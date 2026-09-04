@@ -1,0 +1,82 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.npm/
+
+# Build output and generated caches
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.cache/
+.vite/
+vite.config.*.timestamp-*
+.eslintcache
+.stylelintcache
+.prettier-cache/
+
+# Test output
+playwright-report/
+test-results/
+blob-report/
+
+# Logs and runtime state
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pid
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+!*.env.example
+/secrets/
+/infra/secrets/
+/.local-secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+
+# Local databases, backups and audit exports
+*.dump
+*.backup
+*.sql.gz
+/backups/
+/audit-exports/
+/.data/
+/docker-data/
+
+# Local tools and editors
+.codex-log/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep these versioned when they exist:
+# - pnpm-lock.yaml
+# - database/migrations/**
+# - generated OpenAPI and TypeScript client artifacts
+# - safe .env.example files
