@@ -44,6 +44,7 @@ node scripts/check_docs.mjs
 - [测试矩阵](./docs/test-matrix.md)：规则到自动化验收的覆盖关系；
 - [AGENTS.md](./AGENTS.md)：人工开发者与编码代理都必须遵守的仓库规则；
 - [CONTRIBUTING.md](./CONTRIBUTING.md)：分支、提交、Pull Request、评审和发布规则。
+- [开发日志](./开发日志.md)：每次推送前记录代码变更、功能、优化、测试验证和后续事项。
 
 功能、系统与技术设计及正式 ADR 同步构成候选开发基线。发现冲突时，应先通过 ADR 或同步修订消除歧义，不得由实现者自行选择。
 
