@@ -36,6 +36,8 @@
 | [ADR-020](ADR-020.md) | Accepted | 加密逻辑备份与全新主机恢复验证 |
 | [ADR-021](ADR-021.md) | Accepted | 逐响应 nonce CSP |
 | [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型 |
+| [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外 |
+| [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 
 ## 关联基线
 

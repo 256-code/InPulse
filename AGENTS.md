@@ -77,9 +77,13 @@
 - 跨模块业务操作必须在同一事务中完成；审计、通知、活动投影和搜索投影与业务写入使用相同事务。
 - 聚合更新使用条件更新或显式行锁，并在成功后递增 `row_version`。唯一约束、版本冲突和状态冲突映射为明确的 409 业务错误。
 - 多聚合命令固定锁序为：任务 ID 升序 -> 任务组 ID 升序 -> 迭代记录 ID 升序 -> 遗留项 ID 升序。预读结果在获得锁后发生变化时，必须重新读取并从头有限重试。
-- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；GET、HEAD 和纯校验接口显式声明 `none`。写接口若需豁免，必须在 Route Registry 显式标记、说明理由并通过 ADR 评审。幂等不能只依赖前端禁用按钮或进程内锁。
-- 项目创建时，创建者必须自动成为活跃成员且创建流程不可取消该成员关系；创建完成后，系统管理员可以按普通成员规则移除创建者。`projects.created_by` 只用于不可变溯源，不赋予额外权限，也不得随成员移除而改变。测试必须覆盖“创建者成员记录可移除、`created_by` 保持不变”。
-- 正式记录版本不可变；任务组成员关系是 MAIN/SOURCE 身份的唯一真相。业务历史默认通过归档、作废或新版本保留，不物理覆盖或删除。
+- 命令需要验证项目、模块或功能仍可写时，必须先按项目 -> 模块 -> 功能的父到子顺序和各层 ID 升序取得 `FOR SHARE`；归档方按相同顺序取得 `FOR UPDATE`，随后才进入上述业务聚合锁序，防止父级归档与子级写入竞态。
+- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；普通 GET、HEAD 和纯校验接口显式声明 `none`。[ADR-023](./docs/adr/ADR-023.md) allowlist 中的 operationId 必须且只能声明 `securityFlow`，包括签发/消费一次性安全材料及管理员重认证；新增例外必须另立 ADR。通用幂等记录禁止保存或重放 Cookie、CSRF Token、MFA Secret、验证码或恢复码。
+- `idempotencyRequired` 的请求摘要必须覆盖大写 method、operationId、幂等契约版本、摘要格式与请求 Schema 版本、Schema 解析后的 path 参数和规范 query、规范 Content-Type、Route Registry 声明的全部行为相关请求头以及 JCS 规范化 body；使用版本头的路由必须包含 `If-Match`。摘要使用独立、带版本密钥的 HMAC-SHA-256，不得把普通 SHA-256 用作密码、验证码或其他低熵输入的离线校验器。Cookie、Authorization、CSRF、追踪头和 Idempotency-Key 不进入摘要。任一语义输入或幂等契约版本不同都返回 409。幂等不能只依赖前端禁用按钮或进程内锁。
+- 每条 `idempotencyRequired` 路由必须登记带版本的 `idempotencyReplayPolicy`：逐个列出可能缓存的 2xx 状态；有 body 时列出精确响应 Schema 引用以及可安全持久化和重放的全部 body 叶子字段，无 body 时使用互斥的 `noBody` 分支。CI 必须拒绝遗漏状态、字段不全或越界、Schema 不一致、Secret 字段以及任何 `Set-Cookie`/认证响应头重放；`none` 与 `securityFlow` 路由的该策略只能为 `none`。请求或安全重放策略变化必须升级幂等契约版本，旧 Key 在新契约下返回 409。
+- 每条 `idempotencyRequired` 路由还必须登记 `replayAuthorizationPolicy`，以类型化、最小化的结果资源引用说明缓存响应暴露了哪些资源。幂等重放前必须重新验证当前认证、原操作权限、所有结果资源的当前可读权限及该路由要求的高风险重认证新鲜度；任一门禁失败时拒绝且不得泄露已存状态码或响应。只有全部门禁通过后，同 Key、同摘要和同契约版本才重放原 2xx。
+- 项目创建时，创建者必须自动成为活跃成员且创建流程不可取消该成员关系；创建完成后，系统管理员可以按普通成员规则移除创建者。`projects.created_by` 只用于不可变溯源，不赋予额外权限，也不得随成员移除而改变。普通成员创建者被移除后立即失去成员关系派生的项目权限；若创建者本身是系统管理员，其全局管理员权限不受成员记录影响。测试必须分别覆盖这两种身份。
+- 正式记录版本不可变；迭代记录状态只允许 `DRAFT -> PUBLISHED -> VOID`，以及经管理员重认证的 `VOID -> PUBLISHED` 恢复。`status` 是详情、统计、搜索和时间线可见性的唯一真相，不得因恢复后仍保留 `voided_at` 而继续隐藏。恢复必须保留作废快照与全部版本，原因进入不可变审计，具体不变量见 [ADR-024](./docs/adr/ADR-024.md)。任务组成员关系是 MAIN/SOURCE 身份的唯一真相。业务历史默认通过归档、作废或新版本保留，不物理覆盖或删除。
 - 历史迁移一经合并不得修改、删除或重排。新迁移采用 expand/contract 思路，必须支持从上一正式版本验证升级和回滚兼容窗口。
 - API 进程不得在启动时自动生成 Schema。迁移由独立、受限的 migration 任务执行。
 - Repository/Application 集成测试必须使用真实 PostgreSQL 验证事务、锁、约束和权限，不能只 Mock Repository。
@@ -91,6 +95,9 @@
 - 成员关系不得缓存到 Session 或长生命周期对象；搜索和动态查询必须先取得服务端生成的 `AuthorizedProjectScope`，并在 SQL 层过滤。
 - 资源不存在和无权访问统一返回 404，避免泄露资源存在性；已登录但缺少全局权限时返回 403。
 - Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF、MFA、重认证和安全响应头必须遵守技术设计。
+- 登录只接受匿名预认证 Session 及其 CSRF Token；已有普通、受限或完整认证 Session 必须先登出，再签发新的预认证 CSRF。停用用户的旧 Session 按无效处理；受保护或业务接口返回 401，但 `issueCsrfToken` 与无效 Session 的同源 `logout` 可按匿名安全语义执行且不得恢复身份。
+- 管理员密码与当前 TOTP 重认证成功时，必须以同一服务端事务时间原子刷新 Session 的 `reauthenticated_at` 与 `mfa_verified_at`；高风险接口检查两者均在 5 分钟内。
+- 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；管理员密码阶段只能进入 MFA 注册/验证受限态。恢复码只保存带独立 salt 和参数的 Argon2id 编码哈希，不允许普通 SHA-256 校验。
 - Markdown 不允许原始 HTML；用户链接必须使用标准 URL Parser 和协议/域名白名单。V1.2.2 仅保存 GitHub HTTPS 链接，不主动抓取远程内容。
 - 禁止读取、打印、记录、提交或复制 Secrets。`.env.example` 只放非敏感变量名，不放 Secret 示例值或占位值。
 - 生产 Secret 只从 `/run/secrets/*` 读取；缺失、空值、路径越界或权限不合规必须 fail closed，不允许敏感环境变量 fallback。
@@ -153,7 +160,7 @@
 
 ## 13. 基线冻结剩余事项
 
-截至 2026-09-04，本轮评审已将创建者成员关系、写接口幂等范围和审计并发阈值转为本文件第 6、8 节的可执行规则，并分别落入 [ADR-012](./docs/adr/ADR-012.md)、[ADR-019](./docs/adr/ADR-019.md)、[ADR-008](./docs/adr/ADR-008.md)及[测试矩阵](./docs/test-matrix.md)。ADR 编号冲突已由[唯一 ADR 索引](./docs/adr/README.md)消除：以技术设计的 ADR-001～ADR-020 为主线，系统设计新增的 CSP 与 ExternalLinks 决策顺延为 ADR-021、ADR-022。设计文档必须只引用该索引，不再维护相互冲突的编号正文。
+截至 2026-09-04，本轮评审已将创建者成员关系、写接口幂等范围和审计并发阈值转为本文件第 6、8 节的可执行规则，并分别落入 [ADR-012](./docs/adr/ADR-012.md)、[ADR-019](./docs/adr/ADR-019.md)、[ADR-008](./docs/adr/ADR-008.md)及[测试矩阵](./docs/test-matrix.md)；一次性认证流程的受控幂等例外见 [ADR-023](./docs/adr/ADR-023.md)，记录作废后恢复的状态与历史不变量见 [ADR-024](./docs/adr/ADR-024.md)。ADR 编号冲突已由[唯一 ADR 索引](./docs/adr/README.md)消除：以技术设计的 ADR-001～ADR-020 为主线，系统设计新增的 CSP 与 ExternalLinks 决策顺延为 ADR-021、ADR-022，后续决策继续顺序编号。设计文档必须只引用该索引，不再维护相互冲突的编号正文。
 
 开发基线仍不能宣告冻结，直至以下资料和门禁完成：
 
