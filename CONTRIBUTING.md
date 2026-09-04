@@ -4,7 +4,7 @@
 
 ## 开始之前
 
-- 阅读 [README.md](./README.md)、[系统设计文档 V1.0.2](./系统设计文档v1.0.2.md)、[技术设计 V1.2.2](./技术设计v1.2.2.md) 和相关 ADR。
+- 阅读 [README.md](./README.md)、[功能设计 V1.1](./功能设计v1.1.md)、[系统设计文档 V1.0.2](./系统设计文档v1.0.2.md)、[技术设计 V1.2.2](./技术设计v1.2.2.md)和[相关 ADR](./docs/adr/README.md)。
 - 先确认变更的用户结果、范围、非目标、不变量、接口、数据库影响和验收方式。
 - 设计内容不等于已实现能力；不得编造不存在的命令、接口、测试结果或运行状态。
 - 架构、核心依赖、数据库不变量、权限、安全或运维策略变化必须先形成 ADR，并同步受影响文档与测试。
@@ -37,6 +37,8 @@
 ```text
 <type>[optional scope][!]: <description>
 ```
+
+其中 optional scope 和 `!` 均为可选部分；scope 存在时写成 `(<scope>)`，`!` 必须紧邻冒号之前。
 
 允许的主要类型：
 
@@ -81,39 +83,44 @@ feat(contract)!: change task response schema
 
 ## 评审与合并
 
+团队流程要求：
+
 - 只使用 squash merge；PR 标题作为最终提交标题。
-- 合并前必须解决全部 review conversation，并通过所有适用状态检查。
-- 2～3 名维护者时，`main` 分支规则要求至少一名非作者批准最新可评审提交。
+- 合并前必须解决全部 review conversation，并通过所有已配置且适用于该变更的状态检查。
+- 2～3 名维护者时，至少由一名非作者维护者批准最新可评审提交；这是当前团队规则，不代表 GitHub 已通过 ruleset 强制执行。
 - 仅有一名维护者时，低风险文档、测试和非生产脚手架变更可以由维护者通过 PR 完成结构化自审；数据库迁移、数据库角色、业务不变量、鉴权、权限、Secrets、API 契约、Dockerfile、Compose 和 GitHub workflow 等高风险变更必须取得另一名合格人工审查者批准后才能合并。
-- 禁止直接推送、强制推送或删除 `main`，禁止绕过失败检查。管理员默认也不绕过规则。
-- 合并后自动删除源分支。禁止在已 squash 的旧分支上继续开发下一项变更。
+- 在服务端保护规则完成前，维护者不得直接推送、强制推送或删除 `main`，也不得绕过失败检查。
+- 合并者应删除源分支；在自动删除设置启用前需手工删除。禁止在已 squash 的旧分支上继续开发下一项变更。
 
-仓库的 Pull Requests 设置：
+截至 2026-09-04 可核验的仓库设置为：同时允许 squash merge、merge commit 和 rebase merge，未开启合并后自动删除源分支；本次评审时也没有状态检查被标记为 required。分支保护与 ruleset 接口返回 403，因此无法核验 `main` 的服务端保护状态。在管理员确认并提供可见的规则或门禁结果前，上述要求按人工流程执行，不得描述为已由 GitHub 强制执行。
 
-- 只开启 squash merge，关闭 merge commit 和 rebase merge；
+管理员待完成的目标配置：
+
+- 仅保留 squash merge，关闭 merge commit 和 rebase merge；
 - 将默认 squash commit message 设为 PR title；
-- 合并后自动删除源分支。
+- 开启合并后自动删除源分支；
+- 在当前 GitHub 方案支持时为 `main` 建立 ruleset 或分支保护，并将本节的人工审查规则落为服务端门禁。
 
-建议为 `main` 配置 GitHub ruleset：
+目标 `main` 规则至少包括：
 
 - require a pull request before merging；
 - require status checks；
 - require conversation resolution；
 - require linear history；
 - block force pushes and deletions；
-- disable bypass by default；
+- disable bypass by default。
 
-阶段 0 建立稳定的 CI job 名称后，再把技术设计第 12.4 节的门禁设为 required checks。责任人确定后再添加 `CODEOWNERS`，不要使用虚构账号占位。
+当前凭据访问私有仓库保护规则接口时返回 403，无法据此判断是权限、方案限制还是规则状态。管理员必须在仓库 Settings 中核验并记录实际配置；若当前方案不支持所需 ruleset/分支保护，则继续执行人工门禁，不得宣称保护已经启用。阶段 0 建立其余稳定 CI job 后，再把技术设计第 12.4 节的门禁设为 required checks。责任人确定后再添加 `CODEOWNERS`，不要使用虚构账号占位。
 
 ## 验证
 
-当前仓库仍处于文档阶段，没有 `package.json`、应用代码或可执行的 lint/test/build 脚本。当前唯一统一的命令检查是：
+当前仓库仍处于文档阶段，没有 `package.json`、应用代码或可执行的 lint/test/build 脚本。当前可复现的最小检查是：
 
 ```shell
-git diff --check
+node scripts/check_docs.mjs
 ```
 
-同时人工检查仓库内 Markdown 相对链接，以及设计、README、AGENTS 和贡献规则的一致性；提供真实脚本后再把这些检查列为可复现命令。
+该命令使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点。GitHub Actions 中的 `Documentation / docs` job 执行同一命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 
 阶段 0 初始化工程时，必须同步建立并记录真实可运行的根级入口：
 

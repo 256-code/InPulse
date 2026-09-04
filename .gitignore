@@ -16,6 +16,8 @@ vite.config.*.timestamp-*
 .eslintcache
 .stylelintcache
 .prettier-cache/
+__pycache__/
+*.py[cod]
 
 # Test output
 playwright-report/

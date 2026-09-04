@@ -6,8 +6,8 @@
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| DOC-001 | CI | Git 文本与空白检查 | `git diff --check` 无输出 | 已自动化 |
-| DOC-002 | CI | Markdown 相对链接与本地锚点 | 不存在断链、越界路径或缺失锚点 | 已自动化 |
+| DOC-001 | CI | Git 文本、空白与冲突标记 | `node scripts/check_docs.mjs` 对 HEAD、暂存区、工作区及未忽略新文件无报错 | 已自动化 |
+| DOC-002 | CI | Markdown 相对/引用式链接与本地锚点 | 不存在断链、未定义引用、危险 scheme、越界路径或缺失锚点 | 已自动化 |
 | DOC-003 | Review | ADR 引用与编号 | 所有 ADR 编号唯一，设计只引用 `docs/adr` 权威记录 | Required |
 | DOC-004 | Review | 规则与远程设置 | 文档只陈述已核验事实，目标配置明确标记为待管理员落实 | Required |
 
@@ -26,7 +26,7 @@
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| IDEMP-001 | Registry CI | POST/PUT/PATCH/DELETE 默认策略 | 全部登记 `idempotencyRequired`；豁免同时存在原因与 Accepted ADR | Required |
+| IDEMP-001 | Registry CI | POST/PUT/PATCH/DELETE 默认策略 | 默认登记 `idempotencyRequired`；显式豁免同时登记原因并引用对应的 Accepted ADR | Required |
 | IDEMP-002 | API 集成 | 相同 Key、相同请求重放 | 只执行一次，重放原状态码和脱敏响应 | Required |
 | IDEMP-003 | API 集成 | 相同 Key、不同请求摘要 | 返回 409，不改变业务数据 | Required |
 | IDEMP-004 | PostgreSQL 并发 | 两连接使用同一 Key | 只有一个业务事务成功执行；后继读取已提交结果 | Required |
