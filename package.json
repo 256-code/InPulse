@@ -1,0 +1,20 @@
+{
+  "name": "inpulse",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.0.0 <12"
+  },
+  "scripts": {
+    "check:docs": "node scripts/check_docs.mjs",
+    "db:migrate": "pnpm --filter @inpulse/database migrate",
+    "db:migrations:check": "pnpm --filter @inpulse/database migrations:check",
+    "db:test": "pnpm --filter @inpulse/database test",
+    "db:test:local": "powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/test-local.ps1",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "pnpm typecheck && pnpm test && pnpm check:docs"
+  }
+}

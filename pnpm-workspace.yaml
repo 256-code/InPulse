@@ -1,0 +1,18 @@
+packages:
+  - database
+
+allowBuilds:
+  esbuild: true
+
+catalog:
+  "@types/node": 24.13.3
+  drizzle-orm: 0.45.2
+  postgres: 3.4.9
+  tsx: 4.23.13
+  typescript: 5.9.3
+  vitest: 5.0.0
+
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.0.0'
+  - '@vitest/spy@5.0.0'
+  - vitest@5.0.0
