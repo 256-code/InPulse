@@ -30,6 +30,35 @@
 
 没有 Issue 时可以省略编号，例如 `feature/task-search`。PR 合并后删除分支。
 
+### A/B/C 推送与合并矩阵
+
+三名开发人员按业务域纵向分工，每条工作流由一名开发人员加一个 AI 编码代理负责。功能分支统一使用上文推荐前缀，不新增 A/B/C 个人分支前缀；负责人必须写入任务记录。
+
+| 岗位 | 独立推送范围 | 推送与合并限制 | 非作者评审 |
+|---|---|---|---|
+| A：平台与访问域 | Identity、Projects、Audit、Workflow 公共基建；auth/projects/members/admin 前端；用户、会话、审计、序列与迁移管理；部署、备份与恢复 | 只推送本岗位功能分支；禁止推送 `main`；作为迁移主理人协调迁移 | B 或 C |
+| B：内容与任务执行域 | Modules、Features、Tasks、TaskGroups、ChangeRecords、ExternalLinks；模块、功能、任务、记录与链接前端 | 只推送本岗位功能分支；禁止推送 `main`；迁移草案经 A 协调后提交 | C 或 A |
+| C：聚合与发现域 | Search、Activity、Notifications 读模型；search/notifications/activity/dashboard/me 前端；`app/`、`shared/`、`generated/api/`；浏览器自动化测试基座 | 只推送本岗位功能分支；禁止推送 `main`；A/B 修改其管辖的 `app/`、`shared/` 时必须由其评审 | A 或 B |
+
+任何岗位的 AI 编码代理均只允许推送自己的功能分支，不得直接合并代码；所有进入 `main` 的变更必须通过 PR、squash merge 和非作者评审。高风险变更必须至少一名非作者人工批准，作者不得自批。
+
+共享区域的推送与合并要求：
+
+| 区域 | 主理人 | 推送与合并要求 |
+|---|---|---|
+| `packages/api-contract` | 谁修改谁提交 | 契约 PR 先行，至少由另一岗位评审；OpenAPI 与生成客户端必须由工具生成，禁止手改 |
+| `database/migrations` | A 为迁移主理人 | 按模块编写草案，由 A 统一编号、顺序与冲突处理；每条迁移独立 PR，且必须非作者人工评审 |
+| `app/`、`shared/`、`generated/api/` | C | 其他岗位修改时必须由 C 评审；`generated/api/` 禁止手工修改 |
+| `compose.yaml`、根 `package.json`、CI 配置 | 对应负责人 | 单独 PR，不混入业务功能；高风险变更必须人工评审 |
+
+多人并行时的推荐合入顺序：
+
+1. 契约与数据库迁移先合；
+2. 后端领域与 Workflow 后合；
+3. 前端基于最新 `main` 合入；
+4. 部署、CI 与共享配置最后单独合入；
+5. 文档单独提交，不与功能改动混在一起。
+
 ## 提交与 PR 标题
 
 进入 `main` 的最终 squash commit 和 PR 标题采用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)：
