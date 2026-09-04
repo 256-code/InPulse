@@ -12,9 +12,10 @@
 
 ## Git 工作流
 
-- 采用 trunk-based workflow：`main` 是唯一长期分支，并始终保持可发布。
-- 不建立长期 `develop`、`release` 或个人集成分支。
-- 从最新 `main` 创建短生命周期分支，一个分支和 PR 只承载一个逻辑变更或业务纵切片。
+- 采用“`main` 发布主线 + 三条岗位长期工作分支 + 临时交付分支”模型；`main` 始终保持可发布，禁止直接推送。
+- `dev/a`、`dev/b`、`dev/c` 分别是 A、B、C 岗位的长期工作分支；每个岗位只推送自己的 `dev/<role>`。
+- 正式交付时，先将自己的 `dev/<role>` 同步到最新 `main`，再创建短生命周期交付分支；交付分支一个 PR 只承载一个逻辑变更或业务纵切片。
+- 不得把 `dev/<role>` 直接作为进入 `main` 的 PR 来源，也不得把未交付的 WIP 混入交付 PR；交付分支合并并删除后，再把最新 `main` 同步回自己的 `dev/<role>`。
 - 分支名称使用小写 ASCII 与 kebab-case；Issue 编号存在时放在简短描述前。
 
 推荐前缀：
@@ -28,19 +29,25 @@
 | 测试 | `test/<description>` | `test/audit-concurrency` |
 | 构建/维护 | `chore/<description>` 或 `ci/<description>` | `ci/api-contract-check` |
 
-没有 Issue 时可以省略编号，例如 `feature/task-search`。PR 合并后删除分支。
+没有 Issue 时可以省略编号，例如 `feature/task-search`。PR 合并后删除交付分支，不删除岗位长期工作分支。
 
 ### A/B/C 推送与合并矩阵
 
-三名开发人员按业务域纵向分工，每条工作流由一名开发人员加一个 AI 编码代理负责。功能分支统一使用上文推荐前缀，不新增 A/B/C 个人分支前缀；负责人必须写入任务记录。
+三名开发人员按业务域纵向分工，每条工作流由一名开发人员加一个 AI 编码代理负责。每个岗位使用固定的长期工作分支，正式交付分支仍使用上文推荐前缀；负责人必须写入任务记录。
+
+| 岗位 | 固定工作分支 |
+|---|---|
+| A：平台与访问域 | `dev/a` |
+| B：内容与任务执行域 | `dev/b` |
+| C：聚合与发现域 | `dev/c` |
 
 | 岗位 | 独立推送范围 | 推送与合并限制 | 非作者评审 |
 |---|---|---|---|
-| A：平台与访问域 | Identity、Projects、Audit、Workflow 公共基建；auth/projects/members/admin 前端；用户、会话、审计、序列与迁移管理；部署、备份与恢复 | 只推送本岗位功能分支；禁止推送 `main`；作为迁移主理人协调迁移 | B 或 C |
-| B：内容与任务执行域 | Modules、Features、Tasks、TaskGroups、ChangeRecords、ExternalLinks；模块、功能、任务、记录与链接前端 | 只推送本岗位功能分支；禁止推送 `main`；迁移草案经 A 协调后提交 | C 或 A |
-| C：聚合与发现域 | Search、Activity、Notifications 读模型；search/notifications/activity/dashboard/me 前端；`app/`、`shared/`、`generated/api/`；浏览器自动化测试基座 | 只推送本岗位功能分支；禁止推送 `main`；A/B 修改其管辖的 `app/`、`shared/` 时必须由其评审 | A 或 B |
+| A：平台与访问域 | Identity、Projects、Audit、Workflow 公共基建；auth/projects/members/admin 前端；用户、会话、审计、序列与迁移管理；部署、备份与恢复 | 只推送 `dev/a` 及其交付分支；禁止推送 `main`；作为迁移主理人协调迁移 | B 或 C |
+| B：内容与任务执行域 | Modules、Features、Tasks、TaskGroups、ChangeRecords、ExternalLinks；模块、功能、任务、记录与链接前端 | 只推送 `dev/b` 及其交付分支；禁止推送 `main`；迁移草案经 A 协调后提交 | C 或 A |
+| C：聚合与发现域 | Search、Activity、Notifications 读模型；search/notifications/activity/dashboard/me 前端；`app/`、`shared/`、`generated/api/`；浏览器自动化测试基座 | 只推送 `dev/c` 及其交付分支；禁止推送 `main`；A/B 修改其管辖的 `app/`、`shared/` 时必须由其评审 | A 或 B |
 
-任何岗位的 AI 编码代理均只允许推送自己的功能分支，不得直接合并代码；所有进入 `main` 的变更必须通过 PR、squash merge 和非作者评审。高风险变更必须至少一名非作者人工批准，作者不得自批。
+任何岗位的 AI 编码代理均只允许推送所属岗位的固定工作分支或该岗位交付分支，不得直接合并代码；所有进入 `main` 的变更必须通过 PR、squash merge 和非作者评审。高风险变更必须至少一名非作者人工批准，作者不得自批。
 
 共享区域的推送与合并要求：
 
@@ -127,7 +134,7 @@ feat(contract)!: change task response schema
 - 2～3 名维护者时，至少由一名非作者维护者批准最新可评审提交；这是当前团队规则，不代表 GitHub 已通过 ruleset 强制执行。
 - 仅有一名维护者时，低风险文档、测试和非生产脚手架变更可以由维护者通过 PR 完成结构化自审；数据库迁移、数据库角色、业务不变量、鉴权、权限、Secrets、API 契约、Dockerfile、Compose 和 GitHub workflow 等高风险变更必须取得另一名合格人工审查者批准后才能合并。
 - 在服务端保护规则完成前，维护者不得直接推送、强制推送或删除 `main`，也不得绕过失败检查。
-- 合并者应删除源分支；在自动删除设置启用前需手工删除。禁止在已 squash 的旧分支上继续开发下一项变更。
+- 合并者应删除交付源分支；在自动删除设置启用前需手工删除。禁止在已 squash 的交付分支上继续开发下一项变更；合并后把最新 `main` 同步回对应岗位的 `dev/<role>`。
 
 截至 2026-09-04 可核验的仓库设置为：同时允许 squash merge、merge commit 和 rebase merge，未开启合并后自动删除源分支；本次评审时也没有状态检查被标记为 required。分支保护与 ruleset 接口返回 403，因此无法核验 `main` 的服务端保护状态。在管理员确认并提供可见的规则或门禁结果前，上述要求按人工流程执行，不得描述为已由 GitHub 强制执行。
 

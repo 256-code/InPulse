@@ -124,8 +124,9 @@
 ## 10. Git 与 Pull Request
 
 - Git 细则以 [CONTRIBUTING.md](./CONTRIBUTING.md) 为准。
-- `main` 是唯一长期分支并应始终可发布；不维护长期 `develop` 分支。
-- 使用短生命周期分支和小 PR；一个 PR 聚焦一个逻辑变更或业务纵切片。
+- `main` 是唯一可发布主线；`dev/a`、`dev/b`、`dev/c` 是三个岗位的长期工作分支，不得直接合并到 `main`。
+- 只允许向自己的 `dev/<role>` 及其创建的交付短分支推送；禁止直接推送 `main` 或绕过 PR 合并。
+- 使用短生命周期交付分支和小 PR；一个 PR 聚焦一个逻辑变更或业务纵切片，不得把未交付 WIP 混入 PR。交付分支合并删除后，把最新 `main` 同步回对应 `dev/<role>`。
 - 每次向远端推送功能分支或创建/更新 PR 前，必须更新 [开发日志](./开发日志.md)，记录做了什么、功能、修复/重构或优化、实际验证结果、文档同步、风险与后续事项；不得编造测试或 CI 结果。
 - 进入 `main` 的最终 squash commit 与 PR 标题使用 Conventional Commits 格式。
 - 合并前必须通过适用检查并完成人工审查；数据库迁移、鉴权、权限、Secrets、API 契约、Dockerfile、Compose 和 GitHub workflow 是重点审查项。
