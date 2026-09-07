@@ -160,13 +160,18 @@ feat(contract)!: change task response schema
 
 ## 验证
 
-当前仓库仍处于文档阶段，没有 `package.json`、应用代码或可执行的 lint/test/build 脚本。当前可复现的最小检查是：
+阶段 0 工程基座骨架已落库，根级可运行命令为：
 
 ```shell
-node scripts/check_docs.mjs
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm build
+pnpm db:migrations:check
+pnpm check:docs
 ```
 
-该命令使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点。GitHub Actions 中的 `Documentation / docs` job 执行同一命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
+其中 `check:docs` 使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；`typecheck` 覆盖 database 包与 api/web 应用；`lint` 执行 ESLint 检查；`build` 执行 api/web 的生产构建；`db:migrations:check` 校验迁移文件一致性。数据库迁移与集成测试（`pnpm db:migrate`、`pnpm db:test`）需要 PostgreSQL 18，Windows 可用 `pnpm db:test:local` 创建临时实例。GitHub Actions 中的 `Documentation / docs` 与 `CI / workspace` job 执行同一组命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 
 阶段 0 初始化工程时，必须同步建立并记录真实可运行的根级入口：
 
@@ -177,6 +182,8 @@ node scripts/check_docs.mjs
 - OpenAPI/客户端漂移检查；
 - Web/API 生产构建；
 - Playwright 关键路径、依赖边界、权限矩阵和容器检查。
+
+截至 2026-09-07，frozen lockfile 安装、lint、类型检查、Web/API 生产构建、数据库迁移一致性检查与真实 PostgreSQL 集成测试入口已落库；其中迁移一致性检查已纳入 CI，数据库迁移与集成测试因需要 PostgreSQL 18 服务尚未纳入 CI，格式检查、应用层单元测试、E2E、OpenAPI/客户端漂移检查、依赖边界、权限矩阵自动化与容器检查仍待阶段 0 后续纵切片建立。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 

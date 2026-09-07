@@ -19,20 +19,22 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器及 100 并发真实数据库门禁 |
-| 下一步 | 基于数据库事务契约实现 API 契约、认证、领域模块与前端；补齐 Compose、备份恢复和 CI |
-| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试，以及文档检查 |
-| 尚未提供 | API/Web 应用源代码、应用 lint/build/E2E 和生产部署产物 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build/文档检查脚本与最小 CI 链路） |
+| 下一步 | 基于数据库事务契约实现 API 契约、认证、领域模块与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
+| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build 与文档检查 |
+| 尚未提供 | API 契约生成链路、应用层单元测试、E2E、生产部署产物 |
 
-当前已验证的数据库与文档命令：
+下列根级命令已真实可运行并与 CI 执行同一组命令；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
+
+当前可运行的根级命令：
 
 ```shell
 pnpm install --frozen-lockfile
 pnpm typecheck
+pnpm lint
+pnpm build
 pnpm db:migrations:check
-pnpm db:migrate
-pnpm db:test
-node scripts/check_docs.mjs
+pnpm check:docs
 ```
 
 数据库迁移和测试需要 PostgreSQL 18；Windows 可设置 `POSTGRES_BIN` 后运行
