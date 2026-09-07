@@ -11,6 +11,8 @@
   "scripts": {
     "migrate": "tsx src/migrate.ts",
     "migrations:check": "tsx src/check-migrations.ts",
+    "poc:search": "tsx poc/search/run-poc.ts",
+    "poc:search:pgroonga": "tsx poc/search-pgroonga/run-poc.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

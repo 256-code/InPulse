@@ -2,7 +2,7 @@
 
 软件研发功能迭代记录与任务协作系统，用于统一管理项目、模块、功能、任务、迭代记录及其历史关系。
 
-> 当前状态：阶段 0 实施中。功能、系统和技术设计已形成候选开发基线；PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地，应用代码尚未开始。
+> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build、最小 API/Web 骨架与 CI）已落库；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式搜索实现尚未验证和开始。业务应用代码尚未开始。
 
 ## 项目目标
 
@@ -19,10 +19,10 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build/文档检查脚本与最小 CI 链路） |
-| 下一步 | 基于数据库事务契约实现 API 契约、认证、领域模块与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
-| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build 与文档检查 |
-| 尚未提供 | API 契约生成链路、应用层单元测试、E2E、生产部署产物 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
+| 下一步 | 在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现 API 契约、认证、领域模块、正式搜索索引与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
+| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
+| 尚未提供 | API 契约生成链路、应用层单元测试、正式搜索实现、E2E 和生产部署产物 |
 
 下列根级命令已真实可运行并与 CI 执行同一组命令；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
 
@@ -35,6 +35,23 @@ pnpm lint
 pnpm build
 pnpm db:migrations:check
 pnpm check:docs
+```
+
+PGroonga 搜索 PoC 使用 Docker 启动一次性
+`groonga/pgroonga:4.0.8-alpine-18`，执行迁移、现有数据库测试、V1 语义探针、
+90 条金标召回、跨项目隔离和查询计划验证。当前 PoC 使用内置 PostgreSQL
+18.4，尚不能替代 PostgreSQL 18.6 官方基线；完整结论见
+[PGroonga PoC 说明](./database/poc/search-pgroonga/README.md)。
+
+```powershell
+pnpm db:poc:search:pgroonga:local
+```
+
+原 `pg_trgm` PoC 作为决策证据保留，命令会因 GIN 默认计划门禁失败而非零
+退出，见[原搜索 PoC 说明](./database/poc/search/README.md)：
+
+```powershell
+pnpm db:poc:search:local
 ```
 
 数据库迁移和测试需要 PostgreSQL 18；Windows 可设置 `POSTGRES_BIN` 后运行
@@ -54,6 +71,9 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 - [AGENTS.md](./AGENTS.md)：人工开发者与编码代理都必须遵守的仓库规则；
 - [CONTRIBUTING.md](./CONTRIBUTING.md)：分支、提交、Pull Request、评审和发布规则。
 - [开发日志](./开发日志.md)：每次推送前记录代码变更、功能、优化、测试验证和后续事项。
+- [PGroonga V1 PoC 结果](./docs/poc/search-pgroonga-v1-result.md)：V1 范围、9 组语义探针、Recall@20 与 ADR-025；
+- [PGroonga PoC](./database/poc/search-pgroonga/README.md)：复现命令、策略矩阵、索引证据与限制；
+- [原 pg_trgm PoC](./database/poc/search/README.md)：原门禁失败证据、数据规模、GIN 计划结论。
 
 功能、系统与技术设计及正式 ADR 同步构成候选开发基线。发现冲突时，应先通过 ADR 或同步修订消除歧义，不得由实现者自行选择。
 
