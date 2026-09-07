@@ -23,7 +23,7 @@
 | [ADR-007](ADR-007.md) | Accepted | TaskGroupMember 是任务组归属唯一真相 |
 | [ADR-008](ADR-008.md) | Accepted | 分 scope 串行审计哈希链与角色隔离 |
 | [ADR-009](ADR-009.md) | Accepted | 本期不实现通用 Outbox |
-| [ADR-010](ADR-010.md) | Accepted | pg_trgm 与搜索投影的双阶段门禁 |
+| [ADR-010](ADR-010.md) | Superseded | pg_trgm 与搜索投影的双阶段门禁，由 ADR-025 替代 |
 | [ADR-011](ADR-011.md) | Accepted | Argon2id 与服务端 Session 认证 |
 | [ADR-012](ADR-012.md) | Accepted | 两类角色与创建者成员关系语义 |
 | [ADR-013](ADR-013.md) | Accepted | WorkflowModule 与显式 UnitOfWork |
@@ -38,6 +38,7 @@
 | [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型 |
 | [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外 |
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
+| [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |
 
 ## 关联基线
 

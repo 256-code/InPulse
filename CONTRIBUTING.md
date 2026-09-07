@@ -160,11 +160,25 @@ feat(contract)!: change task response schema
 
 ## 验证
 
-当前仓库仍处于文档阶段，没有 `package.json`、应用代码或可执行的 lint/test/build 脚本。当前可复现的最小检查是：
+当前仓库仍处于阶段 0 数据库实现，没有 API/Web 应用代码或应用级
+lint/test/build 脚本；数据库 workspace 已有 `package.json`、严格
+TypeScript、迁移和真实 PostgreSQL 集成测试，PGroonga 与原 `pg_trgm`
+搜索 PoC 均已落库。当前可复现的检查包括：
 
 ```shell
 node scripts/check_docs.mjs
+pnpm typecheck
+pnpm db:migrations:check
+pnpm db:test
+pnpm db:poc:search:pgroonga:local
+pnpm db:poc:search:local
 ```
+
+PGroonga PoC 已验证 V1 语义、90 条金标 Recall@20、边界和跨项目隔离，但
+PostgreSQL 18.6 官方基线的构建、迁移、默认计划和恢复尚未验证；
+`pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，不得据此
+宣称生产搜索已通过。前端和 API 应用代码均未开始，因此后续 lint/test/build
+命令在落库后仍需更新本节。
 
 该命令使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点。GitHub Actions 中的 `Documentation / docs` job 执行同一命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 

@@ -1,0 +1,3372 @@
+{
+  "version": "pgroonga-poc-v3",
+  "generatedAt": "2026-09-07T03:08:45.433Z",
+  "goldenQueryVersion": "phase0-v1",
+  "requirements": {
+    "v1CompleteTermOnly": true,
+    "arbitraryEnglishSubstringRequired": false,
+    "scope": [
+      "complete-english-abbreviation",
+      "complete-code-identifier",
+      "chinese-short-word",
+      "number-search"
+    ]
+  },
+  "environment": {
+    "platform": "win32 10.0.26200",
+    "arch": "x64",
+    "cpuCount": 20,
+    "totalMemoryBytes": 33818259456
+  },
+  "database": {
+    "version": "PostgreSQL 18.4 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "postgresServerVersion": "18.4",
+    "image": "groonga/pgroonga:4.0.8-alpine-18",
+    "imageDigest": "groonga/pgroonga@sha256:b5c92fa3d86ad76ce75ddd8095f60542cf025348a58b8a38cd0b4a580fe4ce68",
+    "pgroongaVersion": "4.0.8",
+    "pgroongaSchema": "app",
+    "groongaVersion": "16.0.8"
+  },
+  "dataset": {
+    "baseRows": 1000,
+    "requiredBaseRows": 1000,
+    "scaleRows": 101000,
+    "requiredScaleRows": 101000,
+    "projects": 6,
+    "topK": 20,
+    "recallThreshold": 0.9
+  },
+  "permissions": {
+    "runtimeRole": "app_runtime",
+    "canSelect": true,
+    "canUseOperator": true,
+    "canEscape": true,
+    "errors": []
+  },
+  "strategies": [
+    {
+      "id": "default-ilike",
+      "label": "默认全文 + ILIKE",
+      "opclass": "default",
+      "queryStyle": "ilike",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_default-ilike_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_default-ilike_base_idx",
+        "buildMs": 57.212,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18350_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_default-ilike_scale_idx",
+        "buildMs": 666.67,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 29138944,
+        "lexiconName": "Lexicon18352_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_default-ilike_probe_idx",
+        "buildMs": 32.985,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18351_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 1.889,
+        "maxQueryMs": 26.996
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.689,
+        "maxQueryMs": 29.282
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 5.1,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 4.325,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 4.18,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 4.111,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 4.65,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 4.348,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 4.312,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 4.077,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 4.034,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        }
+      ],
+      "updateMs": 12.424,
+      "reindexMs": 960.132,
+      "error": null
+    },
+    {
+      "id": "default-like",
+      "label": "默认全文 + LIKE",
+      "opclass": "default",
+      "queryStyle": "like",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_default-like_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_default-like_base_idx",
+        "buildMs": 55.255,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18354_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_default-like_scale_idx",
+        "buildMs": 711.054,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 29138944,
+        "lexiconName": "Lexicon18356_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_default-like_probe_idx",
+        "buildMs": 44.931,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18355_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 1.744,
+        "maxQueryMs": 3.084
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.801,
+        "maxQueryMs": 18.776
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 4.727,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 4.549,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 4.205,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 4.405,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 4.402,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 4.606,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 4.311,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 4.135,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 4.758,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        }
+      ],
+      "updateMs": 10.987,
+      "reindexMs": 1040.323,
+      "error": null
+    },
+    {
+      "id": "default-query",
+      "label": "默认全文 + &@~ + pgroonga_query_escape",
+      "opclass": "default",
+      "queryStyle": "query",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_default-query_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_default-query_base_idx",
+        "buildMs": 79.238,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18358_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_default-query_scale_idx",
+        "buildMs": 791.286,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 29138944,
+        "lexiconName": "Lexicon18360_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_default-query_probe_idx",
+        "buildMs": 34.683,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18359_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 4.211,
+        "maxQueryMs": 6.082
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.55,
+        "maxQueryMs": 16.25
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 8.496,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 7.582,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 8.083,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 7.545,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 7.248,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 7.825,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 6.753,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.977,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 6.564,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 10.439,
+      "reindexMs": 774.327,
+      "error": null
+    },
+    {
+      "id": "regexp-ilike",
+      "label": "正则 opclass + ILIKE",
+      "opclass": "regexp",
+      "queryStyle": "ilike",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_regexp-ilike_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text app.pgroonga_text_regexp_ops_v2)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_regexp-ilike_base_idx",
+        "buildMs": 61.354,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18362_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_regexp-ilike_scale_idx",
+        "buildMs": 978.769,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 22323200,
+        "lexiconName": "Lexicon18364_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_regexp-ilike_probe_idx",
+        "buildMs": 49.592,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18363_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.423,
+        "maxQueryMs": 3.373
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 3.021,
+        "maxQueryMs": 30.559
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 8.55,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 7.004,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 6.997,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 7.738,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.986,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 6.634,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 6.459,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.076,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 6.384,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 15.153,
+      "reindexMs": 2279.784,
+      "error": null
+    },
+    {
+      "id": "regexp-like",
+      "label": "正则 opclass + LIKE",
+      "opclass": "regexp",
+      "queryStyle": "like",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_regexp-like_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text app.pgroonga_text_regexp_ops_v2)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_regexp-like_base_idx",
+        "buildMs": 119.784,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18366_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_regexp-like_scale_idx",
+        "buildMs": 1886.578,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 22323200,
+        "lexiconName": "Lexicon18368_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_regexp-like_probe_idx",
+        "buildMs": 61.099,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18367_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 6.765,
+        "maxQueryMs": 18.316
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 6.638,
+        "maxQueryMs": 35.586
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 14.228,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 11.41,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 13.761,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 13.355,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 15.464,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 13.603,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 12.131,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 13.076,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 14.137,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 24.169,
+      "reindexMs": 2019.725,
+      "error": null
+    },
+    {
+      "id": "regexp-query",
+      "label": "正则 opclass + &~",
+      "opclass": "regexp",
+      "queryStyle": "regex",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_regexp-query_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text app.pgroonga_text_regexp_ops_v2)",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_regexp-query_base_idx",
+        "buildMs": 128.684,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18370_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_regexp-query_scale_idx",
+        "buildMs": 1710.398,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 22323200,
+        "lexiconName": "Lexicon18372_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_regexp-query_probe_idx",
+        "buildMs": 64.035,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18371_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 0.9666666666666667,
+        "hits": 87,
+        "totalNormal": 90,
+        "missed": [
+          "G083:项目（POC）",
+          "G085:MFA+CSRF",
+          "G089:作废「记录」"
+        ],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 7.601,
+        "maxQueryMs": 11.379
+      },
+      "scaleSuite": {
+        "recallAt20": 0.9666666666666667,
+        "hits": 87,
+        "totalNormal": 90,
+        "missed": [
+          "G083:项目（POC）",
+          "G085:MFA+CSRF",
+          "G089:作废「记录」"
+        ],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 13.772,
+        "maxQueryMs": 254.473
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 19.591,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 18.669,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 15.417,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 14.528,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 18.904,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 16.701,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 14.882,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 13.866,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 12.094,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 10.137,
+      "reindexMs": 955.457,
+      "error": null
+    },
+    {
+      "id": "bigram-ilike",
+      "label": "TokenBigramSplitSymbolAlphaDigit + ILIKE",
+      "opclass": "bigram",
+      "queryStyle": "ilike",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_bigram-ilike_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit')",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_bigram-ilike_base_idx",
+        "buildMs": 71.854,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18374_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_bigram-ilike_scale_idx",
+        "buildMs": 958.469,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 18128896,
+        "lexiconName": "Lexicon18376_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_bigram-ilike_probe_idx",
+        "buildMs": 52.216,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18375_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.883,
+        "maxQueryMs": 4.064
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.861,
+        "maxQueryMs": 29.581
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 8.133,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 7.839,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 6.601,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 9.375,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 8.436,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 9.232,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 7.712,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 8.543,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 7.357,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 10.435,
+      "reindexMs": 913.126,
+      "error": null
+    },
+    {
+      "id": "bigram-query",
+      "label": "TokenBigramSplitSymbolAlphaDigit + &@~",
+      "opclass": "bigram",
+      "queryStyle": "query",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_bigram-query_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text) WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit')",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_bigram-query_base_idx",
+        "buildMs": 58.006,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18378_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_bigram-query_scale_idx",
+        "buildMs": 967.063,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 18128896,
+        "lexiconName": "Lexicon18380_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_bigram-query_probe_idx",
+        "buildMs": 50.816,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18379_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.22,
+        "maxQueryMs": 3.217
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.661,
+        "maxQueryMs": 16.951
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 6.554,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 5.687,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 5.756,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 7.336,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 5.535,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 7.3,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 6.737,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.652,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 7.878,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 11.133,
+      "reindexMs": 1005.185,
+      "error": null
+    },
+    {
+      "id": "ngram-ilike",
+      "label": "TokenNgram(unify=false) + ILIKE",
+      "opclass": "ngram",
+      "queryStyle": "ilike",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_ngram-ilike_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text) WITH (tokenizer='TokenNgram(\"unify_alphabet\", false, \"unify_symbol\", false, \"unify_digit\", false)')",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_ngram-ilike_base_idx",
+        "buildMs": 58.236,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18382_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_ngram-ilike_scale_idx",
+        "buildMs": 705.782,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 18128896,
+        "lexiconName": "Lexicon18384_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_ngram-ilike_probe_idx",
+        "buildMs": 47.141,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18383_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.632,
+        "maxQueryMs": 3.634
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.563,
+        "maxQueryMs": 28.164
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 6.815,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 6.091,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 5.162,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 5.998,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.408,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 7.45,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 5.494,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 5.059,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 5.62,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 9.03,
+      "reindexMs": 659.455,
+      "error": null
+    },
+    {
+      "id": "ngram-query",
+      "label": "TokenNgram(unify=false) + &@~",
+      "opclass": "ngram",
+      "queryStyle": "query",
+      "indexSql": "CREATE INDEX \"pgroonga_poc_ngram-query_base_idx\" ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text) WITH (tokenizer='TokenNgram(\"unify_alphabet\", false, \"unify_symbol\", false, \"unify_digit\", false)')",
+      "baseIndex": {
+        "indexName": "pgroonga_poc_ngram-query_base_idx",
+        "buildMs": 51.129,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18386_0.index",
+        "rowCount": 1000
+      },
+      "scaleIndex": {
+        "indexName": "pgroonga_poc_ngram-query_scale_idx",
+        "buildMs": 648.973,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 18128896,
+        "lexiconName": "Lexicon18388_0.index",
+        "rowCount": 101000
+      },
+      "probeIndex": {
+        "indexName": "pgroonga_poc_ngram-query_probe_idx",
+        "buildMs": 43.856,
+        "indexBytes": 0,
+        "totalBytes": 0,
+        "indexDiskUsage": 5283840,
+        "lexiconName": "Lexicon18387_0.index",
+        "rowCount": 9
+      },
+      "baseSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.223,
+        "maxQueryMs": 3.497
+      },
+      "scaleSuite": {
+        "recallAt20": 1,
+        "hits": 90,
+        "totalNormal": 90,
+        "missed": [],
+        "nonNormalTotal": 10,
+        "nonNormalPassed": 10,
+        "nonNormalFailed": [],
+        "crossProjectPassed": true,
+        "crossProjectReturnedCount": 0,
+        "averageQueryMs": 2.133,
+        "maxQueryMs": 14.544
+      },
+      "requirementProbe": {
+        "allPassed": true,
+        "cases": [
+          {
+            "id": "english-mfa",
+            "query": "mfa",
+            "expectedText": "MFA complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "MFA complete abbreviation probe"
+            ],
+            "elapsedMs": 5.653,
+            "error": null
+          },
+          {
+            "id": "english-csrf",
+            "query": "csrf",
+            "expectedText": "CSRF complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "CSRF complete abbreviation probe"
+            ],
+            "elapsedMs": 5.8,
+            "error": null
+          },
+          {
+            "id": "english-api",
+            "query": "api",
+            "expectedText": "API complete abbreviation probe",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "API complete abbreviation probe"
+            ],
+            "elapsedMs": 4.855,
+            "error": null
+          },
+          {
+            "id": "chinese-login",
+            "query": "登录",
+            "expectedText": "登录模块完整短词",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "登录模块完整短词"
+            ],
+            "elapsedMs": 5.424,
+            "error": null
+          },
+          {
+            "id": "code-inp-full",
+            "query": "INP-T-2026-0001",
+            "expectedText": "INP-T-2026-0001 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 6.047,
+            "error": null
+          },
+          {
+            "id": "code-pr-full",
+            "query": "PR-42",
+            "expectedText": "PR-42 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 5.028,
+            "error": null
+          },
+          {
+            "id": "code-session-full",
+            "query": "SESSION-TOKEN-01",
+            "expectedText": "SESSION-TOKEN-01 complete identifier",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 1,
+            "returnedTitles": [
+              "SESSION-TOKEN-01 complete identifier"
+            ],
+            "elapsedMs": 5.187,
+            "error": null
+          },
+          {
+            "id": "number-2026",
+            "query": "2026",
+            "expectedText": "INP-T-2026-0001 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "INP-T-2026-0001 complete identifier",
+              "INP-T-2026-0001 number search"
+            ],
+            "elapsedMs": 5.257,
+            "error": null
+          },
+          {
+            "id": "number-42",
+            "query": "42",
+            "expectedText": "PR-42 number search",
+            "forcedIndex": true,
+            "usedIndex": true,
+            "scanType": "index-scan",
+            "passed": true,
+            "returnedCount": 2,
+            "returnedTitles": [
+              "PR-42 complete identifier",
+              "PR-42 number search"
+            ],
+            "elapsedMs": 5.416,
+            "error": null
+          }
+        ]
+      },
+      "basePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "bitmap-heap-scan",
+          "forcedScanType": "bitmap-heap-scan",
+          "defaultRecheck": true,
+          "forcedRecheck": true
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "scalePlans": [
+        {
+          "queryId": "G001",
+          "category": "zh-short",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G021",
+          "category": "code",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G041",
+          "category": "english",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G061",
+          "category": "mixed",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        },
+        {
+          "queryId": "G081",
+          "category": "punctuation",
+          "defaultPlan": [],
+          "forcedPlan": [],
+          "defaultUsesIndex": true,
+          "forcedUsesIndex": true,
+          "defaultScanType": "index-scan",
+          "forcedScanType": "index-scan",
+          "defaultRecheck": false,
+          "forcedRecheck": false
+        }
+      ],
+      "updateMs": 15.709,
+      "reindexMs": 618.169,
+      "error": null
+    }
+  ],
+  "limitations": [
+    "官方 PostgreSQL 18.6 基线尚未验证；本次探针镜像内置 PostgreSQL 18.4，不能直接证明 18.6 兼容。",
+    "Groonga 版本通过 pgroonga_command('status') 从运行中实例读取，不代表官方 PostgreSQL 18.6 镜像已内置 PGroonga。",
+    "101000 行规模使用确定性仿真文本，不等同于真实业务数据分布。",
+    "报告未执行备份恢复、故障切换和长时间并发更新门禁。"
+  ]
+}

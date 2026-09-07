@@ -4,5 +4,11 @@
     "rootDir": ".",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["drizzle.config.ts", "schema/**/*.ts", "src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "drizzle.config.ts",
+    "schema/**/*.ts",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "poc/**/*.ts"
+  ]
 }

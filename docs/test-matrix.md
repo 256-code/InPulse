@@ -71,8 +71,17 @@
 
 | ID | 阶段 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| SEARCH-001 | 阶段 0 | 中文可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 GIN trigram，跨项目 0 条 | Required |
+| SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
+
+> 当前执行状态（2026-09-07）：PGroonga PoC 已通过 9 组 V1 语义探针、
+> 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入和
+> 跨项目隔离；原 `pg_trgm` 门禁失败记录保留为决策证据，见
+> [PGroonga PoC 报告](../database/poc/search-pgroonga/README.md) 与
+> [原 pg_trgm PoC 报告](../database/poc/search/README.md)。
+> 正式 SEARCH-001 仍未完成：必须在 PostgreSQL 18.6 官方基线验证 PGroonga
+> 构建、扩展、迁移、默认查询计划、参数化查询和备份恢复。
+
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | Required |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
 | RECOVERY-001 | 上线前及演练 | 全新主机恢复 | 达到记录的 RPO/RTO；旧 Session 失效；审计链与检查点一致；恢复发布清单中的全部版本化 keyring，并保留仍被未过期幂等记录引用的 fingerprint key | Required |

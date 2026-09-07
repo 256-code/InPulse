@@ -68,6 +68,32 @@ pnpm db:test
 `TEST_AUDIT_READER_DATABASE_URL` 和
 `TEST_AUDIT_ARCHIVE_DATABASE_URL`。
 
+## 阶段 0 搜索 PoC
+
+PGroonga V1 PoC（需要 Docker 与镜像）：
+
+```powershell
+docker pull groonga/pgroonga:4.0.8-alpine-18
+pnpm db:poc:search:pgroonga:local
+```
+
+脚本在一次性容器中执行角色初始化、`app` schema 扩展、显式迁移、现有
+数据库测试和搜索 PoC；成功时自动删除容器，也可传 `-KeepContainer`
+保留。结果写入 `poc/search-pgroonga/artifacts/pgroonga-report.json`。
+当前 PoC 使用镜像内置 PostgreSQL 18.4，V1 语义、90 条金标
+Recall@20、边界和跨项目隔离均通过；PostgreSQL 18.6 官方基线尚未验证。
+
+原 `pg_trgm` PoC 保留为决策证据：
+
+```powershell
+pnpm db:poc:search:local
+```
+
+该脚本使用 `postgres:18.6`；`Recall@20`、无结果、边界和跨项目隔离通过，
+但参数化中文短查询的默认查询计划未使用 GIN trigram 索引，因此当前仍会
+非零退出。完整结论见 [PGroonga PoC 说明](./poc/search-pgroonga/README.md)
+与 [原 pg_trgm PoC 说明](./poc/search/README.md)。
+
 ## 功能开发必须遵守的事务契约
 
 - 创建项目时，同一事务必须插入项目、创建者成员历史和唯一

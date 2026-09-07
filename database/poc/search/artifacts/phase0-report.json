@@ -1,0 +1,1240 @@
+{
+  "version": "phase0-v1",
+  "generatedAt": "2026-09-07T01:31:38.494Z",
+  "postgres": {
+    "version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "image": "postgres:18.6",
+    "imageDigest": "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
+  },
+  "environment": {
+    "platform": "win32 10.0.26200",
+    "arch": "x64",
+    "cpuCount": 20,
+    "totalMemoryBytes": 33818259456
+  },
+  "dataset": {
+    "rowCount": 1000,
+    "minimumRows": 1000,
+    "projectCount": 6,
+    "seedAlgorithm": "deterministic templates + frozen golden targets",
+    "normalizedBy": "NFKC + lowercase + whitespace collapse + punctuation map"
+  },
+  "queries": {
+    "count": 100,
+    "expectedCount": 90,
+    "topK": 20,
+    "recallThreshold": 0.9,
+    "recallAt20": 1,
+    "hits": 90,
+    "expectedCases": [
+      {
+        "id": "G001",
+        "category": "zh-short",
+        "query": "登录",
+        "returnedCount": 6,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 2.989
+      },
+      {
+        "id": "G002",
+        "category": "zh-short",
+        "query": "项目",
+        "returnedCount": 10,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 9.335
+      },
+      {
+        "id": "G003",
+        "category": "zh-short",
+        "query": "任务",
+        "returnedCount": 8,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 9.409
+      },
+      {
+        "id": "G004",
+        "category": "zh-short",
+        "query": "搜索",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 8.623
+      },
+      {
+        "id": "G005",
+        "category": "zh-short",
+        "query": "发布",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 4.672
+      },
+      {
+        "id": "G006",
+        "category": "zh-short",
+        "query": "合并",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 6.899
+      },
+      {
+        "id": "G007",
+        "category": "zh-short",
+        "query": "通知",
+        "returnedCount": 20,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 8.725
+      },
+      {
+        "id": "G008",
+        "category": "zh-short",
+        "query": "审计",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 10.215
+      },
+      {
+        "id": "G009",
+        "category": "zh-short",
+        "query": "概览",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 10.255
+      },
+      {
+        "id": "G010",
+        "category": "zh-short",
+        "query": "动态",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 11.014
+      },
+      {
+        "id": "G011",
+        "category": "zh-short",
+        "query": "成员",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 10.979
+      },
+      {
+        "id": "G012",
+        "category": "zh-short",
+        "query": "权限",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 12.364
+      },
+      {
+        "id": "G013",
+        "category": "zh-short",
+        "query": "模块",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 12.283
+      },
+      {
+        "id": "G014",
+        "category": "zh-short",
+        "query": "功能",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 12.777
+      },
+      {
+        "id": "G015",
+        "category": "zh-short",
+        "query": "记录",
+        "returnedCount": 15,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 12.929
+      },
+      {
+        "id": "G016",
+        "category": "zh-short",
+        "query": "遗留",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 13.875
+      },
+      {
+        "id": "G017",
+        "category": "zh-short",
+        "query": "恢复",
+        "returnedCount": 4,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 14.019
+      },
+      {
+        "id": "G018",
+        "category": "zh-short",
+        "query": "作废",
+        "returnedCount": 4,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 14.326
+      },
+      {
+        "id": "G019",
+        "category": "zh-short",
+        "query": "草稿",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 14.436
+      },
+      {
+        "id": "G020",
+        "category": "zh-short",
+        "query": "版本",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 15.493
+      },
+      {
+        "id": "G021",
+        "category": "code",
+        "query": "INP-T-2026-0001",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 15.576
+      },
+      {
+        "id": "G022",
+        "category": "code",
+        "query": "PR-42",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 15.942
+      },
+      {
+        "id": "G023",
+        "category": "code",
+        "query": "ISSUE-17",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 15.888
+      },
+      {
+        "id": "G024",
+        "category": "code",
+        "query": "TASK-GROUP-009",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 17.248
+      },
+      {
+        "id": "G025",
+        "category": "code",
+        "query": "CR-2026-0031",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 17.158
+      },
+      {
+        "id": "G026",
+        "category": "code",
+        "query": "PG-18-6",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 17.487
+      },
+      {
+        "id": "G027",
+        "category": "code",
+        "query": "GIN-INDEX-001",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 17.568
+      },
+      {
+        "id": "G028",
+        "category": "code",
+        "query": "MFA-REAUTH-05",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 18.737
+      },
+      {
+        "id": "G029",
+        "category": "code",
+        "query": "CSRF-ROTATE-02",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 18.763
+      },
+      {
+        "id": "G030",
+        "category": "code",
+        "query": "SESSION-TOKEN-01",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 19.06
+      },
+      {
+        "id": "G031",
+        "category": "code",
+        "query": "API-V1-SEARCH",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 19.096
+      },
+      {
+        "id": "G032",
+        "category": "code",
+        "query": "PROJECT-ALPHA",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 20.463
+      },
+      {
+        "id": "G033",
+        "category": "code",
+        "query": "MODULE-CORE",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 20.397
+      },
+      {
+        "id": "G034",
+        "category": "code",
+        "query": "FEATURE-LOGIN",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 20.878
+      },
+      {
+        "id": "G035",
+        "category": "code",
+        "query": "CHANGE-RECORD-V1",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 20.963
+      },
+      {
+        "id": "G036",
+        "category": "code",
+        "query": "LEFTOVER-0007",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 22.12
+      },
+      {
+        "id": "G037",
+        "category": "code",
+        "query": "EXTERNAL-LINK-88",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 22.2
+      },
+      {
+        "id": "G038",
+        "category": "code",
+        "query": "RECOVERY-CODE-2026",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 22.537
+      },
+      {
+        "id": "G039",
+        "category": "code",
+        "query": "SEARCH-PROJECTION",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 22.613
+      },
+      {
+        "id": "G040",
+        "category": "code",
+        "query": "NPM-11-19",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 25.034
+      },
+      {
+        "id": "G041",
+        "category": "english",
+        "query": "login",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 25.607
+      },
+      {
+        "id": "G042",
+        "category": "english",
+        "query": "mfa",
+        "returnedCount": 4,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 25.578
+      },
+      {
+        "id": "G043",
+        "category": "english",
+        "query": "csrf",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 25.48
+      },
+      {
+        "id": "G044",
+        "category": "english",
+        "query": "postgres",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 26.824
+      },
+      {
+        "id": "G045",
+        "category": "english",
+        "query": "drizzle",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 27.031
+      },
+      {
+        "id": "G046",
+        "category": "english",
+        "query": "session",
+        "returnedCount": 4,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 27.55
+      },
+      {
+        "id": "G047",
+        "category": "english",
+        "query": "project",
+        "returnedCount": 6,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 27.423
+      },
+      {
+        "id": "G048",
+        "category": "english",
+        "query": "task",
+        "returnedCount": 6,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 28.814
+      },
+      {
+        "id": "G049",
+        "category": "english",
+        "query": "search",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 28.905
+      },
+      {
+        "id": "G050",
+        "category": "english",
+        "query": "audit",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 29.224
+      },
+      {
+        "id": "G051",
+        "category": "english",
+        "query": "notification",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 29.291
+      },
+      {
+        "id": "G052",
+        "category": "english",
+        "query": "activity",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 30.597
+      },
+      {
+        "id": "G053",
+        "category": "english",
+        "query": "permission",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 30.503
+      },
+      {
+        "id": "G054",
+        "category": "english",
+        "query": "module",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 30.869
+      },
+      {
+        "id": "G055",
+        "category": "english",
+        "query": "feature",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 30.955
+      },
+      {
+        "id": "G056",
+        "category": "english",
+        "query": "change record",
+        "returnedCount": 3,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 32.183
+      },
+      {
+        "id": "G057",
+        "category": "english",
+        "query": "restore",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 32.096
+      },
+      {
+        "id": "G058",
+        "category": "english",
+        "query": "draft",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 32.59
+      },
+      {
+        "id": "G059",
+        "category": "english",
+        "query": "detach",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 32.703
+      },
+      {
+        "id": "G060",
+        "category": "english",
+        "query": "gin",
+        "returnedCount": 5,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 33.936
+      },
+      {
+        "id": "G061",
+        "category": "mixed",
+        "query": "登录2026",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 33.891
+      },
+      {
+        "id": "G062",
+        "category": "mixed",
+        "query": "PR-42 权限修复",
+        "returnedCount": 2,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 34.226
+      },
+      {
+        "id": "G063",
+        "category": "mixed",
+        "query": "项目ALPHA",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 34.342
+      },
+      {
+        "id": "G064",
+        "category": "mixed",
+        "query": "搜索“全局”",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 35.8
+      },
+      {
+        "id": "G065",
+        "category": "mixed",
+        "query": "任务TASK-100",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 35.712
+      },
+      {
+        "id": "G066",
+        "category": "mixed",
+        "query": "完成迭代记录v2",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 36.071
+      },
+      {
+        "id": "G067",
+        "category": "mixed",
+        "query": "MFA重认证-05",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 36.235
+      },
+      {
+        "id": "G068",
+        "category": "mixed",
+        "query": "CSRF轮换",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 37.569
+      },
+      {
+        "id": "G069",
+        "category": "mixed",
+        "query": "PostgreSQL18迁移",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 37.659
+      },
+      {
+        "id": "G070",
+        "category": "mixed",
+        "query": "合并TASK-GROUP-009",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 37.678
+      },
+      {
+        "id": "G071",
+        "category": "mixed",
+        "query": "通知-未读",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 38.02
+      },
+      {
+        "id": "G072",
+        "category": "mixed",
+        "query": "动态“项目概览”",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 39.401
+      },
+      {
+        "id": "G073",
+        "category": "mixed",
+        "query": "审计-100并发",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 39.423
+      },
+      {
+        "id": "G074",
+        "category": "mixed",
+        "query": "模块CORE",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 39.303
+      },
+      {
+        "id": "G075",
+        "category": "mixed",
+        "query": "功能-LOGIN",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 39.7
+      },
+      {
+        "id": "G076",
+        "category": "mixed",
+        "query": "记录CR-2026-0031",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 41.162
+      },
+      {
+        "id": "G077",
+        "category": "mixed",
+        "query": "遗留问题-0007",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 41.282
+      },
+      {
+        "id": "G078",
+        "category": "mixed",
+        "query": "恢复-作废记录",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 41.186
+      },
+      {
+        "id": "G079",
+        "category": "mixed",
+        "query": "草稿-版本2",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 41.327
+      },
+      {
+        "id": "G080",
+        "category": "mixed",
+        "query": "GitHub-PR-42",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 43.127
+      },
+      {
+        "id": "G081",
+        "category": "punctuation",
+        "query": "登录，版本",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 43.276
+      },
+      {
+        "id": "G082",
+        "category": "punctuation",
+        "query": "全局搜索：",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 43.293
+      },
+      {
+        "id": "G083",
+        "category": "punctuation",
+        "query": "项目（POC）",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 43.158
+      },
+      {
+        "id": "G084",
+        "category": "punctuation",
+        "query": "任务/记录",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 45.189
+      },
+      {
+        "id": "G085",
+        "category": "punctuation",
+        "query": "MFA+CSRF",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 45.166
+      },
+      {
+        "id": "G086",
+        "category": "punctuation",
+        "query": "未读·通知",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 45.103
+      },
+      {
+        "id": "G087",
+        "category": "punctuation",
+        "query": "审计；100并发",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 45.13
+      },
+      {
+        "id": "G088",
+        "category": "punctuation",
+        "query": "恢复——记录",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 47.044
+      },
+      {
+        "id": "G089",
+        "category": "punctuation",
+        "query": "作废「记录」",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 47.063
+      },
+      {
+        "id": "G090",
+        "category": "punctuation",
+        "query": "GitHub_Issue#42",
+        "returnedCount": 1,
+        "targetFound": true,
+        "passed": true,
+        "elapsedMs": 47.078
+      }
+    ],
+    "nonExpectedCases": [
+      {
+        "id": "G091",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "qx7-不存在-zz9",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 46.928
+      },
+      {
+        "id": "G092",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "不存在词条xq7",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 48.736
+      },
+      {
+        "id": "G093",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "%%",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 48.865
+      },
+      {
+        "id": "G094",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "__",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 48.759
+      },
+      {
+        "id": "G095",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "\\\\",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 48.846
+      },
+      {
+        "id": "G096",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "<>?&\"{}",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 50.51
+      },
+      {
+        "id": "G097",
+        "category": "no-result",
+        "policy": "no-result",
+        "query": "新词不存在-2026",
+        "ranQuery": true,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 50.536
+      },
+      {
+        "id": "G098",
+        "category": "edge",
+        "policy": "too-short",
+        "query": "a",
+        "ranQuery": false,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 0.066
+      },
+      {
+        "id": "G099",
+        "category": "edge",
+        "policy": "empty",
+        "query": "",
+        "ranQuery": false,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 0.07
+      },
+      {
+        "id": "G100",
+        "category": "edge",
+        "policy": "too-long",
+        "query": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ranQuery": false,
+        "returnedCount": 0,
+        "passed": true,
+        "elapsedMs": 0.07
+      }
+    ]
+  },
+  "security": {
+    "crossProject": {
+      "passed": true,
+      "query": "INP-T-2026-0001",
+      "returnedCount": 0
+    },
+    "sql": [
+      "WITH candidates AS MATERIALIZED (",
+      "  SELECT ... FROM app.search_projection",
+      "  WHERE normalized_search_text ILIKE '%' || escaped_query || '%' ESCAPE E'\\\\'",
+      ")",
+      "SELECT ... FROM candidates",
+      "WHERE project_id = ANY(?) AND visibility_scope = 'MEMBER'",
+      "ORDER BY project_id, entity_id LIMIT 20"
+    ],
+    "plannerHintForGinProof": "SET LOCAL enable_seqscan = off"
+  },
+  "indexPlans": [
+    {
+      "queryId": "G001",
+      "category": "zh-short",
+      "plan": [
+        "Limit  (cost=882.93..882.93 rows=1 width=40) (actual time=0.910..0.912 rows=6.00 loops=1)",
+        "  Buffers: shared hit=149",
+        "  CTE candidates",
+        "    ->  Bitmap Heap Scan on search_projection  (cost=878.88..882.89 rows=1 width=72) (actual time=0.173..0.901 rows=6.00 loops=1)",
+        "          Recheck Cond: (normalized_search_text ~~* '%登录%'::text)",
+        "          Rows Removed by Index Recheck: 994",
+        "          Heap Blocks: exact=44",
+        "          Buffers: shared hit=149",
+        "          ->  Bitmap Index Scan on search_projection_normalized_text_trgm_idx  (cost=0.00..878.88 rows=1 width=0) (actual time=0.161..0.161 rows=1000.00 loops=1)",
+        "                Index Cond: (normalized_search_text ~~* '%登录%'::text)",
+        "                Index Searches: 1",
+        "                Buffers: shared hit=105",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.910..0.910 rows=6.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=149",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.177..0.906 rows=6.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=149",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.080 ms",
+        "Execution Time: 0.971 ms"
+      ],
+      "ginIndexUsed": true,
+      "defaultPlan": [
+        "Limit  (cost=59.99..60.00 rows=1 width=40) (actual time=0.674..0.676 rows=6.00 loops=1)",
+        "  Buffers: shared hit=44",
+        "  CTE candidates",
+        "    ->  Seq Scan on search_projection  (cost=0.00..59.95 rows=1 width=72) (actual time=0.007..0.667 rows=6.00 loops=1)",
+        "          Filter: (normalized_search_text ~~* '%登录%'::text)",
+        "          Rows Removed by Filter: 994",
+        "          Buffers: shared hit=44",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.674..0.675 rows=6.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=44",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.009..0.671 rows=6.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=44",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.056 ms",
+        "Execution Time: 0.685 ms"
+      ],
+      "defaultPlanUsesGin": false,
+      "plannerHinted": true
+    },
+    {
+      "queryId": "G021",
+      "category": "code",
+      "plan": [
+        "Limit  (cost=499.04..499.05 rows=1 width=40) (actual time=0.646..0.647 rows=1.00 loops=1)",
+        "  Buffers: shared hit=117",
+        "  CTE candidates",
+        "    ->  Bitmap Heap Scan on search_projection  (cost=494.99..499.00 rows=1 width=72) (actual time=0.639..0.639 rows=1.00 loops=1)",
+        "          Recheck Cond: (normalized_search_text ~~* '%inp-t-2026-0001%'::text)",
+        "          Heap Blocks: exact=1",
+        "          Buffers: shared hit=117",
+        "          ->  Bitmap Index Scan on search_projection_normalized_text_trgm_idx  (cost=0.00..494.99 rows=1 width=0) (actual time=0.632..0.632 rows=1.00 loops=1)",
+        "                Index Cond: (normalized_search_text ~~* '%inp-t-2026-0001%'::text)",
+        "                Index Searches: 1",
+        "                Buffers: shared hit=116",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.646..0.646 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=117",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.643..0.643 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=117",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.060 ms",
+        "Execution Time: 0.663 ms"
+      ],
+      "ginIndexUsed": true,
+      "defaultPlan": [
+        "Limit  (cost=59.99..60.00 rows=1 width=40) (actual time=0.714..0.715 rows=1.00 loops=1)",
+        "  Buffers: shared hit=44",
+        "  CTE candidates",
+        "    ->  Seq Scan on search_projection  (cost=0.00..59.95 rows=1 width=72) (actual time=0.023..0.709 rows=1.00 loops=1)",
+        "          Filter: (normalized_search_text ~~* '%inp-t-2026-0001%'::text)",
+        "          Rows Removed by Filter: 999",
+        "          Buffers: shared hit=44",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.713..0.714 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=44",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.025..0.712 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=44",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.081 ms",
+        "Execution Time: 0.725 ms"
+      ],
+      "defaultPlanUsesGin": false,
+      "plannerHinted": true
+    },
+    {
+      "queryId": "G041",
+      "category": "english",
+      "plan": [
+        "Limit  (cost=457.69..457.69 rows=1 width=40) (actual time=0.288..0.290 rows=3.00 loops=1)",
+        "  Buffers: shared hit=108",
+        "  CTE candidates",
+        "    ->  Bitmap Heap Scan on search_projection  (cost=450.87..457.62 rows=2 width=72) (actual time=0.279..0.282 rows=3.00 loops=1)",
+        "          Recheck Cond: (normalized_search_text ~~* '%login%'::text)",
+        "          Heap Blocks: exact=2",
+        "          Buffers: shared hit=108",
+        "          ->  Bitmap Index Scan on search_projection_normalized_text_trgm_idx  (cost=0.00..450.87 rows=2 width=0) (actual time=0.270..0.270 rows=3.00 loops=1)",
+        "                Index Cond: (normalized_search_text ~~* '%login%'::text)",
+        "                Index Searches: 1",
+        "                Buffers: shared hit=106",
+        "  ->  Sort  (cost=0.07..0.08 rows=1 width=40) (actual time=0.288..0.288 rows=3.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=108",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.06 rows=1 width=40) (actual time=0.282..0.286 rows=3.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=108",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.058 ms",
+        "Execution Time: 0.301 ms"
+      ],
+      "ginIndexUsed": true,
+      "defaultPlan": [
+        "Limit  (cost=60.02..60.03 rows=1 width=40) (actual time=0.625..0.626 rows=3.00 loops=1)",
+        "  Buffers: shared hit=44",
+        "  CTE candidates",
+        "    ->  Seq Scan on search_projection  (cost=0.00..59.95 rows=2 width=72) (actual time=0.033..0.618 rows=3.00 loops=1)",
+        "          Filter: (normalized_search_text ~~* '%login%'::text)",
+        "          Rows Removed by Filter: 997",
+        "          Buffers: shared hit=44",
+        "  ->  Sort  (cost=0.07..0.08 rows=1 width=40) (actual time=0.624..0.624 rows=3.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=44",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.06 rows=1 width=40) (actual time=0.035..0.622 rows=3.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=44",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.067 ms",
+        "Execution Time: 0.635 ms"
+      ],
+      "defaultPlanUsesGin": false,
+      "plannerHinted": true
+    },
+    {
+      "queryId": "G061",
+      "category": "mixed",
+      "plan": [
+        "Limit  (cost=459.33..459.33 rows=1 width=40) (actual time=0.321..0.322 rows=1.00 loops=1)",
+        "  Buffers: shared hit=108",
+        "  CTE candidates",
+        "    ->  Bitmap Heap Scan on search_projection  (cost=455.28..459.29 rows=1 width=72) (actual time=0.316..0.316 rows=1.00 loops=1)",
+        "          Recheck Cond: (normalized_search_text ~~* '%登录2026%'::text)",
+        "          Heap Blocks: exact=1",
+        "          Buffers: shared hit=108",
+        "          ->  Bitmap Index Scan on search_projection_normalized_text_trgm_idx  (cost=0.00..455.28 rows=1 width=0) (actual time=0.309..0.309 rows=1.00 loops=1)",
+        "                Index Cond: (normalized_search_text ~~* '%登录2026%'::text)",
+        "                Index Searches: 1",
+        "                Buffers: shared hit=107",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.321..0.321 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=108",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.318..0.319 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=108",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.062 ms",
+        "Execution Time: 0.334 ms"
+      ],
+      "ginIndexUsed": true,
+      "defaultPlan": [
+        "Limit  (cost=59.99..60.00 rows=1 width=40) (actual time=0.650..0.651 rows=1.00 loops=1)",
+        "  Buffers: shared hit=44",
+        "  CTE candidates",
+        "    ->  Seq Scan on search_projection  (cost=0.00..59.95 rows=1 width=72) (actual time=0.053..0.646 rows=1.00 loops=1)",
+        "          Filter: (normalized_search_text ~~* '%登录2026%'::text)",
+        "          Rows Removed by Filter: 999",
+        "          Buffers: shared hit=44",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.650..0.650 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=44",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.055..0.648 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=44",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.056 ms",
+        "Execution Time: 0.659 ms"
+      ],
+      "defaultPlanUsesGin": false,
+      "plannerHinted": true
+    },
+    {
+      "queryId": "G081",
+      "category": "punctuation",
+      "plan": [
+        "Limit  (cost=454.92..454.92 rows=1 width=40) (actual time=0.265..0.266 rows=1.00 loops=1)",
+        "  Buffers: shared hit=107",
+        "  CTE candidates",
+        "    ->  Bitmap Heap Scan on search_projection  (cost=450.86..454.88 rows=1 width=72) (actual time=0.260..0.260 rows=1.00 loops=1)",
+        "          Recheck Cond: (normalized_search_text ~~* '%登录,版本%'::text)",
+        "          Heap Blocks: exact=1",
+        "          Buffers: shared hit=107",
+        "          ->  Bitmap Index Scan on search_projection_normalized_text_trgm_idx  (cost=0.00..450.86 rows=1 width=0) (actual time=0.254..0.254 rows=1.00 loops=1)",
+        "                Index Cond: (normalized_search_text ~~* '%登录,版本%'::text)",
+        "                Index Searches: 1",
+        "                Buffers: shared hit=106",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.264..0.265 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=107",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.262..0.262 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=107",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.056 ms",
+        "Execution Time: 0.276 ms"
+      ],
+      "ginIndexUsed": true,
+      "defaultPlan": [
+        "Limit  (cost=59.99..60.00 rows=1 width=40) (actual time=0.665..0.666 rows=1.00 loops=1)",
+        "  Buffers: shared hit=44",
+        "  CTE candidates",
+        "    ->  Seq Scan on search_projection  (cost=0.00..59.95 rows=1 width=72) (actual time=0.066..0.661 rows=1.00 loops=1)",
+        "          Filter: (normalized_search_text ~~* '%登录,版本%'::text)",
+        "          Rows Removed by Filter: 999",
+        "          Buffers: shared hit=44",
+        "  ->  Sort  (cost=0.04..0.05 rows=1 width=40) (actual time=0.665..0.665 rows=1.00 loops=1)",
+        "        Sort Key: candidates.project_id, candidates.entity_id",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=44",
+        "        ->  CTE Scan on candidates  (cost=0.00..0.03 rows=1 width=40) (actual time=0.068..0.663 rows=1.00 loops=1)",
+        "              Filter: ((visibility_scope = 'MEMBER'::text) AND (project_id = ANY ('{11,12,13,14,15,16}'::integer[])))",
+        "              Storage: Memory  Maximum Storage: 17kB",
+        "              Buffers: shared hit=44",
+        "Planning:",
+        "  Buffers: shared hit=1",
+        "Planning Time: 0.052 ms",
+        "Execution Time: 0.674 ms"
+      ],
+      "defaultPlanUsesGin": false,
+      "plannerHinted": true
+    }
+  ],
+  "gates": {
+    "rowCountPassed": true,
+    "recallPassed": true,
+    "noResultPassed": true,
+    "edgePassed": true,
+    "crossProjectPassed": true,
+    "ginIndexUsableWhenForced": true,
+    "ginDefaultPlanPassed": false,
+    "ginIndexPassed": false,
+    "passed": false
+  }
+}
