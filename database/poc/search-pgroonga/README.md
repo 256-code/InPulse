@@ -4,30 +4,47 @@
 
 这是 [ADR-025](../../../docs/adr/ADR-025.md) 的 V1 技术验证证据，也是
 原 `pg_trgm` 阶段 0 门禁失败后的候选验证。ADR-025 已记录并替代 ADR-010；
-正式产品实现尚未开始，本节不代表生产已实现。V1 验收约束已明确为：完整
-英文缩写、完整代码标识符、中文短词和编号搜索；不要求任意英文子串，也
-不要求代码标识符中间片段子串。
+本节是阶段 0 技术验证证据；正式 `search_projection` PGroonga 迁移与
+bootstrap 已经落库，SearchQueryService、API 与页面尚未开始。V1 验收约束
+已明确为：完整英文缩写、完整代码标识符、中文短词和编号搜索；不要求任意
+英文子串，也不要求代码标识符中间片段子串。
 
-本 PoC 通过 `groonga/pgroonga:4.0.8-alpine-18` 在一次性 PostgreSQL 18.4
-容器中运行，PGroonga 版本为 `4.0.8`，Groonga 版本为 `16.0.8`。仓库当前
-生产基线是 PostgreSQL `18.6`，因此本报告不能证明官方 18.6 镜像已经兼容
-PGroonga。
+本 PoC 已通过仓库内 Dockerfile 在官方 `postgres:18.6` 基础镜像上安装
+PGroonga `4.0.8` 与 Groonga `16.1.0`，并用该镜像完成构建、扩展安装、
+migration runner 迁移、搜索语义、默认查询计划、逻辑备份和恢复后的索引
+可用性验证。Dockerfile 不使用 `latest` 下载路径：PostgreSQL 基础镜像按
+digest 固定，Groonga 官方 keyring 按 SHA-256 固定，PGroonga/Groonga
+Debian 包版本固定；本机已验证镜像 digest 为
+`sha256:bca8248cb90be2b287674741d6d1575b5a87f4f1fbb52259a9aca9055781083a`。
+本镜像只用于 PoC，不代表生产部署镜像已经定稿。
 
 正式证据汇总见
 [docs/poc/search-pgroonga-v1-result.md](../../../docs/poc/search-pgroonga-v1-result.md)。
 
 ## 复现
 
-需要 Docker，并预先拉取镜像：
+需要 Docker。先构建锁定版本的 PostgreSQL 18.6 探针镜像：
 
 ```powershell
-docker pull groonga/pgroonga:4.0.8-alpine-18
-pnpm db:poc:search:pgroonga:local
+docker build `
+  -f database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 `
+  -t inpulse/pgroonga-pg18.6:repro `
+  database/poc/search-pgroonga
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File database/scripts/poc-search-pgroonga-local.ps1 `
+  -Image inpulse/pgroonga-pg18.6:repro `
+  -Port 55436 -RestorePort 55437
 ```
 
-本地脚本会创建一次性容器，执行角色初始化、在 `app` schema 创建
-`pgroonga` 扩展、显式迁移、数据库集成测试，然后运行搜索 PoC。成功时
-容器自动删除；传 `-KeepContainer` 可以保留容器。
+本地脚本会创建两个一次性容器，执行 `000_roles.sql`、`020_pgroonga.sql`
+（由 `cluster_bootstrap` 预装扩展并收紧函数权限）、数据库 migration
+runner、集成测试和搜索 PoC；随后在该实例上创建
+代表性 PGroonga 索引，执行 `pg_dump --format=custom`（排除 Session 数据）、
+在全新容器恢复并验证扩展、索引、权限、默认查询计划与中文探针。成功时
+两个容器自动删除；传 `-KeepContainer` 可以保留容器。`pnpm
+db:poc:search:pgroonga:local` 保留为使用旧 PoC 镜像的快速入口，但 18.6
+验证请使用上面的构建与参数。
 
 如果需要连接已有数据库运行：
 
@@ -39,17 +56,22 @@ $env:POC_PGROONGA_IMAGE_DIGEST = 'sha256:b5c92fa3d86ad76ce75ddd8095f60542cf02534
 pnpm db:poc:search:pgroonga
 ```
 
-结果写入 [`artifacts/pgroonga-report.json`](./artifacts/pgroonga-report.json)。
+结果分别写入
+[`artifacts/pgroonga-report.json`](./artifacts/pgroonga-report.json)、
+[`artifacts/pgroonga-backup-restore-report.json`](./artifacts/pgroonga-backup-restore-report.json)
+与 [`artifacts/pgroonga-migration-report.json`](./artifacts/pgroonga-migration-report.json)。
 
 ## 数据集
 
 - 复用现有冻结搜索金标：100 条查询、90 条正常召回目标、10 条无结果/边界输入。
 - 基础表 1000 行、规模表 101000 行，使用确定性仿真文本，不是真实业务数据。
 - 项目过滤在 SQL 层执行，并验证跨项目隔离。
-- 追加 9 组 V1 语义探针：完整英文缩写 `mfa`、`csrf`、`api`，中文短词
-  `登录`，完整代码标识符 `INP-T-2026-0001`、`PR-42`、`SESSION-TOKEN-01`，
-  以及编号 `2026`、`42`。所有探针强制关闭 `enable_seqscan` 并检查计划
-  确实使用 PGroonga 索引，避免单行小表被普通 `Seq Scan + ILIKE` 误判。
+- 追加 15 组 V1 语义探针：完整英文缩写/标识符 `mfa`、`csrf`、`api`、
+  `payment_callback`、`task_group_id`，中文短词 `登录`、`退款`、`回调`，
+  完整代码标识符 `INP-T-2026-0001`、`PR-42`、`R-42`、`PR-245`、
+  `SESSION-TOKEN-01`，以及编号 `2026`、`42`。默认计划使用
+  `EXPLAIN (ANALYZE, BUFFERS, COSTS OFF)`；探针另强制关闭
+  `enable_seqscan` 作诊断，避免单行小表被普通 `Seq Scan + ILIKE` 误判。
 
 ## 策略矩阵
 
@@ -69,14 +91,20 @@ pnpm db:poc:search:pgroonga
 全部策略在 101000 行数据上使用 PGroonga 索引，没有出现 Seq Scan。默认
 全文策略的中文、英文、混合、标点查询多为 Bitmap Heap Scan，编号查询为
 Index Scan；自定义 Bigram/Ngram 的部分混合和标点查询也使用 Index Scan。
+`regexp-query` 仅作为诊断项使用 `cluster_bootstrap` 执行；`app_runtime`
+按最小权限没有 `pgroonga_regexp_text` EXECUTE，未转义 `&~` 查询被拒绝，
+不作为 V1 运行时门禁。默认计划报告保留
+`EXPLAIN (ANALYZE, BUFFERS, COSTS OFF)` 的 `Buffers` 与 `Execution Time`
+文本。
 
 ## 关键结论
 
 1. 默认 `TokenBigram`（`pgroonga_text_full_text_search_ops_v2`）已通过
-   全部 9 组 V1 语义探针和 90 条金标召回，在当前 V1 约束下不再需要正则
+   全部 15 组 V1 语义探针和 90 条金标召回，在当前 V1 约束下不再需要正则
    opclass 或自定义 Bigram/Ngram；正式方案见 ADR-025。
 2. 默认全文索引不支持任意英文子串（如 `roonga`）和代码内部片段
-   （如 `R-42`），但这两类已明确排除在 V1 范围之外。
+   （如 `R-4`），但这两类已明确排除在 V1 范围之外；完整代码标识符
+   `R-42`、`PR-245` 已按要求覆盖。
 3. `regexp-query` 的 `&~` 虽通过 V1 探针，但把 `项目（POC）`、
    `MFA+CSRF`、`作废「记录」` 当作正则表达式，导致金标 Recall@20 为
    96.7%；普通字符串搜索不应直接使用 `&~`。
@@ -85,6 +113,8 @@ Index Scan；自定义 Bigram/Ngram 的部分混合和标点查询也使用 Inde
 5. `pg_relation_size` 对 PGroonga 索引返回 0；报告改用
    `pgroonga_command('object_inspect')` 读取 PGroonga 索引对象的
    `disk_usage`，并记录对应 Groonga lexicon 名称，才是实际 Groonga 存储占用。
+   默认查询策略的 1000/15 行探针 `indexDiskUsage` 为 `5283840`，101000 行
+   规模索引为 `29138944`。
 6. 扩展安装在 `app` schema 时，opclass 必须写成
    `app.pgroonga_text_regexp_ops_v2`；没有 schema 限定会报 opclass 不存在。
 
@@ -96,12 +126,30 @@ V1 建议采用默认 `pgroonga_text_full_text_search_ops_v2`，查询方式优�
 或正则 opclass。若后续 V2 要求任意英文/代码子串，再评估
 `TokenNgram(unify=false)` 或 `TokenBigramSplitSymbolAlphaDigit`，并新增 ADR。
 
+## 迁移生命周期
+
+- 空库迁移由数据库集成测试执行，六条迁移（`0000-0005`）全部 Applied。
+- 升级路径在独立 `app_upgrade_prev` 数据库中验证：先运行 `0000`、`0001`、
+  `0002`，在 `schema_migrations` 中写入这三个文件的精确 checksum，再由
+  仓库 migration runner 应用 `0003_search_pgroonga.sql`；实际结果为
+  1 applied / 3 already present，确认 PGroonga 索引已创建并记录迁移历史。
+  在旧 GIN 索引仍存在时强制计划确认 PGroonga 可用，再由同一 migration
+  runner 应用 `0004`/`0005`；实际结果为 2 applied / 4 already present，
+  确认旧 GIN 索引和 `pg_trgm` 扩展被独立删除。
+- 回滚分别对 `0003`、`0004`、`0005` 做显式事务验证：`0003` 删除并恢复
+  PGroonga 索引、`0004` 删除并恢复旧 GIN 索引、`0005` 删除并恢复
+  `pg_trgm` 扩展；逐次回滚后迁移历史保持可回退。
+- 结果见 `artifacts/pgroonga-migration-report.json`
+  （`version: pgroonga-migration-v3`）；生产升级/回滚编排仍需部署 Runbook
+  与人工评审。
+
 ## 限制
 
-- 只验证了 `pgroonga/pgroonga:4.0.8-alpine-18`，未验证 PostgreSQL 18.6
-  官方镜像、其他补丁版本、备份恢复、故障切换和长时间并发更新。
+- 已验证 PostgreSQL 18.6 官方基础镜像、PGroonga 构建、`020_pgroonga.sql`
+  扩展权限、`0003-0005` 显式迁移、旧 `pg_trgm` contract 清理、默认查询
+  计划和逻辑恢复，但未验证其他补丁版本、故障切换和长时间并发更新。
 - 101000 行是确定性仿真数据，不能预测真实业务数据分布、中文分词质量、
   索引膨胀和并发写入成本。
-- Groonga 版本通过 `pgroonga_command('status')` 从运行实例读取；ADR-025
-  已创建，功能/系统/技术设计和测试矩阵已同步，但 PostgreSQL 18.6 官方
-  基线、正式迁移、备份恢复和默认查询计划仍需生产验证。
+- 恢复验证只证明 PoC 扩展与索引在逻辑恢复后可用；正式 `search_projection`
+  迁移由数据库集成测试验证，但加密、签名、异机保留、RPO/RTO、旧 Session
+  失效及生产部署镜像仍属于 ADR-020/F-10 与 F-26 的后续交付。

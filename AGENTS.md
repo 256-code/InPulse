@@ -112,7 +112,7 @@
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
 - 阶段 0 工程基座骨架已落库：根级可运行命令为 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm db:migrations:check`、`pnpm check:docs`，GitHub Actions 的 `CI / workspace` 与 `Documentation / docs` job 执行同一组命令。`typecheck` 与 `lint` 覆盖 database 包与 api/web 应用；`pnpm db:migrate`、`pnpm db:test` 和 `pnpm db:test:local` 需要 PostgreSQL 18，尚未纳入 CI。应用层单元测试、E2E 与生成物漂移检查尚未建立。其中 `check:docs` 同时检查 HEAD、暂存区、工作区、未忽略的新文件和 Markdown 链接/锚点。设计一致性仍需人工检查，不得伪称已运行不存在或未执行的门禁。
-- 阶段 0 搜索 PoC 已落库：`pnpm db:poc:search:pgroonga:local` 已通过 V1 语义与 90 条金标，但 PostgreSQL 18.6 官方基线的构建、迁移、默认计划和恢复尚未验证；`pnpm db:poc:search:local` 保留为原 `pg_trgm` GIN 默认计划未通过的证据并会非零退出。
+- 阶段 0 搜索 PoC 已落库：PostgreSQL 18.6 探针镜像已完成 PGroonga 构建、扩展安装、迁移、15 组 V1 语义探针、90 条金标、跨项目隔离、`EXPLAIN (ANALYZE, BUFFERS)` 默认计划、`0000-0002 -> 0003-0005` 由 migration runner 升级/逐迁移事务内回滚和排除 Session 数据的逻辑恢复验证；旧 `pg_trgm` GIN 索引由 `0004` 删除、`pg_trgm` 扩展由 `0005` 在 contract 确认后删除；`search_projection` PGroonga bootstrap 与 `0003-0005` 显式迁移已通过真实 PostgreSQL 集成测试，`app_runtime` 使用未转义 `&~` 被拒绝；SearchQueryService、API、权限过滤/参数化查询测试与生产加密备份恢复仍待交付；`pnpm db:poc:search:local` 保留为原 `pg_trgm` GIN 默认计划未通过的证据并会非零退出。
 - 阶段 0 必须建立统一的根级安装、lint、格式、类型检查、单元测试、集成测试、E2E、生成物漂移检查和构建入口；只有实际脚本落库后才能把命令写成可执行说明。
 
 ## 9. 文档与变更同步

@@ -43,6 +43,7 @@ $repositoryRoot = [System.IO.Path]::GetFullPath(
   (Join-Path $PSScriptRoot '..\..')
 )
 $rolesScript = Join-Path $repositoryRoot 'database\bootstrap\000_roles.sql'
+$pgroongaScript = Join-Path $repositoryRoot 'database\bootstrap\020_pgroonga.sql'
 $serverStarted = $false
 $serverStopped = $false
 $succeeded = $false
@@ -98,6 +99,34 @@ try {
   & (Join-Path $resolvedBin 'psql.exe') @psqlArguments
   if ($LASTEXITCODE -ne 0) {
     throw "database role bootstrap failed with exit code $LASTEXITCODE"
+  }
+
+  $pgroongaAvailable = (
+    & (Join-Path $resolvedBin 'psql.exe') `
+      -X `
+      -At `
+      -h '127.0.0.1' `
+      -p $Port `
+      -U 'cluster_bootstrap' `
+      -d 'app' `
+      -c "SELECT count(*)::INTEGER FROM pg_available_extensions WHERE extname = 'pgroonga'"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0 -or $pgroongaAvailable -ne '1') {
+    throw 'The PostgreSQL 18 installation must provide the PGroonga extension; use pnpm db:poc:search:pgroonga:local or install the matching PGDG PGroonga package.'
+  }
+
+  $pgroongaArguments = @(
+    '-X',
+    '-v', 'ON_ERROR_STOP=1',
+    '-h', '127.0.0.1',
+    '-p', $Port,
+    '-U', 'cluster_bootstrap',
+    '-d', 'app',
+    '-f', $pgroongaScript
+  )
+  & (Join-Path $resolvedBin 'psql.exe') @pgroongaArguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "PGroonga bootstrap failed with exit code $LASTEXITCODE"
   }
 
   $env:NODE_ENV = 'test'
