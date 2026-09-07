@@ -16,7 +16,7 @@
 |---|---|---|
 | [ADR-001](ADR-001.md) | Accepted | 采用模块化单体 |
 | [ADR-002](ADR-002.md) | Accepted | 前端采用 React SPA |
-| [ADR-003](ADR-003.md) | Accepted | NestJS 11.x 基线与 12.x 阶段 0 门禁 |
+| [ADR-003](ADR-003.md) | Superseded | NestJS 11.x 基线与 12.x 阶段 0 门禁，由 ADR-026 替代 |
 | [ADR-004](ADR-004.md) | Accepted | Zod Schema Registry 与 Route Registry 共同生成契约 |
 | [ADR-005](ADR-005.md) | Accepted | PostgreSQL 18、Drizzle 与显式迁移 |
 | [ADR-006](ADR-006.md) | Accepted | PostgreSQL hash-only Session Store |
@@ -39,6 +39,7 @@
 | [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外 |
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 | [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |
+| [ADR-026](ADR-026.md) | Accepted | NestJS 基线锁定 11.2.3 并延后 12.x 升级 |
 
 ## 关联基线
 
