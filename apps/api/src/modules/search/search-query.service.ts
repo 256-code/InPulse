@@ -1,13 +1,13 @@
 import type {
   AuthorizedProjectScope,
   ProjectAccessQueryPort,
-} from "../projects/project-access.port";
+} from "../projects/project-access.port.js";
 import type {
   SearchProjectionReader,
   SearchProjectionItem,
   SearchProjectionVisibilityScope,
-} from "./search-projection.reader";
-import { validateSearchQuery } from "./search-text";
+} from "./search-projection.reader.js";
+import { validateSearchQuery } from "./search-text.js";
 
 export const SEARCH_PAGE_LIMIT_DEFAULT = 20;
 export const SEARCH_PAGE_LIMIT_MAX = 50;

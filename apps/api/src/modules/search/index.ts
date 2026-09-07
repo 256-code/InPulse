@@ -1,3 +1,3 @@
-export * from "./search-projection.reader";
-export * from "./search-query.service";
-export * from "./search-text";
+export * from "./search-projection.reader.js";
+export * from "./search-query.service.js";
+export * from "./search-text.js";
