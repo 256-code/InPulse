@@ -54,7 +54,7 @@
 - `package.json`、`pnpm-lock.yaml`、CI 和生产镜像必须锁定经过批准的实际版本；生产依赖禁止使用 `latest`、`next`、`beta` 或 `rc`。
 - 修改 manifest 时必须同步提交 lockfile。不得手工编辑 lockfile。
 - 依赖升级只通过独立 PR 完成，必须人工确认；不得自动合并依赖更新。
-- OpenAPI 生成工具链已由 [ADR-027](./docs/adr/ADR-027.md) 定为 `Accepted`（2026-09-07）；Nest Zod Pipe/Serializer 组合和运行参数仍未定案。未转为 `Accepted` 的选择不得在规则或实现中伪装成已冻结基线。
+- OpenAPI 生成工具链已由 [ADR-027](./docs/adr/ADR-027.md) 定为 `Accepted`（2026-09-07）；`apps/api` 的模块/解析制式已由 [ADR-028](./docs/adr/ADR-028.md) 定为 ESM/NodeNext（2026-09-07）；Nest Zod Pipe/Serializer 组合和运行参数仍未定案。未转为 `Accepted` 的选择不得在规则或实现中伪装成已冻结基线。
 - 搜索基线已经确定为 PostgreSQL + PGroonga + `SearchProjection`（V1 由 ADR-025 替代 ADR-010）：支持中文短词、完整英文缩写、完整代码标识符和完整编号，不保证任意英文/代码子串，不提供正则搜索；普通查询必须使用 `normalized_search_text &@~ app.pgroonga_query_escape($1)`。
 - 生产 CSP 已确定使用逐响应 nonce 且禁止 `script-src/style-src 'unsafe-inline'`；阶段 0 验证的是 Ant Design/Vite 兼容性，失败时阻断并通过 ADR 更换方案，不得降低 CSP。
 
