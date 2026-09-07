@@ -21,8 +21,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 |---|---|
 | 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、六条显式迁移（`0000-0005`，含 `0003_search_pgroonga.sql` 索引与 `0004/0005` 旧 `pg_trgm` contract 清理）、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、15 组语义探针、90 条金标 Recall@20=100%、跨项目/边界、PostgreSQL 18.6 探针镜像构建、`EXPLAIN (ANALYZE, BUFFERS)`、`0000-0002 -> 0003-0005` 升级/逐迁移回滚与逻辑恢复验证；SearchQueryService 服务层、`ProjectAccessQueryPort` 契约草案与 8 个真实 PostgreSQL 搜索集成用例；ADR-025 替代 ADR-010 |
 | 下一步 | 在 Schema Registry + Route Registry 定案后接入搜索 API/Controller、生产 `ProjectAccessQueryPort` 适配器与前端；随后继续认证、业务领域模块；补齐契约生成链路、生产镜像、加密备份恢复与其余 CI 门禁 |
-| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、搜索服务真实 PostgreSQL 集成测试、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
-| 尚未提供 | API 契约生成链路、生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller/页面、应用层单元测试、E2E 和生产部署产物 |
+| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、前端单元测试基座（`pnpm test:web`）、搜索服务真实 PostgreSQL 集成测试、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
+| 尚未提供 | API 契约生成链路、生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller/页面、E2E 和生产部署产物 |
 
 以下根级命令由 GitHub Actions 的 `CI / workspace` job 执行；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
 
@@ -35,6 +35,13 @@ pnpm lint
 pnpm build
 pnpm db:migrations:check
 pnpm check:docs
+```
+
+以下命令已落库，可用于前端单测或边界检查，当前未纳入 CI：
+
+```powershell
+pnpm test:web
+pnpm check:frontend:boundaries
 ```
 
 以下命令已落库，但需要已初始化 PostgreSQL 18 + PGroonga 的实例
