@@ -171,7 +171,7 @@ pnpm db:migrations:check
 pnpm check:docs
 ```
 
-其中 `check:docs` 使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；`typecheck` 覆盖 database 包与 api/web 应用；`lint` 执行 ESLint 检查；`build` 执行 api/web 的生产构建；`db:migrations:check` 校验迁移文件一致性。数据库迁移与集成测试（`pnpm db:migrate`、`pnpm db:test`）需要 PostgreSQL 18，Windows 可用 `pnpm db:test:local` 创建临时实例。GitHub Actions 中的 `Documentation / docs` 与 `CI / workspace` job 执行同一组命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
+其中 `check:docs` 使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；`typecheck` 覆盖 database 包与 api/web 应用；`lint` 执行 ESLint 检查；`build` 执行 api/web 的生产构建；`db:migrations:check` 校验迁移文件一致性。数据库迁移与集成测试（`pnpm db:migrate`、`pnpm db:test`）需要 PostgreSQL 18，Windows 可用 `pnpm db:test:local` 创建临时实例。`pnpm test:search:db` 与 `pnpm test` 还要求已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，当前未纳入 CI。GitHub Actions 中的 `Documentation / docs` 与 `CI / workspace` job 执行前六项命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 
 阶段 0 搜索 PoC 附加命令（需要 Docker 与对应镜像）：
 
@@ -185,7 +185,9 @@ V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认查询计�
 `search_projection` PGroonga bootstrap 与 `0003-0005` 显式迁移已通过真实
 PostgreSQL 集成测试；旧 `pg_trgm` GIN 索引和扩展在 `0004/0005` 的
 contract 验证后清理，`object_inspect` 用于记录 Groonga 索引磁盘占用。
-SearchQueryService、参数化查询与权限过滤测试以及生产加密备份恢复仍未完成。
+SearchQueryService 服务层、参数化查询与权限过滤测试已落地并通过真实
+PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller、
+页面以及生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 
@@ -199,7 +201,7 @@ SearchQueryService、参数化查询与权限过滤测试以及生产加密备�
 - Web/API 生产构建；
 - Playwright 关键路径、依赖边界、权限矩阵和容器检查。
 
-截至 2026-09-07，frozen lockfile 安装、lint、类型检查、Web/API 生产构建、数据库迁移一致性检查与真实 PostgreSQL 集成测试入口已落库；其中迁移一致性检查已纳入 CI，数据库迁移与集成测试因需要 PostgreSQL 18 服务尚未纳入 CI，格式检查、应用层单元测试、E2E、OpenAPI/客户端漂移检查、依赖边界、权限矩阵自动化与容器检查仍待阶段 0 后续纵切片建立。
+截至 2026-09-07，frozen lockfile 安装、lint、类型检查、Web/API 生产构建、数据库迁移一致性检查、数据库真实 PostgreSQL 集成测试与搜索服务集成测试入口已落库；其中迁移一致性检查已纳入 CI，数据库迁移、数据库测试与搜索服务测试因需要 PostgreSQL 18/PGroonga 服务和 `max_connections >= 150` 尚未纳入 CI，格式检查、应用层单元测试、E2E、OpenAPI/客户端漂移检查、依赖边界、权限矩阵自动化与容器检查仍待阶段 0 后续纵切片建立。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 

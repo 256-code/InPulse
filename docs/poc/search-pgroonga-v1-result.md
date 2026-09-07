@@ -4,8 +4,9 @@
 
 本文是 [ADR-025](../adr/ADR-025.md) 的 V1 搜索技术验证证据。ADR-025 已
 记录并替代 ADR-010；ADR-011 保持原内容不变。PostgreSQL 18.6 探针镜像
-验证与正式 `search_projection` bootstrap/迁移已经完成，
-SearchQueryService、API、页面与生产部署仍在后续纵切片。
+验证与正式 `search_projection` bootstrap/迁移已经完成；SearchQueryService
+服务层与真实 PostgreSQL 参数化/权限过滤测试已实现，搜索 API/Controller、
+页面与生产部署仍在后续纵切片。
 
 ## V1 搜索范围
 
@@ -112,5 +113,6 @@ normalized_search_text &@~ app.pgroonga_query_escape($1)
 - [ADR-025](../adr/ADR-025.md) 已创建，状态为 Accepted，并标记替代
   ADR-010；
 - 未修改或覆盖 [ADR-011](../adr/ADR-011.md)；
-- 下一步为 SearchQueryService、`AuthorizedProjectScope` 权限过滤与参数化
-  查询集成测试、F-26 契约/API/页面，以及生产备份恢复纵切片。
+- 下一步为生产 `ProjectAccessQueryPort` 适配器、F-26 契约/API/页面，
+  以及生产备份恢复纵切片。SearchQueryService 服务层和基于测试版权限
+  `AuthorizedProjectScope` 的参数化查询集成测试已先行落地。

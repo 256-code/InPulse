@@ -5,7 +5,8 @@
 这是 [ADR-025](../../../docs/adr/ADR-025.md) 的 V1 技术验证证据，也是
 原 `pg_trgm` 阶段 0 门禁失败后的候选验证。ADR-025 已记录并替代 ADR-010；
 本节是阶段 0 技术验证证据；正式 `search_projection` PGroonga 迁移与
-bootstrap 已经落库，SearchQueryService、API 与页面尚未开始。V1 验收约束
+bootstrap 已经落库，SearchQueryService 服务层与真实 PostgreSQL 参数化/
+权限过滤测试已实现，搜索 API 与页面仍未开始。V1 验收约束
 已明确为：完整英文缩写、完整代码标识符、中文短词和编号搜索；不要求任意
 英文子串，也不要求代码标识符中间片段子串。
 

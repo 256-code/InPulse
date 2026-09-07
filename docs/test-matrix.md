@@ -1,6 +1,6 @@
 # 测试矩阵
 
-状态：已接受的验收基线。当前仓库处于设计阶段，尚无应用代码；`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
+状态：已接受的验收基线。当前仓库处于阶段 0 实施中，数据库真实 PostgreSQL 测试与搜索服务集成测试已部分落地；`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
 ## 文档与仓库治理
 
@@ -87,10 +87,13 @@
 > 保留为决策证据，见
 > [PGroonga PoC 报告](../database/poc/search-pgroonga/README.md) 与
 > [原 pg_trgm PoC 报告](../database/poc/search/README.md)。
-> 当前 SEARCH-001 仅完成数据库层：`search_projection` PGroonga bootstrap
-> 与 `0003-0005` 显式迁移已通过真实 PostgreSQL 集成测试；
-> 仍缺少 SearchQueryService 参数化查询与权限过滤测试，以及生产备份恢复
-> 纵切片。
+> 当前 SEARCH-001 的数据库层与搜索服务层验证已落地：`search_projection`
+> PGroonga bootstrap 与 `0003-0005` 显式迁移已通过真实 PostgreSQL 集成
+> 测试；SearchQueryService 与测试版 `ProjectAccessQueryPort` 已通过
+> 参数化查询、权限 Scope、跨项目隔离、移除/停用成员、`ADMIN_ONLY/HIDDEN`、
+> 分页、1000 条投影与 100 条金标中的普通用例 Recall@20 >= 90%，以及
+> PGroonga 索引计划验证。仍缺少生产 `ProjectAccessQueryPort` 适配器、
+> 搜索 API/Controller、E2E 和生产备份恢复纵切片。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | Required |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
