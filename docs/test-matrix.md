@@ -30,7 +30,7 @@
 | CI-011 | CI | 权限矩阵一致性 | `pnpm permissions:check` 双向校验可执行权限矩阵与 `docs/permissions.md` 的身份集合、ADR-023 allowlist 精确相等、每条路由都有矩阵条目，并要求需认证路由同时登记允许与拒绝结果 | 已自动化 |
 | CI-012 | CI | 生产构建 | `pnpm build` 完成 api（`tsc`）与 web（`vite`）生产构建 | 已自动化 |
 | CI-013 | CI | 依赖边界 | `pnpm check:deps` 校验前端分层 `app -> pages -> features -> shared/generated`、`features` 不导入 `pages`、web 不导入 database、Controller 不直连数据库、模块只能经公开表面（`public/**`、模块 `index.ts`、`*.port.ts`）跨模块、无循环依赖、前端无裸 `fetch`/`axios`；并由 `pnpm check:frontend:boundaries`（dependency-cruiser）复核 `apps/web/src` 的分层规则 | 已自动化 |
-| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（当前失败：`ansi-regex@5.0.0` high，见下方状态说明） |
+| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex@5.0.0` high 已由 `overrides` 固定到 `^5.0.1` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | Required |
@@ -42,13 +42,13 @@
 > CI-005 现覆盖 database 5 例、api-contract 50 例与 apps/web 15 例（共 70 例），
 > CI-013 同时执行 `pnpm check:deps`（81 个源文件）与 `pnpm check:frontend:boundaries`
 > （dependency-cruiser：33 个模块 / 69 条依赖，无违规）。
-> **CI-014 当前失败**：`pnpm audit --audit-level=high` 报 1 个 high —— `ansi-regex@5.0.0`
+> **CI-014 已解决**：`pnpm audit --audit-level=high` 曾报 1 个 high —— `ansi-regex@5.0.0`
 > （GHSA-93q8-gq69-wqmw，补丁版本 `>=5.0.1`），路径为
 > `apps/web` 的 `@testing-library/{jest-dom,react,user-event}` -> `@testing-library/dom`
-> -> `pretty-format@27.0.2` -> `ansi-regex@5.0.0`；该解析由 `origin/main` 的 PR #16
-> 提交的 lockfile 带入，合并前 `dev/a` 不含 `@testing-library`。按 `AGENTS.md` 第 4 节，
-> 依赖变更须经独立 PR 与人工确认，因此本次合并未擅自加 override 或降级审计阈值，
-> 门禁保持失败以暴露该问题。
+> -> `pretty-format@27.0.2` -> `ansi-regex@5.0.0`（由 `origin/main` PR #16 的 lockfile 带入）。
+> 已在 `pnpm-workspace.yaml` 用 `overrides` 把 `ansi-regex` 固定到 `^5.0.1`（lockfile 落为
+> `5.0.1`）解决，该依赖为 dev 工具链；本地 `pnpm deps:audit` 与 `pnpm check` 已通过。
+> 按 `AGENTS.md` 第 4 节，该依赖变更仍须经独立 PR 与人工确认。
 > CI-007 与 CI-008 曾在 `0000-0002` 上通过本机 PostgreSQL 18.6 实测；合并 `0003-0005`
 > 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
