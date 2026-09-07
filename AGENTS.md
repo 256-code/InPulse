@@ -111,7 +111,7 @@
 - 不得使用 `skip`、降低断言或删除用例来掩盖失败；确需隔离不稳定测试时必须说明原因、影响和恢复计划，并获得人工同意。
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
-- 当前尚无 `package.json`、应用代码或应用测试脚本。文档阶段可执行的最低验证为 `node scripts/check_docs.mjs`；该命令同时检查 HEAD、暂存区、工作区、未忽略的新文件和 Markdown 链接/锚点，GitHub Actions 的 `Documentation / docs` job 执行同一命令。设计一致性仍需人工检查，不得伪称已运行 lint、typecheck、test 或 build。
+- 阶段 0 工程基座骨架已落库：根级可运行命令为 `pnpm install`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm check:docs`，GitHub Actions 的 `CI / workspace` 与 `Documentation / docs` job 执行同一组命令；应用测试脚本、真实 PostgreSQL 集成测试、E2E 与生成物漂移检查尚未建立。其中 `check:docs` 同时检查 HEAD、暂存区、工作区、未忽略的新文件和 Markdown 链接/锚点。设计一致性仍需人工检查，不得伪称已运行不存在或未执行的门禁。
 - 阶段 0 必须建立统一的根级安装、lint、格式、类型检查、单元测试、集成测试、E2E、生成物漂移检查和构建入口；只有实际脚本落库后才能把命令写成可执行说明。
 
 ## 9. 文档与变更同步

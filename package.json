@@ -1,0 +1,20 @@
+{
+  "name": "inpulse",
+  "private": true,
+  "packageManager": "pnpm@11.26.0",
+  "engines": {
+    "node": ">=24.20.0 <25",
+    "pnpm": ">=11.26.0 <12"
+  },
+  "scripts": {
+    "check:docs": "node scripts/check_docs.mjs",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "@inpulse/eslint-config": "workspace:*",
+    "eslint": "10.10.0",
+    "typescript": "5.9.3"
+  }
+}
