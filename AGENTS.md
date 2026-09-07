@@ -49,7 +49,7 @@
 
 - 使用 TypeScript 严格模式、pnpm workspace、单一 lockfile。
 - 候选主版本基线为 Node.js 24.x、pnpm 11.x、React 19.x、Vite 8.x、Ant Design 6.x、TanStack Query 5.x、React Hook Form 7.x、Zod 4.x、PostgreSQL 18.x。
-- NestJS 当前候选基线为 11.x；是否升级 12.x 必须在阶段 0 完成兼容性验证并由 ADR 定案，不得提前写成既成事实。
+- NestJS 基线已按 [ADR-026](./docs/adr/ADR-026.md) 定案为 11.x 并锁定 11.2.3；升级 12.x 必须满足该 ADR 的触发条件与工作清单，并作为独立依赖升级 PR 由人工确认，不得提前写成既成事实。
 - Drizzle 必须处于 `>=0.45.2、<0.46`，但实际补丁版本须由阶段 0 锁定。Nginx 固定为 1.30.x 系列，阶段 0 锁定实际补丁和镜像 digest；切换 stable 系列必须新增 ADR。
 - `package.json`、`pnpm-lock.yaml`、CI 和生产镜像必须锁定经过批准的实际版本；生产依赖禁止使用 `latest`、`next`、`beta` 或 `rc`。
 - 修改 manifest 时必须同步提交 lockfile。不得手工编辑 lockfile。
@@ -164,7 +164,7 @@
 
 ## 13. 基线冻结剩余事项
 
-截至 2026-09-04，本轮评审已将创建者成员关系、写接口幂等范围和审计并发阈值转为本文件第 6、8 节的可执行规则，并分别落入 [ADR-012](./docs/adr/ADR-012.md)、[ADR-019](./docs/adr/ADR-019.md)、[ADR-008](./docs/adr/ADR-008.md)及[测试矩阵](./docs/test-matrix.md)；一次性认证流程的受控幂等例外见 [ADR-023](./docs/adr/ADR-023.md)，记录作废后恢复的状态与历史不变量见 [ADR-024](./docs/adr/ADR-024.md)。ADR 编号冲突已由[唯一 ADR 索引](./docs/adr/README.md)消除：以技术设计的 ADR-001～ADR-020 为主线，系统设计新增的 CSP 与 ExternalLinks 决策顺延为 ADR-021、ADR-022，后续决策继续顺序编号。设计文档必须只引用该索引，不再维护相互冲突的编号正文。
+截至 2026-09-04，本轮评审已将创建者成员关系、写接口幂等范围和审计并发阈值转为本文件第 6、8 节的可执行规则，并分别落入 [ADR-012](./docs/adr/ADR-012.md)、[ADR-019](./docs/adr/ADR-019.md)、[ADR-008](./docs/adr/ADR-008.md)及[测试矩阵](./docs/test-matrix.md)；一次性认证流程的受控幂等例外见 [ADR-023](./docs/adr/ADR-023.md)，记录作废后恢复的状态与历史不变量见 [ADR-024](./docs/adr/ADR-024.md)，NestJS 版本基线的阶段 0 兼容性门禁已完成并按 [ADR-026](./docs/adr/ADR-026.md) 定案为 11.2.3（替代 [ADR-003](./docs/adr/ADR-003.md)，验证证据见 [NestJS PoC 结果](./docs/poc/nestjs-11-vs-12-v1-result.md)）。ADR 编号冲突已由[唯一 ADR 索引](./docs/adr/README.md)消除：以技术设计的 ADR-001～ADR-020 为主线，系统设计新增的 CSP 与 ExternalLinks 决策顺延为 ADR-021、ADR-022，后续决策继续顺序编号。设计文档必须只引用该索引，不再维护相互冲突的编号正文。
 
 开发基线仍不能宣告冻结，直至以下资料和门禁完成：
 
