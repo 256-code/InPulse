@@ -64,14 +64,6 @@ interface IndexPlanResult {
   readonly plannerHinted: boolean;
 }
 
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`Set ${name}`);
-  }
-  return value;
-}
-
 function runSuffix(): string {
   return `${Date.now().toString(36).toUpperCase()}${randomBytes(3)
     .toString("hex")
@@ -293,7 +285,7 @@ async function runGoldenQuery(
   const elapsedMs = Math.round((performance.now() - startedAt) * 1000) / 1000;
 
   let targetFound = false;
-  let passed = false;
+  let passed: boolean;
 
   if (spec.policy === "normal") {
     targetFound =

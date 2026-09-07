@@ -10,8 +10,7 @@ import {
   goldenQueries,
   GOLDEN_QUERY_VERSION,
   type ProjectKey,
-  type QueryCategory,
-  type QueryPolicy
+  type QueryCategory
 } from "../search/golden-queries.js";
 import {
   escapeLikePattern,

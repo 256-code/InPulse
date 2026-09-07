@@ -1,5 +1,7 @@
 packages:
   - database
+  - "apps/*"
+  - "packages/*"
 
 allowBuilds:
   esbuild: true

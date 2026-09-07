@@ -2,7 +2,7 @@
 
 软件研发功能迭代记录与任务协作系统，用于统一管理项目、模块、功能、任务、迭代记录及其历史关系。
 
-> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式产品搜索实现尚未验证和开始。应用代码尚未开始。
+> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build、最小 API/Web 骨架与 CI）已落库；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式搜索实现尚未验证和开始。业务应用代码尚未开始。
 
 ## 项目目标
 
@@ -19,20 +19,22 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器及 100 并发真实数据库门禁；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
-| 下一步 | 在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现 API 契约、认证、领域模块、正式搜索索引与前端 |
-| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
-| 尚未提供 | API/Web 应用源代码、应用 lint/build/E2E 和生产部署产物 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
+| 下一步 | 在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现 API 契约、认证、领域模块、正式搜索索引与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
+| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
+| 尚未提供 | API 契约生成链路、应用层单元测试、正式搜索实现、E2E 和生产部署产物 |
 
-当前已验证的数据库与文档命令：
+下列根级命令已真实可运行并与 CI 执行同一组命令；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
+
+当前可运行的根级命令：
 
 ```shell
 pnpm install --frozen-lockfile
 pnpm typecheck
+pnpm lint
+pnpm build
 pnpm db:migrations:check
-pnpm db:migrate
-pnpm db:test
-node scripts/check_docs.mjs
+pnpm check:docs
 ```
 
 PGroonga 搜索 PoC 使用 Docker 启动一次性

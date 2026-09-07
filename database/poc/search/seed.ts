@@ -107,7 +107,7 @@ function buildSearchRow(
   };
 }
 
-export function buildSearchSeed(projectCount = 6): SearchSeedResult {
+export function buildSearchSeed(): SearchSeedResult {
   const rows: SearchRowSeed[] = [];
   const expectedEntityIdsByGoldenId = new Map<string, number>();
   const expectedEntityTypesByGoldenId = new Map<string, SearchEntityType>();
