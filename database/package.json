@@ -6,6 +6,7 @@
   "exports": {
     ".": "./schema/index.ts",
     "./client": "./src/client.ts",
+    "./config": "./src/config.ts",
     "./migrate": "./src/migrate.ts"
   },
   "scripts": {
