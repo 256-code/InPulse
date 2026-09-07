@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import postgres, { type Sql } from "postgres";
-import { expect } from "vitest";
 
 export interface TestUrls {
   readonly archive: string;
@@ -25,7 +24,7 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(
-      `Set ${name}; database integration tests never silently skip`
+      `Set ${name}; search query integration tests never silently skip`
     );
   }
   return value;
@@ -64,7 +63,7 @@ export function testUrls(): TestUrls {
 
 export function connect(url: string, max = 10): Sql {
   return postgres(url, {
-    connection: { application_name: "inpulse-database-test" },
+    connection: { application_name: "inpulse-search-query-test" },
     max,
     onnotice: () => undefined,
     prepare: false
@@ -77,14 +76,28 @@ function nextToken(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${fixtureCounter.toString(36)}${randomSuffix}`;
 }
 
-export async function createUser(sql: Sql): Promise<number> {
+export async function createUser(
+  sql: Sql,
+  options: { readonly admin?: boolean; readonly disabled?: boolean } = {}
+): Promise<number> {
   const loginName = nextToken("user_").toLowerCase();
+  const status = options.disabled === true ? "DISABLED" : "ACTIVE";
   const [row] = await sql<Array<{ id: number }>>`
-    INSERT INTO app.users (login_name, name, password_hash)
+    INSERT INTO app.users (
+      login_name,
+      name,
+      password_hash,
+      is_admin,
+      status,
+      disabled_at
+    )
     VALUES (
       ${loginName},
       ${`Test ${loginName}`},
-      ${"$argon2id$v=19$m=19456,t=2,p=1$fixture$fixture-hash"}
+      ${"$argon2id$v=19$m=19456,t=2,p=1$fixture$fixture-hash"},
+      ${options.admin === true},
+      ${status},
+      ${options.disabled === true ? new Date() : null}
     )
     RETURNING id
   `;
@@ -96,15 +109,14 @@ export async function createUser(sql: Sql): Promise<number> {
 
 export async function createProject(
   sql: Sql,
-  userId?: number
+  userId: number
 ): Promise<ProjectFixture> {
-  const ownerId = userId ?? (await createUser(sql));
   const code = nextToken("P").toUpperCase().slice(0, 24);
 
   return sql.begin(async (transaction) => {
     const [project] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.projects (code, name, created_by)
-      VALUES (${code}, ${`Project ${code}`}, ${ownerId})
+      VALUES (${code}, ${`Project ${code}`}, ${userId})
       RETURNING id
     `;
     if (!project) {
@@ -113,7 +125,7 @@ export async function createProject(
 
     await transaction`
       INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${project.id}, ${ownerId})
+      VALUES (${project.id}, ${userId})
     `;
     const [module] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.modules (
@@ -126,7 +138,7 @@ export async function createProject(
         ${project.id},
         '未分类',
         'UNCLASSIFIED',
-        ${ownerId}
+        ${userId}
       )
       RETURNING id
     `;
@@ -138,70 +150,22 @@ export async function createProject(
       code,
       moduleId: module.id,
       projectId: project.id,
-      userId: ownerId
+      userId
     };
   });
 }
 
-export async function createTask(
+export async function removeMember(
   sql: Sql,
-  fixture: ProjectFixture,
-  ordinal: number
-): Promise<number> {
-  return sql.begin(async (transaction) => {
-    const [task] = await transaction<Array<{ id: number }>>`
-      INSERT INTO app.tasks (
-        project_id,
-        module_id,
-        scope_type,
-        code,
-        title,
-        assignee_id,
-        creator_id
-      )
-      VALUES (
-        ${fixture.projectId},
-        ${fixture.moduleId},
-        'MODULE',
-        ${`${fixture.code}-T-${ordinal}`},
-        ${`Task ${ordinal}`},
-        ${fixture.userId},
-        ${fixture.userId}
-      )
-      RETURNING id
-    `;
-    if (!task) {
-      throw new Error("Task fixture insert returned no row");
-    }
-    await transaction`
-      INSERT INTO app.task_status_history (
-        task_id,
-        project_id,
-        from_work_status,
-        to_work_status,
-        changed_by
-      )
-      VALUES (
-        ${task.id},
-        ${fixture.projectId},
-        NULL,
-        'TODO',
-        ${fixture.userId}
-      )
-    `;
-    return task.id;
-  });
-}
-
-export async function expectPostgresError(
-  operation: Promise<unknown>,
-  code: string
+  projectId: number,
+  userId: number
 ): Promise<void> {
-  try {
-    await operation;
-  } catch (error) {
-    expect(error).toMatchObject({ code });
-    return;
-  }
-  throw new Error(`Expected PostgreSQL error ${code}, but operation succeeded`);
+  await sql`
+    UPDATE app.project_members
+       SET status = 'REMOVED',
+           removed_at = now()
+     WHERE project_id = ${projectId}
+       AND user_id = ${userId}
+       AND status = 'ACTIVE'
+  `;
 }

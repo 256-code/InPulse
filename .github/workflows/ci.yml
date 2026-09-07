@@ -41,6 +41,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # `pnpm test:search:db` and `pnpm test` require a PostgreSQL 18 instance
+      # with PGroonga and max_connections >= 150. They are intentionally not
+      # enabled here until an approved service image is available.
       - name: Database migration consistency
         run: pnpm db:migrations:check
 

@@ -19,6 +19,7 @@
     "db:test:local": "powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/test-local.ps1",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:search:db": "pnpm --filter @inpulse/api test:search:db",
     "lint": "eslint .",
     "build": "pnpm -r build",
     "check": "pnpm typecheck && pnpm test && pnpm check:docs"

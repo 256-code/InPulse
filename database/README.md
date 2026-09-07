@@ -82,6 +82,17 @@ pnpm db:test
 `TEST_AUDIT_READER_DATABASE_URL` 和
 `TEST_AUDIT_ARCHIVE_DATABASE_URL`。
 
+搜索服务真实 PostgreSQL 集成测试复用同一套角色和迁移：
+
+```powershell
+$env:MIGRATION_DATABASE_URL = 'postgresql://app_migrator@127.0.0.1:55432/app'
+$env:TEST_DATABASE_URL = 'postgresql://cluster_bootstrap@127.0.0.1:55432/app'
+pnpm test:search:db
+```
+
+该命令要求目标实例已执行 `000_roles.sql`、`020_pgroonga.sql`，且
+`max_connections >= 150`；它不在当前 CI 的 `CI / workspace` job 中执行。
+
 ## 阶段 0 搜索 PoC
 
 PostgreSQL 18.6 PGroonga V1 PoC（需要 Docker）：
