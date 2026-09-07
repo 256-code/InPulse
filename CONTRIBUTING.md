@@ -233,7 +233,7 @@ PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器、搜索 API/Contr
 - 生产容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、PostgreSQL 18 挂载检查；
 - 镜像漏洞扫描。
 
-截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`。非数据库门禁已在本地实测通过；空库迁移与数据库集成测试曾在 `0000-0002` 上本地实测通过，合并 `0003-0005` 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此改由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行。`pnpm test:search:db` 与 `pnpm test` 按既定决定仍未纳入 CI。仓库尚无生产 Dockerfile 与 `compose.yaml`，因此生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Proposed`）。
+截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`。非数据库门禁已在本地实测通过；空库迁移与数据库集成测试曾在 `0000-0002` 上本地实测通过，合并 `0003-0005` 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此改由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行。`pnpm test:search:db` 与 `pnpm test` 按既定决定仍未纳入 CI。仓库尚无生产 Dockerfile 与 `compose.yaml`，因此生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Accepted`）。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 
