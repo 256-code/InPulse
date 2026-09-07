@@ -180,8 +180,12 @@ pnpm db:poc:search:pgroonga:local
 pnpm db:poc:search:local
 ```
 
-PGroonga PoC 已验证 V1 语义、90 条金标 Recall@20、边界和跨项目隔离，但
-PostgreSQL 18.6 官方基线的构建、迁移、默认计划和恢复尚未验证；
+PostgreSQL 18.6 探针镜像上的 PGroonga PoC 已通过构建、扩展安装、迁移、
+V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认查询计划和逻辑恢复；
+`search_projection` PGroonga bootstrap 与 `0003-0005` 显式迁移已通过真实
+PostgreSQL 集成测试；旧 `pg_trgm` GIN 索引和扩展在 `0004/0005` 的
+contract 验证后清理，`object_inspect` 用于记录 Groonga 索引磁盘占用。
+SearchQueryService、参数化查询与权限过滤测试以及生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 

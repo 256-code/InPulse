@@ -2,7 +2,7 @@
 
 软件研发功能迭代记录与任务协作系统，用于统一管理项目、模块、功能、任务、迭代记录及其历史关系。
 
-> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build、最小 API/Web 骨架与 CI）已落库；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式搜索实现尚未验证和开始。业务应用代码尚未开始。
+> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build、最小 API/Web 骨架与 CI）已落库；PGroonga V1 搜索 PoC 已在 PostgreSQL 18.6 探针镜像上通过语义、Recall@20、边界、跨项目隔离、默认查询计划和逻辑恢复，ADR-025 已记录；正式 `search_projection` PGroonga bootstrap 与 `0003-0005` 显式迁移（含旧 `pg_trgm` contract 清理）已落库并通过数据库集成测试。SearchQueryService、API 与页面尚未开始，业务领域应用代码尚未开始。
 
 ## 项目目标
 
@@ -19,10 +19,10 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
-| 下一步 | 在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现 API 契约、认证、领域模块、正式搜索索引与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、六条显式迁移（`0000-0005`，含 `0003_search_pgroonga.sql` 索引与 `0004/0005` 旧 `pg_trgm` contract 清理）、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、15 组语义探针、90 条金标 Recall@20=100%、跨项目/边界、PostgreSQL 18.6 探针镜像构建、`EXPLAIN (ANALYZE, BUFFERS)`、`0000-0002 -> 0003-0005` 升级/逐迁移回滚与逻辑恢复验证；ADR-025 替代 ADR-010 |
+| 下一步 | 在已落库的 `search_projection` PGroonga bootstrap/迁移上实现 SearchQueryService、参数化查询与权限过滤测试；随后基于数据库事务契约实现 API 契约、认证、领域模块与前端；补齐契约生成链路、生产镜像、加密备份恢复与其余 CI 门禁 |
 | 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
-| 尚未提供 | API 契约生成链路、应用层单元测试、正式搜索实现、E2E 和生产部署产物 |
+| 尚未提供 | API 契约生成链路、应用层单元测试、SearchQueryService/API/页面、E2E 和生产部署产物 |
 
 下列根级命令已真实可运行并与 CI 执行同一组命令；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
 
@@ -37,15 +37,25 @@ pnpm db:migrations:check
 pnpm check:docs
 ```
 
-PGroonga 搜索 PoC 使用 Docker 启动一次性
-`groonga/pgroonga:4.0.8-alpine-18`，执行迁移、现有数据库测试、V1 语义探针、
-90 条金标召回、跨项目隔离和查询计划验证。当前 PoC 使用内置 PostgreSQL
-18.4，尚不能替代 PostgreSQL 18.6 官方基线；完整结论见
+PGroonga 搜索 PoC 使用仓库内 Dockerfile 构建 PostgreSQL 18.6 探针镜像，
+执行迁移、现有数据库测试、V1 语义探针、90 条金标召回、跨项目隔离、查询
+计划验证、旧 `pg_trgm` GIN 索引与扩展的 contract 清理，以及排除 Session
+数据的逻辑备份恢复与恢复后索引烟雾测试。完整结论见
 [PGroonga PoC 说明](./database/poc/search-pgroonga/README.md)。
 
 ```powershell
-pnpm db:poc:search:pgroonga:local
+docker build `
+  -f database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 `
+  -t inpulse/pgroonga-pg18.6:repro `
+  database/poc/search-pgroonga
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File database/scripts/poc-search-pgroonga-local.ps1 `
+  -Image inpulse/pgroonga-pg18.6:repro `
+  -Port 55436 -RestorePort 55437
 ```
+
+旧的 `pnpm db:poc:search:pgroonga:local` 仍保留为快速复现入口，但其默认
+镜像不是 18.6 探针镜像。
 
 原 `pg_trgm` PoC 作为决策证据保留，命令会因 GIN 默认计划门禁失败而非零
 退出，见[原搜索 PoC 说明](./database/poc/search/README.md)：
@@ -71,7 +81,7 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 - [AGENTS.md](./AGENTS.md)：人工开发者与编码代理都必须遵守的仓库规则；
 - [CONTRIBUTING.md](./CONTRIBUTING.md)：分支、提交、Pull Request、评审和发布规则。
 - [开发日志](./开发日志.md)：每次推送前记录代码变更、功能、优化、测试验证和后续事项。
-- [PGroonga V1 PoC 结果](./docs/poc/search-pgroonga-v1-result.md)：V1 范围、9 组语义探针、Recall@20 与 ADR-025；
+- [PGroonga V1 PoC 结果](./docs/poc/search-pgroonga-v1-result.md)：V1 范围、15 组语义探针、Recall@20 与 ADR-025；
 - [PGroonga PoC](./database/poc/search-pgroonga/README.md)：复现命令、策略矩阵、索引证据与限制；
 - [原 pg_trgm PoC](./database/poc/search/README.md)：原门禁失败证据、数据规模、GIN 计划结论。
 

@@ -63,4 +63,13 @@ describe("database Secret configuration", () => {
       );
     }
   );
+
+  test("fails closed when a production Secret file is missing", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.RUNTIME_DB_PASSWORD_FILE =
+      "/run/secrets/inpulse_missing_secret_test";
+    process.env.DB_HOST = "db";
+
+    await expect(resolveDatabaseUrl("RUNTIME")).rejects.toThrow();
+  });
 });
