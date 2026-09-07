@@ -1,3 +1,29 @@
+# 技术设计 §12.4 CI 门禁顺序（本 job 内按序执行）：
+#   1  依赖安装（frozen lockfile）        -> Install dependencies with frozen lockfile
+#   2  lint                               -> Lint
+#   3  format check                       -> Format check
+#   4  typecheck                          -> Typecheck
+#   5  unit tests                         -> Unit tests
+#   6  database migrations from empty DB  -> Migration file consistency
+#                                            + Start PostgreSQL 18.6 test cluster
+#                                            + Bootstrap database roles
+#                                            + Migrate empty database
+#   7  integration tests                  -> Integration tests against real PostgreSQL
+#                                            （含 §12.4 database role/privilege probes）
+#   8  OpenAPI/client drift check         -> OpenAPI and client drift check
+#   9  Route Registry/permission/response-schema completeness
+#                                         -> Route Registry completeness check
+#  10  web/api production build           -> Build
+#  11  dependency boundary check          -> Dependency boundary check
+#  12  permission matrix test             -> Permission matrix check
+#  13  dependency/secret scan             -> Dependency audit / Secret scan
+#
+# §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
+#   - Playwright critical-path tests（阶段 0 E2E 尚未建立）
+#   - container image build、Compose config render + exact-tag/digest format
+#     + PostgreSQL 18 mount check、image scan（仓库尚无 Dockerfile/compose.yaml，
+#     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
+# 上述项落地后必须在本文件按 §12.4 顺序插入，不得跳过。
 name: CI
 
 on:
@@ -10,10 +36,14 @@ on:
 permissions:
   contents: read
 
+env:
+  POSTGRES_IMAGE: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+  POSTGRES_CONTAINER: inpulse-ci-pg
+
 jobs:
   workspace:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,17 +62,85 @@ jobs:
       - name: Install dependencies with frozen lockfile
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Lint
-        run: pnpm lint
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Migration file consistency
+        run: pnpm db:migrations:check
+
+      - name: Start PostgreSQL 18.6 test cluster
+        run: |
+          docker run -d --name "$POSTGRES_CONTAINER" \
+            --env POSTGRES_USER=cluster_bootstrap \
+            --env POSTGRES_DB=app \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            --publish 127.0.0.1:5432:5432 \
+            "$POSTGRES_IMAGE" \
+            -c max_connections=200
+          for attempt in $(seq 1 60); do
+            if docker exec "$POSTGRES_CONTAINER" pg_isready --host=127.0.0.1 --username=cluster_bootstrap --dbname=app >/dev/null 2>&1; then
+              echo "PostgreSQL 18.6 accepts connections."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready in time." >&2
+          docker logs "$POSTGRES_CONTAINER"
+          exit 1
+
+      - name: Bootstrap database roles
+        # 只执行 000_roles.sql：010_passwords.sql 读取 /run/secrets/* 的五个独立
+        # 密码文件，属于生产初始化，CI 使用 trust 认证，与 database/scripts/test-local.ps1 一致。
+        run: |
+          docker exec --interactive "$POSTGRES_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -U cluster_bootstrap -d app \
+            < database/bootstrap/000_roles.sql
+
+      - name: Migrate empty database
+        env:
+          NODE_ENV: test
+          MIGRATION_DATABASE_URL: postgresql://app_migrator@127.0.0.1:5432/app
+        run: pnpm db:migrate
+
+      - name: Integration tests against real PostgreSQL
+        env:
+          NODE_ENV: test
+          TEST_DATABASE_URL: postgresql://cluster_bootstrap@127.0.0.1:5432/app
+        run: pnpm test:integration
+
+      - name: OpenAPI and client drift check
+        run: pnpm contract:drift
+
+      - name: Route Registry completeness check
+        run: pnpm contract:validate
 
       - name: Build
         run: pnpm build
 
-      - name: Database migration consistency
-        run: pnpm db:migrations:check
+      - name: Dependency boundary check
+        run: pnpm check:deps
+
+      - name: Permission matrix check
+        run: pnpm permissions:check
+
+      - name: Dependency audit
+        run: pnpm deps:audit
+
+      - name: Secret scan
+        run: pnpm check:secrets
 
       - name: Documentation checks
         run: pnpm check:docs
+
+      - name: Stop PostgreSQL test cluster
+        if: always()
+        run: docker rm --force "$POSTGRES_CONTAINER" || true

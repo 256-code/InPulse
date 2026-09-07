@@ -5,11 +5,7 @@ export const MAX_QUERY_LENGTH = 200;
 
 export interface SearchQueryValidation {
   readonly ok: boolean;
-  readonly status:
-    | "ok"
-    | "empty"
-    | "too-short"
-    | "too-long";
+  readonly status: "ok" | "empty" | "too-short" | "too-long";
   readonly rawLength: number;
   readonly normalizedLength: number;
   readonly normalizedQuery: string;
@@ -36,8 +32,8 @@ const punctuationMap: Readonly<Record<string, string>> = {
   "」": "]",
   "『": "[",
   "』": "]",
-  "“": "\"",
-  "”": "\"",
+  "“": '"',
+  "”": '"',
   "‘": "'",
   "’": "'",
   "–": "-",
@@ -45,22 +41,21 @@ const punctuationMap: Readonly<Record<string, string>> = {
   "－": "-",
   "・": ".",
   "～": "~",
-  "＿": "_"
+  "＿": "_",
 };
 
 export function normalizeSearchText(input: string): string {
   const normalized = input.normalize("NFKC").toLowerCase();
-  return Array.from(normalized, (character) =>
-    punctuationMap[character] ?? character
+  return Array.from(
+    normalized,
+    (character) => punctuationMap[character] ?? character,
   )
     .join("")
     .replace(/\s+/gu, " ")
     .trim();
 }
 
-export function validateSearchQuery(
-  rawQuery: string
-): SearchQueryValidation {
+export function validateSearchQuery(rawQuery: string): SearchQueryValidation {
   const rawLength = rawQuery.length;
   if (rawLength === 0) {
     return {
@@ -69,7 +64,7 @@ export function validateSearchQuery(
       rawLength,
       normalizedLength: 0,
       normalizedQuery: "",
-      reason: "query is empty"
+      reason: "query is empty",
     };
   }
   if (rawLength > MAX_QUERY_LENGTH) {
@@ -79,7 +74,7 @@ export function validateSearchQuery(
       rawLength,
       normalizedLength: 0,
       normalizedQuery: "",
-      reason: `query exceeds ${MAX_QUERY_LENGTH} characters`
+      reason: `query exceeds ${MAX_QUERY_LENGTH} characters`,
     };
   }
 
@@ -91,7 +86,7 @@ export function validateSearchQuery(
       rawLength,
       normalizedLength: 0,
       normalizedQuery,
-      reason: "query is empty after normalization"
+      reason: "query is empty after normalization",
     };
   }
   if (normalizedQuery.length < MIN_QUERY_LENGTH) {
@@ -101,7 +96,7 @@ export function validateSearchQuery(
       rawLength,
       normalizedLength: normalizedQuery.length,
       normalizedQuery,
-      reason: `query must contain at least ${MIN_QUERY_LENGTH} characters`
+      reason: `query must contain at least ${MIN_QUERY_LENGTH} characters`,
     };
   }
 
@@ -111,7 +106,7 @@ export function validateSearchQuery(
     rawLength,
     normalizedLength: normalizedQuery.length,
     normalizedQuery,
-    reason: "ok"
+    reason: "ok",
   };
 }
 

@@ -22,16 +22,19 @@ async function readTrimmedSecret(path: string, label: string): Promise<string> {
       posix.dirname(normalizedPath) !== productionSecretRoot
     ) {
       throw new Error(
-        `${label} must name a direct child of ${productionSecretRoot}`
+        `${label} must name a direct child of ${productionSecretRoot}`,
       );
     }
 
     const [resolvedRoot, resolvedPath, linkMetadata] = await Promise.all([
       realpath(productionSecretRoot),
       realpath(path),
-      lstat(path)
+      lstat(path),
     ]);
-    if (linkMetadata.isSymbolicLink() || dirname(resolvedPath) !== resolvedRoot) {
+    if (
+      linkMetadata.isSymbolicLink() ||
+      dirname(resolvedPath) !== resolvedRoot
+    ) {
       throw new Error(`${label} resolves outside ${productionSecretRoot}`);
     }
 
@@ -55,10 +58,11 @@ async function readTrimmedSecret(path: string, label: string): Promise<string> {
 }
 
 export async function resolveDatabaseUrl(
-  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP"
+  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP",
 ): Promise<string> {
   const urlFileName = `${purpose}_DATABASE_URL_FILE`;
-  const urlName = purpose === "RUNTIME" ? "DATABASE_URL" : `${purpose}_DATABASE_URL`;
+  const urlName =
+    purpose === "RUNTIME" ? "DATABASE_URL" : `${purpose}_DATABASE_URL`;
   const urlFile = process.env[urlFileName]?.trim();
 
   if (urlFile) {
@@ -69,7 +73,7 @@ export async function resolveDatabaseUrl(
   if (directUrl) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        `${urlName} is forbidden in production; use ${urlFileName} or a password file`
+        `${urlName} is forbidden in production; use ${urlFileName} or a password file`,
       );
     }
     return directUrl;
@@ -77,14 +81,15 @@ export async function resolveDatabaseUrl(
 
   if (purpose === "TEST_BOOTSTRAP") {
     throw new Error(
-      `Set ${urlFileName} or ${urlName} for database integration tests`
+      `Set ${urlFileName} or ${urlName} for database integration tests`,
     );
   }
 
   const passwordFileName = `${purpose}_DB_PASSWORD_FILE`;
   const passwordFile = required(passwordFileName);
   const password = await readTrimmedSecret(passwordFile, passwordFileName);
-  const user = process.env[`${purpose}_DB_USER`]?.trim() ??
+  const user =
+    process.env[`${purpose}_DB_USER`]?.trim() ??
     (purpose === "MIGRATION" ? "app_migrator" : "app_runtime");
   const host = required("DB_HOST");
   const port = process.env.DB_PORT?.trim() || "5432";

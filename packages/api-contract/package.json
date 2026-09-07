@@ -2,10 +2,25 @@
   "name": "@inpulse/api-contract",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:unit",
+    "test:unit": "vitest run",
+    "generate": "tsx scripts/generate.ts",
+    "drift": "tsx scripts/drift.ts",
+    "validate": "tsx scripts/validate.ts"
+  },
+  "dependencies": {
+    "zod": "4.5.4"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

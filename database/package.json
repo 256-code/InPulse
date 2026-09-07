@@ -14,7 +14,9 @@
     "poc:search": "tsx poc/search/run-poc.ts",
     "poc:search:pgroonga": "tsx poc/search-pgroonga/run-poc.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

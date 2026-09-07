@@ -8,6 +8,12 @@
     "pnpm": ">=11.0.0 <12"
   },
   "scripts": {
+    "contract:generate": "pnpm --filter @inpulse/api-contract generate",
+    "contract:drift": "pnpm --filter @inpulse/api-contract drift",
+    "contract:validate": "pnpm --filter @inpulse/api-contract validate",
+    "check:secrets": "node scripts/check_secrets.mjs",
+    "deps:audit": "pnpm audit --audit-level=high",
+    "check:deps": "node scripts/check_dependencies.mjs",
     "check:docs": "node scripts/check_docs.mjs",
     "db:migrate": "pnpm --filter @inpulse/database migrate",
     "db:migrations:check": "pnpm --filter @inpulse/database migrations:check",
@@ -17,15 +23,21 @@
     "db:poc:search:pgroonga:local": "powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/poc-search-pgroonga-local.ps1",
     "db:test": "pnpm --filter @inpulse/database test",
     "db:test:local": "powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/test-local.ps1",
+    "permissions:check": "pnpm --filter @inpulse/api-contract exec tsx scripts/permissions.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "test:integration": "pnpm -r test:integration",
     "lint": "eslint .",
     "build": "pnpm -r build",
-    "check": "pnpm typecheck && pnpm test && pnpm check:docs"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm db:migrations:check && pnpm contract:drift && pnpm contract:validate && pnpm build && pnpm check:deps && pnpm permissions:check && pnpm deps:audit && pnpm check:secrets && pnpm check:docs"
   },
   "devDependencies": {
     "@inpulse/eslint-config": "workspace:*",
     "eslint": "10.10.0",
+    "prettier": "3.9.6",
     "typescript": "catalog:"
   }
 }

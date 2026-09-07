@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { resolveDatabaseUrl } from "../src/config.js";
+import { resolveDatabaseUrl } from "../../src/config.js";
 
 const managedEnvironmentKeys = [
   "NODE_ENV",
   "DATABASE_URL",
   "RUNTIME_DATABASE_URL_FILE",
   "RUNTIME_DB_PASSWORD_FILE",
-  "DB_HOST"
+  "DB_HOST",
 ] as const;
 
 const originalEnvironment = new Map(
-  managedEnvironmentKeys.map((key) => [key, process.env[key]])
+  managedEnvironmentKeys.map((key) => [key, process.env[key]]),
 );
 
 beforeEach(() => {
@@ -34,21 +34,19 @@ afterEach(() => {
 describe("database Secret configuration", () => {
   test("allows a direct database URL only outside production", async () => {
     process.env.NODE_ENV = "test";
-    process.env.DATABASE_URL =
-      "postgresql://app_runtime@127.0.0.1:55432/app";
+    process.env.DATABASE_URL = "postgresql://app_runtime@127.0.0.1:55432/app";
 
     await expect(resolveDatabaseUrl("RUNTIME")).resolves.toBe(
-      process.env.DATABASE_URL
+      process.env.DATABASE_URL,
     );
   });
 
   test("rejects a direct database URL in production", async () => {
     process.env.NODE_ENV = "production";
-    process.env.DATABASE_URL =
-      "postgresql://app_runtime@127.0.0.1:5432/app";
+    process.env.DATABASE_URL = "postgresql://app_runtime@127.0.0.1:5432/app";
 
     await expect(resolveDatabaseUrl("RUNTIME")).rejects.toThrow(
-      "DATABASE_URL is forbidden in production"
+      "DATABASE_URL is forbidden in production",
     );
   });
 
@@ -59,8 +57,8 @@ describe("database Secret configuration", () => {
       process.env.RUNTIME_DATABASE_URL_FILE = path;
 
       await expect(resolveDatabaseUrl("RUNTIME")).rejects.toThrow(
-        "must name a direct child of /run/secrets"
+        "must name a direct child of /run/secrets",
       );
-    }
+    },
   );
 });

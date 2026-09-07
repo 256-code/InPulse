@@ -1,7 +1,7 @@
 import {
   goldenQueries,
   type ProjectKey,
-  type SearchEntityType
+  type SearchEntityType,
 } from "./golden-queries.js";
 import { normalizeSearchText } from "./normalize.js";
 
@@ -11,7 +11,7 @@ export const PROJECT_KEYS: readonly ProjectKey[] = [
   "p3",
   "p4",
   "p5",
-  "p6"
+  "p6",
 ];
 
 export interface ProjectDefinition {
@@ -26,7 +26,7 @@ export const PROJECT_DEFINITIONS: readonly ProjectDefinition[] = [
   { key: "p3", codePrefix: "POCC3", name: "InPulse 项目三号" },
   { key: "p4", codePrefix: "POCC4", name: "InPulse 项目四号" },
   { key: "p5", codePrefix: "POCC5", name: "InPulse 项目五号" },
-  { key: "p6", codePrefix: "POCC6", name: "InPulse 项目六号" }
+  { key: "p6", codePrefix: "POCC6", name: "InPulse 项目六号" },
 ];
 
 export interface SearchRowSeed {
@@ -50,26 +50,86 @@ const distractorTemplates: ReadonlyArray<{
   readonly summary: string;
   readonly entityType: SearchEntityType;
 }> = [
-  { title: "网关超时重试", summary: "链路质量与稳定性验证", entityType: "TASK" },
-  { title: "缓存失效排查", summary: "热点访问与命中率观察", entityType: "TASK" },
+  {
+    title: "网关超时重试",
+    summary: "链路质量与稳定性验证",
+    entityType: "TASK",
+  },
+  {
+    title: "缓存失效排查",
+    summary: "热点访问与命中率观察",
+    entityType: "TASK",
+  },
   { title: "批量导入对账", summary: "数据量级与差异核对", entityType: "TASK" },
-  { title: "压测报告归档", summary: "结果留档与趋势对比", entityType: "CHANGE_RECORD" },
+  {
+    title: "压测报告归档",
+    summary: "结果留档与趋势对比",
+    entityType: "CHANGE_RECORD",
+  },
   { title: "链路追踪采样", summary: "跨服务调用链采样", entityType: "FEATURE" },
-  { title: "索引优化演练", summary: "查询计划与缓冲区观察", entityType: "MODULE" },
-  { title: "容器资源水位", summary: "运行实例与资源上限观察", entityType: "FEATURE" },
-  { title: "告警收敛策略", summary: "通知频率与抑制窗口", entityType: "MODULE" },
-  { title: "接口幂等补偿", summary: "重复请求与补偿流程", entityType: "FEATURE" },
-  { title: "配置中心回滚", summary: "配置变更与快速回落", entityType: "FEATURE" },
-  { title: "备份窗口调度", summary: "窗口容量与执行时长", entityType: "MODULE" },
+  {
+    title: "索引优化演练",
+    summary: "查询计划与缓冲区观察",
+    entityType: "MODULE",
+  },
+  {
+    title: "容器资源水位",
+    summary: "运行实例与资源上限观察",
+    entityType: "FEATURE",
+  },
+  {
+    title: "告警收敛策略",
+    summary: "通知频率与抑制窗口",
+    entityType: "MODULE",
+  },
+  {
+    title: "接口幂等补偿",
+    summary: "重复请求与补偿流程",
+    entityType: "FEATURE",
+  },
+  {
+    title: "配置中心回滚",
+    summary: "配置变更与快速回落",
+    entityType: "FEATURE",
+  },
+  {
+    title: "备份窗口调度",
+    summary: "窗口容量与执行时长",
+    entityType: "MODULE",
+  },
   { title: "迁移前检查", summary: "结构差异与历史一致性", entityType: "TASK" },
   { title: "票据队列吞吐", summary: "队列长度与消费速率", entityType: "TASK" },
-  { title: "灰度指标看板", summary: "分组对比与异常阈值", entityType: "FEATURE" },
-  { title: "代码扫描门禁", summary: "扫描结果与阻断规则", entityType: "FEATURE" },
-  { title: "构建缓存复用", summary: "增量构建与缓存命中", entityType: "MODULE" },
+  {
+    title: "灰度指标看板",
+    summary: "分组对比与异常阈值",
+    entityType: "FEATURE",
+  },
+  {
+    title: "代码扫描门禁",
+    summary: "扫描结果与阻断规则",
+    entityType: "FEATURE",
+  },
+  {
+    title: "构建缓存复用",
+    summary: "增量构建与缓存命中",
+    entityType: "MODULE",
+  },
   { title: "证书轮换提醒", summary: "有效期与提醒窗口", entityType: "FEATURE" },
-  { title: "密钥轮换提醒", summary: "轮换窗口与合规检查", entityType: "FEATURE" },
-  { title: "调用链耗时统计", summary: "分段耗时与峰值观察", entityType: "MODULE" },
-  { title: "巡检报告汇总", summary: "检查项与风险汇总", entityType: "CHANGE_RECORD" }
+  {
+    title: "密钥轮换提醒",
+    summary: "轮换窗口与合规检查",
+    entityType: "FEATURE",
+  },
+  {
+    title: "调用链耗时统计",
+    summary: "分段耗时与峰值观察",
+    entityType: "MODULE",
+  },
+  {
+    title: "巡检报告汇总",
+    summary: "检查项与风险汇总",
+    entityType: "CHANGE_RECORD",
+  },
 ];
 
 function projectKeyAt(index: number): ProjectKey {
@@ -93,7 +153,7 @@ function buildSearchRow(
   entityType: SearchEntityType,
   entityId: number,
   title: string,
-  summary: string
+  summary: string,
 ): SearchRowSeed {
   const rawText = `${title}。${summary}。阶段0仿真数据。`;
   return {
@@ -103,7 +163,7 @@ function buildSearchRow(
     title,
     summary,
     rawText,
-    normalizedSearchText: normalizeSearchText(rawText)
+    normalizedSearchText: normalizeSearchText(rawText),
   };
 }
 
@@ -130,8 +190,8 @@ export function buildSearchSeed(): SearchSeedResult {
         entityType,
         entityId,
         expectedText,
-        "金标目标，仅用于验证召回与范围过滤"
-      )
+        "金标目标，仅用于验证召回与范围过滤",
+      ),
     );
     expectedEntityIdsByGoldenId.set(entry.id, entityId);
     expectedEntityTypesByGoldenId.set(entry.id, entityType);
@@ -144,7 +204,7 @@ export function buildSearchSeed(): SearchSeedResult {
     const projectKey = projectKeyAt(offset);
     const template = templateAt(offset);
     const project = PROJECT_DEFINITIONS.find(
-      (definition) => definition.key === projectKey
+      (definition) => definition.key === projectKey,
     );
     if (project === undefined) {
       throw new Error(`Missing project definition for ${projectKey}`);
@@ -152,19 +212,13 @@ export function buildSearchSeed(): SearchSeedResult {
     const title = `${template.title}-${String(entityId).padStart(4, "0")}`;
     const summary = `${template.summary}，编号 ${project.codePrefix}-${String(entityId).padStart(4, "0")}`;
     rows.push(
-      buildSearchRow(
-        projectKey,
-        template.entityType,
-        entityId,
-        title,
-        summary
-      )
+      buildSearchRow(projectKey, template.entityType, entityId, title, summary),
     );
   }
 
   return {
     rows,
     expectedEntityIdsByGoldenId,
-    expectedEntityTypesByGoldenId
+    expectedEntityTypesByGoldenId,
   };
 }

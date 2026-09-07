@@ -3,9 +3,8 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node"]
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src", "scripts", "test"]
 }

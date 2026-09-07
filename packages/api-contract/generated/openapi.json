@@ -1,0 +1,96 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "InPulse API",
+    "version": "1.0.0",
+    "description": "由 packages/api-contract 的 Schema Registry 与 Route Registry 生成，禁止手工修改。"
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "存活探针，不访问数据库，不需要认证。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "none",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

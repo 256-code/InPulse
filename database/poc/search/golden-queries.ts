@@ -43,12 +43,12 @@ type ExpectedTuple = readonly [
   query: string,
   expectedText: string,
   projectKey: ProjectKey,
-  entityType: SearchEntityType
+  entityType: SearchEntityType,
 ];
 
 function expectedCases(
   category: QueryCategory,
-  entries: readonly ExpectedTuple[]
+  entries: readonly ExpectedTuple[],
 ): Array<Omit<GoldenQuerySpec, "id">> {
   return entries.map(([query, expectedText, projectKey, entityType]) => ({
     category,
@@ -56,14 +56,14 @@ function expectedCases(
     query,
     expectedText,
     expectedProjectKey: projectKey,
-    expectedEntityType: entityType
+    expectedEntityType: entityType,
   }));
 }
 
 function noResultCases(
   category: QueryCategory,
   entries: readonly string[],
-  policy: QueryPolicy = "no-result"
+  policy: QueryPolicy = "no-result",
 ): Array<Omit<GoldenQuerySpec, "id">> {
   return entries.map((query) => ({
     category,
@@ -71,7 +71,7 @@ function noResultCases(
     query,
     expectedText: null,
     expectedProjectKey: null,
-    expectedEntityType: null
+    expectedEntityType: null,
   }));
 }
 
@@ -95,7 +95,7 @@ const zhShortCases: readonly ExpectedTuple[] = [
   ["恢复", "作废迭代记录恢复", "p5", "CHANGE_RECORD"],
   ["作废", "迭代记录作废与可见性", "p6", "CHANGE_RECORD"],
   ["草稿", "迭代记录草稿编辑", "p1", "CHANGE_RECORD"],
-  ["版本", "正式记录版本不可变", "p2", "CHANGE_RECORD"]
+  ["版本", "正式记录版本不可变", "p2", "CHANGE_RECORD"],
 ];
 
 const codeCases: readonly ExpectedTuple[] = [
@@ -118,7 +118,7 @@ const codeCases: readonly ExpectedTuple[] = [
   ["EXTERNAL-LINK-88", "EXTERNAL-LINK-88 GitHub 链接", "p5", "EXTERNAL_LINK"],
   ["RECOVERY-CODE-2026", "RECOVERY-CODE-2026 恢复码", "p6", "FEATURE"],
   ["SEARCH-PROJECTION", "SEARCH-PROJECTION 投影写入", "p1", "MODULE"],
-  ["NPM-11-19", "NPM-11-19 pnpm 基线", "p2", "PROJECT"]
+  ["NPM-11-19", "NPM-11-19 pnpm 基线", "p2", "PROJECT"],
 ];
 
 const englishCases: readonly ExpectedTuple[] = [
@@ -141,7 +141,7 @@ const englishCases: readonly ExpectedTuple[] = [
   ["restore", "restore voided change record", "p5", "CHANGE_RECORD"],
   ["draft", "draft change record payload", "p6", "CHANGE_RECORD"],
   ["detach", "detach source task from group", "p1", "TASK_GROUP"],
-  ["gin", "gin trigram index explain", "p2", "MODULE"]
+  ["gin", "gin trigram index explain", "p2", "MODULE"],
 ];
 
 const mixedCases: readonly ExpectedTuple[] = [
@@ -164,7 +164,7 @@ const mixedCases: readonly ExpectedTuple[] = [
   ["遗留问题-0007", "遗留问题-0007转任务", "p5", "TASK"],
   ["恢复-作废记录", "恢复-作废记录状态", "p6", "CHANGE_RECORD"],
   ["草稿-版本2", "草稿-版本2内容保存", "p1", "CHANGE_RECORD"],
-  ["GitHub-PR-42", "GitHub-PR-42链接", "p2", "EXTERNAL_LINK"]
+  ["GitHub-PR-42", "GitHub-PR-42链接", "p2", "EXTERNAL_LINK"],
 ];
 
 const punctuationCases: readonly ExpectedTuple[] = [
@@ -177,7 +177,7 @@ const punctuationCases: readonly ExpectedTuple[] = [
   ["审计；100并发", "审计；100并发链一致", "p1", "MODULE"],
   ["恢复——记录", "恢复——记录状态与历史", "p2", "CHANGE_RECORD"],
   ["作废「记录」", "作废「记录」可见性", "p3", "CHANGE_RECORD"],
-  ["GitHub_Issue#42", "GitHub_Issue#42 链接审批", "p4", "EXTERNAL_LINK"]
+  ["GitHub_Issue#42", "GitHub_Issue#42 链接审批", "p4", "EXTERNAL_LINK"],
 ];
 
 const noResultQueries = [
@@ -186,15 +186,15 @@ const noResultQueries = [
   "%%",
   "__",
   "\\\\",
-  "<>?&\"{}",
-  "新词不存在-2026"
+  '<>?&"{}',
+  "新词不存在-2026",
 ];
 
 const edgeCases = [
   ...noResultCases("no-result", noResultQueries),
   ...noResultCases("edge", ["a"], "too-short"),
   ...noResultCases("edge", [""], "empty"),
-  ...noResultCases("edge", ["x".repeat(300)], "too-long")
+  ...noResultCases("edge", ["x".repeat(300)], "too-long"),
 ];
 
 const goldenInputs: ReadonlyArray<Omit<GoldenQuerySpec, "id">> = [
@@ -203,19 +203,20 @@ const goldenInputs: ReadonlyArray<Omit<GoldenQuerySpec, "id">> = [
   ...expectedCases("english", englishCases),
   ...expectedCases("mixed", mixedCases),
   ...expectedCases("punctuation", punctuationCases),
-  ...edgeCases
+  ...edgeCases,
 ];
 
-export const goldenQueries: readonly GoldenQuerySpec[] =
-  goldenInputs.map((entry, index) => ({
+export const goldenQueries: readonly GoldenQuerySpec[] = goldenInputs.map(
+  (entry, index) => ({
     ...entry,
-    id: `G${String(index + 1).padStart(3, "0")}`
-  }));
+    id: `G${String(index + 1).padStart(3, "0")}`,
+  }),
+);
 
 export function assertGoldenQueryShape(): number {
   if (goldenQueries.length !== 100) {
     throw new Error(
-      `Golden query count must be 100, got ${goldenQueries.length}`
+      `Golden query count must be 100, got ${goldenQueries.length}`,
     );
   }
 
@@ -236,7 +237,7 @@ export function assertGoldenQueryShape(): number {
   }
 
   const normalCases = goldenQueries.filter(
-    (entry) => entry.policy === "normal"
+    (entry) => entry.policy === "normal",
   ).length;
   if (normalCases < 90) {
     throw new Error(`Need at least 90 expected cases, got ${normalCases}`);

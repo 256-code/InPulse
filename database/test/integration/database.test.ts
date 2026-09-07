@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import type { Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { migrate } from "../src/migrate.js";
+import { migrate } from "../../src/migrate.js";
 import {
   connect,
   createProject,
@@ -12,7 +12,7 @@ import {
   expectPostgresError,
   testUrls,
   type ProjectFixture,
-  type TestUrls
+  type TestUrls,
 } from "./helpers.js";
 
 describe("PostgreSQL schema, invariants, and roles", () => {
@@ -38,7 +38,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       bootstrap.end({ timeout: 5 }),
       backup.end({ timeout: 5 }),
       auditReader.end({ timeout: 5 }),
-      archive.end({ timeout: 5 })
+      archive.end({ timeout: 5 }),
     ]);
   });
 
@@ -48,7 +48,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     expect(result.alreadyApplied).toEqual([
       "0000_initial.sql",
       "0001_invariants_and_permissions.sql",
-      "0002_security_hardening.sql"
+      "0002_security_hardening.sql",
     ]);
   });
 
@@ -63,13 +63,11 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           VALUES (${invalidCode}, 'Incomplete project', ${userId})
         `;
       }),
-      "23514"
+      "23514",
     );
 
     const fixture = await createProject(runtime, userId);
-    const [counts] = await runtime<
-      Array<{ members: number; modules: number }>
-    >`
+    const [counts] = await runtime<Array<{ members: number; modules: number }>>`
       SELECT
         (SELECT count(*)::INTEGER
            FROM app.project_members
@@ -131,7 +129,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           ${userId}
         )
       `,
-      "23503"
+      "23503",
     );
 
     const taskId = await createTask(runtime, right, 2);
@@ -163,7 +161,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
         INSERT INTO app.task_external_links (project_id, task_id, link_id)
         VALUES (${right.projectId}, ${taskId}, ${link.id})
       `,
-      "23503"
+      "23503",
     );
   });
 
@@ -185,7 +183,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
            WHERE id = ${taskId}
         `;
       }),
-      "23514"
+      "23514",
     );
 
     await runtime.begin(async (transaction) => {
@@ -269,10 +267,10 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     expect(history).toHaveLength(3);
     expect(history[2]).toMatchObject({
       from_work_status: "DONE",
-      to_work_status: "TODO"
+      to_work_status: "TODO",
     });
     expect(history[2]?.completed_at_snapshot?.getTime()).toBe(
-      completedAt.getTime()
+      completedAt.getTime(),
     );
   });
 
@@ -281,7 +279,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     const payload = {
       changeSolution: "增加事务约束",
       contextProblem: "防止不完整发布",
-      resultVerification: "集成测试通过"
+      resultVerification: "集成测试通过",
     };
     const [record] = await runtime<Array<{ id: number }>>`
       INSERT INTO app.change_records (
@@ -320,7 +318,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
            WHERE id = ${record.id}
         `;
       }),
-      "23514"
+      "23514",
     );
 
     await runtime.begin(async (transaction) => {
@@ -362,7 +360,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
          WHERE record_id = ${record.id}
            AND version_no = 1
       `,
-      "42501"
+      "42501",
     );
 
     await runtime`
@@ -383,7 +381,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
                updated_at = now()
          WHERE id = ${record.id}
       `,
-      "23514"
+      "23514",
     );
     await runtime`
       UPDATE app.change_records
@@ -401,7 +399,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     `;
     expect(restored).toMatchObject({
       status: "PUBLISHED",
-      void_reason: "验证作废与恢复状态机"
+      void_reason: "验证作废与恢复状态机",
     });
   });
 
@@ -451,7 +449,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           now() + INTERVAL '30 days'
         )
       `,
-      "23505"
+      "23505",
     );
     await expectPostgresError(
       runtime`
@@ -474,7 +472,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           now() + INTERVAL '30 days 1 second'
         )
       `,
-      "23514"
+      "23514",
     );
     await expectPostgresError(
       runtime`
@@ -490,7 +488,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
            AND operation_id = 'createTask'
            AND idempotency_key = ${key}
       `,
-      "23514"
+      "23514",
     );
   });
 
@@ -509,11 +507,12 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           DO UPDATE
              SET last_number = app.code_sequences.last_number + 1
           RETURNING last_number
-        `.then(([row]) => row?.last_number)
-      )
+        `.then(([row]) => row?.last_number),
+      ),
     );
-    expect(allocations.sort((left, right) => (left ?? 0) - (right ?? 0)))
-      .toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
+    expect(
+      allocations.sort((left, right) => (left ?? 0) - (right ?? 0)),
+    ).toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
 
     await expectPostgresError(
       runtime`
@@ -522,7 +521,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
          WHERE project_id = ${fixture.projectId}
            AND entity_type = 'TASK'
       `,
-      "23514"
+      "23514",
     );
   });
 
@@ -609,7 +608,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           ${fixture.projectId}
         )
       `,
-      "23514"
+      "23514",
     );
 
     await runtime.begin(async (transaction) => {
@@ -646,7 +645,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
                updated_at = now()
          WHERE id = ${featureTaskId}
       `,
-      "23514"
+      "23514",
     );
   });
 
@@ -757,38 +756,41 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           )
         `;
       }),
-      "23514"
+      "23514",
     );
   });
 
   test("database roles enforce DDL, audit, backup, and owner boundaries", async () => {
     await expectPostgresError(
       runtime.unsafe("CREATE TABLE app.runtime_must_not_create (id INTEGER)"),
-      "42501"
+      "42501",
     );
     await expectPostgresError(
       runtime.unsafe("SELECT * FROM app.audit_logs"),
-      "42501"
+      "42501",
     );
     await expectPostgresError(
       backup.unsafe("SELECT * FROM app.user_sessions"),
-      "42501"
+      "42501",
     );
-    await expect(backup.unsafe("SELECT count(*) FROM app.projects")).resolves
-      .toHaveLength(1);
-    await expect(auditReader.unsafe("SELECT count(*) FROM app.audit_logs"))
-      .resolves.toHaveLength(1);
+    await expect(
+      backup.unsafe("SELECT count(*) FROM app.projects"),
+    ).resolves.toHaveLength(1);
+    await expect(
+      auditReader.unsafe("SELECT count(*) FROM app.audit_logs"),
+    ).resolves.toHaveLength(1);
     await expectPostgresError(
       auditReader.unsafe(
-        "INSERT INTO app.audit_chain_heads (chain_id, last_sequence, last_hash, key_version) VALUES ('SYSTEM', 0, decode(repeat('00', 32), 'hex'), 1)"
+        "INSERT INTO app.audit_chain_heads (chain_id, last_sequence, last_hash, key_version) VALUES ('SYSTEM', 0, decode(repeat('00', 32), 'hex'), 1)",
       ),
-      "42501"
+      "42501",
     );
-    await expect(archive.unsafe("SELECT count(*) FROM app.audit_logs")).resolves
-      .toHaveLength(1);
+    await expect(
+      archive.unsafe("SELECT count(*) FROM app.audit_logs"),
+    ).resolves.toHaveLength(1);
     await expectPostgresError(
       archive.unsafe("DELETE FROM app.audit_logs"),
-      "42501"
+      "42501",
     );
     await expectPostgresError(runtime.unsafe("SET ROLE app_owner"), "42501");
 
@@ -820,7 +822,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       expect(role.rolcreatedb).toBe(false);
       expect(role.rolcreaterole).toBe(false);
       expect(role.rolcanlogin).toBe(
-        role.rolname !== "app_owner" && role.rolname !== "audit_writer"
+        role.rolname !== "app_owner" && role.rolname !== "audit_writer",
       );
     }
   });
@@ -831,7 +833,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     const auditRuntime = connect(urls.runtime, 105);
     const auditKey = Buffer.from(
       "integration-only-audit-key-not-a-production-secret",
-      "utf8"
+      "utf8",
     );
     let ready = 0;
     let releaseBarrier: (() => void) | undefined;
@@ -872,7 +874,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
             sequenceNo,
             keyVersion: head.locked_key_version,
             prevHash: Buffer.from(head.locked_last_hash).toString("base64url"),
-            eventPayload
+            eventPayload,
           };
           const recordHash = createHmac("sha256", auditKey)
             .update(JSON.stringify(envelope), "utf8")
@@ -902,7 +904,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
                 'JCS-1'::TEXT
               )
           `;
-        })
+        }),
       );
       await Promise.all(appends);
     } finally {

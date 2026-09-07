@@ -16,13 +16,13 @@ export interface DatabaseClient {
 
 export function createDatabaseClient(
   databaseUrl: string,
-  options: DatabaseClientOptions = {}
+  options: DatabaseClientOptions = {},
 ): DatabaseClient {
   const sql = postgres(databaseUrl, {
     connection: {
-      application_name: options.applicationName ?? "inpulse-api"
+      application_name: options.applicationName ?? "inpulse-api",
     },
-    max: options.maxConnections ?? 10
+    max: options.maxConnections ?? 10,
   });
 
   return {
@@ -30,7 +30,7 @@ export function createDatabaseClient(
     sql,
     async close() {
       await sql.end({ timeout: 5 });
-    }
+    },
   };
 }
 

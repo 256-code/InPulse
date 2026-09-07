@@ -2,7 +2,7 @@
 
 软件研发功能迭代记录与任务协作系统，用于统一管理项目、模块、功能、任务、迭代记录及其历史关系。
 
-> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build、最小 API/Web 骨架与 CI）已落库；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式搜索实现尚未验证和开始。业务应用代码尚未开始。
+> 当前状态：阶段 0 实施中。PostgreSQL 数据库、显式迁移、角色隔离和真实数据库集成测试基线已落地；阶段 0 CI 最小链路已按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序落库（安装、lint、format check、typecheck、单测、空库迁移、真实 PostgreSQL 集成测试、契约漂移与完整性、生产构建、依赖边界、权限矩阵、依赖/Secret 扫描）；API 契约生成链路已落库，生成工具决策见 [ADR-027](./docs/adr/ADR-027.md)（`Proposed`，待人工评审）；PGroonga V1 搜索 PoC 已通过语义、Recall@20、边界和跨项目隔离，ADR-025 已记录；PostgreSQL 18.6 官方基线与正式搜索实现尚未验证和开始；E2E、容器镜像与 Compose 产物尚未落库。业务应用代码尚未开始。
 
 ## 项目目标
 
@@ -19,22 +19,41 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、根级 typecheck/lint/build 与最小 CI 链路）；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
-| 下一步 | 在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现 API 契约、认证、领域模块、正式搜索索引与前端；补齐契约生成链路、Compose、备份恢复与其余 CI 门禁 |
-| 已提供 | pnpm workspace、严格 TypeScript、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
-| 尚未提供 | API 契约生成链路、应用层单元测试、正式搜索实现、E2E 和生产部署产物 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、三条显式迁移、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、Prettier 格式基线、根级 typecheck/lint/build 与 CI 链路）；API 契约双真相（Schema Registry/Zod + Route Registry）、OpenAPI 3.1 与 TypeScript 客户端生成、漂移与完整性检查、可执行权限矩阵；依赖边界与 Secret 扫描；PGroonga V1 PoC、90 条金标 Recall@20=100%、跨项目/边界验证；ADR-025 替代 ADR-010 |
+| 下一步 | 人工评审 ADR-027 并转为 `Accepted`；在 PostgreSQL 18.6 官方基线验证 PGroonga 构建、迁移、默认计划和恢复；随后基于数据库事务契约实现认证、领域模块、正式搜索索引与前端；补齐 Playwright E2E、Dockerfile/Compose 与镜像扫描门禁、备份恢复；CI 稳定后再把 §12.4 门禁设为 required checks |
+| 已提供 | pnpm workspace、严格 TypeScript、格式检查、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、契约生成与漂移检查、权限矩阵检查、依赖边界与 Secret 扫描、依赖漏洞审计、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
+| 尚未提供 | 正式搜索实现、业务领域模块与 API、Playwright E2E、容器镜像与 Compose 生产部署产物、镜像扫描与备份恢复门禁 |
 
-下列根级命令已真实可运行并与 CI 执行同一组命令；阶段 0 其余门禁仍在建设中，补齐前请勿假设其他命令可用。
+下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；§12.4 中 Playwright E2E、容器镜像构建、Compose 渲染与 digest 校验、镜像扫描尚未落库，补齐前请勿假设这些检查已执行。
 
-当前可运行的根级命令：
+当前可运行的根级命令（§12.4 顺序）：
 
 ```shell
 pnpm install --frozen-lockfile
-pnpm typecheck
 pnpm lint
-pnpm build
+pnpm format:check
+pnpm typecheck
+pnpm test:unit
 pnpm db:migrations:check
+pnpm db:migrate            # 需要 PostgreSQL 18
+pnpm test:integration      # 需要 PostgreSQL 18
+pnpm contract:drift
+pnpm contract:validate
+pnpm build
+pnpm check:deps
+pnpm permissions:check
+pnpm deps:audit            # 需要访问 registry
+pnpm check:secrets
 pnpm check:docs
+```
+
+辅助命令：
+
+```shell
+pnpm check             # 一次跑完上述全部非数据库门禁
+pnpm format            # 用 Prettier 写入格式
+pnpm contract:generate # 重新生成 OpenAPI 与 TypeScript 客户端
+pnpm test              # 本地跑全部包测试（database 需要 PostgreSQL 18）
 ```
 
 PGroonga 搜索 PoC 使用 Docker 启动一次性

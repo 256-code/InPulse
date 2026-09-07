@@ -23,7 +23,7 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(
-      `Set ${name}; database integration tests never silently skip`
+      `Set ${name}; database integration tests never silently skip`,
     );
   }
   return value;
@@ -56,7 +56,7 @@ export function testUrls(): TestUrls {
       roleUrl(baseUrl, "app_migrator"),
     runtime:
       process.env.TEST_RUNTIME_DATABASE_URL?.trim() ||
-      roleUrl(baseUrl, "app_runtime")
+      roleUrl(baseUrl, "app_runtime"),
   };
 }
 
@@ -65,7 +65,7 @@ export function connect(url: string, max = 10): Sql {
     connection: { application_name: "inpulse-database-test" },
     max,
     onnotice: () => undefined,
-    prepare: false
+    prepare: false,
   });
 }
 
@@ -93,7 +93,7 @@ export async function createUser(sql: Sql): Promise<number> {
 
 export async function createProject(
   sql: Sql,
-  userId?: number
+  userId?: number,
 ): Promise<ProjectFixture> {
   const ownerId = userId ?? (await createUser(sql));
   const code = nextToken("P").toUpperCase().slice(0, 24);
@@ -135,7 +135,7 @@ export async function createProject(
       code,
       moduleId: module.id,
       projectId: project.id,
-      userId: ownerId
+      userId: ownerId,
     };
   });
 }
@@ -143,7 +143,7 @@ export async function createProject(
 export async function createTask(
   sql: Sql,
   fixture: ProjectFixture,
-  ordinal: number
+  ordinal: number,
 ): Promise<number> {
   return sql.begin(async (transaction) => {
     const [task] = await transaction<Array<{ id: number }>>`
@@ -192,7 +192,7 @@ export async function createTask(
 
 export async function expectPostgresError(
   operation: Promise<unknown>,
-  code: string
+  code: string,
 ): Promise<void> {
   try {
     await operation;

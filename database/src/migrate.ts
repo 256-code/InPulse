@@ -19,7 +19,7 @@ export async function migrate(databaseUrl: string): Promise<MigrationResult> {
     connection: { application_name: "inpulse-migrate" },
     max: 1,
     onnotice: () => undefined,
-    prepare: false
+    prepare: false,
   });
   const applied: string[] = [];
   const alreadyApplied: string[] = [];
@@ -50,7 +50,7 @@ export async function migrate(databaseUrl: string): Promise<MigrationResult> {
       if (recordedChecksum !== undefined) {
         if (recordedChecksum !== migration.checksum) {
           throw new Error(
-            `Applied migration "${migration.name}" was modified; expected ${recordedChecksum}, found ${migration.checksum}`
+            `Applied migration "${migration.name}" was modified; expected ${recordedChecksum}, found ${migration.checksum}`,
           );
         }
         alreadyApplied.push(migration.name);
@@ -64,7 +64,7 @@ export async function migrate(databaseUrl: string): Promise<MigrationResult> {
         await transaction.unsafe("SET LOCAL ROLE app_owner");
         const executionMs = Math.max(
           0,
-          Math.round(performance.now() - startedAt)
+          Math.round(performance.now() - startedAt),
         );
         await transaction`
           INSERT INTO app.schema_migrations (name, checksum, execution_ms)
@@ -92,11 +92,12 @@ async function runCli(): Promise<void> {
     process.stdout.write(`Applied ${name}\n`);
   }
   process.stdout.write(
-    `Migration complete: ${result.applied.length} applied, ${result.alreadyApplied.length} already present.\n`
+    `Migration complete: ${result.applied.length} applied, ${result.alreadyApplied.length} already present.\n`,
   );
 }
 
-const isCli = process.argv[1] !== undefined &&
+const isCli =
+  process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (isCli) {

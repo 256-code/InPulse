@@ -54,7 +54,7 @@
 - `package.json`、`pnpm-lock.yaml`、CI 和生产镜像必须锁定经过批准的实际版本；生产依赖禁止使用 `latest`、`next`、`beta` 或 `rc`。
 - 修改 manifest 时必须同步提交 lockfile。不得手工编辑 lockfile。
 - 依赖升级只通过独立 PR 完成，必须人工确认；不得自动合并依赖更新。
-- 阶段 0 尚未定案的 OpenAPI 生成工具、Nest Zod Pipe/Serializer 组合和运行参数，不得在规则或实现中伪装成已冻结选择。
+- OpenAPI 生成工具链已由 [ADR-027](./docs/adr/ADR-027.md) 提出（状态 `Proposed`，待人工评审转为 `Accepted`）；Nest Zod Pipe/Serializer 组合和运行参数仍未定案。未转为 `Accepted` 的选择不得在规则或实现中伪装成已冻结基线。
 - 搜索基线已经确定为 PostgreSQL + PGroonga + `SearchProjection`（V1 由 ADR-025 替代 ADR-010）：支持中文短词、完整英文缩写、完整代码标识符和完整编号，不保证任意英文/代码子串，不提供正则搜索；普通查询必须使用 `normalized_search_text &@~ app.pgroonga_query_escape($1)`。
 - 生产 CSP 已确定使用逐响应 nonce 且禁止 `script-src/style-src 'unsafe-inline'`；阶段 0 验证的是 Ant Design/Vite 兼容性，失败时阻断并通过 ADR 更换方案，不得降低 CSP。
 
@@ -111,9 +111,9 @@
 - 不得使用 `skip`、降低断言或删除用例来掩盖失败；确需隔离不稳定测试时必须说明原因、影响和恢复计划，并获得人工同意。
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
-- 阶段 0 工程基座骨架已落库：根级可运行命令为 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm db:migrations:check`、`pnpm check:docs`，GitHub Actions 的 `CI / workspace` 与 `Documentation / docs` job 执行同一组命令。`typecheck` 与 `lint` 覆盖 database 包与 api/web 应用；`pnpm db:migrate`、`pnpm db:test` 和 `pnpm db:test:local` 需要 PostgreSQL 18，尚未纳入 CI。应用层单元测试、E2E 与生成物漂移检查尚未建立。其中 `check:docs` 同时检查 HEAD、暂存区、工作区、未忽略的新文件和 Markdown 链接/锚点。设计一致性仍需人工检查，不得伪称已运行不存在或未执行的门禁。
+- 阶段 0 CI 最小链路已落库：根级可运行命令为 `pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm format`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`、`pnpm test:integration`、`pnpm db:migrations:check`、`pnpm db:migrate`、`pnpm contract:generate`、`pnpm contract:drift`、`pnpm contract:validate`、`pnpm build`、`pnpm check:deps`、`pnpm permissions:check`、`pnpm deps:audit`、`pnpm check:secrets`、`pnpm check:docs`，以及一次跑完全部非数据库门禁的 `pnpm check`。GitHub Actions 的 `CI / workspace` job 按技术设计 §12.4 顺序执行同一组命令，`Documentation / docs` job 只执行 `check:docs`。`pnpm db:migrate`、`pnpm test:integration`、`pnpm db:test` 与 `pnpm db:test:local` 需要 PostgreSQL 18：CI 启动 digest 固定的 `postgres:18.6` 容器并在其中执行角色 bootstrap、空库迁移与集成测试，Windows 本地设置 `POSTGRES_BIN` 后运行 `pnpm db:test:local`。`check:docs` 同时检查 HEAD、暂存区、工作区、未忽略的新文件和 Markdown 链接/锚点；`deps:audit` 需要访问 registry。`test:integration` 已包含技术设计 §12.3/§12.4 要求的数据库角色与权限探针。E2E（Playwright 关键路径）尚未建立；仓库尚无 Dockerfile 与 compose.yaml，因此 §12.4 的容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、镜像扫描尚未纳入 CI，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案。设计一致性仍需人工检查，不得伪称已运行不存在或未执行的门禁。
 - 阶段 0 搜索 PoC 已落库：`pnpm db:poc:search:pgroonga:local` 已通过 V1 语义与 90 条金标，但 PostgreSQL 18.6 官方基线的构建、迁移、默认计划和恢复尚未验证；`pnpm db:poc:search:local` 保留为原 `pg_trgm` GIN 默认计划未通过的证据并会非零退出。
-- 阶段 0 必须建立统一的根级安装、lint、格式、类型检查、单元测试、集成测试、E2E、生成物漂移检查和构建入口；只有实际脚本落库后才能把命令写成可执行说明。
+- 阶段 0 仍待建立的入口：应用层 E2E（Playwright 关键路径）、容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、镜像扫描，以及 PostgreSQL 18.6 官方基线上的正式搜索实现验证。只有实际脚本落库后才能把命令写成可执行说明。
 
 ## 9. 文档与变更同步
 
@@ -169,6 +169,6 @@
 开发基线仍不能宣告冻结，直至以下资料和门禁完成：
 
 - 管理员完成 `CONTRIBUTING.md` 所列目标仓库设置；若 GitHub 方案不支持相应保护能力，须记录限制和替代人工门禁；
-- 阶段 0 的技术验证、实际版本锁定和其余 CI 门禁通过。
+- 阶段 0 的技术验证、实际版本锁定和其余 CI 门禁通过：截至 2026-09-07，技术设计 §12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、web/api 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并在 `.github/workflows/ci.yml` 的 `CI / workspace` job 中按序执行，本地已实测通过；仍缺 Playwright 关键路径 E2E、容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描（仓库尚无 Dockerfile/compose.yaml），以及 Drizzle 与 Nginx 实际补丁与镜像 digest 锁定；[ADR-027](./docs/adr/ADR-027.md) 仍为 `Proposed`，需人工评审定案。
 
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。

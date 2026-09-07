@@ -10,14 +10,14 @@ export default [
       "**/coverage/**",
       "**/playwright-report/**",
       "**/test-results/**",
-      "pnpm-lock.yaml"
-    ]
+      "pnpm-lock.yaml",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
     files: ["**/*.mjs"],
-    languageOptions: { globals: { ...globals.node } }
+    languageOptions: { globals: { ...globals.node } },
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
@@ -25,12 +25,12 @@ export default [
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }
-      ]
-    }
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
   },
   {
     files: ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
-    languageOptions: { globals: { ...globals.browser } }
-  }
+    languageOptions: { globals: { ...globals.browser } },
+  },
 ];

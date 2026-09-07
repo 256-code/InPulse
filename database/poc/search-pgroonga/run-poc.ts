@@ -10,13 +10,13 @@ import {
   goldenQueries,
   GOLDEN_QUERY_VERSION,
   type ProjectKey,
-  type QueryCategory
+  type QueryCategory,
 } from "../search/golden-queries.js";
 import {
   escapeLikePattern,
   normalizeSearchText,
   validateSearchQuery,
-  type SearchQueryValidation
+  type SearchQueryValidation,
 } from "../search/normalize.js";
 import { buildSearchSeed, PROJECT_DEFINITIONS } from "../search/seed.js";
 
@@ -46,64 +46,64 @@ const V1_REQUIREMENT_CASES: readonly V1RequirementCaseSpec[] = [
     query: "mfa",
     title: "MFA complete abbreviation probe",
     summary: "MFA reauthentication complete abbreviation",
-    entityId: 9_000_001
+    entityId: 9_000_001,
   },
   {
     id: "english-csrf",
     query: "csrf",
     title: "CSRF complete abbreviation probe",
     summary: "CSRF token complete abbreviation",
-    entityId: 9_000_002
+    entityId: 9_000_002,
   },
   {
     id: "english-api",
     query: "api",
     title: "API complete abbreviation probe",
     summary: "API v1 complete abbreviation",
-    entityId: 9_000_003
+    entityId: 9_000_003,
   },
   {
     id: "chinese-login",
     query: "登录",
     title: "登录模块完整短词",
     summary: "登录完整短词检索",
-    entityId: 9_000_004
+    entityId: 9_000_004,
   },
   {
     id: "code-inp-full",
     query: "INP-T-2026-0001",
     title: "INP-T-2026-0001 complete identifier",
     summary: "task complete code identifier",
-    entityId: 9_000_005
+    entityId: 9_000_005,
   },
   {
     id: "code-pr-full",
     query: "PR-42",
     title: "PR-42 complete identifier",
     summary: "pull request complete code identifier",
-    entityId: 9_000_006
+    entityId: 9_000_006,
   },
   {
     id: "code-session-full",
     query: "SESSION-TOKEN-01",
     title: "SESSION-TOKEN-01 complete identifier",
     summary: "session token complete code identifier",
-    entityId: 9_000_007
+    entityId: 9_000_007,
   },
   {
     id: "number-2026",
     query: "2026",
     title: "INP-T-2026-0001 number search",
     summary: "number search 2026",
-    entityId: 9_000_008
+    entityId: 9_000_008,
   },
   {
     id: "number-42",
     query: "42",
     title: "PR-42 number search",
     summary: "number search 42",
-    entityId: 9_000_009
-  }
+    entityId: 9_000_009,
+  },
 ];
 
 interface SearchRow {
@@ -135,16 +135,66 @@ interface Strategy {
 }
 
 const STRATEGIES: readonly Strategy[] = [
-  { id: "default-ilike", opclass: "default", queryStyle: "ilike", label: "默认全文 + ILIKE" },
-  { id: "default-like", opclass: "default", queryStyle: "like", label: "默认全文 + LIKE" },
-  { id: "default-query", opclass: "default", queryStyle: "query", label: "默认全文 + &@~ + pgroonga_query_escape" },
-  { id: "regexp-ilike", opclass: "regexp", queryStyle: "ilike", label: "正则 opclass + ILIKE" },
-  { id: "regexp-like", opclass: "regexp", queryStyle: "like", label: "正则 opclass + LIKE" },
-  { id: "regexp-query", opclass: "regexp", queryStyle: "regex", label: "正则 opclass + &~" },
-  { id: "bigram-ilike", opclass: "bigram", queryStyle: "ilike", label: "TokenBigramSplitSymbolAlphaDigit + ILIKE" },
-  { id: "bigram-query", opclass: "bigram", queryStyle: "query", label: "TokenBigramSplitSymbolAlphaDigit + &@~" },
-  { id: "ngram-ilike", opclass: "ngram", queryStyle: "ilike", label: "TokenNgram(unify=false) + ILIKE" },
-  { id: "ngram-query", opclass: "ngram", queryStyle: "query", label: "TokenNgram(unify=false) + &@~" }
+  {
+    id: "default-ilike",
+    opclass: "default",
+    queryStyle: "ilike",
+    label: "默认全文 + ILIKE",
+  },
+  {
+    id: "default-like",
+    opclass: "default",
+    queryStyle: "like",
+    label: "默认全文 + LIKE",
+  },
+  {
+    id: "default-query",
+    opclass: "default",
+    queryStyle: "query",
+    label: "默认全文 + &@~ + pgroonga_query_escape",
+  },
+  {
+    id: "regexp-ilike",
+    opclass: "regexp",
+    queryStyle: "ilike",
+    label: "正则 opclass + ILIKE",
+  },
+  {
+    id: "regexp-like",
+    opclass: "regexp",
+    queryStyle: "like",
+    label: "正则 opclass + LIKE",
+  },
+  {
+    id: "regexp-query",
+    opclass: "regexp",
+    queryStyle: "regex",
+    label: "正则 opclass + &~",
+  },
+  {
+    id: "bigram-ilike",
+    opclass: "bigram",
+    queryStyle: "ilike",
+    label: "TokenBigramSplitSymbolAlphaDigit + ILIKE",
+  },
+  {
+    id: "bigram-query",
+    opclass: "bigram",
+    queryStyle: "query",
+    label: "TokenBigramSplitSymbolAlphaDigit + &@~",
+  },
+  {
+    id: "ngram-ilike",
+    opclass: "ngram",
+    queryStyle: "ilike",
+    label: "TokenNgram(unify=false) + ILIKE",
+  },
+  {
+    id: "ngram-query",
+    opclass: "ngram",
+    queryStyle: "query",
+    label: "TokenNgram(unify=false) + &@~",
+  },
 ];
 
 interface SearchResult {
@@ -234,7 +284,9 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function parseGroongaPayload(value: string | undefined): Record<string, unknown> | null {
+function parseGroongaPayload(
+  value: string | undefined,
+): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(value ?? "null");
     if (Array.isArray(parsed)) {
@@ -248,12 +300,15 @@ function parseGroongaPayload(value: string | undefined): Record<string, unknown>
 
 async function readGroongaIndexMetrics(
   sql: Sql,
-  indexName: string
-): Promise<{ readonly indexDiskUsage: number | null; readonly lexiconName: string | null }> {
+  indexName: string,
+): Promise<{
+  readonly indexDiskUsage: number | null;
+  readonly lexiconName: string | null;
+}> {
   const qualifiedIndexName = "app." + indexName;
   const lexiconRows = await sql.unsafe<Array<{ lexicon_name: string | null }>>(
     "SELECT app.pgroonga_index_column_name($1::cstring, $2) AS lexicon_name",
-    [qualifiedIndexName, "normalized_search_text"]
+    [qualifiedIndexName, "normalized_search_text"],
   );
   const lexiconName = lexiconRows[0]?.lexicon_name ?? null;
   if (lexiconName === null) {
@@ -261,12 +316,11 @@ async function readGroongaIndexMetrics(
   }
   const inspectRows = await sql.unsafe<Array<{ payload: string }>>(
     "SELECT app.pgroonga_command('object_inspect', ARRAY['name', $1]) AS payload",
-    [lexiconName]
+    [lexiconName],
   );
   const payload = parseGroongaPayload(inspectRows[0]?.payload);
-  const diskUsage = typeof payload?.disk_usage === "number"
-    ? Number(payload.disk_usage)
-    : null;
+  const diskUsage =
+    typeof payload?.disk_usage === "number" ? Number(payload.disk_usage) : null;
   return { indexDiskUsage: diskUsage, lexiconName };
 }
 
@@ -296,7 +350,7 @@ function seedRowsWithProjects(): readonly SeedRowInput[] {
       normalizedSearchText: row.normalizedSearchText,
       visibilityScope: "MEMBER",
       sourceStatus: "POC",
-      sourceRowVersion: 1
+      sourceRowVersion: 1,
     };
   });
 }
@@ -308,7 +362,7 @@ function scaleRowsWithProjects(): readonly SeedRowInput[] {
     ["索引优化演练", "查询计划与缓冲区观察"],
     ["告警收敛策略", "通知频率与抑制窗口"],
     ["代码扫描门禁", "扫描结果与阻断规则"],
-    ["巡检报告汇总", "检查项与风险汇总"]
+    ["巡检报告汇总", "检查项与风险汇总"],
   ] as const;
   const entityTypes = ["TASK", "FEATURE", "MODULE", "CHANGE_RECORD"] as const;
   const extraCount = SCALE_ROW_COUNT - BASE_ROW_COUNT;
@@ -319,7 +373,8 @@ function scaleRowsWithProjects(): readonly SeedRowInput[] {
     const template = templates[index % templates.length]!;
     const entityType = entityTypes[index % entityTypes.length]!;
     const title = template[0] + "-SCALE-" + String(entityId).padStart(7, "0");
-    const summary = template[1] + "，编号 SCALE-" + String(entityId).padStart(7, "0");
+    const summary =
+      template[1] + "，编号 SCALE-" + String(entityId).padStart(7, "0");
     const rawText = title + "。" + summary + "。阶段0仿真数据。";
     rows.push({
       projectId,
@@ -331,7 +386,7 @@ function scaleRowsWithProjects(): readonly SeedRowInput[] {
       normalizedSearchText: normalizeSearchText(rawText),
       visibilityScope: index % 10 === 0 ? "HIDDEN" : "MEMBER",
       sourceStatus: "POC_SCALE",
-      sourceRowVersion: 1
+      sourceRowVersion: 1,
     });
   }
   return rows;
@@ -350,14 +405,14 @@ function requirementProbeRows(): readonly SeedRowInput[] {
       normalizedSearchText: normalizeSearchText(rawText),
       visibilityScope: "MEMBER",
       sourceStatus: "V1_REQUIREMENT_PROBE",
-      sourceRowVersion: 1
+      sourceRowVersion: 1,
     };
   });
 }
 
 async function tableCount(sql: Sql, table: string): Promise<number> {
   const rows = await sql.unsafe<Array<{ count: number }>>(
-    "SELECT count(*)::int AS count FROM " + table
+    "SELECT count(*)::int AS count FROM " + table,
   );
   return rows[0]?.count ?? -1;
 }
@@ -365,11 +420,13 @@ async function tableCount(sql: Sql, table: string): Promise<number> {
 async function insertRows(
   sql: Sql,
   table: string,
-  rows: readonly SeedRowInput[]
+  rows: readonly SeedRowInput[],
 ): Promise<void> {
   const chunkSize = 5000;
   const sqlText =
-    "INSERT INTO " + table + " (" +
+    "INSERT INTO " +
+    table +
+    " (" +
     "project_id, entity_type, entity_id, title, summary, raw_text, " +
     "normalized_search_text, visibility_scope, source_status, source_row_version" +
     ") SELECT * FROM unnest(" +
@@ -389,7 +446,7 @@ async function insertRows(
       chunk.map((row) => row.normalizedSearchText),
       chunk.map((row) => row.visibilityScope),
       chunk.map((row) => row.sourceStatus),
-      chunk.map((row) => row.sourceRowVersion)
+      chunk.map((row) => row.sourceRowVersion),
     ]);
   }
 }
@@ -411,45 +468,78 @@ async function setupTables(sql: Sql): Promise<void> {
       "CONSTRAINT pgroonga_poc_normalized_check CHECK (length(normalized_search_text) >= 1)";
     await sql.unsafe("CREATE TABLE " + BASE_TABLE + " (" + ddl + ")");
     await sql.unsafe("CREATE TABLE " + SCALE_TABLE + " (" + ddl + ")");
-    await sql.unsafe("ALTER TABLE " + BASE_TABLE + " ADD CONSTRAINT pgroonga_poc_base_entity_unique UNIQUE (project_id, entity_type, entity_id)");
-    await sql.unsafe("ALTER TABLE " + SCALE_TABLE + " ADD CONSTRAINT pgroonga_poc_scale_entity_unique UNIQUE (project_id, entity_type, entity_id)");
+    await sql.unsafe(
+      "ALTER TABLE " +
+        BASE_TABLE +
+        " ADD CONSTRAINT pgroonga_poc_base_entity_unique UNIQUE (project_id, entity_type, entity_id)",
+    );
+    await sql.unsafe(
+      "ALTER TABLE " +
+        SCALE_TABLE +
+        " ADD CONSTRAINT pgroonga_poc_scale_entity_unique UNIQUE (project_id, entity_type, entity_id)",
+    );
     await sql.unsafe("CREATE TABLE " + PROBE_TABLE + " (" + ddl + ")");
-    await sql.unsafe("ALTER TABLE " + PROBE_TABLE + " ADD CONSTRAINT pgroonga_poc_probe_entity_unique UNIQUE (project_id, entity_type, entity_id)");
-    await sql.unsafe("GRANT SELECT ON " + BASE_TABLE + ", " + SCALE_TABLE + ", " + PROBE_TABLE + " TO app_runtime");
+    await sql.unsafe(
+      "ALTER TABLE " +
+        PROBE_TABLE +
+        " ADD CONSTRAINT pgroonga_poc_probe_entity_unique UNIQUE (project_id, entity_type, entity_id)",
+    );
+    await sql.unsafe(
+      "GRANT SELECT ON " +
+        BASE_TABLE +
+        ", " +
+        SCALE_TABLE +
+        ", " +
+        PROBE_TABLE +
+        " TO app_runtime",
+    );
   } finally {
     await sql.unsafe("RESET ROLE");
   }
 }
 
 function indexNameFor(strategy: Strategy, table: string): string {
-  const suffix = table === BASE_TABLE
-    ? "base"
-    : table === PROBE_TABLE
-      ? "probe"
-      : "scale";
+  const suffix =
+    table === BASE_TABLE ? "base" : table === PROBE_TABLE ? "probe" : "scale";
   return "pgroonga_poc_" + strategy.id + "_" + suffix + "_idx";
 }
 
 function indexDdl(strategy: Strategy, table: string): string {
   const indexName = indexNameFor(strategy, table);
   if (strategy.opclass === "regexp") {
-    return "CREATE INDEX " + '"' + indexName + '"' + " ON " + table +
-      " USING pgroonga (normalized_search_text app.pgroonga_text_regexp_ops_v2)";
+    return (
+      "CREATE INDEX " +
+      '"' +
+      indexName +
+      '"' +
+      " ON " +
+      table +
+      " USING pgroonga (normalized_search_text app.pgroonga_text_regexp_ops_v2)"
+    );
   }
   let options = "";
   if (strategy.opclass === "bigram") {
     options = " WITH (tokenizer='TokenBigramSplitSymbolAlphaDigit')";
   } else if (strategy.opclass === "ngram") {
-    options = " WITH (tokenizer='TokenNgram(\"unify_alphabet\", false, \"unify_symbol\", false, \"unify_digit\", false)')";
+    options =
+      ' WITH (tokenizer=\'TokenNgram("unify_alphabet", false, "unify_symbol", false, "unify_digit", false)\')';
   }
-  return "CREATE INDEX " + '"' + indexName + '"' + " ON " + table +
-    " USING pgroonga (normalized_search_text)" + options;
+  return (
+    "CREATE INDEX " +
+    '"' +
+    indexName +
+    '"' +
+    " ON " +
+    table +
+    " USING pgroonga (normalized_search_text)" +
+    options
+  );
 }
 
 async function createIndexAndMeasure(
   sql: Sql,
   table: string,
-  strategy: Strategy
+  strategy: Strategy,
 ): Promise<IndexMetrics> {
   const indexName = indexNameFor(strategy, table);
   await sql.unsafe("SET ROLE app_owner");
@@ -459,10 +549,12 @@ async function createIndexAndMeasure(
     await sql.unsafe(indexDdl(strategy, table));
     const buildMs = Math.round((performance.now() - startedAt) * 1000) / 1000;
     const sizeName = '"app"."' + indexName + '"';
-    const sizes = await sql.unsafe<Array<{ index_bytes: number; total_bytes: number }>>(
+    const sizes = await sql.unsafe<
+      Array<{ index_bytes: number; total_bytes: number }>
+    >(
       "SELECT pg_relation_size($1::regclass)::bigint AS index_bytes, " +
-      "pg_total_relation_size($1::regclass)::bigint AS total_bytes",
-      [sizeName]
+        "pg_total_relation_size($1::regclass)::bigint AS total_bytes",
+      [sizeName],
     );
     const rowCount = await tableCount(sql, table);
     const groongaMetrics = await readGroongaIndexMetrics(sql, indexName);
@@ -473,14 +565,18 @@ async function createIndexAndMeasure(
       totalBytes: Number(sizes[0]?.total_bytes ?? 0),
       indexDiskUsage: groongaMetrics.indexDiskUsage,
       lexiconName: groongaMetrics.lexiconName,
-      rowCount
+      rowCount,
     };
   } finally {
     await sql.unsafe("RESET ROLE");
   }
 }
 
-async function dropIndex(sql: Sql, table: string, strategy: Strategy): Promise<void> {
+async function dropIndex(
+  sql: Sql,
+  table: string,
+  strategy: Strategy,
+): Promise<void> {
   const indexName = indexNameFor(strategy, table);
   await sql.unsafe("SET ROLE app_owner");
   try {
@@ -493,53 +589,58 @@ async function dropIndex(sql: Sql, table: string, strategy: Strategy): Promise<v
 async function measureUpdate(
   sql: Sql,
   table: string,
-  indexName: string
+  indexName: string,
 ): Promise<number> {
   const target = await sql.unsafe<Array<{ id: number }>>(
-    "SELECT id FROM " + table + " WHERE visibility_scope = 'MEMBER' ORDER BY id LIMIT 1"
+    "SELECT id FROM " +
+      table +
+      " WHERE visibility_scope = 'MEMBER' ORDER BY id LIMIT 1",
   );
   if (target[0] === undefined) {
     return -1;
   }
   const startedAt = performance.now();
   await sql.unsafe(
-    "UPDATE " + table +
-    " SET normalized_search_text = normalized_search_text || ' pgroonga-update-probe" + indexName + "' WHERE id = $1",
-    [target[0].id]
+    "UPDATE " +
+      table +
+      " SET normalized_search_text = normalized_search_text || ' pgroonga-update-probe" +
+      indexName +
+      "' WHERE id = $1",
+    [target[0].id],
   );
   return Math.round((performance.now() - startedAt) * 1000) / 1000;
 }
 
-async function measureReindex(
-  sql: Sql,
-  indexName: string
-): Promise<number> {
+async function measureReindex(sql: Sql, indexName: string): Promise<number> {
   const startedAt = performance.now();
   await sql.unsafe("REINDEX INDEX " + '"app"."' + indexName + '"');
   return Math.round((performance.now() - startedAt) * 1000) / 1000;
 }
 
-function predicateSql(strategy: Strategy): { sqlText: string; params: (query: string) => Array<string> } {
+function predicateSql(strategy: Strategy): {
+  sqlText: string;
+  params: (query: string) => Array<string>;
+} {
   switch (strategy.queryStyle) {
     case "like":
       return {
         sqlText: "normalized_search_text LIKE '%' || $1 || '%' ESCAPE E'\\\\'",
-        params: (query) => [escapeLikePattern(query)]
+        params: (query) => [escapeLikePattern(query)],
       };
     case "ilike":
       return {
         sqlText: "normalized_search_text ILIKE '%' || $1 || '%' ESCAPE E'\\\\'",
-        params: (query) => [escapeLikePattern(query)]
+        params: (query) => [escapeLikePattern(query)],
       };
     case "query":
       return {
         sqlText: "normalized_search_text &@~ app.pgroonga_query_escape($1)",
-        params: (query) => [query]
+        params: (query) => [query],
       };
     case "regex":
       return {
         sqlText: "normalized_search_text &~ $1",
-        params: (query) => [query]
+        params: (query) => [query],
       };
   }
   throw new Error("Unsupported query style: " + strategy.queryStyle);
@@ -550,7 +651,7 @@ async function executeSearch(
   table: string,
   strategy: Strategy,
   rawQuery: string,
-  projectIds: readonly number[]
+  projectIds: readonly number[],
 ): Promise<SearchResult> {
   const validation = validateSearchQuery(rawQuery);
   if (!validation.ok || projectIds.length === 0) {
@@ -559,8 +660,10 @@ async function executeSearch(
   const predicate = predicateSql(strategy);
   const predicateParams = predicate.params(validation.normalizedQuery);
   const sqlText =
-    "SELECT project_id, entity_type, entity_id, title, summary FROM " + table +
-    " WHERE " + predicate.sqlText +
+    "SELECT project_id, entity_type, entity_id, title, summary FROM " +
+    table +
+    " WHERE " +
+    predicate.sqlText +
     " AND project_id = ANY($2::int[]) AND visibility_scope = 'MEMBER'" +
     " ORDER BY project_id ASC, entity_id ASC LIMIT $3";
   const startedAt = performance.now();
@@ -568,14 +671,14 @@ async function executeSearch(
     const rows = await sql.unsafe<SearchRow[]>(sqlText, [
       ...predicateParams,
       [...projectIds],
-      TOP_K
+      TOP_K,
     ]);
     return {
       rows,
       validation,
       ranQuery: true,
       elapsedMs: Math.round((performance.now() - startedAt) * 1000) / 1000,
-      error: null
+      error: null,
     };
   } catch (error) {
     return {
@@ -583,7 +686,7 @@ async function executeSearch(
       validation,
       ranQuery: true,
       elapsedMs: Math.round((performance.now() - startedAt) * 1000) / 1000,
-      error: formatError(error)
+      error: formatError(error),
     };
   }
 }
@@ -591,16 +694,19 @@ async function executeSearch(
 async function runRequirementProbe(
   sql: Sql,
   table: string,
-  strategy: Strategy
+  strategy: Strategy,
 ): Promise<RequirementProbeResult> {
   const cases: RequirementProbeCaseResult[] = [];
   for (const probe of V1_REQUIREMENT_CASES) {
     cases.push(await runRequirementProbeCase(sql, table, strategy, probe));
   }
   return {
-    allPassed: cases.length > 0 &&
-      cases.every((result) => result.error === null && result.passed && result.usedIndex),
-    cases
+    allPassed:
+      cases.length > 0 &&
+      cases.every(
+        (result) => result.error === null && result.passed && result.usedIndex,
+      ),
+    cases,
   };
 }
 
@@ -608,7 +714,7 @@ async function runRequirementProbeCase(
   sql: Sql,
   table: string,
   strategy: Strategy,
-  probe: V1RequirementCaseSpec
+  probe: V1RequirementCaseSpec,
 ): Promise<RequirementProbeCaseResult> {
   const validation = validateSearchQuery(probe.query);
   const predicate = predicateSql(strategy);
@@ -619,19 +725,24 @@ async function runRequirementProbeCase(
       await transaction.unsafe("SET LOCAL enable_seqscan = off");
       const params = [...predicateParams, [...PROJECT_IDS], TOP_K];
       const sqlText =
-        "SELECT project_id, entity_type, entity_id, title, summary FROM " + table +
-        " WHERE " + predicate.sqlText +
+        "SELECT project_id, entity_type, entity_id, title, summary FROM " +
+        table +
+        " WHERE " +
+        predicate.sqlText +
         " AND project_id = ANY($2::int[]) AND visibility_scope = 'MEMBER'" +
         " ORDER BY project_id ASC, entity_id ASC LIMIT $3";
       const planRows = await transaction.unsafe<Array<Record<string, string>>>(
         "EXPLAIN (COSTS OFF) " + sqlText,
-        params
+        params,
       );
       const rows = await transaction.unsafe<SearchRow[]>(sqlText, params);
-      const plan = planRows.map((row) =>
-        row["QUERY PLAN"] ?? row.query_plan ?? JSON.stringify(row)
-      ).join("\n");
-      const usesIndex = plan.includes(indexNameFor(strategy, table)) &&
+      const plan = planRows
+        .map(
+          (row) => row["QUERY PLAN"] ?? row.query_plan ?? JSON.stringify(row),
+        )
+        .join("\n");
+      const usesIndex =
+        plan.includes(indexNameFor(strategy, table)) &&
         /Index Scan|Bitmap/.test(plan);
       const scanType = plan.includes("Seq Scan")
         ? "seq-scan"
@@ -653,7 +764,7 @@ async function runRequirementProbeCase(
       returnedCount: outcome.rows.length,
       returnedTitles: outcome.rows.map((row) => row.title),
       elapsedMs: Math.round((performance.now() - startedAt) * 1000) / 1000,
-      error: null
+      error: null,
     };
   } catch (error) {
     return {
@@ -667,14 +778,14 @@ async function runRequirementProbeCase(
       returnedCount: 0,
       returnedTitles: [],
       elapsedMs: Math.round((performance.now() - startedAt) * 1000) / 1000,
-      error: formatError(error)
+      error: formatError(error),
     };
   }
 }
 
 function expectedProjectId(
   spec: (typeof goldenQueries)[number],
-  ids: ReadonlyMap<ProjectKey, number>
+  ids: ReadonlyMap<ProjectKey, number>,
 ): number | undefined {
   if (spec.expectedProjectKey === null) {
     return undefined;
@@ -687,14 +798,26 @@ async function runSuite(
   table: string,
   strategy: Strategy,
   projectIds: readonly number[],
-  seed: ReturnType<typeof buildSearchSeed>
+  seed: ReturnType<typeof buildSearchSeed>,
 ): Promise<SuiteResult> {
   const ids = projectIdByKey();
-  const normalResults: Array<{ spec: (typeof goldenQueries)[number]; result: SearchResult }> = [];
-  const nonNormalResults: Array<{ spec: (typeof goldenQueries)[number]; result: SearchResult }> = [];
+  const normalResults: Array<{
+    spec: (typeof goldenQueries)[number];
+    result: SearchResult;
+  }> = [];
+  const nonNormalResults: Array<{
+    spec: (typeof goldenQueries)[number];
+    result: SearchResult;
+  }> = [];
 
   for (const spec of goldenQueries) {
-    const result = await executeSearch(sql, table, strategy, spec.query, projectIds);
+    const result = await executeSearch(
+      sql,
+      table,
+      strategy,
+      spec.query,
+      projectIds,
+    );
     if (spec.policy === "normal") {
       normalResults.push({ spec, result });
     } else {
@@ -717,15 +840,21 @@ async function runSuite(
       expectedPid !== undefined &&
       expectedEntityId !== undefined &&
       expectedEntityType !== undefined &&
-      result.rows.some((row) =>
-        row.project_id === expectedPid &&
-        row.entity_id === expectedEntityId &&
-        row.entity_type === expectedEntityType
+      result.rows.some(
+        (row) =>
+          row.project_id === expectedPid &&
+          row.entity_id === expectedEntityId &&
+          row.entity_type === expectedEntityType,
       );
     if (found) {
       hits += 1;
     } else {
-      missed.push(spec.id + ":" + spec.query + (result.error === null ? "" : ":" + result.error));
+      missed.push(
+        spec.id +
+          ":" +
+          spec.query +
+          (result.error === null ? "" : ":" + result.error),
+      );
     }
   }
 
@@ -735,24 +864,40 @@ async function runSuite(
     const shouldRun = spec.policy === "no-result" || spec.policy === "special";
     const passed =
       result.error === null &&
-      (shouldRun ? result.ranQuery && result.rows.length === 0 : !result.ranQuery && result.rows.length === 0);
+      (shouldRun
+        ? result.ranQuery && result.rows.length === 0
+        : !result.ranQuery && result.rows.length === 0);
     if (passed) {
       nonNormalPassed += 1;
     } else {
-      nonNormalFailed.push(spec.id + ":" + spec.query + (result.error === null ? "" : ":" + result.error));
+      nonNormalFailed.push(
+        spec.id +
+          ":" +
+          spec.query +
+          (result.error === null ? "" : ":" + result.error),
+      );
     }
   }
 
   const crossSpec = goldenQueries.find(
-    (spec) => spec.policy === "normal" && spec.category === "code"
+    (spec) => spec.policy === "normal" && spec.category === "code",
   );
   let crossProjectPassed = false;
   let crossProjectReturnedCount = 0;
   if (crossSpec !== undefined) {
     const targetPid = expectedProjectId(crossSpec, ids);
     const otherPid = projectIds.find((pid) => pid !== targetPid) ?? 1;
-    const crossResult = await executeSearch(sql, table, strategy, crossSpec.query, [otherPid]);
-    crossProjectPassed = crossResult.error === null && crossResult.ranQuery && crossResult.rows.length === 0;
+    const crossResult = await executeSearch(
+      sql,
+      table,
+      strategy,
+      crossSpec.query,
+      [otherPid],
+    );
+    crossProjectPassed =
+      crossResult.error === null &&
+      crossResult.ranQuery &&
+      crossResult.rows.length === 0;
     crossProjectReturnedCount = crossResult.rows.length;
   }
 
@@ -766,8 +911,11 @@ async function runSuite(
     nonNormalFailed,
     crossProjectPassed,
     crossProjectReturnedCount,
-    averageQueryMs: normalResults.length === 0 ? 0 : Math.round((totalElapsed / normalResults.length) * 1000) / 1000,
-    maxQueryMs: maxElapsed
+    averageQueryMs:
+      normalResults.length === 0
+        ? 0
+        : Math.round((totalElapsed / normalResults.length) * 1000) / 1000,
+    maxQueryMs: maxElapsed,
   };
 }
 
@@ -777,7 +925,7 @@ async function explainSearch(
   strategy: Strategy,
   query: string,
   projectIds: readonly number[],
-  forceIndex: boolean
+  forceIndex: boolean,
 ): Promise<PlanResult> {
   const validation = validateSearchQuery(query);
   if (!validation.ok) {
@@ -788,8 +936,10 @@ async function explainSearch(
   const sqlText =
     "EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) " +
     "WITH candidates AS MATERIALIZED (" +
-    "SELECT project_id, entity_type, entity_id, visibility_scope FROM " + table +
-    " WHERE " + predicate.sqlText +
+    "SELECT project_id, entity_type, entity_id, visibility_scope FROM " +
+    table +
+    " WHERE " +
+    predicate.sqlText +
     ") SELECT project_id, entity_type, entity_id FROM candidates" +
     " WHERE project_id = ANY($2::int[]) AND visibility_scope = 'MEMBER'" +
     " ORDER BY project_id ASC, entity_id ASC LIMIT $3";
@@ -800,9 +950,12 @@ async function explainSearch(
     }
     return transaction.unsafe<Array<Record<string, string>>>(sqlText, params);
   });
-  const plan = planRows.map((row) => row["QUERY PLAN"] ?? row.query_plan ?? JSON.stringify(row));
+  const plan = planRows.map(
+    (row) => row["QUERY PLAN"] ?? row.query_plan ?? JSON.stringify(row),
+  );
   const text = plan.join("\n");
-  const usesIndex = text.includes(indexNameFor(strategy, table)) &&
+  const usesIndex =
+    text.includes(indexNameFor(strategy, table)) &&
     /Index Scan|Bitmap/.test(text);
   const scanType = text.includes("Seq Scan")
     ? "seq-scan"
@@ -821,7 +974,7 @@ async function explainSearch(
     defaultScanType: forceIndex ? "n/a" : scanType,
     forcedScanType: forceIndex ? scanType : "n/a",
     defaultRecheck: !forceIndex && /Recheck Cond:/u.test(text),
-    forcedRecheck: forceIndex && /Recheck Cond:/u.test(text)
+    forcedRecheck: forceIndex && /Recheck Cond:/u.test(text),
   };
 }
 
@@ -829,14 +982,14 @@ async function runPlanChecks(
   sql: Sql,
   table: string,
   strategy: Strategy,
-  projectIds: readonly number[]
+  projectIds: readonly number[],
 ): Promise<readonly PlanResult[]> {
   const categories: readonly QueryCategory[] = [
     "zh-short",
     "code",
     "english",
     "mixed",
-    "punctuation"
+    "punctuation",
   ];
   const results: PlanResult[] = [];
   for (const category of categories) {
@@ -850,7 +1003,7 @@ async function runPlanChecks(
       strategy,
       spec.query,
       projectIds,
-      false
+      false,
     );
     const forcedResult = await explainSearch(
       sql,
@@ -858,7 +1011,7 @@ async function runPlanChecks(
       strategy,
       spec.query,
       projectIds,
-      true
+      true,
     );
     results.push({
       ...defaultResult,
@@ -867,7 +1020,7 @@ async function runPlanChecks(
       forcedPlan: forcedResult.forcedPlan,
       forcedUsesIndex: forcedResult.forcedUsesIndex,
       forcedScanType: forcedResult.forcedScanType,
-      forcedRecheck: forcedResult.forcedRecheck
+      forcedRecheck: forcedResult.forcedRecheck,
     });
   }
   return results;
@@ -875,7 +1028,7 @@ async function runPlanChecks(
 
 async function checkRuntimePermissions(
   sql: Sql,
-  table: string
+  table: string,
 ): Promise<RuntimePermissionResult> {
   const errors: string[] = [];
   let canSelect = false;
@@ -883,22 +1036,27 @@ async function checkRuntimePermissions(
   let canEscape = false;
   let runtimeRole = "unknown";
   try {
-    const rows = await sql.unsafe<Array<{ role: string }>>("SELECT current_user AS role");
+    const rows = await sql.unsafe<Array<{ role: string }>>(
+      "SELECT current_user AS role",
+    );
     runtimeRole = rows[0]?.role ?? "unknown";
   } catch (error) {
     errors.push("role:" + formatError(error));
   }
   try {
-    await sql.unsafe("SELECT count(*)::int AS count FROM " + table + " LIMIT 1");
+    await sql.unsafe(
+      "SELECT count(*)::int AS count FROM " + table + " LIMIT 1",
+    );
     canSelect = true;
   } catch (error) {
     errors.push("select:" + formatError(error));
   }
   try {
     await sql.unsafe(
-      "SELECT count(*)::int AS count FROM " + table +
-      " WHERE normalized_search_text &@~ app.pgroonga_query_escape($1) LIMIT 1",
-      ["登录"]
+      "SELECT count(*)::int AS count FROM " +
+        table +
+        " WHERE normalized_search_text &@~ app.pgroonga_query_escape($1) LIMIT 1",
+      ["登录"],
     );
     canUseOperator = true;
   } catch (error) {
@@ -907,7 +1065,7 @@ async function checkRuntimePermissions(
   try {
     await sql.unsafe<Array<{ escaped: string }>>(
       "SELECT app.pgroonga_query_escape($1) AS escaped",
-      ["MFA+CSRF"]
+      ["MFA+CSRF"],
     );
     canEscape = true;
   } catch (error) {
@@ -940,22 +1098,64 @@ async function runStrategy(
   runtimeSql: Sql,
   strategy: Strategy,
   projectIds: readonly number[],
-  seed: ReturnType<typeof buildSearchSeed>
+  seed: ReturnType<typeof buildSearchSeed>,
 ): Promise<StrategyOutcome> {
   try {
-    const baseIndex = await createIndexAndMeasure(adminSql, BASE_TABLE, strategy);
-    const baseSuite = await runSuite(runtimeSql, BASE_TABLE, strategy, projectIds, seed);
-    const basePlans = await runPlanChecks(runtimeSql, BASE_TABLE, strategy, projectIds);
-    const probeIndex = await createIndexAndMeasure(adminSql, PROBE_TABLE, strategy);
-    const requirementProbe = await runRequirementProbe(runtimeSql, PROBE_TABLE, strategy);
-    const scaleIndex = await createIndexAndMeasure(adminSql, SCALE_TABLE, strategy);
-    const scaleSuite = await runSuite(runtimeSql, SCALE_TABLE, strategy, projectIds, seed);
-    const scalePlans = await runPlanChecks(runtimeSql, SCALE_TABLE, strategy, projectIds);
+    const baseIndex = await createIndexAndMeasure(
+      adminSql,
+      BASE_TABLE,
+      strategy,
+    );
+    const baseSuite = await runSuite(
+      runtimeSql,
+      BASE_TABLE,
+      strategy,
+      projectIds,
+      seed,
+    );
+    const basePlans = await runPlanChecks(
+      runtimeSql,
+      BASE_TABLE,
+      strategy,
+      projectIds,
+    );
+    const probeIndex = await createIndexAndMeasure(
+      adminSql,
+      PROBE_TABLE,
+      strategy,
+    );
+    const requirementProbe = await runRequirementProbe(
+      runtimeSql,
+      PROBE_TABLE,
+      strategy,
+    );
+    const scaleIndex = await createIndexAndMeasure(
+      adminSql,
+      SCALE_TABLE,
+      strategy,
+    );
+    const scaleSuite = await runSuite(
+      runtimeSql,
+      SCALE_TABLE,
+      strategy,
+      projectIds,
+      seed,
+    );
+    const scalePlans = await runPlanChecks(
+      runtimeSql,
+      SCALE_TABLE,
+      strategy,
+      projectIds,
+    );
     let updateMs = -1;
     let reindexMs = -1;
     await adminSql.unsafe("SET ROLE app_owner");
     try {
-      updateMs = await measureUpdate(adminSql, SCALE_TABLE, scaleIndex.indexName);
+      updateMs = await measureUpdate(
+        adminSql,
+        SCALE_TABLE,
+        scaleIndex.indexName,
+      );
       reindexMs = await measureReindex(adminSql, scaleIndex.indexName);
     } finally {
       await adminSql.unsafe("RESET ROLE");
@@ -976,7 +1176,7 @@ async function runStrategy(
       scalePlans,
       updateMs,
       reindexMs,
-      error: null
+      error: null,
     };
   } catch (error) {
     return {
@@ -995,17 +1195,15 @@ async function runStrategy(
       scalePlans: [],
       updateMs: -1,
       reindexMs: -1,
-      error: formatError(error)
+      error: formatError(error),
     };
   }
 }
 
-async function writeReport(
-  report: Record<string, unknown>
-): Promise<string> {
+async function writeReport(report: Record<string, unknown>): Promise<string> {
   const artifactsDirectory = resolve(
     dirname(fileURLToPath(import.meta.url)),
-    "artifacts"
+    "artifacts",
   );
   await mkdir(artifactsDirectory, { recursive: true });
   const reportPath = resolve(artifactsDirectory, "pgroonga-report.json");
@@ -1015,39 +1213,41 @@ async function writeReport(
 
 async function runPoc(): Promise<void> {
   const databaseUrl = requiredEnv("POC_DATABASE_URL");
-  const adminDatabaseUrl = process.env.POC_ADMIN_DATABASE_URL?.trim() ?? databaseUrl;
+  const adminDatabaseUrl =
+    process.env.POC_ADMIN_DATABASE_URL?.trim() ?? databaseUrl;
   const runtimeSql = postgres(databaseUrl, {
     connection: { application_name: "inpulse-pgroonga-poc" },
     max: 4,
     onnotice: () => undefined,
-    prepare: false
+    prepare: false,
   });
   const adminSql = postgres(adminDatabaseUrl, {
     connection: { application_name: "inpulse-pgroonga-poc-admin" },
     max: 1,
     onnotice: () => undefined,
-    prepare: false
+    prepare: false,
   });
 
   try {
     const versionRows = await runtimeSql.unsafe<Array<{ version: string }>>(
-      "SELECT version() AS version"
+      "SELECT version() AS version",
     );
-    const extensionRows = await adminSql.unsafe<Array<{
-      extversion: string;
-      schema: string;
-      postgres_version: string;
-    }>>(
+    const extensionRows = await adminSql.unsafe<
+      Array<{
+        extversion: string;
+        schema: string;
+        postgres_version: string;
+      }>
+    >(
       "SELECT e.extversion, n.nspname AS schema, current_setting('server_version') AS postgres_version " +
-      "FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'pgroonga'"
+        "FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'pgroonga'",
     );
     const statusRows = await adminSql.unsafe<Array<{ payload: string }>>(
-      "SELECT app.pgroonga_command('status') AS payload"
+      "SELECT app.pgroonga_command('status') AS payload",
     );
     const statusPayload = parseGroongaPayload(statusRows[0]?.payload);
-    const groongaVersion = typeof statusPayload?.version === "string"
-      ? statusPayload.version
-      : null;
+    const groongaVersion =
+      typeof statusPayload?.version === "string" ? statusPayload.version : null;
     const seed = buildSearchSeed();
     const baseRows = seedRowsWithProjects();
     const scaleRows = scaleRowsWithProjects();
@@ -1066,13 +1266,14 @@ async function runPoc(): Promise<void> {
     }
     const permissions = await checkRuntimePermissions(runtimeSql, BASE_TABLE);
 
-    const enabled = process.env.POC_PGROONGA_STRATEGY
-      ?.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean) ?? [];
-    const strategies = enabled.length === 0
-      ? STRATEGIES
-      : STRATEGIES.filter((strategy) => enabled.includes(strategy.id));
+    const enabled =
+      process.env.POC_PGROONGA_STRATEGY?.split(",")
+        .map((value) => value.trim())
+        .filter(Boolean) ?? [];
+    const strategies =
+      enabled.length === 0
+        ? STRATEGIES
+        : STRATEGIES.filter((strategy) => enabled.includes(strategy.id));
     const outcomes: StrategyOutcome[] = [];
     for (const strategy of strategies) {
       process.stdout.write("Running PGroonga strategy: " + strategy.id + "\n");
@@ -1081,7 +1282,7 @@ async function runPoc(): Promise<void> {
         runtimeSql,
         strategy,
         PROJECT_IDS,
-        seed
+        seed,
       );
       await dropIndex(adminSql, BASE_TABLE, strategy);
       await dropIndex(adminSql, SCALE_TABLE, strategy);
@@ -1100,14 +1301,14 @@ async function runPoc(): Promise<void> {
           "complete-english-abbreviation",
           "complete-code-identifier",
           "chinese-short-word",
-          "number-search"
-        ]
+          "number-search",
+        ],
       },
       environment: {
         platform: platform() + " " + release(),
         arch: arch(),
         cpuCount: cpus().length,
-        totalMemoryBytes: totalmem()
+        totalMemoryBytes: totalmem(),
       },
       database: {
         version: versionRows[0]?.version ?? null,
@@ -1116,7 +1317,7 @@ async function runPoc(): Promise<void> {
         imageDigest: process.env.POC_PGROONGA_IMAGE_DIGEST?.trim() ?? null,
         pgroongaVersion: extensionRows[0]?.extversion ?? null,
         pgroongaSchema: extensionRows[0]?.schema ?? null,
-        groongaVersion
+        groongaVersion,
       },
       dataset: {
         baseRows: baseCount,
@@ -1125,7 +1326,7 @@ async function runPoc(): Promise<void> {
         requiredScaleRows: SCALE_ROW_COUNT,
         projects: PROJECT_IDS.length,
         topK: TOP_K,
-        recallThreshold: RECALL_THRESHOLD
+        recallThreshold: RECALL_THRESHOLD,
       },
       permissions,
       strategies: outcomes,
@@ -1133,8 +1334,8 @@ async function runPoc(): Promise<void> {
         "官方 PostgreSQL 18.6 基线尚未验证；本次探针镜像内置 PostgreSQL 18.4，不能直接证明 18.6 兼容。",
         "Groonga 版本通过 pgroonga_command('status') 从运行中实例读取，不代表官方 PostgreSQL 18.6 镜像已内置 PGroonga。",
         "101000 行规模使用确定性仿真文本，不等同于真实业务数据分布。",
-        "报告未执行备份恢复、故障切换和长时间并发更新门禁。"
-      ]
+        "报告未执行备份恢复、故障切换和长时间并发更新门禁。",
+      ],
     };
     const reportPath = await writeReport(report);
     process.stdout.write("PGroonga PoC report: " + reportPath + "\n");
@@ -1144,7 +1345,8 @@ async function runPoc(): Promise<void> {
   }
 }
 
-const isCli = process.argv[1] !== undefined &&
+const isCli =
+  process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (isCli) {

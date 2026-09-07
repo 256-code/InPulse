@@ -40,6 +40,7 @@
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 | [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |
 | [ADR-026](ADR-026.md) | Accepted | NestJS 基线锁定 11.2.3 并延后 12.x 升级 |
+| [ADR-027](ADR-027.md) | Proposed | 契约生成链路使用 Zod 4 JSON Schema 与仓库内生成器 |
 
 ## 关联基线
 

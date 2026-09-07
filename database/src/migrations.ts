@@ -20,7 +20,7 @@ export function migrationsDirectory(): string {
 }
 
 export async function discoverMigrations(
-  directory = migrationsDirectory()
+  directory = migrationsDirectory(),
 ): Promise<readonly Migration[]> {
   const names = (await readdir(directory))
     .filter((name) => name.endsWith(".sql"))
@@ -36,7 +36,7 @@ export async function discoverMigrations(
   for (const name of names) {
     if (!migrationNamePattern.test(name)) {
       throw new Error(
-        `Invalid migration name "${name}"; expected 0001_lowercase_name.sql`
+        `Invalid migration name "${name}"; expected 0001_lowercase_name.sql`,
       );
     }
 
@@ -52,19 +52,19 @@ export async function discoverMigrations(
     }
     if (transactionControlPattern.test(sql)) {
       throw new Error(
-        `Migration "${name}" contains transaction control; the runner owns transactions`
+        `Migration "${name}" contains transaction control; the runner owns transactions`,
       );
     }
     if (!name.includes("_contract_") && destructivePattern.test(sql)) {
       throw new Error(
-        `Migration "${name}" contains destructive DDL; use a reviewed *_contract_* migration`
+        `Migration "${name}" contains destructive DDL; use a reviewed *_contract_* migration`,
       );
     }
 
     migrations.push({
       name,
       checksum: createHash("sha256").update(sql, "utf8").digest("hex"),
-      sql
+      sql,
     });
   }
 

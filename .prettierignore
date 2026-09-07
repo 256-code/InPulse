@@ -1,0 +1,15 @@
+# Prettier governs code and machine-readable config only.
+# Prose Markdown is governed by scripts/check_docs.mjs (whitespace, links, anchors);
+# reformatting the design documents would create unreviewable diffs.
+*.md
+pnpm-lock.yaml
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+database/migrations/
+database/bootstrap/
+database/poc/**/artifacts/
+apps/web/src/generated/
+packages/api-contract/generated/

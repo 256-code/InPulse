@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +19,8 @@ const WINDOWS_ABSOLUTE = /^[A-Za-z]:[\\/]/;
 const ATX_HEADING = /^ {0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const REFERENCE_DEFINITION = /^ {0,3}\[([^\]]+)\]:[ \t]*(.*)$/;
-const EXPLICIT_ANCHOR = /<(?:a|[A-Za-z][\w:-]*)\b[^>]*(?:id|name)=["']([^"']+)["'][^>]*>/gi;
+const EXPLICIT_ANCHOR =
+  /<(?:a|[A-Za-z][\w:-]*)\b[^>]*(?:id|name)=["']([^"']+)["'][^>]*>/gi;
 const INLINE_CODE = /(`+)(.*?)\1/g;
 
 const errors = [];
@@ -42,7 +49,9 @@ function runGitWhitespaceCheck(label, args) {
 function nulSeparatedGitFiles(args) {
   const result = git(args, { encoding: null });
   if (result.status !== 0) {
-    throw new Error(result.stderr?.toString("utf8") || `git ${args.join(" ")} failed`);
+    throw new Error(
+      result.stderr?.toString("utf8") || `git ${args.join(" ")} failed`,
+    );
   }
   return result.stdout
     .toString("utf8")
@@ -52,31 +61,45 @@ function nulSeparatedGitFiles(args) {
 }
 
 function repositoryMarkdownFiles() {
-  return nulSeparatedGitFiles(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).filter(
-    (file) => {
-      if (!MARKDOWN_EXTENSIONS.has(path.extname(file).toLowerCase())) return false;
-      let entry;
-      try {
-        entry = lstatSync(file);
-      } catch {
-        return false;
-      }
-      if (entry.isSymbolicLink()) {
-        errors.push(`${relative(file)}: Markdown source must not be a symbolic link`);
-        return false;
-      }
-      const realFile = realpathSync(file);
-      if (isOutsideRepository(realFile)) {
-        errors.push(`${relative(file)}: Markdown source resolves outside the repository`);
-        return false;
-      }
-      return statSync(realFile).isFile();
-    },
-  );
+  return nulSeparatedGitFiles([
+    "ls-files",
+    "-z",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+  ]).filter((file) => {
+    if (!MARKDOWN_EXTENSIONS.has(path.extname(file).toLowerCase()))
+      return false;
+    let entry;
+    try {
+      entry = lstatSync(file);
+    } catch {
+      return false;
+    }
+    if (entry.isSymbolicLink()) {
+      errors.push(
+        `${relative(file)}: Markdown source must not be a symbolic link`,
+      );
+      return false;
+    }
+    const realFile = realpathSync(file);
+    if (isOutsideRepository(realFile)) {
+      errors.push(
+        `${relative(file)}: Markdown source resolves outside the repository`,
+      );
+      return false;
+    }
+    return statSync(realFile).isFile();
+  });
 }
 
 function repositoryUntrackedFiles() {
-  return nulSeparatedGitFiles(["ls-files", "-z", "--others", "--exclude-standard"]).filter(existsSync);
+  return nulSeparatedGitFiles([
+    "ls-files",
+    "-z",
+    "--others",
+    "--exclude-standard",
+  ]).filter(existsSync);
 }
 
 function relative(file) {
@@ -85,7 +108,11 @@ function relative(file) {
 
 function isOutsideRepository(file) {
   const relativeFile = path.relative(ROOT_REAL, file);
-  return relativeFile === ".." || relativeFile.startsWith(`..${path.sep}`) || path.isAbsolute(relativeFile);
+  return (
+    relativeFile === ".." ||
+    relativeFile.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeFile)
+  );
 }
 
 function checkUntrackedWhitespace(files) {
@@ -94,7 +121,9 @@ function checkUntrackedWhitespace(files) {
     if (entry.isSymbolicLink() || !entry.isFile()) continue;
     const realFile = realpathSync(file);
     if (isOutsideRepository(realFile)) {
-      errors.push(`${relative(file)}: untracked file resolves outside the repository`);
+      errors.push(
+        `${relative(file)}: untracked file resolves outside the repository`,
+      );
       continue;
     }
     const buffer = readFileSync(file);
@@ -106,10 +135,14 @@ function checkUntrackedWhitespace(files) {
         errors.push(`${relative(file)}:${index + 1}: trailing whitespace`);
       }
       if (/^ +\t/.test(line)) {
-        errors.push(`${relative(file)}:${index + 1}: space before tab in indentation`);
+        errors.push(
+          `${relative(file)}:${index + 1}: space before tab in indentation`,
+        );
       }
       if (/^(?:<<<<<<<|=======|>>>>>>>)(?: |$)/.test(line)) {
-        errors.push(`${relative(file)}:${index + 1}: unresolved conflict marker`);
+        errors.push(
+          `${relative(file)}:${index + 1}: unresolved conflict marker`,
+        );
       }
     }
   }
@@ -137,8 +170,12 @@ function removeHtmlComments(line, state) {
 
 function decodeHtml(text) {
   return text
-    .replace(/&#x([0-9a-f]+);/gi, (_, value) => String.fromCodePoint(Number.parseInt(value, 16)))
-    .replace(/&#([0-9]+);/g, (_, value) => String.fromCodePoint(Number.parseInt(value, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, value) =>
+      String.fromCodePoint(Number.parseInt(value, 16)),
+    )
+    .replace(/&#([0-9]+);/g, (_, value) =>
+      String.fromCodePoint(Number.parseInt(value, 10)),
+    )
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
@@ -172,7 +209,9 @@ function extractDestination(text, start) {
   if (cursor >= text.length) return [null, cursor];
   if (text[cursor] === "<") {
     const end = text.indexOf(">", cursor + 1);
-    return end < 0 ? [null, text.length] : [text.slice(cursor + 1, end), end + 1];
+    return end < 0
+      ? [null, text.length]
+      : [text.slice(cursor + 1, end), end + 1];
   }
 
   let destination = "";
@@ -196,7 +235,9 @@ function extractDestination(text, start) {
 }
 
 function inlineDestinations(line) {
-  const withoutCode = line.replace(INLINE_CODE, (match) => " ".repeat(match.length));
+  const withoutCode = line.replace(INLINE_CODE, (match) =>
+    " ".repeat(match.length),
+  );
   const found = [];
   let cursor = 0;
   while (true) {
@@ -231,7 +272,10 @@ function parseMarkdown(file) {
       if (state.fenceCharacter === null) {
         state.fenceCharacter = marker[0];
         state.fenceLength = marker.length;
-      } else if (marker[0] === state.fenceCharacter && marker.length >= state.fenceLength) {
+      } else if (
+        marker[0] === state.fenceCharacter &&
+        marker.length >= state.fenceLength
+      ) {
         state.fenceCharacter = null;
         state.fenceLength = 0;
       }
@@ -251,25 +295,37 @@ function parseMarkdown(file) {
       }
     }
 
-    const withoutCode = line.replace(INLINE_CODE, (match) => " ".repeat(match.length));
+    const withoutCode = line.replace(INLINE_CODE, (match) =>
+      " ".repeat(match.length),
+    );
     const definitionMatch = withoutCode.match(REFERENCE_DEFINITION);
     if (definitionMatch) {
       const [destination] = extractDestination(definitionMatch[2], 0);
       const id = normalizeReference(definitionMatch[1]);
-      if (definitions.has(id)) errors.push(`${relative(file)}:${lineNumber}: duplicate reference definition: ${id}`);
+      if (definitions.has(id))
+        errors.push(
+          `${relative(file)}:${lineNumber}: duplicate reference definition: ${id}`,
+        );
       definitions.set(id, destination);
       if (destination) links.push({ lineNumber, destination });
       continue;
     }
 
-    for (const destination of inlineDestinations(withoutCode)) links.push({ lineNumber, destination });
+    for (const destination of inlineDestinations(withoutCode))
+      links.push({ lineNumber, destination });
     for (const match of withoutCode.matchAll(/!?\[([^\]]+)\]\[([^\]]*)\]/g)) {
-      referenceUses.push({ lineNumber, id: normalizeReference(match[2] || match[1]) });
+      referenceUses.push({
+        lineNumber,
+        id: normalizeReference(match[2] || match[1]),
+      });
     }
   }
 
   for (const use of referenceUses) {
-    if (!definitions.has(use.id)) errors.push(`${relative(file)}:${use.lineNumber}: undefined reference link: ${use.id}`);
+    if (!definitions.has(use.id))
+      errors.push(
+        `${relative(file)}:${use.lineNumber}: undefined reference link: ${use.id}`,
+      );
   }
   return { anchors, links };
 }
@@ -278,7 +334,9 @@ function safelyDecode(value, source, lineNumber) {
   try {
     return decodeURIComponent(value);
   } catch {
-    errors.push(`${relative(source)}:${lineNumber}: malformed URL encoding: ${value}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: malformed URL encoding: ${value}`,
+    );
     return null;
   }
 }
@@ -287,93 +345,140 @@ function validateDestination(source, lineNumber, destination, parsed) {
   const scheme = destination.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
   if (scheme) {
     if (!EXTERNAL_SCHEMES.has(scheme[1].toLowerCase())) {
-      errors.push(`${relative(source)}:${lineNumber}: disallowed link scheme: ${destination}`);
+      errors.push(
+        `${relative(source)}:${lineNumber}: disallowed link scheme: ${destination}`,
+      );
     }
     return;
   }
   if (destination.startsWith("//")) {
-    errors.push(`${relative(source)}:${lineNumber}: scheme-relative links are not allowed: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: scheme-relative links are not allowed: ${destination}`,
+    );
     return;
   }
 
   const hashAt = destination.indexOf("#");
-  const beforeFragment = hashAt < 0 ? destination : destination.slice(0, hashAt);
+  const beforeFragment =
+    hashAt < 0 ? destination : destination.slice(0, hashAt);
   const rawFragment = hashAt < 0 ? "" : destination.slice(hashAt + 1);
   const queryAt = beforeFragment.indexOf("?");
-  const rawPath = queryAt < 0 ? beforeFragment : beforeFragment.slice(0, queryAt);
+  const rawPath =
+    queryAt < 0 ? beforeFragment : beforeFragment.slice(0, queryAt);
 
-  if (WINDOWS_ABSOLUTE.test(rawPath) || rawPath.startsWith("/") || rawPath.startsWith("\\")) {
-    errors.push(`${relative(source)}:${lineNumber}: local link must be repository-relative: ${destination}`);
+  if (
+    WINDOWS_ABSOLUTE.test(rawPath) ||
+    rawPath.startsWith("/") ||
+    rawPath.startsWith("\\")
+  ) {
+    errors.push(
+      `${relative(source)}:${lineNumber}: local link must be repository-relative: ${destination}`,
+    );
     return;
   }
 
   const decodedPath = safelyDecode(rawPath, source, lineNumber);
   if (decodedPath === null) return;
-  const target = rawPath ? path.resolve(path.dirname(source), decodedPath) : source;
+  const target = rawPath
+    ? path.resolve(path.dirname(source), decodedPath)
+    : source;
   const relativeTarget = path.relative(ROOT, target);
-  if (relativeTarget === ".." || relativeTarget.startsWith(`..${path.sep}`) || path.isAbsolute(relativeTarget)) {
-    errors.push(`${relative(source)}:${lineNumber}: link escapes repository: ${destination}`);
+  if (
+    relativeTarget === ".." ||
+    relativeTarget.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeTarget)
+  ) {
+    errors.push(
+      `${relative(source)}:${lineNumber}: link escapes repository: ${destination}`,
+    );
     return;
   }
   if (!existsSync(target)) {
-    errors.push(`${relative(source)}:${lineNumber}: target does not exist: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: target does not exist: ${destination}`,
+    );
     return;
   }
 
   const realTarget = realpathSync(target);
   if (isOutsideRepository(realTarget)) {
-    errors.push(`${relative(source)}:${lineNumber}: link resolves outside repository: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: link resolves outside repository: ${destination}`,
+    );
     return;
   }
 
   if (!rawFragment) return;
   if (statSync(realTarget).isDirectory()) {
-    errors.push(`${relative(source)}:${lineNumber}: cannot check anchor on directory: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: cannot check anchor on directory: ${destination}`,
+    );
     return;
   }
   if (!MARKDOWN_EXTENSIONS.has(path.extname(realTarget).toLowerCase())) {
-    errors.push(`${relative(source)}:${lineNumber}: anchor target is not Markdown: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: anchor target is not Markdown: ${destination}`,
+    );
     return;
   }
   const fragment = safelyDecode(rawFragment, source, lineNumber);
   if (fragment === null) return;
-  const targetDocument = parsed.get(path.resolve(realTarget)) ?? parseMarkdown(realTarget);
+  const targetDocument =
+    parsed.get(path.resolve(realTarget)) ?? parseMarkdown(realTarget);
   parsed.set(path.resolve(realTarget), targetDocument);
   if (!targetDocument.anchors.has(fragment)) {
-    errors.push(`${relative(source)}:${lineNumber}: heading anchor does not exist: ${destination}`);
+    errors.push(
+      `${relative(source)}:${lineNumber}: heading anchor does not exist: ${destination}`,
+    );
   }
 }
 
 function main() {
-  const emptyTreeResult = git(["hash-object", "-t", "tree", "--stdin"], { input: "" });
-  if (emptyTreeResult.status !== 0) throw new Error(emptyTreeResult.stderr || "cannot create empty tree hash");
+  const emptyTreeResult = git(["hash-object", "-t", "tree", "--stdin"], {
+    input: "",
+  });
+  if (emptyTreeResult.status !== 0)
+    throw new Error(emptyTreeResult.stderr || "cannot create empty tree hash");
   const emptyTree = emptyTreeResult.stdout.trim();
 
-  runGitWhitespaceCheck("committed tree whitespace", ["diff", "--check", emptyTree, "HEAD"]);
+  runGitWhitespaceCheck("committed tree whitespace", [
+    "diff",
+    "--check",
+    emptyTree,
+    "HEAD",
+  ]);
   runGitWhitespaceCheck("staged whitespace", ["diff", "--cached", "--check"]);
   runGitWhitespaceCheck("unstaged whitespace", ["diff", "--check"]);
   checkUntrackedWhitespace(repositoryUntrackedFiles());
 
   const markdownFiles = repositoryMarkdownFiles();
-  const parsed = new Map(markdownFiles.map((file) => [path.resolve(file), parseMarkdown(file)]));
+  const parsed = new Map(
+    markdownFiles.map((file) => [path.resolve(file), parseMarkdown(file)]),
+  );
   for (const source of markdownFiles) {
-    for (const { lineNumber, destination } of parsed.get(path.resolve(source)).links) {
+    for (const { lineNumber, destination } of parsed.get(path.resolve(source))
+      .links) {
       validateDestination(source, lineNumber, destination, parsed);
     }
   }
 
   if (errors.length > 0) {
     console.error("Documentation validation failed:");
-    for (const error of [...new Set(errors)].sort()) console.error(`- ${error}`);
+    for (const error of [...new Set(errors)].sort())
+      console.error(`- ${error}`);
     return 1;
   }
-  console.log(`Checked Git whitespace state and ${markdownFiles.length} Markdown files: links and anchors are valid.`);
+  console.log(
+    `Checked Git whitespace state and ${markdownFiles.length} Markdown files: links and anchors are valid.`,
+  );
   return 0;
 }
 
 try {
   process.exitCode = main();
 } catch (error) {
-  console.error(`Documentation validation failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(
+    `Documentation validation failed: ${error instanceof Error ? error.message : String(error)}`,
+  );
   process.exitCode = 1;
 }

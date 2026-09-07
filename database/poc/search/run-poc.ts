@@ -13,17 +13,17 @@ import {
   goldenQueries,
   type ProjectKey,
   type GoldenQuerySpec,
-  type QueryCategory
+  type QueryCategory,
 } from "./golden-queries.js";
 import {
   escapeLikePattern,
   validateSearchQuery,
-  type SearchQueryValidation
+  type SearchQueryValidation,
 } from "./normalize.js";
 import {
   buildSearchSeed,
   PROJECT_DEFINITIONS,
-  type SearchRowSeed
+  type SearchRowSeed,
 } from "./seed.js";
 
 const TOP_K = 20;
@@ -72,14 +72,13 @@ function runSuffix(): string {
 
 function projectCode(prefix: string): string {
   return `${prefix}${Math.abs(
-    Number(BigInt(`0x${randomBytes(4).toString("hex")}`))
-  ).toString(36).toUpperCase()}`.slice(0, 32);
+    Number(BigInt(`0x${randomBytes(4).toString("hex")}`)),
+  )
+    .toString(36)
+    .toUpperCase()}`.slice(0, 32);
 }
 
-async function seedProjects(
-  sql: Sql,
-  suffix: string
-): Promise<ProjectIdMap> {
+async function seedProjects(sql: Sql, suffix: string): Promise<ProjectIdMap> {
   const byKey = new Map<ProjectKey, number>();
 
   for (const definition of PROJECT_DEFINITIONS) {
@@ -135,7 +134,7 @@ async function seedProjects(
 async function seedSearchRows(
   sql: Sql,
   rows: readonly SearchRowSeed[],
-  projectIds: ProjectIdMap
+  projectIds: ProjectIdMap,
 ): Promise<void> {
   await sql.begin(async (transaction) => {
     for (const row of rows) {
@@ -175,7 +174,7 @@ async function seedSearchRows(
 
 async function countSeededRows(
   sql: Sql,
-  projectIds: ProjectIdMap
+  projectIds: ProjectIdMap,
 ): Promise<number> {
   const [row] = await sql<Array<{ count: number }>>`
     SELECT count(*)::INTEGER AS count
@@ -193,7 +192,7 @@ async function search(
   sql: Sql,
   projectIds: readonly number[],
   rawQuery: string,
-  topK = TOP_K
+  topK = TOP_K,
 ): Promise<{
   readonly rows: readonly SearchRow[];
   readonly validation: SearchQueryValidation;
@@ -227,17 +226,18 @@ async function explainSearch(
   sql: Sql,
   projectIds: readonly number[],
   rawQuery: string,
-  mode: "default" | "force-gin"
+  mode: "default" | "force-gin",
 ): Promise<{ readonly plan: readonly string[]; readonly ranQuery: boolean }> {
   const validation = validateSearchQuery(rawQuery);
   if (!validation.ok || projectIds.length === 0) {
     return { plan: [], ranQuery: false };
   }
   const pattern = escapeLikePattern(validation.normalizedQuery);
-  const rows = mode === "force-gin"
-    ? await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL enable_seqscan = off`;
-        return transaction<Array<Record<string, string>>>`
+  const rows =
+    mode === "force-gin"
+      ? await sql.begin(async (transaction) => {
+          await transaction`SET LOCAL enable_seqscan = off`;
+          return transaction<Array<Record<string, string>>>`
           EXPLAIN (ANALYZE, BUFFERS)
           WITH candidates AS MATERIALIZED (
             SELECT project_id, entity_type, entity_id, visibility_scope
@@ -252,8 +252,8 @@ async function explainSearch(
            ORDER BY project_id ASC, entity_id ASC
            LIMIT ${TOP_K}
         `;
-      })
-    : await sql<Array<Record<string, string>>>`
+        })
+      : await sql<Array<Record<string, string>>>`
         EXPLAIN (ANALYZE, BUFFERS)
         WITH candidates AS MATERIALIZED (
           SELECT project_id, entity_type, entity_id, visibility_scope
@@ -278,7 +278,7 @@ async function runGoldenQuery(
   spec: GoldenQuerySpec,
   expectedProjectId: number | undefined,
   expectedEntityId: number | undefined,
-  expectedEntityType: string | undefined
+  expectedEntityType: string | undefined,
 ): Promise<QueryRunResult> {
   const startedAt = performance.now();
   const result = await search(sql, projectIds, spec.query);
@@ -296,13 +296,10 @@ async function runGoldenQuery(
         (row) =>
           row.project_id === expectedProjectId &&
           row.entity_id === expectedEntityId &&
-          row.entity_type === expectedEntityType
+          row.entity_type === expectedEntityType,
       );
     passed = targetFound;
-  } else if (
-    spec.policy === "no-result" ||
-    spec.policy === "special"
-  ) {
+  } else if (spec.policy === "no-result" || spec.policy === "special") {
     passed = result.ranQuery && result.rows.length === 0;
   } else {
     passed = !result.ranQuery && result.rows.length === 0;
@@ -315,14 +312,14 @@ async function runGoldenQuery(
     returnedCount: result.rows.length,
     targetFound,
     passed,
-    elapsedMs
+    elapsedMs,
   };
 }
 
 async function runCrossProjectCheck(
   sql: Sql,
   projectIds: ProjectIdMap,
-  firstGolden: GoldenQuerySpec
+  firstGolden: GoldenQuerySpec,
 ): Promise<{
   readonly passed: boolean;
   readonly query: string;
@@ -334,7 +331,7 @@ async function runCrossProjectCheck(
   }
   const targetProjectId = projectIds.byKey.get(targetProjectKey);
   const otherProjectId = projectIds.all.find(
-    (projectId) => projectId !== targetProjectId
+    (projectId) => projectId !== targetProjectId,
   );
   if (targetProjectId === undefined || otherProjectId === undefined) {
     throw new Error("Cross-project check needs at least two projects");
@@ -348,20 +345,20 @@ async function runCrossProjectCheck(
       result.rows.length === 0 &&
       emptyScope.ranQuery === false,
     query: firstGolden.query,
-    returnedCount: result.rows.length
+    returnedCount: result.rows.length,
   };
 }
 
 async function runIndexPlanChecks(
   sql: Sql,
-  projectIds: readonly number[]
+  projectIds: readonly number[],
 ): Promise<readonly IndexPlanResult[]> {
   const categories: readonly QueryCategory[] = [
     "zh-short",
     "code",
     "english",
     "mixed",
-    "punctuation"
+    "punctuation",
   ];
   const results: IndexPlanResult[] = [];
   for (const category of categories) {
@@ -373,13 +370,13 @@ async function runIndexPlanChecks(
       sql,
       projectIds,
       spec.query,
-      "force-gin"
+      "force-gin",
     );
     const defaultPlan = await explainSearch(
       sql,
       projectIds,
       spec.query,
-      "default"
+      "default",
     );
     if (!ginPlan.ranQuery || !defaultPlan.ranQuery) {
       throw new Error(`EXPLAIN query was not executed for ${spec.id}`);
@@ -397,16 +394,17 @@ async function runIndexPlanChecks(
       defaultPlan: defaultPlan.plan,
       defaultPlanUsesGin:
         defaultPlanText.includes(
-          "search_projection_normalized_text_trgm_idx"
+          "search_projection_normalized_text_trgm_idx",
         ) && /(?:Bitmap Index Scan|Index Scan)/u.test(defaultPlanText),
-      plannerHinted: true
+      plannerHinted: true,
     });
   }
   return results;
 }
 
 export async function runPoc(): Promise<void> {
-  const databaseUrl = process.env.POC_DATABASE_URL?.trim() ??
+  const databaseUrl =
+    process.env.POC_DATABASE_URL?.trim() ??
     process.env.TEST_DATABASE_URL?.trim();
   if (!databaseUrl) {
     throw new Error("Set POC_DATABASE_URL or TEST_DATABASE_URL");
@@ -416,7 +414,7 @@ export async function runPoc(): Promise<void> {
   const seed = buildSearchSeed();
   if (seed.rows.length !== SEED_ROW_COUNT) {
     throw new Error(
-      `Expected ${SEED_ROW_COUNT} projection rows, got ${seed.rows.length}`
+      `Expected ${SEED_ROW_COUNT} projection rows, got ${seed.rows.length}`,
     );
   }
 
@@ -424,12 +422,12 @@ export async function runPoc(): Promise<void> {
     connection: { application_name: "inpulse-search-poc" },
     max: 4,
     onnotice: () => undefined,
-    prepare: false
+    prepare: false,
   });
 
   const artifactsDirectory = resolve(
     dirname(fileURLToPath(import.meta.url)),
-    "artifacts"
+    "artifacts",
   );
   await mkdir(artifactsDirectory, { recursive: true });
   const reportPath = resolve(artifactsDirectory, "phase0-report.json");
@@ -447,46 +445,46 @@ export async function runPoc(): Promise<void> {
     const rowCount = await countSeededRows(sql, projectIds);
 
     const resultPromises = goldenQueries.map((spec) => {
-      const entityId = spec.policy === "normal"
-        ? seed.expectedEntityIdsByGoldenId.get(spec.id)
-        : undefined;
-      const entityType = spec.policy === "normal"
-        ? seed.expectedEntityTypesByGoldenId.get(spec.id)
-        : undefined;
-      const projectKey = spec.policy === "normal"
-        ? spec.expectedProjectKey
-        : null;
-      const expectedProjectId = projectKey === null
-        ? undefined
-        : projectIds.byKey.get(projectKey);
+      const entityId =
+        spec.policy === "normal"
+          ? seed.expectedEntityIdsByGoldenId.get(spec.id)
+          : undefined;
+      const entityType =
+        spec.policy === "normal"
+          ? seed.expectedEntityTypesByGoldenId.get(spec.id)
+          : undefined;
+      const projectKey =
+        spec.policy === "normal" ? spec.expectedProjectKey : null;
+      const expectedProjectId =
+        projectKey === null ? undefined : projectIds.byKey.get(projectKey);
       return runGoldenQuery(
         sql,
         projectIds.all,
         spec,
         expectedProjectId,
         entityId,
-        entityType
+        entityType,
       );
     });
     const queryResults = await Promise.all(resultPromises);
 
     const recallCases = queryResults.filter(
-      (result) => result.spec.policy === "normal"
+      (result) => result.spec.policy === "normal",
     );
     const hits = recallCases.filter((result) => result.passed).length;
     const recallAt20 = hits / recallCases.length;
 
     const nonRecallCases = queryResults.filter(
-      (result) => result.spec.policy !== "normal"
+      (result) => result.spec.policy !== "normal",
     );
     const noResultPassed = nonRecallCases.every((result) => result.passed);
     const edgeCases = queryResults.filter(
-      (result) => result.spec.policy === "edge"
+      (result) => result.spec.policy === "edge",
     );
     const edgePassed = edgeCases.every((result) => result.passed);
 
     const crossProjectGolden = goldenQueries.find(
-      (entry) => entry.policy === "normal" && entry.category === "code"
+      (entry) => entry.policy === "normal" && entry.category === "code",
     );
     if (crossProjectGolden === undefined) {
       throw new Error("No code golden query available");
@@ -494,14 +492,14 @@ export async function runPoc(): Promise<void> {
     const crossProject = await runCrossProjectCheck(
       sql,
       projectIds,
-      crossProjectGolden
+      crossProjectGolden,
     );
     const indexPlans = await runIndexPlanChecks(sql, projectIds.all);
     const ginUsableWhenForced = indexPlans.every(
-      (result) => result.ginIndexUsed
+      (result) => result.ginIndexUsed,
     );
     const ginDefaultPlanPassed = indexPlans.every(
-      (result) => result.defaultPlanUsesGin
+      (result) => result.defaultPlanUsesGin,
     );
     const ginPassed = ginDefaultPlanPassed;
 
@@ -519,20 +517,21 @@ export async function runPoc(): Promise<void> {
       postgres: {
         version: versionRow.version,
         image: process.env.POC_POSTGRES_IMAGE?.trim() ?? null,
-        imageDigest: process.env.POC_POSTGRES_IMAGE_DIGEST?.trim() ?? null
+        imageDigest: process.env.POC_POSTGRES_IMAGE_DIGEST?.trim() ?? null,
       },
       environment: {
         platform: `${platform()} ${release()}`,
         arch: arch(),
         cpuCount: cpus().length,
-        totalMemoryBytes: totalmem()
+        totalMemoryBytes: totalmem(),
       },
       dataset: {
         rowCount,
         minimumRows: SEED_ROW_COUNT,
         projectCount: projectIds.all.length,
         seedAlgorithm: "deterministic templates + frozen golden targets",
-        normalizedBy: "NFKC + lowercase + whitespace collapse + punctuation map"
+        normalizedBy:
+          "NFKC + lowercase + whitespace collapse + punctuation map",
       },
       queries: {
         count: goldenQueries.length,
@@ -548,7 +547,7 @@ export async function runPoc(): Promise<void> {
           returnedCount: result.returnedCount,
           targetFound: result.targetFound,
           passed: result.passed,
-          elapsedMs: result.elapsedMs
+          elapsedMs: result.elapsedMs,
         })),
         nonExpectedCases: nonRecallCases.map((result) => ({
           id: result.spec.id,
@@ -558,8 +557,8 @@ export async function runPoc(): Promise<void> {
           ranQuery: result.ranQuery,
           returnedCount: result.returnedCount,
           passed: result.passed,
-          elapsedMs: result.elapsedMs
-        }))
+          elapsedMs: result.elapsedMs,
+        })),
       },
       security: {
         crossProject: crossProject,
@@ -570,9 +569,9 @@ export async function runPoc(): Promise<void> {
           ")",
           "SELECT ... FROM candidates",
           "WHERE project_id = ANY(?) AND visibility_scope = 'MEMBER'",
-          "ORDER BY project_id, entity_id LIMIT 20"
+          "ORDER BY project_id, entity_id LIMIT 20",
         ],
-        plannerHintForGinProof: "SET LOCAL enable_seqscan = off"
+        plannerHintForGinProof: "SET LOCAL enable_seqscan = off",
       },
       indexPlans,
       gates: {
@@ -584,15 +583,15 @@ export async function runPoc(): Promise<void> {
         ginIndexUsableWhenForced: ginUsableWhenForced,
         ginDefaultPlanPassed,
         ginIndexPassed: ginPassed,
-        passed
-      }
+        passed,
+      },
     };
 
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     console.log(`Search PoC report: ${reportPath}`);
     console.log(`Projection rows: ${rowCount}`);
     console.log(
-      `Recall@${TOP_K}: ${(recallAt20 * 100).toFixed(2)}% (${hits}/${recallCases.length})`
+      `Recall@${TOP_K}: ${(recallAt20 * 100).toFixed(2)}% (${hits}/${recallCases.length})`,
     );
     console.log(`No-result cases passed: ${noResultPassed}`);
     console.log(`Edge cases passed: ${edgePassed}`);
@@ -603,7 +602,7 @@ export async function runPoc(): Promise<void> {
 
     if (!passed) {
       throw new Error(
-        "Search phase 0 PoC did not pass one or more required gates"
+        "Search phase 0 PoC did not pass one or more required gates",
       );
     }
   } finally {
@@ -611,7 +610,8 @@ export async function runPoc(): Promise<void> {
   }
 }
 
-const isCli = process.argv[1] !== undefined &&
+const isCli =
+  process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (isCli) {

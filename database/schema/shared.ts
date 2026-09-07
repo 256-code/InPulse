@@ -8,7 +8,7 @@ export const bytea = customType<{
 }>({
   dataType() {
     return "bytea";
-  }
+  },
 });
 
 export const jsonObjectDefault = "'{}'::jsonb";
