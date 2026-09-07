@@ -175,6 +175,7 @@ pnpm contract:drift
 pnpm contract:validate
 pnpm build
 pnpm check:deps
+pnpm check:frontend:boundaries
 pnpm permissions:check
 pnpm deps:audit
 pnpm check:secrets
@@ -195,9 +196,11 @@ pnpm check:docs
 - `contract:drift`：逐字节比对已提交生成物与 Registry 的生成结果，并拒绝生成目录内出现非生成器产出的文件；
 - `contract:validate`：Route Registry 策略完整性、幂等重放与重放授权策略的字段边界、响应 Schema 一致性以及 Controller operationId 绑定检查；
 - `build`：api（`tsc`）与 web（`vite`）生产构建；
-- `check:deps`：前端分层（`app -> pages -> features -> shared/generated`）、跨模块内部访问、循环依赖、Controller 直连数据库与前端裸 `fetch` 检查；
+- `check:deps`：前端分层（`app -> pages -> features -> shared/generated`）、跨模块内部访问、循环依赖、Controller 直连数据库与前端裸 `fetch` 检查；后端跨模块只允许访问目标模块的公开表面（`public/**`、模块 `index.ts`、`*.port.ts`），对应第 3 节的 Domain/Public Port；
+- `check:frontend:boundaries`：`apps/web` 的 dependency-cruiser 分层复核，与 `check:deps` 同属 §12.4 的依赖边界门禁；
+- `test:web`：只运行 `apps/web` 的 jsdom 单元测试，等价于 `pnpm test:unit` 中的 web 部分；
 - `permissions:check`：可执行权限矩阵与 `docs/permissions.md` 的双向一致性，以及每条路由的允许/拒绝用例登记；
-- `deps:audit`：`pnpm audit --audit-level=high`，需要访问 registry；
+- `deps:audit`：`pnpm audit --audit-level=high`，需要访问 registry；该门禁当前失败（`ansi-regex@5.0.0` high，来自 `origin/main` PR #16 的 `@testing-library` 依赖链），按 `AGENTS.md` 第 4 节须由独立 PR 与人工确认修复，不得调低阈值；
 - `check:secrets`：对受版本控制与待提交文件执行 Secret 扫描；
 - `check:docs`：使用 Node.js 内置模块，检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；
 - `check`：按上述顺序一次跑完全部非数据库门禁，不含 `db:migrate`、`test:integration` 与 `test:search:db`。

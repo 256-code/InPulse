@@ -19,9 +19,9 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 | 状态 | 内容 |
 |---|---|
-| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、六条显式迁移（`0000-0005`，含 `0003_search_pgroonga.sql` 索引与 `0004/0005` 旧 `pg_trgm` contract 清理）、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、Prettier 格式基线、根级 typecheck/lint/build）与按 §12.4 顺序执行的 CI 链路；API 契约双真相（Schema Registry/Zod + Route Registry）、OpenAPI 3.1 与 TypeScript 客户端生成、漂移与完整性检查、可执行权限矩阵；依赖边界与 Secret 扫描；PGroonga V1 PoC、15 组语义探针、90 条金标 Recall@20=100%、跨项目/边界、PostgreSQL 18.6 探针镜像构建、`EXPLAIN (ANALYZE, BUFFERS)`、`0000-0002 -> 0003-0005` 升级/逐迁移回滚与逻辑恢复验证；SearchQueryService 服务层、`ProjectAccessQueryPort` 契约草案与 8 个真实 PostgreSQL 搜索集成用例；ADR-025 替代 ADR-010 |
-| 下一步 | 人工评审 [ADR-027](./docs/adr/ADR-027.md) 并转为 `Accepted`；接入搜索 API/Controller、生产 `ProjectAccessQueryPort` 适配器与前端；随后继续认证与业务领域模块；补齐 Playwright E2E、生产 Dockerfile/Compose 与镜像扫描门禁、加密备份恢复；CI 在真实 PR 上稳定后再把 §12.4 门禁设为 required checks |
-| 已提供 | pnpm workspace、严格 TypeScript、格式检查、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、契约生成与漂移检查、权限矩阵检查、依赖边界与 Secret 扫描、依赖漏洞审计、搜索服务真实 PostgreSQL 集成测试、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
+| 已完成 | 候选设计与 ADR；PostgreSQL 18 Schema、六条显式迁移（`0000-0005`，含 `0003_search_pgroonga.sql` 索引与 `0004/0005` 旧 `pg_trgm` contract 清理）、最小权限角色、迁移器与 100 并发真实数据库门禁；阶段 0 工程基座骨架（pnpm workspace、Prettier 格式基线、根级 typecheck/lint/build）与按 §12.4 顺序执行的 CI 链路；API 契约双真相（Schema Registry/Zod + Route Registry）、OpenAPI 3.1 与 TypeScript 客户端生成、漂移与完整性检查、可执行权限矩阵；依赖边界与 Secret 扫描；F-30 前端基座（路由、鉴权守卫、错误边界、Ant Design 主题与 Provider、`@app/@pages/@features/@shared/@generated` 路径别名、jsdom 单测与 dependency-cruiser 边界规则）；PGroonga V1 PoC、15 组语义探针、90 条金标 Recall@20=100%、跨项目/边界、PostgreSQL 18.6 探针镜像构建、`EXPLAIN (ANALYZE, BUFFERS)`、`0000-0002 -> 0003-0005` 升级/逐迁移回滚与逻辑恢复验证；SearchQueryService 服务层、`ProjectAccessQueryPort` 契约草案与 8 个真实 PostgreSQL 搜索集成用例；ADR-025 替代 ADR-010 |
+| 下一步 | 人工评审 [ADR-027](./docs/adr/ADR-027.md) 并转为 `Accepted`；在 Schema Registry + Route Registry 定案后接入搜索 API/Controller、生产 `ProjectAccessQueryPort` 适配器与前端页面；随后继续认证与业务领域模块；补齐 Playwright E2E、生产 Dockerfile/Compose 与镜像扫描门禁、加密备份恢复；CI 在真实 PR 上稳定后再把 §12.4 门禁设为 required checks |
+| 已提供 | pnpm workspace、严格 TypeScript、格式检查、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、前端单元测试（`pnpm test:web`）与 dependency-cruiser 边界检查、契约生成与漂移检查、权限矩阵检查、依赖边界与 Secret 扫描、依赖漏洞审计、搜索服务真实 PostgreSQL 集成测试、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
 | 尚未提供 | 生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller/页面、业务领域模块与 API、Playwright E2E、生产容器镜像与 Compose 部署产物、镜像扫描与备份恢复门禁 |
 
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；§12.4 中 Playwright E2E、生产容器镜像构建、Compose 渲染与 digest 校验、镜像扫描尚未落库，补齐前请勿假设这些检查已执行。
@@ -41,6 +41,7 @@ pnpm contract:drift
 pnpm contract:validate
 pnpm build
 pnpm check:deps
+pnpm check:frontend:boundaries
 pnpm permissions:check
 pnpm deps:audit            # 需要访问 registry
 pnpm check:secrets
@@ -53,6 +54,7 @@ pnpm check:docs
 pnpm check             # 一次跑完上述全部非数据库门禁
 pnpm format            # 用 Prettier 写入格式
 pnpm contract:generate # 重新生成 OpenAPI 与 TypeScript 客户端
+pnpm test:web          # 只运行 apps/web 单元测试
 ```
 
 以下命令已落库，但需要已初始化 PostgreSQL 18 + PGroonga 的实例

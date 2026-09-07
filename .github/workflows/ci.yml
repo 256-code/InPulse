@@ -17,6 +17,7 @@
 #                                         -> Route Registry completeness check
 #  10  web/api production build           -> Build
 #  11  dependency boundary check          -> Dependency boundary check
+#                                            + Frontend boundary check (dependency-cruiser)
 #  12  permission matrix test             -> Permission matrix check
 #  13  dependency/secret scan             -> Dependency audit / Secret scan
 #
@@ -170,6 +171,9 @@ jobs:
 
       - name: Dependency boundary check
         run: pnpm check:deps
+
+      - name: Frontend boundary check
+        run: pnpm check:frontend:boundaries
 
       - name: Permission matrix check
         run: pnpm permissions:check

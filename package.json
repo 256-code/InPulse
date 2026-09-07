@@ -15,6 +15,7 @@
     "deps:audit": "pnpm audit --audit-level=high",
     "check:deps": "node scripts/check_dependencies.mjs",
     "check:docs": "node scripts/check_docs.mjs",
+    "check:frontend:boundaries": "pnpm --filter @inpulse/web check:boundaries",
     "db:migrate": "pnpm --filter @inpulse/database migrate",
     "db:migrations:check": "pnpm --filter @inpulse/database migrations:check",
     "db:poc:search": "pnpm --filter @inpulse/database poc:search",
@@ -30,10 +31,11 @@
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",
     "test:integration": "pnpm -r test:integration",
+    "test:web": "pnpm --filter @inpulse/web test",
     "test:search:db": "pnpm --filter @inpulse/api test:search:db",
     "lint": "eslint .",
     "build": "pnpm -r build",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm db:migrations:check && pnpm contract:drift && pnpm contract:validate && pnpm build && pnpm check:deps && pnpm permissions:check && pnpm deps:audit && pnpm check:secrets && pnpm check:docs"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm db:migrations:check && pnpm contract:drift && pnpm contract:validate && pnpm build && pnpm check:deps && pnpm check:frontend:boundaries && pnpm permissions:check && pnpm deps:audit && pnpm check:secrets && pnpm check:docs"
   },
   "devDependencies": {
     "@inpulse/eslint-config": "workspace:*",
