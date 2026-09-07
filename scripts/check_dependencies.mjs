@@ -2,7 +2,8 @@
 
 // 依赖边界门禁（AGENTS.md 第 3 节 / 技术设计 12.4）：
 // - 前端 app -> pages -> features -> shared/generated，禁止反向与跨层；
-// - 后端 Controller 不得直接访问数据库，领域模块只能经 public 表面跨模块；
+// - 后端 Controller 不得直接访问数据库，领域模块只能经公开表面（public/**、
+//   模块 index.ts、*.port.ts）跨模块，对应 AGENTS.md 第 3 节的 Domain/Public Port；
 // - 禁止循环依赖；
 // - 前端业务代码不得裸写 fetch/axios，必须使用生成客户端。
 import { readdir, readFile } from "node:fs/promises";
@@ -228,10 +229,7 @@ function checkEdge(source, target, sourceFile, line, external) {
   const sourceModule = apiModuleOf(source.local);
   const targetModule = apiModuleOf(target.local);
   if (sourceModule && targetModule && sourceModule !== targetModule) {
-    const allowed =
-      target.local.includes(`/modules/${targetModule}/public/`) ||
-      target.local.endsWith(`/modules/${targetModule}/index.ts`);
-    if (!allowed) {
+    if (!isModulePublicSurface(target.local, targetModule)) {
       fail(
         sourceFile,
         line,
@@ -261,6 +259,19 @@ function isControllerDatabaseAccess(source, sourceFile, external, target) {
 function apiModuleOf(local) {
   const match = local.match(/apps\/api\/src\/modules\/([^/]+)\//);
   return match ? match[1] : undefined;
+}
+
+// AGENTS.md 第 3 节：跨域读只允许通过稳定 QueryPort，跨域写只允许 Workflow 调用
+// 公开 CommandPort。因此一个模块的公开表面是 public/**、模块 index.ts 与模块根目录
+// 下的 *.port.ts；其余文件都属于模块内部实现，不得被其他模块导入。
+// Port 文件自身也作为来源被扫描，因此它再伸手进别的模块内部同样会被拒绝。
+function isModulePublicSurface(local, moduleName) {
+  const prefix = `apps/api/src/modules/${moduleName}/`;
+  if (!local.startsWith(prefix)) return false;
+  const relative = local.slice(prefix.length);
+  if (relative.startsWith("public/")) return true;
+  if (relative === "index.ts") return true;
+  return !relative.includes("/") && relative.endsWith(".port.ts");
 }
 
 function checkFetchUsage(source, sourceFile, descriptor) {

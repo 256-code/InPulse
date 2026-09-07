@@ -1,0 +1,44 @@
+{
+    "version":  "pgroonga-migration-v3",
+    "generatedAt":  "2026-09-07T05:31:22.2664543Z",
+    "source":  {
+                   "image":  "inpulse/pgroonga-pg18.6:repro",
+                   "imageDigest":  "inpulse/pgroonga-pg18.6@sha256:bca8248cb90be2b287674741d6d1575b5a87f4f1fbb52259a9aca9055781083a",
+                   "database":  "app_upgrade_prev",
+                   "previousMigrations":  [
+                                              "0000_initial.sql",
+                                              "0001_invariants_and_permissions.sql",
+                                              "0002_security_hardening.sql"
+                                          ],
+                   "appliedMigrations":  [
+                                             "0003_search_pgroonga.sql",
+                                             "0004_search_projection_contract_pg_trgm_index.sql",
+                                             "0005_search_projection_contract_pg_trgm_extension.sql"
+                                         ]
+               },
+    "upgrade":  {
+                    "previousVersionApplied":  true,
+                    "migrationRunnerApplied":  true,
+                    "migrationHistoryRecorded":  true,
+                    "migrationHistoryRows":  6,
+                    "runnerAppliedContractMigrations":  2,
+                    "indexBeforeUpgrade":  0,
+                    "trigramIndexBeforeCleanup":  1,
+                    "indexAfterUpgrade":  1,
+                    "trigramIndexAfterCleanup":  0,
+                    "pgTrgmExtensionAfterCleanup":  0,
+                    "preCleanupForcedPlanUsesPgroonga":  true,
+                    "indexDefinition":  "CREATE INDEX idx_search_projection_pgroonga ON app.search_projection USING pgroonga (normalized_search_text)"
+                },
+    "rollback":  {
+                     "droppedIndexInTransaction":  true,
+                     "indexRestoredAfterRollback":  true,
+                     "indexCountAfterRollback":  1,
+                     "trigramIndexContractRollback":  true,
+                     "pgTrgmExtensionContractRollback":  true
+                 },
+    "limitations":  [
+                        "This is a local verification of the 0000-0002 -\u003e 0003-0005 upgrade path: 0003 is applied before cleanup, then the repository migration runner applies the 0004/0005 contract migrations. Transaction rollback covers the PGroonga index, trigram index, and pg_trgm extension removal.",
+                        "The upgrade uses a local PostgreSQL container and the same migration runner source as CI, but does not cover a production host, phased rollout, or backup-driven rollback."
+                    ]
+}

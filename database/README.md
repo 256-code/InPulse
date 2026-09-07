@@ -12,6 +12,8 @@ Drizzle ORM 0.45.2 和 Postgres.js 3.4.9。API 进程只能使用
 - `bootstrap/000_roles.sql`：首次建库的角色、所有权和默认权限；
 - `bootstrap/010_passwords.sql`：仅初始化容器读取五个独立密码
   Secret；仓库和命令行都不出现密码；
+- `bootstrap/020_pgroonga.sql`：由 `cluster_bootstrap` 预装非 trusted 的
+  `pgroonga` 扩展，并撤销非运行时角色的扩展函数 EXECUTE；
 - `src/migrate.ts`：带全局 advisory lock 和 SHA-256 历史校验的迁移器；
 - `test/database.integration.test.ts`：真实 PostgreSQL 约束、权限与并发门禁。
 
@@ -25,25 +27,37 @@ Drizzle ORM 0.45.2 和 Postgres.js 3.4.9。API 进程只能使用
 生产初始化顺序如下：
 
 1. PostgreSQL 官方镜像以 `cluster_bootstrap` 创建 `app` 数据库；
-2. 以该一次性超级用户依次执行 `000_roles.sql` 和
-   `010_passwords.sql`；
+2. 以该一次性超级用户依次执行 `000_roles.sql`、`010_passwords.sql`
+   和 `020_pgroonga.sql`；
 3. 停止初始化配置，日常数据库容器不再挂载 bootstrap 密码；
 4. 独立迁移任务以 `app_migrator` 执行 `pnpm db:migrate`；
 5. 迁移成功后 API 才以 `app_runtime` 启动。
+
+PGroonga 不是 trusted extension，不能由普通 `app_owner` 首次安装；
+因此 `020_pgroonga.sql` 必须在迁移前由一次性超级用户执行。正式
+`0003_search_pgroonga.sql` 只保留幂等守卫与 schema 限定的索引定义，并在
+缺少扩展时 fail closed。`0004_search_projection_contract_pg_trgm_index.sql`
+确认 PGroonga 索引存在后才删除旧 GIN 索引；
+`0005_search_projection_contract_pg_trgm_extension.sql` 确认旧 GIN 索引已
+删除且 `pg_trgm` 没有扩展外依赖后才删除扩展，避免把索引和扩展清理与
+PGroonga 迁移合并在同一迁移中。
 
 生产环境不接受明文 URL 环境变量。迁移和运行进程分别使用
 `MIGRATION_DB_PASSWORD_FILE`、`RUNTIME_DB_PASSWORD_FILE`，并配合
 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_SSLMODE`。完整键名见
 `.env.example`。
 
-本地已有 PostgreSQL 18 时，可一次性创建隔离集群、迁移、测试并停止：
+本地已有安装 PGroonga 的 PostgreSQL 18 时，可一次性创建隔离集群、迁移、
+测试并停止：
 
 ```powershell
 $env:POSTGRES_BIN = 'C:\Program Files\PostgreSQL\18\bin'
 pnpm db:test:local
 ```
 
-该脚本只在系统临时目录创建 `InPulse-PgTest-<uuid>`，只监听
+该脚本先检查 `pg_available_extensions`，执行 `020_pgroonga.sql`；若本机
+未安装 PGroonga，会明确失败并提示改用 Docker 的一体化 PoC。脚本只在系统
+临时目录创建 `InPulse-PgTest-<uuid>`，只监听
 `127.0.0.1`，使用仅限该临时实例的 trust 认证，并将
 `max_connections` 设为 150 以执行 100 并发审计门禁。成功后自动停止并
 删除测试目录；失败时保留日志路径供排查。可传 `-KeepData` 保留成功实例
@@ -68,20 +82,43 @@ pnpm db:test
 `TEST_AUDIT_READER_DATABASE_URL` 和
 `TEST_AUDIT_ARCHIVE_DATABASE_URL`。
 
-## 阶段 0 搜索 PoC
-
-PGroonga V1 PoC（需要 Docker 与镜像）：
+搜索服务真实 PostgreSQL 集成测试复用同一套角色和迁移：
 
 ```powershell
-docker pull groonga/pgroonga:4.0.8-alpine-18
-pnpm db:poc:search:pgroonga:local
+$env:MIGRATION_DATABASE_URL = 'postgresql://app_migrator@127.0.0.1:55432/app'
+$env:TEST_DATABASE_URL = 'postgresql://cluster_bootstrap@127.0.0.1:55432/app'
+pnpm test:search:db
 ```
 
-脚本在一次性容器中执行角色初始化、`app` schema 扩展、显式迁移、现有
-数据库测试和搜索 PoC；成功时自动删除容器，也可传 `-KeepContainer`
-保留。结果写入 `poc/search-pgroonga/artifacts/pgroonga-report.json`。
-当前 PoC 使用镜像内置 PostgreSQL 18.4，V1 语义、90 条金标
-Recall@20、边界和跨项目隔离均通过；PostgreSQL 18.6 官方基线尚未验证。
+该命令要求目标实例已执行 `000_roles.sql`、`020_pgroonga.sql`，且
+`max_connections >= 150`；它不在当前 CI 的 `CI / workspace` job 中执行。
+
+## 阶段 0 搜索 PoC
+
+PostgreSQL 18.6 PGroonga V1 PoC（需要 Docker）：
+
+```powershell
+docker build `
+  -f database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 `
+  -t inpulse/pgroonga-pg18.6:repro `
+  database/poc/search-pgroonga
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File database/scripts/poc-search-pgroonga-local.ps1 `
+  -Image inpulse/pgroonga-pg18.6:repro `
+  -Port 55436 -RestorePort 55437
+```
+
+脚本创建一次性源/目标容器，执行 `000_roles.sql` 与 `020_pgroonga.sql`、
+显式迁移、现有数据库测试、搜索 PoC，并执行排除 Session 数据的
+`pg_dump`/`pg_restore` 烟雾验证；成功时自动删除容器，也可传
+`-KeepContainer` 保留。结果写入
+`poc/search-pgroonga/artifacts/pgroonga-report.json`、
+`poc/search-pgroonga/artifacts/pgroonga-backup-restore-report.json` 与
+`poc/search-pgroonga/artifacts/pgroonga-migration-report.json`。
+18.6 探针镜像上的 V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认
+查询计划的 `ANALYZE/BUFFERS` 证据、`0000-0002 -> 0003-0005` 升级/逐迁移
+回滚、旧 `pg_trgm` GIN/扩展清理和逻辑恢复均通过；旧
+`pnpm db:poc:search:pgroonga:local` 仍保留为非 18.6 快速复现入口。
 
 原 `pg_trgm` PoC 保留为决策证据：
 

@@ -5,8 +5,10 @@
 #   4  typecheck                          -> Typecheck
 #   5  unit tests                         -> Unit tests
 #   6  database migrations from empty DB  -> Migration file consistency
+#                                            + Build PostgreSQL 18.6 + PGroonga test image
 #                                            + Start PostgreSQL 18.6 test cluster
 #                                            + Bootstrap database roles
+#                                            + Bootstrap PGroonga extension
 #                                            + Migrate empty database
 #   7  integration tests                  -> Integration tests against real PostgreSQL
 #                                            （含 §12.4 database role/privilege probes）
@@ -18,10 +20,21 @@
 #  12  permission matrix test             -> Permission matrix check
 #  13  dependency/secret scan             -> Dependency audit / Secret scan
 #
+# 迁移 0003_search_pgroonga.sql 在缺少 PGroonga 时 fail closed，因此本 job 先用
+# database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 基于 digest 固定的
+# postgres:18.6 构建探针镜像，再按 database/scripts/test-local.ps1 的同一顺序执行
+# 000_roles.sql -> 020_pgroonga.sql -> 迁移 -> 集成测试。该探针镜像只用于 CI 与
+# PoC，不是生产部署镜像，也不等于 §12.4 的 container image build 门禁；生产镜像
+# 与其 digest 仍由部署纵切片按 ADR-017 定案。
+#
+# `pnpm test:search:db` 与 `pnpm test` 需要已初始化 PGroonga 且
+# max_connections >= 150 的 PostgreSQL 18 实例，沿用 origin/main 的既定决定暂不
+# 纳入本 workflow；待批准的搜索服务测试方案确定后必须按 §12.4 顺序插入。
+#
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
 #   - Playwright critical-path tests（阶段 0 E2E 尚未建立）
 #   - container image build、Compose config render + exact-tag/digest format
-#     + PostgreSQL 18 mount check、image scan（仓库尚无 Dockerfile/compose.yaml，
+#     + PostgreSQL 18 mount check、image scan（仓库尚无生产 Dockerfile/compose.yaml，
 #     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
 # 上述项落地后必须在本文件按 §12.4 顺序插入，不得跳过。
 name: CI
@@ -38,12 +51,13 @@ permissions:
 
 env:
   POSTGRES_IMAGE: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+  PGROONGA_IMAGE: inpulse-ci-pgroonga-pg18.6:local
   POSTGRES_CONTAINER: inpulse-ci-pg
 
 jobs:
   workspace:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,6 +91,16 @@ jobs:
       - name: Migration file consistency
         run: pnpm db:migrations:check
 
+      - name: Build PostgreSQL 18.6 + PGroonga test image
+        # 基础镜像由 POSTGRES_IMAGE 的 digest 固定；PGroonga 与 libgroonga 的
+        # Debian 包版本和 keyring SHA-256 在 Dockerfile 内固定。
+        run: |
+          docker build \
+            --file database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 \
+            --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            --tag "$PGROONGA_IMAGE" \
+            database/poc/search-pgroonga
+
       - name: Start PostgreSQL 18.6 test cluster
         run: |
           docker run -d --name "$POSTGRES_CONTAINER" \
@@ -84,7 +108,7 @@ jobs:
             --env POSTGRES_DB=app \
             --env POSTGRES_HOST_AUTH_METHOD=trust \
             --publish 127.0.0.1:5432:5432 \
-            "$POSTGRES_IMAGE" \
+            "$PGROONGA_IMAGE" \
             -c max_connections=200
           for attempt in $(seq 1 60); do
             if docker exec "$POSTGRES_CONTAINER" pg_isready --host=127.0.0.1 --username=cluster_bootstrap --dbname=app >/dev/null 2>&1; then
@@ -97,6 +121,15 @@ jobs:
           docker logs "$POSTGRES_CONTAINER"
           exit 1
 
+      - name: Verify PGroonga is available
+        # PGroonga 随探针镜像提供，这里只确认扩展能被 PostgreSQL 18.6 识别，
+        # 失败时立即阻断，避免把缺少扩展的环境误判成迁移缺陷。
+        run: |
+          docker exec "$POSTGRES_CONTAINER" \
+            psql -X -At -v ON_ERROR_STOP=1 -U cluster_bootstrap -d app \
+            -c "SELECT count(*)::INTEGER FROM pg_available_extensions WHERE name = 'pgroonga'" \
+            | grep -qx 1
+
       - name: Bootstrap database roles
         # 只执行 000_roles.sql：010_passwords.sql 读取 /run/secrets/* 的五个独立
         # 密码文件，属于生产初始化，CI 使用 trust 认证，与 database/scripts/test-local.ps1 一致。
@@ -104,6 +137,15 @@ jobs:
           docker exec --interactive "$POSTGRES_CONTAINER" \
             psql -X -v ON_ERROR_STOP=1 -U cluster_bootstrap -d app \
             < database/bootstrap/000_roles.sql
+
+      - name: Bootstrap PGroonga extension
+        # PGroonga 不是 trusted extension，只能由一次性 bootstrap 超级用户安装；
+        # 020_pgroonga.sql 同时撤销业务角色的管理函数 EXECUTE，只保留 app_runtime
+        # 查询与转义所需函数。必须在 000_roles.sql 之后、迁移之前执行。
+        run: |
+          docker exec --interactive "$POSTGRES_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -U cluster_bootstrap -d app \
+            < database/bootstrap/020_pgroonga.sql
 
       - name: Migrate empty database
         env:

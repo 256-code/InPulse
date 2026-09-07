@@ -49,6 +49,9 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0000_initial.sql",
       "0001_invariants_and_permissions.sql",
       "0002_security_hardening.sql",
+      "0003_search_pgroonga.sql",
+      "0004_search_projection_contract_pg_trgm_index.sql",
+      "0005_search_projection_contract_pg_trgm_extension.sql",
     ]);
   });
 
@@ -649,15 +652,152 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     );
   });
 
-  test("search projection has the required pg_trgm GIN index", async () => {
+  test("search projection no longer depends on pg_trgm after contract cleanup", async () => {
+    const [oldIndex] = await bootstrap<Array<{ regclass: string | null }>>`
+      SELECT to_regclass(
+        'app.search_projection_normalized_text_trgm_idx'
+      )::TEXT AS regclass
+    `;
+    expect(oldIndex?.regclass).toBeNull();
+
+    const [extension] = await bootstrap<Array<{ extensionCount: number }>>`
+      SELECT count(*)::INTEGER AS "extensionCount"
+        FROM pg_extension
+       WHERE extname = 'pg_trgm'
+    `;
+    expect(extension?.extensionCount).toBe(0);
+  });
+
+  test("search projection uses PGroonga with least runtime privileges", async () => {
+    const [extension] = await bootstrap<
+      Array<{ extname: string; schemaName: string }>
+    >`
+      SELECT e.extname, n.nspname AS "schemaName"
+        FROM pg_extension AS e
+        JOIN pg_namespace AS n ON n.oid = e.extnamespace
+       WHERE e.extname = 'pgroonga'
+    `;
+    expect(extension).toEqual({ extname: "pgroonga", schemaName: "app" });
+
     const [index] = await bootstrap<Array<{ definition: string }>>`
       SELECT pg_get_indexdef(indexrelid) AS definition
         FROM pg_index
        WHERE indexrelid =
-         'app.search_projection_normalized_text_trgm_idx'::REGCLASS
+         'app.idx_search_projection_pgroonga'::REGCLASS
     `;
-    expect(index?.definition).toContain("USING gin");
-    expect(index?.definition).toContain("gin_trgm_ops");
+    expect(index?.definition).toContain("USING pgroonga");
+    expect(index?.definition).toContain("app.search_projection");
+    const [opclass] = await bootstrap<
+      Array<{ opclassName: string; schemaName: string }>
+    >`
+      SELECT opc.opcname AS "opclassName", n.nspname AS "schemaName"
+        FROM pg_index AS i
+        JOIN pg_opclass AS opc ON opc.oid = i.indclass[0]
+        JOIN pg_namespace AS n ON n.oid = opc.opcnamespace
+       WHERE i.indexrelid =
+         'app.idx_search_projection_pgroonga'::REGCLASS
+    `;
+    expect(opclass).toEqual({
+      opclassName: "pgroonga_text_full_text_search_ops_v2",
+      schemaName: "app",
+    });
+
+    const fixture = await createProject(runtime);
+    const entityId = fixture.projectId * 1_000_000 + 1;
+    await runtime`
+      INSERT INTO app.search_projection (
+        project_id,
+        entity_type,
+        entity_id,
+        title,
+        summary,
+        raw_text,
+        normalized_search_text,
+        visibility_scope,
+        source_status,
+        source_row_version
+      )
+      VALUES (
+        ${fixture.projectId},
+        'PROJECT',
+        ${entityId},
+        ${"登录模块"},
+        '',
+        ${"登录模块"},
+        ${"登录模块"},
+        'MEMBER',
+        'ACTIVE',
+        1
+      )
+    `;
+
+    const [found] = await runtime<Array<{ id: bigint }>>`
+      SELECT id
+        FROM app.search_projection
+       WHERE project_id = ${fixture.projectId}
+         AND entity_id = ${entityId}
+         AND normalized_search_text &@~
+             app.pgroonga_query_escape(${"登录"})
+       LIMIT 1
+    `;
+    expect(found).toBeDefined();
+
+    const [privilege] = await bootstrap<
+      Array<{ runtimeCommandExecute: boolean }>
+    >`
+      SELECT has_function_privilege(
+        'app_runtime',
+        'app.pgroonga_command(text)'::REGPROCEDURE,
+        'EXECUTE'
+      ) AS "runtimeCommandExecute"
+    `;
+    expect(privilege?.runtimeCommandExecute).toBe(false);
+    await expectPostgresError(
+      runtime.unsafe("SELECT app.pgroonga_command('status')"),
+      "42501",
+    );
+
+    const [regexpPrivilege] = await bootstrap<
+      Array<{ runtimeRegexpExecute: boolean }>
+    >`
+      SELECT has_function_privilege(
+        'app_runtime',
+        'app.pgroonga_regexp_text(text,text)'::REGPROCEDURE,
+        'EXECUTE'
+      ) AS "runtimeRegexpExecute"
+    `;
+    expect(regexpPrivilege?.runtimeRegexpExecute).toBe(false);
+    await expectPostgresError(
+      runtime`
+        SELECT count(*)::INTEGER AS count
+          FROM app.search_projection
+         WHERE normalized_search_text &~ ${"登录"}
+      `,
+      "42501",
+    );
+
+    const [schemaPrivilege] = await bootstrap<
+      Array<{ runtimeSchemaCreate: boolean; runtimeDatabaseCreate: boolean }>
+    >`
+      SELECT
+        has_schema_privilege('app_runtime', 'app', 'CREATE')
+          AS "runtimeSchemaCreate",
+        has_database_privilege(
+          'app_runtime',
+          current_database(),
+          'CREATE'
+        ) AS "runtimeDatabaseCreate"
+    `;
+    expect(schemaPrivilege).toEqual({
+      runtimeSchemaCreate: false,
+      runtimeDatabaseCreate: false,
+    });
+    await expectPostgresError(
+      runtime.unsafe(
+        "CREATE INDEX runtime_forbidden_idx ON app.search_projection (id)",
+      ),
+      "42501",
+    );
   });
 
   test("task groups enforce exactly one active MAIN and at least one active SOURCE at commit", async () => {

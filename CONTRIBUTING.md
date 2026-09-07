@@ -185,11 +185,12 @@ pnpm check:docs
 
 - `lint`：ESLint 检查全部工作区源码；
 - `format` / `format:check`：Prettier 写入或校验格式，`.prettierignore` 排除 Markdown、lockfile、迁移与生成物；
-- `typecheck`：覆盖 database 包、api-contract 包与 api/web 应用；
-- `test:unit`：database 配置校验与 api-contract 契约/生成器单元测试，不需要数据库；
+- `typecheck`：覆盖 database 包、api-contract 包与 api/web 应用，`apps/api` 另含 `tsconfig.test.json`；
+- `test:unit`：database 配置与生产 Secret fail-closed 校验、api-contract 契约与生成器单元测试，不需要数据库；
 - `db:migrations:check`：校验迁移文件的顺序、命名与内容哈希一致性；
-- `db:migrate`：以 `MIGRATION_DATABASE_URL`（`app_migrator` 角色）对空库执行显式迁移，需要 PostgreSQL 18；
-- `test:integration`：以 `TEST_DATABASE_URL`（`cluster_bootstrap` 角色）对真实 PostgreSQL 验证约束、事务、锁、100 并发审计链与数据库角色/权限探针，需要 PostgreSQL 18，不得用 mock 替代；
+- `db:migrate`：以 `MIGRATION_DATABASE_URL`（`app_migrator` 角色）对空库执行 `0000-0005` 显式迁移，需要已安装 PGroonga 的 PostgreSQL 18；
+- `test:integration`：以 `TEST_DATABASE_URL`（`cluster_bootstrap` 角色）对真实 PostgreSQL 验证约束、事务、锁、100 并发审计链、PGroonga bootstrap 与索引、以及数据库角色/权限探针，需要已安装 PGroonga 的 PostgreSQL 18，不得用 mock 替代；
+- `test:search:db`：只运行 `apps/api` 的搜索服务集成测试，需要已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，按既定决定未纳入 CI；
 - `contract:generate`：由 Schema Registry/Zod 与 Route Registry 生成 OpenAPI 3.1、契约指纹与 TypeScript 客户端，生成物禁止手工修改；
 - `contract:drift`：逐字节比对已提交生成物与 Registry 的生成结果，并拒绝生成目录内出现非生成器产出的文件；
 - `contract:validate`：Route Registry 策略完整性、幂等重放与重放授权策略的字段边界、响应 Schema 一致性以及 Controller operationId 绑定检查；
@@ -199,9 +200,9 @@ pnpm check:docs
 - `deps:audit`：`pnpm audit --audit-level=high`，需要访问 registry；
 - `check:secrets`：对受版本控制与待提交文件执行 Secret 扫描；
 - `check:docs`：使用 Node.js 内置模块，检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；
-- `check`：按上述顺序一次跑完全部非数据库门禁，不含 `db:migrate` 与 `test:integration`。
+- `check`：按上述顺序一次跑完全部非数据库门禁，不含 `db:migrate`、`test:integration` 与 `test:search:db`。
 
-本机运行数据库门禁：Windows 设置 `POSTGRES_BIN` 指向 PostgreSQL 18 的 `bin` 目录后运行 `pnpm db:test:local`，它会创建 loopback 临时实例、执行角色 bootstrap、空库迁移与 database 包全部测试后销毁实例；CI 用 digest 固定的 `postgres:18.6` 容器执行同一组步骤。
+本机运行数据库门禁：Windows 设置 `POSTGRES_BIN` 指向**已安装 PGroonga** 的 PostgreSQL 18 `bin` 目录后运行 `pnpm db:test:local`，它会创建 loopback 临时实例，依次执行 `000_roles.sql`、`020_pgroonga.sql`、空库迁移与 database 包全部测试后销毁实例；脚本检测不到 PGroonga 时直接失败，因此不含 PGroonga 的官方 PostgreSQL 18.6 安装无法满足该门禁。CI 改为用 `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的 `postgres:18.6` 构建探针镜像，并在容器内执行同一组步骤。
 
 `CI / workspace` 尚未被配置为 required check。按验收标准，先让门禁在真实 PR 上稳定通过，再由管理员把 §12.4 门禁设为 required checks；在此之前合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 
@@ -212,18 +213,24 @@ pnpm db:poc:search:pgroonga:local
 pnpm db:poc:search:local
 ```
 
-PGroonga PoC 已验证 V1 语义、90 条金标 Recall@20、边界和跨项目隔离，但
-PostgreSQL 18.6 官方基线的构建、迁移、默认计划和恢复尚未验证；
+PostgreSQL 18.6 探针镜像上的 PGroonga PoC 已通过构建、扩展安装、迁移、
+V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认查询计划和逻辑恢复；
+`search_projection` PGroonga bootstrap 与 `0003-0005` 显式迁移已通过真实
+PostgreSQL 集成测试；旧 `pg_trgm` GIN 索引和扩展在 `0004/0005` 的
+contract 验证后清理，`object_inspect` 用于记录 Groonga 索引磁盘占用。
+SearchQueryService 服务层、参数化查询与权限过滤测试已落地并通过真实
+PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller、
+页面以及生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 
 阶段 0 仍待建立并记录真实可运行的根级入口：
 
 - Playwright 关键路径 E2E；
-- 容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、PostgreSQL 18 挂载检查；
+- 生产容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、PostgreSQL 18 挂载检查；
 - 镜像漏洞扫描。
 
-截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`；上述命令已在本地实测通过，GitHub Actions 运行本身尚未在本机执行。仓库尚无 Dockerfile 与 `compose.yaml`，因此容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Proposed`）。
+截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`。非数据库门禁已在本地实测通过；空库迁移与数据库集成测试曾在 `0000-0002` 上本地实测通过，合并 `0003-0005` 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此改由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行。`pnpm test:search:db` 与 `pnpm test` 按既定决定仍未纳入 CI。仓库尚无生产 Dockerfile 与 `compose.yaml`，因此生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Proposed`）。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 

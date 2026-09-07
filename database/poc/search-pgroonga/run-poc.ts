@@ -104,6 +104,48 @@ const V1_REQUIREMENT_CASES: readonly V1RequirementCaseSpec[] = [
     summary: "number search 42",
     entityId: 9_000_009,
   },
+  {
+    id: "english-payment-callback",
+    query: "payment_callback",
+    title: "payment_callback complete code identifier",
+    summary: "payment callback endpoint complete identifier",
+    entityId: 9_000_010,
+  },
+  {
+    id: "english-task-group-id",
+    query: "task_group_id",
+    title: "task_group_id complete code identifier",
+    summary: "task group id complete identifier",
+    entityId: 9_000_011,
+  },
+  {
+    id: "code-r-42",
+    query: "R-42",
+    title: "R-42 complete code identifier",
+    summary: "requirement R-42 complete identifier",
+    entityId: 9_000_012,
+  },
+  {
+    id: "code-pr-245",
+    query: "PR-245",
+    title: "PR-245 complete code identifier",
+    summary: "pull request PR-245 complete identifier",
+    entityId: 9_000_013,
+  },
+  {
+    id: "chinese-refund",
+    query: "退款",
+    title: "退款处理完整短词",
+    summary: "退款处理完整短词检索",
+    entityId: 9_000_014,
+  },
+  {
+    id: "chinese-callback",
+    query: "回调",
+    title: "支付回调完整短词",
+    summary: "支付回调完整短词检索",
+    entityId: 9_000_015,
+  },
 ];
 
 interface SearchRow {
@@ -266,6 +308,7 @@ interface RuntimePermissionResult {
   readonly canSelect: boolean;
   readonly canUseOperator: boolean;
   readonly canEscape: boolean;
+  readonly unescapedRegexDenied: boolean;
   readonly errors: readonly string[];
 }
 
@@ -542,34 +585,39 @@ async function createIndexAndMeasure(
   strategy: Strategy,
 ): Promise<IndexMetrics> {
   const indexName = indexNameFor(strategy, table);
-  await sql.unsafe("SET ROLE app_owner");
-  try {
-    await sql.unsafe("DROP INDEX IF EXISTS " + '"app"."' + indexName + '"');
-    const startedAt = performance.now();
-    await sql.unsafe(indexDdl(strategy, table));
-    const buildMs = Math.round((performance.now() - startedAt) * 1000) / 1000;
-    const sizeName = '"app"."' + indexName + '"';
-    const sizes = await sql.unsafe<
-      Array<{ index_bytes: number; total_bytes: number }>
-    >(
-      "SELECT pg_relation_size($1::regclass)::bigint AS index_bytes, " +
-        "pg_total_relation_size($1::regclass)::bigint AS total_bytes",
-      [sizeName],
-    );
-    const rowCount = await tableCount(sql, table);
-    const groongaMetrics = await readGroongaIndexMetrics(sql, indexName);
-    return {
-      indexName,
-      buildMs,
-      indexBytes: Number(sizes[0]?.index_bytes ?? 0),
-      totalBytes: Number(sizes[0]?.total_bytes ?? 0),
-      indexDiskUsage: groongaMetrics.indexDiskUsage,
-      lexiconName: groongaMetrics.lexiconName,
-      rowCount,
-    };
-  } finally {
-    await sql.unsafe("RESET ROLE");
-  }
+  const measured = await (async () => {
+    await sql.unsafe("SET ROLE app_owner");
+    try {
+      await sql.unsafe("DROP INDEX IF EXISTS " + '"app"."' + indexName + '"');
+      const startedAt = performance.now();
+      await sql.unsafe(indexDdl(strategy, table));
+      const buildMs = Math.round((performance.now() - startedAt) * 1000) / 1000;
+      const sizeName = '"app"."' + indexName + '"';
+      const sizes = await sql.unsafe<
+        Array<{ index_bytes: number; total_bytes: number }>
+      >(
+        "SELECT pg_relation_size($1::regclass)::bigint AS index_bytes, " +
+          "pg_total_relation_size($1::regclass)::bigint AS total_bytes",
+        [sizeName],
+      );
+      return {
+        buildMs,
+        indexBytes: Number(sizes[0]?.index_bytes ?? 0),
+        totalBytes: Number(sizes[0]?.total_bytes ?? 0),
+        rowCount: await tableCount(sql, table),
+      };
+    } finally {
+      await sql.unsafe("RESET ROLE");
+    }
+  })();
+
+  const groongaMetrics = await readGroongaIndexMetrics(sql, indexName);
+  return {
+    indexName,
+    ...measured,
+    indexDiskUsage: groongaMetrics.indexDiskUsage,
+    lexiconName: groongaMetrics.lexiconName,
+  };
 }
 
 async function dropIndex(
@@ -732,7 +780,7 @@ async function runRequirementProbeCase(
         " AND project_id = ANY($2::int[]) AND visibility_scope = 'MEMBER'" +
         " ORDER BY project_id ASC, entity_id ASC LIMIT $3";
       const planRows = await transaction.unsafe<Array<Record<string, string>>>(
-        "EXPLAIN (COSTS OFF) " + sqlText,
+        "EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) " + sqlText,
         params,
       );
       const rows = await transaction.unsafe<SearchRow[]>(sqlText, params);
@@ -967,8 +1015,8 @@ async function explainSearch(
   return {
     queryId: "plan",
     category: "zh-short",
-    defaultPlan: [],
-    forcedPlan: [],
+    defaultPlan: forceIndex ? [] : plan,
+    forcedPlan: forceIndex ? plan : [],
     defaultUsesIndex: !forceIndex && usesIndex,
     forcedUsesIndex: forceIndex && usesIndex,
     defaultScanType: forceIndex ? "n/a" : scanType,
@@ -1034,6 +1082,7 @@ async function checkRuntimePermissions(
   let canSelect = false;
   let canUseOperator = false;
   let canEscape = false;
+  let unescapedRegexDenied = false;
   let runtimeRole = "unknown";
   try {
     const rows = await sql.unsafe<Array<{ role: string }>>(
@@ -1071,7 +1120,33 @@ async function checkRuntimePermissions(
   } catch (error) {
     errors.push("escape:" + formatError(error));
   }
-  return { runtimeRole, canSelect, canUseOperator, canEscape, errors };
+  try {
+    await sql.unsafe(
+      "SELECT count(*)::int AS count FROM " +
+        table +
+        " WHERE normalized_search_text &~ $1 LIMIT 1",
+      ["登录"],
+    );
+  } catch (error) {
+    const message = formatError(error);
+    if (
+      message.includes("permission denied") ||
+      message.includes("42501") ||
+      message.includes("pgroonga_regexp_text")
+    ) {
+      unescapedRegexDenied = true;
+    } else {
+      errors.push("unescaped-regex:" + message);
+    }
+  }
+  return {
+    runtimeRole,
+    canSelect,
+    canUseOperator,
+    canEscape,
+    unescapedRegexDenied,
+    errors,
+  };
 }
 
 interface StrategyOutcome {
@@ -1101,20 +1176,24 @@ async function runStrategy(
   seed: ReturnType<typeof buildSearchSeed>,
 ): Promise<StrategyOutcome> {
   try {
+    // &~ regexp strategies are diagnostic only. app_runtime is intentionally
+    // denied pgroonga_regexp_text EXECUTE, so those probes run as bootstrap.
+    const diagnosticSql =
+      strategy.queryStyle === "regex" ? adminSql : runtimeSql;
     const baseIndex = await createIndexAndMeasure(
       adminSql,
       BASE_TABLE,
       strategy,
     );
     const baseSuite = await runSuite(
-      runtimeSql,
+      diagnosticSql,
       BASE_TABLE,
       strategy,
       projectIds,
       seed,
     );
     const basePlans = await runPlanChecks(
-      runtimeSql,
+      diagnosticSql,
       BASE_TABLE,
       strategy,
       projectIds,
@@ -1125,7 +1204,7 @@ async function runStrategy(
       strategy,
     );
     const requirementProbe = await runRequirementProbe(
-      runtimeSql,
+      diagnosticSql,
       PROBE_TABLE,
       strategy,
     );
@@ -1135,14 +1214,14 @@ async function runStrategy(
       strategy,
     );
     const scaleSuite = await runSuite(
-      runtimeSql,
+      diagnosticSql,
       SCALE_TABLE,
       strategy,
       projectIds,
       seed,
     );
     const scalePlans = await runPlanChecks(
-      runtimeSql,
+      diagnosticSql,
       SCALE_TABLE,
       strategy,
       projectIds,
@@ -1229,6 +1308,7 @@ async function runPoc(): Promise<void> {
   });
 
   try {
+    await adminSql.unsafe("SET search_path = app, pg_catalog");
     const versionRows = await runtimeSql.unsafe<Array<{ version: string }>>(
       "SELECT version() AS version",
     );
@@ -1290,6 +1370,18 @@ async function runPoc(): Promise<void> {
       outcomes.push(outcome);
     }
 
+    const failedStrategies = outcomes.filter(
+      (outcome) => outcome.error !== null,
+    );
+    if (failedStrategies.length > 0) {
+      throw new Error(
+        "PGroonga strategy failures: " +
+          failedStrategies
+            .map((outcome) => outcome.id + ": " + (outcome.error ?? "unknown"))
+            .join("; "),
+      );
+    }
+
     const report = {
       version: "pgroonga-poc-v3",
       generatedAt: new Date().toISOString(),
@@ -1331,10 +1423,11 @@ async function runPoc(): Promise<void> {
       permissions,
       strategies: outcomes,
       limitations: [
-        "官方 PostgreSQL 18.6 基线尚未验证；本次探针镜像内置 PostgreSQL 18.4，不能直接证明 18.6 兼容。",
-        "Groonga 版本通过 pgroonga_command('status') 从运行中实例读取，不代表官方 PostgreSQL 18.6 镜像已内置 PGroonga。",
+        "PostgreSQL 18.6 官方基础镜像上的 PGroonga 构建、扩展安装、迁移、默认查询计划和逻辑恢复验证由一体化本地脚本执行，结果另见 pgroonga-backup-restore-report.json；本项目录直接记录运行实例。",
+        "Groonga 版本通过 pgroonga_command('status') 从运行中实例读取；生产部署镜像仍需由部署纵切片锁定最终 digest。",
         "101000 行规模使用确定性仿真文本，不等同于真实业务数据分布。",
-        "报告未执行备份恢复、故障切换和长时间并发更新门禁。",
+        "&~ regexp 策略仅作诊断，使用 cluster_bootstrap 执行；app_runtime 按最小权限没有 pgroonga_regexp_text EXECUTE，不作为 V1 运行时门禁。",
+        "本报告未执行故障切换和长时间并发更新门禁；备份恢复明细不包含在这里。",
       ],
     };
     const reportPath = await writeReport(report);
