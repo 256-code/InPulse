@@ -35,11 +35,13 @@
 
 三名开发人员按业务域纵向分工，每条工作流由一名开发人员加一个 AI 编码代理负责。每个岗位使用固定的长期工作分支，正式交付分支仍使用上文推荐前缀；负责人必须写入任务记录。
 
-| 岗位 | 固定工作分支 |
-|---|---|
-| A：平台与访问域 | `dev/a` |
-| B：内容与任务执行域 | `dev/b` |
-| C：聚合与发现域 | `dev/c` |
+| 岗位 | GitHub 账号 | 固定工作分支 |
+|---|---|---|
+| A：平台与访问域 | `@shaoxiaoyu-D` | `dev/a` |
+| B：内容与任务执行域 | `@suikiiovo` | `dev/b` |
+| C：聚合与发现域 | `@256-code` | `dev/c` |
+
+账号是分支推送主体；A/B/C 必须使用自己的 GitHub 账号推送对应 `dev/<role>`，不得借用其他岗位账号或由他人代推。
 
 | 岗位 | 独立推送范围 | 推送与合并限制 | 非作者评审 |
 |---|---|---|---|
@@ -161,14 +163,15 @@ feat(contract)!: change task response schema
 阶段 0 工程基座骨架已落库，根级可运行命令为：
 
 ```shell
-pnpm install
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm lint
 pnpm build
+pnpm db:migrations:check
 pnpm check:docs
 ```
 
-其中 `check:docs` 使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；其余命令分别执行全工作区类型检查、ESLint 检查与 api/web 两个应用的生产构建。GitHub Actions 中的 `Documentation / docs` 与 `CI / workspace` job 执行同一组命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
+其中 `check:docs` 使用 Node.js 内置模块，不需安装额外包；它检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；`typecheck` 覆盖 database 包与 api/web 应用；`lint` 执行 ESLint 检查；`build` 执行 api/web 的生产构建；`db:migrations:check` 校验迁移文件一致性。数据库迁移与集成测试（`pnpm db:migrate`、`pnpm db:test`）需要 PostgreSQL 18，Windows 可用 `pnpm db:test:local` 创建临时实例。GitHub Actions 中的 `Documentation / docs` 与 `CI / workspace` job 执行同一组命令。它尚未被配置为 required check；在管理员完成仓库设置前，合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 
 阶段 0 初始化工程时，必须同步建立并记录真实可运行的根级入口：
 
@@ -180,7 +183,7 @@ pnpm check:docs
 - Web/API 生产构建；
 - Playwright 关键路径、依赖边界、权限矩阵和容器检查。
 
-截至 2026-09-07，frozen lockfile 安装、lint、类型检查与 Web/API 生产构建四项入口已落库并纳入 CI；格式检查、单元测试、真实 PostgreSQL 集成测试、E2E、OpenAPI/客户端漂移检查、依赖边界、权限矩阵与容器检查仍待阶段 0 后续纵切片建立。
+截至 2026-09-07，frozen lockfile 安装、lint、类型检查、Web/API 生产构建、数据库迁移一致性检查与真实 PostgreSQL 集成测试入口已落库；其中迁移一致性检查已纳入 CI，数据库迁移与集成测试因需要 PostgreSQL 18 服务尚未纳入 CI，格式检查、应用层单元测试、E2E、OpenAPI/客户端漂移检查、依赖边界、权限矩阵自动化与容器检查仍待阶段 0 后续纵切片建立。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 

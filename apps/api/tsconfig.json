@@ -1,8 +1,9 @@
 {
-  "extends": "@inpulse/tsconfig/base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "Node10",
+    "verbatimModuleSyntax": false,
     "outDir": "dist",
     "rootDir": "src",
     "experimentalDecorators": true,

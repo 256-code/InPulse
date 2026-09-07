@@ -1,20 +1,27 @@
 {
   "name": "inpulse",
+  "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@11.26.0",
+  "packageManager": "pnpm@11.19.0",
   "engines": {
-    "node": ">=24.20.0 <25",
-    "pnpm": ">=11.26.0 <12"
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.0.0 <12"
   },
   "scripts": {
     "check:docs": "node scripts/check_docs.mjs",
-    "lint": "eslint .",
+    "db:migrate": "pnpm --filter @inpulse/database migrate",
+    "db:migrations:check": "pnpm --filter @inpulse/database migrations:check",
+    "db:test": "pnpm --filter @inpulse/database test",
+    "db:test:local": "powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/test-local.ps1",
     "typecheck": "pnpm -r typecheck",
-    "build": "pnpm -r build"
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "build": "pnpm -r build",
+    "check": "pnpm typecheck && pnpm test && pnpm check:docs"
   },
   "devDependencies": {
     "@inpulse/eslint-config": "workspace:*",
     "eslint": "10.10.0",
-    "typescript": "5.9.3"
+    "typescript": "catalog:"
   }
 }
