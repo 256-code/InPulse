@@ -54,7 +54,7 @@
 - `package.json`、`pnpm-lock.yaml`、CI 和生产镜像必须锁定经过批准的实际版本；生产依赖禁止使用 `latest`、`next`、`beta` 或 `rc`。
 - 修改 manifest 时必须同步提交 lockfile。不得手工编辑 lockfile。
 - 依赖升级只通过独立 PR 完成，必须人工确认；不得自动合并依赖更新。
-- OpenAPI 生成工具链已由 [ADR-027](./docs/adr/ADR-027.md) 提出（状态 `Proposed`，待人工评审转为 `Accepted`）；Nest Zod Pipe/Serializer 组合和运行参数仍未定案。未转为 `Accepted` 的选择不得在规则或实现中伪装成已冻结基线。
+- OpenAPI 生成工具链已由 [ADR-027](./docs/adr/ADR-027.md) 定为 `Accepted`（2026-09-07）；Nest Zod Pipe/Serializer 组合和运行参数仍未定案。未转为 `Accepted` 的选择不得在规则或实现中伪装成已冻结基线。
 - 搜索基线已经确定为 PostgreSQL + PGroonga + `SearchProjection`（V1 由 ADR-025 替代 ADR-010）：支持中文短词、完整英文缩写、完整代码标识符和完整编号，不保证任意英文/代码子串，不提供正则搜索；普通查询必须使用 `normalized_search_text &@~ app.pgroonga_query_escape($1)`。
 - 生产 CSP 已确定使用逐响应 nonce 且禁止 `script-src/style-src 'unsafe-inline'`；阶段 0 验证的是 Ant Design/Vite 兼容性，失败时阻断并通过 ADR 更换方案，不得降低 CSP。
 
@@ -169,6 +169,6 @@
 开发基线仍不能宣告冻结，直至以下资料和门禁完成：
 
 - 管理员完成 `CONTRIBUTING.md` 所列目标仓库设置；若 GitHub 方案不支持相应保护能力，须记录限制和替代人工门禁；
-- 阶段 0 的技术验证、实际版本锁定和其余 CI 门禁通过：截至 2026-09-07，技术设计 §12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、web/api 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并在 `.github/workflows/ci.yml` 的 `CI / workspace` job 中按序执行。非数据库门禁已在本地实测通过；空库迁移与真实 PostgreSQL 集成测试曾在 `0000-0002` 上本地实测通过，但合并 `0003-0005` 后迁移与 `database/scripts/test-local.ps1` 均要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此该两项改为由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行；仍缺 Playwright 关键路径 E2E、生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描（仓库尚无生产 Dockerfile 与 compose.yaml，只有 PoC/CI 探针镜像 Dockerfile），以及 Drizzle 与 Nginx 实际补丁与镜像 digest 锁定；[ADR-027](./docs/adr/ADR-027.md) 仍为 `Proposed`，需人工评审定案。
+- 阶段 0 的技术验证、实际版本锁定和其余 CI 门禁通过：截至 2026-09-07，技术设计 §12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、web/api 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并在 `.github/workflows/ci.yml` 的 `CI / workspace` job 中按序执行。非数据库门禁已在本地实测通过；空库迁移与真实 PostgreSQL 集成测试曾在 `0000-0002` 上本地实测通过，但合并 `0003-0005` 后迁移与 `database/scripts/test-local.ps1` 均要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此该两项改为由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行；仍缺 Playwright 关键路径 E2E、生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描（仓库尚无生产 Dockerfile 与 compose.yaml，只有 PoC/CI 探针镜像 Dockerfile），以及 Drizzle 与 Nginx 实际补丁与镜像 digest 锁定；[ADR-027](./docs/adr/ADR-027.md) 已转为 `Accepted`（2026-09-07，见该文件接受记录）。
 
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
