@@ -5,6 +5,16 @@ export type CsrfIssueResponse = {
   readonly csrfToken: string;
 };
 
+export type CurrentUserResponse = {
+  readonly id: number;
+  readonly loginName: string;
+  readonly name: string;
+  readonly email: (string | null);
+  readonly avatarUrl: (string | null);
+  readonly isAdmin: boolean;
+  readonly status: ("ACTIVE" | "DISABLED");
+};
+
 export type ErrorResponse = {
   readonly code: string;
   readonly message: string;

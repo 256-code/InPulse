@@ -199,6 +199,43 @@ export const routeRegistry = [
     auditAction: "none",
   },
   {
+    method: "GET",
+    path: "/me",
+    operationId: "getCurrentUser",
+    summary: "返回当前登录用户资料；身份由服务端从 Session Cookie 解析。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "CurrentUserResponse",
+            },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
     method: "POST",
     path: "/auth/login",
     operationId: "login",
@@ -219,6 +256,13 @@ export const routeRegistry = [
         body: {
           contentTypes: [
             { contentType: "application/json", schemaRef: "LoginResponse" },
+          ],
+        },
+      },
+      "429": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
           ],
         },
       },

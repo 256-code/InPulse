@@ -2,7 +2,7 @@
 
 软件研发功能迭代记录与任务协作系统，用于统一管理项目、模块、功能、任务、迭代记录及其历史关系。
 
-> 当前状态：阶段 0 实施中。PostgreSQL 数据库、`0000-0005` 显式迁移（含 PGroonga 索引与旧 `pg_trgm` contract 清理）、角色隔离和真实数据库集成测试基线已落地；阶段 0 CI 最小链路已按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序落库（安装、lint、format check、typecheck、单测、空库迁移、真实 PostgreSQL 集成测试、契约漂移与完整性、生产构建、依赖边界、权限矩阵、依赖/Secret 扫描），CI 用仓库内探针 Dockerfile 基于 digest 固定的 `postgres:18.6` 构建带 PGroonga 的测试库；API 契约生成链路已落库，生成工具决策见 [ADR-027](./docs/adr/ADR-027.md)（`Accepted`，2026-09-07）；PGroonga V1 搜索 PoC 已在 PostgreSQL 18.6 探针镜像上通过语义、Recall@20、边界、跨项目隔离、默认查询计划和逻辑恢复，ADR-025 已记录；SearchQueryService 服务层与 `ProjectAccessQueryPort` 契约草案已落地并通过真实 PostgreSQL 集成测试。生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller、前端与业务领域模块仍未开始；E2E、生产容器镜像与 Compose 产物尚未落库。
+> 当前状态：阶段 0 实施中。PostgreSQL 数据库、`0000-0005` 显式迁移（含 PGroonga 索引与旧 `pg_trgm` contract 清理）、角色隔离和真实数据库集成测试基线已落地；阶段 0 CI 最小链路已按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序落库（安装、lint、format check、typecheck、单测、空库迁移、真实 PostgreSQL 集成测试、契约漂移与完整性、生产构建、依赖边界、权限矩阵、依赖/Secret 扫描），CI 用仓库内探针 Dockerfile 基于 digest 固定的 `postgres:18.6` 构建带 PGroonga 的测试库；API 契约生成链路已落库，生成工具决策见 [ADR-027](./docs/adr/ADR-027.md)（`Accepted`，2026-09-07）；PGroonga V1 搜索 PoC 已在 PostgreSQL 18.6 探针镜像上通过语义、Recall@20、边界、跨项目隔离、默认查询计划和逻辑恢复，ADR-025 已记录；SearchQueryService 服务层、生产 `ProjectAccessQueryPort` 适配器与通用 `SessionAuthService` 已落地，认证纵切片已包含 `GET /auth/csrf`、`POST /auth/login`、`POST /auth/logout`、`GET /me`；搜索 API/Controller、前端与业务领域模块仍未开始；E2E、生产容器镜像与 Compose 产物尚未落库。
 
 ## 项目目标
 

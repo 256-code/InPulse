@@ -8,12 +8,15 @@ import {
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { LoginError } from "./login.error.js";
 import { LoginService } from "./login.service.js";
 
 interface LoginControllerRequest {
   readonly headers: HttpHeaderBag;
   readonly body: unknown;
+  readonly ip?: string;
+  readonly socket?: { readonly remoteAddress?: string };
 }
 
 interface LoginControllerResponse {
@@ -60,6 +63,12 @@ function parseLoginBody(body: unknown): LoginBodyDto | undefined {
   return { loginName: normalizedLoginName, password };
 }
 
+function resolveClientIp(request: LoginControllerRequest): string {
+  const raw =
+    request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
+  return normalizeClientIp(raw);
+}
+
 /**
  * ADR-023 安全流程入口：POST /auth/login 只消费匿名预认证 Session + CSRF，
  * 成功后轮换 Cookie 并返回一次性认证 CSRF Token。所有错误使用统一信封。
@@ -102,6 +111,7 @@ export class LoginController {
       const result = await this.loginService.login({
         loginName: parsed.loginName,
         password: parsed.password,
+        clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
         csrfToken: getHeader(request.headers, "x-csrf-token"),
       });

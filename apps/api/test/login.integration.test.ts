@@ -7,6 +7,8 @@ import {
   createDatabaseClient,
   type DatabaseClient,
 } from "@inpulse/database/client";
+import { PostgresAuthRateLimitRepository } from "../src/auth/auth-rate-limit.repository.js";
+import { LoginRateLimitService } from "../src/auth/auth-rate-limit.service.js";
 import { LoginService } from "../src/auth/login.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
 import { PostgresPreauthSessionRepository } from "../src/auth/preauth-session.repository.js";
@@ -107,6 +109,11 @@ beforeAll(async () => {
     new PostgresSessionCsrfTokenRepository(),
     tokenService,
     new PasswordService(),
+    new LoginRateLimitService(
+      unitOfWork,
+      new PostgresAuthRateLimitRepository(),
+      keyring,
+    ),
   );
 });
 
@@ -121,6 +128,7 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
     const result = await loginService.login({
       loginName: user.loginName,
       password: LOGIN_FIXTURE_PASSWORD,
+      clientIp: "198.51.100.10",
       cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
       csrfToken: preauth.csrfToken,
     });
@@ -167,6 +175,7 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
       loginService.login({
         loginName: user.loginName,
         password: LOGIN_FIXTURE_PASSWORD,
+        clientIp: "198.51.100.10",
         cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
         csrfToken: preauth.csrfToken,
       }),
@@ -180,6 +189,7 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
       loginService.login({
         loginName: user.loginName,
         password: LOGIN_FIXTURE_PASSWORD,
+        clientIp: "198.51.100.11",
         cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
         csrfToken: preauth.csrfToken,
       }),
@@ -221,6 +231,7 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
     const result = await loginService.login({
       loginName: user.loginName,
       password: LOGIN_FIXTURE_PASSWORD,
+      clientIp: "198.51.100.12",
       cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
       csrfToken: preauth.csrfToken,
     });

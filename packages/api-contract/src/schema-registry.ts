@@ -5,6 +5,7 @@ import {
   loginRequestSchema,
   loginResponseSchema,
   logoutHeadersSchema,
+  currentUserResponseSchema,
   userAuthStateSchema,
 } from "./contracts/auth.zod.js";
 import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
@@ -64,6 +65,11 @@ export const schemaRegistry = {
   UserAuthState: {
     schema: userAuthStateSchema,
     summary: "用户 Session 显式认证状态",
+    sensitiveFieldPaths: [],
+  },
+  CurrentUserResponse: {
+    schema: currentUserResponseSchema,
+    summary: "当前登录用户资料",
     sensitiveFieldPaths: [],
   },
 } satisfies Record<string, SchemaRegistryEntry>;
