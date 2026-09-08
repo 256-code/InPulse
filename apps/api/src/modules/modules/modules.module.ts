@@ -2,9 +2,12 @@ import { Module } from "@nestjs/common";
 import { ModulesCommandPort } from "./modules.command-port.js";
 import { ModulesCommandService } from "./modules-command.service.js";
 import { ModulesRepository } from "./modules.repository.js";
+import { ModuleQueryPort } from "./module-query.port.js";
+import { PostgresModuleQueryPort } from "./postgres-module-query-port.js";
 
 @Module({
   providers: [
+    { provide: ModuleQueryPort, useClass: PostgresModuleQueryPort },
     ModulesRepository,
     {
       provide: ModulesCommandPort,
@@ -13,6 +16,6 @@ import { ModulesRepository } from "./modules.repository.js";
         new ModulesCommandService(repository),
     },
   ],
-  exports: [ModulesCommandPort],
+  exports: [ModulesCommandPort, ModuleQueryPort],
 })
 export class ModulesModule {}
