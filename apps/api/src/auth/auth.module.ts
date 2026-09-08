@@ -20,6 +20,7 @@ import { SessionTokenService } from "./session-token.service.js";
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
 import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
+import { RequireReauthGuard } from "./require-reauth.guard.js";
 import { SessionAuthService } from "./session-auth.service.js";
 import { UserAuthInvalidationService } from "./user-auth-invalidation.service.js";
 import { PostgresUserProfileRepository } from "./user-profile.repository.js";
@@ -53,6 +54,7 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
     LogoutService,
     MeService,
     SessionAuthService,
+    RequireReauthGuard,
     UserAuthInvalidationService,
     PostgresUserProfileRepository,
   ],
@@ -78,6 +80,7 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
     LogoutService,
     MeService,
     SessionAuthService,
+    RequireReauthGuard,
     UserAuthInvalidationService,
   ],
 })
