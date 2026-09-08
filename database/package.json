@@ -4,12 +4,22 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./schema/index.ts",
-    "./client": "./src/client.ts",
-    "./config": "./src/config.ts",
+    ".": {
+      "types": "./schema/index.ts",
+      "default": "./dist/schema/index.js"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./dist/src/client.js"
+    },
+    "./config": {
+      "types": "./src/config.ts",
+      "default": "./dist/src/config.js"
+    },
     "./migrate": "./src/migrate.ts"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "migrate": "tsx src/migrate.ts",
     "migrations:check": "tsx src/check-migrations.ts",
     "poc:search": "tsx poc/search/run-poc.ts",
