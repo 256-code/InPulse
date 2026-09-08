@@ -30,11 +30,13 @@ import {
 } from "./token.js";
 import { PasswordService } from "./password.service.js";
 import { LoginError } from "./login.error.js";
+import { LoginRateLimitService } from "./auth-rate-limit.service.js";
 import { PostgresUnitOfWork } from "../database/unit-of-work.js";
 
 export interface LoginInput {
   readonly loginName: string;
   readonly password: string;
+  readonly clientIp: string;
   readonly cookieHeader: string | undefined;
   readonly csrfToken: string | undefined;
 }
@@ -54,8 +56,9 @@ interface PreparedLogin {
  * 登录纵切片：
  * 1. 只接受匿名预认证 Session 与其 CSRF；
  * 2. 已存在有效认证/受限 Session 时返回 409；
- * 3. Argon2id 校验放在事务外，避免长时间 CPU 计算持锁；
- * 4. 密码通过后在单个事务内重新锁定用户、条件消费预认证、创建显式状态
+ * 3. 在 Argon2id 前按账号 + IP + 全局检查登录限流；
+ * 4. Argon2id 校验放在事务外，避免长时间 CPU 计算持锁；
+ * 5. 密码通过后在单个事务内重新锁定用户、条件消费预认证、创建显式状态
  *    的认证 Session 并签发新 CSRF Token，防止 Session Fixation。
  */
 @Injectable()
@@ -69,18 +72,28 @@ export class LoginService {
     private readonly csrfRepository: PostgresSessionCsrfTokenRepository,
     private readonly tokenService: SessionTokenService,
     private readonly passwordService: PasswordService,
+    private readonly rateLimitService: LoginRateLimitService,
   ) {}
 
   async login(input: LoginInput): Promise<LoginResult> {
     const loginName = input.loginName.trim();
-    const prepared = await this.prepare(input, loginName);
-    await this.verifyPassword(prepared, input.password);
-    return this.issueSession(prepared, input.cookieHeader);
+    const clientIp = input.clientIp;
+    const prepared = await this.prepare(input, loginName, clientIp);
+    try {
+      await this.verifyPassword(prepared, input.password);
+    } catch (error) {
+      if (error instanceof LoginError && error.status === 401) {
+        await this.rateLimitService.recordFailure(loginName, clientIp);
+      }
+      throw error;
+    }
+    return this.issueSession(prepared, input.cookieHeader, loginName);
   }
 
   private async prepare(
     input: LoginInput,
     loginName: string,
+    clientIp: string,
   ): Promise<PreparedLogin> {
     return this.unitOfWork.run(async (tx) => {
       const sessionToken = parseCookieHeader(
@@ -97,6 +110,8 @@ export class LoginService {
       if (existing !== undefined) {
         throw this.sessionConflict();
       }
+
+      await this.rateLimitService.assertAllowed(tx, loginName, clientIp);
 
       const preauthToken = parseCookieHeader(
         input.cookieHeader,
@@ -182,6 +197,7 @@ export class LoginService {
   private async issueSession(
     prepared: PreparedLogin,
     cookieHeader: string | undefined,
+    loginName: string,
   ): Promise<LoginResult> {
     return this.unitOfWork.run(async (tx) => {
       const sessionToken = parseCookieHeader(cookieHeader, SESSION_COOKIE_NAME);
@@ -251,6 +267,8 @@ export class LoginService {
           ),
         ),
       });
+
+      await this.rateLimitService.clearAccount(tx, loginName);
 
       return {
         csrfToken: issuedCsrfToken,

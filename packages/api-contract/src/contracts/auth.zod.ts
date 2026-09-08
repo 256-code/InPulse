@@ -56,3 +56,21 @@ export const loginResponseSchema = z
   .meta({ id: "LoginResponse" });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+/**
+ * 当前登录用户资料。`id` 来自服务端解析出的 Session，不接受客户端输入；
+ * 与 `app.users` 的可空字段保持一致，避免把数据库内部字段暴露给客户端。
+ */
+export const currentUserResponseSchema = z
+  .object({
+    id: z.number().int().positive(),
+    loginName: z.string().min(1).max(100),
+    name: z.string().min(1).max(200),
+    email: z.string().min(3).max(320).nullable(),
+    avatarUrl: z.string().min(1).max(2048).nullable(),
+    isAdmin: z.boolean(),
+    status: z.enum(["ACTIVE", "DISABLED"]),
+  })
+  .meta({ id: "CurrentUserResponse" });
+
+export type CurrentUserResponse = z.infer<typeof currentUserResponseSchema>;

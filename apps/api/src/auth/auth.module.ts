@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../database/database.module.js";
 import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
+import { LoginRateLimitService } from "./auth-rate-limit.service.js";
+import { PostgresAuthRateLimitRepository } from "./auth-rate-limit.repository.js";
 import { CsrfController } from "./csrf.controller.js";
 import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
@@ -9,6 +11,8 @@ import { LoginController } from "./login.controller.js";
 import { LoginService } from "./login.service.js";
 import { LogoutController } from "./logout.controller.js";
 import { LogoutService } from "./logout.service.js";
+import { MeController } from "./me.controller.js";
+import { MeService } from "./me.service.js";
 import { PasswordService } from "./password.service.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
@@ -17,6 +21,8 @@ import { PostgresUserCredentialRepository } from "./user-credential.repository.j
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
 import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
 import { SessionAuthService } from "./session-auth.service.js";
+import { UserAuthInvalidationService } from "./user-auth-invalidation.service.js";
+import { PostgresUserProfileRepository } from "./user-profile.repository.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。
@@ -34,6 +40,8 @@ import { SessionAuthService } from "./session-auth.service.js";
       useFactory: () => VersionedHmacKeyring.fromEnv(process.env),
     },
     SessionTokenService,
+    PostgresAuthRateLimitRepository,
+    LoginRateLimitService,
     PostgresPreauthSessionRepository,
     PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
@@ -43,12 +51,22 @@ import { SessionAuthService } from "./session-auth.service.js";
     CsrfIssueService,
     LoginService,
     LogoutService,
+    MeService,
     SessionAuthService,
+    UserAuthInvalidationService,
+    PostgresUserProfileRepository,
   ],
-  controllers: [CsrfController, LoginController, LogoutController],
+  controllers: [
+    CsrfController,
+    LoginController,
+    LogoutController,
+    MeController,
+  ],
   exports: [
     SESSION_HMAC_KEYRING,
     SessionTokenService,
+    PostgresAuthRateLimitRepository,
+    LoginRateLimitService,
     PostgresPreauthSessionRepository,
     PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
@@ -58,7 +76,9 @@ import { SessionAuthService } from "./session-auth.service.js";
     CsrfIssueService,
     LoginService,
     LogoutService,
+    MeService,
     SessionAuthService,
+    UserAuthInvalidationService,
   ],
 })
 export class AuthModule {}

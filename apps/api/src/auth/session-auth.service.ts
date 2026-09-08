@@ -39,7 +39,7 @@ export class SessionAuthService {
   }
 
   /**
-   * 在调用方已经持有事务时解析当前身份，避免业务路径开启第二个事务。
+   * 在调用方已经持有事务时解析当前身份，避免 GET /me 等读路径开启第二个事务。
    */
   async resolveActorInTransaction(
     tx: TransactionContext,
@@ -77,7 +77,6 @@ export class SessionAuthService {
     if (candidates.length === 0) {
       return undefined;
     }
-
     return { candidates };
   }
 }

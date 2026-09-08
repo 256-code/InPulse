@@ -26,6 +26,10 @@ export interface UserCredentialRepository {
     userId: number,
     expectedAuthVersion: number,
   ): Promise<UserSessionIssueSnapshot | undefined>;
+  incrementAuthVersion(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<boolean>;
 }
 
 /**
@@ -72,5 +76,20 @@ export class PostgresUserCredentialRepository implements UserCredentialRepositor
     `) as unknown as readonly UserSessionIssueSnapshot[];
     const row = rows[0];
     return row === undefined ? undefined : { ...row };
+  }
+
+  async incrementAuthVersion(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.users
+         SET auth_version = auth_version + 1,
+             row_version = row_version + 1,
+             updated_at = now()
+       WHERE id = ${userId}
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
   }
 }

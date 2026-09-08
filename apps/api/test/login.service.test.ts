@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "../src/auth/csrf.http.js";
 import { LoginService } from "../src/auth/login.service.js";
+import { LoginError } from "../src/auth/login.error.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
 import type { PreauthSession } from "../src/auth/preauth-session.repository.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
@@ -147,6 +148,41 @@ class FakePasswordService {
   }
 }
 
+class FakeRateLimitService {
+  blocked = false;
+  readonly failures: Array<{
+    readonly loginName: string;
+    readonly clientIp: string;
+  }> = [];
+  readonly clearedAccounts: string[] = [];
+
+  async assertAllowed(
+    _tx: TransactionContext,
+    _loginName: string,
+    _clientIp: string,
+  ): Promise<void> {
+    if (this.blocked) {
+      throw new LoginError(
+        429,
+        "LOGIN_RATE_LIMITED",
+        "登录失败次数过多，请稍后再试",
+        "login-rate-limited",
+      );
+    }
+  }
+
+  async recordFailure(loginName: string, clientIp: string): Promise<void> {
+    this.failures.push({ loginName, clientIp });
+  }
+
+  async clearAccount(
+    _tx: TransactionContext,
+    loginName: string,
+  ): Promise<void> {
+    this.clearedAccounts.push(loginName);
+  }
+}
+
 interface SetupResult {
   readonly service: LoginService;
   readonly tokenService: SessionTokenService;
@@ -157,6 +193,7 @@ interface SetupResult {
   readonly sessionRepository: FakeSessionRepository;
   readonly csrfRepository: FakeCsrfRepository;
   readonly factorRepository: FakeFactorRepository;
+  readonly rateLimitService: FakeRateLimitService;
 }
 
 function setup(
@@ -181,6 +218,7 @@ function setup(
   const sessionRepository = new FakeSessionRepository();
   const csrfRepository = new FakeCsrfRepository();
   const passwordService = new FakePasswordService();
+  const rateLimitService = new FakeRateLimitService();
   const service = new LoginService(
     unitOfWork as never,
     preauthRepository as never,
@@ -190,6 +228,7 @@ function setup(
     csrfRepository as never,
     tokenService,
     passwordService as never,
+    rateLimitService as never,
   );
 
   const material = tokenService.issuePreauthMaterial();
@@ -234,6 +273,7 @@ function setup(
     sessionRepository,
     csrfRepository,
     factorRepository,
+    rateLimitService,
   };
 }
 
@@ -243,12 +283,14 @@ function input(
     readonly password: string;
     readonly csrfToken: string | undefined;
     readonly cookieHeader: string | undefined;
+    readonly clientIp: string;
   }> = {},
 ) {
   const material = result.material;
   return {
     loginName: "alice",
     password: TEST_LOGIN_PASSWORD,
+    clientIp: "203.0.113.7",
     cookieHeader:
       overrides.cookieHeader ??
       `${PREAUTH_COOKIE_NAME}=${material.sessionToken}`,
@@ -273,6 +315,7 @@ describe("LoginService", () => {
     expect(result.sessionRepository.inserts).toHaveLength(1);
     expect(result.csrfRepository.inserts).toHaveLength(1);
     expect(result.unitOfWork.runs).toBe(2);
+    expect(result.rateLimitService.clearedAccounts).toEqual(["alice"]);
   });
 
   test("已存在有效认证 Session 返回 409 且不校验密码", async () => {
@@ -294,6 +337,9 @@ describe("LoginService", () => {
     });
     expect(result.preauthRepository.consumed).toBe(false);
     expect(result.sessionRepository.inserts).toHaveLength(0);
+    expect(result.rateLimitService.failures).toEqual([
+      { loginName: "alice", clientIp: "203.0.113.7" },
+    ]);
   });
 
   test("CSRF 不匹配时执行等时校验并返回 401", async () => {
@@ -306,6 +352,9 @@ describe("LoginService", () => {
     });
     expect(result.passwordService.encodedHashes).toEqual([undefined]);
     expect(result.unitOfWork.runs).toBe(1);
+    expect(result.rateLimitService.failures).toEqual([
+      { loginName: "alice", clientIp: "203.0.113.7" },
+    ]);
   });
 
   test("停用用户返回 401 且不把真实密码哈希传给校验器", async () => {
@@ -343,6 +392,18 @@ describe("LoginService", () => {
       status: 401,
     });
     expect(result.sessionRepository.inserts).toHaveLength(1);
+  });
+
+  test("限流命中时返回 429 且不校验密码", async () => {
+    const result = setup();
+    result.rateLimitService.blocked = true;
+    await expect(result.service.login(input(result))).rejects.toMatchObject({
+      status: 429,
+      code: "LOGIN_RATE_LIMITED",
+    });
+    expect(result.passwordService.encodedHashes).toHaveLength(0);
+    expect(result.preauthRepository.consumed).toBe(false);
+    expect(result.unitOfWork.runs).toBe(1);
   });
 });
 

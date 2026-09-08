@@ -97,7 +97,7 @@ export async function createUser(
       ${"$argon2id$v=19$m=19456,t=2,p=1$fixture$fixture-hash"},
       ${options.admin === true},
       ${status},
-      ${options.disabled === true ? new Date() : null}
+      ${options.disabled === true ? new Date().toISOString() : null}
     )
     RETURNING id
   `;
