@@ -10,3 +10,4 @@ export * from "./fingerprints.js";
 export * from "./validate.js";
 export * from "./controller-bindings.js";
 export * from "./permission-checks.js";
+export * from "./contracts/search.zod.js";

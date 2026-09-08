@@ -8,7 +8,7 @@
 | 接收方 | A 岗 / 平台与访问域，F-11 工程基座与 API 契约平台 |
 | 文档性质 | 契约评审输入，不是 ADR，不替代现有设计 |
 | 状态 | 待 A 评审；确认后应同步 Route Registry、Schema Registry、设计文档、权限矩阵与测试矩阵 |
-| 当前日期 | 2026-09-07 |
+| 当前日期 | 2026-09-08 |
 
 ### 1.1 评审反馈处理记录
 
@@ -171,14 +171,14 @@ type ConflictErrorDetails = {
 
 | 编号 | 优先级 | 需求 | A 侧需要确认/提供 |
 | --- | --- | --- | --- |
-| FC-060 | P0 | V1 候选统一采用 `cursor + limit`，响应使用 `items`、`nextCursor`、`hasMore`；不混用 `page/pageSize` 或 `offset/limit` | A 需确定公共 envelope；固定表格分页如确有需要，应作为显式例外登记，不能默认混用 |
-| FC-061 | P0 | 游标必须作为不透明字符串暴露，前端不得解析其内部 `(created_at, id)` 编码，也不得排序或修改 | 生成类型应将 cursor 与业务 ID 分开；后端负责签名、校验与过期语义 |
+| FC-060 | P0 | V1 候选统一采用 `cursor + limit`，响应使用 `items`、`nextCursor`、`hasMore`；不混用 `page/pageSize` 或 `offset/limit` | A 已确认 `{ items, nextCursor, hasMore }` 方向（2026-09-08）；公共 envelope 与固定表格分页例外仍未最终冻结 |
+| FC-061 | P0 | 游标必须作为不透明字符串暴露，前端不得解析其内部编码，也不得排序或修改 | A 已确认方向（2026-09-08）：生成类型将 cursor 与业务 ID 分开；服务端负责 HMAC 签名、校验与过期 |
 | FC-062 | P0 | 游标响应必须提供明确的 `nextCursor`/`hasMore`（或等价字段）和当前页数据；无更多数据时不要混用 `null` 与空数组 | 定义空列表、首屏、最后一页在 C 的 TanStack Query infinite query 中可直接消费的形式 |
 | FC-063 | P1 | 通知轮询需要支持 `AbortSignal`、停止轮询、避免无限游标回跳，并可从当前游标继续增量拉取 | 通知接口应返回稳定的排序键、cursored 游标和可恢复语义 |
 | FC-064 | P1 | 搜索应支持项目/模块/功能/状态/负责人等筛选参数，并明确参数编码和最大长度；前端的 URL 状态才能稳定映射 | 不要把搜索条件全部压成一个自由 JSON 字符串；至少对可分享筛选定义 query schema |
 | FC-065 | P1 | 项目概览、任务聚合组、我的任务等聚合读接口应尽量由服务端返回，前端不得按项目逐次请求再合并全量数据 | 给出聚合接口的边界，或明确在路由中登记稳定的 server-side aggregation 操作 |
 
-#### 4.7.1 推荐分页 envelope（候选，未冻结）
+#### 4.7.1 分页 envelope（A 已确认方向，尚未冻结）
 
 ```ts
 type CursorPage<T> = {
@@ -188,7 +188,16 @@ type CursorPage<T> = {
 };
 ```
 
-查询参数候选为 `cursor?: string` 与 `limit?: number`，每个接口必须登记最小值、最大值与默认值。该方案作为评审输入，不视为正式契约；如果 A 选择 `page/pageSize` 或 `offset/limit`，需要在本清单与后续设计中明确适用场景，避免同一系统出现三种分页语义。
+查询参数为 `cursor?: string` 与 `limit?: number`，每个接口必须登记最小值、最大值与默认值。A 已在 2026-09-08 确认该 envelope 与不透明游标方向，但 C-006 仍未关闭；在本清单与 Route Registry 由 A 正式落库前不得视为正式契约，仍须继续按评审结果收敛。
+
+2026-09-08：A 反馈确认 `{ items, nextCursor, hasMore }` 与不透明游标方向；
+C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
+`SearchItem`、`SearchPage`、`GET /api/v1/search` Route Registry、OpenAPI 与
+生成客户端，并在服务层实现 `hasMore`、HMAC 签名游标、绑定用户/查询和过期
+校验。该分支仍是评审输入，C-006 未解决；A 最终落库前不得将
+`SearchPage`/`nextCursor`/`hasMore` 描述为正式定案。前端仍不得解析
+`cursor` 内部内容，服务端负责签名、校验与过期，当前候选 TTL 为
+15 分钟；无效或过期请求返回 `422`。
 
 ### 4.8 C 域功能与生成客户端具体需求
 

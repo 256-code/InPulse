@@ -2,6 +2,32 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## Modules 项目初始化 Port（B，本地交付 2026-09-08）
+
+仅实现项目初始化的未分类模块步骤，未实现项目创建闭环；不改变 HTTP 权限矩阵。
+接入说明见 [Modules CommandPort](../apps/api/src/modules/modules/README.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| MOD-BOOT-001 | PostgreSQL 集成 | 成功初始化 | runtime 同事务写项目、创建者及初始成员、唯一未分类模块，默认字段与事务时间正确 | CI 已通过（e826483，见下方证据） |
+| MOD-BOOT-002 | PostgreSQL 集成 | 后续步骤失败 | 外层抛错后，独立查询项目、成员、模块均为零 | 同上 |
+| MOD-BOOT-003 | PostgreSQL 集成 | 同项目重复 | 同事务第二次创建冲突并整体回滚；已提交项目再次创建冲突且原数据不变 | 同上 |
+| MOD-BOOT-004 | PostgreSQL 集成 | 项目不存在 | modules_project_fk 拒绝且无孤立模块 | 同上 |
+| MOD-BOOT-005 | Nest 集成 | 公开 DI 绑定 | 独立 ModulesModule 可解析 ModulesCommandPort，无全局数据库依赖 | 本地 1/1 通过 |
+
+实现文件：`apps/api/test/modules-command.integration.test.ts`（5 例，现有 API 集成测试配置可发现）
+及 `apps/api/test/modules-module.test.ts`（1 例）。
+
+2026-09-08，提交 `e826483` 的 [CI / workspace](https://github.com/256-code/InPulse/actions/runs/34200874889)
+成功；[真实 PostgreSQL 日志](https://github.com/256-code/InPulse/actions/runs/34200874889/job/101979120660?pr=34#step:17:29)
+记录 `modules-command.integration.test.ts` 5 tests、155 ms、全部通过，覆盖 MOD-BOOT-001～004。
+环境为 PostgreSQL 18.6 + PGroonga，使用既有 bootstrap、迁移和 runtime 角色；
+由根级 `pnpm test:integration` 进入同一 API 集成配置，未用 Mock 替代。
+
+2026-09-08 14:29 +08:00 复跑指定数据库套件退出码 1，beforeAll 缺少
+`TEST_DATABASE_URL`，5 例未执行，当时 MOD-BOOT-001～004 为**待验证**；现已由上述 CI 补齐。
+未发现可用的本地 PostgreSQL/容器/WSL 测试入口；没有以 Mock 或注入测试替代。
+
 ## 文档与仓库治理
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -123,6 +149,7 @@
 |---|---|---|---|---|
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
+| SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 部分自动化（契约、游标与 Controller 单测已落库；真实 HTTP API、Playwright E2E 与真实 PostgreSQL API 纵切片 Required） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
 > 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入、
@@ -142,8 +169,12 @@
 > 分页、1000 条投影与 100 条金标中的普通用例 Recall@20 >= 90%，以及
 > PGroonga 索引计划验证。生产 `ProjectAccessQueryPort` 适配器已由
 > `ProjectsModule` 提供，并补充活跃成员、移除成员、停用用户、系统管理员
-> 与不存在用户的真实 PostgreSQL 集成用例；仍缺少搜索 API/Controller、
-> E2E 和生产备份恢复纵切片。
+> 与不存在用户的真实 PostgreSQL 集成用例。搜索 API 契约纵切片已落地
+> `getSearch`：Schema、Route Registry、权限矩阵、OpenAPI、生成客户端、
+> 最小 `SearchController`、服务端签名游标与真实 `hasMore`。A 已于
+> 2026-09-08 确认 envelope 与不透明游标方向，但 C-006 仍未解决，正式
+> 契约以 A 最终 Registry 落库为准，当前不得描述为已冻结或已验收。仍缺少
+> 真实 HTTP API 集成、Playwright E2E、搜索页面和生产备份恢复纵切片。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
