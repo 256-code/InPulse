@@ -166,6 +166,7 @@ export class HealthController {
       "POST /api/v1/auth/login",
       "POST /api/v1/auth/logout",
       "GET /api/v1/health",
+      "GET /api/v1/search",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });

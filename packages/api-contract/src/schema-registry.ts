@@ -10,6 +10,11 @@ import {
 import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
+import {
+  searchItemSchema,
+  searchPageSchema,
+  searchQueryRequestSchema,
+} from "./contracts/search.zod.js";
 
 export interface SchemaRegistryEntry {
   readonly schema: z.ZodType;
@@ -60,6 +65,21 @@ export const schemaRegistry = {
     schema: logoutHeadersSchema,
     summary: "登出请求头；有效 Session 必须携带当前 CSRF Token",
     sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  SearchQueryRequest: {
+    schema: searchQueryRequestSchema,
+    summary: "全局搜索查询参数；cursor 按字符串登记，limit 默认 20、最大 50",
+    sensitiveFieldPaths: [],
+  },
+  SearchItem: {
+    schema: searchItemSchema,
+    summary: "搜索结果条目，entityType 为稳定判别字段",
+    sensitiveFieldPaths: [],
+  },
+  SearchPage: {
+    schema: searchPageSchema,
+    summary: "全局搜索分页结果",
+    sensitiveFieldPaths: [],
   },
   UserAuthState: {
     schema: userAuthStateSchema,

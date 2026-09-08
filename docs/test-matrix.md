@@ -121,6 +121,7 @@
 |---|---|---|---|---|
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
+| SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` envelope 与匿名/校验/服务错误映射由单元测试覆盖 | 部分自动化（契约与 Controller 单测已落库；真实 HTTP API、Playwright E2E 与真实 PostgreSQL API 纵切片 Required） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
 > 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入、
@@ -140,8 +141,12 @@
 > 分页、1000 条投影与 100 条金标中的普通用例 Recall@20 >= 90%，以及
 > PGroonga 索引计划验证。生产 `ProjectAccessQueryPort` 适配器已由
 > `ProjectsModule` 提供，并补充活跃成员、移除成员、停用用户、系统管理员
-> 与不存在用户的真实 PostgreSQL 集成用例；仍缺少搜索 API/Controller、
-> E2E 和生产备份恢复纵切片。
+> 与不存在用户的真实 PostgreSQL 集成用例。搜索 API 契约纵切片已落地
+> `getSearch`：Schema、Route Registry、权限矩阵、OpenAPI、生成客户端与
+> 最小 `SearchController` 单测通过；`{ items, nextCursor, hasMore }` 与
+> `includeVoid` 暴露方式仍为 C 候选，等待 A 评审（对应 C-006 未解决），
+> 不得在评审确认前描述为正式定案。仍缺少真实 HTTP API 集成、Playwright
+> E2E、搜索页面和生产备份恢复纵切片。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |

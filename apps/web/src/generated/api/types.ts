@@ -34,4 +34,25 @@ export type LogoutHeaders = {
   readonly "x-csrf-token"?: string;
 };
 
+export type SearchItem = {
+  readonly projectId: number;
+  readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP");
+  readonly entityId: number;
+  readonly title: string;
+  readonly summary: string;
+};
+
+export type SearchPage = {
+  readonly items: readonly SearchItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type SearchQueryRequest = {
+  readonly q: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly includeVoid?: boolean;
+};
+
 export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");

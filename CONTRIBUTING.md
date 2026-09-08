@@ -224,7 +224,9 @@ contract 验证后清理，`object_inspect` 用于记录 Groonga 索引磁盘占
 SearchQueryService 服务层、参数化查询与权限过滤测试已落地并通过真实
 PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器与通用
 `SessionAuthService` 已落地，其真实 PostgreSQL 集成测试待 CI 探针镜像执行；
-搜索 API/Controller、页面以及生产加密备份恢复仍未完成。
+`GET /api/v1/search` 契约纵切片已落地 Schema、Route Registry、
+OpenAPI、生成客户端与最小 Controller，响应 envelope 仍为待 A 评审的
+C 候选；搜索页面、真实 HTTP API 集成与生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 
