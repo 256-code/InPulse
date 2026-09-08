@@ -9,7 +9,7 @@
 确认 `modules-command.integration.test.ts` **5/5 实际通过，155 ms**，未使用 Mock。
 CI 通过根级 `pnpm test:integration` 调用 API 的相同 Vitest 集成配置执行该文件。
 本机依然没有数据库环境；下文保留本地失败历史。PR [#34](https://github.com/256-code/InPulse/pull/34)
-等待人工评审，不自动合并。
+已由维护者 `256-code` 合并为 `22c6248`，代理未执行合并。
 
 依据：[ADR-013](../../../../../docs/adr/ADR-013.md)、
 [数据库事务契约](../../../../../database/README.md#功能开发必须遵守的事务契约)。
