@@ -16,6 +16,7 @@
     "check:deps": "node scripts/check_dependencies.mjs",
     "check:docs": "node scripts/check_docs.mjs",
     "check:frontend:boundaries": "pnpm --filter @inpulse/web check:boundaries",
+    "check:deploy": "node scripts/check_deploy_refs.mjs --env deploy/.env.deploy",
     "db:migrate": "pnpm --filter @inpulse/database migrate",
     "db:migrations:check": "pnpm --filter @inpulse/database migrations:check",
     "db:poc:search": "pnpm --filter @inpulse/database poc:search",

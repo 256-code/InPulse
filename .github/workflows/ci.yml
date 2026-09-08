@@ -169,6 +169,18 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Deploy compose config and image ref preflight gate
+        # 仓库尚无生产镜像 digest，本节只证明 compose 可渲染、ref 预检会拒绝占位符；
+        # 真实 *_IMAGE_REF 的 digest 绑定是发布期 gate（check:deploy），不在 CI 伪造。
+        run: |
+          docker compose --project-directory deploy -f deploy/compose.yaml \
+            --env-file deploy/.env.deploy.example config --quiet
+          if node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.example; then
+            echo "Expected placeholder *_IMAGE_REF to be rejected by preflight." >&2
+            exit 1
+          fi
+          echo "Compose config renders; preflight correctly rejects placeholder image refs."
+
       - name: Dependency boundary check
         run: pnpm check:deps
 

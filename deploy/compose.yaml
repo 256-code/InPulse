@@ -1,0 +1,282 @@
+# 生产稳态 Compose 拓扑（对齐技术设计 v1.2.2 §11.2）。
+#
+# 说明与已知冲突（务必在合并前由人工定案，AGENTS.md §2/§9）：
+#   1. *_IMAGE_REF 必须由受信镜像仓库解析后写入签名发布清单；本文件只引用
+#      变量，不伪造 digest。发布前用 `pnpm check:deploy --env <file>` 校验。
+#   2. 环境变量名以当前代码实际读取为准：
+#        - migrate 读 MIGRATION_DB_PASSWORD_FILE / MIGRATION_DB_USER
+#        - api 读 RUNTIME_DB_PASSWORD_FILE / DB_USER
+#      技术设计 §11.2 用的泛化 `DB_PASSWORD_FILE` 与代码不符，此处按代码落地，
+#      是否统一命名待定案。
+#   3. 设计要求 /health/live 与 /health/ready，代码目前只有 GET /health。
+#      api 容器的 `node healthcheck.mjs` 与 web 的 /health/live 健康检查依赖
+#      该契约；在健康端点实现前这些健康检查不可运行（见 §11.3 冲突）。
+#   4. 设计提及 AUDIT_DB_*（独立 audit_reader 连接）与 TOTP_KEK_*，代码尚未读取，
+#      这里按设计拓扑挂载对应 Secret/预留注释，避免 compose 被代码认为必须存在。
+#   5. web/backup/audit-archive 依赖尚未实现的 nginx 配置、ops:backup /
+#      ops:audit-archive 脚本，当前仅可 `config` 渲染校验，不可直接 up。
+#
+# 首次建库使用 deploy/compose.init.yaml（角色+密码初始化），稳态环境不要挂载
+# 任何登录密码；生产不得暴露 PostgreSQL/API 到公网。
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  db:
+    image: "${DB_IMAGE_REF}"
+    user: postgres
+    restart: unless-stopped
+    init: true
+    read_only: true
+    volumes:
+      - pg_data:/var/lib/postgresql
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /var/run/postgresql:size=16m,nosuid,nodev
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "2.0"
+    mem_limit: 4g
+    pids_limit: 256
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_runtime -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [backend]
+    logging: *default-logging
+
+  migrate:
+    image: "${MIGRATE_IMAGE_REF}"
+    user: "10001:10001"
+    command: ["pnpm", "db:migrate"]
+    read_only: true
+    tmpfs: [/tmp:size=64m, noexec, nosuid, nodev]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: app
+      MIGRATION_DB_USER: app_migrator
+      MIGRATION_DB_PASSWORD_FILE: /run/secrets/db_migrator_password
+    depends_on:
+      db:
+        condition: service_healthy
+    secrets:
+      - db_migrator_password
+    networks: [backend]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    logging: *default-logging
+
+  api:
+    image: "${API_IMAGE_REF}"
+    user: "10001:10001"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp:size=128m, noexec, nosuid, nodev]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app_runtime
+      RUNTIME_DB_PASSWORD_FILE: /run/secrets/db_runtime_password
+      # 待定案：代码尚未读取审计只读连接与 TOTP KEK，以下按设计拓扑保留注释。
+      # AUDIT_DB_HOST: db
+      # AUDIT_DB_PORT: "5432"
+      # AUDIT_DB_NAME: app
+      # AUDIT_DB_USER: audit_reader
+      # AUDIT_DB_PASSWORD_FILE: /run/secrets/db_audit_reader_password
+      SESSION_HASH_KEY_VERSION: "${SESSION_HASH_KEY_VERSION}"
+      SESSION_HASH_KEYRING_FILE: /run/secrets/session_hash_keyring
+      IDEMPOTENCY_FINGERPRINT_KEY_VERSION: "${IDEMPOTENCY_FINGERPRINT_KEY_VERSION}"
+      IDEMPOTENCY_FINGERPRINT_KEYRING_FILE: /run/secrets/idempotency_fingerprint_keyring
+      AUDIT_HMAC_KEY_VERSION: "${AUDIT_HMAC_KEY_VERSION}"
+      AUDIT_HMAC_KEYRING_FILE: /run/secrets/audit_hmac_keyring
+      # TOTP_KEK_VERSION: "${TOTP_KEK_VERSION}"
+      # TOTP_KEK_KEYRING_FILE: /run/secrets/totp_kek_keyring
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    secrets:
+      - db_runtime_password
+      - db_audit_reader_password
+      - session_hash_keyring
+      - idempotency_fingerprint_keyring
+      - audit_hmac_keyring
+      - totp_kek_keyring
+    networks: [backend]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.5"
+    mem_limit: 2g
+    pids_limit: 256
+    healthcheck:
+      # 依赖 /health/live 与 /health/ready 契约（见文件顶部冲突说明 3），
+      # app 镜像需内置 healthcheck.mjs。
+      test: ["CMD", "node", "healthcheck.mjs"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *default-logging
+
+  web:
+    image: "${WEB_IMAGE_REF}"
+    user: "101:101"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+      - /var/cache/nginx:size=32m,nosuid,nodev
+      - /var/run:size=8m,nosuid,nodev
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:8080"
+      - "443:8443"
+    environment:
+      TLS_CERT_FILE: /run/secrets/tls_cert
+      TLS_KEY_FILE: /run/secrets/tls_key
+    secrets:
+      - tls_cert
+      - tls_key
+    networks: [edge, backend]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.5"
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      # 依赖 /health/live（见文件顶部冲突说明 3）。
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8080/health/live",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  backup:
+    image: "${OPS_IMAGE_REF}"
+    profiles: [operations]
+    user: "10002:10002"
+    read_only: true
+    tmpfs: [/tmp:size=512m, noexec, nosuid, nodev]
+    command: ["pnpm", "ops:backup"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app_backup
+      DB_PASSWORD_FILE: /run/secrets/db_backup_password
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      OFFSITE_CREDENTIALS_FILE: /run/secrets/offsite_credentials
+    secrets:
+      - db_backup_password
+      - backup_encryption_key
+      - offsite_credentials
+    volumes:
+      - backup_encrypted:/backup
+    networks: [backend, edge]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    logging: *default-logging
+
+  audit-archive:
+    image: "${OPS_IMAGE_REF}"
+    profiles: [operations]
+    user: "10002:10002"
+    read_only: true
+    tmpfs: [/tmp:size=256m, noexec, nosuid, nodev]
+    command: ["pnpm", "ops:audit-archive"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: audit_archive_writer
+      DB_PASSWORD_FILE: /run/secrets/db_audit_archive_password
+      WORM_CREDENTIALS_FILE: /run/secrets/audit_worm_credentials
+      ARCHIVE_SIGNING_KEY_FILE: /run/secrets/audit_archive_signing_key
+    secrets:
+      - db_audit_archive_password
+      - audit_worm_credentials
+      - audit_archive_signing_key
+    networks: [backend, edge]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    logging: *default-logging
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  pg_data:
+  backup_encrypted:
+
+secrets:
+  db_bootstrap_password:
+    file: ./secrets/db_bootstrap_password
+  db_migrator_password:
+    file: ./secrets/db_migrator_password
+  db_runtime_password:
+    file: ./secrets/db_runtime_password
+  db_backup_password:
+    file: ./secrets/db_backup_password
+  db_audit_reader_password:
+    file: ./secrets/db_audit_reader_password
+  db_audit_archive_password:
+    file: ./secrets/db_audit_archive_password
+  session_hash_keyring:
+    file: ./secrets/session_hash_keyring
+  idempotency_fingerprint_keyring:
+    file: ./secrets/idempotency_fingerprint_keyring
+  audit_hmac_keyring:
+    file: ./secrets/audit_hmac_keyring
+  totp_kek_keyring:
+    file: ./secrets/totp_kek_keyring
+  backup_encryption_key:
+    file: ./secrets/backup_encryption_key
+  offsite_credentials:
+    file: ./secrets/offsite_credentials
+  audit_worm_credentials:
+    file: ./secrets/audit_worm_credentials
+  audit_archive_signing_key:
+    file: ./secrets/audit_archive_signing_key
+  tls_cert:
+    file: ./secrets/tls_cert.pem
+  tls_key:
+    file: ./secrets/tls_key.pem
