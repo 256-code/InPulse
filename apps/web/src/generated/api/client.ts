@@ -129,6 +129,8 @@ async function sendEmpty(
 export interface InpulseApiClient {
   getCurrentUser(init?: ApiRequestInit): Promise<CurrentUserResponse>;
   getHealth(init?: ApiRequestInit): Promise<HealthResponse>;
+  getHealthLive(init?: ApiRequestInit): Promise<HealthResponse>;
+  getHealthReady(init?: ApiRequestInit): Promise<HealthResponse>;
   getNotifications(query: NotificationQueryRequest, init?: ApiRequestInit): Promise<NotificationPage>;
   getNotificationUnreadCount(init?: ApiRequestInit): Promise<NotificationUnreadCountResponse>;
   getProjectActivity(projectId: number, query: ActivityQueryRequest, init?: ApiRequestInit): Promise<ActivityPage>;
@@ -150,6 +152,12 @@ export function createApiClient(
     },
     getHealth(init?: ApiRequestInit) {
       return send<HealthResponse>(options, "GET", "/health", "", init);
+    },
+    getHealthLive(init?: ApiRequestInit) {
+      return send<HealthResponse>(options, "GET", "/health/live", "", init);
+    },
+    getHealthReady(init?: ApiRequestInit) {
+      return send<HealthResponse>(options, "GET", "/health/ready", "", init);
     },
     getNotifications(query: NotificationQueryRequest, init?: ApiRequestInit) {
       return send<NotificationPage>(options, "GET", "/notifications", toQueryString(query), init);

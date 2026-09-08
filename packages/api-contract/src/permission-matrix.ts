@@ -53,6 +53,28 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "getHealthLive",
+    outcomes: {
+      匿名: { kind: "allow" },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "allow" },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "getHealthReady",
+    outcomes: {
+      匿名: { kind: "allow" },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "allow" },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
     operationId: "issueCsrfToken",
     outcomes: {
       匿名: { kind: "allow" },

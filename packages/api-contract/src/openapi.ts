@@ -25,6 +25,7 @@ export const statusDescriptions: Readonly<Record<string, string>> = {
   "422": "字段校验错误",
   "429": "限流",
   "500": "未预期错误，不向客户端泄露堆栈",
+  "503": "服务未就绪（就绪探针未通过）",
 };
 
 export const apiDocumentVersion = "1.0.0";
