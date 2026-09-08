@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, test } from "vitest";
 
@@ -76,6 +79,44 @@ describe("VersionedHmacKeyring", () => {
         SESSION_HASH_KEYRING_FILE: "/run/secrets/session_hash_keyring",
       }),
     ).toThrow();
+  });
+
+  test("仅 NODE_ENV=test 且显式开关时允许测试临时 keyring 路径", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "inpulse-keyring-"));
+    try {
+      const key = randomBytes(32).toString("hex");
+      const keyringFile = join(directory, "keyring");
+      await writeFile(keyringFile, `1: ${key}\n`, "utf8");
+
+      const baseEnv = {
+        SESSION_HASH_KEY_VERSION: "1",
+        SESSION_HASH_KEYRING_FILE: keyringFile,
+      };
+      expect(() => VersionedHmacKeyring.fromEnv(baseEnv)).toThrow(
+        /\/run\/secrets\//,
+      );
+      expect(() =>
+        VersionedHmacKeyring.fromEnv({
+          ...baseEnv,
+          NODE_ENV: "test",
+        }),
+      ).toThrow(/\/run\/secrets\//);
+      expect(() =>
+        VersionedHmacKeyring.fromEnv({
+          ...baseEnv,
+          SESSION_HASH_KEYRING_TEST_PATH: "1",
+        }),
+      ).toThrow(/\/run\/secrets\//);
+
+      const keyring = VersionedHmacKeyring.fromEnv({
+        ...baseEnv,
+        NODE_ENV: "test",
+        SESSION_HASH_KEYRING_TEST_PATH: "1",
+      });
+      expect(keyring.currentKey().toString("hex")).toBe(key);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 });
 
