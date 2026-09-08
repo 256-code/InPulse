@@ -179,7 +179,8 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
     await runtime`
       UPDATE app.projects
          SET status = 'ARCHIVED',
-             archived_at = now()
+             archived_at = now(),
+             row_version = row_version + 1
        WHERE id = ${project.projectId}
     `;
 
@@ -190,7 +191,7 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
       resource: {
         projectId: project.projectId,
         status: "ARCHIVED",
-        rowVersion: 1,
+        rowVersion: 2,
         isSystemAdmin: false,
       },
     });
