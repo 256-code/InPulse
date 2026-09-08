@@ -107,6 +107,7 @@ describe("LoginController", () => {
       csrfToken: "A".repeat(43),
       authState: "AUTHENTICATED",
     });
+    expect(response.status).toHaveBeenCalledWith(200);
     expect(response.headers["Cache-Control"]).toBe("no-store");
     expect(response.headers["Set-Cookie"]).toHaveLength(2);
   });
