@@ -47,6 +47,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@inpulse/api-contract':
+        specifier: workspace:*
+        version: link:../../packages/api-contract
       '@inpulse/database':
         specifier: workspace:*
         version: link:../../database
