@@ -192,6 +192,7 @@ export class HealthController {
       "POST /api/v1/notifications/{notificationId}/read",
       "POST /api/v1/notifications/{notificationId}/unread",
       "POST /api/v1/notifications/read-all",
+      "POST /api/v1/projects",
       "GET /api/v1/search",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
