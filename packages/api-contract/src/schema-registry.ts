@@ -1,5 +1,11 @@
 import type { z } from "zod";
 
+import {
+  loginHeadersSchema,
+  loginRequestSchema,
+  loginResponseSchema,
+  userAuthStateSchema,
+} from "./contracts/auth.zod.js";
 import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
@@ -33,6 +39,26 @@ export const schemaRegistry = {
     schema: csrfIssueResponseSchema,
     summary: "CSRF 同步 Token 签发响应",
     sensitiveFieldPaths: ["csrfToken"],
+  },
+  LoginHeaders: {
+    schema: loginHeadersSchema,
+    summary: "登录请求头",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  LoginRequest: {
+    schema: loginRequestSchema,
+    summary: "登录请求体",
+    sensitiveFieldPaths: ["password"],
+  },
+  LoginResponse: {
+    schema: loginResponseSchema,
+    summary: "登录成功响应，返回绑定新 Session 的 CSRF Token 与显式认证状态",
+    sensitiveFieldPaths: ["csrfToken"],
+  },
+  UserAuthState: {
+    schema: userAuthStateSchema,
+    summary: "用户 Session 显式认证状态",
+    sensitiveFieldPaths: [],
   },
 } satisfies Record<string, SchemaRegistryEntry>;
 

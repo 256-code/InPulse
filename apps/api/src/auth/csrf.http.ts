@@ -2,6 +2,8 @@ export const PREAUTH_COOKIE_NAME = "__Host-preauth";
 export const SESSION_COOKIE_NAME = "__Host-session";
 export const PREAUTH_MAX_AGE_SECONDS = 9 * 60;
 export const AUTH_CSRF_MAX_AGE_SECONDS = 8 * 60 * 60;
+export const SESSION_IDLE_MAX_AGE_SECONDS = 8 * 60 * 60;
+export const SESSION_ABSOLUTE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 export const MAX_AUTH_CSRF_TOKENS = 4;
 
 export type HeaderValue = string | readonly string[] | undefined;
@@ -28,6 +30,7 @@ export interface CsrfSetCookie {
 
 export type SameOriginFailure =
   | "missing-host"
+  | "missing-origin-and-referer"
   | "cross-origin"
   | "cross-site"
   | "unsupported-sec-fetch-mode"
@@ -153,4 +156,22 @@ export function sameOriginValidationError(
     return "unsupported-sec-fetch-dest";
   }
   return undefined;
+}
+
+/**
+ * 非安全请求的同源校验：外部可见 Origin/Referer 至少存在一个，优先 Origin，
+ * 其余逻辑与 GET CSRF 签发一致。该函数用于登录等写操作。
+ */
+export function mutationSameOriginValidationError(
+  headers: HttpHeaderBag,
+): SameOriginFailure | undefined {
+  const origin = getHeader(headers, "origin");
+  const referer = getHeader(headers, "referer");
+  if (
+    (origin?.trim().length ?? 0) === 0 &&
+    (referer?.trim().length ?? 0) === 0
+  ) {
+    return "missing-origin-and-referer";
+  }
+  return sameOriginValidationError(headers);
 }

@@ -47,6 +47,64 @@
         }
       }
     },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "只接受匿名预认证 Session 与 X-CSRF-Token；成功后消费预认证 Session、轮换 Cookie 并签发新认证 Session 与 CSRF Token。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "none",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "securityFlow",
+          "idempotencyExceptionAdr": "ADR-023",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": {
+            "singleConsumptionOrNaturalIdempotency": "同一匿名预认证 Session 与其 CSRF Hash 只能成功登录一次；成功时在同一事务条件消费预认证 Session，并创建新的认证 Session 与 CSRF Hash",
+            "clientRecoveryPath": "若已有认证/受限 Session 先登出或清 Cookie，再重新调用 CSRF 签发端点并登录"
+          },
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -140,6 +198,73 @@
           "status"
         ],
         "additionalProperties": false
+      },
+      "LoginHeaders": {
+        "type": "object",
+        "properties": {
+          "x-csrf-token": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          }
+        },
+        "required": [
+          "x-csrf-token"
+        ],
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "loginName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "loginName",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "csrfToken": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          },
+          "authState": {
+            "type": "string",
+            "enum": [
+              "AUTHENTICATED",
+              "MFA_ENROLLMENT",
+              "MFA_CHALLENGE",
+              "RECOVERY_CHALLENGE"
+            ]
+          }
+        },
+        "required": [
+          "csrfToken",
+          "authState"
+        ],
+        "additionalProperties": false
+      },
+      "UserAuthState": {
+        "type": "string",
+        "enum": [
+          "AUTHENTICATED",
+          "MFA_ENROLLMENT",
+          "MFA_CHALLENGE",
+          "RECOVERY_CHALLENGE"
+        ]
       }
     }
   }

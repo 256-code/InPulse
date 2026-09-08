@@ -15,3 +15,19 @@ export type ErrorResponse = {
 export type HealthResponse = {
   readonly status: "ok";
 };
+
+export type LoginHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type LoginRequest = {
+  readonly loginName: string;
+  readonly password: string;
+};
+
+export type LoginResponse = {
+  readonly csrfToken: string;
+  readonly authState: ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+};
+
+export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");

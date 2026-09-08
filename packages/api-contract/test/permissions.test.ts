@@ -161,7 +161,11 @@ export class HealthController {
     expect(scan.globalPrefix).toBe(apiBasePath);
     expect(
       scan.bindings.map((binding) => `${binding.method} ${binding.path}`),
-    ).toEqual(["GET /api/v1/auth/csrf", "GET /api/v1/health"]);
+    ).toEqual([
+      "GET /api/v1/auth/csrf",
+      "POST /api/v1/auth/login",
+      "GET /api/v1/health",
+    ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });
 
