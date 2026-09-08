@@ -1,8 +1,9 @@
 import type { modules } from "@inpulse/database";
 import type { TransactionContext } from "../../database/transaction-context.js";
 
-type ModuleInsert = Required<
-  Pick<typeof modules.$inferInsert, "projectId" | "createdBy" | "name" | "kind">
+type ModuleInsert = Pick<
+  typeof modules.$inferSelect,
+  "projectId" | "createdBy" | "name" | "kind"
 >;
 
 /** Persistence only; no client, transaction ownership or cross-domain repository. */
