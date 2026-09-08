@@ -43,4 +43,22 @@ describe("AppLayout", () => {
     await user.click(screen.getByText("项目与功能"));
     expect(await screen.findByText("Projects content")).toBeInTheDocument();
   });
+
+  it("navigates to search when a query is submitted from the header", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<div>Home content</div>} />
+            <Route path="search" element={<div>Search content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText("全局搜索"), "inpulse{enter}");
+
+    expect(await screen.findByText("Search content")).toBeInTheDocument();
+  });
 });

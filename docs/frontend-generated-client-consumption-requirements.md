@@ -199,6 +199,8 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 `cursor` 内部内容，服务端负责签名、校验与过期，正式 TTL 为
 15 分钟；无效或过期请求返回 `422`。
 
+2026-09-08：C 在 `codex/c-search-page` 完成搜索页面最小纵切片：`features/search` 通过生成客户端 `getSearch` 消费 `SearchPage`，页面路由 `/search` 与顶部全局搜索框接入 `q`，使用 `useInfiniteQuery` + `nextCursor` 分页；不增加未登记筛选参数，不解析 `cursor` 内部内容。真实登录流程尚未接入，因此页面先以 401 状态提示登录，路由暂不声明 `requiresAuth`，避免未接入的守卫阻断页面。
+
 ### 4.8 C 域功能与生成客户端具体需求
 
 | 功能 | C 的消费场景 | 对 A/B 契约的评审要求 |

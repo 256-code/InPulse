@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Avatar,
   Badge,
@@ -16,6 +16,7 @@ const { Text } = Typography;
 
 const workspaceMenuItems: MenuProps["items"] = [
   { key: "home", label: "工作台" },
+  { key: "search", label: "全局搜索" },
   { key: "projects", label: "项目与功能" },
   { key: "tasks", label: "我的任务" },
   { key: "records", label: "迭代记录" },
@@ -31,6 +32,7 @@ const workspaceMenuItems: MenuProps["items"] = [
 
 const navigationPaths: Readonly<Record<string, string>> = {
   home: "/",
+  search: "/search",
   projects: "/projects",
   tasks: "/tasks",
   records: "/records",
@@ -39,6 +41,7 @@ const navigationPaths: Readonly<Record<string, string>> = {
 };
 
 const sections = [
+  { prefix: "/search", key: "search", label: "全局搜索" },
   { prefix: "/projects", key: "projects", label: "项目与功能" },
   { prefix: "/tasks", key: "tasks", label: "我的任务" },
   { prefix: "/records", key: "records", label: "迭代记录" },
@@ -61,14 +64,33 @@ function resolveSectionLabel(pathname: string): string {
 export const AppLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchDraft, setSearchDraft] = useState("");
   const selectedKey = resolveSelectedKey(location.pathname);
   const sectionLabel = resolveSectionLabel(location.pathname);
+
+  useEffect(() => {
+    if (location.pathname === "/search") {
+      setSearchDraft(new URLSearchParams(location.search).get("q") ?? "");
+      return;
+    }
+    setSearchDraft("");
+  }, [location.pathname, location.search]);
 
   const handleNavigation = ({ key }: { key: string }) => {
     const target = navigationPaths[key];
     if (target && target !== location.pathname) {
       navigate(target);
     }
+  };
+
+  const handleSearch = (value: string) => {
+    const query = value.trim();
+    setSearchDraft(query);
+    navigate(
+      query
+        ? "/search?" + new URLSearchParams({ q: query }).toString()
+        : "/search",
+    );
   };
 
   return (
@@ -248,9 +270,14 @@ export const AppLayout: React.FC = () => {
             <Text strong>{sectionLabel}</Text>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 17 }}>
-            <Input
+            <Input.Search
               aria-label="全局搜索"
+              allowClear
+              enterButton="搜索"
               placeholder="搜索项目、任务、功能..."
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.currentTarget.value)}
+              onSearch={handleSearch}
               style={{
                 width: 292,
                 height: 36,
