@@ -72,8 +72,8 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
         0,
         now(),
         now(),
-        ${insert.idleExpiresAt},
-        ${insert.absoluteExpiresAt}
+        ${insert.idleExpiresAt.toISOString()},
+        ${insert.absoluteExpiresAt.toISOString()}
       )
       RETURNING id, auth_state AS "authState"
     `) as unknown as readonly CreatedUserSession[];

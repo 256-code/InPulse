@@ -57,7 +57,7 @@ async function createLoginUser(
       ${passwordHash},
       ${options.admin === true},
       ${status},
-      ${options.disabled === true ? new Date() : null}
+      ${options.disabled === true ? new Date().toISOString() : null}
     )
     RETURNING id
   `) as unknown as readonly { id: number }[];
