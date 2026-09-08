@@ -8,7 +8,9 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type {
   AuthorizedProjectScope,
   ProjectAccessQueryPort,
+  ProjectWriteCheckResult,
 } from "../src/modules/projects/project-access.port";
+import type { TransactionContext } from "../src/database/transaction-context.js";
 import { PostgresSearchProjectionReader } from "../src/modules/search/search-projection.reader";
 import {
   SearchQueryService,
@@ -81,6 +83,15 @@ class FixtureScopedProjectAccessQueryPort implements ProjectAccessQueryPort {
       projectIds: memberships.map((membership) => membership.project_id),
       isSystemAdmin: false,
     };
+  }
+
+  async checkProjectForWrite(
+    _tx: TransactionContext,
+    _input: { readonly actorUserId: number; readonly projectId: number },
+  ): Promise<ProjectWriteCheckResult> {
+    throw new Error(
+      "FixtureScopedProjectAccessQueryPort does not support write checks",
+    );
   }
 }
 

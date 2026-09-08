@@ -33,6 +33,11 @@ class FakeSessionRepository {
   }
 }
 
+const fakeTransaction = (): TransactionContext => ({
+  db: {} as never,
+  sql: {} as never,
+});
+
 function validSession(
   authState: ValidUserSession["authState"],
 ): ValidUserSession {
@@ -113,6 +118,47 @@ describe("SessionAuthService", () => {
 
     await expect(
       service.resolveActor(`${SESSION_COOKIE_NAME}=${token}`),
+    ).resolves.toBeUndefined();
+  });
+
+  test("resolveActorInTransaction 复用调用方事务并返回当前用户身份", async () => {
+    const session = validSession("AUTHENTICATED");
+    const { service, sessionRepository } = setup(session);
+    const token = generateOpaqueToken();
+    const tx = fakeTransaction();
+
+    const actor = await service.resolveActorInTransaction(
+      tx,
+      `${SESSION_COOKIE_NAME}=${token}`,
+    );
+
+    expect(actor).toEqual({
+      sessionId: session.id,
+      userId: session.userId,
+      authState: "AUTHENTICATED",
+      authVersionAtIssue: session.authVersionAtIssue,
+    });
+    expect(sessionRepository.requestedHashCounts).toEqual([1]);
+  });
+
+  test("resolveActorInTransaction 缺少 Cookie 时不查询数据库", async () => {
+    const { service, sessionRepository } = setup(validSession("AUTHENTICATED"));
+
+    await expect(
+      service.resolveActorInTransaction(fakeTransaction(), undefined),
+    ).resolves.toBeUndefined();
+    expect(sessionRepository.requestedHashCounts).toEqual([]);
+  });
+
+  test("resolveActorInTransaction 拒绝受限 Session", async () => {
+    const { service } = setup(validSession("MFA_CHALLENGE"));
+    const token = generateOpaqueToken();
+
+    await expect(
+      service.resolveActorInTransaction(
+        fakeTransaction(),
+        `${SESSION_COOKIE_NAME}=${token}`,
+      ),
     ).resolves.toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { PostgresUnitOfWork } from "../database/unit-of-work.js";
+import type { TransactionContext } from "../database/transaction-context.js";
 import { SESSION_COOKIE_NAME, parseCookieHeader } from "./csrf.http.js";
 import { SessionTokenService } from "./session-token.service.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
@@ -29,6 +30,44 @@ export class SessionAuthService {
   async resolveActor(
     cookieHeader: string | undefined,
   ): Promise<AuthenticatedSessionActor | undefined> {
+    if (this.parseSessionCandidates(cookieHeader) === undefined) {
+      return undefined;
+    }
+    return this.unitOfWork.run((tx) =>
+      this.resolveActorInTransaction(tx, cookieHeader),
+    );
+  }
+
+  /**
+   * 在调用方已经持有事务时解析当前身份，避免业务路径开启第二个事务。
+   */
+  async resolveActorInTransaction(
+    tx: TransactionContext,
+    cookieHeader: string | undefined,
+  ): Promise<AuthenticatedSessionActor | undefined> {
+    const parsed = this.parseSessionCandidates(cookieHeader);
+    if (parsed === undefined) {
+      return undefined;
+    }
+
+    const session = await this.sessionRepository.findValidByTokenHashes(
+      tx,
+      parsed.candidates.map((candidate) => candidate.hash),
+    );
+    if (session === undefined || session.authState !== "AUTHENTICATED") {
+      return undefined;
+    }
+    return {
+      sessionId: session.id,
+      userId: session.userId,
+      authState: session.authState,
+      authVersionAtIssue: session.authVersionAtIssue,
+    };
+  }
+
+  private parseSessionCandidates(
+    cookieHeader: string | undefined,
+  ): { readonly candidates: readonly { readonly hash: Buffer }[] } | undefined {
     const sessionToken = parseCookieHeader(cookieHeader, SESSION_COOKIE_NAME);
     if (sessionToken === undefined) {
       return undefined;
@@ -39,20 +78,6 @@ export class SessionAuthService {
       return undefined;
     }
 
-    return this.unitOfWork.run(async (tx) => {
-      const session = await this.sessionRepository.findValidByTokenHashes(
-        tx,
-        candidates.map((candidate) => candidate.hash),
-      );
-      if (session === undefined || session.authState !== "AUTHENTICATED") {
-        return undefined;
-      }
-      return {
-        sessionId: session.id,
-        userId: session.userId,
-        authState: session.authState,
-        authVersionAtIssue: session.authVersionAtIssue,
-      };
-    });
+    return { candidates };
   }
 }
