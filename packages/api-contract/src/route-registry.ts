@@ -242,6 +242,40 @@ export const routeRegistry = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  {
+    method: "POST",
+    path: "/auth/logout",
+    operationId: "logout",
+    summary:
+      "有效 Session 验证同源与当前 CSRF Token 后在事务内撤销；无效或已撤销 Session 仅清 Cookie，统一返回 204。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "LogoutHeaders",
+      body: { noBody: true },
+    },
+    responses: {
+      "204": { noBody: true },
+    },
+    authPolicy: "none",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "有效 Session 只在同一事务验证 CSRF 后条件撤销；无效或已撤销 Session 的同源重试仅清 Cookie，不执行状态写",
+      clientRecoveryPath:
+        "直接重试同一登出请求；有效 Session 需先调用 CSRF 签发端点取得当前 Token",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
 ] satisfies readonly RouteDefinition[];
 
 export type RegisteredRoute = (typeof routeRegistry)[number];

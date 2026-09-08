@@ -164,6 +164,7 @@ export class HealthController {
     ).toEqual([
       "GET /api/v1/auth/csrf",
       "POST /api/v1/auth/login",
+      "POST /api/v1/auth/logout",
       "GET /api/v1/health",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);

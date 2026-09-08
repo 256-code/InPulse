@@ -100,10 +100,25 @@ async function send<TResult>(
   return payload as TResult;
 }
 
+async function sendEmpty(
+  options: ApiClientOptions,
+  method: string,
+  path: string,
+  query: string,
+  init: ApiRequestInit | undefined,
+  body?: unknown,
+): Promise<void> {
+  const response = await request(options, method, path, query, init, body);
+  if (!response.ok) {
+    throw new ApiError(response.status, await parsePayload(response));
+  }
+}
+
 export interface InpulseApiClient {
   getHealth(init?: ApiRequestInit): Promise<HealthResponse>;
   issueCsrfToken(init?: ApiRequestInit): Promise<CsrfIssueResponse>;
   login(body: LoginRequest, init?: ApiRequestInit): Promise<LoginResponse>;
+  logout(init?: ApiRequestInit): Promise<void>;
 }
 
 export function createApiClient(
@@ -118,6 +133,9 @@ export function createApiClient(
     },
     login(body: LoginRequest, init?: ApiRequestInit) {
       return send<LoginResponse>(options, "POST", "/auth/login", "", init, body);
+    },
+    logout(init?: ApiRequestInit) {
+      return sendEmpty(options, "POST", "/auth/logout", "", init);
     },
   };
 }

@@ -7,6 +7,8 @@ import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
 import { LoginController } from "./login.controller.js";
 import { LoginService } from "./login.service.js";
+import { LogoutController } from "./logout.controller.js";
+import { LogoutService } from "./logout.service.js";
 import { PasswordService } from "./password.service.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
@@ -39,8 +41,9 @@ import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.
     PasswordService,
     CsrfIssueService,
     LoginService,
+    LogoutService,
   ],
-  controllers: [CsrfController, LoginController],
+  controllers: [CsrfController, LoginController, LogoutController],
   exports: [
     SESSION_HMAC_KEYRING,
     SessionTokenService,
@@ -52,6 +55,7 @@ import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.
     PasswordService,
     CsrfIssueService,
     LoginService,
+    LogoutService,
   ],
 })
 export class AuthModule {}

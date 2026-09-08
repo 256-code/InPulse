@@ -22,6 +22,18 @@ export const loginHeadersSchema = z
 
 export type LoginHeaders = z.infer<typeof loginHeadersSchema>;
 
+/**
+ * 登出请求头。有效 Session 必须携带与其绑定的同步 CSRF Token；
+ * Session 已失效或已撤销的同源重试允许省略该头。
+ */
+export const logoutHeadersSchema = z
+  .object({
+    "x-csrf-token": z.string().min(43).max(43).optional(),
+  })
+  .meta({ id: "LogoutHeaders" });
+
+export type LogoutHeaders = z.infer<typeof logoutHeadersSchema>;
+
 /** Session 显式认证状态；数据库没有默认完整态。 */
 export const userAuthStateSchema = z.enum([
   "AUTHENTICATED",

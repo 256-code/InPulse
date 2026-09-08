@@ -12,6 +12,7 @@ export interface SessionCsrfTokenInsert {
 
 export interface SessionCsrfTokenRepository {
   issue(tx: TransactionContext, insert: SessionCsrfTokenInsert): Promise<void>;
+  findValidHashes(tx: TransactionContext, sessionId: number): Promise<Buffer[]>;
 }
 
 /**
@@ -66,5 +67,19 @@ export class PostgresSessionCsrfTokenRepository implements SessionCsrfTokenRepos
       tokenHash: insert.tokenHash,
       expiresAt: insert.expiresAt,
     });
+  }
+
+  async findValidHashes(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<Buffer[]> {
+    const rows = (await tx.sql`
+      SELECT token_hash AS "tokenHash"
+        FROM app.session_csrf_tokens
+       WHERE session_id = ${sessionId}
+         AND expires_at > now()
+       ORDER BY issued_at ASC, token_hash ASC
+    `) as unknown as readonly { tokenHash: Buffer }[];
+    return rows.map((row) => row.tokenHash);
   }
 }

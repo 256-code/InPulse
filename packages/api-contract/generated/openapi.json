@@ -105,6 +105,47 @@
         }
       }
     },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "有效 Session 验证同源与当前 CSRF Token 后在事务内撤销；无效或已撤销 Session 仅清 Cookie，统一返回 204。",
+        "responses": {
+          "204": {
+            "description": "成功且无响应体"
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "none",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "securityFlow",
+          "idempotencyExceptionAdr": "ADR-023",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": {
+            "singleConsumptionOrNaturalIdempotency": "有效 Session 只在同一事务验证 CSRF 后条件撤销；无效或已撤销 Session 的同源重试仅清 Cookie，不执行状态写",
+            "clientRecoveryPath": "直接重试同一登出请求；有效 Session 需先调用 CSRF 签发端点取得当前 Token"
+          },
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -255,6 +296,17 @@
           "csrfToken",
           "authState"
         ],
+        "additionalProperties": false
+      },
+      "LogoutHeaders": {
+        "type": "object",
+        "properties": {
+          "x-csrf-token": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          }
+        },
         "additionalProperties": false
       },
       "UserAuthState": {
