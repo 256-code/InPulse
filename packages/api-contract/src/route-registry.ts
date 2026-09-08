@@ -376,6 +376,404 @@ export const routeRegistry = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  {
+    method: "GET",
+    path: "/projects/{projectId}/activity",
+    operationId: "getProjectActivity",
+    summary:
+      "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY。",
+    request: {
+      path: "ActivityPath",
+      query: "ActivityQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ActivityPage" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/notifications",
+    operationId: "getNotifications",
+    summary:
+      "当前用户自己的站内通知列表；SQL 强制 recipient_id=当前用户，cursor 为服务端签名、校验并带过期时间的不透明字符串。",
+    request: {
+      path: "none",
+      query: "NotificationQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "NotificationPage" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/notifications/unread-count",
+    operationId: "getNotificationUnreadCount",
+    summary: "返回当前登录用户的未读通知数量。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "NotificationUnreadCountResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/notifications/{notificationId}/read",
+    operationId: "readNotification",
+    summary:
+      "把当前用户的一条通知标记为已读；不存在或非本人统一返回 404，重复执行自然幂等。",
+    request: {
+      path: "NotificationPath",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "204": { noBody: true },
+      "400": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: { "204": { noBody: true } },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "NotificationReplayContext",
+        resultRefExtractor: "notificationId",
+        currentReadAuthorizer: "notificationOwnerAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/notifications/{notificationId}/unread",
+    operationId: "unreadNotification",
+    summary:
+      "把当前用户的一条通知标记为未读；不存在或非本人统一返回 404，重复执行自然幂等。",
+    request: {
+      path: "NotificationPath",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "204": { noBody: true },
+      "400": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: { "204": { noBody: true } },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "NotificationReplayContext",
+        resultRefExtractor: "notificationId",
+        currentReadAuthorizer: "notificationOwnerAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/notifications/read-all",
+    operationId: "readAllNotifications",
+    summary: "把当前用户的全部未读通知标记为已读；响应不暴露其他用户资源。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "204": { noBody: true },
+      "400": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: { "204": { noBody: true } },
+    },
+    replayAuthorizationPolicy: { version: "1.0.0", actorOnly: true },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
 ] satisfies readonly RouteDefinition[];
 
 export type RegisteredRoute = (typeof routeRegistry)[number];

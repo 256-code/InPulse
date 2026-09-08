@@ -112,9 +112,21 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
        ORDER BY us.id
        LIMIT 1
        FOR UPDATE OF us
-    `) as unknown as readonly ValidUserSession[];
+    `) as unknown as readonly (Omit<
+      ValidUserSession,
+      "idleExpiresAt" | "absoluteExpiresAt"
+    > & {
+      readonly idleExpiresAt: string;
+      readonly absoluteExpiresAt: string;
+    })[];
     const row = rows[0];
-    return row === undefined ? undefined : { ...row };
+    return row === undefined
+      ? undefined
+      : {
+          ...row,
+          idleExpiresAt: new Date(row.idleExpiresAt),
+          absoluteExpiresAt: new Date(row.absoluteExpiresAt),
+        };
   }
 
   async revoke(tx: TransactionContext, sessionId: number): Promise<boolean> {

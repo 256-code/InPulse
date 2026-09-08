@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { readCommittedFingerprints } from "../src/artifacts.js";
 import { computeRouteFingerprint } from "../src/fingerprints.js";
 import { routeRegistry } from "../src/route-registry.js";
 import type { RouteDefinition } from "../src/route-registry.js";
@@ -36,8 +37,14 @@ function writeFingerprints(route: RouteDefinition, version = "1.0.0") {
 }
 
 describe("Route Registry 完整性", () => {
-  test("已登记的真实 Registry 通过全部规则", () => {
-    expect(validateRouteRegistry(routeRegistry)).toEqual([]);
+  test("已登记的真实 Registry 通过全部规则", async () => {
+    expect(
+      validateRouteRegistry(
+        routeRegistry,
+        undefined,
+        await readCommittedFingerprints(),
+      ),
+    ).toEqual([]);
   });
 
   test("缺少任一策略字段都会失败", () => {
