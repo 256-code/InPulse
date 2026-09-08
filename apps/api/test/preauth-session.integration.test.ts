@@ -27,6 +27,14 @@ function requireClient(): DatabaseClient {
   return client;
 }
 
+/** 用数据库时钟计算有效期，避免 JS 与 PostgreSQL 时钟偏差触发 expiry CHECK。 */
+async function dbFutureExpiry(minutes = 9): Promise<Date> {
+  const rows = await requireClient().sql<
+    Array<{ readonly expires_at: Date }>
+  >`select now() + make_interval(mins => ${minutes}) as expires_at`;
+  return rows[0]!.expires_at;
+}
+
 beforeAll(async () => {
   client = createDatabaseClient(testUrls().runtime, {
     applicationName: "inpulse-preauth-session-test",
@@ -47,12 +55,13 @@ afterAll(async () => {
 describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
   test("创建后可按令牌哈希查回，哈希与密钥版本落库", async () => {
     const material = service.issuePreauthMaterial();
+    const expiresAt = await dbFutureExpiry();
     const created = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
         tokenHashKeyVersion: material.tokenHashKeyVersion,
         csrfTokenHash: material.csrfTokenHash,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt,
       }),
     );
     const found = await unitOfWork.run((tx) =>
@@ -67,12 +76,13 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
 
   test("同一预认证 Session 只能原子消费一次", async () => {
     const material = service.issuePreauthMaterial();
+    const expiresAt = await dbFutureExpiry();
     const first = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
         tokenHashKeyVersion: material.tokenHashKeyVersion,
         csrfTokenHash: material.csrfTokenHash,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt,
       }),
     );
 
@@ -88,44 +98,46 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
 
   test("过期预认证 Session 不可消费", async () => {
     const material = service.issuePreauthMaterial();
+    const expiresAt = await dbFutureExpiry();
     const created = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
         tokenHashKeyVersion: material.tokenHashKeyVersion,
         csrfTokenHash: material.csrfTokenHash,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt,
       }),
     );
-    await requireClient().sql`
-      UPDATE app.preauth_sessions
-         SET expires_at = now() - INTERVAL '1 minute'
-       WHERE id = ${created.id}
-    `;
 
     const consumed = await unitOfWork.run((tx) =>
-      repository.consumeOnce(tx, created.id),
+      repository.consumeOnce(
+        tx,
+        created.id,
+        new Date(Date.now() + 11 * 60 * 1000),
+      ),
     );
     expect(consumed).toBe(false);
   });
 
   test("数据库唯一约束拒绝重复 CSRF 哈希，防跨会话复用", async () => {
     const material = service.issuePreauthMaterial();
+    const expiresAt = await dbFutureExpiry();
     await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
         tokenHashKeyVersion: material.tokenHashKeyVersion,
         csrfTokenHash: material.csrfTokenHash,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt,
       }),
     );
 
+    const otherExpiry = await dbFutureExpiry();
     await expect(
       unitOfWork.run((tx) =>
         repository.create(tx, {
           tokenHash: randomBytes(32),
           tokenHashKeyVersion: material.tokenHashKeyVersion,
           csrfTokenHash: material.csrfTokenHash,
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          expiresAt: otherExpiry,
         }),
       ),
     ).rejects.toThrow();
