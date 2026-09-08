@@ -138,8 +138,10 @@
 > 测试；SearchQueryService 与测试版 `ProjectAccessQueryPort` 已通过
 > 参数化查询、权限 Scope、跨项目隔离、移除/停用成员、`ADMIN_ONLY/HIDDEN`、
 > 分页、1000 条投影与 100 条金标中的普通用例 Recall@20 >= 90%，以及
-> PGroonga 索引计划验证。仍缺少生产 `ProjectAccessQueryPort` 适配器、
-> 搜索 API/Controller、E2E 和生产备份恢复纵切片。
+> PGroonga 索引计划验证。生产 `ProjectAccessQueryPort` 适配器已由
+> `ProjectsModule` 提供，并补充活跃成员、移除成员、停用用户、系统管理员
+> 与不存在用户的真实 PostgreSQL 集成用例；仍缺少搜索 API/Controller、
+> E2E 和生产备份恢复纵切片。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
