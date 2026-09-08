@@ -51,6 +51,7 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
     dimensions: readonly AuthRateLimitCheckDimension[],
     now: Date,
   ): Promise<AuthRateLimitBlock | undefined> {
+    const nowIso = now.toISOString();
     for (const dimension of dimensions) {
       for (const dimensionHash of dimension.dimensionHashes) {
         const rows = (await tx.sql`
@@ -58,7 +59,7 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
             FROM app.auth_rate_limit_buckets
            WHERE bucket_type = ${dimension.bucketType}
              AND dimension_hash = ${dimensionHash}
-             AND blocked_until > ${now}
+             AND blocked_until > ${nowIso}
            LIMIT 1
         `) as unknown as readonly BlockedRow[];
         const row = rows[0];
@@ -78,7 +79,10 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
     dimensions: readonly AuthRateLimitWriteDimension[],
     now: Date,
   ): Promise<void> {
+    const nowIso = now.toISOString();
     for (const dimension of dimensions) {
+      const windowStartedAt = dimension.windowStartedAt.toISOString();
+      const blockedUntil = dimension.blockedUntil.toISOString();
       await tx.sql`
         INSERT INTO app.auth_rate_limit_buckets (
           bucket_type,
@@ -91,27 +95,27 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
         VALUES (
           ${dimension.bucketType},
           ${dimension.dimensionHash},
-          ${dimension.windowStartedAt},
+          ${windowStartedAt},
           1,
           CASE
             WHEN ${dimension.maxAttempts} <= 1
-              THEN ${dimension.blockedUntil}
+              THEN ${blockedUntil}
             ELSE NULL
           END,
-          ${now}
+          ${nowIso}
         )
         ON CONFLICT (bucket_type, dimension_hash, window_started_at)
         DO UPDATE SET
           attempt_count = app.auth_rate_limit_buckets.attempt_count + 1,
           blocked_until = CASE
             WHEN app.auth_rate_limit_buckets.blocked_until IS NOT NULL
-             AND app.auth_rate_limit_buckets.blocked_until > ${now}
+             AND app.auth_rate_limit_buckets.blocked_until > ${nowIso}
               THEN app.auth_rate_limit_buckets.blocked_until
             WHEN app.auth_rate_limit_buckets.attempt_count + 1 >= ${dimension.maxAttempts}
-              THEN ${dimension.blockedUntil}
+              THEN ${blockedUntil}
             ELSE NULL
           END,
-          updated_at = ${now}
+          updated_at = ${nowIso}
       `;
     }
   }
