@@ -90,10 +90,10 @@
 |---|---|---|---|---|
 | OPS-001 | 单元 + API 集成 | `/health` 与 `/health/live` | 返回 200 `{"status":"ok"}`；`/health/live` 不访问数据库 | 单元已通过（controller 2 例）；2026-09-08 本地 PostgreSQL 18.6 + PGroonga 集成 2 例通过 |
 | OPS-002 | 单元 + API 集成 | `/health/ready` 就绪 | 数据库可连接且迁移版本存在时返回 200 `{"status":"ok"}` | 单元已通过（controller 1 例 + service 1 例）；2026-09-08 本地真实 PG 集成 1 例通过 |
-| OPS-003 | 单元 + API 集成 | `/health/ready` 未就绪 | 数据库不可连或迁移缺失时返回 503 统一错误体 `{code:"SERVICE_NOT_READY",message,details,requestId}`，不泄露连接串/版本/堆栈 | 单元已通过（controller 1 例 + service 2 例）；集成失败路径仍待补 |
+| OPS-003 | 单元 + API 集成 | `/health/ready` 未就绪 | 数据库不可连或迁移缺失时返回 503 统一错误体 `{code:"SERVICE_NOT_READY",message,details,requestId}`，不泄露连接串/版本/堆栈 | 单元已通过（controller 1 例 + service 2 例）；2026-09-08 本地无 DB 集成 2 例通过（不可达 DB URL） |
 
 实现文件：`apps/api/test/health.controller.test.ts`（4 例）、`apps/api/test/health.service.test.ts`（3 例）、
-`apps/api/test/health.integration.test.ts`（3 例；2026-09-08 本地 PostgreSQL 18.6 + PGroonga 实测通过）。
+`apps/api/test/health.integration.test.ts`（3 例；2026-09-08 本地 PostgreSQL 18.6 + PGroonga 实测通过）与 `apps/api/test/health-readiness-failure.integration.test.ts`（2 例；不可达 DB URL 验证 503）。
 
 ## 权限与成员关系
 
