@@ -129,6 +129,8 @@ async function sendEmpty(
 export interface InpulseApiClient {
   getCurrentUser(init?: ApiRequestInit): Promise<CurrentUserResponse>;
   getHealth(init?: ApiRequestInit): Promise<HealthResponse>;
+  getHealthLive(init?: ApiRequestInit): Promise<HealthResponse>;
+  getHealthReady(init?: ApiRequestInit): Promise<HealthResponse>;
   getSearch(query: SearchQueryRequest, init?: ApiRequestInit): Promise<SearchPage>;
   issueCsrfToken(init?: ApiRequestInit): Promise<CsrfIssueResponse>;
   login(body: LoginRequest, init?: ApiRequestInit): Promise<LoginResponse>;
@@ -144,6 +146,12 @@ export function createApiClient(
     },
     getHealth(init?: ApiRequestInit) {
       return send<HealthResponse>(options, "GET", "/health", "", init);
+    },
+    getHealthLive(init?: ApiRequestInit) {
+      return send<HealthResponse>(options, "GET", "/health/live", "", init);
+    },
+    getHealthReady(init?: ApiRequestInit) {
+      return send<HealthResponse>(options, "GET", "/health/ready", "", init);
     },
     getSearch(query: SearchQueryRequest, init?: ApiRequestInit) {
       return send<SearchPage>(options, "GET", "/search", toQueryString(query), init);
