@@ -83,6 +83,18 @@
 > 运行本身尚未执行。CI-017～CI-019 因仓库尚无 E2E、生产 Dockerfile 与 `compose.yaml`
 > 而未落库，落地后必须按 §12.4 顺序插入 CI。
 
+
+## 健康探针
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| OPS-001 | 单元 + API 集成 | `/health` 与 `/health/live` | 返回 200 `{"status":"ok"}`；`/health/live` 不访问数据库 | 单元已落地（controller 2 例）；集成 2 例随 CI-008 |
+| OPS-002 | 单元 + API 集成 | `/health/ready` 就绪 | 数据库可连接且迁移版本存在时返回 200 `{"status":"ok"}` | 单元已落地（controller 1 例 + service 1 例）；集成 1 例随 CI-008 |
+| OPS-003 | 单元 + API 集成 | `/health/ready` 未就绪 | 数据库不可连或迁移缺失时返回 503 统一错误体 `{code:"SERVICE_NOT_READY",message,details,requestId}`，不泄露连接串/版本/堆栈 | 单元已落地（controller 1 例 + service 2 例）；集成失败路径待补 |
+
+实现文件：`apps/api/test/health.controller.test.ts`（4 例）、`apps/api/test/health.service.test.ts`（3 例）、
+`apps/api/test/health.integration.test.ts`（3 例，依赖真实 PostgreSQL 18，本机未运行由 CI 执行）。
+
 ## 权限与成员关系
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
