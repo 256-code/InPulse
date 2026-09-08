@@ -10,6 +10,7 @@ import {
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { SearchController } from "./search.controller.js";
+import { SearchCursorService } from "./search-cursor.js";
 import { PostgresSearchProjectionReader } from "./search-projection.reader.js";
 import { SearchQueryService } from "./search-query.service.js";
 
@@ -22,13 +23,19 @@ import { SearchQueryService } from "./search-query.service.js";
         new PostgresSearchProjectionReader(client.sql),
       inject: [DATABASE_CLIENT],
     },
+    SearchCursorService,
     {
       provide: SearchQueryService,
       useFactory: (
         projectAccess: ProjectAccessQueryPort,
         reader: PostgresSearchProjectionReader,
-      ) => new SearchQueryService(projectAccess, reader),
-      inject: [PROJECT_ACCESS_QUERY_PORT, PostgresSearchProjectionReader],
+        cursor: SearchCursorService,
+      ) => new SearchQueryService(projectAccess, reader, cursor),
+      inject: [
+        PROJECT_ACCESS_QUERY_PORT,
+        PostgresSearchProjectionReader,
+        SearchCursorService,
+      ],
     },
   ],
   controllers: [SearchController],

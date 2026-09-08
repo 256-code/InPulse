@@ -7,6 +7,7 @@ import {
   searchPageSchema,
   searchQueryRequestSchema,
 } from "../src/contracts/search.zod.js";
+import { routeRegistry } from "../src/route-registry.js";
 
 const validItem = {
   projectId: 1,
@@ -57,6 +58,15 @@ describe("SearchQueryRequest 契约", () => {
 });
 
 describe("SearchItem/SearchPage 契约", () => {
+  test("getSearch 字段校验错误统一登记 422", () => {
+    const route = routeRegistry.find(
+      (entry) => entry.operationId === "getSearch",
+    );
+    const responses = route?.responses as Readonly<Record<string, unknown>>;
+    expect(responses["422"]).toBeDefined();
+    expect(responses["400"]).toBeUndefined();
+  });
+
   test("SearchItem 保留 entityType 判别字段且不暴露内部 id", () => {
     expect(searchItemSchema.parse(validItem)).toEqual(validItem);
     expect(

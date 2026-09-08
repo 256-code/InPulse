@@ -5,10 +5,12 @@ import { buildSearchSeed } from "../../../database/poc/search/seed.ts";
 import { migrate } from "../../../database/src/migrate.ts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+import { VersionedHmacKeyring } from "../src/auth/keyring";
 import type {
   AuthorizedProjectScope,
   ProjectAccessQueryPort,
 } from "../src/modules/projects/project-access.port";
+import { SearchCursorService } from "../src/modules/search/search-cursor";
 import { PostgresSearchProjectionReader } from "../src/modules/search/search-projection.reader";
 import {
   SearchQueryService,
@@ -242,9 +244,16 @@ describe("SearchQueryService with real PostgreSQL", () => {
       runtime,
       new Set(projectIds.values()),
     );
+    const cursor = new SearchCursorService(
+      VersionedHmacKeyring.fromEntries(
+        [{ version: 1, key: Buffer.alloc(32, 0x5a) }],
+        1,
+      ),
+    );
     service = new SearchQueryService(
       port,
       new PostgresSearchProjectionReader(runtime),
+      cursor,
     );
   });
 
@@ -340,8 +349,11 @@ describe("SearchQueryService with real PostgreSQL", () => {
 
     expect(first.items).toHaveLength(2);
     expect(first.nextCursor).not.toBeNull();
+    expect(first.nextCursor).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(first.hasMore).toBe(first.nextCursor !== null);
     expect(second.items).toHaveLength(2);
     expect(second.items[0]?.id).not.toBe(first.items[0]?.id);
+    expect(second.hasMore).toBe(second.nextCursor !== null);
   });
 
   test("golden query recall at top-20 remains at least 90%", async () => {
