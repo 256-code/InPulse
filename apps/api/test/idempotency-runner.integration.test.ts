@@ -77,7 +77,8 @@ describe("幂等 runner（真实 PostgreSQL）", () => {
         executions += 1;
         await tx.sql`
           UPDATE app.users
-             SET name = 'idempotency-executed'
+             SET name = 'idempotency-executed',
+                 row_version = row_version + 1
            WHERE id = ${actorId}
         `;
         return result();
@@ -103,7 +104,8 @@ describe("幂等 runner（真实 PostgreSQL）", () => {
         execute: async (tx) => {
           await tx.sql`
             UPDATE app.users
-               SET name = 'idempotency-should-rollback'
+               SET name = 'idempotency-should-rollback',
+                   row_version = row_version + 1
              WHERE id = ${actorId}
           `;
           throw new Error("business failure");
