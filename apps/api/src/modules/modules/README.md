@@ -2,7 +2,7 @@
 
 本模块提供项目初始化中的未分类模块写入，以及事务内模块写前检查，不代表项目创建闭环或模块管理已完成。
 
-## 事务内 ModuleQueryPort（本地实现，数据库待 CI 验证）
+## 事务内 ModuleQueryPort（数据库 CI 通过，待人工评审）
 
 公开入口 `./index.ts` 导出 `ModuleQueryPort`、`CheckModuleForWriteInput`、
 `ModuleForWriteResource`、`ModuleWriteCheckResult`；`ModulesModule` 导出抽象类注入 token。
@@ -28,8 +28,8 @@ checkModuleForWrite(
 多资源同层按 ID 升序，任一步非 allowed 必须停止后续业务写入。
 
 完整调用顺序见 [FeatureQueryPort 接入说明](../features/README.md)。
-新增 `write-query-ports.integration.test.ts` 的 6 个真实数据库用例待 CI 执行，
-不沿用下方旧 CommandPort 的 5/5 结果。本地 Nest 注入验证已通过。
+新增 `write-query-ports.integration.test.ts` 的 6 个真实数据库用例已在提交 `58acbe7` 的 CI 中实际通过（334 ms），
+证据见 [本次数据库日志](https://github.com/256-code/InPulse/actions/runs/34210258609/job/102009300977?pr=42#step:17:28)。本地 Nest 注入验证已通过；待 A/C 人工评审。
 
 当前验证状态：2026-09-08，提交 `e826483` 的
 [CI / workspace](https://github.com/256-code/InPulse/actions/runs/34200874889)
