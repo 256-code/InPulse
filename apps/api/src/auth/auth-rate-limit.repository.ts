@@ -59,7 +59,7 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
             FROM app.auth_rate_limit_buckets
            WHERE bucket_type = ${dimension.bucketType}
              AND dimension_hash = ${dimensionHash}
-             AND blocked_until > ${nowIso}
+             AND blocked_until > ${nowIso}::timestamptz
            LIMIT 1
         `) as unknown as readonly BlockedRow[];
         const row = rows[0];
@@ -95,27 +95,27 @@ export class PostgresAuthRateLimitRepository implements AuthRateLimitRepository 
         VALUES (
           ${dimension.bucketType},
           ${dimension.dimensionHash},
-          ${windowStartedAt},
+          ${windowStartedAt}::timestamptz,
           1,
           CASE
             WHEN ${dimension.maxAttempts} <= 1
-              THEN ${blockedUntil}
+              THEN ${blockedUntil}::timestamptz
             ELSE NULL
           END,
-          ${nowIso}
+          ${nowIso}::timestamptz
         )
         ON CONFLICT (bucket_type, dimension_hash, window_started_at)
         DO UPDATE SET
           attempt_count = app.auth_rate_limit_buckets.attempt_count + 1,
           blocked_until = CASE
             WHEN app.auth_rate_limit_buckets.blocked_until IS NOT NULL
-             AND app.auth_rate_limit_buckets.blocked_until > ${nowIso}
+             AND app.auth_rate_limit_buckets.blocked_until > ${nowIso}::timestamptz
               THEN app.auth_rate_limit_buckets.blocked_until
             WHEN app.auth_rate_limit_buckets.attempt_count + 1 >= ${dimension.maxAttempts}
-              THEN ${blockedUntil}
+              THEN ${blockedUntil}::timestamptz
             ELSE NULL
           END,
-          updated_at = ${nowIso}
+          updated_at = ${nowIso}::timestamptz
       `;
     }
   }
