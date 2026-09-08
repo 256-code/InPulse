@@ -172,8 +172,8 @@
 > 与不存在用户的真实 PostgreSQL 集成用例。搜索 API 契约纵切片已落地
 > `getSearch`：Schema、Route Registry、权限矩阵、OpenAPI、生成客户端、
 > 最小 `SearchController`、服务端签名游标与真实 `hasMore`。A 已于
-> 2026-09-08 确认 envelope 与不透明游标方向，但 C-006 仍未解决，正式
-> 契约以 A 最终 Registry 落库为准，当前不得描述为已冻结或已验收。仍缺少
+> 2026-09-08 正式确认 envelope 与不透明游标方向并关闭 C-006；`getSearch`
+> 已作为正式契约进入 Schema/Route Registry、OpenAPI 与生成客户端。仍缺少
 > 真实 HTTP API 集成、Playwright E2E、搜索页面和生产备份恢复纵切片。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
