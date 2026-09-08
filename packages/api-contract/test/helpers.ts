@@ -20,6 +20,7 @@ export const syntheticSchemas: SchemaComponents = {
       requestId: { type: "string" },
     }),
     HealthResponse: objectSchema({ status: { type: "string", const: "ok" } }),
+    CsrfIssueResponse: objectSchema({ csrfToken: { type: "string" } }),
     ReplayResponse: objectSchema({
       id: { type: "integer" },
       nested: objectSchema({ value: { type: "string" } }),
@@ -29,6 +30,7 @@ export const syntheticSchemas: SchemaComponents = {
   rootRefs: {
     ErrorResponse: "#/components/schemas/ErrorResponse",
     HealthResponse: "#/components/schemas/HealthResponse",
+    CsrfIssueResponse: "#/components/schemas/CsrfIssueResponse",
     ReplayResponse: "#/components/schemas/ReplayResponse",
   },
 };

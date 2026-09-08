@@ -24,7 +24,7 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(
-      `Set ${name}; search query integration tests never silently skip`,
+      `Set ${name}; PostgreSQL integration tests never silently skip`,
     );
   }
   return value;

@@ -10,17 +10,33 @@ export interface UnitOfWork {
 
 export type TransactionContextFactory = (
   txSql: TransactionSql,
+  parentSql: Sql,
 ) => TransactionContext;
 
-/** 用事务绑定的 `TransactionSql` 构造 Drizzle `db` 与 `sql` 上下文。 */
+/**
+ * 用事务绑定的 `TransactionSql` 构造 Drizzle `db` 与 `sql` 上下文。
+ *
+ * postgres-js 的 `sql.begin` 回传的 `TransactionSql` 没有顶层 `Sql` 的
+ * `options`；Drizzle 构造时会写 `client.options.parsers/serializers`，
+ * 因此必须复用父连接的 `options`，否则真实事务查询会因缺少 `parsers` 失败。
+ */
 export const defaultTransactionContextFactory: TransactionContextFactory = (
   txSql,
+  parentSql,
 ) => ({
-  // postgres-js 的类型未把 TransactionSql 建模为 Sql；运行期它完全可作为
-  // Drizzle 客户端使用，这里只需一次显式收窄。
-  db: drizzle(txSql as unknown as Sql, { schema }),
+  db: drizzle(withParentOptions(txSql, parentSql), { schema }),
   sql: txSql,
 });
+
+function withParentOptions(txSql: TransactionSql, parentSql: Sql): Sql {
+  const tx = txSql as unknown as Sql & { options?: Sql["options"] };
+  const parent = parentSql as unknown as { options?: Sql["options"] };
+  if (parent.options === undefined) {
+    throw new Error("parent postgres-js client exposes no options");
+  }
+  tx.options = parent.options;
+  return tx;
+}
 
 /**
  * 基于 postgres-js `sql.begin` 的 `UnitOfWork`：
@@ -39,7 +55,7 @@ export class PostgresUnitOfWork implements UnitOfWork {
 
   run<T>(callback: (tx: TransactionContext) => Promise<T>): Promise<T> {
     return this.client.sql.begin(async (txSql) =>
-      callback(this.createTransaction(txSql)),
+      callback(this.createTransaction(txSql, this.client.sql)),
     ) as Promise<T>;
   }
 }
