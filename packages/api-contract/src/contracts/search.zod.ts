@@ -30,7 +30,7 @@ const queryBoolean = z.preprocess((value) => {
 /**
  * 全局搜索查询参数。q 只接受原始文本长度范围，规范化与长度二次校验由
  * SearchQueryService 执行；cursor 是服务端签名、校验并带过期时间的不透明
- * 字符串，客户端不得解析或修改；limit 默认 20。最终冻结仍需 A 确认。
+ * 字符串，客户端不得解析或修改；limit 默认 20。A 已于 2026-09-08 正式确认。
  */
 export const searchQueryRequestSchema = z
   .object({
@@ -60,8 +60,8 @@ export const searchItemSchema = z
 export type SearchItem = z.infer<typeof searchItemSchema>;
 
 /**
- * 分页 envelope（对应 C-006）：A 已确认 `items/nextCursor/hasMore` 与
- * 不透明游标方向，本 Schema 仍作为评审输入，正式冻结以 A 最终落库为准。
+ * 分页 envelope（对应 C-006）：A 已于 2026-09-08 正式确认
+ * `items/nextCursor/hasMore` 与不透明游标方向，并作为 `getSearch` 正式契约。
  */
 export const searchPageSchema = z
   .object({

@@ -8,7 +8,7 @@ import { VersionedHmacKeyring } from "../../auth/keyring.js";
 /** 与 Session Token 使用同一版本化 keyring，但通过独立 domain 分隔用途。 */
 const SEARCH_CURSOR_DOMAIN = "inpulse.search-cursor.v1:";
 
-/** 候选实现：游标签发后 15 分钟过期，最终 TTL 由 A 在正式契约中定案。 */
+/** 正式契约：游标签发后 15 分钟过期，A 已于 2026-09-08 确认。 */
 export const SEARCH_CURSOR_TTL_MS = 15 * 60 * 1_000;
 
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;

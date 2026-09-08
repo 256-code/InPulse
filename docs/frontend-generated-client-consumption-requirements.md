@@ -23,7 +23,7 @@
 | credentials | 采纳为 `same-origin` 默认值 | 当前 Nginx 同源提供前端与 `/api/v1`；跨域变更须 ADR |
 | 错误 `details` | 采纳为公共基础 + 判别联合 | 避免所有错误强制复杂结构，也不退化为 `Record<string, unknown>` |
 | CSRF 错误码 | 采纳为候选 `403 + CSRF_TOKEN_INVALID` | 当前错误模型没有 419；具体状态仍需 A 确认 |
-| 分页规范 | 采纳为候选 `cursor + limit` | 该方案适合 C 域列表，但尚未进入正式契约 |
+| 分页规范 | A 已正式确认 `cursor + limit`（2026-09-08） | 已作为 `getSearch` 的正式分页契约进入 Route Registry |
 | 通知/概览等候选接口 | 采纳为建议接口清单 | 当前仍是评审输入，不视为已冻结路由 |
 | 文档末尾被截断 | 检查原文件 | 正文已包含 FC-070～FC-074，无需补写 |
 | 评审状态字段 | 采用默认“待确认”+ 汇总追踪规则 | 避免在 51 条需求表中重复空状态；A 可按编号批注 |
@@ -171,14 +171,14 @@ type ConflictErrorDetails = {
 
 | 编号 | 优先级 | 需求 | A 侧需要确认/提供 |
 | --- | --- | --- | --- |
-| FC-060 | P0 | V1 候选统一采用 `cursor + limit`，响应使用 `items`、`nextCursor`、`hasMore`；不混用 `page/pageSize` 或 `offset/limit` | A 已确认 `{ items, nextCursor, hasMore }` 方向（2026-09-08）；公共 envelope 与固定表格分页例外仍未最终冻结 |
-| FC-061 | P0 | 游标必须作为不透明字符串暴露，前端不得解析其内部编码，也不得排序或修改 | A 已确认方向（2026-09-08）：生成类型将 cursor 与业务 ID 分开；服务端负责 HMAC 签名、校验与过期 |
+| FC-060 | P0 | V1 统一采用 `cursor + limit`，响应使用 `items`、`nextCursor`、`hasMore`；不混用 `page/pageSize` 或 `offset/limit` | A 已于 2026-09-08 正式确认 `{ items, nextCursor, hasMore }`；固定表格分页如确有需要，须作为显式例外另行登记 |
+| FC-061 | P0 | 游标必须作为不透明字符串暴露，前端不得解析其内部编码，也不得排序或修改 | A 已于 2026-09-08 正式确认：生成类型将 cursor 与业务 ID 分开；服务端负责 HMAC 签名、校验与过期 |
 | FC-062 | P0 | 游标响应必须提供明确的 `nextCursor`/`hasMore`（或等价字段）和当前页数据；无更多数据时不要混用 `null` 与空数组 | 定义空列表、首屏、最后一页在 C 的 TanStack Query infinite query 中可直接消费的形式 |
 | FC-063 | P1 | 通知轮询需要支持 `AbortSignal`、停止轮询、避免无限游标回跳，并可从当前游标继续增量拉取 | 通知接口应返回稳定的排序键、cursored 游标和可恢复语义 |
 | FC-064 | P1 | 搜索应支持项目/模块/功能/状态/负责人等筛选参数，并明确参数编码和最大长度；前端的 URL 状态才能稳定映射 | 不要把搜索条件全部压成一个自由 JSON 字符串；至少对可分享筛选定义 query schema |
 | FC-065 | P1 | 项目概览、任务聚合组、我的任务等聚合读接口应尽量由服务端返回，前端不得按项目逐次请求再合并全量数据 | 给出聚合接口的边界，或明确在路由中登记稳定的 server-side aggregation 操作 |
 
-#### 4.7.1 分页 envelope（A 已确认方向，尚未冻结）
+#### 4.7.1 分页 envelope（A 已正式确认，2026-09-08）
 
 ```ts
 type CursorPage<T> = {
@@ -188,15 +188,15 @@ type CursorPage<T> = {
 };
 ```
 
-查询参数为 `cursor?: string` 与 `limit?: number`，每个接口必须登记最小值、最大值与默认值。A 已在 2026-09-08 确认该 envelope 与不透明游标方向，但 C-006 仍未关闭；在本清单与 Route Registry 由 A 正式落库前不得视为正式契约，仍须继续按评审结果收敛。
+查询参数为 `cursor?: string` 与 `limit?: number`，每个接口必须登记最小值、最大值与默认值。A 已于 2026-09-08 正式确认该 envelope 与不透明游标方向，并已在 `GET /api/v1/search` 的 Route Registry 落库，C-006 关闭。该 envelope 作为 V1 列表游标契约；其他未登记列表接口仍须逐路由进入 Registry 后才能视为正式接口。
 
 2026-09-08：A 反馈确认 `{ items, nextCursor, hasMore }` 与不透明游标方向；
 C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 `SearchItem`、`SearchPage`、`GET /api/v1/search` Route Registry、OpenAPI 与
 生成客户端，并在服务层实现 `hasMore`、HMAC 签名游标、绑定用户/查询和过期
-校验。该分支仍是评审输入，C-006 未解决；A 最终落库前不得将
-`SearchPage`/`nextCursor`/`hasMore` 描述为正式定案。前端仍不得解析
-`cursor` 内部内容，服务端负责签名、校验与过期，当前候选 TTL 为
+校验。该分支已由 A 正式确认并合入 Route Registry，C-006 关闭；
+`SearchPage`/`nextCursor`/`hasMore` 为正式定案。前端仍不得解析
+`cursor` 内部内容，服务端负责签名、校验与过期，正式 TTL 为
 15 分钟；无效或过期请求返回 `422`。
 
 ### 4.8 C 域功能与生成客户端具体需求
@@ -259,7 +259,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | C-003 | 聚合接口缺口 | F-25、F-29、F-32 均需要服务端聚合/跨项目读取；核心接口表未列出 `task-group` 聚合详情、项目概览、我的任务 | 明确稳定路由与服务端聚合边界，避免 C 在前端逐项拼接 |
 | C-004 | 错误 `details` 结构未定 | 技术设计统一错误模型只给出 `{ code, message, details, requestId }`，未定义 `details` 的具体 Schema；422/409/429/重认证场景需要前端消费 | 为公共错误类别定义稳定 `details` 联合，并在 Route Registry 中按需给出每个错误响应的 Schema ref |
 | C-005 | CSRF 失败识别未定 | ADR-015 要求“客户端仅在服务端明确表示 CSRF 校验失败时重签”，但错误模型未给出专用错误码 | 应定义稳定 `CSRF_INVALID` 或等价机器可读错误码，并避免把 CSRF 失败与普通 403 权限错误混用 |
-| C-006 | 分页/游标约定未定 | 系统设计只写搜索“分页”、通知“游标增量拉取”，未定义公共 envelope 或字段名 | 建议先定义统一 cursor/page 契约，再进入各域接口 |
+| C-006 | 分页/游标约定已正式定案（2026-09-08） | 系统设计只写搜索“分页”、通知“游标增量拉取”，未定义公共 envelope 或字段名 | 已关闭：A 确认 `{ items, nextCursor, hasMore }` 与不透明 cursor，并已在 `getSearch` 落库；其他列表接口沿用同一 envelope |
 | C-007 | 生成客户端运行时校验策略未定 | 技术设计要求服务端校验，但未规定生成客户端是否对响应做运行时 Zod 校验 | 需决定生成客户端只做类型映射还是运行时校验；若运行时校验，失败需映射为独立错误且不得暴露内部细节 |
 | C-008 | `message` 的用户交互语义未定 | 错误模型包含 `message`，但前端逻辑应基于 `code` | 明确 `message` 是用户可展示文案还是仅诊断信息；前端不得依赖文案字符串 |
 | C-009 | ID 类型已按正式基线确认 | 当前[技术设计 V1.2.2](../技术设计v1.2.2.md)、数据库 Schema 与迁移均采用 `INTEGER IDENTITY` | 维持 `number`，不引入额外 ID 类型方案；如未来调整主键类型，必须先走 ADR，并同步迁移、代码、权限矩阵与测试矩阵 |
