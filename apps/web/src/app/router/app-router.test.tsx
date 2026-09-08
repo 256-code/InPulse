@@ -16,6 +16,6 @@ describe("AppRouter integration", () => {
     );
 
     expect(screen.getByText("InPulse")).toBeInTheDocument();
-    expect(await screen.findByText("InPulse 前端基础框架")).toBeInTheDocument();
+    expect(await screen.findByText("F-30 视觉壳")).toBeInTheDocument();
   });
 });

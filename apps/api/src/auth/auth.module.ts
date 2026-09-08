@@ -16,6 +16,7 @@ import { SessionTokenService } from "./session-token.service.js";
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
 import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
+import { SessionAuthService } from "./session-auth.service.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。
@@ -42,6 +43,7 @@ import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.
     CsrfIssueService,
     LoginService,
     LogoutService,
+    SessionAuthService,
   ],
   controllers: [CsrfController, LoginController, LogoutController],
   exports: [
@@ -56,6 +58,7 @@ import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.
     CsrfIssueService,
     LoginService,
     LogoutService,
+    SessionAuthService,
   ],
 })
 export class AuthModule {}

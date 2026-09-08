@@ -222,8 +222,9 @@ V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认查询计�
 PostgreSQL 集成测试；旧 `pg_trgm` GIN 索引和扩展在 `0004/0005` 的
 contract 验证后清理，`object_inspect` 用于记录 Groonga 索引磁盘占用。
 SearchQueryService 服务层、参数化查询与权限过滤测试已落地并通过真实
-PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器、搜索 API/Controller、
-页面以及生产加密备份恢复仍未完成。
+PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器与通用
+`SessionAuthService` 已落地，其真实 PostgreSQL 集成测试待 CI 探针镜像执行；
+搜索 API/Controller、页面以及生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 
