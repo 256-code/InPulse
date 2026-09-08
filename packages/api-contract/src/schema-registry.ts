@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
 
@@ -27,6 +28,11 @@ export const schemaRegistry = {
     schema: healthResponseSchema,
     summary: "存活探针响应",
     sensitiveFieldPaths: [],
+  },
+  CsrfIssueResponse: {
+    schema: csrfIssueResponseSchema,
+    summary: "CSRF 同步 Token 签发响应",
+    sensitiveFieldPaths: ["csrfToken"],
   },
 } satisfies Record<string, SchemaRegistryEntry>;
 

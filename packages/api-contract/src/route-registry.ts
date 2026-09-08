@@ -159,6 +159,45 @@ export const routeRegistry = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  {
+    method: "GET",
+    path: "/auth/csrf",
+    operationId: "issueCsrfToken",
+    summary:
+      "匿名或已登录用户签发一次性同步 CSRF Token；匿名时创建预认证 Session。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "CsrfIssueResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "none",
+    csrfPolicy: "none",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "每次签发新 Token 并轮换匿名预认证 Session，数据库只保存 Hash；已登录 Session 复用同一 Session 并最多保留 4 个有效 Hash",
+      clientRecoveryPath: "再次调用签发端点",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
 ] satisfies readonly RouteDefinition[];
 
 export type RegisteredRoute = (typeof routeRegistry)[number];

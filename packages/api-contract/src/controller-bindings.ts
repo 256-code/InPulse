@@ -69,7 +69,7 @@ export function parseControllerSource(
   }
 
   const decoratorPattern =
-    /@([A-Za-z]+)\(([^)]*)\)\s*(?:@[A-Za-z]+\([^)]*\)\s*)*([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+    /@([A-Za-z]+)\(([^)]*)\)\s*(?:@[A-Za-z]+\([^)]*\)\s*)*(?:async\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
   for (const match of source.matchAll(decoratorPattern)) {
     const decorator = match[1]!;
     const rawArgument = match[2]!.trim();

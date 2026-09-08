@@ -221,11 +221,14 @@ export function validateRouteRegistry(
       if (route.csrfPolicy !== "required") {
         add(route, "csrf", `${route.method} 必须登记 csrfPolicy: required`);
       }
-    } else if (route.idempotencyPolicy !== "none") {
+    } else if (
+      route.idempotencyPolicy !== "none" &&
+      route.idempotencyPolicy !== "securityFlow"
+    ) {
       add(
         route,
         "idempotency-default",
-        `ADR-019：${route.method} 只能登记 idempotencyPolicy: none`,
+        `ADR-019：${route.method} 只能登记 idempotencyPolicy: none；ADR-023 的一次性认证安全流程只能登记 securityFlow`,
       );
     } else if (route.csrfPolicy !== "none") {
       add(route, "csrf", `${route.method} 必须登记 csrfPolicy: none`);

@@ -2,7 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
 import { VersionedHmacKeyring } from "./keyring.js";
-import { generateOpaqueToken, hashOpaqueToken } from "./token.js";
+import {
+  generateOpaqueToken,
+  hashOpaqueToken,
+  isValidOpaqueToken,
+} from "./token.js";
 
 /** 一次预认证 Session 签发返回的明文材料；明文只在响应中出现一次。 */
 export interface PreauthMaterial {
@@ -54,5 +58,16 @@ export class SessionTokenService {
 
   hashWithVersion(token: string, keyVersion: number): Buffer {
     return hashOpaqueToken(token, this.keyring.keyFor(keyVersion));
+  }
+
+  /** 对同一令牌按 keyring 中每个版本计算候选哈希，用于轮换后仍可查回旧 Session。 */
+  hashCandidates(token: string): readonly TokenHashAndVersion[] {
+    if (!isValidOpaqueToken(token)) {
+      return [];
+    }
+    return this.keyring.versions.map((version) => ({
+      hash: hashOpaqueToken(token, this.keyring.keyFor(version)),
+      keyVersion: version,
+    }));
   }
 }

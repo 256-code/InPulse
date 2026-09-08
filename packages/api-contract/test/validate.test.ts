@@ -69,6 +69,23 @@ describe("Route Registry 完整性", () => {
     );
   });
 
+  test("ADR-023：安全方法上的 allowlist securityFlow 必须被接受", () => {
+    const route = makeRoute({
+      method: "GET",
+      path: "/auth/csrf",
+      operationId: "issueCsrfToken",
+      idempotencyPolicy: "securityFlow",
+      idempotencyExceptionAdr: "ADR-023",
+      securityFlowPolicy: {
+        singleConsumptionOrNaturalIdempotency: "每次签发新 Token",
+        clientRecoveryPath: "再次签发",
+      },
+    });
+    const rules = rulesOf([route]);
+    expect(rules).not.toContain("idempotency-default");
+    expect(rules).not.toContain("security-flow");
+  });
+
   test("写方法必须要求 CSRF，安全方法必须为 none", () => {
     expect(rulesOf([writeRoute({ csrfPolicy: "none" })])).toContain("csrf");
     expect(rulesOf([makeRoute({ csrfPolicy: "required" })])).toContain("csrf");

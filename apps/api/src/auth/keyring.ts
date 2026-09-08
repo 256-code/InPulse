@@ -87,6 +87,7 @@ export function parseHmacKeyringFile(
  */
 export class VersionedHmacKeyring {
   readonly currentVersion: number;
+  readonly versions: readonly number[];
   private readonly keys: ReadonlyMap<number, Buffer>;
 
   private constructor(
@@ -95,6 +96,7 @@ export class VersionedHmacKeyring {
   ) {
     this.currentVersion = currentVersion;
     this.keys = validateEntries(entries, currentVersion);
+    this.versions = [...this.keys.keys()].sort((left, right) => left - right);
   }
 
   static fromEntries(

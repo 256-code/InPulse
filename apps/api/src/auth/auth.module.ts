@@ -2,9 +2,13 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../database/database.module.js";
 import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
+import { CsrfController } from "./csrf.controller.js";
+import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
+import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
 import { SessionTokenService } from "./session-token.service.js";
+import { PostgresUserSessionRepository } from "./user-session.repository.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。
@@ -23,11 +27,18 @@ import { SessionTokenService } from "./session-token.service.js";
     },
     SessionTokenService,
     PostgresPreauthSessionRepository,
+    PostgresUserSessionRepository,
+    PostgresSessionCsrfTokenRepository,
+    CsrfIssueService,
   ],
+  controllers: [CsrfController],
   exports: [
     SESSION_HMAC_KEYRING,
     SessionTokenService,
     PostgresPreauthSessionRepository,
+    PostgresUserSessionRepository,
+    PostgresSessionCsrfTokenRepository,
+    CsrfIssueService,
   ],
 })
 export class AuthModule {}
