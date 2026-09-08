@@ -7,6 +7,7 @@ import type {
   SearchProjectionItem,
   SearchProjectionVisibilityScope,
 } from "./search-projection.reader.js";
+import { SearchCursorError, SearchCursorService } from "./search-cursor.js";
 import { validateSearchQuery } from "./search-text.js";
 
 export const SEARCH_PAGE_LIMIT_DEFAULT = 20;
@@ -23,6 +24,7 @@ export interface SearchQueryCommand {
 export interface SearchQueryPage {
   readonly items: readonly SearchProjectionItem[];
   readonly nextCursor: string | null;
+  readonly hasMore: boolean;
 }
 
 export class SearchQueryValidationError extends Error {
@@ -41,27 +43,6 @@ export class SearchAuthorizationError extends Error {
     super(message);
     this.name = "SearchAuthorizationError";
   }
-}
-
-function parseCursor(after: string | undefined): bigint {
-  if (after === undefined) {
-    return 0n;
-  }
-  if (!/^[1-9][0-9]*$/.test(after)) {
-    throw new SearchQueryValidationError(
-      "invalid-cursor",
-      "after cursor must be a positive integer",
-    );
-  }
-
-  const parsed = BigInt(after);
-  if (parsed <= 0n) {
-    throw new SearchQueryValidationError(
-      "invalid-cursor",
-      "after cursor must be a positive integer",
-    );
-  }
-  return parsed;
 }
 
 function parseLimit(limit: number | undefined): number {
@@ -89,13 +70,16 @@ function validateScope(
 export class SearchQueryService {
   readonly #projectAccess: ProjectAccessQueryPort;
   readonly #reader: SearchProjectionReader;
+  readonly #cursor: SearchCursorService;
 
   constructor(
     projectAccess: ProjectAccessQueryPort,
     reader: SearchProjectionReader,
+    cursor: SearchCursorService,
   ) {
     this.#projectAccess = projectAccess;
     this.#reader = reader;
+    this.#cursor = cursor;
   }
 
   async search(command: SearchQueryCommand): Promise<SearchQueryPage> {
@@ -113,10 +97,24 @@ export class SearchQueryService {
     validateScope(scope, command.actorUserId);
 
     const limit = parseLimit(command.limit);
-    const afterId = parseCursor(command.after);
+    let afterId: bigint;
+    try {
+      afterId = this.#cursor.decode(command.after, {
+        actorUserId: command.actorUserId,
+        normalizedQuery: validation.normalizedQuery,
+      });
+    } catch (error) {
+      if (error instanceof SearchCursorError) {
+        throw new SearchQueryValidationError(
+          "invalid-cursor",
+          "cursor is invalid, expired, or bound to another request",
+        );
+      }
+      throw error;
+    }
 
     if (scope.projectIds.length === 0) {
-      return { items: [], nextCursor: null };
+      return { items: [], nextCursor: null, hasMore: false };
     }
 
     const visibilityScopes: readonly SearchProjectionVisibilityScope[] =
@@ -135,7 +133,14 @@ export class SearchQueryService {
     return {
       items: page.items,
       nextCursor:
-        page.nextAfterId === null ? null : page.nextAfterId.toString(),
+        page.nextAfterId === null
+          ? null
+          : this.#cursor.encode({
+              actorUserId: command.actorUserId,
+              normalizedQuery: validation.normalizedQuery,
+              afterId: page.nextAfterId,
+            }),
+      hasMore: page.nextAfterId !== null,
     };
   }
 }

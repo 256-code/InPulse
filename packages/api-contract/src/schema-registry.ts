@@ -68,7 +68,8 @@ export const schemaRegistry = {
   },
   SearchQueryRequest: {
     schema: searchQueryRequestSchema,
-    summary: "全局搜索查询参数；cursor 按字符串登记，limit 默认 20、最大 50",
+    summary:
+      "全局搜索查询参数；cursor 为服务端签名的不透明字符串，limit 默认 20、最大 50",
     sensitiveFieldPaths: [],
   },
   SearchItem: {

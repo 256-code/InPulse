@@ -75,7 +75,7 @@ export class SearchController {
 
     const parsed = searchQueryRequestSchema.safeParse(query);
     if (!parsed.success) {
-      response.status(400);
+      response.status(422);
       return {
         code: "SEARCH_VALIDATION_FAILED",
         message: "全局搜索查询参数无效",
@@ -108,11 +108,11 @@ export class SearchController {
       return {
         items: result.items.map(toSearchItem),
         nextCursor: result.nextCursor,
-        hasMore: result.nextCursor !== null,
+        hasMore: result.hasMore,
       };
     } catch (error) {
       if (error instanceof SearchQueryValidationError) {
-        response.status(400);
+        response.status(422);
         return {
           code: "SEARCH_VALIDATION_FAILED",
           message: error.message,

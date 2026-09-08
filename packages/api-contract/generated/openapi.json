@@ -182,7 +182,7 @@
     "/search": {
       "get": {
         "operationId": "getSearch",
-        "summary": "按服务端 AuthorizedProjectScope 搜索当前用户可访问项目中的投影实体；普通输入使用 PGroonga 转义查询，禁止客户端传入授权范围；includeVoid=true 仅供系统管理员显式开启 VOID 可见，普通调用不影响范围。",
+        "summary": "按服务端 AuthorizedProjectScope 搜索当前用户可访问项目中的投影实体；普通输入使用 PGroonga 转义查询，禁止客户端传入授权范围；cursor 为服务端签名、校验并带过期时间的不透明字符串；includeVoid=true 仅供系统管理员显式开启 VOID 可见，普通调用不影响范围。",
         "responses": {
           "200": {
             "description": "成功",
@@ -194,8 +194,8 @@
               }
             }
           },
-          "400": {
-            "description": "请求格式或业务参数错误",
+          "401": {
+            "description": "未登录或 Session 失效",
             "content": {
               "application/json": {
                 "schema": {
@@ -204,8 +204,8 @@
               }
             }
           },
-          "401": {
-            "description": "未登录或 Session 失效",
+          "422": {
+            "description": "字段校验错误",
             "content": {
               "application/json": {
                 "schema": {
