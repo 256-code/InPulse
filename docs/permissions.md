@@ -42,7 +42,7 @@
 | 读取 VOID 迭代记录详情 | 401 | 404 | 404 | 404 | 401 | 允许 | `status` 是可见性真相；恢复为 PUBLISHED 后活跃成员重新可读 |
 | 新建或编辑模块、功能、任务、记录、链接 | 401 | 允许 | 404 | 404 | 401 | 允许 | 项目及父级 ACTIVE；写接口默认幂等 |
 | 任务完成、重新打开、取消、恢复、合并、解除，遗留转任务 | 401 | 允许 | 404 | 404 | 401 | 允许 | 状态机、If-Match 与幂等约束 |
-| 搜索 | 401 | 仅本人活跃项目 | 不返回目标项目 | 不返回 | 401 | 按服务端 Scope | SQL 前强制 AuthorizedProjectScope；VOID 默认不返回，仅管理员显式筛选可见；`app_runtime` 只允许 `app` schema USAGE、查询 `search_projection` 及执行 `pgroonga_query_escape`/`&@~` 所需函数，不允许 DDL 或管理函数 |
+| 搜索（`getSearch` · `GET /api/v1/search`） | 401 | 仅本人活跃项目 | 不返回本项目（可搜索其他活跃成员项目） | 不返回本项目（可搜索其他活跃成员项目） | 401 | 按服务端 Scope | SQL 前强制 AuthorizedProjectScope；`q` 最短 2、最长 200，`limit` 1～50、默认 20，`cursor` 按字符串登记（签名/过期语义待 A 评审）；VOID 默认不返回，仅系统管理员显式传 `includeVoid=true` 时可见，普通成员传该参数也不会扩大范围；`app_runtime` 只允许 `app` schema USAGE、查询 `search_projection` 及执行 `pgroonga_query_escape`/`&@~` 所需函数，不允许 DDL 或管理函数 |
 | 通知读取或已读 | 401 | 仅本人 | 仅本人 | 仅本人 | 401 | 仅本人 | 管理员不得代读其他用户通知 |
 | 成员管理 | 401 | 403 | 404 | 404 | 401 | 允许 | 密码与当前 TOTP 重认证；写审计 |
 | 项目、模块或功能归档/恢复 | 401 | 403 | 404 | 404 | 401 | 允许 | 密码与当前 TOTP 重认证；写审计 |

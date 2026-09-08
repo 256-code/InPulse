@@ -1,7 +1,6 @@
 export const MIN_QUERY_LENGTH = 2;
 
-// Phase 0 service guard. The exact API Schema upper bound still needs Route
-// Registry input from A; it must not be described as a frozen API contract.
+// 与 packages/api-contract 的 SearchQueryRequest 保持一致；契约变更必须同步此处。
 export const MAX_QUERY_LENGTH = 200;
 
 export type SearchQueryValidationStatus =

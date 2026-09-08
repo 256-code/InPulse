@@ -8,7 +8,7 @@
 | 接收方 | A 岗 / 平台与访问域，F-11 工程基座与 API 契约平台 |
 | 文档性质 | 契约评审输入，不是 ADR，不替代现有设计 |
 | 状态 | 待 A 评审；确认后应同步 Route Registry、Schema Registry、设计文档、权限矩阵与测试矩阵 |
-| 当前日期 | 2026-09-07 |
+| 当前日期 | 2026-09-08 |
 
 ### 1.1 评审反馈处理记录
 
@@ -189,6 +189,14 @@ type CursorPage<T> = {
 ```
 
 查询参数候选为 `cursor?: string` 与 `limit?: number`，每个接口必须登记最小值、最大值与默认值。该方案作为评审输入，不视为正式契约；如果 A 选择 `page/pageSize` 或 `offset/limit`，需要在本清单与后续设计中明确适用场景，避免同一系统出现三种分页语义。
+
+2026-09-08：C 在 `feature/c-search-api-contract` 按上述候选 envelope 落地了
+`SearchQueryRequest`、`SearchItem`、`SearchPage`、`GET /api/v1/search`
+Route Registry、OpenAPI 与生成客户端，并提供最小 Controller 通过契约
+完整性检查。该分支仍是评审输入，C-006 未解决；A 确认前不得将
+`SearchPage`/`nextCursor`/`hasMore` 描述为正式定案。当前 `cursor` 只按
+字符串登记，服务端签名、校验与过期语义仍受 [FC-061](#47-分页游标轮询与聚合读取)
+约束并待 A 定案。
 
 ### 4.8 C 域功能与生成客户端具体需求
 
