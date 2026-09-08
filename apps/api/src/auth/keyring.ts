@@ -83,7 +83,9 @@ export function parseHmacKeyringFile(
  * 版本化 HMAC keyring（技术设计 §7/保密基线）：`version:hexkey` 每行一项，
  * `#` 行与空行忽略。当前版本由非敏感 selector 选择，缺失/为空/版本不存在
  * 或密钥不足 32 字节时 fail closed；生产路径只允许 `/run/secrets/*`，
- * 不提供敏感环境变量值 fallback。
+ * 不提供敏感环境变量值 fallback。仅当 `NODE_ENV=test` 且显式设置
+ * `SESSION_HASH_KEYRING_TEST_PATH=1` 时允许集成测试读取临时 keyring，
+ * 其他环境即使传入临时路径仍 fail closed。
  */
 export class VersionedHmacKeyring {
   readonly currentVersion: number;
@@ -123,7 +125,10 @@ export class VersionedHmacKeyring {
     if (!fileRaw) {
       throw new Error("SESSION_HASH_KEYRING_FILE is required");
     }
-    if (!fileRaw.startsWith("/run/secrets/")) {
+    const allowTestPath =
+      env["NODE_ENV"] === "test" &&
+      env["SESSION_HASH_KEYRING_TEST_PATH"] === "1";
+    if (!allowTestPath && !fileRaw.startsWith("/run/secrets/")) {
       throw new Error("SESSION_HASH_KEYRING_FILE must be under /run/secrets/");
     }
     const content = readFileSync(fileRaw, "utf8");

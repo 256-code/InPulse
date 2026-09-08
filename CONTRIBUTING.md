@@ -191,7 +191,7 @@ pnpm check:docs
 - `db:migrations:check`：校验迁移文件的顺序、命名与内容哈希一致性；
 - `db:migrate`：以 `MIGRATION_DATABASE_URL`（`app_migrator` 角色）对空库执行 `0000-0005` 显式迁移，需要已安装 PGroonga 的 PostgreSQL 18；
 - `test:integration`：以 `TEST_DATABASE_URL`（`cluster_bootstrap` 角色）对真实 PostgreSQL 验证约束、事务、锁、100 并发审计链、PGroonga bootstrap 与索引、以及数据库角色/权限探针，需要已安装 PGroonga 的 PostgreSQL 18，不得用 mock 替代；
-- `test:search:db`：只运行 `apps/api` 的搜索服务集成测试，需要已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，按既定决定未纳入 CI；
+- `test:search:db`：运行 `apps/api` 的搜索服务层与真实 HTTP API 集成测试，需要已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，按既定决定未纳入 CI；
 - `contract:generate`：由 Schema Registry/Zod 与 Route Registry 生成 OpenAPI 3.1、契约指纹与 TypeScript 客户端，生成物禁止手工修改；
 - `contract:drift`：逐字节比对已提交生成物与 Registry 的生成结果，并拒绝生成目录内出现非生成器产出的文件；
 - `contract:validate`：Route Registry 策略完整性、幂等重放与重放授权策略的字段边界、响应 Schema 一致性以及 Controller operationId 绑定检查；
