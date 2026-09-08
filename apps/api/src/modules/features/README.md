@@ -47,7 +47,8 @@ await this.unitOfWork.run(async (tx) => {
 数据库错误向调用方传播；安全的 HTTP 错误映射和完整业务流程留给外层。
 
 验证：本地 Nest 注入通过，局部 TypeScript 检查通过；本机未配置 TEST_DATABASE_URL，
-未发现 Docker/Podman/psql，真实 PostgreSQL 18 + PGroonga 测试**待 CI 验证**。
+未发现 Docker/Podman/psql，本机未执行数据库测试。提交 `58acbe7` 的 PostgreSQL 18.6 + PGroonga
+[CI 日志](https://github.com/256-code/InPulse/actions/runs/34210258609/job/102009300977?pr=42#step:17:28) 已确认 **6/6 实际通过，334 ms**；待 A/C 人工评审。
 现有集成配置会自动发现以下测试，无需修改 CI：
 
 ```shell
