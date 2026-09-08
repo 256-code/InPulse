@@ -43,8 +43,8 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
          AND u.disabled_at IS NULL
          AND u.status = 'ACTIVE'
          AND u.auth_version = us.auth_version_at_issue
-         AND us.idle_expires_at > ${new Date()}
-         AND us.absolute_expires_at > ${new Date()}
+         AND us.idle_expires_at > now()
+         AND us.absolute_expires_at > now()
        ORDER BY us.id
        LIMIT 1
        FOR UPDATE OF us
