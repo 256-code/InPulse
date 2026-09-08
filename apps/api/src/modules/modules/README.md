@@ -1,6 +1,16 @@
 # Modules 项目初始化 CommandPort
 
 本模块只提供项目初始化中的未分类模块写入，不代表项目创建闭环或模块管理已完成。
+
+当前验证状态：2026-09-08，提交 `e826483` 的
+[CI / workspace](https://github.com/256-code/InPulse/actions/runs/34200874889)
+通过；PostgreSQL 18.6 + PGroonga 隔离库的
+[数据库测试日志](https://github.com/256-code/InPulse/actions/runs/34200874889/job/101979120660?pr=34#step:17:29)
+确认 `modules-command.integration.test.ts` **5/5 实际通过，155 ms**，未使用 Mock。
+CI 通过根级 `pnpm test:integration` 调用 API 的相同 Vitest 集成配置执行该文件。
+本机依然没有数据库环境；下文保留本地失败历史。PR [#34](https://github.com/256-code/InPulse/pull/34)
+已由维护者 `256-code` 合并为 `22c6248`，代理未执行合并。
+
 依据：[ADR-013](../../../../../docs/adr/ADR-013.md)、
 [数据库事务契约](../../../../../database/README.md#功能开发必须遵守的事务契约)。
 
