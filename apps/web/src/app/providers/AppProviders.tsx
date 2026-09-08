@@ -2,12 +2,14 @@ import React, { useMemo } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConfigProvider, type ConfigProviderProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import type { InpulseApiClient } from "@generated/api";
+import { AuthProvider } from "@features/auth/auth-context";
 import { appTheme } from "../theme/theme";
-import { AuthStateProvider } from "../auth/auth-context";
 
 export interface AppProvidersProps {
   readonly children: React.ReactNode;
   readonly queryClient?: QueryClient;
+  readonly authClient?: InpulseApiClient;
 }
 
 export function getCspNonce(): string | undefined {
@@ -21,6 +23,7 @@ export function getCspNonce(): string | undefined {
 export const AppProviders: React.FC<AppProvidersProps> = ({
   children,
   queryClient,
+  authClient,
 }) => {
   const client = useMemo(
     () =>
@@ -51,7 +54,11 @@ export const AppProviders: React.FC<AppProvidersProps> = ({
   return (
     <QueryClientProvider client={client}>
       <ConfigProvider {...configProps}>
-        <AuthStateProvider>{children}</AuthStateProvider>
+        {authClient ? (
+          <AuthProvider client={authClient}>{children}</AuthProvider>
+        ) : (
+          <AuthProvider>{children}</AuthProvider>
+        )}
       </ConfigProvider>
     </QueryClientProvider>
   );

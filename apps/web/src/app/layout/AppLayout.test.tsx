@@ -3,11 +3,33 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { AppLayout } from "./AppLayout";
 
 describe("AppLayout", () => {
+  function renderLayout(ui: React.ReactElement) {
+    return render(
+      <AuthStateProvider
+        value={{
+          status: "authenticated",
+          user: {
+            id: 1,
+            loginName: "developer",
+            name: "开发者 C",
+            email: null,
+            avatarUrl: null,
+            isAdmin: false,
+            status: "ACTIVE",
+          },
+        }}
+      >
+        {ui}
+      </AuthStateProvider>,
+    );
+  }
+
   it("renders the v1.0 workspace shell", () => {
-    render(
+    renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
           <Route path="/" element={<AppLayout />} />
@@ -29,7 +51,7 @@ describe("AppLayout", () => {
 
   it("navigates to a registered workspace route", async () => {
     const user = userEvent.setup();
-    render(
+    renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
           <Route path="/" element={<AppLayout />}>
@@ -46,7 +68,7 @@ describe("AppLayout", () => {
 
   it("navigates to search when a query is submitted from the header", async () => {
     const user = userEvent.setup();
-    render(
+    renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
           <Route path="/" element={<AppLayout />}>

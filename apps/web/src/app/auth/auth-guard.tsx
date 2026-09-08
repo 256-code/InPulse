@@ -1,6 +1,6 @@
 import React from "react";
 import { Spin, Result, Button } from "antd";
-import { useAuth } from "./auth-context";
+import { useAuth } from "@features/auth/auth-context";
 
 export interface RequireAuthProps {
   readonly children: React.ReactElement;
@@ -11,7 +11,7 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({
   children,
   fallback,
 }) => {
-  const { status } = useAuth();
+  const { status, errorMessage } = useAuth();
 
   if (status === "loading") {
     return (
@@ -24,19 +24,23 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({
     );
   }
 
-  if (status === "anonymous") {
+  if (status === "anonymous" || status === "error") {
     if (fallback) {
       return fallback;
     }
     return (
       <div data-testid="auth-anonymous" style={{ padding: 48 }}>
         <Result
-          status="403"
-          title="需要登录"
-          subTitle="访问此页面需要先登录系统。"
+          status={status === "error" ? "500" : "403"}
+          title={status === "error" ? "登录状态异常" : "需要登录"}
+          subTitle={
+            status === "error"
+              ? (errorMessage ?? "无法确认登录状态，请刷新页面后重试。")
+              : "访问此页面需要先登录系统。"
+          }
           extra={
             <Button type="primary" href="/login">
-              前往登录
+              {status === "error" ? "重新登录" : "前往登录"}
             </Button>
           }
         />
@@ -69,7 +73,7 @@ export const RequireAdmin: React.FC<RequireAdminProps> = ({
     );
   }
 
-  if (status !== "authenticated" || !user?.isSystemAdmin) {
+  if (status !== "authenticated" || !user?.isAdmin) {
     if (fallback) {
       return fallback;
     }

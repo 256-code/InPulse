@@ -10,6 +10,7 @@ import {
   type MenuProps,
 } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@features/auth/auth-context";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -65,8 +66,12 @@ export const AppLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchDraft, setSearchDraft] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { status, user, logout } = useAuth();
   const selectedKey = resolveSelectedKey(location.pathname);
   const sectionLabel = resolveSectionLabel(location.pathname);
+  const displayName = user?.name.trim() || "访客";
+  const avatarText = user?.name.trim().charAt(0) || "访";
 
   useEffect(() => {
     if (location.pathname === "/search") {
@@ -91,6 +96,24 @@ export const AppLayout: React.FC = () => {
         ? "/search?" + new URLSearchParams({ q: query }).toString()
         : "/search",
     );
+  };
+
+  const handleAccountAction = async () => {
+    if (status !== "authenticated") {
+      navigate("/login");
+      return;
+    }
+    setIsLoggingOut(true);
+    try {
+      const loggedOut = await logout()
+        .then(() => true)
+        .catch(() => false);
+      if (loggedOut) {
+        navigate("/");
+      }
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -213,14 +236,14 @@ export const AppLayout: React.FC = () => {
                 background: "#286887",
               }}
             >
-              访
+              {avatarText}
             </Avatar>
             <div style={{ minWidth: 0, flex: 1 }}>
               <Text
                 strong
                 style={{ display: "block", color: "#f4f8fb", fontSize: 12 }}
               >
-                访客
+                {displayName}
               </Text>
               <Text
                 style={{
@@ -230,12 +253,30 @@ export const AppLayout: React.FC = () => {
                   fontSize: 10,
                 }}
               >
-                登录态待接入
+                {status === "loading"
+                  ? "正在验证..."
+                  : status === "error"
+                    ? "登录状态异常"
+                    : status === "authenticated"
+                      ? "已登录"
+                      : "未登录"}
               </Text>
             </div>
-            <Text style={{ color: "#7190aa" }} aria-hidden="true">
-              ···
-            </Text>
+            <Button
+              type="text"
+              aria-label={status === "authenticated" ? "退出登录" : "登录"}
+              loading={isLoggingOut}
+              onClick={() => void handleAccountAction()}
+              style={{
+                minWidth: 0,
+                height: "auto",
+                padding: 0,
+                color: "#7190aa",
+                fontSize: 11,
+              }}
+            >
+              {status === "authenticated" ? "退出" : "登录"}
+            </Button>
           </div>
         </div>
       </Sider>
@@ -296,7 +337,7 @@ export const AppLayout: React.FC = () => {
               </Button>
             </Badge>
             <Avatar style={{ color: "#2364aa", background: "#dcecff" }}>
-              访
+              {avatarText}
             </Avatar>
           </div>
         </Header>
