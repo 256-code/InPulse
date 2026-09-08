@@ -1,6 +1,3 @@
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
-
-import { users, userSessions } from "@inpulse/database";
 import type { TransactionContext } from "../database/transaction-context.js";
 
 export interface ValidUserSession {
@@ -32,30 +29,26 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
     if (tokenHashes.length === 0) {
       return undefined;
     }
-    const rows = await tx.db
-      .select({
-        id: userSessions.id,
-        userId: userSessions.userId,
-        authVersionAtIssue: userSessions.authVersionAtIssue,
-        authState: userSessions.authState,
-        idleExpiresAt: userSessions.idleExpiresAt,
-        absoluteExpiresAt: userSessions.absoluteExpiresAt,
-      })
-      .from(userSessions)
-      .innerJoin(users, eq(userSessions.userId, users.id))
-      .where(
-        and(
-          inArray(userSessions.tokenHash, tokenHashes),
-          isNull(userSessions.revokedAt),
-          isNull(users.disabledAt),
-          eq(users.status, "ACTIVE"),
-          eq(users.authVersion, userSessions.authVersionAtIssue),
-          gt(userSessions.idleExpiresAt, new Date()),
-          gt(userSessions.absoluteExpiresAt, new Date()),
-        ),
-      )
-      .for("update", { of: userSessions })
-      .limit(1);
+    const rows = (await tx.sql`
+      SELECT us.id,
+             us.user_id AS "userId",
+             us.auth_version_at_issue AS "authVersionAtIssue",
+             us.auth_state AS "authState",
+             us.idle_expires_at AS "idleExpiresAt",
+             us.absolute_expires_at AS "absoluteExpiresAt"
+        FROM app.user_sessions AS us
+        JOIN app.users AS u ON u.id = us.user_id
+       WHERE us.token_hash IN ${tx.sql(tokenHashes)}
+         AND us.revoked_at IS NULL
+         AND u.disabled_at IS NULL
+         AND u.status = 'ACTIVE'
+         AND u.auth_version = us.auth_version_at_issue
+         AND us.idle_expires_at > ${new Date()}
+         AND us.absolute_expires_at > ${new Date()}
+       ORDER BY us.id
+       LIMIT 1
+       FOR UPDATE OF us
+    `) as unknown as readonly ValidUserSession[];
     const row = rows[0];
     return row === undefined ? undefined : { ...row };
   }
