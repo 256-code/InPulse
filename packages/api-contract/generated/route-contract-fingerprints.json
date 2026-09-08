@@ -1,1 +1,20 @@
-{}
+{
+  "readAllNotifications": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "d9393b518711c273ef17f7a37f641fc53a7e4c6eb3bc831dc41f8d6d35eed66f"
+    }
+  ],
+  "readNotification": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "5064ce2f8ab19b8845a3ca9e887ffd21ef7fa3ee502695a21be61014daa8cafb"
+    }
+  ],
+  "unreadNotification": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "981d030378c6f75bde97cea9cd8844b39a90fca53c0c4c979aa745913ec9c7db"
+    }
+  ]
+}

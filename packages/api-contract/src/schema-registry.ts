@@ -12,6 +12,20 @@ import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
 import {
+  activityItemSchema,
+  activityPageSchema,
+  activityPathSchema,
+  activityQueryRequestSchema,
+} from "./contracts/activity.zod.js";
+import {
+  notificationItemSchema,
+  notificationPageSchema,
+  notificationPathSchema,
+  notificationQueryRequestSchema,
+  notificationReplayContextSchema,
+  notificationUnreadCountResponseSchema,
+} from "./contracts/notification.zod.js";
+import {
   searchItemSchema,
   searchPageSchema,
   searchQueryRequestSchema,
@@ -81,6 +95,57 @@ export const schemaRegistry = {
   SearchPage: {
     schema: searchPageSchema,
     summary: "全局搜索分页结果",
+    sensitiveFieldPaths: [],
+  },
+  ActivityPath: {
+    schema: activityPathSchema,
+    summary: "项目动态路径参数",
+    sensitiveFieldPaths: [],
+  },
+  ActivityQueryRequest: {
+    schema: activityQueryRequestSchema,
+    summary:
+      "项目动态查询参数；includeAdminOnly 仅系统管理员显式开启时扩大服务端范围",
+    sensitiveFieldPaths: [],
+  },
+  ActivityItem: {
+    schema: activityItemSchema,
+    summary: "项目动态白名单条目，不包含原始审计快照",
+    sensitiveFieldPaths: [],
+  },
+  ActivityPage: {
+    schema: activityPageSchema,
+    summary: "项目动态分页结果",
+    sensitiveFieldPaths: [],
+  },
+  NotificationPath: {
+    schema: notificationPathSchema,
+    summary: "站内通知路径参数",
+    sensitiveFieldPaths: [],
+  },
+  NotificationQueryRequest: {
+    schema: notificationQueryRequestSchema,
+    summary: "当前用户通知列表查询参数",
+    sensitiveFieldPaths: [],
+  },
+  NotificationItem: {
+    schema: notificationItemSchema,
+    summary: "当前用户的一条站内通知",
+    sensitiveFieldPaths: [],
+  },
+  NotificationPage: {
+    schema: notificationPageSchema,
+    summary: "当前用户通知分页结果",
+    sensitiveFieldPaths: [],
+  },
+  NotificationUnreadCountResponse: {
+    schema: notificationUnreadCountResponseSchema,
+    summary: "当前用户未读通知数",
+    sensitiveFieldPaths: [],
+  },
+  NotificationReplayContext: {
+    schema: notificationReplayContextSchema,
+    summary: "单条通知写操作的最小重放授权上下文",
     sensitiveFieldPaths: [],
   },
   UserAuthState: {

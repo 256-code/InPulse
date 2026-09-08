@@ -20,6 +20,7 @@ import {
 import { assertIdempotencyResponsePolicy } from "./response-policy.js";
 import {
   type ReplayAuthorizer,
+  type IdempotencyActorResolver,
   type IdempotencyExecutionResult,
   IdempotencyRunner,
 } from "./runner.js";
@@ -33,12 +34,16 @@ export interface HmacKeyProvider {
 
 export interface IdempotencyHttpCommand {
   readonly operationId: string;
-  readonly actorId: number;
+  readonly actorId: number | IdempotencyActorResolver;
   readonly request: IdempotencyHttpRequest;
   readonly execute: (
     tx: TransactionContext,
+    actorId: number,
   ) => Promise<IdempotencyExecutionResult>;
-  readonly replayAuthorizer?: ReplayAuthorizer;
+  readonly replayAuthorizer?: (
+    record: IdempotencyRecord,
+    tx: TransactionContext,
+  ) => Promise<void>;
 }
 
 export interface IdempotencyHttpResult {
@@ -142,8 +147,8 @@ export class IdempotencyHttpService {
         replayPolicyVersion: route.idempotencyReplayPolicy.version,
         replayAuthPolicyVersion: route.replayAuthorizationPolicy.version,
       },
-      execute: async (tx) => {
-        const result = await input.execute(tx);
+      execute: async (tx, actorId) => {
+        const result = await input.execute(tx, actorId);
         assertIdempotencyResponsePolicy(route, result);
         return result;
       },

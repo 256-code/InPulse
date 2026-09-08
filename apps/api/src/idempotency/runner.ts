@@ -37,7 +37,14 @@ export interface IdempotencyExecutionResult {
  * 当前可读权限以及该路由要求的高风险重认证新鲜度；任一门禁失败应抛错，
  * 此时不得向客户端泄露已存状态码或响应体。
  */
-export type ReplayAuthorizer = (record: IdempotencyRecord) => Promise<void>;
+export type ReplayAuthorizer = (
+  record: IdempotencyRecord,
+  tx: TransactionContext,
+) => Promise<void>;
+
+export type IdempotencyActorResolver = (
+  tx: TransactionContext,
+) => Promise<number>;
 
 export type IdempotencyConflictReason =
   "hash" | "contract-version" | "key-version" | "in-progress";
@@ -51,10 +58,11 @@ export type IdempotencyOutcome =
     };
 
 export interface RunIdempotencyCommand {
-  readonly actorId: number;
+  readonly actorId: number | IdempotencyActorResolver;
   readonly command: IdempotencyCommand;
   readonly execute: (
     tx: TransactionContext,
+    actorId: number,
   ) => Promise<IdempotencyExecutionResult>;
   readonly replayAuthorizer?: ReplayAuthorizer;
 }
@@ -78,8 +86,12 @@ export class IdempotencyRunner {
 
   run(input: RunIdempotencyCommand): Promise<IdempotencyOutcome> {
     return this.unitOfWork.run(async (tx) => {
+      const actorId =
+        typeof input.actorId === "function"
+          ? await input.actorId(tx)
+          : input.actorId;
       const inserted = await this.store.insertPending(tx, {
-        actorId: input.actorId,
+        actorId,
         operationId: input.command.operationId,
         idempotencyKey: input.command.idempotencyKey,
         idempotencyContractVersion: input.command.idempotencyContractVersion,
@@ -89,18 +101,19 @@ export class IdempotencyRunner {
       });
 
       if (inserted !== undefined) {
-        return this.executeAndPersist(tx, input);
+        return this.executeAndPersist(tx, input, actorId);
       }
 
-      return this.resolveConflict(tx, input);
+      return this.resolveConflict(tx, input, actorId);
     });
   }
 
   private async executeAndPersist(
     tx: TransactionContext,
     input: RunIdempotencyCommand,
+    actorId: number,
   ): Promise<IdempotencyOutcome> {
-    const result = await input.execute(tx);
+    const result = await input.execute(tx, actorId);
     const success: IdempotencySuccess = {
       responseStatus: result.responseStatus,
       responseSchemaRef: result.responseSchemaRef,
@@ -114,7 +127,7 @@ export class IdempotencyRunner {
 
     const updated = await this.store.markSucceeded(
       tx,
-      input.actorId,
+      actorId,
       input.command.operationId,
       input.command.idempotencyKey,
       success,
@@ -130,10 +143,11 @@ export class IdempotencyRunner {
   private async resolveConflict(
     tx: TransactionContext,
     input: RunIdempotencyCommand,
+    actorId: number,
   ): Promise<IdempotencyOutcome> {
     const existing = await this.store.find(
       tx,
-      input.actorId,
+      actorId,
       input.command.operationId,
       input.command.idempotencyKey,
     );
@@ -171,7 +185,7 @@ export class IdempotencyRunner {
     }
 
     if (input.replayAuthorizer !== undefined) {
-      await input.replayAuthorizer(existing);
+      await input.replayAuthorizer(existing, tx);
     }
     return { kind: "replayed", record: existing };
   }
