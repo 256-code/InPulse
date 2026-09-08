@@ -201,6 +201,8 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 
 2026-09-08：C 在 `codex/c-search-page` 完成搜索页面最小纵切片：`features/search` 通过生成客户端 `getSearch` 消费 `SearchPage`，页面路由 `/search` 与顶部全局搜索框接入 `q`，使用 `useInfiniteQuery` + `nextCursor` 分页；不增加未登记筛选参数，不解析 `cursor` 内部内容。真实登录流程尚未接入，因此页面先以 401 状态提示登录，路由暂不声明 `requiresAuth`，避免未接入的守卫阻断页面。
 
+2026-09-08：C 在 `dev/c` 工作区继续接入真实认证：`features/auth` 的 `AuthProvider` 在挂载时通过生成客户端调用 `getCurrentUser`，匿名时调用 `issueCsrfToken`；登录先签发 CSRF 再调用 `login`，完整登录后刷新当前用户；登出同样先签发 CSRF 再调用 `logout`。新增 `/login` 登录页、AppLayout 用户入口，并将 `/search` 声明为 `requiresAuth`。管理员/普通用户产生的三种 MFA 返回态只显示“尚未接入”提示，不会被当作已认证；真实 HTTP 与 Playwright E2E 仍未执行，当前仅为本地单测验证。
+
 ### 4.8 C 域功能与生成客户端具体需求
 
 | 功能 | C 的消费场景 | 对 A/B 契约的评审要求 |

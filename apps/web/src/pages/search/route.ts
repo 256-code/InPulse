@@ -6,7 +6,7 @@ const SearchPage = lazy(() => import("./SearchPage"));
 export const searchRoute: AppRouteModule = {
   path: "/search",
   element: SearchPage,
-  requiresAuth: false,
+  requiresAuth: true,
 };
 
 export default searchRoute;
