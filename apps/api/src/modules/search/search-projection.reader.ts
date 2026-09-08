@@ -1,6 +1,8 @@
 import type { Sql } from "postgres";
 
-export type SearchProjectionVisibilityScope = "MEMBER" | "ADMIN_ONLY";
+import type { SearchProjectionVisibilityScope } from "./search-projection.types.js";
+
+export type { SearchProjectionVisibilityScope } from "./search-projection.types.js";
 
 export interface SearchProjectionReadInput {
   readonly normalizedQuery: string;

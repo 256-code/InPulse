@@ -150,6 +150,7 @@
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
 | SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 仍为 Required；本次改动尚未在 GitHub Actions 执行） |
+| SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；GitHub Actions 待执行） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
 > 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入、
@@ -178,7 +179,13 @@
 > PostgreSQL 验证 401/422/200、成员 Scope、跨项目隔离、ADMIN_ONLY/HIDDEN、
 > 签名游标分页和停用用户失效；本地 `pnpm --filter @inpulse/api test:search:db`
 > 为 2 个文件 16 例通过，`pnpm --filter @inpulse/api test:integration` 为
-> 12 个文件 54 例通过。C 已本地完成搜索页面与前端认证最小纵切片，前端单测覆盖查询、签名游标分页、短词与 401 错误、认证上下文、登录与登出；仍缺少 Playwright E2E 和生产备份恢复纵切片。
+> 14 个文件 60 例通过。C 已本地完成搜索页面与前端认证最小纵切片，前端单测覆盖查询、签名游标分页、短词与 401 错误、认证上下文、登录与登出；仍缺少 Playwright E2E 和生产备份恢复纵切片。
+> 2026-09-08 新增 `SearchProjectionWritePort`：独立 `SearchProjectionModule`、
+> PostgreSQL upsert 适配器、输入校验、NFKC/大小写/空白/标点规范化和
+> `source_row_version` 防旧写；模块注入单测与真实 PostgreSQL 4 例已本地通过。
+> 本次非数据库门禁已在本地通过：lint、格式、全 workspace typecheck、单元测试、
+> 迁移/契约检查、构建、依赖边界、权限矩阵、Secret 与文档检查；`deps:audit`
+> 因本地 npm 镜像无 audit endpoint，改用公共 registry 验证为无漏洞。GitHub Actions 尚未执行。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
