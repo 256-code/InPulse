@@ -196,3 +196,18 @@
 - 修复竞态时必须保留能在真实 PostgreSQL 上复现旧缺陷的测试。
 - 不得用 mock 数据库替代锁、唯一约束、迁移或事务测试。
 - PR 中只报告实际执行过的测试；尚未具备运行条件的条目标记为 `Required`，不得写成通过。
+## ModuleQueryPort / FeatureQueryPort 写前检查增量（2026-09-08）
+
+本节仅记录事务内写前检查，不代表 CRUD、HTTP 或归档流程已完成。
+
+| 场景 | 自动化入口 | 验证状态 |
+|---|---|---|
+| 两域活跃返回 ID/归属/状态/版本；归档返回 parent-not-active 摘要 | `apps/api/test/write-query-ports.integration.test.ts`，两域各 1 个结果用例 | 已编写，真实数据库待 CI 验证 |
+| 两域不存在、项目归属不匹配；功能模块归属不匹配；归档但归属错误不泄露 | 同上，使用精确结果断言 | 已编写，真实数据库待 CI 验证 |
+| 两域 FOR SHARE 阻塞另一连接的归档 UPDATE，提交后释放 | 同上，两域各 1 个提交用例，检查 pg_blocking_pids 与最终状态/版本 | 已编写，真实数据库待 CI 验证 |
+| 两域 FOR SHARE 阻塞归档 UPDATE，回滚后释放 | 同上，两域各 1 个回滚用例 | 已编写，真实数据库待 CI 验证 |
+| Nest 独立模块解析两个公开 token；原 CommandPort 注入回归 | `write-query-ports.test.ts`、`modules-module.test.ts` | 本地 2/2 通过 |
+
+集成文件共 6 个用例，只允许在 PostgreSQL 18 + PGroonga 隔离库执行。
+本机缺少测试库，未执行；Nest 测试不替代真实事务和锁验证。
+接入及待执行命令见 [FeatureQueryPort 说明](../apps/api/src/modules/features/README.md)。

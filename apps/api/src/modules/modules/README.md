@@ -1,6 +1,35 @@
 # Modules 项目初始化 CommandPort
 
-本模块只提供项目初始化中的未分类模块写入，不代表项目创建闭环或模块管理已完成。
+本模块提供项目初始化中的未分类模块写入，以及事务内模块写前检查，不代表项目创建闭环或模块管理已完成。
+
+## 事务内 ModuleQueryPort（本地实现，数据库待 CI 验证）
+
+公开入口 `./index.ts` 导出 `ModuleQueryPort`、`CheckModuleForWriteInput`、
+`ModuleForWriteResource`、`ModuleWriteCheckResult`；`ModulesModule` 导出抽象类注入 token。
+调用方在 Nest imports 中加入 `ModulesModule`，使用 `@Inject(ModuleQueryPort)` 注入。
+
+```typescript
+checkModuleForWrite(
+  tx: TransactionContext,
+  input: { projectId: number; moduleId: number },
+): Promise<ModuleWriteCheckResult>;
+```
+
+结果为 `{ kind: 'allowed', resource }`、`{ kind: 'not-found' }` 或
+`{ kind: 'parent-not-active', resource }`。摘要仅含 `moduleId`、`projectId`、
+`status: 'ACTIVE' | 'ARCHIVED'`、`rowVersion`，ID 与版本沿用 Schema 的 integer/number。
+不存在或项目归属不匹配时不返回摘要；归属正确且已归档时返回 parent-not-active。
+
+适配器只查询 `app.modules`，按 ID 与项目归属取得 `FOR SHARE` 后判断状态；
+锁随调用方事务提交或回滚释放。无事务创建、全局 Client、认证或成员查询。
+数据库错误原样向事务调用方传播，由外层决定安全的 HTTP 映射，禁止泄露数据库错误文本。
+此接口只用于事务内写前检查，不能用于普通详情读取或归档（归档需要 FOR UPDATE）。
+调用方必须先通过 A 的身份解析和项目授权，按项目 → 模块 → 功能顺序持锁；
+多资源同层按 ID 升序，任一步非 allowed 必须停止后续业务写入。
+
+完整调用顺序见 [FeatureQueryPort 接入说明](../features/README.md)。
+新增 `write-query-ports.integration.test.ts` 的 6 个真实数据库用例待 CI 执行，
+不沿用下方旧 CommandPort 的 5/5 结果。本地 Nest 注入验证已通过。
 
 当前验证状态：2026-09-08，提交 `e826483` 的
 [CI / workspace](https://github.com/256-code/InPulse/actions/runs/34200874889)
