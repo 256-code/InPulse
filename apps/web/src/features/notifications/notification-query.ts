@@ -1,0 +1,121 @@
+import { useMemo } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  ApiError,
+  createApiClient,
+  type InpulseApiClient,
+} from "@generated/api";
+
+export const NOTIFICATION_PAGE_LIMIT = 20;
+export const NOTIFICATION_POLL_INTERVAL_MS = 30_000;
+
+export type NotificationFilter = "all" | "unread";
+
+export type NotificationAction =
+  | { readonly kind: "read"; readonly notificationId: number }
+  | { readonly kind: "unread"; readonly notificationId: number }
+  | { readonly kind: "readAll" };
+
+export interface NotificationQueryOptions {
+  readonly client?: InpulseApiClient | undefined;
+  readonly enabled?: boolean;
+  readonly limit?: number;
+}
+
+export interface NotificationListOptions extends NotificationQueryOptions {
+  readonly filter: NotificationFilter;
+}
+
+export function createIdempotencyKey(scope: string): string {
+  const randomId =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${scope}-${randomId}`;
+}
+
+export function describeNotificationError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录状态已失效，请重新登录后再查看通知。";
+    }
+    if (error.status === 404) {
+      return "通知不存在或已不可访问。";
+    }
+    if (error.status === 409) {
+      return "通知状态已变化或请求已被其他操作占用，请刷新后重试。";
+    }
+  }
+  return "通知服务暂时不可用，请稍后重试。";
+}
+
+export function useNotificationUnreadCount({
+  client,
+  enabled = true,
+}: NotificationQueryOptions) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  return useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: async () => {
+      const result = await apiClient.getNotificationUnreadCount();
+      return result.unreadCount;
+    },
+    enabled,
+    refetchInterval: NOTIFICATION_POLL_INTERVAL_MS,
+    staleTime: NOTIFICATION_POLL_INTERVAL_MS / 2,
+  });
+}
+
+export function useNotificationsInfiniteQuery({
+  client,
+  filter,
+  limit = NOTIFICATION_PAGE_LIMIT,
+}: NotificationListOptions) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  return useInfiniteQuery({
+    queryKey: ["notifications", "list", filter, limit],
+    queryFn: ({ pageParam, signal }) =>
+      apiClient.getNotifications(
+        {
+          ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
+          ...(filter === "unread" ? { unreadOnly: true } : {}),
+          limit,
+        },
+        signal ? { signal } : undefined,
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextCursor : undefined,
+  });
+}
+
+export function useNotificationActions({ client }: NotificationQueryOptions) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (action: NotificationAction) => {
+      const csrf = await apiClient.issueCsrfToken();
+      const headers = {
+        "x-csrf-token": csrf.csrfToken,
+        "Idempotency-Key": createIdempotencyKey(`notification-${action.kind}`),
+      };
+      if (action.kind === "read") {
+        await apiClient.readNotification(action.notificationId, { headers });
+        return;
+      }
+      if (action.kind === "unread") {
+        await apiClient.unreadNotification(action.notificationId, { headers });
+        return;
+      }
+      await apiClient.readAllNotifications({ headers });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}

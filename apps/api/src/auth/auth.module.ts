@@ -7,6 +7,7 @@ import { PostgresAuthRateLimitRepository } from "./auth-rate-limit.repository.js
 import { CsrfController } from "./csrf.controller.js";
 import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
+import { AuthenticatedMutationService } from "./authenticated-mutation.service.js";
 import { LoginController } from "./login.controller.js";
 import { LoginService } from "./login.service.js";
 import { LogoutController } from "./logout.controller.js";
@@ -54,6 +55,7 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
     LogoutService,
     MeService,
     SessionAuthService,
+    AuthenticatedMutationService,
     RequireReauthGuard,
     UserAuthInvalidationService,
     PostgresUserProfileRepository,
@@ -80,6 +82,7 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
     LogoutService,
     MeService,
     SessionAuthService,
+    AuthenticatedMutationService,
     RequireReauthGuard,
     UserAuthInvalidationService,
   ],

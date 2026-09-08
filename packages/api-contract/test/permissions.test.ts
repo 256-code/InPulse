@@ -141,6 +141,23 @@ export class HealthController {
     ]);
   });
 
+  test("把 Nest 冒号路径参数归一化为 Registry 花括号形式", () => {
+    const parsed = parseControllerSource(
+      [
+        'import { Controller, Get } from "@nestjs/common";',
+        '@Controller("projects")',
+        "export class ActivityController {",
+        '  @Get(":projectId/activity")',
+        "  list(): void {}",
+        "}",
+      ].join("\n"),
+      "activity.controller.ts",
+    );
+
+    expect(parsed.failures).toEqual([]);
+    expect(parsed.bindings[0]?.path).toBe("/projects/{projectId}/activity");
+  });
+
   test("无法解析的装饰器参数必须失败", () => {
     const parsed = parseControllerSource(
       "@Controller(dynamicPrefix)\nexport class X {\n  @Get()\n  a() {}\n}\n",
@@ -169,6 +186,12 @@ export class HealthController {
       "GET /api/v1/health",
       "GET /api/v1/health/live",
       "GET /api/v1/health/ready",
+      "GET /api/v1/projects/{projectId}/activity",
+      "GET /api/v1/notifications",
+      "GET /api/v1/notifications/unread-count",
+      "POST /api/v1/notifications/{notificationId}/read",
+      "POST /api/v1/notifications/{notificationId}/unread",
+      "POST /api/v1/notifications/read-all",
       "GET /api/v1/search",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);

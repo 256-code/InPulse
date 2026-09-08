@@ -24,9 +24,11 @@
 | 错误 `details` | 采纳为公共基础 + 判别联合 | 避免所有错误强制复杂结构，也不退化为 `Record<string, unknown>` |
 | CSRF 错误码 | 采纳为候选 `403 + CSRF_TOKEN_INVALID` | 当前错误模型没有 419；具体状态仍需 A 确认 |
 | 分页规范 | A 已正式确认 `cursor + limit`（2026-09-08） | 已作为 `getSearch` 的正式分页契约进入 Route Registry |
-| 通知/概览等候选接口 | 采纳为建议接口清单 | 当前仍是评审输入，不视为已冻结路由 |
+| 通知/概览等候选接口 | 采纳为建议接口清单 | F-27/F-28 已于 2026-09-08 落库；项目概览、任务聚合、我的任务仍为评审输入 |
 | 文档末尾被截断 | 检查原文件 | 正文已包含 FC-070～FC-074，无需补写 |
 | 评审状态字段 | 采用默认“待确认”+ 汇总追踪规则 | 避免在 51 条需求表中重复空状态；A 可按编号批注 |
+
+2026-09-08：C 在 `codex/c-activity-notifications` 将 F-27/F-28 的读取、未读数与已读/未读/全部已读路由写入 Schema Registry、Route Registry，并生成 OpenAPI 与前端客户端；通知写路由登记 `csrfPolicy=required`、`idempotencyRequired` 和重放授权策略。活动/通知业务事件尚未由项目创建、任务完成、记录作废/恢复等 Workflow 生产，当前仅完成读写端口与页面纵切片。
 
 ## 2. 范围与非目标
 
@@ -211,21 +213,28 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | F-24 解除合并 | 提交成员 ID、解除原因；触发二次确认 | 更新接口必须带 `If-Match`/rowVersion 或等价并发控制；状态和版本冲突要有明确错误码 |
 | F-25 聚合组视图 | 展示主/来源任务、来源状态、迭代记录与 GitHub 链接，支持按分支筛选 | 建议提供 `GET /task-groups/{id}` 或等价聚合读接口；若由 C 组合多个读接口，必须有稳定的 QueryPort 契约且避免 N+1 |
 | F-26 全局搜索 | 按类别展示功能/任务/记录/遗留问题，支持筛选和分页 | 搜索响应需保留 `entityType` 判别字段、权限过滤结果、分页与空结果语义；不能返回数据库内部表结构 |
-| F-27 项目动态 | 时间线展示脱敏活动、加载更多 | 返回值需包含事件类型、实体类型/ID、时间、项目 Scope 和可安全展示的摘要；不能包含原始审计快照 |
-| F-28 站内通知 | 铃铛未读数、列表、点击跳转、轮询、已读/未读 | 当前核心接口表只列了 `GET /notifications`，缺少已读/未读、未读数、标记已读等路由；需要补齐并明确幂等与并发行为 |
+| F-27 项目动态 | 时间线展示脱敏活动、加载更多 | 已落库 `GET /projects/{projectId}/activity`；返回值包含事件类型、实体类型/ID、时间、项目 Scope 和可安全展示的摘要，不包含原始审计快照 |
+| F-28 站内通知 | 铃铛未读数、列表、点击跳转、轮询、已读/未读 | 列表、未读数、单条已读/未读与全部已读路由已落库；三个 POST 均登记 CSRF、幂等与重放授权策略 |
 | F-29 项目概览 | 统计卡片、最近迭代、遗留问题入口 | 需要服务端聚合响应，避免前端跨域拼装；统计口径与功能设计 §29 一致 |
 | F-32 我的任务 | 跨项目列表、状态/范围/是否有记录/负责人等筛选 | 当前设计未明确列出路由与响应 DTO；需用明确的 `GET /me/tasks` 或等价服务端查询，禁止前端按项目请求后合并 |
 
-#### 4.8.1 建议候选接口清单（未冻结）
+#### 4.8.1 接口清单与候选接口（F-27/F-28 已落库，F-25/F-29/F-32 待确认）
 
-以下路由只用于契约评审，必须在 A 完成评审并写入 Route Registry 后才可视为正式接口。
+已落库路由（2026-09-08）：
+
+| 路由 | 用途 | 备注与待确认项 |
+| --- | --- | --- |
+| `GET /api/v1/projects/{projectId}/activity` | 项目动态时间线 | 已落库；只读 `MEMBER`，系统管理员可用 `includeAdminOnly` 显式包含 `ADMIN_ONLY` |
+| `GET /api/v1/notifications` | 当前用户通知列表与轮询 | 已落库；使用 cursor/limit；只能返回当前用户 |
+| `GET /api/v1/notifications/unread-count` | 铃铛未读数 | 已落库；只返回当前用户；不实现管理员代读 |
+| `POST /api/v1/notifications/{notificationId}/read` | 标记单条已读 | 已落库；登记 `idempotencyRequired`，重复结果可安全重放 |
+| `POST /api/v1/notifications/{notificationId}/unread` | 标记单条未读 | 已落库；登记 `idempotencyRequired` |
+| `POST /api/v1/notifications/read-all` | 标记当前用户全部已读 | 已落库；禁止客户端传 `recipientId`；登记 `idempotencyRequired` |
+
+以下仍为候选，等待 A 确认后再进入正式契约：
 
 | 候选路由 | 用途 | 备注与待确认项 |
 | --- | --- | --- |
-| `GET /api/v1/notifications` | 当前用户通知列表与轮询 | 使用 cursor/limit；只能返回当前用户 |
-| `GET /api/v1/notifications/unread-count` | 铃铛未读数 | 只返回当前用户；不实现管理员代读 |
-| `POST /api/v1/notifications/{notificationId}/read` | 标记单条已读 | 重复标记需可安全重放；是否登记 `idempotencyRequired` 由 A确认，不能因“天然幂等”隐式豁免 |
-| `POST /api/v1/notifications/read-all` | 标记当前用户全部已读 | 禁止客户端传 `recipientId`；同样需显式登记并发与幂等策略 |
 | `GET /api/v1/projects/{projectId}/overview` | 项目概览聚合 | 候选归属 C；C 只能通过 A 的 `ProjectAccessQueryPort` 与 B 的公开 QueryPort 或 C 拥有的投影实现，禁止访问 B Repository |
 | `GET /api/v1/task-groups/{groupId}` | 任务聚合组详情 | 候选归属需 A/B 确认；如果由 B 提供 QueryPort，C 不得直接访问 B Repository |
 | `GET /api/v1/me/tasks` | “我的任务”跨项目列表 | 候选归属需 A/B 确认；服务端必须按成员关系过滤，禁止前端按项目合并 |
@@ -259,7 +268,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | 编号 | 冲突/缺口 | 依据 | 建议裁决方向 |
 | --- | --- | --- | --- |
 | C-001 | 生成客户端输出位置冲突 | `技术设计 v1.2.2` 仓库结构在 `packages/api-contract` 写“客户端”；`系统设计文档 v1.0.2` 与 `CONTRIBUTING.md` 指定 `apps/web/src/generated/api/` | 建议以 `apps/web/src/generated/api/` 为前端唯一生成产物，`packages/api-contract` 只保留 Schema/Route Registry 与生成脚本配置；若改共享包需同步所有文档 |
-| C-002 | 通知已读/未读接口缺口 | `功能设计 v1.1` §25.3、F-28 有“已读/未读与未读数”；`系统设计文档 v1.0.2` 核心接口表只列 `GET /notifications` | 应定义 `POST /notifications/{id}/read`、`POST /notifications/read-all` 或等价操作，并登记幂等与并发策略 |
+| C-002 | 通知已读/未读接口缺口 | `功能设计 v1.1` §25.3、F-28 有“已读/未读与未读数”；`系统设计文档 v1.0.2` 核心接口表只列 `GET /notifications` | 已关闭：C 已于 2026-09-08 将列表、未读数、单条已读/未读与全部已读写入 Route Registry，并登记 CSRF、幂等和重放授权策略 |
 | C-003 | 聚合接口缺口 | F-25、F-29、F-32 均需要服务端聚合/跨项目读取；核心接口表未列出 `task-group` 聚合详情、项目概览、我的任务 | 明确稳定路由与服务端聚合边界，避免 C 在前端逐项拼接 |
 | C-004 | 错误 `details` 结构未定 | 技术设计统一错误模型只给出 `{ code, message, details, requestId }`，未定义 `details` 的具体 Schema；422/409/429/重认证场景需要前端消费 | 为公共错误类别定义稳定 `details` 联合，并在 Route Registry 中按需给出每个错误响应的 Schema ref |
 | C-005 | CSRF 失败识别未定 | ADR-015 要求“客户端仅在服务端明确表示 CSRF 校验失败时重签”，但错误模型未给出专用错误码 | 应定义稳定 `CSRF_INVALID` 或等价机器可读错误码，并避免把 CSRF 失败与普通 403 权限错误混用 |
@@ -267,7 +276,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | C-007 | 生成客户端运行时校验策略未定 | 技术设计要求服务端校验，但未规定生成客户端是否对响应做运行时 Zod 校验 | 需决定生成客户端只做类型映射还是运行时校验；若运行时校验，失败需映射为独立错误且不得暴露内部细节 |
 | C-008 | `message` 的用户交互语义未定 | 错误模型包含 `message`，但前端逻辑应基于 `code` | 明确 `message` 是用户可展示文案还是仅诊断信息；前端不得依赖文案字符串 |
 | C-009 | ID 类型已按正式基线确认 | 当前[技术设计 V1.2.2](../技术设计v1.2.2.md)、数据库 Schema 与迁移均采用 `INTEGER IDENTITY` | 维持 `number`，不引入额外 ID 类型方案；如未来调整主键类型，必须先走 ADR，并同步迁移、代码、权限矩阵与测试矩阵 |
-| C-010 | 候选接口尚未冻结 | 本清单新增的通知已读、项目概览、任务聚合详情、我的任务路径尚未进入正式契约 | 在 A 写入 Schema Registry/Route Registry 前，所有候选路径、字段和 operationId 均不能作为实现依据 |
+| C-010 | 候选接口尚未冻结 | 通知/动态已落库；项目概览、任务聚合详情、我的任务路径尚未进入正式契约 | 部分关闭：F-27/F-28 已进入 Route Registry；F-25/F-29/F-32 仍待 A 确认，未落库前不能作为实现依据 |
 
 ### 6.1 评审状态填写规则
 
@@ -293,7 +302,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 3. 生成客户端是否执行响应运行时校验？若执行，校验失败如何处理？
 4. 错误响应是否按“公共错误模型 + 每路由错误 Schema”组织？`details` 的基准结构是什么？
 5. CSRF 失败、重认证过期、幂等契约版本冲突、版本冲突、状态冲突分别使用哪些稳定错误码？
-6. 列表/游标 envelope、通知已读/未读、项目概览、任务聚合详情、我的任务等路由和 DTO 是否在本阶段进入 Route Registry？
+6. 列表/游标 envelope 已由 F-26 定案；F-27 项目动态与 F-28 通知已读/未读已由 C 落库，项目概览、任务聚合详情、我的任务等路由和 DTO 是否进入 Route Registry？
 7. 生成客户端是否需要导出路由元数据（auth/CSRF/idempotency/version）给前端 adapter？
 8. 阶段 0 如何最终验证“前端所有 API 调用都经过生成客户端”和“生成物无漂移”？
 
@@ -301,4 +310,4 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 
 - 若 A 将本清单中的部分条款转为正式设计，应同步 Route Registry/Schema Registry、相关设计文档、权限矩阵、测试矩阵，并优先通过 ADR 处理涉及架构、认证或幂等策略的变化。
 - 若本清单中的需求与现有设计冲突，先按“ADR → 功能/系统/技术设计 → 权限矩阵/测试矩阵 → 工作书”的顺序记录冲突，由人工定案后再开工。
-- C 在 A 确认前不提前创建生成客户端依赖、不手工生成 OpenAPI/客户端文件、不锁定候选生成工具版本。
+- 除 F-27/F-28 已按现有设计落库外，C 在 A 确认项目概览、任务聚合详情、我的任务之前不提前创建对应生成客户端依赖、不手工生成 OpenAPI/客户端文件、不锁定候选生成工具版本。

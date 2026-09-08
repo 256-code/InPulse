@@ -72,6 +72,8 @@ describe("认证 Session CSRF 存取（真实 PostgreSQL）", () => {
     expect(session?.id).toBe(sessionId);
     expect(session?.userId).toBe(userId);
     expect(session?.authState).toBe("AUTHENTICATED");
+    expect(session?.idleExpiresAt).toBeInstanceOf(Date);
+    expect(session?.absoluteExpiresAt).toBeInstanceOf(Date);
   });
 
   test("Session 行锁内重复签发最多保留 4 个有效 CSRF Hash", async () => {

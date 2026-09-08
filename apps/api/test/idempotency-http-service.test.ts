@@ -73,7 +73,7 @@ class FakeRunner {
   async run(input: RunIdempotencyCommand): Promise<IdempotencyOutcome> {
     this.calls.push(input);
     if (this.invokeExecute) {
-      await input.execute({} as never);
+      await input.execute({} as never, 7);
     }
     return this.outcome;
   }
