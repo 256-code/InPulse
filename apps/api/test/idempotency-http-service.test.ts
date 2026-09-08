@@ -6,6 +6,7 @@ import {
   IdempotencyHttpService,
   type HmacKeyProvider,
 } from "../src/idempotency/http-service";
+import { IdempotencyResponsePolicyError } from "../src/idempotency/response-policy";
 import type {
   RunIdempotencyCommand,
   IdempotencyOutcome,
@@ -67,9 +68,13 @@ class FakeRunner {
     kind: "executed",
     record: succeededRecord(),
   };
+  invokeExecute = false;
 
   async run(input: RunIdempotencyCommand): Promise<IdempotencyOutcome> {
     this.calls.push(input);
+    if (this.invokeExecute) {
+      await input.execute({} as never);
+    }
     return this.outcome;
   }
 }
@@ -198,5 +203,38 @@ describe("IdempotencyHttpService", () => {
     await expect(service.run(command())).rejects.toThrow(
       "requires a ReplayAuthorizer",
     );
+  });
+
+  test("业务响应不符合 replay policy 时在 runner 持久化前拒绝", async () => {
+    const noBodyRoute: RouteDefinition = {
+      ...route,
+      responses: { "204": { noBody: true } },
+      idempotencyReplayPolicy: {
+        version: "1.0.0",
+        success: {
+          "204": { noBody: true },
+        },
+      },
+    };
+    const runner = new FakeRunner();
+    runner.invokeExecute = true;
+    const service = new IdempotencyHttpService(
+      runner as never,
+      keyProvider(),
+      () => noBodyRoute,
+    );
+
+    await expect(
+      service.run({
+        ...command(),
+        execute: async () => ({
+          responseStatus: 202,
+          responseSchemaRef: "HealthResponse",
+          responseHasBody: true,
+          responseBody: { status: "ok", leaked: true },
+          replayAuthContext: {},
+        }),
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyResponsePolicyError);
   });
 });

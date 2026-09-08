@@ -17,6 +17,7 @@ import {
   assertIdempotencyRequired,
   type IdempotencyRouteResolver,
 } from "./route.js";
+import { assertIdempotencyResponsePolicy } from "./response-policy.js";
 import {
   type ReplayAuthorizer,
   type IdempotencyExecutionResult,
@@ -141,7 +142,11 @@ export class IdempotencyHttpService {
         replayPolicyVersion: route.idempotencyReplayPolicy.version,
         replayAuthPolicyVersion: route.replayAuthorizationPolicy.version,
       },
-      execute: input.execute,
+      execute: async (tx) => {
+        const result = await input.execute(tx);
+        assertIdempotencyResponsePolicy(route, result);
+        return result;
+      },
       ...(replayAuthorizer === undefined ? {} : { replayAuthorizer }),
     });
 

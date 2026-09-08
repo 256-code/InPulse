@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
 
 import {
   buildCookie,
@@ -69,6 +69,7 @@ export class LoginController {
   constructor(private readonly loginService: LoginService) {}
 
   @Post("login")
+  @HttpCode(200)
   async login(
     @Req() request: LoginControllerRequest,
     @Res({ passthrough: true }) response: LoginControllerResponse,
@@ -109,6 +110,7 @@ export class LoginController {
         result.cookies.map((cookie) => buildCookie(cookie)),
       );
       response.setHeader("Cache-Control", "no-store");
+      response.status(200);
       return {
         csrfToken: result.csrfToken,
         authState: result.authState,
