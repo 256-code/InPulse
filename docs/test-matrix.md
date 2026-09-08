@@ -2,6 +2,26 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## Modules 项目初始化 Port（B，本地交付 2026-09-08）
+
+仅实现项目初始化的未分类模块步骤，未实现项目创建闭环；不改变 HTTP 权限矩阵。
+接入说明见 [Modules CommandPort](../apps/api/src/modules/modules/README.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| MOD-BOOT-001 | PostgreSQL 集成 | 成功初始化 | runtime 同事务写项目、创建者及初始成员、唯一未分类模块，默认字段与事务时间正确 | 测试已落库，本地缺少 TEST_DATABASE_URL，未执行断言 |
+| MOD-BOOT-002 | PostgreSQL 集成 | 后续步骤失败 | 外层抛错后，独立查询项目、成员、模块均为零 | 同上 |
+| MOD-BOOT-003 | PostgreSQL 集成 | 同项目重复 | 同事务第二次创建冲突并整体回滚；已提交项目再次创建冲突且原数据不变 | 同上 |
+| MOD-BOOT-004 | PostgreSQL 集成 | 项目不存在 | modules_project_fk 拒绝且无孤立模块 | 同上 |
+| MOD-BOOT-005 | Nest 集成 | 公开 DI 绑定 | 独立 ModulesModule 可解析 ModulesCommandPort，无全局数据库依赖 | 本地 1/1 通过 |
+
+实现文件：`apps/api/test/modules-command.integration.test.ts`（5 例，现有 API 集成测试配置可发现）
+及 `apps/api/test/modules-module.test.ts`（1 例）。尚无本次 CI 执行证据。
+
+2026-09-08 14:29 +08:00 复跑指定数据库套件退出码 1，beforeAll 缺少
+`TEST_DATABASE_URL`，5 例未执行，MOD-BOOT-001～004 保持**待验证**。
+未发现可用的本地 PostgreSQL/容器/WSL 测试入口；没有以 Mock 或注入测试替代。
+
 ## 文档与仓库治理
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
