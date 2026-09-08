@@ -113,6 +113,7 @@ normalized_search_text &@~ app.pgroonga_query_escape($1)
 - [ADR-025](../adr/ADR-025.md) 已创建，状态为 Accepted，并标记替代
   ADR-010；
 - 未修改或覆盖 [ADR-011](../adr/ADR-011.md)；
-- 下一步为生产 `ProjectAccessQueryPort` 适配器、F-26 契约/API/页面，
-  以及生产备份恢复纵切片。SearchQueryService 服务层和基于测试版权限
-  `AuthorizedProjectScope` 的参数化查询集成测试已先行落地。
+- 生产 `ProjectAccessQueryPort` 适配器已由 A 岗位落地并纳入
+  `ProjectsModule`；下一步为 F-26 契约/API/页面，以及生产备份恢复纵切片。
+  SearchQueryService 服务层和基于测试版权限 `AuthorizedProjectScope` 的
+  参数化查询集成测试已先行落地。
