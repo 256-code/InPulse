@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "./auth/auth.module.js";
+import { AuditModule } from "./audit/audit.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthController } from "./health/health.controller.js";
 import { IdempotencyModule } from "./idempotency/idempotency.module.js";
@@ -12,7 +13,13 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
   : [];
 
 @Module({
-  imports: [DatabaseModule, IdempotencyModule, ProjectsModule, ...authModules],
+  imports: [
+    DatabaseModule,
+    IdempotencyModule,
+    ProjectsModule,
+    AuditModule,
+    ...authModules,
+  ],
   controllers: [HealthController],
 })
 export class AppModule {}
