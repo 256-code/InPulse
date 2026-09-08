@@ -1,5 +1,5 @@
 import type { DatabaseClient } from "@inpulse/database/client";
-import type { TransactionSql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { describe, expect, test, vi } from "vitest";
 
 import {
@@ -33,10 +33,12 @@ describe("PostgresUnitOfWork", () => {
       cb(txSql),
     );
 
-    const factory = vi.fn((sql: TransactionSql): TransactionContext => ({
-      db: { txSql: sql } as never,
-      sql,
-    }));
+    const factory = vi.fn(
+      (txSqlValue: TransactionSql, _parentSql: Sql): TransactionContext => ({
+        db: { txSql: txSqlValue } as never,
+        sql: txSqlValue,
+      }),
+    );
 
     const uow = new PostgresUnitOfWork(fakeClient(begin), factory);
     let received: TransactionContext | undefined;
@@ -47,7 +49,7 @@ describe("PostgresUnitOfWork", () => {
     });
 
     expect(begin).toHaveBeenCalledTimes(1);
-    expect(factory).toHaveBeenCalledWith(txSql);
+    expect(factory).toHaveBeenCalledWith(txSql, expect.anything());
     expect(received).toBeDefined();
     expect(received?.sql).toBe(txSql);
     expect(received?.db).toHaveProperty("txSql", txSql);
@@ -67,8 +69,11 @@ describe("PostgresUnitOfWork", () => {
 
   test("默认工厂返回基于事务 sql 的 db/sql 上下文", () => {
     const txSql = fakeTxSql();
+    const parentSql = {
+      options: { parsers: {}, serializers: {} },
+    } as unknown as Sql;
 
-    const context = defaultTransactionContextFactory(txSql);
+    const context = defaultTransactionContextFactory(txSql, parentSql);
 
     expect(context.sql).toBe(txSql);
     expect(context.db).toBeDefined();
