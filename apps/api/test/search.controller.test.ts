@@ -36,7 +36,8 @@ class FakeSearchService {
         summary: "契约纵切片",
       },
     ],
-    nextCursor: "2",
+    nextCursor: "b3BhcXVlLWN1cnNvcg.MQ",
+    hasMore: true,
   };
   error: unknown;
   commands: SearchQueryCommand[] = [];
@@ -84,7 +85,7 @@ describe("SearchController", () => {
     expect(result).toMatchObject({ code: "SEARCH_UNAUTHENTICATED" });
   });
 
-  test("查询参数无效返回 400 且不调用搜索服务", async () => {
+  test("查询参数无效返回 422 且不调用搜索服务", async () => {
     const session = new FakeSessionAuth();
     const service = new FakeSearchService();
     const controller = new SearchController(session as never, service as never);
@@ -97,7 +98,7 @@ describe("SearchController", () => {
     );
 
     expect(service.commands).toEqual([]);
-    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.status).toHaveBeenCalledWith(422);
     expect(result).toMatchObject({ code: "SEARCH_VALIDATION_FAILED" });
   });
 
@@ -110,14 +111,14 @@ describe("SearchController", () => {
     const result = await controller.search(
       requestFixture(),
       response as never,
-      { q: "ai", cursor: "1", limit: "10" },
+      { q: "ai", cursor: "b3BhcXVlLWN1cnNvcg.MQ", limit: "10" },
     );
 
     expect(service.commands).toEqual([
       {
         actorUserId: 7,
         query: "ai",
-        after: "1",
+        after: "b3BhcXVlLWN1cnNvcg.MQ",
         limit: 10,
       },
     ]);
@@ -131,8 +132,31 @@ describe("SearchController", () => {
           summary: "契约纵切片",
         },
       ],
-      nextCursor: "2",
+      nextCursor: "b3BhcXVlLWN1cnNvcg.MQ",
       hasMore: true,
+    });
+  });
+
+  test("末页直接透传服务端 hasMore，不按 nextCursor 非空推导", async () => {
+    const session = new FakeSessionAuth();
+    const service = new FakeSearchService();
+    service.result = {
+      ...service.result,
+      nextCursor: "opaque-cursor",
+      hasMore: false,
+    };
+    const controller = new SearchController(session as never, service as never);
+    const response = responseFixture();
+
+    const result = await controller.search(
+      requestFixture(),
+      response as never,
+      { q: "ai" },
+    );
+
+    expect(result).toMatchObject({
+      nextCursor: "opaque-cursor",
+      hasMore: false,
     });
   });
 
@@ -150,7 +174,7 @@ describe("SearchController", () => {
     expect(service.commands[0]?.includeVoid).toBe(true);
   });
 
-  test("服务校验错误映射为 400", async () => {
+  test("服务校验错误映射为 422", async () => {
     const session = new FakeSessionAuth();
     const service = new FakeSearchService();
     service.error = new SearchQueryValidationError(
@@ -166,7 +190,7 @@ describe("SearchController", () => {
       { q: "ai" },
     );
 
-    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.status).toHaveBeenCalledWith(422);
     expect(result).toMatchObject({ code: "SEARCH_VALIDATION_FAILED" });
   });
 
