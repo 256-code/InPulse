@@ -36,6 +36,7 @@ export interface UserSessionRepository {
     tx: TransactionContext,
     tokenHashes: readonly Buffer[],
   ): Promise<ValidUserSession | undefined>;
+  revoke(tx: TransactionContext, sessionId: number): Promise<boolean>;
 }
 
 /**
@@ -113,5 +114,16 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
     `) as unknown as readonly ValidUserSession[];
     const row = rows[0];
     return row === undefined ? undefined : { ...row };
+  }
+
+  async revoke(tx: TransactionContext, sessionId: number): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.user_sessions
+         SET revoked_at = now()
+       WHERE id = ${sessionId}
+         AND revoked_at IS NULL
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
   }
 }

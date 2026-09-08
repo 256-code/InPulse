@@ -74,6 +74,17 @@ export const permissionMatrix = [
       系统管理员: { kind: "allow" },
     },
   },
+  {
+    operationId: "logout",
+    outcomes: {
+      匿名: { kind: "allow" },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "allow" },
+      系统管理员: { kind: "allow" },
+    },
+  },
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

@@ -4,6 +4,7 @@ import {
   loginHeadersSchema,
   loginRequestSchema,
   loginResponseSchema,
+  logoutHeadersSchema,
   userAuthStateSchema,
 } from "./contracts/auth.zod.js";
 import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
@@ -54,6 +55,11 @@ export const schemaRegistry = {
     schema: loginResponseSchema,
     summary: "登录成功响应，返回绑定新 Session 的 CSRF Token 与显式认证状态",
     sensitiveFieldPaths: ["csrfToken"],
+  },
+  LogoutHeaders: {
+    schema: logoutHeadersSchema,
+    summary: "登出请求头；有效 Session 必须携带当前 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
   },
   UserAuthState: {
     schema: userAuthStateSchema,

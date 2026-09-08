@@ -30,4 +30,8 @@ export type LoginResponse = {
   readonly authState: ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
 };
 
+export type LogoutHeaders = {
+  readonly "x-csrf-token"?: string;
+};
+
 export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
