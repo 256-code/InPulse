@@ -20,19 +20,12 @@ let unitOfWork: PostgresUnitOfWork;
 let repository: PreauthSessionRepository;
 let service: SessionTokenService;
 
-function requireClient(): DatabaseClient {
-  if (client === undefined) {
-    throw new Error("database client is not initialized");
-  }
-  return client;
-}
-
-/** 用数据库时钟计算有效期，避免 JS 与 PostgreSQL 时钟偏差触发 expiry CHECK。 */
-async function dbFutureExpiry(minutes = 9): Promise<Date> {
-  const rows = await requireClient().sql<
-    Array<{ readonly expires_at: Date }>
-  >`select now() + make_interval(mins => ${minutes}) as expires_at`;
-  return rows[0]!.expires_at;
+/**
+ * 预认证有效期使用 9 分钟而非数据库上限 10 分钟：
+ * 避免 JS 与 PostgreSQL 时钟毫秒级偏差触发 `preauth_sessions_expiry_check`。
+ */
+function futureExpiry(): Date {
+  return new Date(Date.now() + 9 * 60 * 1000);
 }
 
 beforeAll(async () => {
@@ -55,7 +48,7 @@ afterAll(async () => {
 describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
   test("创建后可按令牌哈希查回，哈希与密钥版本落库", async () => {
     const material = service.issuePreauthMaterial();
-    const expiresAt = await dbFutureExpiry();
+    const expiresAt = futureExpiry();
     const created = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
@@ -76,7 +69,7 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
 
   test("同一预认证 Session 只能原子消费一次", async () => {
     const material = service.issuePreauthMaterial();
-    const expiresAt = await dbFutureExpiry();
+    const expiresAt = futureExpiry();
     const first = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
@@ -98,7 +91,7 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
 
   test("过期预认证 Session 不可消费", async () => {
     const material = service.issuePreauthMaterial();
-    const expiresAt = await dbFutureExpiry();
+    const expiresAt = futureExpiry();
     const created = await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
@@ -120,7 +113,7 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
 
   test("数据库唯一约束拒绝重复 CSRF 哈希，防跨会话复用", async () => {
     const material = service.issuePreauthMaterial();
-    const expiresAt = await dbFutureExpiry();
+    const expiresAt = futureExpiry();
     await unitOfWork.run((tx) =>
       repository.create(tx, {
         tokenHash: material.sessionTokenHash,
@@ -130,7 +123,7 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
       }),
     );
 
-    const otherExpiry = await dbFutureExpiry();
+    const otherExpiry = futureExpiry();
     await expect(
       unitOfWork.run((tx) =>
         repository.create(tx, {
