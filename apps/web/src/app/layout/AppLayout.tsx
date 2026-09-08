@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Avatar,
-  Badge,
   Button,
   Input,
   Layout,
@@ -10,7 +9,9 @@ import {
   type MenuProps,
 } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
+import { NotificationBell } from "@features/notifications/NotificationBell";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -43,6 +44,7 @@ const navigationPaths: Readonly<Record<string, string>> = {
 
 const sections = [
   { prefix: "/search", key: "search", label: "全局搜索" },
+  { prefix: "/notifications", key: "notifications", label: "站内通知" },
   { prefix: "/projects", key: "projects", label: "项目与功能" },
   { prefix: "/tasks", key: "tasks", label: "我的任务" },
   { prefix: "/records", key: "records", label: "迭代记录" },
@@ -51,6 +53,9 @@ const sections = [
 ] as const;
 
 function resolveSection(pathname: string) {
+  if (/^\/projects\/[^/]+\/activity(?:\/|$)/.test(pathname)) {
+    return { key: "project-activity", label: "项目动态" };
+  }
   return sections.find((section) => pathname.startsWith(section.prefix));
 }
 
@@ -62,7 +67,11 @@ function resolveSectionLabel(pathname: string): string {
   return resolveSection(pathname)?.label ?? "工作台";
 }
 
-export const AppLayout: React.FC = () => {
+export interface AppLayoutProps {
+  readonly notificationClient?: InpulseApiClient;
+}
+
+export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchDraft, setSearchDraft] = useState("");
@@ -327,15 +336,11 @@ export const AppLayout: React.FC = () => {
                 borderRadius: 7,
               }}
             />
-            <Badge dot color="#ef7777" offset={[-4, 4]}>
-              <Button
-                type="text"
-                aria-label="通知"
-                style={{ minWidth: 30, minHeight: 30, color: "#718399" }}
-              >
-                通知
-              </Button>
-            </Badge>
+            <NotificationBell
+              client={notificationClient}
+              enabled={status === "authenticated"}
+              onOpen={() => navigate("/notifications")}
+            />
             <Avatar style={{ color: "#2364aa", background: "#dcecff" }}>
               {avatarText}
             </Avatar>

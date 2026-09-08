@@ -222,6 +222,575 @@
         }
       }
     },
+    "/notifications": {
+      "get": {
+        "operationId": "getNotifications",
+        "summary": "当前用户自己的站内通知列表；SQL 强制 recipient_id=当前用户，cursor 为服务端签名、校验并带过期时间的不透明字符串。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "unreadOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ]
+      }
+    },
+    "/notifications/{notificationId}/read": {
+      "post": {
+        "operationId": "readNotification",
+        "summary": "把当前用户的一条通知标记为已读；不存在或非本人统一返回 404，重复执行自然幂等。",
+        "responses": {
+          "204": {
+            "description": "成功且无响应体"
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "204": {
+                "noBody": true
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "NotificationReplayContext",
+              "resultRefExtractor": "notificationId",
+              "currentReadAuthorizer": "notificationOwnerAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "notificationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ]
+      }
+    },
+    "/notifications/{notificationId}/unread": {
+      "post": {
+        "operationId": "unreadNotification",
+        "summary": "把当前用户的一条通知标记为未读；不存在或非本人统一返回 404，重复执行自然幂等。",
+        "responses": {
+          "204": {
+            "description": "成功且无响应体"
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "204": {
+                "noBody": true
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "NotificationReplayContext",
+              "resultRefExtractor": "notificationId",
+              "currentReadAuthorizer": "notificationOwnerAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "notificationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ]
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "readAllNotifications",
+        "summary": "把当前用户的全部未读通知标记为已读；响应不暴露其他用户资源。",
+        "responses": {
+          "204": {
+            "description": "成功且无响应体"
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "204": {
+                "noBody": true
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "actorOnly": true
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "operationId": "getNotificationUnreadCount",
+        "summary": "返回当前登录用户的未读通知数量。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationUnreadCountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        }
+      }
+    },
+    "/projects/{projectId}/activity": {
+      "get": {
+        "operationId": "getProjectActivity",
+        "summary": "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "includeAdminOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ]
+      }
+    },
     "/search": {
       "get": {
         "operationId": "getSearch",
@@ -328,6 +897,143 @@
   },
   "components": {
     "schemas": {
+      "ActivityItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sourceEntityType": {
+            "type": "string",
+            "enum": [
+              "PROJECT",
+              "MODULE",
+              "FEATURE",
+              "TASK",
+              "CHANGE_RECORD",
+              "EXTERNAL_LINK",
+              "TASK_GROUP",
+              "LEFTOVER_ITEM"
+            ]
+          },
+          "sourceEntityId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "activityType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "actorId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "occurredAt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "sourceEntityType",
+          "sourceEntityId",
+          "activityType",
+          "actorId",
+          "summary",
+          "occurredAt"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityPath": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityQueryRequest": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "includeAdminOnly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "CsrfIssueResponse": {
         "type": "object",
         "properties": {
@@ -517,6 +1223,182 @@
             "maxLength": 43
           }
         },
+        "additionalProperties": false
+      },
+      "NotificationItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notificationType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "targetPath": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "readAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "notificationType",
+          "title",
+          "body",
+          "targetPath",
+          "createdAt",
+          "readAt"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPath": {
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "notificationId"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationQueryRequest": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "unreadOnly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationReplayContext": {
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "recipientId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "notificationId",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationUnreadCountResponse": {
+        "type": "object",
+        "properties": {
+          "unreadCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "unreadCount"
+        ],
         "additionalProperties": false
       },
       "SearchItem": {

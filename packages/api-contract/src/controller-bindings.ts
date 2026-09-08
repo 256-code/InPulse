@@ -90,9 +90,13 @@ export function parseControllerSource(
       }
       subPath = literal[1]!;
     }
+    const path = joinPath(controllerPath, subPath).replace(
+      /:[A-Za-z_][A-Za-z0-9_]*/g,
+      (parameter) => `{${parameter.slice(1)}}`,
+    );
     bindings.push({
       method,
-      path: joinPath(controllerPath, subPath),
+      path,
       handler,
       file,
     });

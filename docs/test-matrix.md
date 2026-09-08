@@ -203,6 +203,24 @@
 | FE-006 | 单元测试 | 全局搜索页面纵切片 | `SearchPageView` 通过生成客户端消费 `getSearch`，覆盖 `q`、签名游标分页、短词提示与 401 不泄露服务端细节；顶部搜索框提交导航 `/search?q=...` | 已自动化（本地前端 12 文件 32 例通过；GitHub Actions 尚未执行） |
 | FE-007 | 单元测试 | 真实认证上下文与登录表单 | `AuthProvider` 覆盖挂载恢复会话、匿名 CSRF bootstrap、登录、登出与 MFA 不认证；`LoginForm` 覆盖失败提示与成功回调 | 已自动化（本地前端 12 文件 32 例通过；GitHub Actions 尚未执行） |
 
+## 项目动态与站内通知（F-27 / F-28，C 本地交付 2026-09-08）
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ACT-001 | PostgreSQL 集成 | 活动投影写入 | 同一 `TransactionContext` 写审计链与 `activity_projection`；同一来源事件不重复；派生可见性只向更高 `row_version` 推进并更新同一实体全部动态；后续步骤失败整体回滚 | 本地通过（`activity-projection.integration.test.ts` 4 例） |
+| ACT-002 | PostgreSQL 集成 | 活动查询授权与分页 | 普通成员只读本人项目的 `MEMBER` 投影，`includeAdminOnly=true` 不扩大范围；系统管理员默认排除 `ADMIN_ONLY`、显式开启后可见；跨项目与已移除成员统一 404；签名游标绑定用户/项目且分页无重叠；响应只暴露脱敏白名单字段 | 本地通过（`activity-query.integration.test.ts` 4 例、`activity-notifications-api.integration.test.ts` 2 例） |
+| ACT-003 | 单元测试 | 活动游标安全 | 签发并校验绑定用户、命名空间和项目的签名游标；拒绝篡改、过期、绑定其他用户/项目、畸形游标、未知 key 版本和错误命名空间 | 本地通过（`time-cursor.test.ts` 3 例） |
+| ACT-004 | 单元测试 | 活动控制器边界 | 匿名 401；路径参数安全解析；非法路径/查询 422；无权限项目 404；游标错误 422；未知错误 500 | 本地通过（`activity.controller.test.ts` 4 例） |
+| NOT-001 | PostgreSQL 集成 | 通知写入与事务 | 同一来源事件按 `(source_chain_id, source_sequence, recipient_id, notification_type)` 去重；不匹配项目链和非法目标路径在 SQL 前拒绝；同事务后续失败整体回滚 | 本地通过（`notification-state.integration.test.ts` 3 例） |
+| NOT-002 | PostgreSQL 集成 | 通知读取与状态变更 | 只返回当前用户通知；未读过滤、签名游标和无重叠分页；标记已读/未读与全部已读只操作本人；非本人或不存在统一 404 | 本地通过（`notification-state.integration.test.ts` 3 例、`activity-notifications-api.integration.test.ts` 1 例） |
+| NOT-003 | HTTP 集成 | 通知幂等与重放 | 三个写路由要求 CSRF 与 `Idempotency-Key`；缺失 Key/越权/read-all 行为符合契约；同 Key 重放不重复执行且不泄露他人资源 | 本地通过（`activity-notifications-api.integration.test.ts` 1 例） |
+| NOT-004 | 单元测试 | 通知控制器与查询边界 | 匿名与 CSRF 失败映射 401/403；查询只使用当前用户；字符串通知 ID 正确转换；未读数与 422、404、500 均按统一错误模型返回 | 本地通过（`notifications.controller.test.ts` 4 例） |
+| FE-008 | 单元测试 | 项目动态前端纵切片 | `features/activity` 通过生成客户端获取项目动态、传递服务端游标并展示脱敏项与项目范围 | 本地通过（`activity-query.test.tsx`、`ActivityPageView.test.tsx` 2 例） |
+| FE-009 | 单元测试 | 通知前端纵切片 | 铃铛显示未读数并导航 `/notifications`；通知页通过生成客户端读取、按路径跳转、标记已读/未读，写操作带 CSRF 与幂等键 | 本地通过（`notification-query.test.tsx`、`NotificationsPageView.test.tsx`、`AppLayout.test.tsx` 共 8 例） |
+| CONTRACT-001 | 契约与权限 | F-27/F-28 路由登记 | 12 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；GitHub Actions 尚未执行 |
+
+后端本次新增/扩展的真实 PostgreSQL 集成共 20 例（活动投影 4、活动查询 4、通知状态 6、HTTP 集成 4、Session 回归 2），API 集成全量 18 文件 78 例通过；前端全量 16 文件 39 例通过。尚未接入项目创建、任务完成、记录作废/恢复等业务 Workflow，也未在生产侧生成活动/通知事件。
+
 ## 维护规则
 
 - 新增 Route Registry 操作时，同一 PR 必须添加权限、幂等及错误契约用例。
