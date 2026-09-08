@@ -1,15 +1,37 @@
 import type { TransactionContext } from "../database/transaction-context.js";
 
+export type UserAuthState =
+  "AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE";
+
 export interface ValidUserSession {
   readonly id: number;
   readonly userId: number;
   readonly authVersionAtIssue: number;
-  readonly authState: string;
+  readonly authState: UserAuthState;
   readonly idleExpiresAt: Date;
   readonly absoluteExpiresAt: Date;
 }
 
+export interface UserSessionInsert {
+  readonly userId: number;
+  readonly tokenHash: Buffer;
+  readonly tokenHashKeyVersion: number;
+  readonly authVersionAtIssue: number;
+  readonly authState: UserAuthState;
+  readonly idleExpiresAt: Date;
+  readonly absoluteExpiresAt: Date;
+}
+
+export interface CreatedUserSession {
+  readonly id: number;
+  readonly authState: UserAuthState;
+}
+
 export interface UserSessionRepository {
+  create(
+    tx: TransactionContext,
+    insert: UserSessionInsert,
+  ): Promise<CreatedUserSession>;
   findValidByTokenHashes(
     tx: TransactionContext,
     tokenHashes: readonly Buffer[],
@@ -22,6 +44,46 @@ export interface UserSessionRepository {
  * 改密或强制退出的 Session 都按无效处理。
  */
 export class PostgresUserSessionRepository implements UserSessionRepository {
+  async create(
+    tx: TransactionContext,
+    insert: UserSessionInsert,
+  ): Promise<CreatedUserSession> {
+    const rows = (await tx.sql`
+      INSERT INTO app.user_sessions (
+        user_id,
+        token_hash,
+        token_hash_key_version,
+        auth_version_at_issue,
+        auth_state,
+        recovery_rotation_generation,
+        recovery_rotation_consumed_generation,
+        created_at,
+        last_seen_at,
+        idle_expires_at,
+        absolute_expires_at
+      )
+      VALUES (
+        ${insert.userId},
+        ${insert.tokenHash},
+        ${insert.tokenHashKeyVersion},
+        ${insert.authVersionAtIssue},
+        ${insert.authState},
+        0,
+        0,
+        now(),
+        now(),
+        ${insert.idleExpiresAt},
+        ${insert.absoluteExpiresAt}
+      )
+      RETURNING id, auth_state AS "authState"
+    `) as unknown as readonly CreatedUserSession[];
+    const row = rows[0];
+    if (row === undefined) {
+      throw new Error("user session insert returned no row");
+    }
+    return { ...row };
+  }
+
   async findValidByTokenHashes(
     tx: TransactionContext,
     tokenHashes: readonly Buffer[],

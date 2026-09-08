@@ -198,6 +198,50 @@ export const routeRegistry = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  {
+    method: "POST",
+    path: "/auth/login",
+    operationId: "login",
+    summary:
+      "只接受匿名预认证 Session 与 X-CSRF-Token；成功后消费预认证 Session、轮换 Cookie 并签发新认证 Session 与 CSRF Token。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "LoginHeaders",
+      body: {
+        contentTypes: [
+          { contentType: "application/json", schemaRef: "LoginRequest" },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "LoginResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "none",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一匿名预认证 Session 与其 CSRF Hash 只能成功登录一次；成功时在同一事务条件消费预认证 Session，并创建新的认证 Session 与 CSRF Hash",
+      clientRecoveryPath:
+        "若已有认证/受限 Session 先登出或清 Cookie，再重新调用 CSRF 签发端点并登录",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
 ] satisfies readonly RouteDefinition[];
 
 export type RegisteredRoute = (typeof routeRegistry)[number];

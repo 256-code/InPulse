@@ -5,10 +5,15 @@ import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
 import { CsrfController } from "./csrf.controller.js";
 import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
+import { LoginController } from "./login.controller.js";
+import { LoginService } from "./login.service.js";
+import { PasswordService } from "./password.service.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
 import { SessionTokenService } from "./session-token.service.js";
+import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
+import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。
@@ -27,18 +32,26 @@ import { PostgresUserSessionRepository } from "./user-session.repository.js";
     },
     SessionTokenService,
     PostgresPreauthSessionRepository,
+    PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
+    PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
+    PasswordService,
     CsrfIssueService,
+    LoginService,
   ],
-  controllers: [CsrfController],
+  controllers: [CsrfController, LoginController],
   exports: [
     SESSION_HMAC_KEYRING,
     SessionTokenService,
     PostgresPreauthSessionRepository,
+    PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
+    PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
+    PasswordService,
     CsrfIssueService,
+    LoginService,
   ],
 })
 export class AuthModule {}

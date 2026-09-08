@@ -4,6 +4,7 @@ import {
   PREAUTH_COOKIE_NAME,
   PREAUTH_MAX_AGE_SECONDS,
   buildCookie,
+  mutationSameOriginValidationError,
   parseCookieHeader,
   sameOriginValidationError,
 } from "../src/auth/csrf.http.js";
@@ -68,6 +69,24 @@ describe("CSRF HTTP 安全辅助", () => {
     expect(sameOriginValidationError({ origin: "http://localhost:5173" })).toBe(
       "missing-host",
     );
+  });
+
+  test("非安全请求 Origin/Referer 至少存在一个", () => {
+    expect(mutationSameOriginValidationError({})).toBe(
+      "missing-origin-and-referer",
+    );
+    expect(
+      mutationSameOriginValidationError({
+        host: "localhost:5173",
+        referer: "http://localhost:5173/login",
+      }),
+    ).toBeUndefined();
+    expect(
+      mutationSameOriginValidationError({
+        host: "localhost:5173",
+        origin: "https://evil.example",
+      }),
+    ).toBe("cross-origin");
   });
 
   test("Fetch Metadata 存在时必须通过允许值", () => {
