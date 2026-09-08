@@ -849,6 +849,117 @@ export const routeRegistry = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  {
+    method: "POST",
+    path: "/projects",
+    operationId: "createProject",
+    summary:
+      "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选初始成员；单事务内创建未分类模块并写审计、通知、活动与搜索投影；初始成员无效/停用/重复则整笔回滚。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "CreateProjectHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "CreateProjectRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "CreateProjectResponse",
+            },
+          ],
+        },
+      },
+      "400": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "CreateProjectResponse",
+            safeBodyFieldPaths: [
+              "project.id",
+              "project.code",
+              "project.name",
+              "project.description",
+              "project.status",
+              "project.rowVersion",
+              "project.createdBy",
+              "project.createdAt",
+              "project.updatedAt",
+              "members[].userId",
+              "members[].status",
+              "members[].joinedAt",
+              "unclassifiedModuleId",
+            ],
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "CreateProjectReplayContext",
+        resultRefExtractor: "projectId",
+        currentReadAuthorizer: "projectMemberReadAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "project.create",
+  },
 ] satisfies readonly RouteDefinition[];
 
 export type RegisteredRoute = (typeof routeRegistry)[number];

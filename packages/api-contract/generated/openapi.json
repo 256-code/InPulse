@@ -754,6 +754,142 @@
         }
       }
     },
+    "/projects": {
+      "post": {
+        "operationId": "createProject",
+        "summary": "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选初始成员；单事务内创建未分类模块并写审计、通知、活动与搜索投影；初始成员无效/停用/重复则整笔回滚。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateProjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "CreateProjectResponse",
+                  "safeBodyFieldPaths": [
+                    "project.id",
+                    "project.code",
+                    "project.name",
+                    "project.description",
+                    "project.status",
+                    "project.rowVersion",
+                    "project.createdBy",
+                    "project.createdAt",
+                    "project.updatedAt",
+                    "members[].userId",
+                    "members[].status",
+                    "members[].joinedAt",
+                    "unclassifiedModuleId"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "CreateProjectReplayContext",
+              "resultRefExtractor": "projectId",
+              "currentReadAuthorizer": "projectMemberReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "project.create"
+        },
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{projectId}/activity": {
       "get": {
         "operationId": "getProjectActivity",
@@ -1108,6 +1244,154 @@
             "type": "boolean"
           }
         },
+        "additionalProperties": false
+      },
+      "CreateProjectHeaders": {
+        "type": "object",
+        "properties": {
+          "x-csrf-token": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          }
+        },
+        "required": [
+          "x-csrf-token"
+        ],
+        "additionalProperties": false
+      },
+      "CreateProjectReplayContext": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "actorUserId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "actorUserId"
+        ],
+        "additionalProperties": false
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "code": {
+            "$ref": "#/components/schemas/ProjectCode"
+          },
+          "description": {
+            "default": "",
+            "type": "string",
+            "maxLength": 20000
+          },
+          "memberIds": {
+            "default": [],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "memberIds"
+        ],
+        "additionalProperties": false
+      },
+      "CreateProjectResponse": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "code": {
+                "$ref": "#/components/schemas/ProjectCode"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "status": {
+                "type": "string",
+                "const": "ACTIVE"
+              },
+              "rowVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "createdBy": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "createdAt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "updatedAt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "id",
+              "code",
+              "name",
+              "description",
+              "status",
+              "rowVersion",
+              "createdBy",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectMemberItem"
+            }
+          },
+          "unclassifiedModuleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "project",
+          "members",
+          "unclassifiedModuleId"
+        ],
         "additionalProperties": false
       },
       "CsrfIssueResponse": {
@@ -1474,6 +1758,38 @@
         },
         "required": [
           "unreadCount"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectCode": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]{1,31}$"
+      },
+      "ProjectMemberItem": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "REMOVED"
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "userId",
+          "status",
+          "joinedAt"
         ],
         "additionalProperties": false
       },

@@ -30,6 +30,14 @@ import {
   searchPageSchema,
   searchQueryRequestSchema,
 } from "./contracts/search.zod.js";
+import {
+  createProjectHeadersSchema,
+  createProjectReplayContextSchema,
+  createProjectRequestSchema,
+  createProjectResponseSchema,
+  projectMemberItemSchema,
+  projectCodeSchema,
+} from "./contracts/projects.zod.js";
 
 export interface SchemaRegistryEntry {
   readonly schema: z.ZodType;
@@ -146,6 +154,37 @@ export const schemaRegistry = {
   NotificationReplayContext: {
     schema: notificationReplayContextSchema,
     summary: "单条通知写操作的最小重放授权上下文",
+    sensitiveFieldPaths: [],
+  },
+  ProjectCode: {
+    schema: projectCodeSchema,
+    summary: "项目编码；创建后不可修改",
+    sensitiveFieldPaths: [],
+  },
+  CreateProjectRequest: {
+    schema: createProjectRequestSchema,
+    summary:
+      "创建项目请求；创建者由服务端 Session 解析，memberIds 为可选初始成员",
+    sensitiveFieldPaths: [],
+  },
+  CreateProjectHeaders: {
+    schema: createProjectHeadersSchema,
+    summary: "创建项目请求头，要求同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ProjectMemberItem: {
+    schema: projectMemberItemSchema,
+    summary: "项目成员摘要（响应与幂等重放共享）",
+    sensitiveFieldPaths: [],
+  },
+  CreateProjectResponse: {
+    schema: createProjectResponseSchema,
+    summary: "创建项目成功响应（200）",
+    sensitiveFieldPaths: [],
+  },
+  CreateProjectReplayContext: {
+    schema: createProjectReplayContextSchema,
+    summary: "创建项目幂等重放的最小资源授权上下文",
     sensitiveFieldPaths: [],
   },
   UserAuthState: {

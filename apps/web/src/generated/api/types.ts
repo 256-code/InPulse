@@ -28,6 +28,38 @@ export type ActivityQueryRequest = {
   readonly includeAdminOnly?: boolean;
 };
 
+export type CreateProjectHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type CreateProjectReplayContext = {
+  readonly projectId: number;
+  readonly actorUserId: number;
+};
+
+export type CreateProjectRequest = {
+  readonly name: string;
+  readonly code?: ProjectCode;
+  readonly description: string;
+  readonly memberIds: readonly number[];
+};
+
+export type CreateProjectResponse = {
+  readonly project: {
+    readonly id: number;
+    readonly code: ProjectCode;
+    readonly name: string;
+    readonly description: string;
+    readonly status: "ACTIVE";
+    readonly rowVersion: number;
+    readonly createdBy: number;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+  readonly members: readonly ProjectMemberItem[];
+  readonly unclassifiedModuleId: number;
+};
+
 export type CsrfIssueResponse = {
   readonly csrfToken: string;
 };
@@ -105,6 +137,14 @@ export type NotificationReplayContext = {
 
 export type NotificationUnreadCountResponse = {
   readonly unreadCount: number;
+};
+
+export type ProjectCode = string;
+
+export type ProjectMemberItem = {
+  readonly userId: number;
+  readonly status: ("ACTIVE" | "REMOVED");
+  readonly joinedAt: string;
 };
 
 export type SearchItem = {

@@ -1,20 +1,26 @@
 {
+  "createProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "8d3c116bf74f7c621a91b8153472a3a07114eaeed21517ad3c6aaf21d1619cc5"
+    }
+  ],
   "readAllNotifications": [
     {
       "version": "1.0.0",
-      "fingerprint": "d9393b518711c273ef17f7a37f641fc53a7e4c6eb3bc831dc41f8d6d35eed66f"
+      "fingerprint": "a4521077292ad97c7d17e0914e3017da7004f107c877cbeed12215ce45459cd4"
     }
   ],
   "readNotification": [
     {
       "version": "1.0.0",
-      "fingerprint": "5064ce2f8ab19b8845a3ca9e887ffd21ef7fa3ee502695a21be61014daa8cafb"
+      "fingerprint": "bfcc90d99b2e6c0158619d46792aa3c219861966b9495b48d4dffc91779a1a43"
     }
   ],
   "unreadNotification": [
     {
       "version": "1.0.0",
-      "fingerprint": "981d030378c6f75bde97cea9cd8844b39a90fca53c0c4c979aa745913ec9c7db"
+      "fingerprint": "1dabb97faeae65867c61100f10ec5d1dbb849a1c720def5f23eeb07ff69ae547"
     }
   ]
 }
