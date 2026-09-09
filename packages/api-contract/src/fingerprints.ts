@@ -7,6 +7,51 @@ import {
 } from "./json-schema.js";
 import type { RouteDefinition } from "./route-registry.js";
 
+/** 收集路由实际引用的根 Schema 名（去重、排序），供指纹计算使用。 */
+function routeRootSchemaNames(route: RouteDefinition): readonly string[] {
+  const names = new Set<string>();
+  const add = (value: string | "none" | undefined): void => {
+    if (value !== undefined && value !== "none") {
+      names.add(value);
+    }
+  };
+
+  add(route.request.path);
+  add(route.request.query);
+  add(route.request.headers);
+
+  const requestBody = route.request.body;
+  if ("contentTypes" in requestBody) {
+    for (const binding of requestBody.contentTypes) {
+      add(binding.schemaRef);
+    }
+  }
+
+  for (const binding of Object.values(route.responses)) {
+    if ("body" in binding) {
+      for (const content of binding.body.contentTypes) {
+        add(content.schemaRef);
+      }
+    }
+  }
+
+  const replay = route.idempotencyReplayPolicy;
+  if (replay !== "none") {
+    for (const entry of Object.values(replay.success)) {
+      if ("body" in entry) {
+        add(entry.body.responseSchemaRef);
+      }
+    }
+  }
+
+  const auth = route.replayAuthorizationPolicy;
+  if (auth !== "none" && "resources" in auth) {
+    add(auth.resources.contextSchemaRef);
+  }
+
+  return [...names].sort();
+}
+
 /**
  * ADR-019：幂等契约摘要覆盖大写 method、operationId、幂等契约版本、
  * 请求/响应 Schema ref、Content-Type、行为相关请求头、重放策略与重放授权策略。
@@ -46,9 +91,10 @@ export function computeRouteFingerprint(
       body: route.request.body,
     },
     responses: route.responses,
-    schemaRefs: Object.keys(schemas.rootRefs)
-      .sort()
-      .map((name) => ({ name, ref: schemaRef(schemas, name) })),
+    schemaRefs: routeRootSchemaNames(route).map((name) => ({
+      name,
+      ref: schemaRef(schemas, name),
+    })),
     idempotencyReplayPolicy: route.idempotencyReplayPolicy,
     replayAuthorizationPolicy: route.replayAuthorizationPolicy,
   });
