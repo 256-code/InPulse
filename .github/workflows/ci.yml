@@ -173,9 +173,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Deploy compose and image ref positive preflight
+        # 使用合成 ref 验证 compose 可渲染、所有服务 image 均为 exact-tag@sha256，
+        # 以及技术设计 §11.2 的结构不变量；合成 ref 不代表真实镜像已构建。
+        run: pnpm check:deploy:test
+
       - name: Deploy image ref negative preflight
-        # 正例已由 `pnpm check:deploy:test` 执行；这里单独验证 .example 的占位符
-        # 必须被拒绝，避免用“脚本存在”冒充真实发布 ref 已绑定。
+        # 正例由上一步执行；这里单独验证 .example 的占位符必须被拒绝，避免用
+        # “脚本存在”冒充真实发布 ref 已绑定。
         run: |
           if node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.example; then
             echo "Expected placeholder *_IMAGE_REF to be rejected by preflight." >&2
