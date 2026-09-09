@@ -2,7 +2,7 @@
 
 Playwright E2E 纵切片由 F-31 建立，当前覆盖 API 健康探针、真实认证
 （含 MFA 登录挑战与管理员重认证）、项目创建关键路径（登录 → 创建项目 →
-项目动态 → 搜索 → 站内通知）、全局搜索和站内通知等可直接验证的路径。
+项目动态 → 搜索 → 站内通知）、全局搜索边界（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）和站内通知等可直接验证的路径。
 
 ## 前置条件
 
@@ -33,7 +33,7 @@ pnpm test:e2e
 Playwright `webServer` 先启动已构建的 API（`node dist/main.js`，使用
 `NODE_ENV=test`、`app_runtime` 数据库 URL 和临时 Session/幂等 keyring），再启动
 Vite dev server，并把 `/api/v1` 代理到 API。`global-setup` 在服务就绪后创建唯一
-E2E 用户、项目与搜索投影，通过 API 预注册启用 TOTP 的第二管理员并签发
+E2E 用户、可见项目、无当前成员关系的隐藏项目与搜索投影，通过 API 预注册启用 TOTP 的第二管理员并签发
 Session；API 启动探针验证
 `GET /api/v1/health`。失败时保留截图、trace 与 video。
 
@@ -48,9 +48,10 @@ Session；API 启动探针验证
 GitHub Actions 的 `CI / workspace` job 在 `pnpm build` 之后、`pnpm check:deps`
 之前安装 Chromium 并执行 `pnpm test:e2e`，此时 PostgreSQL 探针实例仍在运行。
 无论成功或失败都会上传 Playwright HTML 报告、截图、trace 与 video 作为 CI
-artifact。当前为 8 个用例，已覆盖 MFA 登录挑战/管理员重认证与项目创建关键
-路径；仍不等同于完整业务关键路径；PR #63 的 GitHub Actions 已通过
-（workspace 10m2s，docs 通过，Browser E2E 步骤成功）。
+artifact。当前为 12 个用例，已覆盖 MFA 登录挑战/管理员重认证、项目创建关键
+路径与搜索边界；本分支本地 12/12，GitHub Actions 尚未执行；仍不等同
+于完整业务关键路径；PR #63 的 GitHub Actions 已通过（workspace
+10m2s，docs 通过，Browser E2E 步骤成功）。
 
 ## 范围说明
 

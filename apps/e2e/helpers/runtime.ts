@@ -27,6 +27,16 @@ export interface E2ERuntime {
   readonly projectId: number;
   readonly searchQuery: string;
   readonly projectTitle: string;
+  readonly hiddenProjectId: number;
+  readonly hiddenProjectTitle: string;
+  readonly hiddenSearchQuery: string;
+  readonly pageSearchQuery: string;
+  readonly pageSearchTotal: number;
+  readonly chineseSearchQuery: string;
+  readonly chineseSearchTitle: string;
+  readonly specialSearchQuery: string;
+  readonly specialSearchTitle: string;
+  readonly missingSearchQuery: string;
   readonly sessionCookie: string;
   readonly adminMfa: E2EAccount;
   readonly adminMfaUserId: number;
