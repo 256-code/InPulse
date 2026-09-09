@@ -10,7 +10,8 @@ import {
 } from "./runtime.js";
 import { totpCode } from "./totp.js";
 
-interface MfaAdminFixture {
+export interface MfaAdminFixture {
+  readonly userId: number;
   readonly account: E2EAccount;
   readonly secret: string;
 }
@@ -44,13 +45,14 @@ export const test = base.extend<{ mfaAdmin: MfaAdminFixture }>({
         { id: number }[]
       >`INSERT INTO app.users (login_name, name, password_hash, is_admin, status) VALUES (${account.loginName}, ${account.name}, ${passwordHash}, true, 'ACTIVE') RETURNING id`;
       if (!user) throw new Error("MFA fixture insert returned no row");
-      userId = user.id;
+      const fixtureId = user.id;
+      userId = fixtureId;
       const secret = await enrollAdminViaApi(
         runtime.apiBaseUrl,
         account.loginName,
         account.password,
       );
-      await use({ account, secret });
+      await use({ userId: fixtureId, account, secret });
     } finally {
       try {
         if (userId !== undefined) {

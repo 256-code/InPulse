@@ -1,13 +1,18 @@
 import React from "react";
-import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlaceholder";
+import type { InpulseApiClient } from "@generated/api";
+import { useAuth } from "@features/auth/auth-context";
+import { AdminUsersPageView } from "@features/users/AdminUsersPageView";
 
-export const SettingsPage: React.FC = () => {
+export interface SettingsPageProps {
+  readonly client?: InpulseApiClient | undefined;
+}
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
+  const { user } = useAuth();
   return (
-    <WorkspacePlaceholder
-      eyebrow="系统 / 成员与权限"
-      title="成员与设置"
-      description="成员、角色、项目归属与权限边界；成员管理接口就绪后接入。"
-      icon="settings"
+    <AdminUsersPageView
+      currentUserId={user?.id}
+      {...(client ? { client } : {})}
     />
   );
 };

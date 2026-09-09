@@ -135,3 +135,78 @@ export const taskRoutes: readonly RouteDefinition[] = [
     },
   ),
 ];
+
+/** Same task commands and security policies, addressed through the true MODULE parent. */
+export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
+  (route) => {
+    const write = route.method !== "GET";
+    const create = route.operationId === "createTask";
+    return {
+      ...route,
+      operationId: route.operationId.replace("Task", "ModuleTask"),
+      path: route.path.replace("/features/{featureId}", ""),
+      summary:
+        "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
+      request: {
+        ...route.request,
+        path:
+          route.request.path === "TaskResourcePath"
+            ? "ModuleTaskResourcePath"
+            : "ModuleTaskCollectionPath",
+        body: write
+          ? {
+              contentTypes: [
+                {
+                  contentType: "application/json",
+                  schemaRef: "ModuleTaskEditRequest",
+                },
+              ],
+            }
+          : { noBody: true },
+      },
+      responses: {
+        ...route.responses,
+        "200": json(
+          route.operationId === "listTaskAssignees"
+            ? "TaskAssigneesResponse"
+            : route.operationId === "listTasks"
+              ? "ModuleTaskListResponse"
+              : "ModuleTaskItem",
+        ),
+      },
+      idempotencyReplayPolicy: write
+        ? {
+            version: "1.0.0",
+            success: {
+              "200": {
+                body: {
+                  responseSchemaRef: "ModuleTaskItem",
+                  safeBodyFieldPaths: [...fields, "impactFeatureIds[]"],
+                },
+              },
+            },
+          }
+        : "none",
+      replayAuthorizationPolicy: write
+        ? {
+            version: "1.0.0",
+            resources: {
+              contextSchemaRef: "ModuleTaskReplayContext",
+              resultRefExtractor: "moduleTaskResultResource",
+              currentReadAuthorizer: "moduleTaskCurrentReadAuthorizer",
+            },
+          }
+        : "none",
+      concurrencyPolicy: write
+        ? {
+            rowVersion: create ? "none" : "required",
+            lockOrder: create
+              ? ["project", "module", "feature"]
+              : ["project", "module", "feature", "task"],
+            retry:
+              "up to 3 savepoint attempts; sorted union of current/target feature ids before task; re-read under task lock",
+          }
+        : "none",
+    };
+  },
+);

@@ -6,13 +6,16 @@ import {
   type InpulseApiClient,
   type TaskEditRequest,
   type TaskItem,
+  type ModuleTaskItem,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
+export type TaskViewItem = TaskItem | ModuleTaskItem;
+export type TaskDraft = TaskEditRequest & { impactFeatureIds?: number[] };
 export interface TaskScope {
   projectId: number;
   moduleId: number;
-  featureId: number;
+  featureId: number | null;
 }
 export const taskFields = [
   "title",
@@ -20,27 +23,34 @@ export const taskFields = [
   "priority",
   "assigneeId",
   "dueAt",
+  "impactFeatureIds",
 ] as const;
 export type TaskField = (typeof taskFields)[number];
-export function taskEdit(item: TaskItem): TaskEditRequest {
+export function taskEdit(item: TaskViewItem): TaskDraft {
   return {
     title: item.title,
     description: item.description,
     priority: item.priority,
     assigneeId: item.assigneeId,
     dueAt: item.dueAt,
+    ...(item.scopeType === "MODULE"
+      ? { impactFeatureIds: [...item.impactFeatureIds] }
+      : {}),
   };
 }
 export function mergeTask(
-  base: TaskEditRequest,
-  draft: TaskEditRequest,
-  latest: TaskEditRequest,
+  base: TaskDraft,
+  draft: TaskDraft,
+  latest: TaskDraft,
 ) {
   const values = { ...latest };
   const conflicts: TaskField[] = [];
   for (const field of taskFields) {
-    if (draft[field] === base[field]) continue;
-    if (latest[field] !== base[field] && latest[field] !== draft[field])
+    if (JSON.stringify(draft[field]) === JSON.stringify(base[field])) continue;
+    if (
+      JSON.stringify(latest[field]) !== JSON.stringify(base[field]) &&
+      JSON.stringify(latest[field]) !== JSON.stringify(draft[field])
+    )
       conflicts.push(field);
     Object.assign(values, { [field]: draft[field] });
   }
@@ -66,12 +76,27 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
   const args = [scope.projectId, scope.moduleId, scope.featureId] as const;
   const query = useQuery({
     queryKey: ["tasks", ...args],
-    queryFn: ({ signal }) => api.listTasks(...args, { signal }),
+    queryFn: ({ signal }) =>
+      scope.featureId === null
+        ? api.listModuleTasks(scope.projectId, scope.moduleId, { signal })
+        : api.listTasks(scope.projectId, scope.moduleId, scope.featureId, {
+            signal,
+          }),
     retry: false,
   });
   const members = useQuery({
     queryKey: ["task-assignees", ...args],
-    queryFn: ({ signal }) => api.listTaskAssignees(...args, { signal }),
+    queryFn: ({ signal }) =>
+      scope.featureId === null
+        ? api.listModuleTaskAssignees(scope.projectId, scope.moduleId, {
+            signal,
+          })
+        : api.listTaskAssignees(
+            scope.projectId,
+            scope.moduleId,
+            scope.featureId,
+            { signal },
+          ),
     retry: false,
   });
   const mutation = useMutation({
@@ -80,15 +105,20 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
       item,
       edit,
     }: {
-      item?: TaskItem;
-      edit: TaskEditRequest;
+      item?: TaskViewItem;
+      edit: TaskDraft;
     }) => {
-      const body = { ...edit, title: edit.title.trim() };
+      const { impactFeatureIds, ...fields } = edit;
+      const body = { ...fields, title: edit.title.trim() };
+      const impacts = [...new Set(impactFeatureIds ?? [])].sort(
+        (a, b) => a - b,
+      );
       const signature = JSON.stringify([
         ...args,
         item?.id,
         item?.rowVersion,
         body,
+        ...(scope.featureId === null ? [impacts] : []),
       ]);
       if (retry.current?.signature !== signature)
         retry.current = { signature, key: createIdempotencyKey("task") };
@@ -100,9 +130,37 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
           ...(item ? { "If-Match": `"${item.rowVersion}"` } : {}),
         },
       };
+      if (scope.featureId === null)
+        return item
+          ? api.updateModuleTask(
+              scope.projectId,
+              scope.moduleId,
+              item.id,
+              { ...body, impactFeatureIds: impacts },
+              init,
+            )
+          : api.createModuleTask(
+              scope.projectId,
+              scope.moduleId,
+              { ...body, impactFeatureIds: impacts },
+              init,
+            );
       return item
-        ? api.updateTask(...args, item.id, body, init)
-        : api.createTask(...args, body, init);
+        ? api.updateTask(
+            scope.projectId,
+            scope.moduleId,
+            scope.featureId,
+            item.id,
+            body,
+            init,
+          )
+        : api.createTask(
+            scope.projectId,
+            scope.moduleId,
+            scope.featureId,
+            body,
+            init,
+          );
     },
     onSuccess: async () => {
       retry.current = null;
@@ -113,5 +171,12 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
       );
     },
   });
-  return { api, query, members, mutation };
+  const features = useQuery({
+    queryKey: ["task-impact-options", scope.projectId, scope.moduleId],
+    queryFn: ({ signal }) =>
+      api.listFeatures(scope.projectId, scope.moduleId, { signal }),
+    retry: false,
+    enabled: scope.featureId === null,
+  });
+  return { api, query, members, mutation, features };
 }

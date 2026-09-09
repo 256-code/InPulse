@@ -17,6 +17,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { ProjectCreateModule } from "./modules/projects/project-create.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
+import { AdminUsersModule } from "./admin-users/admin-users.module.js";
 
 /** Secret 未配置时保持健康探针可启动；配置后挂载鉴权模块并 fail closed。 */
 const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
@@ -28,6 +29,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ProjectCreateModule,
       ModulesManagementModule,
       FeaturesManagementModule,
+      AdminUsersModule,
       TasksManagementModule,
     ]
   : [];

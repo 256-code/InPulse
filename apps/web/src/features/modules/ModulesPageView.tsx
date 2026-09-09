@@ -305,6 +305,18 @@ export function ModulesPageView({
                   </Button>
                 </div>
                 <div className="catalog-edit-link">
+                  <Button
+                    className="text-button"
+                    href={
+                      "/projects/" +
+                      projectId +
+                      "/modules/" +
+                      item.id +
+                      "/tasks"
+                    }
+                  >
+                    模块任务
+                  </Button>
                   {item.status === "ACTIVE" && (
                     <Button
                       className="text-button"
