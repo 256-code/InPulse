@@ -1,3 +1,4 @@
+import { FeaturesManagementModule } from "./modules/features/features-management.module.js";
 import { Module } from "@nestjs/common";
 import { ModulesManagementModule } from "./modules/modules/modules-management.module.js";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
@@ -25,6 +26,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       NotificationsModule,
       ProjectCreateModule,
       ModulesManagementModule,
+      FeaturesManagementModule,
     ]
   : [];
 

@@ -105,6 +105,66 @@ export type ErrorResponse = {
   readonly requestId: string;
 };
 
+export type FeatureArchiveRequest = {
+  readonly reason: string;
+};
+
+export type FeatureCollectionPath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type FeatureEditRequest = {
+  readonly name: string;
+  readonly currentBehavior: string;
+  readonly tags: readonly string[];
+};
+
+export type FeatureItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly code: string;
+  readonly createdBy: number;
+  readonly tags: readonly string[];
+  readonly name: string;
+  readonly currentBehavior: string;
+  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly archivedAt: (string | null);
+};
+
+export type FeatureListResponse = {
+  readonly items: readonly FeatureItem[];
+};
+
+export type FeatureMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type FeatureReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+};
+
+export type FeatureResourcePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+};
+
+export type FeatureSimilarQuery = {
+  readonly q: string;
+};
+
+export type FeatureVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+};
+
 export type HealthResponse = {
   readonly status: "ok";
 };
