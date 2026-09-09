@@ -1,0 +1,16 @@
+{
+  "name": "@inpulse/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@node-rs/argon2": "2.2.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "catalog:",
+    "postgres": "catalog:",
+    "typescript": "catalog:"
+  }
+}
