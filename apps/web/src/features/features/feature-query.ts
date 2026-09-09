@@ -45,13 +45,7 @@ export function useFeatures(
   const query = useQuery({
     queryKey: ["features", projectId, moduleId, featureId],
     queryFn: async ({ signal }) =>
-      featureId
-        ? {
-            items: [
-              await api.getFeature(projectId, moduleId, featureId, { signal }),
-            ],
-          }
-        : api.listFeatures(projectId, moduleId, { signal }),
+      api.listFeatures(projectId, moduleId, { signal }),
     retry: false,
     enabled: Number.isInteger(projectId) && projectId > 0,
   });

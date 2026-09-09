@@ -4,8 +4,10 @@ import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlace
 export const RecordsPage: React.FC = () => {
   return (
     <WorkspacePlaceholder
+      eyebrow="工作区 / 迭代记录"
       title="迭代记录"
-      description="迭代变化、版本和验证结果入口将在记录接口就绪后接入。"
+      description="只记录已发生或已确认的变化；人员、时间、归属与版本以服务端为准，记录接口就绪后接入。"
+      icon="gitBranch"
     />
   );
 };

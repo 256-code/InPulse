@@ -11,7 +11,7 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await page.getByRole("link", { name: "功能列表" }).first().click();
+    await page.getByRole("link", { name: "查看功能" }).first().click();
     await expect(page.getByRole("heading", { name: "功能档案" })).toBeVisible();
     expect(page.url()).toMatch(/\/modules\/\d+\/features$/);
     const listUrl = page.url();
@@ -24,12 +24,16 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await create.getByRole("button", { name: /保\s*存/ }).click();
     await expect(create).toBeHidden();
     await page
-      .locator(".ant-card")
+      .locator(".calm-feature-card")
       .filter({ hasText: name })
       .getByRole("link", { name: "查看详情" })
       .click();
-    await expect(page.getByRole("heading", { name: "功能详情" })).toBeVisible();
-    await expect(page.getByText("创建时的说明", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name })).toBeVisible();
+    await expect(
+      page
+        .locator(".feature-reading")
+        .getByText("创建时的说明", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: /归\s*档/ })).toHaveCount(0);
     await page.getByRole("button", { name: /编\s*辑/ }).click();
     const edit = page.getByRole("dialog", { name: "编辑功能" });
@@ -68,7 +72,9 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await expect(edit).toBeHidden();
     await page.reload();
     await expect(
-      page.getByText("其他页面再次修改", { exact: true }),
+      page
+        .locator(".feature-reading")
+        .getByText("其他页面再次修改", { exact: true }),
     ).toBeVisible();
     await page.goto(listUrl);
     await expect(page.getByText(`${name}-更新`, { exact: true })).toBeVisible();
@@ -90,7 +96,7 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
   const page = await context.newPage();
   try {
     await memberPage.goto(`/projects/${runtime.projectId}/modules`);
-    await memberPage.getByRole("link", { name: "功能列表" }).first().click();
+    await memberPage.getByRole("link", { name: "查看功能" }).first().click();
     await memberPage.getByRole("button", { name: "新建功能" }).click();
     const create = memberPage.getByRole("dialog", { name: "新建功能" });
     const name = `归档功能-${Date.now()}`;
@@ -98,7 +104,7 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await create.getByRole("button", { name: /保\s*存/ }).click();
     await expect(create).toBeHidden();
     await memberPage
-      .locator(".ant-card")
+      .locator(".calm-feature-card")
       .filter({ hasText: name })
       .getByRole("link", { name: "查看详情" })
       .click();
@@ -132,7 +138,9 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await page.reload();
     await expect(page.getByRole("button", { name: /恢\s*复/ })).toBeVisible();
     await memberPage.reload();
-    await expect(memberPage.getByText("已归档", { exact: true })).toBeVisible();
+    await expect(
+      memberPage.locator(".feature-facts").getByText("已归档", { exact: true }),
+    ).toBeVisible();
     await expect(
       memberPage.getByRole("button", { name: /编\s*辑/ }),
     ).toHaveCount(0);
