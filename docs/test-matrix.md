@@ -28,7 +28,7 @@
 `TEST_DATABASE_URL`，5 例未执行，当时 MOD-BOOT-001～004 为**待验证**；现已由上述 CI 补齐。
 未发现可用的本地 PostgreSQL/容器/WSL 测试入口；没有以 Mock 或注入测试替代。
 
-## 项目创建 F-04（A，本机交付 2026-09-08）
+## 项目创建 F-04（A 后端 2026-09-08；C 前端 2026-09-09）
 
 单事务创建项目闭环：创建者与可选初始成员 ACTIVE 校验、唯一未分类模块、审计、搜索/活动
 投影与通知；任一初始成员无效（停用/不存在）时整笔回滚，创建者始终以活跃成员写入。
@@ -40,6 +40,10 @@
 | PROJ-CREATE-003 | PostgreSQL 集成 | 停用成员回滚 | 初始成员停用时整笔回滚，无残留项目 | 同上 |
 | PROJ-CREATE-004 | PostgreSQL 集成 | 不存在成员回滚 | `memberIds` 含不存在用户时整笔回滚，无残留项目 | 同上 |
 | PROJ-CREATE-005 | 单元 | 项目编码派生 | `deriveCode`/`resolveProjectCode` 覆盖中文归一、分隔符合并、数字前缀补 P、空名/全符号拒绝与显式编码校验 | 本机 7/7 通过（2026-09-08） |
+| PROJ-CREATE-006 | 单元 | 项目创建控制器边界 | 浏览器完整同源请求头只提取 `x-csrf-token`，严格 Schema 不再因 Host/Origin/Sec-Fetch 等额外头误报 422；缺失 Token 仍返回 422 且不进入幂等事务 | 本地通过（`project-bootstrap.controller.test.ts` 2 例，2026-09-09） |
+| PROJ-CREATE-007 | 单元 | 审计 HMAC keyring 测试路径 | `NODE_ENV=test` 且显式设置 `AUDIT_HMAC_KEYRING_TEST_PATH=1` 时才允许临时 keyring；生产仍限制 `/run/secrets/*` | 本地通过（`audit-keyring.test.ts` 3 例，2026-09-09） |
+| PROJ-CREATE-008 | 前端单元 | 项目创建表单与页面 | RHF + Zod 校验、CSRF/幂等 Key、错误映射、创建成功与入口交互均通过生成客户端消费契约 | 本地通过（`project-query.test.tsx`、`CreateProjectModal.test.tsx`、`ProjectsPage.test.tsx` 等，前端 19 文件 45 例） |
+| PROJ-CREATE-009 | Playwright E2E | 项目创建关键路径 | 登录 → `/projects` → RHF 表单创建 → 项目动态 → 搜索到项目 → 站内通知 | 本地 6/6 通过（2026-09-09） |
 
 实现文件：`apps/api/test/project-bootstrap.integration.test.ts`（4 例）与
 `apps/api/test/project-code.test.ts`（7 例）。前者需 `TEST_DATABASE_URL` 指向已安装
@@ -78,7 +82,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | 基座本地已自动化（5 例通过）；完整关键路径 Required |
+| CI-017 | E2E | Playwright 关键路径 | 登录、项目创建到动态/搜索/通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 6/6 通过（项目创建首条业务关键路径已覆盖）；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
 
@@ -107,7 +111,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
 > `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的
 > `postgres:18.6` 构建的探针镜像覆盖，而 `.github/workflows/ci.yml` 的 GitHub Actions
-> 运行本身尚未执行。CI-017 的 Playwright 基座已落库并于 2026-09-08 在本机 5/5 通过，完整关键路径仍为 Required，本 PR 的 GitHub Actions 执行结果待确认；CI-018 的 `compose config` 渲染、exact-tag@sha256
+> 运行本身尚未执行。CI-017 的 Playwright 基座已于 2026-09-09 在本机 6/6 通过，其中项目创建关键路径已覆盖，其余完整关键路径仍为 Required，本 PR 的 GitHub Actions 执行结果待确认；CI-018 的 `compose config` 渲染、exact-tag@sha256
 > 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
 > `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
 > 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI；CI-019 因尚无生产 Dockerfile、受信 digest 与镜像扫描而未落库。F-31 覆盖见“Playwright 浏览器测试基座”一节。
@@ -261,6 +265,8 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CONTRACT-001 | 契约与权限 | F-27/F-28 路由登记 | 12 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；GitHub Actions 尚未执行 |
 
 后端本次新增/扩展的真实 PostgreSQL 集成共 20 例（活动投影 4、活动查询 4、通知状态 6、HTTP 集成 4、Session 回归 2），API 集成全量 18 文件 78 例通过；前端全量 16 文件 39 例通过。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
+>
+> 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建 → 动态 → 搜索 → 通知。API 单测 38 文件 177 例、前端 19 文件 45 例、API 集成 21 文件 87 例、database 集成 13 例、Playwright 6/6 均本地通过；GitHub Actions 尚未执行。
 
 ## 维护规则
 
