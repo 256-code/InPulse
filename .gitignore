@@ -23,6 +23,7 @@ __pycache__/
 playwright-report/
 test-results/
 blob-report/
+.e2e-runtime/
 
 # Logs and runtime state
 logs/

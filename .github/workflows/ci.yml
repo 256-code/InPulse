@@ -16,10 +16,12 @@
 #   9  Route Registry/permission/response-schema completeness
 #                                         -> Route Registry completeness check
 #  10  web/api production build           -> Build
-#  11  dependency boundary check          -> Dependency boundary check
+#  11  Playwright browser E2E             -> Browser E2E（F-31 基座；数据库驱动）
+#  12  dependency boundary check          -> Dependency boundary check
 #                                            + Frontend boundary check (dependency-cruiser)
-#  12  permission matrix test             -> Permission matrix check
-#  13  dependency/secret scan             -> Dependency audit / Secret scan
+#  13  permission matrix test             -> Permission matrix check
+#  14  dependency/secret scan             -> Dependency audit / Secret scan
+#  15  documentation check                -> Documentation checks
 #
 # 迁移 0003_search_pgroonga.sql 在缺少 PGroonga 时 fail closed，因此本 job 先用
 # database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 基于 digest 固定的
@@ -33,7 +35,7 @@
 # 纳入本 workflow；待批准的搜索服务测试方案确定后必须按 §12.4 顺序插入。
 #
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
-#   - Playwright critical-path tests（阶段 0 E2E 尚未建立）
+#   - Playwright 完整关键路径（F-31 测试基座已落库，完整业务场景待对应模块交付）
 #   - container image build、Compose config render + exact-tag/digest format
 #     + PostgreSQL 18 mount check、image scan（仓库尚无生产 Dockerfile/compose.yaml，
 #     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
@@ -168,6 +170,25 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm --filter @inpulse/e2e exec playwright install --with-deps chromium
+
+      - name: Browser E2E
+        env:
+          E2E_DATABASE_URL: postgresql://cluster_bootstrap@127.0.0.1:5432/app
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            apps/e2e/playwright-report/
+            apps/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Dependency boundary check
         run: pnpm check:deps
