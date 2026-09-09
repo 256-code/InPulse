@@ -55,22 +55,6 @@ async function cleanupFixture(
         DELETE FROM app.mfa_recovery_codes
         WHERE user_id = ${runtime.userId}
       `;
-      await transaction`
-        DELETE FROM app.idempotency_records
-        WHERE actor_id = ${runtime.adminMfaUserId}
-      `;
-      await transaction`
-        DELETE FROM app.user_sessions
-        WHERE user_id = ${runtime.adminMfaUserId}
-      `;
-      await transaction`
-        DELETE FROM app.user_totp_factors
-        WHERE user_id = ${runtime.adminMfaUserId}
-      `;
-      await transaction`
-        DELETE FROM app.mfa_recovery_codes
-        WHERE user_id = ${runtime.adminMfaUserId}
-      `;
     });
   } finally {
     await sql.end({ timeout: 5 });

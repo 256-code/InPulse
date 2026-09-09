@@ -386,6 +386,8 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 
 ## F-14 功能级任务（B，2026-09-09 本地交审）
 
+PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立的 test-scoped 管理员和真实 API 注册因子，避免共享 `last_accepted_step`。生产认证行为及 UI 断言不变。交付独享库上修复前顺序 3/3，修复后两轮顺序 6/6（Edge），四个独立管理员、清理后 Session/因子为 0；未声称复现 CI 原失败，修复版 Chromium/完整 CI 待执行，详见 [交审说明](f14-local-handoff.md#pr-71-交付增量mfa-测试隔离)。
+
 具体命令和独享数据库见 [F-14 交审说明](f14-local-handoff.md)。阶段 0 未完成，本批不含 F-15/F-16/F-19。
 
 | ID | 层级 | 场景 | 实际结果 |

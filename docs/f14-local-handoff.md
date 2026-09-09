@@ -49,3 +49,11 @@ IdempotencyHttpService 创建一个外层事务，Session/CSRF、项目访问、
 早期失败已修复：契约测试先因 Schema 缺失失败；测试 fixture 曾误用 joined_by/idempotency_keys，按既有 Schema 修正；Controller 扫描期望按实际文件顺序补入五路由；jsdom 中 Ant Design 的固定 test-id 导致隐藏抽屉标题与编辑弹窗冲突，改为关闭后卸载抽屉。首次 E2E 配置同时选中 Chromium/Edge，Chromium 缺少本机安装而失败，Edge 已通过；最终显式 `--project=edge` 全命令成功，不冒充默认 Chromium 通过。
 
 只格式化本轮 TS/TSX。未执行全仓静态检查、全量构建、全量测试、依赖审计或 CI；默认 Chromium 未验证。没有声称生产状态机/记录域/模块级任务已实现。剩余交付事项为审核反馈、PR/CI 及合并，交付期间按协调要求冻结分支。
+
+## PR #71 交付增量：MFA 测试隔离
+
+最新交付 HEAD `ff85898` 的 [CI 34340424204](https://github.com/256-code/InPulse/actions/runs/34340424204) 完成真库集成、契约、应用/四生产镜像构建与扫描，Browser E2E 为 16 passed / 1 failed；F-14 Chromium 任务路径通过（31 秒），既有 MFA 用例两次在登录 TOTP 提交后等待“系统管理员”失败（10 秒）。未取得受浏览器限制的 trace/截图，不能将该次失败断言为验证码重放。代码确认 features/mfa 原先共用管理员和因子，前一用例重认证消费未来一步，后一用例可能进入同一已消费步；这是已确认的测试状态耦合，生产防重放实现未在本 PR 修改。
+
+协调授权新增 test-scoped `helpers/mfa-fixture.ts`：每用例/每次重试创建随机独立管理员，通过既有真实 API 注册因子；用例继续走真实 UI 登录和重认证。注册流程从 global setup 原样提取并参数化 API URL；不清零 `last_accepted_step`、不改变窗口、断言或等待。移除 global setup/runtime 中共享管理员及对应全局清理，fixture finally 只清理本次账号的 Session/恢复码/因子，保留用户与审计历史。
+
+交付复跑独享 PostgreSQL 18/PGroonga：`127.0.0.1:55425/inpulse_f14_pr`；未使用实现者 55424。空库应用既有六迁移、E2E 必要 api-contract/database/API 局部编译通过；修复前 features/mfa 顺序 3/3（36.2 秒），未复现该次 CI 失败。修复后执行 `pnpm --filter @inpulse/e2e exec playwright test tests/features.spec.ts tests/mfa.spec.ts --config .e2e-runtime/playwright.edge.config.ts --project=edge --repeat-each=2`，6/6（1.2 分钟），查询确认四次管理员业务用例创建四个不同账号，结束后因子与 Session 均为 0。repeat-each 不是失败重试实测；重试隔离由 Playwright test-scoped fixture 生命周期保证。E2E 局部 `tsc --noEmit`、六个变更 TS 文件的 Prettier/ESLint 和 diff 空白检查通过。未全仓构建、静态检查或无关审计；修复版 Chromium 与完整 CI 待推送后运行，增量待协调审核。
