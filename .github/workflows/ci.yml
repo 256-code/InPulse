@@ -37,8 +37,8 @@
 #
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
 #   - Playwright 完整关键路径（F-31 测试基座已落库，完整业务场景待对应模块交付）
-#   - container image build、Compose config render + exact-tag/digest format
-#     + PostgreSQL 18 mount check、image scan（仓库尚无生产 Dockerfile/compose.yaml，
+#   - container image build、受信镜像 digest 绑定与 image scan
+#     （仓库尚无生产 Dockerfile；deploy/compose.yaml 与 ref 格式预检已落库，
 #     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
 # Compose config render + exact-tag/digest 格式 + PostgreSQL 18 命名卷挂载 + 非 root
 # 结构已由 `pnpm check:deploy:test` 的合成 ref 正例和下方负例 step 覆盖；生产镜像 digest
