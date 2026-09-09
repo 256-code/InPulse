@@ -75,11 +75,11 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-011 | CI | 权限矩阵一致性 | `pnpm permissions:check` 双向校验可执行权限矩阵与 `docs/permissions.md` 的身份集合、ADR-023 allowlist 精确相等、每条路由都有矩阵条目，并要求需认证路由同时登记允许与拒绝结果 | 已自动化 |
 | CI-012 | CI | 生产构建 | `pnpm build` 完成 api（`tsc`）与 web（`vite`）生产构建 | 已自动化 |
 | CI-013 | CI | 依赖边界 | `pnpm check:deps` 校验前端分层 `app -> pages -> features -> shared/generated`、`features` 不导入 `pages`、web 不导入 database、Controller 不直连数据库、模块只能经公开表面（`public/**`、模块 `index.ts`、`*.port.ts`）跨模块、无循环依赖、前端无裸 `fetch`/`axios`；并由 `pnpm check:frontend:boundaries`（dependency-cruiser）复核 `apps/web/src` 的分层规则 | 已自动化 |
-| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex@5.0.0` high 已由 `overrides` 固定到 `^5.0.1` 解决，见下方状态说明） |
+| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | Required（命令已自动化；2026-09-09 公共 registry 暴露基线 `multer` 3 个 high，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | Required |
-| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required |
+| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
@@ -99,8 +99,16 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
 > `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的
 > `postgres:18.6` 构建的探针镜像覆盖，而 `.github/workflows/ci.yml` 的 GitHub Actions
-> 运行本身尚未执行。CI-017～CI-019 因仓库尚无 E2E、生产 Dockerfile 与 `compose.yaml`
-> 而未落库，落地后必须按 §12.4 顺序插入 CI。
+> 运行本身尚未执行。CI-017 与 CI-019 因仓库尚无 Playwright E2E、生产 Dockerfile、
+> 受信 digest 与镜像扫描而未落库；CI-018 的 `compose config` 渲染、exact-tag@sha256
+> 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
+> `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
+> 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI。
+> **2026-09-09 复核**：使用公共 registry 执行 `pnpm audit --audit-level=high` 发现
+> 当前基线 `apps__api` 引入的 `multer` 存在 3 个 high
+> （GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4），
+> patched `>=2.3.0` 或待上游公布。本次部署预检未修改 `pnpm-lock.yaml`，也不应在本
+> PR 夹带依赖升级；按 `AGENTS.md` 第 4 节必须另建独立依赖 PR 并由人工确认。
 
 
 ## 健康探针
