@@ -1,15 +1,55 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
-test("登录用户可打开站内通知页面", async ({ browser }) => {
+async function readUnreadCount(bell: Locator): Promise<number> {
+  await expect(bell).toHaveAttribute("title", /^\d+ 条未读通知$/);
+  const title = await bell.getAttribute("title");
+  const match = title?.match(/^(\d+) 条未读通知$/);
+  if (match?.[1] === undefined) {
+    throw new Error(`无法解析通知未读数: ${title ?? "missing"}`);
+  }
+  return Number(match[1]);
+}
+
+test("登录用户可在通知页切换已读/未读并全部已读", async ({ browser }) => {
   const runtime = await loadRuntime();
   const { context, page } = await createAuthenticatedContext(browser, runtime);
 
+  const created = await createProjectViaUi(page, runtime, "NOT");
   await page.goto("/notifications");
-  await expect(page.getByText("站内通知", { exact: true })).toBeVisible();
-  await expect(page.getByText("还没有通知")).toBeVisible();
+
+  const item = page
+    .locator('[data-testid^="notification-item-"]')
+    .filter({ hasText: created.name });
+  const bell = page.getByRole("button", { name: "通知", exact: true });
+
+  await expect(item).toBeVisible();
+  await expect(
+    item.getByText(`已加入项目 ${created.name}`, { exact: true }),
+  ).toBeVisible();
+  await expect(item.getByRole("button", { name: "标记已读" })).toBeVisible();
+
+  const initialUnread = await readUnreadCount(bell);
+  expect(initialUnread).toBeGreaterThan(0);
+
+  await item.getByRole("button", { name: "标记已读" }).click();
+  await expect(item.getByRole("button", { name: "标记未读" })).toBeVisible();
+  await expect(bell).toHaveAttribute(
+    "title",
+    `${initialUnread - 1} 条未读通知`,
+  );
+
+  await item.getByRole("button", { name: "标记未读" }).click();
+  await expect(item.getByRole("button", { name: "标记已读" })).toBeVisible();
+  await expect(bell).toHaveAttribute("title", `${initialUnread} 条未读通知`);
+
+  await page.getByRole("button", { name: "全部已读" }).click();
+  await expect(item.getByRole("button", { name: "标记未读" })).toBeVisible();
+  await expect(bell).toHaveAttribute("title", "0 条未读通知");
+  await expect(page.getByRole("button", { name: "全部已读" })).toBeDisabled();
 
   await context.close();
 });
