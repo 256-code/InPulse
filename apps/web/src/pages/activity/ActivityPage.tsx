@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { Result } from "antd";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { ActivityPageView } from "@features/activity/ActivityPageView";
@@ -35,13 +35,16 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ client }) => {
   }
 
   return (
-    <ActivityPageView
-      projectId={projectId}
-      includeAdminOnly={includeAdminOnly}
-      onIncludeAdminOnlyChange={handleIncludeAdminOnlyChange}
-      showAdminToggle={Boolean(user?.isAdmin)}
-      {...(client ? { client } : {})}
-    />
+    <>
+      <Link to={`/projects/${projectId}/modules`}>管理项目模块</Link>
+      <ActivityPageView
+        projectId={projectId}
+        includeAdminOnly={includeAdminOnly}
+        onIncludeAdminOnlyChange={handleIncludeAdminOnlyChange}
+        showAdminToggle={Boolean(user?.isAdmin)}
+        {...(client ? { client } : {})}
+      />
+    </>
   );
 };
 

@@ -2,6 +2,26 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## F-12 未分类模块编辑（2026-09-09 人工确认）
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MOD-EDIT-UNCLASSIFIED-001 | HTTP + PostgreSQL + 前端 | 编辑未分类名称、描述 | 活跃成员和管理员在父级及模块可写时允许编辑；kind 保持 UNCLASSIFIED；名称冲突、旧版本、无权限均拒绝；失败时保留表单输入；不提供物理删除 | 本地前端与真实 HTTP/PostgreSQL 已通过，见 F-12 交审说明 |
+
+## F-12 模块完整纵切片（B，2026-09-09 本地交审）
+
+接口、边界与命令见 [F-12 本地交审](f12-local-handoff.md)。以下新增用例独立验证业务行为，不替代原 Port 的证据；2026-09-09 在临时 PostgreSQL 18.6 + PGroonga 4.0.8 实测通过。
+
+| ID | 层级 | 场景 | 通过标准 | 当前证据 |
+| --- | --- | --- | --- | --- |
+| MOD-HTTP-001 | HTTP + PostgreSQL | listModules/createModule/updateModule 允许与拒绝 | 匿名 401，其他项目/已移除成员 404；管理员可读；普通创建固定 NORMAL；未分类可改名，输入身份字段拒绝 | modules-api.integration.test.ts 9/9 本地通过 |
+| MOD-HTTP-002 | HTTP + PostgreSQL | archiveModule/restoreModule 允许与拒绝 | 成员 403，管理员需双时间戳重认证及原因；状态/版本冲突 409；归档父级拒绝写但允许历史读取 | 同上，已通过 |
+| MOD-IDEM-001 | HTTP + PostgreSQL | 幂等与重放权限 | Schema 解析后等价输入重放；不同输入 409；成员移除或重认证过期拒绝返回缓存 | 同上，已通过；modules-http.test.ts 重认证回调单元验证通过 |
+| MOD-TX-001 | PostgreSQL | 审计或搜索失败 | 业务、审计、活动、搜索、幂等同事务回滚；相同 Key 可在故障解除后重试 | 同上，2 个故障注入用例均通过 |
+| MOD-LOCK-001 | PostgreSQL | 项目归档和模块创建竞争 | 真实 FOR UPDATE 阻塞子写，pg_stat_activity 观察 Lock 等待；父归档提交后子写拒绝 | 同上，已通过 |
+| MOD-UI-001 | jsdom | 表单、权限入口、错误与 409 | 未分类可编辑；409 保留快照/草稿，未改字段取最新值，同字段冲突展示差异并显式选择后才更新版本；失败重试；管理员原因；归档恢复入口 | ModulesPageView.test.tsx 7/7 通过；新增 3 例先红后绿 |
+| MOD-E2E-001 | Playwright | 成员模块页面关键路径 | 登录后创建/编辑、刷新持久化、成员无归档入口；双页面竞争验证不同字段自动合并、同字段选择最新值 | apps/e2e/tests/modules.spec.ts 1/1 本地 Edge（Chromium）通过 |
+
 ## Modules 项目初始化 Port（B，本地交付 2026-09-08）
 
 仅实现项目初始化的未分类模块步骤，未实现项目创建闭环；不改变 HTTP 权限矩阵。

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ModulesManagementModule } from "./modules/modules/modules-management.module.js";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { ApiExceptionFilter } from "./http/api-exception.filter.js";
 import { ContractResponseInterceptor } from "./http/contract-response.interceptor.js";
@@ -23,6 +24,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ActivityModule,
       NotificationsModule,
       ProjectCreateModule,
+      ModulesManagementModule,
     ]
   : [];
 

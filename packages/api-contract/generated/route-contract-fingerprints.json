@@ -1,4 +1,16 @@
 {
+  "archiveModule": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "c0a4b256606f5bd1d5e6063481cde614ef99b23d3fe64aab561f654b7593eeeb"
+    }
+  ],
+  "createModule": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "3e2d9e9c8882a1da6f51f1e8d34c234ad696eaaf38f5abbb33b8b08f33b5b974"
+    }
+  ],
   "createProject": [
     {
       "version": "1.0.0",
@@ -23,10 +35,22 @@
       "fingerprint": "f3cad65d2a9b14e9619af1de69ac8d046a9144e339fa4173391f2d575a753b73"
     }
   ],
+  "restoreModule": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ea08dd8b3fc048149e5f7ce88990006839f0b5e92761f44341fa3a4c44c2ae71"
+    }
+  ],
   "unreadNotification": [
     {
       "version": "1.0.0",
       "fingerprint": "1dabb97faeae65867c61100f10ec5d1dbb849a1c720def5f23eeb07ff69ae547"
+    }
+  ],
+  "updateModule": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ef717fe3ae01dfec0bc2c36a0c61996a0192d9e7dec32e3f103afbc743299e1e"
     }
   ]
 }

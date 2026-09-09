@@ -133,6 +133,56 @@ export type MfaEnrollmentHeaders = {
   readonly "x-csrf-token": string;
 };
 
+export type ModuleArchiveRequest = {
+  readonly reason: string;
+};
+
+export type ModuleEditRequest = {
+  readonly name: string;
+  readonly description: string;
+};
+
+export type ModuleItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly name: string;
+  readonly description: string;
+  readonly kind: ("NORMAL" | "UNCLASSIFIED");
+  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly sortOrder: number;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly archivedAt: (string | null);
+};
+
+export type ModuleListResponse = {
+  readonly items: readonly ModuleItem[];
+};
+
+export type ModuleMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type ModuleProjectPath = {
+  readonly projectId: number;
+};
+
+export type ModuleReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type ModuleResourcePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type ModuleVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+};
+
 export type NotificationItem = {
   readonly id: string;
   readonly projectId: (number | null);
