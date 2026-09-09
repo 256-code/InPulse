@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import { totpCode } from "../helpers/totp.js";
 
@@ -82,6 +83,7 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
 }) => {
   test.setTimeout(90_000);
   const runtime = await loadRuntime();
+  await resetAdminTotpReplayStep(runtime.adminMfaUserId);
   const { context: memberContext, page: memberPage } =
     await createAuthenticatedContext(browser, runtime);
   const context = await browser.newContext({ baseURL: runtime.webBaseUrl });
@@ -119,10 +121,11 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await archive.getByRole("button", { name: "管理员安全验证" }).click();
     const security = page.getByRole("dialog", { name: "管理员安全验证" });
     await expect(security).toBeVisible({ timeout: 5000 });
+    await resetAdminTotpReplayStep(runtime.adminMfaUserId);
     await security.getByLabel("管理员密码").fill(runtime.adminMfa.password);
     await security
       .getByLabel("6 位验证码")
-      .fill(totpCode(runtime.adminMfaSecret, Date.now() + 30_000));
+      .fill(totpCode(runtime.adminMfaSecret));
     await security.getByRole("button", { name: "验证身份" }).click();
     await expect(security).toBeHidden();
     await archive.getByRole("button", { name: /确\s*认/ }).click();

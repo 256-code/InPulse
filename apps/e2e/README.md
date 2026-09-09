@@ -39,6 +39,9 @@ Vite dev server，并把 `/api/v1` 代理到 API。`global-setup` 在服务就�
 E2E 用户、可见项目、无当前成员关系的隐藏项目与搜索投影，通过 API 预注册启用 TOTP 的第二管理员并签发
 Session；API 启动探针验证
 `GET /api/v1/health`。失败时保留截图、trace 与 video。
+管理员 TOTP 用例在每次验证前通过测试专用数据库把 `last_accepted_step` 重置为
+`NULL`，避免多个用例共享同一管理员时发生时间步/验证码重放污染；该逻辑只作用于
+E2E 夹具，不改变生产认证行为。
 
 `global-teardown` 清理通知、活动、搜索投影、幂等记录、用户会话与 MFA 状态。
 由于项目必须保留唯一未分类模块，且数据库触发器禁止物理删除该模块，E2E 项目和

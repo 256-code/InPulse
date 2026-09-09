@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import { totpCode } from "../helpers/totp.js";
 
 test("已启用 MFA 的管理员能完成验证并重认证", async ({ browser }) => {
   test.setTimeout(90_000);
   const runtime = await loadRuntime();
+  await resetAdminTotpReplayStep(runtime.adminMfaUserId);
   const context = await browser.newContext({ baseURL: runtime.webBaseUrl });
   const page = await context.newPage();
   try {
@@ -25,10 +27,11 @@ test("已启用 MFA 的管理员能完成验证并重认证", async ({ browser }
     await page.getByRole("button", { name: "管理员安全验证" }).click();
     const dialog = page.getByRole("dialog", { name: "管理员安全验证" });
     await expect(dialog).toBeVisible();
+    await resetAdminTotpReplayStep(runtime.adminMfaUserId);
     await dialog.getByLabel("管理员密码").fill(runtime.adminMfa.password);
     await dialog
       .getByLabel("6 位验证码")
-      .fill(totpCode(runtime.adminMfaSecret, Date.now() + 30_000));
+      .fill(totpCode(runtime.adminMfaSecret));
     await dialog.getByRole("button", { name: "验证身份" }).click();
     await expect(dialog.getByText("重认证成功")).toBeVisible();
   } finally {

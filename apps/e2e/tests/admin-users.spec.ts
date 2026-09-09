@@ -6,6 +6,7 @@ import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
+import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import { totpCode } from "../helpers/totp.js";
 
@@ -51,6 +52,7 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
 
     const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
     await expect(reauth).toBeVisible();
+    await resetAdminTotpReplayStep(runtime.adminMfaUserId);
     await reauth.getByLabel("管理员密码").fill(runtime.adminMfa.password);
     await reauth
       .getByLabel("6 位验证码")
