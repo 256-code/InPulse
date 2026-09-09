@@ -35,11 +35,9 @@ const item: TaskItem = {
 function client(overrides: object = {}) {
   return {
     listTasks: vi.fn().mockResolvedValue({ items: [item] }),
-    listTaskAssignees: vi
-      .fn()
-      .mockResolvedValue({
-        items: [{ id: 5, name: "项目成员", avatarUrl: null }],
-      }),
+    listTaskAssignees: vi.fn().mockResolvedValue({
+      items: [{ id: 5, name: "项目成员", avatarUrl: null }],
+    }),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     getFeature: vi.fn().mockResolvedValue({ status: "ACTIVE" }),
     ...overrides,
