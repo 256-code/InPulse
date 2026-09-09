@@ -17,6 +17,10 @@ export interface UserSessionIssueSnapshot {
 }
 
 export interface UserCredentialRepository {
+  findById(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<UserCredential | undefined>;
   findByNormalizedLoginName(
     tx: TransactionContext,
     loginName: string,
@@ -26,6 +30,15 @@ export interface UserCredentialRepository {
     userId: number,
     expectedAuthVersion: number,
   ): Promise<UserSessionIssueSnapshot | undefined>;
+  lockForMfaMutation(
+    tx: TransactionContext,
+    userId: number,
+    expectedAuthVersion: number,
+  ): Promise<UserSessionIssueSnapshot | undefined>;
+  lockForMfaReset(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<UserCredential | undefined>;
   incrementAuthVersion(
     tx: TransactionContext,
     userId: number,
@@ -38,6 +51,26 @@ export interface UserCredentialRepository {
  * 启用状态与 `auth_version`，防止校验期间停用或改密后签发旧凭据 Session。
  */
 export class PostgresUserCredentialRepository implements UserCredentialRepository {
+  async findById(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<UserCredential | undefined> {
+    const rows = (await tx.sql`
+      SELECT id,
+             login_name AS "loginName",
+             password_hash AS "passwordHash",
+             is_admin AS "isAdmin",
+             status,
+             auth_version AS "authVersion",
+             disabled_at AS "disabledAt"
+        FROM app.users
+       WHERE id = ${userId}
+       LIMIT 1
+    `) as unknown as readonly UserCredential[];
+    const row = rows[0];
+    return row === undefined ? undefined : { ...row };
+  }
+
   async findByNormalizedLoginName(
     tx: TransactionContext,
     loginName: string,
@@ -74,6 +107,46 @@ export class PostgresUserCredentialRepository implements UserCredentialRepositor
          AND auth_version = ${expectedAuthVersion}
        FOR SHARE
     `) as unknown as readonly UserSessionIssueSnapshot[];
+    const row = rows[0];
+    return row === undefined ? undefined : { ...row };
+  }
+
+  async lockForMfaMutation(
+    tx: TransactionContext,
+    userId: number,
+    expectedAuthVersion: number,
+  ): Promise<UserSessionIssueSnapshot | undefined> {
+    const rows = (await tx.sql`
+      SELECT id,
+             is_admin AS "isAdmin",
+             auth_version AS "authVersion"
+        FROM app.users
+       WHERE id = ${userId}
+         AND status = 'ACTIVE'
+         AND disabled_at IS NULL
+         AND auth_version = ${expectedAuthVersion}
+       FOR UPDATE
+    `) as unknown as readonly UserSessionIssueSnapshot[];
+    const row = rows[0];
+    return row === undefined ? undefined : { ...row };
+  }
+
+  async lockForMfaReset(
+    tx: TransactionContext,
+    userId: number,
+  ): Promise<UserCredential | undefined> {
+    const rows = (await tx.sql`
+      SELECT id,
+             login_name AS "loginName",
+             password_hash AS "passwordHash",
+             is_admin AS "isAdmin",
+             status,
+             auth_version AS "authVersion",
+             disabled_at AS "disabledAt"
+        FROM app.users
+       WHERE id = ${userId}
+       FOR UPDATE
+    `) as unknown as readonly UserCredential[];
     const row = rows[0];
     return row === undefined ? undefined : { ...row };
   }

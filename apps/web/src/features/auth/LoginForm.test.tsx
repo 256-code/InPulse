@@ -57,7 +57,11 @@ describe("LoginForm", () => {
       ),
     ).toBeInTheDocument();
     expect(login).toHaveBeenCalledWith(
-      { loginName: "developer", password: rejectedPassword },
+      {
+        loginName: "developer",
+        password: rejectedPassword,
+        challengeMode: "totp",
+      },
       { headers: { "x-csrf-token": "csrf-token" } },
     );
   });

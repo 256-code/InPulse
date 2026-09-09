@@ -27,6 +27,7 @@ interface LoginControllerResponse {
 interface LoginResponseDto {
   readonly csrfToken: string;
   readonly authState: string;
+  readonly enrollmentGeneration?: number;
 }
 
 interface ErrorResponseDto {
@@ -39,6 +40,7 @@ interface ErrorResponseDto {
 interface LoginBodyDto {
   readonly loginName: string;
   readonly password: string;
+  readonly challengeMode: "totp" | "recovery";
 }
 
 function parseLoginBody(body: unknown): LoginBodyDto | undefined {
@@ -48,7 +50,15 @@ function parseLoginBody(body: unknown): LoginBodyDto | undefined {
   const record = body as Readonly<Record<string, unknown>>;
   const loginName = record["loginName"];
   const password = record["password"];
+  const challengeMode = record["challengeMode"];
   if (typeof loginName !== "string" || typeof password !== "string") {
+    return undefined;
+  }
+  if (
+    challengeMode !== undefined &&
+    challengeMode !== "totp" &&
+    challengeMode !== "recovery"
+  ) {
     return undefined;
   }
   const normalizedLoginName = loginName.trim();
@@ -60,7 +70,11 @@ function parseLoginBody(body: unknown): LoginBodyDto | undefined {
   ) {
     return undefined;
   }
-  return { loginName: normalizedLoginName, password };
+  return {
+    loginName: normalizedLoginName,
+    password,
+    challengeMode: challengeMode === "recovery" ? "recovery" : "totp",
+  };
 }
 
 function resolveClientIp(request: LoginControllerRequest): string {
@@ -114,6 +128,7 @@ export class LoginController {
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
         csrfToken: getHeader(request.headers, "x-csrf-token"),
+        challengeMode: parsed.challengeMode,
       });
       response.setHeader(
         "Set-Cookie",
@@ -124,6 +139,9 @@ export class LoginController {
       return {
         csrfToken: result.csrfToken,
         authState: result.authState,
+        ...(result.enrollmentGeneration === undefined
+          ? {}
+          : { enrollmentGeneration: result.enrollmentGeneration }),
       };
     } catch (error) {
       if (error instanceof LoginError) {

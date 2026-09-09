@@ -29,6 +29,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
     const credentials: LoginRequest = {
       loginName: values.loginName.trim(),
       password: values.password,
+      challengeMode: "totp",
     };
     setSubmitting(true);
     setErrorMessage(null);

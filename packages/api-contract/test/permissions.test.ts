@@ -179,10 +179,17 @@ export class HealthController {
     expect(
       scan.bindings.map((binding) => `${binding.method} ${binding.path}`),
     ).toEqual([
+      "POST /api/v1/auth/admin/mfa-reset",
       "GET /api/v1/auth/csrf",
       "POST /api/v1/auth/login",
       "POST /api/v1/auth/logout",
       "GET /api/v1/me",
+      "POST /api/v1/auth/mfa/enrollment/start",
+      "POST /api/v1/auth/mfa/enrollment/confirm",
+      "POST /api/v1/auth/mfa/reauthenticate",
+      "POST /api/v1/auth/mfa/recovery-codes/rotate",
+      "POST /api/v1/auth/mfa/recovery-codes/consume",
+      "POST /api/v1/auth/mfa/verify",
       "GET /api/v1/users",
       "GET /api/v1/health",
       "GET /api/v1/health/live",

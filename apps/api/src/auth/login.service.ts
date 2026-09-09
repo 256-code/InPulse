@@ -9,8 +9,9 @@ import type {
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import type { UserAuthState } from "./user-session.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
-import type { TotpFactorStatus } from "./user-totp-factor.repository.js";
+import type { TotpFactorLoginSnapshot } from "./user-totp-factor.repository.js";
 import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
+import { PostgresMfaRecoveryCodeRepository } from "./mfa-recovery-code.repository.js";
 import type { TransactionContext } from "../database/transaction-context.js";
 import {
   AUTH_CSRF_MAX_AGE_SECONDS,
@@ -39,11 +40,13 @@ export interface LoginInput {
   readonly clientIp: string;
   readonly cookieHeader: string | undefined;
   readonly csrfToken: string | undefined;
+  readonly challengeMode?: "totp" | "recovery";
 }
 
 export interface LoginResult {
   readonly csrfToken: string;
   readonly authState: UserAuthState;
+  readonly enrollmentGeneration?: number;
   readonly cookies: readonly CsrfSetCookie[];
 }
 
@@ -68,6 +71,7 @@ export class LoginService {
     private readonly preauthRepository: PostgresPreauthSessionRepository,
     private readonly userRepository: PostgresUserCredentialRepository,
     private readonly factorRepository: PostgresUserTotpFactorRepository,
+    private readonly recoveryCodeRepository: PostgresMfaRecoveryCodeRepository,
     private readonly sessionRepository: PostgresUserSessionRepository,
     private readonly csrfRepository: PostgresSessionCsrfTokenRepository,
     private readonly tokenService: SessionTokenService,
@@ -87,7 +91,12 @@ export class LoginService {
       }
       throw error;
     }
-    return this.issueSession(prepared, input.cookieHeader, loginName);
+    return this.issueSession(
+      prepared,
+      input.cookieHeader,
+      loginName,
+      input.challengeMode ?? "totp",
+    );
   }
 
   private async prepare(
@@ -198,6 +207,7 @@ export class LoginService {
     prepared: PreparedLogin,
     cookieHeader: string | undefined,
     loginName: string,
+    challengeMode: "totp" | "recovery",
   ): Promise<LoginResult> {
     return this.unitOfWork.run(async (tx) => {
       const sessionToken = parseCookieHeader(cookieHeader, SESSION_COOKIE_NAME);
@@ -225,11 +235,18 @@ export class LoginService {
         throw invalidCredentials();
       }
 
-      const factorStatus = await this.factorRepository.findByUserId(
+      const factorSnapshot = await this.factorRepository.findLoginSnapshot(
         tx,
         snapshot.id,
       );
-      const authState = authStateFor(snapshot, factorStatus);
+      const auth = await authStateFor(
+        tx,
+        snapshot,
+        factorSnapshot,
+        challengeMode,
+        this.recoveryCodeRepository,
+      );
+      const authState = auth.authState;
       const issuedSessionToken = generateOpaqueToken();
       const issuedCsrfToken = generateOpaqueToken();
       const sessionHash = this.tokenService.hash(issuedSessionToken);
@@ -273,6 +290,9 @@ export class LoginService {
       return {
         csrfToken: issuedCsrfToken,
         authState,
+        ...(auth.enrollmentGeneration === undefined
+          ? {}
+          : { enrollmentGeneration: auth.enrollmentGeneration }),
         cookies: [
           {
             name: PREAUTH_COOKIE_NAME,
@@ -308,12 +328,36 @@ function invalidCredentials(): LoginError {
   );
 }
 
-function authStateFor(
+async function authStateFor(
+  tx: TransactionContext,
   snapshot: UserSessionIssueSnapshot,
-  factorStatus: TotpFactorStatus | undefined,
-): UserAuthState {
+  factor: TotpFactorLoginSnapshot | undefined,
+  challengeMode: "totp" | "recovery",
+  recoveryCodeRepository: PostgresMfaRecoveryCodeRepository,
+): Promise<{
+  readonly authState: UserAuthState;
+  readonly enrollmentGeneration?: number;
+}> {
   if (!snapshot.isAdmin) {
-    return "AUTHENTICATED";
+    return { authState: "AUTHENTICATED" };
   }
-  return factorStatus === "ACTIVE" ? "MFA_CHALLENGE" : "MFA_ENROLLMENT";
+  if (factor === undefined) {
+    return { authState: "MFA_ENROLLMENT", enrollmentGeneration: 0 };
+  }
+  if (factor.status !== "ACTIVE") {
+    return {
+      authState: "MFA_ENROLLMENT",
+      enrollmentGeneration: factor.enrollmentGeneration,
+    };
+  }
+  if (challengeMode === "recovery") {
+    const hashes = await recoveryCodeRepository.findActiveHashes(
+      tx,
+      snapshot.id,
+    );
+    if (hashes.length > 0) {
+      return { authState: "RECOVERY_CHALLENGE" };
+    }
+  }
+  return { authState: "MFA_CHALLENGE" };
 }

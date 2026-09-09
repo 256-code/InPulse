@@ -1,10 +1,27 @@
 import type { z } from "zod";
 
 import {
+  confirmMfaEnrollmentRequestSchema,
+  confirmMfaEnrollmentResponseSchema,
   loginHeadersSchema,
   loginRequestSchema,
   loginResponseSchema,
   logoutHeadersSchema,
+  mfaEnrollmentHeadersSchema,
+  reauthenticateAdminHeadersSchema,
+  reauthenticateAdminRequestSchema,
+  rotateMfaRecoveryCodesHeadersSchema,
+  rotateMfaRecoveryCodesResponseSchema,
+  consumeMfaRecoveryCodeHeadersSchema,
+  consumeMfaRecoveryCodeRequestSchema,
+  consumeMfaRecoveryCodeResponseSchema,
+  resetAdminMfaHeadersSchema,
+  resetAdminMfaRequestSchema,
+  startMfaEnrollmentRequestSchema,
+  startMfaEnrollmentResponseSchema,
+  verifyMfaHeadersSchema,
+  verifyMfaRequestSchema,
+  verifyMfaResponseSchema,
   currentUserResponseSchema,
   userAuthStateSchema,
 } from "./contracts/auth.zod.js";
@@ -87,6 +104,94 @@ export const schemaRegistry = {
     schema: loginResponseSchema,
     summary: "登录成功响应，返回绑定新 Session 的 CSRF Token 与显式认证状态",
     sensitiveFieldPaths: ["csrfToken"],
+  },
+  MfaEnrollmentHeaders: {
+    schema: mfaEnrollmentHeadersSchema,
+    summary: "管理员 MFA 注册与确认请求头，要求当前 Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  StartMfaEnrollmentRequest: {
+    schema: startMfaEnrollmentRequestSchema,
+    summary: "开始管理员 MFA 注册请求，携带当前用户级 enrollment generation",
+    sensitiveFieldPaths: [],
+  },
+  StartMfaEnrollmentResponse: {
+    schema: startMfaEnrollmentResponseSchema,
+    summary:
+      "开始注册响应；Secret 与 otpauth URI 只在本次 no-store 响应出现一次",
+    sensitiveFieldPaths: ["secret", "otpauthUri"],
+  },
+  ConfirmMfaEnrollmentRequest: {
+    schema: confirmMfaEnrollmentRequestSchema,
+    summary: "确认注册请求；code 为当前 TOTP 6 位验证码",
+    sensitiveFieldPaths: ["code"],
+  },
+  ConfirmMfaEnrollmentResponse: {
+    schema: confirmMfaEnrollmentResponseSchema,
+    summary: "确认注册响应；恢复码只展示一次，同时轮换为完整 Session 与新 CSRF",
+    sensitiveFieldPaths: ["csrfToken", "recoveryCodes[]"],
+  },
+  VerifyMfaHeaders: {
+    schema: verifyMfaHeadersSchema,
+    summary:
+      "管理员 MFA 验证请求头，要求当前 MFA_CHALLENGE Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  VerifyMfaRequest: {
+    schema: verifyMfaRequestSchema,
+    summary: "管理员 MFA 验证请求，携带当前 6 位 TOTP 验证码",
+    sensitiveFieldPaths: ["code"],
+  },
+  VerifyMfaResponse: {
+    schema: verifyMfaResponseSchema,
+    summary: "MFA 验证成功响应；Session 升级为完整态并返回新 CSRF Token",
+    sensitiveFieldPaths: ["csrfToken"],
+  },
+  ReauthenticateAdminHeaders: {
+    schema: reauthenticateAdminHeadersSchema,
+    summary: "管理员重认证请求头，要求当前完整 Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ReauthenticateAdminRequest: {
+    schema: reauthenticateAdminRequestSchema,
+    summary: "管理员重认证请求，携带密码与当前 6 位 TOTP 验证码",
+    sensitiveFieldPaths: ["password", "code"],
+  },
+  RotateMfaRecoveryCodesHeaders: {
+    schema: rotateMfaRecoveryCodesHeadersSchema,
+    summary: "恢复码轮换请求头，要求当前完整 Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  RotateMfaRecoveryCodesResponse: {
+    schema: rotateMfaRecoveryCodesResponseSchema,
+    summary: "恢复码轮换成功响应；新码只展示一次",
+    sensitiveFieldPaths: ["recoveryCodes[]"],
+  },
+  ConsumeMfaRecoveryCodeHeaders: {
+    schema: consumeMfaRecoveryCodeHeadersSchema,
+    summary:
+      "恢复码消费请求头，要求当前 RECOVERY_CHALLENGE Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ConsumeMfaRecoveryCodeRequest: {
+    schema: consumeMfaRecoveryCodeRequestSchema,
+    summary: "恢复码消费请求，携带当前批次未使用的 20 字符码",
+    sensitiveFieldPaths: ["code"],
+  },
+  ConsumeMfaRecoveryCodeResponse: {
+    schema: consumeMfaRecoveryCodeResponseSchema,
+    summary: "恢复码消费成功响应；Session 升级为完整态并返回新 CSRF Token",
+    sensitiveFieldPaths: ["csrfToken"],
+  },
+  ResetAdminMfaHeaders: {
+    schema: resetAdminMfaHeadersSchema,
+    summary: "管理员 MFA 重置请求头，要求完整管理员 Session 的同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ResetAdminMfaRequest: {
+    schema: resetAdminMfaRequestSchema,
+    summary: "管理员 MFA 重置请求；目标必须是另一名系统管理员且原因必填",
+    sensitiveFieldPaths: [],
   },
   LogoutHeaders: {
     schema: logoutHeadersSchema,
