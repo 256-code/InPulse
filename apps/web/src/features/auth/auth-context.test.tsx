@@ -8,6 +8,8 @@ import {
 } from "@generated/api";
 import { AuthProvider, useAuth } from "./auth-context";
 
+const TOTP_TEST_SECRET = "A".repeat(16);
+
 const currentUser: CurrentUserResponse = {
   id: 1,
   loginName: "developer",
@@ -166,5 +168,192 @@ describe("AuthProvider", () => {
     expect(client.logout).toHaveBeenCalledWith({
       headers: { "x-csrf-token": "csrf-token" },
     });
+  });
+
+  it("keeps the MFA CSRF token and completes enrollment", async () => {
+    const getCurrentUser = vi
+      .fn()
+      .mockRejectedValueOnce(createUnauthenticatedError())
+      .mockResolvedValueOnce(currentUser);
+    const client = createClient({
+      getCurrentUser,
+      login: vi.fn().mockResolvedValue({
+        csrfToken: "login-csrf-token",
+        authState: "MFA_ENROLLMENT",
+        enrollmentGeneration: 0,
+      }),
+      startMfaEnrollment: vi.fn().mockResolvedValue({
+        enrollmentGeneration: 1,
+        secret: TOTP_TEST_SECRET,
+        otpauthUri: `otpauth://totp/InPulse?secret=${TOTP_TEST_SECRET}`,
+      }),
+      confirmMfaEnrollment: vi.fn().mockResolvedValue({
+        csrfToken: "confirmed-csrf-token",
+        authState: "AUTHENTICATED",
+        recoveryCodes: ["CODE-0001"],
+      }),
+    });
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }: { readonly children: React.ReactNode }) => (
+        <AuthProvider client={client}>{children}</AuthProvider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("anonymous");
+    });
+    let loginResult;
+    await act(async () => {
+      loginResult = await result.current.login({
+        loginName: "admin",
+        password: "secret",
+        challengeMode: "totp",
+      });
+    });
+
+    expect(loginResult).toMatchObject({
+      kind: "mfa-required",
+      authState: "MFA_ENROLLMENT",
+      enrollmentGeneration: 0,
+    });
+    expect(result.current.mfaState).toBe("MFA_ENROLLMENT");
+    await act(async () => {
+      await result.current.beginMfaEnrollment();
+    });
+    expect(client.startMfaEnrollment).toHaveBeenCalledWith(
+      { expectedEnrollmentGeneration: 0 },
+      { headers: { "x-csrf-token": "login-csrf-token" } },
+    );
+    expect(result.current.enrollmentGeneration).toBe(1);
+
+    let upgradeResult;
+    await act(async () => {
+      upgradeResult = await result.current.confirmMfaEnrollment("123456", 1);
+    });
+
+    expect(client.confirmMfaEnrollment).toHaveBeenCalledWith(
+      { expectedEnrollmentGeneration: 1, code: "123456" },
+      { headers: { "x-csrf-token": "login-csrf-token" } },
+    );
+    expect(upgradeResult).toMatchObject({
+      kind: "authenticated",
+      recoveryCodes: ["CODE-0001"],
+    });
+    expect(result.current.status).toBe("authenticated");
+    expect(result.current.pendingRecoveryCodes).toEqual(["CODE-0001"]);
+  });
+
+  it("upgrades a TOTP challenge with the rotated CSRF token", async () => {
+    const getCurrentUser = vi
+      .fn()
+      .mockRejectedValueOnce(createUnauthenticatedError())
+      .mockResolvedValueOnce(currentUser);
+    const client = createClient({
+      getCurrentUser,
+      login: vi.fn().mockResolvedValue({
+        csrfToken: "login-csrf-token",
+        authState: "MFA_CHALLENGE",
+      }),
+      verifyMfa: vi.fn().mockResolvedValue({
+        csrfToken: "verified-csrf-token",
+        authState: "AUTHENTICATED",
+      }),
+    });
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }: { readonly children: React.ReactNode }) => (
+        <AuthProvider client={client}>{children}</AuthProvider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("anonymous");
+    });
+    await act(async () => {
+      await result.current.login({
+        loginName: "admin",
+        password: "secret",
+        challengeMode: "totp",
+      });
+    });
+    await act(async () => {
+      await result.current.verifyMfa("654321");
+    });
+
+    expect(client.verifyMfa).toHaveBeenCalledWith(
+      { code: "654321" },
+      { headers: { "x-csrf-token": "login-csrf-token" } },
+    );
+    expect(result.current.status).toBe("authenticated");
+    expect(result.current.mfaState).toBeNull();
+  });
+
+  it("completes a recovery-code challenge", async () => {
+    const getCurrentUser = vi
+      .fn()
+      .mockRejectedValueOnce(createUnauthenticatedError())
+      .mockResolvedValueOnce(currentUser);
+    const client = createClient({
+      getCurrentUser,
+      login: vi.fn().mockResolvedValue({
+        csrfToken: "recovery-login-csrf",
+        authState: "RECOVERY_CHALLENGE",
+      }),
+      consumeMfaRecoveryCode: vi.fn().mockResolvedValue({
+        csrfToken: "recovery-verified-csrf",
+        authState: "AUTHENTICATED",
+      }),
+    });
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }: { readonly children: React.ReactNode }) => (
+        <AuthProvider client={client}>{children}</AuthProvider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("anonymous");
+    });
+    await act(async () => {
+      await result.current.login({
+        loginName: "admin",
+        password: "secret",
+        challengeMode: "recovery",
+      });
+    });
+    await act(async () => {
+      await result.current.consumeMfaRecoveryCode("RECOVERY-1");
+    });
+
+    expect(client.consumeMfaRecoveryCode).toHaveBeenCalledWith(
+      { code: "RECOVERY-1" },
+      { headers: { "x-csrf-token": "recovery-login-csrf" } },
+    );
+    expect(result.current.status).toBe("authenticated");
+    expect(result.current.mfaState).toBeNull();
+  });
+
+  it("issues a fresh CSRF token before admin reauthentication", async () => {
+    const reauthenticateAdmin = vi.fn().mockResolvedValue(undefined);
+    const client = createClient({ reauthenticateAdmin });
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }: { readonly children: React.ReactNode }) => (
+        <AuthProvider client={client}>{children}</AuthProvider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("authenticated");
+    });
+    await act(async () => {
+      await result.current.reauthenticateAdmin({
+        password: "secret",
+        code: "123456",
+      });
+    });
+
+    expect(client.issueCsrfToken).toHaveBeenCalledTimes(1);
+    expect(reauthenticateAdmin).toHaveBeenCalledWith(
+      { password: "secret", code: "123456" },
+      { headers: { "x-csrf-token": "csrf-token" } },
+    );
   });
 });

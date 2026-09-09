@@ -28,6 +28,9 @@ export interface E2ERuntime {
   readonly searchQuery: string;
   readonly projectTitle: string;
   readonly sessionCookie: string;
+  readonly adminMfa: E2EAccount;
+  readonly adminMfaUserId: number;
+  readonly adminMfaSecret: string;
   readonly user: E2EAccount;
   readonly member: E2EAccount;
 }

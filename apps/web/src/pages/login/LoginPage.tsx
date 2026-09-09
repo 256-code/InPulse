@@ -20,16 +20,16 @@ function resolveLoginTarget(rawTarget: string | null): string {
 export const LoginPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { status } = useAuth();
+  const { status, pendingRecoveryCodes } = useAuth();
   const target = resolveLoginTarget(
     new URLSearchParams(location.search).get("from"),
   );
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" && pendingRecoveryCodes === null) {
       navigate(target, { replace: true });
     }
-  }, [navigate, status, target]);
+  }, [navigate, pendingRecoveryCodes, status, target]);
 
   const handleAuthenticated = () => {
     navigate(target, { replace: true });
