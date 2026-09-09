@@ -8,6 +8,12 @@
 
 本次交付先 fetch，将 dev/b 从 `d2c5bbc` 快进同步至实际 `origin/main` `9ca018e`，再创建 `codex/f12-modules-management`。开发日志冲突按双方记录合并；源码、测试和生成物与同步前备份逐文件哈希一致，未改变行为，复用已有验证。完整工作区目录备份与 include-untracked stash 均保留。README 原导航和未跟踪协作方案保留在原工作区，排除出 PR。功能提交 `f51ab0d` 已推送，[PR #65](https://github.com/256-code/InPulse/pull/65) 已创建，base 为 main，负责人 B（suikiiovo）。本段记录首次交付状态，CI 结果以 PR 最新提交的检查为准；跟踪既有 CI 后交 A/C 非作者评审，不自行合并。完整门禁由 CI 执行，本地不运行全量构建、全仓静态检查或无关审计。
 
+### CI 首轮结果与循环依赖修复
+
+[PR #65 / run 34327369577](https://github.com/256-code/InPulse/actions/runs/34327369577)（`a0cf668`）已验证默认 Playwright Chromium E2E **9/9**（含模块双页面竞争），真实 PostgreSQL API 集成 **129/129**（含模块 HTTP 9/9），以及前置构建、镜像扫描和部署预检。随后依赖边界门禁发现 `route-registry -> module-routes -> route-registry` 循环而失败，后续门禁未执行；不得声明整体 CI 已通过。
+
+将路由共享定义原样提取到 `route-definition.ts`，registry 保持原导出，模块路由改为依赖该定义，未改变契约行为。局部契约包类型检查、61/61 单测、28 条路由完整性及 5 个生成物漂移检查通过，等待新提交完整 CI。门禁脚本与测试断言未修改。
+
 以下为本地交审时点的实现和验证记录。
 
 ## 用户操作与入口

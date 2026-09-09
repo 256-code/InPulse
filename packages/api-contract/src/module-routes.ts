@@ -1,4 +1,4 @@
-import type { BodyBinding, RouteDefinition } from "./route-registry.js";
+import type { BodyBinding, RouteDefinition } from "./route-definition.js";
 import type { SchemaName } from "./schema-registry.js";
 
 const json = (schemaRef: SchemaName): BodyBinding => ({
