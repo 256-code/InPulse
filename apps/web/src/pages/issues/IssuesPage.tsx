@@ -4,8 +4,10 @@ import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlace
 export const IssuesPage: React.FC = () => {
   return (
     <WorkspacePlaceholder
+      eyebrow="工作区 / 遗留问题"
       title="遗留问题"
-      description="待闭环的后续工作将在遗留项查询接口就绪后接入。"
+      description="迭代记录中写下的遗留事项会汇总到这里；遗留项查询接口就绪后接入。"
+      icon="alert"
     />
   );
 };

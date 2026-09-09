@@ -10,7 +10,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await page.getByRole("link", { name: "功能列表" }).first().click();
+    await page.getByRole("link", { name: "查看功能" }).first().click();
     const listUrl = page.url();
     const moduleId = listUrl.match(/modules\/(\d+)/)![1];
     const suffix = Date.now();
@@ -24,7 +24,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
       await page
-        .locator(".ant-card")
+        .locator(".calm-feature-card")
         .filter({ hasText: name })
         .getByRole("link", { name: "查看详情" })
         .click();

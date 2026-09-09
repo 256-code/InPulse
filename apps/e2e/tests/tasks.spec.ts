@@ -26,7 +26,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await page.getByTestId("open-created-project-activity").click();
     const projectId = page.url().match(/projects\/(\d+)/)![1];
     await page.goto(`/projects/${projectId}/modules`);
-    await page.getByRole("link", { name: "功能列表" }).first().click();
+    await page.getByRole("link", { name: "查看功能" }).first().click();
     await page.getByRole("button", { name: "新建功能" }).click();
     const feature = page.getByRole("dialog", { name: "新建功能" });
     await feature.getByLabel("功能名称").fill(`支付-${suffix}`);
@@ -48,7 +48,9 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     const drawer = page.getByRole("dialog", { name: "任务详情" });
     await expect(drawer.getByText("最初说明", { exact: true })).toBeVisible();
     await expect(
-      drawer.getByText(`负责人：${runtime.member.name}`, { exact: false }),
+      drawer
+        .locator(".task-modal-facts")
+        .getByText(runtime.member.name, { exact: true }),
     ).toBeVisible();
     await drawer.getByRole("button", { name: "编辑任务" }).click();
     const edit = page.getByRole("dialog", { name: "编辑任务" });
@@ -85,7 +87,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await page.reload();
-    await page.getByRole("radio", { name: "列表", exact: true }).check();
+    await page.getByRole("button", { name: "列表", exact: true }).click();
     await expect(
       page.getByRole("cell", { name: `我的标题-${suffix}` }),
     ).toBeVisible();

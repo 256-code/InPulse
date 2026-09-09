@@ -46,6 +46,27 @@ function mount(client: InpulseApiClient, admin = false) {
     </ConfigProvider>,
   );
 }
+function mountDetail(client: InpulseApiClient, featureId: number) {
+  return render(
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <AuthStateProvider>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <FeaturesPageView
+            projectId={2}
+            moduleId={4}
+            featureId={featureId}
+            isAdmin={false}
+            client={client}
+          />
+        </QueryClientProvider>
+      </AuthStateProvider>
+    </ConfigProvider>,
+  );
+}
 describe("F-13 forms", () => {
   it("reuses the key for an uncertain retry and changes it when semantics change", async () => {
     const createFeature = vi.fn().mockRejectedValue(new Error("response lost"));
@@ -316,5 +337,25 @@ describe("F-13 forms", () => {
     expect(
       screen.queryByRole("button", { name: /归\s*档/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows module siblings in the feature workspace using listFeatures", async () => {
+    const listFeatures = vi.fn().mockResolvedValue({
+      items: [item, { ...item, id: 4, code: "PR-F-2", name: "其他功能" }],
+    });
+    const client = {
+      listFeatures,
+      listTasks: vi.fn().mockResolvedValue({ items: [] }),
+      listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as InpulseApiClient;
+    mountDetail(client, 3);
+    await screen.findByRole("heading", { name: "退款功能" });
+    expect(listFeatures).toHaveBeenCalledWith(
+      2,
+      4,
+      expect.objectContaining({}),
+    );
+    expect(screen.getByRole("link", { name: "退款功能" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "其他功能" })).toBeInTheDocument();
   });
 });

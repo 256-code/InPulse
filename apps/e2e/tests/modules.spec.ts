@@ -18,14 +18,16 @@ test("成员创建编辑模块、解决并发字段冲突，不能看到管理�
     await dialog.getByLabel("模块说明").fill("模块纵切片 E2E");
     await dialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(dialog).toBeHidden();
-    const card = page.locator(".ant-card").filter({ hasText: name });
+    const card = page.locator(".calm-feature-card").filter({ hasText: name });
     await card.getByRole("button", { name: /编\s*辑/ }).click();
     const edit = page.getByRole("dialog", { name: "编辑模块" });
     await edit.getByLabel("模块名称").fill(`${name}-已修改`);
 
     const other = await context.newPage();
     await other.goto(`/projects/${runtime.projectId}/modules`);
-    const otherCard = other.locator(".ant-card").filter({ hasText: name });
+    const otherCard = other
+      .locator(".calm-feature-card")
+      .filter({ hasText: name });
     await otherCard.getByRole("button", { name: /编\s*辑/ }).click();
     const otherEdit = other.getByRole("dialog", { name: "编辑模块" });
     await otherEdit.getByLabel("模块说明").fill("另一窗口更新的说明");

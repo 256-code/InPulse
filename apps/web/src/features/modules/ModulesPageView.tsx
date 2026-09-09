@@ -1,15 +1,5 @@
 import React, { useRef, useState } from "react";
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Input,
-  Modal,
-  Space,
-  Spin,
-  Tag,
-} from "antd";
+import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
@@ -17,6 +7,8 @@ import {
   type ModuleItem,
 } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 import {
   moduleErrorMessage,
   useModules,
@@ -190,69 +182,152 @@ export function ModulesPageView({
     selection?.action === "archive" || selection?.action === "restore";
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
+  const modalTitle =
+    selection?.action === "create"
+      ? "新建模块"
+      : selection?.action === "update"
+        ? "编辑模块"
+        : selection?.action === "archive"
+          ? "归档模块"
+          : "恢复模块";
   return (
     <>
-      <div className="page-header">
-        <div>
-          <span className="eyebrow">项目内模块</span>
-          <h1>模块管理</h1>
-          <p>维护模块名称、说明和归档状态。未分类模块可编辑，身份保持不变。</p>
+      <div className="module-workspace-page">
+        <div className="page-header">
+          <div>
+            <span className="eyebrow">项目 {projectId} / 模块</span>
+            <h1>模块管理</h1>
+            <p>
+              维护模块名称、说明和归档状态。未分类模块可编辑，身份保持不变。
+            </p>
+          </div>
+          <div className="catalog-actions">
+            {query.isSuccess && !query.data?.items.length ? null : (
+              <Button
+                className="primary-button"
+                disabled={!query.data || query.isError}
+                onClick={() => open("create")}
+              >
+                <InpulseIcon name="plus" size={15} />
+                新建模块
+              </Button>
+            )}
+          </div>
         </div>
-        <Button
-          type="primary"
-          disabled={!query.data || query.isError}
-          onClick={() => open("create")}
-        >
-          新建模块
-        </Button>
-      </div>
-      <Space orientation="vertical" style={{ width: "100%" }} size={16}>
-        <Alert
-          type="info"
-          showIcon
-          title="功能档案可从模块卡片进入；任务和记录将在对应功能交付后开放。"
-        />
+        <p className="permission-hint">
+          <InpulseIcon name="alert" size={14} />
+          功能档案可从模块卡片进入；模块级任务与记录将在对应能力交付后开放。
+        </p>
         {success && <Alert type="success" showIcon title="模块操作成功" />}
         {query.isPending ? (
-          <Spin description="正在加载模块" />
+          <div className="calm-state">
+            <Spin />
+            <span>正在加载模块</span>
+          </div>
         ) : query.isError ? (
           <Alert
             type="error"
             title={moduleErrorMessage(query.error)}
-            action={<Button onClick={() => void query.refetch()}>重试</Button>}
+            action={
+              <Button
+                className="secondary-button"
+                onClick={() => void query.refetch()}
+              >
+                重试
+              </Button>
+            }
           />
         ) : !query.data?.items.length ? (
-          <Empty description="暂无模块" />
+          <CalmEmptyState
+            icon="boxes"
+            title="暂无模块"
+            description="项目创建时会自动生成未分类模块，可继续拆分为具体业务模块。"
+          >
+            <Button className="primary-button" onClick={() => open("create")}>
+              <InpulseIcon name="plus" size={15} />
+              新建模块
+            </Button>
+          </CalmEmptyState>
         ) : (
-          query.data.items.map((item) => (
-            <Card
-              key={item.id}
-              title={
-                <Space wrap>
-                  <span>{item.name}</span>
-                  {item.kind === "UNCLASSIFIED" && <Tag>未分类</Tag>}
-                  <Tag color={item.status === "ACTIVE" ? "green" : "default"}>
+          <div className="cards-grid calm-feature-grid module-grid">
+            {query.data.items.map((item) => (
+              <article
+                key={item.id}
+                className={
+                  "calm-feature-card module-card" +
+                  (item.status === "ARCHIVED" ? " card-archived" : "")
+                }
+              >
+                <div className="calm-card-top">
+                  <span className="feature-symbol">
+                    <InpulseIcon name="boxes" size={21} />
+                  </span>
+                  <span className="task-id">模块 #{item.id}</span>
+                </div>
+                <h2>{item.name}</h2>
+                <div className="task-card-badges">
+                  {item.kind === "UNCLASSIFIED" && (
+                    <CalmBadge tone="violet">未分类</CalmBadge>
+                  )}
+                  <CalmBadge tone={item.status === "ACTIVE" ? "blue" : "amber"}>
                     {item.status === "ACTIVE" ? "正常" : "已归档"}
-                  </Tag>
-                </Space>
-              }
-              extra={
-                <Space>
+                  </CalmBadge>
+                </div>
+                <p>{item.description || "暂无模块说明"}</p>
+                <details className="calm-disclosure module-information">
+                  <summary>模块资料</summary>
+                  <p>
+                    {item.kind === "UNCLASSIFIED"
+                      ? "该模块由项目创建流程生成，允许修改名称与说明，不可删除或改变未分类身份。"
+                      : "当前项目的第一层业务分类，后续功能与任务建立在该模块之下。"}
+                  </p>
+                  {item.status === "ARCHIVED" && (
+                    <p>归档历史仍可查看；恢复前不能在此模块新增下级内容。</p>
+                  )}
+                </details>
+                <div className="card-footer">
+                  <span>
+                    <InpulseIcon name="code" size={14} />
+                    功能档案入口
+                  </span>
                   <Button
-                    href={`/projects/${projectId}/modules/${item.id}/features`}
+                    className="text-button"
+                    href={
+                      "/projects/" +
+                      projectId +
+                      "/modules/" +
+                      item.id +
+                      "/features"
+                    }
                   >
-                    功能列表
+                    查看功能
+                    <InpulseIcon name="chevronRight" size={14} />
                   </Button>
+                </div>
+                <div className="catalog-edit-link">
                   <Button
-                    href={`/projects/${projectId}/modules/${item.id}/tasks`}
+                    className="text-button"
+                    href={
+                      "/projects/" +
+                      projectId +
+                      "/modules/" +
+                      item.id +
+                      "/tasks"
+                    }
                   >
                     模块任务
                   </Button>
                   {item.status === "ACTIVE" && (
-                    <Button onClick={() => open("update", item)}>编辑</Button>
+                    <Button
+                      className="text-button"
+                      onClick={() => open("update", item)}
+                    >
+                      编辑
+                    </Button>
                   )}
                   {isAdmin && (
                     <Button
+                      className="text-button"
                       onClick={() =>
                         open(
                           item.status === "ACTIVE" ? "archive" : "restore",
@@ -263,183 +338,200 @@ export function ModulesPageView({
                       {item.status === "ACTIVE" ? "归档" : "恢复"}
                     </Button>
                   )}
-                </Space>
-              }
-            >
-              <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                {item.description || "暂无模块说明"}
-              </p>
-              {item.kind === "UNCLASSIFIED" && (
-                <p>
-                  该模块由项目创建流程生成，允许修改名称与说明，不可删除或改变未分类身份。
-                </p>
-              )}
-              {item.status === "ARCHIVED" && (
-                <p>归档历史仍可查看；恢复前不能在此模块新增下级内容。</p>
-              )}
-            </Card>
-          ))
+                </div>
+              </article>
+            ))}
+          </div>
         )}
-      </Space>
+      </div>
       <Modal
         open={selection !== null}
-        title={
-          selection?.action === "create"
-            ? "新建模块"
-            : selection?.action === "update"
-              ? "编辑模块"
-              : selection?.action === "archive"
-                ? "归档模块"
-                : "恢复模块"
-        }
+        className="catalog-modal module-editor-modal"
+        title={modalTitle}
         onCancel={close}
         footer={null}
         mask={{ closable: !mutation.isPending }}
       >
-        <form onSubmit={(event) => void save(event)}>
-          {lifecycle ? (
-            <>
-              <p>
-                {selection?.action === "archive"
-                  ? "归档后模块及下级内容不可写，历史将保留。"
-                  : "恢复模块本身的可写状态，不改变下级资源各自的归档状态。"}
-              </p>
-              <label htmlFor="module-reason">操作原因</label>
-              <Controller
-                name="reason"
-                control={control}
-                rules={{
-                  validate: (v) => v.trim().length > 0 || "请填写操作原因",
-                  maxLength: { value: 2000, message: "原因最多 2000 字" },
-                }}
-                render={({ field }) => (
-                  <Input.TextArea
-                    {...field}
-                    id="module-reason"
-                    disabled={mutation.isPending || reloading || !!merge}
-                    rows={3}
+        <div className="drawer-header">
+          <span className="detail-label">模块</span>
+          <h2>{modalTitle}</h2>
+          <p>
+            {selection?.action === "archive"
+              ? "归档后模块及下级内容不可写，历史将保留。"
+              : selection?.action === "restore"
+                ? "恢复模块本身的可写状态，不改变下级资源各自的归档状态。"
+                : "名称与说明会保留完整的版本与审计历史。"}
+          </p>
+        </div>
+        <form
+          className="catalog-form calm-form"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="dialog-form">
+            {lifecycle ? (
+              <div className="calm-field">
+                <label htmlFor="module-reason">操作原因</label>
+                <Controller
+                  name="reason"
+                  control={control}
+                  rules={{
+                    validate: (v) => v.trim().length > 0 || "请填写操作原因",
+                    maxLength: { value: 2000, message: "原因最多 2000 字" },
+                  }}
+                  render={({ field }) => (
+                    <Input.TextArea
+                      {...field}
+                      id="module-reason"
+                      disabled={mutation.isPending || reloading || !!merge}
+                      rows={3}
+                    />
+                  )}
+                />
+                <p role="alert">{errors.reason?.message}</p>
+                <Button
+                  className="secondary-button"
+                  onClick={() => setReauthOpen(true)}
+                  disabled={mutation.isPending || reloading || conflict}
+                >
+                  管理员安全验证
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="calm-field">
+                  <label htmlFor="module-name">模块名称</label>
+                  <Controller
+                    name="name"
+                    control={control}
+                    rules={{
+                      validate: (v) => v.trim().length > 0 || "请填写模块名称",
+                      maxLength: { value: 200, message: "名称最多 200 字" },
+                    }}
+                    render={({ field }) => (
+                      <Input
+                        {...field}
+                        id="module-name"
+                        disabled={mutation.isPending || reloading || !!merge}
+                      />
+                    )}
                   />
-                )}
-              />
-              <p role="alert">{errors.reason?.message}</p>
-              <Button
-                onClick={() => setReauthOpen(true)}
-                disabled={mutation.isPending || reloading || conflict}
-              >
-                管理员安全验证
-              </Button>
-            </>
-          ) : (
-            <>
-              <label htmlFor="module-name">模块名称</label>
-              <Controller
-                name="name"
-                control={control}
-                rules={{
-                  validate: (v) => v.trim().length > 0 || "请填写模块名称",
-                  maxLength: { value: 200, message: "名称最多 200 字" },
-                }}
-                render={({ field }) => (
-                  <Input
-                    {...field}
-                    id="module-name"
-                    disabled={mutation.isPending || reloading || !!merge}
-                  />
-                )}
-              />
-              <p role="alert">{errors.name?.message}</p>
-              <label htmlFor="module-description">模块说明</label>
-              <Controller
-                name="description"
-                control={control}
-                rules={{
-                  maxLength: { value: 20000, message: "说明最多 20000 字" },
-                }}
-                render={({ field }) => (
-                  <Input.TextArea
-                    {...field}
-                    id="module-description"
-                    rows={5}
-                    disabled={mutation.isPending || reloading || !!merge}
-                  />
-                )}
-              />
-              <p role="alert">{errors.description?.message}</p>
-            </>
-          )}
-          {mutation.isError && (
-            <Alert type="error" title={moduleErrorMessage(mutation.error)} />
-          )}
-          {reloadError && <Alert type="error" title={reloadError} />}
-          {merge && (
-            <section aria-label="解决编辑冲突">
-              {merge.conflicts.map((field) => (
-                <div key={field}>
-                  <h3>{fieldLabels[field]}存在冲突</h3>
-                  <dl
-                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-                  >
-                    <dt>编辑前</dt>
-                    <dd>{merge.base[field] || "（空）"}</dd>
-                    <dt>我的草稿</dt>
-                    <dd>{merge.draft[field] || "（空）"}</dd>
-                    <dt>服务端最新</dt>
-                    <dd>{merge.latest[field] || "（空）"}</dd>
-                  </dl>
-                  <Space wrap>
-                    <Button
-                      aria-pressed={merge.choices[field] === "draft"}
-                      onClick={() =>
-                        setMerge({
-                          ...merge,
-                          choices: { ...merge.choices, [field]: "draft" },
-                        })
-                      }
-                    >
-                      保留我的{fieldLabels[field]}
-                    </Button>
-                    <Button
-                      aria-pressed={merge.choices[field] === "latest"}
-                      onClick={() =>
-                        setMerge({
-                          ...merge,
-                          choices: { ...merge.choices, [field]: "latest" },
-                        })
-                      }
-                    >
-                      采用最新{fieldLabels[field]}
-                    </Button>
-                  </Space>
+                  <p role="alert">{errors.name?.message}</p>
                 </div>
-              ))}
+                <div className="calm-field">
+                  <label htmlFor="module-description">模块说明</label>
+                  <Controller
+                    name="description"
+                    control={control}
+                    rules={{
+                      maxLength: { value: 20000, message: "说明最多 20000 字" },
+                    }}
+                    render={({ field }) => (
+                      <Input.TextArea
+                        {...field}
+                        id="module-description"
+                        rows={5}
+                        disabled={mutation.isPending || reloading || !!merge}
+                      />
+                    )}
+                  />
+                  <p role="alert">{errors.description?.message}</p>
+                </div>
+              </>
+            )}
+            {mutation.isError && (
+              <Alert type="error" title={moduleErrorMessage(mutation.error)} />
+            )}
+            {reloadError && <Alert type="error" title={reloadError} />}
+            {merge && (
+              <section className="merge-panel" aria-label="解决编辑冲突">
+                <div className="calm-section-title">
+                  <div>
+                    <h3>解决编辑冲突</h3>
+                    <small>选择保留哪一版，应用后再提交最新版本。</small>
+                  </div>
+                </div>
+                {merge.conflicts.map((field) => (
+                  <div className="merge-choice" key={field}>
+                    <h3>{fieldLabels[field]}存在冲突</h3>
+                    <dl
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      <dt>编辑前</dt>
+                      <dd>{merge.base[field] || "（空）"}</dd>
+                      <dt>我的草稿</dt>
+                      <dd>{merge.draft[field] || "（空）"}</dd>
+                      <dt>服务端最新</dt>
+                      <dd>{merge.latest[field] || "（空）"}</dd>
+                    </dl>
+                    <div className="catalog-actions">
+                      <Button
+                        className="secondary-button"
+                        aria-pressed={merge.choices[field] === "draft"}
+                        onClick={() =>
+                          setMerge({
+                            ...merge,
+                            choices: { ...merge.choices, [field]: "draft" },
+                          })
+                        }
+                      >
+                        保留我的{fieldLabels[field]}
+                      </Button>
+                      <Button
+                        className="secondary-button"
+                        aria-pressed={merge.choices[field] === "latest"}
+                        onClick={() =>
+                          setMerge({
+                            ...merge,
+                            choices: { ...merge.choices, [field]: "latest" },
+                          })
+                        }
+                      >
+                        采用最新{fieldLabels[field]}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  className="primary-button"
+                  disabled={merge.conflicts.some(
+                    (field) => !merge.choices[field],
+                  )}
+                  onClick={applyMerge}
+                >
+                  应用合并结果
+                </Button>
+              </section>
+            )}
+            {conflict && !merge && (
               <Button
-                disabled={merge.conflicts.some(
-                  (field) => !merge.choices[field],
-                )}
-                onClick={applyMerge}
+                className="secondary-button"
+                loading={reloading}
+                onClick={() => void reload()}
               >
-                应用合并结果
+                加载最新版本后继续编辑
               </Button>
-            </section>
-          )}
-          {conflict && !merge && (
-            <Button loading={reloading} onClick={() => void reload()}>
-              加载最新版本后继续编辑
-            </Button>
-          )}
-          <Space style={{ marginTop: 16 }}>
-            <Button onClick={close} disabled={mutation.isPending}>
+            )}
+          </div>
+          <div className="calm-action-footer">
+            <Button
+              className="secondary-button"
+              onClick={close}
+              disabled={mutation.isPending}
+            >
               取消
             </Button>
             <Button
-              type="primary"
+              className="primary-button"
               htmlType="submit"
               loading={mutation.isPending}
               disabled={reloading || conflict || !!reloadError || !!merge}
             >
               {lifecycle ? "确认" : "保存"}
             </Button>
-          </Space>
+          </div>
         </form>
       </Modal>
       <AdminReauthenticateModal
