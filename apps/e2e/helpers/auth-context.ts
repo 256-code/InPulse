@@ -24,7 +24,7 @@ export async function loginViaUi(
     .locator("form")
     .getByRole("button", { name: /登\s*录/ })
     .click();
-  await expect(page.getByText("已登录")).toBeVisible();
+  await expect(page.getByText("成员", { exact: true })).toBeVisible();
 }
 
 export async function createAuthenticatedContext(

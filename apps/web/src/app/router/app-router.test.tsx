@@ -28,7 +28,11 @@ describe("AppRouter integration", () => {
       </AppErrorBoundary>,
     );
 
-    expect(screen.getByText("InPulse")).toBeInTheDocument();
-    expect(await screen.findByText("F-30 视觉壳")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "任务中心" }),
+    ).toBeInTheDocument();
   });
 });
