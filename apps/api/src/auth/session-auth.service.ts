@@ -65,6 +65,33 @@ export class SessionAuthService {
     };
   }
 
+  /**
+   * MFA 状态变更专用的不锁 Session 解析。调用方必须先锁 user 与 factor，
+   * 最后再锁 current Session；本方法只读取身份与 CSRF，不持有行锁。
+   */
+  async resolveActorUnlockedInTransaction(
+    tx: TransactionContext,
+    cookieHeader: string | undefined,
+  ): Promise<AuthenticatedSessionActor | undefined> {
+    const parsed = this.parseSessionCandidates(cookieHeader);
+    if (parsed === undefined) {
+      return undefined;
+    }
+    const session = await this.sessionRepository.findValidUnlockedByTokenHashes(
+      tx,
+      parsed.candidates.map((candidate) => candidate.hash),
+    );
+    if (session === undefined || session.authState !== "AUTHENTICATED") {
+      return undefined;
+    }
+    return {
+      sessionId: session.id,
+      userId: session.userId,
+      authState: session.authState,
+      authVersionAtIssue: session.authVersionAtIssue,
+    };
+  }
+
   private parseSessionCandidates(
     cookieHeader: string | undefined,
   ): { readonly candidates: readonly { readonly hash: Buffer }[] } | undefined {

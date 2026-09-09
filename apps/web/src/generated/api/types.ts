@@ -28,6 +28,30 @@ export type ActivityQueryRequest = {
   readonly includeAdminOnly?: boolean;
 };
 
+export type ConfirmMfaEnrollmentRequest = {
+  readonly expectedEnrollmentGeneration: number;
+  readonly code: string;
+};
+
+export type ConfirmMfaEnrollmentResponse = {
+  readonly csrfToken: string;
+  readonly authState: "AUTHENTICATED";
+  readonly recoveryCodes: readonly string[];
+};
+
+export type ConsumeMfaRecoveryCodeHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type ConsumeMfaRecoveryCodeRequest = {
+  readonly code: string;
+};
+
+export type ConsumeMfaRecoveryCodeResponse = {
+  readonly csrfToken: string;
+  readonly authState: "AUTHENTICATED";
+};
+
 export type CreateProjectHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -92,15 +116,21 @@ export type LoginHeaders = {
 export type LoginRequest = {
   readonly loginName: string;
   readonly password: string;
+  readonly challengeMode: ("totp" | "recovery");
 };
 
 export type LoginResponse = {
   readonly csrfToken: string;
   readonly authState: ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+  readonly enrollmentGeneration?: number;
 };
 
 export type LogoutHeaders = {
   readonly "x-csrf-token"?: string;
+};
+
+export type MfaEnrollmentHeaders = {
+  readonly "x-csrf-token": string;
 };
 
 export type NotificationItem = {
@@ -147,6 +177,32 @@ export type ProjectMemberItem = {
   readonly joinedAt: string;
 };
 
+export type ReauthenticateAdminHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type ReauthenticateAdminRequest = {
+  readonly password: string;
+  readonly code: string;
+};
+
+export type ResetAdminMfaHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type ResetAdminMfaRequest = {
+  readonly userId: number;
+  readonly reason: string;
+};
+
+export type RotateMfaRecoveryCodesHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type RotateMfaRecoveryCodesResponse = {
+  readonly recoveryCodes: readonly string[];
+};
+
 export type SearchItem = {
   readonly projectId: number;
   readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP");
@@ -168,4 +224,27 @@ export type SearchQueryRequest = {
   readonly includeVoid?: boolean;
 };
 
+export type StartMfaEnrollmentRequest = {
+  readonly expectedEnrollmentGeneration: number;
+};
+
+export type StartMfaEnrollmentResponse = {
+  readonly enrollmentGeneration: number;
+  readonly secret: string;
+  readonly otpauthUri: string;
+};
+
 export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+
+export type VerifyMfaHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type VerifyMfaRequest = {
+  readonly code: string;
+};
+
+export type VerifyMfaResponse = {
+  readonly csrfToken: string;
+  readonly authState: "AUTHENTICATED";
+};

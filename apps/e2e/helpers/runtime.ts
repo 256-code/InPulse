@@ -18,6 +18,7 @@ export const IDEMPOTENCY_KEYRING_FILE = path.join(
   "idempotency.keyring",
 );
 export const AUDIT_KEYRING_FILE = path.join(E2E_KEYRING_DIR, "audit.keyring");
+export const TOTP_KEYRING_FILE = path.join(E2E_KEYRING_DIR, "totp.keyring");
 
 export interface E2ERuntime {
   readonly apiBaseUrl: string;

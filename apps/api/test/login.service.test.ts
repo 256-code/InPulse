@@ -93,6 +93,18 @@ class FakeFactorRepository {
   ): Promise<"ENROLLING" | "ACTIVE" | "DISABLED" | undefined> {
     return this.status;
   }
+
+  async findLoginSnapshot(_tx: TransactionContext): Promise<
+    | {
+        readonly status: "ENROLLING" | "ACTIVE" | "DISABLED";
+        readonly enrollmentGeneration: number;
+      }
+    | undefined
+  > {
+    return this.status === undefined
+      ? undefined
+      : { status: this.status, enrollmentGeneration: 1 };
+  }
 }
 
 class FakeSessionRepository {
@@ -193,6 +205,12 @@ interface SetupResult {
   readonly sessionRepository: FakeSessionRepository;
   readonly csrfRepository: FakeCsrfRepository;
   readonly factorRepository: FakeFactorRepository;
+  readonly recoveryCodeRepository: {
+    hashes: readonly { readonly codeHash: string }[];
+    readonly findActiveHashes: () => Promise<
+      readonly { readonly codeHash: string }[]
+    >;
+  };
   readonly rateLimitService: FakeRateLimitService;
 }
 
@@ -215,6 +233,14 @@ function setup(
     activeLock: options.userLockActive ?? true,
   });
   const factorRepository = new FakeFactorRepository();
+  const recoveryCodeRepository = {
+    hashes: [] as readonly { readonly codeHash: string }[],
+    async findActiveHashes(): Promise<
+      readonly { readonly codeHash: string }[]
+    > {
+      return this.hashes;
+    },
+  };
   const sessionRepository = new FakeSessionRepository();
   const csrfRepository = new FakeCsrfRepository();
   const passwordService = new FakePasswordService();
@@ -224,6 +250,7 @@ function setup(
     preauthRepository as never,
     userRepository as never,
     factorRepository as never,
+    recoveryCodeRepository as never,
     sessionRepository as never,
     csrfRepository as never,
     tokenService,
@@ -273,6 +300,7 @@ function setup(
     sessionRepository,
     csrfRepository,
     factorRepository,
+    recoveryCodeRepository,
     rateLimitService,
   };
 }
@@ -284,6 +312,7 @@ function input(
     readonly csrfToken: string | undefined;
     readonly cookieHeader: string | undefined;
     readonly clientIp: string;
+    readonly challengeMode: "totp" | "recovery";
   }> = {},
 ) {
   const material = result.material;
@@ -433,5 +462,17 @@ describe("管理员 MFA 状态选择", () => {
     });
     const login = await result.service.login(input(result));
     expect(login.authState).toBe("MFA_CHALLENGE");
+  });
+
+  test("管理员选择恢复码且存在未使用码时进入 RECOVERY_CHALLENGE", async () => {
+    const result = setup({
+      credential: adminCredential(),
+      factorStatus: "ACTIVE",
+    });
+    result.recoveryCodeRepository.hashes = [{ codeHash: "$argon2id$fixture" }];
+    const login = await result.service.login(
+      input(result, { challengeMode: "recovery" }),
+    );
+    expect(login.authState).toBe("RECOVERY_CHALLENGE");
   });
 });

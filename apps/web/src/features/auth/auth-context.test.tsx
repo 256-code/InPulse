@@ -93,6 +93,7 @@ describe("AuthProvider", () => {
       await result.current.login({
         loginName: " developer ",
         password: "secret",
+        challengeMode: "totp",
       });
     });
 
@@ -101,7 +102,11 @@ describe("AuthProvider", () => {
     });
     expect(client.issueCsrfToken).toHaveBeenCalledTimes(2);
     expect(client.login).toHaveBeenCalledWith(
-      { loginName: " developer ", password: "secret" },
+      {
+        loginName: " developer ",
+        password: "secret",
+        challengeMode: "totp",
+      },
       { headers: { "x-csrf-token": "csrf-token" } },
     );
     expect(result.current.user).toEqual(currentUser);
@@ -129,6 +134,7 @@ describe("AuthProvider", () => {
       loginResult = await result.current.login({
         loginName: "admin",
         password: "secret",
+        challengeMode: "totp",
       });
     });
 

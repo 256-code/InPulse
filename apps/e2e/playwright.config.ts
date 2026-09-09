@@ -9,6 +9,7 @@ import {
   E2E_KEYRING_DIR,
   E2E_ROOT,
   IDEMPOTENCY_KEYRING_FILE,
+  TOTP_KEYRING_FILE,
   requiredE2eDatabaseUrl,
   runtimeDatabaseUrl,
   SESSION_KEYRING_FILE,
@@ -39,6 +40,11 @@ writeFileSync(
 );
 writeFileSync(
   AUDIT_KEYRING_FILE,
+  `1:${randomBytes(32).toString("hex")}\n`,
+  "utf8",
+);
+writeFileSync(
+  TOTP_KEYRING_FILE,
   `1:${randomBytes(32).toString("hex")}\n`,
   "utf8",
 );
@@ -85,6 +91,9 @@ export default defineConfig({
         AUDIT_HMAC_KEYRING_FILE: AUDIT_KEYRING_FILE,
         AUDIT_HMAC_KEYRING_TEST_PATH: "1",
         AUDIT_HMAC_KEY_VERSION: "1",
+        TOTP_KEK_KEYRING_FILE: TOTP_KEYRING_FILE,
+        TOTP_KEK_KEYRING_TEST_PATH: "1",
+        TOTP_KEK_VERSION: "1",
       },
     },
     {

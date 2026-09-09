@@ -396,6 +396,575 @@ export const routeRegistry = [
     auditAction: "none",
   },
   {
+    method: "POST",
+    path: "/auth/mfa/enrollment/start",
+    operationId: "startMfaEnrollment",
+    summary:
+      "管理员首次注册 TOTP：按 user → factor → current Session 锁序条件创建新 pending，返回只展示一次 Secret 与 otpauth URI。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "MfaEnrollmentHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "StartMfaEnrollmentRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "StartMfaEnrollmentResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一旧 enrollment generation 只允许一个请求创建新 pending；按 user → factor → current Session 锁序条件更新，失败方返回 409",
+      clientRecoveryPath:
+        "重新登录读取当前 enrollment generation，再以该 generation 重新开始",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/auth/mfa/enrollment/confirm",
+    operationId: "confirmMfaEnrollment",
+    summary:
+      "确认 TOTP 注册：条件接受 pending Secret 的当前 time-step，启用因子、签发恢复码，并在同一事务撤销受限 Session、轮换为完整 Session/CSRF。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "MfaEnrollmentHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "ConfirmMfaEnrollmentRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "ConfirmMfaEnrollmentResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "429": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "条件激活对应 ENROLLING generation；恢复码 Hash 一次签发、原子失效旧批次，旧 Session 撤销并轮换新 Session/CSRF",
+      clientRecoveryPath:
+        "清 Cookie 后重新登录；若因子已激活，完成 MFA 后于下一 time-step 重认证并轮换恢复码",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/auth/mfa/verify",
+    operationId: "verifyMfa",
+    summary:
+      "管理员完成当前 TOTP 验证：条件接受未使用 time-step，并在同一事务将 MFA_CHALLENGE Session 升级为 AUTHENTICATED。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "VerifyMfaHeaders",
+      body: {
+        contentTypes: [
+          { contentType: "application/json", schemaRef: "VerifyMfaRequest" },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "VerifyMfaResponse" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "429": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一 ACTIVE 因子的未使用 TOTP time-step 只接受一次；成功时在同一事务将当前 MFA_CHALLENGE Session 条件升级为 AUTHENTICATED 并刷新 last_accepted_step",
+      clientRecoveryPath:
+        "若响应丢失且 Session 已升级，读取当前用户；仍为 MFA_CHALLENGE 时于下一 time-step 重新验证",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/auth/mfa/reauthenticate",
+    operationId: "reauthenticateAdmin",
+    summary:
+      "完整管理员 Session 使用密码与当前未使用 TOTP 完成重认证，并在同一事务刷新两个新鲜度时间戳与一次性 rotation generation。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "ReauthenticateAdminHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "ReauthenticateAdminRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "204": { noBody: true },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "429": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一完整 Session 的密码与 ACTIVE 因子当前未使用 TOTP time-step 条件通过；成功时同一服务端事务时间原子刷新 reauthenticated_at、mfa_verified_at 并递增 recovery_rotation_generation",
+      clientRecoveryPath:
+        "响应丢失后在下一 TOTP time-step 重新认证；若已进入下一高风险操作，由 RequireReauthGuard 按 5 分钟窗口判断",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "POST",
+    path: "/auth/mfa/recovery-codes/rotate",
+    operationId: "rotateMfaRecoveryCodes",
+    summary:
+      "完整管理员 Session 在 5 分钟内完成密码 + 当前 TOTP 重认证后，原子消费该次 rotation generation、失效全部旧恢复码，并只展示一次新恢复码。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "RotateMfaRecoveryCodesHeaders",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "RotateMfaRecoveryCodesResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一完整 Session 只消费一次 reauthenticateAdmin 签发的 recovery_rotation_generation；按 user → factor → Session 锁序条件更新 consumed generation，同一 generation 的竞争者返回 409，并在同一事务失效旧 Hash 后签发新码",
+      clientRecoveryPath:
+        "响应丢失后不能从 Hash 恢复旧明文；在下一 TOTP time-step 重新调用 reauthenticateAdmin，再于新 generation 轮换",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "auth.mfa_recovery_rotate",
+  },
+  {
+    method: "POST",
+    path: "/auth/mfa/recovery-codes/consume",
+    operationId: "consumeMfaRecoveryCode",
+    summary:
+      "管理员密码阶段选择恢复码挑战后，原子消费一个未使用恢复码、失效旧代码集，并将当前 RECOVERY_CHALLENGE Session 升级为完整 Session。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "ConsumeMfaRecoveryCodeHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "ConsumeMfaRecoveryCodeRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "ConsumeMfaRecoveryCodeResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "429": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "同一未使用恢复码 Hash 只被接受一次；按 user → factor → Session 锁序在事务内条件写 used_at 并失效同用户全部旧码，随后条件升级当前 RECOVERY_CHALLENGE Session 并签发新 CSRF",
+      clientRecoveryPath:
+        "响应丢失且 Session 已升级时重新登录完成 MFA；仍未升级则在下一可用恢复码重试，服务端不保存旧明文",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "auth.mfa_recovery_consume",
+  },
+  {
+    method: "POST",
+    path: "/auth/admin/mfa-reset",
+    operationId: "resetAdminMfa",
+    summary:
+      "另一名已完成密码 + 当前 TOTP 重认证的系统管理员重置目标管理员 MFA：同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销全部 Session 并写审计。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "ResetAdminMfaHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "ResetAdminMfaRequest",
+          },
+        ],
+      },
+    },
+    responses: {
+      "204": { noBody: true },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "409": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "adminSessionWithReauthentication",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: { "204": { noBody: true } },
+    },
+    replayAuthorizationPolicy: { version: "1.0.0", actorOnly: true },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "admin.mfa.reset",
+  },
+  {
     method: "GET",
     path: "/search",
     operationId: "getSearch",
