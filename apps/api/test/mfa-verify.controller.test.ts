@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { MfaVerifyController } from "../src/auth/mfa-verify.controller.js";
+import { invalidMfaSession } from "../src/auth/mfa-verify.error.js";
 import { mfaRateLimited } from "../src/auth/mfa-rate-limit.error.js";
 import type {
   VerifyMfaInput,
@@ -61,6 +62,7 @@ describe("MfaVerifyController", () => {
       requestFixture({}),
       response as never,
       { code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -68,23 +70,27 @@ describe("MfaVerifyController", () => {
     expect(service.verifyCalls).toBe(0);
   });
 
-  test("code 格式无效时返回 422", async () => {
+  test("服务层验证错误映射为统一错误信封", async () => {
     const service = new FakeMfaVerifyService();
+    service.verifyError = invalidMfaSession();
     const controller = new MfaVerifyController(service as never);
     const response = responseFixture();
 
     const result = await controller.verify(
-      requestFixture(
-        { host: "localhost", origin: "http://localhost" },
-        { code: "12345" },
-      ),
+      requestFixture({
+        host: "localhost",
+        origin: "http://localhost",
+        cookie: "__Host-session=A".repeat(43),
+        "x-csrf-token": "B".repeat(43),
+      }),
       response as never,
-      { code: "12345" },
+      { code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "MFA_VERIFY_VALIDATION_FAILED" });
-    expect(service.verifyCalls).toBe(0);
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(result).toMatchObject({ code: "MFA_CHALLENGE_SESSION_REQUIRED" });
+    expect(service.verifyCalls).toBe(1);
   });
 
   test("验证成功返回完整态与 CSRF 并禁止缓存", async () => {
@@ -104,6 +110,7 @@ describe("MfaVerifyController", () => {
       ),
       response as never,
       { code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.verifyCalls).toBe(1);
@@ -138,6 +145,7 @@ describe("MfaVerifyController", () => {
       ),
       response as never,
       { code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(429);

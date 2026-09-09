@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
+import { ApiExceptionFilter } from "./http/api-exception.filter.js";
+import { ContractResponseInterceptor } from "./http/contract-response.interceptor.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { DatabaseModule } from "./database/database.module.js";
@@ -33,6 +36,16 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
     ActivityProjectionModule,
     NotificationProjectionModule,
     ...authModules,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: ApiExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ContractResponseInterceptor,
+    },
   ],
 })
 export class AppModule {}

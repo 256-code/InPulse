@@ -1,13 +1,27 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
+import type { LoginHeaders, LoginRequest } from "@inpulse/api-contract";
 import {
   buildCookie,
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { LoginError } from "./login.error.js";
 import { LoginService } from "./login.service.js";
@@ -37,46 +51,6 @@ interface ErrorResponseDto {
   readonly requestId: string;
 }
 
-interface LoginBodyDto {
-  readonly loginName: string;
-  readonly password: string;
-  readonly challengeMode: "totp" | "recovery";
-}
-
-function parseLoginBody(body: unknown): LoginBodyDto | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Readonly<Record<string, unknown>>;
-  const loginName = record["loginName"];
-  const password = record["password"];
-  const challengeMode = record["challengeMode"];
-  if (typeof loginName !== "string" || typeof password !== "string") {
-    return undefined;
-  }
-  if (
-    challengeMode !== undefined &&
-    challengeMode !== "totp" &&
-    challengeMode !== "recovery"
-  ) {
-    return undefined;
-  }
-  const normalizedLoginName = loginName.trim();
-  if (
-    normalizedLoginName.length < 1 ||
-    normalizedLoginName.length > 100 ||
-    password.length < 1 ||
-    password.length > 1024
-  ) {
-    return undefined;
-  }
-  return {
-    loginName: normalizedLoginName,
-    password,
-    challengeMode: challengeMode === "recovery" ? "recovery" : "totp",
-  };
-}
-
 function resolveClientIp(request: LoginControllerRequest): string {
   const raw =
     request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
@@ -93,10 +67,13 @@ export class LoginController {
 
   @Post("login")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("login")
   async login(
     @Req() request: LoginControllerRequest,
     @Res({ passthrough: true }) response: LoginControllerResponse,
-    @Body() body: unknown,
+    @ContractBody("login") body: LoginRequest,
+    @ContractHeaders("login") headers: LoginHeaders,
   ): Promise<LoginResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -110,25 +87,14 @@ export class LoginController {
       };
     }
 
-    const parsed = parseLoginBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "LOGIN_VALIDATION_FAILED",
-        message: "登录请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
-
     try {
       const result = await this.loginService.login({
-        loginName: parsed.loginName,
-        password: parsed.password,
+        loginName: body.loginName,
+        password: body.password,
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
-        challengeMode: parsed.challengeMode,
+        csrfToken: headers["x-csrf-token"],
+        challengeMode: body.challengeMode,
       });
       response.setHeader(
         "Set-Cookie",

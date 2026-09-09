@@ -12,6 +12,7 @@ export interface ControllerBinding {
   readonly method: HttpMethod;
   readonly path: string;
   readonly handler: string;
+  readonly operationId: string;
   readonly file: string;
 }
 
@@ -71,12 +72,38 @@ export function parseControllerSource(
   const decoratorPattern =
     /@([A-Za-z]+)\(([^)]*)\)\s*(?:@[A-Za-z]+\([^)]*\)\s*)*(?:async\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
   for (const match of source.matchAll(decoratorPattern)) {
-    const decorator = match[1]!;
-    const rawArgument = match[2]!.trim();
+    const decorators = [
+      ...match[0].matchAll(/@([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\)/g),
+    ].map((decorator) => ({
+      name: decorator[1]!,
+      argument: decorator[2]!.trim(),
+    }));
+    const methodDecorator = decorators.find(
+      (decorator) => methodDecorators[decorator.name] !== undefined,
+    );
+    if (methodDecorator === undefined) {
+      continue;
+    }
+    const decorator = methodDecorator.name;
+    const rawArgument = methodDecorator.argument;
     const handler = match[3]!;
     const method = methodDecorators[decorator];
-    if (!method) {
+    if (method === undefined) {
       continue;
+    }
+    const operationDecorator = decorators.find(
+      (candidate) =>
+        candidate.name === "Operation" ||
+        candidate.name === "ContractOperation",
+    );
+    const operationId =
+      operationDecorator?.argument.match(/^"([^"]*)"$/)?.[1] ??
+      operationDecorator?.argument.match(/^'([^']*)'$/)?.[1];
+    if (operationDecorator !== undefined && operationId === undefined) {
+      failures.push(`${file}: ${handler} 的 @Operation 参数必须是字符串字面量`);
+    }
+    if (operationId === undefined) {
+      failures.push(`${file}: ${handler} 缺少 @Operation 字符串字面量`);
     }
     let subPath = "";
     if (rawArgument.length > 0) {
@@ -98,6 +125,7 @@ export function parseControllerSource(
       method,
       path,
       handler,
+      operationId: operationId ?? "",
       file,
     });
   }
@@ -185,13 +213,23 @@ export function validateControllerBindings(
   for (const route of routes) {
     const expected = `${apiBasePath}${route.path}`;
     const match = scan.bindings.find(
-      (binding) => binding.method === route.method && binding.path === expected,
+      (binding) =>
+        binding.method === route.method &&
+        binding.path === expected &&
+        binding.operationId === route.operationId,
     );
     if (!match) {
+      const pathMatch = scan.bindings.find(
+        (binding) =>
+          binding.method === route.method && binding.path === expected,
+      );
       findings.push({
         rule: "controller-binding",
         operationId: route.operationId,
-        message: `Route Registry 登记的 ${route.method} ${expected} 在 apps/api 中没有对应 Controller`,
+        message:
+          pathMatch === undefined
+            ? `Route Registry 登记的 ${route.method} ${expected} 在 apps/api 中没有对应 Controller`
+            : `Route Registry 的 ${route.operationId} 与 Controller ${pathMatch.operationId || pathMatch.handler} 不一致`,
       });
     }
   }

@@ -117,7 +117,17 @@ describe("ProjectBootstrapController", () => {
       },
     };
 
-    const result = await controller.create(request as never, response as never);
+    const result = await controller.create(
+      request as never,
+      response as never,
+      {
+        name: request.body.name,
+        code: request.body.code,
+        description: request.body.description,
+        memberIds: request.body.memberIds,
+      },
+      { "x-csrf-token": "a".repeat(43) },
+    );
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(result).toMatchObject({
@@ -126,33 +136,5 @@ describe("ProjectBootstrapController", () => {
     expect(idempotency.calls).toHaveLength(1);
     expect(idempotency.calls[0]?.operationId).toBe("createProject");
     expect(idempotency.calls[0]?.request.body).toEqual(request.body);
-  });
-
-  test("缺少 CSRF Token 时返回 422 且不进入幂等事务", async () => {
-    const { controller, idempotency } = createController();
-    const response = responseFixture();
-
-    const result = await controller.create(
-      {
-        headers: {
-          cookie: "__Host-session=token",
-          host: "127.0.0.1:4173",
-          origin: "http://127.0.0.1:4173",
-        },
-        body: {
-          name: "商城系统",
-          code: "SHOP",
-          description: "",
-          memberIds: [],
-        },
-      } as never,
-      response as never,
-    );
-
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({
-      code: "PROJECT_VALIDATION_FAILED",
-    });
-    expect(idempotency.calls).toHaveLength(0);
   });
 });

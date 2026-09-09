@@ -1,12 +1,26 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
+import type { VerifyMfaHeaders, VerifyMfaRequest } from "@inpulse/api-contract";
 import {
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { MfaRateLimitError } from "./mfa-rate-limit.error.js";
 import { MfaVerifyError } from "./mfa-verify.error.js";
@@ -31,25 +45,9 @@ interface ErrorResponseDto {
   readonly requestId: string;
 }
 
-interface VerifyRequest {
-  readonly code: string;
-}
-
 interface VerifyResponseDto {
   readonly csrfToken: string;
   readonly authState: "AUTHENTICATED";
-}
-
-function parseVerifyBody(body: unknown): VerifyRequest | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Readonly<Record<string, unknown>>;
-  const code = record["code"];
-  if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
-    return undefined;
-  }
-  return { code };
 }
 
 function resolveClientIp(request: MfaVerifyRequest): string {
@@ -65,10 +63,13 @@ export class MfaVerifyController {
 
   @Post("verify")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("verifyMfa")
   async verify(
     @Req() request: MfaVerifyRequest,
     @Res({ passthrough: true }) response: MfaVerifyResponse,
-    @Body() body: unknown,
+    @ContractBody("verifyMfa") body: VerifyMfaRequest,
+    @ContractHeaders("verifyMfa") headers: VerifyMfaHeaders,
   ): Promise<VerifyResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -81,23 +82,12 @@ export class MfaVerifyController {
         requestId,
       };
     }
-    const parsed = parseVerifyBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "MFA_VERIFY_VALIDATION_FAILED",
-        message: "MFA 验证请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
-
     try {
       const result = await this.service.verify({
-        code: parsed.code,
+        code: body.code,
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
       });
       response.setHeader("Cache-Control", "no-store");
       response.status(200);

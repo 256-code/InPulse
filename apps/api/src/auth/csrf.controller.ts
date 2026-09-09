@@ -8,6 +8,7 @@ import {
   sameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { Operation } from "../http/contract.decorators.js";
 import { CsrfIssueService } from "./csrf-issue.service.js";
 
 interface CsrfControllerRequest {
@@ -38,6 +39,7 @@ interface ErrorResponseDto {
 export class CsrfController {
   constructor(private readonly csrfIssueService: CsrfIssueService) {}
 
+  @Operation("issueCsrfToken")
   @Get("csrf")
   async issue(
     @Req() request: CsrfControllerRequest,

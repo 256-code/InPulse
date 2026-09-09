@@ -28,6 +28,9 @@ import { PasswordService } from "./password.service.js";
 import { RecoveryCodeService } from "./recovery-code.service.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
+import { PostgresSessionCleanupRepository } from "./session-cleanup.repository.js";
+import { SessionCleanupService } from "./session-cleanup.service.js";
+import { SessionCleanupScheduler } from "./session-cleanup.scheduler.js";
 import { SessionTokenService } from "./session-token.service.js";
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
@@ -78,6 +81,9 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     PostgresUserSessionRepository,
     PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
+    PostgresSessionCleanupRepository,
+    SessionCleanupService,
+    SessionCleanupScheduler,
     PasswordService,
     CsrfIssueService,
     LoginService,
@@ -124,6 +130,7 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     PostgresUserSessionRepository,
     PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
+    PostgresSessionCleanupRepository,
     PasswordService,
     CsrfIssueService,
     LoginService,

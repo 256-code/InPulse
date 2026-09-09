@@ -35,7 +35,46 @@ export class PostgresAuditWritePort extends AuditWritePort {
     input: AuditWriteInput,
   ): Promise<AuditAppendResult> {
     const chainId = auditChainId(input.projectId);
-    const lock = await this.lockHead(tx, chainId, input.projectId);
+    let lock = await this.lockHead(tx, chainId, input.projectId);
+    const currentVersion = this.keyProvider.currentVersion;
+
+    if (
+      input.nextKeyVersion === undefined &&
+      currentVersion > lock.keyVersion
+    ) {
+      const rotation = await this.appendLocked(tx, chainId, lock, {
+        projectId: input.projectId,
+        actorType: "SYSTEM",
+        actorId: null,
+        action: "AUDIT_KEY_ROTATED",
+        targetType: "SYSTEM",
+        targetId: null,
+        eventPayload: { newKeyVersion: currentVersion },
+        requestId: input.requestId,
+        clientRequestId: input.clientRequestId ?? null,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        occurredAt: input.occurredAt ?? new Date(),
+        nextKeyVersion: currentVersion,
+      });
+      lock = {
+        chainId,
+        projectId: input.projectId,
+        lastSequence: rotation.sequenceNo,
+        lastHash: rotation.recordHash,
+        keyVersion: currentVersion,
+      };
+    }
+
+    return this.appendLocked(tx, chainId, lock, input);
+  }
+
+  private async appendLocked(
+    tx: TransactionContext,
+    chainId: string,
+    lock: AuditHeadLock,
+    input: AuditWriteInput,
+  ): Promise<AuditAppendResult> {
     const sequenceNo = lock.lastSequence + 1;
     const keyVersion = lock.keyVersion;
     const nextKeyVersion = input.nextKeyVersion ?? keyVersion;

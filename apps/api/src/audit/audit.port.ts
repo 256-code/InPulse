@@ -23,8 +23,9 @@ export interface AuditWriteInput {
   readonly userAgent?: string | null;
   readonly occurredAt?: Date;
   /**
-   * 密钥轮换：仅当 action='AUDIT_KEY_ROTATED' 且 eventPayload.newKeyVersion
-   * 等于该值时使用新版本；否则保持链头当前版本。
+   * 密钥轮换：省略时由 keyring 当前版本自动惰性轮换（先在链头锁内以旧
+   * 密钥写 `AUDIT_KEY_ROTATED`，再以新密钥写业务事件）；显式指定仅允许
+   * action='AUDIT_KEY_ROTATED' 且 eventPayload.newKeyVersion 等于该值。
    */
   readonly nextKeyVersion?: number;
 }
