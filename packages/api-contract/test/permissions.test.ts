@@ -115,9 +115,11 @@ describe("权限矩阵与文档一致性", () => {
 describe("Controller 绑定", () => {
   const controllerSource = `
 import { Controller, Get } from "@nestjs/common";
+import { Operation } from "../http/contract.decorators.js";
 
 @Controller("health")
 export class HealthController {
+  @Operation("getHealth")
   @Get()
   check(): { status: string } {
     return { status: "ok" };
@@ -136,6 +138,7 @@ export class HealthController {
         method: "GET",
         path: "/health",
         handler: "check",
+        operationId: "getHealth",
         file: "health.controller.ts",
       },
     ]);
@@ -145,8 +148,10 @@ export class HealthController {
     const parsed = parseControllerSource(
       [
         'import { Controller, Get } from "@nestjs/common";',
+        'import { Operation } from "../http/contract.decorators.js";',
         '@Controller("projects")',
         "export class ActivityController {",
+        '  @Operation("getProjectActivity")',
         '  @Get(":projectId/activity")',
         "  list(): void {}",
         "}",
@@ -222,6 +227,7 @@ export class HealthController {
           method: "GET",
           path: "/api/v1/health",
           handler: "check",
+          operationId: "getHealth",
           file: "apps/api/src/health/health.controller.ts",
         },
       ],

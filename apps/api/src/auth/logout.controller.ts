@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { Controller, Post, Req, Res } from "@nestjs/common";
+import { Controller, Post, Req, Res, UseGuards } from "@nestjs/common";
 
+import { ContractHeaders, Operation } from "../http/contract.decorators.js";
 import {
   buildCookie,
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { LogoutError } from "./logout.error.js";
 import { LogoutService } from "./logout.service.js";
 
@@ -36,9 +38,12 @@ export class LogoutController {
   constructor(private readonly logoutService: LogoutService) {}
 
   @Post("logout")
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("logout")
   async logout(
     @Req() request: LogoutControllerRequest,
     @Res({ passthrough: true }) response: LogoutControllerResponse,
+    @ContractHeaders("logout") _headers: unknown = undefined,
   ): Promise<void | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);

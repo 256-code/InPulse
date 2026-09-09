@@ -1,13 +1,31 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
+import type {
+  ConfirmMfaEnrollmentRequest,
+  MfaEnrollmentHeaders,
+  StartMfaEnrollmentRequest,
+} from "@inpulse/api-contract";
 import {
   buildCookie,
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { MfaEnrollmentService } from "./mfa-enrollment.service.js";
 import { MfaEnrollmentError } from "./mfa-enrollment.error.js";
@@ -32,15 +50,6 @@ interface ErrorResponseDto {
   readonly requestId: string;
 }
 
-interface StartRequest {
-  readonly expectedEnrollmentGeneration: number;
-}
-
-interface ConfirmRequest {
-  readonly expectedEnrollmentGeneration: number;
-  readonly code: string;
-}
-
 interface StartResponseDto {
   readonly enrollmentGeneration: number;
   readonly secret: string;
@@ -51,43 +60,6 @@ interface ConfirmResponseDto {
   readonly csrfToken: string;
   readonly authState: "AUTHENTICATED";
   readonly recoveryCodes: readonly string[];
-}
-
-function parseStartBody(body: unknown): StartRequest | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Readonly<Record<string, unknown>>;
-  const expected = record["expectedEnrollmentGeneration"];
-  if (
-    typeof expected !== "number" ||
-    !Number.isInteger(expected) ||
-    expected < 0 ||
-    expected > 1_000_000
-  ) {
-    return undefined;
-  }
-  return { expectedEnrollmentGeneration: expected };
-}
-
-function parseConfirmBody(body: unknown): ConfirmRequest | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Readonly<Record<string, unknown>>;
-  const expected = record["expectedEnrollmentGeneration"];
-  const code = record["code"];
-  if (
-    typeof expected !== "number" ||
-    !Number.isInteger(expected) ||
-    expected < 0 ||
-    expected > 1_000_000 ||
-    typeof code !== "string" ||
-    !/^\d{6}$/.test(code)
-  ) {
-    return undefined;
-  }
-  return { expectedEnrollmentGeneration: expected, code };
 }
 
 function resolveClientIp(request: MfaEnrollmentRequest): string {
@@ -102,10 +74,13 @@ export class MfaEnrollmentController {
 
   @Post("start")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("startMfaEnrollment")
   async start(
     @Req() request: MfaEnrollmentRequest,
     @Res({ passthrough: true }) response: MfaEnrollmentResponse,
-    @Body() body: unknown,
+    @ContractBody("startMfaEnrollment") body: StartMfaEnrollmentRequest,
+    @ContractHeaders("startMfaEnrollment") headers: MfaEnrollmentHeaders,
   ): Promise<StartResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -118,21 +93,11 @@ export class MfaEnrollmentController {
         requestId,
       };
     }
-    const parsed = parseStartBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "MFA_ENROLLMENT_VALIDATION_FAILED",
-        message: "MFA 注册请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
     try {
       const result = await this.service.start({
-        expectedEnrollmentGeneration: parsed.expectedEnrollmentGeneration,
+        expectedEnrollmentGeneration: body.expectedEnrollmentGeneration,
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
       });
       response.setHeader("Cache-Control", "no-store");
       response.status(200);
@@ -148,10 +113,13 @@ export class MfaEnrollmentController {
 
   @Post("confirm")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("confirmMfaEnrollment")
   async confirm(
     @Req() request: MfaEnrollmentRequest,
     @Res({ passthrough: true }) response: MfaEnrollmentResponse,
-    @Body() body: unknown,
+    @ContractBody("confirmMfaEnrollment") body: ConfirmMfaEnrollmentRequest,
+    @ContractHeaders("confirmMfaEnrollment") headers: MfaEnrollmentHeaders,
   ): Promise<ConfirmResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -164,23 +132,13 @@ export class MfaEnrollmentController {
         requestId,
       };
     }
-    const parsed = parseConfirmBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "MFA_ENROLLMENT_VALIDATION_FAILED",
-        message: "MFA 注册确认请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
     try {
       const result = await this.service.confirm({
-        expectedEnrollmentGeneration: parsed.expectedEnrollmentGeneration,
-        code: parsed.code,
+        expectedEnrollmentGeneration: body.expectedEnrollmentGeneration,
+        code: body.code,
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
       });
       response.setHeader(
         "Set-Cookie",

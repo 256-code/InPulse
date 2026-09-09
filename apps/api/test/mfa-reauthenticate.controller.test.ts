@@ -73,6 +73,7 @@ describe("MfaReauthenticateController", () => {
       requestFixture({}),
       response as never,
       { password: REAUTH_INVALID_PASSWORD, code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -80,26 +81,26 @@ describe("MfaReauthenticateController", () => {
     expect(service.reauthenticateCalls).toBe(0);
   });
 
-  test("密码或验证码格式无效时返回 422", async () => {
+  test("契约解析后的请求体直接传递到服务层", async () => {
     const service = new FakeMfaReauthenticateService();
     const controller = new MfaReauthenticateController(service as never);
     const response = responseFixture();
 
-    const result = await controller.reauthenticate(
-      requestFixture(
-        {
-          host: "localhost",
-          origin: "http://localhost",
-        },
-        { password: REAUTH_INVALID_PASSWORD, code: "12345" },
-      ),
+    await controller.reauthenticate(
+      requestFixture({
+        host: "localhost",
+        origin: "http://localhost",
+        cookie: "__Host-session=A".repeat(43),
+        "x-csrf-token": "B".repeat(43),
+      }),
       response as never,
-      { password: REAUTH_INVALID_PASSWORD, code: "12345" },
+      { password: REAUTH_VALID_PASSWORD, code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "REAUTH_VALIDATION_FAILED" });
-    expect(service.reauthenticateCalls).toBe(0);
+    expect(response.status).toHaveBeenCalledWith(204);
+    expect(service.reauthenticateCalls).toBe(1);
+    expect(service.lastInput?.password).toBe(REAUTH_VALID_PASSWORD);
   });
 
   test("重认证成功返回 204 并禁止缓存", async () => {
@@ -112,6 +113,7 @@ describe("MfaReauthenticateController", () => {
       request as never,
       response as never,
       request.body,
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.reauthenticateCalls).toBe(1);
@@ -142,6 +144,7 @@ describe("MfaReauthenticateController", () => {
       request as never,
       response as never,
       request.body,
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(409);
@@ -171,6 +174,7 @@ describe("MfaReauthenticateController", () => {
         request as never,
         response as never,
         request.body,
+        { "x-csrf-token": "B".repeat(43) },
       );
 
       expect(response.status).toHaveBeenCalledWith(429);

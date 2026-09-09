@@ -7,6 +7,7 @@ import type {
   StartMfaEnrollmentInput,
   StartMfaEnrollmentResult,
 } from "../src/auth/mfa-enrollment.service.js";
+import { invalidSession } from "../src/auth/mfa-enrollment.error.js";
 import { mfaRateLimited } from "../src/auth/mfa-rate-limit.error.js";
 
 class FakeMfaEnrollmentService {
@@ -90,6 +91,7 @@ describe("MfaEnrollmentController", () => {
       requestFixture({}),
       response as never,
       { expectedEnrollmentGeneration: 0 },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -97,20 +99,27 @@ describe("MfaEnrollmentController", () => {
     expect(service.startCalls).toBe(0);
   });
 
-  test("start 请求体无效时返回 422", async () => {
+  test("start 服务层错误映射为统一错误信封", async () => {
     const service = new FakeMfaEnrollmentService();
+    service.startError = invalidSession();
     const controller = new MfaEnrollmentController(service as never);
     const response = responseFixture();
 
     const result = await controller.start(
-      requestFixture({ host: "localhost", origin: "http://localhost" }, {}),
+      requestFixture({
+        host: "localhost",
+        origin: "http://localhost",
+        cookie: "__Host-session=A".repeat(43),
+        "x-csrf-token": "B".repeat(43),
+      }),
       response as never,
-      {},
+      { expectedEnrollmentGeneration: 0 },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "MFA_ENROLLMENT_VALIDATION_FAILED" });
-    expect(service.startCalls).toBe(0);
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(result).toMatchObject({ code: "MFA_SESSION_REQUIRED" });
+    expect(service.startCalls).toBe(1);
   });
 
   test("start 成功返回 Secret、otpauth URI 并禁止缓存", async () => {
@@ -130,6 +139,7 @@ describe("MfaEnrollmentController", () => {
       ),
       response as never,
       { expectedEnrollmentGeneration: 0 },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.startCalls).toBe(1);
@@ -160,6 +170,7 @@ describe("MfaEnrollmentController", () => {
       ),
       response as never,
       { expectedEnrollmentGeneration: 1, code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.confirmCalls).toBe(1);
@@ -191,6 +202,7 @@ describe("MfaEnrollmentController", () => {
       ),
       response as never,
       { expectedEnrollmentGeneration: 1, code: "123456" },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(429);

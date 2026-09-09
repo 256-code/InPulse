@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Controller, Get, Res } from "@nestjs/common";
 
+import { Operation } from "../http/contract.decorators.js";
 import { HealthService } from "./health.service.js";
 
 interface HealthControllerResponse {
@@ -26,16 +27,19 @@ interface ErrorResponseDto {
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
+  @Operation("getHealth")
   @Get()
   check(): { status: "ok" } {
     return { status: "ok" };
   }
 
+  @Operation("getHealthLive")
   @Get("live")
   live(): { status: "ok" } {
     return { status: "ok" };
   }
 
+  @Operation("getHealthReady")
   @Get("ready")
   async ready(
     @Res({ passthrough: true }) response: HealthControllerResponse,

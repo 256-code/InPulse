@@ -1,11 +1,23 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  resetAdminMfaHeadersSchema,
-  resetAdminMfaRequestSchema,
+import type {
+  ResetAdminMfaHeaders,
+  ResetAdminMfaRequest,
 } from "@inpulse/api-contract";
-import { Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
 import { AdminHighRiskError } from "./admin-high-risk.error.js";
 import { AdminHighRiskAuthService } from "./admin-high-risk.service.js";
 import { AdminMfaResetError } from "./admin-mfa-reset.error.js";
@@ -15,6 +27,7 @@ import {
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import {
   IdempotencyHttpError,
   IdempotencyHttpService,
@@ -60,9 +73,13 @@ export class AdminMfaResetController {
 
   @Post("mfa-reset")
   @HttpCode(204)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("resetAdminMfa")
   async reset(
     @Req() request: AdminMfaResetControllerRequest,
     @Res({ passthrough: true }) response: AdminMfaResetControllerResponse,
+    @ContractBody("resetAdminMfa") body: ResetAdminMfaRequest,
+    @ContractHeaders("resetAdminMfa") headers: ResetAdminMfaHeaders,
   ): Promise<ErrorResponseDto | undefined> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -75,26 +92,7 @@ export class AdminMfaResetController {
         requestId,
       };
     }
-    const parsedHeaders = resetAdminMfaHeadersSchema.safeParse(request.headers);
-    if (!parsedHeaders.success) {
-      response.status(422);
-      return {
-        code: "ADMIN_MFA_RESET_HEADERS_INVALID",
-        message: "管理员 MFA 重置请求头缺少有效的同步 CSRF Token",
-        details: {},
-        requestId,
-      };
-    }
-    const parsedBody = resetAdminMfaRequestSchema.safeParse(request.body);
-    if (!parsedBody.success) {
-      response.status(422);
-      return {
-        code: "ADMIN_MFA_RESET_VALIDATION_FAILED",
-        message: "管理员 MFA 重置请求体字段无效",
-        details: {},
-        requestId,
-      };
-    }
+    void headers;
 
     try {
       const result = await this.idempotency.run({
@@ -110,8 +108,8 @@ export class AdminMfaResetController {
         },
         execute: async (tx, actorId) => {
           await this.resetService.execute(tx, actorId, {
-            userId: parsedBody.data.userId,
-            reason: parsedBody.data.reason,
+            userId: body.userId,
+            reason: body.reason,
             requestId,
             headers: request.headers,
           });

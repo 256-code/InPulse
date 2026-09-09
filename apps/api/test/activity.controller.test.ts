@@ -75,7 +75,7 @@ describe("ActivityController", () => {
     const result = await controller.list(
       request,
       response as never,
-      { projectId: "42" },
+      { projectId: 42 },
       {},
     );
 
@@ -97,11 +97,11 @@ describe("ActivityController", () => {
     const result = await controller.list(
       request,
       response as never,
-      { projectId: "42" },
+      { projectId: 42 },
       {
         cursor: "opaque",
-        limit: "10",
-        includeAdminOnly: "true",
+        limit: 10,
+        includeAdminOnly: true,
       },
     );
 
@@ -122,34 +122,27 @@ describe("ActivityController", () => {
     expect(response.status).not.toHaveBeenCalled();
   });
 
-  test("无效路径或查询返回 422", async () => {
+  test("契约解析后的路径与查询参数不再二次校验", async () => {
     const session = new FakeSessionAuth();
     const service = new FakeActivityService();
     const controller = new ActivityController(
       session as never,
       service as never,
     );
-    const invalidPath = responseFixture();
-    const invalidQuery = responseFixture();
+    const response = responseFixture();
 
-    const pathResult = await controller.list(
+    const result = await controller.list(
       request,
-      invalidPath as never,
-      { projectId: "abc" },
-      {},
-    );
-    const queryResult = await controller.list(
-      request,
-      invalidQuery as never,
-      { projectId: "42" },
-      { limit: "999" },
+      response as never,
+      { projectId: 42 },
+      { limit: 10 },
     );
 
-    expect(invalidPath.status).toHaveBeenCalledWith(422);
-    expect(pathResult).toMatchObject({ code: "ACTIVITY_VALIDATION_FAILED" });
-    expect(invalidQuery.status).toHaveBeenCalledWith(422);
-    expect(queryResult).toMatchObject({ code: "ACTIVITY_VALIDATION_FAILED" });
-    expect(service.commands).toEqual([]);
+    expect(response.status).not.toHaveBeenCalled();
+    expect(service.commands).toEqual([
+      { actorUserId: 7, projectId: 42, limit: 10 },
+    ]);
+    expect(result).toMatchObject({ hasMore: false });
   });
 
   test("无权限项目返回 404，游标错误返回 422，未知错误返回 500", async () => {
@@ -170,7 +163,7 @@ describe("ActivityController", () => {
       await authController.list(
         request,
         authResponse as never,
-        { projectId: "42" },
+        { projectId: 42 },
         {},
       ),
     ).toMatchObject({ code: "ACTIVITY_PROJECT_NOT_FOUND" });
@@ -190,7 +183,7 @@ describe("ActivityController", () => {
       await cursorController.list(
         request,
         cursorResponse as never,
-        { projectId: "42" },
+        { projectId: 42 },
         {},
       ),
     ).toMatchObject({ code: "ACTIVITY_VALIDATION_FAILED" });
@@ -207,7 +200,7 @@ describe("ActivityController", () => {
       await serverController.list(
         request,
         serverResponse as never,
-        { projectId: "42" },
+        { projectId: 42 },
         {},
       ),
     ).toMatchObject({ code: "INTERNAL_ERROR" });

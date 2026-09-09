@@ -86,7 +86,7 @@ function validHeaders(): Readonly<Record<string, string>> {
   };
 }
 
-function validBody(): Readonly<Record<string, unknown>> {
+function validBody(): { readonly userId: number; readonly reason: string } {
   return {
     userId: 2,
     reason: "疑似凭据泄露，执行管理员离线接管",
@@ -128,43 +128,12 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture({ host: "127.0.0.1" }, validBody()) as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
     expect(result).toMatchObject({ code: "CSRF_ORIGIN_REJECTED" });
-    expect(idempotency.runCalls).toBe(0);
-  });
-
-  test("缺少 CSRF 请求头时返回 422", async () => {
-    const { controller, idempotency } = createController();
-    const response = responseFixture();
-    const headers = validHeaders();
-    const { "x-csrf-token": _csrf, ...withoutCsrf } = headers;
-
-    const result = await controller.reset(
-      requestFixture(withoutCsrf, validBody()) as never,
-      response as never,
-    );
-
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "ADMIN_MFA_RESET_HEADERS_INVALID" });
-    expect(idempotency.runCalls).toBe(0);
-  });
-
-  test("请求体字段无效时返回 422", async () => {
-    const { controller, idempotency } = createController();
-    const response = responseFixture();
-
-    const result = await controller.reset(
-      requestFixture(validHeaders(), {
-        userId: 0,
-        reason: "",
-      }) as never,
-      response as never,
-    );
-
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "ADMIN_MFA_RESET_VALIDATION_FAILED" });
     expect(idempotency.runCalls).toBe(0);
   });
 
@@ -174,7 +143,12 @@ describe("AdminMfaResetController", () => {
     const response = responseFixture();
     const request = requestFixture();
 
-    const result = await controller.reset(request as never, response as never);
+    const result = await controller.reset(
+      request as never,
+      response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
+    );
     const command = idempotency.lastInput;
     expect(command).toBeDefined();
     await command!.execute({} as never, 11);
@@ -205,6 +179,8 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture() as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(401);
@@ -221,6 +197,8 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture() as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(409);
@@ -238,6 +216,8 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture() as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -259,6 +239,8 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture() as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(400);
@@ -275,6 +257,8 @@ describe("AdminMfaResetController", () => {
     const result = await controller.reset(
       requestFixture() as never,
       response as never,
+      validBody(),
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(500);

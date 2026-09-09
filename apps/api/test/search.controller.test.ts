@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { AuthenticatedSessionActor } from "../src/auth/session-auth.service.js";
+import { ContractValidationError } from "../src/http/contract-errors.js";
+import { ContractValidationPipe } from "../src/http/contract-validation.pipe.js";
 import {
   SearchAuthorizationError,
   SearchQueryValidationError,
@@ -85,21 +87,10 @@ describe("SearchController", () => {
     expect(result).toMatchObject({ code: "SEARCH_UNAUTHENTICATED" });
   });
 
-  test("查询参数无效返回 422 且不调用搜索服务", async () => {
-    const session = new FakeSessionAuth();
-    const service = new FakeSearchService();
-    const controller = new SearchController(session as never, service as never);
-    const response = responseFixture();
-
-    const result = await controller.search(
-      requestFixture(),
-      response as never,
-      { q: "a" },
-    );
-
-    expect(service.commands).toEqual([]);
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "SEARCH_VALIDATION_FAILED" });
+  test("查询参数无效由 ContractValidationPipe 统一拒绝", () => {
+    expect(() =>
+      new ContractValidationPipe("getSearch", "query").transform({ q: "a" }),
+    ).toThrow(ContractValidationError);
   });
 
   test("成功返回统一 SearchPage 形状，不暴露内部 id", async () => {
@@ -111,7 +102,7 @@ describe("SearchController", () => {
     const result = await controller.search(
       requestFixture(),
       response as never,
-      { q: "ai", cursor: "b3BhcXVlLWN1cnNvcg.MQ", limit: "10" },
+      { q: "ai", cursor: "b3BhcXVlLWN1cnNvcg.MQ", limit: 10 },
     );
 
     expect(service.commands).toEqual([
@@ -160,7 +151,7 @@ describe("SearchController", () => {
     });
   });
 
-  test("includeVoid 字符串参数透传为布尔值", async () => {
+  test("includeVoid 布尔参数透传给搜索服务", async () => {
     const session = new FakeSessionAuth();
     const service = new FakeSearchService();
     const controller = new SearchController(session as never, service as never);
@@ -168,7 +159,7 @@ describe("SearchController", () => {
 
     await controller.search(requestFixture(), response as never, {
       q: "ai",
-      includeVoid: "true",
+      includeVoid: true,
     });
 
     expect(service.commands[0]?.includeVoid).toBe(true);
@@ -191,7 +182,7 @@ describe("SearchController", () => {
     );
 
     expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "SEARCH_VALIDATION_FAILED" });
+    expect(result).toMatchObject({ code: "VALIDATION_FAILED" });
   });
 
   test("授权范围错误映射为 401", async () => {

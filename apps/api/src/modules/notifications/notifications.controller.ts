@@ -4,23 +4,28 @@ import {
   Controller,
   Get,
   HttpCode,
-  Param,
   Post,
-  Query,
   Req,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 
-import {
-  notificationPathSchema,
-  notificationQueryRequestSchema,
+import type {
+  NotificationPath,
+  NotificationQueryRequest,
 } from "@inpulse/api-contract";
+import {
+  ContractPath,
+  ContractQuery,
+  Operation,
+} from "../../http/contract.decorators.js";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import {
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "../../auth/csrf.http.js";
+import { StrictSameOriginGuard } from "../../auth/csrf.guard.js";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
 import {
   IdempotencyHttpError,
@@ -75,10 +80,11 @@ export class NotificationsController {
   ) {}
 
   @Get()
+  @Operation("getNotifications")
   async list(
     @Req() request: NotificationControllerRequest,
     @Res({ passthrough: true }) response: NotificationControllerResponse,
-    @Query() query: unknown,
+    @ContractQuery("getNotifications") query: NotificationQueryRequest,
   ): Promise<unknown | ErrorResponseDto> {
     const requestId = randomUUID();
     const actor = await this.sessionAuth.resolveActor(
@@ -87,23 +93,14 @@ export class NotificationsController {
     if (actor === undefined) {
       return unauthorized(requestId, response);
     }
-    const parsed = notificationQueryRequestSchema.safeParse(query);
-    if (!parsed.success) {
-      response.status(422);
-      return validationResponse(requestId, "通知查询参数无效");
-    }
     try {
       const result = await this.queryService.query({
         actorUserId: actor.userId,
-        ...(parsed.data.cursor === undefined
+        ...(query.cursor === undefined ? {} : { after: query.cursor }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(query.unreadOnly === undefined
           ? {}
-          : { after: parsed.data.cursor }),
-        ...(parsed.data.limit === undefined
-          ? {}
-          : { limit: parsed.data.limit }),
-        ...(parsed.data.unreadOnly === undefined
-          ? {}
-          : { unreadOnly: parsed.data.unreadOnly }),
+          : { unreadOnly: query.unreadOnly }),
       });
       return {
         items: result.items,
@@ -121,6 +118,7 @@ export class NotificationsController {
   }
 
   @Get("unread-count")
+  @Operation("getNotificationUnreadCount")
   async unreadCount(
     @Req() request: NotificationControllerRequest,
     @Res({ passthrough: true }) response: NotificationControllerResponse,
@@ -142,10 +140,12 @@ export class NotificationsController {
 
   @Post(":notificationId/read")
   @HttpCode(204)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("readNotification")
   async read(
     @Req() request: NotificationControllerRequest,
     @Res({ passthrough: true }) response: NotificationControllerResponse,
-    @Param() params: unknown,
+    @ContractPath("readNotification") params: NotificationPath,
   ): Promise<ErrorResponseDto | undefined> {
     return this.runNotificationMutation(
       "readNotification",
@@ -165,10 +165,12 @@ export class NotificationsController {
 
   @Post(":notificationId/unread")
   @HttpCode(204)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("unreadNotification")
   async unread(
     @Req() request: NotificationControllerRequest,
     @Res({ passthrough: true }) response: NotificationControllerResponse,
-    @Param() params: unknown,
+    @ContractPath("unreadNotification") params: NotificationPath,
   ): Promise<ErrorResponseDto | undefined> {
     return this.runNotificationMutation(
       "unreadNotification",
@@ -188,6 +190,8 @@ export class NotificationsController {
 
   @Post("read-all")
   @HttpCode(204)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("readAllNotifications")
   async readAll(
     @Req() request: NotificationControllerRequest,
     @Res({ passthrough: true }) response: NotificationControllerResponse,
@@ -229,7 +233,7 @@ export class NotificationsController {
     routePath: string,
     request: NotificationControllerRequest,
     response: NotificationControllerResponse,
-    params: unknown,
+    params: NotificationPath,
     execute: (
       tx: TransactionContext,
       actorId: number,
@@ -244,11 +248,6 @@ export class NotificationsController {
     if (originFailure !== undefined) {
       return csrfOriginFailure(requestId, response, originFailure);
     }
-    const parsedPath = notificationPathSchema.safeParse(params);
-    if (!parsedPath.success) {
-      response.status(422);
-      return validationResponse(requestId, "通知 ID 无效");
-    }
     try {
       const result = await this.idempotency.run({
         operationId,
@@ -257,27 +256,19 @@ export class NotificationsController {
           method: "POST",
           path: routePath,
           pathParams: {
-            notificationId: String(parsedPath.data.notificationId),
+            notificationId: String(params.notificationId),
           },
           query: {},
           headers: request.headers,
           body: undefined,
         },
         execute: async (tx, actorId) => {
-          const context = await execute(
-            tx,
-            actorId,
-            parsedPath.data.notificationId,
-          );
+          const context = await execute(tx, actorId, params.notificationId);
           return noBodyResult(context);
         },
         replayAuthorizer: async (_record, tx) => {
           const actor = await this.resolveMutationActor(tx, request);
-          await this.stateService.assertOwned(
-            tx,
-            actor,
-            parsedPath.data.notificationId,
-          );
+          await this.stateService.assertOwned(tx, actor, params.notificationId);
         },
       });
       response.status(result.responseStatus);
