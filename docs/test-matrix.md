@@ -260,7 +260,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | FE-009 | 单元测试 | 通知前端纵切片 | 铃铛显示未读数并导航 `/notifications`；通知页通过生成客户端读取、按路径跳转、标记已读/未读，写操作带 CSRF 与幂等键 | 本地通过（`notification-query.test.tsx`、`NotificationsPageView.test.tsx`、`AppLayout.test.tsx` 共 8 例） |
 | CONTRACT-001 | 契约与权限 | F-27/F-28 路由登记 | 12 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；GitHub Actions 尚未执行 |
 
-后端本次新增/扩展的真实 PostgreSQL 集成共 20 例（活动投影 4、活动查询 4、通知状态 6、HTTP 集成 4、Session 回归 2），API 集成全量 18 文件 78 例通过；前端全量 16 文件 39 例通过。尚未接入项目创建、任务完成、记录作废/恢复等业务 Workflow，也未在生产侧生成活动/通知事件。
+后端本次新增/扩展的真实 PostgreSQL 集成共 20 例（活动投影 4、活动查询 4、通知状态 6、HTTP 集成 4、Session 回归 2），API 集成全量 18 文件 78 例通过；前端全量 16 文件 39 例通过。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
 
 ## 维护规则
 
