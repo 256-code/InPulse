@@ -24,7 +24,7 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 | 已提供 | pnpm workspace、严格 TypeScript、格式检查、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、前端单元测试（`pnpm test:web`）与 dependency-cruiser 边界检查、契约生成与漂移检查、权限矩阵检查、依赖边界与 Secret 扫描、依赖漏洞审计、搜索服务真实 PostgreSQL 集成测试、搜索 API 真实 HTTP 集成测试、搜索 API 稳定正式契约（C-006 已确认）、搜索页面最小纵切片、Playwright 浏览器测试基座（`pnpm test:e2e`）、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
 | 尚未提供 | 任务/记录/合并等其余业务领域模块与 API、其余 Playwright 完整关键路径 E2E、生产加密备份恢复（F-10.2）、升级/回滚规程、首次建库 \compose.init\ 纵切片与真实镜像 Tag/digest 签名发布清单；生产容器镜像与镜像扫描已提供，Playwright 测试基座、Compose 稳态拓扑与镜像 ref 预检已提供 |
 
-> 2026-09-09 更新：登录页已接入 TOTP 注册、验证与恢复码，管理员账户菜单提供密码 + 当前 TOTP 重认证；受限 MFA Session 仅在内存保留，注册/验证/恢复码成功后立即轮换 CSRF Token；前端单测 Web 25 文件 63 例，Playwright 14/14（含真实 TOTP 挑战与重认证；本分支新增搜索边界：跨项目隔离、空态、签名游标分页、中文短词与特殊标识符，并新增项目动态专属路径与通知已读/未读/全部已读联动），PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）；PR #67 首次 CI 已通过（workspace 9m58s，docs 通过），API 单测 47 文件 224 例；[PR #63](https://github.com/256-code/InPulse/pull/63) 的 GitHub Actions 已通过（workspace 10m2s，docs 通过）；生产仍需 TOTP KEK 相关 Secret。
+> 2026-09-09 更新：登录页已接入 TOTP 注册、验证与恢复码，管理员账户菜单提供密码 + 当前 TOTP 重认证；受限 MFA Session 仅在内存保留，注册/验证/恢复码成功后立即轮换 CSRF Token；前端单测 Web 25 文件 63 例，Playwright 14/14（含真实 TOTP 挑战与重认证；本分支新增搜索边界：跨项目隔离、空态、签名游标分页、中文短词与特殊标识符，并新增项目动态专属路径与通知已读/未读/全部已读联动），PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）；PR #67 首次 CI 已通过（workspace 9m58s，docs 通过），rebase 后 CI 已通过（workspace 11m7s，docs 通过），API 单测 47 文件 224 例；[PR #63](https://github.com/256-code/InPulse/pull/63) 的 GitHub Actions 已通过（workspace 10m2s，docs 通过）；生产仍需 TOTP KEK 相关 Secret。
 
 > 2026-09-09 补充：F-01 Session 分批清理、F-08 审计密钥惰性轮换与同事务回滚、F-11 Nest 运行期契约绑定和统一错误模型均已本地落库；`pnpm check` 全绿，真实 PostgreSQL 集成 API 124 例、数据库 13 例通过，Playwright 8/8；GitHub Actions 仍在 PR 阶段复核。
 
