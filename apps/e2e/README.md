@@ -1,8 +1,12 @@
 # Browser E2E
 
 Playwright E2E 纵切片由 F-31 建立，当前覆盖 API 健康探针、真实认证
-（含 MFA 登录挑战与管理员重认证）、项目创建关键路径（登录 → 创建项目 →
-项目动态 → 搜索 → 站内通知）、全局搜索边界（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）、项目动态专属路径和站内通知已读/未读/全部已读联动等可直接验证的路径。
+（含 MFA 登录挑战与管理员重认证）、F-03 用户管理（普通成员 403、
+管理员新增/编辑/停用/启用/强退与高风险重认证）、项目创建关键路径
+（登录 → 创建项目 → 项目动态 → 搜索 → 站内通知）、全局搜索边界
+（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）、项目动态专属路径、
+F-13 功能档案、F-14 功能级任务创建/分配/编辑和站内通知已读/未读/全部已读联动等
+可直接验证的路径。
 
 ## 前置条件
 
@@ -33,9 +37,11 @@ pnpm test:e2e
 Playwright `webServer` 先启动已构建的 API（`node dist/main.js`，使用
 `NODE_ENV=test`、`app_runtime` 数据库 URL 和临时 Session/幂等 keyring），再启动
 Vite dev server，并把 `/api/v1` 代理到 API。`global-setup` 在服务就绪后创建唯一
-E2E 用户、可见项目、无当前成员关系的隐藏项目与搜索投影，通过 API 预注册启用 TOTP 的第二管理员并签发
-Session；API 启动探针验证
+E2E 用户、可见项目、无当前成员关系的隐藏项目与搜索投影并签发 Session；API 启动探针验证
 `GET /api/v1/health`。失败时保留截图、trace 与 video。
+需要管理员 MFA 的用例通过 `mfa-fixture` 为每个测试创建独立的临时管理员并完成
+TOTP 注册；测试在登录和重认证前会把该测试用户的 `last_accepted_step` 重置为
+`NULL`，避免时间步/验证码重放污染。该逻辑只作用于 E2E 夹具，不改变生产认证行为。
 
 `global-teardown` 清理通知、活动、搜索投影、幂等记录、用户会话与 MFA 状态。
 由于项目必须保留唯一未分类模块，且数据库触发器禁止物理删除该模块，E2E 项目和
@@ -48,10 +54,11 @@ Session；API 启动探针验证
 GitHub Actions 的 `CI / workspace` job 在 `pnpm build` 之后、`pnpm check:deps`
 之前安装 Chromium 并执行 `pnpm test:e2e`，此时 PostgreSQL 探针实例仍在运行。
 无论成功或失败都会上传 Playwright HTML 报告、截图、trace 与 video 作为 CI
-artifact。当前为 16 个用例，已覆盖 MFA 登录挑战/管理员重认证、项目创建关键
-路径、F-13 功能档案、搜索边界、F-27 项目动态专属路径与 F-28 通知状态联动；本分支已 rebase 到 `origin/main` `1c2b5bf`，本地 16/16，PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）；PR #67 首次 CI 已通过（workspace 9m58s，docs 通过）；rebase 到 8b895e1 后 CI 已通过（workspace 11m7s，docs 通过）；本次 rebase 到 1c2b5bf 后仅文档同步，未等待新 CI；仍不等同
-于完整业务关键路径；PR #63 的 GitHub Actions 已通过（workspace
-10m2s，docs 通过，Browser E2E 步骤成功）。
+artifact。当前为 19 个用例，已覆盖 MFA 登录挑战/管理员重认证、F-03 用户
+管理、项目创建关键路径、F-13 功能档案、F-14 功能级任务、搜索边界、
+F-27 项目动态专属路径与 F-28 通知状态联动；F-03 分支在旧基线 `8386b29` 的
+CI 已通过，同步 `origin/main` `273b273` 后完整 CI 待新运行验证；仍不等同于
+完整业务关键路径。
 
 ## 范围说明
 

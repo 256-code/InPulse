@@ -184,6 +184,12 @@ export class HealthController {
     expect(
       scan.bindings.map((binding) => `${binding.method} ${binding.path}`),
     ).toEqual([
+      "GET /api/v1/admin/users",
+      "POST /api/v1/admin/users",
+      "PATCH /api/v1/admin/users/{userId}",
+      "POST /api/v1/admin/users/{userId}/disable",
+      "POST /api/v1/admin/users/{userId}/enable",
+      "POST /api/v1/admin/users/{userId}/force-logout",
       "POST /api/v1/auth/admin/mfa-reset",
       "GET /api/v1/auth/csrf",
       "POST /api/v1/auth/login",

@@ -1,4 +1,4 @@
-import { hashSync, verify, type Options } from "@node-rs/argon2";
+import { hash, hashSync, verify, type Options } from "@node-rs/argon2";
 import { Injectable } from "@nestjs/common";
 
 import { ConcurrencyGate } from "./concurrency-gate.js";
@@ -43,6 +43,11 @@ export class PasswordService {
   private readonly verificationGate = new ConcurrencyGate(
     ARGON2_MAX_CONCURRENT_VERIFICATIONS,
   );
+
+  /** 管理员新增用户时在事务外生成 Argon2id 哈希，复用同一进程并发闸。 */
+  async createHash(password: string): Promise<string> {
+    return this.verificationGate.run(() => hash(password, ARGON2ID_OPTIONS));
+  }
 
   async verify(
     password: string,
