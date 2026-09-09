@@ -16,6 +16,9 @@ RUN pnpm install --frozen-lockfile \
 
 FROM nginxinc/nginx-unprivileged:1.30.4@sha256:cb92301e719d6639028de775fe8b28e15f58343aca5e5372001311958aafb300 AS runtime
 
+# nginx-unprivileged 镜像默认已以 UID/GID 101 启动。只有 root 才能写
+# /var/lib/apt/lists/partial，因此安装 curl 前临时切回 root，装完再恢复非 root。
+USER root
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
