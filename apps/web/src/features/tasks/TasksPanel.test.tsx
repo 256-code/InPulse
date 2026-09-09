@@ -63,6 +63,41 @@ function mount(api: InpulseApiClient, writable = true) {
   );
 }
 describe("F-14 task editing", () => {
+  it("compares impact sets semantically and requires a three-way choice", () => {
+    const base = { ...taskEdit(item), impactFeatureIds: [2] };
+    expect(
+      mergeTask(
+        base,
+        { ...base, impactFeatureIds: [2, 3] },
+        { ...base, impactFeatureIds: [2, 4] },
+      ).conflicts,
+    ).toEqual(["impactFeatureIds"]);
+    expect(
+      mergeTask(
+        base,
+        { ...base, impactFeatureIds: [2] },
+        { ...base, title: "新标题" },
+      ).conflicts,
+    ).toEqual([]);
+  });
+  it("shows a MODULE reference only once and directs editing to its module", async () => {
+    const module = {
+      ...item,
+      featureId: null,
+      scopeType: "MODULE",
+      impactFeatureIds: [4],
+    };
+    mount(
+      client({ listTasks: vi.fn().mockResolvedValue({ items: [module] }) }),
+    );
+    await screen.findByText("模块级任务 · 引用");
+    expect(screen.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
+    expect(
+      await screen.findByRole("link", { name: "打开模块任务" }),
+    ).toHaveAttribute("href", "/projects/2/modules/3/tasks?taskId=1");
+    expect(screen.getByRole("button", { name: "编辑任务" })).toBeDisabled();
+  });
   it("merges untouched fields and requires choice for conflicting assignee/due date", () => {
     const base = taskEdit(item);
     const draft = {

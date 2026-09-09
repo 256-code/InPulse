@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   taskReplayContextSchema,
-  type TaskItem,
+  moduleTaskReplayContextSchema,
   type TaskEditRequest,
 } from "@inpulse/api-contract";
 import { AuditWritePort } from "../../audit/index.js";
@@ -13,7 +13,7 @@ import {
   ProjectCodePort,
   ProjectMembersQueryPort,
 } from "../projects/index.js";
-import { ModuleQueryPort } from "../modules/index.js";
+import { ModuleQueryPort, ModuleReadPort } from "../modules/index.js";
 import { FeatureQueryPort, FeatureReadPort } from "../features/index.js";
 import { ActivityWritePort } from "../activity/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
@@ -21,9 +21,11 @@ import { NotificationWritePort } from "../notifications/index.js";
 import {
   TaskManagementRepository,
   type TaskScope,
+  type TaskRecord,
 } from "./task-management.repository.js";
 
-export type TaskOperation = "createTask" | "updateTask";
+export type TaskOperation =
+  "createTask" | "updateTask" | "createModuleTask" | "updateModuleTask";
 export class TaskManagementError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422,
@@ -60,6 +62,7 @@ export class TasksManagementService {
     private readonly search: SearchProjectionWritePort,
     @Inject(NotificationWritePort)
     private readonly notifications: NotificationWritePort,
+    @Inject(ModuleReadPort) private readonly moduleRead: ModuleReadPort,
   ) {}
   async read(
     actorId: number,
@@ -71,12 +74,14 @@ export class TasksManagementService {
     if (!authorized.projectIds.includes(scope.projectId)) throw missing();
     return this.uow.run(async (tx) => {
       if (
-        !(await this.featureRead.find(
-          tx,
-          scope.projectId,
-          scope.moduleId,
-          scope.featureId,
-        ))
+        !(scope.featureId === null
+          ? await this.moduleRead.find(tx, scope.projectId, scope.moduleId)
+          : await this.featureRead.find(
+              tx,
+              scope.projectId,
+              scope.moduleId,
+              scope.featureId,
+            ))
       )
         throw missing();
       if (assignees) {
@@ -108,12 +113,14 @@ export class TasksManagementService {
     if (project.kind === "not-found") throw missing();
     // Resolve full identity before reporting any archived state.
     if (
-      !(await this.featureRead.find(
-        tx,
-        scope.projectId,
-        scope.moduleId,
-        scope.featureId,
-      ))
+      !(scope.featureId === null
+        ? await this.moduleRead.find(tx, scope.projectId, scope.moduleId)
+        : await this.featureRead.find(
+            tx,
+            scope.projectId,
+            scope.moduleId,
+            scope.featureId,
+          ))
     )
       throw missing();
     if (
@@ -122,7 +129,13 @@ export class TasksManagementService {
     )
       throw missing();
     const module = await this.modules.checkModuleForWrite(tx, scope);
-    const feature = await this.features.checkFeatureForWrite(tx, scope);
+    const feature =
+      scope.featureId === null
+        ? module
+        : await this.features.checkFeatureForWrite(tx, {
+            ...scope,
+            featureId: scope.featureId,
+          });
     if (module.kind === "not-found" || feature.kind === "not-found")
       throw missing();
     if ([project.kind, module.kind, feature.kind].includes("parent-not-active"))
@@ -137,8 +150,82 @@ export class TasksManagementService {
     actorId: number,
     context: unknown,
   ): Promise<void> {
-    const resource = taskReplayContextSchema.parse(context);
+    const parsed = moduleTaskReplayContextSchema.safeParse(context);
+    const resource = parsed.success
+      ? { ...parsed.data, featureId: null }
+      : taskReplayContextSchema.parse(context);
     await this.authorize(tx, actorId, resource, resource.taskId);
+    if (parsed.success)
+      for (const featureId of parsed.data.impactFeatureIds)
+        if (
+          !(await this.featureRead.find(
+            tx,
+            resource.projectId,
+            resource.moduleId,
+            featureId,
+          ))
+        )
+          throw missing();
+  }
+  private async lockModuleTask(
+    tx: TransactionContext,
+    input: TaskScope & { taskId?: number; version?: number },
+    target: number[],
+  ) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await tx.sql`SAVEPOINT task_impact_locks`;
+      const previous =
+        input.taskId === undefined
+          ? []
+          : await this.repository.impacts(tx, input, input.taskId);
+      const ids = [
+        ...new Set([...target, ...previous.map((r) => r.featureId)]),
+      ].sort((a, b) => a - b);
+      for (const featureId of ids) {
+        const check = await this.features.checkFeatureForWrite(tx, {
+          projectId: input.projectId,
+          moduleId: input.moduleId,
+          featureId,
+        });
+        if (check.kind === "not-found") throw missing();
+        if (
+          check.kind === "parent-not-active" &&
+          target.includes(featureId) &&
+          !previous.some((r) => r.featureId === featureId)
+        )
+          throw new TaskManagementError(
+            409,
+            "TASK_IMPACT_ARCHIVED",
+            "不能新增已归档的影响功能",
+          );
+      }
+      const before =
+        input.taskId === undefined
+          ? undefined
+          : await this.repository.find(tx, input, input.taskId, true);
+      if (input.taskId !== undefined && !before) throw missing();
+      if (before && before.rowVersion !== input.version)
+        throw new TaskManagementError(
+          409,
+          "TASK_VERSION_CONFLICT",
+          "任务版本已变化，请重新加载后编辑",
+        );
+      const current =
+        input.taskId === undefined
+          ? []
+          : await this.repository.impacts(tx, input, input.taskId);
+      if (JSON.stringify(previous) === JSON.stringify(current)) {
+        await tx.sql`RELEASE SAVEPOINT task_impact_locks`;
+        return { before, previous };
+      }
+      await tx.sql`ROLLBACK TO SAVEPOINT task_impact_locks`;
+      await tx.sql`RELEASE SAVEPOINT task_impact_locks`;
+    }
+    throw new TaskManagementError(
+      409,
+      "TASK_IMPACT_CONFLICT",
+      "影响功能已变化，请重新加载后编辑",
+    );
   }
   async execute(
     tx: TransactionContext,
@@ -149,12 +236,25 @@ export class TasksManagementService {
       version?: number;
       edit: TaskEditRequest;
       requestId: string;
+      impactFeatureIds?: number[];
     },
-  ): Promise<TaskItem> {
+  ): Promise<TaskRecord> {
     await this.authorize(tx, input.actorId, input, input.taskId);
-    let before: TaskItem | undefined;
-    if (input.operation === "updateTask") {
-      before = await this.repository.find(tx, input, input.taskId!, true);
+    let before: TaskRecord | undefined;
+    const target = input.impactFeatureIds ?? [];
+    let previousImpacts: Awaited<
+      ReturnType<TaskManagementRepository["impacts"]>
+    > = [];
+    if (input.featureId === null) {
+      const locked = await this.lockModuleTask(tx, input, target);
+      before = locked.before;
+      previousImpacts = locked.previous;
+    }
+    if (
+      input.operation === "updateTask" ||
+      input.operation === "updateModuleTask"
+    ) {
+      before ??= await this.repository.find(tx, input, input.taskId!, true);
       if (!before) throw missing();
       if (before.rowVersion !== input.version)
         throw new TaskManagementError(
@@ -182,7 +282,7 @@ export class TasksManagementService {
         "TASK_ASSIGNEE_INVALID",
         "负责人必须是当前项目的活跃成员",
       );
-    const result = before
+    let result = before
       ? await this.repository.update(tx, before, input.edit)
       : await this.repository.create(
           tx,
@@ -197,6 +297,14 @@ export class TasksManagementService {
         "TASK_VERSION_CONFLICT",
         "任务版本已变化，请重新加载后编辑",
       );
+    if (input.featureId === null) {
+      await this.repository.replaceImpacts(tx, result, target);
+      result = (await this.repository.find(tx, input, result.id))!;
+    }
+    const afterImpacts =
+      input.featureId === null
+        ? await this.repository.impacts(tx, input, result.id)
+        : [];
     const action = before ? "update" : "create";
     const event = await this.audit.append(tx, {
       projectId: result.projectId,
@@ -205,7 +313,22 @@ export class TasksManagementService {
       action: `task.${action}`,
       targetType: "TASK",
       targetId: String(result.id),
-      eventPayload: { before: before ?? null, after: result },
+      eventPayload: {
+        before: before ?? null,
+        after: result,
+        ...(input.featureId === null
+          ? {
+              impactsBefore: previousImpacts,
+              impactsAfter: afterImpacts,
+              added: target.filter(
+                (id) => !previousImpacts.some((r) => r.featureId === id),
+              ),
+              removed: previousImpacts
+                .filter((r) => !target.includes(r.featureId))
+                .map((r) => r.featureId),
+            }
+          : {}),
+      },
       requestId: input.requestId,
     });
     await this.activity.append(tx, {
@@ -247,7 +370,10 @@ export class TasksManagementService {
         notificationType: "task.assigned",
         title: `任务指派：${result.title}`.slice(0, 500),
         body: result.code,
-        targetPath: `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
+        targetPath:
+          result.featureId === null
+            ? `/projects/${result.projectId}/modules/${result.moduleId}/tasks?taskId=${result.id}`
+            : `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
         createdAt: new Date(result.updatedAt),
       });
     return result;

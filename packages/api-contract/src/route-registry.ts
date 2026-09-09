@@ -1,5 +1,5 @@
 import { featureRoutes } from "./feature-routes.js";
-import { taskRoutes } from "./task-routes.js";
+import { taskRoutes, moduleTaskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
 
@@ -14,6 +14,7 @@ export const routeRegistry = [
   ...moduleRoutes,
   ...featureRoutes,
   ...taskRoutes,
+  ...moduleTaskRoutes,
   {
     method: "GET",
     path: "/health",

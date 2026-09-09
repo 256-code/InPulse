@@ -44,7 +44,14 @@ export class TasksHttpService {
   ) {}
 
   async handle(
-    operation: "listTasks" | "getTask" | "listTaskAssignees" | TaskOperation,
+    operation:
+      | "listTasks"
+      | "getTask"
+      | "listTaskAssignees"
+      | "listModuleTasks"
+      | "getModuleTask"
+      | "listModuleTaskAssignees"
+      | TaskOperation,
     request: TasksHttpRequest,
   ): Promise<{ status: number; body: unknown }> {
     const requestId = randomUUID();
@@ -53,6 +60,9 @@ export class TasksHttpService {
         (entry) => entry.operationId === operation,
       )!;
       const write = route.method !== "GET";
+      const moduleScope = operation.includes("ModuleTask");
+      const create =
+        operation === "createTask" || operation === "createModuleTask";
       if (
         write &&
         mutationSameOriginValidationError(request.headers) !== undefined
@@ -91,21 +101,23 @@ export class TasksHttpService {
       const path = parse(route.request.path, request.params) as {
         projectId: number;
         moduleId: number;
-        featureId: number;
+        featureId: number | null;
         taskId?: number;
       };
+      if (moduleScope) path.featureId = null;
       if (!write) {
         const body = await this.tasks.read(
           actor!.userId,
           path,
           path.taskId,
-          operation === "listTaskAssignees",
+          operation === "listTaskAssignees" ||
+            operation === "listModuleTaskAssignees",
         );
         return { status: 200, body };
       }
       const headers = {
         "x-csrf-token": getHeader(request.headers, "x-csrf-token"),
-        ...(operation === "createTask"
+        ...(create
           ? {}
           : { "if-match": getHeader(request.headers, "if-match") }),
       };
@@ -128,7 +140,7 @@ export class TasksHttpService {
       const input = parse(
         route.request.body.contentTypes[0]!.schemaRef,
         request.body,
-      ) as TaskEditRequest;
+      ) as TaskEditRequest & { impactFeatureIds?: number[] };
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (!current)
@@ -148,7 +160,9 @@ export class TasksHttpService {
           method: route.method,
           path: route.path,
           pathParams: Object.fromEntries(
-            Object.entries(path).map(([key, value]) => [key, String(value)]),
+            Object.entries(path)
+              .filter(([, value]) => value !== null)
+              .map(([key, value]) => [key, String(value)]),
           ),
           query: {},
           headers: request.headers,
@@ -170,18 +184,23 @@ export class TasksHttpService {
                   ),
                 }),
             edit: input,
+            ...(input.impactFeatureIds === undefined
+              ? {}
+              : { impactFeatureIds: input.impactFeatureIds }),
             requestId,
           });
           return {
             responseStatus: 200,
-            responseSchemaRef: "TaskItem",
+            responseSchemaRef: moduleScope ? "ModuleTaskItem" : "TaskItem",
             responseHasBody: true,
             responseBody: body,
             replayAuthContext: {
               projectId: body.projectId,
               moduleId: body.moduleId,
               taskId: body.id,
-              featureId: body.featureId,
+              ...(body.scopeType === "MODULE"
+                ? { impactFeatureIds: body.impactFeatureIds }
+                : { featureId: body.featureId }),
             },
           };
         },
@@ -192,7 +211,10 @@ export class TasksHttpService {
       });
       return {
         status: result.responseStatus,
-        body: schemaRegistry.TaskItem.schema.parse(result.responseBody),
+        body: (moduleScope
+          ? schemaRegistry.ModuleTaskItem
+          : schemaRegistry.TaskItem
+        ).schema.parse(result.responseBody),
       };
     } catch (error) {
       let status = 500;
