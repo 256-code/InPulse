@@ -79,7 +79,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | Required |
-| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required |
+| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
@@ -97,17 +97,27 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 >
 > **CI-014 补充（2026-09-09）**：`multer@2.2.0` 曾报 3 个 high ——
 > GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4，路径为
-> `@nestjs/platform-express@11.2.3` -> `multer@2.2.0`。已在
-> `pnpm-workspace.yaml` 用 `overrides` 固定到精确版本 `2.3.0`（lockfile 同步更新），
+> `@nestjs/platform-express@11.2.3` -> `multer@2.2.0`。先由
+> A #56 在 `pnpm-workspace.yaml` 增加 `multer: "^2.3.0"` 并合入主线，随后
+> C #57 将 override 收紧为精确版本 `2.3.0`（lockfile 同步更新）；
 > `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无漏洞。
-> 该依赖为 NestJS 运行时传递依赖，仍须由独立 PR 与人工确认，不得调低阈值。
+> 该依赖为 NestJS 运行时传递依赖，已按第 4 节经独立 PR 与人工确认处理，不得调低阈值。
 > CI-007 与 CI-008 曾在 `0000-0002` 上通过本机 PostgreSQL 18.6 实测；合并 `0003-0005`
 > 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
 > `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的
 > `postgres:18.6` 构建的探针镜像覆盖，而 `.github/workflows/ci.yml` 的 GitHub Actions
-> 运行本身尚未执行。CI-017～CI-019 因仓库尚无 E2E、生产 Dockerfile 与 `compose.yaml`
-> 而未落库，落地后必须按 §12.4 顺序插入 CI。
+> 运行本身尚未执行。CI-017 与 CI-019 因仓库尚无 Playwright E2E、生产 Dockerfile、
+> 受信 digest 与镜像扫描而未落库；CI-018 的 `compose config` 渲染、exact-tag@sha256
+> 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
+> `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
+> 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI。
+> **2026-09-09 复核与跟进**：使用公共 registry 执行 `pnpm audit --audit-level=high` 发现
+> 当前基线 `apps__api` 引入的 `multer` 存在 3 个 high
+> （GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4），
+> patched `>=2.3.0`。本次部署预检未修改 `pnpm-lock.yaml`，依赖升级随后由
+> A #56（`^2.3.0`）与 C #57（精确 `2.3.0`）按第 4 节在独立 PR 中完成，
+> 公共 registry 审计现已无漏洞。
 
 
 ## 健康探针

@@ -174,6 +174,7 @@ pnpm test:integration      # 同上
 pnpm contract:drift
 pnpm contract:validate
 pnpm build
+pnpm check:deploy:test
 pnpm check:deps
 pnpm check:frontend:boundaries
 pnpm permissions:check
@@ -194,6 +195,7 @@ pnpm check:docs
 - `test:search:db`：运行 `apps/api` 的搜索服务层与真实 HTTP API 集成测试，需要已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，按既定决定未纳入 CI；
 - `contract:generate`：由 Schema Registry/Zod 与 Route Registry 生成 OpenAPI 3.1、契约指纹与 TypeScript 客户端，生成物禁止手工修改；
 - `contract:drift`：逐字节比对已提交生成物与 Registry 的生成结果，并拒绝生成目录内出现非生成器产出的文件；
+- `check:deploy:test`：使用 `deploy/.env.deploy.test` 的合成镜像 ref 渲染 `docker compose config`，校验 exact-tag@sha256 格式、PostgreSQL 18 命名卷、非 root/只读、资源限制、独立迁移、健康检查与仅 Nginx 暴露端口；需要 Docker，不代表生产镜像已构建或 digest 来自受信仓库；
 - `contract:validate`：Route Registry 策略完整性、幂等重放与重放授权策略的字段边界、响应 Schema 一致性以及 Controller operationId 绑定检查；
 - `build`：api（`tsc`）与 web（`vite`）生产构建；
 - `check:deps`：前端分层（`app -> pages -> features -> shared/generated`）、跨模块内部访问、循环依赖、Controller 直连数据库与前端裸 `fetch` 检查；后端跨模块只允许访问目标模块的公开表面（`public/**`、模块 `index.ts`、`*.port.ts`），对应第 3 节的 Domain/Public Port；
