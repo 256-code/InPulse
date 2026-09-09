@@ -14,13 +14,14 @@
 
 | ID | 层级 | 场景 | 通过标准 | 当前证据 |
 | --- | --- | --- | --- | --- |
-| MOD-HTTP-001 | HTTP + PostgreSQL | listModules/createModule/updateModule 允许与拒绝 | 匿名 401，其他项目/已移除成员 404；管理员可读；普通创建固定 NORMAL；未分类可改名，输入身份字段拒绝 | modules-api.integration.test.ts 9/9 本地通过 |
+| MOD-HTTP-001 | HTTP + PostgreSQL | listModules/createModule/updateModule 允许与拒绝 | 匿名 401，其他项目/已移除成员 404；管理员可读；普通创建固定 NORMAL；未分类可改名，输入身份字段拒绝 | modules-api.integration.test.ts 10/10 本地通过 |
 | MOD-HTTP-002 | HTTP + PostgreSQL | archiveModule/restoreModule 允许与拒绝 | 成员 403，管理员需双时间戳重认证及原因；状态/版本冲突 409；归档父级拒绝写但允许历史读取 | 同上，已通过 |
 | MOD-IDEM-001 | HTTP + PostgreSQL | 幂等与重放权限 | Schema 解析后等价输入重放；不同输入 409；成员移除或重认证过期拒绝返回缓存 | 同上，已通过；modules-http.test.ts 重认证回调单元验证通过 |
 | MOD-TX-001 | PostgreSQL | 审计或搜索失败 | 业务、审计、活动、搜索、幂等同事务回滚；相同 Key 可在故障解除后重试 | 同上，2 个故障注入用例均通过 |
 | MOD-LOCK-001 | PostgreSQL | 项目归档和模块创建竞争 | 真实 FOR UPDATE 阻塞子写，pg_stat_activity 观察 Lock 等待；父归档提交后子写拒绝 | 同上，已通过 |
 | MOD-UI-001 | jsdom | 表单、权限入口、错误与 409 | 未分类可编辑；409 保留快照/草稿，未改字段取最新值，同字段冲突展示差异并显式选择后才更新版本；失败重试；管理员原因；归档恢复入口 | ModulesPageView.test.tsx 7/7 通过；新增 3 例先红后绿 |
 | MOD-E2E-001 | Playwright | 成员模块页面关键路径 | 登录后创建/编辑、刷新持久化、成员无归档入口；双页面竞争验证不同字段自动合并、同字段选择最新值 | apps/e2e/tests/modules.spec.ts 1/1 本地 Edge（Chromium）通过 |
+| MOD-AUDIT-CONC-001 | PostgreSQL 并发 | 100 个真实 `createModule` 业务事务写同一项目审计链 | 业务、审计、活动与搜索同事务；链无分叉、无序号缺口、链头一致，每个业务命令恰有一条 `module.create`；见 [ADR-008](adr/ADR-008.md) | `modules-api.integration.test.ts` 10/10、全量 API 集成 29 文件 134/134 本地通过（2026-09-09，PostgreSQL 18.6 + PGroonga） |
 
 ## Modules 项目初始化 Port（B，本地交付 2026-09-08）
 
@@ -216,7 +217,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| AUDIT-001 | PostgreSQL 并发 | 至少 100 个同 scope 并发业务事务 | 链无分叉、无序号缺口，每个成功业务事件恰有一条审计；见 [ADR-008](adr/ADR-008.md) | 已自动化（阶段 0 数据库层：100 并发事务追加同一项目链，序号连续且无分叉；业务命令接入后须重跑，见 CI-008） |
+| AUDIT-001 | PostgreSQL 并发 | 至少 100 个同 scope 并发业务事务 | 链无分叉、无序号缺口，每个成功业务事件恰有一条审计；见 [ADR-008](adr/ADR-008.md) | 已自动化（阶段 0 数据库层：100 并发事务追加同一项目链；2026-09-09 已在 F-12 `createModule` 真实业务命令上以 100 笔并发事务重跑，序号连续且无分叉，见 MOD-AUDIT-CONC-001） |
 | AUDIT-002 | PostgreSQL 并发 | 多 scope 与链头初始化竞争 | 按 UTF-8 scope 顺序加锁，无死锁或重复链头 | Required |
 | AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | 本地通过（`audit-write.integration.test.ts` 4/4，2026-09-09；GitHub Actions 待执行） |
 | AUDIT-004 | 恢复演练 | 密钥轮换、备份与恢复 | 数据库链、链头、远端检查点和归档明细全部一致 | Required |
