@@ -11,3 +11,5 @@ export {
   type ModuleForWriteResource,
   type ModuleWriteCheckResult,
 } from "./module-query.port.js";
+
+export * from "./module-read.port.js";

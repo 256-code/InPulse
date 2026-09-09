@@ -1,3 +1,4 @@
+import { featureRoutes } from "./feature-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
 
@@ -10,6 +11,7 @@ export * from "./route-definition.js";
  */
 export const routeRegistry = [
   ...moduleRoutes,
+  ...featureRoutes,
   {
     method: "GET",
     path: "/health",

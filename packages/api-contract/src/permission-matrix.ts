@@ -70,6 +70,37 @@ export const permissionMatrix = [
           : { kind: "allow" },
     },
   })),
+  ...(
+    [
+      "listFeatures",
+      "getFeature",
+      "findSimilarFeatures",
+      "createFeature",
+      "updateFeature",
+      "archiveFeature",
+      "restoreFeature",
+    ] as const
+  ).map((operationId): PermissionMatrixEntry => ({
+    operationId,
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员:
+        operationId === "archiveFeature" || operationId === "restoreFeature"
+          ? { kind: "deny", status: 403 }
+          : { kind: "allow" },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员:
+        operationId === "archiveFeature" || operationId === "restoreFeature"
+          ? {
+              kind: "conditional",
+              allowedWhen: "完整管理员 Session 且密码/TOTP 重认证均在五分钟内",
+              deniedWith: 403,
+            }
+          : { kind: "allow" },
+    },
+  })),
   {
     operationId: "getHealth",
     outcomes: {

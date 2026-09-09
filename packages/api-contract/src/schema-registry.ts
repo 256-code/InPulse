@@ -1,3 +1,4 @@
+import { featureSchemas } from "./contracts/features.zod.js";
 import type { z } from "zod";
 import { moduleSchemas } from "./contracts/modules.zod.js";
 
@@ -77,6 +78,7 @@ export interface SchemaRegistryEntry {
  */
 export const schemaRegistry = {
   ...moduleSchemas,
+  ...featureSchemas,
   ErrorResponse: {
     schema: errorResponseSchema,
     summary: "统一错误响应模型",

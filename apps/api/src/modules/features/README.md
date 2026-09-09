@@ -1,5 +1,7 @@
 # FeatureQueryPort 事务内写前检查
 
+2026-09-09 F-13 增量：功能管理 HTTP 模块为独立 `FeaturesManagementModule`，与本文件原 `FeaturesModule` 写前检查公开模块分离。功能列表/详情、创建/编辑、管理员归档恢复、相似候选的接口及实际验证见 [F-13 本地交审说明](../../../../../docs/f13-local-handoff.md)。原写前检查接口不变，继续由 Tasks/ChangeRecords/Workflow 使用；归档后返回 `parent-not-active`，历史读取不调用此 Port。
+
 公开入口 `apps/api/src/modules/features/index.ts` 导出 `FeatureQueryPort`、
 `CheckFeatureForWriteInput`、`FeatureForWriteResource`、`FeatureWriteCheckResult` 和 `FeaturesModule`。
 Nest imports 加入 `FeaturesModule`，通过 `@Inject(FeatureQueryPort)` 注入抽象类 token。
