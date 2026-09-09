@@ -48,8 +48,8 @@ Session；API 启动探针验证
 GitHub Actions 的 `CI / workspace` job 在 `pnpm build` 之后、`pnpm check:deps`
 之前安装 Chromium 并执行 `pnpm test:e2e`，此时 PostgreSQL 探针实例仍在运行。
 无论成功或失败都会上传 Playwright HTML 报告、截图、trace 与 video 作为 CI
-artifact。当前为 12 个用例，已覆盖 MFA 登录挑战/管理员重认证、项目创建关键
-路径与搜索边界；本分支本地 12/12，GitHub Actions 尚未执行；仍不等同
+artifact。当前为 13 个用例，已覆盖 MFA 登录挑战/管理员重认证、项目创建关键
+路径与搜索边界；本分支本地 13/13，PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）；仍不等同
 于完整业务关键路径；PR #63 的 GitHub Actions 已通过（workspace
 10m2s，docs 通过，Browser E2E 步骤成功）。
 
