@@ -93,6 +93,34 @@ PGroonga 的 PostgreSQL 18 实例并先执行 `pnpm db:migrate`，由 API 集成
 （`vitest.integration.config.ts`）运行；本机已用 PostgreSQL 18.6 + PGroonga 实测通过，
 GitHub Actions 的 CI 尚未就本 PR 执行。
 
+## F-05 项目读取与成员管理（A，2026-09-09 本地实现）
+
+阶段 1 A 域项目纵切片：`GET /api/v1/projects`、`GET /api/v1/projects/{projectId}`
+提供服务端 `AuthorizedProjectScope` 授权与响应 `no-store`；系统管理员新增
+`listProjectMembers`、`listProjectMemberUnfinishedTasks`、`addProjectMember`、
+`removeProjectMember` 四条成员管理路由。成员写操作要求管理员密码与 TOTP 5 分钟
+重认证、CSRF 与数据库级幂等；本项目不实现 F-06 项目编辑/归档/恢复与概览统计。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F05-READ-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `ProjectPath`、`ProjectItem`、`ProjectListResponse`、`ProjectDetailResponse` 登记；两条 GET 路由声明 Session 认证、CSRF/幂等 `none`、只读状态码与精确权限矩阵；OpenAPI 和前端客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，57/57 条路由；`permissions.test.ts` 14 例） |
+| F05-READ-API-001 | API 单元 | 服务端授权编排 | 从 Session 解析 actor，列表/详情只使用服务端 `AuthorizedProjectScope`；无权限与不存在统一 404；匿名 401；异常不泄露数据库细节 | 本地通过（`projects-read.service.test.ts` 3 例、`projects-read.controller.test.ts` 3 例；API 单测 59 文件 274 例） |
+| F05-READ-API-002 | HTTP + PostgreSQL | 真实权限与归档读取 | 系统管理员可见全部项目；普通成员只返回 ACTIVE 成员项目；非成员/已移除成员详情 404；匿名与停用 401；非法路径 422；归档后详情仍为 `ARCHIVED` | 本地通过（`projects-read-api.integration.test.ts` 2 例；API 集成 34 文件 190/190，PostgreSQL 18.6 + PGroonga） |
+| F05-READ-UI-001 | 前端单元 | 项目列表与创建后刷新 | 列表经生成客户端读取并按卡片展示名称/状态/编码/成员数/描述；创建成功后失效 `["projects"]` 查询并保留原有成功入口 | 本地通过（`project-query.test.tsx`、`ProjectsPage.test.tsx` 等，Web 33 文件 104 例） |
+| F05-MEMBER-CONTRACT-001 | 契约与 CI | 四条成员路由登记 | 成员列表/未完成任务、添加、移除均登记 Schema、Route Registry、OpenAPI 与 Web 客户端；声明管理员重认证、CSRF、幂等及重放策略；权限矩阵按 operationId 拆分 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，57/57） |
+| F05-MEMBER-API-001 | API 单元 | 成员管理编排 | 读路径独立事务；写路径由幂等 runner 持有单事务；管理员解析、5 分钟重认证、CSRF、Content-Type、路径/Query 与响应 Schema 均被检验；归档后重放重新检查项目可写性 | 本地通过（`project-member-management-http.service.test.ts` 与 `project-member-management.service.test.ts` 12 例；API 单测 59 文件 274 例） |
+| F05-MEMBER-API-002 | HTTP + PostgreSQL | 添加与移除生命周期 | 添加 ACTIVE 成员同事务写审计、活动、通知与成员历史；重复活跃成员 409；无效/停用用户 422；移除可真实改派并保留未改派任务原负责人；移除创建者不改 `projects.created_by` | 本地通过（`project-member-management-api.integration.test.ts` 8/8；API 集成 34 文件 190/190） |
+| F05-MEMBER-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名/停用 401；非管理员、CSRF 失败、重认证过期 403；非成员/不存在 404；重复活跃或状态冲突 409；非法字段 422；非 JSON 请求 400；统一返回 `{ code, message, details, requestId }` | 本地通过（同集成 8/8；HTTP 单测覆盖 400 与脱敏） |
+| F05-MEMBER-TX-001 | PostgreSQL 集成 | 同事务与幂等 | 审计失败时成员写、通知、活动或任务改派整体回滚；同 Key、同摘要、同契约版本重放不重复写；项目归档后旧 Key 拒绝返回缓存 | 本地通过（集成 8/8 覆盖回滚与重放；归档后重放已由服务单测覆盖） |
+| F05-MEMBER-UI-001 | 前端单元 | 成员管理页面 | 管理员入口仅系统管理员可见；成员历史、添加、移除、未完成任务提示、改派、管理员重认证、CSRF/幂等键与成功后缓存失效均经生成客户端调用 | 本地通过（`ProjectMembersPageView.test.tsx`、`project-member-query.test.tsx` 等，Web 33 文件 104 例） |
+| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 尚未新增成员管理 Playwright 用例，以 API 集成与前端单元覆盖；交付前需补齐或明确后续任务 | 未覆盖 |
+| F05-READ-E2E-001 | Playwright | 项目页面回归 | 项目创建关键路径在本分支通过；全量测试结果如实记录 | 本地 `pnpm test:e2e` 16/20 通过，4 个失败位于既有 `admin-users`/`features`/`module-tasks`/`tasks` 用例，均未触及本 diff；本分支未新增 E2E 用例；`origin/main` 同一基线的 CI 已全绿 |
+
+2026-09-09 本地验证说明：`pnpm test:unit` 数据库 5 例、api-contract 67 例、Web 33 文件
+104 例、API 59 文件 274 例；`pnpm test:integration` 数据库 13 例、API 34 文件 190 例。
+临时 PostgreSQL 18.6 + PGroonga 4.0.8 曾因 `max_connections=100` 初始化不足，已改为
+`max_connections=200` 后完整通过；成员管理页面 Playwright E2E 仍未覆盖。
+
 ## F-03 用户管理（A，2026-09-09 本地交付）
 
 阶段 1 A 域用户管理纵切片：`/api/v1/admin/users` 六条路由，覆盖管理员列表、新增、编辑、

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -10,6 +10,24 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 export interface ProjectMutationOptions {
   readonly client?: InpulseApiClient | undefined;
+}
+
+export function describeProjectListError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录后再查看项目。";
+    if (error.status === 404) return "项目不存在或已无权访问。";
+    return "项目列表暂时无法加载，请稍后重试。";
+  }
+  return "项目列表暂时无法加载，请稍后重试。";
+}
+
+export function useProjects({ client }: ProjectMutationOptions = {}) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  return useQuery({
+    queryKey: ["projects"],
+    queryFn: ({ signal }) => apiClient.listProjects({ signal }),
+    retry: false,
+  });
 }
 
 export function describeCreateProjectError(error: unknown): string {
@@ -34,6 +52,7 @@ export function describeCreateProjectError(error: unknown): string {
 
 export function useCreateProject({ client }: ProjectMutationOptions = {}) {
   const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (request: CreateProjectRequest) => {
@@ -44,6 +63,9 @@ export function useCreateProject({ client }: ProjectMutationOptions = {}) {
           "Idempotency-Key": createIdempotencyKey("create-project"),
         },
       });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

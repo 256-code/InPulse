@@ -6,8 +6,26 @@ import {
   ApiError,
   type CreateProjectResponse,
   type InpulseApiClient,
+  type ProjectItem,
 } from "@generated/api";
-import { describeCreateProjectError, useCreateProject } from "./project-query";
+import {
+  describeCreateProjectError,
+  useCreateProject,
+  useProjects,
+} from "./project-query";
+
+const projectItem: ProjectItem = {
+  id: 7,
+  code: "SHOP",
+  name: "商城系统",
+  description: "商城项目描述",
+  status: "ACTIVE",
+  rowVersion: 1,
+  createdBy: 1,
+  createdAt: "2026-09-09T00:00:00.000Z",
+  updatedAt: "2026-09-09T00:00:00.000Z",
+  memberCount: 1,
+};
 
 const createdProject: CreateProjectResponse = {
   project: {
@@ -40,6 +58,23 @@ function createWrapper() {
 }
 
 describe("project creation query", () => {
+  it("loads the server-side visible project list", async () => {
+    const listProjects = vi.fn().mockResolvedValue({
+      items: [projectItem],
+    });
+    const client = { listProjects } as unknown as InpulseApiClient;
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useProjects({ client }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(listProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(result.current.data).toEqual({ items: [projectItem] });
+  });
+
   it("issues CSRF and sends an idempotency key", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
     const createProject = vi.fn().mockResolvedValue(createdProject);

@@ -56,6 +56,25 @@ export class AdminHighRiskAuthService {
     tx: TransactionContext,
     headers: HttpHeaderBag,
   ): Promise<AdminHighRiskActor> {
+    return this.verifyFresh(tx, headers, true);
+  }
+
+  /**
+   * 高风险管理操作的只读入口：仍要求完整管理员 Session 与 5 分钟内
+   * 密码 + TOTP 新鲜度，但 GET 没有状态变更，不强制同步 CSRF。
+   */
+  async verifyRead(
+    tx: TransactionContext,
+    headers: HttpHeaderBag,
+  ): Promise<AdminHighRiskActor> {
+    return this.verifyFresh(tx, headers, false);
+  }
+
+  private async verifyFresh(
+    tx: TransactionContext,
+    headers: HttpHeaderBag,
+    requireCsrf: boolean,
+  ): Promise<AdminHighRiskActor> {
     const session = await this.findUnlockedSession(
       tx,
       getHeader(headers, "cookie"),
@@ -67,6 +86,7 @@ export class AdminHighRiskAuthService {
       throw fullAdminSessionRequired();
     }
     if (
+      requireCsrf &&
       !(await this.csrfMatches(
         tx,
         session.id,

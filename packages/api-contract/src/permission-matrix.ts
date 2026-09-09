@@ -434,6 +434,51 @@ export const permissionMatrix = [
       系统管理员: { kind: "allow" },
     },
   },
+  {
+    operationId: "listProjects",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "getProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  ...(
+    [
+      "listProjectMembers",
+      "listProjectMemberUnfinishedTasks",
+      "addProjectMember",
+      "removeProjectMember",
+    ] as const
+  ).map((operationId): PermissionMatrixEntry => ({
+    operationId,
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session 且密码与当前 TOTP 重认证均在 5 分钟内；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权",
+        deniedWith: 403,
+      },
+    },
+  })),
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

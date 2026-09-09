@@ -1,6 +1,20 @@
 import React, { useState } from "react";
-import { Alert, Button, Card, Empty, Space, Typography } from "antd";
-import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  List,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from "antd";
+import type {
+  CreateProjectResponse,
+  InpulseApiClient,
+  ProjectItem,
+} from "@generated/api";
 import { CreateProjectModal } from "./CreateProjectModal";
 
 const { Text } = Typography;
@@ -9,22 +23,34 @@ export interface ProjectsPageViewProps {
   readonly client?: InpulseApiClient | undefined;
   readonly creatorName: string;
   readonly creatorUserId?: number | undefined;
+  readonly isAdmin?: boolean | undefined;
   readonly createdProject?: CreateProjectResponse | null;
   readonly onCreated?: (response: CreateProjectResponse) => void;
-  readonly onOpenActivity?: (projectId: number) => void;
-  readonly onOpenModules?: (projectId: number) => void;
-  readonly onSearch?: (query: string) => void;
+  readonly onOpenActivity?: ((projectId: number) => void) | undefined;
+  readonly onOpenModules?: ((projectId: number) => void) | undefined;
+  readonly onOpenMembers?: ((projectId: number) => void) | undefined;
+  readonly onSearch?: ((query: string) => void) | undefined;
+  readonly projects?: readonly ProjectItem[] | undefined;
+  readonly projectsLoading?: boolean | undefined;
+  readonly projectsError?: string | undefined;
+  readonly onRetryProjects?: (() => void) | undefined;
 }
 
 export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   client,
   creatorName,
   creatorUserId,
+  isAdmin = false,
   createdProject,
   onCreated,
   onOpenActivity,
   onOpenModules,
+  onOpenMembers,
   onSearch,
+  projects = [],
+  projectsLoading = false,
+  projectsError,
+  onRetryProjects,
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -32,7 +58,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">项目与功能 · F-04</span>
+          <span className="eyebrow">项目与功能 · F-05</span>
           <h1>项目与功能</h1>
           <p>
             项目是顶层业务容器。创建者自动成为活跃成员，创建流程不可取消该成员关系。
@@ -76,6 +102,14 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                         管理模块
                       </Button>
                     )}
+                    {isAdmin && onOpenMembers && (
+                      <Button
+                        size="small"
+                        onClick={() => onOpenMembers(createdProject.project.id)}
+                      >
+                        管理成员
+                      </Button>
+                    )}
                     <Button
                       type="primary"
                       size="small"
@@ -98,10 +132,81 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
               }
             />
           ) : null}
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="项目列表接口尚未接入；当前可先创建项目，并通过搜索、通知和项目动态验证纵切片。"
-          />
+          {projectsLoading ? (
+            <Spin description="正在加载项目列表" />
+          ) : projectsError ? (
+            <Alert
+              type="error"
+              showIcon
+              title={projectsError}
+              action={
+                onRetryProjects ? (
+                  <Button onClick={onRetryProjects}>重试</Button>
+                ) : undefined
+              }
+            />
+          ) : projects.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="暂无可见项目；系统管理员或已加入成员创建的项目会显示在这里。"
+            />
+          ) : (
+            <List
+              dataSource={[...projects]}
+              rowKey={(item) => item.id}
+              renderItem={(project) => (
+                <Card
+                  className="project-card"
+                  title={
+                    <Space wrap>
+                      <span>{project.name}</span>
+                      <Tag
+                        color={
+                          project.status === "ACTIVE" ? "green" : "default"
+                        }
+                      >
+                        {project.status === "ACTIVE" ? "正常" : "已归档"}
+                      </Tag>
+                    </Space>
+                  }
+                  extra={
+                    <Space wrap>
+                      <Button onClick={() => onOpenModules?.(project.id)}>
+                        管理模块
+                      </Button>
+                      {isAdmin && onOpenMembers ? (
+                        <Button
+                          size="small"
+                          onClick={() => onOpenMembers(project.id)}
+                        >
+                          管理成员
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="primary"
+                        size="small"
+                        onClick={() => onOpenActivity?.(project.id)}
+                      >
+                        查看项目动态
+                      </Button>
+                    </Space>
+                  }
+                >
+                  <Text type="secondary">
+                    {project.code} · {project.memberCount} 位活跃成员
+                  </Text>
+                  {project.description ? (
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      {project.description}
+                    </p>
+                  ) : null}
+                  <Button size="small" onClick={() => onSearch?.(project.code)}>
+                    搜索项目
+                  </Button>
+                </Card>
+              )}
+            />
+          )}
         </Space>
       </Card>
       <CreateProjectModal

@@ -28,6 +28,14 @@ export type ActivityQueryRequest = {
   readonly includeAdminOnly?: boolean;
 };
 
+export type AddProjectMemberRequest = {
+  readonly userId: number;
+};
+
+export type AddProjectMemberResponse = {
+  readonly member: ProjectMemberRecordItem;
+};
+
 export type AdminUserCreateRequest = {
   readonly loginName: string;
   readonly name: string;
@@ -385,10 +393,97 @@ export type NotificationUnreadCountResponse = {
 
 export type ProjectCode = string;
 
+export type ProjectDetailResponse = {
+  readonly project: ProjectItem;
+};
+
+export type ProjectItem = {
+  readonly id: number;
+  readonly code: ProjectCode;
+  readonly name: string;
+  readonly description: string;
+  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly memberCount: number;
+};
+
+export type ProjectListResponse = {
+  readonly items: readonly ProjectItem[];
+};
+
+export type ProjectMemberCollectionPath = {
+  readonly projectId: number;
+};
+
 export type ProjectMemberItem = {
   readonly userId: number;
   readonly status: ("ACTIVE" | "REMOVED");
   readonly joinedAt: string;
+};
+
+export type ProjectMemberMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type ProjectMemberPath = {
+  readonly projectId: number;
+  readonly userId: number;
+};
+
+export type ProjectMemberReassignmentItem = {
+  readonly taskId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly rowVersion: number;
+  readonly assigneeId: number;
+};
+
+export type ProjectMemberRecordItem = {
+  readonly membershipId: number;
+  readonly projectId: number;
+  readonly userId: number;
+  readonly name: string;
+  readonly avatarUrl: (string | null);
+  readonly status: ("ACTIVE" | "REMOVED");
+  readonly joinedAt: string;
+  readonly removedAt: (string | null);
+};
+
+export type ProjectMemberReplayContext = {
+  readonly projectId: number;
+  readonly memberUserId: number;
+};
+
+export type ProjectMemberUnfinishedTaskItem = {
+  readonly taskId: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly code: string;
+  readonly title: string;
+  readonly description: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly dueAt: (string | null);
+  readonly workStatus: "TODO";
+  readonly assigneeId: number;
+  readonly rowVersion: number;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type ProjectMemberUnfinishedTasksResponse = {
+  readonly items: readonly ProjectMemberUnfinishedTaskItem[];
+};
+
+export type ProjectMembersListResponse = {
+  readonly items: readonly ProjectMemberRecordItem[];
+};
+
+export type ProjectPath = {
+  readonly projectId: number;
 };
 
 export type ReauthenticateAdminHeaders = {
@@ -398,6 +493,16 @@ export type ReauthenticateAdminHeaders = {
 export type ReauthenticateAdminRequest = {
   readonly password: string;
   readonly code: string;
+};
+
+export type RemoveProjectMemberRequest = {
+  readonly reassignments: readonly ProjectMemberReassignmentItem[];
+};
+
+export type RemoveProjectMemberResponse = {
+  readonly member: ProjectMemberRecordItem;
+  readonly reassignedTaskIds: readonly number[];
+  readonly unfinishedTaskCount: number;
 };
 
 export type ResetAdminMfaHeaders = {

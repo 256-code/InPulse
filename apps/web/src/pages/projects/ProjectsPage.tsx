@@ -2,6 +2,10 @@ import React, { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
+import {
+  describeProjectListError,
+  useProjects,
+} from "@features/projects/project-query";
 import { ProjectsPageView } from "@features/projects/ProjectsPageView";
 
 export interface ProjectsPageProps {
@@ -13,6 +17,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
   const { user } = useAuth();
   const [createdProject, setCreatedProject] =
     useState<CreateProjectResponse | null>(null);
+  const projectList = useProjects({ client });
 
   const handleCreated = useCallback((response: CreateProjectResponse) => {
     setCreatedProject(response);
@@ -36,11 +41,21 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
     <ProjectsPageView
       creatorName={user?.name.trim() || "创建者"}
       creatorUserId={user?.id}
+      isAdmin={user?.isAdmin === true}
       createdProject={createdProject}
       onCreated={handleCreated}
       onOpenActivity={handleOpenActivity}
       onOpenModules={(projectId) => navigate(`/projects/${projectId}/modules`)}
+      onOpenMembers={(projectId) => navigate(`/projects/${projectId}/members`)}
       onSearch={handleSearch}
+      projects={projectList.data?.items ?? []}
+      projectsLoading={projectList.isPending}
+      projectsError={
+        projectList.isError
+          ? describeProjectListError(projectList.error)
+          : undefined
+      }
+      onRetryProjects={() => void projectList.refetch()}
       {...(client ? { client } : {})}
     />
   );

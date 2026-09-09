@@ -16,6 +16,8 @@ import { NotificationProjectionModule } from "./modules/notifications/notificati
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
 import { ProjectCreateModule } from "./modules/projects/project-create.module.js";
+import { ProjectsReadModule } from "./modules/projects/projects-read.module.js";
+import { ProjectMemberManagementModule } from "./modules/projects/project-member-management.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
 import { AdminUsersModule } from "./admin-users/admin-users.module.js";
 
@@ -27,6 +29,8 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ActivityModule,
       NotificationsModule,
       ProjectCreateModule,
+      ProjectsReadModule,
+      ProjectMemberManagementModule,
       ModulesManagementModule,
       FeaturesManagementModule,
       AdminUsersModule,

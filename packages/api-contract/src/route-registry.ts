@@ -3,6 +3,7 @@ import { taskRoutes, moduleTaskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
 import { adminUserRoutes } from "./user-admin-routes.js";
+import { projectMemberRoutes } from "./project-member-routes.js";
 
 export * from "./route-definition.js";
 
@@ -13,6 +14,7 @@ export * from "./route-definition.js";
  */
 export const routeRegistry = [
   ...adminUserRoutes,
+  ...projectMemberRoutes,
   ...moduleRoutes,
   ...featureRoutes,
   ...taskRoutes,
@@ -981,6 +983,124 @@ export const routeRegistry = [
         body: {
           contentTypes: [
             { contentType: "application/json", schemaRef: "ActivityPage" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/projects",
+    operationId: "listProjects",
+    summary:
+      "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "ProjectListResponse",
+            },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/projects/{projectId}",
+    operationId: "getProject",
+    summary:
+      "读取当前用户可访问的单项目摘要；系统管理员可访问全部项目；不存在与无权访问统一返回 404；包含归档历史。",
+    request: {
+      path: "ProjectPath",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            {
+              contentType: "application/json",
+              schemaRef: "ProjectDetailResponse",
+            },
           ],
         },
       },

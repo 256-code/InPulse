@@ -13,6 +13,7 @@ import { TasksController } from "./tasks.controller.js";
 import { TasksHttpService } from "./tasks-http.service.js";
 import { TasksManagementService } from "./tasks-management.service.js";
 import { TaskManagementRepository } from "./task-management.repository.js";
+import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port.js";
 
 @Module({
   imports: [
@@ -31,7 +32,9 @@ import { TaskManagementRepository } from "./task-management.repository.js";
     TaskManagementRepository,
     TasksManagementService,
     TasksHttpService,
+    ProjectMemberTaskCommandPort,
   ],
+  exports: [ProjectMemberTaskCommandPort],
   controllers: [TasksController],
 })
 export class TasksManagementModule {}
