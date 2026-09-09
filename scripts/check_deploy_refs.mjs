@@ -348,6 +348,19 @@ async function checkDockerfiles() {
     problems.push("deploy/docker/web.Dockerfile: must copy nginx.conf");
   }
 
+  for (const file of [
+    "deploy/docker/api.Dockerfile",
+    "deploy/docker/migration.Dockerfile",
+  ]) {
+    const text = await readFile(file, "utf8").catch(() => "");
+    const runtime = text.split(/\bAS\s+runtime\b/i)[1] ?? "";
+    if (!/rm\s+-rf\s+[^\n]*\/usr\/local\/lib\/node_modules/.test(runtime)) {
+      problems.push(
+        `${file}: Node runtime must remove bundled npm/corepack toolchain before non-root USER`,
+      );
+    }
+  }
+
   return problems;
 }
 

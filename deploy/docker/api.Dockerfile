@@ -27,6 +27,10 @@ COPY --from=builder /out/dist ./dist
 COPY --from=builder /out/node_modules ./node_modules
 COPY --from=builder /workspace/deploy/docker/healthcheck.mjs ./healthcheck.mjs
 
+# 官方 Node 镜像自带 npm/corepack，Trivy 会在 runtime 中报告其全局工具链漏洞；
+# API 只运行编译后的 Node 入口，不需要任何包管理器，因此从运行时删除。
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 RUN groupadd --gid 10001 app \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app \
  && chown -R 10001:10001 /app

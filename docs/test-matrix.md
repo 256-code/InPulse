@@ -312,7 +312,8 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 | 四个生产 Dockerfile 存在且每个 `FROM` 固定 `@sha256:<64hex>`；API/Web/Migration runtime 为数值非 root `USER`；Web 内置 `nginx.conf`；API 内置 `healthcheck.mjs` | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；`.env.deploy.example` 占位符负例被拒绝 |
 | Compose 稳态拓扑渲染、`exact-tag@sha256` 格式、PostgreSQL 18 命名卷挂载、非 root/只读、独立迁移、健康检查、仅 Nginx 暴露 8080/8443 | `pnpm check:deploy:test` | 本地通过 |
 | 每个服务级 secret 使用长语法且 `mode=0400`、`uid/gid` 与容器数值 user 一致、`target` 为 `/run/secrets` 直接子项 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；短语法负例被拒绝 |
+| API/Migration runtime 不保留基础镜像自带 npm/corepack | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过（新增回归校验） |
 | 生产 API/Migration/Web/DB-bootstrap 镜像构建 | `CI / workspace` 新增 Build production * image 步骤 | 待 CI（本机 Docker daemon 未启动，未实际构建） |
-| 生产镜像漏洞扫描 | `CI / workspace` 新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 待 CI（未实际运行 Trivy） |
+| 生产镜像漏洞扫描 | `CI / workspace` 新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 首次实际执行因 API 镜像自带 npm 全局工具链 HIGH 失败；已按 ADR-017 在 runtime 删除 npm/corepack 后待重跑 CI |
 
 本机未运行 Docker，因此镜像构建与扫描为 `Required`，不得据此宣称生产镜像已验证。
