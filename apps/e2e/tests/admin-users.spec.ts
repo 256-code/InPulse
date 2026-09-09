@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../helpers/mfa-fixture.js";
 
 import {
   createAuthenticatedContext,
@@ -26,7 +27,10 @@ test("普通成员不能访问用户管理页面", async ({ browser }) => {
   }
 });
 
-test("管理员完成用户新增、编辑、停用、启用与强制退出", async ({ browser }) => {
+test("管理员完成用户新增、编辑、停用、启用与强制退出", async ({
+  browser,
+  mfaAdmin,
+}) => {
   test.setTimeout(120_000);
   const runtime = await loadRuntime();
   const context = await browser.newContext({
@@ -38,7 +42,7 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
   const name = `F-03 用户 ${suffix}`;
 
   try {
-    await loginAdminViaUi(page, runtime);
+    await loginAdminViaUi(page, runtime, mfaAdmin);
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "用户管理" })).toBeVisible();
 
@@ -52,11 +56,9 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
 
     const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
     await expect(reauth).toBeVisible();
-    await resetAdminTotpReplayStep(runtime.adminMfaUserId);
-    await reauth.getByLabel("管理员密码").fill(runtime.adminMfa.password);
-    await reauth
-      .getByLabel("6 位验证码")
-      .fill(totpCode(runtime.adminMfaSecret));
+    await resetAdminTotpReplayStep(mfaAdmin.userId);
+    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
+    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
     await reauth.getByRole("button", { name: "验证身份" }).click();
     await expect(reauth).toBeHidden();
     await expect(

@@ -73,6 +73,11 @@ export const permissionMatrix = [
   ...(
     [
       "listFeatures",
+      "listTasks",
+      "getTask",
+      "listTaskAssignees",
+      "createTask",
+      "updateTask",
       "getFeature",
       "findSimilarFeatures",
       "createFeature",

@@ -72,6 +72,10 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | `enableUser` · `POST /api/v1/admin/users/{userId}/enable` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；目标不存在 404、已启用或版本冲突 409；同事务清除停用态并递增 `row_version`、写审计；不恢复已撤销 Session 或登录限流历史 |
 | `forceLogoutUser` · `POST /api/v1/admin/users/{userId}/force-logout` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；目标不存在 404、版本冲突 409；禁止强制退出自己；同事务递增 `auth_version` 与 `row_version`、撤销目标全部 Session 并写审计；账号保持 ACTIVE |
 
+## F-14 功能级任务接口（2026-09-09 本地实现）
+
+F-14 功能级任务补充：`listTasks`、`getTask`、`listTaskAssignees`、`createTask`、`updateTask` 允许当前活跃项目成员与系统管理员，匿名/停用 401，非成员/已移除/归属错误 404。读接口包含归档历史；写接口须项目、模块、功能 ACTIVE，编辑还须任务生命周期 ACTIVE，CSRF/数据库幂等，更新 If-Match。创建/真正改派须所选用户 ACTIVE 且为项目 ACTIVE 成员（管理员也不能例外），非法或空负责人 422；未改变的历史负责人允许保留。重放重新验证当前资源权限与父级可写性，失败不返回已存成功内容。成员列表在同一事务内自行验证当前 actor 的项目访问，只暴露本项目活跃用户的 id/name/avatarUrl。实现与实际验证见 [F-14 交审](f14-local-handoff.md)。
+
 ## F-13 功能档案接口（2026-09-09 本地实现）
 
 | operationId | 允许身份 | 拒绝与附加门禁 |

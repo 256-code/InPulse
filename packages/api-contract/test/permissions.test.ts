@@ -225,6 +225,11 @@ export class HealthController {
       "POST /api/v1/notifications/read-all",
       "POST /api/v1/projects",
       "GET /api/v1/search",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/assignees",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks",
+      "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });

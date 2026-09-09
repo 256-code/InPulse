@@ -1,0 +1,37 @@
+import { Module } from "@nestjs/common";
+import { AuthModule } from "../../auth/auth.module.js";
+import { AuditModule } from "../../audit/audit.module.js";
+import { DatabaseModule } from "../../database/database.module.js";
+import { IdempotencyModule } from "../../idempotency/idempotency.module.js";
+import { ProjectsModule } from "../projects/index.js";
+import { ModulesModule } from "../modules/index.js";
+import { FeaturesModule } from "../features/index.js";
+import { ActivityProjectionModule } from "../activity/index.js";
+import { SearchProjectionModule } from "../search/index.js";
+import { NotificationProjectionModule } from "../notifications/index.js";
+import { TasksController } from "./tasks.controller.js";
+import { TasksHttpService } from "./tasks-http.service.js";
+import { TasksManagementService } from "./tasks-management.service.js";
+import { TaskManagementRepository } from "./task-management.repository.js";
+
+@Module({
+  imports: [
+    AuthModule,
+    AuditModule,
+    DatabaseModule,
+    IdempotencyModule,
+    ProjectsModule,
+    ModulesModule,
+    FeaturesModule,
+    ActivityProjectionModule,
+    SearchProjectionModule,
+    NotificationProjectionModule,
+  ],
+  providers: [
+    TaskManagementRepository,
+    TasksManagementService,
+    TasksHttpService,
+  ],
+  controllers: [TasksController],
+})
+export class TasksManagementModule {}

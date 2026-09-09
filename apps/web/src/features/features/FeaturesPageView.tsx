@@ -1,4 +1,5 @@
 import { SimilarFeatures } from "./SimilarFeatures";
+import { TasksPanel } from "../tasks/TasksPanel";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -313,6 +314,15 @@ export function FeaturesPageView({
               </p>
               {item.status === "ARCHIVED" && (
                 <p>归档历史仍可查看；恢复前不能在此功能新增下级内容。</p>
+              )}
+              {featureId && (
+                <TasksPanel
+                  projectId={projectId}
+                  moduleId={moduleId}
+                  featureId={item.id}
+                  writable={item.status === "ACTIVE"}
+                  client={client}
+                />
               )}
             </Card>
           ))

@@ -8,6 +8,7 @@ import {
 import type { E2EAccount, E2ERuntime } from "./runtime.js";
 import { resetAdminTotpReplayStep } from "./admin-totp.js";
 import { totpCode } from "./totp.js";
+import type { MfaAdminFixture } from "./mfa-fixture.js";
 
 export interface AuthenticatedContext {
   readonly context: BrowserContext;
@@ -32,17 +33,18 @@ export async function loginViaUi(
 export async function loginAdminViaUi(
   page: Page,
   runtime: E2ERuntime,
+  admin: MfaAdminFixture,
 ): Promise<void> {
-  await resetAdminTotpReplayStep(runtime.adminMfaUserId);
+  await resetAdminTotpReplayStep(admin.userId);
   await page.goto("/login");
-  await page.getByLabel("登录名").fill(runtime.adminMfa.loginName);
-  await page.getByLabel("密码").fill(runtime.adminMfa.password);
+  await page.getByLabel("登录名").fill(admin.account.loginName);
+  await page.getByLabel("密码").fill(admin.account.password);
   await page
     .locator("form")
     .getByRole("button", { name: /登\s*录/ })
     .click();
   await expect(page.getByText("需要完成 TOTP 验证")).toBeVisible();
-  await page.getByLabel("6 位验证码").fill(totpCode(runtime.adminMfaSecret));
+  await page.getByLabel("6 位验证码").fill(totpCode(admin.secret));
   await page.getByRole("button", { name: "验证并进入系统" }).click();
   await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
 }

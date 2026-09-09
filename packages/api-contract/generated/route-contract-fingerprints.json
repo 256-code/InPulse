@@ -29,6 +29,12 @@
       "fingerprint": "8d3c116bf74f7c621a91b8153472a3a07114eaeed21517ad3c6aaf21d1619cc5"
     }
   ],
+  "createTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "31f261ff5c1a58e596d5789a249c3a438e277876a4568e34a8e0c1d46f545c7e"
+    }
+  ],
   "createUser": [
     {
       "version": "1.0.0",
@@ -99,6 +105,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "ef717fe3ae01dfec0bc2c36a0c61996a0192d9e7dec32e3f103afbc743299e1e"
+    }
+  ],
+  "updateTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ec4d82558f597182a2c41832097eb53d2e08764d65039cfd32395c5f307892ca"
     }
   ],
   "updateUser": [

@@ -19,3 +19,4 @@ export * from "./contracts/users.zod.js";
 export * from "./contracts/auth.zod.js";
 
 export * from "./contracts/features.zod.js";
+export * from "./contracts/tasks.zod.js";
