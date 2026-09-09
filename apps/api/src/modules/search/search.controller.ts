@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { Controller, Get, Query, Req, Res } from "@nestjs/common";
+import { Controller, Get, Req, Res } from "@nestjs/common";
 
 import {
   searchEntityTypeSchema,
-  searchQueryRequestSchema,
   type SearchItem,
+  type SearchQueryRequest,
   type SearchPage,
 } from "@inpulse/api-contract";
+import { ContractQuery, Operation } from "../../http/contract.decorators.js";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
 import { getHeader, type HttpHeaderBag } from "../../auth/csrf.http.js";
 import {
@@ -54,10 +55,11 @@ export class SearchController {
   ) {}
 
   @Get()
+  @Operation("getSearch")
   async search(
     @Req() request: SearchControllerRequest,
     @Res({ passthrough: true }) response: SearchControllerResponse,
-    @Query() query: unknown,
+    @ContractQuery("getSearch") query: SearchQueryRequest,
   ): Promise<SearchPage | ErrorResponseDto> {
     const requestId = randomUUID();
     const actor = await this.sessionAuth.resolveActor(
@@ -73,37 +75,15 @@ export class SearchController {
       };
     }
 
-    const parsed = searchQueryRequestSchema.safeParse(query);
-    if (!parsed.success) {
-      response.status(422);
-      return {
-        code: "SEARCH_VALIDATION_FAILED",
-        message: "全局搜索查询参数无效",
-        details: {
-          reason: parsed.error.issues
-            .map(
-              (issue) =>
-                `${issue.path.length === 0 ? "query" : issue.path.join(".")}: ${issue.message}`,
-            )
-            .join("; "),
-        },
-        requestId,
-      };
-    }
-
     try {
       const result = await this.searchService.search({
         actorUserId: actor.userId,
-        query: parsed.data.q,
-        ...(parsed.data.cursor === undefined
+        query: query.q,
+        ...(query.cursor === undefined ? {} : { after: query.cursor }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(query.includeVoid === undefined
           ? {}
-          : { after: parsed.data.cursor }),
-        ...(parsed.data.limit === undefined
-          ? {}
-          : { limit: parsed.data.limit }),
-        ...(parsed.data.includeVoid === undefined
-          ? {}
-          : { includeVoid: parsed.data.includeVoid }),
+          : { includeVoid: query.includeVoid }),
       });
       return {
         items: result.items.map(toSearchItem),
@@ -114,7 +94,7 @@ export class SearchController {
       if (error instanceof SearchQueryValidationError) {
         response.status(422);
         return {
-          code: "SEARCH_VALIDATION_FAILED",
+          code: "VALIDATION_FAILED",
           message: error.message,
           details: { reason: error.status },
           requestId,

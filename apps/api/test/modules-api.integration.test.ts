@@ -41,6 +41,8 @@ import { ModuleManagementRepository } from "../src/modules/modules/module-manage
 import { ModulesManagementService } from "../src/modules/modules/modules-management.service.js";
 import { ModulesHttpService } from "../src/modules/modules/modules-http.service.js";
 import { ModulesController } from "../src/modules/modules/modules.controller.js";
+import { ApiExceptionFilter } from "../src/http/api-exception.filter.js";
+import { ContractResponseInterceptor } from "../src/http/contract-response.interceptor.js";
 import {
   createProject,
   createUser,
@@ -111,6 +113,8 @@ beforeAll(async () => {
     providers: [{ provide: ModulesHttpService, useValue: http }],
   })(TestModule);
   app = await NestFactory.create(TestModule, { logger: false });
+  app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalInterceptors(new ContractResponseInterceptor());
   app.setGlobalPrefix("api/v1");
   await app.listen(0, "127.0.0.1");
   base = await app.getUrl();

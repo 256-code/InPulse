@@ -48,6 +48,25 @@
 `TEST_DATABASE_URL`，5 例未执行，当时 MOD-BOOT-001～004 为**待验证**；现已由上述 CI 补齐。
 未发现可用的本地 PostgreSQL/容器/WSL 测试入口；没有以 Mock 或注入测试替代。
 
+## F-11 Nest Zod Pipe/Serializer 与统一错误模型（A，2026-09-09）
+
+仅记录已被当前 API 实现消费的契约运行期组合；生成工具链见 [ADR-027](adr/ADR-027.md)，运行期定案见 [ADR-029](adr/ADR-029.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| CONTRACT-001 | 单元 | Zod Pipe body | `ContractBody` 从 Route Registry + Schema Registry 解析；默认值生效；失败统一抛 `ContractValidationError` | 本地通过（`contract-validation.pipe.test.ts` 6 例，2026-09-09） |
+| CONTRACT-002 | 单元 | path/query | path 数字字符串与 query `limit/includeVoid` 按契约 coerce；严格 Schema 拒绝未知字段 | 同上 |
+| CONTRACT-003 | 单元 | headers | 只提取 Schema `shape` 声明字段，Express 附加头部不触发 422；缺 CSRF 拒绝 | 同上 |
+| CONTRACT-004 | 单元 | 响应 Serializer | 按 `@Operation` + 实际状态选择 Schema，成功返回 `parsed.data` 并剔除未知字段 | `contract-response.interceptor.test.ts` 3 例通过 |
+| CONTRACT-005 | 单元 | 响应违规 | 响应不满足契约时抛 `ContractResponseError`，不返回原 body | 同上 |
+| CONTRACT-006 | HTTP 集成 | 请求 422 | 非法 body 返回 `{ code, message, details, requestId }` 与 `X-Request-Id`，不泄露 Zod 内部格式 | `contract-runtime.http.test.ts` 5 例通过 |
+| CONTRACT-007 | HTTP 集成 | 响应 500 | 响应 Schema 违规统一 500 `INTERNAL_ERROR`，`details` 为空 | 同上 |
+| CONTRACT-008 | HTTP 集成 | 未匹配路由 | Nest `NotFoundException` 映射为统一 404，不回显 method/path，返回 `X-Request-Id` | 同上 |
+| CONTRACT-009 | HTTP 集成 | 同源顺序 | 非安全方法先执行 `StrictSameOriginGuard`，缺失 Origin/Referer 返回 403 `CSRF_ORIGIN_REJECTED` | 同上 |
+| CONTRACT-010 | 契约扫描 | operationId 绑定 | 所有 Controller 均绑 `@Operation`，method/path/operationId 与 Route Registry 精确一致；`contract:drift`/`validate`/`permissions:check` 通过 | 本地通过（api-contract 4 文件 59 例；23 条路由） |
+
+新增文件：`contract-validation.pipe.test.ts`、`contract-response.interceptor.test.ts`、`api-exception.filter.test.ts`、`contract-runtime.http.test.ts`。API 单测合计 52 文件 243 例通过；GitHub Actions 尚未执行。
+
 ## 项目创建 F-04（A 后端 2026-09-08；C 前端 2026-09-09）
 
 单事务创建项目闭环：创建者与可选初始成员 ACTIVE 校验、唯一未分类模块、审计、搜索/活动
@@ -199,8 +218,9 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 |---|---|---|---|---|
 | AUDIT-001 | PostgreSQL 并发 | 至少 100 个同 scope 并发业务事务 | 链无分叉、无序号缺口，每个成功业务事件恰有一条审计；见 [ADR-008](adr/ADR-008.md) | 已自动化（阶段 0 数据库层：100 并发事务追加同一项目链，序号连续且无分叉；业务命令接入后须重跑，见 CI-008） |
 | AUDIT-002 | PostgreSQL 并发 | 多 scope 与链头初始化竞争 | 按 UTF-8 scope 顺序加锁，无死锁或重复链头 | Required |
-| AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | Required |
+| AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | 本地通过（`audit-write.integration.test.ts` 4/4，2026-09-09；GitHub Actions 待执行） |
 | AUDIT-004 | 恢复演练 | 密钥轮换、备份与恢复 | 数据库链、链头、远端检查点和归档明细全部一致 | Required |
+| AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 本地通过（`audit-write.integration.test.ts` 轮换用例，2026-09-09；GitHub Actions 待执行） |
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
 | SEC-002 | 浏览器 E2E | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline` | Required |
 | SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | Required |
@@ -215,6 +235,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | SEC-012 | API + PostgreSQL 集成 | 管理员高风险重认证（F-02.3） | 完整管理员 Session + 密码 + 当前 TOTP time-step ±1 且未使用；同一事务原子刷新 `reauthenticated_at` 与 `mfa_verified_at` 并递增 rotation generation；错误密码/验证码返回 401 且不刷新时间戳，分别写登录/MFA 限流；MFA_CHALLENGE 受限 Session 403；同一 time-step 重放 401；达到 MFA 阈值 429 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
 | SEC-013 | API + PostgreSQL 集成 | 管理员恢复码（F-02.4） | 轮换要求完整管理员 Session 且 5 分钟内完成双因子重认证，原子消费一次性 rotation generation、失效旧 Hash 并只返回一次新码；消费仅接受 `RECOVERY_CHALLENGE` 且密码阶段已成功，原子消费恢复码、失效旧代码集并升级为完整 Session；同一 rotation generation 或恢复码并发只有一个 2xx；错误恢复码 401 并写限流；非管理员 403 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
 | SEC-014 | API + PostgreSQL 集成 | 管理员 MFA 重置（F-02.5） | 仅另一名完成 5 分钟双因子重认证的 ACTIVE 系统管理员可执行；目标必须是另一名 ACTIVE 且已启用 TOTP 的系统管理员，可用 MFA 管理员数必须大于 1；同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销目标全部 Session 并写审计；自重置/仅剩一名 MFA 管理员返回 409，非管理员目标 403，缺少重认证 403；两个管理员互相重置时只有一个成功且至少保留一名 MFA 管理员 | 已自动化到本地（Controller 9 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
+| SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 本地通过（`session-cleanup.integration.test.ts` 2 例，2026-09-09；GitHub Actions 待执行） |
 
 ## 搜索、部署与恢复
 

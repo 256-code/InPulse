@@ -1,12 +1,22 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, Post, Req, Res } from "@nestjs/common";
+import { Controller, Post, Req, Res, UseGuards } from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
+import type {
+  ReauthenticateAdminHeaders,
+  ReauthenticateAdminRequest,
+} from "@inpulse/api-contract";
 import {
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { LoginError } from "./login.error.js";
 import { MfaRateLimitError } from "./mfa-rate-limit.error.js";
@@ -32,32 +42,6 @@ interface ErrorResponseDto {
   readonly requestId: string;
 }
 
-interface ReauthenticateRequest {
-  readonly password: string;
-  readonly code: string;
-}
-
-function parseReauthenticateBody(
-  body: unknown,
-): ReauthenticateRequest | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Readonly<Record<string, unknown>>;
-  const password = record["password"];
-  const code = record["code"];
-  if (
-    typeof password !== "string" ||
-    password.length < 1 ||
-    password.length > 1024 ||
-    typeof code !== "string" ||
-    !/^\d{6}$/.test(code)
-  ) {
-    return undefined;
-  }
-  return { password, code };
-}
-
 function resolveClientIp(request: MfaReauthenticateRequest): string {
   const raw =
     request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
@@ -70,10 +54,13 @@ export class MfaReauthenticateController {
   constructor(private readonly service: MfaReauthenticateService) {}
 
   @Post("reauthenticate")
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("reauthenticateAdmin")
   async reauthenticate(
     @Req() request: MfaReauthenticateRequest,
     @Res({ passthrough: true }) response: MfaReauthenticateResponse,
-    @Body() body: unknown,
+    @ContractBody("reauthenticateAdmin") body: ReauthenticateAdminRequest,
+    @ContractHeaders("reauthenticateAdmin") headers: ReauthenticateAdminHeaders,
   ): Promise<void | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -87,24 +74,13 @@ export class MfaReauthenticateController {
       };
     }
 
-    const parsed = parseReauthenticateBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "REAUTH_VALIDATION_FAILED",
-        message: "管理员重认证请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
-
     try {
       await this.service.reauthenticate({
-        password: parsed.password,
-        code: parsed.code,
+        password: body.password,
+        code: body.code,
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
       });
       response.status(204);
       response.setHeader("Cache-Control", "no-store");

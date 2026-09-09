@@ -1,4 +1,5 @@
 import { Controller, Get, Inject, Patch, Post, Req, Res } from "@nestjs/common";
+import { Operation } from "../../http/contract.decorators.js";
 import {
   ModulesHttpService,
   type ModulesHttpRequest,
@@ -15,6 +16,7 @@ export class ModulesController {
   ) {}
 
   @Get(":projectId/modules")
+  @Operation("listModules")
   async list(
     @Req() request: ModulesHttpRequest,
     @Res({ passthrough: true }) response: Response,
@@ -22,6 +24,7 @@ export class ModulesController {
     return this.respond("listModules", request, response);
   }
   @Post(":projectId/modules")
+  @Operation("createModule")
   async create(
     @Req() request: ModulesHttpRequest,
     @Res({ passthrough: true }) response: Response,
@@ -29,6 +32,7 @@ export class ModulesController {
     return this.respond("createModule", request, response);
   }
   @Patch(":projectId/modules/:moduleId")
+  @Operation("updateModule")
   async update(
     @Req() request: ModulesHttpRequest,
     @Res({ passthrough: true }) response: Response,
@@ -36,6 +40,7 @@ export class ModulesController {
     return this.respond("updateModule", request, response);
   }
   @Post(":projectId/modules/:moduleId/archive")
+  @Operation("archiveModule")
   async archive(
     @Req() request: ModulesHttpRequest,
     @Res({ passthrough: true }) response: Response,
@@ -43,6 +48,7 @@ export class ModulesController {
     return this.respond("archiveModule", request, response);
   }
   @Post(":projectId/modules/:moduleId/restore")
+  @Operation("restoreModule")
   async restore(
     @Req() request: ModulesHttpRequest,
     @Res({ passthrough: true }) response: Response,

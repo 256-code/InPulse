@@ -64,6 +64,7 @@ describe("MfaRecoveryController", () => {
     const result = await controller.rotate(
       { headers: { host: "127.0.0.1" }, body: undefined },
       response as never,
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -79,6 +80,7 @@ describe("MfaRecoveryController", () => {
     const result = await controller.rotate(
       { headers: validHeaders(), body: undefined },
       response as never,
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.rotateCalls).toBe(1);
@@ -91,7 +93,7 @@ describe("MfaRecoveryController", () => {
     expect(response.headers["Cache-Control"]).toBe("no-store");
   });
 
-  test("消费恢复码格式无效时返回 422", async () => {
+  test("消费恢复码契约值直接传递", async () => {
     const service = new FakeRecoveryService();
     const controller = new MfaRecoveryController(service as never);
     const response = responseFixture();
@@ -99,12 +101,13 @@ describe("MfaRecoveryController", () => {
     const result = await controller.consume(
       { headers: validHeaders(), body: undefined },
       response as never,
-      { code: "123" },
+      { code: "A".repeat(20) },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "MFA_RECOVERY_VALIDATION_FAILED" });
-    expect(service.consumeCalls).toBe(0);
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(service.consumeCalls).toBe(1);
+    expect(result).toMatchObject({ authState: "AUTHENTICATED" });
   });
 
   test("消费成功使用请求 IP 并返回完整态", async () => {
@@ -120,6 +123,7 @@ describe("MfaRecoveryController", () => {
       },
       response as never,
       { code: "A".repeat(20) },
+      { "x-csrf-token": "B".repeat(43) },
     );
 
     expect(service.lastConsumeInput).toMatchObject({
@@ -149,6 +153,7 @@ describe("MfaRecoveryController", () => {
         { headers: validHeaders(), body: undefined },
         response as never,
         { code: "A".repeat(20) },
+        { "x-csrf-token": "B".repeat(43) },
       ),
     ).toMatchObject({ code: "INVALID_RECOVERY_CODE" });
     expect(response.status).toHaveBeenCalledWith(401);
@@ -160,6 +165,7 @@ describe("MfaRecoveryController", () => {
         { headers: validHeaders(), body: undefined },
         limited as never,
         { code: "A".repeat(20) },
+        { "x-csrf-token": "B".repeat(43) },
       ),
     ).toMatchObject({ code: "MFA_VERIFY_RATE_LIMITED" });
     expect(limited.status).toHaveBeenCalledWith(429);
@@ -170,6 +176,7 @@ describe("MfaRecoveryController", () => {
       await controller.rotate(
         { headers: validHeaders(), body: undefined },
         expired as never,
+        { "x-csrf-token": "B".repeat(43) },
       ),
     ).toMatchObject({ code: "ADMIN_REAUTH_REQUIRED" });
     expect(expired.status).toHaveBeenCalledWith(403);

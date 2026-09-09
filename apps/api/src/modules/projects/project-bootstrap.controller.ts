@@ -1,18 +1,30 @@
 import { randomUUID } from "node:crypto";
 
-import { Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
 import {
-  createProjectHeadersSchema,
-  createProjectRequestSchema,
+  type CreateProjectHeaders,
+  type CreateProjectRequest,
   type CreateProjectResponse,
 } from "@inpulse/api-contract";
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../../http/contract.decorators.js";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import {
-  getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "../../auth/csrf.http.js";
+import { StrictSameOriginGuard } from "../../auth/csrf.guard.js";
 import {
   IdempotencyHttpError,
   IdempotencyHttpService,
@@ -63,9 +75,13 @@ export class ProjectBootstrapController {
 
   @Post()
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("createProject")
   async create(
     @Req() request: ProjectBootstrapControllerRequest,
     @Res({ passthrough: true }) response: ProjectBootstrapControllerResponse,
+    @ContractBody("createProject") body: CreateProjectRequest,
+    @ContractHeaders("createProject") headers: CreateProjectHeaders,
   ): Promise<CreateProjectResponse | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -74,24 +90,7 @@ export class ProjectBootstrapController {
       return csrfOriginFailureResponse(requestId, originFailure);
     }
 
-    const parsedHeaders = createProjectHeadersSchema.safeParse({
-      "x-csrf-token": getHeader(request.headers, "x-csrf-token"),
-    });
-    if (!parsedHeaders.success) {
-      response.status(422);
-      return validationResponse(requestId, "请求头缺少有效的同步 CSRF Token");
-    }
-    void parsedHeaders;
-
-    const parsedBody = createProjectRequestSchema.safeParse(request.body);
-    if (!parsedBody.success) {
-      response.status(422);
-      return validationResponse(
-        requestId,
-        "创建项目请求体字段无效",
-        parsedErrorDetails(parsedBody.error.issues),
-      );
-    }
+    void headers;
 
     try {
       const result = await this.idempotency.run({
@@ -106,7 +105,7 @@ export class ProjectBootstrapController {
           body: request.body,
         },
         execute: async (tx, actorId) =>
-          this.workflow.execute(tx, actorId, parsedBody.data),
+          this.workflow.execute(tx, actorId, body),
         replayAuthorizer: async (_record, tx) => {
           await this.resolveMutationActor(tx, request);
         },
@@ -190,31 +189,4 @@ function csrfOriginFailureResponse(
     details: { reason },
     requestId,
   };
-}
-
-function validationResponse(
-  requestId: string,
-  message: string,
-  details: Readonly<Record<string, string>> = {},
-): ErrorResponseDto {
-  return {
-    code: "PROJECT_VALIDATION_FAILED",
-    message,
-    details,
-    requestId,
-  };
-}
-
-function parsedErrorDetails(
-  issues: readonly {
-    readonly path: readonly PropertyKey[];
-    readonly message: string;
-  }[],
-): Readonly<Record<string, string>> {
-  const details: Record<string, string> = {};
-  for (const issue of issues) {
-    const key = issue.path.map((segment) => String(segment)).join(".");
-    details[key] = issue.message;
-  }
-  return details;
 }

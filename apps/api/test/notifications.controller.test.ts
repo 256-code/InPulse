@@ -146,7 +146,7 @@ function createController(
 }
 
 describe("NotificationsController", () => {
-  test("匿名查询返回 401；有效查询只使用当前用户并用字符串参数解析", async () => {
+  test("匿名查询返回 401；有效查询只使用契约解析后的当前用户与参数", async () => {
     const session = new FakeSessionAuth();
     session.value = undefined;
     const query = new FakeQueryService();
@@ -169,7 +169,7 @@ describe("NotificationsController", () => {
     const result = await controller.list(
       { headers: { cookie: "__Host-session=token" } },
       response as never,
-      { cursor: "opaque", limit: "10", unreadOnly: "true" },
+      { cursor: "opaque", limit: 10, unreadOnly: true },
     );
     expect(query.queryCommands).toEqual([
       {
@@ -182,7 +182,7 @@ describe("NotificationsController", () => {
     expect(result).toEqual({ items: [], nextCursor: null, hasMore: false });
   });
 
-  test("未读数和查询错误分别返回 200 与 422", async () => {
+  test("未读数正常返回 200，未知错误返回 500", async () => {
     const query = new FakeQueryService();
     const { controller } = createController(
       new FakeSessionAuth(),
@@ -208,7 +208,7 @@ describe("NotificationsController", () => {
     expect(errorResponse.status).toHaveBeenCalledWith(500);
   });
 
-  test("标记已读把字符串通知 ID 转数字并执行同事务命令", async () => {
+  test("标记已读使用契约解析后的数字通知 ID 并执行同事务命令", async () => {
     const state = new FakeStateService();
     const { controller, idempotency } = createController(
       new FakeSessionAuth(),
@@ -220,7 +220,7 @@ describe("NotificationsController", () => {
     const result = await controller.read(
       { headers: mutationHeaders() },
       response as never,
-      { notificationId: "42" },
+      { notificationId: 42 },
     );
 
     expect(result).toBeUndefined();
@@ -234,7 +234,7 @@ describe("NotificationsController", () => {
     expect(idempotency.calls[0]?.replayAuthorizer).toBeDefined();
   });
 
-  test("认证失败映射 401，非本人映射 404，无效路径与来源映射 403/422", async () => {
+  test("认证失败映射 401，非本人映射 404，来源映射 403", async () => {
     const unavailable = new FakeMutationAuth();
     unavailable.value = undefined;
     const unavailableState = new FakeStateService();
@@ -249,7 +249,7 @@ describe("NotificationsController", () => {
       await unavailableController.read(
         { headers: mutationHeaders() },
         unauthorizedResponse as never,
-        { notificationId: "42" },
+        { notificationId: 42 },
       ),
     ).toMatchObject({ code: "NOTIFICATION_UNAUTHENTICATED" });
     expect(unauthorizedResponse.status).toHaveBeenCalledWith(401);
@@ -266,7 +266,7 @@ describe("NotificationsController", () => {
       await notFoundController.read(
         { headers: mutationHeaders() },
         notFoundResponse as never,
-        { notificationId: "999" },
+        { notificationId: 999 },
       ),
     ).toMatchObject({ code: "NOTIFICATION_NOT_FOUND" });
     expect(notFoundResponse.status).toHaveBeenCalledWith(404);
@@ -276,19 +276,9 @@ describe("NotificationsController", () => {
       await unavailableController.read(
         { headers: { ...mutationHeaders(), origin: undefined } },
         missingOriginResponse as never,
-        { notificationId: "42" },
+        { notificationId: 42 },
       ),
     ).toMatchObject({ code: "CSRF_ORIGIN_REJECTED" });
     expect(missingOriginResponse.status).toHaveBeenCalledWith(403);
-
-    const invalidPathResponse = responseFixture();
-    expect(
-      await unavailableController.read(
-        { headers: mutationHeaders() },
-        invalidPathResponse as never,
-        { notificationId: "abc" },
-      ),
-    ).toMatchObject({ code: "NOTIFICATION_VALIDATION_FAILED" });
-    expect(invalidPathResponse.status).toHaveBeenCalledWith(422);
   });
 });

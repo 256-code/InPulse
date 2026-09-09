@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { Controller, Get, Param, Query, Req, Res } from "@nestjs/common";
+import { Controller, Get, Req, Res } from "@nestjs/common";
 
+import type { ActivityPath, ActivityQueryRequest } from "@inpulse/api-contract";
 import {
-  activityPathSchema,
-  activityQueryRequestSchema,
-} from "@inpulse/api-contract";
+  ContractPath,
+  ContractQuery,
+  Operation,
+} from "../../http/contract.decorators.js";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
 import { getHeader, type HttpHeaderBag } from "../../auth/csrf.http.js";
 import {
@@ -41,11 +43,12 @@ export class ActivityController {
   ) {}
 
   @Get(":projectId/activity")
+  @Operation("getProjectActivity")
   async list(
     @Req() request: ActivityControllerRequest,
     @Res({ passthrough: true }) response: ActivityControllerResponse,
-    @Param() params: unknown,
-    @Query() query: unknown,
+    @ContractPath("getProjectActivity") params: ActivityPath,
+    @ContractQuery("getProjectActivity") query: ActivityQueryRequest,
   ): Promise<unknown | ErrorResponseDto> {
     const requestId = randomUUID();
     const actor = await this.sessionAuth.resolveActor(
@@ -61,30 +64,15 @@ export class ActivityController {
       };
     }
 
-    const path = activityPathSchema.safeParse(params);
-    if (!path.success) {
-      response.status(422);
-      return validationResponse(requestId, "项目 ID 无效");
-    }
-    const parsed = activityQueryRequestSchema.safeParse(query);
-    if (!parsed.success) {
-      response.status(422);
-      return validationResponse(requestId, "项目动态查询参数无效");
-    }
-
     try {
       const result = await this.activityService.query({
         actorUserId: actor.userId,
-        projectId: path.data.projectId,
-        ...(parsed.data.cursor === undefined
+        projectId: params.projectId,
+        ...(query.cursor === undefined ? {} : { after: query.cursor }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(query.includeAdminOnly === undefined
           ? {}
-          : { after: parsed.data.cursor }),
-        ...(parsed.data.limit === undefined
-          ? {}
-          : { limit: parsed.data.limit }),
-        ...(parsed.data.includeAdminOnly === undefined
-          ? {}
-          : { includeAdminOnly: parsed.data.includeAdminOnly }),
+          : { includeAdminOnly: query.includeAdminOnly }),
       });
       return {
         items: result.items,

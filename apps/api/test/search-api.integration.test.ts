@@ -543,7 +543,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       }),
       422,
     );
-    expect(shortBody.code).toBe("SEARCH_VALIDATION_FAILED");
+    expect(shortBody.code).toBe("VALIDATION_FAILED");
 
     const cursorBody = await expectError(
       await requestSearch(baseUrl, {
@@ -552,7 +552,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       }),
       422,
     );
-    expect(cursorBody.code).toBe("SEARCH_VALIDATION_FAILED");
+    expect(cursorBody.code).toBe("VALIDATION_FAILED");
     expect(cursorBody.details).toHaveProperty("reason");
   });
 

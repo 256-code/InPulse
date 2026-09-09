@@ -4,6 +4,7 @@ import { Controller, Get, Req, Res } from "@nestjs/common";
 
 import type { UserDirectoryResponse } from "@inpulse/api-contract";
 
+import { Operation } from "../http/contract.decorators.js";
 import { getHeader, type HttpHeaderBag } from "./csrf.http.js";
 import { UserDirectoryService } from "./user-directory.service.js";
 
@@ -31,6 +32,7 @@ interface ErrorResponseDto {
 export class UserDirectoryController {
   constructor(private readonly service: UserDirectoryService) {}
 
+  @Operation("getUserDirectory")
   @Get()
   async list(
     @Req() request: UserDirectoryControllerRequest,

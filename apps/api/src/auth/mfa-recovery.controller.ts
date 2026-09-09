@@ -1,7 +1,24 @@
 import { randomUUID } from "node:crypto";
 
-import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 
+import {
+  ContractBody,
+  ContractHeaders,
+  Operation,
+} from "../http/contract.decorators.js";
+import type {
+  ConsumeMfaRecoveryCodeHeaders,
+  ConsumeMfaRecoveryCodeRequest,
+  RotateMfaRecoveryCodesHeaders,
+} from "@inpulse/api-contract";
 import { normalizeClientIp } from "./auth-rate-limit.policy.js";
 import { AdminHighRiskError } from "./admin-high-risk.error.js";
 import {
@@ -9,6 +26,7 @@ import {
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "./csrf.http.js";
+import { StrictSameOriginGuard } from "./csrf.guard.js";
 import { MfaRateLimitError } from "./mfa-rate-limit.error.js";
 import { MfaRecoveryError } from "./mfa-recovery.error.js";
 import { MfaRecoveryService } from "./mfa-recovery.service.js";
@@ -32,10 +50,6 @@ interface ErrorResponseDto {
   readonly requestId: string;
 }
 
-interface ConsumeRequest {
-  readonly code: string;
-}
-
 interface RotateResponseDto {
   readonly recoveryCodes: readonly string[];
 }
@@ -43,17 +57,6 @@ interface RotateResponseDto {
 interface ConsumeResponseDto {
   readonly csrfToken: string;
   readonly authState: "AUTHENTICATED";
-}
-
-function parseConsumeBody(body: unknown): ConsumeRequest | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const code = (body as Readonly<Record<string, unknown>>)["code"];
-  if (typeof code !== "string" || !/^[A-HJ-NP-Z2-9]{20}$/.test(code)) {
-    return undefined;
-  }
-  return { code };
 }
 
 function resolveClientIp(request: MfaRecoveryRequest): string {
@@ -69,9 +72,13 @@ export class MfaRecoveryController {
 
   @Post("rotate")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("rotateMfaRecoveryCodes")
   async rotate(
     @Req() request: MfaRecoveryRequest,
     @Res({ passthrough: true }) response: MfaRecoveryResponse,
+    @ContractHeaders("rotateMfaRecoveryCodes")
+    headers: RotateMfaRecoveryCodesHeaders,
   ): Promise<RotateResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -87,7 +94,7 @@ export class MfaRecoveryController {
     try {
       const result = await this.service.rotate({
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
         requestId,
       });
       response.setHeader("Cache-Control", "no-store");
@@ -100,10 +107,14 @@ export class MfaRecoveryController {
 
   @Post("consume")
   @HttpCode(200)
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("consumeMfaRecoveryCode")
   async consume(
     @Req() request: MfaRecoveryRequest,
     @Res({ passthrough: true }) response: MfaRecoveryResponse,
-    @Body() body: unknown,
+    @ContractBody("consumeMfaRecoveryCode") body: ConsumeMfaRecoveryCodeRequest,
+    @ContractHeaders("consumeMfaRecoveryCode")
+    headers: ConsumeMfaRecoveryCodeHeaders,
   ): Promise<ConsumeResponseDto | ErrorResponseDto> {
     const requestId = randomUUID();
     const originFailure = mutationSameOriginValidationError(request.headers);
@@ -116,22 +127,12 @@ export class MfaRecoveryController {
         requestId,
       };
     }
-    const parsed = parseConsumeBody(body);
-    if (parsed === undefined) {
-      response.status(422);
-      return {
-        code: "MFA_RECOVERY_VALIDATION_FAILED",
-        message: "恢复码消费请求体格式或字段长度无效",
-        details: {},
-        requestId,
-      };
-    }
     try {
       const result = await this.service.consume({
-        code: parsed.code,
+        code: body.code,
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
-        csrfToken: getHeader(request.headers, "x-csrf-token"),
+        csrfToken: headers["x-csrf-token"],
         requestId,
       });
       response.setHeader("Cache-Control", "no-store");

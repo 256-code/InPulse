@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Controller, Get, Req, Res } from "@nestjs/common";
 
+import { Operation } from "../http/contract.decorators.js";
 import { getHeader, type HttpHeaderBag } from "./csrf.http.js";
 import { MeService } from "./me.service.js";
 import type { CurrentUserProfile } from "./user-profile.repository.js";
@@ -30,6 +31,7 @@ interface ErrorResponseDto {
 export class MeController {
   constructor(private readonly meService: MeService) {}
 
+  @Operation("getCurrentUser")
   @Get("me")
   async getCurrentUser(
     @Req() request: MeControllerRequest,

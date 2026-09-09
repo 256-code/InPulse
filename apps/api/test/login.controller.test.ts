@@ -66,7 +66,8 @@ describe("LoginController", () => {
     const result = await controller.login(
       requestFixture({}),
       response as never,
-      { loginName: "alice", password: "secret" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(403);
@@ -74,23 +75,26 @@ describe("LoginController", () => {
     expect(service.calls).toBe(0);
   });
 
-  test("请求体无效时返回 422", async () => {
+  test("Pipe 解析默认挑战模式后进入服务层", async () => {
     const service = new FakeLoginService();
     const controller = new LoginController(service as never);
     const response = responseFixture();
 
     const result = await controller.login(
-      requestFixture(
-        { host: "localhost", origin: "http://localhost" },
-        { loginName: "" },
-      ),
+      requestFixture({
+        host: "localhost",
+        origin: "http://localhost",
+        "x-csrf-token": "A".repeat(43),
+      }),
       response as never,
-      { loginName: "" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
-    expect(response.status).toHaveBeenCalledWith(422);
-    expect(result).toMatchObject({ code: "LOGIN_VALIDATION_FAILED" });
-    expect(service.calls).toBe(0);
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(result).toMatchObject({ authState: "AUTHENTICATED" });
+    expect(service.calls).toBe(1);
+    expect(service.lastInput?.challengeMode).toBe("totp");
   });
 
   test("登录成功返回 CSRF Token、认证状态并设置 Cookie", async () => {
@@ -106,7 +110,8 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(service.calls).toBe(1);
@@ -139,7 +144,8 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(409);
@@ -168,7 +174,8 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(429);
@@ -196,7 +203,8 @@ describe("LoginController", () => {
         { ip: "::ffff:127.0.0.1" },
       ),
       response as never,
-      { loginName: "alice", password: "secret" },
+      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(service.lastInput?.clientIp).toBe("127.0.0.1");
