@@ -8,6 +8,7 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
+import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 
 interface NavigationItem {
   readonly key: string;
@@ -64,6 +65,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [reauthOpen, setReauthOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
@@ -262,6 +264,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
                         <small>{roleLabel}</small>
                       </div>
                     </div>
+                    {user?.isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          setReauthOpen(true);
+                        }}
+                      >
+                        <InpulseIcon name="shield" size={15} />
+                        管理员安全验证
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleNavigation("/settings")}
@@ -297,6 +311,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
         onClose={() => setPaletteOpen(false)}
         onNavigate={handleNavigation}
         onOpenSearch={handleOpenSearch}
+      />
+      <AdminReauthenticateModal
+        open={reauthOpen}
+        onClose={() => setReauthOpen(false)}
       />
     </>
   );

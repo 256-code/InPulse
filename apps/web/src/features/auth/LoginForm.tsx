@@ -1,45 +1,41 @@
 import React, { useState } from "react";
-import { Alert, Button, Form, Input } from "antd";
+import { Alert, Button, Checkbox, Form, Input } from "antd";
 import type { LoginRequest } from "@generated/api";
 import { describeLoginError } from "./auth-errors";
-import { useAuth, type MfaAuthState } from "./auth-context";
+import { useAuth } from "./auth-context";
+import { MfaChallengeForm } from "./MfaChallengeForm";
+import { MfaEnrollmentForm } from "./MfaEnrollmentForm";
+import { MfaRecoveryForm } from "./MfaRecoveryForm";
 
 interface LoginFormValues {
   readonly loginName: string;
   readonly password: string;
 }
 
-const mfaMessages: Readonly<Record<MfaAuthState, string>> = {
-  MFA_ENROLLMENT: "该账号需要先注册 TOTP MFA，当前版本尚未接入。",
-  MFA_CHALLENGE: "该账号需要完成 TOTP MFA 验证，当前版本尚未接入。",
-  RECOVERY_CHALLENGE: "该账号需要完成恢复码验证，当前版本尚未接入。",
-};
-
 export interface LoginFormProps {
   readonly onAuthenticated?: () => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
-  const { login } = useAuth();
+  const { login, logout, mfaState, pendingRecoveryCodes } = useAuth();
+  const [challengeMode, setChallengeMode] = useState<"totp" | "recovery">(
+    "totp",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [mfaMessage, setMfaMessage] = useState<string | null>(null);
 
   const handleFinish = async (values: LoginFormValues) => {
     const credentials: LoginRequest = {
       loginName: values.loginName.trim(),
       password: values.password,
-      challengeMode: "totp",
+      challengeMode,
     };
     setSubmitting(true);
     setErrorMessage(null);
-    setMfaMessage(null);
     try {
       const result = await login(credentials);
       if (result.kind === "authenticated") {
         onAuthenticated?.();
-      } else if (result.kind === "mfa-required") {
-        setMfaMessage(mfaMessages[result.authState]);
       }
     } catch (error) {
       setErrorMessage(describeLoginError(error));
@@ -47,6 +43,39 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
       setSubmitting(false);
     }
   };
+
+  const handleSwitchMode = async (mode: "totp" | "recovery") => {
+    setSubmitting(true);
+    setErrorMessage(null);
+    try {
+      await logout();
+      setChallengeMode(mode);
+    } catch (error) {
+      setErrorMessage(describeLoginError(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (mfaState === "MFA_ENROLLMENT" || pendingRecoveryCodes !== null) {
+    return <MfaEnrollmentForm onAuthenticated={onAuthenticated} />;
+  }
+  if (mfaState === "MFA_CHALLENGE") {
+    return (
+      <MfaChallengeForm
+        onAuthenticated={onAuthenticated}
+        onUseRecovery={() => void handleSwitchMode("recovery")}
+      />
+    );
+  }
+  if (mfaState === "RECOVERY_CHALLENGE") {
+    return (
+      <MfaRecoveryForm
+        onAuthenticated={onAuthenticated}
+        onUseTotp={() => void handleSwitchMode("totp")}
+      />
+    );
+  }
 
   return (
     <Form<LoginFormValues>
@@ -82,11 +111,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
           disabled={submitting}
         />
       </Form.Item>
+      <Form.Item style={{ marginBottom: 16 }}>
+        <Checkbox
+          checked={challengeMode === "recovery"}
+          onChange={(event) =>
+            setChallengeMode(event.target.checked ? "recovery" : "totp")
+          }
+          disabled={submitting}
+        >
+          使用恢复码登录（无法访问验证器时可选）
+        </Checkbox>
+      </Form.Item>
       {errorMessage ? (
         <Alert showIcon type="error" message={errorMessage} />
-      ) : null}
-      {mfaMessage ? (
-        <Alert showIcon type="warning" message={mfaMessage} />
       ) : null}
       <Button
         type="primary"

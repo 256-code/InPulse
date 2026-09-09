@@ -31,7 +31,7 @@ describe("AppLayout", () => {
     readNotification: vi.fn().mockResolvedValue(undefined),
   } as unknown as InpulseApiClient;
 
-  function renderLayout(ui: React.ReactElement) {
+  function renderLayout(ui: React.ReactElement, isAdmin = false) {
     return render(
       <QueryClientProvider
         client={
@@ -49,7 +49,7 @@ describe("AppLayout", () => {
               name: "开发者 C",
               email: null,
               avatarUrl: null,
-              isAdmin: false,
+              isAdmin,
               status: "ACTIVE",
             },
           }}
@@ -162,6 +162,27 @@ describe("AppLayout", () => {
     await user.click(screen.getByRole("button", { name: "查看全部通知" }));
     expect(
       await screen.findByText("Notifications content"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens admin reauthentication from the account menu", async () => {
+    const user = userEvent.setup();
+    renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+      true,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "账户菜单" }));
+    await user.click(screen.getByRole("button", { name: "管理员安全验证" }));
+    expect(
+      await screen.findByRole("dialog", { name: "管理员安全验证" }),
     ).toBeInTheDocument();
   });
 });
