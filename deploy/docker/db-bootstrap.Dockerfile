@@ -12,6 +12,7 @@ ARG PGROONGA_DEBIAN_VERSION=4.0.8-1
 ARG LIBGROONGA_DEBIAN_VERSION=16.1.0-1
 
 RUN apt-get update \
+ && apt-get install -y --only-upgrade libssl3t64 openssl openssl-provider-legacy \
  && apt-get install -y -V ca-certificates lsb-release wget postgresql-common \
  && wget -q -O /usr/share/keyrings/groonga-archive-keyring.asc https://packages.groonga.org/debian/groonga-archive-keyring.asc \
  && echo "${GROONGA_KEYRING_SHA256}  /usr/share/keyrings/groonga-archive-keyring.asc" | sha256sum -c - \
@@ -28,7 +29,8 @@ RUN apt-get update \
       postgresql-18-pgdg-pgroonga=${PGROONGA_DEBIAN_VERSION} \
       libgroonga0=${LIBGROONGA_DEBIAN_VERSION} \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -f /usr/local/bin/gosu
 
 COPY database/bootstrap/000_roles.sql /docker-entrypoint-initdb.d/000_roles.sql
 COPY database/bootstrap/010_passwords.sql /docker-entrypoint-initdb.d/010_passwords.sql

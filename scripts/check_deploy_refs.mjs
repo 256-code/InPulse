@@ -361,6 +361,23 @@ async function checkDockerfiles() {
     }
   }
 
+  const dbBootstrap = await readFile(
+    "deploy/docker/db-bootstrap.Dockerfile",
+    "utf8",
+  ).catch(() => "");
+  if (
+    !/apt-get\s+install\s+-y\s+--only-upgrade\s+libssl3t64/.test(dbBootstrap)
+  ) {
+    problems.push(
+      "deploy/docker/db-bootstrap.Dockerfile: runtime must upgrade OpenSSL from Debian security",
+    );
+  }
+  if (!/rm\s+-f\s+\/usr\/local\/bin\/gosu/.test(dbBootstrap)) {
+    problems.push(
+      "deploy/docker/db-bootstrap.Dockerfile: runtime must remove official gosu binary",
+    );
+  }
+
   return problems;
 }
 
