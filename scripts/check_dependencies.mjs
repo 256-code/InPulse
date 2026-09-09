@@ -15,6 +15,7 @@ const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs", ".cjs", ".js"]);
 const SKIP_DIRECTORIES = new Set(["node_modules", "dist", "coverage", ".git"]);
 const SCAN_ROOTS = [
   "apps/api/src",
+  "apps/e2e",
   "apps/web/src",
   "packages/api-contract/src",
   "packages/api-contract/scripts",

@@ -1,0 +1,93 @@
+import React from "react";
+import { describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  ApiError,
+  type CreateProjectResponse,
+  type InpulseApiClient,
+} from "@generated/api";
+import { describeCreateProjectError, useCreateProject } from "./project-query";
+
+const createdProject: CreateProjectResponse = {
+  project: {
+    id: 7,
+    code: "SHOP",
+    name: "商城系统",
+    description: "商城项目描述",
+    status: "ACTIVE",
+    rowVersion: 1,
+    createdBy: 1,
+    createdAt: "2026-09-09T00:00:00.000Z",
+    updatedAt: "2026-09-09T00:00:00.000Z",
+  },
+  members: [
+    { userId: 1, status: "ACTIVE", joinedAt: "2026-09-09T00:00:00.000Z" },
+  ],
+  unclassifiedModuleId: 12,
+};
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return {
+    queryClient,
+    wrapper: ({ children }: { readonly children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  };
+}
+
+describe("project creation query", () => {
+  it("issues CSRF and sends an idempotency key", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const createProject = vi.fn().mockResolvedValue(createdProject);
+    const client = {
+      issueCsrfToken,
+      createProject,
+    } as unknown as InpulseApiClient;
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useCreateProject({ client }), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        name: "商城系统",
+        code: "SHOP",
+        description: "商城项目描述",
+        memberIds: [],
+      });
+    });
+
+    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
+    expect(issueCsrfToken).toHaveBeenCalledTimes(1);
+    expect(createProject).toHaveBeenCalledWith(
+      {
+        name: "商城系统",
+        code: "SHOP",
+        description: "商城项目描述",
+        memberIds: [],
+      },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-1",
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it("maps the server conflict without leaking internal messages", () => {
+    const error = new ApiError(409, {
+      code: "PROJECT_BOOTSTRAP_CONFLICT",
+      message: "internal-conflict-message",
+      details: {},
+      requestId: "request-1",
+    });
+    const message = describeCreateProjectError(error);
+    expect(message).toBe("项目编码已存在或创建请求发生冲突，请刷新后重试。");
+    expect(message).not.toContain("internal-conflict-message");
+  });
+});

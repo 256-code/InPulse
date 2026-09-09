@@ -25,8 +25,8 @@
 | `login` | 仅有效 `PREAUTH` + CSRF 允许 | 409 | 409 | 409 | 401 | 只消费匿名预认证 Session 与其 CSRF；已有认证或受限 Session 必须先登出/清 Cookie，再签发新预认证 CSRF；管理员成功后进入对应 MFA challenge 或完整 Session |
 | `logout` | 204 | 204 | 204 | 204 | 204 | 有效 Session 时要求其 CSRF 并条件撤销；Session 无效、已撤销或首次响应丢失后的重试仅在同源 Origin/Referer 与 Fetch Metadata 通过时清 Cookie 并返回 204，不执行状态写 |
 | `startMfaEnrollment` | 401 | 403 | 仅 `MFA_ENROLLMENT` 状态允许 | 409 | 401 | 仅尚未启用 MFA 且已通过密码的管理员；按 user → factor → Session 锁序条件递增用户级 generation 并创建新 pending，同一旧 generation 至多一个 2xx |
-| `confirmMfaEnrollment` | 401 | 403 | 仅存在 pending enrollment 时允许 | 409 | 401 | 携带 expected 用户级 generation；按相同锁序验证对应 Secret 与未使用的当前 TOTP time-step，启用 MFA、签发恢复码，并原子轮换为完整 Session 与新 CSRF |
-| `verifyMfa` | 401 | 403 | 仅 `MFA_CHALLENGE` 状态允许 | 409 | 401 | 密码阶段已成功；条件接受未使用的 TOTP time-step，轮换为完整 Session |
+| `confirmMfaEnrollment` | 401 | 403 | 仅存在 pending enrollment 时允许 | 409 | 401 | 携带 expected 用户级 generation；按相同锁序验证对应 Secret 与未使用的当前 TOTP time-step，启用 MFA、签发恢复码，并原子轮换为完整 Session 与新 CSRF；错误验证码按用户/IP/全局三层限流，达到阈值返回 429 |
+| `verifyMfa` | 401 | 403 | 仅 `MFA_CHALLENGE` 状态允许 | 409 | 401 | 密码阶段已成功；仅接受当前 TOTP time-step ±1 且未使用过的验证码，按 user → factor → Session 锁序，在同一事务升级为完整 Session、刷新 `last_accepted_step` 并签发新 CSRF；错误验证码按用户/IP/全局三层持久化限流，达到阈值返回 429 |
 | `reauthenticateAdmin` | 401 | 403 | 403 | 允许 | 401 | 完整管理员 Session + 密码 + 未使用的当前 TOTP time-step；以同一服务端事务时间原子更新 `reauthenticated_at` 与 `mfa_verified_at` |
 | `rotateMfaRecoveryCodes` | 401 | 403 | 403 | 允许 | 401 | 5 分钟内完成双因子重认证并消费该次重认证签发的一次性 rotation generation；同一 generation 至多一个 2xx，原子失效旧 Hash 后只展示一次新码 |
 | `consumeMfaRecoveryCode` | 401 | 403 | 仅 `RECOVERY_CHALLENGE` 状态允许 | 409 | 401 | 密码阶段已成功；原子消费恢复码 Hash、失效旧代码集并轮换为完整 Session |
@@ -51,6 +51,7 @@
 | 移除普通成员或项目创建者 | 401 | 403 | 404 | 404 | 401 | 允许 | 密码与当前 TOTP 重认证；只修改成员历史；`created_by` 不变；系统管理员仍保留全局权限；写审计 |
 | 原始审计查询或导出 | 401 | 403 | 403 | 403 | 401 | 允许 | 重认证；使用 audit_reader；读取本身写审计 |
 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 401 | 403 | 403 | 403 | 401 | 允许 | 重认证并填写原因；写审计 |
+| 重置另一名系统管理员 MFA（`resetAdminMfa` · `POST /api/v1/auth/admin/mfa-reset`） | 401 | 403 | 403 | 403 | 401 | 允许 | 仅完整系统管理员 Session 且 5 分钟内完成密码 + 当前 TOTP 双因子重认证；目标必须是另一名 `ACTIVE` 且已启用 TOTP 的系统管理员，且可用 MFA 管理员数大于 1；同一事务禁用目标因子、失效未使用恢复码、递增 `auth_version`、撤销目标全部 Session 并写审计；CSRF 与幂等键必填；成功 204，目标不存在 404，非管理员/目标未启用 403，自重置、最后一名 MFA 管理员或状态冲突 409，字段/请求头无效 422 |
 | 用户启停、强退、管理员管理 | 401 | 不适用 | 不适用 | 不适用 | 401 | 允许 | 重认证；不能留下无 MFA 管理员的失控状态 |
 
 ## 强制规则

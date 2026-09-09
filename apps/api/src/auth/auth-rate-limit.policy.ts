@@ -1,4 +1,4 @@
-export type AuthRateLimitBucketType = "ACCOUNT" | "IP" | "GLOBAL";
+export type AuthRateLimitBucketType = "ACCOUNT" | "IP" | "GLOBAL" | "MFA";
 
 export interface AuthRateLimitRule {
   readonly bucketType: AuthRateLimitBucketType;

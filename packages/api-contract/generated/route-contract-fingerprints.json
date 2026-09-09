@@ -17,6 +17,12 @@
       "fingerprint": "bfcc90d99b2e6c0158619d46792aa3c219861966b9495b48d4dffc91779a1a43"
     }
   ],
+  "resetAdminMfa": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "f3cad65d2a9b14e9619af1de69ac8d046a9144e339fa4173391f2d575a753b73"
+    }
+  ],
   "unreadNotification": [
     {
       "version": "1.0.0",

@@ -108,6 +108,102 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "startMfaEnrollment",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 MFA_ENROLLMENT 且 generation 匹配",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
+    operationId: "confirmMfaEnrollment",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 MFA_ENROLLMENT 且存在匹配 pending 与未使用 TOTP time-step",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
+    operationId: "verifyMfa",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 MFA_CHALLENGE 且存在未使用的 TOTP time-step",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
+    operationId: "reauthenticateAdmin",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 AUTHENTICATED，密码与 ACTIVE 因子未使用当前 TOTP time-step 均通过",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
+    operationId: "rotateMfaRecoveryCodes",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 AUTHENTICATED，最近5分钟内完成双因子重认证且该次 rotation generation 未消费",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
+    operationId: "consumeMfaRecoveryCode",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 为 RECOVERY_CHALLENGE 且存在未使用的恢复码",
+        deniedWith: 409,
+      },
+    },
+  },
+  {
     operationId: "getCurrentUser",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
@@ -116,6 +212,22 @@ export const permissionMatrix = [
       已移除成员: { kind: "allow" },
       停用用户: { kind: "deny", status: 401 },
       系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "resetAdminMfa",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "系统管理员且当前 Session 最近5分钟内完成双因子重认证，目标是另一名已启用 TOTP 的 ACTIVE 系统管理员，且可用 MFA 管理员数大于1",
+        deniedWith: 409,
+      },
     },
   },
   {

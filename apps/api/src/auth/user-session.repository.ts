@@ -12,6 +12,17 @@ export interface ValidUserSession {
   readonly absoluteExpiresAt: Date;
 }
 
+export interface RecoveryRotationSessionSnapshot {
+  readonly id: number;
+  readonly userId: number;
+  readonly authVersionAtIssue: number;
+  readonly authState: UserAuthState;
+  readonly recoveryRotationGeneration: number;
+  readonly recoveryRotationConsumedGeneration: number;
+  readonly reauthenticatedAt: Date;
+  readonly mfaVerifiedAt: Date;
+}
+
 export interface UserSessionInsert {
   readonly userId: number;
   readonly tokenHash: Buffer;
@@ -36,6 +47,35 @@ export interface UserSessionRepository {
     tx: TransactionContext,
     tokenHashes: readonly Buffer[],
   ): Promise<ValidUserSession | undefined>;
+  findValidUnlockedByTokenHashes(
+    tx: TransactionContext,
+    tokenHashes: readonly Buffer[],
+  ): Promise<ValidUserSession | undefined>;
+  lockById(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<ValidUserSession | undefined>;
+  lockByIdWithRotation(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<RecoveryRotationSessionSnapshot | undefined>;
+  refreshReauthentication(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean>;
+  consumeRecoveryRotation(
+    tx: TransactionContext,
+    sessionId: number,
+    generation: number,
+  ): Promise<boolean>;
+  upgradeToAuthenticated(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean>;
+  upgradeRecoveryChallengeToAuthenticated(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean>;
   revoke(tx: TransactionContext, sessionId: number): Promise<boolean>;
   revokeAllForUser(tx: TransactionContext, userId: number): Promise<number>;
 }
@@ -127,6 +167,195 @@ export class PostgresUserSessionRepository implements UserSessionRepository {
           idleExpiresAt: new Date(row.idleExpiresAt),
           absoluteExpiresAt: new Date(row.absoluteExpiresAt),
         };
+  }
+
+  async findValidUnlockedByTokenHashes(
+    tx: TransactionContext,
+    tokenHashes: readonly Buffer[],
+  ): Promise<ValidUserSession | undefined> {
+    if (tokenHashes.length === 0) {
+      return undefined;
+    }
+    const rows = (await tx.sql`
+      SELECT us.id,
+             us.user_id AS "userId",
+             us.auth_version_at_issue AS "authVersionAtIssue",
+             us.auth_state AS "authState",
+             us.idle_expires_at AS "idleExpiresAt",
+             us.absolute_expires_at AS "absoluteExpiresAt"
+        FROM app.user_sessions AS us
+        JOIN app.users AS u ON u.id = us.user_id
+       WHERE us.token_hash IN ${tx.sql(tokenHashes)}
+         AND us.revoked_at IS NULL
+         AND u.disabled_at IS NULL
+         AND u.status = 'ACTIVE'
+         AND u.auth_version = us.auth_version_at_issue
+         AND us.idle_expires_at > now()
+         AND us.absolute_expires_at > now()
+       ORDER BY us.id
+       LIMIT 1
+    `) as unknown as readonly (Omit<
+      ValidUserSession,
+      "idleExpiresAt" | "absoluteExpiresAt"
+    > & {
+      readonly idleExpiresAt: string;
+      readonly absoluteExpiresAt: string;
+    })[];
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : {
+          ...row,
+          idleExpiresAt: new Date(row.idleExpiresAt),
+          absoluteExpiresAt: new Date(row.absoluteExpiresAt),
+        };
+  }
+
+  async lockById(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<ValidUserSession | undefined> {
+    const rows = (await tx.sql`
+      SELECT us.id,
+             us.user_id AS "userId",
+             us.auth_version_at_issue AS "authVersionAtIssue",
+             us.auth_state AS "authState",
+             us.idle_expires_at AS "idleExpiresAt",
+             us.absolute_expires_at AS "absoluteExpiresAt"
+        FROM app.user_sessions AS us
+        JOIN app.users AS u ON u.id = us.user_id
+       WHERE us.id = ${sessionId}
+         AND us.revoked_at IS NULL
+         AND u.disabled_at IS NULL
+         AND u.status = 'ACTIVE'
+         AND u.auth_version = us.auth_version_at_issue
+         AND us.idle_expires_at > now()
+         AND us.absolute_expires_at > now()
+       FOR UPDATE OF us
+    `) as unknown as readonly (Omit<
+      ValidUserSession,
+      "idleExpiresAt" | "absoluteExpiresAt"
+    > & {
+      readonly idleExpiresAt: string;
+      readonly absoluteExpiresAt: string;
+    })[];
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : {
+          ...row,
+          idleExpiresAt: new Date(row.idleExpiresAt),
+          absoluteExpiresAt: new Date(row.absoluteExpiresAt),
+        };
+  }
+
+  async lockByIdWithRotation(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<RecoveryRotationSessionSnapshot | undefined> {
+    const rows = (await tx.sql`
+      SELECT us.id,
+             us.user_id AS "userId",
+             us.auth_version_at_issue AS "authVersionAtIssue",
+             us.auth_state AS "authState",
+             us.recovery_rotation_generation AS "recoveryRotationGeneration",
+             us.recovery_rotation_consumed_generation AS "recoveryRotationConsumedGeneration",
+             us.reauthenticated_at AS "reauthenticatedAt",
+             us.mfa_verified_at AS "mfaVerifiedAt"
+        FROM app.user_sessions AS us
+        JOIN app.users AS u ON u.id = us.user_id
+       WHERE us.id = ${sessionId}
+         AND us.revoked_at IS NULL
+         AND u.disabled_at IS NULL
+         AND u.status = 'ACTIVE'
+         AND u.auth_version = us.auth_version_at_issue
+         AND us.idle_expires_at > now()
+         AND us.absolute_expires_at > now()
+       FOR UPDATE OF us
+    `) as unknown as readonly (Omit<
+      RecoveryRotationSessionSnapshot,
+      "reauthenticatedAt" | "mfaVerifiedAt"
+    > & {
+      readonly reauthenticatedAt: string;
+      readonly mfaVerifiedAt: string;
+    })[];
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : {
+          ...row,
+          reauthenticatedAt: new Date(row.reauthenticatedAt),
+          mfaVerifiedAt: new Date(row.mfaVerifiedAt),
+        };
+  }
+
+  async refreshReauthentication(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.user_sessions
+         SET reauthenticated_at = now(),
+             mfa_verified_at = now(),
+             recovery_rotation_generation = recovery_rotation_generation + 1,
+             last_seen_at = now()
+       WHERE id = ${sessionId}
+         AND revoked_at IS NULL
+         AND auth_state = 'AUTHENTICATED'
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
+  }
+
+  async consumeRecoveryRotation(
+    tx: TransactionContext,
+    sessionId: number,
+    generation: number,
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.user_sessions
+         SET recovery_rotation_consumed_generation = ${generation},
+             last_seen_at = now()
+       WHERE id = ${sessionId}
+         AND revoked_at IS NULL
+         AND auth_state = 'AUTHENTICATED'
+         AND recovery_rotation_generation = ${generation}
+         AND recovery_rotation_consumed_generation < ${generation}
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
+  }
+
+  async upgradeToAuthenticated(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.user_sessions
+         SET auth_state = 'AUTHENTICATED',
+             last_seen_at = now()
+       WHERE id = ${sessionId}
+         AND revoked_at IS NULL
+         AND auth_state = 'MFA_CHALLENGE'
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
+  }
+
+  async upgradeRecoveryChallengeToAuthenticated(
+    tx: TransactionContext,
+    sessionId: number,
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.user_sessions
+         SET auth_state = 'AUTHENTICATED',
+             last_seen_at = now()
+       WHERE id = ${sessionId}
+         AND revoked_at IS NULL
+         AND auth_state = 'RECOVERY_CHALLENGE'
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    return rows.length > 0;
   }
 
   async revoke(tx: TransactionContext, sessionId: number): Promise<boolean> {
