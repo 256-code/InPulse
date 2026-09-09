@@ -51,11 +51,18 @@ export function deriveProjectCardShortname(code: string): string {
 
 export function toCreateProjectRequest(
   values: ProjectFormValues,
+  selectedMemberIds: readonly number[] = [],
 ): CreateProjectRequest {
   return {
     name: values.name,
     code: values.code,
     description: values.description,
-    memberIds: [],
+    memberIds: Array.from(
+      new Set(
+        selectedMemberIds.filter(
+          (memberId) => Number.isSafeInteger(memberId) && memberId > 0,
+        ),
+      ),
+    ).sort((left, right) => left - right),
   };
 }

@@ -2,11 +2,15 @@ import type { ThemeConfig } from "antd";
 
 export const appTheme: ThemeConfig = {
   token: {
-    colorPrimary: "#2776db",
-    colorLink: "#2776db",
-    colorText: "#16263d",
-    colorBgLayout: "#f5f7fb",
-    borderRadius: 7,
+    colorPrimary: "#1467d8",
+    colorLink: "#1467d8",
+    colorText: "#132238",
+    colorTextSecondary: "#718096",
+    colorBgLayout: "#f4f7fb",
+    colorBgContainer: "#ffffff",
+    colorBorder: "#e1e8f0",
+    colorBorderSecondary: "#e1e8f0",
+    borderRadius: 8,
     fontSize: 13,
     fontFamily: [
       "-apple-system",

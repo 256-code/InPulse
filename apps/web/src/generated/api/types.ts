@@ -169,3 +169,14 @@ export type SearchQueryRequest = {
 };
 
 export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+
+export type UserDirectoryItem = {
+  readonly id: number;
+  readonly name: string;
+  readonly avatarUrl: (string | null);
+  readonly isAdmin: boolean;
+};
+
+export type UserDirectoryResponse = {
+  readonly items: readonly UserDirectoryItem[];
+};

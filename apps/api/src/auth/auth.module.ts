@@ -25,6 +25,9 @@ import { RequireReauthGuard } from "./require-reauth.guard.js";
 import { SessionAuthService } from "./session-auth.service.js";
 import { UserAuthInvalidationService } from "./user-auth-invalidation.service.js";
 import { PostgresUserProfileRepository } from "./user-profile.repository.js";
+import { UserDirectoryController } from "./user-directory.controller.js";
+import { PostgresUserDirectoryRepository } from "./user-directory.repository.js";
+import { UserDirectoryService } from "./user-directory.service.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。
@@ -59,12 +62,15 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
     RequireReauthGuard,
     UserAuthInvalidationService,
     PostgresUserProfileRepository,
+    PostgresUserDirectoryRepository,
+    UserDirectoryService,
   ],
   controllers: [
     CsrfController,
     LoginController,
     LogoutController,
     MeController,
+    UserDirectoryController,
   ],
   exports: [
     SESSION_HMAC_KEYRING,

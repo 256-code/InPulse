@@ -42,8 +42,10 @@
 | PROJ-CREATE-005 | 单元 | 项目编码派生 | `deriveCode`/`resolveProjectCode` 覆盖中文归一、分隔符合并、数字前缀补 P、空名/全符号拒绝与显式编码校验 | 本机 7/7 通过（2026-09-08） |
 | PROJ-CREATE-006 | 单元 | 项目创建控制器边界 | 浏览器完整同源请求头只提取 `x-csrf-token`，严格 Schema 不再因 Host/Origin/Sec-Fetch 等额外头误报 422；缺失 Token 仍返回 422 且不进入幂等事务 | 本地通过（`project-bootstrap.controller.test.ts` 2 例，2026-09-09） |
 | PROJ-CREATE-007 | 单元 | 审计 HMAC keyring 测试路径 | `NODE_ENV=test` 且显式设置 `AUDIT_HMAC_KEYRING_TEST_PATH=1` 时才允许临时 keyring；生产仍限制 `/run/secrets/*` | 本地通过（`audit-keyring.test.ts` 3 例，2026-09-09） |
-| PROJ-CREATE-008 | 前端单元 | 项目创建表单与页面 | RHF + Zod 校验、CSRF/幂等 Key、错误映射、创建成功与入口交互均通过生成客户端消费契约 | 本地通过（`project-query.test.tsx`、`CreateProjectModal.test.tsx`、`ProjectsPage.test.tsx` 等，前端 19 文件 45 例） |
-| PROJ-CREATE-009 | Playwright E2E | 项目创建关键路径 | 登录 → `/projects` → RHF 表单创建 → 项目动态 → 搜索到项目 → 站内通知 | 本地 6/6 通过（2026-09-09） |
+| PROJ-CREATE-008 | 前端单元 | 项目创建表单与页面 | RHF + Zod 校验、CSRF/幂等 Key、错误映射、创建成功与入口交互均通过生成客户端消费契约 | 本地通过（`project-query.test.tsx`、`CreateProjectModal.test.tsx`、`ProjectsPage.test.tsx` 等，前端 20 文件 48 例） |
+| PROJ-CREATE-009 | Playwright E2E | 项目创建关键路径 | 登录 → `/projects` → 选择 ACTIVE 第二成员 → RHF 表单创建 → 项目动态 → 搜索到项目 → 创建者与成员站内通知 | 本地 6/6 通过（2026-09-09，成员选择与第二账号通知已覆盖） |
+| PROJ-CREATE-010 | API 单元 + PostgreSQL 集成 | 用户目录接口 | `GET /api/v1/users` 从 Session 解析身份，只返回 `id/name/avatarUrl/isAdmin`，过滤 DISABLED/`disabled_at` 用户，匿名或停用 Session 返回 401，不暴露登录名、邮箱或密码字段；响应 `no-store` | 本地通过（Controller 3 例；Service/Repository 2 例；API 集成 22 文件 89 例） |
+| PROJ-CREATE-011 | 前端单元 | 成员选择 | 成员目录经生成客户端读取，创建者不可选择且被排除，选择结果去重排序后写入 `memberIds`，目录 401/429 错误不泄露内部信息 | 本地通过（`user-directory-query.test.tsx`、`CreateProjectModal.test.tsx`） |
 
 实现文件：`apps/api/test/project-bootstrap.integration.test.ts`（4 例）与
 `apps/api/test/project-code.test.ts`（7 例）。前者需 `TEST_DATABASE_URL` 指向已安装
@@ -82,7 +84,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、项目创建到动态/搜索/通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 6/6 通过（项目创建首条业务关键路径已覆盖）；其余完整关键路径 Required |
+| CI-017 | E2E | Playwright 关键路径 | 登录、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 6/6 通过（项目创建首条业务关键路径已覆盖）；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
 
@@ -262,11 +264,12 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | NOT-004 | 单元测试 | 通知控制器与查询边界 | 匿名与 CSRF 失败映射 401/403；查询只使用当前用户；字符串通知 ID 正确转换；未读数与 422、404、500 均按统一错误模型返回 | 本地通过（`notifications.controller.test.ts` 4 例） |
 | FE-008 | 单元测试 | 项目动态前端纵切片 | `features/activity` 通过生成客户端获取项目动态、传递服务端游标并展示脱敏项与项目范围 | 本地通过（`activity-query.test.tsx`、`ActivityPageView.test.tsx` 2 例） |
 | FE-009 | 单元测试 | 通知前端纵切片 | 铃铛显示未读数并导航 `/notifications`；通知页通过生成客户端读取、按路径跳转、标记已读/未读，写操作带 CSRF 与幂等键 | 本地通过（`notification-query.test.tsx`、`NotificationsPageView.test.tsx`、`AppLayout.test.tsx` 共 8 例） |
-| CONTRACT-001 | 契约与权限 | F-27/F-28 路由登记 | 12 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；GitHub Actions 尚未执行 |
+| FE-010 | 单元测试 | 设计师最新视觉迁移 | 公共应用壳采用最新 token 与深色侧栏/白色顶栏/面包屑；项目页与创建弹窗按设计师视觉呈现成员选择、创建规则与操作区；不引入额外样式依赖 | 本地通过（Web 20 文件 48 例；E2E 6/6；GitHub Actions 尚未执行） |
+| CONTRACT-001 | 契约与权限 | F-27/F-28 与用户目录路由登记 | 16 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；GitHub Actions 尚未执行 |
 
-后端本次新增/扩展的真实 PostgreSQL 集成共 20 例（活动投影 4、活动查询 4、通知状态 6、HTTP 集成 4、Session 回归 2），API 集成全量 18 文件 78 例通过；前端全量 16 文件 39 例通过。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
+后端本阶段 F-27/F-28 与用户目录相关的真实 PostgreSQL 集成共 89 例（22 文件）；前端本阶段搜索、活动、通知、项目创建与视觉迁移相关单测共 48 例（20 文件）。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
 >
-> 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建 → 动态 → 搜索 → 通知。API 单测 38 文件 177 例、前端 19 文件 45 例、API 集成 21 文件 87 例、database 集成 13 例、Playwright 6/6 均本地通过；GitHub Actions 尚未执行。
+> 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建（含选择第二成员）→ 动态 → 搜索 → 创建者与成员通知。同一批次新增 `GET /api/v1/users` 用户目录与设计师最新视觉迁移。API 单测 39 文件 180 例、前端 20 文件 48 例、API 集成 22 文件 89 例、database 集成 13 例、Playwright 6/6 均本地通过；GitHub Actions 尚未执行。
 
 ## 维护规则
 

@@ -183,6 +183,7 @@ export class HealthController {
       "POST /api/v1/auth/login",
       "POST /api/v1/auth/logout",
       "GET /api/v1/me",
+      "GET /api/v1/users",
       "GET /api/v1/health",
       "GET /api/v1/health/live",
       "GET /api/v1/health/ready",

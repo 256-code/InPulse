@@ -1,16 +1,23 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Avatar,
   Button,
   Checkbox,
+  Empty,
   Form,
   Input,
   Modal,
   Space,
+  Spin,
   Typography,
 } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
+import {
+  useUserDirectoryQuery,
+  describeUserDirectoryError,
+} from "@features/users/user-directory-query";
 import {
   deriveProjectCardShortname,
   normalizeProjectCode,
@@ -28,6 +35,7 @@ const { Text } = Typography;
 export interface CreateProjectModalProps {
   readonly open: boolean;
   readonly creatorName: string;
+  readonly creatorUserId?: number | undefined;
   readonly client?: InpulseApiClient | undefined;
   readonly onClose: () => void;
   readonly onCreated: (response: CreateProjectResponse) => void;
@@ -42,6 +50,7 @@ const defaultValues: ProjectFormValues = {
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   open,
   creatorName,
+  creatorUserId,
   client,
   onClose,
   onCreated,
@@ -59,12 +68,19 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     mode: "onSubmit",
   });
   const mutation = useCreateProject({ client });
+  const directory = useUserDirectoryQuery({ client, enabled: open });
+  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   const code = watch("code") ?? "";
   const cardShortname = deriveProjectCardShortname(code);
+  const candidates = useMemo(
+    () => (directory.data ?? []).filter((user) => user.id !== creatorUserId),
+    [creatorUserId, directory.data],
+  );
 
   useEffect(() => {
     if (open) {
       reset(defaultValues);
+      setSelectedMemberIds([]);
       mutation.reset();
     }
   }, [open]);
@@ -82,7 +98,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
     try {
       const response = await mutation.mutateAsync(
-        toCreateProjectRequest(parsed.data),
+        toCreateProjectRequest(parsed.data, selectedMemberIds),
       );
       mutation.reset();
       onCreated(response);
@@ -98,22 +114,31 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
   };
 
+  const toggleMember = (memberId: number) => {
+    setSelectedMemberIds((current) =>
+      current.includes(memberId)
+        ? current.filter((id) => id !== memberId)
+        : [...current, memberId],
+    );
+  };
+
   return (
     <Modal
+      className="catalog-modal"
       centered
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
       onCancel={handleCancel}
       title={
-        <div>
+        <div className="drawer-header">
           <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
             项目是顶层业务容器
           </Text>
-          <span>新建项目</span>
+          <h2 style={{ margin: "6px 0 0" }}>新建项目</h2>
         </div>
       }
-      width={720}
+      width={760}
       footer={null}
     >
       <form
@@ -210,26 +235,70 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             )}
           />
           <Form.Item label="初始项目成员">
-            <div
-              style={{
-                border: "1px solid #dce4ee",
-                borderRadius: 8,
-                padding: "12px 16px",
-                background: "#f8fafc",
-              }}
-            >
-              <Checkbox checked disabled>
-                {creatorName}（创建者，不可取消）
-              </Checkbox>
-              <Text
-                type="secondary"
-                style={{ display: "block", marginTop: 8, fontSize: 12 }}
-              >
-                当前版本仅支持创建者自动成为初始成员；用户选择入口将在成员查询
-                API 就绪后接入。
+            <div className="impact-fieldset">
+              <div className="check-list">
+                <span className="creator-locked">
+                  <Checkbox checked disabled aria-label="创建者（不可取消）">
+                    {creatorName}（创建者，不可取消）
+                  </Checkbox>
+                </span>
+                {directory.isPending ? (
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <Spin size="small" description="正在加载成员..." />
+                  </div>
+                ) : directory.isError ? (
+                  <Alert
+                    showIcon
+                    type="error"
+                    message={describeUserDirectoryError(directory.error)}
+                  />
+                ) : candidates.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="暂无其他启用用户"
+                  />
+                ) : (
+                  candidates.map((user) => (
+                    <div className="member-option" key={user.id}>
+                      <Checkbox
+                        checked={selectedMemberIds.includes(user.id)}
+                        aria-label={`选择成员：${user.name}`}
+                        onChange={() => toggleMember(user.id)}
+                      />
+                      <Avatar size={24} className="person-avatar">
+                        {user.name.slice(0, 1)}
+                      </Avatar>
+                      <span className="member-name">{user.name}</span>
+                      <span className="member-role">
+                        {user.isAdmin ? "系统管理员" : "项目成员"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                已选择 {selectedMemberIds.length}{" "}
+                位其他成员；创建者自动成为活跃成员，
+                系统管理员即使不在成员列表也会自动拥有项目访问权。
               </Text>
             </div>
           </Form.Item>
+          <aside className="writing-context">
+            <strong>创建规则</strong>
+            <dl>
+              <dt>创建者</dt>
+              <dd>自动成为活跃成员，创建流程中不可取消</dd>
+              <dt>编码</dt>
+              <dd>创建后不可修改，仅用于溯源</dd>
+              <dt>未分类模块</dt>
+              <dd>创建成功后自动生成，可继续拆分</dd>
+              <dt>系统管理员</dt>
+              <dd>自动拥有项目访问权，即使不在成员列表</dd>
+            </dl>
+            <p className="permission-hint">
+              项目创建与成员初始化在同一事务中完成，成员创建成功后收到加入通知。
+            </p>
+          </aside>
           {mutation.error ? (
             <Alert
               showIcon
@@ -239,7 +308,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             />
           ) : null}
         </Form>
-        <Space style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Space
+          className="calm-action-footer"
+          style={{ display: "flex", justifyContent: "flex-end" }}
+        >
           <Button disabled={mutation.isPending} onClick={handleCancel}>
             取消
           </Button>

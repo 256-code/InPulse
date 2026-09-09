@@ -21,6 +21,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
     <Badge count={unreadCount} offset={[-4, 4]} overflowCount={99}>
       <Button
         type="text"
+        className="notification-button"
         aria-label="通知"
         onClick={onOpen}
         style={{ minWidth: 30, minHeight: 30, color: "#718399" }}
