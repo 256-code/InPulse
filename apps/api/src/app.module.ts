@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ModulesManagementModule } from "./modules/modules/modules-management.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { DatabaseModule } from "./database/database.module.js";
@@ -20,6 +21,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ActivityModule,
       NotificationsModule,
       ProjectCreateModule,
+      ModulesManagementModule,
     ]
   : [];
 

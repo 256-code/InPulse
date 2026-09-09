@@ -39,6 +39,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
       createdProject={createdProject}
       onCreated={handleCreated}
       onOpenActivity={handleOpenActivity}
+      onOpenModules={(projectId) => navigate(`/projects/${projectId}/modules`)}
       onSearch={handleSearch}
       {...(client ? { client } : {})}
     />

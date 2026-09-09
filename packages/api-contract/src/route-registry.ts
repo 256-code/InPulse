@@ -1,4 +1,5 @@
 import type { SchemaName } from "./schema-registry.js";
+import { moduleRoutes } from "./module-routes.js";
 
 /** 技术设计 4.1：HTTP API 统一前缀。 */
 export const apiBasePath = "/api/v1";
@@ -125,6 +126,7 @@ export interface RouteDefinition {
  * validateRouteRegistry 失败，未实现的规划路由不得提前登记。
  */
 export const routeRegistry = [
+  ...moduleRoutes,
   {
     method: "GET",
     path: "/health",

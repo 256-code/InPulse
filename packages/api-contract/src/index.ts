@@ -1,4 +1,5 @@
 export * from "./schema-registry.js";
+export * from "./contracts/modules.zod.js";
 export * from "./route-registry.js";
 export * from "./permission-matrix.js";
 export * from "./security-flow.js";

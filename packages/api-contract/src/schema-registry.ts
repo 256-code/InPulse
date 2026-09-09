@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { moduleSchemas } from "./contracts/modules.zod.js";
 
 import {
   confirmMfaEnrollmentRequestSchema,
@@ -75,6 +76,7 @@ export interface SchemaRegistryEntry {
  * 每个条目必须通过 `.meta({ id })` 声明与键名一致的 OpenAPI 组件名。
  */
 export const schemaRegistry = {
+  ...moduleSchemas,
   ErrorResponse: {
     schema: errorResponseSchema,
     summary: "统一错误响应模型",

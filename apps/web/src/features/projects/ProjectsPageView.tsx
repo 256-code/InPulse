@@ -12,6 +12,7 @@ export interface ProjectsPageViewProps {
   readonly createdProject?: CreateProjectResponse | null;
   readonly onCreated?: (response: CreateProjectResponse) => void;
   readonly onOpenActivity?: (projectId: number) => void;
+  readonly onOpenModules?: (projectId: number) => void;
   readonly onSearch?: (query: string) => void;
 }
 
@@ -22,6 +23,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   createdProject,
   onCreated,
   onOpenActivity,
+  onOpenModules,
   onSearch,
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
@@ -67,6 +69,13 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     已自动生成未分类模块，活动、通知与搜索投影已在同一事务中写入。
                   </Text>
                   <Space wrap>
+                    {onOpenModules && (
+                      <Button
+                        onClick={() => onOpenModules(createdProject.project.id)}
+                      >
+                        管理模块
+                      </Button>
+                    )}
                     <Button
                       type="primary"
                       size="small"
