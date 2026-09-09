@@ -243,6 +243,11 @@ export function ModulesPageView({
                   >
                     功能列表
                   </Button>
+                  <Button
+                    href={`/projects/${projectId}/modules/${item.id}/tasks`}
+                  >
+                    模块任务
+                  </Button>
                   {item.status === "ACTIVE" && (
                     <Button onClick={() => open("update", item)}>编辑</Button>
                   )}

@@ -230,6 +230,11 @@ export class HealthController {
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks",
       "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/assignees",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks",
+      "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });

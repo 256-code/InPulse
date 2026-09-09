@@ -1,3 +1,4 @@
+import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { PostgresFeatureReadPort } from "../src/modules/features/postgres-feature-read-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
@@ -14,6 +15,7 @@ import {
 } from "@inpulse/database/client";
 import {
   taskItemSchema,
+  moduleTaskItemSchema,
   taskListResponseSchema,
   taskAssigneesResponseSchema,
   schemaRegistry,
@@ -105,6 +107,7 @@ beforeAll(async () => {
     activity,
     search,
     notifications,
+    new PostgresModuleReadPort(),
   );
   const http = new TasksHttpService(
     auth,
@@ -160,7 +163,7 @@ async function fixture(): Promise<{ member: Actor; project: ScopeFixture }> {
   return { member, project: { ...project, featureId: f!.id } };
 }
 async function request(
-  project: Pick<ScopeFixture, "projectId" | "moduleId" | "featureId">,
+  project: { projectId: number; moduleId: number; featureId: number | null },
   method: string,
   who?: Actor,
   body?: unknown,
@@ -169,7 +172,7 @@ async function request(
   idempotencyKey: string = randomUUID(),
 ) {
   return fetch(
-    `${base}/api/v1/projects/${project.projectId}/modules/${project.moduleId}/features/${project.featureId}/tasks${suffix}`,
+    `${base}/api/v1/projects/${project.projectId}/modules/${project.moduleId}${project.featureId === null ? "" : `/features/${project.featureId}`}/tasks${suffix}`,
     {
       method,
       headers: {
@@ -211,6 +214,349 @@ async function create(project: ScopeFixture, member: Actor) {
 async function addMember(projectId: number, userId: number) {
   await client.sql`INSERT INTO app.project_members (project_id,user_id) VALUES (${projectId},${userId})`;
 }
+describe("F-15 module tasks", () => {
+  it("rechecks module task permissions and all saved impact resources before replay", async () => {
+    const { project, member } = await fixture();
+    const other = await fixture();
+    const scope = { ...project, featureId: null };
+    const key = randomUUID();
+    const input = {
+      ...edit(member.userId),
+      impactFeatureIds: [project.featureId],
+    };
+    const first = await request(
+      scope,
+      "POST",
+      member,
+      input,
+      "",
+      undefined,
+      key,
+    );
+    expect(first.status).toBe(200);
+    const item = moduleTaskItemSchema.parse(await first.json());
+    await error(await request(scope, "GET"), 401);
+    await error(await request(scope, "GET", other.member), 404);
+    await error(
+      await request(scope, "PATCH", other.member, input, `/${item.id}`, 1),
+      404,
+    );
+    await removeMember(client.sql, project.projectId, member.userId);
+    await error(
+      await request(scope, "POST", member, input, "", undefined, key),
+      404,
+    );
+  });
+  const moduleScope = (project: ScopeFixture) => ({
+    ...project,
+    featureId: null,
+  });
+  async function anotherFeature(project: ScopeFixture, member: Actor) {
+    const [row] = await client.sql<
+      { id: number }[]
+    >`INSERT INTO app.features (project_id,module_id,code,name,created_by) VALUES (${project.projectId},${project.moduleId},${project.code + "-F-" + Math.floor(Math.random() * 100000 + 2)},'影响功能',${member.userId}) RETURNING id`;
+    return row!.id;
+  }
+  async function createModule(
+    project: ScopeFixture,
+    member: Actor,
+    ids: number[] = [],
+  ) {
+    const response = await request(moduleScope(project), "POST", member, {
+      ...edit(member.userId),
+      impactFeatureIds: ids,
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    return moduleTaskItemSchema.parse(await response.json());
+  }
+  it("stores one task with deduplicated same-module impacts and references once per feature", async () => {
+    const { project, member } = await fixture();
+    const second = await anotherFeature(project, member);
+    const item = await createModule(project, member, [
+      second,
+      project.featureId,
+      second,
+    ]);
+    expect(item).toMatchObject({
+      scopeType: "MODULE",
+      featureId: null,
+      impactFeatureIds: [project.featureId, second],
+    });
+    expect(
+      await client.sql`SELECT 1 FROM app.tasks WHERE project_id=${project.projectId}`,
+    ).toHaveLength(1);
+    for (const featureId of [project.featureId, second])
+      expect(
+        taskListResponseSchema.parse(
+          await (
+            await request({ ...project, featureId }, "GET", member)
+          ).json(),
+        ).items,
+      ).toEqual([item]);
+    expect(
+      moduleTaskItemSchema.parse(
+        await (
+          await request(
+            moduleScope(project),
+            "GET",
+            member,
+            undefined,
+            `/${item.id}`,
+          )
+        ).json(),
+      ),
+    ).toEqual(item);
+    expect(
+      await client.sql`SELECT 1 FROM app.task_feature_impacts WHERE task_id=${item.id}`,
+    ).toHaveLength(2);
+    await expect(
+      client.sql`INSERT INTO app.task_feature_impacts(task_id,feature_id,module_id,project_id) VALUES (${item.id},${second},${project.moduleId},${project.projectId})`,
+    ).rejects.toMatchObject({ code: "23505" });
+    const foreign = await fixture();
+    await expect(
+      client.sql`INSERT INTO app.task_feature_impacts(task_id,feature_id,module_id,project_id) VALUES (${item.id},${foreign.project.featureId},${project.moduleId},${project.projectId})`,
+    ).rejects.toMatchObject({ code: "23503" });
+    const featureTask = await create(project, member);
+    await expect(
+      client.sql`INSERT INTO app.task_feature_impacts(task_id,feature_id,module_id,project_id) VALUES (${featureTask.id},${second},${project.moduleId},${project.projectId})`,
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+  it("accepts empty impacts, preserves one project number sequence and normalizes same-key reordered duplicates", async () => {
+    const { project, member } = await fixture();
+    const featureTask = await create(project, member);
+    const module = await createModule(project, member);
+    expect(featureTask.code).toBe(project.code + "-T-1");
+    expect(module.code).toBe(project.code + "-T-2");
+    const key = randomUUID();
+    const input = {
+      ...edit(member.userId),
+      impactFeatureIds: [project.featureId, project.featureId],
+    };
+    const a = await request(
+      moduleScope(project),
+      "POST",
+      member,
+      input,
+      "",
+      undefined,
+      key,
+    );
+    const body = await a.json();
+    expect(
+      await (
+        await request(
+          moduleScope(project),
+          "POST",
+          member,
+          { ...input, impactFeatureIds: [project.featureId] },
+          "",
+          undefined,
+          key,
+        )
+      ).json(),
+    ).toEqual(body);
+  });
+  it("rejects foreign project/module impacts and scope injection, with no partial insert", async () => {
+    const { project, member } = await fixture();
+    const foreign = await fixture();
+    await error(
+      await request(moduleScope(project), "POST", member, {
+        ...edit(member.userId),
+        impactFeatureIds: [foreign.project.featureId],
+      }),
+      404,
+    );
+    const [module] = await client.sql<
+      { id: number }[]
+    >`INSERT INTO app.modules(project_id,name,created_by) VALUES (${project.projectId},'另一模块',${member.userId}) RETURNING id`;
+    const wrong = await anotherFeature(
+      { ...project, moduleId: module!.id },
+      member,
+    );
+    await error(
+      await request(moduleScope(project), "POST", member, {
+        ...edit(member.userId),
+        impactFeatureIds: [project.featureId, wrong],
+      }),
+      404,
+    );
+    await error(
+      await request(moduleScope(project), "POST", member, {
+        ...edit(member.userId),
+        featureId: project.featureId,
+        impactFeatureIds: [],
+      }),
+      422,
+    );
+    expect(
+      await client.sql`SELECT 1 FROM app.tasks WHERE project_id=${project.projectId}`,
+    ).toHaveLength(0);
+  });
+  it("removes and readds current relations with complete immutable audit snapshots", async () => {
+    const { project, member } = await fixture();
+    const item = await createModule(project, member, [project.featureId]);
+    const [old] = await client.sql<
+      { created_at: Date }[]
+    >`SELECT created_at FROM app.task_feature_impacts WHERE task_id=${item.id}`;
+    const patch = (ids: number[], version: number) =>
+      request(
+        moduleScope(project),
+        "PATCH",
+        member,
+        { ...edit(member.userId), impactFeatureIds: ids },
+        `/${item.id}`,
+        version,
+      );
+    expect((await patch([], 1)).status).toBe(200);
+    expect(
+      taskListResponseSchema.parse(
+        await (await request(project, "GET", member)).json(),
+      ).items,
+    ).toEqual([]);
+    expect((await patch([project.featureId], 2)).status).toBe(200);
+    const [fresh] = await client.sql<
+      { created_at: Date }[]
+    >`SELECT created_at FROM app.task_feature_impacts WHERE task_id=${item.id}`;
+    expect(new Date(fresh!.created_at).getTime()).toBeGreaterThan(
+      new Date(old!.created_at).getTime(),
+    );
+    const logs = await auditReader.sql<
+      {
+        event_payload: {
+          impactsBefore: unknown[];
+          impactsAfter: unknown[];
+          removed: number[];
+        };
+      }[]
+    >`SELECT event_payload FROM app.audit_logs WHERE project_id=${project.projectId} AND action='task.update' ORDER BY sequence_no`;
+    expect(logs[0]!.event_payload.impactsBefore).toEqual([
+      expect.objectContaining({
+        taskId: item.id,
+        projectId: project.projectId,
+        moduleId: project.moduleId,
+        featureId: project.featureId,
+        relationType: "IMPACT",
+        createdAt: new Date(old!.created_at).toISOString(),
+      }),
+    ]);
+    expect(logs[0]!.event_payload.impactsAfter).toEqual([]);
+    expect(logs[0]!.event_payload.removed).toEqual([project.featureId]);
+  });
+  it("preserves/removes archived existing impacts but rejects adding or readding them", async () => {
+    const { project, member } = await fixture();
+    const item = await createModule(project, member, [project.featureId]);
+    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+    const patch = (ids: number[], version: number) =>
+      request(
+        moduleScope(project),
+        "PATCH",
+        member,
+        { ...edit(member.userId, "编辑模块任务"), impactFeatureIds: ids },
+        `/${item.id}`,
+        version,
+      );
+    expect((await patch([project.featureId], 1)).status).toBe(200);
+    expect((await patch([], 2)).status).toBe(200);
+    await error(
+      await patch([project.featureId], 3),
+      409,
+      "TASK_IMPACT_ARCHIVED",
+    );
+    await error(
+      await request(moduleScope(project), "POST", member, {
+        ...edit(member.userId),
+        impactFeatureIds: [project.featureId],
+      }),
+      409,
+    );
+  });
+  it("rolls back relation removal on audit failure and rejects stale concurrent updates", async () => {
+    const { project, member } = await fixture();
+    const second = await anotherFeature(project, member);
+    const item = await createModule(project, member, [project.featureId]);
+    const patch = (ids: number[]) =>
+      request(
+        moduleScope(project),
+        "PATCH",
+        member,
+        { ...edit(member.userId), impactFeatureIds: ids },
+        `/${item.id}`,
+        1,
+      );
+    vi.spyOn(audit, "append").mockRejectedValueOnce(
+      new Error("audit unavailable"),
+    );
+    await error(await patch([]), 500);
+    expect(
+      moduleTaskItemSchema.parse(
+        await (
+          await request(
+            moduleScope(project),
+            "GET",
+            member,
+            undefined,
+            `/${item.id}`,
+          )
+        ).json(),
+      ),
+    ).toEqual(item);
+    const results = await Promise.all([patch([second]), patch([])]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const success = moduleTaskItemSchema.parse(
+      await results.find((r) => r.status === 200)!.json(),
+    );
+    expect(
+      moduleTaskItemSchema.parse(
+        await (
+          await request(
+            moduleScope(project),
+            "GET",
+            member,
+            undefined,
+            `/${item.id}`,
+          )
+        ).json(),
+      ),
+    ).toEqual(success);
+  });
+  it("waits for feature archival before adding an influence then rejects it", async () => {
+    const { project, member } = await fixture();
+    let release!: () => void;
+    let acquired!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const ready = new Promise<void>((r) => {
+      acquired = r;
+    });
+    const archive = uow.run(async (tx) => {
+      await tx.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+      acquired();
+      await gate;
+    });
+    await ready;
+    const pending = request(moduleScope(project), "POST", member, {
+      ...edit(member.userId),
+      impactFeatureIds: [project.featureId],
+    });
+    try {
+      await vi.waitFor(
+        async () =>
+          expect(
+            (
+              await client.sql`SELECT pid FROM pg_stat_activity WHERE application_name='inpulse-f14-http' AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0`
+            ).length,
+          ).toBeGreaterThan(0),
+        { timeout: 4000, interval: 30 },
+      );
+    } finally {
+      release();
+      await archive;
+    }
+    await error(await pending, 409, "TASK_IMPACT_ARCHIVED");
+  });
+});
+
 describe("F-14 real HTTP / PostgreSQL", () => {
   it("preserves a valid 500-character title while fitting notification limits", async () => {
     const { project, member } = await fixture();

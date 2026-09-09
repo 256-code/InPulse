@@ -290,6 +290,58 @@ export type ModuleResourcePath = {
   readonly moduleId: number;
 };
 
+export type ModuleTaskCollectionPath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type ModuleTaskEditRequest = {
+  readonly title: string;
+  readonly description: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly assigneeId: number;
+  readonly dueAt: (string | null);
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type ModuleTaskItem = {
+  readonly title: string;
+  readonly description: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly assigneeId: number;
+  readonly dueAt: (string | null);
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: null;
+  readonly scopeType: "MODULE";
+  readonly code: string;
+  readonly creatorId: number;
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type ModuleTaskListResponse = {
+  readonly items: readonly ModuleTaskItem[];
+};
+
+export type ModuleTaskReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly taskId: number;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type ModuleTaskResourcePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly taskId: number;
+};
+
 export type ModuleVersionHeaders = {
   readonly "x-csrf-token": string;
   readonly "if-match": string;
@@ -439,7 +491,7 @@ export type TaskItem = {
 };
 
 export type TaskListResponse = {
-  readonly items: readonly TaskItem[];
+  readonly items: readonly (TaskItem | ModuleTaskItem)[];
 };
 
 export type TaskMutationHeaders = {

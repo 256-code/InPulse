@@ -42,8 +42,43 @@ export const taskItemSchema = taskEditRequestSchema
     updatedAt: z.iso.datetime(),
   })
   .meta({ id: "TaskItem" });
+export const moduleTaskCollectionPathSchema = taskCollectionPathSchema
+  .omit({ featureId: true })
+  .meta({ id: "ModuleTaskCollectionPath" });
+export const moduleTaskResourcePathSchema = moduleTaskCollectionPathSchema
+  .extend({ taskId: pathId })
+  .meta({ id: "ModuleTaskResourcePath" });
+const impactIds = z
+  .array(id)
+  .max(1000)
+  .overwrite((values) => [...new Set(values)].sort((a, b) => a - b));
+export const moduleTaskEditRequestSchema = taskEditRequestSchema
+  .extend({ impactFeatureIds: impactIds })
+  .meta({ id: "ModuleTaskEditRequest" });
+export const moduleTaskItemSchema = taskItemSchema
+  .extend({
+    scopeType: z.literal("MODULE"),
+    featureId: z.null(),
+    impactFeatureIds: impactIds,
+  })
+  .meta({ id: "ModuleTaskItem" });
+export const moduleTaskListResponseSchema = z
+  .object({ items: z.array(moduleTaskItemSchema) })
+  .strict()
+  .meta({ id: "ModuleTaskListResponse" });
+export const moduleTaskReplayContextSchema = z
+  .object({
+    projectId: id,
+    moduleId: id,
+    taskId: id,
+    impactFeatureIds: impactIds,
+  })
+  .strict()
+  .meta({ id: "ModuleTaskReplayContext" });
+export type ModuleTaskItem = z.infer<typeof moduleTaskItemSchema>;
+export type ModuleTaskEditRequest = z.infer<typeof moduleTaskEditRequestSchema>;
 export const taskListResponseSchema = z
-  .object({ items: z.array(taskItemSchema) })
+  .object({ items: z.array(z.union([taskItemSchema, moduleTaskItemSchema])) })
   .strict()
   .meta({ id: "TaskListResponse" });
 export const taskReplayContextSchema = z
@@ -67,6 +102,36 @@ export const taskAssigneesResponseSchema = z
   .strict()
   .meta({ id: "TaskAssigneesResponse" });
 export const taskSchemas = {
+  ModuleTaskCollectionPath: {
+    schema: moduleTaskCollectionPathSchema,
+    summary: "模块级任务父级",
+    sensitiveFieldPaths: [],
+  },
+  ModuleTaskResourcePath: {
+    schema: moduleTaskResourcePathSchema,
+    summary: "模块级任务资源",
+    sensitiveFieldPaths: [],
+  },
+  ModuleTaskEditRequest: {
+    schema: moduleTaskEditRequestSchema,
+    summary: "模块任务及去重影响功能集合",
+    sensitiveFieldPaths: [],
+  },
+  ModuleTaskItem: {
+    schema: moduleTaskItemSchema,
+    summary: "单份模块任务及当前影响集合",
+    sensitiveFieldPaths: [],
+  },
+  ModuleTaskListResponse: {
+    schema: moduleTaskListResponseSchema,
+    summary: "模块任务列表",
+    sensitiveFieldPaths: [],
+  },
+  ModuleTaskReplayContext: {
+    schema: moduleTaskReplayContextSchema,
+    summary: "模块任务重放资源与影响功能",
+    sensitiveFieldPaths: [],
+  },
   TaskAssigneesResponse: {
     schema: taskAssigneesResponseSchema,
     summary: "当前项目可指派成员",
@@ -104,7 +169,7 @@ export const taskSchemas = {
   },
   TaskListResponse: {
     schema: taskListResponseSchema,
-    summary: "功能级任务列表",
+    summary: "功能内任务与模块级引用，每个任务只返回一次",
     sensitiveFieldPaths: [],
   },
   TaskReplayContext: {

@@ -101,3 +101,7 @@ F-14 功能级任务补充：`listTasks`、`getTask`、`listTaskAssignees`、`cr
 7. 迭代记录的详情、统计、搜索和时间线必须以 `status` 判定可见性，不得以保留的 `voided_at` 推断当前状态。
 8. 更改本矩阵需要同步 Route Registry、测试矩阵、相关设计与 ADR。
 9. `app_runtime` 搜索数据库权限按最小集显式授予，不得依赖 PUBLIC；业务事务内仅允许维护 `search_projection` 的 `INSERT/UPDATE`（无 `DELETE`/DDL），普通查询只允许 `normalized_search_text &@~ app.pgroonga_query_escape($1)`。
+
+## F-15 模块级任务接口（2026-09-09）
+
+listModuleTasks/getModuleTask/listModuleTaskAssignees/createModuleTask/updateModuleTask允许当前项目活跃成员和系统管理员；匿名/停用401、非成员/移除/真实归属错误404。写操作要求项目/模块和任务生命周期可写，编辑If-Match，全部写CSRF+数据库幂等；负责人沿用F14真实项目成员规则。新增影响必须ACTIVE同项目同模块，保留/移除既有归档影响合法，影响功能不是MODULE任务父级。原功能页listTasks可读模块引用，只有其真实模块路径提供修改入口；归档功能页不开放引用编辑。模块幂等重放检查任务以及响应全部影响功能的当前可读归属。见 [F15交审](f15-local-handoff.md)。

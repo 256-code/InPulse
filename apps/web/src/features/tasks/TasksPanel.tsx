@@ -14,12 +14,7 @@ import {
   Tag,
 } from "antd";
 import { Controller, useForm } from "react-hook-form";
-import {
-  ApiError,
-  type InpulseApiClient,
-  type TaskEditRequest,
-  type TaskItem,
-} from "@generated/api";
+import { ApiError, type InpulseApiClient } from "@generated/api";
 import {
   mergeTask,
   taskEdit,
@@ -27,6 +22,8 @@ import {
   useTasks,
   type TaskScope,
   type TaskField,
+  type TaskViewItem,
+  type TaskDraft,
 } from "./task-query";
 
 const labels: Record<TaskField, string> = {
@@ -35,6 +32,7 @@ const labels: Record<TaskField, string> = {
   priority: "优先级",
   assigneeId: "负责人",
   dueAt: "截止时间",
+  impactFeatureIds: "影响功能",
 };
 const priorityLabels = {
   LOW: "低",
@@ -43,7 +41,7 @@ const priorityLabels = {
   URGENT: "紧急",
 };
 const statusLabels = { TODO: "未完成", DONE: "已完成", CANCELED: "已取消" };
-const empty: TaskEditRequest = {
+const empty: TaskDraft = {
   title: "",
   description: "",
   priority: "NORMAL",
@@ -51,7 +49,7 @@ const empty: TaskEditRequest = {
   dueAt: null,
 };
 type Merge = ReturnType<typeof mergeTask> & {
-  latest: TaskItem;
+  latest: TaskViewItem;
   choices: Partial<Record<TaskField, "draft" | "latest">>;
 };
 
@@ -63,13 +61,15 @@ export function TasksPanel({
   client,
 }: TaskScope & { writable: boolean; client?: InpulseApiClient | undefined }) {
   const scope = { projectId, moduleId, featureId };
-  const { api, query, members, mutation } = useTasks(scope, client);
+  const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState("cards");
   const [selectedId, setSelectedId] = useState<number | null>(
     () =>
       Number(new URLSearchParams(window.location.search).get("taskId")) || null,
   );
-  const [selection, setSelection] = useState<{ item?: TaskItem } | null>(null);
+  const [selection, setSelection] = useState<{ item?: TaskViewItem } | null>(
+    null,
+  );
   const [merge, setMerge] = useState<Merge | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
@@ -82,12 +82,12 @@ export function TasksPanel({
     reset,
     getValues,
     formState: { errors },
-  } = useForm<TaskEditRequest>({ defaultValues: empty });
+  } = useForm<TaskDraft>({ defaultValues: empty });
   const current = query.data?.items.find((item) => item.id === selectedId);
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     `用户 #${id}（历史负责人）`;
-  const open = (item?: TaskItem) => {
+  const open = (item?: TaskViewItem) => {
     setSelectedId(null);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
@@ -97,6 +97,7 @@ export function TasksPanel({
     setReloadError(null);
     setSuccess(false);
     void members.refetch();
+    if (featureId === null) void features.refetch();
   };
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
@@ -143,12 +144,20 @@ export function TasksPanel({
     const draft = getValues();
     setReloading(true);
     try {
-      const latest = await api.getTask(projectId, moduleId, featureId, base.id);
+      const latest =
+        featureId === null
+          ? await api.getModuleTask(projectId, moduleId, base.id)
+          : await api.getTask(projectId, moduleId, featureId, base.id);
       if (stamp !== generation.current) return;
       // Probe parent writability from the latest feature; task writes still recheck every ancestor server-side.
-      const parent = await api.getFeature(projectId, moduleId, featureId);
+      const parent =
+        featureId === null
+          ? (await api.listModules(projectId)).items.find(
+              (m) => m.id === moduleId,
+            )
+          : await api.getFeature(projectId, moduleId, featureId);
       if (stamp !== generation.current) return;
-      if (latest.lifecycleStatus !== "ACTIVE" || parent.status !== "ACTIVE") {
+      if (latest.lifecycleStatus !== "ACTIVE" || parent?.status !== "ACTIVE") {
         setReloadError("任务或功能已归档，草稿已保留，当前不能保存。");
         return;
       }
@@ -172,7 +181,7 @@ export function TasksPanel({
     const values = { ...merge.values };
     for (const field of merge.conflicts)
       if (merge.choices[field] === "latest")
-        Object.assign(values, { [field]: merge.latest[field] });
+        Object.assign(values, { [field]: taskEdit(merge.latest)[field] });
     reset(values);
     setSelection({ item: merge.latest });
     setMerge(null);
@@ -180,9 +189,9 @@ export function TasksPanel({
     setReloadError(null);
   };
   return (
-    <section aria-label="功能任务">
+    <section aria-label={featureId === null ? "模块任务" : "功能任务"}>
       <Space wrap>
-        <h2>功能任务</h2>
+        <h2>{featureId === null ? "模块任务" : "功能任务"}</h2>
         <Button disabled={!writable} onClick={() => open()}>
           新建任务
         </Button>
@@ -196,6 +205,7 @@ export function TasksPanel({
         />
       </Space>
       {!writable && <Alert type="info" title="功能已归档，任务历史只读。" />}
+      {query.data && <p>任务数：{query.data.items.length}（按唯一任务计）</p>}
       {success && <Alert type="success" title="任务已保存" />}
       {query.isPending ? (
         <Spin />
@@ -215,10 +225,15 @@ export function TasksPanel({
           pagination={false}
           dataSource={query.data.items}
           columns={[
+            {
+              title: "范围",
+              render: (_, item: TaskViewItem) =>
+                item.scopeType === "MODULE" ? "模块级任务" : "功能级任务",
+            },
             { title: "编号", dataIndex: "code" },
             {
               title: "标题",
-              render: (_, item: TaskItem) => (
+              render: (_, item: TaskViewItem) => (
                 <Button type="link" onClick={() => setSelectedId(item.id)}>
                   {item.title}
                 </Button>
@@ -226,15 +241,15 @@ export function TasksPanel({
             },
             {
               title: "负责人",
-              render: (_, item: TaskItem) => memberName(item.assigneeId),
+              render: (_, item: TaskViewItem) => memberName(item.assigneeId),
             },
             {
               title: "优先级",
-              render: (_, item: TaskItem) => priorityLabels[item.priority],
+              render: (_, item: TaskViewItem) => priorityLabels[item.priority],
             },
             {
               title: "状态",
-              render: (_, item: TaskItem) => statusLabels[item.workStatus],
+              render: (_, item: TaskViewItem) => statusLabels[item.workStatus],
             },
           ]}
         />
@@ -249,6 +264,11 @@ export function TasksPanel({
               }
             >
               <Tag>{item.code}</Tag>
+              {item.scopeType === "MODULE" && (
+                <Tag color="blue">
+                  模块级任务{featureId === null ? "" : " · 引用"}
+                </Tag>
+              )}
               <Tag>{statusLabels[item.workStatus]}</Tag>
               <Tag>{priorityLabels[item.priority]}</Tag>
               <p>负责人：{memberName(item.assigneeId)}</p>
@@ -289,8 +309,10 @@ export function TasksPanel({
                 {priorityLabels[current.priority]}
               </p>
               <p>
-                项目 #{current.projectId} / 模块 #{current.moduleId} / 功能 #
-                {current.featureId}
+                项目 #{current.projectId} / 模块 #{current.moduleId}
+                {current.featureId === null
+                  ? " / 模块级任务"
+                  : ` / 功能 #${current.featureId}`}
               </p>
               <p>
                 负责人：{memberName(current.assigneeId)} · 创建人 #
@@ -305,8 +327,31 @@ export function TasksPanel({
               <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                 {current.description || "暂无任务说明"}
               </p>
+              {current.scopeType === "MODULE" && (
+                <>
+                  <p>
+                    影响功能：
+                    {current.impactFeatureIds
+                      .map(
+                        (id) =>
+                          features.data?.items.find((f) => f.id === id)?.name ??
+                          `功能 #${id}`,
+                      )
+                      .join("、") || "未选择"}
+                  </p>
+                  <a
+                    href={`/projects/${projectId}/modules/${moduleId}/tasks?taskId=${current.id}`}
+                  >
+                    打开模块任务
+                  </a>
+                </>
+              )}
               <Button
-                disabled={!writable || current.lifecycleStatus !== "ACTIVE"}
+                disabled={
+                  !writable ||
+                  current.lifecycleStatus !== "ACTIVE" ||
+                  (featureId !== null && current.scopeType === "MODULE")
+                }
                 onClick={() => open(current)}
               >
                 编辑任务
@@ -338,7 +383,9 @@ export function TasksPanel({
                 <div key={field}>
                   <p>{labels[field]}存在冲突</p>
                   <p>我的输入：{String(merge.values[field] ?? "未设置")}</p>
-                  <p>最新值：{String(merge.latest[field] ?? "未设置")}</p>
+                  <p>
+                    最新值：{String(taskEdit(merge.latest)[field] ?? "未设置")}
+                  </p>
                   <Button
                     onClick={() =>
                       setMerge({
@@ -371,6 +418,69 @@ export function TasksPanel({
                 应用合并结果
               </Button>
             </div>
+          )}
+          {featureId === null && (
+            <>
+              <p>
+                同一工作只保留一份任务；如果负责人、状态、验收、上线或回滚不同，建议拆分任务。
+              </p>
+              {features.isPending ? (
+                <p>正在加载影响功能…</p>
+              ) : features.isError ? (
+                <Alert
+                  type="error"
+                  title={taskError(features.error)}
+                  action={
+                    <Button onClick={() => void features.refetch()}>
+                      重试影响功能
+                    </Button>
+                  }
+                />
+              ) : (
+                <Controller
+                  name="impactFeatureIds"
+                  control={control}
+                  render={({ field }) => (
+                    <fieldset
+                      disabled={mutation.isPending || reloading || !!merge}
+                    >
+                      <legend>影响功能（可多选，可为空）</legend>
+                      {features.data?.items.map((f) => (
+                        <label key={f.id} style={{ display: "block" }}>
+                          <input
+                            type="checkbox"
+                            checked={(field.value ?? []).includes(f.id)}
+                            disabled={
+                              f.status !== "ACTIVE" &&
+                              !(
+                                selection?.item?.scopeType === "MODULE" &&
+                                selection.item.impactFeatureIds.includes(f.id)
+                              )
+                            }
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.checked
+                                  ? [
+                                      ...new Set([
+                                        ...(field.value ?? []),
+                                        f.id,
+                                      ]),
+                                    ].sort((a, b) => a - b)
+                                  : (field.value ?? []).filter(
+                                      (id) => id !== f.id,
+                                    ),
+                              )
+                            }
+                          />
+                          {f.name}
+                          {f.status === "ARCHIVED" ? "（已归档）" : ""}
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
+                />
+              )}
+            </>
           )}
           <fieldset
             disabled={mutation.isPending || reloading || !!merge}

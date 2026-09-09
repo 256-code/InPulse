@@ -23,6 +23,12 @@
       "fingerprint": "3e2d9e9c8882a1da6f51f1e8d34c234ad696eaaf38f5abbb33b8b08f33b5b974"
     }
   ],
+  "createModuleTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "cd1a215b94ab2cf67a9d3013865be31204480c57728ce5db52e38b5b1ed1723b"
+    }
+  ],
   "createProject": [
     {
       "version": "1.0.0",
@@ -105,6 +111,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "ef717fe3ae01dfec0bc2c36a0c61996a0192d9e7dec32e3f103afbc743299e1e"
+    }
+  ],
+  "updateModuleTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "075791029125955c79b8ebc7eb50bf6faa4e5b872c4843b17c159850f9dc57bc"
     }
   ],
   "updateTask": [
