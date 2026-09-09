@@ -75,7 +75,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-011 | CI | 权限矩阵一致性 | `pnpm permissions:check` 双向校验可执行权限矩阵与 `docs/permissions.md` 的身份集合、ADR-023 allowlist 精确相等、每条路由都有矩阵条目，并要求需认证路由同时登记允许与拒绝结果 | 已自动化 |
 | CI-012 | CI | 生产构建 | `pnpm build` 完成 api（`tsc`）与 web（`vite`）生产构建 | 已自动化 |
 | CI-013 | CI | 依赖边界 | `pnpm check:deps` 校验前端分层 `app -> pages -> features -> shared/generated`、`features` 不导入 `pages`、web 不导入 database、Controller 不直连数据库、模块只能经公开表面（`public/**`、模块 `index.ts`、`*.port.ts`）跨模块、无循环依赖、前端无裸 `fetch`/`axios`；并由 `pnpm check:frontend:boundaries`（dependency-cruiser）复核 `apps/web/src` 的分层规则 | 已自动化 |
-| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | Required（命令已自动化；2026-09-09 公共 registry 暴露基线 `multer` 3 个 high，见下方状态说明） |
+| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | Required |
@@ -94,6 +94,14 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > 已在 `pnpm-workspace.yaml` 用 `overrides` 把 `ansi-regex` 固定到 `^5.0.1`（lockfile 落为
 > `5.0.1`）解决，该依赖为 dev 工具链；本地 `pnpm deps:audit` 与 `pnpm check` 已通过。
 > 按 `AGENTS.md` 第 4 节，该依赖变更仍须经独立 PR 与人工确认。
+>
+> **CI-014 补充（2026-09-09）**：`multer@2.2.0` 曾报 3 个 high ——
+> GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4，路径为
+> `@nestjs/platform-express@11.2.3` -> `multer@2.2.0`。先由
+> A #56 在 `pnpm-workspace.yaml` 增加 `multer: "^2.3.0"` 并合入主线，随后
+> C #57 将 override 收紧为精确版本 `2.3.0`（lockfile 同步更新）；
+> `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无漏洞。
+> 该依赖为 NestJS 运行时传递依赖，已按第 4 节经独立 PR 与人工确认处理，不得调低阈值。
 > CI-007 与 CI-008 曾在 `0000-0002` 上通过本机 PostgreSQL 18.6 实测；合并 `0003-0005`
 > 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
@@ -104,11 +112,12 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
 > `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
 > 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI。
-> **2026-09-09 复核**：使用公共 registry 执行 `pnpm audit --audit-level=high` 发现
+> **2026-09-09 复核与跟进**：使用公共 registry 执行 `pnpm audit --audit-level=high` 发现
 > 当前基线 `apps__api` 引入的 `multer` 存在 3 个 high
 > （GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4），
-> patched `>=2.3.0` 或待上游公布。本次部署预检未修改 `pnpm-lock.yaml`，也不应在本
-> PR 夹带依赖升级；按 `AGENTS.md` 第 4 节必须另建独立依赖 PR 并由人工确认。
+> patched `>=2.3.0`。本次部署预检未修改 `pnpm-lock.yaml`，依赖升级随后由
+> A #56（`^2.3.0`）与 C #57（精确 `2.3.0`）按第 4 节在独立 PR 中完成，
+> 公共 registry 审计现已无漏洞。
 
 
 ## 健康探针

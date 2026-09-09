@@ -202,7 +202,7 @@ pnpm check:docs
 - `check:frontend:boundaries`：`apps/web` 的 dependency-cruiser 分层复核，与 `check:deps` 同属 §12.4 的依赖边界门禁；
 - `test:web`：只运行 `apps/web` 的 jsdom 单元测试，等价于 `pnpm test:unit` 中的 web 部分；
 - `permissions:check`：可执行权限矩阵与 `docs/permissions.md` 的双向一致性，以及每条路由的允许/拒绝用例登记；
-- `deps:audit`：`pnpm audit --audit-level=high`，需要访问 registry；曾因 `ansi-regex@5.0.0`（high，来自 `origin/main` PR #16 的 `@testing-library` 依赖链）失败，已由 `pnpm-workspace.yaml` 的 `overrides` 固定到 `^5.0.1` 解决；该依赖变更须按 `AGENTS.md` 第 4 节由独立 PR 与人工确认，不得调低阈值；
+- `deps:audit`：`pnpm audit --audit-level=high`，需要访问 registry；曾因 `ansi-regex@5.0.0`（high，来自 `origin/main` PR #16 的 `@testing-library` 依赖链）失败，已由 `pnpm-workspace.yaml` 的 `overrides` 固定到 `^5.0.1` 解决；2026-09-09 另因 `multer@2.2.0` 的 3 个 high（GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4，来自 `@nestjs/platform-express@11.2.3`）失败，已在同一文件固定到 `2.3.0` 并由公共 registry 审计零漏洞；这两项依赖变更均须按 `AGENTS.md` 第 4 节由独立 PR 与人工确认，不得调低阈值；
 - `check:secrets`：对受版本控制与待提交文件执行 Secret 扫描；
 - `check:docs`：使用 Node.js 内置模块，检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；
 - `check`：按上述顺序一次跑完全部非数据库门禁，不含 `db:migrate`、`test:integration` 与 `test:search:db`。
