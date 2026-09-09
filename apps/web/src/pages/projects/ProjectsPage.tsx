@@ -35,6 +35,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
   return (
     <ProjectsPageView
       creatorName={user?.name.trim() || "创建者"}
+      creatorUserId={user?.id}
       createdProject={createdProject}
       onCreated={handleCreated}
       onOpenActivity={handleOpenActivity}

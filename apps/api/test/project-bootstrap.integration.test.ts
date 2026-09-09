@@ -167,7 +167,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
     expect(notifications.length).toBeGreaterThanOrEqual(2);
     expect(
       notifications.every(
-        (row) => row.target_path === `/projects/${projectId}`,
+        (row) => row.target_path === `/projects/${projectId}/activity`,
       ),
     ).toBe(true);
   });

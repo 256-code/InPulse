@@ -4,7 +4,7 @@ import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlace
 export const TasksPage: React.FC = () => {
   return (
     <WorkspacePlaceholder
-      title="我的任务"
+      title="任务中心"
       description="跨项目任务列表、状态筛选和详情入口将在任务查询接口就绪后接入。"
     />
   );

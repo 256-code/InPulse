@@ -55,6 +55,10 @@ import {
   projectMemberItemSchema,
   projectCodeSchema,
 } from "./contracts/projects.zod.js";
+import {
+  userDirectoryItemSchema,
+  userDirectoryResponseSchema,
+} from "./contracts/users.zod.js";
 
 export interface SchemaRegistryEntry {
   readonly schema: z.ZodType;
@@ -300,6 +304,16 @@ export const schemaRegistry = {
   CurrentUserResponse: {
     schema: currentUserResponseSchema,
     summary: "当前登录用户资料",
+    sensitiveFieldPaths: [],
+  },
+  UserDirectoryItem: {
+    schema: userDirectoryItemSchema,
+    summary: "用户目录公开条目，用于创建项目时选择初始成员",
+    sensitiveFieldPaths: [],
+  },
+  UserDirectoryResponse: {
+    schema: userDirectoryResponseSchema,
+    summary: "全部启用用户的轻量目录；响应 no-store",
     sensitiveFieldPaths: [],
   },
 } satisfies Record<string, SchemaRegistryEntry>;

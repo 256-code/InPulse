@@ -28,11 +28,14 @@ export interface E2ERuntime {
   readonly searchQuery: string;
   readonly projectTitle: string;
   readonly sessionCookie: string;
-  readonly user: {
-    readonly loginName: string;
-    readonly name: string;
-    readonly password: string;
-  };
+  readonly user: E2EAccount;
+  readonly member: E2EAccount;
+}
+
+export interface E2EAccount {
+  readonly loginName: string;
+  readonly name: string;
+  readonly password: string;
 }
 
 export function requiredE2eDatabaseUrl(): string {

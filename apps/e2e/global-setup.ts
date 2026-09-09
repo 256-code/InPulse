@@ -117,11 +117,14 @@ async function loginViaApi(
 
 async function seedFixture(databaseUrl: string): Promise<{
   readonly userId: number;
+  readonly memberId: number;
   readonly projectId: number;
   readonly searchQuery: string;
   readonly projectTitle: string;
   readonly loginName: string;
   readonly name: string;
+  readonly memberLoginName: string;
+  readonly memberName: string;
 }> {
   const sql = postgres(databaseUrl, {
     max: 1,
@@ -159,6 +162,38 @@ async function seedFixture(databaseUrl: string): Promise<{
     const user = users[0];
     if (user === undefined) {
       throw new Error("E2E user fixture insert returned no row");
+    }
+
+    const memberSuffix = randomBytes(5).toString("hex").toLowerCase();
+    const memberLoginName = `e2e_member_${memberSuffix}`;
+    const memberName = `E2E 成员 ${memberSuffix}`;
+    const memberPasswordHash = await argon2Hash(FIXTURE_PASSWORD, {
+      memoryCost: 19 * 1024,
+      timeCost: 2,
+      parallelism: 1,
+      outputLen: 32,
+      algorithm: 2,
+    });
+    const members = (await sql<readonly { id: number }[]>`
+      INSERT INTO app.users (
+        login_name,
+        name,
+        password_hash,
+        is_admin,
+        status
+      )
+      VALUES (
+        ${memberLoginName},
+        ${memberName},
+        ${memberPasswordHash},
+        false,
+        'ACTIVE'
+      )
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    const member = members[0];
+    if (member === undefined) {
+      throw new Error("E2E member fixture insert returned no row");
     }
 
     const code = `E2E${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -215,11 +250,14 @@ async function seedFixture(databaseUrl: string): Promise<{
 
     return {
       userId: user.id,
+      memberId: member.id,
       projectId,
       searchQuery,
       projectTitle,
       loginName,
       name,
+      memberLoginName,
+      memberName,
     };
   } finally {
     await sql.end({ timeout: 5 });
@@ -262,6 +300,11 @@ export default async function globalSetup(): Promise<void> {
     user: {
       loginName: fixture.loginName,
       name: fixture.name,
+      password: FIXTURE_PASSWORD,
+    },
+    member: {
+      loginName: fixture.memberLoginName,
+      name: fixture.memberName,
       password: FIXTURE_PASSWORD,
     },
   };

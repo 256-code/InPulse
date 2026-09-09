@@ -38,6 +38,9 @@ import { TotpService } from "./totp.service.js";
 import { VersionedAeadKeyring } from "./totp-keyring.js";
 import { UserAuthInvalidationService } from "./user-auth-invalidation.service.js";
 import { PostgresUserProfileRepository } from "./user-profile.repository.js";
+import { UserDirectoryController } from "./user-directory.controller.js";
+import { PostgresUserDirectoryRepository } from "./user-directory.repository.js";
+import { UserDirectoryService } from "./user-directory.service.js";
 import { AdminHighRiskAuthService } from "./admin-high-risk.service.js";
 import { AdminMfaResetController } from "./admin-mfa-reset.controller.js";
 import { AdminMfaResetService } from "./admin-mfa-reset.service.js";
@@ -88,6 +91,8 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     MfaVerifyService,
     MfaReauthenticateService,
     PostgresUserProfileRepository,
+    PostgresUserDirectoryRepository,
+    UserDirectoryService,
     AdminHighRiskAuthService,
     MfaRecoveryService,
     AdminMfaResetService,
@@ -97,6 +102,7 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     LoginController,
     LogoutController,
     MeController,
+    UserDirectoryController,
     MfaEnrollmentController,
     MfaVerifyController,
     MfaReauthenticateController,

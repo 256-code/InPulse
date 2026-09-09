@@ -6,7 +6,7 @@ const HomePage = lazy(() => import("./HomePage"));
 export const homeRoute: AppRouteModule = {
   path: "/",
   element: HomePage,
-  requiresAuth: false,
+  requiresAuth: true,
 };
 
 export default homeRoute;

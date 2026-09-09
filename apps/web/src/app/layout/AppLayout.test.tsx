@@ -10,7 +10,25 @@ import { AppLayout } from "./AppLayout";
 
 describe("AppLayout", () => {
   const notificationClient = {
-    getNotificationUnreadCount: vi.fn().mockResolvedValue({ unreadCount: 2 }),
+    getNotificationUnreadCount: vi.fn().mockResolvedValue({ unreadCount: 1 }),
+    getNotifications: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "42",
+          projectId: 7,
+          notificationType: "PROJECT_JOINED",
+          title: "你已加入成员项目",
+          body: "成员项目通知",
+          targetPath: "/projects/7/activity",
+          createdAt: "2026-09-08T00:00:00.000Z",
+          readAt: null,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "csrf-1" }),
+    readNotification: vi.fn().mockResolvedValue(undefined),
   } as unknown as InpulseApiClient;
 
   function renderLayout(ui: React.ReactElement) {
@@ -42,7 +60,7 @@ describe("AppLayout", () => {
     );
   }
 
-  it("renders the v1.0 workspace shell", async () => {
+  it("renders the latest workspace navigation and header search trigger", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -54,15 +72,18 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("InPulse")).toBeInTheDocument();
-    expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
-    expect(screen.getByText("项目与功能")).toBeInTheDocument();
-    expect(screen.getByText("我的任务")).toBeInTheDocument();
-    expect(screen.getByText("迭代记录")).toBeInTheDocument();
-    expect(screen.getByText("成员与权限")).toBeInTheDocument();
-    expect(screen.getByText("动态审计")).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText("搜索项目、任务、功能..."),
+      screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
+    expect(screen.getByText("任务中心")).toBeInTheDocument();
+    expect(screen.getByText("项目与功能")).toBeInTheDocument();
+    expect(screen.getByText("迭代记录")).toBeInTheDocument();
+    expect(screen.getByText("遗留问题")).toBeInTheDocument();
+    expect(screen.getByText("项目动态")).toBeInTheDocument();
+    expect(screen.getByText("成员与设置")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "打开全局搜索" }),
     ).toBeInTheDocument();
     await screen.findByRole("button", { name: "通知" });
     expect(notificationClient.getNotificationUnreadCount).toHaveBeenCalled();
@@ -88,7 +109,7 @@ describe("AppLayout", () => {
     expect(await screen.findByText("Projects content")).toBeInTheDocument();
   });
 
-  it("navigates to search when a query is submitted from the header", async () => {
+  it("opens the global command palette from the header search button", async () => {
     const user = userEvent.setup();
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
@@ -98,18 +119,26 @@ describe("AppLayout", () => {
             element={<AppLayout notificationClient={notificationClient} />}
           >
             <Route index element={<div>Home content</div>} />
-            <Route path="search" element={<div>Search content</div>} />
+            <Route
+              path="notifications"
+              element={<div>Notifications content</div>}
+            />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
-    await user.type(screen.getByLabelText("全局搜索"), "inpulse{enter}");
-
-    expect(await screen.findByText("Search content")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "打开全局搜索" }));
+    expect(
+      screen.getByRole("dialog", { name: "全局搜索" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^打开通知中心/ }));
+    expect(
+      await screen.findByText("Notifications content"),
+    ).toBeInTheDocument();
   });
 
-  it("navigates to notifications from the header bell", async () => {
+  it("opens the notification popover and can open the full page", async () => {
     const user = userEvent.setup();
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
@@ -129,7 +158,8 @@ describe("AppLayout", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "通知" }));
-
+    expect(await screen.findByText("你已加入成员项目")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看全部通知" }));
     expect(
       await screen.findByText("Notifications content"),
     ).toBeInTheDocument();

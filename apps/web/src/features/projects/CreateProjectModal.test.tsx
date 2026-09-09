@@ -42,6 +42,7 @@ function renderModal(client: InpulseApiClient) {
       <CreateProjectModal
         open
         creatorName="开发者 C"
+        creatorUserId={1}
         client={client}
         onCreated={onCreated}
         onClose={onClose}
@@ -61,9 +62,13 @@ async function fillForm(dialog: HTMLElement) {
 describe("CreateProjectModal", () => {
   it("submits normalized values with CSRF and idempotency headers", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false }],
+    });
     const createProject = vi.fn().mockResolvedValue(createdProject);
     const client = {
       issueCsrfToken,
+      getUserDirectory,
       createProject,
     } as unknown as InpulseApiClient;
     const { onCreated, onClose } = renderModal(client);
@@ -94,6 +99,9 @@ describe("CreateProjectModal", () => {
 
   it("shows a 409 message without calling the success callback", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false }],
+    });
     const createProject = vi.fn().mockRejectedValue(
       new ApiError(409, {
         code: "PROJECT_BOOTSTRAP_CONFLICT",
@@ -104,6 +112,7 @@ describe("CreateProjectModal", () => {
     );
     const client = {
       issueCsrfToken,
+      getUserDirectory,
       createProject,
     } as unknown as InpulseApiClient;
     const { onCreated, onClose } = renderModal(client);
@@ -123,5 +132,37 @@ describe("CreateProjectModal", () => {
     ).not.toBeInTheDocument();
     expect(onCreated).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("sends selected active members while excluding the creator", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [
+        { id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false },
+        { id: 2, name: "开发者 B", avatarUrl: null, isAdmin: false },
+        { id: 3, name: "管理员 A", avatarUrl: null, isAdmin: true },
+      ],
+    });
+    const createProject = vi.fn().mockResolvedValue(createdProject);
+    const client = {
+      issueCsrfToken,
+      getUserDirectory,
+      createProject,
+    } as unknown as InpulseApiClient;
+    const { onCreated, onClose } = renderModal(client);
+
+    const dialog = await screen.findByRole("dialog");
+    await fillForm(dialog);
+    const user = userEvent.setup();
+    await user.click(await screen.findByLabelText("选择成员：开发者 B"));
+    await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
+
+    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
+    expect(createProject).toHaveBeenCalledWith(
+      expect.objectContaining({ memberIds: [2] }),
+      expect.any(Object),
+    );
+    expect(onCreated).toHaveBeenCalledWith(createdProject);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -67,6 +67,7 @@ export function useNotificationUnreadCount({
 export function useNotificationsInfiniteQuery({
   client,
   filter,
+  enabled = true,
   limit = NOTIFICATION_PAGE_LIMIT,
 }: NotificationListOptions) {
   const apiClient = useMemo(() => client ?? createApiClient(), [client]);
@@ -84,6 +85,7 @@ export function useNotificationsInfiniteQuery({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,
+    enabled,
   });
 }
 

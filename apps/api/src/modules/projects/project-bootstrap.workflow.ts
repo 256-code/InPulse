@@ -186,7 +186,7 @@ export class ProjectBootstrapWorkflow {
         notificationType: PROJECT_CREATE_NOTIFICATION_TYPE,
         title: `已加入项目 ${project.name}`,
         body: "你已成为该项目的初始成员",
-        targetPath: `/projects/${project.projectId}`,
+        targetPath: `/projects/${project.projectId}/activity`,
         createdAt: occurredAt,
       });
     }

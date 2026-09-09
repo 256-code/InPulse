@@ -5,7 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 
-import type { E2ERuntime } from "./runtime.js";
+import type { E2EAccount, E2ERuntime } from "./runtime.js";
 
 export interface AuthenticatedContext {
   readonly context: BrowserContext;
@@ -15,15 +15,16 @@ export interface AuthenticatedContext {
 export async function loginViaUi(
   page: Page,
   runtime: E2ERuntime,
+  account: E2EAccount = runtime.user,
 ): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("登录名").fill(runtime.user.loginName);
-  await page.getByLabel("密码").fill(runtime.user.password);
+  await page.getByLabel("登录名").fill(account.loginName);
+  await page.getByLabel("密码").fill(account.password);
   await page
     .locator("form")
     .getByRole("button", { name: /登\s*录/ })
     .click();
-  await expect(page.getByText("已登录")).toBeVisible();
+  await expect(page.getByText("成员", { exact: true })).toBeVisible();
 }
 
 export async function createAuthenticatedContext(

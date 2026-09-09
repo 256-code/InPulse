@@ -29,9 +29,13 @@ const createdProject: CreateProjectResponse = {
 describe("ProjectsPage", () => {
   it("creates a project and navigates to its activity page", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false }],
+    });
     const createProject = vi.fn().mockResolvedValue(createdProject);
     const client = {
       issueCsrfToken,
+      getUserDirectory,
       createProject,
     } as unknown as InpulseApiClient;
 
