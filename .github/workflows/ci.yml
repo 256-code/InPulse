@@ -16,10 +16,11 @@
 #   9  Route Registry/permission/response-schema completeness
 #                                         -> Route Registry completeness check
 #  10  web/api production build           -> Build
-#  11  dependency boundary check          -> Dependency boundary check
+#  11  compose/ref preflight              -> check:deploy:test（合成 ref 正例）
+#  12  dependency boundary check          -> Dependency boundary check
 #                                            + Frontend boundary check (dependency-cruiser)
-#  12  permission matrix test             -> Permission matrix check
-#  13  dependency/secret scan             -> Dependency audit / Secret scan
+#  13  permission matrix test             -> Permission matrix check
+#  14  dependency/secret scan             -> Dependency audit / Secret scan
 #
 # 迁移 0003_search_pgroonga.sql 在缺少 PGroonga 时 fail closed，因此本 job 先用
 # database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 基于 digest 固定的
@@ -34,9 +35,12 @@
 #
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
 #   - Playwright critical-path tests（阶段 0 E2E 尚未建立）
-#   - container image build、Compose config render + exact-tag/digest format
-#     + PostgreSQL 18 mount check、image scan（仓库尚无生产 Dockerfile/compose.yaml，
+#   - container image build 与 image scan（仓库尚无生产 Dockerfile 与真实镜像 digest；
 #     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
+# Compose config render + exact-tag/digest 格式 + PostgreSQL 18 命名卷挂载 + 非 root
+# 结构已由 `pnpm check:deploy:test` 的合成 ref 正例和下方负例 step 覆盖；生产镜像 digest
+# 必须由受信镜像仓库解析，不得使用合成 ref。生产 Dockerfile 与 digest 定案后必须按
+# §12.4 顺序插入镜像构建和扫描门禁。
 # 上述项落地后必须在本文件按 §12.4 顺序插入，不得跳过。
 name: CI
 
@@ -169,17 +173,15 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Deploy compose config and image ref preflight gate
-        # 仓库尚无生产镜像 digest，本节只证明 compose 可渲染、ref 预检会拒绝占位符；
-        # 真实 *_IMAGE_REF 的 digest 绑定是发布期 gate（check:deploy），不在 CI 伪造。
+      - name: Deploy image ref negative preflight
+        # 正例已由 `pnpm check:deploy:test` 执行；这里单独验证 .example 的占位符
+        # 必须被拒绝，避免用“脚本存在”冒充真实发布 ref 已绑定。
         run: |
-          docker compose --project-directory deploy -f deploy/compose.yaml \
-            --env-file deploy/.env.deploy.example config --quiet
           if node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.example; then
             echo "Expected placeholder *_IMAGE_REF to be rejected by preflight." >&2
             exit 1
           fi
-          echo "Compose config renders; preflight correctly rejects placeholder image refs."
+          echo "Preflight correctly rejects placeholder image refs."
 
       - name: Dependency boundary check
         run: pnpm check:deps

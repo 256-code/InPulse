@@ -11,7 +11,8 @@
  *
  * 用法：
  *   node scripts/check_deploy_refs.mjs --env deploy/.env.deploy
- *   node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.example
+ *   node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.test
+ *   node scripts/check_deploy_refs.mjs --env deploy/.env.deploy.example  # 应被拒绝
  *
  * 注意：真实 digest 只能由受信镜像仓库解析后写入，本脚本不生成也不伪造 digest。
  */
@@ -30,7 +31,6 @@ const REQUIRED_REFS = [
   "MIGRATE_IMAGE_REF",
   "API_IMAGE_REF",
   "WEB_IMAGE_REF",
-  "OPS_IMAGE_REF",
 ];
 
 let exitCode = 0;
@@ -178,6 +178,7 @@ function checkStructure(rendered) {
 
   const api = services.api;
   if (api) {
+    if (!api.healthcheck) problems.push("api: healthcheck is required");
     if (
       api.depends_on?.migrate?.condition !== "service_completed_successfully"
     ) {
@@ -195,6 +196,7 @@ function checkStructure(rendered) {
 
   const migrate = services.migrate;
   if (migrate) {
+    if (migrate.restart !== "no") problems.push("migrate: restart must be no");
     const cmd = Array.isArray(migrate.command)
       ? migrate.command.join(" ")
       : String(migrate.command ?? "");
@@ -210,6 +212,7 @@ function checkStructure(rendered) {
 
   const web = services.web;
   if (web) {
+    if (!web.healthcheck) problems.push("web: healthcheck is required");
     const ports = (web.ports ?? []).map((p) => {
       if (typeof p === "string") return p;
       if (p && typeof p === "object") return `${p.published}:${p.target}`;
