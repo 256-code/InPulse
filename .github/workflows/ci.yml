@@ -16,13 +16,15 @@
 #   9  Route Registry/permission/response-schema completeness
 #                                         -> Route Registry completeness check
 #  10  web/api production build           -> Build
-#  11  Playwright browser E2E             -> Browser E2E（F-31 基座；数据库驱动）
-#  12  compose/ref preflight              -> check:deploy:test（合成 ref 正例）
-#  13  dependency boundary check          -> Dependency boundary check
+#  11  production container image build   -> Build production {api,migrate,web,db-bootstrap} image
+#  12  image vulnerability scan           -> Scan production images (Trivy)
+#  13  Playwright browser E2E             -> Browser E2E（F-31 基座；数据库驱动）
+#  14  compose/ref preflight              -> check:deploy:test（合成 ref 正例）
+#  15  dependency boundary check          -> Dependency boundary check
 #                                            + Frontend boundary check (dependency-cruiser)
-#  14  permission matrix test             -> Permission matrix check
-#  15  dependency/secret scan             -> Dependency audit / Secret scan
-#  16  documentation check                -> Documentation checks
+#  16  permission matrix test             -> Permission matrix check
+#  17  dependency/secret scan             -> Dependency audit / Secret scan
+#  18  documentation check                -> Documentation checks
 #
 # 迁移 0003_search_pgroonga.sql 在缺少 PGroonga 时 fail closed，因此本 job 先用
 # database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6 基于 digest 固定的
@@ -36,15 +38,11 @@
 # 纳入本 workflow；待批准的搜索服务测试方案确定后必须按 §12.4 顺序插入。
 #
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
-#   - Playwright 完整关键路径（F-31 测试基座已落库，完整业务场景待对应模块交付）
-#   - container image build、受信镜像 digest 绑定与 image scan
-#     （仓库尚无生产 Dockerfile；deploy/compose.yaml 与 ref 格式预检已落库，
-#     且 ADR-017 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案）
-# Compose config render + exact-tag/digest 格式 + PostgreSQL 18 命名卷挂载 + 非 root
-# 结构已由 `pnpm check:deploy:test` 的合成 ref 正例和下方负例 step 覆盖；生产镜像 digest
-# 必须由受信镜像仓库解析，不得使用合成 ref。生产 Dockerfile 与 digest 定案后必须按
-# §12.4 顺序插入镜像构建和扫描门禁。
-# 上述项落地后必须在本文件按 §12.4 顺序插入，不得跳过。
+#   - Playwright 完整业务关键路径（F-31 测试基座已落库，业务场景待对应模块交付）
+#   - 生产镜像 digest 绑定与签名发布清单（部署发布环节，非本 job 输出）
+# 生产 Dockerfile（API/Migration/Web/DB-bootstrap）与镜像扫描已按 §12.4 顺序在本
+# workflow 落库；`pnpm check:deploy:test` 继续用合成 ref 验证 Compose 渲染与结构，
+# 生产镜像 digest 必须由受信镜像仓库解析并在发布清单中绑定。
 name: CI
 
 on:
@@ -65,7 +63,7 @@ env:
 jobs:
   workspace:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,6 +173,82 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build production API image
+        # 生产 API 多阶段镜像：base 固定 node:24.20.0-bookworm-slim digest，
+        # runtime 仅含 pnpm deploy --prod 产出的生产依赖，非 root。
+        run: |
+          docker build \
+            --file deploy/docker/api.Dockerfile \
+            --tag inpulse/api:ci \
+            .
+
+      - name: Build production migration image
+        # 生产 migration/ops 镜像：与 API 同 commit，运行编译后的 migration 入口，
+        # 不携带 tsx，使用生产依赖。
+        run: |
+          docker build \
+            --file deploy/docker/migration.Dockerfile \
+            --tag inpulse/migrate:ci \
+            .
+
+      - name: Build production web image
+        # 生产 Web 镜像：builder 执行 Vite build，runtime 使用
+        # nginx-unprivileged:1.30.4 digest，托管 dist 并代理 API/health。
+        run: |
+          docker build \
+            --file deploy/docker/web.Dockerfile \
+            --tag inpulse/web:ci \
+            .
+
+      - name: Build production db-bootstrap image
+        # 生产 PostgreSQL 18.6 bootstrap 镜像：base 固定 postgres:18.6 digest，
+        # 安装评审基线 PGroonga 并放入 bootstrap SQL（不含密码）。
+        run: |
+          docker build \
+            --file deploy/docker/db-bootstrap.Dockerfile \
+            --tag inpulse/db-bootstrap:ci \
+            .
+
+      - name: Scan production API image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/api:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
+
+      - name: Scan production migration image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/migrate:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
+
+      - name: Scan production web image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/web:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
+
+      - name: Scan production db-bootstrap image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/db-bootstrap:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
 
       - name: Install Playwright browser
         run: pnpm --filter @inpulse/e2e exec playwright install --with-deps chromium

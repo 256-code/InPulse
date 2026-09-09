@@ -85,8 +85,8 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 6/6 通过（项目创建首条业务关键路径已覆盖）；其余完整关键路径 Required |
-| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
-| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
+| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | Required（Compose/ref 预检已自动化；真实镜像 digest 绑定与签名发布清单仍待发布环节） |
+| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | Required（扫描步骤已落库，待 CI 实际执行） |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
 > CI-001～CI-006、CI-009～CI-013、CI-015、CI-016 的命令已在本地实测通过，其中
@@ -116,7 +116,8 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > 运行本身尚未执行。CI-017 的 Playwright 基座已于 2026-09-09 在本机 6/6 通过，其中项目创建关键路径已覆盖；F-02 接入 TOTP KEK 环境后再次复跑 6/6，MFA UI 场景尚未加入；本 PR 的 GitHub Actions 执行结果待确认；CI-018 的 `compose config` 渲染、exact-tag@sha256
 > 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
 > `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
-> 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI；CI-019 因尚无生产 Dockerfile、受信 digest 与镜像扫描而未落库。F-31 覆盖见“Playwright 浏览器测试基座”一节。
+> Trivy 扫描已按 §12.4 顺序插入 CI；真实镜像 digest 绑定与签名发布清单仍待发布环节。
+> F-31 覆盖见“Playwright 浏览器测试基座”一节。
 
 
 ## 健康探针
@@ -301,3 +302,19 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 2026-09-08：[PR #42](https://github.com/256-code/InPulse/pull/42) 提交 `58acbe7` 的
 [数据库日志](https://github.com/256-code/InPulse/actions/runs/34210258609/job/102009300977?pr=42#step:17:28) 确认本文件 6 tests 全部通过，334 ms；
 CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认本切片数据库自动化验证，A/C 人工评审和业务 Workflow 验收仍待完成。
+
+## F-10.1 生产镜像与部署门禁（2026-09-09）
+
+本节仅记录镜像闭环门禁的落库与验证状态，不代表真实镜像已构建或扫描通过。
+
+| 场景 | 自动化入口 | 验证状态 |
+|---|---|---|
+| 四个生产 Dockerfile 存在且每个 `FROM` 固定 `@sha256:<64hex>`；API/Web/Migration runtime 为数值非 root `USER`；Web 内置 `nginx.conf`；API 内置 `healthcheck.mjs` | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；`.env.deploy.example` 占位符负例被拒绝 |
+| Compose 稳态拓扑渲染、`exact-tag@sha256` 格式、PostgreSQL 18 命名卷挂载、非 root/只读、独立迁移、健康检查、仅 Nginx 暴露 8080/8443 | `pnpm check:deploy:test` | 本地通过 |
+| 每个服务级 secret 使用长语法且 `mode=0400`、`uid/gid` 与容器数值 user 一致、`target` 为 `/run/secrets` 直接子项 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；短语法负例被拒绝 |
+| API/Migration runtime 不保留基础镜像自带 npm/corepack | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过（新增回归校验） |
+| DB-bootstrap runtime 不保留官方 `gosu` 并升级 Debian OpenSSL 安全补丁 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过（新增回归校验） |
+| 生产 API/Migration/Web/DB-bootstrap 镜像构建 | `CI / workspace` 新增 Build production * image 步骤 | 待 CI（本机 Docker daemon 未启动，未实际构建） |
+| 生产镜像漏洞扫描 | `CI / workspace` 新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 首次实际执行因 API 镜像自带 npm HIGH 失败；修复后重跑又发现 DB-bootstrap 自带 `gosu` 与旧 OpenSSL HIGH/CRITICAL，已按 ADR-017 删除/升级后待重跑 CI |
+
+本机未运行 Docker，因此镜像构建与扫描为 `Required`，不得据此宣称生产镜像已验证。
