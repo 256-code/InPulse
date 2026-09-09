@@ -523,6 +523,111 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       ).toBe(200);
     },
   );
+  it("runs 100 real createModule business transactions on one project audit chain without gaps or forks", async () => {
+    const { member, project } = await fixture();
+    const dedicatedClient = createDatabaseClient(testUrls().runtime, {
+      applicationName: "inpulse-f12-audit-concurrency",
+      maxConnections: 110,
+    });
+    const dedicatedUow = new PostgresUnitOfWork(dedicatedClient);
+    const dedicatedManagement = new ModulesManagementService(
+      new PostgresProjectAccessQueryPort(dedicatedClient),
+      dedicatedUow,
+      new ModuleManagementRepository(),
+      new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
+      new PostgresActivityWritePort(),
+      new PostgresSearchProjectionWritePort(),
+    );
+    let ready = 0;
+    let release: (() => void) | undefined;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const operations = Array.from({ length: 100 }, (_, index) =>
+        dedicatedUow.run(async (tx) => {
+          ready += 1;
+          if (ready === 100) release?.();
+          await barrier;
+          return dedicatedManagement.execute(tx, {
+            operation: "createModule",
+            actorId: member.userId,
+            projectId: project.projectId,
+            edit: {
+              name: `concurrent-module-${String(index + 1).padStart(3, "0")}`,
+              description: "100 concurrent business transactions",
+            },
+            requestId: randomUUID(),
+          });
+        }),
+      );
+      const results = await Promise.all(operations);
+      expect(results).toHaveLength(100);
+      expect(results.every((item) => item.status === "ACTIVE")).toBe(true);
+      expect(results.every((item) => item.rowVersion === 1)).toBe(true);
+
+      const chainId = `PROJECT:${project.projectId}`;
+      const auditRows = (await auditReader.sql`
+        SELECT sequence_no AS "sequenceNo",
+               prev_hash AS "prevHash",
+               record_hash AS "recordHash",
+               action,
+               chain_id AS "chainId"
+          FROM app.audit_logs
+         WHERE project_id = ${project.projectId}
+         ORDER BY sequence_no
+      `) as unknown as readonly {
+        sequenceNo: string;
+        prevHash: Buffer;
+        recordHash: Buffer;
+        action: string;
+        chainId: string;
+      }[];
+      expect(auditRows).toHaveLength(100);
+      expect(
+        auditRows.every(
+          (row) => row.chainId === chainId && row.action === "module.create",
+        ),
+      ).toBe(true);
+
+      let previousHash = Buffer.alloc(32);
+      auditRows.forEach((row, index) => {
+        expect(Number(row.sequenceNo)).toBe(index + 1);
+        expect(Buffer.from(row.prevHash).equals(previousHash)).toBe(true);
+        previousHash = Buffer.from(row.recordHash);
+      });
+      const [head] = (await auditReader.sql`
+        SELECT last_sequence AS "lastSequence", last_hash AS "lastHash"
+          FROM app.audit_chain_heads
+         WHERE chain_id = ${chainId}
+      `) as unknown as readonly {
+        lastSequence: string;
+        lastHash: Buffer;
+      }[];
+      expect(Number(head?.lastSequence)).toBe(100);
+      expect(Buffer.from(head?.lastHash ?? [])).toEqual(previousHash);
+
+      const [counts] = (await client.sql`
+        SELECT
+          (SELECT count(*)::INTEGER
+             FROM app.modules
+            WHERE project_id = ${project.projectId}) AS modules,
+          (SELECT count(*)::INTEGER
+             FROM app.activity_projection
+            WHERE project_id = ${project.projectId}) AS activities,
+          (SELECT count(*)::INTEGER
+             FROM app.search_projection
+            WHERE project_id = ${project.projectId}) AS search
+      `) as unknown as readonly {
+        modules: number;
+        activities: number;
+        search: number;
+      }[];
+      expect(counts).toEqual({ modules: 101, activities: 100, search: 100 });
+    } finally {
+      await dedicatedClient.close();
+    }
+  });
   it("parent archive FOR UPDATE blocks a child write, which rechecks ACTIVE after acquiring its lock", async () => {
     const { member, project } = await fixture();
     let release!: () => void;
