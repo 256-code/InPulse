@@ -65,7 +65,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-001 | CI | frozen lockfile 安装 | `pnpm install --frozen-lockfile` 在 Node 24.20.0 / pnpm 11.19.0 下成功，且不修改 `pnpm-lock.yaml` | 已自动化 |
 | CI-002 | CI | ESLint | `pnpm lint` 对全部工作区源码零错误 | 已自动化 |
 | CI-003 | CI | Prettier 格式 | `pnpm format:check` 对 `.prettierignore` 之外的全部文件通过；Markdown、lockfile、迁移与生成物按 `.prettierignore` 排除 | 已自动化 |
-| CI-004 | CI | TypeScript 严格模式 | `pnpm typecheck` 覆盖 database、api-contract、api/web 应用与 `apps/e2e`，零错误 | 已自动化 |
+| CI-004 | CI | TypeScript 严格模式 | `pnpm typecheck` 覆盖 database、api-contract 与 api/web 应用，零错误 | 已自动化 |
 | CI-005 | 单元 | database 配置、契约生成器与前端基座 | `pnpm test:unit` 全部通过且不依赖数据库，覆盖 database 配置/Secret fail-closed、api-contract 契约与生成器、apps/web 路由/鉴权守卫/错误边界（jsdom） | 已自动化 |
 | CI-006 | CI | 迁移文件一致性 | `pnpm db:migrations:check` 校验迁移顺序、命名与内容哈希，历史迁移不可重写 | 已自动化 |
 | CI-007 | PostgreSQL 集成 | 空库迁移 | `pnpm db:migrate` 以 `app_migrator` 对空库应用全部迁移 `0000-0005`（`0003` 在缺少 PGroonga 时 fail closed）；重复执行只报告 already applied，不重复写入 | 已自动化 |
@@ -75,18 +75,18 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-011 | CI | 权限矩阵一致性 | `pnpm permissions:check` 双向校验可执行权限矩阵与 `docs/permissions.md` 的身份集合、ADR-023 allowlist 精确相等、每条路由都有矩阵条目，并要求需认证路由同时登记允许与拒绝结果 | 已自动化 |
 | CI-012 | CI | 生产构建 | `pnpm build` 完成 api（`tsc`）与 web（`vite`）生产构建 | 已自动化 |
 | CI-013 | CI | 依赖边界 | `pnpm check:deps` 校验前端分层 `app -> pages -> features -> shared/generated`、`features` 不导入 `pages`、web 不导入 database、Controller 不直连数据库、模块只能经公开表面（`public/**`、模块 `index.ts`、`*.port.ts`）跨模块、无循环依赖、前端无裸 `fetch`/`axios`；并由 `pnpm check:frontend:boundaries`（dependency-cruiser）复核 `apps/web/src` 的分层规则 | 已自动化 |
-| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex@5.0.0` high 已由 `overrides` 固定到 `^5.0.1` 解决，见下方状态说明） |
+| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、任务完成并同步发布记录、合并/解除任务组、遗留项转任务等关键路径通过 | 基座本地已自动化（5 例通过）；完整关键路径 Required |
-| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required |
+| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root | Required（Compose/ref 预检已自动化；镜像构建、受信 digest 与扫描仍待 F-10.1/F-10.2） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项 | Required |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
 > CI-001～CI-006、CI-009～CI-013、CI-015、CI-016 的命令已在本地实测通过，其中
-> CI-005 现覆盖 database 5 例、api-contract 59 例、apps/web 39 例与 apps/api 160 例（共 263 例），
-> CI-013 同时执行 `pnpm check:deps`（225 个源文件）与 `pnpm check:frontend:boundaries`
-> （dependency-cruiser：72 个模块 / 232 条依赖，无违规）。
+> CI-005 现覆盖 database 5 例、api-contract 50 例与 apps/web 15 例（共 70 例），
+> CI-013 同时执行 `pnpm check:deps`（81 个源文件）与 `pnpm check:frontend:boundaries`
+> （dependency-cruiser：33 个模块 / 69 条依赖，无违规）。
 > **CI-014 已解决**：`pnpm audit --audit-level=high` 曾报 1 个 high —— `ansi-regex@5.0.0`
 > （GHSA-93q8-gq69-wqmw，补丁版本 `>=5.0.1`），路径为
 > `apps/web` 的 `@testing-library/{jest-dom,react,user-event}` -> `@testing-library/dom`
@@ -94,13 +94,23 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > 已在 `pnpm-workspace.yaml` 用 `overrides` 把 `ansi-regex` 固定到 `^5.0.1`（lockfile 落为
 > `5.0.1`）解决，该依赖为 dev 工具链；本地 `pnpm deps:audit` 与 `pnpm check` 已通过。
 > 按 `AGENTS.md` 第 4 节，该依赖变更仍须经独立 PR 与人工确认。
+>
+> **CI-014 补充（2026-09-09）**：`multer@2.2.0` 曾报 3 个 high ——
+> GHSA-wc9g-mqfw-jrwm、GHSA-qfvm-cv95-jqjf、GHSA-535w-7cp7-47q4，路径为
+> `@nestjs/platform-express@11.2.3` -> `multer@2.2.0`。先由
+> A #56 在 `pnpm-workspace.yaml` 增加 `multer: "^2.3.0"` 并合入主线，随后
+> C #57 将 override 收紧为精确版本 `2.3.0`（lockfile 同步更新）；
+> `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无漏洞。
+> 该依赖为 NestJS 运行时传递依赖，已按第 4 节经独立 PR 与人工确认处理，不得调低阈值。
 > CI-007 与 CI-008 曾在 `0000-0002` 上通过本机 PostgreSQL 18.6 实测；合并 `0003-0005`
-> 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 已内置 PGroonga 4.0.8，
-> `pnpm db:test:local` 与 API `test:integration` 已在本地实测通过；CI 仍用
+> 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，
+> `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
 > `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的
 > `postgres:18.6` 构建的探针镜像覆盖，而 `.github/workflows/ci.yml` 的 GitHub Actions
-> 运行本身尚未执行。CI-017 的 Playwright 基座已落库并于 2026-09-08 在本机 5/5 通过，完整关键路径仍为 Required；CI-018/CI-019 因仓库尚无生产 Dockerfile 与 `compose.yaml`
-> 而未落库，落地后必须按 §12.4 顺序插入 CI。F-31 覆盖见“Playwright 浏览器测试基座”一节；GitHub Actions 尚未执行。
+> 运行本身尚未执行。CI-017 的 Playwright 基座已落库并于 2026-09-08 在本机 5/5 通过，完整关键路径仍为 Required，本 PR 的 GitHub Actions 执行结果待确认；CI-018 的 `compose config` 渲染、exact-tag@sha256
+> 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
+> `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
+> 真实 digest 仍待 F-10.1/F-10.2，落地后必须按 §12.4 顺序插入 CI；CI-019 因尚无生产 Dockerfile、受信 digest 与镜像扫描而未落库。F-31 覆盖见“Playwright 浏览器测试基座”一节。
 
 
 ## 健康探针
@@ -233,20 +243,6 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | FE-005 | 架构门禁 | 前端分层依赖检查 | `dependency-cruiser` 确保单向依赖（`app -> pages -> features -> shared/generated`），禁止反向/跨层与循环依赖 | 已自动化 |
 | FE-006 | 单元测试 | 全局搜索页面纵切片 | `SearchPageView` 通过生成客户端消费 `getSearch`，覆盖 `q`、签名游标分页、短词提示与 401 不泄露服务端细节；顶部搜索框提交导航 `/search?q=...` | 已自动化（本地前端 12 文件 32 例通过；GitHub Actions 尚未执行） |
 | FE-007 | 单元测试 | 真实认证上下文与登录表单 | `AuthProvider` 覆盖挂载恢复会话、匿名 CSRF bootstrap、登录、登出与 MFA 不认证；`LoginForm` 覆盖失败提示与成功回调 | 已自动化（本地前端 12 文件 32 例通过；GitHub Actions 尚未执行） |
-
-## Playwright 浏览器测试基座（F-31，C 本地交付 2026-09-08）
-
-| ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
-| E2E-001 | Browser E2E | 基座生命周期 | `webServer` 启动已构建 API 与 Vite dev server；`global-setup` 创建唯一 E2E 用户、项目成员和搜索投影；`global-teardown` 清理通知/活动/幂等/Session 等状态 | 本地通过（`pnpm test:e2e`） |
-| E2E-002 | Browser E2E | 匿名保护页 | 未登录访问 `/search` 展示统一登录提示，不泄漏业务内容 | 本地通过 |
-| E2E-003 | Browser E2E | 真实 UI 登录与站内通知 | 通过登录表单建立 Session 后进入 `/notifications`，读取空通知状态 | 本地通过 |
-| E2E-004 | Browser E2E | 真实 UI 登录与全局搜索 | 登录后按 E2E 投影关键词搜索并看到项目标题 | 本地通过 |
-| E2E-005 | Browser E2E | API Session 复用 | 使用 `global-setup` 签发 Cookie 的 `GET /api/v1/me` 返回当前测试用户 | 本地通过 |
-| E2E-006 | Browser E2E | API 启动探针 | 使用测试 `DATABASE_URL`、`NODE_ENV=test` 与临时 keyring 启动 API，`GET /api/v1/health` 返回成功 | 本地通过 |
-
-> 当前基座仅覆盖认证、搜索和通知冒烟；项目创建、任务完成、合并/解除、记录发布等关键业务路径仍为 Required。运行结果：本地 5 个 Playwright 用例通过；GitHub Actions 尚未执行。项目/用户骨架因未分类模块不可物理删除而按不变量保留，完整自清需另行设计测试数据库策略或新增 ADR。
-
 
 ## 项目动态与站内通知（F-27 / F-28，C 本地交付 2026-09-08）
 

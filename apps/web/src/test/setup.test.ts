@@ -7,4 +7,10 @@ describe("frontend test setup", () => {
     document.body.appendChild(div);
     expect(div).toBeInTheDocument();
   });
+
+  it("clears pending timers before jsdom teardown", () => {
+    setTimeout(() => {
+      throw new Error("pending timer was not cleared");
+    }, 1_000);
+  });
 });
