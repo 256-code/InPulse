@@ -7,6 +7,16 @@ import {
 } from "../src/auth/password.service.js";
 
 describe("PasswordService", () => {
+  test("createHash 生成可验证的 Argon2id 编码哈希", async () => {
+    const passwordValue = "new-user-password";
+    const service = new PasswordService();
+    const encoded = await service.createHash(passwordValue);
+
+    expect(encoded.startsWith("$argon2id$")).toBe(true);
+    expect(await service.verify(passwordValue, encoded)).toBe(true);
+    expect(await service.verify("wrong-password", encoded)).toBe(false);
+  });
+
   test("正确密码通过，错误密码失败", async () => {
     const passwordValue = "correct-password-for-test";
     const encoded = await hash(passwordValue, ARGON2ID_OPTIONS);

@@ -65,7 +65,12 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | 原始审计查询或导出 | 401 | 403 | 403 | 403 | 401 | 允许 | 重认证；使用 audit_reader；读取本身写审计 |
 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 401 | 403 | 403 | 403 | 401 | 允许 | 重认证并填写原因；写审计 |
 | 重置另一名系统管理员 MFA（`resetAdminMfa` · `POST /api/v1/auth/admin/mfa-reset`） | 401 | 403 | 403 | 403 | 401 | 允许 | 仅完整系统管理员 Session 且 5 分钟内完成密码 + 当前 TOTP 双因子重认证；目标必须是另一名 `ACTIVE` 且已启用 TOTP 的系统管理员，且可用 MFA 管理员数大于 1；同一事务禁用目标因子、失效未使用恢复码、递增 `auth_version`、撤销目标全部 Session 并写审计；CSRF 与幂等键必填；成功 204，目标不存在 404，非管理员/目标未启用 403，自重置、最后一名 MFA 管理员或状态冲突 409，字段/请求头无效 422 |
-| 用户启停、强退、管理员管理 | 401 | 不适用 | 不适用 | 不适用 | 401 | 允许 | 重认证；不能留下无 MFA 管理员的失控状态 |
+| `listAdminUsers` · `GET /api/v1/admin/users` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整系统管理员 Session；读取全部账号的登录名、姓名、邮箱、头像、管理员角色、状态、版本与时间，不返回密码、TOTP、恢复码等认证材料；最多 1000 条；响应 `no-store`；不需要 CSRF 或幂等键 |
+| `createUser` · `POST /api/v1/admin/users` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session 且密码/当前 TOTP 双因子重认证均在 5 分钟内；CSRF 与 `Idempotency-Key` 必填；Argon2id 哈希在事务外生成、业务与审计同事务写入；登录名/邮箱唯一冲突 409；响应不返回密码或认证材料 |
+| `updateUser` · `PATCH /api/v1/admin/users/{userId}` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；登录名不可修改，字段缺省保持不变，`email/avatarUrl` 为 null 表示清空；版本/状态冲突 409；禁止取消自己的管理员角色；移除 ACTIVE 管理员前按 id 升序锁定全部活跃 MFA 管理员，剩余可用 MFA 管理员数必须大于 1，否则 409；审计 `admin.user.update` |
+| `disableUser` · `POST /api/v1/admin/users/{userId}/disable` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；目标不存在 404、已停用或版本冲突 409；禁止停用自己；停用 ACTIVE 管理员时执行最后一名可用 MFA 管理员保护；同事务置 `DISABLED`/`disabled_at`、递增 `auth_version` 与 `row_version`、撤销全部 Session 并写审计；停用后目标所有受保护请求 401 |
+| `enableUser` · `POST /api/v1/admin/users/{userId}/enable` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；目标不存在 404、已启用或版本冲突 409；同事务清除停用态并递增 `row_version`、写审计；不恢复已撤销 Session 或登录限流历史 |
+| `forceLogoutUser` · `POST /api/v1/admin/users/{userId}/force-logout` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + 5 分钟双因子重认证；CSRF、`Idempotency-Key` 与 `If-Match` 必填；目标不存在 404、版本冲突 409；禁止强制退出自己；同事务递增 `auth_version` 与 `row_version`、撤销目标全部 Session 并写审计；账号保持 ACTIVE |
 
 ## F-13 功能档案接口（2026-09-09 本地实现）
 

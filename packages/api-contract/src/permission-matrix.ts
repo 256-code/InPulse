@@ -286,6 +286,41 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "listAdminUsers",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  ...(
+    [
+      "createUser",
+      "updateUser",
+      "disableUser",
+      "enableUser",
+      "forceLogoutUser",
+    ] as const
+  ).map((operationId): PermissionMatrixEntry => ({
+    operationId,
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session 且密码/当前 TOTP 双因子重认证均在五分钟内；移除管理员时仍须保留至少一名可用 MFA 管理员，且禁止自移除/自停用/自强退",
+        deniedWith: 403,
+      },
+    },
+  })),
+  {
     operationId: "resetAdminMfa",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

@@ -58,6 +58,14 @@ import {
   projectCodeSchema,
 } from "./contracts/projects.zod.js";
 import {
+  adminUserCreateRequestSchema,
+  adminUserItemSchema,
+  adminUserListResponseSchema,
+  adminUserMutationHeadersSchema,
+  adminUserPathSchema,
+  adminUserReplayContextSchema,
+  adminUserUpdateRequestSchema,
+  adminUserVersionHeadersSchema,
   userDirectoryItemSchema,
   userDirectoryResponseSchema,
 } from "./contracts/users.zod.js";
@@ -318,6 +326,46 @@ export const schemaRegistry = {
   UserDirectoryResponse: {
     schema: userDirectoryResponseSchema,
     summary: "全部启用用户的轻量目录；响应 no-store",
+    sensitiveFieldPaths: [],
+  },
+  AdminUserPath: {
+    schema: adminUserPathSchema,
+    summary: "用户管理路径参数",
+    sensitiveFieldPaths: [],
+  },
+  AdminUserCreateRequest: {
+    schema: adminUserCreateRequestSchema,
+    summary: "系统管理员新增用户请求；密码在请求中出现但不会持久化明文",
+    sensitiveFieldPaths: ["password"],
+  },
+  AdminUserUpdateRequest: {
+    schema: adminUserUpdateRequestSchema,
+    summary: "用户资料与管理员角色编辑请求",
+    sensitiveFieldPaths: [],
+  },
+  AdminUserMutationHeaders: {
+    schema: adminUserMutationHeadersSchema,
+    summary: "用户管理创建请求头，要求同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  AdminUserVersionHeaders: {
+    schema: adminUserVersionHeadersSchema,
+    summary: "用户管理版本写请求头，要求同步 CSRF Token 与 If-Match",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  AdminUserItem: {
+    schema: adminUserItemSchema,
+    summary: "管理员用户管理公开条目；不暴露密码哈希或 MFA 材料",
+    sensitiveFieldPaths: [],
+  },
+  AdminUserListResponse: {
+    schema: adminUserListResponseSchema,
+    summary: "管理员用户列表；响应 no-store",
+    sensitiveFieldPaths: [],
+  },
+  AdminUserReplayContext: {
+    schema: adminUserReplayContextSchema,
+    summary: "用户管理幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
 } satisfies Record<string, SchemaRegistryEntry>;

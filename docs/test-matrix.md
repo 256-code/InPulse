@@ -93,6 +93,29 @@ PGroonga 的 PostgreSQL 18 实例并先执行 `pnpm db:migrate`，由 API 集成
 （`vitest.integration.config.ts`）运行；本机已用 PostgreSQL 18.6 + PGroonga 实测通过，
 GitHub Actions 的 CI 尚未就本 PR 执行。
 
+## F-03 用户管理（A，2026-09-09 本地交付）
+
+阶段 1 A 域用户管理纵切片：`/api/v1/admin/users` 六条路由，覆盖管理员列表、新增、编辑、
+启停、启用与强制退出；无新数据库迁移，复用现有 `users`/`user_sessions`/审计与密钥机制。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F03-CONTRACT-001 | 契约与 CI | 六条路由登记 | Schema Registry、Route Registry、Controller 绑定、OpenAPI、Web 客户端与权限矩阵一致；41 条路由全部由 `contract:drift`/`contract:validate`/`permissions:check` 覆盖 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，41/41） |
+| F03-API-001 | 单元 | HTTP 编排 | `listAdminUsers` 允许管理员、普通用户 403、匿名 401；create 的事务外 Argon2id 哈希、CSRF/幂等键/`If-Match` 传递、失败映射与幂等重认证回调 | 本地通过（`admin-users-http.test.ts`，API 单测 55 文件 256 例） |
+| F03-API-002 | HTTP + PostgreSQL | 完整生命周期 | 管理员创建用户后同 Key 重放不重复；编辑、停用、启用、强退分别递增版本；停用/强退同事务递增 `auth_version` 并撤销 Session；停用后旧 Session 请求 401；五类审计事件齐全；审计失败时创建整体回滚 | 本地通过（`admin-users-api.integration.test.ts`；API 集成 31 文件 152 例，PostgreSQL 18.6 + PGroonga） |
+| F03-API-003 | 权限与边界 | 拒绝与保护 | 缺重认证 403、缺幂等键 400、非法字段 422、旧版本/状态冲突与自停用/最后一名 MFA 管理员 409；错误响应不泄露 SQL 或约束名；普通成员访问管理页 403 | 本地通过（HTTP 单元、真实 PostgreSQL 与权限矩阵） |
+| F03-UI-001 | 前端单元 | 管理页关键交互 | 列表展示、隐藏当前管理员停用/强退入口；新增/编辑携带 CSRF、幂等键和 `If-Match`；重认证失败自动打开、成功后保留同一幂等键；错误文案统一映射 | 本地通过（`admin-user-query.test.tsx` 3 例、`AdminUsersPageView.test.tsx` 5 例；Web 30 文件 87 例） |
+| F03-E2E-001 | Playwright | 领域 E2E | 普通成员访问 `/settings` 显示 403；管理员完成新增（首次写触发重认证并重试）→ 编辑 → 停用 → 启用 → 强制退出真实 UI 链路 | 本地 18/18 通过（新增 2 例，Playwright 全量含 F-13、MFA、搜索、项目创建等既有用例） |
+
+2026-09-09 本地实际通过（已合并 `origin/main` `8386b29`）：`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、
+`pnpm test:unit`（database 5、api-contract 63、web 87、api 256）、`pnpm test:web`（30 文件 87 例）、`pnpm test:integration`（database 13、API 31 文件 152 例）、`pnpm build`、
+`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、
+`pnpm db:migrations:check`、`pnpm check:deps`、`pnpm check:frontend:boundaries`、
+`pnpm check:secrets`、`pnpm check:deploy:test`、`pnpm test:e2e`（18/18）、
+公共 registry 的 `pnpm audit --registry=https://registry.npmjs.org --audit-level=high`
+（No known vulnerabilities found）。生成客户端已重新生成并通过 `pnpm contract:drift`；
+GitHub Actions 尚未对本 PR 执行。
+
 ## 文档与仓库治理
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -124,7 +147,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 16/16 通过（MFA、项目创建、F-13 功能档案、搜索边界及 F-27/F-28 状态联动已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
+| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 18/18 通过（F-03 用户管理、MFA、项目创建、F-13 功能档案、搜索边界及 F-27/F-28 状态联动已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | Required（Compose/ref 预检已自动化；真实镜像 digest 绑定与签名发布清单仍待发布环节） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | Required（扫描步骤已落库，待 CI 实际执行） |
 

@@ -6,6 +6,7 @@ import {
 } from "@playwright/test";
 
 import type { E2EAccount, E2ERuntime } from "./runtime.js";
+import { totpCode } from "./totp.js";
 
 export interface AuthenticatedContext {
   readonly context: BrowserContext;
@@ -25,6 +26,25 @@ export async function loginViaUi(
     .getByRole("button", { name: /登\s*录/ })
     .click();
   await expect(page.getByText("成员", { exact: true })).toBeVisible();
+}
+
+export async function loginAdminViaUi(
+  page: Page,
+  runtime: E2ERuntime,
+): Promise<void> {
+  await page.goto("/login");
+  await page.getByLabel("登录名").fill(runtime.adminMfa.loginName);
+  await page.getByLabel("密码").fill(runtime.adminMfa.password);
+  await page
+    .locator("form")
+    .getByRole("button", { name: /登\s*录/ })
+    .click();
+  await expect(page.getByText("需要完成 TOTP 验证")).toBeVisible();
+  await page
+    .getByLabel("6 位验证码")
+    .fill(totpCode(runtime.adminMfaSecret, Date.now() + 30_000));
+  await page.getByRole("button", { name: "验证并进入系统" }).click();
+  await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
 }
 
 export async function createAuthenticatedContext(

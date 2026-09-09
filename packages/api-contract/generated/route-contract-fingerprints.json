@@ -29,6 +29,30 @@
       "fingerprint": "8d3c116bf74f7c621a91b8153472a3a07114eaeed21517ad3c6aaf21d1619cc5"
     }
   ],
+  "createUser": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
+    }
+  ],
+  "disableUser": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "47856890c6f00c76d72fe2a24e0b866fa1a8a662569cba41bb55e99f6e1daf88"
+    }
+  ],
+  "enableUser": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "c159a7ec6eb02013e211b7ffd0d57ed9c98f160c3063aa291a218822905c90a1"
+    }
+  ],
+  "forceLogoutUser": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "b829a35bc59f1d42318222e611b664c0ec5ebb6efe5a014d91c18fdfc611e2bb"
+    }
+  ],
   "readAllNotifications": [
     {
       "version": "1.0.0",
@@ -75,6 +99,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "ef717fe3ae01dfec0bc2c36a0c61996a0192d9e7dec32e3f103afbc743299e1e"
+    }
+  ],
+  "updateUser": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "2009dfbfe32276348c93d22cf698ffc83445a8b939d977db14746a9a8e9ee545"
     }
   ]
 }
