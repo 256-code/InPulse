@@ -228,19 +228,18 @@ PostgreSQL 验证；生产 `ProjectAccessQueryPort` 适配器与通用
 `SessionAuthService` 已落地，其真实 PostgreSQL 集成测试待 CI 探针镜像执行；
 `GET /api/v1/search` 契约纵切片已落地 Schema、Route Registry、
 OpenAPI、生成客户端、最小 Controller、服务端签名游标与真实 `hasMore`；
-A 已确认 envelope 与不透明游标方向，但 C-006 仍未关闭，正式契约以 A
-最终 Registry 落库为准；搜索页面、真实 HTTP API 集成与生产加密备份恢复
-仍未完成。
+A 已确认 envelope 与不透明游标方向并关闭 C-006；搜索页面与真实 HTTP API
+集成已落库，完整 Playwright 关键路径 E2E 与生产加密备份恢复仍未完成。
 `pnpm db:poc:search:local` 作为原 `pg_trgm` 门禁失败证据仍会非零退出，
 不得据此宣称生产搜索已通过。
 
 阶段 0 仍待建立并记录真实可运行的根级入口：
 
-- Playwright 关键路径 E2E；
+- Playwright 完整关键路径 E2E（F-31 基座已落库，业务场景待补）；
 - 生产容器镜像构建、Compose 渲染与 exact-tag/digest 格式校验、PostgreSQL 18 挂载检查；
 - 镜像漏洞扫描。
 
-截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`。非数据库门禁已在本地实测通过；空库迁移与数据库集成测试曾在 `0000-0002` 上本地实测通过，合并 `0003-0005` 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，因此改由 CI 的 PGroonga 探针镜像覆盖，而 GitHub Actions 运行本身尚未执行。`pnpm test:search:db` 与 `pnpm test` 按既定决定仍未纳入 CI。仓库尚无生产 Dockerfile 与 `compose.yaml`，因此生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Accepted`）。
+截至 2026-09-07，§12.4 中 frozen lockfile 安装、lint、format check、typecheck、unit tests、空库迁移、真实 PostgreSQL 集成测试（含数据库角色/权限探针）、OpenAPI/客户端漂移检查、Route Registry/权限/响应 Schema 完整性、Web/API 生产构建、依赖边界检查、权限矩阵检查与依赖/Secret 扫描已落库并纳入 `CI / workspace`。非数据库门禁已在本地实测通过；空库迁移与数据库集成测试曾在 `0000-0002` 上本地实测通过，合并 `0003-0005` 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 已内置 PGroonga 4.0.8，`db:test:local` 与 API `test:integration` 已在本地通过；GitHub Actions 尚未执行，CI 的 PGroonga 探针镜像仍用于可复现隔离验证。`pnpm test:search:db` 与 `pnpm test` 按既定决定仍未纳入 CI。仓库尚无生产 Dockerfile 与 `compose.yaml`，因此生产容器镜像构建、Compose 渲染与 digest 格式校验、镜像扫描无法落库，且 [ADR-017](./docs/adr/ADR-017.md) 要求的 Nginx 1.30.x 补丁与镜像 digest 仍需人工定案；契约生成工具链见 [ADR-027](./docs/adr/ADR-027.md)（状态 `Accepted`）。
 
 脚本落库前不要在 README、PR 或交付说明中声称这些检查已通过。
 
