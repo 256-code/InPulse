@@ -12,7 +12,6 @@ import {
   RUNTIME_FILE,
   type E2ERuntime,
 } from "./helpers/runtime.js";
-import { totpCode } from "./helpers/totp.js";
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -116,108 +115,6 @@ async function loginViaApi(
   return sessionCookie;
 }
 
-async function enrollAdminViaApi(
-  loginName: string,
-  password: string,
-): Promise<string> {
-  const csrfResponse = await fetch(`${API_BASE_URL}/api/v1/auth/csrf`, {
-    headers: { origin: API_BASE_URL },
-  });
-  if (!csrfResponse.ok) {
-    throw new Error(
-      `Admin CSRF issuance failed with HTTP ${csrfResponse.status}`,
-    );
-  }
-  const csrf = (await csrfResponse.json()) as { readonly csrfToken: string };
-  const preauthCookie = headersFromFetch(csrfResponse.headers)
-    .map((value) => parseCookieValue(value, "__Host-preauth"))
-    .find((value) => value !== undefined);
-  if (preauthCookie === undefined) {
-    throw new Error(
-      "Admin CSRF response did not include __Host-preauth cookie",
-    );
-  }
-
-  const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      cookie: `__Host-preauth=${preauthCookie}`,
-      origin: API_BASE_URL,
-      "x-csrf-token": csrf.csrfToken,
-    },
-    body: JSON.stringify({ loginName, password }),
-  });
-  if (!loginResponse.ok) {
-    throw new Error(`Admin MFA login failed with HTTP ${loginResponse.status}`);
-  }
-  const login = (await loginResponse.json()) as {
-    readonly authState: string;
-    readonly csrfToken: string;
-    readonly enrollmentGeneration?: number;
-  };
-  if (
-    login.authState !== "MFA_ENROLLMENT" ||
-    login.enrollmentGeneration === undefined
-  ) {
-    throw new Error(`Unexpected admin MFA login state: ${login.authState}`);
-  }
-  const sessionCookie = headersFromFetch(loginResponse.headers)
-    .map((value) => parseCookieValue(value, "__Host-session"))
-    .find((value) => value !== undefined);
-  if (sessionCookie === undefined) {
-    throw new Error(
-      "Admin MFA login response did not include __Host-session cookie",
-    );
-  }
-
-  const startResponse = await fetch(
-    `${API_BASE_URL}/api/v1/auth/mfa/enrollment/start`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `__Host-session=${sessionCookie}`,
-        origin: API_BASE_URL,
-        "x-csrf-token": login.csrfToken,
-      },
-      body: JSON.stringify({
-        expectedEnrollmentGeneration: login.enrollmentGeneration,
-      }),
-    },
-  );
-  if (!startResponse.ok) {
-    throw new Error(`Admin MFA start failed with HTTP ${startResponse.status}`);
-  }
-  const start = (await startResponse.json()) as {
-    readonly enrollmentGeneration: number;
-    readonly secret: string;
-  };
-
-  const confirmResponse = await fetch(
-    `${API_BASE_URL}/api/v1/auth/mfa/enrollment/confirm`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `__Host-session=${sessionCookie}`,
-        origin: API_BASE_URL,
-        "x-csrf-token": login.csrfToken,
-      },
-      body: JSON.stringify({
-        expectedEnrollmentGeneration: start.enrollmentGeneration,
-        code: totpCode(start.secret, Date.now() - 30_000),
-      }),
-    },
-  );
-  if (!confirmResponse.ok) {
-    throw new Error(
-      `Admin MFA confirm failed with HTTP ${confirmResponse.status}`,
-    );
-  }
-  return start.secret;
-}
-
 async function seedFixture(databaseUrl: string): Promise<{
   readonly userId: number;
   readonly memberId: number;
@@ -238,9 +135,6 @@ async function seedFixture(databaseUrl: string): Promise<{
   readonly name: string;
   readonly memberLoginName: string;
   readonly memberName: string;
-  readonly adminMfaUserId: number;
-  readonly adminMfaLoginName: string;
-  readonly adminMfaName: string;
 }> {
   const sql = postgres(databaseUrl, {
     max: 1,
@@ -310,38 +204,6 @@ async function seedFixture(databaseUrl: string): Promise<{
     const member = members[0];
     if (member === undefined) {
       throw new Error("E2E member fixture insert returned no row");
-    }
-
-    const adminSuffix = randomBytes(5).toString("hex").toLowerCase();
-    const adminMfaLoginName = `e2e_admin_${adminSuffix}`;
-    const adminMfaName = `E2E 管理员 ${adminSuffix}`;
-    const adminMfaPasswordHash = await argon2Hash(FIXTURE_PASSWORD, {
-      memoryCost: 19 * 1024,
-      timeCost: 2,
-      parallelism: 1,
-      outputLen: 32,
-      algorithm: 2,
-    });
-    const admins = (await sql<readonly { id: number }[]>`
-      INSERT INTO app.users (
-        login_name,
-        name,
-        password_hash,
-        is_admin,
-        status
-      )
-      VALUES (
-        ${adminMfaLoginName},
-        ${adminMfaName},
-        ${adminMfaPasswordHash},
-        true,
-        'ACTIVE'
-      )
-      RETURNING id
-    `) as unknown as readonly { id: number }[];
-    const adminMfa = admins[0];
-    if (adminMfa === undefined) {
-      throw new Error("E2E admin MFA fixture insert returned no row");
     }
 
     const code = `E2E${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -558,9 +420,6 @@ async function seedFixture(databaseUrl: string): Promise<{
       name,
       memberLoginName,
       memberName,
-      adminMfaUserId: adminMfa.id,
-      adminMfaLoginName,
-      adminMfaName,
     };
   } finally {
     await sql.end({ timeout: 5 });
@@ -590,10 +449,6 @@ export default async function globalSetup(): Promise<void> {
 
   const fixture = await seedFixture(requiredE2eDatabaseUrl());
   const sessionCookie = await loginViaApi(fixture.loginName, FIXTURE_PASSWORD);
-  const adminMfaSecret = await enrollAdminViaApi(
-    fixture.adminMfaLoginName,
-    FIXTURE_PASSWORD,
-  );
 
   await mkdir(path.dirname(RUNTIME_FILE), { recursive: true });
   const runtime: E2ERuntime = {
@@ -614,13 +469,6 @@ export default async function globalSetup(): Promise<void> {
     specialSearchTitle: fixture.specialSearchTitle,
     missingSearchQuery: fixture.missingSearchQuery,
     sessionCookie,
-    adminMfa: {
-      loginName: fixture.adminMfaLoginName,
-      name: fixture.adminMfaName,
-      password: FIXTURE_PASSWORD,
-    },
-    adminMfaUserId: fixture.adminMfaUserId,
-    adminMfaSecret,
     user: {
       loginName: fixture.loginName,
       name: fixture.name,
