@@ -5,5 +5,5 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["schema/**/*.ts", "src/client.ts", "src/config.ts"]
+  "include": ["schema/**/*.ts", "src/**/*.ts"]
 }

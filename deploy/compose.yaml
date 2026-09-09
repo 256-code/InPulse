@@ -1,7 +1,8 @@
-# 生产稳态 Compose 拓扑预检（对齐技术设计 v1.2.2 §11.2）。
+# 生产稳态 Compose 拓扑（对齐技术设计 v1.2.2 §11.2）。
 #
-# 本期范围：只校验稳态拓扑结构、镜像 ref 格式、Secrets/挂载/健康检查声明；
-# 不作为可启动生产部署，也不包含尚未交付的 backup / audit-archive 运维服务。
+# 本期范围：稳态拓扑结构、镜像 ref 格式、Secrets/挂载/健康检查声明；已具备
+# 生产 API/Web/Migration/DB-bootstrap 四类镜像（deploy/docker/*.Dockerfile）。
+# 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）。
 #
 # 说明：
 #   1. *_IMAGE_REF 必须由受信镜像仓库解析后写入签名发布清单；本文件只引用
@@ -11,17 +12,13 @@
 #        - migrate 读 MIGRATION_DB_PASSWORD_FILE / MIGRATION_DB_USER
 #        - api 读 RUNTIME_DB_PASSWORD_FILE / DB_USER
 #      技术设计 §11.2 的泛化 `DB_PASSWORD_FILE` 与代码命名仍未统一，属于生产前
-#      人工定案项；本预检按当前代码落地，不静默改写设计或代码。
-#   3. /health/live 与 /health/ready 已由 PR #52 实现，应用全局前缀为 /api/v1；
-#      API 生产镜像应内置 healthcheck 脚本，Web 生产镜像应包含 Nginx 配置。
+#      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
+#   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
+#      API 生产镜像内置 healthcheck.mjs，Web 生产镜像内置 Nginx 配置与 curl。
 #   4. 设计提及的 AUDIT_DB_*（独立 audit_reader 连接）代码尚未读取，本次不挂载
 #      对应 Secret；TOTP_KEK_* 已由代码读取，本次挂载对应 Secret。
-#   5. web 仍依赖尚未实现的生产 Nginx 配置，因此当前 compose 仅可渲染预检，
-#      不可直接 up；backup / audit-archive 推迟到 F-10.3，避免把未交付运维服务
-#      与阶段 0 结构门禁混在一起。
-#
-# 首次建库与角色/密码初始化由 database/bootstrap 和后续独立 compose.init 纵切片
-# 负责，本文件不为生产准备登录密码；生产不得暴露 PostgreSQL/API 到公网。
+#   5. 首次建库与角色/密码初始化由 database/bootstrap 和后续独立 compose.init 纵切片
+#      负责，本文件不为生产准备登录密码；生产不得暴露 PostgreSQL/API 到公网。
 
 x-logging: &default-logging
   driver: json-file
@@ -59,7 +56,7 @@ services:
   migrate:
     image: "${MIGRATE_IMAGE_REF}"
     user: "10001:10001"
-    command: ["pnpm", "db:migrate"]
+    command: ["node", "dist/src/migrate.js"]
     read_only: true
     tmpfs: [/tmp:size=64m, noexec, nosuid, nodev]
     environment:
@@ -73,7 +70,11 @@ services:
       db:
         condition: service_healthy
     secrets:
-      - db_migrator_password
+      - source: db_migrator_password
+        target: /run/secrets/db_migrator_password
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
     networks: [backend]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -117,11 +118,31 @@ services:
       migrate:
         condition: service_completed_successfully
     secrets:
-      - db_runtime_password
-      - session_hash_keyring
-      - idempotency_fingerprint_keyring
-      - audit_hmac_keyring
-      - totp_kek_keyring
+      - source: db_runtime_password
+        target: /run/secrets/db_runtime_password
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: session_hash_keyring
+        target: /run/secrets/session_hash_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: idempotency_fingerprint_keyring
+        target: /run/secrets/idempotency_fingerprint_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: audit_hmac_keyring
+        target: /run/secrets/audit_hmac_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: totp_kek_keyring
+        target: /run/secrets/totp_kek_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
     networks: [backend]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -157,8 +178,16 @@ services:
       TLS_CERT_FILE: /run/secrets/tls_cert
       TLS_KEY_FILE: /run/secrets/tls_key
     secrets:
-      - tls_cert
-      - tls_key
+      - source: tls_cert
+        target: /run/secrets/tls_cert
+        uid: "101"
+        gid: "101"
+        mode: "0400"
+      - source: tls_key
+        target: /run/secrets/tls_key
+        uid: "101"
+        gid: "101"
+        mode: "0400"
     networks: [edge, backend]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -166,13 +195,13 @@ services:
     mem_limit: 512m
     pids_limit: 128
     healthcheck:
-      # 依赖 /health/live（见文件顶部冲突说明 3）。
+      # Web 生产镜像内置 curl；/health/live 由 Nginx 代理到 API。
       test:
         [
           "CMD",
-          "wget",
-          "-q",
-          "-O",
+          "curl",
+          "-fsS",
+          "-o",
           "/dev/null",
           "http://127.0.0.1:8080/health/live",
         ]

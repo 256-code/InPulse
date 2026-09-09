@@ -33,6 +33,18 @@ const REQUIRED_REFS = [
   "WEB_IMAGE_REF",
 ];
 
+// 生产镜像的 Dockerfile 与配套文件（技术设计 §11.1 / §11.2）。
+const REQUIRED_DOCKERFILES = [
+  "deploy/docker/api.Dockerfile",
+  "deploy/docker/migration.Dockerfile",
+  "deploy/docker/web.Dockerfile",
+  "deploy/docker/db-bootstrap.Dockerfile",
+];
+const REQUIRED_DOCKER_ASSETS = [
+  "deploy/docker/nginx.conf",
+  "deploy/docker/healthcheck.mjs",
+];
+
 let exitCode = 0;
 
 function fail(message) {
@@ -200,8 +212,11 @@ function checkStructure(rendered) {
     const cmd = Array.isArray(migrate.command)
       ? migrate.command.join(" ")
       : String(migrate.command ?? "");
-    if (!/db:migrate/.test(cmd))
-      problems.push("migrate: command must invoke db:migrate");
+    if (!(cmd.includes("db:migrate") || cmd.includes("dist/src/migrate.js"))) {
+      problems.push(
+        "migrate: command must invoke db:migrate or dist/src/migrate.js",
+      );
+    }
     const env = migrate.environment ?? {};
     if (!env.MIGRATION_DB_PASSWORD_FILE) {
       problems.push(
@@ -220,6 +235,117 @@ function checkStructure(rendered) {
     });
     if (!ports.includes("80:8080")) problems.push("web: must expose 80:8080");
     if (!ports.includes("443:8443")) problems.push("web: must expose 443:8443");
+  }
+
+  // 生产 `readTrimmedSecret` 要求 secret 为 /run/secrets 直接子项、owner-read-only
+  // （mode 0400），且运行用户必须能读取。Compose 长语法在服务级声明 `uid/gid/mode`，
+  // 必须与容器 user 的数值 uid/gid 一致，否则启动会 fail-closed。
+  const numericUser = (value) => {
+    const match = /^(\d+):(\d+)$/.exec(String(value ?? ""));
+    return match ? { uid: match[1], gid: match[2] } : null;
+  };
+  for (const name of ["migrate", "api", "web"]) {
+    const svc = services[name];
+    if (!svc) continue;
+    const user = numericUser(svc.user);
+    if (!user) continue;
+    for (const ref of svc.secrets ?? []) {
+      if (typeof ref === "string") {
+        problems.push(
+          `${name}: secret \`${ref}\` must use long syntax with target/uid/gid/mode`,
+        );
+        continue;
+      }
+      if (ref.mode !== "0400") {
+        problems.push(
+          `${name}: secret \`${ref.source}\` must set mode 0400 (owner-only readable)`,
+        );
+      }
+      if (ref.uid !== user.uid || ref.gid !== user.gid) {
+        problems.push(
+          `${name}: secret \`${ref.source}\` uid/gid must match container user ${svc.user}`,
+        );
+      }
+      if (!ref.target || !/^\/run\/secrets\/[^/]+$/.test(ref.target)) {
+        problems.push(
+          `${name}: secret \`${ref.source}\` target must be a direct child of /run/secrets`,
+        );
+      }
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * 校验生产 Dockerfile：
+ *   - 每个 `FROM` 必须带 `@sha256:<64hex>` 且不含浮动 tag；
+ *   - runtime 阶段必须存在非 root 数值 `USER`；
+ *   - API 镜像必须内置 healthcheck.mjs；Web 镜像必须内置 nginx.conf。
+ */
+async function checkDockerfiles() {
+  const problems = [];
+
+  for (const file of [...REQUIRED_DOCKERFILES, ...REQUIRED_DOCKER_ASSETS]) {
+    try {
+      await readFile(file, "utf8");
+    } catch {
+      problems.push(`missing required Docker asset: ${file}`);
+    }
+  }
+
+  for (const file of REQUIRED_DOCKERFILES) {
+    let text;
+    try {
+      text = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+
+    const fromLines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("FROM "));
+    if (fromLines.length === 0) {
+      problems.push(`${file}: no FROM directive`);
+    }
+
+    let runtimeUser = false;
+    let hasHealthcheck = false;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (/^USER\s+\d+/.test(trimmed)) runtimeUser = true;
+      if (/healthcheck\.mjs/.test(trimmed)) hasHealthcheck = true;
+    }
+
+    for (const from of fromLines) {
+      if (!/@sha256:[0-9a-f]{64}\s*(?:AS\s+\w+)?\s*$/.test(from)) {
+        problems.push(
+          `${file}: FROM must be pinned to <tag>@sha256:<64hex>; got \`${from}\``,
+        );
+      }
+      if (FORBIDDEN_TAG.test(from)) {
+        problems.push(
+          `${file}: FROM uses a forbidden/imprecise tag \`${from}\``,
+        );
+      }
+    }
+
+    // db-bootstrap 基于官方 postgres 镜像，以非 root `postgres` 用户运行，
+    // 不要求数值 USER；其余自建镜像必须声明非 root 数值 USER。
+    if (!runtimeUser && !file.endsWith("db-bootstrap.Dockerfile")) {
+      problems.push(`${file}: runtime must declare a numeric USER`);
+    }
+    if (file.endsWith("api.Dockerfile") && !hasHealthcheck) {
+      problems.push(`${file}: api image must include healthcheck.mjs`);
+    }
+  }
+
+  const web = await readFile("deploy/docker/web.Dockerfile", "utf8").catch(
+    () => "",
+  );
+  if (!/nginx\.conf/.test(web)) {
+    problems.push("deploy/docker/web.Dockerfile: must copy nginx.conf");
   }
 
   return problems;
@@ -284,8 +410,15 @@ async function main() {
     return;
   }
 
+  const dockerProblems = await checkDockerfiles();
+  if (dockerProblems.length > 0) {
+    for (const problem of dockerProblems) fail(problem);
+    process.exit(exitCode);
+    return;
+  }
+
   info(
-    `${count} image refs valid; compose config rendered; structure invariants OK.`,
+    `${count} image refs valid; compose config rendered; structure invariants and Dockerfile checks OK.`,
   );
   process.exit(exitCode);
 }
