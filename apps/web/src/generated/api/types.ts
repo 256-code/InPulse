@@ -344,6 +344,75 @@ export type StartMfaEnrollmentResponse = {
   readonly otpauthUri: string;
 };
 
+export type TaskAssigneesResponse = {
+  readonly items: readonly ({
+    readonly id: number;
+    readonly name: string;
+    readonly avatarUrl: (string | null);
+  })[];
+};
+
+export type TaskCollectionPath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+};
+
+export type TaskEditRequest = {
+  readonly title: string;
+  readonly description: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly assigneeId: number;
+  readonly dueAt: (string | null);
+};
+
+export type TaskItem = {
+  readonly title: string;
+  readonly description: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly assigneeId: number;
+  readonly dueAt: (string | null);
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+  readonly scopeType: "FEATURE";
+  readonly code: string;
+  readonly creatorId: number;
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type TaskListResponse = {
+  readonly items: readonly TaskItem[];
+};
+
+export type TaskMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type TaskReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+  readonly taskId: number;
+};
+
+export type TaskResourcePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+  readonly taskId: number;
+};
+
+export type TaskVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+};
+
 export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
 
 export type UserDirectoryItem = {

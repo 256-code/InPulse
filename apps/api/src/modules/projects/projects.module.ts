@@ -1,4 +1,6 @@
 import { ProjectCodePort } from "./project-code.port.js";
+import { ProjectMembersQueryPort } from "./project-members-query.port.js";
+import { PostgresProjectMembersQueryPort } from "./postgres-project-members-query-port.js";
 import { PostgresProjectCodePort } from "./postgres-project-code-port.js";
 import { Module } from "@nestjs/common";
 
@@ -23,6 +25,10 @@ import {
 @Module({
   imports: [DatabaseModule],
   providers: [
+    {
+      provide: ProjectMembersQueryPort,
+      useClass: PostgresProjectMembersQueryPort,
+    },
     { provide: ProjectCodePort, useClass: PostgresProjectCodePort },
     PostgresProjectAccessQueryPort,
     {
@@ -39,6 +45,7 @@ import {
     },
   ],
   exports: [
+    ProjectMembersQueryPort,
     ProjectCodePort,
     PROJECT_ACCESS_QUERY_PORT,
     ProjectsWritePort,
