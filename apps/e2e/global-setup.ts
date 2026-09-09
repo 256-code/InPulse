@@ -224,6 +224,16 @@ async function seedFixture(databaseUrl: string): Promise<{
   readonly projectId: number;
   readonly searchQuery: string;
   readonly projectTitle: string;
+  readonly hiddenProjectId: number;
+  readonly hiddenProjectTitle: string;
+  readonly hiddenSearchQuery: string;
+  readonly pageSearchQuery: string;
+  readonly pageSearchTotal: number;
+  readonly chineseSearchQuery: string;
+  readonly chineseSearchTitle: string;
+  readonly specialSearchQuery: string;
+  readonly specialSearchTitle: string;
+  readonly missingSearchQuery: string;
   readonly loginName: string;
   readonly name: string;
   readonly memberLoginName: string;
@@ -386,12 +396,164 @@ async function seedFixture(databaseUrl: string): Promise<{
       )
     `;
 
+    const hiddenCode = `E2EH${randomBytes(5).toString("hex").toUpperCase()}`;
+    const hiddenProjectId = await sql.begin(async (transaction) => {
+      const hiddenProjectRows = (await transaction<readonly { id: number }[]>`
+        INSERT INTO app.projects (code, name, created_by)
+        VALUES (${hiddenCode}, ${`E2E 隐藏项目 ${hiddenCode}`}, ${member.id})
+        RETURNING id
+      `) as unknown as readonly { id: number }[];
+      const hiddenProject = hiddenProjectRows[0];
+      if (hiddenProject === undefined) {
+        throw new Error("E2E hidden project fixture insert returned no row");
+      }
+      await transaction`
+        INSERT INTO app.project_members (project_id, user_id)
+        VALUES (${hiddenProject.id}, ${member.id})
+      `;
+      await transaction`
+        INSERT INTO app.modules (project_id, name, kind, created_by)
+        VALUES (${hiddenProject.id}, '未分类', 'UNCLASSIFIED', ${member.id})
+      `;
+      return hiddenProject.id;
+    });
+    const hiddenProjectTitle = `E2E 隐藏项目 ${hiddenCode}`;
+    const hiddenSearchQuery = `e2ehidden${randomBytes(3).toString("hex")}`;
+    await sql`
+      INSERT INTO app.search_projection (
+        project_id,
+        entity_type,
+        entity_id,
+        title,
+        summary,
+        raw_text,
+        normalized_search_text,
+        visibility_scope,
+        source_status,
+        source_row_version
+      )
+      VALUES (
+        ${hiddenProjectId},
+        'PROJECT',
+        ${hiddenProjectId},
+        ${hiddenProjectTitle},
+        'Playwright hidden search fixture',
+        ${hiddenProjectTitle},
+        ${hiddenSearchQuery},
+        'MEMBER',
+        'ACTIVE',
+        1
+      )
+    `;
+
+    const pageSearchQuery = `e2epage${randomBytes(3).toString("hex")}`;
+    const pageSearchTotal = 25;
+    for (let index = 0; index < pageSearchTotal; index += 1) {
+      const pageTitle = `E2E 分页任务 ${String(index + 1).padStart(2, "0")} ${code}`;
+      await sql`
+        INSERT INTO app.search_projection (
+          project_id,
+          entity_type,
+          entity_id,
+          title,
+          summary,
+          raw_text,
+          normalized_search_text,
+          visibility_scope,
+          source_status,
+          source_row_version
+        )
+        VALUES (
+          ${projectId},
+          'TASK',
+          ${2_000_000 + index},
+          ${pageTitle},
+          'Playwright pagination fixture',
+          ${`${pageTitle} ${pageSearchQuery}`},
+          ${pageSearchQuery},
+          'MEMBER',
+          'ACTIVE',
+          1
+        )
+      `;
+    }
+
+    const chineseSearchQuery = "退款";
+    const chineseSearchTitle = `E2E 中文短词搜索 ${code}`;
+    await sql`
+      INSERT INTO app.search_projection (
+        project_id,
+        entity_type,
+        entity_id,
+        title,
+        summary,
+        raw_text,
+        normalized_search_text,
+        visibility_scope,
+        source_status,
+        source_row_version
+      )
+      VALUES (
+        ${projectId},
+        'TASK',
+        3000002,
+        ${chineseSearchTitle},
+        'Playwright Chinese fixture',
+        ${chineseSearchTitle},
+        '退款回调重复处理',
+        'MEMBER',
+        'ACTIVE',
+        1
+      )
+    `;
+
+    const specialSearchQuery = `e2e-refund-${randomBytes(3).toString("hex")}`;
+    const specialSearchTitle = `E2E 特殊标识符搜索 ${specialSearchQuery}`;
+    await sql`
+      INSERT INTO app.search_projection (
+        project_id,
+        entity_type,
+        entity_id,
+        title,
+        summary,
+        raw_text,
+        normalized_search_text,
+        visibility_scope,
+        source_status,
+        source_row_version
+      )
+      VALUES (
+        ${projectId},
+        'TASK',
+        3000003,
+        ${specialSearchTitle},
+        'Playwright special identifier fixture',
+        ${specialSearchTitle},
+        ${specialSearchQuery},
+        'MEMBER',
+        'ACTIVE',
+        1
+      )
+    `;
+
+    const missingSearchQuery = `e2emissing${randomBytes(4).toString("hex")}`;
+
     return {
       userId: user.id,
       memberId: member.id,
       projectId,
       searchQuery,
       projectTitle,
+      hiddenProjectId,
+      hiddenProjectTitle,
+      hiddenSearchQuery,
+      pageSearchQuery,
+      pageSearchTotal,
+      chineseSearchQuery,
+      chineseSearchTitle,
+      specialSearchQuery,
+      specialSearchTitle,
+      missingSearchQuery,
       loginName,
       name,
       memberLoginName,
@@ -441,6 +603,16 @@ export default async function globalSetup(): Promise<void> {
     projectId: fixture.projectId,
     searchQuery: fixture.searchQuery,
     projectTitle: fixture.projectTitle,
+    hiddenProjectId: fixture.hiddenProjectId,
+    hiddenProjectTitle: fixture.hiddenProjectTitle,
+    hiddenSearchQuery: fixture.hiddenSearchQuery,
+    pageSearchQuery: fixture.pageSearchQuery,
+    pageSearchTotal: fixture.pageSearchTotal,
+    chineseSearchQuery: fixture.chineseSearchQuery,
+    chineseSearchTitle: fixture.chineseSearchTitle,
+    specialSearchQuery: fixture.specialSearchQuery,
+    specialSearchTitle: fixture.specialSearchTitle,
+    missingSearchQuery: fixture.missingSearchQuery,
     sessionCookie,
     adminMfa: {
       loginName: fixture.adminMfaLoginName,

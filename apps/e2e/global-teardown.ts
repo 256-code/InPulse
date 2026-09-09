@@ -36,6 +36,10 @@ async function cleanupFixture(
         WHERE project_id = ${runtime.projectId}
       `;
       await transaction`
+        DELETE FROM app.search_projection
+        WHERE project_id = ${runtime.hiddenProjectId}
+      `;
+      await transaction`
         DELETE FROM app.idempotency_records
         WHERE actor_id = ${runtime.userId}
       `;

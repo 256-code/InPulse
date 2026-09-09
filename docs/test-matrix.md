@@ -83,7 +83,7 @@
 | PROJ-CREATE-006 | 单元 | 项目创建控制器边界 | 浏览器完整同源请求头只提取 `x-csrf-token`，严格 Schema 不再因 Host/Origin/Sec-Fetch 等额外头误报 422；缺失 Token 仍返回 422 且不进入幂等事务 | 本地通过（`project-bootstrap.controller.test.ts` 2 例，2026-09-09） |
 | PROJ-CREATE-007 | 单元 | 审计 HMAC keyring 测试路径 | `NODE_ENV=test` 且显式设置 `AUDIT_HMAC_KEYRING_TEST_PATH=1` 时才允许临时 keyring；生产仍限制 `/run/secrets/*` | 本地通过（`audit-keyring.test.ts` 3 例，2026-09-09） |
 | PROJ-CREATE-008 | 前端单元 | 项目创建表单与页面 | RHF + Zod 校验、CSRF/幂等 Key、错误映射、创建成功与入口交互均通过生成客户端消费契约 | 本地通过（`project-query.test.tsx`、`CreateProjectModal.test.tsx`、`ProjectsPage.test.tsx` 等，前端 20 文件 48 例） |
-| PROJ-CREATE-009 | Playwright E2E | 项目创建关键路径 | 登录 → `/projects` → 选择 ACTIVE 第二成员 → RHF 表单创建 → 项目动态 → 搜索到项目 → 创建者与成员站内通知 | 本地 8/8 通过（2026-09-09，新增 MFA 挑战与重认证用例） |
+| PROJ-CREATE-009 | Playwright E2E | 项目创建关键路径 | 登录 → `/projects` → 选择 ACTIVE 第二成员 → RHF 表单创建 → 项目动态 → 搜索到项目 → 创建者与成员站内通知 | 本地 13/13 通过（2026-09-09，新增 MFA、项目创建与搜索边界用例） |
 | PROJ-CREATE-010 | API 单元 + PostgreSQL 集成 | 用户目录接口 | `GET /api/v1/users` 从 Session 解析身份，只返回 `id/name/avatarUrl/isAdmin`，过滤 DISABLED/`disabled_at` 用户，匿名或停用 Session 返回 401，不暴露登录名、邮箱或密码字段；响应 `no-store` | 本地通过（Controller 3 例；Service/Repository 2 例；API 集成 22 文件 89 例） |
 | PROJ-CREATE-011 | 前端单元 | 成员选择 | 成员目录经生成客户端读取，创建者不可选择且被排除，选择结果去重排序后写入 `memberIds`，目录 401/429 错误不泄露内部信息 | 本地通过（`user-directory-query.test.tsx`、`CreateProjectModal.test.tsx`） |
 
@@ -124,7 +124,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 8/8 通过（MFA 与项目创建首条业务关键路径已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
+| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 13/13 通过（MFA、项目创建与搜索边界已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | Required（Compose/ref 预检已自动化；真实镜像 digest 绑定与签名发布清单仍待发布环节） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | Required（扫描步骤已落库，待 CI 实际执行） |
 
@@ -231,11 +231,11 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | SEC-007 | 部署集成 | 数据库 Secret 文件缺失 | 生产模式 fail closed，不得回退到环境变量；缺失路径、越界路径、空值和权限不合规均拒绝连接串构造 | Required |
 | SEC-008 | API + PostgreSQL 集成 | 登录爆破限流 | 登录失败按账号 + IP + 全局三层计数，任一桶达到候选阈值返回 429 并在 Argon2 前阻断；同一进程 Argon2 并发不超过候选上限；登录成功清除账号失败计数；桶维度只保存 HMAC-SHA-256 摘要 | 已自动化（单元与真实 PostgreSQL 用例已落库，待 CI 执行） |
 | SEC-009 | Application + PostgreSQL 集成 | 用户停用/改密/强退 Session 失效 | 同一事务递增 `users.auth_version`（并推进 `row_version`）后撤销该用户全部未撤销 Session；旧 Session 在下一请求因 `auth_version` 不一致或已撤销而返回 401 | 已自动化（单元与真实 PostgreSQL 用例已落库，待 CI 执行） |
-| SEC-010 | API + PostgreSQL 集成 | 管理员 MFA 注册（F-02.1） | 管理员登录后显式签发 `MFA_ENROLLMENT`；`start` 按 user → factor → Session 锁序条件创建/替换 pending；`confirm` 在同一事务条件激活因子、签发 Argon2id 恢复码哈希、撤销受限 Session 并轮换为 `AUTHENTICATED` Session/新 CSRF；错误验证码不启用因子且写入持久化 MFA 限流；start-vs-start、start-vs-confirm、跨 Session 与同一 TOTP time-step 并发只有一个 2xx；数据库不保存 TOTP Secret、恢复码明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例，数据库单测 5 例与集成 13 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
-| SEC-011 | API + PostgreSQL 集成 | 管理员 MFA 验证（F-02.2） | 管理员登录后显式签发 `MFA_CHALLENGE`；`POST /auth/mfa/verify` 仅接受当前 time-step ±1 且未接受过的 TOTP；按 user → factor → Session 锁序条件验证；格式错误 422、CSRF 错误 401、非管理员 403、状态或验证码并发冲突 409；成功后同一事务将 Session 条件升级为 `AUTHENTICATED`、更新 `last_accepted_step` 并签发新 CSRF；错误验证码写入用户/IP/全局持久化限流，达到阈值 429；跨 Session 同一步长并发仅一个 2xx，通用幂等与日志不保存 TOTP/CSRF 明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
-| SEC-012 | API + PostgreSQL 集成 | 管理员高风险重认证（F-02.3） | 完整管理员 Session + 密码 + 当前 TOTP time-step ±1 且未使用；同一事务原子刷新 `reauthenticated_at` 与 `mfa_verified_at` 并递增 rotation generation；错误密码/验证码返回 401 且不刷新时间戳，分别写登录/MFA 限流；MFA_CHALLENGE 受限 Session 403；同一 time-step 重放 401；达到 MFA 阈值 429 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
-| SEC-013 | API + PostgreSQL 集成 | 管理员恢复码（F-02.4） | 轮换要求完整管理员 Session 且 5 分钟内完成双因子重认证，原子消费一次性 rotation generation、失效旧 Hash 并只返回一次新码；消费仅接受 `RECOVERY_CHALLENGE` 且密码阶段已成功，原子消费恢复码、失效旧代码集并升级为完整 Session；同一 rotation generation 或恢复码并发只有一个 2xx；错误恢复码 401 并写限流；非管理员 403 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
-| SEC-014 | API + PostgreSQL 集成 | 管理员 MFA 重置（F-02.5） | 仅另一名完成 5 分钟双因子重认证的 ACTIVE 系统管理员可执行；目标必须是另一名 ACTIVE 且已启用 TOTP 的系统管理员，可用 MFA 管理员数必须大于 1；同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销目标全部 Session 并写审计；自重置/仅剩一名 MFA 管理员返回 409，非管理员目标 403，缺少重认证 403；两个管理员互相重置时只有一个成功且至少保留一名 MFA 管理员 | 已自动化到本地（Controller 9 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 8/8；GitHub Actions 已通过，PR #63） |
+| SEC-010 | API + PostgreSQL 集成 | 管理员 MFA 注册（F-02.1） | 管理员登录后显式签发 `MFA_ENROLLMENT`；`start` 按 user → factor → Session 锁序条件创建/替换 pending；`confirm` 在同一事务条件激活因子、签发 Argon2id 恢复码哈希、撤销受限 Session 并轮换为 `AUTHENTICATED` Session/新 CSRF；错误验证码不启用因子且写入持久化 MFA 限流；start-vs-start、start-vs-confirm、跨 Session 与同一 TOTP time-step 并发只有一个 2xx；数据库不保存 TOTP Secret、恢复码明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例，数据库单测 5 例与集成 13 例；`pnpm check` 全绿；Playwright 13/13；GitHub Actions 已通过，PR #63） |
+| SEC-011 | API + PostgreSQL 集成 | 管理员 MFA 验证（F-02.2） | 管理员登录后显式签发 `MFA_CHALLENGE`；`POST /auth/mfa/verify` 仅接受当前 time-step ±1 且未接受过的 TOTP；按 user → factor → Session 锁序条件验证；格式错误 422、CSRF 错误 401、非管理员 403、状态或验证码并发冲突 409；成功后同一事务将 Session 条件升级为 `AUTHENTICATED`、更新 `last_accepted_step` 并签发新 CSRF；错误验证码写入用户/IP/全局持久化限流，达到阈值 429；跨 Session 同一步长并发仅一个 2xx，通用幂等与日志不保存 TOTP/CSRF 明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例；`pnpm check` 全绿；Playwright 13/13；GitHub Actions 已通过，PR #63） |
+| SEC-012 | API + PostgreSQL 集成 | 管理员高风险重认证（F-02.3） | 完整管理员 Session + 密码 + 当前 TOTP time-step ±1 且未使用；同一事务原子刷新 `reauthenticated_at` 与 `mfa_verified_at` 并递增 rotation generation；错误密码/验证码返回 401 且不刷新时间戳，分别写登录/MFA 限流；MFA_CHALLENGE 受限 Session 403；同一 time-step 重放 401；达到 MFA 阈值 429 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 13/13；GitHub Actions 已通过，PR #63） |
+| SEC-013 | API + PostgreSQL 集成 | 管理员恢复码（F-02.4） | 轮换要求完整管理员 Session 且 5 分钟内完成双因子重认证，原子消费一次性 rotation generation、失效旧 Hash 并只返回一次新码；消费仅接受 `RECOVERY_CHALLENGE` 且密码阶段已成功，原子消费恢复码、失效旧代码集并升级为完整 Session；同一 rotation generation 或恢复码并发只有一个 2xx；错误恢复码 401 并写限流；非管理员 403 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 13/13；GitHub Actions 已通过，PR #63） |
+| SEC-014 | API + PostgreSQL 集成 | 管理员 MFA 重置（F-02.5） | 仅另一名完成 5 分钟双因子重认证的 ACTIVE 系统管理员可执行；目标必须是另一名 ACTIVE 且已启用 TOTP 的系统管理员，可用 MFA 管理员数必须大于 1；同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销目标全部 Session 并写审计；自重置/仅剩一名 MFA 管理员返回 409，非管理员目标 403，缺少重认证 403；两个管理员互相重置时只有一个成功且至少保留一名 MFA 管理员 | 已自动化到本地（Controller 9 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 13/13；GitHub Actions 已通过，PR #63） |
 | SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 本地通过（`session-cleanup.integration.test.ts` 2 例，2026-09-09；GitHub Actions 待执行） |
 
 ## 搜索、部署与恢复
@@ -244,7 +244,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 |---|---|---|---|---|
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
-| SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 仍为 Required；本次改动尚未在 GitHub Actions 执行） |
+| SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 已本地覆盖 13/13（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
 | SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；GitHub Actions 待执行） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
@@ -274,7 +274,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 > PostgreSQL 验证 401/422/200、成员 Scope、跨项目隔离、ADMIN_ONLY/HIDDEN、
 > 签名游标分页和停用用户失效；本地 `pnpm --filter @inpulse/api test:search:db`
 > 为 2 个文件 16 例通过，`pnpm --filter @inpulse/api test:integration` 为
-> 14 个文件 60 例通过。C 已本地完成搜索页面与前端认证最小纵切片，前端单测覆盖查询、签名游标分页、短词与 401 错误、认证上下文、登录与登出；仍缺少 Playwright E2E 和生产备份恢复纵切片。
+> 14 个文件 60 例通过。C 已本地完成搜索页面与前端认证最小纵切片，前端单测覆盖查询、签名游标分页、短词与 401 错误、认证上下文、登录与登出；Playwright 搜索边界 E2E 已由 C 于 2026-09-09 本地补齐（13/13）；仍缺少生产备份恢复纵切片。
 > 2026-09-08 新增 `SearchProjectionWritePort`：独立 `SearchProjectionModule`、
 > PostgreSQL upsert 适配器、输入校验、NFKC/大小写/空白/标点规范化和
 > `source_row_version` 防旧写；模块注入单测与真实 PostgreSQL 4 例已本地通过。
@@ -295,7 +295,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | FE-003 | 单元测试 | 全局错误边界与恢复 | `AppErrorBoundary` 捕获 UI 渲染异常，展示 Ant Design 提示并支持重置重试 | 已自动化 |
 | FE-004 | 单元测试 | 409 数据冲突交互规范 | `ConflictNotice` 保留本地未提交输入，提示冲突原因并提供重新加载最新数据回调 | 已自动化 |
 | FE-005 | 架构门禁 | 前端分层依赖检查 | `dependency-cruiser` 确保单向依赖（`app -> pages -> features -> shared/generated`），禁止反向/跨层与循环依赖 | 已自动化 |
-| FE-006 | 单元测试 | 全局搜索页面纵切片 | `SearchPageView` 通过生成客户端消费 `getSearch`，覆盖 `q`、签名游标分页、短词提示与 401 不泄露服务端细节；顶部搜索框提交导航 `/search?q=...` | 已自动化（本地前端 12 文件 32 例通过；GitHub Actions 尚未执行） |
+| FE-006 | 单元测试 | 全局搜索页面纵切片 | `SearchPageView` 通过生成客户端消费 `getSearch`，覆盖 `q`、签名游标分页、短词提示与 401 不泄露服务端细节；顶部搜索框提交导航 `/search?q=...` | 已自动化（本地前端 12 文件 32 例通过；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
 | FE-007 | 单元测试 | 真实认证上下文与登录表单 | `AuthProvider` 覆盖挂载恢复会话、匿名 CSRF bootstrap、登录、登出与 MFA 不认证；`LoginForm` 覆盖失败提示与成功回调 | 已自动化（本地前端 25 文件 63 例，含 MFA；PR #63 CI 已通过） |
 
 ## 项目动态与站内通知（F-27 / F-28，C 本地交付 2026-09-08）
@@ -312,13 +312,15 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | NOT-004 | 单元测试 | 通知控制器与查询边界 | 匿名与 CSRF 失败映射 401/403；查询只使用当前用户；字符串通知 ID 正确转换；未读数与 422、404、500 均按统一错误模型返回 | 本地通过（`notifications.controller.test.ts` 4 例） |
 | FE-008 | 单元测试 | 项目动态前端纵切片 | `features/activity` 通过生成客户端获取项目动态、传递服务端游标并展示脱敏项与项目范围 | 本地通过（`activity-query.test.tsx`、`ActivityPageView.test.tsx` 2 例） |
 | FE-009 | 单元测试 | 通知前端纵切片 | 铃铛显示未读数并导航 `/notifications`；通知页通过生成客户端读取、按路径跳转、标记已读/未读，写操作带 CSRF 与幂等键 | 本地通过（`notification-query.test.tsx`、`NotificationsPageView.test.tsx`、`AppLayout.test.tsx` 共 8 例） |
-| FE-010 | 单元测试 | 设计师最新视觉迁移 | 公共应用壳采用最新 token、深色侧栏、白色顶栏、面包屑与联合品牌图片；项目页与创建弹窗按设计师视觉呈现成员选择、创建规则与操作区；全局命令面板按类型分组并支持键盘导航；通知弹层支持未读、最近通知、全部已读与目标直达；活动页拆为项目选择入口与项目动态详情；不引入额外样式依赖 | 本地通过（Web 25 文件 63 例；Playwright 8/8；PR #63 CI 已通过） |
-| FE-011 | 单元测试 + Playwright E2E | 前端 MFA 注册、验证、恢复码与管理员重认证 | `AuthProvider` 保留受限 MFA Session，并在注册/验证/恢复码成功后轮换 CSRF Token；`LoginForm` 按安全文案映射 401/403/409/422/429；管理员账户菜单弹窗输入管理员密码与当前 TOTP 完成重认证；E2E 使用真实 TOTP 完成登录挑战与重认证 | 本地通过（Web 25 文件 63 例；Playwright 8/8；PR #63 CI 已通过） |
+| FE-010 | 单元测试 | 设计师最新视觉迁移 | 公共应用壳采用最新 token、深色侧栏、白色顶栏、面包屑与联合品牌图片；项目页与创建弹窗按设计师视觉呈现成员选择、创建规则与操作区；全局命令面板按类型分组并支持键盘导航；通知弹层支持未读、最近通知、全部已读与目标直达；活动页拆为项目选择入口与项目动态详情；不引入额外样式依赖 | 本地通过（Web 25 文件 63 例；Playwright 13/13；PR #63 CI 已通过） |
+| FE-011 | 单元测试 + Playwright E2E | 前端 MFA 注册、验证、恢复码与管理员重认证 | `AuthProvider` 保留受限 MFA Session，并在注册/验证/恢复码成功后轮换 CSRF Token；`LoginForm` 按安全文案映射 401/403/409/422/429；管理员账户菜单弹窗输入管理员密码与当前 TOTP 完成重认证；E2E 使用真实 TOTP 完成登录挑战与重认证 | 本地通过（Web 25 文件 63 例；Playwright 13/13；PR #63 CI 已通过） |
 | CONTRACT-001 | 契约与权限 | F-27/F-28 与用户目录路由登记 | 16 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；PR #63 CI 已通过 |
 
 后端本阶段 F-27/F-28 与用户目录相关的真实 PostgreSQL 集成共 89 例（22 文件）；前端本阶段搜索、活动、通知、项目创建、视觉迁移与 MFA 认证相关单测共 63 例（25 文件）。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
 >
 > 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建（含选择第二成员）→ 动态 → 搜索 → 创建者与成员通知。同一批次新增 `GET /api/v1/users` 用户目录、设计师最新公共应用壳/项目页、全局命令面板、通知弹层与活动页视觉迁移以及前端 MFA 注册、验证、恢复码与管理员重认证；活动页拆为项目选择入口和项目动态详情，通知点击直达项目动态。API 单测 47 文件 224 例、前端 25 文件 63 例、本次重跑 API 集成 22 文件 89 例、database 集成 13 例、Playwright 8/8 均本地通过；PR #63 GitHub Actions 已通过（workspace 10m2s，docs 通过）。
+
+> 2026-09-09 搜索边界 E2E 新增：全局搜索覆盖无权限项目不返回、无匹配空态、服务端签名游标加载更多、中文短词与特殊标识符；`global-setup` 增加隐藏项目、25 条分页投影及语义查询 fixture，`global-teardown` 同步清理。本地 `pnpm test:e2e` 为 13/13，`apps/e2e` typecheck 与 API build 通过；PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）。
 
 ## 维护规则
 
