@@ -3,11 +3,19 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module.js";
 import { PostgresProjectAccessQueryPort } from "./postgres-project-access-query-port.js";
 import { PROJECT_ACCESS_QUERY_PORT } from "./project-access.port.js";
+import {
+  ActiveUsersQueryPort,
+  ProjectsWritePort,
+} from "./projects-write.port.js";
+import {
+  PostgresActiveUsersQueryPort,
+  PostgresProjectsWritePort,
+} from "./postgres-projects-write-port.js";
 
 /**
  * 项目与项目成员模块。
  *
- * 当前阶段只提供 `ProjectAccessQueryPort` 生产适配器；下游 Search/Activity
+ * 提供 `ProjectAccessQueryPort` 只读适配器与项目创建写端口；下游 Search/Activity
  * 查询服务只能通过该 token 取得服务端生成的 AuthorizedProjectScope。
  */
 @Module({
@@ -18,7 +26,15 @@ import { PROJECT_ACCESS_QUERY_PORT } from "./project-access.port.js";
       provide: PROJECT_ACCESS_QUERY_PORT,
       useExisting: PostgresProjectAccessQueryPort,
     },
+    {
+      provide: ProjectsWritePort,
+      useClass: PostgresProjectsWritePort,
+    },
+    {
+      provide: ActiveUsersQueryPort,
+      useClass: PostgresActiveUsersQueryPort,
+    },
   ],
-  exports: [PROJECT_ACCESS_QUERY_PORT],
+  exports: [PROJECT_ACCESS_QUERY_PORT, ProjectsWritePort, ActiveUsersQueryPort],
 })
 export class ProjectsModule {}
