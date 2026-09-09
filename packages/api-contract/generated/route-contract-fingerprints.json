@@ -1,8 +1,20 @@
 {
+  "archiveFeature": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "7c6dc946f388359612fa98fe597e2c395af0a3efd9b7747efa55bba9e34062c1"
+    }
+  ],
   "archiveModule": [
     {
       "version": "1.0.0",
       "fingerprint": "c0a4b256606f5bd1d5e6063481cde614ef99b23d3fe64aab561f654b7593eeeb"
+    }
+  ],
+  "createFeature": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "36a7743018f77042d7e35a2fea33faed17ac4f74e9dcc7297a1b72b2f5499f1a"
     }
   ],
   "createModule": [
@@ -35,6 +47,12 @@
       "fingerprint": "f3cad65d2a9b14e9619af1de69ac8d046a9144e339fa4173391f2d575a753b73"
     }
   ],
+  "restoreFeature": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "6a805b9fc94a28c4b964502666b4d819ee8684b2fc2f8ca48ad0f08696770ac9"
+    }
+  ],
   "restoreModule": [
     {
       "version": "1.0.0",
@@ -45,6 +63,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "1dabb97faeae65867c61100f10ec5d1dbb849a1c720def5f23eeb07ff69ae547"
+    }
+  ],
+  "updateFeature": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "a29140dcf621c76a786acd948e27922ff83f09657bfb4bacfef54baaf03dedcc"
     }
   ],
   "updateModule": [
