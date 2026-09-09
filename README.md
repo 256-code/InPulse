@@ -24,7 +24,7 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 | 已提供 | pnpm workspace、严格 TypeScript、格式检查、数据库类型检查/迁移/集成测试、应用 typecheck/lint/build、前端单元测试（`pnpm test:web`）与 dependency-cruiser 边界检查、契约生成与漂移检查、权限矩阵检查、依赖边界与 Secret 扫描、依赖漏洞审计、搜索服务真实 PostgreSQL 集成测试、搜索 API 真实 HTTP 集成测试、搜索 API 稳定正式契约（C-006 已确认）、搜索页面最小纵切片、Playwright 浏览器测试基座（`pnpm test:e2e`）、PGroonga 与原 pg_trgm 搜索 PoC 工具链，以及文档检查 |
 | 尚未提供 | 业务领域模块与 API、其余 Playwright 完整关键路径 E2E、生产加密备份恢复（F-10.2）、升级/回滚规程、首次建库 \compose.init\ 纵切片与真实镜像 Tag/digest 签名发布清单；生产容器镜像与镜像扫描已提供，Playwright 测试基座、Compose 稳态拓扑与镜像 ref 预检已提供 |
 
-> 2026-09-09 更新：登录页已接入 TOTP 注册、验证与恢复码，管理员账户菜单提供密码 + 当前 TOTP 重认证；受限 MFA Session 仅在内存保留，注册/验证/恢复码成功后立即轮换 CSRF Token；前端单测 Web 25 文件 63 例，Playwright 8/8（含真实 TOTP 挑战与重认证），API 单测 47 文件 224 例；GitHub Actions 尚未执行，生产仍需 TOTP KEK 相关 Secret。
+> 2026-09-09 更新：登录页已接入 TOTP 注册、验证与恢复码，管理员账户菜单提供密码 + 当前 TOTP 重认证；受限 MFA Session 仅在内存保留，注册/验证/恢复码成功后立即轮换 CSRF Token；前端单测 Web 25 文件 63 例，Playwright 8/8（含真实 TOTP 挑战与重认证），API 单测 47 文件 224 例；[PR #63](https://github.com/256-code/InPulse/pull/63) 的 GitHub Actions 已通过（workspace 10m2s，docs 通过）；生产仍需 TOTP KEK 相关 Secret。
 
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；§12.4 中其余 Playwright 完整关键路径 E2E、生产容器镜像构建、真实镜像 digest 绑定与镜像扫描尚未落库；Playwright 测试基座、Compose 渲染与 ref 预检已落库，补齐前请勿假设这些检查已执行。
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；生产容器镜像构建与 Trivy 镜像扫描已落库，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份恢复仍未落库，补齐前请勿假设这些检查已执行。
