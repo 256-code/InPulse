@@ -56,7 +56,24 @@ import {
   createProjectRequestSchema,
   createProjectResponseSchema,
   projectMemberItemSchema,
+  projectMemberCollectionPathSchema,
+  projectMemberPathSchema,
+  projectMemberRecordItemSchema,
+  projectMembersListResponseSchema,
+  addProjectMemberRequestSchema,
+  projectMemberMutationHeadersSchema,
+  projectMemberUnfinishedTaskItemSchema,
+  projectMemberUnfinishedTasksResponseSchema,
+  projectMemberReassignmentItemSchema,
+  removeProjectMemberRequestSchema,
+  addProjectMemberResponseSchema,
+  removeProjectMemberResponseSchema,
+  projectMemberReplayContextSchema,
   projectCodeSchema,
+  projectItemSchema,
+  projectListResponseSchema,
+  projectDetailResponseSchema,
+  projectPathSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -284,6 +301,26 @@ export const schemaRegistry = {
     summary: "项目编码；创建后不可修改",
     sensitiveFieldPaths: [],
   },
+  ProjectPath: {
+    schema: projectPathSchema,
+    summary: "项目详情路径参数",
+    sensitiveFieldPaths: [],
+  },
+  ProjectItem: {
+    schema: projectItemSchema,
+    summary: "项目公开摘要；包含归档状态与活跃成员数",
+    sensitiveFieldPaths: [],
+  },
+  ProjectListResponse: {
+    schema: projectListResponseSchema,
+    summary: "当前用户可见项目列表；系统管理员返回全部项目",
+    sensitiveFieldPaths: [],
+  },
+  ProjectDetailResponse: {
+    schema: projectDetailResponseSchema,
+    summary: "当前用户可访问项目详情；无权限统一 404",
+    sensitiveFieldPaths: [],
+  },
   CreateProjectRequest: {
     schema: createProjectRequestSchema,
     summary:
@@ -298,6 +335,71 @@ export const schemaRegistry = {
   ProjectMemberItem: {
     schema: projectMemberItemSchema,
     summary: "项目成员摘要（响应与幂等重放共享）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberCollectionPath: {
+    schema: projectMemberCollectionPathSchema,
+    summary: "项目成员集合路径参数",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberPath: {
+    schema: projectMemberPathSchema,
+    summary: "项目成员资源路径参数",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberRecordItem: {
+    schema: projectMemberRecordItemSchema,
+    summary: "项目成员历史记录及脱敏展示字段",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMembersListResponse: {
+    schema: projectMembersListResponseSchema,
+    summary: "系统管理员项目成员历史列表",
+    sensitiveFieldPaths: [],
+  },
+  AddProjectMemberRequest: {
+    schema: addProjectMemberRequestSchema,
+    summary: "系统管理员添加项目成员请求",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberMutationHeaders: {
+    schema: projectMemberMutationHeadersSchema,
+    summary: "成员写请求安全头，要求同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ProjectMemberUnfinishedTaskItem: {
+    schema: projectMemberUnfinishedTaskItemSchema,
+    summary: "成员未完成任务及改派所需版本信息",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberUnfinishedTasksResponse: {
+    schema: projectMemberUnfinishedTasksResponseSchema,
+    summary: "成员未完成任务列表",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberReassignmentItem: {
+    schema: projectMemberReassignmentItemSchema,
+    summary: "成员移除时单任务改派参数",
+    sensitiveFieldPaths: [],
+  },
+  RemoveProjectMemberRequest: {
+    schema: removeProjectMemberRequestSchema,
+    summary: "系统管理员移除项目成员及可选任务改派请求",
+    sensitiveFieldPaths: [],
+  },
+  AddProjectMemberResponse: {
+    schema: addProjectMemberResponseSchema,
+    summary: "添加项目成员成功响应",
+    sensitiveFieldPaths: [],
+  },
+  RemoveProjectMemberResponse: {
+    schema: removeProjectMemberResponseSchema,
+    summary: "移除项目成员成功响应",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMemberReplayContext: {
+    schema: projectMemberReplayContextSchema,
+    summary: "成员写操作幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
   CreateProjectResponse: {

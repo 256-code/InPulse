@@ -1,4 +1,10 @@
 {
+  "addProjectMember": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "d9264e87d62b0308ce0040240df32732755ddc7f2dc1a3287b684850ccb13a41"
+    }
+  ],
   "archiveFeature": [
     {
       "version": "1.0.0",
@@ -75,6 +81,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "bfcc90d99b2e6c0158619d46792aa3c219861966b9495b48d4dffc91779a1a43"
+    }
+  ],
+  "removeProjectMember": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "950d29384a69784c50b58058be94d5904ff00d156e1e8c76f682ca5274502adc"
     }
   ],
   "resetAdminMfa": [
