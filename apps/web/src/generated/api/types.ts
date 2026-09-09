@@ -28,6 +28,58 @@ export type ActivityQueryRequest = {
   readonly includeAdminOnly?: boolean;
 };
 
+export type AdminUserCreateRequest = {
+  readonly loginName: string;
+  readonly name: string;
+  readonly email?: (string | null);
+  readonly avatarUrl?: (string | null);
+  readonly password: string;
+  readonly isAdmin: boolean;
+};
+
+export type AdminUserItem = {
+  readonly id: number;
+  readonly loginName: string;
+  readonly name: string;
+  readonly email: (string | null);
+  readonly avatarUrl: (string | null);
+  readonly isAdmin: boolean;
+  readonly status: ("ACTIVE" | "DISABLED");
+  readonly rowVersion: number;
+  readonly disabledAt: (string | null);
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type AdminUserListResponse = {
+  readonly items: readonly AdminUserItem[];
+};
+
+export type AdminUserMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type AdminUserPath = {
+  readonly userId: number;
+};
+
+export type AdminUserReplayContext = {
+  readonly actorUserId: number;
+  readonly userId: number;
+};
+
+export type AdminUserUpdateRequest = {
+  readonly name?: string;
+  readonly email?: (string | null);
+  readonly avatarUrl?: (string | null);
+  readonly isAdmin?: boolean;
+};
+
+export type AdminUserVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+};
+
 export type ConfirmMfaEnrollmentRequest = {
   readonly expectedEnrollmentGeneration: number;
   readonly code: string;

@@ -2,6 +2,7 @@ import { featureRoutes } from "./feature-routes.js";
 import { taskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
+import { adminUserRoutes } from "./user-admin-routes.js";
 
 export * from "./route-definition.js";
 
@@ -11,6 +12,7 @@ export * from "./route-definition.js";
  * validateRouteRegistry 失败，未实现的规划路由不得提前登记。
  */
 export const routeRegistry = [
+  ...adminUserRoutes,
   ...moduleRoutes,
   ...featureRoutes,
   ...taskRoutes,

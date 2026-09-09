@@ -6,7 +6,7 @@ const SettingsPage = lazy(() => import("./SettingsPage"));
 export const settingsRoute: AppRouteModule = {
   path: "/settings",
   element: SettingsPage,
-  requiresAuth: false,
+  requiresAdmin: true,
 };
 
 export default settingsRoute;
