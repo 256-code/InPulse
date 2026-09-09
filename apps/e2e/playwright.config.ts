@@ -5,6 +5,7 @@ import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  AUDIT_KEYRING_FILE,
   E2E_KEYRING_DIR,
   E2E_ROOT,
   IDEMPOTENCY_KEYRING_FILE,
@@ -33,6 +34,11 @@ writeFileSync(
 );
 writeFileSync(
   IDEMPOTENCY_KEYRING_FILE,
+  `1:${randomBytes(32).toString("hex")}\n`,
+  "utf8",
+);
+writeFileSync(
+  AUDIT_KEYRING_FILE,
   `1:${randomBytes(32).toString("hex")}\n`,
   "utf8",
 );
@@ -76,6 +82,9 @@ export default defineConfig({
         IDEMPOTENCY_FINGERPRINT_KEYRING_FILE: IDEMPOTENCY_KEYRING_FILE,
         IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH: "1",
         IDEMPOTENCY_FINGERPRINT_KEY_VERSION: "1",
+        AUDIT_HMAC_KEYRING_FILE: AUDIT_KEYRING_FILE,
+        AUDIT_HMAC_KEYRING_TEST_PATH: "1",
+        AUDIT_HMAC_KEY_VERSION: "1",
       },
     },
     {

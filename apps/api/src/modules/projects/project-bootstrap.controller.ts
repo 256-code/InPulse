@@ -9,6 +9,7 @@ import {
 } from "@inpulse/api-contract";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import {
+  getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "../../auth/csrf.http.js";
@@ -73,7 +74,9 @@ export class ProjectBootstrapController {
       return csrfOriginFailureResponse(requestId, originFailure);
     }
 
-    const parsedHeaders = createProjectHeadersSchema.safeParse(request.headers);
+    const parsedHeaders = createProjectHeadersSchema.safeParse({
+      "x-csrf-token": getHeader(request.headers, "x-csrf-token"),
+    });
     if (!parsedHeaders.success) {
       response.status(422);
       return validationResponse(requestId, "请求头缺少有效的同步 CSRF Token");

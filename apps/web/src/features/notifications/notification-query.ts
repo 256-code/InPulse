@@ -10,6 +10,7 @@ import {
   createApiClient,
   type InpulseApiClient,
 } from "@generated/api";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 export const NOTIFICATION_PAGE_LIMIT = 20;
 export const NOTIFICATION_POLL_INTERVAL_MS = 30_000;
@@ -29,13 +30,6 @@ export interface NotificationQueryOptions {
 
 export interface NotificationListOptions extends NotificationQueryOptions {
   readonly filter: NotificationFilter;
-}
-
-export function createIdempotencyKey(scope: string): string {
-  const randomId =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `${scope}-${randomId}`;
 }
 
 export function describeNotificationError(error: unknown): string {

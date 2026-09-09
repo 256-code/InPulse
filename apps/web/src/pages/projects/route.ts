@@ -6,7 +6,7 @@ const ProjectsPage = lazy(() => import("./ProjectsPage"));
 export const projectsRoute: AppRouteModule = {
   path: "/projects",
   element: ProjectsPage,
-  requiresAuth: false,
+  requiresAuth: true,
 };
 
 export default projectsRoute;

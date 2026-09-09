@@ -1,11 +1,45 @@
-import React from "react";
-import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlaceholder";
+import React, { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
+import { useAuth } from "@features/auth/auth-context";
+import { ProjectsPageView } from "@features/projects/ProjectsPageView";
 
-export const ProjectsPage: React.FC = () => {
+export interface ProjectsPageProps {
+  readonly client?: InpulseApiClient;
+}
+
+export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [createdProject, setCreatedProject] =
+    useState<CreateProjectResponse | null>(null);
+
+  const handleCreated = useCallback((response: CreateProjectResponse) => {
+    setCreatedProject(response);
+  }, []);
+
+  const handleOpenActivity = useCallback(
+    (projectId: number) => {
+      navigate(`/projects/${projectId}/activity`);
+    },
+    [navigate],
+  );
+
+  const handleSearch = useCallback(
+    (query: string) => {
+      navigate(`/search?q=${encodeURIComponent(query)}`);
+    },
+    [navigate],
+  );
+
   return (
-    <WorkspacePlaceholder
-      title="项目与功能"
-      description="项目、模块、功能和任务的入口将在项目查询接口就绪后接入。"
+    <ProjectsPageView
+      creatorName={user?.name.trim() || "创建者"}
+      createdProject={createdProject}
+      onCreated={handleCreated}
+      onOpenActivity={handleOpenActivity}
+      onSearch={handleSearch}
+      {...(client ? { client } : {})}
     />
   );
 };
