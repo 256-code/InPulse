@@ -35,6 +35,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY deploy/docker/nginx-security-headers.conf /etc/nginx/snippets/inpulse-security-headers.conf
 COPY --from=builder /workspace/apps/web/dist /usr/share/nginx/html
 
 USER 101:101

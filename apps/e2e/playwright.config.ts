@@ -97,16 +97,22 @@ export default defineConfig({
       },
     },
     {
+      // 用生产构建 + `vite preview` 而不是 dev server：SEC-002 验证的必须是
+      // 生产形状的产物（哈希静态资源、懒加载 chunk、无 HMR 注入），CSP
+      // 逐响应 nonce 由 apps/web/tools/vite-csp.ts 的预览中间件提供。
       command:
-        "node node_modules/vite/bin/vite.js --host 127.0.0.1 " +
+        "node node_modules/vite/bin/vite.js build && " +
+        "node node_modules/vite/bin/vite.js preview --host 127.0.0.1 " +
         `--port ${WEB_PORT} --strictPort`,
       cwd: path.resolve(ROOT, "apps/web"),
       url: `${WEB_BASE_URL}/login`,
       reuseExistingServer: false,
-      timeout: 120_000,
+      timeout: 180_000,
       env: {
         ...process.env,
         VITE_API_PROXY_TARGET: API_BASE_URL,
+        // 默认强制 CSP；`E2E_WEB_CSP=report-only` 只用于本地排查（ADR-021）。
+        INPULSE_WEB_CSP: process.env["E2E_WEB_CSP"]?.trim() || "enforce",
       },
     },
   ],
