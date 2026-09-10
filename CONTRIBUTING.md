@@ -162,6 +162,12 @@ feat(contract)!: change task response schema
 
 阶段 0 CI 最小链路已落库。GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行下列根级命令，`Documentation / docs` job 只执行 `check:docs`：
 
+`CI / workspace` 在同一 ref 上取消被新推送取代的在运行流水线（`main` 上的运行不取消，保证每个已合并提交都留下完整结果）；取消只改变耗时，不改变上列门禁的顺序、内容和判定标准。曾试把 `apps/api` 的 `test:unit` 改为并行执行单元测试文件，但 CI 实测反而略慢（`apps/api test:unit` Duration 35.99s -> 40.14s；该套件在 4 vCPU runner 上受模块导入与 worker 启动开销支配），已回退为原串行方式；共享真实 PostgreSQL 的集成测试继续在 `vitest.config.mjs` 与 `vitest.integration.config.ts` 中串行执行。2026-09-10 用 `gh run view` 读到单次运行约 16 分钟，其中 `pnpm install --frozen-lockfile` 仅约 13 秒，因此没有为 pnpm store 引入缓存步骤；当前主要耗时项是 Browser E2E、生产镜像构建与 Trivy 扫描。PR #80 实测运行 16.60~16.68 分钟（同代码基线 `main` `ad6476b` 为 17.58 分钟），Playwright 缓存命中后 Install Playwright browser 由 23s 降到 14s。
+
+为 Playwright 的 Chromium 增加 `actions/cache` 步骤缓存 `~/.cache/ms-playwright`（action 固定到 `v5.1.0` 的提交，键绑定 `pnpm-lock.yaml`），因为实测 Install Playwright browser 在两条运行间为 25s 与 116s，波动明显；Trivy 漏洞库已由 `trivy-action` 自带缓存，未再重复配置。
+
+生产镜像的 builder 改为先复制依赖清单（根 manifest、各 workspace 包 `package.json`、lockfile、`.npmrc`）再执行 `pnpm install --frozen-lockfile`，之后才 `COPY . .`，使依赖层不随源码失效；CI 的镜像构建改用 container driver 的 buildx 并带 `type=gha` 层缓存（每个镜像独立 cache scope 与 `ignore-error=true`），对应 `.github/workflows/ci.yml` 的 Set up Docker Buildx with GHA layer cache 步骤。新增 workspace 包时必须同步 `deploy/docker/{api,migration,web}.Dockerfile` 的依赖清单，否则 `--frozen-lockfile` 会因 lockfile 与 manifests 不一致而失败。
+
 ```shell
 pnpm install --frozen-lockfile
 pnpm lint

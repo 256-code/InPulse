@@ -10,10 +10,22 @@ WORKDIR /workspace
 ENV CI=true
 RUN corepack enable
 
+# 先只复制依赖清单再安装，让依赖层不随源码变化失效；`pnpm install
+# --frozen-lockfile` 需要所有 workspace 包的 manifest，新增 workspace 包时必须
+# 在这里同步补一行，否则安装会因 lockfile 与 manifests 不一致而失败。
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY database/package.json database/
+COPY apps/api/package.json apps/api/
+COPY apps/e2e/package.json apps/e2e/
+COPY apps/web/package.json apps/web/
+COPY packages/api-contract/package.json packages/api-contract/
+COPY packages/eslint-config/package.json packages/eslint-config/
+
+RUN pnpm install --frozen-lockfile
+
 COPY . .
 
-RUN pnpm install --frozen-lockfile \
- && pnpm --filter @inpulse/api-contract build \
+RUN pnpm --filter @inpulse/api-contract build \
  && pnpm --filter @inpulse/database build \
  && pnpm --filter @inpulse/api build \
  && pnpm deploy --legacy --filter @inpulse/api --prod /out
