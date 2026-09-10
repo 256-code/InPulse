@@ -16,6 +16,11 @@ import type {
   ProjectItem,
 } from "@generated/api";
 import { CreateProjectModal } from "./CreateProjectModal";
+import {
+  ArchiveProjectModal,
+  EditProjectModal,
+  RestoreProjectModal,
+} from "./ProjectManagementModals";
 
 const { Text } = Typography;
 
@@ -53,6 +58,12 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   onRetryProjects,
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<ProjectItem | null>(null);
+  const [archiving, setArchiving] = useState<ProjectItem | null>(null);
+  const [restoring, setRestoring] = useState<ProjectItem | null>(null);
+  const [managementSuccess, setManagementSuccess] = useState<string | null>(
+    null,
+  );
 
   return (
     <>
@@ -132,6 +143,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
               }
             />
           ) : null}
+          {managementSuccess ? (
+            <Alert showIcon type="success" title={managementSuccess} />
+          ) : null}
           {projectsLoading ? (
             <Spin description="正在加载项目列表" />
           ) : projectsError ? (
@@ -171,6 +185,33 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                   }
                   extra={
                     <Space wrap>
+                      <Button
+                        size="small"
+                        data-testid={`edit-project-${project.id}`}
+                        onClick={() => setEditing(project)}
+                      >
+                        编辑
+                      </Button>
+                      {isAdmin ? (
+                        project.status === "ACTIVE" ? (
+                          <Button
+                            size="small"
+                            danger
+                            data-testid={`archive-project-${project.id}`}
+                            onClick={() => setArchiving(project)}
+                          >
+                            归档
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            data-testid={`restore-project-${project.id}`}
+                            onClick={() => setRestoring(project)}
+                          >
+                            恢复
+                          </Button>
+                        )
+                      ) : null}
                       <Button onClick={() => onOpenModules?.(project.id)}>
                         管理模块
                       </Button>
@@ -219,6 +260,46 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           onCreated?.(response);
         }}
       />
+      {editing ? (
+        <EditProjectModal
+          open
+          project={editing}
+          client={client}
+          onClose={() => setEditing(null)}
+          onUpdated={(updated) => {
+            setEditing(null);
+            setManagementSuccess(
+              `项目「${updated.name}」已更新，当前版本 ${updated.rowVersion}。`,
+            );
+          }}
+        />
+      ) : null}
+      {archiving ? (
+        <ArchiveProjectModal
+          open
+          project={archiving}
+          client={client}
+          onClose={() => setArchiving(null)}
+          onArchived={(updated) => {
+            setArchiving(null);
+            setManagementSuccess(
+              `项目「${updated.name}」已归档，历史仍可查看。`,
+            );
+          }}
+        />
+      ) : null}
+      {restoring ? (
+        <RestoreProjectModal
+          open
+          project={restoring}
+          client={client}
+          onClose={() => setRestoring(null)}
+          onRestored={(updated) => {
+            setRestoring(null);
+            setManagementSuccess(`项目「${updated.name}」已恢复为正常状态。`);
+          }}
+        />
+      ) : null}
     </>
   );
 };

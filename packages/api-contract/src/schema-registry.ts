@@ -74,6 +74,12 @@ import {
   projectListResponseSchema,
   projectDetailResponseSchema,
   projectPathSchema,
+  projectEditRequestSchema,
+  projectMutationHeadersSchema,
+  projectVersionHeadersSchema,
+  projectReplayContextSchema,
+  projectArchiveRequestSchema,
+  projectArchivePreviewResponseSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -410,6 +416,36 @@ export const schemaRegistry = {
   CreateProjectReplayContext: {
     schema: createProjectReplayContextSchema,
     summary: "创建项目幂等重放的最小资源授权上下文",
+    sensitiveFieldPaths: [],
+  },
+  ProjectEditRequest: {
+    schema: projectEditRequestSchema,
+    summary: "项目编辑请求；编码不可修改，名称与描述整笔替换",
+    sensitiveFieldPaths: [],
+  },
+  ProjectMutationHeaders: {
+    schema: projectMutationHeadersSchema,
+    summary: "项目写请求安全头，要求同步 CSRF Token",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ProjectVersionHeaders: {
+    schema: projectVersionHeadersSchema,
+    summary: "项目编辑版本头，If-Match 防止并发覆盖",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  ProjectReplayContext: {
+    schema: projectReplayContextSchema,
+    summary: "项目写操作幂等重放的最小结果资源上下文",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRequest: {
+    schema: projectArchiveRequestSchema,
+    summary: "项目归档或恢复原因；高风险操作必须显式填写",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchivePreviewResponse: {
+    schema: projectArchivePreviewResponseSchema,
+    summary: "归档前未完成任务数提醒",
     sensitiveFieldPaths: [],
   },
   UserAuthState: {

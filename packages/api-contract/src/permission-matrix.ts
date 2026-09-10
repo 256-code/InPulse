@@ -456,6 +456,53 @@ export const permissionMatrix = [
       系统管理员: { kind: "allow" },
     },
   },
+  {
+    operationId: "updateProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "getProjectArchivePreview",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session 且密码与当前 TOTP 重认证均在 5 分钟内；只读，不要求 CSRF 或幂等键",
+        deniedWith: 403,
+      },
+    },
+  },
+  ...(["archiveProject", "restoreProject"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: { kind: "deny", status: 403 },
+        其他项目成员: { kind: "deny", status: 404 },
+        已移除成员: { kind: "deny", status: 404 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: {
+          kind: "conditional",
+          allowedWhen:
+            operationId === "archiveProject"
+              ? "完整系统管理员 Session + 5 分钟双因子重认证；项目 ACTIVE，原因、If-Match、CSRF 与幂等必填"
+              : "完整系统管理员 Session + 5 分钟双因子重认证；项目 ARCHIVED，原因、If-Match、CSRF 与幂等必填",
+          deniedWith: 403,
+        },
+      },
+    }),
+  ),
   ...(
     [
       "listProjectMembers",

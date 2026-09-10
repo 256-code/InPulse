@@ -40,6 +40,43 @@ export const projectFormSchema = z.object({
 
 export type ProjectFormValues = z.infer<typeof projectFormSchema>;
 
+export const PROJECT_ARCHIVE_REASON_MAX_LENGTH = 2000;
+
+/** 项目编辑只允许整笔替换名称与描述；编码创建后不可修改。 */
+export const projectEditFormSchema = projectFormSchema.pick({
+  name: true,
+  description: true,
+});
+
+export type ProjectEditFormValues = z.infer<typeof projectEditFormSchema>;
+
+/** 归档与恢复都必须由管理员显式填写原因。 */
+export const projectArchiveFormSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(1, "请填写归档原因")
+    .max(
+      PROJECT_ARCHIVE_REASON_MAX_LENGTH,
+      `归档原因不能超过 ${PROJECT_ARCHIVE_REASON_MAX_LENGTH} 个字符`,
+    ),
+});
+
+export const projectRestoreFormSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(1, "请填写恢复原因")
+    .max(
+      PROJECT_ARCHIVE_REASON_MAX_LENGTH,
+      `恢复原因不能超过 ${PROJECT_ARCHIVE_REASON_MAX_LENGTH} 个字符`,
+    ),
+});
+
+export type ProjectArchiveFormValues = z.infer<typeof projectArchiveFormSchema>;
+
+export type ProjectRestoreFormValues = z.infer<typeof projectRestoreFormSchema>;
+
 export function normalizeProjectCode(value: string): string {
   return value.trim().toUpperCase();
 }

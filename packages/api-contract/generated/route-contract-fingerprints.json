@@ -17,6 +17,12 @@
       "fingerprint": "c0a4b256606f5bd1d5e6063481cde614ef99b23d3fe64aab561f654b7593eeeb"
     }
   ],
+  "archiveProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "4eb7e9b0f46438afef9bc50ed7a33bf04c482153439af71dd9e97a44b3c5d869"
+    }
+  ],
   "createFeature": [
     {
       "version": "1.0.0",
@@ -107,6 +113,12 @@
       "fingerprint": "ea08dd8b3fc048149e5f7ce88990006839f0b5e92761f44341fa3a4c44c2ae71"
     }
   ],
+  "restoreProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "f53eb1e655c6934d4f2f0651901d5d36c6ffa197240f1678592b6311819bb96b"
+    }
+  ],
   "unreadNotification": [
     {
       "version": "1.0.0",
@@ -129,6 +141,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "075791029125955c79b8ebc7eb50bf6faa4e5b872c4843b17c159850f9dc57bc"
+    }
+  ],
+  "updateProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "a0a141e51b85db8b396b4a0f1fd64cb834e45aaa441445a0382a48b4923011df"
     }
   ],
   "updateTask": [
