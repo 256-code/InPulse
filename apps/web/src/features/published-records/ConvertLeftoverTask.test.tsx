@@ -160,13 +160,19 @@ it("requires explicit confirmation after 409 impact/content change, retaining ta
   });
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   await screen.findByRole("button", { name: "刷新转换预览" });
-  expect(screen.getByRole("button", { name: "创建跟进任务" })).toBeDisabled();
+  expect(
+    await screen.findByRole("button", { name: "创建跟进任务" }),
+  ).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "刷新转换预览" }));
   await screen.findByText("暂时无法转换，输入已保留，请重试。");
-  expect(screen.getByRole("button", { name: "创建跟进任务" })).toBeDisabled();
+  expect(
+    await screen.findByRole("button", { name: "创建跟进任务" }),
+  ).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "刷新转换预览" }));
   await screen.findByText("最新遗留全文");
-  expect(screen.getByRole("button", { name: "创建跟进任务" })).toBeDisabled();
+  expect(
+    await screen.findByRole("button", { name: "创建跟进任务" }),
+  ).toBeDisabled();
   expect(screen.getByLabelText("跟进任务标题")).toHaveValue("保留标题");
   expect(screen.getByLabelText("跟进任务截止时间（选填）")).toHaveValue(
     "2026-10-11T09:15",
