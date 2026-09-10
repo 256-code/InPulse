@@ -1,4 +1,4 @@
-import { SearchProjectionCapacityError } from "../search/search-projection.write-port.js";
+import { SearchProjectionCapacityError } from "../search/public/search-projection-errors.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
