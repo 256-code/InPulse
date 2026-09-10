@@ -6,6 +6,8 @@ import { ProjectCodePort } from "./project-code.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 import { PostgresProjectMembersQueryPort } from "./postgres-project-members-query-port.js";
 import { PostgresProjectCodePort } from "./postgres-project-code-port.js";
+import { PostgresProjectQueryPort } from "./postgres-project-query-port.js";
+import { ProjectQueryPort } from "./project-query.port.js";
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../../database/database.module.js";
@@ -36,6 +38,7 @@ import {
       useClass: PostgresProjectMembersQueryPort,
     },
     { provide: ProjectCodePort, useClass: PostgresProjectCodePort },
+    { provide: ProjectQueryPort, useClass: PostgresProjectQueryPort },
     PostgresProjectAccessQueryPort,
     {
       provide: PROJECT_ACCESS_QUERY_PORT,
@@ -55,6 +58,7 @@ import {
     ProjectLinkCommandPort,
     ProjectMembersQueryPort,
     ProjectCodePort,
+    ProjectQueryPort,
     PROJECT_ACCESS_QUERY_PORT,
     ProjectsWritePort,
     ActiveUsersQueryPort,

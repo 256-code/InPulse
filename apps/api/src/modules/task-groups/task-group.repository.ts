@@ -65,6 +65,16 @@ export class TaskGroupRepository {
     >`SELECT id AS "groupId",project_id AS "projectId",code,name,status,created_by AS "createdBy",row_version AS "rowVersion",created_at AS "createdAt",updated_at AS "updatedAt",closed_at AS "closedAt" FROM app.task_groups WHERE id=${groupId} AND project_id=${projectId}`;
     return row;
   }
+  /** 项目无关的组预读（R-1 先由 groupId 反查 project_id，再走授权）。只读、不取锁。 */
+  async findGroupById(
+    tx: TransactionContext,
+    groupId: number,
+  ): Promise<TaskGroupRecord | undefined> {
+    const [row] = await tx.sql<
+      TaskGroupRecord[]
+    >`SELECT id AS "groupId",project_id AS "projectId",code,name,status,created_by AS "createdBy",row_version AS "rowVersion",created_at AS "createdAt",updated_at AS "updatedAt",closed_at AS "closedAt" FROM app.task_groups WHERE id=${groupId}`;
+    return row;
+  }
   async lockGroup(
     tx: TransactionContext,
     projectId: number,

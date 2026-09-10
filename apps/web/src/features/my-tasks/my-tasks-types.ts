@@ -1,10 +1,11 @@
 /**
  * F-32 我的任务（跨项目列表）：筛选条件与列表项类型。
  *
- * 字段对齐 docs/c-aggregate-read-contract-proposal.md 的 R-3 草案
- * （MyTaskItem / MyTasksQueryRequest）。骨架 UI 另需 priority、dueAt、
- * completedAt、description、creatorId，该差异已登记开发日志，等待 A 裁决；
- * 契约冻结前不得把本文件当成路由契约来源。
+ * 字段对齐 docs/a-contract-review-f25-f29-f32.md 的冻结 R-3 DTO
+ * （MyTaskItem / MyTasksQueryRequest）：契约可表达的字段为必填；
+ * 骨架 UI 需要但契约未提供的字段（description / priority / dueAt /
+ * completedAt / creatorId / githubLinkCount）为可选，未提供时为 undefined，
+ * 显示层必须显式降级，不得静默忽略或虚构数值。
  */
 
 export type MyTaskScope = "mine" | "created" | "project" | "all";
@@ -50,7 +51,8 @@ export interface MyTaskListItem {
   readonly taskId: number;
   readonly code: string;
   readonly title: string;
-  readonly description: string;
+  /** R-3 契约未提供；undefined 表示不可知，显示层不得展示描述。 */
+  readonly description?: string | null;
   readonly projectId: number;
   readonly projectName: string;
   readonly moduleId: number;
@@ -60,15 +62,23 @@ export interface MyTaskListItem {
   readonly scopeType: MyTaskLevel;
   readonly workStatus: MyTaskWorkStatus;
   readonly lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
-  readonly priority: MyTaskPriority;
-  readonly dueAt: string | null;
+  /** R-3 契约未提供；undefined 表示不可知，显示层隐藏优先级徽章。 */
+  readonly priority?: MyTaskPriority;
+  /**
+   * undefined 表示 R-3 契约未提供截止时间；null 表示确实未设置截止。
+   * 两者的显示文案不同，不得混用。
+   */
+  readonly dueAt?: string | null;
   readonly updatedAt: string;
-  readonly completedAt: string | null;
-  readonly creatorId: number;
+  /** R-3 契约未提供；undefined 表示不可知。 */
+  readonly completedAt?: string | null;
+  /** R-3 契约未提供；undefined 表示不可知。 */
+  readonly creatorId?: number;
   readonly assignee: MyTaskAssigneeRef;
   readonly hasPublishedRecord: boolean;
   readonly groupRole: "MAIN" | "SOURCE" | null;
-  readonly githubLinkCount: number;
+  /** R-3 契约未提供；undefined 表示不可知。 */
+  readonly githubLinkCount?: number;
 }
 
 /** 统计卡片口径；与列表筛选相互独立，按当前范围（scope/project）计算。 */
@@ -84,14 +94,49 @@ export interface MyTaskLeftoverSample {
   readonly summary: string;
 }
 
+/**
+ * UI 筛选面相对冻结 R-3 契约的缺口（参数维度）。
+ *
+ * 这些筛选在设计师稿与骨架 UI 中存在，但 R-3 的冻结参数无法表达；
+ * 服务端适配器必须显式降级（禁用或标注「后续迭代」），不得静默忽略，
+ * 也不得把未登记的参数提前写进请求。
+ */
+export type MyTasksFilterGap =
+  | "scope:created"
+  | "scope:all"
+  | "scope:project-without-id"
+  | "filter:priority"
+  | "filter:relation"
+  | "filter:github"
+  | "filter:query"
+  | "filter:canceled-with-open";
+
+/** 适配器对每个缺口的表达能力；false 表示该筛选必须显式降级。 */
+export type MyTasksFilterSupport = Readonly<Record<MyTasksFilterGap, boolean>>;
+
+/** mock 适配器完整支持全部筛选（演示数据集在本地过滤）。 */
+export const MY_TASKS_FULL_FILTER_SUPPORT: MyTasksFilterSupport = {
+  "scope:created": true,
+  "scope:all": true,
+  "scope:project-without-id": true,
+  "filter:priority": true,
+  "filter:relation": true,
+  "filter:github": true,
+  "filter:query": true,
+  "filter:canceled-with-open": true,
+};
+
 export interface MyTaskListResult {
   readonly items: readonly MyTaskListItem[];
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
-  readonly stats: MyTaskStats;
-  readonly scopeCounts: Readonly<Record<MyTaskScope, number>>;
-  readonly leftoverCount: number;
+  /** R-3 未返回聚合统计；null 表示不可知，显示层不得虚构。 */
+  readonly stats: MyTaskStats | null;
+  readonly scopeCounts: Readonly<Record<MyTaskScope, number>> | null;
+  readonly leftoverCount: number | null;
   readonly leftoverSample: MyTaskLeftoverSample | null;
+  /** 适配器可表达的筛选维度；结果缺省时按完整能力处理。 */
+  readonly filterSupport: MyTasksFilterSupport;
 }
 
 export interface MyTasksQueryInput {
@@ -99,7 +144,7 @@ export interface MyTasksQueryInput {
   readonly viewerId: number | null;
 }
 
-/** 数据源适配器；骨架阶段只有 mock 实现，接口冻结后新增 server 实现。 */
+/** 数据源适配器；页面默认注入 server 实现，mock 只用于测试与降级演示。 */
 export interface MyTasksAdapter {
   readonly source: "mock" | "server";
   readonly notice: string;

@@ -2,6 +2,26 @@ import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
+import {
+  leftoverItemSummarySchema,
+  myTaskItemSchema,
+  myTaskPageSchema,
+  myTasksQueryRequestSchema,
+  projectOverviewProjectSchema,
+  projectOverviewQueryRequestSchema,
+  projectOverviewResponseSchema,
+  projectOverviewStatsSchema,
+  recentRecordItemSchema,
+  taskGroupDetailResponseSchema,
+  taskGroupMemberDetailSchema,
+  taskGroupPathSchema,
+  taskGroupRecordItemSchema,
+  taskGroupRecordLinkSchema,
+  taskGroupRecordPageSchema,
+  taskGroupRecordQueryRequestSchema,
+  taskGroupSummarySchema,
+  userRefSchema,
+} from "./contracts/aggregate-read.zod.js";
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
 import { publishedRecordSchemas } from "./contracts/published-records.zod.js";
 import { featureSchemas } from "./contracts/features.zod.js";
@@ -125,6 +145,96 @@ export const schemaRegistry = {
   ...publishedRecordSchemas,
 
   ...taskGroupSchemas,
+  UserRef: {
+    schema: userRefSchema,
+    summary: "聚合读共用的用户引用，只含姓名与头像",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupPath: {
+    schema: taskGroupPathSchema,
+    summary: "聚合组路径参数，项目归属由服务端反查（Q-01）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupSummary: {
+    schema: taskGroupSummarySchema,
+    summary: "聚合组摘要：编码、名称、状态与版本（R-1）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupMemberDetail: {
+    schema: taskGroupMemberDetailSchema,
+    summary: "聚合组成员明细：角色、分支类型、成员状态与任务原数据（R-1）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupDetailResponse: {
+    schema: taskGroupDetailResponseSchema,
+    summary: "聚合组视图响应，记录列表由子资源分页提供（R-1 / Q-02）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupRecordQueryRequest: {
+    schema: taskGroupRecordQueryRequestSchema,
+    summary: "聚合组记录查询参数：成员任务、游标与每页条数（R-4）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupRecordLink: {
+    schema: taskGroupRecordLinkSchema,
+    summary: "记录上的 GitHub 链接，标题与状态为关联时刻快照（R-4 / Q-14）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupRecordItem: {
+    schema: taskGroupRecordItemSchema,
+    summary: "聚合组记录条目，只含 PUBLISHED 与 VOID（R-4 / Q-13）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupRecordPage: {
+    schema: taskGroupRecordPageSchema,
+    summary: "聚合组记录分页响应（R-4 / C-006）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectOverviewQueryRequest: {
+    schema: projectOverviewQueryRequestSchema,
+    summary: "项目概览收口参数：最近迭代与遗留问题条数（R-2 / Q-06）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectOverviewProject: {
+    schema: projectOverviewProjectSchema,
+    summary: "项目概览项目头，返回原始状态枚举（R-2 / Q-15）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectOverviewStats: {
+    schema: projectOverviewStatsSchema,
+    summary: "项目概览四项统计，口径按功能设计 §29（R-2）",
+    sensitiveFieldPaths: [],
+  },
+  RecentRecordItem: {
+    schema: recentRecordItemSchema,
+    summary: "最近迭代条目，含所属功能名（R-2）",
+    sensitiveFieldPaths: [],
+  },
+  LeftoverItemSummary: {
+    schema: leftoverItemSummarySchema,
+    summary: "待处理遗留问题条目，内容取最新版本快照（R-2）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectOverviewResponse: {
+    schema: projectOverviewResponseSchema,
+    summary: "项目概览响应：项目头、成员数与聚合结果（R-2）",
+    sensitiveFieldPaths: [],
+  },
+  MyTasksQueryRequest: {
+    schema: myTasksQueryRequestSchema,
+    summary: "我的任务查询参数：四项筛选与游标，负责人固定为当前用户（R-3）",
+    sensitiveFieldPaths: [],
+  },
+  MyTaskItem: {
+    schema: myTaskItemSchema,
+    summary: "我的任务条目，含记录存在性与聚合组角色（R-3）",
+    sensitiveFieldPaths: [],
+  },
+  MyTaskPage: {
+    schema: myTaskPageSchema,
+    summary: "我的任务分页响应（R-3 / C-006）",
+    sensitiveFieldPaths: [],
+  },
   ErrorResponse: {
     schema: errorResponseSchema,
     summary: "统一错误响应模型",

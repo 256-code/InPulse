@@ -1,11 +1,12 @@
-import type {
-  MyTaskListItem,
-  MyTaskListResult,
-  MyTaskPriority,
-  MyTaskStats,
-  MyTasksAdapter,
-  MyTasksQueryInput,
-  MyTaskWorkStatus,
+import {
+  MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskListItem,
+  type MyTaskListResult,
+  type MyTaskPriority,
+  type MyTaskStats,
+  type MyTasksAdapter,
+  type MyTasksQueryInput,
+  type MyTaskWorkStatus,
 } from "./my-tasks-types";
 import {
   isBeforeTodayIso,
@@ -14,13 +15,26 @@ import {
 } from "./my-tasks-time";
 
 /**
- * 骨架阶段 mock 数据集内置的示例用户；接口冻结前，真实会话 id 不参与过滤，
- * 页面始终以该示例视角演示，避免真实用户 id 与演示数据不匹配导致空列表。
+ * mock 数据集内置的示例用户；mock 适配器固定以该视角演示，
+ * 避免真实用户 id 与演示数据不匹配导致空列表（server adapter 走会话身份）。
  */
 export const MY_TASKS_MOCK_VIEWER_ID = 1;
 
 export const MY_TASKS_MOCK_NOTICE =
-  "任务中心骨架：任务、统计与遗留问题来自前端 mock adapter，尚未接入服务端聚合接口；接口冻结后只替换 adapter 实现，页面结构不变。";
+  "任务中心 mock 数据：仅用于前端测试与降级演示，未接入服务端聚合接口；生产页面默认使用 server adapter（GET /api/v1/me/tasks）。";
+
+/**
+ * mock 数据集持有全部骨架字段（含契约缺口字段），仅供测试与演示；
+ * 视图类型 MyTaskListItem 上这些字段可选，服务端映射保持 undefined。
+ */
+type MockTaskItem = MyTaskListItem & {
+  description: string;
+  priority: MyTaskPriority;
+  dueAt: string | null;
+  completedAt: string | null;
+  creatorId: number;
+  githubLinkCount: number;
+};
 
 type Bucket = "open" | "done" | "canceled";
 
@@ -66,7 +80,7 @@ function bucketOf(status: MyTaskWorkStatus): Bucket {
   return "canceled";
 }
 
-function createMockItems(): readonly MyTaskListItem[] {
+function createMockItems(): readonly MockTaskItem[] {
   return [
     {
       taskId: 101,
@@ -313,7 +327,7 @@ function createMockItems(): readonly MyTaskListItem[] {
   ];
 }
 
-function haystack(item: MyTaskListItem): string {
+function haystack(item: MockTaskItem): string {
   return [
     item.code,
     item.title,
@@ -328,7 +342,7 @@ function haystack(item: MyTaskListItem): string {
 }
 
 function matchesScope(
-  item: MyTaskListItem,
+  item: MockTaskItem,
   filters: MyTasksQueryInput["filters"],
   viewerId: number,
 ): boolean {
@@ -340,7 +354,7 @@ function matchesScope(
 }
 
 function matchesFilters(
-  item: MyTaskListItem,
+  item: MockTaskItem,
   filters: MyTasksQueryInput["filters"],
 ): boolean {
   const bucket = bucketOf(item.workStatus);
@@ -367,7 +381,7 @@ function matchesFilters(
   return true;
 }
 
-function compareOpen(a: MyTaskListItem, b: MyTaskListItem): number {
+function compareOpen(a: MockTaskItem, b: MockTaskItem): number {
   const aOverdue = a.dueAt !== null && isBeforeTodayIso(a.dueAt);
   const bOverdue = b.dueAt !== null && isBeforeTodayIso(b.dueAt);
   if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
@@ -379,13 +393,13 @@ function compareOpen(a: MyTaskListItem, b: MyTaskListItem): number {
   return (a.dueAt ?? "9999-12-31").localeCompare(b.dueAt ?? "9999-12-31");
 }
 
-function compareClosed(a: MyTaskListItem, b: MyTaskListItem): number {
+function compareClosed(a: MockTaskItem, b: MockTaskItem): number {
   return (b.completedAt ?? b.updatedAt).localeCompare(
     a.completedAt ?? a.updatedAt,
   );
 }
 
-function compareItems(a: MyTaskListItem, b: MyTaskListItem): number {
+function compareItems(a: MockTaskItem, b: MockTaskItem): number {
   const bucket = bucketOf(a.workStatus);
   const byBucket = bucketRank[bucket] - bucketRank[bucketOf(b.workStatus)];
   if (byBucket !== 0) return byBucket;
@@ -393,7 +407,7 @@ function compareItems(a: MyTaskListItem, b: MyTaskListItem): number {
 }
 
 function buildStats(
-  scoped: readonly MyTaskListItem[],
+  scoped: readonly MockTaskItem[],
   viewerId: number,
 ): MyTaskStats {
   const mine = scoped.filter((item) => item.assignee.userId === viewerId);
@@ -420,7 +434,7 @@ function buildStats(
 }
 
 /** 惰性构造演示数据：到期日相对当前日期生成，避免注释型日期随时间漂移。 */
-export function createTasksMockItems(): readonly MyTaskListItem[] {
+export function createTasksMockItems(): readonly MockTaskItem[] {
   return createMockItems();
 }
 
@@ -441,6 +455,7 @@ export const MY_TASKS_MOCK_ADAPTER: MyTasksAdapter = {
       items,
       nextCursor: null,
       hasMore: false,
+      filterSupport: MY_TASKS_FULL_FILTER_SUPPORT,
       stats: buildStats(scoped, viewerId),
       scopeCounts: {
         mine: dataset.filter((item) => item.assignee.userId === viewerId)

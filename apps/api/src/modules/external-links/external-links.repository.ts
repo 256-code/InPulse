@@ -4,6 +4,28 @@ import type { TransactionContext } from "../../database/transaction-context.js";
 import { normalizeGitHubUrl } from "./github-url.js";
 import { githubLinkLabel } from "./github-link-label.js";
 import { linkAssociation } from "./external-link-query.port.js";
+
+/** R-4 聚合组记录链接的批量读模型；createdAt 取记录关联时刻 a.created_at。 */
+export interface ChangeRecordLinkRow {
+  readonly linkId: number;
+  readonly recordId: number;
+  readonly displayUrl: string;
+  readonly kind: "ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER";
+  readonly repository: string | null;
+  readonly externalNumber: string | null;
+  readonly externalSha: string | null;
+  readonly titleSnapshot: string | null;
+  readonly stateSnapshot: string | null;
+  readonly createdAt: Date;
+}
+
+interface ChangeRecordLinkRowRaw extends Omit<
+  ChangeRecordLinkRow,
+  "createdAt"
+> {
+  readonly createdAt: string;
+}
+
 @Injectable()
 export class ExternalLinksRepository {
   async list(
@@ -73,5 +95,42 @@ export class ExternalLinksRepository {
     const rows =
       await tx.sql`SELECT id FROM app.external_links WHERE id=${linkId} AND project_id=${p}`;
     return rows.length > 0;
+  }
+  /**
+   * R-4：批量读取记录上的 GitHub 链接快照。recordIds 为空短路；
+   * SQL 只按 project_id 与 change_record_id 过滤，调用方必须先完成项目授权。
+   */
+  async listChangeRecordLinks(
+    tx: TransactionContext,
+    projectId: number,
+    recordIds: readonly number[],
+  ): Promise<readonly ChangeRecordLinkRow[]> {
+    if (recordIds.length === 0) {
+      return [];
+    }
+    const ids = [...recordIds];
+    const rows = await tx.sql<ChangeRecordLinkRowRaw[]>`
+      SELECT l.id AS "linkId",
+             a.change_record_id AS "recordId",
+             l.display_url AS "displayUrl",
+             l.kind AS kind,
+             l.repository AS repository,
+             l.external_number::text AS "externalNumber",
+             l.external_sha AS "externalSha",
+             l.title_snapshot AS "titleSnapshot",
+             l.state_snapshot AS "stateSnapshot",
+             a.created_at AS "createdAt"
+        FROM app.change_record_external_links a
+        JOIN app.external_links l
+          ON l.id = a.link_id
+         AND l.project_id = a.project_id
+       WHERE a.project_id = ${projectId}
+         AND a.change_record_id = ANY(${ids}::integer[])
+       ORDER BY a.change_record_id ASC, l.id ASC
+    `;
+    return rows.map((row) => ({
+      ...row,
+      createdAt: new Date(row.createdAt),
+    }));
   }
 }

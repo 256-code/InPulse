@@ -44,6 +44,7 @@ import { PostgresUserProfileRepository } from "./user-profile.repository.js";
 import { UserDirectoryController } from "./user-directory.controller.js";
 import { PostgresUserDirectoryRepository } from "./user-directory.repository.js";
 import { UserDirectoryService } from "./user-directory.service.js";
+import { PostgresUserReadPort, UserReadPort } from "./user-read.port.js";
 import { AdminHighRiskAuthService } from "./admin-high-risk.service.js";
 import { AdminMfaResetController } from "./admin-mfa-reset.controller.js";
 import { AdminMfaResetService } from "./admin-mfa-reset.service.js";
@@ -99,6 +100,7 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     PostgresUserProfileRepository,
     PostgresUserDirectoryRepository,
     UserDirectoryService,
+    { provide: UserReadPort, useClass: PostgresUserReadPort },
     AdminHighRiskAuthService,
     MfaRecoveryService,
     AdminMfaResetService,
@@ -116,6 +118,7 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     AdminMfaResetController,
   ],
   exports: [
+    UserReadPort,
     SESSION_HMAC_KEYRING,
     TOTP_KEK_KEYRING,
     SessionTokenService,

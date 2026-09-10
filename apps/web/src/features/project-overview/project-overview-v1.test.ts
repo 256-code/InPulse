@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fromV1ProjectOverview,
   fromV1RecentRecords,
   isProjectOverviewV1LimitValid,
   PROJECT_OVERVIEW_V1_ACTIVE_LEFTOVER_LIMIT_DEFAULT,
@@ -75,6 +76,66 @@ describe("project-overview-v1", () => {
       },
     ]);
     expect(fromV1RecentRecords([])).toEqual([]);
+  });
+
+  it("maps the frozen R-2 response with explicit gap nulls", () => {
+    expect(
+      fromV1ProjectOverview({
+        project: { projectId: 7, name: "订单中台", status: "ACTIVE" },
+        memberCount: 4,
+        stats: {
+          activeModuleCount: 2,
+          activeFeatureCount: 5,
+          openTaskCount: 6,
+          publishedRecordCount: 9,
+        },
+        recentRecords: [
+          {
+            recordId: 12,
+            code: "CR-201",
+            title: "增加商户订单号幂等校验",
+            moduleId: 3,
+            featureId: null,
+            featureName: null,
+            publishedAt: "2026-09-10T09:00:00.000Z",
+          },
+        ],
+        activeLeftovers: [
+          {
+            leftoverItemId: 21,
+            recordId: 12,
+            recordCode: "CR-201",
+            content: "补齐恢复码入口",
+            createdAt: "2026-09-10T09:30:00.000Z",
+          },
+        ],
+      }),
+    ).toEqual({
+      stats: {
+        activeModules: 2,
+        activeFeatures: 5,
+        openTasks: 6,
+        publishedRecords: 9,
+        openLeftovers: null,
+      },
+      recentIterations: [
+        {
+          recordId: 12,
+          code: "CR-201",
+          title: "增加商户订单号幂等校验",
+          featureName: null,
+          publishedAt: "2026-09-10T09:00:00.000Z",
+        },
+      ],
+      leftovers: [
+        {
+          leftoverId: 21,
+          summary: "补齐恢复码入口",
+          recordCode: "CR-201",
+          recordTitle: null,
+        },
+      ],
+    });
   });
 
   it("keeps the documented gaps stable", () => {

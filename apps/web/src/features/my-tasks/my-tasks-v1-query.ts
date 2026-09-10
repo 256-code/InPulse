@@ -1,6 +1,10 @@
+import type { MyTaskItem } from "@generated/api";
 import type {
   MyTaskFilters,
   MyTaskLevel,
+  MyTaskListItem,
+  MyTasksFilterGap,
+  MyTasksFilterSupport,
   MyTaskWorkStatus,
 } from "./my-tasks-types";
 
@@ -12,9 +16,9 @@ import type {
  * scopeType / workStatus / hasPublishedRecord，负责人固定为当前用户，
  * 排序固定 id DESC，limit 默认 20、上限 100。
  *
- * 本文件只做「UI 筛选状态 → 冻结查询参数」的纯映射与缺口盘点：不发起请求、
- * 不引入生成客户端、不登记路由。按裁决 §7，登记与生成物必须与实现同一个 PR
- * 落库；在那之前本文件不是路由契约来源，骨架数据仍由 mock adapter 提供。
+ * 本文件只做「UI 筛选状态 → 冻结查询参数」的纯映射、R-3 条目映射与缺口盘点：
+ * 不发起请求、不引入生成客户端实现、不改契约。请求由 my-tasks-server.ts
+ * 经生成客户端发起；mock adapter 只保留用于前端测试与降级演示。
  */
 
 export const MY_TASKS_V1_PATH = "/api/v1/me/tasks";
@@ -38,28 +42,29 @@ export interface MyTasksV1QueryOptions {
   readonly limit?: number;
 }
 
+/** 兼容别名：缺口类型定义在 my-tasks-types.ts，供适配器能力表复用。 */
+export type MyTasksV1FilterGap = MyTasksFilterGap;
+
 /**
- * UI 筛选面相对冻结契约的缺口（参数维度）。
- *
- * 这些筛选在设计师稿与骨架 UI 中存在，但 R-3 的冻结参数无法表达；
- * 接线时必须显式降级（隐藏或标注「后续迭代」），不得静默忽略，
- * 也不得把未登记的参数提前写进请求。
+ * R-3 冻结契约对 8 项 UI 筛选一律无法表达（见 docs/a-contract-review-
+ * f25-f29-f32.md §3 与 Q-08 ~ Q-10），服务端适配器按本表显式降级。
  */
-export type MyTasksV1FilterGap =
-  | "scope:created"
-  | "scope:all"
-  | "scope:project-without-id"
-  | "filter:priority"
-  | "filter:relation"
-  | "filter:github"
-  | "filter:query"
-  | "filter:canceled-with-open";
+export const MY_TASKS_V1_FILTER_SUPPORT: MyTasksFilterSupport = {
+  "scope:created": false,
+  "scope:all": false,
+  "scope:project-without-id": false,
+  "filter:priority": false,
+  "filter:relation": false,
+  "filter:github": false,
+  "filter:query": false,
+  "filter:canceled-with-open": false,
+};
 
 /**
  * 骨架列表项相对冻结 DTO 的缺口（字段维度）。
  *
- * docs/c-aggregate-read-contract-proposal.md 的 R-3 项没有这些字段，
- * 设计稿的优先级徽章、截止时间与记录数依赖它们，属待裁定项。
+ * R-3 的 MyTaskItem 没有这些字段；映射层保持 undefined，
+ * 显示层不得展示优先级徽章、截止时间与 GitHub 关联等信息。
  */
 export const MY_TASKS_V1_MISSING_ITEM_FIELDS = [
   "priority",
@@ -128,6 +133,35 @@ export function toMyTasksV1Query(
     query.hasPublishedRecord = filters.hasRecord === "yes";
   }
   return query;
+}
+
+/**
+ * 无损映射 R-3 条目到骨架视图；契约未提供的字段保持 undefined，
+ * 显示层据此隐藏优先级、截止时间等无来源信息（见 MY_TASKS_V1_MISSING_ITEM_FIELDS）。
+ */
+export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
+  return {
+    taskId: item.taskId,
+    code: item.code,
+    title: item.title,
+    projectId: item.projectId,
+    projectName: item.projectName,
+    moduleId: item.moduleId,
+    moduleName: item.moduleName,
+    featureId: item.featureId,
+    featureName: item.featureName,
+    scopeType: item.scopeType,
+    workStatus: item.workStatus,
+    lifecycleStatus: item.lifecycleStatus,
+    updatedAt: item.updatedAt,
+    assignee: {
+      userId: item.assignee.userId,
+      name: item.assignee.name,
+      avatarUrl: item.assignee.avatarUrl,
+    },
+    hasPublishedRecord: item.hasPublishedRecord,
+    groupRole: item.groupRole,
+  };
 }
 
 /**

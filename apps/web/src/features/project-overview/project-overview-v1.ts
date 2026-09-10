@@ -1,4 +1,8 @@
-import type { ProjectOverviewIteration } from "./project-overview-types";
+import type {
+  ProjectOverviewIteration,
+  ProjectOverviewLeftover,
+  ProjectOverviewResult,
+} from "./project-overview-types";
 
 /**
  * R-2 getProjectOverview 的 A 岗冻结契约映射（F-29 项目概览）。
@@ -9,7 +13,8 @@ import type { ProjectOverviewIteration } from "./project-overview-types";
  * 响应为 project / memberCount / stats（4 项）/ recentRecords / activeLeftovers。
  *
  * 本文件只做参数收口与无损映射：不发起请求、不引入生成客户端、不改契约。
- * 骨架数据仍由 mock adapter 提供，项目名、状态与成员数走 A 的既有项目端口。
+ * 契约缺口（openLeftovers 总数、leftover.recordTitle）映射为 null，
+ * 由显示层显式降级；其余字段为服务端实时数据。
  */
 
 export const PROJECT_OVERVIEW_V1_PATH = "/api/v1/projects/{projectId}/overview";
@@ -69,7 +74,8 @@ export interface ProjectOverviewV1Response {
 
 /**
  * 设计师稿 6 项指标里 V1 没有契约来源的项：待处理遗留问题计数。
- * 响应只提供 activeLeftovers 列表（默认 2 条），没有总数。
+ * 响应只提供 activeLeftovers 列表（默认 2 条），没有总数；
+ * 映射时记为 null，显示层不得把列表长度冒充总数。
  */
 export const PROJECT_OVERVIEW_V1_MISSING_METRICS = ["openLeftovers"] as const;
 
@@ -116,4 +122,35 @@ export function fromV1RecentRecords(
     featureName: item.featureName,
     publishedAt: item.publishedAt,
   }));
+}
+
+/**
+ * R-2 响应 → F-29 骨架结果。
+ *
+ * 契约缺口映射为 null：
+ * - stats.openLeftovers：响应没有总数（只有 activeLeftovers 列表）；
+ * - leftovers[].recordTitle：响应只有 recordCode。
+ * 显示层依据 PROJECT_OVERVIEW_V1_MISSING_* 降级，不得静默补值。
+ */
+export function fromV1ProjectOverview(
+  response: ProjectOverviewV1Response,
+): ProjectOverviewResult {
+  return {
+    stats: {
+      activeModules: response.stats.activeModuleCount,
+      activeFeatures: response.stats.activeFeatureCount,
+      openTasks: response.stats.openTaskCount,
+      publishedRecords: response.stats.publishedRecordCount,
+      openLeftovers: null,
+    },
+    recentIterations: fromV1RecentRecords(response.recentRecords),
+    leftovers: response.activeLeftovers.map(
+      (item): ProjectOverviewLeftover => ({
+        leftoverId: item.leftoverItemId,
+        summary: item.content,
+        recordCode: item.recordCode,
+        recordTitle: null,
+      }),
+    ),
+  };
 }

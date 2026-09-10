@@ -1,0 +1,364 @@
+import { z } from "zod";
+
+const id = z.number().int().positive().max(2147483647);
+
+/**
+ * F-25 / F-29 / F-32 聚合读契约（A 裁决见 docs/a-contract-review-f25-f29-f32.md）。
+ * 分页 envelope 与 getSearch 同一约定（C-006）：items / nextCursor / hasMore，
+ * 游标为服务端签名、校验并带过期时间的不透明字符串；limit 默认 20、上限 100。
+ */
+export const AGGREGATE_READ_PAGE_LIMIT_DEFAULT = 20;
+export const AGGREGATE_READ_PAGE_LIMIT_MAX = 100;
+export const AGGREGATE_READ_CURSOR_MAX_LENGTH = 256;
+/** R-2 收口参数（Q-06）：默认 3 / 2，上限 10；越界或非整数由服务端返回 422。 */
+export const PROJECT_OVERVIEW_RECENT_LIMIT_DEFAULT = 3;
+export const PROJECT_OVERVIEW_LEFTOVER_LIMIT_DEFAULT = 2;
+export const PROJECT_OVERVIEW_LIST_LIMIT_MAX = 10;
+
+/** 查询字符串布尔值；与 getSearch 的 includeVoid 同一解析口径，未知文本判为非法输入。 */
+const queryBoolean = z.preprocess((value) => {
+  if (value === true || value === "true") {
+    return true;
+  }
+  if (value === false || value === "false") {
+    return false;
+  }
+  return undefined;
+}, z.boolean());
+
+/** 聚合读共用的用户引用；只含展示字段，不暴露登录名、邮箱或凭据材料。 */
+export const userRefSchema = z
+  .object({
+    userId: id,
+    name: z.string().min(1).max(200),
+    avatarUrl: z.string().min(1).max(2048).nullable(),
+  })
+  .strict()
+  .meta({ id: "UserRef" });
+
+export type UserRef = z.infer<typeof userRefSchema>;
+
+/** 聚合组路径参数；Q-01 保持全局路径，项目归属由服务端按 groupId 反查。 */
+export const taskGroupPathSchema = z
+  .object({ groupId: z.coerce.number().int().positive().max(2147483647) })
+  .strict()
+  .meta({ id: "TaskGroupPath" });
+
+export type TaskGroupPath = z.infer<typeof taskGroupPathSchema>;
+
+/** R-1 聚合组摘要；closedAt 只在 CLOSED 时有值。 */
+export const taskGroupSummarySchema = z
+  .object({
+    groupId: id,
+    projectId: id,
+    code: z.string().min(1).max(64),
+    name: z.string().min(1).max(500),
+    status: z.enum(["ACTIVE", "CLOSED"]),
+    createdAt: z.iso.datetime(),
+    closedAt: z.iso.datetime().nullable(),
+    rowVersion: id,
+  })
+  .strict()
+  .meta({ id: "TaskGroupSummary" });
+
+export type TaskGroupSummary = z.infer<typeof taskGroupSummarySchema>;
+
+/**
+ * R-1 成员明细。role 与 sourceKind 是两个正交维度：sourceKind 表示分支是否仍可
+ * 继续工作，memberStatus 表示合并关系是否已解除；已解除成员仍需展示历史。
+ * sourceKind 的可空性由 role 决定（MAIN 恒为 null、SOURCE 必非空），契约不额外收窄，
+ * 服务端按数据库 task_group_members_snapshot_check 的同一形状返回。
+ *
+ * publishedRecordCount 是该任务 PUBLISHED 正式记录数（功能设计 §29.4：按
+ * change_records 计数，不按版本计数，也不按影响功能去重）。
+ */
+export const taskGroupMemberDetailSchema = z
+  .object({
+    taskId: id,
+    taskCode: z.string().min(1).max(64),
+    title: z.string().min(1).max(500),
+    role: z.enum(["MAIN", "SOURCE"]),
+    sourceKind: z.enum(["ACTIVE", "HISTORICAL"]).nullable(),
+    memberStatus: z.enum(["ACTIVE", "DETACHED"]),
+    workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+    lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    moduleId: id,
+    featureId: id.nullable(),
+    assignee: userRefSchema,
+    joinedAt: z.iso.datetime(),
+    detachedAt: z.iso.datetime().nullable(),
+    detachReason: z.string().min(1).max(10000).nullable(),
+    publishedRecordCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupMemberDetail" });
+
+export type TaskGroupMemberDetail = z.infer<typeof taskGroupMemberDetailSchema>;
+
+/**
+ * R-1 响应：只返回组与成员；记录列表按 Q-02 形态 B 拆到 R-4 子资源分页。
+ * 成员排序由服务端固定：主任务在前，来源任务按 joinedAt 升序、taskId 升序。
+ */
+export const taskGroupDetailResponseSchema = z
+  .object({
+    group: taskGroupSummarySchema,
+    members: z.array(taskGroupMemberDetailSchema).max(1000),
+  })
+  .strict()
+  .meta({ id: "TaskGroupDetailResponse" });
+
+export type TaskGroupDetailResponse = z.infer<
+  typeof taskGroupDetailResponseSchema
+>;
+
+/** R-4 查询参数；memberTaskId 缺省表示组内全部成员任务，过滤在服务端执行。 */
+export const taskGroupRecordQueryRequestSchema = z
+  .object({
+    memberTaskId: z.coerce.number().int().positive().max(2147483647).optional(),
+    cursor: z.string().min(1).max(AGGREGATE_READ_CURSOR_MAX_LENGTH).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(AGGREGATE_READ_PAGE_LIMIT_MAX)
+      .optional(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupRecordQueryRequest" });
+
+export type TaskGroupRecordQueryRequest = z.infer<
+  typeof taskGroupRecordQueryRequestSchema
+>;
+
+/**
+ * R-4 记录上的 GitHub 链接。titleSnapshot / stateSnapshot 是关联时刻快照，
+ * 不是远程实时状态（Q-14）；externalNumber 按数据库 bigint 以字符串承载，
+ * 与既有 ExternalLinkItem 的表示一致。
+ */
+export const taskGroupRecordLinkSchema = z
+  .object({
+    linkId: id,
+    displayUrl: z.string().min(1).max(2048),
+    kind: z.enum(["ISSUE", "PULL_REQUEST", "COMMIT", "OTHER"]),
+    repository: z.string().min(3).max(201).nullable(),
+    externalNumber: z.string().max(20).nullable(),
+    externalSha: z.string().min(7).max(64).nullable(),
+    titleSnapshot: z.string().min(1).max(500).nullable(),
+    stateSnapshot: z.string().min(1).max(100).nullable(),
+    createdAt: z.iso.datetime(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupRecordLink" });
+
+export type TaskGroupRecordLink = z.infer<typeof taskGroupRecordLinkSchema>;
+
+/**
+ * R-4 记录条目：只含 PUBLISHED 与 VOID（Q-13，DRAFT 不可见）；
+ * sourceLabel 为「主任务」或来源任务编号，由服务端按组成员推导。
+ */
+export const taskGroupRecordItemSchema = z
+  .object({
+    recordId: id,
+    code: z.string().min(1).max(64),
+    title: z.string().min(1).max(500),
+    recordStatus: z.enum(["PUBLISHED", "VOID"]),
+    taskId: id,
+    sourceLabel: z.string().min(1).max(64),
+    featureId: id.nullable(),
+    publishedAt: z.iso.datetime(),
+    externalLinks: z.array(taskGroupRecordLinkSchema).max(100),
+  })
+  .strict()
+  .meta({ id: "TaskGroupRecordItem" });
+
+export type TaskGroupRecordItem = z.infer<typeof taskGroupRecordItemSchema>;
+
+/** R-4 分页响应（C-006 envelope）。 */
+export const taskGroupRecordPageSchema = z
+  .object({
+    items: z
+      .array(taskGroupRecordItemSchema)
+      .max(AGGREGATE_READ_PAGE_LIMIT_MAX),
+    nextCursor: z
+      .string()
+      .min(1)
+      .max(AGGREGATE_READ_CURSOR_MAX_LENGTH)
+      .nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupRecordPage" });
+
+export type TaskGroupRecordPage = z.infer<typeof taskGroupRecordPageSchema>;
+
+/** R-2 收口参数（Q-06）：recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。 */
+export const projectOverviewQueryRequestSchema = z
+  .object({
+    recentRecordLimit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX)
+      .optional(),
+    activeLeftoverLimit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX)
+      .optional(),
+  })
+  .strict()
+  .meta({ id: "ProjectOverviewQueryRequest" });
+
+export type ProjectOverviewQueryRequest = z.infer<
+  typeof projectOverviewQueryRequestSchema
+>;
+
+/** 项目概览的项目头；返回原始枚举，展示文案（「正常」）由前端映射（Q-15）。 */
+export const projectOverviewProjectSchema = z
+  .object({
+    projectId: id,
+    name: z.string().min(1).max(200),
+    status: z.enum(["ACTIVE", "ARCHIVED"]),
+  })
+  .strict()
+  .meta({ id: "ProjectOverviewProject" });
+
+export type ProjectOverviewProject = z.infer<
+  typeof projectOverviewProjectSchema
+>;
+
+/**
+ * 项目概览四项统计：活跃模块 / 活跃功能按行自身 status = ACTIVE 计数（Q-05）；
+ * openTaskCount 为功能设计 §29.1 有效任务中 work_status = TODO 的计数；
+ * publishedRecordCount 只计 PUBLISHED（§29.4，版本与影响功能不重复计数）。
+ */
+export const projectOverviewStatsSchema = z
+  .object({
+    activeModuleCount: z.number().int().nonnegative(),
+    activeFeatureCount: z.number().int().nonnegative(),
+    openTaskCount: z.number().int().nonnegative(),
+    publishedRecordCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "ProjectOverviewStats" });
+
+export type ProjectOverviewStats = z.infer<typeof projectOverviewStatsSchema>;
+
+/** 最近迭代条目；featureName 用于「功能名：记录标题」展示，模块级记录为 null。 */
+export const recentRecordItemSchema = z
+  .object({
+    recordId: id,
+    code: z.string().min(1).max(64),
+    title: z.string().min(1).max(500),
+    moduleId: id,
+    featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
+    publishedAt: z.iso.datetime(),
+  })
+  .strict()
+  .meta({ id: "RecentRecordItem" });
+
+export type RecentRecordItem = z.infer<typeof recentRecordItemSchema>;
+
+/** 待处理遗留问题条目；content 取该遗留项最新版本的内容快照。 */
+export const leftoverItemSummarySchema = z
+  .object({
+    leftoverItemId: id,
+    recordId: id,
+    recordCode: z.string().min(1).max(64),
+    content: z.string().min(1).max(10000),
+    createdAt: z.iso.datetime(),
+  })
+  .strict()
+  .meta({ id: "LeftoverItemSummary" });
+
+export type LeftoverItemSummary = z.infer<typeof leftoverItemSummarySchema>;
+
+/** R-2 响应：项目头 + 成员数 + 四项统计 + 最近迭代 + 待处理遗留问题。 */
+export const projectOverviewResponseSchema = z
+  .object({
+    project: projectOverviewProjectSchema,
+    memberCount: z.number().int().nonnegative(),
+    stats: projectOverviewStatsSchema,
+    recentRecords: z
+      .array(recentRecordItemSchema)
+      .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX),
+    activeLeftovers: z
+      .array(leftoverItemSummarySchema)
+      .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX),
+  })
+  .strict()
+  .meta({ id: "ProjectOverviewResponse" });
+
+export type ProjectOverviewResponse = z.infer<
+  typeof projectOverviewResponseSchema
+>;
+
+/**
+ * R-3 查询参数。负责人固定为当前用户，不接受 assigneeId / userId / projectIds：
+ * projectId 只用于缩小范围，服务端仍按 AuthorizedProjectScope 复验（Q-08）。
+ * V1 只承载 F-32 的四项筛选（Q-09）；排序固定 id DESC，不提供 sort（Q-10）。
+ */
+export const myTasksQueryRequestSchema = z
+  .object({
+    cursor: z.string().min(1).max(AGGREGATE_READ_CURSOR_MAX_LENGTH).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(AGGREGATE_READ_PAGE_LIMIT_MAX)
+      .optional(),
+    projectId: z.coerce.number().int().positive().max(2147483647).optional(),
+    scopeType: z.enum(["FEATURE", "MODULE"]).optional(),
+    workStatus: z.enum(["TODO", "DONE", "CANCELED"]).optional(),
+    hasPublishedRecord: queryBoolean.optional(),
+  })
+  .strict()
+  .meta({ id: "MyTasksQueryRequest" });
+
+export type MyTasksQueryRequest = z.infer<typeof myTasksQueryRequestSchema>;
+
+/**
+ * R-3 列表项。hasPublishedRecord 为单条 SQL 内先过滤后分页的存在性判断；
+ * groupRole 是任务在当前 ACTIVE 聚合组中的角色，不属于任何组时为 null（Q-11）。
+ */
+export const myTaskItemSchema = z
+  .object({
+    taskId: id,
+    code: z.string().min(1).max(64),
+    title: z.string().min(1).max(500),
+    projectId: id,
+    projectName: z.string().min(1).max(200),
+    moduleId: id,
+    moduleName: z.string().min(1).max(200),
+    featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
+    scopeType: z.enum(["FEATURE", "MODULE"]),
+    workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+    lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    assignee: userRefSchema,
+    updatedAt: z.iso.datetime(),
+    hasPublishedRecord: z.boolean(),
+    groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
+  })
+  .strict()
+  .meta({ id: "MyTaskItem" });
+
+export type MyTaskItem = z.infer<typeof myTaskItemSchema>;
+
+/** R-3 分页响应（C-006 envelope）。 */
+export const myTaskPageSchema = z
+  .object({
+    items: z.array(myTaskItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),
+    nextCursor: z
+      .string()
+      .min(1)
+      .max(AGGREGATE_READ_CURSOR_MAX_LENGTH)
+      .nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "MyTaskPage" });
+
+export type MyTaskPage = z.infer<typeof myTaskPageSchema>;

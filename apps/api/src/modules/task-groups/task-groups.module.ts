@@ -15,6 +15,14 @@ import { ActivityProjectionModule } from "../activity/index.js";
 import { SearchProjectionModule } from "../search/index.js";
 import { NotificationProjectionModule } from "../notifications/index.js";
 import { TaskGroupRepository } from "./task-group.repository.js";
+import {
+  PostgresTaskGroupMembershipReadPort,
+  TaskGroupMembershipReadPort,
+} from "./task-group-membership-read.port.js";
+import {
+  PostgresTaskGroupReadPort,
+  TaskGroupReadPort,
+} from "./task-group-read.port.js";
 import { TaskGroupsService } from "./task-groups.service.js";
 import { TaskGroupsHttpService } from "./task-groups-http.service.js";
 import { TaskGroupUnmergeHttpService } from "./task-group-unmerge-http.service.js";
@@ -38,9 +46,18 @@ import { TaskGroupsController } from "./task-groups.controller.js";
     TaskGroupsService,
     TaskGroupsHttpService,
     { provide: TaskBranchQueryPort, useClass: PostgresTaskBranchQueryPort },
+    {
+      provide: TaskGroupMembershipReadPort,
+      useClass: PostgresTaskGroupMembershipReadPort,
+    },
+    { provide: TaskGroupReadPort, useClass: PostgresTaskGroupReadPort },
     TaskGroupUnmergeHttpService,
   ],
-  exports: [TaskBranchQueryPort],
+  exports: [
+    TaskBranchQueryPort,
+    TaskGroupMembershipReadPort,
+    TaskGroupReadPort,
+  ],
   controllers: [TaskGroupsController],
 })
 export class TaskGroupsModule {}

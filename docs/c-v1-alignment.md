@@ -2,16 +2,16 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | 本地实施中：骨架数据仍由 mock adapter 提供，未接线 |
+| 状态 | 本地已接线：R-1 ~ R-4 契约、后端与生成客户端随 [PR #97](https://github.com/256-code/InPulse/pull/97) 落库，F-29 / F-32 页面默认注入 server adapter（mock 仅保留测试与降级）；GitHub Actions（CI push / PR 与 Documentation）已通过，待非作者评审 |
 | 冻结依据 | [F-25 / F-29 / F-32 契约评审裁决](./a-contract-review-f25-f29-f32.md)（A 岗，`5563bcf`） |
-| 落库状态 | 路由未登记。按裁决 §7，登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库；所依赖的 B 侧只读端口扩展（`TaskQueryPort` 列表/计数、`ChangeRecordReadPort`、`ModuleReadPort.count`、`FeatureReadPort.count`）已由 C 代 B 落库，见[端口扩展提案的回填](./c-port-extension-proposal.md)，C 侧聚合读接线仍未开始 |
-| 当前日期 | 2026-09-10 |
+| 落库状态 | 四条路由已登记（Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端随实现同一 PR）；所依赖的 B 侧只读端口扩展（`TaskQueryPort` 列表/计数、`ChangeRecordReadPort`、`ModuleReadPort.count`、`FeatureReadPort.count`）已由 C 代 B 落库（PR #96），见[端口扩展提案的回填](./c-port-extension-proposal.md)；C 侧接线与测试证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 增量段 |
+| 当前日期 | 2026-09-11 |
 
 ## 1. 目的与边界
 
 把设计师稿与前端骨架的筛选面、字段面与 A 已冻结的 R-2 / R-3 契约做显式对照，落成可执行映射与缺口清单，避免接线时出现「UI 有筛选但请求发不出去」或「字段没有来源」的静默分歧。
 
-本文不是契约来源：路径、参数、状态码与字段名一律以裁决文档为准；本文只记录 C 侧的映射与缺口，不改契约源、不登记路由、不新增生成客户端。
+本文不是契约来源：路径、参数、状态码与字段名一律以裁决文档与 `packages/api-contract` 为准；本文只记录 C 侧的映射与缺口。2026-09-11 起登记、实现与生成物已按裁决 §7 在同一 PR 落库，本文保留映射与缺口清单作为对照。
 
 ## 2. R-3 `listMyTasks` 与 F-32 任务中心
 
@@ -59,8 +59,10 @@ V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`sc
 | `scope=created` / `all`、关键词、GitHub、来源任务筛选 | 冻结参数不含 | V1 在 UI 侧隐藏或标注「后续迭代」，不得静默忽略 |
 | 遗留问题行 `recordTitle` | 冻结 DTO 没有该字段 | 接线时改用 `recordCode` 组合展示，或申请扩展 |
 
-接线顺序（裁决 §7）：B 交付只读端口 → A 登记契约并再生成 OpenAPI 与客户端（与实现同一个 PR）→ C 用生成的客户端替换 mock adapter 并补 Playwright 关键路径。在此之前页面保持骨架，不代表已实现能力。
+接线顺序（裁决 §7）：B 交付只读端口 → A 登记契约并再生成 OpenAPI 与客户端（与实现同一个 PR）→ C 用生成的客户端替换 mock adapter 并补 Playwright 关键路径。前两步已于 2026-09-11 完成（端口扩展 PR #96；契约、实现与生成物同一 PR）；C 侧剩余项是 F-29 / F-32 专属 Playwright 关键路径。
 
-## 5. 本次未做
+## 5. 接线记录与未做
 
-未改契约源、Route Registry、权限矩阵与生成物；未登记路由；未引入生成客户端依赖；未改动 UI 与 mock 数据；未运行 API 单测、真实 PostgreSQL 集成与 Playwright E2E。
+2026-09-11 接线落库：R-1 `getTaskGroup`、R-2 `getProjectOverview`、R-3 `listMyTasks`、R-4 `listTaskGroupRecords` 四条路由连同 Schema、Route Registry、权限矩阵、OpenAPI、生成客户端与 NestJS 实现（三个 Controller、三个查询服务、签名游标）同一 PR 落库；F-29 页面默认使用 `project-overview-server.ts`，F-32 页面默认使用 `my-tasks-server.ts`，契约缺口按 `null` / 全 false 显式降级；测试证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 增量段。
+
+未做：F-29 / F-32 专属 Playwright 关键路径；§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整；GitHub Actions（推送后执行）。

@@ -180,6 +180,44 @@ describe("ProjectOverviewPageView", () => {
     expect(handlers.onOpenIssues).toHaveBeenCalledTimes(2);
   });
 
+  it("degrades the contract gaps on the server source", async () => {
+    renderView({
+      adapter: {
+        source: "server",
+        notice: "服务端适配器测试",
+        fetchProjectOverview: () =>
+          Promise.resolve({
+            stats: {
+              activeModules: 4,
+              activeFeatures: 11,
+              openTasks: 6,
+              publishedRecords: 9,
+              openLeftovers: null,
+            },
+            recentIterations: [],
+            leftovers: [
+              {
+                leftoverId: 21,
+                summary: "遗留一",
+                recordCode: "R-021",
+                recordTitle: null,
+              },
+            ],
+          }),
+      },
+    });
+
+    expect(
+      screen.getByTestId("project-overview-mock-notice"),
+    ).toHaveTextContent("接口说明");
+    const leftovers = await screen.findByTestId("overview-metric-leftovers");
+    expect(await within(leftovers).findByText("—")).toBeInTheDocument();
+    expect(within(leftovers).getByText("契约未提供总数")).toBeInTheDocument();
+    const row = await screen.findByRole("button", { name: /遗留一/ });
+    expect(row).toHaveTextContent("来自 R-021");
+    expect(row).not.toHaveTextContent("登录安全复核");
+  });
+
   it("shows empty states when the adapter returns no rows", async () => {
     renderView({
       adapter: createAdapter({

@@ -4,6 +4,7 @@ export { TasksManagementModule } from "./tasks-management.module.js";
 export {
   PostgresTaskQueryPort,
   TASK_EXCLUDED_IDS_MAX,
+  TASK_READ_IDS_MAX,
   TaskListInputError,
   TaskQueryPort,
   mapTaskListRow,

@@ -323,6 +323,14 @@ export type IndependentRecordDraftRequest = ({
   readonly impactFeatureIds: readonly number[];
 });
 
+export type LeftoverItemSummary = {
+  readonly leftoverItemId: number;
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly content: string;
+  readonly createdAt: string;
+};
+
 export type LeftoverTaskPreview = {
   readonly recordId: number;
   readonly recordVersion: number;
@@ -516,6 +524,40 @@ export type ModuleVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type MyTaskItem = {
+  readonly taskId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly moduleId: number;
+  readonly moduleName: string;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly assignee: UserRef;
+  readonly updatedAt: string;
+  readonly hasPublishedRecord: boolean;
+  readonly groupRole: (("MAIN" | "SOURCE") | null);
+};
+
+export type MyTaskPage = {
+  readonly items: readonly MyTaskItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type MyTasksQueryRequest = {
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
+  readonly scopeType?: ("FEATURE" | "MODULE");
+  readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
+  readonly hasPublishedRecord?: boolean;
+};
+
 export type NotificationItem = {
   readonly id: string;
   readonly projectId: (number | null);
@@ -661,6 +703,32 @@ export type ProjectMutationHeaders = {
   readonly "x-csrf-token": string;
 };
 
+export type ProjectOverviewProject = {
+  readonly projectId: number;
+  readonly name: string;
+  readonly status: ("ACTIVE" | "ARCHIVED");
+};
+
+export type ProjectOverviewQueryRequest = {
+  readonly recentRecordLimit?: number;
+  readonly activeLeftoverLimit?: number;
+};
+
+export type ProjectOverviewResponse = {
+  readonly project: ProjectOverviewProject;
+  readonly memberCount: number;
+  readonly stats: ProjectOverviewStats;
+  readonly recentRecords: readonly RecentRecordItem[];
+  readonly activeLeftovers: readonly LeftoverItemSummary[];
+};
+
+export type ProjectOverviewStats = {
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
+  readonly publishedRecordCount: number;
+};
+
 export type ProjectPath = {
   readonly projectId: number;
 };
@@ -744,6 +812,16 @@ export type ReauthenticateAdminHeaders = {
 export type ReauthenticateAdminRequest = {
   readonly password: string;
   readonly code: string;
+};
+
+export type RecentRecordItem = {
+  readonly recordId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly publishedAt: string;
 };
 
 export type RecordDraftContent = {
@@ -976,6 +1054,11 @@ export type TaskGroupDetachedMemberItem = {
   readonly detachReason: string;
 };
 
+export type TaskGroupDetailResponse = {
+  readonly group: TaskGroupSummary;
+  readonly members: readonly TaskGroupMemberDetail[];
+};
+
 export type TaskGroupItem = {
   readonly id: number;
   readonly projectId: number;
@@ -988,6 +1071,24 @@ export type TaskGroupItem = {
   readonly updatedAt: string;
   readonly mainTaskId: number;
   readonly members: readonly TaskGroupMemberItem[];
+};
+
+export type TaskGroupMemberDetail = {
+  readonly taskId: number;
+  readonly taskCode: string;
+  readonly title: string;
+  readonly role: ("MAIN" | "SOURCE");
+  readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
+  readonly memberStatus: ("ACTIVE" | "DETACHED");
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly assignee: UserRef;
+  readonly joinedAt: string;
+  readonly detachedAt: (string | null);
+  readonly detachReason: (string | null);
+  readonly publishedRecordCount: number;
 };
 
 export type TaskGroupMemberItem = {
@@ -1018,6 +1119,46 @@ export type TaskGroupMergeRequest = {
   readonly mergeNote: (string | null);
 };
 
+export type TaskGroupPath = {
+  readonly groupId: number;
+};
+
+export type TaskGroupRecordItem = {
+  readonly recordId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly recordStatus: ("PUBLISHED" | "VOID");
+  readonly taskId: number;
+  readonly sourceLabel: string;
+  readonly featureId: (number | null);
+  readonly publishedAt: string;
+  readonly externalLinks: readonly TaskGroupRecordLink[];
+};
+
+export type TaskGroupRecordLink = {
+  readonly linkId: number;
+  readonly displayUrl: string;
+  readonly kind: ("ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER");
+  readonly repository: (string | null);
+  readonly externalNumber: (string | null);
+  readonly externalSha: (string | null);
+  readonly titleSnapshot: (string | null);
+  readonly stateSnapshot: (string | null);
+  readonly createdAt: string;
+};
+
+export type TaskGroupRecordPage = {
+  readonly items: readonly TaskGroupRecordItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type TaskGroupRecordQueryRequest = {
+  readonly memberTaskId?: number;
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
 export type TaskGroupStateItem = {
   readonly id: number;
   readonly projectId: number;
@@ -1030,6 +1171,17 @@ export type TaskGroupStateItem = {
   readonly updatedAt: string;
   readonly closedAt: (string | null);
   readonly mainTaskId: number;
+};
+
+export type TaskGroupSummary = {
+  readonly groupId: number;
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly status: ("ACTIVE" | "CLOSED");
+  readonly createdAt: string;
+  readonly closedAt: (string | null);
+  readonly rowVersion: number;
 };
 
 export type TaskGroupUnmergeHeaders = {
@@ -1180,6 +1332,12 @@ export type UserDirectoryItem = {
 
 export type UserDirectoryResponse = {
   readonly items: readonly UserDirectoryItem[];
+};
+
+export type UserRef = {
+  readonly userId: number;
+  readonly name: string;
+  readonly avatarUrl: (string | null);
 };
 
 export type VerifyMfaHeaders = {
