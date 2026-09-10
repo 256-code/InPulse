@@ -56,6 +56,20 @@ export interface ProjectRecord {
   readonly rowVersion: number;
 }
 
+/** 项目变更后的完整公开摘要；与 ProjectItem 对齐，供写操作直接构造响应。 */
+export interface ProjectChangeRecord {
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string;
+  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly memberCount: number;
+}
+
 /** 项目与成员写边界；只做持久化，不决定业务状态流转，调用方持有事务。 */
 export abstract class ProjectsWritePort {
   abstract createProject(
@@ -83,6 +97,43 @@ export abstract class ProjectsWritePort {
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<ProjectRecord | undefined>;
+
+  /** 读取项目完整摘要；lock 为 true 时对项目行 FOR UPDATE。 */
+  abstract findProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+    lock?: boolean,
+  ): Promise<ProjectChangeRecord | undefined>;
+
+  /** 条件更新名称与描述并递增 row_version；版本不匹配返回 undefined。 */
+  abstract updateProjectDetails(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly name: string;
+      readonly description: string;
+    },
+  ): Promise<ProjectChangeRecord | undefined>;
+
+  /**
+   * 条件迁移项目状态并递增 row_version；ACTIVE/ARCHIVED 与 archived_at
+   * 成对维护，版本不匹配返回 undefined。
+   */
+  abstract updateProjectStatus(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly status: "ACTIVE" | "ARCHIVED";
+    },
+  ): Promise<ProjectChangeRecord | undefined>;
+
+  /** 统计项目当前未完成（TODO 且 ACTIVE）任务数；只读，用于归档提醒。 */
+  abstract countUnfinishedTasks(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<number>;
 
   /** 重新加入/新增 ACTIVE 成员；调用方须先锁定历史并处理活跃冲突。 */
   abstract addMemberHistory(

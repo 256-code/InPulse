@@ -316,3 +316,71 @@ export const createProjectReplayContextSchema = z
 export type CreateProjectReplayContext = z.infer<
   typeof createProjectReplayContextSchema
 >;
+
+/**
+ * 项目编辑请求；编码创建后不可修改，名称与描述为完整替换值，
+ * 服务端以 If-Match 版本做乐观锁并整笔覆盖。
+ */
+export const projectEditRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    description: z.string().max(20000).default(""),
+  })
+  .strict()
+  .meta({ id: "ProjectEditRequest" });
+
+export type ProjectEditRequest = z.infer<typeof projectEditRequestSchema>;
+
+/** 项目写请求安全头；要求同步 CSRF Token。 */
+export const projectMutationHeadersSchema = z
+  .object({
+    "x-csrf-token": z.string().min(43).max(43),
+  })
+  .strict()
+  .meta({ id: "ProjectMutationHeaders" });
+
+export type ProjectMutationHeaders = z.infer<
+  typeof projectMutationHeadersSchema
+>;
+
+/** 项目编辑版本头；If-Match 防止覆盖并发编辑。 */
+export const projectVersionHeadersSchema = projectMutationHeadersSchema
+  .extend({
+    "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/),
+  })
+  .meta({ id: "ProjectVersionHeaders" });
+
+export type ProjectVersionHeaders = z.infer<typeof projectVersionHeadersSchema>;
+
+/** 项目写操作幂等重放的最小结果资源上下文。 */
+export const projectReplayContextSchema = z
+  .object({
+    projectId: z.number().int().positive().max(2147483647),
+  })
+  .strict()
+  .meta({ id: "ProjectReplayContext" });
+
+export type ProjectReplayContext = z.infer<typeof projectReplayContextSchema>;
+
+/** 项目归档/恢复原因；两类高风险操作都必须显式填写。 */
+export const projectArchiveRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .strict()
+  .meta({ id: "ProjectArchiveRequest" });
+
+export type ProjectArchiveRequest = z.infer<typeof projectArchiveRequestSchema>;
+
+/** 归档前影响预览；只统计当前未完成的真实任务，用于归档提醒。 */
+export const projectArchivePreviewResponseSchema = z
+  .object({
+    projectId: projectPositiveId,
+    unfinishedTaskCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "ProjectArchivePreviewResponse" });
+
+export type ProjectArchivePreviewResponse = z.infer<
+  typeof projectArchivePreviewResponseSchema
+>;

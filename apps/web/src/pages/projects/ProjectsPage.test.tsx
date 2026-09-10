@@ -1,6 +1,12 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -106,16 +112,22 @@ describe("ProjectsPage", () => {
     await user.click(screen.getByRole("button", { name: "新建项目" }));
 
     const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText("项目名称"), "商城系统");
-    await user.type(within(dialog).getByLabelText("项目编码"), "shop");
-    await user.type(within(dialog).getByLabelText("项目描述"), "商城项目描述");
+    fireEvent.change(within(dialog).getByLabelText("项目名称"), {
+      target: { value: "商城系统" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("项目编码"), {
+      target: { value: "shop" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("项目描述"), {
+      target: { value: "商城项目描述" },
+    });
     await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
 
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("项目创建成功")).toBeInTheDocument();
     await user.click(screen.getByTestId("open-created-project-activity"));
     expect(await screen.findByText("Activity content")).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("opens the admin member management page from a project card", async () => {
     const listProjects = vi.fn().mockResolvedValue({
@@ -175,5 +187,66 @@ describe("ProjectsPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }));
     expect(await screen.findByText("Member content")).toBeInTheDocument();
+  });
+
+  it("opens the archive reminder modal for admins from a project card", async () => {
+    const listProjects = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ...createdProject.project,
+          memberCount: 1,
+        },
+      ],
+    });
+    const getProjectArchivePreview = vi
+      .fn()
+      .mockResolvedValue({ projectId: 7, unfinishedTaskCount: 2 });
+    const client = {
+      getUserDirectory: vi.fn().mockResolvedValue({ items: [] }),
+      listProjects,
+      getProjectArchivePreview,
+    } as unknown as InpulseApiClient;
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <AuthStateProvider
+          value={{
+            status: "authenticated",
+            user: {
+              id: 1,
+              loginName: "developer",
+              name: "开发者 C",
+              email: null,
+              avatarUrl: null,
+              isAdmin: true,
+              status: "ACTIVE",
+            },
+          }}
+        >
+          <MemoryRouter initialEntries={["/projects"]}>
+            <Routes>
+              <Route
+                path="/projects"
+                element={<ProjectsPage client={client} />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthStateProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("商城系统")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /归\s*档/ }));
+    expect(await screen.findByText("归档项目")).toBeInTheDocument();
+    expect(
+      await screen.findByText("该项目仍有 2 个未完成任务"),
+    ).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import {
   ActiveUsersQueryPort,
   type AddProjectMemberInput,
   type CreateProjectRecordInput,
+  type ProjectChangeRecord,
   type ProjectCreatedRecord,
   type ProjectMemberAddedRecord,
   type ProjectMemberIdentity,
@@ -45,6 +46,19 @@ interface ProjectSummaryRow {
   readonly name: string;
   readonly status: "ACTIVE" | "ARCHIVED";
   readonly row_version: number;
+}
+
+interface ProjectChangeRow {
+  readonly id: number;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string;
+  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly memberCount: number;
 }
 
 /** 项目写适配器；只接收显式 TransactionContext，从不开启事务或使用全局客户端。 */
@@ -148,6 +162,147 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
         };
   }
 
+  async findProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+    lock = false,
+  ): Promise<ProjectChangeRecord | undefined> {
+    const rows = (await tx.sql`
+      SELECT p.id,
+             p.code,
+             p.name,
+             p.description,
+             p.status,
+             p.row_version AS "rowVersion",
+             p.created_by AS "createdBy",
+             p.created_at AS "createdAt",
+             p.updated_at AS "updatedAt",
+             (
+               SELECT COUNT(*)::integer
+                 FROM app.project_members m
+                WHERE m.project_id = p.id
+                  AND m.status = 'ACTIVE'
+             ) AS "memberCount"
+        FROM app.projects p
+       WHERE p.id = ${input.projectId}
+       LIMIT 1
+       ${lock ? tx.sql`FOR UPDATE` : tx.sql``}
+    `) as unknown as readonly ProjectChangeRow[];
+    const row = rows[0];
+    return row === undefined ? undefined : this.toChangeRecord(row);
+  }
+
+  async updateProjectDetails(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly name: string;
+      readonly description: string;
+    },
+  ): Promise<ProjectChangeRecord | undefined> {
+    const rows = (await tx.sql`
+      WITH updated AS (
+        UPDATE app.projects
+           SET name = ${input.name},
+               description = ${input.description},
+               updated_at = now(),
+               row_version = row_version + 1
+         WHERE id = ${input.projectId}
+           AND row_version = ${input.expectedRowVersion}
+        RETURNING id,
+                  code,
+                  name,
+                  description,
+                  status,
+                  row_version,
+                  created_by,
+                  created_at,
+                  updated_at
+      )
+      SELECT u.id,
+             u.code,
+             u.name,
+             u.description,
+             u.status,
+             u.row_version AS "rowVersion",
+             u.created_by AS "createdBy",
+             u.created_at AS "createdAt",
+             u.updated_at AS "updatedAt",
+             (
+               SELECT COUNT(*)::integer
+                 FROM app.project_members m
+                WHERE m.project_id = u.id
+                  AND m.status = 'ACTIVE'
+             ) AS "memberCount"
+        FROM updated u
+    `) as unknown as readonly ProjectChangeRow[];
+    const row = rows[0];
+    return row === undefined ? undefined : this.toChangeRecord(row);
+  }
+
+  async updateProjectStatus(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly status: "ACTIVE" | "ARCHIVED";
+    },
+  ): Promise<ProjectChangeRecord | undefined> {
+    const rows = (await tx.sql`
+      WITH updated AS (
+        UPDATE app.projects
+           SET status = ${input.status},
+               archived_at = ${input.status === "ARCHIVED" ? tx.sql`now()` : tx.sql`NULL`},
+               updated_at = now(),
+               row_version = row_version + 1
+         WHERE id = ${input.projectId}
+           AND row_version = ${input.expectedRowVersion}
+        RETURNING id,
+                  code,
+                  name,
+                  description,
+                  status,
+                  row_version,
+                  created_by,
+                  created_at,
+                  updated_at
+      )
+      SELECT u.id,
+             u.code,
+             u.name,
+             u.description,
+             u.status,
+             u.row_version AS "rowVersion",
+             u.created_by AS "createdBy",
+             u.created_at AS "createdAt",
+             u.updated_at AS "updatedAt",
+             (
+               SELECT COUNT(*)::integer
+                 FROM app.project_members m
+                WHERE m.project_id = u.id
+                  AND m.status = 'ACTIVE'
+             ) AS "memberCount"
+        FROM updated u
+    `) as unknown as readonly ProjectChangeRow[];
+    const row = rows[0];
+    return row === undefined ? undefined : this.toChangeRecord(row);
+  }
+
+  async countUnfinishedTasks(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<number> {
+    const rows = (await tx.sql`
+      SELECT COUNT(*)::integer AS "count"
+        FROM app.tasks
+       WHERE project_id = ${input.projectId}
+         AND work_status = 'TODO'
+         AND lifecycle_status = 'ACTIVE'
+    `) as unknown as readonly { count: number }[];
+    return rows[0]?.count ?? 0;
+  }
+
   async findLatestMember(
     tx: TransactionContext,
     input: ProjectMemberIdentity,
@@ -226,6 +381,21 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       joinedAt: new Date(row.joined_at).toISOString(),
       removedAt:
         row.removed_at === null ? null : new Date(row.removed_at).toISOString(),
+    };
+  }
+
+  private toChangeRecord(row: ProjectChangeRow): ProjectChangeRecord {
+    return {
+      projectId: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      rowVersion: row.rowVersion,
+      createdBy: row.createdBy,
+      createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: new Date(row.updatedAt).toISOString(),
+      memberCount: row.memberCount,
     };
   }
 }

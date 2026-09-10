@@ -391,10 +391,24 @@ export type NotificationUnreadCountResponse = {
   readonly unreadCount: number;
 };
 
+export type ProjectArchivePreviewResponse = {
+  readonly projectId: number;
+  readonly unfinishedTaskCount: number;
+};
+
+export type ProjectArchiveRequest = {
+  readonly reason: string;
+};
+
 export type ProjectCode = string;
 
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
+};
+
+export type ProjectEditRequest = {
+  readonly name: string;
+  readonly description: string;
 };
 
 export type ProjectItem = {
@@ -482,8 +496,21 @@ export type ProjectMembersListResponse = {
   readonly items: readonly ProjectMemberRecordItem[];
 };
 
+export type ProjectMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
 export type ProjectPath = {
   readonly projectId: number;
+};
+
+export type ProjectReplayContext = {
+  readonly projectId: number;
+};
+
+export type ProjectVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
 };
 
 export type ReauthenticateAdminHeaders = {

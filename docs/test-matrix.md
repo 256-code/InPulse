@@ -2,6 +2,32 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## F-06 项目编辑与归档/恢复（A，2026-09-10 本地实现）
+
+阶段 1 A 域项目编辑/归档/恢复纵切片：`PATCH /api/v1/projects/{projectId}` 由项目活跃成员或
+系统管理员整笔替换 `name` 与 `description`；编码创建后不可修改；父项目必须 ACTIVE，归档
+项目返回 409 `PROJECT_ARCHIVED`；CSRF、`Idempotency-Key` 与 `If-Match` 必填，版本冲突
+409；名称/描述、审计 `project.update`、活动 `PROJECT_UPDATED` 与搜索投影在同一事务内提交；
+重放前重新验证当前成员关系与项目可写性。`GET /api/v1/projects/{projectId}/archive-preview`
+为管理员只读路径，统计未完成（TODO + ACTIVE）任务数用于归档提醒；`POST
+/api/v1/projects/{projectId}/archive` 与 `restore` 要求完整管理员 Session 与 5 分钟内双因子
+重认证，原因、CSRF、`Idempotency-Key`、`If-Match` 必填，状态不符返回 409
+`PROJECT_STATE_CONFLICT`，归档后全部下级只读而历史仍可读，恢复只恢复项目自身状态，审计、
+活动与搜索投影同一事务。复用现有 `projects.status/archived_at/row_version` 约束，无数据库
+迁移；前端编辑/归档/恢复入口与未完成任务提醒已接入项目页。E2E 尚未覆盖归档/恢复路径。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F06-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `ProjectEditRequest`、`ProjectArchiveRequest`、`ProjectArchivePreviewResponse`、`ProjectMutationHeaders`、`ProjectVersionHeaders`、`ProjectReplayContext` 登记；四条路由声明 Session/管理员重认证、CSRF、数据库幂等、`If-Match` 行为头与资源型重放授权；OpenAPI 与前端客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，61/61 条路由） |
+| F06-EDIT-API-001 | API 单元 | 服务端编排 | 写前实时校验成员关系与用户状态；归档 409、缺失 404、版本冲突 409 均不写审计；成功时审计前后快照、活动与搜索同一事务；重放上下文严格校验 | 本地通过（`project-management.service.test.ts` 7 例） |
+| F06-EDIT-API-002 | HTTP + PostgreSQL | 编辑、审计与投影 | 活跃成员编辑返回 200 与递增 `rowVersion`；`app.audit_logs` 恰一条 `project.update`；`PROJECT_UPDATED` 活动与搜索投影同步；同 Key 同摘要重放返回相同响应 | 本地通过（`project-management-api.integration.test.ts` 9/9，PostgreSQL 18.6 + PGroonga） |
+| F06-EDIT-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名 401；非成员/已移除 404；版本冲突与归档项目 409；缺 CSRF、缺/非法 `If-Match`、非法名称 422；非 JSON 400；缺幂等键 400；错误体不泄露数据库细节 | 同上 |
+| F06-EDIT-API-004 | HTTP + PostgreSQL | 重放授权复核 | 成员被移除后同 Key 重放 404；项目归档后编辑重放 409，均不返回已存成功响应 | 同上 |
+| F06-ARCHIVE-API-001 | HTTP + PostgreSQL | 归档与影响预览 | 管理员归档返回 200、`archived_at` 非空、`rowVersion` 递增；审计 `project.archive`、活动 `PROJECT_ARCHIVED` 与搜索投影 `source_status = 'ARCHIVED'` 同事务；归档后成员编辑 409、重复归档 409；预览只统计 TODO + ACTIVE 任务，匿名 401、非管理员成员 403、非成员 404、重认证过期 403，且 GET 不要求 CSRF | 本地通过（同上 9/9） |
+| F06-ARCHIVE-API-002 | HTTP + PostgreSQL | 恢复与状态门禁 | 恢复返回 200、`archived_at` 置空、`rowVersion` 递增，审计 `project.restore`、活动 `PROJECT_RESTORED` 与搜索投影 `source_status = 'ACTIVE'` 同事务；恢复后成员可再次编辑；未归档恢复 409 `PROJECT_STATE_CONFLICT`；非管理员 403、非成员 404、重认证过期 403 | 同上 |
+| F06-ARCHIVE-API-003 | HTTP + PostgreSQL | 幂等重放 | 归档/恢复成功后同 Key 同摘要重放返回相同 200 响应（归档态重放不因只读被拒）；会话被撤销后同 Key 重放 401，不返回已存成功响应 | 同上 |
+| F06-ARCHIVE-UI-001 | 前端 | 编辑/归档/恢复入口 | 项目卡片提供编辑入口（活跃成员）、归档/恢复入口（管理员）；编辑提交携带 CSRF、`If-Match`、`Idempotency-Key`，版本冲突展示重新加载提示；归档弹窗展示未完成任务提醒并要求原因，403 `ADMIN_REAUTH_REQUIRED` 打开管理员安全验证；恢复弹窗要求原因并说明不改动下级归档状态 | 本地通过（`project-management-modals.test.tsx` 6 例、`ProjectsPage.test.tsx` 归档入口 1 例） |
+
 ## F-12 未分类模块编辑（2026-09-09 人工确认）
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -99,7 +125,8 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 提供服务端 `AuthorizedProjectScope` 授权与响应 `no-store`；系统管理员新增
 `listProjectMembers`、`listProjectMemberUnfinishedTasks`、`addProjectMember`、
 `removeProjectMember` 四条成员管理路由。成员写操作要求管理员密码与 TOTP 5 分钟
-重认证、CSRF 与数据库级幂等；本项目不实现 F-06 项目编辑/归档/恢复与概览统计。
+重认证、CSRF 与数据库级幂等；项目编辑已由 F-06.1 实现，归档/恢复（F-06.2/F-06.3）
+与概览统计仍未实现。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|

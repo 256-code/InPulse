@@ -4,6 +4,7 @@ import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
 import { adminUserRoutes } from "./user-admin-routes.js";
 import { projectMemberRoutes } from "./project-member-routes.js";
+import { projectRoutes } from "./project-routes.js";
 
 export * from "./route-definition.js";
 
@@ -15,6 +16,7 @@ export * from "./route-definition.js";
 export const routeRegistry = [
   ...adminUserRoutes,
   ...projectMemberRoutes,
+  ...projectRoutes,
   ...moduleRoutes,
   ...featureRoutes,
   ...taskRoutes,
