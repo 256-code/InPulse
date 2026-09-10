@@ -257,12 +257,13 @@ export class HealthController {
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks",
       "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/status-history",
-      "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/status",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status-history",
-      "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status",
+      "POST /api/v1/tasks/{taskId}/complete",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts",
       "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts/{recordId}",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/status",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });

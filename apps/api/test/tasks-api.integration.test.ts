@@ -48,6 +48,21 @@ import { TaskManagementRepository } from "../src/modules/tasks/task-management.r
 import { TasksManagementService } from "../src/modules/tasks/tasks-management.service.js";
 import { TasksHttpService } from "../src/modules/tasks/tasks-http.service.js";
 import { TasksController } from "../src/modules/tasks/tasks.controller.js";
+import { TaskStatusCompatibilityController } from "../src/workflows/task-status-compatibility.controller.js";
+import { TaskStatusCompatibilityHttpService } from "../src/workflows/task-status-compatibility-http.service.js";
+import { TaskCompletionWorkflow } from "../src/workflows/task-completion.workflow.js";
+import { ExistingTaskStatusCommandPort } from "../src/modules/tasks/task-status.port.js";
+import { PostgresTaskCompletionCommandPort } from "../src/modules/tasks/task-completion.port.js";
+import { PostgresTaskQueryPort } from "../src/modules/tasks/task-query.port.js";
+import { PostgresTaskBranchQueryPort } from "../src/modules/task-groups/task-branch-query.port.js";
+import { TaskGroupRepository } from "../src/modules/task-groups/task-group.repository.js";
+import { RecordDraftsService } from "../src/modules/change-records/record-drafts.service.js";
+import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
+import { RecordPublicationService } from "../src/modules/change-records/record-publication.service.js";
+import { RecordPublicationRepository } from "../src/modules/change-records/record-publication.repository.js";
+import { RecordPublicationAccess } from "../src/modules/change-records/record-publication-access.js";
+import { RecordPublicationEffects } from "../src/modules/change-records/record-publication-effects.js";
+import { PublishedRecordRepository } from "../src/modules/change-records/published-record.repository.js";
 import { ApiExceptionFilter } from "../src/http/api-exception.filter.js";
 import { ContractResponseInterceptor } from "../src/http/contract-response.interceptor.js";
 import {
@@ -109,20 +124,78 @@ beforeAll(async () => {
     notifications,
     new PostgresModuleReadPort(),
   );
-  const http = new TasksHttpService(
-    auth,
-    new AuthenticatedMutationService(auth, csrf, tokens),
-    new IdempotencyHttpService(
-      new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
-      { currentVersion: 1, currentKey: () => key, keyFor: () => key },
-      resolveRegisteredRoute,
+  const mutation = new AuthenticatedMutationService(auth, csrf, tokens);
+  const idempotency = new IdempotencyHttpService(
+    new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
+    { currentVersion: 1, currentKey: () => key, keyFor: () => key },
+    resolveRegisteredRoute,
+  );
+  const http = new TasksHttpService(auth, mutation, idempotency, management);
+  const access = new PostgresProjectAccessQueryPort(client),
+    modules = new PostgresModuleQueryPort(),
+    features = new PostgresFeatureQueryPort(),
+    featureRead = new PostgresFeatureReadPort(),
+    taskQuery = new PostgresTaskQueryPort(),
+    records = new RecordDraftRepository(),
+    pubRepo = new RecordPublicationRepository();
+  const drafts = new RecordDraftsService(
+    access,
+    modules,
+    new PostgresModuleReadPort(),
+    features,
+    featureRead,
+    records,
+    uow,
+    audit,
+  );
+  const publication = new RecordPublicationService(
+    new RecordPublicationAccess(access, modules, features, taskQuery, pubRepo),
+    pubRepo,
+    records,
+    new PublishedRecordRepository(),
+    new PostgresProjectCodePort(),
+    featureRead,
+    new RecordPublicationEffects(
+      audit,
+      activity,
+      search,
+      notifications,
+      access,
     ),
-    management,
+  );
+  const completion = new TaskCompletionWorkflow(
+    access,
+    modules,
+    features,
+    taskQuery,
+    new PostgresTaskBranchQueryPort(new TaskGroupRepository()),
+    drafts,
+    drafts,
+    publication,
+    new PostgresTaskCompletionCommandPort(
+      new TaskManagementRepository(),
+      audit,
+      activity,
+      search,
+      notifications,
+      access,
+    ),
   );
   class TestModule {}
   Module({
-    controllers: [TasksController],
-    providers: [{ provide: TasksHttpService, useValue: http }],
+    controllers: [TasksController, TaskStatusCompatibilityController],
+    providers: [
+      { provide: TasksHttpService, useValue: http },
+      {
+        provide: TaskStatusCompatibilityHttpService,
+        useValue: new TaskStatusCompatibilityHttpService(
+          mutation,
+          idempotency,
+          completion,
+          new ExistingTaskStatusCommandPort(management),
+        ),
+      },
+    ],
   })(TestModule);
   app = await NestFactory.create(TestModule, { logger: false });
   app.useGlobalFilters(new ApiExceptionFilter());

@@ -66,6 +66,51 @@ export class RecordDraftsService
       return item;
     });
   }
+  async lockDraft(tx: TransactionContext, projectId: number, recordId: number) {
+    // Re-read relationships in a separate READ COMMITTED statement after waiting for the row.
+    const locked = await this.repository.find(tx, projectId, recordId, true);
+    return locked ? this.repository.find(tx, projectId, recordId) : undefined;
+  }
+  async authorsForTask(
+    tx: TransactionContext,
+    projectId: number,
+    taskId: number,
+  ) {
+    return this.repository.authorsForTask(tx, projectId, taskId);
+  }
+  async bindForCompletion(
+    tx: TransactionContext,
+    actorId: number,
+    source: RecordSourceSnapshot,
+    recordId: number,
+    version: number,
+    requestId: string,
+  ) {
+    const before = await this.lockDraft(tx, source.projectId, recordId);
+    if (
+      !before ||
+      before.moduleId !== source.moduleId ||
+      before.featureId !== source.featureId ||
+      (before.taskId !== null && before.taskId !== source.taskId)
+    )
+      throw missing();
+    if (before.rowVersion !== version)
+      throw new RecordDraftError(
+        409,
+        "RECORD_VERSION_CONFLICT",
+        "草稿版本已变化，请重新选择最新草稿",
+      );
+    if (before.taskId === source.taskId) return before;
+    const after = await this.repository.bindSource(tx, before, source.taskId);
+    if (!after)
+      throw new RecordDraftError(
+        409,
+        "RECORD_VERSION_CONFLICT",
+        "草稿关联或版本已变化",
+      );
+    await this.appendAudit(tx, actorId, before, after, requestId);
+    return after;
+  }
   async authorize(
     tx: TransactionContext,
     actorId: number,

@@ -149,6 +149,15 @@ export const taskRoutes: readonly RouteDefinition[] = [
     ...basicTaskRoutes[4]!,
     method: "POST",
     operationId: "transitionTask",
+    idempotencyContractVersion: "2.0.0",
+    replayAuthorizationPolicy: {
+      version: "2.0.0",
+      resources: {
+        contextSchemaRef: "TaskStatusCompatibilityReplayContext",
+        resultRefExtractor: "taskStatusCompatibilityResources",
+        currentReadAuthorizer: "taskStatusCompatibilityCurrentReadAuthorizer",
+      },
+    },
     path: collection + "/{taskId}/status",
     summary: "完成（仅 WITHOUT_RECORD）、重开、取消或恢复任务；原子保留历史。",
     request: {
@@ -162,9 +171,9 @@ export const taskRoutes: readonly RouteDefinition[] = [
     auditAction: "task.status",
     concurrencyPolicy: {
       rowVersion: "required",
-      lockOrder: ["project", "module", "feature", "task"],
+      lockOrder: ["project", "module", "feature", "task", "taskGroup"],
       retry:
-        "none; parents FOR SHARE then task FOR UPDATE; validate version and state under lock",
+        "COMPLETE uses TaskCompletionWorkflow with branch recheck and bounded retry; other transitions retain existing state semantics",
     },
   },
 ];
@@ -226,26 +235,32 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
             },
           }
         : "none",
-      replayAuthorizationPolicy: write
-        ? {
-            version: "1.0.0",
-            resources: {
-              contextSchemaRef: "ModuleTaskReplayContext",
-              resultRefExtractor: "moduleTaskResultResource",
-              currentReadAuthorizer: "moduleTaskCurrentReadAuthorizer",
-            },
-          }
-        : "none",
-      concurrencyPolicy: write
-        ? {
-            rowVersion: create ? "none" : "required",
-            lockOrder: create
-              ? ["project", "module", "feature"]
-              : ["project", "module", "feature", "task"],
-            retry:
-              "up to 3 savepoint attempts; sorted union of current/target feature ids before task; re-read under task lock",
-          }
-        : "none",
+      replayAuthorizationPolicy:
+        route.operationId === "transitionTask"
+          ? route.replayAuthorizationPolicy
+          : write
+            ? {
+                version: "1.0.0",
+                resources: {
+                  contextSchemaRef: "ModuleTaskReplayContext",
+                  resultRefExtractor: "moduleTaskResultResource",
+                  currentReadAuthorizer: "moduleTaskCurrentReadAuthorizer",
+                },
+              }
+            : "none",
+      concurrencyPolicy:
+        route.operationId === "transitionTask"
+          ? route.concurrencyPolicy
+          : write
+            ? {
+                rowVersion: create ? "none" : "required",
+                lockOrder: create
+                  ? ["project", "module", "feature"]
+                  : ["project", "module", "feature", "task"],
+                retry:
+                  "up to 3 savepoint attempts; sorted union of current/target feature ids before task; re-read under task lock",
+              }
+            : "none",
     };
   },
 );

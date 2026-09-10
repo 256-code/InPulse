@@ -774,6 +774,46 @@ export type TaskCollectionPath = {
   readonly featureId: number;
 };
 
+export type TaskCompletionPath = {
+  readonly taskId: number;
+};
+
+export type TaskCompletionReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
+  readonly impactFeatureIds: readonly number[];
+  readonly record: (RecordPublicationReplayContext | null);
+};
+
+export type TaskCompletionRequest = ({
+  readonly mode: "WITHOUT_RECORD";
+  readonly completionReason: ("测试验证" | "技术调研" | "文档补充" | "环境配置" | "沟通协调" | "其他");
+  readonly note: string;
+  readonly expectedRowVersion: number;
+} | {
+  readonly mode: "WITH_RECORD";
+  readonly expectedRowVersion: number;
+  readonly record: {
+    readonly title: string;
+    readonly contextProblem: string;
+    readonly changeSolution: string;
+    readonly resultVerification: string;
+    readonly remainingIssues: string;
+  };
+} | {
+  readonly mode: "WITH_RECORD";
+  readonly expectedRowVersion: number;
+  readonly recordDraftId: number;
+  readonly recordExpectedRowVersion: number;
+});
+
+export type TaskCompletionResponse = {
+  readonly task: (TaskItem | ModuleTaskItem);
+  readonly record: (PublishedRecord | null);
+};
+
 export type TaskEditRequest = {
   readonly title: string;
   readonly description: string;
@@ -902,6 +942,15 @@ export type TaskResourcePath = {
   readonly moduleId: number;
   readonly featureId: number;
   readonly taskId: number;
+};
+
+export type TaskStatusCompatibilityReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
+  readonly impactFeatureIds: readonly number[];
+  readonly completion: boolean;
 };
 
 export type TaskStatusHistoryResponse = {

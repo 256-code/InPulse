@@ -43,6 +43,25 @@ const dto = (row: Row) => {
 };
 @Injectable()
 export class RecordDraftRepository {
+  async bindSource(
+    tx: TransactionContext,
+    before: RecordDraftItem,
+    taskId: number,
+  ) {
+    const rows =
+      await tx.sql`UPDATE app.change_records SET task_id=${taskId},row_version=row_version+1,updated_at=GREATEST(clock_timestamp(),updated_at) WHERE id=${before.id} AND project_id=${before.projectId} AND status='DRAFT' AND task_id IS NULL AND row_version=${before.rowVersion} RETURNING id`;
+    return rows.length ? this.find(tx, before.projectId, before.id) : undefined;
+  }
+  async authorsForTask(
+    tx: TransactionContext,
+    projectId: number,
+    taskId: number,
+  ) {
+    const rows = await tx.sql<
+      { authorId: number }[]
+    >`SELECT DISTINCT author_id AS "authorId" FROM app.change_records WHERE project_id=${projectId} AND task_id=${taskId} ORDER BY author_id`;
+    return rows.map((row) => row.authorId);
+  }
   private columns(tx: TransactionContext) {
     return tx.sql`id, project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",
     scope_type AS "scopeType",task_id AS "taskId",title,handler_id AS "handlerId",author_id AS "authorId",status,code,

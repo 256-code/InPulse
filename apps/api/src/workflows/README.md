@@ -35,3 +35,10 @@ await this.unitOfWork.run(async (tx) => {
 覆盖成功路径与 session、project、module、feature 四层任一失败时的短路行为。
 真实数据库行锁语义由 B 的 `write-query-ports.integration.test.ts` 与 A 的
 `project-access.integration.test.ts` 分别覆盖；本 Workflow 层只验证编排顺序与结果映射。
+
+
+## F-19 组合完成
+
+`TaskCompletionModule` 已接入 AppModule 的鉴权装配，提供 `POST /api/v1/tasks/{taskId}/complete`。HTTP 的 IdempotencyRunner 持有唯一 UnitOfWork，TaskCompletionWorkflow 预读完整父级和影响集合，按项目→模块→功能→任务→组→记录→遗留项顺序调用公开端口；绑定/创建草稿、条件完成任务、v1 发布与全部副作用同事务提交。实现边界、重放与定向真库证据见 [F-19 交审说明](../../../../docs/f19-local-handoff.md)。
+
+旧两条任务状态路由也由本模块的 TaskStatusCompatibilityController 单一调用兼容 Use Case；COMPLETE 复用组合 Workflow，其余三种状态通过 Tasks 公开 TaskStatusCommandPort 保留领域服务行为。旧请求/单任务 DTO 不变，幂等及重放授权升级 2.0.0，旧 Key 返回 409。

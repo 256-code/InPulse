@@ -8,6 +8,7 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskError, type TaskViewItem } from "./task-query";
+import { CompleteWithRecord } from "./CompleteWithRecord";
 
 const labels = {
   COMPLETE: "完成任务",
@@ -47,6 +48,8 @@ export function TaskStatusPanel({
     null,
   );
   const [base, setBase] = useState(item);
+  const [publishedId, setPublishedId] = useState<number | null>(null);
+  const [recordBusy, setRecordBusy] = useState(false);
   const [actualChange, setActualChange] = useState<"" | "yes" | "no">("");
   const [reason, setReason] = useState<(typeof reasons)[number]>("测试验证");
   const [note, setNote] = useState("");
@@ -86,6 +89,16 @@ export function TaskStatusPanel({
           "If-Match": `"${base.rowVersion}"`,
         },
       };
+      if (command.action === "COMPLETE") {
+        const { action: _action, ...input } = command;
+        return (
+          await api.completeTask(
+            base.id,
+            { ...input, expectedRowVersion: base.rowVersion },
+            init,
+          )
+        ).task;
+      }
       return base.featureId === null
         ? api.transitionModuleTask(
             base.projectId,
@@ -205,6 +218,13 @@ export function TaskStatusPanel({
           </Button>
         ))}
       </div>
+      {publishedId !== null && (
+        <a
+          href={`/records?view=published&projectId=${item.projectId}&publishedId=${publishedId}`}
+        >
+          查看已发布记录
+        </a>
+      )}
       <h3>状态历史</h3>
       {history.isPending ? (
         <Spin />
@@ -246,9 +266,9 @@ export function TaskStatusPanel({
         className="catalog-modal"
         footer={null}
         onCancel={() => {
-          if (!saving.current && !reloading) setAction(null);
+          if (!saving.current && !reloading && !recordBusy) setAction(null);
         }}
-        mask={{ closable: !mutation.isPending && !reloading }}
+        mask={{ closable: !mutation.isPending && !reloading && !recordBusy }}
       >
         <form
           className="catalog-form calm-form"
@@ -275,6 +295,7 @@ export function TaskStatusPanel({
                 是否产生实际功能变化
                 <select
                   value={actualChange}
+                  disabled={recordBusy}
                   onChange={(e) =>
                     setActualChange(e.target.value as typeof actualChange)
                   }
@@ -285,16 +306,15 @@ export function TaskStatusPanel({
                 </select>
               </label>
               {actualChange === "yes" && (
-                <Alert
-                  type="info"
-                  title="先保存迭代记录草稿；发布并完成任务尚未开放，任务将保持未完成。"
-                  description={
-                    <a
-                      href={`/records?projectId=${item.projectId}&moduleId=${item.moduleId}&taskId=${item.id}`}
-                    >
-                      选择或新建草稿
-                    </a>
-                  }
+                <CompleteWithRecord
+                  item={base}
+                  api={api}
+                  writable={writable}
+                  onBusyChange={setRecordBusy}
+                  onSuccess={(record) => {
+                    setPublishedId(record.id);
+                    setAction(null);
+                  }}
                 />
               )}
               {actualChange === "no" && (
@@ -312,25 +332,29 @@ export function TaskStatusPanel({
               )}
             </>
           )}
-          <label>
-            {action === "COMPLETE" ? "完成补充说明" : "操作原因（选填）"}
-            <Input.TextArea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={action === "COMPLETE" ? 9800 : 10000}
-              rows={3}
-            />
-          </label>
-          <div className="calm-action-footer">
-            <Button
-              htmlType="submit"
-              className="primary-button"
-              loading={mutation.isPending}
-              disabled={disabled}
-            >
-              确认{action ? labels[action] : "操作"}
-            </Button>
-          </div>
+          {actualChange !== "yes" && (
+            <>
+              <label>
+                {action === "COMPLETE" ? "完成补充说明" : "操作原因（选填）"}
+                <Input.TextArea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={action === "COMPLETE" ? 9800 : 10000}
+                  rows={3}
+                />
+              </label>
+              <div className="calm-action-footer">
+                <Button
+                  htmlType="submit"
+                  className="primary-button"
+                  loading={mutation.isPending}
+                  disabled={disabled}
+                >
+                  确认{action ? labels[action] : "操作"}
+                </Button>
+              </div>
+            </>
+          )}
         </form>
       </Modal>
     </section>

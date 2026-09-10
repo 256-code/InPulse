@@ -79,6 +79,7 @@ export const permissionMatrix = [
       "listChangeRecordVersions",
       "getChangeRecordVersion",
       "publishChangeRecord",
+      "completeTask",
       "createChangeRecordVersion",
       "getTaskRecordDrafts",
       "createTaskRecordDraft",
