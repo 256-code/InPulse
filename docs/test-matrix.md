@@ -507,3 +507,19 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 | F16-006 | Edge E2E | FEATURE/MODULE 完成→重开→取消→恢复→完成，刷新历史和搜索 | 2/2，1.1分钟 |
 
 契约/权限三个测试文件18/18，61路由策略和生成物无漂移。范围与未运行项见 [F16交审](f16-local-handoff.md)，不替代F17–F19验收。
+
+## F-17 迭代记录草稿（2026-09-10 本地交审）
+
+| 覆盖路径 | 实际定向证据 |
+| --- | --- |
+| 独立 FEATURE/MODULE 草稿、三段必填和服务端身份字段 | API `record-drafts.integration.test.ts` 与契约 `record-drafts.test.ts` |
+| 来源多草稿显式创建/选择、同 Key 重放、不同 Key 新建、既有正式记录不阻塞 | 同一真实 PostgreSQL 用例，验证记录数量与独立身份、正式历史未变 |
+| TODO/DONE/CANCELED 不变，处理人/作者/影响快照冻结 | 真库全行对比任务和历史；修改任务负责人/影响后编辑不追随；MODULE 归档历史影响保留 |
+| Session/CSRF、成员移除、错误归属、归档父级与重放拒绝 | 真实 HTTP 统一错误体和 requestId；项目/模块/功能归属及版本门禁 |
+| 并发编辑、审计回滚、父级归档竞争、来源更新竞争 | 真实 PG 锁等待、savepoint 重试；一个编辑成功一个 409；失败无半条草稿或影响关系 |
+| 前端必填、独立保存、多来源选择、指定草稿继续编辑、409 合并 | `RecordDraftsView.test.tsx` 5/5，连同任务面板回归共 14/14 |
+| 真库局部回归 | `record-drafts.integration.test.ts` 14/14 + `tasks-api.integration.test.ts` 41/41，共 55/55，6.17 秒 |
+| 契约/权限 | 两个定向文件共 17/17，72 路由策略/权限与 5 个生成物无漂移 |
+| 浏览器持久化和入口 | Edge `record-drafts.spec.ts` 3/3（37.0 秒）：独立、FEATURE 来源、MODULE 来源；选择第二条编辑/刷新/返回任务仍 TODO 且仅初始历史。F-16 状态两路径在此前同批合跑中均通过 |
+
+首轮来源 fixture 的优先级误写 MEDIUM 导致约束拒绝，改为基线 NORMAL 后通过；首次启动测试未提供 TEST_DATABASE_URL 而 fail closed，配置后执行。首轮浏览器 FEATURE 返回链接多 `/tasks` 导致 404（合跑 4/5），修复后草稿三路径全部通过，未降低断言。未运行本批 CI/默认 Chromium、全量本地构建/测试/静态审计；F-18/F-19 尚未交付。详细复核入口见 [F-17 交审说明](f17-local-handoff.md)。
