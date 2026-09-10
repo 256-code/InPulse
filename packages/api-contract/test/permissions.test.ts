@@ -206,6 +206,10 @@ export class HealthController {
       "GET /api/v1/health/live",
       "GET /api/v1/health/ready",
       "GET /api/v1/projects/{projectId}/activity",
+      "GET /api/v1/projects/{projectId}/record-drafts",
+      "GET /api/v1/projects/{projectId}/record-drafts/{recordId}",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/record-drafts",
+      "PATCH /api/v1/projects/{projectId}/record-drafts/{recordId}",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/similar",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}",
@@ -249,6 +253,9 @@ export class HealthController {
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/status",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status-history",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status",
+      "GET /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts",
+      "PATCH /api/v1/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/record-drafts/{recordId}",
     ]);
     expect(validateControllerBindings(routeRegistry, scan)).toEqual([]);
   });

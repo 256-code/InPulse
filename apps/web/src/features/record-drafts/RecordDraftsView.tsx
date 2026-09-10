@@ -1,0 +1,739 @@
+import React, { useMemo, useRef, useState } from "react";
+import "./record-drafts.css";
+import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Controller, useForm } from "react-hook-form";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import {
+  ApiError,
+  createApiClient,
+  type InpulseApiClient,
+  type RecordDraftContent,
+  type RecordDraftItem,
+  type TaskRecordDraftsResponse,
+} from "@generated/api";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+
+const fields = [
+  "title",
+  "contextProblem",
+  "changeSolution",
+  "resultVerification",
+  "remainingIssues",
+] as const;
+type Field = (typeof fields)[number];
+const labels: Record<Field, string> = {
+  title: "迭代标题",
+  contextProblem: "为什么改、发现了什么问题",
+  changeSolution: "改了什么、怎么改的",
+  resultVerification: "改完效果如何、如何验证",
+  remainingIssues: "还有什么问题（选填）",
+};
+const empty: RecordDraftContent = {
+  title: "",
+  contextProblem: "",
+  changeSolution: "",
+  resultVerification: "",
+  remainingIssues: "",
+};
+const content = (item: RecordDraftContent): RecordDraftContent => ({
+  title: item.title,
+  contextProblem: item.contextProblem,
+  changeSolution: item.changeSolution,
+  resultVerification: item.resultVerification,
+  remainingIssues: item.remainingIssues,
+});
+function errorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录。输入已保留。";
+    if (error.status === 404)
+      return "草稿或所属范围不存在，或你已无权访问。输入已保留。";
+    if (error.status === 403) return "权限或安全校验未通过。输入已保留。";
+    if (error.status === 409) return `${error.message}，输入已保留。`;
+    if (error.status === 422)
+      return "请检查三段必填内容、标题和所属范围。输入已保留。";
+    if (error.status === 429) return "请求过于频繁，请稍后重试。输入已保留。";
+  }
+  return "草稿服务暂时不可用，输入已保留，可重试。";
+}
+export function mergeRecordDraft(
+  base: RecordDraftContent,
+  draft: RecordDraftContent,
+  latest: RecordDraftContent,
+) {
+  const values = { ...latest };
+  const conflicts: Field[] = [];
+  for (const field of fields) {
+    if (draft[field] === base[field]) continue;
+    if (latest[field] !== base[field] && latest[field] !== draft[field])
+      conflicts.push(field);
+    values[field] = draft[field];
+  }
+  return { values, conflicts };
+}
+type Merge = ReturnType<typeof mergeRecordDraft> & {
+  latest: RecordDraftItem;
+  choices: Partial<Record<Field, "mine" | "latest">>;
+};
+export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const projectId = Number(params.get("projectId")) || 0;
+  const recordId = Number(params.get("recordId")) || 0;
+  const taskId = Number(params.get("taskId")) || 0;
+  const sourceModuleId = Number(params.get("moduleId")) || 0;
+  const [selection, setSelection] = useState<{
+    item?: RecordDraftItem;
+    source?: TaskRecordDraftsResponse["source"];
+  } | null>(null);
+  const [moduleId, setModuleId] = useState(Number(params.get("moduleId")) || 0);
+  const [featureId, setFeatureId] = useState(
+    Number(params.get("featureId")) || 0,
+  );
+  const [scopeType, setScopeType] = useState<"FEATURE" | "MODULE">(
+    featureId ? "FEATURE" : "MODULE",
+  );
+  const [impacts, setImpacts] = useState<number[]>([]);
+  const [merge, setMerge] = useState<Merge | null>(null);
+  const [reloadError, setReloadError] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
+  const retry = useRef<{ signature: string; key: string } | null>(null);
+  const saving = useRef(false);
+  const {
+    control,
+    handleSubmit,
+    reset,
+    getValues,
+    formState: { errors },
+  } = useForm<RecordDraftContent>({ defaultValues: empty });
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: ({ signal }) => api.listProjects({ signal }),
+    retry: false,
+  });
+  const modules = useQuery({
+    queryKey: ["modules", projectId],
+    queryFn: ({ signal }) => api.listModules(projectId, { signal }),
+    enabled: projectId > 0,
+    retry: false,
+  });
+  const features = useQuery({
+    queryKey: ["features", projectId, moduleId],
+    queryFn: ({ signal }) => api.listFeatures(projectId, moduleId, { signal }),
+    enabled: projectId > 0 && moduleId > 0,
+    retry: false,
+  });
+  const allDrafts = useQuery({
+    queryKey: ["record-drafts", projectId],
+    queryFn: ({ signal }) => api.listRecordDrafts(projectId, { signal }),
+    enabled: projectId > 0 && !taskId,
+    retry: false,
+  });
+  const sourceQuery = useQuery({
+    queryKey: ["task-record-drafts", projectId, sourceModuleId, taskId],
+    queryFn: ({ signal }) =>
+      api.getTaskRecordDrafts(projectId, sourceModuleId, taskId, { signal }),
+    enabled: projectId > 0 && sourceModuleId > 0 && taskId > 0,
+    retry: false,
+  });
+  const list = taskId ? sourceQuery : allDrafts;
+  const detail = useQuery({
+    queryKey: ["record-draft", projectId, recordId],
+    queryFn: ({ signal }) =>
+      api.getRecordDraft(projectId, recordId, { signal }),
+    enabled: projectId > 0 && recordId > 0,
+    retry: false,
+  });
+  const writable =
+    projects.data?.items.find((p) => p.id === projectId)?.status === "ACTIVE" &&
+    (!taskId || sourceQuery.data?.source.lifecycleStatus === "ACTIVE");
+  const mutation = useMutation({
+    retry: false,
+    mutationFn: async (edit: RecordDraftContent) => {
+      const normalized = Object.fromEntries(
+        fields.map((field) => [field, edit[field].trim()]),
+      ) as RecordDraftContent;
+      const body = selection?.source
+        ? {
+            ...normalized,
+            title:
+              normalized.title === selection.source.title
+                ? null
+                : normalized.title,
+          }
+        : selection?.item
+          ? normalized
+          : {
+              ...normalized,
+              ...(scopeType === "FEATURE"
+                ? { scopeType, featureId }
+                : {
+                    scopeType,
+                    impactFeatureIds: [...impacts].sort((a, b) => a - b),
+                  }),
+            };
+      const signature = JSON.stringify([
+        projectId,
+        moduleId,
+        selection?.item?.id,
+        selection?.item?.rowVersion,
+        selection?.source?.taskId,
+        selection?.source?.rowVersion,
+        body,
+      ]);
+      if (retry.current?.signature !== signature)
+        retry.current = {
+          signature,
+          key: createIdempotencyKey("record-draft"),
+        };
+      const csrf = await api.issueCsrfToken();
+      const init = {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "Idempotency-Key": retry.current.key,
+          ...(selection?.item
+            ? { "If-Match": `"${selection.item.rowVersion}"` }
+            : selection?.source
+              ? { "If-Match": `"${selection.source.rowVersion}"` }
+              : {}),
+        },
+      };
+      if (selection?.item && selection.item.taskId !== null)
+        return api.updateTaskRecordDraft(
+          projectId,
+          selection.item.moduleId,
+          selection.item.taskId,
+          selection.item.id,
+          normalized,
+          init,
+        );
+      if (selection?.source)
+        return api.createTaskRecordDraft(
+          projectId,
+          selection.source.moduleId,
+          selection.source.taskId,
+          body as Parameters<InpulseApiClient["createTaskRecordDraft"]>[3],
+          init,
+        );
+      if (selection?.item)
+        return api.updateIndependentRecordDraft(
+          projectId,
+          selection.item.id,
+          normalized,
+          init,
+        );
+      return api.createIndependentRecordDraft(
+        projectId,
+        moduleId,
+        body as Parameters<InpulseApiClient["createIndependentRecordDraft"]>[2],
+        init,
+      );
+    },
+    onSuccess: async (result) => {
+      retry.current = null;
+      setSelection(null);
+      setParams({
+        projectId: String(projectId),
+        recordId: String(result.id),
+        ...(taskId
+          ? { taskId: String(taskId), moduleId: String(sourceModuleId) }
+          : {}),
+      });
+      cache.setQueryData(["record-draft", projectId, result.id], result);
+      await cache.invalidateQueries({ queryKey: ["record-drafts", projectId] });
+      await cache.invalidateQueries({
+        queryKey: ["task-record-drafts", projectId],
+      });
+    },
+  });
+  const conflict =
+    mutation.error instanceof ApiError && mutation.error.status === 409;
+  const open = (item?: RecordDraftItem) => {
+    const source = taskId ? sourceQuery.data?.source : undefined;
+    if (!item && taskId && !source) return;
+    setSelection(item ? { item } : source ? { source } : {});
+    reset(
+      item ? content(item) : source ? { ...empty, title: source.title } : empty,
+    );
+    setMerge(null);
+    setReloadError(null);
+    mutation.reset();
+    if (item) {
+      setModuleId(item.moduleId);
+      setFeatureId(item.featureId ?? 0);
+      setScopeType(item.scopeType);
+      setImpacts([...item.impactFeatureIds]);
+    } else setImpacts([]);
+  };
+  const reload = async () => {
+    if (!selection?.item && !selection?.source) return;
+    if (
+      mutation.error instanceof ApiError &&
+      mutation.error.code === "RECORD_PARENT_ARCHIVED"
+    ) {
+      setReloadError("所属范围已归档，草稿只读，输入已保留。");
+      return;
+    }
+    setReloading(true);
+    try {
+      if (selection.source) {
+        const latest = await api.getTaskRecordDrafts(
+          projectId,
+          selection.source.moduleId,
+          selection.source.taskId,
+        );
+        setSelection({ source: latest.source });
+        cache.setQueryData(
+          ["task-record-drafts", projectId, sourceModuleId, taskId],
+          latest,
+        );
+        mutation.reset();
+        setReloadError(null);
+        return;
+      }
+      if (!selection.item) return;
+      const latest = await api.getRecordDraft(projectId, selection.item.id);
+      const merged = mergeRecordDraft(
+        content(selection.item),
+        getValues(),
+        content(latest),
+      );
+      if (merged.conflicts.length) setMerge({ ...merged, latest, choices: {} });
+      else {
+        setSelection({ item: latest });
+        reset(merged.values);
+        mutation.reset();
+        setReloadError(null);
+      }
+    } catch (error) {
+      setReloadError(errorMessage(error));
+    } finally {
+      setReloading(false);
+    }
+  };
+  const applyMerge = () => {
+    if (!merge || merge.conflicts.some((field) => !merge.choices[field]))
+      return;
+    const values = { ...merge.values };
+    for (const field of merge.conflicts)
+      if (merge.choices[field] === "latest")
+        values[field] = merge.latest[field];
+    reset(values);
+    setSelection({ item: merge.latest });
+    setMerge(null);
+    mutation.reset();
+    setReloadError(null);
+  };
+  const save = handleSubmit(async (edit) => {
+    if (
+      saving.current ||
+      !selection ||
+      conflict ||
+      merge ||
+      reloading ||
+      reloadError ||
+      !writable
+    )
+      return;
+    saving.current = true;
+    try {
+      await mutation.mutateAsync(edit);
+    } catch {
+      /* Preserve input and key. */
+    } finally {
+      saving.current = false;
+    }
+  });
+  return (
+    <section className="record-drafts-page" aria-label="迭代记录草稿">
+      <div className="calm-section-title">
+        <div>
+          <h1>迭代记录</h1>
+          <p>先把变化写清楚，保存后可与项目成员继续补充。</p>
+        </div>
+        <CalmBadge tone="amber">草稿</CalmBadge>
+      </div>
+      <label className="draft-project-selector">
+        所属项目
+        <select
+          value={projectId}
+          disabled={selection !== null || !!taskId}
+          onChange={(e) => {
+            setParams({ projectId: e.target.value });
+            setModuleId(0);
+            setFeatureId(0);
+          }}
+        >
+          <option value={0}>请选择项目</option>
+          {projects.data?.items.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {projects.isError && (
+        <Alert
+          type="error"
+          title={errorMessage(projects.error)}
+          action={
+            <Button onClick={() => void projects.refetch()}>重试项目</Button>
+          }
+        />
+      )}
+      {projectId > 0 && (
+        <>
+          {taskId > 0 && sourceQuery.data && (
+            <section aria-label="来源任务">
+              <h2>{sourceQuery.data.source.title}</h2>
+              <p>
+                选择已有草稿继续编辑，或新建另一条草稿。保存草稿不会改变任务状态。
+              </p>
+              <a
+                href={`/projects/${projectId}/modules/${sourceModuleId}${sourceQuery.data.source.featureId === null ? "/tasks" : `/features/${sourceQuery.data.source.featureId}`}?taskId=${taskId}`}
+              >
+                返回来源任务
+              </a>
+              {" · "}
+              <a href={`/records?projectId=${projectId}`}>项目全部草稿</a>
+            </section>
+          )}
+          <div className="draft-toolbar">
+            <Button
+              className="primary-button"
+              disabled={!writable}
+              onClick={() => open()}
+            >
+              {taskId ? "新建来源草稿" : "新建独立草稿"}
+            </Button>
+          </div>
+          {list.isPending ? (
+            <Spin />
+          ) : list.isError ? (
+            <Alert
+              type="error"
+              title={errorMessage(list.error)}
+              action={
+                <Button onClick={() => void list.refetch()}>
+                  重试草稿列表
+                </Button>
+              }
+            />
+          ) : !list.data?.items.length ? (
+            <CalmEmptyState
+              icon="gitBranch"
+              title="暂无草稿"
+              description={
+                taskId
+                  ? "此任务还没有草稿，可以显式新建。"
+                  : "为当前项目记录一项变化。"
+              }
+            />
+          ) : (
+            <div className="calm-task-grid">
+              {list.data.items.map((item) => (
+                <article className="calm-task-card" key={item.id}>
+                  <CalmBadge tone="amber">草稿</CalmBadge>
+                  <h3>{item.title}</h3>
+                  <p>
+                    模块 #{item.moduleId}
+                    {item.featureId
+                      ? ` / 功能 #${item.featureId}`
+                      : " / 模块范围"}
+                  </p>
+                  <p>
+                    记录作者 #{item.authorId} · 更新{" "}
+                    {new Date(item.updatedAt).toLocaleString("zh-CN")}
+                  </p>
+                  <Button
+                    onClick={() =>
+                      setParams({
+                        projectId: String(projectId),
+                        recordId: String(item.id),
+                        ...(taskId
+                          ? {
+                              taskId: String(taskId),
+                              moduleId: String(sourceModuleId),
+                            }
+                          : {}),
+                      })
+                    }
+                  >
+                    查看草稿
+                  </Button>
+                </article>
+              ))}
+            </div>
+          )}
+          {recordId > 0 &&
+            (detail.isPending ? (
+              <Spin />
+            ) : detail.isError ? (
+              <Alert type="error" title={errorMessage(detail.error)} />
+            ) : (
+              detail.data && (
+                <section className="draft-detail" aria-label="草稿详情">
+                  <h2>{detail.data.title}</h2>
+                  {detail.data.taskId !== null && (
+                    <a
+                      href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}
+                    >
+                      查看此任务的全部草稿
+                    </a>
+                  )}
+                  <p>
+                    草稿 · 处理人 #{detail.data.handlerId} · 记录作者 #
+                    {detail.data.authorId}
+                  </p>
+                  <p>
+                    项目 #{detail.data.projectId} / 模块 #{detail.data.moduleId}
+                    {detail.data.featureId
+                      ? ` / 功能 #${detail.data.featureId}`
+                      : ` / 影响功能：${detail.data.impactFeatureIds.join("、") || "未选择"}`}
+                  </p>
+                  {fields
+                    .filter((field) => field !== "title")
+                    .map((field) => (
+                      <section key={field}>
+                        <h3>{labels[field]}</h3>
+                        <p className="draft-content">
+                          {detail.data[field] || "暂无已知遗留问题"}
+                        </p>
+                      </section>
+                    ))}
+                  <Button
+                    disabled={!writable}
+                    onClick={() => open(detail.data)}
+                  >
+                    继续编辑
+                  </Button>
+                  <p>草稿尚未发布，不计入正式迭代统计。</p>
+                </section>
+              )
+            ))}
+        </>
+      )}
+      <Modal
+        open={selection !== null}
+        title={
+          selection?.item
+            ? "编辑草稿"
+            : selection?.source
+              ? "新建来源草稿"
+              : "新建独立草稿"
+        }
+        className="catalog-modal"
+        footer={null}
+        onCancel={() => {
+          if (!saving.current && !reloading) setSelection(null);
+        }}
+        mask={{ closable: !mutation.isPending && !reloading }}
+      >
+        <form
+          className="catalog-form calm-form"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="dialog-form">
+            {mutation.isError && (
+              <Alert type="error" title={errorMessage(mutation.error)} />
+            )}
+            {reloadError && <Alert type="warning" title={reloadError} />}
+            {conflict && (selection?.item || selection?.source) && (
+              <Button loading={reloading} onClick={() => void reload()}>
+                {selection?.source ? "加载最新来源任务" : "加载最新草稿并合并"}
+              </Button>
+            )}
+            {merge && (
+              <section aria-label="草稿冲突">
+                <p>以下字段双方都有修改，请逐项选择。</p>
+                {merge.conflicts.map((field) => (
+                  <label key={field}>
+                    {labels[field]}冲突
+                    <select
+                      value={merge.choices[field] ?? ""}
+                      onChange={(e) =>
+                        setMerge({
+                          ...merge,
+                          choices: {
+                            ...merge.choices,
+                            [field]: e.target.value as "mine" | "latest",
+                          },
+                        })
+                      }
+                    >
+                      <option value="">请选择</option>
+                      <option value="mine">保留我的输入</option>
+                      <option value="latest">采用最新内容</option>
+                    </select>
+                    <p>最新内容：{merge.latest[field]}</p>
+                  </label>
+                ))}
+                <Button
+                  onClick={applyMerge}
+                  disabled={merge.conflicts.some(
+                    (field) => !merge.choices[field],
+                  )}
+                >
+                  应用合并
+                </Button>
+              </section>
+            )}
+            {selection?.source && (
+              <p>
+                来源：{selection.source.title} · 处理人 #
+                {selection.source.assigneeId}
+                。归属和影响功能按保存时的来源快照记录。
+              </p>
+            )}
+            {!selection?.item && !selection?.source && (
+              <>
+                <label>
+                  所属模块
+                  <select
+                    required
+                    value={moduleId || ""}
+                    onChange={(e) => {
+                      setModuleId(Number(e.target.value));
+                      setFeatureId(0);
+                      setImpacts([]);
+                    }}
+                  >
+                    <option value="">请选择模块</option>
+                    {modules.data?.items.map((m) => (
+                      <option
+                        key={m.id}
+                        value={m.id}
+                        disabled={m.status !== "ACTIVE"}
+                      >
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  记录范围
+                  <select
+                    value={scopeType}
+                    onChange={(e) =>
+                      setScopeType(e.target.value as typeof scopeType)
+                    }
+                  >
+                    <option value="MODULE">模块</option>
+                    <option value="FEATURE">功能</option>
+                  </select>
+                </label>
+                {scopeType === "FEATURE" ? (
+                  <label>
+                    所属功能
+                    <select
+                      required
+                      value={featureId || ""}
+                      onChange={(e) => setFeatureId(Number(e.target.value))}
+                    >
+                      <option value="">请选择功能</option>
+                      {features.data?.items.map((f) => (
+                        <option
+                          key={f.id}
+                          value={f.id}
+                          disabled={f.status !== "ACTIVE"}
+                        >
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <fieldset>
+                    <legend>影响功能（选填）</legend>
+                    {features.data?.items.map((f) => (
+                      <label key={f.id}>
+                        <input
+                          type="checkbox"
+                          checked={impacts.includes(f.id)}
+                          disabled={f.status !== "ACTIVE"}
+                          onChange={(e) =>
+                            setImpacts(
+                              e.target.checked
+                                ? [...impacts, f.id]
+                                : impacts.filter((id) => id !== f.id),
+                            )
+                          }
+                        />
+                        {f.name}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                {(modules.isError || features.isError) && (
+                  <Alert
+                    type="error"
+                    title="所属范围加载失败，请重新选择或刷新。"
+                  />
+                )}
+              </>
+            )}
+            {fields.map((field) => (
+              <label key={field}>
+                {labels[field]}
+                <Controller
+                  name={field}
+                  control={control}
+                  rules={{
+                    validate: (value) =>
+                      field === "remainingIssues" ||
+                      value.trim().length > 0 ||
+                      "请填写此项",
+                    maxLength: field === "title" ? 500 : 50000,
+                  }}
+                  render={({ field: input }) =>
+                    field === "title" ? (
+                      <Input
+                        {...input}
+                        aria-label={labels[field]}
+                        maxLength={500}
+                      />
+                    ) : (
+                      <Input.TextArea
+                        {...input}
+                        aria-label={labels[field]}
+                        rows={4}
+                        maxLength={50000}
+                      />
+                    )
+                  }
+                />
+                {errors[field] && (
+                  <span role="alert">
+                    {errors[field]?.message || "内容过长"}
+                  </span>
+                )}
+              </label>
+            ))}
+            <p>保存为草稿，可继续编辑；不会完成任务或发布记录。</p>
+          </div>
+          <div className="calm-action-footer">
+            <Button
+              htmlType="submit"
+              className="primary-button"
+              loading={mutation.isPending}
+              disabled={
+                !writable ||
+                conflict ||
+                !!merge ||
+                reloading ||
+                !!reloadError ||
+                (!selection?.item &&
+                  !selection?.source &&
+                  (!moduleId || (scopeType === "FEATURE" && !featureId)))
+              }
+            >
+              保存草稿
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </section>
+  );
+}

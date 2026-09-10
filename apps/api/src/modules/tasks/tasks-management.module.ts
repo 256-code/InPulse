@@ -1,3 +1,4 @@
+import { TaskQueryPort, PostgresTaskQueryPort } from "./task-query.port.js";
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
@@ -30,11 +31,12 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
   ],
   providers: [
     TaskManagementRepository,
+    { provide: TaskQueryPort, useClass: PostgresTaskQueryPort },
     TasksManagementService,
     TasksHttpService,
     ProjectMemberTaskCommandPort,
   ],
-  exports: [ProjectMemberTaskCommandPort],
+  exports: [ProjectMemberTaskCommandPort, TaskQueryPort],
   controllers: [TasksController],
 })
 export class TasksManagementModule {}

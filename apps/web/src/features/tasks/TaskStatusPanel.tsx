@@ -287,7 +287,14 @@ export function TaskStatusPanel({
               {actualChange === "yes" && (
                 <Alert
                   type="info"
-                  title="产生功能变化的任务需要发布迭代记录后一起完成，此功能尚未开放。任务将保持未完成。"
+                  title="先保存迭代记录草稿；发布并完成任务尚未开放，任务将保持未完成。"
+                  description={
+                    <a
+                      href={`/records?projectId=${item.projectId}&moduleId=${item.moduleId}&taskId=${item.id}`}
+                    >
+                      选择或新建草稿
+                    </a>
+                  }
                 />
               )}
               {actualChange === "no" && (
