@@ -17,6 +17,7 @@
 #                                         -> Route Registry completeness check
 #  10  web/api production build           -> Build
 #  11  production container image build   -> Build production {api,migrate,web,db-bootstrap} image
+#                                            + Verify web image per-response nonce CSP（F-09）
 #  12  image vulnerability scan           -> Scan production images (Trivy)
 #  13  Playwright browser E2E             -> Browser E2E（F-31 基座；数据库驱动）
 #  14  compose/ref preflight              -> check:deploy:test（合成 ref 正例）
@@ -236,6 +237,11 @@ jobs:
             --cache-to type=gha,mode=max,scope=web,ignore-error=true \
             --load \
             .
+
+      - name: Verify web image per-response nonce CSP
+        # F-09：用真实构建出的镜像和真实 Nginx 配置验证逐响应 nonce CSP、安全响应头、
+        # no-store 与哈希资源不可变（技术设计 §7.5 / ADR-021，测试矩阵 SEC-002）。
+        run: bash scripts/check-web-image-csp.sh inpulse/web:ci
 
       - name: Build production db-bootstrap image
         # 生产 PostgreSQL 18.6 bootstrap 镜像：base 固定 postgres:18.6 digest，

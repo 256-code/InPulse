@@ -2,6 +2,27 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## F-09 逐响应 nonce CSP 与安全响应头（A，2026-09-10 本地实现）
+
+数据安全专项第一个纵切片（对应技术设计 §7.5 与 [ADR-021](adr/ADR-021.md)，不降低安全基线）：
+Vite 构建期在入口 HTML 的 script/style/modulepreload 标签与 `csp-nonce` bootstrap meta 写入
+占位符 `__INPULSE_CSP_NONCE__`，生产 Nginx 用每个请求 16 随机字节的 `$request_id` 通过
+`sub_filter` 逐响应替换，并在同一响应头下发同值 `script-src 'self' 'nonce-...'` 与
+`style-src 'self' 'nonce-...'`（无 `unsafe-inline`）；HSTS、nosniff、X-Frame-Options、
+Referrer-Policy 与 Permissions-Policy 收敛到 `deploy/docker/nginx-security-headers.conf`，
+由每个声明了 `add_header` 的 location 显式 include；入口与 SPA 回退一律 `no-store`，并关闭
+条件请求与 ETag，避免 304 复用旧 nonce 导致样式/脚本失效；哈希静态资源保持 `immutable`。
+本地开发与 `vite preview` 走同一策略串，`INPULSE_WEB_CSP=off` 只作为本地对照开关，非法值
+fail closed 到 enforce。未交付：Markdown 白名单（SEC-004）、Secret 文件 fail-closed 测试补强
+（SEC-007）与未匹配路由净化 404（SEC-006），另见「审计与安全」表。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F09-CSP-UNIT-001 | Web 单元 | 策略串、nonce 与 HTML 改写 | `resolveWebCspMode` 对非法值 fail closed；策略串与设计 §7.5 一致且不含 `unsafe-inline`；`applyHtmlSecurityHeaders` 只对 HTML 响应写头；`rewriteHtmlBody` 替换全部占位符；nonce 为 32 位十六进制且逐响应用新 | 本地通过（`apps/web/tools/vite-csp.test.ts` 与 `AppProviders.test.tsx`） |
+| F09-CSP-E2E-001 | 浏览器 E2E | 入口 nonce 一致性与强制模式零违规 | 同一入口两次响应的 nonce 不同，CSP 头 nonce 与 meta/script 标签一致，占位符无残留；登录、主题色、命令面板、通知弹层、懒加载与错误页在 CSP enforce 下 `securitypolicyviolation` 零违规；安全检查头齐全 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2，2026-09-10） |
+| F09-CSP-IMAGE-001 | 部署集成 | 真实镜像与 Nginx | HTTP 非 ACME 请求 308 跳同主机 HTTPS；入口/SPA 回退/代理路径逐项校验 nonce、`no-store` 与安全头；代理上游不可达时仍保留安全头；条件请求返回 200 而非带旧 nonce 的 304；哈希资源 `immutable` | 本地通过（`scripts/check-web-image-csp.sh inpulse/web:local`，2026-09-10；已加入 CI 生产镜像构建之后） |
+| F09-CSP-GATE-001 | 部署预检 | Compose/资产结构 | `deploy/docker/nginx-security-headers.conf` 列入必需资产；`nginx.conf` 必须含 `sub_filter "__INPULSE_CSP_NONCE__" "$request_id"` 与安全头 include；两个 Nginx 文件的指令行不得出现 `unsafe-inline`；`web.Dockerfile` 必须拷贝两个配置文件 | 本地通过（`scripts/check_deploy_refs.mjs`，正例通过、`.env.deploy.example` 占位符拒绝） |
+
 ## F-23 任务合并（C，2026-09-10 本地实现）
 
 `POST /api/v1/task-groups/merge` 把来源任务并入主任务所属聚合组：服务端按请求体的任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE` 后建立或复用聚合组，并保存来源任务的原工作状态与原负责人快照；来源已属活跃组、主任务在组内不是 MAIN、组已关闭或主任务在锁内变化统一 409，跨项目与非成员统一 404。合并不修改任何任务字段，审计 `task.merge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-23 交审说明](f23-local-handoff.md)。
@@ -158,13 +179,14 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 | F05-MEMBER-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名/停用 401；非管理员、CSRF 失败、重认证过期 403；非成员/不存在 404；重复活跃或状态冲突 409；非法字段 422；非 JSON 请求 400；统一返回 `{ code, message, details, requestId }` | 本地通过（同集成 8/8；HTTP 单测覆盖 400 与脱敏） |
 | F05-MEMBER-TX-001 | PostgreSQL 集成 | 同事务与幂等 | 审计失败时成员写、通知、活动或任务改派整体回滚；同 Key、同摘要、同契约版本重放不重复写；项目归档后旧 Key 拒绝返回缓存 | 本地通过（集成 8/8 覆盖回滚与重放；归档后重放已由服务单测覆盖） |
 | F05-MEMBER-UI-001 | 前端单元 | 成员管理页面 | 管理员入口仅系统管理员可见；成员历史、添加、移除、未完成任务提示、改派、管理员重认证、CSRF/幂等键与成功后缓存失效均经生成客户端调用 | 本地通过（`ProjectMembersPageView.test.tsx`、`project-member-query.test.tsx` 等，Web 33 文件 104 例） |
-| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 尚未新增成员管理 Playwright 用例，以 API 集成与前端单元覆盖；交付前需补齐或明确后续任务 | 未覆盖 |
-| F05-READ-E2E-001 | Playwright | 项目页面回归 | 项目创建关键路径在本分支通过；全量测试结果如实记录 | 本地 `pnpm test:e2e` 16/20 通过，4 个失败位于既有 `admin-users`/`features`/`module-tasks`/`tasks` 用例，均未触及本 diff；本分支未新增 E2E 用例；`origin/main` 同一基线的 CI 已全绿 |
+| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 普通成员访问 `/projects/:id/members` 由 `RequireAdmin` 拦截并显示 403 空态；管理员登录后首次进入触发管理员重认证，完成密码 + TOTP 后展示成员历史；通过页面添加成员出现成功提示与「活跃成员」徽标；移除成员出现确认对话框与「该成员没有未完成任务。」，确认后保留历史记录卡并标记「已移除」「历史记录已保留」；不存在的项目返回前端映射的读取失败空态 | 本地通过（`apps/e2e/tests/project-members.spec.ts` 2/2；全量 `pnpm test:e2e` 29/29，4.7m，基线 `5020c0a`） |
+| F05-READ-E2E-001 | Playwright | 项目页面回归 | 项目创建关键路径与全量 E2E 结果如实记录 | 本地通过（`pnpm test:e2e` 29/29，4.7m，含本 diff 新增的成员管理 2 例与既有 F-18 记录发布、搜索/动态/通知/任务用例） |
 
 2026-09-09 本地验证说明：`pnpm test:unit` 数据库 5 例、api-contract 67 例、Web 33 文件
 104 例、API 59 文件 274 例；`pnpm test:integration` 数据库 13 例、API 34 文件 190 例。
 临时 PostgreSQL 18.6 + PGroonga 4.0.8 曾因 `max_connections=100` 初始化不足，已改为
-`max_connections=200` 后完整通过；成员管理页面 Playwright E2E 仍未覆盖。
+`max_connections=200` 后完整通过；成员管理页面 Playwright E2E 已于 2026-09-10 由
+`apps/e2e/tests/project-members.spec.ts` 补齐（本地 2/2；该分支 rebase 到 `origin/main` `5020c0a` 后全量 29/29 通过）。
 
 ## F-03 用户管理（A，2026-09-09 本地交付）
 
@@ -220,7 +242,7 @@ GitHub Actions 尚未对本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 18/18 通过（F-03 用户管理、MFA、项目创建、F-13 功能档案、搜索边界及 F-27/F-28 状态联动已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
+| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务等路径仍待覆盖 | 本地 29/29 通过（F-03 用户管理、F-05 成员管理、MFA、项目创建、F-13 功能档案、F-14 功能级任务、F-16 状态闭环、F-17 草稿、F-18 记录发布、搜索边界及 F-27/F-28 状态联动已覆盖）；PR #63 CI 已通过（workspace 10m2s，docs 通过）；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | Required（Compose/ref 预检已自动化；真实镜像 digest 绑定与签名发布清单仍待发布环节） |
 | CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | Required（扫描步骤已落库，待 CI 实际执行） |
 
@@ -319,7 +341,7 @@ GitHub Actions 尚未对本 PR 执行。
 | AUDIT-004 | 恢复演练 | 密钥轮换、备份与恢复 | 数据库链、链头、远端检查点和归档明细全部一致 | Required |
 | AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 本地通过（`audit-write.integration.test.ts` 轮换用例，2026-09-09；GitHub Actions 待执行） |
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
-| SEC-002 | 浏览器 E2E | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline` | Required |
+| SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；GitHub Actions 待执行） |
 | SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | Required |
 | SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | Required |
 | SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required |

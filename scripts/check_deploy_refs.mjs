@@ -42,6 +42,7 @@ const REQUIRED_DOCKERFILES = [
 ];
 const REQUIRED_DOCKER_ASSETS = [
   "deploy/docker/nginx.conf",
+  "deploy/docker/nginx-security-headers.conf",
   "deploy/docker/healthcheck.mjs",
 ];
 
@@ -346,6 +347,50 @@ async function checkDockerfiles() {
   );
   if (!/nginx\.conf/.test(web)) {
     problems.push("deploy/docker/web.Dockerfile: must copy nginx.conf");
+  }
+  if (!/nginx-security-headers\.conf/.test(web)) {
+    problems.push(
+      "deploy/docker/web.Dockerfile: must copy nginx-security-headers.conf",
+    );
+  }
+
+  // F-09 逐响应 nonce CSP：入口 HTML 的占位符必须由 Nginx 变量替换（sub_filter），
+  // 安全头片段必须被 include，且策略不允许 unsafe-inline（ADR-021）。
+  const nginxConf = await readFile("deploy/docker/nginx.conf", "utf8").catch(
+    () => "",
+  );
+  if (
+    !/sub_filter\s+"__INPULSE_CSP_NONCE__"\s+"\$request_id"/.test(nginxConf)
+  ) {
+    problems.push(
+      'deploy/docker/nginx.conf: must rewrite the CSP nonce placeholder via sub_filter "__INPULSE_CSP_NONCE__" "$request_id"',
+    );
+  }
+  if (
+    !/include\s+\/etc\/nginx\/snippets\/inpulse-security-headers\.conf;/.test(
+      nginxConf,
+    )
+  ) {
+    problems.push(
+      "deploy/docker/nginx.conf: must include the security headers snippet in every location",
+    );
+  }
+  const securityHeaders = await readFile(
+    "deploy/docker/nginx-security-headers.conf",
+    "utf8",
+  ).catch(() => "");
+  // 注释里可以出现“禁止 unsafe-inline”这类说明，只能检查实际指令行。
+  for (const [file, text] of [
+    ["deploy/docker/nginx.conf", nginxConf],
+    ["deploy/docker/nginx-security-headers.conf", securityHeaders],
+  ]) {
+    const directives = text
+      .split(/\r?\n/)
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    if (/unsafe-inline/.test(directives)) {
+      problems.push(`${file}: CSP must not contain unsafe-inline`);
+    }
   }
 
   for (const file of [
