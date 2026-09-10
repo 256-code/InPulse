@@ -29,6 +29,12 @@
       "fingerprint": "180e3c2cfc184902f9ac46a825714cec15e161759a4f9a6fe47007b518fbbbdb"
     }
   ],
+  "convertLeftoverToTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "0264f20c50c6b254fb56d0c6dc8a9522df71681d25a629ef429c29c076dc295c"
+    }
+  ],
   "createChangeRecordVersion": [
     {
       "version": "1.0.0",

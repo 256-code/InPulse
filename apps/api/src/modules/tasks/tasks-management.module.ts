@@ -1,3 +1,7 @@
+import {
+  FollowupTaskCommandPort,
+  PostgresFollowupTaskCommandPort,
+} from "./followup-task.port.js";
 import { TaskQueryPort, PostgresTaskQueryPort } from "./task-query.port.js";
 import {
   TaskStatusCommandPort,
@@ -39,6 +43,10 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
   ],
   providers: [
     TaskManagementRepository,
+    {
+      provide: FollowupTaskCommandPort,
+      useClass: PostgresFollowupTaskCommandPort,
+    },
     { provide: TaskStatusCommandPort, useClass: ExistingTaskStatusCommandPort },
     {
       provide: TaskCompletionCommandPort,
@@ -51,6 +59,7 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
   ],
   exports: [
     ProjectMemberTaskCommandPort,
+    FollowupTaskCommandPort,
     TaskQueryPort,
     TaskCompletionCommandPort,
     TaskStatusCommandPort,

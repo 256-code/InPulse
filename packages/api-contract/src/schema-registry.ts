@@ -1,3 +1,4 @@
+import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
@@ -114,6 +115,7 @@ export interface SchemaRegistryEntry {
  */
 export const schemaRegistry = {
   ...taskCompletionSchemas,
+  ...leftoverTaskSchemas,
   ...moduleSchemas,
   ...featureSchemas,
   ...taskSchemas,

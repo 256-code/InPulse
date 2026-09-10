@@ -1,3 +1,8 @@
+import {
+  LeftoverRecordCommandPort,
+  PostgresLeftoverRecordCommandPort,
+} from "./leftover-record.port.js";
+import { LeftoverRecordRepository } from "./leftover-record.repository.js";
 import { RecordPublicationCommandPort } from "./record-publication.port.js";
 import { RecordPublicationService } from "./record-publication.service.js";
 import { RecordPublicationHttpService } from "./record-publication-http.service.js";
@@ -35,9 +40,14 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     NotificationProjectionModule,
     SearchProjectionModule,
   ],
-  exports: [RecordPublicationCommandPort],
+  exports: [RecordPublicationCommandPort, LeftoverRecordCommandPort],
   providers: [
     RecordPublicationService,
+    LeftoverRecordRepository,
+    {
+      provide: LeftoverRecordCommandPort,
+      useClass: PostgresLeftoverRecordCommandPort,
+    },
     RecordPublicationHttpService,
     RecordPublicationAccess,
     RecordPublicationRepository,

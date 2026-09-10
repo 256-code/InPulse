@@ -274,6 +274,73 @@ export type IndependentRecordDraftRequest = ({
   readonly impactFeatureIds: readonly number[];
 });
 
+export type LeftoverTaskPreview = {
+  readonly recordId: number;
+  readonly recordVersion: number;
+  readonly rowVersion: number;
+  readonly leftoverItemId: number;
+  readonly leftoverRowVersion: number;
+  readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+  readonly content: string;
+  readonly inheritedImpacts: readonly ({
+    readonly id: number;
+    readonly name: string;
+  })[];
+  readonly excludedImpacts: readonly ({
+    readonly id: number;
+    readonly name: string;
+  })[];
+  readonly linkedTask: ({
+    readonly projectId: number;
+    readonly moduleId: number;
+    readonly featureId: (number | null);
+    readonly taskId: number;
+  } | null);
+};
+
+export type LeftoverTaskReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
+  readonly recordId: number;
+  readonly leftoverItemId: number;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type LeftoverTaskRequest = {
+  readonly title: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly assigneeId: number;
+  readonly dueAt: (string | null);
+  readonly leftoverItemId: number;
+  readonly recordVersion: number;
+  readonly expectedRowVersion: number;
+  readonly leftoverExpectedRowVersion: number;
+  readonly expectedImpactFeatureIds: readonly number[];
+};
+
+export type LeftoverTaskResponse = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
+  readonly recordId: number;
+  readonly leftoverItemId: number;
+  readonly recordVersion: number;
+  readonly recordRowVersion: number;
+  readonly leftoverRowVersion: number;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type LeftoverTaskSource = {
+  readonly source: ({
+    readonly projectId: number;
+    readonly recordId: number;
+    readonly leftoverItemId: number;
+  } | null);
+};
+
 export type LoginHeaders = {
   readonly "x-csrf-token": string;
 };

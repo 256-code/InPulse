@@ -4,3 +4,4 @@ export { RecordDraftError } from "./record-drafts.service.js";
 
 export * from "./record-publication.port.js";
 export * from "./published-records.module.js";
+export * from "./leftover-record.port.js";
