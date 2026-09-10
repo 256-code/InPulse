@@ -88,24 +88,20 @@ it("409 requires loading current state and explicit confirmation before restorin
     voidedAt: item.updatedAt,
     voidReason: "已有原因",
   };
-  const save = vi
-    .fn()
-    .mockRejectedValue(
-      new ApiError(409, {
-        code: "RECORD_STATE_CONFLICT",
-        message: "冲突",
-        details: {},
-        requestId: "r",
-      }),
-    );
-  const restore = vi
-    .fn()
-    .mockResolvedValue({
-      id: 7,
-      projectId: 1,
-      status: "PUBLISHED",
-      rowVersion: 4,
-    });
+  const save = vi.fn().mockRejectedValue(
+    new ApiError(409, {
+      code: "RECORD_STATE_CONFLICT",
+      message: "冲突",
+      details: {},
+      requestId: "r",
+    }),
+  );
+  const restore = vi.fn().mockResolvedValue({
+    id: 7,
+    projectId: 1,
+    status: "PUBLISHED",
+    rowVersion: 4,
+  });
   const api = {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     voidChangeRecord: save,
@@ -136,16 +132,14 @@ it("409 requires loading current state and explicit confirmation before restorin
 it("keeps the reason while opening dual-factor reauthentication", async () => {
   const api = {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
-    voidChangeRecord: vi
-      .fn()
-      .mockRejectedValue(
-        new ApiError(403, {
-          code: "ADMIN_REAUTH_REQUIRED",
-          message: "验证",
-          details: {},
-          requestId: "r",
-        }),
-      ),
+    voidChangeRecord: vi.fn().mockRejectedValue(
+      new ApiError(403, {
+        code: "ADMIN_REAUTH_REQUIRED",
+        message: "验证",
+        details: {},
+        requestId: "r",
+      }),
+    ),
   } as unknown as InpulseApiClient;
   mount(api);
   fireEvent.change(screen.getByLabelText("作废原因"), {
@@ -154,4 +148,80 @@ it("keeps the reason while opening dual-factor reauthentication", async () => {
   fireEvent.click(screen.getByRole("button", { name: "确认作废记录" }));
   await screen.findByText("双因子验证测试入口");
   expect(screen.getByLabelText("作废原因")).toHaveValue("保留此原因");
+});
+
+it("retains refresh gate after failed reload and close/reopen until explicit latest-version confirmation", async () => {
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce(
+      new ApiError(409, {
+        code: "RECORD_STATE_CONFLICT",
+        message: "冲突",
+        details: {},
+        requestId: "r",
+      }),
+    )
+    .mockResolvedValue({ id: 7, projectId: 1, status: "VOID", rowVersion: 4 });
+  const reload = vi
+    .fn()
+    .mockRejectedValueOnce(
+      new ApiError(500, {
+        code: "INTERNAL_ERROR",
+        message: "失败",
+        details: {},
+        requestId: "r",
+      }),
+    )
+    .mockRejectedValueOnce(Error("network"))
+    .mockResolvedValue({ ...item, rowVersion: 3 });
+  const api = {
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+    voidChangeRecord: save,
+    getChangeRecord: reload,
+  } as unknown as InpulseApiClient;
+  mount(api);
+  fireEvent.change(screen.getByLabelText("作废原因"), {
+    target: { value: "需要保留的原因" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "确认作废记录" }));
+  await screen.findByText(
+    "记录或父级状态已变化。请加载最新状态，核对后重新确认。",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
+  await screen.findByText("暂时无法操作，原因已保留，可重试。");
+  expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "加载最新状态" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "作废记录" }),
+  );
+  expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
+  expect(screen.getByLabelText("作废原因")).toHaveValue("需要保留的原因");
+  fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
+  await waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "加载最新状态" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
+  expect(save).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "确认作废记录" })).toBeEnabled(),
+  );
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText("作废原因")).toHaveValue("需要保留的原因");
+  fireEvent.click(screen.getByRole("button", { name: "确认作废记录" }));
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  expect(save.mock.calls[1]).toMatchObject([
+    1,
+    7,
+    { reason: "需要保留的原因" },
+    { headers: { "If-Match": '"3"' } },
+  ]);
+  expect(save.mock.calls[1]![3].headers["Idempotency-Key"]).not.toBe(
+    save.mock.calls[0]![3].headers["Idempotency-Key"],
+  );
 });

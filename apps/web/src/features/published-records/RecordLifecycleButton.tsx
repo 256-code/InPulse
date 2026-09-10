@@ -22,18 +22,19 @@ export function RecordLifecycleButton({
     [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
+    [needsRefresh, setNeedsRefresh] = useState(false),
     [reauth, setReauth] = useState(false),
     [baseline, setBaseline] = useState(item);
   const retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
   const restore = baseline.status === "VOID",
-    label = restore ? "恢复记录" : "作废记录",
-    conflict = error instanceof ApiError && error.status === 409;
+    label = restore ? "恢复记录" : "作废记录";
   async function reload() {
     setBusy(true);
     try {
       const latest = await api.getChangeRecord(item.projectId, item.id);
       setBaseline(latest);
+      setNeedsRefresh(false);
       setError(null);
       retry.current = null;
     } catch (e) {
@@ -43,7 +44,7 @@ export function RecordLifecycleButton({
     }
   }
   async function submit() {
-    if (saving.current || !reason.trim() || conflict) return;
+    if (saving.current || !reason.trim() || needsRefresh) return;
     saving.current = true;
     setBusy(true);
     setError(null);
@@ -87,6 +88,7 @@ export function RecordLifecycleButton({
       onChanged();
     } catch (e) {
       setError(e);
+      if (e instanceof ApiError && e.status === 409) setNeedsRefresh(true);
       if (e instanceof ApiError && e.code === "ADMIN_REAUTH_REQUIRED")
         setReauth(true);
     } finally {
@@ -139,7 +141,7 @@ export function RecordLifecycleButton({
               danger={!restore}
               type="primary"
               loading={busy}
-              disabled={!reason.trim() || conflict}
+              disabled={!reason.trim() || needsRefresh}
               onClick={() => void submit()}
             >
               确认{label}
@@ -166,12 +168,16 @@ export function RecordLifecycleButton({
           disabled={busy}
           onChange={(e) => setReason(e.target.value)}
         />
-        {error !== null && (
+        {(error !== null || needsRefresh) && (
           <Alert
             type="error"
-            title={errorText}
+            title={
+              error === null && needsRefresh
+                ? "记录或父级状态已变化。请加载最新状态，核对后重新确认。"
+                : errorText
+            }
             action={
-              conflict ? (
+              needsRefresh ? (
                 <Button disabled={busy} onClick={() => void reload()}>
                   加载最新状态
                 </Button>
