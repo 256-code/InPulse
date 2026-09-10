@@ -5,12 +5,21 @@
 | 提交方 | C 岗 / 前端与聚合发现域（`@256-code`） |
 | 接收方 | B 岗 / 任务与记录域；涉及架构冲突的部分需人工定案 |
 | 文档性质 | 后端端口层评审输入，不是 ADR，不替代现有设计 |
-| 状态 | 待 B 评审；端口签名、事务约定与 SQL 骨架均为候选 |
+| 状态 | 端口已由 C 代 B 实现（2026-09-10）；签名、事务约定与 SQL 骨架均已按本文档与 A 裁决 §6 落库，待非作者人工确认 |
 | 当前日期 | 2026-09-10 |
 | 基线 | 分支创建自 `origin/main` `77b2d7e`（F-09 PR #83）；§1 的全部实测事实已按 `origin/main` `935844b`（F-19 PR #85、F-09 SEC PR #86、F-24 PR #87 之后）复核，分支合并前需 rebase |
 | 依据 | 开发工作书 §6.1（接口责任）、工作书 F-29 / F-32、功能设计 §9.5 / §29、系统设计 §6（模块职责表） |
 | 配套文档 | [F-25 / F-29 / F-32 聚合读接口候选 DTO 与路由](./c-aggregate-read-contract-proposal.md)（交 A，HTTP 契约层） |
 | 目的 | 把 C 域 2 项硬阻塞（F-29、F-32）转成 B 可执行的接口工单，并把 2 处架构冲突交人工定案 |
+
+> **C 代 B 实现回填（2026-09-10）**：B 无档期，经人工同意由 C 代为实现本提案的四个端口扩展，落库于 [PR #96](https://github.com/256-code/InPulse/pull/96)（`7f40763`）。
+>
+> 与本文档的差异有两处，均按 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md) §6 执行：
+>
+> 1. `hasPublishedRecord` 落在记录侧新增的 `MyTaskQueryPort`（`apps/api/src/modules/change-records/my-task-query.port.ts`），不放 `TaskQueryPort`，避免 `TasksModule → ChangeRecordsModule` 反向依赖；这是工作书 F-32 步骤 1「通过 TasksModule 公开的只读 Port」的**处方偏差**，需非作者人工在实现 PR 中确认。
+> 2. 历史来源分支的排除集合由 C 计算后作为 `excludedTaskIds` 入参，在同一条 SQL 内先过滤后分页；上限 `TASK_EXCLUDED_IDS_MAX = 1000`，超限抛 `TaskListInputError` 并由应用层映射 422。
+>
+> 索引证据：四种查询形状（项目过滤列表、计数、负责人过滤列表、1000 条排除集合）在 `EXPLAIN (ANALYZE, BUFFERS)` 下均命中既有 `tasks_project_status_idx` / `tasks_assignee_status_idx`，无 `Seq Scan on tasks`，因此未新增数据库迁移。
 
 > **与契约提案的分工**：本文档只处理**后端端口层**（TypeScript 端口签名、事务约定、索引证据、SQL 骨架），交付对象是 B；HTTP 路由、状态码与请求/响应 DTO 属于**契约层**，见[配套契约提案](./c-aggregate-read-contract-proposal.md)，交付对象是 A。两条通道的结论必须一致：若 A 的契约裁决改变路由形态（例如聚合组记录列表改子资源分页），本文档对应部分需同步修订。
 
