@@ -33,7 +33,11 @@ export class PublishedRecordsHttpService {
       );
       if (
         !parsed.success ||
-        Object.keys((request.query ?? {}) as object).length
+        (operation === "listChangeRecords"
+          ? !schemaRegistry.RecordListQuery.schema.safeParse(
+              request.query ?? {},
+            ).success
+          : Object.keys((request.query ?? {}) as object).length)
       )
         throw new RecordDraftError(
           422,
@@ -54,6 +58,10 @@ export class PublishedRecordsHttpService {
           operation === "listChangeRecordVersions" ||
             operation === "getChangeRecordVersion",
           path.versionNo,
+          operation === "listChangeRecords"
+            ? schemaRegistry.RecordListQuery.schema.parse(request.query ?? {})
+                .status
+            : undefined,
         ),
       };
     } catch (error) {

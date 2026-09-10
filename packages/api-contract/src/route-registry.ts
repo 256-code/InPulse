@@ -13,6 +13,7 @@ import { adminUserRoutes } from "./user-admin-routes.js";
 import { projectMemberRoutes } from "./project-member-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import {
+  recordLifecycleRoutes,
   publishedRecordRoutes,
   recordPublicationRoutes,
 } from "./published-record-routes.js";
@@ -33,6 +34,7 @@ export const routeRegistry = [
   ...taskRoutes,
   ...recordDraftRoutes,
   ...publishedRecordRoutes,
+  ...recordLifecycleRoutes,
   ...recordPublicationRoutes,
   ...taskRecordDraftRoutes,
   ...taskGroupRoutes,

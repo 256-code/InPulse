@@ -27,13 +27,24 @@ export class PublishedRecordReadService {
     recordId?: number,
     versions = false,
     versionNo?: number,
+    status: "PUBLISHED" | "VOID" = "PUBLISHED",
   ) {
     const scope = await this.access.getAuthorizedSearchScope(actorId);
     if (!scope.projectIds.includes(projectId)) throw missing();
+    if (status === "VOID" && !scope.isSystemAdmin) throw missing();
     return this.uow.run(async (tx) => {
       if (recordId === undefined)
-        return { items: await this.repository.list(tx, projectId) };
-      const record = await this.repository.find(tx, projectId, recordId);
+        return {
+          items:
+            status === "VOID"
+              ? await this.repository.listVoided(tx, projectId)
+              : await this.repository.list(tx, projectId),
+        };
+      const record =
+        (await this.repository.find(tx, projectId, recordId)) ??
+        (scope.isSystemAdmin
+          ? await this.repository.findVoided(tx, projectId, recordId)
+          : undefined);
       if (!record) throw missing();
       if (!versions) return record;
       const items = await this.repository.versions(tx, record, versionNo);

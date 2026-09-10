@@ -79,7 +79,11 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     operationId: "previewLeftoverTask",
     path: "/projects/{projectId}/change-records/{recordId}/leftover-task-preview",
     summary: "预览遗留转任务的服务端影响继承",
-    request: { ...read.request, path: "RecordDraftResourcePath" },
+    request: {
+      ...read.request,
+      query: "none",
+      path: "RecordDraftResourcePath",
+    },
     responses: { ...read.responses, "200": json("LeftoverTaskPreview") },
   },
   {
@@ -87,7 +91,7 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     operationId: "getLeftoverTaskSource",
     path: "/tasks/{taskId}/leftover-source",
     summary: "读取跟进任务的已授权来源记录",
-    request: { ...read.request, path: "TaskCompletionPath" },
+    request: { ...read.request, query: "none", path: "TaskCompletionPath" },
     responses: { ...read.responses, "200": json("LeftoverTaskSource") },
   },
 ];

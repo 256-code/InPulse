@@ -1,3 +1,5 @@
+import { useAuth } from "@features/auth/auth-context";
+import { RecordLifecycleButton } from "./RecordLifecycleButton";
 import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
 import React, { useMemo, useState } from "react";
 import { EditPublishedRecord } from "./EditPublishedRecord";
@@ -43,10 +45,13 @@ export function PublishedRecordsView({
 }: {
   client?: InpulseApiClient;
 }) {
+  const { user } = useAuth();
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const [params, setParams] = useSearchParams();
   const projectId = Number(params.get("projectId")) || 0,
     recordId = Number(params.get("publishedId")) || 0;
+  const status =
+    params.get("status") === "VOID" && user?.isAdmin ? "VOID" : "PUBLISHED";
   const [oldVersion, setOldVersion] = useState(0),
     [newVersion, setNewVersion] = useState(0);
   const projects = useQuery({
@@ -55,8 +60,9 @@ export function PublishedRecordsView({
     retry: false,
   });
   const list = useQuery({
-    queryKey: ["published-records", projectId],
-    queryFn: ({ signal }) => api.listChangeRecords(projectId, { signal }),
+    queryKey: ["published-records", projectId, status],
+    queryFn: ({ signal }) =>
+      api.listChangeRecords(projectId, { status }, { signal }),
     enabled: projectId > 0,
     retry: false,
   });
@@ -83,17 +89,36 @@ export function PublishedRecordsView({
     <section className="record-drafts-page" aria-label="正式迭代记录">
       <div className="calm-section-title">
         <div>
-          <h1>已发布记录</h1>
+          <h1>{status === "VOID" ? "已作废记录" : "已发布记录"}</h1>
           <p>查看已发布的变化与每次内容修订，历史版本始终保留。</p>
         </div>
         <CalmBadge>正式记录</CalmBadge>
       </div>
+      {user?.isAdmin && (
+        <label>
+          记录状态{" "}
+          <select
+            aria-label="记录状态"
+            value={status}
+            onChange={(e) =>
+              setParams({
+                view: "published",
+                projectId: String(projectId),
+                status: e.target.value,
+              })
+            }
+          >
+            <option value="PUBLISHED">已发布</option>
+            <option value="VOID">已作废（管理员）</option>
+          </select>
+        </label>
+      )}
       <label className="draft-project-selector">
         所属项目
         <select
           value={projectId}
           onChange={(e) => {
-            setParams({ view: "published", projectId: e.target.value });
+            setParams({ view: "published", projectId: e.target.value, status });
             setOldVersion(0);
             setNewVersion(0);
           }}
@@ -123,7 +148,7 @@ export function PublishedRecordsView({
         ) : !list.data?.items.length ? (
           <CalmEmptyState
             icon="gitBranch"
-            title="暂无已发布记录"
+            title={status === "VOID" ? "暂无已作废记录" : "暂无已发布记录"}
             description="草稿发布后会出现在这里。"
           />
         ) : (
@@ -139,6 +164,7 @@ export function PublishedRecordsView({
                   onClick={() => {
                     setParams({
                       view: "published",
+                      status,
                       projectId: String(projectId),
                       publishedId: String(item.id),
                     });
@@ -161,23 +187,50 @@ export function PublishedRecordsView({
           detail.data && (
             <section className="draft-detail" aria-label="正式记录详情">
               <h2>{detail.data.title}</h2>
-              <ConvertLeftoverTask
-                key={detail.data.id}
-                item={detail.data}
-                api={api}
-                writable={
-                  projects.data?.items.find((p) => p.id === projectId)
-                    ?.status === "ACTIVE"
-                }
-              />
-              <EditPublishedRecord
-                item={detail.data}
-                api={api}
-                writable={
-                  projects.data?.items.find((p) => p.id === projectId)
-                    ?.status === "ACTIVE"
-                }
-              />
+              {user?.isAdmin && (
+                <RecordLifecycleButton
+                  item={detail.data}
+                  api={api}
+                  onChanged={() => {
+                    void detail.refetch();
+                    void list.refetch();
+                  }}
+                />
+              )}
+              {detail.data.status === "VOID" && (
+                <Alert
+                  type="warning"
+                  title="已作废 · 仅管理员可见"
+                  description={
+                    <>
+                      最近作废：
+                      {new Date(detail.data.voidedAt).toLocaleString("zh-CN")}
+                      <p className="draft-content">{detail.data.voidReason}</p>
+                    </>
+                  }
+                />
+              )}
+              {detail.data.status === "PUBLISHED" && (
+                <>
+                  <ConvertLeftoverTask
+                    key={detail.data.id}
+                    item={detail.data}
+                    api={api}
+                    writable={
+                      projects.data?.items.find((p) => p.id === projectId)
+                        ?.status === "ACTIVE"
+                    }
+                  />
+                  <EditPublishedRecord
+                    item={detail.data}
+                    api={api}
+                    writable={
+                      projects.data?.items.find((p) => p.id === projectId)
+                        ?.status === "ACTIVE"
+                    }
+                  />
+                </>
+              )}
               {detail.data.leftoverItem?.status === "CONVERTED" && (
                 <p>遗留项已转为跟进任务，修订文字不会创建第二个任务。</p>
               )}
@@ -185,7 +238,8 @@ export function PublishedRecordsView({
                 <p>遗留问题已标记为解决，历史内容仍可查看。</p>
               )}
               <p>
-                {detail.data.code} · v{detail.data.currentVersion} · 已发布
+                {detail.data.code} · v{detail.data.currentVersion} ·{" "}
+                {detail.data.status === "VOID" ? "已作废" : "已发布"}
               </p>
               <p>
                 处理人 #{detail.data.handlerId} · 记录作者 #

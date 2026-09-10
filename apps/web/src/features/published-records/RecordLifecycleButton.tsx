@@ -1,0 +1,198 @@
+import React, { useRef, useState } from "react";
+import { Alert, Button, Input, Modal } from "antd";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ApiError,
+  type InpulseApiClient,
+  type ReadableRecord,
+} from "@generated/api";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+export function RecordLifecycleButton({
+  item,
+  api,
+  onChanged,
+}: {
+  item: ReadableRecord;
+  api: InpulseApiClient;
+  onChanged: () => void;
+}) {
+  const cache = useQueryClient();
+  const [open, setOpen] = useState(false),
+    [reason, setReason] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState<unknown>(null),
+    [reauth, setReauth] = useState(false),
+    [baseline, setBaseline] = useState(item);
+  const retry = useRef<{ signature: string; key: string } | null>(null),
+    saving = useRef(false);
+  const restore = baseline.status === "VOID",
+    label = restore ? "恢复记录" : "作废记录",
+    conflict = error instanceof ApiError && error.status === 409;
+  async function reload() {
+    setBusy(true);
+    try {
+      const latest = await api.getChangeRecord(item.projectId, item.id);
+      setBaseline(latest);
+      setError(null);
+      retry.current = null;
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function submit() {
+    if (saving.current || !reason.trim() || conflict) return;
+    saving.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const body = { reason: reason.trim() },
+        signature = JSON.stringify([
+          baseline.id,
+          baseline.status,
+          baseline.rowVersion,
+          body,
+        ]);
+      if (retry.current?.signature !== signature)
+        retry.current = {
+          signature,
+          key: createIdempotencyKey("record-lifecycle"),
+        };
+      const csrf = await api.issueCsrfToken();
+      const init = {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "If-Match": `"${baseline.rowVersion}"`,
+          "Idempotency-Key": retry.current.key,
+        },
+      };
+      if (restore)
+        await api.restoreChangeRecord(item.projectId, item.id, body, init);
+      else await api.voidChangeRecord(item.projectId, item.id, body, init);
+      await Promise.all(
+        [
+          ["published-records"],
+          ["published-record", item.projectId, item.id],
+          ["record-versions", item.projectId, item.id],
+          ["search"],
+          ["activity"],
+          ["activity-center"],
+        ].map((queryKey) => cache.invalidateQueries({ queryKey })),
+      );
+      setOpen(false);
+      setReason("");
+      retry.current = null;
+      onChanged();
+    } catch (e) {
+      setError(e);
+      if (e instanceof ApiError && e.code === "ADMIN_REAUTH_REQUIRED")
+        setReauth(true);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
+  const errorText =
+    error instanceof ApiError
+      ? error.status === 401
+        ? "登录已失效，请重新登录。"
+        : error.status === 403
+          ? "请完成管理员安全验证后重试。"
+          : error.status === 404
+            ? "记录不存在或当前无法访问。"
+            : error.status === 409
+              ? "记录或父级状态已变化。请加载最新状态，核对后重新确认。"
+              : error.status === 422
+                ? "请检查原因和记录版本。"
+                : error.status === 429
+                  ? "操作频繁，请稍后重试。"
+                  : "暂时无法操作，原因已保留，可重试。"
+      : "暂时无法操作，原因已保留，可重试。";
+  return (
+    <>
+      <Button
+        danger={item.status === "PUBLISHED"}
+        onClick={() => {
+          setBaseline(item);
+          setOpen(true);
+          setError(null);
+        }}
+      >
+        {item.status === "VOID" ? "恢复记录" : "作废记录"}
+      </Button>
+      <Modal
+        title={label}
+        open={open}
+        onCancel={() => {
+          if (!busy) setOpen(false);
+        }}
+        closable={!busy}
+        maskClosable={!busy}
+        footer={
+          <>
+            <Button disabled={busy} onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button
+              danger={!restore}
+              type="primary"
+              loading={busy}
+              disabled={!reason.trim() || conflict}
+              onClick={() => void submit()}
+            >
+              确认{label}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {restore
+            ? "恢复后成员可以再次查看正文及历史版本。最近作废快照与审计历史仍保留。"
+            : "作废后仅管理员可查看该记录及历史版本；既有跟进任务和遗留项保持原状态。"}
+        </p>
+        <p>
+          当前状态：{baseline.status === "VOID" ? "已作废" : "已发布"} · 版本{" "}
+          {baseline.rowVersion}
+        </p>
+        <label htmlFor="record-lifecycle-reason">
+          {restore ? "恢复原因" : "作废原因"}
+        </label>
+        <Input.TextArea
+          id="record-lifecycle-reason"
+          value={reason}
+          maxLength={10000}
+          disabled={busy}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        {error !== null && (
+          <Alert
+            type="error"
+            title={errorText}
+            action={
+              conflict ? (
+                <Button disabled={busy} onClick={() => void reload()}>
+                  加载最新状态
+                </Button>
+              ) : error instanceof ApiError &&
+                error.code === "ADMIN_REAUTH_REQUIRED" ? (
+                <Button onClick={() => setReauth(true)}>管理员安全验证</Button>
+              ) : undefined
+            }
+          />
+        )}
+      </Modal>
+      {reauth && (
+        <AdminReauthenticateModal
+          open
+          onClose={() => setReauth(false)}
+          onSuccess={() => {
+            setReauth(false);
+            setError(null);
+          }}
+        />
+      )}
+    </>
+  );
+}

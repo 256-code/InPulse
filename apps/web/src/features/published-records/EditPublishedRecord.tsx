@@ -60,6 +60,13 @@ export function EditPublishedRecord({
     setBusy(true);
     try {
       const latest = await api.getChangeRecord(item.projectId, item.id);
+      if (latest.status !== "PUBLISHED")
+        throw new ApiError(409, {
+          code: "RECORD_STATE_CONFLICT",
+          message: "记录已作废，请关闭编辑并刷新",
+          details: {},
+          requestId: "",
+        });
       const result = mergeRecordDraft(
         recordContent(baseline),
         getValues(),
