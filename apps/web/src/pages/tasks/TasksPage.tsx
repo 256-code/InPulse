@@ -1,13 +1,71 @@
-import React from "react";
-import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlaceholder";
+import React, { useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import type { InpulseApiClient } from "@generated/api";
+import { useAuth } from "@features/auth/auth-context";
+import { useProjects } from "@features/projects/project-query";
+import type {
+  MyTaskFilters,
+  MyTasksAdapter,
+} from "@features/my-tasks/my-tasks-types";
+import {
+  readMyTaskAdvancedOpen,
+  readMyTaskFilters,
+  writeMyTaskFilters,
+} from "@features/my-tasks/my-tasks-url";
+import { TaskCenterPageView } from "@features/my-tasks/TaskCenterPageView";
 
-export const TasksPage: React.FC = () => {
+export interface TasksPageProps {
+  readonly client?: InpulseApiClient;
+  readonly adapter?: MyTasksAdapter;
+}
+
+export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const projectList = useProjects({ client });
+
+  const isAdmin = user?.isAdmin === true;
+  const filters = useMemo(
+    () => readMyTaskFilters(searchParams, { isAdmin }),
+    [searchParams, isAdmin],
+  );
+  const advancedOpen = useMemo(
+    () => readMyTaskAdvancedOpen(searchParams),
+    [searchParams],
+  );
+
+  const handleFiltersChange = useCallback(
+    (next: MyTaskFilters) => {
+      setSearchParams(writeMyTaskFilters(next, { advancedOpen }), {
+        replace: true,
+      });
+    },
+    [advancedOpen, setSearchParams],
+  );
+
+  const handleToggleAdvanced = useCallback(() => {
+    setSearchParams(
+      writeMyTaskFilters(filters, { advancedOpen: !advancedOpen }),
+      { replace: true },
+    );
+  }, [advancedOpen, filters, setSearchParams]);
+
+  const handleOpenIssues = useCallback(() => {
+    navigate("/issues");
+  }, [navigate]);
+
   return (
-    <WorkspacePlaceholder
-      eyebrow="工作区 / 任务中心"
-      title="任务中心"
-      description="跨项目任务列表、范围与状态筛选、任务详情将在任务中心查询接口就绪后接入。"
-      icon="layoutGrid"
+    <TaskCenterPageView
+      filters={filters}
+      onFiltersChange={handleFiltersChange}
+      viewerId={user?.id ?? null}
+      isAdmin={isAdmin}
+      projects={projectList.data?.items ?? []}
+      advancedOpen={advancedOpen}
+      onToggleAdvanced={handleToggleAdvanced}
+      onOpenIssues={handleOpenIssues}
+      {...(adapter ? { adapter } : {})}
     />
   );
 };
