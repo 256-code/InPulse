@@ -10,4 +10,8 @@ export abstract class ProjectCodePort {
     tx: TransactionContext,
     projectId: number,
   ): Promise<string>;
+  abstract allocateTaskGroupCode(
+    tx: TransactionContext,
+    projectId: number,
+  ): Promise<string>;
 }

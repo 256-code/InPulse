@@ -129,3 +129,11 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 | updateTaskRecordDraft | 同上 | 同上但 If-Match 为记录版本；任务/记录完整同项目关联匹配，内容更新保留来源与记录快照 |
 
 所有写接口成功重放前重新验证当前认证、CSRF、成员权限、真实可写父级和返回的全部影响资源；来源路径额外重读任务/记录关联。拒绝不泄露已存响应。TODO/DONE/CANCELED 均可保存来源草稿，保存不改变状态。无权限放宽、数据库权限或迁移变更。见 [F-17 交审说明](f17-local-handoff.md)。
+
+## F-23 任务合并接口（2026-09-10）
+
+| operationId | 允许身份 | 附加门禁 |
+| --- | --- | --- |
+| mergeTaskGroup | 当前活跃项目成员、系统管理员 | 匿名/停用 401；非成员、移除成员、来源/主任务真实归属错误、跨项目或任务不存在 404；Session、CSRF、同源与数据库幂等 |
+
+仅 `POST /api/v1/task-groups/merge`：请求只携带来源任务、主任务、分支类型（ACTIVE/HISTORICAL）与合并说明，项目、聚合组编号和成员快照（原工作状态/原负责人）全部由服务端在锁内按真实任务推导。服务端先按项目 -> 模块 -> 影响功能父到子顺序取 `FOR SHARE`，再按任务 ID 升序 `FOR UPDATE`，已有聚合组按组行 `FOR UPDATE` 后重读成员；来源任务已属于其他活跃聚合组、主任务在组内不是 MAIN、聚合组已关闭或主任务已变化统一 409。合并只写 `task_groups`/`task_group_members` 关系与来源快照、审计、活动、通知与搜索投影，不修改任何任务字段。重放前重新验证当前认证、CSRF、项目授权、聚合组仍为 ACTIVE 与全部结果任务可读，任一门禁失败不返回已存响应。无权限放宽、数据库权限或迁移变更。见 [F-23 交审说明](f23-local-handoff.md)。

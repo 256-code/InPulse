@@ -239,6 +239,7 @@ export class HealthController {
       "GET /api/v1/projects",
       "GET /api/v1/projects/{projectId}",
       "GET /api/v1/search",
+      "POST /api/v1/task-groups/merge",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/assignees",
       "GET /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}",
