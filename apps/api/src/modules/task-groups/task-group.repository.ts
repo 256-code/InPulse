@@ -12,6 +12,7 @@ export interface TaskGroupRecord {
   rowVersion: number;
   createdAt: Date;
   updatedAt: Date;
+  closedAt: Date | null;
 }
 export interface TaskGroupMemberRecord {
   memberId: number;
@@ -24,12 +25,20 @@ export interface TaskGroupMemberRecord {
   originalWorkStatus: "TODO" | "DONE" | "CANCELED" | null;
   originalAssigneeId: number | null;
   joinedAt: Date;
+  detachedAt: Date | null;
+  detachReason: string | null;
 }
 export interface CreateTaskGroupInput {
   projectId: number;
   code: string;
   name: string;
   createdBy: number;
+}
+export interface DetachTaskGroupMemberInput {
+  projectId: number;
+  memberId: number;
+  detachedBy: number;
+  reason: string;
 }
 export interface CreateTaskGroupMemberInput {
   groupId: number;
@@ -53,7 +62,7 @@ export class TaskGroupRepository {
   ): Promise<TaskGroupRecord | undefined> {
     const [row] = await tx.sql<
       TaskGroupRecord[]
-    >`SELECT id AS "groupId",project_id AS "projectId",code,name,status,created_by AS "createdBy",row_version AS "rowVersion",created_at AS "createdAt",updated_at AS "updatedAt" FROM app.task_groups WHERE id=${groupId} AND project_id=${projectId}`;
+    >`SELECT id AS "groupId",project_id AS "projectId",code,name,status,created_by AS "createdBy",row_version AS "rowVersion",created_at AS "createdAt",updated_at AS "updatedAt",closed_at AS "closedAt" FROM app.task_groups WHERE id=${groupId} AND project_id=${projectId}`;
     return row;
   }
   async lockGroup(
@@ -72,7 +81,7 @@ export class TaskGroupRepository {
   ): Promise<TaskGroupMemberRecord | undefined> {
     const [row] = await tx.sql<
       TaskGroupMemberRecord[]
-    >`SELECT id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt" FROM app.task_group_members WHERE project_id=${projectId} AND task_id=${taskId} AND status='ACTIVE'`;
+    >`SELECT id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt",detached_at AS "detachedAt",detach_reason AS "detachReason" FROM app.task_group_members WHERE project_id=${projectId} AND task_id=${taskId} AND status='ACTIVE'`;
     return row;
   }
   async listMembers(
@@ -82,7 +91,7 @@ export class TaskGroupRepository {
   ): Promise<TaskGroupMemberRecord[]> {
     return tx.sql<
       TaskGroupMemberRecord[]
-    >`SELECT id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt" FROM app.task_group_members WHERE project_id=${projectId} AND group_id=${groupId} ORDER BY id`;
+    >`SELECT id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt",detached_at AS "detachedAt",detach_reason AS "detachReason" FROM app.task_group_members WHERE project_id=${projectId} AND group_id=${groupId} ORDER BY id`;
   }
   async listActiveMemberTaskIds(
     tx: TransactionContext,
@@ -111,7 +120,7 @@ export class TaskGroupRepository {
   ): Promise<TaskGroupMemberRecord> {
     const [row] = await tx.sql<
       TaskGroupMemberRecord[]
-    >`INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id) VALUES (${input.groupId}, ${input.taskId}, ${input.projectId}, ${input.role}, ${input.sourceKind}, ${input.originalWorkStatus}, ${input.originalAssigneeId}) RETURNING id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt"`;
+    >`INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id) VALUES (${input.groupId}, ${input.taskId}, ${input.projectId}, ${input.role}, ${input.sourceKind}, ${input.originalWorkStatus}, ${input.originalAssigneeId}) RETURNING id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt",detached_at AS "detachedAt",detach_reason AS "detachReason"`;
     return row!;
   }
   /**
@@ -127,6 +136,35 @@ export class TaskGroupRepository {
     const rows =
       await tx.sql`UPDATE app.task_groups SET row_version=row_version+1,updated_at=GREATEST(clock_timestamp(),updated_at) WHERE id=${groupId} AND project_id=${projectId} AND status='ACTIVE' AND row_version=${expectedRowVersion} RETURNING id`;
     return rows.length > 0;
+  }
+  /**
+   * 解除成员：条件更新保证只有 ACTIVE 成员能被解除，重复解除不会二次生效。
+   * detached_at 取 max(事务时钟, joined_at)，不依赖客户端时间且不违反
+   * task_group_members_detach_time_check。
+   */
+  async detachMember(
+    tx: TransactionContext,
+    input: DetachTaskGroupMemberInput,
+  ): Promise<TaskGroupMemberRecord | undefined> {
+    const [row] = await tx.sql<
+      TaskGroupMemberRecord[]
+    >`UPDATE app.task_group_members SET status='DETACHED',detached_at=GREATEST(clock_timestamp(),joined_at),detached_by=${input.detachedBy},detach_reason=${input.reason} WHERE id=${input.memberId} AND project_id=${input.projectId} AND status='ACTIVE' RETURNING id AS "memberId",group_id AS "groupId",task_id AS "taskId",project_id AS "projectId",role,source_kind AS "sourceKind",status,original_work_status AS "originalWorkStatus",original_assignee_id AS "originalAssigneeId",joined_at AS "joinedAt",detached_at AS "detachedAt",detach_reason AS "detachReason"`;
+    return row;
+  }
+  /**
+   * 关闭聚合组：仅在组仍 ACTIVE 且版本未变时生效，调用方必须已持有该 group 行锁；
+   * 返回 undefined 表示组状态在锁内已被改变，由服务层映射为 409。
+   */
+  async closeGroup(
+    tx: TransactionContext,
+    projectId: number,
+    groupId: number,
+    expectedRowVersion: number,
+  ): Promise<TaskGroupRecord | undefined> {
+    const rows =
+      await tx.sql`UPDATE app.task_groups SET status='CLOSED',closed_at=GREATEST(clock_timestamp(),created_at),row_version=row_version+1,updated_at=GREATEST(clock_timestamp(),updated_at) WHERE id=${groupId} AND project_id=${projectId} AND status='ACTIVE' AND row_version=${expectedRowVersion} RETURNING id`;
+    if (rows.length === 0) return undefined;
+    return this.findGroup(tx, projectId, groupId);
   }
   /** 合并结果 DTO；形状约束保证 ACTIVE 组恰好一个活跃 MAIN 成员。 */
   async findGroupItem(

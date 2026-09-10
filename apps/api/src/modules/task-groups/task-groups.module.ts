@@ -17,6 +17,7 @@ import { NotificationProjectionModule } from "../notifications/index.js";
 import { TaskGroupRepository } from "./task-group.repository.js";
 import { TaskGroupsService } from "./task-groups.service.js";
 import { TaskGroupsHttpService } from "./task-groups-http.service.js";
+import { TaskGroupUnmergeHttpService } from "./task-group-unmerge-http.service.js";
 import { TaskGroupsController } from "./task-groups.controller.js";
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { TaskGroupsController } from "./task-groups.controller.js";
     TaskGroupsService,
     TaskGroupsHttpService,
     { provide: TaskBranchQueryPort, useClass: PostgresTaskBranchQueryPort },
+    TaskGroupUnmergeHttpService,
   ],
   exports: [TaskBranchQueryPort],
   controllers: [TaskGroupsController],
