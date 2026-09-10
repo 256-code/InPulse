@@ -120,6 +120,9 @@ it("409 requires loading current state and explicit confirmation before restorin
   fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
   await screen.findByLabelText("恢复原因");
   expect(restore).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "确认恢复记录" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "确认恢复记录" }));
   await waitFor(() => expect(restore).toHaveBeenCalledOnce());
   expect(restore.mock.calls[0]).toMatchObject([
@@ -189,7 +192,9 @@ it("retains refresh gate after failed reload and close/reopen until explicit lat
   );
   fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
   await screen.findByText("暂时无法操作，原因已保留，可重试。");
-  expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled(),
+  );
   expect(screen.getByRole("button", { name: "加载最新状态" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
   await waitFor(() =>
@@ -203,7 +208,9 @@ it("retains refresh gate after failed reload and close/reopen until explicit lat
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "加载最新状态" })).toBeEnabled(),
   );
-  expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled(),
+  );
   expect(save).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
   await waitFor(() =>
