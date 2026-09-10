@@ -10,10 +10,21 @@ WORKDIR /workspace
 ENV CI=true
 RUN corepack enable
 
+# 与 API 镜像同构：依赖清单先复制，安装层不随源码变化失效；新增 workspace 包时
+# 必须同步补充这里的 manifest 行。
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY database/package.json database/
+COPY apps/api/package.json apps/api/
+COPY apps/e2e/package.json apps/e2e/
+COPY apps/web/package.json apps/web/
+COPY packages/api-contract/package.json packages/api-contract/
+COPY packages/eslint-config/package.json packages/eslint-config/
+
+RUN pnpm install --frozen-lockfile
+
 COPY . .
 
-RUN pnpm install --frozen-lockfile \
- && pnpm --filter @inpulse/database build \
+RUN pnpm --filter @inpulse/database build \
  && pnpm deploy --legacy --filter @inpulse/database --prod /out
 
 FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
