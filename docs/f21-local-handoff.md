@@ -61,3 +61,15 @@ F-20 的 previewLeftoverTask/getLeftoverTaskSource 显式 query=none，保持原
 二进制：`C:\Users\10348\AppData\Local\Temp\inpulse-f12-pg18\pgsql\bin`，PostgreSQL 18.6 + PGroonga；仅复用二进制，不操作旧F12/F14/F20数据。F21数据目录为 `C:\Users\10348\.codex\worktrees\9d1f\InPulse\.data\f21\pg`，端口55426，loopback trust，仅合成测试数据。
 
 交付前已用 SHOW data_directory 精确核对为上述F21目录，再 pg_ctl -m fast -w stop 正常停库，55426无监听；数据保留。父审核可从该目录重启，按角色URL重新执行同一批定向测试。E2E使用3126/4196，进程已随Playwright退出；本地Edge配置在被忽略的 apps/e2e/.e2e-runtime/f21.config.ts，不提交。没有读取、复制或分享生产Secrets。
+
+## 父审核增量（2026-09-10 17:35 +08:00）
+
+首个交审候选 HEAD `3cde38baa41e7bf9ef849e69d54d82eec8bca4f8` 未获最终批准。父协调发现 RecordLifecycleButton 将冲突门禁绑定到当前 error.status；409 后刷新失败会覆盖错误，从而错误启用旧版本提交，关闭重开也会清空错误并绕过门禁。
+
+增量代码 `92f1463c85f96966ae8fda81086e5689308506a1` 将 needsRefresh 独立保存：409 设置，只有成功读取最新记录才解除；刷新失败、关闭重开、清错误均保留门禁与原因，持续显示重新加载入口。成功加载后仍需显式确认，携带最新 If-Match 并换用新语义 Key。
+
+新增回归先红，实际复现刷新500后确认按钮错误可用。实现时曾遗漏按钮旧 conflict 引用而4例失败；修正后新增用例在取消按钮的中文自动空格定位处失败，改为匹配实际“取 消”后 RecordLifecycleButton 单文件最终4/4（3.04秒）通过。覆盖409→500→关闭重开→网络失败→成功刷新→明确确认新版本/新Key；没有弱化禁用或调用次数断言。此次只改该组件及测试，不重跑真库、契约、E2E或构建。
+
+父协调独立审核复验：F21真实PostgreSQL单文件22/22（3.46秒），契约record-lifecycle/published-records/permissions/validate四文件42/42（391ms）。其首次pg_ctl未带-o启动默认5432，55426拒绝连接；读取本任务postmaster.pid确认后停库并显式55426重启，随后测试通过。已再次SHOW data_directory确认本任务.data/f21/pg，再fast正常停止，数据保留。这里记录的是父协调提供的独立复验结果，不冒充本任务新运行；新增Web修复由父协调复验最终SHA。
+
+父协调最终本地审核：已检查92f1463的独立刷新门禁实现，RecordLifecycleButton/PublishedRecordsView/EditPublishedRecord三文件独立8/8（3.27秒）通过；结合独立真库22/22、契约42/42，本地审核通过。业务代码自92f1463后保持冻结，后续PR/CI/合并由PR任务处理；本地审核不伪称GitHub人工Approval。
