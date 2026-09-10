@@ -9,6 +9,10 @@ import { moduleRoutes } from "./module-routes.js";
 import { adminUserRoutes } from "./user-admin-routes.js";
 import { projectMemberRoutes } from "./project-member-routes.js";
 import { projectRoutes } from "./project-routes.js";
+import {
+  publishedRecordRoutes,
+  recordPublicationRoutes,
+} from "./published-record-routes.js";
 
 export * from "./route-definition.js";
 
@@ -25,6 +29,8 @@ export const routeRegistry = [
   ...featureRoutes,
   ...taskRoutes,
   ...recordDraftRoutes,
+  ...publishedRecordRoutes,
+  ...recordPublicationRoutes,
   ...taskRecordDraftRoutes,
   ...moduleTaskRoutes,
   {

@@ -1,5 +1,6 @@
 import { TaskRecordDraftModule } from "./workflows/task-record-draft.module.js";
 import { RecordDraftsModule } from "./modules/change-records/record-drafts.module.js";
+import { PublishedRecordsModule } from "./modules/change-records/published-records.module.js";
 import { FeaturesManagementModule } from "./modules/features/features-management.module.js";
 import { TasksManagementModule } from "./modules/tasks/tasks-management.module.js";
 import { Module } from "@nestjs/common";
@@ -40,6 +41,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       AdminUsersModule,
       TasksManagementModule,
       RecordDraftsModule,
+      PublishedRecordsModule,
       TaskRecordDraftModule,
     ]
   : [];

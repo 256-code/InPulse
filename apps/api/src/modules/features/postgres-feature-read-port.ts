@@ -13,7 +13,7 @@ export class PostgresFeatureReadPort extends FeatureReadPort {
   ): Promise<FeatureReadResource | undefined> {
     const [row] = await tx.sql<
       FeatureReadResource[]
-    >`SELECT id AS "featureId", project_id AS "projectId", module_id AS "moduleId", name, status FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} AND id = ${featureId}`;
+    >`SELECT id AS "featureId", project_id AS "projectId", module_id AS "moduleId", name, status, created_by AS "createdBy" FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} AND id = ${featureId}`;
     return row;
   }
 }

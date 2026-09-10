@@ -23,6 +23,12 @@
       "fingerprint": "4eb7e9b0f46438afef9bc50ed7a33bf04c482153439af71dd9e97a44b3c5d869"
     }
   ],
+  "createChangeRecordVersion": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "80a7f0ef0d7640a85952118c35f47c6bdb3932d9b7afc420b8739dd163b2c0a3"
+    }
+  ],
   "createFeature": [
     {
       "version": "1.0.0",
@@ -87,6 +93,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "b829a35bc59f1d42318222e611b664c0ec5ebb6efe5a014d91c18fdfc611e2bb"
+    }
+  ],
+  "publishChangeRecord": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "89c8ec1fa59da8bec87910283f7666a5a1f51b392be766f0e337e1f35c23789d"
     }
   ],
   "readAllNotifications": [

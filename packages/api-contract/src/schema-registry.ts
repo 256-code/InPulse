@@ -1,4 +1,5 @@
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
+import { publishedRecordSchemas } from "./contracts/published-records.zod.js";
 import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
@@ -114,6 +115,7 @@ export const schemaRegistry = {
   ...featureSchemas,
   ...taskSchemas,
   ...recordDraftSchemas,
+  ...publishedRecordSchemas,
   ErrorResponse: {
     schema: errorResponseSchema,
     summary: "统一错误响应模型",
