@@ -108,3 +108,8 @@ F-14 功能级任务补充：`listTasks`、`getTask`、`listTaskAssignees`、`cr
 ## F-15 模块级任务接口（2026-09-09）
 
 listModuleTasks/getModuleTask/listModuleTaskAssignees/createModuleTask/updateModuleTask允许当前项目活跃成员和系统管理员；匿名/停用401、非成员/移除/真实归属错误404。写操作要求项目/模块和任务生命周期可写，编辑If-Match，全部写CSRF+数据库幂等；负责人沿用F14真实项目成员规则。新增影响必须ACTIVE同项目同模块，保留/移除既有归档影响合法，影响功能不是MODULE任务父级。原功能页listTasks可读模块引用，只有其真实模块路径提供修改入口；归档功能页不开放引用编辑。模块幂等重放检查任务以及响应全部影响功能的当前可读归属。见 [F15交审](f15-local-handoff.md)。
+
+
+## F-16 任务状态和历史接口（2026-09-10）
+
+transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHistory 允许当前项目活跃成员及系统管理员；匿名/停用401、无成员权限或错误真实归属404。写入要求父级可写、任务ACTIVE、合法状态迁移、CSRF、数据库幂等与If-Match；历史读取允许已归档父级。MODULE 已有归档影响关系可保留；功能引用页不直接执行模块命令。重放重新验证当前身份、权限、父级与已存结果影响资源。COMPLETE 服务端仅接受 WITHOUT_RECORD 六类原因，WITH_RECORD 返回422；取消/恢复不改变授权关系。见 [F16交审](f16-local-handoff.md)。

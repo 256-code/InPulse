@@ -214,6 +214,508 @@ async function create(project: ScopeFixture, member: Actor) {
 async function addMember(projectId: number, userId: number) {
   await client.sql`INSERT INTO app.project_members (project_id,user_id) VALUES (${projectId},${userId})`;
 }
+describe("F-16 status history", () => {
+  const complete = {
+    action: "COMPLETE",
+    mode: "WITHOUT_RECORD",
+    completionReason: "测试验证",
+    note: "回归通过",
+  };
+  it("keeps history time monotonic when a reopening transaction starts before completion", async () => {
+    const { project, member } = await fixture();
+    const task = await create(project, member);
+    let release!: () => void;
+    let acquired!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const reopening = uow.run(async (tx) => {
+      await tx.sql`SELECT now()`;
+      acquired();
+      await gate;
+      return management.transition(tx, {
+        ...project,
+        taskId: task.id,
+        actorId: member.userId,
+        version: 2,
+        command: { action: "REOPEN", reason: "事务重叠" },
+        requestId: randomUUID(),
+      });
+    });
+    await ready;
+    try {
+      expect(
+        (
+          await request(
+            project,
+            "POST",
+            member,
+            complete,
+            `/${task.id}/status`,
+            1,
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      release();
+    }
+    expect(await reopening).toMatchObject({
+      workStatus: "TODO",
+      rowVersion: 3,
+    });
+    const history = schemaRegistry.TaskStatusHistoryResponse.schema.parse(
+      await (
+        await request(
+          project,
+          "GET",
+          member,
+          undefined,
+          `/${task.id}/status-history`,
+        )
+      ).json(),
+    );
+    expect(
+      new Date(history.items[2]!.changedAt).getTime(),
+    ).toBeGreaterThanOrEqual(new Date(history.items[1]!.changedAt).getTime());
+    expect(history.items[2]!.completedAtSnapshot).toBe(
+      history.items[1]!.completedAtSnapshot,
+    );
+  });
+  it("notifies the creator on completion and deduplicates creator/assignee on reopening", async () => {
+    const { project, member } = await fixture();
+    const assignee = await actor();
+    await addMember(project.projectId, assignee.userId);
+    const task = taskItemSchema.parse(
+      await (
+        await request(project, "POST", member, edit(assignee.userId))
+      ).json(),
+    );
+    await request(project, "POST", member, complete, `/${task.id}/status`, 1);
+    await request(
+      project,
+      "POST",
+      member,
+      { action: "REOPEN", reason: null },
+      `/${task.id}/status`,
+      2,
+    );
+    expect(
+      await client.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${project.projectId} AND notification_type='task.complete'`,
+    ).toEqual([{ recipient_id: member.userId }]);
+    expect(
+      await client.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${project.projectId} AND notification_type='task.reopen' ORDER BY recipient_id`,
+    ).toEqual(
+      [member.userId, assignee.userId]
+        .sort((a, b) => a - b)
+        .map((recipient_id) => ({ recipient_id })),
+    );
+    await removeMember(client.sql, project.projectId, assignee.userId);
+    expect(
+      (
+        await request(
+          project,
+          "POST",
+          member,
+          complete,
+          `/${task.id}/status`,
+          3,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      taskItemSchema.parse(
+        await (
+          await request(project, "GET", member, undefined, `/${task.id}`)
+        ).json(),
+      ).assigneeId,
+    ).toBe(assignee.userId);
+  });
+  for (const failure of [
+    "audit",
+    "activity",
+    "search",
+    "notification",
+  ] as const)
+    it(`rolls back status, snapshots and all side effects on ${failure} failure`, async () => {
+      const { project, member } = await fixture();
+      const task = await create(project, member);
+      const snapshot = async () => ({
+        task: await client.sql`SELECT * FROM app.tasks WHERE id=${task.id}`,
+        history:
+          await client.sql`SELECT * FROM app.task_status_history WHERE task_id=${task.id}`,
+        audit:
+          await auditReader.sql`SELECT * FROM app.audit_logs WHERE project_id=${project.projectId} ORDER BY sequence_no`,
+        activity:
+          await client.sql`SELECT * FROM app.activity_projection WHERE project_id=${project.projectId}`,
+        search:
+          await client.sql`SELECT * FROM app.search_projection WHERE project_id=${project.projectId}`,
+        notifications:
+          await client.sql`SELECT * FROM app.notifications WHERE project_id=${project.projectId}`,
+        idempotency:
+          await client.sql`SELECT * FROM app.idempotency_records WHERE actor_id=${member.userId}`,
+      });
+      const before = await snapshot();
+      const spy =
+        failure === "audit"
+          ? vi.spyOn(audit, "append")
+          : failure === "activity"
+            ? vi.spyOn(activity, "append")
+            : failure === "search"
+              ? vi.spyOn(search, "upsert")
+              : vi.spyOn(notifications, "write");
+      spy.mockRejectedValueOnce(new Error("injected status failure"));
+      const key = randomUUID();
+      await error(
+        await request(
+          project,
+          "POST",
+          member,
+          complete,
+          `/${task.id}/status`,
+          1,
+          key,
+        ),
+        500,
+      );
+      expect(await snapshot()).toEqual(before);
+      expect(
+        (
+          await request(
+            project,
+            "POST",
+            member,
+            complete,
+            `/${task.id}/status`,
+            1,
+            key,
+          )
+        ).status,
+      ).toBe(200);
+    });
+  it("replays only after live authorization, rejects changed semantics and keeps history singular", async () => {
+    const { project, member } = await fixture();
+    const task = await create(project, member);
+    const key = randomUUID();
+    const first = await request(
+      project,
+      "POST",
+      member,
+      complete,
+      `/${task.id}/status`,
+      1,
+      key,
+    );
+    expect(first.status).toBe(200);
+    const saved = await first.json();
+    expect(
+      await (
+        await request(
+          project,
+          "POST",
+          member,
+          complete,
+          `/${task.id}/status`,
+          1,
+          key,
+        )
+      ).json(),
+    ).toEqual(saved);
+    expect(
+      await client.sql`SELECT 1 FROM app.task_status_history WHERE task_id=${task.id}`,
+    ).toHaveLength(2);
+    await error(
+      await request(
+        project,
+        "POST",
+        member,
+        { ...complete, note: "different" },
+        `/${task.id}/status`,
+        1,
+        key,
+      ),
+      409,
+    );
+    await error(
+      await request(
+        project,
+        "POST",
+        member,
+        complete,
+        `/${task.id}/status`,
+        2,
+        key,
+      ),
+      409,
+    );
+    await removeMember(client.sql, project.projectId, member.userId);
+    await error(
+      await request(
+        project,
+        "POST",
+        member,
+        complete,
+        `/${task.id}/status`,
+        1,
+        key,
+      ),
+      404,
+    );
+    await error(
+      await request(
+        project,
+        "GET",
+        member,
+        undefined,
+        `/${task.id}/status-history`,
+      ),
+      404,
+    );
+  });
+  it("protects status and history with session, CSRF, ownership and If-Match", async () => {
+    const { project, member } = await fixture();
+    const task = await create(project, member);
+    const outsider = await actor();
+    await error(
+      await request(
+        project,
+        "GET",
+        undefined,
+        undefined,
+        `/${task.id}/status-history`,
+      ),
+      401,
+    );
+    await error(
+      await request(
+        project,
+        "POST",
+        outsider,
+        complete,
+        `/${task.id}/status`,
+        1,
+      ),
+      404,
+    );
+    await error(
+      await request(
+        { ...project, featureId: null },
+        "POST",
+        member,
+        complete,
+        `/${task.id}/status`,
+        1,
+      ),
+      404,
+    );
+    await error(
+      await request(
+        project,
+        "POST",
+        { ...member, csrf: "a".repeat(43) },
+        complete,
+        `/${task.id}/status`,
+        1,
+      ),
+      401,
+    );
+    await error(
+      await request(project, "POST", member, complete, `/${task.id}/status`),
+      422,
+    );
+    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+    await error(
+      await request(project, "POST", member, complete, `/${task.id}/status`, 1),
+      409,
+      "TASK_PARENT_ARCHIVED",
+    );
+    expect(
+      (
+        await request(
+          project,
+          "GET",
+          member,
+          undefined,
+          `/${task.id}/status-history`,
+        )
+      ).status,
+    ).toBe(200);
+  });
+  for (const moduleScope of [false, true])
+    it(`serializes concurrent complete/cancel, keeping the winning status searchable (${moduleScope})`, async () => {
+      const { project, member } = await fixture();
+      const scope = {
+        ...project,
+        featureId: moduleScope ? null : project.featureId,
+      };
+      const original = (
+        moduleScope ? moduleTaskItemSchema : taskItemSchema
+      ).parse(
+        await (
+          await request(scope, "POST", member, {
+            ...edit(member.userId),
+            ...(moduleScope ? { impactFeatureIds: [project.featureId] } : {}),
+          })
+        ).json(),
+      );
+      if (moduleScope)
+        await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+      const results = await Promise.all(
+        [complete, { action: "CANCEL", reason: "重复" }].map((body) =>
+          request(scope, "POST", member, body, `/${original.id}/status`, 1),
+        ),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      const winner = (
+        moduleScope ? moduleTaskItemSchema : taskItemSchema
+      ).parse(await results.find((r) => r.status === 200)!.json());
+      expect(
+        await client.sql`SELECT 1 FROM app.task_status_history WHERE task_id=${original.id}`,
+      ).toHaveLength(2);
+      expect(
+        await client.sql`SELECT source_status FROM app.search_projection WHERE entity_type='TASK' AND entity_id=${original.id} AND normalized_search_text &@~ app.pgroonga_query_escape(${original.code})`,
+      ).toMatchObject([{ source_status: winner.workStatus }]);
+      if (winner.scopeType === "MODULE")
+        expect(winner.impactFeatureIds).toEqual([project.featureId]);
+    });
+  for (const moduleScope of [false, true]) {
+    it(`retains repeated completion snapshots, cancellation and restoration (${moduleScope ? "MODULE" : "FEATURE"})`, async () => {
+      const { project, member } = await fixture();
+      const scope = {
+        ...project,
+        featureId: moduleScope ? null : project.featureId,
+      };
+      const created = await request(scope, "POST", member, {
+        ...edit(member.userId),
+        ...(moduleScope ? { impactFeatureIds: [project.featureId] } : {}),
+      });
+      const original = (
+        moduleScope ? moduleTaskItemSchema : taskItemSchema
+      ).parse(await created.json());
+      let current = original;
+      for (const body of [
+        complete,
+        { action: "REOPEN", reason: "补充验证" },
+        { ...complete, completionReason: "技术调研", note: "再次完成" },
+        { action: "REOPEN", reason: "新增验证" },
+        { action: "CANCEL", reason: "已无必要" },
+        { action: "RESTORE", reason: "需求恢复" },
+      ]) {
+        const response = await request(
+          scope,
+          "POST",
+          member,
+          body,
+          `/${current.id}/status`,
+          current.rowVersion,
+        );
+        expect(response.status, await response.clone().text()).toBe(200);
+        current = (moduleScope ? moduleTaskItemSchema : taskItemSchema).parse(
+          await response.json(),
+        );
+      }
+      expect(current).toMatchObject({
+        ...original,
+        rowVersion: 7,
+        updatedAt: expect.any(String),
+      });
+      const response = await request(
+        scope,
+        "GET",
+        member,
+        undefined,
+        `/${current.id}/status-history`,
+      );
+      expect(response.status).toBe(200);
+      const history = schemaRegistry.TaskStatusHistoryResponse.schema.parse(
+        await response.json(),
+      );
+      expect(
+        history.items.map((h: { toWorkStatus: string }) => h.toWorkStatus),
+      ).toEqual(["TODO", "DONE", "TODO", "DONE", "TODO", "CANCELED", "TODO"]);
+      expect(history.items[2]).toMatchObject({
+        completedAtSnapshot: history.items[1]!.completedAtSnapshot,
+        completionNoteSnapshot: history.items[1]!.completionNoteSnapshot,
+        changedBy: member.userId,
+        reason: "补充验证",
+      });
+      expect(history.items[4]).toMatchObject({
+        completedAtSnapshot: history.items[3]!.completedAtSnapshot,
+        completionNoteSnapshot: "技术调研，不涉及功能变化：再次完成",
+      });
+      expect(
+        new Date(history.items[3]!.completedAtSnapshot!).getTime(),
+      ).toBeGreaterThan(
+        new Date(history.items[1]!.completedAtSnapshot!).getTime(),
+      );
+      expect(history.items[5]).toMatchObject({
+        reason: "已无必要",
+        completedAtSnapshot: null,
+      });
+      expect(history.items[6]).toMatchObject({
+        reason: "需求恢复",
+        completedAtSnapshot: null,
+      });
+      await expect(
+        client.sql`UPDATE app.task_status_history SET reason='tamper' WHERE task_id=${current.id}`,
+      ).rejects.toThrow();
+      await expect(
+        client.sql`DELETE FROM app.task_status_history WHERE task_id=${current.id}`,
+      ).rejects.toThrow();
+    });
+  }
+  it("rejects actual-change completion, injected fields and illegal transitions", async () => {
+    const { project, member } = await fixture();
+    const task = await create(project, member);
+    for (const body of [
+      { ...complete, mode: "WITH_RECORD" },
+      { ...complete, completedAt: new Date().toISOString() },
+      { ...complete, completionReason: "开发功能" },
+    ])
+      await error(
+        await request(project, "POST", member, body, `/${task.id}/status`, 1),
+        422,
+      );
+    for (const action of ["REOPEN", "RESTORE"])
+      await error(
+        await request(
+          project,
+          "POST",
+          member,
+          { action, reason: null },
+          `/${task.id}/status`,
+          1,
+        ),
+        409,
+        "TASK_STATE_CONFLICT",
+      );
+    expect(
+      (
+        await request(
+          project,
+          "POST",
+          member,
+          complete,
+          `/${task.id}/status`,
+          1,
+        )
+      ).status,
+    ).toBe(200);
+    for (const body of [
+      complete,
+      { action: "CANCEL", reason: null },
+      { action: "RESTORE", reason: null },
+    ])
+      await error(
+        await request(project, "POST", member, body, `/${task.id}/status`, 2),
+        409,
+        "TASK_STATE_CONFLICT",
+      );
+  });
+});
+
 describe("F-15 module tasks", () => {
   it("rechecks module task permissions and all saved impact resources before replay", async () => {
     const { project, member } = await fixture();

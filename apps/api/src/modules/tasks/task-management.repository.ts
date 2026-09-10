@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   taskItemSchema,
   moduleTaskItemSchema,
+  taskStatusHistoryResponseSchema,
   type ModuleTaskItem,
   type TaskItem,
   type TaskEditRequest,
@@ -34,6 +35,64 @@ export interface TaskScope {
 
 @Injectable()
 export class TaskManagementRepository {
+  async history(tx: TransactionContext, scope: TaskScope, taskId: number) {
+    const rows = await tx.sql<
+      {
+        id: string;
+        fromWorkStatus: string | null;
+        toWorkStatus: string;
+        completedAtSnapshot: Date | null;
+        completionNoteSnapshot: string | null;
+        reason: string | null;
+        changedBy: number;
+        changedAt: Date;
+      }[]
+    >`
+      SELECT id::text, from_work_status AS "fromWorkStatus", to_work_status AS "toWorkStatus",
+        completed_at_snapshot AS "completedAtSnapshot", completion_note_snapshot AS "completionNoteSnapshot",
+        reason, changed_by AS "changedBy", changed_at AS "changedAt"
+      FROM app.task_status_history WHERE task_id=${taskId} AND project_id=${scope.projectId} ORDER BY app.task_status_history.id`;
+    return taskStatusHistoryResponseSchema.parse({
+      items: rows.map((row) => ({
+        ...row,
+        completedAtSnapshot:
+          row.completedAtSnapshot === null
+            ? null
+            : new Date(row.completedAtSnapshot).toISOString(),
+        changedAt: new Date(row.changedAt).toISOString(),
+      })),
+    });
+  }
+  async transition(
+    tx: TransactionContext,
+    current: TaskRecord,
+    actorId: number,
+    to: TaskRecord["workStatus"],
+    completionNote: string | null,
+    reason: string | null,
+  ) {
+    // The service has validated the transition under the task lock. Preserve DB timestamp
+    // precision in SQL; transaction-start now() can predate a concurrent completed transition.
+    const rows = await tx.sql`
+      WITH previous AS MATERIALIZED (
+        SELECT * FROM app.tasks WHERE id=${current.id} AND project_id=${current.projectId}
+      ), stamp AS MATERIALIZED (SELECT GREATEST(clock_timestamp(), updated_at) AS at FROM previous),
+      updated AS (
+        UPDATE app.tasks SET work_status=${to}, completion_note=${completionNote},
+          completed_at=CASE WHEN ${to}='DONE' THEN (SELECT at FROM stamp) ELSE NULL END,
+          updated_at=(SELECT at FROM stamp), row_version=row_version+1
+        WHERE id=${current.id} AND project_id=${current.projectId} AND row_version=${current.rowVersion}
+          AND work_status=${current.workStatus} AND lifecycle_status='ACTIVE'
+        RETURNING *
+      )
+      INSERT INTO app.task_status_history(task_id,project_id,from_work_status,to_work_status,
+        completed_at_snapshot,completion_note_snapshot,reason,changed_by,changed_at)
+      SELECT u.id,u.project_id,p.work_status,u.work_status,
+        CASE WHEN u.work_status='DONE' THEN u.completed_at WHEN p.work_status='DONE' THEN p.completed_at ELSE NULL END,
+        CASE WHEN u.work_status='DONE' THEN u.completion_note WHEN p.work_status='DONE' THEN p.completion_note ELSE NULL END,
+        ${reason},${actorId},u.updated_at FROM updated u CROSS JOIN previous p RETURNING id`;
+    return rows.length ? this.find(tx, current, current.id) : undefined;
+  }
   async impacts(tx: TransactionContext, scope: TaskScope, taskId: number) {
     const rows = await tx.sql<
       {

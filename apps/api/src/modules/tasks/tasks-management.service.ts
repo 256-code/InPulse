@@ -3,6 +3,8 @@ import {
   taskReplayContextSchema,
   moduleTaskReplayContextSchema,
   type TaskEditRequest,
+  type TaskStatusRequest,
+  taskStatusRequestSchema,
 } from "@inpulse/api-contract";
 import { AuditWritePort } from "../../audit/index.js";
 import type { TransactionContext } from "../../database/transaction-context.js";
@@ -69,6 +71,7 @@ export class TasksManagementService {
     scope: TaskScope,
     taskId?: number,
     assignees = false,
+    history = false,
   ) {
     const authorized = await this.access.getAuthorizedSearchScope(actorId);
     if (!authorized.projectIds.includes(scope.projectId)) throw missing();
@@ -95,6 +98,7 @@ export class TasksManagementService {
       if (taskId !== undefined) {
         const item = await this.repository.find(tx, scope, taskId);
         if (!item) throw missing();
+        if (history) return this.repository.history(tx, scope, taskId);
         return item;
       }
       return { items: await this.repository.list(tx, scope) };
@@ -376,6 +380,136 @@ export class TasksManagementService {
             : `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
         createdAt: new Date(result.updatedAt),
       });
+    return result;
+  }
+  async transition(
+    tx: TransactionContext,
+    input: TaskScope & {
+      actorId: number;
+      taskId: number;
+      version: number;
+      command: TaskStatusRequest;
+      requestId: string;
+    },
+  ): Promise<TaskRecord> {
+    const command = taskStatusRequestSchema.parse(input.command);
+    await this.authorize(tx, input.actorId, input, input.taskId);
+    // Current impact features are locked and rechecked, but never become MODULE parents.
+    const before =
+      input.featureId === null
+        ? (await this.lockModuleTask(tx, input, [])).before
+        : await this.repository.find(tx, input, input.taskId, true);
+    if (!before) throw missing();
+    if (before.rowVersion !== input.version)
+      throw new TaskManagementError(
+        409,
+        "TASK_VERSION_CONFLICT",
+        "任务版本已变化，请重新加载",
+      );
+    const transitions = {
+      COMPLETE: ["TODO", "DONE"],
+      REOPEN: ["DONE", "TODO"],
+      CANCEL: ["TODO", "CANCELED"],
+      RESTORE: ["CANCELED", "TODO"],
+    } as const;
+    const [from, to] = transitions[command.action];
+    if (before.lifecycleStatus !== "ACTIVE" || before.workStatus !== from)
+      throw new TaskManagementError(
+        409,
+        "TASK_STATE_CONFLICT",
+        "任务当前状态不允许此操作",
+      );
+    const note =
+      command.action === "COMPLETE"
+        ? `${command.completionReason}，不涉及功能变化${command.note ? `：${command.note}` : ""}`
+        : null;
+    const reason =
+      command.action === "COMPLETE" ? command.completionReason : command.reason;
+    const result = await this.repository.transition(
+      tx,
+      before,
+      input.actorId,
+      to,
+      note,
+      reason,
+    );
+    if (!result)
+      throw new TaskManagementError(
+        409,
+        "TASK_VERSION_CONFLICT",
+        "任务版本已变化，请重新加载",
+      );
+    const labels = {
+      COMPLETE: "完成",
+      REOPEN: "重新打开",
+      CANCEL: "取消",
+      RESTORE: "恢复",
+    };
+    const action = `task.${command.action.toLowerCase()}`;
+    const event = await this.audit.append(tx, {
+      projectId: result.projectId,
+      actorType: "USER",
+      actorId: input.actorId,
+      action: "task.status",
+      targetType: "TASK",
+      targetId: String(result.id),
+      eventPayload: { before, after: result, command, completionNote: note },
+      requestId: input.requestId,
+    });
+    await this.activity.append(tx, {
+      projectId: result.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "TASK",
+      sourceEntityId: result.id,
+      activityType: action,
+      actorId: input.actorId,
+      summary: `任务${labels[command.action]}：${result.title}`,
+      metadata: {
+        taskId: result.id,
+        moduleId: result.moduleId,
+        featureId: result.featureId,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: result.workStatus,
+      sourceRowVersion: result.rowVersion,
+      occurredAt: new Date(result.updatedAt),
+    });
+    await this.search.upsert(tx, {
+      projectId: result.projectId,
+      entityType: "TASK",
+      entityId: result.id,
+      title: result.title,
+      summary: result.description.slice(0, 5000),
+      rawText: `${result.code}\n${result.title}\n${result.description}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: result.workStatus,
+      sourceRowVersion: result.rowVersion,
+    });
+    if (command.action === "COMPLETE" || command.action === "REOPEN") {
+      const recipients = [
+        ...new Set(
+          command.action === "COMPLETE"
+            ? [result.creatorId]
+            : [result.assigneeId, result.creatorId],
+        ),
+      ].sort((a, b) => a - b);
+      for (const recipientId of recipients)
+        await this.notifications.write(tx, {
+          projectId: result.projectId,
+          recipientId,
+          sourceChainId: event.chainId,
+          sourceSequence: event.sequenceNo,
+          notificationType: action,
+          title: `任务${labels[command.action]}：${result.title}`.slice(0, 500),
+          body: result.code,
+          targetPath:
+            result.featureId === null
+              ? `/projects/${result.projectId}/modules/${result.moduleId}/tasks?taskId=${result.id}`
+              : `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
+          createdAt: new Date(result.updatedAt),
+        });
+    }
     return result;
   }
 }

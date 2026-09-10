@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { TaskStatusPanel } from "./TaskStatusPanel";
 import { Alert, Button, Drawer, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { ApiError, type InpulseApiClient } from "@generated/api";
@@ -71,6 +72,7 @@ export function TasksPanel({
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState<"cards" | "list">("cards");
+  const [statusFilter, setStatusFilter] = useState("TODO");
   const [selectedId, setSelectedId] = useState<number | null>(
     () =>
       Number(new URLSearchParams(window.location.search).get("taskId")) || null,
@@ -92,6 +94,10 @@ export function TasksPanel({
     formState: { errors },
   } = useForm<TaskDraft>({ defaultValues: empty });
   const current = query.data?.items.find((item) => item.id === selectedId);
+  const visibleItems =
+    query.data?.items.filter(
+      (item) => statusFilter === "ALL" || item.workStatus === statusFilter,
+    ) ?? [];
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
@@ -245,6 +251,22 @@ export function TasksPanel({
         </p>
       )}
       {success && <Alert type="success" title="任务已保存" />}
+      {query.data && (
+        <div className="feature-view-controls">
+          <label>
+            任务状态筛选
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="TODO">未完成</option>
+              <option value="DONE">已完成</option>
+              <option value="CANCELED">已取消</option>
+              <option value="ALL">全部状态</option>
+            </select>
+          </label>
+        </div>
+      )}
       {query.isPending ? (
         <div className="calm-state">
           <Spin />
@@ -282,6 +304,12 @@ export function TasksPanel({
             新建任务
           </Button>
         </CalmEmptyState>
+      ) : !visibleItems.length ? (
+        <CalmEmptyState
+          icon="zap"
+          title="当前状态暂无任务"
+          description="可切换状态筛选查看历史任务。"
+        />
       ) : view === "list" ? (
         <div className="feature-list-scroll">
           <table className="feature-list-table">
@@ -298,7 +326,7 @@ export function TasksPanel({
               </tr>
             </thead>
             <tbody>
-              {query.data.items.map((item) => (
+              {visibleItems.map((item) => (
                 <tr key={item.id}>
                   <td>
                     {item.scopeType === "MODULE" ? (
@@ -340,7 +368,7 @@ export function TasksPanel({
         </div>
       ) : (
         <div className="calm-task-grid">
-          {query.data.items.map((item) => (
+          {visibleItems.map((item) => (
             <article className="calm-task-card" key={item.id}>
               <div className="calm-card-top">
                 <span className="task-id">{item.code}</span>
@@ -495,6 +523,15 @@ export function TasksPanel({
                   </a>
                 </div>
               )}
+              <TaskStatusPanel
+                key={current.id}
+                item={current}
+                api={api}
+                writable={
+                  writable &&
+                  !(featureId !== null && current.scopeType === "MODULE")
+                }
+              />
               <div className="calm-action-footer">
                 <Button
                   className="primary-button"
