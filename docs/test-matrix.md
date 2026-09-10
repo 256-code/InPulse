@@ -648,6 +648,8 @@ F-20截止时间审核增量：ConvertLeftoverTask单文件4/4，覆盖本地时
 
 F-21父审核增量：RecordLifecycleButton新增409→刷新500→关闭重开→再次网络失败→刷新成功→显式确认新版本/Key回归，先红后绿，单文件4/4（3.04秒）；独立needsRefresh只有成功加载才解除，失败/关窗不能启用旧提交。父协调独立真库22/22、契约四文件42/42，数据库已再次核对目录后停库。详见F21交审增量，未重复数据库/E2E/构建。
 
+F-21 组件侧修复增量（2026-09-11，issue #94）：RecordLifecycleButton 的确认按钮此前由 busy 驱动 antd loading，`useDelayState` 复位窗口内 `ant-btn-loading` 类仍保留（按钮此时已 enabled），而 antd `handleClick` 以 `innerLoading` 提前 return 静默吞掉点击；同一窗口内 loading 图标还把可访问名拼成「loading 确认作废记录」。修复：确认按钮显式设置固定 aria-label（记录动作名），可访问名不再随 loading 漂移；测试新增确定性回归 keeps the confirm accessible name stable while a reload is pending（手动挂起 reload Promise），修复前确定性红灯（TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "确认作废记录"），并把 8 处确认点击统一经 clickConfirm 等待 loading 类消失后再点击。证据：单文件 5/5 连续 30 次运行 0 失败；反事实（临时换回 HEAD 组件）确定性红灯后还原；`pnpm --filter @inpulse/web test:unit` 58 文件 248 例，`pnpm typecheck`（6 项目）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（193 模块 870 依赖）、`pnpm check:docs`（70 个 Markdown）与 `pnpm check:secrets`（844 文件）通过。未放宽断言、未 skip；未运行 `pnpm test:e2e` 与集成/数据库测试（无后端与行为变化，E2E 由 CI 覆盖）。
+
 ## F-22 当前 GitHub 关联（2026-09-10 本地实施）
 
 | 验收范围 | 自动化与实际结果 |

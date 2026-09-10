@@ -142,6 +142,7 @@ export function RecordLifecycleButton({
               type="primary"
               loading={busy}
               disabled={!reason.trim() || needsRefresh}
+              aria-label={`确认${label}`}
               onClick={() => void submit()}
             >
               确认{label}
