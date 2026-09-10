@@ -18,6 +18,14 @@ import { RecordPublicationAccess } from "./record-publication-access.js";
 import { RecordPublicationRepository } from "./record-publication.repository.js";
 import { RecordPublicationEffects } from "./record-publication-effects.js";
 import { RecordDraftRepository } from "./record-draft.repository.js";
+import {
+  ChangeRecordReadPort,
+  PostgresChangeRecordReadPort,
+} from "./change-record-read.port.js";
+import {
+  MyTaskQueryPort,
+  PostgresMyTaskQueryPort,
+} from "./my-task-query.port.js";
 import { ModulesModule } from "../modules/index.js";
 import { FeaturesModule } from "../features/index.js";
 import { TasksManagementModule } from "../tasks/index.js";
@@ -53,6 +61,8 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     RecordLinkCommandPort,
     RecordPublicationCommandPort,
     LeftoverRecordCommandPort,
+    ChangeRecordReadPort,
+    MyTaskQueryPort,
   ],
   providers: [
     RecordLinkQueryPort,
@@ -78,6 +88,14 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     PublishedRecordRepository,
     PublishedRecordReadService,
     PublishedRecordsHttpService,
+    {
+      provide: ChangeRecordReadPort,
+      useClass: PostgresChangeRecordReadPort,
+    },
+    {
+      provide: MyTaskQueryPort,
+      useClass: PostgresMyTaskQueryPort,
+    },
   ],
   controllers: [PublishedRecordsController, RecordLifecycleController],
 })

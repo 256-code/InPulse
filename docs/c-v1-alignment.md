@@ -4,7 +4,7 @@
 | --- | --- |
 | 状态 | 本地实施中：骨架数据仍由 mock adapter 提供，未接线 |
 | 冻结依据 | [F-25 / F-29 / F-32 契约评审裁决](./a-contract-review-f25-f29-f32.md)（A 岗，`5563bcf`） |
-| 落库状态 | 路由未登记。按裁决 §7，登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库，且依赖 B 的只读端口扩展 |
+| 落库状态 | 路由未登记。按裁决 §7，登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库；所依赖的 B 侧只读端口扩展（`TaskQueryPort` 列表/计数、`ChangeRecordReadPort`、`ModuleReadPort.count`、`FeatureReadPort.count`）已由 C 代 B 落库，见[端口扩展提案的回填](./c-port-extension-proposal.md)，C 侧聚合读接线仍未开始 |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 目的与边界
