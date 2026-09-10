@@ -48,7 +48,20 @@ export class TaskRecordDraftWorkflow {
       const source = await this.tasks.find(tx, path.projectId, path.taskId);
       if (!source || source.moduleId !== path.moduleId) throw missing();
       return {
-        source,
+        // 契约只暴露 TaskRecordDraftsResponse.source 的固定字段，额外读模型字段不得外泄。
+        source: {
+          taskId: source.taskId,
+          projectId: source.projectId,
+          moduleId: source.moduleId,
+          featureId: source.featureId,
+          scopeType: source.scopeType,
+          title: source.title,
+          assigneeId: source.assigneeId,
+          workStatus: source.workStatus,
+          lifecycleStatus: source.lifecycleStatus,
+          rowVersion: source.rowVersion,
+          impactFeatureIds: source.impactFeatureIds,
+        },
         items: await this.records.listForTask(tx, path.projectId, path.taskId),
       };
     });

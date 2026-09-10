@@ -2,6 +2,7 @@ import {
   recordDraftRoutes,
   taskRecordDraftRoutes,
 } from "./record-draft-routes.js";
+import { taskGroupRoutes } from "./task-group-routes.js";
 import { featureRoutes } from "./feature-routes.js";
 import { taskRoutes, moduleTaskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
@@ -32,6 +33,7 @@ export const routeRegistry = [
   ...publishedRecordRoutes,
   ...recordPublicationRoutes,
   ...taskRecordDraftRoutes,
+  ...taskGroupRoutes,
   ...moduleTaskRoutes,
   {
     method: "GET",

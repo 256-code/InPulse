@@ -10,7 +10,7 @@ import {
 } from "../projects/index.js";
 import { ModuleQueryPort } from "../modules/index.js";
 import { FeatureQueryPort } from "../features/index.js";
-import { TaskQueryPort, type TaskDraftSource } from "../tasks/index.js";
+import { TaskQueryPort, type TaskReadModel } from "../tasks/index.js";
 import { RecordDraftError } from "./record-drafts.service.js";
 @Injectable()
 export class RecordPublicationAccess {
@@ -74,7 +74,7 @@ export class RecordPublicationAccess {
           "RECORD_PARENT_ARCHIVED",
           "项目或模块已归档，记录只读",
         );
-      let source: TaskDraftSource | undefined;
+      let source: TaskReadModel | undefined;
       if (publish && previous.taskId !== null) {
         source = await this.tasks.find(tx, projectId, previous.taskId);
         if (

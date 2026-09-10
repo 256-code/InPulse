@@ -2,6 +2,24 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## F-23 任务合并（C，2026-09-10 本地实现）
+
+`POST /api/v1/task-groups/merge` 把来源任务并入主任务所属聚合组：服务端按请求体的任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE` 后建立或复用聚合组，并保存来源任务的原工作状态与原负责人快照；来源已属活跃组、主任务在组内不是 MAIN、组已关闭或主任务在锁内变化统一 409，跨项目与非成员统一 404。合并不修改任何任务字段，审计 `task.merge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-23 交审说明](f23-local-handoff.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F23-CONTRACT-001 | 契约与 CI | Schema、Route Registry、生成物与权限矩阵 | `TaskGroupMergeRequest`、`TaskGroupItem`、`TaskGroupMergeHeaders`、`TaskGroupMergeReplayContext` 登记；唯一路由声明 Session/CSRF、数据库幂等、重放策略与锁序；OpenAPI 与生成客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate` 73 条、`permissions:check` 73/73）；10 文件 75/75 契约单测 |
+| F23-MERGE-API-001 | HTTP + PostgreSQL | 新建聚合组合并 | 200 返回 `TaskGroupItem`：编号 `项目编码-TG-1`、名称为主任务标题、主成员无快照、来源成员带 `HISTORICAL` 快照；两个任务的行版本与字段不变；审计/活动/通知（3 接收人）/搜索各恰一条；同 Key 同摘要重放返回同一响应，摘要不同 409，再合并 409，成员被移除后重放 404 | 本地通过（`task-groups-merge.integration.test.ts` 6/6） |
+| F23-MERGE-API-002 | HTTP + PostgreSQL | 追加来源到既有组 | 第二次合并复用同一聚合组并返回 3 名成员、`rowVersion` 递增为 2，`ACTIVE` 分支来源记录当前快照；搜索投影 `source_row_version` 同步为 2，审计与活动各 2 条 | 同上 |
+| F23-MERGE-API-003 | HTTP + PostgreSQL | 拒绝路径 | 自合并 422；未知任务、跨项目任务、非成员与已移除成员 404；归档项目 409 `TASK_MERGE_PARENT_ARCHIVED` 且零成员写入 | 同上 |
+| F23-MERGE-API-004 | HTTP + PostgreSQL | HTTP 边界与零副作用 | 跨源与缺 Origin 403、CSRF 失效与匿名 401；空 CSRF 头、非 JSON 内容类型、非法请求体、未知字段、查询参数 422；缺/短幂等键 400；全部拒绝路径审计、活动、通知、投影为零 | 同上（处理器内 400 内容类型分支以直接调用覆盖） |
+| F23-MERGE-API-005 | HTTP + PostgreSQL 并发 | 并发合并同一对任务 | 两个并发请求得到 200 与 409 `TASK_ALREADY_MERGED`，聚合组、成员与副作用计数与单次成功一致 | 同上 |
+| F23-HTTP-UNIT-001 | API 单元 | HTTP 边界与错误映射 | 同源/缺 Origin 403、非 JSON 400、空 CSRF 头与未知字段/查询参数 422、幂等键缺失与过短 400、匿名 401、业务错误与唯一约束 409、越界可重放字段拒绝缓存 | 本地通过（`task-groups-http.service.test.ts` 10 例） |
+| F23-INVARIANT-001 | PostgreSQL | 直接约束探针 | 同组第二个活跃 MAIN 23505 `task_group_members_one_active_main_unique`；活跃组缺 SOURCE 23514 形状约束；任务加入两组 23505 `task_group_members_one_active_group_unique`；SOURCE 缺快照 23514 `task_group_members_snapshot_check` | 同上 |
+| F23-UI-001 | 前端 / Playwright | 合并入口与任务组视图 | 前端合并对话框、任务组详情与解除入口 | Required，未交付（F-24/F-25）；E2E 尚未覆盖合并路径 |
+
+本轮真实 PostgreSQL 集成全量 37 文件 232 例、API 单测 61 文件 291 例（含 HTTP 边界 10 例）、契约 10 文件 75 例、前端 35 文件 120 例（并行负载下两个既有计时敏感用例偶发失败，单跑通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
+
 ## F-06 项目编辑与归档/恢复（A，2026-09-10 本地实现）
 
 阶段 1 A 域项目编辑/归档/恢复纵切片：`PATCH /api/v1/projects/{projectId}` 由项目活跃成员或
