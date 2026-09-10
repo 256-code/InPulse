@@ -1,23 +1,32 @@
 import React, { useState } from "react";
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  List,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from "antd";
+import { Button } from "antd";
 import type {
   CreateProjectResponse,
   InpulseApiClient,
   ProjectItem,
 } from "@generated/api";
 import { CreateProjectModal } from "./CreateProjectModal";
+import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
-const { Text } = Typography;
+const chipTones = ["tone-teal", "tone-blue", "tone-amber", "tone-violet"];
+
+const hierarchyNotes = [
+  { label: "项目", text: "顶层业务容器，承载范围与成员。" },
+  { label: "模块", text: "项目内的一级业务分类，不支持子模块。" },
+  { label: "功能", text: "长期档案，保存当前说明与全部迭代历史。" },
+  { label: "任务", text: "一次具体执行工作，功能级或模块级。" },
+  { label: "迭代记录", text: "已经发生的变化，人员与时间自动生成。" },
+  { label: "来源分支", text: "合并后保留的历史，不删除不覆盖。" },
+];
+
+function resolveChipTone(code: string): string {
+  let sum = 0;
+  for (const char of code) {
+    sum = (sum + char.charCodeAt(0)) % 997;
+  }
+  return chipTones[sum % chipTones.length] ?? "tone-blue";
+}
 
 export interface ProjectsPageViewProps {
   readonly client?: InpulseApiClient | undefined;
@@ -26,6 +35,7 @@ export interface ProjectsPageViewProps {
   readonly isAdmin?: boolean | undefined;
   readonly createdProject?: CreateProjectResponse | null;
   readonly onCreated?: (response: CreateProjectResponse) => void;
+  readonly onBackToTasks?: (() => void) | undefined;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
   readonly onOpenModules?: ((projectId: number) => void) | undefined;
   readonly onOpenMembers?: ((projectId: number) => void) | undefined;
@@ -43,6 +53,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   isAdmin = false,
   createdProject,
   onCreated,
+  onBackToTasks,
   onOpenActivity,
   onOpenModules,
   onOpenMembers,
@@ -53,162 +64,180 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   onRetryProjects,
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
+  const eyebrow =
+    projectsLoading || projectsError
+      ? "项目"
+      : "项目 / " + projects.length + " 个";
 
   return (
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">项目与功能 · F-05</span>
+          <span className="eyebrow">{eyebrow}</span>
           <h1>项目与功能</h1>
-          <p>
-            项目是顶层业务容器。创建者自动成为活跃成员，创建流程不可取消该成员关系。
-          </p>
         </div>
         <div className="catalog-actions">
+          {onBackToTasks ? (
+            <Button className="secondary-button" onClick={onBackToTasks}>
+              <InpulseIcon name="clipboard" size={15} />
+              回到任务中心
+            </Button>
+          ) : null}
           <Button
-            type="primary"
+            className="primary-button"
             data-testid="create-project-button"
             onClick={() => setCreateOpen(true)}
           >
+            <InpulseIcon name="plus" size={15} />
             新建项目
           </Button>
         </div>
       </div>
-      <Card className="catalog-panel">
-        <Space orientation="vertical" size={20} style={{ width: "100%" }}>
-          {createdProject ? (
-            <Alert
-              showIcon
-              type="success"
-              title="项目创建成功"
-              description={
-                <Space
-                  orientation="vertical"
-                  size={4}
-                  style={{ width: "100%" }}
-                >
-                  <Text strong>
-                    {createdProject.project.name}（{createdProject.project.code}
-                    ）
-                  </Text>
-                  <Text type="secondary">
-                    已自动生成未分类模块，活动、通知与搜索投影已在同一事务中写入。
-                  </Text>
-                  <Space wrap>
-                    {onOpenModules && (
+
+      {createdProject ? (
+        <div className="creation-success" data-testid="created-project-success">
+          <div className="creation-success-icon">
+            <InpulseIcon name="check" size={18} />
+          </div>
+          <div className="creation-success-body">
+            <strong>项目创建成功</strong>
+            <span>
+              {createdProject.project.name}（{createdProject.project.code}） ·
+              已生成未分类模块，活动、通知与搜索投影已在同一事务中写入。
+            </span>
+          </div>
+          <div className="creation-success-actions">
+            <Button
+              className="text-button"
+              onClick={() => onOpenModules?.(createdProject.project.id)}
+            >
+              管理模块
+            </Button>
+            {isAdmin && onOpenMembers ? (
+              <Button
+                className="text-button"
+                onClick={() => onOpenMembers(createdProject.project.id)}
+              >
+                管理成员
+              </Button>
+            ) : null}
+            <Button
+              className="text-button"
+              data-testid="open-created-project-activity"
+              onClick={() => onOpenActivity?.(createdProject.project.id)}
+            >
+              查看项目动态
+            </Button>
+            <Button
+              className="text-button"
+              data-testid="search-created-project"
+              onClick={() => onSearch?.(createdProject.project.code)}
+            >
+              搜索项目
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {projectsLoading ? (
+        <div className="calm-state">
+          <span className="calm-spinner" />
+          <span>正在加载项目列表</span>
+        </div>
+      ) : projectsError ? (
+        <CalmEmptyState
+          icon="alert"
+          title="项目列表加载失败"
+          description={projectsError}
+        >
+          {onRetryProjects ? (
+            <Button className="secondary-button" onClick={onRetryProjects}>
+              重试
+            </Button>
+          ) : null}
+        </CalmEmptyState>
+      ) : projects.length === 0 ? (
+        <CalmEmptyState
+          icon="boxes"
+          title="还没有项目"
+          description="创建第一个项目后，模块、功能、任务与迭代记录都会沉淀在对应项目内。"
+        >
+          <Button
+            className="primary-button"
+            onClick={() => setCreateOpen(true)}
+          >
+            <InpulseIcon name="plus" size={15} />
+            新建项目
+          </Button>
+        </CalmEmptyState>
+      ) : (
+        <>
+          <div className="cards-grid calm-feature-grid project-grid">
+            {[...projects].map((project) => (
+              <article
+                key={project.id}
+                className={
+                  "calm-feature-card project-card" +
+                  (project.status === "ARCHIVED" ? " card-archived" : "")
+                }
+              >
+                <div className="calm-card-top">
+                  <span
+                    className={"project-chip " + resolveChipTone(project.code)}
+                  >
+                    {project.code}
+                  </span>
+                  <CalmBadge
+                    tone={project.status === "ACTIVE" ? "blue" : "amber"}
+                  >
+                    {project.status === "ACTIVE" ? "正常" : "已归档"}
+                  </CalmBadge>
+                </div>
+                <h2>{project.name}</h2>
+                <p>{project.description || "暂无项目描述"}</p>
+                <div className="card-footer project-card-footer">
+                  <span>
+                    <InpulseIcon name="users" size={14} />
+                    {project.memberCount} 位成员
+                  </span>
+                  <div className="project-card-actions">
+                    {isAdmin && onOpenMembers ? (
                       <Button
-                        onClick={() => onOpenModules(createdProject.project.id)}
-                      >
-                        管理模块
-                      </Button>
-                    )}
-                    {isAdmin && onOpenMembers && (
-                      <Button
-                        size="small"
-                        onClick={() => onOpenMembers(createdProject.project.id)}
+                        className="text-button"
+                        onClick={() => onOpenMembers(project.id)}
                       >
                         管理成员
                       </Button>
-                    )}
-                    <Button
-                      type="primary"
-                      size="small"
-                      data-testid="open-created-project-activity"
-                      onClick={() =>
-                        onOpenActivity?.(createdProject.project.id)
-                      }
-                    >
-                      查看项目动态
-                    </Button>
-                    <Button
-                      size="small"
-                      data-testid="search-created-project"
-                      onClick={() => onSearch?.(createdProject.project.code)}
-                    >
-                      搜索项目
-                    </Button>
-                  </Space>
-                </Space>
-              }
-            />
-          ) : null}
-          {projectsLoading ? (
-            <Spin description="正在加载项目列表" />
-          ) : projectsError ? (
-            <Alert
-              type="error"
-              showIcon
-              title={projectsError}
-              action={
-                onRetryProjects ? (
-                  <Button onClick={onRetryProjects}>重试</Button>
-                ) : undefined
-              }
-            />
-          ) : projects.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无可见项目；系统管理员或已加入成员创建的项目会显示在这里。"
-            />
-          ) : (
-            <List
-              dataSource={[...projects]}
-              rowKey={(item) => item.id}
-              renderItem={(project) => (
-                <Card
-                  className="project-card"
-                  title={
-                    <Space wrap>
-                      <span>{project.name}</span>
-                      <Tag
-                        color={
-                          project.status === "ACTIVE" ? "green" : "default"
-                        }
-                      >
-                        {project.status === "ACTIVE" ? "正常" : "已归档"}
-                      </Tag>
-                    </Space>
-                  }
-                  extra={
-                    <Space wrap>
-                      <Button onClick={() => onOpenModules?.(project.id)}>
-                        管理模块
-                      </Button>
-                      {isAdmin && onOpenMembers ? (
-                        <Button
-                          size="small"
-                          onClick={() => onOpenMembers(project.id)}
-                        >
-                          管理成员
-                        </Button>
-                      ) : null}
+                    ) : null}
+                    {onOpenModules ? (
                       <Button
-                        type="primary"
-                        size="small"
-                        onClick={() => onOpenActivity?.(project.id)}
+                        className="text-button project-card-more"
+                        onClick={() => onOpenModules(project.id)}
                       >
-                        查看项目动态
+                        查看模块
+                        <InpulseIcon name="chevron" size={13} />
                       </Button>
-                    </Space>
-                  }
-                >
-                  <Text type="secondary">
-                    {project.code} · {project.memberCount} 位活跃成员
-                  </Text>
-                  {project.description ? (
-                    <p style={{ whiteSpace: "pre-wrap" }}>
-                      {project.description}
-                    </p>
-                  ) : null}
-                  <Button size="small" onClick={() => onSearch?.(project.code)}>
-                    搜索项目
-                  </Button>
-                </Card>
-              )}
-            />
-          )}
-        </Space>
-      </Card>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          <section className="hierarchy-section" aria-label="层级说明">
+            <h3>层级说明</h3>
+            <p>项目 / 模块 / 功能 / 任务 / 迭代记录</p>
+            <ul className="hierarchy-grid">
+              {hierarchyNotes.map((note) => (
+                <li key={note.label}>
+                  <strong>{note.label}</strong>
+                  <span>{note.text}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
+      )}
+
       <CreateProjectModal
         open={createOpen}
         creatorName={creatorName}

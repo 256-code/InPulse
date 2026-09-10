@@ -1,25 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Avatar,
-  Button,
-  Card,
-  Checkbox,
-  Empty,
-  List,
-  Modal,
-  Select,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from "antd";
+import { Alert, Button, Checkbox, Modal, Select, Spin } from "antd";
 import type {
   InpulseApiClient,
   ProjectMemberReassignmentItem,
   ProjectMemberRecordItem,
 } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   describeUserDirectoryError,
   useUserDirectoryQuery,
@@ -31,8 +23,6 @@ import {
   useProjectMembers,
 } from "./project-member-query";
 
-const { Text } = Typography;
-
 interface ReassignmentChoice {
   readonly enabled: boolean;
   readonly assigneeId?: number | undefined;
@@ -42,6 +32,9 @@ export interface ProjectMembersPageViewProps {
   readonly projectId: number;
   readonly client?: InpulseApiClient | undefined;
 }
+
+const formatMemberDate = (value: string) =>
+  new Date(value).toLocaleString("zh-CN", { hour12: false });
 
 export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   projectId,
@@ -170,7 +163,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       const choice = reassignChoices[task.taskId];
       if (!choice?.enabled) continue;
       if (choice.assigneeId === undefined) {
-        setActionError(`请为任务 ${task.code} 选择改派成员。`);
+        setActionError("请为任务 " + task.code + " 选择改派成员。");
         return;
       }
       reassignments.push({
@@ -236,196 +229,255 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             未改派任务保留原负责人，但原成员将立即失去处理权限。
           </p>
         </div>
-        <Button type="primary" onClick={openAdd}>
-          添加成员
-        </Button>
+        <div className="catalog-actions">
+          <Button className="primary-button" onClick={openAdd}>
+            <InpulseIcon name="plus" size={15} />
+            添加成员
+          </Button>
+        </div>
       </div>
 
-      <Space orientation="vertical" style={{ width: "100%" }} size={16}>
-        {success ? <Alert type="success" showIcon title={success} /> : null}
-        {query.isPending ? (
-          <Spin description="正在加载项目成员" />
-        ) : query.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            title={projectMemberErrorMessage(query.error)}
-            action={<Button onClick={() => void query.refetch()}>重试</Button>}
+      <p className="permission-hint">
+        <InpulseIcon name="shield" size={16} />
+        <span>
+          系统管理员可调整项目成员关系；移除操作保留全部业务历史与审计记录，
+          只关闭当前成员关系，并通过改派或保留原负责人处理未完成任务。
+        </span>
+      </p>
+
+      {success ? (
+        <Alert
+          className="member-success"
+          type="success"
+          showIcon
+          title={success}
+        />
+      ) : null}
+
+      {query.isPending ? (
+        <div className="calm-state">
+          <span className="calm-spinner" />
+          <span>正在加载项目成员</span>
+        </div>
+      ) : query.isError ? (
+        <CalmEmptyState
+          icon="alert"
+          title="项目成员加载失败"
+          description={projectMemberErrorMessage(query.error)}
+        >
+          <Button
+            className="secondary-button"
+            onClick={() => void query.refetch()}
+          >
+            重试
+          </Button>
+        </CalmEmptyState>
+      ) : (query.data?.items.length ?? 0) === 0 ? (
+        <CalmEmptyState
+          icon="users"
+          title="暂无项目成员"
+          description="添加成员后，成员关系、任务历史与审计记录都会保留在项目内。"
+        />
+      ) : (
+        <section className="member-panel">
+          <CalmSectionTitle
+            title="成员与历史"
+            hint="活跃成员可立即处理项目任务；已移除成员仅保留历史记录，可重新加入。"
           />
-        ) : (query.data?.items.length ?? 0) === 0 ? (
-          <Empty description="暂无项目成员" />
-        ) : (
-          <List
-            dataSource={[...(query.data?.items ?? [])]}
-            rowKey={(item) => item.membershipId}
-            renderItem={(member) => (
-              <Card
-                title={
-                  <Space wrap>
-                    <Avatar size={24} className="person-avatar">
-                      {member.name.slice(0, 1)}
-                    </Avatar>
-                    <span>{member.name}</span>
-                    <Tag
-                      color={member.status === "ACTIVE" ? "green" : "default"}
-                    >
-                      {member.status === "ACTIVE" ? "活跃成员" : "已移除"}
-                    </Tag>
-                  </Space>
-                }
-                extra={
-                  member.status === "ACTIVE" ? (
-                    <Button danger onClick={() => openRemove(member)}>
-                      移除
-                    </Button>
-                  ) : undefined
+          <div className="member-history-list">
+            {[...(query.data?.items ?? [])].map((member) => (
+              <article
+                key={member.membershipId}
+                className={
+                  "calm-member-card" +
+                  (member.status === "REMOVED" ? " member-card-removed" : "")
                 }
               >
-                <Text type="secondary">
-                  加入时间：
-                  {new Date(member.joinedAt).toLocaleString("zh-CN", {
-                    hour12: false,
-                  })}
-                </Text>
-                {member.removedAt ? (
-                  <p>
-                    <Text type="secondary">
-                      移除时间：
-                      {new Date(member.removedAt).toLocaleString("zh-CN", {
-                        hour12: false,
-                      })}
-                    </Text>
+                <div className="calm-member-card-main">
+                  <span className="person-avatar member-avatar">
+                    {member.name.slice(0, 1)}
+                  </span>
+                  <div className="member-identity">
+                    <strong>{member.name}</strong>
+                    <span>加入时间：{formatMemberDate(member.joinedAt)}</span>
+                    {member.removedAt ? (
+                      <span>
+                        移除时间：{formatMemberDate(member.removedAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="member-status">
+                  <CalmBadge
+                    tone={member.status === "ACTIVE" ? "green" : "gray"}
+                  >
+                    {member.status === "ACTIVE" ? "活跃成员" : "已移除"}
+                  </CalmBadge>
+                  {member.status === "REMOVED" ? (
+                    <small>历史记录已保留</small>
+                  ) : null}
+                </div>
+                <div className="member-card-actions">
+                  {member.status === "ACTIVE" ? (
+                    <Button
+                      className="danger-button"
+                      onClick={() => openRemove(member)}
+                    >
+                      移除
+                    </Button>
+                  ) : null}
+                </div>
+                {member.status === "REMOVED" ? (
+                  <p className="member-removed-note">
+                    <InpulseIcon name="clock" size={14} />
+                    <span>
+                      已移除成员的历史任务、记录和审计均保留，可重新加入。
+                    </span>
                   </p>
                 ) : null}
-                {member.status === "REMOVED" ? (
-                  <p>已移除成员的历史任务、记录和审计均保留，可重新加入。 </p>
-                ) : null}
-              </Card>
-            )}
-          />
-        )}
-      </Space>
+              </article>
+            ))}
+          </div>
+          <p className="member-history-note">
+            <InpulseIcon name="shield" size={15} />
+            <span>
+              移除成员不会清空任何历史数据；只有系统管理员可以执行添加与移除。
+            </span>
+          </p>
+        </section>
+      )}
 
       <Modal
+        className="catalog-modal"
         open={addOpen}
         title="添加项目成员"
         onCancel={closeAdd}
         footer={null}
         mask={{ closable: !addMutation.isPending }}
       >
-        <Alert
-          showIcon
-          type="info"
-          title="添加后该用户将成为项目活跃成员"
-          description="系统管理员可在成员历史中重新加入已移除用户；停用用户不会出现在目录中。"
-          style={{ marginBottom: 16 }}
-        />
-        {directory.isPending ? (
-          <Spin description="正在加载用户目录" />
-        ) : directory.isError ? (
+        <div className="dialog-form">
           <Alert
-            type="error"
             showIcon
-            title={describeUserDirectoryError(directory.error)}
+            type="info"
+            title="添加后该用户将成为项目活跃成员"
+            description="系统管理员可在成员历史中重新加入已移除用户；停用用户不会出现在目录中。"
           />
-        ) : addCandidates.length === 0 ? (
-          <Empty description="没有可添加的启用用户" />
-        ) : (
-          <div className="impact-fieldset">
-            <div className="check-list">
-              {addCandidates.map((user) => (
-                <div className="member-option" key={user.id}>
-                  <Checkbox
-                    checked={selectedUserId === user.id}
-                    aria-label={`选择成员：${user.name}`}
-                    onChange={(event) =>
-                      setSelectedUserId(event.target.checked ? user.id : null)
-                    }
-                  />
-                  <Avatar size={24} className="person-avatar">
-                    {user.name.slice(0, 1)}
-                  </Avatar>
-                  <span className="member-name">{user.name}</span>
-                  <span className="member-role">
-                    {user.isAdmin ? "系统管理员" : "启用用户"}
-                  </span>
-                </div>
-              ))}
+          {directory.isPending ? (
+            <div className="calm-state modal-loading">
+              <Spin size="small" />
+              <span>正在加载用户目录</span>
             </div>
+          ) : directory.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              title={describeUserDirectoryError(directory.error)}
+            />
+          ) : addCandidates.length === 0 ? (
+            <CalmEmptyState
+              icon="users"
+              title="没有可添加的启用用户"
+              description="请先在用户目录中启用用户，再回来添加项目成员。"
+            />
+          ) : (
+            <div className="impact-fieldset member-candidate-list">
+              <div className="check-list">
+                {addCandidates.map((user) => (
+                  <div className="member-option" key={user.id}>
+                    <Checkbox
+                      checked={selectedUserId === user.id}
+                      aria-label={"选择成员：" + user.name}
+                      onChange={(event) =>
+                        setSelectedUserId(event.target.checked ? user.id : null)
+                      }
+                    />
+                    <span className="person-avatar member-avatar">
+                      {user.name.slice(0, 1)}
+                    </span>
+                    <span className="member-name">{user.name}</span>
+                    <span className="member-role">
+                      {user.isAdmin ? "系统管理员" : "启用用户"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {actionError ? (
+            <Alert type="error" showIcon title={actionError} />
+          ) : null}
+          {reauthReady ? (
+            <Alert
+              type="success"
+              showIcon
+              title="管理员安全验证已完成，请重新点击添加。"
+            />
+          ) : null}
+          <div className="calm-action-footer">
+            <Button
+              className="secondary-button"
+              onClick={closeAdd}
+              disabled={addMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              className="primary-button"
+              loading={addMutation.isPending}
+              disabled={selectedUserId === null}
+              onClick={() => void submitAdd()}
+            >
+              添加成员
+            </Button>
           </div>
-        )}
-        {actionError ? (
-          <Alert
-            type="error"
-            showIcon
-            title={actionError}
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-        {reauthReady ? (
-          <Alert
-            type="success"
-            showIcon
-            title="管理员安全验证已完成，请重新点击添加。"
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-        <Space
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}
-        >
-          <Button onClick={closeAdd} disabled={addMutation.isPending}>
-            取消
-          </Button>
-          <Button
-            type="primary"
-            loading={addMutation.isPending}
-            disabled={selectedUserId === null}
-            onClick={() => void submitAdd()}
-          >
-            添加成员
-          </Button>
-        </Space>
+        </div>
       </Modal>
 
       <Modal
+        className="catalog-modal"
         open={removing !== null}
         title="移除项目成员"
         onCancel={closeRemove}
         footer={null}
         mask={{ closable: !removeMutation.isPending }}
       >
-        <Alert
-          showIcon
-          type="warning"
-          title={`确认从项目中移除 ${removing?.name ?? ""}？`}
-          description="成员历史、已完成任务和审计记录均保留；未完成任务可选择改派，否则保留原负责人但该成员不能继续处理。"
-          style={{ marginBottom: 16 }}
-        />
-        {unfinished.isPending ? (
-          <Spin description="正在检查未完成任务" />
-        ) : unfinished.isError ? (
+        <div className="dialog-form">
           <Alert
-            type="error"
             showIcon
-            title={projectMemberErrorMessage(unfinished.error)}
+            type="warning"
+            title={"确认从项目中移除 " + (removing?.name ?? "") + "？"}
+            description="成员历史、已完成任务和审计记录均保留；未完成任务可选择改派，否则保留原负责人但该成员不能继续处理。"
           />
-        ) : (unfinished.data?.items.length ?? 0) === 0 ? (
-          <Alert type="success" showIcon title="该成员没有未完成任务。" />
-        ) : (
-          <List
-            dataSource={[...(unfinished.data?.items ?? [])]}
-            rowKey={(task) => task.taskId}
-            renderItem={(task) => {
-              const choice = reassignChoices[task.taskId];
-              return (
-                <Card size="small" style={{ marginBottom: 12 }}>
-                  <Space orientation="vertical" style={{ width: "100%" }}>
-                    <span>
-                      <Text strong>{task.code}</Text> · {task.title}
-                    </span>
+          <CalmSectionTitle
+            title="未完成任务"
+            hint="勾选改派后必须选择其他活跃成员；不勾选则保留原负责人。"
+          />
+          {unfinished.isPending ? (
+            <div className="calm-state modal-loading">
+              <Spin size="small" />
+              <span>正在检查未完成任务</span>
+            </div>
+          ) : unfinished.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              title={projectMemberErrorMessage(unfinished.error)}
+            />
+          ) : (unfinished.data?.items.length ?? 0) === 0 ? (
+            <Alert type="success" showIcon title="该成员没有未完成任务。" />
+          ) : (
+            <div className="member-task-list">
+              {[...(unfinished.data?.items ?? [])].map((task) => {
+                const choice = reassignChoices[task.taskId];
+                return (
+                  <div className="calm-member-task-card" key={task.taskId}>
+                    <div className="member-task-main">
+                      <strong>{task.code}</strong>
+                      <span>{task.title}</span>
+                    </div>
                     <Checkbox
                       checked={choice?.enabled === true}
-                      aria-label={`改派任务 ${task.code}`}
+                      aria-label={"改派任务 " + task.code}
                       onChange={(event) =>
                         disabledTaskReassignment(
                           task.taskId,
@@ -437,10 +489,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     </Checkbox>
                     {choice?.enabled ? (
                       <Select
-                        aria-label={`选择 ${task.code} 的改派成员`}
+                        aria-label={"选择 " + task.code + " 的改派成员"}
                         value={choice.assigneeId ?? undefined}
                         placeholder="选择改派成员"
-                        style={{ width: "100%" }}
                         options={assigneeOptions}
                         disabled={assigneeOptions.length === 0}
                         onChange={(value) => {
@@ -450,46 +501,44 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         }}
                       />
                     ) : (
-                      <Text type="secondary">保留原负责人</Text>
+                      <span className="member-task-keep">
+                        <InpulseIcon name="user" size={14} />
+                        保留原负责人
+                      </span>
                     )}
-                  </Space>
-                </Card>
-              );
-            }}
-          />
-        )}
-        {actionError ? (
-          <Alert
-            type="error"
-            showIcon
-            title={actionError}
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-        {reauthReady ? (
-          <Alert
-            type="success"
-            showIcon
-            title="管理员安全验证已完成，请重新点击确认移除。"
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-        <Space
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}
-        >
-          <Button onClick={closeRemove} disabled={removeMutation.isPending}>
-            取消
-          </Button>
-          <Button
-            type="primary"
-            danger
-            loading={removeMutation.isPending}
-            disabled={unfinished.isPending || unfinished.isError}
-            onClick={() => void submitRemove()}
-          >
-            确认移除
-          </Button>
-        </Space>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {actionError ? (
+            <Alert type="error" showIcon title={actionError} />
+          ) : null}
+          {reauthReady ? (
+            <Alert
+              type="success"
+              showIcon
+              title="管理员安全验证已完成，请重新点击确认移除。"
+            />
+          ) : null}
+          <div className="calm-action-footer">
+            <Button
+              className="secondary-button"
+              onClick={closeRemove}
+              disabled={removeMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              className="primary-button danger-button"
+              loading={removeMutation.isPending}
+              disabled={unfinished.isPending || unfinished.isError}
+              onClick={() => void submitRemove()}
+            >
+              确认移除
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <AdminReauthenticateModal

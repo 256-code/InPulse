@@ -30,6 +30,32 @@ export function useProjects({ client }: ProjectMutationOptions = {}) {
   });
 }
 
+export interface ProjectDetailOptions extends ProjectMutationOptions {
+  readonly projectId: number | null;
+  readonly enabled?: boolean | undefined;
+}
+
+export function useProjectDetail({
+  client,
+  projectId,
+  enabled = true,
+}: ProjectDetailOptions) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  return useQuery({
+    queryKey: ["projects", "detail", projectId],
+    queryFn: async () => {
+      if (projectId === null) {
+        throw new Error("projectId is required");
+      }
+      const result = await apiClient.getProject(projectId);
+      return result.project;
+    },
+    enabled: enabled && projectId !== null,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function describeCreateProjectError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.status) {
