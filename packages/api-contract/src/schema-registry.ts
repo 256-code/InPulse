@@ -1,3 +1,4 @@
+import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
 import { publishedRecordSchemas } from "./contracts/published-records.zod.js";
@@ -112,6 +113,7 @@ export interface SchemaRegistryEntry {
  * 每个条目必须通过 `.meta({ id })` 声明与键名一致的 OpenAPI 组件名。
  */
 export const schemaRegistry = {
+  ...taskCompletionSchemas,
   ...moduleSchemas,
   ...featureSchemas,
   ...taskSchemas,

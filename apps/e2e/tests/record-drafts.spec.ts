@@ -84,7 +84,7 @@ for (const moduleScope of [false, true])
       });
       await complete.getByLabel("是否产生实际功能变化").selectOption("yes");
       await expect(
-        complete.getByRole("button", { name: "确认完成任务" }),
+        complete.getByRole("button", { name: "发布并完成任务" }),
       ).toBeDisabled();
       await complete.getByRole("link", { name: "选择或新建草稿" }).click();
       for (let i = 1; i <= 2; i++) {

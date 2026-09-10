@@ -66,7 +66,7 @@ function mount(api: InpulseApiClient, writable = true) {
 }
 describe("F-14 task editing", () => {
   it("keeps actual changes TODO and preserves completion input across a version conflict", async () => {
-    const transitionTask = vi
+    const completeTask = vi
       .fn()
       .mockRejectedValueOnce(
         new ApiError(409, {
@@ -76,10 +76,13 @@ describe("F-14 task editing", () => {
           requestId: "test",
         }),
       )
-      .mockResolvedValue({ ...item, workStatus: "DONE", rowVersion: 3 });
+      .mockResolvedValue({
+        task: { ...item, workStatus: "DONE", rowVersion: 3 },
+        record: null,
+      });
     mount(
       client({
-        transitionTask,
+        completeTask,
         getTask: vi.fn().mockResolvedValue({ ...item, rowVersion: 2 }),
       }),
     );
@@ -95,8 +98,10 @@ describe("F-14 task editing", () => {
     fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
       target: { value: "yes" },
     });
-    expect(modal.getByRole("button", { name: "确认完成任务" })).toBeDisabled();
-    expect(transitionTask).not.toHaveBeenCalled();
+    expect(
+      modal.getByRole("button", { name: "发布并完成任务" }),
+    ).toBeDisabled();
+    expect(completeTask).not.toHaveBeenCalled();
     fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
       target: { value: "no" },
     });
@@ -115,17 +120,17 @@ describe("F-14 task editing", () => {
     );
     expect(modal.getByLabelText("完成补充说明")).toHaveValue("保留我的说明");
     fireEvent.click(modal.getByRole("button", { name: "确认完成任务" }));
-    await waitFor(() => expect(transitionTask).toHaveBeenCalledTimes(2));
-    expect(transitionTask.mock.calls[1]![4]).toEqual({
-      action: "COMPLETE",
+    await waitFor(() => expect(completeTask).toHaveBeenCalledTimes(2));
+    expect(completeTask.mock.calls[1]![1]).toEqual({
+      expectedRowVersion: 2,
       mode: "WITHOUT_RECORD",
       completionReason: "技术调研",
       note: "保留我的说明",
     });
-    expect(transitionTask.mock.calls[1]![5].headers["If-Match"]).toBe('"2"');
-    expect(
-      transitionTask.mock.calls[1]![5].headers["Idempotency-Key"],
-    ).not.toBe(transitionTask.mock.calls[0]![5].headers["Idempotency-Key"]);
+    expect(completeTask.mock.calls[1]![2].headers["If-Match"]).toBe('"2"');
+    expect(completeTask.mock.calls[1]![2].headers["Idempotency-Key"]).not.toBe(
+      completeTask.mock.calls[0]![2].headers["Idempotency-Key"],
+    );
   });
   it("defaults to TODO and retains all history without displaying an incomplete completion rate", async () => {
     mount(

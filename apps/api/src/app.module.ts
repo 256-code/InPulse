@@ -1,4 +1,5 @@
 import { TaskRecordDraftModule } from "./workflows/task-record-draft.module.js";
+import { TaskCompletionModule } from "./workflows/task-completion.module.js";
 import { TaskGroupsModule } from "./modules/task-groups/task-groups.module.js";
 import { RecordDraftsModule } from "./modules/change-records/record-drafts.module.js";
 import { PublishedRecordsModule } from "./modules/change-records/published-records.module.js";
@@ -44,6 +45,7 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       RecordDraftsModule,
       PublishedRecordsModule,
       TaskRecordDraftModule,
+      TaskCompletionModule,
       TaskGroupsModule,
     ]
   : [];

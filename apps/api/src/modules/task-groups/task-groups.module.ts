@@ -1,4 +1,8 @@
 import { Module } from "@nestjs/common";
+import {
+  TaskBranchQueryPort,
+  PostgresTaskBranchQueryPort,
+} from "./task-branch-query.port.js";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
 import { DatabaseModule } from "../../database/database.module.js";
@@ -28,7 +32,13 @@ import { TaskGroupsController } from "./task-groups.controller.js";
     SearchProjectionModule,
     NotificationProjectionModule,
   ],
-  providers: [TaskGroupRepository, TaskGroupsService, TaskGroupsHttpService],
+  providers: [
+    TaskGroupRepository,
+    TaskGroupsService,
+    TaskGroupsHttpService,
+    { provide: TaskBranchQueryPort, useClass: PostgresTaskBranchQueryPort },
+  ],
+  exports: [TaskBranchQueryPort],
   controllers: [TaskGroupsController],
 })
 export class TaskGroupsModule {}

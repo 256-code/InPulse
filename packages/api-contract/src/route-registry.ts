@@ -3,6 +3,7 @@ import {
   taskRecordDraftRoutes,
 } from "./record-draft-routes.js";
 import { taskGroupRoutes } from "./task-group-routes.js";
+import { taskCompletionRoutes } from "./task-completion-routes.js";
 import { featureRoutes } from "./feature-routes.js";
 import { taskRoutes, moduleTaskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
@@ -34,6 +35,7 @@ export const routeRegistry = [
   ...recordPublicationRoutes,
   ...taskRecordDraftRoutes,
   ...taskGroupRoutes,
+  ...taskCompletionRoutes,
   ...moduleTaskRoutes,
   {
     method: "GET",

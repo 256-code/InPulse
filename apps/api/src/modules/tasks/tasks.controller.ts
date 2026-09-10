@@ -288,33 +288,6 @@ export class TasksController {
     return result.body;
   }
 
-  @Post(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/status")
-  @Operation("transitionTask")
-  async transitionTask(
-    @Req() request: TasksHttpRequest,
-    @Res({ passthrough: true }) response: Response,
-    @ContractPath("transitionTask") params: unknown,
-    @ContractQuery("transitionTask") query: unknown,
-    @ContractBody("transitionTask") body: unknown,
-    @ContractHeaders("transitionTask") _headers: unknown,
-  ) {
-    const result = await this.service.handle("transitionTask", {
-      ...request,
-      headers: request.headers,
-      params,
-      query,
-      body,
-    });
-    response.status(result.status);
-    response.setHeader("Cache-Control", "no-store");
-    if (result.status >= 400)
-      response.setHeader(
-        "X-Request-Id",
-        (result.body as { requestId: string }).requestId,
-      );
-    return result.body;
-  }
-
   @Get(":projectId/modules/:moduleId/tasks/:taskId/status-history")
   @Operation("getModuleTaskStatusHistory")
   async getModuleTaskStatusHistory(
@@ -328,33 +301,6 @@ export class TasksController {
       headers: request.headers,
       params,
       query,
-    });
-    response.status(result.status);
-    response.setHeader("Cache-Control", "no-store");
-    if (result.status >= 400)
-      response.setHeader(
-        "X-Request-Id",
-        (result.body as { requestId: string }).requestId,
-      );
-    return result.body;
-  }
-
-  @Post(":projectId/modules/:moduleId/tasks/:taskId/status")
-  @Operation("transitionModuleTask")
-  async transitionModuleTask(
-    @Req() request: TasksHttpRequest,
-    @Res({ passthrough: true }) response: Response,
-    @ContractPath("transitionModuleTask") params: unknown,
-    @ContractQuery("transitionModuleTask") query: unknown,
-    @ContractBody("transitionModuleTask") body: unknown,
-    @ContractHeaders("transitionModuleTask") _headers: unknown,
-  ) {
-    const result = await this.service.handle("transitionModuleTask", {
-      ...request,
-      headers: request.headers,
-      params,
-      query,
-      body,
     });
     response.status(result.status);
     response.setHeader("Cache-Control", "no-store");

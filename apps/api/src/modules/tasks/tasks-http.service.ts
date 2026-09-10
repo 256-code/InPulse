@@ -4,7 +4,6 @@ import {
   routeRegistry,
   schemaRegistry,
   type TaskEditRequest,
-  type TaskStatusRequest,
 } from "@inpulse/api-contract";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
@@ -54,8 +53,6 @@ export class TasksHttpService {
       | "listModuleTaskAssignees"
       | "getTaskStatusHistory"
       | "getModuleTaskStatusHistory"
-      | "transitionTask"
-      | "transitionModuleTask"
       | TaskOperation,
     request: TasksHttpRequest,
   ): Promise<{ status: number; body: unknown }> {
@@ -175,37 +172,26 @@ export class TasksHttpService {
           body: input,
         },
         execute: async (tx, actorId) => {
-          const body = operation.startsWith("transition")
-            ? await this.tasks.transition(tx, {
-                ...path,
-                taskId: path.taskId!,
-                actorId,
-                version: Number(
-                  getHeader(request.headers, "if-match")!.slice(1, -1),
-                ),
-                command: input as unknown as TaskStatusRequest,
-                requestId,
-              })
-            : await this.tasks.execute(tx, {
-                operation: operation as TaskOperation,
-                actorId,
-                projectId: path.projectId,
-                moduleId: path.moduleId,
-                featureId: path.featureId,
-                ...(path.taskId === undefined
-                  ? {}
-                  : {
-                      taskId: path.taskId,
-                      version: Number(
-                        getHeader(request.headers, "if-match")!.slice(1, -1),
-                      ),
-                    }),
-                edit: input,
-                ...(input.impactFeatureIds === undefined
-                  ? {}
-                  : { impactFeatureIds: input.impactFeatureIds }),
-                requestId,
-              });
+          const body = await this.tasks.execute(tx, {
+            operation: operation as TaskOperation,
+            actorId,
+            projectId: path.projectId,
+            moduleId: path.moduleId,
+            featureId: path.featureId,
+            ...(path.taskId === undefined
+              ? {}
+              : {
+                  taskId: path.taskId,
+                  version: Number(
+                    getHeader(request.headers, "if-match")!.slice(1, -1),
+                  ),
+                }),
+            edit: input,
+            ...(input.impactFeatureIds === undefined
+              ? {}
+              : { impactFeatureIds: input.impactFeatureIds }),
+            requestId,
+          });
           return {
             responseStatus: 200,
             responseSchemaRef: moduleScope ? "ModuleTaskItem" : "TaskItem",
