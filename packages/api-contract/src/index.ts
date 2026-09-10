@@ -22,4 +22,6 @@ export * from "./contracts/features.zod.js";
 export * from "./contracts/tasks.zod.js";
 
 export * from "./contracts/record-drafts.zod.js";
+export * from "./contracts/published-records.zod.js";
+
 export * from "./contracts/task-groups.zod.js";

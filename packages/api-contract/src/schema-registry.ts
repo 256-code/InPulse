@@ -1,5 +1,6 @@
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
+import { publishedRecordSchemas } from "./contracts/published-records.zod.js";
 import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
@@ -115,6 +116,8 @@ export const schemaRegistry = {
   ...featureSchemas,
   ...taskSchemas,
   ...recordDraftSchemas,
+  ...publishedRecordSchemas,
+
   ...taskGroupSchemas,
   ErrorResponse: {
     schema: errorResponseSchema,

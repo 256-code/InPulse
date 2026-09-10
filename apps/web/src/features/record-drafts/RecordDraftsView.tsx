@@ -1,4 +1,12 @@
+import {
+  fields,
+  labels,
+  mergeRecordDraft,
+  type Field,
+} from "./record-content.js";
+export { mergeRecordDraft } from "./record-content.js";
 import React, { useMemo, useRef, useState } from "react";
+import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
 import "./record-drafts.css";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
@@ -15,21 +23,6 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 
-const fields = [
-  "title",
-  "contextProblem",
-  "changeSolution",
-  "resultVerification",
-  "remainingIssues",
-] as const;
-type Field = (typeof fields)[number];
-const labels: Record<Field, string> = {
-  title: "迭代标题",
-  contextProblem: "为什么改、发现了什么问题",
-  changeSolution: "改了什么、怎么改的",
-  resultVerification: "改完效果如何、如何验证",
-  remainingIssues: "还有什么问题（选填）",
-};
 const empty: RecordDraftContent = {
   title: "",
   contextProblem: "",
@@ -56,21 +49,6 @@ function errorMessage(error: unknown) {
     if (error.status === 429) return "请求过于频繁，请稍后重试。输入已保留。";
   }
   return "草稿服务暂时不可用，输入已保留，可重试。";
-}
-export function mergeRecordDraft(
-  base: RecordDraftContent,
-  draft: RecordDraftContent,
-  latest: RecordDraftContent,
-) {
-  const values = { ...latest };
-  const conflicts: Field[] = [];
-  for (const field of fields) {
-    if (draft[field] === base[field]) continue;
-    if (latest[field] !== base[field] && latest[field] !== draft[field])
-      conflicts.push(field);
-    values[field] = draft[field];
-  }
-  return { values, conflicts };
 }
 type Merge = ReturnType<typeof mergeRecordDraft> & {
   latest: RecordDraftItem;
@@ -510,6 +488,11 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
                     继续编辑
                   </Button>
                   <p>草稿尚未发布，不计入正式迭代统计。</p>
+                  <PublishRecordButton
+                    item={detail.data}
+                    api={api}
+                    writable={!!writable}
+                  />
                 </section>
               )
             ))}

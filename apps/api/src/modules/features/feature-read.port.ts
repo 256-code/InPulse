@@ -6,6 +6,7 @@ export interface FeatureReadResource {
   readonly moduleId: number;
   readonly name: string;
   readonly status: "ACTIVE" | "ARCHIVED";
+  readonly createdBy: number;
 }
 /** Caller authorizes project access. Includes archived history. */
 export abstract class FeatureReadPort {

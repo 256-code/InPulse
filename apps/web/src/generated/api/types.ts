@@ -88,6 +88,33 @@ export type AdminUserVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type ChangeRecordVersion = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly recordId: number;
+  readonly projectId: number;
+  readonly versionNo: number;
+  readonly createdBy: number;
+  readonly createdAt: string;
+  readonly leftovers: readonly ({
+    readonly id: number;
+    readonly content: string;
+  })[];
+};
+
+export type ChangeRecordVersionList = {
+  readonly items: readonly ChangeRecordVersion[];
+};
+
+export type ChangeRecordVersionPath = {
+  readonly projectId: number;
+  readonly recordId: number;
+  readonly versionNo: number;
+};
+
 export type ConfirmMfaEnrollmentRequest = {
   readonly expectedEnrollmentGeneration: number;
   readonly code: string;
@@ -531,6 +558,63 @@ export type ProjectVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type PublishRecordRequest = Readonly<Record<string, unknown>>;
+
+export type PublishedRecord = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+  readonly handlerId: number;
+  readonly authorId: number;
+  readonly status: "PUBLISHED";
+  readonly code: string;
+  readonly currentVersion: number;
+  readonly publishedAt: string;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly leftoverItem: ({
+    readonly id: number;
+    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+    readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
+  } | null);
+  readonly leftovers: readonly ({
+    readonly id: number;
+    readonly content: string;
+    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+    readonly rowVersion: number;
+  })[];
+};
+
+export type PublishedRecordContent = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly confirmLeftoverResolved: boolean;
+};
+
+export type PublishedRecordList = {
+  readonly items: readonly PublishedRecord[];
+};
+
+export type PublishedRecordVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+  readonly "x-record-version": string;
+};
+
 export type ReauthenticateAdminHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -606,6 +690,16 @@ export type RecordDraftResourcePath = {
 export type RecordDraftVersionHeaders = {
   readonly "x-csrf-token": string;
   readonly "if-match": string;
+};
+
+export type RecordPublicationReplayContext = {
+  readonly projectId: number;
+  readonly recordId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+  readonly leftoverItemIds: readonly number[];
 };
 
 export type RemoveProjectMemberRequest = {

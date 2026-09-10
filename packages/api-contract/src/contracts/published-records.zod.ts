@@ -1,0 +1,129 @@
+import { z } from "zod";
+import {
+  recordDraftContentSchema,
+  recordDraftItemSchema,
+  recordDraftResourcePathSchema,
+} from "./record-drafts.zod.js";
+const id = z.number().int().positive().max(2147483647);
+export const recordVersionLeftoverSchema = z
+  .object({ id, content: z.string().min(1).max(10000) })
+  .strict();
+export const recordLeftoverStateSchema = z
+  .object({
+    id,
+    status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
+    rowVersion: id,
+    linkedTaskId: id.nullable(),
+  })
+  .strict();
+export const publishedRecordContentSchema = recordDraftContentSchema
+  .extend({
+    remainingIssues: z.string().trim().max(10000),
+    confirmLeftoverResolved: z.boolean(),
+  })
+  .meta({ id: "PublishedRecordContent" });
+export const recordPublicationReplayContextSchema = z
+  .object({
+    projectId: id,
+    recordId: id,
+    moduleId: id,
+    featureId: id.nullable(),
+    taskId: id.nullable(),
+    impactFeatureIds: z.array(id),
+    leftoverItemIds: z.array(id),
+  })
+  .strict()
+  .meta({ id: "RecordPublicationReplayContext" });
+export const publishedRecordSchema = recordDraftItemSchema
+  .extend({
+    status: z.literal("PUBLISHED"),
+    leftoverItem: recordLeftoverStateSchema.nullable(),
+    code: z.string().regex(/^[A-Z][A-Z0-9_]{1,31}-CR-[1-9][0-9]*$/),
+    currentVersion: id,
+    publishedAt: z.iso.datetime(),
+    leftovers: z.array(
+      recordVersionLeftoverSchema.extend({
+        status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
+        rowVersion: id,
+      }),
+    ),
+  })
+  .meta({ id: "PublishedRecord" });
+export const changeRecordVersionSchema = recordDraftContentSchema
+  .extend({
+    recordId: id,
+    projectId: id,
+    versionNo: id,
+    createdBy: id,
+    createdAt: z.iso.datetime(),
+    leftovers: z.array(recordVersionLeftoverSchema),
+  })
+  .meta({ id: "ChangeRecordVersion" });
+export const publishedRecordSchemas = {
+  PublishedRecordContent: {
+    schema: publishedRecordContentSchema,
+    summary: "正式记录内容与清空遗留项确认",
+    sensitiveFieldPaths: [],
+  },
+  PublishRecordRequest: {
+    schema: z.object({}).strict().meta({ id: "PublishRecordRequest" }),
+    summary: "发布已保存草稿，不接受客户端身份或状态",
+    sensitiveFieldPaths: [],
+  },
+  PublishedRecordVersionHeaders: {
+    schema: z
+      .object({
+        "x-csrf-token": z.string().length(43),
+        "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/),
+        "x-record-version": z.string().regex(/^[1-9][0-9]{0,9}$/),
+      })
+      .strict()
+      .meta({ id: "PublishedRecordVersionHeaders" }),
+    summary: "记录行版本及正式版本",
+    sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  RecordPublicationReplayContext: {
+    schema: recordPublicationReplayContextSchema,
+    summary: "正式记录及稳定遗留项结果授权",
+    sensitiveFieldPaths: [],
+  },
+  PublishedRecord: {
+    schema: publishedRecordSchema,
+    summary: "正式记录当前内容与稳定遗留项",
+    sensitiveFieldPaths: [],
+  },
+  PublishedRecordList: {
+    schema: z
+      .object({ items: z.array(publishedRecordSchema) })
+      .strict()
+      .meta({ id: "PublishedRecordList" }),
+    summary: "有权项目内已发布记录",
+    sensitiveFieldPaths: [],
+  },
+  ChangeRecordVersion: {
+    schema: changeRecordVersionSchema,
+    summary: "正式记录不可变版本与遗留内容快照",
+    sensitiveFieldPaths: [],
+  },
+  ChangeRecordVersionList: {
+    schema: z
+      .object({ items: z.array(changeRecordVersionSchema) })
+      .strict()
+      .meta({ id: "ChangeRecordVersionList" }),
+    summary: "正式记录历史版本",
+    sensitiveFieldPaths: [],
+  },
+  ChangeRecordVersionPath: {
+    schema: recordDraftResourcePathSchema
+      .extend({ versionNo: z.coerce.number().int().positive().max(2147483647) })
+      .meta({ id: "ChangeRecordVersionPath" }),
+    summary: "指定记录历史版本",
+    sensitiveFieldPaths: [],
+  },
+};
+export type PublishedRecord = z.infer<typeof publishedRecordSchema>;
+export type ChangeRecordVersion = z.infer<typeof changeRecordVersionSchema>;
+
+export type PublishedRecordContent = z.infer<
+  typeof publishedRecordContentSchema
+>;
