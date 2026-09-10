@@ -3,6 +3,19 @@ import { dirname, posix } from "node:path";
 
 const productionSecretRoot = "/run/secrets";
 
+/**
+ * 生产 Secret 必须是常规文件且模式位只允许属主读取：必须包含属主读位
+ * （`0o400`），且不得包含组权限、其他权限或任一执行位（`0o177`）。
+ * 任一条件不满足都 fail closed，不回退到敏感环境变量。
+ */
+export function isPrivateOwnerReadableFile(
+  isFile: boolean,
+  mode: number,
+): boolean {
+  const permissions = mode & 0o777;
+  return isFile && (permissions & 0o400) !== 0 && (permissions & 0o177) === 0;
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -39,12 +52,7 @@ async function readTrimmedSecret(path: string, label: string): Promise<string> {
     }
 
     const metadata = await stat(resolvedPath);
-    const permissions = metadata.mode & 0o777;
-    if (
-      !metadata.isFile() ||
-      (permissions & 0o400) === 0 ||
-      (permissions & 0o177) !== 0
-    ) {
+    if (!isPrivateOwnerReadableFile(metadata.isFile(), metadata.mode)) {
       throw new Error(`${label} is not a private owner-readable regular file`);
     }
     pathToRead = resolvedPath;
