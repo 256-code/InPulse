@@ -1,3 +1,4 @@
+import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { Alert, Button, Drawer, Input, Modal, Spin } from "antd";
@@ -528,6 +529,7 @@ export function TasksPanel({
               >
                 迭代记录草稿
               </a>
+              <LeftoverTaskSource api={api} taskId={current.id} />
               <TaskStatusPanel
                 key={current.id}
                 item={current}

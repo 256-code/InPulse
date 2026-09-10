@@ -241,6 +241,7 @@ export class TasksManagementService {
       edit: TaskEditRequest;
       requestId: string;
       impactFeatureIds?: number[];
+      assignmentNotificationType?: "leftover.convert";
     },
   ): Promise<TaskRecord> {
     await this.authorize(tx, input.actorId, input, input.taskId);
@@ -371,7 +372,7 @@ export class TasksManagementService {
         recipientId: result.assigneeId,
         sourceChainId: event.chainId,
         sourceSequence: event.sequenceNo,
-        notificationType: "task.assigned",
+        notificationType: input.assignmentNotificationType ?? "task.assigned",
         title: `任务指派：${result.title}`.slice(0, 500),
         body: result.code,
         targetPath:

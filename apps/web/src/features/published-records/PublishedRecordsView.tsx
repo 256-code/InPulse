@@ -1,3 +1,4 @@
+import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
 import React, { useMemo, useState } from "react";
 import { EditPublishedRecord } from "./EditPublishedRecord";
 import { Alert, Button, Spin } from "antd";
@@ -160,6 +161,15 @@ export function PublishedRecordsView({
           detail.data && (
             <section className="draft-detail" aria-label="正式记录详情">
               <h2>{detail.data.title}</h2>
+              <ConvertLeftoverTask
+                key={detail.data.id}
+                item={detail.data}
+                api={api}
+                writable={
+                  projects.data?.items.find((p) => p.id === projectId)
+                    ?.status === "ACTIVE"
+                }
+              />
               <EditPublishedRecord
                 item={detail.data}
                 api={api}

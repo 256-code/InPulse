@@ -1,3 +1,4 @@
+import { leftoverTaskRoutes } from "./leftover-task-routes.js";
 import {
   recordDraftRoutes,
   taskRecordDraftRoutes,
@@ -36,6 +37,7 @@ export const routeRegistry = [
   ...taskRecordDraftRoutes,
   ...taskGroupRoutes,
   ...taskCompletionRoutes,
+  ...leftoverTaskRoutes,
   ...moduleTaskRoutes,
   {
     method: "GET",
