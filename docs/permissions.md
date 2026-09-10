@@ -187,3 +187,13 @@ F-19 兼容收口：transitionTask/transitionModuleTask 的 COMPLETE 也必须�
 listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废记录；成员请求 VOID 返回404。getChangeRecord/listChangeRecordVersions/getChangeRecordVersion 允许管理员读取 VOID 详情和全部不可变版本，成员返回404。ReadableRecord 的 PUBLISHED 分支不包含作废快照；VOID 分支仅向管理员返回最近作废时间/原因。恢复后即便保留快照，成员读取仅取 PUBLISHED 分支。
 
 迁移响应/幂等缓存只有 id/projectId/status/rowVersion。重放先重查当前完整认证、CSRF、管理员双时间戳和结果记录可读性；归档父级不取消历史可读性，重放不重复迁移。业务状态、审计、Search 与该记录全部 Activity 共用一个事务；Activity 不含原因，无作废/恢复通知。见 [F-21 交审说明](f21-local-handoff.md)。
+
+## F-22 GitHub 当前关联
+
+| operationId | 允许主体 | 拒绝与附加门禁 |
+| --- | --- | --- |
+| listExternalLinks | 当前活跃项目成员、系统管理员 | 匿名/无效Session401，其他项目/已移除成员404；按真实目标归属；VOID普通成员404、管理员只读；归档目标可读 |
+| addExternalLink | 当前活跃项目成员、系统管理员 | 同上；目标及真实父级ACTIVE（记录DRAFT/PUBLISHED），VOID管理员409；CSRF、同源、If-Match、数据库幂等；重复当前关联409、容量超限422 |
+| removeExternalLink | 当前活跃项目成员、系统管理员 | 同上；只解除当前类型化关联，保留链接实体与不可变审计；其他项目linkId404；状态/版本冲突409 |
+
+三条路由使用严格的 PROJECT/FEATURE/TASK/CHANGE_RECORD 目标枚举。Workflow经各域公开QueryPort解析真实归属、按父到子顺序取锁，各域CommandPort递增目标row_version，不改正式current_version或不可变历史。MODULE的历史影响功能不是记录所属父级；合并来源任务的链接不转移。新写入取得目标锁后再验证Session/CSRF与实时成员关系。重放重新验证当前认证、原操作权限、真实目标和保留链接实体可读；已成功解除的关联无需仍存在，父级归档不隐藏历史成功结果，VOID成员仍404。
