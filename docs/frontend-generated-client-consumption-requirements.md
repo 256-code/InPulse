@@ -210,7 +210,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | 功能 | C 的消费场景 | 对 A/B 契约的评审要求 |
 | --- | --- | --- |
 | F-23 任务合并 | 提交主/来源任务、分支类型、来源说明；合并后刷新聚合视图 | 合并请求必须登记 `idempotencyRequired`，支持同项目校验、反环、重复合并/重复成员 409；响应应可识别新组与成员 |
-| F-24 解除合并 | 提交成员 ID、解除原因；触发二次确认 | 更新接口必须带 `If-Match`/rowVersion 或等价并发控制；状态和版本冲突要有明确错误码 |
+| F-24 解除合并 | 提交来源任务与解除原因；触发二次确认 | 已落库 `POST /api/v1/task-groups/unmerge`：请求只含 `sourceTaskId` 与可空 `unmergeReason`；`versionPolicy: none`，并发控制由任务/聚合组行锁与锁后重读实现，状态/竞态冲突返回 409 `TASK_NOT_MERGED`/`TASK_GROUP_STATE_CONFLICT`，校验 422；二次确认对话框属 F-25 前端 |
 | F-25 聚合组视图 | 展示主/来源任务、来源状态、迭代记录与 GitHub 链接，支持按分支筛选 | 建议提供 `GET /task-groups/{id}` 或等价聚合读接口；若由 C 组合多个读接口，必须有稳定的 QueryPort 契约且避免 N+1 |
 | F-26 全局搜索 | 按类别展示功能/任务/记录/遗留问题，支持筛选和分页 | 搜索响应需保留 `entityType` 判别字段、权限过滤结果、分页与空结果语义；不能返回数据库内部表结构 |
 | F-27 项目动态 | 时间线展示脱敏活动、加载更多 | 已落库 `GET /projects/{projectId}/activity`；返回值包含事件类型、实体类型/ID、时间、项目 Scope 和可安全展示的摘要，不包含原始审计快照 |

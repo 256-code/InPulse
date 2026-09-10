@@ -159,3 +159,11 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 历史 SOURCE 不承接新执行工作，MAIN 与活动 SOURCE 可完成；无变化只保存六类原因和说明。有变化不得更改草稿身份/归属/历史影响或覆盖已有其他 task_id。两业务事件通知分别去重并检查收件人当前访问权。无权限基线、数据库角色或迁移改变。见 [F-19 交审说明](f19-local-handoff.md)。
 
 F-19 兼容收口：transitionTask/transitionModuleTask 的 COMPLETE 也必须通过 TaskCompletionWorkflow 的真实归属、当前组身份与相关记录作者通知过滤。历史 SOURCE 当前执行及成功结果重放均拒绝；MAIN/活动 SOURCE 可完成。两旧 operation 幂等/重放授权契约升级 2.0.0，旧 1.0.0 Key 返回 409。REOPEN/CANCEL/RESTORE 保留原权限行为和旧 TaskItem/ModuleTaskItem 响应。
+
+## F-24 解除合并接口（2026-09-10）
+
+| operationId | 允许身份 | 附加门禁 |
+| --- | --- | --- |
+| unmergeTaskGroup | 当前活跃项目成员、系统管理员 | 匿名/停用 401；非成员、已移除成员、来源/主任务真实归属错误、跨项目或任务不存在 404；Session、CSRF、同源与数据库幂等 |
+
+仅 `POST /api/v1/task-groups/unmerge`：请求只携带来源任务与解除原因（可空，≤10000，空白回落固定文案），项目与聚合组归属全部由服务端在锁内推导。服务端按项目 -> 模块 -> 影响功能父到子顺序取 `FOR SHARE`，再按任务 ID 升序 `FOR UPDATE`，最后锁聚合组行并重读成员；仅允许解除活跃 SOURCE：来源已不是活跃成员 404 `TASK_NOT_MERGED`，来源是 MAIN、聚合组已关闭或锁内关系变化统一 409。解除只写 `task_group_members` 关系（`DETACHED` + 时间 + 原因）与聚合组状态/版本，不修改任务工作状态、负责人和迭代记录；最后一个来源解除时同事务关闭聚合组并解除 MAIN。重放前重新验证当前认证、CSRF、项目授权、聚合组可读与全部结果任务可读（组可为 `CLOSED`），任一门禁失败不返回已存响应。无权限放宽、数据库权限或迁移变更。见 [F-24 交审说明](f24-local-handoff.md)。

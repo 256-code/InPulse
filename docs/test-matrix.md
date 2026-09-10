@@ -55,6 +55,24 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 
 本轮真实 PostgreSQL 集成全量 37 文件 232 例、API 单测 61 文件 291 例（含 HTTP 边界 10 例）、契约 10 文件 75 例、前端 35 文件 120 例（并行负载下两个既有计时敏感用例偶发失败，单跑通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
 
+## F-24 解除合并（C，2026-09-10 本地实现）
+
+`POST /api/v1/task-groups/unmerge` 解除来源任务与聚合组的合并关系：服务端按请求体的来源任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE`、聚合组行 `FOR UPDATE` 并重读成员后，仅允许解除活跃 SOURCE；来源已不是活跃成员 404，来源是 MAIN、组已关闭或锁内关系变化 409。解除只把成员关系标记为 `DETACHED`（记录时间与原因）并在最后一个来源解除时同事务关闭聚合组、解除 MAIN，不修改任务工作状态、负责人、迭代记录与行版本；审计 `task.unmerge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性（组可为 `CLOSED`）。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-24 交审说明](f24-local-handoff.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F24-CONTRACT-001 | 契约与 CI | Schema、Route Registry、生成物与权限矩阵 | `TaskGroupUnmergeRequest`、`TaskGroupUnmergeResponse`、`TaskGroupUnmergeHeaders`、`TaskGroupUnmergeReplayContext` 登记；唯一路由声明 Session/CSRF、数据库幂等、重放策略与锁序；OpenAPI 与生成客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate` 80 条、`permissions:check` 80/80） |
+| F24-UNMERGE-API-001 | HTTP + PostgreSQL | 解除两个来源之一 | 200 返回 `TaskGroupUnmergeResponse`：组保持 `ACTIVE`、`rowVersion` 递增、`detachedMembers` 含来源快照与解除原因/时间；来源任务工作状态、负责人、生命周期与行版本不变；审计/活动/投影各恰一条、通知按去重接收人逐条深链来源任务；同 Key 同摘要重放返回同一响应，摘要不同 409，重复解除 409，同组再合并 409，成员被移除后重放 404 | 本地通过（`task-group-unmerge.integration.test.ts` 8/8） |
+| F24-UNMERGE-API-002 | HTTP + PostgreSQL | 解除最后一个来源 | 组转为 `CLOSED` 且 `closedAt` 非空、MAIN 一并解除；CLOSED 组无活跃成员；随后可成功创建新的 `项目编码-TG-2` 聚合组 | 同上 |
+| F24-UNMERGE-API-003 | HTTP + PostgreSQL | 未填写原因与拒绝路径 | 缺失/空白原因回落到固定文案（关系/审计“未填写解除原因”，通知正文 `<编号> 已恢复独立`）；解除 MAIN 409、未知任务/非成员/已移除成员 404、归档项目 409 且零写入 | 同上 |
+| F24-UNMERGE-API-004 | HTTP + PostgreSQL | HTTP 边界与零副作用 | 跨源与缺 Origin 403、CSRF 失效与匿名 401；空 CSRF 头、非 JSON 内容类型、非法请求体、未知字段、查询参数 422；缺/短幂等键 400；全部拒绝路径审计、活动、通知、投影为零 | 同上（处理器内 400 内容类型分支以直接调用覆盖） |
+| F24-UNMERGE-API-005 | HTTP + PostgreSQL 并发 | 并发解除与解除/新增来源竞态 | 同一来源并发解除得到 200 与 409 `TASK_NOT_MERGED`，组与副作用计数与单次成功一致；解除最后一个来源与合并新来源并发后不存在“CLOSED 组仍含活跃成员”，两分支均满足不变量 | 同上 |
+| F24-HTTP-UNIT-001 | API 单元 | HTTP 边界与错误映射 | 同源/缺 Origin 403、非 JSON 400、空 CSRF 头与未知字段/查询参数 422、幂等键缺失与过短 400、匿名 401、业务错误直通与幂等冲突 409、越界可重放字段拒绝缓存、重放授权上下文登记项目/组/任务 | 本地通过（`task-group-unmerge-http.service.test.ts` 10 例） |
+| F24-INVARIANT-001 | PostgreSQL | 直接约束探针 | 解除元数据不合法（缺 `detached_at`/`detached_by`/原因、`detached_at < joined_at`）23514 `task_group_members_detach_state_check`/`task_group_members_detach_time_check`；关闭组缺 `closed_at` 23514 `task_groups_close_state_check` | 同上 |
+| F24-UI-001 | 前端 / Playwright | 解除入口与二次确认 | 任务组视图内的解除入口、二次确认对话框与解除原因输入 | Required，未交付（F-25） |
+
+本轮真实 PostgreSQL 集成全量 40 文件 260 例（两轮各 1 例既有偶发失败：`project-member-management-api` 与 `preauth-session`，单文件复跑分别 8/8 与 4/4 通过）、解除文件 8/8、API 单测 63 文件 303 例（含 HTTP 边界 10 例）、契约 11 文件 81 例、前端 37 文件 124 例（并行负载下两个既有计时敏感用例偶发失败，单跑 4/4 通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
+
 ## F-06 项目编辑与归档/恢复（A，2026-09-10 本地实现）
 
 阶段 1 A 域项目编辑/归档/恢复纵切片：`PATCH /api/v1/projects/{projectId}` 由项目活跃成员或
