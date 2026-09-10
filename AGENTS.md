@@ -191,4 +191,6 @@
 - 2026-09-08：C 在本地完成 `SearchProjectionWritePort`（独立 `SearchProjectionModule`、显式 `TransactionContext` upsert、输入校验、文本规范化与 `source_row_version` 防旧写）；API 单测与真实 PostgreSQL 集成、类型检查、契约、构建、依赖边界、权限、Secret 与文档检查通过；`pnpm check` 同样仅因本地 npm 镜像无 audit endpoint 而在 `deps:audit` 中断，公共 registry 单独审计无漏洞；GitHub Actions 尚未执行。
 - 2026-09-08：C 在本地完成 F-27 项目动态与 F-28 站内通知读写纵切片；同步 README、权限矩阵、测试矩阵、前端契约说明、开发日志与 AGENTS 状态；API 单测、真实 PostgreSQL 集成、前端单测与构建、类型检查、契约/权限/依赖边界/Secret/文档门禁均通过，`pnpm check` 因本地 npm 镜像无 audit endpoint 失败但公共 registry 审计无漏洞；GitHub Actions 尚未执行，业务 Workflow 尚未接入活动/通知写端口。
 
+- 阶段 1 F-25/F-29/F-32 契约裁决已本地落库（A）：新增 [A 的契约评审裁决](./docs/a-contract-review-f25-f29-f32.md)，裁决 C-003（已接受，转具体 Route）与 C-010（已接受，转具体 Route 后关闭）以及 C 提交的 Q-01 ~ Q-15；三条候选路由进入正式契约，并按 Q-02 新增记录子资源路由，共四条：`getTaskGroup`、`getProjectOverview`、`listMyTasks`、`listTaskGroupRecords`，路径、operationId、状态码与只读策略全部冻结；跨域读归属裁定为「B 域单条 SQL 稳定只读端口加 C 聚合读服务」，拒绝直读他域业务表（路线 III）与依赖环（路线 I）两条路线，路线 IV 留待后续；同步回填上游清单 §4.8.1 / §6 / §7 与两份 C 提案（聚合契约提案、端口扩展提案）。本轮为文档裁决：未改任何代码、迁移、契约源或生成物，未运行代码类门禁；四条路由尚未登记 Route Registry——登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库（依赖 B 的只读端口扩展），在此之前仍不是实现依据；工作书 F-32 步骤 1 的处方偏差需非作者人工确认。
+
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。

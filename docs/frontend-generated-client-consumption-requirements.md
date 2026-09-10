@@ -231,13 +231,14 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | `POST /api/v1/notifications/{notificationId}/unread` | 标记单条未读 | 已落库；登记 `idempotencyRequired` |
 | `POST /api/v1/notifications/read-all` | 标记当前用户全部已读 | 已落库；禁止客户端传 `recipientId`；登记 `idempotencyRequired` |
 
-以下仍为候选，等待 A 确认后再进入正式契约：
+以下候选已由 A 于 2026-09-10 裁决（见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md)）：路径、operationId、状态码与策略已冻结，路由登记、权限矩阵与生成物随实现 PR 落库：
 
 | 候选路由 | 用途 | 备注与待确认项 |
 | --- | --- | --- |
 | `GET /api/v1/projects/{projectId}/overview` | 项目概览聚合 | 候选归属 C；C 只能通过 A 的 `ProjectAccessQueryPort` 与 B 的公开 QueryPort 或 C 拥有的投影实现，禁止访问 B Repository |
 | `GET /api/v1/task-groups/{groupId}` | 任务聚合组详情 | 候选归属需 A/B 确认；如果由 B 提供 QueryPort，C 不得直接访问 B Repository |
-| `GET /api/v1/me/tasks` | “我的任务”跨项目列表 | 候选归属需 A/B 确认；服务端必须按成员关系过滤，禁止前端按项目合并 |
+| `GET /api/v1/me/tasks` | “我的任务”跨项目列表 | 归属 B 域的公开只读端口加 C 聚合服务；服务端按成员关系过滤，禁止前端按项目合并；固定“负责人 = 当前用户”，不提供 `assigneeMe` 参数 |
+| `GET /api/v1/task-groups/{groupId}/records` | 聚合组记录分页（F-25 按分支筛选） | 按 A 裁决 Q-02 新增的子资源路由；`memberTaskId` 过滤，沿用 C-006 游标；只返回 `PUBLISHED` / `VOID`，不返回 `DRAFT` |
 
 ### 4.9 生成物、版本与 CI
 
@@ -269,14 +270,14 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | --- | --- | --- | --- |
 | C-001 | 生成客户端输出位置冲突 | `技术设计 v1.2.2` 仓库结构在 `packages/api-contract` 写“客户端”；`系统设计文档 v1.0.2` 与 `CONTRIBUTING.md` 指定 `apps/web/src/generated/api/` | 建议以 `apps/web/src/generated/api/` 为前端唯一生成产物，`packages/api-contract` 只保留 Schema/Route Registry 与生成脚本配置；若改共享包需同步所有文档 |
 | C-002 | 通知已读/未读接口缺口 | `功能设计 v1.1` §25.3、F-28 有“已读/未读与未读数”；`系统设计文档 v1.0.2` 核心接口表只列 `GET /notifications` | 已关闭：C 已于 2026-09-08 将列表、未读数、单条已读/未读与全部已读写入 Route Registry，并登记 CSRF、幂等和重放授权策略 |
-| C-003 | 聚合接口缺口 | F-25、F-29、F-32 均需要服务端聚合/跨项目读取；核心接口表未列出 `task-group` 聚合详情、项目概览、我的任务 | 明确稳定路由与服务端聚合边界，避免 C 在前端逐项拼接 |
+| C-003 | 聚合接口缺口 | F-25、F-29、F-32 均需要服务端聚合/跨项目读取；核心接口表未列出 `task-group` 聚合详情、项目概览、我的任务 | 明确稳定路由与服务端聚合边界，避免 C 在前端逐项拼接。**A 裁决（2026-09-10）**：已接受（转具体 Route），共四条路由进入正式契约；聚合读只允许 A/B 的公开只读端口组合，不接受 C 直读他域业务表；字段级结论见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md) |
 | C-004 | 错误 `details` 结构未定 | 技术设计统一错误模型只给出 `{ code, message, details, requestId }`，未定义 `details` 的具体 Schema；422/409/429/重认证场景需要前端消费 | 为公共错误类别定义稳定 `details` 联合，并在 Route Registry 中按需给出每个错误响应的 Schema ref |
 | C-005 | CSRF 失败识别未定 | ADR-015 要求“客户端仅在服务端明确表示 CSRF 校验失败时重签”，但错误模型未给出专用错误码 | 应定义稳定 `CSRF_INVALID` 或等价机器可读错误码，并避免把 CSRF 失败与普通 403 权限错误混用 |
 | C-006 | 分页/游标约定已正式定案（2026-09-08） | 系统设计只写搜索“分页”、通知“游标增量拉取”，未定义公共 envelope 或字段名 | 已关闭：A 确认 `{ items, nextCursor, hasMore }` 与不透明 cursor，并已在 `getSearch` 落库；其他列表接口沿用同一 envelope |
 | C-007 | 生成客户端运行时校验策略未定 | 技术设计要求服务端校验，但未规定生成客户端是否对响应做运行时 Zod 校验 | 需决定生成客户端只做类型映射还是运行时校验；若运行时校验，失败需映射为独立错误且不得暴露内部细节 |
 | C-008 | `message` 的用户交互语义未定 | 错误模型包含 `message`，但前端逻辑应基于 `code` | 明确 `message` 是用户可展示文案还是仅诊断信息；前端不得依赖文案字符串 |
 | C-009 | ID 类型已按正式基线确认 | 当前[技术设计 V1.2.2](../技术设计v1.2.2.md)、数据库 Schema 与迁移均采用 `INTEGER IDENTITY` | 维持 `number`，不引入额外 ID 类型方案；如未来调整主键类型，必须先走 ADR，并同步迁移、代码、权限矩阵与测试矩阵 |
-| C-010 | 候选接口尚未冻结 | 通知/动态已落库；项目概览、任务聚合详情、我的任务路径尚未进入正式契约 | 部分关闭：F-27/F-28 已进入 Route Registry；F-25/F-29/F-32 仍待 A 确认，未落库前不能作为实现依据 |
+| C-010 | 候选接口尚未冻结 | 通知/动态已落库；项目概览、任务聚合详情、我的任务路径尚未进入正式契约 | 部分关闭：F-27/F-28 已进入 Route Registry；F-25/F-29/F-32 已由 A 裁决并冻结路径、operationId、状态码、策略与字段名，见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md)；登记与生成物随实现 PR 落库，在登记完成前仍不得作为实现依据 |
 
 ### 6.1 评审状态填写规则
 
@@ -302,7 +303,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 3. 生成客户端是否执行响应运行时校验？若执行，校验失败如何处理？
 4. 错误响应是否按“公共错误模型 + 每路由错误 Schema”组织？`details` 的基准结构是什么？
 5. CSRF 失败、重认证过期、幂等契约版本冲突、版本冲突、状态冲突分别使用哪些稳定错误码？
-6. 列表/游标 envelope 已由 F-26 定案；F-27 项目动态与 F-28 通知已读/未读已由 C 落库，项目概览、任务聚合详情、我的任务等路由和 DTO 是否进入 Route Registry？
+6. 列表/游标 envelope 已由 F-26 定案；F-27 项目动态与 F-28 通知已读/未读已由 C 落库，项目概览、任务聚合详情、我的任务等路由和 DTO 是否进入 Route Registry？（A 答复，2026-09-10：进入，共四条，含按 Q-02 新增的记录子资源路由；字段级裁决与落库顺序见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md)）
 7. 生成客户端是否需要导出路由元数据（auth/CSRF/idempotency/version）给前端 adapter？
 8. 阶段 0 如何最终验证“前端所有 API 调用都经过生成客户端”和“生成物无漂移”？
 

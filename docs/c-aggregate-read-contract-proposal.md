@@ -48,8 +48,9 @@
 | R-1 | `GET` | `/api/v1/task-groups/{groupId}` | `getTaskGroup` | 任务聚合组详情（F-25） | 上游 §4.8.1 第 2 行 |
 | R-2 | `GET` | `/api/v1/projects/{projectId}/overview` | `getProjectOverview` | 项目概览聚合（F-29） | 上游 §4.8.1 第 1 行 |
 | R-3 | `GET` | `/api/v1/me/tasks` | `listMyTasks` | 跨项目「我的任务」（F-32） | 上游 §4.8.1 第 3 行 |
+| R-4 | `GET` | `/api/v1/task-groups/{groupId}/records` | `listTaskGroupRecords` | 聚合组记录分页（F-25 按分支筛选） | 按 A 裁决 Q-02 新增 |
 
-R-1 是否需要追加子资源路由取决于 Q-02 的裁决，本文档按"可能新增第 4 条"处理。
+R-1 是否追加子资源路由已由 A 于 2026-09-10 裁决（Q-02：采纳形态 B），因此正式契约为四条路由，新增 R-4。
 
 ### 2.1 建议策略登记
 
@@ -458,23 +459,23 @@ interface MyTaskItem {
 
 编号从 Q-01 顺延，不与上游 C-001 ~ C-010 混编；A 可在评审记录中按 Q 编号回填上游 §6.1 的状态。
 
-| 编号 | 问题 | 关联 | C 的建议 |
-| --- | --- | --- | --- |
-| Q-01 | R-1 用全局路径 `/task-groups/{groupId}` 还是项目前缀 `/projects/{projectId}/task-groups/{groupId}`？ | R-1、上游 §4.8.1 | 保持上游登记形式，由服务端反查 `project_id` 后校验；若改为项目前缀，需同步修订上游文档 |
-| Q-02 | R-1 的记录列表采用形态 A（单响应内嵌）还是形态 B（子资源分页）？形态 B 需新增路由 `/task-groups/{groupId}/records` | §3.1.3 | 形态 B |
-| Q-03 | 任务基础 DTO 是否暴露聚合组信息（`groupId`、`groupRole`）？F-25 的「查看主任务」入口与任务卡片标记依赖它 | §3.3.3、Q-11 | 在任务基础 DTO 暴露 `groupId: number \| null`；若不扩大该契约，则由 R-3 提供 |
-| Q-04 | `openTaskCount` 是否采用 §29.1 有效任务口径？是否排除历史来源分支？ | §4.2 | 采用 §29.1，包含排除历史来源分支 |
-| Q-05 | `activeModuleCount` / `activeFeatureCount` 是否就是 `status = 'ACTIVE'` 的行数？ | §4.2 | 是 |
-| Q-06 | `recentRecords` / `activeLeftovers` 的默认与上限条数由谁定？功能设计只给了 3 / 2 条的示例 | §3.2.2 | 默认 3 / 2，上限 10，由 A 在 Schema 定案 |
-| Q-07 | `hasPublishedRecord` 筛选的服务端实现归属？它需要 `change_records`，而 `tasks` 与 `change_records` 分属 B 域两个模块 | §3.3.3、端口提案 §7.1 | 由 C 的只读适配器实现并补 ADR（端口提案路线 III；对 F-32 同时是替代工作书步骤 1 的处方）；或按路线 IV 建投影。端口提案已排除「直接塞进 `TaskQueryPort`」的路线 I |
-| Q-08 | `assigneeMe` 是否固定为「负责人=我」？是否允许省略以查询项目内全部任务？ | §3.3.2 | 固定为"负责人=我"；查询他人任务走另一条明确授权的路由 |
-| Q-09 | R-3 的筛选参数一次覆盖功能设计 §24.3 的 13 项，还是先实现 F-32 要求的 4 项？ | §3.3.2 | 先 4 项（状态、范围、是否有记录、负责人），其余后续扩展 |
-| Q-10 | R-3 的排序键与游标键？现有索引可命中 `ORDER BY t.id DESC`，不能命中按 `updated_at` 排序 | §3.3.2、端口提案 §1.4 | `id DESC`；若产品要求按更新时间排序，需先补索引 |
-| Q-11 | F-25 的任务卡片标记（「主任务/来源任务/迭代记录 n 条」）数据放在哪个契约？ | Q-03 | 放任务基础 DTO；若不宜扩大，则放 R-3 与任务列表 DTO |
-| Q-12 | 三条路由的服务端聚合实现放在 C 聚合域（只读适配器）还是由 B 提供 QueryPort？ | §4.2 | 统计类由 B 端口提供；跨域筛选类（`hasPublishedRecord`、历史来源分支排除）由 C 只读适配器加 ADR 实现 |
-| Q-13 | R-1 的记录列表中，`DRAFT` 状态记录是否可见？ | §3.1.3 | 不可见，只返回 `PUBLISHED` 与 `VOID`；功能设计只把正式记录计入迭代历史 |
-| Q-14 | `state_snapshot` 是关联时刻快照而非实时状态，契约是否需要显式说明？ | §3.1.4 | 在字段说明中标注为快照，避免前端当作实时状态展示 |
-| Q-15 | `project.status` 返回原始枚举还是展示文案？功能设计 §9.5 显示「正常」 | §3.2.2 | 返回原始枚举，展示文案由前端映射；`message` 的交互语义上游 C-008 仍未关闭 |
+| 编号 | 问题 | 关联 | C 的建议 | A 裁决（2026-09-10） |
+| --- | --- | --- | --- | --- |
+| Q-01 | R-1 用全局路径 `/task-groups/{groupId}` 还是项目前缀 `/projects/{projectId}/task-groups/{groupId}`？ | R-1、上游 §4.8.1 | 保持上游登记形式，由服务端反查 `project_id` 后校验；若改为项目前缀，需同步修订上游文档 | 保持全局路径；服务端反查 `project_id` 后校验，非成员与不存在统一 `404` |
+| Q-02 | R-1 的记录列表采用形态 A（单响应内嵌）还是形态 B（子资源分页）？形态 B 需新增路由 `/task-groups/{groupId}/records` | §3.1.3 | 形态 B | 采纳形态 B；新增 `listTaskGroupRecords`（`200` / `401` / `404` / `422` / `500`） |
+| Q-03 | 任务基础 DTO 是否暴露聚合组信息（`groupId`、`groupRole`）？F-25 的「查看主任务」入口与任务卡片标记依赖它 | §3.3.3、Q-11 | 在任务基础 DTO 暴露 `groupId: number \| null`；若不扩大该契约，则由 R-3 提供 | 不扩大任务基础 DTO；`role` 只放 R-1 成员项、`groupRole` 只放 R-3 项 |
+| Q-04 | `openTaskCount` 是否采用 §29.1 有效任务口径？是否排除历史来源分支？ | §4.2 | 采用 §29.1，包含排除历史来源分支 | 采用 §29.1 并排除历史来源分支；排除集合由 C 传入端口，不在应用层过滤 |
+| Q-05 | `activeModuleCount` / `activeFeatureCount` 是否就是 `status = 'ACTIVE'` 的行数？ | §4.2 | 是 | 是，按行自身 `status = 'ACTIVE'` 计数，由 B 端口按 `project_id` 提供 |
+| Q-06 | `recentRecords` / `activeLeftovers` 的默认与上限条数由谁定？功能设计只给了 3 / 2 条的示例 | §3.2.2 | 默认 3 / 2，上限 10，由 A 在 Schema 定案 | 默认 3 / 2、上限 10，作为 R-2 可选参数 `recentRecordLimit` / `activeLeftoverLimit` |
+| Q-07 | `hasPublishedRecord` 筛选的服务端实现归属？它需要 `change_records`，而 `tasks` 与 `change_records` 分属 B 域两个模块 | §3.3.3、端口提案 §7.1 | 由 C 的只读适配器实现并补 ADR（端口提案路线 III；对 F-32 同时是替代工作书步骤 1 的处方）；或按路线 IV 建投影。端口提案已排除「直接塞进 `TaskQueryPort`」的路线 I | 由 B 域单条 SQL 实现，不经 C 只读适配器；不转 ADR |
+| Q-08 | `assigneeMe` 是否固定为「负责人=我」？是否允许省略以查询项目内全部任务？ | §3.3.2 | 固定为"负责人=我"；查询他人任务走另一条明确授权的路由 | 固定「负责人 = 我」并删除 `assigneeMe`；查他人仍走 `listProjectMemberUnfinishedTasks` |
+| Q-09 | R-3 的筛选参数一次覆盖功能设计 §24.3 的 13 项，还是先实现 F-32 要求的 4 项？ | §3.3.2 | 先 4 项（状态、范围、是否有记录、负责人），其余后续扩展 | V1 只落 4 项，其余筛选留给后续迭代，不登记未实现参数 |
+| Q-10 | R-3 的排序键与游标键？现有索引可命中 `ORDER BY t.id DESC`，不能命中按 `updated_at` 排序 | §3.3.2、端口提案 §1.4 | `id DESC`；若产品要求按更新时间排序，需先补索引 | 固定 `id DESC`，不提供 `sort`；`limit` 默认 20、上限 100；游标沿用 C-006 |
+| Q-11 | F-25 的任务卡片标记（「主任务/来源任务/迭代记录 n 条」）数据放在哪个契约？ | Q-03 | 放任务基础 DTO；若不宜扩大，则放 R-3 与任务列表 DTO | 与 Q-03 一致：R-1 成员项（`role`、`publishedRecordCount`）加 R-3 项（`groupRole`） |
+| Q-12 | 三条路由的服务端聚合实现放在 C 聚合域（只读适配器）还是由 B 提供 QueryPort？ | §4.2 | 统计类由 B 端口提供；跨域筛选类（`hasPublishedRecord`、历史来源分支排除）由 C 只读适配器加 ADR 实现 | 拒绝路线 I 与路线 III；B 域单条 SQL 端口加 C 聚合服务；路线 IV 留待后续 |
+| Q-13 | R-1 的记录列表中，`DRAFT` 状态记录是否可见？ | §3.1.3 | 不可见，只返回 `PUBLISHED` 与 `VOID`；功能设计只把正式记录计入迭代历史 | 不可见，只返回 `PUBLISHED` 与 `VOID` |
+| Q-14 | `state_snapshot` 是关联时刻快照而非实时状态，契约是否需要显式说明？ | §3.1.4 | 在字段说明中标注为快照，避免前端当作实时状态展示 | 接受，字段说明标注为关联时刻快照 |
+| Q-15 | `project.status` 返回原始枚举还是展示文案？功能设计 §9.5 显示「正常」 | §3.2.2 | 返回原始枚举，展示文案由前端映射；`message` 的交互语义上游 C-008 仍未关闭 | 返回原始枚举，展示映射归前端；`message` 语义属 C-008，本轮不裁决 |
 
 ### 5.1 与其他上游编号的关系
 
@@ -493,6 +494,14 @@ interface MyTaskItem {
 3. **命名规范**：`getTaskGroup` / `getProjectOverview` / `listMyTasks` 是否符合 A 的 operationId 命名规范。
 
 评审结论请回填上游文档的 §6 编号表或本文档 §5 的问题清单；本文档在 A 回复前不会将任何字段视为已定案。
+
+### 6.1 A 答复（2026-09-10）
+
+1. **接受方式**：候选 DTO 直接进入 Schema Registry，不需要 ADR。Q-07 / Q-12 的跨域读归属已按 AGENTS.md §3 收口（B 域单条 SQL 只读端口加 C 聚合服务），理由见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md) §6。但登记必须与实现同一个 PR：`contract:validate` 要求每条登记路由都有 Controller 绑定。
+2. **与现有路由的关系**：不合并、不共用查询实现；两者筛选维度不同，只共享 B 的 `TaskQueryPort` 基础能力，禁止把「查询他人任务」塞进 `/me/tasks`。
+3. **命名规范**：`getTaskGroup` / `getProjectOverview` / `listMyTasks` 符合规范，新增路由命名 `listTaskGroupRecords`；四条均按同一规范登记。
+
+完整裁决（含 Q-01 ~ Q-15 与 C-003 / C-010 状态）见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md)。
 
 ---
 
