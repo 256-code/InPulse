@@ -98,8 +98,6 @@ export function TasksPanel({
     query.data?.items.filter(
       (item) => statusFilter === "ALL" || item.workStatus === statusFilter,
     ) ?? [];
-  const rateTasks =
-    query.data?.items.filter((item) => item.workStatus !== "CANCELED") ?? [];
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
@@ -267,18 +265,6 @@ export function TasksPanel({
               <option value="ALL">全部状态</option>
             </select>
           </label>
-          <span>
-            完成率：
-            {rateTasks.length
-              ? Math.round(
-                  (rateTasks.filter((item) => item.workStatus === "DONE")
-                    .length /
-                    rateTasks.length) *
-                    100,
-                ) + "%"
-              : "—"}
-            （不含已取消）
-          </span>
         </div>
       )}
       {query.isPending ? (

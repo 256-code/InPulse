@@ -127,23 +127,28 @@ describe("F-14 task editing", () => {
       transitionTask.mock.calls[1]![5].headers["Idempotency-Key"],
     ).not.toBe(transitionTask.mock.calls[0]![5].headers["Idempotency-Key"]);
   });
-  it("defaults to TODO, retains completed/canceled history and excludes canceled from the completion rate", async () => {
+  it("defaults to TODO and retains all history without displaying an incomplete completion rate", async () => {
     mount(
       client({
-        listTasks: vi
-          .fn()
-          .mockResolvedValue({
-            items: [
-              item,
-              { ...item, id: 2, title: "历史完成", workStatus: "DONE" },
-              { ...item, id: 3, title: "历史取消", workStatus: "CANCELED" },
-            ],
-          }),
+        listTasks: vi.fn().mockResolvedValue({
+          items: [
+            item,
+            { ...item, id: 2, title: "历史完成", workStatus: "DONE" },
+            { ...item, id: 3, title: "历史取消", workStatus: "CANCELED" },
+            {
+              ...item,
+              id: 4,
+              title: "无效历史",
+              workStatus: "DONE",
+              lifecycleStatus: "INVALID",
+            },
+          ],
+        }),
       }),
     );
     await screen.findByText(item.title);
     expect(screen.queryByText("历史完成")).not.toBeInTheDocument();
-    expect(screen.getByText("完成率：50%（不含已取消）")).toBeVisible();
+    expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("任务状态筛选"), {
       target: { value: "CANCELED" },
     });
@@ -152,6 +157,13 @@ describe("F-14 task editing", () => {
       target: { value: "DONE" },
     });
     expect(screen.getByText("历史完成")).toBeVisible();
+    expect(screen.getByText("无效历史")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
+      target: { value: "ALL" },
+    });
+    for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
+      expect(screen.getByText(title)).toBeVisible();
+    expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
   });
   it("compares impact sets semantically and requires a three-way choice", () => {
     const base = { ...taskEdit(item), impactFeatureIds: [2] };
