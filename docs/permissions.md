@@ -197,3 +197,7 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | removeExternalLink | 当前活跃项目成员、系统管理员 | 同上；只解除当前类型化关联，保留链接实体与不可变审计；其他项目linkId404；状态/版本冲突409 |
 
 三条路由使用严格的 PROJECT/FEATURE/TASK/CHANGE_RECORD 目标枚举。Workflow经各域公开QueryPort解析真实归属、按父到子顺序取锁，各域CommandPort递增目标row_version，不改正式current_version或不可变历史。MODULE的历史影响功能不是记录所属父级；合并来源任务的链接不转移。新写入取得目标锁后再验证Session/CSRF与实时成员关系。重放重新验证当前认证、原操作权限、真实目标和保留链接实体可读；已成功解除的关联无需仍存在，父级归档不隐藏历史成功结果，VOID成员仍404。
+
+### F-22 父审核增量（2026-09-10）
+
+读取与重放在真实父级锁后取目标FOR SHARE并重读，锁保持至本次关联读取/重放授权完成；预读状态不参与最终可见性判定。等待父锁期间PUBLISHED转VOID后，普通GET与添加/解除重放均404，管理员只读。Route Registry与实写审计统一EXTERNAL_LINK_ADDED/EXTERNAL_LINK_REMOVED；真实锁竞态和验证更正见[F22交审说明](f22-local-handoff.md)。

@@ -76,3 +76,27 @@ pnpm --filter @inpulse/api exec vitest run --config vitest.integration.config.ts
 ## 后续
 
 等待父协调独立审核与PR任务正常CI/评审。数据库不新增迁移；共享搜索适配器和容量映射是本批重点复核点。当前列表展示该目标的当前关联，正式历史版本内容保持不可变；链接关联的历史通过不可变审计保留，不把当前关联描述成旧版本快照。没有待定架构裁决阻断本批。
+
+## 父审核增量（2026-09-10 18:36 +08:00）
+
+初次冻结 `8a04d8c` 未获父协调批准，不是最终验收版本。父审核发现：（1）GET/重放在目标预读后等待父级锁，仍把预读PUBLISHED当作可见性真相；（2）Route Registry 的 externalLink.add/remove 与实际审计 EXTERNAL_LINK_ADDED/REMOVED 不一致。
+
+增量代码提交 `b099b6ad46186c4fbe4b69ec75c26819f92c5182` 只修复这两点及对应测试。四域QueryPort使用显式share/update模式。Workflow在父级锁之后始终重新读取目标：GET/重放取FOR SHARE，写入取FOR UPDATE；目标锁保持至同一事务中的关联列表读取或重放授权结束，pre-read只用于确定有序父级路径，不决定最终状态可见性。项目自身写先UPDATE的防升级死锁规则保留。
+
+新增3条真实PostgreSQL受控竞态：持有真实父项目UPDATE锁，启动普通成员GET/添加重放/解除重放；使用pg_blocking_pids和pg_stat_activity明确确认请求已越过预读并阻塞在项目锁；持锁事务调用实际F21 RecordLifecycleService作废，然后提交。修复前3条均错误200（GET泄露当前链接，两类重放泄露缓存结果），修复后均404且响应无normalizedUrl/rowVersion/linkId，管理员仍可读取只读关联。没有用Mock替代数据库锁或状态迁移。
+
+审计动作现统一为EXTERNAL_LINK_ADDED/EXTERNAL_LINK_REMOVED；四类目标CRUD真库断言实际audit.action逐个等于Registry。生成器重跑后只有OpenAPI的2个auditAction扩展改变。computeRouteFingerprint的既有payload不含auditAction，本次也未改请求/响应Schema或重放策略，所以指纹历史和客户端逐字节不变，没有人为重写指纹或无依据升级幂等版本。
+
+更正前文收尾说明：初次代码提交前清理import时误删了夹具初始化仍使用的PostgresFeatureReadPort，因此“只移除未使用import、行为一致”的判断不成立；原71/71确实在清理前执行，不能作为8a04d8c上该测试文件可运行的证据。本轮首个beforeAll实际ReferenceError，测试框架因此未运行36条用例；已恢复import，再取得4条审计不一致红测和3条竞态红测。未添加skip或放宽断言。
+
+最终增量验证（在所有代码/测试编辑与格式化之后）：
+
+| 检查 | 结果 |
+| --- | --- |
+| F22真实PostgreSQL单文件 | 36/36（3.87秒，18:35:49）；包含原33条和新增3条竞态 |
+| F22契约单文件 | 2/2（342ms，18:36:31，在代码提交b099b6a上复跑） |
+| API局部测试类型 | tsc -p tsconfig.test.json --noEmit 通过；首次新增poll误用intervals选项，改为当前Vitest的interval:20后通过 |
+| 生成物/路由 | contract:generate、contract:validate（89路由）、contract:drift（5生成物）通过；仅上述OpenAPI审计扩展变化 |
+| 局部格式 | 锁定Prettier API format后check，仅9个增量TypeScript源码，全部通过；git diff --check通过 |
+
+最后一次真库成功后未再编辑代码或测试；随后仅提交、文档和交接。前端/浏览器和其他真库文件本轮未重复，原批结果保留为历史证据，等待父协调按最终候选独立复验。已再次SHOW data_directory核对为本任务.data/f22/pg并fast正常停止，数据保留，55427/3127/4197无监听。重启参数与上节完全相同，本任务不再占用数据库，交父独占复验。
