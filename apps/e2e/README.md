@@ -54,11 +54,16 @@ TOTP 注册；测试在登录和重认证前会把该测试用户的 `last_accep
 GitHub Actions 的 `CI / workspace` job 在 `pnpm build` 之后、`pnpm check:deps`
 之前安装 Chromium 并执行 `pnpm test:e2e`，此时 PostgreSQL 探针实例仍在运行。
 无论成功或失败都会上传 Playwright HTML 报告、截图、trace 与 video 作为 CI
-artifact。当前为 19 个用例，已覆盖 MFA 登录挑战/管理员重认证、F-03 用户
-管理、项目创建关键路径、F-13 功能档案、F-14 功能级任务、搜索边界、
-F-27 项目动态专属路径与 F-28 通知状态联动；F-03 分支在旧基线 `8386b29` 的
-CI 已通过，同步 `origin/main` `273b273` 后完整 CI 待新运行验证；仍不等同于
-完整业务关键路径。
+artifact。当前为 29 个用例、16 个 spec 文件，已覆盖 MFA 登录挑战/管理员重认证、
+F-03 用户管理、F-05 项目成员管理（普通成员 403、管理员添加/移除与不存在项目读取
+边界）、项目创建关键路径、F-13 功能档案、F-14 功能级任务、F-16 任务状态闭环、
+F-17 独立草稿、F-18 记录发布、搜索边界、F-27 项目动态专属路径与 F-28 通知状态
+联动；本分支同步 `origin/main` `5020c0a` 后实测 29/29 通过（4.7m），CI 待新运行
+验证。
+
+`pnpm test:e2e` 以 `node dist/main.js` 启动 API，本地复跑前必须先执行
+`pnpm build`：本次曾用陈旧 `apps/api/dist` 跑出两条既有 F-18 用例失败（旧产物
+缺少发布端点），重新构建后全绿；仍不等同于完整业务关键路径。
 
 ## 范围说明
 

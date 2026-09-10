@@ -32,6 +32,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-09-09 阶段 1 A 域 F-03 用户管理已本地落库：新增管理员用户列表与创建/编辑/停用/启用/强制退出，写操作要求管理员密码+当前 TOTP 5 分钟双因子重认证、CSRF 与幂等键，停用/强退同事务递增 `auth_version` 并撤销 Session；已合并 `origin/main` `8386b29` 到 F-03 交付分支，本地 API 单测 256 例、真实 PostgreSQL 集成 152 例、Web 单测 87 例、Playwright 18/18 通过；GitHub Actions 尚未执行。
 
+> 2026-09-10 阶段 1 F-05 项目成员管理 Playwright E2E 已补齐：新增 `apps/e2e/tests/project-members.spec.ts` 两个用例（普通成员访问 `/projects/:id/members` 被 `RequireAdmin` 拦截显示 403 空态；管理员登录后完成 5 分钟重认证，经页面添加与移除成员并校验不存在项目的读取失败边界）。分支 rebase 到 `origin/main` `5020c0a` 后本地 `pnpm test:e2e` 29/29 通过（4.7m），`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/e2e typecheck` 均通过；分支 `codex/c-member-e2e` 尚未推送，GitHub Actions 待运行。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；§12.4 中其余 Playwright 完整关键路径 E2E、生产容器镜像构建、真实镜像 digest 绑定与镜像扫描尚未落库；Playwright 测试基座、Compose 渲染与 ref 预检已落库，补齐前请勿假设这些检查已执行。
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；生产容器镜像构建与 Trivy 镜像扫描已落库，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份恢复仍未落库，补齐前请勿假设这些检查已执行。
 
