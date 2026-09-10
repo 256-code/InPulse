@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
@@ -9,6 +9,7 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import { useProjectDetail } from "@features/projects/project-query";
 
 interface NavigationItem {
   readonly key: string;
@@ -58,9 +59,13 @@ function resolveSectionLabel(pathname: string): string {
 
 export interface AppLayoutProps {
   readonly notificationClient?: InpulseApiClient;
+  readonly projectClient?: InpulseApiClient;
 }
 
-export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
+export const AppLayout: React.FC<AppLayoutProps> = ({
+  notificationClient,
+  projectClient,
+}) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -75,6 +80,23 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
   const roleLabel = user?.isAdmin ? "系统管理员" : user ? "成员" : "未登录";
+  const popoverRoleLabel = user?.isAdmin
+    ? "系统管理员 · 可执行高风险操作"
+    : roleLabel;
+  const projectCrumbId = useMemo(() => {
+    const match = /^\/projects\/(\d+)(?:\/|$)/.exec(location.pathname);
+    if (!match) {
+      return null;
+    }
+    const id = Number(match[1]);
+    return Number.isInteger(id) && id >= 1 && id <= 2147483647 ? id : null;
+  }, [location.pathname]);
+  const projectCrumb = useProjectDetail({
+    client: projectClient,
+    projectId: projectCrumbId,
+    enabled: status === "authenticated",
+  });
+  const projectCrumbName = projectCrumb.data?.name ?? null;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -195,7 +217,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
               onClick={() => handleNavigation("/settings")}
             >
               <InpulseIcon name="shield" size={14} />
-              权限矩阵
+              查看权限矩阵
             </button>
           </div>
         </aside>
@@ -220,7 +242,25 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
                 研发交付中心
               </button>
               <InpulseIcon name="chevron" size={14} />
-              <strong>{sectionLabel}</strong>
+              {projectCrumbId !== null && projectCrumbName ? (
+                <>
+                  <button
+                    type="button"
+                    className="crumb-home"
+                    onClick={() =>
+                      handleNavigation(
+                        selectedKey === "activity" ? "/activity" : "/projects",
+                      )
+                    }
+                  >
+                    {sectionLabel}
+                  </button>
+                  <InpulseIcon name="chevron" size={14} />
+                  <strong>{projectCrumbName}</strong>
+                </>
+              ) : (
+                <strong>{sectionLabel}</strong>
+              )}
             </nav>
             <div className="top-actions">
               <button
@@ -243,7 +283,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
                 <button
                   type="button"
                   className="mini-avatar account-trigger"
-                  title={`${displayName} · ${roleLabel}`}
+                  title={`${displayName} · ${popoverRoleLabel}`}
                   aria-label="账户菜单"
                   aria-expanded={accountOpen}
                   onClick={() => setAccountOpen((current) => !current)}
@@ -261,7 +301,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
                       <div>
                         <strong>{displayName}</strong>
                         <small>{user?.email ?? "未绑定邮箱"}</small>
-                        <small>{roleLabel}</small>
+                        <small>{popoverRoleLabel}</small>
                       </div>
                     </div>
                     {user?.isAdmin ? (
@@ -280,8 +320,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ notificationClient }) => {
                       type="button"
                       onClick={() => handleNavigation("/settings")}
                     >
-                      <InpulseIcon name="settings" size={15} />
-                      成员与设置
+                      <InpulseIcon name="users" size={15} />
+                      成员与权限
                     </button>
                     <button
                       type="button"

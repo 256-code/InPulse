@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -87,6 +87,55 @@ describe("AppLayout", () => {
     ).toBeInTheDocument();
     await screen.findByRole("button", { name: "通知" });
     expect(notificationClient.getNotificationUnreadCount).toHaveBeenCalled();
+  });
+
+  it("shows the project name in the breadcrumb on project routes", async () => {
+    const projectClient = {
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 7,
+          code: "AGV",
+          name: "AGV 智能搬运平台",
+          description: "面向工厂的智能搬运调度项目",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 1,
+          createdAt: "2026-09-08T00:00:00.000Z",
+          updatedAt: "2026-09-08T00:00:00.000Z",
+          memberCount: 4,
+        },
+      }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects/7/modules"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={projectClient}
+              />
+            }
+          >
+            <Route
+              path="projects/:projectId/modules"
+              element={<div>Modules content</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
+    expect(
+      await within(crumb).findByText("AGV 智能搬运平台"),
+    ).toBeInTheDocument();
+    expect(
+      within(crumb).getByRole("button", { name: "项目与功能" }),
+    ).toBeInTheDocument();
+    expect(projectClient.getProject).toHaveBeenCalledWith(7);
   });
 
   it("navigates to a registered workspace route", async () => {

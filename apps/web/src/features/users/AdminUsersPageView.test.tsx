@@ -66,7 +66,7 @@ function mount(
 }
 
 function userCard(name: string): HTMLElement {
-  const card = screen.getByText(name).closest(".ant-card");
+  const card = screen.getByText(name).closest(".member-row");
   if (!card) throw new Error(`user card not found: ${name}`);
   return card as HTMLElement;
 }

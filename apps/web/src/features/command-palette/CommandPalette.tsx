@@ -38,6 +38,20 @@ export interface CommandPaletteProps {
   readonly onOpenSearch: (query: string) => void;
 }
 
+const PALETTE_GROUP_ORDER = [
+  "项目",
+  "模块",
+  "功能",
+  "任务",
+  "迭代记录",
+  "任务组",
+  "外部链接",
+  "操作",
+  "搜索",
+] as const;
+
+const paletteGroupOrder: readonly string[] = PALETTE_GROUP_ORDER;
+
 const entityMeta: Readonly<
   Record<SearchItem["entityType"], { label: string; icon: InpulseIconName }>
 > = {
@@ -45,7 +59,7 @@ const entityMeta: Readonly<
   MODULE: { label: "模块", icon: "boxes" },
   FEATURE: { label: "功能", icon: "code" },
   TASK: { label: "任务", icon: "clipboard" },
-  CHANGE_RECORD: { label: "变更记录", icon: "gitBranch" },
+  CHANGE_RECORD: { label: "迭代记录", icon: "gitBranch" },
   EXTERNAL_LINK: { label: "外部链接", icon: "code" },
   TASK_GROUP: { label: "任务组", icon: "boxes" },
 };
@@ -204,6 +218,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
   };
 
+  const orderedGroups = [...grouped.entries()].sort(([a], [b]) => {
+    const rank = (name: string) => {
+      const index = paletteGroupOrder.indexOf(name);
+      return index === -1 ? PALETTE_GROUP_ORDER.length : index;
+    };
+    return rank(a) - rank(b);
+  });
+
   const searchHint = !canSearch
     ? normalizedQuery.length === 0
       ? "输入关键词开始搜索，或直接选择一个快捷操作。"
@@ -212,7 +234,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       ? describeSearchError(search.error)
       : search.isPending
         ? "正在通过服务端搜索当前可访问对象..."
-        : `已找到 ${searchResults.length} 条可访问结果；点击后进入全局搜索页查看完整结果。`;
+        : `支持中文短词、完整英文缩写、完整代码标识符与完整编号；不保证英文或任意子串搜索。已找到 ${searchResults.length} 条可访问结果。`;
 
   return (
     <div
@@ -242,7 +264,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         <p className="palette-hint">{searchHint}</p>
         <div className="palette-results">
           {flatResults.length > 0 ? (
-            [...grouped.entries()].map(([group, items]) => (
+            orderedGroups.map(([group, items]) => (
               <section key={group}>
                 <h4>{group}</h4>
                 <ul>

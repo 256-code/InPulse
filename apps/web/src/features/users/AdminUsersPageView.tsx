@@ -1,16 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Input,
-  Modal,
-  Space,
-  Spin,
-  Switch,
-  Tag,
-} from "antd";
+import { Alert, Button, Input, Modal, Space, Switch } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
@@ -18,6 +7,8 @@ import {
   type InpulseApiClient,
 } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   adminUserErrorMessage,
   useAdminUsers,
@@ -70,6 +61,7 @@ function isAdminReauthRequired(error: unknown): boolean {
 export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   client,
   currentUserId,
+  onOpenProjects,
 }) => {
   const { query, mutation } = useAdminUsers(client);
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -295,91 +287,165 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const selfAdmin = (user: AdminUserItem) =>
     currentUserId !== undefined && user.id === currentUserId;
 
+  const selfIsAdmin =
+    query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
+    false;
+
   return (
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">系统管理员</span>
-          <h1>用户管理</h1>
-          <p>
-            新增、编辑、启停与强制退出用户账号；所有写操作均需安全重认证并留痕。
-          </p>
+          <span className="eyebrow">系统 / 成员与权限</span>
+          <h1>成员与设置</h1>
         </div>
-        <Button type="primary" onClick={openCreate}>
-          新增用户
-        </Button>
+        <span className="identity-chip">
+          当前身份：{selfIsAdmin ? "系统管理员" : "项目成员"}
+        </span>
       </div>
-      <Space orientation="vertical" style={{ width: "100%" }} size={16}>
-        {success && <Alert type="success" showIcon title={success} />}
-        {query.isPending ? (
-          <Spin description="正在加载用户列表" />
-        ) : query.isError ? (
-          <Alert
-            type="error"
-            title={adminUserErrorMessage(query.error)}
-            action={<Button onClick={() => void query.refetch()}>重试</Button>}
-          />
-        ) : !query.data?.items.length ? (
-          <Empty description="暂无用户" />
-        ) : (
-          query.data.items.map((user) => (
-            <Card
-              key={user.id}
-              title={
-                <Space wrap>
-                  <span>{user.name}</span>
-                  <Tag>{user.loginName}</Tag>
-                  <Tag color="blue">{user.isAdmin ? "管理员" : "成员"}</Tag>
-                  <Tag color={user.status === "ACTIVE" ? "green" : "default"}>
-                    {user.status === "ACTIVE" ? "正常" : "已停用"}
-                  </Tag>
-                  {selfAdmin(user) && <Tag color="gold">当前账号</Tag>}
-                </Space>
-              }
-              extra={
-                <Space wrap>
-                  <Button onClick={() => openUpdate(user)}>编辑</Button>
-                  {!selfAdmin(user) && (
-                    <Button
-                      onClick={() =>
-                        openLifecycle(
-                          user.status === "ACTIVE" ? "disable" : "enable",
-                          user,
-                        )
+
+      <div className="settings-shell">
+        <nav className="settings-rail" aria-label="成员与设置导航">
+          <button type="button" className="settings-tab settings-tab-active">
+            成员与角色
+          </button>
+          {onOpenProjects ? (
+            <button
+              type="button"
+              className="settings-tab"
+              onClick={onOpenProjects}
+            >
+              项目成员
+            </button>
+          ) : null}
+        </nav>
+
+        <section className="settings-panel">
+          <div className="settings-panel-header">
+            <div>
+              <h2>成员与角色</h2>
+              <span>
+                {query.data
+                  ? `共 ${query.data.items.length} 位成员`
+                  : "正在加载成员列表"}
+              </span>
+            </div>
+            <Button className="secondary-button" onClick={openCreate}>
+              <InpulseIcon name="users" size={15} />
+              新增用户
+            </Button>
+          </div>
+
+          {success ? (
+            <div className="permission-note note-success" role="status">
+              <InpulseIcon name="check" size={16} />
+              <span>{success}</span>
+            </div>
+          ) : null}
+
+          {query.isPending ? (
+            <div className="calm-state">
+              <span className="calm-spinner" />
+              正在加载用户列表
+            </div>
+          ) : query.isError ? (
+            <CalmEmptyState
+              icon="alert"
+              title="用户列表加载失败"
+              description={adminUserErrorMessage(query.error)}
+            >
+              <Button
+                className="secondary-button"
+                onClick={() => void query.refetch()}
+              >
+                重试
+              </Button>
+            </CalmEmptyState>
+          ) : !query.data?.items.length ? (
+            <CalmEmptyState
+              icon="users"
+              title="暂无用户"
+              description="新增第一位用户后，即可按角色参与项目协作。"
+            >
+              <Button className="primary-button" onClick={openCreate}>
+                <InpulseIcon name="plus" size={15} />
+                新增用户
+              </Button>
+            </CalmEmptyState>
+          ) : (
+            <div className="member-list">
+              {query.data.items.map((user) => (
+                <div className="member-row" key={user.id}>
+                  <span className="person-avatar">
+                    {user.name.trim().charAt(0) || "成"}
+                  </span>
+                  <div className="member-id">
+                    <strong>
+                      {user.name}
+                      {selfAdmin(user) ? (
+                        <span className="member-self">（当前账号）</span>
+                      ) : null}
+                    </strong>
+                    <small>
+                      {user.loginName}
+                      {user.email ? ` · ${user.email}` : ""}
+                    </small>
+                  </div>
+                  <div className="member-meta">
+                    <CalmBadge tone={user.isAdmin ? "blue" : "gray"}>
+                      {user.isAdmin ? "系统管理员" : "项目成员"}
+                    </CalmBadge>
+                    <span
+                      className={
+                        "member-status" +
+                        (user.status === "ACTIVE" ? "" : " is-disabled")
                       }
                     >
-                      {user.status === "ACTIVE" ? "停用" : "启用"}
+                      {user.status === "ACTIVE" ? "启用" : "停用"}
+                    </span>
+                  </div>
+                  <div className="member-actions">
+                    <Button
+                      className="text-button"
+                      onClick={() => openUpdate(user)}
+                    >
+                      编辑
                     </Button>
-                  )}
-                  {!selfAdmin(user) && (
-                    <Button onClick={() => openLifecycle("forceLogout", user)}>
-                      强制退出
-                    </Button>
-                  )}
-                </Space>
-              }
-            >
-              <p>
-                <strong>邮箱：</strong>
-                {user.email ?? "未绑定"}
-              </p>
-              <p>
-                <strong>头像：</strong>
-                {user.avatarUrl ?? "未设置"}
-              </p>
-              <p>
-                <strong>更新时间：</strong>
-                {new Date(user.updatedAt).toLocaleString("zh-CN", {
-                  hour12: false,
-                })}
-              </p>
-              {user.status === "DISABLED" && (
-                <p>停用用户的历史与资料仍保留；重新启用不会恢复旧会话。</p>
-              )}
-            </Card>
-          ))
-        )}
-      </Space>
+                    {!selfAdmin(user) && (
+                      <Button
+                        className="text-button"
+                        onClick={() =>
+                          openLifecycle(
+                            user.status === "ACTIVE" ? "disable" : "enable",
+                            user,
+                          )
+                        }
+                      >
+                        {user.status === "ACTIVE" ? "停用" : "启用"}
+                      </Button>
+                    )}
+                    {!selfAdmin(user) && (
+                      <Button
+                        className="text-button"
+                        onClick={() => openLifecycle("forceLogout", user)}
+                      >
+                        强制退出
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="permission-note">
+            <InpulseIcon name="shield" size={16} />
+            <span>
+              <strong>权限提示</strong>
+              系统管理员可以归档项目、作废与恢复记录、查看原始审计快照；高风险操作需要二次确认。项目成员在已加入项目内拥有全部普通研发操作权限。
+            </span>
+          </div>
+        </section>
+      </div>
 
       <Modal
         open={editor !== null}
@@ -599,4 +665,5 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
 export interface AdminUsersPageViewProps {
   readonly client?: InpulseApiClient | undefined;
   readonly currentUserId?: number | undefined;
+  readonly onOpenProjects?: (() => void) | undefined;
 }
