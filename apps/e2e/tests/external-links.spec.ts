@@ -31,6 +31,12 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
       "Issue #22001",
     );
     await modal.getByRole("button", { name: "关闭关联" }).click();
+    await page.goto(`/search?q=${encodeURIComponent(runtime.searchQuery)}`);
+    await expect(
+      page
+        .getByTestId("search-result-item")
+        .filter({ hasText: runtime.projectTitle }),
+    ).toBeVisible();
     await page.goto(`/projects/${runtime.projectId}/modules`);
     await page.getByRole("link", { name: "查看功能" }).first().click();
     await page.getByRole("button", { name: "新建功能" }).click();
