@@ -1,3 +1,4 @@
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { useAuth } from "@features/auth/auth-context";
 import { RecordLifecycleButton } from "./RecordLifecycleButton";
 import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
@@ -187,6 +188,12 @@ export function PublishedRecordsView({
           detail.data && (
             <section className="draft-detail" aria-label="正式记录详情">
               <h2>{detail.data.title}</h2>
+              <ExternalLinksPanel
+                key={detail.data.id}
+                targetType="CHANGE_RECORD"
+                targetId={detail.data.id}
+                client={api}
+              />
               {user?.isAdmin && (
                 <RecordLifecycleButton
                   item={detail.data}

@@ -1,6 +1,8 @@
+import { ExternalLinkQueryPort } from "../external-links/external-link-query.port.js";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import {
   validateSearchProjectionWriteInput,
+  SearchProjectionCapacityError,
   SearchProjectionWritePort,
   type SearchProjectionWriteInput,
 } from "./search-projection.write-port.js";
@@ -15,7 +17,23 @@ export class PostgresSearchProjectionWritePort extends SearchProjectionWritePort
     tx: TransactionContext,
     input: SearchProjectionWriteInput,
   ): Promise<void> {
-    const normalizedSearchText = validateSearchProjectionWriteInput(input);
+    validateSearchProjectionWriteInput(input);
+    const urls = await new ExternalLinkQueryPort().urls(
+      tx,
+      input.projectId,
+      input.entityType,
+      input.entityId,
+    );
+    let normalizedSearchText: string;
+    try {
+      normalizedSearchText = validateSearchProjectionWriteInput({
+        ...input,
+        rawText: [input.rawText, ...urls].join("\n"),
+      });
+    } catch (error) {
+      if (urls.length) throw new SearchProjectionCapacityError();
+      throw error;
+    }
 
     await tx.sql`
       INSERT INTO app.search_projection (

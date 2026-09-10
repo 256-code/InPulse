@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { hash as argon2Hash } from "@node-rs/argon2";
 import postgres from "postgres";
 
+import { normalizeSearchText } from "../api/src/modules/search/search-text.js";
+
 import {
   parseCookieValue,
   requiredE2eDatabaseUrl,
@@ -231,6 +233,7 @@ async function seedFixture(databaseUrl: string): Promise<{
 
     const searchQuery = `e2e${randomBytes(3).toString("hex")}`;
     const projectTitle = `E2E 可搜索项目 ${code}`;
+    const projectSearchText = `${projectTitle} ${searchQuery}`;
     await sql`
       INSERT INTO app.search_projection (
         project_id,
@@ -250,8 +253,8 @@ async function seedFixture(databaseUrl: string): Promise<{
         ${projectId},
         ${projectTitle},
         'Playwright E2E fixture',
-        ${projectTitle},
-        ${searchQuery},
+        ${projectSearchText},
+        ${normalizeSearchText(projectSearchText)},
         'MEMBER',
         'ACTIVE',
         1

@@ -1,3 +1,4 @@
+import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
@@ -114,6 +115,7 @@ export interface SchemaRegistryEntry {
  * 每个条目必须通过 `.meta({ id })` 声明与键名一致的 OpenAPI 组件名。
  */
 export const schemaRegistry = {
+  ...externalLinkSchemas,
   ...taskCompletionSchemas,
   ...leftoverTaskSchemas,
   ...moduleSchemas,

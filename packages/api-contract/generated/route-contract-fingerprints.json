@@ -1,4 +1,10 @@
 {
+  "addExternalLink": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "3abb40d5c0fd6bac5ccbc20df004b29dde6a61bb0d88b8e19d379eeb08a635d6"
+    }
+  ],
   "addProjectMember": [
     {
       "version": "1.0.0",
@@ -129,6 +135,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "bfcc90d99b2e6c0158619d46792aa3c219861966b9495b48d4dffc91779a1a43"
+    }
+  ],
+  "removeExternalLink": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ddea82056c9489e216c224ea0b205e9b4443c5744b10a6b3f6a5b320fde87524"
     }
   ],
   "removeProjectMember": [

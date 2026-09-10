@@ -1,3 +1,4 @@
+import { SearchProjectionCapacityError } from "../search/public/search-projection-errors.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
@@ -176,6 +177,7 @@ export class RecordPublicationHttpService {
     } catch (error) {
       const known =
         error instanceof RecordDraftError ||
+        error instanceof SearchProjectionCapacityError ||
         error instanceof IdempotencyHttpError;
       return {
         status: known ? error.status : 500,

@@ -1,3 +1,7 @@
+import {
+  RecordLinkQueryPort,
+  RecordLinkCommandPort,
+} from "./external-link-target.port.js";
 import { RecordLifecycleController } from "./record-lifecycle.controller.js";
 import { RecordLifecycleRepository } from "./record-lifecycle.repository.js";
 import { RecordLifecycleHttpService } from "./record-lifecycle-http.service.js";
@@ -44,8 +48,15 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     NotificationProjectionModule,
     SearchProjectionModule,
   ],
-  exports: [RecordPublicationCommandPort, LeftoverRecordCommandPort],
+  exports: [
+    RecordLinkQueryPort,
+    RecordLinkCommandPort,
+    RecordPublicationCommandPort,
+    LeftoverRecordCommandPort,
+  ],
   providers: [
+    RecordLinkQueryPort,
+    RecordLinkCommandPort,
     RecordLifecycleService,
     RecordLifecycleHttpService,
     RecordLifecycleRepository,
