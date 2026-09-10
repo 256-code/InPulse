@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
-import type { SessionAuthService } from "../src/auth/session-auth.service.js";
 import type { TransactionContext } from "../src/database/transaction-context.js";
 import {
   IdempotencyHttpError,
@@ -13,54 +12,43 @@ import type {
   RunIdempotencyCommand,
 } from "../src/idempotency/runner.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
-import { TaskGroupsHttpService } from "../src/modules/task-groups/task-groups-http.service.js";
+import { TaskGroupUnmergeHttpService } from "../src/modules/task-groups/task-group-unmerge-http.service.js";
 import {
-  TaskGroupsService,
   TaskGroupCommandError,
+  TaskGroupsService,
 } from "../src/modules/task-groups/task-groups.service.js";
 
 const tx = {} as TransactionContext;
 const key = randomBytes(32);
-const item = {
-  id: 1,
-  projectId: 3,
-  code: "PAY-TG-1",
-  name: "支付重试",
-  status: "ACTIVE" as const,
-  createdBy: 7,
-  rowVersion: 1,
-  createdAt: "2026-09-10T00:00:00.000Z",
-  updatedAt: "2026-09-10T00:00:00.000Z",
-  mainTaskId: 42,
-  members: [
-    {
-      id: 1,
-      taskId: 42,
-      role: "MAIN" as const,
-      sourceKind: null,
-      status: "ACTIVE" as const,
-      originalWorkStatus: null,
-      originalAssigneeId: null,
-      joinedAt: "2026-09-10T00:00:00.000Z",
-    },
+const response = {
+  group: {
+    id: 5,
+    projectId: 3,
+    code: "PAY-TG-1",
+    name: "支付重试",
+    status: "ACTIVE" as const,
+    createdBy: 7,
+    rowVersion: 3,
+    createdAt: "2026-09-10T00:00:00.000Z",
+    updatedAt: "2026-09-10T00:10:00.000Z",
+    closedAt: null,
+    mainTaskId: 42,
+  },
+  detachedMembers: [
     {
       id: 2,
       taskId: 43,
       role: "SOURCE" as const,
       sourceKind: "HISTORICAL" as const,
-      status: "ACTIVE" as const,
       originalWorkStatus: "DONE" as const,
       originalAssigneeId: 9,
       joinedAt: "2026-09-10T00:00:01.000Z",
+      detachedAt: "2026-09-10T00:10:00.000Z",
+      detachReason: "重复录入",
     },
   ],
 };
-const body = {
-  sourceTaskId: 43,
-  mainTaskId: 42,
-  sourceKind: "HISTORICAL",
-  mergeNote: null,
-};
+const body = { sourceTaskId: 43, unmergeReason: "重复录入" };
 
 function request(
   overrides: {
@@ -76,7 +64,7 @@ function request(
       "sec-fetch-site": "same-origin",
       cookie: "__Host-session=x",
       "x-csrf-token": "c".repeat(43),
-      "idempotency-key": "f23-unit-key-0001",
+      "idempotency-key": "f24-unit-key-0001",
       "content-type": "application/json",
       ...overrides.headers,
     },
@@ -98,11 +86,12 @@ function setup(
     .mockResolvedValue(
       options.actorId === undefined ? undefined : { userId: options.actorId },
     );
-  const execute = vi.fn(async (_tx: TransactionContext, _actorId: number) => {
+  const results: unknown[] = [];
+  const unmerge = vi.fn(async (_tx: TransactionContext, _actorId: number) => {
     if (options.failWith !== undefined) throw options.failWith;
-    return options.item ?? item;
+    return options.item ?? response;
   });
-  const replay = vi.fn().mockResolvedValue(undefined);
+  const replayUnmerge = vi.fn().mockResolvedValue(undefined);
   const executed: RunIdempotencyCommand[] = [];
   const runnerRun = vi.fn(async (input: RunIdempotencyCommand) => {
     executed.push(input);
@@ -111,6 +100,7 @@ function setup(
         ? input.actorId
         : await input.actorId(tx);
     const result = await input.execute(tx, actorId);
+    results.push(result);
     return {
       kind: "executed" as const,
       record: {
@@ -121,71 +111,81 @@ function setup(
       },
     };
   });
-  const service = new TaskGroupsHttpService(
-    {} as SessionAuthService,
+  const service = new TaskGroupUnmergeHttpService(
     { verify } as unknown as AuthenticatedMutationService,
     new IdempotencyHttpService(
       { run: runnerRun } as unknown as IdempotencyRunner,
       { currentVersion: 1, currentKey: () => key, keyFor: () => key },
       resolveRegisteredRoute,
     ),
-    { execute, replay } as unknown as TaskGroupsService,
+    { unmerge, replayUnmerge } as unknown as TaskGroupsService,
   );
-  return { service, verify, execute, replay, executed, runnerRun };
+  return {
+    service,
+    verify,
+    unmerge,
+    replayUnmerge,
+    executed,
+    results,
+    runnerRun,
+  };
 }
 
-function uniqueViolation(constraint: string): unknown {
-  return Object.assign(new Error("duplicate key"), {
-    code: "23505",
-    constraint_name: constraint,
-  });
-}
-
-describe("F-23 合并 HTTP 边界", () => {
+describe("F-24 解除合并 HTTP 边界", () => {
   it("合法请求返回 200 并校验契约 DTO，业务命令收到认证用户", async () => {
-    const { service, execute } = setup({ actorId: 7 });
+    const { service, unmerge } = setup({ actorId: 7 });
     const result = await service.handle(request());
     expect(result.status).toBe(200);
-    expect(result.body).toMatchObject({ id: 1, mainTaskId: 42 });
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute.mock.calls[0]?.[1]).toBe(7);
+    expect(result.body).toMatchObject({
+      group: { id: 5, status: "ACTIVE", rowVersion: 3 },
+      detachedMembers: [{ taskId: 43, role: "SOURCE" }],
+    });
+    expect(unmerge).toHaveBeenCalledTimes(1);
+    expect(unmerge.mock.calls[0]?.[1]).toBe(7);
+  });
+
+  it("重放授权上下文登记项目、聚合组与来源/主任务", async () => {
+    const { service, results } = setup({ actorId: 7 });
+    await service.handle(request());
+    expect(results[0]).toMatchObject({
+      responseSchemaRef: "TaskGroupUnmergeResponse",
+      replayAuthContext: { projectId: 3, groupId: 5, taskIds: [42, 43] },
+    });
   });
 
   it("同源校验失败返回 403 且不进入幂等与业务层", async () => {
-    const { service, runnerRun, execute } = setup({ actorId: 7 });
+    const { service, runnerRun, unmerge } = setup({ actorId: 7 });
     const crossOrigin = await service.handle(
       request({ headers: { origin: "https://evil.example" } }),
     );
     expect(crossOrigin).toMatchObject({ status: 403 });
-    expect(crossOrigin.body).toMatchObject({ code: "CSRF_ORIGIN_REJECTED" });
-    const missingOrigin = await service.handle(
-      request({ headers: { origin: "", referer: "" } }),
-    );
-    expect(missingOrigin).toMatchObject({ status: 403 });
+    expect(crossOrigin.body).toMatchObject({
+      code: "CSRF_ORIGIN_REJECTED",
+    });
     expect(runnerRun).not.toHaveBeenCalled();
-    expect(execute).not.toHaveBeenCalled();
+    expect(unmerge).not.toHaveBeenCalled();
   });
 
-  it("非 JSON 内容类型返回 400", async () => {
-    const { service, execute } = setup({ actorId: 7 });
+  it("非 JSON 请求体返回 400 契约错误码", async () => {
+    const { service, unmerge } = setup({ actorId: 7 });
     const result = await service.handle(
       request({ headers: { "content-type": "text/plain" } }),
     );
     expect(result).toMatchObject({ status: 400 });
     expect(result.body).toMatchObject({
-      code: "TASK_MERGE_CONTENT_TYPE_INVALID",
+      code: "TASK_UNMERGE_CONTENT_TYPE_INVALID",
     });
-    expect(execute).not.toHaveBeenCalled();
+    expect(unmerge).not.toHaveBeenCalled();
   });
 
   it("请求头与请求体违反契约返回 422 与字段明细", async () => {
-    const { service, execute } = setup({ actorId: 7 });
+    const { service, unmerge } = setup({ actorId: 7 });
     const badHeader = await service.handle(
       request({ headers: { "x-csrf-token": "" } }),
     );
     expect(badHeader).toMatchObject({ status: 422 });
     expect(badHeader.body).toMatchObject({
-      code: "TASK_MERGE_VALIDATION_FAILED",
+      code: "TASK_UNMERGE_VALIDATION_FAILED",
       details: { "x-csrf-token": expect.any(String) },
     });
     const badBody = await service.handle(
@@ -193,14 +193,18 @@ describe("F-23 合并 HTTP 边界", () => {
     );
     expect(badBody).toMatchObject({ status: 422 });
     expect(badBody.body).toMatchObject({
-      code: "TASK_MERGE_VALIDATION_FAILED",
+      code: "TASK_UNMERGE_VALIDATION_FAILED",
     });
+    const emptyReason = await service.handle(
+      request({ body: { sourceTaskId: 43 } }),
+    );
+    expect(emptyReason).toMatchObject({ status: 422 });
     const withQuery = await service.handle(request({ query: { dryRun: "1" } }));
     expect(withQuery).toMatchObject({
       status: 422,
       body: { details: { query: expect.any(String) } },
     });
-    expect(execute).not.toHaveBeenCalled();
+    expect(unmerge).not.toHaveBeenCalled();
   });
 
   it("幂等键缺失或过短返回 400", async () => {
@@ -218,38 +222,13 @@ describe("F-23 合并 HTTP 边界", () => {
   });
 
   it("匿名或 CSRF 失效返回 401 且不写入业务", async () => {
-    const { service, execute } = setup();
+    const { service, unmerge } = setup();
     const result = await service.handle(request());
     expect(result).toMatchObject({ status: 401 });
-    expect(result.body).toMatchObject({ code: "TASK_MERGE_SESSION_REQUIRED" });
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("业务错误与数据库唯一约束分别映射为 409", async () => {
-    const merged = setup({
-      actorId: 7,
-      failWith: uniqueViolation("task_group_members_one_active_group_unique"),
+    expect(result.body).toMatchObject({
+      code: "TASK_UNMERGE_SESSION_REQUIRED",
     });
-    const alreadyMerged = await merged.service.handle(request());
-    expect(alreadyMerged).toMatchObject({ status: 409 });
-    expect(alreadyMerged.body).toMatchObject({ code: "TASK_ALREADY_MERGED" });
-    const mainChanged = setup({
-      actorId: 7,
-      failWith: uniqueViolation("task_group_members_one_active_main_unique"),
-    });
-    const conflict = await mainChanged.service.handle(request());
-    expect(conflict).toMatchObject({ status: 409 });
-    expect(conflict.body).toMatchObject({
-      code: "TASK_GROUP_STATE_CONFLICT",
-    });
-    const ok = uniqueViolation("some_other_constraint");
-    const unknown = setup({ actorId: 7, failWith: ok });
-    const internal = await unknown.service.handle(request());
-    expect(internal).toMatchObject({ status: 500 });
-    expect(internal.body).toMatchObject({ code: "INTERNAL_ERROR" });
-    expect(JSON.stringify(internal.body)).not.toContain(
-      "some_other_constraint",
-    );
+    expect(unmerge).not.toHaveBeenCalled();
   });
 
   it("业务层显式错误按状态码直通", async () => {
@@ -257,15 +236,15 @@ describe("F-23 合并 HTTP 边界", () => {
       actorId: 7,
       failWith: new TaskGroupCommandError(
         409,
-        "TASK_MERGE_PARENT_ARCHIVED",
-        "项目已归档，不能合并任务",
+        "TASK_NOT_MERGED",
+        "任务当前不是活跃来源分支，无法解除合并",
       ),
     });
     const result = await service.handle(request());
     expect(result).toMatchObject({ status: 409 });
     expect(result.body).toMatchObject({
-      code: "TASK_MERGE_PARENT_ARCHIVED",
-      message: "项目已归档，不能合并任务",
+      code: "TASK_NOT_MERGED",
+      message: "任务当前不是活跃来源分支，无法解除合并",
     });
   });
 
@@ -288,7 +267,7 @@ describe("F-23 合并 HTTP 边界", () => {
   it("业务结果越出可重放字段白名单时拒绝缓存", async () => {
     const { service, runnerRun } = setup({
       actorId: 7,
-      item: { ...item, secretField: "leak" },
+      item: { ...response, secretField: "leak" },
     });
     const result = await service.handle(request());
     expect(result).toMatchObject({ status: 500 });

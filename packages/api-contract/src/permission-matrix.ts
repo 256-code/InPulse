@@ -103,6 +103,7 @@ export const permissionMatrix = [
       "getTaskStatusHistory",
       "getModuleTaskStatusHistory",
       "mergeTaskGroup",
+      "unmergeTaskGroup",
       "transitionTask",
       "transitionModuleTask",
       "getFeature",

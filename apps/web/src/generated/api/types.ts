@@ -889,6 +889,18 @@ export type TaskEditRequest = {
   readonly dueAt: (string | null);
 };
 
+export type TaskGroupDetachedMemberItem = {
+  readonly id: number;
+  readonly taskId: number;
+  readonly role: ("MAIN" | "SOURCE");
+  readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
+  readonly originalWorkStatus: (("TODO" | "DONE" | "CANCELED") | null);
+  readonly originalAssigneeId: (number | null);
+  readonly joinedAt: string;
+  readonly detachedAt: string;
+  readonly detachReason: string;
+};
+
 export type TaskGroupItem = {
   readonly id: number;
   readonly projectId: number;
@@ -929,6 +941,40 @@ export type TaskGroupMergeRequest = {
   readonly mainTaskId: number;
   readonly sourceKind: ("HISTORICAL" | "ACTIVE");
   readonly mergeNote: (string | null);
+};
+
+export type TaskGroupStateItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly status: ("ACTIVE" | "CLOSED");
+  readonly createdBy: number;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly closedAt: (string | null);
+  readonly mainTaskId: number;
+};
+
+export type TaskGroupUnmergeHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type TaskGroupUnmergeReplayContext = {
+  readonly projectId: number;
+  readonly groupId: number;
+  readonly taskIds: readonly number[];
+};
+
+export type TaskGroupUnmergeRequest = {
+  readonly sourceTaskId: number;
+  readonly unmergeReason: (string | null);
+};
+
+export type TaskGroupUnmergeResponse = {
+  readonly group: TaskGroupStateItem;
+  readonly detachedMembers: readonly TaskGroupDetachedMemberItem[];
 };
 
 export type TaskItem = {
