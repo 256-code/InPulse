@@ -701,3 +701,15 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 本地实际执行（2026-09-11）：聚合读四文件定向 `aggregate-read-cursor` / `aggregate-read.service` / `aggregate-read-ports` / `aggregate-read-api.integration` 48/48（6 + 14 + 16 + 12）；`pnpm test:unit` 全绿（web 54 文件 224 例、api 66 文件 339 例、contract 15 文件 89 例、database 1 文件 15 例）；`pnpm test:integration`（本地 PostgreSQL 18.6 + PGroonga 容器）database 20/20、api 47 文件 400/400；`pnpm test:e2e` 40/40（约 5.1 分钟）；`pnpm lint`、`pnpm typecheck`（6 项目）、`pnpm format:check`、`pnpm build`、`pnpm check:deps`（564 源文件无环无越界）、`pnpm check:frontend:boundaries`（179 模块 792 依赖）、`pnpm check:docs`（70 个 Markdown）、`pnpm check:secrets`（828 文件）、`pnpm check:deploy:test`、`pnpm db:migrations:check`（6 迁移）通过；`pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 无已知漏洞（本地 npm 镜像无 audit endpoint）。未运行：F-29 / F-32 专属 Playwright 用例（裁决 §7 之 C 侧补测，尚未落库）、`pnpm test:search:db` 与 `pnpm test`（要求 `max_connections >= 150`，未纳入 CI）。推送后 GitHub Actions 已通过：`CI` push run [34504191298](https://github.com/256-code/InPulse/actions/runs/34504191298) 13m43s、`CI` pull_request run [34504227163](https://github.com/256-code/InPulse/actions/runs/34504227163) 13m7s、`Documentation` run [34504227104](https://github.com/256-code/InPulse/actions/runs/34504227104) 12s；其后仅本回填提交。
 
 已知风险与限制：① 一次全量集成运行曾出现 20 个失败（task-completion / tasks-api），逐文件复跑（task-completion 30/30、tasks-api 3 次各 41/41）与全量重跑 400/400 均通过，未复现、未定位根因，不能视为已修复；② 本地 `app` 库因项目编号序列耗尽重建后重新加载角色 / 扩展并重放全部迁移，本地测试基线重置，不代表生产数据；③ 代 B 交付的处方偏差（my-tasks 查询端口宿主在记录侧）仍待非作者人工在 PR #96 确认；④ 遗留问题总数、来源记录标题、任务卡片优先级 / 截止时间等设计稿元素在 V1 契约无来源，保持显式降级。
+
+## F-29 / F-32 专属 Playwright E2E（C，2026-09-11 本地落库）
+
+上一条目「未运行：F-29 / F-32 专属 Playwright 用例（裁决 §7 之 C 侧补测）」由本节补齐：新增 `apps/e2e/tests/aggregate-views.spec.ts` 两例，把 F-29 / F-32 页面在服务端适配器下的关键路径与契约缺口显式降级纳入 Playwright 回归。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；服务端说明含「接口说明：」与 `GET /api/v1/me/tasks`；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42 |
+| F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、活跃模块数与成员数为服务端真实值、遗留问题总数为「—」、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页、「全部项目」→ `/projects` | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
+| fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/e2e typecheck` 通过；定向 `pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42（约 5.3 分钟）。未运行：本次提交推送后的 GitHub Actions（推送后回填）。

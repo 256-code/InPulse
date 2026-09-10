@@ -27,6 +27,7 @@ export interface E2ERuntime {
   readonly projectId: number;
   readonly searchQuery: string;
   readonly projectTitle: string;
+  readonly projectName: string;
   readonly hiddenProjectId: number;
   readonly hiddenProjectTitle: string;
   readonly hiddenSearchQuery: string;

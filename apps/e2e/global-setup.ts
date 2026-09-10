@@ -123,6 +123,7 @@ async function seedFixture(databaseUrl: string): Promise<{
   readonly projectId: number;
   readonly searchQuery: string;
   readonly projectTitle: string;
+  readonly projectName: string;
   readonly hiddenProjectId: number;
   readonly hiddenProjectTitle: string;
   readonly hiddenSearchQuery: string;
@@ -209,10 +210,11 @@ async function seedFixture(databaseUrl: string): Promise<{
     }
 
     const code = `E2E${randomBytes(5).toString("hex").toUpperCase()}`;
+    const projectName = `E2E Playwright 项目 ${code}`;
     const projectId = await sql.begin(async (transaction) => {
       const projects = (await transaction<readonly { id: number }[]>`
         INSERT INTO app.projects (code, name, created_by)
-        VALUES (${code}, ${`E2E Playwright 项目 ${code}`}, ${user.id})
+        VALUES (${code}, ${projectName}, ${user.id})
         RETURNING id
       `) as unknown as readonly { id: number }[];
       const project = projects[0];
@@ -409,6 +411,7 @@ async function seedFixture(databaseUrl: string): Promise<{
       projectId,
       searchQuery,
       projectTitle,
+      projectName,
       hiddenProjectId,
       hiddenProjectTitle,
       hiddenSearchQuery,
@@ -461,6 +464,7 @@ export default async function globalSetup(): Promise<void> {
     projectId: fixture.projectId,
     searchQuery: fixture.searchQuery,
     projectTitle: fixture.projectTitle,
+    projectName: fixture.projectName,
     hiddenProjectId: fixture.hiddenProjectId,
     hiddenProjectTitle: fixture.hiddenProjectTitle,
     hiddenSearchQuery: fixture.hiddenSearchQuery,

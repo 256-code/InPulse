@@ -2,7 +2,7 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | 本地已接线：R-1 ~ R-4 契约、后端与生成客户端随 [PR #97](https://github.com/256-code/InPulse/pull/97) 落库，F-29 / F-32 页面默认注入 server adapter（mock 仅保留测试与降级）；GitHub Actions（CI push / PR 与 Documentation）已通过，待非作者评审 |
+| 状态 | 本地已接线：R-1 ~ R-4 契约、后端与生成客户端随 [PR #97](https://github.com/256-code/InPulse/pull/97) 落库，F-29 / F-32 页面默认注入 server adapter（mock 仅保留测试与降级），专属 Playwright 关键路径已落库（全量 E2E 42/42）；GitHub Actions（CI push / PR 与 Documentation）已通过，待非作者评审 |
 | 冻结依据 | [F-25 / F-29 / F-32 契约评审裁决](./a-contract-review-f25-f29-f32.md)（A 岗，`5563bcf`） |
 | 落库状态 | 四条路由已登记（Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端随实现同一 PR）；所依赖的 B 侧只读端口扩展（`TaskQueryPort` 列表/计数、`ChangeRecordReadPort`、`ModuleReadPort.count`、`FeatureReadPort.count`）已由 C 代 B 落库（PR #96），见[端口扩展提案的回填](./c-port-extension-proposal.md)；C 侧接线与测试证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 增量段 |
 | 当前日期 | 2026-09-11 |
@@ -59,10 +59,12 @@ V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`sc
 | `scope=created` / `all`、关键词、GitHub、来源任务筛选 | 冻结参数不含 | V1 在 UI 侧隐藏或标注「后续迭代」，不得静默忽略 |
 | 遗留问题行 `recordTitle` | 冻结 DTO 没有该字段 | 接线时改用 `recordCode` 组合展示，或申请扩展 |
 
-接线顺序（裁决 §7）：B 交付只读端口 → A 登记契约并再生成 OpenAPI 与客户端（与实现同一个 PR）→ C 用生成的客户端替换 mock adapter 并补 Playwright 关键路径。前两步已于 2026-09-11 完成（端口扩展 PR #96；契约、实现与生成物同一 PR）；C 侧剩余项是 F-29 / F-32 专属 Playwright 关键路径。
+接线顺序（裁决 §7）：B 交付只读端口 → A 登记契约并再生成 OpenAPI 与客户端（与实现同一个 PR）→ C 用生成的客户端替换 mock adapter 并补 Playwright 关键路径。三步均已于 2026-09-11 完成：端口扩展 PR #96 代 B 落库；契约、实现与生成物同一 PR；C 侧 F-29 / F-32 专属 Playwright 关键路径见 §5。
 
 ## 5. 接线记录与未做
 
 2026-09-11 接线落库：R-1 `getTaskGroup`、R-2 `getProjectOverview`、R-3 `listMyTasks`、R-4 `listTaskGroupRecords` 四条路由连同 Schema、Route Registry、权限矩阵、OpenAPI、生成客户端与 NestJS 实现（三个 Controller、三个查询服务、签名游标）同一 PR 落库；F-29 页面默认使用 `project-overview-server.ts`，F-32 页面默认使用 `my-tasks-server.ts`，契约缺口按 `null` / 全 false 显式降级；测试证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 增量段。
 
-未做：F-29 / F-32 专属 Playwright 关键路径；§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整；GitHub Actions（推送后执行）。
+2026-09-11 F-29 / F-32 专属 Playwright 关键路径落库：`apps/e2e/tests/aggregate-views.spec.ts` 两例。F-32 先在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户，再在 `/tasks` 验证：服务端适配器说明、统计卡「—」、搜索 / 优先级与「我创建的」范围禁用并标注、默认「我负责的 + 未完成」返回该任务且不显示无契约来源的优先级徽章，以及 F-30 的 URL 筛选状态（`status=done`、`view=list`、`more=1`）与「遗留问题」入口跳转 `/issues`。F-29 在 `/projects/{projectId}/overview` 验证：标题为服务端项目名、活跃模块数与成员数为服务端真实值、遗留问题总数「—」、最近迭代与待处理遗留问题两块面板及空态，以及「查看全部 / 查看模块 / 全部项目」三条导航。`global-setup` 增补 `projectName` 到 runtime 供概览标题断言使用。本地 `@inpulse/e2e` typecheck 与全量 `pnpm test:e2e` 42/42（约 5.3 分钟）通过；证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 E2E 增量段。
+
+未做：§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整；本次 E2E 提交推送后的 GitHub Actions（推送后回填）。
