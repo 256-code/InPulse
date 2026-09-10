@@ -17,18 +17,22 @@ import {
   countActiveMyTaskFilters,
   DEFAULT_MY_TASK_FILTERS,
 } from "./my-tasks-url";
+import { listMyTasksV1Gaps } from "./my-tasks-v1-query";
 import { formatDayIso, isBeforeTodayIso, isTodayIso } from "./my-tasks-time";
-import type {
-  MyTaskFilters,
-  MyTaskGithubFilter,
-  MyTaskLevel,
-  MyTaskListItem,
-  MyTaskPriority,
-  MyTaskRecordFilter,
-  MyTaskRelation,
-  MyTaskScope,
-  MyTasksAdapter,
-  MyTaskWorkStatus,
+import {
+  MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskFilters,
+  type MyTaskGithubFilter,
+  type MyTaskLevel,
+  type MyTaskListItem,
+  type MyTaskPriority,
+  type MyTaskRecordFilter,
+  type MyTaskRelation,
+  type MyTaskScope,
+  type MyTasksAdapter,
+  type MyTasksFilterGap,
+  type MyTasksFilterSupport,
+  type MyTaskWorkStatus,
 } from "./my-tasks-types";
 
 const scopeOrder: readonly MyTaskScope[] = [
@@ -102,7 +106,28 @@ const displayOptions = [
   { value: "list" as const, label: "列表" },
 ];
 
-function dueLabel(item: MyTaskListItem): string {
+const filterGapLabels: Record<MyTasksFilterGap, string> = {
+  "scope:created": "我创建的",
+  "scope:all": "全部任务",
+  "scope:project-without-id": "全部可访问项目",
+  "filter:priority": "优先级",
+  "filter:relation": "合并关系",
+  "filter:github": "GitHub 关联",
+  "filter:query": "关键词搜索",
+  "filter:canceled-with-open": "已取消与未完成合并显示",
+};
+
+function isScopeFilterSupported(
+  scope: MyTaskScope,
+  support: MyTasksFilterSupport,
+): boolean {
+  if (scope === "created") return support["scope:created"];
+  if (scope === "all") return support["scope:all"];
+  return true;
+}
+
+function dueLabel(item: MyTaskListItem): string | null {
+  if (item.dueAt === undefined) return null;
   if (item.dueAt === null) return "未设置截止";
   if (item.workStatus === "TODO" && isBeforeTodayIso(item.dueAt))
     return "已逾期 " + formatDayIso(item.dueAt);
@@ -113,7 +138,7 @@ function dueLabel(item: MyTaskListItem): string {
 function isOverdue(item: MyTaskListItem): boolean {
   return (
     item.workStatus === "TODO" &&
-    item.dueAt !== null &&
+    typeof item.dueAt === "string" &&
     isBeforeTodayIso(item.dueAt)
   );
 }
@@ -131,8 +156,11 @@ export interface TaskCenterPageViewProps {
 }
 
 /**
- * F-32 任务中心页面视图。骨架阶段数据来自 mock adapter；
- * 项目名等公共字段来自 A 的 listProjects 端口（在页面层注入）。
+ * F-32 任务中心页面视图。数据来自注入的 adapter：页面默认注入 server
+ * adapter（R-3 listMyTasks），mock 只用于测试与降级演示；项目名等公共字段
+ * 来自 A 的 listProjects 端口（在页面层注入）。
+ * 契约缺口（统计、范围计数、遗留问题、优先级/截止时间等）按适配器声明的
+ * filterSupport 与可选字段显式降级：禁用或标注，不虚构数值。
  */
 export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   filters,
@@ -153,20 +181,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   });
   const result = taskQuery.data;
   const items = result?.items ?? [];
-  const stats = result?.stats ?? {
-    myOpen: 0,
-    dueToday: 0,
-    overdue: 0,
-    completedThisMonth: 0,
-  };
-  const scopeCounts = result?.scopeCounts ?? {
-    mine: 0,
-    created: 0,
-    project: 0,
-    all: 0,
-  };
-  const leftoverCount = result?.leftoverCount ?? 0;
+  const stats = result?.stats ?? null;
+  const scopeCounts = result?.scopeCounts ?? null;
+  const leftoverCount = result?.leftoverCount ?? null;
   const leftoverSample = result?.leftoverSample ?? null;
+  const filterSupport: MyTasksFilterSupport =
+    result?.filterSupport ?? MY_TASKS_FULL_FILTER_SUPPORT;
+  const appliedFilterGaps = listMyTasksV1Gaps(filters).filter(
+    (gap) => !filterSupport[gap],
+  );
   const projectNames = new Map<number, string>(
     projects.map((project) => [project.id, project.name]),
   );
@@ -196,7 +219,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const statCards: ReadonlyArray<{
     readonly key: string;
     readonly label: string;
-    readonly value: number;
+    readonly value: number | string;
     readonly hint: string;
     readonly icon: InpulseIconName;
     readonly tone: string;
@@ -205,8 +228,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     {
       key: "my-open",
       label: "我负责的未完成",
-      value: stats.myOpen,
-      hint: "点击切换到我的未完成任务",
+      value: stats === null ? "—" : stats.myOpen,
+      hint: stats === null ? "聚合统计暂未接入" : "点击切换到我的未完成任务",
       icon: "clipboard",
       tone: "blue",
       onSelect: () => update({ scope: "mine", status: "open" }),
@@ -214,8 +237,13 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     {
       key: "due-today",
       label: "今天截止",
-      value: stats.dueToday,
-      hint: stats.dueToday > 0 ? "优先安排今天的工作" : "今天没有到期任务",
+      value: stats === null ? "—" : stats.dueToday,
+      hint:
+        stats === null
+          ? "聚合统计暂未接入"
+          : stats.dueToday > 0
+            ? "优先安排今天的工作"
+            : "今天没有到期任务",
       icon: "calendar",
       tone: "violet",
       onSelect: () => update({ scope: "mine", status: "open", query: "" }),
@@ -223,77 +251,89 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     {
       key: "overdue",
       label: "已逾期",
-      value: stats.overdue,
-      hint: stats.overdue > 0 ? "需要协调依赖或改期" : "没有逾期任务",
+      value: stats === null ? "—" : stats.overdue,
+      hint:
+        stats === null
+          ? "聚合统计暂未接入"
+          : stats.overdue > 0
+            ? "需要协调依赖或改期"
+            : "没有逾期任务",
       icon: "alert",
-      tone: stats.overdue > 0 ? "red" : "green",
+      tone: stats !== null && stats.overdue > 0 ? "red" : "green",
       onSelect: () => update({ scope: "mine", status: "open" }),
     },
     {
       key: "completed",
       label: "本月完成",
-      value: stats.completedThisMonth,
-      hint: "已完成任务不会消失",
+      value: stats === null ? "—" : stats.completedThisMonth,
+      hint: stats === null ? "聚合统计暂未接入" : "已完成任务不会消失",
       icon: "check",
       tone: "green",
       onSelect: () => update({ scope: "mine", status: "done" }),
     },
   ];
 
-  const renderCard = (item: MyTaskListItem) => (
-    <article
-      className="calm-task-card"
-      key={item.taskId}
-      data-testid={"my-task-" + item.taskId}
-    >
-      <div className="calm-card-top">
-        <span className="task-id">{item.code}</span>
-        <span className="task-card-badges">
-          {item.scopeType === "MODULE" ? (
-            <CalmBadge tone="violet">模块级</CalmBadge>
-          ) : null}
-          {item.groupRole !== null ? (
-            <CalmBadge tone={item.groupRole === "MAIN" ? "violet" : "cyan"}>
-              {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
+  const renderCard = (item: MyTaskListItem) => {
+    const due = dueLabel(item);
+    return (
+      <article
+        className="calm-task-card"
+        key={item.taskId}
+        data-testid={"my-task-" + item.taskId}
+      >
+        <div className="calm-card-top">
+          <span className="task-id">{item.code}</span>
+          <span className="task-card-badges">
+            {item.scopeType === "MODULE" ? (
+              <CalmBadge tone="violet">模块级</CalmBadge>
+            ) : null}
+            {item.groupRole !== null ? (
+              <CalmBadge tone={item.groupRole === "MAIN" ? "violet" : "cyan"}>
+                {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
+              </CalmBadge>
+            ) : null}
+            <CalmBadge tone={statusTone[item.workStatus]}>
+              {statusLabels[item.workStatus]}
             </CalmBadge>
-          ) : null}
-          <CalmBadge tone={statusTone[item.workStatus]}>
-            {statusLabels[item.workStatus]}
-          </CalmBadge>
-        </span>
-      </div>
-      <h3>{item.title}</h3>
-      <p className="task-belonging">
-        {projectNameOf(item) +
-          " · " +
-          item.moduleName +
-          (item.featureName === null ? "" : " · " + item.featureName)}
-      </p>
-      <div className="calm-card-bottom">
-        <span title={"负责人：" + item.assignee.name}>
-          <InpulseIcon name="users" size={14} />
-          {item.assignee.name}
-        </span>
-        <span title={"截止：" + dueLabel(item)}>
-          <InpulseIcon name="clock" size={14} />
-          {dueLabel(item)}
-        </span>
-      </div>
-      <div className="task-card-footer">
-        <CalmBadge tone={priorityTone[item.priority]}>
-          {priorityLabels[item.priority]}优先级
-        </CalmBadge>
-        {item.hasPublishedRecord ? (
-          <span className="task-card-counts">
-            <span title="1 条已发布迭代记录">
-              <InpulseIcon name="calendar" size={13} />
-              记录 1 条
-            </span>
           </span>
-        ) : null}
-      </div>
-    </article>
-  );
+        </div>
+        <h3>{item.title}</h3>
+        <p className="task-belonging">
+          {projectNameOf(item) +
+            " · " +
+            item.moduleName +
+            (item.featureName === null ? "" : " · " + item.featureName)}
+        </p>
+        <div className="calm-card-bottom">
+          <span title={"负责人：" + item.assignee.name}>
+            <InpulseIcon name="users" size={14} />
+            {item.assignee.name}
+          </span>
+          {due === null ? null : (
+            <span title={"截止：" + due}>
+              <InpulseIcon name="clock" size={14} />
+              {due}
+            </span>
+          )}
+        </div>
+        <div className="task-card-footer">
+          {item.priority === undefined ? null : (
+            <CalmBadge tone={priorityTone[item.priority]}>
+              {priorityLabels[item.priority]}优先级
+            </CalmBadge>
+          )}
+          {item.hasPublishedRecord ? (
+            <span className="task-card-counts">
+              <span title="1 条已发布迭代记录">
+                <InpulseIcon name="calendar" size={13} />
+                记录 1 条
+              </span>
+            </span>
+          ) : null}
+        </div>
+      </article>
+    );
+  };
 
   const renderTable = (rows: readonly MyTaskListItem[]) => (
     <div className="feature-list-scroll">
@@ -332,12 +372,16 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               <td>{projectNameOf(item)}</td>
               <td>{item.assignee.name}</td>
               <td>
-                <CalmBadge tone={priorityTone[item.priority]}>
-                  {priorityLabels[item.priority]}
-                </CalmBadge>
+                {item.priority === undefined ? (
+                  "—"
+                ) : (
+                  <CalmBadge tone={priorityTone[item.priority]}>
+                    {priorityLabels[item.priority]}
+                  </CalmBadge>
+                )}
               </td>
               <td className={isOverdue(item) ? "due-overdue" : undefined}>
-                {dueLabel(item)}
+                {dueLabel(item) ?? "—"}
               </td>
               <td>
                 <CalmBadge tone={statusTone[item.workStatus]}>
@@ -372,7 +416,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             onClick={onOpenIssues}
           >
             <InpulseIcon name="alert" size={15} />
-            遗留问题{leftoverCount > 0 ? " " + leftoverCount : ""}
+            遗留问题
+            {leftoverCount !== null && leftoverCount > 0
+              ? " " + leftoverCount
+              : ""}
           </button>
           <button
             type="button"
@@ -389,14 +436,28 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <div className="skeleton-note" data-testid="task-center-mock-notice">
         <InpulseIcon name="alert" size={16} />
         <span>
-          <strong>骨架数据：</strong>
+          <strong>
+            {activeAdapter.source === "mock" ? "骨架数据：" : "接口说明："}
+          </strong>
           {activeAdapter.notice}
         </span>
       </div>
 
-      {stats.overdue > 0 || leftoverCount > 0 ? (
+      {appliedFilterGaps.length > 0 ? (
+        <Alert
+          type="warning"
+          title={
+            "以下筛选暂未接入服务端聚合读，当前结果未按这些条件收敛：" +
+            appliedFilterGaps.map((gap) => filterGapLabels[gap]).join("、") +
+            "。"
+          }
+        />
+      ) : null}
+
+      {(stats !== null && stats.overdue > 0) ||
+      (leftoverCount !== null && leftoverCount > 0) ? (
         <div className="risk-strip">
-          {stats.overdue > 0 ? (
+          {stats !== null && stats.overdue > 0 ? (
             <button
               type="button"
               className="risk-banner"
@@ -412,7 +473,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                       " " +
                       overdueItem.title +
                       " · " +
-                      dueLabel(overdueItem)}
+                      (dueLabel(overdueItem) ?? "—")}
                 </small>
               </span>
               <span className="risk-action">
@@ -421,7 +482,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </span>
             </button>
           ) : null}
-          {leftoverCount > 0 ? (
+          {leftoverCount !== null && leftoverCount > 0 ? (
             <button
               type="button"
               className="risk-banner risk-banner-amber"
@@ -472,20 +533,31 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <div className="task-view-tabs" role="tablist" aria-label="任务范围">
         {scopeOrder
           .filter((scope) => scope !== "all" || isAdmin)
-          .map((scope) => (
-            <button
-              key={scope}
-              type="button"
-              role="tab"
-              aria-selected={filters.scope === scope}
-              className={filters.scope === scope ? "selected" : ""}
-              onClick={() => handleScopeChange(scope)}
-            >
-              {scopeLabels[scope]}
-              <span>{scopeCounts[scope]}</span>
-              {scope === "all" ? <small>管理员</small> : null}
-            </button>
-          ))}
+          .map((scope) => {
+            const supported = isScopeFilterSupported(scope, filterSupport);
+            return (
+              <button
+                key={scope}
+                type="button"
+                role="tab"
+                aria-selected={filters.scope === scope}
+                className={filters.scope === scope ? "selected" : ""}
+                onClick={() => handleScopeChange(scope)}
+                disabled={!supported}
+                title={
+                  supported
+                    ? undefined
+                    : "服务端聚合读未提供该范围，后续迭代接入"
+                }
+              >
+                {scopeLabels[scope]}
+                {scopeCounts === null ? null : (
+                  <span>{scopeCounts[scope]}</span>
+                )}
+                {scope === "all" ? <small>管理员</small> : null}
+              </button>
+            );
+          })}
       </div>
       <p className="view-description">{scopeHints[filters.scope]}</p>
 
@@ -498,7 +570,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               update({ projectId: Number(event.target.value) || null })
             }
           >
-            <option value="">全部可访问项目</option>
+            <option
+              value=""
+              disabled={!filterSupport["scope:project-without-id"]}
+            >
+              全部可访问项目
+            </option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
@@ -513,8 +590,18 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <InpulseIcon name="search" size={16} />
           <input
             value={filters.query}
-            placeholder="搜索任务编号、标题、描述、归属或负责人"
+            placeholder={
+              filterSupport["filter:query"]
+                ? "搜索任务编号、标题、描述、归属或负责人"
+                : "关键词搜索暂未接入服务端"
+            }
             aria-label="搜索任务"
+            disabled={!filterSupport["filter:query"]}
+            title={
+              filterSupport["filter:query"]
+                ? undefined
+                : "服务端聚合读未提供关键词筛选，后续迭代接入"
+            }
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
@@ -527,6 +614,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <select
           aria-label="优先级"
           value={filters.priority ?? ""}
+          disabled={!filterSupport["filter:priority"]}
+          title={
+            filterSupport["filter:priority"]
+              ? undefined
+              : "服务端聚合读未提供优先级筛选，后续迭代接入"
+          }
           onChange={(event) =>
             update({
               priority:
@@ -582,6 +675,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             合并关系
             <select
               value={filters.relation ?? ""}
+              disabled={!filterSupport["filter:relation"]}
+              title={
+                filterSupport["filter:relation"]
+                  ? undefined
+                  : "服务端聚合读未提供合并关系筛选，后续迭代接入"
+              }
               onChange={(event) =>
                 update({
                   relation:
@@ -619,6 +718,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             是否有 GitHub
             <select
               value={filters.hasGithub ?? ""}
+              disabled={!filterSupport["filter:github"]}
+              title={
+                filterSupport["filter:github"]
+                  ? undefined
+                  : "服务端聚合读未提供 GitHub 关联筛选，后续迭代接入"
+              }
               onChange={(event) =>
                 update({
                   hasGithub:
@@ -637,6 +742,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             <input
               type="checkbox"
               checked={filters.includeCanceled}
+              disabled={!filterSupport["filter:canceled-with-open"]}
+              title={
+                filterSupport["filter:canceled-with-open"]
+                  ? undefined
+                  : "服务端聚合读无法在单次查询中并集已取消任务，后续迭代接入"
+              }
               onChange={(event) =>
                 update({ includeCanceled: event.target.checked })
               }
@@ -664,7 +775,13 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <>
           <CalmSectionTitle
             title="未完成"
-            hint={openItems.length + " 项 · 按逾期、今天截止、优先级排序"}
+            hint={
+              openItems.length +
+              " 项 · " +
+              (filterSupport["filter:priority"]
+                ? "按逾期、今天截止、优先级排序"
+                : "服务端按任务编号倒序")
+            }
           >
             <InpulseIcon
               name={filters.display === "cards" ? "layoutGrid" : "list"}
@@ -690,8 +807,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               open={filters.status === "done"}
             >
               <summary>
-                已完成 {doneItems.length} 项 ·
-                保留编号、负责人、完成时间与全部迭代记录
+                已完成 {doneItems.length} 项 · 保留编号、负责人与全部迭代记录
               </summary>
               {renderTable(doneItems)}
             </details>

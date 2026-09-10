@@ -25,8 +25,11 @@ export type TaskScopeType = "FEATURE" | "MODULE";
 /** excludedTaskIds 的条目上限：超限即拒绝，禁止把无界集合带进 SQL 参数。 */
 export const TASK_EXCLUDED_IDS_MAX = 1000;
 
+/** listByIds 的 taskIds 条目上限：超限即拒绝，禁止把无界数组带进 SQL 参数。 */
+export const TASK_READ_IDS_MAX = 1000;
+
 export type TaskListInputErrorReason =
-  "invalid-limit" | "invalid-excluded-task-ids";
+  "invalid-limit" | "invalid-excluded-task-ids" | "invalid-task-ids";
 
 /** 端口入参越界；调用方（应用层）负责映射为 422。 */
 export class TaskListInputError extends Error {
@@ -135,6 +138,21 @@ export abstract class TaskQueryPort {
   ): Promise<TaskReadModel | undefined>;
 
   /**
+   * 批量按 ID 读取（R-1 聚合组成员、R-4 记录来源标签）。只读、不取锁。
+   *
+   * 约定：
+   * 1. projectIds 与 taskIds 任一为空时短路返回空集，不发出任何 SQL。
+   * 2. SQL 同时带 project_id 与 id 条件，跨项目串联不会返回结果；
+   *    调用方必须先把两者限制在服务端授权范围内。
+   * 3. taskIds 上限 TASK_READ_IDS_MAX，超限抛 TaskListInputError。
+   */
+  abstract listByIds(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly TaskReadModel[]>;
+
+  /**
    * 跨项目分页列表（F-29 未完成任务、F-32 我的任务）。只读、不取锁。
    *
    * 约定：
@@ -166,6 +184,23 @@ function assertLimit(limit: number): void {
       "invalid-limit",
       "task list limit must be a positive integer",
     );
+  }
+}
+
+function assertReadTaskIds(taskIds: readonly number[]): void {
+  if (taskIds.length > TASK_READ_IDS_MAX) {
+    throw new TaskListInputError(
+      "invalid-task-ids",
+      `taskIds exceeds the ${TASK_READ_IDS_MAX} entry limit`,
+    );
+  }
+  for (const taskId of taskIds) {
+    if (!Number.isSafeInteger(taskId) || taskId <= 0) {
+      throw new TaskListInputError(
+        "invalid-task-ids",
+        "taskIds must contain positive integers",
+      );
+    }
   }
 }
 
@@ -211,6 +246,23 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     await tx.sql`SELECT id FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} FOR UPDATE`;
     // Separate READ COMMITTED statement sees relationships committed while waiting for the row.
     return this.find(tx, projectId, taskId);
+  }
+
+  async listByIds(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly TaskReadModel[]> {
+    assertReadTaskIds(taskIds);
+    if (projectIds.length === 0 || taskIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const tasks = [...taskIds];
+    return (await tx.sql<
+      TaskReadModel[]
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) ORDER BY id ASC`) as unknown as readonly TaskReadModel[];
   }
 
   async list(

@@ -66,6 +66,44 @@ interface RecentRecordRowRaw extends Omit<RecentRecordItem, "publishedAt"> {
 interface LeftoverItemRowRaw extends Omit<LeftoverItemSummary, "createdAt"> {
   readonly createdAt: string;
 }
+
+/** R-1 每任务正式记录数（功能设计 §29.4：按 change_records 计数，不按版本计数）。 */
+export interface TaskPublishedRecordCountItem {
+  readonly taskId: number;
+  readonly count: number;
+}
+
+/** R-4 聚合组记录页入参；taskIds 为空表示没有候选任务。 */
+export interface TaskGroupRecordReadInput {
+  readonly projectId: number;
+  readonly taskIds: readonly number[];
+  readonly limit: number;
+  readonly afterRecordId?: number;
+}
+
+export interface TaskGroupRecordRow {
+  readonly recordId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly status: "PUBLISHED" | "VOID";
+  readonly taskId: number;
+  readonly featureId: number | null;
+  readonly publishedAt: Date;
+}
+
+export interface TaskGroupRecordPage {
+  readonly items: readonly TaskGroupRecordRow[];
+  /** 还有下一页时为最后一条的 id（keyset 位置），否则为 null。 */
+  readonly nextRecordId: number | null;
+  readonly hasMore: boolean;
+}
+
+interface TaskGroupRecordRowRaw extends Omit<
+  TaskGroupRecordRow,
+  "publishedAt"
+> {
+  readonly publishedAt: string;
+}
 /**
  * 记录域（B）的项目维度只读聚合端口，服务 F-29 项目概览与 R-1 / R-3 的记录维度。
  *
@@ -109,6 +147,27 @@ export abstract class ChangeRecordReadPort {
     projectIds: readonly number[],
     taskIds?: readonly number[],
   ): Promise<readonly number[]>;
+
+  /**
+   * R-1 成员项的 publishedRecordCount：每任务 PUBLISHED 记录数。
+   * projectIds 或 taskIds 为空时短路返回空集，不发出 SQL；
+   * taskIds 上限 CHANGE_RECORD_TASK_IDS_MAX，超限抛 ChangeRecordReadInputError。
+   */
+  abstract countPublishedByTask(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly TaskPublishedRecordCountItem[]>;
+
+  /**
+   * R-4 聚合组记录分页：只返回 PUBLISHED 与 VOID（A 裁决 Q-13），
+   * 固定 recordId DESC，taskIds 为空短路返回空页；只读、不取锁，
+   * 调用方必须先取得 AuthorizedProjectScope 并把 taskIds 限制在组成员内。
+   */
+  abstract listVisibleRecordsByTaskIds(
+    tx: TransactionContext,
+    input: TaskGroupRecordReadInput,
+  ): Promise<TaskGroupRecordPage>;
 }
 
 function assertLimit(limit: number): void {
@@ -268,5 +327,69 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
        ORDER BY 1
     `;
     return rows.map((row) => row.taskId);
+  }
+
+  async countPublishedByTask(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly TaskPublishedRecordCountItem[]> {
+    assertTaskIds(taskIds);
+    if (projectIds.length === 0 || taskIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const tasks = [...taskIds];
+    return (await tx.sql<TaskPublishedRecordCountItem[]>`
+      SELECT cr.task_id AS "taskId",
+             COUNT(*)::integer AS count
+        FROM app.change_records cr
+       WHERE cr.project_id = ANY(${projects}::integer[])
+         AND cr.status = ${"PUBLISHED"}
+         AND cr.task_id = ANY(${tasks}::integer[])
+       GROUP BY cr.task_id
+       ORDER BY cr.task_id ASC
+    `) as unknown as readonly TaskPublishedRecordCountItem[];
+  }
+
+  async listVisibleRecordsByTaskIds(
+    tx: TransactionContext,
+    input: TaskGroupRecordReadInput,
+  ): Promise<TaskGroupRecordPage> {
+    assertLimit(input.limit);
+    assertTaskIds(input.taskIds);
+    if (input.taskIds.length === 0) {
+      return { items: [], nextRecordId: null, hasMore: false };
+    }
+    const tasks = [...input.taskIds];
+    const after = input.afterRecordId ?? null;
+    const rows = await tx.sql<TaskGroupRecordRowRaw[]>`
+      SELECT cr.id AS "recordId",
+             cr.code AS code,
+             cr.title AS title,
+             cr.status AS status,
+             cr.task_id AS "taskId",
+             cr.feature_id AS "featureId",
+             cr.published_at AS "publishedAt"
+        FROM app.change_records cr
+       WHERE cr.project_id = ${input.projectId}
+         AND cr.status IN (${"PUBLISHED"}, ${"VOID"})
+         AND cr.task_id = ANY(${tasks}::integer[])
+         AND (${after}::integer IS NULL OR cr.id < ${after})
+       ORDER BY cr.id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = visible.map((row) => ({
+      ...row,
+      publishedAt: new Date(row.publishedAt),
+    }));
+    const last = items.length === 0 ? null : items[items.length - 1]!;
+    return {
+      items,
+      hasMore,
+      nextRecordId: hasMore && last !== null ? last.recordId : null,
+    };
   }
 }

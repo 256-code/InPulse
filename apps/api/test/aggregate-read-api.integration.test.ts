@@ -1,0 +1,1296 @@
+import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Sql } from "postgres";
+
+import type { INestApplication } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import {
+  createDatabaseClient,
+  type DatabaseClient,
+} from "@inpulse/database/client";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
+import { migrate } from "../../../database/src/migrate.ts";
+import {
+  myTaskPageSchema,
+  projectOverviewResponseSchema,
+  taskGroupDetailResponseSchema,
+  taskGroupRecordPageSchema,
+} from "../../../packages/api-contract/src/index.ts";
+import { VersionedHmacKeyring } from "../src/auth/keyring.js";
+import { generateOpaqueToken, hashOpaqueToken } from "../src/auth/token.js";
+import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
+import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
+import { TaskManagementRepository } from "../src/modules/tasks/task-management.repository.js";
+import {
+  createProject,
+  createUser,
+  testUrls,
+  type ProjectFixture,
+} from "./database.helpers.js";
+
+// F-25 / F-29 / F-32 聚合读四条路由的真实 HTTP 集成测试（A 裁决 §2、§3、§7）：
+// 授权、404 / 422 语义、统计口径（功能设计 §29.1 / §29.3 / §29.4）与先过滤后分页
+// 全部在真实 PostgreSQL 上验证，不使用 mock；模块级任务与版本不增加计数在
+// R-2 / R-1 断言中显式覆盖。
+
+const SESSION_COOKIE_NAME = "__Host-session";
+const HMAC_KEY_VERSION = 1;
+
+interface ErrorResponseDto {
+  readonly code: string;
+  readonly message: string;
+  readonly requestId: string;
+}
+
+let app: INestApplication | undefined;
+let baseUrl: string;
+let runtime: DatabaseClient | undefined;
+let uow: PostgresUnitOfWork | undefined;
+let sessionKeyringDirectory: string | undefined;
+let previousEnvironment: Readonly<Record<string, string | undefined>> = {};
+let sequence = 0;
+
+let project: ProjectFixture | undefined;
+let otherProject: ProjectFixture | undefined;
+let memberUser = 0;
+let otherUser = 0;
+let outsiderUser = 0;
+let memberCookie = "";
+let otherCookie = "";
+let outsiderCookie = "";
+let featureA = 0;
+let featureB = 0;
+let groupId = 0;
+
+let tMain = 0;
+let tSource = 0;
+let tHistorical = 0;
+let tDetached = 0;
+let tModule = 0;
+let tDone = 0;
+let tCanceled = 0;
+let tInvalid = 0;
+
+let crMain = 0;
+let crModule = 0;
+let crSource = 0;
+let crVoid = 0;
+let crHistorical = 0;
+let crDraft = 0;
+let crPaged: readonly number[] = [];
+
+const taskWrites = new TaskManagementRepository();
+const draftWrites = new RecordDraftRepository();
+
+const recordContent = {
+  title: "聚合读接口记录",
+  contextProblem: "上下文问题",
+  changeSolution: "变更方案",
+  resultVerification: "验证结果",
+  remainingIssues: "",
+};
+
+function nextSuffix(kind: "T" | "F" | "CR"): string {
+  sequence += 1;
+  return "-" + kind + "-" + String(sequence);
+}
+
+async function newModule(scope: ProjectFixture, name: string): Promise<number> {
+  const [row] = await runtime!.sql<{ id: number }[]>`
+    INSERT INTO app.modules (project_id, name, created_by)
+    VALUES (${scope.projectId}, ${name}, ${scope.userId})
+    RETURNING id
+  `;
+  if (!row) throw new Error("module fixture insert returned no row");
+  return row.id;
+}
+
+async function newFeature(
+  scope: ProjectFixture,
+  moduleId: number,
+  name: string,
+): Promise<number> {
+  const [row] = await runtime!.sql<{ id: number }[]>`
+    INSERT INTO app.features (project_id, module_id, code, name, created_by)
+    VALUES (${scope.projectId}, ${moduleId}, ${scope.code + nextSuffix("F")}, ${name}, ${scope.userId})
+    RETURNING id
+  `;
+  if (!row) throw new Error("feature fixture insert returned no row");
+  return row.id;
+}
+
+interface TaskOptions {
+  readonly assigneeId?: number;
+  readonly featureId?: number | null;
+  readonly workStatus?: "TODO" | "DONE" | "CANCELED";
+  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly title?: string;
+}
+
+async function newTask(
+  scope: ProjectFixture,
+  options: TaskOptions = {},
+): Promise<number> {
+  const featureId = options.featureId ?? null;
+  const workStatus = options.workStatus ?? "TODO";
+  const code = scope.code + nextSuffix("T");
+  return uow!.run(async (tx) => {
+    const created = await taskWrites.create(
+      tx,
+      { projectId: scope.projectId, moduleId: scope.moduleId, featureId },
+      scope.userId,
+      code,
+      {
+        title: options.title ?? "聚合读接口任务",
+        description: "",
+        assigneeId: options.assigneeId ?? scope.userId,
+        priority: "NORMAL",
+        dueAt: null,
+      },
+    );
+    const current =
+      workStatus === "TODO"
+        ? created
+        : (await taskWrites.transition(
+            tx,
+            created,
+            scope.userId,
+            workStatus,
+            workStatus === "DONE" ? "聚合读接口夹具完成" : null,
+            "聚合读接口夹具",
+          ))!;
+    if ((options.lifecycleStatus ?? "ACTIVE") !== "ACTIVE") {
+      await tx.sql`UPDATE app.tasks SET lifecycle_status = ${options.lifecycleStatus!}, updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${current.id} AND project_id = ${scope.projectId}`;
+    }
+    return current.id;
+  });
+}
+
+interface RecordOptions {
+  readonly featureId?: number | null;
+  readonly taskId?: number | null;
+  readonly publishedAt?: string;
+  readonly status?: "PUBLISHED" | "VOID";
+}
+
+/**
+ * 已发布记录夹具：先建草稿，再补版本行并发布；VOID 记录保留 published_at 与版本，
+ * 用于验证 R-4「VOID 可见但不计入 publishedRecordCount」与 §29.4「版本不增计数」。
+ */
+async function newPublishedRecord(
+  scope: ProjectFixture,
+  options: RecordOptions = {},
+): Promise<number> {
+  const code = scope.code + nextSuffix("CR");
+  const featureId = options.featureId ?? null;
+  const taskId = options.taskId ?? null;
+  const publishedAt = options.publishedAt ?? null;
+  const draft = await uow!.run((tx) =>
+    draftWrites.create(
+      tx,
+      {
+        projectId: scope.projectId,
+        moduleId: scope.moduleId,
+        featureId,
+        impactFeatureIds: [],
+      },
+      scope.userId,
+      recordContent,
+      taskId === null ? undefined : { taskId, handlerId: scope.userId },
+    ),
+  );
+  await uow!.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_versions (record_id, project_id, version_no, title_snapshot, payload, created_by) SELECT id, project_id, 1, title, current_payload, ${scope.userId} FROM app.change_records WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    await tx.sql`UPDATE app.change_records SET status = ${"PUBLISHED"}, code = ${code}, current_version = 1, published_at = COALESCE(${publishedAt}::timestamptz, clock_timestamp()), row_version = row_version + 1 WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    if (options.status === "VOID") {
+      await tx.sql`UPDATE app.change_records SET status = ${"VOID"}, voided_at = GREATEST(clock_timestamp(), published_at), void_reason = ${"聚合读接口夹具作废"}, row_version = row_version + 1 WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    }
+  });
+  return draft.id;
+}
+
+async function newDraftRecord(
+  scope: ProjectFixture,
+  options: {
+    readonly featureId?: number | null;
+    readonly taskId?: number | null;
+  } = {},
+): Promise<number> {
+  const featureId = options.featureId ?? null;
+  const taskId = options.taskId ?? null;
+  const draft = await uow!.run((tx) =>
+    draftWrites.create(
+      tx,
+      {
+        projectId: scope.projectId,
+        moduleId: scope.moduleId,
+        featureId,
+        impactFeatureIds: [],
+      },
+      scope.userId,
+      recordContent,
+      taskId === null ? undefined : { taskId, handlerId: scope.userId },
+    ),
+  );
+  return draft.id;
+}
+
+async function newRecordVersion(
+  scope: ProjectFixture,
+  recordId: number,
+  versionNo: number,
+): Promise<void> {
+  await uow!.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_versions (record_id, project_id, version_no, title_snapshot, payload, created_by) SELECT id, project_id, ${versionNo}, title, current_payload, ${scope.userId} FROM app.change_records WHERE id = ${recordId} AND project_id = ${scope.projectId}`;
+    await tx.sql`UPDATE app.change_records SET current_version = ${versionNo}, row_version = row_version + 1, updated_at = clock_timestamp() WHERE id = ${recordId} AND project_id = ${scope.projectId}`;
+  });
+}
+
+/**
+ * 遗留问题夹具。快照行必须挂在既有版本行上：0001 的 assert_change_record_versions
+ * 禁止 DRAFT 记录拥有版本，因此草稿记录在结构上不可能产生遗留问题，夹具只覆盖
+ * PUBLISHED / VOID 记录。
+ */
+async function newLeftover(
+  scope: ProjectFixture,
+  recordId: number,
+  options: {
+    readonly content: string;
+    readonly createdAt: string;
+    readonly status?: "ACTIVE" | "RESOLVED";
+  },
+): Promise<number> {
+  const status = options.status ?? "ACTIVE";
+  return uow!.run(async (tx) => {
+    const [row] = await tx.sql<{ id: number }[]>`
+      INSERT INTO app.change_record_leftover_items (record_id, project_id, status, created_by, created_at)
+      VALUES (${recordId}, ${scope.projectId}, ${status}, ${scope.userId}, ${options.createdAt}::timestamptz)
+      RETURNING id
+    `;
+    if (!row) throw new Error("leftover fixture insert returned no row");
+    await tx.sql`INSERT INTO app.change_record_version_leftovers (record_id, version_no, leftover_item_id, project_id, content_snapshot) VALUES (${recordId}, 1, ${row.id}, ${scope.projectId}, ${options.content})`;
+    return row.id;
+  });
+}
+
+interface GroupMemberSeed {
+  readonly taskId: number;
+  readonly role: "MAIN" | "SOURCE";
+  readonly sourceKind?: "ACTIVE" | "HISTORICAL";
+  readonly status?: "ACTIVE" | "DETACHED";
+  readonly joinedAt: string;
+  readonly detachedAt?: string;
+  readonly detachReason?: string;
+}
+
+/**
+ * 聚合组夹具：直接落库而不走 merge 命令，避免把合并 Workflow 的副作用带进聚合读
+ * 用例；ACTIVE 组必须恰好 1 个 ACTIVE MAIN 且至少 1 个 ACTIVE SOURCE（0001 约束触发器）。
+ */
+async function seedTaskGroup(
+  scope: ProjectFixture,
+  codeIndex: number,
+  name: string,
+  members: readonly GroupMemberSeed[],
+): Promise<number> {
+  return uow!.run(async (tx) => {
+    const [group] = await tx.sql<{ id: number }[]>`
+      INSERT INTO app.task_groups (project_id, code, name, created_by)
+      VALUES (${scope.projectId}, ${scope.code + "-TG-" + String(codeIndex)}, ${name}, ${scope.userId})
+      RETURNING id
+    `;
+    if (!group) throw new Error("task group fixture insert returned no row");
+    for (const member of members) {
+      if (member.role === "MAIN") {
+        await tx.sql`
+          INSERT INTO app.task_group_members (group_id, task_id, project_id, role, status, joined_at)
+          VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"MAIN"}, ${"ACTIVE"}, ${member.joinedAt}::timestamptz)
+        `;
+        continue;
+      }
+      const sourceKind = member.sourceKind ?? "ACTIVE";
+      if ((member.status ?? "ACTIVE") === "DETACHED") {
+        await tx.sql`
+          INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id, status, joined_at, detached_at, detached_by, detach_reason)
+          VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"SOURCE"}, ${sourceKind}, ${"TODO"}, ${scope.userId}, ${"DETACHED"}, ${member.joinedAt}::timestamptz, ${member.detachedAt!}::timestamptz, ${scope.userId}, ${member.detachReason!})
+        `;
+        continue;
+      }
+      await tx.sql`
+        INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id, status, joined_at)
+        VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"SOURCE"}, ${sourceKind}, ${"TODO"}, ${scope.userId}, ${"ACTIVE"}, ${member.joinedAt}::timestamptz)
+      `;
+    }
+    return group.id;
+  });
+}
+
+async function getJson(
+  path: string,
+  cookie?: string,
+): Promise<{ readonly status: number; readonly body: unknown }> {
+  const headers: Record<string, string> = {};
+  if (cookie !== undefined) {
+    headers["cookie"] = cookie;
+  }
+  const response = await fetch(baseUrl + path, { headers });
+  const text = await response.text();
+  const body: unknown = text.length === 0 ? null : JSON.parse(text);
+  return { status: response.status, body };
+}
+
+async function expectError(
+  path: string,
+  cookie: string | undefined,
+  status: number,
+  code: string,
+): Promise<void> {
+  const response = await getJson(path, cookie);
+  expect(response.status).toBe(status);
+  const body = response.body as ErrorResponseDto;
+  expect(body.code).toBe(code);
+  expect(body.message.length).toBeGreaterThan(0);
+  expect(body.requestId).toBeTypeOf("string");
+}
+
+let idempotencyKeyringDirectory: string | undefined;
+
+async function createAuthenticatedSession(
+  sql: Sql,
+  keyring: VersionedHmacKeyring,
+  userId: number,
+): Promise<{ readonly cookie: string }> {
+  const rows = (await sql`
+    SELECT auth_version AS "authVersion"
+      FROM app.users
+     WHERE id = ${userId}
+  `) as unknown as readonly { authVersion: number }[];
+  const user = rows[0];
+  if (user === undefined) {
+    throw new Error("user fixture missing");
+  }
+  const token = generateOpaqueToken();
+  await sql`
+    INSERT INTO app.user_sessions (
+      user_id, token_hash, token_hash_key_version, auth_version_at_issue,
+      auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation,
+      created_at, last_seen_at, idle_expires_at, absolute_expires_at
+    )
+    VALUES (
+      ${userId}, ${hashOpaqueToken(token, keyring.currentKey())}, ${HMAC_KEY_VERSION},
+      ${user.authVersion}, ${"AUTHENTICATED"}, 0, 0, now(), now(),
+      now() + ${"1 hour"}::interval, now() + ${"1 day"}::interval
+    )
+  `;
+  return { cookie: SESSION_COOKIE_NAME + "=" + token };
+}
+
+beforeAll(async () => {
+  const urls = testUrls();
+  runtime = createDatabaseClient(urls.runtime, {
+    applicationName: "inpulse-aggregate-read-api-test",
+  });
+  await migrate(urls.migrator);
+  uow = new PostgresUnitOfWork(runtime);
+
+  memberUser = await createUser(runtime.sql);
+  otherUser = await createUser(runtime.sql);
+  outsiderUser = await createUser(runtime.sql);
+  const secondMemberId = await createUser(runtime.sql);
+  const projectFixture = await createProject(runtime.sql, memberUser);
+  project = projectFixture;
+  const otherFixture = await createProject(runtime.sql, otherUser);
+  otherProject = otherFixture;
+  await runtime.sql`INSERT INTO app.project_members (project_id, user_id) VALUES (${projectFixture.projectId}, ${secondMemberId})`;
+
+  await newModule(projectFixture, "聚合读接口模块");
+  const archivedModuleId = await newModule(projectFixture, "已归档模块");
+  await runtime.sql`UPDATE app.modules SET status = ${"ARCHIVED"}, archived_at = clock_timestamp(), updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archivedModuleId} AND project_id = ${projectFixture.projectId}`;
+
+  featureA = await newFeature(
+    projectFixture,
+    projectFixture.moduleId,
+    "聚合读接口功能A",
+  );
+  featureB = await newFeature(
+    projectFixture,
+    projectFixture.moduleId,
+    "聚合读接口功能B",
+  );
+  const archivedFeatureId = await newFeature(
+    projectFixture,
+    projectFixture.moduleId,
+    "已归档功能",
+  );
+  await runtime.sql`UPDATE app.features SET status = ${"ARCHIVED"}, archived_at = clock_timestamp(), updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archivedFeatureId} AND project_id = ${projectFixture.projectId}`;
+
+  tMain = await newTask(projectFixture, { featureId: featureA });
+  tSource = await newTask(projectFixture, { featureId: featureB });
+  tHistorical = await newTask(projectFixture, { featureId: featureA });
+  tDetached = await newTask(projectFixture, { featureId: featureB });
+  tModule = await newTask(projectFixture, { featureId: null });
+  tDone = await newTask(projectFixture, {
+    featureId: featureA,
+    workStatus: "DONE",
+  });
+  tCanceled = await newTask(projectFixture, {
+    featureId: featureA,
+    workStatus: "CANCELED",
+  });
+  tInvalid = await newTask(projectFixture, {
+    featureId: featureA,
+    lifecycleStatus: "INVALID",
+  });
+
+  const baseMs = Date.now();
+  const at = (minutes: number) =>
+    new Date(baseMs + minutes * 60_000).toISOString();
+  const before = (minutes: number) =>
+    new Date(baseMs - minutes * 60_000).toISOString();
+
+  groupId = await seedTaskGroup(projectFixture, 1, "聚合读接口聚合组", [
+    { joinedAt: before(240), role: "MAIN", taskId: tMain },
+    {
+      joinedAt: before(180),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tSource,
+    },
+    {
+      joinedAt: before(120),
+      role: "SOURCE",
+      sourceKind: "HISTORICAL",
+      taskId: tHistorical,
+    },
+    {
+      detachReason: "聚合读接口夹具解除来源关系",
+      detachedAt: before(30),
+      joinedAt: before(60),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      status: "DETACHED",
+      taskId: tDetached,
+    },
+  ]);
+
+  crMain = await newPublishedRecord(projectFixture, {
+    featureId: featureA,
+    publishedAt: at(1),
+    taskId: tMain,
+  });
+  crModule = await newPublishedRecord(projectFixture, { publishedAt: at(2) });
+  crSource = await newPublishedRecord(projectFixture, {
+    featureId: featureB,
+    publishedAt: at(3),
+    taskId: tSource,
+  });
+  crVoid = await newPublishedRecord(projectFixture, {
+    featureId: featureB,
+    publishedAt: at(4),
+    status: "VOID",
+    taskId: tSource,
+  });
+  crHistorical = await newPublishedRecord(projectFixture, {
+    featureId: featureA,
+    publishedAt: at(5),
+    taskId: tHistorical,
+  });
+  crPaged = [
+    await newPublishedRecord(projectFixture, {
+      featureId: featureB,
+      publishedAt: at(6),
+      taskId: tSource,
+    }),
+    await newPublishedRecord(projectFixture, {
+      featureId: featureB,
+      publishedAt: at(7),
+      taskId: tSource,
+    }),
+    await newPublishedRecord(projectFixture, {
+      featureId: featureB,
+      publishedAt: at(8),
+      taskId: tSource,
+    }),
+    await newPublishedRecord(projectFixture, {
+      featureId: featureB,
+      publishedAt: at(9),
+      taskId: tSource,
+    }),
+  ];
+  crDraft = await newDraftRecord(projectFixture, {
+    featureId: featureA,
+    taskId: tMain,
+  });
+  // §29.4：版本递增不改变记录数、统计口径与列表条数。
+  await newRecordVersion(projectFixture, crMain, 2);
+
+  await newLeftover(projectFixture, crModule, {
+    content: "模块级记录遗留问题",
+    createdAt: at(1),
+  });
+  await newLeftover(projectFixture, crVoid, {
+    content: "作废记录遗留问题",
+    createdAt: at(2),
+  });
+  await newLeftover(projectFixture, crSource, {
+    content: "来源任务遗留问题",
+    createdAt: at(3),
+  });
+  await newLeftover(projectFixture, crMain, {
+    content: "已解决遗留问题",
+    createdAt: at(4),
+    status: "RESOLVED",
+  });
+
+  const sessionKey = randomBytes(32);
+  const sessionKeyring = VersionedHmacKeyring.fromEntries(
+    [{ key: sessionKey, version: 1 }],
+    1,
+  );
+  sessionKeyringDirectory = await mkdtemp(
+    join(tmpdir(), "inpulse-aggregate-read-api-"),
+  );
+  const sessionKeyringFile = join(sessionKeyringDirectory, "session.keyring");
+  await writeFile(
+    sessionKeyringFile,
+    "1:" + sessionKey.toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+  const totpKekFile = join(sessionKeyringDirectory, "totp.kek.keyring");
+  await writeFile(
+    totpKekFile,
+    "1:" + randomBytes(32).toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+  memberCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, memberUser)
+  ).cookie;
+  otherCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, otherUser)
+  ).cookie;
+  outsiderCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, outsiderUser)
+  ).cookie;
+
+  idempotencyKeyringDirectory = await mkdtemp(
+    join(tmpdir(), "inpulse-aggregate-read-idempotency-"),
+  );
+  const idempotencyKeyringFile = join(
+    idempotencyKeyringDirectory,
+    "fingerprint.keyring",
+  );
+  await writeFile(
+    idempotencyKeyringFile,
+    "1:" + randomBytes(32).toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+
+  previousEnvironment = {
+    DATABASE_URL: process.env["DATABASE_URL"],
+    IDEMPOTENCY_FINGERPRINT_KEYRING_FILE:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"],
+    IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"],
+    IDEMPOTENCY_FINGERPRINT_KEY_VERSION:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"],
+    NODE_ENV: process.env["NODE_ENV"],
+    SESSION_HASH_KEYRING_FILE: process.env["SESSION_HASH_KEYRING_FILE"],
+    SESSION_HASH_KEYRING_TEST_PATH:
+      process.env["SESSION_HASH_KEYRING_TEST_PATH"],
+    SESSION_HASH_KEY_VERSION: process.env["SESSION_HASH_KEY_VERSION"],
+    TOTP_KEK_KEYRING_FILE: process.env["TOTP_KEK_KEYRING_FILE"],
+    TOTP_KEK_KEYRING_TEST_PATH: process.env["TOTP_KEK_KEYRING_TEST_PATH"],
+    TOTP_KEK_VERSION: process.env["TOTP_KEK_VERSION"],
+  };
+  process.env["NODE_ENV"] = "test";
+  process.env["DATABASE_URL"] = urls.runtime;
+  process.env["SESSION_HASH_KEYRING_FILE"] = sessionKeyringFile;
+  process.env["SESSION_HASH_KEYRING_TEST_PATH"] = "1";
+  process.env["SESSION_HASH_KEY_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"] = idempotencyKeyringFile;
+  process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"] = "1";
+  process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["TOTP_KEK_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
+  process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
+
+  const { AppModule } = await import("../src/app.module.js");
+  app = await NestFactory.create(AppModule, { logger: false });
+  app.setGlobalPrefix("api/v1");
+  await app.listen(0, "127.0.0.1");
+  const address = app.getHttpServer().address() as AddressInfo;
+  baseUrl = "http://127.0.0.1:" + String(address.port);
+});
+
+afterAll(async () => {
+  await app?.close();
+  await runtime?.close();
+  for (const [name, value] of Object.entries(previousEnvironment)) {
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
+  }
+  if (sessionKeyringDirectory !== undefined) {
+    await rm(sessionKeyringDirectory, { force: true, recursive: true });
+  }
+  if (idempotencyKeyringDirectory !== undefined) {
+    await rm(idempotencyKeyringDirectory, { force: true, recursive: true });
+  }
+});
+
+describe("GET /api/v1/task-groups/{groupId}（R-1 聚合组视图）", () => {
+  test("匿名 401，非成员、跨项目成员与不存在的组统一 404", async () => {
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId),
+      undefined,
+      401,
+      "TASK_GROUP_UNAUTHENTICATED",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId),
+      outsiderCookie,
+      404,
+      "TASK_GROUP_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId),
+      otherCookie,
+      404,
+      "TASK_GROUP_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/task-groups/2147483647",
+      memberCookie,
+      404,
+      "TASK_GROUP_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/task-groups/0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("成员按主任务优先、加入时间升序返回，记录数按记录不按版本计数", async () => {
+    const response = await getJson(
+      "/api/v1/task-groups/" + String(groupId),
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const detail = taskGroupDetailResponseSchema.parse(response.body);
+    expect(detail.group).toMatchObject({
+      closedAt: null,
+      code: project!.code + "-TG-1",
+      groupId,
+      name: "聚合读接口聚合组",
+      projectId: project!.projectId,
+      status: "ACTIVE",
+    });
+    expect(detail.members.map((member) => member.taskId)).toEqual([
+      tMain,
+      tSource,
+      tHistorical,
+      tDetached,
+    ]);
+    expect(
+      detail.members.map((member) => ({
+        memberStatus: member.memberStatus,
+        role: member.role,
+        sourceKind: member.sourceKind,
+        workStatus: member.workStatus,
+      })),
+    ).toEqual([
+      {
+        memberStatus: "ACTIVE",
+        role: "MAIN",
+        sourceKind: null,
+        workStatus: "TODO",
+      },
+      {
+        memberStatus: "ACTIVE",
+        role: "SOURCE",
+        sourceKind: "ACTIVE",
+        workStatus: "TODO",
+      },
+      {
+        memberStatus: "ACTIVE",
+        role: "SOURCE",
+        sourceKind: "HISTORICAL",
+        workStatus: "TODO",
+      },
+      {
+        memberStatus: "DETACHED",
+        role: "SOURCE",
+        sourceKind: "ACTIVE",
+        workStatus: "TODO",
+      },
+    ]);
+    // §29.4：crMain 已发布到第 2 版，成员记录数仍为 1；VOID 记录不计入。
+    const [record] = await runtime!.sql<{ currentVersion: number }[]>`
+      SELECT current_version AS "currentVersion"
+        FROM app.change_records
+       WHERE id = ${crMain}
+    `;
+    expect(record?.currentVersion).toBe(2);
+    expect(detail.members.map((member) => member.publishedRecordCount)).toEqual(
+      [1, 5, 1, 0],
+    );
+    expect(detail.members[0]!.taskCode).toContain("-T-");
+    expect(detail.members[0]!.title.length).toBeGreaterThan(0);
+    expect(detail.members[0]!.assignee).toMatchObject({ userId: memberUser });
+    expect(detail.members[0]!.detachedAt).toBeNull();
+    expect(detail.members[3]!.detachedAt).not.toBeNull();
+    expect(detail.members[3]!.detachReason).toBe("聚合读接口夹具解除来源关系");
+    expect(detail.members[2]!.lifecycleStatus).toBe("ACTIVE");
+  });
+});
+
+describe("GET /api/v1/task-groups/{groupId}/records（R-4 聚合组记录）", () => {
+  test("只返回 PUBLISHED 与 VOID 记录，DRAFT 与组外记录不出现", async () => {
+    const response = await getJson(
+      "/api/v1/task-groups/" + String(groupId) + "/records",
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const page = taskGroupRecordPageSchema.parse(response.body);
+    expect(page.items.map((item) => item.recordId)).toEqual([
+      crPaged[3]!,
+      crPaged[2]!,
+      crPaged[1]!,
+      crPaged[0]!,
+      crHistorical,
+      crVoid,
+      crSource,
+      crMain,
+    ]);
+    expect(page.items.map((item) => item.recordStatus)).toEqual([
+      "PUBLISHED",
+      "PUBLISHED",
+      "PUBLISHED",
+      "PUBLISHED",
+      "PUBLISHED",
+      "VOID",
+      "PUBLISHED",
+      "PUBLISHED",
+    ]);
+    expect(page.items.some((item) => item.recordId === crDraft)).toBe(false);
+    expect(page.items.some((item) => item.recordId === crModule)).toBe(false);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+    // §29.4：两个版本仍是同一条记录。
+    expect(page.items.filter((item) => item.recordId === crMain)).toHaveLength(
+      1,
+    );
+    expect(
+      page.items.find((item) => item.recordId === crMain)?.sourceLabel,
+    ).toBe("主任务");
+    expect(
+      page.items.find((item) => item.recordId === crSource)?.sourceLabel,
+    ).toContain("-T-");
+    expect(
+      page.items.find((item) => item.recordId === crHistorical)?.sourceLabel,
+    ).toContain("-T-");
+    expect(page.items.every((item) => item.externalLinks.length === 0)).toBe(
+      true,
+    );
+  });
+
+  test("memberTaskId 只过滤组内成员任务，组外任务返回空页", async () => {
+    const sourcePage = await getJson(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?memberTaskId=" +
+        String(tSource),
+      memberCookie,
+    );
+    expect(sourcePage.status).toBe(200);
+    expect(
+      taskGroupRecordPageSchema
+        .parse(sourcePage.body)
+        .items.map((item) => item.recordId),
+    ).toEqual([
+      crPaged[3]!,
+      crPaged[2]!,
+      crPaged[1]!,
+      crPaged[0]!,
+      crVoid,
+      crSource,
+    ]);
+
+    const historicalPage = await getJson(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?memberTaskId=" +
+        String(tHistorical),
+      memberCookie,
+    );
+    expect(historicalPage.status).toBe(200);
+    expect(
+      taskGroupRecordPageSchema
+        .parse(historicalPage.body)
+        .items.map((item) => item.recordId),
+    ).toEqual([crHistorical]);
+
+    const detachedPage = await getJson(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?memberTaskId=" +
+        String(tDetached),
+      memberCookie,
+    );
+    expect(detachedPage.status).toBe(200);
+    expect(taskGroupRecordPageSchema.parse(detachedPage.body)).toMatchObject({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
+
+    const outsidePage = await getJson(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?memberTaskId=" +
+        String(tModule),
+      memberCookie,
+    );
+    expect(outsidePage.status).toBe(200);
+    expect(taskGroupRecordPageSchema.parse(outsidePage.body)).toMatchObject({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
+  });
+
+  test("游标分页不重复不丢行，拒绝跨筛选与篡改游标", async () => {
+    const collected: number[] = [];
+    let cursor: string | null = null;
+    for (let index = 0; index < 5; index += 1) {
+      const suffix =
+        cursor === null ? "" : "&cursor=" + encodeURIComponent(cursor);
+      const response = await getJson(
+        "/api/v1/task-groups/" + String(groupId) + "/records?limit=3" + suffix,
+        memberCookie,
+      );
+      expect(response.status).toBe(200);
+      const page = taskGroupRecordPageSchema.parse(response.body);
+      collected.push(...page.items.map((item) => item.recordId));
+      cursor = page.nextCursor;
+      if (cursor === null) {
+        break;
+      }
+    }
+    expect(collected).toEqual([
+      crPaged[3]!,
+      crPaged[2]!,
+      crPaged[1]!,
+      crPaged[0]!,
+      crHistorical,
+      crVoid,
+      crSource,
+      crMain,
+    ]);
+    expect(new Set(collected).size).toBe(collected.length);
+
+    const unfiltered = await getJson(
+      "/api/v1/task-groups/" + String(groupId) + "/records?limit=3",
+      memberCookie,
+    );
+    const firstCursor = taskGroupRecordPageSchema.parse(
+      unfiltered.body,
+    ).nextCursor;
+    expect(firstCursor).not.toBeNull();
+    await expectError(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?memberTaskId=" +
+        String(tSource) +
+        "&cursor=" +
+        encodeURIComponent(firstCursor!),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    const tampered =
+      firstCursor!.slice(0, -2) + (firstCursor!.endsWith("A") ? "B" : "A");
+    await expectError(
+      "/api/v1/task-groups/" +
+        String(groupId) +
+        "/records?cursor=" +
+        encodeURIComponent(tampered),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId) + "/records?cursor=broken",
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId) + "/records?limit=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("匿名 401、非成员 404 与非法路径参数 422", async () => {
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId) + "/records",
+      undefined,
+      401,
+      "TASK_GROUP_UNAUTHENTICATED",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId) + "/records",
+      outsiderCookie,
+      404,
+      "TASK_GROUP_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/task-groups/2147483647/records",
+      memberCookie,
+      404,
+      "TASK_GROUP_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/task-groups/abc/records",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups/" + String(groupId) + "/records?memberTaskId=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+});
+
+describe("GET /api/v1/projects/{projectId}/overview（R-2 项目概览）", () => {
+  test("统计口径按 §29.1 / §29.3 / §29.4：历史来源分支与版本都不增计数", async () => {
+    const response = await getJson(
+      "/api/v1/projects/" + String(project!.projectId) + "/overview",
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const overview = projectOverviewResponseSchema.parse(response.body);
+    expect(overview.project).toEqual({
+      name: "Project " + project!.code,
+      projectId: project!.projectId,
+      status: "ACTIVE",
+    });
+    expect(overview.memberCount).toBe(2);
+    // 活跃模块 / 活跃功能排除已归档行；未完成任务排除历史来源分支、
+    // CANCELED、INVALID 与 DONE，并包含 §29.3 的模块级任务。
+    expect(overview.stats).toEqual({
+      activeFeatureCount: 2,
+      activeModuleCount: 2,
+      openTaskCount: 4,
+      publishedRecordCount: 8,
+    });
+    expect(overview.recentRecords.map((item) => item.recordId)).toEqual([
+      crPaged[3]!,
+      crPaged[2]!,
+      crPaged[1]!,
+    ]);
+    expect(overview.recentRecords.map((item) => item.featureName)).toEqual([
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+    ]);
+    expect(overview.activeLeftovers.map((item) => item.content)).toEqual([
+      "来源任务遗留问题",
+      "作废记录遗留问题",
+    ]);
+    expect(
+      overview.activeLeftovers.every(
+        (item) =>
+          item.recordCode.includes("-CR-") &&
+          item.leftoverItemId > 0 &&
+          item.recordId > 0,
+      ),
+    ).toBe(true);
+  });
+
+  test("最近迭代与遗留问题条数由 query 收口，越界与非法值 422", async () => {
+    const expanded = await getJson(
+      "/api/v1/projects/" +
+        String(project!.projectId) +
+        "/overview?recentRecordLimit=5&activeLeftoverLimit=3",
+      memberCookie,
+    );
+    expect(expanded.status).toBe(200);
+    const paged = projectOverviewResponseSchema.parse(expanded.body);
+    expect(paged.recentRecords.map((item) => item.recordId)).toEqual([
+      crPaged[3]!,
+      crPaged[2]!,
+      crPaged[1]!,
+      crPaged[0]!,
+      crHistorical,
+    ]);
+    expect(paged.activeLeftovers.map((item) => item.content)).toEqual([
+      "来源任务遗留问题",
+      "作废记录遗留问题",
+      "模块级记录遗留问题",
+    ]);
+
+    const full = await getJson(
+      "/api/v1/projects/" +
+        String(project!.projectId) +
+        "/overview?recentRecordLimit=10",
+      memberCookie,
+    );
+    expect(full.status).toBe(200);
+    const all = projectOverviewResponseSchema.parse(full.body);
+    expect(all.recentRecords).toHaveLength(8);
+    expect(
+      all.recentRecords.find((item) => item.recordId === crModule)?.featureName,
+    ).toBeNull();
+    // VOID 与 DRAFT 记录都不进入最近迭代；已解决的遗留问题不再返回。
+    expect(all.recentRecords.some((item) => item.recordId === crVoid)).toBe(
+      false,
+    );
+    expect(all.recentRecords.some((item) => item.recordId === crDraft)).toBe(
+      false,
+    );
+    expect(
+      all.activeLeftovers.some((item) => item.content === "已解决遗留问题"),
+    ).toBe(false);
+
+    await expectError(
+      "/api/v1/projects/" +
+        String(project!.projectId) +
+        "/overview?recentRecordLimit=11",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/projects/" +
+        String(project!.projectId) +
+        "/overview?activeLeftoverLimit=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("非成员与不存在的项目统一 404，匿名 401", async () => {
+    await expectError(
+      "/api/v1/projects/" + String(project!.projectId) + "/overview",
+      undefined,
+      401,
+      "PROJECT_OVERVIEW_UNAUTHENTICATED",
+    );
+    await expectError(
+      "/api/v1/projects/" + String(project!.projectId) + "/overview",
+      outsiderCookie,
+      404,
+      "PROJECT_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/projects/" + String(project!.projectId) + "/overview",
+      otherCookie,
+      404,
+      "PROJECT_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/projects/2147483647/overview",
+      memberCookie,
+      404,
+      "PROJECT_NOT_FOUND",
+    );
+    await expectError(
+      "/api/v1/projects/0/overview",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+});
+
+describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
+  test("只返回本人负责的任务，排除历史来源分支并标注组角色", async () => {
+    const response = await getJson("/api/v1/me/tasks", memberCookie);
+    expect(response.status).toBe(200);
+    const page = myTaskPageSchema.parse(response.body);
+    expect(page.items.map((item) => item.taskId)).toEqual([
+      tInvalid,
+      tCanceled,
+      tDone,
+      tModule,
+      tDetached,
+      tSource,
+      tMain,
+    ]);
+    expect(page.items.some((item) => item.taskId === tHistorical)).toBe(false);
+    expect(
+      page.items.every((item) => item.assignee.userId === memberUser),
+    ).toBe(true);
+    const roleByTask = new Map(
+      page.items.map((item) => [item.taskId, item.groupRole]),
+    );
+    expect(roleByTask.get(tMain)).toBe("MAIN");
+    expect(roleByTask.get(tSource)).toBe("SOURCE");
+    expect(roleByTask.get(tDetached)).toBeNull();
+    expect(roleByTask.get(tModule)).toBeNull();
+    const publishedByTask = new Map(
+      page.items.map((item) => [item.taskId, item.hasPublishedRecord]),
+    );
+    expect(publishedByTask.get(tMain)).toBe(true);
+    expect(publishedByTask.get(tSource)).toBe(true);
+    expect(publishedByTask.get(tDone)).toBe(false);
+    expect(page.items.find((item) => item.taskId === tModule)).toMatchObject({
+      featureId: null,
+      featureName: null,
+      lifecycleStatus: "ACTIVE",
+      projectId: project!.projectId,
+      projectName: "Project " + project!.code,
+      scopeType: "MODULE",
+      workStatus: "TODO",
+    });
+    expect(
+      page.items.find((item) => item.taskId === tInvalid)?.lifecycleStatus,
+    ).toBe("INVALID");
+    expect(
+      page.items.find((item) => item.taskId === tSource)?.featureName,
+    ).toBe("聚合读接口功能B");
+  });
+
+  test("四项筛选、越权 projectId 收敛与游标 filterKey 绑定", async () => {
+    const filterCases: readonly {
+      readonly path: string;
+      readonly taskIds: readonly number[];
+    }[] = [
+      { path: "/api/v1/me/tasks?scopeType=MODULE", taskIds: [tModule] },
+      {
+        path: "/api/v1/me/tasks?scopeType=FEATURE&workStatus=TODO",
+        taskIds: [tInvalid, tDetached, tSource, tMain],
+      },
+      { path: "/api/v1/me/tasks?workStatus=DONE", taskIds: [tDone] },
+      { path: "/api/v1/me/tasks?workStatus=CANCELED", taskIds: [tCanceled] },
+      {
+        path: "/api/v1/me/tasks?hasPublishedRecord=true",
+        taskIds: [tSource, tMain],
+      },
+      {
+        path: "/api/v1/me/tasks?hasPublishedRecord=false",
+        taskIds: [tInvalid, tCanceled, tDone, tModule, tDetached],
+      },
+      {
+        path: "/api/v1/me/tasks?projectId=" + String(otherProject!.projectId),
+        taskIds: [],
+      },
+      {
+        path: "/api/v1/me/tasks?projectId=" + String(project!.projectId),
+        taskIds: [
+          tInvalid,
+          tCanceled,
+          tDone,
+          tModule,
+          tDetached,
+          tSource,
+          tMain,
+        ],
+      },
+    ];
+    for (const item of filterCases) {
+      const response = await getJson(item.path, memberCookie);
+      expect(response.status).toBe(200);
+      expect(
+        myTaskPageSchema.parse(response.body).items.map((task) => task.taskId),
+      ).toEqual(item.taskIds);
+    }
+
+    const collected: number[] = [];
+    let cursor: string | null = null;
+    for (let index = 0; index < 5; index += 1) {
+      const suffix =
+        cursor === null ? "" : "&cursor=" + encodeURIComponent(cursor);
+      const response = await getJson(
+        "/api/v1/me/tasks?limit=3" + suffix,
+        memberCookie,
+      );
+      expect(response.status).toBe(200);
+      const page = myTaskPageSchema.parse(response.body);
+      collected.push(...page.items.map((item) => item.taskId));
+      cursor = page.nextCursor;
+      if (cursor === null) {
+        break;
+      }
+    }
+    expect(collected).toEqual([
+      tInvalid,
+      tCanceled,
+      tDone,
+      tModule,
+      tDetached,
+      tSource,
+      tMain,
+    ]);
+    expect(new Set(collected).size).toBe(collected.length);
+
+    const unfiltered = await getJson("/api/v1/me/tasks?limit=3", memberCookie);
+    const firstCursor = myTaskPageSchema.parse(unfiltered.body).nextCursor;
+    expect(firstCursor).not.toBeNull();
+    await expectError(
+      "/api/v1/me/tasks?limit=3&workStatus=TODO&cursor=" +
+        encodeURIComponent(firstCursor!),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/me/tasks?cursor=broken",
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/me/tasks?limit=101",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/me/tasks?scopeType=GROUP",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/me/tasks?hasPublishedRecord=maybe",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("无项目成员身份返回空页，匿名 401", async () => {
+    const response = await getJson("/api/v1/me/tasks", outsiderCookie);
+    expect(response.status).toBe(200);
+    expect(myTaskPageSchema.parse(response.body)).toEqual({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
+    const otherResponse = await getJson("/api/v1/me/tasks", otherCookie);
+    expect(otherResponse.status).toBe(200);
+    expect(myTaskPageSchema.parse(otherResponse.body).items).toEqual([]);
+    await expectError(
+      "/api/v1/me/tasks",
+      undefined,
+      401,
+      "MY_TASKS_UNAUTHENTICATED",
+    );
+  });
+});

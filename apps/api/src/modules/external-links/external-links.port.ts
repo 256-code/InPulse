@@ -19,6 +19,14 @@ export class ExternalLinksQueryPort {
   exists(tx: TransactionContext, p: number, id: number) {
     return this.repository.exists(tx, p, id);
   }
+  /** R-4：批量读取记录上的 GitHub 链接快照（只读、不校验项目授权）。 */
+  listChangeRecordLinks(
+    tx: TransactionContext,
+    projectId: number,
+    recordIds: readonly number[],
+  ) {
+    return this.repository.listChangeRecordLinks(tx, projectId, recordIds);
+  }
 }
 @Injectable()
 export class ExternalLinksCommandPort {

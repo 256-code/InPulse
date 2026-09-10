@@ -2497,6 +2497,134 @@
         }
       }
     },
+    "/me/tasks": {
+      "get": {
+        "operationId": "listMyTasks",
+        "summary": "F-32 我的任务：跨项目列出当前用户负责的任务，服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 只支持 projectId / scopeType / workStatus / hasPublishedRecord 四项筛选，不接受任何他人身份或授权范围参数。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTaskPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "scopeType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FEATURE",
+                "MODULE"
+              ]
+            }
+          },
+          {
+            "name": "workStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TODO",
+                "DONE",
+                "CANCELED"
+              ]
+            }
+          },
+          {
+            "name": "hasPublishedRecord",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ]
+      }
+    },
     "/notifications": {
       "get": {
         "operationId": "getNotifications",
@@ -11360,6 +11488,111 @@
         ]
       }
     },
+    "/projects/{projectId}/overview": {
+      "get": {
+        "operationId": "getProjectOverview",
+        "summary": "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代与待处理遗留问题；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOverviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "recentRecordLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            }
+          },
+          {
+            "name": "activeLeftoverLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            }
+          }
+        ]
+      }
+    },
     "/projects/{projectId}/record-drafts": {
       "get": {
         "operationId": "listRecordDrafts",
@@ -12118,6 +12351,196 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          }
+        ]
+      }
+    },
+    "/task-groups/{groupId}": {
+      "get": {
+        "operationId": "getTaskGroup",
+        "summary": "F-25 任务聚合组视图：按 groupId 反查项目归属并按实时成员关系授权，返回组标识与全部成员（含已解除成员、任务原数据与每任务 PUBLISHED 记录数）；记录列表由 listTaskGroupRecords 子资源分页提供。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGroupDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        ]
+      }
+    },
+    "/task-groups/{groupId}/records": {
+      "get": {
+        "operationId": "listTaskGroupRecords",
+        "summary": "F-25 聚合组记录列表：只返回 PUBLISHED 与 VOID 记录，可按成员任务过滤，按 recordId DESC 游标分页，并附记录上的 GitHub 链接快照。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGroupRecordPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "memberTaskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
             }
           }
         ]
@@ -14418,6 +14841,44 @@
           }
         ]
       },
+      "LeftoverItemSummary": {
+        "type": "object",
+        "properties": {
+          "leftoverItemId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "leftoverItemId",
+          "recordId",
+          "recordCode",
+          "content",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "LeftoverTaskPreview": {
         "type": "object",
         "properties": {
@@ -15422,6 +15883,209 @@
         ],
         "additionalProperties": false
       },
+      "MyTaskItem": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "FEATURE",
+              "MODULE"
+            ]
+          },
+          "workStatus": {
+            "type": "string",
+            "enum": [
+              "TODO",
+              "DONE",
+              "CANCELED"
+            ]
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED",
+              "INVALID"
+            ]
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "hasPublishedRecord": {
+            "type": "boolean"
+          },
+          "groupRole": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "MAIN",
+                  "SOURCE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "taskId",
+          "code",
+          "title",
+          "projectId",
+          "projectName",
+          "moduleId",
+          "moduleName",
+          "featureId",
+          "featureName",
+          "scopeType",
+          "workStatus",
+          "lifecycleStatus",
+          "assignee",
+          "updatedAt",
+          "hasPublishedRecord",
+          "groupRole"
+        ],
+        "additionalProperties": false
+      },
+      "MyTaskPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyTaskItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "MyTasksQueryRequest": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "FEATURE",
+              "MODULE"
+            ]
+          },
+          "workStatus": {
+            "type": "string",
+            "enum": [
+              "TODO",
+              "DONE",
+              "CANCELED"
+            ]
+          },
+          "hasPublishedRecord": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "NotificationItem": {
         "type": "object",
         "properties": {
@@ -16120,6 +16784,120 @@
         ],
         "additionalProperties": false
       },
+      "ProjectOverviewProject": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          }
+        },
+        "required": [
+          "projectId",
+          "name",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectOverviewQueryRequest": {
+        "type": "object",
+        "properties": {
+          "recentRecordLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "activeLeftoverLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectOverviewResponse": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectOverviewProject"
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ProjectOverviewStats"
+          },
+          "recentRecords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentRecordItem"
+            }
+          },
+          "activeLeftovers": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeftoverItemSummary"
+            }
+          }
+        },
+        "required": [
+          "project",
+          "memberCount",
+          "stats",
+          "recentRecords",
+          "activeLeftovers"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectOverviewStats": {
+        "type": "object",
+        "properties": {
+          "activeModuleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "activeFeatureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "openTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "publishedRecordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "activeModuleCount",
+          "activeFeatureCount",
+          "openTaskCount",
+          "publishedRecordCount"
+        ],
+        "additionalProperties": false
+      },
       "ProjectPath": {
         "type": "object",
         "properties": {
@@ -16547,6 +17325,70 @@
         "required": [
           "password",
           "code"
+        ],
+        "additionalProperties": false
+      },
+      "RecentRecordItem": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "recordId",
+          "code",
+          "title",
+          "moduleId",
+          "featureId",
+          "featureName",
+          "publishedAt"
         ],
         "additionalProperties": false
       },
@@ -17736,6 +18578,26 @@
         ],
         "additionalProperties": false
       },
+      "TaskGroupDetailResponse": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/TaskGroupSummary"
+          },
+          "members": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskGroupMemberDetail"
+            }
+          }
+        },
+        "required": [
+          "group",
+          "members"
+        ],
+        "additionalProperties": false
+      },
       "TaskGroupItem": {
         "type": "object",
         "properties": {
@@ -17806,6 +18668,142 @@
           "updatedAt",
           "mainTaskId",
           "members"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupMemberDetail": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "taskCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "MAIN",
+              "SOURCE"
+            ]
+          },
+          "sourceKind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "HISTORICAL"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memberStatus": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "DETACHED"
+            ]
+          },
+          "workStatus": {
+            "type": "string",
+            "enum": [
+              "TODO",
+              "DONE",
+              "CANCELED"
+            ]
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED",
+              "INVALID"
+            ]
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detachReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedRecordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "taskId",
+          "taskCode",
+          "title",
+          "role",
+          "sourceKind",
+          "memberStatus",
+          "workStatus",
+          "lifecycleStatus",
+          "moduleId",
+          "featureId",
+          "assignee",
+          "joinedAt",
+          "detachedAt",
+          "detachReason",
+          "publishedRecordCount"
         ],
         "additionalProperties": false
       },
@@ -17980,6 +18978,247 @@
         ],
         "additionalProperties": false
       },
+      "TaskGroupPath": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "groupId"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupRecordItem": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "recordStatus": {
+            "type": "string",
+            "enum": [
+              "PUBLISHED",
+              "VOID"
+            ]
+          },
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "sourceLabel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "externalLinks": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskGroupRecordLink"
+            }
+          }
+        },
+        "required": [
+          "recordId",
+          "code",
+          "title",
+          "recordStatus",
+          "taskId",
+          "sourceLabel",
+          "featureId",
+          "publishedAt",
+          "externalLinks"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupRecordLink": {
+        "type": "object",
+        "properties": {
+          "linkId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "displayUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ISSUE",
+              "PULL_REQUEST",
+              "COMMIT",
+              "OTHER"
+            ]
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 201
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "externalNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "externalSha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 7,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "titleSnapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stateSnapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "linkId",
+          "displayUrl",
+          "kind",
+          "repository",
+          "externalNumber",
+          "externalSha",
+          "titleSnapshot",
+          "stateSnapshot",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupRecordPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskGroupRecordItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupRecordQueryRequest": {
+        "type": "object",
+        "properties": {
+          "memberTaskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
       "TaskGroupStateItem": {
         "type": "object",
         "properties": {
@@ -18058,6 +19297,71 @@
           "updatedAt",
           "closedAt",
           "mainTaskId"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupSummary": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CLOSED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rowVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "groupId",
+          "projectId",
+          "code",
+          "name",
+          "status",
+          "createdAt",
+          "closedAt",
+          "rowVersion"
         ],
         "additionalProperties": false
       },
@@ -18885,6 +20189,39 @@
         },
         "required": [
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "UserRef": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "avatarUrl"
         ],
         "additionalProperties": false
       },

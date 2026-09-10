@@ -3,7 +3,9 @@ import { DEFAULT_MY_TASK_FILTERS } from "./my-tasks-url";
 import type { MyTaskFilters } from "./my-tasks-types";
 import {
   clampMyTasksV1Limit,
+  fromV1MyTaskItem,
   listMyTasksV1Gaps,
+  MY_TASKS_V1_FILTER_SUPPORT,
   MY_TASKS_V1_LIMIT_DEFAULT,
   MY_TASKS_V1_LIMIT_MAX,
   MY_TASKS_V1_MISSING_ITEM_FIELDS,
@@ -125,6 +127,64 @@ describe("my-tasks-v1-query", () => {
     expect(
       listMyTasksV1Gaps(filters({ scope: "project", projectId: null })),
     ).toEqual(["scope:project-without-id"]);
+  });
+
+  it("maps the frozen R-3 item and keeps contract gaps undefined", () => {
+    const item = fromV1MyTaskItem({
+      taskId: 7,
+      code: "T-007",
+      title: "补齐恢复码入口",
+      projectId: 1,
+      projectName: "InPulse 平台",
+      moduleId: 2,
+      moduleName: "访问控制",
+      featureId: 3,
+      featureName: "MFA 登录",
+      scopeType: "FEATURE",
+      workStatus: "DONE",
+      lifecycleStatus: "ACTIVE",
+      assignee: { userId: 9, name: "张三", avatarUrl: null },
+      updatedAt: "2026-09-10T02:00:00.000Z",
+      hasPublishedRecord: true,
+      groupRole: "SOURCE",
+    });
+    expect(item).toEqual({
+      taskId: 7,
+      code: "T-007",
+      title: "补齐恢复码入口",
+      projectId: 1,
+      projectName: "InPulse 平台",
+      moduleId: 2,
+      moduleName: "访问控制",
+      featureId: 3,
+      featureName: "MFA 登录",
+      scopeType: "FEATURE",
+      workStatus: "DONE",
+      lifecycleStatus: "ACTIVE",
+      assignee: { userId: 9, name: "张三", avatarUrl: null },
+      updatedAt: "2026-09-10T02:00:00.000Z",
+      hasPublishedRecord: true,
+      groupRole: "SOURCE",
+    });
+    expect(item.priority).toBeUndefined();
+    expect(item.dueAt).toBeUndefined();
+    expect(item.completedAt).toBeUndefined();
+    expect(item.creatorId).toBeUndefined();
+    expect(item.description).toBeUndefined();
+    expect(item.githubLinkCount).toBeUndefined();
+  });
+
+  it("declares that the frozen contract supports none of the UI filter gaps", () => {
+    expect(MY_TASKS_V1_FILTER_SUPPORT).toEqual({
+      "scope:created": false,
+      "scope:all": false,
+      "scope:project-without-id": false,
+      "filter:priority": false,
+      "filter:relation": false,
+      "filter:github": false,
+      "filter:query": false,
+      "filter:canceled-with-open": false,
+    });
   });
 
   it("keeps the documented response gaps stable", () => {

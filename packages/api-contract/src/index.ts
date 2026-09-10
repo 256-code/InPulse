@@ -27,4 +27,5 @@ export * from "./contracts/published-records.zod.js";
 
 export * from "./contracts/task-groups.zod.js";
 export * from "./contracts/task-completion.zod.js";
+export * from "./contracts/aggregate-read.zod.js";
 export * from "./contracts/leftover-task.zod.js";

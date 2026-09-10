@@ -1,0 +1,140 @@
+import type { BodyBinding, RouteDefinition } from "./route-definition.js";
+import type { SchemaName } from "./schema-registry.js";
+
+const json = (schemaRef: SchemaName): BodyBinding => ({
+  body: { contentTypes: [{ contentType: "application/json", schemaRef }] },
+});
+
+/** 只登记 A 裁决 §2 冻结的状态码；四条路由都不登记 403（非成员统一 404）。 */
+const errors = (statuses: readonly number[]) =>
+  Object.fromEntries(
+    statuses.map((status) => [String(status), json("ErrorResponse")]),
+  );
+
+/**
+ * F-25 / F-29 / F-32 聚合读路由（A 裁决 docs/a-contract-review-f25-f29-f32.md）。
+ * 四条均为只读 GET：authPolicy 为 session，其余策略按 §3 全量显式写 none。
+ * 非成员项目或跨项目资源统一按「资源不存在」返回 404，不返回 403。
+ */
+export const aggregateReadRoutes: readonly RouteDefinition[] = [
+  {
+    method: "GET",
+    path: "/task-groups/{groupId}",
+    operationId: "getTaskGroup",
+    summary:
+      "F-25 任务聚合组视图：按 groupId 反查项目归属并按实时成员关系授权，返回组标识与全部成员（含已解除成员、任务原数据与每任务 PUBLISHED 记录数）；记录列表由 listTaskGroupRecords 子资源分页提供。",
+    request: {
+      path: "TaskGroupPath",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("TaskGroupDetailResponse"),
+      ...errors([401, 404, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/task-groups/{groupId}/records",
+    operationId: "listTaskGroupRecords",
+    summary:
+      "F-25 聚合组记录列表：只返回 PUBLISHED 与 VOID 记录，可按成员任务过滤，按 recordId DESC 游标分页，并附记录上的 GitHub 链接快照。",
+    request: {
+      path: "TaskGroupPath",
+      query: "TaskGroupRecordQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("TaskGroupRecordPage"),
+      ...errors([401, 404, 422, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/projects/{projectId}/overview",
+    operationId: "getProjectOverview",
+    summary:
+      "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代与待处理遗留问题；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
+    request: {
+      path: "ProjectPath",
+      query: "ProjectOverviewQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("ProjectOverviewResponse"),
+      ...errors([401, 404, 422, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/me/tasks",
+    operationId: "listMyTasks",
+    summary:
+      "F-32 我的任务：跨项目列出当前用户负责的任务，服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 只支持 projectId / scopeType / workStatus / hasPublishedRecord 四项筛选，不接受任何他人身份或授权范围参数。",
+    request: {
+      path: "none",
+      query: "MyTasksQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("MyTaskPage"),
+      ...errors([401, 422, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+];

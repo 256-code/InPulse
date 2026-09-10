@@ -38,7 +38,9 @@ export interface ProjectOverviewPageViewProps {
 
 /**
  * F-29 项目概览视图。项目名、状态与成员数来自 A 的项目端口（调用方注入）；
- * 统计卡片、最近迭代与遗留问题在骨架阶段来自 mock adapter。
+ * 统计卡片、最近迭代与遗留问题来自注入的 adapter：页面默认注入 server
+ * adapter（R-2 getProjectOverview），mock 只用于测试与降级演示。
+ * 契约缺口（遗留问题总数、来源记录标题为 null）在此显式降级展示。
  */
 export const ProjectOverviewPageView: React.FC<
   ProjectOverviewPageViewProps
@@ -122,10 +124,20 @@ export const ProjectOverviewPageView: React.FC<
     {
       key: "leftovers",
       label: "遗留问题",
-      value: String(stats.openLeftovers),
-      hint: stats.openLeftovers > 0 ? "等待闭环" : "全部已闭环",
+      value: stats.openLeftovers === null ? "—" : String(stats.openLeftovers),
+      hint:
+        stats.openLeftovers === null
+          ? "契约未提供总数"
+          : stats.openLeftovers > 0
+            ? "等待闭环"
+            : "全部已闭环",
       icon: "alert",
-      tone: stats.openLeftovers > 0 ? "red" : "gray",
+      tone:
+        stats.openLeftovers === null
+          ? "gray"
+          : stats.openLeftovers > 0
+            ? "red"
+            : "gray",
     },
   ];
 
@@ -152,7 +164,9 @@ export const ProjectOverviewPageView: React.FC<
         <span>
           {item.summary}
           <small>
-            来自 {item.recordCode} {item.recordTitle}
+            {"来自 " +
+              item.recordCode +
+              (item.recordTitle === null ? "" : " " + item.recordTitle)}
           </small>
         </span>
         <InpulseIcon name="chevronRight" size={14} />
@@ -245,7 +259,9 @@ export const ProjectOverviewPageView: React.FC<
       <div className="skeleton-note" data-testid="project-overview-mock-notice">
         <InpulseIcon name="alert" size={16} />
         <span>
-          <strong>骨架数据：</strong>
+          <strong>
+            {activeAdapter.source === "mock" ? "骨架数据：" : "接口说明："}
+          </strong>
           {activeAdapter.notice}
         </span>
       </div>

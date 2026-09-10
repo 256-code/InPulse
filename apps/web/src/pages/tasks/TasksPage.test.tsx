@@ -6,10 +6,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
-import type {
-  MyTaskListResult,
-  MyTasksAdapter,
-  MyTasksQueryInput,
+import {
+  MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskListResult,
+  type MyTasksAdapter,
+  type MyTasksQueryInput,
 } from "@features/my-tasks/my-tasks-types";
 import { TasksPage } from "./TasksPage";
 
@@ -26,6 +27,7 @@ const emptyResult: MyTaskListResult = {
   scopeCounts: { mine: 0, created: 0, project: 0, all: 0 },
   leftoverCount: 0,
   leftoverSample: null,
+  filterSupport: MY_TASKS_FULL_FILTER_SUPPORT,
 };
 
 const createAdapter = () => {

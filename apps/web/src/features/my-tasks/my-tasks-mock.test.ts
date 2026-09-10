@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import { DEFAULT_MY_TASK_FILTERS } from "./my-tasks-url";
-import type { MyTaskFilters, MyTaskListItem } from "./my-tasks-types";
+import {
+  MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskFilters,
+  type MyTaskListItem,
+} from "./my-tasks-types";
 
 const fetchDefault = async (patch: Partial<MyTaskFilters> = {}) =>
   MY_TASKS_MOCK_ADAPTER.fetchMyTasks({
@@ -16,6 +20,7 @@ describe("my-tasks mock adapter", () => {
   it("serves the demo dataset as a mock source", async () => {
     expect(MY_TASKS_MOCK_ADAPTER.source).toBe("mock");
     const result = await fetchDefault();
+    expect(result.filterSupport).toEqual(MY_TASKS_FULL_FILTER_SUPPORT);
     expect(result.items.every((item) => item.workStatus === "TODO")).toBe(true);
     expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103", "T-108"]);
   });
@@ -100,11 +105,15 @@ describe("my-tasks mock adapter", () => {
 
   it("computes date-independent stats and leftover facts for the scope", async () => {
     const result = await fetchDefault();
-    expect(result.stats.myOpen).toBe(4);
-    expect(result.stats.dueToday).toBe(1);
-    expect(result.stats.overdue).toBe(1);
-    expect(result.stats.completedThisMonth).toBeGreaterThanOrEqual(2);
-    expect(result.stats.completedThisMonth).toBeLessThanOrEqual(3);
+    const stats = result.stats;
+    if (!stats) {
+      throw new Error("mock adapter must return stats");
+    }
+    expect(stats.myOpen).toBe(4);
+    expect(stats.dueToday).toBe(1);
+    expect(stats.overdue).toBe(1);
+    expect(stats.completedThisMonth).toBeGreaterThanOrEqual(2);
+    expect(stats.completedThisMonth).toBeLessThanOrEqual(3);
     expect(result.leftoverCount).toBe(3);
     expect(result.leftoverSample?.recordCode).toBe("R-021");
     expect(result.scopeCounts).toEqual({

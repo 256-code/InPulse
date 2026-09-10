@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Alert } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
@@ -7,6 +7,7 @@ import {
   useProjectDetail,
 } from "@features/projects/project-query";
 import type { ProjectOverviewAdapter } from "@features/project-overview/project-overview-types";
+import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
 
 export interface ProjectOverviewPageProps {
@@ -28,6 +29,10 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
   const projectError = projectQuery.isError
     ? describeProjectListError(projectQuery.error)
     : undefined;
+  const overviewAdapter = useMemo(
+    () => adapter ?? createProjectOverviewServerAdapter(client),
+    [adapter, client],
+  );
 
   return (
     <ProjectOverviewPageView
@@ -43,7 +48,7 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
       }
       onOpenIssues={() => navigate("/issues")}
       {...(projectError === undefined ? {} : { projectError })}
-      {...(adapter === undefined ? {} : { adapter })}
+      adapter={overviewAdapter}
     />
   );
 };

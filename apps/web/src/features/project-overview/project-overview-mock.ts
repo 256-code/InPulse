@@ -6,7 +6,7 @@ import type {
 } from "./project-overview-types";
 
 export const PROJECT_OVERVIEW_MOCK_NOTICE =
-  "项目概览骨架：统计卡片、最近迭代与遗留问题来自前端 mock adapter，尚未接入服务端聚合接口；项目名、状态与成员数已取自现有项目端口。接口冻结后只替换 adapter 实现，页面结构不变。";
+  "项目概览 mock 数据：仅用于前端测试与降级演示，未接入服务端聚合接口；生产页面默认使用 server adapter（GET /api/v1/projects/{projectId}/overview）。";
 
 function isoDaysAgo(days: number, hour = 15): string {
   const now = new Date();
