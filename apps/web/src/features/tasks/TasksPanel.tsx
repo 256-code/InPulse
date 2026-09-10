@@ -523,6 +523,11 @@ export function TasksPanel({
                   </a>
                 </div>
               )}
+              <a
+                href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
+              >
+                迭代记录草稿
+              </a>
               <TaskStatusPanel
                 key={current.id}
                 item={current}

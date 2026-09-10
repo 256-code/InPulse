@@ -6,7 +6,7 @@ const RecordsPage = lazy(() => import("./RecordsPage"));
 export const recordsRoute: AppRouteModule = {
   path: "/records",
   element: RecordsPage,
-  requiresAuth: false,
+  requiresAuth: true,
 };
 
 export default recordsRoute;

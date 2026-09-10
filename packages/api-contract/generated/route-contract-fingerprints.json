@@ -29,6 +29,12 @@
       "fingerprint": "36a7743018f77042d7e35a2fea33faed17ac4f74e9dcc7297a1b72b2f5499f1a"
     }
   ],
+  "createIndependentRecordDraft": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "540e596cb07e88663f39b52da9c52ff945ba24d0f074c538282ade833d90dc91"
+    }
+  ],
   "createModule": [
     {
       "version": "1.0.0",
@@ -51,6 +57,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "31f261ff5c1a58e596d5789a249c3a438e277876a4568e34a8e0c1d46f545c7e"
+    }
+  ],
+  "createTaskRecordDraft": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "f6a3ef02736b1f6513bdf548a0af967225b60b911644cdfda4e2e7e22e6c81c2"
     }
   ],
   "createUser": [
@@ -143,6 +155,12 @@
       "fingerprint": "a29140dcf621c76a786acd948e27922ff83f09657bfb4bacfef54baaf03dedcc"
     }
   ],
+  "updateIndependentRecordDraft": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "91f0758856778ec2f5921c1c158200c12c278264257bad2241a9b4ca14c5e786"
+    }
+  ],
   "updateModule": [
     {
       "version": "1.0.0",
@@ -165,6 +183,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "ec4d82558f597182a2c41832097eb53d2e08764d65039cfd32395c5f307892ca"
+    }
+  ],
+  "updateTaskRecordDraft": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "1898da903ce23a521ca8e8092554f3000d868fba0539ecf7a0a2e0a13c9be79f"
     }
   ],
   "updateUser": [

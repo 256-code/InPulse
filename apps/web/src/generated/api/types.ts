@@ -229,6 +229,24 @@ export type HealthResponse = {
   readonly status: "ok";
 };
 
+export type IndependentRecordDraftRequest = ({
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly scopeType: "FEATURE";
+  readonly featureId: number;
+} | {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly scopeType: "MODULE";
+  readonly impactFeatureIds: readonly number[];
+});
+
 export type LoginHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -522,6 +540,74 @@ export type ReauthenticateAdminRequest = {
   readonly code: string;
 };
 
+export type RecordDraftContent = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+};
+
+export type RecordDraftCreatePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type RecordDraftHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type RecordDraftItem = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+  readonly handlerId: number;
+  readonly authorId: number;
+  readonly status: "DRAFT";
+  readonly code: null;
+  readonly currentVersion: 0;
+  readonly publishedAt: null;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type RecordDraftList = {
+  readonly items: readonly RecordDraftItem[];
+};
+
+export type RecordDraftProjectPath = {
+  readonly projectId: number;
+};
+
+export type RecordDraftReplayContext = {
+  readonly projectId: number;
+  readonly recordId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type RecordDraftResourcePath = {
+  readonly projectId: number;
+  readonly recordId: number;
+};
+
+export type RecordDraftVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
+};
+
 export type RemoveProjectMemberRequest = {
   readonly reassignments: readonly ProjectMemberReassignmentItem[];
 };
@@ -628,6 +714,44 @@ export type TaskListResponse = {
 
 export type TaskMutationHeaders = {
   readonly "x-csrf-token": string;
+};
+
+export type TaskRecordDraftPath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly taskId: number;
+};
+
+export type TaskRecordDraftRequest = {
+  readonly title: (string | null);
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+};
+
+export type TaskRecordDraftResourcePath = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly taskId: number;
+  readonly recordId: number;
+};
+
+export type TaskRecordDraftsResponse = {
+  readonly source: {
+    readonly taskId: number;
+    readonly projectId: number;
+    readonly moduleId: number;
+    readonly featureId: (number | null);
+    readonly scopeType: ("FEATURE" | "MODULE");
+    readonly title: string;
+    readonly assigneeId: number;
+    readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+    readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+    readonly rowVersion: number;
+    readonly impactFeatureIds: readonly number[];
+  };
+  readonly items: readonly RecordDraftItem[];
 };
 
 export type TaskReplayContext = {
