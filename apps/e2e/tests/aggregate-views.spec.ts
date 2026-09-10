@@ -127,17 +127,22 @@ test("F-29 项目概览：服务端真实指标、契约缺口降级与入口导
     await expect(notice).toContainText("契约未提供遗留问题总数");
 
     // 服务端真实统计：fixture 项目至少 1 个活跃模块与 1 名成员。
-    const moduleCount = await page
+    // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位 0。
+    const moduleCount = page
       .getByTestId("overview-metric-modules")
-      .locator("strong")
-      .textContent();
-    expect(Number(moduleCount)).toBeGreaterThan(0);
-    const memberCount = await page
+      .locator("strong");
+    await expect
+      .poll(async () => Number(await moduleCount.textContent()))
+      .toBeGreaterThan(0);
+    const memberCount = page
       .getByTestId("overview-metric-members")
-      .locator("strong")
-      .textContent();
-    expect(memberCount ?? "").toContain(" 人");
-    expect(Number.parseInt(memberCount ?? "", 10)).toBeGreaterThan(0);
+      .locator("strong");
+    await expect.poll(() => memberCount.textContent()).toContain(" 人");
+    await expect
+      .poll(async () =>
+        Number.parseInt((await memberCount.textContent()) ?? "", 10),
+      )
+      .toBeGreaterThan(0);
     await expect(
       page.getByTestId("overview-metric-leftovers").locator("strong"),
     ).toHaveText("—");

@@ -51,7 +51,7 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 | F23-MERGE-API-005 | HTTP + PostgreSQL 并发 | 并发合并同一对任务 | 两个并发请求得到 200 与 409 `TASK_ALREADY_MERGED`，聚合组、成员与副作用计数与单次成功一致 | 同上 |
 | F23-HTTP-UNIT-001 | API 单元 | HTTP 边界与错误映射 | 同源/缺 Origin 403、非 JSON 400、空 CSRF 头与未知字段/查询参数 422、幂等键缺失与过短 400、匿名 401、业务错误与唯一约束 409、越界可重放字段拒绝缓存 | 本地通过（`task-groups-http.service.test.ts` 10 例） |
 | F23-INVARIANT-001 | PostgreSQL | 直接约束探针 | 同组第二个活跃 MAIN 23505 `task_group_members_one_active_main_unique`；活跃组缺 SOURCE 23514 形状约束；任务加入两组 23505 `task_group_members_one_active_group_unique`；SOURCE 缺快照 23514 `task_group_members_snapshot_check` | 同上 |
-| F23-UI-001 | 前端 / Playwright | 合并入口与任务组视图 | 前端合并对话框、任务组详情与解除入口 | Required，未交付（F-24/F-25）；E2E 尚未覆盖合并路径 |
+| F23-UI-001 | 前端 / Playwright | 合并入口与任务组视图 | 前端合并对话框、任务组详情与解除入口 | 本地通过（`MergeIntoMainTaskModal` 5 例、`TasksPanel` 合并入口 1 例、`TaskGroupPageView` 8 例、`TaskGroupPage` 4 例、E2E `task-groups.spec.ts` 合并与聚合组页路径，2026-09-11） |
 
 本轮真实 PostgreSQL 集成全量 37 文件 232 例、API 单测 61 文件 291 例（含 HTTP 边界 10 例）、契约 10 文件 75 例、前端 35 文件 120 例（并行负载下两个既有计时敏感用例偶发失败，单跑通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
 
@@ -69,7 +69,7 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 | F24-UNMERGE-API-005 | HTTP + PostgreSQL 并发 | 并发解除与解除/新增来源竞态 | 同一来源并发解除得到 200 与 409 `TASK_NOT_MERGED`，组与副作用计数与单次成功一致；解除最后一个来源与合并新来源并发后不存在“CLOSED 组仍含活跃成员”，两分支均满足不变量 | 同上 |
 | F24-HTTP-UNIT-001 | API 单元 | HTTP 边界与错误映射 | 同源/缺 Origin 403、非 JSON 400、空 CSRF 头与未知字段/查询参数 422、幂等键缺失与过短 400、匿名 401、业务错误直通与幂等冲突 409、越界可重放字段拒绝缓存、重放授权上下文登记项目/组/任务 | 本地通过（`task-group-unmerge-http.service.test.ts` 10 例） |
 | F24-INVARIANT-001 | PostgreSQL | 直接约束探针 | 解除元数据不合法（缺 `detached_at`/`detached_by`/原因、`detached_at < joined_at`）23514 `task_group_members_detach_state_check`/`task_group_members_detach_time_check`；关闭组缺 `closed_at` 23514 `task_groups_close_state_check` | 同上 |
-| F24-UI-001 | 前端 / Playwright | 解除入口与二次确认 | 任务组视图内的解除入口、二次确认对话框与解除原因输入 | Required，未交付（F-25） |
+| F24-UI-001 | 前端 / Playwright | 解除入口与二次确认 | 任务组视图内的解除入口、二次确认对话框与解除原因输入 | 本地通过（`UnmergeTaskGroupButton` 5 例：二次确认、CSRF/幂等头、空原因、409 恢复、closesGroup 警告；E2E 解除路径含「已解除」与「聚合组已关闭」断言，2026-09-11） |
 
 本轮真实 PostgreSQL 集成全量 40 文件 260 例（两轮各 1 例既有偶发失败：`project-member-management-api` 与 `preauth-session`，单文件复跑分别 8/8 与 4/4 通过）、解除文件 8/8、API 单测 63 文件 303 例（含 HTTP 边界 10 例）、契约 11 文件 81 例、前端 37 文件 124 例（并行负载下两个既有计时敏感用例偶发失败，单跑 4/4 通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
 
@@ -713,3 +713,17 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/e2e typecheck` 通过；定向 `pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42（约 5.3 分钟）。推送后 GitHub Actions 已通过：`CI` push run [34508897744](https://github.com/256-code/InPulse/actions/runs/34508897744) 13m19s、`CI` pull_request run [34508916381](https://github.com/256-code/InPulse/actions/runs/34508916381) 13m43s、`Documentation` run [34508916277](https://github.com/256-code/InPulse/actions/runs/34508916277) 9s。
+
+## F-23 / F-24 / F-25 前端交付（C，2026-09-11 本地落库）
+
+F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端纵切片落库：功能页任务抽屉新增「合并到主任务」入口（搜索同项目任务、排除自身、≥2 字符、350ms 防抖、来源分支类型单选、合并说明 ≤5000 字），成功后跳转 `/task-groups/{groupId}`；新增聚合组详情页（成员角色徽章、记录筛选 URL 状态、签名游标加载更多、外部链接快照与显式降级）；来源分支「解除合并」二次确认与组关闭警告。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| F-23 前端：合并弹窗（搜索候选过滤、防抖、必选主任务、409 后重新搜索、提交携带 CSRF 与幂等键） | `MergeIntoMainTaskModal.test.tsx` 5 例；`TasksPanel.test.tsx` 合并入口 1 例 |
+| F-25 前端：聚合组详情（成员排序与徽章、DETACHED/HISTORICAL 展示、记录筛选回调、非法 URL 回退、VOID 快照与游标、CLOSED 警告与空态） | `TaskGroupPageView.test.tsx` 8 例 |
+| F-24 前端：解除合并（二次确认、原因 trim 空转 null、409 保留输入并可重新加载、422 文案、closesGroup 警告、成功失效相关查询） | `UnmergeTaskGroupButton.test.tsx` 5 例 |
+| F-23/F-24/F-25 关键路径 E2E | `apps/e2e/tests/task-groups.spec.ts`：建功能与两个任务 → 来源任务抽屉合并 → 落聚合组页（主任务/来源分支/空态/接口说明）→ 记录筛选写入 URL → 解除合并（组关闭警告）→ 「已解除」与组关闭提示；全量 `pnpm test:e2e` 43/43 |
+| E2E 稳定性修复 | `aggregate-views.spec.ts` F-29 指标断言改为 `expect.poll`（消除读取初始占位 0 的竞态）；`task-groups.spec.ts` 创建任务后关闭自动打开的详情抽屉，避免遮罩阻塞后续点击 |
+
+本地实际执行（2026-09-11）：Web 单测 58 文件 247 例；`@inpulse/e2e` typecheck；全量 `pnpm test:e2e` 43/43（约 5.4 分钟）；`pnpm check` 除本地镜像 audit endpoint 外全部通过，公共 registry 审计无已知漏洞。E2E 首轮曾出现 1 例 `leftover-task` FEATURE `POST .../leftover-task` 500，未复现（单文件复跑 3/3），不能视为已修复。

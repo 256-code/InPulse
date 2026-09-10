@@ -1,4 +1,6 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
+import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
+import { useNavigate } from "react-router-dom";
 import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
@@ -64,6 +66,35 @@ const formatDate = (value: string | null) =>
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
 
+function MergeIntoTargetModal({
+  task,
+  api,
+  onClose,
+}: {
+  task: TaskViewItem;
+  api: InpulseApiClient;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <MergeIntoMainTaskModal
+      open
+      task={{
+        id: task.id,
+        code: task.code,
+        title: task.title,
+        projectId: task.projectId,
+      }}
+      api={api}
+      onClose={onClose}
+      onMerged={(groupId) => {
+        onClose();
+        navigate("/task-groups/" + groupId);
+      }}
+    />
+  );
+}
+
 export function TasksPanel({
   projectId,
   moduleId,
@@ -83,6 +114,7 @@ export function TasksPanel({
     null,
   );
   const [merge, setMerge] = useState<Merge | null>(null);
+  const [mergeInto, setMergeInto] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -110,6 +142,7 @@ export function TasksPanel({
     reset(item ? taskEdit(item) : empty);
     mutation.reset();
     setMerge(null);
+    setMergeInto(false);
     setReloadError(null);
     setSuccess(false);
     void members.refetch();
@@ -548,6 +581,18 @@ export function TasksPanel({
               />
               <div className="calm-action-footer">
                 <Button
+                  className="secondary-button"
+                  disabled={
+                    !writable ||
+                    current.lifecycleStatus !== "ACTIVE" ||
+                    (featureId !== null && current.scopeType === "MODULE")
+                  }
+                  onClick={() => setMergeInto(true)}
+                >
+                  <InpulseIcon name="gitMerge" size={14} />
+                  合并到主任务
+                </Button>
+                <Button
                   className="primary-button"
                   disabled={
                     !writable ||
@@ -560,6 +605,13 @@ export function TasksPanel({
                   编辑任务
                 </Button>
               </div>
+              {mergeInto && (
+                <MergeIntoTargetModal
+                  task={current}
+                  api={api}
+                  onClose={() => setMergeInto(false)}
+                />
+              )}
             </>
           )}
         </Drawer>
