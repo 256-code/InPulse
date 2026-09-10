@@ -30,6 +30,29 @@ const fields = [
   "status",
   "updatedAt",
 ];
+/** 与 TaskGroupUnmergeResponse 的非敏感叶子字段精确相等，顺序无关。 */
+const unmergeFields = [
+  "detachedMembers[].detachReason",
+  "detachedMembers[].detachedAt",
+  "detachedMembers[].id",
+  "detachedMembers[].joinedAt",
+  "detachedMembers[].originalAssigneeId",
+  "detachedMembers[].originalWorkStatus",
+  "detachedMembers[].role",
+  "detachedMembers[].sourceKind",
+  "detachedMembers[].taskId",
+  "group.closedAt",
+  "group.code",
+  "group.createdAt",
+  "group.createdBy",
+  "group.id",
+  "group.mainTaskId",
+  "group.name",
+  "group.projectId",
+  "group.rowVersion",
+  "group.status",
+  "group.updatedAt",
+];
 export const taskGroupRoutes: readonly RouteDefinition[] = [
   {
     method: "POST",
@@ -86,5 +109,61 @@ export const taskGroupRoutes: readonly RouteDefinition[] = [
         "bounded 3 attempts; sorted project/module/feature FOR SHARE then task FOR UPDATE ascending, then group FOR UPDATE with member re-read",
     },
     auditAction: "task.merge",
+  },
+  {
+    method: "POST",
+    path: "/task-groups/unmerge",
+    operationId: "unmergeTaskGroup",
+    summary:
+      "解除来源任务与聚合组的合并关系：按任务 ID 升序锁定 SOURCE/MAIN，再锁聚合组与成员并重新校验；仅允许解除活跃 SOURCE，解除最后一个来源时同事务关闭聚合组并解除 MAIN。不修改任务工作状态、负责人与迭代记录，解除原因与时间写入成员关系、审计与通知。",
+    request: {
+      path: "none",
+      query: "none",
+      headers: "TaskGroupUnmergeHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "TaskGroupUnmergeRequest",
+          },
+        ],
+      },
+    },
+    responses: { "200": json("TaskGroupUnmergeResponse"), ...errors },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "TaskGroupUnmergeResponse",
+            safeBodyFieldPaths: unmergeFields,
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "TaskGroupUnmergeReplayContext",
+        resultRefExtractor: "taskGroupResultResource",
+        currentReadAuthorizer: "taskGroupCurrentReadAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: {
+      rowVersion: "none",
+      lockOrder: ["project", "module", "feature", "task", "taskGroup"],
+      retry:
+        "bounded 3 attempts; sorted project/module/feature FOR SHARE then task FOR UPDATE ascending, then group FOR UPDATE with member re-read",
+    },
+    auditAction: "task.unmerge",
   },
 ];

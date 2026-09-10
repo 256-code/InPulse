@@ -41,6 +41,7 @@ import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgre
 import { TaskGroupRepository } from "../src/modules/task-groups/task-group.repository.js";
 import { TaskGroupsService } from "../src/modules/task-groups/task-groups.service.js";
 import { TaskGroupsHttpService } from "../src/modules/task-groups/task-groups-http.service.js";
+import { TaskGroupUnmergeHttpService } from "../src/modules/task-groups/task-group-unmerge-http.service.js";
 import { TaskGroupsController } from "../src/modules/task-groups/task-groups.controller.js";
 import {
   createProject,
@@ -75,35 +76,47 @@ beforeAll(async () => {
     new PostgresUserSessionRepository(),
     tokens,
   );
+  const service = new TaskGroupsService(
+    new PostgresProjectAccessQueryPort(client),
+    new PostgresProjectCodePort(),
+    new PostgresModuleQueryPort(),
+    new PostgresFeatureQueryPort(),
+    new PostgresTaskQueryPort(),
+    new TaskGroupRepository(),
+    new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
+    new PostgresActivityWritePort(),
+    new PostgresNotificationWritePort(),
+    new PostgresSearchProjectionWritePort(),
+  );
+  const mutation = new AuthenticatedMutationService(
+    auth,
+    new PostgresSessionCsrfTokenRepository(),
+    tokens,
+  );
+  const idempotency = new IdempotencyHttpService(
+    new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
+    { currentVersion: 1, currentKey: () => key, keyFor: () => key },
+    resolveRegisteredRoute,
+  );
   taskGroupsHttp = new TaskGroupsHttpService(
     auth,
-    new AuthenticatedMutationService(
-      auth,
-      new PostgresSessionCsrfTokenRepository(),
-      tokens,
-    ),
-    new IdempotencyHttpService(
-      new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
-      { currentVersion: 1, currentKey: () => key, keyFor: () => key },
-      resolveRegisteredRoute,
-    ),
-    new TaskGroupsService(
-      new PostgresProjectAccessQueryPort(client),
-      new PostgresProjectCodePort(),
-      new PostgresModuleQueryPort(),
-      new PostgresFeatureQueryPort(),
-      new PostgresTaskQueryPort(),
-      new TaskGroupRepository(),
-      new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
-      new PostgresActivityWritePort(),
-      new PostgresNotificationWritePort(),
-      new PostgresSearchProjectionWritePort(),
-    ),
+    mutation,
+    idempotency,
+    service,
+  );
+  // F-24 后控制器同时提供解除合并入口，测试模块必须注册对应 Provider。
+  const unmergeHttp = new TaskGroupUnmergeHttpService(
+    mutation,
+    idempotency,
+    service,
   );
   class TestModule {}
   Module({
     controllers: [TaskGroupsController],
-    providers: [{ provide: TaskGroupsHttpService, useValue: taskGroupsHttp }],
+    providers: [
+      { provide: TaskGroupsHttpService, useValue: taskGroupsHttp },
+      { provide: TaskGroupUnmergeHttpService, useValue: unmergeHttp },
+    ],
   })(TestModule);
   app = await NestFactory.create(TestModule, { logger: false });
   app.useGlobalFilters(new ApiExceptionFilter());

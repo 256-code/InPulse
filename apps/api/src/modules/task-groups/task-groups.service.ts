@@ -1,8 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   taskGroupMergeReplayContextSchema,
+  taskGroupUnmergeReplayContextSchema,
+  taskGroupUnmergeResponseSchema,
   type TaskGroupItem,
   type TaskGroupMergeRequest,
+  type TaskGroupUnmergeRequest,
+  type TaskGroupUnmergeResponse,
 } from "@inpulse/api-contract";
 
 import { AuditWritePort } from "../../audit/index.js";
@@ -24,30 +28,82 @@ import {
   type TaskGroupRecord,
 } from "./task-group.repository.js";
 
-/** 合并事务内最大尝试次数；超过即终止，避免长事务内忙等（技术设计 6.4）。 */
-const MERGE_LOCK_ATTEMPTS = 3;
+/** 合并/解除合并事务内最大尝试次数；超过即终止，避免长事务内忙等（技术设计 6.4 / 6.5）。 */
+const TASK_GROUP_LOCK_ATTEMPTS = 3;
 const MERGE_ACTIVITY_TYPE = "task.merge";
 const MERGE_NOTIFICATION_TYPE = "task.merge";
+const UNMERGE_ACTIVITY_TYPE = "task.unmerge";
+const UNMERGE_NOTIFICATION_TYPE = "task.unmerge";
+/** 功能设计 18.14 把解除原因定义为「建议填写」；未填写时用固定文案满足数据库非空约束。 */
+const DEFAULT_UNMERGE_REASON = "未填写解除原因";
+const MAIN_UNMERGE_MESSAGE =
+  "主任务不能直接解除合并；解除最后一个来源任务后系统会自动关闭聚合组";
 
-export class TaskGroupMergeError extends Error {
+/** 合并与解除合并共用的业务错误：状态码与错误码由调用点显式指定。 */
+export class TaskGroupCommandError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422,
     readonly code: string,
     message: string,
   ) {
     super(message);
-    this.name = "TaskGroupMergeError";
+    this.name = "TaskGroupCommandError";
   }
 }
 
+/** 供共享锁序代码复用的错误构造器；action 用于「不能{action}任务」提示语。 */
+interface CommandErrors {
+  readonly action: string;
+  readonly missing: () => Error;
+  readonly parentArchived: (message: string) => Error;
+}
+
 const missing = () =>
-  new TaskGroupMergeError(404, "TASK_MERGE_NOT_FOUND", "任务不存在或无法访问");
+  new TaskGroupCommandError(
+    404,
+    "TASK_MERGE_NOT_FOUND",
+    "任务不存在或无法访问",
+  );
 const parentArchived = (message: string) =>
-  new TaskGroupMergeError(409, "TASK_MERGE_PARENT_ARCHIVED", message);
+  new TaskGroupCommandError(409, "TASK_MERGE_PARENT_ARCHIVED", message);
 const alreadyMerged = (message: string) =>
-  new TaskGroupMergeError(409, "TASK_ALREADY_MERGED", message);
+  new TaskGroupCommandError(409, "TASK_ALREADY_MERGED", message);
 const groupStateConflict = (message: string) =>
-  new TaskGroupMergeError(409, "TASK_GROUP_STATE_CONFLICT", message);
+  new TaskGroupCommandError(409, "TASK_GROUP_STATE_CONFLICT", message);
+const MERGE_ERRORS: CommandErrors = {
+  action: "合并",
+  missing,
+  parentArchived,
+};
+
+const unmergeMissing = () =>
+  new TaskGroupCommandError(
+    404,
+    "TASK_UNMERGE_NOT_FOUND",
+    "任务不存在或无法访问",
+  );
+const unmergeParentArchived = (message: string) =>
+  new TaskGroupCommandError(409, "TASK_UNMERGE_PARENT_ARCHIVED", message);
+/** 任务当前没有活跃成员关系：未合并、已解除或所在聚合组已关闭。 */
+const notMerged = () =>
+  new TaskGroupCommandError(
+    409,
+    "TASK_NOT_MERGED",
+    "任务当前不是活跃来源分支，无法解除合并",
+  );
+const unmergeConflict = (message: string) =>
+  new TaskGroupCommandError(409, "TASK_GROUP_STATE_CONFLICT", message);
+const UNMERGE_ERRORS: CommandErrors = {
+  action: "解除合并",
+  missing: unmergeMissing,
+  parentArchived: unmergeParentArchived,
+};
+
+/** 空白原因按未填写处理，避免触发 detach_state_check 的 btrim 非空约束。 */
+function effectiveUnmergeReason(value: string | null): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length === 0 ? DEFAULT_UNMERGE_REASON : trimmed;
+}
 
 interface TaskPair {
   readonly source: TaskReadModel;
@@ -55,12 +111,12 @@ interface TaskPair {
 }
 
 /**
- * F-23 任务合并（技术设计 6.4）。
+ * F-23 任务合并与 F-24 解除合并（技术设计 6.4 / 6.5）。
  *
- * 锁序固定为项目 FOR SHARE -> 模块 FOR SHARE -> 影响功能 FOR SHARE ->
- * source/main 任务 ID 升序 FOR UPDATE -> 已有聚合组 FOR UPDATE；获得任务锁后
- * 重新读取并比对预读结果，变化时回滚到保存点从头有限重试。
- * 合并只建立关系与来源快照，不修改任何任务字段。
+ * 两个命令共用同一锁序：项目 FOR SHARE -> 模块 FOR SHARE -> 影响功能 FOR SHARE ->
+ * source/main 任务 ID 升序 FOR UPDATE -> 聚合组 FOR UPDATE；获得任务锁后重新读取
+ * 并比对预读结果，变化时回滚到保存点从头有限重试。
+ * 合并只建立关系与来源快照；解除只把成员标记为 DETACHED。两者都不修改任何任务字段。
  */
 @Injectable()
 export class TaskGroupsService {
@@ -80,19 +136,20 @@ export class TaskGroupsService {
     private readonly search: SearchProjectionWritePort,
   ) {}
 
-  /** 写前授权：实时成员关系与项目 ACTIVE；返回 404/409 已映射错误。 */
+  /** 写前授权：实时成员关系与项目 ACTIVE；错误码与提示语由调用命令决定。 */
   private async authorizeProject(
     tx: TransactionContext,
     actorId: number,
     projectId: number,
+    errors: CommandErrors,
   ): Promise<void> {
     const project = await this.access.checkProjectForWrite(tx, {
       actorUserId: actorId,
       projectId,
     });
-    if (project.kind === "not-found") throw missing();
+    if (project.kind === "not-found") throw errors.missing();
     if (project.kind === "parent-not-active")
-      throw parentArchived("项目已归档，不能合并任务");
+      throw errors.parentArchived(`项目已归档，不能${errors.action}任务`);
   }
 
   /** 父级锁：模块按 ID 升序、影响功能按所属模块分组后按 ID 升序取 FOR SHARE。 */
@@ -100,6 +157,7 @@ export class TaskGroupsService {
     tx: TransactionContext,
     projectId: number,
     tasks: readonly TaskReadModel[],
+    errors: CommandErrors,
   ): Promise<void> {
     const moduleIds = [...new Set(tasks.map((task) => task.moduleId))].sort(
       (a, b) => a - b,
@@ -109,9 +167,9 @@ export class TaskGroupsService {
         projectId,
         moduleId,
       });
-      if (module.kind === "not-found") throw missing();
+      if (module.kind === "not-found") throw errors.missing();
       if (module.kind === "parent-not-active")
-        throw parentArchived("所属模块已归档，不能合并任务");
+        throw errors.parentArchived(`所属模块已归档，不能${errors.action}任务`);
     }
     for (const task of tasks) {
       const featureIds = [
@@ -126,9 +184,11 @@ export class TaskGroupsService {
           moduleId: task.moduleId,
           featureId,
         });
-        if (feature.kind === "not-found") throw missing();
+        if (feature.kind === "not-found") throw errors.missing();
         if (feature.kind === "parent-not-active")
-          throw parentArchived("所属功能已归档，不能合并任务");
+          throw errors.parentArchived(
+            `所属功能已归档，不能${errors.action}任务`,
+          );
       }
     }
   }
@@ -172,7 +232,7 @@ export class TaskGroupsService {
     requestId: string,
   ): Promise<TaskGroupItem> {
     if (input.sourceTaskId === input.mainTaskId)
-      throw new TaskGroupMergeError(
+      throw new TaskGroupCommandError(
         422,
         "TASK_MERGE_SELF_REFERENCE",
         "不能把任务合并到自己",
@@ -183,9 +243,9 @@ export class TaskGroupsService {
     // 跨项目合并按不存在处理，避免泄露其他项目任务的存在性。
     if (sourcePre.projectId !== mainPre.projectId) throw missing();
     const projectId = sourcePre.projectId;
-    await this.authorizeProject(tx, actorId, projectId);
+    await this.authorizeProject(tx, actorId, projectId, MERGE_ERRORS);
 
-    for (let attempt = 0; attempt < MERGE_LOCK_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < TASK_GROUP_LOCK_ATTEMPTS; attempt++) {
       await tx.sql`SAVEPOINT task_merge_attempt`;
       const previous = await this.readPair(
         tx,
@@ -194,7 +254,12 @@ export class TaskGroupsService {
         input.mainTaskId,
       );
       if (!previous) throw missing();
-      await this.lockParents(tx, projectId, [previous.source, previous.main]);
+      await this.lockParents(
+        tx,
+        projectId,
+        [previous.source, previous.main],
+        MERGE_ERRORS,
+      );
       const locked = await this.lockPair(
         tx,
         projectId,
@@ -458,10 +523,384 @@ export class TaskGroupsService {
     const saved = taskGroupMergeReplayContextSchema.safeParse(context);
     if (!saved.success) throw new Error("invalid task group replay context");
     const { projectId, groupId, taskIds } = saved.data;
-    await this.authorizeProject(tx, actorId, projectId);
+    await this.authorizeProject(tx, actorId, projectId, MERGE_ERRORS);
     const group = await this.groups.findGroup(tx, projectId, groupId);
     if (!group || group.status !== "ACTIVE") throw missing();
     for (const taskId of taskIds)
       if (!(await this.tasks.find(tx, projectId, taskId))) throw missing();
+  }
+
+  /**
+   * F-24 解除合并命令（技术设计 6.5）。
+   *
+   * 预读来源任务解析归属项目与所属聚合组，按 ID 升序 FOR UPDATE 锁定 SOURCE/MAIN
+   * 任务，再 FOR UPDATE 锁定聚合组并重读成员；仅允许解除活跃 SOURCE。
+   * 解除只写成员关系（DETACHED + 时间 + 原因），不修改任务工作状态、负责人和迭代记录；
+   * 已无活跃 SOURCE 时同事务关闭聚合组并解除 MAIN。锁内任何结论都来自锁后重读。
+   */
+  async unmerge(
+    tx: TransactionContext,
+    actorId: number,
+    input: TaskGroupUnmergeRequest,
+    requestId: string,
+  ): Promise<TaskGroupUnmergeResponse> {
+    const sourcePre = await this.tasks.findByTaskId(tx, input.sourceTaskId);
+    if (!sourcePre) throw unmergeMissing();
+    const projectId = sourcePre.projectId;
+    await this.authorizeProject(tx, actorId, projectId, UNMERGE_ERRORS);
+
+    for (let attempt = 0; attempt < TASK_GROUP_LOCK_ATTEMPTS; attempt++) {
+      await tx.sql`SAVEPOINT task_unmerge_attempt`;
+      const memberPre = await this.groups.findActiveMember(
+        tx,
+        projectId,
+        input.sourceTaskId,
+      );
+      if (!memberPre) throw notMerged();
+      if (memberPre.role !== "SOURCE")
+        throw unmergeConflict(MAIN_UNMERGE_MESSAGE);
+      const groupPre = await this.groups.findGroup(
+        tx,
+        projectId,
+        memberPre.groupId,
+      );
+      if (!groupPre) throw unmergeMissing();
+      const membersPre = await this.groups.listMembers(
+        tx,
+        projectId,
+        groupPre.groupId,
+      );
+      const mainMemberPre = membersPre.find(
+        (entry) => entry.role === "MAIN" && entry.status === "ACTIVE",
+      );
+      if (!mainMemberPre) throw unmergeConflict("聚合组状态异常，请刷新后重试");
+      const previous = await this.readPair(
+        tx,
+        projectId,
+        input.sourceTaskId,
+        mainMemberPre.taskId,
+      );
+      if (!previous) throw unmergeMissing();
+      await this.lockParents(
+        tx,
+        projectId,
+        [previous.source, previous.main],
+        UNMERGE_ERRORS,
+      );
+      const locked = await this.lockPair(
+        tx,
+        projectId,
+        input.sourceTaskId,
+        mainMemberPre.taskId,
+      );
+      if (!locked) throw unmergeMissing();
+      if (JSON.stringify(locked) !== JSON.stringify(previous)) {
+        await tx.sql`ROLLBACK TO SAVEPOINT task_unmerge_attempt`;
+        await tx.sql`RELEASE SAVEPOINT task_unmerge_attempt`;
+        continue;
+      }
+      // 成员变更必须先持有聚合组行锁，因此锁后的成员读取是最终状态。
+      const lockedGroup = await this.groups.lockGroup(
+        tx,
+        projectId,
+        memberPre.groupId,
+      );
+      if (!lockedGroup) throw unmergeMissing();
+      const members = await this.groups.listMembers(
+        tx,
+        projectId,
+        lockedGroup.groupId,
+      );
+      const member = members.find(
+        (entry) => entry.memberId === memberPre.memberId,
+      );
+      if (!member || member.status !== "ACTIVE") throw notMerged();
+      if (member.role !== "SOURCE") throw unmergeConflict(MAIN_UNMERGE_MESSAGE);
+      if (lockedGroup.status !== "ACTIVE")
+        throw unmergeConflict("聚合组已关闭，不能解除合并");
+      const mainMember = members.find(
+        (entry) => entry.role === "MAIN" && entry.status === "ACTIVE",
+      );
+      if (!mainMember) throw unmergeConflict("聚合组状态异常，请刷新后重试");
+      if (mainMember.taskId !== locked.main.taskId) {
+        // 组内 MAIN 在等待锁期间变化：回滚到保存点按最新关系重新预读。
+        await tx.sql`ROLLBACK TO SAVEPOINT task_unmerge_attempt`;
+        await tx.sql`RELEASE SAVEPOINT task_unmerge_attempt`;
+        continue;
+      }
+      const response = await this.unmergeLocked(
+        tx,
+        actorId,
+        projectId,
+        locked,
+        lockedGroup,
+        member,
+        mainMember,
+        members,
+        input,
+        requestId,
+      );
+      await tx.sql`RELEASE SAVEPOINT task_unmerge_attempt`;
+      return response;
+    }
+    throw unmergeConflict("任务正在被其他操作修改，请重新加载后再解除合并");
+  }
+
+  /** 已持有任务与聚合组锁后的解除写入；关系、审计、通知、投影同事务提交。 */
+  private async unmergeLocked(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+    pair: TaskPair,
+    group: TaskGroupRecord,
+    member: TaskGroupMemberRecord,
+    mainMember: TaskGroupMemberRecord,
+    members: readonly TaskGroupMemberRecord[],
+    input: TaskGroupUnmergeRequest,
+    requestId: string,
+  ): Promise<TaskGroupUnmergeResponse> {
+    const { source, main } = pair;
+    const reason = effectiveUnmergeReason(input.unmergeReason);
+    const remainingSources = members.filter(
+      (entry) =>
+        entry.status === "ACTIVE" &&
+        entry.role === "SOURCE" &&
+        entry.memberId !== member.memberId,
+    );
+    const closesGroup = remainingSources.length === 0;
+
+    const detachedSource = await this.groups.detachMember(tx, {
+      projectId,
+      memberId: member.memberId,
+      detachedBy: actorId,
+      reason,
+    });
+    if (!detachedSource)
+      throw unmergeConflict("任务关系已变化，请重新加载后再解除合并");
+    let detachedMain: TaskGroupMemberRecord | undefined;
+    let updated: TaskGroupRecord;
+    if (closesGroup) {
+      detachedMain = await this.groups.detachMember(tx, {
+        projectId,
+        memberId: mainMember.memberId,
+        detachedBy: actorId,
+        reason,
+      });
+      if (!detachedMain)
+        throw unmergeConflict("任务关系已变化，请重新加载后再解除合并");
+      const closed = await this.groups.closeGroup(
+        tx,
+        projectId,
+        group.groupId,
+        group.rowVersion,
+      );
+      if (!closed)
+        throw unmergeConflict("聚合组已变化，请重新加载后再解除合并");
+      updated = closed;
+    } else {
+      const touched = await this.groups.touchGroup(
+        tx,
+        projectId,
+        group.groupId,
+        group.rowVersion,
+      );
+      if (!touched)
+        throw unmergeConflict("聚合组已变化，请重新加载后再解除合并");
+      const refreshed = await this.groups.findGroup(
+        tx,
+        projectId,
+        group.groupId,
+      );
+      if (!refreshed) throw unmergeMissing();
+      updated = refreshed;
+    }
+
+    const occurredAt = new Date();
+    const event = await this.audit.append(tx, {
+      projectId,
+      actorType: "USER",
+      actorId,
+      action: UNMERGE_ACTIVITY_TYPE,
+      targetType: "TASK_GROUP",
+      targetId: String(group.groupId),
+      eventPayload: {
+        before: {
+          groupId: group.groupId,
+          code: group.code,
+          name: group.name,
+          status: group.status,
+          rowVersion: group.rowVersion,
+          memberId: member.memberId,
+          memberRole: member.role,
+          memberStatus: member.status,
+          sourceKind: member.sourceKind,
+          activeSourceCount: remainingSources.length + 1,
+        },
+        after: {
+          groupId: updated.groupId,
+          code: updated.code,
+          name: updated.name,
+          status: updated.status,
+          rowVersion: updated.rowVersion,
+          closedAt: updated.closedAt,
+          groupClosed: closesGroup,
+          activeSourceCount: remainingSources.length,
+          detachedMemberIds: [
+            member.memberId,
+            ...(detachedMain ? [detachedMain.memberId] : []),
+          ],
+        },
+        source: {
+          taskId: source.taskId,
+          code: source.code,
+          moduleId: source.moduleId,
+          featureId: source.featureId,
+          workStatus: source.workStatus,
+          assigneeId: source.assigneeId,
+          lifecycleStatus: source.lifecycleStatus,
+        },
+        main: {
+          taskId: main.taskId,
+          code: main.code,
+          moduleId: main.moduleId,
+          featureId: main.featureId,
+          workStatus: main.workStatus,
+          assigneeId: main.assigneeId,
+          lifecycleStatus: main.lifecycleStatus,
+        },
+        unmergeReason: reason,
+      },
+      requestId,
+      occurredAt,
+    });
+    await this.activity.append(tx, {
+      projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "TASK_GROUP",
+      sourceEntityId: updated.groupId,
+      activityType: UNMERGE_ACTIVITY_TYPE,
+      actorId,
+      summary: (closesGroup
+        ? `解除合并：${source.code} ${source.title} 恢复独立，聚合组 ${updated.code} 已关闭`
+        : `解除合并：${source.code} ${source.title} 恢复独立`
+      ).slice(0, 1000),
+      metadata: {
+        groupId: updated.groupId,
+        code: updated.code,
+        mainTaskId: main.taskId,
+        sourceTaskId: source.taskId,
+        groupClosed: closesGroup,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: updated.status,
+      sourceRowVersion: updated.rowVersion,
+      occurredAt,
+    });
+    // 解除后来源任务恢复独立展示，通知统一深链到来源任务。
+    const targetPath =
+      source.featureId === null
+        ? `/projects/${projectId}/modules/${source.moduleId}/tasks?taskId=${source.taskId}`
+        : `/projects/${projectId}/modules/${source.moduleId}/features/${source.featureId}?taskId=${source.taskId}`;
+    const recipients = [
+      ...new Set([
+        source.assigneeId,
+        main.assigneeId,
+        source.creatorId,
+        main.creatorId,
+      ]),
+    ].sort((a, b) => a - b);
+    // 未填写或纯空白原因时通知正文回落到来源编号，避免出现空正文。
+    const notificationBody =
+      input.unmergeReason === null || input.unmergeReason.trim().length === 0
+        ? `${source.code} 已恢复独立`
+        : input.unmergeReason.slice(0, 5000);
+    for (const recipientId of recipients)
+      await this.notifications.write(tx, {
+        recipientId,
+        projectId,
+        sourceChainId: event.chainId,
+        sourceSequence: event.sequenceNo,
+        notificationType: UNMERGE_NOTIFICATION_TYPE,
+        title: `任务解除合并：${source.title} 恢复独立`.slice(0, 500),
+        body: notificationBody,
+        targetPath,
+        createdAt: occurredAt,
+      });
+    await this.search.upsert(tx, {
+      projectId,
+      entityType: "TASK_GROUP",
+      entityId: updated.groupId,
+      title: updated.name,
+      summary: input.unmergeReason ?? "",
+      rawText: `${updated.code} ${updated.name} ${source.code} ${source.title} ${main.code} ${main.title}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: updated.status,
+      sourceRowVersion: updated.rowVersion,
+    });
+
+    const detachedMemberIds = new Set<number>([
+      member.memberId,
+      ...(detachedMain ? [detachedMain.memberId] : []),
+    ]);
+    const after = await this.groups.listMembers(tx, projectId, group.groupId);
+    const detachedMembers = after
+      .filter((entry) => detachedMemberIds.has(entry.memberId))
+      .map((entry) => {
+        if (entry.detachedAt === null || entry.detachReason === null)
+          throw new Error("detached member is missing detach metadata");
+        return {
+          id: entry.memberId,
+          taskId: entry.taskId,
+          role: entry.role,
+          sourceKind: entry.sourceKind,
+          originalWorkStatus: entry.originalWorkStatus,
+          originalAssigneeId: entry.originalAssigneeId,
+          joinedAt: new Date(entry.joinedAt).toISOString(),
+          detachedAt: new Date(entry.detachedAt).toISOString(),
+          detachReason: entry.detachReason,
+        };
+      });
+    return taskGroupUnmergeResponseSchema.parse({
+      group: {
+        id: updated.groupId,
+        projectId: updated.projectId,
+        code: updated.code,
+        name: updated.name,
+        status: updated.status,
+        createdBy: updated.createdBy,
+        rowVersion: updated.rowVersion,
+        createdAt: new Date(updated.createdAt).toISOString(),
+        updatedAt: new Date(updated.updatedAt).toISOString(),
+        closedAt:
+          updated.closedAt === null
+            ? null
+            : new Date(updated.closedAt).toISOString(),
+        mainTaskId: mainMember.taskId,
+      },
+      detachedMembers,
+    });
+  }
+
+  /**
+   * 解除合并的幂等重放复核：项目可写、聚合组可读、全部结果任务可读。
+   * 与合并不同，最后一个来源解除后聚合组合法变为 CLOSED，因此这里不限制组状态；
+   * 关闭组的历史关系仍属于结果资源，仍按同一门禁复核。
+   */
+  async replayUnmerge(
+    tx: TransactionContext,
+    actorId: number,
+    context: unknown,
+  ): Promise<void> {
+    const saved = taskGroupUnmergeReplayContextSchema.safeParse(context);
+    if (!saved.success)
+      throw new Error("invalid task group unmerge replay context");
+    const { projectId, groupId, taskIds } = saved.data;
+    await this.authorizeProject(tx, actorId, projectId, UNMERGE_ERRORS);
+    const group = await this.groups.findGroup(tx, projectId, groupId);
+    if (!group) throw unmergeMissing();
+    for (const taskId of taskIds)
+      if (!(await this.tasks.find(tx, projectId, taskId)))
+        throw unmergeMissing();
   }
 }
