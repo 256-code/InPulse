@@ -41,6 +41,23 @@ export interface PermissionMatrixEntry {
  * 不得据此放宽任何业务或认证路由。
  */
 export const permissionMatrix = [
+  ...(["voidChangeRecord", "restoreChangeRecord"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: { kind: "deny", status: 403 },
+        其他项目成员: { kind: "deny", status: 403 },
+        已移除成员: { kind: "deny", status: 403 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: {
+          kind: "conditional",
+          allowedWhen: "完整管理员 Session 且双时间戳重认证在五分钟内",
+          deniedWith: 403,
+        },
+      },
+    }),
+  ),
   ...(
     [
       "listModules",

@@ -1,3 +1,7 @@
+import { RecordLifecycleController } from "./record-lifecycle.controller.js";
+import { RecordLifecycleRepository } from "./record-lifecycle.repository.js";
+import { RecordLifecycleHttpService } from "./record-lifecycle-http.service.js";
+import { RecordLifecycleService } from "./record-lifecycle.service.js";
 import {
   LeftoverRecordCommandPort,
   PostgresLeftoverRecordCommandPort,
@@ -42,6 +46,9 @@ import { PublishedRecordsController } from "./published-records.controller.js";
   ],
   exports: [RecordPublicationCommandPort, LeftoverRecordCommandPort],
   providers: [
+    RecordLifecycleService,
+    RecordLifecycleHttpService,
+    RecordLifecycleRepository,
     RecordPublicationService,
     LeftoverRecordRepository,
     {
@@ -61,6 +68,6 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     PublishedRecordReadService,
     PublishedRecordsHttpService,
   ],
-  controllers: [PublishedRecordsController],
+  controllers: [PublishedRecordsController, RecordLifecycleController],
 })
 export class PublishedRecordsModule {}

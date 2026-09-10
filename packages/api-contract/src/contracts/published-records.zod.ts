@@ -49,6 +49,17 @@ export const publishedRecordSchema = recordDraftItemSchema
     ),
   })
   .meta({ id: "PublishedRecord" });
+export const voidedRecordSchema = publishedRecordSchema
+  .extend({
+    status: z.literal("VOID"),
+    voidedAt: z.iso.datetime(),
+    voidReason: z.string().trim().min(1),
+  })
+  .meta({ id: "VoidedRecord" });
+export const readableRecordSchema = z
+  .discriminatedUnion("status", [publishedRecordSchema, voidedRecordSchema])
+  .meta({ id: "ReadableRecord" });
+export type ReadableRecord = z.infer<typeof readableRecordSchema>;
 export const changeRecordVersionSchema = recordDraftContentSchema
   .extend({
     recordId: id,
@@ -60,6 +71,56 @@ export const changeRecordVersionSchema = recordDraftContentSchema
   })
   .meta({ id: "ChangeRecordVersion" });
 export const publishedRecordSchemas = {
+  RecordLifecycleRequest: {
+    schema: z
+      .object({ reason: z.string().trim().min(1).max(10000) })
+      .strict()
+      .meta({ id: "RecordLifecycleRequest" }),
+    summary: "管理员作废或恢复原因",
+    sensitiveFieldPaths: [],
+  },
+  RecordLifecycleResult: {
+    schema: z
+      .object({
+        id,
+        projectId: id,
+        status: z.enum(["PUBLISHED", "VOID"]),
+        rowVersion: id,
+      })
+      .strict()
+      .meta({ id: "RecordLifecycleResult" }),
+    summary: "生命周期状态，不缓存原因或正文",
+    sensitiveFieldPaths: [],
+  },
+  RecordLifecycleReplayContext: {
+    schema: z
+      .object({ projectId: id, recordId: id })
+      .strict()
+      .meta({ id: "RecordLifecycleReplayContext" }),
+    summary: "生命周期结果资源",
+    sensitiveFieldPaths: [],
+  },
+  ReadableRecord: {
+    schema: readableRecordSchema,
+    summary: "成员 PUBLISHED 或管理员 VOID 详情",
+    sensitiveFieldPaths: [],
+  },
+  ReadableRecordList: {
+    schema: z
+      .object({ items: z.array(readableRecordSchema) })
+      .strict()
+      .meta({ id: "ReadableRecordList" }),
+    summary: "显式状态筛选的记录",
+    sensitiveFieldPaths: [],
+  },
+  RecordListQuery: {
+    schema: z
+      .object({ status: z.enum(["PUBLISHED", "VOID"]).optional() })
+      .strict()
+      .meta({ id: "RecordListQuery" }),
+    summary: "默认 PUBLISHED，VOID 仅管理员",
+    sensitiveFieldPaths: [],
+  },
   PublishedRecordContent: {
     schema: publishedRecordContentSchema,
     summary: "正式记录内容与清空遗留项确认",

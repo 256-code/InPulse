@@ -143,6 +143,12 @@
       "fingerprint": "f3cad65d2a9b14e9619af1de69ac8d046a9144e339fa4173391f2d575a753b73"
     }
   ],
+  "restoreChangeRecord": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "fe52ec961d5273606954d45a25eaa02d44642cb1c70a8e3879be4d9a3061714d"
+    }
+  ],
   "restoreFeature": [
     {
       "version": "1.0.0",
@@ -239,6 +245,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "2009dfbfe32276348c93d22cf698ffc83445a8b939d977db14746a9a8e9ee545"
+    }
+  ],
+  "voidChangeRecord": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ce9c18ac78dba470010258e4a4de8dfa9c7338f1df5e21a3d93446423b2045ec"
     }
   ]
 }

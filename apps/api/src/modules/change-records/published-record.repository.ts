@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import {
   publishedRecordSchema,
+  voidedRecordSchema,
+  type ReadableRecord,
   changeRecordVersionSchema,
   type PublishedRecord,
   type ChangeRecordVersion,
@@ -18,7 +20,9 @@ type Row = Omit<
   | "remainingIssues"
   | "leftovers"
   | "leftoverItem"
+  | "status"
 > & {
+  status: "PUBLISHED" | "VOID";
   title: string;
   currentPayload: Record<string, unknown>;
   createdAt: Date;
@@ -36,7 +40,7 @@ export class PublishedRecordRepository {
       await tx.sql`SELECT l.id,l.status,l.row_version AS "rowVersion",v.content_snapshot AS content FROM app.change_record_version_leftovers v JOIN app.change_record_leftover_items l ON l.id=v.leftover_item_id AND l.project_id=v.project_id AND l.record_id=v.record_id WHERE v.record_id=${row.id} AND v.project_id=${row.projectId} AND v.version_no=${row.currentVersion} ORDER BY l.id`;
     const [leftoverItem] =
       await tx.sql`SELECT l.id,l.status,l.row_version AS "rowVersion",t.task_id AS "linkedTaskId" FROM app.change_record_leftover_items l LEFT JOIN app.leftover_task_links t ON t.leftover_item_id=l.id AND t.project_id=l.project_id WHERE l.record_id=${row.id} AND l.project_id=${row.projectId} ORDER BY l.id`;
-    return publishedRecordSchema.parse({
+    return {
       remainingIssues: "",
       ...currentPayload,
       ...identity,
@@ -45,23 +49,58 @@ export class PublishedRecordRepository {
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
       publishedAt: new Date(row.publishedAt).toISOString(),
-    });
+    };
   }
   async find(tx: TransactionContext, projectId: number, recordId: number) {
     const [row] = await tx.sql<
       Row[]
     >`SELECT ${this.columns(tx)} FROM app.change_records WHERE id=${recordId} AND project_id=${projectId} AND status='PUBLISHED'`;
-    return row ? this.dto(tx, row) : undefined;
+    return row
+      ? publishedRecordSchema.parse(await this.dto(tx, row))
+      : undefined;
   }
   async list(tx: TransactionContext, projectId: number) {
     const rows = await tx.sql<
       Row[]
     >`SELECT ${this.columns(tx)} FROM app.change_records WHERE project_id=${projectId} AND status='PUBLISHED' ORDER BY published_at DESC,id DESC`;
-    return Promise.all(rows.map((row) => this.dto(tx, row)));
+    return Promise.all(
+      rows.map(async (row) =>
+        publishedRecordSchema.parse(await this.dto(tx, row)),
+      ),
+    );
+  }
+  async findVoided(
+    tx: TransactionContext,
+    projectId: number,
+    recordId: number,
+  ) {
+    const [row] = await tx.sql<
+      (Row & { voidedAt: Date; voidReason: string })[]
+    >`SELECT ${this.columns(tx)},voided_at AS "voidedAt",void_reason AS "voidReason" FROM app.change_records WHERE id=${recordId} AND project_id=${projectId} AND status='VOID'`;
+    if (!row) return undefined;
+    const { voidedAt, voidReason, ...base } = row;
+    const content = await this.dto(tx, base);
+    return voidedRecordSchema.parse({
+      ...content,
+      status: "VOID",
+      voidedAt: new Date(voidedAt).toISOString(),
+      voidReason,
+    });
+  }
+  async listVoided(tx: TransactionContext, projectId: number) {
+    const rows = await tx.sql<
+      { id: number }[]
+    >`SELECT id FROM app.change_records WHERE project_id=${projectId} AND status='VOID' ORDER BY published_at DESC,id DESC`;
+    const items = await Promise.all(
+      rows.map((row) => this.findVoided(tx, projectId, row.id)),
+    );
+    return items.filter(
+      (item): item is NonNullable<typeof item> => item !== undefined,
+    );
   }
   async versions(
     tx: TransactionContext,
-    record: PublishedRecord,
+    record: ReadableRecord,
     versionNo?: number,
   ): Promise<ChangeRecordVersion[]> {
     const rows = await tx.sql<

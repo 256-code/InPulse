@@ -28,19 +28,19 @@ export const publishedRecordRoutes: readonly RouteDefinition[] = (
         : version
           ? "ChangeRecordVersionPath"
           : "RecordDraftResourcePath",
-      query: "none",
+      query: list ? "RecordListQuery" : "none",
       headers: "none",
       body: { noBody: true },
     },
     responses: {
       "200": json(
         list
-          ? "PublishedRecordList"
+          ? "ReadableRecordList"
           : version
             ? "ChangeRecordVersion"
             : versions
               ? "ChangeRecordVersionList"
-              : "PublishedRecord",
+              : "ReadableRecord",
       ),
       "401": json("ErrorResponse"),
       "404": json("ErrorResponse"),
@@ -173,3 +173,68 @@ export const recordPublicationRoutes: readonly RouteDefinition[] = (
     auditAction: publish ? "record.publish" : "record.version.create",
   };
 });
+
+export const recordLifecycleRoutes: readonly RouteDefinition[] = (
+  ["voidChangeRecord", "restoreChangeRecord"] as const
+).map((operationId) => ({
+  ...recordDraftRoutes[3]!,
+  operationId,
+  method: "POST",
+  path:
+    "/projects/{projectId}/change-records/{recordId}/" +
+    (operationId === "voidChangeRecord" ? "void" : "restore"),
+  summary: "ADR-024 管理员作废/恢复；只改记录状态及同事务审计/投影",
+  authPolicy: "adminSessionWithReauthentication",
+  request: {
+    path: "RecordDraftResourcePath",
+    query: "none",
+    headers: "RecordDraftVersionHeaders",
+    body: {
+      contentTypes: [
+        {
+          contentType: "application/json",
+          schemaRef: "RecordLifecycleRequest",
+        },
+      ],
+    },
+  },
+  responses: {
+    "200": json("RecordLifecycleResult"),
+    ...Object.fromEntries(
+      [400, 401, 403, 404, 409, 422, 429, 500].map((status) => [
+        String(status),
+        json("ErrorResponse"),
+      ]),
+    ),
+  },
+  behaviorHeaders: ["If-Match"],
+  idempotencyReplayPolicy: {
+    version: "1.0.0",
+    success: {
+      "200": {
+        body: {
+          responseSchemaRef: "RecordLifecycleResult",
+          safeBodyFieldPaths: ["id", "projectId", "status", "rowVersion"],
+        },
+      },
+    },
+  },
+  replayAuthorizationPolicy: {
+    version: "1.0.0",
+    resources: {
+      contextSchemaRef: "RecordLifecycleReplayContext",
+      resultRefExtractor: "recordLifecycleResources",
+      currentReadAuthorizer: "recordLifecycleCurrentReadAuthorizer",
+    },
+  },
+  concurrencyPolicy: {
+    rowVersion: "required",
+    lockOrder: ["project", "module", "feature", "changeRecord"],
+    retry:
+      "none; lock ownership parents then conditional status and row_version update",
+  },
+  auditAction:
+    operationId === "voidChangeRecord"
+      ? "CHANGE_RECORD_VOIDED"
+      : "CHANGE_RECORD_RESTORED",
+}));

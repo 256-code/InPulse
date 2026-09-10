@@ -134,8 +134,8 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 
 | operationId | 允许主体 | 实时门禁及拒绝 |
 | --- | --- | --- |
-| listChangeRecords / getChangeRecord | 活跃项目成员、系统管理员 | 匿名/停用 401；非成员/撤权/跨项目 404；仅 PUBLISHED，归档父级可读 |
-| listChangeRecordVersions / getChangeRecordVersion | 同上 | 真实项目及记录关系，版本属于该 PUBLISHED 记录；VOID 404，恢复以 status 为准 |
+| listChangeRecords / getChangeRecord | 活跃项目成员、系统管理员 | 匿名/停用 401；非成员/撤权/跨项目 404；成员仅 PUBLISHED；管理员显式 VOID 列表及 VOID 详情，归档父级可读 |
+| listChangeRecordVersions / getChangeRecordVersion | 同上 | 真实项目及记录关系，版本属于该记录；普通成员 VOID 404，管理员可读全部版本；恢复以 status 为准 |
 | publishChangeRecord | 同上 | 父级可写、记录 DRAFT、If-Match；来源为空或锁内 DONE，TODO/CANCELED 409；同源/CSRF、数据库幂等 |
 | createChangeRecordVersion | 同上 | 父级可写、记录 PUBLISHED、If-Match 与 X-Record-Version；内容 DTO 禁止来源/身份/状态字段；ACTIVE 清空须明确确认；同源/CSRF、数据库幂等 |
 
@@ -176,3 +176,14 @@ F-19 兼容收口：transitionTask/transitionModuleTask 的 COMPLETE 也必须�
 | unmergeTaskGroup | 当前活跃项目成员、系统管理员 | 匿名/停用 401；非成员、已移除成员、来源/主任务真实归属错误、跨项目或任务不存在 404；Session、CSRF、同源与数据库幂等 |
 
 仅 `POST /api/v1/task-groups/unmerge`：请求只携带来源任务与解除原因（可空，≤10000，空白回落固定文案），项目与聚合组归属全部由服务端在锁内推导。服务端按项目 -> 模块 -> 影响功能父到子顺序取 `FOR SHARE`，再按任务 ID 升序 `FOR UPDATE`，最后锁聚合组行并重读成员；仅允许解除活跃 SOURCE：来源已不是活跃成员 404 `TASK_NOT_MERGED`，来源是 MAIN、聚合组已关闭或锁内关系变化统一 409。解除只写 `task_group_members` 关系（`DETACHED` + 时间 + 原因）与聚合组状态/版本，不修改任务工作状态、负责人和迭代记录；最后一个来源解除时同事务关闭聚合组并解除 MAIN。重放前重新验证当前认证、CSRF、项目授权、聚合组可读与全部结果任务可读（组可为 `CLOSED`），任一门禁失败不返回已存响应。无权限放宽、数据库权限或迁移变更。见 [F-24 交审说明](f24-local-handoff.md)。
+
+## F-21 记录作废与恢复（2026-09-10）
+
+| operationId | 允许身份 | 拒绝与门禁 |
+| --- | --- | --- |
+| voidChangeRecord | 完整管理员 Session，五分钟密码与当前 TOTP 双时间戳重认证 | 匿名/失效401；普通成员及其他非管理员403；原因非空、同源、CSRF、If-Match、数据库幂等；PUBLISHED→VOID；错误资源404，状态/版本/归档父级409 |
+| restoreChangeRecord | 同上 | VOID→PUBLISHED；项目和模块 ACTIVE，FEATURE 所属功能 ACTIVE；MODULE 历史影响及来源任务不是父级门禁 |
+
+listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废记录；成员请求 VOID 返回404。getChangeRecord/listChangeRecordVersions/getChangeRecordVersion 允许管理员读取 VOID 详情和全部不可变版本，成员返回404。ReadableRecord 的 PUBLISHED 分支不包含作废快照；VOID 分支仅向管理员返回最近作废时间/原因。恢复后即便保留快照，成员读取仅取 PUBLISHED 分支。
+
+迁移响应/幂等缓存只有 id/projectId/status/rowVersion。重放先重查当前完整认证、CSRF、管理员双时间戳和结果记录可读性；归档父级不取消历史可读性，重放不重复迁移。业务状态、审计、Search 与该记录全部 Activity 共用一个事务；Activity 不含原因，无作废/恢复通知。见 [F-21 交审说明](f21-local-handoff.md)。

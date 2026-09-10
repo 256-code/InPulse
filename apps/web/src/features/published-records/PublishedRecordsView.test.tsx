@@ -8,6 +8,9 @@ import {
   PublishedRecordsView,
   compareRecordVersions,
 } from "./PublishedRecordsView";
+vi.mock("@features/auth/auth-context", () => ({
+  useAuth: () => ({ user: { isAdmin: false } }),
+}));
 const first: ChangeRecordVersion = {
   recordId: 7,
   projectId: 1,

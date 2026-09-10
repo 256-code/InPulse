@@ -682,6 +682,12 @@ export type PublishedRecordVersionHeaders = {
   readonly "x-record-version": string;
 };
 
+export type ReadableRecord = (PublishedRecord | VoidedRecord);
+
+export type ReadableRecordList = {
+  readonly items: readonly ReadableRecord[];
+};
+
 export type ReauthenticateAdminHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -757,6 +763,26 @@ export type RecordDraftResourcePath = {
 export type RecordDraftVersionHeaders = {
   readonly "x-csrf-token": string;
   readonly "if-match": string;
+};
+
+export type RecordLifecycleReplayContext = {
+  readonly projectId: number;
+  readonly recordId: number;
+};
+
+export type RecordLifecycleRequest = {
+  readonly reason: string;
+};
+
+export type RecordLifecycleResult = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly status: ("PUBLISHED" | "VOID");
+  readonly rowVersion: number;
+};
+
+export type RecordListQuery = {
+  readonly status?: ("PUBLISHED" | "VOID");
 };
 
 export type RecordPublicationReplayContext = {
@@ -1118,4 +1144,42 @@ export type VerifyMfaRequest = {
 export type VerifyMfaResponse = {
   readonly csrfToken: string;
   readonly authState: "AUTHENTICATED";
+};
+
+export type VoidedRecord = {
+  readonly title: string;
+  readonly contextProblem: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly remainingIssues: string;
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+  readonly handlerId: number;
+  readonly authorId: number;
+  readonly status: "VOID";
+  readonly code: string;
+  readonly currentVersion: number;
+  readonly publishedAt: string;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly leftoverItem: ({
+    readonly id: number;
+    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+    readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
+  } | null);
+  readonly leftovers: readonly ({
+    readonly id: number;
+    readonly content: string;
+    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+    readonly rowVersion: number;
+  })[];
+  readonly voidedAt: string;
+  readonly voidReason: string;
 };
