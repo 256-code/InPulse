@@ -593,3 +593,8 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 API/契约仅作 E2E 所需编译，API 测试/Web/E2E 局部类型检查通过。必要跨域检查 466 源文件无循环/越界，前端144模块边界通过。F16–F19浏览器四文件最终合跑 10/10（2.0分钟），详见 [F-19 交审说明](f19-local-handoff.md)。首轮草稿返回详情的测试 URL 缺 taskId 导致超时；F17旧按钮/提示入口断言在首次合跑两例失败，已同步当前实际流程及保留草稿直达，不降低保存草稿后任务仍待办、历史仍一条的业务断言。未运行全仓静态/构建/测试/无关审计、默认Chromium或本批CI；F20/F21入口未实现。
 
 F-19 旧状态 API 兼容回归：两范围旧 COMPLETE 的响应与相关作者通知、原草稿不变；MAIN/ACTIVE SOURCE 成功、HISTORICAL 当前执行与变更后重放拒绝；旧 1.0.0 Key 在 2.0.0 下 409；REOPEN/CANCEL/RESTORE 及同 Key 重放保持原 DTO；新旧完成竞态仅一条成功、通知故障全部回滚。新增 task-completion 真库 30/30；原 tasks-api 41/41（测试模块同步实际兼容 Controller，原断言保留）。契约五文件 46/46，指纹保留 1.0.0 并追加 2.0.0。
+## F-20 遗留项转换定向验证（2026-09-10）
+
+新增leftover-task.integration.test.ts 21例，覆盖两范围成功/原文与版本不变/双向来源；MODULE混合及全归档影响继承；版本/ID/成员/伪造输入；三层真实父级归档；7种不同阶段故障整体回滚；HTTP同Key重放/不同Key并发唯一/当前撤权与已有任务引用保护；CONVERTED修订/清空/回填稳定链接和重放；ACTIVE解决/回填同ID；两范围归档锁等待及功能先于记录的锁序；预览与任务来源GET隔离。与record-publication、published-records、tasks-api真库四文件82/82。
+
+ConvertLeftoverTask/PublishedRecordsView/TasksPanel前三端回归13/13，含未确定失败同Key重试、409显式最新预览确认、刷新再次失败仍阻止旧提交；契约leftover-task/published-records/permissions/validate 41/41，83条路由/权限及5生成物漂移通过。现有CSP build+preview Edge F20三例+F18两例5/5（51.3秒）；浏览器之后的刷新失败状态强化由Web回归验证，未重复E2E。完整21场景、实际命令及失败修复见[F-20交审说明](f20-local-handoff.md)。未声称本批GitHubCI、全仓静态/全量构建或无关审计通过。

@@ -159,3 +159,12 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 历史 SOURCE 不承接新执行工作，MAIN 与活动 SOURCE 可完成；无变化只保存六类原因和说明。有变化不得更改草稿身份/归属/历史影响或覆盖已有其他 task_id。两业务事件通知分别去重并检查收件人当前访问权。无权限基线、数据库角色或迁移改变。见 [F-19 交审说明](f19-local-handoff.md)。
 
 F-19 兼容收口：transitionTask/transitionModuleTask 的 COMPLETE 也必须通过 TaskCompletionWorkflow 的真实归属、当前组身份与相关记录作者通知过滤。历史 SOURCE 当前执行及成功结果重放均拒绝；MAIN/活动 SOURCE 可完成。两旧 operation 幂等/重放授权契约升级 2.0.0，旧 1.0.0 Key 返回 409。REOPEN/CANCEL/RESTORE 保留原权限行为和旧 TaskItem/ModuleTaskItem 响应。
+## F-20 遗留转换授权（2026-09-10）
+
+| 路由 | 授权与限制 |
+| --- | --- |
+| convertLeftoverToTask | 匿名/失效401，非成员或错误记录/遗留404，真实父级归档409；当前PUBLISHED关系、稳定ACTIVE项、版本/继承确认、当前活跃成员指派、CSRF/同源/幂等 |
+| previewLeftoverTask | 实时项目成员/管理员，PUBLISHED当前遗留；因为是写预览，真实父级归档409；MODULE归档影响只排除不阻断 |
+| getLeftoverTaskSource | 按真实任务项目验证当前成员/管理员；任务不存在/失权404，归档历史可读；来源非PUBLISHED或未关联返回null，不暴露记录引用 |
+
+不同Key重复转换先验证现有任务归属与访问再返回409引用；失权details为空。同Key成功结果重放检查当前记录、稳定链接、任务和保存影响资源。任务负责人须由服务端成员端口验证，来源scope与原文不可由客户端改写。三路由均no-store，具体测试与未验证项见[F-20交审说明](f20-local-handoff.md)。
