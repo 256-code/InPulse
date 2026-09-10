@@ -94,3 +94,12 @@ export function validateSearchProjectionWriteInput(
 function invalid(reason: string): never {
   throw new SearchProjectionWriteValidationError(reason);
 }
+
+/** User-visible capacity failure caused by combining current text and linked evidence. */
+export class SearchProjectionCapacityError extends Error {
+  readonly status = 422;
+  readonly code = "SEARCH_TEXT_CAPACITY_EXCEEDED";
+  constructor() {
+    super("正文与GitHub链接的搜索内容超过容量，请精简正文或解除不需要的链接");
+  }
+}

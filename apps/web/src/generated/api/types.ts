@@ -192,6 +192,55 @@ export type ErrorResponse = {
   readonly requestId: string;
 };
 
+export type ExternalLinkItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly normalizedUrl: string;
+  readonly kind: ("ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER");
+  readonly label: string;
+  readonly repository: (string | null);
+  readonly externalNumber: (string | null);
+  readonly externalSha: (string | null);
+  readonly releaseTag: (string | null);
+};
+
+export type ExternalLinkList = {
+  readonly projectId: number;
+  readonly rowVersion: number;
+  readonly writable: boolean;
+  readonly items: readonly ExternalLinkItem[];
+};
+
+export type ExternalLinkReplayContext = {
+  readonly projectId: number;
+  readonly targetType: ("PROJECT" | "FEATURE" | "TASK" | "CHANGE_RECORD");
+  readonly targetId: number;
+  readonly linkId: number;
+};
+
+export type ExternalLinkRequest = {
+  readonly url: string;
+};
+
+export type ExternalLinkResourcePath = {
+  readonly targetType: ("PROJECT" | "FEATURE" | "TASK" | "CHANGE_RECORD");
+  readonly targetId: number;
+  readonly linkId: number;
+};
+
+export type ExternalLinkResult = {
+  readonly projectId: number;
+  readonly targetType: ("PROJECT" | "FEATURE" | "TASK" | "CHANGE_RECORD");
+  readonly targetId: number;
+  readonly linkId: number;
+  readonly rowVersion: number;
+};
+
+export type ExternalLinkTargetPath = {
+  readonly targetType: ("PROJECT" | "FEATURE" | "TASK" | "CHANGE_RECORD");
+  readonly targetId: number;
+};
+
 export type FeatureArchiveRequest = {
   readonly reason: string;
 };

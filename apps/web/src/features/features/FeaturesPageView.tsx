@@ -1,3 +1,4 @@
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
 import React, { useRef, useState } from "react";
@@ -462,6 +463,12 @@ export function FeaturesPageView({
                   </div>
                 </div>
                 <div className="catalog-actions">
+                  <ExternalLinksPanel
+                    key={activeItem.id}
+                    targetType="FEATURE"
+                    targetId={activeItem.id}
+                    client={client}
+                  />
                   {activeItem.status === "ACTIVE" && (
                     <Button
                       className="secondary-button"

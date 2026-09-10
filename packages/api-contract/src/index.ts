@@ -1,3 +1,4 @@
+export * from "./contracts/external-links.zod.js";
 export * from "./schema-registry.js";
 export * from "./contracts/modules.zod.js";
 export * from "./route-registry.js";

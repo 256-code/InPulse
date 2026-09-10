@@ -1,3 +1,4 @@
+import { SearchProjectionCapacityError } from "../search/search-projection.write-port.js";
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
@@ -226,6 +227,7 @@ export class TasksHttpService {
       let details: Record<string, string> = {};
       if (
         error instanceof TaskManagementError ||
+        error instanceof SearchProjectionCapacityError ||
         error instanceof IdempotencyHttpError
       )
         ({ status, code, message } = error);

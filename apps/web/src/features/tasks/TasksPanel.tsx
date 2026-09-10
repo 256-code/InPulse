@@ -1,3 +1,4 @@
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
@@ -458,6 +459,12 @@ export function TasksPanel({
                       : " 功能 #" + current.featureId}
                   </span>
                   <h2>{current.title}</h2>
+                  <ExternalLinksPanel
+                    key={current.id}
+                    targetType="TASK"
+                    targetId={current.id}
+                    client={api}
+                  />
                   <div className="task-modal-badges">
                     <span className="task-id">{current.code}</span>
                     <CalmBadge tone={statusTone[current.workStatus]}>

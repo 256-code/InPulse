@@ -1,3 +1,4 @@
+import { SearchProjectionCapacityError } from "../search/search-projection.write-port.js";
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import {
@@ -226,6 +227,7 @@ export class FeaturesHttpService {
       let details: Record<string, string> = {};
       if (
         error instanceof FeatureManagementError ||
+        error instanceof SearchProjectionCapacityError ||
         error instanceof IdempotencyHttpError ||
         error instanceof AdminHighRiskError
       )

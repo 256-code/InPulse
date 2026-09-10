@@ -1,0 +1,17 @@
+.external-links-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+.external-links-list li {
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #e7edf1);
+  overflow-wrap: anywhere;
+}
+.external-links-list p {
+  margin: 8px 0;
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+}

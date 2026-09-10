@@ -1,3 +1,4 @@
+import { SearchProjectionCapacityError } from "../modules/search/search-projection.write-port.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
@@ -185,6 +186,7 @@ export class LeftoverTaskHttpService {
       const known =
         error instanceof TaskManagementError ||
         error instanceof RecordDraftError ||
+        error instanceof SearchProjectionCapacityError ||
         error instanceof IdempotencyHttpError;
       return {
         status: known ? error.status : 500,

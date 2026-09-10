@@ -1,3 +1,4 @@
+import { SearchProjectionCapacityError } from "../search/search-projection.write-port.js";
 import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
@@ -261,7 +262,10 @@ export class ProjectManagementHttpService {
     error: unknown,
     requestId: string,
   ): { readonly status: number; readonly body: unknown } {
-    if (error instanceof ProjectManagementError) {
+    if (
+      error instanceof ProjectManagementError ||
+      error instanceof SearchProjectionCapacityError
+    ) {
       return errorBody(error.status, error.code, error.message, requestId);
     }
     if (error instanceof AdminHighRiskError) {

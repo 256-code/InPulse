@@ -1,3 +1,4 @@
+import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
 import {
   recordDraftRoutes,
@@ -26,6 +27,7 @@ export * from "./route-definition.js";
  * validateRouteRegistry 失败，未实现的规划路由不得提前登记。
  */
 export const routeRegistry = [
+  ...externalLinkRoutes,
   ...adminUserRoutes,
   ...projectMemberRoutes,
   ...projectRoutes,
