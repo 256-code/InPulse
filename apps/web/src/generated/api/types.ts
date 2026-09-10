@@ -688,6 +688,48 @@ export type TaskEditRequest = {
   readonly dueAt: (string | null);
 };
 
+export type TaskGroupItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly status: "ACTIVE";
+  readonly createdBy: number;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly mainTaskId: number;
+  readonly members: readonly TaskGroupMemberItem[];
+};
+
+export type TaskGroupMemberItem = {
+  readonly id: number;
+  readonly taskId: number;
+  readonly role: ("MAIN" | "SOURCE");
+  readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
+  readonly status: ("ACTIVE" | "DETACHED");
+  readonly originalWorkStatus: (("TODO" | "DONE" | "CANCELED") | null);
+  readonly originalAssigneeId: (number | null);
+  readonly joinedAt: string;
+};
+
+export type TaskGroupMergeHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type TaskGroupMergeReplayContext = {
+  readonly projectId: number;
+  readonly groupId: number;
+  readonly taskIds: readonly number[];
+};
+
+export type TaskGroupMergeRequest = {
+  readonly sourceTaskId: number;
+  readonly mainTaskId: number;
+  readonly sourceKind: ("HISTORICAL" | "ACTIVE");
+  readonly mergeNote: (string | null);
+};
+
 export type TaskItem = {
   readonly title: string;
   readonly description: string;
