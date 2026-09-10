@@ -88,6 +88,10 @@ for (const feature of [true, false])
       await dialog
         .getByLabel("跟进任务负责人")
         .selectOption({ label: runtime.user.name });
+      if (feature)
+        await dialog
+          .getByLabel("跟进任务截止时间（选填）")
+          .fill("2026-10-10T18:30");
       await dialog.getByRole("button", { name: "创建跟进任务" }).click();
       await expect(dialog).toBeHidden();
       const link = record.getByRole("link", {
@@ -103,6 +107,22 @@ for (const feature of [true, false])
       ).toBeEnabled();
       await expect(task.locator(".task-status-history > li")).toHaveCount(1);
       await expect(task.getByText(/来源记录：.*-CR-/)).toBeVisible();
+      if (feature) {
+        await task
+          .getByRole("button", { name: "编辑任务", exact: true })
+          .click();
+        const editTask = page.getByRole("dialog", {
+          name: "编辑任务",
+          exact: true,
+        });
+        await expect(editTask.getByLabel("截止时间")).toHaveValue(
+          "2026-10-10T18:30",
+        );
+        await editTask.getByRole("button", { name: /取\s*消/ }).click();
+        await expect(editTask).toBeHidden();
+        // Opening the editor closes the detail drawer; return through the real task URL.
+        await page.goto(target!);
+      }
       await task.getByRole("link", { name: "查看遗留来源记录" }).click();
       await expect(
         record.getByRole("link", { name: "查看跟进任务", exact: true }),

@@ -10,6 +10,23 @@ import {
   type LeftoverTaskResponse,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+/** Match the task form's browser-local input and UTC API value, guarding invalid dates. */
+export function parseFollowupDueAt(value: string): string | null | undefined {
+  if (value === "") return null;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!parts) return undefined;
+  const date = new Date(value);
+  if (
+    !Number.isFinite(date.getTime()) ||
+    date.getFullYear() !== Number(parts[1]) ||
+    date.getMonth() + 1 !== Number(parts[2]) ||
+    date.getDate() !== Number(parts[3]) ||
+    date.getHours() !== Number(parts[4]) ||
+    date.getMinutes() !== Number(parts[5])
+  )
+    return undefined;
+  return date.toISOString();
+}
 const taskPath = (task: {
   projectId: number;
   moduleId: number;
@@ -72,6 +89,8 @@ export function ConvertLeftoverTask({
     [error, setError] = useState<unknown>(null),
     [title, setTitle] = useState(""),
     [assigneeId, setAssignee] = useState(0),
+    [dueInput, setDueInput] = useState(""),
+    [dueBadInput, setDueBadInput] = useState(false),
     [priority, setPriority] =
       useState<LeftoverTaskRequest["priority"]>("NORMAL"),
     [result, setResult] = useState<LeftoverTaskResponse | null>(null);
@@ -90,6 +109,8 @@ export function ConvertLeftoverTask({
     retry: false,
   });
   const [conflict, setConflict] = useState(false);
+  const dueAt = parseFollowupDueAt(dueInput);
+  const dueInvalid = dueBadInput || dueAt === undefined;
   async function load(initial: boolean) {
     if (saving.current) return;
     saving.current = true;
@@ -115,6 +136,8 @@ export function ConvertLeftoverTask({
     setError(null);
     setTitle((item.title + " · 遗留跟进").slice(0, 500));
     setAssignee(0);
+    setDueInput("");
+    setDueBadInput(false);
     setPriority("NORMAL");
     retry.current = null;
     void load(true);
@@ -128,6 +151,8 @@ export function ConvertLeftoverTask({
       !title.trim() ||
       !assigneeId ||
       latest ||
+      dueBadInput ||
+      dueAt === undefined ||
       conflict
     )
       return;
@@ -140,7 +165,7 @@ export function ConvertLeftoverTask({
         title: title.trim(),
         assigneeId,
         priority,
-        dueAt: null,
+        dueAt,
       },
       signature = JSON.stringify(body);
     if (retry.current?.signature !== signature)
@@ -293,6 +318,26 @@ export function ConvertLeftoverTask({
             <option value="HIGH">高</option>
             <option value="URGENT">紧急</option>
           </select>
+          <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
+          <input
+            id="leftover-task-due"
+            type="datetime-local"
+            value={dueInput}
+            disabled={busy}
+            aria-invalid={dueInvalid}
+            aria-describedby={
+              dueInvalid ? "leftover-task-due-error" : undefined
+            }
+            onChange={(event) => {
+              setDueInput(event.target.value);
+              setDueBadInput(event.target.validity.badInput);
+            }}
+          />
+          {dueInvalid && (
+            <p id="leftover-task-due-error" role="alert">
+              请输入有效的截止时间，或清空以不设置。
+            </p>
+          )}
           <p>
             新任务保持原记录的{item.scopeType === "MODULE" ? "模块" : "功能"}
             范围，初始为待办，说明自动保存本次遗留原文与来源版本。
@@ -306,6 +351,7 @@ export function ConvertLeftoverTask({
               preview.status !== "ACTIVE" ||
               !title.trim() ||
               !assigneeId ||
+              dueInvalid ||
               !!latest ||
               conflict ||
               members.isError
