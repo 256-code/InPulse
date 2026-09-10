@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { ApiError, type InpulseApiClient, type TaskItem } from "@generated/api";
 import { TasksPanel } from "./TasksPanel";
 import { mergeTask, taskEdit } from "./task-query";
@@ -314,5 +315,39 @@ describe("F-14 task editing", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("请选择负责人");
+  });
+});
+
+function mountWithRouter(api: InpulseApiClient, writable = true) {
+  render(
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter>
+          <TasksPanel
+            projectId={2}
+            moduleId={3}
+            featureId={4}
+            writable={writable}
+            client={api}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </ConfigProvider>,
+  );
+}
+describe("F-23 merge entry", () => {
+  it("opens the merge modal from the task drawer", async () => {
+    mountWithRouter(client());
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "合并到主任务" }),
+    );
+    expect(
+      await screen.findByLabelText(/主任务（搜索任务编号或标题/),
+    ).toBeInTheDocument();
   });
 });

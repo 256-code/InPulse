@@ -3608,3 +3608,201 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ===================== F-23/F-24/F-25 任务聚合组 ===================== */
+/* 合并到主任务弹窗：候选搜索、已选提示与分支类型选择。 */
+.merge-search-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  color: #6d8498;
+  font-size: 12px;
+}
+.merge-candidate-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 216px;
+  overflow-y: auto;
+  border: 1px solid #e2eaf3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.merge-candidate-list li + li {
+  border-top: 1px solid #edf1f5;
+}
+.merge-candidate-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: #2a3b50;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.merge-candidate-list button:hover {
+  background: #f5faff;
+}
+.merge-candidate-list button.selected {
+  background: #eef6ff;
+  box-shadow: inset 2px 0 0 #4a8fd4;
+}
+.merge-candidate-list button strong {
+  color: #22384f;
+  font-size: 13px;
+}
+.merge-candidate-list button span {
+  color: #8494a6;
+  font-size: 11px;
+}
+.merge-selected {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid #cfe3f6;
+  border-radius: 7px;
+  background: #f2f8ff;
+  color: #27567f;
+  font-size: 12px;
+}
+.merge-branch-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #e2eaf3;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+.merge-branch-choice legend {
+  padding: 0 6px;
+  color: #5c7691;
+  font-size: 12px;
+}
+.merge-branch-choice label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #3c5a77;
+  font-size: 12px;
+}
+/* 聚合组详情页：成员与分支面板、记录筛选与分页。 */
+.task-group-created {
+  color: #8494a6;
+  font-size: 11px;
+}
+.task-group-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.task-group-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #edf1f5;
+}
+.task-group-member {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+.task-group-member + .task-group-member {
+  border-top: 1px solid #edf1f5;
+}
+.task-group-member.detached {
+  background: #fafbfd;
+}
+.task-group-member.detached > strong {
+  color: #6d8498;
+}
+.task-group-member-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.task-group-member > strong {
+  color: #22384f;
+  font-size: 13px;
+}
+.task-group-member-meta {
+  margin: 0;
+  color: #8494a6;
+  font-size: 11px;
+}
+.task-group-member-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.task-group-record-filter {
+  padding: 0 18px 12px;
+}
+.task-group-record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #edf1f5;
+}
+.task-group-record-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 18px;
+}
+.task-group-record-list > li + li {
+  border-top: 1px solid #edf1f5;
+}
+.task-group-record-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.task-group-record-list > li > strong {
+  color: #22384f;
+  font-size: 13px;
+}
+.task-group-record-meta {
+  color: #8a98a8;
+  font-size: 11px;
+}
+.task-group-record-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+.task-group-record-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #2671c9;
+  font-size: 12px;
+}
+.task-group-record-links small {
+  display: block;
+  margin-top: 2px;
+  color: #8a98a8;
+  font-size: 10px;
+}
+.task-group-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 14px 18px;
+  border-top: 1px solid #edf1f5;
+}
+@media (max-width: 1080px) {
+  .task-group-panels {
+    grid-template-columns: 1fr;
+  }
+}
