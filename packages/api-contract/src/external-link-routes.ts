@@ -50,8 +50,8 @@ export const externalLinkRoutes: readonly RouteDefinition[] = [
     },
     auditAction: write
       ? remove
-        ? "externalLink.remove"
-        : "externalLink.add"
+        ? "EXTERNAL_LINK_REMOVED"
+        : "EXTERNAL_LINK_ADDED"
       : "none",
     behaviorHeaders: write ? ["If-Match"] : "none",
     idempotencyReplayPolicy: write

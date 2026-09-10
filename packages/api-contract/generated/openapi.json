@@ -2089,7 +2089,7 @@
             ],
             "retry": "Re-read true ownership after ordered target lock; reject changed version"
           },
-          "auditAction": "externalLink.add"
+          "auditAction": "EXTERNAL_LINK_ADDED"
         },
         "parameters": [
           {
@@ -2296,7 +2296,7 @@
             ],
             "retry": "Re-read true ownership after ordered target lock; reject changed version"
           },
-          "auditAction": "externalLink.remove"
+          "auditAction": "EXTERNAL_LINK_REMOVED"
         },
         "parameters": [
           {

@@ -109,7 +109,11 @@ export class ExternalLinkWorkflow {
   ) {
     const query = this.queries[type];
     // PROJECT commands acquire UPDATE before the authorization SHARE lock: no shared-lock upgrade race.
-    const before = await query.find(tx, id, write && type === "PROJECT");
+    const before = await query.find(
+      tx,
+      id,
+      write && type === "PROJECT" ? "update" : undefined,
+    );
     if (!before) throw missing();
     const project = await this.access.checkProjectForWrite(tx, {
       actorUserId: actor,
@@ -134,7 +138,9 @@ export class ExternalLinkWorkflow {
       if (feature.kind === "not-found") throw missing();
       writable = writable && feature.kind === "allowed";
     }
-    const current = write ? await query.find(tx, id, true) : before;
+    // Parent waits can invalidate the pre-read. Lock and re-read every target,
+    // including GET/replay, then retain that lock through result authorization.
+    const current = await query.find(tx, id, write ? "update" : "share");
     if (!current) throw missing();
     if (
       current.projectId !== before.projectId ||

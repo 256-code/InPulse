@@ -1,3 +1,4 @@
+import { PostgresFeatureReadPort } from "../src/modules/features/postgres-feature-read-port.js";
 import { TaskGroupsService } from "../src/modules/task-groups/task-groups.service.js";
 import { TaskGroupRepository } from "../src/modules/task-groups/task-group.repository.js";
 import { ExternalLinkController } from "../src/workflows/external-link.controller.js";
@@ -44,7 +45,7 @@ import {
 } from "vitest";
 import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { schemaRegistry } from "@inpulse/api-contract";
+import { schemaRegistry, routeRegistry } from "@inpulse/api-contract";
 import {
   createDatabaseClient,
   type DatabaseClient,
@@ -461,8 +462,15 @@ describe("F22 typed external links", () => {
         await db.sql`SELECT id FROM app.external_links WHERE id=${result.linkId}`,
       ).toHaveLength(1);
       const logs =
-        await auditDb.sql`SELECT event_payload FROM app.audit_logs WHERE project_id=${f.projectId} AND action IN ('EXTERNAL_LINK_ADDED','EXTERNAL_LINK_REMOVED') ORDER BY sequence_no`;
+        await auditDb.sql`SELECT action,event_payload FROM app.audit_logs WHERE project_id=${f.projectId} AND action IN ('EXTERNAL_LINK_ADDED','EXTERNAL_LINK_REMOVED') ORDER BY sequence_no`;
       expect(logs).toHaveLength(2);
+      expect(logs.map((row) => row.action)).toEqual(
+        ["addExternalLink", "removeExternalLink"].map(
+          (operationId) =>
+            routeRegistry.find((route) => route.operationId === operationId)!
+              .auditAction,
+        ),
+      );
       expect(JSON.stringify(logs)).toContain(
         "https://github.com/inpulse/core/pull/245",
       );
@@ -1016,4 +1024,127 @@ describe("F22 typed external links", () => {
       422,
     );
   });
+
+  it.each(["GET", "ADD_REPLAY", "REMOVE_REPLAY"])(
+    "%s rechecks VOID after waiting for the real parent lock",
+    async (operation) => {
+      const f = await lifecycleFixture(true),
+        actor = await session(f.userId);
+      const addKey = randomUUID(),
+        removeKey = randomUUID();
+      const added = await linkRequest(
+        "CHANGE_RECORD",
+        f.draft.id,
+        actor,
+        f.record.rowVersion,
+        undefined,
+        undefined,
+        addKey,
+      );
+      expect(added.status).toBe(200);
+      const link = schemaRegistry.ExternalLinkResult.schema.parse(
+        await added.json(),
+      );
+      let version = link.rowVersion;
+      if (operation === "REMOVE_REPLAY") {
+        const removed = await linkRequest(
+          "CHANGE_RECORD",
+          f.draft.id,
+          actor,
+          version,
+          "",
+          link.linkId,
+          removeKey,
+        );
+        expect(removed.status).toBe(200);
+        version = schemaRegistry.ExternalLinkResult.schema.parse(
+          await removed.json(),
+        ).rowVersion;
+      }
+      const lifecycle = new RecordLifecycleService(
+        new PostgresProjectAccessQueryPort(db),
+        new PostgresModuleQueryPort(),
+        new PostgresFeatureQueryPort(),
+        new RecordPublicationRepository(),
+        new PublishedRecordRepository(),
+        new RecordLifecycleRepository(),
+        audit,
+        activity,
+        search,
+      );
+      let signalReady!: (pid: number) => void, release!: () => void;
+      const ready = new Promise<number>((r) => (signalReady = r)),
+        gate = new Promise<void>((r) => (release = r));
+      const blocker = uow.run(async (tx) => {
+        await tx.sql`SELECT id FROM app.projects WHERE id=${f.projectId} FOR UPDATE`;
+        const [backend] = await tx.sql<
+          { pid: number }[]
+        >`SELECT pg_backend_pid() AS pid`;
+        signalReady(backend!.pid);
+        await gate;
+        // Use the actual F21 service in the transaction owning the parent lock.
+        await lifecycle.transition(
+          tx,
+          f.adminId,
+          f.projectId,
+          f.draft.id,
+          version,
+          false,
+          { reason: "受控读写竞态" },
+          randomUUID(),
+          async () => f.adminId,
+        );
+      });
+      const pid = await ready;
+      const pending =
+        operation === "GET"
+          ? listLinks("CHANGE_RECORD", f.draft.id, actor)
+          : operation === "ADD_REPLAY"
+            ? linkRequest(
+                "CHANGE_RECORD",
+                f.draft.id,
+                actor,
+                f.record.rowVersion,
+                undefined,
+                undefined,
+                addKey,
+              )
+            : linkRequest(
+                "CHANGE_RECORD",
+                f.draft.id,
+                actor,
+                link.rowVersion,
+                "",
+                link.linkId,
+                removeKey,
+              );
+      try {
+        // This proves the HTTP request has passed its pre-read and is waiting on the parent.
+        await expect
+          .poll(
+            async () => {
+              const [waiters] = await db.sql<
+                { count: number }[]
+              >`SELECT count(*)::int AS count FROM pg_stat_activity WHERE ${pid}=ANY(pg_blocking_pids(pid)) AND query LIKE '%app.projects%' AND wait_event_type='Lock'`;
+              return waiters!.count;
+            },
+            { timeout: 3000, interval: 20 },
+          )
+          .toBeGreaterThan(0);
+      } finally {
+        release();
+        await blocker;
+      }
+      const response = await pending;
+      await failure(response.clone(), 404);
+      expect(await response.text()).not.toMatch(
+        /normalizedUrl|rowVersion|linkId/,
+      );
+      const admin = await listLinks("CHANGE_RECORD", f.draft.id, f.admin);
+      expect(admin.status).toBe(200);
+      expect(
+        schemaRegistry.ExternalLinkList.schema.parse(await admin.json()),
+      ).toMatchObject({ writable: false });
+    },
+  );
 });

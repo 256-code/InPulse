@@ -30,3 +30,13 @@ it("registers typed targets and versioned link mutations", () => {
     routeRegistry.find((r) => r.operationId === "listExternalLinks")?.method,
   ).toBe("GET");
 });
+
+it("declares the exact emitted audit actions", () => {
+  expect(
+    routeRegistry.find((r) => r.operationId === "addExternalLink")?.auditAction,
+  ).toBe("EXTERNAL_LINK_ADDED");
+  expect(
+    routeRegistry.find((r) => r.operationId === "removeExternalLink")
+      ?.auditAction,
+  ).toBe("EXTERNAL_LINK_REMOVED");
+});

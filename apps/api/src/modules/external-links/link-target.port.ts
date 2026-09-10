@@ -7,11 +7,13 @@ export interface LinkTarget {
   status: string;
   rowVersion: number;
 }
+export type LinkTargetLock = "share" | "update";
+/** Shared/read and update locks remain held until the caller transaction ends. */
 export interface LinkTargetQueryPort {
   find(
     tx: TransactionContext,
     id: number,
-    lock?: boolean,
+    lock?: LinkTargetLock,
   ): Promise<LinkTarget | undefined>;
 }
 export interface LinkTargetCommandPort {

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type {
   LinkTarget,
+  LinkTargetLock,
   LinkTargetQueryPort,
   LinkTargetCommandPort,
 } from "../external-links/link-target.port.js";
@@ -10,11 +11,11 @@ export class FeatureLinkQueryPort implements LinkTargetQueryPort {
   async find(
     tx: TransactionContext,
     id: number,
-    lock = false,
+    lock?: LinkTargetLock,
   ): Promise<LinkTarget | undefined> {
     const [row] = await tx.sql<
       LinkTarget[]
-    >`SELECT id,project_id AS "projectId",module_id AS "moduleId",id AS "featureId",status AS status,row_version AS "rowVersion" FROM app.features WHERE id=${id} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT id,project_id AS "projectId",module_id AS "moduleId",id AS "featureId",status AS status,row_version AS "rowVersion" FROM app.features WHERE id=${id} ${lock === "update" ? tx.sql`FOR UPDATE` : lock === "share" ? tx.sql`FOR SHARE` : tx.sql``}`;
     return row;
   }
 }
