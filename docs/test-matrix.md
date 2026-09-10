@@ -523,3 +523,17 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 | 浏览器持久化和入口 | Edge `record-drafts.spec.ts` 3/3（37.0 秒）：独立、FEATURE 来源、MODULE 来源；选择第二条编辑/刷新/返回任务仍 TODO 且仅初始历史。F-16 状态两路径在此前同批合跑中均通过 |
 
 首轮来源 fixture 的优先级误写 MEDIUM 导致约束拒绝，改为基线 NORMAL 后通过；首次启动测试未提供 TEST_DATABASE_URL 而 fail closed，配置后执行。首轮浏览器 FEATURE 返回链接多 `/tasks` 导致 404（合跑 4/5），修复后草稿三路径全部通过，未降低断言。未运行本批 CI/默认 Chromium、全量本地构建/测试/静态审计；F-18/F-19 尚未交付。详细复核入口见 [F-17 交审说明](f17-local-handoff.md)。
+
+## F-18 正式发布与版本（2026-09-10 本地交审）
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| 编号/v1/时间、独立发布/来源 DONE、TODO/CANCELED 拒绝、真实锁等待重读 | `published-records.integration.test.ts` 8/8 |
+| 稳定遗留 ID、ACTIVE 清空确认/RESOLVED 再填、CONVERTED 保留链接、版本不可变 | `record-publication.integration.test.ts` 12/12，含 HTTP 与真实数据库 |
+| 四副作用失败回滚、并发发布及双版本条件更新、超限保留输入/编号回滚、当前通知权限与历史重开 | 同上；与 F-17 `record-drafts.integration.test.ts` 合跑三文件 34/34 |
+| 原文/NFKC/UTF-16 搜索容量边界 | `record-publication-effects.test.ts` 2/2 |
+| 修订确认、网络失败同键重试、409 逐字段合并、历史原文对比及草稿回归 | 三个前端文件 9/9 |
+| 内容严格 DTO、正式遗留 10000/草稿 50000、双版本头、路由/权限 | 四个契约文件 43/43；78 路由、78 操作完整性通过 |
+| 独立发布→修订→解决遗留→刷新→历史比较→搜索；已完成 FEATURE 来源发布；F-17 三路径 | Edge 两文件五路径 5/5（54.5 秒） |
+
+已通过受影响 API/契约编译及 API 测试/Web/E2E 局部类型检查。首次无遗留项 HTTP 发布因幂等安全字段遗漏 null 分支返回 500，补全后回归通过；未弱化测试。首次 Edge 期间生成客户端引发 Vite 热更新鉴权上下文错误日志，业务 2/2；停止源文件改动后的五路径合跑无该错误。未执行本批 CI、默认 Chromium、全仓静态/构建/测试/审计；F-19/F-20 入口未交付。完整命令、人工确认口径与风险见 [F-18 交审说明](f18-local-handoff.md)。

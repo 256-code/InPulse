@@ -129,3 +129,14 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 | updateTaskRecordDraft | 同上 | 同上但 If-Match 为记录版本；任务/记录完整同项目关联匹配，内容更新保留来源与记录快照 |
 
 所有写接口成功重放前重新验证当前认证、CSRF、成员权限、真实可写父级和返回的全部影响资源；来源路径额外重读任务/记录关联。拒绝不泄露已存响应。TODO/DONE/CANCELED 均可保存来源草稿，保存不改变状态。无权限放宽、数据库权限或迁移变更。见 [F-17 交审说明](f17-local-handoff.md)。
+
+## F-18 正式记录接口（2026-09-10）
+
+| operationId | 允许主体 | 实时门禁及拒绝 |
+| --- | --- | --- |
+| listChangeRecords / getChangeRecord | 活跃项目成员、系统管理员 | 匿名/停用 401；非成员/撤权/跨项目 404；仅 PUBLISHED，归档父级可读 |
+| listChangeRecordVersions / getChangeRecordVersion | 同上 | 真实项目及记录关系，版本属于该 PUBLISHED 记录；VOID 404，恢复以 status 为准 |
+| publishChangeRecord | 同上 | 父级可写、记录 DRAFT、If-Match；来源为空或锁内 DONE，TODO/CANCELED 409；同源/CSRF、数据库幂等 |
+| createChangeRecordVersion | 同上 | 父级可写、记录 PUBLISHED、If-Match 与 X-Record-Version；内容 DTO 禁止来源/身份/状态字段；ACTIVE 清空须明确确认；同源/CSRF、数据库幂等 |
+
+两条 POST 重放重新验证当前身份、CSRF、实时权限、可写父级及结果记录/影响/遗留项归属，拒绝不返回缓存结果。来源任务后续重开不取消已发布历史的修订/重放资格。发布通知去重后的作者/处理人/当前任务负责人/真实所属或影响功能创建者，修订通知原作者/当前任务负责人，逐人检查当前项目权限。无新增数据库角色或权限。见 [F-18 交审说明](f18-local-handoff.md)。
