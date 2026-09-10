@@ -44,7 +44,9 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
   try {
     await loginAdminViaUi(page, runtime, mfaAdmin);
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "用户管理" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "成员与设置" }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "新增用户" }).click();
     const createDialog = page.getByRole("dialog", { name: "新增用户" });
@@ -69,7 +71,7 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
     await createDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(page.getByText("用户创建成功", { exact: true })).toBeVisible();
 
-    const card = page.locator(".ant-card").filter({ hasText: loginName });
+    const card = page.locator(".member-row").filter({ hasText: loginName });
     await expect(card.getByText(name, { exact: true })).toBeVisible();
 
     await card.getByRole("button", { name: /编\s*辑/ }).click();
@@ -84,13 +86,13 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
     const disableDialog = page.getByRole("dialog", { name: "停用用户" });
     await disableDialog.getByRole("button", { name: /确\s*认/ }).click();
     await expect(disableDialog).toBeHidden();
-    await expect(card.getByText("已停用", { exact: true })).toBeVisible();
+    await expect(card.getByText("停用", { exact: true })).toBeVisible();
 
     await card.getByRole("button", { name: /启\s*用/ }).click();
     const enableDialog = page.getByRole("dialog", { name: "启用用户" });
     await enableDialog.getByRole("button", { name: /确\s*认/ }).click();
     await expect(enableDialog).toBeHidden();
-    await expect(card.getByText("正常", { exact: true })).toBeVisible();
+    await expect(card.getByText("启用", { exact: true })).toBeVisible();
 
     await card.getByRole("button", { name: "强制退出" }).click();
     const logoutDialog = page.getByRole("dialog", { name: "强制退出" });

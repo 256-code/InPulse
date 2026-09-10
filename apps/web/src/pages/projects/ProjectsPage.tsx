@@ -44,6 +44,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
       isAdmin={user?.isAdmin === true}
       createdProject={createdProject}
       onCreated={handleCreated}
+      onBackToTasks={() => navigate("/tasks")}
       onOpenActivity={handleOpenActivity}
       onOpenModules={(projectId) => navigate(`/projects/${projectId}/modules`)}
       onOpenMembers={(projectId) => navigate(`/projects/${projectId}/members`)}

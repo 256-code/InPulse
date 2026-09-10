@@ -94,7 +94,10 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
     const projectName = await screen.findByText("商城系统");
     expect(projectName).toBeInTheDocument();
-    expect(projectName.closest(".ant-card")).toHaveTextContent("1 位活跃成员");
+    expect(projectName.closest(".project-card")).toHaveTextContent("1 位成员");
+    expect(screen.getByText("项目 / 1 个")).toBeInTheDocument();
+    expect(projectName.closest(".project-card")).toHaveTextContent("查看模块");
+    expect(screen.getByText("层级说明")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }),
     ).toBeInTheDocument();
@@ -167,7 +170,7 @@ describe("ProjectsPage", () => {
     );
 
     const projectName = await screen.findByText("商城系统");
-    const projectCard = projectName.closest(".ant-card");
+    const projectCard = projectName.closest(".project-card");
     expect(projectCard).not.toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }));
