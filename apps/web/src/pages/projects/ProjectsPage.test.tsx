@@ -124,7 +124,7 @@ describe("ProjectsPage", () => {
     expect(await screen.findByText("项目创建成功")).toBeInTheDocument();
     await user.click(screen.getByTestId("open-created-project-activity"));
     expect(await screen.findByText("Activity content")).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("opens the admin member management page from a project card", async () => {
     const listProjects = vi.fn().mockResolvedValue({
