@@ -41,6 +41,28 @@ export interface PermissionMatrixEntry {
  * 不得据此放宽任何业务或认证路由。
  */
 export const permissionMatrix = [
+  ...["listExternalLinks", "addExternalLink", "removeExternalLink"].map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: {
+          kind: "conditional",
+          allowedWhen: "目标当前可读；写入另需目标和父级可写及当前版本",
+          deniedWith: 404,
+        },
+        其他项目成员: { kind: "deny", status: 404 },
+        已移除成员: { kind: "deny", status: 404 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: {
+          kind: "conditional",
+          allowedWhen: "目标存在；VOID只读，写入需目标和父级可写",
+          deniedWith: 404,
+        },
+      },
+    }),
+  ),
+
   ...(["voidChangeRecord", "restoreChangeRecord"] as const).map(
     (operationId): PermissionMatrixEntry => ({
       operationId,

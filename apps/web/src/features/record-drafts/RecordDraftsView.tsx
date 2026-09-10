@@ -1,3 +1,4 @@
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import {
   fields,
   labels,
@@ -454,6 +455,12 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
               detail.data && (
                 <section className="draft-detail" aria-label="草稿详情">
                   <h2>{detail.data.title}</h2>
+                  <ExternalLinksPanel
+                    key={detail.data.id}
+                    targetType="CHANGE_RECORD"
+                    targetId={detail.data.id}
+                    client={api}
+                  />
                   {detail.data.taskId !== null && (
                     <a
                       href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}

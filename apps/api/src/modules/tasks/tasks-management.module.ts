@@ -1,4 +1,8 @@
 import {
+  TaskLinkQueryPort,
+  TaskLinkCommandPort,
+} from "./external-link-target.port.js";
+import {
   FollowupTaskCommandPort,
   PostgresFollowupTaskCommandPort,
 } from "./followup-task.port.js";
@@ -42,6 +46,8 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
     NotificationProjectionModule,
   ],
   providers: [
+    TaskLinkQueryPort,
+    TaskLinkCommandPort,
     TaskManagementRepository,
     {
       provide: FollowupTaskCommandPort,
@@ -58,6 +64,8 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
     ProjectMemberTaskCommandPort,
   ],
   exports: [
+    TaskLinkQueryPort,
+    TaskLinkCommandPort,
     ProjectMemberTaskCommandPort,
     FollowupTaskCommandPort,
     TaskQueryPort,

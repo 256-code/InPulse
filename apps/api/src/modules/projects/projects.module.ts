@@ -1,3 +1,7 @@
+import {
+  ProjectLinkQueryPort,
+  ProjectLinkCommandPort,
+} from "./external-link-target.port.js";
 import { ProjectCodePort } from "./project-code.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 import { PostgresProjectMembersQueryPort } from "./postgres-project-members-query-port.js";
@@ -25,6 +29,8 @@ import {
 @Module({
   imports: [DatabaseModule],
   providers: [
+    ProjectLinkQueryPort,
+    ProjectLinkCommandPort,
     {
       provide: ProjectMembersQueryPort,
       useClass: PostgresProjectMembersQueryPort,
@@ -45,6 +51,8 @@ import {
     },
   ],
   exports: [
+    ProjectLinkQueryPort,
+    ProjectLinkCommandPort,
     ProjectMembersQueryPort,
     ProjectCodePort,
     PROJECT_ACCESS_QUERY_PORT,

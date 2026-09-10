@@ -119,6 +119,12 @@ function inferExternalReference(segments: readonly string[]): {
     owner !== undefined && repository !== undefined
       ? `${owner}/${repository}`
       : null;
+  if (
+    repositorySlug !== null &&
+    (repositorySlug.length > 201 || /\s/.test(repositorySlug))
+  ) {
+    throw new InvalidGitHubUrlError("仓库路径格式或长度无效");
+  }
   const extra = segments.slice(2);
 
   if (repositorySlug === null || extra.length === 0) {

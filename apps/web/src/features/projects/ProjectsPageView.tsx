@@ -1,3 +1,4 @@
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import React, { useState } from "react";
 import { Button } from "antd";
 import type {
@@ -226,6 +227,11 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     {project.memberCount} 位成员
                   </span>
                   <div className="project-card-actions">
+                    <ExternalLinksPanel
+                      targetType="PROJECT"
+                      targetId={project.id}
+                      client={client}
+                    />
                     <Button
                       className="text-button"
                       data-testid={`edit-project-${project.id}`}
