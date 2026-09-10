@@ -195,9 +195,7 @@ it("retains refresh gate after failed reload and close/reopen until explicit lat
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "作废记录" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "作废记录" }));
   expect(screen.getByRole("button", { name: "确认作废记录" })).toBeDisabled();
   expect(screen.getByLabelText("作废原因")).toHaveValue("需要保留的原因");
   fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
