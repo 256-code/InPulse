@@ -261,4 +261,108 @@ export class TasksController {
       );
     return result.body;
   }
+
+  // Keep the literal single-line for the repository's Controller binding scanner.
+  // prettier-ignore
+  @Get(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/status-history")
+  @Operation("getTaskStatusHistory")
+  async getTaskStatusHistory(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("getTaskStatusHistory") params: unknown,
+    @ContractQuery("getTaskStatusHistory") query: unknown,
+  ) {
+    const result = await this.service.handle("getTaskStatusHistory", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Post(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/status")
+  @Operation("transitionTask")
+  async transitionTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("transitionTask") params: unknown,
+    @ContractQuery("transitionTask") query: unknown,
+    @ContractBody("transitionTask") body: unknown,
+    @ContractHeaders("transitionTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("transitionTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Get(":projectId/modules/:moduleId/tasks/:taskId/status-history")
+  @Operation("getModuleTaskStatusHistory")
+  async getModuleTaskStatusHistory(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("getModuleTaskStatusHistory") params: unknown,
+    @ContractQuery("getModuleTaskStatusHistory") query: unknown,
+  ) {
+    const result = await this.service.handle("getModuleTaskStatusHistory", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Post(":projectId/modules/:moduleId/tasks/:taskId/status")
+  @Operation("transitionModuleTask")
+  async transitionModuleTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("transitionModuleTask") params: unknown,
+    @ContractQuery("transitionModuleTask") query: unknown,
+    @ContractBody("transitionModuleTask") body: unknown,
+    @ContractHeaders("transitionModuleTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("transitionModuleTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
 }

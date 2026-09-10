@@ -34,6 +34,8 @@ const item: TaskItem = {
 };
 function client(overrides: object = {}) {
   return {
+    getTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
+    getModuleTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
     listTasks: vi.fn().mockResolvedValue({ items: [item] }),
     listTaskAssignees: vi.fn().mockResolvedValue({
       items: [{ id: 5, name: "项目成员", avatarUrl: null }],
@@ -63,6 +65,106 @@ function mount(api: InpulseApiClient, writable = true) {
   );
 }
 describe("F-14 task editing", () => {
+  it("keeps actual changes TODO and preserves completion input across a version conflict", async () => {
+    const transitionTask = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(409, {
+          code: "TASK_VERSION_CONFLICT",
+          message: "版本变化",
+          details: {},
+          requestId: "test",
+        }),
+      )
+      .mockResolvedValue({ ...item, workStatus: "DONE", rowVersion: 3 });
+    mount(
+      client({
+        transitionTask,
+        getTask: vi.fn().mockResolvedValue({ ...item, rowVersion: 2 }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
+    // Ant Design assigns the same aria title ID to nested dialogs in NODE_ENV=test.
+    // Locate this dialog through its labeled field; real-browser E2E verifies its name.
+    const modal = within(
+      (await screen.findByLabelText("是否产生实际功能变化")).closest(
+        '[role="dialog"]',
+      ) as HTMLElement,
+    );
+    fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
+      target: { value: "yes" },
+    });
+    expect(modal.getByRole("button", { name: "确认完成任务" })).toBeDisabled();
+    expect(transitionTask).not.toHaveBeenCalled();
+    fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
+      target: { value: "no" },
+    });
+    fireEvent.change(modal.getByLabelText("完成原因"), {
+      target: { value: "技术调研" },
+    });
+    fireEvent.change(modal.getByLabelText("完成补充说明"), {
+      target: { value: "保留我的说明" },
+    });
+    fireEvent.click(modal.getByRole("button", { name: "确认完成任务" }));
+    fireEvent.click(
+      await modal.findByRole("button", { name: "加载最新任务状态" }),
+    );
+    await waitFor(() =>
+      expect(modal.getByRole("button", { name: "确认完成任务" })).toBeEnabled(),
+    );
+    expect(modal.getByLabelText("完成补充说明")).toHaveValue("保留我的说明");
+    fireEvent.click(modal.getByRole("button", { name: "确认完成任务" }));
+    await waitFor(() => expect(transitionTask).toHaveBeenCalledTimes(2));
+    expect(transitionTask.mock.calls[1]![4]).toEqual({
+      action: "COMPLETE",
+      mode: "WITHOUT_RECORD",
+      completionReason: "技术调研",
+      note: "保留我的说明",
+    });
+    expect(transitionTask.mock.calls[1]![5].headers["If-Match"]).toBe('"2"');
+    expect(
+      transitionTask.mock.calls[1]![5].headers["Idempotency-Key"],
+    ).not.toBe(transitionTask.mock.calls[0]![5].headers["Idempotency-Key"]);
+  });
+  it("defaults to TODO and retains all history without displaying an incomplete completion rate", async () => {
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({
+          items: [
+            item,
+            { ...item, id: 2, title: "历史完成", workStatus: "DONE" },
+            { ...item, id: 3, title: "历史取消", workStatus: "CANCELED" },
+            {
+              ...item,
+              id: 4,
+              title: "无效历史",
+              workStatus: "DONE",
+              lifecycleStatus: "INVALID",
+            },
+          ],
+        }),
+      }),
+    );
+    await screen.findByText(item.title);
+    expect(screen.queryByText("历史完成")).not.toBeInTheDocument();
+    expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
+      target: { value: "CANCELED" },
+    });
+    expect(screen.getByText("历史取消")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
+      target: { value: "DONE" },
+    });
+    expect(screen.getByText("历史完成")).toBeVisible();
+    expect(screen.getByText("无效历史")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
+      target: { value: "ALL" },
+    });
+    for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
+      expect(screen.getByText(title)).toBeVisible();
+    expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
+  });
   it("compares impact sets semantically and requires a three-way choice", () => {
     const base = { ...taskEdit(item), impactFeatureIds: [2] };
     expect(

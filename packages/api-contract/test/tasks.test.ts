@@ -3,13 +3,15 @@ import { taskEditRequestSchema } from "../src/contracts/tasks.zod.js";
 import { taskRoutes } from "../src/task-routes.js";
 
 describe("F-14 task input", () => {
-  it("registers five routes and requires explicit replay/version/lock policies for writes", () => {
+  it("registers task routes and requires explicit replay/version/lock policies for writes", () => {
     expect(taskRoutes.map((route) => route.operationId)).toEqual([
       "listTasks",
       "getTask",
       "listTaskAssignees",
       "createTask",
       "updateTask",
+      "getTaskStatusHistory",
+      "transitionTask",
     ]);
     for (const route of taskRoutes) {
       if (route.method === "GET") expect(route.idempotencyPolicy).toBe("none");
