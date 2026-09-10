@@ -666,3 +666,19 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 新增GET/ADD_REPLAY/REMOVE_REPLAY三条真实PG父锁等待→F21作废提交竞态，修复前均200泄露、修复后普通成员404且无缓存/链接字段，管理员只读。四类CRUD另断言实际审计action等于Registry。最终增量F22真库36/36、契约2/2、局部类型/9个源码格式/89路由/5生成物漂移通过；其他测试本轮未重复。
 
 初次冻结前误删仍在使用的fixture import，导致本轮最初beforeAll ReferenceError；已恢复后完成上述最终验证。原71/71在误删前执行，不能当作旧冻结SHA测试可运行的证据；更正与全部红测见[F22交审增量](f22-local-handoff.md)。
+
+## F-32 任务中心 / F-29 项目概览前端骨架（C，2026-09-10 本地骨架，PR #92）
+
+按 [C 域聚合读契约与端口提案](c-port-extension-proposal.md) §7.5：F-25/F-29/F-32 路由尚未由 A 冻结，不登记 Route Registry、不新增契约草案；两张页面先用注入式 mock adapter 隔离数据源，项目名/状态/成员数走 A 已有项目端口。F-32 页面 `/tasks`（改为登录保护）承载统计卡片、视图标签、高级筛选面板与任务明细表；F-29 页面 `/projects/:projectId/overview` 承载项目详情头部、6 项指标条、最近迭代与待处理遗留问题面板。2026-09-10 按设计师最新稿做截图对比迁移：项目概览头部改为纵向结构（返回、标题块、操作行）且操作行左对齐下移，指标条改 4 列网格（第 2 行 2 格后留灰底空位）；任务卡片顶部徽章改为「模块级 / 主任务或来源任务 / 工作状态」，页脚左侧为优先级全称徽章、右侧仅在有已发布记录时显示记录数，并移除未冻结路由的禁用「任务详情」占位。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| F-32 URL 筛选状态：scope/project/status/priority/level/relation/record/github/canceled/q/view/more 的默认值省略、非法值回退、非管理员降级 mine、project 仅在 scope=project 时写入、查询词去空白 | `my-tasks-url.test.ts` 9 例 |
+| F-32 mock 适配器口径：默认视图排除已完成与已取消、created 按创建者、project 按项目、全部范围跨项目、优先级/层级/关系/记录/GitHub 过滤、关键词跨编号与归属匹配、统计卡片与遗留问题事实 | `my-tasks-mock.test.ts` 10 例 |
+| F-32 页面渲染与交互：骨架提示、统计卡片、scope 标签、项目名从项目端口解析、高级范围仅管理员、筛选变更回调、遗留问题入口与风险条、适配器错误态、卡片徽章（模块级 / 主任务）与页脚优先级全称、有已发布记录时才显示记录数 | `TaskCenterPageView.test.tsx` 10 例 |
+| F-32 页面层：URL 读取筛选、筛选写回 URL、more 参数控制高级面板、跳转遗留问题、非管理员降级与管理员保留 | `pages/tasks/TasksPage.test.tsx` 6 例 |
+| F-29 指标与数据源：6 项指标条（活跃模块/活跃功能/未完成任务/迭代记录/遗留问题来自 adapter，成员数来自项目端口 memberCount）、mock 指标口径、迭代按发布时间倒序、项目 id 在契约冻结前不参与过滤 | `ProjectOverviewPageView.test.tsx`、`project-overview-mock.test.ts` 3 例 |
+| F-29 交互与容错：最近迭代行与「查看全部」进入记录页、遗留问题行与「进入遗留问题」进入问题页、空态、adapter 错误态、项目错误重试 | `ProjectOverviewPageView.test.tsx` 7 例 |
+| F-29 页面层：按路由 projectId 读取项目与概览、非法 projectId 错误态、遗留问题跳转、返回项目列表 | `ProjectOverviewPage.test.tsx` 4 例 |
+
+本地实际执行：`pnpm --filter @inpulse/web exec vitest run src/features/project-overview src/pages/project-overview` 3 文件 14/14；`pnpm --filter @inpulse/web test:unit` 48 文件 195/195；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/web build`、变更目录 ESLint 与 `pnpm check:frontend:boundaries`（167 模块）通过；2026-09-10 截图对比迁移后重跑定向 `src/features/my-tasks src/features/project-overview src/pages/tasks` 6 文件 45/45、`pnpm lint` 与 `pnpm format:check` 通过。rebase 到 `origin/main` `5087f0a` 后重跑上述门禁：`pnpm --filter @inpulse/web test:unit` 49 文件 199/199（含主线 F-21 新增用例）、`pnpm check:frontend:boundaries`（169 模块 753 依赖）、`pnpm check:docs`（68 个 Markdown）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）与 `pnpm --filter @inpulse/web build` 通过。未运行 API/集成/数据库测试（无后端改动）、`pnpm test:e2e`（骨架路由尚无 E2E）与 GitHub Actions。骨架数据不代表已实现能力；F-32 补充字段（priority/dueAt/completedAt/description/creatorId）与 F-29 统计口径等待 A 对 C 域提案的裁定。

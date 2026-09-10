@@ -6,7 +6,7 @@ const TasksPage = lazy(() => import("./TasksPage"));
 export const tasksRoute: AppRouteModule = {
   path: "/tasks",
   element: TasksPage,
-  requiresAuth: false,
+  requiresAuth: true,
 };
 
 export default tasksRoute;

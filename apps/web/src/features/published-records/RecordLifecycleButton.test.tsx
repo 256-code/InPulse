@@ -120,6 +120,9 @@ it("409 requires loading current state and explicit confirmation before restorin
   fireEvent.click(screen.getByRole("button", { name: "加载最新状态" }));
   await screen.findByLabelText("恢复原因");
   expect(restore).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "确认恢复记录" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "确认恢复记录" }));
   await waitFor(() => expect(restore).toHaveBeenCalledOnce());
   expect(restore.mock.calls[0]).toMatchObject([
