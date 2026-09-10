@@ -2,6 +2,27 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+## F-09 逐响应 nonce CSP 与安全响应头（A，2026-09-10 本地实现）
+
+数据安全专项第一个纵切片（对应技术设计 §7.5 与 [ADR-021](adr/ADR-021.md)，不降低安全基线）：
+Vite 构建期在入口 HTML 的 script/style/modulepreload 标签与 `csp-nonce` bootstrap meta 写入
+占位符 `__INPULSE_CSP_NONCE__`，生产 Nginx 用每个请求 16 随机字节的 `$request_id` 通过
+`sub_filter` 逐响应替换，并在同一响应头下发同值 `script-src 'self' 'nonce-...'` 与
+`style-src 'self' 'nonce-...'`（无 `unsafe-inline`）；HSTS、nosniff、X-Frame-Options、
+Referrer-Policy 与 Permissions-Policy 收敛到 `deploy/docker/nginx-security-headers.conf`，
+由每个声明了 `add_header` 的 location 显式 include；入口与 SPA 回退一律 `no-store`，并关闭
+条件请求与 ETag，避免 304 复用旧 nonce 导致样式/脚本失效；哈希静态资源保持 `immutable`。
+本地开发与 `vite preview` 走同一策略串，`INPULSE_WEB_CSP=off` 只作为本地对照开关，非法值
+fail closed 到 enforce。未交付：Markdown 白名单（SEC-004）、Secret 文件 fail-closed 测试补强
+（SEC-007）与未匹配路由净化 404（SEC-006），另见「审计与安全」表。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F09-CSP-UNIT-001 | Web 单元 | 策略串、nonce 与 HTML 改写 | `resolveWebCspMode` 对非法值 fail closed；策略串与设计 §7.5 一致且不含 `unsafe-inline`；`applyHtmlSecurityHeaders` 只对 HTML 响应写头；`rewriteHtmlBody` 替换全部占位符；nonce 为 32 位十六进制且逐响应用新 | 本地通过（`apps/web/tools/vite-csp.test.ts` 与 `AppProviders.test.tsx`） |
+| F09-CSP-E2E-001 | 浏览器 E2E | 入口 nonce 一致性与强制模式零违规 | 同一入口两次响应的 nonce 不同，CSP 头 nonce 与 meta/script 标签一致，占位符无残留；登录、主题色、命令面板、通知弹层、懒加载与错误页在 CSP enforce 下 `securitypolicyviolation` 零违规；安全检查头齐全 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2，2026-09-10） |
+| F09-CSP-IMAGE-001 | 部署集成 | 真实镜像与 Nginx | HTTP 非 ACME 请求 308 跳同主机 HTTPS；入口/SPA 回退/代理路径逐项校验 nonce、`no-store` 与安全头；代理上游不可达时仍保留安全头；条件请求返回 200 而非带旧 nonce 的 304；哈希资源 `immutable` | 本地通过（`scripts/check-web-image-csp.sh inpulse/web:local`，2026-09-10；已加入 CI 生产镜像构建之后） |
+| F09-CSP-GATE-001 | 部署预检 | Compose/资产结构 | `deploy/docker/nginx-security-headers.conf` 列入必需资产；`nginx.conf` 必须含 `sub_filter "__INPULSE_CSP_NONCE__" "$request_id"` 与安全头 include；两个 Nginx 文件的指令行不得出现 `unsafe-inline`；`web.Dockerfile` 必须拷贝两个配置文件 | 本地通过（`scripts/check_deploy_refs.mjs`，正例通过、`.env.deploy.example` 占位符拒绝） |
+
 ## F-23 任务合并（C，2026-09-10 本地实现）
 
 `POST /api/v1/task-groups/merge` 把来源任务并入主任务所属聚合组：服务端按请求体的任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE` 后建立或复用聚合组，并保存来源任务的原工作状态与原负责人快照；来源已属活跃组、主任务在组内不是 MAIN、组已关闭或主任务在锁内变化统一 409，跨项目与非成员统一 404。合并不修改任何任务字段，审计 `task.merge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-23 交审说明](f23-local-handoff.md)。
@@ -319,7 +340,7 @@ GitHub Actions 尚未对本 PR 执行。
 | AUDIT-004 | 恢复演练 | 密钥轮换、备份与恢复 | 数据库链、链头、远端检查点和归档明细全部一致 | Required |
 | AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 本地通过（`audit-write.integration.test.ts` 轮换用例，2026-09-09；GitHub Actions 待执行） |
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
-| SEC-002 | 浏览器 E2E | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline` | Required |
+| SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；GitHub Actions 待执行） |
 | SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | Required |
 | SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | Required |
 | SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required |
