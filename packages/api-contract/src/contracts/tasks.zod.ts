@@ -101,7 +101,62 @@ export const taskAssigneesResponseSchema = z
   })
   .strict()
   .meta({ id: "TaskAssigneesResponse" });
+export const taskStatusRequestSchema = z
+  .discriminatedUnion("action", [
+    z
+      .object({
+        action: z.literal("COMPLETE"),
+        mode: z.literal("WITHOUT_RECORD"),
+        completionReason: z.enum([
+          "测试验证",
+          "技术调研",
+          "文档补充",
+          "环境配置",
+          "沟通协调",
+          "其他",
+        ]),
+        note: z.string().trim().max(9800),
+      })
+      .strict(),
+    z
+      .object({
+        action: z.enum(["REOPEN", "CANCEL", "RESTORE"]),
+        reason: z.string().trim().min(1).max(10000).nullable(),
+      })
+      .strict(),
+  ])
+  .meta({ id: "TaskStatusRequest" });
+export type TaskStatusRequest = z.infer<typeof taskStatusRequestSchema>;
+export const taskStatusHistoryResponseSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          id: z.string().regex(/^[1-9][0-9]*$/),
+          fromWorkStatus: z.enum(["TODO", "DONE", "CANCELED"]).nullable(),
+          toWorkStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+          completedAtSnapshot: z.iso.datetime().nullable(),
+          completionNoteSnapshot: z.string().max(10000).nullable(),
+          reason: z.string().max(10000).nullable(),
+          changedBy: id,
+          changedAt: z.iso.datetime(),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+  .meta({ id: "TaskStatusHistoryResponse" });
 export const taskSchemas = {
+  TaskStatusRequest: {
+    schema: taskStatusRequestSchema,
+    summary: "任务状态命令；完成仅支持无功能变化",
+    sensitiveFieldPaths: [],
+  },
+  TaskStatusHistoryResponse: {
+    schema: taskStatusHistoryResponseSchema,
+    summary: "不可变任务状态历史和完成快照",
+    sensitiveFieldPaths: [],
+  },
   ModuleTaskCollectionPath: {
     schema: moduleTaskCollectionPathSchema,
     summary: "模块级任务父级",

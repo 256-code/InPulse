@@ -617,6 +617,29 @@ export type TaskResourcePath = {
   readonly taskId: number;
 };
 
+export type TaskStatusHistoryResponse = {
+  readonly items: readonly ({
+    readonly id: string;
+    readonly fromWorkStatus: (("TODO" | "DONE" | "CANCELED") | null);
+    readonly toWorkStatus: ("TODO" | "DONE" | "CANCELED");
+    readonly completedAtSnapshot: (string | null);
+    readonly completionNoteSnapshot: (string | null);
+    readonly reason: (string | null);
+    readonly changedBy: number;
+    readonly changedAt: string;
+  })[];
+};
+
+export type TaskStatusRequest = ({
+  readonly action: "COMPLETE";
+  readonly mode: "WITHOUT_RECORD";
+  readonly completionReason: ("测试验证" | "技术调研" | "文档补充" | "环境配置" | "沟通协调" | "其他");
+  readonly note: string;
+} | {
+  readonly action: ("REOPEN" | "CANCEL" | "RESTORE");
+  readonly reason: (string | null);
+});
+
 export type TaskVersionHeaders = {
   readonly "x-csrf-token": string;
   readonly "if-match": string;

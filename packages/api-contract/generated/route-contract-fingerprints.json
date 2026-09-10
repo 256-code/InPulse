@@ -107,6 +107,18 @@
       "fingerprint": "ea08dd8b3fc048149e5f7ce88990006839f0b5e92761f44341fa3a4c44c2ae71"
     }
   ],
+  "transitionModuleTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "ea1b149dd64702be39b872d5c4d9b74d91d949faee60741a096dad21175173e0"
+    }
+  ],
+  "transitionTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "759d8d0641a30fb63ae5a8e1e7d272550d9231412c800041ccef74db0845cd27"
+    }
+  ],
   "unreadNotification": [
     {
       "version": "1.0.0",

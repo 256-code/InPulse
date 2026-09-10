@@ -31,7 +31,7 @@ const fields = [
   "createdAt",
   "updatedAt",
 ];
-export const taskRoutes: readonly RouteDefinition[] = [
+const basicTaskRoutes: readonly RouteDefinition[] = [
   ...(["listTasks", "getTask", "listTaskAssignees"] as const).map(
     (operationId): RouteDefinition => ({
       method: "GET",
@@ -136,6 +136,39 @@ export const taskRoutes: readonly RouteDefinition[] = [
   ),
 ];
 
+export const taskRoutes: readonly RouteDefinition[] = [
+  ...basicTaskRoutes,
+  {
+    ...basicTaskRoutes[1]!,
+    operationId: "getTaskStatusHistory",
+    path: collection + "/{taskId}/status-history",
+    summary: "读取真实归属任务的不可变状态历史，包含历次完成与重开快照。",
+    responses: { "200": json("TaskStatusHistoryResponse"), ...errors },
+  },
+  {
+    ...basicTaskRoutes[4]!,
+    method: "POST",
+    operationId: "transitionTask",
+    path: collection + "/{taskId}/status",
+    summary: "完成（仅 WITHOUT_RECORD）、重开、取消或恢复任务；原子保留历史。",
+    request: {
+      ...basicTaskRoutes[4]!.request,
+      body: {
+        contentTypes: [
+          { contentType: "application/json", schemaRef: "TaskStatusRequest" },
+        ],
+      },
+    },
+    auditAction: "task.status",
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project", "module", "feature", "task"],
+      retry:
+        "none; parents FOR SHARE then task FOR UPDATE; validate version and state under lock",
+    },
+  },
+];
+
 /** Same task commands and security policies, addressed through the true MODULE parent. */
 export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
   (route) => {
@@ -146,32 +179,38 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
       operationId: route.operationId.replace("Task", "ModuleTask"),
       path: route.path.replace("/features/{featureId}", ""),
       summary:
-        "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
+        route.operationId === "transitionTask" ||
+        route.operationId === "getTaskStatusHistory"
+          ? "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。"
+          : "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
       request: {
         ...route.request,
         path:
           route.request.path === "TaskResourcePath"
             ? "ModuleTaskResourcePath"
             : "ModuleTaskCollectionPath",
-        body: write
-          ? {
-              contentTypes: [
-                {
-                  contentType: "application/json",
-                  schemaRef: "ModuleTaskEditRequest",
-                },
-              ],
-            }
-          : { noBody: true },
+        body:
+          write && route.operationId !== "transitionTask"
+            ? {
+                contentTypes: [
+                  {
+                    contentType: "application/json",
+                    schemaRef: "ModuleTaskEditRequest",
+                  },
+                ],
+              }
+            : route.request.body,
       },
       responses: {
         ...route.responses,
         "200": json(
-          route.operationId === "listTaskAssignees"
-            ? "TaskAssigneesResponse"
-            : route.operationId === "listTasks"
-              ? "ModuleTaskListResponse"
-              : "ModuleTaskItem",
+          route.operationId === "getTaskStatusHistory"
+            ? "TaskStatusHistoryResponse"
+            : route.operationId === "listTaskAssignees"
+              ? "TaskAssigneesResponse"
+              : route.operationId === "listTasks"
+                ? "ModuleTaskListResponse"
+                : "ModuleTaskItem",
         ),
       },
       idempotencyReplayPolicy: write
