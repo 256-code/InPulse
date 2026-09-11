@@ -41,7 +41,7 @@
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
 #   - Playwright 完整业务关键路径（F-31 测试基座已落库，业务场景待对应模块交付）
 #   - 生产镜像 digest 绑定与签名发布清单（部署发布环节，非本 job 输出）
-# 生产 Dockerfile（API/Migration/Web/DB-bootstrap）与镜像扫描已按 §12.4 顺序在本
+# 生产 Dockerfile（API/Migration/Web/DB-bootstrap/Ops）与镜像扫描已按 §12.4 顺序在本
 # workflow 落库；`pnpm check:deploy:test` 继续用合成 ref 验证 Compose 渲染与结构，
 # 生产镜像 digest 必须由受信镜像仓库解析并在发布清单中绑定。
 #
@@ -52,7 +52,7 @@
 # 构建与 Trivy 扫描。Trivy 漏洞库已由 trivy-action 自带缓存，不需要重复配置；
 # Playwright 浏览器（约 100MB）用 actions/cache 缓存，缓存命中后 Install Playwright browser 由实测 23s 降到 14s（未命中时为 25s~116s）
 # 压到只剩系统依赖安装。
-# 5 个镜像构建改用 container driver 的 buildx 并带 `type=gha` 层缓存，配合
+# 6 个镜像构建（5 个生产镜像 + PGroonga 探针镜像）改用 container driver 的 buildx 并带 `type=gha` 层缓存，配合
 # deploy/docker/*.Dockerfile 中“先复制依赖清单、再复制源码”的层顺序，避免源码
 # 改动触发依赖重装；各镜像使用独立 cache scope。
 name: CI
@@ -255,6 +255,18 @@ jobs:
             --load \
             .
 
+      - name: Build production ops image
+        # 生产 ops 镜像（A-1）：承载 operations profile 的 backup 与 audit-archive
+        # 一次性任务，runtime 含 PostgreSQL 18 客户端（pg_dump/pg_restore）且非 root。
+        run: |
+          docker buildx build \
+            --file deploy/docker/ops.Dockerfile \
+            --tag inpulse/ops:ci \
+            --cache-from type=gha,scope=ops \
+            --cache-to type=gha,mode=max,scope=ops,ignore-error=true \
+            --load \
+            .
+
       - name: Scan production API image
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
@@ -289,6 +301,16 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           image-ref: "inpulse/db-bootstrap:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
+
+      - name: Scan production ops image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/ops:ci"
           scan-type: "image"
           severity: "CRITICAL,HIGH"
           exit-code: "1"

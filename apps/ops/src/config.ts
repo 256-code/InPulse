@@ -48,16 +48,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 归档数据库连接：生产稳态由 compose 以 `DB_HOST/DB_PORT/DB_NAME/DB_USER/
- * DB_PASSWORD_FILE` 注入（角色固定为 `audit_archive_writer`）；本地与集成测试可用
- * `ARCHIVE_DATABASE_URL` 直连，但生产模式禁止该变量（沿用 database 包的 fail closed 策略）。
+ * 归档/备份数据库连接（角色由调用方指定）：生产稳态由 compose 以
+ * `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD_FILE` 注入；本地与集成测试可用
+ * `<directUrlName>` 直连，但生产模式禁止该变量（沿用 database 包的 fail closed 策略）。
  */
-export async function resolveArchiveDatabaseUrl(): Promise<string> {
-  const direct = process.env["ARCHIVE_DATABASE_URL"]?.trim();
+export async function resolveRoleDatabaseUrl(options: {
+  readonly directUrlName: string;
+  readonly defaultUser: string;
+}): Promise<string> {
+  const direct = process.env[options.directUrlName]?.trim();
   if (direct) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "ARCHIVE_DATABASE_URL is forbidden in production; use DB_PASSWORD_FILE",
+        `${options.directUrlName} is forbidden in production; use DB_PASSWORD_FILE`,
       );
     }
     return direct;
@@ -66,7 +69,7 @@ export async function resolveArchiveDatabaseUrl(): Promise<string> {
   const passwordFileName = "DB_PASSWORD_FILE";
   const passwordFile = required(passwordFileName);
   const password = await readTrimmedSecret(passwordFile, passwordFileName);
-  const user = process.env["DB_USER"]?.trim() || "audit_archive_writer";
+  const user = process.env["DB_USER"]?.trim() || options.defaultUser;
   const host = required("DB_HOST");
   const port = process.env["DB_PORT"]?.trim() || "5432";
   const database = process.env["DB_NAME"]?.trim() || "app";
@@ -83,7 +86,10 @@ export async function resolveArchiveDatabaseUrl(): Promise<string> {
   return url.toString();
 }
 
-export function parseSigningKeyring(text: string): ArchiveSigningKeyring {
+export function parseSigningKeyring(
+  text: string,
+  fileName = "ARCHIVE_SIGNING_KEY_FILE",
+): ArchiveSigningKeyring {
   const keys = new Map<number, Buffer>();
   for (const [index, rawLine] of text.split(/\r?\n/).entries()) {
     const line = rawLine.trim();
@@ -91,7 +97,7 @@ export function parseSigningKeyring(text: string): ArchiveSigningKeyring {
     const match = /^(\d+):([0-9a-fA-F]{64})$/.exec(line);
     if (match === null) {
       throw new Error(
-        `ARCHIVE_SIGNING_KEY_FILE line ${index + 1} must be <version>:<64 hex chars>`,
+        `${fileName} line ${index + 1} must be <version>:<64 hex chars>`,
       );
     }
     const version = Number(match[1]);
@@ -103,7 +109,7 @@ export function parseSigningKeyring(text: string): ArchiveSigningKeyring {
     keys.set(version, Buffer.from(match[2] as string, "hex"));
   }
   if (keys.size === 0) {
-    throw new Error("ARCHIVE_SIGNING_KEY_FILE must contain at least one key");
+    throw new Error(`${fileName} must contain at least one key`);
   }
   const currentVersion = Math.max(...keys.keys());
   return { currentVersion, keys };
@@ -111,7 +117,13 @@ export function parseSigningKeyring(text: string): ArchiveSigningKeyring {
 
 export function parseWormCredentials(
   text: string,
-  options: { readonly requireHttps: boolean },
+  options: {
+    readonly requireHttps: boolean;
+    /** 缺省对象前缀（归档与备份各自独立）。 */
+    readonly defaultPrefix?: string;
+    /** 备份红线：归档/备份上传凭据必须对应至少该天数的对象锁。 */
+    readonly requireObjectLockMinRetainDays?: number;
+  },
 ): WormCredentials {
   let parsed: unknown;
   try {
@@ -154,7 +166,10 @@ export function parseWormCredentials(
   };
 
   const prefixRaw = parsed["prefix"];
-  const prefix = prefixRaw === undefined ? "inpulse/audit" : prefixRaw;
+  const prefix =
+    prefixRaw === undefined
+      ? (options.defaultPrefix ?? "inpulse/audit")
+      : prefixRaw;
   if (typeof prefix !== "string" || prefix.trim() === "") {
     throw new Error("WORM_CREDENTIALS_FILE prefix must be a non-empty string");
   }
@@ -191,6 +206,21 @@ export function parseWormCredentials(
       );
     }
     objectLock = { mode, retainDays };
+  }
+
+  if (options.requireObjectLockMinRetainDays !== undefined) {
+    if (objectLock === null) {
+      throw new Error(
+        "upload credentials must set objectLock for offsite backup retention",
+      );
+    }
+    if (objectLock.retainDays < options.requireObjectLockMinRetainDays) {
+      throw new Error(
+        "upload credentials objectLock.retainDays must be at least " +
+          options.requireObjectLockMinRetainDays +
+          " for offsite backup retention",
+      );
+    }
   }
 
   return {
@@ -232,4 +262,108 @@ export async function loadOpsConfig(): Promise<OpsConfig> {
   }
 
   return { databaseUrl, worm, signingKeyring, fetchTimeoutMs };
+}
+
+export async function resolveArchiveDatabaseUrl(): Promise<string> {
+  return resolveRoleDatabaseUrl({
+    directUrlName: "ARCHIVE_DATABASE_URL",
+    defaultUser: "audit_archive_writer",
+  });
+}
+
+/** 逻辑备份配置（技术设计 §11.5 / F-10.3）。 */
+export interface BackupConfig {
+  readonly databaseUrl: string;
+  /** 本机密文目录（compose 卷 backup_encrypted 挂载点。生产默认 /backup）。 */
+  readonly localDir: string;
+  /** 本机密文保留天数（技术设计固定 7 天）。 */
+  readonly localRetentionDays: number;
+  /** pg_dump 可执行文件路径（生产镜像内置 PostgreSQL 18 客户端）。 */
+  readonly pgDumpPath: string;
+  /** 备份加密与清单签名共用的 keyring（<version>:<64 hex>）。 */
+  readonly keyring: ArchiveSigningKeyring;
+  /** 异机上传凭据（S3 兼容，必须带 >=30 天对象锁）。 */
+  readonly upload: WormCredentials;
+  readonly fetchTimeoutMs: number;
+  /** 发布清单注入的 Git SHA；生产必填，进入签名清单。 */
+  readonly gitSha: string | null;
+  /** 发布清单注入的 ops 镜像引用；生产必填，进入签名清单。 */
+  readonly imageRef: string | null;
+}
+
+function optionalReleaseField(name: string, pattern: RegExp): string | null {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`Missing required environment variable: ${name}`);
+    }
+    return null;
+  }
+  if (!pattern.test(raw)) {
+    throw new Error(`${name} has an invalid format: ${raw}`);
+  }
+  return raw;
+}
+
+export async function loadBackupConfig(): Promise<BackupConfig> {
+  const databaseUrl = await resolveRoleDatabaseUrl({
+    directUrlName: "BACKUP_DATABASE_URL",
+    defaultUser: "app_backup",
+  });
+
+  const keyFileName = "BACKUP_ENCRYPTION_KEY_FILE";
+  const keyText = await readTrimmedSecret(required(keyFileName), keyFileName);
+  const keyring = parseSigningKeyring(keyText, keyFileName);
+
+  const uploadFileName = "OFFSITE_CREDENTIALS_FILE";
+  const uploadText = await readTrimmedSecret(
+    required(uploadFileName),
+    uploadFileName,
+  );
+  const upload = parseWormCredentials(uploadText, {
+    requireHttps: process.env.NODE_ENV === "production",
+    defaultPrefix: "inpulse/backups",
+    requireObjectLockMinRetainDays: 30,
+  });
+
+  const localDir = process.env["BACKUP_LOCAL_DIR"]?.trim() || "/backup";
+  const retentionRaw = process.env["BACKUP_LOCAL_RETENTION_DAYS"]?.trim();
+  const localRetentionDays =
+    retentionRaw === undefined ? 7 : Number.parseInt(retentionRaw, 10);
+  if (
+    !Number.isSafeInteger(localRetentionDays) ||
+    localRetentionDays < 1 ||
+    localRetentionDays > 90
+  ) {
+    throw new Error(
+      "BACKUP_LOCAL_RETENTION_DAYS must be an integer between 1 and 90",
+    );
+  }
+
+  const pgDumpPath = process.env["BACKUP_PG_DUMP_PATH"]?.trim() || "pg_dump";
+
+  const timeoutRaw = process.env["BACKUP_FETCH_TIMEOUT_MS"]?.trim();
+  const fetchTimeoutMs =
+    timeoutRaw === undefined ? 30_000 : Number.parseInt(timeoutRaw, 10);
+  if (!Number.isSafeInteger(fetchTimeoutMs) || fetchTimeoutMs < 1_000) {
+    throw new Error("BACKUP_FETCH_TIMEOUT_MS must be an integer >= 1000");
+  }
+
+  const gitSha = optionalReleaseField("BACKUP_GIT_SHA", /^[0-9a-f]{40}$/);
+  const imageRef = optionalReleaseField(
+    "BACKUP_IMAGE_REF",
+    /^[^:\s]+:[^@\s]+@sha256:[0-9a-f]{64}$/,
+  );
+
+  return {
+    databaseUrl,
+    localDir,
+    localRetentionDays,
+    pgDumpPath,
+    keyring,
+    upload,
+    fetchTimeoutMs,
+    gitSha,
+    imageRef,
+  };
 }
