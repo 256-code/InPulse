@@ -1,13 +1,13 @@
 import React from "react";
-import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlaceholder";
+import type { InpulseApiClient } from "@generated/api";
+import { AuditLogPageView } from "@features/audit/AuditLogPageView";
 
-export const AuditPage: React.FC = () => {
-  return (
-    <WorkspacePlaceholder
-      title="动态审计"
-      description="项目动态和操作审计入口将在审计查询接口就绪后接入。"
-    />
-  );
+export interface AuditPageProps {
+  readonly client?: InpulseApiClient | undefined;
+}
+
+export const AuditPage: React.FC<AuditPageProps> = ({ client }) => {
+  return <AuditLogPageView {...(client ? { client } : {})} />;
 };
 
 export default AuditPage;

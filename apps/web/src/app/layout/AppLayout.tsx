@@ -27,6 +27,7 @@ const workspaceNavigation: readonly NavigationItem[] = [
 
 const systemNavigation: readonly NavigationItem[] = [
   { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
+  { key: "audit", label: "动态审计", path: "/audit", icon: "shield" },
   { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
 ];
 
@@ -36,6 +37,7 @@ const sections = [
   { prefix: "/records", key: "records", label: "迭代记录" },
   { prefix: "/issues", key: "issues", label: "遗留问题" },
   { prefix: "/activity", key: "activity", label: "项目动态" },
+  { prefix: "/audit", key: "audit", label: "动态审计" },
   { prefix: "/settings", key: "settings", label: "成员与设置" },
   { prefix: "/search", key: "search", label: "全局搜索" },
   { prefix: "/notifications", key: "notifications", label: "通知中心" },
@@ -76,6 +78,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
   const selectedKey = resolveSelectedKey(location.pathname);
+  const visibleSystemNavigation = useMemo(
+    () =>
+      user?.isAdmin
+        ? systemNavigation
+        : systemNavigation.filter((item) => item.key !== "audit"),
+    [user?.isAdmin],
+  );
   const sectionLabel = resolveSectionLabel(location.pathname);
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
@@ -203,7 +212,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             <span className="nav-group-label">工作区</span>
             {workspaceNavigation.map(renderNavigationItem)}
             <span className="nav-section-label">系统</span>
-            {systemNavigation.map(renderNavigationItem)}
+            {visibleSystemNavigation.map(renderNavigationItem)}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>
