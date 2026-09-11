@@ -146,6 +146,7 @@ describe("my-tasks-v1-query", () => {
       assignee: { userId: 9, name: "张三", avatarUrl: null },
       updatedAt: "2026-09-10T02:00:00.000Z",
       hasPublishedRecord: true,
+      publishedRecordCount: 1,
       groupRole: "SOURCE",
       priority: "NORMAL",
       dueAt: null,

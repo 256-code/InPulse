@@ -339,6 +339,9 @@ export type MyTasksQueryRequest = z.infer<typeof myTasksQueryRequestSchema>;
 
 /**
  * R-3 列表项。hasPublishedRecord 为单条 SQL 内先过滤后分页的存在性判断；
+ * publishedRecordCount 与它同源同口径（裁决修订 D-1：按 change_records 计数，
+ * 不按版本计数、不按影响功能去重），恒有
+ * hasPublishedRecord === publishedRecordCount > 0；
  * groupRole 是任务在当前 ACTIVE 聚合组中的角色，不属于任何组时为 null（Q-11）。
  */
 export const myTaskItemSchema = z
@@ -366,6 +369,8 @@ export const myTaskItemSchema = z
     /** 该任务经 task_external_links 关联的外部链接条数，按链接去重。 */
     githubLinkCount: z.number().int().nonnegative(),
     hasPublishedRecord: z.boolean(),
+    /** 与 hasPublishedRecord 同源同口径（裁决修订 D-1），无 PUBLISHED 记录为 0。 */
+    publishedRecordCount: z.number().int().nonnegative(),
     groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
     /** 与 groupRole 同源、同空同非空；支撑「查看主任务」入口（A 裁决 §10.3）。 */
     groupId: id.nullable(),
@@ -426,11 +431,12 @@ export const myTaskPageSchema = z
 export type MyTaskPage = z.infer<typeof myTaskPageSchema>;
 
 /**
- * R-5 任务卡片聚合关系批量查询（A 裁决 §10.4）。
+ * R-5 任务记录标记批量读（A 裁决 §10.4，裁决修订 D-1 / §11.4）。
  *
  * taskIds 是以英文逗号分隔的 1..100 个正整数；生成客户端对数组参数序列化为
  * 同一格式，服务端按此解析。数量、格式或重复校验失败统一返回 422；
- * 只返回当前用户可访问项目内、属于 ACTIVE 聚合组的任务，其余不入结果。
+ * 请求中每一个有权 taskId 都出现在结果中，未入组任务以 groupId / groupRole
+ * 为 null 返回且计数照常；无权或不存在仍不出现，不泄露存在性。
  */
 export const taskGroupMembershipQueryRequestSchema = z
   .object({
@@ -455,12 +461,17 @@ export type TaskGroupMembershipQueryRequest = z.infer<
   typeof taskGroupMembershipQueryRequestSchema
 >;
 
-/** R-5 成员关系条目；groupRole 与既有 MyTaskItem.groupRole 同源。 */
+/**
+ * R-5 任务记录标记条目（裁决修订 D-1 / §11.4）：groupRole / groupId 与既有
+ * MyTaskItem 同源，未加入 ACTIVE 聚合组时同为空；publishedRecordCount 与
+ * R-1 成员项、R-3 列表项同一口径（按 change_records 计数），无记录为 0。
+ */
 export const taskGroupMembershipItemSchema = z
   .object({
     taskId: id,
-    groupId: id,
-    groupRole: z.enum(["MAIN", "SOURCE"]),
+    groupId: id.nullable(),
+    groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
+    publishedRecordCount: z.number().int().nonnegative(),
   })
   .strict()
   .meta({ id: "TaskGroupMembershipItem" });
@@ -469,7 +480,10 @@ export type TaskGroupMembershipItem = z.infer<
   typeof taskGroupMembershipItemSchema
 >;
 
-/** R-5 响应：items 按 taskId 升序，未命中或无权任务不出现。 */
+/**
+ * R-5 响应：items 按 taskId 升序，覆盖请求中每一个有权 taskId；
+ * 无权或不存在（含跨项目）的任务不出现。
+ */
 export const taskGroupMembershipResponseSchema = z
   .object({
     items: z

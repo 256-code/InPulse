@@ -623,6 +623,7 @@ export type MyTaskItem = {
   readonly creatorId: number;
   readonly githubLinkCount: number;
   readonly hasPublishedRecord: boolean;
+  readonly publishedRecordCount: number;
   readonly groupRole: (("MAIN" | "SOURCE") | null);
   readonly groupId: (number | null);
 };
@@ -1252,8 +1253,9 @@ export type TaskGroupMemberItem = {
 
 export type TaskGroupMembershipItem = {
   readonly taskId: number;
-  readonly groupId: number;
-  readonly groupRole: ("MAIN" | "SOURCE");
+  readonly groupId: (number | null);
+  readonly groupRole: (("MAIN" | "SOURCE") | null);
+  readonly publishedRecordCount: number;
 };
 
 export type TaskGroupMembershipQueryRequest = {

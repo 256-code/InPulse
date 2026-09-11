@@ -301,6 +301,7 @@ export class MyTasksQueryService {
         creatorId: row.creatorId,
         githubLinkCount: linkCountByTask.get(row.taskId) ?? 0,
         hasPublishedRecord: publishedRecordCount > 0,
+        publishedRecordCount,
         groupRole: roleByTask.get(row.taskId) ?? null,
         groupId: groupIdByTask.get(row.taskId) ?? null,
       };

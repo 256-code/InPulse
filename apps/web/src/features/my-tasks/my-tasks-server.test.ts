@@ -25,6 +25,7 @@ const page: MyTaskPage = {
       assignee: { userId: 2, name: "开发者 C", avatarUrl: null },
       updatedAt: "2026-09-10T09:00:00.000Z",
       hasPublishedRecord: true,
+      publishedRecordCount: 1,
       groupRole: "MAIN",
       priority: "NORMAL",
       dueAt: null,
