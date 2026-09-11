@@ -375,7 +375,7 @@ GitHub Actions 尚未对本 PR 执行。
 | AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 本地通过（`audit-write.integration.test.ts` 轮换用例，2026-09-09；GitHub Actions 待执行） |
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
 | SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；GitHub Actions 待执行） |
-| SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | Required |
+| SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | 本地通过（`apps/api/test/csrf-lifecycle.integration.test.ts` 4 例：CSRF 失败不消费、重签后重试一次、单次消费、4 个上限淘汰最旧、Session 与预认证过期恢复、securityFlow 幂等例外；`apps/e2e/tests/csrf.spec.ts` 4 例：首登轮换、刷新、多标签、If-Match/CSRF/幂等键请求头；2026-09-11；GitHub Actions 待执行） |
 | SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 本地通过（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 13 例（2026-09-11 补齐项目/功能/记录关联的复合外键用例），2026-09-10；F-22 已交付 HTTP 关联接口并在服务端复用同一规范化器（证据见本文件「F-22 当前 GitHub 关联」章节）；GitHub Actions 待执行） |
 | SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required |
 | SEC-006 | API 集成 | 未匹配路由的错误契约净化 | 任意未匹配路径返回 `application/json` 的统一 404 `{ code, message, details, requestId }`，message 为固定文案且不回显 method、path 或框架内部文本，响应带 `X-Request-Id` 并保留应用 CSP，不返回框架或 Express 默认 HTML；已匹配路由不受影响；见 [ADR-026](adr/ADR-026.md) | 本地通过（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点在全局异常过滤器本身，未新增 adapter 包装；API 响应的 nosniff/CSP 由生产 Nginx `location /api/v1/` 下发，另见 F09-CSP-*；GitHub Actions 待执行） |
@@ -917,3 +917,31 @@ DEPLOY-003）仍是上线门禁，未在本批执行；③ 六份密码、发布
 声明会给出「not supported」警告（属 Swarm 语法），实际文件权限由部署账户控制，静态声明仍由
 `check:deploy` 校验；⑤ `010_passwords.sql` 的容器内路径已与稳态 secret 名对齐（`db_*`），
 `database/.env.example` 同步更新。
+
+## A-4 SEC-003 CSRF 完整生命周期 E2E（2026-09-11 本地落库）
+
+按 [ADR-015](adr/ADR-015.md) 与 [ADR-023](adr/ADR-023.md)：浏览器侧首登、刷新、多标签与
+普通/版本化写请求头由 [`apps/e2e/tests/csrf.spec.ts`](../apps/e2e/tests/csrf.spec.ts) 覆盖；
+材料失效与恢复的服务端语义（单次消费、4 个上限、过期、重签恢复、securityFlow 幂等例外）由
+[`apps/api/test/csrf-lifecycle.integration.test.ts`](../apps/api/test/csrf-lifecycle.integration.test.ts)
+在真实 PostgreSQL 与真实 HTTP（完整 AppModule）上覆盖。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| SEC3-E2E-001 | 浏览器 E2E | 首登与轮换 | 登录请求带 43 字符 `x-csrf-token` 且不带 Idempotency-Key；`GET /auth/csrf` 不发送业务幂等键；登录成功后 `__Host-session` 为 HttpOnly/Secure/SameSite=Lax/Path=/ 且 `__Host-preauth` 被清除 | 本地通过（2026-09-11） |
+| SEC3-E2E-002 | 浏览器 E2E | 刷新 | 登录后刷新页面仍为已认证；随后 `POST /projects` 重新签发 CSRF 并携带 `x-csrf-token` 与 `Idempotency-Key` | 本地通过 |
+| SEC3-E2E-003 | 浏览器 E2E | 多标签 | 同一会话两个标签各自签发 CSRF 并分别完成项目创建；第二个标签签发后第一个标签仍能完成「全部已读」写操作 | 本地通过 |
+| SEC3-E2E-004 | 浏览器 E2E | If-Match | 模块编辑 PATCH 携带 `If-Match: "rowVersion"`、`x-csrf-token` 与 `Idempotency-Key` | 本地通过 |
+| SEC3-API-001 | API 集成 | 失败不消费与重试一次 | 错误 CSRF 登录 401 且预认证材料未被消费；重签后重试一次成功（200，签发 Session 与新 CSRF）；同一材料再登录：带有效 Session 409 `AUTH_SESSION_CONFLICT`、登出后 401；从未消费的原始材料仍可登录 | 本地通过 |
+| SEC3-API-002 | API 集成 | 4 个上限与过期恢复 | 连续签发 5 次仅保留 4 个有效 Hash（DB 断言）；最旧 Token 写操作 401 `MODULE_SESSION_REQUIRED`，其余仍可用；全部过期后写操作 401，重签后恢复 200 | 本地通过 |
+| SEC3-API-003 | API 集成 | 预认证过期 | 过期预认证材料登录 401；重签后成功签发 Session | 本地通过 |
+| SEC3-API-004 | API 集成 | securityFlow 幂等例外 | 登录即使携带 Idempotency-Key 也不写入 `app.idempotency_records`（计数 0）；模块创建缺 Key 返回 400 `IDEMPOTENCY_KEY_REQUIRED`，带 Key 成功 | 本地通过 |
+
+本地实际执行（2026-09-11）：`apps/api/test/csrf-lifecycle.integration.test.ts` 4/4（真实
+PostgreSQL 与完整 AppModule HTTP）、`apps/e2e/tests/csrf.spec.ts` 4/4（Playwright chromium）、
+`pnpm build`、`apps/e2e` typecheck、`pnpm format:check`、`pnpm check:docs` 均通过。
+
+未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② CSRF Token 8 小时自然过期与后台
+清理按真实时间推进，不在本批（过期失效语义以数据库时间回拨覆盖）；③ 除登录/登出外的其余
+securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路径已有控制器单测与 MFA E2E 覆盖，
+本批不重复。
