@@ -994,6 +994,69 @@ export const routeRegistry = [
   },
   {
     method: "GET",
+    path: "/audit-logs",
+    operationId: "getAuditLogs",
+    summary:
+      "系统管理员读取原始审计链；要求完整管理员 Session 且密码 + 当前 TOTP 重认证在 5 分钟内；AuditQueryService 使用独立 audit_reader 只读连接查询，返回前必须由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
+    request: {
+      path: "none",
+      query: "AuditLogQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "AuditLogPage" },
+          ],
+        },
+      },
+      "401": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "403": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "adminSessionWithReauthentication",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "AUDIT_LOG_READ",
+  },
+  {
+    method: "GET",
     path: "/projects/{projectId}/activity",
     operationId: "getProjectActivity",
     summary:

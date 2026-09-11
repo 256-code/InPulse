@@ -1,3 +1,8 @@
+import {
+  auditLogItemSchema,
+  auditLogPageSchema,
+  auditLogQueryRequestSchema,
+} from "./contracts/audit.zod.js";
 import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
@@ -406,6 +411,22 @@ export const schemaRegistry = {
   SearchPage: {
     schema: searchPageSchema,
     summary: "全局搜索分页结果",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogQueryRequest: {
+    schema: auditLogQueryRequestSchema,
+    summary:
+      "原始审计查询参数；不传 projectId 读 SYSTEM 链，cursor 为服务端签名的不透明字符串，limit 默认 50、最大 100",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogItem: {
+    schema: auditLogItemSchema,
+    summary: "原始审计条目；只对系统管理员经重认证后可见，包含事件负载与链哈希",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogPage: {
+    schema: auditLogPageSchema,
+    summary: "原始审计分页结果",
     sensitiveFieldPaths: [],
   },
   ActivityPath: {

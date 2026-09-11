@@ -754,3 +754,16 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 两条均未退化为顺序扫描，现有索引可支撑，无需新索引（补索引属迁移，按裁决 §10.6 另行人工评审）。
 
 本地实际执行（2026-09-11）：`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、API `test:unit` 66 文件 343 例、API `test:integration` 47 文件 407 例（真实 PostgreSQL）、`pnpm --filter @inpulse/web test` 58 文件 248 例、`pnpm db:test` 2 文件 20 例、`pnpm db:migrations:check`（6 个迁移）、`pnpm check:secrets`（855 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test`、`pnpm check:deps`（579 文件）与 `pnpm check:frontend:boundaries` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。未运行：`pnpm test:e2e`（本轮未改 UI 页面行为）、`pnpm test:search:db` / `pnpm test`（要求 `max_connections >= 150`，按既定决定未纳入 CI）、GitHub Actions。前端适配器对新增字段的接线与降级项清零属 C 域交付（裁决 §10.5）；本轮仅把 C 侧测试夹具补到类型所需字段，未改适配器行为。
+
+## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
+
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）仍未交付。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 重认证管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-11） |
+| F08-READ-API-002 | HTTP + PostgreSQL | 身份与重认证门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；完整管理员未做 5 分钟内双因子重认证时 403 `ADMIN_REAUTH_REQUIRED` | 同上 |
+| F08-READ-API-003 | HTTP + PostgreSQL | action 过滤与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
+| F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
+
+本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 尚未执行。
