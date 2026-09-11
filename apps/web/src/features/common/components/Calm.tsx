@@ -70,3 +70,38 @@ export const CalmSegmented = <T extends string>({
     ))}
   </div>
 );
+
+/**
+ * C-3：设计师稿 task-modal 的「任务内容」标签栏（`calm-tabs`）——一行标签 +
+ * 一根底部细线，选中态用 2px 下边框；内容区由调用方按 activeKey 渲染，
+ * 标签文案（如 `迭代记录 3`、`合并与分支 · #12`）也由调用方组装。
+ */
+export const CalmTabs = <K extends string>({
+  label,
+  activeKey,
+  items,
+  onChange,
+}: {
+  readonly label: string;
+  readonly activeKey: K;
+  readonly items: ReadonlyArray<{
+    readonly key: K;
+    readonly label: React.ReactNode;
+  }>;
+  readonly onChange: (key: K) => void;
+}) => (
+  <div className="calm-tabs" role="tablist" aria-label={label}>
+    {items.map((item) => (
+      <button
+        key={item.key}
+        type="button"
+        role="tab"
+        aria-selected={activeKey === item.key}
+        className={activeKey === item.key ? "selected" : ""}
+        onClick={() => onChange(item.key)}
+      >
+        {item.label}
+      </button>
+    ))}
+  </div>
+);
