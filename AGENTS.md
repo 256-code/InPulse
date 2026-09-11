@@ -198,6 +198,8 @@
 
 - 备份调度生效时机已裁定（A，2026-09-11）：定时备份（宿主每 12 小时加密备份、排除 Session、SHA-256/签名清单、异机保留与失败告警）是生产上线门禁项，上线时才启用；上线前不部署、不运行定时备份任务，`deploy/compose.yaml` 的 `operations` profile 保持未发布。同时修正文档内备份频率不一致：技术设计 §1.3、系统设计部署表与技术设计 §10.4/§11.5/§12 统一为与 ADR-020 一致的至少每 12 小时，未改动 ADR-020 决策。本轮仅文档变更，未改代码、迁移、契约源或生成物。
 
+- 阶段 0 F-10 备份调度配置与 Runbook 已本地落库（A）：新增 `deploy/backup/`（`backupctl.sh` 宿主控制器 + `inpulse-backup`/`inpulse-backup-alert@`/`inpulse-backup-watchdog` systemd 单元与定时器 + `backup.env.example` 非敏感配置示例）与 `docs/runbooks/backup-restore.md`、`docs/runbooks/upgrade-rollback.md`；启用流程要求 `--confirm-go-live` 与全新主机恢复演练证据（fail closed），`run` 以 `flock` 串行化并执行 `docker compose --profile operations run --rm backup`，staleness 默认 18 小时、每小时 watchdog，告警 Webhook 只从受限文件读取且不进进程参数与日志；`scripts/check_deploy_refs.mjs` 新增 9 项备份资产与调度不变量静态校验（12 小时/每小时节奏、`Persistent`、`flock`、go-live 门禁与 `enabled-at` 启用基线、`*_FILE` 凭据、禁止 `--profile operations up`、`backup`/`audit-archive` 必须 `profiles: [operations]`）；本地 `pnpm check:deploy:test` 退出码 0、`bash -n deploy/backup/backupctl.sh` 通过；未运行：真实主机 systemd 安装、真实告警投递、全新主机恢复演练与 GitHub Actions；`backup`/`audit-archive` 服务本体（F-10.3）与真实镜像 digest 签名发布清单仍未交付。
+
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
 
 - 2026-09-10 F-21 已本地交审：管理员记录作废/恢复、双时间戳重认证（含锁后复核）、原因/If-Match/数据库幂等、管理员VOID读取/发现及同事务审计/Activity/Search；版本、最近作废快照、遗留项及转换链接保留，无通知或迁移。真库四文件63/63、契约42/42、Web7/7、86路由/权限与5生成物漂移通过；Edge F21 1/1及相邻F18 2/2分别通过，未执行本批CI。代码 9b5805805bbee6f0ff964fba75d5732701570943，范围与失败历史见 [F-21交审说明](docs/f21-local-handoff.md)。

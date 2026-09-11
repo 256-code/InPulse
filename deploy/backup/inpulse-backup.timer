@@ -1,0 +1,15 @@
+[Unit]
+# InPulse 备份调度（技术设计 v1.2.2 §11.5）：每 12 小时触发一次。
+# Persistent=true 覆盖宿主机停机错过的窗口；RandomizedDelaySec 避免与其它运维
+# 任务同时争抢 I/O。启用属于生产上线门禁动作，见 docs/runbooks/backup-restore.md。
+Description=InPulse 备份调度（12 小时）
+
+[Timer]
+OnCalendar=*-*-* 00/12:00:00
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=1m
+Unit=inpulse-backup.service
+
+[Install]
+WantedBy=timers.target
