@@ -27,17 +27,10 @@ export const MY_TASKS_MOCK_NOTICE =
   "任务中心 mock 数据：仅用于前端测试与降级演示，未接入服务端聚合接口；生产页面默认使用 server adapter（GET /api/v1/me/tasks）。";
 
 /**
- * mock 数据集持有全部骨架字段（含契约缺口字段），仅供测试与演示；
- * 视图类型 MyTaskListItem 上这些字段可选，服务端映射保持 undefined。
+ * mock 数据集持有全部骨架字段（含契约未提供的 description），仅供测试与演示；
+ * 其余字段与视图类型 MyTaskListItem 一致，应与服务端映射保持同源。
  */
-type MockTaskItem = MyTaskListItem & {
-  description: string;
-  priority: MyTaskPriority;
-  dueAt: string | null;
-  completedAt: string | null;
-  creatorId: number;
-  githubLinkCount: number;
-};
+type MockTaskItem = MyTaskListItem & { description: string };
 
 type Bucket = "open" | "done" | "canceled";
 
@@ -108,6 +101,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 1,
     },
     {
@@ -133,6 +127,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: true,
       groupRole: "MAIN",
+      groupId: 501,
       githubLinkCount: 0,
     },
     {
@@ -157,6 +152,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 0,
     },
     {
@@ -181,6 +177,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: true,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 1,
     },
     {
@@ -205,6 +202,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 2, name: "王敏", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: "SOURCE",
+      groupId: 501,
       githubLinkCount: 0,
     },
     {
@@ -229,6 +227,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 0,
     },
     {
@@ -253,6 +252,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 0,
     },
     {
@@ -277,6 +277,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 0,
     },
     {
@@ -301,6 +302,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 1, name: "陈晓", avatarUrl: null },
       hasPublishedRecord: true,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 1,
     },
     {
@@ -325,6 +327,7 @@ function createMockItems(): readonly MockTaskItem[] {
       assignee: { userId: 3, name: "赵磊", avatarUrl: null },
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       githubLinkCount: 0,
     },
   ];

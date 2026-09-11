@@ -78,7 +78,7 @@ describe("project-overview-v1", () => {
     expect(fromV1RecentRecords([])).toEqual([]);
   });
 
-  it("maps the frozen R-2 response with explicit gap nulls", () => {
+  it("maps the frozen R-2 response including the second-round fields", () => {
     expect(
       fromV1ProjectOverview({
         project: { projectId: 7, name: "订单中台", status: "ACTIVE" },
@@ -100,11 +100,13 @@ describe("project-overview-v1", () => {
             publishedAt: "2026-09-10T09:00:00.000Z",
           },
         ],
+        activeLeftoverTotal: 1,
         activeLeftovers: [
           {
             leftoverItemId: 21,
             recordId: 12,
             recordCode: "CR-201",
+            recordTitle: "增加商户订单号幂等校验",
             content: "补齐恢复码入口",
             createdAt: "2026-09-10T09:30:00.000Z",
           },
@@ -116,7 +118,7 @@ describe("project-overview-v1", () => {
         activeFeatures: 5,
         openTasks: 6,
         publishedRecords: 9,
-        openLeftovers: null,
+        openLeftovers: 1,
       },
       recentIterations: [
         {
@@ -132,16 +134,14 @@ describe("project-overview-v1", () => {
           leftoverId: 21,
           summary: "补齐恢复码入口",
           recordCode: "CR-201",
-          recordTitle: null,
+          recordTitle: "增加商户订单号幂等校验",
         },
       ],
     });
   });
 
-  it("keeps the documented gaps stable", () => {
-    expect(PROJECT_OVERVIEW_V1_MISSING_METRICS).toEqual(["openLeftovers"]);
-    expect(PROJECT_OVERVIEW_V1_MISSING_FIELDS).toEqual([
-      "leftover.recordTitle",
-    ]);
+  it("clears the documented gaps after the second-round extension", () => {
+    expect(PROJECT_OVERVIEW_V1_MISSING_METRICS).toEqual([]);
+    expect(PROJECT_OVERVIEW_V1_MISSING_FIELDS).toEqual([]);
   });
 });

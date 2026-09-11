@@ -2,7 +2,7 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | 本地已接线：R-1 ~ R-4 契约、后端与生成客户端随 [PR #97](https://github.com/256-code/InPulse/pull/97) 落库，F-29 / F-32 页面默认注入 server adapter（mock 仅保留测试与降级），专属 Playwright 关键路径已落库并以 [PR #98](https://github.com/256-code/InPulse/pull/98) 交付（全量 E2E 42/42）；GitHub Actions（CI push / PR 与 Documentation）已通过，待非作者评审 |
+| 状态 | 本地已接线：R-1 ~ R-4 契约、后端与生成客户端随 [PR #97](https://github.com/256-code/InPulse/pull/97) 落库，F-29 / F-32 页面默认注入 server adapter（mock 仅保留测试与降级），专属 Playwright 关键路径已落库并以 [PR #98](https://github.com/256-code/InPulse/pull/98) 交付（全量 E2E 42/42）；2026-09-11 C-2 第二轮字段接线与降级清零已本地落库（R-2 / R-3 扩展全量接线，E2E 45/45，见 §2 / §3 / §5），GitHub Actions 尚未对本批执行 |
 | 冻结依据 | [F-25 / F-29 / F-32 契约评审裁决](./a-contract-review-f25-f29-f32.md)（A 岗，`5563bcf`） |
 | 落库状态 | 四条路由已登记（Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端随实现同一 PR）；所依赖的 B 侧只读端口扩展（`TaskQueryPort` 列表/计数、`ChangeRecordReadPort`、`ModuleReadPort.count`、`FeatureReadPort.count`）已由 C 代 B 落库（PR #96），见[端口扩展提案的回填](./c-port-extension-proposal.md)；C 侧接线与测试证据见[测试矩阵](./test-matrix.md) 的 2026-09-11 增量段 |
 | 当前日期 | 2026-09-11 |
@@ -29,9 +29,9 @@
 | `record=yes` / `no` | `hasPublishedRecord=true` / `false` | 记录筛选 |
 | `limit` | `limit` | 非正整数回退 20，超过 100 收口到 100 |
 
-V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`scope=all`、`scope=project` 未选项目、`priority`、`relation`、`github`、`q`（关键词），以及 `status=open` 叠加「包含已取消」（`workStatus` 单值无法表达 TODO 与 CANCELED 的并集）。
+第二轮扩展后 `priority`（单值）与 `includeCanceled`（与 `workStatus=TODO` 组合表达「未完成并含已取消」）已可表达；`listMyTasksV1Gaps` 仍返回 `scope=created`、`scope=all`、`scope=project` 未选项目、`relation`、`github`、`q`（关键词）6 项，UI 按 `MY_TASKS_V1_FILTER_SUPPORT`（`filter:priority` 与 `filter:canceled-with-open` 已翻为 true）显式禁用并标注。
 
-响应与列表项缺口：R-3 只返回 `items` / `nextCursor` / `hasMore`；骨架的统计卡片、各范围计数与遗留问题入口没有契约来源。列表项缺 `priority`、`dueAt`、`completedAt`、`description`、`creatorId`、`githubLinkCount`。
+响应与列表项缺口（C-2 后）：`stats` / `leftoverCount` / `leftoverSample` 与列表项 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId` 已接线；仅 `description`（A 裁决拒绝）与 `scopeCounts`（§10.3 延后）保留缺口常量 `MY_TASKS_V1_MISSING_ITEM_FIELDS` / `MY_TASKS_V1_MISSING_RESPONSE_PARTS` 作为入口，范围计数不渲染。
 
 ## 3. R-2 `getProjectOverview` 与 F-29 项目概览
 
@@ -47,7 +47,7 @@ V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`sc
 | 最近迭代 | `recentRecords` | 无损映射为骨架视图字段（`moduleId` / `featureId` 不进入视图） |
 | 待处理遗留问题（列表） | `activeLeftovers` | 字段为 `leftoverItemId` / `recordId` / `recordCode` / `content` / `createdAt` |
 
-缺口：设计师稿的「待处理遗留问题」计数没有契约来源（响应只有列表，默认 2 条）；骨架遗留问题行使用 `recordTitle`，冻结 DTO 没有该字段。
+缺口（C-2 后清零）：`activeLeftoverTotal` 与 `activeLeftovers[].recordTitle` 已由第二轮扩展提供，指标卡与遗留行均渲染服务端实时值；`PROJECT_OVERVIEW_V1_MISSING_METRICS` / `PROJECT_OVERVIEW_V1_MISSING_FIELDS` 清空保留为入口，恢复缺口时必须同步补回。
 
 ## 4. 待裁定项与接线顺序
 
@@ -71,9 +71,11 @@ V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`sc
 
 2026-09-11 第二轮裁决契约扩展落库（A）：R-2 `activeLeftoverTotal` / `recordTitle`、R-3 列表项 6 字段与 `stats` / `leftoverCount` / `leftoverSample`、筛选 `priority` / `includeCanceled` 与新增 R-5 `listTaskGroupMemberships` 的 Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端随服务端实现同一 PR 落库；真实 PostgreSQL 集成测试覆盖 R-2 / R-3 新字段与 R-5 批量查询（聚合读 19/19），`priority` / `includeCanceled` 的 `EXPLAIN` 证据见[测试矩阵](./test-matrix.md) 增量段。
 
-C 侧待办（2026-09-11 第二轮契约扩展落库后更新）：R-5 前端接线（F-25 步骤 3 任务卡片徽章与任务详情抽屉「查看主任务」按页面一次批量调用，`groupRole === null` 隐藏入口、`groupId` 导航 `/task-groups/{groupId}`）；F-29 / F-32 适配器对 `activeLeftoverTotal` / `recordTitle` / 新条目字段 / `stats` / `leftoverCount` / `leftoverSample` 与 `priority` / `includeCanceled` 筛选的接线；降级项清零并同步 `my-tasks-types.ts` 与 `project-overview-v1.ts` 的缺口注释；对应 Playwright 关键路径。在这些完成前，前端降级保持有效。既有页面视觉与 mock 数据集本身的调整仍未做。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。 R-5 契约已随 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库并按顺延冻结编号（本批两条新路由为 R-6 / R-7），前端接线可直接开始。
+C 侧待办（2026-09-11 C-2 落库后更新）：F-29 / F-32 适配器接线、降级清零、缺口注释同步与对应 Playwright 关键路径已随 C-2 本地落库（见下条；`scopeCounts` 与 `description` 为 A 裁决延后项，保持缺口常量）。仍待做：R-5 前端接线（F-25 步骤 3 任务卡片徽章与任务详情抽屉「查看主任务」按页面一次批量调用，`groupRole === null` 隐藏入口、`groupId` 导航 `/task-groups/{groupId}`，工作书 C-1 且被 A-7 / B-7 阻塞）；C-3 既有页面视觉与 mock 数据集本身的调整。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。R-5 契约已随 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库并按顺延冻结编号（本批两条新路由为 R-6 / R-7），前端接线可直接开始。
+2026-09-11 C-2 第二轮字段接线与降级清零落库（工作书 C-2）：`apps/web/src/features/my-tasks/*` 与 `apps/web/src/features/project-overview/*` 完成接线——`my-tasks-server.ts` 改为透传 `stats` / `leftoverCount` / `leftoverSample`（仅 `scopeCounts` 保持 null），`MY_TASKS_V1_FILTER_SUPPORT` 翻 `filter:priority` 与 `filter:canceled-with-open` 为 true，`toMyTasksV1Query` 增加 `priority` / `includeCanceled` 映射，`fromV1MyTaskItem` 映射 6 个新字段并收紧 `MyTaskListItem`（null 语义即契约定义，`description` 仍可选）；`project-overview-v1.ts` 改为 `openLeftovers = activeLeftoverTotal`、`recordTitle` 直取服务端字段，`PROJECT_OVERVIEW_V1_MISSING_*` 清空；两页视图移除「—」与禁用降级：统计卡渲染服务端数字、卡片/表格始终渲染优先级徽章与截止文案、遗留指标卡与遗留行渲染真实数据。`apps/e2e/tests/aggregate-views.spec.ts` 两例由降级断言翻转为接线断言（统计卡数字轮询、优先级筛选选中写 URL、任务卡含「普通优先级」与「未设置截止」、显示已取消开关可用、遗留指标为数字、notice 断言更新）。新增/更新的单测见[测试矩阵](./test-matrix.md) 的 C-2 增量段；本地 `pnpm --filter @inpulse/web test` 64 文件 293 例、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm check:frontend:boundaries`（207 模块 946 依赖）与全量 `pnpm test:e2e` 45/45（约 6.1 分钟）通过。排障记录：本地 `app` 库缺 `0006_leftover_search_entity.sql` 导致所有带遗留问题的发布 500（`search_projection_entity_type_check` 不含 LEFTOVER），以 `MIGRATION_DATABASE_URL` 执行 `pnpm db:migrate` 应用 0006 后 10/10 复跑通过；该失败与 C-2 无关，CI 一次性建库不受影响。新增/更新的 E2E 用例需非作者人工评审。
+
 2026-09-11 F-20 遗留问题页与任务中心聚合组区块落库：`/issues` 由 `WorkspacePlaceholder` 换成按设计师稿实现的遗留问题页（未闭环 / 已闭环分桶、服务端签名游标分页、行内来源记录与来源 / 跟进任务入口、未闭环项「转为任务」复用已发布记录页的转换弹窗）；任务中心补上设计师稿的「任务聚合组」区块（组卡、分支行徽章与负责人、页脚「查看主任务」直达任务详情）。两条页面所需的「列遗留项 / 列聚合组」服务端读能力在既有契约中不存在，因此新增 `GET /api/v1/leftover-items`（`listLeftoverItems`）与 `GET /api/v1/task-groups`（`listTaskGroups`），Schema、Route Registry 全策略、权限矩阵、OpenAPI、生成客户端与真实 PostgreSQL / E2E 用例随实现同一个 PR 落库；两条路由按服务端 `AuthorizedProjectScope` 跨项目过滤，非成员与不存在返回空页而不是 404（与 `listMyTasks` 同族）。测试证据见[测试矩阵](./test-matrix.md) 的 F-20 页面与聚合组区块条目；全量 `pnpm test:e2e` 45/45。新增 E2E 用例需非作者人工评审。
 
 编号说明（已按建议顺延）：A 于 2026-09-11 冻结的 R-5 是 `listTaskGroupMemberships`（[PR #102](https://github.com/256-code/InPulse/pull/102)）；本批两条新路由原沿用的 R-5 / R-6 与其冲突，已按建议顺延落库为 **R-6 `listLeftoverItems`（`GET /api/v1/leftover-items`）** 与 **R-7 `listTaskGroups`（`GET /api/v1/task-groups`）**；Route Registry、Schema、Schema Registry 描述、实现注释、前端接线、集成测试与 E2E 用例、OpenAPI 与生成客户端已同步，冲突编号不再存在。
 
-未做：§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整。`/records` 单页结构改造（会改动 F-17 / F-18 / F-19 已交付视图）经产品 2026-09-11 定案为**暂缓**并归属 B，登记为工作书 B-3；恢复开工需先定案跨项目记录读路由（现有 `listChangeRecords` 与 `listRecordDrafts` 均先选项目，`RecordListQuery` 只有 `status`），按独立契约纵切片排期。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。
+未做：§4 的延后项（`scopeCounts`、`description`、`scope=created|all`、`relation` / `github` / `q` 筛选）保持显式降级；C-3 既有页面视觉与 mock 数据集本身的调整仍未做。`/records` 单页结构改造（会改动 F-17 / F-18 / F-19 已交付视图）经产品 2026-09-11 定案为**暂缓**并归属 B，登记为工作书 B-3；恢复开工需先定案跨项目记录读路由（现有 `listChangeRecords` 与 `listRecordDrafts` 均先选项目，`RecordListQuery` 只有 `status`），按独立契约纵切片排期。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。

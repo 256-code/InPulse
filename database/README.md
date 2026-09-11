@@ -115,8 +115,8 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 `poc/search-pgroonga/artifacts/pgroonga-report.json`、
 `poc/search-pgroonga/artifacts/pgroonga-backup-restore-report.json` 与
 `poc/search-pgroonga/artifacts/pgroonga-migration-report.json`。
-18.6 探针镜像上的 V1 语义、90 条金标 Recall@20、边界、跨项目隔离、默认
-查询计划的 `ANALYZE/BUFFERS` 证据、`0000-0002 -> 0003-0005` 升级/逐迁移
+18.6 探针镜像上的 V1 语义、200 条冻结金标（phase4-v1）Recall@20、边界、跨项目隔离、默认
+查询计划的 `ANALYZE/BUFFERS` 证据、`0000-0002 -> 0003-0006` 升级/逐迁移
 回滚、旧 `pg_trgm` GIN/扩展清理和逻辑恢复均通过；旧
 `pnpm db:poc:search:pgroonga:local` 仍保留为非 18.6 快速复现入口。
 

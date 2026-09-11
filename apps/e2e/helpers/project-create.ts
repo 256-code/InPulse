@@ -8,10 +8,16 @@ export interface CreatedProject {
   readonly name: string;
 }
 
+export interface CreateProjectViaUiOptions {
+  /** 创建成功横幅的断言超时（毫秒）；默认沿用 Playwright 的 10s，仅在本地大数据量列表上放宽。 */
+  readonly successTimeoutMs?: number;
+}
+
 export async function createProjectViaUi(
   page: Page,
   runtime: E2ERuntime,
   prefix: string,
+  options: CreateProjectViaUiOptions = {},
 ): Promise<CreatedProject> {
   const suffix =
     Date.now().toString(16).slice(-8).toUpperCase() +
@@ -33,6 +39,10 @@ export async function createProjectViaUi(
   await expect(dialog.getByText(/已选择 1 位其他成员/)).toBeVisible();
   await dialog.getByRole("button", { name: "创建项目" }).click();
 
-  await expect(page.getByText("项目创建成功", { exact: true })).toBeVisible();
+  await expect(page.getByText("项目创建成功", { exact: true })).toBeVisible(
+    options.successTimeoutMs === undefined
+      ? {}
+      : { timeout: options.successTimeoutMs },
+  );
   return { code, name };
 }

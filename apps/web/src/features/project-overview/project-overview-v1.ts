@@ -13,8 +13,8 @@ import type {
  * 响应为 project / memberCount / stats（4 项）/ recentRecords / activeLeftovers。
  *
  * 本文件只做参数收口与无损映射：不发起请求、不引入生成客户端、不改契约。
- * 契约缺口（openLeftovers 总数、leftover.recordTitle）映射为 null，
- * 由显示层显式降级；其余字段为服务端实时数据。
+ * 第二轮契约扩展后 activeLeftoverTotal 与 leftover.recordTitle 已接线，
+ * 缺口清单清零，所有字段均为服务端实时数据。
  */
 
 export const PROJECT_OVERVIEW_V1_PATH = "/api/v1/projects/{projectId}/overview";
@@ -60,6 +60,7 @@ export interface ProjectOverviewV1Leftover {
   readonly leftoverItemId: number;
   readonly recordId: number;
   readonly recordCode: string;
+  readonly recordTitle: string;
   readonly content: string;
   readonly createdAt: string;
 }
@@ -69,20 +70,16 @@ export interface ProjectOverviewV1Response {
   readonly memberCount: number;
   readonly stats: ProjectOverviewV1Stats;
   readonly recentRecords: readonly ProjectOverviewV1RecentRecord[];
+  readonly activeLeftoverTotal: number;
   readonly activeLeftovers: readonly ProjectOverviewV1Leftover[];
 }
 
 /**
- * 设计师稿 6 项指标里 V1 没有契约来源的项：待处理遗留问题计数。
- * 响应只提供 activeLeftovers 列表（默认 2 条），没有总数；
- * 映射时记为 null，显示层不得把列表长度冒充总数。
+ * 原骨架缺口清单：R-2 第二轮扩展已提供 activeLeftoverTotal 与
+ * leftover.recordTitle，清单清零保留为入口；恢复缺口时必须同步补回。
  */
-export const PROJECT_OVERVIEW_V1_MISSING_METRICS = ["openLeftovers"] as const;
-
-/** 骨架遗留问题行相对冻结 DTO 的缺口：没有 recordTitle。 */
-export const PROJECT_OVERVIEW_V1_MISSING_FIELDS = [
-  "leftover.recordTitle",
-] as const;
+export const PROJECT_OVERVIEW_V1_MISSING_METRICS = [] as const;
+export const PROJECT_OVERVIEW_V1_MISSING_FIELDS = [] as const;
 
 export function isProjectOverviewV1LimitValid(value: number): boolean {
   return (
@@ -127,10 +124,8 @@ export function fromV1RecentRecords(
 /**
  * R-2 响应 → F-29 骨架结果。
  *
- * 契约缺口映射为 null：
- * - stats.openLeftovers：响应没有总数（只有 activeLeftovers 列表）；
- * - leftovers[].recordTitle：响应只有 recordCode。
- * 显示层依据 PROJECT_OVERVIEW_V1_MISSING_* 降级，不得静默补值。
+ * 第二轮契约扩展后 openLeftovers 取 activeLeftoverTotal、
+ * leftovers[].recordTitle 取服务端字段，无降级项。
  */
 export function fromV1ProjectOverview(
   response: ProjectOverviewV1Response,
@@ -141,7 +136,7 @@ export function fromV1ProjectOverview(
       activeFeatures: response.stats.activeFeatureCount,
       openTasks: response.stats.openTaskCount,
       publishedRecords: response.stats.publishedRecordCount,
-      openLeftovers: null,
+      openLeftovers: response.activeLeftoverTotal,
     },
     recentIterations: fromV1RecentRecords(response.recentRecords),
     leftovers: response.activeLeftovers.map(
@@ -149,7 +144,7 @@ export function fromV1ProjectOverview(
         leftoverId: item.leftoverItemId,
         summary: item.content,
         recordCode: item.recordCode,
-        recordTitle: null,
+        recordTitle: item.recordTitle,
       }),
     ),
   };

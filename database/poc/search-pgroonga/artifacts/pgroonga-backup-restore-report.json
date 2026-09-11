@@ -1,10 +1,10 @@
 {
     "version":  "pgroonga-backup-restore-v2",
-    "generatedAt":  "2026-09-07T05:31:33.6028780Z",
+    "generatedAt":  "2026-09-11T08:06:48.9065943Z",
     "source":  {
-                   "image":  "inpulse/pgroonga-pg18.6:repro",
-                   "imageDigest":  "inpulse/pgroonga-pg18.6@sha256:bca8248cb90be2b287674741d6d1575b5a87f4f1fbb52259a9aca9055781083a",
-                   "postgres":  "18.6 (Debian 18.6-1.pgdg13+2)",
+                   "image":  "groonga/pgroonga:4.0.8-alpine-18",
+                   "imageDigest":  "groonga/pgroonga@sha256:b5c92fa3d86ad76ce75ddd8095f60542cf025348a58b8a38cd0b4a580fe4ce68",
+                   "postgres":  "18.4",
                    "pgroongaSchema":  "app",
                    "bootstrapScript":  "database/bootstrap/020_pgroonga.sql",
                    "migrationScript":  "database/migrations/0003_search_pgroonga.sql",
@@ -12,7 +12,7 @@
                },
     "backup":  {
                    "format":  "custom",
-                   "sha256":  "9ecfc3054ead70611755593a37706ed4c343f2f462ab6dd31956209881b33509",
+                   "sha256":  "265dc84bc6a4e2a57f6d899da7f8cca33005bbfa0ac001e9770af623de9d02d0",
                    "excludedSessionTables":  [
                                                  "app.user_sessions",
                                                  "app.session_csrf_tokens",
@@ -23,7 +23,7 @@
                    "pgroongaIndexInToc":  true
                },
     "restore":  {
-                    "postgres":  "18.6 (Debian 18.6-1.pgdg13+2)",
+                    "postgres":  "18.4",
                     "pgroongaVersion":  "4.0.8",
                     "pgroongaSchema":  "app",
                     "indexDefinition":  "CREATE INDEX pgroonga_poc_restore_idx ON app.pgroonga_poc_projection USING pgroonga (normalized_search_text)",
@@ -42,8 +42,8 @@
                     "escapedValue":  "foo\u0026bar",
                     "defaultPlanUsesIndex":  true,
                     "forcedPlanUsesIndex":  true,
-                    "defaultPlan":  "Limit (actual time=0.191..0.192 rows=6.00 loops=1)\n  Buffers: shared hit=7\n  -\u003e  Sort (actual time=0.190..0.190 rows=6.00 loops=1)\n        Sort Key: entity_id\n        Sort Method: quicksort  Memory: 25kB\n        Buffers: shared hit=7\n        -\u003e  Bitmap Heap Scan on pgroonga_poc_projection (actual time=0.172..0.175 rows=6.00 loops=1)\n              Recheck Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n              Heap Blocks: exact=4\n              Buffers: shared hit=4\n              -\u003e  Bitmap Index Scan on pgroonga_poc_restore_idx (actual time=0.163..0.163 rows=6.00 loops=1)\n                    Index Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n                    Index Searches: 0\nPlanning:\n  Buffers: shared hit=114\nPlanning Time: 35.680 ms\nExecution Time: 0.258 ms",
-                    "forcedPlan":  "SET\nLimit (actual time=0.196..0.197 rows=6.00 loops=1)\n  Buffers: shared hit=7\n  -\u003e  Sort (actual time=0.195..0.196 rows=6.00 loops=1)\n        Sort Key: entity_id\n        Sort Method: quicksort  Memory: 25kB\n        Buffers: shared hit=7\n        -\u003e  Bitmap Heap Scan on pgroonga_poc_projection (actual time=0.179..0.181 rows=6.00 loops=1)\n              Recheck Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n              Heap Blocks: exact=4\n              Buffers: shared hit=4\n              -\u003e  Bitmap Index Scan on pgroonga_poc_restore_idx (actual time=0.170..0.170 rows=6.00 loops=1)\n                    Index Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n                    Index Searches: 0\nPlanning:\n  Buffers: shared hit=114\nPlanning Time: 34.161 ms\nExecution Time: 0.263 ms",
+                    "defaultPlan":  "Limit (actual time=0.298..0.300 rows=6.00 loops=1)\n  Buffers: shared hit=9\n  -\u003e  Sort (actual time=0.297..0.298 rows=6.00 loops=1)\n        Sort Key: entity_id\n        Sort Method: quicksort  Memory: 25kB\n        Buffers: shared hit=9\n        -\u003e  Bitmap Heap Scan on pgroonga_poc_projection (actual time=0.252..0.259 rows=6.00 loops=1)\n              Recheck Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n              Heap Blocks: exact=6\n              Buffers: shared hit=6\n              -\u003e  Bitmap Index Scan on pgroonga_poc_restore_idx (actual time=0.231..0.232 rows=6.00 loops=1)\n                    Index Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n                    Index Searches: 0\nPlanning:\n  Buffers: shared hit=114\nPlanning Time: 50.812 ms\nExecution Time: 0.407 ms",
+                    "forcedPlan":  "SET\nLimit (actual time=0.271..0.273 rows=6.00 loops=1)\n  Buffers: shared hit=9\n  -\u003e  Sort (actual time=0.270..0.271 rows=6.00 loops=1)\n        Sort Key: entity_id\n        Sort Method: quicksort  Memory: 25kB\n        Buffers: shared hit=9\n        -\u003e  Bitmap Heap Scan on pgroonga_poc_projection (actual time=0.229..0.235 rows=6.00 loops=1)\n              Recheck Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n              Heap Blocks: exact=6\n              Buffers: shared hit=6\n              -\u003e  Bitmap Index Scan on pgroonga_poc_restore_idx (actual time=0.207..0.207 rows=6.00 loops=1)\n                    Index Cond: (normalized_search_text \u0026@~ \u0027登录\u0027::text)\n                    Index Searches: 0\nPlanning:\n  Buffers: shared hit=114\nPlanning Time: 52.153 ms\nExecution Time: 0.391 ms",
                     "returnedRowsForChineseProbe":  6,
                     "groongaLexiconName":  "Lexicon17967_0.index"
                 },

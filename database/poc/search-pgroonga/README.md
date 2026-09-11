@@ -64,7 +64,7 @@ pnpm db:poc:search:pgroonga
 
 ## 数据集
 
-- 复用现有冻结搜索金标：100 条查询、90 条正常召回目标、10 条无结果/边界输入。
+- 复用现有冻结搜索金标（`phase4-v1`）：200 条查询、190 条正常召回目标、10 条无结果/边界输入。
 - 基础表 1000 行、规模表 101000 行，使用确定性仿真文本，不是真实业务数据。
 - 项目过滤在 SQL 层执行，并验证跨项目隔离。
 - 追加 15 组 V1 语义探针：完整英文缩写/标识符 `mfa`、`csrf`、`api`、
@@ -83,7 +83,7 @@ pnpm db:poc:search:pgroonga
 | `default-query` | 默认全文 opclass | `&@~` + `pgroonga_query_escape` | 是 | 100% |
 | `regexp-ilike` | `app.pgroonga_text_regexp_ops_v2` | `ILIKE` | 是 | 100% |
 | `regexp-like` | 正则 opclass | `LIKE` | 是 | 100% |
-| `regexp-query` | 正则 opclass | `&~` | 是 | 96.7%（87/90） |
+| `regexp-query` | 正则 opclass | `&~` | 是 | 95.8%（182/190） |
 | `bigram-ilike` | `TokenBigramSplitSymbolAlphaDigit` | `ILIKE` | 是 | 100% |
 | `bigram-query` | `TokenBigramSplitSymbolAlphaDigit` | `&@~` | 是 | 100% |
 | `ngram-ilike` | `TokenNgram(unify_alphabet=false, unify_symbol=false, unify_digit=false)` | `ILIKE` | 是 | 100% |
@@ -101,14 +101,14 @@ Index Scan；自定义 Bigram/Ngram 的部分混合和标点查询也使用 Inde
 ## 关键结论
 
 1. 默认 `TokenBigram`（`pgroonga_text_full_text_search_ops_v2`）已通过
-   全部 15 组 V1 语义探针和 90 条金标召回，在当前 V1 约束下不再需要正则
+   全部 15 组 V1 语义探针和 200 条金标召回，在当前 V1 约束下不再需要正则
    opclass 或自定义 Bigram/Ngram；正式方案见 ADR-025。
 2. 默认全文索引不支持任意英文子串（如 `roonga`）和代码内部片段
    （如 `R-4`），但这两类已明确排除在 V1 范围之外；完整代码标识符
    `R-42`、`PR-245` 已按要求覆盖。
 3. `regexp-query` 的 `&~` 虽通过 V1 探针，但把 `项目（POC）`、
    `MFA+CSRF`、`作废「记录」` 当作正则表达式，导致金标 Recall@20 为
-   96.7%；普通字符串搜索不应直接使用 `&~`。
+   95.8%（182/190）；普通字符串搜索不应直接使用 `&~`。
 4. 101000 行规模索引约 27.8 MB，更新约 7-16 ms，REINDEX 约 589-596 ms；
    这些成本仍需在真实业务数据上复核。
 5. `pg_relation_size` 对 PGroonga 索引返回 0；报告改用
@@ -129,13 +129,13 @@ V1 建议采用默认 `pgroonga_text_full_text_search_ops_v2`，查询方式优�
 
 ## 迁移生命周期
 
-- 空库迁移由数据库集成测试执行，六条迁移（`0000-0005`）全部 Applied。
+- 空库迁移由数据库集成测试执行，七条迁移（`0000-0006`）全部 Applied。
 - 升级路径在独立 `app_upgrade_prev` 数据库中验证：先运行 `0000`、`0001`、
   `0002`，在 `schema_migrations` 中写入这三个文件的精确 checksum，再由
   仓库 migration runner 应用 `0003_search_pgroonga.sql`；实际结果为
   1 applied / 3 already present，确认 PGroonga 索引已创建并记录迁移历史。
   在旧 GIN 索引仍存在时强制计划确认 PGroonga 可用，再由同一 migration
-  runner 应用 `0004`/`0005`；实际结果为 2 applied / 4 already present，
+  runner 应用 `0004`-`0006`；实际结果为 3 applied / 4 already present，
   确认旧 GIN 索引和 `pg_trgm` 扩展被独立删除。
 - 回滚分别对 `0003`、`0004`、`0005` 做显式事务验证：`0003` 删除并恢复
   PGroonga 索引、`0004` 删除并恢复旧 GIN 索引、`0005` 删除并恢复
@@ -147,7 +147,7 @@ V1 建议采用默认 `pgroonga_text_full_text_search_ops_v2`，查询方式优�
 ## 限制
 
 - 已验证 PostgreSQL 18.6 官方基础镜像、PGroonga 构建、`020_pgroonga.sql`
-  扩展权限、`0003-0005` 显式迁移、旧 `pg_trgm` contract 清理、默认查询
+  扩展权限、`0003-0006` 显式迁移、旧 `pg_trgm` contract 清理、默认查询
   计划和逻辑恢复，但未验证其他补丁版本、故障切换和长时间并发更新。
 - 101000 行是确定性仿真数据，不能预测真实业务数据分布、中文分词质量、
   索引膨胀和并发写入成本。
