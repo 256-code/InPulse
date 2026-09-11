@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -68,7 +68,10 @@ const createAdapter = () => {
 const renderPage = (entries: string) => {
   const { adapter, fetchProjectOverview } = createAdapter();
   const getProject = vi.fn().mockResolvedValue({ project });
-  const client = { getProject } as unknown as InpulseApiClient;
+  const listModules = vi.fn().mockResolvedValue({
+    items: [{ id: 3, projectId: 1, name: "未分类模块", status: "ACTIVE" }],
+  });
+  const client = { getProject, listModules } as unknown as InpulseApiClient;
   render(
     <QueryClientProvider
       client={
@@ -88,12 +91,16 @@ const renderPage = (entries: string) => {
             path="/projects/:projectId/modules"
             element={<div>模块页</div>}
           />
+          <Route
+            path="/projects/:projectId/modules/:moduleId/features"
+            element={<div>功能列表页</div>}
+          />
           <Route path="/issues" element={<div>遗留问题页</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { getProject, fetchProjectOverview };
+  return { getProject, fetchProjectOverview, listModules };
 };
 
 describe("ProjectOverviewPage", () => {
@@ -130,5 +137,27 @@ describe("ProjectOverviewPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /全部项目/ }));
     expect(await screen.findByText("全部项目页")).toBeInTheDocument();
+  });
+
+  it("loads the project modules into the project context navigation", async () => {
+    const { listModules } = renderPage("/projects/1/overview");
+    await waitFor(() =>
+      expect(listModules).toHaveBeenCalledWith(1, {
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    const nav = await screen.findByRole("navigation", { name: "项目内导航" });
+    expect(
+      within(nav)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["项目概览", "未分类模块"]);
+  });
+
+  it("opens a module feature list from the project context navigation", async () => {
+    renderPage("/projects/1/overview");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "未分类模块" }));
+    expect(await screen.findByText("功能列表页")).toBeInTheDocument();
   });
 });

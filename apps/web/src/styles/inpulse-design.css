@@ -351,10 +351,10 @@ button {
 }
 
 .page-content {
-  max-width: 1450px;
+  max-width: 1420px;
   width: 100%;
   margin: 0 auto;
-  padding: 31px 38px 52px;
+  padding: 32px 34px 48px;
 }
 
 .page-header {
@@ -1188,6 +1188,7 @@ button {
   margin: 0;
   color: #314c65;
   font-size: 14px;
+  font-weight: 400;
 }
 
 .calm-section-title small {
@@ -1667,12 +1668,12 @@ button {
   align-items: center;
   gap: 4px;
   min-height: 20px;
-  padding: 3px 7px;
+  padding: 4px 7px;
   border-radius: 4px;
-  background: #eef2f6;
+  background: #f0f3f6;
   color: #718092;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
 }
 .badge-blue {
@@ -1685,11 +1686,11 @@ button {
 }
 .badge-red {
   background: #ffebeb;
-  color: #bd5656;
+  color: #a6343f;
 }
 .badge-amber {
   background: #fff3dc;
-  color: #ae741b;
+  color: #865b0d;
 }
 .badge-violet {
   background: #eeeaff;
@@ -1778,6 +1779,44 @@ button {
 .back-button.ant-btn:hover {
   color: #1d5fa8 !important;
   background: #f2f7fc !important;
+}
+
+/* 设计师稿 latest-version/app/globals.css L364-365：项目内导航。 */
+.project-context-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #dfe7ef;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+.project-context-nav button {
+  border: 0;
+  background: none;
+  padding: 9px 15px;
+  border-radius: 7px;
+  color: #647b92;
+}
+.project-context-nav button.active {
+  background: #e7f1ff;
+  color: #226cc2;
+  font-weight: 600;
+}
+
+/* 设计师稿 latest-version/views/records.tsx L56-99：记录页容器与视图切换。 */
+.records-page {
+  line-height: 1.5;
+}
+
+/* 设计师稿 app/globals.css 依赖 Tailwind preflight 的 h1..h6 字重继承；
+   这里只在本页面对齐，不改动全局 .page-header。 */
+.records-page .page-header h1 {
+  font-weight: 400;
+}
+
+.records-page > .segmented {
+  width: fit-content;
+  margin-bottom: 24px;
 }
 
 .page-header .eyebrow {
@@ -2968,80 +3007,100 @@ button {
 }
 .settings-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 185px minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
+  line-height: 1.5;
 }
 .settings-rail {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px;
+  gap: 3px;
 }
 .settings-tab {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 5px;
   background: transparent;
-  color: #5b7892;
+  color: #718298;
   font-size: 13px;
   text-align: left;
 }
 .settings-tab:hover {
-  background: #eaf1f8;
-  color: #2f4a63;
+  background: #ffffff;
+  color: #2672bb;
 }
 .settings-tab-active,
 .settings-tab-active:hover {
   background: #ffffff;
-  color: #1467d8;
-  font-weight: 700;
-  box-shadow: 0 1px 2px rgba(19, 34, 56, 0.08);
+  color: #2672bb;
 }
 .settings-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px 20px;
+  padding: 0 0 15px;
   border: 1px solid var(--inpulse-border);
-  border-radius: 12px;
+  border-radius: 7px;
   background: var(--inpulse-card);
-  box-shadow: 0 1px 2px #10253e0d;
+  overflow: hidden;
 }
-.settings-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--inpulse-border);
+.settings-panel .calm-section-title small {
+  color: #61788e;
+  font-size: 0.8em;
 }
-.settings-panel-header h2 {
-  margin: 0 0 4px;
-  color: #132238;
-  font-size: 15px;
+/* 设计师稿 latest-version/app/globals.css L55/L605：设置页说明表。 */
+.table-panel {
+  overflow: hidden;
 }
-.settings-panel-header h2 + span {
-  color: #718096;
+.table-wrap {
+  overflow-x: auto;
+}
+.settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.settings-table th {
+  background: #f8fafc;
+  color: #7d8b9a;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 11px 15px;
+  white-space: nowrap;
+}
+.settings-table td {
+  padding: 14px 15px;
+  border-top: 1px solid #edf1f5;
+  color: #637489;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.settings-table td strong {
+  display: block;
+  color: #273b51;
   font-size: 12px;
+  font-weight: 600;
+}
+.settings-table td small {
+  display: block;
+  color: #607286;
+  font-size: 10px;
+  margin-top: 5px;
+}
+.settings-table .permission-cell {
+  text-align: center;
 }
 .member-list {
   display: flex;
   flex-direction: column;
 }
 .member-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 14px;
+  display: flex;
   align-items: center;
-  padding: 13px 4px;
-  border-bottom: 1px solid var(--inpulse-border);
-}
-.member-row:last-child {
-  border-bottom: 0;
+  gap: 11px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--inpulse-border);
 }
 .member-row .person-avatar {
   width: 34px !important;
@@ -3051,6 +3110,7 @@ button {
 }
 .member-id {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -3091,22 +3151,20 @@ button {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin: 0;
-  padding: 11px 14px;
-  border-radius: 9px;
-  background: #eef6fe;
+  margin: 15px 20px 0;
+  padding: 12px;
+  border-radius: 5px;
+  background: #f1f8fe;
   color: #5b7892;
-  font-size: 12px;
-  line-height: 1.8;
+  font-size: 11px;
+  line-height: 1.6;
 }
 .permission-note svg {
   flex: 0 0 auto;
   color: #3b88c6;
-  margin-top: 3px;
 }
 .permission-note strong {
-  margin-right: 2px;
-  color: #1467d8;
+  color: #2e6794;
 }
 .permission-note.note-success {
   background: #eaf7ee;
