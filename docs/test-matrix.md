@@ -1035,7 +1035,7 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 `pnpm build`（产物含 `RecordMarkdown-*.js`）、`pnpm check:frontend:boundaries`（220 模块
 1005 依赖）与 `pnpm check:docs` 通过；记录相关既有浏览器 E2E 定向复跑 11 例 10 过 + 1 偶发（`record-publishing.spec.ts:78` 新建功能弹窗未关，Docker 日志同时段 `idempotency_records_retention_check` 违约，属既有偶发同族；单文件复跑 2/2 通过）。
 
-未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #NNN](https://github.com/256-code/InPulse/pull/NNN)；
+未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #129](https://github.com/256-code/InPulse/pull/129)；
 ② 未新增浏览器 E2E，记录相关既有用例定向复跑见上（含 1 例既有偶发，按约定不得视为已修复）；
 ③ 新增单测需非
 作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
