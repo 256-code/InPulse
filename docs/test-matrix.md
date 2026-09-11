@@ -968,3 +968,18 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 未运行 / 已知偏差：① 本批 GitHub Actions 尚未执行；② `pnpm test:integration` 未运行（本批无服务端改动，R-5 服务端由 A-7 [PR #118](https://github.com/256-code/InPulse/pull/118) 覆盖）；③ 全量 E2E 的偶发失败按约定不得视为已修复（根因见下）；④ 新增 / 更新的 E2E 用例与前端用例需非作者人工评审；⑤ 任务详情弹窗内的 tabs 等 C-3 收尾项未做。
 
 偶发 E2E 失败根因（2026-09-11 定位，未修复）：本机 Docker 日志（`inpulse-local-dev`）显示偶发 500 来自 `idempotency_records_retention_check`（`expires_at <= created_at + 30 days`）。实例：`2026-09-11 09:55:51` 行 `created_at 09:55:51.576903+00`、`expires_at 10:55:51.577+00` —— JS 宿主 `Date.now() + 30d` 比 Docker PostgreSQL `now()` 快约 0.1ms（Windows Docker Desktop VM 时钟偏差），差值超出 30 天上限 97µs 被拒，表现为写请求 500 与保存后弹窗不关闭；Linux / CI 单一时钟源不受影响。另：E2E 运行的是 `node apps/api/dist/main.js` 与 `packages/api-contract/dist`，契约或服务端改动后必须先执行 `pnpm --filter @inpulse/api-contract build` 与 `pnpm --filter @inpulse/api build`，否则会以旧构建启动并触发 `contract response validation failed`。
+
+## C-3 / C-4 任务详情弹窗 tabs 与全站视觉复核（2026-09-11 本地落库）
+
+按 C-3 完成 F-29 / F-32 页面视觉收尾，并为任务详情弹窗切换设计稿的标签页结构（页面不再使用抽屉，按用户 2026-09-11 指令）：`TasksPanel.tsx` 弹窗头部改为动作行（`TaskDueBadge` 截止徽章 + 完成任务 / 取消任务 / 合并到主任务 / 重新打开 / 恢复任务 / 编辑任务，`disabled={!taskWritable}`），中部新增 `CalmTabs`（`role=tablist/tab` + `aria-selected`）承载「任务信息 / 迭代记录 [n] / 合并与分支 [· #groupId]」三个标签页，右侧 facts 面板保留「影响功能：」等字段；`TaskStatusPanel.tsx` 重写为受控 `action` 面板（外层 `section.task-status-section`，保留 `.task-status-history` 时间线与完成 / 重开 / 取消 / 恢复弹窗、冲突重载与幂等键）；`Calm.tsx` 新增 `CalmTabs`、`InpulseIcon.tsx` 新增 `x` 图标；`inpulse-design.css` 新增 `.calm-task-actions` / `.calm-due`(+tone) / `.calm-tabs` / `.task-status-section` / `.task-status-published` / `.task-status-history`。C-4 对 `.page-content` 与 `.badge` 全局样式改动做全站人工视觉复核。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| C3-UNIT-001 | 单元 | 弹窗标签页与分支面板 | 任务详情弹窗标签页切换（任务信息 / 迭代记录 / 合并与分支）；SOURCE / MAIN / 未入组三种分支面板渲染；`TasksPanel.test.tsx` 新增 4 例 | 本地通过 |
+| C3-E2E-001 | Playwright | 状态历史与动作行回归 | `task-status.spec.ts`（FEATURE / MODULE 两例）、`record-publishing.spec.ts`、`record-drafts.spec.ts`、`issues.spec.ts` 在弹窗 tabs 改造后仍通过（`.task-status-history` 计数、动作按钮、查看已发布记录链接） | 本地通过 |
+| C3-E2E-002 | Playwright | 各页面弹窗 / 关系标记回归 | `tasks.spec.ts`、`module-tasks.spec.ts`、`external-links.spec.ts`、`task-groups.spec.ts`、`aggregate-views.spec.ts`、`leftover-task.spec.ts`、`task-completion.spec.ts` 随全量 `pnpm test:e2e` 通过 | 本地通过 |
+| C4-REC-001 | 人工视觉 | 全站 `.page-content` / `.badge` 复核 | 17 张视图截图逐张核对（任务中心 1280 / 1680、任务详情弹窗三 tab、项目概览六指标 strip、功能档案、记录、遗留问题、活动、通知、搜索、设置与审计等），未发现需改代码的缺陷 | 本地通过 |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 67 文件 322 例；`pnpm check` 至 `deps:audit` 前全部通过（lint / format:check / typecheck / test:unit / db:migrations:check / contract:drift / contract:validate / build / check:deploy:test / check:deps / check:frontend:boundaries（215 模块 992 依赖）/ permissions:check（97/97）/ check:secrets / check:docs），`deps:audit` 因本地 npm 镜像无 audit endpoint 失败（非本批回归；公共 registry 审计无已知漏洞）；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）单独复跑通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）全量 50 例 49 过 + 1 偶发：`aggregate-views.spec.ts:14` 在「新建功能」弹窗保存后 `toBeHidden` 超时（与既有偶发同族），单文件复跑 2/2 通过，按约定不得视为已修复。
+
+未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #126](https://github.com/256-code/InPulse/pull/126)；② `pnpm test:integration` 未运行（本批无服务端改动）；③ 新增 / 更新的单测与 E2E 用例需非作者人工评审；④ C-4 视觉复核用临时 Playwright spec 与 17 张截图仅本地产出（spec 已删除，截图未入库）。
