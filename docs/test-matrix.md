@@ -85,7 +85,7 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 重认证，原因、CSRF、`Idempotency-Key`、`If-Match` 必填，状态不符返回 409
 `PROJECT_STATE_CONFLICT`，归档后全部下级只读而历史仍可读，恢复只恢复项目自身状态，审计、
 活动与搜索投影同一事务。复用现有 `projects.status/archived_at/row_version` 约束，无数据库
-迁移；前端编辑/归档/恢复入口与未完成任务提醒已接入项目页。E2E 尚未覆盖归档/恢复路径。
+迁移；前端编辑/归档/恢复入口与未完成任务提醒已接入项目页。E2E 已覆盖归档/恢复关键路径（`apps/e2e/tests/project-archive.spec.ts`，2026-09-11 本地 1/1 通过）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -98,6 +98,7 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 | F06-ARCHIVE-API-002 | HTTP + PostgreSQL | 恢复与状态门禁 | 恢复返回 200、`archived_at` 置空、`rowVersion` 递增，审计 `project.restore`、活动 `PROJECT_RESTORED` 与搜索投影 `source_status = 'ACTIVE'` 同事务；恢复后成员可再次编辑；未归档恢复 409 `PROJECT_STATE_CONFLICT`；非管理员 403、非成员 404、重认证过期 403 | 同上 |
 | F06-ARCHIVE-API-003 | HTTP + PostgreSQL | 幂等重放 | 归档/恢复成功后同 Key 同摘要重放返回相同 200 响应（归档态重放不因只读被拒）；会话被撤销后同 Key 重放 401，不返回已存成功响应 | 同上 |
 | F06-ARCHIVE-UI-001 | 前端 | 编辑/归档/恢复入口 | 项目卡片提供编辑入口（活跃成员）、归档/恢复入口（管理员）；编辑提交携带 CSRF、`If-Match`、`Idempotency-Key`，版本冲突展示重新加载提示；归档弹窗展示未完成任务提醒并要求原因，403 `ADMIN_REAUTH_REQUIRED` 打开管理员安全验证；恢复弹窗要求原因并说明不改动下级归档状态 | 本地通过（`project-management-modals.test.tsx` 6 例、`ProjectsPage.test.tsx` 归档入口 1 例） |
+| F06-ARCHIVE-E2E-001 | Playwright | 归档→只读→恢复关键路径 | 管理员 TOTP 登录后创建项目/功能/任务；归档预览提示“仍有 1 个未完成任务”；归档后徽标“已归档”、编辑被拒“项目已归档，项目只读…”且名称未落库；5 分钟窗口内恢复“正常”后可改名成功、原任务保留 | 本地 1/1（2.6 分钟；E2E_API_PORT=3131 / E2E_WEB_PORT=4191） |
 
 ## F-12 未分类模块编辑（2026-09-09 人工确认）
 
@@ -432,6 +433,8 @@ GitHub Actions 尚未对本 PR 执行。
 > 本次非数据库门禁已在本地通过：lint、格式、全 workspace typecheck、单元测试、
 > 迁移/契约检查、构建、依赖边界、权限矩阵、Secret 与文档检查；`deps:audit`
 > 因本地 npm 镜像无 audit endpoint，改用公共 registry 验证为无漏洞。GitHub Actions 尚未执行。
+>
+> 2026-09-11 阶段 4 金标扩集（C-5）：冻结金标 100→200，`GOLDEN_QUERY_VERSION=phase4-v1`（190 normal + 7 no-result + 3 edge），`assertGoldenQueryShape` 与 `apps/api/test/search-query.integration.test.ts` 召回断言同步 200 / ≥180（真实 PostgreSQL 通过）。PGroonga PoC 全流程重跑退出码 0：10 策略 `error=null`；default/bigram/ngram 系 base 1000 / scale 101000 均 190/190；`regexp-query` 182/190 仅诊断；升级 `0000-0002` → `0003-0006`（3 applied / 4 already present）；三份 artifact（`pgroonga-poc-v3` / `pgroonga-migration-v3` / `pgroonga-backup-restore-v2`）已重新生成。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
@@ -755,6 +758,22 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 本地实际执行（2026-09-11）：`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、API `test:unit` 66 文件 343 例、API `test:integration` 47 文件 407 例（真实 PostgreSQL）、`pnpm --filter @inpulse/web test` 58 文件 248 例、`pnpm db:test` 2 文件 20 例、`pnpm db:migrations:check`（6 个迁移）、`pnpm check:secrets`（855 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test`、`pnpm check:deps`（579 文件）与 `pnpm check:frontend:boundaries` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。未运行：`pnpm test:e2e`（本轮未改 UI 页面行为）、`pnpm test:search:db` / `pnpm test`（要求 `max_connections >= 150`，按既定决定未纳入 CI）、GitHub Actions。前端适配器对新增字段的接线与降级项清零属 C 域交付（裁决 §10.5）；本轮仅把 C 侧测试夹具补到类型所需字段，未改适配器行为。
 
+## F-29 / F-32 第二轮字段接线与降级清零（C，2026-09-11 本地落库，工作书 C-2）
+
+按 [A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10 与工作书 C-2：F-32 任务中心与 F-29 项目概览的 server adapter 全量接线第二轮契约扩展并清零降级。`my-tasks-server.ts` 透传 `stats` / `leftoverCount` / `leftoverSample`（`scopeCounts` 为 §10.3 延后项保持 null）；`MY_TASKS_V1_FILTER_SUPPORT` 翻 `filter:priority` 与 `filter:canceled-with-open` 为 true；`toMyTasksV1Query` 增加 `priority` / `includeCanceled`；`fromV1MyTaskItem` 映射 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId`；`project-overview-v1.ts` 取 `activeLeftoverTotal` 与 `leftover.recordTitle`，`PROJECT_OVERVIEW_V1_MISSING_*` 清空为入口常量。视图移除统计「—」、优先级 / 截止缺失分支与遗留指标降级；`my-tasks-types.ts` 与 `project-overview-types.ts` 的 null 语义收紧为契约定义并同步注释。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| R-3 映射：`priority` 单值与 `includeCanceled`（`status=open` 叠加）进入查询；6 个新条目字段无损映射（`dueAt` / `completedAt` / `groupId` 保留 null）；默认查询不变 | `my-tasks-v1-query.test.ts` 14 例（含新增 priority / includeCanceled 映射与 `fromV1MyTaskItem` 全字段断言） |
+| R-3 适配器：`stats` / `leftoverCount` / `leftoverSample` 透传、`scopeCounts` 保持 null、`filterSupport` 两项为 true、notice 更新为「服务端实时数据」 | `my-tasks-server.test.ts` 5 例 |
+| R-2 映射与适配器：`openLeftovers = activeLeftoverTotal`、`recordTitle` 直取、缺口常量为空、notice 不含「契约未提供」 | `project-overview-v1.test.ts`、`project-overview-server.test.ts` |
+| 视图降级移除：任务卡 / 表格始终渲染优先级徽章与截止文案；统计卡渲染服务端数字；遗留指标与遗留行渲染服务端数据（含 `recordTitle`） | `TaskCenterPageView.test.tsx`、`ProjectOverviewPageView.test.tsx`、`my-tasks-mock.test.ts` 等 |
+| 关键路径 E2E 翻转：统计卡为数字（轮询）、优先级筛选启用并写 URL（`priority=HIGH` → 清除）、任务卡含「普通优先级」与「未设置截止」、「显示已取消任务」开关启用、关键词搜索与「我创建的」保持禁用；F-29 遗留指标为数字、notice 含「待处理遗留问题总数」与「服务端实时数据」且不含「契约未提供」 | `apps/e2e/tests/aggregate-views.spec.ts` 两例；全量 `pnpm test:e2e` 45/45 |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 64 文件 293 例；`pnpm test:unit`（database 15、api-contract 89、canonical-json 5、web 293、api 346、ops 36）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 个 workspace 项目）、`pnpm build`、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环无越界）、`pnpm check:frontend:boundaries`（207 模块 946 依赖）、`pnpm check:deploy:test`、`pnpm check:secrets`（918 文件）、`pnpm check:docs` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 无已知漏洞。全量 `pnpm test:e2e` 45/45（约 6.1 分钟；同期并行线程的 `project-archive.spec.ts` 当时尚未完成、未计入本次 45/45，该文件已随 C-6 交付，见 F-06 段 `F06-ARCHIVE-E2E-001`）。
+
+排障记录：本地 `app` 库缺 `0006_leftover_search_entity.sql`（PR #104 引入）导致所有带遗留内容的记录发布返回 500 `INTERNAL_ERROR`（`search_projection_entity_type_check` 不含 `LEFTOVER`）；以 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app` 执行 `pnpm db:migrate` 应用 0006 后，原先稳定失败的 9 例复跑 10/10 通过。该问题是本地环境迁移滞后，与 C-2 改动无关（CI 一次性建库执行全部迁移）。未运行：GitHub Actions（本批尚未推送 / 开 PR）、`pnpm test:integration` 与 `pnpm test:search:db`（无后端与搜索改动；后者另要求 `max_connections >= 150`，按既定决定未纳入 CI）、`pnpm db:test` / `pnpm test`（同上）。新增 / 更新的 E2E 断言需非作者人工评审。
+
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
 `GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
@@ -837,3 +856,19 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（无已知漏洞）均通过。
 
 未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，`apps/api/test/aggregate-read-ports.integration.test.ts` 可正常收集（17 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed；B7-INT-001 与 B7-PLAN-001 需由 CI 首次执行（EXPLAIN 断言依赖真库计划形状）；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI（`spawnSync docker ENOENT`），与本次改动无关；④ 本分支 GitHub Actions 尚未执行；⑤ 新增真库用例需非作者人工评审；⑥ A-7 未落库前 C-1 不得以条数实现标记（裁决 §11.6）。
+
+## A-7 R-3 / R-5 记录标记扩展（D-1，2026-09-11 本地落库）
+
+按[裁决修订 D-1](a-contract-review-f25-f29-f32.md) §11：R-3 `MyTaskItem` 增加 `publishedRecordCount`（与 `hasPublishedRecord` 同源同口径，恒有 `hasPublishedRecord === (publishedRecordCount > 0)`）；R-5 由「聚合组成员关系」扩为「任务记录标记批量读」，条目为 `{ taskId, groupId, groupRole, publishedRecordCount }`，`groupId` / `groupRole` 可空，请求中每一个有权 taskId 都出现（未入组以 null 返回且计数照常），无权或不存在（含跨项目）仍不出现。B-7 记录侧计数端口不变，R-5 只消费既有 `countPublishedByTask`，不新增依赖边、不新增路由。本节取代上方向后兼容的旧 R-5 语义描述（PR #102 章节保留为历史记录）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| A7-CONTRACT-001 | 契约 | Schema 与生成物 | R-3 `myTaskItemSchema` 增加 `publishedRecordCount`；R-5 条目 `groupId`/`groupRole` 可空并新增 `publishedRecordCount`；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）通过 | 本地通过 |
+| A7-R3-INT-001 | PostgreSQL 集成 | R-3 计数与存在性同源 | `GET /api/v1/me/tasks` 条目计数：`tMain` = 1（草稿不计）、`tSource` = 5（作废记录不计）、`tDone` = 0；逐条满足 `hasPublishedRecord === (publishedRecordCount > 0)` | 本地通过（`apps/api/test/aggregate-read-api.integration.test.ts` 19/19） |
+| A7-R5-INT-001 | PostgreSQL 集成 | R-5 覆盖 / 空值 / 授权 | 一次请求 6 个有权 taskId：全部出现且按 taskId 升序；未入组任务 `groupId`/`groupRole` 为 null（含带 1 条 PUBLISHED 记录者计数为 1、已解除 DETACHED 成员关系按未入组返回）；不存在的 `2147483647` 返回空集；跨项目任务对无权限用户不出现、对成员返回带计数的关系项 | 本地通过（同上，3 例） |
+| A7-R5-UNIT-001 | 单元 | R-5 服务覆盖与短路 | 服务按 `TaskQueryPort.listByIds` 求有权集合、升序补齐未入组条目与计数；无权任务不出现；无授权项目时不调用 `listGroupRoles` / `countPublishedByTask` | 本地通过（`apps/api/test/aggregate-read.service.test.ts` 23 例） |
+| A7-PLAN-001 | PostgreSQL 集成 | EXPLAIN (ANALYZE, BUFFERS) | R-3「先过滤后分页」SQL 与计数 SQL 均为 ANALYZE 实测输出（含 `actual time`）、命中 `change_records` 既有索引且无 `Seq Scan`；引用并加强 B7-PLAN-001 证据 | 本地通过（`apps/api/test/aggregate-read-ports.integration.test.ts` 17/17） |
+
+本地实际执行（2026-09-11，本机 PostgreSQL 18.6 + PGroonga，`127.0.0.1:55436`）：`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（web 64 文件 293 例、api 68 文件 351 例、ops 8 文件 52 例，其余 workspace 通过）、`pnpm --filter @inpulse/api test:integration`（49 文件 428 例）均通过。
+
+未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② `pnpm test:e2e` 未运行（本次未改前端行为）；③ 前端消费（F-25 步骤 3 徽章与「查看主任务」）属 C-1，仍待落地；④ 新增真库用例与 R-5 破坏性契约变更需非作者人工评审。

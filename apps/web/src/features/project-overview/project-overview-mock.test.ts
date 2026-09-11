@@ -15,11 +15,7 @@ describe("project overview mock adapter", () => {
       openLeftovers: 2,
     });
     expect(result.recentIterations).toHaveLength(3);
-    const openLeftovers = result.stats.openLeftovers;
-    if (typeof openLeftovers !== "number") {
-      throw new Error("mock adapter must declare the openLeftovers metric");
-    }
-    expect(result.leftovers).toHaveLength(openLeftovers);
+    expect(result.leftovers).toHaveLength(result.stats.openLeftovers);
   });
 
   it("keeps recent iterations ordered by publishedAt descending", async () => {

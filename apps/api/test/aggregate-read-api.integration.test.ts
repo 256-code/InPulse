@@ -1165,6 +1165,18 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     expect(publishedByTask.get(tMain)).toBe(true);
     expect(publishedByTask.get(tSource)).toBe(true);
     expect(publishedByTask.get(tDone)).toBe(false);
+    // 裁决修订 D-1：publishedRecordCount 与 hasPublishedRecord 同源同口径。
+    const recordCountByTask = new Map(
+      page.items.map((item) => [item.taskId, item.publishedRecordCount]),
+    );
+    expect(recordCountByTask.get(tMain)).toBe(1);
+    expect(recordCountByTask.get(tSource)).toBe(5);
+    expect(recordCountByTask.get(tDone)).toBe(0);
+    expect(
+      page.items.every(
+        (item) => item.hasPublishedRecord === item.publishedRecordCount > 0,
+      ),
+    ).toBe(true);
     expect(page.items.find((item) => item.taskId === tModule)).toMatchObject({
       featureId: null,
       featureName: null,
@@ -1486,19 +1498,63 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
   });
 });
 
-describe("GET /api/v1/task-groups/memberships（R-5 任务卡片聚合关系）", () => {
-  test("只返回授权项目内 ACTIVE 聚合组的任务关系", async () => {
+describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读，裁决修订 D-1）", () => {
+  test("覆盖请求中每一个有权 taskId：未入组任务返回空关系且计数照常", async () => {
+    // 未入组但有 PUBLISHED 记录的任务：groupId / groupRole 为 null，计数照常非零。
+    const ungroupedWithRecord = await newTask(project!, {
+      featureId: featureB,
+    });
+    await newPublishedRecord(project!, {
+      featureId: featureB,
+      taskId: ungroupedWithRecord,
+    });
+
     const response = await getJson(
       "/api/v1/task-groups/memberships?taskIds=" +
-        [tMain, tSource, tHistorical, tDetached, tModule].join(","),
+        [
+          tMain,
+          tSource,
+          tHistorical,
+          tDetached,
+          tModule,
+          ungroupedWithRecord,
+        ].join(","),
       memberCookie,
     );
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       items: [
-        { taskId: tMain, groupId, groupRole: "MAIN" },
-        { taskId: tSource, groupId, groupRole: "SOURCE" },
-        { taskId: tHistorical, groupId, groupRole: "SOURCE" },
+        { taskId: tMain, groupId, groupRole: "MAIN", publishedRecordCount: 1 },
+        {
+          taskId: tSource,
+          groupId,
+          groupRole: "SOURCE",
+          publishedRecordCount: 5,
+        },
+        {
+          taskId: tHistorical,
+          groupId,
+          groupRole: "SOURCE",
+          publishedRecordCount: 1,
+        },
+        {
+          taskId: tDetached,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 0,
+        },
+        {
+          taskId: tModule,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 0,
+        },
+        {
+          taskId: ungroupedWithRecord,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 1,
+        },
       ],
     });
 
@@ -1538,11 +1594,17 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务卡片聚合关系）"
     expect(visible.status).toBe(200);
     expect(visible.body).toEqual({
       items: [
-        { taskId: foreignMain, groupId: foreignGroupId, groupRole: "MAIN" },
+        {
+          taskId: foreignMain,
+          groupId: foreignGroupId,
+          groupRole: "MAIN",
+          publishedRecordCount: 0,
+        },
         {
           taskId: foreignSource,
           groupId: foreignGroupId,
           groupRole: "SOURCE",
+          publishedRecordCount: 0,
         },
       ],
     });

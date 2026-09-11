@@ -141,8 +141,7 @@ function isScopeFilterSupported(
   return true;
 }
 
-function dueLabel(item: MyTaskListItem): string | null {
-  if (item.dueAt === undefined) return null;
+function dueLabel(item: MyTaskListItem): string {
   if (item.dueAt === null) return "未设置截止";
   if (item.workStatus === "TODO" && isBeforeTodayIso(item.dueAt))
     return "已逾期 " + formatDayIso(item.dueAt);
@@ -332,19 +331,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             <InpulseIcon name="users" size={14} />
             {item.assignee.name}
           </span>
-          {due === null ? null : (
-            <span title={"截止：" + due}>
-              <InpulseIcon name="clock" size={14} />
-              {due}
-            </span>
-          )}
+          <span title={"截止：" + due}>
+            <InpulseIcon name="clock" size={14} />
+            {due}
+          </span>
         </div>
         <div className="task-card-footer">
-          {item.priority === undefined ? null : (
-            <CalmBadge tone={priorityTone[item.priority]}>
-              {priorityLabels[item.priority]}优先级
-            </CalmBadge>
-          )}
+          <CalmBadge tone={priorityTone[item.priority]}>
+            {priorityLabels[item.priority]}优先级
+          </CalmBadge>
           {item.hasPublishedRecord ? (
             <span className="task-card-counts">
               <span title="1 条已发布迭代记录">
@@ -395,13 +390,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               <td>{projectNameOf(item)}</td>
               <td>{item.assignee.name}</td>
               <td>
-                {item.priority === undefined ? (
-                  "—"
-                ) : (
-                  <CalmBadge tone={priorityTone[item.priority]}>
-                    {priorityLabels[item.priority]}
-                  </CalmBadge>
-                )}
+                <CalmBadge tone={priorityTone[item.priority]}>
+                  {priorityLabels[item.priority]}
+                </CalmBadge>
               </td>
               <td className={isOverdue(item) ? "due-overdue" : undefined}>
                 {dueLabel(item) ?? "—"}
@@ -801,7 +792,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             hint={
               openItems.length +
               " 项 · " +
-              (filterSupport["filter:priority"]
+              (activeAdapter.source === "mock"
                 ? "按逾期、今天截止、优先级排序"
                 : "服务端按任务编号倒序")
             }

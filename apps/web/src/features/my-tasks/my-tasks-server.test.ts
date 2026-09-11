@@ -25,6 +25,7 @@ const page: MyTaskPage = {
       assignee: { userId: 2, name: "开发者 C", avatarUrl: null },
       updatedAt: "2026-09-10T09:00:00.000Z",
       hasPublishedRecord: true,
+      publishedRecordCount: 1,
       groupRole: "MAIN",
       priority: "NORMAL",
       dueAt: null,
@@ -37,8 +38,8 @@ const page: MyTaskPage = {
   nextCursor: "signed-cursor",
   hasMore: true,
   stats: { myOpen: 1, dueToday: 0, overdue: 0, completedThisMonth: 0 },
-  leftoverCount: 0,
-  leftoverSample: null,
+  leftoverCount: 1,
+  leftoverSample: { recordCode: "R-021", summary: "恢复码入口待补齐" },
 };
 
 describe("my tasks server adapter", () => {
@@ -75,15 +76,44 @@ describe("my tasks server adapter", () => {
         lifecycleStatus: "ACTIVE",
         updatedAt: "2026-09-10T09:00:00.000Z",
         assignee: { userId: 2, name: "开发者 C", avatarUrl: null },
+        priority: "NORMAL",
+        dueAt: null,
+        completedAt: null,
+        creatorId: 2,
+        githubLinkCount: 0,
         hasPublishedRecord: true,
         groupRole: "MAIN",
+        groupId: null,
       },
     ]);
     expect(result.nextCursor).toBe("signed-cursor");
     expect(result.hasMore).toBe(true);
   });
 
-  it("keeps the frozen contract gaps as explicit nulls", async () => {
+  it("passes priority and the canceled union to the generated client", async () => {
+    const listMyTasks = vi.fn().mockResolvedValue(page);
+    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const adapter = createMyTasksServerAdapter(client);
+
+    await adapter.fetchMyTasks({
+      filters: {
+        ...DEFAULT_MY_TASK_FILTERS,
+        status: "open",
+        includeCanceled: true,
+        priority: "HIGH",
+      },
+      viewerId: 2,
+    });
+
+    expect(listMyTasks).toHaveBeenCalledWith({
+      limit: 20,
+      workStatus: "TODO",
+      priority: "HIGH",
+      includeCanceled: true,
+    });
+  });
+
+  it("wires stats and leftovers from the page while scopeCounts stays deferred", async () => {
     const listMyTasks = vi.fn().mockResolvedValue(page);
     const client = { listMyTasks } as unknown as InpulseApiClient;
     const adapter = createMyTasksServerAdapter(client);
@@ -93,14 +123,17 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
-    expect(result.stats).toBeNull();
+    expect(result.stats).toEqual(page.stats);
     expect(result.scopeCounts).toBeNull();
-    expect(result.leftoverCount).toBeNull();
-    expect(result.leftoverSample).toBeNull();
+    expect(result.leftoverCount).toBe(1);
+    expect(result.leftoverSample).toEqual({
+      recordCode: "R-021",
+      summary: "恢复码入口待补齐",
+    });
     expect(result.filterSupport).toBe(MY_TASKS_V1_FILTER_SUPPORT);
-    expect(
-      Object.values(result.filterSupport).every((supported) => !supported),
-    ).toBe(true);
+    expect(result.filterSupport["filter:priority"]).toBe(true);
+    expect(result.filterSupport["filter:canceled-with-open"]).toBe(true);
+    expect(result.filterSupport["filter:query"]).toBe(false);
   });
 
   it("maps the R-7 task group page through the generated client", async () => {
@@ -146,8 +179,9 @@ describe("my tasks server adapter", () => {
     });
   });
 
-  it("keeps the notice explicit about the frozen contract gaps", () => {
+  it("keeps the notice explicit about the wired data and the remaining gaps", () => {
     expect(MY_TASKS_SERVER_NOTICE).toContain("统计卡片");
     expect(MY_TASKS_SERVER_NOTICE).toContain("优先级");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("范围计数");
   });
 });
