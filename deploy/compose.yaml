@@ -33,8 +33,10 @@
 #   5. operations profile 的 backup / audit-archive 服务只在校验过的宿主调度
 #      （或人工运维）下按需 `run --rm` 执行，不常驻；上线前
 #      `--profile operations` 保持未启用。
-#   6. 首次建库与角色/密码初始化由 database/bootstrap 和后续独立 compose.init 纵切片
-#      负责，本文件不为生产准备登录密码；生产不得暴露 PostgreSQL/API 到公网。
+#   6. 首次建库与角色/密码初始化由 database/bootstrap 镜像脚本与一次性覆盖
+#      deploy/compose.init.yaml 负责（静态校验见 scripts/check_deploy_refs.mjs，
+#      完整步骤见 docs/runbooks/disaster-recovery.md）；本文件不为生产准备
+#      登录密码；生产不得暴露 PostgreSQL/API 到公网。
 
 x-logging: &default-logging
   driver: json-file

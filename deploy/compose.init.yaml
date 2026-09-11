@@ -1,0 +1,65 @@
+# 首次建库 / 灾难恢复一次性覆盖（技术设计 v1.2.2 §11.2 / §11.2.1）。
+#
+# 用途：仅在「首次建库」或「灾难恢复重建空库并创建角色」阶段，与稳态
+# deploy/compose.yaml 叠加使用，为 db 服务临时提供官方镜像初始化所需的
+# cluster_bootstrap 凭据和六份独立密码 Secret。稳态 db 服务不挂载任何登录
+# 密码；初始化和角色探针通过后必须立即停止本覆盖，改回稳态 Compose。
+#
+# 参考用法（完整步骤见 docs/runbooks/disaster-recovery.md）：
+#   docker compose --project-directory deploy -f deploy/compose.yaml \
+#     -f deploy/compose.init.yaml --env-file deploy/.env.deploy up -d db
+#   ... 等待 db healthy 并运行角色探针 ...
+#   docker compose --project-directory deploy -f deploy/compose.yaml \
+#     -f deploy/compose.init.yaml --env-file deploy/.env.deploy down
+#   docker compose --project-directory deploy -f deploy/compose.yaml \
+#     --env-file deploy/.env.deploy up -d
+#
+# 禁止把本覆盖用于日常 up。静态防线：scripts/check_deploy_refs.mjs
+# 校验稳态渲染必须不含 POSTGRES_PASSWORD_FILE 与 db_bootstrap_password，
+# 且本覆盖渲染必须包含六份密码 Secret。
+#
+# 前提：六份密码文件已按部署账户可读权限落位到 deploy/secrets/
+# （不进入 Git），每份至少 32 字符；uid/gid 999 为官方 PostgreSQL 镜像内
+# postgres 用户的数值身份，与 db-bootstrap 镜像 digest 一并锁定。
+
+services:
+  db:
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: cluster_bootstrap
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_bootstrap_password
+    secrets:
+      - source: db_bootstrap_password
+        target: /run/secrets/db_bootstrap_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+      - source: db_migrator_password
+        target: /run/secrets/db_migrator_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+      - source: db_runtime_password
+        target: /run/secrets/db_runtime_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+      - source: db_backup_password
+        target: /run/secrets/db_backup_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+      - source: db_audit_reader_password
+        target: /run/secrets/db_audit_reader_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+      - source: db_audit_archive_password
+        target: /run/secrets/db_audit_archive_password
+        uid: "999"
+        gid: "999"
+        mode: "0400"
+
+secrets:
+  db_bootstrap_password:
+    file: ./secrets/db_bootstrap_password

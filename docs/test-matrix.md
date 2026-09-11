@@ -888,3 +888,32 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 本地实际执行（2026-09-11）：`pnpm contract:generate`、`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`、真库 `pnpm --filter @inpulse/api test:integration`、`pnpm check:docs`、`pnpm check:secrets` 均通过。
 
 未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② FC-031 判别联合与逐路由 `details` Schema ref 属延后项，恢复条件见裁决 §3.2，未在本批实现；③ 本次不改路由、状态码语义与权限矩阵。
+
+## A-3 compose.init 首次建库纵切片与灾难恢复离线 Runbook（2026-09-11 本地落库）
+
+按[技术设计 §11.2 / §11.2.1 / §11.5](../技术设计v1.2.2.md)：首次建库使用版本化一次性覆盖
+[`deploy/compose.init.yaml`](../deploy/compose.init.yaml)——仅该次向 db 服务设置 `POSTGRES_DB=app`、
+`POSTGRES_USER=cluster_bootstrap`、`POSTGRES_PASSWORD_FILE`，并只读挂载六份独立密码 Secret；稳态
+db 容器不挂载任何登录密码，禁止把一次性覆盖用于日常 `up`。灾难恢复离线步骤见
+[灾难恢复离线 Runbook](./runbooks/disaster-recovery.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| A3-INIT-001 | 部署预检 | compose.init.yaml 结构与静态防线 | `pnpm check:deploy:test`：overlay 渲染出 db 的三个 POSTGRES_* 环境变量与六份 `db_*` Secret（target `/run/secrets/db_*`、mode 0400、uid/gid 999）；稳态渲染的 db 无 POSTGRES_* 且 db/migrate/api/web/backup/audit-archive 均不挂 `db_bootstrap_password`；负例（篡改 target、`.env.deploy.example` 占位符）被拒绝 | 本地通过 |
+| A3-INIT-002 | 集成 / 容器 | 真实首次建库（db-bootstrap 镜像） | 本地 Docker 构建 `deploy/docker/db-bootstrap.Dockerfile` 后以 overlay 启动 db：initdb 与 `000_roles.sql` / `010_passwords.sql` / `020_pgroonga.sql` 依次执行无报错；容器 healthy | 本地通过（2026-09-11） |
+| A3-INIT-003 | 集成 / 容器 | 角色与扩展探针 | 7 个角色：`app_owner` / `audit_writer` NOLOGIN，其余 5 个 LOGIN；全部非超级用户、无 CREATEDB/CREATEROLE；`app_runtime` 密码可登录且 `SET ROLE app_owner` 被拒（42501）；`pgroonga` 扩展存在 | 本地通过 |
+| A3-INIT-004 | 集成 / 容器 | 稳态接管 | init 覆盖 `down` 后以稳态 compose 启动同一数据卷：db healthy（数据卷已初始化时稳态无需 POSTGRES_*） | 本地通过 |
+| A3-RUNBOOK-001 | 文档 | 灾难恢复离线 Runbook | 交付 `docs/runbooks/disaster-recovery.md`：离线材料清单、镜像 digest 校验、compose.init 用法与角色探针、数据恢复、Session 处理、迁移与完整校验、RPO/RTO 门禁、故障处理；`backup-restore.md` §7 与 `database/README.md` 同步引用 | 本地通过（`pnpm check:docs` 75 个 Markdown） |
+
+本地实际执行（2026-09-11）：`pnpm check:deploy:test`（正例，含 overlay 渲染与新断言）、
+`pnpm check:deploy --env deploy/.env.deploy.example`（负例被拒）、篡改 overlay secret target 的
+负例被拦截、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm check:docs`、
+`pnpm check:secrets` 均通过；Docker 真实验证见 A3-INIT-002~004（独立 project 名，验证后已 `down -v`
+清理，测试密码与本地 env 文件不在版本控制内）。
+
+未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② 真实主机恢复演练（RECOVERY-001 /
+DEPLOY-003）仍是上线门禁，未在本批执行；③ 六份密码、发布清单 digest 与 TLS 的离线保管流程由
+运维在上线时落实，本批只交付 Runbook 与静态防线；④ 本地 Compose 对 secrets 的 uid/gid/mode
+声明会给出「not supported」警告（属 Swarm 语法），实际文件权限由部署账户控制，静态声明仍由
+`check:deploy` 校验；⑤ `010_passwords.sql` 的容器内路径已与稳态 secret 名对齐（`db_*`），
+`database/.env.example` 同步更新。

@@ -122,6 +122,10 @@ sudo docker compose --project-name inpulse --env-file deploy/.env.deploy \
 
 ## 7. 全新主机恢复
 
+完整离线步骤（含 [deploy/compose.init.yaml](../../deploy/compose.init.yaml) 一次性
+覆盖、角色探针与离线材料清单）见[灾难恢复离线 Runbook](./disaster-recovery.md)；
+本节为摘要与备份侧的对接点。
+
 1. 校验发布清单签名与全部镜像 digest，创建空卷，用 bootstrap 脚本建立全部 LOGIN/NOLOGIN
    角色与默认权限；
 2. 校验密文 Hash，在 tmpfs 解密，以 `app_owner` 执行 `pg_restore --no-owner --no-acl`；
@@ -160,4 +164,5 @@ sudo docker compose --project-name inpulse --env-file deploy/.env.deploy \
 - [ADR-018 PostgreSQL 数据卷与数据库角色分离](../adr/ADR-018.md)
 - [测试矩阵](../test-matrix.md)：`DEPLOY-003`、`DEPLOY-004`、`RECOVERY-001`
 - 宿主调度配置与单元：[`deploy/backup/`](../../deploy/backup/)
+- [灾难恢复离线 Runbook](./disaster-recovery.md)
 - [升级与回滚 Runbook](./upgrade-rollback.md)
