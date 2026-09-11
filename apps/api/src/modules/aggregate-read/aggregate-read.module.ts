@@ -16,6 +16,8 @@ import { MyTasksController } from "./my-tasks.controller.js";
 import { MyTasksQueryService } from "./my-tasks-query.service.js";
 import { ProjectOverviewController } from "./project-overview.controller.js";
 import { ProjectOverviewQueryService } from "./project-overview-query.service.js";
+import { TaskGroupMembershipController } from "./task-group-membership.controller.js";
+import { TaskGroupMembershipQueryService } from "./task-group-membership-query.service.js";
 import { TaskGroupReadController } from "./task-group-read.controller.js";
 import { TaskGroupQueryService } from "./task-group-query.service.js";
 
@@ -46,10 +48,14 @@ import { TaskGroupQueryService } from "./task-group-query.service.js";
       inject: [SESSION_HMAC_KEYRING],
     },
     TaskGroupQueryService,
+    TaskGroupMembershipQueryService,
     ProjectOverviewQueryService,
     MyTasksQueryService,
   ],
   controllers: [
+    // R-5 的静态段 /task-groups/memberships 必须先于 TaskGroupReadController 的
+    // :groupId 参数路由注册，否则会被吞掉（集成测试断言实际路由解析）。
+    TaskGroupMembershipController,
     TaskGroupReadController,
     ProjectOverviewController,
     MyTasksController,

@@ -2500,7 +2500,7 @@
     "/me/tasks": {
       "get": {
         "operationId": "listMyTasks",
-        "summary": "F-32 我的任务：跨项目列出当前用户负责的任务，服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 只支持 projectId / scopeType / workStatus / hasPublishedRecord 四项筛选，不接受任何他人身份或授权范围参数。",
+        "summary": "F-32 我的任务：跨项目列出当前用户负责的任务，返回优先级、截止与完成时间、创建者、外部链接数与聚合组关系，并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 六项筛选，不接受任何他人身份或授权范围参数。",
         "responses": {
           "200": {
             "description": "成功",
@@ -2616,6 +2616,28 @@
           },
           {
             "name": "hasPublishedRecord",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LOW",
+                "NORMAL",
+                "HIGH",
+                "URGENT"
+              ]
+            }
+          },
+          {
+            "name": "includeCanceled",
             "in": "query",
             "required": false,
             "schema": {
@@ -11491,7 +11513,7 @@
     "/projects/{projectId}/overview": {
       "get": {
         "operationId": "getProjectOverview",
-        "summary": "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代与待处理遗留问题；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
+        "summary": "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代、待处理遗留问题总数与列表；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
         "responses": {
           "200": {
             "description": "成功",
@@ -12542,6 +12564,88 @@
               "minimum": 1,
               "maximum": 100
             }
+          }
+        ]
+      }
+    },
+    "/task-groups/memberships": {
+      "get": {
+        "operationId": "listTaskGroupMemberships",
+        "summary": "F-25 任务卡片聚合关系批量查询（R-5）：按逗号分隔的 1..100 个任务 ID，返回当前用户可访问项目内、属于 ACTIVE 聚合组的任务与组内角色；无权、不存在或已解除的关系一律不入结果，不泄露资源存在性；数量、格式或重复校验失败返回 422。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGroupMembershipResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "taskIds",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              }
+            },
+            "style": "form",
+            "explode": false
           }
         ]
       }
@@ -14859,6 +14963,11 @@
             "minLength": 1,
             "maxLength": 64
           },
+          "recordTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
           "content": {
             "type": "string",
             "minLength": 1,
@@ -14874,6 +14983,7 @@
           "leftoverItemId",
           "recordId",
           "recordCode",
+          "recordTitle",
           "content",
           "createdAt"
         ],
@@ -15976,6 +16086,49 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "creatorId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "githubLinkCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
           "hasPublishedRecord": {
             "type": "boolean"
           },
@@ -15987,6 +16140,18 @@
                   "MAIN",
                   "SOURCE"
                 ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groupId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
               },
               {
                 "type": "null"
@@ -16009,8 +16174,34 @@
           "lifecycleStatus",
           "assignee",
           "updatedAt",
+          "priority",
+          "dueAt",
+          "completedAt",
+          "creatorId",
+          "githubLinkCount",
           "hasPublishedRecord",
-          "groupRole"
+          "groupRole",
+          "groupId"
+        ],
+        "additionalProperties": false
+      },
+      "MyTaskLeftoverSample": {
+        "type": "object",
+        "properties": {
+          "recordCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 201
+          }
+        },
+        "required": [
+          "recordCode",
+          "summary"
         ],
         "additionalProperties": false
       },
@@ -16038,12 +16229,65 @@
           },
           "hasMore": {
             "type": "boolean"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/MyTaskStats"
+          },
+          "leftoverCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "leftoverSample": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyTaskLeftoverSample"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "items",
           "nextCursor",
-          "hasMore"
+          "hasMore",
+          "stats",
+          "leftoverCount",
+          "leftoverSample"
+        ],
+        "additionalProperties": false
+      },
+      "MyTaskStats": {
+        "type": "object",
+        "properties": {
+          "myOpen": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "dueToday": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completedThisMonth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "myOpen",
+          "dueToday",
+          "overdue",
+          "completedThisMonth"
         ],
         "additionalProperties": false
       },
@@ -16081,6 +16325,18 @@
             ]
           },
           "hasPublishedRecord": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "includeCanceled": {
             "type": "boolean"
           }
         },
@@ -16849,6 +17105,11 @@
               "$ref": "#/components/schemas/RecentRecordItem"
             }
           },
+          "activeLeftoverTotal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
           "activeLeftovers": {
             "maxItems": 10,
             "type": "array",
@@ -16862,6 +17123,7 @@
           "memberCount",
           "stats",
           "recentRecords",
+          "activeLeftoverTotal",
           "activeLeftovers"
         ],
         "additionalProperties": false
@@ -18890,6 +19152,69 @@
           "originalWorkStatus",
           "originalAssigneeId",
           "joinedAt"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupMembershipItem": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "groupId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "groupRole": {
+            "type": "string",
+            "enum": [
+              "MAIN",
+              "SOURCE"
+            ]
+          }
+        },
+        "required": [
+          "taskId",
+          "groupId",
+          "groupRole"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupMembershipQueryRequest": {
+        "type": "object",
+        "properties": {
+          "taskIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "required": [
+          "taskIds"
+        ],
+        "additionalProperties": false
+      },
+      "TaskGroupMembershipResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskGroupMembershipItem"
+            }
+          }
+        },
+        "required": [
+          "items"
         ],
         "additionalProperties": false
       },

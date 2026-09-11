@@ -129,6 +129,8 @@ interface TaskOptions {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
+  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly dueAt?: string | null;
 }
 
 async function newTask(
@@ -148,8 +150,8 @@ async function newTask(
         title: options.title ?? "聚合读接口任务",
         description: "",
         assigneeId: options.assigneeId ?? scope.userId,
-        priority: "NORMAL",
-        dueAt: null,
+        priority: options.priority ?? "NORMAL",
+        dueAt: options.dueAt ?? null,
       },
     );
     const current =
@@ -1116,6 +1118,20 @@ describe("GET /api/v1/projects/{projectId}/overview（R-2 项目概览）", () =
       "VALIDATION_FAILED",
     );
   });
+
+  test("activeLeftoverTotal 不受 limit 影响，recordTitle 取来源记录标题", async () => {
+    const response = await getJson(
+      "/api/v1/projects/" +
+        String(project!.projectId) +
+        "/overview?activeLeftoverLimit=1",
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const overview = projectOverviewResponseSchema.parse(response.body);
+    expect(overview.activeLeftovers).toHaveLength(1);
+    expect(overview.activeLeftoverTotal).toBe(3);
+    expect(overview.activeLeftovers[0]?.recordTitle).toBe("聚合读接口记录");
+  });
 });
 
 describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
@@ -1275,13 +1291,16 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     );
   });
 
-  test("无项目成员身份返回空页，匿名 401", async () => {
+  test("无项目成员身份返回空页与零统计，匿名 401", async () => {
     const response = await getJson("/api/v1/me/tasks", outsiderCookie);
     expect(response.status).toBe(200);
     expect(myTaskPageSchema.parse(response.body)).toEqual({
       hasMore: false,
       items: [],
       nextCursor: null,
+      stats: { myOpen: 0, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+      leftoverCount: 0,
+      leftoverSample: null,
     });
     const otherResponse = await getJson("/api/v1/me/tasks", otherCookie);
     expect(otherResponse.status).toBe(200);
@@ -1291,6 +1310,289 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       undefined,
       401,
       "MY_TASKS_UNAUTHENTICATED",
+    );
+  });
+
+  test("priority / includeCanceled 筛选与新选择列（A 裁决 §10.3）", async () => {
+    const dueAt = "2027-03-01T03:00:00.000Z";
+    const highTask = await newTask(project!, {
+      dueAt,
+      featureId: featureA,
+      priority: "HIGH",
+    });
+    const response = await getJson(
+      "/api/v1/me/tasks?priority=HIGH",
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const page = myTaskPageSchema.parse(response.body);
+    expect(page.items.map((item) => item.taskId)).toEqual([highTask]);
+    expect(page.items[0]).toMatchObject({
+      priority: "HIGH",
+      dueAt: new Date(dueAt).toISOString(),
+      completedAt: null,
+      creatorId: memberUser,
+      githubLinkCount: 0,
+      groupId: null,
+      groupRole: null,
+    });
+
+    const unionResponse = await getJson(
+      "/api/v1/me/tasks?workStatus=TODO&includeCanceled=true",
+      memberCookie,
+    );
+    expect(unionResponse.status).toBe(200);
+    const unionIds = myTaskPageSchema
+      .parse(unionResponse.body)
+      .items.map((item) => item.taskId);
+    expect(unionIds).toContain(tCanceled);
+    expect(unionIds).toContain(highTask);
+    expect(unionIds).not.toContain(tDone);
+
+    const excludedResponse = await getJson(
+      "/api/v1/me/tasks?workStatus=TODO&includeCanceled=false",
+      memberCookie,
+    );
+    expect(
+      myTaskPageSchema
+        .parse(excludedResponse.body)
+        .items.map((item) => item.taskId),
+    ).not.toContain(tCanceled);
+
+    await expectError(
+      "/api/v1/me/tasks?priority=CRITICAL",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/me/tasks?includeCanceled=maybe",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("githubLinkCount 与 groupId 同源映射（§10.3）", async () => {
+    const linkTask = await newTask(project!, { featureId: featureB });
+    const url = "https://github.com/256-code/InPulse/issues/9901";
+    const [link] = await runtime!.sql<{ id: number }[]>`
+      INSERT INTO app.external_links (project_id, display_url, normalized_url, kind, created_by)
+      VALUES (${project!.projectId}, ${url}, ${url}, ${"ISSUE"}, ${memberUser})
+      RETURNING id
+    `;
+    if (!link) throw new Error("external link fixture insert returned no row");
+    await runtime!
+      .sql`INSERT INTO app.task_external_links (project_id, task_id, link_id) VALUES (${project!.projectId}, ${linkTask}, ${link.id})`;
+    await runtime!
+      .sql`INSERT INTO app.task_external_links (project_id, task_id, link_id) VALUES (${project!.projectId}, ${tMain}, ${link.id})`;
+
+    const response = await getJson("/api/v1/me/tasks", memberCookie);
+    const page = myTaskPageSchema.parse(response.body);
+    const byTask = new Map(page.items.map((item) => [item.taskId, item]));
+    expect(byTask.get(linkTask)).toMatchObject({
+      githubLinkCount: 1,
+      groupRole: null,
+      groupId: null,
+    });
+    expect(byTask.get(tMain)).toMatchObject({
+      githubLinkCount: 1,
+      groupRole: "MAIN",
+      groupId,
+    });
+  });
+
+  test("统计卡片与遗留问题入口按基准集合计算且与筛选正交（§10.3）", async () => {
+    const statsProject = await createProject(runtime!.sql, memberUser);
+    const before = (minutes: number) =>
+      new Date(Date.now() - minutes * 60_000).toISOString();
+    const after = (minutes: number) =>
+      new Date(Date.now() + minutes * 60_000).toISOString();
+    const overdueTask = await newTask(statsProject, {
+      dueAt: before(26 * 60),
+      priority: "URGENT",
+    });
+    const [todayBoundary] = await runtime!.sql<{ dueAt: string }[]>`
+      SELECT ((date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '23 hours 59 minutes 59 seconds') AT TIME ZONE 'Asia/Shanghai')::text AS "dueAt"
+    `;
+    const todayTask = await newTask(statsProject, {
+      dueAt: todayBoundary!.dueAt,
+    });
+    const doneTask = await newTask(statsProject, { workStatus: "DONE" });
+    const canceledTask = await newTask(statsProject, {
+      workStatus: "CANCELED",
+    });
+
+    const recordId = await newPublishedRecord(statsProject, {
+      publishedAt: after(5),
+      taskId: overdueTask,
+    });
+    const [recordRow] = await runtime!.sql<{ code: string }[]>`
+      SELECT code FROM app.change_records WHERE id = ${recordId} AND project_id = ${statsProject.projectId}
+    `;
+    const leftoverId = await newLeftover(statsProject, recordId, {
+      content: "统计遗留内容",
+      createdAt: before(30),
+    });
+    await runtime!
+      .sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by) VALUES (${leftoverId}, ${overdueTask}, ${statsProject.projectId}, ${statsProject.userId})`;
+
+    const scope = "projectId=" + String(statsProject.projectId);
+    const response = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
+    expect(response.status).toBe(200);
+    const page = myTaskPageSchema.parse(response.body);
+    expect(page.items.map((item) => item.taskId)).toEqual([
+      canceledTask,
+      doneTask,
+      todayTask,
+      overdueTask,
+    ]);
+    expect(page.stats).toEqual({
+      myOpen: 2,
+      dueToday: 1,
+      overdue: 1,
+      completedThisMonth: 1,
+    });
+    expect(page.leftoverCount).toBe(1);
+    expect(page.leftoverSample).toEqual({
+      recordCode: recordRow!.code,
+      summary: "统计遗留内容",
+    });
+
+    // 统计与遗留计数与筛选正交：workStatus / priority 只影响 items。
+    const filtered = await getJson(
+      "/api/v1/me/tasks?" + scope + "&workStatus=DONE&priority=LOW",
+      memberCookie,
+    );
+    const filteredPage = myTaskPageSchema.parse(filtered.body);
+    expect(filteredPage.items).toEqual([]);
+    expect(filteredPage.stats).toEqual(page.stats);
+    expect(filteredPage.leftoverCount).toBe(1);
+
+    // 最新一条遗留项超过 200 字符时摘要截断并追加省略号。
+    const longLeftoverId = await newLeftover(statsProject, recordId, {
+      content: "长".repeat(260),
+      createdAt: new Date().toISOString(),
+    });
+    await runtime!
+      .sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by) VALUES (${longLeftoverId}, ${todayTask}, ${statsProject.projectId}, ${statsProject.userId})`;
+    const truncated = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
+    const truncatedPage = myTaskPageSchema.parse(truncated.body);
+    expect(truncatedPage.leftoverCount).toBe(2);
+    expect(truncatedPage.leftoverSample).toEqual({
+      recordCode: recordRow!.code,
+      summary: "长".repeat(200) + "…",
+    });
+  });
+});
+
+describe("GET /api/v1/task-groups/memberships（R-5 任务卡片聚合关系）", () => {
+  test("只返回授权项目内 ACTIVE 聚合组的任务关系", async () => {
+    const response = await getJson(
+      "/api/v1/task-groups/memberships?taskIds=" +
+        [tMain, tSource, tHistorical, tDetached, tModule].join(","),
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      items: [
+        { taskId: tMain, groupId, groupRole: "MAIN" },
+        { taskId: tSource, groupId, groupRole: "SOURCE" },
+        { taskId: tHistorical, groupId, groupRole: "SOURCE" },
+      ],
+    });
+
+    const unknown = await getJson(
+      "/api/v1/task-groups/memberships?taskIds=2147483647",
+      memberCookie,
+    );
+    expect(unknown.status).toBe(200);
+    expect(unknown.body).toEqual({ items: [] });
+  });
+
+  test("无权项目的聚合关系不返回，也不泄露存在性", async () => {
+    const foreignMain = await newTask(otherProject!, {
+      assigneeId: otherUser,
+    });
+    const foreignSource = await newTask(otherProject!, {
+      assigneeId: otherUser,
+    });
+    const joinedAt = new Date(Date.now() - 60_000).toISOString();
+    const foreignGroupId = await seedTaskGroup(otherProject!, 9, "外部聚合组", [
+      { joinedAt, role: "MAIN", taskId: foreignMain },
+      { joinedAt, role: "SOURCE", taskId: foreignSource },
+    ]);
+
+    const hidden = await getJson(
+      "/api/v1/task-groups/memberships?taskIds=" + String(foreignMain),
+      memberCookie,
+    );
+    expect(hidden.status).toBe(200);
+    expect(hidden.body).toEqual({ items: [] });
+
+    const visible = await getJson(
+      "/api/v1/task-groups/memberships?taskIds=" +
+        [foreignMain, foreignSource].join(","),
+      otherCookie,
+    );
+    expect(visible.status).toBe(200);
+    expect(visible.body).toEqual({
+      items: [
+        { taskId: foreignMain, groupId: foreignGroupId, groupRole: "MAIN" },
+        {
+          taskId: foreignSource,
+          groupId: foreignGroupId,
+          groupRole: "SOURCE",
+        },
+      ],
+    });
+  });
+
+  test("taskIds 数量、格式与重复校验失败统一 422，匿名 401", async () => {
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=" + String(tMain),
+      undefined,
+      401,
+      "TASK_GROUP_MEMBERSHIP_UNAUTHENTICATED",
+    );
+    await expectError(
+      "/api/v1/task-groups/memberships",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=abc",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=1,1",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    const tooMany = Array.from({ length: 101 }, (_, index) =>
+      String(index + 1),
+    ).join(",");
+    await expectError(
+      "/api/v1/task-groups/memberships?taskIds=" + tooMany,
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
     );
   });
 });

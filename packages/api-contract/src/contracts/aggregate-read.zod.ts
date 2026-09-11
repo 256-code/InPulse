@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const id = z.number().int().positive().max(2147483647);
 
+/** R-3 任务优先级；与 app.tasks.tasks_priority_check 的取值一致。 */
+export const TASK_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
+
+/** R-5 批量任务 ID 上限：单次 1..100 个；数量、格式或重复校验失败返回 422。 */
+export const TASK_GROUP_MEMBERSHIP_IDS_MAX = 100;
+
+/** R-3 遗留问题摘要上限：取最新版本 content 前 200 个字符，截断时追加 “…” 。 */
+export const MY_TASK_LEFTOVER_SUMMARY_MAX = 200;
+
 /**
  * F-25 / F-29 / F-32 聚合读契约（A 裁决见 docs/a-contract-review-f25-f29-f32.md）。
  * 分页 envelope 与 getSearch 同一约定（C-006）：items / nextCursor / hasMore，
@@ -267,6 +276,7 @@ export const leftoverItemSummarySchema = z
     leftoverItemId: id,
     recordId: id,
     recordCode: z.string().min(1).max(64),
+    recordTitle: z.string().min(1).max(500),
     content: z.string().min(1).max(10000),
     createdAt: z.iso.datetime(),
   })
@@ -284,6 +294,7 @@ export const projectOverviewResponseSchema = z
     recentRecords: z
       .array(recentRecordItemSchema)
       .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX),
+    activeLeftoverTotal: z.number().int().nonnegative(),
     activeLeftovers: z
       .array(leftoverItemSummarySchema)
       .max(PROJECT_OVERVIEW_LIST_LIMIT_MAX),
@@ -313,6 +324,13 @@ export const myTasksQueryRequestSchema = z
     scopeType: z.enum(["FEATURE", "MODULE"]).optional(),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]).optional(),
     hasPublishedRecord: queryBoolean.optional(),
+    /** 单值优先级筛选；与 workStatus 正交（A 裁决 §10.3）。 */
+    priority: z.enum(TASK_PRIORITIES).optional(),
+    /**
+     * 与 workStatus 组合表达「未完成并含已取消」（TODO ∪ CANCELED）；
+     * workStatus 缺省时的全集本就包含 CANCELED，该参数不产生额外过滤。
+     */
+    includeCanceled: queryBoolean.optional(),
   })
   .strict()
   .meta({ id: "MyTasksQueryRequest" });
@@ -339,15 +357,56 @@ export const myTaskItemSchema = z
     lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
     assignee: userRefSchema,
     updatedAt: z.iso.datetime(),
+    priority: z.enum(TASK_PRIORITIES),
+    /** null = 未设置截止；与骨架的 undefined（不可知）语义不同。 */
+    dueAt: z.iso.datetime().nullable(),
+    /** 与 work_status = 'DONE' 同真（tasks_completion_state_check）。 */
+    completedAt: z.iso.datetime().nullable(),
+    creatorId: id,
+    /** 该任务经 task_external_links 关联的外部链接条数，按链接去重。 */
+    githubLinkCount: z.number().int().nonnegative(),
     hasPublishedRecord: z.boolean(),
     groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
+    /** 与 groupRole 同源、同空同非空；支撑「查看主任务」入口（A 裁决 §10.3）。 */
+    groupId: id.nullable(),
   })
   .strict()
   .meta({ id: "MyTaskItem" });
 
 export type MyTaskItem = z.infer<typeof myTaskItemSchema>;
 
-/** R-3 分页响应（C-006 envelope）。 */
+/**
+ * R-3 统计卡片口径（A 裁决 §10.3）：基准集合 = 当前用户负责、projectId 生效、
+ * 排除 INVALID / CANCELED 与历史来源分支的有效任务；分页与游标不影响计数，
+ * 日界与月界按业务时区 Asia/Shanghai 由服务端计算，客户端不得自行推导。
+ */
+export const myTaskStatsSchema = z
+  .object({
+    myOpen: z.number().int().nonnegative(),
+    dueToday: z.number().int().nonnegative(),
+    overdue: z.number().int().nonnegative(),
+    completedThisMonth: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "MyTaskStats" });
+
+export type MyTaskStats = z.infer<typeof myTaskStatsSchema>;
+
+/** R-3 遗留问题入口样例：summary 为最新版本 content 前 200 字符，截断时追加 “…” 。 */
+export const myTaskLeftoverSampleSchema = z
+  .object({
+    recordCode: z.string().min(1).max(64),
+    summary: z
+      .string()
+      .min(1)
+      .max(MY_TASK_LEFTOVER_SUMMARY_MAX + 1),
+  })
+  .strict()
+  .meta({ id: "MyTaskLeftoverSample" });
+
+export type MyTaskLeftoverSample = z.infer<typeof myTaskLeftoverSampleSchema>;
+
+/** R-3 分页响应（C-006 envelope）+ 统计与遗留问题入口（A 裁决 §10.3）。 */
 export const myTaskPageSchema = z
   .object({
     items: z.array(myTaskItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),
@@ -357,8 +416,69 @@ export const myTaskPageSchema = z
       .max(AGGREGATE_READ_CURSOR_MAX_LENGTH)
       .nullable(),
     hasMore: z.boolean(),
+    stats: myTaskStatsSchema,
+    leftoverCount: z.number().int().nonnegative(),
+    leftoverSample: myTaskLeftoverSampleSchema.nullable(),
   })
   .strict()
   .meta({ id: "MyTaskPage" });
 
 export type MyTaskPage = z.infer<typeof myTaskPageSchema>;
+
+/**
+ * R-5 任务卡片聚合关系批量查询（A 裁决 §10.4）。
+ *
+ * taskIds 是以英文逗号分隔的 1..100 个正整数；生成客户端对数组参数序列化为
+ * 同一格式，服务端按此解析。数量、格式或重复校验失败统一返回 422；
+ * 只返回当前用户可访问项目内、属于 ACTIVE 聚合组的任务，其余不入结果。
+ */
+export const taskGroupMembershipQueryRequestSchema = z
+  .object({
+    taskIds: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.length > 0
+          ? value.split(",")
+          : undefined,
+      z
+        .array(z.coerce.number().int().positive().max(2147483647))
+        .min(1)
+        .max(TASK_GROUP_MEMBERSHIP_IDS_MAX)
+        .refine((ids) => new Set(ids).size === ids.length, {
+          message: "taskIds 不得重复",
+        }),
+    ),
+  })
+  .strict()
+  .meta({ id: "TaskGroupMembershipQueryRequest" });
+
+export type TaskGroupMembershipQueryRequest = z.infer<
+  typeof taskGroupMembershipQueryRequestSchema
+>;
+
+/** R-5 成员关系条目；groupRole 与既有 MyTaskItem.groupRole 同源。 */
+export const taskGroupMembershipItemSchema = z
+  .object({
+    taskId: id,
+    groupId: id,
+    groupRole: z.enum(["MAIN", "SOURCE"]),
+  })
+  .strict()
+  .meta({ id: "TaskGroupMembershipItem" });
+
+export type TaskGroupMembershipItem = z.infer<
+  typeof taskGroupMembershipItemSchema
+>;
+
+/** R-5 响应：items 按 taskId 升序，未命中或无权任务不出现。 */
+export const taskGroupMembershipResponseSchema = z
+  .object({
+    items: z
+      .array(taskGroupMembershipItemSchema)
+      .max(TASK_GROUP_MEMBERSHIP_IDS_MAX),
+  })
+  .strict()
+  .meta({ id: "TaskGroupMembershipResponse" });
+
+export type TaskGroupMembershipResponse = z.infer<
+  typeof taskGroupMembershipResponseSchema
+>;

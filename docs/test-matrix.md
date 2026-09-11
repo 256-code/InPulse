@@ -731,3 +731,25 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | E2E 稳定性修复 | `aggregate-views.spec.ts` F-29 指标断言改为 `expect.poll`（消除读取初始占位 0 的竞态）；`task-groups.spec.ts` 创建任务后关闭自动打开的详情抽屉，避免遮罩阻塞后续点击 |
 
 本地实际执行（2026-09-11）：Web 单测 58 文件 247 例；`@inpulse/e2e` typecheck；全量 `pnpm test:e2e` 43/43（约 5.4 分钟）；`pnpm check` 除本地镜像 audit endpoint 外全部通过，公共 registry 审计无已知漏洞。E2E 首轮曾出现 1 例 `leftover-task` FEATURE `POST .../leftover-task` 500，未复现（单文件复跑 3/3），不能视为已修复。
+
+## F-25 / F-29 / F-32 第二轮裁决：R-2 / R-3 Schema 扩展 + R-5 `listTaskGroupMemberships`（A，2026-09-11 本地落库，PR #102）
+
+按 [A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10：R-2 `getProjectOverview` 增加 `activeLeftoverTotal` 与 `LeftoverItemSummary.recordTitle`；R-3 `listMyTasks` 列表项增加 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId`，响应增加 `stats` / `leftoverCount` / `leftoverSample`，筛选增加 `priority` / `includeCanceled`；新增 R-5 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）。契约、Route Registry、权限矩阵、测试矩阵、OpenAPI、生成客户端与服务端实现同一 PR 落库；`description`、`scopeCounts`、`relation`、`query`、`scope=created|all` 按裁决保持拒绝与延后。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| 契约登记与生成物：94 条路由全策略完整、5 个生成物与 Registry 一致、权限矩阵 94 操作与路由全覆盖 | `pnpm contract:validate`（94 条全部通过）、`pnpm contract:drift`（5 个产物一致）、`pnpm permissions:check`（94 条操作 / 94 条路由） |
+| R-2 扩展：`activeLeftoverTotal` 与 `activeLeftovers` 同一过滤且不受 `activeLeftoverLimit` 影响；遗留行 `recordTitle` 为来源记录当前标题 | `aggregate-read-api.integration.test.ts`（真实 PostgreSQL，聚合读 19/19） |
+| R-3 扩展：`priority` / `includeCanceled` 筛选、6 个新条目字段、`stats`（Asia/Shanghai 日/月界）/ `leftoverCount` / `leftoverSample`（200 字符截断追加 “…”） | `aggregate-read.service.test.ts` 18/18、`aggregate-read-api.integration.test.ts`（真实 PostgreSQL） |
+| R-5：`taskIds` 逗号分隔 1..100 正整数（数量 / 格式 / 重复 422）、只返回授权项目内 `ACTIVE` 组关系、无权不入结果且不泄露存在性、匿名 401 | `aggregate-read-api.integration.test.ts` 3 例；权限矩阵扫描 `permissions.test.ts` 89/89 |
+| R-5 路由顺序：`/task-groups/memberships` 不被 `/task-groups/{groupId}` 吞掉 | `aggregate-read-api.integration.test.ts` 实际断言（Controller 注册顺序） |
+| `priority` / `includeCanceled` 的 `EXPLAIN (ANALYZE, BUFFERS)`（裁决 §10.3 验收要求）：30,481 行真实结构 `app.tasks` 下两条查询均走反向主键索引扫描，非顺序扫描 | 见下方计划文本 |
+
+`EXPLAIN (ANALYZE, BUFFERS)` 关键输出（本地 PostgreSQL 18.6，`app.tasks` 30,481 行，含 `tasks_assignee_status_idx (assignee_id, work_status, id)` 与 `tasks_pkey`）：
+
+- `priority = 'HIGH'` + 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 111，Buffers shared hit: 40，Execution Time: 0.149 ms。
+- `work_status = ANY('{TODO,CANCELED}')`（`includeCanceled` 组合）+ 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 51，Buffers shared hit: 34，Execution Time: 0.058 ms。
+
+两条均未退化为顺序扫描，现有索引可支撑，无需新索引（补索引属迁移，按裁决 §10.6 另行人工评审）。
+
+本地实际执行（2026-09-11）：`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、API `test:unit` 66 文件 343 例、API `test:integration` 47 文件 407 例（真实 PostgreSQL）、`pnpm --filter @inpulse/web test` 58 文件 248 例、`pnpm db:test` 2 文件 20 例、`pnpm db:migrations:check`（6 个迁移）、`pnpm check:secrets`（855 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test`、`pnpm check:deps`（579 文件）与 `pnpm check:frontend:boundaries` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。未运行：`pnpm test:e2e`（本轮未改 UI 页面行为）、`pnpm test:search:db` / `pnpm test`（要求 `max_connections >= 150`，按既定决定未纳入 CI）、GitHub Actions。前端适配器对新增字段的接线与降级项清零属 C 域交付（裁决 §10.5）；本轮仅把 C 侧测试夹具补到类型所需字段，未改适配器行为。

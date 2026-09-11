@@ -9,7 +9,7 @@
 | 文档性质 | 契约评审裁决记录；不是 ADR，不替代功能设计、系统设计、技术设计、权限矩阵或测试矩阵 |
 | 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships` |
 | 基线 | `origin/main` `fc7bb68`（F-20 PR #88 之后）；本文引用的代码事实均按该提交复核 |
-| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5）尚未登记，登记与生成物必须与实现同一个 PR |
+| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付 |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 结论摘要
@@ -226,6 +226,8 @@ F-25 步骤 3 的落地方式：任务卡片徽章与任务详情抽屉「查看
 | A | R-2 / R-3 Schema 扩展、R-5 的 Schema 与 Route Registry 登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成 | `pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；与实现同一个 PR |
 | B | `TaskQueryPort` 选择列与筛选扩展（`priority` / `dueAt` / `completedAt` / `creatorId`）、外部链接计数、统计与遗留计数在同一 SQL 内的实现 | 真实 PostgreSQL 集成测试；`EXPLAIN` 证据；`count` 与不分页 `list` 口径一致 |
 | C | R-5 查询服务与实现、F-13 / F-14 / F-15 卡片徽章与「查看主任务」入口、前端适配器降级项替换 | Playwright 关键路径；降级项清零并同步 `my-tasks-types.ts` 的缺口注释 |
+
+2026-09-11 落库：A 的交付物（R-2 / R-3 Schema 扩展、R-5 Schema 与 Route Registry 登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成）已随服务端实现同一个 PR 落库；真实 PostgreSQL 集成测试覆盖 R-2 / R-3 新字段与 R-5 批量查询（聚合读 19/19），`priority` / `includeCanceled` 的 `EXPLAIN (ANALYZE, BUFFERS)` 证据（30,481 行、反向主键索引扫描、非顺序扫描）见[测试矩阵](./test-matrix.md) 新增加量段。B 交付物（选择列、计数与统计实现）由同一实现落库；C 交付物（R-5 前端接线、F-13 / F-14 / F-15 徽章与「查看主任务」、降级项替换）仍待交付，前端降级在 C 完成前保持有效。
 
 ### 10.6 边界
 

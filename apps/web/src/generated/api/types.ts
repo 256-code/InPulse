@@ -327,6 +327,7 @@ export type LeftoverItemSummary = {
   readonly leftoverItemId: number;
   readonly recordId: number;
   readonly recordCode: string;
+  readonly recordTitle: string;
   readonly content: string;
   readonly createdAt: string;
 };
@@ -539,14 +540,35 @@ export type MyTaskItem = {
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly assignee: UserRef;
   readonly updatedAt: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly dueAt: (string | null);
+  readonly completedAt: (string | null);
+  readonly creatorId: number;
+  readonly githubLinkCount: number;
   readonly hasPublishedRecord: boolean;
   readonly groupRole: (("MAIN" | "SOURCE") | null);
+  readonly groupId: (number | null);
+};
+
+export type MyTaskLeftoverSample = {
+  readonly recordCode: string;
+  readonly summary: string;
 };
 
 export type MyTaskPage = {
   readonly items: readonly MyTaskItem[];
   readonly nextCursor: (string | null);
   readonly hasMore: boolean;
+  readonly stats: MyTaskStats;
+  readonly leftoverCount: number;
+  readonly leftoverSample: (MyTaskLeftoverSample | null);
+};
+
+export type MyTaskStats = {
+  readonly myOpen: number;
+  readonly dueToday: number;
+  readonly overdue: number;
+  readonly completedThisMonth: number;
 };
 
 export type MyTasksQueryRequest = {
@@ -556,6 +578,8 @@ export type MyTasksQueryRequest = {
   readonly scopeType?: ("FEATURE" | "MODULE");
   readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
   readonly hasPublishedRecord?: boolean;
+  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly includeCanceled?: boolean;
 };
 
 export type NotificationItem = {
@@ -719,6 +743,7 @@ export type ProjectOverviewResponse = {
   readonly memberCount: number;
   readonly stats: ProjectOverviewStats;
   readonly recentRecords: readonly RecentRecordItem[];
+  readonly activeLeftoverTotal: number;
   readonly activeLeftovers: readonly LeftoverItemSummary[];
 };
 
@@ -1100,6 +1125,20 @@ export type TaskGroupMemberItem = {
   readonly originalWorkStatus: (("TODO" | "DONE" | "CANCELED") | null);
   readonly originalAssigneeId: (number | null);
   readonly joinedAt: string;
+};
+
+export type TaskGroupMembershipItem = {
+  readonly taskId: number;
+  readonly groupId: number;
+  readonly groupRole: ("MAIN" | "SOURCE");
+};
+
+export type TaskGroupMembershipQueryRequest = {
+  readonly taskIds: readonly number[];
+};
+
+export type TaskGroupMembershipResponse = {
+  readonly items: readonly TaskGroupMembershipItem[];
 };
 
 export type TaskGroupMergeHeaders = {
