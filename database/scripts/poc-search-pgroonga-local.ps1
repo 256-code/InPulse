@@ -4,7 +4,10 @@ param(
   [ValidateRange(1024, 65535)]
   [int]$Port = 55434,
   [int]$RestorePort = 0,
-  [switch]$KeepContainer
+  [switch]$KeepContainer,
+  [switch]$Capacity,
+  [ValidateRange(30, 3600)]
+  [int]$CapacityDurationSeconds = 600
 )
 
 Set-StrictMode -Version Latest
@@ -128,6 +131,15 @@ try {
     & pnpm db:poc:search:pgroonga
     if ($LASTEXITCODE -ne 0) {
       throw "PGroonga search PoC failed with exit code $LASTEXITCODE"
+    }
+
+    if ($Capacity) {
+      $env:POC_CAPACITY_DURATION_MS = [string]($CapacityDurationSeconds * 1000)
+      $env:POC_CAPACITY_RESTART_CONTAINER = $containerName
+      & pnpm --filter @inpulse/database poc:search:capacity
+      if ($LASTEXITCODE -ne 0) {
+        throw "PGroonga capacity gate failed with exit code $LASTEXITCODE"
+      }
     }
 
     foreach ($migrationName in @(
