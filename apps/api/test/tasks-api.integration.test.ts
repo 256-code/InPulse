@@ -44,6 +44,7 @@ import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
+import { LeftoverSearchProjectionSync } from "../src/modules/change-records/leftover-search-projection.js";
 import { TaskManagementRepository } from "../src/modules/tasks/task-management.repository.js";
 import { TasksManagementService } from "../src/modules/tasks/tasks-management.service.js";
 import { TasksHttpService } from "../src/modules/tasks/tasks-http.service.js";
@@ -159,6 +160,7 @@ beforeAll(async () => {
       audit,
       activity,
       search,
+      new LeftoverSearchProjectionSync(search),
       notifications,
       access,
     ),

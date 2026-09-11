@@ -52,6 +52,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0003_search_pgroonga.sql",
       "0004_search_projection_contract_pg_trgm_index.sql",
       "0005_search_projection_contract_pg_trgm_extension.sql",
+      "0006_leftover_search_entity.sql",
     ]);
   });
 

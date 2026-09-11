@@ -20,6 +20,7 @@ import {
 } from "../modules/tasks/index.js";
 import {
   LeftoverRecordCommandPort,
+  LeftoverSearchProjectionSync,
   RecordDraftError,
 } from "../modules/change-records/index.js";
 import { AuditWritePort } from "../audit/index.js";
@@ -64,6 +65,8 @@ export class LeftoverTaskWorkflow {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(LeftoverSearchProjectionSync)
+    private readonly leftovers: LeftoverSearchProjectionSync,
   ) {}
   async authorize(
     tx: TransactionContext,
@@ -313,6 +316,7 @@ export class LeftoverTaskWorkflow {
       sourceStatus: "PUBLISHED",
       sourceRowVersion: record.rowVersion + 1,
     });
+    await this.leftovers.syncRecord(tx, record);
     return {
       projectId: p,
       moduleId: record.moduleId,

@@ -976,7 +976,7 @@ export type RotateMfaRecoveryCodesResponse = {
 
 export type SearchItem = {
   readonly projectId: number;
-  readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP");
+  readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP" | "LEFTOVER");
   readonly entityId: number;
   readonly title: string;
   readonly summary: string;

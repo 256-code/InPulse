@@ -49,6 +49,7 @@ import { PublishedRecordsController } from "../src/modules/change-records/publis
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
+import { LeftoverSearchProjectionSync } from "../src/modules/change-records/leftover-search-projection.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
@@ -114,6 +115,7 @@ beforeAll(async () => {
       audit,
       activity,
       search,
+      new LeftoverSearchProjectionSync(search),
       notifications,
       access,
     ),
@@ -157,6 +159,7 @@ beforeAll(async () => {
             audit,
             activity,
             search,
+            new LeftoverSearchProjectionSync(search),
           ),
         ),
       },
@@ -323,6 +326,9 @@ describe("F21 ADR-024 lifecycle", () => {
         status: "VOID",
         void_reason: "作废私密原因" + round,
       });
+      expect(voidState.search).toHaveLength(2);
+      for (const row of voidState.search)
+        expect(row).toMatchObject({ visibility_scope: "ADMIN_ONLY" });
       for (const row of voidState.activity)
         expect(row).toMatchObject({
           visibility_scope: "ADMIN_ONLY",
@@ -352,11 +358,18 @@ describe("F21 ADR-024 lifecycle", () => {
         "notifications",
       ] as const)
         expect(after[field]).toEqual(before[field]);
-      expect(after.search).toHaveLength(1);
+      expect(after.search).toHaveLength(2);
       expect(after.search[0]).toMatchObject({
         id: before.search[0]!.id,
+        entity_type: "CHANGE_RECORD",
         visibility_scope: "MEMBER",
         source_status: "PUBLISHED",
+      });
+      expect(after.search[1]).toMatchObject({
+        id: before.search[1]!.id,
+        entity_type: "LEFTOVER",
+        visibility_scope: "MEMBER",
+        source_status: "ACTIVE",
       });
       for (const row of after.activity)
         expect(row).toMatchObject({
@@ -543,7 +556,11 @@ it("search and activity readers enforce current visibility before and after rest
   expect((await change(f)).status).toBe(200);
   expect((await searchFor(f.userId, true)).items).toEqual([]);
   expect((await searchFor(f.adminId)).items).toEqual([]);
-  expect((await searchFor(f.adminId, true)).items).toHaveLength(1);
+  expect(
+    (await searchFor(f.adminId, true)).items
+      .map((item) => item.entityType)
+      .sort(),
+  ).toEqual(["CHANGE_RECORD", "LEFTOVER"]);
   expect(
     (
       await activities.query({
@@ -554,7 +571,9 @@ it("search and activity readers enforce current visibility before and after rest
     ).items,
   ).toEqual([]);
   expect((await change(f, true, f.record.rowVersion + 1)).status).toBe(200);
-  expect((await searchFor(f.userId)).items).toHaveLength(1);
+  expect(
+    (await searchFor(f.userId)).items.map((item) => item.entityType).sort(),
+  ).toEqual(["CHANGE_RECORD", "LEFTOVER"]);
   expect(
     (await activities.query({ actorUserId: f.userId, projectId: f.projectId }))
       .items,

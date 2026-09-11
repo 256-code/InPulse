@@ -239,7 +239,7 @@ export const searchProjection = appSchema.table(
     check(
       "search_projection_entity_type_check",
       sql.raw(
-        "entity_type IN ('PROJECT', 'MODULE', 'FEATURE', 'TASK', 'CHANGE_RECORD', 'EXTERNAL_LINK', 'TASK_GROUP')",
+        "entity_type IN ('PROJECT', 'MODULE', 'FEATURE', 'TASK', 'CHANGE_RECORD', 'EXTERNAL_LINK', 'TASK_GROUP', 'LEFTOVER')",
       ),
     ),
     check(

@@ -65,6 +65,32 @@ describe("SearchPageView", () => {
     });
   });
 
+  it("renders the leftover classification label", async () => {
+    const getSearch = vi.fn().mockResolvedValue({
+      items: [
+        {
+          projectId: 1,
+          entityType: "LEFTOVER",
+          entityId: 9,
+          title: "登录页偶发闪白",
+          summary: "待处理 · CR-2048 登录页偶发闪白",
+        } satisfies SearchItem,
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+    const client = { getSearch } as unknown as InpulseApiClient;
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <SearchPageView initialQuery="闪白" client={client} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("遗留问题")).toBeInTheDocument();
+    expect(await screen.findByText("登录页偶发闪白")).toBeInTheDocument();
+  });
+
   it("shows a validation hint without calling the API for a short query", async () => {
     const getSearch = vi.fn();
     const client = { getSearch } as unknown as InpulseApiClient;
