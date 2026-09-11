@@ -732,7 +732,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 本地实际执行（2026-09-11）：Web 单测 58 文件 247 例；`@inpulse/e2e` typecheck；全量 `pnpm test:e2e` 43/43（约 5.4 分钟）；`pnpm check` 除本地镜像 audit endpoint 外全部通过，公共 registry 审计无已知漏洞。E2E 首轮曾出现 1 例 `leftover-task` FEATURE `POST .../leftover-task` 500，未复现（单文件复跑 3/3），不能视为已修复。
 
-## F-25 / F-29 / F-32 第二轮裁决：R-2 / R-3 Schema 扩展 + R-5 `listTaskGroupMemberships`（A，2026-09-11 本地落库）
+## F-25 / F-29 / F-32 第二轮裁决：R-2 / R-3 Schema 扩展 + R-5 `listTaskGroupMemberships`（A，2026-09-11 本地落库，PR #102）
 
 按 [A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10：R-2 `getProjectOverview` 增加 `activeLeftoverTotal` 与 `LeftoverItemSummary.recordTitle`；R-3 `listMyTasks` 列表项增加 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId`，响应增加 `stats` / `leftoverCount` / `leftoverSample`，筛选增加 `priority` / `includeCanceled`；新增 R-5 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）。契约、Route Registry、权限矩阵、测试矩阵、OpenAPI、生成客户端与服务端实现同一 PR 落库；`description`、`scopeCounts`、`relation`、`query`、`scope=created|all` 按裁决保持拒绝与延后。
 

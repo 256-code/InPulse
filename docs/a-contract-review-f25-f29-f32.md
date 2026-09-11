@@ -9,7 +9,7 @@
 | 文档性质 | 契约评审裁决记录；不是 ADR，不替代功能设计、系统设计、技术设计、权限矩阵或测试矩阵 |
 | 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships` |
 | 基线 | `origin/main` `fc7bb68`（F-20 PR #88 之后）；本文引用的代码事实均按该提交复核 |
-| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库，含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付 |
+| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付 |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 结论摘要
