@@ -67,6 +67,24 @@ describe("my-tasks-v1-query", () => {
     expect(toMyTasksV1Query(filters()).hasPublishedRecord).toBeUndefined();
   });
 
+  it("maps the priority filter and the canceled union", () => {
+    expect(toMyTasksV1Query(filters({ priority: "HIGH" })).priority).toBe(
+      "HIGH",
+    );
+    expect(toMyTasksV1Query(filters()).priority).toBeUndefined();
+    expect(
+      toMyTasksV1Query(filters({ status: "open", includeCanceled: true }))
+        .includeCanceled,
+    ).toBe(true);
+    expect(
+      toMyTasksV1Query(filters({ status: "all", includeCanceled: true }))
+        .includeCanceled,
+    ).toBeUndefined();
+    expect(toMyTasksV1Query(filters({ status: "open" })).includeCanceled).toBe(
+      undefined,
+    );
+  });
+
   it("omits empty cursors and clamps out-of-range limits", () => {
     const allStatus = filters({ status: "all" });
     expect(toMyTasksV1Query(allStatus, { cursor: "" })).toEqual({ limit: 20 });
@@ -85,7 +103,6 @@ describe("my-tasks-v1-query", () => {
       listMyTasksV1Gaps(
         filters({
           scope: "all",
-          priority: "HIGH",
           relation: "MAIN",
           hasGithub: "no",
           query: "登录",
@@ -93,31 +110,34 @@ describe("my-tasks-v1-query", () => {
       ),
     ).toEqual([
       "scope:all",
-      "filter:priority",
       "filter:relation",
       "filter:github",
       "filter:query",
     ]);
   });
 
-  it("reports the canceled union gap only for the open status", () => {
-    expect(listMyTasksV1Gaps(filters({ includeCanceled: true }))).toEqual([
-      "filter:canceled-with-open",
-    ]);
+  it("no longer reports priority or the canceled union as gaps", () => {
     expect(
-      listMyTasksV1Gaps(filters({ status: "all", includeCanceled: true })),
+      listMyTasksV1Gaps(filters({ priority: "HIGH", includeCanceled: true })),
+    ).toEqual([]);
+    expect(
+      listMyTasksV1Gaps(
+        filters({ status: "all", priority: "LOW", includeCanceled: true }),
+      ),
     ).toEqual([]);
   });
 
-  it("returns no gaps for the four frozen V1 filters", () => {
+  it("returns no gaps for the six V1-expressible filters", () => {
     expect(
       listMyTasksV1Gaps(
         filters({
           scope: "project",
           projectId: 3,
-          status: "done",
+          status: "open",
           level: "FEATURE",
           hasRecord: "yes",
+          priority: "URGENT",
+          includeCanceled: true,
         }),
       ),
     ).toEqual([]);
@@ -170,38 +190,33 @@ describe("my-tasks-v1-query", () => {
       lifecycleStatus: "ACTIVE",
       assignee: { userId: 9, name: "张三", avatarUrl: null },
       updatedAt: "2026-09-10T02:00:00.000Z",
+      priority: "NORMAL",
+      dueAt: null,
+      completedAt: null,
+      creatorId: 9,
+      githubLinkCount: 0,
       hasPublishedRecord: true,
       groupRole: "SOURCE",
+      groupId: null,
     });
-    expect(item.priority).toBeUndefined();
-    expect(item.dueAt).toBeUndefined();
-    expect(item.completedAt).toBeUndefined();
-    expect(item.creatorId).toBeUndefined();
     expect(item.description).toBeUndefined();
-    expect(item.githubLinkCount).toBeUndefined();
   });
 
-  it("declares that the frozen contract supports none of the UI filter gaps", () => {
+  it("declares priority and the canceled union as supported, the rest as gaps", () => {
     expect(MY_TASKS_V1_FILTER_SUPPORT).toEqual({
       "scope:created": false,
       "scope:all": false,
       "scope:project-without-id": false,
-      "filter:priority": false,
+      "filter:priority": true,
       "filter:relation": false,
       "filter:github": false,
       "filter:query": false,
-      "filter:canceled-with-open": false,
+      "filter:canceled-with-open": true,
     });
   });
 
-  it("keeps the documented response gaps stable", () => {
-    expect(MY_TASKS_V1_MISSING_ITEM_FIELDS).toContain("priority");
-    expect(MY_TASKS_V1_MISSING_ITEM_FIELDS).toContain("githubLinkCount");
-    expect(MY_TASKS_V1_MISSING_RESPONSE_PARTS).toEqual([
-      "stats",
-      "scopeCounts",
-      "leftoverCount",
-      "leftoverSample",
-    ]);
+  it("keeps only description and scopeCounts as documented gaps", () => {
+    expect(MY_TASKS_V1_MISSING_ITEM_FIELDS).toEqual(["description"]);
+    expect(MY_TASKS_V1_MISSING_RESPONSE_PARTS).toEqual(["scopeCounts"]);
   });
 });

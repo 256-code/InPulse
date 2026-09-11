@@ -48,7 +48,7 @@ export interface ProjectOverviewPageViewProps {
  * F-29 项目概览视图。项目名、状态与成员数来自 A 的项目端口（调用方注入）；
  * 统计卡片、最近迭代与遗留问题来自注入的 adapter：页面默认注入 server
  * adapter（R-2 getProjectOverview），mock 只用于测试与降级演示。
- * 契约缺口（遗留问题总数、来源记录标题为 null）在此显式降级展示。
+ * 第二轮契约扩展后遗留问题总数与来源记录标题均已接线，无降级展示。
  */
 export const ProjectOverviewPageView: React.FC<
   ProjectOverviewPageViewProps
@@ -135,20 +135,10 @@ export const ProjectOverviewPageView: React.FC<
     {
       key: "leftovers",
       label: "遗留问题",
-      value: stats.openLeftovers === null ? "—" : String(stats.openLeftovers),
-      hint:
-        stats.openLeftovers === null
-          ? "契约未提供总数"
-          : stats.openLeftovers > 0
-            ? "等待闭环"
-            : "全部已闭环",
+      value: String(stats.openLeftovers),
+      hint: stats.openLeftovers > 0 ? "等待闭环" : "全部已闭环",
       icon: "alert",
-      tone:
-        stats.openLeftovers === null
-          ? "gray"
-          : stats.openLeftovers > 0
-            ? "red"
-            : "gray",
+      tone: stats.openLeftovers > 0 ? "red" : "gray",
     },
   ];
 
@@ -174,11 +164,7 @@ export const ProjectOverviewPageView: React.FC<
         <InpulseIcon name="alert" size={15} />
         <span>
           {item.summary}
-          <small>
-            {"来自 " +
-              item.recordCode +
-              (item.recordTitle === null ? "" : " " + item.recordTitle)}
-          </small>
+          <small>{"来自 " + item.recordCode + " " + item.recordTitle}</small>
         </span>
         <InpulseIcon name="chevronRight" size={14} />
       </button>

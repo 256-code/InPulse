@@ -6,11 +6,12 @@ import { loadRuntime } from "../helpers/runtime.js";
 /**
  * F-29 项目概览 / F-32 任务中心的专属关键路径 E2E。
  * 两个页面默认注入服务端适配器（R-2 / R-3）：这里验证真实服务端数据进入
- * 视图、契约缺口按显式降级展示（统计与总数显示为「—」、筛选控件禁用并标注），
+ * 视图（统计卡片、优先级筛选、遗留问题总数与优先级徽章）、仍无契约来源的
+ * 范围按显式降级展示（关键词搜索与「我创建的」禁用并标注），
  * 以及 F-30 约定下筛选状态由 URL 承载。
  */
 
-test("F-32 任务中心：真实任务进入列表，契约缺口显式降级，筛选状态写入 URL", async ({
+test("F-32 任务中心：真实任务进入列表，统计与优先级接线，筛选状态写入 URL", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -54,13 +55,23 @@ test("F-32 任务中心：真实任务进入列表，契约缺口显式降级，
     await expect(notice).toContainText("接口说明：");
     await expect(notice).toContainText("GET /api/v1/me/tasks");
     await expect(notice).toContainText("统计卡片");
+    await expect(notice).toContainText("服务端实时数据");
 
-    // 契约缺口显式降级：统计卡片为「—」，无契约来源的筛选控件禁用并标注。
-    await expect(page.getByTestId("stat-my-open").locator("strong")).toHaveText(
-      "—",
-    );
+    // 第二轮契约接线：统计卡片为服务端实时数字、优先级筛选可用；
+    // 仍无契约来源的范围（关键词搜索、我创建的）保持禁用并标注。
+    await expect
+      .poll(async () =>
+        Number.parseInt(
+          (await page
+            .getByTestId("stat-my-open")
+            .locator("strong")
+            .textContent()) ?? "",
+          10,
+        ),
+      )
+      .toBeGreaterThan(0);
     await expect(page.getByLabel("搜索任务")).toBeDisabled();
-    await expect(page.getByLabel("优先级")).toBeDisabled();
+    await expect(page.getByLabel("优先级")).toBeEnabled();
     await expect(page.getByRole("tab", { name: "我创建的" })).toBeDisabled();
 
     // 服务端真实数据：默认「我负责的 + 未完成」能看到刚创建的任务。
@@ -69,7 +80,18 @@ test("F-32 任务中心：真实任务进入列表，契约缺口显式降级，
       .filter({ hasText: taskTitle });
     await expect(taskCard).toBeVisible();
     await expect(taskCard).toContainText(runtime.user.name);
-    await expect(taskCard).not.toContainText("优先级");
+    await expect(taskCard).toContainText("普通优先级");
+    await expect(taskCard).toContainText("未设置截止");
+
+    // 优先级筛选已接入服务端：选中写入 URL，清除后 URL 不再携带。
+    await page.getByLabel("优先级").selectOption("HIGH");
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("priority"))
+      .toBe("HIGH");
+    await page.getByLabel("优先级").selectOption("");
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("priority"))
+      .toBeNull();
 
     // F-30：筛选状态由 URL 承载，切换筛选即更新地址栏。
     await page
@@ -96,7 +118,7 @@ test("F-32 任务中心：真实任务进入列表，契约缺口显式降级，
     ).toBeVisible();
     await expect(
       page.getByLabel("显示已取消任务（不计入完成率）"),
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     await page
       .getByTestId("task-center")
@@ -108,7 +130,7 @@ test("F-32 任务中心：真实任务进入列表，契约缺口显式降级，
   }
 });
 
-test("F-29 项目概览：服务端真实指标、契约缺口降级与入口导航", async ({
+test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入口导航", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -124,7 +146,9 @@ test("F-29 项目概览：服务端真实指标、契约缺口降级与入口导
 
     const notice = page.getByTestId("project-overview-mock-notice");
     await expect(notice).toContainText("接口说明：");
-    await expect(notice).toContainText("契约未提供遗留问题总数");
+    await expect(notice).toContainText("待处理遗留问题总数");
+    await expect(notice).toContainText("服务端实时数据");
+    await expect(notice).not.toContainText("契约未提供");
 
     // 服务端真实统计：fixture 项目至少 1 个活跃模块与 1 名成员。
     // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位 0。
@@ -143,9 +167,14 @@ test("F-29 项目概览：服务端真实指标、契约缺口降级与入口导
         Number.parseInt((await memberCount.textContent()) ?? "", 10),
       )
       .toBeGreaterThan(0);
-    await expect(
-      page.getByTestId("overview-metric-leftovers").locator("strong"),
-    ).toHaveText("—");
+    const leftoverMetric = page
+      .getByTestId("overview-metric-leftovers")
+      .locator("strong");
+    await expect
+      .poll(async () =>
+        /^\d+$/.test((await leftoverMetric.textContent())?.trim() ?? ""),
+      )
+      .toBe(true);
 
     await expect(page.getByRole("heading", { name: "最近迭代" })).toBeVisible();
     await expect(

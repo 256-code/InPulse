@@ -3,6 +3,7 @@ import type {
   MyTaskFilters,
   MyTaskLevel,
   MyTaskListItem,
+  MyTaskPriority,
   MyTasksFilterGap,
   MyTasksFilterSupport,
   MyTaskWorkStatus,
@@ -11,10 +12,10 @@ import type {
 /**
  * R-3 listMyTasks 的 A 岗冻结契约映射（F-32 任务中心）。
  *
- * 冻结事实见 docs/a-contract-review-f25-f29-f32.md §2、§3、Q-08 ~ Q-10：
- * 路径 GET /api/v1/me/tasks，参数只允许 cursor / limit / projectId /
- * scopeType / workStatus / hasPublishedRecord，负责人固定为当前用户，
- * 排序固定 id DESC，limit 默认 20、上限 100。
+ * 冻结事实见 docs/a-contract-review-f25-f29-f32.md §2、§3、§10、§11：
+ * 路径 GET /api/v1/me/tasks，参数支持 cursor / limit / projectId /
+ * scopeType / workStatus / hasPublishedRecord / priority / includeCanceled，
+ * 负责人固定为当前用户，排序固定 id DESC，limit 默认 20、上限 100。
  *
  * 本文件只做「UI 筛选状态 → 冻结查询参数」的纯映射、R-3 条目映射与缺口盘点：
  * 不发起请求、不引入生成客户端实现、不改契约。请求由 my-tasks-server.ts
@@ -33,6 +34,10 @@ export interface MyTasksV1Query {
   readonly scopeType?: MyTaskLevel;
   readonly workStatus?: MyTaskWorkStatus;
   readonly hasPublishedRecord?: boolean;
+  /** 单值优先级筛选；与 workStatus 正交（A 裁决 §10.3）。 */
+  readonly priority?: MyTaskPriority;
+  /** 与 workStatus=TODO 组合表达「未完成并含已取消」（A 裁决 §10.3）。 */
+  readonly includeCanceled?: boolean;
 }
 
 export interface MyTasksV1QueryOptions {
@@ -46,47 +51,37 @@ export interface MyTasksV1QueryOptions {
 export type MyTasksV1FilterGap = MyTasksFilterGap;
 
 /**
- * R-3 冻结契约对 8 项 UI 筛选一律无法表达（见 docs/a-contract-review-
- * f25-f29-f32.md §3 与 Q-08 ~ Q-10），服务端适配器按本表显式降级。
+ * R-3 契约对各项 UI 筛选的表达能力：第二轮扩展后 priority 与
+ * 「未完成并含已取消」可由参数表达；其余 6 项仍无契约来源
+ * （见 docs/a-contract-review-f25-f29-f32.md §3、§10 与 Q-08 ~ Q-10），
+ * 服务端适配器按本表显式降级。
  */
 export const MY_TASKS_V1_FILTER_SUPPORT: MyTasksFilterSupport = {
   "scope:created": false,
   "scope:all": false,
   "scope:project-without-id": false,
-  "filter:priority": false,
+  "filter:priority": true,
   "filter:relation": false,
   "filter:github": false,
   "filter:query": false,
-  "filter:canceled-with-open": false,
+  "filter:canceled-with-open": true,
 };
 
 /**
  * 骨架列表项相对冻结 DTO 的缺口（字段维度）。
  *
- * R-3 的 MyTaskItem 没有这些字段；映射层保持 undefined，
- * 显示层不得展示优先级徽章、截止时间与 GitHub 关联等信息。
+ * 第二轮扩展后仅剩 description（A 裁决暂缓）；映射层保持 undefined，
+ * 显示层不得展示描述。
  */
-export const MY_TASKS_V1_MISSING_ITEM_FIELDS = [
-  "priority",
-  "dueAt",
-  "completedAt",
-  "description",
-  "creatorId",
-  "githubLinkCount",
-] as const;
+export const MY_TASKS_V1_MISSING_ITEM_FIELDS = ["description"] as const;
 
 /**
- * 响应维度的缺口：R-3 只返回 items / nextCursor / hasMore，
- * 统计卡片、各范围计数与遗留问题入口没有契约来源。
+ * 响应维度的缺口：第二轮扩展后 stats / leftoverCount / leftoverSample
+ * 已由 R-3 提供；scopeCounts 为 A 裁决 §10.3 延后项，保持 null。
  */
-export const MY_TASKS_V1_MISSING_RESPONSE_PARTS = [
-  "stats",
-  "scopeCounts",
-  "leftoverCount",
-  "leftoverSample",
-] as const;
+export const MY_TASKS_V1_MISSING_RESPONSE_PARTS = ["scopeCounts"] as const;
 
-/** 取「未完成」时是否要求把已取消任务一并计入（workStatus 单值无法表达并集）。 */
+/** 取「未完成」时是否要求把已取消任务一并计入（映射为 includeCanceled=true）。 */
 export function requiresCanceledUnion(filters: MyTaskFilters): boolean {
   return filters.status === "open" && filters.includeCanceled;
 }
@@ -117,6 +112,8 @@ export function toMyTasksV1Query(
     scopeType?: MyTaskLevel;
     workStatus?: MyTaskWorkStatus;
     hasPublishedRecord?: boolean;
+    priority?: MyTaskPriority;
+    includeCanceled?: boolean;
   } = {
     limit: clampMyTasksV1Limit(options.limit ?? MY_TASKS_V1_LIMIT_DEFAULT),
   };
@@ -132,12 +129,14 @@ export function toMyTasksV1Query(
   if (filters.hasRecord !== null) {
     query.hasPublishedRecord = filters.hasRecord === "yes";
   }
+  if (filters.priority !== null) query.priority = filters.priority;
+  if (requiresCanceledUnion(filters)) query.includeCanceled = true;
   return query;
 }
 
 /**
- * 无损映射 R-3 条目到骨架视图；契约未提供的字段保持 undefined，
- * 显示层据此隐藏优先级、截止时间等无来源信息（见 MY_TASKS_V1_MISSING_ITEM_FIELDS）。
+ * 无损映射 R-3 条目到骨架视图；仅 description 无契约来源保持 undefined，
+ * 显示层据此显式降级（见 MY_TASKS_V1_MISSING_ITEM_FIELDS）。
  */
 export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
   return {
@@ -159,8 +158,14 @@ export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
       name: item.assignee.name,
       avatarUrl: item.assignee.avatarUrl,
     },
+    priority: item.priority,
+    dueAt: item.dueAt,
+    completedAt: item.completedAt,
+    creatorId: item.creatorId,
+    githubLinkCount: item.githubLinkCount,
     hasPublishedRecord: item.hasPublishedRecord,
     groupRole: item.groupRole,
+    groupId: item.groupId,
   };
 }
 
@@ -177,10 +182,8 @@ export function listMyTasksV1Gaps(
   if (filters.scope === "project" && filters.projectId === null) {
     gaps.push("scope:project-without-id");
   }
-  if (filters.priority !== null) gaps.push("filter:priority");
   if (filters.relation !== null) gaps.push("filter:relation");
   if (filters.hasGithub !== null) gaps.push("filter:github");
   if (filters.query.trim().length > 0) gaps.push("filter:query");
-  if (requiresCanceledUnion(filters)) gaps.push("filter:canceled-with-open");
   return gaps;
 }

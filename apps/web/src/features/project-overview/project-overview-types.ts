@@ -5,9 +5,8 @@
  * 活跃模块、活跃功能、未完成任务、迭代记录、最近迭代、待处理遗留问题；
  * 项目名、状态与成员数来自 A 的既有项目端口（getProject），不经过本适配器。
  * 默认数据源为 server adapter（R-2 getProjectOverview，见 project-overview-server.ts）；
- * mock adapter 只保留用于前端测试与降级演示。R-2 契约未提供的字段
- * （openLeftovers 总数、leftover.recordTitle）以 null 标记，
- * 显示层必须显式降级，不得静默忽略或虚构数值。
+ * mock adapter 只保留用于前端测试与降级演示。第二轮契约扩展后
+ * openLeftovers 总数与 leftover.recordTitle 已由 R-2 提供，无降级字段。
  */
 
 export interface ProjectOverviewStats {
@@ -15,8 +14,8 @@ export interface ProjectOverviewStats {
   readonly activeFeatures: number;
   readonly openTasks: number;
   readonly publishedRecords: number;
-  /** R-2 契约未提供总数；null 表示不可知，显示层不得虚构。 */
-  readonly openLeftovers: number | null;
+  /** R-2 第二轮扩展已提供总数；显示层直接渲染服务端口径。 */
+  readonly openLeftovers: number;
 }
 
 export interface ProjectOverviewIteration {
@@ -31,8 +30,8 @@ export interface ProjectOverviewLeftover {
   readonly leftoverId: number;
   readonly summary: string;
   readonly recordCode: string;
-  /** R-2 契约未提供来源记录标题；null 表示不可知，显示层只展示编号。 */
-  readonly recordTitle: string | null;
+  /** R-2 第二轮扩展已提供来源记录标题；显示层展示编号 + 标题。 */
+  readonly recordTitle: string;
 }
 
 export interface ProjectOverviewResult {
