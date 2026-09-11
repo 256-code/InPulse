@@ -84,3 +84,17 @@
 无已知未提供的 A/C 接口或本机测试环境阻断。以上针对性验证已通过，仍需审核对话检查本次 diff，尤其三方合并、`app/` 装配、前端共享入口及鉴权/契约。没有新增生产基础设施或数据库迁移。
 
 README 原导航增量保留；`docs/three-person-ai-delivery-plan-v2.md` 原文件内容保留。同步主线时开发日志冲突按双方记录合并；两个接入阶段的日志均保留，stash 安全副本暂留。旧 [接入阻断说明](f12-readiness-blockers.md) 属历史记录，当前以本文为准。
+
+## 收尾（B-2，2026-09-11）
+
+尾部「未运行」清单按后续事实逐项收尾；以上历史段落保留原文，不改写交审时点的记录。
+
+| 项 | 收尾结论 | 证据 |
+| --- | --- | --- |
+| CI | 已通过：F-12 提交的完整 CI 在 dev/a、dev/b 运行全部步骤成功（含 Browser E2E）。合并当次 main 运行曾在 Browser E2E 的 global setup 失败（`Admin MFA confirm failed with HTTP 401`，模块用例尚未开始），同一提交其后运行均通过 | dev/a [run 34330267916](https://github.com/256-code/InPulse/actions/runs/34330267916)（2026-09-09 08:38:56Z）、dev/b [run 34331523993](https://github.com/256-code/InPulse/actions/runs/34331523993)（08:52:27Z）success；main [run 34329989078](https://github.com/256-code/InPulse/actions/runs/34329989078) failure |
+| 默认下载版 Playwright Chromium 项目 | 已由 CI Browser E2E 覆盖并通过（`playwright install --with-deps chromium` 与 `pnpm test:e2e`，`testDir` 含 `apps/e2e/tests/modules.spec.ts`） | 上述两个运行的 `Browser E2E` 步骤 success；后续 main 运行（`c94dc1b` [run 34569138797](https://github.com/256-code/InPulse/actions/runs/34569138797)、`3ce6773` [run 34573203674](https://github.com/256-code/InPulse/actions/runs/34573203674)）success |
+| 全量构建、全仓 lint/静态检查 | 已由 CI workspace job 的 Lint / Format check / Typecheck / Build / Dependency boundary / Frontend boundary 步骤覆盖并通过 | 同上 |
+| 无关审计或全量测试 | 已由 CI 的 Unit tests / Integration tests / Dependency audit / Secret scan / Documentation checks 步骤覆盖并通过 | 同上 |
+| PR 合并状态 | [PR #65](https://github.com/256-code/InPulse/pull/65) 于 2026-09-09 08:35:51Z 合并进 main，merge commit `58abb40` | PR 元数据与 main 历史 |
+
+仍不在覆盖范围：非 Chromium 浏览器项目（本仓 E2E 只配置 Chromium；本机 Edge 记录见上）；合并当次 main 运行的失败根因未定位，不宣称已修复或已归因，仅凭同一提交其后多次通过判定与 F-12 实现无关。
