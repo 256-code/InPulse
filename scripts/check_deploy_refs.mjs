@@ -40,6 +40,7 @@ const REQUIRED_DOCKERFILES = [
   "deploy/docker/migration.Dockerfile",
   "deploy/docker/web.Dockerfile",
   "deploy/docker/db-bootstrap.Dockerfile",
+  "deploy/docker/ops.Dockerfile",
 ];
 const REQUIRED_DOCKER_ASSETS = [
   "deploy/docker/nginx.conf",
@@ -525,7 +526,7 @@ function checkStructure(rendered) {
     const match = /^(\d+):(\d+)$/.exec(String(value ?? ""));
     return match ? { uid: match[1], gid: match[2] } : null;
   };
-  for (const name of ["migrate", "api", "web"]) {
+  for (const name of ["migrate", "api", "web", "backup", "audit-archive"]) {
     const svc = services[name];
     if (!svc) continue;
     const user = numericUser(svc.user);
@@ -676,6 +677,7 @@ async function checkDockerfiles() {
   for (const file of [
     "deploy/docker/api.Dockerfile",
     "deploy/docker/migration.Dockerfile",
+    "deploy/docker/ops.Dockerfile",
   ]) {
     const text = await readFile(file, "utf8").catch(() => "");
     const runtime = text.split(/\bAS\s+runtime\b/i)[1] ?? "";

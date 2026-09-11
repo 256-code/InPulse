@@ -10,7 +10,8 @@
 #                                            + Bootstrap database roles
 #                                            + Bootstrap PGroonga extension
 #                                            + Migrate empty database
-#   7  integration tests                  -> Integration tests against real PostgreSQL
+#   7  integration tests                  -> Install PostgreSQL 18 client tools
+#                                            + Integration tests against real PostgreSQL
 #                                            （含 §12.4 database role/privilege probes）
 #   8  OpenAPI/client drift check         -> OpenAPI and client drift check
 #   9  Route Registry/permission/response-schema completeness
@@ -34,6 +35,12 @@
 # PoC，不是生产部署镜像，也不等于 §12.4 的 container image build 门禁；生产镜像
 # 与其 digest 仍由部署纵切片按 ADR-017 定案。
 #
+# A-1 备份/恢复集成测试需要真实 pg_dump/pg_restore：runner 自带的是 PGDG noble 的
+# pg_dump 16.x，而 pg_dump 拒绝连接主版本更新的服务器（测试库为 PostgreSQL 18.6）。
+# 本 job 因此在集成测试前启用 PGDG 源并安装与生产 ops 镜像同一基线的
+# postgresql-client-18=18.6-1.pgdg24.04+2，并向集成测试注入
+# INPULSE_BACKUP_PG_DUMP/INPULSE_BACKUP_PG_RESTORE。
+#
 # `pnpm test:search:db` 与 `pnpm test` 需要已初始化 PGroonga 且
 # max_connections >= 150 的 PostgreSQL 18 实例，沿用 origin/main 的既定决定暂不
 # 纳入本 workflow；待批准的搜索服务测试方案确定后必须按 §12.4 顺序插入。
@@ -41,7 +48,7 @@
 # §12.4 中尚未落库、因此本 workflow 不执行也不声称通过的项：
 #   - Playwright 完整业务关键路径（F-31 测试基座已落库，业务场景待对应模块交付）
 #   - 生产镜像 digest 绑定与签名发布清单（部署发布环节，非本 job 输出）
-# 生产 Dockerfile（API/Migration/Web/DB-bootstrap）与镜像扫描已按 §12.4 顺序在本
+# 生产 Dockerfile（API/Migration/Web/DB-bootstrap/Ops）与镜像扫描已按 §12.4 顺序在本
 # workflow 落库；`pnpm check:deploy:test` 继续用合成 ref 验证 Compose 渲染与结构，
 # 生产镜像 digest 必须由受信镜像仓库解析并在发布清单中绑定。
 #
@@ -52,7 +59,7 @@
 # 构建与 Trivy 扫描。Trivy 漏洞库已由 trivy-action 自带缓存，不需要重复配置；
 # Playwright 浏览器（约 100MB）用 actions/cache 缓存，缓存命中后 Install Playwright browser 由实测 23s 降到 14s（未命中时为 25s~116s）
 # 压到只剩系统依赖安装。
-# 5 个镜像构建改用 container driver 的 buildx 并带 `type=gha` 层缓存，配合
+# 6 个镜像构建（5 个生产镜像 + PGroonga 探针镜像）改用 container driver 的 buildx 并带 `type=gha` 层缓存，配合
 # deploy/docker/*.Dockerfile 中“先复制依赖清单、再复制源码”的层顺序，避免源码
 # 改动触发依赖重装；各镜像使用独立 cache scope。
 name: CI
@@ -187,10 +194,33 @@ jobs:
           MIGRATION_DATABASE_URL: postgresql://app_migrator@127.0.0.1:5432/app
         run: pnpm db:migrate
 
+      - name: Install PostgreSQL 18 client tools
+        # 集成测试需要真实 pg_dump/pg_restore（A-1 备份/恢复演练），而 runner 自带的
+        # PGDG noble 客户端是 16.x：pg_dump 拒绝连接主版本更新的服务器（测试库为
+        # PostgreSQL 18.6）。这里启用 PGDG 源并安装与生产 ops 镜像同一基线的 18.6
+        # 客户端，再通过 INPULSE_BACKUP_PG_DUMP/INPULSE_BACKUP_PG_RESTORE 注入。
+        run: |
+          if ! grep -rqs "apt.postgresql.org" /etc/apt/sources.list.d/; then
+            if [ -x /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh ]; then
+              sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            else
+              sudo install -d /usr/share/postgresql-common/pgdg
+              sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+              . /etc/os-release
+              echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            fi
+          fi
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client-18=18.6-1.pgdg24.04+2
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/pg_restore --version
+
       - name: Integration tests against real PostgreSQL
         env:
           NODE_ENV: test
           TEST_DATABASE_URL: postgresql://cluster_bootstrap@127.0.0.1:5432/app
+          INPULSE_BACKUP_PG_DUMP: /usr/lib/postgresql/18/bin/pg_dump
+          INPULSE_BACKUP_PG_RESTORE: /usr/lib/postgresql/18/bin/pg_restore
         run: pnpm test:integration
 
       - name: OpenAPI and client drift check
@@ -255,6 +285,18 @@ jobs:
             --load \
             .
 
+      - name: Build production ops image
+        # 生产 ops 镜像（A-1）：承载 operations profile 的 backup 与 audit-archive
+        # 一次性任务，runtime 含 PostgreSQL 18 客户端（pg_dump/pg_restore）且非 root。
+        run: |
+          docker buildx build \
+            --file deploy/docker/ops.Dockerfile \
+            --tag inpulse/ops:ci \
+            --cache-from type=gha,scope=ops \
+            --cache-to type=gha,mode=max,scope=ops,ignore-error=true \
+            --load \
+            .
+
       - name: Scan production API image
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
@@ -289,6 +331,16 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           image-ref: "inpulse/db-bootstrap:ci"
+          scan-type: "image"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: "true"
+          format: "table"
+
+      - name: Scan production ops image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: "inpulse/ops:ci"
           scan-type: "image"
           severity: "CRITICAL,HIGH"
           exit-code: "1"

@@ -53,6 +53,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0004_search_projection_contract_pg_trgm_index.sql",
       "0005_search_projection_contract_pg_trgm_extension.sql",
       "0006_leftover_search_entity.sql",
+      "0007_backup_role_pg_dump_grants.sql",
     ]);
   });
 
@@ -910,8 +911,14 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       runtime.unsafe("SELECT * FROM app.audit_logs"),
       "42501",
     );
+    // F-10.3（迁移 0007）：pg_dump 一致性快照要求 app_backup 对 dump 范围内
+    // 全部表持有表级 SELECT（含会话表）；会话表数据仍由 --exclude-table-data
+    // 排除在备份文件之外，且备份角色始终没有写权限。
+    await expect(
+      backup.unsafe("SELECT count(*) FROM app.user_sessions"),
+    ).resolves.toHaveLength(1);
     await expectPostgresError(
-      backup.unsafe("SELECT * FROM app.user_sessions"),
+      backup.unsafe("DELETE FROM app.user_sessions"),
       "42501",
     );
     await expect(
