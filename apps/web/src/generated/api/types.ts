@@ -88,6 +88,43 @@ export type AdminUserVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type AuditLogItem = {
+  readonly chainId: string;
+  readonly sequenceNo: number;
+  readonly projectId: (number | null);
+  readonly actorType: ("USER" | "SYSTEM");
+  readonly actorId: (number | null);
+  readonly action: string;
+  readonly targetType: string;
+  readonly targetId: (string | null);
+  readonly eventPayload: Readonly<Record<string, unknown>>;
+  readonly requestId: string;
+  readonly clientRequestId: (string | null);
+  readonly ipAddress: (string | null);
+  readonly userAgent: (string | null);
+  readonly occurredAt: string;
+  readonly prevHash: string;
+  readonly recordHash: string;
+  readonly keyVersion: number;
+  readonly canonicalVersion: string;
+};
+
+export type AuditLogPage = {
+  readonly items: readonly AuditLogItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type AuditLogQueryRequest = {
+  readonly projectId?: number;
+  readonly action?: string;
+  readonly actorId?: number;
+  readonly from?: string;
+  readonly to?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
 export type ChangeRecordVersion = {
   readonly title: string;
   readonly contextProblem: string;
