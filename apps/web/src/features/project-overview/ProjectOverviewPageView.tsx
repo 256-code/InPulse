@@ -6,6 +6,10 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  ProjectContextNav,
+  type ProjectContextNavModule,
+} from "@features/common/components/ProjectContextNav";
 import { PROJECT_OVERVIEW_MOCK_ADAPTER } from "./project-overview-mock";
 import {
   describeProjectOverviewError,
@@ -33,6 +37,10 @@ export interface ProjectOverviewPageViewProps {
   readonly onOpenMembers: () => void;
   readonly onOpenRecords: () => void;
   readonly onOpenIssues: () => void;
+  /** 项目内导航的模块项（设计师稿 catalog.tsx L212 项目级导航）。 */
+  readonly modules: readonly ProjectContextNavModule[];
+  readonly onOpenModule: (moduleId: number) => void;
+  readonly onOpenOverview: () => void;
   readonly adapter?: ProjectOverviewAdapter;
 }
 
@@ -55,6 +63,9 @@ export const ProjectOverviewPageView: React.FC<
   onOpenMembers,
   onOpenRecords,
   onOpenIssues,
+  modules,
+  onOpenModule,
+  onOpenOverview,
   adapter,
 }) => {
   const activeAdapter = adapter ?? PROJECT_OVERVIEW_MOCK_ADAPTER;
@@ -180,6 +191,12 @@ export const ProjectOverviewPageView: React.FC<
       aria-label="项目概览"
       data-testid="project-overview"
     >
+      <ProjectContextNav
+        modules={modules}
+        active="overview"
+        onSelectOverview={onOpenOverview}
+        onSelectModule={onOpenModule}
+      />
       <div className="page-header">
         <div>
           <button

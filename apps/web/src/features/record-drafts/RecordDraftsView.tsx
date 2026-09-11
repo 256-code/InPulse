@@ -22,7 +22,11 @@ import {
   type TaskRecordDraftsResponse,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
 
 const empty: RecordDraftContent = {
   title: "",
@@ -327,13 +331,12 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
   });
   return (
     <section className="record-drafts-page" aria-label="迭代记录草稿">
-      <div className="calm-section-title">
-        <div>
-          <h1>迭代记录</h1>
-          <p>先把变化写清楚，保存后可与项目成员继续补充。</p>
-        </div>
+      <CalmSectionTitle
+        title="草稿列表"
+        hint="先把变化写清楚，保存后可与项目成员继续补充。"
+      >
         <CalmBadge tone="amber">草稿</CalmBadge>
-      </div>
+      </CalmSectionTitle>
       <label className="draft-project-selector">
         所属项目
         <select

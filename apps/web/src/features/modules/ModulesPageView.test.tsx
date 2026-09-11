@@ -1,7 +1,14 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
@@ -33,7 +40,9 @@ function mount(client: InpulseApiClient, admin = false) {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <ModulesPageView projectId={2} isAdmin={admin} client={client} />
+          <MemoryRouter>
+            <ModulesPageView projectId={2} isAdmin={admin} client={client} />
+          </MemoryRouter>
         </QueryClientProvider>
       </AuthStateProvider>
     </ConfigProvider>,
@@ -182,7 +191,7 @@ describe("F-12 forms", () => {
       ),
     } as unknown as InpulseApiClient;
     mount(client);
-    await screen.findByText("未分类模块");
+    await screen.findByRole("heading", { name: "未分类模块" });
     expect(
       screen.queryByRole("button", { name: /归\s*档/ }),
     ).not.toBeInTheDocument();
@@ -261,5 +270,28 @@ describe("F-12 forms", () => {
     expect(
       screen.queryByRole("button", { name: /归\s*档/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("项目内导航", () => {
+  it("lists the project modules and marks no entry as current on the module management page", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [item] }),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    const nav = screen.getByRole("navigation", {
+      name: "项目内导航",
+    });
+    await within(nav).findByRole("button", { name: "未分类模块" });
+    expect(
+      within(nav)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["项目概览", "未分类模块"]);
+    expect(
+      within(nav)
+        .getAllByRole("button")
+        .filter((button) => button.classList.contains("active")),
+    ).toEqual([]);
   });
 });
