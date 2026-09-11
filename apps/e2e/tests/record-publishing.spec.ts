@@ -119,6 +119,17 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       task.getByRole("button", { name: "重新打开", exact: true }),
     ).toBeEnabled();
     await expect(task.locator(".task-status-history > li")).toHaveCount(2);
+    // C-1：详情弹窗与任务卡片显示已发布迭代记录条数（D-1 数量口径，
+    // 多个版本不重复计数）；未合并任务不显示关系徽章。
+    await expect(task.getByText("迭代记录 1 条")).toBeVisible();
+    await task.getByRole("button", { name: "关闭" }).click();
+    await page.getByLabel("任务状态筛选").selectOption("DONE");
+    const card = page
+      .locator(".calm-task-card")
+      .filter({ hasText: `发布来源-${suffix}` });
+    await expect(card.getByText("迭代记录 1 条")).toBeVisible();
+    await expect(card.getByText("来源任务")).toHaveCount(0);
+    await expect(card.getByText("主任务")).toHaveCount(0);
   } finally {
     await context.close();
   }

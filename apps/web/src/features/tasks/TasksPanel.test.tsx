@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { ApiError, type InpulseApiClient, type TaskItem } from "@generated/api";
 import { TasksPanel } from "./TasksPanel";
 import { mergeTask, taskEdit } from "./task-query";
@@ -38,6 +38,7 @@ function client(overrides: object = {}) {
     getTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
     getModuleTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
     listTasks: vi.fn().mockResolvedValue({ items: [item] }),
+    listTaskGroupMemberships: vi.fn().mockResolvedValue({ items: [] }),
     listTaskAssignees: vi.fn().mockResolvedValue({
       items: [{ id: 5, name: "项目成员", avatarUrl: null }],
     }),
@@ -54,13 +55,15 @@ function mount(api: InpulseApiClient, writable = true) {
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
-        <TasksPanel
-          projectId={2}
-          moduleId={3}
-          featureId={4}
-          writable={writable}
-          client={api}
-        />
+        <MemoryRouter>
+          <TasksPanel
+            projectId={2}
+            moduleId={3}
+            featureId={4}
+            writable={writable}
+            client={api}
+          />
+        </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
   );
@@ -318,7 +321,11 @@ describe("F-14 task editing", () => {
   });
 });
 
-function mountWithRouter(api: InpulseApiClient, writable = true) {
+function GroupRouteProbe() {
+  const { groupId } = useParams();
+  return <p>{"聚合组 #" + groupId}</p>;
+}
+function mountWithGroupRoute(api: InpulseApiClient, writable = true) {
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <QueryClientProvider
@@ -326,22 +333,30 @@ function mountWithRouter(api: InpulseApiClient, writable = true) {
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
-        <MemoryRouter>
-          <TasksPanel
-            projectId={2}
-            moduleId={3}
-            featureId={4}
-            writable={writable}
-            client={api}
-          />
+        <MemoryRouter initialEntries={["/features/4"]}>
+          <Routes>
+            <Route
+              path="/features/4"
+              element={
+                <TasksPanel
+                  projectId={2}
+                  moduleId={3}
+                  featureId={4}
+                  writable={writable}
+                  client={api}
+                />
+              }
+            />
+            <Route path="/task-groups/:groupId" element={<GroupRouteProbe />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
   );
 }
 describe("F-23 merge entry", () => {
-  it("opens the merge modal from the task drawer", async () => {
-    mountWithRouter(client());
+  it("opens the merge modal from the task detail dialog", async () => {
+    mount(client());
     fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "合并到主任务" }),
@@ -349,5 +364,86 @@ describe("F-23 merge entry", () => {
     expect(
       await screen.findByLabelText(/主任务（搜索任务编号或标题/),
     ).toBeInTheDocument();
+  });
+});
+describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
+  const source: TaskItem = { ...item, id: 1, title: "来源任务甲" };
+  const ungrouped: TaskItem = { ...item, id: 2, title: "未入组任务乙" };
+  const main: TaskItem = { ...item, id: 3, title: "主任务丙" };
+  const marks = {
+    items: [
+      { taskId: 1, groupId: 501, groupRole: "SOURCE", publishedRecordCount: 2 },
+      { taskId: 2, groupId: null, groupRole: null, publishedRecordCount: 0 },
+    ],
+  } as const;
+  it("marks every card from one batch call and hides the entry for ungrouped tasks", async () => {
+    const listTaskGroupMemberships = vi.fn().mockResolvedValue(marks);
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({ items: [source, ungrouped] }),
+        listTaskGroupMemberships,
+      }),
+    );
+    const sourceCard = (await screen.findByText("来源任务甲")).closest(
+      "article",
+    ) as HTMLElement;
+    expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
+    expect(
+      await within(sourceCard).findByText("迭代记录 2 条"),
+    ).toBeInTheDocument();
+    const ungroupedCard = screen
+      .getByText("未入组任务乙")
+      .closest("article") as HTMLElement;
+    expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
+    await waitFor(() =>
+      expect(listTaskGroupMemberships).toHaveBeenCalledTimes(1),
+    );
+    expect(listTaskGroupMemberships.mock.calls[0]![0]).toEqual({
+      taskIds: [1, 2],
+    });
+  });
+  it("shows badge, record count and the main-task entry in the detail dialog, then routes to the group", async () => {
+    mountWithGroupRoute(
+      client({
+        listTasks: vi.fn().mockResolvedValue({ items: [source] }),
+        listTaskGroupMemberships: vi.fn().mockResolvedValue(marks),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
+    expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
+    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+  });
+  it("keeps the main task badge but hides the main-task entry on the MAIN task itself", async () => {
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({ items: [main] }),
+        listTaskGroupMemberships: vi.fn().mockResolvedValue({
+          items: [
+            {
+              taskId: 3,
+              groupId: 501,
+              groupRole: "MAIN",
+              publishedRecordCount: 0,
+            },
+          ],
+        }),
+      }),
+    );
+    const mainCard = (await screen.findByText("主任务丙")).closest(
+      "article",
+    ) as HTMLElement;
+    expect(await within(mainCard).findByText("主任务")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    expect(await within(dialog).findByText("主任务")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /查看主任务/ }),
+    ).toBeNull();
+    expect(within(dialog).queryByText(/迭代记录 \d+ 条/)).toBeNull();
   });
 });

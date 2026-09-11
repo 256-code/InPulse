@@ -2400,16 +2400,6 @@ button {
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.task-detail-drawer .ant-drawer-content {
-  background: #ffffff;
-}
-.task-detail-drawer .ant-drawer-header {
-  border-bottom: 1px solid #e8eef5;
-  padding: 20px 26px;
-}
-.task-detail-drawer .ant-drawer-body {
-  padding: 0 26px 26px;
-}
 .task-modal-header {
   padding: 22px 2px 18px;
   border-bottom: 1px solid #eaf0f6;
@@ -2432,10 +2422,22 @@ button {
 .task-modal-facts {
   min-width: 0;
 }
-.task-detail-drawer .calm-action-footer {
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid #edf1f5;
+.task-detail-modal .ant-modal-body {
+  padding: 0 28px 16px;
+}
+.task-modal-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 0 0 18px;
+}
+.task-record-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7f90a2;
+  font-size: 11px;
 }
 
 .catalog-modal .dialog-form {

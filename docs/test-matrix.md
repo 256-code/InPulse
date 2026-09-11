@@ -872,3 +872,22 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 本地实际执行（2026-09-11，本机 PostgreSQL 18.6 + PGroonga，`127.0.0.1:55436`）：`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（web 64 文件 293 例、api 68 文件 351 例、ops 8 文件 52 例，其余 workspace 通过）、`pnpm --filter @inpulse/api test:integration`（49 文件 428 例）均通过。
 
 未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② `pnpm test:e2e` 未运行（本次未改前端行为）；③ 前端消费（F-25 步骤 3 徽章与「查看主任务」）属 C-1，仍待落地；④ 新增真库用例与 R-5 破坏性契约变更需非作者人工评审。
+
+## C-1 F-25 步骤 3 入口标记与任务详情弹窗（2026-09-11 本地落库）
+
+按[裁决](a-contract-review-f25-f29-f32.md) §10.4 与 §11 落地 F-25 步骤 3：任务中心的任务列表、任务卡片与任务详情新增「主任务 / 来源任务」关系徽章、「迭代记录 n 条」与「查看主任务」入口；数据源为 R-5 `GET /api/v1/task-groups/memberships` 的页面级一次批量调用（`taskIds` 1..100，常规页面单块即一次请求），禁止按任务逐个请求；「未入组」按条目本身（`groupId` / `groupRole` 为 `null`）判断而非按条目缺失，`groupRole` 为 `null` 时隐藏徽章与导航入口，`groupId` 导航 `/task-groups/{groupId}`；条数取自 D-1 落库的 `publishedRecordCount`，未扩展任务基础 DTO。任务详情由右侧抽屉改为居中弹窗（`Modal centered width={1000}` + `catalog-modal task-detail-modal`），视觉与交互对齐设计师稿（`D:\design\latest-version` 的任务卡片与任务弹窗）；弹窗内 tabs 属 C-3，不在本项范围。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| C1-UNIT-001 | 单元 | 批量标记 Hook | `useTaskMarks` 去重升序、按 `TASK_MARK_IDS_MAX=100` 分块、空集合不发请求（`enabled: key.length > 0`）、读取失败降级为空 Map 且不重试；`toTaskMarkMap` 按 taskId 建索引 | 本地通过（`apps/web/src/features/tasks/task-marks.test.tsx` 5 例） |
+| C1-UNIT-002 | 单元 | 任务面板徽章、计数与入口 | 列表行与卡片按 `groupRole` 显示「主任务 / 来源任务」徽章、卡片页脚与详情显示「迭代记录 n 条」（0 条不渲染）、详情「查看主任务」仅 `SOURCE` 显示并导航 `/task-groups/{groupId}`、`MAIN` 自身隐藏入口；整页只发一次标记请求（`taskIds: [1, 2]`） | 本地通过（`apps/web/src/features/tasks/TasksPanel.test.tsx`，含 C-1 3 例） |
+| C1-UNIT-003 | 单元 | 任务中心真实计数 | 任务中心卡片改读 `item.publishedRecordCount`（原写死「记录 1 条」），>0 显示「记录 n 条」且 `title` 为「n 条已发布迭代记录」，0 不渲染 | 本地通过（`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`，期望「记录 3 条」） |
+| C1-UNIT-004 | 单元 | 适配器与 mock 计数同形 | `MyTaskListItem.publishedRecordCount` 在类型、v1 查询映射、服务端适配器与 mock 数据集（10 条，3 条非零 3/2/1）同形状 | 本地通过（`my-tasks-v1-query.test.ts`、`my-tasks-server.test.ts`） |
+| C1-E2E-001 | Playwright | 聚合组任务详情关系标记 | `task-groups.spec.ts`：合并后在任务详情弹窗（`.task-detail-modal`）看到「主任务 / 来源任务」（以 `getByText(..., { exact: true })` 断言，避免与卡片 h3 标题子串冲突）与「迭代记录 n 条」 | 本地通过 |
+| C1-E2E-002 | Playwright | 遗留问题页与记录发布路径 | `issues.spec.ts` 由抽屉断言改为弹窗断言；`record-publishing.spec.ts` 末段断言详情「迭代记录 1 条」、筛选 DONE 后卡片计数与无关系徽章 | 本地通过 |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 65 文件 303 例、`pnpm test:unit`（api 68 文件 351 例，其余 workspace 通过）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（含 `apps/e2e`）、`pnpm build`、`pnpm check:frontend:boundaries`（211 模块 965 依赖）、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97/97）、`pnpm db:migrations:check`（8 个迁移）、`pnpm check:deps`、`pnpm check:secrets`（930 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm check:deploy:test` 与公共 registry 审计（无已知漏洞）均通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）：改动三文件 5/5 通过；全量 46 例两轮为 44 过 + 2 偶发、45 过 + 1 偶发，失败集合每轮不同，均由下述幂等约束边界 500 引起（`project-archive.spec.ts` 单文件复跑 2/2、`module-tasks.spec.ts` F-15 单例复跑 1/1 通过）。
+
+未运行 / 已知偏差：① 本批 GitHub Actions 尚未执行；② `pnpm test:integration` 未运行（本批无服务端改动，R-5 服务端由 A-7 [PR #118](https://github.com/256-code/InPulse/pull/118) 覆盖）；③ 全量 E2E 的偶发失败按约定不得视为已修复（根因见下）；④ 新增 / 更新的 E2E 用例与前端用例需非作者人工评审；⑤ 任务详情弹窗内的 tabs 等 C-3 收尾项未做。
+
+偶发 E2E 失败根因（2026-09-11 定位，未修复）：本机 Docker 日志（`inpulse-local-dev`）显示偶发 500 来自 `idempotency_records_retention_check`（`expires_at <= created_at + 30 days`）。实例：`2026-09-11 09:55:51` 行 `created_at 09:55:51.576903+00`、`expires_at 10:55:51.577+00` —— JS 宿主 `Date.now() + 30d` 比 Docker PostgreSQL `now()` 快约 0.1ms（Windows Docker Desktop VM 时钟偏差），差值超出 30 天上限 97µs 被拒，表现为写请求 500 与保存后弹窗不关闭；Linux / CI 单一时钟源不受影响。另：E2E 运行的是 `node apps/api/dist/main.js` 与 `packages/api-contract/dist`，契约或服务端改动后必须先执行 `pnpm --filter @inpulse/api-contract build` 与 `pnpm --filter @inpulse/api build`，否则会以旧构建启动并触发 `contract response validation failed`。

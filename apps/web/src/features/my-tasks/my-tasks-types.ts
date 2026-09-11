@@ -72,6 +72,12 @@ export interface MyTaskListItem {
   readonly creatorId: number;
   readonly assignee: MyTaskAssigneeRef;
   readonly hasPublishedRecord: boolean;
+  /**
+   * 该任务的 PUBLISHED 正式记录条数（裁决修订 D-1，与 hasPublishedRecord 同源同口径：
+   * 按 change_records 计数，不按版本计数、不按影响功能去重），恒有
+   * hasPublishedRecord === publishedRecordCount > 0；F-25 步骤 3 的「迭代记录 n 条」。
+   */
+  readonly publishedRecordCount: number;
   readonly groupRole: "MAIN" | "SOURCE" | null;
   readonly githubLinkCount: number;
   /** 与 groupRole 同源、同空同非空；供「查看主任务」入口按组导航（C-1）。 */
