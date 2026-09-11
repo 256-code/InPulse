@@ -1,0 +1,11 @@
+[Unit]
+# InPulse 备份告警（技术设计 v1.2.2 §11.5）：由 OnFailure 实例化，%i 为失败单元名。
+# 告警接收方地址只从 INPULSE_BACKUP_ALERT_WEBHOOK_FILE 指向的受限文件读取，
+# 控制器不把 Webhook 写入进程参数或日志。
+Description=InPulse 备份告警（来源单元 %i）
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/inpulse/backup.env
+ExecStart=__INPULSE_BACKUPCTL__ alert failed-unit:%i
+TimeoutStartSec=2m

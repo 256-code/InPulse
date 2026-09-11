@@ -1,0 +1,11 @@
+[Unit]
+# InPulse 备份 staleness 检查（技术设计 v1.2.2 §11.5）：超过 18 小时没有成功
+# 备份记录即告警（含“任务未开始”这种静默失败）。
+Description=InPulse 备份 staleness 检查
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/inpulse/backup.env
+ExecStart=__INPULSE_BACKUPCTL__ check-staleness
+TimeoutStartSec=5m
+OnFailure=inpulse-backup-alert@%N.service

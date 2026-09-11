@@ -1,0 +1,22 @@
+[Unit]
+# InPulse 加密备份（宿主每 12 小时调度；技术设计 v1.2.2 §11.5 / ADR-020）。
+# 单元文件由 deploy/backup/backupctl.sh enable 安装：__INPULSE_BACKUPCTL__
+# 会被替换为安装后的控制器绝对路径。上线前不得启用本单元。
+Description=InPulse 加密备份（12 小时）
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/inpulse/backup.env
+ExecStart=__INPULSE_BACKUPCTL__ run
+# 超时或未开始都会走 OnFailure 告警；正常退出后由 watchdog 检查 staleness。
+TimeoutStartSec=3h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+OnFailure=inpulse-backup-alert@%N.service
+
+[Install]
+WantedBy=multi-user.target

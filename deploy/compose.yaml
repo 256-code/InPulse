@@ -4,7 +4,9 @@
 # 生产 API/Web/Migration/DB-bootstrap 四类镜像（deploy/docker/*.Dockerfile）。
 # 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）；这两个
 # operations 服务与宿主 12 小时调度是生产上线门禁项，上线时才启用，上线前不
-# 部署、不运行。
+# 部署、不运行。宿主调度配置与启用流程已交付在 deploy/backup/（backupctl.sh、
+# 5 个 systemd 单元与非敏感配置示例）；启用与恢复见 docs/runbooks/backup-restore.md，
+# 升级与回滚见 docs/runbooks/upgrade-rollback.md；静态校验由 pnpm check:deploy 执行。
 #
 # 说明：
 #   1. *_IMAGE_REF 必须由受信镜像仓库解析后写入签名发布清单；本文件只引用

@@ -375,7 +375,7 @@ GitHub Actions 尚未对本 PR 执行。
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
 | SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；GitHub Actions 待执行） |
 | SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | Required |
-| SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 本地通过（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 7 例，2026-09-10；外部链接 HTTP 关联接口属 F-14 业务纵切片，未交付；GitHub Actions 待执行） |
+| SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 本地通过（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 7 例，2026-09-10；F-22 已交付 HTTP 关联接口并在服务端复用同一规范化器（证据见本文件「F-22 当前 GitHub 关联」章节）；GitHub Actions 待执行） |
 | SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required |
 | SEC-006 | API 集成 | 未匹配路由的错误契约净化 | 任意未匹配路径返回 `application/json` 的统一 404 `{ code, message, details, requestId }`，message 为固定文案且不回显 method、path 或框架内部文本，响应带 `X-Request-Id` 并保留应用 CSP，不返回框架或 Express 默认 HTML；已匹配路由不受影响；见 [ADR-026](adr/ADR-026.md) | 本地通过（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点在全局异常过滤器本身，未新增 adapter 包装；API 响应的 nosniff/CSP 由生产 Nginx `location /api/v1/` 下发，另见 F09-CSP-*；GitHub Actions 待执行） |
 | SEC-007 | 部署集成 | 数据库 Secret 文件缺失 | 生产模式 fail closed，不得回退到环境变量；缺失路径、越界路径、空值和权限不合规均拒绝连接串构造 | 本地通过（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位需 Linux 环境，Windows 本机不可复现，权限判定在函数级覆盖；compose secret 声明由 `check:deploy` 校验；GitHub Actions 待执行） |
@@ -434,8 +434,9 @@ GitHub Actions 尚未对本 PR 执行。
 
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
-| RECOVERY-001 | 上线前及演练 | 全新主机恢复 | 达到记录的 RPO/RTO；旧 Session 失效；审计链与检查点一致；恢复发布清单中的全部版本化 keyring，并保留仍被未过期幂等记录引用的 fingerprint key | Required |
-| DEPLOY-003 | 上线前 | 备份调度生效时机 | 上线前不部署、不运行定时备份（`operations` profile 未发布、无备份告警）；上线门禁要求启用宿主 12 小时调度、异机保留与失败告警，并在启用前完成一次完整全新主机恢复演练 | Required |
+| RECOVERY-001 | 上线前及演练 | 全新主机恢复 | 达到记录的 RPO/RTO；旧 Session 失效；审计链与检查点一致；恢复发布清单中的全部版本化 keyring，并保留仍被未过期幂等记录引用的 fingerprint key | Required（恢复 7 步与演练证据要求见 [备份与恢复 Runbook](runbooks/backup-restore.md)；演练未执行） |
+| DEPLOY-003 | 上线前 | 备份调度生效时机 | 上线前不部署、不运行定时备份（`operations` profile 未发布、无备份告警）；上线门禁要求启用宿主 12 小时调度、异机保留与失败告警，并在启用前完成一次完整全新主机恢复演练 | Required（宿主调度配置与启用流程见 DEPLOY-004 与 [备份与恢复 Runbook](runbooks/backup-restore.md)；真实启用、告警投递与恢复演练仍是上线门禁） |
+| DEPLOY-004 | 上线前（静态门禁） | 备份调度配置与 Runbook | `deploy/backup/` 交付宿主控制器、5 个 systemd 单元与非敏感配置示例，`docs/runbooks/` 交付备份/恢复与升级/回滚 Runbook；`pnpm check:deploy:test` 静态校验：12 小时与每小时定时器节奏、`Persistent=true`、`flock` 并发锁、`--confirm-go-live` 与恢复演练证据前置、staleness 默认 18 小时与 `enabled-at` 启用基线、告警 Webhook 只从受限文件读取、禁止 `--profile operations up`，以及 `backup`/`audit-archive` 服务若存在必须声明 `profiles: [operations]` | 本地通过（`pnpm check:deploy:test` 退出码 0，2026-09-11；真实 systemd 安装、真实告警投递与全新主机恢复演练未运行） |
 
 ## 前端基础框架与边界治理 (F-30)
 
