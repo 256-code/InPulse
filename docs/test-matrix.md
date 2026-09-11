@@ -2,6 +2,8 @@
 
 状态：已接受的验收基线。当前仓库处于阶段 0 实施中，尚无完整业务应用代码，数据库真实 PostgreSQL 测试与搜索服务/HTTP API 集成测试已部分落地；`已自动化` 表示该检查的脚本已落库并已纳入 `.github/workflows/ci.yml`（实际执行证据见各章节的状态说明），`Required` 表示对应阶段必须实现并由 CI 执行，不代表测试已经通过。
 
+2026-09-12 清账：main `4141e1d` 的 `CI / workspace`（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)，含五个生产镜像构建与 Trivy 扫描、Browser E2E 50 passed / 6.3 分钟）与 `Documentation / docs`（[run 34620173112](https://github.com/256-code/InPulse/actions/runs/34620173112)）已通过；下列历史小节按当时事实保留，其中「GitHub Actions 待执行 / 尚未执行」为当日本地交审时点的描述，实际 CI 结果已在行内回填。
+
 ## F-09 数据安全专项（A，2026-09-10 本地实现）
 
 数据安全专项第一个纵切片（对应技术设计 §7.5 与 [ADR-021](adr/ADR-021.md)，不降低安全基线）：
@@ -15,7 +17,7 @@ Referrer-Policy 与 Permissions-Policy 收敛到 `deploy/docker/nginx-security-h
 本地开发与 `vite preview` 走同一策略串，`INPULSE_WEB_CSP=off` 只作为本地对照开关，非法值
 fail closed 到 enforce。
 
-第二个纵切片补齐 SEC-004/SEC-006/SEC-007（同日本地实现、本地验证，GitHub Actions 待执行）：
+第二个纵切片补齐 SEC-004/SEC-006/SEC-007（同日本地实现、本地验证；CI 已通过，PR #86 / run 34451420820）：
 未匹配路由的 404 由全局 `ApiExceptionFilter` 统一为固定文案，并在回归用例中锁定契约
 （Nest 11.2.3 默认会把 `Cannot {method} {url}` 回显进响应体，[ADR-026](adr/ADR-026.md) 要求
 直接修正异常过滤器，因此不引入 adapter 包装）；`database/src/config.ts` 把 Secret 文件权限
@@ -34,10 +36,10 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 | F09-CSP-E2E-001 | 浏览器 E2E | 入口 nonce 一致性与强制模式零违规 | 同一入口两次响应的 nonce 不同，CSP 头 nonce 与 meta/script 标签一致，占位符无残留；登录、主题色、命令面板、通知弹层、懒加载与错误页在 CSP enforce 下 `securitypolicyviolation` 零违规；安全检查头齐全 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2，2026-09-10） |
 | F09-CSP-IMAGE-001 | 部署集成 | 真实镜像与 Nginx | HTTP 非 ACME 请求 308 跳同主机 HTTPS；入口/SPA 回退/代理路径逐项校验 nonce、`no-store` 与安全头；代理上游不可达时仍保留安全头；条件请求返回 200 而非带旧 nonce 的 304；哈希资源 `immutable` | 本地通过（`scripts/check-web-image-csp.sh inpulse/web:local`，2026-09-10；已加入 CI 生产镜像构建之后） |
 | F09-CSP-GATE-001 | 部署预检 | Compose/资产结构 | `deploy/docker/nginx-security-headers.conf` 列入必需资产；`nginx.conf` 必须含 `sub_filter "__INPULSE_CSP_NONCE__" "$request_id"` 与安全头 include；两个 Nginx 文件的指令行不得出现 `unsafe-inline`；`web.Dockerfile` 必须拷贝两个配置文件 | 本地通过（`scripts/check_deploy_refs.mjs`，正例通过、`.env.deploy.example` 占位符拒绝） |
-| F09-SEC006-API-001 | API 集成 | 未匹配路由净化 404 | 未知路径（含全局前缀外、根路径与 `/api/v1` 本身）返回 `application/json` 的统一 404：`code=NOT_FOUND`、`message` 为固定文案、`details` 为空，body 不回显 method、path、框架文案或 HTML；`X-Request-Id` 与 body 一致；已匹配路由（`/health/live` 200、匿名 `/me` 401）不受影响 | 本地通过（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点即全局异常过滤器，无需额外 adapter 包装；GitHub Actions 待执行） |
-| F09-SEC007-DB-001 | 数据库单元 + 部署预检 | Secret 文件 fail closed | 权限矩阵只接受属主读位且无组/其他/执行位（`0600`/`0400` 通过，`0500`/`0700`/`0640`/`0604`/`0606`/`0000`/`0200` 拒绝）；生产 Secret 路径必须是 `/run/secrets` 直接子项（相对路径、`..`、嵌套目录与根目录本身均拒绝）；缺失文件变量不回退环境变量，生产模式直连 `DATABASE_URL`/`MIGRATION_DATABASE_URL` 同样被拒；空文件与纯空白内容拒绝，内容读取后去首尾空白；compose secret 声明（mode 0400、直接子项、uid/gid）由 `check:deploy` 校验 | 本地通过（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位无法在 Windows 本机复现，权限判定在函数级覆盖；GitHub Actions 待执行） |
-| F09-SEC004-API-001 | API 单元 | GitHub URL 规范化 | 只接受规范化的 `https://github.com/...`：拒绝 http/ftp、用户信息、非默认端口、`api.github.com`、`github.com.evil.example` 混淆域名、编码伪段、超长输入与非 URL；query 只保留 `page/q/tab` 并排序、fragment 一律移除；ISSUE/PR 编号必须为正整数，COMMIT 必须为 7-64 位十六进制且规范化保存小写；不配置 Token、不发起远程请求 | 本地通过（`apps/api/test/github-url.test.ts` 16 例，2026-09-10；GitHub Actions 待执行） |
-| F09-SEC004-DB-001 | PostgreSQL 集成 | ExternalLinks 数据库防线 | 同项目规范化 URL 唯一（23505）且并发写入只成一条；非 https、混淆域名与带 fragment 的 URL 被 CHECK 拒绝（23514）；任务/功能/记录/项目四类类型化关联的跨项目串联与归属错配均被复合外键拒绝（23503）；四类关联重复关联同一链接均 23505；`normalized_url` 不可变 | 本地通过（`database/test/integration/external-links.test.ts` 13 例，PostgreSQL 18.6 + PGroonga，2026-09-10 落库 7 例、2026-09-11 补齐项目/功能/记录关联的复合外键用例；GitHub Actions 待执行） |
+| F09-SEC006-API-001 | API 集成 | 未匹配路由净化 404 | 未知路径（含全局前缀外、根路径与 `/api/v1` 本身）返回 `application/json` 的统一 404：`code=NOT_FOUND`、`message` 为固定文案、`details` 为空，body 不回显 method、path、框架文案或 HTML；`X-Request-Id` 与 body 一致；已匹配路由（`/health/live` 200、匿名 `/me` 401）不受影响 | 本地通过（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点即全局异常过滤器，无需额外 adapter 包装；CI 已通过，PR #86 / run 34451420820） |
+| F09-SEC007-DB-001 | 数据库单元 + 部署预检 | Secret 文件 fail closed | 权限矩阵只接受属主读位且无组/其他/执行位（`0600`/`0400` 通过，`0500`/`0700`/`0640`/`0604`/`0606`/`0000`/`0200` 拒绝）；生产 Secret 路径必须是 `/run/secrets` 直接子项（相对路径、`..`、嵌套目录与根目录本身均拒绝）；缺失文件变量不回退环境变量，生产模式直连 `DATABASE_URL`/`MIGRATION_DATABASE_URL` 同样被拒；空文件与纯空白内容拒绝，内容读取后去首尾空白；compose secret 声明（mode 0400、直接子项、uid/gid）由 `check:deploy` 校验 | 本地通过（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位无法在 Windows 本机复现，权限判定在函数级覆盖；CI 已通过，PR #86 / run 34451420820） |
+| F09-SEC004-API-001 | API 单元 | GitHub URL 规范化 | 只接受规范化的 `https://github.com/...`：拒绝 http/ftp、用户信息、非默认端口、`api.github.com`、`github.com.evil.example` 混淆域名、编码伪段、超长输入与非 URL；query 只保留 `page/q/tab` 并排序、fragment 一律移除；ISSUE/PR 编号必须为正整数，COMMIT 必须为 7-64 位十六进制且规范化保存小写；不配置 Token、不发起远程请求 | 本地通过（`apps/api/test/github-url.test.ts` 16 例，2026-09-10；CI 已通过，PR #86 / run 34451420820） |
+| F09-SEC004-DB-001 | PostgreSQL 集成 | ExternalLinks 数据库防线 | 同项目规范化 URL 唯一（23505）且并发写入只成一条；非 https、混淆域名与带 fragment 的 URL 被 CHECK 拒绝（23514）；任务/功能/记录/项目四类类型化关联的跨项目串联与归属错配均被复合外键拒绝（23503）；四类关联重复关联同一链接均 23505；`normalized_url` 不可变 | 本地通过（`database/test/integration/external-links.test.ts` 13 例，PostgreSQL 18.6 + PGroonga，2026-09-10 落库 7 例、2026-09-11 补齐项目/功能/记录关联的复合外键用例；CI 已通过，PR #103 / run 34556627765） |
 
 ## F-23 任务合并（C，2026-09-10 本地实现）
 
@@ -55,7 +57,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 | F23-INVARIANT-001 | PostgreSQL | 直接约束探针 | 同组第二个活跃 MAIN 23505 `task_group_members_one_active_main_unique`；活跃组缺 SOURCE 23514 形状约束；任务加入两组 23505 `task_group_members_one_active_group_unique`；SOURCE 缺快照 23514 `task_group_members_snapshot_check` | 同上 |
 | F23-UI-001 | 前端 / Playwright | 合并入口与任务组视图 | 前端合并对话框、任务组详情与解除入口 | 本地通过（`MergeIntoMainTaskModal` 5 例、`TasksPanel` 合并入口 1 例、`TaskGroupPageView` 8 例、`TaskGroupPage` 4 例、E2E `task-groups.spec.ts` 合并与聚合组页路径，2026-09-11） |
 
-本轮真实 PostgreSQL 集成全量 37 文件 232 例、API 单测 61 文件 291 例（含 HTTP 边界 10 例）、契约 10 文件 75 例、前端 35 文件 120 例（并行负载下两个既有计时敏感用例偶发失败，单跑通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
+本轮真实 PostgreSQL 集成全量 37 文件 232 例、API 单测 61 文件 291 例（含 HTTP 边界 10 例）、契约 10 文件 75 例、前端 35 文件 120 例（并行负载下两个既有计时敏感用例偶发失败，单跑通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描（本地时点；F-23 由 PR #81 合入，CI 已通过 run 34436623939）。
 
 ## F-24 解除合并（C，2026-09-10 本地实现）
 
@@ -73,7 +75,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 | F24-INVARIANT-001 | PostgreSQL | 直接约束探针 | 解除元数据不合法（缺 `detached_at`/`detached_by`/原因、`detached_at < joined_at`）23514 `task_group_members_detach_state_check`/`task_group_members_detach_time_check`；关闭组缺 `closed_at` 23514 `task_groups_close_state_check` | 同上 |
 | F24-UI-001 | 前端 / Playwright | 解除入口与二次确认 | 任务组视图内的解除入口、二次确认对话框与解除原因输入 | 本地通过（`UnmergeTaskGroupButton` 5 例：二次确认、CSRF/幂等头、空原因、409 恢复、closesGroup 警告；E2E 解除路径含「已解除」与「聚合组已关闭」断言，2026-09-11） |
 
-本轮真实 PostgreSQL 集成全量 40 文件 260 例（两轮各 1 例既有偶发失败：`project-member-management-api` 与 `preauth-session`，单文件复跑分别 8/8 与 4/4 通过）、解除文件 8/8、API 单测 63 文件 303 例（含 HTTP 边界 10 例）、契约 11 文件 81 例、前端 37 文件 124 例（并行负载下两个既有计时敏感用例偶发失败，单跑 4/4 通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描。
+本轮真实 PostgreSQL 集成全量 40 文件 260 例（两轮各 1 例既有偶发失败：`project-member-management-api` 与 `preauth-session`，单文件复跑分别 8/8 与 4/4 通过）、解除文件 8/8、API 单测 63 文件 303 例（含 HTTP 边界 10 例）、契约 11 文件 81 例、前端 37 文件 124 例（并行负载下两个既有计时敏感用例偶发失败，单跑 4/4 通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描（本地时点；F-24 由 PR #87 合入，CI 已通过 run 34453066198）。
 
 ## F-06 项目编辑与归档/恢复（A，2026-09-10 本地实现）
 
@@ -166,7 +168,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 | CONTRACT-009 | HTTP 集成 | 同源顺序 | 非安全方法先执行 `StrictSameOriginGuard`，缺失 Origin/Referer 返回 403 `CSRF_ORIGIN_REJECTED` | 同上 |
 | CONTRACT-010 | 契约扫描 | operationId 绑定 | 所有 Controller 均绑 `@Operation`，method/path/operationId 与 Route Registry 精确一致；`contract:drift`/`validate`/`permissions:check` 通过 | 本地通过（api-contract 4 文件 59 例；23 条路由） |
 
-新增文件：`contract-validation.pipe.test.ts`、`contract-response.interceptor.test.ts`、`api-exception.filter.test.ts`、`contract-runtime.http.test.ts`。API 单测合计 52 文件 243 例通过；GitHub Actions 尚未执行。
+新增文件：`contract-validation.pipe.test.ts`、`contract-response.interceptor.test.ts`、`api-exception.filter.test.ts`、`contract-runtime.http.test.ts`。API 单测合计 52 文件 243 例通过；GitHub Actions 已通过（F-11 随 PR #66 合入，run 34328573647）。
 
 ## 项目创建 F-04（A 后端 2026-09-08；C 前端 2026-09-09）
 
@@ -191,7 +193,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 `apps/api/test/project-code.test.ts`（7 例）。前者需 `TEST_DATABASE_URL` 指向已安装
 PGroonga 的 PostgreSQL 18 实例并先执行 `pnpm db:migrate`，由 API 集成测试配置
 （`vitest.integration.config.ts`）运行；本机已用 PostgreSQL 18.6 + PGroonga 实测通过，
-GitHub Actions 的 CI 尚未就本 PR 执行。
+GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 
 ## F-05 项目读取与成员管理（A，2026-09-09 本地实现）
 
@@ -244,7 +246,7 @@ GitHub Actions 的 CI 尚未就本 PR 执行。
 `pnpm check:secrets`、`pnpm check:deploy:test`、`pnpm test:e2e`（18/18）、
 公共 registry 的 `pnpm audit --registry=https://registry.npmjs.org --audit-level=high`
 （No known vulnerabilities found）。生成客户端已重新生成并通过 `pnpm contract:drift`；
-GitHub Actions 尚未对本 PR 执行。
+GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 
 ## 文档与仓库治理
 
@@ -277,9 +279,9 @@ GitHub Actions 尚未对本 PR 执行。
 | CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
-| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务、记录作废/恢复等路径已覆盖 | 本地全量 45/45 通过（2026-09-11，5.1 分钟）；CI Browser E2E（默认 Chromium）已在 main 推送运行 [34578707754](https://github.com/256-code/InPulse/actions/runs/34578707754)（`bff1972`，2026-09-11）45 passed（5.6 分钟）；覆盖 F-03 用户管理、F-05 成员管理、MFA、项目创建、F-12 模块、F-13 功能档案、F-14 功能级任务、F-15 模块级任务、F-16 任务完成与状态闭环、F-17 草稿、F-18 记录发布、F-20 遗留项转任务、F-21 作废/恢复、F-22 外部链接、任务组合并/解除、搜索边界及 F-27/F-28 状态联动；其余完整关键路径 Required |
-| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | Required（Compose/ref 预检已自动化；真实镜像 digest 绑定与签名发布清单仍待发布环节） |
-| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | Required（扫描步骤已落库，待 CI 实际执行） |
+| CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务、记录作废/恢复等路径已覆盖 | 本地全量 45/45 通过（2026-09-11，5.1 分钟）；CI Browser E2E（默认 Chromium）已在 main 最新运行 [34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)（`4141e1d`，2026-09-11）50 passed（6.3 分钟），此前 push 运行 [34578707754](https://github.com/256-code/InPulse/actions/runs/34578707754)（`bff1972`）为 45 passed（5.6 分钟）；覆盖 F-03 用户管理、F-05 成员管理、MFA、项目创建、F-12 模块、F-13 功能档案、F-14 功能级任务、F-15 模块级任务、F-16 任务完成与状态闭环、F-17 草稿、F-18 记录发布、F-20 遗留项转任务、F-21 作废/恢复、F-22 外部链接、任务组合并/解除、搜索边界及 F-27/F-28 状态联动；其余完整关键路径 Required |
+| CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 实际构建 API/migration/web/db-bootstrap/ops 五个生产镜像成功；Compose/ref 预检由 `check:deploy:test` 覆盖；真实镜像 Tag/digest 绑定与签名发布清单仍属发布环节） |
+| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个生产镜像的 Trivy 扫描全部 success，CRITICAL/HIGH 无未处置项） |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
 > CI-001～CI-006、CI-009～CI-013、CI-015、CI-016 的命令已在本地实测通过，其中
@@ -306,7 +308,7 @@ GitHub Actions 尚未对本 PR 执行。
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
 > `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的
 > `postgres:18.6` 构建的探针镜像覆盖，而 `.github/workflows/ci.yml` 的 GitHub Actions
-> 运行本身尚未执行。CI-017 的 Playwright 基座已于 2026-09-09 在本机 8/8 通过，其中项目创建与 MFA 挑战/重认证关键路径已覆盖；F-02 接入 TOTP KEK 环境后再次复跑 8/8，MFA UI 场景已加入；本 PR 的 GitHub Actions 已通过（workspace 10m2s，docs 通过）；CI-018 的 `compose config` 渲染、exact-tag@sha256
+> 运行本身其后已执行通过（main `4141e1d` 的 [run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 全绿）。CI-017 的 Playwright 基座已于 2026-09-09 在本机 8/8 通过，其中项目创建与 MFA 挑战/重认证关键路径已覆盖；F-02 接入 TOTP KEK 环境后再次复跑 8/8，MFA UI 场景已加入；本 PR 的 GitHub Actions 已通过（workspace 10m2s，docs 通过）；CI-018 的 `compose config` 渲染、exact-tag@sha256
 > 格式、PostgreSQL 18 命名卷挂载、非 root/只读/资源限制/健康检查/端口检查已由
 > `pnpm check:deploy:test` 落库（合成 ref，不代表受信镜像已构建），生产镜像构建与
 > Trivy 扫描已按 §12.4 顺序插入 CI；真实镜像 digest 绑定与签名发布清单仍待发布环节。
@@ -328,78 +330,78 @@ GitHub Actions 尚未对本 PR 执行。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| AUTHZ-001 | API 集成 | 每条 Route Registry 操作 | 至少一条允许与一条拒绝用例，身份覆盖与[权限矩阵](permissions.md)一致 | Required |
-| AUTHZ-002 | PostgreSQL 集成 | 跨项目 IDOR | 其他项目成员和已移除成员均得到 404，SQL 不返回目标行 | Required |
-| AUTHZ-003 | Workflow 集成 | 创建项目时取消创建者 | 请求被 Schema/业务规则拒绝；创建者必为初始成员 | Required |
-| AUTHZ-004 | Workflow 集成 | 管理员移除普通成员身份的项目创建者 | ACTIVE 成员记录关闭；`projects.created_by` 值不变；创建者立即失去成员关系派生权限 | Required |
-| AUTHZ-005 | Workflow 集成 | 创建者重新加入 | 新增成员历史，不覆盖之前 `joined_at/removed_at` | Required |
-| AUTHZ-006 | API 集成 | 停用用户旧 Session | 所有受保护/业务路由及使用停用凭据的登录统一 401；`issueCsrfToken` 只能按匿名创建无身份预认证状态；同源 `logout` 仅清 Cookie 返回 204；其他用户不受影响 | Required |
-| AUTHZ-007 | API 集成 | 项目、模块或功能归档/恢复 | 项目成员为 403；跨项目或已移除成员为 404；管理员须完成密码与当前 TOTP 重认证并写审计 | Required |
-| AUTHZ-008 | API 集成 | 管理员移除成员 | 缺少密码或当前 TOTP 重认证时拒绝；双因子齐备时只关闭成员历史并写审计 | Required |
-| AUTHZ-009 | API 集成 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 项目成员为 403；管理员须重认证、填写原因并写审计 | Required |
-| AUTHZ-010 | Workflow 集成 | 移除系统管理员身份的项目创建者成员记录 | ACTIVE 成员记录关闭且 `created_by` 不变；其成员权限消失，但全局管理员权限仍可访问项目 | Required |
-| AUTHZ-011 | Registry + API 矩阵 | ADR-023 认证安全流程 | 九个 operationId 与权限矩阵精确对应；每项覆盖允许、身份拒绝或前置状态拒绝、停用用户和受限 Session 越权；认证/受限 Session 调用 `login` 为 409，必须登出后重新建立预认证状态 | Required |
-| AUTHZ-012 | API + 投影集成 | VOID 迭代记录可见性 | 活跃成员的详情为 404，搜索及该记录全部既有/新增普通时间线项不返回；管理员可读且只有显式 VOID 搜索筛选才返回；恢复为 PUBLISHED 后成员详情、默认搜索及既有/新增时间线重新可见，Activity 不暴露原因 | Required |
+| AUTHZ-001 | API 集成 | 每条 Route Registry 操作 | 至少一条允许与一条拒绝用例，身份覆盖与[权限矩阵](permissions.md)一致 | 已自动化（`packages/api-contract/test/permissions.test.ts` 扫描需认证路由的允许/拒绝用例并与 Registry 一致，`pnpm permissions:check` 双向校验；CI 已执行） |
+| AUTHZ-002 | PostgreSQL 集成 | 跨项目 IDOR | 其他项目成员和已移除成员均得到 404，SQL 不返回目标行 | 已自动化（`features-api.integration.test.ts` 跨项目/已移除成员 404 与 `project-member-management-api.integration.test.ts`；CI 已执行） |
+| AUTHZ-003 | Workflow 集成 | 创建项目时取消创建者 | 请求被 Schema/业务规则拒绝；创建者必为初始成员 | 已自动化（`project-bootstrap.integration.test.ts` 创建者同事务写入与仅创建者用例；CI 已执行） |
+| AUTHZ-004 | Workflow 集成 | 管理员移除普通成员身份的项目创建者 | ACTIVE 成员记录关闭；`projects.created_by` 值不变；创建者立即失去成员关系派生权限 | 已自动化（`project-member-management-api.integration.test.ts` 移除创建者：`created_by` 不变且权限消失；CI 已执行） |
+| AUTHZ-005 | Workflow 集成 | 创建者重新加入 | 新增成员历史，不覆盖之前 `joined_at/removed_at` | Required（2026-09-12 清账核对：未找到「创建者移除后重新加入」的直接用例，保持待补） |
+| AUTHZ-006 | API 集成 | 停用用户旧 Session | 所有受保护/业务路由及使用停用凭据的登录统一 401；`issueCsrfToken` 只能按匿名创建无身份预认证状态；同源 `logout` 仅清 Cookie 返回 204；其他用户不受影响 | 已自动化（`user-auth-invalidation.integration.test.ts` 与 `login.integration.test.ts` 停用用户 401 且不签发 Session；CI 已执行） |
+| AUTHZ-007 | API 集成 | 项目、模块或功能归档/恢复 | 项目成员为 403；跨项目或已移除成员为 404；管理员须完成密码与当前 TOTP 重认证并写审计 | 已自动化（`features-api.integration.test.ts` 归档/恢复与重认证、`apps/e2e/tests/project-archive.spec.ts`；CI 已执行） |
+| AUTHZ-008 | API 集成 | 管理员移除成员 | 缺少密码或当前 TOTP 重认证时拒绝；双因子齐备时只关闭成员历史并写审计 | 已自动化（`project-member-management-api.integration.test.ts` 重认证门禁与审计用例；CI 已执行） |
+| AUTHZ-009 | API 集成 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 项目成员为 403；管理员须重认证、填写原因并写审计 | 已自动化（`record-lifecycle.integration.test.ts` 含管理员重认证与恢复；CI 已执行） |
+| AUTHZ-010 | Workflow 集成 | 移除系统管理员身份的项目创建者成员记录 | ACTIVE 成员记录关闭且 `created_by` 不变；其成员权限消失，但全局管理员权限仍可访问项目 | 已自动化（`project-member-management-api.integration.test.ts` 移除系统管理员创建者分支；CI 已执行） |
+| AUTHZ-011 | Registry + API 矩阵 | ADR-023 认证安全流程 | 九个 operationId 与权限矩阵精确对应；每项覆盖允许、身份拒绝或前置状态拒绝、停用用户和受限 Session 越权；认证/受限 Session 调用 `login` 为 409，必须登出后重新建立预认证状态 | 已自动化（`permissions.test.ts` allowlist 精确相等、`validate.test.ts`、`preauth-session.integration.test.ts` 与 MFA 系列集成；CI 已执行） |
+| AUTHZ-012 | API + 投影集成 | VOID 迭代记录可见性 | 活跃成员的详情为 404，搜索及该记录全部既有/新增普通时间线项不返回；管理员可读且只有显式 VOID 搜索筛选才返回；恢复为 PUBLISHED 后成员详情、默认搜索及既有/新增时间线重新可见，Activity 不暴露原因 | 已自动化（`record-lifecycle.integration.test.ts` 搜索与时间线可见性断言；CI 已执行） |
 
 ## 幂等、版本与事务
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| IDEMP-001 | Registry CI | POST/PUT/PATCH/DELETE 默认策略 | 默认登记 `idempotencyRequired`；显式豁免同时登记原因并引用对应的 Accepted ADR | Required |
-| IDEMP-002 | API 集成 | 相同 Key、相同请求重放 | 当前认证、权限及所需高风险重认证新鲜度均通过时只执行一次并重放原状态码和脱敏响应；任一门禁失败则拒绝且不泄露已存响应 | Required |
-| IDEMP-003 | API 集成 | 相同 Key、任一语义输入不同 | body、path 参数、query、Content-Type、适用的 `If-Match` 或 Registry 声明的行为头任一不同均返回 409，不改变业务数据 | Required |
-| IDEMP-004 | PostgreSQL 并发 | 两连接使用同一 Key | 只有一个业务事务成功执行；后继读取已提交结果 | Required |
-| IDEMP-005 | PostgreSQL 并发 | 先行事务回滚 | 幂等占位随事务回滚，后继请求可重新执行 | Required |
-| IDEMP-006 | API 集成 | 幂等重放前门禁变化 | 权限被移除、用户停用、Session 失效、高风险重认证过期，或结果资源不再可读时均拒绝且不泄露原响应；覆盖创建项目后移除创建者再重放、记录变为 VOID 后普通成员重放；恢复全部门禁后才可按协议重放 | Required |
-| IDEMP-007 | API 集成 | 规范化等价请求 | 仅 query 顺序、Header 名大小写或 JSON 成员顺序不同且 Schema 解析结果相同时摘要一致 | Required |
-| IDEMP-008 | Registry CI | 幂等例外 | `securityFlow` operationId 集合与 ADR-023 allowlist 精确相等；每项声明 `idempotencyExceptionAdr`、单次消费机制和客户端恢复路径 | Required |
-| IDEMP-009 | PostgreSQL + 部署集成 | 摘要 HMAC 密钥轮换 | 当前版本由非敏感 selector 选择 `/run/secrets/idempotency_fingerprint_keyring`；缺失/空 keyring fail closed；旧记录在 30 天窗口、部署与恢复后仍可比较，清理后才退役旧 key；普通 SHA-256 不能离线验证低熵凭据 | Required |
-| IDEMP-010 | Registry CI + API/数据库集成 | 安全响应重放 | 每个 `idempotencyRequired` 路由的全部 2xx 状态均登记带版本的互斥 `body`/`noBody` 及结果授权策略；body 保存精确 Schema ref 和穷尽安全字段，noBody 保存 false + SQL NULL 且重放无 body/Content-Type；任何响应头不存储或重放；数据库拒绝 SUCCEEDED 缺失/非对象授权上下文 | Required |
-| IDEMP-011 | Registry CI + API 集成 | 幂等契约跨部署变化 | 请求 Schema、摘要字段、响应 Schema、安全字段或结果资源授权策略变化必须升级幂等契约版本并进入摘要；旧 Key 在新契约下返回 409，不按旧策略重放 | Required |
-| IDEMP-012 | API + PostgreSQL 集成 | 业务 4xx 或异常后的占位 | 校验/鉴权失败不插入占位；事务内业务 4xx、5xx 或异常回滚整个事务与 `PENDING` 行，同 Key 后续请求不会永久等待且可重新执行 | Required |
-| CONC-001 | PostgreSQL 并发 | 多聚合锁序 | 按任务、任务组、记录、遗留项 ID 升序；变化后有限次从头重试 | Required |
-| CONC-002 | API 集成 | If-Match 版本冲突 | 返回 409；无部分更新 | Required |
-| CONC-003 | PostgreSQL 并发 | 父级归档与子级写入 | 项目/模块/功能归档和代表性的子级 create/edit/publish 按父到子统一锁序串行；不能基于旧 ACTIVE 快照同时提交，且无死锁 | Required |
-| TX-001 | Application / Workflow 集成 | 任一步骤失败 | 业务、审计、该命令契约规定的通知及投影全部回滚 | Required |
-| STATE-001 | Application + PostgreSQL 集成 | 记录状态与字段不变量 | 只允许 ADR-024 三条迁移；拒绝空白原因、非法状态/字段组合和 MODULE/FEATURE 父级门禁失败；恢复只改 status、row_version、updated_at，其他聚合字段、版本、关联、外链与作废快照不变 | Required |
-| STATE-002 | API + PostgreSQL 并发 | 作废/恢复幂等与竞争 | 当前认证、管理员权限及 5 分钟双时间戳门禁仍通过时，同 Key 同摘要重放原 2xx；否则拒绝且不泄露；双 Key 并发仅一次迁移和审计；父级归档与恢复按同一父到子锁序串行；新 Key 重复操作或 If-Match 冲突为 409 | Required |
-| STATE-003 | API + 投影集成 | 作废/恢复可见性 | 业务 `status` 是唯一真相；作废同事务把 Search 与该记录全部 Activity 设为 `ADMIN_ONLY/VOID`，成员排除、管理员仅显式 VOID 搜索可见；恢复同键 UPSERT Search、恢复既有 Activity 并追加脱敏恢复事件为 `MEMBER/PUBLISHED`，均不重复、不暴露原因 | Required |
-| STATE-004 | Workflow + PostgreSQL 集成 | 任务与迭代记录一对多 | 一条记录至多关联一个同项目任务；同一任务可关联多条独立记录，完成命令本次最多发布一条但不得被历史记录阻断；按 `(project_id, task_id)` 可索引查询 | Required |
+| IDEMP-001 | Registry CI | POST/PUT/PATCH/DELETE 默认策略 | 默认登记 `idempotencyRequired`；显式豁免同时登记原因并引用对应的 Accepted ADR | 已自动化（`packages/api-contract/test/validate.test.ts` 写方法不得 `none` 与豁免理由校验；CI 已执行） |
+| IDEMP-002 | API 集成 | 相同 Key、相同请求重放 | 当前认证、权限及所需高风险重认证新鲜度均通过时只执行一次并重放原状态码和脱敏响应；任一门禁失败则拒绝且不泄露已存响应 | 已自动化（`idempotency-runner.integration.test.ts` 与 `idempotency-runner.test.ts` 重放与门禁用例；CI 已执行） |
+| IDEMP-003 | API 集成 | 相同 Key、任一语义输入不同 | body、path 参数、query、Content-Type、适用的 `If-Match` 或 Registry 声明的行为头任一不同均返回 409，不改变业务数据 | 已自动化（`idempotency-http.test.ts` 与 runner 集成用例；CI 已执行） |
+| IDEMP-004 | PostgreSQL 并发 | 两连接使用同一 Key | 只有一个业务事务成功执行；后继读取已提交结果 | 已自动化（`idempotency-runner.integration.test.ts` 并发同 Key 用例；CI 已执行） |
+| IDEMP-005 | PostgreSQL 并发 | 先行事务回滚 | 幂等占位随事务回滚，后继请求可重新执行 | 已自动化（同上：业务失败回滚 `PENDING` 用例；CI 已执行） |
+| IDEMP-006 | API 集成 | 幂等重放前门禁变化 | 权限被移除、用户停用、Session 失效、高风险重认证过期，或结果资源不再可读时均拒绝且不泄露原响应；覆盖创建项目后移除创建者再重放、记录变为 VOID 后普通成员重放；恢复全部门禁后才可按协议重放 | 已自动化（runner 单测与集成：重放授权失败、版本冲突与门禁变化；CI 已执行） |
+| IDEMP-007 | API 集成 | 规范化等价请求 | 仅 query 顺序、Header 名大小写或 JSON 成员顺序不同且 Schema 解析结果相同时摘要一致 | 已自动化（`idempotency-http.test.ts`：Header 名大小写与 query 顺序不影响摘要；CI 已执行） |
+| IDEMP-008 | Registry CI | 幂等例外 | `securityFlow` operationId 集合与 ADR-023 allowlist 精确相等；每项声明 `idempotencyExceptionAdr`、单次消费机制和客户端恢复路径 | 已自动化（`validate.test.ts` 与 `permissions.test.ts` 的 ADR-023 allowlist 精确相等；CI 已执行） |
+| IDEMP-009 | PostgreSQL + 部署集成 | 摘要 HMAC 密钥轮换 | 当前版本由非敏感 selector 选择 `/run/secrets/idempotency_fingerprint_keyring`；缺失/空 keyring fail closed；旧记录在 30 天窗口、部署与恢复后仍可比较，清理后才退役旧 key；普通 SHA-256 不能离线验证低熵凭据 | 已自动化（`idempotency-keyring.test.ts` fail closed 用例；30 天窗口与部署/恢复见审计与恢复章节；CI 已执行） |
+| IDEMP-010 | Registry CI + API/数据库集成 | 安全响应重放 | 每个 `idempotencyRequired` 路由的全部 2xx 状态均登记带版本的互斥 `body`/`noBody` 及结果授权策略；body 保存精确 Schema ref 和穷尽安全字段，noBody 保存 false + SQL NULL 且重放无 body/Content-Type；任何响应头不存储或重放；数据库拒绝 SUCCEEDED 缺失/非对象授权上下文 | 已自动化（`idempotency-response-policy.test.ts` 与 `database/test/integration/database.test.ts` 授权上下文 CHECK；CI 已执行） |
+| IDEMP-011 | Registry CI + API 集成 | 幂等契约跨部署变化 | 请求 Schema、摘要字段、响应 Schema、安全字段或结果资源授权策略变化必须升级幂等契约版本并进入摘要；旧 Key 在新契约下返回 409，不按旧策略重放 | 已自动化（runner 版本用例与响应策略测试；CI 已执行） |
+| IDEMP-012 | API + PostgreSQL 集成 | 业务 4xx 或异常后的占位 | 校验/鉴权失败不插入占位；事务内业务 4xx、5xx 或异常回滚整个事务与 `PENDING` 行，同 Key 后续请求不会永久等待且可重新执行 | 已自动化（`idempotency-runner.integration.test.ts` 业务失败回滚与可重执行；CI 已执行） |
+| CONC-001 | PostgreSQL 并发 | 多聚合锁序 | 按任务、任务组、记录、遗留项 ID 升序；变化后有限次从头重试 | 已自动化（`task-completion.integration.test.ts` 锁定并集与有限重试用例；CI 已执行） |
+| CONC-002 | API 集成 | If-Match 版本冲突 | 返回 409；无部分更新 | 已自动化（tasks/modules/features 集成测试的 `If-Match` 409 用例；CI 已执行） |
+| CONC-003 | PostgreSQL 并发 | 父级归档与子级写入 | 项目/模块/功能归档和代表性的子级 create/edit/publish 按父到子统一锁序串行；不能基于旧 ACTIVE 快照同时提交，且无死锁 | 已自动化（`modules-api.integration.test.ts` 与 `features-api.integration.test.ts` 父级归档锁序用例；CI 已执行） |
+| TX-001 | Application / Workflow 集成 | 任一步骤失败 | 业务、审计、该命令契约规定的通知及投影全部回滚 | 已自动化（`task-completion.integration.test.ts`、`tasks-api.integration.test.ts` 与 `record-lifecycle.integration.test.ts` 回滚用例；CI 已执行） |
+| STATE-001 | Application + PostgreSQL 集成 | 记录状态与字段不变量 | 只允许 ADR-024 三条迁移；拒绝空白原因、非法状态/字段组合和 MODULE/FEATURE 父级门禁失败；恢复只改 status、row_version、updated_at，其他聚合字段、版本、关联、外链与作废快照不变 | 已自动化（`record-lifecycle.integration.test.ts` 状态与字段不变量用例；CI 已执行） |
+| STATE-002 | API + PostgreSQL 并发 | 作废/恢复幂等与竞争 | 当前认证、管理员权限及 5 分钟双时间戳门禁仍通过时，同 Key 同摘要重放原 2xx；否则拒绝且不泄露；双 Key 并发仅一次迁移和审计；父级归档与恢复按同一父到子锁序串行；新 Key 重复操作或 If-Match 冲突为 409 | 已自动化（`record-lifecycle.integration.test.ts` 幂等/并发与 `If-Match` 用例；CI 已执行） |
+| STATE-003 | API + 投影集成 | 作废/恢复可见性 | 业务 `status` 是唯一真相；作废同事务把 Search 与该记录全部 Activity 设为 `ADMIN_ONLY/VOID`，成员排除、管理员仅显式 VOID 搜索可见；恢复同键 UPSERT Search、恢复既有 Activity 并追加脱敏恢复事件为 `MEMBER/PUBLISHED`，均不重复、不暴露原因 | 已自动化（`record-lifecycle.integration.test.ts` 投影可见性用例；CI 已执行） |
+| STATE-004 | Workflow + PostgreSQL 集成 | 任务与迭代记录一对多 | 一条记录至多关联一个同项目任务；同一任务可关联多条独立记录，完成命令本次最多发布一条但不得被历史记录阻断；按 `(project_id, task_id)` 可索引查询 | 已自动化（`task-completion.integration.test.ts` 历史记录不被阻断用例；CI 已执行） |
 
 ## 审计与安全
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | AUDIT-001 | PostgreSQL 并发 | 至少 100 个同 scope 并发业务事务 | 链无分叉、无序号缺口，每个成功业务事件恰有一条审计；见 [ADR-008](adr/ADR-008.md) | 已自动化（阶段 0 数据库层：100 并发事务追加同一项目链；2026-09-09 已在 F-12 `createModule` 真实业务命令上以 100 笔并发事务重跑，序号连续且无分叉，见 MOD-AUDIT-CONC-001） |
-| AUDIT-002 | PostgreSQL 并发 | 多 scope 与链头初始化竞争 | 按 UTF-8 scope 顺序加锁，无死锁或重复链头 | Required |
-| AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | 本地通过（`audit-write.integration.test.ts` 4/4，2026-09-09；GitHub Actions 待执行） |
+| AUDIT-002 | PostgreSQL 并发 | 多 scope 与链头初始化竞争 | 按 UTF-8 scope 顺序加锁，无死锁或重复链头 | Required（2026-09-12 清账核对：未找到多 scope 链头竞争的并发用例，保持待补） |
+| AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | 已自动化（`audit-write.integration.test.ts` 4/4，2026-09-09；CI 已执行） |
 | AUDIT-004 | 恢复演练 | 密钥轮换、备份与恢复 | 数据库链、链头、远端检查点和归档明细全部一致 | Required |
-| AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 本地通过（`audit-write.integration.test.ts` 轮换用例，2026-09-09；GitHub Actions 待执行） |
+| AUDIT-005 | PostgreSQL 集成 | 审计密钥惰性轮换 | keyring 当前版本高于链头时，同一事务先写 `AUDIT_KEY_ROTATED`，再按新密钥写业务事件；旧/新版本均可用各自密钥验证 HMAC，链头版本同步递增 | 已自动化（`audit-write.integration.test.ts` 轮换用例，2026-09-09；CI 已执行） |
 | SEC-001 | 权限集成 | 数据库角色 | runtime 无 DDL/原始审计 SELECT；writer 不能改历史；reader 只读 | 已自动化（阶段 0 数据库层，见 CI-008） |
-| SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；GitHub Actions 待执行） |
-| SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | 本地通过（`apps/api/test/csrf-lifecycle.integration.test.ts` 4 例：CSRF 失败不消费、重签后重试一次、单次消费、4 个上限淘汰最旧、Session 与预认证过期恢复、securityFlow 幂等例外；`apps/e2e/tests/csrf.spec.ts` 4 例：首登轮换、刷新、多标签、If-Match/CSRF/幂等键请求头；2026-09-11；GitHub Actions 待执行） |
-| SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 本地通过（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 13 例（2026-09-11 补齐项目/功能/记录关联的复合外键用例），2026-09-10；F-22 已交付 HTTP 关联接口并在服务端复用同一规范化器（证据见本文件「F-22 当前 GitHub 关联」章节）；GitHub Actions 待执行） |
-| SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required |
-| SEC-006 | API 集成 | 未匹配路由的错误契约净化 | 任意未匹配路径返回 `application/json` 的统一 404 `{ code, message, details, requestId }`，message 为固定文案且不回显 method、path 或框架内部文本，响应带 `X-Request-Id` 并保留应用 CSP，不返回框架或 Express 默认 HTML；已匹配路由不受影响；见 [ADR-026](adr/ADR-026.md) | 本地通过（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点在全局异常过滤器本身，未新增 adapter 包装；API 响应的 nosniff/CSP 由生产 Nginx `location /api/v1/` 下发，另见 F09-CSP-*；GitHub Actions 待执行） |
-| SEC-007 | 部署集成 | 数据库 Secret 文件缺失 | 生产模式 fail closed，不得回退到环境变量；缺失路径、越界路径、空值和权限不合规均拒绝连接串构造 | 本地通过（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位需 Linux 环境，Windows 本机不可复现，权限判定在函数级覆盖；compose secret 声明由 `check:deploy` 校验；GitHub Actions 待执行） |
-| SEC-008 | API + PostgreSQL 集成 | 登录爆破限流 | 登录失败按账号 + IP + 全局三层计数，任一桶达到候选阈值返回 429 并在 Argon2 前阻断；同一进程 Argon2 并发不超过候选上限；登录成功清除账号失败计数；桶维度只保存 HMAC-SHA-256 摘要 | 已自动化（单元与真实 PostgreSQL 用例已落库，待 CI 执行） |
-| SEC-009 | Application + PostgreSQL 集成 | 用户停用/改密/强退 Session 失效 | 同一事务递增 `users.auth_version`（并推进 `row_version`）后撤销该用户全部未撤销 Session；旧 Session 在下一请求因 `auth_version` 不一致或已撤销而返回 401 | 已自动化（单元与真实 PostgreSQL 用例已落库，待 CI 执行） |
+| SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 已自动化（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；CI 已执行：Browser E2E 50 passed 与 Web 镜像 CSP 校验步骤） |
+| SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | 已自动化（`apps/api/test/csrf-lifecycle.integration.test.ts` 4 例：CSRF 失败不消费、重签后重试一次、单次消费、4 个上限淘汰最旧、Session 与预认证过期恢复、securityFlow 幂等例外；`apps/e2e/tests/csrf.spec.ts` 4 例：首登轮换、刷新、多标签、If-Match/CSRF/幂等键请求头；2026-09-11；CI 已执行） |
+| SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 已自动化（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 13 例（2026-09-11 补齐项目/功能/记录关联的复合外键用例），2026-09-10；F-22 已交付 HTTP 关联接口并在服务端复用同一规范化器（证据见本文件「F-22 当前 GitHub 关联」章节）；CI 已执行） |
+| SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 管理员密码阶段显式签发受限态，绝不能因默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；用户级 enrollment generation 在 start-vs-start、start-vs-confirm 及跨 Session 竞争中只有一个条件更新成功；同一 rotation generation、验证 Session、TOTP time-step 或恢复码只能被对应操作接受一次；确认注册原子轮换为完整 Session/新 CSRF，重认证原子刷新双时间戳；恢复码仅存 Argon2id 哈希；重复 CSRF 签发允许，无效 Session 重复登出为 204；九个 operationId 的响应丢失均按 ADR-023 路径恢复 | Required（2026-09-12 清账核对：登录单次消费与 enrollment 竞争已有用例（login.service.test.ts、mfa-enrollment.integration.test.ts），其余单次消费语义分散在 SEC-003 与 SEC-010～SEC-013；ADR-023 要求的九个 operationId 逐项真库并发验证与每条响应丢失后的客户端 E2E 恢复路径未见完整证据，保持待补） |
+| SEC-006 | API 集成 | 未匹配路由的错误契约净化 | 任意未匹配路径返回 `application/json` 的统一 404 `{ code, message, details, requestId }`，message 为固定文案且不回显 method、path 或框架内部文本，响应带 `X-Request-Id` 并保留应用 CSP，不返回框架或 Express 默认 HTML；已匹配路由不受影响；见 [ADR-026](adr/ADR-026.md) | 已自动化（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点在全局异常过滤器本身，未新增 adapter 包装；API 响应的 nosniff/CSP 由生产 Nginx `location /api/v1/` 下发，另见 F09-CSP-*；CI 已执行） |
+| SEC-007 | 部署集成 | 数据库 Secret 文件缺失 | 生产模式 fail closed，不得回退到环境变量；缺失路径、越界路径、空值和权限不合规均拒绝连接串构造 | 已自动化（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位需 Linux 环境，Windows 本机不可复现，权限判定在函数级覆盖；compose secret 声明由 `check:deploy` 校验；CI 已执行） |
+| SEC-008 | API + PostgreSQL 集成 | 登录爆破限流 | 登录失败按账号 + IP + 全局三层计数，任一桶达到候选阈值返回 429 并在 Argon2 前阻断；同一进程 Argon2 并发不超过候选上限；登录成功清除账号失败计数；桶维度只保存 HMAC-SHA-256 摘要 | 已自动化（单元与真实 PostgreSQL 用例已落库；CI 已执行） |
+| SEC-009 | Application + PostgreSQL 集成 | 用户停用/改密/强退 Session 失效 | 同一事务递增 `users.auth_version`（并推进 `row_version`）后撤销该用户全部未撤销 Session；旧 Session 在下一请求因 `auth_version` 不一致或已撤销而返回 401 | 已自动化（单元与真实 PostgreSQL 用例已落库；CI 已执行） |
 | SEC-010 | API + PostgreSQL 集成 | 管理员 MFA 注册（F-02.1） | 管理员登录后显式签发 `MFA_ENROLLMENT`；`start` 按 user → factor → Session 锁序条件创建/替换 pending；`confirm` 在同一事务条件激活因子、签发 Argon2id 恢复码哈希、撤销受限 Session 并轮换为 `AUTHENTICATED` Session/新 CSRF；错误验证码不启用因子且写入持久化 MFA 限流；start-vs-start、start-vs-confirm、跨 Session 与同一 TOTP time-step 并发只有一个 2xx；数据库不保存 TOTP Secret、恢复码明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例，数据库单测 5 例与集成 13 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
 | SEC-011 | API + PostgreSQL 集成 | 管理员 MFA 验证（F-02.2） | 管理员登录后显式签发 `MFA_CHALLENGE`；`POST /auth/mfa/verify` 仅接受当前 time-step ±1 且未接受过的 TOTP；按 user → factor → Session 锁序条件验证；格式错误 422、CSRF 错误 401、非管理员 403、状态或验证码并发冲突 409；成功后同一事务将 Session 条件升级为 `AUTHENTICATED`、更新 `last_accepted_step` 并签发新 CSRF；错误验证码写入用户/IP/全局持久化限流，达到阈值 429；跨 Session 同一步长并发仅一个 2xx，通用幂等与日志不保存 TOTP/CSRF 明文 | 已自动化到本地（API 单元 47 文件 224 例，真实 PostgreSQL 集成 26 文件 118 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
 | SEC-012 | API + PostgreSQL 集成 | 管理员高风险重认证（F-02.3） | 完整管理员 Session + 密码 + 当前 TOTP time-step ±1 且未使用；同一事务原子刷新 `reauthenticated_at` 与 `mfa_verified_at` 并递增 rotation generation；错误密码/验证码返回 401 且不刷新时间戳，分别写登录/MFA 限流；MFA_CHALLENGE 受限 Session 403；同一 time-step 重放 401；达到 MFA 阈值 429 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
 | SEC-013 | API + PostgreSQL 集成 | 管理员恢复码（F-02.4） | 轮换要求完整管理员 Session 且 5 分钟内完成双因子重认证，原子消费一次性 rotation generation、失效旧 Hash 并只返回一次新码；消费仅接受 `RECOVERY_CHALLENGE` 且密码阶段已成功，原子消费恢复码、失效旧代码集并升级为完整 Session；同一 rotation generation 或恢复码并发只有一个 2xx；错误恢复码 401 并写限流；非管理员 403 | 已自动化到本地（Controller 5 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
 | SEC-014 | API + PostgreSQL 集成 | 管理员 MFA 重置（F-02.5） | 仅另一名完成 5 分钟双因子重认证的 ACTIVE 系统管理员可执行；目标必须是另一名 ACTIVE 且已启用 TOTP 的系统管理员，可用 MFA 管理员数必须大于 1；同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销目标全部 Session 并写审计；自重置/仅剩一名 MFA 管理员返回 409，非管理员目标 403，缺少重认证 403；两个管理员互相重置时只有一个成功且至少保留一名 MFA 管理员 | 已自动化到本地（Controller 9 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
-| SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 本地通过（`session-cleanup.integration.test.ts` 2 例，2026-09-09；GitHub Actions 待执行） |
+| SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 已自动化（`session-cleanup.integration.test.ts` 2 例，2026-09-09；CI 已执行） |
 
 ## 搜索、部署与恢复
 
 | ID | 阶段 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
+| SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | 已自动化（`apps/api/test/search-query.integration.test.ts` 冻结 200 条金标与 Recall@20 ≥ 90% 断言（≥180/200）；101000 行规模、Recall 189/190 与容量证据见 SEARCH-002 与 A-5 章节，CI 已执行） |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | 本地通过（2026-09-11：101000 行规模表、30 并发 × 600.8s、2,362,344 次 SQL、0 错误、P95 10.171ms / P99 13.284ms、Recall@20 189/190、行级跨项目越界 0、冷缓存 30 条单独记录；证据 [`pgroonga-capacity-report.json`](../database/poc/search-pgroonga/artifacts/pgroonga-capacity-report.json) 与本文件 A-5 章节；该门禁不进入 CI；5 年峰值模型未在设计中定稿，1.2 倍条件以上界形式记录） |
 | SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 已本地覆盖 13/13（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
-| SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；GitHub Actions 待执行） |
-| SEARCH-005 | 阶段 0 | 搜索结果「遗留问题」独立分类（F-26） | 迁移 `0006` 允许 `LEFTOVER` 投影；记录发布/修订、作废/恢复与遗留项转任务在同一事务内按最新版本快照刷新投影；`entityId` 为遗留项 ID、title 至多 500 字符、`summary` 标注处置状态与来源记录、可见性跟随父记录（PUBLISHED=MEMBER、VOID=ADMIN_ONLY）、`sourceStatus` 为遗留项状态；`GET /api/v1/search` 返回 `entityType: "LEFTOVER"` 且前端以「遗留问题」分组呈现，不再依赖父记录 rawText 命中 | 已自动化（真实 PostgreSQL 集成：`record-publication` 12 例、`record-lifecycle` 22 例、`search-api` 9 例含 LEFTOVER 分类命中与跨项目隔离；全量 API 集成 47 文件 408 例、Web 单测 58 文件 249 例、Playwright E2E 43/43，2026-09-11；GitHub Actions 待执行） |
+| SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；CI 已执行） |
+| SEARCH-005 | 阶段 0 | 搜索结果「遗留问题」独立分类（F-26） | 迁移 `0006` 允许 `LEFTOVER` 投影；记录发布/修订、作废/恢复与遗留项转任务在同一事务内按最新版本快照刷新投影；`entityId` 为遗留项 ID、title 至多 500 字符、`summary` 标注处置状态与来源记录、可见性跟随父记录（PUBLISHED=MEMBER、VOID=ADMIN_ONLY）、`sourceStatus` 为遗留项状态；`GET /api/v1/search` 返回 `entityType: "LEFTOVER"` 且前端以「遗留问题」分组呈现，不再依赖父记录 rawText 命中 | 已自动化（真实 PostgreSQL 集成：`record-publication` 12 例、`record-lifecycle` 22 例、`search-api` 9 例含 LEFTOVER 分类命中与跨项目隔离；全量 API 集成 47 文件 408 例、Web 单测 58 文件 249 例、Playwright E2E 43/43，2026-09-11；CI 已执行） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
 > 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入、
@@ -434,7 +436,7 @@ GitHub Actions 尚未对本 PR 执行。
 > `source_row_version` 防旧写；模块注入单测与真实 PostgreSQL 4 例已本地通过。
 > 本次非数据库门禁已在本地通过：lint、格式、全 workspace typecheck、单元测试、
 > 迁移/契约检查、构建、依赖边界、权限矩阵、Secret 与文档检查；`deps:audit`
-> 因本地 npm 镜像无 audit endpoint，改用公共 registry 验证为无漏洞。GitHub Actions 尚未执行。
+> 因本地 npm 镜像无 audit endpoint，改用公共 registry 验证为无漏洞。GitHub Actions 已执行（该批随 PR #68 的 CI 通过，run 34332842506）。
 >
 > 2026-09-11 阶段 4 金标扩集（C-5）：冻结金标 100→200，`GOLDEN_QUERY_VERSION=phase4-v1`（190 normal + 7 no-result + 3 edge），`assertGoldenQueryShape` 与 `apps/api/test/search-query.integration.test.ts` 召回断言同步 200 / ≥180（真实 PostgreSQL 通过）。PGroonga PoC 全流程重跑退出码 0：10 策略 `error=null`；default/bigram/ngram 系 base 1000 / scale 101000 均 190/190；`regexp-query` 182/190 仅诊断；升级 `0000-0002` → `0003-0006`（3 applied / 4 already present）；三份 artifact（`pgroonga-poc-v3` / `pgroonga-migration-v3` / `pgroonga-backup-restore-v2`）已重新生成。
 
@@ -474,7 +476,7 @@ GitHub Actions 尚未对本 PR 执行。
 | FE-011 | 单元测试 + Playwright E2E | 前端 MFA 注册、验证、恢复码与管理员重认证 | `AuthProvider` 保留受限 MFA Session，并在注册/验证/恢复码成功后轮换 CSRF Token；`LoginForm` 按安全文案映射 401/403/409/422/429；管理员账户菜单弹窗输入管理员密码与当前 TOTP 完成重认证；E2E 使用真实 TOTP 完成登录挑战与重认证 | 本地通过（Web 25 文件 63 例；Playwright 16/16；PR #63 CI 已通过） |
 | CONTRACT-001 | 契约与权限 | F-27/F-28 与用户目录路由登记 | 16 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；PR #63 CI 已通过 |
 
-后端本阶段 F-27/F-28 与用户目录相关的真实 PostgreSQL 集成共 89 例（22 文件）；前端本阶段搜索、活动、通知、项目创建、视觉迁移与 MFA 认证相关单测共 63 例（25 文件）。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成。
+后端本阶段 F-27/F-28 与用户目录相关的真实 PostgreSQL 集成共 89 例（22 文件）；前端本阶段搜索、活动、通知、项目创建、视觉迁移与 MFA 认证相关单测共 63 例（25 文件）。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成（本地时点；2026-09-12 回填：此后任务域创建/编辑/状态流转、记录作废/恢复、任务组合并与解除、外部链接和遗留项转任务等已陆续接入活动/通知写端口，实现见 apps/api/src/modules/tasks/tasks-management.service.ts、apps/api/src/modules/change-records/record-lifecycle.service.ts、apps/api/src/modules/task-groups/task-groups.service.ts 与 apps/api/src/workflows/external-link.workflow.ts、apps/api/src/workflows/leftover-task.workflow.ts）。
 >
 > 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建（含选择第二成员）→ 动态 → 搜索 → 创建者与成员通知。同一批次新增 `GET /api/v1/users` 用户目录、设计师最新公共应用壳/项目页、全局命令面板、通知弹层与活动页视觉迁移以及前端 MFA 注册、验证、恢复码与管理员重认证；活动页拆为项目选择入口和项目动态详情，通知点击直达项目动态。API 单测 47 文件 224 例、前端 25 文件 63 例、本次重跑 API 集成 22 文件 89 例、database 集成 13 例、Playwright 8/8 均本地通过；PR #63 GitHub Actions 已通过（workspace 10m2s，docs 通过）。
 
@@ -511,7 +513,7 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 
 ## F-10.1 生产镜像与部署门禁（2026-09-09）
 
-本节仅记录镜像闭环门禁的落库与验证状态，不代表真实镜像已构建或扫描通过。
+本节记录镜像闭环门禁的落库与验证状态；2026-09-12 回填：五个生产镜像（API/migration/web/db-bootstrap/ops）已由 main `4141e1d` 的 CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际构建并完成 Trivy 扫描；真实镜像 Tag/digest 绑定与签名发布清单仍属发布环节。
 
 | 场景 | 自动化入口 | 验证状态 |
 |---|---|---|
@@ -520,10 +522,10 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 | 每个服务级 secret 使用长语法且 `mode=0400`、`uid/gid` 与容器数值 user 一致、`target` 为 `/run/secrets` 直接子项 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；短语法负例被拒绝 |
 | API/Migration runtime 不保留基础镜像自带 npm/corepack | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过（新增回归校验） |
 | DB-bootstrap runtime 不保留官方 `gosu` 并升级 Debian OpenSSL 安全补丁 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过（新增回归校验） |
-| 生产 API/Migration/Web/DB-bootstrap 镜像构建 | `CI / workspace` 新增 Build production * image 步骤 | 待 CI（本机 Docker daemon 未启动，未实际构建） |
-| 生产镜像漏洞扫描 | `CI / workspace` 新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 首次实际执行因 API 镜像自带 npm HIGH 失败；修复后重跑又发现 DB-bootstrap 自带 `gosu` 与旧 OpenSSL HIGH/CRITICAL，已按 ADR-017 删除/升级后待重跑 CI |
+| 生产 API/Migration/Web/DB-bootstrap 镜像构建 | `CI / workspace` 新增 Build production * image 步骤 | CI 已通过（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 构建 API/migration/web/db-bootstrap/ops 五个镜像成功，2026-09-11） |
+| 生产镜像漏洞扫描 | `CI / workspace` 新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | CI 已通过（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个镜像的扫描全部 success；此前的 API npm HIGH 与 DB-bootstrap `gosu`/OpenSSL HIGH/CRITICAL 已按 ADR-017 修复） |
 
-本机未运行 Docker，因此镜像构建与扫描为 `Required`，不得据此宣称生产镜像已验证。
+本机当时未运行 Docker；镜像构建与扫描现已由 CI [run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 实际执行通过（五个镜像构建与扫描全部 success）。真实 Tag/digest 绑定与签名发布仍属发布环节。
 
 ## F-13 功能档案（B，2026-09-09 本地交审）
 
@@ -540,11 +542,11 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 | F13-007 | 前端 | 三方合并名称/说明/标签、同字段显式选择、错误重试、管理员原因/版本、归档恢复入口、不确定重试 Key、相似响应过期隔离 | F-13 两文件 9/9 + F-12 页面回归 7/7，共 16/16 |
 | F13-008 | Edge E2E | 模块入口→创建→详情→双页面冲突→刷新持久化；真实管理员密码/TOTP 重认证→归档→成员只读→恢复 | `features.spec.ts` 2/2，最终合跑 34.7 秒；本机 Edge，非默认 Chromium/CI |
 
-契约生成/漂移 5 个产物及 35 路由完整性通过；API/依赖包为 E2E 必要局部编译，API 测试/Web/E2E 局部类型检查通过。未执行全量构建、全仓静态检查、无关审计、全量测试及 GitHub Actions。未新增迁移；现有数据库约束与触发器未削弱。
+契约生成/漂移 5 个产物及 35 路由完整性通过；API/依赖包为 E2E 必要局部编译，API 测试/Web/E2E 局部类型检查通过。未执行全量构建、全仓静态检查、无关审计、全量测试及 GitHub Actions（本地交审时点；F-13 随后由 PR #70 合入，CI 已通过 run 34335321993）。未新增迁移；现有数据库约束与触发器未削弱。
 
 ## F-14 功能级任务（B，2026-09-09 本地交审）
 
-PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立的 test-scoped 管理员和真实 API 注册因子，避免共享 `last_accepted_step`。生产认证行为及 UI 断言不变。交付独享库上修复前顺序 3/3，修复后两轮顺序 6/6（Edge），四个独立管理员、清理后 Session/因子为 0；未声称复现 CI 原失败，修复版 Chromium/完整 CI 待执行，详见 [交审说明](f14-local-handoff.md#pr-71-交付增量mfa-测试隔离)。
+PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立的 test-scoped 管理员和真实 API 注册因子，避免共享 `last_accepted_step`。生产认证行为及 UI 断言不变。交付独享库上修复前顺序 3/3，修复后两轮顺序 6/6（Edge），四个独立管理员、清理后 Session/因子为 0；未声称复现 CI 原失败，修复版 Chromium/完整 CI 待执行（本地时点；F-14 随后由 PR #71 合入，CI 已通过 run 34342585945），详见 [交审说明](f14-local-handoff.md#pr-71-交付增量mfa-测试隔离)。
 
 具体命令和独享数据库见 [F-14 交审说明](f14-local-handoff.md)。阶段 0 未完成，本批不含 F-15/F-16/F-19。
 
@@ -602,7 +604,7 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 | 契约/权限 | 两个定向文件共 17/17，72 路由策略/权限与 5 个生成物无漂移 |
 | 浏览器持久化和入口 | Edge `record-drafts.spec.ts` 3/3（37.0 秒）：独立、FEATURE 来源、MODULE 来源；选择第二条编辑/刷新/返回任务仍 TODO 且仅初始历史。F-16 状态两路径在此前同批合跑中均通过 |
 
-首轮来源 fixture 的优先级误写 MEDIUM 导致约束拒绝，改为基线 NORMAL 后通过；首次启动测试未提供 TEST_DATABASE_URL 而 fail closed，配置后执行。首轮浏览器 FEATURE 返回链接多 `/tasks` 导致 404（合跑 4/5），修复后草稿三路径全部通过，未降低断言。未运行本批 CI/默认 Chromium、全量本地构建/测试/静态审计；F-18/F-19 尚未交付。详细复核入口见 [F-17 交审说明](f17-local-handoff.md)。
+首轮来源 fixture 的优先级误写 MEDIUM 导致约束拒绝，改为基线 NORMAL 后通过；首次启动测试未提供 TEST_DATABASE_URL 而 fail closed，配置后执行。首轮浏览器 FEATURE 返回链接多 `/tasks` 导致 404（合跑 4/5），修复后草稿三路径全部通过，未降低断言。未运行本批 CI/默认 Chromium、全量本地构建/测试/静态审计（本地时点；F-17 随后由 PR #79 合入，CI 已通过 run 34430811569）；F-18/F-19 尚未交付。详细复核入口见 [F-17 交审说明](f17-local-handoff.md)。
 
 ## F-18 正式发布与版本（2026-09-10 本地交审）
 
@@ -616,7 +618,7 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 | 内容严格 DTO、正式遗留 10000/草稿 50000、双版本头、路由/权限 | 四个契约文件 43/43；78 路由、78 操作完整性通过 |
 | 独立发布→修订→解决遗留→刷新→历史比较→搜索；已完成 FEATURE 来源发布；F-17 三路径 | Edge 两文件五路径 5/5（54.5 秒） |
 
-已通过受影响 API/契约编译及 API 测试/Web/E2E 局部类型检查。首次无遗留项 HTTP 发布因幂等安全字段遗漏 null 分支返回 500，补全后回归通过；未弱化测试。首次 Edge 期间生成客户端引发 Vite 热更新鉴权上下文错误日志，业务 2/2；停止源文件改动后的五路径合跑无该错误。未执行本批 CI、默认 Chromium、全仓静态/构建/测试/审计；F-19/F-20 入口未交付。完整命令、人工确认口径与风险见 [F-18 交审说明](f18-local-handoff.md)。
+已通过受影响 API/契约编译及 API 测试/Web/E2E 局部类型检查。首次无遗留项 HTTP 发布因幂等安全字段遗漏 null 分支返回 500，补全后回归通过；未弱化测试。首次 Edge 期间生成客户端引发 Vite 热更新鉴权上下文错误日志，业务 2/2；停止源文件改动后的五路径合跑无该错误。未执行本批 CI、默认 Chromium、全仓静态/构建/测试/审计（本地时点；F-18 随后由 PR #82 合入，CI 已通过 run 34443392933）；F-19/F-20 入口未交付。完整命令、人工确认口径与风险见 [F-18 交审说明](f18-local-handoff.md)。
 
 ## F-19 完成并发布组合事务（2026-09-10 本地交审）
 
@@ -630,14 +632,14 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 | 无记录完成、内联必填/失败同 Key、明确草稿选择及409最新全文确认，原草稿/正式历史回归 | 五个 Web 文件 20/20 |
 | 严格请求/DTO、路由和权限、既有契约回归 | 五个契约文件 45/45，80 路由/操作与5个生成物无漂移通过 |
 
-API/契约仅作 E2E 所需编译，API 测试/Web/E2E 局部类型检查通过。必要跨域检查 466 源文件无循环/越界，前端144模块边界通过。F16–F19浏览器四文件最终合跑 10/10（2.0分钟），详见 [F-19 交审说明](f19-local-handoff.md)。首轮草稿返回详情的测试 URL 缺 taskId 导致超时；F17旧按钮/提示入口断言在首次合跑两例失败，已同步当前实际流程及保留草稿直达，不降低保存草稿后任务仍待办、历史仍一条的业务断言。未运行全仓静态/构建/测试/无关审计、默认Chromium或本批CI；F20/F21入口未实现。
+API/契约仅作 E2E 所需编译，API 测试/Web/E2E 局部类型检查通过。必要跨域检查 466 源文件无循环/越界，前端144模块边界通过。F16–F19浏览器四文件最终合跑 10/10（2.0分钟），详见 [F-19 交审说明](f19-local-handoff.md)。首轮草稿返回详情的测试 URL 缺 taskId 导致超时；F17旧按钮/提示入口断言在首次合跑两例失败，已同步当前实际流程及保留草稿直达，不降低保存草稿后任务仍待办、历史仍一条的业务断言。未运行全仓静态/构建/测试/无关审计、默认Chromium或本批CI（本地时点；F-19 随后由 PR #85 合入，CI 已通过 run 34449977136）；F20/F21入口未实现。
 
 F-19 旧状态 API 兼容回归：两范围旧 COMPLETE 的响应与相关作者通知、原草稿不变；MAIN/ACTIVE SOURCE 成功、HISTORICAL 当前执行与变更后重放拒绝；旧 1.0.0 Key 在 2.0.0 下 409；REOPEN/CANCEL/RESTORE 及同 Key 重放保持原 DTO；新旧完成竞态仅一条成功、通知故障全部回滚。新增 task-completion 真库 30/30；原 tasks-api 41/41（测试模块同步实际兼容 Controller，原断言保留）。契约五文件 46/46，指纹保留 1.0.0 并追加 2.0.0。
 ## F-20 遗留项转换定向验证（2026-09-10）
 
 新增leftover-task.integration.test.ts 21例，覆盖两范围成功/原文与版本不变/双向来源；MODULE混合及全归档影响继承；版本/ID/成员/伪造输入；三层真实父级归档；7种不同阶段故障整体回滚；HTTP同Key重放/不同Key并发唯一/当前撤权与已有任务引用保护；CONVERTED修订/清空/回填稳定链接和重放；ACTIVE解决/回填同ID；两范围归档锁等待及功能先于记录的锁序；预览与任务来源GET隔离。与record-publication、published-records、tasks-api真库四文件82/82。
 
-ConvertLeftoverTask/PublishedRecordsView/TasksPanel前三端回归13/13，含未确定失败同Key重试、409显式最新预览确认、刷新再次失败仍阻止旧提交；契约leftover-task/published-records/permissions/validate 41/41，83条路由/权限及5生成物漂移通过。现有CSP build+preview Edge F20三例+F18两例5/5（51.3秒）；浏览器之后的刷新失败状态强化由Web回归验证，未重复E2E。完整21场景、实际命令及失败修复见[F-20交审说明](f20-local-handoff.md)。未声称本批GitHubCI、全仓静态/全量构建或无关审计通过。
+ConvertLeftoverTask/PublishedRecordsView/TasksPanel前三端回归13/13，含未确定失败同Key重试、409显式最新预览确认、刷新再次失败仍阻止旧提交；契约leftover-task/published-records/permissions/validate 41/41，83条路由/权限及5生成物漂移通过。现有CSP build+preview Edge F20三例+F18两例5/5（51.3秒）；浏览器之后的刷新失败状态强化由Web回归验证，未重复E2E。完整21场景、实际命令及失败修复见[F-20交审说明](f20-local-handoff.md)。未声称本批GitHubCI、全仓静态/全量构建或无关审计通过（本地时点；F-20 随后由 PR #88 合入，CI 已通过 run 34456720227）。
 
 F-20截止时间审核增量：ConvertLeftoverTask单文件4/4，覆盖本地时间→UTC、失败/409保留、同Key与改时间换Key、清空null和非法日期；现有FEATURE Edge增加截止时间落库回显检查，单例1/1（16.1秒）。本次仅前端增量，未重复真库/契约或扩大E2E范围。
 
@@ -652,11 +654,11 @@ F-20截止时间审核增量：ConvertLeftoverTask单文件4/4，覆盖本地时
 | 前端原因必填、If-Match、失败保留原因/Key、409加载最新状态后再次明确确认、双因子入口 | RecordLifecycleButton.test.tsx |
 | 管理员真实登录/重认证→作废→VOID发现/历史→恢复→成员旧版本与搜索重新可读 | record-lifecycle.spec.ts |
 
-数量、实际运行结果与首轮失败修复记录以 [F-21 交审说明](f21-local-handoff.md) 为准；未执行全仓静态检查、额外全量构建或本批 GitHub CI。
+数量、实际运行结果与首轮失败修复记录以 [F-21 交审说明](f21-local-handoff.md) 为准；未执行全仓静态检查、额外全量构建或本批 GitHub CI（本地时点；F-21 随后由 PR #91 合入，CI 已通过 run 34462058350）。
 
 F-21父审核增量：RecordLifecycleButton新增409→刷新500→关闭重开→再次网络失败→刷新成功→显式确认新版本/Key回归，先红后绿，单文件4/4（3.04秒）；独立needsRefresh只有成功加载才解除，失败/关窗不能启用旧提交。父协调独立真库22/22、契约四文件42/42，数据库已再次核对目录后停库。详见F21交审增量，未重复数据库/E2E/构建。
 
-F-21 组件侧修复增量（2026-09-11，issue #94）：RecordLifecycleButton 的确认按钮此前由 busy 驱动 antd loading，`useDelayState` 复位窗口内 `ant-btn-loading` 类仍保留（按钮此时已 enabled），而 antd `handleClick` 以 `innerLoading` 提前 return 静默吞掉点击；同一窗口内 loading 图标还把可访问名拼成「loading 确认作废记录」。修复：确认按钮显式设置固定 aria-label（记录动作名），可访问名不再随 loading 漂移；测试新增确定性回归 keeps the confirm accessible name stable while a reload is pending（手动挂起 reload Promise），修复前确定性红灯（TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "确认作废记录"），并把 8 处确认点击统一经 clickConfirm 等待 loading 类消失后再点击。证据：单文件 5/5 连续 30 次运行 0 失败；反事实（临时换回 HEAD 组件）确定性红灯后还原；`pnpm --filter @inpulse/web test:unit` 58 文件 248 例，`pnpm typecheck`（6 项目）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（193 模块 870 依赖）、`pnpm check:docs`（70 个 Markdown）与 `pnpm check:secrets`（844 文件）通过。未放宽断言、未 skip；未运行 `pnpm test:e2e` 与集成/数据库测试（无后端与行为变化，E2E 由 CI 覆盖）。
+F-21 组件侧修复增量（2026-09-11，issue #94）：RecordLifecycleButton 的确认按钮此前由 busy 驱动 antd loading，`useDelayState` 复位窗口内 `ant-btn-loading` 类仍保留（按钮此时已 enabled），而 antd `handleClick` 以 `innerLoading` 提前 return 静默吞掉点击；同一窗口内 loading 图标还把可访问名拼成「loading 确认作废记录」。修复：确认按钮显式设置固定 aria-label（记录动作名），可访问名不再随 loading 漂移；测试新增确定性回归 keeps the confirm accessible name stable while a reload is pending（手动挂起 reload Promise），修复前确定性红灯（TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "确认作废记录"），并把 8 处确认点击统一经 clickConfirm 等待 loading 类消失后再点击。证据：单文件 5/5 连续 30 次运行 0 失败；反事实（临时换回 HEAD 组件）确定性红灯后还原；`pnpm --filter @inpulse/web test:unit` 58 文件 248 例，`pnpm typecheck`（6 项目）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（193 模块 870 依赖）、`pnpm check:docs`（70 个 Markdown）与 `pnpm check:secrets`（844 文件）通过。未放宽断言、未 skip；未运行 `pnpm test:e2e` 与集成/数据库测试（无后端与行为变化，E2E 由 CI 覆盖；PR #100 的 CI 已通过 run 34525398751）。
 
 ## F-22 当前 GitHub 关联（2026-09-10 本地实施）
 
@@ -669,7 +671,7 @@ F-21 组件侧修复增量（2026-09-11，issue #94）：RecordLifecycleButton �
 | 前端未知失败同Key、409刷新失败与关闭重开不绕过、相邻五页面 | ExternalLinksPanel等5文件27/27 |
 | 真实UI四类目标、多链接、Release/重复/危险host、刷新/解除、新窗口属性、草稿到发布/修订/旧版本/搜索 | external-links.spec.ts Edge最终2/2（23.2秒） |
 
-URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成物漂移通过，48个变更源码Prettier API check与局部类型通过。此前SEC-004条目的“外部链接HTTP未交付”属于旧阶段记录，本补充提供本批实际交付证据。未运行本批GitHub CI、全仓静态、全量测试或额外全量构建；详细失败历史/命令/端口见 [F-22 交审说明](f22-local-handoff.md)。
+URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成物漂移通过，48个变更源码Prettier API check与局部类型通过。此前SEC-004条目的“外部链接HTTP未交付”属于旧阶段记录，本补充提供本批实际交付证据。未运行本批GitHub CI、全仓静态、全量测试或额外全量构建（本地时点；F-22 随后由 PR #93 合入，CI 已通过 run 34471109176）；详细失败历史/命令/端口见 [F-22 交审说明](f22-local-handoff.md)。
 
 ### F-22 父审核增量（2026-09-10 18:36）
 
@@ -691,7 +693,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | F-29 交互与容错：最近迭代行与「查看全部」进入记录页、遗留问题行与「进入遗留问题」进入问题页、空态、adapter 错误态、项目错误重试 | `ProjectOverviewPageView.test.tsx` 7 例 |
 | F-29 页面层：按路由 projectId 读取项目与概览、非法 projectId 错误态、遗留问题跳转、返回项目列表 | `ProjectOverviewPage.test.tsx` 4 例 |
 
-本地实际执行：`pnpm --filter @inpulse/web exec vitest run src/features/project-overview src/pages/project-overview` 3 文件 14/14；`pnpm --filter @inpulse/web test:unit` 48 文件 195/195；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/web build`、变更目录 ESLint 与 `pnpm check:frontend:boundaries`（167 模块）通过；2026-09-10 截图对比迁移后重跑定向 `src/features/my-tasks src/features/project-overview src/pages/tasks` 6 文件 45/45、`pnpm lint` 与 `pnpm format:check` 通过。rebase 到 `origin/main` `5087f0a` 后重跑上述门禁：`pnpm --filter @inpulse/web test:unit` 49 文件 199/199（含主线 F-21 新增用例）、`pnpm check:frontend:boundaries`（169 模块 753 依赖）、`pnpm check:docs`（68 个 Markdown）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）与 `pnpm --filter @inpulse/web build` 通过。未运行 API/集成/数据库测试（无后端改动）、`pnpm test:e2e`（骨架路由尚无 E2E）与 GitHub Actions。骨架数据不代表已实现能力；F-32 补充字段（priority/dueAt/completedAt/description/creatorId）与 F-29 统计口径等待 A 对 C 域提案的裁定。
+本地实际执行：`pnpm --filter @inpulse/web exec vitest run src/features/project-overview src/pages/project-overview` 3 文件 14/14；`pnpm --filter @inpulse/web test:unit` 48 文件 195/195；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/web build`、变更目录 ESLint 与 `pnpm check:frontend:boundaries`（167 模块）通过；2026-09-10 截图对比迁移后重跑定向 `src/features/my-tasks src/features/project-overview src/pages/tasks` 6 文件 45/45、`pnpm lint` 与 `pnpm format:check` 通过。rebase 到 `origin/main` `5087f0a` 后重跑上述门禁：`pnpm --filter @inpulse/web test:unit` 49 文件 199/199（含主线 F-21 新增用例）、`pnpm check:frontend:boundaries`（169 模块 753 依赖）、`pnpm check:docs`（68 个 Markdown）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）与 `pnpm --filter @inpulse/web build` 通过。未运行 API/集成/数据库测试（无后端改动）、`pnpm test:e2e`（骨架路由尚无 E2E）与 GitHub Actions（PR #92 的 CI 后续已通过，run 34473214899）。骨架数据不代表已实现能力；F-32 补充字段（priority/dueAt/completedAt/description/creatorId）与 F-29 统计口径等待 A 对 C 域提案的裁定。
 
 
 ## C 域聚合读 R-1 ~ R-4 契约、后端与 F-29 / F-32 接线（C，2026-09-11 本地落库，PR #97）
@@ -758,7 +760,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 两条均未退化为顺序扫描，现有索引可支撑，无需新索引（补索引属迁移，按裁决 §10.6 另行人工评审）。
 
-本地实际执行（2026-09-11）：`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、API `test:unit` 66 文件 343 例、API `test:integration` 47 文件 407 例（真实 PostgreSQL）、`pnpm --filter @inpulse/web test` 58 文件 248 例、`pnpm db:test` 2 文件 20 例、`pnpm db:migrations:check`（6 个迁移）、`pnpm check:secrets`（855 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test`、`pnpm check:deps`（579 文件）与 `pnpm check:frontend:boundaries` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。未运行：`pnpm test:e2e`（本轮未改 UI 页面行为）、`pnpm test:search:db` / `pnpm test`（要求 `max_connections >= 150`，按既定决定未纳入 CI）、GitHub Actions。前端适配器对新增字段的接线与降级项清零属 C 域交付（裁决 §10.5）；本轮仅把 C 侧测试夹具补到类型所需字段，未改适配器行为。
+本地实际执行（2026-09-11）：`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、API `test:unit` 66 文件 343 例、API `test:integration` 47 文件 407 例（真实 PostgreSQL）、`pnpm --filter @inpulse/web test` 58 文件 248 例、`pnpm db:test` 2 文件 20 例、`pnpm db:migrations:check`（6 个迁移）、`pnpm check:secrets`（855 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test`、`pnpm check:deps`（579 文件）与 `pnpm check:frontend:boundaries` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。未运行：`pnpm test:e2e`（本轮未改 UI 页面行为）、`pnpm test:search:db` / `pnpm test`（要求 `max_connections >= 150`，按既定决定未纳入 CI）、GitHub Actions（PR #102 的 CI 后续已通过，run 34555834580）。前端适配器对新增字段的接线与降级项清零属 C 域交付（裁决 §10.5）；本轮仅把 C 侧测试夹具补到类型所需字段，未改适配器行为。
 
 ## F-29 / F-32 第二轮字段接线与降级清零（C，2026-09-11 本地落库，工作书 C-2）
 
@@ -774,7 +776,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 64 文件 293 例；`pnpm test:unit`（database 15、api-contract 89、canonical-json 5、web 293、api 346、ops 36）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 个 workspace 项目）、`pnpm build`、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环无越界）、`pnpm check:frontend:boundaries`（207 模块 946 依赖）、`pnpm check:deploy:test`、`pnpm check:secrets`（918 文件）、`pnpm check:docs` 通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 无已知漏洞。全量 `pnpm test:e2e` 45/45（约 6.1 分钟；同期并行线程的 `project-archive.spec.ts` 当时尚未完成、未计入本次 45/45，该文件已随 C-6 交付，见 F-06 段 `F06-ARCHIVE-E2E-001`）。
 
-排障记录：本地 `app` 库缺 `0006_leftover_search_entity.sql`（PR #104 引入）导致所有带遗留内容的记录发布返回 500 `INTERNAL_ERROR`（`search_projection_entity_type_check` 不含 `LEFTOVER`）；以 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app` 执行 `pnpm db:migrate` 应用 0006 后，原先稳定失败的 9 例复跑 10/10 通过。该问题是本地环境迁移滞后，与 C-2 改动无关（CI 一次性建库执行全部迁移）。未运行：GitHub Actions（本批尚未推送 / 开 PR）、`pnpm test:integration` 与 `pnpm test:search:db`（无后端与搜索改动；后者另要求 `max_connections >= 150`，按既定决定未纳入 CI）、`pnpm db:test` / `pnpm test`（同上）。新增 / 更新的 E2E 断言需非作者人工评审。
+排障记录：本地 `app` 库缺 `0006_leftover_search_entity.sql`（PR #104 引入）导致所有带遗留内容的记录发布返回 500 `INTERNAL_ERROR`（`search_projection_entity_type_check` 不含 `LEFTOVER`）；以 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app` 执行 `pnpm db:migrate` 应用 0006 后，原先稳定失败的 9 例复跑 10/10 通过。该问题是本地环境迁移滞后，与 C-2 改动无关（CI 一次性建库执行全部迁移）。未运行：GitHub Actions（本地时点；PR #119 的 CI 后续已通过，run 34579633422）、`pnpm test:integration` 与 `pnpm test:search:db`（无后端与搜索改动；后者另要求 `max_connections >= 150`，按既定决定未纳入 CI）、`pnpm db:test` / `pnpm test`（同上）。新增 / 更新的 E2E 断言需非作者人工评审。
 
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
@@ -789,9 +791,9 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人 ID 必须正整数、`from/to` 由 `datetime-local` 换算为带时区 ISO，`from >= to` 与非法 ID 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-11） |
 | F08-READ-WEB-002 | 前端单元（jsdom） | 重认证与错误映射 | 403 `ADMIN_REAUTH_REQUIRED` 自动打开管理员安全验证，成功后重新读取并提示；401/403/422/429 与未知失败映射为安全文案、不泄露服务端 `message`；行内「原始快照」展示 `eventPayload` JSON、前后哈希与请求元数据；`/audit` 路由 `requiresAdmin` 且侧栏入口仅管理员可见（`AppLayout.test.tsx`） | 同上 |
 
-本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 尚未执行。
+本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 已通过（PR #106，run 34560879433）。
 
-B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 66 文件 310 例通过（新增审计查询 6 例与审计页 8 例，含页内重认证与游标分页）；未运行 `pnpm test:e2e`（本机无 PostgreSQL/Docker），`/audit` 浏览器 E2E 待补。
+B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 66 文件 310 例通过（新增审计查询 6 例与审计页 8 例，含页内重认证与游标分页）；未运行 `pnpm test:e2e`（本机无 PostgreSQL/Docker；PR #124 的 CI 已通过 run 34586112012，含 Browser E2E），`/audit` 浏览器 E2E 待补。
 
 ## F-08 审计远端归档（A，2026-09-11 本地落库）
 
@@ -807,7 +809,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 | F08-ARCHIVE-INT-003 | PostgreSQL | 归档角色最小权限 | `audit_archive_writer` 可读 `app.audit_logs` 与 `app.audit_chain_heads`；INSERT/UPDATE/DELETE 与 `SET ROLE app_owner` 均 42501 | 同上 |
 | DEPLOY-005 | 上线前（静态门禁） | 审计归档调度与 Runbook | `deploy/backup/` 交付 `audit-archivectl.sh`、两个 service/timer 与 `audit-archive.env.example`，`docs/runbooks/audit-archive.md` 交付操作步骤；`pnpm check:deploy:test` 校验 `--profile operations run --rm audit-archive`、`flock`、`--confirm-go-live`、每小时检查点与每日 00:20 导出节奏、`TimeoutStartSec`、`OnFailure` 告警与敏感键 `*_FILE` 化 | 本地通过（`pnpm check:deploy:test` 退出码 0，2026-09-11；真实 systemd 安装与真实 WORM 投递未运行） |
 
-本地实际执行（2026-09-11）：`pnpm --filter @inpulse/ops test:unit` 7 文件 36 例、`pnpm --filter @inpulse/ops test:integration` 4/4（真实 PostgreSQL 18.6）；`pnpm check:deploy:test`（5 image refs）与 `pnpm check:deps`（604 源文件）通过。未运行：真实 S3/Object-Lock 端点联调、真实 systemd 安装、GitHub Actions（推送后由 CI 执行）。
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/ops test:unit` 7 文件 36 例、`pnpm --filter @inpulse/ops test:integration` 4/4（真实 PostgreSQL 18.6）；`pnpm check:deploy:test`（5 image refs）与 `pnpm check:deps`（604 源文件）通过。未运行：真实 S3/Object-Lock 端点联调、真实 systemd 安装、GitHub Actions（PR #107 的 CI 已通过，run 34564754475）。
 
 ## F-20 遗留问题页与任务中心聚合组区块（C，2026-09-11 本地落库）
 
@@ -828,7 +830,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 
 本地实际执行（2026-09-11，含合并 `origin/main` `d737035` 与编号顺延后）：`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（含新增 `apps/ops` 与 `packages/canonical-json`）、`pnpm check:deps`（631 文件无环）、`pnpm check:frontend:boundaries`（207 模块 / 946 依赖）、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:secrets`（919 文件）、`pnpm check:docs`（75 个 Markdown）、`pnpm check:deploy:test` 全部通过；公共 registry `pnpm audit --audit-level=high` 无已知漏洞。`pnpm test:unit`：database 15、api-contract 89、canonical-json 5、web 64 文件 291 例、api 67 文件 346 例、ops 7 文件 36 例；`pnpm test:integration`（与 CI 同构的新建库，合并 #107 前）：database 26/26、apps/api 49 文件 425 例；`pnpm test:e2e`（合并 #107 前）全量三次 42/45、43/45、44/45；合并 #107 后的整树由 CI 覆盖。
 
-未运行 / 已知偏差：① 本 PR 的 GitHub Actions 尚未执行；② 新增 E2E 用例与新增测试需非作者人工评审；③ 旧本地长跑库在整库全量集成时出现随机单文件 500，根因定位为客户端计算的过期 / 消费时间戳与 PostgreSQL `now()` 的毫秒级时钟抖动触发 `idempotency_records_retention_check` 与 `preauth_sessions_consumed_at_check` 的边界值，重复复跑不复现；换用与 CI 同构的新建库后两次全量 410/410 通过，该现象与本 PR 改动无关，但 CI 与本地时钟源差异值得后续确认；④ 旧本地库另有 `entityId` 整型溢出与项目编号序列耗尽等数据累积问题（非代码缺陷），不作为验收基线。⑤ 本机全量 `pnpm test:e2e` 三次运行各出现 1～3 个用例失败（42/45、43/45、44/45），失败集合每次不同且全部落在本批未改动的既有用例（features / task-status / leftover-task / record-publishing / search），单独重跑与差分重跑全部通过；⑥ 本机 `apps/web` 单测两次运行各出现 1 例超时抖动（防抖与弹窗用例，失败用例每次不同、单独重跑通过）。⑤⑥ 均判定为本机环境时延抖动（本机同时运行其它高负载桌面应用），非本批回归；CI 以 `retries: 1` 运行。
+未运行 / 已知偏差：① 本 PR 的 GitHub Actions 已通过（PR #108，run 34566748968 / 34566748947）；② 新增 E2E 用例与新增测试需非作者人工评审；③ 旧本地长跑库在整库全量集成时出现随机单文件 500，根因定位为客户端计算的过期 / 消费时间戳与 PostgreSQL `now()` 的毫秒级时钟抖动触发 `idempotency_records_retention_check` 与 `preauth_sessions_consumed_at_check` 的边界值，重复复跑不复现；换用与 CI 同构的新建库后两次全量 410/410 通过，该现象与本 PR 改动无关，但 CI 与本地时钟源差异值得后续确认；④ 旧本地库另有 `entityId` 整型溢出与项目编号序列耗尽等数据累积问题（非代码缺陷），不作为验收基线。⑤ 本机全量 `pnpm test:e2e` 三次运行各出现 1～3 个用例失败（42/45、43/45、44/45），失败集合每次不同且全部落在本批未改动的既有用例（features / task-status / leftover-task / record-publishing / search），单独重跑与差分重跑全部通过；⑥ 本机 `apps/web` 单测两次运行各出现 1 例超时抖动（防抖与弹窗用例，失败用例每次不同、单独重跑通过）。⑤⑥ 均判定为本机环境时延抖动（本机同时运行其它高负载桌面应用），非本批回归；CI 以 `retries: 1` 运行。
 
 契约编号（已按建议顺延落库）：A 于 2026-09-11 的第二轮裁决（[A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10）把 **R-5 定义为 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）**，并已由 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库。本批新增的两条路由原按 R-5 / R-6 标注，与已冻结编号冲突；现按建议顺延为 **R-6 `listLeftoverItems`（`GET /api/v1/leftover-items`）** 与 **R-7 `listTaskGroups`（`GET /api/v1/task-groups`）**，路由 summary、Schema Registry 描述、实现注释与引用测试均已同步，冲突编号不再存在。
 
@@ -843,11 +845,11 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 | B1-CONTRACT-001 | 契约 | 分页参数与 envelope | `RecordListQuery` / `RecordDraftListQuery` 接受 `cursor`+`limit`（字符串 “20” 归一为 20）并拒绝 0、101、非整数、超长游标与未知字段；`ReadableRecordPage` / `RecordDraftPage` 严格校验 `items`/`nextCursor`/`hasMore`，缺字段、空 `nextCursor`、未知字段均拒绝 | 本地通过（`packages/api-contract/test/published-records.test.ts`、`test/record-drafts.test.ts`；契约 15 文件 93 例通过） |
 | B1-API-UNIT-001 | 单元 | 游标编码、解码与错误映射 | 第 1 页以本页最后一条位置编码 `nextCursor`，第 2 页以其为排他 keyset 边界；篡改、跨 actor、跨项目、跨命名空间 422 `INVALID_CURSOR`；无权限项目先 404 且不按游标状态区分；成员请求 VOID 列表 404；`limit` 1..100 透传、缺省 20 | 本地通过（`apps/api/test/record-list-pagination.test.ts` 4 例） |
 | B1-WEB-001 | 前端单元 | 「加载更多」与签名游标 | 已发布记录与草稿列表点击「加载更多」后用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过（`apps/web/src/features/published-records/PublishedRecordsView.test.tsx`、`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
-| B1-INT-001 | PostgreSQL 集成 | keyset 不重不漏与游标校验 | 3 条草稿 / 正式记录以 `limit=2` 分两页取回：页内顺序为 `created_at DESC,id DESC` / `published_at DESC,id DESC`，两页无重叠无遗漏，`hasMore` 由 true 翻转为 false 且第二页 `nextCursor` 为 null；跨项目游标与损坏游标 422 `INVALID_CURSOR` | 已落库待 CI（`apps/api/test/record-drafts.integration.test.ts`、`published-records.integration.test.ts`；本机无 PostgreSQL 实例与 Docker，未运行） |
+| B1-INT-001 | PostgreSQL 集成 | keyset 不重不漏与游标校验 | 3 条草稿 / 正式记录以 `limit=2` 分两页取回：页内顺序为 `created_at DESC,id DESC` / `published_at DESC,id DESC`，两页无重叠无遗漏，`hasMore` 由 true 翻转为 false 且第二页 `nextCursor` 为 null；跨项目游标与损坏游标 422 `INVALID_CURSOR` | CI 已通过（PR #114，run 34571987936；本机当时无 PostgreSQL 实例与 Docker，用例由 CI 首次执行） |
 
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（公共 registry 高等级审计无已知漏洞）均通过；lint 同时暴露并修复了「分页游标列被透传进严格响应 Schema」的缺陷。
 
-未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，两个集成文件可正常收集（24 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed，新增的 B1-INT-001 用例需由 CI 首次执行；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI，脚本报 `spawnSync docker ENOENT`，与本次改动无关，故 `pnpm check` 在该步骤中断；④ 本分支 GitHub Actions 尚未执行；⑤ 新增集成用例与前端「加载更多」用例需非作者人工评审。
+未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，两个集成文件可正常收集（24 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed，新增的 B1-INT-001 用例已由 CI 首次执行通过（PR #114）；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI，脚本报 `spawnSync docker ENOENT`，与本次改动无关，故 `pnpm check` 在该步骤中断；④ 本分支 GitHub Actions 已通过（PR #114 `3ce6773`，CI run 34571987936 / Documentation run 34571987921）；⑤ 新增集成用例与前端「加载更多」用例需非作者人工评审。
 
 ## B-7 记录侧发布计数映射（D-1 前置，2026-09-11 本地落库）
 
@@ -855,13 +857,13 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| B7-INT-001 | PostgreSQL 集成 | 计数口径与范围 | 同一任务 2 条 PUBLISHED 记录（其中 1 条含第 2 版）→ `count = 2`；仅 VOID / 仅草稿 / 无记录任务缺席（消费端补 0）；跨项目任务只在传入该项目 ID 时返回；空 `projectIds` / 空 `taskIds` 短路且不发出 SQL；越界 `taskIds`（超上限、非正整数）抛 `invalid-task-ids` 且不发出 SQL | 已落库待 CI（`apps/api/test/aggregate-read-ports.integration.test.ts`；本机无 PostgreSQL 实例与 Docker，未运行） |
-| B7-PLAN-001 | PostgreSQL 集成 | EXPLAIN (ANALYZE, BUFFERS) | R-3「先过滤后分页」SQL 与计数 SQL 均命中 `change_records` 既有索引（`change_records_project_task_idx` / `change_records_project_status_idx`），无 `Seq Scan on change_records` 与 `Seq Scan on tasks`；证明计数未破坏先过滤后分页、不需要新增迁移 | 已落库待 CI（同上） |
+| B7-INT-001 | PostgreSQL 集成 | 计数口径与范围 | 同一任务 2 条 PUBLISHED 记录（其中 1 条含第 2 版）→ `count = 2`；仅 VOID / 仅草稿 / 无记录任务缺席（消费端补 0）；跨项目任务只在传入该项目 ID 时返回；空 `projectIds` / 空 `taskIds` 短路且不发出 SQL；越界 `taskIds`（超上限、非正整数）抛 `invalid-task-ids` 且不发出 SQL | CI 已通过（PR #116，run 34574310447；本机当时无 PostgreSQL 实例与 Docker，用例由 CI 首次执行） |
+| B7-PLAN-001 | PostgreSQL 集成 | EXPLAIN (ANALYZE, BUFFERS) | R-3「先过滤后分页」SQL 与计数 SQL 均命中 `change_records` 既有索引（`change_records_project_task_idx` / `change_records_project_status_idx`），无 `Seq Scan on change_records` 与 `Seq Scan on tasks`；证明计数未破坏先过滤后分页、不需要新增迁移 | CI 已通过（PR #116，run 34574310447） |
 | B7-API-UNIT-001 | 单元 | R-3 服务消费计数映射 | `MyTasksQueryService.list` 以本页 `taskIds` 调用 `countPublishedByTask(tx, pageProjectIds, taskIds)`；有条目 → `hasPublishedRecord: true`，缺席 → `false` | 本地通过（`apps/api/test/aggregate-read.service.test.ts`，22 例） |
 
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（无已知漏洞）均通过。
 
-未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，`apps/api/test/aggregate-read-ports.integration.test.ts` 可正常收集（17 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed；B7-INT-001 与 B7-PLAN-001 需由 CI 首次执行（EXPLAIN 断言依赖真库计划形状）；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI（`spawnSync docker ENOENT`），与本次改动无关；④ 本分支 GitHub Actions 尚未执行；⑤ 新增真库用例需非作者人工评审；⑥ A-7 未落库前 C-1 不得以条数实现标记（裁决 §11.6）。
+未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，`apps/api/test/aggregate-read-ports.integration.test.ts` 可正常收集（17 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed；B7-INT-001 与 B7-PLAN-001 已由 CI 首次执行通过（PR #116，EXPLAIN 断言依赖真库计划形状）；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI（`spawnSync docker ENOENT`），与本次改动无关；④ 本分支 GitHub Actions 已通过（PR #116 `3b5fe90`，run 34574310447 / 34574310178）；⑤ 新增真库用例需非作者人工评审；⑥ A-7 未落库前 C-1 不得以条数实现标记（裁决 §11.6）。
 
 ## A-7 R-3 / R-5 记录标记扩展（D-1，2026-09-11 本地落库）
 
@@ -877,7 +879,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 
 本地实际执行（2026-09-11，本机 PostgreSQL 18.6 + PGroonga，`127.0.0.1:55436`）：`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（web 64 文件 293 例、api 68 文件 351 例、ops 8 文件 52 例，其余 workspace 通过）、`pnpm --filter @inpulse/api test:integration`（49 文件 428 例）均通过。
 
-未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② `pnpm test:e2e` 未运行（本次未改前端行为）；③ 前端消费（F-25 步骤 3 徽章与「查看主任务」）属 C-1，仍待落地；④ 新增真库用例与 R-5 破坏性契约变更需非作者人工评审。
+未运行 / 已知偏差：① 本分支 GitHub Actions 已通过（PR #118 `361fdf9`，run 34579816992 / 34579816884）；② `pnpm test:e2e` 未运行（本次未改前端行为）；③ 前端消费（F-25 步骤 3 徽章与「查看主任务」）属 C-1，仍待落地；④ 新增真库用例与 R-5 破坏性契约变更需非作者人工评审。
 
 ## A-2 未裁决契约项定案（C-001 / C-004 / C-005 / C-007 / C-008，2026-09-11 本地落库）
 
@@ -893,7 +895,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 
 本地实际执行（2026-09-11）：`pnpm contract:generate`、`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`、真库 `pnpm --filter @inpulse/api test:integration`、`pnpm check:docs`、`pnpm check:secrets` 均通过。
 
-未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② FC-031 判别联合与逐路由 `details` Schema ref 属延后项，恢复条件见裁决 §3.2，未在本批实现；③ 本次不改路由、状态码语义与权限矩阵。
+未运行 / 已知偏差：① 本分支 GitHub Actions 已通过（PR #121 `fff0c7e`，run 34583330490 / 34583330511）；② FC-031 判别联合与逐路由 `details` Schema ref 属延后项，恢复条件见裁决 §3.2，未在本批实现；③ 本次不改路由、状态码语义与权限矩阵。
 
 ## A-3 compose.init 首次建库纵切片与灾难恢复离线 Runbook（2026-09-11 本地落库）
 
@@ -917,7 +919,7 @@ db 容器不挂载任何登录密码，禁止把一次性覆盖用于日常 `up`
 `pnpm check:secrets` 均通过；Docker 真实验证见 A3-INIT-002~004（独立 project 名，验证后已 `down -v`
 清理，测试密码与本地 env 文件不在版本控制内）。
 
-未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② 真实主机恢复演练（RECOVERY-001 /
+未运行 / 已知偏差：① 本分支 GitHub Actions 已通过（PR #123 `6b1f5cc`，run 34587654943 / 34587654963）；② 真实主机恢复演练（RECOVERY-001 /
 DEPLOY-003）仍是上线门禁，未在本批执行；③ 六份密码、发布清单 digest 与 TLS 的离线保管流程由
 运维在上线时落实，本批只交付 Runbook 与静态防线；④ 本地 Compose 对 secrets 的 uid/gid/mode
 声明会给出「not supported」警告（属 Swarm 语法），实际文件权限由部署账户控制，静态声明仍由
@@ -947,7 +949,7 @@ DEPLOY-003）仍是上线门禁，未在本批执行；③ 六份密码、发布
 PostgreSQL 与完整 AppModule HTTP）、`apps/e2e/tests/csrf.spec.ts` 4/4（Playwright chromium）、
 `pnpm build`、`apps/e2e` typecheck、`pnpm format:check`、`pnpm check:docs` 均通过。
 
-未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② CSRF Token 8 小时自然过期与后台
+未运行 / 已知偏差：① 本分支 GitHub Actions 已通过（PR #123 `6b1f5cc`，run 34587654943 / 34587654963）；② CSRF Token 8 小时自然过期与后台
 清理按真实时间推进，不在本批（过期失效语义以数据库时间回拨覆盖）；③ 除登录/登出外的其余
 securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路径已有控制器单测与 MFA E2E 覆盖，
 本批不重复。
@@ -967,7 +969,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 65 文件 303 例、`pnpm test:unit`（api 68 文件 351 例，其余 workspace 通过）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（含 `apps/e2e`）、`pnpm build`、`pnpm check:frontend:boundaries`（211 模块 965 依赖）、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97/97）、`pnpm db:migrations:check`（8 个迁移）、`pnpm check:deps`、`pnpm check:secrets`（930 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm check:deploy:test` 与公共 registry 审计（无已知漏洞）均通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）：改动三文件 5/5 通过；全量 46 例两轮为 44 过 + 2 偶发、45 过 + 1 偶发，失败集合每轮不同，均由下述幂等约束边界 500 引起（`project-archive.spec.ts` 单文件复跑 2/2、`module-tasks.spec.ts` F-15 单例复跑 1/1 通过）。
 
-未运行 / 已知偏差：① 本批 GitHub Actions 尚未执行；② `pnpm test:integration` 未运行（本批无服务端改动，R-5 服务端由 A-7 [PR #118](https://github.com/256-code/InPulse/pull/118) 覆盖）；③ 全量 E2E 的偶发失败按约定不得视为已修复（根因见下）；④ 新增 / 更新的 E2E 用例与前端用例需非作者人工评审；⑤ 任务详情弹窗内的 tabs 等 C-3 收尾项未做。
+未运行 / 已知偏差：① 本批 GitHub Actions 已通过（PR #125 `5d00bb9`，run 34590026123 / 34590026131）；② `pnpm test:integration` 未运行（本批无服务端改动，R-5 服务端由 A-7 [PR #118](https://github.com/256-code/InPulse/pull/118) 覆盖）；③ 全量 E2E 的偶发失败按约定不得视为已修复（根因见下）；④ 新增 / 更新的 E2E 用例与前端用例需非作者人工评审；⑤ 任务详情弹窗内的 tabs 等 C-3 收尾项未做。
 
 偶发 E2E 失败根因（2026-09-11 定位，未修复）：本机 Docker 日志（`inpulse-local-dev`）显示偶发 500 来自 `idempotency_records_retention_check`（`expires_at <= created_at + 30 days`）。实例：`2026-09-11 09:55:51` 行 `created_at 09:55:51.576903+00`、`expires_at 10:55:51.577+00` —— JS 宿主 `Date.now() + 30d` 比 Docker PostgreSQL `now()` 快约 0.1ms（Windows Docker Desktop VM 时钟偏差），差值超出 30 天上限 97µs 被拒，表现为写请求 500 与保存后弹窗不关闭；Linux / CI 单一时钟源不受影响。另：E2E 运行的是 `node apps/api/dist/main.js` 与 `packages/api-contract/dist`，契约或服务端改动后必须先执行 `pnpm --filter @inpulse/api-contract build` 与 `pnpm --filter @inpulse/api build`，否则会以旧构建启动并触发 `contract response validation failed`。
 
@@ -984,7 +986,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 67 文件 322 例；`pnpm check` 至 `deps:audit` 前全部通过（lint / format:check / typecheck / test:unit / db:migrations:check / contract:drift / contract:validate / build / check:deploy:test / check:deps / check:frontend:boundaries（215 模块 992 依赖）/ permissions:check（97/97）/ check:secrets / check:docs），`deps:audit` 因本地 npm 镜像无 audit endpoint 失败（非本批回归；公共 registry 审计无已知漏洞）；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）单独复跑通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）全量 50 例 49 过 + 1 偶发：`aggregate-views.spec.ts:14` 在「新建功能」弹窗保存后 `toBeHidden` 超时（与既有偶发同族），单文件复跑 2/2 通过，按约定不得视为已修复。
 
-未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #126](https://github.com/256-code/InPulse/pull/126)；② `pnpm test:integration` 未运行（本批无服务端改动）；③ 新增 / 更新的单测与 E2E 用例需非作者人工评审；④ C-4 视觉复核用临时 Playwright spec 与 17 张截图仅本地产出（spec 已删除，截图未入库）。
+未运行 / 已知偏差：① 本批 GitHub Actions 已通过（[PR #126](https://github.com/256-code/InPulse/pull/126) run 34597046361 / 34597046383）；② `pnpm test:integration` 未运行（本批无服务端改动）；③ 新增 / 更新的单测与 E2E 用例需非作者人工评审；④ C-4 视觉复核用临时 Playwright spec 与 17 张截图仅本地产出（spec 已删除，截图未入库）。
 
 ## A-5 阶段 4 搜索容量门禁（2026-09-11 本地落库）
 
@@ -1005,7 +1007,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 
 本地实际执行（2026-09-11）：`powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/poc-search-pgroonga-local.ps1 -Image inpulse/pgroonga-pg18.6:repro -Port 55434 -RestorePort 55435 -Capacity` 一体化路径成功退出——8 个迁移校验与迁移、数据库单测 15 例、数据库集成 26 例、10 个 PGroonga 策略 PoC、容量门禁（30 并发 × 600.8s、2,398,317 次请求 / 2,362,344 次 SQL、0 错误、P95 10.171ms、P99 13.284ms、召回 189/190、冷缓存 30 条）、升级路径（`0000-0002` 手工应用后由 runner 应用 `0003`-`0007`，4 applied / 4 already present）与 `0003`/`0004`/`0005` 逐迁移事务内回滚、逻辑备份恢复验证；`database/package.json` 新增 `poc:search:capacity`，`database/scripts/poc-search-pgroonga-local.ps1` 新增 `-Capacity` 参数。
 
-未运行 / 已知偏差：① 本批 [PR #128](https://github.com/256-code/InPulse/pull/128) 的 GitHub Actions 结果见该 PR 检查记录；② 容量门禁不进入 CI（含 10 分钟持续负载与容器重启），端到端 P95（Nginx / TLS / API 与鉴权开销）需在部署环境复测；③ 5 年容量模型峰值未在设计中定稿，1.2 倍条件以上界形式记录（峰值 ≤ 84166 时成立），定稿后需人工复核并按需复测；④ 冷缓存只清空 PostgreSQL shared_buffers，宿主页缓存与存储层缓存未清空；⑤ 30 并发由单进程发起，未覆盖真实成员关系变更并发；⑥ 本批三个既有 PoC artifact 由同一次脚本运行重生成后已还原，避免夹带与 A-5 无关的时序噪声。
+未运行 / 已知偏差：① 本批 [PR #128](https://github.com/256-code/InPulse/pull/128) 的 GitHub Actions 已通过（run 34612213457 / 34612213472）；② 容量门禁不进入 CI（含 10 分钟持续负载与容器重启），端到端 P95（Nginx / TLS / API 与鉴权开销）需在部署环境复测；③ 5 年容量模型峰值未在设计中定稿，1.2 倍条件以上界形式记录（峰值 ≤ 84166 时成立），定稿后需人工复核并按需复测；④ 冷缓存只清空 PostgreSQL shared_buffers，宿主页缓存与存储层缓存未清空；⑤ 30 并发由单进程发起，未覆盖真实成员关系变更并发；⑥ 本批三个既有 PoC artifact 由同一次脚本运行重生成后已还原，避免夹带与 A-5 无关的时序噪声。
 ## B-5 迭代记录 Markdown 白名单渲染（2026-09-11 本地落库）
 
 按[技术设计 §7.5](../技术设计v1.2.2.md)与[系统设计 §3.6](../系统设计文档v1.0.2.md)：迭代记录
@@ -1035,7 +1037,7 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 `pnpm build`（产物含 `RecordMarkdown-*.js`）、`pnpm check:frontend:boundaries`（220 模块
 1005 依赖）、`pnpm check:docs` 与 `pnpm check:secrets`（944 个文件）通过；记录相关既有浏览器 E2E 定向复跑 11 例 10 过 + 1 偶发（`record-publishing.spec.ts:78` 新建功能弹窗未关，Docker 日志同时段 `idempotency_records_retention_check` 违约，属既有偶发同族；单文件复跑 2/2 通过）。推送 2（2026-09-11）：首轮 CI 的 Secret scan 命中测试内 userinfo 反例字面量（用户名与口令内嵌于 URL），已改为片段拼接，未放宽扫描规则。推送 3（2026-09-11）：推送 2 的 CI 又在本文档与 `开发日志.md` 正文命中同类 userinfo 字面量，本次改写为不含连接串形态的描述；`pnpm check:secrets`、`pnpm check:docs` 与本文件 `pnpm exec prettier --check` 重新通过，仍未放宽扫描规则。
 
-未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #129](https://github.com/256-code/InPulse/pull/129)；
+未运行 / 已知偏差：① 本批 GitHub Actions 已通过（[PR #129](https://github.com/256-code/InPulse/pull/129) run 34618476646 / 34618476818）；
 ② 未新增浏览器 E2E，记录相关既有用例定向复跑见上（含 1 例既有偶发，按约定不得视为已修复）；
 ③ 新增单测需非
 作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
