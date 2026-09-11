@@ -82,7 +82,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/overview",
     operationId: "getProjectOverview",
     summary:
-      "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代与待处理遗留问题；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
+      "F-29 项目概览：服务端聚合活跃模块数、活跃功能数、未完成任务、迭代记录数、最近迭代、待处理遗留问题总数与列表；统计口径按功能设计 §29，无权限项目统一 404；recentRecordLimit 默认 3、activeLeftoverLimit 默认 2，上限 10。",
     request: {
       path: "ProjectPath",
       query: "ProjectOverviewQueryRequest",
@@ -109,10 +109,40 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
   },
   {
     method: "GET",
+    path: "/task-groups/memberships",
+    operationId: "listTaskGroupMemberships",
+    summary:
+      "F-25 任务卡片聚合关系批量查询（R-5）：按逗号分隔的 1..100 个任务 ID，返回当前用户可访问项目内、属于 ACTIVE 聚合组的任务与组内角色；无权、不存在或已解除的关系一律不入结果，不泄露资源存在性；数量、格式或重复校验失败返回 422。",
+    request: {
+      path: "none",
+      query: "TaskGroupMembershipQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("TaskGroupMembershipResponse"),
+      ...errors([401, 422, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
     path: "/me/tasks",
     operationId: "listMyTasks",
     summary:
-      "F-32 我的任务：跨项目列出当前用户负责的任务，服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 只支持 projectId / scopeType / workStatus / hasPublishedRecord 四项筛选，不接受任何他人身份或授权范围参数。",
+      "F-32 我的任务：跨项目列出当前用户负责的任务，返回优先级、截止与完成时间、创建者、外部链接数与聚合组关系，并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 六项筛选，不接受任何他人身份或授权范围参数。",
     request: {
       path: "none",
       query: "MyTasksQueryRequest",

@@ -25,11 +25,13 @@ const response: ProjectOverviewResponse = {
       publishedAt: "2026-09-10T09:00:00.000Z",
     },
   ],
+  activeLeftoverTotal: 1,
   activeLeftovers: [
     {
       leftoverItemId: 21,
       recordId: 12,
       recordCode: "CR-201",
+      recordTitle: "增加商户订单号幂等校验",
       content: "补齐恢复码入口",
       createdAt: "2026-09-10T09:30:00.000Z",
     },

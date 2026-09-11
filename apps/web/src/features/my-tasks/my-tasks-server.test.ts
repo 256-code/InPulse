@@ -26,10 +26,19 @@ const page: MyTaskPage = {
       updatedAt: "2026-09-10T09:00:00.000Z",
       hasPublishedRecord: true,
       groupRole: "MAIN",
+      priority: "NORMAL",
+      dueAt: null,
+      completedAt: null,
+      creatorId: 2,
+      githubLinkCount: 0,
+      groupId: null,
     },
   ],
   nextCursor: "signed-cursor",
   hasMore: true,
+  stats: { myOpen: 1, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+  leftoverCount: 0,
+  leftoverSample: null,
 };
 
 describe("my tasks server adapter", () => {

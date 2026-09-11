@@ -14,7 +14,9 @@ import {
 import {
   ChangeRecordReadPort,
   MyTaskQueryPort,
+  type MyTaskPriority,
 } from "../change-records/index.js";
+import { ExternalLinksQueryPort } from "../external-links/index.js";
 import { FeatureReadPort } from "../features/index.js";
 import { ModuleReadPort } from "../modules/index.js";
 import {
@@ -38,7 +40,9 @@ import {
  * 负责人固定为当前用户（A 裁决 Q-08），不接受任何他人身份或授权范围参数；
  * projectId 只用于缩小范围，最终仍按服务端 AuthorizedProjectScope 过滤，
  * 越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
- * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与四项筛选。
+ * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与六项筛选。
+ * 统计卡片与遗留问题入口按 A 裁决 §10.3：基准集合只受负责人与 projectId 影响，
+ * 分页与游标不影响计数，日界/月界由 SQL 按 Asia/Shanghai 计算。
  *
  * effectiveOnly 不在此处使用：R-3 需要返回 CANCELED / INVALID 任务才能让
  * workStatus 筛选有意义；§29.1 的「有效任务」口径只服务 R-2 的未完成任务计数。
@@ -52,6 +56,12 @@ export interface MyTasksQueryCommand {
   readonly scopeType?: "FEATURE" | "MODULE";
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly hasPublishedRecord?: boolean;
+  readonly priority?: MyTaskPriority;
+  /**
+   * 与 workStatus 组合表达「未完成并含已取消」（TODO ∪ CANCELED）：
+   * workStatus 缺省时全集本就包含 CANCELED，该参数不产生额外过滤（A 裁决 §10.3）。
+   */
+  readonly includeCanceled?: boolean;
 }
 
 function inconsistentError(detail: string): AggregateReadError {
@@ -70,6 +80,23 @@ function toUserRef(user: UserRefItem): {
   return { userId: user.userId, name: user.name, avatarUrl: user.avatarUrl };
 }
 
+/**
+ * R-3 的 workStatus 与 includeCanceled 组合（A 裁决 §10.3）：
+ * workStatus 缺省表示全集（本已包含 CANCELED）；includeCanceled = true 时
+ * 在显式 workStatus 上并入 CANCELED（TODO ∪ CANCELED），否则保持单值。
+ */
+function effectiveWorkStatuses(
+  command: MyTasksQueryCommand,
+): readonly ("TODO" | "DONE" | "CANCELED")[] | undefined {
+  if (command.workStatus === undefined) {
+    return undefined;
+  }
+  if (command.includeCanceled === true && command.workStatus !== "CANCELED") {
+    return [command.workStatus, "CANCELED"];
+  }
+  return [command.workStatus];
+}
+
 @Injectable()
 export class MyTasksQueryService {
   constructor(
@@ -81,6 +108,8 @@ export class MyTasksQueryService {
     @Inject(FeatureReadPort) private readonly features: FeatureReadPort,
     @Inject(ChangeRecordReadPort)
     private readonly records: ChangeRecordReadPort,
+    @Inject(ExternalLinksQueryPort)
+    private readonly links: ExternalLinksQueryPort,
     @Inject(TaskGroupMembershipReadPort)
     private readonly membership: TaskGroupMembershipReadPort,
     @Inject(UserReadPort) private readonly users: UserReadPort,
@@ -104,12 +133,15 @@ export class MyTasksQueryService {
       command.scopeType ?? null,
       command.workStatus ?? null,
       command.hasPublishedRecord ?? null,
+      command.priority ?? null,
+      command.includeCanceled ?? null,
     ]);
     const afterTaskId = this.decodeCursor(
       command.cursor,
       command.actorUserId,
       filterKey,
     );
+    const workStatuses = effectiveWorkStatuses(command);
 
     const data = await this.unitOfWork.run(async (tx) => {
       const excludedTaskIds = await this.membership.listHistoricalSourceTaskIds(
@@ -121,15 +153,16 @@ export class MyTasksQueryService {
         assigneeId: command.actorUserId,
         limit,
         excludedTaskIds,
-        ...(command.workStatus === undefined
-          ? {}
-          : { workStatuses: [command.workStatus] }),
+        ...(workStatuses === undefined ? {} : { workStatuses }),
         ...(command.scopeType === undefined
           ? {}
           : { scopeTypes: [command.scopeType] }),
         ...(command.hasPublishedRecord === undefined
           ? {}
           : { hasPublishedRecord: command.hasPublishedRecord }),
+        ...(command.priority === undefined
+          ? {}
+          : { priority: command.priority }),
         ...(afterTaskId === null ? {} : { afterTaskId }),
       });
       const taskIds = page.items.map((item) => item.taskId);
@@ -166,6 +199,21 @@ export class MyTasksQueryService {
         pageProjectIds,
         taskIds,
       );
+      const linkCounts = await this.links.countTaskLinks(
+        tx,
+        pageProjectIds,
+        taskIds,
+      );
+      const stats = await this.myTasks.stats(tx, {
+        projectIds,
+        assigneeId: command.actorUserId,
+        excludedTaskIds,
+      });
+      const leftover = await this.myTasks.leftoverEntry(tx, {
+        projectIds,
+        assigneeId: command.actorUserId,
+        excludedTaskIds,
+      });
       return {
         page,
         pageProjectIds,
@@ -174,6 +222,9 @@ export class MyTasksQueryService {
         assignees,
         publishedTaskIds,
         groupRoles,
+        linkCounts,
+        stats,
+        leftover,
       };
     });
 
@@ -190,11 +241,16 @@ export class MyTasksQueryService {
     const userById = new Map(data.assignees.map((item) => [item.userId, item]));
     const publishedTaskIdSet = new Set(data.publishedTaskIds);
     const roleByTask = new Map<number, "MAIN" | "SOURCE">();
+    const groupIdByTask = new Map<number, number>();
     for (const item of data.groupRoles) {
       if (!roleByTask.has(item.taskId)) {
         roleByTask.set(item.taskId, item.role);
+        groupIdByTask.set(item.taskId, item.groupId);
       }
     }
+    const linkCountByTask = new Map(
+      data.linkCounts.map((item) => [item.taskId, item.count]),
+    );
 
     const items: MyTaskItem[] = data.page.items.map((row) => {
       const projectName = projectNameById.get(row.projectId);
@@ -232,8 +288,15 @@ export class MyTasksQueryService {
         lifecycleStatus: row.lifecycleStatus,
         assignee: toUserRef(assignee),
         updatedAt: row.updatedAt.toISOString(),
+        priority: row.priority,
+        dueAt: row.dueAt === null ? null : row.dueAt.toISOString(),
+        completedAt:
+          row.completedAt === null ? null : row.completedAt.toISOString(),
+        creatorId: row.creatorId,
+        githubLinkCount: linkCountByTask.get(row.taskId) ?? 0,
         hasPublishedRecord: publishedTaskIdSet.has(row.taskId),
         groupRole: roleByTask.get(row.taskId) ?? null,
+        groupId: groupIdByTask.get(row.taskId) ?? null,
       };
     });
 
@@ -249,6 +312,17 @@ export class MyTasksQueryService {
               afterId: data.page.nextTaskId,
             }),
       hasMore: data.page.hasMore,
+      stats: data.stats,
+      leftoverCount: data.leftover.count,
+      leftoverSample:
+        data.leftover.sample === null
+          ? null
+          : {
+              recordCode: data.leftover.sample.recordCode,
+              summary:
+                data.leftover.sample.contentPrefix +
+                (data.leftover.sample.truncated ? "…" : ""),
+            },
     };
   }
 

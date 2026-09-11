@@ -26,6 +26,12 @@ interface ChangeRecordLinkRowRaw extends Omit<
   readonly createdAt: string;
 }
 
+/** R-3 任务外部链接计数行。 */
+export interface TaskExternalLinkCountRow {
+  readonly taskId: number;
+  readonly count: number;
+}
+
 @Injectable()
 export class ExternalLinksRepository {
   async list(
@@ -96,6 +102,32 @@ export class ExternalLinksRepository {
       await tx.sql`SELECT id FROM app.external_links WHERE id=${linkId} AND project_id=${p}`;
     return rows.length > 0;
   }
+  /**
+   * R-3：批量统计任务上的外部链接数（去重后的 link_id 计数）。
+   * projectIds 或 taskIds 为空短路返回空集；只读、不校验项目授权，
+   * 调用方必须先取得 AuthorizedProjectScope。
+   */
+  async countTaskLinks(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly TaskExternalLinkCountRow[]> {
+    if (projectIds.length === 0 || taskIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const tasks = [...taskIds];
+    return (await tx.sql<TaskExternalLinkCountRow[]>`
+      SELECT a.task_id AS "taskId",
+             COUNT(DISTINCT a.link_id)::integer AS count
+        FROM app.task_external_links a
+       WHERE a.project_id = ANY(${projects}::integer[])
+         AND a.task_id = ANY(${tasks}::integer[])
+       GROUP BY a.task_id
+       ORDER BY a.task_id ASC
+    `) as unknown as readonly TaskExternalLinkCountRow[];
+  }
+
   /**
    * R-4：批量读取记录上的 GitHub 链接快照。recordIds 为空短路；
    * SQL 只按 project_id 与 change_record_id 过滤，调用方必须先完成项目授权。
