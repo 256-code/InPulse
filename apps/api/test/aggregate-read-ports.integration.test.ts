@@ -1131,6 +1131,9 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     expect(listPlan).toContain("Limit");
     expect(listPlan).not.toMatch(/Seq Scan on tasks/);
     for (const plan of [listPlan, countPlan]) {
+      // 裁决修订 D-1 / §11.6：EXPLAIN (ANALYZE, BUFFERS) 实测输出（actual time），
+      // 证明计数只对本页 taskIds 补齐、未改变分页 SQL 的先过滤后分页性质。
+      expect(plan).toContain("actual time");
       expect(plan).not.toMatch(/Seq Scan on change_records/);
       expect(plan).toMatch(/change_records_project_(task|status)_idx/);
     }

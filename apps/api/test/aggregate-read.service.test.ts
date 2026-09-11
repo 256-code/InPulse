@@ -1261,10 +1261,15 @@ describe("TaskGroupMembershipQueryService.list", () => {
   function membershipSetup(
     options: {
       readonly scopeProjectIds?: readonly number[];
+      readonly authorizedTaskIds?: readonly number[];
       readonly roles?: readonly {
         readonly taskId: number;
         readonly groupId: number;
         readonly role: "MAIN" | "SOURCE";
+      }[];
+      readonly counts?: readonly {
+        readonly taskId: number;
+        readonly count: number;
       }[];
     } = {},
   ) {
@@ -1273,50 +1278,108 @@ describe("TaskGroupMembershipQueryService.list", () => {
       projectIds: options.scopeProjectIds ?? [7],
       isSystemAdmin: false,
     });
+    const listByIds = vi
+      .fn()
+      .mockResolvedValue(
+        (options.authorizedTaskIds ?? []).map((taskId) => ({ taskId })),
+      );
     const listGroupRoles = vi.fn().mockResolvedValue(options.roles ?? []);
+    const countPublishedByTask = vi
+      .fn()
+      .mockResolvedValue(options.counts ?? []);
     const service = new TaskGroupMembershipQueryService(
       { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
+      { listByIds } as unknown as TaskQueryPort,
       { listGroupRoles } as unknown as TaskGroupMembershipReadPort,
+      { countPublishedByTask } as unknown as ChangeRecordReadPort,
       unitOfWork,
     );
-    return { service, getAuthorizedSearchScope, listGroupRoles };
+    return {
+      service,
+      getAuthorizedSearchScope,
+      listByIds,
+      listGroupRoles,
+      countPublishedByTask,
+    };
   }
 
-  it("按服务端授权范围读取 ACTIVE 组关系并固定 taskId 升序", async () => {
+  it("覆盖每个有权 taskId：未入组返回 null，计数按映射补齐", async () => {
     const setup = membershipSetup({
+      authorizedTaskIds: [21, 22, 23],
       roles: [
         { taskId: 22, groupId: 12, role: "SOURCE" },
         { taskId: 21, groupId: 11, role: "MAIN" },
       ],
+      counts: [
+        { taskId: 21, count: 2 },
+        { taskId: 22, count: 1 },
+      ],
     });
     const result = await setup.service.list({
       actorUserId: 5,
-      taskIds: [22, 21],
+      taskIds: [23, 22, 21],
     });
     expect(result).toEqual({
       items: [
-        { taskId: 21, groupId: 11, groupRole: "MAIN" },
-        { taskId: 22, groupId: 12, groupRole: "SOURCE" },
+        {
+          taskId: 21,
+          groupId: 11,
+          groupRole: "MAIN",
+          publishedRecordCount: 2,
+        },
+        {
+          taskId: 22,
+          groupId: 12,
+          groupRole: "SOURCE",
+          publishedRecordCount: 1,
+        },
+        {
+          taskId: 23,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 0,
+        },
       ],
     });
     expect(setup.listGroupRoles).toHaveBeenCalledWith(
       expect.anything(),
       [7],
-      [22, 21],
+      [21, 22, 23],
+    );
+    expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [21, 22, 23],
     );
   });
 
-  it("无授权项目时返回空结果且不发出 SQL", async () => {
+  it("无权或不存在任务不出现", async () => {
+    const setup = membershipSetup({ authorizedTaskIds: [21] });
+    const result = await setup.service.list({
+      actorUserId: 5,
+      taskIds: [21, 999],
+    });
+    expect(result).toEqual({
+      items: [
+        {
+          taskId: 21,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 0,
+        },
+      ],
+    });
+  });
+
+  it("无授权项目时返回空结果且不发出后续 SQL", async () => {
     const setup = membershipSetup({ scopeProjectIds: [] });
     const result = await setup.service.list({
       actorUserId: 5,
       taskIds: [999],
     });
     expect(result).toEqual({ items: [] });
-    expect(setup.listGroupRoles).toHaveBeenCalledWith(
-      expect.anything(),
-      [],
-      [999],
-    );
+    expect(setup.listByIds).toHaveBeenCalledWith(expect.anything(), [], [999]);
+    expect(setup.listGroupRoles).not.toHaveBeenCalled();
+    expect(setup.countPublishedByTask).not.toHaveBeenCalled();
   });
 });
