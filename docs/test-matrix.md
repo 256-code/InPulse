@@ -729,3 +729,28 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | E2E 稳定性修复 | `aggregate-views.spec.ts` F-29 指标断言改为 `expect.poll`（消除读取初始占位 0 的竞态）；`task-groups.spec.ts` 创建任务后关闭自动打开的详情抽屉，避免遮罩阻塞后续点击 |
 
 本地实际执行（2026-09-11）：Web 单测 58 文件 247 例；`@inpulse/e2e` typecheck；全量 `pnpm test:e2e` 43/43（约 5.4 分钟）；`pnpm check` 除本地镜像 audit endpoint 外全部通过，公共 registry 审计无已知漏洞。E2E 首轮曾出现 1 例 `leftover-task` FEATURE `POST .../leftover-task` 500，未复现（单文件复跑 3/3），不能视为已修复。
+
+## F-20 遗留问题页与任务中心聚合组区块（C，2026-09-11 本地落库）
+
+按人工指令补齐两处缺口：`/issues` 由 `WorkspacePlaceholder` 改为按 `latest-version/views/issues.tsx` 实现的遗留问题页；任务中心按 `latest-version/views/task-center.tsx` 补上「任务聚合组」区块（组卡、分支行徽章、页脚「查看主任务」）。两条页面都需要「列遗留项 / 列聚合组」的服务端读能力，既有契约只有 `getTaskGroup`（按 groupId）与 `listTaskGroupRecords`，因此本 PR 新增两条只读路由 `GET /api/v1/leftover-items`（`listLeftoverItems`）与 `GET /api/v1/task-groups`（`listTaskGroups`），Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端随实现同一个 PR 落库。
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| 遗留问题列表读路由：`bucket` 只切换 OPEN（ACTIVE）与 CLOSED（CONVERTED / RESOLVED）展示分桶、固定 `leftoverItemId DESC`、`limit` 1～100 默认 20、`projectId` 只收窄授权范围、内容取最新版本快照、来源 / 跟进任务只返回任务引用；跨项目范围读按 `AuthorizedProjectScope` 过滤，非成员与不存在返回空页而不是 404（与 `listMyTasks` 同族） | `LeftoverListQueryRequest` / `LeftoverListItem` / `LeftoverItemPage`（Schema Registry + Route Registry 全策略 + 权限矩阵 + OpenAPI + 生成客户端）；`apps/api/test/leftover-items.service.test.ts` 4 例；游标命名空间 `LEFTOVER_ITEMS`、TTL 15 分钟 |
+| 聚合组列表读路由：只返回 ACTIVE 成员（已解除不进入摘要）、主任务在前、来源任务按加入顺序、`groupId DESC` 签名游标、返回原始 `groupRole` / `sourceKind` / `workStatus` 枚举 | `TaskGroupListQueryRequest` / `TaskGroupListBranch` / `TaskGroupListItem` / `TaskGroupListPage`；`apps/api/test/aggregate-read.service.test.ts` 18 例（含列表分支）；游标命名空间 `TASK_GROUPS` |
+| 真实 PostgreSQL + 真实 HTTP：两个新路由的鉴权、跨项目隔离、分页边界、422 校验、响应 Schema 校验与未知字段剔除、非成员空页语义 | `apps/api/test/aggregate-read-list-api.integration.test.ts` 10 例（真实 PostgreSQL 18.6 + PGroonga） |
+| 遗留问题页（F-20 前端）：未闭环 / 已闭环两桶各自签名游标分页与「加载更多」、「问题不是任务」提示、行内来源记录与来源任务入口、未闭环项「转为任务」、已闭环折叠区保留「查看跟进任务」、加载与错误态 | `apps/web/src/features/issues/IssuesPageView.test.tsx` 7 例、`issues-format.test.ts` 3 例；`apps/web/src/pages/issues/IssuesPage.tsx` 接线路由、返回迭代记录与任务深链 |
+| 页内「转为任务」复用已发布记录页的转换弹窗（CSRF、`If-Match`、幂等键与 409 / 422 语义一致），成功后按应用统一模式打开新建跟进任务 | `apps/web/src/features/published-records/ConvertLeftoverTask.test.tsx` 4 例；`LeftoverTaskConvertModal` 改为受控导出供遗留问题页复用，`ConvertLeftoverTask` 包装器保留原调用点行为 |
+| 任务中心「任务聚合组」区块：区块标题与说明、`N 个聚合组` 徽章、组卡（编号 / 名称 / 状态 / 项目名）、分支行（主分支 / 活动来源 / 历史来源徽章、任务编号与标题、工作状态、负责人）、页脚说明与「查看主任务」、加载更多与空态 | `apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 14 例；`apps/web/src/pages/tasks/TasksPage.test.tsx` 6 例 |
+| 适配器接线：`fetchTaskGroups` 在真实服务端适配器与 mock 适配器同一形状（项目名解析、分支角色与来源类型映射、未完成分支排序） | `my-tasks-server.test.ts` 4 例、`my-tasks-mock.test.ts` 11 例 |
+| 关键路径 E2E：发布带「还有什么问题」的记录 → 遗留问题页待闭环行（来源记录与来源任务）→ 页内转为任务 → 自动打开跟进任务 → 回页后该条进入已闭环折叠区并保留跟进任务入口，原记录内容不被改写 | `apps/e2e/tests/issues.spec.ts` 1 例；全量 `pnpm test:e2e` 45/45 |
+| 聚合组区块 E2E：建功能与主 / 来源任务 → 合并 → 任务中心区块出现组卡、主分支与活动来源分支、「查看主任务」直达主任务详情 | `apps/e2e/tests/task-groups.spec.ts` 第 2 例扩展 |
+| 与设计师稿的截图比对：遗留问题页（页头、amber 提示、未闭环行、来源任务 / 转为任务按钮、已闭环折叠区）与任务中心聚合组区块（组卡、分支行徽章与负责人、页脚「查看主任务」）逐项一致 | 本地 Playwright 截图与设计师导出页同尺寸截屏对比；唯一差异是 `page-header` 描述行——设计师最终 CSS 以 `.page-header > div > p { display: none }` 全局隐藏该行，本仓既有页面（`/tasks`、项目动态等）同样保留该行，属既有横向差异，未在本 PR 单方面改动 |
+
+本地实际执行（2026-09-11）：`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm check:deps`（589 文件无环）、`pnpm check:frontend:boundaries`（199 模块）、`pnpm contract:validate`（95 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（95 条操作 / 95 条路由）、`pnpm db:migrations:check`、`pnpm check:secrets`、`pnpm check:docs`、`pnpm check:deploy:test` 全部通过；`pnpm deps:audit` 在公共 registry 返回无已知漏洞。`pnpm test:unit`：database 15、api-contract 89、web 60 文件 264 例、api 67 文件 347 例；`pnpm test:integration`（与 CI 同构的新建库）：database 20/20、apps/api 48 文件 410 例；`pnpm test:e2e` 45/45（约 5.5 分钟）。
+
+未运行 / 已知偏差：① 本 PR 的 GitHub Actions 尚未执行；② 新增 E2E 用例与新增测试需非作者人工评审；③ 旧本地长跑库在整库全量集成时出现随机单文件 500，根因定位为客户端计算的过期 / 消费时间戳与 PostgreSQL `now()` 的毫秒级时钟抖动触发 `idempotency_records_retention_check` 与 `preauth_sessions_consumed_at_check` 的边界值，重复复跑不复现；换用与 CI 同构的新建库后两次全量 410/410 通过，该现象与本 PR 改动无关，但 CI 与本地时钟源差异值得后续确认；④ 旧本地库另有 `entityId` 整型溢出与项目编号序列耗尽等数据累积问题（非代码缺陷），不作为验收基线。
+
+契约编号冲突（需 A 裁决）：A 于 2026-09-11 的第二轮裁决（[A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10）把 **R-5 定义为 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）**，并已由 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库。本 PR 新增的两条路由在实现注释与 OpenAPI summary 中按 R-5 / R-6 标注，其中 R-5 与上述已冻结编号冲突。两条路由的 Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端均已随本 PR 落库并通过门禁，但正式编号需由 A 指定（建议顺延为 R-6 / R-7）；编号确定后需同步修订路由 summary、Schema Registry 描述、实现注释与本条记录，不得保留冲突编号。
+
+分工提示：A 的 §10 裁决同时把 F-25 步骤 3（功能页任务卡片 / 详情抽屉的「主任务 / 来源任务 / 迭代记录 n 条」标记与「查看主任务」）的落地方式定为页面级一次批量调用 R-5 `listTaskGroupMemberships`，并明确**不扩大任务基础 DTO**（不接受 `TaskItem.groupRole`）。该条不在本 PR 范围内，仍待实现。

@@ -107,6 +107,7 @@ it("shows inherited/excluded history, retains input and reuses the key after unc
   );
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   await screen.findByRole("link", { name: "查看跟进任务" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(convert.mock.calls[0]).toEqual(convert.mock.calls[1]);
   expect(convert.mock.calls[0]![2]).toMatchObject({
     leftoverItemId: 8,

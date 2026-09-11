@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectItem } from "@inpulse/api-contract";
-import type { UserReadPort } from "../src/auth/user-read.port.js";
+import type { UserReadPort, UserRefItem } from "../src/auth/user-read.port.js";
 import type { TransactionContext } from "../src/database/transaction-context.js";
 import type { UnitOfWork } from "../src/database/unit-of-work.js";
 import {
@@ -24,7 +24,11 @@ import type {
   ProjectAccessQueryPort,
   ProjectQueryPort,
 } from "../src/modules/projects/index.js";
-import type { TaskGroupMembershipReadPort } from "../src/modules/task-groups/index.js";
+import type {
+  TaskGroupActiveMemberRow,
+  TaskGroupListPage,
+  TaskGroupMembershipReadPort,
+} from "../src/modules/task-groups/index.js";
 import type {
   TaskGroupMemberRow,
   TaskGroupReadPort,
@@ -72,6 +76,23 @@ function memberFixture(
 ): TaskGroupMemberRow {
   return {
     memberId: 1,
+    taskId: 21,
+    role: "MAIN",
+    sourceKind: null,
+    status: "ACTIVE",
+    joinedAt: baseTime,
+    detachedAt: null,
+    detachReason: null,
+    ...overrides,
+  };
+}
+
+function activeMemberFixture(
+  overrides: Partial<TaskGroupActiveMemberRow> = {},
+): TaskGroupActiveMemberRow {
+  return {
+    memberId: 1,
+    groupId: 11,
     taskId: 21,
     role: "MAIN",
     sourceKind: null,
@@ -153,6 +174,7 @@ function taskGroupSetup(
       readonly count: number;
     }[];
     readonly page?: TaskGroupRecordPage;
+    readonly projects?: readonly ProjectItem[];
     readonly decode?: () => number | null;
   } = {},
 ) {
@@ -171,6 +193,9 @@ function taskGroupSetup(
       options.page ?? { items: [], nextRecordId: null, hasMore: false },
     );
   const listChangeRecordLinks = vi.fn().mockResolvedValue([]);
+  const listProjects = vi
+    .fn()
+    .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
   const listUsers = vi
     .fn()
     .mockResolvedValue([{ userId: 5, name: "成员", avatarUrl: null }]);
@@ -180,6 +205,7 @@ function taskGroupSetup(
   const service = new TaskGroupQueryService(
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
     { findGroupById, listMembers } as unknown as TaskGroupReadPort,
+    { list: listProjects } as unknown as ProjectQueryPort,
     { listByIds } as unknown as TaskQueryPort,
     {
       countPublishedByTask,
@@ -199,6 +225,67 @@ function taskGroupSetup(
     countPublishedByTask,
     listVisibleRecordsByTaskIds,
     listChangeRecordLinks,
+    listProjects,
+  };
+}
+
+function taskGroupListSetup(
+  options: {
+    readonly scopeProjectIds?: readonly number[];
+    readonly page?: TaskGroupListPage;
+    readonly members?: readonly TaskGroupActiveMemberRow[];
+    readonly tasks?: readonly TaskReadModel[];
+    readonly users?: readonly UserRefItem[];
+    readonly projects?: readonly ProjectItem[];
+    readonly decode?: () => number | null;
+  } = {},
+) {
+  const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
+    actorUserId: 5,
+    projectIds: options.scopeProjectIds ?? [7],
+    isSystemAdmin: false,
+  });
+  const listGroups = vi
+    .fn()
+    .mockResolvedValue(
+      options.page ?? { items: [], nextGroupId: null, hasMore: false },
+    );
+  const listActiveMembersForGroups = vi
+    .fn()
+    .mockResolvedValue(options.members ?? []);
+  const listByIds = vi.fn().mockResolvedValue(options.tasks ?? []);
+  const listUsers = vi
+    .fn()
+    .mockResolvedValue(
+      options.users ?? [{ userId: 5, name: "成员", avatarUrl: null }],
+    );
+  const listProjects = vi
+    .fn()
+    .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
+  const cursor = cursorMock(
+    options.decode === undefined ? {} : { decode: options.decode },
+  );
+  const service = new TaskGroupQueryService(
+    { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
+    {
+      listGroups,
+      listActiveMembersForGroups,
+    } as unknown as TaskGroupReadPort,
+    { list: listProjects } as unknown as ProjectQueryPort,
+    { listByIds } as unknown as TaskQueryPort,
+    {} as unknown as ChangeRecordReadPort,
+    { listByIds: listUsers } as unknown as UserReadPort,
+    {} as unknown as ExternalLinksQueryPort,
+    unitOfWork,
+    cursor as unknown as AggregateReadCursorService,
+  );
+  return {
+    service,
+    listGroups,
+    listActiveMembersForGroups,
+    listByIds,
+    listProjects,
+    cursor,
   };
 }
 
@@ -433,6 +520,188 @@ describe("TaskGroupQueryService.listTaskGroupRecords", () => {
     });
     await expect(
       badCursor.service.listTaskGroupRecords({ actorUserId: 5, groupId: 11 }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
+  });
+});
+
+describe("TaskGroupQueryService.listTaskGroups", () => {
+  it("组列表映射主任务与分支排序，并签发下一页游标", async () => {
+    const setup = taskGroupListSetup({
+      page: {
+        items: [
+          groupFixture({ groupId: 12, code: "SHOP-TG-2", name: "登录聚合" }),
+          groupFixture({
+            groupId: 11,
+            code: "SHOP-TG-1",
+            name: "登出聚合",
+            status: "CLOSED",
+            closedAt: baseTime,
+          }),
+        ],
+        nextGroupId: 11,
+        hasMore: true,
+      },
+      members: [
+        activeMemberFixture({
+          memberId: 3,
+          groupId: 12,
+          taskId: 24,
+          role: "SOURCE",
+          sourceKind: "ACTIVE",
+          joinedAt: new Date(baseTime.getTime() + 1000),
+        }),
+        activeMemberFixture({ memberId: 1, groupId: 12, taskId: 22 }),
+        activeMemberFixture({
+          memberId: 2,
+          groupId: 12,
+          taskId: 23,
+          role: "SOURCE",
+          sourceKind: "HISTORICAL",
+        }),
+      ],
+      tasks: [
+        taskFixture(22, { workStatus: "TODO" }),
+        taskFixture(23, { workStatus: "DONE" }),
+        taskFixture(24, { workStatus: "CANCELED", assigneeId: 6 }),
+      ],
+      users: [
+        { userId: 5, name: "成员", avatarUrl: null },
+        {
+          userId: 6,
+          name: "另一成员",
+          avatarUrl: "https://example.com/a.png",
+        },
+      ],
+    });
+
+    const result = await setup.service.listTaskGroups({
+      actorUserId: 5,
+      limit: 2,
+    });
+
+    expect(setup.listGroups).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      limit: 2,
+    });
+    expect(setup.listActiveMembersForGroups).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [12, 11],
+    );
+    expect(result.items.map((item) => item.groupId)).toEqual([12, 11]);
+    const group = result.items[0]!;
+    expect(group).toMatchObject({
+      code: "SHOP-TG-2",
+      name: "登录聚合",
+      projectName: "商城系统",
+      status: "ACTIVE",
+      mainTask: {
+        taskId: 22,
+        code: "SHOP-T-22",
+        projectId: 7,
+        moduleId: 3,
+        featureId: 4,
+      },
+    });
+    expect(
+      group.branches.map((branch) => [
+        branch.taskId,
+        branch.role,
+        branch.sourceKind,
+        branch.workStatus,
+        branch.moduleId,
+        branch.featureId,
+      ]),
+    ).toEqual([
+      [22, "MAIN", null, "TODO", 3, 4],
+      [23, "SOURCE", "HISTORICAL", "DONE", 3, 4],
+      [24, "SOURCE", "ACTIVE", "CANCELED", 3, 4],
+    ]);
+    expect(group.branches[2]!.assignee).toEqual({
+      userId: 6,
+      name: "另一成员",
+      avatarUrl: "https://example.com/a.png",
+    });
+    expect(result.items[1]).toMatchObject({
+      groupId: 11,
+      status: "CLOSED",
+      mainTask: null,
+      branches: [],
+    });
+    expect(result.hasMore).toBe(true);
+    expect(result.nextCursor).toBe("cursor-next");
+    expect(setup.cursor.encode).toHaveBeenCalledWith({
+      actorUserId: 5,
+      namespace: "TASK_GROUPS",
+      filterKey: JSON.stringify([null]),
+      afterId: 11,
+    });
+  });
+
+  it("越权 projectId 收敛为空页且端口收到空 projectIds", async () => {
+    const setup = taskGroupListSetup({ scopeProjectIds: [7] });
+    const result = await setup.service.listTaskGroups({
+      actorUserId: 5,
+      projectId: 999,
+    });
+    expect(result).toEqual({ items: [], nextCursor: null, hasMore: false });
+    expect(setup.listGroups).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [],
+      limit: 20,
+    });
+    expect(setup.listProjects).toHaveBeenCalledWith([]);
+    expect(setup.cursor.decode).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        actorUserId: 5,
+        namespace: "TASK_GROUPS",
+        filterKey: JSON.stringify([999]),
+      }),
+    );
+  });
+
+  it("组缺少项目或分支负责人缺失时以 500 失败而不是静默丢行", async () => {
+    const missingProject = taskGroupListSetup({
+      page: {
+        items: [groupFixture()],
+        nextGroupId: null,
+        hasMore: false,
+      },
+      projects: [],
+    });
+    await expect(
+      missingProject.service.listTaskGroups({ actorUserId: 5 }),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "AGGREGATE_READ_INCONSISTENT",
+    });
+
+    const missingAssignee = taskGroupListSetup({
+      page: {
+        items: [groupFixture()],
+        nextGroupId: null,
+        hasMore: false,
+      },
+      members: [activeMemberFixture()],
+      tasks: [taskFixture(21, { assigneeId: 999 })],
+      users: [{ userId: 5, name: "成员", avatarUrl: null }],
+    });
+    await expect(
+      missingAssignee.service.listTaskGroups({ actorUserId: 5 }),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "AGGREGATE_READ_INCONSISTENT",
+    });
+  });
+
+  it("非法游标映射为 422 INVALID_CURSOR", async () => {
+    const setup = taskGroupListSetup({
+      decode: () => {
+        throw new AggregateReadCursorError("signature", "bad");
+      },
+    });
+    await expect(
+      setup.service.listTaskGroups({ actorUserId: 5 }),
     ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
   });
 });

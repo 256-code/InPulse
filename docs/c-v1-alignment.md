@@ -69,4 +69,8 @@ V1 无法表达的筛选（`listMyTasksV1Gaps` 返回）：`scope=created`、`sc
 
 2026-09-11 F-23 / F-24 / F-25 前端交付落库：功能页任务抽屉新增「合并到主任务」入口（全局搜索同项目任务、排除自身、≥2 字符、350ms 防抖、来源分支类型单选、说明 ≤5000 字），成功后由合并响应携带的 `groupId` 跳转 `/task-groups/{groupId}`；新增聚合组详情页（主任务/来源分支成员、角色徽章、记录筛选由 URL 承载（F-30）、签名游标加载更多、外部链接快照字段按 `Snapshot` 后缀标注「关联时刻快照」、遗留问题总数与来源记录标题等契约缺口保持显式降级）；来源分支「解除合并」二次确认（原因选填、最后一个活跃来源关闭聚合组的警告），成功提示与关系「已解除」、组关闭状态可见。测试证据见[测试矩阵](./test-matrix.md) 的 F-23 / F-24 / F-25 前端增量段（前端 23 例 + E2E `task-groups.spec.ts`）。同时修复 #98 引入的两处 E2E 问题：F-29 指标竞态改 `expect.poll`、新用例未处理创建任务后自动打开的详情抽屉；全量 `pnpm test:e2e` 43/43。新增 E2E 用例需非作者人工评审。
 
+2026-09-11 F-20 遗留问题页与任务中心聚合组区块落库：`/issues` 由 `WorkspacePlaceholder` 换成按设计师稿实现的遗留问题页（未闭环 / 已闭环分桶、服务端签名游标分页、行内来源记录与来源 / 跟进任务入口、未闭环项「转为任务」复用已发布记录页的转换弹窗）；任务中心补上设计师稿的「任务聚合组」区块（组卡、分支行徽章与负责人、页脚「查看主任务」直达任务详情）。两条页面所需的「列遗留项 / 列聚合组」服务端读能力在既有契约中不存在，因此新增 `GET /api/v1/leftover-items`（`listLeftoverItems`）与 `GET /api/v1/task-groups`（`listTaskGroups`），Schema、Route Registry 全策略、权限矩阵、OpenAPI、生成客户端与真实 PostgreSQL / E2E 用例随实现同一个 PR 落库；两条路由按服务端 `AuthorizedProjectScope` 跨项目过滤，非成员与不存在返回空页而不是 404（与 `listMyTasks` 同族）。测试证据见[测试矩阵](./test-matrix.md) 的 F-20 页面与聚合组区块条目；全量 `pnpm test:e2e` 45/45。新增 E2E 用例需非作者人工评审。
+
+编号说明（需 A 裁决）：A 于 2026-09-11 冻结的 R-5 是 `listTaskGroupMemberships`（[PR #102](https://github.com/256-code/InPulse/pull/102)）；本批两条新路由在实现注释与 OpenAPI summary 中沿用了 R-5 / R-6，其中 R-5 与之冲突，正式编号需 A 指定（建议顺延为 R-6 / R-7），确定后同步修订路由 summary、Schema Registry 描述与实现注释。
+
 未做：§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。

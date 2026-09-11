@@ -67,6 +67,47 @@ interface LeftoverItemRowRaw extends Omit<LeftoverItemSummary, "createdAt"> {
   readonly createdAt: string;
 }
 
+/** R-5 遗留问题列表的展示分桶：OPEN = ACTIVE；CLOSED = CONVERTED / RESOLVED。 */
+export type LeftoverListBucket = "OPEN" | "CLOSED";
+
+/** R-5 列表入参；projectIds 必须来自服务端 AuthorizedProjectScope，端口不校验授权。 */
+export interface LeftoverListReadInput {
+  readonly projectIds: readonly number[];
+  readonly bucket?: LeftoverListBucket;
+  readonly limit: number;
+  readonly afterLeftoverItemId?: number;
+}
+
+/** R-5 列表行：内容取最新版本快照；任务字段只返回 ID，编号由应用层解析。 */
+export interface LeftoverListRow {
+  readonly leftoverItemId: number;
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly recordTitle: string;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number | null;
+  readonly authorId: number;
+  readonly publishedAt: Date;
+  readonly content: string;
+  readonly status: "ACTIVE" | "CONVERTED" | "RESOLVED";
+  /** 来源任务（记录归属任务）；独立记录为 null。 */
+  readonly sourceTaskId: number | null;
+  /** 已生成跟进任务；未转换或「已解决」遗留项为 null。 */
+  readonly followupTaskId: number | null;
+}
+
+/** R-5 分页结果：hasMore 为 true 时 nextLeftoverItemId 是最后一条的 keyset 位置。 */
+export interface LeftoverListPage {
+  readonly items: readonly LeftoverListRow[];
+  readonly nextLeftoverItemId: number | null;
+  readonly hasMore: boolean;
+}
+
+interface LeftoverListRowRaw extends Omit<LeftoverListRow, "publishedAt"> {
+  readonly publishedAt: string;
+}
+
 /** R-1 每任务正式记录数（功能设计 §29.4：按 change_records 计数，不按版本计数）。 */
 export interface TaskPublishedRecordCountItem {
   readonly taskId: number;
@@ -134,6 +175,17 @@ export abstract class ChangeRecordReadPort {
     tx: TransactionContext,
     input: RecordCountInput & { readonly limit: number },
   ): Promise<readonly LeftoverItemSummary[]>;
+
+  /**
+   * R-5 遗留问题列表（F-20 / F-32）：跨项目按授权范围汇总可见记录（PUBLISHED /
+   * VOID，A 裁决 Q-13）的遗留项，内容口径与 listActiveLeftovers 相同（最新版本
+   * 快照）。固定 leftoverItemId DESC 与 keyset 分页；只读、不取锁，调用方必须先
+   * 取得 AuthorizedProjectScope。projectIds 为空短路返回空页，不发出 SQL。
+   */
+  abstract listLeftovers(
+    tx: TransactionContext,
+    input: LeftoverListReadInput,
+  ): Promise<LeftoverListPage>;
 
   /**
    * 给定项目范围（可选任务集合），返回其中已有正式（PUBLISHED）记录的任务 ID。
@@ -304,6 +356,73 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
       ...row,
       createdAt: new Date(row.createdAt),
     }));
+  }
+
+  async listLeftovers(
+    tx: TransactionContext,
+    input: LeftoverListReadInput,
+  ): Promise<LeftoverListPage> {
+    assertLimit(input.limit);
+    if (input.projectIds.length === 0) {
+      return { items: [], nextLeftoverItemId: null, hasMore: false };
+    }
+    const projects = [...input.projectIds];
+    const statuses =
+      input.bucket === undefined
+        ? null
+        : input.bucket === "OPEN"
+          ? ["ACTIVE"]
+          : ["CONVERTED", "RESOLVED"];
+    const after = input.afterLeftoverItemId ?? null;
+    const rows = await tx.sql<LeftoverListRowRaw[]>`
+      SELECT li.id AS "leftoverItemId",
+             li.record_id AS "recordId",
+             cr.code AS "recordCode",
+             cr.title AS "recordTitle",
+             li.project_id AS "projectId",
+             cr.module_id AS "moduleId",
+             cr.feature_id AS "featureId",
+             cr.author_id AS "authorId",
+             cr.published_at AS "publishedAt",
+             vl.content_snapshot AS content,
+             li.status AS status,
+             cr.task_id AS "sourceTaskId",
+             ltl.task_id AS "followupTaskId"
+        FROM app.change_record_leftover_items li
+        JOIN app.change_records cr
+          ON cr.id = li.record_id
+         AND cr.project_id = li.project_id
+         AND cr.status IN ('PUBLISHED', 'VOID')
+        JOIN LATERAL (
+          SELECT v.content_snapshot
+            FROM app.change_record_version_leftovers v
+           WHERE v.leftover_item_id = li.id
+             AND v.record_id = li.record_id
+             AND v.project_id = li.project_id
+           ORDER BY v.version_no DESC
+           LIMIT 1
+        ) vl ON TRUE
+        LEFT JOIN app.leftover_task_links ltl
+          ON ltl.leftover_item_id = li.id
+         AND ltl.project_id = li.project_id
+       WHERE li.project_id = ANY(${projects}::integer[])
+         AND (${statuses}::text[] IS NULL OR li.status = ANY(${statuses}::text[]))
+         AND (${after}::integer IS NULL OR li.id < ${after})
+       ORDER BY li.id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = visible.map((row) => ({
+      ...row,
+      publishedAt: new Date(row.publishedAt),
+    }));
+    const last = items.length === 0 ? null : items[items.length - 1]!;
+    return {
+      items,
+      hasMore,
+      nextLeftoverItemId: hasMore && last !== null ? last.leftoverItemId : null,
+    };
   }
 
   async listTaskIdsWithPublishedRecords(

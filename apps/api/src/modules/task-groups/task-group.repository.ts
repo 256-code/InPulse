@@ -113,6 +113,76 @@ export class TaskGroupRepository {
     >`SELECT task_id AS "taskId" FROM app.task_group_members WHERE project_id=${projectId} AND group_id=${groupId} AND status='ACTIVE' ORDER BY task_id`;
     return rows.map((row) => row.taskId);
   }
+
+  /**
+   * R-6 聚合组列表：按授权项目范围列出组，固定 id DESC keyset 分页。
+   * 只读、不取锁；projectIds 为空短路返回空数组，不发出 SQL。
+   */
+  async listGroupsPage(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    limit: number,
+    afterGroupId?: number,
+  ): Promise<TaskGroupRecord[]> {
+    if (projectIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const after = afterGroupId ?? null;
+    return tx.sql<TaskGroupRecord[]>`
+      SELECT id AS "groupId",
+             project_id AS "projectId",
+             code,
+             name,
+             status,
+             created_by AS "createdBy",
+             row_version AS "rowVersion",
+             created_at AS "createdAt",
+             updated_at AS "updatedAt",
+             closed_at AS "closedAt"
+        FROM app.task_groups
+       WHERE project_id = ANY(${projects}::integer[])
+         AND (${after}::integer IS NULL OR id < ${after})
+       ORDER BY id DESC
+       LIMIT ${limit + 1}
+    `;
+  }
+
+  /**
+   * R-6 聚合组分支摘要：只返回 status = ACTIVE 的成员（DETACHED 不进入列表）。
+   * SQL 同时带 project_id 与 group_id 条件，跨项目串联不会返回结果。
+   */
+  async listActiveMembersForGroups(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    groupIds: readonly number[],
+  ): Promise<TaskGroupMemberRecord[]> {
+    if (projectIds.length === 0 || groupIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const groups = [...groupIds];
+    return tx.sql<TaskGroupMemberRecord[]>`
+      SELECT id AS "memberId",
+             group_id AS "groupId",
+             task_id AS "taskId",
+             project_id AS "projectId",
+             role,
+             source_kind AS "sourceKind",
+             status,
+             original_work_status AS "originalWorkStatus",
+             original_assignee_id AS "originalAssigneeId",
+             joined_at AS "joinedAt",
+             detached_at AS "detachedAt",
+             detach_reason AS "detachReason"
+        FROM app.task_group_members
+       WHERE project_id = ANY(${projects}::integer[])
+         AND group_id = ANY(${groups}::integer[])
+         AND status = 'ACTIVE'
+       ORDER BY group_id ASC, id ASC
+    `;
+  }
+
   async createGroup(
     tx: TransactionContext,
     input: CreateTaskGroupInput,

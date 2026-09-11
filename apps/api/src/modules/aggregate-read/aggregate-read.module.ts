@@ -12,6 +12,8 @@ import { ProjectsModule } from "../projects/index.js";
 import { TaskGroupsModule } from "../task-groups/index.js";
 import { TasksManagementModule } from "../tasks/index.js";
 import { AggregateReadCursorService } from "./aggregate-read-cursor.js";
+import { LeftoverItemsController } from "./leftover-items.controller.js";
+import { LeftoverItemsQueryService } from "./leftover-items-query.service.js";
 import { MyTasksController } from "./my-tasks.controller.js";
 import { MyTasksQueryService } from "./my-tasks-query.service.js";
 import { ProjectOverviewController } from "./project-overview.controller.js";
@@ -20,11 +22,11 @@ import { TaskGroupReadController } from "./task-group-read.controller.js";
 import { TaskGroupQueryService } from "./task-group-query.service.js";
 
 /**
- * F-25 / F-29 / F-32 聚合读宿主模块（A 裁决 §6 附带要求）。
+ * F-20 / F-25 / F-29 / F-32 聚合读宿主模块（A 裁决 §6 附带要求）。
  *
  * 只依赖 A 的 ProjectAccessQueryPort / ProjectQueryPort 与 B、C 已发布的公开
  * QueryPort，不导出任何 Repository、不注册命令端口、不参与任何命令 UnitOfWork；
- * 三条路由的授权全部在服务层通过服务端 AuthorizedProjectScope 完成。
+ * 五条路由的授权全部在服务层通过服务端 AuthorizedProjectScope 完成。
  */
 @Module({
   imports: [
@@ -47,11 +49,13 @@ import { TaskGroupQueryService } from "./task-group-query.service.js";
     },
     TaskGroupQueryService,
     ProjectOverviewQueryService,
+    LeftoverItemsQueryService,
     MyTasksQueryService,
   ],
   controllers: [
     TaskGroupReadController,
     ProjectOverviewController,
+    LeftoverItemsController,
     MyTasksController,
   ],
 })

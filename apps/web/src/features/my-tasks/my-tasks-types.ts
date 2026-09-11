@@ -1,3 +1,5 @@
+import type { TaskGroupListItem } from "@generated/api";
+
 /**
  * F-32 我的任务（跨项目列表）：筛选条件与列表项类型。
  *
@@ -126,6 +128,24 @@ export const MY_TASKS_FULL_FILTER_SUPPORT: MyTasksFilterSupport = {
   "filter:canceled-with-open": true,
 };
 
+/**
+ * R-6 聚合组列表：直接消费服务端 DTO（MyTaskGroupItem 即 TaskGroupListItem），
+ * 视图不复制任务或记录实体；CLOSED 组按服务端口径返回空 branches 与 null mainTask。
+ */
+export type MyTaskGroupItem = TaskGroupListItem;
+
+export interface MyTaskGroupsResult {
+  readonly items: readonly MyTaskGroupItem[];
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+}
+
+export interface MyTaskGroupsQueryInput {
+  /** 按项目范围筛选时传入当前项目；null 表示跨项目（服务端 AuthorizedProjectScope）。 */
+  readonly projectId: number | null;
+  readonly cursor: string | null;
+}
+
 export interface MyTaskListResult {
   readonly items: readonly MyTaskListItem[];
   readonly nextCursor: string | null;
@@ -149,4 +169,6 @@ export interface MyTasksAdapter {
   readonly source: "mock" | "server";
   readonly notice: string;
   fetchMyTasks(input: MyTasksQueryInput): Promise<MyTaskListResult>;
+  /** R-6 聚合组列表（任务中心「任务聚合组」区块）；缺数据时返回空页而不是隐藏区块。 */
+  fetchTaskGroups(input: MyTaskGroupsQueryInput): Promise<MyTaskGroupsResult>;
 }

@@ -94,6 +94,49 @@ describe("my tasks server adapter", () => {
     ).toBe(true);
   });
 
+  it("maps the R-6 task group page through the generated client", async () => {
+    const listTaskGroups = vi.fn().mockResolvedValue({
+      items: [
+        {
+          groupId: 501,
+          projectId: 1,
+          projectName: "InPulse 平台",
+          code: "TG-001",
+          name: "任务合并后来源分支历史保留",
+          status: "ACTIVE",
+          mainTask: {
+            taskId: 102,
+            code: "T-102",
+            projectId: 1,
+            moduleId: 12,
+            featureId: 121,
+          },
+          branches: [],
+        },
+      ],
+      nextCursor: "group-cursor",
+      hasMore: true,
+    });
+    const client = { listTaskGroups } as unknown as InpulseApiClient;
+    const adapter = createMyTasksServerAdapter(client);
+
+    const scoped = await adapter.fetchTaskGroups({
+      projectId: 1,
+      cursor: null,
+    });
+    expect(listTaskGroups).toHaveBeenCalledWith({ limit: 20, projectId: 1 });
+    expect(scoped.items).toHaveLength(1);
+    expect(scoped.items[0]?.code).toBe("TG-001");
+    expect(scoped.nextCursor).toBe("group-cursor");
+    expect(scoped.hasMore).toBe(true);
+
+    await adapter.fetchTaskGroups({ projectId: null, cursor: "group-cursor" });
+    expect(listTaskGroups).toHaveBeenLastCalledWith({
+      limit: 20,
+      cursor: "group-cursor",
+    });
+  });
+
   it("keeps the notice explicit about the frozen contract gaps", () => {
     expect(MY_TASKS_SERVER_NOTICE).toContain("统计卡片");
     expect(MY_TASKS_SERVER_NOTICE).toContain("优先级");

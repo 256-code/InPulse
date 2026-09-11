@@ -3,6 +3,8 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   AGGREGATE_READ_PAGE_LIMIT_DEFAULT,
   type TaskGroupDetailResponse,
+  type TaskGroupListItem,
+  type TaskGroupListPage,
   type TaskGroupMemberDetail,
   type TaskGroupRecordItem,
   type TaskGroupRecordLink,
@@ -26,10 +28,12 @@ import {
 } from "../external-links/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
+  ProjectQueryPort,
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import {
   TaskGroupReadPort,
+  type TaskGroupActiveMemberRow,
   type TaskGroupMemberRow,
   type TaskGroupReadRecord,
 } from "../task-groups/index.js";
@@ -62,6 +66,14 @@ export interface TaskGroupRecordQueryCommand {
   readonly memberTaskId?: number;
   readonly cursor?: string;
   readonly limit?: number;
+}
+
+/** R-6 聚合组列表命令；projectId 只用于缩小服务端授权范围。 */
+export interface TaskGroupListQueryCommand {
+  readonly actorUserId: number;
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
 }
 
 function notFoundError(): AggregateReadError {
@@ -174,6 +186,7 @@ export class TaskGroupQueryService {
     @Inject(PROJECT_ACCESS_QUERY_PORT)
     private readonly projectAccess: ProjectAccessQueryPort,
     @Inject(TaskGroupReadPort) private readonly groups: TaskGroupReadPort,
+    @Inject(ProjectQueryPort) private readonly projects: ProjectQueryPort,
     @Inject(TaskQueryPort) private readonly tasks: TaskQueryPort,
     @Inject(ChangeRecordReadPort)
     private readonly records: ChangeRecordReadPort,
@@ -226,6 +239,143 @@ export class TaskGroupQueryService {
     });
   }
 
+  async listTaskGroups(
+    command: TaskGroupListQueryCommand,
+  ): Promise<TaskGroupListPage> {
+    const scope = await this.projectAccess.getAuthorizedSearchScope(
+      command.actorUserId,
+    );
+    const limit = command.limit ?? AGGREGATE_READ_PAGE_LIMIT_DEFAULT;
+    const projectIds =
+      command.projectId === undefined
+        ? scope.projectIds
+        : scope.projectIds.filter(
+            (projectId) => projectId === command.projectId,
+          );
+    const filterKey = JSON.stringify([command.projectId ?? null]);
+    const afterGroupId = this.decodeCursor(
+      command.cursor,
+      command.actorUserId,
+      filterKey,
+      "TASK_GROUPS",
+    );
+    const data = await this.unitOfWork.run(async (tx) => {
+      const page = await this.groups.listGroups(tx, {
+        projectIds,
+        limit,
+        ...(afterGroupId === null ? {} : { afterGroupId }),
+      });
+      const pageProjectIds = [
+        ...new Set(page.items.map((group) => group.projectId)),
+      ];
+      const members = await this.groups.listActiveMembersForGroups(
+        tx,
+        pageProjectIds,
+        page.items.map((group) => group.groupId),
+      );
+      const taskIds = [...new Set(members.map((member) => member.taskId))];
+      const tasks = await this.tasks.listByIds(tx, pageProjectIds, taskIds);
+      const assignees = await this.users.listByIds(tx, [
+        ...new Set(tasks.map((row) => row.assigneeId)),
+      ]);
+      return { page, pageProjectIds, members, tasks, assignees };
+    });
+
+    const projects = await this.projects.list(data.pageProjectIds);
+    const projectNameById = new Map(
+      projects.map((project) => [project.id, project.name]),
+    );
+    const taskById = new Map(data.tasks.map((row) => [row.taskId, row]));
+    const userById = new Map(data.assignees.map((row) => [row.userId, row]));
+    const membersByGroup = new Map<number, TaskGroupActiveMemberRow[]>();
+    for (const member of data.members) {
+      const bucket = membersByGroup.get(member.groupId);
+      if (bucket === undefined) {
+        membersByGroup.set(member.groupId, [member]);
+        continue;
+      }
+      bucket.push(member);
+    }
+
+    const items: TaskGroupListItem[] = data.page.items.map((group) => {
+      const projectName = projectNameById.get(group.projectId);
+      if (projectName === undefined) {
+        throw inconsistentError("聚合组缺少项目 " + String(group.projectId));
+      }
+      const branches = [...(membersByGroup.get(group.groupId) ?? [])]
+        .sort((left, right) => {
+          if (left.role !== right.role) {
+            return left.role === "MAIN" ? -1 : 1;
+          }
+          const joinedDelta =
+            left.joinedAt.getTime() - right.joinedAt.getTime();
+          if (joinedDelta !== 0) {
+            return joinedDelta;
+          }
+          return left.taskId - right.taskId;
+        })
+        .map((member) => {
+          const task = taskById.get(member.taskId);
+          if (task === undefined) {
+            throw inconsistentError(
+              "聚合组成员缺少对应任务 " + String(member.taskId),
+            );
+          }
+          const assignee = userById.get(task.assigneeId);
+          if (assignee === undefined) {
+            throw inconsistentError(
+              "任务负责人不存在 " + String(task.assigneeId),
+            );
+          }
+          return {
+            taskId: task.taskId,
+            taskCode: task.code,
+            title: task.title,
+            role: member.role,
+            sourceKind: member.sourceKind,
+            workStatus: task.workStatus,
+            moduleId: task.moduleId,
+            featureId: task.featureId,
+            assignee: toUserRef(assignee),
+          };
+        });
+      const main = branches.find((branch) => branch.role === "MAIN");
+      return {
+        groupId: group.groupId,
+        projectId: group.projectId,
+        projectName,
+        code: group.code,
+        name: group.name,
+        status: group.status,
+        mainTask:
+          main === undefined
+            ? null
+            : {
+                taskId: main.taskId,
+                code: main.taskCode,
+                projectId: group.projectId,
+                moduleId: main.moduleId,
+                featureId: main.featureId,
+              },
+        branches,
+      };
+    });
+
+    return {
+      items,
+      nextCursor:
+        data.page.nextGroupId === null
+          ? null
+          : this.cursor.encode({
+              actorUserId: command.actorUserId,
+              namespace: "TASK_GROUPS",
+              filterKey,
+              afterId: data.page.nextGroupId,
+            }),
+      hasMore: data.page.hasMore,
+    };
+  }
+
   async listTaskGroupRecords(
     command: TaskGroupRecordQueryCommand,
   ): Promise<TaskGroupRecordPage> {
@@ -259,6 +409,7 @@ export class TaskGroupQueryService {
         command.cursor,
         command.actorUserId,
         filterKey,
+        "TASK_GROUP_RECORDS",
       );
       const page = await this.records.listVisibleRecordsByTaskIds(tx, {
         projectId: group.projectId,
@@ -346,11 +497,12 @@ export class TaskGroupQueryService {
     cursor: string | undefined,
     actorUserId: number,
     filterKey: string,
+    namespace: "TASK_GROUP_RECORDS" | "TASK_GROUPS",
   ): number | null {
     try {
       return this.cursor.decode(cursor, {
         actorUserId,
-        namespace: "TASK_GROUP_RECORDS",
+        namespace,
         filterKey,
       });
     } catch (error) {

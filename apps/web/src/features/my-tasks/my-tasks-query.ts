@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ApiError } from "@generated/api";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import type { MyTaskFilters, MyTasksAdapter } from "./my-tasks-types";
@@ -23,6 +23,31 @@ export interface UseMyTasksQueryOptions {
   readonly filters: MyTaskFilters;
   readonly viewerId: number | null;
   readonly adapter?: MyTasksAdapter;
+}
+
+export interface UseMyTaskGroupsQueryOptions {
+  /** 按项目范围筛选时传入当前项目；null 表示跨项目（服务端授权范围）。 */
+  readonly projectId: number | null;
+  readonly adapter?: MyTasksAdapter;
+}
+
+/**
+ * R-6 任务聚合组列表：按 groupId 倒序签名游标分页；服务端已按
+ * AuthorizedProjectScope 过滤，非成员项目不会出现在结果中。
+ * 失败时不隐藏「任务聚合组」区块，由视图渲染错误态。
+ */
+export function useMyTaskGroupsQuery({
+  projectId,
+  adapter = MY_TASKS_MOCK_ADAPTER,
+}: UseMyTaskGroupsQueryOptions) {
+  return useInfiniteQuery({
+    queryKey: ["my-task-groups", adapter.source, projectId],
+    queryFn: ({ pageParam }) =>
+      adapter.fetchTaskGroups({ projectId, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+    retry: false,
+  });
 }
 
 export function useMyTasksQuery({
