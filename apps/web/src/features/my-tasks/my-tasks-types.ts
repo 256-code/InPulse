@@ -129,7 +129,7 @@ export const MY_TASKS_FULL_FILTER_SUPPORT: MyTasksFilterSupport = {
 };
 
 /**
- * R-6 聚合组列表：直接消费服务端 DTO（MyTaskGroupItem 即 TaskGroupListItem），
+ * R-7 聚合组列表：直接消费服务端 DTO（MyTaskGroupItem 即 TaskGroupListItem），
  * 视图不复制任务或记录实体；CLOSED 组按服务端口径返回空 branches 与 null mainTask。
  */
 export type MyTaskGroupItem = TaskGroupListItem;
@@ -169,6 +169,6 @@ export interface MyTasksAdapter {
   readonly source: "mock" | "server";
   readonly notice: string;
   fetchMyTasks(input: MyTasksQueryInput): Promise<MyTaskListResult>;
-  /** R-6 聚合组列表（任务中心「任务聚合组」区块）；缺数据时返回空页而不是隐藏区块。 */
+  /** R-7 聚合组列表（任务中心「任务聚合组」区块）；缺数据时返回空页而不是隐藏区块。 */
   fetchTaskGroups(input: MyTaskGroupsQueryInput): Promise<MyTaskGroupsResult>;
 }

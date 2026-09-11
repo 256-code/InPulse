@@ -69,10 +69,10 @@ interface LeftoverItemRowRaw extends Omit<LeftoverItemSummary, "createdAt"> {
   readonly createdAt: string;
 }
 
-/** R-5 遗留问题列表的展示分桶：OPEN = ACTIVE；CLOSED = CONVERTED / RESOLVED。 */
+/** R-6 遗留问题列表的展示分桶：OPEN = ACTIVE；CLOSED = CONVERTED / RESOLVED。 */
 export type LeftoverListBucket = "OPEN" | "CLOSED";
 
-/** R-5 列表入参；projectIds 必须来自服务端 AuthorizedProjectScope，端口不校验授权。 */
+/** R-6 列表入参；projectIds 必须来自服务端 AuthorizedProjectScope，端口不校验授权。 */
 export interface LeftoverListReadInput {
   readonly projectIds: readonly number[];
   readonly bucket?: LeftoverListBucket;
@@ -80,7 +80,7 @@ export interface LeftoverListReadInput {
   readonly afterLeftoverItemId?: number;
 }
 
-/** R-5 列表行：内容取最新版本快照；任务字段只返回 ID，编号由应用层解析。 */
+/** R-6 列表行：内容取最新版本快照；任务字段只返回 ID，编号由应用层解析。 */
 export interface LeftoverListRow {
   readonly leftoverItemId: number;
   readonly recordId: number;
@@ -99,7 +99,7 @@ export interface LeftoverListRow {
   readonly followupTaskId: number | null;
 }
 
-/** R-5 分页结果：hasMore 为 true 时 nextLeftoverItemId 是最后一条的 keyset 位置。 */
+/** R-6 分页结果：hasMore 为 true 时 nextLeftoverItemId 是最后一条的 keyset 位置。 */
 export interface LeftoverListPage {
   readonly items: readonly LeftoverListRow[];
   readonly nextLeftoverItemId: number | null;
@@ -179,7 +179,7 @@ export abstract class ChangeRecordReadPort {
   ): Promise<readonly LeftoverItemSummary[]>;
 
   /**
-   * R-5 遗留问题列表（F-20 / F-32）：跨项目按授权范围汇总可见记录（PUBLISHED /
+   * R-6 遗留问题列表（F-20 / F-32）：跨项目按授权范围汇总可见记录（PUBLISHED /
    * VOID，A 裁决 Q-13）的遗留项，内容口径与 listActiveLeftovers 相同（最新版本
    * 快照）。固定 leftoverItemId DESC 与 keyset 分页；只读、不取锁，调用方必须先
    * 取得 AuthorizedProjectScope。projectIds 为空短路返回空页，不发出 SQL。

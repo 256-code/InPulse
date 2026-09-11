@@ -30,7 +30,7 @@ import {
   type ProjectFixture,
 } from "./database.helpers.js";
 
-// F-20 遗留问题列表（R-5）与任务聚合组列表（R-6）的真实 HTTP 集成测试：
+// F-20 遗留问题列表（R-6）与任务聚合组列表（R-7）的真实 HTTP 集成测试：
 // 授权范围固定为服务端 AuthorizedProjectScope（非成员收敛为空页而非 404）、
 // 分桶与跨项目隔离、keyset 分页与签名游标绑定（actor + filterKey）、
 // 最新版本快照内容、来源/跟进任务引用、聚合组分支排序与 DETACHED 排除。
@@ -661,7 +661,7 @@ afterAll(async () => {
   }
 });
 
-describe("GET /api/v1/leftover-items（R-5 遗留问题列表）", () => {
+describe("GET /api/v1/leftover-items（R-6 遗留问题列表）", () => {
   test("匿名 401，非成员与越权项目收敛为空页，非法参数 422", async () => {
     await expectError(
       "/api/v1/leftover-items",
@@ -919,7 +919,7 @@ describe("GET /api/v1/leftover-items（R-5 遗留问题列表）", () => {
   });
 });
 
-describe("GET /api/v1/task-groups（R-6 任务聚合组列表）", () => {
+describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
   test("匿名 401，非成员与越权项目收敛为空页，非法参数 422", async () => {
     await expectError(
       "/api/v1/task-groups",

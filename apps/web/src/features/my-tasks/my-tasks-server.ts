@@ -17,7 +17,7 @@ import type { MyTasksAdapter } from "./my-tasks-types";
  * - filterSupport 全 false，UI 禁用并标注未接入的筛选项；
  * - 条目只映射 R-3 字段，骨架字段（优先级、截止时间等）保持 undefined。
  *
- * 任务聚合组区块由 R-6 listTaskGroups 提供（GET /api/v1/task-groups，
+ * 任务聚合组区块由 R-7 listTaskGroups 提供（GET /api/v1/task-groups，
  * 授权范围由服务端 AuthorizedProjectScope 决定）；projectId 非空时按项目
  * 过滤，否则跨项目返回；未接入时不隐藏区块，由视图渲染空态或错误态。
  */

@@ -68,7 +68,7 @@ export interface TaskGroupRecordQueryCommand {
   readonly limit?: number;
 }
 
-/** R-6 聚合组列表命令；projectId 只用于缩小服务端授权范围。 */
+/** R-7 聚合组列表命令；projectId 只用于缩小服务端授权范围。 */
 export interface TaskGroupListQueryCommand {
   readonly actorUserId: number;
   readonly cursor?: string;

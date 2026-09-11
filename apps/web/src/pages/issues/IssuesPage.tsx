@@ -6,7 +6,7 @@ import { taskDetailPath, type TaskLocation } from "@features/tasks/task-links";
 
 /**
  * F-20 遗留问题页容器：只负责路由跳转（回到迭代记录、打开来源 / 跟进任务），
- * 数据与状态全部在 IssuesPageView 内，经生成客户端访问 R-5。
+ * 数据与状态全部在 IssuesPageView 内，经生成客户端访问 R-6。
  */
 
 export interface IssuesPageProps {

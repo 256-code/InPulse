@@ -29,7 +29,7 @@ interface ErrorResponseDto {
 }
 
 /**
- * F-20 遗留问题列表（R-5）。只绑定 listLeftoverItems；授权范围固定为服务端
+ * F-20 遗留问题列表（R-6）。只绑定 listLeftoverItems；授权范围固定为服务端
  * AuthorizedProjectScope，projectId 只用于缩小范围，越权项目收敛为空页而不是
  * 404；游标无效或与筛选不匹配统一 422（聚合读统一语义）。
  */

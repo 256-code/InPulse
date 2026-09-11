@@ -20,7 +20,7 @@ import { issueOriginText, isLeftoverClosed } from "./issues-format";
 import { describeIssuesError, useLeftoverItemsQuery } from "./issues-query";
 
 /**
- * F-20 遗留问题页（R-5）：未闭环与已闭环两个分桶各自按服务端签名游标分页，
+ * F-20 遗留问题页（R-6）：未闭环与已闭环两个分桶各自按服务端签名游标分页，
  * 行内保留来源记录与来源 / 跟进任务引用，未闭环项可直接转为跟进任务（复用
  * 已发布记录页的转换弹窗：CSRF、If-Match 与幂等键语义完全一致）。
  *

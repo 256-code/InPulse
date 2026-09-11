@@ -483,7 +483,7 @@ export type TaskGroupMembershipResponse = z.infer<
   typeof taskGroupMembershipResponseSchema
 >;
 /**
- * R-5 / R-6：遗留问题与任务聚合组的跨项目聚合读列表（C 域）。
+ * R-6 / R-7：遗留问题与任务聚合组的跨项目聚合读列表（C 域）。
  * 两者沿用 C-006 envelope；授权范围固定为服务端 AuthorizedProjectScope，
  * projectId 只用于缩小范围（越权项目收敛为空页），非成员不产生 404。
  */
@@ -506,7 +506,7 @@ export const aggregateTaskRefSchema = z
 export type AggregateTaskRef = z.infer<typeof aggregateTaskRefSchema>;
 
 /**
- * R-5 遗留问题列表查询参数。bucket 是展示分桶，不改变排序：
+ * R-6 遗留问题列表查询参数。bucket 是展示分桶，不改变排序：
  * OPEN = status ACTIVE；CLOSED = status CONVERTED / RESOLVED；
  * 缺省表示不按分桶过滤。排序固定 leftoverItemId DESC。
  */
@@ -530,7 +530,7 @@ export type LeftoverListQueryRequest = z.infer<
 >;
 
 /**
- * R-5 列表项：内容取该遗留项最新版本快照；sourceTask 为来源任务（独立记录为
+ * R-6 列表项：内容取该遗留项最新版本快照；sourceTask 为来源任务（独立记录为
  * null），followupTask 为已生成跟进任务（未转换 / 已解决时为 null）。记录只含
  * PUBLISHED 与 VOID（Q-13），author 为记录作者，不暴露登录名或邮箱。
  */
@@ -558,7 +558,7 @@ export const leftoverListItemSchema = z
 
 export type LeftoverListItem = z.infer<typeof leftoverListItemSchema>;
 
-/** R-5 分页响应（C-006 envelope）。 */
+/** R-6 分页响应（C-006 envelope）。 */
 export const leftoverItemPageSchema = z
   .object({
     items: z.array(leftoverListItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),
@@ -574,7 +574,7 @@ export const leftoverItemPageSchema = z
 
 export type LeftoverItemPage = z.infer<typeof leftoverItemPageSchema>;
 
-/** R-6 聚合组列表查询参数；projectId 只用于缩小范围，排序固定 groupId DESC。 */
+/** R-7 聚合组列表查询参数；projectId 只用于缩小范围，排序固定 groupId DESC。 */
 export const taskGroupListQueryRequestSchema = z
   .object({
     cursor: z.string().min(1).max(AGGREGATE_READ_CURSOR_MAX_LENGTH).optional(),
@@ -594,7 +594,7 @@ export type TaskGroupListQueryRequest = z.infer<
 >;
 
 /**
- * R-6 聚合组分支：只含当前生效（ACTIVE）成员，主任务在前、来源任务按
+ * R-7 聚合组分支：只含当前生效（ACTIVE）成员，主任务在前、来源任务按
  * joinedAt 与 taskId 升序；sourceKind 的可空性由 role 决定（MAIN 恒为 null）。
  * moduleId / featureId 是任务所在位置（featureId 为 null 表示模块级任务）。
  * 已解除（DETACHED）成员不出现在列表摘要中，仍由 R-1 详情页展示。
@@ -616,7 +616,7 @@ export const taskGroupListBranchSchema = z
 
 export type TaskGroupListBranch = z.infer<typeof taskGroupListBranchSchema>;
 
-/** R-6 列表项：组标识、项目名与当前生效分支；mainTask 为活跃主任务引用。 */
+/** R-7 列表项：组标识、项目名与当前生效分支；mainTask 为活跃主任务引用。 */
 export const taskGroupListItemSchema = z
   .object({
     groupId: id,
@@ -633,7 +633,7 @@ export const taskGroupListItemSchema = z
 
 export type TaskGroupListItem = z.infer<typeof taskGroupListItemSchema>;
 
-/** R-6 分页响应（C-006 envelope）。 */
+/** R-7 分页响应（C-006 envelope）。 */
 export const taskGroupListPageSchema = z
   .object({
     items: z.array(taskGroupListItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),

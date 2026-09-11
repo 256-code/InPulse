@@ -24,21 +24,21 @@ export interface TaskGroupMemberRow {
   readonly detachReason: string | null;
 }
 
-/** R-6 聚合组列表入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
+/** R-7 聚合组列表入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
 export interface TaskGroupListReadInput {
   readonly projectIds: readonly number[];
   readonly limit: number;
   readonly afterGroupId?: number;
 }
 
-/** R-6 分页结果：hasMore 为 true 时 nextGroupId 是最后一条的 keyset 位置。 */
+/** R-7 分页结果：hasMore 为 true 时 nextGroupId 是最后一条的 keyset 位置。 */
 export interface TaskGroupListPage {
   readonly items: readonly TaskGroupReadRecord[];
   readonly nextGroupId: number | null;
   readonly hasMore: boolean;
 }
 
-/** R-6 分支摘要行：只含 ACTIVE 成员，同时保留 role / sourceKind 由契约层映射。 */
+/** R-7 分支摘要行：只含 ACTIVE 成员，同时保留 role / sourceKind 由契约层映射。 */
 export interface TaskGroupActiveMemberRow extends TaskGroupMemberRow {
   readonly groupId: number;
 }
@@ -67,7 +67,7 @@ export abstract class TaskGroupReadPort {
   ): Promise<readonly TaskGroupMemberRow[]>;
 
   /**
-   * R-6 聚合组列表：只返回授权项目范围内的组，固定 groupId DESC keyset 分页。
+   * R-7 聚合组列表：只返回授权项目范围内的组，固定 groupId DESC keyset 分页。
    * 只读、不取锁；projectIds 为空短路返回空页，不发出 SQL。
    */
   abstract listGroups(
@@ -76,7 +76,7 @@ export abstract class TaskGroupReadPort {
   ): Promise<TaskGroupListPage>;
 
   /**
-   * R-6 分支摘要：只返回 status = ACTIVE 的成员（不含 DETACHED）；SQL 同时带
+   * R-7 分支摘要：只返回 status = ACTIVE 的成员（不含 DETACHED）；SQL 同时带
    * project_id 与 group_id 条件，跨项目串联不会返回结果。
    */
   abstract listActiveMembersForGroups(

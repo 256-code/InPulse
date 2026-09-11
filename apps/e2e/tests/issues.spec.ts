@@ -3,7 +3,7 @@ import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 /**
- * F-20 遗留问题页（R-5）关键路径 E2E：发布带「还有什么问题」的迭代记录后，
+ * F-20 遗留问题页（R-6）关键路径 E2E：发布带「还有什么问题」的迭代记录后，
  * 未闭环桶展示来源记录、来源任务与转为任务入口；页内完成转换后按应用统一
  * 模式自动打开新建的跟进任务详情，回到遗留问题页可见该条移入已闭环折叠区
  * 并保留跟进任务入口，原记录内容不被改写。

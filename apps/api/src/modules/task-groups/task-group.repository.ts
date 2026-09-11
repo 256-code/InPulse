@@ -115,7 +115,7 @@ export class TaskGroupRepository {
   }
 
   /**
-   * R-6 聚合组列表：按授权项目范围列出组，固定 id DESC keyset 分页。
+   * R-7 聚合组列表：按授权项目范围列出组，固定 id DESC keyset 分页。
    * 只读、不取锁；projectIds 为空短路返回空数组，不发出 SQL。
    */
   async listGroupsPage(
@@ -149,7 +149,7 @@ export class TaskGroupRepository {
   }
 
   /**
-   * R-6 聚合组分支摘要：只返回 status = ACTIVE 的成员（DETACHED 不进入列表）。
+   * R-7 聚合组分支摘要：只返回 status = ACTIVE 的成员（DETACHED 不进入列表）。
    * SQL 同时带 project_id 与 group_id 条件，跨项目串联不会返回结果。
    */
   async listActiveMembersForGroups(

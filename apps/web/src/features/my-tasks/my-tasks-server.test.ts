@@ -103,7 +103,7 @@ describe("my tasks server adapter", () => {
     ).toBe(true);
   });
 
-  it("maps the R-6 task group page through the generated client", async () => {
+  it("maps the R-7 task group page through the generated client", async () => {
     const listTaskGroups = vi.fn().mockResolvedValue({
       items: [
         {

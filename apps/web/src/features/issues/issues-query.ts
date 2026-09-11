@@ -7,7 +7,7 @@ import {
 } from "@generated/api";
 
 /**
- * F-20 遗留问题聚合读：R-5 GET /api/v1/leftover-items 的服务端签名游标分页。
+ * F-20 遗留问题聚合读：R-6 GET /api/v1/leftover-items 的服务端签名游标分页。
  * 未闭环与已闭环各自独立分页，列表顺序固定 leftoverItemId DESC（服务端口径），
  * 不在前端做过滤或重排。
  */

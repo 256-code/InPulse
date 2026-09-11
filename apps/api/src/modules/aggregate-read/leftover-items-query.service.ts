@@ -31,7 +31,7 @@ import {
 } from "./aggregate-read.errors.js";
 
 /**
- * R-5 遗留问题列表（F-20）聚合读。
+ * R-6 遗留问题列表（F-20）聚合读。
  *
  * 授权：只调用 A 的 ProjectAccessQueryPort 取得服务端 AuthorizedProjectScope；
  * projectId 只用于缩小范围，非成员或越权项目收敛为空页而不是 404（不泄露存在性）。

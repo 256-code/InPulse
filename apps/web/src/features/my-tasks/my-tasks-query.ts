@@ -32,7 +32,7 @@ export interface UseMyTaskGroupsQueryOptions {
 }
 
 /**
- * R-6 任务聚合组列表：按 groupId 倒序签名游标分页；服务端已按
+ * R-7 任务聚合组列表：按 groupId 倒序签名游标分页；服务端已按
  * AuthorizedProjectScope 过滤，非成员项目不会出现在结果中。
  * 失败时不隐藏「任务聚合组」区块，由视图渲染错误态。
  */

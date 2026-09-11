@@ -284,42 +284,42 @@ export const schemaRegistry = {
   },
   AggregateTaskRef: {
     schema: aggregateTaskRefSchema,
-    summary: "聚合读共用的任务引用，只含任务 ID 与编号（R-5 / R-6）",
+    summary: "聚合读共用的任务引用，只含任务 ID 与编号（R-6 / R-7）",
     sensitiveFieldPaths: [],
   },
   LeftoverListQueryRequest: {
     schema: leftoverListQueryRequestSchema,
-    summary: "遗留问题列表查询参数：分桶、项目收窄与游标（R-5）",
+    summary: "遗留问题列表查询参数：分桶、项目收窄与游标（R-6）",
     sensitiveFieldPaths: [],
   },
   LeftoverListItem: {
     schema: leftoverListItemSchema,
-    summary: "遗留问题条目：最新快照内容、来源任务与跟进任务引用（R-5）",
+    summary: "遗留问题条目：最新快照内容、来源任务与跟进任务引用（R-6）",
     sensitiveFieldPaths: [],
   },
   LeftoverItemPage: {
     schema: leftoverItemPageSchema,
-    summary: "遗留问题分页响应（R-5 / C-006）",
+    summary: "遗留问题分页响应（R-6 / C-006）",
     sensitiveFieldPaths: [],
   },
   TaskGroupListQueryRequest: {
     schema: taskGroupListQueryRequestSchema,
-    summary: "聚合组列表查询参数：项目收窄与游标（R-6）",
+    summary: "聚合组列表查询参数：项目收窄与游标（R-7）",
     sensitiveFieldPaths: [],
   },
   TaskGroupListBranch: {
     schema: taskGroupListBranchSchema,
-    summary: "聚合组列表分支：只含生效成员与任务原数据（R-6）",
+    summary: "聚合组列表分支：只含生效成员与任务原数据（R-7）",
     sensitiveFieldPaths: [],
   },
   TaskGroupListItem: {
     schema: taskGroupListItemSchema,
-    summary: "聚合组列表条目：组标识、项目名与生效分支（R-6）",
+    summary: "聚合组列表条目：组标识、项目名与生效分支（R-7）",
     sensitiveFieldPaths: [],
   },
   TaskGroupListPage: {
     schema: taskGroupListPageSchema,
-    summary: "聚合组分页响应（R-6 / C-006）",
+    summary: "聚合组分页响应（R-7 / C-006）",
     sensitiveFieldPaths: [],
   },
   ErrorResponse: {
