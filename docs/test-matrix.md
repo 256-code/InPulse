@@ -117,7 +117,7 @@ Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全�
 | MOD-TX-001 | PostgreSQL | 审计或搜索失败 | 业务、审计、活动、搜索、幂等同事务回滚；相同 Key 可在故障解除后重试 | 同上，2 个故障注入用例均通过 |
 | MOD-LOCK-001 | PostgreSQL | 项目归档和模块创建竞争 | 真实 FOR UPDATE 阻塞子写，pg_stat_activity 观察 Lock 等待；父归档提交后子写拒绝 | 同上，已通过 |
 | MOD-UI-001 | jsdom | 表单、权限入口、错误与 409 | 未分类可编辑；409 保留快照/草稿，未改字段取最新值，同字段冲突展示差异并显式选择后才更新版本；失败重试；管理员原因；归档恢复入口 | ModulesPageView.test.tsx 7/7 通过；新增 3 例先红后绿 |
-| MOD-E2E-001 | Playwright | 成员模块页面关键路径 | 登录后创建/编辑、刷新持久化、成员无归档入口；双页面竞争验证不同字段自动合并、同字段选择最新值 | apps/e2e/tests/modules.spec.ts 1/1 本地 Edge（Chromium）通过 |
+| MOD-E2E-001 | Playwright | 成员模块页面关键路径 | 登录后创建/编辑、刷新持久化、成员无归档入口；双页面竞争验证不同字段自动合并、同字段选择最新值 | apps/e2e/tests/modules.spec.ts 1/1 本地 Edge（Chromium）通过；CI Browser E2E（默认 Chromium）已覆盖并通过（2026-09-09 dev/a、dev/b 运行含该步骤且成功，后续 main 运行全绿） |
 | MOD-AUDIT-CONC-001 | PostgreSQL 并发 | 100 个真实 `createModule` 业务事务写同一项目审计链 | 业务、审计、活动与搜索同事务；链无分叉、无序号缺口、链头一致，每个业务命令恰有一条 `module.create`；见 [ADR-008](adr/ADR-008.md) | `modules-api.integration.test.ts` 10/10、全量 API 集成 29 文件 134/134 本地通过（2026-09-09，PostgreSQL 18.6 + PGroonga） |
 
 ## Modules 项目初始化 Port（B，本地交付 2026-09-08）
