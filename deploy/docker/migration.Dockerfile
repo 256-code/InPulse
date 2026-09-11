@@ -24,8 +24,11 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# `--config.node-linker=hoisted`：默认（isolated）的 legacy deploy 会把 workspace
+# 包以符号链接指向 /workspace，runtime 阶段不存在该目录，镜像内模块解析会失败；
+# hoisted 布局把全部依赖（含 workspace 包）复制进 /out，运行树完全自包含。
 RUN pnpm --filter @inpulse/database build \
- && pnpm deploy --legacy --filter @inpulse/database --prod /out
+ && pnpm deploy --legacy --filter @inpulse/database --prod --config.node-linker=hoisted /out
 
 FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 ENV NODE_ENV=production

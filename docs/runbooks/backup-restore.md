@@ -17,8 +17,8 @@
 
 | 组件 | 位置 | 责任 |
 | --- | --- | --- |
-| 备份服务 | compose `operations` profile 的 `backup` 服务（F-10.3 待交付） | `pg_dump --format=custom`、AEAD/age 加密、SHA-256 与签名清单、原子重命名、异机上传与保留 |
-| 审计归档 | compose `operations` profile 的 `audit-archive`（F-10.3 待交付） | 每小时写签名链头检查点、每日导出加密审计明细到独立 WORM 前缀 |
+| 备份服务 | compose `operations` profile 的 `backup` 服务（F-10.3 已交付，镜像 `deploy/docker/ops.Dockerfile`） | `pg_dump --format=custom`、AES-256-GCM 加密、SHA-256 与签名清单、原子重命名、异机上传与保留 |
+| 审计归档 | compose `operations` profile 的 `audit-archive`（F-08 步骤 6 已交付，复用同一 ops 镜像） | 每小时写签名链头检查点、每日导出加密审计明细到独立 WORM 前缀 |
 | 宿主调度 | `deploy/backup/`（`backupctl.sh` + 5 个 systemd 单元） | 12 小时调度、并发锁、失败与 staleness 告警、启用/停用与状态 |
 | 告警接收方 | 运维侧受控配置（地址不在仓库内） | 接收失败与 staleness 告警 |
 | 密钥与异机存储授权 | 运维侧 | 提供解密密钥、异机只读存储凭据、恢复授权流程 |
@@ -27,8 +27,9 @@
 
 ## 2. 生效时机
 
-- 上线前：`deploy/compose.yaml` 不包含 `backup` / `audit-archive` 服务，宿主不安装
-  `inpulse-backup.*` 单元；`backupctl.sh enable` 会拒绝执行（缺少 compose 服务、缺少
+- 上线前：`backup` / `audit-archive` 只作为 `profiles: [operations]` 声明存在于
+  `deploy/compose.yaml`，不部署、不随默认 profile 启动，宿主也不安装
+  `inpulse-backup.*` 单元；`backupctl.sh enable` 会拒绝执行（缺少
   `--confirm-go-live` 或缺少演练证据）。
 - 上线时：完成 §3 前置后执行一次 `enable`；调度生效后 18 小时内必须出现第一条成功记录
   （`enable` 以 `enabled-at` 记录启用时间作为 watchdog 起点，刚启用不会误报），超阈值后
@@ -100,6 +101,24 @@ sudo deploy/backup/backupctl.sh disable
 6. 不使用 `pg_dump` 恢复数据库角色与密码：角色由 bootstrap 脚本建立，角色密码单独保管；
 7. `audit-archive` 每小时写签名链头检查点，每日导出加密审计明细；
 8. 记录最近一次成功备份、异机上传、审计归档与恢复演练时间。
+
+手工执行与验证（等价于宿主调度的单次任务；压缩包与清单在 `backup_encrypted` 卷中）：
+
+```bash
+# 手工执行一次备份（宿主 backupctl.sh run 的等价命令）：
+sudo docker compose --project-name inpulse --env-file deploy/.env.deploy \
+  --file deploy/compose.yaml --profile operations run --rm -T backup
+
+# 解密校验备份包（只读取 BACKUP_ENCRYPTION_KEY_FILE，不访问数据库与异机存储）：
+sudo docker compose --project-name inpulse --env-file deploy/.env.deploy \
+  --file deploy/compose.yaml --profile operations run --rm -T backup \
+  node dist/backup-cli.js verify \
+  --file /backup/backup-<stamp>-<id>.pgdump.enc \
+  --manifest /backup/backup-<stamp>-<id>.pgdump.enc.manifest.json
+```
+
+`verify` 输出明文/密文 SHA-256、字节数与签名版本；清单校验失败或哈希不一致即非零退出。
+备份任务失败时保留本机密文（保留期 7 天），上传恢复后必须在窗口内补齐异机副本。
 
 ## 7. 全新主机恢复
 

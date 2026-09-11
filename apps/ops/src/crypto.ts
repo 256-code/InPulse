@@ -49,17 +49,27 @@ export function verifyCanonicalSignature(
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-/** HKDF-SHA256 从归档签名密钥派生导出加密子密钥（独立用途，避免密钥复用）。 */
-export function deriveExportKey(signingKey: Buffer, salt: Buffer): Buffer {
+/** 归档导出与备份加密各自使用独立的 HKDF info；跨用途复用子密钥属于违规。 */
+export function deriveSubkey(
+  masterKey: Buffer,
+  salt: Buffer,
+  info: string,
+): Buffer {
   return Buffer.from(
-    hkdfSync(
-      "sha256",
-      signingKey,
-      salt,
-      AUDIT_EXPORT_KDF_INFO,
-      EXPORT_KEY_LENGTH,
-    ),
+    hkdfSync("sha256", masterKey, salt, info, EXPORT_KEY_LENGTH),
   );
+}
+
+/** 导出加密子密钥（info `inpulse-audit-export-v1`）。 */
+export function deriveExportKey(signingKey: Buffer, salt: Buffer): Buffer {
+  return deriveSubkey(signingKey, salt, AUDIT_EXPORT_KDF_INFO);
+}
+
+/** 逻辑备份加密子密钥（info `inpulse-backup-encryption-v1`，与导出用途分离）。 */
+export const BACKUP_ENCRYPTION_KDF_INFO = "inpulse-backup-encryption-v1";
+
+export function deriveBackupKey(encryptionKey: Buffer, salt: Buffer): Buffer {
+  return deriveSubkey(encryptionKey, salt, BACKUP_ENCRYPTION_KDF_INFO);
 }
 
 export interface EncryptedExport {

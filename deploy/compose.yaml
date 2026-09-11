@@ -1,14 +1,16 @@
 # 生产稳态 Compose 拓扑（对齐技术设计 v1.2.2 §11.2）。
 #
 # 本期范围：稳态拓扑结构、镜像 ref 格式、Secrets/挂载/健康检查声明；已具备
-# 生产 API/Web/Migration/DB-bootstrap 四类镜像（deploy/docker/*.Dockerfile），
-# 以及 operations profile 下的 audit-archive 审计归档服务（F-08 步骤 6：每小时
-# 签名链头检查点 + 每日加密明细导出；OPS_IMAGE_REF 由发布清单解析后才可用）。
-# 本文件仍不包含尚未交付的 backup 备份本体（F-10.3 另一半）；operations 服务
-# 与宿主调度是生产上线门禁项，上线时才启用，上线前不部署、不运行。宿主调度
-# 配置与启用流程已交付在 deploy/backup/（backupctl.sh、audit-archivectl.sh、
-# systemd 单元与非敏感配置示例）；启用与恢复见 docs/runbooks/backup-restore.md
-# 与 docs/runbooks/audit-archive.md，升级与回滚见 docs/runbooks/upgrade-rollback.md；
+# 生产 API/Web/Migration/DB-bootstrap/Ops 五类镜像（deploy/docker/*.Dockerfile，
+# Ops 镜像同时承载 operations profile 的 backup 与 audit-archive），以及
+# operations profile 下的 backup 备份服务（F-10.3：pg_dump + AEAD 加密 + 签名
+# 清单 + 异机上传，默认命令 `node dist/backup-cli.js backup`）与 audit-archive
+# 审计归档服务（F-08 步骤 6：每小时签名链头检查点 + 每日加密明细导出）。
+# OPS_IMAGE_REF 由发布清单解析后才可用。operations 服务与宿主调度是生产上线
+# 门禁项，上线时才启用，上线前不部署、不运行。宿主调度配置与启用流程已交付在
+# deploy/backup/（backupctl.sh、audit-archivectl.sh、systemd 单元与非敏感配置
+# 示例）；启用与恢复见 docs/runbooks/backup-restore.md 与
+# docs/runbooks/audit-archive.md，升级与回滚见 docs/runbooks/upgrade-rollback.md；
 # 静态校验由 pnpm check:deploy 执行。
 #
 # 说明：
@@ -20,15 +22,17 @@
 #        - api 读 RUNTIME_DB_PASSWORD_FILE / DB_USER
 #        - audit-archive 读 DB_PASSWORD_FILE（角色 audit_archive_writer）、
 #          WORM_CREDENTIALS_FILE 与 ARCHIVE_SIGNING_KEY_FILE，不挂载在线审计 HMAC
+#        - backup 读 DB_PASSWORD_FILE（角色 app_backup）、BACKUP_ENCRYPTION_KEY_FILE、
+#          OFFSITE_CREDENTIALS_FILE，以及发布清单注入的 BACKUP_GIT_SHA / BACKUP_IMAGE_REF
 #      技术设计 §11.2 的泛化 `DB_PASSWORD_FILE` 与代码命名仍未统一，属于生产前
 #      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
 #   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
 #      API 生产镜像内置 healthcheck.mjs，Web 生产镜像内置 Nginx 配置与 curl。
 #   4. AUDIT_DB_*（独立 audit_reader 连接）已由代码读取，本次挂载对应 Secret；
 #      TOTP_KEK_* 已由代码读取，本次挂载对应 Secret。
-#   5. operations profile 的 audit-archive 服务只在校验过的宿主调度（或人工
-#      运维）下按需 `run --rm` 执行，不常驻；上线前 `--profile operations`
-#      保持未启用。
+#   5. operations profile 的 backup / audit-archive 服务只在校验过的宿主调度
+#      （或人工运维）下按需 `run --rm` 执行，不常驻；上线前
+#      `--profile operations` 保持未启用。
 #   6. 首次建库与角色/密码初始化由 database/bootstrap 和后续独立 compose.init 纵切片
 #      负责，本文件不为生产准备登录密码；生产不得暴露 PostgreSQL/API 到公网。
 
@@ -225,6 +229,56 @@ services:
       retries: 5
     logging: *default-logging
 
+  backup:
+    image: "${OPS_IMAGE_REF}"
+    profiles: [operations]
+    user: "10002:10002"
+    read_only: true
+    tmpfs: [/tmp:size=512m, noexec, nosuid, nodev]
+    # 默认执行一次完整加密逻辑备份；验证/批量解密用
+    # `run --rm backup node dist/backup-cli.js verify --file <pkg>` 覆盖命令。
+    command: ["node", "dist/backup-cli.js", "backup"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app_backup
+      DB_PASSWORD_FILE: /run/secrets/db_backup_password
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      OFFSITE_CREDENTIALS_FILE: /run/secrets/offsite_credentials
+      BACKUP_LOCAL_DIR: /backup
+      # 发布清单注入：Git commit SHA（40 hex）与 ops 镜像 ref 进入签名清单；
+      # 生产模式缺任一值即 fail closed（见 apps/ops/src/config.ts）。
+      BACKUP_GIT_SHA: "${BACKUP_GIT_SHA:-}"
+      BACKUP_IMAGE_REF: "${OPS_IMAGE_REF}"
+    secrets:
+      - source: db_backup_password
+        target: /run/secrets/db_backup_password
+        uid: "10002"
+        gid: "10002"
+        mode: "0400"
+      - source: backup_encryption_key
+        target: /run/secrets/backup_encryption_key
+        uid: "10002"
+        gid: "10002"
+        mode: "0400"
+      - source: offsite_credentials
+        target: /run/secrets/offsite_credentials
+        uid: "10002"
+        gid: "10002"
+        mode: "0400"
+    volumes:
+      - backup_encrypted:/backup
+    networks: [backend, edge]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    mem_limit: 1g
+    pids_limit: 128
+    restart: "no"
+    logging: *default-logging
+
   audit-archive:
     image: "${OPS_IMAGE_REF}"
     profiles: [operations]
@@ -275,6 +329,7 @@ networks:
 
 volumes:
   pg_data:
+  backup_encrypted:
 
 secrets:
   db_migrator_password:
@@ -301,3 +356,9 @@ secrets:
     file: ./secrets/tls_cert.pem
   tls_key:
     file: ./secrets/tls_key.pem
+  db_backup_password:
+    file: ./secrets/db_backup_password
+  backup_encryption_key:
+    file: ./secrets/backup_encryption_key
+  offsite_credentials:
+    file: ./secrets/offsite_credentials
