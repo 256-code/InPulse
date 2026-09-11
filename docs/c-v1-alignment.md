@@ -76,4 +76,4 @@ C 侧待办（2026-09-11 第二轮契约扩展落库后更新）：R-5 前端接
 
 编号说明（已按建议顺延）：A 于 2026-09-11 冻结的 R-5 是 `listTaskGroupMemberships`（[PR #102](https://github.com/256-code/InPulse/pull/102)）；本批两条新路由原沿用的 R-5 / R-6 与其冲突，已按建议顺延落库为 **R-6 `listLeftoverItems`（`GET /api/v1/leftover-items`）** 与 **R-7 `listTaskGroups`（`GET /api/v1/task-groups`）**；Route Registry、Schema、Schema Registry 描述、实现注释、前端接线、集成测试与 E2E 用例、OpenAPI 与生成客户端已同步，冲突编号不再存在。
 
-未做：§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。
+未做：§4 待裁定项的契约扩展（遗留问题总数、来源记录标题、优先级 / 截止时间等仍无字段来源，保持降级）；既有页面视觉与 mock 数据集本身的调整。`/records` 单页结构改造（会改动 F-17 / F-18 / F-19 已交付视图）经产品 2026-09-11 定案为**暂缓**并归属 B，登记为工作书 B-3；恢复开工需先定案跨项目记录读路由（现有 `listChangeRecords` 与 `listRecordDrafts` 均先选项目，`RecordListQuery` 只有 `status`），按独立契约纵切片排期。PR #98 的三次 GitHub Actions（CI push / pull_request 与 Documentation）已通过。
