@@ -11,6 +11,7 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskDetailPath } from "@features/tasks/task-links";
+import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 /** Match the task form's browser-local input and UTC API value, guarding invalid dates. */
 export function parseFollowupDueAt(value: string): string | null | undefined {
   if (value === "") return null;
@@ -46,7 +47,7 @@ function Preview({ value }: { value: LeftoverTaskPreview }) {
       <p>
         记录 v{value.recordVersion} · 稳定遗留项 #{value.leftoverItemId}
       </p>
-      <p className="draft-content">{value.content || "当前版本没有遗留问题"}</p>
+      <RecordMarkdown content={value.content || "当前版本没有遗留问题"} />
       <p>
         将继承的影响功能：
         {value.inheritedImpacts.map((f) => f.name).join("、") || "无"}

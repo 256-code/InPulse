@@ -11,6 +11,7 @@ import {
   type PublishedRecord,
 } from "@generated/api";
 import { fields, labels } from "@features/record-drafts/record-content";
+import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import type { TaskViewItem } from "./task-query";
 export function CompleteWithRecord({
@@ -214,9 +215,10 @@ export function CompleteWithRecord({
           {fields
             .filter((field) => field !== "title")
             .map((field) => (
-              <p className="draft-content" key={field}>
-                {labels[field]}：{latest[field] || "（空）"}
-              </p>
+              <div className="record-field" key={field}>
+                <span className="record-field-label">{labels[field]}</span>
+                <RecordMarkdown content={latest[field] || "（空）"} />
+              </div>
             ))}
           <Button
             disabled={busy}
@@ -308,9 +310,10 @@ export function CompleteWithRecord({
           {selected && (
             <section aria-label="所选草稿内容">
               {fields.map((field) => (
-                <p className="draft-content" key={field}>
-                  {labels[field]}：{selected[field] || "（空）"}
-                </p>
+                <div className="record-field" key={field}>
+                  <span className="record-field-label">{labels[field]}</span>
+                  <RecordMarkdown content={selected[field] || "（空）"} />
+                </div>
               ))}
               <a
                 href={`/records?projectId=${base.projectId}&recordId=${selected.id}${selected.taskId === null ? "" : `&moduleId=${base.moduleId}&taskId=${base.id}`}`}

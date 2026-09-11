@@ -15,6 +15,7 @@ import {
   recordContent,
   type Field,
 } from "@features/record-drafts/record-content";
+import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 type Merge = ReturnType<typeof mergeRecordDraft> & {
   latest: PublishedRecord;
@@ -216,9 +217,10 @@ export function EditPublishedRecord({
                     <option value="mine">保留我的输入</option>
                     <option value="latest">采用最新内容</option>
                   </select>
-                  <p className="draft-content">
-                    最新内容：{merge.latest[field]}
-                  </p>
+                  <div className="record-field">
+                    <span className="record-field-label">最新内容</span>
+                    <RecordMarkdown content={merge.latest[field] || "（空）"} />
+                  </div>
                 </label>
               ))}
               <Button

@@ -21,10 +21,12 @@ fail closed 到 enforce。
 直接修正异常过滤器，因此不引入 adapter 包装）；`database/src/config.ts` 把 Secret 文件权限
 判定抽成 `isPrivateOwnerReadableFile`，生产模式仍是 `/run/secrets` 直接子项、非符号链接、
 仅属主可读的 fail closed 策略；GitHub 外链按 [ADR-022](adr/ADR-022.md) 用标准 URL Parser
-实现规范化，数据库最终防线沿用既有类型化关联模型。未交付：Markdown 白名单（前端当前没有
-任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR 由
-人工确认）；外部链接的 HTTP 关联接口属 F-14 业务纵切片，新增路由必须同步 Schema、Route
-Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全」表。
+实现规范化，数据库最终防线沿用既有类型化关联模型。Markdown 白名单渲染当时列为未交付（前端
+没有任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR
+由人工确认）：依赖已由 [PR #127](https://github.com/256-code/InPulse/pull/127) 合入，白名单渲染
+已由 B-5 落库，见本文件「B-5 迭代记录 Markdown 白名单渲染」章节。外部链接的 HTTP 关联接口属
+F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端。
+另见「审计与安全」表。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -394,7 +396,7 @@ GitHub Actions 尚未对本 PR 执行。
 | ID | 阶段 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | Required |
-| SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
+| SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | 本地通过（2026-09-11：101000 行规模表、30 并发 × 600.8s、2,362,344 次 SQL、0 错误、P95 10.171ms / P99 13.284ms、Recall@20 189/190、行级跨项目越界 0、冷缓存 30 条单独记录；证据 [`pgroonga-capacity-report.json`](../database/poc/search-pgroonga/artifacts/pgroonga-capacity-report.json) 与本文件 A-5 章节；该门禁不进入 CI；5 年峰值模型未在设计中定稿，1.2 倍条件以上界形式记录） |
 | SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 已本地覆盖 13/13（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
 | SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；GitHub Actions 待执行） |
 | SEARCH-005 | 阶段 0 | 搜索结果「遗留问题」独立分类（F-26） | 迁移 `0006` 允许 `LEFTOVER` 投影；记录发布/修订、作废/恢复与遗留项转任务在同一事务内按最新版本快照刷新投影；`entityId` 为遗留项 ID、title 至多 500 字符、`summary` 标注处置状态与来源记录、可见性跟随父记录（PUBLISHED=MEMBER、VOID=ADMIN_ONLY）、`sourceStatus` 为遗留项状态；`GET /api/v1/search` 返回 `entityType: "LEFTOVER"` 且前端以「遗留问题」分组呈现，不再依赖父记录 rawText 命中 | 已自动化（真实 PostgreSQL 集成：`record-publication` 12 例、`record-lifecycle` 22 例、`search-api` 9 例含 LEFTOVER 分类命中与跨项目隔离；全量 API 集成 47 文件 408 例、Web 单测 58 文件 249 例、Playwright E2E 43/43，2026-09-11；GitHub Actions 待执行） |
@@ -983,3 +985,58 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 67 文件 322 例；`pnpm check` 至 `deps:audit` 前全部通过（lint / format:check / typecheck / test:unit / db:migrations:check / contract:drift / contract:validate / build / check:deploy:test / check:deps / check:frontend:boundaries（215 模块 992 依赖）/ permissions:check（97/97）/ check:secrets / check:docs），`deps:audit` 因本地 npm 镜像无 audit endpoint 失败（非本批回归；公共 registry 审计无已知漏洞）；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）单独复跑通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）全量 50 例 49 过 + 1 偶发：`aggregate-views.spec.ts:14` 在「新建功能」弹窗保存后 `toBeHidden` 超时（与既有偶发同族），单文件复跑 2/2 通过，按约定不得视为已修复。
 
 未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #126](https://github.com/256-code/InPulse/pull/126)；② `pnpm test:integration` 未运行（本批无服务端改动）；③ 新增 / 更新的单测与 E2E 用例需非作者人工评审；④ C-4 视觉复核用临时 Playwright spec 与 17 张截图仅本地产出（spec 已删除，截图未入库）。
+
+## A-5 阶段 4 搜索容量门禁（2026-09-11 本地落库）
+
+按[技术设计 §9.4](../技术设计v1.2.2.md#94-中文-poc-验收)（阶段 4 容量条目）与[系统设计 §1.6](../系统设计文档v1.0.2.md#16-搜索方案与验收指标)（阶段 4 容量与安全最终验收）落地：新增
+[`database/poc/search-pgroonga/run-capacity.ts`](../database/poc/search-pgroonga/run-capacity.ts)，复用 PGroonga PoC 种子化的
+`app.pgroonga_poc_scale`（101000 行）与默认全文索引，查询 SQL 与生产 `PostgresSearchProjectionReader`
+同形状（`&@~ app.pgroonga_query_escape($1)`、项目与 visibility 过滤在 SQL 层、id keyset 分页）；
+`poc-search-pgroonga-local.ps1` 新增 `-Capacity` / `-CapacityDurationSeconds`，在搜索 PoC 通过后追加容量步骤；
+报告见 [`pgroonga-capacity-report.json`](../database/poc/search-pgroonga/artifacts/pgroonga-capacity-report.json)（`version: pgroonga-capacity-v1`，全部 gate 通过才以 0 退出）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| SEARCH2-CAP-001 | 真实 PostgreSQL 压测 | 投影规模与冻结金标 | 规模表 ≥ 100,000 行（实测 101000）、冻结金标 200 条且版本 `phase4-v1`、预热 Recall@20 ≥ 90%（实测 189/190 = 99.47%，缺失 `G007:通知`） | 本地通过 |
+| SEARCH2-CAP-002 | 真实 PostgreSQL 压测 | 30 并发 × 10 分钟 | 30 并发持续 ≥ 600s（实测 600.8s）、2,362,344 次 SQL、0 错误、P95 < 500ms（实测 10.171ms）、P99 < 1s（实测 13.284ms）、qps 3991.8 | 本地通过 |
+| SEARCH2-CAP-003 | 真实 PostgreSQL 压测 | 跨项目隔离 | 行级断言任何越界 `project_id` 计违规（实测 0），持续压测前后各一次负向探针（`G043` 在非授权项目返回 0 行） | 本地通过 |
+| SEARCH2-CAP-004 | 真实 PostgreSQL 压测 | 冷缓存单独记录 | `docker restart` 清空 PostgreSQL shared_buffers 后单并发执行首批查询（30 条，min 1.483ms / max 68.211ms），与预热后结果分开呈现 | 本地通过 |
+| SEARCH2-CAP-005 | 脚本门禁 | 失败即非零退出 | 报告 `gates` 全部为 true 才以 0 退出，任一未达标写入报告并抛错 | 本地通过 |
+
+本地实际执行（2026-09-11）：`powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/poc-search-pgroonga-local.ps1 -Image inpulse/pgroonga-pg18.6:repro -Port 55434 -RestorePort 55435 -Capacity` 一体化路径成功退出——8 个迁移校验与迁移、数据库单测 15 例、数据库集成 26 例、10 个 PGroonga 策略 PoC、容量门禁（30 并发 × 600.8s、2,398,317 次请求 / 2,362,344 次 SQL、0 错误、P95 10.171ms、P99 13.284ms、召回 189/190、冷缓存 30 条）、升级路径（`0000-0002` 手工应用后由 runner 应用 `0003`-`0007`，4 applied / 4 already present）与 `0003`/`0004`/`0005` 逐迁移事务内回滚、逻辑备份恢复验证；`database/package.json` 新增 `poc:search:capacity`，`database/scripts/poc-search-pgroonga-local.ps1` 新增 `-Capacity` 参数。
+
+未运行 / 已知偏差：① 本批 [PR #128](https://github.com/256-code/InPulse/pull/128) 的 GitHub Actions 结果见该 PR 检查记录；② 容量门禁不进入 CI（含 10 分钟持续负载与容器重启），端到端 P95（Nginx / TLS / API 与鉴权开销）需在部署环境复测；③ 5 年容量模型峰值未在设计中定稿，1.2 倍条件以上界形式记录（峰值 ≤ 84166 时成立），定稿后需人工复核并按需复测；④ 冷缓存只清空 PostgreSQL shared_buffers，宿主页缓存与存储层缓存未清空；⑤ 30 并发由单进程发起，未覆盖真实成员关系变更并发；⑥ 本批三个既有 PoC artifact 由同一次脚本运行重生成后已还原，避免夹带与 A-5 无关的时序噪声。
+## B-5 迭代记录 Markdown 白名单渲染（2026-09-11 本地落库）
+
+按[技术设计 §7.5](../技术设计v1.2.2.md)与[系统设计 §3.6](../系统设计文档v1.0.2.md)：迭代记录
+正文保存 Markdown 原文，渲染必须过白名单，不允许原始 HTML。依赖 `react-markdown@10.1.0` +
+`rehype-sanitize@6.0.0` 已按第 4 节由独立依赖 [PR #127](https://github.com/256-code/InPulse/pull/127)
+squash 合入 main `3e416a1`（外链口径沿用 [ADR-022](adr/ADR-022.md)）。渲染器
+[`RecordMarkdown`](../apps/web/src/features/common/components/RecordMarkdown.tsx) 逐层收敛：
+react-markdown 不启用原始 HTML；rehype-sanitize 使用显式完整 schema，只保留
+`a/blockquote/br/code/em/h1-h6/hr/img/li/ol/p/pre/strong/ul` 标签与 `a.href`、`img.alt`
+属性，`href` 协议只允许 https，并对 `id/name` 前缀转义；`urlTransform` 与 `a` 组件统一走
+`recordLinkHref`（标准 URL Parser，禁止字符串前缀判断域名），只把规范化后的
+`https://github.com/...` 渲染为 `target="_blank" rel="noopener noreferrer"` 外链，拒绝
+http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸形 URL；图片不加载远程资源，
+只显示 `[图片：alt]`。接入点：已发布记录详情与版本对比、草稿详情、完成任务时的最新草稿与所选
+草稿、遗留项转任务预览、版本冲突「最新内容」预览；编辑表单保持纯文本 textarea。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B5-UNIT-001 | Web 单元 | CommonMark 结构渲染 | 标题 / 列表 / 引用 / 代码块 / 行内代码 / 粗斜体 / 分隔线按白名单渲染；行内代码中的 `<div>` 文本保留；空内容不产生节点并保留调用方类名 | 本地通过（`RecordMarkdown.test.tsx`） |
+| B5-UNIT-002 | Web 单元 | 原始 HTML 惰性 | `<script>`、事件处理器与原始标签不进入 DOM（无 script/img/onerror 节点与全局探针赋值）；原始 HTML 文本按策略丢弃、历史纯文本换行保留 | 本地通过 |
+| B5-UNIT-003 | Web 单元 | 协议与域名白名单 | `javascript:` / `data:` / `vbscript:` 不产出 href；`https://github.com/...` 产出安全外链且 autolink 同口径；http、非 GitHub 域名、混淆域名、userinfo、非默认端口、相对路径与畸形 URL 只保留文本 | 本地通过 |
+| B5-UNIT-004 | Web 单元 | 图片与占位 | 图片不加载远程资源、只显示 `[图片：alt]`；详情「暂无已知遗留问题」与版本对比「（空）」占位保持 | 本地通过 |
+| B5-UNIT-005 | Web 单元 | 视图接线回归 | 已发布记录 / 草稿 / 完成任务 / 遗留转任务用例在接入 `RecordMarkdown` 后通过；版本冲突断言改为标签「最新内容」与内容分别断言 | 本地通过 |
+
+本地实际执行（2026-09-11）：`RecordMarkdown.test.tsx` 11 例；`pnpm --filter @inpulse/web test`
+68 文件 333 例通过；`pnpm --filter @inpulse/web typecheck`、`pnpm lint`、`pnpm format:check`、
+`pnpm build`（产物含 `RecordMarkdown-*.js`）、`pnpm check:frontend:boundaries`（220 模块
+1005 依赖）、`pnpm check:docs` 与 `pnpm check:secrets`（944 个文件）通过；记录相关既有浏览器 E2E 定向复跑 11 例 10 过 + 1 偶发（`record-publishing.spec.ts:78` 新建功能弹窗未关，Docker 日志同时段 `idempotency_records_retention_check` 违约，属既有偶发同族；单文件复跑 2/2 通过）。推送 2（2026-09-11）：首轮 CI 的 Secret scan 命中测试内 userinfo 反例字面量（用户名与口令内嵌于 URL），已改为片段拼接，未放宽扫描规则。推送 3（2026-09-11）：推送 2 的 CI 又在本文档与 `开发日志.md` 正文命中同类 userinfo 字面量，本次改写为不含连接串形态的描述；`pnpm check:secrets`、`pnpm check:docs` 与本文件 `pnpm exec prettier --check` 重新通过，仍未放宽扫描规则。
+
+未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #129](https://github.com/256-code/InPulse/pull/129)；
+② 未新增浏览器 E2E，记录相关既有用例定向复跑见上（含 1 例既有偶发，按约定不得视为已修复）；
+③ 新增单测需非
+作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
+（不与 rehype-sanitize 默认 schema 合并），后续升级依赖时必须同步复核本文件 schema 与测试。
