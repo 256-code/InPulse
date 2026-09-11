@@ -196,6 +196,8 @@
 
 - 阶段 1 F-29/F-32 第二轮契约裁决已本地落库（A）：回应 B 在 PR #98 后反馈的契约缺口与 `TaskItem.groupRole`。裁决 [A 的契约评审裁决](./docs/a-contract-review-f25-f29-f32.md) §10 接受 R-2 `activeLeftoverTotal` 与 `LeftoverItemSummary.recordTitle`、R-3 列表项 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId` 与 `stats` / `leftoverCount` / `leftoverSample`、筛选参数 `priority` 与 `includeCanceled`；拒绝列表返回 `description`；延后 `scopeCounts`、`relation`、`query` 与 `scope=created/all`。`TaskItem.groupRole` 不在 B 的任务读写路由扩字段（会形成 TasksModule 与 TaskGroupsModule 依赖环），改为新增 C 侧只读路由 R-5 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）。本轮只做裁决与台账同步：未改代码、迁移、契约源或生成物，未注册路由；实现必须与 A 的契约登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端同一个 PR 落库，`priority` / `includeCanceled` 需补 `EXPLAIN` 证据。
 
+- 备份调度生效时机已裁定（A，2026-09-11）：定时备份（宿主每 12 小时加密备份、排除 Session、SHA-256/签名清单、异机保留与失败告警）是生产上线门禁项，上线时才启用；上线前不部署、不运行定时备份任务，`deploy/compose.yaml` 的 `operations` profile 保持未发布。同时修正文档内备份频率不一致：技术设计 §1.3、系统设计部署表与技术设计 §10.4/§11.5/§12 统一为与 ADR-020 一致的至少每 12 小时，未改动 ADR-020 决策。本轮仅文档变更，未改代码、迁移、契约源或生成物。
+
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
 
 - 2026-09-10 F-21 已本地交审：管理员记录作废/恢复、双时间戳重认证（含锁后复核）、原因/If-Match/数据库幂等、管理员VOID读取/发现及同事务审计/Activity/Search；版本、最近作废快照、遗留项及转换链接保留，无通知或迁移。真库四文件63/63、契约42/42、Web7/7、86路由/权限与5生成物漂移通过；Edge F21 1/1及相邻F18 2/2分别通过，未执行本批CI。代码 9b5805805bbee6f0ff964fba75d5732701570943，范围与失败历史见 [F-21交审说明](docs/f21-local-handoff.md)。

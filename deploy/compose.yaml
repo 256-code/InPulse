@@ -2,7 +2,9 @@
 #
 # 本期范围：稳态拓扑结构、镜像 ref 格式、Secrets/挂载/健康检查声明；已具备
 # 生产 API/Web/Migration/DB-bootstrap 四类镜像（deploy/docker/*.Dockerfile）。
-# 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）。
+# 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）；这两个
+# operations 服务与宿主 12 小时调度是生产上线门禁项，上线时才启用，上线前不
+# 部署、不运行。
 #
 # 说明：
 #   1. *_IMAGE_REF 必须由受信镜像仓库解析后写入签名发布清单；本文件只引用

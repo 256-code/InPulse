@@ -435,6 +435,7 @@ GitHub Actions 尚未对本 PR 执行。
 | DEPLOY-001 | 阶段 0 | 空库迁移与角色 | 独立迁移任务成功，应用启动不迁移，runtime 无 DDL | 部分自动化（空库迁移与 runtime DDL 见 CI-007/CI-008；`apps/api` 启动不迁移尚无断言） |
 | DEPLOY-002 | 上线前 | 可复现镜像 | 精确 Tag 与 digest、一致 lockfile、非 root 运行、健康检查通过 | Required |
 | RECOVERY-001 | 上线前及演练 | 全新主机恢复 | 达到记录的 RPO/RTO；旧 Session 失效；审计链与检查点一致；恢复发布清单中的全部版本化 keyring，并保留仍被未过期幂等记录引用的 fingerprint key | Required |
+| DEPLOY-003 | 上线前 | 备份调度生效时机 | 上线前不部署、不运行定时备份（`operations` profile 未发布、无备份告警）；上线门禁要求启用宿主 12 小时调度、异机保留与失败告警，并在启用前完成一次完整全新主机恢复演练 | Required |
 
 ## 前端基础框架与边界治理 (F-30)
 
