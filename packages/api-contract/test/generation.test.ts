@@ -218,6 +218,18 @@ describe("客户端生成", () => {
     );
   });
 
+  test("生成客户端不做运行时 Schema 校验（C-007 裁决）：无 zod 依赖，错误走 JSON.parse + ApiError", () => {
+    const schemas = buildSchemaComponents();
+    const client = renderClientSource(routeRegistry, schemas);
+    const types = renderTypesSource(schemas);
+    for (const source of [client, types]) {
+      expect(source).not.toContain("zod");
+      expect(source).not.toContain("safeParse");
+    }
+    expect(client).toContain("JSON.parse(text)");
+    expect(client).toContain("if (!response.ok)");
+  });
+
   test("无法表达的 Schema 必须失败而不是退化成 any", () => {
     expect(() =>
       renderTypesSource({
