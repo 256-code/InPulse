@@ -872,3 +872,19 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 本地实际执行（2026-09-11，本机 PostgreSQL 18.6 + PGroonga，`127.0.0.1:55436`）：`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（web 64 文件 293 例、api 68 文件 351 例、ops 8 文件 52 例，其余 workspace 通过）、`pnpm --filter @inpulse/api test:integration`（49 文件 428 例）均通过。
 
 未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② `pnpm test:e2e` 未运行（本次未改前端行为）；③ 前端消费（F-25 步骤 3 徽章与「查看主任务」）属 C-1，仍待落地；④ 新增真库用例与 R-5 破坏性契约变更需非作者人工评审。
+
+## A-2 未裁决契约项定案（C-001 / C-004 / C-005 / C-007 / C-008，2026-09-11 本地落库）
+
+按 [A 的契约评审裁决](a-contract-review-frontend-consumption.md)（对应 [C 的消费需求清单](frontend-generated-client-consumption-requirements.md) §6 五条开放项）：C-001 生成客户端输出位置冻结为 `apps/web/src/generated/api/`；C-004 `details` 保持开放对象并冻结保留键 `issues` / `reason`（判别联合延后，恢复条件见裁决 §3.2）；C-005 冻结 CSRF 四码族；C-007 生成客户端不做运行时 Schema 校验；C-008 `message` 为稳定诊断文案、前端只按 `code` 分支。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| A2-RULING-001 | 文档 | 五项裁决记录 | 五项全部定案并写入裁决文档；消费清单 §6 状态列与 §7 评审请求同步；技术设计仓库结构“客户端”修订为“客户端生成器” | 本地通过 |
+| A2-CONTRACT-001 | 契约 | ErrorResponse 字段说明与生成物 | `error.zod.ts` 四字段补 `description`（含空对象约定与保留键）；`pnpm contract:generate` 重生成 5 个产物、`contract:drift` 无漂移、`contract:validate`（97 条路由）、`permissions:check`（97/97） | 本地通过 |
+| A2-UNIT-001 | 单元 | 生成客户端不做运行时校验（C-007） | `generation.test.ts` 断言真实 Registry 的客户端与类型产物不含 `zod` / `safeParse`，错误解析走 `JSON.parse` 与 `response.ok` | 本地通过（api-contract 94 例） |
+| A2-CODES-001 | 集成 / 单元 | CSRF 码族（C-005） | `CSRF_ORIGIN_REJECTED`（403，`reason` 为同源失败枚举）、`CSRF_TOKEN_INVALID`（403，`invalid-csrf`）、`MFA_CSRF_REJECTED`（401）、`ADMIN_CSRF_REJECTED`（401）与裁决一致，失败不使用 `FORBIDDEN` | 既有测试已覆盖（`logout.controller.test.ts`、`contract-runtime.http.test.ts`、`api-exception.filter.test.ts`、CONTRACT-009；本次未改实现） |
+| A2-DETAILS-001 | 集成 | `details` wire 形状不变 | 既有 `{ issues: ... }` / `{ reason: ... }` / `{}` 断言（如 `http-error-contract.integration.test.ts`）保持通过 | 本地通过（`pnpm --filter @inpulse/api test:integration`） |
+
+本地实际执行（2026-09-11）：`pnpm contract:generate`、`pnpm contract:drift`、`pnpm contract:validate`、`pnpm permissions:check`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`、真库 `pnpm --filter @inpulse/api test:integration`、`pnpm check:docs`、`pnpm check:secrets` 均通过。
+
+未运行 / 已知偏差：① 本分支 GitHub Actions 尚未执行；② FC-031 判别联合与逐路由 `details` Schema ref 属延后项，恢复条件见裁决 §3.2，未在本批实现；③ 本次不改路由、状态码语义与权限矩阵。
