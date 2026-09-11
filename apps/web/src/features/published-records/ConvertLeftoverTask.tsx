@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,6 +10,7 @@ import {
   type LeftoverTaskResponse,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { taskDetailPath } from "@features/tasks/task-links";
 /** Match the task form's browser-local input and UTC API value, guarding invalid dates. */
 export function parseFollowupDueAt(value: string): string | null | undefined {
   if (value === "") return null;
@@ -27,13 +28,6 @@ export function parseFollowupDueAt(value: string): string | null | undefined {
     return undefined;
   return date.toISOString();
 }
-const taskPath = (task: {
-  projectId: number;
-  moduleId: number;
-  featureId: number | null;
-  taskId: number;
-}) =>
-  `/projects/${task.projectId}/modules/${task.moduleId}${task.featureId === null ? "/tasks" : `/features/${task.featureId}`}?taskId=${task.taskId}`;
 function message(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 409)
@@ -65,25 +59,46 @@ function Preview({ value }: { value: LeftoverTaskPreview }) {
         </p>
       )}
       {value.linkedTask && (
-        <a href={taskPath(value.linkedTask)}>查看已有跟进任务</a>
+        <a href={taskDetailPath(value.linkedTask)}>查看已有跟进任务</a>
       )}
     </section>
   );
 }
-export function ConvertLeftoverTask({
-  item,
+/**
+ * 遗留转换的目标记录：只依赖转换所需字段，供已发布记录页与遗留问题页共用，
+ * 不再要求调用方传入完整 PublishedRecord（也避免跨页面复制记录实体）。
+ */
+export interface LeftoverConvertTarget {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number | null;
+  readonly recordId: number;
+  readonly recordTitle: string;
+}
+
+export interface LeftoverTaskConvertModalProps {
+  readonly target: LeftoverConvertTarget;
+  readonly api: InpulseApiClient;
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onConverted: (result: LeftoverTaskResponse) => void;
+}
+
+/**
+ * 转换弹窗：预览、归属范围与冲突处理完全沿用原实现；打开时重新加载预览并
+ * 重置输入。所有写请求仍携带 CSRF、If-Match 与幂等键。
+ */
+export function LeftoverTaskConvertModal({
+  target,
   api,
-  writable,
-}: {
-  item: PublishedRecord;
-  api: InpulseApiClient;
-  writable: boolean;
-}) {
+  open,
+  onClose,
+  onConverted,
+}: LeftoverTaskConvertModalProps) {
   const cache = useQueryClient(),
     saving = useRef(false),
     retry = useRef<{ signature: string; key: string } | null>(null);
-  const [open, setOpen] = useState(false),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [preview, setPreview] = useState<LeftoverTaskPreview | null>(null),
     [latest, setLatest] = useState<LeftoverTaskPreview | null>(null),
     [error, setError] = useState<unknown>(null),
@@ -92,19 +107,22 @@ export function ConvertLeftoverTask({
     [dueInput, setDueInput] = useState(""),
     [dueBadInput, setDueBadInput] = useState(false),
     [priority, setPriority] =
-      useState<LeftoverTaskRequest["priority"]>("NORMAL"),
-    [result, setResult] = useState<LeftoverTaskResponse | null>(null);
+      useState<LeftoverTaskRequest["priority"]>("NORMAL");
   const members = useQuery({
     queryKey: [
       "leftover-assignees",
-      item.projectId,
-      item.moduleId,
-      item.featureId,
+      target.projectId,
+      target.moduleId,
+      target.featureId,
     ],
     queryFn: () =>
-      item.featureId === null
-        ? api.listModuleTaskAssignees(item.projectId, item.moduleId)
-        : api.listTaskAssignees(item.projectId, item.moduleId, item.featureId),
+      target.featureId === null
+        ? api.listModuleTaskAssignees(target.projectId, target.moduleId)
+        : api.listTaskAssignees(
+            target.projectId,
+            target.moduleId,
+            target.featureId,
+          ),
     enabled: open,
     retry: false,
   });
@@ -116,7 +134,10 @@ export function ConvertLeftoverTask({
     saving.current = true;
     setBusy(true);
     try {
-      const next = await api.previewLeftoverTask(item.projectId, item.id);
+      const next = await api.previewLeftoverTask(
+        target.projectId,
+        target.recordId,
+      );
       if (initial) {
         setPreview(next);
         setError(null);
@@ -128,20 +149,25 @@ export function ConvertLeftoverTask({
       saving.current = false;
     }
   }
-  function start() {
+  const scopeLabel = target.featureId === null ? "模块" : "功能";
+  /**
+   * 打开弹窗时重置输入并重新读取预览；关闭时保留输入，与转换前的行为一致。
+   * 调用方在转换成功后关闭或卸载弹窗，由 onConverted 决定后续展示。
+   */
+  useEffect(() => {
+    if (!open) return;
     setConflict(false);
-    setOpen(true);
     setPreview(null);
     setLatest(null);
     setError(null);
-    setTitle((item.title + " · 遗留跟进").slice(0, 500));
+    setTitle((target.recordTitle + " · 遗留跟进").slice(0, 500));
     setAssignee(0);
     setDueInput("");
     setDueBadInput(false);
     setPriority("NORMAL");
     retry.current = null;
     void load(true);
-  }
+  }, [open, target.recordId]);
   async function submit() {
     if (
       saving.current ||
@@ -176,8 +202,8 @@ export function ConvertLeftoverTask({
     try {
       const csrf = await api.issueCsrfToken(),
         created = await api.convertLeftoverToTask(
-          item.projectId,
-          item.id,
+          target.projectId,
+          target.recordId,
           body,
           {
             headers: {
@@ -187,9 +213,9 @@ export function ConvertLeftoverTask({
             },
           },
         );
-      setResult(created);
-      setOpen(false);
+      onConverted(created);
       for (const key of [
+        "leftover-items",
         "published-record",
         "published-records",
         "record-versions",
@@ -209,6 +235,154 @@ export function ConvertLeftoverTask({
       setBusy(false);
     }
   }
+  return (
+    <Modal
+      open={open}
+      title="遗留问题转为新任务"
+      footer={null}
+      onCancel={() => {
+        if (!saving.current) onClose();
+      }}
+      mask={{ closable: !busy }}
+      closable={!busy}
+    >
+      <div className="catalog-form calm-form">
+        {error !== null && <Alert type="error" title={message(error)} />}
+        {busy && !preview && <Spin />}
+        {preview && <Preview value={preview} />}
+        {latest && (
+          <section aria-label="最新转换预览">
+            <h3>请确认最新遗留内容与影响功能</h3>
+            <Preview value={latest} />
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setPreview(latest);
+                setLatest(null);
+                setError(null);
+                setConflict(false);
+                retry.current = null;
+              }}
+            >
+              确认使用最新预览
+            </Button>
+          </section>
+        )}
+        {conflict && !latest && (
+          <Button disabled={busy} onClick={() => void load(false)}>
+            刷新转换预览
+          </Button>
+        )}
+        {!preview && !busy && error !== null && (
+          <Button onClick={() => void load(true)}>重试加载预览</Button>
+        )}
+        <label htmlFor="leftover-task-title">跟进任务标题</label>
+        <Input
+          id="leftover-task-title"
+          value={title}
+          maxLength={500}
+          disabled={busy}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <label htmlFor="leftover-task-assignee">跟进任务负责人</label>
+        <select
+          id="leftover-task-assignee"
+          value={assigneeId}
+          disabled={busy}
+          onChange={(e) => setAssignee(Number(e.target.value))}
+        >
+          <option value={0}>请选择负责人</option>
+          {members.data?.items.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        {members.isError && (
+          <Alert
+            type="error"
+            title="成员列表加载失败"
+            action={
+              <Button onClick={() => void members.refetch()}>
+                重试成员列表
+              </Button>
+            }
+          />
+        )}
+        <label htmlFor="leftover-task-priority">跟进任务优先级</label>
+        <select
+          id="leftover-task-priority"
+          value={priority}
+          disabled={busy}
+          onChange={(e) =>
+            setPriority(e.target.value as LeftoverTaskRequest["priority"])
+          }
+        >
+          <option value="LOW">低</option>
+          <option value="NORMAL">普通</option>
+          <option value="HIGH">高</option>
+          <option value="URGENT">紧急</option>
+        </select>
+        <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
+        <input
+          id="leftover-task-due"
+          type="datetime-local"
+          value={dueInput}
+          disabled={busy}
+          aria-invalid={dueInvalid}
+          aria-describedby={dueInvalid ? "leftover-task-due-error" : undefined}
+          onChange={(event) => {
+            setDueInput(event.target.value);
+            setDueBadInput(event.target.validity.badInput);
+          }}
+        />
+        {dueInvalid && (
+          <p id="leftover-task-due-error" role="alert">
+            请输入有效的截止时间，或清空以不设置。
+          </p>
+        )}
+        <p>
+          新任务保持原记录的{scopeLabel}
+          范围，初始为待办，说明自动保存本次遗留原文与来源版本。
+        </p>
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={
+            !preview ||
+            !preview.content ||
+            preview.status !== "ACTIVE" ||
+            !title.trim() ||
+            !assigneeId ||
+            dueInvalid ||
+            !!latest ||
+            conflict ||
+            members.isError
+          }
+          onClick={() => void submit()}
+        >
+          创建跟进任务
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * 已发布记录页的触发按钮：保持原有「已转换显示链接、否则显示按钮」的行为，
+ * 逻辑全部复用转换弹窗。
+ */
+export function ConvertLeftoverTask({
+  item,
+  api,
+  writable,
+}: {
+  item: PublishedRecord;
+  api: InpulseApiClient;
+  writable: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<LeftoverTaskResponse | null>(null);
   const linked =
     result ??
     (item.leftoverItem?.linkedTaskId
@@ -222,146 +396,31 @@ export function ConvertLeftoverTask({
   return (
     <>
       {linked ? (
-        <a href={taskPath(linked)}>查看跟进任务</a>
+        <a href={taskDetailPath(linked)}>查看跟进任务</a>
       ) : (
         item.leftoverItem?.status === "ACTIVE" &&
         item.leftovers.some((l) => l.id === item.leftoverItem?.id) && (
-          <Button disabled={!writable} onClick={start}>
+          <Button disabled={!writable} onClick={() => setOpen(true)}>
             转为新任务
           </Button>
         )
       )}
-      <Modal
-        open={open}
-        title="遗留问题转为新任务"
-        footer={null}
-        onCancel={() => {
-          if (!saving.current) setOpen(false);
+      <LeftoverTaskConvertModal
+        target={{
+          projectId: item.projectId,
+          moduleId: item.moduleId,
+          featureId: item.featureId,
+          recordId: item.id,
+          recordTitle: item.title,
         }}
-        mask={{ closable: !busy }}
-        closable={!busy}
-      >
-        <div className="catalog-form calm-form">
-          {error !== null && <Alert type="error" title={message(error)} />}
-          {busy && !preview && <Spin />}
-          {preview && <Preview value={preview} />}
-          {latest && (
-            <section aria-label="最新转换预览">
-              <h3>请确认最新遗留内容与影响功能</h3>
-              <Preview value={latest} />
-              <Button
-                disabled={busy}
-                onClick={() => {
-                  setPreview(latest);
-                  setLatest(null);
-                  setError(null);
-                  setConflict(false);
-                  retry.current = null;
-                }}
-              >
-                确认使用最新预览
-              </Button>
-            </section>
-          )}
-          {conflict && !latest && (
-            <Button disabled={busy} onClick={() => void load(false)}>
-              刷新转换预览
-            </Button>
-          )}
-          {!preview && !busy && error !== null && (
-            <Button onClick={() => void load(true)}>重试加载预览</Button>
-          )}
-          <label htmlFor="leftover-task-title">跟进任务标题</label>
-          <Input
-            id="leftover-task-title"
-            value={title}
-            maxLength={500}
-            disabled={busy}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <label htmlFor="leftover-task-assignee">跟进任务负责人</label>
-          <select
-            id="leftover-task-assignee"
-            value={assigneeId}
-            disabled={busy}
-            onChange={(e) => setAssignee(Number(e.target.value))}
-          >
-            <option value={0}>请选择负责人</option>
-            {members.data?.items.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          {members.isError && (
-            <Alert
-              type="error"
-              title="成员列表加载失败"
-              action={
-                <Button onClick={() => void members.refetch()}>
-                  重试成员列表
-                </Button>
-              }
-            />
-          )}
-          <label htmlFor="leftover-task-priority">跟进任务优先级</label>
-          <select
-            id="leftover-task-priority"
-            value={priority}
-            disabled={busy}
-            onChange={(e) =>
-              setPriority(e.target.value as LeftoverTaskRequest["priority"])
-            }
-          >
-            <option value="LOW">低</option>
-            <option value="NORMAL">普通</option>
-            <option value="HIGH">高</option>
-            <option value="URGENT">紧急</option>
-          </select>
-          <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
-          <input
-            id="leftover-task-due"
-            type="datetime-local"
-            value={dueInput}
-            disabled={busy}
-            aria-invalid={dueInvalid}
-            aria-describedby={
-              dueInvalid ? "leftover-task-due-error" : undefined
-            }
-            onChange={(event) => {
-              setDueInput(event.target.value);
-              setDueBadInput(event.target.validity.badInput);
-            }}
-          />
-          {dueInvalid && (
-            <p id="leftover-task-due-error" role="alert">
-              请输入有效的截止时间，或清空以不设置。
-            </p>
-          )}
-          <p>
-            新任务保持原记录的{item.scopeType === "MODULE" ? "模块" : "功能"}
-            范围，初始为待办，说明自动保存本次遗留原文与来源版本。
-          </p>
-          <Button
-            type="primary"
-            loading={busy}
-            disabled={
-              !preview ||
-              !preview.content ||
-              preview.status !== "ACTIVE" ||
-              !title.trim() ||
-              !assigneeId ||
-              dueInvalid ||
-              !!latest ||
-              conflict ||
-              members.isError
-            }
-            onClick={() => void submit()}
-          >
-            创建跟进任务
-          </Button>
-        </div>
-      </Modal>
+        api={api}
+        open={open}
+        onClose={() => setOpen(false)}
+        onConverted={(created) => {
+          setResult(created);
+          setOpen(false);
+        }}
+      />
     </>
   );
 }

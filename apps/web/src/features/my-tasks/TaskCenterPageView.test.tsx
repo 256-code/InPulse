@@ -5,8 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ProjectItem } from "@generated/api";
 import { TaskCenterPageView } from "./TaskCenterPageView";
+import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import { DEFAULT_MY_TASK_FILTERS } from "./my-tasks-url";
 import type { MyTasksAdapter } from "./my-tasks-types";
+import type { TaskLocation } from "@features/tasks/task-links";
 
 const projects: readonly ProjectItem[] = [
   {
@@ -42,12 +44,14 @@ interface ViewOverrides {
   readonly onFiltersChange?: (next: unknown) => void;
   readonly onToggleAdvanced?: () => void;
   readonly onOpenIssues?: () => void;
+  readonly onOpenTask?: (task: TaskLocation) => void;
 }
 
 const renderView = (overrides: ViewOverrides = {}) => {
   const onFiltersChange = overrides.onFiltersChange ?? vi.fn();
   const onToggleAdvanced = overrides.onToggleAdvanced ?? vi.fn();
   const onOpenIssues = overrides.onOpenIssues ?? vi.fn();
+  const onOpenTask = overrides.onOpenTask ?? vi.fn();
   render(
     <QueryClientProvider
       client={
@@ -65,11 +69,12 @@ const renderView = (overrides: ViewOverrides = {}) => {
         advancedOpen={overrides.advancedOpen === true}
         onToggleAdvanced={onToggleAdvanced}
         onOpenIssues={onOpenIssues}
+        onOpenTask={onOpenTask}
         {...(overrides.adapter ? { adapter: overrides.adapter } : {})}
       />
     </QueryClientProvider>,
   );
-  return { onFiltersChange, onToggleAdvanced, onOpenIssues };
+  return { onFiltersChange, onToggleAdvanced, onOpenIssues, onOpenTask };
 };
 
 describe("TaskCenterPageView", () => {
@@ -183,10 +188,85 @@ describe("TaskCenterPageView", () => {
         source: "mock",
         notice: "测试失败路径",
         fetchMyTasks: () => Promise.reject(new Error("boom")),
+        fetchTaskGroups: async () => ({
+          items: [],
+          nextCursor: null,
+          hasMore: false,
+        }),
       },
     });
     expect(
       await screen.findByText("任务列表暂时不可用，请稍后重试。"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the task group panel with branches, statuses and assignees", async () => {
+    renderView();
+
+    const panel = await screen.findByRole("region", { name: "任务聚合组" });
+    expect(await within(panel).findByText("1 个聚合组")).toBeInTheDocument();
+    expect(within(panel).getByText("TG-001")).toBeInTheDocument();
+    expect(
+      within(panel).getByText("任务合并后来源分支历史保留"),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText("进行中")).toBeInTheDocument();
+    expect(within(panel).getByText("注入项目名")).toBeInTheDocument();
+    expect(within(panel).getByText("主分支")).toBeInTheDocument();
+    expect(within(panel).getByText("活动来源")).toBeInTheDocument();
+    expect(within(panel).getAllByText("历史来源")).toHaveLength(2);
+    expect(within(panel).getByText("已完成")).toBeInTheDocument();
+    expect(within(panel).getByText("已取消")).toBeInTheDocument();
+    expect(within(panel).getByText("旧版任务导出脚本下线")).toBeInTheDocument();
+  });
+
+  it("opens a branch task and the main task through onOpenTask", async () => {
+    const { onOpenTask } = renderView();
+    const user = userEvent.setup();
+    const panel = await screen.findByRole("region", { name: "任务聚合组" });
+
+    await user.click(
+      await within(panel).findByRole("button", { name: /T-104/ }),
+    );
+    expect(onOpenTask).toHaveBeenCalledWith({
+      projectId: 1,
+      moduleId: 13,
+      featureId: 131,
+      taskId: 104,
+    });
+
+    await user.click(within(panel).getByRole("button", { name: /查看主任务/ }));
+    expect(onOpenTask).toHaveBeenLastCalledWith({
+      projectId: 1,
+      moduleId: 12,
+      featureId: 121,
+      taskId: 102,
+    });
+  });
+
+  it("renders the group empty state when the adapter returns no groups", async () => {
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          items: [],
+          nextCursor: null,
+          hasMore: false,
+        }),
+      },
+    });
+    expect(await screen.findByText("还没有聚合组")).toBeInTheDocument();
+  });
+
+  it("keeps the group panel visible with an error alert when groups fail", async () => {
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: () => Promise.reject(new Error("boom")),
+      },
+    });
+    const panel = await screen.findByRole("region", { name: "任务聚合组" });
+    expect(
+      await within(panel).findByText("任务列表暂时不可用，请稍后重试。"),
     ).toBeInTheDocument();
   });
 

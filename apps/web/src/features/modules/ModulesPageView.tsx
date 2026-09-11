@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import {
   ApiError,
   type InpulseApiClient,
@@ -9,6 +10,7 @@ import {
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
 import {
   moduleErrorMessage,
   useModules,
@@ -37,6 +39,7 @@ export function ModulesPageView({
   client?: InpulseApiClient | undefined;
 }) {
   const { query, mutation } = useModules(projectId, client);
+  const navigate = useNavigate();
   const [selection, setSelection] = useState<{
     action: ModuleChange["action"];
     item?: ModuleItem;
@@ -193,6 +196,18 @@ export function ModulesPageView({
   return (
     <>
       <div className="module-workspace-page">
+        <ProjectContextNav
+          modules={query.data?.items ?? []}
+          active={null}
+          onSelectOverview={() =>
+            navigate("/projects/" + projectId + "/overview")
+          }
+          onSelectModule={(moduleId) =>
+            navigate(
+              "/projects/" + projectId + "/modules/" + moduleId + "/features",
+            )
+          }
+        />
         <div className="page-header">
           <div>
             <span className="eyebrow">项目 {projectId} / 模块</span>

@@ -482,3 +482,169 @@ export const taskGroupMembershipResponseSchema = z
 export type TaskGroupMembershipResponse = z.infer<
   typeof taskGroupMembershipResponseSchema
 >;
+/**
+ * R-6 / R-7：遗留问题与任务聚合组的跨项目聚合读列表（C 域）。
+ * 两者沿用 C-006 envelope；授权范围固定为服务端 AuthorizedProjectScope，
+ * projectId 只用于缩小范围（越权项目收敛为空页），非成员不产生 404。
+ */
+
+/**
+ * 聚合读共用的任务引用；只含任务标识与所在位置，不复制任务实体。
+ * featureId 为 null 表示模块级任务；前端据此还原任务深链。
+ */
+export const aggregateTaskRefSchema = z
+  .object({
+    taskId: id,
+    code: z.string().min(1).max(64),
+    projectId: id,
+    moduleId: id,
+    featureId: id.nullable(),
+  })
+  .strict()
+  .meta({ id: "AggregateTaskRef" });
+
+export type AggregateTaskRef = z.infer<typeof aggregateTaskRefSchema>;
+
+/**
+ * R-6 遗留问题列表查询参数。bucket 是展示分桶，不改变排序：
+ * OPEN = status ACTIVE；CLOSED = status CONVERTED / RESOLVED；
+ * 缺省表示不按分桶过滤。排序固定 leftoverItemId DESC。
+ */
+export const leftoverListQueryRequestSchema = z
+  .object({
+    cursor: z.string().min(1).max(AGGREGATE_READ_CURSOR_MAX_LENGTH).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(AGGREGATE_READ_PAGE_LIMIT_MAX)
+      .optional(),
+    projectId: z.coerce.number().int().positive().max(2147483647).optional(),
+    bucket: z.enum(["OPEN", "CLOSED"]).optional(),
+  })
+  .strict()
+  .meta({ id: "LeftoverListQueryRequest" });
+
+export type LeftoverListQueryRequest = z.infer<
+  typeof leftoverListQueryRequestSchema
+>;
+
+/**
+ * R-6 列表项：内容取该遗留项最新版本快照；sourceTask 为来源任务（独立记录为
+ * null），followupTask 为已生成跟进任务（未转换 / 已解决时为 null）。记录只含
+ * PUBLISHED 与 VOID（Q-13），author 为记录作者，不暴露登录名或邮箱。
+ */
+export const leftoverListItemSchema = z
+  .object({
+    leftoverItemId: id,
+    recordId: id,
+    recordCode: z.string().min(1).max(64),
+    recordTitle: z.string().min(1).max(500),
+    projectId: id,
+    projectName: z.string().min(1).max(200),
+    moduleId: id,
+    moduleName: z.string().min(1).max(200),
+    featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
+    author: userRefSchema,
+    publishedAt: z.iso.datetime(),
+    content: z.string().min(1).max(10000),
+    status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
+    sourceTask: aggregateTaskRefSchema.nullable(),
+    followupTask: aggregateTaskRefSchema.nullable(),
+  })
+  .strict()
+  .meta({ id: "LeftoverListItem" });
+
+export type LeftoverListItem = z.infer<typeof leftoverListItemSchema>;
+
+/** R-6 分页响应（C-006 envelope）。 */
+export const leftoverItemPageSchema = z
+  .object({
+    items: z.array(leftoverListItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),
+    nextCursor: z
+      .string()
+      .min(1)
+      .max(AGGREGATE_READ_CURSOR_MAX_LENGTH)
+      .nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "LeftoverItemPage" });
+
+export type LeftoverItemPage = z.infer<typeof leftoverItemPageSchema>;
+
+/** R-7 聚合组列表查询参数；projectId 只用于缩小范围，排序固定 groupId DESC。 */
+export const taskGroupListQueryRequestSchema = z
+  .object({
+    cursor: z.string().min(1).max(AGGREGATE_READ_CURSOR_MAX_LENGTH).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(AGGREGATE_READ_PAGE_LIMIT_MAX)
+      .optional(),
+    projectId: z.coerce.number().int().positive().max(2147483647).optional(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupListQueryRequest" });
+
+export type TaskGroupListQueryRequest = z.infer<
+  typeof taskGroupListQueryRequestSchema
+>;
+
+/**
+ * R-7 聚合组分支：只含当前生效（ACTIVE）成员，主任务在前、来源任务按
+ * joinedAt 与 taskId 升序；sourceKind 的可空性由 role 决定（MAIN 恒为 null）。
+ * moduleId / featureId 是任务所在位置（featureId 为 null 表示模块级任务）。
+ * 已解除（DETACHED）成员不出现在列表摘要中，仍由 R-1 详情页展示。
+ */
+export const taskGroupListBranchSchema = z
+  .object({
+    taskId: id,
+    taskCode: z.string().min(1).max(64),
+    title: z.string().min(1).max(500),
+    role: z.enum(["MAIN", "SOURCE"]),
+    sourceKind: z.enum(["ACTIVE", "HISTORICAL"]).nullable(),
+    workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+    moduleId: id,
+    featureId: id.nullable(),
+    assignee: userRefSchema,
+  })
+  .strict()
+  .meta({ id: "TaskGroupListBranch" });
+
+export type TaskGroupListBranch = z.infer<typeof taskGroupListBranchSchema>;
+
+/** R-7 列表项：组标识、项目名与当前生效分支；mainTask 为活跃主任务引用。 */
+export const taskGroupListItemSchema = z
+  .object({
+    groupId: id,
+    projectId: id,
+    projectName: z.string().min(1).max(200),
+    code: z.string().min(1).max(64),
+    name: z.string().min(1).max(500),
+    status: z.enum(["ACTIVE", "CLOSED"]),
+    mainTask: aggregateTaskRefSchema.nullable(),
+    branches: z.array(taskGroupListBranchSchema).max(1000),
+  })
+  .strict()
+  .meta({ id: "TaskGroupListItem" });
+
+export type TaskGroupListItem = z.infer<typeof taskGroupListItemSchema>;
+
+/** R-7 分页响应（C-006 envelope）。 */
+export const taskGroupListPageSchema = z
+  .object({
+    items: z.array(taskGroupListItemSchema).max(AGGREGATE_READ_PAGE_LIMIT_MAX),
+    nextCursor: z
+      .string()
+      .min(1)
+      .max(AGGREGATE_READ_CURSOR_MAX_LENGTH)
+      .nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "TaskGroupListPage" });
+
+export type TaskGroupListPage = z.infer<typeof taskGroupListPageSchema>;

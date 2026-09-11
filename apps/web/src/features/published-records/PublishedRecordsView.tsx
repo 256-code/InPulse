@@ -13,7 +13,11 @@ import {
   type ChangeRecordVersion,
   ApiError,
 } from "@generated/api";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
 import "@features/record-drafts/record-drafts.css";
 const fields = [
   ["title", "迭代标题"],
@@ -88,13 +92,12 @@ export function PublishedRecordsView({
   const after = history.find((v) => v.versionNo === newVersion) ?? history[0];
   return (
     <section className="record-drafts-page" aria-label="正式迭代记录">
-      <div className="calm-section-title">
-        <div>
-          <h1>{status === "VOID" ? "已作废记录" : "已发布记录"}</h1>
-          <p>查看已发布的变化与每次内容修订，历史版本始终保留。</p>
-        </div>
+      <CalmSectionTitle
+        title={status === "VOID" ? "已作废记录" : "已发布记录"}
+        hint="查看已发布的变化与每次内容修订，历史版本始终保留。"
+      >
         <CalmBadge>正式记录</CalmBadge>
-      </div>
+      </CalmSectionTitle>
       {user?.isAdmin && (
         <label>
           记录状态{" "}

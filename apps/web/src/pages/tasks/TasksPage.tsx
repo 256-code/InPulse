@@ -13,6 +13,7 @@ import {
   writeMyTaskFilters,
 } from "@features/my-tasks/my-tasks-url";
 import { createMyTasksServerAdapter } from "@features/my-tasks/my-tasks-server";
+import { taskDetailPath, type TaskLocation } from "@features/tasks/task-links";
 import { TaskCenterPageView } from "@features/my-tasks/TaskCenterPageView";
 
 export interface TasksPageProps {
@@ -56,6 +57,13 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
     navigate("/issues");
   }, [navigate]);
 
+  const handleOpenTask = useCallback(
+    (task: TaskLocation) => {
+      navigate(taskDetailPath(task));
+    },
+    [navigate],
+  );
+
   const taskAdapter = useMemo(
     () => adapter ?? createMyTasksServerAdapter(client),
     [adapter, client],
@@ -71,6 +79,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
       advancedOpen={advancedOpen}
       onToggleAdvanced={handleToggleAdvanced}
       onOpenIssues={handleOpenIssues}
+      onOpenTask={handleOpenTask}
       adapter={taskAdapter}
     />
   );

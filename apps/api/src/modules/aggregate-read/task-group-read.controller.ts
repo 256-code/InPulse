@@ -4,6 +4,8 @@ import { Controller, Get, Req, Res } from "@nestjs/common";
 
 import type {
   TaskGroupDetailResponse,
+  TaskGroupListPage,
+  TaskGroupListQueryRequest,
   TaskGroupPath,
   TaskGroupRecordPage,
   TaskGroupRecordQueryRequest,
@@ -37,7 +39,8 @@ interface ErrorResponseDto {
 /**
  * F-25 聚合组视图（R-1）与聚合组记录列表（R-4）。
  *
- * 只绑定 Route Registry 的 getTaskGroup / listTaskGroupRecords，先解析 Session
+ * 只绑定 Route Registry 的 getTaskGroup / listTaskGroups / listTaskGroupRecords，
+ * 先解析 Session
  * 再由服务层取得服务端 AuthorizedProjectScope；非成员与不存在统一 404，
  * 游标或筛选非法统一 422，均不向客户端泄露资源存在性。
  */
@@ -113,6 +116,41 @@ export class TaskGroupReadController {
       });
     } catch (error) {
       return this.toErrorResponse(error, response, requestId, "查看聚合组记录");
+    }
+  }
+
+  @Get()
+  @Operation("listTaskGroups")
+  async listTaskGroups(
+    @Req() request: TaskGroupControllerRequest,
+    @Res({ passthrough: true }) response: TaskGroupControllerResponse,
+    @ContractQuery("listTaskGroups") query: TaskGroupListQueryRequest,
+  ): Promise<TaskGroupListPage | ErrorResponseDto> {
+    const requestId = randomUUID();
+    const actor = await this.sessionAuth.resolveActor(
+      getHeader(request.headers, "cookie"),
+    );
+    if (actor === undefined) {
+      response.status(401);
+      return {
+        code: "TASK_GROUP_UNAUTHENTICATED",
+        message: "需要有效认证 Session 才能查看任务聚合组",
+        details: {},
+        requestId,
+      };
+    }
+
+    try {
+      return await this.taskGroups.listTaskGroups({
+        actorUserId: actor.userId,
+        ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(query.projectId === undefined
+          ? {}
+          : { projectId: query.projectId }),
+      });
+    } catch (error) {
+      return this.toErrorResponse(error, response, requestId, "查看任务聚合组");
     }
   }
 
