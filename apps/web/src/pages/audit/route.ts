@@ -6,7 +6,7 @@ const AuditPage = lazy(() => import("./AuditPage"));
 export const auditRoute: AppRouteModule = {
   path: "/audit",
   element: AuditPage,
-  requiresAuth: false,
+  requiresAdmin: true,
 };
 
 export default auditRoute;

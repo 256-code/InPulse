@@ -784,8 +784,12 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | F08-READ-API-002 | HTTP + PostgreSQL | 身份与重认证门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；完整管理员未做 5 分钟内双因子重认证时 403 `ADMIN_REAUTH_REQUIRED` | 同上 |
 | F08-READ-API-003 | HTTP + PostgreSQL | action 过滤与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
+| F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人 ID 必须正整数、`from/to` 由 `datetime-local` 换算为带时区 ISO，`from >= to` 与非法 ID 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-11） |
+| F08-READ-WEB-002 | 前端单元（jsdom） | 重认证与错误映射 | 403 `ADMIN_REAUTH_REQUIRED` 自动打开管理员安全验证，成功后重新读取并提示；401/403/422/429 与未知失败映射为安全文案、不泄露服务端 `message`；行内「原始快照」展示 `eventPayload` JSON、前后哈希与请求元数据；`/audit` 路由 `requiresAdmin` 且侧栏入口仅管理员可见（`AppLayout.test.tsx`） | 同上 |
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 尚未执行。
+
+B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 66 文件 310 例通过（新增审计查询 6 例与审计页 8 例，含页内重认证与游标分页）；未运行 `pnpm test:e2e`（本机无 PostgreSQL/Docker），`/audit` 浏览器 E2E 待补。
 
 ## F-08 审计远端归档（A，2026-09-11 本地落库）
 
