@@ -194,6 +194,8 @@
 
 - 阶段 1 F-25/F-29/F-32 契约裁决已本地落库（A）：新增 [A 的契约评审裁决](./docs/a-contract-review-f25-f29-f32.md)，裁决 C-003（已接受，转具体 Route）与 C-010（已接受，转具体 Route 后关闭）以及 C 提交的 Q-01 ~ Q-15；三条候选路由进入正式契约，并按 Q-02 新增记录子资源路由，共四条：`getTaskGroup`、`getProjectOverview`、`listMyTasks`、`listTaskGroupRecords`，路径、operationId、状态码与只读策略全部冻结；跨域读归属裁定为「B 域单条 SQL 稳定只读端口加 C 聚合读服务」，拒绝直读他域业务表（路线 III）与依赖环（路线 I）两条路线，路线 IV 留待后续；同步回填上游清单 §4.8.1 / §6 / §7 与两份 C 提案（聚合契约提案、端口扩展提案）。本轮为文档裁决：未改任何代码、迁移、契约源或生成物，未运行代码类门禁；四条路由尚未登记 Route Registry——登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库（依赖 B 的只读端口扩展），在此之前仍不是实现依据；工作书 F-32 步骤 1 的处方偏差需非作者人工确认。
 
+- 阶段 1 F-29/F-32 第二轮契约裁决已本地落库（A）：回应 B 在 PR #98 后反馈的契约缺口与 `TaskItem.groupRole`。裁决 [A 的契约评审裁决](./docs/a-contract-review-f25-f29-f32.md) §10 接受 R-2 `activeLeftoverTotal` 与 `LeftoverItemSummary.recordTitle`、R-3 列表项 `priority` / `dueAt` / `completedAt` / `creatorId` / `githubLinkCount` / `groupId` 与 `stats` / `leftoverCount` / `leftoverSample`、筛选参数 `priority` 与 `includeCanceled`；拒绝列表返回 `description`；延后 `scopeCounts`、`relation`、`query` 与 `scope=created/all`。`TaskItem.groupRole` 不在 B 的任务读写路由扩字段（会形成 TasksModule 与 TaskGroupsModule 依赖环），改为新增 C 侧只读路由 R-5 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）。本轮只做裁决与台账同步：未改代码、迁移、契约源或生成物，未注册路由；实现必须与 A 的契约登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端同一个 PR 落库，`priority` / `includeCanceled` 需补 `EXPLAIN` 证据。
+
 完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
 
 - 2026-09-10 F-21 已本地交审：管理员记录作废/恢复、双时间戳重认证（含锁后复核）、原因/If-Match/数据库幂等、管理员VOID读取/发现及同事务审计/Activity/Search；版本、最近作废快照、遗留项及转换链接保留，无通知或迁移。真库四文件63/63、契约42/42、Web7/7、86路由/权限与5生成物漂移通过；Edge F21 1/1及相邻F18 2/2分别通过，未执行本批CI。代码 9b5805805bbee6f0ff964fba75d5732701570943，范围与失败历史见 [F-21交审说明](docs/f21-local-handoff.md)。
