@@ -42,7 +42,7 @@ test("成员创建编辑模块、解决并发字段冲突，不能看到管理�
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await expect(
-      page.getByText(`${name}-已修改`, { exact: true }),
+      card.getByRole("heading", { name: `${name}-已修改`, exact: true }),
     ).toBeVisible();
     await expect(
       card.getByText("另一窗口更新的说明", { exact: true }),
@@ -71,7 +71,7 @@ test("成员创建编辑模块、解决并发字段冲突，不能看到管理�
     await other.close();
     await page.reload();
     await expect(
-      page.getByText(`${name}-已修改`, { exact: true }),
+      card.getByRole("heading", { name: `${name}-已修改`, exact: true }),
     ).toBeVisible();
   } finally {
     await context.close();
