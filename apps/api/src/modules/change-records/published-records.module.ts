@@ -36,6 +36,9 @@ import { ActivityProjectionModule } from "../activity/index.js";
 import { NotificationProjectionModule } from "../notifications/index.js";
 import { SearchProjectionModule } from "../search/index.js";
 import { Module } from "@nestjs/common";
+import { SESSION_HMAC_KEYRING } from "../../auth/auth.constants.js";
+import type { VersionedHmacKeyring } from "../../auth/keyring.js";
+import { TimeCursorService } from "../../cursors/time-cursor.js";
 import { AuthModule } from "../../auth/auth.module.js";
 import { DatabaseModule } from "../../database/database.module.js";
 import { ProjectsModule } from "../projects/index.js";
@@ -84,6 +87,12 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     RecordPublicationEffects,
     LeftoverSearchProjectionSync,
     RecordDraftRepository,
+    {
+      provide: TimeCursorService,
+      useFactory: (keyring: VersionedHmacKeyring) =>
+        new TimeCursorService(keyring, "CHANGE_RECORDS"),
+      inject: [SESSION_HMAC_KEYRING],
+    },
     {
       provide: RecordPublicationCommandPort,
       useExisting: RecordPublicationService,

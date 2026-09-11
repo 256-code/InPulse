@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  RECORD_CURSOR_MAX_LENGTH,
+  RECORD_PAGE_LIMIT_MAX,
+  recordListCursorSchema,
+  recordListLimitSchema,
+} from "./record-pagination.zod.js";
 
 const id = z.number().int().positive().max(2147483647);
 const pathId = z.coerce.number().int().positive().max(2147483647);
@@ -48,10 +54,23 @@ export const recordDraftItemSchema = recordDraftContentSchema
     updatedAt: z.iso.datetime(),
   })
   .meta({ id: "RecordDraftItem" });
-export const recordDraftListSchema = z
-  .object({ items: z.array(recordDraftItemSchema) })
+export const recordDraftListQuerySchema = z
+  .object({
+    cursor: recordListCursorSchema,
+    limit: recordListLimitSchema,
+  })
   .strict()
-  .meta({ id: "RecordDraftList" });
+  .meta({ id: "RecordDraftListQuery" });
+export const recordDraftPageSchema = z
+  .object({
+    items: z.array(recordDraftItemSchema).max(RECORD_PAGE_LIMIT_MAX),
+    nextCursor: z.string().min(1).max(RECORD_CURSOR_MAX_LENGTH).nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "RecordDraftPage" });
+export type RecordDraftListQuery = z.infer<typeof recordDraftListQuerySchema>;
+export type RecordDraftPage = z.infer<typeof recordDraftPageSchema>;
 export const recordDraftProjectPathSchema = z
   .object({ projectId: pathId })
   .strict()
@@ -147,9 +166,14 @@ export const recordDraftSchemas = {
     summary: "未编号的草稿及服务端归属",
     sensitiveFieldPaths: [],
   },
-  RecordDraftList: {
-    schema: recordDraftListSchema,
-    summary: "当前有权项目的草稿列表",
+  RecordDraftPage: {
+    schema: recordDraftPageSchema,
+    summary: "当前有权项目的草稿分页（items/nextCursor/hasMore）",
+    sensitiveFieldPaths: [],
+  },
+  RecordDraftListQuery: {
+    schema: recordDraftListQuerySchema,
+    summary: "草稿列表签名游标与 limit 1..100 默认 20",
     sensitiveFieldPaths: [],
   },
   RecordDraftProjectPath: {

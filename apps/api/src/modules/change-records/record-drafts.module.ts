@@ -3,6 +3,9 @@ import {
   RecordDraftQueryPort,
 } from "./record-draft.port.js";
 import { Module } from "@nestjs/common";
+import { SESSION_HMAC_KEYRING } from "../../auth/auth.constants.js";
+import type { VersionedHmacKeyring } from "../../auth/keyring.js";
+import { TimeCursorService } from "../../cursors/time-cursor.js";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
 import { DatabaseModule } from "../../database/database.module.js";
@@ -29,6 +32,12 @@ import { RecordDraftsController } from "./record-drafts.controller.js";
     { provide: RecordDraftCommandPort, useExisting: RecordDraftsService },
     { provide: RecordDraftQueryPort, useExisting: RecordDraftsService },
     RecordDraftRepository,
+    {
+      provide: TimeCursorService,
+      useFactory: (keyring: VersionedHmacKeyring) =>
+        new TimeCursorService(keyring, "RECORD_DRAFTS"),
+      inject: [SESSION_HMAC_KEYRING],
+    },
     RecordDraftsHttpService,
   ],
   exports: [RecordDraftCommandPort, RecordDraftQueryPort],

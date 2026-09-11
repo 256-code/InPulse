@@ -18,6 +18,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { useChangeRecordsQuery } from "./published-records-query";
 import "@features/record-drafts/record-drafts.css";
 const fields = [
   ["title", "迭代标题"],
@@ -64,13 +65,8 @@ export function PublishedRecordsView({
     queryFn: ({ signal }) => api.listProjects({ signal }),
     retry: false,
   });
-  const list = useQuery({
-    queryKey: ["published-records", projectId, status],
-    queryFn: ({ signal }) =>
-      api.listChangeRecords(projectId, { status }, { signal }),
-    enabled: projectId > 0,
-    retry: false,
-  });
+  const list = useChangeRecordsQuery({ client, projectId, status });
+  const records = list.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const detail = useQuery({
     queryKey: ["published-record", projectId, recordId],
     queryFn: ({ signal }) =>
@@ -149,7 +145,7 @@ export function PublishedRecordsView({
               <Button onClick={() => void list.refetch()}>重试记录列表</Button>
             }
           />
-        ) : !list.data?.items.length ? (
+        ) : !records.length ? (
           <CalmEmptyState
             icon="gitBranch"
             title={status === "VOID" ? "暂无已作废记录" : "暂无已发布记录"}
@@ -157,7 +153,7 @@ export function PublishedRecordsView({
           />
         ) : (
           <div className="calm-task-grid">
-            {list.data.items.map((item) => (
+            {records.map((item) => (
               <article className="calm-task-card" key={item.id}>
                 <CalmBadge>
                   {item.code} · v{item.currentVersion}
@@ -182,6 +178,16 @@ export function PublishedRecordsView({
             ))}
           </div>
         ))}
+      {projectId > 0 && list.hasNextPage && (
+        <div className="record-load-more">
+          <Button
+            disabled={list.isFetchingNextPage}
+            onClick={() => void list.fetchNextPage()}
+          >
+            {list.isFetchingNextPage ? "正在加载…" : "加载更多"}
+          </Button>
+        </div>
+      )}
       {recordId > 0 &&
         (detail.isPending ? (
           <Spin />

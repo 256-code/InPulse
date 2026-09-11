@@ -6,6 +6,7 @@ import {
   recordDraftItemSchema,
   type IndependentRecordDraftRequest,
   type RecordDraftContent,
+  type RecordDraftListQuery,
 } from "@inpulse/api-contract";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
@@ -89,7 +90,14 @@ export class RecordDraftsHttpService {
           );
         return result.data;
       };
-      if (Object.keys((request.query ?? {}) as object).length)
+      const listQuery =
+        operation === "listRecordDrafts"
+          ? (parse(
+              "RecordDraftListQuery",
+              request.query ?? {},
+            ) as RecordDraftListQuery)
+          : undefined;
+      if (!listQuery && Object.keys((request.query ?? {}) as object).length)
         throw new DraftInputError({ query: "此接口不接受查询参数" });
       if (route.request.path === "none") throw Error("Draft path missing");
       const path = parse(route.request.path, request.params) as {
@@ -104,6 +112,16 @@ export class RecordDraftsHttpService {
             actor!.userId,
             path.projectId,
             path.recordId,
+            listQuery === undefined
+              ? {}
+              : {
+                  ...(listQuery.cursor === undefined
+                    ? {}
+                    : { cursor: listQuery.cursor }),
+                  ...(listQuery.limit === undefined
+                    ? {}
+                    : { limit: listQuery.limit }),
+                },
           ),
         };
       if (route.request.headers === "none")

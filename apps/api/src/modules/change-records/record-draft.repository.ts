@@ -5,6 +5,19 @@ import {
   type RecordDraftItem,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
+import type { TimeCursorValue } from "../../cursors/time-cursor.js";
+
+export interface RecordDraftListPageInput {
+  readonly projectId: number;
+  readonly limit: number;
+  readonly after: TimeCursorValue | null;
+}
+
+export interface RecordDraftListPageResult {
+  readonly items: RecordDraftItem[];
+  readonly last: TimeCursorValue | null;
+  readonly hasMore: boolean;
+}
 
 export interface DraftScope {
   projectId: number;
@@ -80,14 +93,34 @@ export class RecordDraftRepository {
     >`SELECT ${this.columns(tx)} FROM app.change_records WHERE project_id=${projectId} AND id=${recordId} AND status='DRAFT' ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return row ? dto(row) : undefined;
   }
-  async list(
+  /**
+   * 草稿列表分页（B-1）：created_at DESC,id DESC 与签名游标 keyset 一致，
+   * 取 limit+1 判断 hasMore；last 只在还有下一页时返回。
+   */
+  async listPage(
     tx: TransactionContext,
-    projectId: number,
-  ): Promise<RecordDraftItem[]> {
+    input: RecordDraftListPageInput,
+  ): Promise<RecordDraftListPageResult> {
+    const afterAt = input.after?.at ?? null,
+      afterId = input.after?.id ?? "0";
     const rows = await tx.sql<
-      Row[]
-    >`SELECT ${this.columns(tx)} FROM app.change_records WHERE project_id=${projectId} AND status='DRAFT' ORDER BY id DESC`;
-    return rows.map(dto);
+      (Row & { createdAtCursor: string })[]
+    >`SELECT ${this.columns(tx)},to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='DRAFT' AND (${afterAt}::timestamptz IS NULL OR created_at < ${afterAt}::timestamptz OR (created_at = ${afterAt}::timestamptz AND id < ${afterId}::bigint)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+    const hasMore = rows.length > input.limit,
+      pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = pageRows.map((row) => {
+      const { createdAtCursor: _cursor, ...base } = row;
+      return dto(base);
+    });
+    const lastRow = pageRows[pageRows.length - 1];
+    return {
+      items,
+      hasMore,
+      last:
+        hasMore && lastRow !== undefined
+          ? { at: lastRow.createdAtCursor, id: String(lastRow.id) }
+          : null,
+    };
   }
   async create(
     tx: TransactionContext,

@@ -56,7 +56,7 @@ export const recordDraftRoutes: readonly RouteDefinition[] = (
         : list
           ? "RecordDraftProjectPath"
           : "RecordDraftResourcePath",
-      query: "none",
+      query: list ? "RecordDraftListQuery" : "none",
       headers: write
         ? create
           ? "RecordDraftHeaders"
@@ -76,7 +76,7 @@ export const recordDraftRoutes: readonly RouteDefinition[] = (
         : { noBody: true },
     },
     responses: {
-      "200": json(list ? "RecordDraftList" : "RecordDraftItem"),
+      "200": json(list ? "RecordDraftPage" : "RecordDraftItem"),
       ...errors,
     },
     authPolicy: "session",
@@ -155,6 +155,7 @@ export const taskRecordDraftRoutes: readonly RouteDefinition[] = (
       "任务来源草稿；多条独立记录，保存不改变任务状态；由Workflow绑定真实来源。",
     request: {
       ...base.request,
+      query: "none",
       path: update ? "TaskRecordDraftResourcePath" : "TaskRecordDraftPath",
       headers: read ? "none" : "RecordDraftVersionHeaders",
       body: read

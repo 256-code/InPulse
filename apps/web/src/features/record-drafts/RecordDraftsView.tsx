@@ -8,6 +8,7 @@ import {
 export { mergeRecordDraft } from "./record-content.js";
 import React, { useMemo, useRef, useState } from "react";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
+import { useRecordDraftsQuery } from "./record-drafts-query";
 import "./record-drafts.css";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
@@ -108,12 +109,13 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
     enabled: projectId > 0 && moduleId > 0,
     retry: false,
   });
-  const allDrafts = useQuery({
-    queryKey: ["record-drafts", projectId],
-    queryFn: ({ signal }) => api.listRecordDrafts(projectId, { signal }),
-    enabled: projectId > 0 && !taskId,
-    retry: false,
+  const allDrafts = useRecordDraftsQuery({
+    client,
+    projectId,
+    enabled: !taskId,
   });
+  const allDraftItems =
+    allDrafts.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const sourceQuery = useQuery({
     queryKey: ["task-record-drafts", projectId, sourceModuleId, taskId],
     queryFn: ({ signal }) =>
@@ -121,7 +123,12 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
     enabled: projectId > 0 && sourceModuleId > 0 && taskId > 0,
     retry: false,
   });
-  const list = taskId ? sourceQuery : allDrafts;
+  const drafts = taskId > 0 ? (sourceQuery.data?.items ?? []) : allDraftItems;
+  const listPending = taskId > 0 ? sourceQuery.isPending : allDrafts.isPending;
+  const listError = taskId > 0 ? sourceQuery.error : allDrafts.error;
+  const listFailed = taskId > 0 ? sourceQuery.isError : allDrafts.isError;
+  const reloadList = () =>
+    void (taskId > 0 ? sourceQuery.refetch() : allDrafts.refetch());
   const detail = useQuery({
     queryKey: ["record-draft", projectId, recordId],
     queryFn: ({ signal }) =>
@@ -391,19 +398,15 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
               {taskId ? "新建来源草稿" : "新建独立草稿"}
             </Button>
           </div>
-          {list.isPending ? (
+          {listPending ? (
             <Spin />
-          ) : list.isError ? (
+          ) : listFailed ? (
             <Alert
               type="error"
-              title={errorMessage(list.error)}
-              action={
-                <Button onClick={() => void list.refetch()}>
-                  重试草稿列表
-                </Button>
-              }
+              title={errorMessage(listError)}
+              action={<Button onClick={reloadList}>重试草稿列表</Button>}
             />
-          ) : !list.data?.items.length ? (
+          ) : !drafts.length ? (
             <CalmEmptyState
               icon="gitBranch"
               title="暂无草稿"
@@ -415,7 +418,7 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
             />
           ) : (
             <div className="calm-task-grid">
-              {list.data.items.map((item) => (
+              {drafts.map((item) => (
                 <article className="calm-task-card" key={item.id}>
                   <CalmBadge tone="amber">草稿</CalmBadge>
                   <h3>{item.title}</h3>
@@ -447,6 +450,16 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
                   </Button>
                 </article>
               ))}
+            </div>
+          )}
+          {taskId === 0 && allDrafts.hasNextPage && (
+            <div className="record-load-more">
+              <Button
+                disabled={allDrafts.isFetchingNextPage}
+                onClick={() => void allDrafts.fetchNextPage()}
+              >
+                {allDrafts.isFetchingNextPage ? "正在加载…" : "加载更多"}
+              </Button>
             </div>
           )}
           {recordId > 0 &&

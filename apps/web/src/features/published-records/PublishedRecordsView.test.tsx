@@ -64,7 +64,11 @@ it("loads real version data and permits selecting historical snapshots", async (
     listProjects: vi
       .fn()
       .mockResolvedValue({ items: [{ id: 1, name: "支付项目" }] }),
-    listChangeRecords: vi.fn().mockResolvedValue({ items: [item] }),
+    listChangeRecords: vi.fn().mockResolvedValue({
+      items: [item],
+      nextCursor: null,
+      hasMore: false,
+    }),
     getChangeRecord: vi.fn().mockResolvedValue(item),
     listChangeRecordVersions: vi
       .fn()
@@ -89,6 +93,39 @@ it("loads real version data and permits selecting historical snapshots", async (
   expect(api.listChangeRecordVersions).toHaveBeenCalledWith(
     1,
     7,
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+});
+
+it("loads the next published-record page with the server cursor", async () => {
+  const next = { ...item, id: 8, code: "SHOP-CR-2", title: "第二页记录" };
+  const listChangeRecords = vi
+    .fn()
+    .mockResolvedValueOnce({
+      items: [item],
+      nextCursor: "cursor-1",
+      hasMore: true,
+    })
+    .mockResolvedValueOnce({ items: [next], nextCursor: null, hasMore: false });
+  const api = {
+    listProjects: vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: 1, name: "支付项目" }] }),
+    listChangeRecords,
+  } as unknown as InpulseApiClient;
+  render(
+    <MemoryRouter initialEntries={["/records?view=published&projectId=1"]}>
+      <QueryClientProvider client={new QueryClient()}>
+        <PublishedRecordsView client={api} />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText("支付修订")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  expect(await screen.findByText("第二页记录")).toBeVisible();
+  expect(listChangeRecords).toHaveBeenLastCalledWith(
+    1,
+    { status: "PUBLISHED", limit: 20, cursor: "cursor-1" },
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
 });

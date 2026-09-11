@@ -44,6 +44,7 @@ import { PostgresFeatureReadPort } from "../src/modules/features/postgres-featur
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
 import { RecordDraftsService } from "../src/modules/change-records/record-drafts.service.js";
+import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import {
   createProject,
   createUser,
@@ -59,9 +60,8 @@ let app: INestApplication;
 let base: string;
 let workflow: TaskRecordDraftWorkflow;
 const key = randomBytes(32);
-const tokens = new SessionTokenService(
-  VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-);
+const ring = VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1);
+const tokens = new SessionTokenService(ring);
 const content = {
   title: "独立验证",
   contextProblem: "重复请求",
@@ -84,6 +84,7 @@ beforeAll(async () => {
     new RecordDraftRepository(),
     uow,
     audit,
+    new TimeCursorService(ring, "RECORD_DRAFTS"),
   );
   const auth = new SessionAuthService(
     uow,
@@ -532,6 +533,46 @@ describe("F-17 independent drafts", () => {
     expect(results.find((r) => r.status === "rejected")).toMatchObject({
       reason: { status: 409, code: "RECORD_VERSION_CONFLICT" },
     });
+  });
+  it("pages drafts newest-first with the signed keyset cursor without overlap or loss", async () => {
+    const f = await fixture();
+    const created: number[] = [];
+    for (const title of ["分页甲", "分页乙", "分页丙"]) {
+      const draft = await uow.run((tx) =>
+        service.create(
+          tx,
+          f.userId,
+          f.projectId,
+          f.moduleId,
+          { ...content, title, scopeType: "MODULE", impactFeatureIds: [] },
+          randomUUID(),
+        ),
+      );
+      created.push(draft.id);
+    }
+    const newestFirst = [...created].reverse();
+    const readPage = async (params: {
+      readonly limit?: number;
+      readonly cursor?: string;
+    }) =>
+      schemaRegistry.RecordDraftPage.schema.parse(
+        await service.read(f.userId, f.projectId, undefined, params),
+      );
+    const first = await readPage({ limit: 2 });
+    expect(first.items.map((x) => x.id)).toEqual(newestFirst.slice(0, 2));
+    expect(first.hasMore).toBe(true);
+    const cursor = first.nextCursor;
+    expect(cursor).not.toBeNull();
+    const second = await readPage({ limit: 2, cursor: cursor! });
+    expect(second.items.map((x) => x.id)).toEqual(newestFirst.slice(2));
+    expect(second).toMatchObject({ hasMore: false, nextCursor: null });
+    const other = await createProject(client.sql, f.userId);
+    await expect(
+      service.read(f.userId, other.projectId, undefined, { cursor: cursor! }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
+    await expect(
+      service.read(f.userId, f.projectId, undefined, { cursor: "tampered.0" }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
   });
 });
 async function taskFixture(scope: "FEATURE" | "MODULE" = "FEATURE") {

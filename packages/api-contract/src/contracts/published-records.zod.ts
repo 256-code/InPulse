@@ -4,6 +4,12 @@ import {
   recordDraftItemSchema,
   recordDraftResourcePathSchema,
 } from "./record-drafts.zod.js";
+import {
+  RECORD_CURSOR_MAX_LENGTH,
+  RECORD_PAGE_LIMIT_MAX,
+  recordListCursorSchema,
+  recordListLimitSchema,
+} from "./record-pagination.zod.js";
 const id = z.number().int().positive().max(2147483647);
 export const recordVersionLeftoverSchema = z
   .object({ id, content: z.string().min(1).max(10000) })
@@ -60,6 +66,15 @@ export const readableRecordSchema = z
   .discriminatedUnion("status", [publishedRecordSchema, voidedRecordSchema])
   .meta({ id: "ReadableRecord" });
 export type ReadableRecord = z.infer<typeof readableRecordSchema>;
+export const readableRecordPageSchema = z
+  .object({
+    items: z.array(readableRecordSchema).max(RECORD_PAGE_LIMIT_MAX),
+    nextCursor: z.string().min(1).max(RECORD_CURSOR_MAX_LENGTH).nullable(),
+    hasMore: z.boolean(),
+  })
+  .strict()
+  .meta({ id: "ReadableRecordPage" });
+export type ReadableRecordPage = z.infer<typeof readableRecordPageSchema>;
 export const changeRecordVersionSchema = recordDraftContentSchema
   .extend({
     recordId: id,
@@ -105,20 +120,21 @@ export const publishedRecordSchemas = {
     summary: "成员 PUBLISHED 或管理员 VOID 详情",
     sensitiveFieldPaths: [],
   },
-  ReadableRecordList: {
-    schema: z
-      .object({ items: z.array(readableRecordSchema) })
-      .strict()
-      .meta({ id: "ReadableRecordList" }),
-    summary: "显式状态筛选的记录",
+  ReadableRecordPage: {
+    schema: readableRecordPageSchema,
+    summary: "显式状态筛选的记录分页（items/nextCursor/hasMore）",
     sensitiveFieldPaths: [],
   },
   RecordListQuery: {
     schema: z
-      .object({ status: z.enum(["PUBLISHED", "VOID"]).optional() })
+      .object({
+        status: z.enum(["PUBLISHED", "VOID"]).optional(),
+        cursor: recordListCursorSchema,
+        limit: recordListLimitSchema,
+      })
       .strict()
       .meta({ id: "RecordListQuery" }),
-    summary: "默认 PUBLISHED，VOID 仅管理员",
+    summary: "默认 PUBLISHED，VOID 仅管理员；签名游标与 limit 1..100 默认 20",
     sensitiveFieldPaths: [],
   },
   PublishedRecordContent: {

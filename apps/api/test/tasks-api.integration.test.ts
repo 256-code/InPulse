@@ -58,6 +58,7 @@ import { PostgresTaskQueryPort } from "../src/modules/tasks/task-query.port.js";
 import { PostgresTaskBranchQueryPort } from "../src/modules/task-groups/task-branch-query.port.js";
 import { TaskGroupRepository } from "../src/modules/task-groups/task-group.repository.js";
 import { RecordDraftsService } from "../src/modules/change-records/record-drafts.service.js";
+import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
 import { RecordPublicationService } from "../src/modules/change-records/record-publication.service.js";
 import { RecordPublicationRepository } from "../src/modules/change-records/record-publication.repository.js";
@@ -85,9 +86,8 @@ let search: PostgresSearchProjectionWritePort;
 let activity: PostgresActivityWritePort;
 let notifications: PostgresNotificationWritePort;
 const key = randomBytes(32);
-const tokens = new SessionTokenService(
-  VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-);
+const ring = VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1);
+const tokens = new SessionTokenService(ring);
 interface Actor {
   userId: number;
   sessionId: number;
@@ -148,6 +148,7 @@ beforeAll(async () => {
     records,
     uow,
     audit,
+    new TimeCursorService(ring, "RECORD_DRAFTS"),
   );
   const publication = new RecordPublicationService(
     new RecordPublicationAccess(access, modules, features, taskQuery, pubRepo),

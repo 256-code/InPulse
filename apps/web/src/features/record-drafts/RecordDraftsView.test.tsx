@@ -48,7 +48,11 @@ function client(overrides: object = {}) {
       items: [{ id: 2, name: "支付模块", status: "ACTIVE" }],
     }),
     listFeatures: vi.fn().mockResolvedValue({ items: [] }),
-    listRecordDrafts: vi.fn().mockResolvedValue({ items: [item] }),
+    listRecordDrafts: vi.fn().mockResolvedValue({
+      items: [item],
+      nextCursor: null,
+      hasMore: false,
+    }),
     getRecordDraft: vi.fn().mockResolvedValue(item),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     ...overrides,
@@ -255,4 +259,29 @@ it("continues the selected source draft through the workflow without copying sou
     remainingIssues: "补充",
   });
   expect(update.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
+});
+
+it("loads the next draft page with the server cursor", async () => {
+  const nextItem = { ...item, id: 8, title: "第二页草稿" };
+  const listRecordDrafts = vi
+    .fn()
+    .mockResolvedValueOnce({
+      items: [item],
+      nextCursor: "cursor-1",
+      hasMore: true,
+    })
+    .mockResolvedValueOnce({
+      items: [nextItem],
+      nextCursor: null,
+      hasMore: false,
+    });
+  mount(client({ listRecordDrafts }));
+  expect(await screen.findByText("支付修正")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+  expect(await screen.findByText("第二页草稿")).toBeVisible();
+  expect(listRecordDrafts).toHaveBeenLastCalledWith(
+    1,
+    { limit: 20, cursor: "cursor-1" },
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
 });

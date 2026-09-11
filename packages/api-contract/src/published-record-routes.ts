@@ -35,7 +35,7 @@ export const publishedRecordRoutes: readonly RouteDefinition[] = (
     responses: {
       "200": json(
         list
-          ? "ReadableRecordList"
+          ? "ReadableRecordPage"
           : version
             ? "ChangeRecordVersion"
             : versions

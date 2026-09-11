@@ -17,6 +17,7 @@ import { RecordDraftRepository } from "../src/modules/change-records/record-draf
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
 import { PublishedRecordRepository } from "../src/modules/change-records/published-record.repository.js";
 import { PublishedRecordReadService } from "../src/modules/change-records/published-record-read.service.js";
+import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import { PublishedRecordsHttpService } from "../src/modules/change-records/published-records-http.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
@@ -32,6 +33,10 @@ let client: DatabaseClient,
   uow: PostgresUnitOfWork,
   read: PublishedRecordReadService,
   http: PublishedRecordsHttpService;
+const ring = VersionedHmacKeyring.fromEntries(
+  [{ version: 1, key: randomBytes(32) }],
+  1,
+);
 const content = {
   title: "正式记录",
   contextProblem: "版本并发问题",
@@ -48,17 +53,13 @@ beforeAll(() => {
     new PostgresProjectAccessQueryPort(client),
     uow,
     new PublishedRecordRepository(),
+    new TimeCursorService(ring, "CHANGE_RECORDS"),
   );
   http = new PublishedRecordsHttpService(
     new SessionAuthService(
       uow,
       new PostgresUserSessionRepository(),
-      new SessionTokenService(
-        VersionedHmacKeyring.fromEntries(
-          [{ version: 1, key: randomBytes(32) }],
-          1,
-        ),
-      ),
+      new SessionTokenService(ring),
     ),
     read,
   );
@@ -86,6 +87,30 @@ async function fixture() {
     await tx.sql`UPDATE app.change_records SET status='PUBLISHED',code=${project.code + "-CR-1"},current_version=1,published_at=clock_timestamp(),row_version=row_version+1 WHERE id=${draft.id}`;
   });
   return { ...project, userId, draft };
+}
+async function publishAdditionalRecord(
+  f: Awaited<ReturnType<typeof fixture>>,
+  sequence: number,
+  title: string,
+) {
+  const draft = await uow.run((tx) =>
+    new RecordDraftRepository().create(
+      tx,
+      {
+        projectId: f.projectId,
+        moduleId: f.moduleId,
+        featureId: null,
+        impactFeatureIds: [],
+      },
+      f.userId,
+      { ...content, title },
+    ),
+  );
+  await uow.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_versions(record_id,project_id,version_no,title_snapshot,payload,created_by) SELECT id,project_id,1,title,current_payload,${f.userId} FROM app.change_records WHERE id=${draft.id}`;
+    await tx.sql`UPDATE app.change_records SET status='PUBLISHED',code=${f.code + "-CR-" + sequence},current_version=1,published_at=clock_timestamp(),row_version=row_version+1 WHERE id=${draft.id}`;
+  });
+  return draft;
 }
 describe("F18 formal record reads", () => {
   it("allocates formal record codes transactionally and rolls back a failed allocation", async () => {
@@ -136,7 +161,7 @@ describe("F18 formal record reads", () => {
       await tx.sql`INSERT INTO app.change_record_versions(record_id,project_id,version_no,title_snapshot,payload,created_by) VALUES(${f.draft.id},${f.projectId},2,'修订标题',${JSON.stringify(next)}::jsonb,${f.userId})`;
       await tx.sql`UPDATE app.change_records SET current_version=2,title='修订标题',current_payload=${JSON.stringify(next)}::jsonb,row_version=row_version+1 WHERE id=${f.draft.id}`;
     });
-    expect(await read.read(f.userId, f.projectId)).toMatchObject({
+    expect(await read.list(f.userId, f.projectId, {})).toMatchObject({
       items: [
         {
           id: f.draft.id,
@@ -169,7 +194,11 @@ describe("F18 formal record reads", () => {
     await expect(
       read.read(f.userId, f.projectId, f.draft.id),
     ).rejects.toMatchObject({ status: 404 });
-    expect(await read.read(f.userId, f.projectId)).toEqual({ items: [] });
+    expect(await read.list(f.userId, f.projectId, {})).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
     await client.sql`UPDATE app.change_records SET status='PUBLISHED',row_version=row_version+1 WHERE id=${f.draft.id}`;
     expect(await read.read(f.userId, f.projectId, f.draft.id)).toMatchObject({
       id: f.draft.id,
@@ -190,6 +219,27 @@ describe("F18 formal record reads", () => {
       status: 401,
       body: { code: "RECORD_SESSION_REQUIRED", requestId: expect.any(String) },
     });
+  });
+  it("pages published records newest-first with the signed keyset cursor", async () => {
+    const f = await fixture();
+    const second = await publishAdditionalRecord(f, 2, "补充分页记录二");
+    const third = await publishAdditionalRecord(f, 3, "补充分页记录三");
+    const newestFirst = [third.id, second.id, f.draft.id];
+    const first = await read.list(f.userId, f.projectId, { limit: 2 });
+    expect(first.items.map((x) => x.id)).toEqual(newestFirst.slice(0, 2));
+    expect(first.hasMore).toBe(true);
+    const cursor = first.nextCursor;
+    expect(cursor).not.toBeNull();
+    const rest = await read.list(f.userId, f.projectId, {
+      limit: 2,
+      cursor: cursor!,
+    });
+    expect(rest.items.map((x) => x.id)).toEqual(newestFirst.slice(2));
+    expect(rest).toMatchObject({ hasMore: false, nextCursor: null });
+    const other = await createProject(client.sql, f.userId);
+    await expect(
+      read.list(f.userId, other.projectId, { cursor: cursor! }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
   });
 });
 function publicationAccess() {

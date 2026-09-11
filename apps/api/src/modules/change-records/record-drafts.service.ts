@@ -5,11 +5,18 @@ import type {
   RecordSourceSnapshot,
 } from "./record-draft.port.js";
 import {
+  RECORD_PAGE_LIMIT_DEFAULT,
   recordDraftReplayContextSchema,
   type IndependentRecordDraftRequest,
   type RecordDraftContent,
   type RecordDraftItem,
+  type RecordDraftPage,
 } from "@inpulse/api-contract";
+import {
+  TimeCursorError,
+  TimeCursorService,
+  type TimeCursorValue,
+} from "../../cursors/time-cursor.js";
 import { AuditWritePort } from "../../audit/index.js";
 import { PostgresUnitOfWork } from "../../database/unit-of-work.js";
 import type { TransactionContext } from "../../database/transaction-context.js";
@@ -23,6 +30,14 @@ import {
   RecordDraftRepository,
   type DraftScope,
 } from "./record-draft.repository.js";
+
+const RECORD_DRAFT_LIST_NAMESPACE = "RECORD_DRAFTS";
+
+/** B-1 草稿列表分页参数：limit 1..100 默认 20，cursor 为服务端签名游标。 */
+export interface RecordDraftListCommand {
+  readonly cursor?: string;
+  readonly limit?: number;
+}
 
 export class RecordDraftError extends Error {
   constructor(
@@ -54,17 +69,70 @@ export class RecordDraftsService
     private readonly repository: RecordDraftRepository,
     @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
     @Inject(AuditWritePort) private readonly audit: AuditWritePort,
+    @Inject(TimeCursorService) private readonly cursor: TimeCursorService,
   ) {}
-  async read(actorId: number, projectId: number, recordId?: number) {
+  /**
+   * 草稿列表分页（B-1 / C-006）：items / nextCursor / hasMore；签名游标绑定
+   * actor、命名空间与项目，15 分钟过期，失效统一 422；草稿详情读取不变。
+   */
+  async read(
+    actorId: number,
+    projectId: number,
+    recordId?: number,
+    page: RecordDraftListCommand = {},
+  ): Promise<RecordDraftItem | RecordDraftPage> {
     const authorized = await this.access.getAuthorizedSearchScope(actorId);
     if (!authorized.projectIds.includes(projectId)) throw missing();
+    if (recordId !== undefined)
+      return this.uow.run(async (tx) => {
+        const item = await this.repository.find(tx, projectId, recordId);
+        if (!item) throw missing();
+        return item;
+      });
+    const limit = page.limit ?? RECORD_PAGE_LIMIT_DEFAULT;
+    const after = this.decodeListCursor(page.cursor, actorId, projectId);
     return this.uow.run(async (tx) => {
-      if (recordId === undefined)
-        return { items: await this.repository.list(tx, projectId) };
-      const item = await this.repository.find(tx, projectId, recordId);
-      if (!item) throw missing();
-      return item;
+      const result = await this.repository.listPage(tx, {
+        projectId,
+        limit,
+        after,
+      });
+      return {
+        items: result.items,
+        hasMore: result.hasMore,
+        nextCursor:
+          result.last === null
+            ? null
+            : this.cursor.encode({
+                actorUserId: actorId,
+                namespace: RECORD_DRAFT_LIST_NAMESPACE,
+                projectId,
+                afterAt: result.last.at,
+                afterId: result.last.id,
+              }),
+      };
     });
+  }
+  private decodeListCursor(
+    cursor: string | undefined,
+    actorId: number,
+    projectId: number,
+  ): TimeCursorValue | null {
+    try {
+      return this.cursor.decode(cursor, {
+        actorUserId: actorId,
+        namespace: RECORD_DRAFT_LIST_NAMESPACE,
+        projectId,
+      });
+    } catch (error) {
+      if (error instanceof TimeCursorError)
+        throw new RecordDraftError(
+          422,
+          "INVALID_CURSOR",
+          "游标无效、已过期或与当前筛选条件不匹配",
+        );
+      throw error;
+    }
   }
   async lockDraft(tx: TransactionContext, projectId: number, recordId: number) {
     // Re-read relationships in a separate READ COMMITTED statement after waiting for the row.

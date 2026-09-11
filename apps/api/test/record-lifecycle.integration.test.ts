@@ -75,9 +75,8 @@ let audit: PostgresAuditWritePort,
   search: PostgresSearchProjectionWritePort,
   notifications: PostgresNotificationWritePort;
 const key = randomBytes(32),
-  tokens = new SessionTokenService(
-    VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-  );
+  ring = VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
+  tokens = new SessionTokenService(ring);
 const content = {
   title: "发布验证",
   contextProblem: "并发保存",
@@ -171,6 +170,7 @@ beforeAll(async () => {
             access,
             uow,
             new PublishedRecordRepository(),
+            new TimeCursorService(ring, "CHANGE_RECORDS"),
           ),
         ),
       },
@@ -395,6 +395,7 @@ describe("F21 ADR-024 lifecycle", () => {
       new PostgresProjectAccessQueryPort(db),
       uow,
       new PublishedRecordRepository(),
+      new TimeCursorService(ring, "CHANGE_RECORDS"),
     );
     await expect(
       reader.read(f.userId, f.projectId, f.draft.id),
@@ -403,18 +404,15 @@ describe("F21 ADR-024 lifecycle", () => {
       reader.read(f.userId, f.projectId, f.draft.id, true),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
-      reader.read(f.userId, f.projectId, undefined, false, undefined, "VOID"),
+      reader.list(f.userId, f.projectId, { status: "VOID" }),
     ).rejects.toMatchObject({ status: 404 });
-    expect(await reader.read(f.adminId, f.projectId)).toEqual({ items: [] });
+    expect(await reader.list(f.adminId, f.projectId, {})).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
     expect(
-      await reader.read(
-        f.adminId,
-        f.projectId,
-        undefined,
-        false,
-        undefined,
-        "VOID",
-      ),
+      await reader.list(f.adminId, f.projectId, { status: "VOID" }),
     ).toMatchObject({ items: [{ id: f.draft.id, status: "VOID" }] });
     expect(await reader.read(f.adminId, f.projectId, f.draft.id)).toMatchObject(
       { status: "VOID", voidReason: "生命周期测试原因" },

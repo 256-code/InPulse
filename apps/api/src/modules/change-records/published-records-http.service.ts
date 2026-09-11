@@ -31,24 +31,39 @@ export class PublishedRecordsHttpService {
       const parsed = schemaRegistry[route.request.path].schema.safeParse(
         request.params,
       );
-      if (
-        !parsed.success ||
-        (operation === "listChangeRecords"
-          ? !schemaRegistry.RecordListQuery.schema.safeParse(
-              request.query ?? {},
-            ).success
-          : Object.keys((request.query ?? {}) as object).length)
-      )
+      const listQuery =
+        operation === "listChangeRecords"
+          ? schemaRegistry.RecordListQuery.schema.safeParse(request.query ?? {})
+          : undefined;
+      const rejectedQuery = listQuery
+        ? !listQuery.success
+        : Object.keys((request.query ?? {}) as object).length !== 0;
+      if (!parsed.success || rejectedQuery)
         throw new RecordDraftError(
           422,
           "RECORD_VALIDATION_FAILED",
-          "请检查记录路径和版本",
+          "请检查记录路径、筛选与分页参数",
         );
       const path = parsed.data as {
         projectId: number;
         recordId?: number;
         versionNo?: number;
       };
+      if (operation === "listChangeRecords" && listQuery?.success)
+        return {
+          status: 200,
+          body: await this.service.list(actor.userId, path.projectId, {
+            ...(listQuery.data.status === undefined
+              ? {}
+              : { status: listQuery.data.status }),
+            ...(listQuery.data.cursor === undefined
+              ? {}
+              : { cursor: listQuery.data.cursor }),
+            ...(listQuery.data.limit === undefined
+              ? {}
+              : { limit: listQuery.data.limit }),
+          }),
+        };
       return {
         status: 200,
         body: await this.service.read(
@@ -58,10 +73,6 @@ export class PublishedRecordsHttpService {
           operation === "listChangeRecordVersions" ||
             operation === "getChangeRecordVersion",
           path.versionNo,
-          operation === "listChangeRecords"
-            ? schemaRegistry.RecordListQuery.schema.parse(request.query ?? {})
-                .status
-            : undefined,
         ),
       };
     } catch (error) {

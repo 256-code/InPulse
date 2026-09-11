@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Alert, Button, Input, Spin } from "antd";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRecordDraftsQuery } from "@features/record-drafts/record-drafts-query";
 import {
   ApiError,
   type InpulseApiClient,
@@ -45,13 +46,14 @@ export function CompleteWithRecord({
   };
   const retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
-  const drafts = useQuery({
-    queryKey: ["completion-drafts", item.projectId, item.id],
-    queryFn: ({ signal }) => api.listRecordDrafts(item.projectId, { signal }),
+  const drafts = useRecordDraftsQuery({
+    client: api,
+    projectId: item.projectId,
     enabled: mode === "draft",
-    retry: false,
   });
-  const choices = (drafts.data?.items ?? []).filter(
+  const draftItems =
+    drafts.data?.pages.flatMap((page) => [...page.items]) ?? [];
+  const choices = draftItems.filter(
     (record) =>
       record.moduleId === item.moduleId &&
       record.featureId === item.featureId &&
@@ -146,7 +148,6 @@ export function CompleteWithRecord({
             "record-drafts",
             "task-record-drafts",
             "published-records",
-            "completion-drafts",
             "activity",
             "search",
             "notifications",
@@ -292,6 +293,16 @@ export function CompleteWithRecord({
                   </option>
                 ))}
               </select>
+              {drafts.hasNextPage && (
+                <div className="record-load-more">
+                  <Button
+                    disabled={drafts.isFetchingNextPage}
+                    onClick={() => void drafts.fetchNextPage()}
+                  >
+                    {drafts.isFetchingNextPage ? "正在加载…" : "加载更多"}
+                  </Button>
+                </div>
+              )}
             </label>
           )}
           {selected && (

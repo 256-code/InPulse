@@ -66,6 +66,7 @@ import { RecordPublicationService } from "../src/modules/change-records/record-p
 import { RecordPublicationHttpService } from "../src/modules/change-records/record-publication-http.service.js";
 import { PublishedRecordsHttpService } from "../src/modules/change-records/published-records-http.service.js";
 import { PublishedRecordReadService } from "../src/modules/change-records/published-record-read.service.js";
+import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import { PublishedRecordsController } from "../src/modules/change-records/published-records.controller.js";
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
@@ -96,9 +97,8 @@ let audit: PostgresAuditWritePort,
   search: PostgresSearchProjectionWritePort,
   notifications: PostgresNotificationWritePort;
 const key = randomBytes(32),
-  tokens = new SessionTokenService(
-    VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-  );
+  ring = VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
+  tokens = new SessionTokenService(ring);
 const content = {
   title: "发布验证",
   contextProblem: "并发保存",
@@ -223,6 +223,7 @@ beforeAll(async () => {
             access,
             uow,
             new PublishedRecordRepository(),
+            new TimeCursorService(ring, "CHANGE_RECORDS"),
           ),
         ),
       },
