@@ -5,7 +5,7 @@ import type { TaskScopeType } from "../tasks/index.js";
 /** 列表条数上限：契约层已按 A 裁决 Q-06 收口到 1..10，端口再兜一层。 */
 export const CHANGE_RECORD_READ_LIMIT_MAX = 100;
 
-/** listTaskIdsWithPublishedRecords 的 taskIds 上限，避免无界数组进入 SQL 参数。 */
+/** countPublishedByTask 的 taskIds 上限，避免无界数组进入 SQL 参数。 */
 export const CHANGE_RECORD_TASK_IDS_MAX = 1000;
 
 export type ChangeRecordReadInputErrorReason =
@@ -110,7 +110,11 @@ interface LeftoverListRowRaw extends Omit<LeftoverListRow, "publishedAt"> {
   readonly publishedAt: string;
 }
 
-/** R-1 每任务正式记录数（功能设计 §29.4：按 change_records 计数，不按版本计数）。 */
+/**
+ * 任务 → PUBLISHED 正式记录数映射条目（功能设计 §29.4：按 change_records 计数，
+ * 不按版本计数、不按影响功能去重；裁决修订 D-1）。计数为 0 的任务不出现，
+ * 消费端按 `?? 0` 补齐，恒有 `hasPublishedRecord === count > 0`。
+ */
 export interface TaskPublishedRecordCountItem {
   readonly taskId: number;
   readonly count: number;
@@ -198,20 +202,13 @@ export abstract class ChangeRecordReadPort {
   ): Promise<number>;
 
   /**
-   * 给定项目范围（可选任务集合），返回其中已有正式（PUBLISHED）记录的任务 ID。
-   * 服务 R-1 成员项的 publishedRecordCount 与任务记录维度标记。
+   * 任务 → PUBLISHED 正式记录数映射（裁决修订 D-1 / §11.6）：单条 SQL、按
+   * task_id 升序，供 R-1 成员项、R-3 列表项与 R-5 批量标记同时消费；
+   * 计数为 0 的任务不出现，消费端按 `?? 0` 补齐（恒有
+   * hasPublishedRecord === publishedRecordCount > 0）。
    *
-   * projectIds 为空返回空数组，不发出 SQL；taskIds 省略表示不限任务，传入空数组
-   * 表示没有候选任务、同样返回空数组。
-   */
-  abstract listTaskIdsWithPublishedRecords(
-    tx: TransactionContext,
-    projectIds: readonly number[],
-    taskIds?: readonly number[],
-  ): Promise<readonly number[]>;
-
-  /**
-   * R-1 成员项的 publishedRecordCount：每任务 PUBLISHED 记录数。
+   * R-3 的记录维度筛选不依赖本方法：MyTaskQueryPort.list 在同一分页 SQL 内用
+   * 等价 EXISTS 先过滤后分页；本方法只为本页或本次请求的 taskIds 补齐计数。
    * projectIds 或 taskIds 为空时短路返回空集，不发出 SQL；
    * taskIds 上限 CHANGE_RECORD_TASK_IDS_MAX，超限抛 ChangeRecordReadInputError。
    */
@@ -457,29 +454,6 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
          AND (${scopeType}::text IS NULL OR cr.scope_type = ${scopeType})
     `;
     return row?.total ?? 0;
-  }
-
-  async listTaskIdsWithPublishedRecords(
-    tx: TransactionContext,
-    projectIds: readonly number[],
-    taskIds?: readonly number[],
-  ): Promise<readonly number[]> {
-    assertTaskIds(taskIds);
-    if (projectIds.length === 0 || taskIds?.length === 0) {
-      return [];
-    }
-    const projects = [...projectIds];
-    const tasks = taskIds ? [...taskIds] : null;
-    const rows = await tx.sql<{ taskId: number }[]>`
-      SELECT DISTINCT cr.task_id AS "taskId"
-        FROM app.change_records cr
-       WHERE cr.project_id = ANY(${projects}::integer[])
-         AND cr.status = 'PUBLISHED'
-         AND cr.task_id IS NOT NULL
-         AND (${tasks}::integer[] IS NULL OR cr.task_id = ANY(${tasks}::integer[]))
-       ORDER BY 1
-    `;
-    return rows.map((row) => row.taskId);
   }
 
   async countPublishedByTask(

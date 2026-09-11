@@ -19,6 +19,8 @@ export interface MyTaskPageInput extends TaskListFilter {
   /**
    * 记录维度筛选（R-3 的 hasPublishedRecord）：
    * true = 只返回已有 PUBLISHED 记录的任务；false = 只返回没有的；缺省 = 不筛选。
+   * 与 ChangeRecordReadPort.countPublishedByTask 同源同口径（等价 count > 0），
+   * 仍在下方同一分页 SQL 内先过滤后分页（裁决修订 D-1 / §11.6）。
    */
   readonly hasPublishedRecord?: boolean;
   /** 单值优先级筛选；与 workStatus 正交（A 裁决 §10.3）。 */
@@ -110,7 +112,9 @@ export interface MyTaskLeftoverEntry {
  * 1. 只读、不取锁；不校验项目授权，调用方必须先取得 AuthorizedProjectScope。
  * 2. projectIds 为空时短路返回空页，不发出任何 SQL。
  * 3. 排序固定 ORDER BY t.id DESC，与 TaskQueryPort.list 同口径。
- * 4. excludedTaskIds（C 域的历史来源分支）与 hasPublishedRecord 都在分页前过滤。
+ * 4. excludedTaskIds（C 域的历史来源分支）与 hasPublishedRecord 都在分页前过滤；
+ *    计数映射（countPublishedByTask）只在分页后按本页 taskIds 补齐，不参与、也不
+ *    替代筛选，确保先过滤后分页不被破坏（裁决修订 D-1）。
  * 5. 游标签名不属于端口职责：调用方解码游标后传入 afterTaskId，并用返回的
  *    nextTaskId 自行签发（C-006 / Q-10：绑定 actor 与筛选条件、TTL 15 分钟）。
  */
