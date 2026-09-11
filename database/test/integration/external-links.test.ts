@@ -24,6 +24,10 @@ describe("ExternalLinks invariants", () => {
   let other: ProjectFixture;
   let taskId: number;
   let otherTaskId: number;
+  let featureId: number;
+  let otherFeatureId: number;
+  let recordId: number;
+  let otherRecordId: number;
 
   beforeAll(async () => {
     urls = testUrls();
@@ -33,6 +37,10 @@ describe("ExternalLinks invariants", () => {
     other = await createProject(runtime);
     taskId = await createTask(runtime, member, 1);
     otherTaskId = await createTask(runtime, other, 1);
+    featureId = await createFeature(runtime, member, 1);
+    otherFeatureId = await createFeature(runtime, other, 1);
+    recordId = await createChangeRecord(runtime, member, 1);
+    otherRecordId = await createChangeRecord(runtime, other, 1);
   });
 
   afterAll(async () => {
@@ -72,6 +80,64 @@ describe("ExternalLinks invariants", () => {
     `;
     if (!row) {
       throw new Error("external_links insert returned no row");
+    }
+    return row.id;
+  }
+
+  async function createFeature(
+    sql: Sql,
+    fixture: ProjectFixture,
+    ordinal: number,
+  ): Promise<number> {
+    const [row] = await sql<Array<{ id: number }>>`
+      INSERT INTO app.features (
+        project_id,
+        module_id,
+        code,
+        name,
+        created_by
+      )
+      VALUES (
+        ${fixture.projectId},
+        ${fixture.moduleId},
+        ${`${fixture.code}-F-${ordinal}`},
+        ${`功能 ${ordinal}`},
+        ${fixture.userId}
+      )
+      RETURNING id
+    `;
+    if (!row) {
+      throw new Error("Feature fixture insert returned no row");
+    }
+    return row.id;
+  }
+
+  async function createChangeRecord(
+    sql: Sql,
+    fixture: ProjectFixture,
+    ordinal: number,
+  ): Promise<number> {
+    const [row] = await sql<Array<{ id: number }>>`
+      INSERT INTO app.change_records (
+        project_id,
+        module_id,
+        scope_type,
+        title,
+        handler_id,
+        author_id
+      )
+      VALUES (
+        ${fixture.projectId},
+        ${fixture.moduleId},
+        'MODULE',
+        ${`变更记录 ${ordinal}`},
+        ${fixture.userId},
+        ${fixture.userId}
+      )
+      RETURNING id
+    `;
+    if (!row) {
+      throw new Error("Change-record fixture insert returned no row");
     }
     return row.id;
   }
@@ -171,6 +237,190 @@ describe("ExternalLinks invariants", () => {
       runtime`
         INSERT INTO app.task_external_links (project_id, task_id, link_id)
         VALUES (${member.projectId}, ${taskId}, ${linkId})
+      `,
+      "23505",
+    );
+  });
+
+  test("功能级关联拒绝跨项目串联与归属错配", async () => {
+    const url = uniqueUrl("feature");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+      VALUES (${member.projectId}, ${featureId}, ${linkId})
+    `;
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+        VALUES (${other.projectId}, ${otherFeatureId}, ${linkId})
+      `,
+      "23503",
+    );
+
+    const otherUrl = uniqueUrl("feature-other");
+    const otherLinkId = await insertLink(
+      other.projectId,
+      other.userId,
+      otherUrl,
+    );
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+        VALUES (${member.projectId}, ${featureId}, ${otherLinkId})
+      `,
+      "23503",
+    );
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+        VALUES (${other.projectId}, ${featureId}, ${otherLinkId})
+      `,
+      "23503",
+    );
+  });
+
+  test("同一功能重复关联同一链接返回 23505", async () => {
+    const url = uniqueUrl("feature-dup");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+      VALUES (${member.projectId}, ${featureId}, ${linkId})
+    `;
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.feature_external_links (project_id, feature_id, link_id)
+        VALUES (${member.projectId}, ${featureId}, ${linkId})
+      `,
+      "23505",
+    );
+  });
+
+  test("记录级关联拒绝跨项目串联与归属错配", async () => {
+    const url = uniqueUrl("record");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.change_record_external_links (
+        project_id,
+        change_record_id,
+        link_id
+      )
+      VALUES (${member.projectId}, ${recordId}, ${linkId})
+    `;
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.change_record_external_links (
+          project_id,
+          change_record_id,
+          link_id
+        )
+        VALUES (${other.projectId}, ${otherRecordId}, ${linkId})
+      `,
+      "23503",
+    );
+
+    const otherUrl = uniqueUrl("record-other");
+    const otherLinkId = await insertLink(
+      other.projectId,
+      other.userId,
+      otherUrl,
+    );
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.change_record_external_links (
+          project_id,
+          change_record_id,
+          link_id
+        )
+        VALUES (${member.projectId}, ${recordId}, ${otherLinkId})
+      `,
+      "23503",
+    );
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.change_record_external_links (
+          project_id,
+          change_record_id,
+          link_id
+        )
+        VALUES (${other.projectId}, ${recordId}, ${otherLinkId})
+      `,
+      "23503",
+    );
+  });
+
+  test("同一记录重复关联同一链接返回 23505", async () => {
+    const url = uniqueUrl("record-dup");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.change_record_external_links (
+        project_id,
+        change_record_id,
+        link_id
+      )
+      VALUES (${member.projectId}, ${recordId}, ${linkId})
+    `;
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.change_record_external_links (
+          project_id,
+          change_record_id,
+          link_id
+        )
+        VALUES (${member.projectId}, ${recordId}, ${linkId})
+      `,
+      "23505",
+    );
+  });
+
+  test("项目级关联拒绝其他项目的链接", async () => {
+    const url = uniqueUrl("project");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.project_external_links (project_id, link_id)
+      VALUES (${member.projectId}, ${linkId})
+    `;
+
+    const otherUrl = uniqueUrl("project-other");
+    const otherLinkId = await insertLink(
+      other.projectId,
+      other.userId,
+      otherUrl,
+    );
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.project_external_links (project_id, link_id)
+        VALUES (${member.projectId}, ${otherLinkId})
+      `,
+      "23503",
+    );
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.project_external_links (project_id, link_id)
+        VALUES (${other.projectId}, ${linkId})
+      `,
+      "23503",
+    );
+  });
+
+  test("同一项目重复关联同一链接返回 23505", async () => {
+    const url = uniqueUrl("project-dup");
+    const linkId = await insertLink(member.projectId, member.userId, url);
+    await runtime`
+      INSERT INTO app.project_external_links (project_id, link_id)
+      VALUES (${member.projectId}, ${linkId})
+    `;
+
+    await expectPostgresError(
+      runtime`
+        INSERT INTO app.project_external_links (project_id, link_id)
+        VALUES (${member.projectId}, ${linkId})
       `,
       "23505",
     );
