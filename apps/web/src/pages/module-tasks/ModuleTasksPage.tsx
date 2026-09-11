@@ -1,10 +1,12 @@
 import React from "react";
 import { Alert, Button, Spin } from "antd";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
+import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
 import { TasksPanel } from "@features/tasks/TasksPanel";
 
 export default function ModuleTasksPage() {
+  const navigate = useNavigate();
   const params = useParams();
   const projectId = Number(params["projectId"]);
   const moduleId = Number(params["moduleId"]);
@@ -28,6 +30,18 @@ export default function ModuleTasksPage() {
   if (!module) return <Alert type="error" title="模块不存在或无法访问" />;
   return (
     <>
+      <ProjectContextNav
+        modules={query.data.items}
+        active={moduleId}
+        onSelectOverview={() =>
+          navigate("/projects/" + projectId + "/overview")
+        }
+        onSelectModule={(nextModuleId) =>
+          navigate(
+            "/projects/" + projectId + "/modules/" + nextModuleId + "/features",
+          )
+        }
+      />
       <h1>{module.name} · 模块任务</h1>
       <TasksPanel
         key={`${projectId}:${moduleId}`}

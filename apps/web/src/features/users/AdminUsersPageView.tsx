@@ -7,8 +7,14 @@ import {
   type InpulseApiClient,
 } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
+import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
 import {
   adminUserErrorMessage,
   useAdminUsers,
@@ -20,6 +26,9 @@ type EditorState =
   | { readonly mode: "update"; readonly user: AdminUserItem };
 
 type LifecycleAction = "disable" | "enable" | "forceLogout";
+
+/** 设计师稿 latest-version/views/settings.tsx L9-11：左栏区块导航。 */
+type SettingsTab = "members" | "permissions" | "notifications";
 
 type EditorValues = {
   readonly loginName: string;
@@ -75,6 +84,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("members");
   const submitting = useRef(false);
   const {
     control,
@@ -305,7 +315,16 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
 
       <div className="settings-shell">
         <nav className="settings-rail" aria-label="成员与设置导航">
-          <button type="button" className="settings-tab settings-tab-active">
+          <button
+            type="button"
+            className={
+              activeTab === "members"
+                ? "settings-tab settings-tab-active"
+                : "settings-tab"
+            }
+            aria-current={activeTab === "members" ? "page" : undefined}
+            onClick={() => setActiveTab("members")}
+          >
             成员与角色
           </button>
           {onOpenProjects ? (
@@ -317,134 +336,162 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
               项目成员
             </button>
           ) : null}
+          <button
+            type="button"
+            className={
+              activeTab === "permissions"
+                ? "settings-tab settings-tab-active"
+                : "settings-tab"
+            }
+            aria-current={activeTab === "permissions" ? "page" : undefined}
+            onClick={() => setActiveTab("permissions")}
+          >
+            权限矩阵
+          </button>
+          <button
+            type="button"
+            className={
+              activeTab === "notifications"
+                ? "settings-tab settings-tab-active"
+                : "settings-tab"
+            }
+            aria-current={activeTab === "notifications" ? "page" : undefined}
+            onClick={() => setActiveTab("notifications")}
+          >
+            通知策略
+          </button>
         </nav>
 
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2>成员与角色</h2>
-              <span>
-                {query.data
+        {activeTab === "permissions" ? <PermissionMatrixPanel /> : null}
+        {activeTab === "notifications" ? <NotificationPolicyPanel /> : null}
+
+        {activeTab === "members" ? (
+          <section className="settings-panel">
+            <CalmSectionTitle
+              title="成员与角色"
+              hint={
+                query.data
                   ? `共 ${query.data.items.length} 位成员`
-                  : "正在加载成员列表"}
-              </span>
-            </div>
-            <Button className="secondary-button" onClick={openCreate}>
-              <InpulseIcon name="users" size={15} />
-              新增用户
-            </Button>
-          </div>
-
-          {success ? (
-            <div className="permission-note note-success" role="status">
-              <InpulseIcon name="check" size={16} />
-              <span>{success}</span>
-            </div>
-          ) : null}
-
-          {query.isPending ? (
-            <div className="calm-state">
-              <span className="calm-spinner" />
-              正在加载用户列表
-            </div>
-          ) : query.isError ? (
-            <CalmEmptyState
-              icon="alert"
-              title="用户列表加载失败"
-              description={adminUserErrorMessage(query.error)}
+                  : "正在加载成员列表"
+              }
             >
-              <Button
-                className="secondary-button"
-                onClick={() => void query.refetch()}
-              >
-                重试
-              </Button>
-            </CalmEmptyState>
-          ) : !query.data?.items.length ? (
-            <CalmEmptyState
-              icon="users"
-              title="暂无用户"
-              description="新增第一位用户后，即可按角色参与项目协作。"
-            >
-              <Button className="primary-button" onClick={openCreate}>
-                <InpulseIcon name="plus" size={15} />
+              <Button className="secondary-button" onClick={openCreate}>
+                <InpulseIcon name="users" size={15} />
                 新增用户
               </Button>
-            </CalmEmptyState>
-          ) : (
-            <div className="member-list">
-              {query.data.items.map((user) => (
-                <div className="member-row" key={user.id}>
-                  <span className="person-avatar">
-                    {user.name.trim().charAt(0) || "成"}
-                  </span>
-                  <div className="member-id">
-                    <strong>
-                      {user.name}
-                      {selfAdmin(user) ? (
-                        <span className="member-self">（当前账号）</span>
-                      ) : null}
-                    </strong>
-                    <small>
-                      {user.loginName}
-                      {user.email ? ` · ${user.email}` : ""}
-                    </small>
-                  </div>
-                  <div className="member-meta">
-                    <CalmBadge tone={user.isAdmin ? "blue" : "gray"}>
-                      {user.isAdmin ? "系统管理员" : "项目成员"}
-                    </CalmBadge>
-                    <span
-                      className={
-                        "member-status" +
-                        (user.status === "ACTIVE" ? "" : " is-disabled")
-                      }
-                    >
-                      {user.status === "ACTIVE" ? "启用" : "停用"}
+            </CalmSectionTitle>
+
+            {success ? (
+              <div className="permission-note note-success" role="status">
+                <InpulseIcon name="check" size={16} />
+                <span>{success}</span>
+              </div>
+            ) : null}
+
+            {query.isPending ? (
+              <div className="calm-state">
+                <span className="calm-spinner" />
+                正在加载用户列表
+              </div>
+            ) : query.isError ? (
+              <CalmEmptyState
+                icon="alert"
+                title="用户列表加载失败"
+                description={adminUserErrorMessage(query.error)}
+              >
+                <Button
+                  className="secondary-button"
+                  onClick={() => void query.refetch()}
+                >
+                  重试
+                </Button>
+              </CalmEmptyState>
+            ) : !query.data?.items.length ? (
+              <CalmEmptyState
+                icon="users"
+                title="暂无用户"
+                description="新增第一位用户后，即可按角色参与项目协作。"
+              >
+                <Button className="primary-button" onClick={openCreate}>
+                  <InpulseIcon name="plus" size={15} />
+                  新增用户
+                </Button>
+              </CalmEmptyState>
+            ) : (
+              <div className="member-list">
+                {query.data.items.map((user) => (
+                  <div className="member-row" key={user.id}>
+                    <span className="person-avatar">
+                      {user.name.trim().charAt(0) || "成"}
                     </span>
-                  </div>
-                  <div className="member-actions">
-                    <Button
-                      className="text-button"
-                      onClick={() => openUpdate(user)}
-                    >
-                      编辑
-                    </Button>
-                    {!selfAdmin(user) && (
-                      <Button
-                        className="text-button"
-                        onClick={() =>
-                          openLifecycle(
-                            user.status === "ACTIVE" ? "disable" : "enable",
-                            user,
-                          )
+                    <div className="member-id">
+                      <strong>
+                        {user.name}
+                        {selfAdmin(user) ? (
+                          <span className="member-self">（当前账号）</span>
+                        ) : null}
+                      </strong>
+                      <small>
+                        {user.loginName}
+                        {user.email ? ` · ${user.email}` : ""}
+                      </small>
+                    </div>
+                    <div className="member-meta">
+                      <CalmBadge tone={user.isAdmin ? "blue" : "gray"}>
+                        {user.isAdmin ? "系统管理员" : "项目成员"}
+                      </CalmBadge>
+                      <span
+                        className={
+                          "member-status" +
+                          (user.status === "ACTIVE" ? "" : " is-disabled")
                         }
                       >
-                        {user.status === "ACTIVE" ? "停用" : "启用"}
-                      </Button>
-                    )}
-                    {!selfAdmin(user) && (
+                        {user.status === "ACTIVE" ? "启用" : "停用"}
+                      </span>
+                    </div>
+                    <div className="member-actions">
                       <Button
                         className="text-button"
-                        onClick={() => openLifecycle("forceLogout", user)}
+                        onClick={() => openUpdate(user)}
                       >
-                        强制退出
+                        编辑
                       </Button>
-                    )}
+                      {!selfAdmin(user) && (
+                        <Button
+                          className="text-button"
+                          onClick={() =>
+                            openLifecycle(
+                              user.status === "ACTIVE" ? "disable" : "enable",
+                              user,
+                            )
+                          }
+                        >
+                          {user.status === "ACTIVE" ? "停用" : "启用"}
+                        </Button>
+                      )}
+                      {!selfAdmin(user) && (
+                        <Button
+                          className="text-button"
+                          onClick={() => openLifecycle("forceLogout", user)}
+                        >
+                          强制退出
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
 
-          <div className="permission-note">
-            <InpulseIcon name="shield" size={16} />
-            <span>
-              <strong>权限提示</strong>
-              系统管理员可以归档项目、作废与恢复记录、查看原始审计快照；高风险操作需要二次确认。项目成员在已加入项目内拥有全部普通研发操作权限。
-            </span>
-          </div>
-        </section>
+            <div className="permission-note">
+              <InpulseIcon name="shield" size={16} />
+              <span>
+                <strong>权限提示</strong>
+                系统管理员可以归档项目、作废与恢复记录、查看原始审计快照；高风险操作需要二次确认。项目成员在已加入项目内拥有全部普通研发操作权限。
+              </span>
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <Modal

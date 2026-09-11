@@ -1,7 +1,14 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
@@ -26,6 +33,16 @@ const item: FeatureItem = {
   updatedAt: "2026-09-09T00:00:00.000Z",
   archivedAt: null,
 };
+/**
+ * 功能视图会读模块列表用于项目内导航；这里默认给空列表，
+ * 需要断言导航的用例在传入的 client 上显式提供 listModules 覆盖即可。
+ */
+const withModules = (client: InpulseApiClient): InpulseApiClient =>
+  Object.assign(
+    { listModules: vi.fn().mockResolvedValue({ items: [] }) },
+    client,
+  ) as unknown as InpulseApiClient;
+
 function mount(client: InpulseApiClient, admin = false) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
@@ -35,12 +52,14 @@ function mount(client: InpulseApiClient, admin = false) {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <FeaturesPageView
-            projectId={2}
-            moduleId={4}
-            isAdmin={admin}
-            client={client}
-          />
+          <MemoryRouter>
+            <FeaturesPageView
+              projectId={2}
+              moduleId={4}
+              isAdmin={admin}
+              client={withModules(client)}
+            />
+          </MemoryRouter>
         </QueryClientProvider>
       </AuthStateProvider>
     </ConfigProvider>,
@@ -55,13 +74,15 @@ function mountDetail(client: InpulseApiClient, featureId: number) {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <FeaturesPageView
-            projectId={2}
-            moduleId={4}
-            featureId={featureId}
-            isAdmin={false}
-            client={client}
-          />
+          <MemoryRouter>
+            <FeaturesPageView
+              projectId={2}
+              moduleId={4}
+              featureId={featureId}
+              isAdmin={false}
+              client={withModules(client)}
+            />
+          </MemoryRouter>
         </QueryClientProvider>
       </AuthStateProvider>
     </ConfigProvider>,
@@ -357,5 +378,117 @@ describe("F-13 forms", () => {
     );
     expect(screen.getByRole("link", { name: "退款功能" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "其他功能" })).toBeInTheDocument();
+  });
+});
+
+const moduleRow = (id: number, name: string) => ({
+  id,
+  projectId: 2,
+  name,
+  description: "",
+  kind: "UNCLASSIFIED" as const,
+  status: "ACTIVE" as const,
+  sortOrder: id,
+  rowVersion: 1,
+  createdAt: "2026-09-09T00:00:00.000Z",
+  updatedAt: "2026-09-09T00:00:00.000Z",
+  archivedAt: null,
+});
+
+const moduleClient = (modules: readonly { id: number; name: string }[]) =>
+  ({
+    listFeatures: vi.fn().mockResolvedValue({ items: [] }),
+    findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+    listModules: vi.fn().mockResolvedValue({ items: modules }),
+  }) as unknown as InpulseApiClient;
+
+describe("项目内导航", () => {
+  it("renders the project overview entry plus the project modules with the current module active", async () => {
+    mount(moduleClient([moduleRow(4, "退款模块"), moduleRow(5, "结算模块")]));
+    const nav = screen.getByRole("navigation", {
+      name: "项目内导航",
+    });
+    await within(nav).findByRole("button", { name: "结算模块" });
+    expect(
+      within(nav)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["项目概览", "退款模块", "结算模块"]);
+    expect(within(nav).getByRole("button", { name: "退款模块" })).toHaveClass(
+      "active",
+    );
+    expect(
+      within(nav).getByRole("button", { name: "项目概览" }),
+    ).not.toHaveClass("active");
+  });
+
+  it("hides the navigation while a single feature is open", async () => {
+    mountDetail(
+      {
+        listFeatures: vi.fn().mockResolvedValue({ items: [item] }),
+        findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+        listTasks: vi.fn().mockResolvedValue({ items: [] }),
+        listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+      } as unknown as InpulseApiClient,
+      3,
+    );
+    await screen.findByRole("heading", { name: "退款功能" });
+    expect(
+      screen.queryByRole("navigation", { name: "项目内导航" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches to the selected module feature list and back to the project overview", async () => {
+    const client = moduleClient([
+      moduleRow(4, "退款模块"),
+      moduleRow(5, "结算模块"),
+    ]);
+    const FeatureListRoute: React.FC = () => {
+      const params = useParams();
+      const moduleId = Number(params["moduleId"]);
+      return (
+        <>
+          <FeaturesPageView
+            projectId={2}
+            moduleId={moduleId}
+            isAdmin={false}
+            client={client}
+          />
+          <p>{`当前模块 ${moduleId}`}</p>
+        </>
+      );
+    };
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter initialEntries={["/projects/2/modules/4/features"]}>
+              <Routes>
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features"
+                  element={<FeatureListRoute />}
+                />
+                <Route
+                  path="/projects/:projectId/overview"
+                  element={<div>项目概览页</div>}
+                />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+    await screen.findByText("当前模块 4");
+    fireEvent.click(await screen.findByRole("button", { name: "结算模块" }));
+    expect(await screen.findByText("当前模块 5")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "结算模块" })).toHaveClass(
+      "active",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "项目概览" }));
+    expect(await screen.findByText("项目概览页")).toBeInTheDocument();
   });
 });

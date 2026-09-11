@@ -276,3 +276,39 @@ describe("F-03 admin users page", () => {
     expect(secondKey).toBe(firstKey);
   });
 });
+
+describe("F-03 settings sections", () => {
+  it("switches between the member, permission matrix and notification panels", async () => {
+    const client = {
+      listAdminUsers: vi.fn().mockResolvedValue({ items: [admin, member] }),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    await screen.findByText("Alice");
+
+    const rail = screen.getByRole("navigation", { name: "成员与设置导航" });
+    const memberTab = within(rail).getByRole("button", { name: "成员与角色" });
+    const matrixTab = within(rail).getByRole("button", { name: "权限矩阵" });
+    const notifyTab = within(rail).getByRole("button", { name: "通知策略" });
+    expect(memberTab).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(matrixTab);
+    expect(matrixTab).toHaveAttribute("aria-current", "page");
+    expect(memberTab).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("table", { name: "权限矩阵" })).toBeInTheDocument();
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument();
+
+    fireEvent.click(notifyTab);
+    expect(notifyTab).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("table", { name: "通知场景" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("table", { name: "权限矩阵" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(memberTab);
+    await screen.findByText("Alice");
+    expect(memberTab).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.queryByRole("table", { name: "通知场景" }),
+    ).not.toBeInTheDocument();
+  });
+});

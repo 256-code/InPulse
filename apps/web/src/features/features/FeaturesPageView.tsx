@@ -4,6 +4,7 @@ import { TasksPanel } from "../tasks/TasksPanel";
 import React, { useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import {
   ApiError,
   type InpulseApiClient,
@@ -12,6 +13,8 @@ import {
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
+import { useModules } from "@features/modules/module-query";
 import {
   featureErrorMessage,
   useFeatures,
@@ -61,6 +64,8 @@ export function FeaturesPageView({
     featureId,
     client,
   );
+  const moduleQuery = useModules(projectId, client);
+  const navigate = useNavigate();
   const [selection, setSelection] = useState<{
     action: FeatureChange["action"];
     item?: FeatureItem;
@@ -222,6 +227,24 @@ export function FeaturesPageView({
   return (
     <>
       <div className="features-page">
+        {!featureId && (
+          <ProjectContextNav
+            modules={moduleQuery.query.data?.items ?? []}
+            active={moduleId}
+            onSelectOverview={() =>
+              navigate("/projects/" + projectId + "/overview")
+            }
+            onSelectModule={(nextModuleId) =>
+              navigate(
+                "/projects/" +
+                  projectId +
+                  "/modules/" +
+                  nextModuleId +
+                  "/features",
+              )
+            }
+          />
+        )}
         <div className="feature-breadcrumbs">
           <Button
             className="back-button"
