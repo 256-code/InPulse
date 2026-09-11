@@ -89,6 +89,34 @@ describe("AppLayout", () => {
     expect(notificationClient.getNotificationUnreadCount).toHaveBeenCalled();
   });
 
+  it("shows the audit entry only to system administrators", async () => {
+    const { unmount } = renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+      true,
+    );
+    expect(screen.getByText("动态审计")).toBeInTheDocument();
+    unmount();
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText("动态审计")).not.toBeInTheDocument();
+  });
+
   it("shows the project name in the breadcrumb on project routes", async () => {
     const projectClient = {
       getProject: vi.fn().mockResolvedValue({
