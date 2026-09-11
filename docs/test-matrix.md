@@ -757,7 +757,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
-`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）仍未交付。
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -767,6 +767,23 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 尚未执行。
+
+## F-08 审计远端归档（A，2026-09-11 本地落库）
+
+`apps/ops` 交付 F-08 步骤 6：每小时把链头（`chain_id`/`last_sequence`/`last_hash`/`key_version`/`headUpdatedAt`）的签名检查点写入 WORM；每日导出前一 UTC 自然日的加密审计明细（AES-256-GCM，子密钥由归档签名密钥经 HKDF-SHA256 派生）与 HMAC-SHA256 签名清单。归档进程使用 `audit_archive_writer`（只读 `app.audit_logs` 与 `app.audit_chain_heads`），不挂载在线审计 HMAC；WORM PUT 携带对象锁（COMPLIANCE + 保留天数），409/412 按「对象已存在」幂等处理，不覆盖、不删除。宿主调度由 `deploy/backup/audit-archivectl.sh`（`flock` 并发锁、`--confirm-go-live` 门禁）与两个 timer 承担（每小时检查点、每日 UTC 00:20 导出），静态校验并入 `pnpm check:deploy:test`；操作步骤见[审计归档 Runbook](./runbooks/audit-archive.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F08-ARCHIVE-UNIT-001 | 单元 | 检查点构造/编码/验签 | envelope 为 JCS 规范化 JSON + 末尾换行；篡改 payload 或未知签名密钥版本验签失败 | 本地通过（`checkpoint.test.ts` 3 例，2026-09-11） |
+| F08-ARCHIVE-UNIT-002 | 单元 | 导出包加密、密钥派生与清单 | 加解密往返一致；明文哈希不符、密文截断、未知密钥版本抛错；空窗口导出可解密为空包 | 本地通过（`export.test.ts`、`crypto.test.ts`，2026-09-11） |
+| F08-ARCHIVE-UNIT-003 | 单元 | SigV4 与 WORM 客户端 | AWS 官方向量 `get-vanilla` 通过；对象锁头、path/virtual-host URL、409/412 幂等、5xx 指数退避、4xx 不重试、GET 404 抛错 | 本地通过（`sigv4.test.ts`、`worm.test.ts`，2026-09-11） |
+| F08-ARCHIVE-INT-001 | PostgreSQL + WORM 桩 | 检查点等于真实链头 | 以 `audit_archive_writer` 读取真实链头，检查点验签通过且 payload 与链头逐字段一致；PUT 带 `x-amz-object-lock-mode` | 本地通过（`audit-archive.integration.test.ts` 4/4，真实 PostgreSQL 18.6，2026-09-11） |
+| F08-ARCHIVE-INT-002 | PostgreSQL + WORM 桩 | 明细导出与清单绑定 | 窗口 `rowCount` 与数据库 count 一致；解密后可定位种子行（`prevHash`/`recordHash`/`keyVersion`/`canonicalVersion`）；清单验签且 `ciphertextSha256` 与密文绑定 | 同上 |
+| F08-ARCHIVE-INT-003 | PostgreSQL | 归档角色最小权限 | `audit_archive_writer` 可读 `app.audit_logs` 与 `app.audit_chain_heads`；INSERT/UPDATE/DELETE 与 `SET ROLE app_owner` 均 42501 | 同上 |
+| DEPLOY-005 | 上线前（静态门禁） | 审计归档调度与 Runbook | `deploy/backup/` 交付 `audit-archivectl.sh`、两个 service/timer 与 `audit-archive.env.example`，`docs/runbooks/audit-archive.md` 交付操作步骤；`pnpm check:deploy:test` 校验 `--profile operations run --rm audit-archive`、`flock`、`--confirm-go-live`、每小时检查点与每日 00:20 导出节奏、`TimeoutStartSec`、`OnFailure` 告警与敏感键 `*_FILE` 化 | 本地通过（`pnpm check:deploy:test` 退出码 0，2026-09-11；真实 systemd 安装与真实 WORM 投递未运行） |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/ops test:unit` 7 文件 36 例、`pnpm --filter @inpulse/ops test:integration` 4/4（真实 PostgreSQL 18.6）；`pnpm check:deploy:test`（5 image refs）与 `pnpm check:deps`（604 源文件）通过。未运行：真实 S3/Object-Lock 端点联调、真实 systemd 安装、GitHub Actions（推送后由 CI 执行）。
+
 ## F-20 遗留问题页与任务中心聚合组区块（C，2026-09-11 本地落库）
 
 按人工指令补齐两处缺口：`/issues` 由 `WorkspacePlaceholder` 改为按 `latest-version/views/issues.tsx` 实现的遗留问题页；任务中心按 `latest-version/views/task-center.tsx` 补上「任务聚合组」区块（组卡、分支行徽章、页脚「查看主任务」）。两条页面都需要「列遗留项 / 列聚合组」的服务端读能力，既有契约只有 `getTaskGroup`（按 groupId）与 `listTaskGroupRecords`，因此本 PR 新增两条只读路由 `GET /api/v1/leftover-items`（`listLeftoverItems`）与 `GET /api/v1/task-groups`（`listTaskGroups`），Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端随实现同一个 PR 落库。
@@ -784,9 +801,9 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | 聚合组区块 E2E：建功能与主 / 来源任务 → 合并 → 任务中心区块出现组卡、主分支与活动来源分支、「查看主任务」直达主任务详情 | `apps/e2e/tests/task-groups.spec.ts` 第 2 例扩展 |
 | 与设计师稿的截图比对：遗留问题页（页头、amber 提示、未闭环行、来源任务 / 转为任务按钮、已闭环折叠区）与任务中心聚合组区块（组卡、分支行徽章与负责人、页脚「查看主任务」）逐项一致 | 本地 Playwright 截图与设计师导出页同尺寸截屏对比；唯一差异是 `page-header` 描述行——设计师最终 CSS 以 `.page-header > div > p { display: none }` 全局隐藏该行，本仓既有页面（`/tasks`、项目动态等）同样保留该行，属既有横向差异，未在本 PR 单方面改动 |
 
-本地实际执行（2026-09-11，含合并 `origin/main` 与编号顺延后）：`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm check:deps`（606 文件无环）、`pnpm check:frontend:boundaries`（207 模块 / 946 依赖）、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:secrets`（883 文件）、`pnpm check:docs`（72 个 Markdown）、`pnpm check:deploy:test` 全部通过；公共 registry `pnpm audit --audit-level=high` 无已知漏洞。`pnpm test:unit`：database 15、api-contract 89、web 64 文件 291 例、api 67 文件 351 例；`pnpm test:integration`（与 CI 同构的新建库）：database 26/26、apps/api 49 文件 425 例；`pnpm test:e2e` 全量三次 42/45、43/45、44/45。
+本地实际执行（2026-09-11，含合并 `origin/main` `d737035` 与编号顺延后）：`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（含新增 `apps/ops` 与 `packages/canonical-json`）、`pnpm check:deps`（631 文件无环）、`pnpm check:frontend:boundaries`（207 模块 / 946 依赖）、`pnpm contract:validate`（97 条路由）、`pnpm contract:drift`（5 个产物）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:secrets`（919 文件）、`pnpm check:docs`（75 个 Markdown）、`pnpm check:deploy:test` 全部通过；公共 registry `pnpm audit --audit-level=high` 无已知漏洞。`pnpm test:unit`：database 15、api-contract 89、canonical-json 5、web 64 文件 291 例、api 67 文件 346 例、ops 7 文件 36 例；`pnpm test:integration`（与 CI 同构的新建库，合并 #107 前）：database 26/26、apps/api 49 文件 425 例；`pnpm test:e2e`（合并 #107 前）全量三次 42/45、43/45、44/45；合并 #107 后的整树由 CI 覆盖。
 
-未运行 / 已知偏差：① 本 PR 的 GitHub Actions 尚未执行；② 新增 E2E 用例与新增测试需非作者人工评审；③ 旧本地长跑库在整库全量集成时出现随机单文件 500，根因定位为客户端计算的过期 / 消费时间戳与 PostgreSQL `now()` 的毫秒级时钟抖动触发 `idempotency_records_retention_check` 与 `preauth_sessions_consumed_at_check` 的边界值，重复复跑不复现；换用与 CI 同构的新建库后两次全量 410/410 通过，该现象与本 PR 改动无关，但 CI 与本地时钟源差异值得后续确认；④ 旧本地库另有 `entityId` 整型溢出与项目编号序列耗尽等数据累积问题（非代码缺陷），不作为验收基线。⑤ 本机全量 `pnpm test:e2e` 三次运行各出现 1～3 个用例失败（42/45、43/45、44/45），失败集合每次不同且全部落在本批未改动的既有用例（features / task-status / leftover-task / record-publishing / search），单独重跑与差分重跑全部通过，判定为本机环境时延抖动，非本批回归；CI 以 `retries: 1` 运行。
+未运行 / 已知偏差：① 本 PR 的 GitHub Actions 尚未执行；② 新增 E2E 用例与新增测试需非作者人工评审；③ 旧本地长跑库在整库全量集成时出现随机单文件 500，根因定位为客户端计算的过期 / 消费时间戳与 PostgreSQL `now()` 的毫秒级时钟抖动触发 `idempotency_records_retention_check` 与 `preauth_sessions_consumed_at_check` 的边界值，重复复跑不复现；换用与 CI 同构的新建库后两次全量 410/410 通过，该现象与本 PR 改动无关，但 CI 与本地时钟源差异值得后续确认；④ 旧本地库另有 `entityId` 整型溢出与项目编号序列耗尽等数据累积问题（非代码缺陷），不作为验收基线。⑤ 本机全量 `pnpm test:e2e` 三次运行各出现 1～3 个用例失败（42/45、43/45、44/45），失败集合每次不同且全部落在本批未改动的既有用例（features / task-status / leftover-task / record-publishing / search），单独重跑与差分重跑全部通过；⑥ 本机 `apps/web` 单测两次运行各出现 1 例超时抖动（防抖与弹窗用例，失败用例每次不同、单独重跑通过）。⑤⑥ 均判定为本机环境时延抖动（本机同时运行其它高负载桌面应用），非本批回归；CI 以 `retries: 1` 运行。
 
 契约编号（已按建议顺延落库）：A 于 2026-09-11 的第二轮裁决（[A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10）把 **R-5 定义为 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）**，并已由 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库。本批新增的两条路由原按 R-5 / R-6 标注，与已冻结编号冲突；现按建议顺延为 **R-6 `listLeftoverItems`（`GET /api/v1/leftover-items`）** 与 **R-7 `listTaskGroups`（`GET /api/v1/task-groups`）**，路由 summary、Schema Registry 描述、实现注释与引用测试均已同步，冲突编号不再存在。
 

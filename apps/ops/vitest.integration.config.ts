@@ -5,12 +5,6 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@inpulse\/api-contract$/,
-        replacement: fileURLToPath(
-          new URL("../../packages/api-contract/src/index.ts", import.meta.url),
-        ),
-      },
-      {
         find: /^@inpulse\/canonical-json$/,
         replacement: fileURLToPath(
           new URL(
@@ -32,6 +26,12 @@ export default defineConfig({
         ),
       },
       {
+        find: /^@inpulse\/database\/migrate$/,
+        replacement: fileURLToPath(
+          new URL("../../database/src/migrate.ts", import.meta.url),
+        ),
+      },
+      {
         find: /^@inpulse\/database$/,
         replacement: fileURLToPath(
           new URL("../../database/schema/index.ts", import.meta.url),
@@ -42,7 +42,7 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     hookTimeout: 180_000,
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.integration.test.ts"],
     sequence: {
       concurrent: false,
     },

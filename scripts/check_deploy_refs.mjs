@@ -31,6 +31,7 @@ const REQUIRED_REFS = [
   "MIGRATE_IMAGE_REF",
   "API_IMAGE_REF",
   "WEB_IMAGE_REF",
+  "OPS_IMAGE_REF",
 ];
 
 // 生产镜像的 Dockerfile 与配套文件（技术设计 §11.1 / §11.2）。
@@ -52,6 +53,12 @@ const REQUIRED_DOCKER_ASSETS = [
 const REQUIRED_BACKUP_ASSETS = [
   "deploy/backup/backup.env.example",
   "deploy/backup/backupctl.sh",
+  "deploy/backup/audit-archivectl.sh",
+  "deploy/backup/audit-archive.env.example",
+  "deploy/backup/inpulse-audit-archive-checkpoint.service",
+  "deploy/backup/inpulse-audit-archive-checkpoint.timer",
+  "deploy/backup/inpulse-audit-archive-export.service",
+  "deploy/backup/inpulse-audit-archive-export.timer",
   "deploy/backup/inpulse-backup.service",
   "deploy/backup/inpulse-backup.timer",
   "deploy/backup/inpulse-backup-alert@.service",
@@ -59,6 +66,7 @@ const REQUIRED_BACKUP_ASSETS = [
   "deploy/backup/inpulse-backup-watchdog.timer",
   "docs/runbooks/backup-restore.md",
   "docs/runbooks/upgrade-rollback.md",
+  "docs/runbooks/audit-archive.md",
 ];
 
 async function checkBackupSchedule(rendered) {
@@ -173,6 +181,102 @@ async function checkBackupSchedule(rendered) {
     problems.push(
       "deploy/backup/inpulse-backup-watchdog.timer: staleness 检查必须每小时一次",
     );
+  }
+
+  // F-08 步骤 6：审计远端归档的宿主调度静态校验（每小时检查点 + 每日导出）。
+  const auditController = texts.get("deploy/backup/audit-archivectl.sh");
+  if (auditController !== undefined) {
+    if (
+      !auditController.includes("--profile operations run --rm") ||
+      !auditController.includes("audit-archive")
+    ) {
+      problems.push(
+        "deploy/backup/audit-archivectl.sh: 归档入口必须执行 docker compose --profile operations run --rm audit-archive",
+      );
+    }
+    if (!auditController.includes("flock")) {
+      problems.push(
+        "deploy/backup/audit-archivectl.sh: 必须用 flock 实现并发锁",
+      );
+    }
+    if (!auditController.includes("--confirm-go-live")) {
+      problems.push(
+        "deploy/backup/audit-archivectl.sh: enable 必须要求 --confirm-go-live（上线门禁）",
+      );
+    }
+    if (auditController.includes("--profile operations up")) {
+      problems.push(
+        "deploy/backup/audit-archivectl.sh: 宿主脚本不得常驻启动 operations profile",
+      );
+    }
+  }
+
+  const checkpointAuditTimer = texts.get(
+    "deploy/backup/inpulse-audit-archive-checkpoint.timer",
+  );
+  if (checkpointAuditTimer !== undefined) {
+    if (!checkpointAuditTimer.includes("OnCalendar=hourly")) {
+      problems.push(
+        "deploy/backup/inpulse-audit-archive-checkpoint.timer: 必须每小时（OnCalendar=hourly）",
+      );
+    }
+    if (!checkpointAuditTimer.includes("Persistent=true")) {
+      problems.push(
+        "deploy/backup/inpulse-audit-archive-checkpoint.timer: 需要 Persistent=true",
+      );
+    }
+  }
+
+  const exportAuditTimer = texts.get(
+    "deploy/backup/inpulse-audit-archive-export.timer",
+  );
+  if (exportAuditTimer !== undefined) {
+    if (!exportAuditTimer.includes("OnCalendar=*-*-* 00:20:00")) {
+      problems.push(
+        "deploy/backup/inpulse-audit-archive-export.timer: 必须每日 UTC 00:20（OnCalendar=*-*-* 00:20:00）",
+      );
+    }
+  }
+
+  for (const [file, command] of [
+    [
+      "deploy/backup/inpulse-audit-archive-checkpoint.service",
+      "run-checkpoint",
+    ],
+    ["deploy/backup/inpulse-audit-archive-export.service", "run-export"],
+  ]) {
+    const unitText = texts.get(file);
+    if (unitText === undefined) continue;
+    if (!unitText.includes("__INPULSE_AUDIT_ARCHIVECTL__ " + command)) {
+      problems.push(
+        file + ": ExecStart 必须调用 audit-archivectl.sh（安装时替换路径）",
+      );
+    }
+    if (!unitText.includes("TimeoutStartSec=")) {
+      problems.push(file + ": 必须声明 TimeoutStartSec");
+    }
+    if (!unitText.includes("OnFailure=inpulse-backup-alert@%N.service")) {
+      problems.push(file + ": 必须用 OnFailure 指向告警单元");
+    }
+  }
+
+  const auditEnvExample = texts.get("deploy/backup/audit-archive.env.example");
+  if (auditEnvExample !== undefined) {
+    for (const rawLine of auditEnvExample.split(String.fromCharCode(10))) {
+      const trimmed = rawLine.trim();
+      if (trimmed === "" || trimmed.startsWith("#")) continue;
+      const separator = trimmed.indexOf("=");
+      const key = separator > 0 ? trimmed.slice(0, separator).trim() : trimmed;
+      if (
+        /^(PASSWORD|SECRET|TOKEN|WEBHOOK|DSN)/i.test(key) ||
+        /(PASSWORD|SECRET|TOKEN|WEBHOOK|DSN)$/i.test(key)
+      ) {
+        problems.push(
+          "deploy/backup/audit-archive.env.example: 敏感键必须以 *_FILE 提供或删除：" +
+            key,
+        );
+      }
+    }
   }
 
   const envExample = texts.get("deploy/backup/backup.env.example");
