@@ -82,6 +82,7 @@ describe("my tasks server adapter", () => {
         creatorId: 2,
         githubLinkCount: 0,
         hasPublishedRecord: true,
+        publishedRecordCount: 1,
         groupRole: "MAIN",
         groupId: null,
       },

@@ -196,6 +196,7 @@ describe("my-tasks-v1-query", () => {
       creatorId: 9,
       githubLinkCount: 0,
       hasPublishedRecord: true,
+      publishedRecordCount: 1,
       groupRole: "SOURCE",
       groupId: null,
     });

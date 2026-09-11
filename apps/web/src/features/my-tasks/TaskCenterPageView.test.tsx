@@ -277,7 +277,7 @@ describe("TaskCenterPageView", () => {
     expect(within(merged).getByText("模块级")).toBeInTheDocument();
     expect(within(merged).getByText("主任务")).toBeInTheDocument();
     expect(within(merged).getByText("高优先级")).toBeInTheDocument();
-    expect(within(merged).getByText("记录 1 条")).toBeInTheDocument();
+    expect(within(merged).getByText("记录 3 条")).toBeInTheDocument();
 
     const plain = await screen.findByTestId("my-task-101");
     expect(within(plain).getByText("紧急优先级")).toBeInTheDocument();

@@ -340,11 +340,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <CalmBadge tone={priorityTone[item.priority]}>
             {priorityLabels[item.priority]}优先级
           </CalmBadge>
-          {item.hasPublishedRecord ? (
+          {item.publishedRecordCount > 0 ? (
             <span className="task-card-counts">
-              <span title="1 条已发布迭代记录">
+              <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
                 <InpulseIcon name="calendar" size={13} />
-                记录 1 条
+                记录 {item.publishedRecordCount} 条
               </span>
             </span>
           ) : null}

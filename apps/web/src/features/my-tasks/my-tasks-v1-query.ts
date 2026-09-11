@@ -164,6 +164,7 @@ export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
     creatorId: item.creatorId,
     githubLinkCount: item.githubLinkCount,
     hasPublishedRecord: item.hasPublishedRecord,
+    publishedRecordCount: item.publishedRecordCount,
     groupRole: item.groupRole,
     groupId: item.groupId,
   };

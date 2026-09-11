@@ -58,9 +58,9 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(row).toContainText(taskTitle);
 
     await row.getByRole("button", { name: /^来源任务/ }).click();
-    const drawer = page.locator(".task-detail-drawer");
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(taskTitle)).toBeVisible();
+    const detail = page.locator(".task-detail-modal");
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(taskTitle)).toBeVisible();
 
     await page.goto("/issues");
     await page
@@ -78,8 +78,8 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(convert).toBeHidden();
 
     // 转换成功后与新建任务一致，自动打开新建的跟进任务详情。
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(followupTitle)).toBeVisible();
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(followupTitle)).toBeVisible();
 
     // 回到遗留问题页：条目离开未闭环桶，进入已闭环折叠区并保留跟进任务入口。
     await page.goto("/issues");
@@ -99,8 +99,8 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(closedRow).toBeVisible();
     await expect(closedRow.getByText("已闭环")).toBeVisible();
     await closedRow.getByRole("button", { name: /查看跟进任务/ }).click();
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(followupTitle)).toBeVisible();
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(followupTitle)).toBeVisible();
   } finally {
     await context.close();
   }

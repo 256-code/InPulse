@@ -41,7 +41,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .getByRole("link", { name: "查看详情" })
       .click();
 
-    const detailDrawer = page.locator(".task-detail-drawer");
+    const detail = page.locator(".task-detail-modal");
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
       await page.getByRole("button", { name: "新建任务" }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
@@ -51,11 +51,11 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
         .selectOption({ label: runtime.user.name });
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
-      // 任务保存后应用会自动打开该任务的详情抽屉（带遮罩），先关闭再继续，
+      // 任务保存后应用会自动打开该任务的详情弹窗（带遮罩），先关闭再继续，
       // 否则后续点击会被遮罩挡住直到用例超时。
-      await expect(detailDrawer).toBeVisible();
-      await detailDrawer.getByRole("button", { name: "关闭" }).click();
-      await expect(detailDrawer).toBeHidden();
+      await expect(detail).toBeVisible();
+      await detail.getByRole("button", { name: "关闭" }).click();
+      await expect(detail).toBeHidden();
     }
 
     // F-23：从来源任务详情合并到同项目内的主任务。
@@ -64,9 +64,8 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .filter({ hasText: sourceTaskTitle })
       .getByRole("button", { name: "任务详情" })
       .click();
-    const drawer = page.locator(".task-detail-drawer");
-    await expect(drawer).toBeVisible();
-    await drawer.getByRole("button", { name: "合并到主任务" }).click();
+    await expect(detail).toBeVisible();
+    await detail.getByRole("button", { name: "合并到主任务" }).click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
     await mergeDialog
       .getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")
@@ -151,8 +150,9 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       .filter({ hasText: featureName })
       .getByRole("link", { name: "查看详情" })
       .click();
+    const featurePath = new URL(page.url()).pathname;
 
-    const drawer = page.locator(".task-detail-drawer");
+    const detail = page.locator(".task-detail-modal");
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
       await page.getByRole("button", { name: "新建任务" }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
@@ -162,9 +162,9 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
         .selectOption({ label: runtime.user.name });
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
-      await expect(drawer).toBeVisible();
-      await drawer.getByRole("button", { name: "关闭" }).click();
-      await expect(drawer).toBeHidden();
+      await expect(detail).toBeVisible();
+      await detail.getByRole("button", { name: "关闭" }).click();
+      await expect(detail).toBeHidden();
     }
 
     await page
@@ -172,8 +172,8 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       .filter({ hasText: sourceTaskTitle })
       .getByRole("button", { name: "任务详情" })
       .click();
-    await expect(drawer).toBeVisible();
-    await drawer.getByRole("button", { name: "合并到主任务" }).click();
+    await expect(detail).toBeVisible();
+    await detail.getByRole("button", { name: "合并到主任务" }).click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
     await mergeDialog
       .getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")
@@ -182,6 +182,28 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       .getByRole("button", { name: new RegExp(mainTaskTitle) })
       .click();
     await mergeDialog.getByRole("button", { name: "确认合并" }).click();
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toContain("/task-groups/");
+
+    // C-1：功能页任务卡片按 R-5 页面级批量显示关系徽章，来源任务详情
+    // 的「查看主任务」直达当前聚合组。
+    await page.goto(featurePath);
+    const sourceCard = page
+      .locator(".calm-task-card")
+      .filter({ hasText: sourceTaskTitle });
+    await expect(
+      sourceCard.getByText("来源任务", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator(".calm-task-card")
+        .filter({ hasText: mainTaskTitle })
+        .getByText("主任务", { exact: true }),
+    ).toBeVisible();
+    await sourceCard.getByRole("button", { name: "任务详情" }).click();
+    await expect(detail.getByText("来源任务", { exact: true })).toBeVisible();
+    await detail.getByRole("button", { name: "查看主任务" }).click();
     await expect
       .poll(() => new URL(page.url()).pathname)
       .toContain("/task-groups/");
@@ -208,18 +230,18 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
 
     // 分支按钮按统一模式打开任务详情；返回任务中心后「查看主任务」直达主任务。
     await sourceRow.locator("button.branch-task").click();
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(sourceTaskTitle)).toBeVisible();
-    await drawer.getByRole("button", { name: "关闭" }).click();
-    await expect(drawer).toBeHidden();
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(sourceTaskTitle)).toBeVisible();
+    await detail.getByRole("button", { name: "关闭" }).click();
+    await expect(detail).toBeHidden();
 
     await page.goto("/tasks");
     const cardAgain = page
       .locator(".group-panel .group-card")
       .filter({ hasText: mainTaskTitle });
     await cardAgain.getByRole("button", { name: "查看主任务" }).click();
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(mainTaskTitle)).toBeVisible();
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(mainTaskTitle)).toBeVisible();
   } finally {
     await context.close();
   }

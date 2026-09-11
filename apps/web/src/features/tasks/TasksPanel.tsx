@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
-import { Alert, Button, Drawer, Input, Modal, Spin } from "antd";
+import { useTaskMarks, type TaskMark } from "./task-marks";
+import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { ApiError, type InpulseApiClient } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -61,6 +62,25 @@ type Merge = ReturnType<typeof mergeTask> & {
   latest: TaskViewItem;
   choices: Partial<Record<TaskField, "draft" | "latest">>;
 };
+/**
+ * C-1 关系徽章：groupRole 为 null 表示未加入 ACTIVE 聚合组（未入组），
+ * 徽章与「查看主任务」入口一并隐藏；数据来自页面级一次批量 R-5 调用。
+ */
+function relationBadge(mark: TaskMark | undefined): {
+  readonly label: "主任务" | "来源任务";
+  readonly tone: "violet" | "cyan";
+  readonly title: string;
+} | null {
+  if (mark?.groupRole === "MAIN")
+    return { label: "主任务", tone: "violet", title: "聚合组统一入口" };
+  if (mark?.groupRole === "SOURCE")
+    return {
+      label: "来源任务",
+      tone: "cyan",
+      title: "来源分支，保留原始状态与历史",
+    };
+  return null;
+}
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
 const dueLabel = (value: string | null) =>
@@ -127,7 +147,20 @@ export function TasksPanel({
     getValues,
     formState: { errors },
   } = useForm<TaskDraft>({ defaultValues: empty });
+  const navigate = useNavigate();
   const current = query.data?.items.find((item) => item.id === selectedId);
+  // 页面级一次批量（R-5）：任务集合变化时整批重读，不按任务逐个请求。
+  const marks = useTaskMarks(
+    api,
+    query.data?.items.map((item) => item.id) ?? [],
+  );
+  const currentMark = current ? marks.get(current.id) : undefined;
+  const currentBadge = relationBadge(currentMark);
+  // 主任务自身就是统一入口，只有来源分支显示「查看主任务」；
+  // groupRole 为 null（未入组）时不显示任何导航入口（C-1）。
+  const currentGroupId =
+    currentMark?.groupRole === "SOURCE" ? currentMark.groupId : null;
+  const currentRecordCount = currentMark?.publishedRecordCount ?? 0;
   const visibleItems =
     query.data?.items.filter(
       (item) => statusFilter === "ALL" || item.workStatus === statusFilter,
@@ -361,105 +394,128 @@ export function TasksPanel({
               </tr>
             </thead>
             <tbody>
-              {visibleItems.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    {item.scopeType === "MODULE" ? (
-                      <span className="task-scope">模块级任务</span>
-                    ) : (
-                      <span className="task-scope">功能级任务</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className="task-id">{item.code}</span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="feature-list-open"
-                      aria-label={item.title}
-                      onClick={() => setSelectedId(item.id)}
-                    >
-                      <strong>{item.title}</strong>
-                      <span>查看任务详情</span>
-                    </button>
-                  </td>
-                  <td>{memberName(item.assigneeId)}</td>
-                  <td>
-                    <CalmBadge tone={priorityTone[item.priority]}>
-                      {priorityLabels[item.priority]}
-                    </CalmBadge>
-                  </td>
-                  <td className="due-overdue">{dueLabel(item.dueAt)}</td>
-                  <td>
-                    <CalmBadge tone={statusTone[item.workStatus]}>
-                      {statusLabels[item.workStatus]}
-                    </CalmBadge>
-                  </td>
-                </tr>
-              ))}
+              {visibleItems.map((item) => {
+                const badge = relationBadge(marks.get(item.id));
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      {item.scopeType === "MODULE" ? (
+                        <span className="task-scope">模块级任务</span>
+                      ) : (
+                        <span className="task-scope">功能级任务</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="task-id">{item.code}</span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="feature-list-open"
+                        aria-label={item.title}
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <strong>{item.title}</strong>
+                        <span>
+                          {badge === null ? "" : badge.label + " · "}
+                          查看任务详情
+                        </span>
+                      </button>
+                    </td>
+                    <td>{memberName(item.assigneeId)}</td>
+                    <td>
+                      <CalmBadge tone={priorityTone[item.priority]}>
+                        {priorityLabels[item.priority]}
+                      </CalmBadge>
+                    </td>
+                    <td className="due-overdue">{dueLabel(item.dueAt)}</td>
+                    <td>
+                      <CalmBadge tone={statusTone[item.workStatus]}>
+                        {statusLabels[item.workStatus]}
+                      </CalmBadge>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="calm-task-grid">
-          {visibleItems.map((item) => (
-            <article className="calm-task-card" key={item.id}>
-              <div className="calm-card-top">
-                <span className="task-id">{item.code}</span>
-                <span className="task-card-badges">
-                  <CalmBadge tone={statusTone[item.workStatus]}>
-                    {statusLabels[item.workStatus]}
-                  </CalmBadge>
-                  <CalmBadge tone={priorityTone[item.priority]}>
-                    {priorityLabels[item.priority]}
-                  </CalmBadge>
-                </span>
-              </div>
-              <h3>{item.title}</h3>
-              <p className="task-belonging">
-                {item.featureId === null
-                  ? "模块级任务" + (featureId === null ? "" : " · 引用")
-                  : "功能 #" + item.featureId}
-              </p>
-              <div className="calm-card-bottom">
-                <span title={"负责人：" + memberName(item.assigneeId)}>
-                  <InpulseIcon name="users" size={14} />
-                  {memberName(item.assigneeId)}
-                </span>
-                <span title={"截止：" + formatDate(item.dueAt)}>
-                  <InpulseIcon name="clock" size={14} />
-                  {dueLabel(item.dueAt)}
-                </span>
-              </div>
-              <div className="task-card-footer">
-                <span className="task-card-counts">
-                  <span>
-                    <InpulseIcon name="calendar" size={13} />
-                    更新 {formatDate(item.updatedAt)}
+          {visibleItems.map((item) => {
+            const badge = relationBadge(marks.get(item.id));
+            const recordCount = marks.get(item.id)?.publishedRecordCount ?? 0;
+            return (
+              <article className="calm-task-card" key={item.id}>
+                <div className="calm-card-top">
+                  <span className="task-id">{item.code}</span>
+                  <span className="task-card-badges">
+                    {badge !== null && (
+                      <CalmBadge tone={badge.tone} title={badge.title}>
+                        {badge.label}
+                      </CalmBadge>
+                    )}
+                    <CalmBadge tone={statusTone[item.workStatus]}>
+                      {statusLabels[item.workStatus]}
+                    </CalmBadge>
+                    <CalmBadge tone={priorityTone[item.priority]}>
+                      {priorityLabels[item.priority]}
+                    </CalmBadge>
                   </span>
-                </span>
-                <button
-                  type="button"
-                  className="text-button"
-                  aria-label="任务详情"
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  任务详情
-                  <InpulseIcon name="chevronRight" size={13} />
-                </button>
-              </div>
-            </article>
-          ))}
+                </div>
+                <h3>{item.title}</h3>
+                <p className="task-belonging">
+                  {item.featureId === null
+                    ? "模块级任务" + (featureId === null ? "" : " · 引用")
+                    : "功能 #" + item.featureId}
+                </p>
+                <div className="calm-card-bottom">
+                  <span title={"负责人：" + memberName(item.assigneeId)}>
+                    <InpulseIcon name="users" size={14} />
+                    {memberName(item.assigneeId)}
+                  </span>
+                  <span title={"截止：" + formatDate(item.dueAt)}>
+                    <InpulseIcon name="clock" size={14} />
+                    {dueLabel(item.dueAt)}
+                  </span>
+                </div>
+                <div className="task-card-footer">
+                  <span className="task-card-counts">
+                    <span>
+                      <InpulseIcon name="calendar" size={13} />
+                      更新 {formatDate(item.updatedAt)}
+                    </span>
+                    {recordCount > 0 && (
+                      <span title={recordCount + " 条已发布迭代记录"}>
+                        <InpulseIcon name="gitBranch" size={13} />
+                        迭代记录 {recordCount} 条
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-button"
+                    aria-label="任务详情"
+                    onClick={() => setSelectedId(item.id)}
+                  >
+                    任务详情
+                    <InpulseIcon name="chevronRight" size={13} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
       {selectedId !== null && (
-        <Drawer
+        <Modal
           open
-          onClose={() => setSelectedId(null)}
-          className="catalog-modal task-detail-drawer"
+          centered
+          width={1000}
+          onCancel={() => setSelectedId(null)}
+          className="catalog-modal task-detail-modal"
           title="任务详情"
-          size="large"
+          footer={null}
         >
           {query.isPending ? (
             <div className="calm-state">
@@ -506,6 +562,14 @@ export function TasksPanel({
                     <CalmBadge tone={priorityTone[current.priority]}>
                       {priorityLabels[current.priority]}
                     </CalmBadge>
+                    {currentBadge !== null && (
+                      <CalmBadge
+                        tone={currentBadge.tone}
+                        title={currentBadge.title}
+                      >
+                        {currentBadge.label}
+                      </CalmBadge>
+                    )}
                   </div>
                 </div>
               </div>
@@ -548,8 +612,8 @@ export function TasksPanel({
                   </dl>
                 </aside>
               </div>
-              {current.scopeType === "MODULE" && (
-                <div className="task-modal-module-link">
+              <div className="task-modal-links">
+                {current.scopeType === "MODULE" && (
                   <a
                     href={
                       "/projects/" +
@@ -562,13 +626,33 @@ export function TasksPanel({
                   >
                     打开模块任务
                   </a>
-                </div>
-              )}
-              <a
-                href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
-              >
-                迭代记录草稿
-              </a>
+                )}
+                <a
+                  href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
+                >
+                  迭代记录草稿
+                </a>
+                {currentRecordCount > 0 && (
+                  <span
+                    className="task-record-count"
+                    title={currentRecordCount + " 条已发布迭代记录"}
+                  >
+                    <InpulseIcon name="gitBranch" size={13} />
+                    迭代记录 {currentRecordCount} 条
+                  </span>
+                )}
+                {currentGroupId !== null && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => navigate("/task-groups/" + currentGroupId)}
+                  >
+                    <InpulseIcon name="gitBranch" size={14} />
+                    查看主任务
+                    <InpulseIcon name="chevronRight" size={13} />
+                  </button>
+                )}
+              </div>
               <LeftoverTaskSource api={api} taskId={current.id} />
               <TaskStatusPanel
                 key={current.id}
@@ -614,7 +698,7 @@ export function TasksPanel({
               )}
             </>
           )}
-        </Drawer>
+        </Modal>
       )}
       <Modal
         open={selection !== null}
