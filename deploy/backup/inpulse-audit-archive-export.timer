@@ -1,0 +1,14 @@
+[Unit]
+# InPulse 审计明细导出调度（技术设计 v1.2.2 §11.5）：每日 UTC 00:20 导出前一
+# 自然日；Persistent=true 覆盖宿主机停机错过的窗口。
+Description=InPulse 审计明细导出调度（每日）
+
+[Timer]
+OnCalendar=*-*-* 00:20:00
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1m
+Unit=inpulse-audit-archive-export.service
+
+[Install]
+WantedBy=timers.target

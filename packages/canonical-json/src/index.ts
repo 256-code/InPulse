@@ -1,7 +1,10 @@
 /**
  * JSON Canonicalization Scheme（RFC 8785）的确定性序列化。
  *
- * 只用于幂等请求摘要的“JCS 规范化 body”，不用于登录/低熵输入的离线校验。
+ * 两处使用方需要完全一致的规范化语义：
+ * - 幂等请求摘要的“JCS 规范化 body”（apps/api）；
+ * - 审计归档的链头检查点与导出清单签名（apps/ops）。
+ *
  * 规则：对象键按 UTF-16 code unit 升序排列；字符串/数字交给 ECMAScript 序列化；
  * 拒绝非有限数字与 JSON 不支持的值（undefined、函数、BigInt、Symbol）。
  */

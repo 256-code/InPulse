@@ -24,7 +24,15 @@ function required(name: string): string {
   return value;
 }
 
-async function readTrimmedSecret(path: string, label: string): Promise<string> {
+/**
+ * 读取受保护的 Secret 文件：生产模式只接受 `/run/secrets` 直接子项、非符号链接、
+ * 仅属主可读的常规文件，内容去首尾空白后非空；非生产模式直接读取。
+ * 由 database 运行时、审计读取与 ops 归档进程共同复用。
+ */
+export async function readTrimmedSecret(
+  path: string,
+  label: string,
+): Promise<string> {
   let pathToRead = path;
 
   if (process.env.NODE_ENV === "production") {
