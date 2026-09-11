@@ -3,6 +3,8 @@
 -- The official PostgreSQL image already consumes the bootstrap password via
 -- POSTGRES_PASSWORD_FILE. This script consumes the other five independent,
 -- read-only mounted Secret files without exposing values in argv or logs.
+-- File names match the steady-state compose secret names (deploy/compose.yaml);
+-- the one-shot deploy/compose.init.yaml overlay provides them.
 DO $bootstrap$
 DECLARE
   migrator_password TEXT;
@@ -12,19 +14,19 @@ DECLARE
   archive_password TEXT;
 BEGIN
   migrator_password := btrim(
-    pg_read_file('/run/secrets/app_migrator_password')
+    pg_read_file('/run/secrets/db_migrator_password')
   );
   runtime_password := btrim(
-    pg_read_file('/run/secrets/app_runtime_password')
+    pg_read_file('/run/secrets/db_runtime_password')
   );
   backup_password := btrim(
-    pg_read_file('/run/secrets/app_backup_password')
+    pg_read_file('/run/secrets/db_backup_password')
   );
   reader_password := btrim(
-    pg_read_file('/run/secrets/audit_reader_password')
+    pg_read_file('/run/secrets/db_audit_reader_password')
   );
   archive_password := btrim(
-    pg_read_file('/run/secrets/audit_archive_writer_password')
+    pg_read_file('/run/secrets/db_audit_archive_password')
   );
 
   IF length(migrator_password) < 32

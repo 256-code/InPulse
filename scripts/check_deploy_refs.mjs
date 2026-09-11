@@ -17,6 +17,7 @@
  * 注意：真实 digest 只能由受信镜像仓库解析后写入，本脚本不生成也不伪造 digest。
  */
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -329,6 +330,124 @@ async function checkBackupSchedule(rendered) {
 
 let exitCode = 0;
 
+// 首次建库 / 灾难恢复一次性覆盖（技术设计 §11.2 / §11.2.1）。版本化
+// compose.init.yaml 只允许在该次向 db 服务提供 cluster_bootstrap 凭据和六份
+// 独立密码 Secret；稳态渲染必须完全不含 bootstrap 凭据；migrate/api/web/
+// backup/audit-archive 从不挂载 db_bootstrap_password。
+const INIT_OVERLAY = "deploy/compose.init.yaml";
+const REQUIRED_INIT_ASSETS = [
+  INIT_OVERLAY,
+  "docs/runbooks/disaster-recovery.md",
+];
+const INIT_DB_ENVIRONMENT = {
+  POSTGRES_DB: "app",
+  POSTGRES_USER: "cluster_bootstrap",
+  POSTGRES_PASSWORD_FILE: "/run/secrets/db_bootstrap_password",
+};
+const INIT_DB_SECRETS = [
+  "db_bootstrap_password",
+  "db_migrator_password",
+  "db_runtime_password",
+  "db_backup_password",
+  "db_audit_reader_password",
+  "db_audit_archive_password",
+];
+const INIT_DB_SECRET_UID = "999";
+
+function secretNameOf(ref) {
+  return typeof ref === "string" ? ref : (ref?.source ?? "");
+}
+
+function checkInitOverlay(steadyRendered, initRendered) {
+  const problems = [];
+  const steadyDb = steadyRendered.services?.db;
+  if (steadyDb) {
+    const env = steadyDb.environment ?? {};
+    for (const key of Object.keys(INIT_DB_ENVIRONMENT)) {
+      if (env[key] !== undefined) {
+        problems.push(
+          "steady-state db: must not set " +
+            key +
+            "; initialization overlay is one-shot only",
+        );
+      }
+    }
+    if (
+      (steadyDb.secrets ?? []).some(
+        (ref) => secretNameOf(ref) === "db_bootstrap_password",
+      )
+    ) {
+      problems.push("steady-state db: must not mount db_bootstrap_password");
+    }
+  }
+  for (const name of ["migrate", "api", "web", "backup", "audit-archive"]) {
+    const service = steadyRendered.services?.[name];
+    if (!service) continue;
+    if (
+      (service.secrets ?? []).some(
+        (ref) => secretNameOf(ref) === "db_bootstrap_password",
+      )
+    ) {
+      problems.push(name + ": must never mount db_bootstrap_password");
+    }
+  }
+
+  const db = initRendered.services?.db;
+  if (!db) {
+    problems.push("compose.init.yaml: db service missing in overlay render");
+    return problems;
+  }
+  const environment = db.environment ?? {};
+  for (const [key, value] of Object.entries(INIT_DB_ENVIRONMENT)) {
+    if (environment[key] !== value) {
+      problems.push(
+        "compose.init.yaml: db environment " + key + " must be " + value,
+      );
+    }
+  }
+  const secrets = (db.secrets ?? []).map((ref) =>
+    typeof ref === "string" ? { source: ref, target: undefined } : ref,
+  );
+  const bySource = new Map(secrets.map((ref) => [ref.source, ref]));
+  for (const name of INIT_DB_SECRETS) {
+    const ref = bySource.get(name);
+    if (!ref) {
+      problems.push("compose.init.yaml: db must mount secret " + name);
+      continue;
+    }
+    if (ref.target !== "/run/secrets/" + name) {
+      problems.push(
+        "compose.init.yaml: secret " +
+          name +
+          " target must be /run/secrets/" +
+          name,
+      );
+    }
+    if (ref.mode !== "0400") {
+      problems.push(
+        "compose.init.yaml: secret " + name + " must set mode 0400",
+      );
+    }
+    if (ref.uid !== INIT_DB_SECRET_UID || ref.gid !== INIT_DB_SECRET_UID) {
+      problems.push(
+        "compose.init.yaml: secret " +
+          name +
+          " uid/gid must be " +
+          INIT_DB_SECRET_UID +
+          ":" +
+          INIT_DB_SECRET_UID,
+      );
+    }
+  }
+  for (const ref of secrets) {
+    if (!INIT_DB_SECRETS.includes(ref.source)) {
+      problems.push(
+        "compose.init.yaml: db must not mount unexpected secret " + ref.source,
+      );
+    }
+  }
+  return problems;
+}
 function fail(message) {
   process.stderr.write(`[check:deploy] ERROR: ${message}\n`);
   exitCode = 1;
@@ -405,24 +524,19 @@ function validateRef(label, value) {
 
 function renderComposeJson({ env, compose }) {
   const projectDir = resolve(process.cwd(), "deploy");
-  const result = spawnSync(
-    "docker",
-    [
-      "compose",
-      "--project-directory",
-      projectDir,
-      "-f",
-      compose,
-      "--env-file",
-      env,
-      "--profile",
-      "operations",
-      "config",
-      "--format",
-      "json",
-    ],
-    { encoding: "utf8" },
+  const composeFiles = Array.isArray(compose) ? compose : [compose];
+  const args = ["compose", "--project-directory", projectDir];
+  for (const file of composeFiles) args.push("-f", file);
+  args.push(
+    "--env-file",
+    env,
+    "--profile",
+    "operations",
+    "config",
+    "--format",
+    "json",
   );
+  const result = spawnSync("docker", args, { encoding: "utf8" });
   if (result.error) {
     fail(`unable to run docker compose: ${result.error.message}`);
     return null;
@@ -763,6 +877,26 @@ async function main() {
   const problems = checkStructure(rendered);
   if (problems.length > 0) {
     for (const problem of problems) fail(problem);
+    process.exit(exitCode);
+    return;
+  }
+
+  for (const asset of REQUIRED_INIT_ASSETS) {
+    if (!existsSync(asset)) {
+      fail("missing required init asset: " + asset);
+    }
+  }
+  const initRendered = renderComposeJson({
+    env,
+    compose: [compose, INIT_OVERLAY],
+  });
+  if (initRendered !== null) {
+    const initProblems = checkInitOverlay(rendered, initRendered);
+    for (const problem of initProblems) fail(problem);
+  } else {
+    fail("initialization overlay render failed");
+  }
+  if (exitCode !== 0) {
     process.exit(exitCode);
     return;
   }
