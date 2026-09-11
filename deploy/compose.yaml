@@ -2,7 +2,11 @@
 #
 # 本期范围：稳态拓扑结构、镜像 ref 格式、Secrets/挂载/健康检查声明；已具备
 # 生产 API/Web/Migration/DB-bootstrap 四类镜像（deploy/docker/*.Dockerfile）。
-# 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）。
+# 本文件不包含尚未交付的 backup / audit-archive 运维服务（F-10.3）；这两个
+# operations 服务与宿主 12 小时调度是生产上线门禁项，上线时才启用，上线前不
+# 部署、不运行。宿主调度配置与启用流程已交付在 deploy/backup/（backupctl.sh、
+# 5 个 systemd 单元与非敏感配置示例）；启用与恢复见 docs/runbooks/backup-restore.md，
+# 升级与回滚见 docs/runbooks/upgrade-rollback.md；静态校验由 pnpm check:deploy 执行。
 #
 # 说明：
 #   1. *_IMAGE_REF 必须由受信镜像仓库解析后写入签名发布清单；本文件只引用
@@ -15,8 +19,8 @@
 #      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
 #   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
 #      API 生产镜像内置 healthcheck.mjs，Web 生产镜像内置 Nginx 配置与 curl。
-#   4. 设计提及的 AUDIT_DB_*（独立 audit_reader 连接）代码尚未读取，本次不挂载
-#      对应 Secret；TOTP_KEK_* 已由代码读取，本次挂载对应 Secret。
+#   4. AUDIT_DB_*（独立 audit_reader 连接）已由代码读取，本次挂载对应 Secret；
+#      TOTP_KEK_* 已由代码读取，本次挂载对应 Secret。
 #   5. 首次建库与角色/密码初始化由 database/bootstrap 和后续独立 compose.init 纵切片
 #      负责，本文件不为生产准备登录密码；生产不得暴露 PostgreSQL/API 到公网。
 
@@ -98,12 +102,10 @@ services:
       DB_NAME: app
       DB_USER: app_runtime
       RUNTIME_DB_PASSWORD_FILE: /run/secrets/db_runtime_password
-      # 待定案：代码尚未读取审计只读连接与 TOTP KEK，以下按设计拓扑保留注释。
-      # AUDIT_DB_HOST: db
-      # AUDIT_DB_PORT: "5432"
-      # AUDIT_DB_NAME: app
-      # AUDIT_DB_USER: audit_reader
-      # AUDIT_DB_PASSWORD_FILE: /run/secrets/db_audit_reader_password
+      # F-08 原始审计读取使用独立 audit_reader 只读连接；主机/端口/库名复用
+      # DB_HOST/DB_PORT/DB_NAME，连接池在第一次审计读取时惰性建立。
+      AUDIT_DB_USER: audit_reader
+      AUDIT_DB_PASSWORD_FILE: /run/secrets/db_audit_reader_password
       SESSION_HASH_KEY_VERSION: "${SESSION_HASH_KEY_VERSION}"
       SESSION_HASH_KEYRING_FILE: /run/secrets/session_hash_keyring
       IDEMPOTENCY_FINGERPRINT_KEY_VERSION: "${IDEMPOTENCY_FINGERPRINT_KEY_VERSION}"
@@ -140,6 +142,11 @@ services:
         mode: "0400"
       - source: totp_kek_keyring
         target: /run/secrets/totp_kek_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: db_audit_reader_password
+        target: /run/secrets/db_audit_reader_password
         uid: "10001"
         gid: "10001"
         mode: "0400"
@@ -223,6 +230,8 @@ secrets:
     file: ./secrets/db_migrator_password
   db_runtime_password:
     file: ./secrets/db_runtime_password
+  db_audit_reader_password:
+    file: ./secrets/db_audit_reader_password
   session_hash_keyring:
     file: ./secrets/session_hash_keyring
   idempotency_fingerprint_keyring:

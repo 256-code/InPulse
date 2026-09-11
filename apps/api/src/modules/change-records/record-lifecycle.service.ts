@@ -15,6 +15,7 @@ import { RecordPublicationRepository } from "./record-publication.repository.js"
 import { RecordLifecycleRepository } from "./record-lifecycle.repository.js";
 import { RecordDraftError } from "./record-drafts.service.js";
 import { validatePublishedRecordSearch } from "./record-publication-effects.js";
+import { LeftoverSearchProjectionSync } from "./leftover-search-projection.js";
 const missing = () =>
   new RecordDraftError(404, "CHANGE_RECORD_NOT_FOUND", "记录不存在或无法访问");
 const conflict = () =>
@@ -40,6 +41,8 @@ export class RecordLifecycleService {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(LeftoverSearchProjectionSync)
+    private readonly leftovers: LeftoverSearchProjectionSync,
   ) {}
   async replay(tx: TransactionContext, actorId: number, context: unknown) {
     const { projectId, recordId } =
@@ -184,6 +187,7 @@ export class RecordLifecycleService {
       visibilityScope: visibility.visibilityScope,
       sourceStatus: after.status,
     });
+    await this.leftovers.syncRecord(tx, after);
     return schemaRegistry.RecordLifecycleResult.schema.parse({
       id: after.id,
       projectId: after.projectId,

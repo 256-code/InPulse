@@ -46,6 +46,182 @@ const REQUIRED_DOCKER_ASSETS = [
   "deploy/docker/healthcheck.mjs",
 ];
 
+// 备份调度宿主资产（技术设计 §11.5）：生产上线门禁项，上线前不部署、不运行。
+// 静态校验范围：定时器节奏、并发锁、run 目标、go-live 门禁、staleness 阈值、
+// 凭据只允许通过 *_FILE 提供，以及 operations 服务不得进入默认 profile。
+const REQUIRED_BACKUP_ASSETS = [
+  "deploy/backup/backup.env.example",
+  "deploy/backup/backupctl.sh",
+  "deploy/backup/inpulse-backup.service",
+  "deploy/backup/inpulse-backup.timer",
+  "deploy/backup/inpulse-backup-alert@.service",
+  "deploy/backup/inpulse-backup-watchdog.service",
+  "deploy/backup/inpulse-backup-watchdog.timer",
+  "docs/runbooks/backup-restore.md",
+  "docs/runbooks/upgrade-rollback.md",
+];
+
+async function checkBackupSchedule(rendered) {
+  const problems = [];
+  const texts = new Map();
+
+  for (const asset of REQUIRED_BACKUP_ASSETS) {
+    try {
+      texts.set(asset, await readFile(asset, "utf8"));
+    } catch {
+      problems.push("missing required backup asset: " + asset);
+    }
+  }
+
+  const controller = texts.get("deploy/backup/backupctl.sh");
+  if (controller !== undefined) {
+    if (!/--profile operations run --rm(?: -T)? backup/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: 备份入口必须执行 docker compose --profile operations run --rm backup",
+      );
+    }
+    if (!/\bflock\b/.test(controller)) {
+      problems.push("deploy/backup/backupctl.sh: 必须用 flock 实现并发锁");
+    }
+    if (!/--confirm-go-live/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: enable 必须要求 --confirm-go-live（上线门禁）",
+      );
+    }
+    if (!/backup-drill-evidence/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: enable 必须校验全新主机恢复演练证据",
+      );
+    }
+    if (!/INPULSE_BACKUP_MAX_AGE_HOURS:-18/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: staleness 阈值默认必须是 18 小时",
+      );
+    }
+    if (!/ENABLED_STAMP=/.test(controller) || !/enabled-at/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: 必须记录 enabled-at 启用时间，避免首次启用误报 staleness",
+      );
+    }
+    if (/--profile operations up\b/.test(controller)) {
+      problems.push(
+        "deploy/backup/backupctl.sh: 宿主脚本不得常驻启动 operations profile",
+      );
+    }
+  }
+
+  const timer = texts.get("deploy/backup/inpulse-backup.timer");
+  if (timer !== undefined) {
+    if (!/OnCalendar=\*-\*-\* (?:00\/12|00,12):00:00/.test(timer)) {
+      problems.push(
+        "deploy/backup/inpulse-backup.timer: 必须是每 12 小时（OnCalendar=*-*-* 00/12:00:00）",
+      );
+    }
+    if (!/Persistent=true/.test(timer)) {
+      problems.push("deploy/backup/inpulse-backup.timer: 需要 Persistent=true");
+    }
+    if (!/Unit=inpulse-backup\.service/.test(timer)) {
+      problems.push(
+        "deploy/backup/inpulse-backup.timer: 必须绑定 Unit=inpulse-backup.service",
+      );
+    }
+  }
+
+  const service = texts.get("deploy/backup/inpulse-backup.service");
+  if (service !== undefined) {
+    if (!/ExecStart=__INPULSE_BACKUPCTL__ run/.test(service)) {
+      problems.push(
+        "deploy/backup/inpulse-backup.service: ExecStart 必须调用 backupctl.sh run（安装时替换路径）",
+      );
+    }
+    if (!/TimeoutStartSec=/.test(service)) {
+      problems.push(
+        "deploy/backup/inpulse-backup.service: 必须声明 TimeoutStartSec",
+      );
+    }
+    if (!/OnFailure=inpulse-backup-alert@%N\.service/.test(service)) {
+      problems.push(
+        "deploy/backup/inpulse-backup.service: 必须用 OnFailure 指向告警单元",
+      );
+    }
+  }
+
+  const alertUnit = texts.get("deploy/backup/inpulse-backup-alert@.service");
+  if (
+    alertUnit !== undefined &&
+    !/ExecStart=__INPULSE_BACKUPCTL__ alert/.test(alertUnit)
+  ) {
+    problems.push(
+      "deploy/backup/inpulse-backup-alert@.service: 必须调用 backupctl.sh alert",
+    );
+  }
+
+  const watchdog = texts.get("deploy/backup/inpulse-backup-watchdog.service");
+  if (
+    watchdog !== undefined &&
+    !/ExecStart=__INPULSE_BACKUPCTL__ check-staleness/.test(watchdog)
+  ) {
+    problems.push(
+      "deploy/backup/inpulse-backup-watchdog.service: 必须调用 backupctl.sh check-staleness",
+    );
+  }
+
+  const watchdogTimer = texts.get(
+    "deploy/backup/inpulse-backup-watchdog.timer",
+  );
+  if (watchdogTimer !== undefined && !/OnCalendar=hourly/.test(watchdogTimer)) {
+    problems.push(
+      "deploy/backup/inpulse-backup-watchdog.timer: staleness 检查必须每小时一次",
+    );
+  }
+
+  const envExample = texts.get("deploy/backup/backup.env.example");
+  if (envExample !== undefined) {
+    envExample.split(/\r?\n/).forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed === "" || trimmed.startsWith("#")) return;
+      const separator = trimmed.indexOf("=");
+      if (separator < 0) {
+        problems.push(
+          "deploy/backup/backup.env.example:" +
+            (index + 1) +
+            ": 必须是 KEY=VALUE",
+        );
+        return;
+      }
+      const key = trimmed.slice(0, separator).trim();
+      const value = trimmed.slice(separator + 1).trim();
+      const sensitive = /(PASSWORD|SECRET|TOKEN|KEY|URL|WEBHOOK|DSN)/i.test(
+        key,
+      );
+      if (sensitive && !(key.endsWith("_FILE") || value === "")) {
+        problems.push(
+          "deploy/backup/backup.env.example:" +
+            (index + 1) +
+            ": " +
+            key +
+            " 必须留空或改为 *_FILE 指向受限文件",
+        );
+      }
+    });
+  }
+
+  for (const name of ["backup", "audit-archive"]) {
+    const svc = rendered.services?.[name];
+    if (!svc) continue;
+    const profiles = svc.profiles ?? [];
+    if (!Array.isArray(profiles) || !profiles.includes("operations")) {
+      problems.push(
+        "service " +
+          name +
+          ": 必须声明 profiles: [operations]（上线前不得随默认 profile 启动）",
+      );
+    }
+  }
+
+  return problems;
+}
+
 let exitCode = 0;
 
 function fail(message) {
@@ -492,8 +668,15 @@ async function main() {
     return;
   }
 
+  const backupProblems = await checkBackupSchedule(rendered);
+  if (backupProblems.length > 0) {
+    for (const problem of backupProblems) fail(problem);
+    process.exit(exitCode);
+    return;
+  }
+
   info(
-    `${count} image refs valid; compose config rendered; structure invariants and Dockerfile checks OK.`,
+    `${count} image refs valid; compose config rendered; structure invariants, Dockerfile and backup-schedule checks OK.`,
   );
   process.exit(exitCode);
 }

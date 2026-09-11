@@ -50,6 +50,8 @@ export interface LeftoverItemSummary {
   readonly recordId: number;
   /** 记录编号；PUBLISHED / VOID 记录的 code 非空（0000 的 state CHECK）。 */
   readonly recordCode: string;
+  /** 来源记录当前标题（change_records.title）；R-2 裁决 §10.2。 */
+  readonly recordTitle: string;
   readonly projectId: number;
   readonly content: string;
   readonly createdAt: Date;
@@ -186,6 +188,14 @@ export abstract class ChangeRecordReadPort {
     tx: TransactionContext,
     input: LeftoverListReadInput,
   ): Promise<LeftoverListPage>;
+  /**
+   * F-29 待处理遗留问题总数（R-2 裁决 §10.2）：与 listActiveLeftovers 同一过滤，
+   * 不受 activeLeftoverLimit 影响；不 join 影响功能、不按版本重复计数。
+   */
+  abstract countActiveLeftovers(
+    tx: TransactionContext,
+    input: RecordCountInput,
+  ): Promise<number>;
 
   /**
    * 给定项目范围（可选任务集合），返回其中已有正式（PUBLISHED）记录的任务 ID。
@@ -327,6 +337,7 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
       SELECT li.id AS "leftoverItemId",
              li.record_id AS "recordId",
              cr.code AS "recordCode",
+             cr.title AS "recordTitle",
              li.project_id AS "projectId",
              vl.content_snapshot AS content,
              li.created_at AS "createdAt"
@@ -423,6 +434,29 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
       hasMore,
       nextLeftoverItemId: hasMore && last !== null ? last.leftoverItemId : null,
     };
+  }
+
+  async countActiveLeftovers(
+    tx: TransactionContext,
+    input: RecordCountInput,
+  ): Promise<number> {
+    const moduleId = input.moduleId ?? null;
+    const featureId = input.featureId ?? null;
+    const scopeType = input.scopeType ?? null;
+    const [row] = await tx.sql<{ total: number }[]>`
+      SELECT COUNT(*)::integer AS total
+        FROM app.change_record_leftover_items li
+        JOIN app.change_records cr
+          ON cr.id = li.record_id
+         AND cr.project_id = li.project_id
+         AND cr.status IN ('PUBLISHED', 'VOID')
+       WHERE li.project_id = ${input.projectId}
+         AND li.status = 'ACTIVE'
+         AND (${moduleId}::integer IS NULL OR cr.module_id = ${moduleId})
+         AND (${featureId}::integer IS NULL OR cr.feature_id = ${featureId})
+         AND (${scopeType}::text IS NULL OR cr.scope_type = ${scopeType})
+    `;
+    return row?.total ?? 0;
   }
 
   async listTaskIdsWithPublishedRecords(

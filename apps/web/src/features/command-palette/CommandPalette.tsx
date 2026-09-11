@@ -44,6 +44,7 @@ const PALETTE_GROUP_ORDER = [
   "功能",
   "任务",
   "迭代记录",
+  "遗留问题",
   "任务组",
   "外部链接",
   "操作",
@@ -62,6 +63,7 @@ const entityMeta: Readonly<
   CHANGE_RECORD: { label: "迭代记录", icon: "gitBranch" },
   EXTERNAL_LINK: { label: "外部链接", icon: "code" },
   TASK_GROUP: { label: "任务组", icon: "boxes" },
+  LEFTOVER: { label: "遗留问题", icon: "alert" },
 };
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({

@@ -7,9 +7,9 @@
 | 配套输入 | [F-29 / F-32 跨域只读端口扩展提案](./c-port-extension-proposal.md)（C 岗交 B 岗；本裁决同时对其 §7 的两处架构冲突给出结论） |
 | 上游编号 | C-003（聚合接口缺口）、C-010（候选接口尚未冻结） |
 | 文档性质 | 契约评审裁决记录；不是 ADR，不替代功能设计、系统设计、技术设计、权限矩阵或测试矩阵 |
-| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由 |
+| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships` |
 | 基线 | `origin/main` `fc7bb68`（F-20 PR #88 之后）；本文引用的代码事实均按该提交复核 |
-| 落库状态 | 尚未登记 Route Registry。`contract:validate` 要求每条登记路由都有 Controller 绑定（`packages/api-contract/src/controller-bindings.ts:213`），而四条路由的聚合读依赖 B 域尚不存在的只读端口；登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端必须与实现同一个 PR 落库，见 §7 |
+| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付 |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 结论摘要
@@ -138,3 +138,98 @@ auditAction: "none",
 | 现有只读端口 | `apps/api/src/modules/tasks/task-query.port.ts`、`modules/module-read.port.ts`、`features/feature-read.port.ts`、`projects/project-query.port.ts`、`projects/project-members-query.port.ts` | 需要扩展或复用的端口 |
 | 依赖边实测 | `apps/api/src/modules/change-records/record-publication-access.ts` | 冲突 A 的方向事实 |
 | 搜索契约范式 | [frontend-generated-client-consumption-requirements.md](./frontend-generated-client-consumption-requirements.md) C-006 | 游标 envelope 与 TTL 约定 |
+
+## 10. 第二轮裁决：F-29 / F-32 契约缺口与任务卡片聚合关系（2026-09-11）
+
+背景：B 在 [PR #98](https://github.com/256-code/InPulse/pull/98) 交付后反馈「统计口径、遗留总数、recordTitle、priority 等契约缺口」与 `TaskItem.groupRole` 待 A 裁定；C 的对齐台账见 [C v1 对齐表](./c-v1-alignment.md) §4。
+
+### 10.1 总原则
+
+- 只扩读、不扩写：新增字段全部落在只读路由上，写路由的 200 响应（`TaskItem` / `ModuleTaskItem`）保持不变，避免幂等重放叶子清单与幂等契约版本连锁升级（AGENTS.md §6）。
+- 跨域数据不进 B 的模型：`task_group_members` 属 C 域，只能由 C 侧组合，B 的响应不得包含 C 域字段（AGENTS.md §3，同 §6 的结论）。
+- 未提供的能力必须显式降级，不得静默忽略；缺口清零时同步删除降级注释。
+
+### 10.2 R-2 `getProjectOverview` 扩展
+
+| 项 | A 裁决 | 依据与口径 |
+| --- | --- | --- |
+| `activeLeftoverTotal` | 接受：`z.number().int().nonnegative()` | 与 `activeLeftovers` 同一过滤（`change_record_leftover_items.status = 'ACTIVE'`），不受 `activeLeftoverLimit` 影响；不 join 影响功能、不按版本重复计数 |
+| `LeftoverItemSummary.recordTitle` | 接受：`z.string().min(1).max(500)` | 取来源记录当前标题（`change_records.title`）；`recordCode` 保留。设计师稿行内展示「记录标题 + 遗留内容」，用 `recordCode` 组合只是降级 |
+
+### 10.3 R-3 `listMyTasks` 扩展
+
+列表项 `MyTaskItem` 新增字段：
+
+| 字段 | A 裁决 | 口径 |
+| --- | --- | --- |
+| `priority` | 接受：`LOW` / `NORMAL` / `HIGH` / `URGENT` | 来源 `tasks.priority`，数据库非空且默认 `NORMAL` |
+| `dueAt` | 接受：ISO 8601 字符串或 `null` | `null` 表示未设置截止；与骨架 `undefined`（不可知）语义不同，契约落地后不得再用 `undefined` |
+| `completedAt` | 接受：ISO 8601 字符串或 `null` | 与 `work_status = 'DONE'` 同真（`tasks_completion_state_check` 保证） |
+| `creatorId` | 接受：正整数 | 来源 `tasks.creator_id` |
+| `githubLinkCount` | 接受：`int >= 0` | 该任务经 `task_external_links` 关联的外部链接条数，去重后计数 |
+| `groupId` | 接受：正整数或 `null` | 与既有 `groupRole` 同源、同空同非空；支撑 F-25 步骤 3 的「查看主任务」入口 |
+| `description` | 拒绝 | 列表不返回上限 50000 的正文；任务详情接口已提供。若产品确需摘要，另立 `descriptionExcerpt`（≤200）迭代 |
+
+响应新增 `stats`（`MyTaskStats`）与遗留问题入口：
+
+| 字段 | A 裁决 | 口径 |
+| --- | --- | --- |
+| `stats.myOpen` | 接受 | 基准集合中 `work_status = 'TODO'` 的计数 |
+| `stats.dueToday` | 接受 | 基准集合中 `due_at` 落在业务时区当日且未完成的计数 |
+| `stats.overdue` | 接受 | 基准集合中 `due_at < 当前时刻` 且未完成的计数 |
+| `stats.completedThisMonth` | 接受 | 基准集合中 `work_status = 'DONE'` 且 `completed_at` 落在业务时区当月的计数 |
+| `leftoverCount` | 接受：`int >= 0` | 基准集合任务所关联的 `ACTIVE` 遗留项去重计数（与 R-2 的口径一致） |
+| `leftoverSample` | 接受：`{ recordCode, summary }` 或 `null` | 取 `created_at DESC, id DESC` 最新一条；`summary` 为该遗留项最新版本 `content` 的前 200 个字符，超出追加 `…`，不得改写内容 |
+| `scopeCounts` | 延后 | `scope = created` / `all` 本身不在 V1 参数内，返回计数会渲染出不可点击的入口；需与 scope 扩展、`createdByMe` 归属与索引证据同批做 |
+
+统计基准集合与业务时区：
+
+- 基准集合 = 当前用户负责、且符合功能设计 §29.1「有效任务」的任务（排除 `INVALID`、`CANCELED` 与历史来源分支）；`projectId` 参数生效，分页与游标不影响计数。
+- 历史来源分支的排除沿用 Q-04 / Q-07 机制：C 从自有 `task_group_members` 计算排除集合作为端口入参，B 在单条 SQL 内先过滤。
+- 业务时区固定为 `Asia/Shanghai`（UTC+08:00），日界与月界一律由服务端计算并写入契约常量；契约禁止客户端自行推导。
+
+筛选参数扩展：
+
+| 参数 | A 裁决 | 说明 |
+| --- | --- | --- |
+| `priority` | 接受：单值 | 与 `workStatus` 正交；`dueAt` 级别的排序仍固定 `id DESC` |
+| `includeCanceled` | 接受：布尔，缺省 `false` | 与 `workStatus` 组合表达「未完成并含已取消」（`TODO ∪ CANCELED`），替代 `workStatus` 多值写法 |
+| `relation` | 延后 | 需要 C 域聚合关系参与筛选，属 Q-07 同类跨域问题，须单独裁决 |
+| `query` | 延后 | 关键词检索属 F-26 搜索投影范畴，不得在聚合读里自建 `LIKE` |
+| `scope = created` / `all` | 延后 | 需要 `createdByMe` 归属参数与新的复合索引，属独立迭代 |
+
+验收要求：`priority` / `includeCanceled` 的实现 PR 必须提供 `EXPLAIN (ANALYZE, BUFFERS)`。现有 `tasks_assignee_status_idx (assignee_id, work_status, id)` 不含 `priority`；若退化为顺序扫描，必须给出数据规模依据或补复合索引（补索引走迁移并人工评审）。
+
+### 10.4 任务卡片聚合关系（`TaskItem.groupRole`）
+
+**裁定：不在 B 的任务列表 / 详情路由增加 `groupId` / `groupRole`。** `TaskGroupsModule → TaskQueryPort` 依赖边已存在，反向读取会形成 `TasksModule ↔ TaskGroupsModule` 环，违反 AGENTS.md §3；把 C 域数据放进 B 的响应也违反同一节的跨域读约束。
+
+**替代方案：新增 C 侧只读路由 R-5。**
+
+| 项 | 定义 |
+| --- | --- |
+| 方法 / 路径 | `GET /api/v1/task-groups/memberships` |
+| operationId | `listTaskGroupMemberships` |
+| 查询参数 | `taskIds`：逗号分隔的 1..100 个正整数；数量、格式或重复校验失败返回 `422` |
+| 响应 | `{ items: [{ taskId, groupId, groupRole }] }`；只包含当前用户有权访问项目、且属于 `ACTIVE` 聚合组的任务；无权或不存在一律不入结果（不泄露存在性） |
+| 策略 | `authPolicy: session`，其余策略全 `none`；状态码 `200` / `401` / `422` / `500`，无 `404` |
+| 数据来源 | C 自有 `task_group_members` 加任务归属校验；不导出 Repository、不进入任何写事务 |
+
+F-25 步骤 3 的落地方式：任务卡片徽章与任务详情抽屉「查看主任务」由页面级**一次批量**调用 R-5 获取（禁止按任务逐个请求）；`groupRole === null` 时隐藏入口，并用 `groupId` 导航 `/task-groups/{groupId}`。
+
+若产品接受 V1 降级，可先只在任务中心（R-3 的 `groupRole` / `groupId`）与聚合组页（R-1）展示标记；但 F-25 步骤 3 未闭环的事实必须保留在台账中，不得以「已实现」描述。
+
+### 10.5 落库与责任
+
+| 责任方 | 交付物 | 验收 |
+| --- | --- | --- |
+| A | R-2 / R-3 Schema 扩展、R-5 的 Schema 与 Route Registry 登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成 | `pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；与实现同一个 PR |
+| B | `TaskQueryPort` 选择列与筛选扩展（`priority` / `dueAt` / `completedAt` / `creatorId`）、外部链接计数、统计与遗留计数在同一 SQL 内的实现 | 真实 PostgreSQL 集成测试；`EXPLAIN` 证据；`count` 与不分页 `list` 口径一致 |
+| C | R-5 查询服务与实现、F-13 / F-14 / F-15 卡片徽章与「查看主任务」入口、前端适配器降级项替换 | Playwright 关键路径；降级项清零并同步 `my-tasks-types.ts` 的缺口注释 |
+
+2026-09-11 落库：A 的交付物（R-2 / R-3 Schema 扩展、R-5 Schema 与 Route Registry 登记、权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成）已随服务端实现同一个 PR 落库；真实 PostgreSQL 集成测试覆盖 R-2 / R-3 新字段与 R-5 批量查询（聚合读 19/19），`priority` / `includeCanceled` 的 `EXPLAIN (ANALYZE, BUFFERS)` 证据（30,481 行、反向主键索引扫描、非顺序扫描）见[测试矩阵](./test-matrix.md) 新增加量段。B 交付物（选择列、计数与统计实现）由同一实现落库；C 交付物（R-5 前端接线、F-13 / F-14 / F-15 徽章与「查看主任务」、降级项替换）仍待交付，前端降级在 C 完成前保持有效。
+
+### 10.6 边界
+
+- 本轮不扩写响应、不改权限模型、不新增迁移；若 `priority` 过滤被证明必须补索引，按 §6 单独走迁移与人工评审。
+- 延后项（`description`、`scopeCounts`、`relation`、`query`、`scope = created` / `all`）的恢复条件已写明，恢复时必须重新裁决，不得由实现方自行放开。

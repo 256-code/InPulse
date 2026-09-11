@@ -41,6 +41,7 @@ import { PublishedRecordsController } from "../src/modules/change-records/publis
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
+import { LeftoverSearchProjectionSync } from "../src/modules/change-records/leftover-search-projection.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
@@ -111,6 +112,7 @@ beforeAll(async () => {
       audit,
       activity,
       search,
+      new LeftoverSearchProjectionSync(search),
       notifications,
       access,
     ),
@@ -329,6 +331,18 @@ describe("F18 publication and immutable revisions", () => {
     expect(
       await db.sql`SELECT 1 FROM app.change_record_leftover_items WHERE record_id=${v1.id}`,
     ).toHaveLength(1);
+    expect(
+      await db.sql`SELECT entity_type,title,summary,visibility_scope,source_status,source_row_version FROM app.search_projection WHERE project_id=${f.projectId} AND entity_type='LEFTOVER'`,
+    ).toEqual([
+      {
+        entity_type: "LEFTOVER",
+        title: "重新说明同一问题",
+        summary: `待处理 · ${v1.code} ${v1.title}`,
+        visibility_scope: "MEMBER",
+        source_status: "ACTIVE",
+        source_row_version: 3,
+      },
+    ]);
   });
   it("retains CONVERTED identity and its task link through clearing and refilling", async () => {
     const f = await fixture(),
@@ -366,6 +380,9 @@ describe("F18 publication and immutable revisions", () => {
     expect(
       await db.sql`SELECT content_snapshot FROM app.change_record_version_leftovers WHERE record_id=${v1.id} AND version_no=1`,
     ).toEqual([{ content_snapshot: content.remainingIssues }]);
+    expect(
+      await db.sql`SELECT source_status,title FROM app.search_projection WHERE project_id=${f.projectId} AND entity_type='LEFTOVER'`,
+    ).toEqual([{ source_status: "CONVERTED", title: "澄清同一问题" }]);
   });
   it.each(["audit", "activity", "search", "notification"] as const)(
     "rolls back record, v1, stable item, code and all side effects when %s fails",

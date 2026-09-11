@@ -147,6 +147,12 @@ describe("my-tasks-v1-query", () => {
       updatedAt: "2026-09-10T02:00:00.000Z",
       hasPublishedRecord: true,
       groupRole: "SOURCE",
+      priority: "NORMAL",
+      dueAt: null,
+      completedAt: null,
+      creatorId: 9,
+      githubLinkCount: 0,
+      groupId: null,
     });
     expect(item).toEqual({
       taskId: 7,

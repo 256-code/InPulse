@@ -18,6 +18,13 @@ describe("CommandPalette", () => {
           title: "商城系统",
           summary: "SHOP · 商城项目描述",
         },
+        {
+          projectId: 7,
+          entityType: "LEFTOVER",
+          entityId: 9,
+          title: "登录页偶发闪白",
+          summary: "待处理 · CR-2048 登录页偶发闪白",
+        },
       ],
       nextCursor: null,
       hasMore: false,
@@ -56,6 +63,7 @@ describe("CommandPalette", () => {
     expect(getSearch).toHaveBeenCalledWith(
       expect.objectContaining({ q: "inpulse", limit: 20 }),
     );
+    expect(await screen.findByText("遗留问题")).toBeInTheDocument();
     await user.click(
       await screen.findByRole("button", { name: /^搜索“inpulse”/ }),
     );

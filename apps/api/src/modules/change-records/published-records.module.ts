@@ -17,6 +17,7 @@ import { RecordPublicationHttpService } from "./record-publication-http.service.
 import { RecordPublicationAccess } from "./record-publication-access.js";
 import { RecordPublicationRepository } from "./record-publication.repository.js";
 import { RecordPublicationEffects } from "./record-publication-effects.js";
+import { LeftoverSearchProjectionSync } from "./leftover-search-projection.js";
 import { RecordDraftRepository } from "./record-draft.repository.js";
 import {
   ChangeRecordReadPort,
@@ -63,6 +64,7 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     LeftoverRecordCommandPort,
     ChangeRecordReadPort,
     MyTaskQueryPort,
+    LeftoverSearchProjectionSync,
   ],
   providers: [
     RecordLinkQueryPort,
@@ -80,6 +82,7 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     RecordPublicationAccess,
     RecordPublicationRepository,
     RecordPublicationEffects,
+    LeftoverSearchProjectionSync,
     RecordDraftRepository,
     {
       provide: RecordPublicationCommandPort,

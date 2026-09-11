@@ -101,11 +101,17 @@ function buildParameters(
     const { properties, required } = objectProperties(entry.ref, schemas);
     for (const [name, schema] of Object.entries(properties)) {
       const isPathParameter = entry.location === "path";
+      const isArray = schema.type === "array";
       parameters.push({
         name,
         in: entry.location,
         required: isPathParameter ? true : required.has(name),
         schema,
+        // 生成客户端把数组序列化为逗号分隔字符串（toQueryString 的 String(value)），
+        // OpenAPI 必须按同一形式声明，避免文档与真实 wire format 不一致。
+        ...(isArray && !isPathParameter
+          ? { style: "form", explode: false }
+          : {}),
       });
     }
   }

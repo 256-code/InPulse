@@ -65,8 +65,13 @@ async function readTrimmedSecret(path: string, label: string): Promise<string> {
   return value;
 }
 
+/**
+ * 解析数据库连接：MIGRATION 使用迁移角色，RUNTIME 使用 app_runtime，
+ * AUDIT 使用独立只读的 audit_reader（F-08 原始审计读取，环境变量前缀
+ * `AUDIT_DB_*` / `AUDIT_DATABASE_URL(_FILE)`）。
+ */
 export async function resolveDatabaseUrl(
-  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP",
+  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP" | "AUDIT",
 ): Promise<string> {
   const urlFileName = `${purpose}_DATABASE_URL_FILE`;
   const urlName =
@@ -98,7 +103,11 @@ export async function resolveDatabaseUrl(
   const password = await readTrimmedSecret(passwordFile, passwordFileName);
   const user =
     process.env[`${purpose}_DB_USER`]?.trim() ??
-    (purpose === "MIGRATION" ? "app_migrator" : "app_runtime");
+    (purpose === "MIGRATION"
+      ? "app_migrator"
+      : purpose === "AUDIT"
+        ? "audit_reader"
+        : "app_runtime");
   const host = required("DB_HOST");
   const port = process.env.DB_PORT?.trim() || "5432";
   const database = process.env.DB_NAME?.trim() || "app";

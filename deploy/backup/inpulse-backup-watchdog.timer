@@ -1,0 +1,13 @@
+[Unit]
+# InPulse 备份 staleness 调度（技术设计 v1.2.2 §11.5）：每小时检查一次。
+# 与 12 小时备份调度同一时刻启用，见 docs/runbooks/backup-restore.md。
+Description=InPulse 备份 staleness 调度（每小时）
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1m
+Unit=inpulse-backup-watchdog.service
+
+[Install]
+WantedBy=timers.target

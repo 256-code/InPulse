@@ -11,10 +11,15 @@ import {
 import { AggregateReadError } from "../src/modules/aggregate-read/aggregate-read.errors.js";
 import { MyTasksQueryService } from "../src/modules/aggregate-read/my-tasks-query.service.js";
 import { ProjectOverviewQueryService } from "../src/modules/aggregate-read/project-overview-query.service.js";
+import { TaskGroupMembershipQueryService } from "../src/modules/aggregate-read/task-group-membership-query.service.js";
 import { TaskGroupQueryService } from "../src/modules/aggregate-read/task-group-query.service.js";
 import type {
   ChangeRecordReadPort,
+  MyTaskLeftoverEntry,
+  MyTaskListPage,
+  MyTaskListRow,
   MyTaskQueryPort,
+  MyTaskStatsResult,
   TaskGroupRecordPage,
 } from "../src/modules/change-records/index.js";
 import type { ExternalLinksQueryPort } from "../src/modules/external-links/index.js";
@@ -35,8 +40,6 @@ import type {
   TaskGroupReadRecord,
 } from "../src/modules/task-groups/task-group-read.port.js";
 import type {
-  TaskListPage,
-  TaskListRow,
   TaskQueryPort,
   TaskReadModel,
 } from "../src/modules/tasks/index.js";
@@ -128,8 +131,8 @@ function taskFixture(
 
 function taskRowFixture(
   taskId: number,
-  overrides: Partial<TaskListRow> = {},
-): TaskListRow {
+  overrides: Partial<MyTaskListRow> = {},
+): MyTaskListRow {
   return {
     taskId,
     projectId: 7,
@@ -144,6 +147,10 @@ function taskRowFixture(
     rowVersion: 1,
     createdAt: baseTime,
     updatedAt: baseTime,
+    priority: "NORMAL",
+    dueAt: null,
+    completedAt: null,
+    creatorId: 5,
     ...overrides,
   };
 }
@@ -741,6 +748,7 @@ function overviewSetup(
   const listActiveLeftovers = vi
     .fn()
     .mockResolvedValue(options.leftovers ?? []);
+  const countActiveLeftovers = vi.fn().mockResolvedValue(2);
   const listHistoricalSourceTaskIds = vi
     .fn()
     .mockResolvedValue(options.excludedTaskIds ?? [90]);
@@ -754,6 +762,7 @@ function overviewSetup(
       countPublished,
       listRecentPublished,
       listActiveLeftovers,
+      countActiveLeftovers,
     } as unknown as ChangeRecordReadPort,
     { listHistoricalSourceTaskIds } as unknown as TaskGroupMembershipReadPort,
     unitOfWork,
@@ -767,6 +776,7 @@ function overviewSetup(
     countPublished,
     listRecentPublished,
     listActiveLeftovers,
+    countActiveLeftovers,
     listHistoricalSourceTaskIds,
   };
 }
@@ -811,6 +821,7 @@ describe("ProjectOverviewQueryService.getOverview", () => {
           leftoverItemId: 9,
           recordId: 41,
           recordCode: "SHOP-CR-41",
+          recordTitle: "迭代记录标题",
           projectId: 7,
           content: "遗留",
           createdAt,
@@ -846,11 +857,13 @@ describe("ProjectOverviewQueryService.getOverview", () => {
         publishedAt: publishedAt.toISOString(),
       },
     ]);
+    expect(result.activeLeftoverTotal).toBe(2);
     expect(result.activeLeftovers).toEqual([
       {
         leftoverItemId: 9,
         recordId: 41,
         recordCode: "SHOP-CR-41",
+        recordTitle: "迭代记录标题",
         content: "遗留",
         createdAt: createdAt.toISOString(),
       },
@@ -880,6 +893,9 @@ describe("ProjectOverviewQueryService.getOverview", () => {
       projectId: 7,
       limit: 2,
     });
+    expect(setup.countActiveLeftovers).toHaveBeenCalledWith(expect.anything(), {
+      projectId: 7,
+    });
   });
 
   it("显式列表条数直接透传", async () => {
@@ -903,7 +919,13 @@ describe("ProjectOverviewQueryService.getOverview", () => {
 function myTasksSetup(
   options: {
     readonly scopeProjectIds?: readonly number[];
-    readonly page?: TaskListPage;
+    readonly page?: MyTaskListPage;
+    readonly stats?: MyTaskStatsResult;
+    readonly leftover?: MyTaskLeftoverEntry;
+    readonly linkCounts?: readonly {
+      readonly taskId: number;
+      readonly count: number;
+    }[];
     readonly decode?: () => number | null;
     readonly projects?: readonly ProjectItem[];
     readonly moduleNames?: readonly {
@@ -955,6 +977,27 @@ function myTasksSetup(
     .mockResolvedValue(options.publishedTaskIds ?? [501]);
   const listHistoricalSourceTaskIds = vi.fn().mockResolvedValue([90]);
   const listGroupRoles = vi.fn().mockResolvedValue(options.groupRoles ?? []);
+  const countTaskLinks = vi
+    .fn()
+    .mockResolvedValue(options.linkCounts ?? [{ taskId: 501, count: 3 }]);
+  const stats = vi.fn().mockResolvedValue(
+    options.stats ?? {
+      myOpen: 4,
+      dueToday: 1,
+      overdue: 2,
+      completedThisMonth: 3,
+    },
+  );
+  const leftoverEntry = vi.fn().mockResolvedValue(
+    options.leftover ?? {
+      count: 2,
+      sample: {
+        recordCode: "SHOP-CR-41",
+        contentPrefix: "最新遗留内容",
+        truncated: false,
+      },
+    },
+  );
   const listUsers = vi
     .fn()
     .mockResolvedValue([{ userId: 5, name: "成员", avatarUrl: null }]);
@@ -964,10 +1007,11 @@ function myTasksSetup(
   const service = new MyTasksQueryService(
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
     { list: listProjects } as unknown as ProjectQueryPort,
-    { list: listPage } as unknown as MyTaskQueryPort,
+    { list: listPage, stats, leftoverEntry } as unknown as MyTaskQueryPort,
     { listNames: listModuleNames } as unknown as ModuleReadPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
     { listTaskIdsWithPublishedRecords } as unknown as ChangeRecordReadPort,
+    { countTaskLinks } as unknown as ExternalLinksQueryPort,
     {
       listHistoricalSourceTaskIds,
       listGroupRoles,
@@ -983,6 +1027,9 @@ function myTasksSetup(
     listProjects,
     listHistoricalSourceTaskIds,
     listGroupRoles,
+    countTaskLinks,
+    stats,
+    leftoverEntry,
   };
 }
 
@@ -990,27 +1037,41 @@ describe("MyTasksQueryService.list", () => {
   it("越权 projectId 收敛为空页而不是 404", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7] });
     const result = await setup.service.list({ actorUserId: 5, projectId: 9 });
-    expect(result).toEqual({ items: [], nextCursor: null, hasMore: false });
+    expect(result).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      stats: { myOpen: 4, dueToday: 1, overdue: 2, completedThisMonth: 3 },
+      leftoverCount: 2,
+      leftoverSample: { recordCode: "SHOP-CR-41", summary: "最新遗留内容" },
+    });
     expect(setup.listPage).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ projectIds: [] }),
     );
+    expect(setup.stats).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [],
+      assigneeId: 5,
+      excludedTaskIds: [90],
+    });
   });
 
-  it("四项筛选进入端口与游标 filterKey", async () => {
+  it("六项筛选进入端口与游标 filterKey，includeCanceled 并入 CANCELED", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
     await setup.service.list({
       actorUserId: 5,
       projectId: 9,
       scopeType: "MODULE",
-      workStatus: "CANCELED",
+      workStatus: "TODO",
       hasPublishedRecord: false,
+      priority: "HIGH",
+      includeCanceled: true,
       limit: 5,
     });
     expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
-      filterKey: JSON.stringify([9, "MODULE", "CANCELED", false]),
+      filterKey: JSON.stringify([9, "MODULE", "TODO", false, "HIGH", true]),
     });
     expect(setup.listPage).toHaveBeenCalledWith(
       expect.anything(),
@@ -1019,10 +1080,19 @@ describe("MyTasksQueryService.list", () => {
         assigneeId: 5,
         limit: 5,
         excludedTaskIds: [90],
-        workStatuses: ["CANCELED"],
+        workStatuses: ["TODO", "CANCELED"],
         scopeTypes: ["MODULE"],
         hasPublishedRecord: false,
+        priority: "HIGH",
       }),
+    );
+  });
+
+  it("includeCanceled 在 workStatus 缺省时不产生额外过滤", async () => {
+    const setup = myTasksSetup();
+    await setup.service.list({ actorUserId: 5, includeCanceled: true });
+    expect(setup.listPage.mock.calls[0]?.[1]).not.toHaveProperty(
+      "workStatuses",
     );
   });
 
@@ -1045,22 +1115,41 @@ describe("MyTasksQueryService.list", () => {
       featureName: null,
       projectName: "商城系统",
       moduleName: "模块",
+      priority: "NORMAL",
+      dueAt: null,
+      completedAt: null,
+      creatorId: 5,
+      githubLinkCount: 0,
       hasPublishedRecord: false,
       groupRole: null,
+      groupId: null,
       updatedAt: baseTime.toISOString(),
     });
     expect(result.items[1]).toMatchObject({
       taskId: 501,
       featureName: "功能",
       hasPublishedRecord: true,
+      githubLinkCount: 3,
       groupRole: "MAIN",
+      groupId: 11,
+    });
+    expect(result.stats).toEqual({
+      myOpen: 4,
+      dueToday: 1,
+      overdue: 2,
+      completedThisMonth: 3,
+    });
+    expect(result.leftoverCount).toBe(2);
+    expect(result.leftoverSample).toEqual({
+      recordCode: "SHOP-CR-41",
+      summary: "最新遗留内容",
     });
     expect(result.hasMore).toBe(true);
     expect(result.nextCursor).toBe("cursor-next");
     expect(setup.cursor.encode).toHaveBeenCalledWith({
       actorUserId: 5,
       namespace: "MY_TASKS",
-      filterKey: JSON.stringify([null, null, null, null]),
+      filterKey: JSON.stringify([null, null, null, null, null, null]),
       afterId: 501,
     });
   });
@@ -1077,6 +1166,70 @@ describe("MyTasksQueryService.list", () => {
     });
   });
 
+  it("截止与完成时间按 ISO 返回，统计与遗留样例按基准集合透传并截断", async () => {
+    const dueAt = new Date("2026-09-10T04:00:00.000Z");
+    const completedAt = new Date("2026-09-08T04:00:00.000Z");
+    const setup = myTasksSetup({
+      page: {
+        items: [
+          taskRowFixture(501, {
+            workStatus: "DONE",
+            dueAt,
+            completedAt,
+          }),
+        ],
+        nextTaskId: null,
+        hasMore: false,
+      },
+      stats: {
+        myOpen: 0,
+        dueToday: 0,
+        overdue: 0,
+        completedThisMonth: 1,
+      },
+      leftover: {
+        count: 1,
+        sample: {
+          recordCode: "SHOP-CR-41",
+          contentPrefix: "遗留内容".repeat(50),
+          truncated: true,
+        },
+      },
+    });
+    const result = await setup.service.list({ actorUserId: 5 });
+    expect(result.items[0]).toMatchObject({
+      workStatus: "DONE",
+      dueAt: dueAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+    });
+    expect(result.stats).toEqual({
+      myOpen: 0,
+      dueToday: 0,
+      overdue: 0,
+      completedThisMonth: 1,
+    });
+    expect(result.leftoverCount).toBe(1);
+    expect(result.leftoverSample).toEqual({
+      recordCode: "SHOP-CR-41",
+      summary: "遗留内容".repeat(50) + "…",
+    });
+    expect(setup.stats).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      assigneeId: 5,
+      excludedTaskIds: [90],
+    });
+    expect(setup.leftoverEntry).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      assigneeId: 5,
+      excludedTaskIds: [90],
+    });
+    expect(setup.countTaskLinks).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [501],
+    );
+  });
+
   it("条目缺少项目或模块时以 500 失败而不是静默丢行", async () => {
     const setup = myTasksSetup({
       page: {
@@ -1090,5 +1243,69 @@ describe("MyTasksQueryService.list", () => {
       status: 500,
       code: "AGGREGATE_READ_INCONSISTENT",
     });
+  });
+});
+
+describe("TaskGroupMembershipQueryService.list", () => {
+  function membershipSetup(
+    options: {
+      readonly scopeProjectIds?: readonly number[];
+      readonly roles?: readonly {
+        readonly taskId: number;
+        readonly groupId: number;
+        readonly role: "MAIN" | "SOURCE";
+      }[];
+    } = {},
+  ) {
+    const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
+      actorUserId: 5,
+      projectIds: options.scopeProjectIds ?? [7],
+      isSystemAdmin: false,
+    });
+    const listGroupRoles = vi.fn().mockResolvedValue(options.roles ?? []);
+    const service = new TaskGroupMembershipQueryService(
+      { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
+      { listGroupRoles } as unknown as TaskGroupMembershipReadPort,
+      unitOfWork,
+    );
+    return { service, getAuthorizedSearchScope, listGroupRoles };
+  }
+
+  it("按服务端授权范围读取 ACTIVE 组关系并固定 taskId 升序", async () => {
+    const setup = membershipSetup({
+      roles: [
+        { taskId: 22, groupId: 12, role: "SOURCE" },
+        { taskId: 21, groupId: 11, role: "MAIN" },
+      ],
+    });
+    const result = await setup.service.list({
+      actorUserId: 5,
+      taskIds: [22, 21],
+    });
+    expect(result).toEqual({
+      items: [
+        { taskId: 21, groupId: 11, groupRole: "MAIN" },
+        { taskId: 22, groupId: 12, groupRole: "SOURCE" },
+      ],
+    });
+    expect(setup.listGroupRoles).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [22, 21],
+    );
+  });
+
+  it("无授权项目时返回空结果且不发出 SQL", async () => {
+    const setup = membershipSetup({ scopeProjectIds: [] });
+    const result = await setup.service.list({
+      actorUserId: 5,
+      taskIds: [999],
+    });
+    expect(result).toEqual({ items: [] });
+    expect(setup.listGroupRoles).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+      [999],
+    );
   });
 });

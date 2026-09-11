@@ -56,6 +56,7 @@ interface SearchFixture {
   readonly disabledSessionCookie: string;
   readonly disabledUserId: number;
   readonly hiddenEntityId: number;
+  readonly leftoverEntityId: number;
   readonly memberProject: ProjectFixture;
   readonly memberSessionCookie: string;
   readonly memberUserId: number;
@@ -237,6 +238,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
     const hiddenEntityId = entityIdOffset + 4;
     const otherProjectEntityId = entityIdOffset + 5;
     const adminProjectEntityId = entityIdOffset + 6;
+    const leftoverEntityId = entityIdOffset + 7;
 
     await insertProjection(runtime, {
       projectId: memberProject.projectId,
@@ -298,6 +300,16 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       visibilityScope: "MEMBER",
       sourceStatus: "ACTIVE",
     });
+    await insertProjection(runtime, {
+      projectId: memberProject.projectId,
+      entityType: "LEFTOVER",
+      entityId: leftoverEntityId,
+      title: `${SEED_QUERY_PREFIX} leftover issue`,
+      summary: "待处理 · CR-2048 登录页偶发闪白",
+      normalizedSearchText: `${SEED_QUERY_PREFIX} leftover issue`,
+      visibilityScope: "MEMBER",
+      sourceStatus: "ACTIVE",
+    });
 
     const keyringKey = randomBytes(32);
     keyring = VersionedHmacKeyring.fromEntries(
@@ -350,6 +362,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       disabledSessionCookie: disabledSession.cookie,
       disabledUserId,
       hiddenEntityId,
+      leftoverEntityId,
       memberProject,
       memberSessionCookie: memberSession.cookie,
       memberUserId,
@@ -417,7 +430,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       await requestSearch(baseUrl, { cookie: fixture.memberSessionCookie }),
     );
 
-    expect(page.items).toHaveLength(2);
+    expect(page.items).toHaveLength(3);
     expect(
       page.items.every(
         (item) => item.projectId === fixture.memberProject.projectId,
@@ -427,13 +440,20 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       page.items
         .map((item) => item.entityId)
         .sort((left, right) => left - right),
-    ).toEqual([fixture.visibleEntityId1, fixture.visibleEntityId2]);
+    ).toEqual([
+      fixture.visibleEntityId1,
+      fixture.visibleEntityId2,
+      fixture.leftoverEntityId,
+    ]);
     expect(
       page.items.some((item) => item.entityId === fixture.adminOnlyEntityId),
     ).toBe(false);
     expect(
       page.items.some((item) => item.entityId === fixture.hiddenEntityId),
     ).toBe(false);
+    expect(page.items.filter((item) => item.entityType === "LEFTOVER")).toEqual(
+      [expect.objectContaining({ entityId: fixture.leftoverEntityId })],
+    );
     expect(page.nextCursor).toBeNull();
     expect(page.hasMore).toBe(false);
     expect(Object.keys(page.items[0]!).sort()).toEqual([
@@ -443,6 +463,25 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       "summary",
       "title",
     ]);
+  });
+
+  test("遗留问题投影以独立 LEFTOVER 分类命中并携带处置状态", async () => {
+    const page = await expectSearchPage(
+      await requestSearch(baseUrl, {
+        cookie: fixture.memberSessionCookie,
+        query: { q: `${SEED_QUERY_PREFIX} leftover issue` },
+      }),
+    );
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toEqual(
+      expect.objectContaining({
+        entityType: "LEFTOVER",
+        entityId: fixture.leftoverEntityId,
+        projectId: fixture.memberProject.projectId,
+        title: `${SEED_QUERY_PREFIX} leftover issue`,
+        summary: "待处理 · CR-2048 登录页偶发闪白",
+      }),
+    );
   });
 
   test("跨项目隔离由服务端 Scope 强制，普通成员默认 0 条", async () => {
@@ -469,7 +508,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
     const adminDefault = await expectSearchPage(
       await requestSearch(baseUrl, { cookie: fixture.adminSessionCookie }),
     );
-    expect(adminDefault.items).toHaveLength(4);
+    expect(adminDefault.items).toHaveLength(5);
     expect(
       adminDefault.items.some(
         (item) => item.entityId === fixture.adminOnlyEntityId,
@@ -482,7 +521,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
         query: { q: SEED_QUERY_PREFIX, includeVoid: true },
       }),
     );
-    expect(adminVoid.items).toHaveLength(5);
+    expect(adminVoid.items).toHaveLength(6);
     expect(
       adminVoid.items.some(
         (item) => item.entityId === fixture.adminOnlyEntityId,
@@ -500,7 +539,7 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
         query: { q: SEED_QUERY_PREFIX, includeVoid: true },
       }),
     );
-    expect(page.items).toHaveLength(2);
+    expect(page.items).toHaveLength(3);
     expect(
       page.items.some((item) => item.entityId === fixture.adminOnlyEntityId),
     ).toBe(false);
@@ -528,11 +567,31 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
       }),
     );
     expect(second.items).toHaveLength(1);
-    expect(second.hasMore).toBe(false);
-    expect(second.nextCursor).toBeNull();
+    expect(second.hasMore).toBe(true);
+    expect(second.nextCursor).not.toBeNull();
     expect([second.items[0]?.projectId, second.items[0]?.entityId]).not.toEqual(
       [first.items[0]?.projectId, first.items[0]?.entityId],
     );
+
+    const third = await expectSearchPage(
+      await requestSearch(baseUrl, {
+        cookie: fixture.memberSessionCookie,
+        query: {
+          q: SEED_QUERY_PREFIX,
+          limit: 1,
+          cursor: second.nextCursor as string,
+        },
+      }),
+    );
+    expect(third.items).toHaveLength(1);
+    expect(third.hasMore).toBe(false);
+    expect(third.nextCursor).toBeNull();
+    const seen = new Set(
+      [first, second, third].map(
+        (page) => `${page.items[0]?.projectId}:${page.items[0]?.entityId}`,
+      ),
+    );
+    expect(seen.size).toBe(3);
   });
 
   test("短查询与无效游标统一返回 422", async () => {
