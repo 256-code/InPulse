@@ -1,0 +1,93 @@
+/* B-5：迭代记录 Markdown 白名单渲染的展示样式。
+   沿用 .draft-content 的换行策略（pre-wrap），保留历史纯文本记录里的换行。 */
+.record-markdown {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.record-markdown > :first-child {
+  margin-top: 0;
+}
+
+.record-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.record-markdown p {
+  margin: 0 0 8px;
+}
+
+.record-markdown h1,
+.record-markdown h2,
+.record-markdown h3,
+.record-markdown h4,
+.record-markdown h5,
+.record-markdown h6 {
+  margin: 12px 0 8px;
+  color: #354f66;
+  font-size: 14px;
+}
+
+.record-markdown ul,
+.record-markdown ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.record-markdown li {
+  margin: 2px 0;
+}
+
+.record-markdown code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inpulse-muted);
+  font-size: 12px;
+}
+
+.record-markdown pre {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f5f8fc;
+  overflow-x: auto;
+}
+
+.record-markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.record-markdown blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--inpulse-border);
+  color: var(--inpulse-muted-foreground);
+}
+
+.record-markdown hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--inpulse-border);
+}
+
+.record-markdown a {
+  color: var(--inpulse-primary);
+}
+
+.record-markdown-media {
+  color: var(--inpulse-muted-foreground);
+}
+
+/* 带标签的记录字段：标签一行、Markdown 正文一块（块级渲染不能与标签内联）。 */
+.record-field {
+  margin: 0 0 10px;
+}
+
+.record-field-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--inpulse-muted-foreground);
+  font-size: 12px;
+}

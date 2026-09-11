@@ -108,7 +108,8 @@ it("retains input on conflict and requires choosing before saving against the la
   fireEvent.click(
     await screen.findByRole("button", { name: "加载最新版本并合并" }),
   );
-  await screen.findByText("最新内容：其他人的方案");
+  await screen.findByText("最新内容");
+  await screen.findByText("其他人的方案");
   expect(screen.getByLabelText("改了什么、怎么改的")).toHaveValue("我的方案");
   expect(screen.getByRole("button", { name: "应用合并" })).toBeDisabled();
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "mine" } });

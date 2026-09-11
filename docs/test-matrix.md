@@ -21,10 +21,12 @@ fail closed 到 enforce。
 直接修正异常过滤器，因此不引入 adapter 包装）；`database/src/config.ts` 把 Secret 文件权限
 判定抽成 `isPrivateOwnerReadableFile`，生产模式仍是 `/run/secrets` 直接子项、非符号链接、
 仅属主可读的 fail closed 策略；GitHub 外链按 [ADR-022](adr/ADR-022.md) 用标准 URL Parser
-实现规范化，数据库最终防线沿用既有类型化关联模型。未交付：Markdown 白名单（前端当前没有
-任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR 由
-人工确认）；外部链接的 HTTP 关联接口属 F-14 业务纵切片，新增路由必须同步 Schema、Route
-Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全」表。
+实现规范化，数据库最终防线沿用既有类型化关联模型。Markdown 白名单渲染当时列为未交付（前端
+没有任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR
+由人工确认）：依赖已由 [PR #127](https://github.com/256-code/InPulse/pull/127) 合入，白名单渲染
+已由 B-5 落库，见本文件「B-5 迭代记录 Markdown 白名单渲染」章节。外部链接的 HTTP 关联接口属
+F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端。
+另见「审计与安全」表。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -983,3 +985,38 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/web test` 67 文件 322 例；`pnpm check` 至 `deps:audit` 前全部通过（lint / format:check / typecheck / test:unit / db:migrations:check / contract:drift / contract:validate / build / check:deploy:test / check:deps / check:frontend:boundaries（215 模块 992 依赖）/ permissions:check（97/97）/ check:secrets / check:docs），`deps:audit` 因本地 npm 镜像无 audit endpoint 失败（非本批回归；公共 registry 审计无已知漏洞）；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）单独复跑通过。`pnpm test:e2e`（`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）全量 50 例 49 过 + 1 偶发：`aggregate-views.spec.ts:14` 在「新建功能」弹窗保存后 `toBeHidden` 超时（与既有偶发同族），单文件复跑 2/2 通过，按约定不得视为已修复。
 
 未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #126](https://github.com/256-code/InPulse/pull/126)；② `pnpm test:integration` 未运行（本批无服务端改动）；③ 新增 / 更新的单测与 E2E 用例需非作者人工评审；④ C-4 视觉复核用临时 Playwright spec 与 17 张截图仅本地产出（spec 已删除，截图未入库）。
+
+## B-5 迭代记录 Markdown 白名单渲染（2026-09-11 本地落库）
+
+按[技术设计 §7.5](../技术设计v1.2.2.md)与[系统设计 §3.6](../系统设计文档v1.0.2.md)：迭代记录
+正文保存 Markdown 原文，渲染必须过白名单，不允许原始 HTML。依赖 `react-markdown@10.1.0` +
+`rehype-sanitize@6.0.0` 已按第 4 节由独立依赖 [PR #127](https://github.com/256-code/InPulse/pull/127)
+squash 合入 main `3e416a1`（外链口径沿用 [ADR-022](adr/ADR-022.md)）。渲染器
+[`RecordMarkdown`](../apps/web/src/features/common/components/RecordMarkdown.tsx) 逐层收敛：
+react-markdown 不启用原始 HTML；rehype-sanitize 使用显式完整 schema，只保留
+`a/blockquote/br/code/em/h1-h6/hr/img/li/ol/p/pre/strong/ul` 标签与 `a.href`、`img.alt`
+属性，`href` 协议只允许 https，并对 `id/name` 前缀转义；`urlTransform` 与 `a` 组件统一走
+`recordLinkHref`（标准 URL Parser，禁止字符串前缀判断域名），只把规范化后的
+`https://github.com/...` 渲染为 `target="_blank" rel="noopener noreferrer"` 外链，拒绝
+http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸形 URL；图片不加载远程资源，
+只显示 `[图片：alt]`。接入点：已发布记录详情与版本对比、草稿详情、完成任务时的最新草稿与所选
+草稿、遗留项转任务预览、版本冲突「最新内容」预览；编辑表单保持纯文本 textarea。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B5-UNIT-001 | Web 单元 | CommonMark 结构渲染 | 标题 / 列表 / 引用 / 代码块 / 行内代码 / 粗斜体 / 分隔线按白名单渲染；行内代码中的 `<div>` 文本保留；空内容不产生节点并保留调用方类名 | 本地通过（`RecordMarkdown.test.tsx`） |
+| B5-UNIT-002 | Web 单元 | 原始 HTML 惰性 | `<script>`、事件处理器与原始标签不进入 DOM（无 script/img/onerror 节点与全局探针赋值）；原始 HTML 文本按策略丢弃、历史纯文本换行保留 | 本地通过 |
+| B5-UNIT-003 | Web 单元 | 协议与域名白名单 | `javascript:` / `data:` / `vbscript:` 不产出 href；`https://github.com/...` 产出安全外链且 autolink 同口径；http、非 GitHub 域名、混淆域名、userinfo、非默认端口、相对路径与畸形 URL 只保留文本 | 本地通过 |
+| B5-UNIT-004 | Web 单元 | 图片与占位 | 图片不加载远程资源、只显示 `[图片：alt]`；详情「暂无已知遗留问题」与版本对比「（空）」占位保持 | 本地通过 |
+| B5-UNIT-005 | Web 单元 | 视图接线回归 | 已发布记录 / 草稿 / 完成任务 / 遗留转任务用例在接入 `RecordMarkdown` 后通过；版本冲突断言改为标签「最新内容」与内容分别断言 | 本地通过 |
+
+本地实际执行（2026-09-11）：`RecordMarkdown.test.tsx` 11 例；`pnpm --filter @inpulse/web test`
+68 文件 333 例通过；`pnpm --filter @inpulse/web typecheck`、`pnpm lint`、`pnpm format:check`、
+`pnpm build`（产物含 `RecordMarkdown-*.js`）、`pnpm check:frontend:boundaries`（220 模块
+1005 依赖）与 `pnpm check:docs` 通过；记录相关既有浏览器 E2E 定向复跑 11 例 10 过 + 1 偶发（`record-publishing.spec.ts:78` 新建功能弹窗未关，Docker 日志同时段 `idempotency_records_retention_check` 违约，属既有偶发同族；单文件复跑 2/2 通过）。
+
+未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #NNN](https://github.com/256-code/InPulse/pull/NNN)；
+② 未新增浏览器 E2E，记录相关既有用例定向复跑见上（含 1 例既有偶发，按约定不得视为已修复）；
+③ 新增单测需非
+作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
+（不与 rehype-sanitize 默认 schema 合并），后续升级依赖时必须同步复核本文件 schema 与测试。

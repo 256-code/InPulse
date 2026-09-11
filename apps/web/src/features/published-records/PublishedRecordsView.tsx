@@ -18,6 +18,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { useChangeRecordsQuery } from "./published-records-query";
 import "@features/record-drafts/record-drafts.css";
 const fields = [
@@ -273,9 +274,9 @@ export function PublishedRecordsView({
                 .map(([field, label]) => (
                   <section key={field}>
                     <h3>{label}</h3>
-                    <p className="draft-content">
-                      {detail.data![field] || "暂无已知遗留问题"}
-                    </p>
+                    <RecordMarkdown
+                      content={detail.data![field] || "暂无已知遗留问题"}
+                    />
                   </section>
                 ))}
               <section aria-label="历史版本">
@@ -333,15 +334,15 @@ export function PublishedRecordsView({
                             <div className="record-version-columns">
                               <div>
                                 <strong>v{before.versionNo}</strong>
-                                <p className="draft-content">
-                                  {row.before || "（空）"}
-                                </p>
+                                <RecordMarkdown
+                                  content={row.before || "（空）"}
+                                />
                               </div>
                               <div>
                                 <strong>v{after.versionNo}</strong>
-                                <p className="draft-content">
-                                  {row.after || "（空）"}
-                                </p>
+                                <RecordMarkdown
+                                  content={row.after || "（空）"}
+                                />
                               </div>
                             </div>
                           </section>
