@@ -2448,6 +2448,59 @@ button {
 .task-detail-modal .ant-modal-body {
   padding: 0 28px 16px;
 }
+
+/* C-3：设计师稿 task-modal 的「截止徽章 + 主操作」动作行与「任务内容」标签栏。
+ * 动作行左端固定截止徽章（tone 直接复用 due-* 色板），其余操作靠右；
+ * 标签栏为「一行标签 + 一根底部细线」，选中态用 2px 下边框（design-system.css L256-258）。 */
+.calm-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.task-detail-modal .calm-task-actions > .calm-due {
+  margin-right: auto;
+}
+.calm-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7b8b9c;
+  font-size: 12px;
+}
+.calm-due.due-red {
+  color: #c0453f;
+}
+.calm-due.due-amber {
+  color: #b0761d;
+}
+.calm-due.due-blue {
+  color: #2f6fb2;
+}
+.calm-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid #e2e9f0;
+  margin-top: 15px;
+}
+.task-detail-modal .calm-tabs {
+  margin-top: 13px;
+}
+.calm-tabs button {
+  border: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  padding: 13px 2px;
+  color: #6c8094;
+  font-size: 13px;
+  cursor: pointer;
+}
+.calm-tabs button.selected {
+  color: #1467d8;
+  border-color: #1467d8;
+  font-weight: 600;
+}
 .task-modal-links {
   display: flex;
   flex-wrap: wrap;
@@ -2460,6 +2513,56 @@ button {
   align-items: center;
   gap: 4px;
   color: #7f90a2;
+  font-size: 11px;
+}
+
+/* C-3：详情弹窗的「状态历史」区块。动作行按设计师稿独立到标签栏之上后，
+ * 状态操作按钮不再与历史列表同区，这里补齐区块分隔、时间线圆点、
+ * 已发布记录入口与独立任务空态按钮的样式。 */
+.task-status-section {
+  margin-top: 6px;
+  padding: 18px 0 4px;
+  border-top: 1px solid #eaf0f6;
+}
+.task-status-section h3 {
+  margin: 0 0 14px;
+  color: #354f66;
+  font-size: 14px;
+}
+.task-status-published {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.task-status-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 2px 0 2px 14px;
+  list-style: none;
+  border-left: 1px solid #e3ebf3;
+}
+.task-status-history > li {
+  position: relative;
+  padding-left: 14px;
+}
+.task-status-history > li::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cfe0f1;
+}
+.task-status-history strong {
+  color: #37566f;
+  font-size: 12px;
+}
+.task-status-history p {
+  margin: 4px 0 0;
+  color: #8395a7;
   font-size: 11px;
 }
 

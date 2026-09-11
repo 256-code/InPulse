@@ -7,12 +7,17 @@ import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
-import { ApiError, type InpulseApiClient } from "@generated/api";
+import {
+  ApiError,
+  type InpulseApiClient,
+  type TaskStatusRequest,
+} from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   CalmBadge,
   CalmEmptyState,
   CalmSegmented,
+  CalmTabs,
 } from "@features/common/components/Calm";
 import {
   mergeTask,
@@ -85,6 +90,42 @@ const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
+const recordDraftsHref = (item: TaskViewItem) =>
+  `/records?projectId=${item.projectId}&moduleId=${item.moduleId}&taskId=${item.id}`;
+type DetailTab = "info" | "records" | "branches";
+/**
+ * C-3：任务详情弹窗动作行的截止徽章（设计师稿 dueInfo）：按本地日历日计算
+ * 与今天的差值，色调映射 calm-due 的 due-* 色板；已完成/已取消不提示逾期。
+ */
+function dueInfo(
+  value: string | null,
+  workStatus: TaskViewItem["workStatus"],
+): { label: string; tone: "gray" | "red" | "amber" | "blue" } {
+  if (value === null) return { label: "未设置截止", tone: "gray" };
+  if (workStatus === "DONE") return { label: "已完成", tone: "gray" };
+  if (workStatus === "CANCELED") return { label: "已取消", tone: "gray" };
+  const startOfDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.round(
+    (startOfDay(new Date(value)) - startOfDay(new Date())) / 86_400_000,
+  );
+  if (days < 0)
+    return { label: "已逾期 " + Math.abs(days) + "天", tone: "red" };
+  if (days === 0) return { label: "今天截止", tone: "amber" };
+  if (days === 1) return { label: "明天截止", tone: "amber" };
+  if (days <= 7) return { label: days + " 天后截止", tone: "blue" };
+  return { label: "截止 " + formatDate(value), tone: "gray" };
+}
+/** C-3：动作行左端的截止徽章。 */
+function TaskDueBadge({ item }: { readonly item: TaskViewItem }) {
+  const due = dueInfo(item.dueAt, item.workStatus);
+  return (
+    <span className={"calm-due due-" + due.tone}>
+      <InpulseIcon name="clock" size={14} />
+      {due.label}
+    </span>
+  );
+}
 
 function MergeIntoTargetModal({
   task,
@@ -130,6 +171,13 @@ export function TasksPanel({
     () =>
       Number(new URLSearchParams(window.location.search).get("taskId")) || null,
   );
+  // C-3：详情弹窗的标签页与状态操作。statusToken 每次打开动作弹窗递增，
+  // 父级据此更换 key，让输入、冲突与幂等重试键随重新挂载清空。
+  const [tab, setTab] = useState<DetailTab>("info");
+  const [statusAction, setStatusAction] = useState<
+    TaskStatusRequest["action"] | null
+  >(null);
+  const [statusToken, setStatusToken] = useState(0);
   const [selection, setSelection] = useState<{ item?: TaskViewItem } | null>(
     null,
   );
@@ -161,6 +209,18 @@ export function TasksPanel({
   const currentGroupId =
     currentMark?.groupRole === "SOURCE" ? currentMark.groupId : null;
   const currentRecordCount = currentMark?.publishedRecordCount ?? 0;
+  // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
+  // 与标签文案一份显式的关系视图模型（未入组为 null）。
+  const currentRelation =
+    currentMark &&
+    currentMark.groupRole !== null &&
+    currentMark.groupId !== null
+      ? { groupId: currentMark.groupId, role: currentMark.groupRole }
+      : null;
+  const taskWritable =
+    writable &&
+    current?.lifecycleStatus === "ACTIVE" &&
+    !(featureId !== null && current.scopeType === "MODULE");
   const visibleItems =
     query.data?.items.filter(
       (item) => statusFilter === "ALL" || item.workStatus === statusFilter,
@@ -168,8 +228,28 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  const openDetail = (id: number) => {
+    setSelectedId(id);
+    setTab("info");
+    setStatusAction(null);
+  };
+  const closeDetail = () => {
+    setSelectedId(null);
+    setTab("info");
+    setStatusAction(null);
+  };
+  /**
+   * C-3：状态操作入口。每次点击递增 token，任务状态弹窗重新挂载，
+   * 上一次的输入、冲突提示与幂等重试键都不会沿用。
+   */
+  const openStatus = (next: TaskStatusRequest["action"]) => {
+    setStatusToken((value) => value + 1);
+    setStatusAction(next);
+  };
   const open = (item?: TaskViewItem) => {
     setSelectedId(null);
+    setTab("info");
+    setStatusAction(null);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
     reset(item ? taskEdit(item) : empty);
@@ -203,7 +283,7 @@ export function TasksPanel({
     saving.current = true;
     try {
       const result = await mutation.mutateAsync({ ...selection, edit });
-      setSelectedId(result.id);
+      openDetail(result.id);
       setSelection(null);
       setSuccess(true);
     } catch {
@@ -413,7 +493,7 @@ export function TasksPanel({
                         type="button"
                         className="feature-list-open"
                         aria-label={item.title}
-                        onClick={() => setSelectedId(item.id)}
+                        onClick={() => openDetail(item.id)}
                       >
                         <strong>{item.title}</strong>
                         <span>
@@ -496,7 +576,7 @@ export function TasksPanel({
                     type="button"
                     className="text-button"
                     aria-label="任务详情"
-                    onClick={() => setSelectedId(item.id)}
+                    onClick={() => openDetail(item.id)}
                   >
                     任务详情
                     <InpulseIcon name="chevronRight" size={13} />
@@ -512,7 +592,7 @@ export function TasksPanel({
           open
           centered
           width={1000}
-          onCancel={() => setSelectedId(null)}
+          onCancel={closeDetail}
           className="catalog-modal task-detail-modal"
           title="任务详情"
           footer={null}
@@ -573,12 +653,217 @@ export function TasksPanel({
                   </div>
                 </div>
               </div>
+              <div className="calm-task-actions">
+                <TaskDueBadge item={current} />
+                {current.workStatus === "TODO" && (
+                  <>
+                    <Button
+                      className="primary-button"
+                      disabled={!taskWritable}
+                      onClick={() => openStatus("COMPLETE")}
+                    >
+                      <InpulseIcon name="check" size={15} />
+                      完成任务
+                    </Button>
+                    <Button
+                      className="secondary-button"
+                      disabled={!taskWritable}
+                      onClick={() => openStatus("CANCEL")}
+                    >
+                      <InpulseIcon name="x" size={15} />
+                      取消任务
+                    </Button>
+                    <Button
+                      className="secondary-button"
+                      disabled={!taskWritable}
+                      onClick={() => setMergeInto(true)}
+                    >
+                      <InpulseIcon name="gitMerge" size={15} />
+                      合并到主任务
+                    </Button>
+                  </>
+                )}
+                {current.workStatus === "DONE" && (
+                  <Button
+                    className="primary-button"
+                    disabled={!taskWritable}
+                    onClick={() => openStatus("REOPEN")}
+                  >
+                    <InpulseIcon name="rotateCcw" size={15} />
+                    重新打开
+                  </Button>
+                )}
+                {current.workStatus === "CANCELED" && (
+                  <Button
+                    className="primary-button"
+                    disabled={!taskWritable}
+                    onClick={() => openStatus("RESTORE")}
+                  >
+                    <InpulseIcon name="rotateCcw" size={15} />
+                    恢复任务
+                  </Button>
+                )}
+                <Button
+                  className="secondary-button"
+                  disabled={!taskWritable}
+                  onClick={() => open(current)}
+                >
+                  <InpulseIcon name="pencil" size={14} />
+                  编辑任务
+                </Button>
+              </div>
+              <CalmTabs
+                label="任务内容"
+                activeKey={tab}
+                onChange={setTab}
+                items={[
+                  { key: "info", label: "任务信息" },
+                  {
+                    key: "records",
+                    label:
+                      currentRecordCount > 0
+                        ? "迭代记录 " + currentRecordCount
+                        : "迭代记录",
+                  },
+                  {
+                    key: "branches",
+                    label: currentRelation
+                      ? "合并与分支 · #" + currentRelation.groupId
+                      : "合并与分支",
+                  },
+                ]}
+              />
               <div className="task-modal-grid">
                 <div className="task-modal-main">
-                  <section className="calm-description">
-                    <h3>任务描述</h3>
-                    <p>{current.description || "暂无任务说明"}</p>
-                  </section>
+                  {tab === "info" && (
+                    <>
+                      <section className="calm-description">
+                        <h3>任务描述</h3>
+                        <p>{current.description || "暂无任务说明"}</p>
+                      </section>
+                      <div className="task-modal-links">
+                        {current.scopeType === "MODULE" && (
+                          <a
+                            href={
+                              "/projects/" +
+                              projectId +
+                              "/modules/" +
+                              moduleId +
+                              "/tasks?taskId=" +
+                              current.id
+                            }
+                          >
+                            打开模块任务
+                          </a>
+                        )}
+                        <a
+                          href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
+                        >
+                          迭代记录草稿
+                        </a>
+                        {currentRecordCount > 0 && (
+                          <span
+                            className="task-record-count"
+                            title={currentRecordCount + " 条已发布迭代记录"}
+                          >
+                            <InpulseIcon name="gitBranch" size={13} />
+                            迭代记录 {currentRecordCount} 条
+                          </span>
+                        )}
+                        {currentGroupId !== null && (
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() =>
+                              navigate("/task-groups/" + currentGroupId)
+                            }
+                          >
+                            <InpulseIcon name="gitBranch" size={14} />
+                            查看主任务
+                            <InpulseIcon name="chevronRight" size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {tab === "records" && (
+                    <>
+                      <div className="calm-section-title">
+                        <div>
+                          <h3>本任务迭代记录</h3>
+                          <small>
+                            {currentRecordCount > 0
+                              ? "已发布 " +
+                                currentRecordCount +
+                                " 条，多个版本不重复计数"
+                              : "一个任务可以没有记录，也可以产生多条记录"}
+                          </small>
+                        </div>
+                        <a
+                          className="primary-button"
+                          href={recordDraftsHref(current)}
+                        >
+                          <InpulseIcon name="zap" size={15} />
+                          记录一次迭代
+                        </a>
+                      </div>
+                      {currentRecordCount === 0 && (
+                        <div className="calm-empty">
+                          <InpulseIcon name="gitBranch" size={25} />
+                          <strong>该任务还没有迭代记录</strong>
+                          <p>
+                            完成任务时可以直接记录，也可以先在迭代记录草稿中保存内容。
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {tab === "branches" && (
+                    <section className="merge-panel">
+                      {currentRelation === null ? (
+                        <div className="calm-empty">
+                          <InpulseIcon name="gitMerge" size={25} />
+                          <strong>当前是独立任务</strong>
+                          <p>
+                            发现重复任务时可以合并到主任务，合并后形成主分支与来源分支，历史全部保留。
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="calm-section-title">
+                            <div>
+                              <h3>
+                                {currentRelation.role === "MAIN"
+                                  ? "主任务"
+                                  : "来源分支"}{" "}
+                                · 聚合组 #{currentRelation.groupId}
+                              </h3>
+                              <small>
+                                {currentRelation.role === "MAIN"
+                                  ? "本任务是聚合组的统一入口，来源分支保留各自的状态与历史。"
+                                  : "本任务是来源分支，原始状态、负责人、迭代记录与外部链接全部保留。"}
+                              </small>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() =>
+                              navigate(
+                                "/task-groups/" + currentRelation.groupId,
+                              )
+                            }
+                          >
+                            <InpulseIcon name="gitBranch" size={14} />
+                            {currentRelation.role === "MAIN"
+                              ? "打开聚合组"
+                              : "查看主任务"}
+                            <InpulseIcon name="chevronRight" size={13} />
+                          </button>
+                        </>
+                      )}
+                    </section>
+                  )}
                 </div>
                 <aside className="task-modal-facts">
                   <dl className="calm-meta">
@@ -612,83 +897,15 @@ export function TasksPanel({
                   </dl>
                 </aside>
               </div>
-              <div className="task-modal-links">
-                {current.scopeType === "MODULE" && (
-                  <a
-                    href={
-                      "/projects/" +
-                      projectId +
-                      "/modules/" +
-                      moduleId +
-                      "/tasks?taskId=" +
-                      current.id
-                    }
-                  >
-                    打开模块任务
-                  </a>
-                )}
-                <a
-                  href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
-                >
-                  迭代记录草稿
-                </a>
-                {currentRecordCount > 0 && (
-                  <span
-                    className="task-record-count"
-                    title={currentRecordCount + " 条已发布迭代记录"}
-                  >
-                    <InpulseIcon name="gitBranch" size={13} />
-                    迭代记录 {currentRecordCount} 条
-                  </span>
-                )}
-                {currentGroupId !== null && (
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => navigate("/task-groups/" + currentGroupId)}
-                  >
-                    <InpulseIcon name="gitBranch" size={14} />
-                    查看主任务
-                    <InpulseIcon name="chevronRight" size={13} />
-                  </button>
-                )}
-              </div>
               <LeftoverTaskSource api={api} taskId={current.id} />
               <TaskStatusPanel
-                key={current.id}
+                key={statusToken}
                 item={current}
                 api={api}
-                writable={
-                  writable &&
-                  !(featureId !== null && current.scopeType === "MODULE")
-                }
+                writable={taskWritable}
+                action={statusAction}
+                onClose={() => setStatusAction(null)}
               />
-              <div className="calm-action-footer">
-                <Button
-                  className="secondary-button"
-                  disabled={
-                    !writable ||
-                    current.lifecycleStatus !== "ACTIVE" ||
-                    (featureId !== null && current.scopeType === "MODULE")
-                  }
-                  onClick={() => setMergeInto(true)}
-                >
-                  <InpulseIcon name="gitMerge" size={14} />
-                  合并到主任务
-                </Button>
-                <Button
-                  className="primary-button"
-                  disabled={
-                    !writable ||
-                    current.lifecycleStatus !== "ACTIVE" ||
-                    (featureId !== null && current.scopeType === "MODULE")
-                  }
-                  onClick={() => open(current)}
-                >
-                  <InpulseIcon name="pencil" size={14} />
-                  编辑任务
-                </Button>
-              </div>
               {mergeInto && (
                 <MergeIntoTargetModal
                   task={current}

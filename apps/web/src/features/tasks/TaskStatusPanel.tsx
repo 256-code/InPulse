@@ -34,19 +34,26 @@ const reasons = [
 const time = (value: string) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 
+/**
+ * C-3：任务状态操作弹窗（完成任务 / 重新打开 / 取消任务 / 恢复任务）与状态历史。
+ * 与设计师稿 task-modal 一致，触发按钮由父级动作行渲染；本组件只保留弹窗、
+ * 提交流程和「状态历史」区块。父级在每次打开时更换 key，输入、冲突状态与
+ * 幂等重试键随重新挂载回到初始状态，取消后再次打开不会沿用上一次的内容。
+ */
 export function TaskStatusPanel({
   item,
   api,
   writable,
+  action,
+  onClose,
 }: {
   item: TaskViewItem;
   api: InpulseApiClient;
   writable: boolean;
+  action: TaskStatusRequest["action"] | null;
+  onClose: () => void;
 }) {
   const cache = useQueryClient();
-  const [action, setAction] = useState<TaskStatusRequest["action"] | null>(
-    null,
-  );
   const [base, setBase] = useState(item);
   const [publishedId, setPublishedId] = useState<number | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
@@ -119,7 +126,7 @@ export function TaskStatusPanel({
     retry: false,
     onSuccess: async () => {
       retry.current = null;
-      setAction(null);
+      onClose();
       await Promise.all(
         ["tasks", "task-history", "activity", "search", "notifications"].map(
           (key) => cache.invalidateQueries({ queryKey: [key] }),
@@ -129,15 +136,6 @@ export function TaskStatusPanel({
   });
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
-  const open = (next: TaskStatusRequest["action"]) => {
-    setAction(next);
-    setBase(item);
-    setActualChange("");
-    setNote("");
-    setReason("测试验证");
-    setReloadError(null);
-    mutation.reset();
-  };
   const reload = async () => {
     setReloading(true);
     try {
@@ -200,30 +198,15 @@ export function TaskStatusPanel({
     }
   };
   return (
-    <section aria-label="任务状态与历史">
-      <div className="calm-action-footer">
-        {(item.workStatus === "TODO"
-          ? (["COMPLETE", "CANCEL"] as const)
-          : item.workStatus === "DONE"
-            ? (["REOPEN"] as const)
-            : (["RESTORE"] as const)
-        ).map((next) => (
-          <Button
-            key={next}
-            className="secondary-button"
-            disabled={!writable || item.lifecycleStatus !== "ACTIVE"}
-            onClick={() => open(next)}
-          >
-            {labels[next]}
-          </Button>
-        ))}
-      </div>
+    <section className="task-status-section" aria-label="任务状态历史">
       {publishedId !== null && (
-        <a
-          href={`/records?view=published&projectId=${item.projectId}&publishedId=${publishedId}`}
-        >
-          查看已发布记录
-        </a>
+        <p className="task-status-published">
+          <a
+            href={`/records?view=published&projectId=${item.projectId}&publishedId=${publishedId}`}
+          >
+            查看已发布记录
+          </a>
+        </p>
       )}
       <h3>状态历史</h3>
       {history.isPending ? (
@@ -266,7 +249,7 @@ export function TaskStatusPanel({
         className="catalog-modal"
         footer={null}
         onCancel={() => {
-          if (!saving.current && !reloading && !recordBusy) setAction(null);
+          if (!saving.current && !reloading && !recordBusy) onClose();
         }}
         mask={{ closable: !mutation.isPending && !reloading && !recordBusy }}
       >
@@ -313,7 +296,7 @@ export function TaskStatusPanel({
                   onBusyChange={setRecordBusy}
                   onSuccess={(record) => {
                     setPublishedId(record.id);
-                    setAction(null);
+                    onClose();
                   }}
                 />
               )}

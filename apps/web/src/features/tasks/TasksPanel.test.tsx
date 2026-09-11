@@ -447,3 +447,101 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     expect(within(dialog).queryByText(/迭代记录 \d+ 条/)).toBeNull();
   });
 });
+
+describe("C-3 任务详情弹窗标签页", () => {
+  const source: TaskItem = { ...item, id: 1, title: "来源任务甲" };
+  const main: TaskItem = { ...item, id: 3, title: "主任务丙" };
+  const marks = (role: "MAIN" | "SOURCE") => ({
+    items: [
+      {
+        taskId: role === "MAIN" ? 3 : 1,
+        groupId: 501,
+        groupRole: role,
+        publishedRecordCount: 2,
+      },
+    ],
+  });
+  it("renders the info tab first and switches to the records tab with the drafts entry", async () => {
+    mount(client());
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
+    // 默认停在任务信息：描述与「迭代记录草稿」入口首屏可见。
+    expect(within(tabs).getByRole("tab", { name: "任务信息" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(within(dialog).getByText("原说明")).toBeInTheDocument();
+    // jsdom 下弹窗首帧动画 opacity 为 0，仓库统一用 toBeInTheDocument 断言弹窗内容。
+    expect(
+      within(dialog).getByRole("link", { name: "迭代记录草稿" }),
+    ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
+    fireEvent.click(within(tabs).getByRole("tab", { name: "迭代记录" }));
+    // 迭代记录标签页只给计数与草稿入口；记录列表属于 F-18 页面，弹窗不虚构列表。
+    expect(within(tabs).getByRole("tab", { name: "迭代记录" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      within(dialog).getByText("该任务还没有迭代记录"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("link", { name: "迭代记录草稿" }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByRole("link", { name: "记录一次迭代" }),
+    ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
+    fireEvent.click(within(tabs).getByRole("tab", { name: "任务信息" }));
+    expect(within(dialog).getByText("原说明")).toBeInTheDocument();
+  });
+  it("shows the source branch panel and routes to the group from the branches tab", async () => {
+    mountWithGroupRoute(
+      client({
+        listTasks: vi.fn().mockResolvedValue({ items: [source] }),
+        listTaskGroupMemberships: vi.fn().mockResolvedValue(marks("SOURCE")),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
+    fireEvent.click(
+      within(tabs).getByRole("tab", { name: "合并与分支 · #501" }),
+    );
+    expect(
+      within(dialog).getByRole("heading", { name: "来源分支 · 聚合组 #501" }),
+    ).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
+    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+  });
+  it("keeps the group marker but hides the main-task entry on the MAIN task", async () => {
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({ items: [main] }),
+        listTaskGroupMemberships: vi.fn().mockResolvedValue(marks("MAIN")),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
+    fireEvent.click(
+      within(tabs).getByRole("tab", { name: "合并与分支 · #501" }),
+    );
+    expect(
+      within(dialog).getByRole("heading", { name: "主任务 · 聚合组 #501" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /查看主任务/ }),
+    ).toBeNull();
+  });
+  it("shows the standalone empty state without a main-task entry for ungrouped tasks", async () => {
+    mount(client());
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
+    fireEvent.click(within(tabs).getByRole("tab", { name: "合并与分支" }));
+    expect(within(dialog).getByText("当前是独立任务")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /查看主任务/ }),
+    ).toBeNull();
+  });
+});
