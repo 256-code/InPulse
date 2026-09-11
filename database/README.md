@@ -11,7 +11,8 @@ Drizzle ORM 0.45.2 和 Postgres.js 3.4.9。API 进程只能使用
 - `migrations/*.sql`：数据库行为的权威、只追加迁移历史；
 - `bootstrap/000_roles.sql`：首次建库的角色、所有权和默认权限；
 - `bootstrap/010_passwords.sql`：仅初始化容器读取五个独立密码
-  Secret；仓库和命令行都不出现密码；
+  Secret（路径与稳态 compose secret 同名，`db_*_password`）；
+  仓库和命令行都不出现密码；
 - `bootstrap/020_pgroonga.sql`：由 `cluster_bootstrap` 预装非 trusted 的
   `pgroonga` 扩展，并撤销非运行时角色的扩展函数 EXECUTE；
 - `src/migrate.ts`：带全局 advisory lock 和 SHA-256 历史校验的迁移器；
@@ -24,7 +25,8 @@ Drizzle ORM 0.45.2 和 Postgres.js 3.4.9。API 进程只能使用
 
 ## 首次建库
 
-生产初始化顺序如下：
+生产初始化顺序如下（可执行入口为 [`deploy/compose.init.yaml`](../deploy/compose.init.yaml)
+一次性覆盖与 [灾难恢复离线 Runbook](../docs/runbooks/disaster-recovery.md)）：
 
 1. PostgreSQL 官方镜像以 `cluster_bootstrap` 创建 `app` 数据库；
 2. 以该一次性超级用户依次执行 `000_roles.sql`、`010_passwords.sql`
