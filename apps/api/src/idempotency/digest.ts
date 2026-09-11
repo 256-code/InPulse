@@ -1,6 +1,6 @@
 import { createHmac, type KeyObject } from "node:crypto";
 
-import { canonicalizeJson } from "./jcs.js";
+import { canonicalizeJson } from "@inpulse/canonical-json";
 
 /** 幂等请求摘要的格式标识（随幂等契约版本一并发散）。 */
 export const idempotencyDigestFormat = "jcs-hmac-sha256-v1";

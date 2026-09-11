@@ -7,7 +7,7 @@ import { createDatabaseClient } from "@inpulse/database/client";
 
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
-import { canonicalizeJson } from "../src/idempotency/jcs.js";
+import { canonicalizeJson } from "@inpulse/canonical-json";
 import {
   createProject,
   createUser,

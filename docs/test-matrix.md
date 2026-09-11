@@ -757,7 +757,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
-`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）仍未交付。
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。完整管理员 Session 且密码与当前 TOTP 双时间戳重认证均在 5 分钟内（GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -767,3 +767,19 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 尚未执行。
+
+## F-08 审计远端归档（A，2026-09-11 本地落库）
+
+`apps/ops` 交付 F-08 步骤 6：每小时把链头（`chain_id`/`last_sequence`/`last_hash`/`key_version`/`headUpdatedAt`）的签名检查点写入 WORM；每日导出前一 UTC 自然日的加密审计明细（AES-256-GCM，子密钥由归档签名密钥经 HKDF-SHA256 派生）与 HMAC-SHA256 签名清单。归档进程使用 `audit_archive_writer`（只读 `app.audit_logs` 与 `app.audit_chain_heads`），不挂载在线审计 HMAC；WORM PUT 携带对象锁（COMPLIANCE + 保留天数），409/412 按「对象已存在」幂等处理，不覆盖、不删除。宿主调度由 `deploy/backup/audit-archivectl.sh`（`flock` 并发锁、`--confirm-go-live` 门禁）与两个 timer 承担（每小时检查点、每日 UTC 00:20 导出），静态校验并入 `pnpm check:deploy:test`；操作步骤见[审计归档 Runbook](./runbooks/audit-archive.md)。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F08-ARCHIVE-UNIT-001 | 单元 | 检查点构造/编码/验签 | envelope 为 JCS 规范化 JSON + 末尾换行；篡改 payload 或未知签名密钥版本验签失败 | 本地通过（`checkpoint.test.ts` 3 例，2026-09-11） |
+| F08-ARCHIVE-UNIT-002 | 单元 | 导出包加密、密钥派生与清单 | 加解密往返一致；明文哈希不符、密文截断、未知密钥版本抛错；空窗口导出可解密为空包 | 本地通过（`export.test.ts`、`crypto.test.ts`，2026-09-11） |
+| F08-ARCHIVE-UNIT-003 | 单元 | SigV4 与 WORM 客户端 | AWS 官方向量 `get-vanilla` 通过；对象锁头、path/virtual-host URL、409/412 幂等、5xx 指数退避、4xx 不重试、GET 404 抛错 | 本地通过（`sigv4.test.ts`、`worm.test.ts`，2026-09-11） |
+| F08-ARCHIVE-INT-001 | PostgreSQL + WORM 桩 | 检查点等于真实链头 | 以 `audit_archive_writer` 读取真实链头，检查点验签通过且 payload 与链头逐字段一致；PUT 带 `x-amz-object-lock-mode` | 本地通过（`audit-archive.integration.test.ts` 4/4，真实 PostgreSQL 18.6，2026-09-11） |
+| F08-ARCHIVE-INT-002 | PostgreSQL + WORM 桩 | 明细导出与清单绑定 | 窗口 `rowCount` 与数据库 count 一致；解密后可定位种子行（`prevHash`/`recordHash`/`keyVersion`/`canonicalVersion`）；清单验签且 `ciphertextSha256` 与密文绑定 | 同上 |
+| F08-ARCHIVE-INT-003 | PostgreSQL | 归档角色最小权限 | `audit_archive_writer` 可读 `app.audit_logs` 与 `app.audit_chain_heads`；INSERT/UPDATE/DELETE 与 `SET ROLE app_owner` 均 42501 | 同上 |
+| DEPLOY-005 | 上线前（静态门禁） | 审计归档调度与 Runbook | `deploy/backup/` 交付 `audit-archivectl.sh`、两个 service/timer 与 `audit-archive.env.example`，`docs/runbooks/audit-archive.md` 交付操作步骤；`pnpm check:deploy:test` 校验 `--profile operations run --rm audit-archive`、`flock`、`--confirm-go-live`、每小时检查点与每日 00:20 导出节奏、`TimeoutStartSec`、`OnFailure` 告警与敏感键 `*_FILE` 化 | 本地通过（`pnpm check:deploy:test` 退出码 0，2026-09-11；真实 systemd 安装与真实 WORM 投递未运行） |
+
+本地实际执行（2026-09-11）：`pnpm --filter @inpulse/ops test:unit` 7 文件 36 例、`pnpm --filter @inpulse/ops test:integration` 4/4（真实 PostgreSQL 18.6）；`pnpm check:deploy:test`（5 image refs）与 `pnpm check:deps`（604 源文件）通过。未运行：真实 S3/Object-Lock 端点联调、真实 systemd 安装、GitHub Actions（推送后由 CI 执行）。
