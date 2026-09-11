@@ -10,7 +10,8 @@
 #                                            + Bootstrap database roles
 #                                            + Bootstrap PGroonga extension
 #                                            + Migrate empty database
-#   7  integration tests                  -> Integration tests against real PostgreSQL
+#   7  integration tests                  -> Install PostgreSQL 18 client tools
+#                                            + Integration tests against real PostgreSQL
 #                                            （含 §12.4 database role/privilege probes）
 #   8  OpenAPI/client drift check         -> OpenAPI and client drift check
 #   9  Route Registry/permission/response-schema completeness
@@ -33,6 +34,12 @@
 # 000_roles.sql -> 020_pgroonga.sql -> 迁移 -> 集成测试。该探针镜像只用于 CI 与
 # PoC，不是生产部署镜像，也不等于 §12.4 的 container image build 门禁；生产镜像
 # 与其 digest 仍由部署纵切片按 ADR-017 定案。
+#
+# A-1 备份/恢复集成测试需要真实 pg_dump/pg_restore：runner 自带的是 PGDG noble 的
+# pg_dump 16.x，而 pg_dump 拒绝连接主版本更新的服务器（测试库为 PostgreSQL 18.6）。
+# 本 job 因此在集成测试前启用 PGDG 源并安装与生产 ops 镜像同一基线的
+# postgresql-client-18=18.6-1.pgdg24.04+2，并向集成测试注入
+# INPULSE_BACKUP_PG_DUMP/INPULSE_BACKUP_PG_RESTORE。
 #
 # `pnpm test:search:db` 与 `pnpm test` 需要已初始化 PGroonga 且
 # max_connections >= 150 的 PostgreSQL 18 实例，沿用 origin/main 的既定决定暂不
@@ -187,10 +194,33 @@ jobs:
           MIGRATION_DATABASE_URL: postgresql://app_migrator@127.0.0.1:5432/app
         run: pnpm db:migrate
 
+      - name: Install PostgreSQL 18 client tools
+        # 集成测试需要真实 pg_dump/pg_restore（A-1 备份/恢复演练），而 runner 自带的
+        # PGDG noble 客户端是 16.x：pg_dump 拒绝连接主版本更新的服务器（测试库为
+        # PostgreSQL 18.6）。这里启用 PGDG 源并安装与生产 ops 镜像同一基线的 18.6
+        # 客户端，再通过 INPULSE_BACKUP_PG_DUMP/INPULSE_BACKUP_PG_RESTORE 注入。
+        run: |
+          if ! grep -rqs "apt.postgresql.org" /etc/apt/sources.list.d/; then
+            if [ -x /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh ]; then
+              sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            else
+              sudo install -d /usr/share/postgresql-common/pgdg
+              sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+              . /etc/os-release
+              echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            fi
+          fi
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client-18=18.6-1.pgdg24.04+2
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/pg_restore --version
+
       - name: Integration tests against real PostgreSQL
         env:
           NODE_ENV: test
           TEST_DATABASE_URL: postgresql://cluster_bootstrap@127.0.0.1:5432/app
+          INPULSE_BACKUP_PG_DUMP: /usr/lib/postgresql/18/bin/pg_dump
+          INPULSE_BACKUP_PG_RESTORE: /usr/lib/postgresql/18/bin/pg_restore
         run: pnpm test:integration
 
       - name: OpenAPI and client drift check
