@@ -233,3 +233,52 @@ F-25 步骤 3 的落地方式：任务卡片徽章与任务详情抽屉「查看
 
 - 本轮不扩写响应、不改权限模型、不新增迁移；若 `priority` 过滤被证明必须补索引，按 §6 单独走迁移与人工评审。
 - 延后项（`description`、`scopeCounts`、`relation`、`query`、`scope = created` / `all`）的恢复条件已写明，恢复时必须重新裁决，不得由实现方自行放开。
+
+---
+
+## 11. 裁决修订 D-1：R-3 / R-5 增加 `publishedRecordCount`（2026-09-11，产品定案）
+
+### 11.1 冲突与定案
+
+§4 的 Q-03 / Q-11 裁定「不扩大任务基础 DTO」，标记数据只放 R-1 成员项（`role` / `publishedRecordCount`）与 R-3 项（`groupRole`）。而 F-25 步骤 3 的设计师稿要求在任务卡片与任务详情抽屉展示「迭代记录 n 条」（`components/task-card.tsx` 的徽章、`components/task-modal.tsx` 的标签页），是**条数**而不是布尔；R-3 现只有 `hasPublishedRecord: boolean`，条数没有来源。
+
+**产品定案（2026-09-11）：不降级为布尔标记，补条数。** 据此修订如下。**Q-03 维持有效**，本次只修订 Q-11 中「R-3 项只保留 `groupRole`」一句。
+
+### 11.2 裁定 D-1.1：任务基础 DTO 不动
+
+`packages/api-contract/src/contracts/tasks.zod.ts` 仍不扩写。该 DTO 被 F-13 ~ F-20 多条路由与幂等重放叶子清单消费，Q-03 的理由未变。
+
+### 11.3 裁定 D-1.2：R-3 `MyTaskItem` 增加 `publishedRecordCount`
+
+与既有 `hasPublishedRecord` 同源同口径（功能设计 §29.4：按 `change_records` 计数，不按版本计数、不按影响功能去重）。两者同时保留，恒有 `hasPublishedRecord === (publishedRecordCount > 0)`。
+
+### 11.4 裁定 D-1.3：R-5 由「聚合组成员关系」扩为「任务记录标记批量读」
+
+**原因：R-3 覆盖不到目标 UI。** R-3 `listMyTasks` 只返回「当前用户负责」的任务，而 F-25 步骤 3 的标记要落在**功能页任务卡片与任务详情抽屉**（F-13 / F-14 / F-15 的任务列表，走任务基础 DTO 与 `listTasks`），那里没有 R-3。R-5 的调用机制（页面级一次批量、`taskIds` 1..100）正是为此冻结的，扩展它既不新增路由，也不增加请求数。
+
+R-5 现状（§10.4）只返回属于 `ACTIVE` 聚合组的任务，未入组的任务不出现，因此无法承载「所有任务都有条数」。
+
+| 项 | 修订前 | 修订后 |
+| --- | --- | --- |
+| 响应条目 | `{ taskId, groupId, groupRole }`，只含 `ACTIVE` 聚合组成员 | `{ taskId, groupId, groupRole, publishedRecordCount }`；`groupId` 与 `groupRole` 改为可空 |
+| 覆盖范围 | 未命中不出现 | **请求中每一个有权 taskId 都出现在结果中**；未入组任务以 `groupId: null` / `groupRole: null` 返回且计数照常 |
+| 语义 | 聚合组成员关系 | 任务记录标记（聚合关系 + 迭代记录条数） |
+| 空值语义 | 无 | `publishedRecordCount` 恒为非负整数，无记录为 `0`；无权或不存在仍不出现，不泄露存在性 |
+| 策略 | `authPolicy: session`，其余 `none`；`200` / `401` / `422` / `500`，无 `404` | 不变 |
+
+**副作用（实施必须同步）：** 「未入组」的判定从「条目不存在」变为「条目存在但 `groupRole` 为 `null`」。§10.4 的落地说明与前端隐藏逻辑必须同步改写，避免把「无权 / 不存在」与「未入组」混为一谈。
+
+### 11.5 裁定 D-1.4：R-1 / R-2 不变
+
+聚合组页与项目概览的记录数口径不动；R-1 成员项的 `publishedRecordCount` 与 R-2 的 `publishedRecordCount` 保持原样。
+
+### 11.6 责任与前置
+
+| 责任方 | 交付物 |
+| --- | --- |
+| A | R-3 与 R-5 的 Schema 扩展、路由描述与语义更新、权限矩阵、OpenAPI 与生成客户端再生成；与实现同一个 PR |
+| B | 记录侧只读端口把「已发布任务 ID 集合」改为「任务 → PUBLISHED 记录数」映射：单条 SQL、先过滤后分页、宿主沿用记录侧（不新增依赖边），供 R-3 与 R-5 同时消费 |
+| C | F-13 / F-14 / F-15 任务卡片徽章、任务详情抽屉「查看主任务」与「迭代记录 n 条」；`/tasks` 侧 R-3 字段替换；降级项清零 |
+
+**前置关系：** D-1.2 与 D-1.3 未落库前，C 侧不得以条数实现该标记；R-5 扩展落库后 F-25 步骤 3 才可闭环。A-7 与 B-7 的台账见[开发工作书](../开发工作书v1.0.md)「剩余工作清算与岗位重分配（2026-09-11 生效）」。
+**验收：** `pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；R-3 与 R-5 的真实 PostgreSQL 集成测试覆盖未入组任务的计数与空值；`EXPLAIN (ANALYZE, BUFFERS)` 证明计数未破坏先过滤后分页。
