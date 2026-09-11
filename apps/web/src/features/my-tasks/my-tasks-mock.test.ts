@@ -124,6 +124,42 @@ describe("my-tasks mock adapter", () => {
     });
   });
 
+  it("serves the demo task group with main and source branches", async () => {
+    const result = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    expect(result.hasMore).toBe(false);
+    expect(result.nextCursor).toBeNull();
+    const [group] = result.items;
+    if (group === undefined) {
+      throw new Error("mock adapter must return one demo group");
+    }
+    expect(group.code).toBe("TG-001");
+    expect(group.status).toBe("ACTIVE");
+    expect(group.projectName).toBe("InPulse 平台");
+    expect(group.mainTask?.taskId).toBe(102);
+    expect(
+      group.branches.map((branch) => [
+        branch.taskCode,
+        branch.role,
+        branch.sourceKind,
+        branch.workStatus,
+      ]),
+    ).toEqual([
+      ["T-102", "MAIN", null, "TODO"],
+      ["T-101", "SOURCE", "ACTIVE", "TODO"],
+      ["T-104", "SOURCE", "HISTORICAL", "DONE"],
+      ["T-107", "SOURCE", "HISTORICAL", "CANCELED"],
+    ]);
+
+    const otherProject = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: 2,
+      cursor: null,
+    });
+    expect(otherProject.items).toEqual([]);
+  });
+
   it("keeps the demo viewer until the server contract is frozen", async () => {
     const result = await MY_TASKS_MOCK_ADAPTER.fetchMyTasks({
       filters: DEFAULT_MY_TASK_FILTERS,

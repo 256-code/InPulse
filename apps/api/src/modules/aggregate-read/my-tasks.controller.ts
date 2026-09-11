@@ -75,6 +75,10 @@ export class MyTasksController {
         ...(query.hasPublishedRecord === undefined
           ? {}
           : { hasPublishedRecord: query.hasPublishedRecord }),
+        ...(query.priority === undefined ? {} : { priority: query.priority }),
+        ...(query.includeCanceled === undefined
+          ? {}
+          : { includeCanceled: query.includeCanceled }),
       });
     } catch (error) {
       if (error instanceof AggregateReadError) {

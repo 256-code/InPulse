@@ -14,7 +14,8 @@ export const AGGREGATE_READ_CURSOR_TTL_MS = 15 * 60 * 1_000;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 const BASE64URL_HASH_LENGTH = 43;
 
-export type AggregateReadCursorNamespace = "MY_TASKS" | "TASK_GROUP_RECORDS";
+export type AggregateReadCursorNamespace =
+  "MY_TASKS" | "TASK_GROUP_RECORDS" | "LEFTOVER_ITEMS" | "TASK_GROUPS";
 
 interface AggregateReadCursorPayload {
   readonly v: number;

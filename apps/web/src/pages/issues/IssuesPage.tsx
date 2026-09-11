@@ -1,13 +1,37 @@
-import React from "react";
-import { WorkspacePlaceholder } from "@features/common/components/WorkspacePlaceholder";
+import React, { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import type { InpulseApiClient } from "@generated/api";
+import { IssuesPageView } from "@features/issues/IssuesPageView";
+import { taskDetailPath, type TaskLocation } from "@features/tasks/task-links";
 
-export const IssuesPage: React.FC = () => {
+/**
+ * F-20 遗留问题页容器：只负责路由跳转（回到迭代记录、打开来源 / 跟进任务），
+ * 数据与状态全部在 IssuesPageView 内，经生成客户端访问 R-6。
+ */
+
+export interface IssuesPageProps {
+  readonly client?: InpulseApiClient;
+}
+
+export const IssuesPage: React.FC<IssuesPageProps> = ({ client }) => {
+  const navigate = useNavigate();
+
+  const handleBackToRecords = useCallback(() => {
+    navigate("/records");
+  }, [navigate]);
+
+  const handleOpenTask = useCallback(
+    (task: TaskLocation) => {
+      navigate(taskDetailPath(task));
+    },
+    [navigate],
+  );
+
   return (
-    <WorkspacePlaceholder
-      eyebrow="工作区 / 遗留问题"
-      title="遗留问题"
-      description="迭代记录中写下的遗留事项会汇总到这里；遗留项查询接口就绪后接入。"
-      icon="alert"
+    <IssuesPageView
+      onBackToRecords={handleBackToRecords}
+      onOpenTask={handleOpenTask}
+      {...(client ? { client } : {})}
     />
   );
 };

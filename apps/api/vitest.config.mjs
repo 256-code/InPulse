@@ -11,6 +11,15 @@ export default defineConfig({
         ),
       },
       {
+        find: /^@inpulse\/canonical-json$/,
+        replacement: fileURLToPath(
+          new URL(
+            "../../packages/canonical-json/src/index.ts",
+            import.meta.url,
+          ),
+        ),
+      },
+      {
         find: /^@inpulse\/database\/client$/,
         replacement: fileURLToPath(
           new URL("../../database/src/client.ts", import.meta.url),

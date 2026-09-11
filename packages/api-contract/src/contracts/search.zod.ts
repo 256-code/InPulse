@@ -15,6 +15,7 @@ export const searchEntityTypeSchema = z.enum([
   "CHANGE_RECORD",
   "EXTERNAL_LINK",
   "TASK_GROUP",
+  "LEFTOVER",
 ]);
 
 const queryBoolean = z.preprocess((value) => {

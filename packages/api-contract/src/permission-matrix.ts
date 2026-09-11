@@ -420,6 +420,17 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "getAuditLogs",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
     operationId: "getTaskGroup",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
@@ -454,6 +465,39 @@ export const permissionMatrix = [
   },
   {
     operationId: "listMyTasks",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "listLeftoverItems",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "listTaskGroups",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "listTaskGroupMemberships",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
       活跃成员: { kind: "allow" },

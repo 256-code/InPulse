@@ -1,5 +1,8 @@
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskGroupItem,
+  type MyTaskGroupsQueryInput,
+  type MyTaskGroupsResult,
   type MyTaskListItem,
   type MyTaskListResult,
   type MyTaskPriority,
@@ -438,6 +441,84 @@ export function createTasksMockItems(): readonly MockTaskItem[] {
   return createMockItems();
 }
 
+type MockGroupBranchSeed = {
+  readonly taskId: number;
+  readonly role: "MAIN" | "SOURCE";
+  readonly sourceKind: "ACTIVE" | "HISTORICAL" | null;
+};
+
+/**
+ * 任务聚合组演示数据：主分支固定一条，来源分支覆盖活动/历史来源与
+ * 未完成、已完成、已取消三种工作状态；分支字段全部从同一 mock 任务
+ * 数据集派生，不复制标题、状态或负责人，保证与任务列表口径一致。
+ */
+const MOCK_GROUP_BRANCH_SEEDS: readonly MockGroupBranchSeed[] = [
+  { taskId: 102, role: "MAIN", sourceKind: null },
+  { taskId: 101, role: "SOURCE", sourceKind: "ACTIVE" },
+  { taskId: 104, role: "SOURCE", sourceKind: "HISTORICAL" },
+  { taskId: 107, role: "SOURCE", sourceKind: "HISTORICAL" },
+];
+
+function createMockGroups(): readonly MyTaskGroupItem[] {
+  const dataset = createMockItems();
+  const byId = new Map(dataset.map((item) => [item.taskId, item]));
+  const branches = MOCK_GROUP_BRANCH_SEEDS.map((seed) => {
+    const task = byId.get(seed.taskId);
+    if (task === undefined) {
+      throw new Error("mock 聚合组引用了不存在的任务 " + String(seed.taskId));
+    }
+    return {
+      taskId: task.taskId,
+      taskCode: task.code,
+      title: task.title,
+      role: seed.role,
+      sourceKind: seed.sourceKind,
+      workStatus: task.workStatus,
+      moduleId: task.moduleId,
+      featureId: task.featureId,
+      assignee: task.assignee,
+      projectId: task.projectId,
+      projectName: task.projectName,
+    };
+  });
+  const projectIds = new Set(branches.map((branch) => branch.projectId));
+  if (projectIds.size !== 1) {
+    throw new Error("mock 聚合组的分支必须属于同一项目");
+  }
+  const main = branches.find((branch) => branch.role === "MAIN");
+  if (main === undefined) {
+    throw new Error("mock 聚合组必须包含主分支");
+  }
+  return [
+    {
+      groupId: 501,
+      projectId: main.projectId,
+      projectName: main.projectName,
+      code: "TG-001",
+      name: "任务合并后来源分支历史保留",
+      status: "ACTIVE",
+      mainTask: {
+        taskId: main.taskId,
+        code: main.taskCode,
+        projectId: main.projectId,
+        moduleId: main.moduleId,
+        featureId: main.featureId,
+      },
+      branches: branches.map((branch) => ({
+        taskId: branch.taskId,
+        taskCode: branch.taskCode,
+        title: branch.title,
+        role: branch.role,
+        sourceKind: branch.sourceKind,
+        workStatus: branch.workStatus,
+        moduleId: branch.moduleId,
+        featureId: branch.featureId,
+        assignee: branch.assignee,
+      })),
+    },
+  ];
+}
+
 export const MY_TASKS_MOCK_ADAPTER: MyTasksAdapter = {
   source: "mock",
   notice: MY_TASKS_MOCK_NOTICE,
@@ -475,5 +556,14 @@ export const MY_TASKS_MOCK_ADAPTER: MyTasksAdapter = {
         summary: "恢复码入口与说明文档不一致，需要补齐登录页入口",
       },
     });
+  },
+  fetchTaskGroups: (
+    input: MyTaskGroupsQueryInput,
+  ): Promise<MyTaskGroupsResult> => {
+    const items = createMockGroups().filter(
+      (group) =>
+        input.projectId === null || group.projectId === input.projectId,
+    );
+    return Promise.resolve({ items, nextCursor: null, hasMore: false });
   },
 };

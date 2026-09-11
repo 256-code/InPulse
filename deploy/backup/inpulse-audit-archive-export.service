@@ -1,0 +1,21 @@
+[Unit]
+# InPulse 审计明细导出（宿主每日调度；技术设计 v1.2.2 §11.5 第 7 步、F-08 步骤 6）。
+# 单元文件由 deploy/backup/audit-archivectl.sh enable 安装：__INPULSE_AUDIT_ARCHIVECTL__
+# 会被替换为安装后的控制器绝对路径。上线前不得启用本单元。
+Description=InPulse 审计明细导出（每日）
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/inpulse/audit-archive.env
+ExecStart=__INPULSE_AUDIT_ARCHIVECTL__ run-export
+TimeoutStartSec=3h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+OnFailure=inpulse-backup-alert@%N.service
+
+[Install]
+WantedBy=multi-user.target

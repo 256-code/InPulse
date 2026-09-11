@@ -12,19 +12,23 @@ import { ProjectsModule } from "../projects/index.js";
 import { TaskGroupsModule } from "../task-groups/index.js";
 import { TasksManagementModule } from "../tasks/index.js";
 import { AggregateReadCursorService } from "./aggregate-read-cursor.js";
+import { LeftoverItemsController } from "./leftover-items.controller.js";
+import { LeftoverItemsQueryService } from "./leftover-items-query.service.js";
 import { MyTasksController } from "./my-tasks.controller.js";
 import { MyTasksQueryService } from "./my-tasks-query.service.js";
 import { ProjectOverviewController } from "./project-overview.controller.js";
 import { ProjectOverviewQueryService } from "./project-overview-query.service.js";
+import { TaskGroupMembershipController } from "./task-group-membership.controller.js";
+import { TaskGroupMembershipQueryService } from "./task-group-membership-query.service.js";
 import { TaskGroupReadController } from "./task-group-read.controller.js";
 import { TaskGroupQueryService } from "./task-group-query.service.js";
 
 /**
- * F-25 / F-29 / F-32 聚合读宿主模块（A 裁决 §6 附带要求）。
+ * F-20 / F-25 / F-29 / F-32 聚合读宿主模块（A 裁决 §6 附带要求）。
  *
  * 只依赖 A 的 ProjectAccessQueryPort / ProjectQueryPort 与 B、C 已发布的公开
  * QueryPort，不导出任何 Repository、不注册命令端口、不参与任何命令 UnitOfWork；
- * 三条路由的授权全部在服务层通过服务端 AuthorizedProjectScope 完成。
+ * 五条路由的授权全部在服务层通过服务端 AuthorizedProjectScope 完成。
  */
 @Module({
   imports: [
@@ -46,12 +50,18 @@ import { TaskGroupQueryService } from "./task-group-query.service.js";
       inject: [SESSION_HMAC_KEYRING],
     },
     TaskGroupQueryService,
+    TaskGroupMembershipQueryService,
     ProjectOverviewQueryService,
+    LeftoverItemsQueryService,
     MyTasksQueryService,
   ],
   controllers: [
+    // R-5 的静态段 /task-groups/memberships 必须先于 TaskGroupReadController 的
+    // :groupId 参数路由注册，否则会被吞掉（集成测试断言实际路由解析）。
+    TaskGroupMembershipController,
     TaskGroupReadController,
     ProjectOverviewController,
+    LeftoverItemsController,
     MyTasksController,
   ],
 })

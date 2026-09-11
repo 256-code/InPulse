@@ -4,10 +4,11 @@ import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 /**
- * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的关键路径 E2E。
- * 从功能页任务详情发起合并（搜索主任务 → 选择 → 确认），落到聚合组页验证
- * 主任务与来源分支的展示与记录筛选的 URL 状态；随后解除合并，验证组关闭、
- * 关系标记已解除但历史保留。用例依赖任务创建时同事务写入的搜索投影。
+ * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页与任务中心聚合组区块的
+ * 关键路径 E2E。从功能页任务详情发起合并（搜索主任务 → 选择 → 确认），落到聚合
+ * 组页验证主任务与来源分支的展示与记录筛选的 URL 状态，并在任务中心验证
+ * 「任务聚合组」区块（主分支 / 来源分支 / 查看主任务跳转）；随后解除合并，
+ * 验证组关闭、关系标记已解除但历史保留。用例依赖任务创建时同事务写入的搜索投影。
  */
 
 test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async ({
@@ -116,6 +117,109 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       group.locator(".task-group-member").filter({ hasText: sourceTaskTitle }),
     ).toContainText("已解除");
     await expect(group.getByText(/聚合组已关闭/)).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主任务", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const suffix = Date.now().toString(16).toUpperCase();
+    const featureName = "聚合组面板-" + suffix;
+    const mainTaskTitle = "面板主任务-" + suffix;
+    const sourceTaskTitle = "面板来源任务-" + suffix;
+
+    await page.goto("/projects/" + runtime.projectId + "/modules");
+    await page
+      .locator(".calm-feature-card")
+      .filter({ hasText: "未分类" })
+      .first()
+      .getByRole("link", { name: "查看功能" })
+      .click();
+    await page.getByRole("button", { name: "新建功能" }).click();
+    const featureDialog = page.getByRole("dialog", { name: "新建功能" });
+    await featureDialog.getByLabel("功能名称").fill(featureName);
+    await featureDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await expect(featureDialog).toBeHidden();
+    await page
+      .locator(".calm-feature-card")
+      .filter({ hasText: featureName })
+      .getByRole("link", { name: "查看详情" })
+      .click();
+
+    const drawer = page.locator(".task-detail-drawer");
+    for (const title of [mainTaskTitle, sourceTaskTitle]) {
+      await page.getByRole("button", { name: "新建任务" }).click();
+      const dialog = page.getByRole("dialog", { name: "新建任务" });
+      await dialog.getByLabel("任务标题").fill(title);
+      await dialog
+        .getByLabel("负责人")
+        .selectOption({ label: runtime.user.name });
+      await dialog.getByRole("button", { name: /保\s*存/ }).click();
+      await expect(dialog).toBeHidden();
+      await expect(drawer).toBeVisible();
+      await drawer.getByRole("button", { name: "关闭" }).click();
+      await expect(drawer).toBeHidden();
+    }
+
+    await page
+      .locator(".calm-task-card")
+      .filter({ hasText: sourceTaskTitle })
+      .getByRole("button", { name: "任务详情" })
+      .click();
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: "合并到主任务" }).click();
+    const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
+    await mergeDialog
+      .getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")
+      .fill(mainTaskTitle);
+    await mergeDialog
+      .getByRole("button", { name: new RegExp(mainTaskTitle) })
+      .click();
+    await mergeDialog.getByRole("button", { name: "确认合并" }).click();
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toContain("/task-groups/");
+
+    // 任务中心「任务聚合组」区块：组头、主分支与活动来源分支。
+    await page.goto("/tasks");
+    const panel = page.locator(".group-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText(/\d+ 个聚合组/)).toBeVisible();
+    const card = panel
+      .locator(".group-card")
+      .filter({ hasText: mainTaskTitle });
+    await expect(card).toBeVisible();
+    await expect(card.locator("header .task-id")).toContainText("TG-");
+    await expect(card.getByText("进行中")).toBeVisible();
+    await expect(card.locator("header")).toContainText(runtime.projectName);
+    await expect(card).toContainText("来源任务的原始状态");
+    const mainRow = card.locator("li").filter({ hasText: mainTaskTitle });
+    await expect(mainRow).toContainText("主分支");
+    await expect(mainRow).toContainText("未完成");
+    await expect(mainRow).toContainText(runtime.user.name);
+    const sourceRow = card.locator("li").filter({ hasText: sourceTaskTitle });
+    await expect(sourceRow).toContainText("活动来源");
+
+    // 分支按钮按统一模式打开任务详情；返回任务中心后「查看主任务」直达主任务。
+    await sourceRow.locator("button.branch-task").click();
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText(sourceTaskTitle)).toBeVisible();
+    await drawer.getByRole("button", { name: "关闭" }).click();
+    await expect(drawer).toBeHidden();
+
+    await page.goto("/tasks");
+    const cardAgain = page
+      .locator(".group-panel .group-card")
+      .filter({ hasText: mainTaskTitle });
+    await cardAgain.getByRole("button", { name: "查看主任务" }).click();
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText(mainTaskTitle)).toBeVisible();
   } finally {
     await context.close();
   }

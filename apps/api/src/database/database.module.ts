@@ -4,6 +4,7 @@ import {
   type DatabaseClient,
 } from "@inpulse/database/client";
 import { resolveDatabaseUrl } from "@inpulse/database/config";
+import { AuditReaderDatabase } from "./audit-reader.client.js";
 import { DATABASE_CLIENT } from "./database.constants.js";
 import { PostgresUnitOfWork } from "./unit-of-work.js";
 
@@ -21,8 +22,9 @@ import { PostgresUnitOfWork } from "./unit-of-work.js";
       useFactory: (client: DatabaseClient) => new PostgresUnitOfWork(client),
       inject: [DATABASE_CLIENT],
     },
+    AuditReaderDatabase,
   ],
-  exports: [DATABASE_CLIENT, PostgresUnitOfWork],
+  exports: [DATABASE_CLIENT, PostgresUnitOfWork, AuditReaderDatabase],
 })
 export class DatabaseModule implements OnModuleDestroy {
   constructor(

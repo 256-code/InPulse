@@ -29,7 +29,8 @@ import { AggregateReadError } from "./aggregate-read.errors.js";
  * 活跃模块 / 活跃功能按行自身 status = ACTIVE 计数；未完成任务 = 有效任务中
  * work_status = TODO（有效 = 非 INVALID、非 CANCELED，且排除历史来源分支）；
  * 迭代记录数只计 PUBLISHED，不按版本、不按影响功能重复计数。
- * 非成员或项目不存在统一 404；列表条数由契约收口（默认 3 / 2，上限 10）。
+ * 非成员或项目不存在统一 404；列表条数由契约收口（默认 3 / 2，上限 10），
+ * activeLeftoverTotal 与列表同一过滤、不受 limit 影响（R-2 裁决 §10.2）。
  */
 export interface ProjectOverviewQueryCommand {
   readonly actorUserId: number;
@@ -111,6 +112,9 @@ export class ProjectOverviewQueryService {
         projectId,
         limit: activeLeftoverLimit,
       });
+      const activeLeftoverTotal = await this.records.countActiveLeftovers(tx, {
+        projectId,
+      });
 
       return {
         project: {
@@ -134,10 +138,12 @@ export class ProjectOverviewQueryService {
           featureName: item.featureName,
           publishedAt: item.publishedAt.toISOString(),
         })),
+        activeLeftoverTotal,
         activeLeftovers: activeLeftovers.map((item) => ({
           leftoverItemId: item.leftoverItemId,
           recordId: item.recordId,
           recordCode: item.recordCode,
+          recordTitle: item.recordTitle,
           content: item.content,
           createdAt: item.createdAt.toISOString(),
         })),

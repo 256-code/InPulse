@@ -88,6 +88,51 @@ export type AdminUserVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type AggregateTaskRef = {
+  readonly taskId: number;
+  readonly code: string;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+};
+
+export type AuditLogItem = {
+  readonly chainId: string;
+  readonly sequenceNo: number;
+  readonly projectId: (number | null);
+  readonly actorType: ("USER" | "SYSTEM");
+  readonly actorId: (number | null);
+  readonly action: string;
+  readonly targetType: string;
+  readonly targetId: (string | null);
+  readonly eventPayload: Readonly<Record<string, unknown>>;
+  readonly requestId: string;
+  readonly clientRequestId: (string | null);
+  readonly ipAddress: (string | null);
+  readonly userAgent: (string | null);
+  readonly occurredAt: string;
+  readonly prevHash: string;
+  readonly recordHash: string;
+  readonly keyVersion: number;
+  readonly canonicalVersion: string;
+};
+
+export type AuditLogPage = {
+  readonly items: readonly AuditLogItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type AuditLogQueryRequest = {
+  readonly projectId?: number;
+  readonly action?: string;
+  readonly actorId?: number;
+  readonly from?: string;
+  readonly to?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
 export type ChangeRecordVersion = {
   readonly title: string;
   readonly contextProblem: string;
@@ -323,12 +368,45 @@ export type IndependentRecordDraftRequest = ({
   readonly impactFeatureIds: readonly number[];
 });
 
+export type LeftoverItemPage = {
+  readonly items: readonly LeftoverListItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
 export type LeftoverItemSummary = {
   readonly leftoverItemId: number;
   readonly recordId: number;
   readonly recordCode: string;
+  readonly recordTitle: string;
   readonly content: string;
   readonly createdAt: string;
+};
+
+export type LeftoverListItem = {
+  readonly leftoverItemId: number;
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly recordTitle: string;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly moduleId: number;
+  readonly moduleName: string;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly author: UserRef;
+  readonly publishedAt: string;
+  readonly content: string;
+  readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+  readonly sourceTask: (AggregateTaskRef | null);
+  readonly followupTask: (AggregateTaskRef | null);
+};
+
+export type LeftoverListQueryRequest = {
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
+  readonly bucket?: ("OPEN" | "CLOSED");
 };
 
 export type LeftoverTaskPreview = {
@@ -539,14 +617,35 @@ export type MyTaskItem = {
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly assignee: UserRef;
   readonly updatedAt: string;
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly dueAt: (string | null);
+  readonly completedAt: (string | null);
+  readonly creatorId: number;
+  readonly githubLinkCount: number;
   readonly hasPublishedRecord: boolean;
   readonly groupRole: (("MAIN" | "SOURCE") | null);
+  readonly groupId: (number | null);
+};
+
+export type MyTaskLeftoverSample = {
+  readonly recordCode: string;
+  readonly summary: string;
 };
 
 export type MyTaskPage = {
   readonly items: readonly MyTaskItem[];
   readonly nextCursor: (string | null);
   readonly hasMore: boolean;
+  readonly stats: MyTaskStats;
+  readonly leftoverCount: number;
+  readonly leftoverSample: (MyTaskLeftoverSample | null);
+};
+
+export type MyTaskStats = {
+  readonly myOpen: number;
+  readonly dueToday: number;
+  readonly overdue: number;
+  readonly completedThisMonth: number;
 };
 
 export type MyTasksQueryRequest = {
@@ -556,6 +655,8 @@ export type MyTasksQueryRequest = {
   readonly scopeType?: ("FEATURE" | "MODULE");
   readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
   readonly hasPublishedRecord?: boolean;
+  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly includeCanceled?: boolean;
 };
 
 export type NotificationItem = {
@@ -719,6 +820,7 @@ export type ProjectOverviewResponse = {
   readonly memberCount: number;
   readonly stats: ProjectOverviewStats;
   readonly recentRecords: readonly RecentRecordItem[];
+  readonly activeLeftoverTotal: number;
   readonly activeLeftovers: readonly LeftoverItemSummary[];
 };
 
@@ -951,7 +1053,7 @@ export type RotateMfaRecoveryCodesResponse = {
 
 export type SearchItem = {
   readonly projectId: number;
-  readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP");
+  readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP" | "LEFTOVER");
   readonly entityId: number;
   readonly title: string;
   readonly summary: string;
@@ -1073,6 +1175,41 @@ export type TaskGroupItem = {
   readonly members: readonly TaskGroupMemberItem[];
 };
 
+export type TaskGroupListBranch = {
+  readonly taskId: number;
+  readonly taskCode: string;
+  readonly title: string;
+  readonly role: ("MAIN" | "SOURCE");
+  readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly assignee: UserRef;
+};
+
+export type TaskGroupListItem = {
+  readonly groupId: number;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly code: string;
+  readonly name: string;
+  readonly status: ("ACTIVE" | "CLOSED");
+  readonly mainTask: (AggregateTaskRef | null);
+  readonly branches: readonly TaskGroupListBranch[];
+};
+
+export type TaskGroupListPage = {
+  readonly items: readonly TaskGroupListItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type TaskGroupListQueryRequest = {
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
+};
+
 export type TaskGroupMemberDetail = {
   readonly taskId: number;
   readonly taskCode: string;
@@ -1100,6 +1237,20 @@ export type TaskGroupMemberItem = {
   readonly originalWorkStatus: (("TODO" | "DONE" | "CANCELED") | null);
   readonly originalAssigneeId: (number | null);
   readonly joinedAt: string;
+};
+
+export type TaskGroupMembershipItem = {
+  readonly taskId: number;
+  readonly groupId: number;
+  readonly groupRole: ("MAIN" | "SOURCE");
+};
+
+export type TaskGroupMembershipQueryRequest = {
+  readonly taskIds: readonly number[];
+};
+
+export type TaskGroupMembershipResponse = {
+  readonly items: readonly TaskGroupMembershipItem[];
 };
 
 export type TaskGroupMergeHeaders = {

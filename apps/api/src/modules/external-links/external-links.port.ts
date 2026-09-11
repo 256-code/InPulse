@@ -19,6 +19,14 @@ export class ExternalLinksQueryPort {
   exists(tx: TransactionContext, p: number, id: number) {
     return this.repository.exists(tx, p, id);
   }
+  /** R-3：批量统计任务上的外部链接数（去重后的 link_id 计数）。 */
+  countTaskLinks(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ) {
+    return this.repository.countTaskLinks(tx, projectIds, taskIds);
+  }
   /** R-4：批量读取记录上的 GitHub 链接快照（只读、不校验项目授权）。 */
   listChangeRecordLinks(
     tx: TransactionContext,

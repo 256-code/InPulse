@@ -8,6 +8,7 @@ import type { InpulseApiClient } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
+  type MyTaskGroupsResult,
   type MyTaskListResult,
   type MyTasksAdapter,
   type MyTasksQueryInput,
@@ -34,12 +35,18 @@ const createAdapter = () => {
   const fetchMyTasks = vi.fn(
     async (_input: MyTasksQueryInput): Promise<MyTaskListResult> => emptyResult,
   );
+  const fetchTaskGroups = vi.fn(async (): Promise<MyTaskGroupsResult> => ({
+    items: [],
+    nextCursor: null,
+    hasMore: false,
+  }));
   const adapter: MyTasksAdapter = {
     source: "mock",
     notice: "测试骨架数据",
     fetchMyTasks,
+    fetchTaskGroups,
   };
-  return { adapter, fetchMyTasks };
+  return { adapter, fetchMyTasks, fetchTaskGroups };
 };
 
 interface RenderOptions {

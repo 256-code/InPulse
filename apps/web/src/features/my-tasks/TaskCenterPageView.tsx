@@ -12,7 +12,12 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
-import { describeMyTasksError, useMyTasksQuery } from "./my-tasks-query";
+import {
+  describeMyTasksError,
+  useMyTaskGroupsQuery,
+  useMyTasksQuery,
+} from "./my-tasks-query";
+import type { TaskLocation } from "@features/tasks/task-links";
 import {
   countActiveMyTaskFilters,
   DEFAULT_MY_TASK_FILTERS,
@@ -72,6 +77,16 @@ const statusTone: Record<MyTaskWorkStatus, "blue" | "green" | "gray"> = {
   DONE: "green",
   CANCELED: "gray",
 };
+
+const sourceKindLabels: Record<"ACTIVE" | "HISTORICAL", string> = {
+  ACTIVE: "活动来源",
+  HISTORICAL: "历史来源",
+};
+
+/** 来源分支标签：sourceKind 缺失时退回通用「来源分支」，不虚构活动/历史。 */
+function sourceKindLabel(sourceKind: "ACTIVE" | "HISTORICAL" | null): string {
+  return sourceKind === null ? "来源分支" : sourceKindLabels[sourceKind];
+}
 
 const priorityLabels: Record<MyTaskPriority, string> = {
   LOW: "低",
@@ -152,6 +167,7 @@ export interface TaskCenterPageViewProps {
   readonly advancedOpen: boolean;
   readonly onToggleAdvanced: () => void;
   readonly onOpenIssues: () => void;
+  readonly onOpenTask?: (task: TaskLocation) => void;
   readonly adapter?: MyTasksAdapter;
 }
 
@@ -171,6 +187,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   advancedOpen,
   onToggleAdvanced,
   onOpenIssues,
+  onOpenTask,
   adapter,
 }) => {
   const activeAdapter = adapter ?? MY_TASKS_MOCK_ADAPTER;
@@ -179,6 +196,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     viewerId,
     adapter: activeAdapter,
   });
+  const groupsQuery = useMyTaskGroupsQuery({
+    projectId: filters.scope === "project" ? filters.projectId : null,
+    adapter: activeAdapter,
+  });
+  const groups =
+    groupsQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const result = taskQuery.data;
   const items = result?.items ?? [];
   const stats = result?.stats ?? null;
@@ -822,6 +845,121 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           ) : null}
         </>
       )}
+
+      <section className="group-panel" aria-label="任务聚合组">
+        <CalmSectionTitle
+          title="任务聚合组"
+          hint="合并后主任务是统一入口，来源任务作为独立分支保留全部历史"
+        >
+          <CalmBadge tone="violet">{groups.length} 个聚合组</CalmBadge>
+        </CalmSectionTitle>
+        {groupsQuery.isPending ? (
+          <div className="calm-state">
+            <Spin size="large" />
+            <p>正在加载聚合组…</p>
+          </div>
+        ) : groupsQuery.isError ? (
+          <Alert type="error" title={describeMyTasksError(groupsQuery.error)} />
+        ) : groups.length === 0 ? (
+          <CalmEmptyState
+            icon="gitMerge"
+            title="还没有聚合组"
+            description="发现重复任务时，可在任务详情中合并到主任务。"
+          />
+        ) : (
+          <>
+            <div className="group-list">
+              {groups.map((group) => {
+                const mainTask = group.mainTask;
+                return (
+                  <article className="group-card" key={group.groupId}>
+                    <header>
+                      <span className="task-id">{group.code}</span>
+                      <strong>{group.name}</strong>
+                      <CalmBadge
+                        tone={group.status === "ACTIVE" ? "blue" : "gray"}
+                      >
+                        {group.status === "ACTIVE" ? "进行中" : "已关闭"}
+                      </CalmBadge>
+                      <small>
+                        {projectNames.get(group.projectId) ?? group.projectName}
+                      </small>
+                    </header>
+                    <ul>
+                      {group.branches.map((branch) => (
+                        <li key={branch.taskId}>
+                          <CalmBadge
+                            tone={branch.role === "MAIN" ? "violet" : "cyan"}
+                          >
+                            {branch.role === "MAIN"
+                              ? "主分支"
+                              : sourceKindLabel(branch.sourceKind)}
+                          </CalmBadge>
+                          <button
+                            type="button"
+                            className="branch-task"
+                            onClick={() =>
+                              onOpenTask?.({
+                                projectId: group.projectId,
+                                moduleId: branch.moduleId,
+                                featureId: branch.featureId,
+                                taskId: branch.taskId,
+                              })
+                            }
+                          >
+                            <strong>{branch.taskCode}</strong>
+                            <span>{branch.title}</span>
+                          </button>
+                          <CalmBadge tone={statusTone[branch.workStatus]}>
+                            {statusLabels[branch.workStatus]}
+                          </CalmBadge>
+                          <small>{branch.assignee.name}</small>
+                        </li>
+                      ))}
+                    </ul>
+                    <footer>
+                      <InpulseIcon name="gitMerge" size={14} />
+                      <span>
+                        来源任务的原始状态、负责人、迭代记录与 GitHub
+                        链接全部保留。
+                      </span>
+                      {mainTask === null ? null : (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() =>
+                            onOpenTask?.({
+                              projectId: mainTask.projectId,
+                              moduleId: mainTask.moduleId,
+                              featureId: mainTask.featureId,
+                              taskId: mainTask.taskId,
+                            })
+                          }
+                        >
+                          查看主任务
+                          <InpulseIcon name="chevronRight" size={14} />
+                        </button>
+                      )}
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+            {groupsQuery.hasNextPage ? (
+              <div className="group-panel-load-more">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={groupsQuery.isFetchingNextPage}
+                  onClick={() => void groupsQuery.fetchNextPage()}
+                >
+                  {groupsQuery.isFetchingNextPage ? "正在加载…" : "加载更多"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
     </section>
   );
 };

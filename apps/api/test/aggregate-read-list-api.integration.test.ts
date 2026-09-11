@@ -1,0 +1,1083 @@
+import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Sql } from "postgres";
+
+import type { INestApplication } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import {
+  createDatabaseClient,
+  type DatabaseClient,
+} from "@inpulse/database/client";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
+import { migrate } from "../../../database/src/migrate.ts";
+import {
+  leftoverItemPageSchema,
+  taskGroupListPageSchema,
+} from "../../../packages/api-contract/src/index.ts";
+import { VersionedHmacKeyring } from "../src/auth/keyring.js";
+import { generateOpaqueToken, hashOpaqueToken } from "../src/auth/token.js";
+import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
+import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
+import { TaskManagementRepository } from "../src/modules/tasks/task-management.repository.js";
+import {
+  createProject,
+  createUser,
+  testUrls,
+  type ProjectFixture,
+} from "./database.helpers.js";
+
+// F-20 遗留问题列表（R-6）与任务聚合组列表（R-7）的真实 HTTP 集成测试：
+// 授权范围固定为服务端 AuthorizedProjectScope（非成员收敛为空页而非 404）、
+// 分桶与跨项目隔离、keyset 分页与签名游标绑定（actor + filterKey）、
+// 最新版本快照内容、来源/跟进任务引用、聚合组分支排序与 DETACHED 排除。
+// 全部在真实 PostgreSQL 上验证，不使用 mock。
+
+const SESSION_COOKIE_NAME = "__Host-session";
+const HMAC_KEY_VERSION = 1;
+
+interface ErrorResponseDto {
+  readonly code: string;
+  readonly message: string;
+  readonly requestId: string;
+}
+
+let app: INestApplication | undefined;
+let baseUrl: string;
+let runtime: DatabaseClient | undefined;
+let uow: PostgresUnitOfWork | undefined;
+let keyringDirectory: string | undefined;
+let idempotencyKeyringDirectory: string | undefined;
+let previousEnvironment: Readonly<Record<string, string | undefined>> = {};
+let sequence = 0;
+
+const baseMs = Date.now();
+
+function isoAt(minutes: number): string {
+  return new Date(baseMs + minutes * 60_000).toISOString();
+}
+
+function isoBefore(minutes: number): string {
+  return new Date(baseMs - minutes * 60_000).toISOString();
+}
+
+let project: ProjectFixture | undefined;
+let otherProject: ProjectFixture | undefined;
+let memberUser = 0;
+let otherUser = 0;
+let outsiderUser = 0;
+let memberCookie = "";
+let otherCookie = "";
+let outsiderCookie = "";
+
+let featureA = 0;
+let featureB = 0;
+let tSourceA = 0;
+let tSourceB = 0;
+let tFollowup = 0;
+
+let rLinked = 0;
+let rOrphan = 0;
+let rConverted = 0;
+let rResolved = 0;
+let rVoid = 0;
+let rOther = 0;
+
+let loLinked = 0;
+let loOrphan = 0;
+let loConverted = 0;
+let loResolved = 0;
+let loVoid = 0;
+let loOther = 0;
+
+let tGroupMain = 0;
+let tGroupSource = 0;
+let tGroupHistorical = 0;
+let tGroupDetached = 0;
+let tClosedDetached = 0;
+let tOtherMain = 0;
+let tOtherSource = 0;
+let groupActive = 0;
+let groupClosed = 0;
+let groupOther = 0;
+
+const taskWrites = new TaskManagementRepository();
+const draftWrites = new RecordDraftRepository();
+
+const recordContent = {
+  title: "聚合读列表接口记录",
+  contextProblem: "上下文问题",
+  changeSolution: "变更方案",
+  resultVerification: "验证结果",
+  remainingIssues: "",
+};
+
+function nextSuffix(kind: "T" | "F" | "CR"): string {
+  sequence += 1;
+  return "-" + kind + "-" + String(sequence);
+}
+
+async function newModule(scope: ProjectFixture, name: string): Promise<number> {
+  const [row] = await runtime!.sql<{ id: number }[]>`
+    INSERT INTO app.modules (project_id, name, created_by)
+    VALUES (${scope.projectId}, ${name}, ${scope.userId})
+    RETURNING id
+  `;
+  if (!row) throw new Error("module fixture insert returned no row");
+  return row.id;
+}
+
+async function newFeature(
+  scope: ProjectFixture,
+  moduleId: number,
+  name: string,
+): Promise<number> {
+  const [row] = await runtime!.sql<{ id: number }[]>`
+    INSERT INTO app.features (project_id, module_id, code, name, created_by)
+    VALUES (${scope.projectId}, ${moduleId}, ${scope.code + nextSuffix("F")}, ${name}, ${scope.userId})
+    RETURNING id
+  `;
+  if (!row) throw new Error("feature fixture insert returned no row");
+  return row.id;
+}
+
+interface TaskOptions {
+  readonly assigneeId?: number;
+  readonly featureId?: number | null;
+  readonly workStatus?: "TODO" | "DONE" | "CANCELED";
+  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly title?: string;
+}
+
+async function newTask(
+  scope: ProjectFixture,
+  options: TaskOptions = {},
+): Promise<number> {
+  const featureId = options.featureId ?? null;
+  const workStatus = options.workStatus ?? "TODO";
+  const code = scope.code + nextSuffix("T");
+  return uow!.run(async (tx) => {
+    const created = await taskWrites.create(
+      tx,
+      { projectId: scope.projectId, moduleId: scope.moduleId, featureId },
+      scope.userId,
+      code,
+      {
+        title: options.title ?? "聚合读列表接口任务",
+        description: "",
+        assigneeId: options.assigneeId ?? scope.userId,
+        priority: "NORMAL",
+        dueAt: null,
+      },
+    );
+    const current =
+      workStatus === "TODO"
+        ? created
+        : (await taskWrites.transition(
+            tx,
+            created,
+            scope.userId,
+            workStatus,
+            workStatus === "DONE" ? "聚合读列表接口夹具完成" : null,
+            "聚合读列表接口夹具",
+          ))!;
+    if ((options.lifecycleStatus ?? "ACTIVE") !== "ACTIVE") {
+      await tx.sql`UPDATE app.tasks SET lifecycle_status = ${options.lifecycleStatus!}, updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${current.id} AND project_id = ${scope.projectId}`;
+    }
+    return current.id;
+  });
+}
+
+interface RecordOptions {
+  readonly featureId?: number | null;
+  readonly taskId?: number | null;
+  readonly publishedAt?: string;
+  readonly status?: "PUBLISHED" | "VOID";
+}
+
+async function newPublishedRecord(
+  scope: ProjectFixture,
+  options: RecordOptions = {},
+): Promise<number> {
+  const code = scope.code + nextSuffix("CR");
+  const featureId = options.featureId ?? null;
+  const taskId = options.taskId ?? null;
+  const publishedAt = options.publishedAt ?? null;
+  const draft = await uow!.run((tx) =>
+    draftWrites.create(
+      tx,
+      {
+        projectId: scope.projectId,
+        moduleId: scope.moduleId,
+        featureId,
+        impactFeatureIds: [],
+      },
+      scope.userId,
+      recordContent,
+      taskId === null ? undefined : { taskId, handlerId: scope.userId },
+    ),
+  );
+  await uow!.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_versions (record_id, project_id, version_no, title_snapshot, payload, created_by) SELECT id, project_id, 1, title, current_payload, ${scope.userId} FROM app.change_records WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    await tx.sql`UPDATE app.change_records SET status = ${"PUBLISHED"}, code = ${code}, current_version = 1, published_at = COALESCE(${publishedAt}::timestamptz, clock_timestamp()), row_version = row_version + 1 WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    if (options.status === "VOID") {
+      await tx.sql`UPDATE app.change_records SET status = ${"VOID"}, voided_at = GREATEST(clock_timestamp(), published_at), void_reason = ${"聚合读列表接口夹具作废"}, row_version = row_version + 1 WHERE id = ${draft.id} AND project_id = ${scope.projectId}`;
+    }
+  });
+  return draft.id;
+}
+
+async function newRecordVersion(
+  scope: ProjectFixture,
+  recordId: number,
+  versionNo: number,
+): Promise<void> {
+  await uow!.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_versions (record_id, project_id, version_no, title_snapshot, payload, created_by) SELECT id, project_id, ${versionNo}, title, current_payload, ${scope.userId} FROM app.change_records WHERE id = ${recordId} AND project_id = ${scope.projectId}`;
+    await tx.sql`UPDATE app.change_records SET current_version = ${versionNo}, row_version = row_version + 1, updated_at = clock_timestamp() WHERE id = ${recordId} AND project_id = ${scope.projectId}`;
+  });
+}
+
+interface LeftoverOptions {
+  readonly content: string;
+  readonly createdAt: string;
+  readonly status?: "ACTIVE" | "CONVERTED" | "RESOLVED";
+}
+
+async function newLeftover(
+  scope: ProjectFixture,
+  recordId: number,
+  options: LeftoverOptions,
+): Promise<number> {
+  const status = options.status ?? "ACTIVE";
+  return uow!.run(async (tx) => {
+    const [row] = await tx.sql<{ id: number }[]>`
+      INSERT INTO app.change_record_leftover_items (record_id, project_id, status, created_by, created_at)
+      VALUES (${recordId}, ${scope.projectId}, ${status}, ${scope.userId}, ${options.createdAt}::timestamptz)
+      RETURNING id
+    `;
+    if (!row) throw new Error("leftover fixture insert returned no row");
+    await tx.sql`INSERT INTO app.change_record_version_leftovers (record_id, version_no, leftover_item_id, project_id, content_snapshot) VALUES (${recordId}, 1, ${row.id}, ${scope.projectId}, ${options.content})`;
+    return row.id;
+  });
+}
+
+async function newLeftoverSnapshotVersion(
+  scope: ProjectFixture,
+  recordId: number,
+  versionNo: number,
+  leftoverItemId: number,
+  content: string,
+): Promise<void> {
+  await uow!.run(async (tx) => {
+    await tx.sql`INSERT INTO app.change_record_version_leftovers (record_id, version_no, leftover_item_id, project_id, content_snapshot) VALUES (${recordId}, ${versionNo}, ${leftoverItemId}, ${scope.projectId}, ${content})`;
+  });
+}
+
+async function taskCode(
+  taskId: number,
+  scope: ProjectFixture,
+): Promise<string> {
+  const [row] = await runtime!.sql<{ code: string }[]>`
+    SELECT code FROM app.tasks WHERE id = ${taskId} AND project_id = ${scope.projectId}
+  `;
+  if (!row) throw new Error("task fixture missing");
+  return row.code;
+}
+
+interface GroupMemberSeed {
+  readonly taskId: number;
+  readonly role: "MAIN" | "SOURCE";
+  readonly sourceKind?: "ACTIVE" | "HISTORICAL";
+  readonly status?: "ACTIVE" | "DETACHED";
+  readonly joinedAt: string;
+  readonly detachedAt?: string;
+  readonly detachReason?: string;
+}
+
+async function seedTaskGroup(
+  scope: ProjectFixture,
+  codeIndex: number,
+  name: string,
+  members: readonly GroupMemberSeed[],
+  status: "ACTIVE" | "CLOSED" = "ACTIVE",
+): Promise<number> {
+  return uow!.run(async (tx) => {
+    const [group] = await tx.sql<{ id: number }[]>`
+      INSERT INTO app.task_groups (project_id, code, name, created_by, status, closed_at)
+      VALUES (${scope.projectId}, ${scope.code + "-TG-" + String(codeIndex)}, ${name}, ${scope.userId}, ${status}, ${status === "CLOSED" ? new Date().toISOString() : null}::timestamptz)
+      RETURNING id
+    `;
+    if (!group) throw new Error("task group fixture insert returned no row");
+    for (const member of members) {
+      if (member.role === "MAIN") {
+        await tx.sql`
+          INSERT INTO app.task_group_members (group_id, task_id, project_id, role, status, joined_at)
+          VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"MAIN"}, ${"ACTIVE"}, ${member.joinedAt}::timestamptz)
+        `;
+        continue;
+      }
+      const sourceKind = member.sourceKind ?? "ACTIVE";
+      if ((member.status ?? "ACTIVE") === "DETACHED") {
+        await tx.sql`
+          INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id, status, joined_at, detached_at, detached_by, detach_reason)
+          VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"SOURCE"}, ${sourceKind}, ${"TODO"}, ${scope.userId}, ${"DETACHED"}, ${member.joinedAt}::timestamptz, ${member.detachedAt!}::timestamptz, ${scope.userId}, ${member.detachReason!})
+        `;
+        continue;
+      }
+      await tx.sql`
+        INSERT INTO app.task_group_members (group_id, task_id, project_id, role, source_kind, original_work_status, original_assignee_id, status, joined_at)
+        VALUES (${group.id}, ${member.taskId}, ${scope.projectId}, ${"SOURCE"}, ${sourceKind}, ${"TODO"}, ${scope.userId}, ${"ACTIVE"}, ${member.joinedAt}::timestamptz)
+      `;
+    }
+    return group.id;
+  });
+}
+
+async function getJson(
+  path: string,
+  cookie?: string,
+): Promise<{ readonly status: number; readonly body: unknown }> {
+  const headers: Record<string, string> = {};
+  if (cookie !== undefined) {
+    headers["cookie"] = cookie;
+  }
+  const response = await fetch(baseUrl + path, { headers });
+  const text = await response.text();
+  const body: unknown = text.length === 0 ? null : JSON.parse(text);
+  return { status: response.status, body };
+}
+
+async function expectError(
+  path: string,
+  cookie: string | undefined,
+  status: number,
+  code: string,
+): Promise<void> {
+  const response = await getJson(path, cookie);
+  expect(response.status).toBe(status);
+  const body = response.body as ErrorResponseDto;
+  expect(body.code).toBe(code);
+  expect(body.message.length).toBeGreaterThan(0);
+  expect(body.requestId).toBeTypeOf("string");
+}
+
+async function createAuthenticatedSession(
+  sql: Sql,
+  keyring: VersionedHmacKeyring,
+  userId: number,
+): Promise<{ readonly cookie: string }> {
+  const rows = (await sql`
+    SELECT auth_version AS "authVersion"
+      FROM app.users
+     WHERE id = ${userId}
+  `) as unknown as readonly { authVersion: number }[];
+  const user = rows[0];
+  if (user === undefined) {
+    throw new Error("user fixture missing");
+  }
+  const token = generateOpaqueToken();
+  await sql`
+    INSERT INTO app.user_sessions (
+      user_id, token_hash, token_hash_key_version, auth_version_at_issue,
+      auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation,
+      created_at, last_seen_at, idle_expires_at, absolute_expires_at
+    )
+    VALUES (
+      ${userId}, ${hashOpaqueToken(token, keyring.currentKey())}, ${HMAC_KEY_VERSION},
+      ${user.authVersion}, ${"AUTHENTICATED"}, 0, 0, now(), now(),
+      now() + ${"1 hour"}::interval, now() + ${"1 day"}::interval
+    )
+  `;
+  return { cookie: SESSION_COOKIE_NAME + "=" + token };
+}
+
+beforeAll(async () => {
+  const urls = testUrls();
+  runtime = createDatabaseClient(urls.runtime, {
+    applicationName: "inpulse-aggregate-read-list-api-test",
+  });
+  await migrate(urls.migrator);
+  uow = new PostgresUnitOfWork(runtime);
+
+  memberUser = await createUser(runtime.sql);
+  otherUser = await createUser(runtime.sql);
+  outsiderUser = await createUser(runtime.sql);
+  const projectFixture = await createProject(runtime.sql, memberUser);
+  project = projectFixture;
+  const otherFixture = await createProject(runtime.sql, otherUser);
+  otherProject = otherFixture;
+
+  await newModule(projectFixture, "遗留模块");
+  featureA = await newFeature(
+    projectFixture,
+    projectFixture.moduleId,
+    "遗留功能A",
+  );
+  featureB = await newFeature(
+    projectFixture,
+    projectFixture.moduleId,
+    "遗留功能B",
+  );
+
+  tSourceA = await newTask(projectFixture, {
+    featureId: featureA,
+    title: "遗留来源任务A",
+  });
+  tSourceB = await newTask(projectFixture, {
+    featureId: featureB,
+    title: "遗留来源任务B",
+  });
+  tFollowup = await newTask(projectFixture, {
+    featureId: featureB,
+    title: "遗留跟进任务",
+  });
+
+  tGroupMain = await newTask(projectFixture, { title: "聚合组主任务" });
+  tGroupSource = await newTask(projectFixture, {
+    title: "聚合组活动来源",
+    workStatus: "DONE",
+  });
+  tGroupHistorical = await newTask(projectFixture, {
+    title: "聚合组历史来源",
+    workStatus: "CANCELED",
+  });
+  tGroupDetached = await newTask(projectFixture, { title: "聚合组已解除来源" });
+  tClosedDetached = await newTask(projectFixture, { title: "已关闭组来源" });
+  tOtherMain = await newTask(otherFixture, { title: "其他项目主任务" });
+  tOtherSource = await newTask(otherFixture, { title: "其他项目来源任务" });
+
+  rLinked = await newPublishedRecord(projectFixture, {
+    featureId: featureA,
+    publishedAt: isoAt(1),
+    taskId: tSourceA,
+  });
+  rOrphan = await newPublishedRecord(projectFixture, { publishedAt: isoAt(2) });
+  rConverted = await newPublishedRecord(projectFixture, {
+    featureId: featureB,
+    publishedAt: isoAt(3),
+    taskId: tSourceB,
+  });
+  rResolved = await newPublishedRecord(projectFixture, {
+    featureId: featureA,
+    publishedAt: isoAt(4),
+  });
+  rVoid = await newPublishedRecord(projectFixture, {
+    featureId: featureB,
+    publishedAt: isoAt(5),
+    status: "VOID",
+    taskId: tSourceB,
+  });
+  rOther = await newPublishedRecord(otherFixture, { publishedAt: isoAt(6) });
+
+  loLinked = await newLeftover(projectFixture, rLinked, {
+    content: "遗留-有关联来源任务",
+    createdAt: isoAt(1),
+  });
+  loOrphan = await newLeftover(projectFixture, rOrphan, {
+    content: "遗留-模块级无来源任务",
+    createdAt: isoAt(2),
+  });
+  loConverted = await newLeftover(projectFixture, rConverted, {
+    content: "遗留-已生成跟进任务",
+    createdAt: isoAt(3),
+    status: "CONVERTED",
+  });
+  loResolved = await newLeftover(projectFixture, rResolved, {
+    content: "遗留-已解决无跟进",
+    createdAt: isoAt(4),
+    status: "RESOLVED",
+  });
+  loVoid = await newLeftover(projectFixture, rVoid, {
+    content: "遗留-作废记录",
+    createdAt: isoAt(5),
+  });
+  loOther = await newLeftover(otherFixture, rOther, {
+    content: "其他项目遗留",
+    createdAt: isoAt(6),
+  });
+  await runtime.sql`
+    INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+    VALUES (${loConverted}, ${tFollowup}, ${projectFixture.projectId}, ${projectFixture.userId})
+  `;
+  await newRecordVersion(projectFixture, rLinked, 2);
+  await newLeftoverSnapshotVersion(
+    projectFixture,
+    rLinked,
+    2,
+    loLinked,
+    "最新快照内容：遗留-有关联来源任务",
+  );
+
+  groupActive = await seedTaskGroup(projectFixture, 1, "遗留聚合组", [
+    { joinedAt: isoBefore(300), role: "MAIN", taskId: tGroupMain },
+    {
+      joinedAt: isoBefore(200),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tGroupSource,
+    },
+    {
+      joinedAt: isoBefore(100),
+      role: "SOURCE",
+      sourceKind: "HISTORICAL",
+      taskId: tGroupHistorical,
+    },
+    {
+      detachReason: "遗留夹具解除来源关系",
+      detachedAt: isoBefore(40),
+      joinedAt: isoBefore(50),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      status: "DETACHED",
+      taskId: tGroupDetached,
+    },
+  ]);
+  groupClosed = await seedTaskGroup(
+    projectFixture,
+    2,
+    "已关闭聚合组",
+    [
+      {
+        detachReason: "遗留夹具关闭聚合组",
+        detachedAt: isoBefore(10),
+        joinedAt: isoBefore(400),
+        role: "SOURCE",
+        sourceKind: "ACTIVE",
+        status: "DETACHED",
+        taskId: tClosedDetached,
+      },
+    ],
+    "CLOSED",
+  );
+  groupOther = await seedTaskGroup(otherFixture, 1, "其他项目聚合组", [
+    { joinedAt: isoBefore(300), role: "MAIN", taskId: tOtherMain },
+    {
+      joinedAt: isoBefore(200),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tOtherSource,
+    },
+  ]);
+
+  const sessionKey = randomBytes(32);
+  const sessionKeyring = VersionedHmacKeyring.fromEntries(
+    [{ key: sessionKey, version: 1 }],
+    1,
+  );
+  keyringDirectory = await mkdtemp(
+    join(tmpdir(), "inpulse-aggregate-read-list-"),
+  );
+  const sessionKeyringFile = join(keyringDirectory, "session.keyring");
+  await writeFile(
+    sessionKeyringFile,
+    "1:" + sessionKey.toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+  const totpKekFile = join(keyringDirectory, "totp.kek.keyring");
+  await writeFile(
+    totpKekFile,
+    "1:" + randomBytes(32).toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+  memberCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, memberUser)
+  ).cookie;
+  otherCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, otherUser)
+  ).cookie;
+  outsiderCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, outsiderUser)
+  ).cookie;
+
+  idempotencyKeyringDirectory = await mkdtemp(
+    join(tmpdir(), "inpulse-aggregate-read-list-idempotency-"),
+  );
+  const idempotencyKeyringFile = join(
+    idempotencyKeyringDirectory,
+    "fingerprint.keyring",
+  );
+  await writeFile(
+    idempotencyKeyringFile,
+    "1:" + randomBytes(32).toString("hex") + String.fromCharCode(10),
+    "utf8",
+  );
+
+  previousEnvironment = {
+    DATABASE_URL: process.env["DATABASE_URL"],
+    IDEMPOTENCY_FINGERPRINT_KEYRING_FILE:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"],
+    IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"],
+    IDEMPOTENCY_FINGERPRINT_KEY_VERSION:
+      process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"],
+    NODE_ENV: process.env["NODE_ENV"],
+    SESSION_HASH_KEYRING_FILE: process.env["SESSION_HASH_KEYRING_FILE"],
+    SESSION_HASH_KEYRING_TEST_PATH:
+      process.env["SESSION_HASH_KEYRING_TEST_PATH"],
+    SESSION_HASH_KEY_VERSION: process.env["SESSION_HASH_KEY_VERSION"],
+    TOTP_KEK_KEYRING_FILE: process.env["TOTP_KEK_KEYRING_FILE"],
+    TOTP_KEK_KEYRING_TEST_PATH: process.env["TOTP_KEK_KEYRING_TEST_PATH"],
+    TOTP_KEK_VERSION: process.env["TOTP_KEK_VERSION"],
+  };
+  process.env["NODE_ENV"] = "test";
+  process.env["DATABASE_URL"] = urls.runtime;
+  process.env["SESSION_HASH_KEYRING_FILE"] = sessionKeyringFile;
+  process.env["SESSION_HASH_KEYRING_TEST_PATH"] = "1";
+  process.env["SESSION_HASH_KEY_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"] = idempotencyKeyringFile;
+  process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"] = "1";
+  process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["TOTP_KEK_VERSION"] = String(HMAC_KEY_VERSION);
+  process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
+  process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
+
+  const { AppModule } = await import("../src/app.module.js");
+  app = await NestFactory.create(AppModule, { logger: false });
+  app.setGlobalPrefix("api/v1");
+  await app.listen(0, "127.0.0.1");
+  const address = app.getHttpServer().address() as AddressInfo;
+  baseUrl = "http://127.0.0.1:" + String(address.port);
+});
+
+afterAll(async () => {
+  await app?.close();
+  await runtime?.close();
+  for (const [name, value] of Object.entries(previousEnvironment)) {
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
+  }
+  if (keyringDirectory !== undefined) {
+    await rm(keyringDirectory, { force: true, recursive: true });
+  }
+  if (idempotencyKeyringDirectory !== undefined) {
+    await rm(idempotencyKeyringDirectory, { force: true, recursive: true });
+  }
+});
+
+describe("GET /api/v1/leftover-items（R-6 遗留问题列表）", () => {
+  test("匿名 401，非成员与越权项目收敛为空页，非法参数 422", async () => {
+    await expectError(
+      "/api/v1/leftover-items",
+      undefined,
+      401,
+      "LEFTOVER_ITEMS_UNAUTHENTICATED",
+    );
+    const outsider = await getJson("/api/v1/leftover-items", outsiderCookie);
+    expect(outsider.status).toBe(200);
+    expect(leftoverItemPageSchema.parse(outsider.body)).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    const otherScoped = await getJson(
+      "/api/v1/leftover-items?projectId=" + String(otherProject!.projectId),
+      memberCookie,
+    );
+    expect(otherScoped.status).toBe(200);
+    expect(leftoverItemPageSchema.parse(otherScoped.body).items).toEqual([]);
+
+    const unknownScoped = await getJson(
+      "/api/v1/leftover-items?projectId=2147483647",
+      memberCookie,
+    );
+    expect(unknownScoped.status).toBe(200);
+    expect(leftoverItemPageSchema.parse(unknownScoped.body).items).toEqual([]);
+
+    await expectError(
+      "/api/v1/leftover-items?bucket=ALL",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/leftover-items?limit=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/leftover-items?projectId=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("成员按 id 倒序看到全部遗留项，内容取最新快照，任务引用只含 ID 与编号", async () => {
+    const response = await getJson("/api/v1/leftover-items", memberCookie);
+    expect(response.status).toBe(200);
+    const page = leftoverItemPageSchema.parse(response.body);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+    expect(page.items.map((item) => item.leftoverItemId)).toEqual([
+      loVoid,
+      loResolved,
+      loConverted,
+      loOrphan,
+      loLinked,
+    ]);
+
+    const linked = page.items[4]!;
+    expect(linked).toMatchObject({
+      content: "最新快照内容：遗留-有关联来源任务",
+      featureId: featureA,
+      featureName: "遗留功能A",
+      moduleId: project!.moduleId,
+      moduleName: "未分类",
+      projectId: project!.projectId,
+      projectName: "Project " + project!.code,
+      recordId: rLinked,
+      recordTitle: "聚合读列表接口记录",
+      status: "ACTIVE",
+    });
+    expect(linked.author.userId).toBe(memberUser);
+    expect(linked.sourceTask).toEqual({
+      taskId: tSourceA,
+      code: await taskCode(tSourceA, project!),
+      projectId: project!.projectId,
+      moduleId: project!.moduleId,
+      featureId: featureA,
+    });
+    expect(linked.followupTask).toBeNull();
+    expect(linked.publishedAt).toBe(isoAt(1));
+
+    const orphan = page.items[3]!;
+    expect(orphan).toMatchObject({
+      featureId: null,
+      featureName: null,
+      recordId: rOrphan,
+      status: "ACTIVE",
+    });
+    expect(orphan.sourceTask).toBeNull();
+    expect(orphan.followupTask).toBeNull();
+
+    const converted = page.items[2]!;
+    expect(converted).toMatchObject({
+      recordId: rConverted,
+      status: "CONVERTED",
+    });
+    expect(converted.sourceTask).toEqual({
+      taskId: tSourceB,
+      code: await taskCode(tSourceB, project!),
+      projectId: project!.projectId,
+      moduleId: project!.moduleId,
+      featureId: featureB,
+    });
+    expect(converted.followupTask).toEqual({
+      taskId: tFollowup,
+      code: await taskCode(tFollowup, project!),
+      projectId: project!.projectId,
+      moduleId: project!.moduleId,
+      featureId: featureB,
+    });
+
+    const resolved = page.items[1]!;
+    expect(resolved).toMatchObject({ recordId: rResolved, status: "RESOLVED" });
+    expect(resolved.sourceTask).toBeNull();
+    expect(resolved.followupTask).toBeNull();
+
+    const voided = page.items[0]!;
+    expect(voided).toMatchObject({ recordId: rVoid, status: "ACTIVE" });
+    expect(voided.sourceTask).toEqual({
+      taskId: tSourceB,
+      code: await taskCode(tSourceB, project!),
+      projectId: project!.projectId,
+      moduleId: project!.moduleId,
+      featureId: featureB,
+    });
+    expect(voided.followupTask).toBeNull();
+  });
+
+  test("bucket=OPEN 只含 ACTIVE（含作废记录的遗留项），bucket=CLOSED 含 CONVERTED 与 RESOLVED", async () => {
+    const open = leftoverItemPageSchema.parse(
+      (await getJson("/api/v1/leftover-items?bucket=OPEN", memberCookie)).body,
+    );
+    expect(open.items.map((item) => item.leftoverItemId)).toEqual([
+      loVoid,
+      loOrphan,
+      loLinked,
+    ]);
+    expect(open.items.map((item) => item.status)).toEqual([
+      "ACTIVE",
+      "ACTIVE",
+      "ACTIVE",
+    ]);
+
+    const closed = leftoverItemPageSchema.parse(
+      (await getJson("/api/v1/leftover-items?bucket=CLOSED", memberCookie))
+        .body,
+    );
+    expect(closed.items.map((item) => item.leftoverItemId)).toEqual([
+      loResolved,
+      loConverted,
+    ]);
+    expect(closed.items.map((item) => item.status)).toEqual([
+      "RESOLVED",
+      "CONVERTED",
+    ]);
+
+    const narrowed = leftoverItemPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/leftover-items?bucket=OPEN&projectId=" +
+            String(project!.projectId),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(narrowed.items.map((item) => item.leftoverItemId)).toEqual([
+      loVoid,
+      loOrphan,
+      loLinked,
+    ]);
+  });
+
+  test("keyset 分页稳定，游标绑定 actor 与筛选条件，跨筛选或跨用户复用 422", async () => {
+    const first = leftoverItemPageSchema.parse(
+      (await getJson("/api/v1/leftover-items?limit=2", memberCookie)).body,
+    );
+    expect(first.items.map((item) => item.leftoverItemId)).toEqual([
+      loVoid,
+      loResolved,
+    ]);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = leftoverItemPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/leftover-items?limit=2&cursor=" +
+            encodeURIComponent(first.nextCursor!),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(second.items.map((item) => item.leftoverItemId)).toEqual([
+      loConverted,
+      loOrphan,
+    ]);
+    expect(second.hasMore).toBe(true);
+
+    const third = leftoverItemPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/leftover-items?limit=2&cursor=" +
+            encodeURIComponent(second.nextCursor!),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(third.items.map((item) => item.leftoverItemId)).toEqual([loLinked]);
+    expect(third.hasMore).toBe(false);
+    expect(third.nextCursor).toBeNull();
+
+    await expectError(
+      "/api/v1/leftover-items?bucket=OPEN&cursor=" +
+        encodeURIComponent(first.nextCursor!),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/leftover-items?cursor=" + encodeURIComponent(first.nextCursor!),
+      otherCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/leftover-items?cursor=broken",
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    const tampered =
+      first.nextCursor!.slice(0, -2) +
+      (first.nextCursor!.endsWith("A") ? "B" : "A");
+    await expectError(
+      "/api/v1/leftover-items?cursor=" + encodeURIComponent(tampered),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+  });
+
+  test("其他项目成员只看到自己项目的遗留项", async () => {
+    const page = leftoverItemPageSchema.parse(
+      (await getJson("/api/v1/leftover-items", otherCookie)).body,
+    );
+    expect(page.items.map((item) => item.leftoverItemId)).toEqual([loOther]);
+    expect(page.items[0]!.projectId).toBe(otherProject!.projectId);
+    expect(page.items[0]!.projectName).toBe("Project " + otherProject!.code);
+  });
+});
+
+describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
+  test("匿名 401，非成员与越权项目收敛为空页，非法参数 422", async () => {
+    await expectError(
+      "/api/v1/task-groups",
+      undefined,
+      401,
+      "TASK_GROUP_UNAUTHENTICATED",
+    );
+    const outsider = await getJson("/api/v1/task-groups", outsiderCookie);
+    expect(outsider.status).toBe(200);
+    expect(taskGroupListPageSchema.parse(outsider.body)).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    const scoped = taskGroupListPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups?projectId=" + String(otherProject!.projectId),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(scoped.items).toEqual([]);
+
+    await expectError(
+      "/api/v1/task-groups?limit=0",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      "/api/v1/task-groups?projectId=-1",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("成员按组 ID 倒序看到聚合组，分支主任务在前且 DETACHED 不出现", async () => {
+    const response = await getJson("/api/v1/task-groups", memberCookie);
+    expect(response.status).toBe(200);
+    const page = taskGroupListPageSchema.parse(response.body);
+    expect(page.items.map((group) => group.groupId)).toEqual([
+      groupClosed,
+      groupActive,
+    ]);
+
+    const active = page.items[1]!;
+    expect(active).toMatchObject({
+      code: project!.code + "-TG-1",
+      name: "遗留聚合组",
+      projectId: project!.projectId,
+      projectName: "Project " + project!.code,
+      status: "ACTIVE",
+    });
+    expect(active.mainTask).toEqual({
+      taskId: tGroupMain,
+      code: await taskCode(tGroupMain, project!),
+      projectId: project!.projectId,
+      moduleId: project!.moduleId,
+      featureId: null,
+    });
+    expect(
+      active.branches.map((branch) => [
+        branch.taskId,
+        branch.role,
+        branch.sourceKind,
+        branch.workStatus,
+        branch.moduleId,
+        branch.featureId,
+      ]),
+    ).toEqual([
+      [tGroupMain, "MAIN", null, "TODO", project!.moduleId, null],
+      [tGroupSource, "SOURCE", "ACTIVE", "DONE", project!.moduleId, null],
+      [
+        tGroupHistorical,
+        "SOURCE",
+        "HISTORICAL",
+        "CANCELED",
+        project!.moduleId,
+        null,
+      ],
+    ]);
+    const mainBranch = active.branches[0]!;
+    expect(mainBranch.title).toBe("聚合组主任务");
+    expect(mainBranch.taskCode).toBe(await taskCode(tGroupMain, project!));
+    expect(mainBranch.assignee.userId).toBe(memberUser);
+  });
+
+  test("已关闭聚合组没有活跃成员：branches 为空且 mainTask 为 null", async () => {
+    const page = taskGroupListPageSchema.parse(
+      (await getJson("/api/v1/task-groups", memberCookie)).body,
+    );
+    const closed = page.items[0]!;
+    expect(closed).toMatchObject({
+      code: project!.code + "-TG-2",
+      mainTask: null,
+      name: "已关闭聚合组",
+      status: "CLOSED",
+    });
+    expect(closed.branches).toEqual([]);
+  });
+
+  test("分页与游标绑定：跨 projectId 复用或跨用户复用游标一律 422", async () => {
+    const first = taskGroupListPageSchema.parse(
+      (await getJson("/api/v1/task-groups?limit=1", memberCookie)).body,
+    );
+    expect(first.items.map((group) => group.groupId)).toEqual([groupClosed]);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = taskGroupListPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups?limit=1&cursor=" +
+            encodeURIComponent(first.nextCursor!),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(second.items.map((group) => group.groupId)).toEqual([groupActive]);
+    expect(second.hasMore).toBe(false);
+    expect(second.nextCursor).toBeNull();
+
+    await expectError(
+      "/api/v1/task-groups?projectId=" +
+        String(project!.projectId) +
+        "&cursor=" +
+        encodeURIComponent(first.nextCursor!),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/task-groups?cursor=" + encodeURIComponent(first.nextCursor!),
+      otherCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+    await expectError(
+      "/api/v1/task-groups?cursor=broken",
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+  });
+
+  test("其他项目成员只看到自己项目的聚合组", async () => {
+    const page = taskGroupListPageSchema.parse(
+      (await getJson("/api/v1/task-groups", otherCookie)).body,
+    );
+    expect(page.items.map((group) => group.groupId)).toEqual([groupOther]);
+    expect(
+      page.items[0]!.branches.map((branch) => [branch.taskId, branch.role]),
+    ).toEqual([
+      [tOtherMain, "MAIN"],
+      [tOtherSource, "SOURCE"],
+    ]);
+  });
+});

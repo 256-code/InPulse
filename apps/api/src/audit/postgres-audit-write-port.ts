@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import type { TransactionContext } from "../database/transaction-context.js";
-import { canonicalizeJson } from "../idempotency/jcs.js";
+import { canonicalizeJson } from "@inpulse/canonical-json";
 import {
   AUDIT_CANONICAL_VERSION,
   type AuditAppendResult,

@@ -1,0 +1,15 @@
+[Unit]
+# InPulse 审计链头检查点调度（技术设计 v1.2.2 §11.5）：每小时触发一次。
+# Persistent=true 覆盖宿主机停机错过的窗口；RandomizedDelaySec 避免与备份任务
+# 同时争抢 I/O。启用属于生产上线门禁动作，见 docs/runbooks/audit-archive.md。
+Description=InPulse 审计链头检查点调度（每小时）
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+AccuracySec=1m
+Unit=inpulse-audit-archive-checkpoint.service
+
+[Install]
+WantedBy=timers.target

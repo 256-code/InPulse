@@ -15,11 +15,15 @@ const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs", ".cjs", ".js"]);
 const SKIP_DIRECTORIES = new Set(["node_modules", "dist", "coverage", ".git"]);
 const SCAN_ROOTS = [
   "apps/api/src",
+  "apps/ops/src",
+  "apps/ops/test",
   "apps/e2e",
   "apps/web/src",
   "packages/api-contract/src",
   "packages/api-contract/scripts",
   "packages/api-contract/test",
+  "packages/canonical-json/src",
+  "packages/canonical-json/test",
   "packages/eslint-config",
   "database/src",
   "database/schema",
@@ -87,6 +91,10 @@ function workspacePackages() {
       ROOT,
       "packages/api-contract/src/index.ts",
     ),
+    "@inpulse/canonical-json": path.resolve(
+      ROOT,
+      "packages/canonical-json/src/index.ts",
+    ),
     "@inpulse/database": path.resolve(ROOT, "database/schema/index.ts"),
     "@inpulse/eslint-config": path.resolve(
       ROOT,
@@ -137,8 +145,14 @@ function describe(file) {
   if (local.startsWith("apps/api/")) {
     return { area: "api", local };
   }
+  if (local.startsWith("apps/ops/")) {
+    return { area: "ops", local };
+  }
   if (local.startsWith("packages/api-contract/")) {
     return { area: "contract", local };
+  }
+  if (local.startsWith("packages/canonical-json/")) {
+    return { area: "canonical-json", local };
   }
   if (local.startsWith("packages/eslint-config/")) {
     return { area: "eslint-config", local };

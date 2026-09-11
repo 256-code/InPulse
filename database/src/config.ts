@@ -24,7 +24,15 @@ function required(name: string): string {
   return value;
 }
 
-async function readTrimmedSecret(path: string, label: string): Promise<string> {
+/**
+ * 读取受保护的 Secret 文件：生产模式只接受 `/run/secrets` 直接子项、非符号链接、
+ * 仅属主可读的常规文件，内容去首尾空白后非空；非生产模式直接读取。
+ * 由 database 运行时、审计读取与 ops 归档进程共同复用。
+ */
+export async function readTrimmedSecret(
+  path: string,
+  label: string,
+): Promise<string> {
   let pathToRead = path;
 
   if (process.env.NODE_ENV === "production") {
@@ -65,8 +73,13 @@ async function readTrimmedSecret(path: string, label: string): Promise<string> {
   return value;
 }
 
+/**
+ * 解析数据库连接：MIGRATION 使用迁移角色，RUNTIME 使用 app_runtime，
+ * AUDIT 使用独立只读的 audit_reader（F-08 原始审计读取，环境变量前缀
+ * `AUDIT_DB_*` / `AUDIT_DATABASE_URL(_FILE)`）。
+ */
 export async function resolveDatabaseUrl(
-  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP",
+  purpose: "MIGRATION" | "RUNTIME" | "TEST_BOOTSTRAP" | "AUDIT",
 ): Promise<string> {
   const urlFileName = `${purpose}_DATABASE_URL_FILE`;
   const urlName =
@@ -98,7 +111,11 @@ export async function resolveDatabaseUrl(
   const password = await readTrimmedSecret(passwordFile, passwordFileName);
   const user =
     process.env[`${purpose}_DB_USER`]?.trim() ??
-    (purpose === "MIGRATION" ? "app_migrator" : "app_runtime");
+    (purpose === "MIGRATION"
+      ? "app_migrator"
+      : purpose === "AUDIT"
+        ? "audit_reader"
+        : "app_runtime");
   const host = required("DB_HOST");
   const port = process.env.DB_PORT?.trim() || "5432";
   const database = process.env.DB_NAME?.trim() || "app";

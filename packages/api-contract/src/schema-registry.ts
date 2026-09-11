@@ -1,11 +1,22 @@
+import {
+  auditLogItemSchema,
+  auditLogPageSchema,
+  auditLogQueryRequestSchema,
+} from "./contracts/audit.zod.js";
 import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import {
+  aggregateTaskRefSchema,
+  leftoverItemPageSchema,
+  leftoverListItemSchema,
+  leftoverListQueryRequestSchema,
   leftoverItemSummarySchema,
   myTaskItemSchema,
+  myTaskLeftoverSampleSchema,
   myTaskPageSchema,
+  myTaskStatsSchema,
   myTasksQueryRequestSchema,
   projectOverviewProjectSchema,
   projectOverviewQueryRequestSchema,
@@ -13,11 +24,18 @@ import {
   projectOverviewStatsSchema,
   recentRecordItemSchema,
   taskGroupDetailResponseSchema,
+  taskGroupListBranchSchema,
+  taskGroupListItemSchema,
+  taskGroupListPageSchema,
+  taskGroupListQueryRequestSchema,
   taskGroupMemberDetailSchema,
   taskGroupPathSchema,
   taskGroupRecordItemSchema,
   taskGroupRecordLinkSchema,
   taskGroupRecordPageSchema,
+  taskGroupMembershipItemSchema,
+  taskGroupMembershipQueryRequestSchema,
+  taskGroupMembershipResponseSchema,
   taskGroupRecordQueryRequestSchema,
   taskGroupSummarySchema,
   userRefSchema,
@@ -227,12 +245,81 @@ export const schemaRegistry = {
   },
   MyTaskItem: {
     schema: myTaskItemSchema,
-    summary: "我的任务条目，含记录存在性与聚合组角色（R-3）",
+    summary:
+      "我的任务条目，含优先级、截止、完成时间、创建者、外部链接数与聚合组角色（R-3 / §10.3）",
+    sensitiveFieldPaths: [],
+  },
+  MyTaskStats: {
+    schema: myTaskStatsSchema,
+    summary:
+      "我的任务统计卡片：未完成、今日截止、逾期与本月完成（R-3 / §10.3，业务时区 Asia/Shanghai）",
+    sensitiveFieldPaths: [],
+  },
+  MyTaskLeftoverSample: {
+    schema: myTaskLeftoverSampleSchema,
+    summary:
+      "我的任务遗留问题入口样例：记录编号与最新版本内容摘要（R-3 / §10.3）",
     sensitiveFieldPaths: [],
   },
   MyTaskPage: {
     schema: myTaskPageSchema,
-    summary: "我的任务分页响应（R-3 / C-006）",
+    summary:
+      "我的任务分页响应，附统计卡片与遗留问题入口（R-3 / C-006 / §10.3）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupMembershipQueryRequest: {
+    schema: taskGroupMembershipQueryRequestSchema,
+    summary: "任务卡片聚合关系批量查询参数：逗号分隔的 1..100 个任务 ID（R-5）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupMembershipItem: {
+    schema: taskGroupMembershipItemSchema,
+    summary: "任务卡片聚合关系条目：任务、聚合组与组内角色（R-5 / §10.4）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupMembershipResponse: {
+    schema: taskGroupMembershipResponseSchema,
+    summary: "任务卡片聚合关系批量响应，按 taskId 升序（R-5 / §10.4）",
+    sensitiveFieldPaths: [],
+  },
+  AggregateTaskRef: {
+    schema: aggregateTaskRefSchema,
+    summary: "聚合读共用的任务引用，只含任务 ID 与编号（R-6 / R-7）",
+    sensitiveFieldPaths: [],
+  },
+  LeftoverListQueryRequest: {
+    schema: leftoverListQueryRequestSchema,
+    summary: "遗留问题列表查询参数：分桶、项目收窄与游标（R-6）",
+    sensitiveFieldPaths: [],
+  },
+  LeftoverListItem: {
+    schema: leftoverListItemSchema,
+    summary: "遗留问题条目：最新快照内容、来源任务与跟进任务引用（R-6）",
+    sensitiveFieldPaths: [],
+  },
+  LeftoverItemPage: {
+    schema: leftoverItemPageSchema,
+    summary: "遗留问题分页响应（R-6 / C-006）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupListQueryRequest: {
+    schema: taskGroupListQueryRequestSchema,
+    summary: "聚合组列表查询参数：项目收窄与游标（R-7）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupListBranch: {
+    schema: taskGroupListBranchSchema,
+    summary: "聚合组列表分支：只含生效成员与任务原数据（R-7）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupListItem: {
+    schema: taskGroupListItemSchema,
+    summary: "聚合组列表条目：组标识、项目名与生效分支（R-7）",
+    sensitiveFieldPaths: [],
+  },
+  TaskGroupListPage: {
+    schema: taskGroupListPageSchema,
+    summary: "聚合组分页响应（R-7 / C-006）",
     sensitiveFieldPaths: [],
   },
   ErrorResponse: {
@@ -372,6 +459,22 @@ export const schemaRegistry = {
   SearchPage: {
     schema: searchPageSchema,
     summary: "全局搜索分页结果",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogQueryRequest: {
+    schema: auditLogQueryRequestSchema,
+    summary:
+      "原始审计查询参数；不传 projectId 读 SYSTEM 链，cursor 为服务端签名的不透明字符串，limit 默认 50、最大 100",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogItem: {
+    schema: auditLogItemSchema,
+    summary: "原始审计条目；只对系统管理员经重认证后可见，包含事件负载与链哈希",
+    sensitiveFieldPaths: [],
+  },
+  AuditLogPage: {
+    schema: auditLogPageSchema,
+    summary: "原始审计分页结果",
     sensitiveFieldPaths: [],
   },
   ActivityPath: {

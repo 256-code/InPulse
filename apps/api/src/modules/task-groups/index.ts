@@ -6,6 +6,9 @@ export {
 export {
   PostgresTaskGroupReadPort,
   TaskGroupReadPort,
+  type TaskGroupActiveMemberRow,
+  type TaskGroupListPage,
+  type TaskGroupListReadInput,
   type TaskGroupMemberRow,
   type TaskGroupReadRecord,
 } from "./task-group-read.port.js";
