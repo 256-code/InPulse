@@ -14951,22 +14951,26 @@
         "properties": {
           "code": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "机器可读错误码；客户端唯一允许的逻辑分支依据"
           },
           "message": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "稳定诊断文案，可直接兜底展示；不是机器契约，前端不得按文案分支"
           },
           "details": {
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "description": "附加细节；无附加细节时必须为空对象 {}。保留键：issues（422 校验摘要）、reason（错误码内稳定原因码）；其余键只用于表单定位与诊断"
           },
           "requestId": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "服务端生成的排障引用，与响应头 X-Request-Id 同值"
           }
         },
         "required": [
