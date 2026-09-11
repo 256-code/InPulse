@@ -41,6 +41,8 @@ import {
  * projectId 只用于缩小范围，最终仍按服务端 AuthorizedProjectScope 过滤，
  * 越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
  * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与六项筛选。
+ * 记录维度：hasPublishedRecord 由任务 → PUBLISHED 记录数映射派生（count > 0，裁决
+ * 修订 D-1），筛选仍由 MyTaskQueryPort.list 在同一分页 SQL 内先过滤后分页。
  * 统计卡片与遗留问题入口按 A 裁决 §10.3：基准集合只受负责人与 projectId 影响，
  * 分页与游标不影响计数，日界/月界由 SQL 按 Asia/Shanghai 计算。
  *
@@ -188,12 +190,11 @@ export class MyTasksQueryService {
       const assignees = await this.users.listByIds(tx, [
         ...new Set(page.items.map((item) => item.assigneeId)),
       ]);
-      const publishedTaskIds =
-        await this.records.listTaskIdsWithPublishedRecords(
-          tx,
-          pageProjectIds,
-          taskIds,
-        );
+      const publishedRecordCounts = await this.records.countPublishedByTask(
+        tx,
+        pageProjectIds,
+        taskIds,
+      );
       const groupRoles = await this.membership.listGroupRoles(
         tx,
         pageProjectIds,
@@ -220,7 +221,7 @@ export class MyTasksQueryService {
         modules,
         features,
         assignees,
-        publishedTaskIds,
+        publishedRecordCounts,
         groupRoles,
         linkCounts,
         stats,
@@ -239,7 +240,9 @@ export class MyTasksQueryService {
       data.features.map((item) => [item.featureId, item.name]),
     );
     const userById = new Map(data.assignees.map((item) => [item.userId, item]));
-    const publishedTaskIdSet = new Set(data.publishedTaskIds);
+    const publishedRecordCountByTask = new Map(
+      data.publishedRecordCounts.map((item) => [item.taskId, item.count]),
+    );
     const roleByTask = new Map<number, "MAIN" | "SOURCE">();
     const groupIdByTask = new Map<number, number>();
     for (const item of data.groupRoles) {
@@ -273,6 +276,9 @@ export class MyTasksQueryService {
         }
         featureName = name;
       }
+      // 计数为 0 的任务不出现于端口结果，按缺席补 0（裁决修订 D-1）。
+      const publishedRecordCount =
+        publishedRecordCountByTask.get(row.taskId) ?? 0;
       return {
         taskId: row.taskId,
         code: row.code,
@@ -294,7 +300,7 @@ export class MyTasksQueryService {
           row.completedAt === null ? null : row.completedAt.toISOString(),
         creatorId: row.creatorId,
         githubLinkCount: linkCountByTask.get(row.taskId) ?? 0,
-        hasPublishedRecord: publishedTaskIdSet.has(row.taskId),
+        hasPublishedRecord: publishedRecordCount > 0,
         groupRole: roleByTask.get(row.taskId) ?? null,
         groupId: groupIdByTask.get(row.taskId) ?? null,
       };

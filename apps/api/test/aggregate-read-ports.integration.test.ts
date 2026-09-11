@@ -954,53 +954,54 @@ describe("ChangeRecordReadPort", () => {
     expect(capped).toHaveLength(1);
   });
 
-  test("task ids with published records scope by project, task set and status", async () => {
+  test("published record counts map tasks to PUBLISHED counts and scope by project", async () => {
     const scope = await newProject();
     const other = await newProject();
     const published = await newTask(scope);
     await newPublishedRecord(scope, { taskId: published });
+    const second = await newPublishedRecord(scope, { taskId: published });
+    await newRecordVersion(scope, second, 2);
+    const voided = await newTask(scope);
+    await newPublishedRecord(scope, { taskId: voided, status: "VOID" });
     const draftOnly = await newTask(scope);
     await newDraftRecord(scope, { taskId: draftOnly });
     const noRecord = await newTask(scope);
     const foreign = await newTask(other);
     await newPublishedRecord(other, { taskId: foreign });
-    expect(
-      await uow.run((tx) =>
-        records.listTaskIdsWithPublishedRecords(tx, [
-          scope.projectId,
-          other.projectId,
-        ]),
+    const candidates = [published, voided, draftOnly, noRecord, foreign];
+    const bothProjects = await uow.run((tx) =>
+      records.countPublishedByTask(
+        tx,
+        [scope.projectId, other.projectId],
+        candidates,
       ),
-    ).toEqual([published, foreign].sort((left, right) => left - right));
+    );
+    expect(bothProjects).toEqual(
+      [
+        { taskId: published, count: 2 },
+        { taskId: foreign, count: 1 },
+      ].sort((left, right) => left.taskId - right.taskId),
+    );
     expect(
       await uow.run((tx) =>
-        records.listTaskIdsWithPublishedRecords(tx, [scope.projectId]),
+        records.countPublishedByTask(tx, [scope.projectId], candidates),
       ),
-    ).toEqual([published]);
+    ).toEqual([{ taskId: published, count: 2 }]);
     expect(
       await uow.run((tx) =>
-        records.listTaskIdsWithPublishedRecords(
+        records.countPublishedByTask(
           tx,
           [scope.projectId],
-          [draftOnly, noRecord],
+          [voided, draftOnly, noRecord],
         ),
       ),
     ).toEqual([]);
-    expect(
-      await uow.run((tx) =>
-        records.listTaskIdsWithPublishedRecords(
-          tx,
-          [scope.projectId],
-          [published, noRecord],
-        ),
-      ),
-    ).toEqual([published]);
   });
 
   test("record read validation rejects unbounded task sets before SQL", async () => {
     const { calls, tx } = captureTransaction();
     await expect(
-      records.listTaskIdsWithPublishedRecords(
+      records.countPublishedByTask(
         tx,
         [1],
         Array.from({ length: CHANGE_RECORD_TASK_IDS_MAX + 1 }, () => 1),
@@ -1010,7 +1011,7 @@ describe("ChangeRecordReadPort", () => {
       reason: "invalid-task-ids",
     });
     await expect(
-      records.listTaskIdsWithPublishedRecords(tx, [1], [0]),
+      records.countPublishedByTask(tx, [1], [0]),
     ).rejects.toMatchObject({ reason: "invalid-task-ids" });
     await expect(
       records.listRecentPublished(tx, { projectId: 1, limit: -1 }),
@@ -1019,12 +1020,12 @@ describe("ChangeRecordReadPort", () => {
       records.listActiveLeftovers(tx, { projectId: 1, limit: 101 }),
     ).rejects.toBeInstanceOf(ChangeRecordReadInputError);
     expect(calls).toEqual([]);
-    await expect(
-      records.listTaskIdsWithPublishedRecords(tx, [], [1]),
-    ).resolves.toEqual([]);
-    await expect(
-      records.listTaskIdsWithPublishedRecords(tx, [1], []),
-    ).resolves.toEqual([]);
+    await expect(records.countPublishedByTask(tx, [], [1])).resolves.toEqual(
+      [],
+    );
+    await expect(records.countPublishedByTask(tx, [1], [])).resolves.toEqual(
+      [],
+    );
     expect(calls).toEqual([]);
   });
 });
@@ -1093,5 +1094,45 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
       expect(plan).not.toMatch(/Seq Scan on tasks/);
     }
     expect(excludedPlan).toContain("<> ALL");
+  });
+
+  test("记录维度计数与先过滤后分页命中 change_records 既有索引，不需要新增迁移", async () => {
+    const indexes = await client.sql.unsafe<
+      { indexname: string; indexdef: string }[]
+    >(
+      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'change_records' AND indexname IN ('change_records_project_task_idx', 'change_records_project_status_idx') ORDER BY indexname",
+    );
+    expect(
+      indexes.find((row) => row.indexname === "change_records_project_task_idx")
+        ?.indexdef,
+    ).toContain("(project_id, task_id, id)");
+    expect(
+      indexes.find(
+        (row) => row.indexname === "change_records_project_status_idx",
+      )?.indexdef,
+    ).toContain("(project_id, status, id)");
+    const scope = await newProject();
+    const filtered = await newTask(scope);
+    await newPublishedRecord(scope, { taskId: filtered });
+    const listCall = captureTransaction();
+    await myTasks.list(listCall.tx, {
+      projectIds: [scope.projectId],
+      hasPublishedRecord: true,
+      limit: 21,
+    });
+    const countCall = captureTransaction();
+    await records.countPublishedByTask(
+      countCall.tx,
+      [scope.projectId],
+      [filtered],
+    );
+    const listPlan = await explain(listCall.calls[0]!);
+    const countPlan = await explain(countCall.calls[0]!);
+    expect(listPlan).toContain("Limit");
+    expect(listPlan).not.toMatch(/Seq Scan on tasks/);
+    for (const plan of [listPlan, countPlan]) {
+      expect(plan).not.toMatch(/Seq Scan on change_records/);
+      expect(plan).toMatch(/change_records_project_(task|status)_idx/);
+    }
   });
 });

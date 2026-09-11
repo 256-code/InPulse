@@ -939,7 +939,10 @@ function myTasksSetup(
       readonly moduleId: number;
       readonly name: string;
     }[];
-    readonly publishedTaskIds?: readonly number[];
+    readonly publishedRecordCounts?: readonly {
+      readonly taskId: number;
+      readonly count: number;
+    }[];
     readonly groupRoles?: readonly {
       readonly taskId: number;
       readonly groupId: number;
@@ -972,9 +975,11 @@ function myTasksSetup(
         { featureId: 4, projectId: 7, moduleId: 3, name: "功能" },
       ],
     );
-  const listTaskIdsWithPublishedRecords = vi
+  const countPublishedByTask = vi
     .fn()
-    .mockResolvedValue(options.publishedTaskIds ?? [501]);
+    .mockResolvedValue(
+      options.publishedRecordCounts ?? [{ taskId: 501, count: 2 }],
+    );
   const listHistoricalSourceTaskIds = vi.fn().mockResolvedValue([90]);
   const listGroupRoles = vi.fn().mockResolvedValue(options.groupRoles ?? []);
   const countTaskLinks = vi
@@ -1010,7 +1015,7 @@ function myTasksSetup(
     { list: listPage, stats, leftoverEntry } as unknown as MyTaskQueryPort,
     { listNames: listModuleNames } as unknown as ModuleReadPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
-    { listTaskIdsWithPublishedRecords } as unknown as ChangeRecordReadPort,
+    { countPublishedByTask } as unknown as ChangeRecordReadPort,
     { countTaskLinks } as unknown as ExternalLinksQueryPort,
     {
       listHistoricalSourceTaskIds,
@@ -1024,6 +1029,7 @@ function myTasksSetup(
     service,
     cursor,
     listPage,
+    countPublishedByTask,
     listProjects,
     listHistoricalSourceTaskIds,
     listGroupRoles,
@@ -1103,7 +1109,7 @@ describe("MyTasksQueryService.list", () => {
         nextTaskId: 501,
         hasMore: true,
       },
-      publishedTaskIds: [501],
+      publishedRecordCounts: [{ taskId: 501, count: 2 }],
       groupRoles: [{ taskId: 501, groupId: 11, role: "MAIN" }],
     });
 
@@ -1133,6 +1139,11 @@ describe("MyTasksQueryService.list", () => {
       groupRole: "MAIN",
       groupId: 11,
     });
+    expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [502, 501],
+    );
     expect(result.stats).toEqual({
       myOpen: 4,
       dueToday: 1,

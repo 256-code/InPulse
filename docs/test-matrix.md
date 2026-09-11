@@ -823,3 +823,17 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（公共 registry 高等级审计无已知漏洞）均通过；lint 同时暴露并修复了「分页游标列被透传进严格响应 Schema」的缺陷。
 
 未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，两个集成文件可正常收集（24 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed，新增的 B1-INT-001 用例需由 CI 首次执行；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI，脚本报 `spawnSync docker ENOENT`，与本次改动无关，故 `pnpm check` 在该步骤中断；④ 本分支 GitHub Actions 尚未执行；⑤ 新增集成用例与前端「加载更多」用例需非作者人工评审。
+
+## B-7 记录侧发布计数映射（D-1 前置，2026-09-11 本地落库）
+
+记录侧只读端口 `ChangeRecordReadPort` 删除「已发布任务 ID 集合」方法 `listTaskIdsWithPublishedRecords`，统一为「任务 → PUBLISHED 正式记录数」映射 `countPublishedByTask`（单条 SQL、按 `task_id` 升序、计数为 0 的任务缺席由消费端 `?? 0` 补齐，恒有 `hasPublishedRecord === (count > 0)`）。R-3 `MyTasksQueryService.list` 改为消费计数映射并由计数派生 `hasPublishedRecord`；存在性筛选仍在 `MyTaskQueryPort.list` 的同一分页 SQL 内以等价 EXISTS 先过滤后分页，不改锁序、不新增依赖边。R-3 的 `publishedRecordCount` 契约字段与 R-5 的「任务记录标记批量读」扩展属 A-7（裁决 §11.6），不在本批。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B7-INT-001 | PostgreSQL 集成 | 计数口径与范围 | 同一任务 2 条 PUBLISHED 记录（其中 1 条含第 2 版）→ `count = 2`；仅 VOID / 仅草稿 / 无记录任务缺席（消费端补 0）；跨项目任务只在传入该项目 ID 时返回；空 `projectIds` / 空 `taskIds` 短路且不发出 SQL；越界 `taskIds`（超上限、非正整数）抛 `invalid-task-ids` 且不发出 SQL | 已落库待 CI（`apps/api/test/aggregate-read-ports.integration.test.ts`；本机无 PostgreSQL 实例与 Docker，未运行） |
+| B7-PLAN-001 | PostgreSQL 集成 | EXPLAIN (ANALYZE, BUFFERS) | R-3「先过滤后分页」SQL 与计数 SQL 均命中 `change_records` 既有索引（`change_records_project_task_idx` / `change_records_project_status_idx`），无 `Seq Scan on change_records` 与 `Seq Scan on tasks`；证明计数未破坏先过滤后分页、不需要新增迁移 | 已落库待 CI（同上） |
+| B7-API-UNIT-001 | 单元 | R-3 服务消费计数映射 | `MyTasksQueryService.list` 以本页 `taskIds` 调用 `countPublishedByTask(tx, pageProjectIds, taskIds)`；有条目 → `hasPublishedRecord: true`，缺席 → `false` | 本地通过（`apps/api/test/aggregate-read.service.test.ts`，22 例） |
+
+本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（无已知漏洞）均通过。
+
+未运行 / 已知偏差：① `pnpm test:integration` 未运行——本机没有 PostgreSQL 实例与 Docker，`apps/api/test/aggregate-read-ports.integration.test.ts` 可正常收集（17 例），仅按设计因缺少 `TEST_DATABASE_URL` fail closed；B7-INT-001 与 B7-PLAN-001 需由 CI 首次执行（EXPLAIN 断言依赖真库计划形状）；② `pnpm test:e2e` 未运行（依赖数据库与浏览器环境）；③ `pnpm check:deploy:test` 未通过——本机缺少 docker CLI（`spawnSync docker ENOENT`），与本次改动无关；④ 本分支 GitHub Actions 尚未执行；⑤ 新增真库用例需非作者人工评审；⑥ A-7 未落库前 C-1 不得以条数实现标记（裁决 §11.6）。
