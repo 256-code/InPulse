@@ -108,3 +108,36 @@ describe("F-17 draft content", () => {
     ).toBe(false);
   });
 });
+
+describe("B-1 draft list pagination contract", () => {
+  it("coerces limit within 1..100 and only accepts the opaque cursor shape", () => {
+    const schema = schemaRegistry.RecordDraftListQuery.schema;
+    expect(schema.parse({})).toEqual({});
+    expect(schema.parse({ limit: "20" })).toEqual({ limit: 20 });
+    expect(schema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(schema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(schema.safeParse({ limit: 1.5 }).success).toBe(false);
+    expect(schema.safeParse({ cursor: "a".repeat(513) }).success).toBe(false);
+    expect(schema.safeParse({ status: "PUBLISHED" }).success).toBe(false);
+    const cursor = ["payload", "signature"].join(".");
+    expect(schema.parse({ cursor })).toEqual({ cursor });
+  });
+  it("keeps the items/nextCursor/hasMore envelope strict", () => {
+    const page = schemaRegistry.RecordDraftPage.schema;
+    expect(
+      page.safeParse({ items: [], nextCursor: null, hasMore: false }).success,
+    ).toBe(true);
+    expect(page.safeParse({ items: [], nextCursor: null }).success).toBe(false);
+    expect(
+      page.safeParse({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        extra: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      page.safeParse({ items: [], nextCursor: "", hasMore: false }).success,
+    ).toBe(false);
+  });
+});

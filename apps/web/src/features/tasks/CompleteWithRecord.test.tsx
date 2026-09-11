@@ -104,6 +104,8 @@ it("requires explicit draft selection and explicit confirmation of its changed c
     completeTask,
     listRecordDrafts: vi.fn().mockResolvedValue({
       items: [draft, { ...draft, id: 8, featureId: 99, title: "不匹配草稿" }],
+      nextCursor: null,
+      hasMore: false,
     }),
     getRecordDraft: vi
       .fn()

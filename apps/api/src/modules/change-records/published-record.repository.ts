@@ -8,6 +8,7 @@ import {
   type ChangeRecordVersion,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
+import type { TimeCursorValue } from "../../cursors/time-cursor.js";
 type Row = Omit<
   PublishedRecord,
   | "createdAt"
@@ -29,6 +30,18 @@ type Row = Omit<
   updatedAt: Date;
   publishedAt: Date;
 };
+export interface RecordListPageInput {
+  readonly projectId: number;
+  readonly limit: number;
+  readonly after: TimeCursorValue | null;
+}
+
+export interface RecordListPageResult {
+  readonly items: ReadableRecord[];
+  readonly last: TimeCursorValue | null;
+  readonly hasMore: boolean;
+}
+
 @Injectable()
 export class PublishedRecordRepository {
   private columns(tx: TransactionContext) {
@@ -59,15 +72,30 @@ export class PublishedRecordRepository {
       ? publishedRecordSchema.parse(await this.dto(tx, row))
       : undefined;
   }
-  async list(tx: TransactionContext, projectId: number) {
+  async listPublishedPage(
+    tx: TransactionContext,
+    input: RecordListPageInput,
+  ): Promise<RecordListPageResult> {
     const rows = await tx.sql<
-      Row[]
-    >`SELECT ${this.columns(tx)} FROM app.change_records WHERE project_id=${projectId} AND status='PUBLISHED' ORDER BY published_at DESC,id DESC`;
-    return Promise.all(
-      rows.map(async (row) =>
-        publishedRecordSchema.parse(await this.dto(tx, row)),
-      ),
+      (Row & { publishedAtCursor: string })[]
+    >`SELECT ${this.columns(tx)},to_char(published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "publishedAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='PUBLISHED' AND (${input.after?.at ?? null}::timestamptz IS NULL OR published_at < ${input.after?.at ?? null}::timestamptz OR (published_at = ${input.after?.at ?? null}::timestamptz AND id < ${input.after?.id ?? "0"}::bigint)) ORDER BY published_at DESC,id DESC LIMIT ${input.limit + 1}`;
+    const hasMore = rows.length > input.limit,
+      pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = await Promise.all(
+      pageRows.map(async (row) => {
+        const { publishedAtCursor: _cursor, ...base } = row;
+        return publishedRecordSchema.parse(await this.dto(tx, base));
+      }),
     );
+    const lastRow = pageRows[pageRows.length - 1];
+    return {
+      items,
+      hasMore,
+      last:
+        hasMore && lastRow !== undefined
+          ? { at: lastRow.publishedAtCursor, id: String(lastRow.id) }
+          : null,
+    };
   }
   async findVoided(
     tx: TransactionContext,
@@ -87,16 +115,45 @@ export class PublishedRecordRepository {
       voidReason,
     });
   }
-  async listVoided(tx: TransactionContext, projectId: number) {
+  async listVoidedPage(
+    tx: TransactionContext,
+    input: RecordListPageInput,
+  ): Promise<RecordListPageResult> {
     const rows = await tx.sql<
-      { id: number }[]
-    >`SELECT id FROM app.change_records WHERE project_id=${projectId} AND status='VOID' ORDER BY published_at DESC,id DESC`;
+      (Row & {
+        voidedAt: Date;
+        voidReason: string;
+        publishedAtCursor: string;
+      })[]
+    >`SELECT ${this.columns(tx)},voided_at AS "voidedAt",void_reason AS "voidReason",to_char(published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "publishedAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='VOID' AND (${input.after?.at ?? null}::timestamptz IS NULL OR published_at < ${input.after?.at ?? null}::timestamptz OR (published_at = ${input.after?.at ?? null}::timestamptz AND id < ${input.after?.id ?? "0"}::bigint)) ORDER BY published_at DESC,id DESC LIMIT ${input.limit + 1}`;
+    const hasMore = rows.length > input.limit,
+      pageRows = hasMore ? rows.slice(0, input.limit) : rows;
     const items = await Promise.all(
-      rows.map((row) => this.findVoided(tx, projectId, row.id)),
+      pageRows.map(async (row) => {
+        const {
+          voidedAt,
+          voidReason,
+          publishedAtCursor: _cursor,
+          ...base
+        } = row;
+        const content = await this.dto(tx, base);
+        return voidedRecordSchema.parse({
+          ...content,
+          status: "VOID",
+          voidedAt: new Date(voidedAt).toISOString(),
+          voidReason,
+        });
+      }),
     );
-    return items.filter(
-      (item): item is NonNullable<typeof item> => item !== undefined,
-    );
+    const lastRow = pageRows[pageRows.length - 1];
+    return {
+      items,
+      hasMore,
+      last:
+        hasMore && lastRow !== undefined
+          ? { at: lastRow.publishedAtCursor, id: String(lastRow.id) }
+          : null,
+    };
   }
   async versions(
     tx: TransactionContext,

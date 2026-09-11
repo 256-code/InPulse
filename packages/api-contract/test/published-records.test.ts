@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { schemaRegistry } from "../src/schema-registry.js";
 const content = {
   title: "修订",
@@ -62,4 +62,25 @@ it("requires both explicit version headers and a strictly empty publication body
   expect(
     schemaRegistry.PublishRecordRequest.schema.safeParse({ taskId: 1 }).success,
   ).toBe(false);
+});
+
+describe("B-1 published record list pagination contract", () => {
+  it("accepts status/cursor/limit and rejects unknown or out-of-range values", () => {
+    const schema = schemaRegistry.RecordListQuery.schema;
+    expect(schema.parse({ status: "VOID", limit: "20" })).toEqual({
+      status: "VOID",
+      limit: 20,
+    });
+    expect(schema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(schema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(schema.safeParse({ cursor: "" }).success).toBe(false);
+    expect(schema.safeParse({ q: "x" }).success).toBe(false);
+  });
+  it("keeps the items/nextCursor/hasMore envelope strict", () => {
+    const page = schemaRegistry.ReadableRecordPage.schema;
+    expect(
+      page.safeParse({ items: [], nextCursor: "c.1", hasMore: true }).success,
+    ).toBe(true);
+    expect(page.safeParse({ items: [], hasMore: true }).success).toBe(false);
+  });
 });

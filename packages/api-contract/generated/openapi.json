@@ -4231,7 +4231,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadableRecordList"
+                  "$ref": "#/components/schemas/ReadableRecordPage"
                 }
               }
             }
@@ -4313,6 +4313,26 @@
                 "PUBLISHED",
                 "VOID"
               ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
             }
           }
         ]
@@ -11877,7 +11897,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecordDraftList"
+                  "$ref": "#/components/schemas/RecordDraftPage"
                 }
               }
             }
@@ -11987,6 +12007,26 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 2147483647
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
             }
           }
         ]
@@ -18358,18 +18398,36 @@
           }
         ]
       },
-      "ReadableRecordList": {
+      "ReadableRecordPage": {
         "type": "object",
         "properties": {
           "items": {
+            "maxItems": 100,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReadableRecord"
             }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
           }
         },
         "required": [
-          "items"
+          "items",
+          "nextCursor",
+          "hasMore"
         ],
         "additionalProperties": false
       },
@@ -18688,18 +18746,52 @@
         ],
         "additionalProperties": false
       },
-      "RecordDraftList": {
+      "RecordDraftListQuery": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "RecordDraftPage": {
         "type": "object",
         "properties": {
           "items": {
+            "maxItems": 100,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecordDraftItem"
             }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
           }
         },
         "required": [
-          "items"
+          "items",
+          "nextCursor",
+          "hasMore"
         ],
         "additionalProperties": false
       },
@@ -18895,6 +18987,16 @@
               "PUBLISHED",
               "VOID"
             ]
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
           }
         },
         "additionalProperties": false

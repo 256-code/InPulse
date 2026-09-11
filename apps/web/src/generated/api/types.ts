@@ -903,8 +903,10 @@ export type PublishedRecordVersionHeaders = {
 
 export type ReadableRecord = (PublishedRecord | VoidedRecord);
 
-export type ReadableRecordList = {
+export type ReadableRecordPage = {
   readonly items: readonly ReadableRecord[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
 };
 
 export type ReauthenticateAdminHeaders = {
@@ -967,8 +969,15 @@ export type RecordDraftItem = {
   readonly updatedAt: string;
 };
 
-export type RecordDraftList = {
+export type RecordDraftListQuery = {
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
+export type RecordDraftPage = {
   readonly items: readonly RecordDraftItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
 };
 
 export type RecordDraftProjectPath = {
@@ -1012,6 +1021,8 @@ export type RecordLifecycleResult = {
 
 export type RecordListQuery = {
   readonly status?: ("PUBLISHED" | "VOID");
+  readonly cursor?: string;
+  readonly limit?: number;
 };
 
 export type RecordPublicationReplayContext = {

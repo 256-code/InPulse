@@ -45,6 +45,7 @@ import { TaskGroupRepository } from "../src/modules/task-groups/task-group.repos
 import { PostgresTaskBranchQueryPort } from "../src/modules/task-groups/task-branch-query.port.js";
 import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
 import { RecordDraftsService } from "../src/modules/change-records/record-drafts.service.js";
+import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import { RecordPublicationRepository } from "../src/modules/change-records/record-publication.repository.js";
 import { RecordPublicationAccess } from "../src/modules/change-records/record-publication-access.js";
 import { RecordPublicationEffects } from "../src/modules/change-records/record-publication-effects.js";
@@ -107,6 +108,7 @@ beforeAll(async () => {
     records,
     uow,
     audit,
+    new TimeCursorService(ring, "RECORD_DRAFTS"),
   );
   publication = new RecordPublicationService(
     new RecordPublicationAccess(access, modules, features, taskQuery, pubRepo),
@@ -204,9 +206,8 @@ beforeAll(async () => {
   base = await app.getUrl();
 });
 const key = randomBytes(32);
-const tokens = new SessionTokenService(
-  VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-);
+const ring = VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1);
+const tokens = new SessionTokenService(ring);
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
   await app?.close();
