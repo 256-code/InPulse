@@ -28,6 +28,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 
 const empty: RecordDraftContent = {
   title: "",
@@ -499,9 +500,9 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
                     .map((field) => (
                       <section key={field}>
                         <h3>{labels[field]}</h3>
-                        <p className="draft-content">
-                          {detail.data[field] || "暂无已知遗留问题"}
-                        </p>
+                        <RecordMarkdown
+                          content={detail.data[field] || "暂无已知遗留问题"}
+                        />
                       </section>
                     ))}
                   <Button
@@ -573,7 +574,12 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
                       <option value="mine">保留我的输入</option>
                       <option value="latest">采用最新内容</option>
                     </select>
-                    <p>最新内容：{merge.latest[field]}</p>
+                    <div className="record-field">
+                      <span className="record-field-label">最新内容</span>
+                      <RecordMarkdown
+                        content={merge.latest[field] || "（空）"}
+                      />
+                    </div>
                   </label>
                 ))}
                 <Button

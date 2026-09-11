@@ -75,9 +75,6 @@
   padding: 16px;
   min-width: 0;
 }
-.record-version-columns .draft-content {
-  overflow-wrap: anywhere;
-}
 @media (max-width: 720px) {
   .record-version-columns {
     grid-template-columns: 1fr;

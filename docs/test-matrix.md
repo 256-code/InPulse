@@ -21,10 +21,12 @@ fail closed 到 enforce。
 直接修正异常过滤器，因此不引入 adapter 包装）；`database/src/config.ts` 把 Secret 文件权限
 判定抽成 `isPrivateOwnerReadableFile`，生产模式仍是 `/run/secrets` 直接子项、非符号链接、
 仅属主可读的 fail closed 策略；GitHub 外链按 [ADR-022](adr/ADR-022.md) 用标准 URL Parser
-实现规范化，数据库最终防线沿用既有类型化关联模型。未交付：Markdown 白名单（前端当前没有
-任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR 由
-人工确认）；外部链接的 HTTP 关联接口属 F-14 业务纵切片，新增路由必须同步 Schema、Route
-Registry、权限矩阵、OpenAPI 与生成客户端。另见「审计与安全」表。
+实现规范化，数据库最终防线沿用既有类型化关联模型。Markdown 白名单渲染当时列为未交付（前端
+没有任何 Markdown 渲染落点，引入 react-markdown/rehype-sanitize 属新增生产依赖，必须独立 PR
+由人工确认）：依赖已由 [PR #127](https://github.com/256-code/InPulse/pull/127) 合入，白名单渲染
+已由 B-5 落库，见本文件「B-5 迭代记录 Markdown 白名单渲染」章节。外部链接的 HTTP 关联接口属
+F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限矩阵、OpenAPI 与生成客户端。
+另见「审计与安全」表。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -1004,3 +1006,37 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 本地实际执行（2026-09-11）：`powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/poc-search-pgroonga-local.ps1 -Image inpulse/pgroonga-pg18.6:repro -Port 55434 -RestorePort 55435 -Capacity` 一体化路径成功退出——8 个迁移校验与迁移、数据库单测 15 例、数据库集成 26 例、10 个 PGroonga 策略 PoC、容量门禁（30 并发 × 600.8s、2,398,317 次请求 / 2,362,344 次 SQL、0 错误、P95 10.171ms、P99 13.284ms、召回 189/190、冷缓存 30 条）、升级路径（`0000-0002` 手工应用后由 runner 应用 `0003`-`0007`，4 applied / 4 already present）与 `0003`/`0004`/`0005` 逐迁移事务内回滚、逻辑备份恢复验证；`database/package.json` 新增 `poc:search:capacity`，`database/scripts/poc-search-pgroonga-local.ps1` 新增 `-Capacity` 参数。
 
 未运行 / 已知偏差：① 本批 [PR #128](https://github.com/256-code/InPulse/pull/128) 的 GitHub Actions 结果见该 PR 检查记录；② 容量门禁不进入 CI（含 10 分钟持续负载与容器重启），端到端 P95（Nginx / TLS / API 与鉴权开销）需在部署环境复测；③ 5 年容量模型峰值未在设计中定稿，1.2 倍条件以上界形式记录（峰值 ≤ 84166 时成立），定稿后需人工复核并按需复测；④ 冷缓存只清空 PostgreSQL shared_buffers，宿主页缓存与存储层缓存未清空；⑤ 30 并发由单进程发起，未覆盖真实成员关系变更并发；⑥ 本批三个既有 PoC artifact 由同一次脚本运行重生成后已还原，避免夹带与 A-5 无关的时序噪声。
+## B-5 迭代记录 Markdown 白名单渲染（2026-09-11 本地落库）
+
+按[技术设计 §7.5](../技术设计v1.2.2.md)与[系统设计 §3.6](../系统设计文档v1.0.2.md)：迭代记录
+正文保存 Markdown 原文，渲染必须过白名单，不允许原始 HTML。依赖 `react-markdown@10.1.0` +
+`rehype-sanitize@6.0.0` 已按第 4 节由独立依赖 [PR #127](https://github.com/256-code/InPulse/pull/127)
+squash 合入 main `3e416a1`（外链口径沿用 [ADR-022](adr/ADR-022.md)）。渲染器
+[`RecordMarkdown`](../apps/web/src/features/common/components/RecordMarkdown.tsx) 逐层收敛：
+react-markdown 不启用原始 HTML；rehype-sanitize 使用显式完整 schema，只保留
+`a/blockquote/br/code/em/h1-h6/hr/img/li/ol/p/pre/strong/ul` 标签与 `a.href`、`img.alt`
+属性，`href` 协议只允许 https，并对 `id/name` 前缀转义；`urlTransform` 与 `a` 组件统一走
+`recordLinkHref`（标准 URL Parser，禁止字符串前缀判断域名），只把规范化后的
+`https://github.com/...` 渲染为 `target="_blank" rel="noopener noreferrer"` 外链，拒绝
+http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸形 URL；图片不加载远程资源，
+只显示 `[图片：alt]`。接入点：已发布记录详情与版本对比、草稿详情、完成任务时的最新草稿与所选
+草稿、遗留项转任务预览、版本冲突「最新内容」预览；编辑表单保持纯文本 textarea。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B5-UNIT-001 | Web 单元 | CommonMark 结构渲染 | 标题 / 列表 / 引用 / 代码块 / 行内代码 / 粗斜体 / 分隔线按白名单渲染；行内代码中的 `<div>` 文本保留；空内容不产生节点并保留调用方类名 | 本地通过（`RecordMarkdown.test.tsx`） |
+| B5-UNIT-002 | Web 单元 | 原始 HTML 惰性 | `<script>`、事件处理器与原始标签不进入 DOM（无 script/img/onerror 节点与全局探针赋值）；原始 HTML 文本按策略丢弃、历史纯文本换行保留 | 本地通过 |
+| B5-UNIT-003 | Web 单元 | 协议与域名白名单 | `javascript:` / `data:` / `vbscript:` 不产出 href；`https://github.com/...` 产出安全外链且 autolink 同口径；http、非 GitHub 域名、混淆域名、userinfo、非默认端口、相对路径与畸形 URL 只保留文本 | 本地通过 |
+| B5-UNIT-004 | Web 单元 | 图片与占位 | 图片不加载远程资源、只显示 `[图片：alt]`；详情「暂无已知遗留问题」与版本对比「（空）」占位保持 | 本地通过 |
+| B5-UNIT-005 | Web 单元 | 视图接线回归 | 已发布记录 / 草稿 / 完成任务 / 遗留转任务用例在接入 `RecordMarkdown` 后通过；版本冲突断言改为标签「最新内容」与内容分别断言 | 本地通过 |
+
+本地实际执行（2026-09-11）：`RecordMarkdown.test.tsx` 11 例；`pnpm --filter @inpulse/web test`
+68 文件 333 例通过；`pnpm --filter @inpulse/web typecheck`、`pnpm lint`、`pnpm format:check`、
+`pnpm build`（产物含 `RecordMarkdown-*.js`）、`pnpm check:frontend:boundaries`（220 模块
+1005 依赖）、`pnpm check:docs` 与 `pnpm check:secrets`（944 个文件）通过；记录相关既有浏览器 E2E 定向复跑 11 例 10 过 + 1 偶发（`record-publishing.spec.ts:78` 新建功能弹窗未关，Docker 日志同时段 `idempotency_records_retention_check` 违约，属既有偶发同族；单文件复跑 2/2 通过）。推送 2（2026-09-11）：首轮 CI 的 Secret scan 命中测试内 userinfo 反例字面量（用户名与口令内嵌于 URL），已改为片段拼接，未放宽扫描规则。推送 3（2026-09-11）：推送 2 的 CI 又在本文档与 `开发日志.md` 正文命中同类 userinfo 字面量，本次改写为不含连接串形态的描述；`pnpm check:secrets`、`pnpm check:docs` 与本文件 `pnpm exec prettier --check` 重新通过，仍未放宽扫描规则。
+
+未运行 / 已知偏差：① 本批 GitHub Actions 见 [PR #129](https://github.com/256-code/InPulse/pull/129)；
+② 未新增浏览器 E2E，记录相关既有用例定向复跑见上（含 1 例既有偶发，按约定不得视为已修复）；
+③ 新增单测需非
+作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
+（不与 rehype-sanitize 默认 schema 合并），后续升级依赖时必须同步复核本文件 schema 与测试。
