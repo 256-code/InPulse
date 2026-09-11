@@ -57,10 +57,16 @@ $env:POC_PGROONGA_IMAGE_DIGEST = 'sha256:b5c92fa3d86ad76ce75ddd8095f60542cf02534
 pnpm db:poc:search:pgroonga
 ```
 
+传 `-Capacity` 会在搜索 PoC 通过后追加阶段 4 容量门禁（30 并发 × 600 秒、
+冷缓存容器重启、跨项目越界断言），可用 `-CapacityDurationSeconds` 缩短冒烟；
+该步骤会 `docker restart` 本次运行的一次性容器，容器创建与清理语义与默认
+运行一致。
+
 结果分别写入
 [`artifacts/pgroonga-report.json`](./artifacts/pgroonga-report.json)、
-[`artifacts/pgroonga-backup-restore-report.json`](./artifacts/pgroonga-backup-restore-report.json)
-与 [`artifacts/pgroonga-migration-report.json`](./artifacts/pgroonga-migration-report.json)。
+[`artifacts/pgroonga-backup-restore-report.json`](./artifacts/pgroonga-backup-restore-report.json)、
+[`artifacts/pgroonga-migration-report.json`](./artifacts/pgroonga-migration-report.json)
+与 [`artifacts/pgroonga-capacity-report.json`](./artifacts/pgroonga-capacity-report.json)。
 
 ## 数据集
 
@@ -126,6 +132,42 @@ V1 建议采用默认 `pgroonga_text_full_text_search_ops_v2`，查询方式优�
 行上代表查询均为 Index Scan，功能门禁通过，不需要额外引入自定义 tokenizer
 或正则 opclass。若后续 V2 要求任意英文/代码子串，再评估
 `TokenNgram(unify=false)` 或 `TokenBigramSplitSymbolAlphaDigit`，并新增 ADR。
+
+## 容量门禁（阶段 4 / A-5）
+
+阶段 4 容量门禁按技术设计 V1.2.2 §9.4 与系统设计 §1.6 执行：搜索投影
+≥ 100,000 条且不低于 5 年容量模型峰值的 1.2 倍、≥ 200 条冻结金标、
+30 并发持续 10 分钟、预热后 P95 < 500ms / P99 < 1s，并单独记录冷缓存。
+运行器 `run-capacity.ts` 复用本 PoC 种子化的 `app.pgroonga_poc_scale`
+（101000 行）与默认全文索引，查询 SQL 与生产
+`PostgresSearchProjectionReader` 同形状（`&@~ app.pgroonga_query_escape($1)`、
+项目与 visibility 过滤在 SQL 层、id keyset 分页），行级校验任何越界
+`project_id` 都计为违规。
+
+- 入口：`poc-search-pgroonga-local.ps1 -Capacity`（默认 600 秒，
+  `-CapacityDurationSeconds` 可缩短冒烟）；对已有实例可直接运行
+  `pnpm --filter @inpulse/database poc:search:capacity`。
+- 环境变量：`POC_DATABASE_URL`（`app_runtime`）、`POC_ADMIN_DATABASE_URL`
+  （`cluster_bootstrap`，缺省回退 `POC_DATABASE_URL`）、
+  `POC_CAPACITY_CONCURRENCY`（默认 30）、`POC_CAPACITY_DURATION_MS`
+  （默认 600000）、`POC_CAPACITY_COLD_QUERIES`（默认 30）、
+  `POC_CAPACITY_WARMUP_PASSES`（默认 2）、`POC_CAPACITY_RESTART_CONTAINER`
+  （冷缓存重启的容器名，本地脚本自动设置）。
+- 冷缓存：`docker restart` 指定容器清空 PostgreSQL shared_buffers 后，以
+  单并发执行首批查询并与预热后的持续压测分开记录；宿主页缓存与存储层
+  缓存未清空，生产冷启动仍需按 DEPLOY / RECOVERY 门禁复测。
+- 结果写入 `artifacts/pgroonga-capacity-report.json`
+  （`version: pgroonga-capacity-v1`，含 `gates` 与 `allPassed`）；任一
+  门禁不通过时以非零退出。
+- 2026-09-11 本地实测（`inpulse/pgroonga-pg18.6:repro`、PostgreSQL 18.6、
+  PGroonga 4.0.8、101000 行、30 并发 × 600 秒）：2,398,317 次请求 /
+  2,362,344 次 SQL、0 错误、P95 10.171 ms、P99 13.284 ms、Recall@20
+  189/190（99.47%）、跨项目越界 0、冷缓存 30 条单独记录，全部 gate 通过。
+- 该门禁不进入 CI：完整运行含 10 分钟持续负载与容器重启，属阶段 4 /
+  发布前验收门禁；30 并发由单进程发起，未包含 Nginx、TLS、API 与鉴权
+  开销，端到端 P95 需在部署环境复测。
+- 设计文档未给出 5 年容量模型峰值的具体数值；1.2 倍条件以上界形式记录
+  （模型峰值 ≤ 84166 时自动满足），模型定稿后需人工复核并按需复测。
 
 ## 迁移生命周期
 

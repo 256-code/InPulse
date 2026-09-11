@@ -1,0 +1,539 @@
+{
+  "version": "pgroonga-capacity-v1",
+  "generatedAt": "2026-09-11T14:42:02.905Z",
+  "goldenQueryVersion": "phase4-v1",
+  "gate": {
+    "clause": "技术设计 V1.2.2 §9.4 / 系统设计 §1.6：搜索投影 >= 100000 条且不低于 5 年容量模型峰值 1.2 倍；>= 200 条冻结金标；30 并发持续 10 分钟；预热后 P95 < 500ms、P99 < 1s；Recall@20 >= 90%；跨项目 0 条；另报冷缓存",
+    "scaleRowFloor": 100000,
+    "concurrency": 30,
+    "durationMs": 600000,
+    "p95LimitMs": 500,
+    "p99LimitMs": 1000,
+    "recallThreshold": 0.9,
+    "fiveYearPeakModel": {
+      "definedInDesignDocs": false,
+      "note": "设计文档未给出 5 年容量模型峰值的具体数值；本报告记录验收规模 101000 条与对应上界：当 5 年峰值模型 <= 84166 条时，1.2 倍条件自动满足。模型定稿后需人工复核并按需复测。"
+    }
+  },
+  "environment": {
+    "platform": "win32 10.0.26200",
+    "arch": "x64",
+    "cpuCount": 20,
+    "totalMemoryBytes": 33818259456
+  },
+  "database": {
+    "version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgresServerVersion": "18.6 (Debian 18.6-1.pgdg13+2)",
+    "image": "inpulse/pgroonga-pg18.6:repro",
+    "imageDigest": "inpulse/pgroonga-pg18.6@sha256:bca8248cb90be2b287674741d6d1575b5a87f4f1fbb52259a9aca9055781083a",
+    "pgroongaVersion": "4.0.8",
+    "pgroongaSchema": "app",
+    "groongaVersion": "16.1.0",
+    "settings": {
+      "effective_cache_size": "524288",
+      "max_connections": "150",
+      "max_worker_processes": "8",
+      "shared_buffers": "16384",
+      "work_mem": "4096"
+    }
+  },
+  "dataset": {
+    "table": "app.pgroonga_poc_scale",
+    "scaleRows": 101000,
+    "requiredScaleRows": 100000,
+    "projects": 6,
+    "topK": 20,
+    "goldenQueries": 200,
+    "goldenNormalQueries": 190
+  },
+  "index": {
+    "name": "pgroonga_poc_default-query_scale_idx",
+    "definition": "CREATE INDEX pgroonga_poc_default-query_scale_idx ON app.pgroonga_poc_scale USING pgroonga (normalized_search_text)",
+    "buildMs": 649.665,
+    "table_bytes": "39378944",
+    "total_bytes": "44212224",
+    "indexDiskUsage": 29138944,
+    "lexiconName": "Lexicon18396_0.index"
+  },
+  "config": {
+    "concurrency": 30,
+    "durationMs": 600000,
+    "coldSampleCount": 30,
+    "warmupPasses": 2,
+    "restartContainer": "inpulse-pgroonga-poc-e9e61e808a114940bd939fc06cdcaf30",
+    "scopeRotation": [
+      [
+        1,
+        2,
+        3
+      ],
+      [
+        4,
+        5,
+        6
+      ],
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      [
+        2,
+        4,
+        6
+      ],
+      [
+        1,
+        3,
+        5
+      ]
+    ],
+    "sql": "SELECT id::text AS id, project_id, entity_type, entity_id, title, summary FROM app.pgroonga_poc_scale WHERE normalized_search_text &@~ app.pgroonga_query_escape($1) AND project_id = ANY($2::int[]) AND visibility_scope = ANY($3::text[]) AND id > $4::bigint ORDER BY id ASC LIMIT $5"
+  },
+  "phases": {
+    "coldCache": {
+      "method": "容器重启清空 PostgreSQL shared_buffers 后的首轮单并发查询（宿主页缓存未清空）",
+      "restartedContainer": "inpulse-pgroonga-poc-e9e61e808a114940bd939fc06cdcaf30",
+      "restartWaitMs": 195.481,
+      "samples": [
+        {
+          "id": "G001",
+          "query": "登录",
+          "elapsedMs": 68.211,
+          "rowCount": 6,
+          "error": null
+        },
+        {
+          "id": "G002",
+          "query": "项目",
+          "elapsedMs": 2.764,
+          "rowCount": 10,
+          "error": null
+        },
+        {
+          "id": "G003",
+          "query": "任务",
+          "elapsedMs": 2.259,
+          "rowCount": 8,
+          "error": null
+        },
+        {
+          "id": "G004",
+          "query": "搜索",
+          "elapsedMs": 2.017,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G005",
+          "query": "发布",
+          "elapsedMs": 1.842,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G006",
+          "query": "合并",
+          "elapsedMs": 1.679,
+          "rowCount": 3,
+          "error": null
+        },
+        {
+          "id": "G007",
+          "query": "通知",
+          "elapsedMs": 31.733,
+          "rowCount": 20,
+          "error": null
+        },
+        {
+          "id": "G008",
+          "query": "审计",
+          "elapsedMs": 2.463,
+          "rowCount": 3,
+          "error": null
+        },
+        {
+          "id": "G009",
+          "query": "概览",
+          "elapsedMs": 2.405,
+          "rowCount": 2,
+          "error": null
+        },
+        {
+          "id": "G010",
+          "query": "动态",
+          "elapsedMs": 2.307,
+          "rowCount": 3,
+          "error": null
+        },
+        {
+          "id": "G011",
+          "query": "成员",
+          "elapsedMs": 2.898,
+          "rowCount": 3,
+          "error": null
+        },
+        {
+          "id": "G012",
+          "query": "权限",
+          "elapsedMs": 1.998,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G013",
+          "query": "模块",
+          "elapsedMs": 1.7,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G014",
+          "query": "功能",
+          "elapsedMs": 1.677,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G015",
+          "query": "记录",
+          "elapsedMs": 1.601,
+          "rowCount": 15,
+          "error": null
+        },
+        {
+          "id": "G016",
+          "query": "遗留",
+          "elapsedMs": 1.561,
+          "rowCount": 3,
+          "error": null
+        },
+        {
+          "id": "G017",
+          "query": "恢复",
+          "elapsedMs": 1.861,
+          "rowCount": 4,
+          "error": null
+        },
+        {
+          "id": "G018",
+          "query": "作废",
+          "elapsedMs": 1.752,
+          "rowCount": 4,
+          "error": null
+        },
+        {
+          "id": "G019",
+          "query": "草稿",
+          "elapsedMs": 1.604,
+          "rowCount": 2,
+          "error": null
+        },
+        {
+          "id": "G020",
+          "query": "版本",
+          "elapsedMs": 1.698,
+          "rowCount": 5,
+          "error": null
+        },
+        {
+          "id": "G021",
+          "query": "续期",
+          "elapsedMs": 1.96,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G022",
+          "query": "熔断",
+          "elapsedMs": 1.701,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G023",
+          "query": "限流",
+          "elapsedMs": 1.651,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G024",
+          "query": "快照",
+          "elapsedMs": 1.679,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G025",
+          "query": "沙箱",
+          "elapsedMs": 1.605,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G026",
+          "query": "白名单",
+          "elapsedMs": 1.737,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G027",
+          "query": "回执",
+          "elapsedMs": 1.668,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G028",
+          "query": "分派",
+          "elapsedMs": 1.483,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G029",
+          "query": "验收",
+          "elapsedMs": 1.53,
+          "rowCount": 1,
+          "error": null
+        },
+        {
+          "id": "G030",
+          "query": "预热",
+          "elapsedMs": 1.526,
+          "rowCount": 1,
+          "error": null
+        }
+      ],
+      "summary": {
+        "count": 30,
+        "minMs": 1.483,
+        "meanMs": 5.086,
+        "p50Ms": 1.701,
+        "p90Ms": 2.764,
+        "p95Ms": 31.733,
+        "p99Ms": 68.211,
+        "maxMs": 68.211
+      }
+    },
+    "warmup": {
+      "passes": 2,
+      "recall": {
+        "recallAt20": 0.9947368421052631,
+        "hits": 189,
+        "totalNormal": 190,
+        "missed": [
+          "G007:通知"
+        ],
+        "errors": []
+      },
+      "additionalWarmupQueries": 197,
+      "warmupErrors": 0
+    },
+    "sustained": {
+      "concurrency": 30,
+      "requestedDurationMs": 600000,
+      "actualDurationMs": 600812.934,
+      "requests": 2398317,
+      "sqlExecuted": 2362344,
+      "validationRejected": 35973,
+      "errors": 0,
+      "errorSamples": [],
+      "rowsReturned": 2482296,
+      "projectViolations": 0,
+      "qps": 3991.787,
+      "latencyMethod": "nearest-rank（排序后取 ceil(p*n)）",
+      "latencyMs": {
+        "count": 2362344,
+        "minMs": 2.76,
+        "meanMs": 7.616,
+        "p50Ms": 6.722,
+        "p90Ms": 9.138,
+        "p95Ms": 10.171,
+        "p99Ms": 13.284,
+        "maxMs": 940.095
+      },
+      "histogram": [
+        {
+          "upperBoundMs": 1,
+          "count": 0
+        },
+        {
+          "upperBoundMs": 2,
+          "count": 0
+        },
+        {
+          "upperBoundMs": 5,
+          "count": 175900
+        },
+        {
+          "upperBoundMs": 10,
+          "count": 2054381
+        },
+        {
+          "upperBoundMs": 25,
+          "count": 119723
+        },
+        {
+          "upperBoundMs": 50,
+          "count": 681
+        },
+        {
+          "upperBoundMs": 100,
+          "count": 1
+        },
+        {
+          "upperBoundMs": 200,
+          "count": 11386
+        },
+        {
+          "upperBoundMs": 500,
+          "count": 149
+        },
+        {
+          "upperBoundMs": 1000,
+          "count": 123
+        },
+        {
+          "upperBoundMs": null,
+          "count": 0
+        }
+      ],
+      "timeline": [
+        {
+          "elapsedSeconds": 60,
+          "requests": 267833,
+          "sqlExecuted": 263816,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 9.395
+        },
+        {
+          "elapsedSeconds": 120.102,
+          "requests": 507794,
+          "sqlExecuted": 500177,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 9.791
+        },
+        {
+          "elapsedSeconds": 180.299,
+          "requests": 747040,
+          "sqlExecuted": 735835,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 9.938
+        },
+        {
+          "elapsedSeconds": 240.553,
+          "requests": 986740,
+          "sqlExecuted": 971941,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 9.997
+        },
+        {
+          "elapsedSeconds": 300.887,
+          "requests": 1227179,
+          "sqlExecuted": 1208771,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.023
+        },
+        {
+          "elapsedSeconds": 361.291,
+          "requests": 1467121,
+          "sqlExecuted": 1445116,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.045
+        },
+        {
+          "elapsedSeconds": 421.772,
+          "requests": 1707357,
+          "sqlExecuted": 1681749,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.059
+        },
+        {
+          "elapsedSeconds": 482.355,
+          "requests": 1945881,
+          "sqlExecuted": 1916694,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.083
+        },
+        {
+          "elapsedSeconds": 543.048,
+          "requests": 2180882,
+          "sqlExecuted": 2148170,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.125
+        },
+        {
+          "elapsedSeconds": 600,
+          "requests": 2398287,
+          "sqlExecuted": 2362314,
+          "errors": 0,
+          "projectViolations": 0,
+          "p95MsSoFar": 10.171
+        }
+      ],
+      "sharedBufferStats": {
+        "blksHit": 73606173,
+        "blksRead": 5863,
+        "hitRate": 1
+      }
+    },
+    "crossProjectBeforeSustained": {
+      "queryId": "G043",
+      "query": "INP-T-2026-0001",
+      "expectedProjectId": 1,
+      "queriedProjectIds": [
+        2
+      ],
+      "returnedRows": 0,
+      "error": null,
+      "passed": true
+    },
+    "crossProjectAfterSustained": {
+      "queryId": "G043",
+      "query": "INP-T-2026-0001",
+      "expectedProjectId": 1,
+      "queriedProjectIds": [
+        2
+      ],
+      "returnedRows": 0,
+      "error": null,
+      "passed": true
+    }
+  },
+  "gates": {
+    "scaleRows": true,
+    "frozenGoldenSet": true,
+    "goldenQueryVersion": true,
+    "recallAt20": true,
+    "concurrency": true,
+    "duration": true,
+    "zeroErrors": true,
+    "p95Under500ms": true,
+    "p99Under1000ms": true,
+    "crossProjectZero": true,
+    "coldCacheRecorded": true
+  },
+  "allPassed": true,
+  "limitations": [
+    "101000 行为确定性仿真数据，不代表真实业务分布；容量结论只覆盖该仿真规模。",
+    "冷缓存为容器重启后（PostgreSQL shared_buffers 清空）的首轮查询；宿主页缓存与存储层缓存未清空，生产冷启动与异地恢复场景仍需按 DEPLOY/RECOVERY 门禁复测。",
+    "30 并发由同一台宿主上的单个 Node 进程发起，未包含 Nginx、TLS、API 与鉴权层开销；端到端 P95 需在部署环境复测。",
+    "设计文档未固定 5 年容量模型峰值；1.2 倍条件以上界形式记录（模型峰值 <= 84166 时成立），模型定稿后需人工复核。",
+    "P95/P99 使用 nearest-rank 方法；跨项目校验为行级断言与两次负向探针，未覆盖真实成员关系变更并发。"
+  ]
+}
