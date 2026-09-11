@@ -18280,7 +18280,8 @@
               "TASK",
               "CHANGE_RECORD",
               "EXTERNAL_LINK",
-              "TASK_GROUP"
+              "TASK_GROUP",
+              "LEFTOVER"
             ]
           },
           "entityId": {

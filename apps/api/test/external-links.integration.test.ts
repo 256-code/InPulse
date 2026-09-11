@@ -70,6 +70,7 @@ import { PublishedRecordsController } from "../src/modules/change-records/publis
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
+import { LeftoverSearchProjectionSync } from "../src/modules/change-records/leftover-search-projection.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
@@ -135,6 +136,7 @@ beforeAll(async () => {
       audit,
       activity,
       search,
+      new LeftoverSearchProjectionSync(search),
       notifications,
       access,
     ),
@@ -209,6 +211,7 @@ beforeAll(async () => {
             audit,
             activity,
             search,
+            new LeftoverSearchProjectionSync(search),
           ),
         ),
       },
@@ -1071,6 +1074,7 @@ describe("F22 typed external links", () => {
         audit,
         activity,
         search,
+        new LeftoverSearchProjectionSync(search),
       );
       let signalReady!: (pid: number) => void, release!: () => void;
       const ready = new Promise<number>((r) => (signalReady = r)),

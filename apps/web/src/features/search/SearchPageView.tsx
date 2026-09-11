@@ -35,6 +35,7 @@ const entityTypeMeta: Readonly<
   CHANGE_RECORD: { label: "变更记录", color: "orange" },
   EXTERNAL_LINK: { label: "外部链接", color: "green" },
   TASK_GROUP: { label: "任务组", color: "magenta" },
+  LEFTOVER: { label: "遗留问题", color: "volcano" },
 };
 
 export interface SearchPageViewProps {

@@ -6,6 +6,7 @@ export const SEARCH_PROJECTION_ENTITY_TYPES = [
   "CHANGE_RECORD",
   "EXTERNAL_LINK",
   "TASK_GROUP",
+  "LEFTOVER",
 ] as const;
 
 export type SearchProjectionEntityType =

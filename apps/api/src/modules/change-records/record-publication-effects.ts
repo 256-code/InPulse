@@ -19,6 +19,7 @@ import {
   type SearchProjectionWriteInput,
 } from "../search/index.js";
 import { RecordDraftError } from "./record-drafts.service.js";
+import { LeftoverSearchProjectionSync } from "./leftover-search-projection.js";
 type SearchRecord = RecordDraftContent & {
   id: number;
   projectId: number;
@@ -66,6 +67,8 @@ export class RecordPublicationEffects {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(LeftoverSearchProjectionSync)
+    private readonly leftovers: LeftoverSearchProjectionSync,
     @Inject(NotificationWritePort)
     private readonly notifications: NotificationWritePort,
     @Inject(PROJECT_ACCESS_QUERY_PORT)
@@ -113,6 +116,7 @@ export class RecordPublicationEffects {
       occurredAt: new Date(after.updatedAt),
     });
     await this.search.upsert(tx, input);
+    await this.leftovers.syncRecord(tx, after);
     // Candidates come only from the application service's server-side source context.
     for (const recipientId of [...new Set(recipients)].sort((a, b) => a - b)) {
       const scope = await this.access.checkProjectForWrite(tx, {

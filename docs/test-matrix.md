@@ -396,6 +396,7 @@ GitHub Actions 尚未对本 PR 执行。
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | Required |
 | SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 已本地覆盖 13/13（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
 | SEARCH-004 | 阶段 0 | `SearchProjectionWritePort` | 显式接收同一 `TransactionContext`，规范化 `rawText` 后 upsert；同一 `(project_id,entity_type,entity_id)` 不重复；更新可同步 `visibility_scope/source_status/source_row_version`；旧 `source_row_version` 不覆盖较新状态；后续业务异常整体回滚 | 已自动化（`SearchProjectionModule` 注入单测 + 真实 PostgreSQL 4 例已本地通过；GitHub Actions 待执行） |
+| SEARCH-005 | 阶段 0 | 搜索结果「遗留问题」独立分类（F-26） | 迁移 `0006` 允许 `LEFTOVER` 投影；记录发布/修订、作废/恢复与遗留项转任务在同一事务内按最新版本快照刷新投影；`entityId` 为遗留项 ID、title 至多 500 字符、`summary` 标注处置状态与来源记录、可见性跟随父记录（PUBLISHED=MEMBER、VOID=ADMIN_ONLY）、`sourceStatus` 为遗留项状态；`GET /api/v1/search` 返回 `entityType: "LEFTOVER"` 且前端以「遗留问题」分组呈现，不再依赖父记录 rawText 命中 | 已自动化（真实 PostgreSQL 集成：`record-publication` 12 例、`record-lifecycle` 22 例、`search-api` 9 例含 LEFTOVER 分类命中与跨项目隔离；全量 API 集成 47 文件 408 例、Web 单测 58 文件 249 例、Playwright E2E 43/43，2026-09-11；GitHub Actions 待执行） |
 
 > 当前执行状态（2026-09-07）：PGroonga PoC 已通过 15 组 V1 语义探针、
 > 101000 条仿真数据、90 条金标 Recall@20=100%、无结果/边界、特殊输入、

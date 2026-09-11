@@ -53,6 +53,7 @@ import { PublishedRecordRepository } from "../src/modules/change-records/publish
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
+import { LeftoverSearchProjectionSync } from "../src/modules/change-records/leftover-search-projection.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { TaskCompletionWorkflow } from "../src/workflows/task-completion.workflow.js";
 import {
@@ -118,6 +119,7 @@ beforeAll(async () => {
       audit,
       activity,
       search,
+      new LeftoverSearchProjectionSync(search),
       notifications,
       access,
     ),
