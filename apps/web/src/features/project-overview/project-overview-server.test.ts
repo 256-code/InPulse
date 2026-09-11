@@ -58,7 +58,7 @@ describe("project overview server adapter", () => {
       activeFeatures: 2,
       openTasks: 3,
       publishedRecords: 4,
-      openLeftovers: null,
+      openLeftovers: 1,
     });
     expect(result.recentIterations).toEqual([
       {
@@ -74,13 +74,14 @@ describe("project overview server adapter", () => {
         leftoverId: 21,
         summary: "补齐恢复码入口",
         recordCode: "CR-201",
-        recordTitle: null,
+        recordTitle: "增加商户订单号幂等校验",
       },
     ]);
   });
 
-  it("keeps the notice explicit about the frozen contract gaps", () => {
-    expect(PROJECT_OVERVIEW_SERVER_NOTICE).toContain("遗留问题总数");
-    expect(PROJECT_OVERVIEW_SERVER_NOTICE).toContain("来源记录标题");
+  it("keeps the notice explicit about the wired server data", () => {
+    expect(PROJECT_OVERVIEW_SERVER_NOTICE).toContain("待处理遗留问题总数");
+    expect(PROJECT_OVERVIEW_SERVER_NOTICE).toContain("服务端实时数据");
+    expect(PROJECT_OVERVIEW_SERVER_NOTICE).not.toContain("契约未提供");
   });
 });

@@ -369,11 +369,11 @@ describe("SearchQueryService with real PostgreSQL", () => {
 
   test("golden query recall at top-20 remains at least 90%", async () => {
     const seed = buildSearchSeed();
-    expect(goldenQueries).toHaveLength(100);
+    expect(goldenQueries).toHaveLength(200);
     const normalCases = goldenQueries.filter(
       (spec) => spec.policy === "normal",
     );
-    expect(normalCases.length).toBeGreaterThanOrEqual(90);
+    expect(normalCases.length).toBeGreaterThanOrEqual(180);
     const expectedIds = new Map(
       [...seed.expectedEntityIdsByGoldenId].map(([id, entityId]) => [
         id,

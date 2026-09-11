@@ -43,7 +43,7 @@ V1 明确接受的示例包括 `MFA`、`CSRF`、`payment_callback`、
 
 ## 验证方法
 
-- 复用 100 条冻结查询，其中 90 条正常召回、10 条无结果/边界输入。
+- 复用 200 条冻结查询（`phase4-v1`），其中 190 条正常召回、10 条无结果/边界输入。
 - 基础数据 1000 行，规模数据 101000 行。
 - 新增 15 组 V1 语义探针：`mfa`、`csrf`、`api`、`payment_callback`、
   `task_group_id`、`登录`、`INP-T-2026-0001`、`PR-42`、`R-42`、`PR-245`、
@@ -61,14 +61,14 @@ V1 明确接受的示例包括 `MFA`、`CSRF`、`payment_callback`、
 | 门禁 | 默认 TokenBigram | 结果 |
 | --- | --- | --- |
 | 15 组 V1 语义探针 | 全部通过 | 通过 |
-| 90 条中文金标 Recall@20 | 100%（90/90） | 通过 |
+| 200 条冻结金标（`phase4-v1`）Recall@20 | 100%（190/190） | 通过 |
 | 空查询/过短/过长输入 | 通过 | 通过 |
 | 特殊标点输入 | 通过 | 通过 |
 | 跨项目隔离 | 通过 | 通过 |
 | 101000 行使用 PGroonga 索引 | 通过 | 通过 |
 | PostgreSQL 18.6 探针镜像构建 | 通过 | 通过 |
 | `EXPLAIN (ANALYZE, BUFFERS)` 默认计划 | 通过（含 `Buffers` 与 `Execution Time`） | 通过 |
-| `0000-0002` 升级到 `0003-0005` | 通过（`0003`：1 applied / 3 already present；`0004/0005`：2 applied / 4 already present） | 通过 |
+| `0000-0002` 升级到 `0003-0006` | 通过（`0003`：1 applied / 3 already present；`0004`-`0006`：3 applied / 4 already present） | 通过 |
 | `0003`/`0004`/`0005` 事务内回滚 | 通过（PGroonga 索引、旧 GIN 索引、`pg_trgm` 扩展均恢复） | 通过 |
 | PGroonga 索引大小度量 | 通过（`object_inspect`：1000/15 行 `indexDiskUsage=5283840`，101000 行 `29138944`） | 通过 |
 | 逻辑恢复后 PGroonga 扩展/索引/计划 | 通过 | 通过 |
@@ -103,7 +103,7 @@ normalized_search_text &@~ app.pgroonga_query_escape($1)
   101000 行探针上的 `indexDiskUsage` 分别为 `5283840` 与 `29138944`。
 - 当前恢复验证使用 PoC 镜像和逻辑备份，不满足 ADR-020/F-10 的加密、签名、
   异机保留、RPO/RTO 和旧 Session 失效门禁。
-- 正式 `0003-0005` 迁移已通过真实 PostgreSQL 的扩展存在性、opclass、
+- 正式 `0003-0006` 迁移已通过真实 PostgreSQL 的扩展存在性、opclass、
   索引、旧 `pg_trgm` contract 清理、runtime 查询/转义与
   `pgroonga_command` 拒绝测试；生产多阶段镜像仍待部署纵切片；生产升级/
   回滚编排仍需 Runbook 与人工评审。

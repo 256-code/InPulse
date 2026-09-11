@@ -4,9 +4,9 @@ import type { TaskGroupListItem } from "@generated/api";
  * F-32 我的任务（跨项目列表）：筛选条件与列表项类型。
  *
  * 字段对齐 docs/a-contract-review-f25-f29-f32.md 的冻结 R-3 DTO
- * （MyTaskItem / MyTasksQueryRequest）：契约可表达的字段为必填；
- * 骨架 UI 需要但契约未提供的字段（description / priority / dueAt /
- * completedAt / creatorId / githubLinkCount）为可选，未提供时为 undefined，
+ * （MyTaskItem / MyTasksQueryRequest）：契约提供的字段（含第二轮扩展的 priority / dueAt / completedAt /
+ * creatorId / githubLinkCount / groupId）均为必填，null 表示契约明确定义的
+ * 「未设置」；仅 description 仍无契约来源，保持可选，未提供时为 undefined，
  * 显示层必须显式降级，不得静默忽略或虚构数值。
  */
 
@@ -64,23 +64,18 @@ export interface MyTaskListItem {
   readonly scopeType: MyTaskLevel;
   readonly workStatus: MyTaskWorkStatus;
   readonly lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
-  /** R-3 契约未提供；undefined 表示不可知，显示层隐藏优先级徽章。 */
-  readonly priority?: MyTaskPriority;
-  /**
-   * undefined 表示 R-3 契约未提供截止时间；null 表示确实未设置截止。
-   * 两者的显示文案不同，不得混用。
-   */
-  readonly dueAt?: string | null;
+  readonly priority: MyTaskPriority;
+  /** null 表示确实未设置截止；R-3 已提供该字段，不再有「不可知」态。 */
+  readonly dueAt: string | null;
   readonly updatedAt: string;
-  /** R-3 契约未提供；undefined 表示不可知。 */
-  readonly completedAt?: string | null;
-  /** R-3 契约未提供；undefined 表示不可知。 */
-  readonly creatorId?: number;
+  readonly completedAt: string | null;
+  readonly creatorId: number;
   readonly assignee: MyTaskAssigneeRef;
   readonly hasPublishedRecord: boolean;
   readonly groupRole: "MAIN" | "SOURCE" | null;
-  /** R-3 契约未提供；undefined 表示不可知。 */
-  readonly githubLinkCount?: number;
+  readonly githubLinkCount: number;
+  /** 与 groupRole 同源、同空同非空；供「查看主任务」入口按组导航（C-1）。 */
+  readonly groupId: number | null;
 }
 
 /** 统计卡片口径；与列表筛选相互独立，按当前范围（scope/project）计算。 */
@@ -99,9 +94,10 @@ export interface MyTaskLeftoverSample {
 /**
  * UI 筛选面相对冻结 R-3 契约的缺口（参数维度）。
  *
- * 这些筛选在设计师稿与骨架 UI 中存在，但 R-3 的冻结参数无法表达；
- * 服务端适配器必须显式降级（禁用或标注「后续迭代」），不得静默忽略，
- * 也不得把未登记的参数提前写进请求。
+ * 第二轮契约扩展后，priority 与「未完成并含已取消」已可由参数表达；
+ * 其余缺口（created / all 范围、relation、github、query）在设计师稿与
+ * 骨架 UI 中存在但 R-3 参数仍无法表达，服务端适配器必须显式降级
+ * （禁用或标注「后续迭代」），不得静默忽略，也不得把未登记的参数写进请求。
  */
 export type MyTasksFilterGap =
   | "scope:created"
@@ -150,10 +146,13 @@ export interface MyTaskListResult {
   readonly items: readonly MyTaskListItem[];
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
-  /** R-3 未返回聚合统计；null 表示不可知，显示层不得虚构。 */
+  /** R-3 已提供聚合统计；null 仅表示适配器未接线或尚未加载。 */
   readonly stats: MyTaskStats | null;
+  /** 延后项（A 裁决 §10.3）：R-3 暂缓返回；null 表示不可知，显示层不渲染计数。 */
   readonly scopeCounts: Readonly<Record<MyTaskScope, number>> | null;
+  /** R-3 已提供遗留问题计数；null 仅表示适配器未接线。 */
   readonly leftoverCount: number | null;
+  /** R-3 已提供遗留问题样例；null 表示当前范围无遗留或适配器未接线。 */
   readonly leftoverSample: MyTaskLeftoverSample | null;
   /** 适配器可表达的筛选维度；结果缺省时按完整能力处理。 */
   readonly filterSupport: MyTasksFilterSupport;

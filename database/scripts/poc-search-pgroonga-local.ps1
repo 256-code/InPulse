@@ -394,6 +394,9 @@ ROLLBACK;
       throw "0004/0005 contract migration runner upgrade failed with exit code $LASTEXITCODE"
     }
 
+    $expectedMigrationCount = @(
+      Get-ChildItem -LiteralPath (Join-Path $repoRoot 'database\migrations') -Filter '*.sql' -File
+    ).Count
     $upgradeHistoryCount = [int](& docker exec $containerName psql `
       -X `
       -At `
@@ -406,8 +409,8 @@ ROLLBACK;
       -U cluster_bootstrap `
       -d $upgradeDatabase `
       -c "SELECT count(*)::INTEGER FROM app.schema_migrations WHERE name IN ('0004_search_projection_contract_pg_trgm_index.sql', '0005_search_projection_contract_pg_trgm_extension.sql');").Trim()
-    if ($LASTEXITCODE -ne 0 -or $upgradeHistoryCount -ne 6 -or $upgradeRunnerAppliedCount -ne 2) {
-      throw "migration runner did not record the 0004/0005 contract migrations."
+    if ($LASTEXITCODE -ne 0 -or $upgradeHistoryCount -ne $expectedMigrationCount -or $upgradeRunnerAppliedCount -ne 2) {
+      throw "migration runner did not record all repository migrations (0004/0005 contract cleanup included)."
     }
 
     $upgradeIndexAfter = [int](& docker exec $containerName psql `
@@ -503,7 +506,8 @@ ROLLBACK;
         appliedMigrations = @(
           '0003_search_pgroonga.sql',
           '0004_search_projection_contract_pg_trgm_index.sql',
-          '0005_search_projection_contract_pg_trgm_extension.sql'
+          '0005_search_projection_contract_pg_trgm_extension.sql',
+          '0006_leftover_search_entity.sql'
         )
       }
       upgrade = [ordered]@{
@@ -528,7 +532,7 @@ ROLLBACK;
         pgTrgmExtensionContractRollback = $pgTrgmExtensionRollbackPassed
       }
       limitations = @(
-        'This is a local verification of the 0000-0002 -> 0003-0005 upgrade path: 0003 is applied before cleanup, then the repository migration runner applies the 0004/0005 contract migrations. Transaction rollback covers the PGroonga index, trigram index, and pg_trgm extension removal.',
+        'This is a local verification of the 0000-0002 -> 0003-0006 upgrade path: 0003 is applied before cleanup, then the repository migration runner applies the remaining repository migrations, including the 0004/0005 contract cleanup and the 0006 leftover-search migration. Transaction rollback covers the PGroonga index, trigram index, and pg_trgm extension removal.',
         'The upgrade uses a local PostgreSQL container and the same migration runner source as CI, but does not cover a production host, phased rollout, or backup-driven rollback.'
       )
     }

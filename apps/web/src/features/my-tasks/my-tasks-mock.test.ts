@@ -23,6 +23,9 @@ describe("my-tasks mock adapter", () => {
     expect(result.filterSupport).toEqual(MY_TASKS_FULL_FILTER_SUPPORT);
     expect(result.items.every((item) => item.workStatus === "TODO")).toBe(true);
     expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103", "T-108"]);
+    expect(result.items.find((item) => item.code === "T-102")?.groupId).toBe(
+      501,
+    );
   });
 
   it("keeps done and canceled tasks out of the default view", async () => {
