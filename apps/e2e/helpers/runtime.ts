@@ -68,6 +68,14 @@ export function runtimeDatabaseUrl(baseUrl: string): string {
   return url.toString();
 }
 
+/** F-08 原始审计读取使用独立只读角色；与 API 集成测试的 auditReader URL 同构。 */
+export function auditDatabaseUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.username = "audit_reader";
+  url.password = "";
+  return url.toString();
+}
+
 export async function loadRuntime(): Promise<E2ERuntime> {
   const content = await readFile(RUNTIME_FILE, "utf8");
   return JSON.parse(content) as E2ERuntime;
