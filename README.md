@@ -40,6 +40,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-09-11 阶段 1 A-1 已本地落库：`operations` profile 新增 `backup` 备份服务本体（`apps/ops` 编译入口 `dist/backup-cli.js backup`：流式 `pg_dump --format=custom` → AES-256-GCM 加密 → SHA-256 与 HMAC 签名清单 → 原子重命名 → 异机 WORM 上传 + 本机 7 天保留）与 `deploy/docker/ops.Dockerfile` 生产镜像（PostgreSQL 18.6 客户端、非 root `10002:10002`、CI 构建与 Trivy 扫描）；迁移 `0007` 为 `app_backup` 补齐 `pg_dump` 所需的表级 SELECT 与序列只读授权（会话表数据仍由 `--exclude-table-data` 排除，角色无写权限）；修复生产镜像 deploy 运行树不自包含的缺陷（`--config.node-linker=hoisted`）；真实全新主机恢复演练与调度启用仍属上线门禁。
 
+> 2026-09-12 登录入口与登录页视觉（C）：匿名访问不再显示「需要登录」提示页，任何受保护入口（含 `/`）都会直达登录页并携带 `from` 回跳参数，登录成功后回到原目标；登录页按设计师稿重做为独立全屏品牌页（Libiao Robotics 标志、图标药丸输入框、黄色主按钮与卡片底部品牌条），品牌样式经 `LoginForm` 的 `variant="brand"` 与 `apps/web/src/pages/login/login-page.css` 隔离，`RequireAdmin` 403 与登录状态异常的 500 空态语义未变。本片仅前端入口与视觉，未改后端、契约、迁移、角色、权限行与 CI；[PR #134](https://github.com/256-code/InPulse/pull/134)。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；五个生产容器镜像（API/Migration/Web/DB-bootstrap/Ops）的构建与 Trivy 扫描已在 main CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际通过，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E（`/audit` 审计页已补齐，见[测试矩阵](./docs/test-matrix.md)）、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份的真实全新主机恢复演练与启用仍未落库，补齐前请勿假设这些检查已执行。
 
 当前可运行的根级命令（§12.4 顺序）：
