@@ -24,6 +24,7 @@ export type InpulseIconName =
   | "gitMerge"
   | "layoutGrid"
   | "list"
+  | "lock"
   | "moreHorizontal"
   | "pencil"
   | "rotateCcw"
@@ -226,6 +227,12 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <line x1="3" x2="3.01" y1="6" y2="6" />
       <line x1="3" x2="3.01" y1="12" y2="12" />
       <line x1="3" x2="3.01" y1="18" y2="18" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </>
   ),
   moreHorizontal: (

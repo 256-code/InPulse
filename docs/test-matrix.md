@@ -1127,3 +1127,19 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/e2e typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 通过；`pnpm --filter @inpulse/api build` 后全量 `pnpm test:e2e` 53/53（9.3 分钟，其中 `audit.spec.ts` 两例 8.1s）通过；`pnpm test:unit`（database 15、canonical-json 5、api-contract 16 文件 98 例、web 69 文件 340 例、ops 8 文件 52 例、api 68 文件 351 例）与 `pnpm test:web`（69 文件 340 例）通过；`pnpm check:deps`（656 文件）、`pnpm check:secrets`（961 文件）、`pnpm check:docs`（75 个 Markdown）通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
 
 未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #133 检查记录；② 未运行 `pnpm test:integration`、`pnpm db:test` 与整体 `pnpm check`（本片无后端、契约、迁移与角色改动；整体 `check` 的 `deps:audit` 在本机 npm 镜像必然失败，其余步骤已逐条执行）；③ 新增 E2E 用例与 E2E 基建配置需非作者人工评审；④ 既有真库集成 500 偶发（`idempotency_records_retention_check` 时钟偏差族）本次全量 E2E 未复现、未修复。
+
+## 登录入口与登录页视觉（C，2026-09-12 本地落库，[PR #134](https://github.com/256-code/InPulse/pull/134)）
+
+按产品要求把匿名入口改为直达登录页，并按设计师稿重做登录页视觉：`RequireAuth` 匿名分支不再渲染「需要登录」Result，改为 `<Navigate to="/login?from=...">`（`buildLoginRedirect` 对非 `/` 开头、`//` 开头或指向 `/login` 的目标回退 `/login`）；登录成功后按 `from` 回跳，页面侧 `resolveLoginTarget` 再次校验。`AppLayout` 在 `/login` 只渲染 `<Outlet />`；`LoginForm` 新增 `variant="brand"`（默认 `"default"` 行为不变），品牌样式收敛在 `apps/web/src/pages/login/login-page.css` 的 `.login-card` 作用域；新增素材 `apps/web/public/libiao-robotics-logo.png`。`status === "error"` 的 500「登录状态异常」Result 与 `RequireAdmin` 403 空态语义未变，仍由既有 E2E 约束。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| LOGIN-UI-001 | 浏览器 E2E | 匿名直达登录页 | 匿名访问 `/search` 与 `/projects` 均不再出现「需要登录」，`waitForURL(/\/login\?from=/)` 后 `from` 参数等于原目标，`login-page` 容器、`Libiao Robotics` 标志与「登录名 / 密码」两个可访问标签可见，「需要登录」不可见 | 本地通过（`apps/e2e/tests/auth.spec.ts` 5/5，2026-09-12） |
+| LOGIN-UI-002 | 浏览器 E2E | 品牌表单与黄色主按钮 | 登录页提交按钮计算样式 `background-color` 为 `rgb(247, 200, 0)`，品牌表单与标志渲染 | 同上 |
+| LOGIN-UI-003 | 浏览器 E2E | 登录后回跳 `from` | 匿名打开 `/projects` 被送到登录页，完成真实登录后落回 `/projects` 并看到「项目与功能」标题 | 同上 |
+| LOGIN-UI-004 | 单元 | 登录跳转目标校验 | `buildLoginRedirect` 对 `/projects/7?tab=1` 生成 `/login?from=%2Fprojects%2F7%3Ftab%3D1`；对非 `/` 开头、`//` 开头、`/login`、`/login?from=x` 一律回退 `/login`；`RequireAuth` 匿名时不渲染 `auth-anonymous` 且携带 `replace` | 本地通过（`apps/web/src/app/auth/auth.test.tsx`） |
+| LOGIN-UI-005 | 单元 | 品牌 variant 渲染 | `variant="brand"` 渲染 `form.login-form.login-form-brand`、提交按钮带 `login-submit`、无 `.ant-form-item-label`（`label` 由 `aria-label` 提供），提交仍调用 `client.login`；默认 variant 行为不变 | 本地通过（`apps/web/src/features/auth/LoginForm.test.tsx`） |
+
+本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/web test:unit` 69 文件 342 例、`pnpm --filter @inpulse/web typecheck`、`apps/e2e` `tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/api build`、`pnpm --filter @inpulse/web build` 通过；`pnpm check:frontend:boundaries`（226 模块 1029 依赖）、`pnpm check:deps`（656 文件）、`pnpm check:secrets`（963 文件）、`pnpm check:docs`（75 个 Markdown）通过；全量 `pnpm test:e2e` 53 通过 + 2 失败（9.5 分钟；`auth.spec.ts` 单独复跑 5/5 通过），失败为既有偶发族，见下；视觉按 1536×1024 与 414×896 两档截图逐项对照设计稿，移动端无横向溢出。
+
+未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #134 检查记录；② 未运行 `pnpm test:integration` 与整体 `pnpm check`（本片无后端、契约、迁移与角色改动；整体 `check` 的 `deps:audit` 在本机 npm 镜像必然失败，改以公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无已知漏洞）；③ 新增 E2E 用例与登录页视觉需非作者人工评审；④ 全量 E2E 本轮 2 例失败（`module-tasks` F-15 保存后弹窗 10 秒内未关闭、`notifications` 标记未读未生效）属既有偶发族（根因见 2026-09-11 条目），两文件单独复跑 2/2 通过、根因未定位，不得视为已修复。

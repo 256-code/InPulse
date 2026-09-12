@@ -97,4 +97,29 @@ describe("LoginForm", () => {
       expect(onAuthenticated).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("renders the brand variant without visible labels and submits credentials", async () => {
+    const client = createClient({});
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <AuthProvider client={client}>
+        <LoginForm variant="brand" />
+      </AuthProvider>,
+    );
+
+    expect(container.querySelector("form.login-form-brand")).not.toBeNull();
+    expect(container.querySelector(".login-submit")).not.toBeNull();
+    expect(container.querySelector(".ant-form-item-label")).toBeNull();
+    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
+    expect(screen.getByLabelText("密码")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("登录名"), "developer");
+    await user.type(screen.getByLabelText("密码"), "secret");
+    await user.click(screen.getByRole("button", { name: /登\s*录/ }));
+
+    await waitFor(() => {
+      expect(client.login).toHaveBeenCalledTimes(1);
+    });
+  });
 });
