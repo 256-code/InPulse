@@ -6,7 +6,8 @@ import {
   type Field,
 } from "./record-content.js";
 export { mergeRecordDraft } from "./record-content.js";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
 import { useRecordDraftsQuery } from "./record-drafts-query";
 import "./record-drafts.css";
@@ -61,7 +62,20 @@ type Merge = ReturnType<typeof mergeRecordDraft> & {
   latest: RecordDraftItem;
   choices: Partial<Record<Field, "mine" | "latest">>;
 };
-export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
+export function RecordDraftsView({
+  client,
+  createToken = 0,
+  currentUserId,
+  onCanCreateChange,
+}: {
+  client?: InpulseApiClient | undefined;
+  /** 页头 CTA 的递增令牌：变化时打开对应模式的草稿弹窗（B-3a 单页）。 */
+  createToken?: number;
+  /** 当前登录用户 id：用于「我的草稿」条带；不传则不显示条带。 */
+  currentUserId?: number | undefined;
+  /** 向调用方上报能否创建草稿，供页头 CTA 的禁用态使用。 */
+  onCanCreateChange?: ((canCreate: boolean) => void) | undefined;
+}) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -140,6 +154,21 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
   const writable =
     projects.data?.items.find((p) => p.id === projectId)?.status === "ACTIVE" &&
     (!taskId || sourceQuery.data?.source.lifecycleStatus === "ACTIVE");
+  const canCreate = !!writable && (taskId === 0 || !!sourceQuery.data?.source);
+  useEffect(() => {
+    onCanCreateChange?.(canCreate);
+  }, [canCreate, onCanCreateChange]);
+  // B-3a：项目选择器上移到页面 toolbar 后，切换项目时在这里重置范围与弹窗状态。
+  const lastProjectId = useRef(projectId);
+  useEffect(() => {
+    if (lastProjectId.current === projectId) return;
+    lastProjectId.current = projectId;
+    setSelection(null);
+    setImpacts([]);
+    setModuleId(Number(params.get("moduleId")) || 0);
+    setFeatureId(Number(params.get("featureId")) || 0);
+    setScopeType(Number(params.get("featureId")) ? "FEATURE" : "MODULE");
+  }, [projectId, params]);
   const mutation = useMutation({
     retry: false,
     mutationFn: async (edit: RecordDraftContent) => {
@@ -258,6 +287,21 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
       setImpacts([...item.impactFeatureIds]);
     } else setImpacts([]);
   };
+  // B-3a：页头 CTA（记录一次迭代 / 新建来源草稿）通过递增令牌打开同一个弹窗。
+  const lastCreateToken = useRef(createToken);
+  useEffect(() => {
+    if (lastCreateToken.current === createToken) return;
+    lastCreateToken.current = createToken;
+    if (!canCreate) return;
+    const source = taskId ? sourceQuery.data?.source : undefined;
+    if (taskId && !source) return;
+    setSelection(source ? { source } : {});
+    reset(source ? { ...empty, title: source.title } : empty);
+    setMerge(null);
+    setReloadError(null);
+    mutation.reset();
+    setImpacts([]);
+  }, [createToken, canCreate, taskId, sourceQuery.data, reset, mutation]);
   const reload = async () => {
     if (!selection?.item && !selection?.source) return;
     if (
@@ -337,33 +381,11 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
       saving.current = false;
     }
   });
+  const myDrafts = currentUserId
+    ? drafts.filter((draft) => draft.authorId === currentUserId)
+    : [];
   return (
     <section className="record-drafts-page" aria-label="迭代记录草稿">
-      <CalmSectionTitle
-        title="草稿列表"
-        hint="先把变化写清楚，保存后可与项目成员继续补充。"
-      >
-        <CalmBadge tone="amber">草稿</CalmBadge>
-      </CalmSectionTitle>
-      <label className="draft-project-selector">
-        所属项目
-        <select
-          value={projectId}
-          disabled={selection !== null || !!taskId}
-          onChange={(e) => {
-            setParams({ projectId: e.target.value });
-            setModuleId(0);
-            setFeatureId(0);
-          }}
-        >
-          <option value={0}>请选择项目</option>
-          {projects.data?.items.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
       {projects.isError && (
         <Alert
           type="error"
@@ -372,6 +394,30 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
             <Button onClick={() => void projects.refetch()}>重试项目</Button>
           }
         />
+      )}
+      {myDrafts.length > 0 && (
+        <section className="draft-strip" aria-label="我的草稿">
+          <CalmSectionTitle
+            title="我的草稿"
+            hint={`${myDrafts.length} 条，尚未进入功能历史`}
+          />
+          {myDrafts.map((draft) => (
+            <button
+              type="button"
+              className="draft-record"
+              key={draft.id}
+              aria-label={draft.title}
+              onClick={() => open(draft)}
+            >
+              <CalmBadge>草稿</CalmBadge>
+              <strong>{draft.title}</strong>
+              <span>
+                <InpulseIcon name="pencil" size={13} />
+                继续编辑 →
+              </span>
+            </button>
+          ))}
+        </section>
       )}
       {projectId > 0 && (
         <>
@@ -390,6 +436,12 @@ export function RecordDraftsView({ client }: { client?: InpulseApiClient }) {
               <a href={`/records?projectId=${projectId}`}>项目全部草稿</a>
             </section>
           )}
+          <CalmSectionTitle
+            title={taskId > 0 ? "来源草稿" : "项目草稿"}
+            hint="先把变化写清楚，保存后可与项目成员继续补充。"
+          >
+            <CalmBadge tone="amber">草稿</CalmBadge>
+          </CalmSectionTitle>
           <div className="draft-toolbar">
             <Button
               className="primary-button"

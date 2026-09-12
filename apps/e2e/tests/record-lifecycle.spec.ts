@@ -80,11 +80,14 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
     await expect(
       member.page.getByText("记录不存在或当前无法访问。"),
     ).toBeVisible();
-    await page.getByRole("combobox", { name: "记录状态" }).selectOption("VOID");
     await page
-      .locator(".calm-task-card")
+      .getByRole("group", { name: "记录状态" })
+      .getByRole("button", { name: "已作废" })
+      .click();
+    await page
+      .locator(".record-card")
       .filter({ hasText: title })
-      .getByRole("button", { name: "查看记录" })
+      .locator("summary")
       .click();
     await expect(detail.getByLabel("较早版本")).toHaveValue("1");
     await expect(
