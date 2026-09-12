@@ -20,6 +20,10 @@ import { RecordPublicationEffects } from "./record-publication-effects.js";
 import { LeftoverSearchProjectionSync } from "./leftover-search-projection.js";
 import { RecordDraftRepository } from "./record-draft.repository.js";
 import {
+  RecordFeedReadPort,
+  PostgresRecordFeedReadPort,
+} from "./record-feed-read.port.js";
+import {
   ChangeRecordReadPort,
   PostgresChangeRecordReadPort,
 } from "./change-record-read.port.js";
@@ -67,6 +71,7 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     LeftoverRecordCommandPort,
     ChangeRecordReadPort,
     MyTaskQueryPort,
+    RecordFeedReadPort,
     LeftoverSearchProjectionSync,
   ],
   providers: [
@@ -107,6 +112,10 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     {
       provide: MyTaskQueryPort,
       useClass: PostgresMyTaskQueryPort,
+    },
+    {
+      provide: RecordFeedReadPort,
+      useClass: PostgresRecordFeedReadPort,
     },
   ],
   controllers: [PublishedRecordsController, RecordLifecycleController],

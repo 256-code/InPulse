@@ -58,7 +58,11 @@ function client(overrides: object = {}) {
     ...overrides,
   } as unknown as InpulseApiClient;
 }
-function mount(api: InpulseApiClient, path = "/records?projectId=1") {
+function mount(
+  api: InpulseApiClient,
+  path = "/records?projectId=1",
+  currentUserId?: number,
+) {
   render(
     <MemoryRouter initialEntries={[path]}>
       <ConfigProvider theme={{ token: { motion: false } }}>
@@ -67,7 +71,7 @@ function mount(api: InpulseApiClient, path = "/records?projectId=1") {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <RecordDraftsView client={api} />
+          <RecordDraftsView client={api} currentUserId={currentUserId} />
         </QueryClientProvider>
       </ConfigProvider>
     </MemoryRouter>,
@@ -283,5 +287,43 @@ it("loads the next draft page with the server cursor", async () => {
     1,
     { limit: 20, cursor: "cursor-1" },
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+});
+
+it("lists my drafts across projects through the global query and opens the owning project", async () => {
+  const listMyRecordDrafts = vi.fn().mockResolvedValue({
+    items: [
+      {
+        draft: { ...item, id: 21, projectId: 5, title: "跨项目草稿" },
+        projectName: "风控项目",
+        moduleName: "风控模块",
+        featureName: null,
+      },
+    ],
+    nextCursor: null,
+    hasMore: false,
+  });
+  const getRecordDraft = vi
+    .fn()
+    .mockResolvedValue({ ...item, id: 21, projectId: 5, title: "跨项目草稿" });
+  mount(
+    client({ listMyRecordDrafts, getRecordDraft }),
+    "/records?projectId=1",
+    3,
+  );
+  const strip = await screen.findByRole("region", { name: "我的草稿" });
+  expect(within(strip).getByText("跨项目草稿")).toBeVisible();
+  expect(within(strip).getByText("风控项目 / 风控模块")).toBeVisible();
+  expect(listMyRecordDrafts).toHaveBeenCalledWith(
+    { limit: 20 },
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  fireEvent.click(within(strip).getByRole("button", { name: "跨项目草稿" }));
+  await waitFor(() =>
+    expect(getRecordDraft).toHaveBeenCalledWith(
+      5,
+      21,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ),
   );
 });

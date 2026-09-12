@@ -19,6 +19,20 @@ export interface RecordDraftListPageResult {
   readonly hasMore: boolean;
 }
 
+/** B-3b 我的草稿入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
+export interface MyRecordDraftListInput {
+  readonly authorId: number;
+  readonly projectIds: readonly number[];
+  readonly limit: number;
+  readonly after: TimeCursorValue | null;
+}
+
+export interface MyRecordDraftListPage {
+  readonly items: RecordDraftItem[];
+  readonly last: TimeCursorValue | null;
+  readonly hasMore: boolean;
+}
+
 export interface DraftScope {
   projectId: number;
   moduleId: number;
@@ -106,6 +120,36 @@ export class RecordDraftRepository {
     const rows = await tx.sql<
       (Row & { createdAtCursor: string })[]
     >`SELECT ${this.columns(tx)},to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='DRAFT' AND (${afterAt}::timestamptz IS NULL OR created_at < ${afterAt}::timestamptz OR (created_at = ${afterAt}::timestamptz AND id < ${afterId}::bigint)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+    const hasMore = rows.length > input.limit,
+      pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = pageRows.map((row) => {
+      const { createdAtCursor: _cursor, ...base } = row;
+      return dto(base);
+    });
+    const lastRow = pageRows[pageRows.length - 1];
+    return {
+      items,
+      hasMore,
+      last:
+        hasMore && lastRow !== undefined
+          ? { at: lastRow.createdAtCursor, id: String(lastRow.id) }
+          : null,
+    };
+  }
+  /**
+   * B-3b 我的草稿（跨项目）：author_id 恒为当前 actor，排序与单项目草稿列表
+   * 一致（created_at DESC, id DESC）；被移出项目后该项目的草稿立即不再返回。
+   */
+  async listMyDraftsPage(
+    tx: TransactionContext,
+    input: MyRecordDraftListInput,
+  ): Promise<MyRecordDraftListPage> {
+    const projects = [...input.projectIds];
+    const afterAt = input.after?.at ?? null,
+      afterId = input.after?.id ?? "0";
+    const rows = await tx.sql<
+      (Row & { createdAtCursor: string })[]
+    >`SELECT ${this.columns(tx)},to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAtCursor" FROM app.change_records WHERE author_id=${input.authorId} AND status='DRAFT' AND project_id = ANY(${projects}::integer[]) AND (${afterAt}::timestamptz IS NULL OR created_at < ${afterAt}::timestamptz OR (created_at = ${afterAt}::timestamptz AND id < ${afterId}::bigint)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
     const hasMore = rows.length > input.limit,
       pageRows = hasMore ? rows.slice(0, input.limit) : rows;
     const items = pageRows.map((row) => {

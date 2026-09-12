@@ -9,6 +9,62 @@ import {
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type { TimeCursorValue } from "../../cursors/time-cursor.js";
+/** B-3b 记录清单来源筛选：主任务 / 来源任务 / 模块级 / 功能直接创建。 */
+export type RecordFeedSourceFilter = "MAIN" | "SOURCE" | "MODULE" | "FEATURE";
+/** B-3b 跨项目清单入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
+export interface RecordFeedListInput {
+  readonly projectIds: readonly number[];
+  /** 已按管理员可见性收敛的 status 集合（非管理员不出现 VOID）。 */
+  readonly statuses: readonly ("PUBLISHED" | "VOID")[];
+  readonly source: RecordFeedSourceFilter | null;
+  /** 归一化后的检索词；null 表示不启用全文过滤。 */
+  readonly normalizedQuery: string | null;
+  /** 与 statuses 对应的搜索投影可见性白名单。 */
+  readonly visibilityScopes: readonly ("MEMBER" | "ADMIN_ONLY")[];
+  readonly limit: number;
+  readonly after: TimeCursorValue | null;
+}
+export interface RecordFeedListPage {
+  readonly items: ReadableRecord[];
+  readonly last: TimeCursorValue | null;
+  readonly hasMore: boolean;
+}
+type RecordFeedRow = Row & {
+  voidedAt: Date | null;
+  voidReason: string | null;
+  publishedAtCursor: string;
+};
+/**
+ * ACTIVE 聚合组内的来源任务关系（与 TaskGroupMembershipReadPort 同一口径：
+ * 组成员与组都必须处于 ACTIVE，且双向带 project_id 防跨项目串联）。
+ */
+function activeSourceExists(tx: TransactionContext) {
+  return tx.sql`EXISTS (
+          SELECT 1
+            FROM app.task_group_members m
+            JOIN app.task_groups g
+              ON g.id = m.group_id
+             AND g.project_id = m.project_id
+           WHERE m.project_id = change_records.project_id
+             AND m.task_id = change_records.task_id
+             AND m.status = 'ACTIVE'
+             AND g.status = 'ACTIVE'
+             AND m.role = 'SOURCE'
+        )`;
+}
+/** MAIN = 任务来源中未被 ACTIVE 组合并为来源任务的记录；MODULE / FEATURE 为无任务记录。 */
+function sourceCondition(
+  tx: TransactionContext,
+  source: RecordFeedSourceFilter | null,
+) {
+  if (source === null) return tx.sql``;
+  if (source === "SOURCE") return tx.sql`AND ${activeSourceExists(tx)}`;
+  if (source === "MAIN")
+    return tx.sql`AND task_id IS NOT NULL AND NOT ${activeSourceExists(tx)}`;
+  if (source === "MODULE")
+    return tx.sql`AND task_id IS NULL AND scope_type = 'MODULE'`;
+  return tx.sql`AND task_id IS NULL AND scope_type = 'FEATURE'`;
+}
 type Row = Omit<
   PublishedRecord,
   | "createdAt"
@@ -137,6 +193,77 @@ export class PublishedRecordRepository {
           ...base
         } = row;
         const content = await this.dto(tx, base);
+        return voidedRecordSchema.parse({
+          ...content,
+          status: "VOID",
+          voidedAt: new Date(voidedAt).toISOString(),
+          voidReason,
+        });
+      }),
+    );
+    const lastRow = pageRows[pageRows.length - 1];
+    return {
+      items,
+      hasMore,
+      last:
+        hasMore && lastRow !== undefined
+          ? { at: lastRow.publishedAtCursor, id: String(lastRow.id) }
+          : null,
+    };
+  }
+  /**
+   * B-3b 跨项目记录清单（GET /change-records）分页：status、来源与 q 全部在
+   * SQL 层过滤后再按 published_at DESC, id DESC 做 keyset 分页，翻页不经过
+   * 应用层重排；q 复用 CHANGE_RECORD 全文投影（PGroonga，普通查询必须带
+   * app.pgroonga_query_escape）。VOID 行沿用 voidedRecordSchema 形状。
+   */
+  async listFeedPage(
+    tx: TransactionContext,
+    input: RecordFeedListInput,
+  ): Promise<RecordFeedListPage> {
+    const projects = [...input.projectIds];
+    const statuses = [...input.statuses];
+    const visibilityScopes = [...input.visibilityScopes];
+    const source = sourceCondition(tx, input.source);
+    const rows = await tx.sql<RecordFeedRow[]>`
+      SELECT ${this.columns(tx)},
+             voided_at AS "voidedAt",
+             void_reason AS "voidReason",
+             to_char(published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "publishedAtCursor"
+        FROM app.change_records
+       WHERE project_id = ANY(${projects}::integer[])
+         AND status = ANY(${statuses}::text[])
+         ${source}
+         AND (${input.normalizedQuery}::text IS NULL OR EXISTS (
+               SELECT 1
+                 FROM app.search_projection sp
+                WHERE sp.project_id = change_records.project_id
+                  AND sp.entity_type = 'CHANGE_RECORD'
+                  AND sp.entity_id = change_records.id
+                  AND sp.visibility_scope = ANY(${visibilityScopes}::text[])
+                  AND sp.normalized_search_text &@~ app.pgroonga_query_escape(${input.normalizedQuery})
+             ))
+         AND (${input.after?.at ?? null}::timestamptz IS NULL OR published_at < ${input.after?.at ?? null}::timestamptz OR (published_at = ${input.after?.at ?? null}::timestamptz AND id < ${input.after?.id ?? "0"}::bigint))
+       ORDER BY published_at DESC,id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const hasMore = rows.length > input.limit,
+      pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+    const items = await Promise.all(
+      pageRows.map(async (row) => {
+        const {
+          voidedAt,
+          voidReason,
+          publishedAtCursor: _cursor,
+          ...base
+        } = row;
+        const content = await this.dto(tx, base);
+        if (base.status === "PUBLISHED")
+          return publishedRecordSchema.parse(content);
+        if (voidedAt === null || voidReason === null)
+          throw new Error(
+            `change record ${row.id} is VOID without void snapshot`,
+          );
         return voidedRecordSchema.parse({
           ...content,
           status: "VOID",

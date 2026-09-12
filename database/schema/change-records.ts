@@ -81,6 +81,17 @@ export const changeRecords = appSchema.table(
       table.status,
       table.id,
     ),
+    index("change_records_status_published_idx").on(
+      table.status,
+      table.publishedAt.desc(),
+      table.id.desc(),
+    ),
+    index("change_records_author_status_created_idx").on(
+      table.authorId,
+      table.status,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
     check(
       "change_records_scope_check",
       sql.raw("scope_type IN ('FEATURE', 'MODULE')"),

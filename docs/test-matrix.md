@@ -1079,3 +1079,38 @@ endpoint 失败，改用公共 registry `pnpm audit --registry=https://registry.
 ② 搜索与来源筛选只作用于当前已加载页，正式记录列表没有服务端筛选与跨项目查询——这是 B-3b 的范围，
 不得据此声称跨项目清单或服务端检索已可用；③ 状态筛选只有「已发布 / 已作废」（VOID 仅管理员），
 契约 `RecordListQuery` 仍只有 `status`，未新增「全部」；④ 新增与迁移的前端用例需非作者人工评审。
+
+## B-3b 跨项目记录清单与全局「我的草稿」（C，2026-09-12 本地落库，[PR #132](https://github.com/256-code/InPulse/pull/132)）
+
+B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listRecordFeed`（`GET /api/v1/change-records`，跨项目正式记录清单，
+`projectId` 可省略、`status` / `source` / `q` 可选、服务端签名游标分页，按 `AuthorizedProjectScope` 过滤并批量回填
+项目 / 模块 / 功能名与作者引用）与 `listMyRecordDrafts`（`GET /api/v1/me/record-drafts`，当前 actor 的全局未发布草稿，
+跨项目回填名称）；迁移 `0008_records_cross_project_indexes.sql` 增加跨项目读索引（`database/schema/change-records.ts` 同步）；
+`/records` 据此打开「全部项目」（不传 `projectId` 即默认全量），B-3a 的本地降级筛选被服务端筛选与 `q` 取代。
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B3B-CONTRACT-001 | 契约 | Schema、路由与权限登记 | 6 个 Schema（`RecordFeedQueryRequest` / `RecordFeedItem` / `RecordFeedPage` / `MyRecordDraftItem` / `MyRecordDraftPage` / `MyRecordDraftListQuery`）与 2 条 GET 路由全策略显式登记；OpenAPI、生成客户端与 Registry 无漂移；`docs/permissions.md` 新增两行 | 本地通过（`packages/api-contract/test/record-feed.test.ts`；`pnpm contract:drift` 5 个产物、`pnpm contract:validate` 99 条路由、`pnpm permissions:check` 99 条操作 / 99 条路由） |
+| B3B-API-001 | API 集成 | 鉴权与输入边界 | 匿名 401；`limit` 越界、归一化后不足 2 字的 `q` 与非法 `status` 返回 422；两条路由均不要求 CSRF 与幂等键 | 本地通过（`apps/api/test/record-feed-api.integration.test.ts`） |
+| B3B-API-002 | API 集成 | 授权范围与状态口径 | 默认只返回成员项目 PUBLISHED 行并回填名称；非成员 `projectId` 收敛为空页（不返回 404）；非管理员请求 `VOID` / `ALL` 收敛为 PUBLISHED，管理员可读作废行 | 本地通过 |
+| B3B-API-003 | API 集成 | 来源筛选与 `q` 检索 | 来源四档（主任务 / 来源任务 / 模块级 / 功能直接创建）分别命中；`q` 复用 `CHANGE_RECORD` 全文投影跨项目命中、作废行只对管理员可见、无匹配为空页 | 本地通过 |
+| B3B-API-004 | API 集成 | 我的草稿全局读 | 只返回当前 actor 的草稿（他人草稿不可见）、跨项目、名称回填；被移出项目后该作者的草稿立即不再返回 | 本地通过 |
+| B3B-API-005 | API 集成 | 游标稳定性与绑定 | keyset 分页稳定；游标绑定 actor、命名空间与筛选指纹（`filterKey`），跨筛选、跨接口与跨 actor 复用被拒 | 本地通过 |
+| B3B-UNIT-001 | Web 单元 | 「全部项目」默认与名称回填 | 不选项目时请求不带 `projectId`；卡片按记录自身项目显示「归属 项目 / 模块 / 功能」与编号、版本、发布时间、作者；逐记录按自身项目判定可写 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`） |
+| B3B-UNIT-002 | Web 单元 | 来源 / 状态收敛与 `q` 防抖 | 来源五档与状态选项按角色收敛（非管理员只有「已发布」）；关键词 350ms 防抖后以 `q` 下发（不足 2 字不下发）；「加载更多」携带服务端游标 | 本地通过 |
+| B3B-UNIT-003 | Web 单元 | 全局我的草稿条带 | 条带用全局查询列出跨项目本人草稿与「项目 / 模块」归属，点击回到所属项目的草稿详情，保存成功后失效刷新 | 本地通过（`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
+| B3B-E2E-001 | 浏览器 E2E | 跨项目清单闭环 | 创建第二个项目 → `/records` 选该项目建独立草稿（条带显示标题与「项目 / 未分类」）→ 发布 → 回到未选项目的 `/records` 看到卡片与「归属 项目 /」；`q` 检索无匹配空态与命中；展开摘要显示 `-CR-\d+ · v1 · 已发布` | 本地通过（`apps/e2e/tests/record-feed.spec.ts`；`pnpm test:e2e` 全量 51 例） |
+本地实际执行（2026-09-12）：`pnpm --filter @inpulse/api-contract test` 16 文件 98 例；`pnpm test:unit`
+（database 15、canonical-json 5、api-contract 16 文件 98、web 69 文件 340、ops 8 文件 52、api 68 文件 351）全部通过；
+真库 `apps/api` 集成 51 文件 442 例（新增 `record-feed-api.integration.test.ts` 10 例），两次全量各出现无关文件 500 偶发
+（首轮 `task-group-unmerge` 2 例、次轮 `external-links` 6 例 + `features-api` 3 例），逐文件复跑 3 文件 59 例通过；
+`pnpm test:e2e` 全量 51 例通过（先定向复跑 `record-feed.spec.ts` 1 例）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、
+`pnpm build`、`pnpm db:migrations:check`（9 条迁移）、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（99 条路由）、
+`pnpm permissions:check`（99 条操作 / 99 条路由）、`pnpm check:deploy:test`、`pnpm check:deps`（655 文件）、
+`pnpm check:frontend:boundaries`（225 模块 1026 依赖）、`pnpm check:secrets`（960 文件）与 `pnpm check:docs` 通过；
+`pnpm deps:audit` 因本机 npm 镜像缺 audit endpoint 失败，改用公共 registry
+`pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
+
+未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #132 检查记录；② 真库两次全量的 500 偶发属既有
+`idempotency_records_retention_check` 时钟偏差族（失败文件每次不同、单文件复跑全过），不得视为已修复；
+③ 迁移 `0008`、新增权限行与新增集成 / E2E 用例需非作者人工评审；④ `q` 只覆盖既有 `CHANGE_RECORD` 投影内容，
+不提供任意英文 / 代码子串或正则检索（V1 边界不变）；⑤ 记录写入仍走单项目视图与项目内 API，本片只扩展读路径。

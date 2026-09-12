@@ -28,9 +28,9 @@
   font: inherit;
 }
 
-.records-filter-note {
+.draft-strip-error {
   margin: 0 0 14px;
-  color: var(--inpulse-muted-foreground);
+  color: #b45309;
   font-size: 12px;
 }
 
@@ -77,6 +77,13 @@
   flex: 1;
   min-width: 0;
   color: #2b4560;
+}
+
+.draft-record small.draft-record-project {
+  flex-shrink: 0;
+  color: #7b93ab;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .draft-record > span:last-child {
@@ -179,6 +186,11 @@
   display: block;
   margin-top: 5px;
   color: #7b8fa2;
+  font-size: 11px;
+}
+
+.record-summary-text small.record-summary-path {
+  color: #93a1b0;
   font-size: 11px;
 }
 
