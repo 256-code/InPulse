@@ -35,20 +35,6 @@ export const LoginPage: React.FC = () => {
 
   return (
     <main className="login-page" data-testid="login-page">
-      <div className="login-watermark" aria-hidden="true">
-        INPULSE
-      </div>
-      <div className="login-decor login-decor-top" aria-hidden="true">
-        <span className="login-decor-bar" />
-        <span className="login-decor-bar" />
-        <span className="login-decor-bar login-decor-bar-thin" />
-      </div>
-      <div className="login-decor login-decor-chevron" aria-hidden="true" />
-      <div className="login-decor login-decor-bottom" aria-hidden="true">
-        <span className="login-decor-bar" />
-        <span className="login-decor-bar" />
-      </div>
-
       <section className="login-card">
         <div className="login-card-slashes" aria-hidden="true">
           <span />

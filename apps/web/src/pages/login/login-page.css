@@ -12,102 +12,7 @@
   justify-content: center;
   min-height: 100vh;
   padding: 48px 20px;
-  background: linear-gradient(180deg, #f5f5f6 0%, #ececee 100%);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.login-watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(22, 24, 29, 0.045);
-  font-size: clamp(160px, 28vw, 460px);
-  font-style: italic;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-
-.login-decor {
-  position: absolute;
-  pointer-events: none;
-}
-
-.login-decor-bar {
-  position: absolute;
-  display: block;
-  border-radius: 999px;
-  background: linear-gradient(120deg, #fdf0bd 0%, #f9dd85 100%);
-  transform: rotate(-38deg);
-}
-
-.login-decor-top {
-  top: -80px;
-  left: -40px;
-  width: 520px;
-  height: 360px;
-}
-
-.login-decor-top .login-decor-bar:nth-child(1) {
-  left: 32px;
-  top: 150px;
-  width: 330px;
-  height: 52px;
-}
-
-.login-decor-top .login-decor-bar:nth-child(2) {
-  left: 128px;
-  top: 62px;
-  width: 330px;
-  height: 52px;
-  opacity: 0.75;
-}
-
-.login-decor-top .login-decor-bar-thin {
-  left: 216px;
-  top: -10px;
-  width: 220px;
-  height: 22px;
-  opacity: 0.55;
-}
-
-.login-decor-chevron {
-  left: 30px;
-  bottom: 68px;
-  width: 190px;
-  height: 190px;
-  border-right: 30px solid rgba(249, 221, 133, 0.9);
-  border-bottom: 30px solid rgba(249, 221, 133, 0.9);
-  border-bottom-right-radius: 22px;
-  transform: rotate(-45deg);
-}
-
-.login-decor-bottom {
-  right: -60px;
-  bottom: -90px;
-  width: 560px;
-  height: 420px;
-}
-
-.login-decor-bottom .login-decor-bar:nth-child(1) {
-  right: 20px;
-  bottom: 180px;
-  width: 420px;
-  height: 60px;
-  opacity: 0.6;
-}
-
-.login-decor-bottom .login-decor-bar:nth-child(2) {
-  right: -60px;
-  bottom: 40px;
-  width: 420px;
-  height: 44px;
-  opacity: 0.85;
+  background: #ffffff;
 }
 
 .login-card {
@@ -116,6 +21,7 @@
   width: min(600px, 100%);
   padding: 46px 52px 26px;
   border-radius: 28px;
+  border: 1px solid #edeef1;
   background: #ffffff;
   box-shadow:
     0 30px 70px rgba(15, 23, 42, 0.1),
