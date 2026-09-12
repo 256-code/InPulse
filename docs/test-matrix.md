@@ -844,7 +844,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 |---|---|---|---|---|
 | B1-CONTRACT-001 | 契约 | 分页参数与 envelope | `RecordListQuery` / `RecordDraftListQuery` 接受 `cursor`+`limit`（字符串 “20” 归一为 20）并拒绝 0、101、非整数、超长游标与未知字段；`ReadableRecordPage` / `RecordDraftPage` 严格校验 `items`/`nextCursor`/`hasMore`，缺字段、空 `nextCursor`、未知字段均拒绝 | 本地通过（`packages/api-contract/test/published-records.test.ts`、`test/record-drafts.test.ts`；契约 15 文件 93 例通过） |
 | B1-API-UNIT-001 | 单元 | 游标编码、解码与错误映射 | 第 1 页以本页最后一条位置编码 `nextCursor`，第 2 页以其为排他 keyset 边界；篡改、跨 actor、跨项目、跨命名空间 422 `INVALID_CURSOR`；无权限项目先 404 且不按游标状态区分；成员请求 VOID 列表 404；`limit` 1..100 透传、缺省 20 | 本地通过（`apps/api/test/record-list-pagination.test.ts` 4 例） |
-| B1-WEB-001 | 前端单元 | 「加载更多」与签名游标 | 已发布记录与草稿列表点击「加载更多」后用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过（`apps/web/src/features/published-records/PublishedRecordsView.test.tsx`、`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
+| B1-WEB-001 | 前端单元 | 「加载更多」与签名游标 | 已发布记录与草稿列表点击「加载更多」后用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`、`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
 | B1-INT-001 | PostgreSQL 集成 | keyset 不重不漏与游标校验 | 3 条草稿 / 正式记录以 `limit=2` 分两页取回：页内顺序为 `created_at DESC,id DESC` / `published_at DESC,id DESC`，两页无重叠无遗漏，`hasMore` 由 true 翻转为 false 且第二页 `nextCursor` 为 null；跨项目游标与损坏游标 422 `INVALID_CURSOR` | CI 已通过（PR #114，run 34571987936；本机当时无 PostgreSQL 实例与 Docker，用例由 CI 首次执行） |
 
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（公共 registry 高等级审计无已知漏洞）均通过；lint 同时暴露并修复了「分页游标列被透传进严格响应 Schema」的缺陷。
@@ -1042,3 +1042,40 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 ③ 新增单测需非
 作者人工评审；④ 编辑表单仍为纯文本输入，白名单只作用于只读展示；⑤ 渲染 schema 是显式完整替换
 （不与 rehype-sanitize 默认 schema 合并），后续升级依赖时必须同步复核本文件 schema 与测试。
+
+## B-3a `/records` 前端单页重构（C，2026-09-12 本地落库，[PR #131](https://github.com/256-code/InPulse/pull/131)）
+
+按产品 2026-09-12 定案，B-3 拆两片执行：本片只做前端单页重构（骨架与信息层级照设计师稿
+`views/records.tsx`），项目仍必选、不新增后端路由；跨项目记录清单、我的草稿（全局）、名称回填、
+跨项目索引与服务端 `q` 检索属 B-3b 独立契约纵切片，「全部项目」在 B-3b 落库前保持关闭。
+实现为 `features/records/`（`RecordsWorkspace`、`PublishedRecordCard`、`record-timeline`、`records-timeline.css`）
+加 `features/published-records/PublishedRecordDetail`：页头 CTA「记录一次迭代」→ 我的草稿条带 →
+项目草稿与草稿详情 → 四项筛选 toolbar → 按发布日分组的 `record-card` 时间线 → 加载更多；
+`PublishedRecordsView` 删除，`pages/records/RecordsPage` 降为薄包装，既有 URL 契约
+（`projectId`/`status`/`publishedId`/`moduleId`/`taskId` 与 `view=published` 兼容忽略）与 E2E 依赖的可访问名保持不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| B3A-UNIT-001 | Web 单元 | 本地来源与关键词筛选 | 来源筛选覆盖「全部来源 / 任务来源 / 模块级影响 / 功能直接创建」（按 `taskId` 与 `scopeType` 判定）；关键词命中编号、标题、原因、改动、验证与遗留问题，大小写不敏感，空关键词不过滤 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`） |
+| B3A-UNIT-002 | Web 单元 | 按发布日分组 | 当前已加载页按 `publishedAt` 日期键分组，组内保持服务端 `published_at DESC` 顺序、组间按日期降序，并给出中文日期与条数 | 本地通过 |
+| B3A-UNIT-003 | Web 单元 | 卡片展开、详情与生命周期 | `record-card` 摘要显示标题、编号、版本与状态徽标；展开状态由 URL `publishedId` 驱动，展开后渲染 `正式记录详情` region（版本对比、历史版本、GitHub 关联与管理员生命周期操作）；VOID 记录对成员只读 | 本地通过（`PublishedRecordDetail.test.tsx` 4 例 + `RecordsWorkspace.test.tsx`） |
+| B3A-UNIT-004 | Web 单元 | 「加载更多」与签名游标 | 点击「加载更多」用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过 |
+| B3A-UNIT-005 | Web 单元 | 我的草稿条带与页头 CTA | 条带只列当前登录用户草稿（项目草稿列表仍显示全部成员草稿），点击直接打开「编辑草稿」弹窗；页头 CTA 在未选项目或不可写时禁用，可写时打开对应模式的草稿弹窗；草稿详情与弹窗文案保持 | 本地通过（`RecordDraftsView.test.tsx` 与 `RecordsWorkspace.test.tsx`） |
+| B3A-UNIT-006 | Web 单元 | 页面壳与降级提示 | `records-page` 壳保持，`RecordsPage` 只渲染工作区；出现筛选条件时显示 `.records-filter-note`，显式说明列表筛选只在当前已加载条数内生效 | 本地通过（`apps/web/src/pages/records/RecordsPage.test.tsx`） |
+| B3A-E2E-001 | 浏览器 E2E | 记录生命周期断言迁移 | `record-lifecycle.spec.ts` 由「记录状态」分段控件内选「已作废」并展开 `record-card` 摘要，管理员作废、成员可见 VOID 与恢复路径保持通过 | 本地通过（全量 `pnpm test:e2e` 50 例） |
+| B3A-E2E-002 | 浏览器 E2E | 记录相关既有路径回归 | 草稿（F-17）、发布（F-18）、完成任务（F-19）、遗留转任务（F-20）、外链（F-22）与聚合视图（F-29 / F-32）用例在单页重构后全部通过 | 本地通过 |
+
+本地实际执行（2026-09-12）：`pnpm --filter @inpulse/web test:unit` 69 文件 339 例；`pnpm test:unit`
+（database 15、canonical-json 5、api-contract 15 文件 94、web 69 文件 339、ops 8 文件 52、api 68 文件 351）；
+`pnpm test:integration` 中 `apps/api` 50 文件 432 例通过，`database` 25/26（1 例为本机长跑库 projectId 增大后
+fixture 计算 `project_id * 1_000_000 + 1` 超出 int4 的环境性失败，与本片改动无关）；`pnpm test:e2e` 全量 50 例通过；
+`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm build`、`pnpm db:migrations:check`（8 条迁移）、
+`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、
+`pnpm check:deploy:test`、`pnpm check:deps`（646 文件）、`pnpm check:frontend:boundaries`（225 模块 1026 依赖）、
+`pnpm check:secrets`（951 文件）与 `pnpm check:docs`（75 个 Markdown）通过；`pnpm deps:audit` 因本机 npm 镜像缺 audit
+endpoint 失败，改用公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
+
+未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #131 检查记录；
+② 搜索与来源筛选只作用于当前已加载页，正式记录列表没有服务端筛选与跨项目查询——这是 B-3b 的范围，
+不得据此声称跨项目清单或服务端检索已可用；③ 状态筛选只有「已发布 / 已作废」（VOID 仅管理员），
+契约 `RecordListQuery` 仍只有 `status`，未新增「全部」；④ 新增与迁移的前端用例需非作者人工评审。

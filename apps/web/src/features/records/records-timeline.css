@@ -1,0 +1,286 @@
+/* B-3a：`/records` 单页工作区（页头 → 我的草稿 → 项目草稿 → 筛选 toolbar → 日期分组卡片）。 */
+.records-workspace {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.records-toolbar {
+  flex-wrap: wrap;
+  margin: 18px 0 10px;
+}
+
+.records-toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--inpulse-muted-foreground);
+  font-size: 12px;
+}
+
+.records-toolbar-field select {
+  min-width: 150px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--inpulse-border);
+  border-radius: 8px;
+  background: var(--inpulse-card);
+  color: inherit;
+  font: inherit;
+}
+
+.records-filter-note {
+  margin: 0 0 14px;
+  color: var(--inpulse-muted-foreground);
+  font-size: 12px;
+}
+
+.record-drafts-block {
+  margin: 0 0 6px;
+}
+
+.record-drafts-block > .calm-section-title {
+  margin-bottom: 14px;
+}
+
+.draft-strip {
+  margin: 0 0 22px;
+  padding: 18px 20px;
+  border: 1px solid var(--inpulse-border);
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.draft-strip .calm-section-title {
+  margin-bottom: 12px;
+}
+
+.draft-record {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  border: 1px dashed #cddbea;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #4e6a85;
+  text-align: left;
+  cursor: pointer;
+}
+
+.draft-record:last-child {
+  margin-bottom: 0;
+}
+
+.draft-record strong {
+  flex: 1;
+  min-width: 0;
+  color: #2b4560;
+}
+
+.draft-record > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #3f648a;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.draft-record:hover {
+  border-color: #86afd7;
+  background: #f2f8fe;
+}
+
+.timeline-block {
+  margin-bottom: 28px;
+}
+
+.timeline-date {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 13px;
+  color: #5b7892;
+}
+
+.timeline-date strong {
+  color: #31475e;
+  font-size: 13px;
+}
+
+.timeline-date small {
+  color: #93a1b0;
+  font-size: 11px;
+}
+
+.record-card-list {
+  display: grid;
+  gap: 14px;
+  max-width: 1000px;
+}
+
+.record-card {
+  overflow: hidden;
+  border: 1px solid #dfe7ef;
+  border-radius: 10px;
+  background: var(--inpulse-card);
+}
+
+.record-card summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.record-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.record-card summary > svg {
+  flex-shrink: 0;
+  color: #8fa5b8;
+  transition: transform 0.15s;
+}
+
+.record-card[open] summary > svg {
+  transform: rotate(90deg);
+}
+
+.record-symbol {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #eef4fb;
+  color: #3f79b4;
+}
+
+.record-summary-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-summary-text strong {
+  display: block;
+  color: #314b65;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.record-summary-text small {
+  display: block;
+  margin-top: 5px;
+  color: #7b8fa2;
+  font-size: 11px;
+}
+
+.record-summary-badges {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.record-expanded {
+  padding: 0 22px 22px;
+}
+
+.record-expanded-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid #edf1f5;
+}
+
+.record-expanded-head h3 {
+  margin: 0;
+  color: #314b65;
+  font-size: 15px;
+}
+
+.record-expanded > section {
+  padding: 16px 0;
+  border-top: 1px solid #edf1f5;
+}
+
+.record-expanded h4 {
+  margin: 0 0 8px;
+  color: #37566f;
+  font-size: 12px;
+}
+
+.record-expanded h5 {
+  margin: 0 0 8px;
+  color: #5b7892;
+  font-size: 12px;
+}
+
+.record-expanded > p {
+  margin: 14px 0 0;
+  color: #60768b;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.record-facts {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px 14px;
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  border-radius: 9px;
+  background: #f7fafd;
+  font-size: 12px;
+}
+
+.record-facts dt {
+  color: #8494a6;
+}
+
+.record-facts dd {
+  margin: 0;
+  color: #4d6479;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.record-voided {
+  border-color: #ecd9c9;
+  background: #fffdfb;
+}
+
+.record-voided > summary {
+  opacity: 0.88;
+}
+
+.record-standalone-detail {
+  max-width: 1000px;
+  margin-bottom: 20px;
+}
+
+.record-standalone-detail > .record-expanded {
+  border: 1px solid #dfe7ef;
+  border-radius: 10px;
+  background: var(--inpulse-card);
+}
+
+@media (max-width: 700px) {
+  .records-toolbar-field {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .record-card summary {
+    flex-wrap: wrap;
+  }
+}

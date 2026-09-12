@@ -3,13 +3,17 @@ import { it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { InpulseApiClient, ChangeRecordVersion } from "@generated/api";
 import {
-  PublishedRecordsView,
+  ApiError,
+  type InpulseApiClient,
+  type ChangeRecordVersion,
+} from "@generated/api";
+import {
+  PublishedRecordDetail,
   compareRecordVersions,
-} from "./PublishedRecordsView";
+} from "./PublishedRecordDetail";
 vi.mock("@features/auth/auth-context", () => ({
-  useAuth: () => ({ user: { isAdmin: false } }),
+  useAuth: () => ({ user: { id: 3, isAdmin: false } }),
 }));
 const first: ChangeRecordVersion = {
   recordId: 7,
@@ -46,7 +50,23 @@ const item = {
   updatedAt: first.createdAt,
   rowVersion: 3,
   impactFeatureIds: [],
+  leftoverItem: null,
+  leftovers: [],
 };
+function mountDetail(api: InpulseApiClient) {
+  return render(
+    <MemoryRouter initialEntries={["/records?projectId=1&publishedId=7"]}>
+      <QueryClientProvider client={new QueryClient()}>
+        <PublishedRecordDetail
+          projectId={1}
+          recordId={7}
+          client={api}
+          writable
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
 it("compares exact immutable version content and identifies unchanged fields", () => {
   const diff = compareRecordVersions(first, second);
   expect(diff.filter((x) => x.changed)).toEqual([
@@ -61,32 +81,18 @@ it("compares exact immutable version content and identifies unchanged fields", (
 });
 it("loads real version data and permits selecting historical snapshots", async () => {
   const api = {
-    listProjects: vi
-      .fn()
-      .mockResolvedValue({ items: [{ id: 1, name: "支付项目" }] }),
-    listChangeRecords: vi.fn().mockResolvedValue({
-      items: [item],
-      nextCursor: null,
-      hasMore: false,
-    }),
     getChangeRecord: vi.fn().mockResolvedValue(item),
     listChangeRecordVersions: vi
       .fn()
       .mockResolvedValue({ items: [second, first] }),
   } as unknown as InpulseApiClient;
-  render(
-    <MemoryRouter
-      initialEntries={["/records?view=published&projectId=1&publishedId=7"]}
-    >
-      <QueryClientProvider client={new QueryClient()}>
-        <PublishedRecordsView client={api} />
-      </QueryClientProvider>
-    </MemoryRouter>,
-  );
+  mountDetail(api);
   const diff = within(await screen.findByRole("generic", { name: "版本差异" }));
   expect(diff.getByText("初次验证")).toBeVisible();
   expect(diff.getByText("追加并发验证")).toBeVisible();
-  fireEvent.change(screen.getByLabelText("对照版本"), {
+  const region = screen.getByRole("region", { name: "正式记录详情" });
+  expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
+  fireEvent.change(within(region).getByLabelText("对照版本"), {
     target: { value: "1" },
   });
   expect(diff.getAllByText("初次验证")).toHaveLength(2);
@@ -96,36 +102,39 @@ it("loads real version data and permits selecting historical snapshots", async (
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
 });
-
-it("loads the next published-record page with the server cursor", async () => {
-  const next = { ...item, id: 8, code: "SHOP-CR-2", title: "第二页记录" };
-  const listChangeRecords = vi
-    .fn()
-    .mockResolvedValueOnce({
-      items: [item],
-      nextCursor: "cursor-1",
-      hasMore: true,
-    })
-    .mockResolvedValueOnce({ items: [next], nextCursor: null, hasMore: false });
+it("renders the source task link and the four content sections", async () => {
   const api = {
-    listProjects: vi
+    getChangeRecord: vi
       .fn()
-      .mockResolvedValue({ items: [{ id: 1, name: "支付项目" }] }),
-    listChangeRecords,
+      .mockResolvedValue({ ...item, taskId: 8, featureId: 2 }),
+    listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
   } as unknown as InpulseApiClient;
-  render(
-    <MemoryRouter initialEntries={["/records?view=published&projectId=1"]}>
-      <QueryClientProvider client={new QueryClient()}>
-        <PublishedRecordsView client={api} />
-      </QueryClientProvider>
-    </MemoryRouter>,
+  mountDetail(api);
+  const region = await screen.findByRole("region", { name: "正式记录详情" });
+  const source = await within(region).findByRole("link", {
+    name: "查看来源任务",
+  });
+  expect(source).toHaveAttribute(
+    "href",
+    "/projects/1/modules/2/features/2?taskId=8",
   );
-  expect(await screen.findByText("支付修订")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
-  expect(await screen.findByText("第二页记录")).toBeVisible();
-  expect(listChangeRecords).toHaveBeenLastCalledWith(
-    1,
-    { status: "PUBLISHED", limit: 20, cursor: "cursor-1" },
-    expect.objectContaining({ signal: expect.any(AbortSignal) }),
-  );
+  expect(within(region).getByText("为什么改、发现了什么问题")).toBeVisible();
+  expect(within(region).getByText("改了什么、怎么改的")).toBeVisible();
+  expect(within(region).getByText("改完效果如何、如何验证")).toBeVisible();
+  expect(within(region).getByText("还有什么问题")).toBeVisible();
+});
+it("explains a missing or unauthorized record without leaking existence", async () => {
+  const api = {
+    getChangeRecord: vi.fn().mockRejectedValue(
+      new ApiError(404, {
+        code: "NOT_FOUND",
+        message: "不存在",
+        requestId: "test",
+        details: {},
+      }),
+    ),
+    listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [] }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api);
+  expect(await screen.findByText("记录不存在或当前无法访问。")).toBeVisible();
 });
