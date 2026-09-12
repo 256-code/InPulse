@@ -793,7 +793,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 已通过（PR #106，run 34560879433）。
 
-B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 66 文件 310 例通过（新增审计查询 6 例与审计页 8 例，含页内重认证与游标分页）；未运行 `pnpm test:e2e`（本机无 PostgreSQL/Docker；PR #124 的 CI 已通过 run 34586112012，含 Browser E2E），`/audit` 浏览器 E2E 待补。
+B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 66 文件 310 例通过（新增审计查询 6 例与审计页 8 例，含页内重认证与游标分页）；未运行 `pnpm test:e2e`（本机无 PostgreSQL/Docker；PR #124 的 CI 已通过 run 34586112012，含 Browser E2E），`/audit` 浏览器 E2E 已由 C 于 2026-09-12 补齐（见本文件「F-08 `/audit` 审计页浏览器 E2E」章节）。
 
 ## F-08 审计远端归档（A，2026-09-11 本地落库）
 
@@ -1114,3 +1114,16 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 `idempotency_records_retention_check` 时钟偏差族（失败文件每次不同、单文件复跑全过），不得视为已修复；
 ③ 迁移 `0008`、新增权限行与新增集成 / E2E 用例需非作者人工评审；④ `q` 只覆盖既有 `CHANGE_RECORD` 投影内容，
 不提供任意英文 / 代码子串或正则检索（V1 边界不变）；⑤ 记录写入仍走单项目视图与项目内 API，本片只扩展读路径；⑥ 迁移 `0008` 新增索引后，`aggregate-read-ports.integration.test.ts` 的 EXPLAIN 断言由绑定 `change_records_project_*_idx` 改为「命中 change_records 索引且不回落 Seq Scan」（CI 实测规划器改选 `change_records_status_published_idx`），属本片驱动的断言调整，A-7 的 `actual time` 与无 `Seq Scan` 证据不变，B7-PLAN-001 / A7-PLAN-001 的历史 CI 结论按当时索引集成立。
+
+## F-08 `/audit` 审计页浏览器 E2E（C，2026-09-12 本地落库）
+
+补齐 B-4 遗留的 `/audit` 浏览器 E2E：`apps/e2e/tests/audit.spec.ts` 两例覆盖普通成员 403 与管理员 5 分钟双因子重认证后的真实读取链路；E2E 基建同步为 API 进程注入 `AUDIT_DATABASE_URL`（由 `E2E_DATABASE_URL` 派生 `audit_reader` 只读账号，`apps/e2e/helpers/runtime.ts` 的 `auditDatabaseUrl()`）。此前 E2E API 进程只有 `DATABASE_URL`，审计读取按设计 fail closed 返回 500——本次是 E2E 环境配置补齐，生产配置、`apps/api/src/database/audit-reader.client.ts` 的 fail closed 行为、角色与鉴权均未放宽。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F08-E2E-001 | 浏览器 E2E | 普通成员访问审计页 | 普通成员打开 `/audit` 命中 `admin-forbidden` 空态与「无权访问」「此区域仅限系统管理员访问。」，页面不展示任何审计内容 | 本地通过（`apps/e2e/tests/audit.spec.ts` 2/2，2026-09-12） |
+| F08-E2E-002 | 浏览器 E2E | 管理员重认证后读取原始审计 | 管理员进入 `/audit` 先得到「请先完成管理员安全验证（管理员密码 + 当前 TOTP）后再读取原始审计。」并自动弹出管理员安全验证；完成密码 + 当前 TOTP 后自动重新读取并提示完成；动作码 `AUDIT_LOG_READ` 过滤命中「链 SYSTEM / 用户 #id / 用户操作」；行内「原始快照」弹窗展示 `eventPayload`（含 `returnedCount`）并以 Escape 关闭；切到 `PROJECT:<id>` 链命中 `project.create` 行与 `PROJECT #id` 归属；操作人 ID 非正整数在本地被拦截且不发请求 | 同上 |
+
+本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/e2e typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 通过；`pnpm --filter @inpulse/api build` 后全量 `pnpm test:e2e` 53/53（9.3 分钟，其中 `audit.spec.ts` 两例 8.1s）通过；`pnpm test:unit`（database 15、canonical-json 5、api-contract 16 文件 98 例、web 69 文件 340 例、ops 8 文件 52 例、api 68 文件 351 例）与 `pnpm test:web`（69 文件 340 例）通过；`pnpm check:deps`（656 文件）、`pnpm check:secrets`（961 文件）、`pnpm check:docs`（75 个 Markdown）通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
+
+未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #133 检查记录；② 未运行 `pnpm test:integration`、`pnpm db:test` 与整体 `pnpm check`（本片无后端、契约、迁移与角色改动；整体 `check` 的 `deps:audit` 在本机 npm 镜像必然失败，其余步骤已逐条执行）；③ 新增 E2E 用例与 E2E 基建配置需非作者人工评审；④ 既有真库集成 500 偶发（`idempotency_records_retention_check` 时钟偏差族）本次全量 E2E 未复现、未修复。

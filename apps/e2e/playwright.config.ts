@@ -10,6 +10,7 @@ import {
   E2E_ROOT,
   IDEMPOTENCY_KEYRING_FILE,
   TOTP_KEYRING_FILE,
+  auditDatabaseUrl,
   requiredE2eDatabaseUrl,
   runtimeDatabaseUrl,
   SESSION_KEYRING_FILE,
@@ -80,6 +81,7 @@ export default defineConfig({
       env: {
         ...process.env,
         DATABASE_URL: runtimeDatabaseUrl(databaseUrl),
+        AUDIT_DATABASE_URL: auditDatabaseUrl(databaseUrl),
         NODE_ENV: "test",
         PORT: String(API_PORT),
         SESSION_HASH_KEYRING_FILE: SESSION_KEYRING_FILE,
