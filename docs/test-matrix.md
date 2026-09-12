@@ -1102,7 +1102,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 本地实际执行（2026-09-12）：`pnpm --filter @inpulse/api-contract test` 16 文件 98 例；`pnpm test:unit`
 （database 15、canonical-json 5、api-contract 16 文件 98、web 69 文件 340、ops 8 文件 52、api 68 文件 351）全部通过；
 真库 `apps/api` 集成 51 文件 442 例（新增 `record-feed-api.integration.test.ts` 10 例），两次全量各出现无关文件 500 偶发
-（首轮 `task-group-unmerge` 2 例、次轮 `external-links` 6 例 + `features-api` 3 例），逐文件复跑 3 文件 59 例通过；
+（首轮 `task-group-unmerge` 2 例、次轮 `external-links` 6 例 + `features-api` 3 例），逐文件复跑 3 文件 59 例通过；`database` 集成 26 例（25 通过，1 例为本机长跑库 `project_id` 越 int4 的环境性失败，与本片无关）；
 `pnpm test:e2e` 全量 51 例通过（先定向复跑 `record-feed.spec.ts` 1 例）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、
 `pnpm build`、`pnpm db:migrations:check`（9 条迁移）、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（99 条路由）、
 `pnpm permissions:check`（99 条操作 / 99 条路由）、`pnpm check:deploy:test`、`pnpm check:deps`（655 文件）、
