@@ -187,6 +187,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     </button>
   );
 
+  if (location.pathname === "/login") {
+    // 登录页使用独立的全屏视觉，不渲染工作台外壳。
+    return <Outlet />;
+  }
+
   return (
     <>
       <div className="app-shell">

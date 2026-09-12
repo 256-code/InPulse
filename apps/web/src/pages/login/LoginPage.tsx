@@ -1,10 +1,8 @@
 import React, { useEffect } from "react";
-import { Card, Space, Typography } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LoginForm } from "@features/auth/LoginForm";
 import { useAuth } from "@features/auth/auth-context";
-
-const { Paragraph, Title } = Typography;
+import "./login-page.css";
 
 function resolveLoginTarget(rawTarget: string | null): string {
   if (
@@ -36,19 +34,43 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <Space direction="vertical" size={20} style={{ width: "100%" }}>
-      <Card style={{ maxWidth: 480, margin: "0 auto", borderRadius: 10 }}>
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Title level={3} style={{ margin: 0 }}>
-            登录 InPulse
-          </Title>
-          <Paragraph type="secondary" style={{ margin: 0 }}>
-            使用系统账号登录后，可继续访问全局搜索等项目数据。
-          </Paragraph>
-          <LoginForm onAuthenticated={handleAuthenticated} />
-        </Space>
-      </Card>
-    </Space>
+    <main className="login-page" data-testid="login-page">
+      <div className="login-watermark" aria-hidden="true">
+        INPULSE
+      </div>
+      <div className="login-decor login-decor-top" aria-hidden="true">
+        <span className="login-decor-bar" />
+        <span className="login-decor-bar" />
+        <span className="login-decor-bar login-decor-bar-thin" />
+      </div>
+      <div className="login-decor login-decor-chevron" aria-hidden="true" />
+      <div className="login-decor login-decor-bottom" aria-hidden="true">
+        <span className="login-decor-bar" />
+        <span className="login-decor-bar" />
+      </div>
+
+      <section className="login-card">
+        <div className="login-card-slashes" aria-hidden="true">
+          <span />
+          <span />
+        </div>
+        <img
+          className="login-logo"
+          src="/libiao-robotics-logo.png"
+          alt="Libiao Robotics"
+        />
+        <h1 className="login-title">登录 InPulse</h1>
+        <LoginForm variant="brand" onAuthenticated={handleAuthenticated} />
+        <div className="login-card-footer" aria-hidden="true">
+          <span className="login-card-brand">INPULSE</span>
+          <span className="login-card-divider" />
+          <span className="login-card-stripes">
+            <i />
+            <i />
+          </span>
+        </div>
+      </section>
+    </main>
   );
 };
 

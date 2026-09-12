@@ -1,5 +1,6 @@
 import React from "react";
 import { Spin, Result, Button } from "antd";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@features/auth/auth-context";
 
 export interface RequireAuthProps {
@@ -7,11 +8,24 @@ export interface RequireAuthProps {
   readonly fallback?: React.ReactElement;
 }
 
+export function buildLoginRedirect(pathname: string, search: string): string {
+  const target = `${pathname}${search}`;
+  if (
+    !target.startsWith("/") ||
+    target.startsWith("//") ||
+    target.startsWith("/login")
+  ) {
+    return "/login";
+  }
+  return `/login?${new URLSearchParams({ from: target }).toString()}`;
+}
+
 export const RequireAuth: React.FC<RequireAuthProps> = ({
   children,
   fallback,
 }) => {
   const { status, errorMessage } = useAuth();
+  const location = useLocation();
 
   if (status === "loading") {
     return (
@@ -24,23 +38,31 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({
     );
   }
 
-  if (status === "anonymous" || status === "error") {
+  if (status === "anonymous") {
+    if (fallback) {
+      return fallback;
+    }
+    return (
+      <Navigate
+        to={buildLoginRedirect(location.pathname, location.search)}
+        replace
+      />
+    );
+  }
+
+  if (status === "error") {
     if (fallback) {
       return fallback;
     }
     return (
       <div data-testid="auth-anonymous" style={{ padding: 48 }}>
         <Result
-          status={status === "error" ? "500" : "403"}
-          title={status === "error" ? "登录状态异常" : "需要登录"}
-          subTitle={
-            status === "error"
-              ? (errorMessage ?? "无法确认登录状态，请刷新页面后重试。")
-              : "访问此页面需要先登录系统。"
-          }
+          status="500"
+          title="登录状态异常"
+          subTitle={errorMessage ?? "无法确认登录状态，请刷新页面后重试。"}
           extra={
             <Button type="primary" href="/login">
-              {status === "error" ? "重新登录" : "前往登录"}
+              重新登录
             </Button>
           }
         />
