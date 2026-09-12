@@ -13,15 +13,28 @@ import { TaskGroupsModule } from "../task-groups/index.js";
 import { TasksManagementModule } from "../tasks/index.js";
 import { AggregateReadCursorService } from "./aggregate-read-cursor.js";
 import { LeftoverItemsController } from "./leftover-items.controller.js";
+import { MyRecordDraftsController } from "./my-record-drafts.controller.js";
+import {
+  MyRecordDraftsQueryService,
+  MY_RECORD_DRAFTS_CURSOR,
+  MY_RECORD_DRAFTS_CURSOR_NAMESPACE,
+} from "./my-record-drafts-query.service.js";
 import { LeftoverItemsQueryService } from "./leftover-items-query.service.js";
 import { MyTasksController } from "./my-tasks.controller.js";
 import { MyTasksQueryService } from "./my-tasks-query.service.js";
 import { ProjectOverviewController } from "./project-overview.controller.js";
 import { ProjectOverviewQueryService } from "./project-overview-query.service.js";
+import { RecordFeedController } from "./record-feed.controller.js";
+import {
+  RecordFeedQueryService,
+  RECORD_FEED_CURSOR,
+  RECORD_FEED_CURSOR_NAMESPACE,
+} from "./record-feed-query.service.js";
 import { TaskGroupMembershipController } from "./task-group-membership.controller.js";
 import { TaskGroupMembershipQueryService } from "./task-group-membership-query.service.js";
 import { TaskGroupReadController } from "./task-group-read.controller.js";
 import { TaskGroupQueryService } from "./task-group-query.service.js";
+import { TimeCursorService } from "../../cursors/time-cursor.js";
 
 /**
  * F-20 / F-25 / F-29 / F-32 聚合读宿主模块（A 裁决 §6 附带要求）。
@@ -49,11 +62,25 @@ import { TaskGroupQueryService } from "./task-group-query.service.js";
         new AggregateReadCursorService(keyring),
       inject: [SESSION_HMAC_KEYRING],
     },
+    {
+      provide: RECORD_FEED_CURSOR,
+      useFactory: (keyring: VersionedHmacKeyring) =>
+        new TimeCursorService(keyring, RECORD_FEED_CURSOR_NAMESPACE),
+      inject: [SESSION_HMAC_KEYRING],
+    },
+    {
+      provide: MY_RECORD_DRAFTS_CURSOR,
+      useFactory: (keyring: VersionedHmacKeyring) =>
+        new TimeCursorService(keyring, MY_RECORD_DRAFTS_CURSOR_NAMESPACE),
+      inject: [SESSION_HMAC_KEYRING],
+    },
     TaskGroupQueryService,
     TaskGroupMembershipQueryService,
     ProjectOverviewQueryService,
     LeftoverItemsQueryService,
     MyTasksQueryService,
+    RecordFeedQueryService,
+    MyRecordDraftsQueryService,
   ],
   controllers: [
     // R-5 的静态段 /task-groups/memberships 必须先于 TaskGroupReadController 的
@@ -63,6 +90,8 @@ import { TaskGroupQueryService } from "./task-group-query.service.js";
     ProjectOverviewController,
     LeftoverItemsController,
     MyTasksController,
+    RecordFeedController,
+    MyRecordDraftsController,
   ],
 })
 export class AggregateReadModule {}

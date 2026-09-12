@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Spin } from "antd";
@@ -10,14 +10,16 @@ import {
 } from "@features/common/components/Calm";
 import { useAuth } from "@features/auth/auth-context";
 import { RecordDraftsView } from "@features/record-drafts/RecordDraftsView";
-import { useChangeRecordsQuery } from "@features/published-records/published-records-query";
+import {
+  useRecordFeedQuery,
+  type RecordFeedStatus,
+} from "@features/published-records/published-records-query";
 import {
   PublishedRecordDetail,
   publishedRecordErrorMessage,
 } from "@features/published-records/PublishedRecordDetail";
 import { PublishedRecordCard } from "./PublishedRecordCard";
 import {
-  filterRecords,
   groupRecordsByDate,
   RECORD_SEARCH_PLACEHOLDER,
   RECORD_SOURCE_FILTERS,
@@ -25,13 +27,15 @@ import {
 } from "./record-timeline";
 import "./records-timeline.css";
 
-type RecordStatus = "PUBLISHED" | "VOID";
+/** 关键词下发前的防抖窗口（毫秒）：与相似功能提示保持同一节奏。 */
+const SEARCH_DEBOUNCE_MS = 350;
 
 /**
  * B-3a：`/records` 单页工作区（设计师稿 views/records.tsx 的结构）。
- * 页头 CTA → 我的草稿条带 → 项目草稿与草稿详情 → 四项筛选 toolbar →
- * 按发布日分组的正式记录卡片。项目仍为必选；跨项目清单、名称回填与
- * 服务端全文检索属于 B-3b 的独立契约纵切片，本轮不做。
+ * B-3b：项目下拉增加「全部项目」并作为默认视图（跨项目记录清单 + 名称回填），
+ * 来源五档与关键词 `q` 改为服务端筛选，我的草稿条带改为全局 `listMyRecordDrafts`；
+ * 页头 CTA → 我的草稿条带 → 项目草稿与草稿详情 → 筛选 toolbar → 按发布日分组。
+ * 创建草稿仍要求先选定具体项目（草稿按项目 + 模块创建，服务端不接受「全部项目」）。
  */
 export function RecordsWorkspace({
   client,
@@ -43,43 +47,70 @@ export function RecordsWorkspace({
   const [params, setParams] = useSearchParams();
   const projectId = Number(params.get("projectId")) || 0;
   const publishedId = Number(params.get("publishedId")) || 0;
-  const status: RecordStatus =
-    params.get("status") === "VOID" && user?.isAdmin ? "VOID" : "PUBLISHED";
+  const requestedStatus = params.get("status");
+  const status: RecordFeedStatus =
+    user?.isAdmin && (requestedStatus === "VOID" || requestedStatus === "ALL")
+      ? requestedStatus
+      : "PUBLISHED";
   const [query, setQuery] = useState("");
+  const [term, setTerm] = useState("");
   const [source, setSource] = useState<RecordSourceFilter>("ALL");
   const [createToken, setCreateToken] = useState(0);
   const [canCreate, setCanCreate] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setTerm(query.trim()),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [query]);
   const projects = useQuery({
     queryKey: ["projects"],
     queryFn: ({ signal }) => api.listProjects({ signal }),
     retry: false,
   });
-  const list = useChangeRecordsQuery({ client, projectId, status });
-  const records = list.data?.pages.flatMap((page) => [...page.items]) ?? [];
-  const visible = filterRecords(records, { query, source });
-  const groups = groupRecordsByDate(visible);
-  const project = projects.data?.items.find((item) => item.id === projectId);
-  const writable = project?.status === "ACTIVE";
+  const list = useRecordFeedQuery({
+    client,
+    projectId,
+    status,
+    source,
+    query: term,
+  });
+  const items = list.data?.pages.flatMap((page) => [...page.items]) ?? [];
+  const groups = groupRecordsByDate(items);
+  const projectStatus = useMemo(
+    () =>
+      new Map(
+        (projects.data?.items ?? []).map(
+          (item) => [item.id, item.status] as const,
+        ),
+      ),
+    [projects.data],
+  );
+  /** 跨项目视图下每条记录按自身项目的状态判定可写，避免误用当前所选项目。 */
+  const canWrite = (recordProjectId: number) =>
+    projectStatus.get(recordProjectId) === "ACTIVE";
   const reportCanCreate = useCallback((next: boolean) => {
     setCanCreate((prev) => (prev === next ? prev : next));
   }, []);
-  const filtered = query.trim().length > 0 || source !== "ALL";
+  const filtered = term.length > 0 || source !== "ALL";
   const standaloneDetail =
+    projectId > 0 &&
     publishedId > 0 &&
     !list.isPending &&
-    !records.some((record) => record.id === publishedId);
+    !items.some((item) => item.record.id === publishedId);
   const selectProject = (value: string) => {
-    const next = new URLSearchParams();
+    const next = new URLSearchParams(params);
     if (Number(value) > 0) next.set("projectId", value);
-    if (status === "VOID") next.set("status", "VOID");
+    else next.delete("projectId");
+    next.delete("publishedId");
+    next.delete("recordId");
     setParams(next);
-    setQuery("");
-    setSource("ALL");
   };
-  const selectStatus = (next: RecordStatus) => {
+  const selectStatus = (next: RecordFeedStatus) => {
     const nextParams = new URLSearchParams(params);
-    if (next === "VOID") nextParams.set("status", "VOID");
-    else nextParams.delete("status");
+    if (next === "PUBLISHED") nextParams.delete("status");
+    else nextParams.set("status", next);
     nextParams.delete("publishedId");
     setParams(nextParams);
   };
@@ -96,7 +127,7 @@ export function RecordsWorkspace({
     <div className="records-workspace">
       <div className="page-header">
         <div>
-          <div className="eyebrow">研发记录 / {visible.length} 条</div>
+          <div className="eyebrow">研发记录 / {items.length} 条</div>
           <h1>迭代记录</h1>
           <p>
             只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
@@ -135,10 +166,10 @@ export function RecordsWorkspace({
           项目
           <select
             aria-label="项目"
-            value={projectId || ""}
+            value={projectId > 0 ? String(projectId) : ""}
             onChange={(event) => selectProject(event.target.value)}
           >
-            <option value="">请选择项目</option>
+            <option value="">全部项目</option>
             {projects.data?.items.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
@@ -170,18 +201,13 @@ export function RecordsWorkspace({
               ? [
                   { value: "PUBLISHED", label: "已发布" },
                   { value: "VOID", label: "已作废" },
+                  { value: "ALL", label: "全部" },
                 ]
               : [{ value: "PUBLISHED", label: "已发布" }]
           }
           onChange={selectStatus}
         />
       </div>
-      {filtered && projectId > 0 && (
-        <p className="records-filter-note">
-          列表筛选只在当前已加载的 {records.length}{" "}
-          条内生效；跨项目与全文检索由后续切片提供。
-        </p>
-      )}
       {projects.isError && (
         <Alert
           type="error"
@@ -191,13 +217,7 @@ export function RecordsWorkspace({
           }
         />
       )}
-      {projectId === 0 ? (
-        <CalmEmptyState
-          icon="gitBranch"
-          title="请先选择项目"
-          description="迭代记录按项目组织；选择项目后可查看草稿与正式记录。"
-        />
-      ) : list.isPending ? (
+      {list.isPending ? (
         <Spin />
       ) : list.isError ? (
         <Alert
@@ -207,7 +227,7 @@ export function RecordsWorkspace({
             <Button onClick={() => void list.refetch()}>重试记录列表</Button>
           }
         />
-      ) : !visible.length ? (
+      ) : !items.length ? (
         <CalmEmptyState
           icon="gitBranch"
           title={
@@ -232,15 +252,14 @@ export function RecordsWorkspace({
               <small>{group.records.length} 条</small>
             </div>
             <div className="record-card-list">
-              {group.records.map((record) => (
+              {group.records.map((item) => (
                 <PublishedRecordCard
-                  key={record.id}
-                  item={record}
-                  projectId={projectId}
+                  key={item.record.id}
+                  item={item}
                   client={client}
-                  writable={!!writable}
-                  open={publishedId === record.id}
-                  onToggle={(open) => toggleRecord(record.id, open)}
+                  writable={canWrite(item.record.projectId)}
+                  open={publishedId === item.record.id}
+                  onToggle={(open) => toggleRecord(item.record.id, open)}
                   onListChanged={() => void list.refetch()}
                 />
               ))}
@@ -254,12 +273,12 @@ export function RecordsWorkspace({
             projectId={projectId}
             recordId={publishedId}
             client={client}
-            writable={!!writable}
+            writable={canWrite(projectId)}
             onListChanged={() => void list.refetch()}
           />
         </section>
       )}
-      {projectId > 0 && list.hasNextPage && (
+      {list.hasNextPage && (
         <div className="record-load-more">
           <Button
             disabled={list.isFetchingNextPage}

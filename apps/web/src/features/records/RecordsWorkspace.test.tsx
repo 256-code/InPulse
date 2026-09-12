@@ -14,6 +14,7 @@ import type {
   CurrentUserResponse,
   InpulseApiClient,
   ReadableRecord,
+  RecordFeedItem,
 } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 import { RecordsWorkspace } from "./RecordsWorkspace";
@@ -73,7 +74,8 @@ const first: ReadableRecord = {
 const second: ReadableRecord = {
   ...first,
   id: 8,
-  code: "SHOP-CR-2",
+  projectId: 2,
+  code: "RISK-CR-2",
   taskId: 9,
   title: "风控修正",
   changeSolution: "补充风控规则",
@@ -81,6 +83,20 @@ const second: ReadableRecord = {
   createdAt: "2026-09-11T02:00:00.000Z",
   updatedAt: "2026-09-11T02:00:00.000Z",
 };
+
+function feedItem(
+  record: ReadableRecord,
+  overrides: Partial<RecordFeedItem> = {},
+): RecordFeedItem {
+  return {
+    record,
+    projectName: record.projectId === 1 ? "支付项目" : "风控项目",
+    moduleName: record.projectId === 1 ? "支付模块" : "风控模块",
+    featureName: null,
+    author: { userId: record.authorId, name: "开发者 C", avatarUrl: null },
+    ...overrides,
+  };
+}
 
 function baseClient() {
   return {
@@ -90,11 +106,14 @@ function baseClient() {
         { id: 2, name: "风控项目", status: "ACTIVE" },
       ],
     }),
-    listChangeRecords: vi.fn().mockResolvedValue({
-      items: [first, second],
+    listRecordFeed: vi.fn().mockResolvedValue({
+      items: [feedItem(first), feedItem(second)],
       nextCursor: null,
       hasMore: false,
     }),
+    listMyRecordDrafts: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
     getChangeRecord: vi.fn().mockResolvedValue(first),
     listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [] }),
   };
@@ -122,83 +141,112 @@ function mount(
   );
 }
 
-describe("RecordsWorkspace", () => {
-  it("requires a project before loading records and disables the header action", async () => {
-    const client = baseClient();
-    mount(client as unknown as InpulseApiClient, "/records");
-    expect(
-      screen.getByRole("heading", { name: "迭代记录" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("研发记录 / 0 条")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "记录一次迭代" })).toBeDisabled();
-    expect(
-      await screen.findByText("请先选择项目", { selector: "strong" }),
-    ).toBeVisible();
-    expect(client.listChangeRecords).not.toHaveBeenCalled();
-  });
+const signalInit = expect.objectContaining({ signal: expect.any(AbortSignal) });
 
-  it("groups published records by publish date and opens the record from the url", async () => {
+describe("RecordsWorkspace", () => {
+  it(
+    "loads the cross-project feed by default and disables the header action" +
+      " until a project is chosen",
+    async () => {
+      const client = baseClient();
+      mount(client as unknown as InpulseApiClient, "/records");
+      expect(
+        screen.getByRole("heading", { name: "迭代记录" }),
+      ).toBeInTheDocument();
+      expect(await screen.findByText("研发记录 / 2 条")).toBeInTheDocument();
+      expect(screen.getByLabelText("项目")).toHaveValue("");
+      expect(
+        screen.getByRole("option", { name: "全部项目" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "记录一次迭代" }),
+      ).toBeDisabled();
+      expect(client.listRecordFeed).toHaveBeenCalledWith(
+        { status: "PUBLISHED", source: "ALL", limit: 20 },
+        signalInit,
+      );
+    },
+  );
+
+  it("groups cross-project records by date and backfills the owner names", async () => {
     const client = baseClient();
     const { container } = mount(
       client as unknown as InpulseApiClient,
       "/records?projectId=1&publishedId=7",
     );
-    expect(await screen.findByText("支付修正")).toBeVisible();
-    expect(screen.getByText("风控修正")).toBeVisible();
+    expect(
+      await screen.findByText("支付修正", { selector: "summary strong" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("风控修正", { selector: "summary strong" }),
+    ).toBeVisible();
     expect(container.querySelectorAll(".timeline-block")).toHaveLength(2);
+    expect(screen.getByText("归属 支付项目 / 支付模块")).toBeVisible();
+    expect(screen.getByText("归属 风控项目 / 风控模块")).toBeVisible();
     expect(
       await screen.findByRole("region", { name: "正式记录详情" }),
     ).toBeVisible();
-    expect(client.listChangeRecords).toHaveBeenCalledWith(
-      1,
-      { status: "PUBLISHED", limit: 20 },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    expect(client.listRecordFeed).toHaveBeenCalledWith(
+      { projectId: 1, status: "PUBLISHED", source: "ALL", limit: 20 },
+      signalInit,
     );
-    expect(client.getChangeRecord).toHaveBeenCalledWith(
-      1,
-      7,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(client.getChangeRecord).toHaveBeenCalledWith(1, 7, signalInit);
   });
 
-  it("loads a record outside the loaded page as a standalone detail", async () => {
+  it("opens a record outside the loaded page as a standalone detail", async () => {
     const client = baseClient();
     mount(
       client as unknown as InpulseApiClient,
       "/records?projectId=1&publishedId=99",
     );
-    await screen.findByText("支付修正");
+    await screen.findByText("支付修正", { selector: "summary strong" });
     expect(
       await screen.findByRole("region", { name: "正式记录详情" }),
     ).toBeVisible();
-    expect(client.getChangeRecord).toHaveBeenCalledWith(
-      1,
-      99,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(client.getChangeRecord).toHaveBeenCalledWith(1, 99, signalInit);
   });
 
-  it("filters the loaded records by keyword and source without a server round trip", async () => {
+  it("sends the source filter and the debounced keyword to the server", async () => {
     const client = baseClient();
     mount(client as unknown as InpulseApiClient, "/records?projectId=1");
-    await screen.findByText("支付修正");
-    const calls = client.listChangeRecords.mock.calls.length;
+    await screen.findByText("支付修正", { selector: "summary strong" });
     fireEvent.change(screen.getByLabelText("来源"), {
-      target: { value: "TASK" },
+      target: { value: "MAIN" },
     });
-    expect(screen.queryByText("支付修正")).not.toBeInTheDocument();
-    expect(screen.getByText("风控修正")).toBeVisible();
-    expect(
-      screen.getByText(/列表筛选只在当前已加载的 2 条内生效/),
-    ).toBeVisible();
+    await waitFor(() =>
+      expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+        {
+          projectId: 1,
+          status: "PUBLISHED",
+          source: "MAIN",
+          limit: 20,
+        },
+        signalInit,
+      ),
+    );
     fireEvent.change(screen.getByLabelText("搜索迭代记录"), {
       target: { value: "支付" },
     });
-    expect(await screen.findByText("没有匹配的迭代记录")).toBeVisible();
-    expect(client.listChangeRecords.mock.calls.length).toBe(calls);
+    await waitFor(
+      () =>
+        expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+          {
+            projectId: 1,
+            status: "PUBLISHED",
+            source: "MAIN",
+            q: "支付",
+            limit: 20,
+          },
+          signalInit,
+        ),
+      { timeout: 2000 },
+    );
+    expect(
+      screen.queryByText(/列表筛选只在当前已加载/),
+    ).not.toBeInTheDocument();
   });
 
-  it("switches the project in the toolbar and drops the expanded record", async () => {
+  it("narrows to one project in the toolbar and drops the expanded record", async () => {
     const client = baseClient();
     mount(
       client as unknown as InpulseApiClient,
@@ -207,10 +255,9 @@ describe("RecordsWorkspace", () => {
     await screen.findByRole("region", { name: "正式记录详情" });
     fireEvent.change(screen.getByLabelText("项目"), { target: { value: "2" } });
     await waitFor(() =>
-      expect(client.listChangeRecords).toHaveBeenLastCalledWith(
-        2,
-        { status: "PUBLISHED", limit: 20 },
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+        { projectId: 2, status: "PUBLISHED", source: "ALL", limit: 20 },
+        signalInit,
       ),
     );
     expect(
@@ -218,7 +265,7 @@ describe("RecordsWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers the voided status filter to administrators only", async () => {
+  it("offers the voided and full status filters to administrators only", async () => {
     const client = baseClient();
     const view = mount(
       client as unknown as InpulseApiClient,
@@ -227,6 +274,9 @@ describe("RecordsWorkspace", () => {
     const group = screen.getByRole("group", { name: "记录状态" });
     expect(
       within(group).queryByRole("button", { name: "已作废" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(group).queryByRole("button", { name: "全部" }),
     ).not.toBeInTheDocument();
     view.unmount();
     const adminClient = baseClient();
@@ -238,35 +288,50 @@ describe("RecordsWorkspace", () => {
     const adminGroup = screen.getByRole("group", { name: "记录状态" });
     fireEvent.click(within(adminGroup).getByRole("button", { name: "已作废" }));
     await waitFor(() =>
-      expect(adminClient.listChangeRecords).toHaveBeenLastCalledWith(
-        1,
-        { status: "VOID", limit: 20 },
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect(adminClient.listRecordFeed).toHaveBeenLastCalledWith(
+        { projectId: 1, status: "VOID", source: "ALL", limit: 20 },
+        signalInit,
+      ),
+    );
+    fireEvent.click(within(adminGroup).getByRole("button", { name: "全部" }));
+    await waitFor(() =>
+      expect(adminClient.listRecordFeed).toHaveBeenLastCalledWith(
+        { projectId: 1, status: "ALL", source: "ALL", limit: 20 },
+        signalInit,
       ),
     );
   });
 
   it("loads the next record page with the server cursor", async () => {
     const client = baseClient();
-    client.listChangeRecords
+    client.listRecordFeed
       .mockResolvedValueOnce({
-        items: [first],
+        items: [feedItem(first)],
         nextCursor: "cursor-1",
         hasMore: true,
       })
       .mockResolvedValueOnce({
-        items: [second],
+        items: [feedItem(second)],
         nextCursor: null,
         hasMore: false,
       });
     mount(client as unknown as InpulseApiClient, "/records?projectId=1");
-    expect(await screen.findByText("支付修正")).toBeVisible();
+    expect(
+      await screen.findByText("支付修正", { selector: "summary strong" }),
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
-    expect(await screen.findByText("风控修正")).toBeVisible();
-    expect(client.listChangeRecords).toHaveBeenLastCalledWith(
-      1,
-      { status: "PUBLISHED", limit: 20, cursor: "cursor-1" },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    expect(
+      await screen.findByText("风控修正", { selector: "summary strong" }),
+    ).toBeVisible();
+    expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+      {
+        projectId: 1,
+        status: "PUBLISHED",
+        source: "ALL",
+        limit: 20,
+        cursor: "cursor-1",
+      },
+      signalInit,
     );
   });
 

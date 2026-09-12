@@ -11,6 +11,11 @@ export interface TimeCursorEncodeInput {
   readonly projectId: number | null;
   readonly afterAt: string;
   readonly afterId: string;
+  /**
+   * 可选：本接口的规范化筛选摘要（B-3b 跨项目记录读）。提供后解码必须复现
+   * 完全相同的字符串，否则按筛选不匹配拒绝，游标不得跨筛选复用。
+   */
+  readonly filterKey?: string | null;
   readonly nowMs?: number;
 }
 
@@ -18,6 +23,8 @@ export interface TimeCursorDecodeContext {
   readonly actorUserId: number;
   readonly namespace: string;
   readonly projectId: number | null;
+  /** 与 encode 对称的可选筛选摘要；调用方必须传入同一份规范化文本。 */
+  readonly filterKey?: string | null;
   readonly nowMs?: number;
 }
 
@@ -31,6 +38,7 @@ interface TimeCursorPayload {
   readonly u: number;
   readonly n: string;
   readonly p: number | null;
+  readonly f: string | null;
   readonly a: string;
   readonly i: string;
   readonly e: number;
@@ -48,8 +56,9 @@ export class TimeCursorError extends Error {
 
 /**
  * 服务端签名的时间游标：base64url(payload).base64url(HMAC-SHA-256)。
- * 同时绑定 keyring 版本、当前用户、业务命名空间和可选的 projectId，
- * 防止把 Activity 游标用于通知或其他项目。调用方只能解析，不能伪造。
+ * 同时绑定 keyring 版本、当前用户、业务命名空间、可选的 projectId 与可选的
+ * 规范化筛选摘要，防止把 Activity 游标用于通知、其他项目或其他筛选条件。
+ * 调用方只能解析，不能伪造。
  */
 export class TimeCursorService {
   constructor(
@@ -85,6 +94,7 @@ export class TimeCursorService {
       u: input.actorUserId,
       n: input.namespace,
       p: input.projectId,
+      f: input.filterKey ?? null,
       a: input.afterAt,
       i: input.afterId,
       e: nowMs + TIME_CURSOR_TTL_MS,
@@ -155,6 +165,9 @@ export class TimeCursorService {
     if (payload.p !== context.projectId) {
       fail("project-mismatch", "time cursor project does not match");
     }
+    if ((payload.f ?? null) !== (context.filterKey ?? null)) {
+      fail("filter-mismatch", "time cursor filter does not match");
+    }
     return { at: payload.a, id: payload.i };
   }
 }
@@ -209,6 +222,15 @@ function parsePayload(raw: string): TimeCursorPayload {
     fail("malformed", "time cursor namespace is invalid");
   }
   if (
+    payload.f !== undefined &&
+    payload.f !== null &&
+    (typeof payload.f !== "string" ||
+      payload.f.length === 0 ||
+      payload.f.length > 1024)
+  ) {
+    fail("malformed", "time cursor filter key is invalid");
+  }
+  if (
     payload.p !== null &&
     (!Number.isSafeInteger(payload.p) || (payload.p ?? 0) <= 0)
   ) {
@@ -228,6 +250,7 @@ function parsePayload(raw: string): TimeCursorPayload {
     u: payload.u!,
     n: payload.n,
     p: payload.p ?? null,
+    f: payload.f ?? null,
     a: payload.a,
     i: payload.i,
     e: payload.e!,

@@ -602,6 +602,24 @@ export type ModuleVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type MyRecordDraftItem = {
+  readonly draft: RecordDraftItem;
+  readonly projectName: string;
+  readonly moduleName: string;
+  readonly featureName: (string | null);
+};
+
+export type MyRecordDraftListQuery = {
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
+export type MyRecordDraftPage = {
+  readonly items: readonly MyRecordDraftItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
 export type MyTaskItem = {
   readonly taskId: number;
   readonly code: string;
@@ -1002,6 +1020,29 @@ export type RecordDraftResourcePath = {
 export type RecordDraftVersionHeaders = {
   readonly "x-csrf-token": string;
   readonly "if-match": string;
+};
+
+export type RecordFeedItem = {
+  readonly record: ReadableRecord;
+  readonly projectName: string;
+  readonly moduleName: string;
+  readonly featureName: (string | null);
+  readonly author: UserRef;
+};
+
+export type RecordFeedPage = {
+  readonly items: readonly RecordFeedItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type RecordFeedQueryRequest = {
+  readonly projectId?: number;
+  readonly status?: ("PUBLISHED" | "VOID" | "ALL");
+  readonly source?: ("ALL" | "MAIN" | "SOURCE" | "MODULE" | "FEATURE");
+  readonly q?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
 };
 
 export type RecordLifecycleReplayContext = {

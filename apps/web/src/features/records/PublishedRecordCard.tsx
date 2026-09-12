@@ -1,38 +1,41 @@
 import React from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import type { InpulseApiClient, ReadableRecord } from "@generated/api";
+import type { InpulseApiClient, RecordFeedItem } from "@generated/api";
 import { CalmBadge } from "@features/common/components/Calm";
 import { PublishedRecordDetail } from "@features/published-records/PublishedRecordDetail";
 
-export function recordStatusLabel(status: ReadableRecord["status"]) {
+type RecordStatus = RecordFeedItem["record"]["status"];
+
+export function recordStatusLabel(status: RecordStatus) {
   return status === "VOID" ? "已作废" : "已发布";
 }
 
 /**
  * B-3a：设计师稿 record-card——摘要行常驻，展开后在卡片内加载详情、版本对比、
  * GitHub 关联与生命周期操作。展开状态由调用方（记录页 URL 的 publishedId）驱动。
+ * B-3b：卡片接收跨项目清单条目（B-3b 名称回填），展开区按记录自身 projectId 读取，
+ * 因此同一条卡片在「全部项目」视图下也能打开详情、版本与生命周期操作。
  */
 export function PublishedRecordCard({
   item,
-  projectId,
   open,
   onToggle,
   client,
   writable,
   onListChanged,
 }: {
-  readonly item: ReadableRecord;
-  readonly projectId: number;
+  readonly item: RecordFeedItem;
   readonly open: boolean;
   readonly onToggle: (open: boolean) => void;
   readonly client?: InpulseApiClient | undefined;
   readonly writable: boolean;
   readonly onListChanged?: (() => void) | undefined;
 }) {
+  const record = item.record;
   return (
     <details
       className={
-        "record-card" + (item.status === "VOID" ? " record-voided" : "")
+        "record-card" + (record.status === "VOID" ? " record-voided" : "")
       }
       open={open}
       onToggle={(event) => onToggle(event.currentTarget.open)}
@@ -42,29 +45,34 @@ export function PublishedRecordCard({
           <InpulseIcon name="gitBranch" size={18} />
         </span>
         <span className="record-summary-text">
-          <strong>{item.title}</strong>
+          <strong>{record.title}</strong>
           <small>
-            {item.code} · v{item.currentVersion} · 发布{" "}
-            {new Date(item.publishedAt).toLocaleString("zh-CN")}
+            {record.code} · v{record.currentVersion} · 发布{" "}
+            {new Date(record.publishedAt).toLocaleString("zh-CN")} ·{" "}
+            {item.author.name}
+          </small>
+          <small className="record-summary-path">
+            归属 {item.projectName} / {item.moduleName}
+            {item.featureName === null ? "" : ` / ${item.featureName}`}
           </small>
         </span>
         <span className="record-summary-badges">
-          {item.scopeType === "MODULE" ? (
+          {record.scopeType === "MODULE" ? (
             <CalmBadge tone="violet">模块级</CalmBadge>
           ) : null}
-          {item.currentVersion > 1 ? (
-            <CalmBadge tone="cyan">v{item.currentVersion}</CalmBadge>
+          {record.currentVersion > 1 ? (
+            <CalmBadge tone="cyan">v{record.currentVersion}</CalmBadge>
           ) : null}
-          <CalmBadge tone={item.status === "VOID" ? "red" : "green"}>
-            {recordStatusLabel(item.status)}
+          <CalmBadge tone={record.status === "VOID" ? "red" : "green"}>
+            {recordStatusLabel(record.status)}
           </CalmBadge>
         </span>
         <InpulseIcon name="chevronRight" size={16} />
       </summary>
       {open ? (
         <PublishedRecordDetail
-          projectId={projectId}
-          recordId={item.id}
+          projectId={record.projectId}
+          recordId={record.id}
           client={client}
           writable={writable}
           onListChanged={onListChanged}

@@ -7,4 +7,5 @@ export * from "./published-records.module.js";
 export * from "./leftover-record.port.js";
 export * from "./leftover-search-projection.js";
 export * from "./change-record-read.port.js";
+export * from "./record-feed-read.port.js";
 export * from "./my-task-query.port.js";

@@ -1949,6 +1949,139 @@
         }
       }
     },
+    "/change-records": {
+      "get": {
+        "operationId": "listRecordFeed",
+        "summary": "B-3b 跨项目迭代记录清单：按 AuthorizedProjectScope 汇总所有可读项目的正式记录（PUBLISHED / VOID），支持按项目收窄、状态（PUBLISHED / VOID / ALL）、来源（主任务 / 来源任务 / 模块级 / 功能直接创建）与 q 全文检索筛选；服务端批量回填项目 / 模块 / 功能名与作者引用；固定 published_at DESC, id DESC 游标分页，limit 1～100、默认 20；projectId 只收窄范围，非成员项目为空页而不是 404。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordFeedPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PUBLISHED",
+                "VOID",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "MAIN",
+                "SOURCE",
+                "MODULE",
+                "FEATURE"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ]
+      }
+    },
     "/external-links/{targetType}/{targetId}": {
       "get": {
         "operationId": "listExternalLinks",
@@ -2747,6 +2880,91 @@
           "concurrencyPolicy": "none",
           "auditAction": "none"
         }
+      }
+    },
+    "/me/record-drafts": {
+      "get": {
+        "operationId": "listMyRecordDrafts",
+        "summary": "B-3b 我的草稿（全局）：跨项目列出当前用户为作者的未发布草稿，服务端批量回填项目 / 模块 / 功能名；作者恒为当前 actor，不接受 assigneeId / userId / projectIds 等他人身份或授权范围参数；固定 created_at DESC, id DESC 游标分页，limit 1～100、默认 20；被移出项目后其草稿立即不再返回。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRecordDraftPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ]
       }
     },
     "/me/tasks": {
@@ -16853,6 +17071,92 @@
         ],
         "additionalProperties": false
       },
+      "MyRecordDraftItem": {
+        "type": "object",
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/RecordDraftItem"
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "draft",
+          "projectName",
+          "moduleName",
+          "featureName"
+        ],
+        "additionalProperties": false
+      },
+      "MyRecordDraftListQuery": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "MyRecordDraftPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyRecordDraftItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
       "MyTaskItem": {
         "type": "object",
         "properties": {
@@ -18918,6 +19222,124 @@
           "x-csrf-token",
           "if-match"
         ],
+        "additionalProperties": false
+      },
+      "RecordFeedItem": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "$ref": "#/components/schemas/ReadableRecord"
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        },
+        "required": [
+          "record",
+          "projectName",
+          "moduleName",
+          "featureName",
+          "author"
+        ],
+        "additionalProperties": false
+      },
+      "RecordFeedPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordFeedItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "RecordFeedQueryRequest": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PUBLISHED",
+              "VOID",
+              "ALL"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "MAIN",
+              "SOURCE",
+              "MODULE",
+              "FEATURE"
+            ]
+          },
+          "q": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
         "additionalProperties": false
       },
       "RecordLifecycleReplayContext": {

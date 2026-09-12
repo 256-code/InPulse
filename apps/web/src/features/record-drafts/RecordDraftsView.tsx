@@ -9,7 +9,11 @@ export { mergeRecordDraft } from "./record-content.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
-import { useRecordDraftsQuery } from "./record-drafts-query";
+import {
+  MY_RECORD_DRAFTS_QUERY_KEY,
+  useMyRecordDraftsQuery,
+  useRecordDraftsQuery,
+} from "./record-drafts-query";
 import "./record-drafts.css";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
@@ -20,6 +24,7 @@ import {
   createApiClient,
   type InpulseApiClient,
   type RecordDraftContent,
+  type MyRecordDraftItem,
   type RecordDraftItem,
   type TaskRecordDraftsResponse,
 } from "@generated/api";
@@ -71,7 +76,10 @@ export function RecordDraftsView({
   client?: InpulseApiClient | undefined;
   /** 页头 CTA 的递增令牌：变化时打开对应模式的草稿弹窗（B-3a 单页）。 */
   createToken?: number;
-  /** 当前登录用户 id：用于「我的草稿」条带；不传则不显示条带。 */
+  /**
+   * 当前登录用户 id：决定是否请求并显示「我的草稿」条带（B-3b 起为全局
+   * `listMyRecordDrafts`，跨项目显示并回填项目名称）；不传则不显示条带。
+   */
   currentUserId?: number | undefined;
   /** 向调用方上报能否创建草稿，供页头 CTA 的禁用态使用。 */
   onCanCreateChange?: ((canCreate: boolean) => void) | undefined;
@@ -263,6 +271,7 @@ export function RecordDraftsView({
       });
       cache.setQueryData(["record-draft", projectId, result.id], result);
       await cache.invalidateQueries({ queryKey: ["record-drafts", projectId] });
+      await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
       await cache.invalidateQueries({
         queryKey: ["task-record-drafts", projectId],
       });
@@ -381,9 +390,33 @@ export function RecordDraftsView({
       saving.current = false;
     }
   });
-  const myDrafts = currentUserId
-    ? drafts.filter((draft) => draft.authorId === currentUserId)
-    : [];
+  const myDrafts = useMyRecordDraftsQuery({
+    client,
+    enabled: currentUserId !== undefined,
+  });
+  const myDraftItems =
+    myDrafts.data?.pages.flatMap((page) => [...page.items]) ?? [];
+  /**
+   * 条带跨项目：同项目草稿直接打开弹窗；其他项目先把 URL 切到该项目的记录页
+   * （带 recordId），由既有的草稿详情面板加载，避免用错项目的写入路径。
+   */
+  const openMyDraft = (item: MyRecordDraftItem) => {
+    if (item.draft.projectId === projectId) {
+      open(item.draft);
+      return;
+    }
+    setSelection(null);
+    setParams({
+      projectId: String(item.draft.projectId),
+      recordId: String(item.draft.id),
+      ...(item.draft.taskId === null
+        ? {}
+        : {
+            taskId: String(item.draft.taskId),
+            moduleId: String(item.draft.moduleId),
+          }),
+    });
+  };
   return (
     <section className="record-drafts-page" aria-label="迭代记录草稿">
       {projects.isError && (
@@ -395,22 +428,31 @@ export function RecordDraftsView({
           }
         />
       )}
-      {myDrafts.length > 0 && (
+      {currentUserId !== undefined && myDrafts.isError && (
+        <p className="draft-strip-error">
+          我的草稿暂时无法加载，刷新页面或稍后重试。
+        </p>
+      )}
+      {myDraftItems.length > 0 && (
         <section className="draft-strip" aria-label="我的草稿">
           <CalmSectionTitle
             title="我的草稿"
-            hint={`${myDrafts.length} 条，尚未进入功能历史`}
+            hint={`${myDraftItems.length} 条，尚未进入功能历史`}
           />
-          {myDrafts.map((draft) => (
+          {myDraftItems.map((item) => (
             <button
               type="button"
               className="draft-record"
-              key={draft.id}
-              aria-label={draft.title}
-              onClick={() => open(draft)}
+              key={item.draft.id}
+              aria-label={item.draft.title}
+              onClick={() => openMyDraft(item)}
             >
               <CalmBadge>草稿</CalmBadge>
-              <strong>{draft.title}</strong>
+              <strong>{item.draft.title}</strong>
+              <small className="draft-record-project">
+                {item.projectName} / {item.moduleName}
+                {item.featureName === null ? "" : ` / ${item.featureName}`}
+              </small>
               <span>
                 <InpulseIcon name="pencil" size={13} />
                 继续编辑 →
