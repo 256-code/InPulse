@@ -1113,4 +1113,4 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #132 检查记录；② 真库两次全量的 500 偶发属既有
 `idempotency_records_retention_check` 时钟偏差族（失败文件每次不同、单文件复跑全过），不得视为已修复；
 ③ 迁移 `0008`、新增权限行与新增集成 / E2E 用例需非作者人工评审；④ `q` 只覆盖既有 `CHANGE_RECORD` 投影内容，
-不提供任意英文 / 代码子串或正则检索（V1 边界不变）；⑤ 记录写入仍走单项目视图与项目内 API，本片只扩展读路径。
+不提供任意英文 / 代码子串或正则检索（V1 边界不变）；⑤ 记录写入仍走单项目视图与项目内 API，本片只扩展读路径；⑥ 迁移 `0008` 新增索引后，`aggregate-read-ports.integration.test.ts` 的 EXPLAIN 断言由绑定 `change_records_project_*_idx` 改为「命中 change_records 索引且不回落 Seq Scan」（CI 实测规划器改选 `change_records_status_published_idx`），属本片驱动的断言调整，A-7 的 `actual time` 与无 `Seq Scan` 证据不变，B7-PLAN-001 / A7-PLAN-001 的历史 CI 结论按当时索引集成立。

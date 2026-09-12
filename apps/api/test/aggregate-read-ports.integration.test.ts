@@ -1096,7 +1096,7 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     expect(excludedPlan).toContain("<> ALL");
   });
 
-  test("记录维度计数与先过滤后分页命中 change_records 既有索引，不需要新增迁移", async () => {
+  test("记录维度计数与先过滤后分页命中 change_records 索引且不回落 Seq Scan", async () => {
     const indexes = await client.sql.unsafe<
       { indexname: string; indexdef: string }[]
     >(
@@ -1135,7 +1135,10 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
       // 证明计数只对本页 taskIds 补齐、未改变分页 SQL 的先过滤后分页性质。
       expect(plan).toContain("actual time");
       expect(plan).not.toMatch(/Seq Scan on change_records/);
-      expect(plan).toMatch(/change_records_project_(task|status)_idx/);
+      // B-3b 迁移 0008 新增 change_records_status_published_idx 后，规划器可在等价
+      // 索引间改选（CI 实测计数子计划改走新索引）；这里只要求命中 change_records
+      // 索引且不回落 Seq Scan，不绑定具体索引名。
+      expect(plan).toMatch(/Index (Only )?Scan using change_records_/);
     }
   });
 });
