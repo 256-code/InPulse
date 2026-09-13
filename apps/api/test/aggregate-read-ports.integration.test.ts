@@ -1262,9 +1262,13 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
       expect(plan).toContain("actual time");
       expect(plan).not.toMatch(/Seq Scan on change_records/);
       // B-3b 迁移 0008 新增 change_records_status_published_idx 后，规划器可在等价
-      // 索引间改选（CI 实测计数子计划改走新索引）；这里只要求命中 change_records
-      // 索引且不回落 Seq Scan，不绑定具体索引名。
-      expect(plan).toMatch(/Index (Only )?Scan using change_records_/);
+      // 索引间改选，也会随统计信息把子计划从 `Index Scan using <idx>` 换成
+      // `Bitmap Index Scan on <idx>`（Windows 本机与 Linux CI 实测各走一种）；
+      // 这里只要求命中 change_records 索引且不回落 Seq Scan，不绑定具体索引名
+      // 与访问方式。
+      expect(plan).toMatch(
+        /(?:Index (?:Only )?Scan using|Bitmap Index Scan on) change_records_/,
+      );
     }
   });
 });

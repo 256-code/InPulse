@@ -1378,10 +1378,16 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 通过 |
 | `pnpm check:secrets`（983 文件）/ `pnpm check:docs`（75 个 Markdown） | 通过 |
 
-未运行：`pnpm test:integration`、`pnpm check`（整链）、`pnpm test:e2e`、GitHub Actions。
+| `pnpm test:integration`（Windows，CI 等价全新库） | 通过：database 2 文件 26 例、ops 2 文件 7 例、api 51 文件 447 例（113.6 s） |
+
+未运行：`pnpm check`（整链，本机 npm 镜像缺 audit endpoint）、`pnpm test:e2e`、GitHub Actions。
 
 #### 5. 附带修复
 
-`database/test/integration/database.test.ts` 的迁移不可变断言在合并 `0009_tasks_creator_index.sql` 后未同步清单，导致 `main` 的 `CI / workspace` 在集成测试步骤失败；本轮补齐 `alreadyApplied` 清单。
+`database/test/integration/database.test.ts` 的迁移不可变断言在合并 `0009_tasks_creator_index.sql` 后未同步清单，导致 `CI / workspace` 在集成测试步骤失败；本轮补齐 `alreadyApplied` 清单。
+
+`apps/api/test/aggregate-read-ports.integration.test.ts` 的「记录维度计数与先过滤后分页命中 `change_records` 索引」断言原为 `/Index (Only )?Scan using change_records_/`，只接受计划节点文本 `Index Scan using <idx>`。Windows 本机与 Linux CI 在同一 SQL、同一索引集下规划器各选一种访问方式（本机 `Index Scan using change_records_…`、Linux `Bitmap Index Scan on change_records_status_published_idx`，后者节点文本是 `on` 而非 `using`），该断言因此在 CI 上必失。放宽为 `/(?:Index (?:Only )?Scan using|Bitmap Index Scan on) change_records_/`，断言强度不变：仍要求命中 `change_records_` 前缀索引、仍保留 `expect(plan).not.toMatch(/Seq Scan on change_records/)` 与 `actual time`（ANALYZE 实测）要求。
+
+**定位方式**：CI job logs 需要登录态，本机 `gh` 未登录无法读取，故用 `node:24.20.0-bookworm` 容器 + PGroonga 探针镜像（`max_connections=200`、trust）复刻同一套环境（`000_roles.sql` → `020_pgroonga.sql` → `db:migrate` 10 条 → `pnpm test:integration`），**exit 1 稳定复现**该例，修复后同一容器全量 **51 文件 447 例全绿**（71.2 s）。
 
 **待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。
