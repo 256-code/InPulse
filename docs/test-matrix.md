@@ -281,7 +281,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务、记录作废/恢复等路径已覆盖 | 本地全量 45/45 通过（2026-09-11，5.1 分钟）；CI Browser E2E（默认 Chromium）已在 main 最新运行 [34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)（`4141e1d`，2026-09-11）50 passed（6.3 分钟），此前 push 运行 [34578707754](https://github.com/256-code/InPulse/actions/runs/34578707754)（`bff1972`）为 45 passed（5.6 分钟）；覆盖 F-03 用户管理、F-05 成员管理、MFA、项目创建、F-12 模块、F-13 功能档案、F-14 功能级任务、F-15 模块级任务、F-16 任务完成与状态闭环、F-17 草稿、F-18 记录发布、F-20 遗留项转任务、F-21 作废/恢复、F-22 外部链接、任务组合并/解除、搜索边界及 F-27/F-28 状态联动；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 实际构建 API/migration/web/db-bootstrap/ops 五个生产镜像成功；Compose/ref 预检由 `check:deploy:test` 覆盖；真实镜像 Tag/digest 绑定与签名发布清单仍属发布环节） |
-| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个生产镜像的 Trivy 扫描全部 success，CRITICAL/HIGH 无未处置项） |
+| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个生产镜像的 Trivy 扫描全部 success，CRITICAL/HIGH 无未处置项；2026-09-13 上游集中公布 Debian 安全更新后同一门禁对 API 镜像报出 2 个 HIGH（`libpcre2-8-0`），已按「固定 digest 基础镜像内刷新 Debian 安全包」修复，见下方「演示数据库版本化种子」章节 §5） |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
 > CI-001～CI-006、CI-009～CI-013、CI-015、CI-016 的命令已在本地实测通过，其中
@@ -1389,5 +1389,15 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 `apps/api/test/aggregate-read-ports.integration.test.ts` 的「记录维度计数与先过滤后分页命中 `change_records` 索引」断言原为 `/Index (Only )?Scan using change_records_/`，只接受计划节点文本 `Index Scan using <idx>`。Windows 本机与 Linux CI 在同一 SQL、同一索引集下规划器各选一种访问方式（本机 `Index Scan using change_records_…`、Linux `Bitmap Index Scan on change_records_status_published_idx`，后者节点文本是 `on` 而非 `using`），该断言因此在 CI 上必失。放宽为 `/(?:Index (?:Only )?Scan using|Bitmap Index Scan on) change_records_/`，断言强度不变：仍要求命中 `change_records_` 前缀索引、仍保留 `expect(plan).not.toMatch(/Seq Scan on change_records/)` 与 `actual time`（ANALYZE 实测）要求。
 
 **定位方式**：CI job logs 需要登录态，本机 `gh` 未登录无法读取，故用 `node:24.20.0-bookworm` 容器 + PGroonga 探针镜像（`max_connections=200`、trust）复刻同一套环境（`000_roles.sql` → `020_pgroonga.sql` → `db:migrate` 10 条 → `pnpm test:integration`），**exit 1 稳定复现**该例，修复后同一容器全量 **51 文件 447 例全绿**（71.2 s）。
+
+五个生产镜像的 Trivy 门禁在上游集中公布 Debian 安全更新后转红，根因与处置如下（同批修复）：
+
+- **根因不是 Node 依赖，也不是本分支引入**：`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`deploy/docker/*`、各 workspace `package.json` 与本分支基点零差异；报出的漏洞都在镜像的 Debian 系统包层（API 镜像实测 `Total: 2 (HIGH: 2)`，均为 `libpcre2-8-0 10.42-1`，修复版本 `10.42-1+deb12u1`）。
+- **换 digest 不可行**：`deploy/docker/*.Dockerfile` 固定的 `node:24.20.0-bookworm-slim@sha256:ba849c60…` 与当前同名 tag 的 digest 完全一致，上游未因 Debian 安全更新重建镜像；而镜像引用按 ADR-017 必须 exact-tag@digest，不能改指向未评审的新 digest。
+- **处置方式**：按「固定 digest 基础镜像内刷新 Debian 安全包」在五个 Dockerfile 的 runtime 阶段引入一次刷新，并 `apt-get clean && rm -rf /var/lib/apt/lists/*`，避免 apt 缓存本身进入扫描报告。
+- **两套清单差异（实测）**：`node:24.20.0-bookworm-slim`（Debian 12.15）内完整 `apt-get upgrade` 为空，只有 `libpcre2-8-0` 需要升级，且 `libsqlite3-0`、`libssh2-1t64`、`perl` 在该套件内**不存在**（`apt-get install --only-upgrade` 会 `E: Unable to locate package` 并 exit 100）；`nginxinc/nginx-unprivileged:1.30.4` 与 `postgres:18.6`（Debian 13.6 trixie）需要点名升级 `gzip libpcre2-8-0 libsqlite3-0 libssh2-1t64 perl perl-base libperl5.40 perl-modules-5.40`。
+- **为什么 API/migration/ops 用整体 `upgrade`、web/db-bootstrap 用点名 `--only-upgrade`**：api/migration/ops 只带 Node，没有需要按版本确认的服务器二进制；web 与 db-bootstrap 必须把 nginx 停在 1.30.x、PostgreSQL 停在 18.6 评审基线（db-bootstrap 已配置 PGDG 源，整体 upgrade 会在 PGDG 发新补丁时带走 PostgreSQL 版本），故只点名升级 Debian 系统包。两者都只用 `upgrade`/`--only-upgrade`，不装新包、不删包、不改镜像基线。
+- **本地验证**：五个镜像全部重建成功，逐镜像 `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1` 全部 **exit 0**；复扫报告 `api` 的 Debian 层 0 漏洞、`web (debian 13.6)` 0、`db-bootstrap (debian 13.6)` 0；镜像内核验 `node 24.20.0`、`nginx/1.30.4`（uid 101）、`postgres 18.6`、`pg_dump/pg_restore 18.6`（uid 10002）、`/app/healthcheck.mjs` 与 entrypoint 初始化脚本均在位；包版本为 `libpcre2-8-0 10.42-1+deb12u1`（bookworm）/`10.46-1~deb13u2`（trixie）、`perl-base 5.40.1-6+deb13u1`、`gzip 1.13-1+deb13u1`、`libsqlite3-0 3.46.1-7+deb13u2`、`libssh2-1t64 1.11.1-1+deb13u2`；`pnpm check:deploy:test` 退出码 0（db-bootstrap 的 OpenSSL `--only-upgrade` 行保留）。
+- **未运行**：CI 镜像扫描步骤结论以推送后的运行为准，本条不预称已通过。
 
 **待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。

@@ -34,6 +34,18 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
+# Debian 会持续为系统包发布安全更新，而 digest 固定的基础镜像不会因此立即重建；
+# 不刷新就会被新公告卡住 Trivy 镜像门禁（实测 perl-base 的 CRITICAL 与 gzip、
+# libpcre2-8-0、libsqlite3-0、libssh2-1t64 的 HIGH 使扫描失败）。这里逐个点名
+# 升级而不用整体 upgrade，以保证 nginx 仍停在 1.30.x 评审基线；`--only-upgrade`
+# 只升级已安装的包：未安装的包跳过、已是最新的包不动，不安装新包、不删除任何包。
+RUN apt-get update \
+ && apt-get install -y --only-upgrade \
+      gzip libpcre2-8-0 libsqlite3-0 libssh2-1t64 \
+      perl perl-base libperl5.40 perl-modules-5.40 \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY deploy/docker/nginx-security-headers.conf /etc/nginx/snippets/inpulse-security-headers.conf
 COPY --from=builder /workspace/apps/web/dist /usr/share/nginx/html
