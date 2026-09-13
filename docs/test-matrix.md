@@ -1336,4 +1336,52 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 **定向验证**：`record-lifecycle` / `leftover-task` / `task-completion` 3 文件 7 例通过（59.5 s）；`record-publishing` / `record-feed` 2 文件 3 例通过。**全量**：`55 passed / 0 failed`（4.6 分钟，容器库 PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3201` / `E2E_WEB_PORT=4173`）。
 
-**待人工评审项**：⑤ 上述 8 处 e2e 改动均为测试语义同步，需非作者确认「摘要行承载编号与状态」的产品口径；⑥ 段落小标题仍是仓库长版（「为什么改、发现了什么问题」等），设计师稿为短版（「为什么改」），尚未收敛，属有意偏离。
+**待人工评审项**：⑤ 上述 8 处 e2e 改动均为测试语义同步，需非作者确认「摘要行承载状态」的产品口径；⑥ 段落小标题仍是仓库长版（「为什么改、发现了什么问题」等），设计师稿为短版（「为什么改」），尚未收敛，属有意偏离。
+
+## 演示数据库版本化种子（C，2026-09-13 本地落库）
+
+产品反馈「把数据库一并上传，我们要真实的数据库」「之前的数据库替换掉」：把本地容器演示库（`inpulse-local-dev`，`127.0.0.1:55432`）的真实演示数据作为版本化种子提交进仓库，替换仓库原先的占位演示数据。
+
+#### 1. 方案与产物
+
+| 产物 | 作用 |
+| --- | --- |
+| `scripts/export-demo-seed.mjs` | 维护者工具：从演示库 `pg_dump --data-only` 导出 27 张业务表，剔除测试痕迹、替换口令占位、统一文件头 |
+| `database/seed/demo-data.sql` | 生成物（680265 B）：27 个 `COPY` 块 + `setval` 块，参与漂移检查 |
+| `apps/api/scripts/seed-demo-data.mjs` | 载入器：单事务清空 + 载入 + 口令重置 + 回读校验 + 行数统计 |
+| `pnpm db:seed:check` / `pnpm db:seed:demo` | 根级入口；`db:seed:check` 已插入 `pnpm check` 链、`README.md` 与 `AGENTS.md` §8 |
+
+导出只含业务数据：**不含**登录会话、CSRF 材料、幂等记录、限流桶、MFA 恢复码与 TOTP 因子（承载运行痕迹的 7 张表在载入时也会被清空）。**含项目审计链**（`audit_chain_heads` + `audit_logs`），因为 `activity_projection_source_audit_fk` 指向 `audit_logs(chain_id, sequence_no)`，缺了项目动态无法载入；审计链里的测试痕迹行按 `SYSTEM_TEST` / `AUDIT_SEED_` 前缀在导出时剔除。口令列写固定占位值 `$argon2id$seed-demo-placeholder`（满足 `users.password_hash` 的 NOT NULL 与 `LIKE '$argon2id$%'` 约束、又不构成可用凭据），载入时由 `@node-rs/argon2` 统一重置为演示口令（默认 `Inpulse@2026`，可用 `SEED_DEMO_PASSWORD` 覆盖）并回读校验。
+
+#### 2. 载入顺序约束（踩坑取证）
+
+| 触发点 | 约束 |
+| --- | --- |
+| `require_active_task_assignee()` | 任务负责人必须是项目 `ACTIVE` 成员 ⇒ `project_members` 必须先于 `tasks` |
+| `require_next_row_version()` | 核心聚合的 `row_version` 必须**恰好 +1** ⇒ 载入器重置口令的 `UPDATE` 也要带 `row_version = row_version + 1` |
+| `activity_projection_source_audit_fk`（`DEFERRABLE INITIALLY DEFERRED`） | 项目动态指向审计记录 ⇒ 审计链必须随种子导出，且 `audit_chain_heads` 早于 `audit_logs` |
+| `activity_projection_actor_id_users_id_fk` | `users` 必须最先载入 |
+| Windows `psql --command` | 参数按控制台代码页转码，中文字面量会变成非法字节序列 ⇒ 统计 SQL 改为纯 ASCII，中文标签只在 Node 侧打印 |
+
+#### 3. 端到端验证证据（2026-09-13，容器库 PostgreSQL 18.6 + PGroonga）
+
+1. **全新库重建**：`CREATE DATABASE seedcheck` → `bootstrap/000_roles.sql` → `bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=…app_migrator@127.0.0.1:55433/seedcheck pnpm db:migrate`（**10 条迁移 0000-0009 全部 Applied**）→ `node apps/api/scripts/seed-demo-data.mjs` **成功**。
+2. **逐表哈希比对**：对 27 张表执行 `md5(string_agg(to_jsonb(t)::text, '|' ORDER BY to_jsonb(t)::text))`，**26/27 与演示库完全一致**；`users` 差异仅来自口令占位被重置与 `tege.row_version` 由 2 递增到 3，去掉口令相关列后哈希一致（`d2df3615a9772c51117e401bed6a8573`）。
+3. **真实 HTTP 读路径**：对该库以 `app_runtime` 启动真实 API（`PORT=3399`），用演示账号 `xiaopan` 完成 CSRF 签发 → 登录 → 22 条读路径，**0 失败**：当前用户（小潘）、项目列表（1）、项目详情、项目概览（含 `stats` / `recentRecords` / `activeLeftoverTotal`）、模块（8）、功能点（32，逐个模块遍历）、功能点详情、我的任务（15）、任务聚合组（1）、遗留问题（4）、迭代记录（20 + 下一页游标）、项目动态（20 + 下一页游标）、站内通知（20 + 下一页游标）、未读数量（3）、全局搜索（17）、用户目录（4）；项目成员接口对非管理员返回 403 属设计内权限行为。
+4. **载入后行数**（与演示库一致）：账号 4、项目 1、项目成员 4、模块 8、功能点 32、任务 53、迭代记录 49、外部链接 268、项目动态 193、审计记录 198、站内通知 202。
+
+#### 4. 定向门禁
+
+| 检查 | 结果 |
+| --- | --- |
+| `pnpm db:seed:check` | 通过（27 张业务表，无口令哈希） |
+| `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 通过 |
+| `pnpm check:secrets`（983 文件）/ `pnpm check:docs`（75 个 Markdown） | 通过 |
+
+未运行：`pnpm test:integration`、`pnpm check`（整链）、`pnpm test:e2e`、GitHub Actions。
+
+#### 5. 附带修复
+
+`database/test/integration/database.test.ts` 的迁移不可变断言在合并 `0009_tasks_creator_index.sql` 后未同步清单，导致 `main` 的 `CI / workspace` 在集成测试步骤失败；本轮补齐 `alreadyApplied` 清单。
+
+**待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。

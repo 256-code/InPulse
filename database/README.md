@@ -95,6 +95,48 @@ pnpm test:search:db
 该命令要求目标实例已执行 `000_roles.sql`、`020_pgroonga.sql`，且
 `max_connections >= 150`；它不在当前 CI 的 `CI / workspace` job 中执行。
 
+## 演示种子数据
+
+`seed/demo-data.sql` 是从真实运行中的演示库导出的**业务数据快照**，用于让
+全新的空库一次性得到与演示环境一致的账号、项目、模块、功能点、任务、迭代
+记录、外部链接、项目动态、审计链和站内通知。它是版本化数据资产，参与
+`pnpm db:seed:check` 漂移检查，不进入迁移历史、也不修改任何表结构。
+
+种子只包含业务数据：
+
+- 含项目审计链（`audit_logs` 与 `audit_chain_heads`）——项目动态的来源外键
+  指向审计记录，缺了会直接载入失败；导出时已剔除测试痕迹行；
+- 不含登录会话、CSRF 材料、幂等记录、限流桶、MFA 恢复码和 TOTP 因子等
+  运行痕迹，这些表在载入时会被清空；
+- 不含演示账号的口令哈希：口令列在种子中是固定占位值，载入时由
+  `db:seed:demo` 统一重置为演示口令，并回读校验一次。
+
+在已迁移到最新版本的空库上载入：
+
+```powershell
+# 新库必须先跑角色与 PGroonga bootstrap，再跑迁移
+$env:MIGRATION_DATABASE_URL = 'postgresql://app_migrator@127.0.0.1:55432/app'
+pnpm db:migrate
+
+# 载入种子（默认连 127.0.0.1:55432/app，可用 SEED_DATABASE_URL 覆盖）
+pnpm db:seed:demo
+
+# 已有数据时需显式确认覆盖
+pnpm db:seed:demo -- --force
+```
+
+`db:seed:demo` 在单个事务内清空业务表、按父到子顺序载入种子、重置演示账号
+口令并打印各表行数；任一步失败即整体回滚。导出与校验命令：
+
+```powershell
+# 从演示库重新导出（需要 INPULSE_SEED_SOURCE_URL 指向演示库）
+$env:INPULSE_SEED_SOURCE_URL = 'postgresql://cluster_bootstrap@127.0.0.1:55432/app'
+node scripts/export-demo-seed.mjs
+
+# 校验已提交的种子与导出规则一致（CI 与 pnpm check 使用）
+pnpm db:seed:check
+```
+
 ## 阶段 0 搜索 PoC
 
 PostgreSQL 18.6 PGroonga V1 PoC（需要 Docker）：

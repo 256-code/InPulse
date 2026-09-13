@@ -75,6 +75,8 @@ pnpm check             # 一次跑完上述全部非数据库门禁
 pnpm format            # 用 Prettier 写入格式
 pnpm contract:generate # 重新生成 OpenAPI 与 TypeScript 客户端
 pnpm test:web          # 只运行 apps/web 单元测试
+pnpm db:seed:demo      # 把仓库内的演示种子数据载入本地库（已有数据时加 -- --force）
+pnpm db:seed:check     # 校验 database/seed/demo-data.sql 与导出规则一致
 pnpm check:deploy:test # Compose 渲染 + exact-tag@sha256 + 结构不变量正例
 pnpm check:deploy      # 真实发布 ref 检查，需要 deploy/.env.deploy
 ```
@@ -122,6 +124,11 @@ pnpm db:poc:search:local
 数据库迁移和测试需要 PostgreSQL 18；Windows 可设置 `POSTGRES_BIN` 后运行
 `pnpm db:test:local` 自动创建并销毁 loopback 临时实例。环境变量、生产
 Secret、角色和功能开发事务契约见[数据库说明](./database/README.md)。
+
+仓库内的 `database/seed/demo-data.sql` 是真实演示环境的业务数据快照（账号、
+项目、模块、功能点、任务、迭代记录、外部链接、项目动态、审计链与站内通知），
+可直接灌进空库得到完整可点的演示环境；导出与校验规则、口令说明见
+[数据库说明的演示种子数据章节](./database/README.md#演示种子数据)。
 
 基线冻结的剩余事项只在[仓库开发规则](./AGENTS.md#13-基线冻结剩余事项)维护；实施顺序和验收条件见[技术设计第 14 章](./技术设计v1.2.2.md#14-实施顺序)。
 
