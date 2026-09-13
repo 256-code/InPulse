@@ -68,6 +68,14 @@ export interface ProjectChangeRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly memberCount: number;
+  readonly stats: ProjectStatRecord;
+}
+
+/** 项目卡统计；与 R-2 项目概览的 ProjectOverviewStats 同名同口径。 */
+export interface ProjectStatRecord {
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
 }
 
 /** 项目与成员写边界；只做持久化，不决定业务状态流转，调用方持有事务。 */

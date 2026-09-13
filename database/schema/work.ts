@@ -197,6 +197,11 @@ export const tasks = appSchema.table(
       table.workStatus,
       table.id,
     ),
+    index("tasks_creator_status_idx").on(
+      table.creatorId,
+      table.workStatus,
+      table.id,
+    ),
     check("tasks_scope_check", sql.raw("scope_type IN ('FEATURE', 'MODULE')")),
     check(
       "tasks_scope_feature_check",

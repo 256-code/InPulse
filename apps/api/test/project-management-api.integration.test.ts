@@ -242,6 +242,11 @@ describe("F-06.1 project edit API", () => {
       status: "ACTIVE",
       rowVersion: 2,
       memberCount: 1,
+      stats: {
+        activeModuleCount: 1,
+        activeFeatureCount: 0,
+        openTaskCount: 0,
+      },
     });
 
     const replay = await request("PATCH", path, value.owner, editBody, {
@@ -460,6 +465,11 @@ describe("F-06.2 project archive API", () => {
       status: "ARCHIVED",
       rowVersion: 2,
       memberCount: 1,
+      stats: {
+        activeModuleCount: 1,
+        activeFeatureCount: 0,
+        openTaskCount: 0,
+      },
     });
 
     const replay = await request("POST", path, value.admin, archiveBody, {
@@ -777,6 +787,11 @@ describe("F-06.3 project restore API", () => {
     expect(restoredBody.project).toMatchObject({
       status: "ACTIVE",
       rowVersion: 3,
+      stats: {
+        activeModuleCount: 1,
+        activeFeatureCount: 0,
+        openTaskCount: 0,
+      },
     });
 
     const replay = await request(

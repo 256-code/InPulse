@@ -30,6 +30,20 @@ export const featureMutationHeadersSchema = z
 export const featureVersionHeadersSchema = featureMutationHeadersSchema
   .extend({ "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/) })
   .meta({ id: "FeatureVersionHeaders" });
+/**
+ * 功能卡统计：openTaskCount 与项目/模块卡同口径，只计该功能下 work_status = TODO 的有效任务；
+ * recordCount 只计 status = PUBLISHED 的正式迭代记录，与功能档案的迭代历史一致。
+ */
+export const featureStatsSchema = z
+  .object({
+    openTaskCount: z.number().int().nonnegative(),
+    recordCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "FeatureStats" });
+
+export type FeatureStats = z.infer<typeof featureStatsSchema>;
+
 export const featureItemSchema = z
   .object({
     id,
@@ -45,6 +59,7 @@ export const featureItemSchema = z
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     archivedAt: z.iso.datetime().nullable(),
+    stats: featureStatsSchema,
   })
   .strict()
   .meta({ id: "FeatureItem" });

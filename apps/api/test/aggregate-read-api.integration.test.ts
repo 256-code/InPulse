@@ -59,6 +59,7 @@ let otherProject: ProjectFixture | undefined;
 let memberUser = 0;
 let otherUser = 0;
 let outsiderUser = 0;
+let secondMemberUser = 0;
 let memberCookie = "";
 let otherCookie = "";
 let outsiderCookie = "";
@@ -125,6 +126,8 @@ async function newFeature(
 
 interface TaskOptions {
   readonly assigneeId?: number;
+  /** 任务创建者；缺省为项目夹具所有者，用于构造 creator ≠ assignee 的场景。 */
+  readonly actorUserId?: number;
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
@@ -144,7 +147,7 @@ async function newTask(
     const created = await taskWrites.create(
       tx,
       { projectId: scope.projectId, moduleId: scope.moduleId, featureId },
-      scope.userId,
+      options.actorUserId ?? scope.userId,
       code,
       {
         title: options.title ?? "聚合读接口任务",
@@ -402,12 +405,12 @@ beforeAll(async () => {
   memberUser = await createUser(runtime.sql);
   otherUser = await createUser(runtime.sql);
   outsiderUser = await createUser(runtime.sql);
-  const secondMemberId = await createUser(runtime.sql);
+  secondMemberUser = await createUser(runtime.sql);
   const projectFixture = await createProject(runtime.sql, memberUser);
   project = projectFixture;
   const otherFixture = await createProject(runtime.sql, otherUser);
   otherProject = otherFixture;
-  await runtime.sql`INSERT INTO app.project_members (project_id, user_id) VALUES (${projectFixture.projectId}, ${secondMemberId})`;
+  await runtime.sql`INSERT INTO app.project_members (project_id, user_id) VALUES (${projectFixture.projectId}, ${secondMemberUser})`;
 
   await newModule(projectFixture, "聚合读接口模块");
   const archivedModuleId = await newModule(projectFixture, "已归档模块");
@@ -1297,6 +1300,68 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     );
     await expectError(
       "/api/v1/me/tasks?hasPublishedRecord=maybe",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
+  });
+
+  test("ownership 归属维度正交：CREATOR 只返回本人创建，且游标签名绑定（F-32「我创建的」）", async () => {
+    const createdForOther = await newTask(project!, {
+      assigneeId: secondMemberUser,
+      dueAt: "2027-04-01T03:00:00.000Z",
+    });
+    const createdByOtherForMe = await newTask(project!, {
+      actorUserId: secondMemberUser,
+      assigneeId: memberUser,
+    });
+
+    const createdPage = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks?ownership=CREATOR", memberCookie)).body,
+    );
+    const createdIds = createdPage.items.map((item) => item.taskId);
+    expect(createdIds).toContain(createdForOther);
+    expect(createdIds).not.toContain(createdByOtherForMe);
+    expect(
+      createdPage.items.every((item) => item.creatorId === memberUser),
+    ).toBe(true);
+
+    const assignedPage = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks", memberCookie)).body,
+    );
+    const assignedIds = assignedPage.items.map((item) => item.taskId);
+    expect(assignedIds).toContain(createdByOtherForMe);
+    expect(assignedIds).not.toContain(createdForOther);
+    // 统计口径与遗留问题样本只描述「我负责的」，不随 ownership 变化。
+    expect(createdPage.stats).toEqual(assignedPage.stats);
+    expect(createdPage.leftoverCount).toBe(assignedPage.leftoverCount);
+
+    const explicitAssignee = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks?ownership=ASSIGNEE", memberCookie)).body,
+    );
+    expect(explicitAssignee.items.map((item) => item.taskId)).toEqual(
+      assignedIds,
+    );
+
+    const paged = myTaskPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/me/tasks?ownership=CREATOR&limit=1",
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(paged.nextCursor).not.toBeNull();
+    await expectError(
+      "/api/v1/me/tasks?ownership=ASSIGNEE&limit=1&cursor=" +
+        encodeURIComponent(paged.nextCursor!),
+      memberCookie,
+      422,
+      "INVALID_CURSOR",
+    );
+
+    await expectError(
+      "/api/v1/me/tasks?ownership=OWNER",
       memberCookie,
       422,
       "VALIDATION_FAILED",

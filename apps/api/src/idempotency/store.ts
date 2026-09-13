@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { idempotencyRecords } from "@inpulse/database";
 import type { TransactionContext } from "../database/transaction-context.js";
@@ -33,6 +33,11 @@ export interface IdempotencyRecordInsert {
   readonly idempotencyContractVersion: string;
   readonly requestHash: Buffer;
   readonly requestHashKeyVersion: number;
+  /**
+   * 调用方期望的过期时刻（保留期上限见技术设计 §4.3.1 的 30 天窗口）。
+   *
+   * 写入时以数据库时钟为准换算，不使用应用进程时钟作为权威时间。
+   */
   readonly expiresAt: Date;
 }
 
@@ -170,6 +175,15 @@ function mapRecord(row: IdempotencyRow): IdempotencyRecord {
 }
 
 /**
+ * 保留期上限（技术设计 §4.3.1：幂等保证窗口为 30 天）。
+ *
+ * `idempotency_records_retention_check` 以数据库 `now()` 写入的 `created_at`
+ * 为基准限制该窗口，因此这里也必须以数据库时钟为准，否则宿主机与数据库
+ * 时钟偏差会把整条命令打成 500。
+ */
+const IDEMPOTENCY_RETENTION_UPPER_BOUND_SQL = sql`now() + interval '30 days'`;
+
+/**
  * 基于 `app.idempotency_records` 的 Postgres 幂等存储。
  *
  * 所有方法都接收显式 `TransactionContext`，使用事务绑定的 `tx.db`（Drizzle），
@@ -190,7 +204,11 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
         idempotencyContractVersion: insert.idempotencyContractVersion,
         requestHash: insert.requestHash,
         requestHashKeyVersion: insert.requestHashKeyVersion,
-        expiresAt: insert.expiresAt,
+        // 调用方给出的是应用进程时钟上的绝对过期时刻，只能当作「意图」：
+        // `created_at` 由数据库 `now()` 生成，保留期上限也以数据库时钟为准，
+        // 取两者较小值即可在任何宿主机/数据库时钟偏差下都满足
+        // `idempotency_records_retention_check`，同时保持 30 天保证窗口。
+        expiresAt: sql`least(${insert.expiresAt.toISOString()}::timestamptz, ${IDEMPOTENCY_RETENTION_UPPER_BOUND_SQL})`,
       })
       .onConflictDoNothing({
         target: [

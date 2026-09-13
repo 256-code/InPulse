@@ -27,6 +27,9 @@ import {
 import { PostgresMyTaskQueryPort } from "../src/modules/change-records/my-task-query.port.js";
 import { RecordDraftRepository } from "../src/modules/change-records/record-draft.repository.js";
 import { createProject, createUser, testUrls } from "./database.helpers.js";
+import type { TestUrls } from "./database.helpers.js";
+import { connect } from "./database.helpers.js";
+import type { Sql } from "postgres";
 
 // F-29 / F-32 只读端口验收（C 端口提案 §9.1、A 裁决 §7）：
 // 1. 每个新方法至少 1 条真实 PostgreSQL 用例，覆盖正常 / 空 projectIds / 跨项目不返回 /
@@ -37,6 +40,7 @@ import { createProject, createUser, testUrls } from "./database.helpers.js";
 // 5. 查询计划命中既有索引、无 Seq Scan on tasks；端口可在只读事务中执行。
 
 let client: DatabaseClient;
+let bootstrap: Sql;
 let uow: PostgresUnitOfWork;
 let moduleContext: INestApplicationContext;
 let featureContext: INestApplicationContext;
@@ -70,9 +74,11 @@ const recordContent = {
 };
 
 beforeAll(async () => {
-  client = createDatabaseClient(testUrls().runtime, {
+  const urls: TestUrls = testUrls();
+  client = createDatabaseClient(urls.runtime, {
     applicationName: "inpulse-aggregate-read-ports",
   });
+  bootstrap = connect(urls.bootstrap, 2);
   expect((await client.sql`SELECT current_user AS role`)[0]?.role).toBe(
     "app_runtime",
   );
@@ -91,6 +97,7 @@ afterAll(async () => {
   await featureContext?.close();
   await moduleContext?.close();
   await client?.close();
+  await bootstrap?.end({ timeout: 5 });
 });
 
 function nextSuffix(kind: "T" | "F" | "CR"): string {
@@ -141,6 +148,8 @@ interface TaskOptions {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
+  /** 创建者（app.tasks.creator_id）；缺省用项目创建者，用于构造 creator ≠ assignee 的夹具。 */
+  readonly actorUserId?: number;
 }
 
 async function newTask(
@@ -150,11 +159,12 @@ async function newTask(
   const featureId = options.featureId ?? null;
   const workStatus = options.workStatus ?? "TODO";
   const code = scope.code + nextSuffix("T");
+  const actorUserId = options.actorUserId ?? scope.userId;
   return uow.run(async (tx) => {
     const created = await taskWrites.create(
       tx,
       { projectId: scope.projectId, moduleId: scope.moduleId, featureId },
-      scope.userId,
+      actorUserId,
       code,
       {
         title: options.title ?? "聚合读端口任务",
@@ -333,9 +343,13 @@ function captureTransaction(): { calls: SqlCall[]; tx: TransactionContext } {
 }
 
 async function explain(call: SqlCall): Promise<string> {
+  // 计划断言依赖 app.tasks / app.change_records 的统计信息：夹具库会被反复增删，
+  // 统计信息滞后时规划器可能把刚插入 200 行的项目估成 2 行、改选另一条等价索引，
+  // 使断言随环境漂移。app_runtime 无 MAINTAIN 权限，这里用 bootstrap 连接刷新。
+  await bootstrap.unsafe("ANALYZE app.tasks, app.change_records");
   return client.sql.begin(async (tx) => {
-    // 夹具库规模小，且 app_runtime 无 MAINTAIN 权限、无法 ANALYZE；关闭顺序扫描后
-    // 计划仍出现索引路径，才证明该查询形状可被既有索引服务（不依赖 Seq Scan）。
+    // 夹具库规模小，统计信息之外再关闭顺序扫描：计划仍出现索引路径，才证明该查询
+    // 形状可被既有索引服务（不依赖 Seq Scan）。
     await tx.unsafe("SET LOCAL enable_seqscan = off");
     const rows = await tx.unsafe<Array<Record<string, string>>>(
       "EXPLAIN (ANALYZE, BUFFERS) " + call.text,
@@ -766,6 +780,84 @@ describe("MyTaskQueryPort.list", () => {
     expect(byAssignee.items).toHaveLength(3);
   });
 
+  test("creatorId 归属过滤与 assigneeId 正交且先过滤后分页（F-32「我创建的」）", async () => {
+    const scope = await newProject();
+    const teammateUserId = await createUser(client.sql);
+    await addMember(scope.projectId, teammateUserId);
+
+    const createdAndAssigned = await newTask(scope);
+    const createdForTeammate = await newTask(scope, {
+      assigneeId: teammateUserId,
+    });
+    const teammateCreatedForMe = await newTask(scope, {
+      actorUserId: teammateUserId,
+      assigneeId: scope.userId,
+    });
+
+    const byAssignee = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [scope.projectId],
+        assigneeId: scope.userId,
+        limit: 100,
+      }),
+    );
+    expect(byAssignee.items.map((item) => item.taskId)).toEqual([
+      teammateCreatedForMe,
+      createdAndAssigned,
+    ]);
+
+    const byCreator = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [scope.projectId],
+        creatorId: scope.userId,
+        limit: 100,
+      }),
+    );
+    expect(byCreator.items.map((item) => item.taskId)).toEqual([
+      createdForTeammate,
+      createdAndAssigned,
+    ]);
+    expect(
+      byCreator.items.every((item) => item.creatorId === scope.userId),
+    ).toBe(true);
+
+    const firstPage = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [scope.projectId],
+        creatorId: scope.userId,
+        limit: 1,
+      }),
+    );
+    expect(firstPage.items.map((item) => item.taskId)).toEqual([
+      createdForTeammate,
+    ]);
+    expect(firstPage.hasMore).toBe(true);
+    const secondPage = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [scope.projectId],
+        creatorId: scope.userId,
+        limit: 1,
+        afterTaskId: firstPage.nextTaskId!,
+      }),
+    );
+    expect(secondPage.items.map((item) => item.taskId)).toEqual([
+      createdAndAssigned,
+    ]);
+    expect(secondPage.hasMore).toBe(false);
+
+    const foreign = await newProject();
+    await newTask(foreign);
+    const scoped = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [foreign.projectId, scope.projectId],
+        creatorId: foreign.userId,
+        limit: 100,
+      }),
+    );
+    expect(scoped.items.map((item) => item.taskId)).toHaveLength(1);
+    expect(scoped.items[0]?.projectId).toBe(foreign.projectId);
+  });
+
   test("my task list short-circuits and validates like the task port", async () => {
     const { calls, tx } = captureTransaction();
     await expect(
@@ -1035,7 +1127,7 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     const rows = await client.sql.unsafe<
       { indexname: string; indexdef: string }[]
     >(
-      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'tasks' AND indexname IN ('tasks_project_status_idx', 'tasks_assignee_status_idx') ORDER BY indexname",
+      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'tasks' AND indexname IN ('tasks_project_status_idx', 'tasks_assignee_status_idx', 'tasks_creator_status_idx') ORDER BY indexname",
     );
     const projectIndex = rows.find(
       (row) => row.indexname === "tasks_project_status_idx",
@@ -1043,10 +1135,14 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     const assigneeIndex = rows.find(
       (row) => row.indexname === "tasks_assignee_status_idx",
     );
+    const creatorIndex = rows.find(
+      (row) => row.indexname === "tasks_creator_status_idx",
+    );
     expect(projectIndex?.indexdef).toContain(
       "(project_id, lifecycle_status, work_status, id)",
     );
     expect(assigneeIndex?.indexdef).toContain("(assignee_id, work_status, id)");
+    expect(creatorIndex?.indexdef).toContain("(creator_id, work_status, id)");
   });
 
   test("四种端口形状都命中预期索引且不回退为 Seq Scan", async () => {
@@ -1094,6 +1190,36 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
       expect(plan).not.toMatch(/Seq Scan on tasks/);
     }
     expect(excludedPlan).toContain("<> ALL");
+  });
+
+  test("creator 归属过滤命中 tasks_creator_status_idx 且不回退为 Seq Scan", async () => {
+    const bulk = await newProject();
+    const teammateUserId = await createUser(client.sql);
+    await addMember(bulk.projectId, teammateUserId);
+    await newTaskBatch(bulk, 200, 600);
+    const createdByTeammate = await newTask(bulk, {
+      actorUserId: teammateUserId,
+    });
+
+    const creatorCall = captureTransaction();
+    await myTasks.list(creatorCall.tx, {
+      projectIds: [bulk.projectId],
+      creatorId: teammateUserId,
+      limit: 21,
+    });
+    const creatorPlan = await explain(creatorCall.calls[0]!);
+    expect(creatorPlan).toContain("tasks_creator_status_idx");
+    expect(creatorPlan).toMatch(/Index Only Scan|Index Scan|Bitmap Heap Scan/);
+    expect(creatorPlan).not.toMatch(/Seq Scan on tasks/);
+
+    const rows = await uow.run((tx) =>
+      myTasks.list(tx, {
+        projectIds: [bulk.projectId],
+        creatorId: teammateUserId,
+        limit: 21,
+      }),
+    );
+    expect(rows.items.map((item) => item.taskId)).toEqual([createdByTeammate]);
   });
 
   test("记录维度计数与先过滤后分页命中 change_records 索引且不回落 Seq Scan", async () => {

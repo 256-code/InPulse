@@ -5,20 +5,29 @@ import {
   type FeatureItem,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
+import { featureStatColumns } from "../../stats/card-stat-columns.js";
 
-type Row = Omit<FeatureItem, "createdAt" | "updatedAt" | "archivedAt"> & {
+type Row = Omit<
+  FeatureItem,
+  "createdAt" | "updatedAt" | "archivedAt" | "stats"
+> & {
   createdAt: string | Date;
   updatedAt: string | Date;
   archivedAt: string | Date | null;
+  openTaskCount: number;
+  recordCount: number;
 };
-const dto = (row: Row): FeatureItem =>
-  featureItemSchema.parse({
-    ...row,
+const dto = (row: Row): FeatureItem => {
+  const { openTaskCount, recordCount, ...rest } = row;
+  return featureItemSchema.parse({
+    ...rest,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
     archivedAt:
       row.archivedAt === null ? null : new Date(row.archivedAt).toISOString(),
+    stats: { openTaskCount, recordCount },
   });
+};
 
 @Injectable()
 export class FeatureManagementRepository {
@@ -29,7 +38,7 @@ export class FeatureManagementRepository {
   ): Promise<FeatureItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", code, name, current_behavior AS "currentBehavior", tags, created_by AS "createdBy", status, row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", archived_at AS "archivedAt" FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} ORDER BY id`;
+    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.module_id = ${moduleId} ORDER BY f.id`;
     return rows.map(dto);
   }
 
@@ -42,7 +51,7 @@ export class FeatureManagementRepository {
   ): Promise<FeatureItem | undefined> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", code, name, current_behavior AS "currentBehavior", tags, created_by AS "createdBy", status, row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", archived_at AS "archivedAt" FROM app.features WHERE project_id = ${projectId} AND id = ${featureId} AND module_id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.id = ${featureId} AND f.module_id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return rows[0] === undefined ? undefined : dto(rows[0]);
   }
 
