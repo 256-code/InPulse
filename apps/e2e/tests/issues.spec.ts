@@ -34,7 +34,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
       name: "完成任务",
       exact: true,
     });
-    await completion.getByLabel("是否产生实际功能变化").selectOption("yes");
+    await completion.getByRole("button", { name: /有，填写迭代记录/ }).click();
     for (const label of [
       "为什么改、发现了什么问题",
       "改了什么、怎么改的",
@@ -58,7 +58,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(row).toContainText(taskTitle);
 
     await row.getByRole("button", { name: /^来源任务/ }).click();
-    const detail = page.locator(".task-detail-modal");
+    const detail = page.getByRole("dialog", { name: "任务详情" });
     await expect(detail).toBeVisible();
     await expect(detail.getByText(taskTitle)).toBeVisible();
 

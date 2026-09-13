@@ -56,8 +56,8 @@ for (const moduleScope of [false, true])
         await page.getByRole("link", { name: "模块任务" }).first().click();
       else {
         await page.getByRole("link", { name: "查看功能" }).first().click();
-        await page.getByRole("button", { name: "新建功能" }).click();
-        const feature = page.getByRole("dialog", { name: "新建功能" });
+        await page.getByRole("button", { name: "新增功能" }).click();
+        const feature = page.getByRole("dialog", { name: "新增功能" });
         await feature.getByLabel("功能名称").fill(`草稿功能-${suffix}`);
         await feature.getByRole("button", { name: /保\s*存/ }).click();
         await expect(feature).toBeHidden();
@@ -82,7 +82,7 @@ for (const moduleScope of [false, true])
         name: "完成任务",
         exact: true,
       });
-      await complete.getByLabel("是否产生实际功能变化").selectOption("yes");
+      await complete.getByRole("button", { name: /有，填写迭代记录/ }).click();
       await expect(
         complete.getByRole("button", { name: "发布并完成任务" }),
       ).toBeDisabled();

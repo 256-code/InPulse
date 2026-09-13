@@ -12,23 +12,25 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await page.goto(`/projects/${runtime.projectId}/modules`);
     const suffix = Date.now();
     const moduleName = `模块任务隔离-${suffix}`;
-    await page.getByRole("button", { name: "新建模块" }).click();
-    const moduleDialog = page.getByRole("dialog", { name: "新建模块" });
+    await page.getByRole("button", { name: "新增模块" }).first().click();
+    const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill(moduleName);
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(moduleDialog).toBeHidden();
-    const moduleCard = page
-      .locator(".calm-feature-card")
+    // 「查看功能」在 `.calm-feature-card` 内，而「模块任务」在它的兄弟
+    // `span.catalog-edit-link` 内，两者共同的父级是 `article.catalog-module-wrap`。
+    const moduleEntry = page
+      .locator("article.catalog-module-wrap")
       .filter({ hasText: moduleName });
-    await moduleCard.getByRole("link", { name: "查看功能" }).click();
+    await moduleEntry.getByRole("link", { name: "查看功能" }).click();
     const listUrl = page.url();
     const moduleId = listUrl.match(/modules\/(\d+)/)![1];
     const names = [`影响甲-${suffix}`, `影响乙-${suffix}`];
     const featureUrls: string[] = [];
     for (const name of names) {
       await page.goto(listUrl);
-      await page.getByRole("button", { name: "新建功能" }).click();
-      const dialog = page.getByRole("dialog", { name: "新建功能" });
+      await page.getByRole("button", { name: "新增功能" }).click();
+      const dialog = page.getByRole("dialog", { name: "新增功能" });
       await dialog.getByLabel("功能名称").fill(name);
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
@@ -40,7 +42,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       featureUrls.push(page.url());
     }
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await moduleCard.getByRole("link", { name: "模块任务" }).click();
+    await moduleEntry.getByRole("link", { name: "模块任务" }).click();
     await page.getByRole("button", { name: "新建任务" }).click();
     const create = page.getByRole("dialog", { name: "新建任务" });
     const title = `公共任务-${suffix}`;
