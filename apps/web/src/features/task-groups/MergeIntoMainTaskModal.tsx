@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Alert, Button, Input, Spin } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
@@ -174,14 +175,16 @@ export function MergeIntoMainTaskModal({
 
   return (
     <Modal
+      className="catalog-modal"
+      eyebrow={task.code + " · " + task.title}
       title="合并到主任务"
       open={open}
+      body
       onCancel={() => {
         if (!busy) onClose();
       }}
       closable={!busy}
-      maskClosable={!busy}
-      width={560}
+      mask={{ closable: !busy }}
       footer={
         <>
           <Button disabled={busy} onClick={onClose}>

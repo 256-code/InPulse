@@ -1,24 +1,45 @@
 import "./external-links.css";
-import React, { useMemo, useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Spin, Tag } from "antd";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Input, Spin, Tag } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
   type InpulseApiClient,
+  type ExternalLinkItem,
   type ExternalLinkList,
   type ExternalLinkTargetPath,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 type TargetType = ExternalLinkTargetPath["targetType"];
+/** 设计师稿 github-links 的徽章文案：先看 Release 标记，再看链接类型。 */
+export function externalLinkKindLabel(item: ExternalLinkItem): string {
+  return item.releaseTag
+    ? "Release"
+    : item.kind === "PULL_REQUEST"
+      ? "PR"
+      : item.kind === "ISSUE"
+        ? "Issue"
+        : item.kind === "COMMIT"
+          ? "Commit"
+          : "链接";
+}
 export function ExternalLinksPanel({
   targetType,
   targetId,
   client,
+  variant = "button",
+  triggerClassName,
 }: {
   targetType: TargetType;
   targetId: number;
   client?: InpulseApiClient | undefined;
+  /** `inline` 按设计师稿在页面内直接展示列表与新增表单；`button` 保持弹层形态。 */
+  variant?: "button" | "inline";
+  /** `button` 形态下触发按钮的样式类，用于融入所在页面的动作区。 */
+  triggerClassName?: string | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]),
     cache = useQueryClient();
@@ -28,7 +49,8 @@ export function ExternalLinksPanel({
     [url, setUrl] = useState(""),
     [error, setError] = useState<unknown>(null),
     [needsRefresh, setNeedsRefresh] = useState(false),
-    [removeId, setRemoveId] = useState<number | null>(null);
+    [removeId, setRemoveId] = useState<number | null>(null),
+    [adding, setAdding] = useState(false);
   const saving = useRef(false),
     retry = useRef<{ signature: string; key: string } | null>(null);
   async function load() {
@@ -92,6 +114,7 @@ export function ExternalLinksPanel({
       retry.current = null;
       setUrl("");
       setRemoveId(null);
+      setAdding(false);
       // The mutation has succeeded. Prevent stale resubmission even if the subsequent reload fails.
       setNeedsRefresh(true);
       for (const key of [
@@ -139,9 +162,125 @@ export function ExternalLinksPanel({
                   ? "操作频繁，请稍后重试。"
                   : "暂时无法操作，输入已保留，可重试。"
       : "暂时无法操作，输入已保留，可重试。";
+  const inline = variant === "inline";
+  useEffect(() => {
+    if (inline) void load();
+    // 目标或形态变化时重新加载，等价于弹层形态的「打开即加载」。
+  }, [inline, targetType, targetId]);
+  const addForm = removeId ? (
+    <div className="calm-action-footer">
+      <p>确认解除此链接的当前关联？</p>
+      <Button disabled={busy} onClick={() => setRemoveId(null)}>
+        取消解除
+      </Button>
+      <Button
+        danger
+        disabled={busy || needsRefresh}
+        onClick={() => void save()}
+      >
+        确认解除关联
+      </Button>
+    </div>
+  ) : (
+    <>
+      <label htmlFor={`external-link-url-${targetType}-${targetId}`}>
+        GitHub URL
+      </label>
+      <Input
+        id={`external-link-url-${targetType}-${targetId}`}
+        value={url}
+        maxLength={2048}
+        disabled={busy}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://github.com/owner/repository/pull/123"
+      />
+      {url.trim() && (
+        <p role="status">
+          {previewLabel(url)
+            ? "识别为：" + previewLabel(url)
+            : "请输入有效的 GitHub HTTPS URL"}
+        </p>
+      )}
+      <Button
+        type="primary"
+        disabled={busy || needsRefresh || !url.trim()}
+        onClick={() => void save()}
+      >
+        确认添加
+      </Button>
+    </>
+  );
+  /** 内联形态的操作区：解除确认优先于新增表单，与设计师稿的展开式一致。 */
+  const inlineActions =
+    removeId !== null || adding ? (
+      <div className="github-add">{addForm}</div>
+    ) : (
+      <button
+        type="button"
+        className="text-button"
+        disabled={busy || needsRefresh}
+        onClick={() => setAdding(true)}
+      >
+        <InpulseIcon name="plus" size={14} />
+        添加 GitHub 链接
+      </button>
+    );
+  if (inline)
+    return (
+      <div className="github-block">
+        {!data && busy && <Spin />}
+        {error !== null && <Alert type="error" title={message} />}
+        {!data && !busy && (
+          <Button disabled={busy} onClick={() => void load()}>
+            加载最新关联
+          </Button>
+        )}
+        {data &&
+          (data.items.length === 0 ? (
+            <p className="muted">
+              尚未关联 GitHub。系统只保存 HTTPS
+              链接，不抓取远程内容，也不会自动改变任务状态。
+            </p>
+          ) : (
+            <ul className="github-list">
+              {data.items.map((item) => (
+                <li key={item.id}>
+                  <Tag>{externalLinkKindLabel(item)}</Tag>
+                  <a
+                    href={item.normalizedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {item.label}
+                    <InpulseIcon name="externalLink" size={13} />
+                  </a>
+                  {item.externalNumber ? (
+                    <code>{item.externalNumber}</code>
+                  ) : null}
+                  {data.writable && (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={"解除 " + item.label}
+                      disabled={busy || needsRefresh}
+                      onClick={() => setRemoveId(item.id)}
+                    >
+                      <InpulseIcon name="x" size={15} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ))}
+        {data?.writable && inlineActions}
+      </div>
+    );
   return (
     <>
       <Button
+        {...(triggerClassName === undefined
+          ? {}
+          : { className: triggerClassName })}
         onClick={() => {
           setOpen(true);
           if (!data && !needsRefresh) void load();
@@ -150,13 +289,16 @@ export function ExternalLinksPanel({
         GitHub 链接
       </Button>
       <Modal
+        className="catalog-modal"
+        eyebrow="保存代码证据，可关联多个链接"
         title="GitHub 链接"
         open={open}
+        body
         onCancel={() => {
           if (!busy) setOpen(false);
         }}
         closable={!busy}
-        maskClosable={!busy}
+        mask={{ closable: !busy }}
         footer={
           <Button disabled={busy} onClick={() => setOpen(false)}>
             关闭关联
@@ -183,13 +325,7 @@ export function ExternalLinksPanel({
               <ul className="external-links-list">
                 {data.items.map((item) => (
                   <li key={item.id}>
-                    <Tag>
-                      {item.releaseTag
-                        ? "Release"
-                        : item.kind === "PULL_REQUEST"
-                          ? "PR"
-                          : item.kind}
-                    </Tag>{" "}
+                    <Tag>{externalLinkKindLabel(item)}</Tag>{" "}
                     <a
                       href={item.normalizedUrl}
                       target="_blank"

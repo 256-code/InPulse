@@ -69,7 +69,12 @@ export function taskError(error: unknown): string {
   }
   return "任务服务暂时不可用，输入已保留，可重试。";
 }
-export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
+export function useTasks(
+  scope: TaskScope,
+  client?: InpulseApiClient,
+  options: { impactOptions?: boolean } = {},
+) {
+  const impactOptions = options.impactOptions ?? true;
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
   const retry = useRef<{ signature: string; key: string } | null>(null);
@@ -176,7 +181,7 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
     queryFn: ({ signal }) =>
       api.listFeatures(scope.projectId, scope.moduleId, { signal }),
     retry: false,
-    enabled: scope.featureId === null,
+    enabled: impactOptions && scope.featureId === null,
   });
   return { api, query, members, mutation, features };
 }

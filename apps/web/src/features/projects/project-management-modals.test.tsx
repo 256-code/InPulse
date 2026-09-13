@@ -32,6 +32,7 @@ const project: ProjectItem = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
+  stats: { activeModuleCount: 3, activeFeatureCount: 7, openTaskCount: 5 },
 };
 
 function renderWithProviders(node: React.ReactNode) {
@@ -83,7 +84,7 @@ describe("EditProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
     const nameInput = within(dialog).getByLabelText("项目名称");
     fireEvent.change(nameInput, { target: { value: "商城系统二期" } });
     await userEvent.click(
@@ -133,7 +134,7 @@ describe("EditProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
     await userEvent.click(
       within(dialog).getByRole("button", { name: "保存修改" }),
     );
@@ -173,7 +174,7 @@ describe("ArchiveProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "归档项目" });
     expect(
       await within(dialog).findByText("该项目仍有 5 个未完成任务"),
     ).toBeTruthy();
@@ -224,7 +225,7 @@ describe("ArchiveProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "归档项目" });
     await userEvent.click(
       within(dialog).getByRole("button", { name: "确认归档" }),
     );
@@ -261,7 +262,7 @@ describe("ArchiveProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "归档项目" });
     fireEvent.change(within(dialog).getByLabelText("归档原因"), {
       target: { value: "项目已交付" },
     });
@@ -300,7 +301,7 @@ describe("RestoreProjectModal", () => {
       />,
     );
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "恢复项目" });
     fireEvent.change(within(dialog).getByLabelText("恢复原因"), {
       target: { value: "项目重启" },
     });

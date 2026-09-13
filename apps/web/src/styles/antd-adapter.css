@@ -1,0 +1,479 @@
+/**
+ * antd 适配层
+ *
+ * 架构上覆盖层组件（Modal / Tabs / Segmented / Dropdown / Popover / message / Tooltip）统一由
+ * Ant Design 渲染，但视觉必须仍由 `design-system.css` 决定（外观零差异是硬约束）。
+ *
+ * antd 的样式是运行时注入的 CSS-in-JS，注入位置在 <head> 末尾、晚于本文件；因此这里的每条
+ * 规则都用「比 antd 多一层选择器」的方式提升特异性，而不是依赖引入顺序。
+ *
+ * 约定：选择器写成 `.ant-xxx.ds-yyy` 形式，`ds-yyy` 即 design-system.css 里的原始类名。
+ */
+
+/* ================================ Modal ================================
+ * design-system.css: .surface-modal { position:fixed; inset:0; margin:auto; width:min(1020px,calc(100vw - 64px));
+ *                      max-height:calc(100dvh - 56px); border-radius:16px; overflow:hidden; display:flex;
+ *                      flex-direction:column } + .surface-modal-md/-lg/-xl + ::backdrop{background:#10253e70;
+ *                      backdrop-filter:blur(2px)}
+ *
+ * 原型是原生 `<dialog>` + `showModal()`：盒子进 top layer，遮罩是 `::backdrop`。
+ * 现在 `.surface-modal` 由 antd Modal 的 `modalRender` 渲染成普通 `<div>`，挂在
+ * `.ant-modal-wrap` 内，遮罩换成 `.ant-modal-mask`；DOM 层级为
+ *   .ant-modal-root > [.ant-modal-mask, .ant-modal-wrap > .ant-modal > .ant-modal-render > .surface-modal]
+ * 这里逐层把 antd 的外壳还原成「无外观容器」，只留下遮罩和全屏定位。 */
+
+.surface-modal-root .ant-modal-mask {
+  background: #10253e70;
+  backdrop-filter: blur(2px);
+  animation: none;
+}
+
+/* 原型里 .surface-modal.task-side-modal::backdrop 关掉了模糊 */
+.surface-modal-root:has(.surface-modal.task-side-modal) .ant-modal-mask {
+  backdrop-filter: none;
+}
+
+/* .ant-modal-wrap 本身没有任何可见外观（fixed + inset:0 + overflow:auto + z-index），
+ * 保留它才能让「点遮罩关闭」和 rc-dialog 的 mousedown 判定继续工作。 */
+.surface-modal-wrap.ant-modal-wrap {
+  overflow: hidden;
+}
+
+/* antd 给 .ant-modal 挂了 pointer-events:none（让遮罩可点）与 resetComponent 的字体/
+ * 列表样式，都会**继承**给里面的 .surface-modal；原型里盒子直接挂在 body 下，继承的是
+ * body 的值，所以这里逐项还原继承来源。 */
+.surface-modal-wrap.ant-modal-wrap .ant-modal.surface-modal-dialog {
+  position: static;
+  top: auto;
+  display: block;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: auto;
+  font: inherit;
+  color: inherit;
+  line-height: inherit;
+  text-align: start;
+  list-style: initial;
+}
+
+/* modalRender 额外插的一层壳，不能影响布局 */
+.surface-modal-wrap.ant-modal-wrap .ant-modal-render {
+  display: block;
+  pointer-events: auto;
+}
+
+/* 原型里 `<dialog open>` 位于 top layer，Blink 把它当成独立合成层，光栅平移量会对齐到设备
+ * 像素整数；antd 的盒子只是普通定位元素，相位差会让 SVG 细斜线（如关闭图标的 X）抗锯齿
+ * 变化 1px 左右。`will-change:opacity` 只提升合成层、不改变布局与绘制内容，用它复现基线的
+ * 光栅化条件。不要改成 `transform`：那会把弹层内的文字抗锯齿切成灰度。 */
+.surface-modal-wrap.ant-modal-wrap .surface-modal {
+  will-change: opacity;
+}
+
+/* ============================== Segmented ============================== */
+/* design-system.css: .segmented { display:flex; gap:3px; background:#e9eff5; padding:3px; border-radius:6px; }
+ *                    .segmented button { border:0; background:transparent; color:#7c8c9e; border-radius:4px; padding:7px 14px; }
+ *                    .segmented button.selected { color:#276db3; background:white; box-shadow:0 1px 3px #203c5515; } */
+
+.ant-segmented.segmented {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: #e9eff5;
+  border-radius: 6px;
+  /* 基线里的 <button> 被 preflight 的 `font: inherit` 继承了行高，这里用 inherit 还原同一语义 */
+  line-height: inherit;
+  /* 基线的容器没有自己的 color / list-style，取继承值与初始值 */
+  color: inherit;
+  list-style-type: disc;
+}
+
+.ant-segmented.segmented .ant-segmented-group {
+  display: flex;
+  gap: 3px;
+  width: 100%;
+  /* 见下方「文字栅格化」小节：antd 给 group/item 的 position:relative 必须还原为 static */
+  position: static;
+}
+
+.ant-segmented.segmented .ant-segmented-item,
+.ant-segmented.segmented .ant-segmented-item-selected {
+  flex: 0 1 auto;
+  border-radius: 4px;
+  color: #7c8c9e;
+  background: transparent;
+  box-shadow: none;
+  line-height: inherit;
+  transition: none;
+  /* antd 的 item 是 <label>，会命中 design-system 里给表单标签写的 `.dialog-form label { font-size:11px;
+   * display:flex; flex-direction:column; gap:6px; color:#586d83 }` 等规则；而基线这里是 <button>，
+   * 只吃 preflight 的 `font: inherit`（13px / 行高 1.5），不命中那些规则。字号一旦被压到 11px，
+   * `line-height: 1.5` 就会算出 16.5px 而不是 19.5px，整行矮 3px。这里把「按钮语义」还原回来。 */
+  font-size: inherit;
+  display: block;
+  flex-direction: row;
+  gap: normal;
+  /* 见下方「文字栅格化」小节 */
+  position: static;
+  transform: none;
+}
+
+/* antd 用 min-height / line-height 撑出 28px 的固定高度，设计系统里高度由 padding 决定 */
+.ant-segmented.segmented .ant-segmented-item-label {
+  min-height: 0;
+  line-height: inherit;
+  padding: 7px 14px;
+  border-radius: 4px;
+  color: #7c8c9e;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
+  /* antd 自带的 overflow:hidden 与基线的 <button>（overflow:visible）不一致，还原之 */
+  overflow: visible;
+}
+
+/* ---------------------------- 文字栅格化 ----------------------------
+ * 反例：antd 给 `.ant-segmented-item` 挂了恒等变换 `transform: matrix(1,0,0,1,0,0)`，且
+ * group/item 都是 `position: relative`。这两者叠加会把每个 item 提升为独立的合成图层，
+ * Blink 对合成图层里的文字改用**灰度抗锯齿**；而基线的 `<button>` 走的是 **LCD 次像素抗锯齿**。
+ * 结果就是字形位置完全一致、但每个笔画边缘的 RGB 分量不同（如基线 rgb(194,150,179)
+ * 对应目标 rgb(105,154,202)），`visual.mjs` 会报出几百个像素差。
+ *
+ * 只清 `transform` 或只清 `position` 都不够，必须两者同时还原为初始值（已逐项二分验证）；
+ * 还原后几何完全不变（`position: relative` 无偏移量，恒等变换无位移），但文字回到 LCD 路径。
+ * 这是纯渲染管线问题，不是外观差异，所以必须在这里抹平。
+ * ------------------------------------------------------------------ */
+
+/* antd 的 hover / active 反馈在设计系统里不存在，必须抹平 */
+.ant-segmented.segmented
+  .ant-segmented-item:hover:not(.ant-segmented-item-selected)
+  .ant-segmented-item-label,
+.ant-segmented.segmented
+  .ant-segmented-item:active:not(.ant-segmented-item-selected)
+  .ant-segmented-item-label {
+  color: #7c8c9e;
+  background: transparent;
+}
+
+.ant-segmented.segmented
+  .ant-segmented-item-selected
+  .ant-segmented-item-label {
+  color: #276db3;
+  background: white;
+  box-shadow: 0 1px 3px #203c5515;
+}
+
+/* 滑动指示条是 antd 的动效元素，设计系统用选中项的自身背景代替 */
+.ant-segmented.segmented .ant-segmented-thumb {
+  display: none;
+}
+
+/* =============================== message ===============================
+ * design-system.css: .toast { position:fixed; z-index:50; right:28px; bottom:28px; color:white;
+ *                      background:#163653; border:1px solid #386887; border-radius:5px; padding:12px 16px;
+ *                      display:flex; align-items:center; gap:8px; box-shadow:0 8px 25px #16365333 }
+ *
+ * 原型把提示直接渲染成 `.toast` 元素；现在由 antd message 渲染，`className: 'toast'` 正好落在
+ * `.ant-message-notice` 上，于是 DOM 变成
+ *   .ant-message.ant-message-list (fixed / 100vh / pointer-events:none)
+ *     > .ant-message-list-content > .ant-message-notice.toast > [.ant-message-notice-wrapper
+ *         > [.ant-message-notice-icon, .ant-message-notice-title]]
+ * 下面把 antd 的 notice 卡片样式逐项还原成 `.toast` 的声明（antd 与本文件选择器同权重时
+ * 靠注入顺序胜出，所以一律多一层选择器）。 */
+
+/* 提示的位置必须相对视口计算，而 antd 把 notice 放在 fixed 容器里用 `left:50%` + `transform`
+ * 居中；用 fixed 直接定位到右下角更贴合原型。 */
+.ant-message .ant-message-notice.toast {
+  position: fixed;
+  top: auto;
+  right: 28px;
+  bottom: 28px;
+  left: auto;
+  /* 原型的 z-index 只高于页面自身层级（.topbar 15 / .overlay 30 / .popover 40 / .palette-overlay 45），
+   * 因此仍会被弹层遮罩压住；容器保持 fixed 是为了让这个 50 生效在正确的层叠上下文里。 */
+  z-index: 50;
+  width: auto;
+  max-width: none;
+  padding: 12px 16px;
+  color: white;
+  background: #163653;
+  border-radius: 5px;
+  box-shadow: 0 8px 25px #16365333;
+  font-size: 13px;
+  /* 设计系统里 `.toast` 不写行高，继承自 preflight 的 `html { line-height:1.5 }`；写成比例值而不是
+   * antd 算好的 21px，才能在 13px 字号下得到与原型一致的 19.5px（差 1.5px 会让整块与图标都错位）。 */
+  line-height: 1.5;
+  overflow-wrap: normal;
+  pointer-events: auto;
+  /* antd 的 `transform: scale(var(--notification-scale,1))` 会提升合成层 → 文字被切成灰度抗锯齿，
+   * 与基线的 LCD 次像素不一致（同 Segmented 那节的原因）。 */
+  transform: none;
+}
+
+/* 容器：antd 默认 z-index 2010（高于 Modal 的 1000），原型里 toast 是被弹层遮罩压住的 */
+.ant-message.ant-message-list {
+  /* antd 用 `left:50%` + `translateX(-50%)` 让容器居中，同时也把它自己的 `top` 往视口外挪了 16px。
+   * 带 transform 的元素会成为固定定位后代的包含块，于 `.toast` 的 right/bottom 就相对这个偏移过的
+   * 容器解析（实测提示跑到 y=809 而不是 825）。这里把容器定义成恰好等于视口的一张透明画布，
+   * 提示的 right/bottom 便与设计系统里一样相对视口生效。 */
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  z-index: 50;
+}
+
+/* antd 给列表内容层挂了 `will-change: height, transform`（给堆叠动效做准备）。`will-change:transform`
+ * 同样会让它成为固定定位后代的包含块，并把整棵子树提升为合成层（提示文字退回灰度抗锯齿）。
+ * motion 已关闭、且同时只会有一个提示，去掉它不影响 antd 的堆叠动效。 */
+.ant-message .ant-message-list-content {
+  will-change: auto;
+}
+
+/* antd 的 icon / title 各自带字号与颜色，原型里它们只是 `.toast` 的两个普通子节点 */
+.ant-message-notice.toast .ant-message-notice-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ant-message-notice.toast .ant-message-notice-title {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.ant-message-notice.toast .ant-message-notice-icon {
+  font-size: inherit;
+  line-height: 0;
+}
+
+/* =============================== Tabs ===============================
+ * design-system.css: .calm-tabs { display:flex; gap:24px; border-bottom:1px solid #e2e9f0; margin-top:15px; flex-shrink:0 }
+ *                    .calm-tabs button { border:0; background:transparent; border-bottom:2px solid transparent;
+ *                                        padding:13px 2px; color:#6c8094; font-size:13px }
+ *                    .calm-tabs button.selected { color:#1467d8; border-color:#1467d8; font-weight:600 }
+ *
+ * 原型把「一行标签 + 一根底边细线」直接渲染在 `.calm-tabs` 里；antd Tabs 的 DOM 是
+ *   .ant-tabs.calm-tabs (flex column)
+ *     > .ant-tabs-nav (role=tablist, margin-bottom:16px, ::before 画底线)
+ *         > .ant-tabs-nav-wrap > .ant-tabs-nav-list
+ *             > .ant-tabs-tab (position:relative, padding:12px 0, 非首项 margin-left:24px)
+ *                 > .ant-tabs-tab-btn (role=tab, line-height:21px)
+ *             > .ant-tabs-ink-bar
+ *         > .ant-tabs-nav-operations > button.ant-tabs-nav-more   （标签装得下时带 -hidden 类，不可见）
+ *     > .ant-tabs-body-holder > .ant-tabs-body > .ant-tabs-content (role=tabpanel, 空)
+ * 原型没有内容面板（内容由调用方渲染在标签栏下方），所以整棵 body-holder 隐藏。
+ * 标签间距两边恰好都是 24px：原型靠容器 gap，antd 靠非首项的 margin-left。 */
+
+/* 根：原型是 flex-row 只装标签，antd 用 flex-column 排「标签栏 + 内容面板」。
+ * 字号/行高交回继承，才能得到与原型相同的 13px / 19.5px（antd 自己算的是 14px / 21px）。 */
+.ant-tabs.calm-tabs {
+  flex-direction: row;
+  font-size: inherit;
+  line-height: 1.5;
+  color: inherit;
+  /* antd 在根上把 list-style 重置成 none，而原型（preflight）继承到的是初始值 disc；
+   * parity 门禁逐属性比对，故还原（list-style-type 只在 list-item 上可见，无视觉影响）。 */
+  list-style-type: disc;
+}
+
+/* 标签栏：antd 用 margin-bottom 撑开面板 + ::before 画底线；原型的底线在容器 `.calm-tabs` 自身。
+ * `position: relative` 会把整条标签栏提升为合成层 → 文字被切成灰度抗锯齿，与基线的 LCD 次像素不一致。 */
+.ant-tabs.calm-tabs > .ant-tabs-nav {
+  margin: 0;
+  position: static;
+}
+
+.ant-tabs.calm-tabs > .ant-tabs-nav::before {
+  content: none;
+}
+
+/* antd 给 nav-wrap 声明了 `transform: translate(0px)`，rc-tabs 还会往 nav-list 写**内联**的
+ * `transform: translate(0px, 0px)`（标签可滚动时的位移量）。恒等变换同样会提升合成层 →
+ * 这一行的标签文字退回灰度抗锯齿，与基线的次像素渲染不一致（同 Segmented 那节）。 */
+.ant-tabs.calm-tabs .ant-tabs-nav-wrap,
+.ant-tabs.calm-tabs .ant-tabs-nav-list {
+  position: static;
+  transform: none;
+}
+
+/* nav-list 上的是内联样式，只能靠 !important 覆盖；原型没有标签横向滚动（装不下时走 antd 的溢出按钮）。 */
+.ant-tabs.calm-tabs .ant-tabs-nav-list {
+  transform: none !important;
+}
+
+/* 滑动指示条：原型用选中标签自身的下边框表示选中 */
+.ant-tabs.calm-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+/* 内容面板：原型不需要 */
+.ant-tabs.calm-tabs > .ant-tabs-body-holder {
+  display: none;
+}
+
+/* 标签：antd 的 `position: relative` 同样是合成层的成因；内边距与颜色按设计系统的按钮还原 */
+.ant-tabs.calm-tabs .ant-tabs-tab {
+  position: static;
+  padding: 13px 2px;
+  border-bottom: 2px solid transparent;
+  color: #6c8094;
+  font-size: 13px;
+  line-height: inherit;
+  background: transparent;
+  transition: none;
+}
+
+.ant-tabs.calm-tabs .ant-tabs-tab .ant-tabs-tab-btn {
+  line-height: inherit;
+  transition: none;
+}
+
+.ant-tabs.calm-tabs .ant-tabs-tab-active {
+  border-bottom-color: #1467d8;
+}
+
+.ant-tabs.calm-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1467d8;
+  font-weight: 600;
+}
+
+/* 原型的标签没有 hover 反馈 */
+.ant-tabs.calm-tabs
+  .ant-tabs-tab:hover:not(.ant-tabs-tab-active)
+  .ant-tabs-tab-btn {
+  color: #6c8094;
+}
+
+/* ===== Dropdown（批量：`.more-wrap` 的 `.calm-more` 菜单） =====
+ * 原型的弹层是 `.more-wrap .calm-more`：右对齐、下移 7px、白底 + 1px 边框 + 9px 圆角 + 大投影，
+ * 内部纵向排 `.text-button`（12px、padding 8px 10px、圆角 5px、hover 淡蓝）。antd 的弹层承担定位，
+ * 排版全部在这里还原。 */
+
+.ant-dropdown .ant-dropdown-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 7px;
+  min-width: 190px;
+  background: white;
+  border: 1px solid #e1e8f0;
+  border-radius: 9px;
+  box-shadow: 0 14px 34px #16324d26;
+}
+
+.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #3273bb;
+}
+
+.ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:hover {
+  background: #f2f7fc;
+}
+
+/* 危险项的文字色来自 `colorError` token（见 antd-theme.ts），这里不再重复声明。 */
+
+.ant-dropdown
+  .ant-dropdown-menu
+  .ant-dropdown-menu-item
+  .ant-dropdown-menu-item-icon {
+  margin: 0;
+  min-width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ===== Tooltip（批量：原型的 53 处 `title=` 提示） =====
+ * 原型用的是浏览器原生 title（操作系统自绘，没有 DOM 与样式可比），这里改用 antd Tooltip，
+ * 外观统一成本站浮层的语言：白底 + 1px 边框 + 圆角 + 投影，12px 正文。
+ * 代理层选择器必须压过 antd 的 `:where(.css-xxx).ant-tooltip …`，所以用「标签 + 类」提升特异性。 */
+
+/* antd 默认给 `.ant-tooltip` 加三层 drop-shadow；滤镜会把文字提升为合成图层（灰度抗锯齿），
+ * 换成容器上的普通 box-shadow。 */
+div.ant-tooltip {
+  filter: none;
+}
+
+div.ant-tooltip > div.ant-tooltip-container {
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #354f66;
+  background: white;
+  border: 1px solid #e1e8f0;
+  border-radius: 7px;
+  box-shadow: 0 10px 26px #16324d26;
+}
+
+/* ===== Popover（顶栏的通知中心 / 账户菜单） =====
+ * 原型里 `.popover` 是 `.popover-wrap`（30×30）的子元素，靠 `top: calc(100% + 10px); right: 0`
+ * 相对那个小盒子定位；antd 把弹层 portal 到 body 之后这层引用系就没了。
+ * 这里把 antd 的弹层容器压成 1×1 的透明盒子，并用 align.points=['tl','br'] 把它的左上角
+ * 对到锚点右下角 —— `.popover` 于是重新回到「以锚点右下角为原点」的引用系，
+ * 适配层再把它自己的 top/right 按同一语义写回去即可，定位能精确到 0.5px。
+ *
+ * 容器必须是 1×1 而不是 0×0：rc-trigger 用 `popupRect.width / computedStyle.width` 算缩放，
+ * 0×0 会算出 NaN，整个定位逻辑直接失效（useAlign 里 `nextOffsetX / scaleX`）。 */
+
+/* antd 给 `.ant-popover` 加了三层 drop-shadow，滤镜会把文字提升为合成图层（灰度抗锯齿）；
+ * `line-height: 21px`（antd 的 token）会顶掉原型继承来的 1.5 比例，`.account-popover` 三行
+ * 各高 3px、面板整体高 6px；`user-select: text` 也不是原型的值。 */
+div.ant-popover {
+  filter: none;
+  line-height: 1.5;
+  user-select: auto;
+  /* 原型里 .popover 的 z-index:40 被 .topbar（position:sticky + z-index:15）的层叠上下文困住，
+   * 所以 .overlay(30) / .palette-overlay(45) / .toast(50) 都能盖住它。
+   * antd 把弹层 portal 到 body 后脱离了那个上下文，1030 会浮到调色板之上 —— 这里退回 15
+   * 还原原型层级（portal 容器排在 #root 之后，等于 15 时仍压在顶栏之上，与原型一致）。 */
+  z-index: 15;
+}
+
+div.ant-popover > div.ant-popover-container {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  background: transparent;
+  background-clip: border-box;
+  border-radius: 0;
+}
+
+/* 容器只有 1px 宽，内容层若留在流内会变成一个 1px 宽的引用盒，`.popover` 的 right:0
+ * 就会落在锚点右侧 1px 处。让它脱离文档流，引用盒才回到 0×0 的「锚点右下角」原点上。 */
+div.ant-popover > div.ant-popover-container > div.ant-popover-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* 相对「锚点右下角」的定位，等价于原型的 `top: calc(100% + 10px); right: 0`。 */
+div.ant-popover .popover {
+  top: 10px;
+  right: 0;
+}
+
+/* rc-trigger 会把算出来的位置 Math.floor 到整像素，而通知按钮的底边在 16.5 + 30 = 46.5，
+ * 被抹掉的 0.5px 在这里补回来（账户按钮的底边本来就是整数，不受影响）。 */
+div.ant-popover .popover.notification-popover {
+  top: 10.5px;
+}

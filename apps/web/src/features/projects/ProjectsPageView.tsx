@@ -1,4 +1,3 @@
-import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import React, { useState } from "react";
 import { Button } from "antd";
 import type {
@@ -12,10 +11,14 @@ import {
   EditProjectModal,
   RestoreProjectModal,
 } from "./ProjectManagementModals";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
+import { isCardClick } from "@features/common/card-click";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-
-const chipTones = ["tone-teal", "tone-blue", "tone-amber", "tone-violet"];
+import { ProjectLogo } from "@features/common/components/ProjectLogo";
 
 const hierarchyNotes = [
   { label: "项目", text: "顶层业务容器，承载范围与成员。" },
@@ -25,14 +28,6 @@ const hierarchyNotes = [
   { label: "迭代记录", text: "已经发生的变化，人员与时间自动生成。" },
   { label: "来源分支", text: "合并后保留的历史，不删除不覆盖。" },
 ];
-
-function resolveChipTone(code: string): string {
-  let sum = 0;
-  for (const char of code) {
-    sum = (sum + char.charCodeAt(0)) % 997;
-  }
-  return chipTones[sum % chipTones.length] ?? "tone-blue";
-}
 
 export interface ProjectsPageViewProps {
   readonly client?: InpulseApiClient | undefined;
@@ -87,6 +82,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         <div>
           <span className="eyebrow">{eyebrow}</span>
           <h1>项目与功能</h1>
+          <p>项目负责承载范围，模块负责分类，功能负责沉淀。</p>
         </div>
         <div className="catalog-actions">
           {onBackToTasks ? (
@@ -105,6 +101,12 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           </Button>
         </div>
       </div>
+
+      {isAdmin ? (
+        <p className="view-description">
+          当前身份为系统管理员，可查看全部项目；项目成员只会看到已加入的项目。
+        </p>
+      ) : null}
 
       {createdProject ? (
         <div className="creation-success" data-testid="created-project-success">
@@ -198,100 +200,111 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         </CalmEmptyState>
       ) : (
         <>
-          <div className="cards-grid calm-feature-grid project-grid">
+          <div className="cards-grid calm-projects">
             {[...projects].map((project) => (
               <article
                 key={project.id}
                 className={
-                  "calm-feature-card project-card" +
+                  "project-card" +
                   (project.status === "ARCHIVED" ? " card-archived" : "")
                 }
+                onClick={(event) => {
+                  if (!isCardClick(event)) return;
+                  onOpenModules?.(project.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  if (event.target !== event.currentTarget) return;
+                  event.preventDefault();
+                  onOpenModules?.(project.id);
+                }}
+                tabIndex={0}
               >
-                <div className="calm-card-top">
-                  <span
-                    className={"project-chip " + resolveChipTone(project.code)}
-                  >
-                    {project.code}
-                  </span>
+                <span className="card-top">
+                  <ProjectLogo code={project.code} />
                   <CalmBadge
                     tone={project.status === "ACTIVE" ? "blue" : "amber"}
                   >
                     {project.status === "ACTIVE" ? "正常" : "已归档"}
                   </CalmBadge>
-                </div>
+                </span>
                 <h2>{project.name}</h2>
                 <p>{project.description || "暂无项目描述"}</p>
-                <div className="card-footer project-card-footer">
+                <span className="card-footer">
+                  <span>
+                    <InpulseIcon name="boxes" size={14} />
+                    {project.stats.activeModuleCount} 个模块
+                  </span>
+                  <span>
+                    <InpulseIcon name="code" size={14} />
+                    {project.stats.activeFeatureCount} 个功能
+                  </span>
+                  <span>
+                    <InpulseIcon name="clipboard" size={14} />
+                    {project.stats.openTaskCount} 项待办
+                  </span>
+                </span>
+                <span className="card-footer">
                   <span>
                     <InpulseIcon name="users" size={14} />
                     {project.memberCount} 位成员
                   </span>
-                  <div className="project-card-actions">
-                    <ExternalLinksPanel
-                      targetType="PROJECT"
-                      targetId={project.id}
-                      client={client}
-                    />
-                    <Button
-                      className="text-button"
-                      data-testid={`edit-project-${project.id}`}
-                      onClick={() => setEditing(project)}
-                    >
-                      编辑
-                    </Button>
-                    {isAdmin ? (
-                      project.status === "ACTIVE" ? (
-                        <Button
-                          className="danger-button"
-                          data-testid={`archive-project-${project.id}`}
-                          onClick={() => setArchiving(project)}
-                        >
-                          归档
-                        </Button>
-                      ) : (
-                        <Button
-                          className="text-button"
-                          data-testid={`restore-project-${project.id}`}
-                          onClick={() => setRestoring(project)}
-                        >
-                          恢复
-                        </Button>
-                      )
-                    ) : null}
-                    {isAdmin && onOpenMembers ? (
+                  <span>
+                    查看模块
+                    <InpulseIcon name="chevronRight" size={14} />
+                  </span>
+                </span>
+                <div className="card-footer project-card-actions">
+                  <Button
+                    className="text-button"
+                    data-testid={`edit-project-${project.id}`}
+                    onClick={() => setEditing(project)}
+                  >
+                    编辑
+                  </Button>
+                  {isAdmin ? (
+                    project.status === "ACTIVE" ? (
+                      <Button
+                        className="danger-button"
+                        data-testid={`archive-project-${project.id}`}
+                        onClick={() => setArchiving(project)}
+                      >
+                        归档
+                      </Button>
+                    ) : (
                       <Button
                         className="text-button"
-                        onClick={() => onOpenMembers(project.id)}
+                        data-testid={`restore-project-${project.id}`}
+                        onClick={() => setRestoring(project)}
                       >
-                        管理成员
+                        恢复
                       </Button>
-                    ) : null}
-                    {onOpenModules ? (
-                      <Button
-                        className="text-button project-card-more"
-                        onClick={() => onOpenModules(project.id)}
-                      >
-                        查看模块
-                        <InpulseIcon name="chevron" size={13} />
-                      </Button>
-                    ) : null}
-                  </div>
+                    )
+                  ) : null}
+                  {isAdmin && onOpenMembers ? (
+                    <Button
+                      className="text-button"
+                      onClick={() => onOpenMembers(project.id)}
+                    >
+                      管理成员
+                    </Button>
+                  ) : null}
                 </div>
               </article>
             ))}
           </div>
-          <section className="hierarchy-section" aria-label="层级说明">
-            <h3>层级说明</h3>
-            <p>项目 / 模块 / 功能 / 任务 / 迭代记录</p>
-            <ul className="hierarchy-grid">
-              {hierarchyNotes.map((note) => (
-                <li key={note.label}>
-                  <strong>{note.label}</strong>
-                  <span>{note.text}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <CalmSectionTitle
+            title="层级说明"
+            hint="项目 / 模块 / 功能 / 任务 / 迭代记录"
+          />
+          <ul className="rule-list rule-list-grid">
+            {hierarchyNotes.map((note) => (
+              <li key={note.label}>
+                <strong>{note.label}</strong>
+                {note.text}
+              </li>
+            ))}
+          </ul>
         </>
       )}
 

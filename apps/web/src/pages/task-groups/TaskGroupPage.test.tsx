@@ -65,7 +65,6 @@ function emptyPage(): TaskGroupRecordPage {
 function createAdapter(): TaskGroupAdapter {
   return {
     source: "server",
-    notice: "测试接口说明",
     fetchTaskGroup: vi.fn().mockResolvedValue(detail()),
     fetchTaskGroupRecords: vi.fn().mockResolvedValue(emptyPage()),
   };

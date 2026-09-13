@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal } from "antd";
+import { Alert, Button, Input } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, type InpulseApiClient } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
@@ -130,13 +131,16 @@ export function UnmergeTaskGroupButton({
         解除合并
       </Button>
       <Modal
+        className="catalog-modal"
+        eyebrow={member.taskCode + " · " + member.title}
         title="解除合并"
         open={open}
+        body
         onCancel={() => {
           if (!busy) setOpen(false);
         }}
         closable={!busy}
-        maskClosable={!busy}
+        mask={{ closable: !busy }}
         footer={
           <>
             <Button disabled={busy} onClick={() => setOpen(false)}>

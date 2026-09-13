@@ -13,7 +13,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--inpulse-muted-foreground);
+  color: var(--muted-foreground);
   font-size: 12px;
 }
 
@@ -21,9 +21,9 @@
   min-width: 150px;
   min-height: 38px;
   padding: 0 10px;
-  border: 1px solid var(--inpulse-border);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--inpulse-card);
+  background: var(--card);
   color: inherit;
   font: inherit;
 }
@@ -45,7 +45,7 @@
 .draft-strip {
   margin: 0 0 22px;
   padding: 18px 20px;
-  border: 1px solid var(--inpulse-border);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #fbfcfe;
 }
@@ -132,7 +132,7 @@
   overflow: hidden;
   border: 1px solid #dfe7ef;
   border-radius: 10px;
-  background: var(--inpulse-card);
+  background: var(--card);
 }
 
 .record-card summary {
@@ -283,7 +283,7 @@
 .record-standalone-detail > .record-expanded {
   border: 1px solid #dfe7ef;
   border-radius: 10px;
-  background: var(--inpulse-card);
+  background: var(--card);
 }
 
 @media (max-width: 700px) {

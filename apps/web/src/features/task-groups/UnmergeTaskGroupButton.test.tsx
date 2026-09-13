@@ -76,7 +76,7 @@ describe("F-24 unmerge task group", () => {
     const { onChanged } = mount({ api });
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "解除合并" });
     expect(
       within(dialog).getByText(/PR-T-2 重复回调分支 将恢复为独立任务/),
     ).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("F-24 unmerge task group", () => {
     mount({ api });
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "解除合并" });
     await user.click(
       within(dialog).getByRole("button", { name: "确认解除合并" }),
     );
@@ -134,7 +134,7 @@ describe("F-24 unmerge task group", () => {
     mount({ api, onReload });
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "解除合并" });
     await user.type(
       within(dialog).getByLabelText("解除原因（选填）"),
       "保留的我输入",
@@ -173,7 +173,7 @@ describe("F-24 unmerge task group", () => {
     mount({ api });
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "解除合并" });
     await user.click(
       within(dialog).getByRole("button", { name: "确认解除合并" }),
     );
@@ -184,7 +184,7 @@ describe("F-24 unmerge task group", () => {
     mount({ closesGroup: true });
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "解除合并" });
     expect(
       within(dialog).getByText(/最后一个活跃来源分支/),
     ).toBeInTheDocument();

@@ -20,7 +20,6 @@ export interface TaskGroupRecordsQuery {
 
 export interface TaskGroupAdapter {
   readonly source: "server";
-  readonly notice: string;
   fetchTaskGroup(groupId: number): Promise<TaskGroupDetailResponse>;
   fetchTaskGroupRecords(
     groupId: number,

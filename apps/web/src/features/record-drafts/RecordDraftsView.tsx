@@ -15,7 +15,8 @@ import {
   useRecordDraftsQuery,
 } from "./record-drafts-query";
 import "./record-drafts.css";
-import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Alert, Button, Input, Spin } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -618,6 +619,13 @@ export function RecordDraftsView({
       )}
       <Modal
         open={selection !== null}
+        eyebrow={
+          selection?.item
+            ? "草稿 · " + selection.item.title
+            : selection?.source
+              ? "来源任务 · " + selection.source.title
+              : "项目与功能 / 迭代记录"
+        }
         title={
           selection?.item
             ? "编辑草稿"
@@ -626,7 +634,7 @@ export function RecordDraftsView({
               : "新建独立草稿"
         }
         className="catalog-modal"
-        footer={null}
+        size="lg"
         onCancel={() => {
           if (!saving.current && !reloading) setSelection(null);
         }}

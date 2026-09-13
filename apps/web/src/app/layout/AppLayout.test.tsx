@@ -131,6 +131,11 @@ describe("AppLayout", () => {
           createdAt: "2026-09-08T00:00:00.000Z",
           updatedAt: "2026-09-08T00:00:00.000Z",
           memberCount: 4,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+          },
         },
       }),
     } as unknown as InpulseApiClient;
@@ -240,6 +245,42 @@ describe("AppLayout", () => {
     expect(
       await screen.findByText("Notifications content"),
     ).toBeInTheDocument();
+  });
+
+  it("renders sidebar counters from the read-only aggregate ports", async () => {
+    const counterClient = {
+      ...notificationClient,
+      listMyTasks: vi.fn().mockResolvedValue({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        stats: { myOpen: 7, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+      }),
+      listLeftoverItems: vi.fn().mockResolvedValue({
+        items: [{ id: 1 }, { id: 2 }, { id: 3 }],
+        nextCursor: null,
+        hasMore: false,
+      }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout projectClient={counterClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // 计数用 aria-hidden 的 <em> 渲染，不参与导航按钮的可访问名。
+    const tasks = await screen.findByRole("button", { name: "任务中心" });
+    expect(await within(tasks).findByTitle("7 项待处理")).toHaveTextContent(
+      "7",
+    );
+    const issues = screen.getByRole("button", { name: "遗留问题" });
+    expect(within(issues).getByTitle("3 项待处理")).toHaveTextContent("3");
   });
 
   it("opens admin reauthentication from the account menu", async () => {

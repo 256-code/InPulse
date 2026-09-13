@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { Alert, Spin } from "antd";
-import type { ProjectItem } from "@generated/api";
+import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import {
   InpulseIcon,
   type InpulseIconName,
@@ -22,8 +22,14 @@ import {
   countActiveMyTaskFilters,
   DEFAULT_MY_TASK_FILTERS,
 } from "./my-tasks-url";
-import { listMyTasksV1Gaps } from "./my-tasks-v1-query";
+import {
+  listMyTasksV1Gaps,
+  matchesMyTasksLocalFilters,
+  MY_TASKS_V1_LOCAL_FILTER_SUPPORT,
+} from "./my-tasks-v1-query";
 import { formatDayIso, isBeforeTodayIso, isTodayIso } from "./my-tasks-time";
+import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
+import { MyTaskDetailModal } from "./MyTaskDetailModal";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskFilters,
@@ -34,6 +40,7 @@ import {
   type MyTaskRecordFilter,
   type MyTaskRelation,
   type MyTaskScope,
+  type MyTaskStatusFilter,
   type MyTasksAdapter,
   type MyTasksFilterGap,
   type MyTasksFilterSupport,
@@ -54,16 +61,27 @@ const scopeLabels: Record<MyTaskScope, string> = {
   all: "全部任务",
 };
 
+/** 视图说明；`project` 一栏按 R-3 的真实能力收窄措辞：R-3 只服务当前会话用户的
+ * 自指维度（负责 / 创建），「按项目查看全部任务」需要项目任务列表路由，属延后项。 */
 const scopeHints: Record<MyTaskScope, string> = {
   mine: "我负责的任务；项目成员平权，任何人都可以推进与更新。",
   created: "我创建的任务；即使指派给他人，也会在这里跟踪。",
-  project: "按项目查看全部任务，先选项目再看范围。",
+  project: "按项目查看我负责的任务，先选项目再看范围。",
   all: "管理员视图：查看全部项目的任务。",
 };
 
-const levelLabels: Record<MyTaskLevel, string> = {
-  FEATURE: "功能级",
-  MODULE: "模块级",
+/** 可用但能力受限的范围，需要显式说明服务端边界，不能让视图看起来返回了全部任务。 */
+const scopeTitles: Partial<Record<MyTaskScope, string>> = {
+  project:
+    "R-3 只返回当前会话用户在此项目下负责的任务：「按项目查看全部任务」需要跨归属的" +
+    "项目任务列表路由，尚未接入",
+};
+
+/** 仍不可用的范围与原因；禁用按钮必须有可读原因，不能让用户以为界面坏了。 */
+const scopeDisabledTitles: Partial<Record<MyTaskScope, string>> = {
+  all:
+    "「全部任务」需要跨用户的授权范围；R-3 只服务当前登录用户自指维度（负责 / 创建），" +
+    "非管理员不得放开，V1 保持禁用",
 };
 
 const statusLabels: Record<MyTaskWorkStatus, string> = {
@@ -116,6 +134,23 @@ const statusOptions = [
   { value: "all" as const, label: "全部" },
 ];
 
+/**
+ * 列表区块标题与空态必须跟随工作状态分段控件：服务端按 workStatus 收窄，
+ * 只把「未完成」主列表做标题、把其余结果留在折叠面板里，会让「已完成 / 全部」
+ * 看起来像没有数据（标题恒为「未完成 0 项」）。
+ */
+const listTitles: Record<MyTaskStatusFilter, string> = {
+  open: "未完成",
+  done: "已完成",
+  all: "全部任务",
+};
+
+const listEmptyTitles: Record<MyTaskStatusFilter, string> = {
+  open: "没有匹配的未完成任务",
+  done: "没有匹配的已完成任务",
+  all: "没有匹配的任务",
+};
+
 const displayOptions = [
   { value: "cards" as const, label: "卡片" },
   { value: "list" as const, label: "列表" },
@@ -139,6 +174,23 @@ function isScopeFilterSupported(
   if (scope === "created") return support["scope:created"];
   if (scope === "all") return support["scope:all"];
   return true;
+}
+
+/**
+ * 本地筛选提示：服务端没有对应参数、只对已加载页生效时必须显式说明，
+ * 否则会被读成服务端全量收敛。
+ */
+function localFilterNote(
+  localGaps: readonly MyTasksFilterGap[],
+  loaded: number,
+): string {
+  return (
+    "以下条件在已加载的 " +
+    loaded +
+    " 条任务上本地筛选（服务端暂未提供参数）：" +
+    localGaps.map((gap) => filterGapLabels[gap]).join("、") +
+    "；点“加载更多”可扩大范围。"
+  );
 }
 
 function dueLabel(item: MyTaskListItem): string {
@@ -168,6 +220,8 @@ export interface TaskCenterPageViewProps {
   readonly onOpenIssues: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
   readonly adapter?: MyTasksAdapter;
+  /** 与页面共用同一个生成客户端；缺省时弹窗自行创建。 */
+  readonly client?: InpulseApiClient | undefined;
 }
 
 /**
@@ -188,6 +242,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   onOpenIssues,
   onOpenTask,
   adapter,
+  client,
 }) => {
   const activeAdapter = adapter ?? MY_TASKS_MOCK_ADAPTER;
   const taskQuery = useMyTasksQuery({
@@ -209,19 +264,49 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const leftoverSample = result?.leftoverSample ?? null;
   const filterSupport: MyTasksFilterSupport =
     result?.filterSupport ?? MY_TASKS_FULL_FILTER_SUPPORT;
-  const appliedFilterGaps = listMyTasksV1Gaps(filters).filter(
-    (gap) => !filterSupport[gap],
+  /**
+   * 服务端缺口的两个分支：可本地计算的条件（relation / github / query）保持控件可用，
+   * 只在提示条里说明"仅对已加载页生效"；无法本地计算的条件（scope:created /
+   * scope:all）必须继续禁用，由 tab 的 title 说明原因。
+   */
+  const localGaps = listMyTasksV1Gaps(filters).filter(
+    (gap) => !filterSupport[gap] && MY_TASKS_V1_LOCAL_FILTER_SUPPORT[gap],
   );
+  const enabled = (gap: MyTasksFilterGap): boolean =>
+    filterSupport[gap] || MY_TASKS_V1_LOCAL_FILTER_SUPPORT[gap];
   const projectNames = new Map<number, string>(
     projects.map((project) => [project.id, project.name]),
   );
   const projectNameOf = (item: MyTaskListItem): string =>
     projectNames.get(item.projectId) ?? item.projectName;
-  const openItems = items.filter((item) => item.workStatus === "TODO");
-  const doneItems = items.filter((item) => item.workStatus === "DONE");
-  const canceledItems = items.filter((item) => item.workStatus === "CANCELED");
+  const visibleItems = items.filter((item) =>
+    matchesMyTasksLocalFilters(item, filters, filterSupport),
+  );
+  const openItems = visibleItems.filter((item) => item.workStatus === "TODO");
+  const doneItems = visibleItems.filter((item) => item.workStatus === "DONE");
+  const canceledItems = visibleItems.filter(
+    (item) => item.workStatus === "CANCELED",
+  );
   const overdueItem = openItems.find((item) => isOverdue(item)) ?? null;
+  /**
+   * 主列表取当前工作状态对应的集合：「已完成 / 全部」的结果必须直接可见，
+   * 否则切换分段控件时页面上仍只有「未完成 0 项」与空态。
+   */
+  const primaryItems =
+    filters.status === "done"
+      ? doneItems
+      : filters.status === "all"
+        ? visibleItems
+        : openItems;
+  const listTitle = listTitles[filters.status];
+  const listEmptyTitle = listEmptyTitles[filters.status];
+  /** 空态按范围说明服务端边界：R-3 的负责人固定为当前会话用户。 */
+  const listEmptyDescription =
+    filters.scope === "project"
+      ? "服务端聚合读只返回你负责的任务：他人负责的任务请在对应功能页查看，或调整筛选条件。"
+      : "调整筛选条件，或到对应功能页创建新任务。";
   const activeFilterCount = countActiveMyTaskFilters(filters);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const update = (patch: Partial<MyTaskFilters>) => {
     onFiltersChange({ ...filters, ...patch });
@@ -295,13 +380,29 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     },
   ];
 
+  /**
+   * 卡片与列表行都在任务中心内打开任务详情弹层（设计师稿 TaskTile / TaskTable 的
+   * onOpen → 页内弹层，关闭后仍停留在任务中心）；需要回到目录时由弹层里的
+   * 「在功能档案中查看」触发 onOpenTask。
+   */
+  const [detail, setDetail] = useState<MyTaskListItem | null>(null);
+  const openTask = (item: MyTaskListItem) => setDetail(item);
+
+  const relationLabelOf = (item: MyTaskListItem): string => {
+    if (item.groupRole === "MAIN") return "主任务";
+    if (item.groupRole === "SOURCE") return "来源任务";
+    return "独立任务";
+  };
+
   const renderCard = (item: MyTaskListItem) => {
     const due = dueLabel(item);
     return (
-      <article
+      <button
+        type="button"
         className="calm-task-card"
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
+        onClick={() => openTask(item)}
       >
         <div className="calm-card-top">
           <span className="task-id">{item.code}</span>
@@ -349,7 +450,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             </span>
           ) : null}
         </div>
-      </article>
+      </button>
     );
   };
 
@@ -359,13 +460,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <caption className="sr-only">跨项目任务列表</caption>
         <thead>
           <tr>
-            <th scope="col">范围</th>
             <th scope="col">编号</th>
             <th scope="col">任务</th>
             <th scope="col">项目</th>
+            <th scope="col">归属</th>
             <th scope="col">负责人</th>
             <th scope="col">优先级</th>
             <th scope="col">截止</th>
+            <th scope="col">迭代</th>
             <th scope="col">状态</th>
           </tr>
         </thead>
@@ -373,21 +475,26 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           {rows.map((item) => (
             <tr key={item.taskId}>
               <td>
-                <span className="task-scope">
-                  {levelLabels[item.scopeType] + "任务"}
-                </span>
-              </td>
-              <td>
                 <span className="task-id">{item.code}</span>
               </td>
               <td>
-                <strong className="task-table-title">{item.title}</strong>
-                <span className="task-table-sub">
-                  {item.moduleName +
-                    (item.featureName === null ? "" : " / " + item.featureName)}
-                </span>
+                <button
+                  type="button"
+                  className="feature-list-open"
+                  onClick={() => openTask(item)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>
+                    {relationLabelOf(item)}
+                    {item.scopeType === "MODULE" ? " · 模块级" : ""}
+                  </span>
+                </button>
               </td>
               <td>{projectNameOf(item)}</td>
+              <td>
+                {item.moduleName +
+                  (item.featureName === null ? "" : " / " + item.featureName)}
+              </td>
               <td>{item.assignee.name}</td>
               <td>
                 <CalmBadge tone={priorityTone[item.priority]}>
@@ -397,6 +504,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               <td className={isOverdue(item) ? "due-overdue" : undefined}>
                 {dueLabel(item) ?? "—"}
               </td>
+              <td>{item.publishedRecordCount}</td>
               <td>
                 <CalmBadge tone={statusTone[item.workStatus]}>
                   {statusLabels[item.workStatus]}
@@ -438,8 +546,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <button
             type="button"
             className="primary-button"
-            disabled
-            title="跨项目新建任务需要先确定任务归属，接口冻结后接入"
+            onClick={() => setCreateOpen(true)}
           >
             <InpulseIcon name="plus" size={16} />
             新建任务
@@ -447,25 +554,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </div>
       </div>
 
-      <div className="skeleton-note" data-testid="task-center-mock-notice">
-        <InpulseIcon name="alert" size={16} />
-        <span>
-          <strong>
-            {activeAdapter.source === "mock" ? "骨架数据：" : "接口说明："}
-          </strong>
-          {activeAdapter.notice}
-        </span>
-      </div>
-
-      {appliedFilterGaps.length > 0 ? (
-        <Alert
-          type="warning"
-          title={
-            "以下筛选暂未接入服务端聚合读，当前结果未按这些条件收敛：" +
-            appliedFilterGaps.map((gap) => filterGapLabels[gap]).join("、") +
-            "。"
-          }
-        />
+      {activeAdapter.source === "mock" ? (
+        <div className="skeleton-note" data-testid="task-center-mock-notice">
+          <InpulseIcon name="alert" size={16} />
+          <span>
+            <strong>骨架数据：</strong>
+            {activeAdapter.notice}
+          </span>
+        </div>
       ) : null}
 
       {(stats !== null && stats.overdue > 0) ||
@@ -560,8 +656,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 disabled={!supported}
                 title={
                   supported
-                    ? undefined
-                    : "服务端聚合读未提供该范围，后续迭代接入"
+                    ? scopeTitles[scope]
+                    : (scopeDisabledTitles[scope] ??
+                      "服务端聚合读未提供该范围，对应 tab 保持禁用")
                 }
               >
                 {scopeLabels[scope]}
@@ -584,10 +681,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               update({ projectId: Number(event.target.value) || null })
             }
           >
-            <option
-              value=""
-              disabled={!filterSupport["scope:project-without-id"]}
-            >
+            <option value="" disabled={!enabled("scope:project-without-id")}>
               全部可访问项目
             </option>
             {projects.map((project) => (
@@ -604,18 +698,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <InpulseIcon name="search" size={16} />
           <input
             value={filters.query}
-            placeholder={
-              filterSupport["filter:query"]
-                ? "搜索任务编号、标题、描述、归属或负责人"
-                : "关键词搜索暂未接入服务端"
-            }
+            placeholder="搜索任务编号、标题、描述、归属或负责人"
             aria-label="搜索任务"
-            disabled={!filterSupport["filter:query"]}
-            title={
-              filterSupport["filter:query"]
-                ? undefined
-                : "服务端聚合读未提供关键词筛选，后续迭代接入"
-            }
+            disabled={!enabled("filter:query")}
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
@@ -628,12 +713,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <select
           aria-label="优先级"
           value={filters.priority ?? ""}
-          disabled={!filterSupport["filter:priority"]}
-          title={
-            filterSupport["filter:priority"]
-              ? undefined
-              : "服务端聚合读未提供优先级筛选，后续迭代接入"
-          }
+          disabled={!enabled("filter:priority")}
           onChange={(event) =>
             update({
               priority:
@@ -683,18 +763,19 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         />
       </div>
 
+      {localGaps.length > 0 ? (
+        <p className="view-description" data-testid="task-center-local-note">
+          {localFilterNote(localGaps, items.length)}
+        </p>
+      ) : null}
+
       {advancedOpen ? (
         <div className="filter-panel">
           <label>
             合并关系
             <select
               value={filters.relation ?? ""}
-              disabled={!filterSupport["filter:relation"]}
-              title={
-                filterSupport["filter:relation"]
-                  ? undefined
-                  : "服务端聚合读未提供合并关系筛选，后续迭代接入"
-              }
+              disabled={!enabled("filter:relation")}
               onChange={(event) =>
                 update({
                   relation:
@@ -732,12 +813,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             是否有 GitHub
             <select
               value={filters.hasGithub ?? ""}
-              disabled={!filterSupport["filter:github"]}
-              title={
-                filterSupport["filter:github"]
-                  ? undefined
-                  : "服务端聚合读未提供 GitHub 关联筛选，后续迭代接入"
-              }
+              disabled={!enabled("filter:github")}
               onChange={(event) =>
                 update({
                   hasGithub:
@@ -756,12 +832,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             <input
               type="checkbox"
               checked={filters.includeCanceled}
-              disabled={!filterSupport["filter:canceled-with-open"]}
-              title={
-                filterSupport["filter:canceled-with-open"]
-                  ? undefined
-                  : "服务端聚合读无法在单次查询中并集已取消任务，后续迭代接入"
-              }
+              disabled={!enabled("filter:canceled-with-open")}
               onChange={(event) =>
                 update({ includeCanceled: event.target.checked })
               }
@@ -788,9 +859,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       ) : (
         <>
           <CalmSectionTitle
-            title="未完成"
+            title={listTitle}
             hint={
-              openItems.length +
+              primaryItems.length +
               " 项 · " +
               (activeAdapter.source === "mock"
                 ? "按逾期、今天截止、优先级排序"
@@ -802,23 +873,25 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               size={16}
             />
           </CalmSectionTitle>
-          {openItems.length > 0 ? (
+          {primaryItems.length > 0 ? (
             filters.display === "cards" ? (
-              <div className="calm-task-grid">{openItems.map(renderCard)}</div>
+              <div className="calm-task-grid">
+                {primaryItems.map(renderCard)}
+              </div>
             ) : (
-              renderTable(openItems)
+              renderTable(primaryItems)
             )
           ) : (
             <CalmEmptyState
               icon="check"
-              title="没有匹配的未完成任务"
-              description="调整筛选条件，或到对应功能页创建新任务。"
+              title={listEmptyTitle}
+              description={listEmptyDescription}
             />
           )}
-          {doneItems.length > 0 ? (
+          {filters.status === "open" && doneItems.length > 0 ? (
             <details
               className="calm-disclosure history-block"
-              open={filters.status === "done"}
+              open={openItems.length === 0}
             >
               <summary>
                 已完成 {doneItems.length} 项 · 保留编号、负责人与全部迭代记录
@@ -826,7 +899,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               {renderTable(doneItems)}
             </details>
           ) : null}
-          {canceledItems.length > 0 ? (
+          {filters.status !== "all" && canceledItems.length > 0 ? (
             <details className="calm-disclosure history-block">
               <summary>
                 已取消 {canceledItems.length} 项 · 默认折叠，不计入完成率
@@ -951,6 +1024,33 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </>
         )}
       </section>
+
+      <GlobalTaskCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        client={client}
+        preset={
+          filters.scope === "project" && filters.projectId !== null
+            ? { projectId: filters.projectId }
+            : undefined
+        }
+      />
+
+      <MyTaskDetailModal
+        open={detail !== null}
+        task={detail}
+        onClose={() => setDetail(null)}
+        client={client}
+        onOpenInCatalog={(item) => {
+          setDetail(null);
+          onOpenTask?.({
+            projectId: item.projectId,
+            moduleId: item.moduleId,
+            featureId: item.featureId,
+            taskId: item.taskId,
+          });
+        }}
+      />
     </section>
   );
 };

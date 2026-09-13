@@ -44,3 +44,10 @@ export function formatDayIso(iso: string): string {
   const value = new Date(iso);
   return value.getMonth() + 1 + "月" + value.getDate() + "日";
 }
+
+export function formatDateTimeIso(iso: string): string {
+  const value = new Date(iso);
+  const hour = String(value.getHours()).padStart(2, "0");
+  const minute = String(value.getMinutes()).padStart(2, "0");
+  return formatDayIso(iso) + " " + hour + ":" + minute;
+}

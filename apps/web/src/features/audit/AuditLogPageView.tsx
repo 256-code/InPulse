@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import type { AuditLogItem, InpulseApiClient } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import {
@@ -276,7 +276,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         </div>
       </div>
 
-      <div className="toolbar task-toolbar activity-toolbar audit-toolbar">
+      <div className="toolbar activity-toolbar audit-toolbar">
         <select
           aria-label="审计链"
           value={chain.kind === "system" ? "system" : String(chain.projectId)}
@@ -383,11 +383,14 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
 
       <Modal
         open={snapshot !== null}
+        eyebrow={
+          snapshot === null
+            ? undefined
+            : snapshot.occurredAt + " · " + actorLabel(snapshot)
+        }
         title="原始审计快照"
         onCancel={() => setSnapshot(null)}
-        footer={null}
-        width={720}
-        className="catalog-modal"
+        size="md"
       >
         {snapshot ? (
           <div className="snapshot-body" data-testid="audit-snapshot">

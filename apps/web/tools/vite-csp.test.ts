@@ -152,6 +152,22 @@ describe("HTML security headers and body rewrite", () => {
     expect(response.removeHeader).toHaveBeenCalledWith("Content-Length");
     expect(response.removeHeader).toHaveBeenCalledWith("Transfer-Encoding");
   });
+
+  it("drops cache validators so a 304 can never re-serve a stale nonce body", () => {
+    const { response, headers } = createResponseStub();
+    headers.set("cache-control", "no-cache");
+    headers.set("etag", 'W/"2d0-abc"');
+    headers.set("last-modified", "Wed, 01 Jan 2020 00:00:00 GMT");
+    response.end = ((body: string) => body) as never;
+
+    rewriteHtmlBody(response as never, "d".repeat(32));
+    response.write(`<script nonce="${CSP_NONCE_PLACEHOLDER}"></script>`);
+    response.end();
+
+    expect(headers.get("cache-control")).toBe("no-store");
+    expect(headers.has("etag")).toBe(false);
+    expect(headers.has("last-modified")).toBe(false);
+  });
 });
 
 describe("createPreviewCspMiddleware", () => {
