@@ -283,6 +283,109 @@ describe("AppLayout", () => {
     expect(within(issues).getByTitle("3 项待处理")).toHaveTextContent("3");
   });
 
+  it("renders the system directory tree inside the workspace navigation", async () => {
+    const catalogClient = {
+      ...notificationClient,
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 7,
+          code: "AGV",
+          name: "AGV 智能搬运平台",
+          description: "面向工厂的智能搬运调度项目",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 1,
+          createdAt: "2026-09-08T00:00:00.000Z",
+          updatedAt: "2026-09-08T00:00:00.000Z",
+          memberCount: 4,
+          stats: {
+            activeModuleCount: 1,
+            activeFeatureCount: 1,
+            openTaskCount: 1,
+          },
+        },
+      }),
+      listModules: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
+      listFeatures: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects/7/modules"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={catalogClient}
+              />
+            }
+          >
+            <Route
+              path="projects/:projectId/modules"
+              element={<div>项目主页内容</div>}
+            />
+            <Route
+              path="projects/:projectId/modules/:moduleId/features"
+              element={<div>功能目录内容</div>}
+            />
+            <Route
+              path="projects/:projectId/modules/:moduleId/features/:featureId"
+              element={<div>功能档案内容</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // 系统目录与主导航共用同一个 nav，不再单独成块。
+    const nav = screen.getByRole("navigation", { name: "工作区导航" });
+    expect(within(nav).getByText("任务中心")).toBeInTheDocument();
+    expect(
+      within(nav).getByText("系统目录", { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(nav).findByRole("button", { name: /AGV 智能搬运平台/ }),
+    ).toBeInTheDocument();
+    expect(
+      await within(nav).findByRole("button", { name: /调度模块/ }),
+    ).toBeInTheDocument();
+    // 目录只是导航，项目主页本身仍然完整渲染。
+    expect(screen.getByText("项目主页内容")).toBeInTheDocument();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /调度模块/ }),
+    );
+    expect(await screen.findByText("功能目录内容")).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /车辆调度/ }),
+    );
+    expect(await screen.findByText("功能档案内容")).toBeInTheDocument();
+  });
+
+  it("hides the system directory tree outside project pages", async () => {
+    renderLayout(
+      <MemoryRouter initialEntries={["/tasks"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          >
+            <Route path="tasks" element={<div>任务中心内容</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("任务中心内容")).toBeInTheDocument();
+    expect(screen.queryByText("系统目录", { selector: "p" })).toBeNull();
+    expect(document.querySelector(".project-tree")).toBeNull();
+  });
+
   it("opens admin reauthentication from the account menu", async () => {
     const user = userEvent.setup();
     renderLayout(
