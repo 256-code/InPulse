@@ -44,6 +44,8 @@
 | [ADR-028](ADR-028.md) | Accepted | apps/api 迁移至 ESM/NodeNext 以消费共享 ESM 包 |
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
 
+| [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
+
 ## 关联基线
 
 - [功能设计 V1.1](../../功能设计v1.1.md)

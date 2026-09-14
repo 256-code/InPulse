@@ -1,3 +1,4 @@
+import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
@@ -101,6 +102,7 @@ beforeAll(async () => {
     audit,
     activity,
     search,
+    new PostgresUserReadPort(),
   );
   const http = new FeaturesHttpService(
     auth,
@@ -274,7 +276,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       "FEATURE_CODE_CONFLICT",
     );
     expect(
-      await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id = ${project.projectId}`,
+      await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id = ${project.projectId} AND entity_type = 'FEATURE'`,
     ).toHaveLength(0);
     const [row] =
       await client.sql`SELECT name FROM app.features WHERE project_id = ${project.projectId}`;
@@ -291,24 +293,30 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     });
     const list = await request(project, "GET", member);
     expect(featureListResponseSchema.parse(await list.json()).items).toEqual([
-      item,
+      { ...item, createdByName: expect.any(String) },
     ]);
     expect(
       await (
         await request(project, "GET", member, undefined, `/${item.id}`)
       ).json(),
-    ).toEqual(item);
+    ).toEqual({ ...item, createdByName: expect.any(String) });
     const update = await request(
       project,
       "PATCH",
       member,
-      { name: item.name, currentBehavior: "新说明", tags: ["新标签"] },
+      {
+        name: item.name,
+        currentBehavior: "新说明",
+        acceptanceCriteria: "低于 400ms",
+        tags: ["新标签"],
+      },
       `/${item.id}`,
       1,
     );
     expect(update.status).toBe(200);
     expect(featureItemSchema.parse(await update.json())).toMatchObject({
       currentBehavior: "新说明",
+      acceptanceCriteria: "低于 400ms",
       tags: ["新标签"],
       rowVersion: 2,
       code: item.code,
@@ -317,8 +325,8 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     const audits =
       await auditReader.sql`SELECT event_payload FROM app.audit_logs WHERE project_id = ${project.projectId} AND action = 'feature.update'`;
     expect(audits[0]?.event_payload).toMatchObject({
-      before: { currentBehavior: "原说明" },
-      after: { currentBehavior: "新说明" },
+      before: { currentBehavior: "原说明", acceptanceCriteria: "" },
+      after: { currentBehavior: "新说明", acceptanceCriteria: "低于 400ms" },
     });
     expect(
       await client.sql`SELECT id FROM app.change_records WHERE project_id = ${project.projectId}`,
@@ -689,13 +697,15 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       );
       for (const table of [
         "features",
-        "code_sequences",
         "activity_projection",
         "search_projection",
       ])
         expect(
           await client.sql`SELECT 1 FROM ${client.sql(`app.${table}`)} WHERE project_id = ${project.projectId}`,
         ).toHaveLength(0);
+      expect(
+        await client.sql`SELECT entity_type,last_number FROM app.code_sequences WHERE project_id=${project.projectId}`,
+      ).toEqual([{ entity_type: "MODULE", last_number: 1 }]);
       expect(
         await auditReader.sql`SELECT 1 FROM app.audit_logs WHERE project_id = ${project.projectId}`,
       ).toHaveLength(0);

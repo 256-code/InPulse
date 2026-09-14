@@ -43,7 +43,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
 
     const detail = page.getByRole("dialog", { name: "任务详情" });
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
-      await page.getByRole("button", { name: "新建任务" }).click();
+      await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
       await dialog
@@ -154,7 +154,7 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
 
     const detail = page.getByRole("dialog", { name: "任务详情" });
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
-      await page.getByRole("button", { name: "新建任务" }).click();
+      await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
       await dialog

@@ -1,3 +1,4 @@
+import { taskCreateRoutes } from "./task-create-routes.js";
 import { aggregateReadRoutes } from "./aggregate-read-routes.js";
 import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
@@ -34,6 +35,7 @@ export const routeRegistry = [
   ...projectMemberRoutes,
   ...projectRoutes,
   ...moduleRoutes,
+  ...taskCreateRoutes,
   ...featureRoutes,
   ...taskRoutes,
   ...recordDraftRoutes,
@@ -1643,7 +1645,7 @@ export const routeRegistry = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    idempotencyContractVersion: "2.0.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: {
@@ -1665,7 +1667,6 @@ export const routeRegistry = [
               "members[].userId",
               "members[].status",
               "members[].joinedAt",
-              "unclassifiedModuleId",
             ],
           },
         },

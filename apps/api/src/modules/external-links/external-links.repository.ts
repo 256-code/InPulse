@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { ExternalLinkTargetType } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
-import { normalizeGitHubUrl } from "./github-url.js";
+import { InvalidGitHubUrlError, normalizeGitHubUrl } from "./github-url.js";
 import { githubLinkLabel } from "./github-link-label.js";
 import { linkAssociation } from "./external-link-query.port.js";
 
@@ -46,12 +46,13 @@ export class ExternalLinksRepository {
         id: number;
         projectId: number;
         normalizedUrl: string;
+        isRootRepository: boolean;
         kind: "ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER";
         repository: string | null;
         externalNumber: string | null;
         externalSha: string | null;
       }[]
-    >`SELECT l.id,l.project_id AS "projectId",l.normalized_url AS "normalizedUrl",l.kind,l.repository,l.external_number::text AS "externalNumber",l.external_sha AS "externalSha" FROM app.external_links l JOIN ${tx.sql("app." + a.table)} a ON a.project_id=l.project_id AND a.link_id=l.id WHERE a.project_id=${p} AND ${tx.sql("a." + a.column)}=${id} ORDER BY l.id`;
+    >`SELECT ${type === "PROJECT" ? tx.sql`a.is_root_repository` : tx.sql`false`} AS "isRootRepository",l.id,l.project_id AS "projectId",l.normalized_url AS "normalizedUrl",l.kind,l.repository,l.external_number::text AS "externalNumber",l.external_sha AS "externalSha" FROM app.external_links l JOIN ${tx.sql("app." + a.table)} a ON a.project_id=l.project_id AND a.link_id=l.id WHERE a.project_id=${p} AND ${tx.sql("a." + a.column)}=${id} ORDER BY l.id`;
     return rows.map((row) => ({
       ...row,
       ...githubLinkLabel(row.normalizedUrl),
@@ -64,8 +65,17 @@ export class ExternalLinksRepository {
     id: number,
     actor: number,
     url: string,
+    isRootRepository = false,
   ) {
     const value = normalizeGitHubUrl(url);
+    if (
+      isRootRepository &&
+      (type !== "PROJECT" ||
+        !/^https:\/\/github[.]com\/[^/?#]+\/[^/?#]+$/.test(value.normalizedUrl))
+    )
+      throw new InvalidGitHubUrlError(
+        "项目根仓库必须是 https://github.com/owner/repository 链接",
+      );
     // Persist only the safe canonical URL; discard unapproved query/fragment even in display_url.
     await tx.sql`INSERT INTO app.external_links(project_id,display_url,normalized_url,kind,repository,external_number,external_sha,created_by) VALUES(${p},${value.normalizedUrl},${value.normalizedUrl},${value.kind},${value.repository},${value.externalNumber},${value.externalSha},${actor}) ON CONFLICT(project_id,normalized_url) DO NOTHING`;
     const [link] = await tx.sql<
@@ -76,9 +86,17 @@ export class ExternalLinksRepository {
       type === "PROJECT"
         ? await tx.sql`INSERT INTO app.project_external_links(project_id,link_id) VALUES(${p},${link!.id}) ON CONFLICT DO NOTHING RETURNING link_id`
         : await tx.sql`INSERT INTO ${tx.sql("app." + a.table)}(project_id,${tx.sql(a.column)},link_id) VALUES(${p},${id},${link!.id}) ON CONFLICT DO NOTHING RETURNING link_id`;
+    let rootChanged = false;
+    if (isRootRepository) {
+      await tx.sql`UPDATE app.project_external_links SET is_root_repository = false WHERE project_id=${p} AND link_id<>${link!.id} AND is_root_repository`;
+      const updated =
+        await tx.sql`UPDATE app.project_external_links SET is_root_repository = true WHERE project_id=${p} AND link_id=${link!.id} AND NOT is_root_repository RETURNING link_id`;
+      rootChanged = updated.length > 0;
+    }
     return {
       linkId: link!.id,
-      changed: rows.length > 0,
+      changed: rows.length > 0 || rootChanged,
+      associatedBefore: rows.length === 0,
       url: value.normalizedUrl,
     };
   }
@@ -95,7 +113,12 @@ export class ExternalLinksRepository {
     );
     if (!before) return undefined;
     await tx.sql`DELETE FROM ${tx.sql("app." + a.table)} WHERE project_id=${p} AND ${tx.sql(a.column)}=${id} AND link_id=${linkId}`;
-    return { linkId, url: before.normalizedUrl, changed: true };
+    return {
+      linkId,
+      url: before.normalizedUrl,
+      changed: true,
+      associatedBefore: true,
+    };
   }
   async exists(tx: TransactionContext, p: number, linkId: number) {
     const rows =

@@ -215,7 +215,9 @@ export class ExternalLinkWorkflow {
     type: ExternalLinkTargetType,
     id: number,
     version: number,
-    input: { url: string } | { linkId: number },
+    input:
+      | ReturnType<typeof schemaRegistry.ExternalLinkRequest.schema.parse>
+      | { linkId: number },
     requestId: string,
     reauthorize: () => Promise<number>,
   ) {
@@ -224,6 +226,12 @@ export class ExternalLinkWorkflow {
     if ((await reauthorize()) !== actor)
       throw new ExternalLinkError(401, "SESSION_REQUIRED", "登录状态已失效");
     const adding = "url" in input;
+    const previousRoot =
+      type === "PROJECT"
+        ? ((await this.links.list(tx, target.projectId, type, id)).find(
+            (link) => link.isRootRepository,
+          )?.id ?? null)
+        : null;
     const result = adding
       ? await this.linkCommands.add(
           tx,
@@ -232,6 +240,7 @@ export class ExternalLinkWorkflow {
           id,
           actor,
           input.url,
+          input.isRootRepository,
         )
       : await this.linkCommands.remove(
           tx,
@@ -261,7 +270,14 @@ export class ExternalLinkWorkflow {
         targetId: id,
         linkId: result.linkId,
         normalizedUrl: result.url,
-        before: { associated: !adding, rowVersion: version },
+        previousRootLinkId: previousRoot,
+        rootLinkId:
+          adding && input.isRootRepository
+            ? result.linkId
+            : !adding && result.linkId === previousRoot
+              ? null
+              : previousRoot,
+        before: { associated: result.associatedBefore, rowVersion: version },
         after: { associated: adding, rowVersion },
       },
       requestId,

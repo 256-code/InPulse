@@ -16,6 +16,7 @@ const errors = {
 const fields = [
   "id",
   "projectId",
+  "code",
   "name",
   "description",
   "kind",
@@ -93,7 +94,7 @@ export const moduleRoutes: readonly RouteDefinition[] = [
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",
-      idempotencyContractVersion: "1.1.0",
+      idempotencyContractVersion: "1.2.0",
       idempotencyFingerprintVersion: "1.0.0",
       behaviorHeaders: create ? [] : ["If-Match"],
       idempotencyReplayPolicy: {

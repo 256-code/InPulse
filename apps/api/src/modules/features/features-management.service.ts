@@ -1,6 +1,7 @@
 import { FeatureCandidatesQueryPort } from "../search/index.js";
 import { ModuleQueryPort, ModuleReadPort } from "../modules/index.js";
 import { ProjectCodePort } from "../projects/index.js";
+import { UserReadPort } from "../../auth/user-read.port.js";
 import { Inject, Injectable } from "@nestjs/common";
 import {
   featureReplayContextSchema,
@@ -73,6 +74,7 @@ export class FeaturesManagementService {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(UserReadPort) private readonly users: UserReadPort,
   ) {}
 
   async read(
@@ -94,10 +96,26 @@ export class FeaturesManagementService {
           moduleId,
         );
         if (!item) throw missing();
-        return item;
+        return (await this.withNames(tx, [item]))[0]!;
       }
-      return { items: await this.repository.list(tx, projectId, moduleId) };
+      return {
+        items: await this.withNames(
+          tx,
+          await this.repository.list(tx, projectId, moduleId),
+        ),
+      };
     });
+  }
+
+  private async withNames(tx: TransactionContext, items: FeatureItem[]) {
+    const users = await this.users.listByIds(tx, [
+      ...new Set(items.map((item) => item.createdBy)),
+    ]);
+    return items.map((item) => ({
+      ...item,
+      createdByName:
+        users.find((user) => user.userId === item.createdBy)?.name ?? null,
+    }));
   }
 
   async similar(
@@ -213,6 +231,8 @@ export class FeaturesManagementService {
         name: input.edit?.name ?? previous.name,
         currentBehavior:
           input.edit?.currentBehavior ?? previous.currentBehavior,
+        acceptanceCriteria:
+          input.edit?.acceptanceCriteria ?? previous.acceptanceCriteria,
         tags: input.edit?.tags ?? previous.tags,
         status: input.operation === "archiveFeature" ? "ARCHIVED" : "ACTIVE",
       });

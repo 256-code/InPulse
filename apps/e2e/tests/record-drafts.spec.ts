@@ -65,7 +65,7 @@ for (const moduleScope of [false, true])
           .getByRole("link", { name: "查看详情" })
           .click();
       }
-      await page.getByRole("button", { name: "新建任务" }).click();
+      await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const createTask = page.getByRole("dialog", { name: "新建任务" });
       const title = `草稿任务-${suffix}`;
       await createTask.getByLabel("任务标题").fill(title);
@@ -95,6 +95,13 @@ for (const moduleScope of [false, true])
         await create.getByLabel("改动效果").fill("验证" + i);
         await create.getByRole("button", { name: "保存草稿" }).click();
         await expect(create).toBeHidden();
+        const detail = page.getByRole("dialog", {
+          name: "草稿详情",
+          exact: true,
+        });
+        await expect(detail).toBeVisible();
+        await detail.getByRole("button", { name: "关闭", exact: true }).click();
+        await expect(detail).toBeHidden();
         await expect(
           page.getByRole("button", { name: "查看草稿" }),
         ).toHaveCount(i);
@@ -119,6 +126,10 @@ for (const moduleScope of [false, true])
         path: `test-results/f17-${moduleScope ? "module" : "feature"}-drafts.png`,
         fullPage: true,
       });
+      await page
+        .getByRole("dialog", { name: "草稿详情", exact: true })
+        .getByRole("button", { name: "关闭", exact: true })
+        .click();
       await page.getByRole("link", { name: "返回来源任务" }).click();
       await expect(
         task.getByRole("button", { name: "完成任务", exact: true }),

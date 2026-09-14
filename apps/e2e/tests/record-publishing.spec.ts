@@ -85,7 +85,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       .filter({ hasText: `发布功能-${suffix}` })
       .getByRole("link", { name: "查看详情" })
       .click();
-    await page.getByRole("button", { name: "新建任务" }).click();
+    await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskForm = page.getByRole("dialog", { name: "新建任务" });
     await taskForm.getByLabel("任务标题").fill(`发布来源-${suffix}`);
     await taskForm

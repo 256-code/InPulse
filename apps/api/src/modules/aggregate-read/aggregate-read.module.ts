@@ -1,3 +1,4 @@
+import { TaskCenterController } from "./task-center.controller.js";
 import { Module } from "@nestjs/common";
 
 import type { VersionedHmacKeyring } from "../../auth/keyring.js";
@@ -90,6 +91,7 @@ import { TimeCursorService } from "../../cursors/time-cursor.js";
     ProjectOverviewController,
     LeftoverItemsController,
     MyTasksController,
+    TaskCenterController,
     RecordFeedController,
     MyRecordDraftsController,
   ],

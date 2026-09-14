@@ -45,6 +45,7 @@ export const moduleItemSchema = z
   .object({
     id,
     projectId: id,
+    code: z.string().max(64),
     name: z.string().min(1).max(200),
     description: z.string().max(20000),
     kind: z.enum(["NORMAL", "UNCLASSIFIED"]),
