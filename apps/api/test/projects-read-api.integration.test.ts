@@ -20,6 +20,7 @@ import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres
 import { PostgresProjectQueryPort } from "../src/modules/projects/postgres-project-query-port.js";
 import { ProjectsReadController } from "../src/modules/projects/projects-read.controller.js";
 import { ProjectsReadService } from "../src/modules/projects/projects-read.service.js";
+import { TaskManagementRepository } from "../src/modules/tasks/task-management.repository.js";
 import {
   createProject,
   createUser,
@@ -31,6 +32,15 @@ let client: DatabaseClient;
 let app: INestApplication | undefined;
 let base: string;
 let tokenService: SessionTokenService;
+let uow: PostgresUnitOfWork;
+const taskWrites = new TaskManagementRepository();
+
+/** 项目统计夹具的期望值：与 R-2 getProjectOverview 同口径。 */
+const expectedStats = {
+  activeModuleCount: 2,
+  activeFeatureCount: 2,
+  openTaskCount: 4,
+} as const;
 
 async function issueSessionCookie(userId: number): Promise<string> {
   const token = generateOpaqueToken();
@@ -102,7 +112,8 @@ beforeAll(async () => {
   client = createDatabaseClient(testUrls().runtime, {
     applicationName: "inpulse-projects-read-api-test",
   });
-  const uow = new PostgresUnitOfWork(client);
+  const uowLocal = new PostgresUnitOfWork(client);
+  uow = uowLocal;
   const keyring = VersionedHmacKeyring.fromEntries(
     [{ version: 1, key: randomBytes(32) }],
     1,
@@ -261,5 +272,197 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     expect(memberItems.map((item) => item.id)).not.toContain(
       otherProject.projectId,
     );
+  });
+
+  test("列表与详情按 R-2 口径返回活跃模块、活跃功能与未完成有效任务", async () => {
+    const admin = await actor(true);
+    const owner = await actor();
+    const extra = await actor();
+    const project = await createProject(client.sql, owner.userId);
+    await client.sql`
+      INSERT INTO app.project_members (project_id, user_id)
+      VALUES (${project.projectId}, ${extra.userId})
+    `;
+    const [secondModule] = await client.sql<{ id: number }[]>`
+      INSERT INTO app.modules (project_id, name, created_by)
+      VALUES (${project.projectId}, ${"统计夹具模块 B"}, ${owner.userId})
+      RETURNING id
+    `;
+    await client.sql`
+      INSERT INTO app.modules (project_id, name, created_by, status, archived_at)
+      VALUES (
+        ${project.projectId},
+        ${"统计夹具模块 C"},
+        ${owner.userId},
+        ${"ARCHIVED"},
+        clock_timestamp()
+      )
+    `;
+    for (const [code, name, moduleId, status] of [
+      [`${project.code}-F-1`, "统计夹具功能 1", project.moduleId, "ACTIVE"],
+      [`${project.code}-F-2`, "统计夹具功能 2", secondModule!.id, "ACTIVE"],
+      [`${project.code}-F-3`, "统计夹具功能 3", project.moduleId, "ARCHIVED"],
+    ] as const) {
+      await client.sql`
+        INSERT INTO app.features (
+          project_id, module_id, code, name, created_by, status, archived_at
+        )
+        VALUES (
+          ${project.projectId},
+          ${moduleId},
+          ${code},
+          ${name},
+          ${owner.userId},
+          ${status},
+          ${status === "ARCHIVED" ? new Date().toISOString() : null}::timestamptz
+        )
+      `;
+    }
+
+    let taskSequence = 0;
+    const newTask = async (title: string) => {
+      taskSequence += 1;
+      return uow.run((tx) =>
+        taskWrites.create(
+          tx,
+          {
+            projectId: project.projectId,
+            moduleId: project.moduleId,
+            featureId: null,
+          },
+          owner.userId,
+          `${project.code}-T-${taskSequence}`,
+          {
+            title,
+            description: "",
+            assigneeId: owner.userId,
+            priority: "NORMAL",
+            dueAt: null,
+          },
+        ),
+      );
+    };
+
+    await newTask("统计夹具未完成任务");
+    const done = await newTask("统计夹具已完成任务");
+    await uow.run((tx) =>
+      taskWrites.transition(
+        tx,
+        done,
+        owner.userId,
+        "DONE",
+        "统计夹具完成",
+        null,
+      ),
+    );
+    const canceled = await newTask("统计夹具已取消任务");
+    await uow.run((tx) =>
+      taskWrites.transition(
+        tx,
+        canceled,
+        owner.userId,
+        "CANCELED",
+        null,
+        "统计夹具取消",
+      ),
+    );
+    const invalid = await newTask("统计夹具已失效任务");
+    await client.sql`
+      UPDATE app.tasks
+         SET lifecycle_status = ${"INVALID"},
+             updated_at = clock_timestamp(),
+             row_version = row_version + 1
+       WHERE id = ${invalid.id} AND project_id = ${project.projectId}
+    `;
+    const historicalSource = await newTask("统计夹具历史来源任务");
+    const activeSource = await newTask("统计夹具聚合来源任务");
+    const activeGroupMain = await newTask("统计夹具活跃组主任务");
+    const closedGroupSource = await newTask("统计夹具已关闭组来源任务");
+
+    await uow.run(async (tx) => {
+      const [activeGroup] = await tx.sql<{ id: number }[]>`
+        INSERT INTO app.task_groups (project_id, code, name, created_by, status)
+        VALUES (
+          ${project.projectId},
+          ${`${project.code}-TG-1`},
+          ${"统计夹具活跃聚合组"},
+          ${owner.userId},
+          ${"ACTIVE"}
+        )
+        RETURNING id
+      `;
+      await tx.sql`
+        INSERT INTO app.task_group_members (group_id, task_id, project_id, role, status, joined_at)
+        VALUES (${activeGroup!.id}, ${activeGroupMain.id}, ${project.projectId}, ${"MAIN"}, ${"ACTIVE"}, clock_timestamp())
+      `;
+      await tx.sql`
+        INSERT INTO app.task_group_members (
+          group_id, task_id, project_id, role, source_kind, original_work_status,
+          original_assignee_id, status, joined_at
+        )
+        VALUES (
+          ${activeGroup!.id}, ${historicalSource.id}, ${project.projectId}, ${"SOURCE"},
+          ${"HISTORICAL"}, ${"DONE"}, ${owner.userId}, ${"ACTIVE"}, clock_timestamp()
+        )
+      `;
+      await tx.sql`
+        INSERT INTO app.task_group_members (
+          group_id, task_id, project_id, role, source_kind, original_work_status,
+          original_assignee_id, status, joined_at
+        )
+        VALUES (
+          ${activeGroup!.id}, ${activeSource.id}, ${project.projectId}, ${"SOURCE"},
+          ${"ACTIVE"}, ${"TODO"}, ${owner.userId}, ${"ACTIVE"}, clock_timestamp()
+        )
+      `;
+
+      const [closedGroup] = await tx.sql<{ id: number }[]>`
+        INSERT INTO app.task_groups (project_id, code, name, created_by, status, closed_at)
+        VALUES (
+          ${project.projectId},
+          ${`${project.code}-TG-2`},
+          ${"统计夹具已关闭聚合组"},
+          ${owner.userId},
+          ${"CLOSED"},
+          clock_timestamp()
+        )
+        RETURNING id
+      `;
+      await tx.sql`
+        INSERT INTO app.task_group_members (
+          group_id, task_id, project_id, role, source_kind, original_work_status,
+          original_assignee_id, status, joined_at, detached_at, detached_by, detach_reason
+        )
+        VALUES (
+          ${closedGroup!.id}, ${closedGroupSource.id}, ${project.projectId}, ${"SOURCE"},
+          ${"HISTORICAL"}, ${"TODO"}, ${owner.userId}, ${"DETACHED"},
+          clock_timestamp() - interval '1 hour', clock_timestamp(), ${owner.userId},
+          ${"统计夹具解除关联"}
+        )
+      `;
+    });
+
+    const isolated = await createProject(client.sql, owner.userId);
+    const detailBody = schemaRegistry.ProjectDetailResponse.schema.parse(
+      await (await detail(project.projectId, admin.cookie)).json(),
+    );
+    expect(detailBody.project.stats).toEqual(expectedStats);
+
+    const items = schemaRegistry.ProjectListResponse.schema.parse(
+      await (await list(owner.cookie)).json(),
+    ).items;
+    expect(items.find((item) => item.id === project.projectId)?.stats).toEqual(
+      expectedStats,
+    );
+    expect(items.find((item) => item.id === isolated.projectId)?.stats).toEqual(
+      {
+        activeModuleCount: 1,
+        activeFeatureCount: 0,
+        openTaskCount: 0,
+      },
+    );
+    expect(
+      items.find((item) => item.id === project.projectId)?.memberCount,
+    ).toBe(2);
   });
 });

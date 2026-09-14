@@ -23,6 +23,7 @@ const project = {
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-02T00:00:00.000Z",
   memberCount: 5,
+  stats: { activeModuleCount: 4, activeFeatureCount: 11, openTaskCount: 6 },
 };
 
 const overviewResult: ProjectOverviewResult = {

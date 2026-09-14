@@ -22,10 +22,11 @@ import type { MyTasksAdapter } from "./my-tasks-types";
  */
 
 export const MY_TASKS_SERVER_NOTICE =
-  "任务中心已接入服务端聚合读接口（GET /api/v1/me/tasks，默认展示当前用户负责的任务）。" +
-  "统计卡片、遗留问题入口、优先级与「未完成并含已取消」筛选为服务端实时数据；" +
-  "契约暂未提供：范围计数（「我创建的 / 全部任务 / 全部可访问项目」）、合并关系、" +
-  "GitHub 关联与关键词搜索筛选，已禁用并标注，待契约扩展后接入。";
+  "任务中心已接入服务端聚合读接口（GET /api/v1/me/tasks）。「我负责的」与「我创建的」" +
+  "分别按 assignee_id 与 creator_id 在服务端过滤，都只使用当前登录身份；统计卡片、" +
+  "遗留问题入口、优先级、「未完成并含已取消」、合并关系、GitHub 关联与关键词搜索均为" +
+  "实时数据；合并关系、GitHub 关联与关键词搜索由服务端返回的已加载页本地收窄，页面会" +
+  "显式提示作用范围；契约暂未提供范围计数与跨用户的「全部任务」，对应 tab 保持禁用。";
 
 export function createMyTasksServerAdapter(
   client?: InpulseApiClient | undefined,

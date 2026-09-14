@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { ProjectItem } from "@inpulse/api-contract";
 import type { DatabaseClient } from "@inpulse/database/client";
 import { DATABASE_CLIENT } from "../../database/database.constants.js";
+import { projectStatColumns } from "../../stats/card-stat-columns.js";
 import { ProjectQueryPort } from "./project-query.port.js";
 
 interface ProjectRow {
@@ -15,6 +16,9 @@ interface ProjectRow {
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly memberCount: number;
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
 }
 
 /** 项目只读 PostgreSQL 适配器；不计入事务，在服务端授权范围之后执行。 */
@@ -46,7 +50,8 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
                  FROM app.project_members m
                 WHERE m.project_id = p.id
                   AND m.status = 'ACTIVE'
-             ) AS "memberCount"
+             ) AS "memberCount",
+             ${projectStatColumns(this.client.sql, "p")}
         FROM app.projects p
        WHERE p.id = ANY(${projectIds}::integer[])
        ORDER BY p.id ASC
@@ -70,7 +75,8 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
                  FROM app.project_members m
                 WHERE m.project_id = p.id
                   AND m.status = 'ACTIVE'
-             ) AS "memberCount"
+             ) AS "memberCount",
+             ${projectStatColumns(this.client.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${projectId}
     `) as unknown as readonly ProjectRow[];
@@ -90,6 +96,11 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
       memberCount: row.memberCount,
+      stats: {
+        activeModuleCount: row.activeModuleCount,
+        activeFeatureCount: row.activeFeatureCount,
+        openTaskCount: row.openTaskCount,
+      },
     };
   }
 }

@@ -66,6 +66,9 @@ export class MyTasksController {
         ...(query.projectId === undefined
           ? {}
           : { projectId: query.projectId }),
+        ...(query.ownership === undefined
+          ? {}
+          : { ownership: query.ownership }),
         ...(query.scopeType === undefined
           ? {}
           : { scopeType: query.scopeType }),

@@ -12,13 +12,20 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await page.getByRole("link", { name: "查看功能" }).first().click();
-    await expect(page.getByRole("heading", { name: "功能档案" })).toBeVisible();
+    const firstModule = page.locator(".calm-feature-card").first();
+    const firstModuleName = (
+      await firstModule.getByRole("heading").first().innerText()
+    ).trim();
+    await firstModule.getByRole("link", { name: "查看功能" }).click();
+    await expect(
+      page.getByRole("heading", { name: firstModuleName }),
+    ).toBeVisible();
+    await expect(page.getByText(`模块 / ${runtime.projectName}`)).toBeVisible();
     expect(page.url()).toMatch(/\/modules\/\d+\/features$/);
     const listUrl = page.url();
     const name = `退款功能-${Date.now()}`;
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const create = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const create = page.getByRole("dialog", { name: "新增功能" });
     await create.getByLabel("功能名称").fill(name);
     await create.getByLabel("当前功能说明").fill("创建时的说明");
     await create.getByLabel("标签（每行一个，最多 50 个）").fill("支付\n退款");
@@ -35,13 +42,13 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
         .locator(".feature-reading")
         .getByText("创建时的说明", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: /归\s*档/ })).toHaveCount(0);
-    await page.getByRole("button", { name: /编\s*辑/ }).click();
+    await expect(page.getByRole("button", { name: "归档功能" })).toHaveCount(0);
+    await page.getByRole("button", { name: "编辑功能" }).click();
     const edit = page.getByRole("dialog", { name: "编辑功能" });
     await edit.getByLabel("功能名称").fill(`${name}-更新`);
     const other = await context.newPage();
     await other.goto(page.url());
-    await other.getByRole("button", { name: /编\s*辑/ }).click();
+    await other.getByRole("button", { name: "编辑功能" }).click();
     const otherEdit = other.getByRole("dialog", { name: "编辑功能" });
     await otherEdit.getByLabel("当前功能说明").fill("其他页面的新说明");
     await otherEdit.getByRole("button", { name: /保\s*存/ }).click();
@@ -55,10 +62,10 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await expect(edit.getByLabel("功能名称")).toHaveValue(`${name}-更新`);
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
-    await page.getByRole("button", { name: /编\s*辑/ }).click();
+    await page.getByRole("button", { name: "编辑功能" }).click();
     await edit.getByLabel("当前功能说明").fill("我的说明草稿");
     await other.reload();
-    await other.getByRole("button", { name: /编\s*辑/ }).click();
+    await other.getByRole("button", { name: "编辑功能" }).click();
     await otherEdit.getByLabel("当前功能说明").fill("其他页面再次修改");
     await otherEdit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(otherEdit).toBeHidden();
@@ -99,8 +106,8 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
   try {
     await memberPage.goto(`/projects/${runtime.projectId}/modules`);
     await memberPage.getByRole("link", { name: "查看功能" }).first().click();
-    await memberPage.getByRole("button", { name: "新建功能" }).click();
-    const create = memberPage.getByRole("dialog", { name: "新建功能" });
+    await memberPage.getByRole("button", { name: "新增功能" }).click();
+    const create = memberPage.getByRole("dialog", { name: "新增功能" });
     const name = `归档功能-${Date.now()}`;
     await create.getByLabel("功能名称").fill(name);
     await create.getByRole("button", { name: /保\s*存/ }).click();
@@ -123,7 +130,7 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await page.getByRole("button", { name: "验证并进入系统" }).click();
     await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
     await page.goto(detailUrl);
-    await page.getByRole("button", { name: /归\s*档/ }).click();
+    await page.getByRole("button", { name: "归档功能" }).click();
     const archive = page.getByRole("dialog", { name: "归档功能" });
     await archive.getByLabel("操作原因").fill("功能下线，保留历史");
     await archive.getByRole("button", { name: "管理员安全验证" }).click();
@@ -137,21 +144,21 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await archive.getByRole("button", { name: /确\s*认/ }).click();
     await expect(archive).toBeHidden();
     await page.reload();
-    await expect(page.getByRole("button", { name: /恢\s*复/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "恢复功能" })).toBeVisible();
     await memberPage.reload();
     await expect(
       memberPage.locator(".feature-facts").getByText("已归档", { exact: true }),
     ).toBeVisible();
     await expect(
-      memberPage.getByRole("button", { name: /编\s*辑/ }),
+      memberPage.getByRole("button", { name: "编辑功能" }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: /恢\s*复/ }).click();
+    await page.getByRole("button", { name: "恢复功能" }).click();
     const restore = page.getByRole("dialog", { name: "恢复功能" });
     await restore.getByLabel("操作原因").fill("重新启用功能");
     await restore.getByRole("button", { name: /确\s*认/ }).click();
     await expect(restore).toBeHidden();
     await page.reload();
-    await expect(page.getByRole("button", { name: /编\s*辑/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "编辑功能" })).toBeVisible();
   } finally {
     await memberContext.close();
     await context.close();

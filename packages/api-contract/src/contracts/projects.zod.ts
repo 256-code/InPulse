@@ -18,7 +18,24 @@ export const projectPathSchema = z
 
 export type ProjectPath = z.infer<typeof projectPathSchema>;
 
-/** 项目公开摘要；包含归档状态与当前活跃成员数，不暴露成员名单或内部字段。 */
+/**
+ * 项目卡统计：与 R-2 项目概览（projectOverviewStatsSchema）同名同口径——
+ * activeModuleCount / activeFeatureCount 只计行自身 status = ACTIVE，
+ * openTaskCount 只计有效任务的 work_status = TODO（排除 INVALID、CANCELED 与历史来源分支）。
+ * 列表接口一次返回，项目卡无需按项目逐个再请求概览。
+ */
+export const projectStatsSchema = z
+  .object({
+    activeModuleCount: z.number().int().nonnegative(),
+    activeFeatureCount: z.number().int().nonnegative(),
+    openTaskCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "ProjectStats" });
+
+export type ProjectStats = z.infer<typeof projectStatsSchema>;
+
+/** 项目公开摘要；包含归档状态、当前活跃成员数与项目卡统计，不暴露成员名单或内部字段。 */
 export const projectItemSchema = z
   .object({
     id: projectPositiveId,
@@ -31,6 +48,7 @@ export const projectItemSchema = z
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     memberCount: z.number().int().nonnegative(),
+    stats: projectStatsSchema,
   })
   .strict()
   .meta({ id: "ProjectItem" });

@@ -19,6 +19,7 @@ import {
   publishedRecordErrorMessage,
 } from "@features/published-records/PublishedRecordDetail";
 import { PublishedRecordCard } from "./PublishedRecordCard";
+import { useProjectFeatureNames } from "./feature-name-map";
 import {
   groupRecordsByDate,
   RECORD_SEARCH_PLACEHOLDER,
@@ -57,6 +58,7 @@ export function RecordsWorkspace({
   const [source, setSource] = useState<RecordSourceFilter>("ALL");
   const [createToken, setCreateToken] = useState(0);
   const [canCreate, setCanCreate] = useState(false);
+  const featureNames = useProjectFeatureNames(projectId, client);
   useEffect(() => {
     const timer = window.setTimeout(
       () => setTerm(query.trim()),
@@ -261,6 +263,7 @@ export function RecordsWorkspace({
                   open={publishedId === item.record.id}
                   onToggle={(open) => toggleRecord(item.record.id, open)}
                   onListChanged={() => void list.refetch()}
+                  featureNames={featureNames}
                 />
               ))}
             </div>
@@ -274,6 +277,7 @@ export function RecordsWorkspace({
             recordId={publishedId}
             client={client}
             writable={canWrite(projectId)}
+            standalone
             onListChanged={() => void list.refetch()}
           />
         </section>

@@ -11,7 +11,7 @@ export const NotificationPolicyPanel: React.FC = () => {
   const [preferenceHint, setPreferenceHint] = useState(false);
 
   return (
-    <section className="settings-panel table-panel" aria-label="通知策略">
+    <section className="panel settings-panel table-panel" aria-label="通知策略">
       <CalmSectionTitle
         title="通知策略"
         hint="只通知需要采取行动或关注结果的人"

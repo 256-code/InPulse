@@ -21,12 +21,20 @@ export function describeProjectListError(error: unknown): string {
   return "项目列表暂时无法加载，请稍后重试。";
 }
 
-export function useProjects({ client }: ProjectMutationOptions = {}) {
+export interface ProjectListOptions extends ProjectMutationOptions {
+  readonly enabled?: boolean | undefined;
+}
+
+export function useProjects({
+  client,
+  enabled = true,
+}: ProjectListOptions = {}) {
   const apiClient = useMemo(() => client ?? createApiClient(), [client]);
   return useQuery({
     queryKey: ["projects"],
     queryFn: ({ signal }) => apiClient.listProjects({ signal }),
     retry: false,
+    enabled,
   });
 }
 

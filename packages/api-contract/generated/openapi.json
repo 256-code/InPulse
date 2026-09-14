@@ -2970,7 +2970,7 @@
     "/me/tasks": {
       "get": {
         "operationId": "listMyTasks",
-        "summary": "F-32 我的任务：跨项目列出当前用户负责的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系与 PUBLISHED 记录数，并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 六项筛选，不接受任何他人身份或授权范围参数。",
+        "summary": "F-32 我的任务：跨项目列出当前用户负责或创建的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系与 PUBLISHED 记录数，并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 ownership / projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 七项筛选，其中 ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，不接受任何他人身份或授权范围参数。",
         "responses": {
           "200": {
             "description": "成功",
@@ -3057,6 +3057,18 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 2147483647
+            }
+          },
+          {
+            "name": "ownership",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ASSIGNEE",
+                "CREATOR"
+              ]
             }
           },
           {
@@ -3934,7 +3946,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3955,7 +3967,10 @@
                     "project.createdBy",
                     "project.createdAt",
                     "project.updatedAt",
-                    "project.memberCount"
+                    "project.memberCount",
+                    "project.stats.activeModuleCount",
+                    "project.stats.activeFeatureCount",
+                    "project.stats.openTaskCount"
                   ]
                 }
               }
@@ -4231,7 +4246,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -4252,7 +4267,10 @@
                     "project.createdBy",
                     "project.createdAt",
                     "project.updatedAt",
-                    "project.memberCount"
+                    "project.memberCount",
+                    "project.stats.activeModuleCount",
+                    "project.stats.activeFeatureCount",
+                    "project.stats.openTaskCount"
                   ]
                 }
               }
@@ -6820,7 +6838,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -6840,7 +6858,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.activeFeatureCount",
+                    "stats.openTaskCount"
                   ]
                 }
               }
@@ -6994,7 +7014,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -7016,7 +7036,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.activeFeatureCount",
+                    "stats.openTaskCount"
                   ]
                 }
               }
@@ -7190,7 +7212,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -7212,7 +7234,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.activeFeatureCount",
+                    "stats.openTaskCount"
                   ]
                 }
               }
@@ -7509,7 +7533,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -7531,7 +7555,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.openTaskCount",
+                    "stats.recordCount"
                   ]
                 }
               }
@@ -7829,7 +7855,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -7853,7 +7879,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.openTaskCount",
+                    "stats.recordCount"
                   ]
                 }
               }
@@ -8038,7 +8066,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -8062,7 +8090,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.openTaskCount",
+                    "stats.recordCount"
                   ]
                 }
               }
@@ -8247,7 +8277,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -8271,7 +8301,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.openTaskCount",
+                    "stats.recordCount"
                   ]
                 }
               }
@@ -10074,7 +10106,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -10096,7 +10128,9 @@
                     "rowVersion",
                     "createdAt",
                     "updatedAt",
-                    "archivedAt"
+                    "archivedAt",
+                    "stats.activeFeatureCount",
+                    "stats.openTaskCount"
                   ]
                 }
               }
@@ -12692,7 +12726,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -12713,7 +12747,10 @@
                     "project.createdBy",
                     "project.createdAt",
                     "project.updatedAt",
-                    "project.memberCount"
+                    "project.memberCount",
+                    "project.stats.activeModuleCount",
+                    "project.stats.activeFeatureCount",
+                    "project.stats.openTaskCount"
                   ]
                 }
               }
@@ -15583,6 +15620,9 @@
                 "type": "null"
               }
             ]
+          },
+          "stats": {
+            "$ref": "#/components/schemas/FeatureStats"
           }
         },
         "required": [
@@ -15598,7 +15638,8 @@
           "rowVersion",
           "createdAt",
           "updatedAt",
-          "archivedAt"
+          "archivedAt",
+          "stats"
         ],
         "additionalProperties": false
       },
@@ -15694,6 +15735,26 @@
         },
         "required": [
           "q"
+        ],
+        "additionalProperties": false
+      },
+      "FeatureStats": {
+        "type": "object",
+        "properties": {
+          "openTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "openTaskCount",
+          "recordCount"
         ],
         "additionalProperties": false
       },
@@ -16665,6 +16726,9 @@
                 "type": "null"
               }
             ]
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ModuleStats"
           }
         },
         "required": [
@@ -16678,7 +16742,8 @@
           "rowVersion",
           "createdAt",
           "updatedAt",
-          "archivedAt"
+          "archivedAt",
+          "stats"
         ],
         "additionalProperties": false
       },
@@ -16762,6 +16827,26 @@
         "required": [
           "projectId",
           "moduleId"
+        ],
+        "additionalProperties": false
+      },
+      "ModuleStats": {
+        "type": "object",
+        "properties": {
+          "activeFeatureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "openTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "activeFeatureCount",
+          "openTaskCount"
         ],
         "additionalProperties": false
       },
@@ -17479,6 +17564,13 @@
             "exclusiveMinimum": 0,
             "maximum": 2147483647
           },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "ASSIGNEE",
+              "CREATOR"
+            ]
+          },
           "scopeType": {
             "type": "string",
             "enum": [
@@ -17809,6 +17901,9 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ProjectStats"
           }
         },
         "required": [
@@ -17821,7 +17916,8 @@
           "createdBy",
           "createdAt",
           "updatedAt",
-          "memberCount"
+          "memberCount",
+          "stats"
         ],
         "additionalProperties": false
       },
@@ -18355,6 +18451,32 @@
         },
         "required": [
           "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectStats": {
+        "type": "object",
+        "properties": {
+          "activeModuleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "activeFeatureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "openTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "activeModuleCount",
+          "activeFeatureCount",
+          "openTaskCount"
         ],
         "additionalProperties": false
       },

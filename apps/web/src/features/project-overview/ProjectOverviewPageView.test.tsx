@@ -21,6 +21,7 @@ const project: ProjectItem = {
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-02T00:00:00.000Z",
   memberCount: 3,
+  stats: { activeModuleCount: 4, activeFeatureCount: 11, openTaskCount: 6 },
 };
 
 const overviewResult: ProjectOverviewResult = {
@@ -219,11 +220,13 @@ describe("ProjectOverviewPageView", () => {
     });
 
     expect(
-      screen.getByTestId("project-overview-mock-notice"),
-    ).toHaveTextContent("接口说明");
+      screen.queryByTestId("project-overview-mock-notice"),
+    ).not.toBeInTheDocument();
     const leftovers = await screen.findByTestId("overview-metric-leftovers");
     expect(await within(leftovers).findByText("2")).toBeInTheDocument();
-    expect(within(leftovers).getByText("等待闭环")).toBeInTheDocument();
+    // 设计师稿 catalog.tsx L238-245 的指标项只有标签与数值，没有第二行说明。
+    expect(within(leftovers).getByText("遗留问题")).toBeInTheDocument();
+    expect(within(leftovers).queryByText("等待闭环")).toBeNull();
     const row = await screen.findByRole("button", { name: /遗留一/ });
     expect(row).toHaveTextContent("来自 R-021 登录安全复核");
   });

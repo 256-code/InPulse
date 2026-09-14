@@ -27,6 +27,9 @@ const projectDetailFields = [
   "project.createdAt",
   "project.updatedAt",
   "project.memberCount",
+  "project.stats.activeModuleCount",
+  "project.stats.activeFeatureCount",
+  "project.stats.openTaskCount",
 ] as const;
 
 const replayPolicy = {
@@ -72,7 +75,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    idempotencyContractVersion: "1.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,
@@ -149,7 +152,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
         csrfPolicy: "required",
         idempotencyPolicy: "idempotencyRequired",
         idempotencyExceptionAdr: "none",
-        idempotencyContractVersion: "1.0.0",
+        idempotencyContractVersion: "1.1.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: ["If-Match"],
         idempotencyReplayPolicy: replayPolicy,

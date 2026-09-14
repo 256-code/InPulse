@@ -69,7 +69,23 @@ export function taskError(error: unknown): string {
   }
   return "任务服务暂时不可用，输入已保留，可重试。";
 }
-export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
+/**
+ * 查询被 `enabled: false` 关闭时 React Query 仍保持 `isPending`，直接用它渲染
+ * 加载文案会在「归属尚未选好」时留下一直存在的假加载提示；只有既没有数据、
+ * 又确实在取数时才属于真正的首次加载。
+ */
+export function isFirstLoad(query: {
+  readonly isPending: boolean;
+  readonly isFetching: boolean;
+}): boolean {
+  return query.isPending && query.isFetching;
+}
+export function useTasks(
+  scope: TaskScope,
+  client?: InpulseApiClient,
+  options: { impactOptions?: boolean } = {},
+) {
+  const impactOptions = options.impactOptions ?? true;
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
   const retry = useRef<{ signature: string; key: string } | null>(null);
@@ -176,7 +192,7 @@ export function useTasks(scope: TaskScope, client?: InpulseApiClient) {
     queryFn: ({ signal }) =>
       api.listFeatures(scope.projectId, scope.moduleId, { signal }),
     retry: false,
-    enabled: scope.featureId === null,
+    enabled: impactOptions && scope.featureId === null,
   });
   return { api, query, members, mutation, features };
 }

@@ -21,10 +21,10 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
     const draft = member.page.getByRole("dialog", { name: "新建独立草稿" });
     await draft.getByLabel("所属模块").selectOption({ index: 1 });
     await draft.getByLabel("迭代标题").fill(title);
-    await draft.getByLabel("为什么改、发现了什么问题").fill("原始问题");
-    await draft.getByLabel("改了什么、怎么改的").fill("原始方案");
-    await draft.getByLabel("改完效果如何、如何验证").fill("原始验证");
-    await draft.getByLabel("还有什么问题（选填）").fill("保留遗留问题");
+    await draft.getByLabel("改动原因").fill("原始问题");
+    await draft.getByLabel("具体改动").fill("原始方案");
+    await draft.getByLabel("改动效果").fill("原始验证");
+    await draft.getByLabel("遗留问题（选填）").fill("保留遗留问题");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await member.page
@@ -89,22 +89,24 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
       .filter({ hasText: title })
       .locator("summary")
       .click();
-    await expect(detail.getByLabel("较早版本")).toHaveValue("1");
-    await expect(
-      detail.getByLabel("版本差异").getByText("原始方案").first(),
-    ).toBeVisible();
+    // 作废不影响正文：展开区仍渲染作废前的完整内容，单版本记录不再做自我对比。
+    await expect(detail.getByText("原始方案")).toBeVisible();
     await detail.getByRole("button", { name: "恢复记录" }).click();
     const restore = page.getByRole("dialog", { name: "恢复记录", exact: true });
     await restore.getByLabel("恢复原因").fill("纠正误作废");
     await restore.getByRole("button", { name: "确认恢复记录" }).click();
     await expect(restore).toBeHidden();
+    // 恢复后记录离开「已作废」列表，页面回落到独立详情形态。
     await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
     await expect(detail.getByText(privateReason)).toHaveCount(0);
     await member.page.goto(recordUrl);
-    await expect(memberDetail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
-    await expect(
-      memberDetail.getByLabel("版本差异").getByText("保留遗留问题").first(),
-    ).toBeVisible();
+    const memberCard = member.page
+      .locator(".record-card")
+      .filter({ hasText: title });
+    await expect(memberCard.locator("summary")).toContainText(
+      /-CR-\d+ · v1 · 发布/,
+    );
+    await expect(memberCard).toContainText("保留遗留问题");
     await member.page.screenshot({
       path: "test-results/f21-restored-member.png",
       fullPage: true,

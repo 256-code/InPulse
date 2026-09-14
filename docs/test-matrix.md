@@ -281,7 +281,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、MFA 挑战/重认证、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务、记录作废/恢复等路径已覆盖 | 本地全量 45/45 通过（2026-09-11，5.1 分钟）；CI Browser E2E（默认 Chromium）已在 main 最新运行 [34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)（`4141e1d`，2026-09-11）50 passed（6.3 分钟），此前 push 运行 [34578707754](https://github.com/256-code/InPulse/actions/runs/34578707754)（`bff1972`）为 45 passed（5.6 分钟）；覆盖 F-03 用户管理、F-05 成员管理、MFA、项目创建、F-12 模块、F-13 功能档案、F-14 功能级任务、F-15 模块级任务、F-16 任务完成与状态闭环、F-17 草稿、F-18 记录发布、F-20 遗留项转任务、F-21 作废/恢复、F-22 外部链接、任务组合并/解除、搜索边界及 F-27/F-28 状态联动；其余完整关键路径 Required |
 | CI-018 | CI | 容器镜像与 Compose | 镜像构建成功、`compose config` 渲染通过、全部运行与基础镜像为 exact-tag@sha256 digest、PostgreSQL 18 命名卷挂载 `/var/lib/postgresql`、容器非 root；生产 Dockerfile 与四镜像构建步骤已落库 | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 实际构建 API/migration/web/db-bootstrap/ops 五个生产镜像成功；Compose/ref 预检由 `check:deploy:test` 覆盖；真实镜像 Tag/digest 绑定与签名发布清单仍属发布环节） |
-| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个生产镜像的 Trivy 扫描全部 success，CRITICAL/HIGH 无未处置项） |
+| CI-019 | CI | 镜像扫描 | 运行与基础镜像漏洞扫描无 high 及以上未处置项；CI 已新增 Trivy 扫描步骤（CRITICAL/HIGH、`ignore-unfixed=true`、`exit-code=1`） | 已自动化（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140) 对五个生产镜像的 Trivy 扫描全部 success，CRITICAL/HIGH 无未处置项；2026-09-13 上游集中公布 Debian 安全更新后同一门禁对 API 镜像报出 2 个 HIGH（`libpcre2-8-0`），已按「固定 digest 基础镜像内刷新 Debian 安全包」修复，见下方「演示数据库版本化种子」章节 §5；修复后 `CI / workspace`（[run 34766854573](https://github.com/256-code/InPulse/actions/runs/34766854573)）**46 步全部 success**，第 29-33 步五个镜像扫描全绿） |
 
 > 当前执行状态（2026-09-07，合并 `origin/main` PR #15/#16/#17/#18 之后）：
 > CI-001～CI-006、CI-009～CI-013、CI-015、CI-016 的命令已在本地实测通过，其中
@@ -720,7 +720,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 
 | 验收点 | 实际证据 |
 | --- | --- |
-| F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；服务端说明含「接口说明：」与 `GET /api/v1/me/tasks`；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42 |
+| F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；开发期「接口说明」黄条按设计师稿 `task-center.tsx` 移除，断言 `task-center-mock-notice` 计数为 0；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；落库当时全量 `pnpm test:e2e` 42/42；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
 | F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、活跃模块数与成员数为服务端真实值、遗留问题总数为「—」、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页、「全部项目」→ `/projects` | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
 | fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
 
@@ -735,7 +735,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | F-23 前端：合并弹窗（搜索候选过滤、防抖、必选主任务、409 后重新搜索、提交携带 CSRF 与幂等键） | `MergeIntoMainTaskModal.test.tsx` 5 例；`TasksPanel.test.tsx` 合并入口 1 例 |
 | F-25 前端：聚合组详情（成员排序与徽章、DETACHED/HISTORICAL 展示、记录筛选回调、非法 URL 回退、VOID 快照与游标、CLOSED 警告与空态） | `TaskGroupPageView.test.tsx` 8 例 |
 | F-24 前端：解除合并（二次确认、原因 trim 空转 null、409 保留输入并可重新加载、422 文案、closesGroup 警告、成功失效相关查询） | `UnmergeTaskGroupButton.test.tsx` 5 例 |
-| F-23/F-24/F-25 关键路径 E2E | `apps/e2e/tests/task-groups.spec.ts`：建功能与两个任务 → 来源任务抽屉合并 → 落聚合组页（主任务/来源分支/空态/接口说明）→ 记录筛选写入 URL → 解除合并（组关闭警告）→ 「已解除」与组关闭提示；全量 `pnpm test:e2e` 43/43 |
+| F-23/F-24/F-25 关键路径 E2E | `apps/e2e/tests/task-groups.spec.ts`：建功能与两个任务 → 来源任务抽屉合并 → 落聚合组页（主任务/来源分支/空态，开发期「接口说明」黄条断言为 0）→ 记录筛选写入 URL → 解除合并（组关闭警告）→ 「已解除」与组关闭提示；落库当时全量 `pnpm test:e2e` 43/43；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
 | E2E 稳定性修复 | `aggregate-views.spec.ts` F-29 指标断言改为 `expect.poll`（消除读取初始占位 0 的竞态）；`task-groups.spec.ts` 创建任务后关闭自动打开的详情抽屉，避免遮罩阻塞后续点击 |
 
 本地实际执行（2026-09-11）：Web 单测 58 文件 247 例；`@inpulse/e2e` typecheck；全量 `pnpm test:e2e` 43/43（约 5.4 分钟）；`pnpm check` 除本地镜像 audit endpoint 外全部通过，公共 registry 审计无已知漏洞。E2E 首轮曾出现 1 例 `leftover-task` FEATURE `POST .../leftover-task` 500，未复现（单文件复跑 3/3），不能视为已修复。
@@ -1143,3 +1143,297 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/web test:unit` 69 文件 342 例、`pnpm --filter @inpulse/web typecheck`、`apps/e2e` `tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/api build`、`pnpm --filter @inpulse/web build` 通过；`pnpm check:frontend:boundaries`（226 模块 1029 依赖）、`pnpm check:deps`（656 文件）、`pnpm check:secrets`（963 文件）、`pnpm check:docs`（75 个 Markdown）通过；全量 `pnpm test:e2e` 53 通过 + 2 失败（9.5 分钟；`auth.spec.ts` 单独复跑 5/5 通过），失败为既有偶发族，见下；视觉按 1536×1024 与 414×896 两档截图逐项对照设计稿，移动端无横向溢出。
 
 未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #134 检查记录；② 未运行 `pnpm test:integration` 与整体 `pnpm check`（本片无后端、契约、迁移与角色改动；整体 `check` 的 `deps:audit` 在本机 npm 镜像必然失败，改以公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无已知漏洞）；③ 新增 E2E 用例与登录页视觉需非作者人工评审；④ 全量 E2E 本轮 2 例失败（`module-tasks` F-15 保存后弹窗 10 秒内未关闭、`notifications` 标记未读未生效）属既有偶发族（根因见 2026-09-11 条目），两文件单独复跑 2/2 通过、根因未定位，不得视为已修复。
+
+## 前端交互大改与 e2e 超时真因定位（C，2026-09-12 本地落库）
+
+按产品要求「UI 与交互完全对齐设计师稿 `D:\design\latest-version`、逐功能点核对前后端、数据用 Docker 容器 PostgreSQL」对前端做整体改造，并用 Playwright `trace.zip` 逐个定位此前只能在 `finally { context.close() }` 处报超时的用例。**登录页按产品要求保持不变。**
+
+### 修复的 e2e 超时 / 失败真因
+
+此前 `pnpm test:e2e` 全量 46 passed / 9 failed，其中数例报错位置全在 `finally` 的 `browserContext.close`（主体无断言错误，而是某步无限等待）。用「合并全部 `*-trace.trace` chunk 的 `before` / `after` 事件差集」定位到卡住的那一步后，确认为 4 个真实缺陷 / 定位器缺陷：
+
+| # | 用例 | 卡住的选择器 | 真因 | 修复 |
+|---|---|---|---|---|
+| 1 | `module-tasks.spec.ts` | `.calm-feature-card >> has-text 模块名 >> link "模块任务"` | 「模块任务」链接在 `.calm-feature-card` 的**兄弟**节点 `span.catalog-edit-link` 内（`ModulesPageView.tsx`），而「查看功能」才在卡片内；同一 `moduleCard` 作用域既查卡片内又查卡片外，后者永久挂起 | 父范围改为两者共同的 `article.catalog-module-wrap`（变量名同步为 `moduleEntry`） |
+| 2 | `audit.spec.ts`（4 处） | `button "查询"` / `button "重置"` | 审计页工具栏误挂 `.task-toolbar`，而 `design-system.css` 的 `.task-toolbar > .secondary-button { display: none }` 是设计稿**刻意隐藏**规则 → 两个按钮被隐藏；`applyFilters` 只以「查询」按钮为唯一入口（无 `form onSubmit`、无 Enter 处理）→ **审计筛选功能完全不可用** | 去掉 `task-toolbar` 类；在 `inpulse-design.css` 用 `.activity-toolbar.audit-toolbar > .secondary-button` 显式还原次级按钮外观并写死 `display: inline-flex`，防止再次被隐藏 |
+| 3 | `record-publishing.spec.ts`、`task-groups.spec.ts`（3 处） | `role=dialog[name="任务详情"] >> button "关闭"` | `TasksPanel.tsx` 任务详情弹层只传 `label` 未传 `title` / `eyebrow`，而 `AppModal.tsx` 的 `hasHeader = eyebrow !== undefined \|\| title !== undefined` **不认 `label`** → 整个 `.drawer-header`（含关闭按钮）不渲染。正文另用 `.task-modal-header` 自渲标题区，造成「像有头部但没有任何关闭按钮」 | `.task-modal-header` 补回 `drawer-header` 类并内联关闭按钮（`aria-label="关闭任务详情"`），与设计稿 `task-modal.tsx:150` 一致；移除已无意义的 `closeLabel` |
+| 4 | `task-groups.spec.ts` | `getByTestId("task-group-notice")` 期望含「接口说明：」 | 该黄条是开发期接口说明（含内部路由编号 R-1 / R-4），设计师稿的聚合组区块没有它；`aggregate-views.spec.ts` 已对 F-32 / F-29 做同样处理（断言 mock 提示计数为 0），任务聚合组页漏改 | 按同一约定从 `TaskGroupAdapter` 移除已无消费方的 `notice` 字段与 `TASK_GROUP_SERVER_NOTICE`；两处断言改为「`/接口说明/` 计数为 0」并写明依据 |
+
+### 后端缺陷：幂等保留期零余量（500 偶发族根因）
+
+`idempotency_records_retention_check` 是本次容器内**违反次数最多**的约束（183 次，第二名为 35 次），表现为写接口间歇 500（`INTERNAL_ERROR`）。
+
+- `apps/api/src/idempotency/http-service.ts` 以应用进程时钟计算 `expiresAt = Date.now() + 30 天`（**恰好 30 天整、零余量**），而 `created_at` 取数据库 `now()`；实测本机 JS `Date.now()` **慢于容器 DB `clock_timestamp()` 44–50 ms**（5 次采样稳定）→ `expires_at <= created_at + INTERVAL '30 days'` 必然越界 → `23514` → 整事务回滚 → 500。
+- 修复：`apps/api/src/idempotency/store.ts` 改为 SQL 侧 `least(${expiresAt}::timestamptz, now() + interval '30 days')` 夹取。选 `least` 而非「应用侧减 60s」，是为了在极限偏差下仍保留满 30 天窗口。
+- 证据：`apps/api/test/idempotency-runner.integration.test.ts` 新增跨时钟偏差回归用例（4/4）；并做**负向对照**——临时改回直接传应用侧 `expiresAt` 立即复现 `violates check constraint`，恢复夹取后通过。
+- 同类代码点评估后未改：`apps/api/src/auth/csrf.http.ts` 的 `PREAUTH_MAX_AGE_SECONDS = 9 * 60` 对 10 分钟上限留有 1 分钟余量。
+- **修复有效性验证**（容器日志实测，非推断）：`idempotency_records_retention_check` 最后一次出现为 `2026-09-12 15:01:33`，此后至 23:36 共 8.5 小时内**零新增**，期间完成了 `pnpm build` 多次、全量集成与全量 E2E（55 例）等高写入负载；约束违反总数停在 184（修复前 183）。对照数据：`preauth_sessions_consumed_at_check` 3 次、`task_group_members_snapshot_check` 35 次、`external_links_*` 48 次、`search_projection_entity_type_check` 19 次——后三者为集成测试的**负向用例刻意触发**，非缺陷。
+
+### 已取代的历史断言
+
+- F-32 / F-29 / F-25 的「接口说明：」断言（本文档 L723、L738 行）由本次改为「开发期说明计数为 0」，行内已标注。
+- `TaskGroupAdapter.notice` 与 `TASK_GROUP_SERVER_NOTICE` 已删除；`TaskGroupPageView.test.tsx`、`TaskGroupPage.test.tsx` 的 `notice` 夹具同步移除。
+
+### 本轮定向验证（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3201` / `E2E_WEB_PORT=4173`）
+
+`pnpm build` 全 workspace 通过后，定向 `pnpm test:e2e "audit.spec.ts" "module-tasks.spec.ts" "record-publishing.spec.ts" "task-groups.spec.ts"` 首轮 6/7（仅剩真因 4），补齐真因 4 后 `task-groups.spec.ts` 2/2；`task-groups.spec.ts` 首个用例耗时由 16.2 s（含 10 s 断言超时燃烧）降至 7.0 s。
+
+**全量 `pnpm test:e2e` 结果：55 passed / 0 failed（5.1 分钟）**。对照基线为 46 passed / 9 failed（16.6 分钟）——即 5 个真因与幂等 500 修复后，既有的全部失败归零，总耗时约为基线的三分之一。其中此前只在全量运行时才复现的两例（`csrf.spec.ts:103` 多标签 CSRF、`features.spec.ts:95` 功能归档恢复）与另两例（`module-tasks.spec.ts:5` F-15 保存后弹窗未关、`notifications.spec.ts:17` 标记未读未生效）本轮全部通过。关键用例耗时：`audit.spec.ts:29` 4.9 s（基线 240 s 超时）、`module-tasks.spec.ts:5` 17.1 s（基线永久挂起）、`record-publishing.spec.ts:66` 7.8 s、`task-groups.spec.ts:14` 6.8 s（基线 16.2 s）、`task-groups.spec.ts:124` 9.9 s。
+
+其余门禁：`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/ops typecheck`、`pnpm check:frontend:boundaries`（235 模块 / 1107 依赖，0 违规）、`pnpm --filter @inpulse/web exec vitest run src/features/task-groups src/pages/task-groups`（4 文件 22 例）、`src/features/tasks`（4 文件 31 例）、`apps/api/test/idempotency-runner.integration.test.ts`（4/4，含负向对照）通过。
+
+未运行 / 已知偏差：① 本节为前端交互大改的中间记录，`pnpm lint`、`pnpm check` 与 GitHub Actions 结果以随后条目为准；② 真因 2 的修复依赖 `inpulse-design.css` 补充层选择器，属仓库扩展（设计师稿没有审计页）；③ 真因 3 的修复影响全部任务详情弹层，需非作者人工评审；④ 后端 `idempotency/store.ts` 修复超出「前端大改」标题范围，但由 500 偶发族直接驱动，产品已授权「如果有问题你可以修改」；⑤ 视觉差异未归零，主因是内容量与页面高度不同（如 tasks 1099 vs 1337、records 2799 vs 1030），不属本次已修复缺陷范围；⑥ `pnpm check` 与 `pnpm test:web` 出现 `apps/web/src/features/auth/MfaForms.test.tsx` 的 `registers TOTP, shows recovery codes once and completes login` 超时（5159–5164 ms，vitest 默认 `testTimeout` 5000 ms），**属既有计时敏感偶发失败、本批未修复**，判定依据：该文件在本分支零改动（`git log` 最后修改为 `d2c5bbc`，PR #63）；其导入闭包（`LoginForm.tsx` 传递闭包 10 个文件）经脚本枚举**不含任何本分支改动文件**；该文件单独复跑 4/4 通过（4.92 s），全量 `pnpm test:web` 第二次运行 69 文件 360 例全通过，仅在并行负载下越过 5000 ms。同族先例见本文档 L833 第 ⑥ 条与本条 ⑤。**建议处置**（需非作者人工确认，本批未执行）：为该用例加显式 `timeout`，或为 `apps/web/vitest.config.ts` 设定 `testTimeout`；不得用 `skip`、降低断言或删用例规避。
+⑦ 同类时钟偏差代码点 `apps/api/src/auth/preauth-session.repository.ts` 的 `consumedAt: Date = new Date()`（约束 `preauth_sessions_consumed_at_check`: `consumed_at IS NULL OR consumed_at >= created_at`）与已修复的幂等保留期为同一族零余量比较，但**本次未改**：容器日志 3 次出现集中在 `2026-09-10 07:31:54` / `2026-09-11 03:01:57` / `2026-09-11 03:04:37`，本批多次全量集成与全量 E2E 零复现；该处属鉴权路径，改动需人工评审，故仅登记为风险，不建议在无复现证据时修改。
+
+### 任务中心工作状态分段控件：列表标题、计数、内容与空态未跟随（2026-09-13）
+
+用户反馈「任务中心按项目视图不管怎么切换都是未完成 / 没有数据」。取证结论分两层：
+
+1. **分段控件本身工作正常**：点击「已完成 / 全部」后 URL 与请求都正确变化（`status=done` → `workStatus=DONE`；`status=all` → 不带 `workStatus`）。
+2. **视图渲染是缺陷**：`TaskCenterPageView.tsx` 的列表标题写死 `title="未完成"`、hint 恒取 `openItems.length`、空态写死「没有匹配的未完成任务」，且主列表恒取 `openItems`。因此 `done` / `all` 下虽然拿回了数据，页面仍显示「未完成 0 项」加空态，视觉上等于切换无效。
+
+设计师稿 `D:\design\latest-version\apps\web\src\views\task-center.tsx` L319 存在**同一处硬编码**（`title="未完成"` + `openList`），本次按「列表跟随当前工作状态」的正当预期修复，属对设计师稿的增强，不改变其视觉基线（`.calm-section-title`、`.calm-empty-state`、`.calm-disclosure` 结构不变）。
+
+| 用例 | 断言 | 结果 |
+| --- | --- | --- |
+| 列表标题随分段控件变化 | `status=all` → 标题「全部任务」且已完成任务直接可见、无空态 | `TaskCenterPageView.test.tsx` 通过 |
+| 空态文案随分段控件变化 | `status=done` + 空结果 → 标题「已完成」、空态「没有匹配的已完成任务」 | 同上 |
+| 未完成为空时自动展开已完成折叠面板 | `status=open` + 仅已完成 → 空态「没有匹配的未完成任务」且 `details[open]` 内可见该任务 | 同上 |
+| 按项目空态说明服务端边界 | `scope=project` + 空结果 → 文案含「只返回你负责的任务」 | 同上 |
+| 真实 UI 切换 | `aggregate-views.spec.ts` 切到「已完成」后 `.calm-section-title h3` 为「已完成」、旧文案计数为 0 | E2E 2/2 通过 |
+
+浏览器实测（5199，已登录特哥，`/tasks?scope=project&project=1`）：`status=all` → 标题「全部任务」+ 卡片 `my-task-9`；`status=done` → 标题「已完成」+ 卡片 `my-task-9`；`status=open` → 标题「未完成」+ 空态与上述边界说明。
+
+**数据量稀少的契约原因（非缺陷，不得自行放开）**：R-3 `listMyTasks` 的负责人固定为当前会话用户，特哥在 project 1 仅 1 个 DONE 任务（DB 实测：project 1 共 53 个任务，其中特哥仅 1 个）。「按项目看他人任务」需要新增归属参数与复合索引并经 A 裁决，仍属延后项。
+
+本轮定向验证：`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks`（5 文件 63 例）、`pnpm test:web`（69 文件 364 例）、`pnpm typecheck`、`pnpm build`、`pnpm --filter @inpulse/e2e exec playwright test tests/aggregate-views.spec.ts`（2/2）、全量 `pnpm test:e2e`（55 passed / 0 failed，4.5 分钟）、`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（75 个 Markdown）全部通过。
+
+### 任务中心「我创建的」tab 不可点：`ownership` 自指维度扩展（2026-09-13）
+
+产品反馈「我创建的这个按钮点不了 在任务中心」。取证与裁决：
+
+1. **现象**：`.task-view-tabs` 中「我创建的」tab 带 `disabled`，无法点击；`my-tasks-v1-query.ts` 的 `MY_TASKS_V1_FILTER_SUPPORT["scope:created"] = false` 是其唯一来源。
+2. **后端能力已存在，只是未被使用**：`my-tasks-query.service.ts` 把自指维度硬编码为 `assigneeId: command.actorUserId`，而 `PostgresMyTaskQueryPort` 与 `app.tasks.creator_id` 早已具备 creator 维度；`listHistoricalSourceTaskIds` 的排除逻辑对两个维度同样适用。
+3. **设计师稿语义**：`D:\design\latest-version\apps\web\src\views\task-center.tsx` 的「我创建的」判定为 `task.creatorId === data.currentUser.id`，与「负责人」维度相互独立。
+4. **裁决**：新增契约参数 `ownership: "ASSIGNEE" | "CREATOR"`（缺省 `ASSIGNEE`，向后兼容），**不扩张授权范围**——两个取值都仍是「当前会话用户自指」维度，不引入跨用户查询；「按项目查看他人任务」与 `scope=all` 仍保持原有边界（见上一节）。
+5. **统计口径**：`stats`（`myOpen` / `dueToday` / `overdue` / `completedThisMonth`）恒按负责人口径计算，与统计卡文案「我负责的」一致，避免列表切到 `CREATOR` 时统计数字与列表内容口径漂移。
+
+随契约同步的产物：`packages/api-contract` 的 Schema 与 Route Registry、OpenAPI、生成指纹与生成客户端（`ownership?: ("ASSIGNEE" | "CREATOR")`）、权限矩阵、Controller / Service / Port、前端查询层与 tab 状态、测试与 E2E 断言——同一工作区一次性完成，无生成物漂移（`pnpm contract:drift`）。
+
+**索引与迁移**：新增 `tasks_creator_status_idx(creator_id, work_status, id)`，迁移 `0009_tasks_creator_index.sql`（sha256 `18fa0b251609ef10`，`pnpm db:migrations:check` 校验 10 个迁移通过）。`database/schema/work.ts` 与 SQL 迁移同步。
+
+| 用例 | 断言 | 结果 |
+| --- | --- | --- |
+| 契约接受 `ownership=CREATOR` 且拒绝非法值 | Schema `.strict()` 枚举校验；未传时按 `ASSIGNEE` | api-contract 单测通过 |
+| 服务层按 `ownership` 分派过滤维度 | `CREATOR` → `{ creatorId: actorUserId }`，其余 → `{ assigneeId: actorUserId }` | `aggregate-read.service.test.ts`（24 例）通过 |
+| 端口 SQL 支持 creator 维度并正确分页 | `list` / `stats` 均带 `AND (creatorId::integer IS NULL OR t.creator_id = creatorId)`；游标与 `hasMore` 语义不变 | `aggregate-read-ports.integration.test.ts`（19 例）通过 |
+| `creator` 过滤命中索引且不回退 Seq Scan | `EXPLAIN (ANALYZE, BUFFERS)` 计划含 `tasks_creator_status_idx`，匹配 `Index Only Scan|Index Scan|Bitmap Heap Scan`，且**不含** `Seq Scan on tasks`（批量夹具 200 任务 + 单条 creator 记录） | 同上，通过 |
+| HTTP 契约与授权 | `GET /api/v1/me/tasks?ownership=CREATOR` 200 且只返回当前用户创建的任务；跨用户不可见 | `aggregate-read-api.integration.test.ts`（20 例）通过 |
+| 前端 tab 可用且请求携带 `ownership` | `scope=created` → tab `disabled:false`、URL 保留 `scope=created`、请求含 `ownership=CREATOR` | `my-tasks-v1-query.test.ts`、`my-tasks-server.test.ts`、`TaskCenterPageView.test.tsx` 通过 |
+| 真实 UI | `aggregate-views.spec.ts`：「我创建的」断言由 `toBeDisabled()` 翻转为 `toBeEnabled()`，并校验切换后 URL 与列表渲染 | E2E 2/2 通过 |
+
+**「我创建的」在本地数据下为空是数据现实，不是缺陷**：容器库 `app` 中用户 `xiaopan`（id 2）只创建了 `INPULSE-T-21`，而该任务已是聚合组 `TG-1` 的活跃 `SOURCE`（`task_group_members.detached_at IS NULL`），按设计被 `listHistoricalSourceTaskIds` 排除（与「我负责的」同一规则）；他在 project 1 的其余 15 个任务都是 `assignee` 而非 `creator`。因此该 tab 现在**可点击、会发请求、会正确渲染空态**，只是真实数据下没有可展示条目。
+
+### `/records` 持续 500：dev 环境连接角色错误（非代码缺陷，2026-09-13 排障记录）
+
+前置条件：dev 环境改为指向本工作区的最新构建（Vite dev `5199` 经 `VITE_API_PROXY_TARGET` 代理到新 API），登录小潘后 `/records` 稳定 500。
+
+- 抓包：`GET /api/v1/change-records?status=PUBLISHED&source=ALL&limit=20` → `{"code":"INTERNAL_ERROR","message":"服务器无法完成迭代记录查询"}`；8 组筛选参数组合全部 500；`limit=200/201` 正常返回 422（契约上限 100）；同一会话的 `GET /api/v1/me/tasks` 与 `GET /api/v1/search` 均为 200。
+- 定位：`record-feed.controller.ts` 的 500 分支 → `RecordFeedQueryService.list` → `PublishedRecordRepository.listFeedPage`；在容器内手工重放该 SQL 得到 **`ERROR: operator does not exist: text &@~ text`**（`sp.normalized_search_text &@~ app.pgroonga_query_escape($1)`）。
+- 根因：PGroonga 扩展安装在 schema **`app`**，`&@~` 运算符族全部属于 `app` schema；而启动该 API 实例时 `DATABASE_URL` 用了 `cluster_bootstrap`，其角色级 `search_path` 是 `"$user", public`，无法解析该运算符。**该 SQL 无条件包含这段子查询（即使没有查询词），所以 `/records` 一打开必然 500。**
+- 修复：dev API 改用 `DATABASE_URL=postgresql://app_runtime@127.0.0.1:55432/app`（`database/bootstrap/000_roles.sql` 为该角色设置 `SET search_path = app, pg_catalog`），审计读取链路用 `AUDIT_DATABASE_URL=postgresql://audit_reader@127.0.0.1:55432/app`。**这正是 `apps/e2e/helpers/runtime.ts` 与生产 Compose 一直使用的角色，因此 E2E 与 CI 从未暴露该问题，仅影响手工启动的 dev API。**
+- 复验：`/records` → 200（20 条）、无 `role="alert"`；全站 8 个页面（`/tasks`、`/projects`、`/projects/1/overview`、`/records`、`/issues`、`/activity`、`/search`、`/settings`）无 alert、无 console error（`/settings` 对非管理员显示「无权访问」属正确行为；`/search` 仅一条 antd `Space direction` 弃用告警）。
+
+本轮门禁（2026-09-13，工作区未提交）：`pnpm --filter @inpulse/api test:unit`（352 例）、`pnpm test:web`（69 文件 367 例）、全量 `pnpm test:e2e`（55 passed / 0 failed）、`pnpm check:deps`（660 文件）、`pnpm check:frontend:boundaries`（235 模块 / 1107 依赖）、`pnpm check:secrets`（975 文件）、`pnpm check:deploy:test`（5 refs）、`pnpm db:migrations:check`（10 迁移）、`git diff --check` 全部通过。
+
+**待人工评审项**：迁移 `0009` 属数据库变更（新增索引），按仓库规则必须人工评审；`ownership` 为契约新增参数，虽缺省行为不变，仍需非作者复核。
+
+### 项目/模块/功能卡整卡点击、卡片内 GitHub 区域与记录正文数据订正（C，2026-09-13）
+
+产品反馈三条：①「迭代记录这个 inpulse 里面的内容太详细了 不像正常使用者总结的话语，请你全部修改数据库的内容，要精简一点，不要这样是看不懂的代码，尽量按照功能点去描述；另外迭代记录现在看不到 github 链接和设计师稿不一样」；②「项目与功能点、功能与项目的卡片不能直接点击卡片，和设计师稿还是不一样，卡片布局的效果也不一样，跳转逻辑不一样」；③「把这些测试账号清掉，这个 github 链接按钮不要放在这，而且有 bug，按这个链接也有按卡片的效果这是不对的，链接放在对应的卡片那里就好了」。
+
+#### 1. 记录正文数据订正（容器库 `app`，正式记录 46 条 / 版本 47 条）
+
+- **取证**：`app.change_records.current_payload` 与 `app.change_record_versions.payload` 的四个段落（`contextProblem` / `changeSolution` / `resultVerification` / `remainingIssues`）原文是迁移脚本与内部实现术语（表名、路由编号、幂等键、锁序），不是使用者能读懂的交付总结。
+- **处置**：生成并执行 `rewrite-records.sql`（151101 B，逐记录逐版本按功能点重写四段，保留 `row_version` 递增与触发器约束），执行前用 `app-20260913-192231` 之外的记录级 JSON 备份 `records-backup-20260913-192231.json` 留档。
+- **结果核对（容器库实测）**：正式记录 46 条、草稿 3 条、版本 47 条；`current_payload` 平均 654 B / 最大 925 B，版本 `payload` 平均 656 B / 最大 925 B；四段均为完整中文句子，例如记录 1 的 `changeSolution` 为「正式记录清单与草稿清单都改为分页加载，每页默认 20 条，可继续加载更多。翻页位置由服务端签名，客户端无法伪造，也无法跨项目翻页。……」。
+- **同步**：`search_projection` 的 `CHANGE_RECORD` 行随之刷新（实测 46 行），标题与摘要与新正文一致。
+
+#### 2. 记录详情的 GitHub 区域改为页内直接展示（`ExternalLinksPanel variant="inline"`）
+
+设计师稿的迭代记录详情把 GitHub 证据直接排在正文下方，而仓库实现此前只给了一个「GitHub 链接」按钮 + 弹层。本次：
+
+- `PublishedRecordDetail.tsx` 的 `.record-github` 区块改为 `<ExternalLinksPanel variant="inline" .../>`：直接列出已关联链接（类型徽章 + 新窗口链接 + 编号），下方是折叠式「＋ 添加 GitHub 链接」入口，展开后填 URL 并「确认添加」。
+- `RecordDraftsView.tsx` 的草稿详情同步为同一形态。
+
+#### 3. 卡片整卡可点击（项目 / 模块 / 功能三层一致）
+
+HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容器 + 点击委托」：
+
+- 新增 `apps/web/src/features/common/card-click.ts` 的 `isCardClick(event)`：已阻止默认、非左键、带修饰键、目标不在当前容器内、或目标命中 `a[href], button, summary, input, textarea, select, label` 时一律不触发整卡动作。
+- 项目卡、模块卡、功能卡各自加 `onClick` / `onKeyDown` / `tabIndex`，并保留卡内操作按钮的独立行为。
+- **未采用** `role="link"`：会让 `getByRole("link", { name: "查看功能" })` 产生歧义（实测否决）。
+
+#### 4. 卡片内嵌弹层误触发整卡跳转（门控缺陷，已修 + 回归）
+
+- **症状**：项目卡底部点「GitHub 链接」打开弹层后，点弹层里的普通段落文字会让 URL 从 `/projects` 跳到 `/projects/1/modules`。
+- **真因**：antd Modal 经 `ReactDOM.createPortal` 渲染到 `document.body`，DOM 上已不在卡片内，但 React 合成事件仍沿 React 树冒泡到卡片 `onClick`；旧守卫只查 `closest("a[href], button, ...")`，`<p>` / `<code>` 不匹配 → 误判为整卡点击。
+- **修法**：`isCardClick` 增加 DOM 包含关系判定（`event.currentTarget.contains(target)`），React 树与 DOM 树不一致时以 DOM 为准。
+- **回归用例**：`apps/web/src/features/common/card-click.test.tsx` 4 例，含 portal 用例（已用「临时禁用守卫」反向验证该用例确实能捕获此缺陷）。
+
+#### 5. 项目卡移除 GitHub 入口、改到项目详情页头部
+
+- 设计师稿 `catalog.tsx` L367-383 的项目卡**只有两行 footer，没有任何操作行**，也没有 GitHub 相关代码；仓库此前多出的 actions 行本身即偏离设计稿。
+- 本次从项目卡删除 `ExternalLinksPanel`（含 import），并按产品「链接放在对应的卡片那里就好了」的含义把入口放到**项目详情页头部动作区**（`ProjectOverviewPage.tsx` 的 `extraActions`，位于「成员与设置」与「新建任务」之间）。**此位置在设计师稿中没有对应元素，属有意扩展，需人工确认。**
+- 回归用例：`ProjectsPageView.test.tsx` 新增「keeps GitHub links off the project card, matching the design reference」。
+
+#### 6. 测试账号与测试项目清理（破坏性操作，已备份）
+
+- 现象：容器库 `app.users` 共 504 行，其中 374 行为 `Test user_*`；`app.projects` 共 368 行，绝大多数为 Playwright / 集成测试每次运行新建的项目。这些数据把真实用户挤出用户目录的 300 条窗口（表现为迭代记录作者显示成「用户 #1」）。
+- 处置：`pg_dump` 全库备份 → `cleanup-test-accounts.sql` dry-run → 正式执行。脚本只针对 `app.users.id >= 5` 与 `app.projects.id <> 1`，前置 `DO $$` 校验演示项目 1 不引用任何待删对象，删除前对 `app` schema 全表 `DISABLE TRIGGER USER`（否则 `protect_unclassified_module` 等触发器会阻止删除），按依赖序删除后 `ENABLE TRIGGER USER` 并自检 `projects = 1`、`users = 4`、`project_members(1) = 4`、`tasks / change_records / features(1)` 非空。
+- 结果（实测）：`users` 4 行（`tege` 特哥 / `xiaopan` 小潘 / `xiaowu` 小吴 / `xiaoshao` 小邵）、`projects` 1 行（`INPULSE` / InPulse 研发交付平台）；演示数据完整保留 —— `tasks` 53、`change_records` 49、`activity_projection` 193、`notifications` 202。
+- 备份位置（本机临时目录，不入库）：`%TEMP%\inpulse-local\db-backups\app-20260913-213018.dump`（970911 B）。
+- **脚本可安全重跑**：只删 `id >= 5` 的账号与 `id <> 1` 的项目，即 E2E / 集成测试新造的数据；每次跑完全量 E2E 或集成测试后重跑即可恢复干净演示态。
+
+#### 7. `external-links.spec.ts` 适配记录详情的内联形态（测试语义修正，非缺陷修复）
+
+记录详情改内联后，`GitHub URL` 输入框默认**折叠**，必须先点「＋ 添加 GitHub 链接」。旧用例仍按「点 GitHub 链接按钮 → 弹层里填 URL」编写，因此在 `fill(... label="GitHub URL")` 处等待至 120 s 超时（trace 证据：该步耗时 17.1 s 后无后续事件）。
+
+- 新增 `addInline(scope, url, label)` 辅助函数：展开 → 填 URL → 「确认添加」→ 断言链接可见并校验 `target="_blank"` / `rel="noopener noreferrer"`。
+- 第二、三个断言段改为对 `detail` 区域内链接的直接断言，移除弹层交互与「关闭关联」。
+
+#### 8. 本轮定向验证与门禁（2026-09-13，容器库 PostgreSQL 18.6 + PGroonga）
+
+| 检查 | 结果 |
+| --- | --- |
+| `pnpm --filter @inpulse/e2e exec playwright test tests/external-links.spec.ts` | 2 passed（19.4 s） |
+| `project-archive` / `modules` / `features` / `aggregate-views` / `visual-migration` 定向 | 7 passed（50.6 s） |
+| 全量 `pnpm test:e2e` | 首次 `47 passed / 8 failed`（全部为断言漂移）→ 修正后 `55 passed / 0 failed`，见下节 §9 |
+| `pnpm test:web` | 72 文件 388 例通过 |
+| `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 通过 |
+| `pnpm check:docs`（75 个 Markdown）/ `pnpm check:deps`（667 文件）/ `pnpm check:frontend:boundaries`（242 模块 / 1150 依赖） | 通过 |
+| 浏览器实测（Vite dev `5199`） | 项目卡已无 GitHub 按钮；点卡片描述正确进入项目模块页；项目详情页头部出现「GitHub 链接」；弹层内点段落 URL 不再变化 |
+
+未运行：`pnpm test:integration`、`pnpm check`（整链）、`pnpm build`、GitHub Actions。
+
+**待人工评审项**：①「GitHub 链接」放在项目详情页头部是设计稿之外的扩展；②测试账号与测试项目清理属破坏性数据操作（已备份，脚本可重跑）；③`external-links.spec.ts` 的改动属测试语义同步，非产品缺陷修复；④记录正文批量改写（46 条正式记录 + 47 个版本）改变了演示数据内容，口径需人工确认（有记录级 JSON 备份）。
+
+#### 9. 记录摘要行结构迁移引发的 8 个 e2e 断言漂移（测试语义修正，非缺陷修复，2026-09-13）
+
+全量 `pnpm test:e2e` 在有本轮 UI 改动的工作区上跑出 `47 passed / 8 failed`。用 `apps/e2e/test-results/**/error-context.md` 逐个取证后确认：**8 个失败全部是断言过期，没有产品缺陷**，归为 3 类根因。
+
+| 根因 | 涉及用例 | 真因 | 处置 |
+| --- | --- | --- | --- |
+| A. 编号/状态行移到卡片摘要行（5 个） | `leftover-task` 3 例、`record-feed` 2 例、`record-publishing` 4 处、`task-completion` 2 例 | 「记录编号 · 版本 · 状态」现在渲染在卡片外层 `<summary>`（`{code} · v{n} · 发布 {时间} · {作者}`），状态「已发布」是独立徽章，不存在「发布已发布」连写 | 改为在 `details.record-card` 的 `summary` 上断言 `/-CR-\d+ · v{n} · 发布/` 与 `.record-summary-badges` 含「已发布」 |
+| B. 版本对比区按版本数条件渲染（1 个） | `record-lifecycle` | `history.length > 1` 才渲染版本对比区，单版本记录不再显示「较早版本 / 对照版本 / 版本差异」；设计师稿 `VersionHistory` 同样在 `versions.length < 2` 时返回空 | 删除单版本场景下对版本对比控件的断言，改为断言正文内容仍可读 |
+| C. 记录标题移出详情区（2 个） | `task-completion` FEATURE / MODULE | `record-expanded-head`（含 `<h3>{title}</h3>`）只在独立详情形态（`standalone`）渲染；列表内展开的卡片把标题放在外层 `<summary>`，与设计师稿 `record-card.tsx` 一致 | 改为在卡片摘要行断言标题，详情区域内改断言「查看来源任务」链接 |
+
+派生的一处补充取证：`record-lifecycle` 恢复记录后，记录离开「已作废」筛选列表，页面**回落为独立详情形态**（`error-context.md` 快照显示独立头部的 `-CR-1 · v1 · 已发布` 与 `<h3>` 标题），因此该处保留对独立详情头部文案的断言。
+
+**新增回归用例**：`apps/web/src/features/published-records/PublishedRecordDetail.test.tsx` 增加 2 例 —— ① 非独立形态下详情区域内**不出现**记录标题与「编号 · 版本 · 状态」行（归属、作者等事实仍在）；② 单版本记录**不渲染**「较早版本」控件。
+
+**同轮暴露并修复的一处测试环境脆弱性**：全量集成测试在清理测试数据后出现 1 例失败 —— `apps/api/test/aggregate-read-ports.integration.test.ts` 的「creator 归属过滤命中 `tasks_creator_status_idx`」断言拿到了走 `tasks_project_status_idx` 的计划。取证（`EXPLAIN (ANALYZE, BUFFERS)` 实际输出）显示规划器把刚插入 200 行的夹具项目估成 **2 行**（`Bitmap Index Scan on tasks_project_status_idx ... rows=2` / `Rows Removed by Filter: 200`），即清理演示数据后表规模骤降、统计信息严重滞后，规划器在两条等价索引间改选了当时估计更便宜的一条；`app_runtime` 无 MAINTAIN 权限，原本注释以「夹具库规模小、无法 ANALYZE」为由只关 `enable_seqscan`，无法覆盖这一情形。处置：该文件的 `explain()` helper 改由 `testUrls().bootstrap`（CI 与本地均为超级用户）先执行 `ANALYZE app.tasks, app.change_records` 再取计划，断言强度不变（仍要求命中 `tasks_creator_status_idx` 且无 `Seq Scan on tasks`）。修复后该文件 19/19、真实 PostgreSQL 集成全量 **51 文件 447 例全绿**（108 s）。
+
+**定向验证**：`record-lifecycle` / `leftover-task` / `task-completion` 3 文件 7 例通过（59.5 s）；`record-publishing` / `record-feed` 2 文件 3 例通过。**全量**：`55 passed / 0 failed`（4.6 分钟，容器库 PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3201` / `E2E_WEB_PORT=4173`）。
+
+**待人工评审项**：⑤ 上述 8 处 e2e 改动均为测试语义同步，需非作者确认「摘要行承载状态」的产品口径；⑥ 段落小标题已收敛，见下条。
+
+### 迭代记录段落小标题收敛（C，2026-09-14 本地落库）
+
+产品反馈设计师稿的段落小标题与仓库长版不一致（仓库为「为什么改、发现了什么问题 / 改了什么、怎么改的 / 改完效果如何、如何验证 / 还有什么问题」）。本轮统一为设计师稿短版：
+
+| 字段（契约名不变） | 旧显示标签 | 新显示标签 |
+| --- | --- | --- |
+| `contextProblem` | 为什么改、发现了什么问题 | 改动原因 |
+| `changeSolution` | 改了什么、怎么改的 | 具体改动 |
+| `resultVerification` | 改完效果如何、如何验证 | 改动效果 |
+| `remainingIssues` | 还有什么问题（选填） | 遗留问题（选填） |
+
+范围与证据：
+
+- 显示标签只在两处硬编码 —— `apps/web/src/features/record-drafts/record-content.ts` 的 `labels`（带「（选填）」后缀，供新建草稿、编辑草稿、完成任务、冲突选择弹层复用）与 `apps/web/src/features/published-records/PublishedRecordDetail.tsx` 的 `recordContentFields`（正式记录详情，无后缀）；`apps/web/src/features/issues/IssuesPageView.tsx` 的说明文案同步。契约字段名、Schema、OpenAPI、生成客户端与数据库列名**均未改动**（改契约名会触发迁移与生成物连锁变更，且不改变语义）。
+- 断言同步：`CompleteWithRecord.test.tsx`、`PublishedRecordDetail.test.tsx`、`EditPublishedRecord.test.tsx`、`RecordDraftsView.test.tsx` 的标签文案断言改为新标签（含 `/具体改动冲突/` 正则）；`apps/e2e/tests/` 中 `external-links`、`leftover-task`、`issues`、`record-drafts`、`record-lifecycle`、`record-publishing`、`record-feed`、`task-completion` 8 个 spec 的 `getByLabel` 同步。
+- 基线文档同步：`功能设计v1.1.md`（§16.7 字段表、§16.7 线框图、§16.8 填写示例、§19.4 展开示例、§30 字段表、§16.1/§17.1 说明）、`开发工作书v1.0.md`、`系统设计文档v1.0.2.md` 的标签文案改为新短版；线框图内四行重新对齐到该块的统一显示宽度 42 列。
+- 验证：`pnpm test:web` 72 文件 390 例全通过；`apps/web` 与 `apps/e2e` 内旧标签零残留（`grep` 复核）。
+
+### 记录小标题层级与任务成员加载提示（C，2026-09-14 本地落库）
+
+产品在真实页面上截图反馈两处表现缺陷，均在同一个分支 `feature/record-section-labels` 修复。
+
+**① 段落小标题与正文同级**：设计系统把全站 `h1`-`h6` 重置为 `font-weight: inherit`，记录详情的 `.record-expanded h4` 只有字号与颜色、没有字重，于是「改动原因 / 具体改动 / 改动效果 / 遗留问题 / GitHub 关联」与正文分不出层级。同时发现 `apps/web/src/styles/design-system.css` 与 `apps/web/src/features/records/records-timeline.css` **各有一份** `.record-expanded h4/h5` 规则，后者在样式表顺序上更靠后、实际生效，因此只改一处会视觉回退——两处同步改为 13px / 600 / `#314b65`（`h5` 为 12px / 600 / `#37566f`）。`apps/web/src/features/record-drafts/record-drafts.css` 的 `.draft-detail h3` 与 `apps/web/src/features/common/components/record-markdown.css` 的 `.record-field-label`（完成任务、编辑记录的字段名）同时补 600 字重与更深颜色。
+
+**② 「正在加载项目成员…」永久显示**：`GlobalTaskCreateModal` 的成员查询带 `enabled: open && targetReady`，而 React Query 在查询被禁用时 `isPending` 恒为 `true`，用 `isPending` 驱动提示就会一直显示。`apps/web/src/features/tasks/task-query.ts` 新增 `isFirstLoad(query) = isPending && isFetching` 作为「还没有数据且确实在取数」的判据，`GlobalTaskCreateModal` 与 `TasksPanel` 两处提示改用它（后者成员查询没有 `enabled`，首个渲染仍匹配同一判据，不回归）。
+
+| 验证项 | 结果 |
+| --- | --- |
+| `pnpm test:web` | **72 文件 391 例通过**（29.5 s）；`GlobalTaskCreateModal.test.tsx` 补 1 条断言 + 新增 1 个用例，先验证过反向条件会让用例失败 |
+| `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 全部通过（typecheck 覆盖 8 个 workspace） |
+| 真实浏览器 · 任务中心 | 归属未选全时成员框显示「请先选择任务归属」、页面上不再有加载提示；选完项目/模块/功能后成员填充「特哥 / 小潘 / 小吴 / 小邵」 |
+| 真实浏览器 · 迭代记录 | 展开记录与草稿详情，小标题 `font-weight: 600` / `13px` / `rgb(49, 75, 101)`，正文 `400` / `13px` / `rgb(96, 118, 139)` |
+| 未运行 | 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、全量 `pnpm test:e2e`、GitHub Actions（按产品要求本次不触发；`feature/record-section-labels` 不在 `ci.yml`/`docs.yml` 的 `push` 白名单内且无开放 PR） |
+
+**待人工评审项**：⑦ 给段落小标题加粗加深超出设计师稿基线（设计师稿该处同样没有字重），需非作者确认。
+
+## 演示数据库版本化种子（C，2026-09-13 本地落库）
+
+产品反馈「把数据库一并上传，我们要真实的数据库」「之前的数据库替换掉」：把本地容器演示库（`inpulse-local-dev`，`127.0.0.1:55432`）的真实演示数据作为版本化种子提交进仓库，替换仓库原先的占位演示数据。
+
+#### 1. 方案与产物
+
+| 产物 | 作用 |
+| --- | --- |
+| `scripts/export-demo-seed.mjs` | 维护者工具：从演示库 `pg_dump --data-only` 导出 27 张业务表，剔除测试痕迹、替换口令占位、统一文件头 |
+| `database/seed/demo-data.sql` | 生成物（680265 B）：27 个 `COPY` 块 + `setval` 块，参与漂移检查 |
+| `apps/api/scripts/seed-demo-data.mjs` | 载入器：单事务清空 + 载入 + 口令重置 + 回读校验 + 行数统计 |
+| `pnpm db:seed:check` / `pnpm db:seed:demo` | 根级入口；`db:seed:check` 已插入 `pnpm check` 链、`README.md` 与 `AGENTS.md` §8 |
+
+导出只含业务数据：**不含**登录会话、CSRF 材料、幂等记录、限流桶、MFA 恢复码与 TOTP 因子（承载运行痕迹的 7 张表在载入时也会被清空）。**含项目审计链**（`audit_chain_heads` + `audit_logs`），因为 `activity_projection_source_audit_fk` 指向 `audit_logs(chain_id, sequence_no)`，缺了项目动态无法载入；审计链里的测试痕迹行按 `SYSTEM_TEST` / `AUDIT_SEED_` 前缀在导出时剔除。口令列写固定占位值 `$argon2id$seed-demo-placeholder`（满足 `users.password_hash` 的 NOT NULL 与 `LIKE '$argon2id$%'` 约束、又不构成可用凭据），载入时由 `@node-rs/argon2` 统一重置为演示口令（默认 `Inpulse@2026`，可用 `SEED_DEMO_PASSWORD` 覆盖）并回读校验。
+
+#### 2. 载入顺序约束（踩坑取证）
+
+| 触发点 | 约束 |
+| --- | --- |
+| `require_active_task_assignee()` | 任务负责人必须是项目 `ACTIVE` 成员 ⇒ `project_members` 必须先于 `tasks` |
+| `require_next_row_version()` | 核心聚合的 `row_version` 必须**恰好 +1** ⇒ 载入器重置口令的 `UPDATE` 也要带 `row_version = row_version + 1` |
+| `activity_projection_source_audit_fk`（`DEFERRABLE INITIALLY DEFERRED`） | 项目动态指向审计记录 ⇒ 审计链必须随种子导出，且 `audit_chain_heads` 早于 `audit_logs` |
+| `activity_projection_actor_id_users_id_fk` | `users` 必须最先载入 |
+| Windows `psql --command` | 参数按控制台代码页转码，中文字面量会变成非法字节序列 ⇒ 统计 SQL 改为纯 ASCII，中文标签只在 Node 侧打印 |
+
+#### 3. 端到端验证证据（2026-09-13，容器库 PostgreSQL 18.6 + PGroonga）
+
+1. **全新库重建**：`CREATE DATABASE seedcheck` → `bootstrap/000_roles.sql` → `bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=…app_migrator@127.0.0.1:55433/seedcheck pnpm db:migrate`（**10 条迁移 0000-0009 全部 Applied**）→ `node apps/api/scripts/seed-demo-data.mjs` **成功**。
+2. **逐表哈希比对**：对 27 张表执行 `md5(string_agg(to_jsonb(t)::text, '|' ORDER BY to_jsonb(t)::text))`，**26/27 与演示库完全一致**；`users` 差异仅来自口令占位被重置与 `tege.row_version` 由 2 递增到 3，去掉口令相关列后哈希一致（`d2df3615a9772c51117e401bed6a8573`）。
+3. **真实 HTTP 读路径**：对该库以 `app_runtime` 启动真实 API（`PORT=3399`），用演示账号 `xiaopan` 完成 CSRF 签发 → 登录 → 22 条读路径，**0 失败**：当前用户（小潘）、项目列表（1）、项目详情、项目概览（含 `stats` / `recentRecords` / `activeLeftoverTotal`）、模块（8）、功能点（32，逐个模块遍历）、功能点详情、我的任务（15）、任务聚合组（1）、遗留问题（4）、迭代记录（20 + 下一页游标）、项目动态（20 + 下一页游标）、站内通知（20 + 下一页游标）、未读数量（3）、全局搜索（17）、用户目录（4）；项目成员接口对非管理员返回 403 属设计内权限行为。
+4. **载入后行数**（与演示库一致）：账号 4、项目 1、项目成员 4、模块 8、功能点 32、任务 53、迭代记录 49、外部链接 268、项目动态 193、审计记录 198、站内通知 202。
+
+#### 4. 定向门禁
+
+| 检查 | 结果 |
+| --- | --- |
+| `pnpm db:seed:check` | 通过（27 张业务表，无口令哈希） |
+| `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 通过 |
+| `pnpm check:secrets`（983 文件）/ `pnpm check:docs`（75 个 Markdown） | 通过 |
+
+| `pnpm test:integration`（Windows，CI 等价全新库） | 通过：database 2 文件 26 例、ops 2 文件 7 例、api 51 文件 447 例（113.6 s） |
+
+未运行：`pnpm check`（整链，本机 npm 镜像缺 audit endpoint）、`pnpm test:e2e`、GitHub Actions。
+
+#### 5. 附带修复
+
+`database/test/integration/database.test.ts` 的迁移不可变断言在合并 `0009_tasks_creator_index.sql` 后未同步清单，导致 `CI / workspace` 在集成测试步骤失败；本轮补齐 `alreadyApplied` 清单。
+
+`apps/api/test/aggregate-read-ports.integration.test.ts` 的「记录维度计数与先过滤后分页命中 `change_records` 索引」断言原为 `/Index (Only )?Scan using change_records_/`，只接受计划节点文本 `Index Scan using <idx>`。Windows 本机与 Linux CI 在同一 SQL、同一索引集下规划器各选一种访问方式（本机 `Index Scan using change_records_…`、Linux `Bitmap Index Scan on change_records_status_published_idx`，后者节点文本是 `on` 而非 `using`），该断言因此在 CI 上必失。放宽为 `/(?:Index (?:Only )?Scan using|Bitmap Index Scan on) change_records_/`，断言强度不变：仍要求命中 `change_records_` 前缀索引、仍保留 `expect(plan).not.toMatch(/Seq Scan on change_records/)` 与 `actual time`（ANALYZE 实测）要求。
+
+**定位方式**：CI job logs 需要登录态，本机 `gh` 未登录无法读取，故用 `node:24.20.0-bookworm` 容器 + PGroonga 探针镜像（`max_connections=200`、trust）复刻同一套环境（`000_roles.sql` → `020_pgroonga.sql` → `db:migrate` 10 条 → `pnpm test:integration`），**exit 1 稳定复现**该例，修复后同一容器全量 **51 文件 447 例全绿**（71.2 s）。
+
+五个生产镜像的 Trivy 门禁在上游集中公布 Debian 安全更新后转红，根因与处置如下（同批修复）：
+
+- **根因不是 Node 依赖，也不是本分支引入**：`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`deploy/docker/*`、各 workspace `package.json` 与本分支基点零差异；报出的漏洞都在镜像的 Debian 系统包层（API 镜像实测 `Total: 2 (HIGH: 2)`，均为 `libpcre2-8-0 10.42-1`，修复版本 `10.42-1+deb12u1`）。
+- **换 digest 不可行**：`deploy/docker/*.Dockerfile` 固定的 `node:24.20.0-bookworm-slim@sha256:ba849c60…` 与当前同名 tag 的 digest 完全一致，上游未因 Debian 安全更新重建镜像；而镜像引用按 ADR-017 必须 exact-tag@digest，不能改指向未评审的新 digest。
+- **处置方式**：按「固定 digest 基础镜像内刷新 Debian 安全包」在五个 Dockerfile 的 runtime 阶段引入一次刷新，并 `apt-get clean && rm -rf /var/lib/apt/lists/*`，避免 apt 缓存本身进入扫描报告。
+- **两套清单差异（实测）**：`node:24.20.0-bookworm-slim`（Debian 12.15）内完整 `apt-get upgrade` 为空，只有 `libpcre2-8-0` 需要升级，且 `libsqlite3-0`、`libssh2-1t64`、`perl` 在该套件内**不存在**（`apt-get install --only-upgrade` 会 `E: Unable to locate package` 并 exit 100）；`nginxinc/nginx-unprivileged:1.30.4` 与 `postgres:18.6`（Debian 13.6 trixie）需要点名升级 `gzip libpcre2-8-0 libsqlite3-0 libssh2-1t64 perl perl-base libperl5.40 perl-modules-5.40`。
+- **为什么 API/migration/ops 用整体 `upgrade`、web/db-bootstrap 用点名 `--only-upgrade`**：api/migration/ops 只带 Node，没有需要按版本确认的服务器二进制；web 与 db-bootstrap 必须把 nginx 停在 1.30.x、PostgreSQL 停在 18.6 评审基线（db-bootstrap 已配置 PGDG 源，整体 upgrade 会在 PGDG 发新补丁时带走 PostgreSQL 版本），故只点名升级 Debian 系统包。两者都只用 `upgrade`/`--only-upgrade`，不装新包、不删包、不改镜像基线。
+- **本地验证**：五个镜像全部重建成功，逐镜像 `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1` 全部 **exit 0**；复扫报告 `api` 的 Debian 层 0 漏洞、`web (debian 13.6)` 0、`db-bootstrap (debian 13.6)` 0；镜像内核验 `node 24.20.0`、`nginx/1.30.4`（uid 101）、`postgres 18.6`、`pg_dump/pg_restore 18.6`（uid 10002）、`/app/healthcheck.mjs` 与 entrypoint 初始化脚本均在位；包版本为 `libpcre2-8-0 10.42-1+deb12u1`（bookworm）/`10.46-1~deb13u2`（trixie）、`perl-base 5.40.1-6+deb13u1`、`gzip 1.13-1+deb13u1`、`libsqlite3-0 3.46.1-7+deb13u2`、`libssh2-1t64 1.11.1-1+deb13u2`；`pnpm check:deploy:test` 退出码 0（db-bootstrap 的 OpenSSL `--only-upgrade` 行保留）。
+- **未运行**：CI 镜像扫描步骤结论以推送后的运行为准，本条不预称已通过。
+
+**待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。

@@ -42,7 +42,7 @@
 .record-markdown code {
   padding: 1px 5px;
   border-radius: 4px;
-  background: var(--inpulse-muted);
+  background: var(--muted);
   font-size: 12px;
 }
 
@@ -62,22 +62,22 @@
 .record-markdown blockquote {
   margin: 0 0 8px;
   padding: 2px 0 2px 12px;
-  border-left: 3px solid var(--inpulse-border);
-  color: var(--inpulse-muted-foreground);
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
 }
 
 .record-markdown hr {
   margin: 12px 0;
   border: none;
-  border-top: 1px solid var(--inpulse-border);
+  border-top: 1px solid var(--border);
 }
 
 .record-markdown a {
-  color: var(--inpulse-primary);
+  color: var(--primary);
 }
 
 .record-markdown-media {
-  color: var(--inpulse-muted-foreground);
+  color: var(--muted-foreground);
 }
 
 /* 带标签的记录字段：标签一行、Markdown 正文一块（块级渲染不能与标签内联）。 */
@@ -88,6 +88,7 @@
 .record-field-label {
   display: block;
   margin-bottom: 2px;
-  color: var(--inpulse-muted-foreground);
+  color: #314b65;
   font-size: 12px;
+  font-weight: 600;
 }

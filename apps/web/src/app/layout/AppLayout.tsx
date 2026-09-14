@@ -9,7 +9,7 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
-import { useProjectDetail } from "@features/projects/project-query";
+import { useCatalogTrail, useShellCounters } from "./shell-data";
 
 interface NavigationItem {
   readonly key: string;
@@ -27,12 +27,14 @@ const workspaceNavigation: readonly NavigationItem[] = [
 
 const systemNavigation: readonly NavigationItem[] = [
   { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
-  { key: "audit", label: "动态审计", path: "/audit", icon: "shield" },
   { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
+  // 设计师稿的系统组只有上两项；动态审计是仓库已有能力，保留为管理员专属末项。
+  { key: "audit", label: "动态审计", path: "/audit", icon: "shield" },
 ];
 
 const sections = [
   { prefix: "/tasks", key: "tasks", label: "任务中心" },
+  { prefix: "/task-groups", key: "tasks", label: "任务中心" },
   { prefix: "/projects", key: "projects", label: "项目与功能" },
   { prefix: "/records", key: "records", label: "迭代记录" },
   { prefix: "/issues", key: "issues", label: "遗留问题" },
@@ -42,6 +44,48 @@ const sections = [
   { prefix: "/search", key: "search", label: "全局搜索" },
   { prefix: "/notifications", key: "notifications", label: "通知中心" },
 ] as const;
+
+/** `/projects/:projectId[/modules/:moduleId[/features/:featureId]]` 的路径解析。 */
+interface CatalogScope {
+  readonly projectId: number | null;
+  readonly moduleId: number | null;
+  readonly featureId: number | null;
+}
+
+const EMPTY_CATALOG_SCOPE: CatalogScope = {
+  projectId: null,
+  moduleId: null,
+  featureId: null,
+};
+
+const CATALOG_SCOPE_PATTERN =
+  /^\/projects\/(\d+)(?:\/modules\/(\d+)(?:\/features(?:\/(\d+))?)?)?(?:\/|$)/;
+
+function readEntityId(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 2147483647
+    ? value
+    : null;
+}
+
+function readCatalogScope(pathname: string): CatalogScope {
+  const match = CATALOG_SCOPE_PATTERN.exec(pathname);
+  if (!match) {
+    return EMPTY_CATALOG_SCOPE;
+  }
+  const projectId = readEntityId(match[1]);
+  if (projectId === null) {
+    return EMPTY_CATALOG_SCOPE;
+  }
+  return {
+    projectId,
+    moduleId: readEntityId(match[2]),
+    featureId: readEntityId(match[3]),
+  };
+}
 
 function resolveSection(pathname: string) {
   if (/^\/projects\/[^/]+\/activity(?:\/|$)/.test(pathname)) {
@@ -85,6 +129,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         : systemNavigation.filter((item) => item.key !== "audit"),
     [user?.isAdmin],
   );
+  const catalogScope = useMemo(
+    () => readCatalogScope(location.pathname),
+    [location.pathname],
+  );
   const sectionLabel = resolveSectionLabel(location.pathname);
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
@@ -92,20 +140,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const popoverRoleLabel = user?.isAdmin
     ? "系统管理员 · 可执行高风险操作"
     : roleLabel;
-  const projectCrumbId = useMemo(() => {
-    const match = /^\/projects\/(\d+)(?:\/|$)/.exec(location.pathname);
-    if (!match) {
-      return null;
-    }
-    const id = Number(match[1]);
-    return Number.isInteger(id) && id >= 1 && id <= 2147483647 ? id : null;
-  }, [location.pathname]);
-  const projectCrumb = useProjectDetail({
+  const trail = useCatalogTrail({
+    projectId: catalogScope.projectId,
+    moduleId: catalogScope.moduleId,
+    featureId: catalogScope.featureId,
     client: projectClient,
-    projectId: projectCrumbId,
     enabled: status === "authenticated",
   });
-  const projectCrumbName = projectCrumb.data?.name ?? null;
+  const shellCounters = useShellCounters({
+    client: projectClient,
+    enabled: status === "authenticated",
+  });
+  const projectCrumbName = trail.projectName;
+  const shellCounts: Readonly<Record<string, number>> = useMemo(
+    () => ({
+      tasks: shellCounters.myOpenTaskCount ?? 0,
+      issues: shellCounters.openLeftoverCount ?? 0,
+    }),
+    [shellCounters.myOpenTaskCount, shellCounters.openLeftoverCount],
+  );
+  // 设计师稿只在「项目与功能」视图渲染 项目 → 模块 → 功能 三段面包屑。
+  const isCatalogView = resolveSection(location.pathname)?.key === "projects";
+  const catalogProjectId = isCatalogView ? catalogScope.projectId : null;
+  const moduleCrumbName = isCatalogView ? trail.moduleName : null;
+  const featureCrumbName = isCatalogView ? trail.featureName : null;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -174,18 +232,26 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
   };
 
-  const renderNavigationItem = (item: NavigationItem) => (
-    <button
-      type="button"
-      key={item.key}
-      className={`nav-item${selectedKey === item.key ? " active" : ""}`}
-      aria-current={selectedKey === item.key ? "page" : undefined}
-      onClick={() => handleNavigation(item.path)}
-    >
-      <InpulseIcon name={item.icon} size={17} className="nav-icon" />
-      <span className="nav-item-label">{item.label}</span>
-    </button>
-  );
+  const renderNavigationItem = (item: NavigationItem) => {
+    const count = shellCounts[item.key] ?? 0;
+    return (
+      <button
+        type="button"
+        key={item.key}
+        className={`nav-item${selectedKey === item.key ? " active" : ""}`}
+        aria-current={selectedKey === item.key ? "page" : undefined}
+        onClick={() => handleNavigation(item.path)}
+      >
+        <InpulseIcon name={item.icon} size={17} />
+        <span>{item.label}</span>
+        {count > 0 ? (
+          <em aria-hidden="true" title={`${count} 项待处理`}>
+            {count}
+          </em>
+        ) : null}
+      </button>
+    );
+  };
 
   if (location.pathname === "/login") {
     // 登录页使用独立的全屏视觉，不渲染工作台外壳。
@@ -214,20 +280,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             <span>研发交付中心</span>
           </button>
           <nav className="nav-group" aria-label="工作区导航">
-            <span className="nav-group-label">工作区</span>
+            <p>工作区</p>
             {workspaceNavigation.map(renderNavigationItem)}
-            <span className="nav-section-label">系统</span>
+            <p className="nav-section">系统</p>
             {visibleSystemNavigation.map(renderNavigationItem)}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>
-            <div className="sidebar-user">
+            <div className="account-identity">
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </div>
             <button
               type="button"
-              className="text-button sidebar-permission-button"
+              className="text-button"
               onClick={() => handleNavigation("/settings")}
             >
               <InpulseIcon name="shield" size={14} />
@@ -256,11 +322,65 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 研发交付中心
               </button>
               <InpulseIcon name="chevron" size={14} />
-              {projectCrumbId !== null && projectCrumbName ? (
+              {catalogProjectId !== null && projectCrumbName ? (
                 <>
                   <button
                     type="button"
-                    className="crumb-home"
+                    onClick={() => handleNavigation("/projects")}
+                  >
+                    项目与功能
+                  </button>
+                  <InpulseIcon name="chevron" size={14} />
+                  {moduleCrumbName ? (
+                    <>
+                      <button
+                        type="button"
+                        title={projectCrumbName}
+                        onClick={() =>
+                          handleNavigation(
+                            `/projects/${catalogProjectId}/overview`,
+                          )
+                        }
+                      >
+                        {projectCrumbName}
+                      </button>
+                      <InpulseIcon name="chevron" size={14} />
+                    </>
+                  ) : (
+                    <strong aria-current="page" title={projectCrumbName}>
+                      {projectCrumbName}
+                    </strong>
+                  )}
+                  {moduleCrumbName ? (
+                    featureCrumbName ? (
+                      <>
+                        <button
+                          type="button"
+                          title={moduleCrumbName}
+                          onClick={() =>
+                            handleNavigation(
+                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}`,
+                            )
+                          }
+                        >
+                          {moduleCrumbName}
+                        </button>
+                        <InpulseIcon name="chevron" size={14} />
+                        <strong aria-current="page" title={featureCrumbName}>
+                          {featureCrumbName}
+                        </strong>
+                      </>
+                    ) : (
+                      <strong aria-current="page" title={moduleCrumbName}>
+                        {moduleCrumbName}
+                      </strong>
+                    )
+                  ) : null}
+                </>
+              ) : projectCrumbName ? (
+                <>
+                  <button
+                    type="button"
                     onClick={() =>
                       handleNavigation(
                         selectedKey === "activity" ? "/activity" : "/projects",
@@ -270,10 +390,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                     {sectionLabel}
                   </button>
                   <InpulseIcon name="chevron" size={14} />
-                  <strong>{projectCrumbName}</strong>
+                  <strong aria-current="page" title={projectCrumbName}>
+                    {projectCrumbName}
+                  </strong>
                 </>
               ) : (
-                <strong>{sectionLabel}</strong>
+                <strong aria-current="page">{sectionLabel}</strong>
               )}
             </nav>
             <div className="top-actions">

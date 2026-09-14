@@ -307,9 +307,9 @@ export type ProjectOverviewResponse = z.infer<
 >;
 
 /**
- * R-3 查询参数。负责人固定为当前用户，不接受 assigneeId / userId / projectIds：
- * projectId 只用于缩小范围，服务端仍按 AuthorizedProjectScope 复验（Q-08）。
- * V1 只承载 F-32 的四项筛选（Q-09）；排序固定 id DESC，不提供 sort（Q-10）。
+ * R-3 查询参数。归属主体固定为当前用户，不接受 assigneeId / creatorId / userId /
+ * projectIds：projectId 只用于缩小范围，服务端仍按 AuthorizedProjectScope 复验（Q-08）。
+ * V1 承载 F-32 的筛选（Q-09 / §10.3）；排序固定 id DESC，不提供 sort（Q-10）。
  */
 export const myTasksQueryRequestSchema = z
   .object({
@@ -321,6 +321,14 @@ export const myTasksQueryRequestSchema = z
       .max(AGGREGATE_READ_PAGE_LIMIT_MAX)
       .optional(),
     projectId: z.coerce.number().int().positive().max(2147483647).optional(),
+    /**
+     * 归属维度（F-32 任务中心「我负责的 / 我创建的」分段）：
+     * ASSIGNEE = 当前用户负责的任务（缺省，与历史行为一致）；
+     * CREATOR = 当前用户创建的任务，用于跟踪已指派给他人的任务。
+     * 两个取值都只使用当前 Session 用户的身份，仍按 AuthorizedProjectScope
+     * 过滤，不引入任何他人身份或授权范围参数（Q-08）。
+     */
+    ownership: z.enum(["ASSIGNEE", "CREATOR"]).optional(),
     scopeType: z.enum(["FEATURE", "MODULE"]).optional(),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]).optional(),
     hasPublishedRecord: queryBoolean.optional(),

@@ -51,8 +51,8 @@ test("captures the migrated command palette, notification popover and activity p
 
   await page.goto("/activity");
   await expect(page.getByRole("heading", { name: "项目动态" })).toBeVisible();
-  await page.getByLabel("搜索项目").fill(code);
-  await expect(page.getByTestId(/^activity-project-/)).toBeVisible();
+  await page.getByLabel("搜索动态").fill(code);
+  await expect(page.getByTestId(/^activity-item-/)).toBeVisible();
   await page.screenshot({ path: path.join(output, "05-activity-index.png") });
 
   await context.close();

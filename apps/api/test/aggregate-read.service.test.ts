@@ -167,6 +167,7 @@ function projectFixture(id: number, name: string): ProjectItem {
     createdAt: "2026-09-09T00:00:00.000Z",
     updatedAt: "2026-09-09T00:00:00.000Z",
     memberCount: 2,
+    stats: { activeModuleCount: 2, activeFeatureCount: 1, openTaskCount: 3 },
   };
 }
 
@@ -1062,7 +1063,7 @@ describe("MyTasksQueryService.list", () => {
     });
   });
 
-  it("六项筛选进入端口与游标 filterKey，includeCanceled 并入 CANCELED", async () => {
+  it("七项筛选进入端口与游标 filterKey，includeCanceled 并入 CANCELED", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
     await setup.service.list({
       actorUserId: 5,
@@ -1077,7 +1078,15 @@ describe("MyTasksQueryService.list", () => {
     expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
-      filterKey: JSON.stringify([9, "MODULE", "TODO", false, "HIGH", true]),
+      filterKey: JSON.stringify([
+        "ASSIGNEE",
+        9,
+        "MODULE",
+        "TODO",
+        false,
+        "HIGH",
+        true,
+      ]),
     });
     expect(setup.listPage).toHaveBeenCalledWith(
       expect.anything(),
@@ -1092,6 +1101,30 @@ describe("MyTasksQueryService.list", () => {
         priority: "HIGH",
       }),
     );
+    expect(setup.listPage.mock.calls[0]?.[1]).not.toHaveProperty("creatorId");
+  });
+
+  it("ownership=CREATOR 只在当前用户身份内改走 creatorId，并绑定游标签名", async () => {
+    const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
+    await setup.service.list({
+      actorUserId: 5,
+      projectId: 9,
+      ownership: "CREATOR",
+    });
+    expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
+      actorUserId: 5,
+      namespace: "MY_TASKS",
+      filterKey: JSON.stringify(["CREATOR", 9, null, null, null, null, null]),
+    });
+    const pageInput = setup.listPage.mock.calls[0]?.[1];
+    expect(pageInput).toMatchObject({ projectIds: [9], creatorId: 5 });
+    expect(pageInput).not.toHaveProperty("assigneeId");
+    // 统计与遗留问题样本口径只描述「我负责的」，不随 ownership 变化。
+    expect(setup.stats).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [9],
+      assigneeId: 5,
+      excludedTaskIds: [90],
+    });
   });
 
   it("includeCanceled 在 workStatus 缺省时不产生额外过滤", async () => {
@@ -1160,7 +1193,15 @@ describe("MyTasksQueryService.list", () => {
     expect(setup.cursor.encode).toHaveBeenCalledWith({
       actorUserId: 5,
       namespace: "MY_TASKS",
-      filterKey: JSON.stringify([null, null, null, null, null, null]),
+      filterKey: JSON.stringify([
+        "ASSIGNEE",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]),
       afterId: 501,
     });
   });

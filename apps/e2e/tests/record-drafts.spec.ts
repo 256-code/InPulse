@@ -12,18 +12,16 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await create.getByLabel("所属模块").selectOption({ index: 1 });
     const title = `独立草稿-${Date.now()}`;
     await create.getByLabel("迭代标题").fill(title);
-    await create
-      .getByLabel("为什么改、发现了什么问题")
-      .fill("重复提交造成状态冲突");
-    await create.getByLabel("改了什么、怎么改的").fill("增加幂等校验");
-    await create.getByLabel("改完效果如何、如何验证").fill("并发请求验证通过");
+    await create.getByLabel("改动原因").fill("重复提交造成状态冲突");
+    await create.getByLabel("具体改动").fill("增加幂等校验");
+    await create.getByLabel("改动效果").fill("并发请求验证通过");
     await create.getByRole("button", { name: "保存草稿" }).click();
     await expect(create).toBeHidden();
     const detail = page.getByRole("region", { name: "草稿详情" });
     await expect(detail.getByText("暂无已知遗留问题")).toBeVisible();
     await page.getByRole("button", { name: "继续编辑" }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
-    await edit.getByLabel("还有什么问题（选填）").fill("继续观察高峰流量");
+    await edit.getByLabel("遗留问题（选填）").fill("继续观察高峰流量");
     await edit.getByRole("button", { name: "保存草稿" }).click();
     await expect(edit).toBeHidden();
     await page.reload();
@@ -56,8 +54,8 @@ for (const moduleScope of [false, true])
         await page.getByRole("link", { name: "模块任务" }).first().click();
       else {
         await page.getByRole("link", { name: "查看功能" }).first().click();
-        await page.getByRole("button", { name: "新建功能" }).click();
-        const feature = page.getByRole("dialog", { name: "新建功能" });
+        await page.getByRole("button", { name: "新增功能" }).click();
+        const feature = page.getByRole("dialog", { name: "新增功能" });
         await feature.getByLabel("功能名称").fill(`草稿功能-${suffix}`);
         await feature.getByRole("button", { name: /保\s*存/ }).click();
         await expect(feature).toBeHidden();
@@ -82,7 +80,7 @@ for (const moduleScope of [false, true])
         name: "完成任务",
         exact: true,
       });
-      await complete.getByLabel("是否产生实际功能变化").selectOption("yes");
+      await complete.getByRole("button", { name: /有，填写迭代记录/ }).click();
       await expect(
         complete.getByRole("button", { name: "发布并完成任务" }),
       ).toBeDisabled();
@@ -92,11 +90,9 @@ for (const moduleScope of [false, true])
         const create = page.getByRole("dialog", { name: "新建来源草稿" });
         await expect(create.getByLabel("迭代标题")).toHaveValue(title);
         if (i === 2) await create.getByLabel("迭代标题").fill(title + "第二条");
-        await create
-          .getByLabel("为什么改、发现了什么问题")
-          .fill("来源问题" + i);
-        await create.getByLabel("改了什么、怎么改的").fill("方案" + i);
-        await create.getByLabel("改完效果如何、如何验证").fill("验证" + i);
+        await create.getByLabel("改动原因").fill("来源问题" + i);
+        await create.getByLabel("具体改动").fill("方案" + i);
+        await create.getByLabel("改动效果").fill("验证" + i);
         await create.getByRole("button", { name: "保存草稿" }).click();
         await expect(create).toBeHidden();
         await expect(
@@ -110,7 +106,7 @@ for (const moduleScope of [false, true])
         .click();
       await page.getByRole("button", { name: "继续编辑" }).click();
       const edit = page.getByRole("dialog", { name: "编辑草稿" });
-      await edit.getByLabel("还有什么问题（选填）").fill("来源草稿补充");
+      await edit.getByLabel("遗留问题（选填）").fill("来源草稿补充");
       await edit.getByRole("button", { name: "保存草稿" }).click();
       await expect(edit).toBeHidden();
       await page.reload();

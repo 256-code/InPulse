@@ -343,6 +343,7 @@ export class ProjectManagementService {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       memberCount: record.memberCount,
+      stats: record.stats,
     };
   }
 }

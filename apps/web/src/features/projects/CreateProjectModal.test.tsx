@@ -73,7 +73,7 @@ describe("CreateProjectModal", () => {
     } as unknown as InpulseApiClient;
     const { onCreated, onClose } = renderModal(client);
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     await fillForm(dialog);
     const user = userEvent.setup();
     await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
@@ -117,7 +117,7 @@ describe("CreateProjectModal", () => {
     } as unknown as InpulseApiClient;
     const { onCreated, onClose } = renderModal(client);
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     await fillForm(dialog);
     const user = userEvent.setup();
     await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
@@ -151,7 +151,7 @@ describe("CreateProjectModal", () => {
     } as unknown as InpulseApiClient;
     const { onCreated, onClose } = renderModal(client);
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     await fillForm(dialog);
     const user = userEvent.setup();
     await user.click(await screen.findByLabelText("选择成员：开发者 B"));

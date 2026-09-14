@@ -45,6 +45,16 @@ FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Debian 会持续为系统包发布安全更新，而 digest 固定的官方 Node 镜像不会因此
+# 立即重建；不刷新就会被新公告卡住 Trivy 镜像门禁（实测 libpcre2-8-0 的两个
+# HIGH 使 CI 失败）。此镜像只带 Node，没有需要按版本确认的服务器二进制，因此
+# 直接升级全部已安装的包；`upgrade`（不是 dist-upgrade）只升级已安装的包，
+# 不安装新包、不删除任何包。该层放在启用 PGDG 源之前，只取 Debian 源的基础包。
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
 # PostgreSQL 18 客户端：备份必须用与生产同补丁的 pg_dump（§11.5 步骤 1），
 # 恢复演练用同包 pg_restore。PGDG 源与版本号固定，与 db-bootstrap 镜像同一
 # 基线；postgresql-common 自带 PGDG keyring，脚本离线启用源。

@@ -1,29 +1,16 @@
-import React, { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React from "react";
 import type { InpulseApiClient } from "@generated/api";
-import { ActivityIndexPageView } from "@features/activity-center/ActivityIndexPageView";
+import { ActivityPageView } from "@features/activity/ActivityPageView";
 
 export interface ActivityCenterPageProps {
   readonly client?: InpulseApiClient;
 }
 
+/** 侧栏「项目动态」入口：不锁定项目，直接聚合当前账号可见的全部项目。 */
 export const ActivityCenterPage: React.FC<ActivityCenterPageProps> = ({
   client,
 }) => {
-  const navigate = useNavigate();
-  const handleOpenProject = useCallback(
-    (projectId: number) => {
-      navigate(`/projects/${projectId}/activity`);
-    },
-    [navigate],
-  );
-
-  return (
-    <ActivityIndexPageView
-      onOpenProject={handleOpenProject}
-      {...(client ? { client } : {})}
-    />
-  );
+  return <ActivityPageView {...(client ? { client } : {})} />;
 };
 
 export default ActivityCenterPage;

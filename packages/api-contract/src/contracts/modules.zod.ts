@@ -26,6 +26,21 @@ export const moduleMutationHeadersSchema = z
 export const moduleVersionHeadersSchema = moduleMutationHeadersSchema
   .extend({ "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/) })
   .meta({ id: "ModuleVersionHeaders" });
+/**
+ * 模块卡统计：activeFeatureCount 只计模块下 status = ACTIVE 的功能；
+ * openTaskCount 与项目卡同口径（work_status = TODO，排除 INVALID 与历史来源分支），
+ * 统计范围是模块下全部任务（含功能级任务），与模块任务列表一致。
+ */
+export const moduleStatsSchema = z
+  .object({
+    activeFeatureCount: z.number().int().nonnegative(),
+    openTaskCount: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "ModuleStats" });
+
+export type ModuleStats = z.infer<typeof moduleStatsSchema>;
+
 export const moduleItemSchema = z
   .object({
     id,
@@ -39,6 +54,7 @@ export const moduleItemSchema = z
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     archivedAt: z.iso.datetime().nullable(),
+    stats: moduleStatsSchema,
   })
   .strict()
   .meta({ id: "ModuleItem" });

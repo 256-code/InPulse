@@ -27,6 +27,8 @@ const fields = [
   "createdAt",
   "updatedAt",
   "archivedAt",
+  "stats.openTaskCount",
+  "stats.recordCount",
 ];
 export const featureRoutes: readonly RouteDefinition[] = [
   {
@@ -150,7 +152,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",
-      idempotencyContractVersion: "1.0.0",
+      idempotencyContractVersion: "1.1.0",
       idempotencyFingerprintVersion: "1.0.0",
       behaviorHeaders: create ? [] : ["If-Match"],
       idempotencyReplayPolicy: {

@@ -47,7 +47,11 @@ export function useFeatures(
     queryFn: async ({ signal }) =>
       api.listFeatures(projectId, moduleId, { signal }),
     retry: false,
-    enabled: Number.isInteger(projectId) && projectId > 0,
+    enabled:
+      Number.isInteger(projectId) &&
+      projectId > 0 &&
+      Number.isInteger(moduleId) &&
+      moduleId > 0,
   });
   const mutation = useMutation({
     retry: false,

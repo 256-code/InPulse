@@ -23,6 +23,7 @@ export function PublishedRecordCard({
   client,
   writable,
   onListChanged,
+  featureNames,
 }: {
   readonly item: RecordFeedItem;
   readonly open: boolean;
@@ -30,6 +31,8 @@ export function PublishedRecordCard({
   readonly client?: InpulseApiClient | undefined;
   readonly writable: boolean;
   readonly onListChanged?: (() => void) | undefined;
+  /** 功能名称表：把记录事实区里的影响功能 ID 还原成名称。 */
+  readonly featureNames?: ReadonlyMap<number, string> | undefined;
 }) {
   const record = item.record;
   return (
@@ -76,6 +79,15 @@ export function PublishedRecordCard({
           client={client}
           writable={writable}
           onListChanged={onListChanged}
+          labels={{
+            project: item.projectName,
+            module: item.moduleName,
+            feature: item.featureName,
+            author: item.author.name,
+            impactFeatures: record.impactFeatureIds
+              .map((id) => featureNames?.get(id))
+              .filter((name): name is string => typeof name === "string"),
+          }}
         />
       ) : null}
     </details>

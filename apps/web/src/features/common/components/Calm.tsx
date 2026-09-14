@@ -81,6 +81,7 @@ export const CalmTabs = <K extends string>({
   activeKey,
   items,
   onChange,
+  className = "calm-tabs",
 }: {
   readonly label: string;
   readonly activeKey: K;
@@ -89,8 +90,9 @@ export const CalmTabs = <K extends string>({
     readonly label: React.ReactNode;
   }>;
   readonly onChange: (key: K) => void;
+  readonly className?: string;
 }) => (
-  <div className="calm-tabs" role="tablist" aria-label={label}>
+  <div className={className} role="tablist" aria-label={label}>
     {items.map((item) => (
       <button
         key={item.key}

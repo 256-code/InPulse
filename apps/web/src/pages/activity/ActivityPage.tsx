@@ -1,8 +1,7 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import { Result } from "antd";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
-import { useAuth } from "@features/auth/auth-context";
 import { ActivityPageView } from "@features/activity/ActivityPageView";
 
 export interface ActivityPageProps {
@@ -16,13 +15,7 @@ function parseProjectId(value: string | undefined): number | null {
 
 export const ActivityPage: React.FC<ActivityPageProps> = ({ client }) => {
   const { projectId: projectIdParam } = useParams<{ projectId: string }>();
-  const { user } = useAuth();
   const projectId = parseProjectId(projectIdParam);
-  const [includeAdminOnly, setIncludeAdminOnly] = useState(false);
-
-  const handleIncludeAdminOnlyChange = useCallback((value: boolean) => {
-    setIncludeAdminOnly(value);
-  }, []);
 
   if (projectId === null) {
     return (
@@ -35,16 +28,7 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ client }) => {
   }
 
   return (
-    <>
-      <Link to={`/projects/${projectId}/modules`}>管理项目模块</Link>
-      <ActivityPageView
-        projectId={projectId}
-        includeAdminOnly={includeAdminOnly}
-        onIncludeAdminOnlyChange={handleIncludeAdminOnlyChange}
-        showAdminToggle={Boolean(user?.isAdmin)}
-        {...(client ? { client } : {})}
-      />
-    </>
+    <ActivityPageView projectId={projectId} {...(client ? { client } : {})} />
   );
 };
 

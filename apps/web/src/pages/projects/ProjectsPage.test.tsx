@@ -44,6 +44,11 @@ describe("ProjectsPage", () => {
         {
           ...createdProject.project,
           memberCount: 1,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+          },
         },
       ],
     });
@@ -111,7 +116,7 @@ describe("ProjectsPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "新建项目" }));
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     fireEvent.change(within(dialog).getByLabelText("项目名称"), {
       target: { value: "商城系统" },
     });
@@ -135,6 +140,11 @@ describe("ProjectsPage", () => {
         {
           ...createdProject.project,
           memberCount: 1,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+          },
         },
       ],
     });
@@ -195,6 +205,11 @@ describe("ProjectsPage", () => {
         {
           ...createdProject.project,
           memberCount: 1,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+          },
         },
       ],
     });

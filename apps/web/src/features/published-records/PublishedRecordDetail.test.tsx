@@ -53,7 +53,10 @@ const item = {
   leftoverItem: null,
   leftovers: [],
 };
-function mountDetail(api: InpulseApiClient) {
+function mountDetail(
+  api: InpulseApiClient,
+  { standalone = true }: { standalone?: boolean } = {},
+) {
   return render(
     <MemoryRouter initialEntries={["/records?projectId=1&publishedId=7"]}>
       <QueryClientProvider client={new QueryClient()}>
@@ -62,6 +65,7 @@ function mountDetail(api: InpulseApiClient) {
           recordId={7}
           client={api}
           writable
+          standalone={standalone}
         />
       </QueryClientProvider>
     </MemoryRouter>,
@@ -72,7 +76,7 @@ it("compares exact immutable version content and identifies unchanged fields", (
   expect(diff.filter((x) => x.changed)).toEqual([
     {
       field: "resultVerification",
-      label: "改完效果如何、如何验证",
+      label: "改动效果",
       before: "初次验证",
       after: "追加并发验证",
       changed: true,
@@ -118,10 +122,10 @@ it("renders the source task link and the four content sections", async () => {
     "href",
     "/projects/1/modules/2/features/2?taskId=8",
   );
-  expect(within(region).getByText("为什么改、发现了什么问题")).toBeVisible();
-  expect(within(region).getByText("改了什么、怎么改的")).toBeVisible();
-  expect(within(region).getByText("改完效果如何、如何验证")).toBeVisible();
-  expect(within(region).getByText("还有什么问题")).toBeVisible();
+  expect(within(region).getByText("改动原因")).toBeVisible();
+  expect(within(region).getByText("具体改动")).toBeVisible();
+  expect(within(region).getByText("改动效果")).toBeVisible();
+  expect(within(region).getByText("遗留问题")).toBeVisible();
 });
 it("explains a missing or unauthorized record without leaking existence", async () => {
   const api = {
@@ -137,4 +141,27 @@ it("explains a missing or unauthorized record without leaking existence", async 
   } as unknown as InpulseApiClient;
   mountDetail(api);
   expect(await screen.findByText("记录不存在或当前无法访问。")).toBeVisible();
+});
+it("leaves the record identity to the card summary when not standalone", async () => {
+  const api = {
+    getChangeRecord: vi.fn().mockResolvedValue(item),
+    listChangeRecordVersions: vi
+      .fn()
+      .mockResolvedValue({ items: [second, first] }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api, { standalone: false });
+  const region = await screen.findByRole("region", { name: "正式记录详情" });
+  expect(await within(region).findByText("归属")).toBeVisible();
+  expect(within(region).queryByText("支付修订")).toBeNull();
+  expect(within(region).queryByText("SHOP-CR-1 · v2 · 已发布")).toBeNull();
+});
+it("hides the version comparison until a record has more than one version", async () => {
+  const api = {
+    getChangeRecord: vi.fn().mockResolvedValue(item),
+    listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api);
+  const region = await screen.findByRole("region", { name: "正式记录详情" });
+  expect(await within(region).findByText("归属")).toBeVisible();
+  expect(within(region).queryByLabelText("较早版本")).toBeNull();
 });

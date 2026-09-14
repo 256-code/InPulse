@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Space, Switch } from "antd";
+import { Alert, Button, Input, Space, Switch } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
@@ -313,36 +314,24 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
         </span>
       </div>
 
-      <div className="settings-shell">
-        <nav className="settings-rail" aria-label="成员与设置导航">
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="成员与设置导航">
           <button
             type="button"
-            className={
-              activeTab === "members"
-                ? "settings-tab settings-tab-active"
-                : "settings-tab"
-            }
+            className={activeTab === "members" ? "selected" : undefined}
             aria-current={activeTab === "members" ? "page" : undefined}
             onClick={() => setActiveTab("members")}
           >
             成员与角色
           </button>
           {onOpenProjects ? (
-            <button
-              type="button"
-              className="settings-tab"
-              onClick={onOpenProjects}
-            >
+            <button type="button" onClick={onOpenProjects}>
               项目成员
             </button>
           ) : null}
           <button
             type="button"
-            className={
-              activeTab === "permissions"
-                ? "settings-tab settings-tab-active"
-                : "settings-tab"
-            }
+            className={activeTab === "permissions" ? "selected" : undefined}
             aria-current={activeTab === "permissions" ? "page" : undefined}
             onClick={() => setActiveTab("permissions")}
           >
@@ -350,11 +339,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           </button>
           <button
             type="button"
-            className={
-              activeTab === "notifications"
-                ? "settings-tab settings-tab-active"
-                : "settings-tab"
-            }
+            className={activeTab === "notifications" ? "selected" : undefined}
             aria-current={activeTab === "notifications" ? "page" : undefined}
             onClick={() => setActiveTab("notifications")}
           >
@@ -366,7 +351,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
         {activeTab === "notifications" ? <NotificationPolicyPanel /> : null}
 
         {activeTab === "members" ? (
-          <section className="settings-panel">
+          <section className="panel settings-panel">
             <CalmSectionTitle
               title="成员与角色"
               hint={
@@ -495,10 +480,12 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
       </div>
 
       <Modal
+        className="catalog-modal"
         open={editor !== null}
+        eyebrow="用户目录与本地账号"
         title={editorTitle}
+        body
         onCancel={closeEditor}
-        footer={null}
         mask={{ closable: !mutation.isPending }}
       >
         <form onSubmit={(event) => void save(event)}>
@@ -656,10 +643,14 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
       </Modal>
 
       <Modal
+        className="catalog-modal"
         open={lifecycle !== null}
+        eyebrow={
+          lifecycle ? "账号 · " + lifecycle.user.loginName : "账号生命周期"
+        }
         title={lifecycle ? lifecycleCopy[lifecycle.action].title : ""}
+        body
         onCancel={closeLifecycle}
-        footer={null}
         mask={{ closable: !mutation.isPending }}
       >
         {lifecycle && (

@@ -5,7 +5,8 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
-import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Alert, Button, Input, Spin } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
@@ -20,6 +21,7 @@ import {
   CalmTabs,
 } from "@features/common/components/Calm";
 import {
+  isFirstLoad,
   mergeTask,
   taskEdit,
   taskError,
@@ -590,12 +592,10 @@ export function TasksPanel({
       {selectedId !== null && (
         <Modal
           open
-          centered
-          width={1000}
+          size="xl"
+          label="任务详情"
           onCancel={closeDetail}
-          className="catalog-modal task-detail-modal"
-          title="任务详情"
-          footer={null}
+          className="task-modal"
         >
           {query.isPending ? (
             <div className="calm-state">
@@ -619,7 +619,7 @@ export function TasksPanel({
             <Alert type="warning" title="任务不存在或无法访问。" />
           ) : (
             <>
-              <div className="task-modal-header">
+              <div className="drawer-header task-modal-header">
                 <div>
                   <span className="detail-label">
                     项目 #{current.projectId} / 模块 #{current.moduleId} /
@@ -652,6 +652,14 @@ export function TasksPanel({
                     )}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="关闭任务详情"
+                  onClick={closeDetail}
+                >
+                  <InpulseIcon name="x" size={19} />
+                </button>
               </div>
               <div className="calm-task-actions">
                 <TaskDueBadge item={current} />
@@ -919,10 +927,15 @@ export function TasksPanel({
       )}
       <Modal
         open={selection !== null}
+        eyebrow={
+          selection?.item
+            ? selection.item.code + " · 编辑后 rowVersion 递增并写入审计"
+            : "任务负责一次具体执行工作"
+        }
         title={selection?.item ? "编辑任务" : "新建任务"}
-        className="catalog-modal task-edit-modal"
+        size="lg"
+        className="catalog-modal"
         onCancel={close}
-        footer={null}
         mask={{ closable: !mutation.isPending && !reloading }}
       >
         <form
@@ -1155,7 +1168,7 @@ export function TasksPanel({
                 {errors.assigneeId && (
                   <p role="alert">{errors.assigneeId.message}</p>
                 )}
-                {members.isPending && <p>正在加载项目成员…</p>}
+                {isFirstLoad(members) && <p>正在加载项目成员…</p>}
                 {members.isError && (
                   <Alert
                     type="error"

@@ -13,9 +13,10 @@ import type {
  * R-3 listMyTasks 的 A 岗冻结契约映射（F-32 任务中心）。
  *
  * 冻结事实见 docs/a-contract-review-f25-f29-f32.md §2、§3、§10、§11：
- * 路径 GET /api/v1/me/tasks，参数支持 cursor / limit / projectId /
- * scopeType / workStatus / hasPublishedRecord / priority / includeCanceled，
- * 负责人固定为当前用户，排序固定 id DESC，limit 默认 20、上限 100。
+ * 路径 GET /api/v1/me/tasks，参数支持 cursor / limit / ownership /
+ * projectId / scopeType / workStatus / hasPublishedRecord / priority /
+ * includeCanceled，归属主体固定为当前用户（ownership 只区分负责与创建两个自指
+ * 维度），排序固定 id DESC，limit 默认 20、上限 100。
  *
  * 本文件只做「UI 筛选状态 → 冻结查询参数」的纯映射、R-3 条目映射与缺口盘点：
  * 不发起请求、不引入生成客户端实现、不改契约。请求由 my-tasks-server.ts
@@ -30,6 +31,8 @@ export const MY_TASKS_V1_LIMIT_MAX = 100;
 export interface MyTasksV1Query {
   readonly cursor?: string;
   readonly limit?: number;
+  /** 归属维度：ASSIGNEE（负责，缺省/「我负责的」）或 CREATOR（创建，「我创建的」）。 */
+  readonly ownership?: "ASSIGNEE" | "CREATOR";
   readonly projectId?: number;
   readonly scopeType?: MyTaskLevel;
   readonly workStatus?: MyTaskWorkStatus;
@@ -51,20 +54,39 @@ export interface MyTasksV1QueryOptions {
 export type MyTasksV1FilterGap = MyTasksFilterGap;
 
 /**
- * R-3 契约对各项 UI 筛选的表达能力：第二轮扩展后 priority 与
- * 「未完成并含已取消」可由参数表达；其余 6 项仍无契约来源
+ * R-3 契约对各项 UI 筛选的表达能力：第二轮扩展与 ownership 扩展后
+ * priority、「未完成并含已取消」与「我创建的」可由参数表达；其余 5 项仍无契约来源
  * （见 docs/a-contract-review-f25-f29-f32.md §3、§10 与 Q-08 ~ Q-10），
  * 服务端适配器按本表显式降级。
  */
 export const MY_TASKS_V1_FILTER_SUPPORT: MyTasksFilterSupport = {
-  "scope:created": false,
+  "scope:created": true,
   "scope:all": false,
-  "scope:project-without-id": false,
+  "scope:project-without-id": true,
   "filter:priority": true,
   "filter:relation": false,
   "filter:github": false,
   "filter:query": false,
   "filter:canceled-with-open": true,
+};
+
+/**
+ * R-3 无对应参数、但视图可在已加载页上本地计算的条件。
+ *
+ * 这些条件不改变请求，只在已加载的结果集内收窄显示；调用方必须同时提示
+ * 结果受分页限制，不得把本地筛选结果说成服务端筛选结果。
+ * scope:all 无法本地计算：R-3 只服务当前用户的自指维度（负责人或创建者），
+ * 「全部任务」需要跨用户的授权范围，非管理员不得放开。
+ */
+export const MY_TASKS_V1_LOCAL_FILTER_SUPPORT: MyTasksFilterSupport = {
+  "scope:created": false,
+  "scope:all": false,
+  "scope:project-without-id": false,
+  "filter:priority": false,
+  "filter:relation": true,
+  "filter:github": true,
+  "filter:query": true,
+  "filter:canceled-with-open": false,
 };
 
 /**
@@ -86,13 +108,26 @@ export function requiresCanceledUnion(filters: MyTaskFilters): boolean {
   return filters.status === "open" && filters.includeCanceled;
 }
 
-/** status=all 不带 workStatus；open 与 done 映射为单值。 */
+/**
+ * status=all 不带 workStatus；open 与 done 映射为单值。
+ */
 export function toMyTasksV1WorkStatus(
   filters: MyTaskFilters,
 ): MyTaskWorkStatus | null {
   if (filters.status === "open") return "TODO";
   if (filters.status === "done") return "DONE";
   return null;
+}
+
+/**
+ * 范围 → 归属维度（Q-08 的自指维度，不引入他人身份参数）：
+ * created = CREATOR（当前用户创建），其余范围都是 ASSIGNEE（当前用户负责）。
+ * 缺省不发送该参数，服务端按 ASSIGNEE 处理，与历史行为一致。
+ */
+export function toMyTasksV1Ownership(
+  filters: MyTaskFilters,
+): "ASSIGNEE" | "CREATOR" | null {
+  return filters.scope === "created" ? "CREATOR" : null;
 }
 
 /** 非正整数回退默认值，超过上限按上限收口，与服务端 422 边界保持一致。 */
@@ -108,6 +143,7 @@ export function toMyTasksV1Query(
   const query: {
     cursor?: string;
     limit: number;
+    ownership?: "ASSIGNEE" | "CREATOR";
     projectId?: number;
     scopeType?: MyTaskLevel;
     workStatus?: MyTaskWorkStatus;
@@ -120,6 +156,8 @@ export function toMyTasksV1Query(
 
   const cursor = options.cursor ?? null;
   if (cursor !== null && cursor.length > 0) query.cursor = cursor;
+  const ownership = toMyTasksV1Ownership(filters);
+  if (ownership !== null) query.ownership = ownership;
   if (filters.scope === "project" && filters.projectId !== null) {
     query.projectId = filters.projectId;
   }
@@ -178,13 +216,44 @@ export function listMyTasksV1Gaps(
   filters: MyTaskFilters,
 ): readonly MyTasksV1FilterGap[] {
   const gaps: MyTasksV1FilterGap[] = [];
-  if (filters.scope === "created") gaps.push("scope:created");
   if (filters.scope === "all") gaps.push("scope:all");
-  if (filters.scope === "project" && filters.projectId === null) {
-    gaps.push("scope:project-without-id");
-  }
   if (filters.relation !== null) gaps.push("filter:relation");
   if (filters.hasGithub !== null) gaps.push("filter:github");
   if (filters.query.trim().length > 0) gaps.push("filter:query");
   return gaps;
+}
+
+/**
+ * 在已加载结果集上本地收窄；只处理 server 未提供而本地可计算的条件。
+ * 返回值必须与「结果受分页限制」的提示一起呈现。
+ */
+export function matchesMyTasksLocalFilters(
+  item: MyTaskListItem,
+  filters: MyTaskFilters,
+  support: MyTasksFilterSupport,
+): boolean {
+  if (!support["filter:relation"] && filters.relation !== null) {
+    const relation = item.groupRole ?? "STANDALONE";
+    if (relation !== filters.relation) return false;
+  }
+  if (!support["filter:github"] && filters.hasGithub !== null) {
+    if (item.githubLinkCount > 0 !== (filters.hasGithub === "yes")) {
+      return false;
+    }
+  }
+  const needle = filters.query.trim().toLowerCase();
+  if (!support["filter:query"] && needle.length > 0) {
+    const haystack = [
+      item.code,
+      item.title,
+      item.projectName,
+      item.moduleName,
+      item.featureName ?? "",
+      item.assignee.name,
+    ]
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(needle)) return false;
+  }
+  return true;
 }

@@ -32,14 +32,20 @@ const item: FeatureItem = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   archivedAt: null,
+  stats: { openTaskCount: 0, recordCount: 0 },
 };
 /**
- * 功能视图会读模块列表用于项目内导航；这里默认给空列表，
- * 需要断言导航的用例在传入的 client 上显式提供 listModules 覆盖即可。
+ * 功能视图会读模块列表用于项目内导航、读模块级任务用于页头计数；
+ * 这里默认给空列表，需要断言导航的用例在传入的 client 上显式提供
+ * listModules / listModuleTasks 覆盖即可。
  */
 const withModules = (client: InpulseApiClient): InpulseApiClient =>
   Object.assign(
-    { listModules: vi.fn().mockResolvedValue({ items: [] }) },
+    {
+      listModules: vi.fn().mockResolvedValue({ items: [] }),
+      listModuleTasks: vi.fn().mockResolvedValue({ items: [] }),
+      listModuleTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+    },
     client,
   ) as unknown as InpulseApiClient;
 
@@ -99,7 +105,7 @@ describe("F-13 forms", () => {
     } as unknown as InpulseApiClient;
     mount(client);
     await screen.findByText("暂无功能");
-    fireEvent.click(screen.getByRole("button", { name: "新建功能" }));
+    fireEvent.click(screen.getByRole("button", { name: "新增功能" }));
     fireEvent.change(screen.getByLabelText("功能名称"), {
       target: { value: "退款" },
     });
@@ -151,7 +157,7 @@ describe("F-13 forms", () => {
         .mockResolvedValue({ ...latest, name: "我的新名称", rowVersion: 3 }),
     } as unknown as InpulseApiClient;
     mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
     fireEvent.change(screen.getByLabelText("功能名称"), {
       target: { value: "我的新名称" },
     });
@@ -213,7 +219,7 @@ describe("F-13 forms", () => {
           .mockResolvedValue({ ...latest, rowVersion: 3 }),
       } as unknown as InpulseApiClient;
       mount(client);
-      fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
       fireEvent.change(screen.getByLabelText("当前功能说明"), {
         target: { value: "我的说明草稿" },
       });
@@ -280,9 +286,9 @@ describe("F-13 forms", () => {
     mount(client);
     await screen.findByText("退款功能");
     expect(
-      screen.queryByRole("button", { name: /归\s*档/ }),
+      screen.queryByRole("button", { name: "归档功能" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /编\s*辑/ }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑功能" }));
     fireEvent.change(screen.getByLabelText("功能名称"), {
       target: { value: "保留的新名称" },
     });
@@ -315,7 +321,7 @@ describe("F-13 forms", () => {
         .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
     } as unknown as InpulseApiClient;
     mount(client, true);
-    fireEvent.click(await screen.findByRole("button", { name: /归\s*档/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "归档功能" }));
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "管理员安全验证" }),
@@ -351,12 +357,12 @@ describe("F-13 forms", () => {
       }),
     } as unknown as InpulseApiClient;
     mount(client, true);
-    await screen.findByRole("button", { name: /恢\s*复/ });
+    await screen.findByRole("button", { name: "恢复功能" });
     expect(
-      screen.queryByRole("button", { name: /编\s*辑/ }),
+      screen.queryByRole("button", { name: "编辑功能" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /归\s*档/ }),
+      screen.queryByRole("button", { name: "归档功能" }),
     ).not.toBeInTheDocument();
   });
 
@@ -490,5 +496,73 @@ describe("项目内导航", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "项目概览" }));
     expect(await screen.findByText("项目概览页")).toBeInTheDocument();
+  });
+});
+
+describe("功能卡", () => {
+  const withStats = {
+    ...item,
+    stats: { openTaskCount: 7, recordCount: 5 },
+  };
+  const CardListRoute: React.FC = () => (
+    <FeaturesPageView
+      projectId={2}
+      moduleId={4}
+      isAdmin={false}
+      client={cardClient}
+    />
+  );
+  const cardClient = withModules({
+    listFeatures: vi.fn().mockResolvedValue({ items: [withStats] }),
+    findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+  } as unknown as InpulseApiClient);
+  const mountCardList = () =>
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter initialEntries={["/projects/2/modules/4/features"]}>
+              <Routes>
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features"
+                  element={<CardListRoute />}
+                />
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features/:featureId"
+                  element={<div>功能详情页</div>}
+                />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+
+  it("shows the open task and iteration counts in the card footer", async () => {
+    mountCardList();
+    expect(await screen.findByText(/7 项待办/)).toBeInTheDocument();
+    expect(screen.getByText(/5 条迭代/)).toBeInTheDocument();
+  });
+
+  it("opens the feature detail when the card body itself is clicked", async () => {
+    mountCardList();
+    fireEvent.click(await screen.findByRole("heading", { name: "退款功能" }));
+    await screen.findByText("功能详情页");
+  });
+
+  it("keeps 查看详情 as the single link inside the card", async () => {
+    mountCardList();
+    const links = await screen.findAllByRole("link", { name: "查看详情" });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe(
+      "/projects/2/modules/4/features/3",
+    );
+    expect(
+      links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
+    ).toBeNull();
   });
 });

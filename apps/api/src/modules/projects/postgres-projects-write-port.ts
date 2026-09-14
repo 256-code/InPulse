@@ -1,4 +1,5 @@
 import type { TransactionContext } from "../../database/transaction-context.js";
+import { projectStatColumns } from "../../stats/card-stat-columns.js";
 import {
   ActiveUsersQueryPort,
   type AddProjectMemberInput,
@@ -59,6 +60,9 @@ interface ProjectChangeRow {
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly memberCount: number;
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
 }
 
 /** 项目写适配器；只接收显式 TransactionContext，从不开启事务或使用全局客户端。 */
@@ -182,7 +186,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                  FROM app.project_members m
                 WHERE m.project_id = p.id
                   AND m.status = 'ACTIVE'
-             ) AS "memberCount"
+             ) AS "memberCount",
+             ${projectStatColumns(tx.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${input.projectId}
        LIMIT 1
@@ -234,7 +239,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                  FROM app.project_members m
                 WHERE m.project_id = u.id
                   AND m.status = 'ACTIVE'
-             ) AS "memberCount"
+             ) AS "memberCount",
+             ${projectStatColumns(tx.sql, "u")}
         FROM updated u
     `) as unknown as readonly ProjectChangeRow[];
     const row = rows[0];
@@ -282,7 +288,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                  FROM app.project_members m
                 WHERE m.project_id = u.id
                   AND m.status = 'ACTIVE'
-             ) AS "memberCount"
+             ) AS "memberCount",
+             ${projectStatColumns(tx.sql, "u")}
         FROM updated u
     `) as unknown as readonly ProjectChangeRow[];
     const row = rows[0];
@@ -396,6 +403,11 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
       memberCount: row.memberCount,
+      stats: {
+        activeModuleCount: row.activeModuleCount,
+        activeFeatureCount: row.activeFeatureCount,
+        openTaskCount: row.openTaskCount,
+      },
     };
   }
 }

@@ -3,7 +3,7 @@ import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 /**
- * F-20 遗留问题页（R-6）关键路径 E2E：发布带「还有什么问题」的迭代记录后，
+ * F-20 遗留问题页（R-6）关键路径 E2E：发布带「遗留问题」的迭代记录后，
  * 未闭环桶展示来源记录、来源任务与转为任务入口；页内完成转换后按应用统一
  * 模式自动打开新建的跟进任务详情，回到遗留问题页可见该条移入已闭环折叠区
  * 并保留跟进任务入口，原记录内容不被改写。
@@ -34,14 +34,10 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
       name: "完成任务",
       exact: true,
     });
-    await completion.getByLabel("是否产生实际功能变化").selectOption("yes");
-    for (const label of [
-      "为什么改、发现了什么问题",
-      "改了什么、怎么改的",
-      "改完效果如何、如何验证",
-    ])
+    await completion.getByRole("button", { name: /有，填写迭代记录/ }).click();
+    for (const label of ["改动原因", "具体改动", "改动效果"])
       await completion.getByLabel(label).fill("F-20 E2E 内容 " + suffix);
-    await completion.getByLabel("还有什么问题（选填）").fill(leftover);
+    await completion.getByLabel("遗留问题（选填）").fill(leftover);
     await completion
       .getByRole("button", { name: "发布并完成任务", exact: true })
       .click();
@@ -58,7 +54,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(row).toContainText(taskTitle);
 
     await row.getByRole("button", { name: /^来源任务/ }).click();
-    const detail = page.locator(".task-detail-modal");
+    const detail = page.getByRole("dialog", { name: "任务详情" });
     await expect(detail).toBeVisible();
     await expect(detail.getByText(taskTitle)).toBeVisible();
 

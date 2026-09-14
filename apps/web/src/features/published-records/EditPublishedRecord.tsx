@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal } from "antd";
+import { Alert, Button, Input } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,6 +37,7 @@ export function EditPublishedRecord({
     [error, setError] = useState<unknown>(null),
     [confirmed, setConfirmed] = useState(false),
     [merge, setMerge] = useState<Merge | null>(null);
+  const formId = React.useId();
   const retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
   const {
@@ -165,146 +167,162 @@ export function EditPublishedRecord({
       </Button>
       <Modal
         open={baseline !== null}
+        eyebrow={
+          baseline === null
+            ? undefined
+            : item.code +
+              " · 保存为 v" +
+              ((baseline.currentVersion ?? item.currentVersion) + 1)
+        }
         title="修订迭代记录"
         className="catalog-modal"
-        footer={null}
+        size="lg"
         onCancel={() => {
           if (!busy) setBaseline(null);
         }}
         mask={{ closable: !busy }}
+        footer={
+          <Button
+            htmlType="submit"
+            form={formId}
+            type="primary"
+            loading={busy}
+            disabled={
+              !writable ||
+              conflict ||
+              !!merge ||
+              (needsConfirmation && !confirmed)
+            }
+          >
+            保存新版本
+          </Button>
+        }
       >
-        <form className="catalog-form calm-form" onSubmit={(e) => void save(e)}>
-          <p>
-            保存为 v{(baseline?.currentVersion ?? item.currentVersion) + 1}
-            ，旧版本保持不变。新的独立功能变化请新建记录。
-          </p>
-          {!!error && (
-            <Alert
-              type="error"
-              title={
-                error instanceof ApiError
-                  ? `${error.message} 输入已保留。`
-                  : "服务暂时不可用，输入已保留，可重试。"
-              }
-            />
-          )}
-          {conflict &&
-            error instanceof ApiError &&
-            error.code === "RECORD_VERSION_CONFLICT" && (
-              <Button disabled={busy} onClick={() => void reload()}>
-                加载最新版本并合并
-              </Button>
-            )}
-          {merge && (
-            <section aria-label="版本冲突">
-              <p>双方都修改了以下内容，请逐项选择。</p>
-              {merge.conflicts.map((field) => (
-                <label key={field}>
-                  {labels[field]}冲突
-                  <select
-                    value={merge.choices[field] ?? ""}
-                    onChange={(e) =>
-                      setMerge({
-                        ...merge,
-                        choices: {
-                          ...merge.choices,
-                          [field]: e.target.value as "mine" | "latest",
-                        },
-                      })
-                    }
-                  >
-                    <option value="">请选择</option>
-                    <option value="mine">保留我的输入</option>
-                    <option value="latest">采用最新内容</option>
-                  </select>
-                  <div className="record-field">
-                    <span className="record-field-label">最新内容</span>
-                    <RecordMarkdown content={merge.latest[field] || "（空）"} />
-                  </div>
-                </label>
-              ))}
-              <Button
-                disabled={merge.conflicts.some((f) => !merge.choices[f])}
-                onClick={apply}
-              >
-                应用合并
-              </Button>
-            </section>
-          )}
-          {fields.map((field) => (
-            <label key={field}>
-              {labels[field]}
-              <Controller
-                name={field}
-                control={control}
-                rules={{
-                  validate: (v) =>
-                    field === "remainingIssues" ||
-                    v.trim().length > 0 ||
-                    "请填写此项",
-                  maxLength:
-                    field === "title"
-                      ? 500
-                      : field === "remainingIssues"
-                        ? 10000
-                        : 50000,
-                }}
-                render={({ field: input }) =>
-                  field === "title" ? (
-                    <Input
-                      {...input}
-                      aria-label={labels[field]}
-                      maxLength={500}
-                    />
-                  ) : (
-                    <Input.TextArea
-                      {...input}
-                      aria-label={labels[field]}
-                      rows={4}
-                      maxLength={field === "remainingIssues" ? 10000 : 50000}
-                    />
-                  )
+        <form
+          id={formId}
+          className="catalog-form calm-form"
+          onSubmit={(e) => void save(e)}
+        >
+          <div className="dialog-form">
+            <p>
+              保存为 v{(baseline?.currentVersion ?? item.currentVersion) + 1}
+              ，旧版本保持不变。新的独立功能变化请新建记录。
+            </p>
+            {!!error && (
+              <Alert
+                type="error"
+                title={
+                  error instanceof ApiError
+                    ? `${error.message} 输入已保留。`
+                    : "服务暂时不可用，输入已保留，可重试。"
                 }
               />
-              {errors[field] && (
-                <span role="alert">
-                  {errors[field]?.message || "内容超过长度限制"}
-                </span>
+            )}
+            {conflict &&
+              error instanceof ApiError &&
+              error.code === "RECORD_VERSION_CONFLICT" && (
+                <Button disabled={busy} onClick={() => void reload()}>
+                  加载最新版本并合并
+                </Button>
               )}
-            </label>
-          ))}
-          {needsConfirmation && (
-            <label>
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />
-              确认遗留问题已解决，清空本版本内容
-            </label>
-          )}
-          {baseline?.leftoverItem?.status === "CONVERTED" && (
+            {merge && (
+              <section aria-label="版本冲突">
+                <p>双方都修改了以下内容，请逐项选择。</p>
+                {merge.conflicts.map((field) => (
+                  <label key={field}>
+                    {labels[field]}冲突
+                    <select
+                      value={merge.choices[field] ?? ""}
+                      onChange={(e) =>
+                        setMerge({
+                          ...merge,
+                          choices: {
+                            ...merge.choices,
+                            [field]: e.target.value as "mine" | "latest",
+                          },
+                        })
+                      }
+                    >
+                      <option value="">请选择</option>
+                      <option value="mine">保留我的输入</option>
+                      <option value="latest">采用最新内容</option>
+                    </select>
+                    <div className="record-field">
+                      <span className="record-field-label">最新内容</span>
+                      <RecordMarkdown
+                        content={merge.latest[field] || "（空）"}
+                      />
+                    </div>
+                  </label>
+                ))}
+                <Button
+                  disabled={merge.conflicts.some((f) => !merge.choices[f])}
+                  onClick={apply}
+                >
+                  应用合并
+                </Button>
+              </section>
+            )}
+            {fields.map((field) => (
+              <label key={field}>
+                {labels[field]}
+                <Controller
+                  name={field}
+                  control={control}
+                  rules={{
+                    validate: (v) =>
+                      field === "remainingIssues" ||
+                      v.trim().length > 0 ||
+                      "请填写此项",
+                    maxLength:
+                      field === "title"
+                        ? 500
+                        : field === "remainingIssues"
+                          ? 10000
+                          : 50000,
+                  }}
+                  render={({ field: input }) =>
+                    field === "title" ? (
+                      <Input
+                        {...input}
+                        aria-label={labels[field]}
+                        maxLength={500}
+                      />
+                    ) : (
+                      <Input.TextArea
+                        {...input}
+                        aria-label={labels[field]}
+                        rows={4}
+                        maxLength={field === "remainingIssues" ? 10000 : 50000}
+                      />
+                    )
+                  }
+                />
+                {errors[field] && (
+                  <span role="alert">
+                    {errors[field]?.message || "内容超过长度限制"}
+                  </span>
+                )}
+              </label>
+            ))}
+            {needsConfirmation && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(e) => setConfirmed(e.target.checked)}
+                />
+                确认遗留问题已解决，清空本版本内容
+              </label>
+            )}
+            {baseline?.leftoverItem?.status === "CONVERTED" && (
+              <p>
+                此遗留项已转为跟进任务，修订或清空文字仍保留原任务关联。新的独立问题请新建记录。
+              </p>
+            )}
             <p>
-              此遗留项已转为跟进任务，修订或清空文字仍保留原任务关联。新的独立问题请新建记录。
+              遗留问题最多10000字符。超出完整正文的发布容量时会保留输入并提示调整。
             </p>
-          )}
-          <p>
-            遗留问题最多10000字符。超出完整正文的发布容量时会保留输入并提示调整。
-          </p>
-          <div className="calm-action-footer">
-            <Button
-              htmlType="submit"
-              type="primary"
-              loading={busy}
-              disabled={
-                !writable ||
-                conflict ||
-                !!merge ||
-                (needsConfirmation && !confirmed)
-              }
-            >
-              保存新版本
-            </Button>
           </div>
         </form>
       </Modal>

@@ -142,7 +142,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
           </div>
           <h1>遗留问题</h1>
           <p>
-            迭代记录中写下的「还有什么问题」会汇总到这里，确认影响范围后转为可执行任务。
+            迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
           </p>
         </div>
         <div className="catalog-actions">
