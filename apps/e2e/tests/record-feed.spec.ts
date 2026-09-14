@@ -22,13 +22,9 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
     await draft.getByLabel("所属模块").selectOption({ index: 1 });
     await draft.getByLabel("迭代标题").fill(title);
-    await draft
-      .getByLabel("为什么改、发现了什么问题")
-      .fill("B-3b 跨项目清单问题");
-    await draft.getByLabel("改了什么、怎么改的").fill("B-3b 跨项目清单方案");
-    await draft
-      .getByLabel("改完效果如何、如何验证")
-      .fill("B-3b 跨项目清单验证");
+    await draft.getByLabel("改动原因").fill("B-3b 跨项目清单问题");
+    await draft.getByLabel("具体改动").fill("B-3b 跨项目清单方案");
+    await draft.getByLabel("改动效果").fill("B-3b 跨项目清单验证");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await expect(

@@ -50,13 +50,9 @@ for (const feature of [true, false])
       await task.getByRole("button", { name: "完成任务", exact: true }).click();
       const form = page.getByRole("dialog", { name: "完成任务", exact: true });
       await form.getByRole("button", { name: /有，填写迭代记录/ }).click();
-      for (const label of [
-        "为什么改、发现了什么问题",
-        "改了什么、怎么改的",
-        "改完效果如何、如何验证",
-      ])
+      for (const label of ["改动原因", "具体改动", "改动效果"])
         await form.getByLabel(label).fill("真实组合流程");
-      await form.getByLabel("还有什么问题（选填）").fill("需要后续跟进");
+      await form.getByLabel("遗留问题（选填）").fill("需要后续跟进");
       await form
         .getByRole("button", { name: "发布并完成任务", exact: true })
         .click();
@@ -97,13 +93,9 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建来源草稿" });
-    for (const label of [
-      "为什么改、发现了什么问题",
-      "改了什么、怎么改的",
-      "改完效果如何、如何验证",
-    ])
+    for (const label of ["改动原因", "具体改动", "改动效果"])
       await draft.getByLabel(label).fill("可保留的完整内容");
-    await draft.getByLabel("还有什么问题（选填）").fill("文".repeat(10001));
+    await draft.getByLabel("遗留问题（选填）").fill("文".repeat(10001));
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.goto(url);
@@ -124,7 +116,7 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await form.getByRole("link", { name: "打开草稿继续编辑" }).click();
     await page.getByRole("button", { name: "继续编辑" }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
-    await edit.getByLabel("还有什么问题（选填）").fill("后续跟进");
+    await edit.getByLabel("遗留问题（选填）").fill("后续跟进");
     await edit.getByRole("button", { name: "保存草稿" }).click();
     await expect(edit).toBeHidden();
     await page.goto(url);

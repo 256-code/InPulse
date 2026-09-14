@@ -130,9 +130,9 @@ test("F22 draft links survive publication and revision without changing old vers
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
     await draft.getByLabel("所属模块").selectOption({ index: 1 });
     await draft.getByLabel("迭代标题").fill("F22记录" + Date.now());
-    await draft.getByLabel("为什么改、发现了什么问题").fill("原始问题");
-    await draft.getByLabel("改了什么、怎么改的").fill("原始方案");
-    await draft.getByLabel("改完效果如何、如何验证").fill("原始验证");
+    await draft.getByLabel("改动原因").fill("原始问题");
+    await draft.getByLabel("具体改动").fill("原始方案");
+    await draft.getByLabel("改动效果").fill("原始验证");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page
@@ -160,7 +160,7 @@ test("F22 draft links survive publication and revision without changing old vers
     );
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
-    await edit.getByLabel("改了什么、怎么改的").fill("修订方案");
+    await edit.getByLabel("具体改动").fill("修订方案");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
     await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();

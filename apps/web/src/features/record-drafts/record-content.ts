@@ -9,10 +9,10 @@ export const fields = [
 export type Field = (typeof fields)[number];
 export const labels: Record<Field, string> = {
   title: "迭代标题",
-  contextProblem: "为什么改、发现了什么问题",
-  changeSolution: "改了什么、怎么改的",
-  resultVerification: "改完效果如何、如何验证",
-  remainingIssues: "还有什么问题（选填）",
+  contextProblem: "改动原因",
+  changeSolution: "具体改动",
+  resultVerification: "改动效果",
+  remainingIssues: "遗留问题（选填）",
 };
 export function mergeRecordDraft(
   base: RecordDraftContent,

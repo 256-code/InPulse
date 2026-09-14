@@ -48,15 +48,9 @@ async function createRecord(
   await task.getByRole("button", { name: "完成任务", exact: true }).click();
   const form = page.getByRole("dialog", { name: "完成任务", exact: true });
   await form.getByRole("button", { name: /有，填写迭代记录/ }).click();
-  for (const label of [
-    "为什么改、发现了什么问题",
-    "改了什么、怎么改的",
-    "改完效果如何、如何验证",
-  ])
+  for (const label of ["改动原因", "具体改动", "改动效果"])
     await form.getByLabel(label).fill("F20来源内容");
-  await form
-    .getByLabel("还有什么问题（选填）")
-    .fill("本次需要跟进的完整遗留原文");
+  await form.getByLabel("遗留问题（选填）").fill("本次需要跟进的完整遗留原文");
   await form
     .getByRole("button", { name: "发布并完成任务", exact: true })
     .click();
@@ -142,7 +136,7 @@ for (const feature of [true, false])
         for (const value of ["", "转换后的再次填写"]) {
           await record.getByRole("button", { name: "修订内容" }).click();
           const edit = page.getByRole("dialog", { name: "修订迭代记录" });
-          await edit.getByLabel("还有什么问题（选填）").fill(value);
+          await edit.getByLabel("遗留问题（选填）").fill(value);
           await edit.getByRole("button", { name: "保存新版本" }).click();
           await expect(edit).toBeHidden();
           await expect(
@@ -182,7 +176,7 @@ test("F20 其他页面修订造成409，保留任务输入并明确确认最新�
     await other.goto(url);
     await other.getByRole("button", { name: "修订内容" }).click();
     const edit = other.getByRole("dialog", { name: "修订迭代记录" });
-    await edit.getByLabel("还有什么问题（选填）").fill("并发修订后的最新遗留");
+    await edit.getByLabel("遗留问题（选填）").fill("并发修订后的最新遗留");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
     await other.close();

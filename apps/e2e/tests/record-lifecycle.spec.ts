@@ -21,10 +21,10 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
     const draft = member.page.getByRole("dialog", { name: "新建独立草稿" });
     await draft.getByLabel("所属模块").selectOption({ index: 1 });
     await draft.getByLabel("迭代标题").fill(title);
-    await draft.getByLabel("为什么改、发现了什么问题").fill("原始问题");
-    await draft.getByLabel("改了什么、怎么改的").fill("原始方案");
-    await draft.getByLabel("改完效果如何、如何验证").fill("原始验证");
-    await draft.getByLabel("还有什么问题（选填）").fill("保留遗留问题");
+    await draft.getByLabel("改动原因").fill("原始问题");
+    await draft.getByLabel("具体改动").fill("原始方案");
+    await draft.getByLabel("改动效果").fill("原始验证");
+    await draft.getByLabel("遗留问题（选填）").fill("保留遗留问题");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await member.page

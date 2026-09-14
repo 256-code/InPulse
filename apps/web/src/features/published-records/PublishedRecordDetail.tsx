@@ -17,10 +17,10 @@ import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
   ["title", "迭代标题"],
-  ["contextProblem", "为什么改、发现了什么问题"],
-  ["changeSolution", "改了什么、怎么改的"],
-  ["resultVerification", "改完效果如何、如何验证"],
-  ["remainingIssues", "还有什么问题"],
+  ["contextProblem", "改动原因"],
+  ["changeSolution", "具体改动"],
+  ["resultVerification", "改动效果"],
+  ["remainingIssues", "遗留问题"],
 ] as const;
 
 /** 逐字段对比两个不可变版本，供「版本差异」区渲染。 */

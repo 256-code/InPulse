@@ -14,10 +14,10 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
     await draft.getByLabel("所属模块").selectOption({ index: 1 });
     await draft.getByLabel("迭代标题").fill(title);
-    await draft.getByLabel("为什么改、发现了什么问题").fill("版本一问题");
-    await draft.getByLabel("改了什么、怎么改的").fill("版本一方案");
-    await draft.getByLabel("改完效果如何、如何验证").fill("版本一验证");
-    await draft.getByLabel("还有什么问题（选填）").fill("需要后续跟进");
+    await draft.getByLabel("改动原因").fill("版本一问题");
+    await draft.getByLabel("具体改动").fill("版本一方案");
+    await draft.getByLabel("改动效果").fill("版本一验证");
+    await draft.getByLabel("遗留问题（选填）").fill("需要后续跟进");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.getByRole("button", { name: "发布记录", exact: true }).click();
@@ -28,12 +28,12 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
-    await edit.getByLabel("改了什么、怎么改的").fill("版本二方案");
+    await edit.getByLabel("具体改动").fill("版本二方案");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
     await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
-    await edit.getByLabel("还有什么问题（选填）").fill("");
+    await edit.getByLabel("遗留问题（选填）").fill("");
     await expect(
       edit.getByRole("button", { name: "保存新版本" }),
     ).toBeDisabled();
@@ -106,9 +106,9 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建来源草稿" });
-    await draft.getByLabel("为什么改、发现了什么问题").fill("补充测试记录");
-    await draft.getByLabel("改了什么、怎么改的").fill("整理测试用例");
-    await draft.getByLabel("改完效果如何、如何验证").fill("验证全部通过");
+    await draft.getByLabel("改动原因").fill("补充测试记录");
+    await draft.getByLabel("具体改动").fill("整理测试用例");
+    await draft.getByLabel("改动效果").fill("验证全部通过");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.getByRole("button", { name: "发布记录", exact: true }).click();

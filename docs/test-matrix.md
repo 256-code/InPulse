@@ -1336,7 +1336,25 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 **定向验证**：`record-lifecycle` / `leftover-task` / `task-completion` 3 文件 7 例通过（59.5 s）；`record-publishing` / `record-feed` 2 文件 3 例通过。**全量**：`55 passed / 0 failed`（4.6 分钟，容器库 PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3201` / `E2E_WEB_PORT=4173`）。
 
-**待人工评审项**：⑤ 上述 8 处 e2e 改动均为测试语义同步，需非作者确认「摘要行承载状态」的产品口径；⑥ 段落小标题仍是仓库长版（「为什么改、发现了什么问题」等），设计师稿为短版（「为什么改」），尚未收敛，属有意偏离。
+**待人工评审项**：⑤ 上述 8 处 e2e 改动均为测试语义同步，需非作者确认「摘要行承载状态」的产品口径；⑥ 段落小标题已收敛，见下条。
+
+### 迭代记录段落小标题收敛（C，2026-09-14 本地落库）
+
+产品反馈设计师稿的段落小标题与仓库长版不一致（仓库为「为什么改、发现了什么问题 / 改了什么、怎么改的 / 改完效果如何、如何验证 / 还有什么问题」）。本轮统一为设计师稿短版：
+
+| 字段（契约名不变） | 旧显示标签 | 新显示标签 |
+| --- | --- | --- |
+| `contextProblem` | 为什么改、发现了什么问题 | 改动原因 |
+| `changeSolution` | 改了什么、怎么改的 | 具体改动 |
+| `resultVerification` | 改完效果如何、如何验证 | 改动效果 |
+| `remainingIssues` | 还有什么问题（选填） | 遗留问题（选填） |
+
+范围与证据：
+
+- 显示标签只在两处硬编码 —— `apps/web/src/features/record-drafts/record-content.ts` 的 `labels`（带「（选填）」后缀，供新建草稿、编辑草稿、完成任务、冲突选择弹层复用）与 `apps/web/src/features/published-records/PublishedRecordDetail.tsx` 的 `recordContentFields`（正式记录详情，无后缀）；`apps/web/src/features/issues/IssuesPageView.tsx` 的说明文案同步。契约字段名、Schema、OpenAPI、生成客户端与数据库列名**均未改动**（改契约名会触发迁移与生成物连锁变更，且不改变语义）。
+- 断言同步：`CompleteWithRecord.test.tsx`、`PublishedRecordDetail.test.tsx`、`EditPublishedRecord.test.tsx`、`RecordDraftsView.test.tsx` 的标签文案断言改为新标签（含 `/具体改动冲突/` 正则）；`apps/e2e/tests/` 中 `external-links`、`leftover-task`、`issues`、`record-drafts`、`record-lifecycle`、`record-publishing`、`record-feed`、`task-completion` 8 个 spec 的 `getByLabel` 同步。
+- 基线文档同步：`功能设计v1.1.md`（§16.7 字段表、§16.7 线框图、§16.8 填写示例、§19.4 展开示例、§30 字段表、§16.1/§17.1 说明）、`开发工作书v1.0.md`、`系统设计文档v1.0.2.md` 的标签文案改为新短版；线框图内四行重新对齐到该块的统一显示宽度 42 列。
+- 验证：`pnpm test:web` 72 文件 390 例全通过；`apps/web` 与 `apps/e2e` 内旧标签零残留（`grep` 复核）。
 
 ## 演示数据库版本化种子（C，2026-09-13 本地落库）
 

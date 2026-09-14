@@ -76,7 +76,7 @@ it("compares exact immutable version content and identifies unchanged fields", (
   expect(diff.filter((x) => x.changed)).toEqual([
     {
       field: "resultVerification",
-      label: "改完效果如何、如何验证",
+      label: "改动效果",
       before: "初次验证",
       after: "追加并发验证",
       changed: true,
@@ -122,10 +122,10 @@ it("renders the source task link and the four content sections", async () => {
     "href",
     "/projects/1/modules/2/features/2?taskId=8",
   );
-  expect(within(region).getByText("为什么改、发现了什么问题")).toBeVisible();
-  expect(within(region).getByText("改了什么、怎么改的")).toBeVisible();
-  expect(within(region).getByText("改完效果如何、如何验证")).toBeVisible();
-  expect(within(region).getByText("还有什么问题")).toBeVisible();
+  expect(within(region).getByText("改动原因")).toBeVisible();
+  expect(within(region).getByText("具体改动")).toBeVisible();
+  expect(within(region).getByText("改动效果")).toBeVisible();
+  expect(within(region).getByText("遗留问题")).toBeVisible();
 });
 it("explains a missing or unauthorized record without leaking existence", async () => {
   const api = {

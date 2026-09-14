@@ -95,9 +95,9 @@ describe("F-17 draft UI", () => {
     expect(create).not.toHaveBeenCalled();
     for (const [label, value] of [
       ["迭代标题", item.title],
-      ["为什么改、发现了什么问题", item.contextProblem],
-      ["改了什么、怎么改的", item.changeSolution],
-      ["改完效果如何、如何验证", item.resultVerification],
+      ["改动原因", item.contextProblem],
+      ["具体改动", item.changeSolution],
+      ["改动效果", item.resultVerification],
     ])
       fireEvent.change(modal.getByLabelText(label!), { target: { value } });
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
@@ -141,7 +141,7 @@ describe("F-17 draft UI", () => {
     const modal = within(
       await screen.findByRole("dialog", { name: "编辑草稿" }),
     );
-    fireEvent.change(modal.getByLabelText("改了什么、怎么改的"), {
+    fireEvent.change(modal.getByLabelText("具体改动"), {
       target: { value: "我的方案" },
     });
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
@@ -151,8 +151,8 @@ describe("F-17 draft UI", () => {
     expect(
       await modal.findByRole("button", { name: "应用合并" }),
     ).toBeDisabled();
-    expect(modal.getByLabelText("改了什么、怎么改的")).toHaveValue("我的方案");
-    fireEvent.change(modal.getByLabelText(/改了什么、怎么改的冲突/), {
+    expect(modal.getByLabelText("具体改动")).toHaveValue("我的方案");
+    fireEvent.change(modal.getByLabelText(/具体改动冲突/), {
       target: { value: "mine" },
     });
     fireEvent.click(modal.getByRole("button", { name: "应用合并" }));
@@ -213,11 +213,7 @@ it("lists all source drafts without implicit selection and explicitly creates an
   );
   expect(modal.getByLabelText("迭代标题")).toHaveValue("来源标题");
   expect(modal.queryByLabelText("所属模块")).not.toBeInTheDocument();
-  for (const label of [
-    "为什么改、发现了什么问题",
-    "改了什么、怎么改的",
-    "改完效果如何、如何验证",
-  ])
+  for (const label of ["改动原因", "具体改动", "改动效果"])
     fireEvent.change(modal.getByLabelText(label), {
       target: { value: "说明" },
     });
@@ -249,7 +245,7 @@ it("continues the selected source draft through the workflow without copying sou
   fireEvent.click(await screen.findByRole("button", { name: "查看草稿" }));
   fireEvent.click(await screen.findByRole("button", { name: "继续编辑" }));
   const modal = within(await screen.findByRole("dialog", { name: "编辑草稿" }));
-  fireEvent.change(modal.getByLabelText("还有什么问题（选填）"), {
+  fireEvent.change(modal.getByLabelText("遗留问题（选填）"), {
     target: { value: "补充" },
   });
   fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));

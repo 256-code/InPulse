@@ -62,17 +62,13 @@ it("requires core content and reuses the exact request key after uncertain failu
     });
   const done = mount({ completeTask });
   expect(screen.getByRole("button", { name: "发布并完成任务" })).toBeDisabled();
-  for (const label of [
-    "为什么改、发现了什么问题",
-    "改了什么、怎么改的",
-    "改完效果如何、如何验证",
-  ])
+  for (const label of ["改动原因", "具体改动", "改动效果"])
     fireEvent.change(screen.getByLabelText(label), {
       target: { value: "真实内容" },
     });
   fireEvent.click(screen.getByRole("button", { name: "发布并完成任务" }));
   await screen.findByText("服务暂时不可用，输入和选择已保留，可重试。");
-  expect(screen.getByLabelText("改了什么、怎么改的")).toHaveValue("真实内容");
+  expect(screen.getByLabelText("具体改动")).toHaveValue("真实内容");
   fireEvent.click(screen.getByRole("button", { name: "发布并完成任务" }));
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
   expect(completeTask.mock.calls[0]).toEqual(completeTask.mock.calls[1]);
