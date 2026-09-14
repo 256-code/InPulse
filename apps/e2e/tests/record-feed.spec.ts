@@ -18,7 +18,10 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     expect(projectId).not.toBeNull();
 
     await page.goto(`/projects/${projectId}/modules`);
-    await page.getByRole("button", { name: "新增模块" }).click();
+    await page
+      .locator(".project-detail-actions")
+      .getByRole("button", { name: "新增模块", exact: true })
+      .click();
     const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill("记录测试模块");
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();

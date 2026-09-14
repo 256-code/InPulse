@@ -43,7 +43,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     }
     await page.goto(`/projects/${runtime.projectId}/modules`);
     await moduleEntry.getByRole("link", { name: "模块任务" }).click();
-    await page.getByRole("button", { name: "新建任务" }).click();
+    await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const create = page.getByRole("dialog", { name: "新建任务" });
     const title = `公共任务-${suffix}`;
     await create.getByLabel("任务标题").fill(title);

@@ -36,7 +36,10 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
 
     // 新项目允许零模块：先显式建模块，再创建功能与任务。
     await page.goto("/projects/" + projectId + "/modules");
-    await page.getByRole("button", { name: "新增模块" }).click();
+    await page
+      .locator(".project-detail-actions")
+      .getByRole("button", { name: "新增模块", exact: true })
+      .click();
     const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill("归档测试模块");
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
@@ -54,7 +57,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
       .getByRole("link", { name: "查看详情" })
       .click();
     const featureUrl = page.url();
-    await page.getByRole("button", { name: "新建任务" }).click();
+    await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
     await taskDialog

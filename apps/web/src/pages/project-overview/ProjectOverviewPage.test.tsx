@@ -120,6 +120,14 @@ describe("ProjectOverviewPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("provides one GitHub links action in the composed overview page", async () => {
+    renderPage("/projects/1/overview");
+    await screen.findByText("InPulse 平台");
+    expect(
+      screen.getAllByRole("button", { name: "GitHub 链接", exact: true }),
+    ).toHaveLength(1);
+  });
+
   it("rejects an invalid project id in the URL", async () => {
     renderPage("/projects/abc/overview");
     expect(await screen.findByText("项目地址无效")).toBeInTheDocument();

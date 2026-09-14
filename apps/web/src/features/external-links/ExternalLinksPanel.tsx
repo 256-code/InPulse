@@ -159,7 +159,9 @@ export function ExternalLinksPanel({
             ? "目标不存在或当前无法访问。"
             : error.status === 409
               ? error.code === "EXTERNAL_LINK_ALREADY_ASSOCIATED"
-                ? "该链接及根仓库设置已存在。"
+                ? isRootRepository
+                  ? "该链接及根仓库设置已存在。"
+                  : "该链接已关联，请勿重复添加。"
                 : "目标状态或版本已变化，请加载最新关联后重新确认。"
               : error.status === 422
                 ? error.code === "SEARCH_TEXT_CAPACITY_EXCEEDED"
