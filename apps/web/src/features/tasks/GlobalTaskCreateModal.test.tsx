@@ -160,6 +160,8 @@ describe("GlobalTaskCreateModal", () => {
 
     const assignee = await screen.findByLabelText("指派给");
     expect(assignee).toBeDisabled();
+    // 归属没选全之前成员请求本就不该发出，不能显示一直不变的加载提示。
+    expect(screen.queryByText("正在加载项目成员…")).toBeNull();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
 
     await user.selectOptions(await screen.findByLabelText("所属项目"), "1");
@@ -180,6 +182,31 @@ describe("GlobalTaskCreateModal", () => {
       await screen.findByRole("option", { name: "李雷" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeEnabled();
+  });
+
+  it("shows the member loading hint only while the request is in flight", async () => {
+    const test = harness();
+    const gate: { release: () => void } = { release: () => undefined };
+    (
+      test.client as unknown as { listTaskAssignees: () => Promise<unknown> }
+    ).listTaskAssignees = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          gate.release = () =>
+            resolve({ items: members.map((item) => ({ ...item })) });
+        }),
+    );
+
+    mount(test, { preset: { projectId: 1, moduleId: 11, featureId: 111 } });
+
+    expect(await screen.findByText("正在加载项目成员…")).toBeInTheDocument();
+    gate.release();
+    await waitFor(() =>
+      expect(screen.queryByText("正在加载项目成员…")).toBeNull(),
+    );
+    expect(
+      await screen.findByRole("option", { name: "李雷" }),
+    ).toBeInTheDocument();
   });
 
   it("resets the dependent selections when the project changes", async () => {

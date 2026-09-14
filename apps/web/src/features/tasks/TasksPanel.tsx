@@ -21,6 +21,7 @@ import {
   CalmTabs,
 } from "@features/common/components/Calm";
 import {
+  isFirstLoad,
   mergeTask,
   taskEdit,
   taskError,
@@ -1167,7 +1168,7 @@ export function TasksPanel({
                 {errors.assigneeId && (
                   <p role="alert">{errors.assigneeId.message}</p>
                 )}
-                {members.isPending && <p>正在加载项目成员…</p>}
+                {isFirstLoad(members) && <p>正在加载项目成员…</p>}
                 {members.isError && (
                   <Alert
                     type="error"
