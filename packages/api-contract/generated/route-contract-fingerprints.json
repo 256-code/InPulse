@@ -5,10 +5,6 @@
       "fingerprint": "3abb40d5c0fd6bac5ccbc20df004b29dde6a61bb0d88b8e19d379eeb08a635d6"
     },
     {
-      "version": "2.0",
-      "fingerprint": "398bf950de87cd7ac874029e70187ef11d84965d04171144dd4c8b5e13c33c7d"
-    },
-    {
       "version": "2.0.0",
       "fingerprint": "4a3513458580ee8d0e5c7c5e05e8e9d897f5f0fdb5a5aa3cbb2b5775f4e71bb3"
     }
@@ -71,6 +67,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "0264f20c50c6b254fb56d0c6dc8a9522df71681d25a629ef429c29c076dc295c"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "facf598b9bea2f1a00527c44ed320123e394df202e763a892e2b38dbdac91e9c"
     }
   ],
   "createChangeRecordVersion": [
@@ -215,10 +215,6 @@
     {
       "version": "1.0.0",
       "fingerprint": "ddea82056c9489e216c224ea0b205e9b4443c5744b10a6b3f6a5b320fde87524"
-    },
-    {
-      "version": "2.0",
-      "fingerprint": "6631a84f1a0126fb0dfc7157f8d122b6c2a753e3696175e4f7e3d92956b45682"
     },
     {
       "version": "2.0.0",
