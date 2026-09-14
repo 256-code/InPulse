@@ -2900,7 +2900,14 @@ a:focus-visible {
   border-top: 1px solid #edf1f5;
 }
 .record-expanded h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #314b65;
+}
+.record-expanded h5 {
   font-size: 12px;
+  font-weight: 600;
   margin: 0 0 8px;
   color: #37566f;
 }

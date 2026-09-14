@@ -227,14 +227,16 @@
 
 .record-expanded h4 {
   margin: 0 0 8px;
-  color: #37566f;
-  font-size: 12px;
+  color: #314b65;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .record-expanded h5 {
   margin: 0 0 8px;
-  color: #5b7892;
+  color: #37566f;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .record-expanded > p {
