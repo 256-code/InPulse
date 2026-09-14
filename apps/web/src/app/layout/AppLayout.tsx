@@ -9,6 +9,8 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import { ProjectTree } from "@features/project-tree/ProjectTree";
+import { treeScopeOf } from "@features/project-tree/tree-selection";
 import { useCatalogTrail, useShellCounters } from "./shell-data";
 
 interface NavigationItem {
@@ -133,6 +135,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     () => readCatalogScope(location.pathname),
     [location.pathname],
   );
+  const treeScope = useMemo(() => treeScopeOf(catalogScope), [catalogScope]);
   const sectionLabel = resolveSectionLabel(location.pathname);
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
@@ -284,6 +287,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             {workspaceNavigation.map(renderNavigationItem)}
             <p className="nav-section">系统</p>
             {visibleSystemNavigation.map(renderNavigationItem)}
+            {treeScope === null ? null : (
+              <>
+                <p className="nav-section">系统目录</p>
+                <ProjectTree
+                  projectId={treeScope.projectId}
+                  selection={treeScope.selection}
+                  onNavigate={handleNavigation}
+                  {...(projectClient ? { client: projectClient } : {})}
+                />
+              </>
+            )}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>

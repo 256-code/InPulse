@@ -252,6 +252,38 @@ describe("TaskCenterPageView", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens no read-only detail dialog and reports the archive location for a feature task card", async () => {
+    const { onOpenTask } = renderView();
+    const card = await screen.findByTestId("my-task-101");
+    await userEvent.click(card);
+
+    // 任务中心不再弹出只读详情：写操作只在功能档案中，点击卡片即交由页面定位。
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "关闭" })).toBeNull();
+    expect(onOpenTask).toHaveBeenCalledWith({
+      projectId: 1,
+      moduleId: 11,
+      featureId: 111,
+      taskId: 101,
+    });
+  });
+
+  it("reports a module-level archive location for a task without a feature", async () => {
+    const { onOpenTask } = renderView({
+      adapter: serverLikeAdapterWith([doneTask]),
+      filters: { status: "done" },
+    });
+    await userEvent.click(await screen.findByTestId("my-task-901"));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onOpenTask).toHaveBeenCalledWith({
+      projectId: 1,
+      moduleId: 11,
+      featureId: null,
+      taskId: 901,
+    });
+  });
+
   it("reports scope changes through onFiltersChange", async () => {
     const { onFiltersChange } = renderView();
     const user = userEvent.setup();

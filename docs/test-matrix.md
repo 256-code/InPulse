@@ -689,7 +689,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | F-32 mock 适配器口径：默认视图排除已完成与已取消、created 按创建者、project 按项目、全部范围跨项目、优先级/层级/关系/记录/GitHub 过滤、关键词跨编号与归属匹配、统计卡片与遗留问题事实 | `my-tasks-mock.test.ts` 10 例 |
 | F-32 页面渲染与交互：骨架提示、统计卡片、scope 标签、项目名从项目端口解析、高级范围仅管理员、筛选变更回调、遗留问题入口与风险条、适配器错误态、卡片徽章（模块级 / 主任务）与页脚优先级全称、有已发布记录时才显示记录数 | `TaskCenterPageView.test.tsx` 10 例 |
 | F-32 页面层：URL 读取筛选、筛选写回 URL、more 参数控制高级面板、跳转遗留问题、非管理员降级与管理员保留 | `pages/tasks/TasksPage.test.tsx` 6 例 |
-| F-29 指标与数据源：6 项指标条（活跃模块/活跃功能/未完成任务/迭代记录/遗留问题来自 adapter，成员数来自项目端口 memberCount）、mock 指标口径、迭代按发布时间倒序、项目 id 在契约冻结前不参与过滤 | `ProjectOverviewPageView.test.tsx`、`project-overview-mock.test.ts` 3 例 |
+| F-29 指标与数据源：4 项指标卡（未完成任务/迭代记录/遗留问题来自 adapter，成员数来自项目端口 memberCount）、mock 指标口径、迭代按发布时间倒序、项目 id 在契约冻结前不参与过滤；2026-09-14 按用户确认，活跃模块与活跃功能从展示层取消（R-2 服务端口径与适配器返回值不变，页面不渲染对应卡片） | `ProjectOverviewPageView.test.tsx`（含「不再渲染活跃模块/活跃功能」反向断言）、`project-overview-mock.test.ts` 3 例 |
 | F-29 交互与容错：最近迭代行与「查看全部」进入记录页、遗留问题行与「进入遗留问题」进入问题页、空态、adapter 错误态、项目错误重试 | `ProjectOverviewPageView.test.tsx` 7 例 |
 | F-29 页面层：按路由 projectId 读取项目与概览、非法 projectId 错误态、遗留问题跳转、返回项目列表 | `ProjectOverviewPage.test.tsx` 4 例 |
 
@@ -721,7 +721,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | 验收点 | 实际证据 |
 | --- | --- |
 | F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；开发期「接口说明」黄条按设计师稿 `task-center.tsx` 移除，断言 `task-center-mock-notice` 计数为 0；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；落库当时全量 `pnpm test:e2e` 42/42；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
-| F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、活跃模块数与成员数为服务端真实值、遗留问题总数为「—」、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页、「全部项目」→ `/projects` | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
+| F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、成员数为服务端真实值且 > 0、任务/记录/遗留三项以数字形态渲染、已取消的 `overview-metric-modules` 与 `overview-metric-features` 计数为 0、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页、「全部项目」→ `/projects` | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
 | fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/e2e typecheck` 通过；定向 `pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42（约 5.3 分钟）。推送后 GitHub Actions 已通过：`CI` push run [34508897744](https://github.com/256-code/InPulse/actions/runs/34508897744) 13m19s、`CI` pull_request run [34508916381](https://github.com/256-code/InPulse/actions/runs/34508916381) 13m43s、`Documentation` run [34508916277](https://github.com/256-code/InPulse/actions/runs/34508916277) 9s。
@@ -1437,3 +1437,53 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - **未运行**：CI 镜像扫描步骤结论以推送后的运行为准，本条不预称已通过。
 
 **待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。
+
+## F-32 任务中心点击卡片直达功能档案（C，2026-09-14 本地落库）
+
+产品截图反馈：任务中心的任务卡片点开后是一个只读详情弹层（PR #136 引入的 `MyTaskDetailModal`），无法在里面完成任务编辑、生成迭代记录、合并到主任务、关联 GitHub 链接等写操作——这些写操作只在功能档案的任务详情弹窗里。只读弹层既不能操作又需要用户再点一次「在功能档案中查看」才能跳转，等于给同一份数据多套一层入口。本轮把任务中心收敛为纯定位入口：**删除 `MyTaskDetailModal`，卡片与列表行点击后经 `onOpenTask`（`TasksPage` → `taskDetailPath` 深链）直接跳转到功能档案的 `?taskId=` 深链，由 `TasksPanel` 打开承载全部写操作的任务详情弹窗，任务中心不再复制一份只读弹层**。
+
+契约与后端口径不变：任务中心仍走 R-3 `listMyTasks` 与 R-5 `listTaskGroupMemberships`（关系徽章、「迭代记录 n 条」与「查看主任务」保留），`taskDetailPath` 与 `TasksPanel` 的 `?taskId=` 弹窗均为既有能力，本轮只是把点击目标从页内弹层换成深链导航。删除的 `MyTaskDetailModal.tsx` / `.test.tsx` 无其它消费者；`.task-modal*` 系列样式仍被功能档案的 `TasksPanel` 使用，未产生死代码。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F32-NAV-UNIT-001 | 单元 | 功能级卡片点击直达 | `TaskCenterPageView.test.tsx`：点击功能级任务卡片（项目 1 / 模块 11 / 功能 111 / 任务 101）后 `onOpenTask` 收到 `{ projectId:1, moduleId:11, featureId:111, taskId:101 }`，页面内**不出现** `role=dialog`、不出现「关闭」按钮（证明不再弹只读详情） | 本地通过 |
+| F32-NAV-UNIT-002 | 单元 | 模块级已完成任务点击直达 | `TaskCenterPageView.test.tsx`：`serverLikeAdapterWith` + `filters:{status:"done"}` 下点击模块级 `doneTask`（任务 901，`featureId:null`）后 `onOpenTask` 收到 `{ projectId:1, moduleId:11, featureId:null, taskId:901 }` | 本地通过 |
+| F32-NAV-PAGE-001 | 单元（页面层） | 功能级深链路径 | `TasksPage.test.tsx`：注入 `featureTask`（7 / 71 / 711 / 320），点击卡片后 `ArchiveProbe` 文本为 `/projects/7/modules/71/features/711?taskId=320` | 本地通过 |
+| F32-NAV-PAGE-002 | 单元（页面层） | 模块级深链路径（`featureId` 为 null 时落到 `/tasks`） | `TasksPage.test.tsx`：注入 `moduleTask`（7 / 72 / null / 321），点击卡片后 `ArchiveProbe` 文本为 `/projects/7/modules/72/tasks?taskId=321` | 本地通过 |
+| F32-NAV-E2E-001 | Playwright | 真实数据卡片直达功能档案并打开写操作弹窗 | `aggregate-views.spec.ts` 例 1：经真实 UI 建功能与任务后进入 `/tasks`（卡片视图），点击该任务卡片，URL 落到 `^/projects/{projectId}/modules/\d+/features/\d+$` 且带 `taskId`；功能档案弹出 `dialog[name=任务详情]`，内含任务标题、「编辑任务」与「完成任务」按钮；关闭后弹窗隐藏 | 本地通过 |
+
+本地实际执行（2026-09-14，前端专项，无后端 / 契约 / 迁移改动）：
+
+- 定向单测 `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks src/pages/tasks` **6 文件 76 例通过**；
+- 全量 `pnpm test:web` **73 文件 399 例通过**（删除 `MyTaskDetailModal.test.tsx` 后总数相应下降，无 skip / 弱化断言）；
+- `pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck` 通过；
+- 变更文件 ESLint（`TaskCenterPageView.tsx` / `TaskCenterPageView.test.tsx` / `TasksPage.test.tsx` / `aggregate-views.spec.ts`）与 `pnpm exec prettier --check` 通过；
+- `pnpm check:frontend:boundaries` 无违规（244 模块 / 1146 依赖）、`pnpm --filter @inpulse/web build` 通过；
+- 定向 Playwright `pnpm exec playwright test aggregate-views task-groups`（`E2E_API_PORT=3188` / `E2E_WEB_PORT=4188`，容器库 55432）**4 例全通过**（33.7 s），确认新增卡片直达块与聚合组区块「查看主任务」跳转功能档案后仍能打开 `dialog[name=任务详情]`；
+- 真实浏览器人工复验（Vite 5301 → API 3199，真实演示数据与真实登录）：点击任务卡片 `INPULSE-T-55` 后落到 `/projects/1/modules/2/features/2?taskId=55`，功能档案弹出「任务详情」弹窗，含「编辑任务」「完成任务」「取消任务」「合并到主任务」「GitHub 链接」；
+- 推送前全量门禁：`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（75 个 Markdown）、`pnpm typecheck`（8 个 workspace）与 `pnpm build`（全 workspace）全部通过。
+
+未运行 / 已知偏差：① 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）与全量 `pnpm test:e2e` 未执行，结论以推送后的门禁为准；② 无后端 / 契约 / 迁移改动，未运行 API 单测与真实 PostgreSQL 集成；③ 新增 / 更新的单元与 E2E 用例需非作者人工评审；④ 本条与同分支的目录树恢复、F-29 概览指标卡收敛同批推送。
+
+## 项目主页目录树恢复（「系统目录」导航，C，2026-09-14 本地落库）
+
+产品反馈（含截图）：上一轮目录改造在侧栏加出了「系统目录」树，但项目**主页面**「严重丢失了好多功能和效果」，产品澄清口径是「目录应该影响的是这个页面而不是新建页面」。该轮改造把项目卡片的入口让给了新建的只读复刻页（`/explorer` 重实现，从未进入任何提交），项目主页 `/projects/{projectId}/modules`（`ProjectOverviewPageView` + 模块卡片网格 + `ModuleEditorModal`）因此失去可达入口。
+
+本轮修复口径是**目录只做导航，不新建页面**：
+
+- `apps/web/src/features/project-tree/`（新增 4 文件）：`ProjectTree.tsx` 复用既有 `useProjectDetail` / `useModules` / `useFeatures` 查询钩子与生成客户端渲染「系统 → 模块 → 功能」三级树，点击经 `onNavigate` 交给既有路由；组件不含业务规则、不发写请求。
+- `tree-selection.ts`：`treeScopeOf()` 由 `readCatalogScope` 的路径解析结果推导选中层级（系统 / 模块 / 功能；非项目路径返回 `null`），`treePath()` 把三级映射到既有页面——系统 → `/projects/{p}/modules`（项目主页）、模块 → `/projects/{p}/modules/{m}/features`（功能目录）、功能 → `/projects/{p}/modules/{m}/features/{f}`（功能档案）。
+- `AppLayout.tsx`：在既有 `nav[aria-label="工作区导航"]` 内、「系统」分组之后新增「系统目录」分组，仅在项目目录路径范围内渲染（`treeScope === null` 时不渲染该分组）。
+- 无新增路由、无 API / 契约 / 权限 / 迁移改动；项目卡片入口保持 `onOpenModules` → `/projects/{projectId}/modules`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| CAT-NAV-UNIT-001 | 单元 | 树层级与既有页面映射 | `tree-selection.test.ts` 2 例：`treeScopeOf` 对 4 种路径形状分别返回 `null` / 系统 / 模块 / 功能；`treePath` 三级分别得到 `/projects/2/modules`、`/projects/2/modules/3/features`、`/projects/2/modules/3/features/5` | 本地通过 |
+| CAT-NAV-UNIT-002 | 单元 | 树渲染、展开与选中态 | `ProjectTree.test.tsx` 5 例：根节点为系统名并加载模块；三级点击分别调用既有页面路径（并验证系统节点重复点击不收起模块列表）；模块分支在其功能列表加载期间保持 `aria-expanded=true`；功能行 `aria-current=true` 且所属模块保持 `in-path`；项目主页激活时系统节点 `aria-current=true` | 本地通过 |
+| CAT-NAV-UNIT-003 | 单元（布局） | 目录树只在项目目录范围内出现，且与主导航同容器 | `AppLayout.test.tsx` 新增 2 例：项目主页下同一 `nav[name="工作区导航"]` 内既有「任务中心」也有「系统目录」分组，点模块 / 功能分别渲染功能目录 / 功能档案内容，且项目主页内容仍完整渲染；`/tasks` 下不出现「系统目录」分组与 `.project-tree` | 本地通过 |
+
+真实浏览器复验（Vite 5301 → API 3199，真实演示数据与真实登录）：自项目列表进入 `/projects/1/modules`，项目概览与模块列表完整；目录树三级点分别落到 `/projects/1/modules`、`/projects/1/modules/{m}/features`、`/projects/1/modules/8/features/31`（功能「浏览器自动化测试基座」），功能档案完整渲染，树内该功能行高亮且所属模块保持展开。
+
+本地实际执行（2026-09-14，前端专项，无后端 / 契约 / 迁移改动）：`pnpm test:web` **73 文件 399 例通过**（含 `project-tree` 2 文件 7 例与 `AppLayout.test.tsx` 新增 2 例）；`pnpm typecheck`（8 个 workspace）、`pnpm build`（全 workspace）与 `pnpm check:frontend:boundaries`（244 模块 / 1146 依赖，无违规）通过；`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（75 个 Markdown）通过。
+
+未运行 / 已知偏差：① **尚无目录树的 Playwright 用例**，树的行为目前只有单元层与人工浏览器复验，E2E 覆盖待补；② 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）与全量 `pnpm test:e2e` 未运行；③ 新增组件与测试需非作者人工评审；④ 本条与 F-29 概览指标卡收敛、F-32 任务中心点击直达同批推送。
