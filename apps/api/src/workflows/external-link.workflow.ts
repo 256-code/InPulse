@@ -215,7 +215,9 @@ export class ExternalLinkWorkflow {
     type: ExternalLinkTargetType,
     id: number,
     version: number,
-    input: { url: string; isRootRepository?: boolean } | { linkId: number },
+    input:
+      | ReturnType<typeof schemaRegistry.ExternalLinkRequest.schema.parse>
+      | { linkId: number },
     requestId: string,
     reauthorize: () => Promise<number>,
   ) {
