@@ -219,16 +219,14 @@ describe("my tasks server adapter", () => {
 });
 
 it("preserves the selected project for a personal overdue drilldown", async () => {
-  const listTaskCenter = vi
-    .fn()
-    .mockResolvedValue({
-      items: [],
-      nextCursor: null,
-      hasMore: false,
-      stats: null,
-      leftoverCount: 0,
-      leftoverSample: null,
-    });
+  const listTaskCenter = vi.fn().mockResolvedValue({
+    items: [],
+    nextCursor: null,
+    hasMore: false,
+    stats: null,
+    leftoverCount: 0,
+    leftoverSample: null,
+  });
   const adapter = createMyTasksServerAdapter({
     listTaskCenter,
   } as unknown as InpulseApiClient);
