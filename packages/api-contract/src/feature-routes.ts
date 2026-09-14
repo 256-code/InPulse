@@ -154,7 +154,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",
-      idempotencyContractVersion: "1.1.0",
+      idempotencyContractVersion: "1.2.0",
       idempotencyFingerprintVersion: "1.0.0",
       behaviorHeaders: create ? [] : ["If-Match"],
       idempotencyReplayPolicy: {

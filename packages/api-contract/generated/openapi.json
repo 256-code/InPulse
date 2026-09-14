@@ -2320,8 +2320,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -2527,8 +2527,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -4895,7 +4895,7 @@
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
           "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -5197,8 +5197,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -5218,6 +5218,11 @@
                     "impactFeatureIds[]",
                     "handlerId",
                     "authorId",
+                    "authorName",
+                    "handlerName",
+                    "moduleName",
+                    "featureName",
+                    "impactFeatureNames[]",
                     "status",
                     "code",
                     "currentVersion",
@@ -5426,8 +5431,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -5720,8 +5725,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match",
             "X-Record-Version"
@@ -5742,6 +5747,11 @@
                     "impactFeatureIds[]",
                     "handlerId",
                     "authorId",
+                    "authorName",
+                    "handlerName",
+                    "moduleName",
+                    "featureName",
+                    "impactFeatureNames[]",
                     "status",
                     "code",
                     "currentVersion",
@@ -6063,8 +6073,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -7660,7 +7670,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -7984,7 +7994,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -8197,7 +8207,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -8410,7 +8420,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -10045,8 +10055,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
             "version": "1.0.0",
@@ -11302,8 +11312,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -11536,8 +11546,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -12669,8 +12679,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -14323,8 +14333,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
+          "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -14363,6 +14373,11 @@
                     "record.impactFeatureIds[]",
                     "record.handlerId",
                     "record.authorId",
+                    "record.authorName",
+                    "record.handlerName",
+                    "record.moduleName",
+                    "record.featureName",
+                    "record.impactFeatureNames[]",
                     "record.status",
                     "record.code",
                     "record.currentVersion",
