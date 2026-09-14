@@ -428,7 +428,9 @@ describe("F22 typed external links", () => {
       true,
     );
     expect(one.status, await one.clone().text()).toBe(200);
-    const first = await one.json();
+    const first = schemaRegistry.ExternalLinkResult.schema.parse(
+      await one.json(),
+    );
     const two = await linkRequest(
       "PROJECT",
       f.projectId,
@@ -437,7 +439,9 @@ describe("F22 typed external links", () => {
       "https://github.com/inpulse/two",
     );
     expect(two.status).toBe(200);
-    const second = await two.json();
+    const second = schemaRegistry.ExternalLinkResult.schema.parse(
+      await two.json(),
+    );
     const switchRoot = await linkRequest(
       "PROJECT",
       f.projectId,
