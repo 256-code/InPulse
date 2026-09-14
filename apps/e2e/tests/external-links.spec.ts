@@ -81,7 +81,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
     await modal.getByRole("button", { name: "确认添加" }).click();
     await expect(modal.getByText(/链接无效/)).toBeVisible();
     await modal.getByRole("button", { name: "关闭关联" }).click();
-    await page.getByRole("button", { name: "新建任务", exact: true }).click();
+    await page.getByRole("button", { name: "新建任务" }).click();
     const task = page.getByRole("dialog", { name: "新建任务" });
     await task.getByLabel("任务标题").fill("GitHub任务");
     await task.getByLabel("负责人").selectOption({ label: runtime.user.name });

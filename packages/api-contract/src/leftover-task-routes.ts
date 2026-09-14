@@ -29,7 +29,7 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     },
     responses: { ...write.responses, "200": json("LeftoverTaskResponse") },
     auditAction: "leftover.convert",
-    idempotencyContractVersion: "1.1.0",
+    idempotencyContractVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: {
       version: "1.0.0",

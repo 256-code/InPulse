@@ -1,4 +1,3 @@
-import { MemoryRouter } from "react-router-dom";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -93,36 +92,32 @@ const renderView = (overrides: RenderOverrides = {}) => {
     onOpenOverview: vi.fn(),
   };
   render(
-    <MemoryRouter>
-      <QueryClientProvider
-        client={
-          new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          })
-        }
-      >
-        <ProjectOverviewPageView
-          projectId={1}
-          project={
-            overrides.project === undefined ? project : overrides.project
-          }
-          projectLoading={false}
-          onRetryProject={handlers.onRetryProject}
-          onBackToProjects={handlers.onBackToProjects}
-          onOpenModules={handlers.onOpenModules}
-          onOpenMembers={handlers.onOpenMembers}
-          onOpenRecords={handlers.onOpenRecords}
-          onOpenIssues={handlers.onOpenIssues}
-          modules={overrides.modules ?? projectModules}
-          onOpenModule={handlers.onOpenModule}
-          onOpenOverview={handlers.onOpenOverview}
-          adapter={overrides.adapter ?? createAdapter()}
-          {...(overrides.projectError === undefined
-            ? {}
-            : { projectError: overrides.projectError })}
-        />
-      </QueryClientProvider>
-    </MemoryRouter>,
+    <QueryClientProvider
+      client={
+        new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        })
+      }
+    >
+      <ProjectOverviewPageView
+        projectId={1}
+        project={overrides.project === undefined ? project : overrides.project}
+        projectLoading={false}
+        onRetryProject={handlers.onRetryProject}
+        onBackToProjects={handlers.onBackToProjects}
+        onOpenModules={handlers.onOpenModules}
+        onOpenMembers={handlers.onOpenMembers}
+        onOpenRecords={handlers.onOpenRecords}
+        onOpenIssues={handlers.onOpenIssues}
+        modules={overrides.modules ?? projectModules}
+        onOpenModule={handlers.onOpenModule}
+        onOpenOverview={handlers.onOpenOverview}
+        adapter={overrides.adapter ?? createAdapter()}
+        {...(overrides.projectError === undefined
+          ? {}
+          : { projectError: overrides.projectError })}
+      />
+    </QueryClientProvider>,
   );
   return handlers;
 };

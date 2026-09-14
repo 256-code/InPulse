@@ -23,7 +23,6 @@ const item: FeatureItem = {
   projectId: 2,
   name: "退款功能",
   currentBehavior: "",
-  acceptanceCriteria: "",
   moduleId: 4,
   code: "PR-F-1",
   createdBy: 1,
@@ -136,7 +135,6 @@ describe("F-13 forms", () => {
     const latest = {
       ...original,
       currentBehavior: "其他人更新的说明",
-      acceptanceCriteria: "",
       tags: ["别人更新的标签"],
       rowVersion: 2,
     };
@@ -183,7 +181,6 @@ describe("F-13 forms", () => {
       {
         name: "我的新名称",
         currentBehavior: "其他人更新的说明",
-        acceptanceCriteria: "",
         tags: ["别人更新的标签"],
       },
       expect.objectContaining({
@@ -199,7 +196,6 @@ describe("F-13 forms", () => {
       const latest = {
         ...original,
         currentBehavior: "其他人更新的说明",
-        acceptanceCriteria: "",
         rowVersion: 2,
       };
       const client = {
@@ -267,12 +263,7 @@ describe("F-13 forms", () => {
         2,
         4,
         3,
-        {
-          name: original.name,
-          currentBehavior: expectedDescription,
-          acceptanceCriteria: "",
-          tags: [],
-        },
+        { name: original.name, currentBehavior: expectedDescription, tags: [] },
         expect.objectContaining({
           headers: expect.objectContaining({ "If-Match": '"2"' }),
         }),
@@ -574,36 +565,4 @@ describe("功能卡", () => {
       links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
     ).toBeNull();
   });
-});
-
-it("功能概览显示验收标准，编辑时保留并提交", async () => {
-  const updateFeature = vi.fn().mockResolvedValue({
-    ...item,
-    acceptanceCriteria: "响应低于 400ms",
-    rowVersion: 2,
-  });
-  const api = {
-    listFeatures: vi.fn().mockResolvedValue({
-      items: [{ ...item, acceptanceCriteria: "响应低于 500ms" }],
-    }),
-    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
-    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
-    updateFeature,
-  } as unknown as InpulseApiClient;
-  mountDetail(api, item.id);
-  expect(await screen.findByText("响应低于 500ms")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "编辑功能" }));
-  const field = await screen.findByLabelText("验收标准（选填）");
-  expect(field).toHaveValue("响应低于 500ms");
-  fireEvent.change(field, { target: { value: "响应低于 400ms" } });
-  fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
-  await waitFor(() =>
-    expect(updateFeature).toHaveBeenCalledWith(
-      2,
-      4,
-      item.id,
-      expect.objectContaining({ acceptanceCriteria: "响应低于 400ms" }),
-      expect.anything(),
-    ),
-  );
 });

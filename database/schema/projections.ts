@@ -40,7 +40,7 @@ export const codeSequences = appSchema.table(
     check(
       "code_sequences_entity_check",
       sql.raw(
-        "entity_type IN ('FEATURE', 'TASK', 'CHANGE_RECORD', 'TASK_GROUP', 'MODULE')",
+        "entity_type IN ('FEATURE', 'TASK', 'CHANGE_RECORD', 'TASK_GROUP')",
       ),
     ),
     check("code_sequences_number_check", sql.raw("last_number > 0")),

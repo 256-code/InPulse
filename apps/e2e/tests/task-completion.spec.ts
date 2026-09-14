@@ -21,7 +21,7 @@ async function createTask(
       .getByRole("link", { name: "查看详情" })
       .click();
   } else await page.getByRole("link", { name: "模块任务" }).first().click();
-  await page.getByRole("button", { name: "新建任务", exact: true }).click();
+  await page.getByRole("button", { name: "新建任务" }).click();
   const form = page.getByRole("dialog", { name: "新建任务" });
   await form.getByLabel("任务标题").fill(title);
   await form.getByLabel("负责人").selectOption({ label: runtime.user.name });

@@ -1,4 +1,3 @@
-import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import "reflect-metadata";
 import { randomBytes, randomUUID } from "node:crypto";
 import { beforeAll, afterAll, afterEach, it, expect, vi } from "vitest";
@@ -110,7 +109,6 @@ beforeAll(async () => {
     uow,
     audit,
     new TimeCursorService(ring, "RECORD_DRAFTS"),
-    new PostgresUserReadPort(),
   );
   publication = new RecordPublicationService(
     new RecordPublicationAccess(access, modules, features, taskQuery, pubRepo),

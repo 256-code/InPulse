@@ -1,4 +1,3 @@
-import { ProjectCreationLockPort } from "./project-creation-lock.port.js";
 import {
   ProjectLinkQueryPort,
   ProjectLinkCommandPort,
@@ -33,7 +32,6 @@ import {
   imports: [DatabaseModule],
   providers: [
     ProjectLinkQueryPort,
-    ProjectCreationLockPort,
     ProjectLinkCommandPort,
     {
       provide: ProjectMembersQueryPort,
@@ -57,7 +55,6 @@ import {
   ],
   exports: [
     ProjectLinkQueryPort,
-    ProjectCreationLockPort,
     ProjectLinkCommandPort,
     ProjectMembersQueryPort,
     ProjectCodePort,

@@ -31,7 +31,6 @@ export type MyTaskWorkStatus = "TODO" | "DONE" | "CANCELED";
 /** 任务中心筛选状态；由 URL 承载（F-30），不使用组件内部副本。 */
 export interface MyTaskFilters {
   readonly scope: MyTaskScope;
-  readonly overdue?: boolean;
   readonly projectId: number | null;
   readonly status: MyTaskStatusFilter;
   readonly priority: MyTaskPriority | null;
@@ -166,7 +165,6 @@ export interface MyTaskListResult {
 }
 
 export interface MyTasksQueryInput {
-  readonly cursor?: string | null;
   readonly filters: MyTaskFilters;
   readonly viewerId: number | null;
 }

@@ -43,6 +43,7 @@ const createdProject: CreateProjectResponse = {
   members: [
     { userId: 1, status: "ACTIVE", joinedAt: "2026-09-09T00:00:00.000Z" },
   ],
+  unclassifiedModuleId: 12,
 };
 
 function createWrapper() {

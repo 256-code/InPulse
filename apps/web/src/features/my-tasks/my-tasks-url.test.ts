@@ -115,8 +115,3 @@ describe("my-tasks-url", () => {
     ).toBe(8);
   });
 });
-
-it("round-trips a project overdue drilldown without expanding its scope", () => {
-  const filters = { ...DEFAULT_MY_TASK_FILTERS, projectId: 7, overdue: true };
-  expect(readMyTaskFilters(writeMyTaskFilters(filters))).toEqual(filters);
-});

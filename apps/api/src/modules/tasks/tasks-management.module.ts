@@ -1,4 +1,3 @@
-import { TaskCreateCommandPort } from "./create.command-port.js";
 import {
   TaskLinkQueryPort,
   TaskLinkCommandPort,
@@ -47,7 +46,6 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
     NotificationProjectionModule,
   ],
   providers: [
-    TaskCreateCommandPort,
     TaskLinkQueryPort,
     TaskLinkCommandPort,
     TaskManagementRepository,
@@ -66,7 +64,6 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
     ProjectMemberTaskCommandPort,
   ],
   exports: [
-    TaskCreateCommandPort,
     TaskLinkQueryPort,
     TaskLinkCommandPort,
     ProjectMemberTaskCommandPort,

@@ -85,7 +85,6 @@ export function readMyTaskFilters(
   return {
     scope: scope === "all" && options.isAdmin !== true ? "mine" : scope,
     projectId: readPositiveId(params.get("project")),
-    ...(params.get("overdue") === "1" ? { overdue: true } : {}),
     status:
       pick(statusValues, params.get("status")) ??
       DEFAULT_MY_TASK_FILTERS.status,
@@ -113,10 +112,7 @@ export function writeMyTaskFilters(
   const params = new URLSearchParams();
   if (filters.scope !== DEFAULT_MY_TASK_FILTERS.scope)
     params.set("scope", filters.scope);
-  if (
-    (filters.scope === "project" || filters.overdue) &&
-    filters.projectId !== null
-  )
+  if (filters.scope === "project" && filters.projectId !== null)
     params.set("project", String(filters.projectId));
   if (filters.status !== DEFAULT_MY_TASK_FILTERS.status)
     params.set("status", filters.status);
@@ -130,7 +126,6 @@ export function writeMyTaskFilters(
   if (term.length > 0) params.set("q", term);
   if (filters.display !== DEFAULT_MY_TASK_FILTERS.display)
     params.set("view", filters.display);
-  if (filters.overdue) params.set("overdue", "1");
   if (options.advancedOpen === true) params.set(MY_TASKS_MORE_PARAM, "1");
   return params;
 }

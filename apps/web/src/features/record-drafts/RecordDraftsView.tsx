@@ -271,9 +271,6 @@ export function RecordDraftsView({
           : {}),
       });
       cache.setQueryData(["record-draft", projectId, result.id], result);
-      await cache.invalidateQueries({
-        queryKey: ["record-draft", projectId, result.id],
-      });
       await cache.invalidateQueries({ queryKey: ["record-drafts", projectId] });
       await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
       await cache.invalidateQueries({
@@ -522,13 +519,13 @@ export function RecordDraftsView({
                   <CalmBadge tone="amber">草稿</CalmBadge>
                   <h3>{item.title}</h3>
                   <p>
-                    模块 {item.moduleName ?? "名称暂不可用"}
+                    模块 #{item.moduleId}
                     {item.featureId
-                      ? ` / 功能 ${item.featureName ?? "名称暂不可用"}`
+                      ? ` / 功能 #${item.featureId}`
                       : " / 模块范围"}
                   </p>
                   <p>
-                    记录作者 {item.authorName ?? "名称暂不可用"} · 更新{" "}
+                    记录作者 #{item.authorId} · 更新{" "}
                     {new Date(item.updatedAt).toLocaleString("zh-CN")}
                   </p>
                   <Button
@@ -561,80 +558,63 @@ export function RecordDraftsView({
               </Button>
             </div>
           )}
-          <Modal
-            open={recordId > 0 && selection === null}
-            title="草稿详情"
-            body
-            size="lg"
-            onCancel={() => {
-              const next = new URLSearchParams(params);
-              next.delete("recordId");
-              setParams(next);
-            }}
-            footer={null}
-          >
-            {recordId > 0 &&
-              (detail.isPending ? (
-                <Spin />
-              ) : detail.isError ? (
-                <Alert type="error" title={errorMessage(detail.error)} />
-              ) : (
-                detail.data && (
-                  <section className="draft-detail" aria-label="草稿详情">
-                    <h2>{detail.data.title}</h2>
-                    <ExternalLinksPanel
-                      key={detail.data.id}
-                      targetType="CHANGE_RECORD"
-                      targetId={detail.data.id}
-                      client={api}
-                    />
-                    {detail.data.taskId !== null && (
-                      <a
-                        href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}
-                      >
-                        查看此任务的全部草稿
-                      </a>
-                    )}
-                    <p>
-                      草稿 · 处理人 {detail.data.handlerName ?? "名称暂不可用"}{" "}
-                      · 记录作者 {detail.data.authorName ?? "名称暂不可用"}
-                    </p>
-                    <p>
-                      项目{" "}
-                      {projects.data?.items.find(
-                        (p) => p.id === detail.data.projectId,
-                      )?.name ?? "名称暂不可用"}{" "}
-                      / 模块 {detail.data.moduleName ?? "名称暂不可用"}
-                      {detail.data.featureId
-                        ? ` / 功能 ${detail.data.featureName ?? "名称暂不可用"}`
-                        : ` / 影响功能：${detail.data.impactFeatureNames?.join("、") || "未选择"}`}
-                    </p>
-                    {fields
-                      .filter((field) => field !== "title")
-                      .map((field) => (
-                        <section key={field}>
-                          <h3>{labels[field]}</h3>
-                          <RecordMarkdown
-                            content={detail.data[field] || "暂无已知遗留问题"}
-                          />
-                        </section>
-                      ))}
-                    <Button
-                      disabled={!writable}
-                      onClick={() => open(detail.data)}
+          {recordId > 0 &&
+            (detail.isPending ? (
+              <Spin />
+            ) : detail.isError ? (
+              <Alert type="error" title={errorMessage(detail.error)} />
+            ) : (
+              detail.data && (
+                <section className="draft-detail" aria-label="草稿详情">
+                  <h2>{detail.data.title}</h2>
+                  <ExternalLinksPanel
+                    key={detail.data.id}
+                    targetType="CHANGE_RECORD"
+                    targetId={detail.data.id}
+                    client={api}
+                  />
+                  {detail.data.taskId !== null && (
+                    <a
+                      href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}
                     >
-                      继续编辑
-                    </Button>
-                    <p>草稿尚未发布，不计入正式迭代统计。</p>
-                    <PublishRecordButton
-                      item={detail.data}
-                      api={api}
-                      writable={!!writable}
-                    />
-                  </section>
-                )
-              ))}
-          </Modal>
+                      查看此任务的全部草稿
+                    </a>
+                  )}
+                  <p>
+                    草稿 · 处理人 #{detail.data.handlerId} · 记录作者 #
+                    {detail.data.authorId}
+                  </p>
+                  <p>
+                    项目 #{detail.data.projectId} / 模块 #{detail.data.moduleId}
+                    {detail.data.featureId
+                      ? ` / 功能 #${detail.data.featureId}`
+                      : ` / 影响功能：${detail.data.impactFeatureIds.join("、") || "未选择"}`}
+                  </p>
+                  {fields
+                    .filter((field) => field !== "title")
+                    .map((field) => (
+                      <section key={field}>
+                        <h3>{labels[field]}</h3>
+                        <RecordMarkdown
+                          content={detail.data[field] || "暂无已知遗留问题"}
+                        />
+                      </section>
+                    ))}
+                  <Button
+                    disabled={!writable}
+                    onClick={() => open(detail.data)}
+                  >
+                    继续编辑
+                  </Button>
+                  <p>草稿尚未发布，不计入正式迭代统计。</p>
+                  <PublishRecordButton
+                    item={detail.data}
+                    api={api}
+                    writable={!!writable}
+                  />
+                </section>
+              )
+            ))}
         </>
       )}
       <Modal
@@ -716,8 +696,8 @@ export function RecordDraftsView({
             )}
             {selection?.source && (
               <p>
-                来源：{selection.source.title} · 处理人{" "}
-                {selection.source.assigneeName ?? "名称暂不可用"}
+                来源：{selection.source.title} · 处理人 #
+                {selection.source.assigneeId}
                 。归属和影响功能按保存时的来源快照记录。
               </p>
             )}

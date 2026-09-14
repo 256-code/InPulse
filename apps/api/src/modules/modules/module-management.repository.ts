@@ -34,7 +34,7 @@ export class ModuleManagementRepository {
   async list(tx: TransactionContext, projectId: number): Promise<ModuleItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} ORDER BY m.sort_order, m.id`;
+    >`SELECT m.id, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} ORDER BY m.sort_order, m.id`;
     return rows.map(dto);
   }
 
@@ -46,7 +46,7 @@ export class ModuleManagementRepository {
   ): Promise<ModuleItem | undefined> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} AND m.id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT m.id, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} AND m.id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return rows[0] === undefined ? undefined : dto(rows[0]);
   }
 

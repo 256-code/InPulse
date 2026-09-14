@@ -1,4 +1,3 @@
-import { TaskCreateModule } from "./workflows/task-create.module.js";
 import { ExternalLinkModule } from "./workflows/external-link.module.js";
 import { LeftoverTaskModule } from "./workflows/leftover-task.module.js";
 import { TaskRecordDraftModule } from "./workflows/task-record-draft.module.js";
@@ -52,7 +51,6 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       PublishedRecordsModule,
       TaskRecordDraftModule,
       TaskCompletionModule,
-      TaskCreateModule,
       LeftoverTaskModule,
       ExternalLinkModule,
       TaskGroupsModule,

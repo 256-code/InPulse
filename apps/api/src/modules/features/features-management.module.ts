@@ -1,4 +1,3 @@
-import { FeatureCreateCommandPort } from "./create.command-port.js";
 import { ModulesModule } from "../modules/index.js";
 import { FeatureCandidatesQueryPort } from "../search/index.js";
 import { Module } from "@nestjs/common";
@@ -25,9 +24,7 @@ import { FeatureManagementRepository } from "./feature-management.repository.js"
     ActivityProjectionModule,
     SearchProjectionModule,
   ],
-  exports: [FeatureCreateCommandPort],
   providers: [
-    FeatureCreateCommandPort,
     FeatureCandidatesQueryPort,
     FeatureManagementRepository,
     FeaturesManagementService,

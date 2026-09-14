@@ -15,7 +15,6 @@ export const featureEditRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(500),
     currentBehavior: z.string().max(50000).default(""),
-    acceptanceCriteria: z.string().max(50000).optional(),
     tags: z.array(z.string()).max(50).default([]),
   })
   .strict()
@@ -52,11 +51,9 @@ export const featureItemSchema = z
     moduleId: id,
     code: z.string().max(64),
     createdBy: id,
-    createdByName: z.string().nullable().optional(),
     tags: z.array(z.string()).max(50),
     name: z.string().min(1).max(500),
     currentBehavior: z.string().max(50000),
-    acceptanceCriteria: z.string().max(50000),
     status: z.enum(["ACTIVE", "ARCHIVED"]),
     rowVersion: id,
     createdAt: z.iso.datetime(),
