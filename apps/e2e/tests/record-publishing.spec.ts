@@ -43,7 +43,11 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
     await page.reload();
-    await expect(detail.getByText(/-CR-\d+ · v3 · 已发布/)).toBeVisible();
+    const card = page.locator(".record-card").filter({ hasText: title });
+    await expect(card.locator("summary")).toContainText(/-CR-\d+ · v3 · 发布/);
+    await expect(card.locator(".record-summary-badges")).toContainText(
+      "已发布",
+    );
     await expect(
       detail.getByText("遗留问题已标记为解决，历史内容仍可查看。"),
     ).toBeVisible();
@@ -71,8 +75,8 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     const suffix = Date.now();
     await page.goto(`/projects/${runtime.projectId}/modules`);
     await page.getByRole("link", { name: "查看功能" }).first().click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const feature = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const feature = page.getByRole("dialog", { name: "新增功能" });
     await feature.getByLabel("功能名称").fill(`发布功能-${suffix}`);
     await feature.getByRole("button", { name: /保\s*存/ }).click();
     await expect(feature).toBeHidden();
@@ -95,7 +99,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       name: "完成任务",
       exact: true,
     });
-    await complete.getByLabel("是否产生实际功能变化").selectOption("no");
+    await complete.getByRole("button", { name: /没有，仅完成任务/ }).click();
     await complete.getByLabel("完成原因").selectOption("测试验证");
     await complete.getByRole("button", { name: "确认完成任务" }).click();
     await expect(complete).toBeHidden();

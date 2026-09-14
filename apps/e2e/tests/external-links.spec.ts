@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 async function add(page: Page, url: string, label: string) {
@@ -13,6 +13,19 @@ async function add(page: Page, url: string, label: string) {
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   return modal;
 }
+async function addInline(
+  scope: Locator,
+  url: string,
+  label: string,
+): Promise<void> {
+  await scope.getByRole("button", { name: "添加 GitHub 链接" }).click();
+  await scope.getByLabel("GitHub URL").fill(url);
+  await scope.getByRole("button", { name: "确认添加" }).click();
+  const link = scope.getByRole("link", { name: label, exact: true });
+  await expect(link).toBeVisible({ timeout: 15000 });
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+}
 test("F22 project, feature and task multi-links persist; duplicate and unsafe links are explained", async ({
   browser,
 }) => {
@@ -20,11 +33,8 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
   const runtime = await loadRuntime(),
     { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
-    await page.goto("/projects");
-    const project = page
-      .locator(".project-card")
-      .filter({ hasText: runtime.projectTitle.split(" ").at(-1)! });
-    await project.getByRole("button", { name: "GitHub 链接" }).click();
+    await page.goto(`/projects/${runtime.projectId}/overview`);
+    await page.getByRole("button", { name: "GitHub 链接" }).click();
     let modal = await add(
       page,
       "https://github.com/inpulse/core/issues/22001",
@@ -39,8 +49,8 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
     ).toBeVisible();
     await page.goto(`/projects/${runtime.projectId}/modules`);
     await page.getByRole("link", { name: "查看功能" }).first().click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const create = page.getByRole("dialog", { name: "新建功能" }),
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const create = page.getByRole("dialog", { name: "新增功能" }),
       name = "链接功能" + Date.now();
     await create.getByLabel("功能名称").fill(name);
     await create.getByRole("button", { name: /保\s*存/ }).click();
@@ -129,7 +139,7 @@ test("F22 draft links survive publication and revision without changing old vers
       .getByRole("region", { name: "草稿详情" })
       .getByRole("button", { name: "GitHub 链接" })
       .click();
-    let modal = await add(
+    const modal = await add(
       page,
       "https://github.com/inpulse/core/issues/22003",
       "Issue #22003",
@@ -140,16 +150,14 @@ test("F22 draft links survive publication and revision without changing old vers
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    await detail.getByRole("button", { name: "GitHub 链接" }).click();
     await expect(
-      modal.getByRole("link", { name: "Issue #22003" }),
+      detail.getByRole("link", { name: "Issue #22003", exact: true }),
     ).toBeVisible();
-    modal = await add(
-      page,
+    await addInline(
+      detail,
       "https://github.com/inpulse/core/pull/22004",
       "PR #22004",
     );
-    await modal.getByRole("button", { name: "关闭关联" }).click();
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
     await edit.getByLabel("改了什么、怎么改的").fill("修订方案");
@@ -161,12 +169,12 @@ test("F22 draft links survive publication and revision without changing old vers
     await expect(
       detail.getByLabel("版本差异").getByText("原始方案"),
     ).toBeVisible();
-    await detail.getByRole("button", { name: "GitHub 链接" }).click();
     await expect(
-      modal.getByRole("link", { name: "Issue #22003" }),
+      detail.getByRole("link", { name: "Issue #22003", exact: true }),
     ).toBeVisible();
-    await expect(modal.getByRole("link", { name: "PR #22004" })).toBeVisible();
-    await modal.getByRole("button", { name: "关闭关联" }).click();
+    await expect(
+      detail.getByRole("link", { name: "PR #22004", exact: true }),
+    ).toBeVisible();
     await page.goto("/search?q=22004");
     await expect(page.getByText(/F22记录/).first()).toBeVisible();
   } finally {

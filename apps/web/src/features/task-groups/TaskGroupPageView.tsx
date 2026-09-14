@@ -249,14 +249,6 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
         </div>
       ) : null}
 
-      <div className="skeleton-note" data-testid="task-group-notice">
-        <InpulseIcon name="alert" size={16} />
-        <span>
-          <strong>接口说明：</strong>
-          {adapter.notice}
-        </span>
-      </div>
-
       {groupQuery.isPending ? (
         <div className="calm-state">
           <Spin size="large" />

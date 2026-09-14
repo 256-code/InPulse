@@ -15,18 +15,30 @@
     {
       "version": "1.0.0",
       "fingerprint": "7c6dc946f388359612fa98fe597e2c395af0a3efd9b7747efa55bba9e34062c1"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "c11f18115759cb4a8a5b2b2e5db956afd225a7426cdea63c529aadc4e2192cae"
     }
   ],
   "archiveModule": [
     {
       "version": "1.0.0",
       "fingerprint": "c0a4b256606f5bd1d5e6063481cde614ef99b23d3fe64aab561f654b7593eeeb"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "0c4c48038d311ee08d1e70467a10f99f835b3581c2a483b406b6411fd5bf3db4"
     }
   ],
   "archiveProject": [
     {
       "version": "1.0.0",
       "fingerprint": "4eb7e9b0f46438afef9bc50ed7a33bf04c482153439af71dd9e97a44b3c5d869"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "b35cd59b90d139fdc562e7c5631e999c9ba06effb47fa4686ad172680756d497"
     }
   ],
   "completeTask": [
@@ -51,6 +63,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "36a7743018f77042d7e35a2fea33faed17ac4f74e9dcc7297a1b72b2f5499f1a"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "4bcb1ced1e801a64837b00633524c520db70fac126e35e2a8c6a30db71d0cb8d"
     }
   ],
   "createIndependentRecordDraft": [
@@ -63,6 +79,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "3e2d9e9c8882a1da6f51f1e8d34c234ad696eaaf38f5abbb33b8b08f33b5b974"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "f08b22a98151584bdcdf4cc6a2c1589f3fbf632076f6d6ee11ff659143677a8a"
     }
   ],
   "createModuleTask": [
@@ -165,18 +185,30 @@
     {
       "version": "1.0.0",
       "fingerprint": "6a805b9fc94a28c4b964502666b4d819ee8684b2fc2f8ca48ad0f08696770ac9"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "06c94d593aa2335a8bfeb908102801d7adbc82722afc5473f2b2d83e9e9765f0"
     }
   ],
   "restoreModule": [
     {
       "version": "1.0.0",
       "fingerprint": "ea08dd8b3fc048149e5f7ce88990006839f0b5e92761f44341fa3a4c44c2ae71"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "12ea1cef319f1c8cdea21dc10b17406bdee0dc095ccb3a0b3fa0d19c9ae1946a"
     }
   ],
   "restoreProject": [
     {
       "version": "1.0.0",
       "fingerprint": "f53eb1e655c6934d4f2f0651901d5d36c6ffa197240f1678592b6311819bb96b"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "f1b38b54c2ddf3f59929c9abdb92fbd9007c4fb57bc0b4c3de88f5703765751a"
     }
   ],
   "transitionModuleTask": [
@@ -215,6 +247,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "a29140dcf621c76a786acd948e27922ff83f09657bfb4bacfef54baaf03dedcc"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "17c9024b0b9f251e05a4173c18c496bd3dc69b108d86bfe366cb2800a44eeed7"
     }
   ],
   "updateIndependentRecordDraft": [
@@ -227,6 +263,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "ef717fe3ae01dfec0bc2c36a0c61996a0192d9e7dec32e3f103afbc743299e1e"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "96ce8906421da43f402b6313ce702a0e64d12766839a59182125ed362a3bc475"
     }
   ],
   "updateModuleTask": [
@@ -239,6 +279,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "a0a141e51b85db8b396b4a0f1fd64cb834e45aaa441445a0382a48b4923011df"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "64830de8c58513d6a49819fdd6400200e2f59670b88204578438d8f3e789b110"
     }
   ],
   "updateTask": [

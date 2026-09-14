@@ -114,6 +114,27 @@ describe("my tasks server adapter", () => {
     });
   });
 
+  it("passes ownership for the created scope and keeps stats mine-scoped", async () => {
+    const listMyTasks = vi.fn().mockResolvedValue(page);
+    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const adapter = createMyTasksServerAdapter(client);
+
+    const result = await adapter.fetchMyTasks({
+      filters: {
+        ...DEFAULT_MY_TASK_FILTERS,
+        scope: "created",
+        status: "all",
+      },
+      viewerId: 2,
+    });
+
+    expect(listMyTasks).toHaveBeenCalledWith({
+      limit: 20,
+      ownership: "CREATOR",
+    });
+    expect(result.items).toHaveLength(1);
+  });
+
   it("wires stats and leftovers from the page while scopeCounts stays deferred", async () => {
     const listMyTasks = vi.fn().mockResolvedValue(page);
     const client = { listMyTasks } as unknown as InpulseApiClient;

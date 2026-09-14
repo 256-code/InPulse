@@ -315,6 +315,7 @@ export type FeatureItem = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: (string | null);
+  readonly stats: FeatureStats;
 };
 
 export type FeatureListResponse = {
@@ -339,6 +340,11 @@ export type FeatureResourcePath = {
 
 export type FeatureSimilarQuery = {
   readonly q: string;
+};
+
+export type FeatureStats = {
+  readonly openTaskCount: number;
+  readonly recordCount: number;
 };
 
 export type FeatureVersionHeaders = {
@@ -521,6 +527,7 @@ export type ModuleItem = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: (string | null);
+  readonly stats: ModuleStats;
 };
 
 export type ModuleListResponse = {
@@ -543,6 +550,11 @@ export type ModuleReplayContext = {
 export type ModuleResourcePath = {
   readonly projectId: number;
   readonly moduleId: number;
+};
+
+export type ModuleStats = {
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
 };
 
 export type ModuleTaskCollectionPath = {
@@ -671,6 +683,7 @@ export type MyTasksQueryRequest = {
   readonly cursor?: string;
   readonly limit?: number;
   readonly projectId?: number;
+  readonly ownership?: ("ASSIGNEE" | "CREATOR");
   readonly scopeType?: ("FEATURE" | "MODULE");
   readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
   readonly hasPublishedRecord?: boolean;
@@ -745,6 +758,7 @@ export type ProjectItem = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly memberCount: number;
+  readonly stats: ProjectStats;
 };
 
 export type ProjectListResponse = {
@@ -856,6 +870,12 @@ export type ProjectPath = {
 
 export type ProjectReplayContext = {
   readonly projectId: number;
+};
+
+export type ProjectStats = {
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
 };
 
 export type ProjectVersionHeaders = {

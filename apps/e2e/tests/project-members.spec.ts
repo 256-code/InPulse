@@ -53,7 +53,7 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
     await reauth.getByRole("button", { name: "验证身份" }).click();
     await expect(reauth).toBeHidden();
 
-    await expect(page.getByText("成员与历史", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "项目成员" })).toBeVisible();
     await expect(
       page.locator(".calm-member-card").filter({ hasText: runtime.user.name }),
     ).toHaveCount(1);

@@ -87,3 +87,51 @@ it("409 refresh failure and closing never enable stale submission", async () => 
     add.mock.calls[0]![3].headers["Idempotency-Key"],
   );
 });
+it("inline variant renders the github list in place, without a modal", async () => {
+  const list = vi.fn().mockResolvedValue({
+    projectId: 1,
+    rowVersion: 4,
+    writable: true,
+    items: [
+      {
+        id: 9,
+        projectId: 1,
+        normalizedUrl: "https://github.com/a/b/pull/7",
+        kind: "PULL_REQUEST",
+        label: "a/b#7",
+        repository: "a/b",
+        externalNumber: "7",
+        externalSha: null,
+        releaseTag: null,
+      },
+    ],
+  });
+  render(
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <QueryClientProvider client={new QueryClient()}>
+        <ExternalLinksPanel
+          variant="inline"
+          targetType="TASK"
+          targetId={7}
+          client={
+            {
+              listExternalLinks: list,
+              issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+            } as unknown as InpulseApiClient
+          }
+        />
+      </QueryClientProvider>
+    </ConfigProvider>,
+  );
+  const link = await screen.findByRole("link", { name: /a\/b#7/ });
+  expect(link).toHaveAttribute("href", "https://github.com/a/b/pull/7");
+  expect(screen.getByText("PR")).toBeVisible();
+  expect(screen.getByText("7")).toBeVisible();
+  expect(list).toHaveBeenCalledWith("TASK", 7);
+  // 内联形态不打开弹层：没有弹层的关闭按钮，只有就地新增入口。
+  expect(screen.queryByRole("button", { name: "关闭关联" })).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "添加 GitHub 链接" }),
+  ).toBeEnabled();
+  expect(screen.getByRole("button", { name: "解除 a/b#7" })).toBeEnabled();
+});

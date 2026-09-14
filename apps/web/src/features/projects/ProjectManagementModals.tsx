@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Form, Input, Modal, Space, Typography } from "antd";
+import { Alert, Button, Form, Input, Space, Typography } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
@@ -24,17 +25,6 @@ import {
 } from "./project-form";
 
 const { Text } = Typography;
-
-function modalTitle(kicker: string, title: string) {
-  return (
-    <div className="drawer-header">
-      <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-        {kicker}
-      </Text>
-      <h2 style={{ margin: "6px 0 0" }}>{title}</h2>
-    </div>
-  );
-}
 
 export interface EditProjectModalProps {
   readonly open: boolean;
@@ -63,6 +53,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     defaultValues: { name: project.name, description: project.description },
   });
   const mutation = useUpdateProject(project.id, client);
+  const formId = React.useId();
 
   useEffect(() => {
     if (open) {
@@ -100,92 +91,101 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      centered
+      eyebrow="项目活跃成员或系统管理员可编辑"
+      title="编辑项目"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
       onCancel={() => {
         if (!mutation.isPending) onClose();
       }}
-      title={modalTitle("项目活跃成员或系统管理员可编辑", "编辑项目")}
-      width={640}
-      footer={null}
-    >
-      <form onSubmit={handleSubmit((values) => void submit(values))} noValidate>
-        <Form component={false} layout="vertical" requiredMark={false}>
-          <Form.Item label="项目编码">
-            <Input value={project.code} disabled aria-label="项目编码" />
-          </Form.Item>
-          <Controller
-            name="name"
-            control={control}
-            render={({ field }) => (
-              <Form.Item
-                label="项目名称"
-                required
-                validateStatus={errors.name ? "error" : ""}
-                help={errors.name?.message ?? ""}
-              >
-                <Input
-                  {...field}
-                  aria-label="项目名称"
-                  maxLength={PROJECT_NAME_MAX_LENGTH}
-                  disabled={mutation.isPending}
-                  onChange={(event) => {
-                    field.onChange(event.currentTarget.value);
-                    clearErrors("name");
-                  }}
-                />
-              </Form.Item>
-            )}
-          />
-          <Controller
-            name="description"
-            control={control}
-            render={({ field }) => (
-              <Form.Item
-                label="项目描述"
-                validateStatus={errors.description ? "error" : ""}
-                help={errors.description?.message ?? ""}
-              >
-                <Input.TextArea
-                  {...field}
-                  aria-label="项目描述"
-                  rows={4}
-                  maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-                  disabled={mutation.isPending}
-                  onChange={(event) => {
-                    field.onChange(event.currentTarget.value);
-                    clearErrors("description");
-                  }}
-                />
-              </Form.Item>
-            )}
-          />
-          <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-            编码创建后不可修改，仅用于溯源；保存成功后项目版本递增，
-            其他页面的编辑需要重新加载最新版本。
-          </Text>
-          {mutation.error ? (
-            <Alert
-              showIcon
-              type="error"
-              title={describeProjectManagementError(mutation.error, "update")}
-              style={{ marginTop: 16 }}
-            />
-          ) : null}
-        </Form>
-        <Space
-          className="calm-action-footer"
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}
-        >
+      footer={
+        <>
           <Button disabled={mutation.isPending} onClick={onClose}>
             取消
           </Button>
-          <Button type="primary" htmlType="submit" loading={mutation.isPending}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form={formId}
+            loading={mutation.isPending}
+          >
             保存修改
           </Button>
-        </Space>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="catalog-form calm-form"
+        onSubmit={handleSubmit((values) => void submit(values))}
+        noValidate
+      >
+        <Form component={false} layout="vertical" requiredMark={false}>
+          <div className="dialog-form">
+            <Form.Item label="项目编码">
+              <Input value={project.code} disabled aria-label="项目编码" />
+            </Form.Item>
+            <Controller
+              name="name"
+              control={control}
+              render={({ field }) => (
+                <Form.Item
+                  label="项目名称"
+                  required
+                  validateStatus={errors.name ? "error" : ""}
+                  help={errors.name?.message ?? ""}
+                >
+                  <Input
+                    {...field}
+                    aria-label="项目名称"
+                    maxLength={PROJECT_NAME_MAX_LENGTH}
+                    disabled={mutation.isPending}
+                    onChange={(event) => {
+                      field.onChange(event.currentTarget.value);
+                      clearErrors("name");
+                    }}
+                  />
+                </Form.Item>
+              )}
+            />
+            <Controller
+              name="description"
+              control={control}
+              render={({ field }) => (
+                <Form.Item
+                  label="项目描述"
+                  validateStatus={errors.description ? "error" : ""}
+                  help={errors.description?.message ?? ""}
+                >
+                  <Input.TextArea
+                    {...field}
+                    aria-label="项目描述"
+                    rows={4}
+                    maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+                    disabled={mutation.isPending}
+                    onChange={(event) => {
+                      field.onChange(event.currentTarget.value);
+                      clearErrors("description");
+                    }}
+                  />
+                </Form.Item>
+              )}
+            />
+            <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+              编码创建后不可修改，仅用于溯源；保存成功后项目版本递增，
+              其他页面的编辑需要重新加载最新版本。
+            </Text>
+            {mutation.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectManagementError(mutation.error, "update")}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+          </div>
+        </Form>
       </form>
     </Modal>
   );
@@ -215,6 +215,7 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
     formState: { errors },
   } = useForm<ProjectArchiveFormValues>({ defaultValues: { reason: "" } });
   const mutation = useArchiveProject(project.id, client);
+  const formId = React.useId();
   const preview = useProjectArchivePreview(open ? project.id : null, client);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthDone, setReauthDone] = useState(false);
@@ -257,99 +258,16 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      centered
+      eyebrow="仅系统管理员可执行，需 5 分钟内双因子重认证"
+      title="归档项目"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
       onCancel={() => {
         if (!mutation.isPending) onClose();
       }}
-      title={modalTitle(
-        "仅系统管理员可执行，需 5 分钟内双因子重认证",
-        "归档项目",
-      )}
-      width={640}
-      footer={null}
-    >
-      <form onSubmit={handleSubmit((values) => void submit(values))} noValidate>
-        <Form component={false} layout="vertical" requiredMark={false}>
-          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-            {preview.isPending ? (
-              <Alert showIcon type="info" title="正在检查未完成任务..." />
-            ) : null}
-            {preview.isError ? (
-              <Alert
-                showIcon
-                type="warning"
-                title="未能读取未完成任务数量"
-                description="归档后项目及全部下级数据只读；历史仍可查看。"
-                action={
-                  <Button size="small" onClick={() => void preview.refetch()}>
-                    重试
-                  </Button>
-                }
-              />
-            ) : null}
-            {preview.data ? (
-              preview.data.unfinishedTaskCount > 0 ? (
-                <Alert
-                  showIcon
-                  type="warning"
-                  title={`该项目仍有 ${preview.data.unfinishedTaskCount} 个未完成任务`}
-                  description="归档后项目及全部下级数据只读，历史仍可查看；请确认这些任务已妥善安排。"
-                />
-              ) : (
-                <Alert
-                  showIcon
-                  type="info"
-                  title="该项目当前没有未完成任务"
-                  description="归档后项目及全部下级数据只读，历史仍可查看。"
-                />
-              )
-            ) : null}
-            <Controller
-              name="reason"
-              control={control}
-              render={({ field }) => (
-                <Form.Item
-                  label="归档原因"
-                  required
-                  validateStatus={errors.reason ? "error" : ""}
-                  help={errors.reason?.message ?? ""}
-                >
-                  <Input.TextArea
-                    {...field}
-                    aria-label="归档原因"
-                    rows={3}
-                    maxLength={PROJECT_ARCHIVE_REASON_MAX_LENGTH}
-                    placeholder="说明为何归档，原因会写入不可变审计"
-                    disabled={mutation.isPending}
-                  />
-                </Form.Item>
-              )}
-            />
-          </Space>
-          {reauthDone ? (
-            <Alert
-              type="success"
-              showIcon
-              title="管理员安全验证已完成，请重新点击确认归档。"
-              style={{ marginTop: 16 }}
-            />
-          ) : null}
-          {mutation.error ? (
-            <Alert
-              showIcon
-              type="error"
-              title={describeProjectManagementError(mutation.error, "archive")}
-              style={{ marginTop: 16 }}
-            />
-          ) : null}
-        </Form>
-        <Space
-          className="calm-action-footer"
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}
-        >
+      footer={
+        <>
           <Button disabled={mutation.isPending} onClick={onClose}>
             取消
           </Button>
@@ -357,11 +275,99 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
             danger
             type="primary"
             htmlType="submit"
+            form={formId}
             loading={mutation.isPending}
           >
             确认归档
           </Button>
-        </Space>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="catalog-form calm-form"
+        onSubmit={handleSubmit((values) => void submit(values))}
+        noValidate
+      >
+        <Form component={false} layout="vertical" requiredMark={false}>
+          <div className="dialog-form">
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+              {preview.isPending ? (
+                <Alert showIcon type="info" title="正在检查未完成任务..." />
+              ) : null}
+              {preview.isError ? (
+                <Alert
+                  showIcon
+                  type="warning"
+                  title="未能读取未完成任务数量"
+                  description="归档后项目及全部下级数据只读；历史仍可查看。"
+                  action={
+                    <Button size="small" onClick={() => void preview.refetch()}>
+                      重试
+                    </Button>
+                  }
+                />
+              ) : null}
+              {preview.data ? (
+                preview.data.unfinishedTaskCount > 0 ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    title={`该项目仍有 ${preview.data.unfinishedTaskCount} 个未完成任务`}
+                    description="归档后项目及全部下级数据只读，历史仍可查看；请确认这些任务已妥善安排。"
+                  />
+                ) : (
+                  <Alert
+                    showIcon
+                    type="info"
+                    title="该项目当前没有未完成任务"
+                    description="归档后项目及全部下级数据只读，历史仍可查看。"
+                  />
+                )
+              ) : null}
+              <Controller
+                name="reason"
+                control={control}
+                render={({ field }) => (
+                  <Form.Item
+                    label="归档原因"
+                    required
+                    validateStatus={errors.reason ? "error" : ""}
+                    help={errors.reason?.message ?? ""}
+                  >
+                    <Input.TextArea
+                      {...field}
+                      aria-label="归档原因"
+                      rows={3}
+                      maxLength={PROJECT_ARCHIVE_REASON_MAX_LENGTH}
+                      placeholder="说明为何归档，原因会写入不可变审计"
+                      disabled={mutation.isPending}
+                    />
+                  </Form.Item>
+                )}
+              />
+            </Space>
+            {reauthDone ? (
+              <Alert
+                type="success"
+                showIcon
+                title="管理员安全验证已完成，请重新点击确认归档。"
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+            {mutation.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectManagementError(
+                  mutation.error,
+                  "archive",
+                )}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+          </div>
+        </Form>
       </form>
       <AdminReauthenticateModal
         open={reauthOpen}
@@ -399,6 +405,7 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
     formState: { errors },
   } = useForm<ProjectRestoreFormValues>({ defaultValues: { reason: "" } });
   const mutation = useRestoreProject(project.id, client);
+  const formId = React.useId();
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthDone, setReauthDone] = useState(false);
 
@@ -440,77 +447,86 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      centered
+      eyebrow="仅系统管理员可执行，需 5 分钟内双因子重认证"
+      title="恢复项目"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
       onCancel={() => {
         if (!mutation.isPending) onClose();
       }}
-      title={modalTitle(
-        "仅系统管理员可执行，需 5 分钟内双因子重认证",
-        "恢复项目",
-      )}
-      width={640}
-      footer={null}
-    >
-      <form onSubmit={handleSubmit((values) => void submit(values))} noValidate>
-        <Form component={false} layout="vertical" requiredMark={false}>
-          <Alert
-            showIcon
-            type="info"
-            title="恢复只恢复项目自身状态"
-            description="项目及下级数据重新可写；下级资源各自的归档状态保持不变。"
-          />
-          <Controller
-            name="reason"
-            control={control}
-            render={({ field }) => (
-              <Form.Item
-                label="恢复原因"
-                required
-                validateStatus={errors.reason ? "error" : ""}
-                help={errors.reason?.message ?? ""}
-                style={{ marginTop: 16 }}
-              >
-                <Input.TextArea
-                  {...field}
-                  aria-label="恢复原因"
-                  rows={3}
-                  maxLength={PROJECT_ARCHIVE_REASON_MAX_LENGTH}
-                  placeholder="说明为何恢复，原因会写入不可变审计"
-                  disabled={mutation.isPending}
-                />
-              </Form.Item>
-            )}
-          />
-          {reauthDone ? (
-            <Alert
-              type="success"
-              showIcon
-              title="管理员安全验证已完成，请重新点击确认恢复。"
-            />
-          ) : null}
-          {mutation.error ? (
-            <Alert
-              showIcon
-              type="error"
-              title={describeProjectManagementError(mutation.error, "restore")}
-              style={{ marginTop: 16 }}
-            />
-          ) : null}
-        </Form>
-        <Space
-          className="calm-action-footer"
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}
-        >
+      footer={
+        <>
           <Button disabled={mutation.isPending} onClick={onClose}>
             取消
           </Button>
-          <Button type="primary" htmlType="submit" loading={mutation.isPending}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form={formId}
+            loading={mutation.isPending}
+          >
             确认恢复
           </Button>
-        </Space>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="catalog-form calm-form"
+        onSubmit={handleSubmit((values) => void submit(values))}
+        noValidate
+      >
+        <Form component={false} layout="vertical" requiredMark={false}>
+          <div className="dialog-form">
+            <Alert
+              showIcon
+              type="info"
+              title="恢复只恢复项目自身状态"
+              description="项目及下级数据重新可写；下级资源各自的归档状态保持不变。"
+            />
+            <Controller
+              name="reason"
+              control={control}
+              render={({ field }) => (
+                <Form.Item
+                  label="恢复原因"
+                  required
+                  validateStatus={errors.reason ? "error" : ""}
+                  help={errors.reason?.message ?? ""}
+                  style={{ marginTop: 16 }}
+                >
+                  <Input.TextArea
+                    {...field}
+                    aria-label="恢复原因"
+                    rows={3}
+                    maxLength={PROJECT_ARCHIVE_REASON_MAX_LENGTH}
+                    placeholder="说明为何恢复，原因会写入不可变审计"
+                    disabled={mutation.isPending}
+                  />
+                </Form.Item>
+              )}
+            />
+            {reauthDone ? (
+              <Alert
+                type="success"
+                showIcon
+                title="管理员安全验证已完成，请重新点击确认恢复。"
+              />
+            ) : null}
+            {mutation.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectManagementError(
+                  mutation.error,
+                  "restore",
+                )}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+          </div>
+        </Form>
       </form>
       <AdminReauthenticateModal
         open={reauthOpen}

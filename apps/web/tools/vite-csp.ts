@@ -108,6 +108,19 @@ export function applyHtmlSecurityHeaders(
 }
 
 /**
+ * dev 模式下 Vite 会给入口 HTML 打上 `Cache-Control: no-cache` 与 `ETag`，覆盖本
+ * 模块设置的 `no-store`。浏览器随后以 `If-None-Match` 复用缓存的旧正文，而 304
+ * 响应携带的仍是本次生成的 CSP nonce，旧正文里的 nonce 全部失效、入口脚本被拦
+ * 截（表现为 `@vitejs/plugin-react can't detect preamble`）。入口 HTML 既不缓存
+ * 也不留校验器，才能保证正文与 nonce 始终同源。
+ */
+export function disableHtmlCaching(response: ServerResponse): void {
+  response.setHeader("Cache-Control", "no-store");
+  response.removeHeader("ETag");
+  response.removeHeader("Last-Modified");
+}
+
+/**
  * 缓冲 HTML 响应体并在发送前把 nonce 占位符替换为当前响应的真实 nonce。
  * HTML 体积很小；替换后由 Node 重新计算 Content-Length，避免长度不一致。
  */
@@ -161,6 +174,7 @@ export function rewriteHtmlBody(response: ServerResponse, nonce: string): void {
     collect(chunk, typeof encoding === "function" ? undefined : encoding);
     const body = injectCspNonce(Buffer.concat(chunks).toString("utf8"), nonce);
     if (!response.headersSent) {
+      disableHtmlCaching(response);
       // 替换后长度变化，交由 Node 重新计算；若下游已先发送头部（例如压缩流），
       // 保持原样，不能在这里改写已发送的头部。
       response.removeHeader("Content-Length");
@@ -200,6 +214,10 @@ export function installDevCspMiddleware(
     }
     const nonce = generateCspNonce();
     applyHtmlSecurityHeaders(response, mode, nonce);
+    // 浏览器若还持有上一轮的校验器，条件请求会被 Vite 直接判成 304；此时响应
+    // 只有新的 CSP 头而没有新正文，旧 nonce 会让入口脚本全部被拦截。
+    delete request.headers["if-none-match"];
+    delete request.headers["if-modified-since"];
     rewriteHtmlBody(response, nonce);
     next();
   };

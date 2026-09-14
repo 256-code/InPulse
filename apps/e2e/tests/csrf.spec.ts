@@ -146,18 +146,20 @@ test("版本化写请求保留 If-Match 与 CSRF、幂等键", async ({ browser 
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await expect(page.getByRole("heading", { name: "模块管理" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: runtime.projectName }),
+    ).toBeVisible();
     const name = `CSRF模块-${Date.now()}`;
-    await page.getByRole("button", { name: "新建模块" }).click();
-    const dialog = page.getByRole("dialog", { name: "新建模块" });
+    await page.getByRole("button", { name: "新增模块" }).first().click();
+    const dialog = page.getByRole("dialog", { name: "新增模块" });
     await dialog.getByLabel("模块名称").fill(name);
     await dialog.getByLabel("模块说明").fill("CSRF 生命周期 E2E");
     await dialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(dialog).toBeHidden();
 
     const requests = captureRequests(page);
-    const card = page.locator(".calm-feature-card").filter({ hasText: name });
-    await card.getByRole("button", { name: /编\s*辑/ }).click();
+    const card = page.locator(".catalog-module-wrap").filter({ hasText: name });
+    await card.getByRole("button", { name: "编辑模块" }).click();
     const edit = page.getByRole("dialog", { name: "编辑模块" });
     await edit.getByLabel("模块名称").fill(`${name}-已修改`);
     await edit.getByRole("button", { name: /保\s*存/ }).click();

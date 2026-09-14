@@ -67,10 +67,12 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
 
     // 跨项目卡片按记录自身 projectId 打开详情（错误实现会停在加载态）。
     await card.locator("summary").click();
+    await expect(card.locator("summary")).toContainText(/-CR-\d+ · v1 · 发布/);
+    await expect(card.locator(".record-summary-badges")).toContainText(
+      "已发布",
+    );
     await expect(
-      page
-        .getByRole("region", { name: "正式记录详情" })
-        .getByText(/-CR-\d+ · v1 · 已发布/),
+      page.getByRole("region", { name: "正式记录详情" }),
     ).toBeVisible();
     await page.screenshot({
       path: "test-results/b3b-cross-project-feed.png",

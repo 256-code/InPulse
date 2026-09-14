@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Form, Input, Modal, Result } from "antd";
+import { Alert, Button, Form, Input, Result } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useAuth } from "./auth-context";
 import { describeMfaError } from "./auth-errors";
 
@@ -57,9 +58,10 @@ export const AdminReauthenticateModal: React.FC<
   return (
     <Modal
       open={open}
+      eyebrow="高风险操作前需要 5 分钟内完成双因子验证"
       title="管理员安全验证"
       onCancel={handleClose}
-      footer={null}
+      body
       destroyOnHidden
       mask={{ closable: !submitting }}
       className="catalog-modal"
@@ -88,7 +90,7 @@ export const AdminReauthenticateModal: React.FC<
             <Alert
               showIcon
               type="error"
-              message={errorMessage}
+              title={errorMessage}
               style={{ marginBottom: 16 }}
             />
           ) : null}

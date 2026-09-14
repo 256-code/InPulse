@@ -56,6 +56,11 @@ export const AppProviders: React.FC<AppProvidersProps> = ({
   const configProps: ConfigProviderProps = {
     locale: zhCN,
     theme: appTheme,
+    /**
+     * antd 默认给"恰好两个汉字"的按钮插入空格（编 辑 / 归 档 / 取 消），
+     * 与设计师稿的按钮文案不一致，全局关闭。
+     */
+    button: { autoInsertSpace: false },
   };
 
   if (nonce) {

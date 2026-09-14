@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Alert, Button, Input, Spin } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
@@ -9,6 +10,7 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskError, type TaskViewItem } from "./task-query";
 import { CompleteWithRecord } from "./CompleteWithRecord";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
 const labels = {
   COMPLETE: "完成任务",
@@ -62,6 +64,7 @@ export function TaskStatusPanel({
   const [note, setNote] = useState("");
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  const formId = React.useId();
   const saving = useRef(false);
   const retry = useRef<{ signature: string; key: string } | null>(null);
   const history = useQuery({
@@ -168,14 +171,31 @@ export function TaskStatusPanel({
     action !== null &&
     (base.lifecycleStatus !== "ACTIVE" ||
       requiredStatus[action] !== base.workStatus);
-  const disabled =
+  const blocked =
     !writable ||
     mutation.isPending ||
     reloading ||
     conflict ||
     !!reloadError ||
-    invalidState ||
-    (action === "COMPLETE" && actualChange !== "no");
+    invalidState;
+  const disabled = blocked || (action === "COMPLETE" && actualChange !== "no");
+  // 设计稿 completion-flow 的三个步骤各有一个引导标题；仓库的「完成任务」弹层标题
+  // 已经承担第三步骤（完成任务）的措辞，这里只补前两步的问句与标题。
+  const completionStepTitle =
+    action !== "COMPLETE" || actualChange === "no"
+      ? null
+      : actualChange === ""
+        ? "本次工作是否产生了实际功能变化？"
+        : "记录这次变化";
+  // 设计稿 task-modal.tsx 的取消流程复用同一骨架：返回按钮 + `h2` 标题 + 任务副标题。
+  const stepTitle =
+    action === "COMPLETE"
+      ? completionStepTitle
+      : action
+        ? labels[action]
+        : null;
+  // `actualChange !== ""` 表示已经离开选择步骤，返回按钮应沿流程回退而非关闭弹层。
+  const inFlowSubStep = action === "COMPLETE" && actualChange !== "";
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!action || disabled || saving.current) return;
@@ -244,51 +264,96 @@ export function TaskStatusPanel({
         </ol>
       )}
       <Modal
-        open={action !== null}
-        title={action ? labels[action] : "任务状态"}
         className="catalog-modal"
-        footer={null}
+        size="xl"
+        open={action !== null}
+        eyebrow={`项目 #${item.projectId} / 模块 #${item.moduleId} / ${
+          item.featureId === null ? "模块级任务" : `功能 #${item.featureId}`
+        }`}
+        title={action ? labels[action] : "任务状态"}
         onCancel={() => {
           if (!saving.current && !reloading && !recordBusy) onClose();
         }}
         mask={{ closable: !mutation.isPending && !reloading && !recordBusy }}
+        footer={
+          action === "COMPLETE" && actualChange !== "no" ? undefined : (
+            <Button
+              htmlType="submit"
+              form={formId}
+              className="primary-button"
+              loading={mutation.isPending}
+              disabled={disabled}
+            >
+              确认{action ? labels[action] : "操作"}
+            </Button>
+          )
+        }
       >
         <form
+          id={formId}
           className="catalog-form calm-form"
           onSubmit={(event) => void submit(event)}
         >
-          {mutation.isError && (
-            <Alert type="error" title={taskError(mutation.error)} />
-          )}
-          {reloadError && <Alert type="warning" title={reloadError} />}
-          {conflict && (
-            <Button loading={reloading} onClick={() => void reload()}>
-              加载最新任务状态
-            </Button>
-          )}
-          {invalidState && (
-            <Alert
-              type="warning"
-              title={`最新状态为${statuses[base.workStatus]}，无法继续此操作。说明已保留。`}
-            />
-          )}
-          {action === "COMPLETE" && (
-            <>
-              <label>
-                是否产生实际功能变化
-                <select
-                  value={actualChange}
-                  disabled={recordBusy}
-                  onChange={(e) =>
-                    setActualChange(e.target.value as typeof actualChange)
-                  }
-                >
-                  <option value="">请选择</option>
-                  <option value="yes">是，需要迭代记录</option>
-                  <option value="no">否，仅完成任务</option>
-                </select>
-              </label>
-              {actualChange === "yes" && (
+          <div className="completion-flow">
+            {mutation.isError && (
+              <Alert type="error" title={taskError(mutation.error)} />
+            )}
+            {reloadError && <Alert type="warning" title={reloadError} />}
+            {conflict && (
+              <Button loading={reloading} onClick={() => void reload()}>
+                加载最新任务状态
+              </Button>
+            )}
+            {invalidState && (
+              <Alert
+                type="warning"
+                title={`最新状态为${statuses[base.workStatus]}，无法继续此操作。说明已保留。`}
+              />
+            )}
+            <button
+              type="button"
+              className="back-button"
+              onClick={() => {
+                if (saving.current || reloading || recordBusy) return;
+                if (inFlowSubStep) setActualChange("");
+                else onClose();
+              }}
+            >
+              <InpulseIcon name="arrowLeft" size={15} />
+              {inFlowSubStep ? "上一步" : "返回任务"}
+            </button>
+            {stepTitle === null ? null : (
+              <h2 className="completion-step-title">{stepTitle}</h2>
+            )}
+            <p className="calm-subtitle">
+              {item.code} · {item.title}
+            </p>
+            <div className="dialog-form">
+              {action === "COMPLETE" && actualChange === "" && (
+                <div className="completion-choices">
+                  <button
+                    type="button"
+                    disabled={blocked}
+                    onClick={() => setActualChange("yes")}
+                  >
+                    <InpulseIcon name="gitBranch" size={22} />
+                    <strong>有，填写迭代记录</strong>
+                    <span>记录变化后发布，任务同时标记为已完成</span>
+                    <InpulseIcon name="chevronRight" size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={blocked}
+                    onClick={() => setActualChange("no")}
+                  >
+                    <InpulseIcon name="check" size={22} />
+                    <strong>没有，仅完成任务</strong>
+                    <span>测试、调研、文档等不改变功能的工作</span>
+                    <InpulseIcon name="chevronRight" size={17} />
+                  </button>
+                </div>
+              )}
+              {action === "COMPLETE" && actualChange === "yes" && (
                 <CompleteWithRecord
                   item={base}
                   api={api}
@@ -300,44 +365,44 @@ export function TaskStatusPanel({
                   }}
                 />
               )}
-              {actualChange === "no" && (
+              {action === "COMPLETE" && actualChange === "no" && (
+                <>
+                  <label>
+                    完成原因
+                    <select
+                      value={reason}
+                      onChange={(e) =>
+                        setReason(e.target.value as typeof reason)
+                      }
+                    >
+                      {reasons.map((value) => (
+                        <option key={value}>{value}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="permission-hint">
+                    该任务不会生成迭代记录，但会保留完成说明、完成时间与全部状态历史。
+                  </p>
+                </>
+              )}
+              {actualChange !== "yes" && (
                 <label>
-                  完成原因
-                  <select
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value as typeof reason)}
-                  >
-                    {reasons.map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
+                  {action === "COMPLETE" ? "完成补充说明" : "操作原因（选填）"}
+                  <Input.TextArea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    maxLength={action === "COMPLETE" ? 9800 : 10000}
+                    rows={3}
+                  />
                 </label>
               )}
-            </>
-          )}
-          {actualChange !== "yes" && (
-            <>
-              <label>
-                {action === "COMPLETE" ? "完成补充说明" : "操作原因（选填）"}
-                <Input.TextArea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  maxLength={action === "COMPLETE" ? 9800 : 10000}
-                  rows={3}
-                />
-              </label>
-              <div className="calm-action-footer">
-                <Button
-                  htmlType="submit"
-                  className="primary-button"
-                  loading={mutation.isPending}
-                  disabled={disabled}
-                >
-                  确认{action ? labels[action] : "操作"}
-                </Button>
-              </div>
-            </>
-          )}
+              {action === "CANCEL" && (
+                <p className="permission-hint">
+                  任务与迭代记录不会被物理删除：编号、描述、状态历史与审计全部保留，仅从默认待办中移出，且不计入完成率。
+                </p>
+              )}
+            </div>
+          </div>
         </form>
       </Modal>
     </section>

@@ -27,8 +27,8 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     const projectId = page.url().match(/projects\/(\d+)/)![1];
     await page.goto(`/projects/${projectId}/modules`);
     await page.getByRole("link", { name: "查看功能" }).first().click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const feature = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const feature = page.getByRole("dialog", { name: "新增功能" });
     await feature.getByLabel("功能名称").fill(`支付-${suffix}`);
     await feature.getByRole("button", { name: /保\s*存/ }).click();
     await expect(feature).toBeHidden();

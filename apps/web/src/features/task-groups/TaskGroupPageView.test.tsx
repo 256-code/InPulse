@@ -140,7 +140,6 @@ function createAdapter(
 ): TaskGroupAdapter {
   return {
     source: "server",
-    notice: "测试接口说明：记录为关联时刻快照。",
     fetchTaskGroup: vi.fn().mockResolvedValue(detail()),
     fetchTaskGroupRecords: vi
       .fn()
@@ -184,7 +183,7 @@ function mount(
 }
 
 describe("F-25 task group view", () => {
-  it("renders the main task first with role badges, member meta and the interface notice", async () => {
+  it("renders the main task first with role badges and member meta", async () => {
     const { onBackToTasks } = mount();
     await screen.findByText("退款主任务");
     const items = screen.getAllByTestId(/^task-group-member-/);
@@ -199,9 +198,10 @@ describe("F-25 task group view", () => {
     expect(
       main.getByText(/负责人 李四 · 已发布记录 2 条 · 合并于 9月1日 · 功能 #4/),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("task-group-notice")).toHaveTextContent(
-      "测试接口说明：记录为关联时刻快照。",
-    );
+    // 设计师稿 task-center.tsx 的聚合组区块没有「接口说明」黄条：页面只呈现
+    // 头部、成员分支与记录面板，开发期接口说明不进入用户界面。
+    expect(screen.queryByText(/接口说明/)).toBeNull();
+    expect(screen.queryByText(/骨架数据/)).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "任务中心" }));
     expect(onBackToTasks).toHaveBeenCalledTimes(1);

@@ -95,20 +95,27 @@ describe("F-14 task editing", () => {
     // Ant Design assigns the same aria title ID to nested dialogs in NODE_ENV=test.
     // Locate this dialog through its labeled field; real-browser E2E verifies its name.
     const modal = within(
-      (await screen.findByLabelText("是否产生实际功能变化")).closest(
-        '[role="dialog"]',
-      ) as HTMLElement,
+      (
+        await screen.findByRole("button", {
+          name: /有，填写迭代记录/,
+        })
+      ).closest('[role="dialog"]') as HTMLElement,
     );
-    fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
-      target: { value: "yes" },
-    });
+    // 设计稿 completion-flow 的骨架：返回任务 + 步骤标题 + 任务副标题 + 双卡片。
+    expect(modal.getByRole("button", { name: /返回任务/ })).toBeTruthy();
+    expect(
+      modal.getByRole("heading", {
+        name: "本次工作是否产生了实际功能变化？",
+      }),
+    ).toBeTruthy();
+    expect(modal.getByText(`${item.code} · ${item.title}`)).toBeTruthy();
+    fireEvent.click(modal.getByRole("button", { name: /有，填写迭代记录/ }));
     expect(
       modal.getByRole("button", { name: "发布并完成任务" }),
     ).toBeDisabled();
     expect(completeTask).not.toHaveBeenCalled();
-    fireEvent.change(modal.getByLabelText("是否产生实际功能变化"), {
-      target: { value: "no" },
-    });
+    fireEvent.click(modal.getByRole("button", { name: /上一步/ }));
+    fireEvent.click(modal.getByRole("button", { name: /没有，仅完成任务/ }));
     fireEvent.change(modal.getByLabelText("完成原因"), {
       target: { value: "技术调研" },
     });

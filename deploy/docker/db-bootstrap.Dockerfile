@@ -11,8 +11,17 @@ ARG GROONGA_KEYRING_SHA256=91677bc2f9f454ef6ddfc6afe40764e470e60d8a6b1921661fd32
 ARG PGROONGA_DEBIAN_VERSION=4.0.8-1
 ARG LIBGROONGA_DEBIAN_VERSION=16.1.0-1
 
+# Debian 会持续为系统包发布安全更新，而 digest 固定的 postgres 镜像不会因此
+# 立即重建；不刷新就会被新公告卡住 Trivy 镜像门禁（实测 perl 的 CRITICAL 与
+# gzip、libpcre2-8-0、libsqlite3-0 的 HIGH 使扫描失败）。此处逐个点名升级而
+# 不做整体 upgrade：官方 postgres 镜像已配置 PGDG 源，整体 upgrade 会在 PGDG
+# 发布新补丁时把 PostgreSQL 18.6 基线悄悄带走。`--only-upgrade` 只升级已安装
+# 的包：未安装的包跳过、已是最新的包不动，不安装新包、不删除任何包。
 RUN apt-get update \
  && apt-get install -y --only-upgrade libssl3t64 openssl openssl-provider-legacy \
+ && apt-get install -y --only-upgrade \
+      gzip libpcre2-8-0 libsqlite3-0 libssh2-1t64 \
+      perl perl-base libperl5.40 perl-modules-5.40 \
  && apt-get install -y -V ca-certificates lsb-release wget postgresql-common \
  && wget -q -O /usr/share/keyrings/groonga-archive-keyring.asc https://packages.groonga.org/debian/groonga-archive-keyring.asc \
  && echo "${GROONGA_KEYRING_SHA256}  /usr/share/keyrings/groonga-archive-keyring.asc" | sha256sum -c - \

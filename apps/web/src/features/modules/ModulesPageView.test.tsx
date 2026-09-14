@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
@@ -30,6 +30,7 @@ const item: ModuleItem = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   archivedAt: null,
+  stats: { activeFeatureCount: 0, openTaskCount: 0 },
 };
 function mount(client: InpulseApiClient, admin = false) {
   return render(
@@ -273,8 +274,76 @@ describe("F-12 forms", () => {
   });
 });
 
+describe("模块卡", () => {
+  const withStats = {
+    ...item,
+    stats: { activeFeatureCount: 3, openTaskCount: 2 },
+  };
+  const mountRouted = (client: InpulseApiClient) =>
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter initialEntries={["/projects/2/modules"]}>
+              <Routes>
+                <Route
+                  path="/projects/:projectId/modules"
+                  element={
+                    <ModulesPageView
+                      projectId={2}
+                      isAdmin={false}
+                      client={client}
+                    />
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features"
+                  element={<div>功能列表页</div>}
+                />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+  it("shows the module feature and open task counts in the card footer", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [withStats] }),
+    } as unknown as InpulseApiClient;
+    mountRouted(client);
+    expect(await screen.findByText(/3 个功能/)).toBeInTheDocument();
+    expect(screen.getByText(/2 项待办/)).toBeInTheDocument();
+  });
+  it("opens the feature list when the card body itself is clicked", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [withStats] }),
+    } as unknown as InpulseApiClient;
+    mountRouted(client);
+    fireEvent.click(await screen.findByRole("heading", { name: "未分类模块" }));
+    await screen.findByText("功能列表页");
+  });
+  it("keeps 查看功能 as the single link inside the card so card clicks stay unambiguous", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [withStats] }),
+    } as unknown as InpulseApiClient;
+    mountRouted(client);
+    const links = await screen.findAllByRole("link", { name: "查看功能" });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe(
+      "/projects/2/modules/3/features",
+    );
+    expect(
+      links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
+    ).toBeNull();
+  });
+});
+
 describe("项目内导航", () => {
-  it("lists the project modules and marks no entry as current on the module management page", async () => {
+  it("lists the project modules and marks the overview tab as current on the project page", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({ items: [item] }),
     } as unknown as InpulseApiClient;
@@ -288,10 +357,15 @@ describe("项目内导航", () => {
         .getAllByRole("button")
         .map((button) => button.textContent),
     ).toEqual(["项目概览", "未分类模块"]);
+    // 设计师稿 catalog.tsx L214：项目页（概览 + 模块网格同页）的「项目概览」恒为当前页签。
     expect(
       within(nav)
         .getAllByRole("button")
-        .filter((button) => button.classList.contains("active")),
-    ).toEqual([]);
+        .filter((button) => button.classList.contains("active"))
+        .map((button) => button.textContent),
+    ).toEqual(["项目概览"]);
+    expect(
+      within(nav).getByRole("button", { name: "项目概览" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 });

@@ -37,14 +37,16 @@ import {
 /**
  * R-3 我的任务聚合读（F-32）。
  *
- * 负责人固定为当前用户（A 裁决 Q-08），不接受任何他人身份或授权范围参数；
- * projectId 只用于缩小范围，最终仍按服务端 AuthorizedProjectScope 过滤，
- * 越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
- * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与六项筛选。
+ * 归属主体固定为当前用户（A 裁决 Q-08），不接受任何他人身份或授权范围参数；
+ * ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，
+ * 用于任务中心「我负责的 / 我创建的」分段。projectId 只用于缩小范围，最终仍按服务端
+ * AuthorizedProjectScope 过滤，越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
+ * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与七项筛选。
  * 记录维度：hasPublishedRecord 由任务 → PUBLISHED 记录数映射派生（count > 0，裁决
  * 修订 D-1），筛选仍由 MyTaskQueryPort.list 在同一分页 SQL 内先过滤后分页。
  * 统计卡片与遗留问题入口按 A 裁决 §10.3：基准集合只受负责人与 projectId 影响，
- * 分页与游标不影响计数，日界/月界由 SQL 按 Asia/Shanghai 计算。
+ * 与 ownership 无关（卡片文案恒为「我负责的」口径），分页与游标不影响计数，
+ * 日界/月界由 SQL 按 Asia/Shanghai 计算。
  *
  * effectiveOnly 不在此处使用：R-3 需要返回 CANCELED / INVALID 任务才能让
  * workStatus 筛选有意义；§29.1 的「有效任务」口径只服务 R-2 的未完成任务计数。
@@ -55,6 +57,11 @@ export interface MyTasksQueryCommand {
   readonly cursor?: string;
   readonly limit?: number;
   readonly projectId?: number;
+  /**
+   * 归属维度（缺省 ASSIGNEE）：ASSIGNEE 按 assignee_id 过滤，CREATOR 按 creator_id
+   * 过滤，两者都是当前 actorUserId，只是列不同。
+   */
+  readonly ownership?: "ASSIGNEE" | "CREATOR";
   readonly scopeType?: "FEATURE" | "MODULE";
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly hasPublishedRecord?: boolean;
@@ -131,6 +138,7 @@ export class MyTasksQueryService {
             (projectId) => projectId === command.projectId,
           );
     const filterKey = JSON.stringify([
+      command.ownership ?? "ASSIGNEE",
       command.projectId ?? null,
       command.scopeType ?? null,
       command.workStatus ?? null,
@@ -144,6 +152,7 @@ export class MyTasksQueryService {
       filterKey,
     );
     const workStatuses = effectiveWorkStatuses(command);
+    const ownership = command.ownership ?? "ASSIGNEE";
 
     const data = await this.unitOfWork.run(async (tx) => {
       const excludedTaskIds = await this.membership.listHistoricalSourceTaskIds(
@@ -152,7 +161,9 @@ export class MyTasksQueryService {
       );
       const page = await this.myTasks.list(tx, {
         projectIds,
-        assigneeId: command.actorUserId,
+        ...(ownership === "CREATOR"
+          ? { creatorId: command.actorUserId }
+          : { assigneeId: command.actorUserId }),
         limit,
         excludedTaskIds,
         ...(workStatuses === undefined ? {} : { workStatuses }),

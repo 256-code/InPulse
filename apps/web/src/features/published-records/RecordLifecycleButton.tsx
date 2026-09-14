@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal } from "antd";
+import { Alert, Button, Input } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
@@ -125,13 +126,16 @@ export function RecordLifecycleButton({
         {item.status === "VOID" ? "恢复记录" : "作废记录"}
       </Button>
       <Modal
+        className="catalog-modal"
+        eyebrow={item.code + " · " + item.title}
         title={label}
         open={open}
+        body
         onCancel={() => {
           if (!busy) setOpen(false);
         }}
         closable={!busy}
-        maskClosable={!busy}
+        mask={{ closable: !busy }}
         footer={
           <>
             <Button disabled={busy} onClick={() => setOpen(false)}>

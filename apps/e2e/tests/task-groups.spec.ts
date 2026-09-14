@@ -30,8 +30,8 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .first()
       .getByRole("link", { name: "查看功能" })
       .click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const featureDialog = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const featureDialog = page.getByRole("dialog", { name: "新增功能" });
     await featureDialog.getByLabel("功能名称").fill(featureName);
     await featureDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(featureDialog).toBeHidden();
@@ -41,7 +41,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .getByRole("link", { name: "查看详情" })
       .click();
 
-    const detail = page.locator(".task-detail-modal");
+    const detail = page.getByRole("dialog", { name: "任务详情" });
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
       await page.getByRole("button", { name: "新建任务" }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
@@ -84,9 +84,9 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .toContain("/task-groups/");
     const group = page.getByTestId("task-group");
     await expect(group).toBeVisible();
-    await expect(group.getByTestId("task-group-notice")).toContainText(
-      "接口说明：",
-    );
+    // 设计师稿 task-center.tsx 的聚合组区块没有「接口说明」黄条：服务端适配器下
+    // 页面只呈现头部、成员分支与记录面板，开发期接口说明不进入用户界面。
+    await expect(group.getByText(/接口说明/)).toHaveCount(0);
     const mainMember = group
       .locator(".task-group-member")
       .filter({ hasText: mainTaskTitle });
@@ -140,8 +140,8 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       .first()
       .getByRole("link", { name: "查看功能" })
       .click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const featureDialog = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const featureDialog = page.getByRole("dialog", { name: "新增功能" });
     await featureDialog.getByLabel("功能名称").fill(featureName);
     await featureDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(featureDialog).toBeHidden();
@@ -152,7 +152,7 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       .click();
     const featurePath = new URL(page.url()).pathname;
 
-    const detail = page.locator(".task-detail-modal");
+    const detail = page.getByRole("dialog", { name: "任务详情" });
     for (const title of [mainTaskTitle, sourceTaskTitle]) {
       await page.getByRole("button", { name: "新建任务" }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });

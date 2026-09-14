@@ -94,6 +94,42 @@ describe("幂等 runner（真实 PostgreSQL）", () => {
     expect(stored?.responseStatus).toBe(201);
   });
 
+  test("应用时钟快于数据库时钟时仍满足 30 天保留期约束", async () => {
+    const actorId = await createUser(client!.sql);
+    // 模拟宿主机时钟领先数据库时钟：调用方给出的绝对过期时刻会越过
+    // `idempotency_records_retention_check`（数据库时钟 + 30 天）的上限。
+    // 修复前该写入违反检查约束，整条命令失败并返回 500。
+    const skewedKey = `${key}-clock-ahead`;
+    const outcome = await runner.run({
+      actorId,
+      command: {
+        ...command(),
+        idempotencyKey: skewedKey,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000 + 60_000),
+      },
+      execute: async () => result(),
+    });
+
+    expect(outcome.kind).toBe("executed");
+    const rows = (await client!.sql`
+      SELECT (expires_at > created_at) AS after_creation,
+             (expires_at <= created_at + INTERVAL '30 days') AS within_retention,
+             (expires_at - created_at) >= INTERVAL '29 days 23 hours' AS keeps_window
+        FROM app.idempotency_records
+       WHERE actor_id = ${actorId}
+         AND operation_id = 'createProject'
+         AND idempotency_key = ${skewedKey}
+    `) as unknown as readonly {
+      after_creation: boolean;
+      within_retention: boolean;
+      keeps_window: boolean;
+    }[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.after_creation).toBe(true);
+    expect(rows[0]!.within_retention).toBe(true);
+    expect(rows[0]!.keeps_window).toBe(true);
+  });
+
   test("业务失败会回滚业务写和幂等 PENDING 行，后续可重试", async () => {
     const actorId = await createUser(client!.sql);
 

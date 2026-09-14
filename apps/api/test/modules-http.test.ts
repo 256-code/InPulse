@@ -24,6 +24,7 @@ const item = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   archivedAt: null,
+  stats: { activeFeatureCount: 0, openTaskCount: 0 },
 };
 function setup() {
   const resolveActor = vi.fn().mockResolvedValue({ userId: 7 });

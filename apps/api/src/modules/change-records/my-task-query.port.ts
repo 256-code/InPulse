@@ -17,6 +17,12 @@ export interface MyTaskPageInput extends TaskListFilter {
   /** 上一页返回的 nextTaskId；缺省表示第一页。端口只接收已解码的游标位置。 */
   readonly afterTaskId?: number;
   /**
+   * R-3 归属维度（契约 ownership）：与 filter 的 assigneeId 互斥使用。
+   * ASSIGNEE 由调用方传 assigneeId，CREATOR 传本字段，两者都是当前 actor。
+   * 缺省表示不按归属列过滤（仅测试与非 R-3 调用会用到）。
+   */
+  readonly creatorId?: number;
+  /**
    * 记录维度筛选（R-3 的 hasPublishedRecord）：
    * true = 只返回已有 PUBLISHED 记录的任务；false = 只返回没有的；缺省 = 不筛选。
    * 与 ChangeRecordReadPort.countPublishedByTask 同源同口径（等价 count > 0），
@@ -187,6 +193,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
     }
     const projectIds = [...input.projectIds];
     const assigneeId = input.assigneeId ?? null;
+    const creatorId = input.creatorId ?? null;
     const workStatuses = input.workStatuses ? [...input.workStatuses] : null;
     const scopeTypes = input.scopeTypes ? [...input.scopeTypes] : null;
     const effectiveOnly = input.effectiveOnly === true;
@@ -221,6 +228,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
         FROM app.tasks t
        WHERE t.project_id = ANY(${projectIds}::integer[])
          AND (${assigneeId}::integer IS NULL OR t.assignee_id = ${assigneeId})
+         AND (${creatorId}::integer IS NULL OR t.creator_id = ${creatorId})
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${priority}::text IS NULL OR t.priority = ${priority})

@@ -7,7 +7,8 @@ import { loadRuntime } from "../helpers/runtime.js";
  * F-29 项目概览 / F-32 任务中心的专属关键路径 E2E。
  * 两个页面默认注入服务端适配器（R-2 / R-3）：这里验证真实服务端数据进入
  * 视图（统计卡片、优先级筛选、遗留问题总数与优先级徽章）、仍无契约来源的
- * 范围按显式降级展示（关键词搜索与「我创建的」禁用并标注），
+ * 条件按显式降级处理（关键词搜索只对已加载页生效并标注，「我创建的」经
+ * ownership 参数接入服务端），
  * 以及 F-30 约定下筛选状态由 URL 承载。
  */
 
@@ -28,8 +29,8 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       .filter({ hasText: "未分类" })
       .first();
     await moduleCard.getByRole("link", { name: "查看功能" }).click();
-    await page.getByRole("button", { name: "新建功能" }).click();
-    const featureDialog = page.getByRole("dialog", { name: "新建功能" });
+    await page.getByRole("button", { name: "新增功能" }).click();
+    const featureDialog = page.getByRole("dialog", { name: "新增功能" });
     await featureDialog.getByLabel("功能名称").fill(featureName);
     await featureDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(featureDialog).toBeHidden();
@@ -52,13 +53,12 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(center).toBeVisible();
 
     const notice = page.getByTestId("task-center-mock-notice");
-    await expect(notice).toContainText("接口说明：");
-    await expect(notice).toContainText("GET /api/v1/me/tasks");
-    await expect(notice).toContainText("统计卡片");
-    await expect(notice).toContainText("服务端实时数据");
+    // 设计师稿 task-center.tsx 没有「接口说明」黄条：默认服务端适配器下页面只呈现
+    // 统计、风险条与任务列表，骨架数据提示只在 mock 降级时出现。
+    await expect(notice).toHaveCount(0);
 
     // 第二轮契约接线：统计卡片为服务端实时数字、优先级筛选可用；
-    // 仍无契约来源的范围（关键词搜索、我创建的）保持禁用并标注。
+    // 「我创建的」由 R-3 的 ownership 参数承载，可点击并走服务端过滤。
     await expect
       .poll(async () =>
         Number.parseInt(
@@ -70,9 +70,9 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
         ),
       )
       .toBeGreaterThan(0);
-    await expect(page.getByLabel("搜索任务")).toBeDisabled();
+    await expect(page.getByLabel("搜索任务")).toBeEnabled();
     await expect(page.getByLabel("优先级")).toBeEnabled();
-    await expect(page.getByRole("tab", { name: "我创建的" })).toBeDisabled();
+    await expect(page.getByRole("tab", { name: "我创建的" })).toBeEnabled();
 
     // 服务端真实数据：默认「我负责的 + 未完成」能看到刚创建的任务。
     const taskCard = page
@@ -82,6 +82,53 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(taskCard).toContainText(runtime.user.name);
     await expect(taskCard).toContainText("普通优先级");
     await expect(taskCard).toContainText("未设置截止");
+
+    // 切到「我创建的」：请求必须携带 ownership=CREATOR 且状态写入 URL；
+    // 本次刚用当前用户身份创建的任务（创建者=当前用户）仍然在列表中。
+    const createdRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes("/api/v1/me/tasks") &&
+        new URL(request.url()).searchParams.get("ownership") === "CREATOR",
+    );
+    await page.getByRole("tab", { name: "我创建的" }).click();
+    await createdRequest;
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("scope"))
+      .toBe("created");
+    await expect(taskCard).toBeVisible();
+
+    // 切回「我负责的」：范围写回 URL 默认值（F-30 省略默认值），tab 选中态回位。
+    // 只断言 UI 状态：该范围查询在 staleTime 窗口内命中缓存，不保证重新发请求。
+    await page.getByRole("tab", { name: "我负责的" }).click();
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("scope"))
+      .toBeNull();
+    await expect(page.getByRole("tab", { name: "我负责的" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tab", { name: "我创建的" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    await expect(taskCard).toBeVisible();
+
+    // 关键词搜索、合并关系与 GitHub 关联没有服务端参数，但可在已加载页上本地筛选：
+    // 控件保持可用，同时出现显式范围提示，不能把本地结果说成服务端收敛。
+    await expect(page.getByTestId("task-center-local-note")).toHaveCount(0);
+    await page.getByLabel("搜索任务").fill(taskTitle);
+    const localNote = page.getByTestId("task-center-local-note");
+    await expect(localNote).toContainText("本地筛选");
+    await expect(localNote).toContainText("服务端暂未提供参数");
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("q"))
+      .toBe(taskTitle);
+    await expect(taskCard).toBeVisible();
+    await page.getByLabel("搜索任务").fill("无匹配任务的关键词-zzz");
+    await expect(taskCard).toHaveCount(0);
+    await page.getByLabel("搜索任务").fill("");
+    await expect(taskCard).toBeVisible();
+    await expect(page.getByTestId("task-center-local-note")).toHaveCount(0);
 
     // 优先级筛选已接入服务端：选中写入 URL，清除后 URL 不再携带。
     await page.getByLabel("优先级").selectOption("HIGH");
@@ -101,7 +148,11 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect
       .poll(() => new URL(page.url()).searchParams.get("status"))
       .toBe("done");
-    await expect(page.getByText("没有匹配的未完成任务")).toBeVisible();
+    // 列表区块跟随工作状态：切到「已完成」后标题与空态都不能再写「未完成」。
+    const taskListHeading = page.locator(".calm-section-title h3").first();
+    await expect(taskListHeading).toHaveText("已完成");
+    await expect(page.getByText("没有匹配的未完成任务")).toHaveCount(0);
+    await expect(page.getByText("没有匹配的已完成任务")).toBeVisible();
     await page
       .getByRole("group", { name: "展示方式" })
       .getByRole("button", { name: "列表" })
@@ -109,7 +160,13 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect
       .poll(() => new URL(page.url()).searchParams.get("view"))
       .toBe("list");
-    await page.getByRole("button", { name: /更多筛选/ }).click();
+    // 设计系统刻意把「更多筛选」触发按钮定为常驻 display:none：设计师稿的
+    // design-system.css 与自带的视觉状态脚本（apps/e2e/scripts/visual-states.mjs）
+    // 都按此约定，用 DOM 事件而不是可见点击展开筛选面板。这里沿用同一手法，
+    // 断言（more=1 写入 URL、面板内容与可用性）保持不变。
+    await page
+      .locator(".task-toolbar > .secondary-button")
+      .dispatchEvent("click");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("more"))
       .toBe("1");
@@ -145,10 +202,9 @@ test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入
     ).toBeVisible();
 
     const notice = page.getByTestId("project-overview-mock-notice");
-    await expect(notice).toContainText("接口说明：");
-    await expect(notice).toContainText("待处理遗留问题总数");
-    await expect(notice).toContainText("服务端实时数据");
-    await expect(notice).not.toContainText("契约未提供");
+    // 设计师稿 catalog.tsx 的项目详情页没有「接口说明」黄条：服务端适配器下
+    // 页面只呈现头部、指标条与两个面板，骨架数据提示只在 mock 降级时出现。
+    await expect(notice).toHaveCount(0);
 
     // 服务端真实统计：fixture 项目至少 1 个活跃模块与 1 名成员。
     // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位 0。

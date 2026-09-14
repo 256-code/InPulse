@@ -1,34 +1,23 @@
-import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Spin } from "antd";
-import { Controller, useForm } from "react-hook-form";
+import React, { useMemo, useState } from "react";
+import { Alert, Button, Spin } from "antd";
 import { useNavigate } from "react-router-dom";
-import {
-  ApiError,
-  type InpulseApiClient,
-  type ModuleItem,
-} from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
+import { type InpulseApiClient, type ModuleItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
-import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
+import { isCardClick } from "@features/common/card-click";
 import {
-  moduleErrorMessage,
-  useModules,
-  type ModuleChange,
-} from "./module-query";
+  CalmBadge,
+  CalmEmptyState,
+  CalmSectionTitle,
+} from "@features/common/components/Calm";
+import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
+import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
+import { useProjectDetail } from "@features/projects/project-query";
+import { moduleErrorMessage, useModules } from "./module-query";
+import {
+  ModuleEditorModal,
+  type ModuleEditorRequest,
+} from "./ModuleEditorModal";
 
-type Values = { name: string; description: string; reason: string };
-const editableFields = ["name", "description"] as const;
-type EditableField = (typeof editableFields)[number];
-const fieldLabels = { name: "模块名称", description: "模块说明" };
-type Merge = {
-  base: ModuleItem;
-  draft: Values;
-  latest: ModuleItem;
-  values: Values;
-  conflicts: EditableField[];
-  choices: Partial<Record<EditableField, "draft" | "latest">>;
-};
 export function ModulesPageView({
   projectId,
   isAdmin,
@@ -38,524 +27,209 @@ export function ModulesPageView({
   isAdmin: boolean;
   client?: InpulseApiClient | undefined;
 }) {
-  const { query, mutation } = useModules(projectId, client);
+  const { query } = useModules(projectId, client);
   const navigate = useNavigate();
-  const [selection, setSelection] = useState<{
-    action: ModuleChange["action"];
-    item?: ModuleItem;
-  } | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
+  const [request, setRequest] = useState<ModuleEditorRequest | null>(null);
   const [success, setSuccess] = useState(false);
-  const [reloadError, setReloadError] = useState<string | null>(null);
-  const [reloading, setReloading] = useState(false);
-  const [merge, setMerge] = useState<Merge | null>(null);
-  const editGeneration = useRef(0);
-  const submitting = useRef(false);
-  const {
-    control,
-    handleSubmit,
-    reset,
-    getValues,
-    formState: { errors },
-  } = useForm<Values>({
-    defaultValues: { name: "", description: "", reason: "" },
-  });
-  const open = (action: ModuleChange["action"], item?: ModuleItem) => {
-    editGeneration.current += 1;
-    setMerge(null);
-    setSelection({ action, ...(item ? { item } : {}) });
-    reset({
-      name: item?.name ?? "",
-      description: item?.description ?? "",
-      reason: "",
-    });
-    mutation.reset();
-    setReloadError(null);
+  const open = (action: ModuleEditorRequest["action"], item?: ModuleItem) => {
     setSuccess(false);
+    setRequest({ action, ...(item ? { item } : {}) });
   };
-  const save = handleSubmit(async (values) => {
-    if (
-      !selection ||
-      submitting.current ||
-      reloading ||
-      merge ||
-      conflict ||
-      reloadError
-    )
-      return;
-    submitting.current = true;
-    try {
-      await mutation.mutateAsync({ ...selection, ...values });
-      setSelection(null);
-      setSuccess(true);
-      reset();
-    } catch {
-      /* Mutation retains the error and form remains mounted. */
-    } finally {
-      submitting.current = false;
-    }
+  const onOpenModule = (moduleId: number) =>
+    navigate("/projects/" + projectId + "/modules/" + moduleId + "/features");
+  const projectQuery = useProjectDetail({
+    client,
+    projectId,
   });
-  const reload = async () => {
-    const generation = editGeneration.current;
-    const draft = getValues();
-    setReloading(true);
-    try {
-      const latest = await query.refetch();
-      if (generation !== editGeneration.current) return;
-      if (latest.error) {
-        setReloadError(moduleErrorMessage(latest.error));
-        return;
-      }
-      if (selection?.item) {
-        const item = latest.data?.items.find(
-          (value) => value.id === selection.item!.id,
-        );
-        if (!item) {
-          setReloadError("模块已不可访问，请取消编辑。");
-          return;
-        }
-        if (selection.action === "update") {
-          if (item.status !== "ACTIVE") {
-            setReloadError(
-              "模块已归档，草稿已保留，请取消编辑并在恢复后重试。",
-            );
-            return;
-          }
-          const values = { ...draft };
-          const conflicts: EditableField[] = [];
-          for (const field of editableFields) {
-            // Compare the name as the request schema normalizes it.
-            const normalize = (value: string) =>
-              field === "name" ? value.trim() : value;
-            const original = normalize(selection.item[field]);
-            const mine = normalize(draft[field]);
-            const theirs = normalize(item[field]);
-            if (mine === original) values[field] = item[field];
-            else if (theirs !== original && mine !== theirs)
-              conflicts.push(field);
-          }
-          if (conflicts.length) {
-            setMerge({
-              base: selection.item,
-              draft,
-              latest: item,
-              values,
-              conflicts,
-              choices: {},
-            });
-            setReloadError(null);
-            return;
-          }
-          reset(values);
-        }
-        setSelection({ ...selection, item });
-      }
-      mutation.reset();
-      setReloadError(null);
-    } finally {
-      setReloading(false);
-    }
-  };
-  const applyMerge = () => {
-    if (
-      !merge ||
-      !selection ||
-      merge.conflicts.some((field) => !merge.choices[field])
-    )
-      return;
-    const values = { ...merge.values };
-    for (const field of merge.conflicts) {
-      values[field] =
-        merge.choices[field] === "draft"
-          ? merge.draft[field]
-          : merge.latest[field];
-    }
-    reset(values);
-    setSelection({ ...selection, item: merge.latest });
-    setMerge(null);
-    mutation.reset();
-  };
-  const close = () => {
-    if (submitting.current) return;
-    editGeneration.current += 1;
-    setSelection(null);
-    setMerge(null);
-  };
-  const lifecycle =
-    selection?.action === "archive" || selection?.action === "restore";
-  const conflict =
-    mutation.error instanceof ApiError && mutation.error.status === 409;
-  const modalTitle =
-    selection?.action === "create"
-      ? "新建模块"
-      : selection?.action === "update"
-        ? "编辑模块"
-        : selection?.action === "archive"
-          ? "归档模块"
-          : "恢复模块";
+  const projectName = projectQuery.data?.name ?? null;
+  const overviewAdapter = useMemo(
+    () => createProjectOverviewServerAdapter(client),
+    [client],
+  );
   return (
     <>
       <div className="module-workspace-page">
-        <ProjectContextNav
+        <ProjectOverviewPageView
+          projectId={projectId}
+          client={client}
+          project={projectQuery.data ?? null}
+          projectLoading={projectQuery.isPending}
+          onRetryProject={() => void projectQuery.refetch()}
+          onBackToProjects={() => navigate("/projects")}
+          // 设计师稿 catalog.tsx L214：项目页的「项目概览」是当前页签（自指），
+          // 模块网格与概览同页，因此不再跳到不含模块的 /overview。
+          onOpenOverview={() => navigate("/projects/" + projectId + "/modules")}
+          onOpenModule={onOpenModule}
+          onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
+          onOpenRecords={() =>
+            navigate("/records?view=published&projectId=" + projectId)
+          }
+          onOpenIssues={() => navigate("/issues")}
           modules={query.data?.items ?? []}
-          active={null}
-          onSelectOverview={() =>
-            navigate("/projects/" + projectId + "/overview")
-          }
-          onSelectModule={(moduleId) =>
-            navigate(
-              "/projects/" + projectId + "/modules/" + moduleId + "/features",
-            )
-          }
-        />
-        <div className="page-header">
-          <div>
-            <span className="eyebrow">项目 {projectId} / 模块</span>
-            <h1>模块管理</h1>
-            <p>
-              维护模块名称、说明和归档状态。未分类模块可编辑，身份保持不变。
-            </p>
-          </div>
-          <div className="catalog-actions">
-            {query.isSuccess && !query.data?.items.length ? null : (
-              <Button
-                className="primary-button"
-                disabled={!query.data || query.isError}
-                onClick={() => open("create")}
-              >
-                <InpulseIcon name="plus" size={15} />
-                新建模块
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="permission-hint">
-          <InpulseIcon name="alert" size={14} />
-          功能档案可从模块卡片进入；模块级任务与记录将在对应能力交付后开放。
-        </p>
-        {success && <Alert type="success" showIcon title="模块操作成功" />}
-        {query.isPending ? (
-          <div className="calm-state">
-            <Spin />
-            <span>正在加载模块</span>
-          </div>
-        ) : query.isError ? (
-          <Alert
-            type="error"
-            title={moduleErrorMessage(query.error)}
-            action={
-              <Button
-                className="secondary-button"
-                onClick={() => void query.refetch()}
-              >
-                重试
-              </Button>
-            }
-          />
-        ) : !query.data?.items.length ? (
-          <CalmEmptyState
-            icon="boxes"
-            title="暂无模块"
-            description="项目创建时会自动生成未分类模块，可继续拆分为具体业务模块。"
-          >
-            <Button className="primary-button" onClick={() => open("create")}>
+          // 设计师稿 catalog.tsx L214：进入项目页后「项目概览」恒为 active。
+          navActive="overview"
+          adapter={overviewAdapter}
+          extraActions={
+            // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」
+            //（secondary）与 L307 SectionTitle 行内的「新增模块」（primary）是设计
+            // 稿同时存在的两个入口，共用同一个模块编辑器。
+            <Button className="secondary-button" onClick={() => open("create")}>
               <InpulseIcon name="plus" size={15} />
-              新建模块
+              新增模块
             </Button>
-          </CalmEmptyState>
-        ) : (
-          <div className="cards-grid calm-feature-grid module-grid">
-            {query.data.items.map((item) => (
-              <article
-                key={item.id}
-                className={
-                  "calm-feature-card module-card" +
-                  (item.status === "ARCHIVED" ? " card-archived" : "")
-                }
-              >
-                <div className="calm-card-top">
-                  <span className="feature-symbol">
-                    <InpulseIcon name="boxes" size={21} />
-                  </span>
-                  <span className="task-id">模块 #{item.id}</span>
-                </div>
-                <h2>{item.name}</h2>
-                <div className="task-card-badges">
-                  {item.kind === "UNCLASSIFIED" && (
-                    <CalmBadge tone="violet">未分类</CalmBadge>
-                  )}
-                  <CalmBadge tone={item.status === "ACTIVE" ? "blue" : "amber"}>
-                    {item.status === "ACTIVE" ? "正常" : "已归档"}
-                  </CalmBadge>
-                </div>
-                <p>{item.description || "暂无模块说明"}</p>
-                <details className="calm-disclosure module-information">
-                  <summary>模块资料</summary>
-                  <p>
-                    {item.kind === "UNCLASSIFIED"
-                      ? "该模块由项目创建流程生成，允许修改名称与说明，不可删除或改变未分类身份。"
-                      : "当前项目的第一层业务分类，后续功能与任务建立在该模块之下。"}
-                  </p>
-                  {item.status === "ARCHIVED" && (
-                    <p>归档历史仍可查看；恢复前不能在此模块新增下级内容。</p>
-                  )}
-                </details>
-                <div className="card-footer">
-                  <span>
-                    <InpulseIcon name="code" size={14} />
-                    功能档案入口
-                  </span>
-                  <Button
-                    className="text-button"
-                    href={
-                      "/projects/" +
-                      projectId +
-                      "/modules/" +
-                      item.id +
-                      "/features"
-                    }
-                  >
-                    查看功能
-                    <InpulseIcon name="chevronRight" size={14} />
-                  </Button>
-                </div>
-                <div className="catalog-edit-link">
-                  <Button
-                    className="text-button"
-                    href={
-                      "/projects/" +
-                      projectId +
-                      "/modules/" +
-                      item.id +
-                      "/tasks"
-                    }
-                  >
-                    模块任务
-                  </Button>
-                  {item.status === "ACTIVE" && (
-                    <Button
-                      className="text-button"
-                      onClick={() => open("update", item)}
-                    >
-                      编辑
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      className="text-button"
-                      onClick={() =>
-                        open(
-                          item.status === "ACTIVE" ? "archive" : "restore",
-                          item,
-                        )
-                      }
-                    >
-                      {item.status === "ACTIVE" ? "归档" : "恢复"}
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
-      <Modal
-        open={selection !== null}
-        className="catalog-modal module-editor-modal"
-        title={modalTitle}
-        onCancel={close}
-        footer={null}
-        mask={{ closable: !mutation.isPending }}
-      >
-        <div className="drawer-header">
-          <span className="detail-label">模块</span>
-          <h2>{modalTitle}</h2>
-          <p>
-            {selection?.action === "archive"
-              ? "归档后模块及下级内容不可写，历史将保留。"
-              : selection?.action === "restore"
-                ? "恢复模块本身的可写状态，不改变下级资源各自的归档状态。"
-                : "名称与说明会保留完整的版本与审计历史。"}
-          </p>
-        </div>
-        <form
-          className="catalog-form calm-form"
-          onSubmit={(event) => void save(event)}
+          }
         >
-          <div className="dialog-form">
-            {lifecycle ? (
-              <div className="calm-field">
-                <label htmlFor="module-reason">操作原因</label>
-                <Controller
-                  name="reason"
-                  control={control}
-                  rules={{
-                    validate: (v) => v.trim().length > 0 || "请填写操作原因",
-                    maxLength: { value: 2000, message: "原因最多 2000 字" },
-                  }}
-                  render={({ field }) => (
-                    <Input.TextArea
-                      {...field}
-                      id="module-reason"
-                      disabled={mutation.isPending || reloading || !!merge}
-                      rows={3}
-                    />
-                  )}
-                />
-                <p role="alert">{errors.reason?.message}</p>
+          {success && <Alert type="success" showIcon title="模块操作成功" />}
+          {query.isPending ? (
+            <div className="calm-state">
+              <Spin />
+              <span>正在加载模块</span>
+            </div>
+          ) : query.isError ? (
+            <Alert
+              type="error"
+              title={moduleErrorMessage(query.error)}
+              action={
                 <Button
                   className="secondary-button"
-                  onClick={() => setReauthOpen(true)}
-                  disabled={mutation.isPending || reloading || conflict}
+                  onClick={() => void query.refetch()}
                 >
-                  管理员安全验证
+                  重试
                 </Button>
-              </div>
-            ) : (
-              <>
-                <div className="calm-field">
-                  <label htmlFor="module-name">模块名称</label>
-                  <Controller
-                    name="name"
-                    control={control}
-                    rules={{
-                      validate: (v) => v.trim().length > 0 || "请填写模块名称",
-                      maxLength: { value: 200, message: "名称最多 200 字" },
-                    }}
-                    render={({ field }) => (
-                      <Input
-                        {...field}
-                        id="module-name"
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.name?.message}</p>
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="module-description">模块说明</label>
-                  <Controller
-                    name="description"
-                    control={control}
-                    rules={{
-                      maxLength: { value: 20000, message: "说明最多 20000 字" },
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="module-description"
-                        rows={5}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.description?.message}</p>
-                </div>
-              </>
-            )}
-            {mutation.isError && (
-              <Alert type="error" title={moduleErrorMessage(mutation.error)} />
-            )}
-            {reloadError && <Alert type="error" title={reloadError} />}
-            {merge && (
-              <section className="merge-panel" aria-label="解决编辑冲突">
-                <div className="calm-section-title">
-                  <div>
-                    <h3>解决编辑冲突</h3>
-                    <small>选择保留哪一版，应用后再提交最新版本。</small>
-                  </div>
-                </div>
-                {merge.conflicts.map((field) => (
-                  <div className="merge-choice" key={field}>
-                    <h3>{fieldLabels[field]}存在冲突</h3>
-                    <dl
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      <dt>编辑前</dt>
-                      <dd>{merge.base[field] || "（空）"}</dd>
-                      <dt>我的草稿</dt>
-                      <dd>{merge.draft[field] || "（空）"}</dd>
-                      <dt>服务端最新</dt>
-                      <dd>{merge.latest[field] || "（空）"}</dd>
-                    </dl>
-                    <div className="catalog-actions">
-                      <Button
-                        className="secondary-button"
-                        aria-pressed={merge.choices[field] === "draft"}
-                        onClick={() =>
-                          setMerge({
-                            ...merge,
-                            choices: { ...merge.choices, [field]: "draft" },
-                          })
-                        }
-                      >
-                        保留我的{fieldLabels[field]}
-                      </Button>
-                      <Button
-                        className="secondary-button"
-                        aria-pressed={merge.choices[field] === "latest"}
-                        onClick={() =>
-                          setMerge({
-                            ...merge,
-                            choices: { ...merge.choices, [field]: "latest" },
-                          })
-                        }
-                      >
-                        采用最新{fieldLabels[field]}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+              }
+            />
+          ) : !query.data?.items.length ? (
+            <CalmEmptyState
+              icon="boxes"
+              title="暂无模块"
+              description="项目创建时会自动生成未分类模块，可继续拆分为具体业务模块。"
+            >
+              <Button className="primary-button" onClick={() => open("create")}>
+                <InpulseIcon name="plus" size={15} />
+                新增模块
+              </Button>
+            </CalmEmptyState>
+          ) : (
+            <>
+              <CalmSectionTitle
+                title="模块"
+                hint={`${(query.data?.items ?? []).length} 个模块 · 模块负责分类，功能负责沉淀`}
+              >
                 <Button
                   className="primary-button"
-                  disabled={merge.conflicts.some(
-                    (field) => !merge.choices[field],
-                  )}
-                  onClick={applyMerge}
+                  onClick={() => open("create")}
                 >
-                  应用合并结果
+                  <InpulseIcon name="plus" size={15} />
+                  新增模块
                 </Button>
-              </section>
-            )}
-            {conflict && !merge && (
-              <Button
-                className="secondary-button"
-                loading={reloading}
-                onClick={() => void reload()}
-              >
-                加载最新版本后继续编辑
-              </Button>
-            )}
-          </div>
-          <div className="calm-action-footer">
-            <Button
-              className="secondary-button"
-              onClick={close}
-              disabled={mutation.isPending}
-            >
-              取消
-            </Button>
-            <Button
-              className="primary-button"
-              htmlType="submit"
-              loading={mutation.isPending}
-              disabled={reloading || conflict || !!reloadError || !!merge}
-            >
-              {lifecycle ? "确认" : "保存"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          mutation.reset();
-        }}
+              </CalmSectionTitle>
+              <div className="calm-feature-grid">
+                {query.data.items.map((item) => (
+                  <article className="catalog-module-wrap" key={item.id}>
+                    <div
+                      className={
+                        "calm-feature-card module-card" +
+                        (item.status === "ARCHIVED" ? " card-archived" : "")
+                      }
+                      onClick={(event) => {
+                        if (!isCardClick(event)) return;
+                        onOpenModule(item.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        if (event.target !== event.currentTarget) return;
+                        event.preventDefault();
+                        onOpenModule(item.id);
+                      }}
+                      tabIndex={0}
+                    >
+                      <div className="calm-card-top">
+                        <span className="feature-symbol">
+                          <InpulseIcon name="boxes" size={21} />
+                        </span>
+                        <span className="task-id">模块 #{item.id}</span>
+                      </div>
+                      <h2>{item.name}</h2>
+                      <div className="task-card-badges">
+                        {item.kind === "UNCLASSIFIED" && (
+                          <CalmBadge tone="violet">未分类</CalmBadge>
+                        )}
+                        <CalmBadge
+                          tone={item.status === "ACTIVE" ? "gray" : "amber"}
+                        >
+                          {item.status === "ACTIVE" ? "正常" : "已归档"}
+                        </CalmBadge>
+                      </div>
+                      <p>{item.description || "暂无模块说明"}</p>
+                      <div className="card-footer">
+                        <span>
+                          {item.stats.activeFeatureCount} 个功能 ·{" "}
+                          {item.stats.openTaskCount} 项待办
+                        </span>
+                        <Button
+                          className="text-button"
+                          href={
+                            "/projects/" +
+                            projectId +
+                            "/modules/" +
+                            item.id +
+                            "/features"
+                          }
+                        >
+                          查看功能
+                          <InpulseIcon name="chevronRight" size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                    <span className="catalog-edit-link">
+                      <Button
+                        className="text-button"
+                        href={
+                          "/projects/" +
+                          projectId +
+                          "/modules/" +
+                          item.id +
+                          "/tasks"
+                        }
+                      >
+                        模块任务
+                      </Button>
+                      {item.status === "ACTIVE" && (
+                        <Button
+                          className="text-button"
+                          onClick={() => open("update", item)}
+                        >
+                          编辑模块
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          className="text-button"
+                          onClick={() =>
+                            open(
+                              item.status === "ACTIVE" ? "archive" : "restore",
+                              item,
+                            )
+                          }
+                        >
+                          {item.status === "ACTIVE" ? "归档模块" : "恢复模块"}
+                        </Button>
+                      )}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </ProjectOverviewPageView>
+      </div>
+      <ModuleEditorModal
+        projectId={projectId}
+        client={client}
+        projectName={projectName}
+        request={request}
+        onClose={() => setRequest(null)}
+        onSaved={() => setSuccess(true)}
       />
     </>
   );

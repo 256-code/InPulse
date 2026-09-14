@@ -8,10 +8,13 @@ import {
   MY_TASKS_V1_FILTER_SUPPORT,
   MY_TASKS_V1_LIMIT_DEFAULT,
   MY_TASKS_V1_LIMIT_MAX,
+  MY_TASKS_V1_LOCAL_FILTER_SUPPORT,
   MY_TASKS_V1_MISSING_ITEM_FIELDS,
   MY_TASKS_V1_MISSING_RESPONSE_PARTS,
   MY_TASKS_V1_PATH,
+  matchesMyTasksLocalFilters,
   toMyTasksV1Query,
+  toMyTasksV1Ownership,
   toMyTasksV1WorkStatus,
 } from "./my-tasks-v1-query";
 
@@ -116,6 +119,20 @@ describe("my-tasks-v1-query", () => {
     ]);
   });
 
+  it("maps the created scope onto the ownership parameter and drops the gap", () => {
+    expect(toMyTasksV1Ownership(filters({ scope: "created" }))).toBe("CREATOR");
+    expect(toMyTasksV1Ownership(filters({ scope: "mine" }))).toBeNull();
+    expect(toMyTasksV1Ownership(filters({ scope: "all" }))).toBeNull();
+    expect(
+      toMyTasksV1Query(filters({ scope: "created", status: "all" })),
+    ).toEqual({ limit: 20, ownership: "CREATOR" });
+    expect(toMyTasksV1Query(filters({ scope: "mine", status: "all" }))).toEqual(
+      { limit: 20 },
+    );
+    expect(listMyTasksV1Gaps(filters({ scope: "created" }))).toEqual([]);
+    expect(MY_TASKS_V1_FILTER_SUPPORT["scope:created"]).toBe(true);
+  });
+
   it("no longer reports priority or the canceled union as gaps", () => {
     expect(
       listMyTasksV1Gaps(filters({ priority: "HIGH", includeCanceled: true })),
@@ -143,10 +160,61 @@ describe("my-tasks-v1-query", () => {
     ).toEqual([]);
   });
 
-  it("reports a project scope without a project id", () => {
+  it("no longer reports the project scope without a project id", () => {
     expect(
       listMyTasksV1Gaps(filters({ scope: "project", projectId: null })),
-    ).toEqual(["scope:project-without-id"]);
+    ).toEqual([]);
+  });
+
+  it("only hard-gates the gaps the view cannot compute locally", () => {
+    expect(MY_TASKS_V1_LOCAL_FILTER_SUPPORT["scope:created"]).toBe(false);
+    expect(MY_TASKS_V1_LOCAL_FILTER_SUPPORT["scope:all"]).toBe(false);
+    expect(MY_TASKS_V1_LOCAL_FILTER_SUPPORT["filter:relation"]).toBe(true);
+    expect(MY_TASKS_V1_LOCAL_FILTER_SUPPORT["filter:github"]).toBe(true);
+    expect(MY_TASKS_V1_LOCAL_FILTER_SUPPORT["filter:query"]).toBe(true);
+  });
+
+  it("narrows loaded pages by relation, github and keyword", () => {
+    const item = fromV1MyTaskItem({
+      taskId: 7,
+      code: "T-007",
+      title: "补齐恢复码入口",
+      projectId: 1,
+      projectName: "InPulse 平台",
+      moduleId: 2,
+      moduleName: "访问控制",
+      featureId: 3,
+      featureName: "MFA 登录",
+      scopeType: "FEATURE",
+      workStatus: "TODO",
+      lifecycleStatus: "ACTIVE",
+      assignee: { userId: 9, name: "张三", avatarUrl: null },
+      updatedAt: "2026-09-10T02:00:00.000Z",
+      hasPublishedRecord: false,
+      publishedRecordCount: 0,
+      groupRole: null,
+      priority: "NORMAL",
+      dueAt: null,
+      completedAt: null,
+      creatorId: 9,
+      githubLinkCount: 2,
+      groupId: null,
+    });
+    const matches = (overrides: Partial<MyTaskFilters>): boolean =>
+      matchesMyTasksLocalFilters(
+        item,
+        filters(overrides),
+        MY_TASKS_V1_FILTER_SUPPORT,
+      );
+    expect(matches({ relation: "STANDALONE" })).toBe(true);
+    expect(matches({ relation: "MAIN" })).toBe(false);
+    expect(matches({ hasGithub: "yes" })).toBe(true);
+    expect(matches({ hasGithub: "no" })).toBe(false);
+    expect(matches({ query: "恢复码" })).toBe(true);
+    expect(matches({ query: "mfa 登录" })).toBe(true);
+    expect(matches({ query: "张三" })).toBe(true);
+    expect(matches({ query: "不存在的词" })).toBe(false);
+    expect(matches({ relation: "STANDALONE", query: "恢复码" })).toBe(true);
   });
 
   it("maps the frozen R-3 item and keeps contract gaps undefined", () => {
@@ -203,11 +271,11 @@ describe("my-tasks-v1-query", () => {
     expect(item.description).toBeUndefined();
   });
 
-  it("declares priority and the canceled union as supported, the rest as gaps", () => {
+  it("declares priority, the canceled union and the created scope as supported, the rest as gaps", () => {
     expect(MY_TASKS_V1_FILTER_SUPPORT).toEqual({
-      "scope:created": false,
+      "scope:created": true,
       "scope:all": false,
-      "scope:project-without-id": false,
+      "scope:project-without-id": true,
       "filter:priority": true,
       "filter:relation": false,
       "filter:github": false,

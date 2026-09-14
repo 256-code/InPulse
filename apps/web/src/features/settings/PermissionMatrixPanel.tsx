@@ -7,7 +7,7 @@ import { permissionMatrixRows } from "./settings-content";
  * 只渲染只读说明表，任何鉴权判断都在服务端完成。
  */
 export const PermissionMatrixPanel: React.FC = () => (
-  <section className="settings-panel table-panel" aria-label="权限矩阵">
+  <section className="panel settings-panel table-panel" aria-label="权限矩阵">
     <CalmSectionTitle
       title="权限矩阵"
       hint="V1.1 授权验收入口 · 与功能设计 §8.2 一致"

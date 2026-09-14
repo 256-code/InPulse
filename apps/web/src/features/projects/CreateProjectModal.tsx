@@ -1,19 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Avatar,
-  Button,
-  Checkbox,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Space,
-  Spin,
-  Typography,
-} from "antd";
+import { Alert, Button, Empty, Form, Input, Spin, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import {
   useUserDirectoryQuery,
   describeUserDirectoryError,
@@ -68,6 +57,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     mode: "onSubmit",
   });
   const mutation = useCreateProject({ client });
+  const formId = React.useId();
   const directory = useUserDirectoryQuery({ client, enabled: open });
   const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   const code = watch("code") ?? "";
@@ -125,164 +115,173 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      centered
+      eyebrow="项目是顶层业务容器"
+      title="新建项目"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
       onCancel={handleCancel}
-      title={
-        <div className="drawer-header">
-          <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-            项目是顶层业务容器
-          </Text>
-          <h2 style={{ margin: "6px 0 0" }}>新建项目</h2>
-        </div>
+      footer={
+        <>
+          <Button disabled={mutation.isPending} onClick={handleCancel}>
+            取消
+          </Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form={formId}
+            loading={mutation.isPending}
+          >
+            创建项目
+          </Button>
+        </>
       }
-      width={760}
-      footer={null}
     >
       <form
+        id={formId}
+        className="catalog-form catalog-form-create calm-form"
         onSubmit={handleSubmit((values) => void handleSubmitForm(values))}
         noValidate
       >
         <Form component={false} layout="vertical" requiredMark={false}>
-          <Controller
-            name="name"
-            control={control}
-            render={({ field }) => (
-              <Form.Item
-                label="项目名称"
-                required
-                validateStatus={errors.name ? "error" : ""}
-                help={errors.name?.message ?? ""}
-              >
-                <Input
-                  {...field}
-                  id="project-name"
-                  aria-label="项目名称"
-                  maxLength={PROJECT_NAME_MAX_LENGTH}
-                  placeholder="例如：商城系统"
-                  disabled={mutation.isPending}
-                  onChange={(event) => {
-                    field.onChange(event.currentTarget.value);
-                    clearErrors("name");
-                  }}
-                />
-              </Form.Item>
-            )}
-          />
-          <Space align="start" size={16} style={{ display: "flex" }}>
+          <div className="dialog-form">
             <Controller
-              name="code"
+              name="name"
               control={control}
               render={({ field }) => (
                 <Form.Item
-                  label="项目编码"
+                  label="项目名称"
                   required
-                  style={{ flex: 1 }}
-                  validateStatus={errors.code ? "error" : ""}
-                  help={errors.code?.message ?? ""}
+                  validateStatus={errors.name ? "error" : ""}
+                  help={errors.name?.message ?? ""}
                 >
                   <Input
                     {...field}
-                    id="project-code"
-                    aria-label="项目编码"
-                    maxLength={PROJECT_CODE_MAX_LENGTH}
-                    placeholder="SHOP"
+                    id="project-name"
+                    aria-label="项目名称"
+                    maxLength={PROJECT_NAME_MAX_LENGTH}
+                    placeholder="例如：商城系统"
                     disabled={mutation.isPending}
                     onChange={(event) => {
-                      field.onChange(
-                        normalizeProjectCode(event.currentTarget.value),
-                      );
-                      clearErrors("code");
+                      field.onChange(event.currentTarget.value);
+                      clearErrors("name");
                     }}
                   />
                 </Form.Item>
               )}
             />
-            <Form.Item label="卡片简称" style={{ flex: 1 }}>
-              <Input
-                id="project-card-shortname"
-                aria-label="卡片简称"
-                value={cardShortname}
-                disabled
+            <div className="form-row">
+              <Controller
+                name="code"
+                control={control}
+                render={({ field }) => (
+                  <Form.Item
+                    label="项目编码"
+                    required
+                    style={{ flex: 1 }}
+                    validateStatus={errors.code ? "error" : ""}
+                    help={errors.code?.message ?? ""}
+                  >
+                    <Input
+                      {...field}
+                      id="project-code"
+                      aria-label="项目编码"
+                      maxLength={PROJECT_CODE_MAX_LENGTH}
+                      placeholder="SHOP"
+                      disabled={mutation.isPending}
+                      onChange={(event) => {
+                        field.onChange(
+                          normalizeProjectCode(event.currentTarget.value),
+                        );
+                        clearErrors("code");
+                      }}
+                    />
+                  </Form.Item>
+                )}
               />
-            </Form.Item>
-          </Space>
-          <Controller
-            name="description"
-            control={control}
-            render={({ field }) => (
-              <Form.Item
-                label="项目描述"
-                validateStatus={errors.description ? "error" : ""}
-                help={errors.description?.message ?? ""}
-              >
-                <Input.TextArea
-                  {...field}
-                  id="project-description"
-                  aria-label="项目描述"
-                  rows={3}
-                  maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-                  placeholder="描述项目目标、交付范围与现场背景"
-                  disabled={mutation.isPending}
-                  onChange={(event) => {
-                    field.onChange(event.currentTarget.value);
-                    clearErrors("description");
-                  }}
+              <Form.Item label="卡片简称" style={{ flex: 1 }}>
+                <Input
+                  id="project-card-shortname"
+                  aria-label="卡片简称"
+                  value={cardShortname}
+                  disabled
                 />
               </Form.Item>
-            )}
-          />
-          <Form.Item label="初始项目成员">
-            <div className="impact-fieldset">
+            </div>
+            <Controller
+              name="description"
+              control={control}
+              render={({ field }) => (
+                <Form.Item
+                  label="项目描述"
+                  validateStatus={errors.description ? "error" : ""}
+                  help={errors.description?.message ?? ""}
+                >
+                  <Input.TextArea
+                    {...field}
+                    id="project-description"
+                    aria-label="项目描述"
+                    rows={3}
+                    maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+                    placeholder="描述项目目标、交付范围与现场背景"
+                    disabled={mutation.isPending}
+                    onChange={(event) => {
+                      field.onChange(event.currentTarget.value);
+                      clearErrors("description");
+                    }}
+                  />
+                </Form.Item>
+              )}
+            />
+            <fieldset className="impact-fieldset">
+              <legend>初始项目成员</legend>
               <div className="check-list">
                 <span className="creator-locked">
-                  <Checkbox checked disabled aria-label="创建者（不可取消）">
-                    {creatorName}（创建者，不可取消）
-                  </Checkbox>
+                  <input
+                    type="checkbox"
+                    checked
+                    readOnly
+                    aria-label="创建者（不可取消）"
+                  />
+                  {creatorName}（创建者，不可取消）
                 </span>
-                {directory.isPending ? (
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    <Spin size="small" description="正在加载成员..." />
-                  </div>
-                ) : directory.isError ? (
-                  <Alert
-                    showIcon
-                    type="error"
-                    message={describeUserDirectoryError(directory.error)}
-                  />
-                ) : candidates.length === 0 ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="暂无其他启用用户"
-                  />
-                ) : (
+                {!directory.isPending &&
+                  !directory.isError &&
                   candidates.map((user) => (
-                    <div className="member-option" key={user.id}>
-                      <Checkbox
+                    <label key={user.id}>
+                      <input
+                        type="checkbox"
                         checked={selectedMemberIds.includes(user.id)}
                         aria-label={`选择成员：${user.name}`}
                         onChange={() => toggleMember(user.id)}
                       />
-                      <Avatar size={24} className="person-avatar">
-                        {user.name.slice(0, 1)}
-                      </Avatar>
-                      <span className="member-name">{user.name}</span>
-                      <span className="member-role">
-                        {user.isAdmin ? "系统管理员" : "项目成员"}
-                      </span>
-                    </div>
-                  ))
-                )}
+                      {user.name} · {user.isAdmin ? "系统管理员" : "项目成员"}
+                    </label>
+                  ))}
               </div>
-              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+              {directory.isPending ? (
+                <div className="member-loading">
+                  <Spin size="small" description="正在加载成员..." />
+                </div>
+              ) : directory.isError ? (
+                <Alert
+                  showIcon
+                  type="error"
+                  message={describeUserDirectoryError(directory.error)}
+                />
+              ) : candidates.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="暂无其他启用用户"
+                />
+              ) : null}
+              <Text type="secondary" className="member-hint">
                 已选择 {selectedMemberIds.length}{" "}
                 位其他成员；创建者自动成为活跃成员，
                 系统管理员即使不在成员列表也会自动拥有项目访问权。
               </Text>
-            </div>
-          </Form.Item>
+            </fieldset>
+          </div>
           <aside className="writing-context">
             <strong>创建规则</strong>
             <dl>
@@ -308,17 +307,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             />
           ) : null}
         </Form>
-        <Space
-          className="calm-action-footer"
-          style={{ display: "flex", justifyContent: "flex-end" }}
-        >
-          <Button disabled={mutation.isPending} onClick={handleCancel}>
-            取消
-          </Button>
-          <Button type="primary" htmlType="submit" loading={mutation.isPending}>
-            创建项目
-          </Button>
-        </Space>
       </form>
     </Modal>
   );

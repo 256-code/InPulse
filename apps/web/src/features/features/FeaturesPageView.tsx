@@ -2,7 +2,8 @@ import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel"
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Spin } from "antd";
+import { Alert, Button, Input, Segmented, Spin } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,9 +13,20 @@ import {
 } from "@generated/api";
 import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { isCardClick } from "@features/common/card-click";
+import {
+  CalmBadge,
+  CalmEmptyState,
+  CalmTabs,
+} from "@features/common/components/Calm";
 import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
 import { useModules } from "@features/modules/module-query";
+import {
+  ModuleEditorModal,
+  type ModuleEditorRequest,
+} from "@features/modules/ModuleEditorModal";
+import { useProjectDetail } from "@features/projects/project-query";
+import { useTasks } from "@features/tasks/task-query";
 import {
   featureErrorMessage,
   useFeatures,
@@ -65,6 +77,11 @@ export function FeaturesPageView({
     client,
   );
   const moduleQuery = useModules(projectId, client);
+  const moduleTasks = useTasks(
+    { projectId, moduleId, featureId: null },
+    client,
+    { impactOptions: false },
+  );
   const navigate = useNavigate();
   const [selection, setSelection] = useState<{
     action: FeatureChange["action"];
@@ -72,9 +89,15 @@ export function FeaturesPageView({
   } | null>(null);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [success, setSuccess] = useState(false);
+  // 模块本体的编辑/归档/恢复与模块列表页共用同一个编辑器弹层。
+  const [moduleRequest, setModuleRequest] =
+    useState<ModuleEditorRequest | null>(null);
+  const [moduleSuccess, setModuleSuccess] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [merge, setMerge] = useState<Merge | null>(null);
+  const [display, setDisplay] = useState<"cards" | "list">("cards");
+  const [search, setSearch] = useState("");
   const editGeneration = useRef(0);
   const submitting = useRef(false);
   const {
@@ -101,6 +124,15 @@ export function FeaturesPageView({
     setReloadError(null);
     setSuccess(false);
   };
+  const onOpenFeature = (nextFeatureId: number) =>
+    navigate(
+      "/projects/" +
+        projectId +
+        "/modules/" +
+        moduleId +
+        "/features/" +
+        nextFeatureId,
+    );
   const save = handleSubmit(async (values) => {
     if (
       !selection ||
@@ -215,7 +247,7 @@ export function FeaturesPageView({
     mutation.error instanceof ApiError && mutation.error.status === 409;
   const modalTitle =
     selection?.action === "create"
-      ? "新建功能"
+      ? "新增功能"
       : selection?.action === "update"
         ? "编辑功能"
         : selection?.action === "archive"
@@ -224,6 +256,24 @@ export function FeaturesPageView({
   const activeItem = featureId
     ? query.data?.items.find((item) => item.id === featureId)
     : undefined;
+  const currentModule = moduleQuery.query.data?.items.find(
+    (item) => item.id === moduleId,
+  );
+  const projectQuery = useProjectDetail({ client, projectId });
+  const projectName =
+    projectQuery.data === undefined
+      ? null
+      : currentModule === undefined
+        ? projectQuery.data.name
+        : projectQuery.data.name + " / " + currentModule.name;
+  const keyword = search.trim().toLocaleLowerCase();
+  const visibleItems = (query.data?.items ?? []).filter(
+    (item) =>
+      keyword === "" ||
+      item.name.toLocaleLowerCase().includes(keyword) ||
+      item.code.toLocaleLowerCase().includes(keyword) ||
+      item.currentBehavior.toLocaleLowerCase().includes(keyword),
+  );
   return (
     <>
       <div className="features-page">
@@ -269,29 +319,109 @@ export function FeaturesPageView({
             <div className="page-header">
               <div>
                 <span className="eyebrow">
-                  项目 {projectId} / 模块 {moduleId}
+                  {`模块 / ${projectQuery.data?.name ?? "加载中"}`}
                 </span>
-                <h1>功能档案</h1>
-                <p>维护长期功能档案，说明修改会保留审计历史。</p>
+                <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                <p>
+                  {currentModule?.description ||
+                    "维护长期功能档案，说明修改会保留审计历史。"}
+                </p>
               </div>
               <div className="catalog-actions">
+                <Button
+                  className="secondary-button"
+                  disabled={!currentModule}
+                  onClick={() =>
+                    currentModule &&
+                    setModuleRequest({ action: "update", item: currentModule })
+                  }
+                >
+                  编辑模块
+                </Button>
+                {isAdmin && currentModule ? (
+                  <Button
+                    className="secondary-button"
+                    onClick={() =>
+                      setModuleRequest({
+                        action:
+                          currentModule.status === "ARCHIVED"
+                            ? "restore"
+                            : "archive",
+                        item: currentModule,
+                      })
+                    }
+                  >
+                    {currentModule.status === "ARCHIVED"
+                      ? "恢复模块"
+                      : "归档模块"}
+                  </Button>
+                ) : null}
                 {query.isSuccess && !query.data?.items.length ? null : (
                   <Button
                     className="primary-button"
-                    disabled={!query.data || query.isError}
+                    disabled={
+                      !query.data ||
+                      query.isError ||
+                      currentModule?.status === "ARCHIVED"
+                    }
+                    title={
+                      currentModule?.status === "ARCHIVED"
+                        ? "模块归档后不能新建功能或模块级任务"
+                        : undefined
+                    }
                     onClick={() => open("create")}
                   >
                     <InpulseIcon name="plus" size={15} />
-                    新建功能
+                    新增功能
                   </Button>
                 )}
               </div>
             </div>
-            <p className="permission-hint">
-              <InpulseIcon name="alert" size={14} />
-              任务与迭代记录将在对应能力交付后开放；当前先沉淀功能名称、说明与标签。
-            </p>
+            <details className="calm-disclosure module-information">
+              <summary>
+                模块资料 · {currentModule ? currentModule.name : "加载中"} ·{" "}
+                {currentModule?.status === "ARCHIVED" ? "已归档" : "正常"}
+              </summary>
+              <h4>职责与范围</h4>
+              <p>
+                {currentModule?.description || "尚未补充，可通过编辑模块完善。"}
+              </p>
+              <small>
+                功能 {query.data?.items.length ?? 0} 个 · 模块级任务{" "}
+                {moduleTasks.query.data?.items.length ?? 0} 项
+              </small>
+            </details>
+            <CalmTabs
+              className="calm-tabs module-work-tabs"
+              label="模块工作区"
+              activeKey="功能目录"
+              onChange={(key) => {
+                if (key === "模块级任务")
+                  navigate(
+                    "/projects/" +
+                      projectId +
+                      "/modules/" +
+                      moduleId +
+                      "/tasks",
+                  );
+              }}
+              items={[
+                {
+                  key: "功能目录",
+                  label: <>功能目录 {query.data?.items.length ?? 0}</>,
+                },
+                {
+                  key: "模块级任务",
+                  label: (
+                    <>模块级任务 {moduleTasks.query.data?.items.length ?? 0}</>
+                  ),
+                },
+              ]}
+            />
             {success && <Alert type="success" showIcon title="功能操作成功" />}
+            {moduleSuccess && (
+              <Alert type="success" showIcon title="模块操作成功" />
+            )}
             {query.isPending ? (
               <div className="calm-state">
                 <Spin />
@@ -318,88 +448,201 @@ export function FeaturesPageView({
               >
                 <Button
                   className="primary-button"
+                  disabled={currentModule?.status === "ARCHIVED"}
                   onClick={() => open("create")}
                 >
                   <InpulseIcon name="plus" size={15} />
-                  新建功能
+                  新增功能
                 </Button>
               </CalmEmptyState>
             ) : (
-              <div className="cards-grid calm-feature-grid feature-grid">
-                {query.data.items.map((item) => (
-                  <article
-                    key={item.id}
-                    className={
-                      "calm-feature-card" +
-                      (item.status === "ARCHIVED" ? " card-archived" : "")
-                    }
+              <>
+                <div className="calm-feature-toolbar">
+                  <h3>功能</h3>
+                  <div className="feature-view-controls">
+                    <Segmented<string>
+                      className="segmented"
+                      role="group"
+                      aria-label="功能展示方式"
+                      tabIndex={undefined}
+                      value={display}
+                      options={[
+                        { value: "cards", label: "卡片" },
+                        { value: "list", label: "列表" },
+                      ]}
+                      onChange={(next) => setDisplay(next as "cards" | "list")}
+                    />
+                    <div className="task-search">
+                      <InpulseIcon name="search" size={15} />
+                      <input
+                        aria-label="搜索当前模块的功能"
+                        placeholder="搜索当前模块的功能"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {visibleItems.length === 0 ? (
+                  <CalmEmptyState
+                    icon="search"
+                    title="没有匹配的功能"
+                    description="调整关键词后重试，或清空搜索查看当前模块的全部功能。"
                   >
-                    <div className="calm-card-top">
-                      <span className="feature-symbol">
-                        <InpulseIcon name="code" size={21} />
-                      </span>
-                      <span className="task-id">{item.code}</span>
-                    </div>
-                    <h2>{item.name}</h2>
-                    <div className="task-card-badges">
-                      <CalmBadge
-                        tone={item.status === "ACTIVE" ? "blue" : "amber"}
-                      >
-                        {item.status === "ACTIVE" ? "正常" : "已归档"}
-                      </CalmBadge>
-                      {item.tags.slice(0, 3).map((tag) => (
-                        <CalmBadge key={tag} tone="gray">
-                          {tag}
-                        </CalmBadge>
-                      ))}
-                    </div>
-                    <p>{item.currentBehavior || "暂无功能说明"}</p>
-                    <div className="card-footer">
-                      <span>
-                        <InpulseIcon name="gitBranch" size={14} />
-                        功能档案
-                      </span>
-                      <Button
-                        className="text-button"
-                        href={
-                          "/projects/" +
-                          projectId +
-                          "/modules/" +
-                          moduleId +
-                          "/features/" +
-                          item.id
-                        }
-                      >
-                        查看详情
-                        <InpulseIcon name="chevronRight" size={14} />
-                      </Button>
-                    </div>
-                    <div className="catalog-edit-link">
-                      {item.status === "ACTIVE" && (
-                        <Button
-                          className="text-button"
-                          onClick={() => open("update", item)}
-                        >
-                          编辑
-                        </Button>
-                      )}
-                      {isAdmin && (
-                        <Button
-                          className="text-button"
-                          onClick={() =>
-                            open(
-                              item.status === "ACTIVE" ? "archive" : "restore",
-                              item,
-                            )
+                    <Button
+                      className="secondary-button"
+                      onClick={() => setSearch("")}
+                    >
+                      清空搜索
+                    </Button>
+                  </CalmEmptyState>
+                ) : display === "list" ? (
+                  <div className="feature-list-scroll">
+                    <table className="feature-list-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">功能</th>
+                          <th scope="col">编号</th>
+                          <th scope="col">状态</th>
+                          <th scope="col">标签</th>
+                          <th scope="col">最近更新</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleItems.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <Button
+                                className="feature-list-open"
+                                href={
+                                  "/projects/" +
+                                  projectId +
+                                  "/modules/" +
+                                  moduleId +
+                                  "/features/" +
+                                  item.id
+                                }
+                              >
+                                <strong>{item.name}</strong>
+                                <span>
+                                  {item.currentBehavior || "暂无功能说明"}
+                                </span>
+                              </Button>
+                            </td>
+                            <td>{item.code}</td>
+                            <td>
+                              <CalmBadge
+                                tone={
+                                  item.status === "ACTIVE" ? "blue" : "amber"
+                                }
+                              >
+                                {item.status === "ACTIVE" ? "正常" : "已归档"}
+                              </CalmBadge>
+                            </td>
+                            <td>
+                              {item.tags.length ? item.tags.join("、") : "—"}
+                            </td>
+                            <td>{formatStamp(item.updatedAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="calm-feature-grid">
+                    {visibleItems.map((item) => (
+                      <article className="catalog-module-wrap" key={item.id}>
+                        <div
+                          className={
+                            "calm-feature-card" +
+                            (item.status === "ARCHIVED" ? " card-archived" : "")
                           }
+                          onClick={(event) => {
+                            if (!isCardClick(event)) return;
+                            onOpenFeature(item.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ")
+                              return;
+                            if (event.target !== event.currentTarget) return;
+                            event.preventDefault();
+                            onOpenFeature(item.id);
+                          }}
+                          tabIndex={0}
                         >
-                          {item.status === "ACTIVE" ? "归档" : "恢复"}
-                        </Button>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
+                          <div className="calm-card-top">
+                            <span className="feature-symbol">
+                              <InpulseIcon name="code" size={21} />
+                            </span>
+                            <span className="task-id">{item.code}</span>
+                          </div>
+                          <h2>{item.name}</h2>
+                          <div className="task-card-badges">
+                            <CalmBadge
+                              tone={item.status === "ACTIVE" ? "gray" : "amber"}
+                            >
+                              {item.status === "ACTIVE" ? "正常" : "已归档"}
+                            </CalmBadge>
+                            {item.tags.slice(0, 3).map((tag) => (
+                              <CalmBadge key={tag} tone="gray">
+                                {tag}
+                              </CalmBadge>
+                            ))}
+                          </div>
+                          <p>{item.currentBehavior || "暂无功能说明"}</p>
+                          <div className="card-footer">
+                            <span>
+                              {item.stats.openTaskCount} 项待办 ·{" "}
+                              {item.stats.recordCount} 条迭代
+                            </span>
+                            <Button
+                              className="text-button"
+                              href={
+                                "/projects/" +
+                                projectId +
+                                "/modules/" +
+                                moduleId +
+                                "/features/" +
+                                item.id
+                              }
+                            >
+                              查看详情
+                              <InpulseIcon name="chevronRight" size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                        <span className="catalog-edit-link">
+                          {item.status === "ACTIVE" && (
+                            <Button
+                              className="text-button"
+                              onClick={() => open("update", item)}
+                            >
+                              编辑功能
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <Button
+                              className="text-button"
+                              onClick={() =>
+                                open(
+                                  item.status === "ACTIVE"
+                                    ? "archive"
+                                    : "restore",
+                                  item,
+                                )
+                              }
+                            >
+                              {item.status === "ACTIVE"
+                                ? "归档功能"
+                                : "恢复功能"}
+                            </Button>
+                          )}
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : query.isPending ? (
@@ -581,28 +824,25 @@ export function FeaturesPageView({
       </div>
       <Modal
         open={selection !== null}
-        className="catalog-modal feature-editor-modal"
+        className="catalog-modal"
+        eyebrow={projectName}
         title={modalTitle}
         onCancel={close}
-        footer={null}
         mask={{ closable: !mutation.isPending }}
       >
-        <div className="drawer-header">
-          <span className="detail-label">功能</span>
-          <h2>{modalTitle}</h2>
-          <p>
-            {selection?.action === "archive"
-              ? "归档后功能及下级内容不可写，历史将保留。"
-              : selection?.action === "restore"
-                ? "恢复功能本身的可写状态，不改变下级资源各自的归档状态。"
-                : "只维护长期档案；任务与迭代记录由对应能力独立管理。"}
-          </p>
-        </div>
         <form
           className="catalog-form calm-form"
           onSubmit={(event) => void save(event)}
         >
           <div className="dialog-form">
+            <p className="permission-hint">
+              <InpulseIcon name="shield" size={14} />
+              {selection?.action === "archive"
+                ? "归档后功能及下级内容不可写，历史将保留。"
+                : selection?.action === "restore"
+                  ? "恢复功能本身的可写状态，不改变下级资源各自的归档状态。"
+                  : "只维护长期档案；任务与迭代记录由对应能力独立管理。"}
+            </p>
             {lifecycle ? (
               <div className="calm-field">
                 <label htmlFor="feature-reason">操作原因</label>
@@ -810,6 +1050,14 @@ export function FeaturesPageView({
           setReauthOpen(false);
           mutation.reset();
         }}
+      />
+      <ModuleEditorModal
+        projectId={projectId}
+        client={client}
+        projectName={projectQuery.data?.name ?? null}
+        request={moduleRequest}
+        onClose={() => setModuleRequest(null)}
+        onSaved={() => setModuleSuccess(true)}
       />
     </>
   );

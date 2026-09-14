@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Modal } from "antd";
+import { Alert, Button } from "antd";
+import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -93,13 +94,27 @@ export function PublishRecordButton({
         发布记录
       </Button>
       <Modal
+        className="catalog-modal"
         open={open}
+        eyebrow={item.code + " · " + item.title}
         title="发布迭代记录"
-        footer={null}
+        body
         onCancel={() => {
           if (!busy) setOpen(false);
         }}
         mask={{ closable: !busy }}
+        footer={
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={
+              !writable || (error instanceof ApiError && error.status === 409)
+            }
+            onClick={() => void publish()}
+          >
+            确认发布
+          </Button>
+        }
       >
         <p>
           发布“{item.title}”并生成正式编号与 v1。之后的内容修订会保留为新版本。
@@ -128,18 +143,6 @@ export function PublishRecordButton({
             </Button>
           )
         )}
-        <div className="calm-action-footer">
-          <Button
-            type="primary"
-            loading={busy}
-            disabled={
-              !writable || (error instanceof ApiError && error.status === 409)
-            }
-            onClick={() => void publish()}
-          >
-            确认发布
-          </Button>
-        </div>
       </Modal>
     </>
   );

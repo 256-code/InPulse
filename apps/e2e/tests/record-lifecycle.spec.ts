@@ -89,22 +89,24 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
       .filter({ hasText: title })
       .locator("summary")
       .click();
-    await expect(detail.getByLabel("较早版本")).toHaveValue("1");
-    await expect(
-      detail.getByLabel("版本差异").getByText("原始方案").first(),
-    ).toBeVisible();
+    // 作废不影响正文：展开区仍渲染作废前的完整内容，单版本记录不再做自我对比。
+    await expect(detail.getByText("原始方案")).toBeVisible();
     await detail.getByRole("button", { name: "恢复记录" }).click();
     const restore = page.getByRole("dialog", { name: "恢复记录", exact: true });
     await restore.getByLabel("恢复原因").fill("纠正误作废");
     await restore.getByRole("button", { name: "确认恢复记录" }).click();
     await expect(restore).toBeHidden();
+    // 恢复后记录离开「已作废」列表，页面回落到独立详情形态。
     await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
     await expect(detail.getByText(privateReason)).toHaveCount(0);
     await member.page.goto(recordUrl);
-    await expect(memberDetail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
-    await expect(
-      memberDetail.getByLabel("版本差异").getByText("保留遗留问题").first(),
-    ).toBeVisible();
+    const memberCard = member.page
+      .locator(".record-card")
+      .filter({ hasText: title });
+    await expect(memberCard.locator("summary")).toContainText(
+      /-CR-\d+ · v1 · 发布/,
+    );
+    await expect(memberCard).toContainText("保留遗留问题");
     await member.page.screenshot({
       path: "test-results/f21-restored-member.png",
       fullPage: true,

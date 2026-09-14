@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import type {
   InpulseApiClient,
   ProjectMemberRecordItem,
@@ -64,21 +65,46 @@ function mount(
 ) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
-      <AuthStateProvider value={authValue}>
-        <QueryClientProvider
-          client={
-            new QueryClient({ defaultOptions: { queries: { retry: false } } })
-          }
-        >
-          <ProjectMembersPageView projectId={7} client={client} />
-        </QueryClientProvider>
-      </AuthStateProvider>
+      <MemoryRouter>
+        <AuthStateProvider value={authValue}>
+          <QueryClientProvider
+            client={
+              new QueryClient({
+                defaultOptions: { queries: { retry: false } },
+              })
+            }
+          >
+            <ProjectMembersPageView projectId={7} client={client} />
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </MemoryRouter>
     </ConfigProvider>,
   );
 }
 
 function baseClient() {
   return {
+    listProjects: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          code: "INPULSE",
+          name: "InPulse 研发交付平台",
+          description: "示例项目",
+          status: "ACTIVE",
+          rowVersion: 2,
+          createdBy: 2,
+          createdAt: "2026-09-01T00:00:00.000Z",
+          updatedAt: "2026-09-09T00:00:00.000Z",
+          memberCount: 2,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+          },
+        },
+      ],
+    }),
     listProjectMembers: vi.fn().mockResolvedValue({ items: [owner, removed] }),
     listProjectMemberUnfinishedTasks: vi.fn().mockResolvedValue({ items: [] }),
     getUserDirectory: vi.fn().mockResolvedValue({ items: [] }),
@@ -96,7 +122,9 @@ describe("ProjectMembersPageView", () => {
     expect(screen.getByRole("button", { name: /移\s*除/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /移\s*除/ }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", {
+      name: "移除项目成员",
+    });
     expect(within(dialog).getByText("移除项目成员")).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -127,7 +155,9 @@ describe("ProjectMembersPageView", () => {
 
     await screen.findByText("开发者 C");
     fireEvent.click(screen.getByRole("button", { name: "添加成员" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", {
+      name: "添加项目成员",
+    });
     fireEvent.click(
       within(dialog).getByRole("checkbox", { name: "选择成员：新成员" }),
     );
@@ -169,7 +199,9 @@ describe("ProjectMembersPageView", () => {
 
     await screen.findByText("开发者 C");
     fireEvent.click(screen.getByRole("button", { name: /移\s*除/ }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", {
+      name: "移除项目成员",
+    });
     await within(dialog).findByText("SHOP-T-99");
     fireEvent.click(within(dialog).getByRole("button", { name: "确认移除" }));
 

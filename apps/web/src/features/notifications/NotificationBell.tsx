@@ -148,7 +148,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
     <div className="popover-wrap" ref={rootRef}>
       <button
         type="button"
-        className="icon-button notification-trigger"
+        className="icon-button"
         aria-label="通知"
         aria-expanded={open}
         title={`${unreadCount} 条未读通知`}

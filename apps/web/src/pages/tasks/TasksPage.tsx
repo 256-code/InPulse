@@ -81,6 +81,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
       onOpenIssues={handleOpenIssues}
       onOpenTask={handleOpenTask}
       adapter={taskAdapter}
+      client={client}
     />
   );
 };
