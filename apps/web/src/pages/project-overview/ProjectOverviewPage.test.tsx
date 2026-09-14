@@ -123,9 +123,9 @@ describe("ProjectOverviewPage", () => {
   it("provides one GitHub links action in the composed overview page", async () => {
     renderPage("/projects/1/overview");
     await screen.findByText("InPulse 平台");
-    expect(
-      screen.getAllByRole("button", { name: "GitHub 链接" }),
-    ).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "GitHub 链接" })).toHaveLength(
+      1,
+    );
   });
 
   it("rejects an invalid project id in the URL", async () => {
