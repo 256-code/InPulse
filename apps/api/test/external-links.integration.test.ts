@@ -364,7 +364,6 @@ async function linkRequest(
   url = "https://github.com/inpulse/core/pull/245",
   linkId?: number,
   key = randomUUID(),
-  isRootRepository?: boolean,
 ) {
   return fetch(
     `${base}/api/v1/external-links/${type}/${id}${linkId ? "/" + linkId : ""}`,
@@ -379,14 +378,7 @@ async function linkRequest(
         "Idempotency-Key": key,
         ...(linkId ? {} : { "content-type": "application/json" }),
       },
-      ...(linkId
-        ? {}
-        : {
-            body: JSON.stringify({
-              url,
-              ...(isRootRepository === undefined ? {} : { isRootRepository }),
-            }),
-          }),
+      ...(linkId ? {} : { body: JSON.stringify({ url }) }),
     },
   );
 }
@@ -414,119 +406,6 @@ async function taskFixture(f: Awaited<ReturnType<typeof fixture>>, number = 1) {
   return task.id;
 }
 describe("F22 typed external links", () => {
-  it("显式选择根仓库、切换已有链接并保留其他关联", async () => {
-    const f = await fixture(),
-      actor = await session(f.userId);
-    const one = await linkRequest(
-      "PROJECT",
-      f.projectId,
-      actor,
-      1,
-      "https://github.com/inpulse/one",
-      undefined,
-      randomUUID(),
-      true,
-    );
-    expect(one.status, await one.clone().text()).toBe(200);
-    const first = schemaRegistry.ExternalLinkResult.schema.parse(
-      await one.json(),
-    );
-    const two = await linkRequest(
-      "PROJECT",
-      f.projectId,
-      actor,
-      2,
-      "https://github.com/inpulse/two",
-    );
-    expect(two.status).toBe(200);
-    const second = schemaRegistry.ExternalLinkResult.schema.parse(
-      await two.json(),
-    );
-    const switchRoot = await linkRequest(
-      "PROJECT",
-      f.projectId,
-      actor,
-      3,
-      "https://github.com/inpulse/two",
-      undefined,
-      randomUUID(),
-      true,
-    );
-    expect(switchRoot.status, await switchRoot.clone().text()).toBe(200);
-    const links = schemaRegistry.ExternalLinkList.schema.parse(
-      await (await listLinks("PROJECT", f.projectId, actor)).json(),
-    );
-    expect(links.items).toHaveLength(2);
-    expect(
-      links.items
-        .filter((link) => link.isRootRepository)
-        .map((link) => link.id),
-    ).toEqual([second.linkId]);
-    const events =
-      await auditDb.sql`SELECT event_payload FROM app.audit_logs WHERE project_id=${f.projectId} ORDER BY sequence_no DESC LIMIT 1`;
-    expect(events[0]?.event_payload).toMatchObject({
-      previousRootLinkId: first.linkId,
-      rootLinkId: second.linkId,
-    });
-    const stale = await linkRequest(
-      "PROJECT",
-      f.projectId,
-      actor,
-      3,
-      "https://github.com/inpulse/one",
-      undefined,
-      randomUUID(),
-      true,
-    );
-    await failure(stale, 409);
-  });
-  it("根仓库拒绝子路径、非项目目标和外部项目访问", async () => {
-    const f = await fixture(),
-      actor = await session(f.userId);
-    await failure(
-      await linkRequest(
-        "PROJECT",
-        f.projectId,
-        actor,
-        1,
-        "https://github.com/inpulse/core/pull/1",
-        undefined,
-        randomUUID(),
-        true,
-      ),
-      422,
-    );
-    await failure(
-      await linkRequest(
-        "FEATURE",
-        f.featureId,
-        actor,
-        1,
-        "https://github.com/inpulse/core",
-        undefined,
-        randomUUID(),
-        true,
-      ),
-      422,
-    );
-    await failure(
-      await linkRequest(
-        "PROJECT",
-        f.projectId,
-        await session(await createUser(db.sql)),
-        1,
-        "https://github.com/inpulse/core",
-        undefined,
-        randomUUID(),
-        true,
-      ),
-      404,
-    );
-    expect(
-      await db.sql`SELECT link_id FROM app.project_external_links WHERE project_id=${f.projectId}`,
-    ).toHaveLength(0);
-  });
-
   it.each(["PROJECT", "FEATURE", "TASK", "CHANGE_RECORD"])(
     "%s lists/adds/removes and preserves link entity plus audit",
     async (type) => {

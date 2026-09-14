@@ -14,7 +14,6 @@ export type FeatureChange = {
   item?: FeatureItem;
   name: string;
   currentBehavior: string;
-  acceptanceCriteria: string;
   reason: string;
   tags: string;
 };
@@ -60,7 +59,6 @@ export function useFeatures(
       const edit: FeatureEditRequest = {
         name: change.name.trim(),
         currentBehavior: change.currentBehavior,
-        acceptanceCriteria: change.acceptanceCriteria,
         tags:
           change.item && change.tags === change.item.tags.join("\n")
             ? [...change.item.tags]

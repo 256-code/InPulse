@@ -39,7 +39,7 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       .filter({ hasText: featureName })
       .getByRole("link", { name: "查看详情" })
       .click();
-    await page.getByRole("button", { name: "新建任务", exact: true }).click();
+    await page.getByRole("button", { name: "新建任务" }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
     await taskDialog
@@ -83,12 +83,12 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(taskCard).toContainText("普通优先级");
     await expect(taskCard).toContainText("未设置截止");
 
-    // 切到「我创建的」：任务中心请求必须携带 scope=created 且状态写入 URL；
+    // 切到「我创建的」：请求必须携带 ownership=CREATOR 且状态写入 URL；
     // 本次刚用当前用户身份创建的任务（创建者=当前用户）仍然在列表中。
     const createdRequest = page.waitForRequest(
       (request) =>
-        new URL(request.url()).pathname === "/api/v1/tasks" &&
-        new URL(request.url()).searchParams.get("scope") === "created",
+        request.url().includes("/api/v1/me/tasks") &&
+        new URL(request.url()).searchParams.get("ownership") === "CREATOR",
     );
     await page.getByRole("tab", { name: "我创建的" }).click();
     await createdRequest;

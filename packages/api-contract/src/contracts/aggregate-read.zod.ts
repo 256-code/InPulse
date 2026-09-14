@@ -670,14 +670,3 @@ export const taskGroupListPageSchema = z
   .meta({ id: "TaskGroupListPage" });
 
 export type TaskGroupListPage = z.infer<typeof taskGroupListPageSchema>;
-
-export const taskCenterQuerySchema = myTasksQueryRequestSchema
-  .extend({
-    scope: z.enum(["mine", "created", "project", "all"]).default("mine"),
-    overdue: queryBoolean.optional(),
-  })
-  .refine((v) => v.scope !== "project" || v.projectId !== undefined, {
-    message: "按项目查看必须选择项目",
-  })
-  .meta({ id: "TaskCenterQuery" });
-export type TaskCenterQuery = z.infer<typeof taskCenterQuerySchema>;

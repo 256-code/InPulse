@@ -1,6 +1,6 @@
 import "./external-links.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Checkbox, Input, Spin, Tag } from "antd";
+import { Alert, Button, Input, Spin, Tag } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,7 +51,6 @@ export function ExternalLinksPanel({
     [needsRefresh, setNeedsRefresh] = useState(false),
     [removeId, setRemoveId] = useState<number | null>(null),
     [adding, setAdding] = useState(false);
-  const [isRootRepository, setIsRootRepository] = useState(false);
   const saving = useRef(false),
     retry = useRef<{ signature: string; key: string } | null>(null);
   async function load() {
@@ -89,7 +88,6 @@ export function ExternalLinksPanel({
         data.rowVersion,
         removeId,
         url.trim(),
-        isRootRepository,
       ]);
       if (retry.current?.signature !== signature)
         retry.current = {
@@ -110,22 +108,17 @@ export function ExternalLinksPanel({
         await api.addExternalLink(
           targetType,
           targetId,
-          {
-            url: url.trim(),
-            ...(targetType === "PROJECT" ? { isRootRepository } : {}),
-          },
+          { url: url.trim() },
           init,
         );
       retry.current = null;
       setUrl("");
-      setIsRootRepository(false);
       setRemoveId(null);
       setAdding(false);
       // The mutation has succeeded. Prevent stale resubmission even if the subsequent reload fails.
       setNeedsRefresh(true);
       for (const key of [
         "projects",
-        "project-repository",
         "features",
         "tasks",
         "record-drafts",
@@ -159,9 +152,7 @@ export function ExternalLinksPanel({
             ? "目标不存在或当前无法访问。"
             : error.status === 409
               ? error.code === "EXTERNAL_LINK_ALREADY_ASSOCIATED"
-                ? isRootRepository
-                  ? "该链接及根仓库设置已存在。"
-                  : "该链接已关联，请勿重复添加。"
+                ? "该链接已关联，请勿重复添加。"
                 : "目标状态或版本已变化，请加载最新关联后重新确认。"
               : error.status === 422
                 ? error.code === "SEARCH_TEXT_CAPACITY_EXCEEDED"
@@ -203,15 +194,6 @@ export function ExternalLinksPanel({
         onChange={(e) => setUrl(e.target.value)}
         placeholder="https://github.com/owner/repository/pull/123"
       />
-      {targetType === "PROJECT" && (
-        <Checkbox
-          checked={isRootRepository}
-          disabled={busy}
-          onChange={(e) => setIsRootRepository(e.target.checked)}
-        >
-          设为项目根仓库（可填写已有链接以切换）
-        </Checkbox>
-      )}
       {url.trim() && (
         <p role="status">
           {previewLabel(url)
@@ -263,11 +245,7 @@ export function ExternalLinksPanel({
             <ul className="github-list">
               {data.items.map((item) => (
                 <li key={item.id}>
-                  <Tag>
-                    {item.isRootRepository
-                      ? "项目根仓库"
-                      : externalLinkKindLabel(item)}
-                  </Tag>
+                  <Tag>{externalLinkKindLabel(item)}</Tag>
                   <a
                     href={item.normalizedUrl}
                     target="_blank"
@@ -347,11 +325,7 @@ export function ExternalLinksPanel({
               <ul className="external-links-list">
                 {data.items.map((item) => (
                   <li key={item.id}>
-                    <Tag>
-                      {item.isRootRepository
-                        ? "项目根仓库"
-                        : externalLinkKindLabel(item)}
-                    </Tag>{" "}
+                    <Tag>{externalLinkKindLabel(item)}</Tag>{" "}
                     <a
                       href={item.normalizedUrl}
                       target="_blank"
@@ -403,15 +377,6 @@ export function ExternalLinksPanel({
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://github.com/owner/repository/pull/123"
                   />
-                  {targetType === "PROJECT" && (
-                    <Checkbox
-                      checked={isRootRepository}
-                      disabled={busy}
-                      onChange={(e) => setIsRootRepository(e.target.checked)}
-                    >
-                      设为项目根仓库（可填写已有链接以切换）
-                    </Checkbox>
-                  )}
                   {url.trim() && (
                     <p role="status">
                       {previewLabel(url)

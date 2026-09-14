@@ -1,4 +1,3 @@
-import { UserReadPort } from "../../auth/user-read.port.js";
 import { Inject, Injectable } from "@nestjs/common";
 import type {
   RecordDraftCommandPort,
@@ -71,7 +70,6 @@ export class RecordDraftsService
     @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
     @Inject(AuditWritePort) private readonly audit: AuditWritePort,
     @Inject(TimeCursorService) private readonly cursor: TimeCursorService,
-    @Inject(UserReadPort) private readonly users: UserReadPort,
   ) {}
   /**
    * 草稿列表分页（B-1 / C-006）：items / nextCursor / hasMore；签名游标绑定
@@ -89,7 +87,7 @@ export class RecordDraftsService
       return this.uow.run(async (tx) => {
         const item = await this.repository.find(tx, projectId, recordId);
         if (!item) throw missing();
-        return (await this.withNames(tx, [item]))[0]!;
+        return item;
       });
     const limit = page.limit ?? RECORD_PAGE_LIMIT_DEFAULT;
     const after = this.decodeListCursor(page.cursor, actorId, projectId);
@@ -100,7 +98,7 @@ export class RecordDraftsService
         after,
       });
       return {
-        items: await this.withNames(tx, result.items),
+        items: result.items,
         hasMore: result.hasMore,
         nextCursor:
           result.last === null
@@ -114,51 +112,6 @@ export class RecordDraftsService
               }),
       };
     });
-  }
-  private async withNames(
-    tx: TransactionContext,
-    items: readonly RecordDraftItem[],
-  ) {
-    const users = await this.users.listByIds(tx, [
-      ...new Set(items.flatMap((item) => [item.authorId, item.handlerId])),
-    ]);
-    const names = new Map(users.map((user) => [user.userId, user.name]));
-    const projectIds = [...new Set(items.map((item) => item.projectId))];
-    const moduleNames = await this.moduleRead.listNames(tx, {
-      projectIds,
-      moduleIds: [...new Set(items.map((item) => item.moduleId))],
-    });
-    const featureNames = await this.featureRead.listNames(tx, {
-      projectIds,
-      featureIds: [
-        ...new Set(
-          items.flatMap((item) => [
-            ...item.impactFeatureIds,
-            ...(item.featureId === null ? [] : [item.featureId]),
-          ]),
-        ),
-      ],
-    });
-    return items.map((item) => ({
-      ...item,
-      moduleName:
-        moduleNames.find(
-          (m) => m.projectId === item.projectId && m.moduleId === item.moduleId,
-        )?.name ?? null,
-      featureName:
-        featureNames.find(
-          (f) =>
-            f.projectId === item.projectId && f.featureId === item.featureId,
-        )?.name ?? null,
-      impactFeatureNames: item.impactFeatureIds.map(
-        (id) =>
-          featureNames.find(
-            (f) => f.projectId === item.projectId && f.featureId === id,
-          )?.name ?? "名称暂不可用",
-      ),
-      authorName: names.get(item.authorId) ?? null,
-      handlerName: names.get(item.handlerId) ?? null,
-    }));
   }
   private decodeListCursor(
     cursor: string | undefined,
@@ -388,15 +341,11 @@ export class RecordDraftsService
       )
         throw missing();
   }
-  async findDraft(tx: TransactionContext, projectId: number, recordId: number) {
-    // Business pre-reads must match lockDraft; display names belong to read/list responses.
+  findDraft(tx: TransactionContext, projectId: number, recordId: number) {
     return this.repository.find(tx, projectId, recordId);
   }
-  async listForTask(tx: TransactionContext, projectId: number, taskId: number) {
-    return this.withNames(
-      tx,
-      await this.repository.listForTask(tx, projectId, taskId),
-    );
+  listForTask(tx: TransactionContext, projectId: number, taskId: number) {
+    return this.repository.listForTask(tx, projectId, taskId);
   }
   async createFromTask(
     tx: TransactionContext,

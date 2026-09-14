@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Spin } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import {
   InpulseIcon,
@@ -66,18 +66,22 @@ const scopeLabels: Record<MyTaskScope, string> = {
 const scopeHints: Record<MyTaskScope, string> = {
   mine: "我负责的任务；项目成员平权，任何人都可以推进与更新。",
   created: "我创建的任务；即使指派给他人，也会在这里跟踪。",
-  project: "查看所选项目内所有成员的任务。",
+  project: "按项目查看我负责的任务，先选项目再看范围。",
   all: "管理员视图：查看全部项目的任务。",
 };
 
 /** 可用但能力受限的范围，需要显式说明服务端边界，不能让视图看起来返回了全部任务。 */
 const scopeTitles: Partial<Record<MyTaskScope, string>> = {
-  project: "查看项目内所有成员的任务",
+  project:
+    "R-3 只返回当前会话用户在此项目下负责的任务：「按项目查看全部任务」需要跨归属的" +
+    "项目任务列表路由，尚未接入",
 };
 
 /** 仍不可用的范围与原因；禁用按钮必须有可读原因，不能让用户以为界面坏了。 */
 const scopeDisabledTitles: Partial<Record<MyTaskScope, string>> = {
-  all: "全部任务仅对系统管理员开放。",
+  all:
+    "「全部任务」需要跨用户的授权范围；R-3 只服务当前登录用户自指维度（负责 / 创建），" +
+    "非管理员不得放开，V1 保持禁用",
 };
 
 const statusLabels: Record<MyTaskWorkStatus, string> = {
@@ -299,29 +303,24 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   /** 空态按范围说明服务端边界：R-3 的负责人固定为当前会话用户。 */
   const listEmptyDescription =
     filters.scope === "project"
-      ? "当前项目没有符合条件的任务，可调整筛选或新建任务。"
+      ? "服务端聚合读只返回你负责的任务：他人负责的任务请在对应功能页查看，或调整筛选条件。"
       : "调整筛选条件，或到对应功能页创建新任务。";
   const activeFilterCount = countActiveMyTaskFilters(filters);
   const [createOpen, setCreateOpen] = useState(false);
 
   const update = (patch: Partial<MyTaskFilters>) => {
-    onFiltersChange({
-      ...filters,
-      ...(patch.status !== undefined ? { overdue: false } : {}),
-      ...patch,
-    });
+    onFiltersChange({ ...filters, ...patch });
   };
 
   const handleScopeChange = (scope: MyTaskScope) => {
     if (scope === "project") {
       update({
         scope,
-        overdue: false,
         projectId: filters.projectId ?? projects[0]?.id ?? null,
       });
       return;
     }
-    update({ scope, overdue: false });
+    update({ scope });
   };
 
   const statCards: ReadonlyArray<{
@@ -368,22 +367,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             : "没有逾期任务",
       icon: "alert",
       tone: stats !== null && stats.overdue > 0 ? "red" : "green",
-      onSelect: () =>
-        update({
-          scope: "mine",
-          status: "open",
-          overdue: true,
-          projectId:
-            filters.scope === "project" || filters.overdue
-              ? filters.projectId
-              : null,
-          query: "",
-          priority: null,
-          level: null,
-          relation: null,
-          hasRecord: null,
-          hasGithub: null,
-        }),
+      onSelect: () => update({ scope: "mine", status: "open" }),
     },
     {
       key: "completed",
@@ -587,23 +571,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             <button
               type="button"
               className="risk-banner"
-              onClick={() =>
-                update({
-                  scope: "mine",
-                  status: "open",
-                  overdue: true,
-                  projectId:
-                    filters.scope === "project" || filters.overdue
-                      ? filters.projectId
-                      : null,
-                  query: "",
-                  priority: null,
-                  level: null,
-                  relation: null,
-                  hasRecord: null,
-                  hasGithub: null,
-                })
-              }
+              onClick={() => update({ scope: "mine", status: "open" })}
             >
               <InpulseIcon name="alert" size={20} />
               <span>
@@ -672,17 +640,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         ))}
       </div>
 
-      {filters.overdue && (
-        <p>
-          仅显示已逾期任务
-          {filters.projectId !== null
-            ? ` · ${projectNames.get(filters.projectId) ?? "当前项目"}`
-            : ""}{" "}
-          <button type="button" onClick={() => update({ overdue: false })}>
-            清除逾期筛选
-          </button>
-        </p>
-      )}
       <div className="task-view-tabs" role="tablist" aria-label="任务范围">
         {scopeOrder
           .filter((scope) => scope !== "all" || isAdmin)
@@ -724,7 +681,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               update({ projectId: Number(event.target.value) || null })
             }
           >
-            <option value="">请选择项目</option>
+            <option value="" disabled={!enabled("scope:project-without-id")}>
+              全部可访问项目
+            </option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
@@ -890,13 +849,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </div>
       ) : null}
 
-      {filters.scope === "project" && filters.projectId === null ? (
-        <CalmEmptyState
-          icon="folder"
-          title="请选择项目"
-          description="选择项目后查看该项目内全员的任务。"
-        />
-      ) : taskQuery.isPending ? (
+      {taskQuery.isPending ? (
         <div className="calm-state">
           <Spin size="large" />
           <p>正在加载任务列表…</p>
@@ -957,15 +910,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </>
       )}
 
-      {taskQuery.hasNextPage && (
-        <Button
-          loading={taskQuery.isFetchingNextPage}
-          onClick={() => void taskQuery.fetchNextPage()}
-        >
-          加载更多任务
-        </Button>
-      )}
-
       <section className="group-panel" aria-label="任务聚合组">
         <CalmSectionTitle
           title="任务聚合组"
@@ -995,9 +939,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   <article className="group-card" key={group.groupId}>
                     <header>
                       <span className="task-id">{group.code}</span>
-                      <a href={"/task-groups/" + group.groupId}>
-                        <strong>{group.name}</strong>
-                      </a>
+                      <strong>{group.name}</strong>
                       <CalmBadge
                         tone={group.status === "ACTIVE" ? "blue" : "gray"}
                       >
@@ -1045,11 +987,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                         来源任务的原始状态、负责人、迭代记录与 GitHub
                         链接全部保留。
                       </span>
-                      <a href={"/task-groups/" + group.groupId}>
-                        {group.status === "ACTIVE"
-                          ? "查看详情 / 解除合并"
-                          : "查看聚合历史"}
-                      </a>
                       {mainTask === null ? null : (
                         <button
                           type="button"
@@ -1089,7 +1026,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       </section>
 
       <GlobalTaskCreateModal
-        onCreatedLocation={onOpenTask}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         client={client}

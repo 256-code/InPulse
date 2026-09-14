@@ -315,6 +315,7 @@ export const createProjectResponseSchema = z
       })
       .strict(),
     members: z.array(projectMemberItemSchema),
+    unclassifiedModuleId: z.number().int().positive(),
   })
   .strict()
   .meta({ id: "CreateProjectResponse" });

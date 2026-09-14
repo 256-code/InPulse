@@ -26,5 +26,3 @@ export {
   type TaskStatusResource,
 } from "./task-status.port.js";
 export * from "./followup-task.port.js";
-
-export { TaskCreateCommandPort } from "./create.command-port.js";

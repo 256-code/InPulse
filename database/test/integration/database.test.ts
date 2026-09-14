@@ -56,13 +56,10 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0007_backup_role_pg_dump_grants.sql",
       "0008_records_cross_project_indexes.sql",
       "0009_tasks_creator_index.sql",
-      "0010_project_module_codes.sql",
-      "0011_feature_acceptance.sql",
-      "0012_project_root_repository.sql",
     ]);
   });
 
-  test("project bootstrap requires creator history and allows an empty module list", async () => {
+  test("project bootstrap is atomic and requires creator history plus one unclassified module", async () => {
     const userId = await createUser(runtime);
     const invalidCode = `P${Date.now().toString(36)}X`.toUpperCase();
 
@@ -75,20 +72,6 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       }),
       "23514",
     );
-
-    const emptyProjectId = await runtime.begin(async (tx) => {
-      const [project] = await tx<Array<{ id: number }>>`
-        INSERT INTO app.projects (code, name, created_by)
-        VALUES (${invalidCode + "E"}, 'Empty project', ${userId}) RETURNING id
-      `;
-      if (!project) throw new Error("Project insert returned no row");
-      await tx`INSERT INTO app.project_members (project_id, user_id) VALUES (${project.id}, ${userId})`;
-      return project.id;
-    });
-    const [emptyCounts] = await runtime<Array<{ modules: number }>>`
-      SELECT count(*)::integer AS modules FROM app.modules WHERE project_id=${emptyProjectId}
-    `;
-    expect(emptyCounts).toEqual({ modules: 0 });
 
     const fixture = await createProject(runtime, userId);
     const [counts] = await runtime<Array<{ members: number; modules: number }>>`

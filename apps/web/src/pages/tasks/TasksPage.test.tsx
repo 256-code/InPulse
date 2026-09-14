@@ -114,7 +114,6 @@ describe("TasksPage", () => {
           display: "list",
         }),
         viewerId: 1,
-        cursor: null,
       }),
     );
   });
@@ -134,7 +133,6 @@ describe("TasksPage", () => {
       expect(fetchMyTasks).toHaveBeenLastCalledWith({
         filters: expect.objectContaining({ scope: "created" }),
         viewerId: 1,
-        cursor: null,
       }),
     );
   });
@@ -164,7 +162,6 @@ describe("TasksPage", () => {
       expect(fetchMyTasks).toHaveBeenCalledWith({
         filters: expect.objectContaining({ scope: "mine" }),
         viewerId: 1,
-        cursor: null,
       }),
     );
     expect(screen.queryByRole("tab", { name: /全部任务/ })).toBeNull();
@@ -179,7 +176,6 @@ describe("TasksPage", () => {
       expect(fetchMyTasks).toHaveBeenCalledWith({
         filters: expect.objectContaining({ scope: "all" }),
         viewerId: 1,
-        cursor: null,
       }),
     );
     expect(

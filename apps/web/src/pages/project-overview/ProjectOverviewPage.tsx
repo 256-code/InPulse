@@ -10,6 +10,7 @@ import { useModules } from "@features/modules/module-query";
 import type { ProjectOverviewAdapter } from "@features/project-overview/project-overview-types";
 import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 
 export interface ProjectOverviewPageProps {
   readonly client?: InpulseApiClient;
@@ -57,6 +58,14 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
         navigate("/records?view=published&projectId=" + projectId)
       }
       onOpenIssues={() => navigate("/issues")}
+      extraActions={
+        <ExternalLinksPanel
+          targetType="PROJECT"
+          targetId={projectId}
+          client={client}
+          triggerClassName="secondary-button"
+        />
+      }
       {...(projectError === undefined ? {} : { projectError })}
       adapter={overviewAdapter}
     />

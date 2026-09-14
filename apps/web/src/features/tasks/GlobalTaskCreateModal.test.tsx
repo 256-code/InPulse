@@ -103,16 +103,13 @@ function harness(
     listProjects: vi.fn(() => Promise.resolve({ items: [...projects] })),
     listModules: vi.fn(() => Promise.resolve({ items: [...modules] })),
     listFeatures: vi.fn(() => Promise.resolve({ items: [...features] })),
-    listActiveProjectMembers: vi.fn(() =>
-      Promise.resolve({ items: [...members] }),
-    ),
+    listTaskAssignees: vi.fn(() => Promise.resolve({ items: [...members] })),
     listModuleTaskAssignees: vi.fn(() =>
       Promise.resolve({ items: [...members] }),
     ),
     createTask: vi.fn(createTask),
     createModuleTask,
     addExternalLink: vi.fn(addExternalLink),
-    listExternalLinks: vi.fn().mockResolvedValue({ rowVersion: 1, items: [] }),
   } as unknown as InpulseApiClient;
 
   return {
@@ -191,10 +188,8 @@ describe("GlobalTaskCreateModal", () => {
     const test = harness();
     const gate: { release: () => void } = { release: () => undefined };
     (
-      test.client as unknown as {
-        listActiveProjectMembers: () => Promise<unknown>;
-      }
-    ).listActiveProjectMembers = vi.fn(
+      test.client as unknown as { listTaskAssignees: () => Promise<unknown> }
+    ).listTaskAssignees = vi.fn(
       () =>
         new Promise((resolve) => {
           gate.release = () =>
@@ -360,49 +355,4 @@ describe("GlobalTaskCreateModal", () => {
     expect(test.onClose).not.toHaveBeenCalled();
     expect(screen.getByLabelText("任务标题")).toHaveValue("重复标题");
   });
-});
-
-it("在一次提交中创建自定义模块、功能和任务，并返回真实跳转位置", async () => {
-  const test = harness();
-  const createTaskWithScope = vi.fn().mockResolvedValue({
-    projectId: 1,
-    moduleId: 21,
-    featureId: 211,
-    taskId: 903,
-  });
-  Object.assign(test.client, { createTaskWithScope });
-  mount(test, { preset: { projectId: 1 } });
-  const user = userEvent.setup();
-  await user.selectOptions(await screen.findByLabelText("所属模块"), "-1");
-  await user.type(screen.getByLabelText("新模块名称"), "新业务模块");
-  await user.type(screen.getByLabelText("新功能名称"), "新业务功能");
-  await user.type(screen.getByLabelText("任务标题"), "一起创建");
-  await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-  await user.selectOptions(screen.getByLabelText("指派给"), "1");
-  await user.click(screen.getByRole("button", { name: "创建任务" }));
-  await waitFor(() => expect(createTaskWithScope).toHaveBeenCalledTimes(1));
-  expect(createTaskWithScope).toHaveBeenCalledWith(
-    1,
-    expect.objectContaining({
-      module: { kind: "new", input: { name: "新业务模块", description: "" } },
-      feature: {
-        kind: "new",
-        input: {
-          name: "新业务功能",
-          currentBehavior: "",
-          acceptanceCriteria: "",
-          tags: [],
-        },
-      },
-      impactFeatureIds: [],
-    }),
-    expect.objectContaining({
-      headers: expect.objectContaining({
-        "Idempotency-Key": expect.any(String),
-      }),
-    }),
-  );
-  expect(test.createTask).not.toHaveBeenCalled();
-  expect(test.createModuleTask).not.toHaveBeenCalled();
-  await waitFor(() => expect(test.onCreated).toHaveBeenCalledWith(903));
 });

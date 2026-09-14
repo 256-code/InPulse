@@ -117,7 +117,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             <strong>项目创建成功</strong>
             <span>
               {createdProject.project.name}（{createdProject.project.code}） ·
-              现在可以新增模块，或在新建任务时创建模块和功能。
+              已生成未分类模块，活动、通知与搜索投影已在同一事务中写入。
             </span>
           </div>
           <div className="creation-success-actions">

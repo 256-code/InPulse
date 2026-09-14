@@ -111,9 +111,7 @@ describe("F-17 draft UI", () => {
       scopeType: "MODULE",
       impactFeatureIds: [],
     });
-    await waitFor(() =>
-      expect(screen.getByText("暂无已知遗留问题")).toBeVisible(),
-    );
+    expect(await screen.findByText("暂无已知遗留问题")).toBeVisible();
   });
   it("preserves conflicting local content and requires a field choice before a new version", async () => {
     const update = vi

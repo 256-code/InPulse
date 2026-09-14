@@ -135,27 +135,3 @@ it("inline variant renders the github list in place, without a modal", async () 
   ).toBeEnabled();
   expect(screen.getByRole("button", { name: "解除 a/b#7" })).toBeEnabled();
 });
-
-it("explains an ordinary duplicate link without root repository wording", async () => {
-  mount({
-    listExternalLinks: vi.fn().mockResolvedValue(empty),
-    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
-    addExternalLink: vi.fn().mockRejectedValue(
-      new ApiError(409, {
-        code: "EXTERNAL_LINK_ALREADY_ASSOCIATED",
-        message: "duplicate",
-        details: {},
-        requestId: "r",
-      }),
-    ),
-  } as unknown as InpulseApiClient);
-  await screen.findByLabelText("GitHub URL");
-  fireEvent.change(screen.getByLabelText("GitHub URL"), {
-    target: { value: "https://github.com/a/b/pull/7" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "确认添加" }));
-  await waitFor(() =>
-    expect(screen.getByText("该链接已关联，请勿重复添加。")).toBeVisible(),
-  );
-  expect(screen.getByRole("button", { name: "确认添加" })).toBeDisabled();
-});

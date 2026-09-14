@@ -1,5 +1,5 @@
 /** 聚合读（R-1 ~ R-4）的业务错误：Controller 按 status/code 映射错误体。 */
-export type AggregateReadErrorStatus = 401 | 403 | 404 | 422 | 500;
+export type AggregateReadErrorStatus = 401 | 404 | 422 | 500;
 
 export class AggregateReadError extends Error {
   readonly status: AggregateReadErrorStatus;

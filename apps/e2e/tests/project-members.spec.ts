@@ -9,44 +9,17 @@ import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import { totpCode } from "../helpers/totp.js";
 
-test("普通成员只能查看本项目成员，不能增删或读取其他项目", async ({
-  browser,
-}) => {
+test("普通成员不能访问项目成员管理页面", async ({ browser }) => {
   test.setTimeout(60_000);
   const runtime = await loadRuntime();
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/members`);
-    const members = page.locator(".project-members");
+    await expect(page.getByTestId("admin-forbidden")).toBeVisible();
+    await expect(page.getByText("无权访问", { exact: true })).toBeVisible();
     await expect(
-      members.getByRole("heading", {
-        name: `${runtime.projectName} · 项目成员`,
-      }),
+      page.getByText("此区域仅限系统管理员访问。", { exact: true }),
     ).toBeVisible();
-    await expect(
-      members.getByRole("listitem").filter({ hasText: runtime.user.name }),
-    ).toHaveCount(1);
-    await expect(members.getByRole("button", { name: "添加成员" })).toHaveCount(
-      0,
-    );
-    await expect(members.getByRole("button", { name: /移\s*除/ })).toHaveCount(
-      0,
-    );
-
-    const forbidden = page.waitForResponse((response) =>
-      response
-        .url()
-        .endsWith(`/api/v1/projects/${runtime.hiddenProjectId}/active-members`),
-    );
-    await page.goto(`/projects/${runtime.hiddenProjectId}/members`);
-    expect((await forbidden).status()).toBe(404);
-    await expect(
-      page.getByText("项目或成员不存在，或你已无权访问。", { exact: true }),
-    ).toBeVisible();
-    await expect(members.getByRole("listitem")).toHaveCount(0);
-    await expect(
-      members.getByText(runtime.member.name, { exact: true }),
-    ).toHaveCount(0);
   } finally {
     await context.close();
   }
@@ -69,7 +42,7 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
     await loginAdminViaUi(page, runtime, mfaAdmin);
     await page.goto(`/projects/${runtime.projectId}/members`);
     await expect(
-      page.getByRole("heading", { name: runtime.projectName, exact: true }),
+      page.getByRole("heading", { name: "项目成员管理" }),
     ).toBeVisible();
 
     const reauth = page.getByRole("dialog", { name: "管理员安全验证" });

@@ -49,9 +49,8 @@ export class ExternalLinksCommandPort {
     id: number,
     actor: number,
     url: string,
-    isRootRepository = false,
   ) {
-    return this.repository.add(tx, p, type, id, actor, url, isRootRepository);
+    return this.repository.add(tx, p, type, id, actor, url);
   }
   remove(
     tx: TransactionContext,

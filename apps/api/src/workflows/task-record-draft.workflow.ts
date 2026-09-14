@@ -1,4 +1,3 @@
-import { UserReadPort } from "../auth/user-read.port.js";
 import { Inject, Injectable } from "@nestjs/common";
 import type { RecordDraftContent } from "@inpulse/api-contract";
 import type { TransactionContext } from "../database/transaction-context.js";
@@ -41,7 +40,6 @@ export class TaskRecordDraftWorkflow {
     @Inject(RecordDraftCommandPort)
     private readonly commands: RecordDraftCommandPort,
     @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
-    @Inject(UserReadPort) private readonly users: UserReadPort,
   ) {}
   async read(actorId: number, path: TaskDraftPath) {
     const authorized = await this.access.getAuthorizedSearchScope(actorId);
@@ -49,7 +47,6 @@ export class TaskRecordDraftWorkflow {
     return this.uow.run(async (tx) => {
       const source = await this.tasks.find(tx, path.projectId, path.taskId);
       if (!source || source.moduleId !== path.moduleId) throw missing();
-      const [assignee] = await this.users.listByIds(tx, [source.assigneeId]);
       return {
         // 契约只暴露 TaskRecordDraftsResponse.source 的固定字段，额外读模型字段不得外泄。
         source: {
@@ -60,7 +57,6 @@ export class TaskRecordDraftWorkflow {
           scopeType: source.scopeType,
           title: source.title,
           assigneeId: source.assigneeId,
-          assigneeName: assignee?.name ?? null,
           workStatus: source.workStatus,
           lifecycleStatus: source.lifecycleStatus,
           rowVersion: source.rowVersion,

@@ -36,21 +36,14 @@ import {
 type Values = {
   name: string;
   currentBehavior: string;
-  acceptanceCriteria: string;
   reason: string;
   tags: string;
 };
-const editableFields = [
-  "name",
-  "currentBehavior",
-  "acceptanceCriteria",
-  "tags",
-] as const;
+const editableFields = ["name", "currentBehavior", "tags"] as const;
 type EditableField = (typeof editableFields)[number];
 const fieldLabels = {
   name: "功能名称",
   currentBehavior: "当前功能说明",
-  acceptanceCriteria: "验收标准",
   tags: "标签",
 };
 type Merge = {
@@ -115,13 +108,7 @@ export function FeaturesPageView({
     watch,
     formState: { errors },
   } = useForm<Values>({
-    defaultValues: {
-      name: "",
-      currentBehavior: "",
-      acceptanceCriteria: "",
-      reason: "",
-      tags: "",
-    },
+    defaultValues: { name: "", currentBehavior: "", reason: "", tags: "" },
   });
   const open = (action: FeatureChange["action"], item?: FeatureItem) => {
     editGeneration.current += 1;
@@ -130,7 +117,6 @@ export function FeaturesPageView({
     reset({
       name: item?.name ?? "",
       currentBehavior: item?.currentBehavior ?? "",
-      acceptanceCriteria: item?.acceptanceCriteria ?? "",
       reason: "",
       tags: item?.tags.join("\n") ?? "",
     });
@@ -393,11 +379,10 @@ export function FeaturesPageView({
             </div>
             <details className="calm-disclosure module-information">
               <summary>
-                {currentModule?.code ?? "模块资料"} ·{" "}
-                {currentModule ? currentModule.name : "加载中"} ·{" "}
+                模块资料 · {currentModule ? currentModule.name : "加载中"} ·{" "}
                 {currentModule?.status === "ARCHIVED" ? "已归档" : "正常"}
               </summary>
-              <h4>模块说明</h4>
+              <h4>职责与范围</h4>
               <p>
                 {currentModule?.description || "尚未补充，可通过编辑模块完善。"}
               </p>
@@ -544,9 +529,7 @@ export function FeaturesPageView({
                                 </span>
                               </Button>
                             </td>
-                            <td>
-                              <InpulseIcon name="code" size={14} /> {item.code}
-                            </td>
+                            <td>{item.code}</td>
                             <td>
                               <CalmBadge
                                 tone={
@@ -785,12 +768,6 @@ export function FeaturesPageView({
                       <p>{activeItem.currentBehavior || "暂无功能说明"}</p>
                     </section>
                     <section>
-                      <h3>验收标准</h3>
-                      <p style={{ whiteSpace: "pre-wrap" }}>
-                        {activeItem.acceptanceCriteria || "尚未填写验收标准"}
-                      </p>
-                    </section>
-                    <section>
                       <h3>标签</h3>
                       {activeItem.tags.length ? (
                         <div className="tag-row">
@@ -826,11 +803,11 @@ export function FeaturesPageView({
                       <dt>编号</dt>
                       <dd>{activeItem.code}</dd>
                       <dt>所属项目</dt>
-                      <dd>{projectQuery.data?.name ?? "加载中"}</dd>
+                      <dd>#{activeItem.projectId}</dd>
                       <dt>所属模块</dt>
-                      <dd>{currentModule?.name ?? "加载中"}</dd>
+                      <dd>#{activeItem.moduleId}</dd>
                       <dt>创建人</dt>
-                      <dd>{activeItem.createdByName ?? "名称暂不可用"}</dd>
+                      <dd>#{activeItem.createdBy}</dd>
                       <dt>数据版本</dt>
                       <dd>v{activeItem.rowVersion}</dd>
                       <dt>状态</dt>
@@ -944,30 +921,6 @@ export function FeaturesPageView({
                     )}
                   />
                   <p role="alert">{errors.currentBehavior?.message}</p>
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="feature-acceptanceCriteria">
-                    验收标准（选填）
-                  </label>
-                  <Controller
-                    name="acceptanceCriteria"
-                    control={control}
-                    rules={{
-                      maxLength: {
-                        value: 50000,
-                        message: "验收标准最多 50000 字",
-                      },
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="feature-acceptanceCriteria"
-                        rows={5}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.acceptanceCriteria?.message}</p>
                 </div>
                 <div className="calm-field">
                   <label htmlFor="feature-tags">

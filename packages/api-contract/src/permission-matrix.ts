@@ -41,31 +41,6 @@ export interface PermissionMatrixEntry {
  * 不得据此放宽任何业务或认证路由。
  */
 export const permissionMatrix = [
-  {
-    operationId: "listTaskCenter",
-    outcomes: {
-      匿名: { kind: "deny", status: 401 },
-      活跃成员: {
-        kind: "conditional",
-        allowedWhen:
-          "mine/created/project 且 SQL 仅返回当前授权项目；all 仅管理员",
-        deniedWith: 403,
-      },
-      其他项目成员: {
-        kind: "conditional",
-        allowedWhen: "仅返回其余可访问项目，all 仅管理员",
-        deniedWith: 403,
-      },
-      已移除成员: {
-        kind: "conditional",
-        allowedWhen: "已移除项目不返回，all 仅管理员",
-        deniedWith: 403,
-      },
-      停用用户: { kind: "deny", status: 401 },
-      系统管理员: { kind: "allow" },
-    },
-  },
-
   ...["listExternalLinks", "addExternalLink", "removeExternalLink"].map(
     (operationId): PermissionMatrixEntry => ({
       operationId,
@@ -157,8 +132,6 @@ export const permissionMatrix = [
       "listTasks",
       "getTask",
       "listTaskAssignees",
-      "listActiveProjectMembers",
-      "createTaskWithScope",
       "createTask",
       "updateTask",
       "listModuleTasks",
