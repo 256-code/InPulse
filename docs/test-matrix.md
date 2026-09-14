@@ -1356,6 +1356,24 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 基线文档同步：`功能设计v1.1.md`（§16.7 字段表、§16.7 线框图、§16.8 填写示例、§19.4 展开示例、§30 字段表、§16.1/§17.1 说明）、`开发工作书v1.0.md`、`系统设计文档v1.0.2.md` 的标签文案改为新短版；线框图内四行重新对齐到该块的统一显示宽度 42 列。
 - 验证：`pnpm test:web` 72 文件 390 例全通过；`apps/web` 与 `apps/e2e` 内旧标签零残留（`grep` 复核）。
 
+### 记录小标题层级与任务成员加载提示（C，2026-09-14 本地落库）
+
+产品在真实页面上截图反馈两处表现缺陷，均在同一个分支 `feature/record-section-labels` 修复。
+
+**① 段落小标题与正文同级**：设计系统把全站 `h1`-`h6` 重置为 `font-weight: inherit`，记录详情的 `.record-expanded h4` 只有字号与颜色、没有字重，于是「改动原因 / 具体改动 / 改动效果 / 遗留问题 / GitHub 关联」与正文分不出层级。同时发现 `apps/web/src/styles/design-system.css` 与 `apps/web/src/features/records/records-timeline.css` **各有一份** `.record-expanded h4/h5` 规则，后者在样式表顺序上更靠后、实际生效，因此只改一处会视觉回退——两处同步改为 13px / 600 / `#314b65`（`h5` 为 12px / 600 / `#37566f`）。`apps/web/src/features/record-drafts/record-drafts.css` 的 `.draft-detail h3` 与 `apps/web/src/features/common/components/record-markdown.css` 的 `.record-field-label`（完成任务、编辑记录的字段名）同时补 600 字重与更深颜色。
+
+**② 「正在加载项目成员…」永久显示**：`GlobalTaskCreateModal` 的成员查询带 `enabled: open && targetReady`，而 React Query 在查询被禁用时 `isPending` 恒为 `true`，用 `isPending` 驱动提示就会一直显示。`apps/web/src/features/tasks/task-query.ts` 新增 `isFirstLoad(query) = isPending && isFetching` 作为「还没有数据且确实在取数」的判据，`GlobalTaskCreateModal` 与 `TasksPanel` 两处提示改用它（后者成员查询没有 `enabled`，首个渲染仍匹配同一判据，不回归）。
+
+| 验证项 | 结果 |
+| --- | --- |
+| `pnpm test:web` | **72 文件 391 例通过**（29.5 s）；`GlobalTaskCreateModal.test.tsx` 补 1 条断言 + 新增 1 个用例，先验证过反向条件会让用例失败 |
+| `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | 全部通过（typecheck 覆盖 8 个 workspace） |
+| 真实浏览器 · 任务中心 | 归属未选全时成员框显示「请先选择任务归属」、页面上不再有加载提示；选完项目/模块/功能后成员填充「特哥 / 小潘 / 小吴 / 小邵」 |
+| 真实浏览器 · 迭代记录 | 展开记录与草稿详情，小标题 `font-weight: 600` / `13px` / `rgb(49, 75, 101)`，正文 `400` / `13px` / `rgb(96, 118, 139)` |
+| 未运行 | 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、全量 `pnpm test:e2e`、GitHub Actions（按产品要求本次不触发；`feature/record-section-labels` 不在 `ci.yml`/`docs.yml` 的 `push` 白名单内且无开放 PR） |
+
+**待人工评审项**：⑦ 给段落小标题加粗加深超出设计师稿基线（设计师稿该处同样没有字重），需非作者确认。
+
 ## 演示数据库版本化种子（C，2026-09-13 本地落库）
 
 产品反馈「把数据库一并上传，我们要真实的数据库」「之前的数据库替换掉」：把本地容器演示库（`inpulse-local-dev`，`127.0.0.1:55432`）的真实演示数据作为版本化种子提交进仓库，替换仓库原先的占位演示数据。
