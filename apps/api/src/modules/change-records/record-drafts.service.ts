@@ -389,8 +389,8 @@ export class RecordDraftsService
         throw missing();
   }
   async findDraft(tx: TransactionContext, projectId: number, recordId: number) {
-    const item = await this.repository.find(tx, projectId, recordId);
-    return item ? (await this.withNames(tx, [item]))[0] : undefined;
+    // Business pre-reads must match lockDraft; display names belong to read/list responses.
+    return this.repository.find(tx, projectId, recordId);
   }
   async listForTask(tx: TransactionContext, projectId: number, taskId: number) {
     return this.withNames(

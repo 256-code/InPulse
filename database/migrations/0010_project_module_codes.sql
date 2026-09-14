@@ -42,7 +42,7 @@ SET search_path = pg_catalog, app AS $function$
 DECLARE project_code TEXT; number BIGINT;
 BEGIN
   SELECT code INTO project_code FROM app.projects WHERE id = NEW.project_id;
-  IF project_code IS NULL THEN RAISE EXCEPTION 'project not found' USING ERRCODE = 'foreign_key_violation'; END IF;
+  IF project_code IS NULL THEN RAISE EXCEPTION 'project not found' USING ERRCODE = 'foreign_key_violation', CONSTRAINT = 'modules_project_fk'; END IF;
   INSERT INTO app.code_sequences(project_id, entity_type, last_number)
   VALUES(NEW.project_id, 'MODULE', 1)
   ON CONFLICT(project_id, entity_type) DO UPDATE SET last_number = app.code_sequences.last_number + 1
