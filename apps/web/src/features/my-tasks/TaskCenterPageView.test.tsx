@@ -532,3 +532,31 @@ it("keeps the project when drilling into its overdue statistic", async () => {
     expect.objectContaining({ scope: "mine", projectId: 1, overdue: true }),
   );
 });
+
+it("loads the next page and keeps previously loaded tasks", async () => {
+  const fetchMyTasks = vi.fn(
+    async (input: Parameters<MyTasksAdapter["fetchMyTasks"]>[0]) => ({
+      ...(await MY_TASKS_MOCK_ADAPTER.fetchMyTasks(input)),
+      items: [
+        {
+          ...doneTask,
+          taskId: input.cursor ? 902 : 901,
+          title: input.cursor ? "第二页任务" : "第一页任务",
+          workStatus: "TODO" as const,
+        },
+      ],
+      nextCursor: input.cursor ? null : "next-page",
+      hasMore: !input.cursor,
+    }),
+  );
+  renderView({ adapter: { ...MY_TASKS_MOCK_ADAPTER, fetchMyTasks } });
+  await userEvent.click(
+    await screen.findByRole("button", { name: "加载更多任务" }),
+  );
+  expect(await screen.findByText("第二页任务")).toBeVisible();
+  expect(screen.getByText("第一页任务")).toBeVisible();
+  expect(fetchMyTasks).toHaveBeenLastCalledWith(
+    expect.objectContaining({ cursor: "next-page" }),
+  );
+  expect(screen.queryByRole("button", { name: "加载更多任务" })).toBeNull();
+});

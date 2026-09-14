@@ -131,7 +131,6 @@ describe("my tasks server adapter", () => {
     });
 
     expect(listTaskCenter).toHaveBeenCalledWith({
-      scope: "mine",
       limit: 20,
       ownership: "CREATOR",
       scope: "created",
