@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
+  uniqueIndex,
   check,
   foreignKey,
   integer,
@@ -100,9 +102,13 @@ export const projectExternalLinks = appSchema.table(
   {
     projectId: integer("project_id").notNull(),
     linkId: integer("link_id").notNull(),
+    isRootRepository: boolean("is_root_repository").notNull().default(false),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("project_external_links_one_root")
+      .on(table.projectId)
+      .where(sql.raw("is_root_repository")),
     primaryKey({
       name: "project_external_links_pk",
       columns: [table.projectId, table.linkId],

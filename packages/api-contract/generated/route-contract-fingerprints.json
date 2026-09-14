@@ -3,6 +3,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "3abb40d5c0fd6bac5ccbc20df004b29dde6a61bb0d88b8e19d379eeb08a635d6"
+    },
+    {
+      "version": "2.0",
+      "fingerprint": "398bf950de87cd7ac874029e70187ef11d84965d04171144dd4c8b5e13c33c7d"
     }
   ],
   "addProjectMember": [
@@ -29,6 +33,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "0c4c48038d311ee08d1e70467a10f99f835b3581c2a483b406b6411fd5bf3db4"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "c3d7bea397f63de02d6e932a079ec7ce290befe96d447c660554d369f21b1427"
     }
   ],
   "archiveProject": [
@@ -83,6 +91,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "f08b22a98151584bdcdf4cc6a2c1589f3fbf632076f6d6ee11ff659143677a8a"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "a6550486d62fafb9cde18631e0a56225918491766ddf8072fd80f0c56af66efe"
     }
   ],
   "createModuleTask": [
@@ -95,6 +107,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "8d3c116bf74f7c621a91b8153472a3a07114eaeed21517ad3c6aaf21d1619cc5"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "3fe13621322b6eae881db9d27e0ccea5b07f4ee8b7a618050df24db511f5c284"
     }
   ],
   "createTask": [
@@ -107,6 +123,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "f6a3ef02736b1f6513bdf548a0af967225b60b911644cdfda4e2e7e22e6c81c2"
+    }
+  ],
+  "createTaskWithScope": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "446456e913f6284f2981cbf3a6339835224a0106deee8bc25ea1ce5c86227b51"
     }
   ],
   "createUser": [
@@ -161,6 +183,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "ddea82056c9489e216c224ea0b205e9b4443c5744b10a6b3f6a5b320fde87524"
+    },
+    {
+      "version": "2.0",
+      "fingerprint": "6631a84f1a0126fb0dfc7157f8d122b6c2a753e3696175e4f7e3d92956b45682"
     }
   ],
   "removeProjectMember": [
@@ -199,6 +225,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "12ea1cef319f1c8cdea21dc10b17406bdee0dc095ccb3a0b3fa0d19c9ae1946a"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "70363ff80d937c56568ef5d502bab230b9dad79cb66519b70bd3cc1a75861189"
     }
   ],
   "restoreProject": [
@@ -267,6 +297,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "96ce8906421da43f402b6313ce702a0e64d12766839a59182125ed362a3bc475"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "e5ee6c86986e9c95795e1f53501f5b1466b3e4df0b17352f77d66226286621b6"
     }
   ],
   "updateModuleTask": [

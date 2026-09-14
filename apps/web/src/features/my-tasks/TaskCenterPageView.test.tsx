@@ -230,13 +230,15 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByText("已完成任务-901")).toBeInTheDocument();
   });
 
-  it("explains the R-3 assignee boundary in the project-scoped empty state", async () => {
+  it("explains the project-wide empty state", async () => {
     renderView({
       filters: { scope: "project", projectId: 5, status: "all" },
       adapter: serverLikeAdapterWith([]),
     });
 
-    expect(await screen.findByText(/只返回你负责的任务/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/当前项目没有符合条件的任务/),
+    ).toBeInTheDocument();
   });
 
   it("resolves project names from the injected project port", async () => {
@@ -501,7 +503,7 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByRole("tab", { name: /全部任务/ })).toBeDisabled();
     expect(
       screen.getByRole("tab", { name: /全部任务/ }).getAttribute("title"),
-    ).toContain("跨用户的授权范围");
+    ).toContain("系统管理员");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: /我负责的/ }));
@@ -509,4 +511,24 @@ describe("TaskCenterPageView", () => {
       expect.objectContaining({ scope: "mine" }),
     );
   });
+});
+
+it("clears overdue when opening completed tasks", async () => {
+  const { onFiltersChange } = renderView({ filters: { overdue: true } });
+  await userEvent.click(
+    await screen.findByRole("button", { name: /本月完成/ }),
+  );
+  expect(onFiltersChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ status: "done", overdue: false }),
+  );
+});
+
+it("keeps the project when drilling into its overdue statistic", async () => {
+  const { onFiltersChange } = renderView({
+    filters: { scope: "project", projectId: 1 },
+  });
+  await userEvent.click(await screen.findByRole("button", { name: /已逾期/ }));
+  expect(onFiltersChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ scope: "mine", projectId: 1, overdue: true }),
+  );
 });

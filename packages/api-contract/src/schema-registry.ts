@@ -1,3 +1,5 @@
+import { taskCenterQuerySchema } from "./contracts/aggregate-read.zod.js";
+import { taskCreateSchemas } from "./contracts/task-create.zod.js";
 import {
   auditLogItemSchema,
   auditLogPageSchema,
@@ -158,6 +160,12 @@ export const schemaRegistry = {
   ...taskCompletionSchemas,
   ...leftoverTaskSchemas,
   ...moduleSchemas,
+  ...taskCreateSchemas,
+  TaskCenterQuery: {
+    schema: taskCenterQuerySchema,
+    summary: "授权范围内任务中心筛选",
+    sensitiveFieldPaths: [],
+  },
   ...featureSchemas,
   ...taskSchemas,
   ...recordDraftSchemas,

@@ -34,8 +34,13 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
     const taskTitle = "未完成任务-" + suffix;
     const featureName = "归档功能-" + suffix;
 
-    // 为归档预览准备一个未完成任务：未分类模块下新增功能与任务。
+    // 新项目允许零模块：先显式建模块，再创建功能与任务。
     await page.goto("/projects/" + projectId + "/modules");
+    await page.getByRole("button", { name: "新增模块" }).click();
+    const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
+    await moduleDialog.getByLabel("模块名称").fill("归档测试模块");
+    await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await expect(moduleDialog).toBeHidden();
     await page.getByRole("link", { name: "查看功能" }).first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const featureDialog = page.getByRole("dialog", { name: "新增功能" });

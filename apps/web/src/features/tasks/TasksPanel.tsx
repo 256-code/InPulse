@@ -1,3 +1,5 @@
+import { GlobalTaskCreateModal } from "./GlobalTaskCreateModal";
+import { taskDetailPath } from "./task-links";
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
 import { useNavigate } from "react-router-dom";
@@ -198,6 +200,7 @@ export function TasksPanel({
     formState: { errors },
   } = useForm<TaskDraft>({ defaultValues: empty });
   const navigate = useNavigate();
+  const [customCreateOpen, setCustomCreateOpen] = useState(false);
   const current = query.data?.items.find((item) => item.id === selectedId);
   // 页面级一次批量（R-5）：任务集合变化时整批重读，不按任务逐个请求。
   const marks = useTaskMarks(
@@ -356,6 +359,19 @@ export function TasksPanel({
       aria-label={featureId === null ? "模块任务" : "功能任务"}
       className="tasks-panel"
     >
+      {customCreateOpen && (
+        <GlobalTaskCreateModal
+          open
+          onClose={() => setCustomCreateOpen(false)}
+          client={client}
+          preset={{
+            projectId,
+            moduleId,
+            ...(featureId !== null ? { featureId } : {}),
+          }}
+          onCreatedLocation={(task) => navigate(taskDetailPath(task))}
+        />
+      )}
       <div className="calm-section-title">
         <div>
           <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
@@ -366,6 +382,12 @@ export function TasksPanel({
           </small>
         </div>
         <div className="feature-view-controls">
+          <Button
+            disabled={!writable}
+            onClick={() => setCustomCreateOpen(true)}
+          >
+            自定义归属新建任务
+          </Button>
           <CalmSegmented
             label="展示方式"
             value={view}

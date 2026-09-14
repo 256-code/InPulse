@@ -1437,3 +1437,23 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - **未运行**：CI 镜像扫描步骤结论以推送后的运行为准，本条不预称已通过。
 
 **待人工评审项**：⑦ 把真实演示库（含审计链的 `ip_address` 与浏览器 User-Agent 字段，实测只有 `127.0.0.1` 与一个无头浏览器标识）作为数据资产提交进仓库，需要非作者确认存档范围；⑧ 演示口令是仓库内公开的固定值，仅适用于本地演示环境，生产部署不得载入该种子。
+
+
+## ADR-030 定向回归
+
+| 变更 | 验收证据入口 |
+|---|---|
+| 空项目与创建者历史 | `apps/api/test/project-bootstrap.integration.test.ts`，零模块、成员/审计/投影同事务 |
+| 业务编号与联合创建 | `apps/api/test/task-create.integration.test.ts`，真实 PostgreSQL 唯一编号、并发、无效指派回滚、幂等与撤销权限 |
+| 成员隔离 | 同上，授权成员名单、外部项目用户、已移除成员 |
+| 任务中心范围与逾期 | `apps/api/test/aggregate-read.service.test.ts`；`apps/web/src/features/my-tasks/my-tasks-server.test.ts`，scope/overdue 入查询、管理员约束、个人统计保持 |
+| 验收标准 | `apps/api/test/features-api.integration.test.ts`；`apps/web/src/features/features/FeaturesPageView.test.tsx`，保存、读取、版本/审计与冲突合并 |
+| 草稿详情 | `apps/api/test/record-drafts.integration.test.ts`；`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`，姓名/归属、弹窗、编辑返回 |
+| 根仓库 | `apps/api/test/external-links.integration.test.ts`，明确设置、切换已有关联、审计、版本冲突、非法路径、跨项目拒绝 |
+| 自定义归属 UI | `apps/web/src/features/tasks/GlobalTaskCreateModal.test.tsx`，整笔提交、错误保留、链接失败不重复建任务 |
+
+本次按用户限制仅执行相关行为测试，不执行全量构建、静态检查或依赖审计；未执行的门禁不能记为通过。
+
+### 任务计划补齐（2026-09-14）
+
+逾期统计下钻保留项目范围，切换完成状态清除逾期条件；对应任务中心、适配器、URL 回归已补。草稿详情使用统一滚动正文容器，根仓库未配置时显示明确提示。模块/功能任务区增加自定义归属入口，复用原子创建接口。局部前端回归覆盖上述交互，浏览器验收与远端 CI 结果另行记录。

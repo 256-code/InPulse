@@ -102,7 +102,7 @@ export function ModulesPageView({
             <CalmEmptyState
               icon="boxes"
               title="暂无模块"
-              description="项目创建时会自动生成未分类模块，可继续拆分为具体业务模块。"
+              description="创建一个业务模块，也可以在新建任务时同时创建模块。"
             >
               <Button className="primary-button" onClick={() => open("create")}>
                 <InpulseIcon name="plus" size={15} />
@@ -147,7 +147,7 @@ export function ModulesPageView({
                         <span className="feature-symbol">
                           <InpulseIcon name="boxes" size={21} />
                         </span>
-                        <span className="task-id">模块 #{item.id}</span>
+                        <span className="task-id">{item.code}</span>
                       </div>
                       <h2>{item.name}</h2>
                       <div className="task-card-badges">

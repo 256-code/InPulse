@@ -19,6 +19,7 @@ import { ModulesPageView } from "./ModulesPageView";
 import { AuthStateProvider } from "@features/auth/auth-context";
 
 const item: ModuleItem = {
+  code: "INP-M-1",
   id: 3,
   projectId: 2,
   name: "未分类模块",

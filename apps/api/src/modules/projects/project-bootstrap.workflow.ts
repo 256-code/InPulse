@@ -7,7 +7,6 @@ import type {
 import type { TransactionContext } from "../../database/transaction-context.js";
 import { AuditWritePort } from "../../audit/audit.port.js";
 import type { IdempotencyExecutionResult } from "../../idempotency/runner.js";
-import { ModulesCommandPort } from "../modules/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
 import { ActivityWritePort } from "../activity/index.js";
 import { NotificationWritePort } from "../notifications/index.js";
@@ -43,7 +42,6 @@ export class ProjectBootstrapConflictError extends Error {
 export interface ProjectBootstrapDeps {
   readonly projects: ProjectsWritePort;
   readonly activeUsers: ActiveUsersQueryPort;
-  readonly modules: ModulesCommandPort;
   readonly audit: AuditWritePort;
   readonly search: SearchProjectionWritePort;
   readonly activity: ActivityWritePort;
@@ -52,7 +50,7 @@ export interface ProjectBootstrapDeps {
 
 /**
  * F-04 项目创建单事务编排（技术设计 §6.2）。
- * 只接收显式 `TransactionContext`；创建者/初始成员 ACTIVE 校验、项目、未分类模块、
+ * 只接收显式 `TransactionContext`；创建者/初始成员 ACTIVE 校验、项目、
  * 审计、通知、活动与搜索投影全部在同一事务内。任一成员无效/停用/重复整笔回滚。
  */
 @Injectable()
@@ -61,7 +59,6 @@ export class ProjectBootstrapWorkflow {
     @Inject(ProjectsWritePort) private readonly projects: ProjectsWritePort,
     @Inject(ActiveUsersQueryPort)
     private readonly activeUsers: ActiveUsersQueryPort,
-    @Inject(ModulesCommandPort) private readonly modules: ModulesCommandPort,
     @Inject(AuditWritePort) private readonly audit: AuditWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
@@ -122,11 +119,6 @@ export class ProjectBootstrapWorkflow {
         joinedAt: record.joinedAt,
       });
     }
-
-    const module = await this.modules.createUnclassifiedModule(tx, {
-      projectId: project.projectId,
-      createdBy: actorId,
-    });
 
     const occurredAt = new Date();
     const requestId = `project-bootstrap:${project.projectId}`;
@@ -204,7 +196,6 @@ export class ProjectBootstrapWorkflow {
         updatedAt: project.updatedAt,
       },
       members: memberRecords,
-      unclassifiedModuleId: module.moduleId,
     };
 
     return {

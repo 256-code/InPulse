@@ -9,8 +9,6 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
-import { ModulesCommandService } from "../src/modules/modules/modules-command.service.js";
-import { ModulesRepository } from "../src/modules/modules/modules.repository.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import {
   PostgresActiveUsersQueryPort,
@@ -41,7 +39,6 @@ beforeAll(async () => {
   workflow = new ProjectBootstrapWorkflow(
     new PostgresProjectsWritePort(),
     new PostgresActiveUsersQueryPort(),
-    new ModulesCommandService(new ModulesRepository()),
     new PostgresAuditWritePort({
       currentVersion: 1,
       keyFor: () => auditKey,
@@ -63,7 +60,7 @@ interface MemberRow {
 }
 
 describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
-  test("成功创建项目：创建者+初始成员+未分类模块+审计+三投影同事务", async () => {
+  test("成功创建项目：创建者+初始成员+空模块集合+审计+三投影同事务", async () => {
     const creatorId = await createUser(client!.sql);
     const memberId = await createUser(client!.sql);
     const name = `项目 ${randomUUID()}`;
@@ -118,8 +115,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
          WHERE project_id = ${projectId}
            AND kind = 'UNCLASSIFIED'
     `) as unknown as readonly { id: number; kind: string; name: string }[];
-    expect(modules).toHaveLength(1);
-    expect(modules[0]!.name).toBe("未分类模块");
+    expect(modules).toHaveLength(0);
 
     const audits = (await auditClient!.sql`
         SELECT action, chain_id, target_id
@@ -172,7 +168,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
     ).toBe(true);
   });
 
-  test("仅创建者：创建者永久为活跃成员且项目恰好一个未分类模块", async () => {
+  test("仅创建者：保留初始成员历史且项目不创建模块", async () => {
     const creatorId = await createUser(client!.sql);
     const name = `仅创建者 ${randomUUID()}`;
     const result = await uow!.run((tx) =>
@@ -188,7 +184,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
          WHERE project_id = ${projectId}
            AND kind = 'UNCLASSIFIED'
     `) as unknown as readonly { id: number }[];
-    expect(modules).toHaveLength(1);
+    expect(modules).toHaveLength(0);
     const memberRows = (await client!.sql`
         SELECT user_id, status FROM app.project_members
          WHERE project_id = ${projectId}

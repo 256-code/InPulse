@@ -15,6 +15,7 @@ export const externalLinkRoutes: readonly RouteDefinition[] = [
   return {
     ...(write ? recordDraftRoutes[3]! : publishedRecordRoutes[1]!),
     operationId,
+    idempotencyContractVersion: write ? "2.0" : "none",
     method: write ? (remove ? "DELETE" : "POST") : "GET",
     path:
       "/external-links/{targetType}/{targetId}" + (remove ? "/{linkId}" : ""),

@@ -54,6 +54,8 @@ import {
  */
 export interface MyTasksQueryCommand {
   readonly actorUserId: number;
+  readonly scope?: "mine" | "created" | "project" | "all";
+  readonly overdue?: boolean;
   readonly cursor?: string;
   readonly limit?: number;
   readonly projectId?: number;
@@ -130,6 +132,18 @@ export class MyTasksQueryService {
     const scope = await this.projectAccess.getAuthorizedSearchScope(
       command.actorUserId,
     );
+    if (command.scope === "all" && !scope.isSystemAdmin)
+      throw new AggregateReadError(
+        403,
+        "TASK_CENTER_ADMIN_REQUIRED",
+        "只有管理员可以查看全部项目任务",
+      );
+    if (command.scope === "project" && command.projectId === undefined)
+      throw new AggregateReadError(
+        422,
+        "TASK_CENTER_PROJECT_REQUIRED",
+        "请先选择项目",
+      );
     const limit = command.limit ?? AGGREGATE_READ_PAGE_LIMIT_DEFAULT;
     const projectIds =
       command.projectId === undefined
@@ -138,6 +152,9 @@ export class MyTasksQueryService {
             (projectId) => projectId === command.projectId,
           );
     const filterKey = JSON.stringify([
+      ...(command.scope === undefined && command.overdue === undefined
+        ? []
+        : [command.scope ?? "mine", command.overdue ?? false]),
       command.ownership ?? "ASSIGNEE",
       command.projectId ?? null,
       command.scopeType ?? null,
@@ -152,7 +169,12 @@ export class MyTasksQueryService {
       filterKey,
     );
     const workStatuses = effectiveWorkStatuses(command);
-    const ownership = command.ownership ?? "ASSIGNEE";
+    const ownership =
+      command.scope === undefined
+        ? (command.ownership ?? "ASSIGNEE")
+        : command.scope === "created"
+          ? "CREATOR"
+          : "ASSIGNEE";
 
     const data = await this.unitOfWork.run(async (tx) => {
       const excludedTaskIds = await this.membership.listHistoricalSourceTaskIds(
@@ -161,9 +183,12 @@ export class MyTasksQueryService {
       );
       const page = await this.myTasks.list(tx, {
         projectIds,
-        ...(ownership === "CREATOR"
-          ? { creatorId: command.actorUserId }
-          : { assigneeId: command.actorUserId }),
+        ...(command.scope === "project" || command.scope === "all"
+          ? {}
+          : ownership === "CREATOR" || command.scope === "created"
+            ? { creatorId: command.actorUserId }
+            : { assigneeId: command.actorUserId }),
+        ...(command.overdue === undefined ? {} : { overdue: command.overdue }),
         limit,
         excludedTaskIds,
         ...(workStatuses === undefined ? {} : { workStatuses }),
