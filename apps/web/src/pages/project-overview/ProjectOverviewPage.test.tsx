@@ -124,7 +124,7 @@ describe("ProjectOverviewPage", () => {
     renderPage("/projects/1/overview");
     await screen.findByText("InPulse 平台");
     expect(
-      screen.getAllByRole("button", { name: "GitHub 链接", exact: true }),
+      screen.getAllByRole("button", { name: "GitHub 链接" }),
     ).toHaveLength(1);
   });
 
