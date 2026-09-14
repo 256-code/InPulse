@@ -130,7 +130,9 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await page.getByRole("button", { name: "验证并进入系统" }).click();
     await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
     await page.goto(detailUrl);
-    await page.getByRole("button", { name: "归档功能" }).click();
+    // 侧栏「系统目录」树把功能名渲染成按钮，动作按钮查询必须限定在主内容区。
+    const detail = page.getByRole("main");
+    await detail.getByRole("button", { name: "归档功能" }).click();
     const archive = page.getByRole("dialog", { name: "归档功能" });
     await archive.getByLabel("操作原因").fill("功能下线，保留历史");
     await archive.getByRole("button", { name: "管理员安全验证" }).click();
