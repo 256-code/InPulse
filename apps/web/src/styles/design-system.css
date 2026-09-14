@@ -387,35 +387,32 @@ button {
   transform: rotate(90deg);
   color: #72d4d1;
 }
+/* 侧栏系统目录树：沿用导航行样式，只保留 系统 → 模块 → 功能 三层。 */
 .project-tree {
-  margin: 2px 0 10px;
-  padding: 7px 7px 8px 10px;
-  border: 1px solid #234663;
-  border-radius: 8px;
-  background: #0d2035;
-  box-shadow: inset 0 1px #2a4c68;
+  margin: 0 0 12px;
 }
 .tree-project {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 .tree-row {
   width: 100%;
-  min-height: 34px;
+  min-height: 32px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: #91abc2;
+  color: #9bb0c7;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
-  border-radius: 6px;
+  padding: 0 11px;
+  margin-bottom: 2px;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
+  cursor: pointer;
 }
 .tree-row:hover {
-  background: #193b5a;
+  background: #1a3957;
   color: white;
 }
 .tree-row span {
@@ -423,41 +420,24 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.project-node {
-  color: #bdd0df;
-}
-.project-node.expanded {
-  background: #173b5a;
-  color: #fff;
-}
 .tree-label {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 .tree-label strong {
-  font-size: 11px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tree-label small {
-  color: #6f91ad;
-  font-size: 9px;
 }
 .tree-folder {
   position: relative;
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   color: #73c9cc;
 }
 .tree-folder svg {
   position: absolute;
   inset: 0;
+  transition: opacity 0.15s ease;
 }
 .tree-folder svg:first-child {
   opacity: 1;
@@ -465,27 +445,29 @@ button {
 .tree-folder svg:last-child {
   opacity: 0;
 }
-.project-node.expanded .tree-folder svg:first-child {
+.tree-row.expanded .tree-folder svg:first-child {
   opacity: 0;
 }
-.project-node.expanded .tree-folder svg:last-child {
+.tree-row.expanded .tree-folder svg:last-child {
   opacity: 1;
 }
 .tree-children {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 1px 0 4px 16px;
-  padding: 2px 0 2px 14px;
-  border-left: 1px solid #315a75;
+}
+.project-node {
+  padding-left: 8px;
+  color: #d6e5f0;
+}
+.project-node.selected {
+  background: #1c69a2;
+  color: white;
+  box-shadow: inset 3px 0 #45d2d5;
 }
 .module-node {
-  min-height: 30px;
-  color: #819db4;
-  padding-left: 7px;
-  position: relative;
+  padding-left: 18px;
 }
-.module-node svg {
+.module-node .tree-folder {
   color: #5fc4c4;
 }
 .module-node.selected {
@@ -493,15 +475,36 @@ button {
   color: #e7ffff;
   box-shadow: inset 2px 0 #58d1cb;
 }
-.module-node.selected svg {
+.module-node.selected .tree-folder {
   color: #8ae5dc;
 }
-.module-branch {
-  display: block;
-  width: 7px;
-  height: 1px;
-  flex: 0 0 7px;
-  background: #315a75;
+.module-node.in-path {
+  background: #14324b;
+  color: #cfe6f5;
+}
+.module-node.in-path .tree-folder {
+  color: #7fd8d3;
+}
+.feature-node {
+  min-height: 28px;
+  padding-left: 50px;
+  color: #8ba3b9;
+}
+.feature-node .tree-label strong {
+  font-weight: 400;
+}
+.feature-node.selected {
+  background: #164a60;
+  color: #e7ffff;
+  box-shadow: inset 2px 0 #58d1cb;
+}
+.feature-node.selected .tree-label strong {
+  font-weight: 600;
+}
+.tree-hint {
+  color: #6f91ad;
+  font-size: 10px;
+  margin: 2px 0 4px 50px;
 }
 .sidebar-footer {
   border-top: 1px solid #29425b;
@@ -1074,35 +1077,6 @@ button {
 }
 .project-overview .panel-head {
   padding-bottom: 13px;
-}
-.project-overview-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid #edf1f5;
-}
-.overview-metric {
-  min-height: 92px;
-  padding: 15px 20px;
-  border-right: 1px solid #edf1f5;
-}
-.overview-metric:last-child {
-  border-right: 0;
-}
-.overview-metric span,
-.overview-metric small {
-  display: block;
-  color: #8291a1;
-  font-size: 10px;
-}
-.overview-metric strong {
-  display: block;
-  color: #243b54;
-  font-size: 23px;
-  margin: 7px 0 4px;
-  letter-spacing: -0.4px;
-}
-.overview-metric small {
-  color: #4a9278;
 }
 .toolbar {
   display: flex;
@@ -1859,31 +1833,69 @@ td small {
   gap: 10px;
 }
 .project-overview-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: #dfe8ef;
-  border: 1px solid #dfe8ef;
-  border-radius: 8px;
-  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 32px;
 }
 .project-overview-strip > div {
+  display: flex;
+  flex: 1 1 132px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 132px;
+  padding: 14px 16px;
+  border-radius: 16px;
   background: white;
-  padding: 17px 20px;
-}
-.project-overview-strip span,
-.project-overview-strip strong {
-  display: block;
+  border: 1px solid #eef2f6;
+  box-shadow:
+    0 10px 24px rgb(23 43 68 / 7%),
+    0 2px 6px rgb(23 43 68 / 4%);
 }
 .project-overview-strip span {
   color: #8090a1;
-  font-size: 10px;
-  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.project-overview-strip .metric-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin-top: 12px;
+}
+.project-overview-strip .metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.project-overview-strip .metric-icon.tone-blue {
+  color: #2472c3;
+  background: #e6f2ff;
+}
+.project-overview-strip .metric-icon.tone-green {
+  color: #34815d;
+  background: #e7f6ed;
+}
+.project-overview-strip .metric-icon.tone-amber {
+  color: #ae741b;
+  background: #fff3dc;
+}
+.project-overview-strip .metric-icon.tone-red {
+  color: #bd5656;
+  background: #ffebeb;
 }
 .project-overview-strip strong {
   color: #243b54;
-  font-size: 19px;
+  font-size: 20px;
+  letter-spacing: -0.3px;
 }
 .project-section-head {
   display: flex;
@@ -1981,7 +1993,11 @@ td small {
     font-size: 21px;
   }
   .project-overview-strip {
-    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .project-overview-strip > div {
+    flex: 1 1 120px;
+    max-width: none;
   }
   .project-section-head {
     align-items: flex-start;

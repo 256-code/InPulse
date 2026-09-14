@@ -177,6 +177,43 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       page.getByLabel("显示已取消任务（不计入完成率）"),
     ).toBeEnabled();
 
+    // 任务中心不弹只读详情：重新进入 /tasks（卡片视图），点击卡片直接定位到
+    // 功能档案，由 ?taskId= 打开任务详情弹窗，写操作（编辑 / 完成任务 / 合并 /
+    // 关联链接）都在这一个入口里，任务中心本身不再复制一份只读弹层。
+    await page.goto("/tasks");
+    await expect(page.getByTestId("task-center")).toBeVisible();
+    const navCard = page
+      .locator(".calm-task-card")
+      .filter({ hasText: taskTitle });
+    await expect(navCard).toBeVisible();
+    await navCard.click();
+    await expect
+      .poll(() => {
+        const url = new URL(page.url());
+        return url.pathname;
+      })
+      .toMatch(
+        new RegExp(
+          "^/projects/" + runtime.projectId + "/modules/\\d+/features/\\d+$",
+        ),
+      );
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("taskId"))
+      .not.toBeNull();
+    const archiveDetail = page.getByRole("dialog", { name: "任务详情" });
+    await expect(archiveDetail).toBeVisible();
+    await expect(archiveDetail.getByText(taskTitle)).toBeVisible();
+    await expect(
+      archiveDetail.getByRole("button", { name: "编辑任务" }),
+    ).toBeVisible();
+    await expect(
+      archiveDetail.getByRole("button", { name: "完成任务" }),
+    ).toBeVisible();
+    await archiveDetail.getByRole("button", { name: "关闭" }).click();
+    await expect(archiveDetail).toBeHidden();
+
+    await page.goto("/tasks");
+    await expect(page.getByTestId("task-center")).toBeVisible();
     await page
       .getByTestId("task-center")
       .getByRole("button", { name: "遗留问题" })
@@ -206,14 +243,13 @@ test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入
     // 页面只呈现头部、指标条与两个面板，骨架数据提示只在 mock 降级时出现。
     await expect(notice).toHaveCount(0);
 
-    // 服务端真实统计：fixture 项目至少 1 个活跃模块与 1 名成员。
-    // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位 0。
-    const moduleCount = page
-      .getByTestId("overview-metric-modules")
-      .locator("strong");
-    await expect
-      .poll(async () => Number(await moduleCount.textContent()))
-      .toBeGreaterThan(0);
+    // 指标卡按用户确认的口径只展示任务/记录/成员/遗留四项：
+    // 「活跃模块」「活跃功能」已从展示层取消（服务端仍返回该统计）。
+    await expect(page.getByTestId("overview-metric-modules")).toHaveCount(0);
+    await expect(page.getByTestId("overview-metric-features")).toHaveCount(0);
+
+    // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位。
+    // 成员数是 fixture 项目必然 > 0 的服务端真实值（创建者自动成为成员）。
     const memberCount = page
       .getByTestId("overview-metric-members")
       .locator("strong");
@@ -223,14 +259,17 @@ test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入
         Number.parseInt((await memberCount.textContent()) ?? "", 10),
       )
       .toBeGreaterThan(0);
-    const leftoverMetric = page
-      .getByTestId("overview-metric-leftovers")
-      .locator("strong");
-    await expect
-      .poll(async () =>
-        /^\d+$/.test((await leftoverMetric.textContent())?.trim() ?? ""),
-      )
-      .toBe(true);
+    // 其余指标以数字形态渲染（fixture 项目尚无已发布记录与遗留问题，值为 0）。
+    for (const key of ["tasks", "records", "leftovers"]) {
+      const metric = page
+        .getByTestId("overview-metric-" + key)
+        .locator("strong");
+      await expect
+        .poll(async () =>
+          /^\d+$/.test((await metric.textContent())?.trim() ?? ""),
+        )
+        .toBe(true);
+    }
 
     await expect(page.getByRole("heading", { name: "最近迭代" })).toBeVisible();
     await expect(

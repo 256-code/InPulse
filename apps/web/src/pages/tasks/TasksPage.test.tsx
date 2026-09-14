@@ -9,6 +9,7 @@ import { AuthStateProvider } from "@features/auth/auth-context";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskGroupsResult,
+  type MyTaskListItem,
   type MyTaskListResult,
   type MyTasksAdapter,
   type MyTasksQueryInput,
@@ -18,6 +19,13 @@ import { TasksPage } from "./TasksPage";
 const LocationProbe: React.FC = () => {
   const location = useLocation();
   return <div data-testid="location-search">{location.search}</div>;
+};
+
+const ArchiveProbe: React.FC = () => {
+  const location = useLocation();
+  return (
+    <div data-testid="archive-probe">{location.pathname + location.search}</div>
+  );
 };
 
 const emptyResult: MyTaskListResult = {
@@ -31,9 +39,49 @@ const emptyResult: MyTaskListResult = {
   filterSupport: MY_TASKS_FULL_FILTER_SUPPORT,
 };
 
-const createAdapter = () => {
+const featureTask: MyTaskListItem = {
+  taskId: 320,
+  code: "INP-320",
+  title: "功能级任务",
+  projectId: 7,
+  projectName: "注入项目名",
+  moduleId: 71,
+  moduleName: "未分类",
+  featureId: 711,
+  featureName: "登录功能",
+  scopeType: "FEATURE",
+  workStatus: "TODO",
+  lifecycleStatus: "ACTIVE",
+  priority: "NORMAL",
+  dueAt: null,
+  updatedAt: "2026-09-12T00:00:00.000Z",
+  completedAt: null,
+  creatorId: 1,
+  assignee: { userId: 1, name: "开发者 C", avatarUrl: null },
+  hasPublishedRecord: false,
+  publishedRecordCount: 0,
+  groupRole: null,
+  githubLinkCount: 0,
+  groupId: null,
+};
+
+const moduleTask: MyTaskListItem = {
+  ...featureTask,
+  taskId: 321,
+  code: "INP-321",
+  title: "模块级任务",
+  moduleId: 72,
+  featureId: null,
+  featureName: null,
+  scopeType: "MODULE",
+};
+
+const createAdapter = (items: MyTaskListItem[] = []) => {
   const fetchMyTasks = vi.fn(
-    async (_input: MyTasksQueryInput): Promise<MyTaskListResult> => emptyResult,
+    async (_input: MyTasksQueryInput): Promise<MyTaskListResult> => ({
+      ...emptyResult,
+      items,
+    }),
   );
   const fetchTaskGroups = vi.fn(async (): Promise<MyTaskGroupsResult> => ({
     items: [],
@@ -52,10 +100,11 @@ const createAdapter = () => {
 interface RenderOptions {
   readonly entries?: string;
   readonly isAdmin?: boolean;
+  readonly items?: MyTaskListItem[];
 }
 
 const renderPage = (options: RenderOptions = {}) => {
-  const { adapter, fetchMyTasks } = createAdapter();
+  const { adapter, fetchMyTasks } = createAdapter(options.items ?? []);
   const listProjects = vi.fn().mockResolvedValue({ items: [] });
   const client = { listProjects } as unknown as InpulseApiClient;
   render(
@@ -92,6 +141,14 @@ const renderPage = (options: RenderOptions = {}) => {
               }
             />
             <Route path="/issues" element={<div>遗留问题页</div>} />
+            <Route
+              path="/projects/:projectId/modules/:moduleId/features/:featureId?"
+              element={<ArchiveProbe />}
+            />
+            <Route
+              path="/projects/:projectId/modules/:moduleId/tasks"
+              element={<ArchiveProbe />}
+            />
           </Routes>
         </MemoryRouter>
       </AuthStateProvider>
@@ -154,6 +211,27 @@ describe("TasksPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /遗留问题/ }));
     expect(await screen.findByText("遗留问题页")).toBeInTheDocument();
+  });
+
+  it("navigates a feature task card straight into the feature archive", async () => {
+    renderPage({ items: [featureTask, moduleTask] });
+    const user = userEvent.setup();
+
+    // 任务中心不弹只读详情：点击卡片直接定位到功能档案，由 ?taskId= 打开任务抽屉。
+    await user.click(await screen.findByTestId("my-task-320"));
+    expect(await screen.findByTestId("archive-probe")).toHaveTextContent(
+      "/projects/7/modules/71/features/711?taskId=320",
+    );
+  });
+
+  it("navigates a module-level task row into the module task archive", async () => {
+    renderPage({ entries: "/tasks?view=list", items: [moduleTask] });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /模块级任务/ }));
+
+    expect(await screen.findByTestId("archive-probe")).toHaveTextContent(
+      "/projects/7/modules/72/tasks?taskId=321",
+    );
   });
 
   it("demotes the admin-only scope for non-admins", async () => {

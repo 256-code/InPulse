@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { Alert, Spin } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
-import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import {
+  InpulseIcon,
+  type InpulseIconName,
+} from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
@@ -100,40 +103,42 @@ export const ProjectOverviewPageView: React.FC<
   const iterations = result?.recentIterations ?? [];
   const leftovers = result?.leftovers ?? [];
 
+  // 指标小卡只保留任务/记录/成员/遗留四项：活跃模块与活跃功能按用户要求
+  // 从展示层取消（服务端口径不变，仍由 R-2 提供，供后续接线）。
   const metrics: ReadonlyArray<{
     readonly key: string;
     readonly label: string;
     readonly value: string;
+    readonly icon: InpulseIconName;
+    readonly tone: string;
   }> = [
-    {
-      key: "modules",
-      label: "活跃模块",
-      value: String(stats.activeModules),
-    },
-    {
-      key: "features",
-      label: "活跃功能",
-      value: String(stats.activeFeatures),
-    },
     {
       key: "tasks",
       label: "未完成任务",
       value: String(stats.openTasks),
+      icon: "clipboard",
+      tone: "blue",
     },
     {
       key: "records",
       label: "迭代记录",
       value: String(stats.publishedRecords),
+      icon: "gitBranch",
+      tone: "green",
     },
     {
       key: "members",
       label: "成员",
       value: project === null ? "—" : project.memberCount + " 人",
+      icon: "users",
+      tone: "amber",
     },
     {
       key: "leftovers",
       label: "遗留问题",
       value: String(stats.openLeftovers),
+      icon: "alert",
+      tone: "red",
     },
   ];
 
@@ -279,15 +284,18 @@ export const ProjectOverviewPageView: React.FC<
         </div>
       ) : null}
 
-      {/* 设计师稿 catalog.tsx L238-245：指标条由 `.project-overview-strip > div`
-          直接承载（标签 + 数值，无图标），不要再加 `.overview-metric`——那是设计
-          系统里给旧版 `.project-overview-metrics` 网格用的遗留类，会带进
-          `min-height: 92px` 与 `strong` 的 `margin: 7px 0 4px`，把单项从 86px 撑到 92px。 */}
+      {/* 指标小卡：标签在上、彩色图标 + 数值在下，白底圆角软阴影，
+          按用户确认的紧凑卡片排版替换原四列通栏指标条。 */}
       <div className="project-overview-strip">
         {metrics.map((metric) => (
           <div key={metric.key} data-testid={"overview-metric-" + metric.key}>
             <span>{metric.label}</span>
-            <strong>{metric.value}</strong>
+            <div className="metric-value">
+              <i className={"metric-icon tone-" + metric.tone}>
+                <InpulseIcon name={metric.icon} size={14} />
+              </i>
+              <strong>{metric.value}</strong>
+            </div>
           </div>
         ))}
       </div>

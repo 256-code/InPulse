@@ -29,7 +29,6 @@ import {
 } from "./my-tasks-v1-query";
 import { formatDayIso, isBeforeTodayIso, isTodayIso } from "./my-tasks-time";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
-import { MyTaskDetailModal } from "./MyTaskDetailModal";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskFilters,
@@ -381,12 +380,18 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   ];
 
   /**
-   * 卡片与列表行都在任务中心内打开任务详情弹层（设计师稿 TaskTile / TaskTable 的
-   * onOpen → 页内弹层，关闭后仍停留在任务中心）；需要回到目录时由弹层里的
-   * 「在功能档案中查看」触发 onOpenTask。
+   * 任务中心只做跨项目查看与定位，不复制功能档案的写入口（状态推进 / 生成迭代记录 /
+   * 合并 / 删除 / 关联链接 / 任务编辑只在功能档案的任务抽屉中提供）。卡片与列表行点击
+   * 后经 onOpenTask（TasksPage → taskDetailPath 深链）直接进入项目 / 模块 / 功能定位，
+   * 由 ?taskId= 打开任务抽屉，不在任务中心弹出只读详情弹层。
    */
-  const [detail, setDetail] = useState<MyTaskListItem | null>(null);
-  const openTask = (item: MyTaskListItem) => setDetail(item);
+  const openTask = (item: MyTaskListItem) =>
+    onOpenTask?.({
+      projectId: item.projectId,
+      moduleId: item.moduleId,
+      featureId: item.featureId,
+      taskId: item.taskId,
+    });
 
   const relationLabelOf = (item: MyTaskListItem): string => {
     if (item.groupRole === "MAIN") return "主任务";
@@ -1034,22 +1039,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             ? { projectId: filters.projectId }
             : undefined
         }
-      />
-
-      <MyTaskDetailModal
-        open={detail !== null}
-        task={detail}
-        onClose={() => setDetail(null)}
-        client={client}
-        onOpenInCatalog={(item) => {
-          setDetail(null);
-          onOpenTask?.({
-            projectId: item.projectId,
-            moduleId: item.moduleId,
-            featureId: item.featureId,
-            taskId: item.taskId,
-          });
-        }}
       />
     </section>
   );

@@ -135,16 +135,9 @@ describe("ProjectOverviewPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the overview metrics from the adapter", async () => {
+  it("renders the overview metric cards from the adapter", async () => {
     renderView();
 
-    const modules = await screen.findByTestId("overview-metric-modules");
-    expect(await within(modules).findByText("4")).toBeInTheDocument();
-    expect(
-      await within(screen.getByTestId("overview-metric-features")).findByText(
-        "11",
-      ),
-    ).toBeInTheDocument();
     expect(
       await within(screen.getByTestId("overview-metric-tasks")).findByText("6"),
     ).toBeInTheDocument();
@@ -158,6 +151,11 @@ describe("ProjectOverviewPageView", () => {
         "1",
       ),
     ).toBeInTheDocument();
+    // 活跃模块 / 活跃功能已从展示层取消：适配器仍返回服务端值，但页面不渲染。
+    expect(screen.queryByTestId("overview-metric-modules")).toBeNull();
+    expect(screen.queryByTestId("overview-metric-features")).toBeNull();
+    expect(screen.queryByText("活跃模块")).toBeNull();
+    expect(screen.queryByText("活跃功能")).toBeNull();
     expect(
       screen.getByTestId("project-overview-mock-notice"),
     ).toHaveTextContent("骨架数据");
