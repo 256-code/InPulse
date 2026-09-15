@@ -1612,3 +1612,19 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-15）：`pnpm test:web` **76 文件 413 例通过**；`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/e2e exec playwright test tests/aggregate-views.spec.ts`（2 passed）通过；真实浏览器复验（Vite 5173，普通成员 xiaopan，`/tasks?scope=created`）卡片徽章渲染「紧急」「普通」，优先级筛选选项读取为 `["全部","紧急","高","普通","低"]` 且默认显示「全部」。
 
 未运行 / 已知偏差：① 本批次只改文案，未跑数据库 / 契约 / 权限门禁（无相关改动）；② 修改与新增测试需非作者人工评审。
+
+## 面包屑模块导航 404 修复（整体 UI 回归续，2026-09-15 本地落库）
+
+用户反馈：在功能页点击顶部面包屑里的「模块」会进入「页面不存在」。定位结论：`AppLayout` 面包屑的模块按钮生成了 `/projects/:projectId/modules/:moduleId`，而 `apps/web/src/pages` 下只注册了 `/projects/:projectId/modules`、`/projects/:projectId/modules/:moduleId/tasks` 与 `/projects/:projectId/modules/:moduleId/features/:featureId?`，因此该 URL 落到 `path: "*"` 兜底，渲染品牌化 404。侧栏系统目录（`treePath`）与后端通知 `targetPath`（如 `apps/api/src/modules/tasks/task-completion.port.ts`）都带 `/features` 或 `/tasks` 后缀，只有面包屑这一处漂移。
+
+- 修复：`apps/web/src/app/layout/AppLayout.tsx` 面包屑模块按钮改为 `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}/features`，与 `treePath`（模块 -> 功能目录）一致；未新增路由、未改契约，后端零改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| UI-BUG-MODULE-CRUMB-UNIT-001 | Web 单元 | 面包屑模块名落地页 | `AppLayout.test.tsx` 新增用例：在 `/projects/7/modules/3/features/5` 点击面包屑「调度模块」后渲染「功能目录内容」；把该行回退为无 `/features` 的路径后同一用例失败（已实测） | 本地通过 |
+
+真实浏览器验证（临时 Playwright 用例，验证后已删除）：普通成员登录后进入功能详情页，点击面包屑中的模块名，修复后落在 `/projects/49/modules/44/features`、页面渲染功能目录且无「页面不存在」；把该行回退为无 `/features` 的路径后，同一步骤渲染「页面不存在」并留下失败截图，与用户反馈完全一致。
+
+本地实际执行（2026-09-15）：`pnpm --filter @inpulse/web exec vitest run src/app/layout/AppLayout.test.tsx` 12 例通过，回退修复后同一用例失败（确认可挡住回归）；`pnpm test:web` **76 文件 414 例通过**；`pnpm format:check` 与 `pnpm typecheck`（全 workspace）通过。
+
+未运行 / 已知偏差：① 本轮未重跑 `pnpm test:e2e` 与 `pnpm check` 整链，改动为单处路径字符串并有单元用例锁定；② 新增测试需非作者人工评审。

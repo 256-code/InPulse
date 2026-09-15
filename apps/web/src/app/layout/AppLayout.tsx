@@ -405,7 +405,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                           title={moduleCrumbName}
                           onClick={() =>
                             handleNavigation(
-                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}`,
+                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}/features`,
                             )
                           }
                         >

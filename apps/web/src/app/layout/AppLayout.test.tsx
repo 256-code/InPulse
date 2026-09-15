@@ -407,6 +407,79 @@ describe("AppLayout", () => {
     expect(await screen.findByText("功能档案内容")).toBeInTheDocument();
   });
 
+  it("opens the feature catalog from the breadcrumb module crumb", async () => {
+    const catalogClient = {
+      ...notificationClient,
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            code: "AGV",
+            name: "AGV 智能搬运平台",
+            status: "ACTIVE",
+          },
+        ],
+      }),
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 7,
+          code: "AGV",
+          name: "AGV 智能搬运平台",
+          description: "面向工厂的智能搬运调度项目",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 1,
+          createdAt: "2026-09-08T00:00:00.000Z",
+          updatedAt: "2026-09-08T00:00:00.000Z",
+          memberCount: 4,
+          stats: {
+            activeModuleCount: 1,
+            activeFeatureCount: 1,
+            openTaskCount: 1,
+          },
+        },
+      }),
+      listModules: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
+      listFeatures: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects/7/modules/3/features/5"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={catalogClient}
+              />
+            }
+          >
+            <Route
+              path="projects/:projectId/modules/:moduleId/features"
+              element={<div>功能目录内容</div>}
+            />
+            <Route
+              path="projects/:projectId/modules/:moduleId/features/:featureId"
+              element={<div>功能档案内容</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
+    // 面包屑的模块名必须落到已注册的功能目录路由，而不是未注册的模块路径。
+    await userEvent.click(
+      await within(crumb).findByRole("button", { name: "调度模块" }),
+    );
+    expect(await screen.findByText("功能目录内容")).toBeInTheDocument();
+  });
+
   it("collapses the system directory tree outside project pages", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/tasks"]}>
