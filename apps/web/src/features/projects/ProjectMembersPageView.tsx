@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Button, Select, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
@@ -7,7 +7,6 @@ import type {
   ProjectMemberReassignmentItem,
   ProjectMemberRecordItem,
 } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -19,7 +18,6 @@ import {
   useUserDirectoryQuery,
 } from "@features/users/user-directory-query";
 import {
-  isAdminReauthRequired,
   projectMemberErrorMessage,
   useProjectMemberUnfinishedTasks,
   useProjectMembers,
@@ -60,8 +58,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   const [reassignChoices, setReassignChoices] = useState<
     Readonly<Record<number, ReassignmentChoice>>
   >({});
-  const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthReady, setReauthReady] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [dangerAction, setDangerAction] = useState<
@@ -109,36 +105,11 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       ),
     [query.data],
   );
-  const mutationError = addMutation.isError
-    ? addMutation.error
-    : removeMutation.isError
-      ? removeMutation.error
-      : undefined;
-
-  useEffect(() => {
-    if (query.isError && isAdminReauthRequired(query.error)) {
-      setReauthOpen(true);
-    }
-  }, [query.error, query.isError]);
-
-  useEffect(() => {
-    if (unfinished.isError && isAdminReauthRequired(unfinished.error)) {
-      setReauthOpen(true);
-    }
-  }, [unfinished.error, unfinished.isError]);
-
-  useEffect(() => {
-    if (mutationError !== undefined && isAdminReauthRequired(mutationError)) {
-      setReauthOpen(true);
-    }
-  }, [mutationError]);
-
   const openAdd = () => {
     setAddOpen(true);
     setSelectedUserId(null);
     setActionError(null);
     setSuccess(null);
-    setReauthReady(false);
     addMutation.reset();
   };
 
@@ -153,7 +124,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     setReassignChoices({});
     setActionError(null);
     setSuccess(null);
-    setReauthReady(false);
     removeMutation.reset();
   };
 
@@ -171,9 +141,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       setAddOpen(false);
       setSuccess("成员已添加，项目成员列表已更新。");
     } catch (error) {
-      if (!isAdminReauthRequired(error)) {
-        setActionError(projectMemberErrorMessage(error));
-      }
+      setActionError(projectMemberErrorMessage(error));
     }
   };
 
@@ -207,20 +175,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         "成员已移出项目，未改派任务保留原负责人且该成员已失去处理权限。",
       );
     } catch (error) {
-      if (!isAdminReauthRequired(error)) {
-        setActionError(projectMemberErrorMessage(error));
-      }
-    }
-  };
-
-  const handleReauthSuccess = () => {
-    setReauthOpen(false);
-    setReauthReady(true);
-    addMutation.reset();
-    removeMutation.reset();
-    void query.refetch();
-    if (removing !== null) {
-      void unfinished.refetch();
+      setActionError(projectMemberErrorMessage(error));
     }
   };
 
@@ -531,13 +486,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             {actionError ? (
               <Alert type="error" showIcon title={actionError} />
             ) : null}
-            {reauthReady ? (
-              <Alert
-                type="success"
-                showIcon
-                title="管理员安全验证已完成，请重新点击添加。"
-              />
-            ) : null}
           </div>
         </div>
       </Modal>
@@ -647,22 +595,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             {actionError ? (
               <Alert type="error" showIcon title={actionError} />
             ) : null}
-            {reauthReady ? (
-              <Alert
-                type="success"
-                showIcon
-                title="管理员安全验证已完成，请重新点击确认移除。"
-              />
-            ) : null}
           </div>
         </div>
       </Modal>
-
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={handleReauthSuccess}
-      />
 
       {project && dangerAction === "archive" ? (
         <ArchiveProjectModal

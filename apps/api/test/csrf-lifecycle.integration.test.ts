@@ -262,12 +262,6 @@ beforeAll(async () => {
     `1:${sessionKey.toString("hex")}\n`,
     "utf8",
   );
-  const totpKekFile = join(sessionKeyringDirectory, "totp.kek.keyring");
-  await writeFile(
-    totpKekFile,
-    `1:${randomBytes(32).toString("hex")}\n`,
-    "utf8",
-  );
 
   idempotencyKeyringDirectory = await mkdtemp(
     join(tmpdir(), "inpulse-csrf-idempotency-"),
@@ -301,9 +295,6 @@ beforeAll(async () => {
       process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"],
     IDEMPOTENCY_FINGERPRINT_KEY_VERSION:
       process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"],
-    TOTP_KEK_VERSION: process.env["TOTP_KEK_VERSION"],
-    TOTP_KEK_KEYRING_FILE: process.env["TOTP_KEK_KEYRING_FILE"],
-    TOTP_KEK_KEYRING_TEST_PATH: process.env["TOTP_KEK_KEYRING_TEST_PATH"],
     AUDIT_HMAC_KEYRING_FILE: process.env["AUDIT_HMAC_KEYRING_FILE"],
     AUDIT_HMAC_KEYRING_TEST_PATH: process.env["AUDIT_HMAC_KEYRING_TEST_PATH"],
     AUDIT_HMAC_KEY_VERSION: process.env["AUDIT_HMAC_KEY_VERSION"],
@@ -316,9 +307,6 @@ beforeAll(async () => {
   process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"] = idempotencyKeyringFile;
   process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"] = "1";
   process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"] = String(HMAC_KEY_VERSION);
-  process.env["TOTP_KEK_VERSION"] = String(HMAC_KEY_VERSION);
-  process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
-  process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
   process.env["AUDIT_HMAC_KEYRING_FILE"] = auditKeyringFile;
   process.env["AUDIT_HMAC_KEYRING_TEST_PATH"] = "1";
   process.env["AUDIT_HMAC_KEY_VERSION"] = String(HMAC_KEY_VERSION);

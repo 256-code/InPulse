@@ -1,5 +1,6 @@
 # F-21 本地交审说明
 
+> 2026-09-15 注：[ADR-031](adr/ADR-031.md) 已移除全部 TOTP 验证与管理员高风险重认证；本文件是当时交付事实的历史交审记录，其中「密码/TOTP 重认证」「`AdminReauthenticateModal`」「双时间戳门禁」等描述不再代表现行行为（现行门禁为有效完整管理员 Session + `is_admin` + 写操作 CSRF/幂等）。
 ## 基线与范围
 
 工作区 `C:\Users\10348\.codex\worktrees\9d1f\InPulse` 开工干净，fetch 成功后从 `origin/main` `fc7bb681944942cdba49454e130023a16f778222` 创建 `codex/f21-record-lifecycle`。仅实现管理员记录作废/恢复完整纵切片，未开展 F-22，未采用 #89 两份候选端口/聚合读取提案。未操作 D:\InPulse 的工作分支、README 用户修改或三人协作计划。

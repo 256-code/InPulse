@@ -23,9 +23,7 @@ export function moduleErrorMessage(error: unknown): string {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或模块不存在，或你已无权访问。";
     if (error.status === 403)
-      return error.code === "ADMIN_REAUTH_REQUIRED"
-        ? "请先完成管理员安全验证，再重新提交。"
-        : "你没有执行此操作的权限，或安全校验未通过。";
+      return "你没有执行此操作的权限，或安全校验未通过。";
     if (error.status === 422) return "请检查模块名称、描述或原因。";
   }
   return "模块服务暂时不可用，请重试。";

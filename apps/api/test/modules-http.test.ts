@@ -3,7 +3,7 @@ import type { TransactionContext } from "../src/database/transaction-context.js"
 import type { SessionAuthService } from "../src/auth/session-auth.service.js";
 import type { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
 import type { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
-import { reauthExpired } from "../src/auth/admin-high-risk.error.js";
+import { notAdmin } from "../src/auth/admin-high-risk.error.js";
 import type {
   IdempotencyHttpService,
   IdempotencyHttpCommand,
@@ -105,20 +105,20 @@ describe("F-12 HTTP orchestration", () => {
     ).toBe(422);
     expect(s.execute).not.toHaveBeenCalled();
   });
-  it("revalidates admin freshness on replay and refuses cached response disclosure", async () => {
+  it("revalidates admin identity on replay and refuses cached response disclosure", async () => {
     const s = setup();
     const result = await s.service.handle("archiveModule", {
       ...s.request,
       body: { reason: "封存" },
     });
     expect(result.status).toBe(200);
-    s.adminVerify.mockRejectedValueOnce(reauthExpired());
+    s.adminVerify.mockRejectedValueOnce(notAdmin());
     await expect(
       s.command().replayAuthorizer!(
         { replayAuthContext: { projectId: 2, moduleId: 3 } } as never,
         tx,
       ),
-    ).rejects.toMatchObject({ code: "ADMIN_REAUTH_REQUIRED" });
+    ).rejects.toMatchObject({ code: "ADMIN_REQUIRED" });
   });
   it("normalizes name conflicts and never exposes database failures", async () => {
     const s = setup();

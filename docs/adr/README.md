@@ -29,22 +29,22 @@
 | [ADR-013](ADR-013.md) | Accepted | WorkflowModule 与显式 UnitOfWork |
 | [ADR-014](ADR-014.md) | Accepted | 使用脱敏 ActivityProjection |
 | [ADR-015](ADR-015.md) | Accepted | 同步 CSRF Token 与有限重签 |
-| [ADR-016](ADR-016.md) | Accepted | 系统管理员 TOTP MFA 与重认证 |
+| [ADR-016](ADR-016.md) | Superseded | 系统管理员 TOTP MFA 与重认证，由 ADR-031 替代 |
 | [ADR-017](ADR-017.md) | Accepted | 固定版本、补丁与镜像 digest |
 | [ADR-018](ADR-018.md) | Accepted | PostgreSQL 数据卷与数据库角色分离 |
 | [ADR-019](ADR-019.md) | Accepted | Route Registry、权限矩阵与写接口幂等默认值 |
 | [ADR-020](ADR-020.md) | Accepted | 加密逻辑备份与全新主机恢复验证 |
 | [ADR-021](ADR-021.md) | Accepted | 逐响应 nonce CSP |
 | [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型 |
-| [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外 |
+| [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外（allowlist 由 ADR-031 收缩为 `issueCsrfToken`、`login`、`logout`） |
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 | [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |
 | [ADR-026](ADR-026.md) | Accepted | NestJS 基线锁定 11.2.3 并延后 12.x 升级 |
 | [ADR-027](ADR-027.md) | Accepted | 契约生成链路使用 Zod 4 JSON Schema 与仓库内生成器 |
 | [ADR-028](ADR-028.md) | Accepted | apps/api 迁移至 ESM/NodeNext 以消费共享 ESM 包 |
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
-
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
+| [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
 
 ## 关联基线
 

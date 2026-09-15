@@ -43,11 +43,11 @@ V1 冻结规则：
 1. `details` 必填、类型为 `Record<string, unknown>`；无附加细节时必须是空对象 `{}`，不得缺省、不得为 `null`（与技术设计 §4.2 示例一致）。
 2. 保留键（frozen，跨路由稳定）：
    - `issues: string`：422 `VALIDATION_FAILED` 的校验摘要（服务端按 `path: message; ...` 拼接）；
-   - `reason: string`：该 `code` 内部的稳定原因码（例如 `missing-origin-and-referer`、`login-rate-limited`、`invalid-csrf`、`reauth-expired`、`self-reset`）。同一 `code` 的 `reason` 取值集合属于该错误码契约的一部分，新增取值必须随引入 PR 同步权限矩阵与测试矩阵；
+   - `reason: string`：该 `code` 内部的稳定原因码（例如 `missing-origin-and-referer`、`login-rate-limited`、`invalid-csrf`、`not-admin`、`csrf-rejected`）。同一 `code` 的 `reason` 取值集合属于该错误码契约的一部分，新增取值必须随引入 PR 同步权限矩阵与测试矩阵；
    - 其余键（例如 `query`、`x-csrf-token`、`task`）是字段级 / 资源级明细，只用于表单定位与诊断，键名不得用于业务分支。
 3. 前端与生成客户端**只允许按 `code` 分支**（与 C-008 一致）；`details` 只作展示、表单定位与调试。
 
-未采纳（明确延后）：FC-031 的判别联合 `ApiErrorDetails`（`ValidationErrorDetails` / `ConflictErrorDetails` / … 逐类判别）。理由：现有错误发射跨 97 条路由异构（`reason`、字段明细、资源引用、空对象并存），V1 强收窄要么让 OpenAPI 与实际响应不一致（第二真相），要么迫使一次性重发全部错误形状，代价大于收益；且前端真正需要分支的 422 / 409 / 429 / 重认证 / CSRF 场景已可用 `code` + 保留键覆盖。
+未采纳（明确延后）：FC-031 的判别联合 `ApiErrorDetails`（`ValidationErrorDetails` / `ConflictErrorDetails` / … 逐类判别）。理由：现有错误发射跨 95 条路由异构（`reason`、字段明细、资源引用、空对象并存），V1 强收窄要么让 OpenAPI 与实际响应不一致（第二真相），要么迫使一次性重发全部错误形状，代价大于收益；且前端真正需要分支的 422 / 409 / 429 / 重认证 / CSRF 场景已可用 `code` + 保留键覆盖。
 
 恢复条件（届时重新裁决，不得静默收窄）：当错误发射统一为“每码固定形状”后，以**新契约版本**引入判别联合，同步登记每条路由的错误响应 Schema ref、生成客户端与前端 adapter，并重新评估 Route Registry 是否改为逐路由 `details` Schema ref。
 
@@ -55,16 +55,15 @@ V1 冻结规则：
 
 ### 3.3 C-005：CSRF 专用错误码（已接受）
 
-冻结码族：CSRF 失败必须使用下列四个码之一，禁止用 `FORBIDDEN` / `UNAUTHENTICATED` 等泛化码表示：
+冻结码族：CSRF 失败必须使用下列三个码之一，禁止用 `FORBIDDEN` / `UNAUTHENTICATED` 等泛化码表示（[ADR-031](adr/ADR-031.md) 移除了 `MFA_CSRF_REJECTED`）：
 
 | code | HTTP | 场景 | `details.reason` |
 | --- | --- | --- | --- |
 | `CSRF_ORIGIN_REJECTED` | 403 | Origin / Referer / Fetch Metadata 同源校验失败 | `missing-host`、`missing-origin-and-referer`、`cross-origin`、`cross-site`、`unsupported-sec-fetch-mode`、`unsupported-sec-fetch-dest` |
 | `CSRF_TOKEN_INVALID` | 403 | 已认证 Session 的同步 Token 缺失、无效或过期（通用码） | `invalid-csrf` |
-| `MFA_CSRF_REJECTED` | 401 | MFA 注册 / 验证 / 恢复 / 重认证受限流程内的 CSRF 失败 | `csrf-rejected` |
 | `ADMIN_CSRF_REJECTED` | 401 | 管理员高风险流程内的 CSRF 失败 | `csrf-rejected` |
 
-为什么不统一成一个码：`MFA_*` / `ADMIN_*` 流程的错误语义是“受限会话需重建”（401），与已认证 Session 的 403 重签语义不同；但前端**重签判定**统一按上表四码处理（`apps/web/src/features/auth/auth-errors.ts` 已按此映射）。
+为什么不统一成一个码：`ADMIN_*` 流程的错误语义是“管理员身份需重建”（401），与已认证 Session 的 403 重签语义不同；[ADR-031](adr/ADR-031.md) 起不再有 `MFA_*` 码，前端写操作在提交前通过生成客户端显式签发 CSRF，失败时按上表三码分支处理。
 为什么要保持 403 / 401 而不是 419：错误模型不引入 419（技术设计 §4.2），CSRF 失败属于安全校验失败，沿用 403 / 401。
 重试规则（重申 ADR-015，不新增）：仅当服务端以上述码明确表示 CSRF 失败且业务 / 安全状态尚未消费时，客户端可重新签发并**最多重试一次**，不得循环刷新；`idempotencyRequired` 与版本化路由复用原 `Idempotency-Key` / `If-Match`；`securityFlow` 路由按 ADR-023 的逐操作恢复路径执行。
 `retryable` 字段（FC-033 候选）：不采纳为 `details` 保留键。重试与否是策略而非数据，已由 Route Registry 的 `csrfPolicy` / `securityFlow` 与上表码族共同决定，新增字段会造成同一致信息的双真相；A-7 之前实现的 CSRF 失败 403 与第二次失败即停止的规则不变。
@@ -94,8 +93,9 @@ V1 冻结规则：
 
 | 场景 | 码（示例） | HTTP |
 | --- | --- | --- |
-| 重认证缺失 / 过期 | `ADMIN_REAUTH_REQUIRED`（`details.reason = reauth-expired`）、流程会话缺失为 `ADMIN_REAUTH_SESSION_REQUIRED` | 403 |
-| 重认证状态冲突 | `REAUTH_STATE_CONFLICT`、`MFA_VERIFY_CONFLICT`、`MFA_RECOVERY_CONFLICT` | 409 |
+| 管理员身份缺失 / 已失效 | `ADMIN_SESSION_REQUIRED` | 401 |
+| 已登录但非管理员 | `ADMIN_REQUIRED` | 403 |
+| 管理员高风险写操作的 CSRF 失败 | `ADMIN_CSRF_REJECTED`（`details.reason = csrf-rejected`） | 401 |
 | 幂等：同 Key 不同请求 / 契约版本 / Key 版本 | `IDEMPOTENCY_REQUEST_MISMATCH`、`IDEMPOTENCY_CONTRACT_MISMATCH`、`IDEMPOTENCY_KEY_VERSION_MISMATCH` | 409 |
 | 幂等：并发进行中 | `IDEMPOTENCY_IN_PROGRESS` | 409 |
 | 乐观锁版本冲突 | 各域 `*_VERSION_CONFLICT`（如 `RECORD_VERSION_CONFLICT`、`FEATURE_VERSION_CONFLICT`、`ADMIN_USER_VERSION_CONFLICT`） | 409 |

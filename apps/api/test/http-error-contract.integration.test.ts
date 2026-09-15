@@ -40,12 +40,6 @@ describe("未匹配路由的错误契约净化（SEC-006）", () => {
       `1:${randomBytes(32).toString("hex")}\n`,
       "utf8",
     );
-    const totpKekFile = join(keyringDirectory, "totp.kek.keyring");
-    await writeFile(
-      totpKekFile,
-      `1:${randomBytes(32).toString("hex")}\n`,
-      "utf8",
-    );
 
     previousEnvironment.NODE_ENV = process.env["NODE_ENV"];
     previousEnvironment.DATABASE_URL = process.env["DATABASE_URL"];
@@ -55,19 +49,11 @@ describe("未匹配路由的错误契约净化（SEC-006）", () => {
       process.env["SESSION_HASH_KEYRING_TEST_PATH"];
     previousEnvironment.SESSION_HASH_KEY_VERSION =
       process.env["SESSION_HASH_KEY_VERSION"];
-    previousEnvironment.TOTP_KEK_KEYRING_FILE =
-      process.env["TOTP_KEK_KEYRING_FILE"];
-    previousEnvironment.TOTP_KEK_KEYRING_TEST_PATH =
-      process.env["TOTP_KEK_KEYRING_TEST_PATH"];
-    previousEnvironment.TOTP_KEK_VERSION = process.env["TOTP_KEK_VERSION"];
     process.env["NODE_ENV"] = "test";
     process.env["DATABASE_URL"] = runtime;
     process.env["SESSION_HASH_KEYRING_FILE"] = sessionKeyringFile;
     process.env["SESSION_HASH_KEYRING_TEST_PATH"] = "1";
     process.env["SESSION_HASH_KEY_VERSION"] = "1";
-    process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
-    process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
-    process.env["TOTP_KEK_VERSION"] = "1";
 
     const { AppModule } = await import("../src/app.module.js");
     app = await NestFactory.create(AppModule, { logger: false });

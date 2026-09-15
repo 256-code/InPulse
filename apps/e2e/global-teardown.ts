@@ -47,14 +47,6 @@ async function cleanupFixture(
         DELETE FROM app.user_sessions
         WHERE user_id = ${runtime.userId}
       `;
-      await transaction`
-        DELETE FROM app.user_totp_factors
-        WHERE user_id = ${runtime.userId}
-      `;
-      await transaction`
-        DELETE FROM app.mfa_recovery_codes
-        WHERE user_id = ${runtime.userId}
-      `;
     });
   } finally {
     await sql.end({ timeout: 5 });

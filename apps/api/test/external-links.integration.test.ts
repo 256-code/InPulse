@@ -303,7 +303,6 @@ async function lifecycleFixture(feature = false) {
   const record = await publish(f);
   const adminId = await createUser(db.sql, { admin: true });
   const admin = await session(adminId);
-  await db.sql`UPDATE app.user_sessions SET reauthenticated_at=now(),mfa_verified_at=now() WHERE user_id=${adminId}`;
   return { ...f, record, adminId, admin };
 }
 async function change(

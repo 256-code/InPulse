@@ -411,12 +411,6 @@ beforeAll(async () => {
     "1:" + sessionKey.toString("hex") + String.fromCharCode(10),
     "utf8",
   );
-  const totpKekFile = join(keyringDirectory, "totp.kek.keyring");
-  await writeFile(
-    totpKekFile,
-    "1:" + randomBytes(32).toString("hex") + String.fromCharCode(10),
-    "utf8",
-  );
   memberCookie = (
     await createAuthenticatedSession(runtime.sql, sessionKeyring, memberUser)
   ).cookie;
@@ -453,9 +447,6 @@ beforeAll(async () => {
     SESSION_HASH_KEYRING_TEST_PATH:
       process.env["SESSION_HASH_KEYRING_TEST_PATH"],
     SESSION_HASH_KEY_VERSION: process.env["SESSION_HASH_KEY_VERSION"],
-    TOTP_KEK_KEYRING_FILE: process.env["TOTP_KEK_KEYRING_FILE"],
-    TOTP_KEK_KEYRING_TEST_PATH: process.env["TOTP_KEK_KEYRING_TEST_PATH"],
-    TOTP_KEK_VERSION: process.env["TOTP_KEK_VERSION"],
   };
   process.env["NODE_ENV"] = "test";
   process.env["DATABASE_URL"] = urls.runtime;
@@ -465,9 +456,6 @@ beforeAll(async () => {
   process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_FILE"] = idempotencyKeyringFile;
   process.env["IDEMPOTENCY_FINGERPRINT_KEYRING_TEST_PATH"] = "1";
   process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"] = String(HMAC_KEY_VERSION);
-  process.env["TOTP_KEK_VERSION"] = String(HMAC_KEY_VERSION);
-  process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
-  process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
 
   const { AppModule } = await import("../src/app.module.js");
   app = await NestFactory.create(AppModule, { logger: false });

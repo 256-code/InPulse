@@ -2,16 +2,10 @@ import { Injectable } from "@nestjs/common";
 
 import type { PreauthSession } from "./preauth-session.repository.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
-import type {
-  UserCredential,
-  UserSessionIssueSnapshot,
-} from "./user-credential.repository.js";
+import type { UserCredential } from "./user-credential.repository.js";
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import type { UserAuthState } from "./user-session.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
-import type { TotpFactorLoginSnapshot } from "./user-totp-factor.repository.js";
-import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
-import { PostgresMfaRecoveryCodeRepository } from "./mfa-recovery-code.repository.js";
 import type { TransactionContext } from "../database/transaction-context.js";
 import {
   AUTH_CSRF_MAX_AGE_SECONDS,
@@ -40,13 +34,11 @@ export interface LoginInput {
   readonly clientIp: string;
   readonly cookieHeader: string | undefined;
   readonly csrfToken: string | undefined;
-  readonly challengeMode?: "totp" | "recovery";
 }
 
 export interface LoginResult {
   readonly csrfToken: string;
   readonly authState: UserAuthState;
-  readonly enrollmentGeneration?: number;
   readonly cookies: readonly CsrfSetCookie[];
 }
 
@@ -56,9 +48,10 @@ interface PreparedLogin {
 }
 
 /**
- * 登录纵切片：
+ * 登录纵切片。ADR-031 之后登录只保留口令因素，通过后直接签发
+ * `AUTHENTICATED` Session，不再有 MFA 注册、TOTP 验证与恢复码步骤：
  * 1. 只接受匿名预认证 Session 与其 CSRF；
- * 2. 已存在有效认证/受限 Session 时返回 409；
+ * 2. 已存在有效认证 Session 时返回 409；
  * 3. 在 Argon2id 前按账号 + IP + 全局检查登录限流；
  * 4. Argon2id 校验放在事务外，避免长时间 CPU 计算持锁；
  * 5. 密码通过后在单个事务内重新锁定用户、条件消费预认证、创建显式状态
@@ -70,8 +63,6 @@ export class LoginService {
     private readonly unitOfWork: PostgresUnitOfWork,
     private readonly preauthRepository: PostgresPreauthSessionRepository,
     private readonly userRepository: PostgresUserCredentialRepository,
-    private readonly factorRepository: PostgresUserTotpFactorRepository,
-    private readonly recoveryCodeRepository: PostgresMfaRecoveryCodeRepository,
     private readonly sessionRepository: PostgresUserSessionRepository,
     private readonly csrfRepository: PostgresSessionCsrfTokenRepository,
     private readonly tokenService: SessionTokenService,
@@ -91,12 +82,7 @@ export class LoginService {
       }
       throw error;
     }
-    return this.issueSession(
-      prepared,
-      input.cookieHeader,
-      loginName,
-      input.challengeMode ?? "totp",
-    );
+    return this.issueSession(prepared, input.cookieHeader, loginName);
   }
 
   private async prepare(
@@ -207,7 +193,6 @@ export class LoginService {
     prepared: PreparedLogin,
     cookieHeader: string | undefined,
     loginName: string,
-    challengeMode: "totp" | "recovery",
   ): Promise<LoginResult> {
     return this.unitOfWork.run(async (tx) => {
       const sessionToken = parseCookieHeader(cookieHeader, SESSION_COOKIE_NAME);
@@ -235,18 +220,7 @@ export class LoginService {
         throw invalidCredentials();
       }
 
-      const factorSnapshot = await this.factorRepository.findLoginSnapshot(
-        tx,
-        snapshot.id,
-      );
-      const auth = await authStateFor(
-        tx,
-        snapshot,
-        factorSnapshot,
-        challengeMode,
-        this.recoveryCodeRepository,
-      );
-      const authState = auth.authState;
+      const authState: UserAuthState = "AUTHENTICATED";
       const issuedSessionToken = generateOpaqueToken();
       const issuedCsrfToken = generateOpaqueToken();
       const sessionHash = this.tokenService.hash(issuedSessionToken);
@@ -290,9 +264,6 @@ export class LoginService {
       return {
         csrfToken: issuedCsrfToken,
         authState,
-        ...(auth.enrollmentGeneration === undefined
-          ? {}
-          : { enrollmentGeneration: auth.enrollmentGeneration }),
         cookies: [
           {
             name: PREAUTH_COOKIE_NAME,
@@ -326,38 +297,4 @@ function invalidCredentials(): LoginError {
     "预认证 Session、CSRF 或用户名密码无效",
     "invalid-credentials",
   );
-}
-
-async function authStateFor(
-  tx: TransactionContext,
-  snapshot: UserSessionIssueSnapshot,
-  factor: TotpFactorLoginSnapshot | undefined,
-  challengeMode: "totp" | "recovery",
-  recoveryCodeRepository: PostgresMfaRecoveryCodeRepository,
-): Promise<{
-  readonly authState: UserAuthState;
-  readonly enrollmentGeneration?: number;
-}> {
-  if (!snapshot.isAdmin) {
-    return { authState: "AUTHENTICATED" };
-  }
-  if (factor === undefined) {
-    return { authState: "MFA_ENROLLMENT", enrollmentGeneration: 0 };
-  }
-  if (factor.status !== "ACTIVE") {
-    return {
-      authState: "MFA_ENROLLMENT",
-      enrollmentGeneration: factor.enrollmentGeneration,
-    };
-  }
-  if (challengeMode === "recovery") {
-    const hashes = await recoveryCodeRepository.findActiveHashes(
-      tx,
-      snapshot.id,
-    );
-    if (hashes.length > 0) {
-      return { authState: "RECOVERY_CHALLENGE" };
-    }
-  }
-  return { authState: "MFA_CHALLENGE" };
 }

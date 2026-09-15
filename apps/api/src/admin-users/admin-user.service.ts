@@ -18,7 +18,7 @@ import {
   adminUserSelfMutation,
   adminUserStateConflict,
   adminUserVersionConflict,
-  lastMfaAdmin,
+  lastActiveAdmin,
 } from "./admin-user.error.js";
 
 export interface AdminUserMutationMeta {
@@ -69,15 +69,15 @@ export class AdminUserService {
     const candidate = await this.repository.find(tx, userId);
     if (candidate === undefined) throw adminUserNotFound();
     this.rejectSelfRoleRemoval(candidate, input, meta.actorId);
-    const requiresMfaGuard =
+    const requiresAdminGuard =
       input.isAdmin !== undefined &&
       candidate.isAdmin &&
       candidate.status === "ACTIVE" &&
       input.isAdmin !== candidate.isAdmin;
-    const current = await this.lockTarget(tx, userId, requiresMfaGuard);
+    const current = await this.lockTarget(tx, userId, requiresAdminGuard);
     if (current.rowVersion !== version) throw adminUserVersionConflict();
     this.rejectSelfRoleRemoval(current, input, meta.actorId);
-    if (requiresMfaGuard) await this.ensureOtherMfaAdmin(tx, current);
+    if (requiresAdminGuard) await this.ensureOtherActiveAdmin(tx, current);
     const actor = await this.lockActorSessionAndVerify(tx, meta.headers);
     this.assertActor(actor.userId, meta.actorId);
     const updated = await this.repository.update(tx, current, input);
@@ -99,12 +99,13 @@ export class AdminUserService {
     const candidate = await this.repository.find(tx, userId);
     if (candidate === undefined) throw adminUserNotFound();
     if (candidate.id === meta.actorId) throw adminUserSelfMutation();
-    const requiresMfaGuard = candidate.isAdmin && candidate.status === "ACTIVE";
-    const current = await this.lockTarget(tx, userId, requiresMfaGuard);
+    const requiresAdminGuard =
+      candidate.isAdmin && candidate.status === "ACTIVE";
+    const current = await this.lockTarget(tx, userId, requiresAdminGuard);
     if (current.rowVersion !== version) throw adminUserVersionConflict();
     if (current.status !== "ACTIVE") throw adminUserStateConflict();
     if (current.id === meta.actorId) throw adminUserSelfMutation();
-    if (requiresMfaGuard) await this.ensureOtherMfaAdmin(tx, current);
+    if (requiresAdminGuard) await this.ensureOtherActiveAdmin(tx, current);
     const actor = await this.lockActorSessionAndVerify(tx, meta.headers);
     this.assertActor(actor.userId, meta.actorId);
     const disabled = await this.repository.disable(tx, current);
@@ -193,29 +194,29 @@ export class AdminUserService {
   private async lockTarget(
     tx: TransactionContext,
     userId: number,
-    requiresMfaGuard: boolean,
+    requiresAdminGuard: boolean,
   ): Promise<AdminUserItem> {
-    if (!requiresMfaGuard) {
+    if (!requiresAdminGuard) {
       const target = await this.repository.find(tx, userId, true);
       if (target === undefined) throw adminUserNotFound();
       return target;
     }
-    await this.repository.activeMfaAdminIds(tx);
+    await this.repository.activeAdminIds(tx);
     const target = await this.repository.find(tx, userId, true);
     if (target === undefined) throw adminUserNotFound();
     return target;
   }
 
-  private async ensureOtherMfaAdmin(
+  private async ensureOtherActiveAdmin(
     tx: TransactionContext,
     target: AdminUserItem,
   ): Promise<void> {
-    const ids = await this.repository.activeMfaAdminIds(tx);
+    const ids = await this.repository.activeAdminIds(tx);
     if (ids.every((id) => id !== target.id)) {
-      throw lastMfaAdmin();
+      throw lastActiveAdmin();
     }
     if (ids.filter((id) => id !== target.id).length === 0) {
-      throw lastMfaAdmin();
+      throw lastActiveAdmin();
     }
   }
 

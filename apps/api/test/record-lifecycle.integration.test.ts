@@ -250,7 +250,6 @@ async function lifecycleFixture(feature = false) {
   const record = await publish(f);
   const adminId = await createUser(db.sql, { admin: true });
   const admin = await session(adminId);
-  await db.sql`UPDATE app.user_sessions SET reauthenticated_at=now(),mfa_verified_at=now() WHERE user_id=${adminId}`;
   return { ...f, record, adminId, admin };
 }
 async function change(
@@ -425,7 +424,7 @@ describe("F21 ADR-024 lifecycle", () => {
     expect(restored).toMatchObject({ status: "PUBLISHED" });
     expect(restored).not.toHaveProperty("voidReason");
   });
-  it("checks both timestamps and current authentication on safe same-Key replay", async () => {
+  it("replays the same Key and re-checks current administrator identity", async () => {
     const f = await lifecycleFixture(),
       key = randomUUID();
     const first = await change(f, false, f.record.rowVersion, f.admin, key);
@@ -434,17 +433,6 @@ describe("F21 ADR-024 lifecycle", () => {
     expect(
       await (await change(f, false, f.record.rowVersion, f.admin, key)).json(),
     ).toEqual(original);
-    for (const column of ["reauthenticated_at", "mfa_verified_at"]) {
-      await db.sql.unsafe(
-        `UPDATE app.user_sessions SET ${column}=now()-interval '6 minutes' WHERE user_id=$1`,
-        [f.adminId],
-      );
-      await failure(
-        await change(f, false, f.record.rowVersion, f.admin, key),
-        403,
-      );
-      await db.sql`UPDATE app.user_sessions SET reauthenticated_at=now(),mfa_verified_at=now() WHERE user_id=${f.adminId}`;
-    }
     await failure(
       await change(f, false, f.record.rowVersion, f.admin, key, "不同原因"),
       409,
@@ -739,7 +727,7 @@ it("holds parent locks until projections commit, serializing a following archive
   expect(archived).toBe(true);
 });
 
-it("rechecks dual-factor freshness after waiting for the record lock", async () => {
+it("rechecks administrator identity after waiting for the record lock", async () => {
   const f = await lifecycleFixture(),
     before = await state(f);
   let release!: () => void, locked!: () => void;
@@ -761,7 +749,7 @@ it("rechecks dual-factor freshness after waiting for the record lock", async () 
       },
       { timeout: 5000, interval: 20 },
     );
-    await db.sql`UPDATE app.user_sessions SET mfa_verified_at=now()-interval '6 minutes' WHERE user_id=${f.adminId}`;
+    await db.sql`UPDATE app.users SET is_admin=false,row_version=row_version+1 WHERE id=${f.adminId}`;
   } finally {
     release();
     await blocker;
@@ -769,7 +757,7 @@ it("rechecks dual-factor freshness after waiting for the record lock", async () 
   await failure(await pending, 403);
   expect(await state(f)).toEqual(before);
 });
-it("validates HTTP VOID versions and rejects absent factors without exposing reasons", async () => {
+it("validates HTTP VOID versions and hides record reasons from unauthorized readers", async () => {
   const f = await lifecycleFixture();
   expect((await change(f)).status).toBe(200);
   const member = await session(f.userId),
@@ -784,14 +772,6 @@ it("validates HTTP VOID versions and rejects absent factors without exposing rea
   const denied = await fetch(url, { headers: { cookie: member.cookie } });
   expect(denied.status).toBe(404);
   expect(await denied.text()).not.toContain("生命周期测试原因");
-  for (const column of ["reauthenticated_at", "mfa_verified_at"]) {
-    await db.sql.unsafe(
-      `UPDATE app.user_sessions SET ${column}=NULL WHERE user_id=$1`,
-      [f.adminId],
-    );
-    await failure(await change(f, true, f.record.rowVersion + 1), 403);
-    await db.sql`UPDATE app.user_sessions SET reauthenticated_at=now(),mfa_verified_at=now() WHERE user_id=${f.adminId}`;
-  }
 });
 for (const effect of ["audit", "visibility", "activity", "search"] as const)
   it("rolls back restore when " + effect + " fails", async () => {

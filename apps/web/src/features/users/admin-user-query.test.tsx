@@ -79,13 +79,7 @@ describe("admin user query", () => {
     );
   });
 
-  it("maps admin reauth, conflict and permission errors without leaking internals", () => {
-    const reauth = new ApiError(403, {
-      code: "ADMIN_REAUTH_REQUIRED",
-      message: "internal-reauth",
-      details: {},
-      requestId: "r",
-    });
+  it("maps conflict and permission errors without leaking internals", () => {
     const version = new ApiError(409, {
       code: "ADMIN_USER_VERSION_CONFLICT",
       message: "internal-version",
@@ -98,9 +92,6 @@ describe("admin user query", () => {
       details: {},
       requestId: "f",
     });
-    expect(adminUserErrorMessage(reauth)).toBe(
-      "请先完成管理员安全验证，再重新提交。",
-    );
     expect(adminUserErrorMessage(version)).toContain("加载最新版本");
     expect(adminUserErrorMessage(forbidden)).not.toContain(
       "internal-forbidden",

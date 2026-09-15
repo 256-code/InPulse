@@ -44,7 +44,7 @@ export type AdminUserPath = z.infer<typeof adminUserPathSchema>;
 
 /**
  * 管理员可见的用户条目。返回用户管理页面需要的登录名、状态、版本与时间，
- * 不返回密码哈希、TOTP 密文、恢复码或任何认证材料。
+ * 不返回密码哈希或任何认证材料。
  */
 export const adminUserItemSchema = z
   .object({
@@ -92,7 +92,7 @@ export type AdminUserCreateRequest = z.infer<
 
 /**
  * 编辑用户请求。字段缺省表示保持不变；`email`、`avatarUrl` 传 null 表示清空；
- * `isAdmin` 为管理员角色变更，服务端执行最后一名可用 MFA 管理员保护。
+ * `isAdmin` 为管理员角色变更，服务端执行最后一名可用管理员保护。
  */
 export const adminUserUpdateRequestSchema = z
   .object({

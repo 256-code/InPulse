@@ -10,7 +10,7 @@ import { AuditModule } from "./audit.module.js";
 /**
  * F-08 原始审计读取模块。独立于 AuditModule，避免与 AuthModule
  * （已 import AuditModule）形成循环依赖；需要 Session keyring（游标）、
- * AdminHighRiskAuthService（重认证）与 audit_reader 连接。
+ * AdminHighRiskAuthService（管理员高风险门禁）与 audit_reader 连接。
  */
 @Module({
   imports: [AuthModule, DatabaseModule, AuditModule],

@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 
 import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
 test("普通成员不能访问用户管理页面", async ({ browser }) => {
   test.setTimeout(60_000);
@@ -29,7 +27,7 @@ test("普通成员不能访问用户管理页面", async ({ browser }) => {
 
 test("管理员完成用户新增、编辑、停用、启用与强制退出", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(120_000);
   const runtime = await loadRuntime();
@@ -42,7 +40,7 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
   const name = `F-03 用户 ${suffix}`;
 
   try {
-    await loginAdminViaUi(page, runtime, mfaAdmin);
+    await loginAdminViaUi(page, runtime, admin);
     await page.goto("/settings");
     await expect(
       page.getByRole("heading", { name: "成员与设置" }),
@@ -56,19 +54,6 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
     await createDialog.getByLabel("初始密码").fill("f03-e2e-password-123");
     await createDialog.getByRole("button", { name: /保\s*存/ }).click();
 
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible();
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth).toBeHidden();
-    await expect(
-      createDialog.getByText("管理员安全验证已完成，请重新提交当前操作。", {
-        exact: true,
-      }),
-    ).toBeVisible();
-    await createDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(page.getByText("用户创建成功", { exact: true })).toBeVisible();
 
     const card = page.locator(".member-row").filter({ hasText: loginName });

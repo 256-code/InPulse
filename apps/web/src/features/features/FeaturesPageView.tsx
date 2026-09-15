@@ -11,7 +11,6 @@ import {
   type InpulseApiClient,
   type FeatureItem,
 } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
 import {
@@ -93,7 +92,6 @@ export function FeaturesPageView({
     action: FeatureChange["action"];
     item?: FeatureItem;
   } | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   // 模块本体的编辑/归档/恢复与模块列表页共用同一个编辑器弹层。
   const [moduleRequest, setModuleRequest] =
@@ -826,13 +824,6 @@ export function FeaturesPageView({
                   )}
                 />
                 <p role="alert">{errors.reason?.message}</p>
-                <Button
-                  className="secondary-button"
-                  onClick={() => setReauthOpen(true)}
-                  disabled={mutation.isPending || reloading || conflict}
-                >
-                  管理员安全验证
-                </Button>
               </div>
             ) : (
               <>
@@ -1030,14 +1021,6 @@ export function FeaturesPageView({
           </div>
         </form>
       </Modal>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          mutation.reset();
-        }}
-      />
       <ModuleEditorModal
         projectId={projectId}
         client={client}

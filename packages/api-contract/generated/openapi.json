@@ -199,7 +199,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -277,7 +277,7 @@
     "/admin/users/{userId}": {
       "patch": {
         "operationId": "updateUser",
-        "summary": "系统管理员编辑用户资料与管理员角色；移除最后一名可用 MFA 管理员前按编号锁定全部 MFA 管理员并拒绝。",
+        "summary": "系统管理员编辑用户资料与管理员角色；移除最后一名可用管理员前按编号锁定全部活跃管理员并拒绝。",
         "responses": {
           "200": {
             "description": "成功",
@@ -361,7 +361,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -410,7 +410,7 @@
           "concurrencyPolicy": {
             "rowVersion": "required",
             "lockOrder": "none",
-            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃 MFA 管理员；版本或状态冲突返回 409，不自动重试"
+            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃管理员；版本或状态冲突返回 409，不自动重试"
           },
           "auditAction": "admin.user.update"
         },
@@ -537,7 +537,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -571,7 +571,7 @@
           "concurrencyPolicy": {
             "rowVersion": "required",
             "lockOrder": "none",
-            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃 MFA 管理员；版本或状态冲突返回 409，不自动重试"
+            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃管理员；版本或状态冲突返回 409，不自动重试"
           },
           "auditAction": "admin.user.disable"
         },
@@ -688,7 +688,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -722,7 +722,7 @@
           "concurrencyPolicy": {
             "rowVersion": "required",
             "lockOrder": "none",
-            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃 MFA 管理员；版本或状态冲突返回 409，不自动重试"
+            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃管理员；版本或状态冲突返回 409，不自动重试"
           },
           "auditAction": "admin.user.enable"
         },
@@ -839,7 +839,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -873,7 +873,7 @@
           "concurrencyPolicy": {
             "rowVersion": "required",
             "lockOrder": "none",
-            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃 MFA 管理员；版本或状态冲突返回 409，不自动重试"
+            "retry": "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃管理员；版本或状态冲突返回 409，不自动重试"
           },
           "auditAction": "admin.user.force_logout"
         },
@@ -913,7 +913,7 @@
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
-        "summary": "系统管理员读取原始审计链；要求完整管理员 Session 且密码 + 当前 TOTP 重认证在 5 分钟内；AuditQueryService 使用独立 audit_reader 只读连接查询，返回前必须由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
+        "summary": "系统管理员读取原始审计链；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF；AuditQueryService 使用独立 audit_reader 只读连接查询，返回前必须由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
         "responses": {
           "200": {
             "description": "成功",
@@ -967,7 +967,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -1053,124 +1053,6 @@
             }
           }
         ]
-      }
-    },
-    "/auth/admin/mfa-reset": {
-      "post": {
-        "operationId": "resetAdminMfa",
-        "summary": "另一名已完成密码 + 当前 TOTP 重认证的系统管理员重置目标管理员 MFA：同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销全部 Session 并写审计。",
-        "responses": {
-          "204": {
-            "description": "成功且无响应体"
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或当前用户不可访问",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "idempotencyRequired",
-          "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
-          "behaviorHeaders": [],
-          "idempotencyReplayPolicy": {
-            "version": "1.0.0",
-            "success": {
-              "204": {
-                "noBody": true
-              }
-            }
-          },
-          "replayAuthorizationPolicy": {
-            "version": "1.0.0",
-            "actorOnly": true
-          },
-          "securityFlowPolicy": "none",
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "admin.mfa.reset"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetAdminMfaRequest"
-              }
-            }
-          }
-        }
       }
     },
     "/auth/csrf": {
@@ -1316,637 +1198,6 @@
             }
           }
         ]
-      }
-    },
-    "/auth/mfa/enrollment/confirm": {
-      "post": {
-        "operationId": "confirmMfaEnrollment",
-        "summary": "确认 TOTP 注册：条件接受 pending Secret 的当前 time-step，启用因子、签发恢复码，并在同一事务撤销受限 Session、轮换为完整 Session/CSRF。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfirmMfaEnrollmentResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "条件激活对应 ENROLLING generation；恢复码 Hash 一次签发、原子失效旧批次，旧 Session 撤销并轮换新 Session/CSRF",
-            "clientRecoveryPath": "清 Cookie 后重新登录；若因子已激活，完成 MFA 后于下一 time-step 重认证并轮换恢复码"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "none"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmMfaEnrollmentRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/mfa/enrollment/start": {
-      "post": {
-        "operationId": "startMfaEnrollment",
-        "summary": "管理员首次注册 TOTP：按 user → factor → current Session 锁序条件创建新 pending，返回只展示一次 Secret 与 otpauth URI。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StartMfaEnrollmentResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "同一旧 enrollment generation 只允许一个请求创建新 pending；按 user → factor → current Session 锁序条件更新，失败方返回 409",
-            "clientRecoveryPath": "重新登录读取当前 enrollment generation，再以该 generation 重新开始"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "none"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StartMfaEnrollmentRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/mfa/reauthenticate": {
-      "post": {
-        "operationId": "reauthenticateAdmin",
-        "summary": "完整管理员 Session 使用密码与当前未使用 TOTP 完成重认证，并在同一事务刷新两个新鲜度时间戳与一次性 rotation generation。",
-        "responses": {
-          "204": {
-            "description": "成功且无响应体"
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "同一完整 Session 的密码与 ACTIVE 因子当前未使用 TOTP time-step 条件通过；成功时同一服务端事务时间原子刷新 reauthenticated_at、mfa_verified_at 并递增 recovery_rotation_generation",
-            "clientRecoveryPath": "响应丢失后在下一 TOTP time-step 重新认证；若已进入下一高风险操作，由 RequireReauthGuard 按 5 分钟窗口判断"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "none"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReauthenticateAdminRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/mfa/recovery-codes/consume": {
-      "post": {
-        "operationId": "consumeMfaRecoveryCode",
-        "summary": "管理员密码阶段选择恢复码挑战后，原子消费一个未使用恢复码、失效旧代码集，并将当前 RECOVERY_CHALLENGE Session 升级为完整 Session。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConsumeMfaRecoveryCodeResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "同一未使用恢复码 Hash 只被接受一次；按 user → factor → Session 锁序在事务内条件写 used_at 并失效同用户全部旧码，随后条件升级当前 RECOVERY_CHALLENGE Session 并签发新 CSRF",
-            "clientRecoveryPath": "响应丢失且 Session 已升级时重新登录完成 MFA；仍未升级则在下一可用恢复码重试，服务端不保存旧明文"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "auth.mfa_recovery_consume"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConsumeMfaRecoveryCodeRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/mfa/recovery-codes/rotate": {
-      "post": {
-        "operationId": "rotateMfaRecoveryCodes",
-        "summary": "完整管理员 Session 在 5 分钟内完成密码 + 当前 TOTP 重认证后，原子消费该次 rotation generation、失效全部旧恢复码，并只展示一次新恢复码。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RotateMfaRecoveryCodesResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "同一完整 Session 只消费一次 reauthenticateAdmin 签发的 recovery_rotation_generation；按 user → factor → Session 锁序条件更新 consumed generation，同一 generation 的竞争者返回 409，并在同一事务失效旧 Hash 后签发新码",
-            "clientRecoveryPath": "响应丢失后不能从 Hash 恢复旧明文；在下一 TOTP time-step 重新调用 reauthenticateAdmin，再于新 generation 轮换"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "auth.mfa_recovery_rotate"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ]
-      }
-    },
-    "/auth/mfa/verify": {
-      "post": {
-        "operationId": "verifyMfa",
-        "summary": "管理员完成当前 TOTP 验证：条件接受未使用 time-step，并在同一事务将 MFA_CHALLENGE Session 升级为 AUTHENTICATED。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyMfaResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "securityFlow",
-          "idempotencyExceptionAdr": "ADR-023",
-          "idempotencyContractVersion": "none",
-          "idempotencyFingerprintVersion": "none",
-          "behaviorHeaders": "none",
-          "idempotencyReplayPolicy": "none",
-          "replayAuthorizationPolicy": "none",
-          "securityFlowPolicy": {
-            "singleConsumptionOrNaturalIdempotency": "同一 ACTIVE 因子的未使用 TOTP time-step 只接受一次；成功时在同一事务将当前 MFA_CHALLENGE Session 条件升级为 AUTHENTICATED 并刷新 last_accepted_step",
-            "clientRecoveryPath": "若响应丢失且 Session 已升级，读取当前用户；仍为 MFA_CHALLENGE 时于下一 time-step 重新验证"
-          },
-          "versionPolicy": "none",
-          "concurrencyPolicy": "none",
-          "auditAction": "none"
-        },
-        "parameters": [
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VerifyMfaRequest"
-              }
-            }
-          }
-        }
       }
     },
     "/change-records": {
@@ -4282,7 +3533,7 @@
     "/projects/{projectId}/archive": {
       "post": {
         "operationId": "archiveProject",
-        "summary": "系统管理员归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求 5 分钟内密码/TOTP 重认证；归档后全部下级只读、历史仍可读，审计、活动与搜索投影在同一事务更新。",
+        "summary": "系统管理员归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求当前有效的完整管理员 Session（is_admin）；归档后全部下级只读、历史仍可读，审计、活动与搜索投影在同一事务更新。",
         "responses": {
           "200": {
             "description": "成功",
@@ -4366,7 +3617,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -4469,7 +3720,7 @@
     "/projects/{projectId}/archive-preview": {
       "get": {
         "operationId": "getProjectArchivePreview",
-        "summary": "系统管理员在归档前读取未完成任务数提醒；要求完整管理员 Session 且密码与当前 TOTP 重认证均在 5 分钟内，不要求 CSRF 或幂等键。",
+        "summary": "系统管理员在归档前读取未完成任务数提醒；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF 或幂等键。",
         "responses": {
           "200": {
             "description": "成功",
@@ -4553,7 +3804,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -5427,7 +4678,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -6069,7 +5320,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -6176,7 +5427,7 @@
     "/projects/{projectId}/members": {
       "get": {
         "operationId": "listProjectMembers",
-        "summary": "系统管理员读取项目成员完整历史，仅允许最近 5 分钟内完成密码与 TOTP 重认证；普通成员与非成员统一 403/404。",
+        "summary": "系统管理员读取项目成员完整历史，要求当前有效的完整管理员 Session（is_admin）；普通成员与非成员统一 403/404。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6260,7 +5511,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -6373,7 +5624,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -6544,7 +5795,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -6730,7 +5981,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -6884,7 +6135,7 @@
       },
       "post": {
         "operationId": "createModule",
-        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7061,7 +6312,7 @@
     "/projects/{projectId}/modules/{moduleId}": {
       "patch": {
         "operationId": "updateModule",
-        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7260,7 +6511,7 @@
     "/projects/{projectId}/modules/{moduleId}/archive": {
       "post": {
         "operationId": "archiveModule",
-        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7344,7 +6595,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -7582,7 +6833,7 @@
       },
       "post": {
         "operationId": "createFeature",
-        "summary": "create 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "create 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7906,7 +7157,7 @@
       },
       "patch": {
         "operationId": "updateFeature",
-        "summary": "update 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "update 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8119,7 +7370,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/archive": {
       "post": {
         "operationId": "archiveFeature",
-        "summary": "archive 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "archive 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8203,7 +7454,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -8332,7 +7583,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/restore": {
       "post": {
         "operationId": "restoreFeature",
-        "summary": "restore 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "restore 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8416,7 +7667,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -10168,7 +9419,7 @@
     "/projects/{projectId}/modules/{moduleId}/restore": {
       "post": {
         "operationId": "restoreModule",
-        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需管理员重认证与原因。",
+        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -10252,7 +9503,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -12804,7 +12055,7 @@
     "/projects/{projectId}/restore": {
       "post": {
         "operationId": "restoreProject",
-        "summary": "系统管理员恢复已归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求 5 分钟内密码/TOTP 重认证；只恢复项目自身状态、不改变下级数据，审计、活动与搜索投影在同一事务更新。",
+        "summary": "系统管理员恢复已归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求当前有效的完整管理员 Session（is_admin）；只恢复项目自身状态、不改变下级数据，审计、活动与搜索投影在同一事务更新。",
         "responses": {
           "200": {
             "description": "成功",
@@ -12888,7 +12139,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSessionWithReauthentication",
+          "authPolicy": "adminSession",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
@@ -15462,100 +14713,6 @@
         ],
         "additionalProperties": false
       },
-      "ConfirmMfaEnrollmentRequest": {
-        "type": "object",
-        "properties": {
-          "expectedEnrollmentGeneration": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1000000
-          },
-          "code": {
-            "type": "string",
-            "pattern": "^\\d{6}$"
-          }
-        },
-        "required": [
-          "expectedEnrollmentGeneration",
-          "code"
-        ],
-        "additionalProperties": false
-      },
-      "ConfirmMfaEnrollmentResponse": {
-        "type": "object",
-        "properties": {
-          "csrfToken": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          },
-          "authState": {
-            "type": "string",
-            "const": "AUTHENTICATED"
-          },
-          "recoveryCodes": {
-            "minItems": 10,
-            "maxItems": 10,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-HJ-NP-Z2-9]{20}$"
-            }
-          }
-        },
-        "required": [
-          "csrfToken",
-          "authState",
-          "recoveryCodes"
-        ],
-        "additionalProperties": false
-      },
-      "ConsumeMfaRecoveryCodeHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
-        "additionalProperties": false
-      },
-      "ConsumeMfaRecoveryCodeRequest": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "pattern": "^[A-HJ-NP-Z2-9]{20}$"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "additionalProperties": false
-      },
-      "ConsumeMfaRecoveryCodeResponse": {
-        "type": "object",
-        "properties": {
-          "csrfToken": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          },
-          "authState": {
-            "type": "string",
-            "const": "AUTHENTICATED"
-          }
-        },
-        "required": [
-          "csrfToken",
-          "authState"
-        ],
-        "additionalProperties": false
-      },
       "CreateProjectHeaders": {
         "type": "object",
         "properties": {
@@ -17150,20 +16307,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1024
-          },
-          "challengeMode": {
-            "default": "totp",
-            "type": "string",
-            "enum": [
-              "totp",
-              "recovery"
-            ]
           }
         },
         "required": [
           "loginName",
-          "password",
-          "challengeMode"
+          "password"
         ],
         "additionalProperties": false
       },
@@ -17177,17 +16325,7 @@
           },
           "authState": {
             "type": "string",
-            "enum": [
-              "AUTHENTICATED",
-              "MFA_ENROLLMENT",
-              "MFA_CHALLENGE",
-              "RECOVERY_CHALLENGE"
-            ]
-          },
-          "enrollmentGeneration": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1000000
+            "const": "AUTHENTICATED"
           }
         },
         "required": [
@@ -17205,20 +16343,6 @@
             "maxLength": 43
           }
         },
-        "additionalProperties": false
-      },
-      "MfaEnrollmentHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
         "additionalProperties": false
       },
       "ModuleArchiveRequest": {
@@ -19498,39 +18622,6 @@
         ],
         "additionalProperties": false
       },
-      "ReauthenticateAdminHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
-        "additionalProperties": false
-      },
-      "ReauthenticateAdminRequest": {
-        "type": "object",
-        "properties": {
-          "password": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 1024
-          },
-          "code": {
-            "type": "string",
-            "pattern": "^\\d{6}$"
-          }
-        },
-        "required": [
-          "password",
-          "code"
-        ],
-        "additionalProperties": false
-      },
       "RecentRecordItem": {
         "type": "object",
         "properties": {
@@ -20330,72 +19421,6 @@
         ],
         "additionalProperties": false
       },
-      "ResetAdminMfaHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
-        "additionalProperties": false
-      },
-      "ResetAdminMfaRequest": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 500
-          }
-        },
-        "required": [
-          "userId",
-          "reason"
-        ],
-        "additionalProperties": false
-      },
-      "RotateMfaRecoveryCodesHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
-        "additionalProperties": false
-      },
-      "RotateMfaRecoveryCodesResponse": {
-        "type": "object",
-        "properties": {
-          "recoveryCodes": {
-            "minItems": 10,
-            "maxItems": 10,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-HJ-NP-Z2-9]{20}$"
-            }
-          }
-        },
-        "required": [
-          "recoveryCodes"
-        ],
-        "additionalProperties": false
-      },
       "SearchItem": {
         "type": "object",
         "properties": {
@@ -20498,46 +19523,6 @@
         },
         "required": [
           "q"
-        ],
-        "additionalProperties": false
-      },
-      "StartMfaEnrollmentRequest": {
-        "type": "object",
-        "properties": {
-          "expectedEnrollmentGeneration": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1000000
-          }
-        },
-        "required": [
-          "expectedEnrollmentGeneration"
-        ],
-        "additionalProperties": false
-      },
-      "StartMfaEnrollmentResponse": {
-        "type": "object",
-        "properties": {
-          "enrollmentGeneration": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          },
-          "secret": {
-            "type": "string",
-            "maxLength": 64,
-            "pattern": "^[A-Z2-7]{32}$"
-          },
-          "otpauthUri": {
-            "type": "string",
-            "maxLength": 2048,
-            "pattern": "^otpauth:\\/\\/totp\\/.*"
-          }
-        },
-        "required": [
-          "enrollmentGeneration",
-          "secret",
-          "otpauthUri"
         ],
         "additionalProperties": false
       },
@@ -23042,12 +22027,7 @@
       },
       "UserAuthState": {
         "type": "string",
-        "enum": [
-          "AUTHENTICATED",
-          "MFA_ENROLLMENT",
-          "MFA_CHALLENGE",
-          "RECOVERY_CHALLENGE"
-        ]
+        "const": "AUTHENTICATED"
       },
       "UserDirectoryItem": {
         "type": "object",
@@ -23132,52 +22112,6 @@
           "userId",
           "name",
           "avatarUrl"
-        ],
-        "additionalProperties": false
-      },
-      "VerifyMfaHeaders": {
-        "type": "object",
-        "properties": {
-          "x-csrf-token": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          }
-        },
-        "required": [
-          "x-csrf-token"
-        ],
-        "additionalProperties": false
-      },
-      "VerifyMfaRequest": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "pattern": "^\\d{6}$"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "additionalProperties": false
-      },
-      "VerifyMfaResponse": {
-        "type": "object",
-        "properties": {
-          "csrfToken": {
-            "type": "string",
-            "minLength": 43,
-            "maxLength": 43
-          },
-          "authState": {
-            "type": "string",
-            "const": "AUTHENTICATED"
-          }
-        },
-        "required": [
-          "csrfToken",
-          "authState"
         ],
         "additionalProperties": false
       },

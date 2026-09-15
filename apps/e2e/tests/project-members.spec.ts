@@ -1,13 +1,11 @@
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 
 import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
 test("普通成员只能查看本项目成员，不能增删或读取其他项目", async ({
   browser,
@@ -57,7 +55,7 @@ test("普通成员只能查看本项目成员，不能增删或读取其他项�
 
 test("管理员完成成员添加与移除，并校验不存在项目的读取边界", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(180_000);
   const runtime = await loadRuntime();
@@ -69,19 +67,11 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
     .last();
 
   try {
-    await loginAdminViaUi(page, runtime, mfaAdmin);
+    await loginAdminViaUi(page, runtime, admin);
     await page.goto(`/projects/${runtime.projectId}/members`);
     await expect(
       page.getByRole("heading", { name: runtime.projectName, exact: true }),
     ).toBeVisible();
-
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible();
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth).toBeHidden();
 
     await expect(page.getByRole("heading", { name: "项目成员" })).toBeVisible();
     await expect(

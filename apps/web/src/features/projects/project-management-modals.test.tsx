@@ -234,16 +234,16 @@ describe("ArchiveProjectModal", () => {
     expect(archiveProject).not.toHaveBeenCalled();
   });
 
-  it("opens the admin reauthentication modal on 403 ADMIN_REAUTH_REQUIRED", async () => {
+  it("shows the administrator permission copy on 403 ADMIN_REQUIRED", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
     const getProjectArchivePreview = vi
       .fn()
       .mockResolvedValue({ projectId: 7, unfinishedTaskCount: 0 });
     const archiveProject = vi.fn().mockRejectedValue(
       new ApiError(403, {
-        code: "ADMIN_REAUTH_REQUIRED",
-        message: "需要最近 5 分钟内完成密码与当前 TOTP 双重认证",
-        details: { reason: "reauth-expired" },
+        code: "ADMIN_REQUIRED",
+        message: "internal-forbidden",
+        details: { reason: "not-admin" },
         requestId: "req-2",
       }),
     );
@@ -271,11 +271,9 @@ describe("ArchiveProjectModal", () => {
     );
 
     expect(
-      await within(dialog).findByText(
-        "请先完成管理员安全验证，再继续归档或恢复项目。",
-      ),
+      await within(dialog).findByText("只有系统管理员可以归档或恢复项目。"),
     ).toBeTruthy();
-    expect(await screen.findByText("管理员安全验证")).toBeTruthy();
+    expect(within(dialog).queryByText("internal-forbidden")).toBeNull();
   });
 });
 

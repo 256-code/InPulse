@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, Button, Input, Space, Switch } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -7,7 +7,6 @@ import {
   type AdminUserItem,
   type InpulseApiClient,
 } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -57,17 +56,6 @@ const lifecycleCopy: Readonly<
   },
 };
 
-function isAdminReauthRequired(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    "code" in error &&
-    (error as { readonly status: unknown }).status === 403 &&
-    (error as { readonly code: unknown }).code === "ADMIN_REAUTH_REQUIRED"
-  );
-}
-
 export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   client,
   currentUserId,
@@ -79,8 +67,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     action: LifecycleAction;
     user: AdminUserItem;
   } | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthReady, setReauthReady] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
@@ -103,19 +89,12 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     },
   });
 
-  useEffect(() => {
-    if (mutation.isError && isAdminReauthRequired(mutation.error)) {
-      setReauthOpen(true);
-    }
-  }, [mutation.error, mutation.isError]);
-
   const openCreate = () => {
     setEditor({ mode: "create" });
     setLifecycle(null);
     setSuccess(null);
     setFormError(null);
     setReloadError(null);
-    setReauthReady(false);
     mutation.reset();
     reset({
       loginName: "",
@@ -133,7 +112,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     setSuccess(null);
     setFormError(null);
     setReloadError(null);
-    setReauthReady(false);
     mutation.reset();
     reset({
       loginName: user.loginName,
@@ -151,7 +129,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     setSuccess(null);
     setFormError(null);
     setReloadError(null);
-    setReauthReady(false);
     mutation.reset();
   };
 
@@ -219,10 +196,8 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
       setSuccess(editor.mode === "create" ? "用户创建成功" : "用户资料已更新");
       setEditor(null);
       reset();
-    } catch (error) {
-      if (isAdminReauthRequired(error)) {
-        setReauthOpen(true);
-      }
+    } catch {
+      // 失败详情由 mutation 状态统一渲染，避免重复提示。
     } finally {
       submitting.current = false;
     }
@@ -277,10 +252,8 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             : "已强制退出该用户",
       );
       setLifecycle(null);
-    } catch (error) {
-      if (isAdminReauthRequired(error)) {
-        setReauthOpen(true);
-      }
+    } catch {
+      // 失败详情由 mutation 状态统一渲染，避免重复提示。
     } finally {
       submitting.current = false;
     }
@@ -608,19 +581,13 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           <p>
             {editor?.mode === "update" && selfAdmin(editor.user)
               ? "不能取消自己当前的管理员角色。"
-              : "开启后该账号登录时需完成 TOTP MFA 注册。"}
+              : "开启后该账号可执行用户管理、模块归档等管理员操作。"}
           </p>
           {formError && <Alert type="error" title={formError} />}
           {mutation.isError && (
             <Alert type="error" title={adminUserErrorMessage(mutation.error)} />
           )}
           {reloadError && <Alert type="error" title={reloadError} />}
-          {reauthReady && (
-            <Alert
-              type="success"
-              title="管理员安全验证已完成，请重新提交当前操作。"
-            />
-          )}
           {versionConflict && (
             <Button loading={reloading} onClick={() => void reloadLatest()}>
               加载最新版本后继续编辑
@@ -665,12 +632,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
                 title={adminUserErrorMessage(mutation.error)}
               />
             )}
-            {reauthReady && (
-              <Alert
-                type="success"
-                title="管理员安全验证已完成，请重新提交当前操作。"
-              />
-            )}
             <Space style={{ marginTop: 16 }}>
               <Button onClick={closeLifecycle} disabled={mutation.isPending}>
                 取消
@@ -686,16 +647,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           </>
         )}
       </Modal>
-
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          setReauthReady(true);
-          mutation.reset();
-        }}
-      />
     </>
   );
 };

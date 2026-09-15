@@ -1,3 +1,5 @@
+// `MFA` 是数据库 `auth_rate_limit_buckets.bucket_type` 的历史取值，
+// ADR-031 起不再创建该桶，保留类型只为兼容既有 CHECK 约束。
 export type AuthRateLimitBucketType = "ACCOUNT" | "IP" | "GLOBAL" | "MFA";
 
 export interface AuthRateLimitRule {

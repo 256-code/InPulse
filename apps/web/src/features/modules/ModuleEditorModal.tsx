@@ -7,7 +7,6 @@ import {
   type InpulseApiClient,
   type ModuleItem,
 } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   moduleErrorMessage,
@@ -56,7 +55,6 @@ export function ModuleEditorModal({
   onSaved?: (() => void) | undefined;
 }) {
   const { query, mutation } = useModules(projectId, client);
-  const [reauthOpen, setReauthOpen] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [merge, setMerge] = useState<Merge | null>(null);
@@ -269,13 +267,6 @@ export function ModuleEditorModal({
                   )}
                 />
                 <p role="alert">{errors.reason?.message}</p>
-                <Button
-                  className="secondary-button"
-                  onClick={() => setReauthOpen(true)}
-                  disabled={mutation.isPending || reloading || conflict}
-                >
-                  管理员安全验证
-                </Button>
               </div>
             ) : (
               <>
@@ -415,14 +406,6 @@ export function ModuleEditorModal({
           </div>
         </form>
       </Modal>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          mutation.reset();
-        }}
-      />
     </>
   );
 }

@@ -112,11 +112,11 @@
 | 编号 | 优先级 | 需求 | A 侧需要确认/提供 |
 | --- | --- | --- | --- |
 | FC-030 | P0 | 生成客户端应将服务端非 2xx 响应统一解析为类型化 `ApiError`，包含 HTTP 状态、`code`、`message`、`details`、`requestId` | 错误响应 Schema 必须纳入 Schema Registry，不能只在 NestJS 层手工构造 |
-| FC-031 | P0 | 定义统一 `ApiError` 基础结构，并按错误码提供判别联合 `details`；401/404 等简单错误可省略复杂详情，不能退化为 `Record<string, unknown>` | 定义 `ApiErrorDetails` 联合；校验、冲突、限流、重认证与幂等错误各自使用专用结构 |
+| FC-031 | P0 | 定义统一 `ApiError` 基础结构，并按错误码提供判别联合 `details`；401/404 等简单错误可省略复杂详情，不能退化为 `Record<string, unknown>` | 定义 `ApiErrorDetails` 联合；校验、冲突、限流与幂等错误各自使用专用结构（重认证分支已随 [ADR-031](adr/ADR-031.md) 移除） |
 | FC-032 | P0 | 前端逻辑必须基于稳定 `code` 而非自然语言 `message`；`message` 可作为安全 fallback 展示文案，但不能参与流程判断 | 定义错误码命名/版本规则，并承诺新增错误码时生成源同步更新 |
 | FC-033 | P0 | 候选采用 `403 + CSRF_TOKEN_INVALID`，错误 `details` 至少包含 `retryable`；前端据此最多重签一次并复用原请求的 `Idempotency-Key` | 当前错误模型不存在 419，不建议新增；A 需确认最终 status/code，且重试仅限 Route Registry 允许的业务命令，第二次失败即停止 |
 | FC-034 | P0 | 401、403、404、409、422、429 必须按固定语义区分；客户端不得把 404 当权限提示、把 409 当网络错误 | 对照技术设计统一错误模型为每条路由登记实际可出现的错误状态 |
-| FC-035 | P0 | 管理员重认证失败/过期必须能被前端识别，以进入密码 + 当前 TOTP 重认证流程 | 定义 `REAUTH_REQUIRED` 或等价稳定码，并说明是否附带剩余有效期/所需原因 |
+| FC-035 | P2 | 管理员高风险操作失败必须能被前端识别（401/403/409/422/429 稳定语义） | [ADR-031](adr/ADR-031.md) 起不再有重认证流程；按统一错误模型区分 `ADMIN_SESSION_REQUIRED` / `ADMIN_REQUIRED` / `ADMIN_CSRF_REJECTED` 与 CSRF 四码 |
 | FC-036 | P1 | 网络错误、超时、abort、解析错误应作为独立错误类型返回，不能混入 `ApiError` 或导致未处理异常 | 定义前端错误边界可消费的联合错误类型 |
 | FC-037 | P1 | 前端不得直接输出原始服务端错误细节或堆栈；日志只记录安全字段 | 生成客户端/适配器应提供脱敏的日志摘要接口或约定 |
 
@@ -135,7 +135,6 @@ type ApiErrorDetails =
   | ValidationErrorDetails
   | ConflictErrorDetails
   | RateLimitErrorDetails
-  | ReauthErrorDetails
   | IdempotencyErrorDetails
   | CsrfErrorDetails;
 
@@ -146,13 +145,13 @@ type ConflictErrorDetails = {
 };
 ```
 
-该结构仅为候选输入：401、404 等简单错误可以省略 `details`；需要前端判断的错误（422、409、429、重认证、幂等冲突、CSRF 失败）才使用专用判别分支。最终字段必须由 A 写入 Schema Registry，不得在本文冻结。
+该结构仅为候选输入：401、404 等简单错误可以省略 `details`；需要前端判断的错误（422、409、429、幂等冲突、CSRF 失败）才使用专用判别分支。最终字段必须由 A 写入 Schema Registry，不得在本文冻结。
 
 ### 4.5 Session、CSRF 与一次性安全流程
 
 | 编号 | 优先级 | 需求 | A 侧需要确认/提供 |
 | --- | --- | --- | --- |
-| FC-040 | P0 | `issueCsrfToken`、`login`、`logout`、MFA/重认证/恢复码等安全流程必须通过生成客户端调用，不得由前端手工 `fetch` | 这些 operationId 必须进入 Route Registry，且生成客户端不能因“安全流程”而把调用逻辑隐藏在中间件 |
+| FC-040 | P0 | `issueCsrfToken`、`login`、`logout` 等安全流程（[ADR-031](adr/ADR-031.md) 后仅此三条）必须通过生成客户端调用，不得由前端手工 `fetch` | 这些 operationId 必须进入 Route Registry，且生成客户端不能因“安全流程”而把调用逻辑隐藏在中间件 |
 | FC-041 | P0 | 写请求使用当前 CSRF Token；登录成功轮换 Session/CSRF 后，前端必须能重新取得新 Token | 明确 Token 返回位置（body/header）并纳入 Schema；前端不能依赖读取 HttpOnly Cookie |
 | FC-042 | P0 | 生成客户端不能自动重签 CSRF、不能无限重试；只有应用层根据稳定错误码执行一次重签并重试 | 明确“CSRF 校验失败且业务/安全状态未消费”在客户端层面如何判断 |
 | FC-043 | P0 | `securityFlow` 路由不得发送业务 `Idempotency-Key`，不得把安全材料送入通用幂等记录 | 路由元数据应标出该策略，C 的 adapter 据此省略/禁止错误头 |
@@ -271,8 +270,8 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 | C-001 | 生成客户端输出位置冲突 | `技术设计 v1.2.2` 仓库结构在 `packages/api-contract` 写“客户端”；`系统设计文档 v1.0.2` 与 `CONTRIBUTING.md` 指定 `apps/web/src/generated/api/` | 建议以 `apps/web/src/generated/api/` 为前端唯一生成产物，`packages/api-contract` 只保留 Schema/Route Registry 与生成脚本配置；若改共享包需同步所有文档。**A 裁决（2026-09-11）：已接受**，见 [A 的契约评审裁决](./a-contract-review-frontend-consumption.md) §3.1 |
 | C-002 | 通知已读/未读接口缺口 | `功能设计 v1.1` §25.3、F-28 有“已读/未读与未读数”；`系统设计文档 v1.0.2` 核心接口表只列 `GET /notifications` | 已关闭：C 已于 2026-09-08 将列表、未读数、单条已读/未读与全部已读写入 Route Registry，并登记 CSRF、幂等和重放授权策略 |
 | C-003 | 聚合接口缺口 | F-25、F-29、F-32 均需要服务端聚合/跨项目读取；核心接口表未列出 `task-group` 聚合详情、项目概览、我的任务 | 明确稳定路由与服务端聚合边界，避免 C 在前端逐项拼接。**A 裁决（2026-09-10）**：已接受（转具体 Route），共四条路由进入正式契约；聚合读只允许 A/B 的公开只读端口组合，不接受 C 直读他域业务表；字段级结论见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md) |
-| C-004 | 错误 `details` 结构未定 | 技术设计统一错误模型只给出 `{ code, message, details, requestId }`，未定义 `details` 的具体 Schema；422/409/429/重认证场景需要前端消费 | 为公共错误类别定义稳定 `details` 联合，并在 Route Registry 中按需给出每个错误响应的 Schema ref。**A 裁决（2026-09-11）：已修改接受**——`details` 保持开放对象并冻结保留键 `issues` / `reason`，判别联合延后（恢复条件见裁决 §3.2） |
-| C-005 | CSRF 失败识别未定 | ADR-015 要求“客户端仅在服务端明确表示 CSRF 校验失败时重签”，但错误模型未给出专用错误码 | 应定义稳定 `CSRF_INVALID` 或等价机器可读错误码，并避免把 CSRF 失败与普通 403 权限错误混用。**A 裁决（2026-09-11）：已接受**——冻结 `CSRF_ORIGIN_REJECTED` / `CSRF_TOKEN_INVALID` / `MFA_CSRF_REJECTED` / `ADMIN_CSRF_REJECTED`，见裁决 §3.3 |
+| C-004 | 错误 `details` 结构未定 | 技术设计统一错误模型只给出 `{ code, message, details, requestId }`，未定义 `details` 的具体 Schema；422/409/429 场景需要前端消费 | 为公共错误类别定义稳定 `details` 联合，并在 Route Registry 中按需给出每个错误响应的 Schema ref。**A 裁决（2026-09-11）：已修改接受**——`details` 保持开放对象并冻结保留键 `issues` / `reason`，判别联合延后（恢复条件见裁决 §3.2） |
+| C-005 | CSRF 失败识别未定 | ADR-015 要求“客户端仅在服务端明确表示 CSRF 校验失败时重签”，但错误模型未给出专用错误码 | 应定义稳定 `CSRF_INVALID` 或等价机器可读错误码，并避免把 CSRF 失败与普通 403 权限错误混用。**A 裁决（2026-09-11）：已接受**——冻结 `CSRF_ORIGIN_REJECTED` / `CSRF_TOKEN_INVALID` / `ADMIN_CSRF_REJECTED` 三码（[ADR-031](adr/ADR-031.md) 起移除 `MFA_CSRF_REJECTED`），见裁决 §3.3 |
 | C-006 | 分页/游标约定已正式定案（2026-09-08） | 系统设计只写搜索“分页”、通知“游标增量拉取”，未定义公共 envelope 或字段名 | 已关闭：A 确认 `{ items, nextCursor, hasMore }` 与不透明 cursor，并已在 `getSearch` 落库；其他列表接口沿用同一 envelope |
 | C-007 | 生成客户端运行时校验策略未定 | 技术设计要求服务端校验，但未规定生成客户端是否对响应做运行时 Zod 校验 | 需决定生成客户端只做类型映射还是运行时校验；若运行时校验，失败需映射为独立错误且不得暴露内部细节。**A 裁决（2026-09-11）：已修改接受**——不引入运行时校验，客户端只做类型映射，见裁决 §3.4 |
 | C-008 | `message` 的用户交互语义未定 | 错误模型包含 `message`，但前端逻辑应基于 `code` | 明确 `message` 是用户可展示文案还是仅诊断信息；前端不得依赖文案字符串。**A 裁决（2026-09-11）：已接受**——`message` 是稳定诊断文案（可兜底展示），不是机器契约，见裁决 §3.5 |
@@ -302,7 +301,7 @@ C 在 `feature/c-search-api-contract` 继续落地 `SearchQueryRequest`、
 2. 生成客户端采用“纯函数/工厂 + 调用方注入 transport/headers”还是“生成层内置请求客户端”？
 3. 生成客户端是否执行响应运行时校验？若执行，校验失败如何处理？（A 答复，2026-09-11：不执行运行时校验，见 [A 的契约评审裁决](./a-contract-review-frontend-consumption.md) §3.4）
 4. 错误响应是否按“公共错误模型 + 每路由错误 Schema”组织？`details` 的基准结构是什么？（A 答复，2026-09-11：统一 `ErrorResponse` + 开放 `details` 与保留键；逐路由 ref 与判别联合延后，见 [A 的契约评审裁决](./a-contract-review-frontend-consumption.md) §3.2）
-5. CSRF 失败、重认证过期、幂等契约版本冲突、版本冲突、状态冲突分别使用哪些稳定错误码？（A 答复，2026-09-11：CSRF 四码见 [A 的契约评审裁决](./a-contract-review-frontend-consumption.md) §3.3，其余相关码速查见 §3.6）
+5. CSRF 失败、幂等契约版本冲突、版本冲突、状态冲突分别使用哪些稳定错误码？（A 答复，2026-09-11：CSRF 四码见 [A 的契约评审裁决](./a-contract-review-frontend-consumption.md) §3.3，其余相关码速查见 §3.6）
 6. 列表/游标 envelope 已由 F-26 定案；F-27 项目动态与 F-28 通知已读/未读已由 C 落库，项目概览、任务聚合详情、我的任务等路由和 DTO 是否进入 Route Registry？（A 答复，2026-09-10：进入，共四条，含按 Q-02 新增的记录子资源路由；字段级裁决与落库顺序见 [A 的契约评审裁决](./a-contract-review-f25-f29-f32.md)）
 7. 生成客户端是否需要导出路由元数据（auth/CSRF/idempotency/version）给前端 adapter？
 8. 阶段 0 如何最终验证“前端所有 API 调用都经过生成客户端”和“生成物无漂移”？

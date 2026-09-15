@@ -4,16 +4,12 @@ import { ContractValidationError } from "../src/http/contract-errors.js";
 import { ContractValidationPipe } from "../src/http/contract-validation.pipe.js";
 
 describe("ContractValidationPipe", () => {
-  test("body 由 Route Registry 的 Zod Schema 解析并应用默认值", () => {
+  test("body 由 Route Registry 的 Zod Schema 解析", () => {
     const value = new ContractValidationPipe("login", "body").transform({
       loginName: "alice",
       password: "secret",
     });
-    expect(value).toEqual({
-      loginName: "alice",
-      password: "secret",
-      challengeMode: "totp",
-    });
+    expect(value).toEqual({ loginName: "alice", password: "secret" });
   });
 
   test("body 校验失败抛出统一 ContractValidationError", () => {

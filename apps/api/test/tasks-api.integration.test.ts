@@ -222,7 +222,7 @@ async function actor(admin = false): Promise<Actor> {
   const csrf = randomBytes(32).toString("base64url");
   const [session] = await client.sql<
     { id: number }[]
-  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation, idle_expires_at, absolute_expires_at, reauthenticated_at, mfa_verified_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', 0, 0, now() + interval '1 hour', now() + interval '1 day', ${admin ? client.sql`now()` : client.sql`NULL`}, ${admin ? client.sql`now()` : client.sql`NULL`}) RETURNING id`;
+  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, idle_expires_at, absolute_expires_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', now() + interval '1 hour', now() + interval '1 day') RETURNING id`;
   await client.sql`INSERT INTO app.session_csrf_tokens (session_id, token_hash, expires_at) VALUES (${session!.id}, ${tokens.hash(csrf).hash}, now() + interval '1 hour')`;
   return {
     userId,

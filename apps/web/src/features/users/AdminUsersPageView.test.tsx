@@ -43,16 +43,10 @@ const member: AdminUserItem = {
 
 const ADMIN_USER_INITIAL_PASSWORD = "initial-password";
 
-function mount(
-  client: InpulseApiClient,
-  currentUserId = 1,
-  authValue: {
-    readonly reauthenticateAdmin?: () => Promise<void>;
-  } = {},
-) {
+function mount(client: InpulseApiClient, currentUserId = 1) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
-      <AuthStateProvider value={authValue}>
+      <AuthStateProvider>
         <QueryClientProvider
           client={
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -213,7 +207,7 @@ describe("F-03 admin users page", () => {
     await screen.findByText("用户已停用");
   });
 
-  it("opens reauthentication on 403 and reuses the idempotency key after success", async () => {
+  it("reuses the idempotency key when retrying a rejected update", async () => {
     const listAdminUsers = vi
       .fn()
       .mockResolvedValue({ items: [admin, member] });
@@ -223,21 +217,20 @@ describe("F-03 admin users page", () => {
     const updateUser = vi
       .fn()
       .mockRejectedValueOnce(
-        new ApiError(403, {
-          code: "ADMIN_REAUTH_REQUIRED",
-          message: "needs reauth",
+        new ApiError(500, {
+          code: "INTERNAL_ERROR",
+          message: "internal-detail",
           details: {},
-          requestId: "reauth",
+          requestId: "boom",
         }),
       )
       .mockResolvedValue({ ...member, name: "Bob Updated", rowVersion: 2 });
-    const reauthenticateAdmin = vi.fn().mockResolvedValue(undefined);
     const client = {
       listAdminUsers,
       issueCsrfToken,
       updateUser,
     } as unknown as InpulseApiClient;
-    mount(client, 1, { reauthenticateAdmin });
+    mount(client, 1);
 
     await screen.findByText("Bob");
     fireEvent.click(
@@ -247,22 +240,10 @@ describe("F-03 admin users page", () => {
       target: { value: "Bob Updated" },
     });
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
-    await waitFor(() => expect(updateUser).toHaveBeenCalledTimes(1));
-    const dialogs = await screen.findAllByRole("dialog");
-    const reauth = dialogs.find((dialog) =>
-      dialog.textContent?.includes("验证身份"),
-    );
-    if (!reauth) throw new Error("reauthentication dialog not found");
-    fireEvent.change(within(reauth).getByLabelText("管理员密码"), {
-      target: { value: "password" },
-    });
-    fireEvent.change(within(reauth).getByLabelText("6 位验证码"), {
-      target: { value: "123456" },
-    });
-    fireEvent.click(within(reauth).getByRole("button", { name: "验证身份" }));
-    await screen.findByText(/管理员安全验证已完成/);
+    await screen.findByText("用户管理服务暂时不可用，请重试。");
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
     await waitFor(() => expect(updateUser).toHaveBeenCalledTimes(2));
+    await screen.findByText("用户资料已更新");
     const firstKey = (
       updateUser.mock.calls[0]![2] as {
         readonly headers: { readonly "Idempotency-Key": string };

@@ -85,28 +85,6 @@ class FakeUserCredentialRepository {
   }
 }
 
-class FakeFactorRepository {
-  status: "ENROLLING" | "ACTIVE" | "DISABLED" | undefined;
-
-  async findByUserId(
-    _tx: TransactionContext,
-  ): Promise<"ENROLLING" | "ACTIVE" | "DISABLED" | undefined> {
-    return this.status;
-  }
-
-  async findLoginSnapshot(_tx: TransactionContext): Promise<
-    | {
-        readonly status: "ENROLLING" | "ACTIVE" | "DISABLED";
-        readonly enrollmentGeneration: number;
-      }
-    | undefined
-  > {
-    return this.status === undefined
-      ? undefined
-      : { status: this.status, enrollmentGeneration: 1 };
-  }
-}
-
 class FakeSessionRepository {
   existing: ValidUserSession | undefined;
   readonly inserts: Array<{
@@ -204,13 +182,6 @@ interface SetupResult {
   readonly passwordService: FakePasswordService;
   readonly sessionRepository: FakeSessionRepository;
   readonly csrfRepository: FakeCsrfRepository;
-  readonly factorRepository: FakeFactorRepository;
-  readonly recoveryCodeRepository: {
-    hashes: readonly { readonly codeHash: string }[];
-    readonly findActiveHashes: () => Promise<
-      readonly { readonly codeHash: string }[]
-    >;
-  };
   readonly rateLimitService: FakeRateLimitService;
 }
 
@@ -218,7 +189,6 @@ function setup(
   options: {
     readonly credential?: UserCredential;
     readonly userLockActive?: boolean;
-    readonly factorStatus?: "ENROLLING" | "ACTIVE" | "DISABLED";
     readonly existingSession?: boolean;
   } = {},
 ): SetupResult {
@@ -232,15 +202,6 @@ function setup(
   const userRepository = new FakeUserCredentialRepository({
     activeLock: options.userLockActive ?? true,
   });
-  const factorRepository = new FakeFactorRepository();
-  const recoveryCodeRepository = {
-    hashes: [] as readonly { readonly codeHash: string }[],
-    async findActiveHashes(): Promise<
-      readonly { readonly codeHash: string }[]
-    > {
-      return this.hashes;
-    },
-  };
   const sessionRepository = new FakeSessionRepository();
   const csrfRepository = new FakeCsrfRepository();
   const passwordService = new FakePasswordService();
@@ -249,8 +210,6 @@ function setup(
     unitOfWork as never,
     preauthRepository as never,
     userRepository as never,
-    factorRepository as never,
-    recoveryCodeRepository as never,
     sessionRepository as never,
     csrfRepository as never,
     tokenService,
@@ -279,7 +238,6 @@ function setup(
       authVersion: 1,
       disabledAt: null,
     } satisfies UserCredential);
-  factorRepository.status = options.factorStatus;
   if (options.existingSession === true) {
     sessionRepository.existing = {
       id: 42,
@@ -299,8 +257,6 @@ function setup(
     passwordService,
     sessionRepository,
     csrfRepository,
-    factorRepository,
-    recoveryCodeRepository,
     rateLimitService,
   };
 }
@@ -312,7 +268,6 @@ function input(
     readonly csrfToken: string | undefined;
     readonly cookieHeader: string | undefined;
     readonly clientIp: string;
-    readonly challengeMode: "totp" | "recovery";
   }> = {},
 ) {
   const material = result.material;
@@ -436,7 +391,7 @@ describe("LoginService", () => {
   });
 });
 
-describe("管理员 MFA 状态选择", () => {
+describe("管理员登录（ADR-031 后无第二因素）", () => {
   function adminCredential(): UserCredential {
     return {
       id: 7,
@@ -449,30 +404,12 @@ describe("管理员 MFA 状态选择", () => {
     };
   }
 
-  test("管理员无 ACTIVE 因子进入 MFA_ENROLLMENT", async () => {
+  test("管理员通过口令后直接获得完整认证 Session", async () => {
     const result = setup({ credential: adminCredential() });
     const login = await result.service.login(input(result));
-    expect(login.authState).toBe("MFA_ENROLLMENT");
-  });
-
-  test("管理员有 ACTIVE 因子进入 MFA_CHALLENGE", async () => {
-    const result = setup({
-      credential: adminCredential(),
-      factorStatus: "ACTIVE",
-    });
-    const login = await result.service.login(input(result));
-    expect(login.authState).toBe("MFA_CHALLENGE");
-  });
-
-  test("管理员选择恢复码且存在未使用码时进入 RECOVERY_CHALLENGE", async () => {
-    const result = setup({
-      credential: adminCredential(),
-      factorStatus: "ACTIVE",
-    });
-    result.recoveryCodeRepository.hashes = [{ codeHash: "$argon2id$fixture" }];
-    const login = await result.service.login(
-      input(result, { challengeMode: "recovery" }),
+    expect(login.authState).toBe("AUTHENTICATED");
+    expect(result.sessionRepository.inserts[0]?.authState).toBe(
+      "AUTHENTICATED",
     );
-    expect(login.authState).toBe("RECOVERY_CHALLENGE");
   });
 });

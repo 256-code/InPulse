@@ -8,7 +8,6 @@ import {
   type ReadableRecord,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 export function RecordLifecycleButton({
   item,
   api,
@@ -24,7 +23,6 @@ export function RecordLifecycleButton({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
     [needsRefresh, setNeedsRefresh] = useState(false),
-    [reauth, setReauth] = useState(false),
     [baseline, setBaseline] = useState(item);
   const retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
@@ -90,8 +88,6 @@ export function RecordLifecycleButton({
     } catch (e) {
       setError(e);
       if (e instanceof ApiError && e.status === 409) setNeedsRefresh(true);
-      if (e instanceof ApiError && e.code === "ADMIN_REAUTH_REQUIRED")
-        setReauth(true);
     } finally {
       saving.current = false;
       setBusy(false);
@@ -102,7 +98,7 @@ export function RecordLifecycleButton({
       ? error.status === 401
         ? "登录已失效，请重新登录。"
         : error.status === 403
-          ? "请完成管理员安全验证后重试。"
+          ? "只有系统管理员可以作废或恢复记录。"
           : error.status === 404
             ? "记录不存在或当前无法访问。"
             : error.status === 409
@@ -186,24 +182,11 @@ export function RecordLifecycleButton({
                 <Button disabled={busy} onClick={() => void reload()}>
                   加载最新状态
                 </Button>
-              ) : error instanceof ApiError &&
-                error.code === "ADMIN_REAUTH_REQUIRED" ? (
-                <Button onClick={() => setReauth(true)}>管理员安全验证</Button>
               ) : undefined
             }
           />
         )}
       </Modal>
-      {reauth && (
-        <AdminReauthenticateModal
-          open
-          onClose={() => setReauth(false)}
-          onSuccess={() => {
-            setReauth(false);
-            setError(null);
-          }}
-        />
-      )}
     </>
   );
 }

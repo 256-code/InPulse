@@ -132,7 +132,7 @@ async function actor(admin = false): Promise<Actor> {
   const csrf = randomBytes(32).toString("base64url");
   const [session] = await client.sql<
     { id: number }[]
-  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation, idle_expires_at, absolute_expires_at, reauthenticated_at, mfa_verified_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', 0, 0, now() + interval '1 hour', now() + interval '1 day', ${admin ? client.sql`now()` : client.sql`NULL`}, ${admin ? client.sql`now()` : client.sql`NULL`}) RETURNING id`;
+  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, idle_expires_at, absolute_expires_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', now() + interval '1 hour', now() + interval '1 day') RETURNING id`;
   await client.sql`INSERT INTO app.session_csrf_tokens (session_id, token_hash, expires_at) VALUES (${session!.id}, ${tokens.hash(csrf).hash}, now() + interval '1 hour')`;
   return {
     userId,
@@ -342,19 +342,15 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       archivedAt: null,
       rowVersion: 3,
     });
-    await client.sql`UPDATE app.user_sessions SET reauthenticated_at = now() - interval '6 minutes' WHERE id = ${admin.sessionId}`;
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        admin,
-        { reason: "过期" },
-        `/${project.moduleId}/archive`,
-        3,
-      ),
-      403,
-      "ADMIN_REAUTH_REQUIRED",
+    const archivedAgain = await request(
+      project.projectId,
+      "POST",
+      admin,
+      { reason: "无需重认证再次停用" },
+      `/${project.moduleId}/archive`,
+      3,
     );
+    expect(archivedAgain.status).toBe(200);
   });
   it("replays equivalent normalized requests, rejects changed input and removed membership", async () => {
     const { member, project } = await fixture();
@@ -408,7 +404,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       404,
     );
   });
-  it("requires fresh reauth on replay and rejects archived parent writes while retaining history", async () => {
+  it("revalidates identity on replay and rejects archived parent writes while retaining history", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const key = randomUUID();
@@ -439,19 +435,19 @@ describe("F-12 real HTTP + PostgreSQL", () => {
         )
       ).status,
     ).toBe(200);
-    await client.sql`UPDATE app.user_sessions SET mfa_verified_at = now() - interval '6 minutes' WHERE id = ${admin.sessionId}`;
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        admin,
-        { reason: "封存" },
-        suffix,
-        1,
-        key,
-      ),
-      403,
-    );
+    expect(
+      (
+        await request(
+          project.projectId,
+          "POST",
+          admin,
+          { reason: "封存" },
+          suffix,
+          1,
+          key,
+        )
+      ).status,
+    ).toBe(200);
     await client.sql`UPDATE app.projects SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.projectId}`;
     expect((await request(project.projectId, "GET", member)).status).toBe(200);
     await error(

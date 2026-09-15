@@ -160,30 +160,6 @@ export type ChangeRecordVersionPath = {
   readonly versionNo: number;
 };
 
-export type ConfirmMfaEnrollmentRequest = {
-  readonly expectedEnrollmentGeneration: number;
-  readonly code: string;
-};
-
-export type ConfirmMfaEnrollmentResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
-  readonly recoveryCodes: readonly string[];
-};
-
-export type ConsumeMfaRecoveryCodeHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ConsumeMfaRecoveryCodeRequest = {
-  readonly code: string;
-};
-
-export type ConsumeMfaRecoveryCodeResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
-};
-
 export type CreateProjectHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -493,21 +469,15 @@ export type LoginHeaders = {
 export type LoginRequest = {
   readonly loginName: string;
   readonly password: string;
-  readonly challengeMode: ("totp" | "recovery");
 };
 
 export type LoginResponse = {
   readonly csrfToken: string;
-  readonly authState: ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
-  readonly enrollmentGeneration?: number;
+  readonly authState: "AUTHENTICATED";
 };
 
 export type LogoutHeaders = {
   readonly "x-csrf-token"?: string;
-};
-
-export type MfaEnrollmentHeaders = {
-  readonly "x-csrf-token": string;
 };
 
 export type ModuleArchiveRequest = {
@@ -958,15 +928,6 @@ export type ReadableRecordPage = {
   readonly hasMore: boolean;
 };
 
-export type ReauthenticateAdminHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ReauthenticateAdminRequest = {
-  readonly password: string;
-  readonly code: string;
-};
-
 export type RecentRecordItem = {
   readonly recordId: number;
   readonly code: string;
@@ -1122,23 +1083,6 @@ export type RemoveProjectMemberResponse = {
   readonly unfinishedTaskCount: number;
 };
 
-export type ResetAdminMfaHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ResetAdminMfaRequest = {
-  readonly userId: number;
-  readonly reason: string;
-};
-
-export type RotateMfaRecoveryCodesHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type RotateMfaRecoveryCodesResponse = {
-  readonly recoveryCodes: readonly string[];
-};
-
 export type SearchItem = {
   readonly projectId: number;
   readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP" | "LEFTOVER");
@@ -1158,16 +1102,6 @@ export type SearchQueryRequest = {
   readonly cursor?: string;
   readonly limit?: number;
   readonly includeVoid?: boolean;
-};
-
-export type StartMfaEnrollmentRequest = {
-  readonly expectedEnrollmentGeneration: number;
-};
-
-export type StartMfaEnrollmentResponse = {
-  readonly enrollmentGeneration: number;
-  readonly secret: string;
-  readonly otpauthUri: string;
 };
 
 export type TaskAssigneesResponse = {
@@ -1602,7 +1536,7 @@ export type TaskVersionHeaders = {
   readonly "if-match": string;
 };
 
-export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+export type UserAuthState = "AUTHENTICATED";
 
 export type UserDirectoryItem = {
   readonly id: number;
@@ -1619,19 +1553,6 @@ export type UserRef = {
   readonly userId: number;
   readonly name: string;
   readonly avatarUrl: (string | null);
-};
-
-export type VerifyMfaHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type VerifyMfaRequest = {
-  readonly code: string;
-};
-
-export type VerifyMfaResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
 };
 
 export type VoidedRecord = {

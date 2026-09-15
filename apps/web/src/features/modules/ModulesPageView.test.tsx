@@ -225,11 +225,6 @@ describe("F-12 forms", () => {
     } as unknown as InpulseApiClient;
     mount(client, true);
     fireEvent.click(await screen.findByRole("button", { name: /归\s*档/ }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "管理员安全验证" }),
-      ).toBeVisible(),
-    );
     fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
     await screen.findByText("请填写操作原因");
     expect(client.archiveModule).not.toHaveBeenCalled();

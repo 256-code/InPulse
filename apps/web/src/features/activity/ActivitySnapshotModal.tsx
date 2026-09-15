@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import type {
   AuditLogItem,
   ActivityItem,
@@ -6,11 +6,9 @@ import type {
 } from "@generated/api";
 import { AppModal } from "@features/common/components/AppModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import {
   EMPTY_AUDIT_FILTERS,
   describeAuditError,
-  isAdminReauthRequired,
   useAuditLogsInfiniteQuery,
   type AuditFilters,
 } from "@features/audit/audit-query";
@@ -54,7 +52,7 @@ function snapshotPayloadText(entry: AuditLogItem): string {
 }
 
 /**
- * 「原始快照」需要管理员 5 分钟双因子重认证，且 `GET /api/v1/audit-logs`
+ * 「原始快照」需要有效的系统管理员 Session，且 `GET /api/v1/audit-logs`
  * 只能按链 + 时间窗 + 操作人过滤，没有链序号参数；因此这里用动态与审计
  * 一一对应的特性（同一 `(chain_id, sequence_no)`、同一时间戳）在时间窗内
  * 按对象 ID 定位那条记录。
@@ -66,8 +64,6 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
   client,
   onClose,
 }) => {
-  const [reauthOpen, setReauthOpen] = useState(false);
-
   const filters = useMemo<AuditFilters>(() => {
     if (item === null) {
       return EMPTY_AUDIT_FILTERS;
@@ -90,12 +86,6 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
     ...(client ? { client } : {}),
     enabled: item !== null,
   });
-
-  useEffect(() => {
-    if (auditQuery.isError && isAdminReauthRequired(auditQuery.error)) {
-      setReauthOpen(true);
-    }
-  }, [auditQuery.error, auditQuery.isError]);
 
   const records = useMemo(
     () => auditQuery.data?.pages.flatMap((page) => [...page.items]) ?? [],
@@ -122,16 +112,7 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
         }
       >
         {auditQuery.isError ? (
-          <>
-            {describeAuditError(auditQuery.error)}
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setReauthOpen(true)}
-            >
-              管理员安全验证
-            </button>
-          </>
+          <>{describeAuditError(auditQuery.error)}</>
         ) : (
           <>
             <span className="activity-spinner" />
@@ -215,14 +196,6 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
           {item === null ? null : body}
         </div>
       </AppModal>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          void auditQuery.refetch();
-        }}
-      />
     </>
   );
 };

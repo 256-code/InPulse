@@ -145,7 +145,7 @@ async function actor(admin = false): Promise<Actor> {
   const csrf = randomBytes(32).toString("base64url");
   const [session] = await client.sql<
     { id: number }[]
-  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation, idle_expires_at, absolute_expires_at, reauthenticated_at, mfa_verified_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', 0, 0, now() + interval '1 hour', now() + interval '1 day', ${admin ? client.sql`now()` : client.sql`NULL`}, ${admin ? client.sql`now()` : client.sql`NULL`}) RETURNING id`;
+  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, idle_expires_at, absolute_expires_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', now() + interval '1 hour', now() + interval '1 day') RETURNING id`;
   await client.sql`INSERT INTO app.session_csrf_tokens (session_id, token_hash, expires_at) VALUES (${session!.id}, ${tokens.hash(csrf).hash}, now() + interval '1 hour')`;
   return {
     userId,
@@ -468,7 +468,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     ).toBe(200);
   });
 
-  it("requires administrator reauthentication, archives history, rejects downstream writes and restores only itself", async () => {
+  it("requires administrator identity, archives history, rejects downstream writes and restores only itself", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const item = await create(project, member);
@@ -539,20 +539,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       ),
       409,
     );
-    await client.sql`UPDATE app.user_sessions SET mfa_verified_at = now() - interval '6 minutes' WHERE id = ${admin.sessionId}`;
-    await error(await archive(), 403, "ADMIN_REAUTH_REQUIRED");
-    await error(
-      await request(
-        project,
-        "POST",
-        admin,
-        { reason: "恢复" },
-        `/${item.id}/restore`,
-        2,
-      ),
-      403,
-    );
-    await client.sql`UPDATE app.user_sessions SET mfa_verified_at = now(), reauthenticated_at = now() WHERE id = ${admin.sessionId}`;
+    expect((await archive()).status).toBe(200);
     const restored = await request(
       project,
       "POST",

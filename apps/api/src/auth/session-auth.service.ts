@@ -16,8 +16,8 @@ export interface AuthenticatedSessionActor {
 /**
  * 从 `__Host-session` Cookie 解析当前认证用户的通用身份服务。
  *
- * 只接受 `AUTHENTICATED` Session；匿名、无效、停用、过期、撤销以及
- * MFA/恢复码受限状态统一返回 undefined，由 Controller 按 401 处理。
+ * 只接受 `AUTHENTICATED` Session；匿名、无效、停用、过期、撤销以及数据库
+ * 中历史遗留的 MFA 受限状态统一返回 undefined，由 Controller 按 401 处理。
  */
 @Injectable()
 export class SessionAuthService {
@@ -51,33 +51,6 @@ export class SessionAuthService {
     }
 
     const session = await this.sessionRepository.findValidByTokenHashes(
-      tx,
-      parsed.candidates.map((candidate) => candidate.hash),
-    );
-    if (session === undefined || session.authState !== "AUTHENTICATED") {
-      return undefined;
-    }
-    return {
-      sessionId: session.id,
-      userId: session.userId,
-      authState: session.authState,
-      authVersionAtIssue: session.authVersionAtIssue,
-    };
-  }
-
-  /**
-   * MFA 状态变更专用的不锁 Session 解析。调用方必须先锁 user 与 factor，
-   * 最后再锁 current Session；本方法只读取身份与 CSRF，不持有行锁。
-   */
-  async resolveActorUnlockedInTransaction(
-    tx: TransactionContext,
-    cookieHeader: string | undefined,
-  ): Promise<AuthenticatedSessionActor | undefined> {
-    const parsed = this.parseSessionCandidates(cookieHeader);
-    if (parsed === undefined) {
-      return undefined;
-    }
-    const session = await this.sessionRepository.findValidUnlockedByTokenHashes(
       tx,
       parsed.candidates.map((candidate) => candidate.hash),
     );

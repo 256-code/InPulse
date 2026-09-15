@@ -133,7 +133,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
       method: update ? "PATCH" : "POST",
       path: `/projects/{projectId}/modules/{moduleId}/features${create ? "" : `/{featureId}${highRisk ? `/${action}` : ""}`}`,
       operationId,
-      summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员重认证与原因。`,
+      summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需管理员身份与原因。`,
       request: {
         path: create ? "FeatureCollectionPath" : "FeatureResourcePath",
         query: "none",
@@ -150,7 +150,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
         },
       },
       responses: { "200": json("FeatureItem"), ...errors },
-      authPolicy: highRisk ? "adminSessionWithReauthentication" : "session",
+      authPolicy: highRisk ? "adminSession" : "session",
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",

@@ -8,7 +8,6 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import { treeScopeOf } from "@features/project-tree/tree-selection";
 import { useCatalogTrail, useShellCounters } from "./shell-data";
@@ -118,7 +117,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [reauthOpen, setReauthOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   // 系统目录内嵌在「项目与功能」导航项下：进入项目路由自动展开，也可手动开合。
@@ -486,18 +484,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                         <small>{popoverRoleLabel}</small>
                       </div>
                     </div>
-                    {user?.isAdmin ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountOpen(false);
-                          setReauthOpen(true);
-                        }}
-                      >
-                        <InpulseIcon name="shield" size={15} />
-                        管理员安全验证
-                      </button>
-                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleNavigation("/settings")}
@@ -533,10 +519,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onClose={() => setPaletteOpen(false)}
         onNavigate={handleNavigation}
         onOpenSearch={handleOpenSearch}
-      />
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
       />
     </>
   );

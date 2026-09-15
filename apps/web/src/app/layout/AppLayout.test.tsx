@@ -502,25 +502,4 @@ describe("AppLayout", () => {
     expect(document.querySelector(".project-tree")).not.toBeNull();
     expect(screen.getByRole("button", { name: "收起系统目录" })).toBeTruthy();
   });
-
-  it("opens admin reauthentication from the account menu", async () => {
-    const user = userEvent.setup();
-    renderLayout(
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={<AppLayout notificationClient={notificationClient} />}
-          />
-        </Routes>
-      </MemoryRouter>,
-      true,
-    );
-
-    await user.click(await screen.findByRole("button", { name: "账户菜单" }));
-    await user.click(screen.getByRole("button", { name: "管理员安全验证" }));
-    expect(
-      await screen.findByRole("dialog", { name: "管理员安全验证" }),
-    ).toBeInTheDocument();
-  });
 });

@@ -1,10 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Alert, Button, Form, Input, Space, Typography } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
-import { isAdminReauthRequired } from "./project-member-query";
 import {
   describeProjectManagementError,
   useArchiveProject,
@@ -199,7 +197,7 @@ export interface ArchiveProjectModalProps {
   readonly onArchived: (updated: ProjectItem) => void;
 }
 
-/** F-06.2 前端归档入口；归档前展示未完成任务提醒，要求管理员重认证与原因。 */
+/** F-06.2 前端归档入口；归档前展示未完成任务提醒，要求管理员身份与原因。 */
 export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
   open,
   project,
@@ -217,23 +215,12 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
   const mutation = useArchiveProject(project.id, client);
   const formId = React.useId();
   const preview = useProjectArchivePreview(open ? project.id : null, client);
-  const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthDone, setReauthDone] = useState(false);
-
   useEffect(() => {
     if (open) {
       reset({ reason: "" });
       mutation.reset();
-      setReauthDone(false);
     }
   }, [open, project.id]);
-
-  useEffect(() => {
-    if (mutation.isError && isAdminReauthRequired(mutation.error)) {
-      setReauthOpen(true);
-      setReauthDone(false);
-    }
-  }, [mutation.error, mutation.isError]);
 
   const submit = async (values: ProjectArchiveFormValues) => {
     const parsed = projectArchiveFormSchema.safeParse(values);
@@ -258,7 +245,7 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      eyebrow="仅系统管理员可执行，需 5 分钟内双因子重认证"
+      eyebrow="仅系统管理员可执行"
       title="归档项目"
       destroyOnHidden
       mask={{ closable: false }}
@@ -347,14 +334,6 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
                 )}
               />
             </Space>
-            {reauthDone ? (
-              <Alert
-                type="success"
-                showIcon
-                title="管理员安全验证已完成，请重新点击确认归档。"
-                style={{ marginTop: 16 }}
-              />
-            ) : null}
             {mutation.error ? (
               <Alert
                 showIcon
@@ -369,14 +348,6 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
           </div>
         </Form>
       </form>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          setReauthDone(true);
-        }}
-      />
     </Modal>
   );
 };
@@ -406,23 +377,12 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
   } = useForm<ProjectRestoreFormValues>({ defaultValues: { reason: "" } });
   const mutation = useRestoreProject(project.id, client);
   const formId = React.useId();
-  const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthDone, setReauthDone] = useState(false);
-
   useEffect(() => {
     if (open) {
       reset({ reason: "" });
       mutation.reset();
-      setReauthDone(false);
     }
   }, [open, project.id]);
-
-  useEffect(() => {
-    if (mutation.isError && isAdminReauthRequired(mutation.error)) {
-      setReauthOpen(true);
-      setReauthDone(false);
-    }
-  }, [mutation.error, mutation.isError]);
 
   const submit = async (values: ProjectRestoreFormValues) => {
     const parsed = projectRestoreFormSchema.safeParse(values);
@@ -447,7 +407,7 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
-      eyebrow="仅系统管理员可执行，需 5 分钟内双因子重认证"
+      eyebrow="仅系统管理员可执行"
       title="恢复项目"
       destroyOnHidden
       mask={{ closable: false }}
@@ -507,13 +467,6 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
                 </Form.Item>
               )}
             />
-            {reauthDone ? (
-              <Alert
-                type="success"
-                showIcon
-                title="管理员安全验证已完成，请重新点击确认恢复。"
-              />
-            ) : null}
             {mutation.error ? (
               <Alert
                 showIcon
@@ -528,14 +481,6 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
           </div>
         </Form>
       </form>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          setReauthDone(true);
-        }}
-      />
     </Modal>
   );
 };

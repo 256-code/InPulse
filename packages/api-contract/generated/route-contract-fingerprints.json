@@ -227,12 +227,6 @@
       "fingerprint": "950d29384a69784c50b58058be94d5904ff00d156e1e8c76f682ca5274502adc"
     }
   ],
-  "resetAdminMfa": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "f3cad65d2a9b14e9619af1de69ac8d046a9144e339fa4173391f2d575a753b73"
-    }
-  ],
   "restoreChangeRecord": [
     {
       "version": "1.0.0",

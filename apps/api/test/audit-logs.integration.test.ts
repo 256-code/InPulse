@@ -57,7 +57,6 @@ interface ErrorResponseDto {
 
 interface AuditFixture {
   readonly adminCookie: string;
-  readonly adminCookieNoReauth: string;
   readonly adminUserId: number;
   readonly memberCookie: string;
   readonly memberUserId: number;
@@ -68,7 +67,6 @@ async function createSession(
   sql: Sql,
   keyring: VersionedHmacKeyring,
   userId: number,
-  options: { readonly reauth: boolean },
 ): Promise<string> {
   const users = (await sql`
     SELECT auth_version AS "authVersion"
@@ -109,14 +107,6 @@ async function createSession(
       now() + interval '1 day'
     )
   `;
-  if (options.reauth) {
-    await sql`
-      UPDATE app.user_sessions
-         SET reauthenticated_at = now(),
-             mfa_verified_at = now()
-       WHERE token_hash = ${tokenHash}
-    `;
-  }
   return `${SESSION_COOKIE_NAME}=${token}`;
 }
 
@@ -240,12 +230,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       `${HMAC_KEY_VERSION}:${keyringKey.toString("hex")}\n`,
       "utf8",
     );
-    const totpKekFile = join(keyringDirectory, "totp.kek.keyring");
-    await writeFile(
-      totpKekFile,
-      `1:${randomBytes(32).toString("hex")}\n`,
-      "utf8",
-    );
     const auditKeyringFile = join(keyringDirectory, "audit.keyring");
     await writeFile(
       auditKeyringFile,
@@ -253,21 +237,10 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       "utf8",
     );
 
-    const adminCookie = await createSession(runtime, keyring, adminUserId, {
-      reauth: true,
-    });
-    const memberCookie = await createSession(runtime, keyring, memberUserId, {
-      reauth: false,
-    });
-    const adminCookieNoReauth = await createSession(
-      runtime,
-      keyring,
-      adminUserId,
-      { reauth: false },
-    );
+    const adminCookie = await createSession(runtime, keyring, adminUserId);
+    const memberCookie = await createSession(runtime, keyring, memberUserId);
     fixture = {
       adminCookie,
-      adminCookieNoReauth,
       adminUserId,
       memberCookie,
       memberUserId,
@@ -285,9 +258,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       SESSION_HASH_KEYRING_TEST_PATH:
         process.env["SESSION_HASH_KEYRING_TEST_PATH"],
       SESSION_HASH_KEY_VERSION: process.env["SESSION_HASH_KEY_VERSION"],
-      TOTP_KEK_KEYRING_FILE: process.env["TOTP_KEK_KEYRING_FILE"],
-      TOTP_KEK_KEYRING_TEST_PATH: process.env["TOTP_KEK_KEYRING_TEST_PATH"],
-      TOTP_KEK_VERSION: process.env["TOTP_KEK_VERSION"],
     };
     process.env["NODE_ENV"] = "test";
     process.env["DATABASE_URL"] = urls.runtime;
@@ -298,9 +268,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     process.env["AUDIT_HMAC_KEYRING_FILE"] = auditKeyringFile;
     process.env["AUDIT_HMAC_KEYRING_TEST_PATH"] = "1";
     process.env["AUDIT_HMAC_KEY_VERSION"] = String(HMAC_KEY_VERSION);
-    process.env["TOTP_KEK_KEYRING_FILE"] = totpKekFile;
-    process.env["TOTP_KEK_KEYRING_TEST_PATH"] = "1";
-    process.env["TOTP_KEK_VERSION"] = String(HMAC_KEY_VERSION);
 
     const { AppModule } = await import("../src/app.module.js");
     app = await NestFactory.create(AppModule, {
@@ -344,18 +311,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(JSON.stringify(body)).not.toContain(seedAction);
   });
 
-  test("管理员完成密码认证但未做 5 分钟内 TOTP 重认证时返回 403", async () => {
-    const body = await expectError(
-      await requestAuditLogs(baseUrl, {
-        cookie: fixture.adminCookieNoReauth,
-      }),
-      403,
-    );
-    expect(body.code).toBe("ADMIN_REAUTH_REQUIRED");
-    expect(body.details).toHaveProperty("reason");
-  });
-
-  test("重认证管理员读取 SYSTEM 链并在返回前写入 AUDIT_LOG_READ 留痕", async () => {
+  test("管理员完整认证 Session 无需额外重认证即可读取 SYSTEM 链并写入 AUDIT_LOG_READ 留痕（ADR-031）", async () => {
     const page = await expectAuditPage(
       await requestAuditLogs(baseUrl, { cookie: fixture.adminCookie }),
     );

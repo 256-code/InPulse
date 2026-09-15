@@ -1,12 +1,10 @@
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
-import { totpCode } from "../helpers/totp.js";
-test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧版本", async ({
+test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(150000);
   const runtime = await loadRuntime(),
@@ -41,16 +39,13 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
     await expect(
       memberDetail.getByRole("button", { name: "作废记录" }),
     ).toHaveCount(0);
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
     await page.goto("/login");
-    await page.getByLabel("登录名").fill(mfaAdmin.account.loginName);
-    await page.getByLabel("密码").fill(mfaAdmin.account.password);
+    await page.getByLabel("登录名").fill(admin.account.loginName);
+    await page.getByLabel("密码").fill(admin.account.password);
     await page
       .locator("form")
       .getByRole("button", { name: /登\s*录/ })
       .click();
-    await page.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await page.getByRole("button", { name: "验证并进入系统" }).click();
     await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
     await page.goto(recordUrl);
     const detail = page.getByRole("region", { name: "正式记录详情" });
@@ -63,15 +58,6 @@ test("F21 管理员双因子作废、发现VOID与恢复，成员重新可读旧
       voidDialog.getByRole("button", { name: "确认作废记录" }),
     ).toBeDisabled();
     await voidDialog.getByLabel("作废原因").fill(privateReason);
-    await voidDialog.getByRole("button", { name: "确认作废记录" }).click();
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible();
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth).toBeHidden();
-    await expect(voidDialog.getByLabel("作废原因")).toHaveValue(privateReason);
     await voidDialog.getByRole("button", { name: "确认作废记录" }).click();
     await expect(voidDialog).toBeHidden();
     await expect(detail.getByText("已作废 · 仅管理员可见")).toBeVisible();

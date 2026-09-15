@@ -22,7 +22,7 @@ staleness 告警与故障处理以该文件为准；本文件只负责「全新�
 | 材料 | 用途 | 保管要求 |
 | --- | --- | --- |
 | 六份数据库密码文件（db_bootstrap / db_migrator / db_runtime / db_backup / db_audit_reader / db_audit_archive） | 首次建库与全部角色登录 | 密封、双人授权；与备份副本分库存放 |
-| Session / 幂等指纹 / 审计 HMAC / TOTP KEK 四组 keyring（含历史版本） | 恢复后服务启动与历史数据可解 | 与签名发布清单的 key 版本一致 |
+| Session / 幂等指纹 / 审计 HMAC 三组 keyring（含历史版本；[ADR-031](../adr/ADR-031.md) 起 TOTP KEK 已移除） | 恢复后服务启动与历史数据可解 | 与签名发布清单的 key 版本一致 |
 | 备份加密密钥 | 解密备份包 | 与备份副本分库存放 |
 | 异机只读存储凭据 | 取回备份包 | 部署账户之外单独保管 |
 | WORM 凭据与归档签名密钥 | 审计归档校验与续跑 | 同上 |
@@ -127,7 +127,7 @@ staleness 告警与故障处理以该文件为准；本文件只负责「全新�
 
 1. 以 `app_migrator` 运行迁移任务（compose `migrate` 服务），确认迁移版本与发布清单一致；
 2. 校验扩展、全部约束、审计链序号 / Hash / 远端锚点；
-3. 校验 MFA（TOTP KEK）与审计 HMAC 的历史 keyring 可用性（抽样解密 / 验证）；缺历史
+3. 校验审计 HMAC 与 Session / 幂等指纹历史 keyring 的可用性（抽样验证）；缺历史
    版本时用 §0 离线材料补齐后再启动；
 4. 启动 API / Web，运行 smoke test：登录、项目读取、写入回滚、搜索权限与审计读取；
 5. 记录实测 RPO / RTO（目标 RPO ≤ 24h、RTO ≤ 2h）；未达标即上线阻断。

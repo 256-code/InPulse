@@ -28,8 +28,7 @@
 #      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
 #   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
 #      API 生产镜像内置 healthcheck.mjs，Web 生产镜像内置 Nginx 配置与 curl。
-#   4. AUDIT_DB_*（独立 audit_reader 连接）已由代码读取，本次挂载对应 Secret；
-#      TOTP_KEK_* 已由代码读取，本次挂载对应 Secret。
+#   4. AUDIT_DB_*（独立 audit_reader 连接）已由代码读取，本次挂载对应 Secret。
 #   5. operations profile 的 backup / audit-archive 服务只在校验过的宿主调度
 #      （或人工运维）下按需 `run --rm` 执行，不常驻；上线前
 #      `--profile operations` 保持未启用。
@@ -126,8 +125,6 @@ services:
       IDEMPOTENCY_FINGERPRINT_KEYRING_FILE: /run/secrets/idempotency_fingerprint_keyring
       AUDIT_HMAC_KEY_VERSION: "${AUDIT_HMAC_KEY_VERSION}"
       AUDIT_HMAC_KEYRING_FILE: /run/secrets/audit_hmac_keyring
-      TOTP_KEK_VERSION: "${TOTP_KEK_VERSION}"
-      TOTP_KEK_KEYRING_FILE: /run/secrets/totp_kek_keyring
     depends_on:
       db:
         condition: service_healthy
@@ -151,11 +148,6 @@ services:
         mode: "0400"
       - source: audit_hmac_keyring
         target: /run/secrets/audit_hmac_keyring
-        uid: "10001"
-        gid: "10001"
-        mode: "0400"
-      - source: totp_kek_keyring
-        target: /run/secrets/totp_kek_keyring
         uid: "10001"
         gid: "10001"
         mode: "0400"
@@ -352,8 +344,6 @@ secrets:
     file: ./secrets/audit_worm_credentials
   audit_archive_signing_key:
     file: ./secrets/audit_archive_signing_key
-  totp_kek_keyring:
-    file: ./secrets/totp_kek_keyring
   tls_cert:
     file: ./secrets/tls_cert.pem
   tls_key:

@@ -84,8 +84,8 @@ sudo deploy/backup/backupctl.sh disable
   （mode `0400` / `0600`、属主 `root`）或 compose secrets（`/run/secrets/*`）提供。
 - 告警接收方地址登记在运维侧受控配置中：本 Runbook 记录**接收方归属与联系方式**，仓库不保存
   地址本身。接收方变更属于发布变更，需在发布清单中记录。
-- 密钥轮换与恢复：恢复发布清单引用的全部版本化 keyring（Session、幂等 fingerprint、审计、
-  TOTP KEK），保留仍被未过期幂等记录引用的 fingerprint key；密钥不得与备份同库存放。
+- 密钥轮换与恢复：恢复发布清单引用的全部版本化 keyring（Session、幂等 fingerprint、审计；
+  [ADR-031](../adr/ADR-031.md) 起 TOTP KEK 已移除），保留仍被未过期幂等记录引用的 fingerprint key；密钥不得与备份同库存放。
 
 ## 6. 每次备份做什么
 
@@ -132,7 +132,7 @@ sudo docker compose --project-name inpulse --env-file deploy/.env.deploy \
 3. 重新执行权限收敛脚本，验证 runtime/backup 不拥有对象且不能 DDL；
 4. 确认 `user_sessions` / `session_csrf_tokens` / `preauth_sessions` 为空；若恢复自物理全库
    快照，在 API 启动前轮换 Session HMAC key 并递增全部用户 `auth_version`；
-5. 校验迁移版本、扩展、约束、审计序号/Hash/远端锚点与 MFA/审计旧密钥可用性；
+5. 校验迁移版本、扩展、约束、审计序号/Hash/远端锚点与审计旧密钥可用性；
 6. 启动 API/Web，运行登录、项目读取、写入回滚、搜索权限与审计读取 smoke test；
 7. 记录实测 RPO/RTO（目标 RPO ≤ 24h、RTO ≤ 2h）；未达标即上线阻断。
 
