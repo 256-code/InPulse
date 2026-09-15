@@ -283,9 +283,19 @@ describe("AppLayout", () => {
     expect(within(issues).getByTitle("3 项待处理")).toHaveTextContent("3");
   });
 
-  it("renders the system directory tree inside the workspace navigation", async () => {
+  it("renders the system directory tree inside the projects navigation item", async () => {
     const catalogClient = {
       ...notificationClient,
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            code: "AGV",
+            name: "AGV 智能搬运平台",
+            status: "ACTIVE",
+          },
+        ],
+      }),
       getProject: vi.fn().mockResolvedValue({
         project: {
           id: 7,
@@ -342,12 +352,10 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
 
-    // 系统目录与主导航共用同一个 nav，不再单独成块。
+    // 系统目录嵌在「项目与功能」导航项下，不再单独成块；项目路由自动展开。
     const nav = screen.getByRole("navigation", { name: "工作区导航" });
     expect(within(nav).getByText("任务中心")).toBeInTheDocument();
-    expect(
-      within(nav).getByText("系统目录", { selector: "p" }),
-    ).toBeInTheDocument();
+    expect(within(nav).queryByText("系统目录", { selector: "p" })).toBeNull();
     expect(
       await within(nav).findByRole("button", { name: /AGV 智能搬运平台/ }),
     ).toBeInTheDocument();
@@ -367,7 +375,7 @@ describe("AppLayout", () => {
     expect(await screen.findByText("功能档案内容")).toBeInTheDocument();
   });
 
-  it("hides the system directory tree outside project pages", async () => {
+  it("collapses the system directory tree outside project pages", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/tasks"]}>
         <Routes>
@@ -382,8 +390,12 @@ describe("AppLayout", () => {
     );
 
     expect(await screen.findByText("任务中心内容")).toBeInTheDocument();
-    expect(screen.queryByText("系统目录", { selector: "p" })).toBeNull();
+    // 非项目路由默认收起；点击「项目与功能」行尾的 chevron 仍可展开。
     expect(document.querySelector(".project-tree")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "展开系统目录" });
+    await userEvent.click(toggle);
+    expect(document.querySelector(".project-tree")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "收起系统目录" })).toBeTruthy();
   });
 
   it("opens admin reauthentication from the account menu", async () => {

@@ -121,6 +121,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [reauthOpen, setReauthOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // 系统目录内嵌在「项目与功能」导航项下：进入项目路由自动展开，也可手动开合。
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
   const selectedKey = resolveSelectedKey(location.pathname);
@@ -167,6 +169,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const catalogProjectId = isCatalogView ? catalogScope.projectId : null;
   const moduleCrumbName = isCatalogView ? trail.moduleName : null;
   const featureCrumbName = isCatalogView ? trail.featureName : null;
+
+  useEffect(() => {
+    if (resolveSelectedKey(location.pathname) === "projects") {
+      setCatalogOpen(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -237,10 +245,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const renderNavigationItem = (item: NavigationItem) => {
     const count = shellCounts[item.key] ?? 0;
-    return (
+    const withCatalog = item.key === "projects";
+    const button = (
       <button
         type="button"
-        key={item.key}
         className={`nav-item${selectedKey === item.key ? " active" : ""}`}
         aria-current={selectedKey === item.key ? "page" : undefined}
         onClick={() => handleNavigation(item.path)}
@@ -253,6 +261,37 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </em>
         ) : null}
       </button>
+    );
+    if (!withCatalog) {
+      return <React.Fragment key={item.key}>{button}</React.Fragment>;
+    }
+    // 系统目录内嵌在「项目与功能」下：chevron 切换按钮与导航按钮平级，避免嵌套 button。
+    return (
+      <div key={item.key} className="nav-item-group">
+        <div className="nav-item-row">
+          {button}
+          <button
+            type="button"
+            className="nav-tree-toggle"
+            aria-label={catalogOpen ? "收起系统目录" : "展开系统目录"}
+            aria-expanded={catalogOpen}
+            onClick={() => setCatalogOpen((current) => !current)}
+          >
+            <InpulseIcon
+              name="chevron"
+              size={14}
+              className={catalogOpen ? "tree-chevron expanded" : "tree-chevron"}
+            />
+          </button>
+        </div>
+        {catalogOpen ? (
+          <ProjectTree
+            activeScope={treeScope}
+            onNavigate={handleNavigation}
+            {...(projectClient ? { client: projectClient } : {})}
+          />
+        ) : null}
+      </div>
     );
   };
 
@@ -287,17 +326,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             {workspaceNavigation.map(renderNavigationItem)}
             <p className="nav-section">系统</p>
             {visibleSystemNavigation.map(renderNavigationItem)}
-            {treeScope === null ? null : (
-              <>
-                <p className="nav-section">系统目录</p>
-                <ProjectTree
-                  projectId={treeScope.projectId}
-                  selection={treeScope.selection}
-                  onNavigate={handleNavigation}
-                  {...(projectClient ? { client: projectClient } : {})}
-                />
-              </>
-            )}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>

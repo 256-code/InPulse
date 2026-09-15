@@ -7,6 +7,7 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -92,6 +93,8 @@ function relationBadge(mark: TaskMark | undefined): {
 }
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
+const formatDay = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString("zh-CN") : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
 const recordDraftsHref = (item: TaskViewItem) =>
@@ -214,6 +217,30 @@ export function TasksPanel({
   const currentGroupId =
     currentMark?.groupRole === "SOURCE" ? currentMark.groupId : null;
   const currentRecordCount = currentMark?.publishedRecordCount ?? 0;
+  // 迭代记录标签页按设计师稿直接列出本任务的已发布记录与草稿：两者都是既有
+  // 只读契约（listChangeRecords / getTaskRecordDrafts），客户端按 taskId 过滤，不新增路由。
+  const detailTaskId = current?.id ?? 0;
+  const detailModuleId = current?.moduleId ?? 0;
+  const taskRecords = useQuery({
+    queryKey: ["task-published-records", projectId, detailTaskId],
+    queryFn: ({ signal }) =>
+      api.listChangeRecords(projectId, { limit: 100 }, { signal }),
+    enabled: detailTaskId > 0,
+    retry: false,
+  });
+  const taskDrafts = useQuery({
+    queryKey: ["task-record-drafts", projectId, detailModuleId, detailTaskId],
+    queryFn: ({ signal }) =>
+      api.getTaskRecordDrafts(projectId, detailModuleId, detailTaskId, {
+        signal,
+      }),
+    enabled: detailTaskId > 0,
+    retry: false,
+  });
+  const taskPublished = (taskRecords.data?.items ?? []).filter(
+    (record) => record.taskId === detailTaskId,
+  );
+  const taskDraftItems = taskDrafts.data?.items ?? [];
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -837,7 +864,28 @@ export function TasksPanel({
                           记录一次迭代
                         </a>
                       </div>
-                      {currentRecordCount === 0 && (
+                      {taskRecords.isPending || taskDrafts.isPending ? (
+                        <div className="calm-state">
+                          <Spin />
+                          <span>正在加载迭代记录</span>
+                        </div>
+                      ) : taskRecords.isError || taskDrafts.isError ? (
+                        <Alert
+                          type="error"
+                          title="迭代记录加载失败，请重试。"
+                          action={
+                            <Button
+                              onClick={() => {
+                                void taskRecords.refetch();
+                                void taskDrafts.refetch();
+                              }}
+                            >
+                              重试
+                            </Button>
+                          }
+                        />
+                      ) : taskPublished.length === 0 &&
+                        taskDraftItems.length === 0 ? (
                         <div className="calm-empty">
                           <InpulseIcon name="gitBranch" size={25} />
                           <strong>该任务还没有迭代记录</strong>
@@ -845,6 +893,58 @@ export function TasksPanel({
                             完成任务时可以直接记录，也可以先在迭代记录草稿中保存内容。
                           </p>
                         </div>
+                      ) : (
+                        <ul className="task-record-list">
+                          {taskPublished.map((record) => (
+                            <li key={"published-" + record.id}>
+                              <a
+                                href={
+                                  "/records?projectId=" +
+                                  projectId +
+                                  "&publishedId=" +
+                                  record.id
+                                }
+                              >
+                                <strong>{record.title}</strong>
+                                <small>
+                                  {record.code +
+                                    " · " +
+                                    formatDay(record.publishedAt) +
+                                    " · " +
+                                    (record.handlerName ??
+                                      record.authorName ??
+                                      "处理人不可用")}
+                                </small>
+                              </a>
+                              <CalmBadge tone="green">已发布</CalmBadge>
+                            </li>
+                          ))}
+                          {taskDraftItems.map((draft) => (
+                            <li key={"draft-" + draft.id}>
+                              <a
+                                href={
+                                  "/records?projectId=" +
+                                  projectId +
+                                  "&moduleId=" +
+                                  draft.moduleId +
+                                  "&taskId=" +
+                                  detailTaskId +
+                                  "&recordId=" +
+                                  draft.id
+                                }
+                              >
+                                <strong>{draft.title || "未命名草稿"}</strong>
+                                <small>
+                                  {"草稿 · 更新于 " +
+                                    formatDay(draft.updatedAt) +
+                                    " · 处理人 " +
+                                    (draft.handlerName ?? "名称不可用")}
+                                </small>
+                              </a>
+                              <CalmBadge tone="amber">草稿</CalmBadge>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </>
                   )}

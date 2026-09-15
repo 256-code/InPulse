@@ -1,9 +1,14 @@
 import React, { useMemo, useState } from "react";
-import type { FeatureItem, InpulseApiClient, ModuleItem } from "@generated/api";
+import type {
+  FeatureItem,
+  InpulseApiClient,
+  ModuleItem,
+  ProjectItem,
+} from "@generated/api";
 import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
-import { useProjectDetail } from "@features/projects/project-query";
-import { treePath, type TreeSelection } from "./tree-selection";
+import { useProjects } from "@features/projects/project-query";
+import { treePath, type TreeScope, type TreeSelection } from "./tree-selection";
 
 const FOLDER_CLOSED_PATH =
   "M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z";
@@ -35,8 +40,7 @@ const FolderGlyph: React.FC = () => (
 );
 
 export interface ProjectTreeProps {
-  readonly projectId: number;
-  readonly selection: TreeSelection;
+  readonly activeScope: TreeScope | null;
   readonly onNavigate: (path: string) => void;
   readonly client?: InpulseApiClient | undefined;
 }
@@ -44,18 +48,17 @@ export interface ProjectTreeProps {
 interface FeatureRowProps {
   readonly moduleId: number;
   readonly item: FeatureItem;
-  readonly selection: TreeSelection;
+  readonly selection: TreeSelection | null;
   readonly onFeatureClick: (selection: TreeSelection) => void;
 }
 
 interface FeatureListProps {
   readonly projectId: number;
   readonly moduleId: number;
-  readonly selection: TreeSelection;
+  readonly selection: TreeSelection | null;
   readonly onFeatureClick: (selection: TreeSelection) => void;
   readonly client?: InpulseApiClient | undefined;
 }
-
 const FeatureRow: React.FC<FeatureRowProps> = ({
   moduleId,
   item,
@@ -63,7 +66,7 @@ const FeatureRow: React.FC<FeatureRowProps> = ({
   onFeatureClick,
 }) => {
   const isSelected =
-    selection.kind === "feature" &&
+    selection?.kind === "feature" &&
     selection.moduleId === moduleId &&
     selection.featureId === item.id;
   return (
@@ -120,9 +123,16 @@ interface ModuleBranchProps {
   readonly projectId: number;
   readonly item: ModuleItem;
   readonly expanded: boolean;
-  readonly selection: TreeSelection;
-  readonly onModuleClick: (key: string, selection: TreeSelection) => void;
-  readonly onFeatureClick: (selection: TreeSelection) => void;
+  readonly selection: TreeSelection | null;
+  readonly onModuleClick: (
+    key: string,
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
+  readonly onFeatureClick: (
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
   readonly client?: InpulseApiClient | undefined;
 }
 
@@ -135,10 +145,11 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
   onFeatureClick,
   client,
 }) => {
-  const key = `module:${item.id}`;
+  const key = `project:${projectId}:module:${item.id}`;
   const isSelected =
-    selection.kind === "module" && selection.moduleId === item.id;
-  const inPath = selection.kind === "feature" && selection.moduleId === item.id;
+    selection?.kind === "module" && selection.moduleId === item.id;
+  const inPath =
+    selection?.kind === "feature" && selection.moduleId === item.id;
   return (
     <div className="tree-project">
       <button
@@ -150,7 +161,7 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
         aria-current={isSelected ? "true" : undefined}
         title={item.name}
         onClick={() =>
-          onModuleClick(key, { kind: "module", moduleId: item.id })
+          onModuleClick(key, projectId, { kind: "module", moduleId: item.id })
         }
       >
         <FolderGlyph />
@@ -164,7 +175,7 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
             projectId={projectId}
             moduleId={item.id}
             selection={selection}
-            onFeatureClick={onFeatureClick}
+            onFeatureClick={(next) => onFeatureClick(projectId, next)}
             client={client}
           />
         </div>
@@ -174,17 +185,133 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
 };
 
 /**
- * 侧栏系统目录：只渲染 系统 → 模块 → 功能 三层，点击节点跳转到既有的
- * 项目主页、功能目录与功能档案页面，内容区功能不在此重复实现。
+ * 侧栏系统目录：项目与功能导航展开后先罗列所有项目，点击项目再罗列模块、
+ * 点击模块再罗列功能；点击节点跳转到既有的项目主页、功能目录与功能档案
+ * 页面，内容区功能不在此重复实现。当前路由所在链路自动展开。
  */
-export const ProjectTree: React.FC<ProjectTreeProps> = ({
+interface ModuleListProps {
+  readonly projectId: number;
+  readonly selection: TreeSelection | null;
+  readonly expandedKeys: ReadonlySet<string>;
+  readonly onModuleClick: (
+    key: string,
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
+  readonly onFeatureClick: (
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
+  readonly client?: InpulseApiClient | undefined;
+}
+
+const ModuleList: React.FC<ModuleListProps> = ({
   projectId,
   selection,
+  expandedKeys,
+  onModuleClick,
+  onFeatureClick,
+  client,
+}) => {
+  const modules = useModules(projectId, client);
+  if (modules.query.isPending) {
+    return <p className="tree-hint">正在加载模块…</p>;
+  }
+  if (modules.query.isError) {
+    return <p className="tree-hint">模块加载失败</p>;
+  }
+  const items = modules.query.data?.items ?? [];
+  if (items.length === 0) {
+    return <p className="tree-hint">暂无模块</p>;
+  }
+  return (
+    <>
+      {items.map((item) => (
+        <ModuleBranch
+          key={item.id}
+          projectId={projectId}
+          item={item}
+          expanded={expandedKeys.has(`project:${projectId}:module:${item.id}`)}
+          selection={selection}
+          onModuleClick={onModuleClick}
+          onFeatureClick={onFeatureClick}
+          client={client}
+        />
+      ))}
+    </>
+  );
+};
+
+interface ProjectBranchProps {
+  readonly item: ProjectItem;
+  readonly expanded: boolean;
+  readonly activeScope: TreeScope | null;
+  readonly expandedKeys: ReadonlySet<string>;
+  readonly onProjectClick: (projectId: number) => void;
+  readonly onModuleClick: (
+    key: string,
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
+  readonly onFeatureClick: (
+    projectId: number,
+    selection: TreeSelection,
+  ) => void;
+  readonly client?: InpulseApiClient | undefined;
+}
+
+const ProjectBranch: React.FC<ProjectBranchProps> = ({
+  item,
+  expanded,
+  activeScope,
+  expandedKeys,
+  onProjectClick,
+  onModuleClick,
+  onFeatureClick,
+  client,
+}) => {
+  const isActiveProject = activeScope?.projectId === item.id;
+  const isSelected =
+    isActiveProject && activeScope?.selection.kind === "project";
+  return (
+    <div className="tree-project">
+      <button
+        type="button"
+        className={`tree-row project-node${isSelected ? " selected" : ""}${
+          expanded ? " expanded" : ""
+        }`}
+        aria-expanded={expanded}
+        aria-current={isSelected ? "true" : undefined}
+        title={item.name}
+        onClick={() => onProjectClick(item.id)}
+      >
+        <FolderGlyph />
+        <span className="tree-label">
+          <strong>{item.name}</strong>
+        </span>
+      </button>
+      {expanded ? (
+        <div className="tree-children">
+          <ModuleList
+            projectId={item.id}
+            selection={isActiveProject ? activeScope.selection : null}
+            expandedKeys={expandedKeys}
+            onModuleClick={onModuleClick}
+            onFeatureClick={onFeatureClick}
+            client={client}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+export const ProjectTree: React.FC<ProjectTreeProps> = ({
+  activeScope,
   onNavigate,
   client,
 }) => {
-  const project = useProjectDetail({ client, projectId });
-  const modules = useModules(projectId, client);
+  const projects = useProjects({ client });
   const [extraExpanded, setExtraExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -192,12 +319,18 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     () => new Set(),
   );
   const chainKeys = useMemo(() => {
-    const keys = new Set<string>(["project"]);
-    if (selection.kind !== "project") {
-      keys.add(`module:${selection.moduleId}`);
+    const keys = new Set<string>();
+    if (activeScope === null) {
+      return keys;
+    }
+    keys.add(`project:${activeScope.projectId}`);
+    if (activeScope.selection.kind !== "project") {
+      keys.add(
+        `project:${activeScope.projectId}:module:${activeScope.selection.moduleId}`,
+      );
     }
     return keys;
-  }, [selection]);
+  }, [activeScope]);
   const expandedKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const key of chainKeys) {
@@ -230,71 +363,48 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     });
     setExtraExpanded((prev) => new Set(prev).add(key));
   };
-  const handleModuleClick = (key: string, next: TreeSelection) => {
+  const handleProjectClick = (projectId: number) => {
+    // 与模块节点一致：点击导航到项目主页并开合切换，再次点击收回模块列表。
+    onNavigate(treePath(projectId, { kind: "project" }));
+    toggle(`project:${projectId}`);
+  };
+  const handleModuleClick = (
+    key: string,
+    projectId: number,
+    next: TreeSelection,
+  ) => {
     onNavigate(treePath(projectId, next));
     toggle(key);
   };
-  const handleRootClick = () => {
-    // 系统节点是项目主页的主入口，只导航并展开，不做折叠切换。
-    onNavigate(treePath(projectId, { kind: "project" }));
-    setCollapsed((prev) => {
-      if (!prev.has("project")) {
-        return prev;
-      }
-      const next = new Set(prev);
-      next.delete("project");
-      return next;
-    });
-  };
-  const handleFeatureClick = (next: TreeSelection) => {
+  const handleFeatureClick = (projectId: number, next: TreeSelection) => {
     onNavigate(treePath(projectId, next));
   };
 
-  const rootExpanded = expandedKeys.has("project");
-  const rootSelected = selection.kind === "project";
-  const moduleItems = modules.query.data?.items ?? [];
+  const items = projects.data?.items ?? [];
   return (
     <div className="project-tree">
-      <div className="tree-project">
-        <button
-          type="button"
-          className={`tree-row project-node${rootSelected ? " selected" : ""}${
-            rootExpanded ? " expanded" : ""
-          }`}
-          aria-expanded={rootExpanded}
-          aria-current={rootSelected ? "true" : undefined}
-          title={project.data?.name ?? "系统目录"}
-          onClick={handleRootClick}
-        >
-          <FolderGlyph />
-          <span className="tree-label">
-            <strong>{project.data?.name ?? "系统目录"}</strong>
-          </span>
-        </button>
-        {rootExpanded ? (
-          <div className="tree-children">
-            {modules.query.isPending ? (
-              <p className="tree-hint">正在加载模块…</p>
-            ) : modules.query.isError ? (
-              <p className="tree-hint">模块加载失败</p>
-            ) : moduleItems.length === 0 ? (
-              <p className="tree-hint">暂无模块</p>
-            ) : (
-              moduleItems.map((item) => (
-                <ModuleBranch
-                  key={item.id}
-                  projectId={projectId}
-                  item={item}
-                  expanded={expandedKeys.has(`module:${item.id}`)}
-                  selection={selection}
-                  onModuleClick={handleModuleClick}
-                  onFeatureClick={handleFeatureClick}
-                  client={client}
-                />
-              ))
-            )}
-          </div>
-        ) : null}
+      <div className="project-tree-scroll">
+        {projects.isPending ? (
+          <p className="tree-hint">正在加载项目…</p>
+        ) : projects.isError ? (
+          <p className="tree-hint">项目加载失败</p>
+        ) : items.length === 0 ? (
+          <p className="tree-hint">暂无项目</p>
+        ) : (
+          items.map((item) => (
+            <ProjectBranch
+              key={item.id}
+              item={item}
+              expanded={expandedKeys.has(`project:${item.id}`)}
+              activeScope={activeScope}
+              expandedKeys={expandedKeys}
+              onProjectClick={handleProjectClick}
+              onModuleClick={handleModuleClick}
+              onFeatureClick={handleFeatureClick}
+              client={client}
+            />
+          ))
+        )}
       </div>
     </div>
   );

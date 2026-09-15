@@ -1479,7 +1479,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | CAT-NAV-UNIT-001 | 单元 | 树层级与既有页面映射 | `tree-selection.test.ts` 2 例：`treeScopeOf` 对 4 种路径形状分别返回 `null` / 系统 / 模块 / 功能；`treePath` 三级分别得到 `/projects/2/modules`、`/projects/2/modules/3/features`、`/projects/2/modules/3/features/5` | 本地通过 |
-| CAT-NAV-UNIT-002 | 单元 | 树渲染、展开与选中态 | `ProjectTree.test.tsx` 5 例：根节点为系统名并加载模块；三级点击分别调用既有页面路径（并验证系统节点重复点击不收起模块列表）；模块分支在其功能列表加载期间保持 `aria-expanded=true`；功能行 `aria-current=true` 且所属模块保持 `in-path`；项目主页激活时系统节点 `aria-current=true` | 本地通过 |
+| CAT-NAV-UNIT-002 | 单元 | 树渲染、展开与选中态 | `ProjectTree.test.tsx` 5 例：根节点为系统名并加载模块；三级点击分别调用既有页面路径（并验证系统节点重复点击不收起模块列表）；模块分支在其功能列表加载期间保持 `aria-expanded=true`；功能行 `aria-current=true` 且所属模块保持 `in-path`；项目主页激活时系统节点 `aria-current=true`。**注**：本条「重复点击不收起」语义已被下方「系统目录并入『项目与功能』导航」章节的 NAV-TREE-UNIT-001 取代（项目节点改为与模块一致的点击开合） | 本地通过 |
 | CAT-NAV-UNIT-003 | 单元（布局） | 目录树只在项目目录范围内出现，且与主导航同容器 | `AppLayout.test.tsx` 新增 2 例：项目主页下同一 `nav[name="工作区导航"]` 内既有「任务中心」也有「系统目录」分组，点模块 / 功能分别渲染功能目录 / 功能档案内容，且项目主页内容仍完整渲染；`/tasks` 下不出现「系统目录」分组与 `.project-tree` | 本地通过 |
 
 真实浏览器复验（Vite 5301 → API 3199，真实演示数据与真实登录）：自项目列表进入 `/projects/1/modules`，项目概览与模块列表完整；目录树三级点分别落到 `/projects/1/modules`、`/projects/1/modules/{m}/features`、`/projects/1/modules/8/features/31`（功能「浏览器自动化测试基座」），功能档案完整渲染，树内该功能行高亮且所属模块保持展开。
@@ -1498,7 +1498,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | 任务中心范围与逾期 | `apps/api/test/aggregate-read.service.test.ts`；`apps/web/src/features/my-tasks/my-tasks-server.test.ts`，scope/overdue 入查询、管理员约束、个人统计保持 |
 | 验收标准 | `apps/api/test/features-api.integration.test.ts`；`apps/web/src/features/features/FeaturesPageView.test.tsx`，保存、读取、版本/审计与冲突合并 |
 | 草稿详情 | `apps/api/test/record-drafts.integration.test.ts`；`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`，姓名/归属、弹窗、编辑返回 |
-| 根仓库 | `apps/api/test/external-links.integration.test.ts`，明确设置、切换已有关联、审计、版本冲突、非法路径、跨项目拒绝 |
+| 根仓库 | `apps/api/test/external-links.integration.test.ts`，明确设置、切换已有关联、审计、版本冲突、非法路径、跨项目拒绝；前端 `apps/web/src/features/external-links/ProjectRepositoryLink.test.tsx` 断言直达链接同时含「项目根仓库」文案与根仓库网址文本 |
 | 自定义归属 UI | `apps/web/src/features/tasks/GlobalTaskCreateModal.test.tsx`，整笔提交、错误保留、链接失败不重复建任务 |
 
 本次按用户限制仅执行相关行为测试，不执行全量构建、静态检查或依赖审计；未执行的门禁不能记为通过。
@@ -1517,6 +1517,14 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 执行结果记录于本轮开发日志与 PR 检查，不把按钮定位修复等同于后续业务链路已通过。
 
 补充实际进入后续流程暴露的旧预期：任务中心监听 `/api/v1/tasks?scope=created`；管理员成员页校验加载后的项目名称；多草稿切换先关闭详情弹窗；新项目任务指派前显式创建模块。普通链接重复使用普通关联提示，仅根仓库设置显示根仓库提示。
+
+## 项目根仓库直达链接展示网址（C，2026-09-15 本地落库）
+
+用户反馈概览头部根仓库入口「只有文字说明，没有网址」。`ProjectRepositoryLink` 的直达链接在「项目根仓库」文案后追加 `.project-repository-url` 网址文本（超长省略号截断，max-width 260px），链接 href 不变；`design-system.css` 为该容器与链接补充行内布局与配色。`ProjectRepositoryLink.test.tsx` 在既有「直达明确标记的根仓库」用例中追加 `textContent` 含网址断言。验证：目标文件 2/2、全量 web 单测 74 文件 403 例、web typecheck、改动文件 Prettier/ESLint 通过；浏览器实测头部同时显示「项目根仓库」与 `https://github.com/256-code/InPulse`。无契约 / 权限 / 迁移 / 路由改动。
+
+## GitHub 链接弹窗添加表单置顶（C，2026-09-15 本地落库）
+
+用户要求「GitHub 链接」弹窗里的添加链接放在顶上。`ExternalLinksPanel` 把新增表单字段提取为 `addFormFields`（弹层与内联共用），弹层形态在 `data` 就绪且可写时先渲染 `.external-links-add`（下边框分隔）再渲染版本行与链接列表，弹窗底部只保留解除关联确认；内联形态交互不变。`ExternalLinksPanel.test.tsx` 新增「添加表单排在链接列表之前」DOM 顺序断言。验证：目标 2 文件 7 例、全量 web 单测 74 文件 404 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测弹窗内 `.external-links-add` 先于列表首项且输入框可见，截图确认顶部为 URL 输入 + 根仓库勾选 + 确认添加。无契约 / 权限 / 迁移 / 路由改动；`apps/e2e/tests/external-links.spec.ts` 的弹窗填写路径不受影响（未运行，argon2 环境问题未修复）。
 
 ## 冗余导航收敛与普通成员只读成员页（C，2026-09-15 本地落库）
 
@@ -1544,3 +1552,20 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-15，前端专项，无后端 / 契约 / 迁移改动）：`pnpm --filter @inpulse/web test` **74 文件 401 例通过**（新增 `ActiveProjectMembers.test.tsx` 5 例，删除导航相关 7 例、替换 2 例）；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/web build`、`pnpm --filter @inpulse/web check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 检查通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects/1/members` 渲染新只读视图（4 名成员、特哥标注创建者、无任何写入口）。
 
 未运行 / 已知偏差：① `project-members.spec.ts` 因上述 argon2 环境问题未实跑，仅 typecheck；② 全量 `pnpm test:e2e`、整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、`pnpm check:docs` 未运行；③ 窄屏（侧栏折叠）下模块切换只剩面包屑与返回按钮，属本次收敛的已知取舍；④ `ProjectContextNav` 为设计师稿组件，本次删除属用户明确授权的设计偏离；⑤ 新增 / 修改测试需非作者人工评审。
+
+## 系统目录并入「项目与功能」导航（C，2026-09-15 本地落库）
+
+用户要求：侧栏不再单独渲染「系统目录」分组，目录树并入「项目与功能」导航项——点击该项（或其行尾 chevron）展开系统目录，**先罗列所有项目**，点击项目再罗列模块、点击模块再罗列功能（逐级展开）；并给罗列区域设置固定高度区间，过长时内部滚动。纯前端导航结构调整，无后端 / 契约 / 权限 / 迁移 / 路由变化：
+
+- `ProjectTree` 重构为多项目渐进树：props 由 `projectId + selection` 改为 `activeScope: TreeScope | null`；根层用 `useProjects` 罗列全部项目，点击项目节点导航到项目主页并 toggle 该项目模块列表（再次点击收回；初版误实现为「只展开不收起」，已由用户反馈修正为与模块节点一致的开合语义），点击模块导航到功能目录并 toggle 功能列表；当前路由所在链路（项目 → 模块）仍自动展开、选中态与 `in-path` 高亮语义不变；加载 / 失败 / 空态提示按层级展示。
+- `AppLayout`：删除独立「系统目录」`nav-section` 分组；「项目与功能」行改为 `.nav-item-row`（导航按钮 + 行尾 `.nav-tree-toggle` chevron，避免嵌套 button），`catalogOpen` 状态控制树开合，进入 `/projects*` 路由自动展开；树仅在展开时渲染。
+- 罗列区间：新增 `.project-tree-scroll { max-height: 264px; overflow-y: auto }`（含细滚动条样式），目录过长时在固定高度内滚动，不再把侧栏导航撑出视口；项目层提示文案缩进与项目节点对齐。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| NAV-TREE-UNIT-001 | 单元 | 目录树多项目渐进展开 | `ProjectTree.test.tsx` 7 例：先罗列所有项目且未点击不加载模块；点击项目导航 `/projects/2/modules` 并展开模块；**再次点击项目节点收回模块列表（`aria-expanded` true→false、模块行消失）且仍导航项目主页**；模块 / 功能点击导航既有页面；activeScope 链路自动展开；模块分支 toggle；选中态与 in-path 高亮 | 本地通过 |
+| NAV-TREE-UNIT-002 | 单元 | 目录树内嵌「项目与功能」导航项 | `AppLayout.test.tsx` 更新 2 例：项目路由下树渲染在「工作区导航」内且无独立「系统目录」分组标题，模块 / 功能节点点击驱动既有路由；非项目路由默认收起（无 `.project-tree`），点击「展开系统目录」chevron 可展开 / 收起 | 本地通过 |
+
+本地实际执行（2026-09-15）：`pnpm --filter @inpulse/web test` **74 文件 403 例通过**；`typecheck`、`build`、`check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects` 下树内嵌「项目与功能」行并罗列 2 个项目，点击「InPulse 研发交付平台」跳转 `/projects/1/modules` 且展开 9 个模块，**再次点击项目节点收回模块（9 → 0，`aria-expanded` false）、三击重新展开（0 → 9）**，罗列区 264px 限高生效（scrollHeight 374 > clientHeight 264，内部滚动），chevron 收起 / 展开正常。
+
+未运行 / 已知偏差：① 全量 `pnpm test:e2e`（argon2 环境问题未修复）与整链 `pnpm check` 未运行；② 目录树相关 Playwright 用例仍缺失（沿袭上一轮已知项）；③ 修改测试需非作者人工评审。

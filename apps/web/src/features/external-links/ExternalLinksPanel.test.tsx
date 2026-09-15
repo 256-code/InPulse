@@ -159,3 +159,39 @@ it("explains an ordinary duplicate link without root repository wording", async 
   );
   expect(screen.getByRole("button", { name: "确认添加" })).toBeDisabled();
 });
+
+it("renders the add form above the link list in the modal", async () => {
+  mount({
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 1,
+      rowVersion: 2,
+      writable: true,
+      items: [
+        {
+          id: 9,
+          projectId: 1,
+          normalizedUrl: "https://github.com/a/b/pull/7",
+          kind: "PULL_REQUEST",
+          label: "a/b#7",
+          repository: "a/b",
+          externalNumber: "7",
+          externalSha: null,
+          releaseTag: null,
+          isRootRepository: false,
+        },
+      ],
+    }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+    addExternalLink: vi.fn().mockResolvedValue({ rowVersion: 3 }),
+  } as unknown as InpulseApiClient);
+  const addBox = await screen
+    .findByLabelText("GitHub URL")
+    .then((input) => input.closest(".external-links-add"));
+  const firstItem = await screen.findByRole("link", { name: /a\/b#7/ });
+  expect(addBox).not.toBeNull();
+  // 添加表单必须排在链接列表之前（DOM 顺序）。
+  expect(
+    addBox!.compareDocumentPosition(firstItem) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});

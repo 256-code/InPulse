@@ -27,6 +27,9 @@ export function ProjectRepositoryLink({
           rel="noopener noreferrer"
         >
           <InpulseIcon name="code" size={16} /> 项目根仓库{" "}
+          <span className="project-repository-url">
+            {repository.normalizedUrl}
+          </span>{" "}
           <InpulseIcon name="externalLink" size={14} />
         </a>
       )}

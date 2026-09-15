@@ -44,6 +44,25 @@ function client(overrides: object = {}) {
     }),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     getFeature: vi.fn().mockResolvedValue({ status: "ACTIVE" }),
+    listChangeRecords: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+    getTaskRecordDrafts: vi.fn().mockResolvedValue({
+      source: {
+        taskId: 1,
+        projectId: 2,
+        moduleId: 3,
+        featureId: 4,
+        scopeType: "FEATURE",
+        title: item.title,
+        assigneeId: 5,
+        workStatus: "TODO",
+        lifecycleStatus: "ACTIVE",
+        rowVersion: 1,
+        impactFeatureIds: [],
+      },
+      items: [],
+    }),
     ...overrides,
   } as unknown as InpulseApiClient;
 }
@@ -484,7 +503,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(dialog).getByRole("link", { name: "迭代记录草稿" }),
     ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
     fireEvent.click(within(tabs).getByRole("tab", { name: "迭代记录" }));
-    // 迭代记录标签页只给计数与草稿入口；记录列表属于 F-18 页面，弹窗不虚构列表。
+    // 迭代记录标签页按设计师稿列出本任务已发布记录与草稿；两者皆空时给空态与草稿入口。
     expect(within(tabs).getByRole("tab", { name: "迭代记录" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -498,6 +517,105 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).getByRole("link", { name: "记录一次迭代" }),
     ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
+  });
+  it("lists the task's published records and drafts on the records tab", async () => {
+    const record = {
+      id: 11,
+      projectId: 2,
+      moduleId: 3,
+      featureId: 4,
+      scopeType: "FEATURE",
+      taskId: 1,
+      impactFeatureIds: [],
+      handlerId: 5,
+      authorId: 5,
+      status: "PUBLISHED",
+      code: "PR-CR-1",
+      currentVersion: 1,
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      rowVersion: 1,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+      title: "已发布记录甲",
+      contextProblem: "a",
+      changeSolution: "b",
+      resultVerification: "c",
+      remainingIssues: "",
+      leftovers: [],
+      leftoverItem: null,
+    };
+    mount(
+      client({
+        listChangeRecords: vi.fn().mockResolvedValue({
+          items: [
+            record,
+            { ...record, id: 12, taskId: 999, title: "他人任务记录" },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        }),
+        getTaskRecordDrafts: vi.fn().mockResolvedValue({
+          source: {
+            taskId: 1,
+            projectId: 2,
+            moduleId: 3,
+            featureId: 4,
+            scopeType: "FEATURE",
+            title: item.title,
+            assigneeId: 5,
+            workStatus: "TODO",
+            lifecycleStatus: "ACTIVE",
+            rowVersion: 1,
+            impactFeatureIds: [],
+          },
+          items: [
+            {
+              id: 21,
+              projectId: 2,
+              moduleId: 3,
+              featureId: 4,
+              scopeType: "FEATURE",
+              taskId: 1,
+              impactFeatureIds: [],
+              handlerId: 5,
+              authorId: 5,
+              status: "DRAFT",
+              code: null,
+              currentVersion: 0,
+              publishedAt: null,
+              rowVersion: 1,
+              createdAt: "2026-09-02T00:00:00.000Z",
+              updatedAt: "2026-09-02T00:00:00.000Z",
+              title: "草稿乙",
+              contextProblem: "a",
+              changeSolution: "b",
+              resultVerification: "c",
+              remainingIssues: "",
+            },
+          ],
+        }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
+    fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
+    const publishedLink = await within(dialog).findByRole("link", {
+      name: /已发布记录甲/,
+    });
+    expect(publishedLink).toHaveAttribute(
+      "href",
+      "/records?projectId=2&publishedId=11",
+    );
+    expect(within(dialog).getByText("已发布")).toBeInTheDocument();
+    const draftLink = within(dialog).getByRole("link", { name: /草稿乙/ });
+    expect(draftLink).toHaveAttribute(
+      "href",
+      "/records?projectId=2&moduleId=3&taskId=1&recordId=21",
+    );
+    expect(within(dialog).getByText("草稿")).toBeInTheDocument();
+    // 同项目其他任务的记录不得混入本任务列表。
+    expect(within(dialog).queryByText("他人任务记录")).toBeNull();
     fireEvent.click(within(tabs).getByRole("tab", { name: "任务信息" }));
     expect(within(dialog).getByText("原说明")).toBeInTheDocument();
   });

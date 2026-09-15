@@ -176,21 +176,8 @@ export function ExternalLinksPanel({
     if (inline) void load();
     // 目标或形态变化时重新加载，等价于弹层形态的「打开即加载」。
   }, [inline, targetType, targetId]);
-  const addForm = removeId ? (
-    <div className="calm-action-footer">
-      <p>确认解除此链接的当前关联？</p>
-      <Button disabled={busy} onClick={() => setRemoveId(null)}>
-        取消解除
-      </Button>
-      <Button
-        danger
-        disabled={busy || needsRefresh}
-        onClick={() => void save()}
-      >
-        确认解除关联
-      </Button>
-    </div>
-  ) : (
+  /** 弹层与内联形态共用的新增表单字段；弹层形态按用户要求置于链接列表顶部。 */
+  const addFormFields = removeId ? null : (
     <>
       <label htmlFor={`external-link-url-${targetType}-${targetId}`}>
         GitHub URL
@@ -227,6 +214,23 @@ export function ExternalLinksPanel({
         确认添加
       </Button>
     </>
+  );
+  const addForm = removeId ? (
+    <div className="calm-action-footer">
+      <p>确认解除此链接的当前关联？</p>
+      <Button disabled={busy} onClick={() => setRemoveId(null)}>
+        取消解除
+      </Button>
+      <Button
+        danger
+        disabled={busy || needsRefresh}
+        onClick={() => void save()}
+      >
+        确认解除关联
+      </Button>
+    </div>
+  ) : (
+    addFormFields
   );
   /** 内联形态的操作区：解除确认优先于新增表单，与设计师稿的展开式一致。 */
   const inlineActions =
@@ -337,6 +341,9 @@ export function ExternalLinksPanel({
         )}
         {data && (
           <>
+            {data.writable && addFormFields !== null && (
+              <div className="external-links-add">{addFormFields}</div>
+            )}
             <p>
               当前版本 {data.rowVersion}
               {!data.writable ? " · 只读" : ""}
@@ -373,61 +380,21 @@ export function ExternalLinksPanel({
                 ))}
               </ul>
             )}
-            {data.writable &&
-              (removeId ? (
-                <>
-                  <p>确认解除此链接的当前关联？</p>
-                  <Button disabled={busy} onClick={() => setRemoveId(null)}>
-                    取消解除
-                  </Button>
-                  <Button
-                    danger
-                    disabled={busy || needsRefresh}
-                    onClick={() => void save()}
-                  >
-                    确认解除关联
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <label
-                    htmlFor={`external-link-url-${targetType}-${targetId}`}
-                  >
-                    GitHub URL
-                  </label>
-                  <Input
-                    id={`external-link-url-${targetType}-${targetId}`}
-                    value={url}
-                    maxLength={2048}
-                    disabled={busy}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://github.com/owner/repository/pull/123"
-                  />
-                  {targetType === "PROJECT" && (
-                    <Checkbox
-                      checked={isRootRepository}
-                      disabled={busy}
-                      onChange={(e) => setIsRootRepository(e.target.checked)}
-                    >
-                      设为项目根仓库（可填写已有链接以切换）
-                    </Checkbox>
-                  )}
-                  {url.trim() && (
-                    <p role="status">
-                      {previewLabel(url)
-                        ? "识别为：" + previewLabel(url)
-                        : "请输入有效的 GitHub HTTPS URL"}
-                    </p>
-                  )}
-                  <Button
-                    type="primary"
-                    disabled={busy || needsRefresh || !url.trim()}
-                    onClick={() => void save()}
-                  >
-                    确认添加
-                  </Button>
-                </>
-              ))}
+            {data.writable && removeId !== null && (
+              <>
+                <p>确认解除此链接的当前关联？</p>
+                <Button disabled={busy} onClick={() => setRemoveId(null)}>
+                  取消解除
+                </Button>
+                <Button
+                  danger
+                  disabled={busy || needsRefresh}
+                  onClick={() => void save()}
+                >
+                  确认解除关联
+                </Button>
+              </>
+            )}
           </>
         )}
       </Modal>

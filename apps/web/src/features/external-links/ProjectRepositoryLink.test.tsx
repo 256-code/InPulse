@@ -30,9 +30,12 @@ describe("project repository", () => {
         isRootRepository: true,
       },
     ]);
-    expect(
-      await screen.findByRole("link", { name: /项目根仓库/ }),
-    ).toHaveAttribute("href", "https://github.com/a/right");
+    const rootLink = await screen.findByRole("link", {
+      name: /项目根仓库/,
+    });
+    expect(rootLink).toHaveAttribute("href", "https://github.com/a/right");
+    // 链接除「项目根仓库」文案外必须同时展示根仓库网址文本。
+    expect(rootLink.textContent).toContain("https://github.com/a/right");
     expect(api.listExternalLinks).toHaveBeenCalledWith(
       "PROJECT",
       7,

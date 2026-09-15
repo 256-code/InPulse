@@ -378,6 +378,33 @@ button {
   background: #2b82b8;
   color: white;
 }
+/* 「项目与功能」行：导航按钮与目录开合按钮平级排列，目录树嵌在行下方。 */
+.nav-item-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.nav-item-row .nav-item {
+  flex: 1;
+  min-width: 0;
+}
+.nav-tree-toggle {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7192af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.nav-tree-toggle:hover {
+  background: #1a3957;
+  color: white;
+}
 .tree-chevron {
   transition: transform 0.18s ease;
   flex: 0 0 auto;
@@ -387,9 +414,17 @@ button {
   transform: rotate(90deg);
   color: #72d4d1;
 }
-/* 侧栏系统目录树：沿用导航行样式，只保留 系统 → 模块 → 功能 三层。 */
+/* 侧栏系统目录树：沿用导航行样式，罗列 项目 → 模块 → 功能 三层。 */
 .project-tree {
   margin: 0 0 12px;
+}
+/* 罗列区间：目录过长时在固定高度内滚动，不把侧栏导航撑出视口。 */
+.project-tree-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #2c4a66 transparent;
 }
 .tree-project {
   display: flex;
@@ -505,6 +540,10 @@ button {
   color: #6f91ad;
   font-size: 10px;
   margin: 2px 0 4px 50px;
+}
+/* 项目层提示（加载/失败/空）与项目节点缩进对齐，而不是功能层的 50px。 */
+.project-tree-scroll > .tree-hint {
+  margin-left: 12px;
 }
 .sidebar-footer {
   border-top: 1px solid #29425b;
@@ -1835,6 +1874,30 @@ td small {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.project-repository-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.project-repository-link > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #2472c3;
+  font-size: 13px;
+  font-weight: 600;
+}
+.project-repository-url {
+  max-width: 260px;
+  overflow: hidden;
+  color: #74869a;
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-overview-strip {
   display: flex;
@@ -3916,6 +3979,38 @@ a:focus-visible {
 .task-modal-main > .calm-description:first-child {
   border-top: 0;
   padding-top: 0;
+}
+.task-record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-record-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e7edf1;
+  border-radius: 10px;
+}
+.task-record-list a {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: #3c5670;
+}
+.task-record-list a strong {
+  display: block;
+  font-size: 13px;
+}
+.task-record-list a small {
+  display: block;
+  margin-top: 3px;
+  color: #98a5b3;
+  font-size: 11px;
 }
 .task-modal-facts {
   min-width: 0;
