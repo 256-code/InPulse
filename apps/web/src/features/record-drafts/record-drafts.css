@@ -26,11 +26,29 @@
   font: inherit;
 }
 
-.draft-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin: 16px 0;
+.draft-source-head {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border, #e7edf1);
+  border-radius: 12px;
+  background: #fff;
+}
+.draft-source-head h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.draft-source-head p {
+  margin: 0 0 8px;
+  color: #74869a;
+  font-size: 12px;
+}
+.draft-source-head a {
+  color: #2472c3;
+  font-size: 12px;
+}
+.record-drafts-page .calm-section-title {
+  align-items: center;
+  gap: 10px;
 }
 
 .record-drafts-page .calm-task-card > .badge {

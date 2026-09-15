@@ -468,27 +468,27 @@ export function RecordDraftsView({
       {projectId > 0 && (
         <>
           {taskId > 0 && sourceQuery.data && (
-            <section aria-label="来源任务">
-              <h2>{sourceQuery.data.source.title}</h2>
-              <p>
-                选择已有草稿继续编辑，或新建另一条草稿。保存草稿不会改变任务状态。
-              </p>
-              <a
-                href={`/projects/${projectId}/modules/${sourceModuleId}${sourceQuery.data.source.featureId === null ? "/tasks" : `/features/${sourceQuery.data.source.featureId}`}?taskId=${taskId}`}
-              >
-                返回来源任务
-              </a>
-              {" · "}
-              <a href={`/records?projectId=${projectId}`}>项目全部草稿</a>
-            </section>
+            <div className="draft-source-head">
+              <section aria-label="来源任务">
+                <h2>{sourceQuery.data.source.title}</h2>
+                <p>
+                  选择已有草稿继续编辑，或新建另一条草稿。保存草稿不会改变任务状态。
+                </p>
+                <a
+                  href={`/projects/${projectId}/modules/${sourceModuleId}${sourceQuery.data.source.featureId === null ? "/tasks" : `/features/${sourceQuery.data.source.featureId}`}?taskId=${taskId}`}
+                >
+                  返回来源任务
+                </a>
+                {" · "}
+                <a href={`/records?projectId=${projectId}`}>项目全部草稿</a>
+              </section>
+            </div>
           )}
           <CalmSectionTitle
             title={taskId > 0 ? "来源草稿" : "项目草稿"}
             hint="先把变化写清楚，保存后可与项目成员继续补充。"
           >
             <CalmBadge tone="amber">草稿</CalmBadge>
-          </CalmSectionTitle>
-          <div className="draft-toolbar">
             <Button
               className="primary-button"
               disabled={!writable}
@@ -496,7 +496,7 @@ export function RecordDraftsView({
             >
               {taskId ? "新建来源草稿" : "新建独立草稿"}
             </Button>
-          </div>
+          </CalmSectionTitle>
           {listPending ? (
             <Spin />
           ) : listFailed ? (

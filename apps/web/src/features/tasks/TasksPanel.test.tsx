@@ -44,6 +44,9 @@ function client(overrides: object = {}) {
     }),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     getFeature: vi.fn().mockResolvedValue({ status: "ACTIVE" }),
+    listActiveProjectMembers: vi.fn().mockResolvedValue({
+      items: [{ id: 5, name: "项目成员", avatarUrl: null }],
+    }),
     listChangeRecords: vi
       .fn()
       .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
@@ -618,6 +621,33 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(within(dialog).queryByText("他人任务记录")).toBeNull();
     fireEvent.click(within(tabs).getByRole("tab", { name: "任务信息" }));
     expect(within(dialog).getByText("原说明")).toBeInTheDocument();
+  });
+  it("shows creator and history operator names instead of raw ids", async () => {
+    mount(
+      client({
+        getTaskStatusHistory: vi.fn().mockResolvedValue({
+          items: [
+            {
+              id: "1",
+              fromWorkStatus: null,
+              toWorkStatus: "TODO",
+              completedAtSnapshot: null,
+              completionNoteSnapshot: null,
+              reason: null,
+              changedBy: 5,
+              changedAt: "2026-09-10T03:00:00.000Z",
+            },
+          ],
+        }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    // 创建人与状态历史操作人都解析为姓名，不再显示裸编号。
+    expect(within(dialog).queryByText("#5")).toBeNull();
+    expect(
+      await within(dialog).findByText(/操作人\s*项目成员/),
+    ).toBeInTheDocument();
   });
   it("shows the source branch panel and routes to the group from the branches tab", async () => {
     mountWithGroupRoute(

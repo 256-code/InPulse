@@ -260,6 +260,18 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
+  // 仍解析不到（已移出项目或停用）时回退中性编号，不冒充负责人语义。
+  const projectMembers = useQuery({
+    queryKey: ["project-active-members", projectId],
+    queryFn: ({ signal }) =>
+      api.listActiveProjectMembers(projectId, { signal }),
+    retry: false,
+  });
+  const personName = (id: number) =>
+    projectMembers.data?.items.find((m) => m.id === id)?.name ??
+    members.data?.items.find((m) => m.id === id)?.name ??
+    "用户 #" + id;
   const openDetail = (id: number) => {
     setSelectedId(id);
     setTab("info");
@@ -912,7 +924,7 @@ export function TasksPanel({
                                     formatDay(record.publishedAt) +
                                     " · " +
                                     (record.handlerName ??
-                                      memberName(record.handlerId))}
+                                      personName(record.handlerId))}
                                 </small>
                               </a>
                               <CalmBadge tone="green">已发布</CalmBadge>
@@ -938,7 +950,7 @@ export function TasksPanel({
                                     formatDay(draft.updatedAt) +
                                     " · 处理人 " +
                                     (draft.handlerName ??
-                                      memberName(draft.handlerId))}
+                                      personName(draft.handlerId))}
                                 </small>
                               </a>
                               <CalmBadge tone="amber">草稿</CalmBadge>
@@ -1000,7 +1012,7 @@ export function TasksPanel({
                     <dt>负责人</dt>
                     <dd>{memberName(current.assigneeId)}</dd>
                     <dt>创建人</dt>
-                    <dd>#{current.creatorId}</dd>
+                    <dd>{personName(current.creatorId)}</dd>
                     <dt>截止时间</dt>
                     <dd>{formatDate(current.dueAt)}</dd>
                     <dt>创建时间</dt>
@@ -1035,6 +1047,7 @@ export function TasksPanel({
                 writable={taskWritable}
                 action={statusAction}
                 onClose={() => setStatusAction(null)}
+                nameOf={personName}
               />
               {mergeInto && (
                 <MergeIntoTargetModal

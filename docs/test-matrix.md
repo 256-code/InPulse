@@ -1522,6 +1522,14 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 用户反馈概览头部根仓库入口「只有文字说明，没有网址」。`ProjectRepositoryLink` 的直达链接在「项目根仓库」文案后追加 `.project-repository-url` 网址文本（超长省略号截断，max-width 260px），链接 href 不变；`design-system.css` 为该容器与链接补充行内布局与配色。`ProjectRepositoryLink.test.tsx` 在既有「直达明确标记的根仓库」用例中追加 `textContent` 含网址断言。验证：目标文件 2/2、全量 web 单测 74 文件 403 例、web typecheck、改动文件 Prettier/ESLint 通过；浏览器实测头部同时显示「项目根仓库」与 `https://github.com/256-code/InPulse`。无契约 / 权限 / 迁移 / 路由改动。
 
+## 迭代记录页来源草稿区头部卡片化（C，2026-09-15 本地落库）
+
+用户反馈 `/records?projectId=&moduleId=&taskId=` 的来源草稿区「是什么、为什么没有 UI」：该区块是 `RecordDraftsView` 嵌在 `RecordsWorkspace` 顶部的任务来源草稿管理区，来源头部此前是无容器的裸文本（标题/说明/两个链接），「新建来源草稿」按钮孤悬右对齐，视觉上像未加样式。本轮把来源头部包进 `.draft-source-head` 白底圆角卡片，「新建来源草稿/新建独立草稿」按钮移入 `CalmSectionTitle` 右侧（与徽章同行，删除孤立的 `.draft-toolbar`），`record-drafts.css` 补卡片与标题行对齐样式。`RecordDraftsView.test.tsx` 补断言：来源标题位于 `.draft-source-head` 内、新建按钮位于 `.calm-section-title` 内。验证：目标文件 7 例、全量 web 单测 74 文件 406 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测（小邵登录，`/records?projectId=1&moduleId=5&taskId=5`）：头部卡片渲染、徽章与按钮同行右侧（实测 bounding box 同 top），截图确认。无契约 / 权限 / 迁移 / 路由改动。
+
+## 任务创建人与状态历史操作人姓名解析（C，2026-09-15 本地落库）
+
+用户反馈任务详情弹窗「创建人」与状态历史「操作人」显示裸编号（`#1` / `#3`）。`TasksPanel` 新增 `listActiveProjectMembers` 只读查询与 `personName` 解析（项目活跃成员 → 任务指派人候选 → 回退中性「用户 #id」，不冒充负责人语义），「创建人」改用 `personName(current.creatorId)`；`TaskStatusPanel` 新增可选 `nameOf` 属性，状态历史行「操作人」改用它解析姓名。迭代记录列表的处理人回退同步改用 `personName`。`TasksPanel.test.tsx` 基础 mock 补 `listActiveProjectMembers`，新增「创建人与历史操作人显示姓名而非裸编号」用例。验证：目标文件 19 例、全量 web 单测 74 文件 406 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测（小邵登录，功能 12 已完成任务）：创建人「特哥」、历史「操作人 特哥 / 操作人 小吴」。**未验证**：已移出项目或停用用户的回退形态（演示库无此数据，仅单测与代码路径覆盖）。无契约 / 权限 / 迁移 / 路由改动（`listActiveProjectMembers` 为既有成员只读路由）。
+
 ## 任务详情弹窗迭代记录列表（C，2026-09-15 本地落库）
 
 用户反馈任务详情弹窗「迭代记录」标签不显示已有记录与草稿，要求按设计师稿（`https://256-code.github.io/latest-version/`）实现。`TasksPanel` 在详情弹窗打开时新增两个只读查询：`listChangeRecords(projectId, {limit:100})` 客户端按 `taskId` 过滤出本任务已发布记录（`listChangeRecords` 无 taskId 查询参数，不改契约），`getTaskRecordDrafts` 取本任务草稿；标签页按设计师稿渲染列表（标题 + 编号/日期/处理人 + 已发布/草稿徽章），已发布记录点击跳 `/records?projectId=&publishedId=` 打开详情，草稿跳 `/records?...&taskId=&recordId=` 打开草稿详情；两者皆空保留原空态。处理人姓名优先用响应回填字段，缺失时回退项目成员名单（`listChangeRecords` 不回填姓名）。`TasksPanel.test.tsx` 基础 mock 补两个只读接口，新增列表用例（含同项目他人任务记录不混入断言）。验证：目标文件 18 例、全量 web 单测 74 文件 405 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测：任务 22 的弹窗标签显示「迭代记录 1」并列出 `INPULSE-CR-9 · 2026/9/12 · 特哥 · 已发布`，点击跳转 `/records?projectId=1&publishedId=9` 且详情可见；无记录任务显示空态；演示库当前无任务级草稿，草稿条目仅单测覆盖（未验证）。无契约 / 权限 / 迁移 / 路由改动。
