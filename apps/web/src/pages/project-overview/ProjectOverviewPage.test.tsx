@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -148,25 +148,10 @@ describe("ProjectOverviewPage", () => {
     expect(await screen.findByText("全部项目页")).toBeInTheDocument();
   });
 
-  it("loads the project modules into the project context navigation", async () => {
-    const { listModules } = renderPage("/projects/1/overview");
-    await waitFor(() =>
-      expect(listModules).toHaveBeenCalledWith(1, {
-        signal: expect.any(AbortSignal),
-      }),
-    );
-    const nav = await screen.findByRole("navigation", { name: "项目内导航" });
-    expect(
-      within(nav)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["项目概览", "未分类模块"]);
-  });
-
-  it("opens a module feature list from the project context navigation", async () => {
+  it("opens the project modules workspace from the 查看模块 entry", async () => {
     renderPage("/projects/1/overview");
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "未分类模块" }));
-    expect(await screen.findByText("功能列表页")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "查看模块" }));
+    expect(await screen.findByText("模块页")).toBeInTheDocument();
   });
 });

@@ -1540,6 +1540,10 @@ td small {
 .settings-panel {
   padding-bottom: 15px;
 }
+/* .panel 无内边距且标题自身无水平内缩，包裹层让标题与 project-facts（20px 外边距）左缘对齐。 */
+.settings-panel-head {
+  padding: 18px 20px 0;
+}
 .member-row {
   display: flex;
   align-items: center;
@@ -3655,57 +3659,6 @@ a:focus-visible {
   }
 }
 
-.project-context-nav {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  border-bottom: 1px solid #dfe7ef;
-  padding-bottom: 16px;
-  margin-bottom: 24px;
-}
-.project-context-nav button {
-  border: 0;
-  background: none;
-  padding: 9px 15px;
-  border-radius: 7px;
-  color: #647b92;
-}
-.project-context-nav button.active {
-  background: #e7f1ff;
-  color: #226cc2;
-  font-weight: 600;
-}
-.feature-workspace {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-.feature-switcher {
-  position: sticky;
-  top: 88px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 0;
-}
-.feature-switcher > button {
-  border: 0;
-  background: transparent;
-  color: #60768d;
-  padding: 12px;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-.feature-switcher > button.active {
-  background: white;
-  color: #226cc2;
-  box-shadow: 0 1px 4px #1837560c;
-}
 .feature-document {
   background: white;
   border: 1px solid #e3eaf2;
@@ -3815,14 +3768,6 @@ a:focus-visible {
   height: 16px;
 }
 @media (max-width: 1000px) {
-  .feature-workspace {
-    grid-template-columns: 1fr;
-  }
-  .feature-switcher {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
   .record-writing-grid {
     grid-template-columns: 1fr;
   }

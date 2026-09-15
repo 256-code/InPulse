@@ -849,56 +849,6 @@
   margin: -4px 0 8px;
 }
 
-.feature-switcher .back-button {
-  margin-bottom: 8px;
-}
-
-.feature-switcher-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid #e2eaf3;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #536b82;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.feature-switcher-item.ant-btn {
-  width: 100%;
-  min-height: 38px;
-  justify-content: flex-start;
-  gap: 7px;
-  padding: 8px 10px !important;
-  border: 0 !important;
-  background: transparent !important;
-  color: #60768d !important;
-  border-radius: 8px;
-  font-size: 12px;
-  text-align: left;
-  overflow: hidden;
-}
-
-.feature-switcher-item.ant-btn:hover {
-  color: #276db3 !important;
-  background: #f2f7fc !important;
-}
-
-.feature-switcher-item.ant-btn.active {
-  color: #226cc2 !important;
-  background: #ffffff !important;
-  box-shadow: 0 1px 4px #1837560c;
-}
-
-.feature-switcher-item .anticon {
-  flex: 0 0 auto;
-}
-
 .modal-badges,
 .detail-badges {
   display: flex;
@@ -1146,12 +1096,6 @@
 
 .merge-choice .catalog-actions {
   align-items: center;
-}
-
-@media (max-width: 1000px) {
-  .feature-switcher .back-button {
-    margin-bottom: 0;
-  }
 }
 
 @media (max-width: 700px) {

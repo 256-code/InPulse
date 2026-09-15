@@ -1517,3 +1517,30 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 执行结果记录于本轮开发日志与 PR 检查，不把按钮定位修复等同于后续业务链路已通过。
 
 补充实际进入后续流程暴露的旧预期：任务中心监听 `/api/v1/tasks?scope=created`；管理员成员页校验加载后的项目名称；多草稿切换先关闭详情弹窗；新项目任务指派前显式创建模块。普通链接重复使用普通关联提示，仅根仓库设置显示根仓库提示。
+
+## 冗余导航收敛与普通成员只读成员页（C，2026-09-15 本地落库）
+
+用户确认：侧栏「系统目录」树（项目主页目录树恢复条目）已承担项目 → 模块 → 功能三级导航，页面内与之重叠的导航不再保留。本轮两项前端改动，均无后端 / 契约 / 权限 / 迁移 / 路由变化：
+
+**一、冗余导航移除**
+
+- 删除 `ProjectContextNav`（设计师稿 `.project-context-nav` 横条，「项目概览 + 模块」切换）及其组件文件与单测；移除 4 处使用点：`ProjectOverviewPageView`（含 `modules` / `onOpenModule` / `onOpenOverview` / `navActive` 四个仅为该导航服务的 props，接口同步收窄）、`ModulesPageView`、`FeaturesPageView`（功能目录态）、`ModuleTasksPage`。
+- 删除功能档案页左栏 `feature-switcher`（「模块内功能」列表）：`FeaturesPageView` 详情态不再渲染 `.feature-workspace` 双栏，`.feature-document` 直接铺满；「返回功能列表 / 返回模块列表」入口由既有 `.feature-breadcrumbs` 保留。
+- 保留：顶部面包屑（`AppLayout`）、「全部项目 / 返回模块列表」等寻路按钮、`/projects/:id/overview` 独立路由（活动深链 `activity-labels.ts`、成员页返回链接、E2E `aggregate-views.spec.ts` / `external-links.spec.ts` 直接引用）。
+- 样式清理：`design-system.css` 移除 `.project-context-nav*`、`.feature-workspace`、`.feature-switcher`（含 1000px 媒体查询分支）；`inpulse-design.css` 移除 `.feature-switcher-label/-item` 系列与对应媒体查询。
+
+**二、普通成员项目成员页只读视觉对齐（`ActiveProjectMembers`）**
+
+- 原实现是 ADR-030（PR #137）落库的无样式占位（裸 `<ul>` 名单）；本轮重做为与管理员 `ProjectMembersPageView` 相同视觉语言的只读视图：`page-header`（项目名 + 状态徽章）、`panel settings-panel`、`project-facts`（编码 / 状态 / 创建人 / 创建时间 / 当前成员）、`member-editor` + `.calm-member-card` 成员卡片（头像、姓名、创建者标注、「活跃成员」徽章）、「刷新成员」与只读权限提示；**不含**添加 / 移除 / 任务改派 / 归档 / 项目切换任何写入口。
+- 数据源不变：`getProject` + `listActiveProjectMembers`（只返回活跃成员 `id/name/avatarUrl`，无加入时间 / 历史状态，卡片按此裁剪字段）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| NAV-CLEAN-UNIT-001 | 单元 | 概览视图收窄后的 props 与渲染 | `ProjectOverviewPageView.test.tsx` 8 例：删除 2 个「项目内导航」用例后其余（指标卡、面板、错误态、跳转）全通过；`ProjectOverviewPage.test.tsx` 6 例：2 个导航用例替换为「查看模块」入口用例 | 本地通过 |
+| NAV-CLEAN-UNIT-002 | 单元 | 模块页 / 功能页移除横条与左栏后无回归 | `ModulesPageView.test.tsx` 8 例（删除「项目内导航」describe）、`FeaturesPageView.test.tsx` 10 例（删除「项目内导航」describe 与「module siblings」用例及其 `moduleRow`/`moduleClient` 辅助）全通过 | 本地通过 |
+| MEMBER-RO-UNIT-001 | 单元 | 只读成员视图渲染与只读语义 | `ActiveProjectMembers.test.tsx` 5 例（新增）：复用管理员视觉（h1 项目名、`.panel.settings-panel`、`.calm-member-card` 数量）；无添加 / 移除 / 归档 / dialog、仅「刷新成员」；创建者标注且全员「活跃成员」；空态；加载失败出「项目成员加载失败」+ 重试 | 本地通过 |
+| MEMBER-RO-E2E-001 | 浏览器 E2E | 普通成员只读成员页与隐藏项目 404 | `project-members.spec.ts` 例 1 选择器同步：`.project-members`/`listitem`/旧 h1 文案断言改为 `.settings-panel` + `.calm-member-card` + h1 项目名；「无添加 / 移除按钮」「隐藏项目 404 且不泄露成员姓名」断言语义不变；管理员用例（例 2）不受影响 | **未运行**（本机 `@node-rs/argon2` win32-x64-msvc 原生二进制加载失败 error 126，API 无法启动，属环境问题；`@inpulse/e2e` typecheck 通过） |
+
+本地实际执行（2026-09-15，前端专项，无后端 / 契约 / 迁移改动）：`pnpm --filter @inpulse/web test` **74 文件 401 例通过**（新增 `ActiveProjectMembers.test.tsx` 5 例，删除导航相关 7 例、替换 2 例）；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/web build`、`pnpm --filter @inpulse/web check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 检查通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects/1/members` 渲染新只读视图（4 名成员、特哥标注创建者、无任何写入口）。
+
+未运行 / 已知偏差：① `project-members.spec.ts` 因上述 argon2 环境问题未实跑，仅 typecheck；② 全量 `pnpm test:e2e`、整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、`pnpm check:docs` 未运行；③ 窄屏（侧栏折叠）下模块切换只剩面包屑与返回按钮，属本次收敛的已知取舍；④ `ProjectContextNav` 为设计师稿组件，本次删除属用户明确授权的设计偏离；⑤ 新增 / 修改测试需非作者人工评审。

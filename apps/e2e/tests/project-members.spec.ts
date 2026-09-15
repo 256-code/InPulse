@@ -17,14 +17,17 @@ test("普通成员只能查看本项目成员，不能增删或读取其他项�
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/members`);
-    const members = page.locator(".project-members");
+    // 只读视图复用管理员页的视觉语言：h1 为项目名，成员渲染为
+    // .calm-member-card 卡片；不再提供旧的 `.project-members` 列表结构。
+    const members = page.locator(".settings-panel");
     await expect(
-      members.getByRole("heading", {
-        name: `${runtime.projectName} · 项目成员`,
-      }),
+      page.getByRole("heading", { name: runtime.projectName, level: 1 }),
     ).toBeVisible();
+    await expect(members).toBeVisible();
     await expect(
-      members.getByRole("listitem").filter({ hasText: runtime.user.name }),
+      members
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.user.name }),
     ).toHaveCount(1);
     await expect(members.getByRole("button", { name: "添加成员" })).toHaveCount(
       0,
@@ -43,9 +46,9 @@ test("普通成员只能查看本项目成员，不能增删或读取其他项�
     await expect(
       page.getByText("项目或成员不存在，或你已无权访问。", { exact: true }),
     ).toBeVisible();
-    await expect(members.getByRole("listitem")).toHaveCount(0);
+    await expect(page.locator(".calm-member-card")).toHaveCount(0);
     await expect(
-      members.getByText(runtime.member.name, { exact: true }),
+      page.getByText(runtime.member.name, { exact: true }),
     ).toHaveCount(0);
   } finally {
     await context.close();

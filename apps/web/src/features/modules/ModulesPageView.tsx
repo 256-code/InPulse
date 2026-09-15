@@ -56,18 +56,11 @@ export function ModulesPageView({
           projectLoading={projectQuery.isPending}
           onRetryProject={() => void projectQuery.refetch()}
           onBackToProjects={() => navigate("/projects")}
-          // 设计师稿 catalog.tsx L214：项目页的「项目概览」是当前页签（自指），
-          // 模块网格与概览同页，因此不再跳到不含模块的 /overview。
-          onOpenOverview={() => navigate("/projects/" + projectId + "/modules")}
-          onOpenModule={onOpenModule}
           onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
           onOpenRecords={() =>
             navigate("/records?view=published&projectId=" + projectId)
           }
           onOpenIssues={() => navigate("/issues")}
-          modules={query.data?.items ?? []}
-          // 设计师稿 catalog.tsx L214：进入项目页后「项目概览」恒为 active。
-          navActive="overview"
           adapter={overviewAdapter}
           extraActions={
             // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」

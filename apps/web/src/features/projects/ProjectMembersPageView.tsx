@@ -300,24 +300,26 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         </CalmEmptyState>
       ) : (
         <section className="panel settings-panel">
-          <CalmSectionTitle
-            title="项目成员"
-            hint="只有系统管理员可以添加或移除成员"
-          >
-            <select
-              aria-label="选择项目"
-              value={projectId}
-              onChange={(event) =>
-                navigate(`/projects/${event.target.value}/members`)
-              }
+          <div className="settings-panel-head">
+            <CalmSectionTitle
+              title="项目成员"
+              hint="只有系统管理员可以添加或移除成员"
             >
-              {(projects.data?.items ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </CalmSectionTitle>
+              <select
+                aria-label="选择项目"
+                value={projectId}
+                onChange={(event) =>
+                  navigate(`/projects/${event.target.value}/members`)
+                }
+              >
+                {(projects.data?.items ?? []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </CalmSectionTitle>
+          </div>
           {project ? (
             <>
               <dl className="calm-meta project-facts">
