@@ -437,12 +437,27 @@ describe("TaskCenterPageView", () => {
     const merged = await screen.findByTestId("my-task-102");
     expect(within(merged).getByText("模块级")).toBeInTheDocument();
     expect(within(merged).getByText("主任务")).toBeInTheDocument();
-    expect(within(merged).getByText("高优先级")).toBeInTheDocument();
+    expect(within(merged).getByText("高")).toBeInTheDocument();
+    expect(within(merged).getByTitle("优先级：高")).toBeInTheDocument();
     expect(within(merged).getByText("记录 3 条")).toBeInTheDocument();
 
     const plain = await screen.findByTestId("my-task-101");
-    expect(within(plain).getByText("紧急优先级")).toBeInTheDocument();
+    expect(within(plain).getByText("紧急")).toBeInTheDocument();
+    expect(within(plain).getByTitle("优先级：紧急")).toBeInTheDocument();
     expect(within(plain).queryByText(/记录/)).toBeNull();
+  });
+
+  it("keeps every priority label within two characters in the filter", async () => {
+    renderView();
+
+    const select = await screen.findByLabelText("优先级");
+    const labels = Array.from(select.querySelectorAll("option")).map(
+      (option) => option.textContent?.trim() ?? "",
+    );
+    expect(labels).toEqual(["全部", "紧急", "高", "普通", "低"]);
+    for (const label of labels) {
+      expect([...label].length).toBeLessThanOrEqual(2);
+    }
   });
 
   it("offers an enabled create action that opens the cross-project form", async () => {

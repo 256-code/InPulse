@@ -459,8 +459,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </span>
         </div>
         <div className="task-card-footer">
-          <CalmBadge tone={priorityTone[item.priority]}>
-            {priorityLabels[item.priority]}优先级
+          <CalmBadge
+            tone={priorityTone[item.priority]}
+            title={`优先级：${priorityLabels[item.priority]}`}
+          >
+            {priorityLabels[item.priority]}
           </CalmBadge>
           {item.publishedRecordCount > 0 ? (
             <span className="task-card-counts">
@@ -769,7 +772,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             })
           }
         >
-          <option value="">全部优先级</option>
+          <option value="">全部</option>
           {priorityOrder.map((priority) => (
             <option key={priority} value={priority}>
               {priorityLabels[priority]}
