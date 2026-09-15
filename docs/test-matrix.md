@@ -1573,3 +1573,42 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-15）：`pnpm --filter @inpulse/web test` **74 文件 403 例通过**；`typecheck`、`build`、`check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects` 下树内嵌「项目与功能」行并罗列 2 个项目，点击「InPulse 研发交付平台」跳转 `/projects/1/modules` 且展开 9 个模块，**再次点击项目节点收回模块（9 → 0，`aria-expanded` false）、三击重新展开（0 → 9）**，罗列区 264px 限高生效（scrollHeight 374 > clientHeight 264，内部滚动），chevron 收起 / 展开正常。
 
 未运行 / 已知偏差：① 全量 `pnpm test:e2e`（argon2 环境问题未修复）与整链 `pnpm check` 未运行；② 目录树相关 Playwright 用例仍缺失（沿袭上一轮已知项）；③ 修改测试需非作者人工评审。
+
+## 前端 UI 缺陷修复批次（整体 UI 回归，2026-09-15 本地落库）
+
+用户要求「修理」整体 UI 测试发现的缺陷。本批次为纯前端修复：不改路由契约、Route Registry、数据库不变量、迁移、鉴权与幂等策略，后端代码零改动，`docs/permissions.md` 与 `packages/api-contract` 不受影响。
+
+- **P2-1 未匹配路由落到 React Router 开发者错误页**：新增 `apps/web/src/pages/not-found/route.ts`（`path: "*"` + `requiresAuth`）与 `NotFoundPage.tsx`，并在根路由挂 `errorElement: <RouteErrorPage />`（`apps/web/src/app/errors/RouteErrorPage.tsx`）。修复前访问 `/no-such-page-xyz` 或 `/projects/1/features`（真实路由是 `/projects/:projectId/modules/:moduleId/features/:featureId?`）整页渲染 `Unexpected Application Error! 404 Not Found` 与 `Hey developer` 开发者提示，且 `main`/`aside` 数量均为 0——应用外壳被一起替换；修复后外壳保留、内容区渲染品牌化 404，并提供「回到任务中心」与「返回上一页」。
+- **P2-2 用户管理冲突文案错误**：服务端在登录名/邮箱冲突时返回 409 `ADMIN_USER_LOGIN_CONFLICT`/`ADMIN_USER_EMAIL_CONFLICT`（映射见 `apps/api/src/admin-users/admin-user-http.service.ts`），前端 `apps/web/src/features/users/admin-user-query.ts` 的 409 分支此前未处理这两个 code，落到兜底文案「用户当前状态不允许此操作，请检查列表后重试。」；现分别输出「登录名已存在，请更换后重试。」与「邮箱已被使用，请更换后重试。」。
+- **P2-3 创建项目弹窗文案与 ADR-030 冲突**：删除「未分类模块 —— 创建成功后自动生成，可继续拆分」，改为「模块 —— 按需手动创建，项目也可以没有模块」，与 ADR-030 第 1 条和实际创建行为一致。
+- **P2-4 普通成员侧栏页脚死链**：`AppLayout` 页脚「查看权限矩阵」改为仅对系统管理员渲染（该入口指向管理员专属的 `/settings`，普通成员只会看到「无权访问」）；「成员与设置」导航项保持设计师稿的系统组两项不变，普通成员访问 `/settings` 仍按既有 E2E 断言显示「无权访问 / 此区域仅限系统管理员访问。」。
+- **P3-1 antd 弃用告警**：搜索页 3 处、通知页 2 处 `Space direction` 改为 `orientation`；两页的 `List`/`List.Item` 换成语义化 `ul`/`li`（保留 `data-testid="search-result-item"` 与 `notification-item-*`，12px 行距 + `var(--border)` 分隔线，末行无下边框），不再触发 `[antd: List]` 弃用告警。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| UI-BUG-NOTFOUND-UNIT-001 | Web 单元 | 未匹配路径兜底与外壳保留 | `NotFoundPage.test.tsx`：品牌化 404、无 `Hey developer`、点击「回到任务中心」跳到 `/tasks`；`route-error-page.test.tsx`：404 响应与未知异常分别渲染「页面不存在」「页面加载失败」；`app-router.test.tsx` 新增用例在 `/definitely-not-a-route` 下断言 `route-not-found` 可见且品牌图仍在（外壳未被替换） | 本地通过 |
+| UI-BUG-ADMIN-CONFLICT-UNIT-001 | Web 单元 | 用户管理 409 冲突文案 | `admin-user-query.test.tsx` 新增用例：两个冲突 code 分别输出「登录名已存在」「邮箱已被使用」，不再落到状态兜底文案 | 本地通过 |
+| UI-BUG-RULES-UNIT-001 | Web 单元 | 创建项目规则文案 | `CreateProjectModal.test.tsx` 新增用例：规则面板包含「模块」且不包含「未分类」 | 本地通过 |
+| UI-BUG-SIDEBAR-UNIT-001 | Web 单元 | 页脚入口的身份可见性 | `AppLayout.test.tsx` 新增用例：系统管理员可见「查看权限矩阵」，普通成员不可见 | 本地通过 |
+| UI-BUG-DEPRECATION-UNIT-001 | Web 单元 + 浏览器 | 弃用告警消除与列表渲染 | `SearchPageView.test.tsx`、`NotificationsPageView.test.tsx` 既有用例全通过；真实浏览器下普通成员与管理员在 `/notifications`、`/search` 控制台零 `deprecated` 告警，通知 20 行、搜索结果 20 行正常渲染且与修复前截图视觉一致 | 本地通过 |
+| UI-BUG-REGRESSION-E2E-001 | 浏览器 E2E | 全量关键路径回归 | `pnpm test:e2e` 55 passed（4.1m），含 `notifications.spec.ts`、`search.spec.ts`、`admin-users.spec.ts`、`visual-migration.spec.ts` 与 CSP 错误态用例 | 本地通过 |
+
+本地实际执行（2026-09-15）：`pnpm --filter @inpulse/web test` **76 文件 412 例通过**（修复前为 74 文件 405 例，新增 2 文件 7 例）；`pnpm check` 整链通过（`lint`、`format:check`、`typecheck`、`test:unit`、`db:migrations:check`、`db:seed:check`、`contract:drift`、`contract:validate`、`build`、`check:deploy:test`、`check:deps` 689 文件无循环/越界、`check:frontend:boundaries` 251 模块 1193 依赖无违规、`permissions:check` 102/102、`deps:audit` 无已知漏洞、`check:secrets` 1010 文件、`check:docs` 76 篇 Markdown），另有 `pnpm test:e2e` 55 passed；真实浏览器回归 10/10（脚本产物 `%TEMP%\\inpulse-ui-audit\\verify-report.json`）：未知路由与 `/projects/1/features` 均保留外壳渲染 404、成员页脚无「查看权限矩阵」、管理员可见、重复登录名提示已改为「登录名已存在，请更换后重试。」、创建项目规则文案已更新、双身份控制台零弃用告警。
+
+未运行 / 已知偏差：① 本批次无依赖变更，`deps:audit` 由整链 `pnpm check` 执行并通过（No known vulnerabilities found）；GitHub Actions 未执行（本地时点）；② 「查看权限矩阵」对普通成员改为不可见是保守选择——若产品希望成员可读只读权限矩阵，需要新增成员可读页面，并同步修改 `admin-users.spec.ts` 中「普通成员访问 /settings 显示无权访问」的既有断言，本轮未改；③ 本批次新增/修改的测试需非作者人工评审。
+
+## 优先级标签文案收敛（C，2026-09-15 本地落库）
+
+用户反馈：任务中心的优先级文案太长，所有优先级标签都要 1～2 个字（卡片徽章曾显示「紧急优先级」「普通优先级」，筛选下拉首项为「全部优先级」）。纯前端文案调整，无契约 / 权限 / 数据库 / 后端变化：
+
+- `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 卡片页脚徽章由 `{priorityLabels[priority]}优先级` 改为直接渲染 `priorityLabels[priority]`，即「低 / 普通 / 高 / 紧急」，并保留 `title="优先级：X"` 作为悬停与辅助技术补充；列表视图徽章、任务创建与遗留转任务下拉、筛选下拉的其余选项原本已是短标签。
+- 同一筛选栏的优先级下拉首项由「全部优先级」改为「全部」，与该栏其它筛选（状态、任务范围）已用的「全部」保持一致。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| UI-PRIORITY-LABEL-UNIT-001 | Web 单元 | 卡片徽章与筛选选项长度 | `TaskCenterPageView.test.tsx`：高 / 紧急卡片徽章文本恰为「高」「紧急」且 `title` 为「优先级：高 / 紧急」；优先级筛选选项严格等于 `["全部","紧急","高","普通","低"]` 且每项不超过 2 个字符 | 本地通过 |
+| UI-PRIORITY-LABEL-E2E-001 | 浏览器 E2E | 任务中心真实数据 | `aggregate-views.spec.ts` 2 passed：卡片徽章 `locator('[title="优先级：普通"]')` 文本为「普通」；优先级筛选仍可写入 / 清除 URL | 本地通过 |
+
+本地实际执行（2026-09-15）：`pnpm test:web` **76 文件 413 例通过**；`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/e2e exec playwright test tests/aggregate-views.spec.ts`（2 passed）通过；真实浏览器复验（Vite 5173，普通成员 xiaopan，`/tasks?scope=created`）卡片徽章渲染「紧急」「普通」，优先级筛选选项读取为 `["全部","紧急","高","普通","低"]` 且默认显示「全部」。
+
+未运行 / 已知偏差：① 本批次只改文案，未跑数据库 / 契约 / 权限门禁（无相关改动）；② 修改与新增测试需非作者人工评审。

@@ -333,14 +333,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </div>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => handleNavigation("/settings")}
-            >
-              <InpulseIcon name="shield" size={14} />
-              查看权限矩阵
-            </button>
+            {/* 权限矩阵只存在于管理员专属的「成员与设置」页，
+                对普通成员显示入口只会落到「无权访问」，因此仅对管理员渲染。 */}
+            {user?.isAdmin ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => handleNavigation("/settings")}
+              >
+                <InpulseIcon name="shield" size={14} />
+                查看权限矩阵
+              </button>
+            ) : null}
           </div>
         </aside>
 

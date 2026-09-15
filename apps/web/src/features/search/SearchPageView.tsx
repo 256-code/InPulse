@@ -5,7 +5,6 @@ import {
   Card,
   Empty,
   Input,
-  List,
   Space,
   Spin,
   Tag,
@@ -115,13 +114,21 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
     );
   } else {
     content = (
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <List
-          dataSource={results}
-          rowKey={(item) => `${item.entityType}:${item.entityId}`}
-          renderItem={(item) => (
-            <List.Item data-testid="search-result-item">
-              <Space direction="vertical" size={4} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={16} style={{ width: "100%" }}>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {results.map((item, index) => (
+            <li
+              key={`${item.entityType}:${item.entityId}`}
+              data-testid="search-result-item"
+              style={{
+                padding: "12px 0",
+                borderBottom:
+                  index === results.length - 1
+                    ? "none"
+                    : "1px solid var(--border)",
+              }}
+            >
+              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                 <Space align="center" wrap>
                   <Tag color={entityTypeMeta[item.entityType].color}>
                     {entityTypeMeta[item.entityType].label}
@@ -130,9 +137,9 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
                 </Space>
                 <Text type="secondary">{item.summary}</Text>
               </Space>
-            </List.Item>
-          )}
-        />
+            </li>
+          ))}
+        </ul>
         {hasNextPage ? (
           <Button
             type="primary"
@@ -149,7 +156,7 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
 
   return (
     <Card style={{ borderRadius: 10 }}>
-      <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={20} style={{ width: "100%" }}>
         <Space align="center" wrap>
           <Title level={3} style={{ margin: 0 }}>
             全局搜索

@@ -9,6 +9,7 @@ import type { AppRouteModule } from "@shared/routing/route-descriptor";
 import { buildRouteObjects } from "@shared/routing/route-registry";
 import { AppLayout } from "../layout/AppLayout";
 import { RequireAuth, RequireAdmin } from "../auth/auth-guard";
+import { RouteErrorPage } from "../errors/RouteErrorPage";
 
 export function loadPageRoutes(): AppRouteModule[] {
   // 静态自动聚合 pages 目录下所有领域 route.ts 导出
@@ -52,6 +53,8 @@ export function createInPulseRouter(
   const rootRoute: RouteObject = {
     path: "/",
     element: <AppLayout />,
+    // 兜底错误页：路由级异常与默认 404 都不再落到 React Router 的开发者页面。
+    errorElement: <RouteErrorPage />,
     children: childRoutes,
   };
 

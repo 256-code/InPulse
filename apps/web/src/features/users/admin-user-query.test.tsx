@@ -106,4 +106,21 @@ describe("admin user query", () => {
       "internal-forbidden",
     );
   });
+
+  it("surfaces login name and email conflicts with their own messages", () => {
+    const loginConflict = new ApiError(409, {
+      code: "ADMIN_USER_LOGIN_CONFLICT",
+      message: "登录名已存在",
+      details: {},
+      requestId: "l",
+    });
+    const emailConflict = new ApiError(409, {
+      code: "ADMIN_USER_EMAIL_CONFLICT",
+      message: "邮箱已被使用",
+      details: {},
+      requestId: "e",
+    });
+    expect(adminUserErrorMessage(loginConflict)).toContain("登录名已存在");
+    expect(adminUserErrorMessage(emailConflict)).toContain("邮箱已被使用");
+  });
 });

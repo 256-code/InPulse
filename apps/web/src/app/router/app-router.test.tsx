@@ -35,4 +35,37 @@ describe("AppRouter integration", () => {
       await screen.findByRole("heading", { name: "任务中心" }),
     ).toBeInTheDocument();
   });
+
+  it("keeps the app shell and renders the branded 404 for unknown paths", async () => {
+    const authClient = {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        id: 1,
+        loginName: "developer",
+        name: "开发者 C",
+        email: null,
+        avatarUrl: null,
+        isAdmin: false,
+        status: "ACTIVE",
+      }),
+    } as unknown as InpulseApiClient;
+
+    window.history.pushState({}, "", "/definitely-not-a-route");
+    try {
+      render(
+        <AppErrorBoundary>
+          <AppProviders authClient={authClient}>
+            <AppRouter />
+          </AppProviders>
+        </AppErrorBoundary>,
+      );
+
+      expect(await screen.findByTestId("route-not-found")).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Hey developer/u)).not.toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
 });

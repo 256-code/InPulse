@@ -38,6 +38,10 @@ export function adminUserErrorMessage(error: unknown): string {
         return "用户信息已在其他窗口被修改，请加载最新版本后重试。";
       if (error.code === "ADMIN_USER_SELF_MUTATION_REJECTED")
         return "不能对当前管理员自己执行停用、降级或强制退出。";
+      if (error.code === "ADMIN_USER_LOGIN_CONFLICT")
+        return "登录名已存在，请更换后重试。";
+      if (error.code === "ADMIN_USER_EMAIL_CONFLICT")
+        return "邮箱已被使用，请更换后重试。";
       if (error.code === "LAST_MFA_ADMIN_REQUIRES_OFFLINE_RECOVERY")
         return "不能移除最后一名可用 MFA 管理员，请先确认其他管理员的离线恢复能力。";
       return "用户当前状态不允许此操作，请检查列表后重试。";

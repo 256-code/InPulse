@@ -117,6 +117,38 @@ describe("AppLayout", () => {
     expect(screen.queryByText("动态审计")).not.toBeInTheDocument();
   });
 
+  it("shows the permission matrix shortcut only to system administrators", async () => {
+    const { unmount } = renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+      true,
+    );
+    expect(
+      screen.getByRole("button", { name: "查看权限矩阵" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByRole("button", { name: "查看权限矩阵" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the project name in the breadcrumb on project routes", async () => {
     const projectClient = {
       getProject: vi.fn().mockResolvedValue({
