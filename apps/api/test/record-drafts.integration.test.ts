@@ -1,3 +1,4 @@
+import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import "reflect-metadata";
 import { Module, type INestApplication } from "@nestjs/common";
@@ -85,6 +86,7 @@ beforeAll(async () => {
     uow,
     audit,
     new TimeCursorService(ring, "RECORD_DRAFTS"),
+    new PostgresUserReadPort(),
   );
   const auth = new SessionAuthService(
     uow,
@@ -114,6 +116,7 @@ beforeAll(async () => {
     service,
     service,
     uow,
+    new PostgresUserReadPort(),
   );
   const sourceHttp = new TaskRecordDraftHttpService(
     auth,
@@ -513,7 +516,14 @@ describe("F-17 independent drafts", () => {
         ),
       ),
     ).rejects.toThrow("audit failed");
-    expect(await service.read(f.userId, f.projectId, draft.id)).toEqual(draft);
+    expect(await service.read(f.userId, f.projectId, draft.id)).toEqual({
+      ...draft,
+      authorName: expect.any(String),
+      handlerName: expect.any(String),
+      moduleName: "未分类",
+      featureName: null,
+      impactFeatureNames: [],
+    });
     const results = await Promise.allSettled(
       ["甲", "乙"].map((title) =>
         uow.run((tx) =>

@@ -3,7 +3,6 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
 import { IdempotencyModule } from "../../idempotency/idempotency.module.js";
-import { ModulesModule } from "../modules/index.js";
 import { SearchProjectionModule } from "../search/index.js";
 import { ActivityProjectionModule } from "../activity/index.js";
 import { NotificationProjectionModule } from "../notifications/index.js";
@@ -21,7 +20,6 @@ import { ProjectsModule } from "./projects.module.js";
     AuthModule,
     AuditModule,
     IdempotencyModule,
-    ModulesModule,
     SearchProjectionModule,
     ActivityProjectionModule,
     NotificationProjectionModule,

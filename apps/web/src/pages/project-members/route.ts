@@ -4,7 +4,7 @@ import type { AppRouteModule } from "@shared/routing/route-descriptor";
 const route: AppRouteModule = {
   path: "/projects/:projectId/members",
   element: lazy(() => import("./ProjectMembersPage")),
-  requiresAdmin: true,
+  requiresAuth: true,
 };
 
 export default route;

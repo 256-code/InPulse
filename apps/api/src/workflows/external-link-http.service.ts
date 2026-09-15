@@ -153,7 +153,7 @@ export class ExternalLinkHttpService {
                     request.params,
                   ).linkId,
                 }
-              : { url: body!.data!.url },
+              : body!.data!,
             requestId,
             () => actor(tx),
           );

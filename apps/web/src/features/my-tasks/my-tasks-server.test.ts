@@ -44,8 +44,8 @@ const page: MyTaskPage = {
 
 describe("my tasks server adapter", () => {
   it("calls the generated client with the frozen R-3 query", async () => {
-    const listMyTasks = vi.fn().mockResolvedValue(page);
-    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const listTaskCenter = vi.fn().mockResolvedValue(page);
+    const client = { listTaskCenter } as unknown as InpulseApiClient;
     const adapter = createMyTasksServerAdapter(client);
 
     expect(adapter.source).toBe("server");
@@ -56,7 +56,8 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
-    expect(listMyTasks).toHaveBeenCalledWith({
+    expect(listTaskCenter).toHaveBeenCalledWith({
+      scope: "mine",
       limit: 20,
       workStatus: "TODO",
     });
@@ -92,8 +93,8 @@ describe("my tasks server adapter", () => {
   });
 
   it("passes priority and the canceled union to the generated client", async () => {
-    const listMyTasks = vi.fn().mockResolvedValue(page);
-    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const listTaskCenter = vi.fn().mockResolvedValue(page);
+    const client = { listTaskCenter } as unknown as InpulseApiClient;
     const adapter = createMyTasksServerAdapter(client);
 
     await adapter.fetchMyTasks({
@@ -106,7 +107,8 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
-    expect(listMyTasks).toHaveBeenCalledWith({
+    expect(listTaskCenter).toHaveBeenCalledWith({
+      scope: "mine",
       limit: 20,
       workStatus: "TODO",
       priority: "HIGH",
@@ -115,8 +117,8 @@ describe("my tasks server adapter", () => {
   });
 
   it("passes ownership for the created scope and keeps stats mine-scoped", async () => {
-    const listMyTasks = vi.fn().mockResolvedValue(page);
-    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const listTaskCenter = vi.fn().mockResolvedValue(page);
+    const client = { listTaskCenter } as unknown as InpulseApiClient;
     const adapter = createMyTasksServerAdapter(client);
 
     const result = await adapter.fetchMyTasks({
@@ -128,16 +130,17 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
-    expect(listMyTasks).toHaveBeenCalledWith({
+    expect(listTaskCenter).toHaveBeenCalledWith({
       limit: 20,
       ownership: "CREATOR",
+      scope: "created",
     });
     expect(result.items).toHaveLength(1);
   });
 
   it("wires stats and leftovers from the page while scopeCounts stays deferred", async () => {
-    const listMyTasks = vi.fn().mockResolvedValue(page);
-    const client = { listMyTasks } as unknown as InpulseApiClient;
+    const listTaskCenter = vi.fn().mockResolvedValue(page);
+    const client = { listTaskCenter } as unknown as InpulseApiClient;
     const adapter = createMyTasksServerAdapter(client);
 
     const result = await adapter.fetchMyTasks({
@@ -152,7 +155,10 @@ describe("my tasks server adapter", () => {
       recordCode: "R-021",
       summary: "恢复码入口待补齐",
     });
-    expect(result.filterSupport).toBe(MY_TASKS_V1_FILTER_SUPPORT);
+    expect(result.filterSupport).toEqual({
+      ...MY_TASKS_V1_FILTER_SUPPORT,
+      "scope:all": true,
+    });
     expect(result.filterSupport["filter:priority"]).toBe(true);
     expect(result.filterSupport["filter:canceled-with-open"]).toBe(true);
     expect(result.filterSupport["filter:query"]).toBe(false);
@@ -188,7 +194,10 @@ describe("my tasks server adapter", () => {
       projectId: 1,
       cursor: null,
     });
-    expect(listTaskGroups).toHaveBeenCalledWith({ limit: 20, projectId: 1 });
+    expect(listTaskGroups).toHaveBeenCalledWith({
+      limit: 20,
+      projectId: 1,
+    });
     expect(scoped.items).toHaveLength(1);
     expect(scoped.items[0]?.code).toBe("TG-001");
     expect(scoped.nextCursor).toBe("group-cursor");
@@ -203,7 +212,33 @@ describe("my tasks server adapter", () => {
 
   it("keeps the notice explicit about the wired data and the remaining gaps", () => {
     expect(MY_TASKS_SERVER_NOTICE).toContain("统计卡片");
-    expect(MY_TASKS_SERVER_NOTICE).toContain("优先级");
-    expect(MY_TASKS_SERVER_NOTICE).toContain("范围计数");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("项目内全员任务");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("管理员");
   });
+});
+
+it("preserves the selected project for a personal overdue drilldown", async () => {
+  const listTaskCenter = vi.fn().mockResolvedValue({
+    items: [],
+    nextCursor: null,
+    hasMore: false,
+    stats: null,
+    leftoverCount: 0,
+    leftoverSample: null,
+  });
+  const adapter = createMyTasksServerAdapter({
+    listTaskCenter,
+  } as unknown as InpulseApiClient);
+  await adapter.fetchMyTasks({
+    filters: {
+      ...DEFAULT_MY_TASK_FILTERS,
+      scope: "mine",
+      projectId: 1,
+      overdue: true,
+    },
+    viewerId: 1,
+  });
+  expect(listTaskCenter).toHaveBeenCalledWith(
+    expect.objectContaining({ projectId: 1, scope: "mine", overdue: true }),
+  );
 });

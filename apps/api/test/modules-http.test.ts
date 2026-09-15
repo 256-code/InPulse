@@ -15,6 +15,7 @@ const tx = {} as TransactionContext;
 const item = {
   id: 3,
   projectId: 2,
+  code: "INP-M-1",
   name: "模块",
   description: "",
   kind: "NORMAL",

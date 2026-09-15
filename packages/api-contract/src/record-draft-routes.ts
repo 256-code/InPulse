@@ -19,6 +19,11 @@ const fields = [
   "impactFeatureIds[]",
   "handlerId",
   "authorId",
+  "moduleName",
+  "featureName",
+  "impactFeatureNames[]",
+  "authorName",
+  "handlerName",
   "status",
   "code",
   "currentVersion",
@@ -83,8 +88,8 @@ export const recordDraftRoutes: readonly RouteDefinition[] = (
     csrfPolicy: write ? "required" : "none",
     idempotencyPolicy: write ? "idempotencyRequired" : "none",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: write ? "1.0.0" : "none",
-    idempotencyFingerprintVersion: write ? "1.0.0" : "none",
+    idempotencyContractVersion: write ? "1.1.0" : "none",
+    idempotencyFingerprintVersion: write ? "1.1.0" : "none",
     behaviorHeaders: write ? (create ? [] : ["If-Match"]) : "none",
     idempotencyReplayPolicy: write
       ? {

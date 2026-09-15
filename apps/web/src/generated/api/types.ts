@@ -213,7 +213,6 @@ export type CreateProjectResponse = {
     readonly updatedAt: string;
   };
   readonly members: readonly ProjectMemberItem[];
-  readonly unclassifiedModuleId: number;
 };
 
 export type CsrfIssueResponse = {
@@ -241,6 +240,7 @@ export type ExternalLinkItem = {
   readonly id: number;
   readonly projectId: number;
   readonly normalizedUrl: string;
+  readonly isRootRepository?: boolean;
   readonly kind: ("ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER");
   readonly label: string;
   readonly repository: (string | null);
@@ -265,6 +265,7 @@ export type ExternalLinkReplayContext = {
 
 export type ExternalLinkRequest = {
   readonly url: string;
+  readonly isRootRepository?: boolean;
 };
 
 export type ExternalLinkResourcePath = {
@@ -298,6 +299,7 @@ export type FeatureCollectionPath = {
 export type FeatureEditRequest = {
   readonly name: string;
   readonly currentBehavior: string;
+  readonly acceptanceCriteria?: string;
   readonly tags: readonly string[];
 };
 
@@ -307,9 +309,11 @@ export type FeatureItem = {
   readonly moduleId: number;
   readonly code: string;
   readonly createdBy: number;
+  readonly createdByName?: (string | null);
   readonly tags: readonly string[];
   readonly name: string;
   readonly currentBehavior: string;
+  readonly acceptanceCriteria: string;
   readonly status: ("ACTIVE" | "ARCHIVED");
   readonly rowVersion: number;
   readonly createdAt: string;
@@ -518,6 +522,7 @@ export type ModuleEditRequest = {
 export type ModuleItem = {
   readonly id: number;
   readonly projectId: number;
+  readonly code: string;
   readonly name: string;
   readonly description: string;
   readonly kind: ("NORMAL" | "UNCLASSIFIED");
@@ -900,6 +905,11 @@ export type PublishedRecord = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "PUBLISHED";
   readonly code: string;
   readonly currentVersion: number;
@@ -999,6 +1009,11 @@ export type RecordDraftItem = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "DRAFT";
   readonly code: null;
   readonly currentVersion: 0;
@@ -1163,6 +1178,20 @@ export type TaskAssigneesResponse = {
   })[];
 };
 
+export type TaskCenterQuery = {
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
+  readonly ownership?: ("ASSIGNEE" | "CREATOR");
+  readonly scopeType?: ("FEATURE" | "MODULE");
+  readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
+  readonly hasPublishedRecord?: boolean;
+  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly includeCanceled?: boolean;
+  readonly scope: ("mine" | "created" | "project" | "all");
+  readonly overdue?: boolean;
+};
+
 export type TaskCollectionPath = {
   readonly projectId: number;
   readonly moduleId: number;
@@ -1207,6 +1236,32 @@ export type TaskCompletionRequest = ({
 export type TaskCompletionResponse = {
   readonly task: (TaskItem | ModuleTaskItem);
   readonly record: (PublishedRecord | null);
+};
+
+export type TaskCreateRequest = {
+  readonly module: ({
+    readonly kind: "existing";
+    readonly id: number;
+  } | {
+    readonly kind: "new";
+    readonly input: ModuleEditRequest;
+  });
+  readonly feature: (({
+    readonly kind: "existing";
+    readonly id: number;
+  } | {
+    readonly kind: "new";
+    readonly input: FeatureEditRequest;
+  }) | null);
+  readonly task: TaskEditRequest;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type TaskCreateResult = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
 };
 
 export type TaskEditRequest = {
@@ -1487,6 +1542,7 @@ export type TaskRecordDraftsResponse = {
     readonly scopeType: ("FEATURE" | "MODULE");
     readonly title: string;
     readonly assigneeId: number;
+    readonly assigneeName?: (string | null);
     readonly workStatus: ("TODO" | "DONE" | "CANCELED");
     readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
     readonly rowVersion: number;
@@ -1593,6 +1649,11 @@ export type VoidedRecord = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "VOID";
   readonly code: string;
   readonly currentVersion: number;

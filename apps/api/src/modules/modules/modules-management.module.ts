@@ -1,3 +1,4 @@
+import { ModuleCreateCommandPort } from "./create.command-port.js";
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
@@ -21,7 +22,9 @@ import { ModuleManagementRepository } from "./module-management.repository.js";
     ActivityProjectionModule,
     SearchProjectionModule,
   ],
+  exports: [ModuleCreateCommandPort],
   providers: [
+    ModuleCreateCommandPort,
     ModuleManagementRepository,
     ModulesManagementService,
     ModulesHttpService,

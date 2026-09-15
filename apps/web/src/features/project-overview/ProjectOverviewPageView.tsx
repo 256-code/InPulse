@@ -1,3 +1,6 @@
+import { ProjectRepositoryLink } from "@features/external-links/ProjectRepositoryLink";
+import { useNavigate } from "react-router-dom";
+import { taskDetailPath } from "@features/tasks/task-links";
 import React, { useState } from "react";
 import { Alert, Spin } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
@@ -86,6 +89,7 @@ export const ProjectOverviewPageView: React.FC<
   extraActions,
   children,
 }) => {
+  const navigate = useNavigate();
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const activeAdapter = adapter ?? PROJECT_OVERVIEW_MOCK_ADAPTER;
   const overviewQuery = useProjectOverviewQuery({
@@ -219,6 +223,7 @@ export const ProjectOverviewPageView: React.FC<
           </div>
         </div>
         <div className="project-detail-actions">
+          <ProjectRepositoryLink projectId={projectId} client={client} />
           {project === null ? null : (
             <CalmBadge tone={project.status === "ACTIVE" ? "blue" : "amber"}>
               {project.status === "ACTIVE" ? "正常" : "已归档"}
@@ -379,6 +384,7 @@ export const ProjectOverviewPageView: React.FC<
       {children}
 
       <GlobalTaskCreateModal
+        onCreatedLocation={(task) => navigate(taskDetailPath(task))}
         open={createTaskOpen}
         onClose={() => setCreateTaskOpen(false)}
         client={client}

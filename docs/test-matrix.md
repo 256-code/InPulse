@@ -1487,3 +1487,33 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-14，前端专项，无后端 / 契约 / 迁移改动）：`pnpm test:web` **73 文件 399 例通过**（含 `project-tree` 2 文件 7 例与 `AppLayout.test.tsx` 新增 2 例）；`pnpm typecheck`（8 个 workspace）、`pnpm build`（全 workspace）与 `pnpm check:frontend:boundaries`（244 模块 / 1146 依赖，无违规）通过；`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（75 个 Markdown）通过。
 
 未运行 / 已知偏差：① **尚无目录树的 Playwright 用例**，树的行为目前只有单元层与人工浏览器复验，E2E 覆盖待补；② 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）与全量 `pnpm test:e2e` 未运行；③ 新增组件与测试需非作者人工评审；④ 本条与 F-29 概览指标卡收敛、F-32 任务中心点击直达同批推送。
+
+## ADR-030 定向回归
+
+| 变更 | 验收证据入口 |
+|---|---|
+| 空项目与创建者历史 | `apps/api/test/project-bootstrap.integration.test.ts`，零模块、成员/审计/投影同事务 |
+| 业务编号与联合创建 | `apps/api/test/task-create.integration.test.ts`，真实 PostgreSQL 唯一编号、并发、无效指派回滚、幂等与撤销权限 |
+| 成员隔离 | 同上，授权成员名单、外部项目用户、已移除成员 |
+| 任务中心范围与逾期 | `apps/api/test/aggregate-read.service.test.ts`；`apps/web/src/features/my-tasks/my-tasks-server.test.ts`，scope/overdue 入查询、管理员约束、个人统计保持 |
+| 验收标准 | `apps/api/test/features-api.integration.test.ts`；`apps/web/src/features/features/FeaturesPageView.test.tsx`，保存、读取、版本/审计与冲突合并 |
+| 草稿详情 | `apps/api/test/record-drafts.integration.test.ts`；`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`，姓名/归属、弹窗、编辑返回 |
+| 根仓库 | `apps/api/test/external-links.integration.test.ts`，明确设置、切换已有关联、审计、版本冲突、非法路径、跨项目拒绝 |
+| 自定义归属 UI | `apps/web/src/features/tasks/GlobalTaskCreateModal.test.tsx`，整笔提交、错误保留、链接失败不重复建任务 |
+
+本次按用户限制仅执行相关行为测试，不执行全量构建、静态检查或依赖审计；未执行的门禁不能记为通过。
+
+### 任务计划补齐（2026-09-14）
+
+逾期统计下钻保留项目范围，切换完成状态清除逾期条件；对应任务中心、适配器、URL 回归已补。草稿详情使用统一滚动正文容器，根仓库未配置时显示明确提示。模块/功能任务区增加自定义归属入口，复用原子创建接口。局部前端回归覆盖上述交互，浏览器验收与远端 CI 结果另行记录。
+
+任务完成回归补充：内部 findDraft 与 lockDraft 使用相同持久化数据，姓名回填仅发生在界面读取；真实 PostgreSQL 的 task-completion、modules-command、record-drafts 三文件 50 例通过，保留并发等待、失败回滚与外键约束断言。
+
+### E2E 入口与成员验收同步（2026-09-14）
+
+- 任务区原“新建任务”与新增“自定义归属新建任务”采用完整名称定位，保留后续创建、状态、发布、合并断言；模块新增用例定位项目操作区，避免与空态/列表入口混淆。
+- 项目概览仅保留一个 GitHub 链接管理入口；页面组合回归检查入口唯一，外链 E2E 继续验证添加、去重与非法链接。
+- 成员 E2E 按 ADR-030 验证本项目只读列表、无增删操作、非成员项目返回 404 且不显示成员姓名；管理员管理用例保持。
+- 执行结果记录于本轮开发日志与 PR 检查，不把按钮定位修复等同于后续业务链路已通过。
+
+补充实际进入后续流程暴露的旧预期：任务中心监听 `/api/v1/tasks?scope=created`；管理员成员页校验加载后的项目名称；多草稿切换先关闭详情弹窗；新项目任务指派前显式创建模块。普通链接重复使用普通关联提示，仅根仓库设置显示根仓库提示。
