@@ -912,8 +912,7 @@ export function TasksPanel({
                                     formatDay(record.publishedAt) +
                                     " · " +
                                     (record.handlerName ??
-                                      record.authorName ??
-                                      "处理人不可用")}
+                                      memberName(record.handlerId))}
                                 </small>
                               </a>
                               <CalmBadge tone="green">已发布</CalmBadge>
@@ -938,7 +937,8 @@ export function TasksPanel({
                                   {"草稿 · 更新于 " +
                                     formatDay(draft.updatedAt) +
                                     " · 处理人 " +
-                                    (draft.handlerName ?? "名称不可用")}
+                                    (draft.handlerName ??
+                                      memberName(draft.handlerId))}
                                 </small>
                               </a>
                               <CalmBadge tone="amber">草稿</CalmBadge>

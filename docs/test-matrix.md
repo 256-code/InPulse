@@ -1522,6 +1522,10 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 用户反馈概览头部根仓库入口「只有文字说明，没有网址」。`ProjectRepositoryLink` 的直达链接在「项目根仓库」文案后追加 `.project-repository-url` 网址文本（超长省略号截断，max-width 260px），链接 href 不变；`design-system.css` 为该容器与链接补充行内布局与配色。`ProjectRepositoryLink.test.tsx` 在既有「直达明确标记的根仓库」用例中追加 `textContent` 含网址断言。验证：目标文件 2/2、全量 web 单测 74 文件 403 例、web typecheck、改动文件 Prettier/ESLint 通过；浏览器实测头部同时显示「项目根仓库」与 `https://github.com/256-code/InPulse`。无契约 / 权限 / 迁移 / 路由改动。
 
+## 任务详情弹窗迭代记录列表（C，2026-09-15 本地落库）
+
+用户反馈任务详情弹窗「迭代记录」标签不显示已有记录与草稿，要求按设计师稿（`https://256-code.github.io/latest-version/`）实现。`TasksPanel` 在详情弹窗打开时新增两个只读查询：`listChangeRecords(projectId, {limit:100})` 客户端按 `taskId` 过滤出本任务已发布记录（`listChangeRecords` 无 taskId 查询参数，不改契约），`getTaskRecordDrafts` 取本任务草稿；标签页按设计师稿渲染列表（标题 + 编号/日期/处理人 + 已发布/草稿徽章），已发布记录点击跳 `/records?projectId=&publishedId=` 打开详情，草稿跳 `/records?...&taskId=&recordId=` 打开草稿详情；两者皆空保留原空态。处理人姓名优先用响应回填字段，缺失时回退项目成员名单（`listChangeRecords` 不回填姓名）。`TasksPanel.test.tsx` 基础 mock 补两个只读接口，新增列表用例（含同项目他人任务记录不混入断言）。验证：目标文件 18 例、全量 web 单测 74 文件 405 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测：任务 22 的弹窗标签显示「迭代记录 1」并列出 `INPULSE-CR-9 · 2026/9/12 · 特哥 · 已发布`，点击跳转 `/records?projectId=1&publishedId=9` 且详情可见；无记录任务显示空态；演示库当前无任务级草稿，草稿条目仅单测覆盖（未验证）。无契约 / 权限 / 迁移 / 路由改动。
+
 ## GitHub 链接弹窗添加表单置顶（C，2026-09-15 本地落库）
 
 用户要求「GitHub 链接」弹窗里的添加链接放在顶上。`ExternalLinksPanel` 把新增表单字段提取为 `addFormFields`（弹层与内联共用），弹层形态在 `data` 就绪且可写时先渲染 `.external-links-add`（下边框分隔）再渲染版本行与链接列表，弹窗底部只保留解除关联确认；内联形态交互不变。`ExternalLinksPanel.test.tsx` 新增「添加表单排在链接列表之前」DOM 顺序断言。验证：目标 2 文件 7 例、全量 web 单测 74 文件 404 例、web typecheck 退出码 0、改动文件 Prettier/ESLint 通过；浏览器实测弹窗内 `.external-links-add` 先于列表首项且输入框可见，截图确认顶部为 URL 输入 + 根仓库勾选 + 确认添加。无契约 / 权限 / 迁移 / 路由改动；`apps/e2e/tests/external-links.spec.ts` 的弹窗填写路径不受影响（未运行，argon2 环境问题未修复）。
