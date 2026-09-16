@@ -42,11 +42,18 @@ function message(error: unknown) {
   }
   return "暂时无法转换，输入已保留，请重试。";
 }
-function Preview({ value }: { value: LeftoverTaskPreview }) {
+function Preview({
+  value,
+  recordTitle,
+}: {
+  value: LeftoverTaskPreview;
+  recordTitle?: string | undefined;
+}) {
   return (
     <section aria-label="遗留转换预览">
       <p>
-        记录 v{value.recordVersion} · 稳定遗留项 #{value.leftoverItemId}
+        记录{recordTitle ? ` ${recordTitle}` : ""} v{value.recordVersion} ·
+        稳定遗留项 #{value.leftoverItemId}
       </p>
       <RecordMarkdown content={value.content || "当前版本没有遗留问题"} />
       <p>
@@ -273,11 +280,13 @@ export function LeftoverTaskConvertModal({
         <div className="dialog-form">
           {error !== null && <Alert type="error" title={message(error)} />}
           {busy && !preview && <Spin />}
-          {preview && <Preview value={preview} />}
+          {preview && (
+            <Preview value={preview} recordTitle={target.recordTitle} />
+          )}
           {latest && (
             <section aria-label="最新转换预览">
               <h3>请确认最新遗留内容与影响功能</h3>
-              <Preview value={latest} />
+              <Preview value={latest} recordTitle={target.recordTitle} />
               <Button
                 disabled={busy}
                 onClick={() => {

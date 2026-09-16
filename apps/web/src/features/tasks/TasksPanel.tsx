@@ -34,6 +34,10 @@ import {
   type TaskViewItem,
   type TaskDraft,
 } from "./task-query";
+import { useProjectDetail } from "@features/projects/project-query";
+import { useModules } from "@features/modules/module-query";
+import { useFeatures } from "@features/features/feature-query";
+import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 
 const labels: Record<TaskField, string> = {
   title: "任务标题",
@@ -241,6 +245,14 @@ export function TasksPanel({
     (record) => record.taskId === detailTaskId,
   );
   const taskDraftItems = taskDrafts.data?.items ?? [];
+  // 详情头部与卡片归属展示名称而非裸 ID：项目/模块/功能名称均为既有只读契约。
+  const projectDetail = useProjectDetail({ client, projectId });
+  const modules = useModules(projectId, client);
+  const featureList = useFeatures(projectId, moduleId, undefined, client);
+  const moduleName = (id: number) =>
+    modules.query.data?.items.find((m) => m.id === id)?.name;
+  const featureName = (id: number) =>
+    featureList.query.data?.items.find((f) => f.id === id)?.name;
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -268,9 +280,13 @@ export function TasksPanel({
       api.listActiveProjectMembers(projectId, { signal }),
     retry: false,
   });
+  // 创建人/操作人可能不是本项目成员（如系统管理员跨项目操作）：项目活跃成员与
+  // 指派人候选都解析不到时，用全站用户目录兜底姓名，仍解析不到才回退中性编号。
+  const userDirectory = useUserDirectoryQuery({ client });
   const personName = (id: number) =>
     projectMembers.data?.items.find((m) => m.id === id)?.name ??
     members.data?.items.find((m) => m.id === id)?.name ??
+    userDirectory.data?.find((u) => u.id === id)?.name ??
     "用户 #" + id;
   const openDetail = (id: number) => {
     setSelectedId(id);
@@ -610,7 +626,8 @@ export function TasksPanel({
                 <p className="task-belonging">
                   {item.featureId === null
                     ? "模块级任务" + (featureId === null ? "" : " · 引用")
-                    : "功能 #" + item.featureId}
+                    : (featureName(item.featureId) ??
+                      "功能 #" + item.featureId)}
                 </p>
                 <div className="calm-card-bottom">
                   <span title={"负责人：" + memberName(item.assigneeId)}>
@@ -683,18 +700,19 @@ export function TasksPanel({
               <div className="drawer-header task-modal-header">
                 <div>
                   <span className="detail-label">
-                    项目 #{current.projectId} / 模块 #{current.moduleId} /
+                    {projectDetail.data?.project.name ??
+                      "项目 #" + current.projectId}{" "}
+                    /{" "}
+                    {moduleName(current.moduleId) ??
+                      "模块 #" + current.moduleId}
+                    /
                     {current.featureId === null
                       ? " 模块级任务"
-                      : " 功能 #" + current.featureId}
+                      : " " +
+                        (featureName(current.featureId) ??
+                          "功能 #" + current.featureId)}
                   </span>
                   <h2>{current.title}</h2>
-                  <ExternalLinksPanel
-                    key={current.id}
-                    targetType="TASK"
-                    targetId={current.id}
-                    client={api}
-                  />
                   <div className="task-modal-badges">
                     <span className="task-id">{current.code}</span>
                     <CalmBadge tone={statusTone[current.workStatus]}>
@@ -711,6 +729,14 @@ export function TasksPanel({
                         {currentBadge.label}
                       </CalmBadge>
                     )}
+                  </div>
+                  <div className="task-modal-header-links">
+                    <ExternalLinksPanel
+                      key={current.id}
+                      targetType="TASK"
+                      targetId={current.id}
+                      client={api}
+                    />
                   </div>
                 </div>
                 <button
@@ -1039,16 +1065,18 @@ export function TasksPanel({
                   </dl>
                 </aside>
               </div>
-              <LeftoverTaskSource api={api} taskId={current.id} />
-              <TaskStatusPanel
-                key={statusToken}
-                item={current}
-                api={api}
-                writable={taskWritable}
-                action={statusAction}
-                onClose={() => setStatusAction(null)}
-                nameOf={personName}
-              />
+              <div className="task-modal-bottom">
+                <LeftoverTaskSource api={api} taskId={current.id} />
+                <TaskStatusPanel
+                  key={statusToken}
+                  item={current}
+                  api={api}
+                  writable={taskWritable}
+                  action={statusAction}
+                  onClose={() => setStatusAction(null)}
+                  nameOf={personName}
+                />
+              </div>
               {mergeInto && (
                 <MergeIntoTargetModal
                   task={current}

@@ -3004,6 +3004,53 @@ a:focus-visible {
 .record-expanded > small {
   color: #7b8fa2;
 }
+/* 遗留问题逐行列出：参考任务内多条迭代记录的卡片行布局，保留历史遗留项，
+   行尾用状态徽章标记是否闭环，未闭环行旁放「转为新任务」按钮。 */
+.leftover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leftover-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e7edf1;
+  border-radius: 10px;
+}
+.leftover-content {
+  flex: 1;
+  min-width: 0;
+}
+.leftover-followup {
+  font-size: 12px;
+}
+/* 全局 reset 把 select 的边框与背景清零，版本对比选择器需显式恢复表单外观。 */
+.record-version-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 12px 0 4px;
+}
+.record-version-pickers label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #586d83;
+  font-size: 11px;
+}
+.record-version-pickers select {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 9px;
+  background: white;
+  color: #405a72;
+}
 .record-leftover .text-button {
   margin-top: 12px;
 }
@@ -3932,6 +3979,9 @@ a:focus-visible {
   gap: 7px;
   align-items: center;
 }
+.task-modal-header-links {
+  margin-top: 10px;
+}
 .task-modal > .calm-task-actions {
   padding: 15px 30px 0;
   margin-top: 0;
@@ -4562,6 +4612,9 @@ td.due-overdue {
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #edf1f5;
+}
+.record-source-link {
+  margin: 14px 0;
 }
 .record-voided {
   background: #fffdfb;
@@ -5245,6 +5298,9 @@ td.due-overdue {
   .task-modal > .calm-task-actions {
     padding: 14px 20px 0;
     flex-wrap: wrap;
+  }
+  .task-modal-bottom {
+    padding: 0 20px 22px;
   }
   .task-modal > .completion-flow {
     padding: 16px 20px 22px;

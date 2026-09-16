@@ -3,6 +3,7 @@ import { useAuth } from "@features/auth/auth-context";
 import { RecordLifecycleButton } from "./RecordLifecycleButton";
 import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
 import { EditPublishedRecord } from "./EditPublishedRecord";
+import { taskDetailPath } from "@features/tasks/task-links";
 import React, { useMemo, useState } from "react";
 import { Alert, Button, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import {
 } from "@generated/api";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { CalmBadge } from "@features/common/components/Calm";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -45,6 +47,24 @@ export function publishedRecordErrorMessage(error: unknown) {
       ? "记录不存在或当前无法访问。"
       : "暂时无法加载记录，请重试。";
 }
+
+/** 遗留项状态中文标签：逐行列表行尾标记是否闭环。 */
+export function leftoverStatusText(
+  status: "ACTIVE" | "CONVERTED" | "RESOLVED",
+) {
+  return status === "ACTIVE"
+    ? "未闭环"
+    : status === "CONVERTED"
+      ? "已转为任务"
+      : "已完成";
+}
+
+/** 遗留项状态徽章色调：与任务记录列表的状态徽章同一套 CalmBadge。 */
+const leftoverTone = {
+  ACTIVE: "red",
+  CONVERTED: "blue",
+  RESOLVED: "green",
+} as const;
 
 /**
  * B-3a：正式记录卡片的展开区（设计师稿 record-card 的 record-expanded）。
@@ -142,12 +162,61 @@ export function PublishedRecordDetail({
       ) : null}
       {recordContentFields
         .filter(([field]) => field !== "title")
-        .map(([field, label]) => (
-          <section key={field}>
-            <h4>{label}</h4>
-            <RecordMarkdown content={record[field] || "暂无已知遗留问题"} />
-          </section>
-        ))}
+        .map(([field, label]) =>
+          field === "remainingIssues" ? (
+            <section key={field} aria-label="遗留问题列表">
+              <h4>{label}</h4>
+              {record.leftovers.length === 0 ? (
+                <RecordMarkdown content="暂无已知遗留问题" />
+              ) : (
+                <ul className="leftover-list">
+                  {record.leftovers.map((leftover) => (
+                    <li key={leftover.id}>
+                      <div className="leftover-content">
+                        <RecordMarkdown content={leftover.content} />
+                      </div>
+                      <CalmBadge tone={leftoverTone[leftover.status]}>
+                        {leftoverStatusText(leftover.status)}
+                      </CalmBadge>
+                      {record.leftoverItem !== null &&
+                        leftover.id === record.leftoverItem.id &&
+                        record.leftoverItem.status === "CONVERTED" &&
+                        record.leftoverItem.linkedTaskId !== null && (
+                          <a
+                            className="leftover-followup"
+                            href={taskDetailPath({
+                              projectId: record.projectId,
+                              moduleId: record.moduleId,
+                              featureId: record.featureId,
+                              taskId: record.leftoverItem.linkedTaskId,
+                            })}
+                          >
+                            查看跟进任务
+                          </a>
+                        )}
+                      {record.leftoverItem !== null &&
+                        leftover.id === record.leftoverItem.id &&
+                        record.leftoverItem.status === "ACTIVE" &&
+                        record.status === "PUBLISHED" && (
+                          <ConvertLeftoverTask
+                            key={`convert-${record.id}-${leftover.id}`}
+                            item={record}
+                            api={api}
+                            writable={writable}
+                          />
+                        )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : (
+            <section key={field}>
+              <h4>{label}</h4>
+              <RecordMarkdown content={record[field] || "暂无已知遗留问题"} />
+            </section>
+          ),
+        )}
       {record.leftoverItem?.status === "CONVERTED" && (
         <p>遗留项已转为跟进任务，修订文字不会创建第二个任务。</p>
       )}
@@ -186,8 +255,10 @@ export function PublishedRecordDetail({
       </dl>
       {record.taskId !== null && (
         <a
+          className="secondary-button record-source-link"
           href={`/projects/${projectId}/modules/${record.moduleId}${record.featureId === null ? "/tasks" : `/features/${record.featureId}`}?taskId=${record.taskId}`}
         >
+          <InpulseIcon name="cornerDown" size={14} />
           查看来源任务
         </a>
       )}
@@ -222,34 +293,36 @@ export function PublishedRecordDetail({
           ) : (
             <>
               <p>选择两个版本，逐项查看当时保存的完整内容。</p>
-              <label>
-                较早版本
-                <select
-                  value={before?.versionNo ?? ""}
-                  onChange={(e) => setOldVersion(Number(e.target.value))}
-                >
-                  {history.map((v) => (
-                    <option key={v.versionNo} value={v.versionNo}>
-                      v{v.versionNo} ·{" "}
-                      {new Date(v.createdAt).toLocaleString("zh-CN")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                对照版本
-                <select
-                  value={after?.versionNo ?? ""}
-                  onChange={(e) => setNewVersion(Number(e.target.value))}
-                >
-                  {history.map((v) => (
-                    <option key={v.versionNo} value={v.versionNo}>
-                      v{v.versionNo} ·{" "}
-                      {new Date(v.createdAt).toLocaleString("zh-CN")}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="record-version-pickers">
+                <label>
+                  较早版本
+                  <select
+                    value={before?.versionNo ?? ""}
+                    onChange={(e) => setOldVersion(Number(e.target.value))}
+                  >
+                    {history.map((v) => (
+                      <option key={v.versionNo} value={v.versionNo}>
+                        v{v.versionNo} ·{" "}
+                        {new Date(v.createdAt).toLocaleString("zh-CN")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  对照版本
+                  <select
+                    value={after?.versionNo ?? ""}
+                    onChange={(e) => setNewVersion(Number(e.target.value))}
+                  >
+                    {history.map((v) => (
+                      <option key={v.versionNo} value={v.versionNo}>
+                        v{v.versionNo} ·{" "}
+                        {new Date(v.createdAt).toLocaleString("zh-CN")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               {before && after && (
                 <div aria-label="版本差异">
                   {compareRecordVersions(before, after).map((row) => (
@@ -286,7 +359,7 @@ export function PublishedRecordDetail({
           <InpulseIcon
             name="chevron"
             size={14}
-            className={githubOpen ? "expanded" : undefined}
+            {...(githubOpen ? { className: "expanded" } : {})}
           />
           <span>GitHub 关联</span>
         </button>
@@ -300,26 +373,22 @@ export function PublishedRecordDetail({
           />
         )}
       </div>
-      {record.status === "PUBLISHED" && (
+      {(record.status === "PUBLISHED" || user?.isAdmin) && (
         <div className="record-actions">
-          <ConvertLeftoverTask
-            key={record.id}
-            item={record}
-            api={api}
-            writable={writable}
-          />
-          <EditPublishedRecord item={record} api={api} writable={writable} />
+          {record.status === "PUBLISHED" && (
+            <EditPublishedRecord item={record} api={api} writable={writable} />
+          )}
+          {user?.isAdmin && (
+            <RecordLifecycleButton
+              item={record}
+              api={api}
+              onChanged={() => {
+                void detail.refetch();
+                onListChanged?.();
+              }}
+            />
+          )}
         </div>
-      )}
-      {user?.isAdmin && (
-        <RecordLifecycleButton
-          item={record}
-          api={api}
-          onChanged={() => {
-            void detail.refetch();
-            onListChanged?.();
-          }}
-        />
       )}
     </section>
   );

@@ -920,6 +920,19 @@
 /* C-3：详情弹窗的「状态历史」区块。动作行按设计师稿独立到标签栏之上后，
  * 状态操作按钮不再与历史列表同区，这里补齐区块分隔、时间线圆点、
  * 已发布记录入口与独立任务空态按钮的样式。 */
+/* 遗留来源链接与状态历史位于网格之外，用底部容器统一水平内边距，避免贴边。 */
+.task-modal-bottom {
+  padding: 0 30px 26px;
+  overflow: auto;
+}
+.task-modal-bottom > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: #2472c3;
+  font-size: 12px;
+}
 .task-status-section {
   margin-top: 6px;
   padding: 18px 0 4px;

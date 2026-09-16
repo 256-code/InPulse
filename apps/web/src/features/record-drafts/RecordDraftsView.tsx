@@ -582,33 +582,23 @@ export function RecordDraftsView({
                 detail.data && (
                   <section className="draft-detail" aria-label="草稿详情">
                     <h2>{detail.data.title}</h2>
-                    <ExternalLinksPanel
-                      key={detail.data.id}
-                      targetType="CHANGE_RECORD"
-                      targetId={detail.data.id}
-                      client={api}
-                    />
-                    {detail.data.taskId !== null && (
-                      <a
-                        href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}
-                      >
-                        查看此任务的全部草稿
-                      </a>
-                    )}
-                    <p>
-                      草稿 · 处理人 {detail.data.handlerName ?? "名称暂不可用"}{" "}
-                      · 记录作者 {detail.data.authorName ?? "名称暂不可用"}
-                    </p>
-                    <p>
-                      项目{" "}
-                      {projects.data?.items.find(
-                        (p) => p.id === detail.data.projectId,
-                      )?.name ?? "名称暂不可用"}{" "}
-                      / 模块 {detail.data.moduleName ?? "名称暂不可用"}
-                      {detail.data.featureId
-                        ? ` / 功能 ${detail.data.featureName ?? "名称暂不可用"}`
-                        : ` / 影响功能：${detail.data.impactFeatureNames?.join("、") || "未选择"}`}
-                    </p>
+                    <div className="draft-detail-meta">
+                      <p>
+                        草稿 · 处理人{" "}
+                        {detail.data.handlerName ?? "名称暂不可用"} · 记录作者{" "}
+                        {detail.data.authorName ?? "名称暂不可用"}
+                      </p>
+                      <p>
+                        项目{" "}
+                        {projects.data?.items.find(
+                          (p) => p.id === detail.data.projectId,
+                        )?.name ?? "名称暂不可用"}{" "}
+                        / 模块 {detail.data.moduleName ?? "名称暂不可用"}
+                        {detail.data.featureId
+                          ? ` / 功能 ${detail.data.featureName ?? "名称暂不可用"}`
+                          : ` / 影响功能：${detail.data.impactFeatureNames?.join("、") || "未选择"}`}
+                      </p>
+                    </div>
                     {fields
                       .filter((field) => field !== "title")
                       .map((field) => (
@@ -619,18 +609,39 @@ export function RecordDraftsView({
                           />
                         </section>
                       ))}
-                    <Button
-                      disabled={!writable}
-                      onClick={() => open(detail.data)}
-                    >
-                      继续编辑
-                    </Button>
-                    <p>草稿尚未发布，不计入正式迭代统计。</p>
-                    <PublishRecordButton
-                      item={detail.data}
-                      api={api}
-                      writable={!!writable}
-                    />
+                    <div className="draft-detail-links">
+                      <ExternalLinksPanel
+                        key={detail.data.id}
+                        targetType="CHANGE_RECORD"
+                        targetId={detail.data.id}
+                        client={api}
+                      />
+                      {detail.data.taskId !== null && (
+                        <a
+                          className="secondary-button"
+                          href={`/records?projectId=${projectId}&moduleId=${detail.data.moduleId}&taskId=${detail.data.taskId}`}
+                        >
+                          <InpulseIcon name="cornerDown" size={14} />
+                          查看此任务的全部草稿
+                        </a>
+                      )}
+                    </div>
+                    <div className="draft-detail-actions">
+                      <Button
+                        disabled={!writable}
+                        onClick={() => open(detail.data)}
+                      >
+                        继续编辑
+                      </Button>
+                      <PublishRecordButton
+                        item={detail.data}
+                        api={api}
+                        writable={!!writable}
+                      />
+                    </div>
+                    <p className="draft-detail-note">
+                      草稿尚未发布，不计入正式迭代统计。
+                    </p>
                   </section>
                 )
               ))}

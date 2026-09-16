@@ -258,7 +258,7 @@ export class LeftoverTaskWorkflow {
         assigneeId: input.assigneeId,
         priority: input.priority,
         dueAt: input.dueAt,
-        description: `来源记录：${record.code} v${record.currentVersion}\n遗留项 #${item.id}\n\n${content}`,
+        description: `来源记录：${record.title}（${record.code} v${record.currentVersion}）\n遗留项 #${item.id}\n\n${content}`,
       },
       requestId,
     );
