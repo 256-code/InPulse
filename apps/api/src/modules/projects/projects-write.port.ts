@@ -81,6 +81,7 @@ export interface ProjectStatRecord {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 }
 
 /** 项目与成员写边界；只做持久化，不决定业务状态流转，调用方持有事务。 */
@@ -144,6 +145,15 @@ export abstract class ProjectsWritePort {
 
   /** 统计项目当前未完成（TODO 且 ACTIVE）任务数；只读，用于归档提醒。 */
   abstract countUnfinishedTasks(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<number>;
+
+  /**
+   * ADR-034：统计项目下尚未归档（lifecycle_status 为 ACTIVE）的任务数；
+   * 项目归档申请与批准都要求结果为 0。
+   */
+  abstract countUnarchivedTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<number>;

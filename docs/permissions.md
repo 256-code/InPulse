@@ -38,7 +38,7 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | listModules | 当前活跃项目成员、系统管理员 | 匿名/无效 Session 401，其他项目/已移除成员 404；归档仍可读 |
 | createModule | 当前活跃项目成员、系统管理员 | 同上；父项目必须 ACTIVE，Session/CSRF 与幂等必需，只能创建 NORMAL |
 | updateModule | 当前活跃项目成员、系统管理员 | 同上；真实模块归属与父项目/模块 ACTIVE，If-Match；允许编辑未分类名称/描述 |
-| archiveModule | 完整认证的系统管理员、本项目 LEADER、本项目 PROJECT_ADMIN（ADR-033） | 自己项目的普通成员 403，其他项目/已移除成员 404；原因、If-Match、父 ACTIVE 和模块 ACTIVE |
+| archiveModule | 完整认证的系统管理员、本项目 LEADER、本项目 PROJECT_ADMIN（ADR-033） | 自己项目的普通成员 403，其他项目/已移除成员 404；原因、If-Match、父 ACTIVE 和模块 ACTIVE；ADR-034 起模块下仍存在未收尾任务（`lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'`）时 409 `MODULE_ARCHIVE_TASKS_OPEN`，已完成、已取消或已归档的任务不算阻塞，功能无需归档 |
 | restoreModule | 同上 | 同上；父 ACTIVE 和模块 ARCHIVED；不恢复下级状态 |
 
 全部写接口重放前重查当前 Session/CSRF、原操作权限和结果模块可读权限。父级已归档则拒绝写入或重放为 409；这些状态门禁不作用于普通 GET。
@@ -52,6 +52,10 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | 编辑项目（`updateProject` · `PATCH /api/v1/projects/{projectId}`） | 401 | 允许 | 404 | 404 | 401 | 允许 | 项目编码创建后不可修改，只允许整笔替换 `name` 与 `description`；父项目必须 ACTIVE，归档项目 409 `PROJECT_ARCHIVED`；CSRF 与 `Idempotency-Key` 必填、`If-Match` 乐观锁（版本冲突 409）；名称/描述、审计 `project.update`、活动与搜索投影同一事务；重放前重新验证当前成员关系与项目可写性 |
 | 归档前影响预览（`getProjectArchivePreview` · `GET /api/v1/projects/{projectId}/archive-preview`） | 401 | 403 | 404 | 404 | 401 | 允许（完整管理员 Session；只读，不要求 CSRF 或幂等键） | 只统计当前未完成（`work_status = 'TODO'` 且 `lifecycle_status = 'ACTIVE'`）任务数，用于归档前提醒；归档项目仍可查看；无审计与投影写入 |
 | 归档项目（`archiveProject` · `POST /api/v1/projects/{projectId}/archive`）与恢复项目（`restoreProject` · `POST /api/v1/projects/{projectId}/restore`） | 401 | 403 | 404 | 404 | 401 | 允许（完整管理员 Session） | 归档原因、CSRF、`Idempotency-Key` 与 `If-Match` 必填；归档要求项目 ACTIVE、恢复要求项目 ARCHIVED，状态不符 409 `PROJECT_STATE_CONFLICT`；归档后项目及全部下级只读而历史仍可读，恢复只恢复项目自身状态；审计 `project.archive`/`project.restore`、活动与搜索投影在同一事务；重放前重新验证当前管理员身份与项目可读权限 |
+| 归档任务与恢复任务（`archiveTask`/`restoreTask` · `POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/archive`，模块级任务为去掉 `features/{featureId}` 的同名路径） | 401 | 本项目 LEADER 或 PROJECT_ADMIN 允许（普通成员 403） | 404 | 404 | 401 | 允许（完整管理员 Session） | ADR-033 角色模型：原因、`If-Match`、CSRF 与 `Idempotency-Key` 必填；只切换任务 `lifecycle_status`，工作状态、完成快照与 `task_status_history` 不可变；项目必须 ACTIVE；模块或功能已归档时仍允许归档其任务（收尾），恢复要求模块与功能父级链全部 ACTIVE；审计 `task.archive` 与 `task.unarchive`、活动与搜索投影同一事务提交 |
+| 项目归档申请（`requestProjectArchive` · `POST /api/v1/projects/{projectId}/archive-requests`） | 401 | 本项目 LEADER 或 PROJECT_ADMIN 允许（普通成员 403） | 404 | 404 | 401 | 允许（完整管理员 Session） | ADR-034：项目必须 ACTIVE 且项目下任务均已收尾（不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'` 的任务），否则 409 `PROJECT_ARCHIVE_TASKS_OPEN`；同一项目同时只允许一条待审申请，重复申请 409；CSRF 与 `Idempotency-Key` 必填，不要求 `If-Match`；申请不改变项目状态，审计 `project.archive.request`、活动与通知全部系统管理员的站内通知在同一事务提交；重放前重新验证当前成员关系、项目可读性与项目内管理角色 |
+| 批准项目归档申请（`approveProjectArchive` · `POST /api/v1/projects/{projectId}/archive-requests/{requestId}/approve`） | 401 | 403 | 404 | 404 | 401 | 允许（完整管理员 Session） | ADR-034：申请必须属于该项目且仍为 PENDING，项目必须 ACTIVE 且 `If-Match` 版本匹配，项目下任务均已收尾（不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'` 的任务）否则 409 `PROJECT_ARCHIVE_TASKS_OPEN`，状态不符 409；批准在同一事务内归档项目、把申请置为 APPROVED 并通知申请人，并写入审计 `project.archive.approve`、活动与搜索投影；重放前重新验证当前管理员身份与项目可读权限 |
+| 驳回项目归档申请（`rejectProjectArchive` · `POST /api/v1/projects/{projectId}/archive-requests/{requestId}/reject`） | 401 | 403 | 404 | 404 | 401 | 允许（完整管理员 Session） | ADR-034：申请必须属于该项目且仍为 PENDING，非待审 409；批注可选且不超过 2000 字；只把申请置为 REJECTED，不改变项目状态；审计 `project.archive.reject` 与通知申请人的站内通知在同一事务提交 |
 | 读取项目及下级资源 | 401 | 允许 | 404 | 404 | 401 | 允许 | 资源型接口隐藏存在性；归档数据仍可读；VOID 记录按下一行 |
 | 读取 VOID 迭代记录详情 | 401 | 404 | 404 | 404 | 401 | 允许 | `status` 是可见性真相；恢复为 PUBLISHED 后活跃成员重新可读 |
 | 新建或编辑模块、功能、任务、记录、链接 | 401 | 允许 | 404 | 404 | 401 | 允许 | 项目及父级 ACTIVE；写接口默认幂等；未分类模块允许编辑名称、描述，kind 不变，不能物理删除（2026-09-09 人工确认；F-12 已本地实现，真库验收待运行） |
@@ -96,10 +100,10 @@ F-14 功能级任务补充：`listTasks`、`getTask`、`listTaskAssignees`、`cr
 | findSimilarFeatures | 活跃项目成员、系统管理员 | 同上；SQL 在 LIMIT 前限制当前项目 FEATURE + MEMBER 投影；提示不阻止同名创建 |
 | createFeature | 活跃项目成员、系统管理员 | 父项目/模块必须 ACTIVE；Session、CSRF、同源和幂等 Key；只接受 name/currentBehavior/tags |
 | updateFeature | 活跃项目成员、系统管理员 | 同上且功能 ACTIVE，If-Match；说明前后审计，不生成迭代记录 |
-| archiveFeature | 完整认证的系统管理员 | 普通成员 403；非成员 404；父级 ACTIVE、功能 ACTIVE、原因和 If-Match |
-| restoreFeature | 完整认证的系统管理员 | 同上；功能 ARCHIVED；只恢复自身，不改下级状态 |
+| archiveFeature | 完整认证的系统管理员、本项目 LEADER、本项目 PROJECT_ADMIN（ADR-034） | 自己项目的普通成员 403，其他项目/已移除成员 404；父级 ACTIVE、功能 ACTIVE、原因和 If-Match；不要求功能下任务已归档（功能不参与任务归档前置校验） |
+| restoreFeature | 同上 | 同上；功能 ARCHIVED；只恢复自身，不改下级状态 |
 
-四条写接口重放前重查 Session/CSRF、当前项目授权、完整结果归属及当前管理员身份；父项目/模块归档拒绝重放。重复状态操作可重放原成功结果，不重复执行状态迁移。所有拒绝返回统一错误体，不泄露已存响应。真实测试入口见 [F-13 交审说明](f13-local-handoff.md)。
+四条写接口重放前重查 Session/CSRF、当前项目授权、完整结果归属及当前管理员身份或（ADR-034 起）归档/恢复路由要求的项目内管理角色；父项目/模块归档拒绝重放。重复状态操作可重放原成功结果，不重复执行状态迁移。所有拒绝返回统一错误体，不泄露已存响应。真实测试入口见 [F-13 交审说明](f13-local-handoff.md)。
 
 ## 强制规则
 

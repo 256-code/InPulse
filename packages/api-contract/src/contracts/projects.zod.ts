@@ -21,7 +21,9 @@ export type ProjectPath = z.infer<typeof projectPathSchema>;
 /**
  * 项目卡统计：与 R-2 项目概览（projectOverviewStatsSchema）同名同口径——
  * activeModuleCount / activeFeatureCount 只计行自身 status = ACTIVE，
- * openTaskCount 只计有效任务的 work_status = TODO（排除 INVALID、CANCELED 与历史来源分支）。
+ * openTaskCount 只计有效任务的 work_status = TODO（排除 INVALID、CANCELED 与历史来源分支）；
+ * completedTaskCount 是同一有效任务口径下 work_status = DONE 的任务数，前端据此显示
+ * 「未开始」标签（项目内没有已完成任务即未开始）。
  * 列表接口一次返回，项目卡无需按项目逐个再请求概览。
  */
 export const projectStatsSchema = z
@@ -29,6 +31,7 @@ export const projectStatsSchema = z
     activeModuleCount: z.number().int().nonnegative(),
     activeFeatureCount: z.number().int().nonnegative(),
     openTaskCount: z.number().int().nonnegative(),
+    completedTaskCount: z.number().int().nonnegative(),
   })
   .strict()
   .meta({ id: "ProjectStats" });
@@ -54,14 +57,6 @@ export const projectItemSchema = z
   .meta({ id: "ProjectItem" });
 
 export type ProjectItem = z.infer<typeof projectItemSchema>;
-
-/** 当前用户可见项目列表；系统管理员返回全部项目。 */
-export const projectListResponseSchema = z
-  .object({ items: z.array(projectItemSchema) })
-  .strict()
-  .meta({ id: "ProjectListResponse" });
-
-export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
 
 /** ADR-033：项目内角色；成员被移除即失效，重新加入从 MEMBER 开始。 */
 export const projectMemberRoleSchema = z.enum([
@@ -444,4 +439,121 @@ export const projectArchivePreviewResponseSchema = z
 
 export type ProjectArchivePreviewResponse = z.infer<
   typeof projectArchivePreviewResponseSchema
+>;
+/**
+ * 项目归档申请状态：PENDING 待审核、APPROVED 已批准（项目已归档）、
+ * REJECTED 已驳回；CANCELED 保留给项目在审核前已被归档等情况的历史行。
+ */
+export const projectArchiveRequestStatusSchema = z
+  .enum(["PENDING", "APPROVED", "REJECTED", "CANCELED"])
+  .meta({ id: "ProjectArchiveRequestStatus" });
+
+export type ProjectArchiveRequestStatus = z.infer<
+  typeof projectArchiveRequestStatusSchema
+>;
+
+/** 项目卡上的待审归档申请摘要；只暴露发起人展示名与理由，不含内部列。 */
+export const pendingProjectArchiveRequestSchema = z
+  .object({
+    id: projectPositiveId,
+    requestedBy: projectPositiveId,
+    requestedByName: z.string().min(1).max(200),
+    reason: z.string().min(1).max(2000),
+    requestedAt: z.iso.datetime(),
+  })
+  .strict()
+  .meta({ id: "PendingProjectArchiveRequest" });
+
+export type PendingProjectArchiveRequest = z.infer<
+  typeof pendingProjectArchiveRequestSchema
+>;
+
+/**
+ * F-06.2 项目列表条目：在项目摘要之上补充当前用户在本项目的成员角色与待审
+ * 归档申请。列表页据此决定是否显示「申请归档」入口，以及管理员审核入口。
+ */
+export const projectListItemSchema = projectItemSchema
+  .extend({
+    currentUserRole: projectMemberRoleSchema.nullable(),
+    pendingArchiveRequest: pendingProjectArchiveRequestSchema.nullable(),
+  })
+  .meta({ id: "ProjectListItem" });
+
+export type ProjectListItem = z.infer<typeof projectListItemSchema>;
+
+/** 当前用户可见项目列表；系统管理员返回全部项目。 */
+export const projectListResponseSchema = z
+  .object({ items: z.array(projectListItemSchema) })
+  .strict()
+  .meta({ id: "ProjectListResponse" });
+
+export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
+
+/** 项目归档申请路径；申请与审核都定位到具体项目的单条申请。 */
+export const projectArchiveRequestPathSchema = z
+  .object({
+    projectId: z.coerce.number().int().positive().max(2147483647),
+    requestId: z.coerce.number().int().positive().max(2147483647),
+  })
+  .strict()
+  .meta({ id: "ProjectArchiveRequestPath" });
+
+export type ProjectArchiveRequestPath = z.infer<
+  typeof projectArchiveRequestPathSchema
+>;
+
+/** 项目归档申请理由；申请本身不改变项目状态，只有系统管理员批准才归档。 */
+export const projectArchiveRequestSubmissionSchema = z
+  .object({ reason: z.string().trim().min(1).max(2000) })
+  .strict()
+  .meta({ id: "ProjectArchiveRequestSubmission" });
+
+export type ProjectArchiveRequestSubmission = z.infer<
+  typeof projectArchiveRequestSubmissionSchema
+>;
+
+/** 项目归档申请完整条目；申请人与审核人只暴露展示名，不暴露账号字段。 */
+export const projectArchiveRequestItemSchema = z
+  .object({
+    id: projectPositiveId,
+    projectId: projectPositiveId,
+    requestedBy: projectPositiveId,
+    requestedByName: z.string().min(1).max(200),
+    reason: z.string().min(1).max(2000),
+    status: projectArchiveRequestStatusSchema,
+    requestedAt: z.iso.datetime(),
+    decidedBy: projectPositiveId.nullable(),
+    decidedByName: z.string().min(1).max(200).nullable(),
+    decidedAt: z.iso.datetime().nullable(),
+    decisionNote: z.string().max(2000).nullable(),
+    rowVersion: projectPositiveId,
+  })
+  .strict()
+  .meta({ id: "ProjectArchiveRequestItem" });
+
+export type ProjectArchiveRequestItem = z.infer<
+  typeof projectArchiveRequestItemSchema
+>;
+
+/** 驳回项目归档申请；批注可选，留空表示不附理由。 */
+export const projectArchiveRejectionRequestSchema = z
+  .object({ note: z.string().trim().max(2000).default("") })
+  .strict()
+  .meta({ id: "ProjectArchiveRejectionRequest" });
+
+export type ProjectArchiveRejectionRequest = z.infer<
+  typeof projectArchiveRejectionRequestSchema
+>;
+
+/** 项目归档申请幂等重放的最小结果资源上下文。 */
+export const projectArchiveRequestReplayContextSchema = z
+  .object({
+    projectId: z.number().int().positive().max(2147483647),
+    requestId: z.number().int().positive().max(2147483647),
+  })
+  .strict()
+  .meta({ id: "ProjectArchiveRequestReplayContext" });
+
+export type ProjectArchiveRequestReplayContext = z.infer<
+  typeof projectArchiveRequestReplayContextSchema
 >;

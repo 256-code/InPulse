@@ -700,3 +700,72 @@ describe("C-3 任务详情弹窗标签页", () => {
     ).toBeNull();
   });
 });
+
+describe("ADR-034 任务归档入口", () => {
+  it("archives the task from the edit dialog footer", async () => {
+    const archiveTask = vi.fn().mockResolvedValue({
+      ...item,
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: 2,
+    });
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({ currentUserRole: "LEADER" }),
+        archiveTask,
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    fireEvent.click(await modal.findByTestId("task-modal-lifecycle"));
+    const lifecycleModal = within(
+      screen.getByRole("dialog", { name: "归档任务" }),
+    );
+    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
+    expect(await lifecycleModal.findByRole("alert")).toHaveTextContent(
+      "请填写操作原因",
+    );
+    fireEvent.change(lifecycleModal.getByLabelText("操作原因"), {
+      target: { value: "阶段结束" },
+    });
+    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() => expect(archiveTask).toHaveBeenCalledTimes(1));
+    expect(archiveTask.mock.calls[0]![4]).toMatchObject({ reason: "阶段结束" });
+    expect(archiveTask.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
+  });
+
+  it("keeps the archive entry reachable when the parent feature is archived", async () => {
+    const archiveTask = vi.fn().mockResolvedValue({
+      ...item,
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: 2,
+    });
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({ currentUserRole: "LEADER" }),
+        archiveTask,
+      }),
+      false,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const edit = await screen.findByRole("button", { name: "编辑任务" });
+    expect(edit).not.toBeDisabled();
+    fireEvent.click(edit);
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    expect(
+      await modal.findByTestId("task-modal-lifecycle"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the lifecycle entry from plain members", async () => {
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({ currentUserRole: "MEMBER" }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    expect(modal.queryByTestId("task-modal-lifecycle")).toBeNull();
+  });
+});

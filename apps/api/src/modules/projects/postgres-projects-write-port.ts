@@ -65,6 +65,7 @@ interface ProjectChangeRow {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 }
 
 /** 项目写适配器；只接收显式 TransactionContext，从不开启事务或使用全局客户端。 */
@@ -314,6 +315,20 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     `) as unknown as readonly { count: number }[];
     return rows[0]?.count ?? 0;
   }
+  /** 项目归档前置校验：未完成（TODO）且未归档的任务才阻塞，见 ADR-034。 */
+  async countUnarchivedTasks(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<number> {
+    const rows = (await tx.sql`
+      SELECT COUNT(*)::integer AS "count"
+        FROM app.tasks
+       WHERE project_id = ${input.projectId}
+         AND lifecycle_status = 'ACTIVE'
+         AND work_status NOT IN ('DONE', 'CANCELED')
+    `) as unknown as readonly { count: number }[];
+    return rows[0]?.count ?? 0;
+  }
 
   async findLatestMember(
     tx: TransactionContext,
@@ -447,6 +462,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
         activeModuleCount: row.activeModuleCount,
         activeFeatureCount: row.activeFeatureCount,
         openTaskCount: row.openTaskCount,
+        completedTaskCount: row.completedTaskCount,
       },
     };
   }

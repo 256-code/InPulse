@@ -29,6 +29,7 @@ import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectArchiveRequestRepository } from "../src/modules/projects/postgres-project-archive-request.repository.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectManagementController } from "../src/modules/projects/project-management.controller.js";
 import { ProjectManagementHttpService } from "../src/modules/projects/project-management-http.service.js";
@@ -181,6 +182,7 @@ beforeAll(async () => {
     new PostgresActivityWritePort(),
     new PostgresSearchProjectionWritePort(),
     new PostgresProjectMembersQueryPort(),
+    new PostgresProjectArchiveRequestRepository(),
   );
   const http = new ProjectManagementHttpService(
     auth,
@@ -240,6 +242,7 @@ describe("F-06.1 project edit API", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 
@@ -464,6 +467,7 @@ describe("F-06.2 project archive API", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 
@@ -749,6 +753,54 @@ describe("F-06.2 project archive API", () => {
       "PROJECT_SESSION_REQUIRED",
     );
   });
+
+  it("cancels a pending archive request when an admin archives the project directly (ADR-034)", async () => {
+    const value = await fixture();
+    const pendingRows = (await client.sql`
+      INSERT INTO app.project_archive_requests (project_id, requested_by, reason)
+      VALUES (${value.project.projectId}, ${value.owner.userId}, '组长申请归档')
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    const pending = pendingRows[0]!;
+
+    const archived = await request(
+      "POST",
+      `/projects/${value.project.projectId}/archive`,
+      value.admin,
+      { reason: "管理员直接归档" },
+      { ifMatch: '"1"' },
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+
+    const rows = (await client.sql`
+      SELECT status,
+             decided_by AS "decidedBy",
+             decision_note AS "decisionNote"
+        FROM app.project_archive_requests
+       WHERE id = ${pending.id}
+    `) as unknown as readonly {
+      status: string;
+      decidedBy: number;
+      decisionNote: string | null;
+    }[];
+    expect(rows[0]).toMatchObject({
+      status: "CANCELED",
+      decidedBy: value.admin.userId,
+      decisionNote: null,
+    });
+
+    const audits = (await auditReader.sql`
+      SELECT event_payload AS "payload"
+        FROM app.audit_logs
+       WHERE project_id = ${value.project.projectId}
+         AND action = 'project.archive'
+    `) as unknown as readonly {
+      payload: { cancelledArchiveRequestIds: readonly number[] };
+    }[];
+    expect(audits[0]!.payload).toMatchObject({
+      cancelledArchiveRequestIds: [pending.id],
+    });
+  });
 });
 
 describe("F-06.3 project restore API", () => {
@@ -782,6 +834,7 @@ describe("F-06.3 project restore API", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 

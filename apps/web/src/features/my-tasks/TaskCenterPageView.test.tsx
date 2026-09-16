@@ -25,7 +25,12 @@ const projects: readonly ProjectItem[] = [
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
     memberCount: 3,
-    stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 4 },
+    stats: {
+      activeModuleCount: 2,
+      activeFeatureCount: 5,
+      openTaskCount: 4,
+      completedTaskCount: 1,
+    },
   },
   {
     id: 5,
@@ -38,7 +43,12 @@ const projects: readonly ProjectItem[] = [
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
     memberCount: 2,
-    stats: { activeModuleCount: 1, activeFeatureCount: 3, openTaskCount: 2 },
+    stats: {
+      activeModuleCount: 1,
+      activeFeatureCount: 3,
+      openTaskCount: 2,
+      completedTaskCount: 1,
+    },
   },
 ];
 

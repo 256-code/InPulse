@@ -15,6 +15,7 @@ import {
   PROJECT_ACCESS_QUERY_PORT,
   type ProjectAccessQueryPort,
 } from "./project-access.port.js";
+import { ProjectArchiveRequestPort } from "./project-archive-request.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 import {
   ProjectsWritePort,
@@ -66,6 +67,8 @@ export class ProjectManagementService {
     private readonly search: SearchProjectionWritePort,
     @Inject(ProjectMembersQueryPort)
     private readonly members: ProjectMembersQueryPort,
+    @Inject(ProjectArchiveRequestPort)
+    private readonly archiveRequests: ProjectArchiveRequestPort,
   ) {}
 
   /** 写前授权：实时成员关系与用户状态由 Port 读取，归档项目拒绝写入。 */
@@ -288,6 +291,14 @@ export class ProjectManagementService {
       status: input.target,
     });
     if (updated === undefined) throw versionConflict();
+    // ADR-034：直接归档项目时结束仍待审的归档申请，避免悬挂的待办。
+    const cancelledArchiveRequestIds =
+      input.target === "ARCHIVED"
+        ? await this.archiveRequests.cancelPendingRequests(tx, {
+            projectId: updated.projectId,
+            decidedBy: input.actorId,
+          })
+        : [];
 
     const action = input.target === "ARCHIVED" ? "archive" : "restore";
     const occurredAt = new Date();
@@ -302,6 +313,7 @@ export class ProjectManagementService {
         reason: input.reason,
         before: { status: current.status, rowVersion: current.rowVersion },
         after: { status: updated.status, rowVersion: updated.rowVersion },
+        cancelledArchiveRequestIds,
       },
       requestId: input.requestId,
       occurredAt,

@@ -5,6 +5,10 @@ import { type InpulseApiClient, type ModuleItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
 import {
+  resourceLifecycleLabel,
+  resourceLifecycleTone,
+} from "@features/common/resource-lifecycle";
+import {
   CalmBadge,
   CalmEmptyState,
   CalmSectionTitle,
@@ -156,9 +160,16 @@ export function ModulesPageView({
                           <CalmBadge tone="violet">未分类</CalmBadge>
                         )}
                         <CalmBadge
-                          tone={item.status === "ACTIVE" ? "gray" : "amber"}
+                          tone={resourceLifecycleTone(
+                            item.status,
+                            item.stats.completedTaskCount,
+                            "gray",
+                          )}
                         >
-                          {item.status === "ACTIVE" ? "正常" : "已归档"}
+                          {resourceLifecycleLabel(
+                            item.status,
+                            item.stats.completedTaskCount,
+                          )}
                         </CalmBadge>
                       </div>
                       <p>{item.description || "暂无模块说明"}</p>
@@ -231,6 +242,8 @@ export function ModulesPageView({
         request={request}
         onClose={() => setRequest(null)}
         onSaved={() => setSuccess(true)}
+        canArchive={canArchive}
+        onLifecycleRequest={(action, item) => open(action, item)}
       />
     </>
   );

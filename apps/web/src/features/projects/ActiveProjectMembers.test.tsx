@@ -17,7 +17,12 @@ const project = {
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 5,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 const activeMembers = [

@@ -7,7 +7,7 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -34,6 +34,11 @@ import {
   type TaskViewItem,
   type TaskDraft,
 } from "./task-query";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 
 const labels: Record<TaskField, string> = {
   title: "任务标题",
@@ -169,7 +174,13 @@ export function TasksPanel({
   featureId,
   writable,
   client,
-}: TaskScope & { writable: boolean; client?: InpulseApiClient | undefined }) {
+  isAdmin = false,
+}: TaskScope & {
+  writable: boolean;
+  client?: InpulseApiClient | undefined;
+  /** ADR-034：任务归档/恢复入口只对系统管理员或项目内管理角色开放。 */
+  isAdmin?: boolean | undefined;
+}) {
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState<"cards" | "list">("cards");
@@ -190,6 +201,13 @@ export function TasksPanel({
   );
   const [merge, setMerge] = useState<Merge | null>(null);
   const [mergeInto, setMergeInto] = useState(false);
+  // ADR-034：归档/恢复是编辑弹窗底部的独立确认流程，与编辑表单状态互不影响。
+  const [lifecycle, setLifecycle] = useState<{
+    action: "archive" | "restore";
+    item: TaskViewItem;
+  } | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -272,6 +290,81 @@ export function TasksPanel({
     projectMembers.data?.items.find((m) => m.id === id)?.name ??
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id;
+  // ADR-033/ADR-034：项目内管理角色或系统管理员才看到归档/恢复入口。
+  const projectQuery = useProjectDetail({ client, projectId });
+  const canArchiveTasks = canManageProjectResources(
+    isAdmin,
+    projectQuery.data?.currentUserRole ?? null,
+  );
+  // ADR-034：父级或任务自身已归档时编辑表单只读，但归档/恢复入口必须仍然可达，
+  // 否则「功能已归档 → 任务无法归档 → 模块无法归档」会把入口锁死。
+  const editReadOnly =
+    selection?.item !== undefined &&
+    (!writable || selection.item.lifecycleStatus !== "ACTIVE");
+  const canOpenLifecycleDialog =
+    canArchiveTasks &&
+    current !== undefined &&
+    (current.lifecycleStatus === "ACTIVE" ||
+      current.lifecycleStatus === "ARCHIVED");
+  const lifecycleCache = useQueryClient();
+  const lifecycleMutation = useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      item: TaskViewItem;
+      action: "archive" | "restore";
+      reason: string;
+    }) => {
+      const csrf = await api.issueCsrfToken();
+      const init = {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "Idempotency-Key": createIdempotencyKey("task-lifecycle"),
+          "If-Match": '"' + input.item.rowVersion + '"',
+        },
+      };
+      const body = { reason: input.reason };
+      if (input.item.scopeType === "MODULE")
+        return input.action === "archive"
+          ? api.archiveModuleTask(
+              projectId,
+              moduleId,
+              input.item.id,
+              body,
+              init,
+            )
+          : api.restoreModuleTask(
+              projectId,
+              moduleId,
+              input.item.id,
+              body,
+              init,
+            );
+      return input.action === "archive"
+        ? api.archiveTask(
+            projectId,
+            moduleId,
+            input.item.featureId,
+            input.item.id,
+            body,
+            init,
+          )
+        : api.restoreTask(
+            projectId,
+            moduleId,
+            input.item.featureId,
+            input.item.id,
+            body,
+            init,
+          );
+    },
+    onSuccess: async () => {
+      await Promise.all(
+        ["tasks", "modules", "activity", "search", "notifications"].map((key) =>
+          lifecycleCache.invalidateQueries({ queryKey: [key] }),
+        ),
+      );
+    },
+  });
   const openDetail = (id: number) => {
     setSelectedId(id);
     setTab("info");
@@ -392,6 +485,37 @@ export function TasksPanel({
     setMerge(null);
     mutation.reset();
     setReloadError(null);
+  };
+  const openLifecycle = (action: "archive" | "restore", item: TaskViewItem) => {
+    lifecycleMutation.reset();
+    setLifecycleError(null);
+    setLifecycleReason("");
+    setLifecycle({ action, item });
+  };
+  const closeLifecycle = () => {
+    if (lifecycleMutation.isPending) return;
+    lifecycleMutation.reset();
+    setLifecycleError(null);
+    setLifecycleReason("");
+    setLifecycle(null);
+  };
+  const submitLifecycle = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!lifecycle || lifecycleMutation.isPending) return;
+    const reason = lifecycleReason.trim();
+    if (reason.length === 0) {
+      setLifecycleError("请填写操作原因。");
+      return;
+    }
+    setLifecycleError(null);
+    try {
+      await lifecycleMutation.mutateAsync({ ...lifecycle, reason });
+      setLifecycle(null);
+      setLifecycleReason("");
+      setSuccess(true);
+    } catch {
+      /* 失败时保留原因输入，便于按最新版本重试。 */
+    }
   };
   return (
     <section
@@ -774,7 +898,7 @@ export function TasksPanel({
                 )}
                 <Button
                   className="secondary-button"
-                  disabled={!taskWritable}
+                  disabled={!taskWritable && !canOpenLifecycleDialog}
                   onClick={() => open(current)}
                 >
                   <InpulseIcon name="pencil" size={14} />
@@ -1078,6 +1202,12 @@ export function TasksPanel({
           onSubmit={(event) => void save(event)}
         >
           <div className="dialog-form">
+            {editReadOnly && (
+              <Alert
+                type="info"
+                title="任务或所属模块、功能已归档，表单只读；可用下方按钮归档或恢复。"
+              />
+            )}
             {mutation.isError && (
               <Alert type="error" title={taskError(mutation.error)} />
             )}
@@ -1355,6 +1485,30 @@ export function TasksPanel({
             </fieldset>
           </div>
           <div className="calm-action-footer">
+            {/* ADR-034：任务归档/恢复入口与模块、功能一致放在编辑弹窗底部；
+                普通成员看不到，系统管理员或项目内管理角色可直接切到归档流程。 */}
+            {selection?.item &&
+            canArchiveTasks &&
+            (selection.item.lifecycleStatus === "ACTIVE" ||
+              selection.item.lifecycleStatus === "ARCHIVED") ? (
+              <Button
+                className="secondary-button footer-leading"
+                data-testid="task-modal-lifecycle"
+                disabled={mutation.isPending || reloading || !!merge}
+                onClick={() =>
+                  openLifecycle(
+                    selection.item!.lifecycleStatus === "ARCHIVED"
+                      ? "restore"
+                      : "archive",
+                    selection.item!,
+                  )
+                }
+              >
+                {selection.item.lifecycleStatus === "ARCHIVED"
+                  ? "恢复"
+                  : "归档"}
+              </Button>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1371,6 +1525,65 @@ export function TasksPanel({
               }
             >
               保存
+            </Button>
+          </div>
+        </form>
+      </Modal>
+      <Modal
+        open={lifecycle !== null}
+        eyebrow={
+          lifecycle === null
+            ? "任务生命周期"
+            : lifecycle.item.code +
+              (lifecycle.action === "archive"
+                ? " · 归档只切换生命周期状态"
+                : " · 恢复后任务重新回到活跃列表")
+        }
+        title={lifecycle?.action === "restore" ? "恢复任务" : "归档任务"}
+        className="catalog-modal"
+        onCancel={closeLifecycle}
+        mask={{ closable: !lifecycleMutation.isPending }}
+      >
+        <form
+          className="catalog-form calm-form"
+          onSubmit={(event) => void submitLifecycle(event)}
+        >
+          <div className="dialog-form">
+            {lifecycleMutation.isError && (
+              <Alert type="error" title={taskError(lifecycleMutation.error)} />
+            )}
+            {lifecycleError && <Alert type="error" title={lifecycleError} />}
+            <div className="calm-field">
+              <label htmlFor="task-lifecycle-reason">操作原因</label>
+              <Input.TextArea
+                id="task-lifecycle-reason"
+                rows={3}
+                maxLength={2000}
+                value={lifecycleReason}
+                disabled={lifecycleMutation.isPending}
+                onChange={(event) => setLifecycleReason(event.target.value)}
+              />
+            </div>
+            <p className="calm-hint">
+              {lifecycle?.action === "restore"
+                ? "恢复只让任务重新可写；所属模块或功能已归档时，先恢复上一级再恢复任务。"
+                : "归档不改变工作状态、完成记录与状态历史；模块归档要求该模块下的全部任务都已归档。"}
+            </p>
+          </div>
+          <div className="calm-action-footer">
+            <Button
+              className="secondary-button"
+              onClick={closeLifecycle}
+              disabled={lifecycleMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              className="primary-button"
+              htmlType="submit"
+              loading={lifecycleMutation.isPending}
+            >
+              确认
             </Button>
           </div>
         </form>

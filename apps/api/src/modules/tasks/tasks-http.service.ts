@@ -144,7 +144,10 @@ export class TasksHttpService {
       const input = parse(
         route.request.body.contentTypes[0]!.schemaRef,
         request.body,
-      ) as TaskEditRequest & { impactFeatureIds?: number[] };
+      ) as TaskEditRequest & {
+        impactFeatureIds?: number[];
+        reason?: string;
+      };
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (!current)
@@ -153,7 +156,11 @@ export class TasksHttpService {
             "TASK_SESSION_REQUIRED",
             "登录或 CSRF 状态已失效",
           );
-        await this.tasks.authorize(tx, current.userId, path, path.taskId);
+        // 归档命令放行「父级已归档」（收尾），与 management.execute 的口径一致。
+        await this.tasks.authorize(tx, current.userId, path, path.taskId, {
+          allowArchivedParents:
+            operation === "archiveTask" || operation === "archiveModuleTask",
+        });
 
         return current.userId;
       };
@@ -191,6 +198,7 @@ export class TasksHttpService {
             ...(input.impactFeatureIds === undefined
               ? {}
               : { impactFeatureIds: input.impactFeatureIds }),
+            ...(input.reason === undefined ? {} : { reason: input.reason }),
             requestId,
           });
           return {

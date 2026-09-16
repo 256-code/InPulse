@@ -7,7 +7,10 @@ import {
 } from "./project-access.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 
-/** ADR-033：可执行项目内管理操作（成员增删、模块归档/恢复）的角色。 */
+/**
+ * ADR-033：可执行项目内管理操作（成员增删、模块归档/恢复）的角色。
+ * ADR-034：任务归档/恢复与功能归档/恢复复用同一门禁。
+ */
 export type ProjectManageRole = "SYSTEM_ADMIN" | "LEADER" | "PROJECT_ADMIN";
 
 /**

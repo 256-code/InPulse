@@ -13,12 +13,15 @@ import {
   ApiError,
   type InpulseApiClient,
   type ProjectItem,
+  type ProjectListItem,
 } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 import {
   ArchiveProjectModal,
   EditProjectModal,
+  RequestProjectArchiveModal,
   RestoreProjectModal,
+  ReviewProjectArchiveModal,
 } from "./ProjectManagementModals";
 
 const project: ProjectItem = {
@@ -32,7 +35,12 @@ const project: ProjectItem = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 3, activeFeatureCount: 7, openTaskCount: 5 },
+  stats: {
+    activeModuleCount: 3,
+    activeFeatureCount: 7,
+    openTaskCount: 5,
+    completedTaskCount: 1,
+  },
 };
 
 function renderWithProviders(node: React.ReactNode) {
@@ -321,6 +329,211 @@ describe("RestoreProjectModal", () => {
     );
     expect(onRestored).toHaveBeenCalledWith(
       expect.objectContaining({ status: "ACTIVE" }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+const listedProject: ProjectListItem = {
+  ...project,
+  currentUserRole: "LEADER",
+  pendingArchiveRequest: {
+    id: 21,
+    requestedBy: 9,
+    requestedByName: "组长甲",
+    reason: "本阶段交付结束",
+    requestedAt: "2026-09-16T02:00:00.000Z",
+  },
+};
+
+describe("RequestProjectArchiveModal", () => {
+  it("submits the reason with CSRF and idempotency headers", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const requestProjectArchive = vi.fn().mockResolvedValue({ id: 31 });
+    const client = {
+      issueCsrfToken,
+      requestProjectArchive,
+    } as unknown as InpulseApiClient;
+    const onRequested = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <RequestProjectArchiveModal
+        open
+        project={listedProject}
+        client={client}
+        onRequested={onRequested}
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "申请项目归档",
+    });
+    fireEvent.change(within(dialog).getByLabelText("归档申请原因"), {
+      target: { value: "本阶段交付结束" },
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "提交归档申请" }),
+    );
+
+    await waitFor(() => expect(requestProjectArchive).toHaveBeenCalledTimes(1));
+    expect(requestProjectArchive).toHaveBeenCalledWith(
+      7,
+      { reason: "本阶段交付结束" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-1",
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+    expect(onRequested).toHaveBeenCalledWith({ id: 31 });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the open task conflict without closing the form", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const requestProjectArchive = vi.fn().mockRejectedValue(
+      new ApiError(409, {
+        code: "PROJECT_ARCHIVE_TASKS_OPEN",
+        message: "项目下仍有 2 个未归档任务",
+        details: {},
+        requestId: "req-2",
+      }),
+    );
+    const client = {
+      issueCsrfToken,
+      requestProjectArchive,
+    } as unknown as InpulseApiClient;
+    const onClose = vi.fn();
+    renderWithProviders(
+      <RequestProjectArchiveModal
+        open
+        project={listedProject}
+        client={client}
+        onRequested={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "申请项目归档",
+    });
+    fireEvent.change(within(dialog).getByLabelText("归档申请原因"), {
+      target: { value: "本阶段交付结束" },
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "提交归档申请" }),
+    );
+
+    expect(
+      await within(dialog).findByText(
+        "项目下仍有未完成、也未归档的任务，请先在任务弹窗底部完成或归档全部任务再申请。",
+      ),
+    ).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("ReviewProjectArchiveModal", () => {
+  it("approves with If-Match and reports the archived project", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const approveProjectArchive = vi.fn().mockResolvedValue({
+      project: { ...project, status: "ARCHIVED", rowVersion: 4 },
+      currentUserRole: null,
+    });
+    const client = {
+      issueCsrfToken,
+      approveProjectArchive,
+    } as unknown as InpulseApiClient;
+    const onApproved = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <ReviewProjectArchiveModal
+        open
+        decision="approve"
+        project={listedProject}
+        client={client}
+        onApproved={onApproved}
+        onRejected={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "批准项目归档",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "确认归档" }),
+    );
+
+    await waitFor(() => expect(approveProjectArchive).toHaveBeenCalledTimes(1));
+    expect(approveProjectArchive).toHaveBeenCalledWith(
+      7,
+      21,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-1",
+          "If-Match": '"3"',
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+    expect(onApproved).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "ARCHIVED" }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects with an optional note and keeps the project active", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const rejectProjectArchive = vi.fn().mockResolvedValue({
+      id: 21,
+      status: "REJECTED",
+      decisionNote: "任务尚未收尾",
+    });
+    const client = {
+      issueCsrfToken,
+      rejectProjectArchive,
+    } as unknown as InpulseApiClient;
+    const onRejected = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <ReviewProjectArchiveModal
+        open
+        decision="reject"
+        project={listedProject}
+        client={client}
+        onApproved={vi.fn()}
+        onRejected={onRejected}
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "驳回项目归档申请",
+    });
+    fireEvent.change(within(dialog).getByLabelText("驳回批注"), {
+      target: { value: "任务尚未收尾" },
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "确认驳回" }),
+    );
+
+    await waitFor(() => expect(rejectProjectArchive).toHaveBeenCalledTimes(1));
+    expect(rejectProjectArchive).toHaveBeenCalledWith(
+      7,
+      21,
+      { note: "任务尚未收尾" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-1",
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "REJECTED" }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });

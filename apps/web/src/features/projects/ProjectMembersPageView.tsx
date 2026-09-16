@@ -14,6 +14,10 @@ import {
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
+  resourceLifecycleLabel,
+  resourceLifecycleTone,
+} from "@features/common/resource-lifecycle";
+import {
   describeUserDirectoryError,
   useUserDirectoryQuery,
 } from "@features/users/user-directory-query";
@@ -267,8 +271,17 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         </div>
         {project ? (
           <div className="catalog-actions">
-            <CalmBadge tone={project.status === "ACTIVE" ? "blue" : "amber"}>
-              {project.status === "ACTIVE" ? "正常" : "已归档"}
+            <CalmBadge
+              tone={resourceLifecycleTone(
+                project.status,
+                project.stats.completedTaskCount,
+                "blue",
+              )}
+            >
+              {resourceLifecycleLabel(
+                project.status,
+                project.stats.completedTaskCount,
+              )}
             </CalmBadge>
           </div>
         ) : null}
@@ -342,7 +355,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   <code>{project.code}</code>（创建后不可修改）
                 </dd>
                 <dt>状态</dt>
-                <dd>{project.status === "ACTIVE" ? "正常" : "已归档"}</dd>
+                <dd>
+                  {resourceLifecycleLabel(
+                    project.status,
+                    project.stats.completedTaskCount,
+                  )}
+                </dd>
                 <dt>创建人</dt>
                 <dd>
                   {memberNames.get(project.createdBy) ?? "—"}

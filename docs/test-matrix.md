@@ -1677,3 +1677,145 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-15）：`pnpm --filter @inpulse/web exec vitest run src/app/layout/AppLayout.test.tsx` 12 例通过，回退修复后同一用例失败（确认可挡住回归）；`pnpm test:web` **76 文件 414 例通过**；`pnpm format:check` 与 `pnpm typecheck`（全 workspace）通过。
 
 未运行 / 已知偏差：① 本轮未重跑 `pnpm test:e2e` 与 `pnpm check` 整链，改动为单处路径字符串并有单元用例锁定；② 新增测试需非作者人工评审。
+
+## 模块弹窗底部归档入口（C，2026-09-16 本地落库）
+
+用户要求在「点击模块弹出的窗口最下面」增加一个删除/归档入口，权限为系统管理员、项目管理员与项目创建者（普通组员没有）。按 [ADR-033](adr/ADR-033.md) 与 [功能设计 v1.1](../功能设计v1.1.md) BR-011（「项目、模块、功能只能归档；任务只能取消」），「删除模块」的唯一实现是逻辑归档，因此本轮只把既有的归档/恢复动作补到模块弹层底部：不新增接口、迁移或权限条目，也不引入模块物理删除。任务弹层对应的移除能力（取消任务）属于既有 F-16 状态流转，未在本轮改动。
+
+- `apps/web/src/features/modules/ModuleEditorModal.tsx`：新增可选属性 `canArchive` 与 `onLifecycleRequest`；编辑既有模块时在 `.calm-action-footer` 左侧渲染「归档模块」（模块已归档时为「恢复模块」），点击后由宿主把弹层切到既有 `archive` / `restore` 流程，原因必填、`If-Match`、数据库幂等与服务端角色门禁全部沿用。
+- `apps/web/src/features/modules/ModulesPageView.tsx` 与 `apps/web/src/features/features/FeaturesPageView.tsx`：传入 `canManageProjectResources(isAdmin, currentUserRole)` 与切换回调，弹层底部入口与列表页/模块详情页头部入口同源。
+- `apps/web/src/styles/design-system.css`：新增 `.calm-action-footer > .footer-leading`，让底部归档入口靠左、与右侧「取消 / 保存」分离。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR033-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在模块弹窗底部看到归档入口 | `ModulesPageView.test.tsx`：当前用户角色为 `LEADER` 时打开「编辑模块」，弹层 `.calm-action-footer` 内出现「归档模块」，点击后弹层切到「归档模块」并出现「操作原因」，填原因确认后以 `If-Match` 调用 `archiveModule` | 本地通过 |
+| ADR033-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 项目管理员同样可见 | 当前用户角色为 `PROJECT_ADMIN` 时弹层底部出现「归档模块」 | 本地通过 |
+| ADR033-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 普通成员不可见 | 当前用户角色为 `MEMBER` 时弹层底部既无「归档」也无「恢复」按钮 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm --filter @inpulse/web exec vitest run src/features/modules/ModulesPageView.test.tsx` 14 例通过、同一命令跑 `src/features/features/FeaturesPageView.test.tsx` 12 例通过、`pnpm exec eslint`（4 个改动文件）无告警、`prettier --write` 已应用。未运行：`pnpm test:web` 全量、`pnpm test:e2e`、GitHub Actions；全 workspace `pnpm typecheck` 当前被拉取到的 `b35ba9e` 中 `apps/web/src/features/published-records/PublishedRecordDetail.tsx` 的 `InpulseIcon className` 类型错误阻断，与本次改动无关。
+
+## 项目/模块「未开始」标签与按标签排序（C，2026-09-16 本地落库）
+
+用户要求新增「未开始」标签（作用域内没有任何已完成任务），并让项目卡与模块卡默认按标签排序：正常 → 未开始 → 已归档。本轮只改展示与排序口径，不改动任何归档/恢复权限与状态流转语义（[ADR-033](adr/ADR-033.md) 与功能设计 v1.1 §项目/模块归档规则不变）。
+
+判定口径统一为：`status = 'ARCHIVED'` 一律最后一档；`ACTIVE` 且已完成任务数为 0 即「未开始」；否则「正常」。已完成任务数沿用 `openTaskCount` 的「有效任务」口径（排除 `INVALID` 与仍挂在活跃聚合组下的历史来源分支），只把 `work_status` 由 `'TODO'` 换成 `'DONE'`。
+
+- `packages/api-contract/src/contracts/modules.zod.ts` / `projects.zod.ts`：`ModuleStats` / `ProjectStats` 新增必填 `completedTaskCount`（非负整数）。
+- `apps/api/src/stats/card-stat-columns.ts`：抽出 `effectiveTaskWhere`，新增 `completedTaskCountColumn` 与 `lifecycleRankExpression`（档位排序键，档位 0/1/2 与前端同规则）。
+- `apps/api/src/modules/modules/module-management.repository.ts`、`apps/api/src/modules/projects/postgres-project-query-port.ts`、`postgres-projects-write-port.ts`、`projects-write.port.ts`：返回新字段；项目列表与模块列表的 `ORDER BY` 改为「生命周期档位 → sort_order/id（项目为 id）」。
+- `packages/api-contract/src/module-routes.ts` / `route-registry.ts`：`listModules` 与 `listProjects` 摘要同步新排序；4 条模块写路由与 3 条项目写路由的 `safeBodyFieldPaths` 补 `stats.completedTaskCount` / `project.stats.completedTaskCount`，并升 `idempotencyContractVersion`（模块 1.2.0→1.3.0、1.3.0→1.4.0；项目 1.2.0→1.3.0），旧 Key 在新契约下返回 409；OpenAPI 与生成客户端由 `pnpm contract:generate` 重生成。
+- `apps/web/src/features/common/resource-lifecycle.ts`（新增）：标签与配色判定，规则与后端 `lifecycleRankExpression` 一致；未开始用 `cyan`，正常沿用各页原有主色（项目蓝、模块灰），已归档沿用琥珀。
+- 项目标签接入：`ProjectsPageView` 卡片、`ProjectOverviewPageView` 头部、`ProjectMembersPageView` 头部与状态项、`ActiveProjectMembers` 头部与状态项；模块标签接入：`ModulesPageView` 卡片、`FeaturesPageView` 模块资料行、`ModuleTasksPage` 模块资料行。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| LIFECYCLE-WEB-UNIT-001 | Web 单元 | 三档判定与配色 | `resource-lifecycle.test.ts`：`ARCHIVED` 优先于未开始；`ACTIVE` + 0 已完成 = 未开始且配色为 `cyan`；`ACTIVE` + ≥1 已完成 = 正常并沿用调用方主色 | 本地通过 |
+| LIFECYCLE-WEB-UNIT-002 | Web 单元 | 模块卡标签 | `ModulesPageView.test.tsx`：`completedTaskCount = 0` 的活跃模块渲染「未开始」且 class 含 `badge-cyan`；有已完成任务的模块仍为「正常」，已归档模块为「已归档」 | 本地通过 |
+| LIFECYCLE-WEB-UNIT-003 | Web 单元 | 项目卡标签 | `ProjectsPageView.test.tsx`：`completedTaskCount = 0` 的项目渲染「未开始」，另一项目仍为「正常」 | 本地通过 |
+| LIFECYCLE-API-INT-001 | 真实 PostgreSQL | 模块列表按档位排序 | `modules-api.integration.test.ts`：同项目内「有已完成任务 / 无已完成任务 / 已归档」三个模块按 正常→未开始→已归档 返回，`stats.completedTaskCount` 分别为 1/0/0 | 本地通过 |
+| LIFECYCLE-API-INT-002 | 真实 PostgreSQL | 项目列表按档位排序 | `projects-read-api.integration.test.ts`：三个项目按 正常→未开始→已归档 返回，`completedTaskCount` 为 1/0/0 | 本地通过 |
+| LIFECYCLE-API-INT-003 | 真实 PostgreSQL | 旧字段口径未变 | 既有 `projects-read-api` 统计夹具仍要求 `expectedStats`（含新的 `completedTaskCount: 1`）与 R-2 项目概览口径一致 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm --filter @inpulse/api test:unit` 64 文件 351 例通过；`pnpm --filter @inpulse/api test:integration`（`TEST_DATABASE_URL` 指向本机 PGroonga 容器）48 文件 444 例通过；`pnpm test:web` 77 文件 436 例通过；`pnpm --filter @inpulse/api typecheck`（含 `tsconfig.test.json`）通过；`pnpm lint`、`pnpm format:check`、`pnpm contract:drift`、`pnpm contract:validate`（98 条路由）、`pnpm permissions:check`（98 条操作）、`pnpm check:frontend:boundaries` 通过。为在浏览器看到真实效果，另用仓库外临时 Dockerfile 重建并重启了本机 `inpulse-api` 容器（镜像 `inpulse/api:local`，未改动仓库内 Dockerfile）。
+
+未运行 / 已知偏差：① 本轮未跑 `pnpm test:e2e` 与 `pnpm check` 整链、GitHub Actions；② 全 workspace `pnpm typecheck` 仍被拉取到的 `b35ba9e` 中 `apps/web/src/features/published-records/PublishedRecordDetail.tsx:286` 的 `InpulseIcon className` 类型错误阻断（与本次改动无关，也未修）；③ 功能设计 v1.1 未逐字列出项目卡/模块卡统计字段，本轮只同步了契约、Route Registry 摘要与测试矩阵，未改设计文档；④ 新增测试需非作者人工评审。
+
+## 项目归档申请—审核与任务归档（C，2026-09-16 本地落库）
+
+用户确认的口径：① 项目归档保留「双方同意」，但申请权与审批权分离——项目组长（LEADER）、项目管理员（PROJECT_ADMIN）与系统管理员可发起申请，只有总管理员（系统管理员）能批准真正归档；② 拦截口径只针对任务——项目归档的申请与批准、模块归档都要求作用域内任务均已收尾，功能不需要归档、也不参与任何一级的拦截。（该口径在 2026-09-16 第二轮按用户反馈修正：任务「完成」即算收尾，不再要求必须归档。）完整决策与边界见 [ADR-034](adr/ADR-034.md)。
+
+- 迁移 `database/migrations/0016_project_archive_requests.sql`：新表 `app.project_archive_requests`（`status` 枚举 CHECK、`project_archive_requests_one_pending` 部分唯一索引、origin guard 触发器，`app_runtime` 授予 SELECT/INSERT/UPDATE）。该迁移尚未合并，初版用 `BIGINT` 主键导致 postgres.js 返回字符串并使响应 Schema 校验失败，改为 `integer` 后手动回退该迁移并重新 apply 验证通过。
+- 契约与权限：新增 `requestProjectArchive`/`approveProjectArchive`/`rejectProjectArchive` 与 `archiveTask`/`restoreTask`/`archiveModuleTask`/`restoreModuleTask` 共 7 条路由（Route Registry 98 → 105 条）；`projectListItemSchema` 增加 `currentUserRole`/`pendingArchiveRequest`；`docs/permissions.md` 同步新增条目，`archiveModule` 行补充 409 说明。
+- 后端：新增 `ProjectArchiveRequestService`/`Controller`/`Module` 与 PostgreSQL 仓储；`ProjectsWritePort.countUnarchivedTasks` 与 `ModuleManagementRepository.countUnarchivedTasks` 落实任务归档前置校验；`TasksManagementService` 新增 4 个生命周期命令并复用 `ProjectRoleGateService` 角色门禁。
+- 前端：项目列表按角色区分「申请归档」「归档申请审核中」「批准归档」「驳回申请」入口；模块与任务弹窗底部归档入口；409 使用专用文案。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR034-API-INT-001 | 真实 PostgreSQL | 归档申请角色矩阵 | `project-archive-request-api.integration.test.ts`：普通成员申请 403 `PROJECT_ARCHIVE_REQUEST_FORBIDDEN`、非成员与其他项目 404 | 本地通过 |
+| ADR034-API-INT-002 | 真实 PostgreSQL | 申请前置校验与幂等 | 项目下存在未完成且未归档的任务时申请 409 `PROJECT_ARCHIVE_TASKS_OPEN`；提交成功后同 Key 同摘要重放原响应，同一项目重复申请 409 | 本地通过 |
+| ADR034-API-INT-003 | 真实 PostgreSQL | 只有系统管理员能审核 | 组长与项目管理员审核 403 `ADMIN_REQUIRED`；不存在项目 404；驳回后项目仍为 ACTIVE 且 `row_version` 不变 | 本地通过 |
+| ADR034-API-INT-004 | 真实 PostgreSQL | 批准按 If-Match 归档 | 版本不匹配 409 `PROJECT_VERSION_CONFLICT`；批准后项目 ARCHIVED、申请 APPROVED，重复批准 409 `PROJECT_STATE_CONFLICT` | 本地通过 |
+| ADR034-API-INT-005 | 真实 PostgreSQL | 申请同事务副作用与列表字段 | 审计 `project.archive.request`、活动 `PROJECT_ARCHIVE_REQUESTED` 与发给系统管理员的站内通知同事务提交；项目列表返回 `currentUserRole` 与 `pendingArchiveRequest` | 本地通过 |
+| ADR034-API-INT-006 | 真实 PostgreSQL | 任务归档与恢复 | `tasks-api.integration.test.ts`：只切换 `lifecycle_status` 且不写 `task_status_history`；审计 `task.archive`/`task.unarchive`、活动与搜索投影同事务；普通成员 403、跨项目 404、版本 409、状态 409 | 本地通过 |
+| ADR034-API-INT-007 | 真实 PostgreSQL | 模块归档前置校验 | `modules-api.integration.test.ts`：模块下仍有活跃任务时归档 409 `MODULE_ARCHIVE_TASKS_OPEN`，任务归档后可成功归档 | 本地通过 |
+| ADR034-API-INT-008 | 真实 PostgreSQL | 直接归档取消待审申请 | `project-management-api.integration.test.ts`：系统管理员直接 `archiveProject` 时 PENDING 申请被置为 CANCELED，审计 payload 记录 `cancelledArchiveRequestIds` | 本地通过 |
+| ADR034-WEB-UNIT-001 | Web 单元 | 项目列表归档入口 | `ProjectsPageView.test.tsx`：LEADER 与 PROJECT_ADMIN 看到「申请归档」，待审时显示「归档申请审核中」，系统管理员看到「批准归档」「驳回申请」，普通成员看不到入口 | 本地通过 |
+| ADR034-WEB-UNIT-002 | Web 单元 | 申请与审核弹窗 | `project-management-modals.test.tsx`：申请提交带 CSRF 与幂等键、409 冲突显示专用文案、批准携带 `If-Match`、驳回批注可空 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm contract:generate`；`pnpm contract:validate`（105 条路由全部通过）；`pnpm permissions:check`（105 条操作 / 105 条路由）；`pnpm contract:drift`（5 个产物一致）；`pnpm lint`；`pnpm format:check`；`node scripts/check_docs.mjs`（80 个 Markdown 文件的链接与锚点）；真实 PostgreSQL 18.6 + PGroonga 下 `pnpm --filter @inpulse/api test:integration` 49 文件 453 例通过；`pnpm --filter @inpulse/api test:unit` 64 文件 351 例通过；`pnpm test:web` 77 文件 445 例通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② `pnpm deps:audit` 在本机 npm 镜像缺少 audit endpoint 时会失败，本轮未运行也未新增依赖；③ 全 workspace `pnpm typecheck` 仍被既有无关错误 `apps/web/src/features/published-records/PublishedRecordDetail.tsx:286` 阻断（未修）；④ 本地 `inpulse-api` 容器未按本轮重建，浏览器端验证依赖前端 Vite HMR；⑤ 新增测试需非作者人工评审。
+
+## 功能归档权限与任务、模块对齐（C，2026-09-16 本地落库）
+
+用户要求「功能应该也要有可以删除的按钮，删除权限与任务相同」。按 BR-011「项目、模块、功能只能归档」，「删除功能」的唯一实现是逻辑归档，因此本轮把功能归档/恢复的权限与任务、模块归档对齐（系统管理员、本项目组长或项目管理员；普通成员没有），不新增物理删除、迁移或新路由。
+
+- 契约：`archiveFeature`/`restoreFeature` 的 `authPolicy` 由 `adminSession` 调整为 `session`，权限矩阵 `活跃成员` 改为 ADR-034 的 conditional 条目；高风险管理路由幂等契约版本 1.2.0 → 1.3.0（旧 Key 409），OpenAPI 与生成客户端由 `pnpm contract:generate` 重生成。
+- 后端：`FeaturesManagementService` 注入 `ProjectRoleGateService`，新增 `requireManageRole`（非成员 404、普通成员 403 `FEATURE_MANAGE_FORBIDDEN`），在 `execute` 与 `replay`（`requireManageRole: highRisk`）执行；`FeaturesHttpService` 移除管理员高风险 Session 门禁与 `AdminHighRiskAuthService` 依赖。
+- 前端：`FeaturesPageView` 的列表行与详情页头归档/恢复入口由 `isAdmin` 改为 `canManageProjectResources(isAdmin, currentUserRole)`，入口加 `feature-lifecycle-{id}` / `feature-detail-lifecycle-{id}` 测试 id；`feature-query.ts` 对 403 `FEATURE_MANAGE_FORBIDDEN` 给出专用文案。
+- 功能不参与任务归档前置校验：归档功能只要求项目与父模块 ACTIVE、功能自身 ACTIVE（恢复要求 ARCHIVED）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR034-API-INT-009 | 真实 PostgreSQL | 功能归档角色矩阵 | `features-api.integration.test.ts`：普通成员（显式降级为 MEMBER）归档 403 `FEATURE_MANAGE_FORBIDDEN`；组长无 `is_admin` 也能归档（`ARCHIVED`、rowVersion 2）与恢复（`ACTIVE`、rowVersion 3） | 本地通过 |
+| ADR034-API-INT-010 | 真实 PostgreSQL | 功能归档越权与移除成员 | 跨项目非成员归档 404 `FEATURE_NOT_FOUND`；被移除成员归档 404 | 本地通过 |
+| ADR034-WEB-UNIT-003 | Web 单元 | 功能归档入口按角色显示 | `FeaturesPageView.test.tsx`：`currentUserRole = MEMBER` 时列表既无 `feature-lifecycle-3` 也无「归档功能」按钮；`LEADER` 与 `PROJECT_ADMIN` 可见并可提交归档（携带原因） | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm contract:generate`、`pnpm contract:validate`（105 条路由）、`pnpm permissions:check`（105/105）、`pnpm contract:drift`、`pnpm lint`、`pnpm format:check`、`node scripts/check_docs.mjs`（80 个 Markdown 文件）；`pnpm --filter @inpulse/api typecheck`；真实 PostgreSQL 18.6 + PGroonga：API 集成 49 文件 455 例、API 单测 64 文件 351 例、Web 单测 77 文件 448 例。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 本地 `inpulse-api` 容器需按本轮重建后才能用浏览器验证（前端 Vite HMR 已生效）；③ 新增测试需非作者人工评审。
+
+## 功能归档入口迁移到「编辑功能」弹窗（C，2026-09-16 本地落库）
+
+用户要求「归档功能按钮和模块一样放在编辑弹窗里面」，随后进一步要求「把原来右上角的归档功能去掉，编辑里面的按钮把归档功能改为归档两字」。因此功能归档入口只保留在编辑弹窗底部左侧（按钮文案「归档」/「恢复」），功能卡片与功能详情页头不再提供归档按钮，仅对已归档功能保留「恢复功能」入口以避免恢复无路可走；权限与任务、模块归档一致（系统管理员、本项目组长或项目管理员；普通成员不可见）。
+
+- `apps/web/src/features/features/FeaturesPageView.tsx`：编辑弹窗 `.calm-action-footer` 增加 `footer-leading` 按钮（`data-testid="feature-modal-lifecycle"`），仅当处于 `update` 且 `canManageProjectResources(isAdmin, currentUserRole)` 为真时渲染，文案「归档」/「恢复」；点击后调用既有 `open("archive" | "restore", item)` 切到归档/恢复确认流程，原因必填、`If-Match`、CSRF 与幂等全部沿用。卡片与详情页头的归档按钮已删除，`feature-lifecycle-{id}` 只渲染已归档功能的「恢复功能」。
+- 复用模块弹窗既有样式 `.calm-action-footer > .footer-leading`（`apps/web/src/styles/design-system.css`），未新增 CSS 或接口。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR034-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在功能编辑弹窗底部归档 | `FeaturesPageView.test.tsx`：`currentUserRole = LEADER` 时点「编辑功能」，弹窗底部出现文案为「归档」的 `feature-modal-lifecycle`，点击后出现「操作原因」，填原因确认即以 `archiveFeature(2, 4, 3, { reason })` 调用 | 本地通过 |
+| ADR034-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员看不到该入口 | `currentUserRole = MEMBER` 时打开同一编辑弹窗，`feature-modal-lifecycle` 不存在，卡片上也没有归档或恢复按钮 | 本地通过 |
+| ADR034-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 页面不再有独立归档按钮 | ACTIVE 功能卡片与详情页头均无「归档功能」按钮；已归档功能卡片保留「恢复功能」，点击后走恢复确认并以 `restoreFeature` 调用 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm --filter @inpulse/web exec vitest run src/features/features/FeaturesPageView.test.tsx` 17 例通过；`pnpm test:web` 77 文件 450 例通过；`pnpm lint`、`pnpm format:check`、`node scripts/check_docs.mjs` 通过；管理员一次性归档用例改为经「编辑功能」弹窗底部触发，仍断言未填原因不发请求且携带 `If-Match`。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 本轮只改前端入口位置，后端权限与契约未变；③ 新增测试需非作者人工评审。
+
+## 任务归档入口与「已归档父级仍可归档任务」修复（C，2026-09-16 本地落库）
+
+用户反馈「模块下功能里任务都完成了但是模块不能归档」。排查确认根因是口径与入口的双重问题：任务「完成」（`work_status = DONE`）不等于「归档」（`lifecycle_status = ARCHIVED`），而功能一经归档，其下任务会被父级只读校验挡在归档之外，前端也没有任务归档入口，于是「归档功能 → 任务无法归档 → 模块下永远存在 ACTIVE 任务 → 模块无法归档」形成死锁。本轮按用户已确认的口径（模块/项目归档都要求下级任务已归档）修复死锁并补齐入口，未放宽归档前置校验。
+
+- 后端：`TasksManagementService.authorize` 增加 `allowArchivedParents` 选项，归档命令（`archiveTask`/`archiveModuleTask`）在模块或功能已归档时仍放行；恢复命令与「项目已归档」保持严格拒绝。`TasksHttpService` 幂等解析阶段的 `authorize` 使用同一口径。
+- 后端文案：`ModulesManagementService.assertAllTasksArchived` 的 409 `MODULE_ARCHIVE_TASKS_OPEN` 带未收尾任务数量；口径在同日第二轮修正为「完成即算收尾」，文案与前端 `module-query.ts`、`project-management-query.ts` 同步改为「完成或归档」。
+- 前端：`TasksPanel` 新增 `isAdmin` 可选属性与 `canManageProjectResources(isAdmin, currentUserRole)` 判定，编辑弹窗 `.calm-action-footer` 左侧渲染 `data-testid=task-modal-lifecycle` 按钮（文案「归档」/「恢复」），点击后独立确认弹窗要求填写操作原因并经生成客户端携带 `If-Match` 与 `Idempotency-Key` 提交；`FeaturesPageView` 与 `ModuleTasksPage` 传入 `isAdmin`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR034-API-INT-011 | 真实 PostgreSQL | 功能已归档后归档其任务 | `tasks-api.integration.test.ts`：功能置为 ARCHIVED 后 `POST .../tasks/{taskId}/archive` 200 且 `lifecycleStatus = ARCHIVED`；随后 `restore` 仍 409 `TASK_PARENT_ARCHIVED` | 本地通过 |
+| ADR034-WEB-UNIT-004 | Web 单元 | 任务编辑弹窗底部归档 | `TasksPanel.test.tsx`：`currentUserRole = LEADER` 时编辑弹窗出现 `task-modal-lifecycle`，未填原因先提示「请填写操作原因」，填原因确认后以 `archiveTask(2, 3, 4, 1, { reason })` 与 `If-Match: "1"` 调用 | 本地通过 |
+| ADR034-WEB-UNIT-005 | Web 单元 | 普通成员看不到任务归档入口 | `currentUserRole = MEMBER` 时同一编辑弹窗内 `task-modal-lifecycle` 不存在 | 本地通过 |
+| ADR034-WEB-UNIT-007 | Web 单元 | 父级已归档时入口仍可达 | `TasksPanel.test.tsx`：`writable = false` 且 `currentUserRole = LEADER` 时「编辑任务」按钮不再禁用，弹窗内出现 `task-modal-lifecycle` 与只读提示；`pnpm test:web` 77 文件 453 例 | 本地通过 |
+| ADR034-WEB-UNIT-008 | Web 单元 | 无管理角色仍保持只读 | 既有用例继续要求 `writable = false` 且无项目角色时「编辑任务」禁用，避免只读场景被无条件放开 | 本地通过 |
+| ADR034-WEB-UNIT-006 | Web 单元 | 归档冲突文案同步 | `project-management-modals.test.tsx` 断言 `PROJECT_ARCHIVE_TASKS_OPEN` 文案改为「任务完成不等于归档，请在任务弹窗底部先归档全部任务」 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm --filter @inpulse/api test:integration tasks-api` 44 例通过；`pnpm --filter @inpulse/api test:integration modules-api tasks-api features-api` 3 文件 74 例通过；`pnpm --filter @inpulse/api typecheck`、`pnpm test:web` 77 文件 453 例通过；`pnpm lint`、`pnpm format:check`、`pnpm contract:validate`（105 条路由）、`pnpm permissions:check`（105/105）、`pnpm contract:drift` 通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 全 workspace `pnpm typecheck` 仍被无关的 `apps/web/src/features/published-records/PublishedRecordDetail.tsx:286` 阻断（未修）；③ 本条随后被同日的「任务完成即算收尾」条目修正：模块归档不再要求任务必须归档，完成或取消即算收尾；④ 新增测试需非作者人工评审。
+
+## 归档前置校验改为「任务已收尾」（C，2026-09-16 第二轮本地落库）
+
+用户反馈「这个任务完成不同步啊导致上级不能归档」：任务「完成」后仍被上级归档拦截，体验上等于强制用户额外做一次「归档」动作。经确认把口径修正为「任务已收尾」——已完成（DONE）、已取消（CANCELED）或已归档都算收尾，只有仍未完成（TODO）且未归档的任务才阻塞模块归档与项目归档申请/批准；任务归档入口保留为可选的收尾动作。
+
+- 后端：`ModuleManagementRepository.countUnarchivedTasks` 与 `PostgresProjectsWritePort.countUnarchivedTasks` 的 SQL 增加 `AND work_status NOT IN ('DONE', 'CANCELED')`；`ModulesManagementService` 与 `ProjectArchiveRequestService` 的 409 文案改为「未完成、也未归档的任务」，前端 `module-query.ts`、`project-management-query.ts` 同步。
+- 文档：ADR-034 的决策与 §2 前置校验、`AGENTS.md` ADR-034 节、系统设计、技术设计、功能设计、开发工作书与 `docs/permissions.md` 的同一口径全部改为「已收尾」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR034-API-INT-012 | 真实 PostgreSQL | 任务完成即可归档模块 | `modules-api.integration.test.ts`：模块下任务 `work_status = DONE` 且未归档时 `POST /modules/{id}/archive` 200 且返回 `ARCHIVED` | 本地通过 |
+| ADR034-API-INT-013 | 真实 PostgreSQL | 任务完成即可申请项目归档 | `project-archive-request-api.integration.test.ts`：项目下任务为 DONE 且未归档时组长提交申请 200 | 本地通过 |
+| ADR034-WEB-UNIT-009 | Web 单元 | 409 文案同步 | `project-management-modals.test.tsx` 断言 `PROJECT_ARCHIVE_TASKS_OPEN` 文案为「项目下仍有未完成、也未归档的任务…」 | 本地通过 |
+
+本地实际执行（2026-09-16）：`pnpm --filter @inpulse/api test:integration modules-api project-archive-request` 2 文件 18 例通过；`pnpm test:web` 77 文件 453 例通过；`pnpm lint`、`pnpm format:check`、`pnpm contract:validate`（105 条路由）、`pnpm permissions:check`（105/105）、`pnpm contract:drift`、`node scripts/check_docs.mjs` 通过。另注：全量 `pnpm --filter @inpulse/api test:integration` 本轮出现 1 例与本改动无关的不稳定失败（`preauth-session.integration.test.ts` 的 `preauth_sessions_consumed_at_check` 并发时钟边界），单独重跑该文件 4 例通过，未修改该测试。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 已完成但未归档的任务在模块归档后仍保持 ACTIVE，用户如需从活跃视图移除可继续手动归档；③ 新增测试需非作者人工评审。

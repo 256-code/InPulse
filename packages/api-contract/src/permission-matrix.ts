@@ -190,7 +190,12 @@ export const permissionMatrix = [
       匿名: { kind: "deny", status: 401 },
       活跃成员:
         operationId === "archiveFeature" || operationId === "restoreFeature"
-          ? { kind: "deny", status: 403 }
+          ? {
+              kind: "conditional",
+              allowedWhen:
+                "ADR-034：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目/模块 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+              deniedWith: 403,
+            }
           : { kind: "allow" },
       其他项目成员: { kind: "deny", status: 404 },
       已移除成员: { kind: "deny", status: 404 },
@@ -668,6 +673,74 @@ export const permissionMatrix = [
       },
     },
   },
+  {
+    operationId: "requestProjectArchive",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-034：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填；普通成员 403",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填",
+        deniedWith: 403,
+      },
+    },
+  },
+  ...(["approveProjectArchive", "rejectProjectArchive"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: { kind: "deny", status: 403 },
+        其他项目成员: { kind: "deny", status: 404 },
+        已移除成员: { kind: "deny", status: 404 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: {
+          kind: "conditional",
+          allowedWhen:
+            operationId === "approveProjectArchive"
+              ? "完整系统管理员 Session；申请仍为 PENDING、项目 ACTIVE、If-Match、CSRF 与幂等必填；批准即在同一事务内归档项目"
+              : "完整系统管理员 Session；申请仍为 PENDING、CSRF 与幂等必填；只驳回申请，不改变项目状态",
+          deniedWith: 403,
+        },
+      },
+    }),
+  ),
+  ...(
+    [
+      "archiveTask",
+      "restoreTask",
+      "archiveModuleTask",
+      "restoreModuleTask",
+    ] as const
+  ).map((operationId): PermissionMatrixEntry => ({
+    operationId,
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-033 角色模型：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），父级 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen: "完整管理员 Session；原因、If-Match、CSRF 与幂等必填",
+        deniedWith: 403,
+      },
+    },
+  })),
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

@@ -5,7 +5,10 @@ import {
   type ModuleItem,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
-import { moduleStatColumns } from "../../stats/card-stat-columns.js";
+import {
+  lifecycleRankExpression,
+  moduleStatColumns,
+} from "../../stats/card-stat-columns.js";
 
 type Row = Omit<
   ModuleItem,
@@ -16,16 +19,18 @@ type Row = Omit<
   archivedAt: string | Date | null;
   activeFeatureCount: number;
   openTaskCount: number;
+  completedTaskCount: number;
 };
 const dto = (row: Row): ModuleItem => {
-  const { activeFeatureCount, openTaskCount, ...rest } = row;
+  const { activeFeatureCount, openTaskCount, completedTaskCount, ...rest } =
+    row;
   return moduleItemSchema.parse({
     ...rest,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
     archivedAt:
       row.archivedAt === null ? null : new Date(row.archivedAt).toISOString(),
-    stats: { activeFeatureCount, openTaskCount },
+    stats: { activeFeatureCount, openTaskCount, completedTaskCount },
   });
 };
 
@@ -34,7 +39,7 @@ export class ModuleManagementRepository {
   async list(tx: TransactionContext, projectId: number): Promise<ModuleItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} ORDER BY m.sort_order, m.id`;
+    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.status, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", m.archived_at AS "archivedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} ORDER BY ${lifecycleRankExpression(tx.sql, "module", "m")}, m.sort_order, m.id`;
     return rows.map(dto);
   }
 
@@ -73,5 +78,27 @@ export class ModuleManagementRepository {
     return rows.length
       ? this.find(tx, current.projectId, current.id)
       : undefined;
+  }
+
+  /**
+   * 模块归档前置校验（F-06.2）：模块内仍未收尾的任务计数。
+   * 「已收尾」= 已归档（lifecycle_status = ARCHIVED / INVALID）或工作状态已完结
+   * （work_status = DONE / CANCELED）：用户口径是「任务完成就不该再挡住上级归档」。
+   * 仍未完成（TODO）且未归档的任务才计入阻塞。
+   */
+  async countUnarchivedTasks(
+    tx: TransactionContext,
+    projectId: number,
+    moduleId: number,
+  ): Promise<number> {
+    const rows = await tx.sql<{ count: number }[]>`
+      SELECT COUNT(*)::integer AS "count"
+        FROM app.tasks
+       WHERE project_id = ${projectId}
+         AND module_id = ${moduleId}
+         AND lifecycle_status = 'ACTIVE'
+         AND work_status NOT IN ('DONE', 'CANCELED')
+    `;
+    return rows[0]?.count ?? 0;
   }
 }
