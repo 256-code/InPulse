@@ -990,6 +990,7 @@ export type RecordDraftItem = {
 export type RecordDraftListQuery = {
   readonly cursor?: string;
   readonly limit?: number;
+  readonly authorId?: number;
 };
 
 export type RecordDraftPage = {

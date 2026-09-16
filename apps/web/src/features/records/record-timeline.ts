@@ -37,6 +37,26 @@ function recordDateLabel(key: string) {
     : key;
 }
 
+/** 时间线竖线左侧的短日期（如 9/16），完整日期仍由分组标题承载。 */
+export function timelineDayLabel(key: string) {
+  const date = new Date(`${key}T00:00:00`);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+    : key;
+}
+
+/** 时间线竖线左侧、每条记录对应的发布时刻（如 14:59）。 */
+export function timelineTimeLabel(publishedAt: string) {
+  const date = new Date(publishedAt);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+    : "";
+}
+
 interface DatedFeedItem {
   readonly record: { readonly publishedAt: string };
 }

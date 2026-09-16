@@ -145,8 +145,8 @@ const signalInit = expect.objectContaining({ signal: expect.any(AbortSignal) });
 
 describe("RecordsWorkspace", () => {
   it(
-    "loads the cross-project feed by default and disables the header action" +
-      " until a project is chosen",
+    "loads the cross-project feed by default and keeps the header action" +
+      " available for the dialog-side project choice",
     async () => {
       const client = baseClient();
       mount(client as unknown as InpulseApiClient, "/records");
@@ -158,9 +158,11 @@ describe("RecordsWorkspace", () => {
       expect(
         screen.getByRole("option", { name: "全部项目" }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "记录一次迭代" }),
-      ).toBeDisabled();
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "记录一次迭代" }),
+        ).toBeEnabled(),
+      );
       expect(client.listRecordFeed).toHaveBeenCalledWith(
         { status: "PUBLISHED", source: "ALL", limit: 20 },
         signalInit,

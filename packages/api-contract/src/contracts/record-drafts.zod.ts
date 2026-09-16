@@ -63,6 +63,8 @@ export const recordDraftListQuerySchema = z
   .object({
     cursor: recordListCursorSchema,
     limit: recordListLimitSchema,
+    // 只看某个作者创建的草稿（项目草稿区传当前用户）；省略返回项目内全部草稿。
+    authorId: z.coerce.number().int().positive().max(2147483647).optional(),
   })
   .strict()
   .meta({ id: "RecordDraftListQuery" });

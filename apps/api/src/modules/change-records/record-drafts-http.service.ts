@@ -121,6 +121,9 @@ export class RecordDraftsHttpService {
                   ...(listQuery.limit === undefined
                     ? {}
                     : { limit: listQuery.limit }),
+                  ...(listQuery.authorId === undefined
+                    ? {}
+                    : { authorId: listQuery.authorId }),
                 },
           ),
         };

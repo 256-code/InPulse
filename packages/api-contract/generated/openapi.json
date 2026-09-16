@@ -12007,6 +12007,16 @@
               "minimum": 1,
               "maximum": 100
             }
+          },
+          {
+            "name": "authorId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           }
         ]
       }
@@ -19295,6 +19305,11 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "authorId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
           }
         },
         "additionalProperties": false

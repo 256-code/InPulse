@@ -38,7 +38,13 @@ const RECORD_DRAFT_LIST_NAMESPACE = "RECORD_DRAFTS";
 export interface RecordDraftListCommand {
   readonly cursor?: string;
   readonly limit?: number;
+  /** 只看某个作者创建的草稿（项目草稿区传当前用户）；省略返回项目内全部草稿。 */
+  readonly authorId?: number;
 }
+
+/** 作者过滤进入游标绑定：同一游标换作者或去掉作者都按筛选不匹配拒绝。 */
+const draftListFilterKey = (authorId: number | undefined): string | null =>
+  authorId === undefined ? null : `authorId=${authorId}`;
 
 export class RecordDraftError extends Error {
   constructor(
@@ -92,12 +98,19 @@ export class RecordDraftsService
         return (await this.withNames(tx, [item]))[0]!;
       });
     const limit = page.limit ?? RECORD_PAGE_LIMIT_DEFAULT;
-    const after = this.decodeListCursor(page.cursor, actorId, projectId);
+    const filterKey = draftListFilterKey(page.authorId);
+    const after = this.decodeListCursor(
+      page.cursor,
+      actorId,
+      projectId,
+      filterKey,
+    );
     return this.uow.run(async (tx) => {
       const result = await this.repository.listPage(tx, {
         projectId,
         limit,
         after,
+        ...(page.authorId === undefined ? {} : { authorId: page.authorId }),
       });
       return {
         items: await this.withNames(tx, result.items),
@@ -111,6 +124,7 @@ export class RecordDraftsService
                 projectId,
                 afterAt: result.last.at,
                 afterId: result.last.id,
+                filterKey,
               }),
       };
     });
@@ -160,16 +174,19 @@ export class RecordDraftsService
       handlerName: names.get(item.handlerId) ?? null,
     }));
   }
+
   private decodeListCursor(
     cursor: string | undefined,
     actorId: number,
     projectId: number,
+    filterKey: string | null,
   ): TimeCursorValue | null {
     try {
       return this.cursor.decode(cursor, {
         actorUserId: actorId,
         namespace: RECORD_DRAFT_LIST_NAMESPACE,
         projectId,
+        filterKey,
       });
     } catch (error) {
       if (error instanceof TimeCursorError)

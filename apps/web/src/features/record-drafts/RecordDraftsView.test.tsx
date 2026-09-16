@@ -58,12 +58,14 @@ function client(overrides: object = {}) {
     ...overrides,
   } as unknown as InpulseApiClient;
 }
-function mount(
+function mountView(
   api: InpulseApiClient,
   path = "/records?projectId=1",
   currentUserId?: number,
+  createToken = 0,
+  onCanCreateChange?: (value: boolean) => void,
 ) {
-  render(
+  return (
     <MemoryRouter initialEntries={[path]}>
       <ConfigProvider theme={{ token: { motion: false } }}>
         <QueryClientProvider
@@ -71,11 +73,23 @@ function mount(
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <RecordDraftsView client={api} currentUserId={currentUserId} />
+          <RecordDraftsView
+            client={api}
+            currentUserId={currentUserId}
+            createToken={createToken}
+            onCanCreateChange={onCanCreateChange}
+          />
         </QueryClientProvider>
       </ConfigProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+function mount(
+  api: InpulseApiClient,
+  path = "/records?projectId=1",
+  currentUserId?: number,
+) {
+  render(mountView(api, path, currentUserId));
 }
 describe("F-17 draft UI", () => {
   it("validates three sections and creates an independent draft through the client", async () => {
@@ -335,4 +349,71 @@ it("lists my drafts across projects through the global query and opens the ownin
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     ),
   );
+});
+
+it("creates an independent draft in the project chosen inside the dialog from the all-projects view", async () => {
+  const create = vi
+    .fn()
+    .mockResolvedValue({ ...item, id: 12, projectId: 2, moduleId: 9 });
+  const listModules = vi.fn().mockResolvedValue({
+    items: [{ id: 9, name: "风控模块", status: "ACTIVE" }],
+  });
+  const api = client({
+    listProjects: vi.fn().mockResolvedValue({
+      items: [
+        { id: 1, name: "支付项目", status: "ACTIVE" },
+        { id: 2, name: "风控项目", status: "ACTIVE" },
+      ],
+    }),
+    listModules,
+    createIndependentRecordDraft: create,
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(mountView(api, "/records", 3, 0, canCreate));
+  // 「全部项目」下只要存在可写项目就允许发起创建。
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records", 3, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建独立草稿" }),
+  );
+  // 未选项目前不请求模块，也不能提交。
+  expect(listModules).not.toHaveBeenCalled();
+  expect(modal.getByRole("button", { name: "保存草稿" })).toBeDisabled();
+  fireEvent.change(modal.getByLabelText("所属项目"), {
+    target: { value: "2" },
+  });
+  const moduleSelect = modal.getByLabelText("所属模块");
+  await waitFor(() =>
+    expect(
+      within(moduleSelect).getByRole("option", { name: "风控模块" }),
+    ).toBeInTheDocument(),
+  );
+  fireEvent.change(moduleSelect, {
+    target: { value: "9" },
+  });
+  expect(listModules).toHaveBeenCalledWith(
+    2,
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  for (const [label, value] of [
+    ["迭代标题", "风控修正"],
+    ["改动原因", "说明"],
+    ["具体改动", "说明"],
+    ["改动效果", "说明"],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0]!.slice(0, 2)).toEqual([2, 9]);
+});
+
+it("reports the header action as unavailable when every visible project is archived", async () => {
+  const canCreate = vi.fn();
+  const archived = client({
+    listProjects: vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "支付项目", status: "ARCHIVED" }],
+    }),
+  });
+  render(mountView(archived, "/records", 3, 0, canCreate));
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(false));
 });

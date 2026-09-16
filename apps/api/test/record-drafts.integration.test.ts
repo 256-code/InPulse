@@ -584,6 +584,70 @@ describe("F-17 independent drafts", () => {
       service.read(f.userId, f.projectId, undefined, { cursor: "tampered.0" }),
     ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
   });
+  it("filters the project draft list by author and binds the author into the cursor", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId);
+    const member = await createUser(client.sql);
+    await client.sql`INSERT INTO app.project_members(project_id,user_id) VALUES (${f.projectId},${member})`;
+    const create = (authorId: number, title: string) =>
+      uow.run((tx) =>
+        service.create(
+          tx,
+          authorId,
+          f.projectId,
+          f.moduleId,
+          { ...content, title, scopeType: "MODULE", impactFeatureIds: [] },
+          randomUUID(),
+        ),
+      );
+    const mineOlder = await create(f.userId, "我的草稿甲");
+    const mineNewer = await create(f.userId, "我的草稿乙");
+    const theirs = await create(member, "他人草稿");
+    const numeric = (a: number, b: number) => a - b;
+    const readPage = async (params: {
+      readonly limit?: number;
+      readonly cursor?: string;
+      readonly authorId?: number;
+    }) =>
+      schemaRegistry.RecordDraftPage.schema.parse(
+        await service.read(f.userId, f.projectId, undefined, params),
+      );
+    const all = await readPage({});
+    expect(all.items.map((item) => item.id).sort(numeric)).toEqual(
+      [mineOlder.id, mineNewer.id, theirs.id].sort(numeric),
+    );
+    const first = await readPage({ authorId: f.userId, limit: 1 });
+    expect(first.items.map((item) => item.id)).toEqual([mineNewer.id]);
+    expect(first.hasMore).toBe(true);
+    const cursor = first.nextCursor;
+    expect(cursor).not.toBeNull();
+    const second = await readPage({
+      authorId: f.userId,
+      limit: 1,
+      cursor: cursor!,
+    });
+    expect(second.items.map((item) => item.id)).toEqual([mineOlder.id]);
+    expect(second).toMatchObject({ hasMore: false, nextCursor: null });
+    await expect(
+      service.read(f.userId, f.projectId, undefined, {
+        limit: 1,
+        cursor: cursor!,
+        authorId: member,
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
+    await expect(
+      service.read(f.userId, f.projectId, undefined, { cursor: cursor! }),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_CURSOR" });
+    const list = `/projects/${f.projectId}/record-drafts`;
+    const mine = schemaRegistry.RecordDraftPage.schema.parse(
+      await (await http(`${list}?authorId=${f.userId}`, "GET", actor)).json(),
+    );
+    expect(mine.items.map((item) => item.id).sort(numeric)).toEqual(
+      [mineOlder.id, mineNewer.id].sort(numeric),
+    );
+    await failure(await http(`${list}?authorId=abc`, "GET", actor), 422);
+    await failure(await http(`${list}?authorId=0`, "GET", actor), 422);
+  });
 });
 async function taskFixture(scope: "FEATURE" | "MODULE" = "FEATURE") {
   const f = await fixture();

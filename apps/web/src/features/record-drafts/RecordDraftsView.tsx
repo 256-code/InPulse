@@ -104,9 +104,18 @@ export function RecordDraftsView({
     featureId ? "FEATURE" : "MODULE",
   );
   const [impacts, setImpacts] = useState<number[]>([]);
+  /**
+   * 「全部项目」视图（URL 无 projectId）下，在弹窗里选择的目标项目；
+   * URL 已锁定项目时以 URL 为准，该状态不参与。
+   */
+  const [createProjectId, setCreateProjectId] = useState(0);
   const [merge, setMerge] = useState<Merge | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  /** 草稿列表区的展开状态：只影响展示，查询与分页不变。 */
+  const [draftsOpen, setDraftsOpen] = useState(true);
+  /** 创建草稿的目标项目：草稿按项目创建，服务端不接受「全部项目」。 */
+  const formProjectId = projectId > 0 ? projectId : createProjectId;
   const retry = useRef<{ signature: string; key: string } | null>(null);
   const saving = useRef(false);
   const {
@@ -122,21 +131,23 @@ export function RecordDraftsView({
     retry: false,
   });
   const modules = useQuery({
-    queryKey: ["modules", projectId],
-    queryFn: ({ signal }) => api.listModules(projectId, { signal }),
-    enabled: projectId > 0,
+    queryKey: ["modules", formProjectId],
+    queryFn: ({ signal }) => api.listModules(formProjectId, { signal }),
+    enabled: formProjectId > 0,
     retry: false,
   });
   const features = useQuery({
-    queryKey: ["features", projectId, moduleId],
-    queryFn: ({ signal }) => api.listFeatures(projectId, moduleId, { signal }),
-    enabled: projectId > 0 && moduleId > 0,
+    queryKey: ["features", formProjectId, moduleId],
+    queryFn: ({ signal }) =>
+      api.listFeatures(formProjectId, moduleId, { signal }),
+    enabled: formProjectId > 0 && moduleId > 0,
     retry: false,
   });
   const allDrafts = useRecordDraftsQuery({
     client,
     projectId,
     enabled: !taskId,
+    authorId: currentUserId,
   });
   const allDraftItems =
     allDrafts.data?.pages.flatMap((page) => [...page.items]) ?? [];
@@ -161,9 +172,18 @@ export function RecordDraftsView({
     retry: false,
   });
   const writable =
-    projects.data?.items.find((p) => p.id === projectId)?.status === "ACTIVE" &&
+    formProjectId > 0 &&
+    projects.data?.items.find((p) => p.id === formProjectId)?.status ===
+      "ACTIVE" &&
     (!taskId || sourceQuery.data?.source.lifecycleStatus === "ACTIVE");
-  const canCreate = !!writable && (taskId === 0 || !!sourceQuery.data?.source);
+  /** 全部项目视图下只要存在可写项目即可发起创建，具体项目在弹窗内选定。 */
+  const anyWritableProject = (projects.data?.items ?? []).some(
+    (p) => p.status === "ACTIVE",
+  );
+  const canCreate =
+    projectId > 0
+      ? !!writable && (taskId === 0 || !!sourceQuery.data?.source)
+      : taskId === 0 && anyWritableProject;
   useEffect(() => {
     onCanCreateChange?.(canCreate);
   }, [canCreate, onCanCreateChange]);
@@ -174,6 +194,7 @@ export function RecordDraftsView({
     lastProjectId.current = projectId;
     setSelection(null);
     setImpacts([]);
+    setCreateProjectId(0);
     setModuleId(Number(params.get("moduleId")) || 0);
     setFeatureId(Number(params.get("featureId")) || 0);
     setScopeType(Number(params.get("featureId")) ? "FEATURE" : "MODULE");
@@ -204,7 +225,7 @@ export function RecordDraftsView({
                   }),
             };
       const signature = JSON.stringify([
-        projectId,
+        formProjectId,
         moduleId,
         selection?.item?.id,
         selection?.item?.rowVersion,
@@ -254,7 +275,7 @@ export function RecordDraftsView({
           init,
         );
       return api.createIndependentRecordDraft(
-        projectId,
+        formProjectId,
         moduleId,
         body as Parameters<InpulseApiClient["createIndependentRecordDraft"]>[2],
         init,
@@ -264,17 +285,19 @@ export function RecordDraftsView({
       retry.current = null;
       setSelection(null);
       setParams({
-        projectId: String(projectId),
+        projectId: String(formProjectId),
         recordId: String(result.id),
         ...(taskId
           ? { taskId: String(taskId), moduleId: String(sourceModuleId) }
           : {}),
       });
-      cache.setQueryData(["record-draft", projectId, result.id], result);
+      cache.setQueryData(["record-draft", formProjectId, result.id], result);
       await cache.invalidateQueries({
-        queryKey: ["record-draft", projectId, result.id],
+        queryKey: ["record-draft", formProjectId, result.id],
       });
-      await cache.invalidateQueries({ queryKey: ["record-drafts", projectId] });
+      await cache.invalidateQueries({
+        queryKey: ["record-drafts", formProjectId],
+      });
       await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
       await cache.invalidateQueries({
         queryKey: ["task-record-drafts", projectId],
@@ -486,7 +509,16 @@ export function RecordDraftsView({
           )}
           <CalmSectionTitle
             title={taskId > 0 ? "来源草稿" : "项目草稿"}
-            hint="先把变化写清楚，保存后可与项目成员继续补充。"
+            hint={
+              taskId > 0
+                ? "先把变化写清楚，保存后可与项目成员继续补充。"
+                : "只显示你自己创建的草稿，保存后可与项目成员继续补充。"
+            }
+            collapsible={{
+              expanded: draftsOpen,
+              onToggle: () => setDraftsOpen((prev) => !prev),
+              controls: "record-draft-list",
+            }}
           >
             <CalmBadge tone="amber">草稿</CalmBadge>
             <Button
@@ -497,68 +529,72 @@ export function RecordDraftsView({
               {taskId ? "新建来源草稿" : "新建独立草稿"}
             </Button>
           </CalmSectionTitle>
-          {listPending ? (
-            <Spin />
-          ) : listFailed ? (
-            <Alert
-              type="error"
-              title={errorMessage(listError)}
-              action={<Button onClick={reloadList}>重试草稿列表</Button>}
-            />
-          ) : !drafts.length ? (
-            <CalmEmptyState
-              icon="gitBranch"
-              title="暂无草稿"
-              description={
-                taskId
-                  ? "此任务还没有草稿，可以显式新建。"
-                  : "为当前项目记录一项变化。"
-              }
-            />
-          ) : (
-            <div className="calm-task-grid">
-              {drafts.map((item) => (
-                <article className="calm-task-card" key={item.id}>
-                  <CalmBadge tone="amber">草稿</CalmBadge>
-                  <h3>{item.title}</h3>
-                  <p>
-                    模块 {item.moduleName ?? "名称暂不可用"}
-                    {item.featureId
-                      ? ` / 功能 ${item.featureName ?? "名称暂不可用"}`
-                      : " / 模块范围"}
-                  </p>
-                  <p>
-                    记录作者 {item.authorName ?? "名称暂不可用"} · 更新{" "}
-                    {new Date(item.updatedAt).toLocaleString("zh-CN")}
-                  </p>
+          {draftsOpen && (
+            <div id="record-draft-list">
+              {listPending ? (
+                <Spin />
+              ) : listFailed ? (
+                <Alert
+                  type="error"
+                  title={errorMessage(listError)}
+                  action={<Button onClick={reloadList}>重试草稿列表</Button>}
+                />
+              ) : !drafts.length ? (
+                <CalmEmptyState
+                  icon="gitBranch"
+                  title="暂无草稿"
+                  description={
+                    taskId
+                      ? "此任务还没有草稿，可以显式新建。"
+                      : "你还没有在该项目中创建草稿。"
+                  }
+                />
+              ) : (
+                <div className="calm-task-grid">
+                  {drafts.map((item) => (
+                    <article className="calm-task-card" key={item.id}>
+                      <CalmBadge tone="amber">草稿</CalmBadge>
+                      <h3>{item.title}</h3>
+                      <p>
+                        模块 {item.moduleName ?? "名称暂不可用"}
+                        {item.featureId
+                          ? ` / 功能 ${item.featureName ?? "名称暂不可用"}`
+                          : " / 模块范围"}
+                      </p>
+                      <p>
+                        记录作者 {item.authorName ?? "名称暂不可用"} · 更新{" "}
+                        {new Date(item.updatedAt).toLocaleString("zh-CN")}
+                      </p>
+                      <Button
+                        onClick={() =>
+                          setParams({
+                            projectId: String(projectId),
+                            recordId: String(item.id),
+                            ...(taskId
+                              ? {
+                                  taskId: String(taskId),
+                                  moduleId: String(sourceModuleId),
+                                }
+                              : {}),
+                          })
+                        }
+                      >
+                        查看草稿
+                      </Button>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {taskId === 0 && allDrafts.hasNextPage && (
+                <div className="record-load-more">
                   <Button
-                    onClick={() =>
-                      setParams({
-                        projectId: String(projectId),
-                        recordId: String(item.id),
-                        ...(taskId
-                          ? {
-                              taskId: String(taskId),
-                              moduleId: String(sourceModuleId),
-                            }
-                          : {}),
-                      })
-                    }
+                    disabled={allDrafts.isFetchingNextPage}
+                    onClick={() => void allDrafts.fetchNextPage()}
                   >
-                    查看草稿
+                    {allDrafts.isFetchingNextPage ? "正在加载…" : "加载更多"}
                   </Button>
-                </article>
-              ))}
-            </div>
-          )}
-          {taskId === 0 && allDrafts.hasNextPage && (
-            <div className="record-load-more">
-              <Button
-                disabled={allDrafts.isFetchingNextPage}
-                onClick={() => void allDrafts.fetchNextPage()}
-              >
-                {allDrafts.isFetchingNextPage ? "正在加载…" : "加载更多"}
-              </Button>
+                </div>
+              )}
             </div>
           )}
           <Modal
@@ -734,6 +770,32 @@ export function RecordDraftsView({
             )}
             {!selection?.item && !selection?.source && (
               <>
+                {projectId === 0 && (
+                  <label>
+                    所属项目
+                    <select
+                      required
+                      value={createProjectId || ""}
+                      onChange={(e) => {
+                        setCreateProjectId(Number(e.target.value));
+                        setModuleId(0);
+                        setFeatureId(0);
+                        setImpacts([]);
+                      }}
+                    >
+                      <option value="">请选择项目</option>
+                      {projects.data?.items.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          disabled={p.status !== "ACTIVE"}
+                        >
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   所属模块
                   <select
@@ -745,7 +807,9 @@ export function RecordDraftsView({
                       setImpacts([]);
                     }}
                   >
-                    <option value="">请选择模块</option>
+                    <option value="">
+                      {formProjectId > 0 ? "请选择模块" : "请先选择项目"}
+                    </option>
                     {modules.data?.items.map((m) => (
                       <option
                         key={m.id}
@@ -871,7 +935,9 @@ export function RecordDraftsView({
                 !!reloadError ||
                 (!selection?.item &&
                   !selection?.source &&
-                  (!moduleId || (scopeType === "FEATURE" && !featureId)))
+                  (!formProjectId ||
+                    !moduleId ||
+                    (scopeType === "FEATURE" && !featureId)))
               }
             >
               保存草稿

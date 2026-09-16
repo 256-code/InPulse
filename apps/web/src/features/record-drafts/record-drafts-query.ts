@@ -54,6 +54,8 @@ export interface RecordDraftsQueryOptions {
   readonly projectId: number;
   readonly enabled?: boolean;
   readonly limit?: number;
+  /** 只看该用户创建的草稿（项目草稿区传当前用户 id）；省略返回项目内全部草稿。 */
+  readonly authorId?: number | undefined;
 }
 
 export function useRecordDraftsQuery({
@@ -61,16 +63,18 @@ export function useRecordDraftsQuery({
   projectId,
   enabled = true,
   limit = RECORD_DRAFTS_PAGE_LIMIT,
+  authorId,
 }: RecordDraftsQueryOptions) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   return useInfiniteQuery({
-    queryKey: ["record-drafts", projectId, limit],
+    queryKey: ["record-drafts", projectId, limit, authorId ?? 0],
     queryFn: ({ pageParam, signal }) =>
       api.listRecordDrafts(
         projectId,
         {
           limit,
           ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
+          ...(authorId === undefined ? {} : { authorId }),
         },
         signal ? { signal } : undefined,
       ),

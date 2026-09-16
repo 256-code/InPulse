@@ -2749,6 +2749,31 @@ a:focus-visible {
   font-size: 14px;
   margin: 0;
 }
+.calm-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.calm-section-toggle > svg {
+  color: #93a1b0;
+  transition: transform 0.15s ease;
+}
+.calm-section-toggle > svg.expanded {
+  transform: rotate(90deg);
+}
+.calm-section-toggle-title {
+  display: block;
+  color: #314c65;
+  font-size: 14px;
+  font-weight: 600;
+}
 .calm-feature-toolbar {
   display: flex;
   justify-content: space-between;

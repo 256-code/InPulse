@@ -879,7 +879,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 
 ## B-1 记录列表分页（F-17 / F-18，2026-09-11 本地落库）
 
-`listRecordDrafts`（F-17）与 `listChangeRecords`（F-18）由单页数组改为 C-006 服务端签名游标分页：契约以 `RecordDraftPage` / `ReadableRecordPage`（items/nextCursor/hasMore）替换 `RecordDraftList` / `ReadableRecordList`，新增 `RecordDraftListQuery`，`RecordListQuery` 增补 `cursor` 与 `limit`（1～100、默认 20，越界或未知字段 422）。草稿按 `created_at DESC,id DESC`、正式记录按 `published_at DESC,id DESC` 取 `limit+1` 条判断 `hasMore`，服务端把本页最后一条位置编码为签名游标；游标绑定 actor、命名空间与项目，TTL 15 分钟，篡改 / 过期 / 跨项目 / 跨命名空间统一 422 `INVALID_CURSOR`。查询参数不改变可见性：无权限项目先收敛为 404，通过后才校验游标。
+`listRecordDrafts`（F-17）与 `listChangeRecords`（F-18）由单页数组改为 C-006 服务端签名游标分页：契约以 `RecordDraftPage` / `ReadableRecordPage`（items/nextCursor/hasMore）替换 `RecordDraftList` / `ReadableRecordList`，新增 `RecordDraftListQuery`，`RecordListQuery` 增补 `cursor` 与 `limit`（1～100、默认 20，越界或未知字段 422）。草稿按 `created_at DESC,id DESC`、正式记录按 `published_at DESC,id DESC` 取 `limit+1` 条判断 `hasMore`，服务端把本页最后一条位置编码为签名游标；游标绑定 actor、命名空间与项目，TTL 15 分钟，篡改 / 过期 / 跨项目 / 跨命名空间统一 422 `INVALID_CURSOR`。查询参数不改变可见性：无权限项目先收敛为 404，通过后才校验游标。2026-09-16 起 `RecordDraftListQuery` 另接受可选 `authorId`（`z.coerce` 正整数，越界、非数字与未知字段 422），只返回该作者创建的草稿（前端项目草稿区传当前用户 id），并把作者过滤编入游标绑定 `filterKey`：同一游标换作者或去掉作者统一 422 `INVALID_CURSOR`，避免切换筛选后复用旧游标造成错位。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -887,6 +887,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 | B1-API-UNIT-001 | 单元 | 游标编码、解码与错误映射 | 第 1 页以本页最后一条位置编码 `nextCursor`，第 2 页以其为排他 keyset 边界；篡改、跨 actor、跨项目、跨命名空间 422 `INVALID_CURSOR`；无权限项目先 404 且不按游标状态区分；成员请求 VOID 列表 404；`limit` 1..100 透传、缺省 20 | 本地通过（`apps/api/test/record-list-pagination.test.ts` 4 例） |
 | B1-WEB-001 | 前端单元 | 「加载更多」与签名游标 | 已发布记录与草稿列表点击「加载更多」后用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`、`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
 | B1-INT-001 | PostgreSQL 集成 | keyset 不重不漏与游标校验 | 3 条草稿 / 正式记录以 `limit=2` 分两页取回：页内顺序为 `created_at DESC,id DESC` / `published_at DESC,id DESC`，两页无重叠无遗漏，`hasMore` 由 true 翻转为 false 且第二页 `nextCursor` 为 null；跨项目游标与损坏游标 422 `INVALID_CURSOR` | CI 已通过（PR #114，run 34571987936；本机当时无 PostgreSQL 实例与 Docker，用例由 CI 首次执行） |
+| B1-INT-002 | PostgreSQL 集成 | 草稿列表按作者过滤与游标绑定（2026-09-16） | 两作者各建草稿：不传 `authorId` 返回全部；`authorId` 只返回该作者且 `hasMore`/`nextCursor` 分页正确；按作者过滤生成的游标换作者或去掉作者后复用统一 422 `INVALID_CURSOR`；HTTP 层 `authorId=abc` 与 `authorId=0` 422，合法参数未登录 401 | 本地通过（`apps/api/test/record-drafts.integration.test.ts` 16 例，含新增 1 例） |
 
 本地实际执行（2026-09-11）：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）、`pnpm test:unit`（database 15、api-contract 15 文件 93 例、canonical-json 5、web 64 文件 293 例、api 68 文件 350 例、ops 7 文件 36 例）、`pnpm build`、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97 条操作 / 97 条路由）、`pnpm db:migrations:check`（7 个迁移）、`pnpm check:deps`（625 文件无环）、`pnpm check:frontend:boundaries`（209 模块 / 955 依赖）、`pnpm check:secrets`（921 文件）、`pnpm check:docs`（73 个 Markdown）、`pnpm deps:audit`（公共 registry 高等级审计无已知漏洞）均通过；lint 同时暴露并修复了「分页游标列被透传进严格响应 Schema」的缺陷。
 
@@ -1101,7 +1102,9 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 | B3A-UNIT-002 | Web 单元 | 按发布日分组 | 当前已加载页按 `publishedAt` 日期键分组，组内保持服务端 `published_at DESC` 顺序、组间按日期降序，并给出中文日期与条数 | 本地通过 |
 | B3A-UNIT-003 | Web 单元 | 卡片展开、详情与生命周期 | `record-card` 摘要显示标题、编号、版本与状态徽标；展开状态由 URL `publishedId` 驱动，展开后渲染 `正式记录详情` region（版本对比、历史版本、GitHub 关联与管理员生命周期操作）；VOID 记录对成员只读 | 本地通过（`PublishedRecordDetail.test.tsx` 4 例 + `RecordsWorkspace.test.tsx`） |
 | B3A-UNIT-004 | Web 单元 | 「加载更多」与签名游标 | 点击「加载更多」用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过 |
-| B3A-UNIT-005 | Web 单元 | 我的草稿条带与页头 CTA | 条带只列当前登录用户草稿（项目草稿列表仍显示全部成员草稿），点击直接打开「编辑草稿」弹窗；页头 CTA 在未选项目或不可写时禁用，可写时打开对应模式的草稿弹窗；草稿详情与弹窗文案保持 | 本地通过（`RecordDraftsView.test.tsx` 与 `RecordsWorkspace.test.tsx`） |
+| B3A-UNIT-005 | Web 单元 | 我的草稿条带与页头 CTA | 条带只列当前登录用户草稿，点击直接打开「编辑草稿」弹窗；页头 CTA 在不可写时禁用，可写时打开对应模式的草稿弹窗；「全部项目」视图下只要存在可写项目 CTA 即可用，全部项目都不可写时保持禁用；草稿详情与弹窗文案保持 | 本地通过（`RecordDraftsView.test.tsx` 与 `RecordsWorkspace.test.tsx`） |
+| B3A-UNIT-007 | Web 单元 | 项目草稿区只看自己并可收起展开（2026-09-16） | 项目草稿查询携带 `authorId=当前用户`，任务来源草稿不变；区块标题行是可点击的展开/收起按钮（`aria-expanded` + `aria-controls`），收起后隐藏列表与「加载更多」，再次展开恢复原列表与分页状态 | 待人工确认（本地 76 文件 427 例通过，但该交互无自动化断言；`authorId` 请求参数已在浏览器网络面板确认为 `?limit=20&authorId=5`） |
+| B3A-UNIT-008 | Web 单元 | 「全部项目」下记录一次迭代在弹窗内选项目（2026-09-16） | URL 无 `projectId` 时新建草稿弹窗在「所属模块」之上渲染「所属项目」下拉（可写项目可选、已归档项目 `disabled`），未选项目前不请求模块且「保存草稿」禁用；选定项目后按该项目请求模块并把所选项目 id 作为 `createIndependentRecordDraft` 第一个参数，成功后跳转 `/records?projectId=<所选项目>&recordId=<新草稿>`；URL 已带 `projectId` 时不渲染该下拉（项目自动沿用） | 本地通过（`RecordDraftsView.test.tsx` 新增 2 例 + `RecordsWorkspace.test.tsx`，本地 76 文件 429 例）；浏览器已复验：`/records` 全部项目视图点 `记录一次迭代` → 选「InPulse 研发交付平台」→ 模块列表加载 → 保存后 URL 变为 `/records?projectId=1&recordId=1245`；`/records?projectId=1` 打开弹窗无「所属项目」下拉且模块直接可选 |
 | B3A-UNIT-006 | Web 单元 | 页面壳与降级提示 | `records-page` 壳保持，`RecordsPage` 只渲染工作区；出现筛选条件时显示 `.records-filter-note`，显式说明列表筛选只在当前已加载条数内生效 | 本地通过（`apps/web/src/pages/records/RecordsPage.test.tsx`） |
 | B3A-E2E-001 | 浏览器 E2E | 记录生命周期断言迁移 | `record-lifecycle.spec.ts` 由「记录状态」分段控件内选「已作废」并展开 `record-card` 摘要，管理员作废、成员可见 VOID 与恢复路径保持通过 | 本地通过（全量 `pnpm test:e2e` 50 例） |
 | B3A-E2E-002 | 浏览器 E2E | 记录相关既有路径回归 | 草稿（F-17）、发布（F-18）、完成任务（F-19）、遗留转任务（F-20）、外链（F-22）与聚合视图（F-29 / F-32）用例在单页重构后全部通过 | 本地通过 |

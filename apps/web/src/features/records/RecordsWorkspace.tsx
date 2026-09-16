@@ -24,6 +24,8 @@ import {
   groupRecordsByDate,
   RECORD_SEARCH_PLACEHOLDER,
   RECORD_SOURCE_FILTERS,
+  timelineDayLabel,
+  timelineTimeLabel,
   type RecordSourceFilter,
 } from "./record-timeline";
 import "./records-timeline.css";
@@ -36,7 +38,8 @@ const SEARCH_DEBOUNCE_MS = 350;
  * B-3b：项目下拉增加「全部项目」并作为默认视图（跨项目记录清单 + 名称回填），
  * 来源五档与关键词 `q` 改为服务端筛选，我的草稿条带改为全局 `listMyRecordDrafts`；
  * 页头 CTA → 我的草稿条带 → 项目草稿与草稿详情 → 筛选 toolbar → 按发布日分组。
- * 创建草稿仍要求先选定具体项目（草稿按项目 + 模块创建，服务端不接受「全部项目」）。
+ * 「全部项目」下 CTA 仍可用：草稿按项目 + 模块创建，目标项目在弹窗内选定；
+ * URL 已选项目时弹窗直接沿用该项目。
  */
 export function RecordsWorkspace({
   client,
@@ -149,8 +152,14 @@ export function RecordsWorkspace({
         <button
           type="button"
           className="primary-button"
-          disabled={projectId === 0 || !canCreate}
-          title={projectId === 0 ? "请先选择项目" : undefined}
+          disabled={!canCreate}
+          title={
+            canCreate
+              ? undefined
+              : projectId === 0
+                ? "当前没有可写入的项目"
+                : "请先选择项目"
+          }
           onClick={() => setCreateToken((token) => token + 1)}
         >
           <InpulseIcon name="plus" size={16} />
@@ -264,6 +273,9 @@ export function RecordsWorkspace({
               !group.records.some((item) => item.record.id === publishedId);
             return (
               <section className="timeline-block" key={group.key}>
+                <span aria-hidden="true" className="timeline-day">
+                  {timelineDayLabel(group.key)}
+                </span>
                 <button
                   type="button"
                   className="timeline-toggle"
@@ -281,16 +293,22 @@ export function RecordsWorkspace({
                 {!collapsed && (
                   <div className="record-card-list">
                     {group.records.map((item) => (
-                      <PublishedRecordCard
-                        key={item.record.id}
-                        item={item}
-                        client={client}
-                        writable={canWrite(item.record.projectId)}
-                        open={publishedId === item.record.id}
-                        onToggle={(open) => toggleRecord(item.record.id, open)}
-                        onListChanged={() => void list.refetch()}
-                        featureNames={featureNames}
-                      />
+                      <div className="timeline-item" key={item.record.id}>
+                        <span aria-hidden="true" className="timeline-time">
+                          {timelineTimeLabel(item.record.publishedAt)}
+                        </span>
+                        <PublishedRecordCard
+                          item={item}
+                          client={client}
+                          writable={canWrite(item.record.projectId)}
+                          open={publishedId === item.record.id}
+                          onToggle={(open) =>
+                            toggleRecord(item.record.id, open)
+                          }
+                          onListChanged={() => void list.refetch()}
+                          featureNames={featureNames}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
