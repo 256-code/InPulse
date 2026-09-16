@@ -58,6 +58,17 @@ export function RecordsWorkspace({
   const [source, setSource] = useState<RecordSourceFilter>("ALL");
   const [createToken, setCreateToken] = useState(0);
   const [canCreate, setCanCreate] = useState(false);
+  /** 时间线按天折叠：记录日期键集合，默认全部展开。 */
+  const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleDay = (key: string) =>
+    setCollapsedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const featureNames = useProjectFeatureNames(projectId, client);
   useEffect(() => {
     const timer = window.setTimeout(
@@ -246,29 +257,47 @@ export function RecordsWorkspace({
           }
         />
       ) : (
-        groups.map((group) => (
-          <section className="timeline-block" key={group.key}>
-            <div className="timeline-date">
-              <InpulseIcon name="gitBranch" size={15} />
-              <strong>{group.label}</strong>
-              <small>{group.records.length} 条</small>
-            </div>
-            <div className="record-card-list">
-              {group.records.map((item) => (
-                <PublishedRecordCard
-                  key={item.record.id}
-                  item={item}
-                  client={client}
-                  writable={canWrite(item.record.projectId)}
-                  open={publishedId === item.record.id}
-                  onToggle={(open) => toggleRecord(item.record.id, open)}
-                  onListChanged={() => void list.refetch()}
-                  featureNames={featureNames}
-                />
-              ))}
-            </div>
-          </section>
-        ))
+        <div className="record-timeline">
+          {groups.map((group) => {
+            const collapsed =
+              collapsedDays.has(group.key) &&
+              !group.records.some((item) => item.record.id === publishedId);
+            return (
+              <section className="timeline-block" key={group.key}>
+                <button
+                  type="button"
+                  className="timeline-toggle"
+                  aria-expanded={!collapsed}
+                  onClick={() => toggleDay(group.key)}
+                >
+                  <InpulseIcon
+                    name="chevron"
+                    size={14}
+                    {...(collapsed ? {} : { className: "expanded" })}
+                  />
+                  <strong>{group.label}</strong>
+                  <small>{group.records.length} 条</small>
+                </button>
+                {!collapsed && (
+                  <div className="record-card-list">
+                    {group.records.map((item) => (
+                      <PublishedRecordCard
+                        key={item.record.id}
+                        item={item}
+                        client={client}
+                        writable={canWrite(item.record.projectId)}
+                        open={publishedId === item.record.id}
+                        onToggle={(open) => toggleRecord(item.record.id, open)}
+                        onListChanged={() => void list.refetch()}
+                        featureNames={featureNames}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
       {standaloneDetail && (
         <section className="record-standalone-detail">
