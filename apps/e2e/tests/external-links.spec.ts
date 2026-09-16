@@ -150,6 +150,8 @@ test("F22 draft links survive publication and revision without changing old vers
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
     const detail = page.getByRole("region", { name: "正式记录详情" });
+    // GitHub 关联默认折叠，先展开再断言链接。
+    await detail.getByRole("button", { name: "GitHub 关联" }).click();
     await expect(
       detail.getByRole("link", { name: "Issue #22003", exact: true }),
     ).toBeVisible();

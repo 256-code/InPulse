@@ -1304,7 +1304,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 
 设计师稿的迭代记录详情把 GitHub 证据直接排在正文下方，而仓库实现此前只给了一个「GitHub 链接」按钮 + 弹层。本次：
 
-- `PublishedRecordDetail.tsx` 的 `.record-github` 区块改为 `<ExternalLinksPanel variant="inline" .../>`：直接列出已关联链接（类型徽章 + 新窗口链接 + 编号），下方是折叠式「＋ 添加 GitHub 链接」入口，展开后填 URL 并「确认添加」。
+- `PublishedRecordDetail.tsx` 的 `.record-github` 区块改为 `<ExternalLinksPanel variant="inline" .../>`：直接列出已关联链接（类型徽章 + 新窗口链接 + 编号），下方是折叠式「＋ 添加 GitHub 链接」入口，展开后填 URL 并「确认添加」。（2026-09-16 按产品反馈再收一层：链接列表可能过长，「GitHub 关联」标题改为折叠开关，默认收起且不挂载面板、不发列表请求，点击展开后才就地渲染；`apps/e2e/tests/external-links.spec.ts` 在断言记录详情内链接前先点开该开关。）
 - `RecordDraftsView.tsx` 的草稿详情同步为同一形态。
 
 #### 3. 卡片整卡可点击（项目 / 模块 / 功能三层一致）

@@ -13,6 +13,7 @@ import {
   ApiError,
 } from "@generated/api";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -83,7 +84,8 @@ export function PublishedRecordDetail({
   const { user } = useAuth();
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const [oldVersion, setOldVersion] = useState(0),
-    [newVersion, setNewVersion] = useState(0);
+    [newVersion, setNewVersion] = useState(0),
+    [githubOpen, setGithubOpen] = useState(false);
   const detail = useQuery({
     queryKey: ["published-record", projectId, recordId],
     queryFn: ({ signal }) =>
@@ -274,14 +276,29 @@ export function PublishedRecordDetail({
         </section>
       )}
       <div className="record-github">
-        <h4>GitHub 关联</h4>
-        <ExternalLinksPanel
-          key={record.id}
-          targetType="CHANGE_RECORD"
-          targetId={record.id}
-          client={api}
-          variant="inline"
-        />
+        {/* 链接列表可能很长，默认折叠，点击标题展开；折叠时不挂载面板、不发列表请求。 */}
+        <button
+          type="button"
+          className="record-github-toggle"
+          aria-expanded={githubOpen}
+          onClick={() => setGithubOpen((open) => !open)}
+        >
+          <InpulseIcon
+            name="chevron"
+            size={14}
+            className={githubOpen ? "expanded" : undefined}
+          />
+          <span>GitHub 关联</span>
+        </button>
+        {githubOpen && (
+          <ExternalLinksPanel
+            key={record.id}
+            targetType="CHANGE_RECORD"
+            targetId={record.id}
+            client={api}
+            variant="inline"
+          />
+        )}
       </div>
       {record.status === "PUBLISHED" && (
         <div className="record-actions">
