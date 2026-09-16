@@ -34,7 +34,9 @@ export class ProjectsReadService {
   async list(cookieHeader: string | undefined): Promise<ProjectListResponse> {
     const actor = await this.requireActor(cookieHeader);
     const scope = await this.access.getAuthorizedSearchScope(actor.userId);
-    return { items: [...(await this.projects.list(scope.projectIds))] };
+    return {
+      items: [...(await this.projects.list(scope.projectIds, actor.userId))],
+    };
   }
 
   async detail(

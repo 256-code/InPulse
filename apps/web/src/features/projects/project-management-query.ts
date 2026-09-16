@@ -182,3 +182,144 @@ export function useProjectArchivePreview(
       projectId > 0,
   });
 }
+
+export type ProjectArchiveRequestAction = "request" | "approve" | "reject";
+
+/** ADR-034：项目归档申请与审核的错误文案；码值来自 Route Registry。 */
+export function describeProjectArchiveRequestError(
+  error: unknown,
+  action: ProjectArchiveRequestAction,
+): string {
+  const fallback =
+    action === "request"
+      ? "归档申请提交失败，请稍后重试。"
+      : "归档申请审核失败，请稍后重试。";
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录后再操作。";
+    if (error.status === 403) {
+      if (error.code === "PROJECT_ARCHIVE_REQUEST_FORBIDDEN")
+        return "只有项目组长或项目管理员可以发起归档申请。";
+      if (error.code === "ADMIN_REQUIRED")
+        return "只有系统管理员可以审核项目归档申请。";
+      return "安全校验未通过，请刷新页面后重试。";
+    }
+    if (error.status === 404) return "项目或归档申请不存在，可能已被处理。";
+    if (error.status === 409) {
+      if (error.code === "PROJECT_ARCHIVE_TASKS_OPEN")
+        return "项目下仍有未完成、也未归档的任务，请先在任务弹窗底部完成或归档全部任务再申请。";
+      if (error.code === "PROJECT_ARCHIVE_REQUEST_EXISTS")
+        return "该项目已有待审核的归档申请，请等待系统管理员审核。";
+      if (error.code === "PROJECT_ARCHIVE_REQUEST_DECIDED")
+        return "该归档申请已被处理，请刷新列表查看最新状态。";
+      if (error.code === "PROJECT_VERSION_CONFLICT")
+        return "项目内容已被他人更新，请刷新列表后重试。";
+      return "项目状态已变化，请刷新列表后重试。";
+    }
+    if (error.status === 422) return "请检查归档原因或审核批注。";
+    if (error.status === 429) return "请求过于频繁，请稍后重试。";
+  }
+  return fallback;
+}
+
+/** 申请与审核都不要求 If-Match，只带 CSRF 与幂等键。 */
+function archiveRequestHeaders(csrfToken: string, idempotencyKey: string) {
+  return {
+    "x-csrf-token": csrfToken,
+    "Idempotency-Key": idempotencyKey,
+  };
+}
+
+/**
+ * ADR-034：项目组长或项目管理员发起归档申请；申请不改变项目状态，
+ * 只有系统管理员批准后才归档。
+ */
+export function useRequestProjectArchive(
+  projectId: number,
+  client?: InpulseApiClient,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: { readonly reason: string }) => {
+      const key = retryKey(
+        JSON.stringify([projectId, input.reason]),
+        "project-archive-request",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.requestProjectArchive(
+        projectId,
+        { reason: input.reason },
+        { headers: archiveRequestHeaders(csrf.csrfToken, key) },
+      );
+    },
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/** ADR-034：只有系统管理员能批准归档；批准按 If-Match 版本直接归档项目。 */
+export function useApproveProjectArchive(
+  projectId: number,
+  client?: InpulseApiClient,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      readonly requestId: number;
+      readonly rowVersion: number;
+    }) => {
+      const key = retryKey(
+        JSON.stringify([projectId, input.requestId, input.rowVersion]),
+        "project-archive-approve",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.approveProjectArchive(projectId, input.requestId, {
+        headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion),
+      });
+    },
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/** ADR-034：系统管理员驳回申请；项目状态不变，批注可选。 */
+export function useRejectProjectArchive(
+  projectId: number,
+  client?: InpulseApiClient,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      readonly requestId: number;
+      readonly note: string;
+    }) => {
+      const key = retryKey(
+        JSON.stringify([projectId, input.requestId, input.note]),
+        "project-archive-reject",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.rejectProjectArchive(
+        projectId,
+        input.requestId,
+        { note: input.note },
+        { headers: archiveRequestHeaders(csrf.csrfToken, key) },
+      );
+    },
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}

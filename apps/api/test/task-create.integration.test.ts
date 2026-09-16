@@ -93,6 +93,7 @@ beforeAll(() => {
     activity,
     search,
     new PostgresUserReadPort(),
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   tasks = new TasksManagementService(
     access,
@@ -101,6 +102,7 @@ beforeAll(() => {
     featureRead,
     codes,
     new PostgresProjectMembersQueryPort(),
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
     uow,
     new TaskManagementRepository(),
     audit,

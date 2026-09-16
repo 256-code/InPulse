@@ -22,7 +22,12 @@ const project: ProjectItem = {
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-02T00:00:00.000Z",
   memberCount: 3,
-  stats: { activeModuleCount: 4, activeFeatureCount: 11, openTaskCount: 6 },
+  stats: {
+    activeModuleCount: 4,
+    activeFeatureCount: 11,
+    openTaskCount: 6,
+    completedTaskCount: 1,
+  },
 };
 
 const overviewResult: ProjectOverviewResult = {

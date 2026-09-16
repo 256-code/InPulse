@@ -154,6 +154,9 @@ export class ModulesManagementService {
       input.operation === "restoreModule"
     )
       await this.requireManageRole(tx, input.actorId, input.projectId);
+    // ADR-034：模块归档要求模块下所有任务已归档，功能无需归档。
+    if (input.operation === "archiveModule")
+      await this.assertAllTasksArchived(tx, input.projectId, input.moduleId!);
     const action = input.operation.replace("Module", "");
     let previous: ModuleItem | undefined;
     let result: ModuleItem;
@@ -228,5 +231,29 @@ export class ModulesManagementService {
       sourceRowVersion: result.rowVersion,
     });
     return result;
+  }
+
+  /**
+   * ADR-034：模块归档要求模块下所有任务已归档；仍有未归档任务时返回 409，
+   * 由前端提示用户先处理任务。
+   */
+  private async assertAllTasksArchived(
+    tx: TransactionContext,
+    projectId: number,
+    moduleId: number,
+  ): Promise<void> {
+    const unarchived = await this.repository.countUnarchivedTasks(
+      tx,
+      projectId,
+      moduleId,
+    );
+    if (unarchived > 0)
+      throw new ModuleManagementError(
+        409,
+        "MODULE_ARCHIVE_TASKS_OPEN",
+        // ADR-034：任务「完成」即视为已收尾，提示里说明还剩多少 TODO 任务，
+        // 并指明可以做完成或归档两种动作。
+        `模块下仍有 ${unarchived} 个未完成、也未归档的任务，请先完成或归档该模块的全部任务再归档`,
+      );
   }
 }

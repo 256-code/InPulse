@@ -324,7 +324,9 @@ describe("F-13 forms", () => {
         .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
     } as unknown as InpulseApiClient;
     mount(client, true);
-    fireEvent.click(await screen.findByRole("button", { name: "归档功能" }));
+    // ADR-034：归档入口在编辑弹窗底部，列表卡片不再提供归档按钮。
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    fireEvent.click(await screen.findByTestId("feature-modal-lifecycle"));
     fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
     await screen.findByText("请填写操作原因");
     expect(client.archiveFeature).not.toHaveBeenCalled();
@@ -463,4 +465,112 @@ it("功能概览显示验收标准，编辑时保留并提交", async () => {
       expect.anything(),
     ),
   );
+});
+
+describe("功能归档入口权限（ADR-034）", () => {
+  const project = {
+    id: 2,
+    code: "PR",
+    name: "项目",
+    description: null,
+    status: "ACTIVE" as const,
+    rowVersion: 1,
+    createdBy: 1,
+    createdAt: "2026-09-09T00:00:00.000Z",
+    updatedAt: "2026-09-09T00:00:00.000Z",
+    memberCount: 2,
+    stats: {
+      activeModuleCount: 1,
+      activeFeatureCount: 1,
+      openTaskCount: 0,
+      completedTaskCount: 0,
+    },
+  };
+  const archivedItem: FeatureItem = {
+    ...item,
+    status: "ARCHIVED",
+    rowVersion: 2,
+    archivedAt: "2026-09-10T00:00:00.000Z",
+  };
+  const lifecycleClient = (
+    role: string | null,
+    items: FeatureItem[] = [item],
+  ) =>
+    ({
+      listFeatures: vi.fn().mockResolvedValue({ items }),
+      getProject: vi.fn().mockResolvedValue({ project, currentUserRole: role }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+      archiveFeature: vi
+        .fn()
+        .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
+      restoreFeature: vi
+        .fn()
+        .mockResolvedValue({ ...item, status: "ACTIVE", rowVersion: 3 }),
+    }) as unknown as InpulseApiClient;
+
+  it("普通成员看不到归档与恢复入口", async () => {
+    mount(lifecycleClient("MEMBER"));
+    await screen.findByText("退款功能");
+    expect(screen.queryByTestId("feature-lifecycle-3")).toBeNull();
+    expect(screen.queryByRole("button", { name: "归档功能" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复功能" })).toBeNull();
+  });
+
+  it("组长在编辑弹窗底部归档，按钮文案为「归档」", async () => {
+    const client = lifecycleClient("LEADER");
+    mount(client);
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    const trigger = await screen.findByTestId("feature-modal-lifecycle");
+    // antd 会在 CJK 两字按钮里插入空格，按正则断言文案。
+    expect(trigger.textContent).toMatch(/归\s*档/);
+    fireEvent.click(trigger);
+    fireEvent.change(await screen.findByLabelText("操作原因"), {
+      target: { value: "弹窗内归档" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() =>
+      expect(client.archiveFeature).toHaveBeenCalledWith(
+        2,
+        4,
+        3,
+        { reason: "弹窗内归档" },
+        expect.objectContaining({ headers: expect.anything() }),
+      ),
+    );
+  });
+
+  it("卡片与编辑弹窗都不再提供归档按钮给普通成员", async () => {
+    mount(lifecycleClient("MEMBER"));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    await screen.findByLabelText("功能名称");
+    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
+  });
+
+  it("项目管理员同样在编辑弹窗底部看到归档入口", async () => {
+    mount(lifecycleClient("PROJECT_ADMIN"));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    expect(
+      (await screen.findByTestId("feature-modal-lifecycle")).textContent,
+    ).toMatch(/归\s*档/);
+  });
+
+  it("已归档功能只在卡片保留恢复入口，组长可直接恢复", async () => {
+    const client = lifecycleClient("LEADER", [archivedItem]);
+    mount(client);
+    expect(screen.queryByRole("button", { name: "归档功能" })).toBeNull();
+    fireEvent.click(await screen.findByTestId("feature-lifecycle-3"));
+    fireEvent.change(await screen.findByLabelText("操作原因"), {
+      target: { value: "恢复使用" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() =>
+      expect(client.restoreFeature).toHaveBeenCalledWith(
+        2,
+        4,
+        3,
+        { reason: "恢复使用" },
+        expect.objectContaining({ headers: expect.anything() }),
+      ),
+    );
+  });
 });

@@ -530,6 +530,7 @@ export type ModuleResourcePath = {
 export type ModuleStats = {
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 };
 
 export type ModuleTaskCollectionPath = {
@@ -702,12 +703,55 @@ export type NotificationUnreadCountResponse = {
   readonly unreadCount: number;
 };
 
+export type PendingProjectArchiveRequest = {
+  readonly id: number;
+  readonly requestedBy: number;
+  readonly requestedByName: string;
+  readonly reason: string;
+  readonly requestedAt: string;
+};
+
 export type ProjectArchivePreviewResponse = {
   readonly projectId: number;
   readonly unfinishedTaskCount: number;
 };
 
+export type ProjectArchiveRejectionRequest = {
+  readonly note: string;
+};
+
 export type ProjectArchiveRequest = {
+  readonly reason: string;
+};
+
+export type ProjectArchiveRequestItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly requestedBy: number;
+  readonly requestedByName: string;
+  readonly reason: string;
+  readonly status: ProjectArchiveRequestStatus;
+  readonly requestedAt: string;
+  readonly decidedBy: (number | null);
+  readonly decidedByName: (string | null);
+  readonly decidedAt: (string | null);
+  readonly decisionNote: (string | null);
+  readonly rowVersion: number;
+};
+
+export type ProjectArchiveRequestPath = {
+  readonly projectId: number;
+  readonly requestId: number;
+};
+
+export type ProjectArchiveRequestReplayContext = {
+  readonly projectId: number;
+  readonly requestId: number;
+};
+
+export type ProjectArchiveRequestStatus = ("PENDING" | "APPROVED" | "REJECTED" | "CANCELED");
+
+export type ProjectArchiveRequestSubmission = {
   readonly reason: string;
 };
 
@@ -737,8 +781,24 @@ export type ProjectItem = {
   readonly stats: ProjectStats;
 };
 
+export type ProjectListItem = {
+  readonly id: number;
+  readonly code: ProjectCode;
+  readonly name: string;
+  readonly description: string;
+  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly memberCount: number;
+  readonly stats: ProjectStats;
+  readonly currentUserRole: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
+  readonly pendingArchiveRequest: (PendingProjectArchiveRequest | null);
+};
+
 export type ProjectListResponse = {
-  readonly items: readonly ProjectItem[];
+  readonly items: readonly ProjectListItem[];
 };
 
 export type ProjectMemberCollectionPath = {
@@ -854,6 +914,7 @@ export type ProjectStats = {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 };
 
 export type ProjectVersionHeaders = {
@@ -1125,6 +1186,10 @@ export type SsoCallbackQueryRequest = {
 
 export type SsoStartQueryRequest = {
   readonly returnTo?: string;
+};
+
+export type TaskArchiveRequest = {
+  readonly reason: string;
 };
 
 export type TaskAssigneesResponse = {

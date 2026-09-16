@@ -3,9 +3,11 @@ import { Alert, Button, Spin } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
 import { useProjectDetail } from "@features/projects/project-query";
+import { useAuth } from "@features/auth/auth-context";
 import { TasksPanel } from "@features/tasks/TasksPanel";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmSectionTitle, CalmTabs } from "@features/common/components/Calm";
+import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
 
 export default function ModuleTasksPage() {
   const navigate = useNavigate();
@@ -14,6 +16,7 @@ export default function ModuleTasksPage() {
   const moduleId = Number(params["moduleId"]);
   const { query } = useModules(projectId);
   const projectQuery = useProjectDetail({ projectId });
+  const { user } = useAuth();
   if (
     ![projectId, moduleId].every(
       (id) => Number.isInteger(id) && id > 0 && id <= 2147483647,
@@ -59,7 +62,10 @@ export default function ModuleTasksPage() {
       <details className="calm-disclosure module-information">
         <summary>
           模块资料 · {module.name} ·{" "}
-          {module.status === "ARCHIVED" ? "已归档" : "正常"}
+          {resourceLifecycleLabel(
+            module.status,
+            module.stats.completedTaskCount,
+          )}
         </summary>
         <h4>职责与范围</h4>
         <p>{module.description || "尚未补充，可通过编辑模块完善。"}</p>
@@ -86,6 +92,7 @@ export default function ModuleTasksPage() {
         moduleId={moduleId}
         featureId={null}
         writable={module.status === "ACTIVE"}
+        isAdmin={user?.isAdmin === true}
       />
     </>
   );

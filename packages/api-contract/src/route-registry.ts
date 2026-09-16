@@ -624,7 +624,7 @@ export const routeRegistry = [
     path: "/projects",
     operationId: "listProjects",
     summary:
-      "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
+      "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；按生命周期档位（正常、未开始、已归档）分组，组内再按项目 ID 升序；每个条目附带当前用户在本项目的成员角色与待审归档申请摘要（ADR-034），供列表页决定申请与审核入口；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
     request: {
       path: "none",
       query: "none",

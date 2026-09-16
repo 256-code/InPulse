@@ -5,6 +5,7 @@ import type { TransactionContext } from "../src/database/transaction-context.js"
 import type { ActivityWritePort } from "../src/modules/activity/activity.write-port.js";
 import type { ProjectAccessQueryPort } from "../src/modules/projects/project-access.port.js";
 import type { ProjectMembersQueryPort } from "../src/modules/projects/project-members-query.port.js";
+import type { ProjectArchiveRequestPort } from "../src/modules/projects/project-archive-request.port.js";
 import {
   ProjectManagementService,
   ProjectManagementError,
@@ -26,7 +27,12 @@ const current: ProjectChangeRecord = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 2, activeFeatureCount: 1, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 1,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 const tx = {} as unknown as TransactionContext;
@@ -78,6 +84,9 @@ function setup(
     { append: appendActivity } as unknown as ActivityWritePort,
     { upsert: upsertSearch } as unknown as SearchProjectionWritePort,
     { findActiveRole } as unknown as ProjectMembersQueryPort,
+    {
+      cancelPendingRequests: async () => [],
+    } as unknown as ProjectArchiveRequestPort,
   );
   return {
     service,
@@ -256,6 +265,7 @@ describe("ProjectManagementService", () => {
           reason: "项目已交付",
           before: { status: "ACTIVE", rowVersion: 1 },
           after: { status: "ARCHIVED", rowVersion: 2 },
+          cancelledArchiveRequestIds: [],
         },
       }),
     );
@@ -361,6 +371,7 @@ describe("ProjectManagementService", () => {
           reason: "项目重启",
           before: { status: "ARCHIVED", rowVersion: 2 },
           after: { status: "ACTIVE", rowVersion: 3 },
+          cancelledArchiveRequestIds: [],
         },
       }),
     );

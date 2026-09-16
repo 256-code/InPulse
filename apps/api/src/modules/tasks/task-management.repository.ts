@@ -93,6 +93,20 @@ export class TaskManagementRepository {
         ${reason},${actorId},u.updated_at FROM updated u CROSS JOIN previous p RETURNING id`;
     return rows.length ? this.find(tx, current, current.id) : undefined;
   }
+  /**
+   * 任务生命周期归档/恢复：只改 lifecycle_status 与 row_version，
+   * 不写 task_status_history（工作状态未变化），历史与完成快照保持不可变。
+   */
+  async setLifecycle(
+    tx: TransactionContext,
+    current: TaskRecord,
+    lifecycle: "ACTIVE" | "ARCHIVED",
+  ): Promise<TaskRecord | undefined> {
+    const rows = await tx.sql<
+      { id: number }[]
+    >`UPDATE app.tasks SET lifecycle_status = ${lifecycle}, updated_at = GREATEST(clock_timestamp(), updated_at), row_version = row_version + 1 WHERE id = ${current.id} AND project_id = ${current.projectId} AND lifecycle_status = ${current.lifecycleStatus} AND row_version = ${current.rowVersion} RETURNING id`;
+    return rows.length === 1 ? this.find(tx, current, current.id) : undefined;
+  }
   async impacts(tx: TransactionContext, scope: TaskScope, taskId: number) {
     const rows = await tx.sql<
       {

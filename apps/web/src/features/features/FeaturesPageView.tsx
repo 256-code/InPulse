@@ -13,6 +13,7 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
+import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -274,9 +275,8 @@ export function FeaturesPageView({
     (item) => item.id === moduleId,
   );
   const projectQuery = useProjectDetail({ client, projectId });
-  // ADR-033：模块归档/恢复由系统管理员或本项目组长/项目管理员执行；
-  // 功能归档仍仅限系统管理员。
-  const canArchiveModule = canManageProjectResources(
+  // ADR-033/ADR-034：模块与功能的归档/恢复都由系统管理员或本项目组长/项目管理员执行。
+  const canArchiveResources = canManageProjectResources(
     isAdmin,
     projectQuery.data?.currentUserRole ?? null,
   );
@@ -340,7 +340,7 @@ export function FeaturesPageView({
                 >
                   编辑模块
                 </Button>
-                {canArchiveModule && currentModule ? (
+                {canArchiveResources && currentModule ? (
                   <Button
                     className="secondary-button"
                     onClick={() =>
@@ -383,7 +383,12 @@ export function FeaturesPageView({
               <summary>
                 {currentModule?.code ?? "模块资料"} ·{" "}
                 {currentModule ? currentModule.name : "加载中"} ·{" "}
-                {currentModule?.status === "ARCHIVED" ? "已归档" : "正常"}
+                {currentModule
+                  ? resourceLifecycleLabel(
+                      currentModule.status,
+                      currentModule.stats.completedTaskCount,
+                    )
+                  : "正常"}
               </summary>
               <h4>模块说明</h4>
               <p>
@@ -625,23 +630,18 @@ export function FeaturesPageView({
                               编辑功能
                             </Button>
                           )}
-                          {isAdmin && (
-                            <Button
-                              className="text-button"
-                              onClick={() =>
-                                open(
-                                  item.status === "ACTIVE"
-                                    ? "archive"
-                                    : "restore",
-                                  item,
-                                )
-                              }
-                            >
-                              {item.status === "ACTIVE"
-                                ? "归档功能"
-                                : "恢复功能"}
-                            </Button>
-                          )}
+                          {/* ADR-034：归档入口只在「编辑功能」弹窗底部提供，
+                              卡片上仅保留已归档功能的恢复入口。 */}
+                          {canArchiveResources &&
+                            item.status === "ARCHIVED" && (
+                              <Button
+                                className="text-button"
+                                data-testid={"feature-lifecycle-" + item.id}
+                                onClick={() => open("restore", item)}
+                              >
+                                恢复功能
+                              </Button>
+                            )}
                         </span>
                       </article>
                     ))}
@@ -712,17 +712,13 @@ export function FeaturesPageView({
                     编辑功能
                   </Button>
                 )}
-                {isAdmin && (
+                {canArchiveResources && activeItem.status === "ARCHIVED" && (
                   <Button
                     className="secondary-button"
-                    onClick={() =>
-                      open(
-                        activeItem.status === "ACTIVE" ? "archive" : "restore",
-                        activeItem,
-                      )
-                    }
+                    data-testid={"feature-detail-lifecycle-" + activeItem.id}
+                    onClick={() => open("restore", activeItem)}
                   >
-                    {activeItem.status === "ACTIVE" ? "归档功能" : "恢复功能"}
+                    恢复功能
                   </Button>
                 )}
               </div>
@@ -765,6 +761,7 @@ export function FeaturesPageView({
                       featureId={activeItem.id}
                       writable={activeItem.status === "ACTIVE"}
                       client={client}
+                      isAdmin={isAdmin}
                     />
                   </section>
                 </div>
@@ -1012,6 +1009,27 @@ export function FeaturesPageView({
             )}
           </div>
           <div className="calm-action-footer">
+            {/* ADR-034：功能归档/恢复入口与模块弹窗一致放在编辑弹窗底部；
+                普通成员看不到，组长/项目管理员可直接切到归档流程。 */}
+            {selection?.action === "update" &&
+            selection.item &&
+            canArchiveResources ? (
+              <Button
+                className="secondary-button footer-leading"
+                data-testid="feature-modal-lifecycle"
+                disabled={mutation.isPending || reloading || !!merge}
+                onClick={() =>
+                  open(
+                    selection.item!.status === "ARCHIVED"
+                      ? "restore"
+                      : "archive",
+                    selection.item!,
+                  )
+                }
+              >
+                {selection.item.status === "ARCHIVED" ? "恢复" : "归档"}
+              </Button>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1037,6 +1055,10 @@ export function FeaturesPageView({
         request={moduleRequest}
         onClose={() => setModuleRequest(null)}
         onSaved={() => setModuleSuccess(true)}
+        canArchive={canArchiveResources}
+        onLifecycleRequest={(action, item) =>
+          setModuleRequest({ action, item })
+        }
       />
     </>
   );

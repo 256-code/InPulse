@@ -2,22 +2,34 @@ import React, { useEffect } from "react";
 import { Alert, Button, Form, Input, Space, Typography } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
-import type { InpulseApiClient, ProjectItem } from "@generated/api";
+import type {
+  InpulseApiClient,
+  ProjectArchiveRequestItem,
+  ProjectItem,
+  ProjectListItem,
+} from "@generated/api";
 import {
+  describeProjectArchiveRequestError,
   describeProjectManagementError,
+  useApproveProjectArchive,
   useArchiveProject,
   useProjectArchivePreview,
+  useRejectProjectArchive,
+  useRequestProjectArchive,
   useRestoreProject,
   useUpdateProject,
 } from "./project-management-query";
 import {
+  PROJECT_ARCHIVE_NOTE_MAX_LENGTH,
   PROJECT_ARCHIVE_REASON_MAX_LENGTH,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   projectArchiveFormSchema,
+  projectArchiveRejectionFormSchema,
   projectEditFormSchema,
   projectRestoreFormSchema,
   type ProjectArchiveFormValues,
+  type ProjectArchiveRejectionFormValues,
   type ProjectEditFormValues,
   type ProjectRestoreFormValues,
 } from "./project-form";
@@ -474,6 +486,317 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
                 title={describeProjectManagementError(
                   mutation.error,
                   "restore",
+                )}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+          </div>
+        </Form>
+      </form>
+    </Modal>
+  );
+};
+
+export interface RequestProjectArchiveModalProps {
+  readonly open: boolean;
+  readonly project: ProjectListItem;
+  readonly client?: InpulseApiClient | undefined;
+  readonly onClose: () => void;
+  readonly onRequested: (request: ProjectArchiveRequestItem) => void;
+}
+
+/**
+ * ADR-034：项目组长或项目管理员发起归档申请；申请只进入待审状态，
+ * 只有系统管理员批准后项目才会归档。
+ */
+export const RequestProjectArchiveModal: React.FC<
+  RequestProjectArchiveModalProps
+> = ({ open, project, client, onClose, onRequested }) => {
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<ProjectArchiveFormValues>({ defaultValues: { reason: "" } });
+  const mutation = useRequestProjectArchive(project.id, client);
+  const formId = React.useId();
+
+  useEffect(() => {
+    if (open) {
+      reset({ reason: "" });
+      mutation.reset();
+    }
+  }, [open, project.id]);
+
+  const submit = async (values: ProjectArchiveFormValues) => {
+    const parsed = projectArchiveFormSchema.safeParse(values);
+    if (!parsed.success) {
+      setError("reason", {
+        message: parsed.error.issues[0]?.message ?? "请填写归档申请原因",
+      });
+      return;
+    }
+    try {
+      const created = await mutation.mutateAsync({
+        reason: parsed.data.reason,
+      });
+      onRequested(created);
+      onClose();
+    } catch {
+      // mutation.error 负责展示，原因输入保留。
+    }
+  };
+
+  return (
+    <Modal
+      className="catalog-modal"
+      eyebrow="项目组长或项目管理员可发起"
+      title="申请项目归档"
+      destroyOnHidden
+      mask={{ closable: false }}
+      open={open}
+      onCancel={() => {
+        if (!mutation.isPending) onClose();
+      }}
+      footer={
+        <>
+          <Button disabled={mutation.isPending} onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form={formId}
+            loading={mutation.isPending}
+          >
+            提交归档申请
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="catalog-form calm-form"
+        onSubmit={handleSubmit((values) => void submit(values))}
+        noValidate
+      >
+        <Form component={false} layout="vertical" requiredMark={false}>
+          <div className="dialog-form">
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+              <Alert
+                showIcon
+                type="info"
+                title="申请需要系统管理员审核"
+                description="项目下全部任务归档后才能申请；批准后项目及全部下级数据只读，历史仍可查看。"
+              />
+              <Controller
+                name="reason"
+                control={control}
+                render={({ field }) => (
+                  <Form.Item
+                    label="归档申请原因"
+                    required
+                    validateStatus={errors.reason ? "error" : ""}
+                    help={errors.reason?.message ?? ""}
+                  >
+                    <Input.TextArea
+                      {...field}
+                      aria-label="归档申请原因"
+                      rows={3}
+                      maxLength={PROJECT_ARCHIVE_REASON_MAX_LENGTH}
+                      placeholder="说明为何需要归档，原因会写入不可变审计"
+                      disabled={mutation.isPending}
+                    />
+                  </Form.Item>
+                )}
+              />
+            </Space>
+            {mutation.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectArchiveRequestError(
+                  mutation.error,
+                  "request",
+                )}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+          </div>
+        </Form>
+      </form>
+    </Modal>
+  );
+};
+
+export interface ReviewProjectArchiveModalProps {
+  readonly open: boolean;
+  readonly project: ProjectListItem;
+  readonly decision: "approve" | "reject";
+  readonly client?: InpulseApiClient | undefined;
+  readonly onClose: () => void;
+  readonly onApproved: (project: ProjectItem) => void;
+  readonly onRejected: (request: ProjectArchiveRequestItem) => void;
+}
+
+/**
+ * ADR-034：系统管理员审核项目归档申请；批准时按 If-Match 版本归档项目，
+ * 驳回只结束申请、不改变项目状态。
+ */
+export const ReviewProjectArchiveModal: React.FC<
+  ReviewProjectArchiveModalProps
+> = ({ open, project, decision, client, onClose, onApproved, onRejected }) => {
+  const approve = useApproveProjectArchive(project.id, client);
+  const reject = useRejectProjectArchive(project.id, client);
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<ProjectArchiveRejectionFormValues>({
+    defaultValues: { note: "" },
+  });
+  const formId = React.useId();
+  const pending = project.pendingArchiveRequest;
+  const busy = approve.isPending || reject.isPending;
+
+  useEffect(() => {
+    if (open) {
+      reset({ note: "" });
+      approve.reset();
+      reject.reset();
+    }
+  }, [open, project.id, pending?.id]);
+
+  const submit = async (values: ProjectArchiveRejectionFormValues) => {
+    if (!pending) return;
+    if (decision === "approve") {
+      try {
+        const detail = await approve.mutateAsync({
+          requestId: pending.id,
+          rowVersion: project.rowVersion,
+        });
+        onApproved(detail.project);
+        onClose();
+      } catch {
+        // approve.error 负责展示。
+      }
+      return;
+    }
+    const parsed = projectArchiveRejectionFormSchema.safeParse(values);
+    if (!parsed.success) {
+      setError("note", {
+        message: parsed.error.issues[0]?.message ?? "批注不能超过 2000 个字符",
+      });
+      return;
+    }
+    try {
+      const rejected = await reject.mutateAsync({
+        requestId: pending.id,
+        note: parsed.data.note,
+      });
+      onRejected(rejected);
+      onClose();
+    } catch {
+      // reject.error 负责展示，批注输入保留。
+    }
+  };
+
+  const reviewing = decision === "approve" ? approve : reject;
+
+  return (
+    <Modal
+      className="catalog-modal"
+      eyebrow="仅系统管理员可执行"
+      title={decision === "approve" ? "批准项目归档" : "驳回项目归档申请"}
+      destroyOnHidden
+      mask={{ closable: false }}
+      open={open}
+      onCancel={() => {
+        if (!busy) onClose();
+      }}
+      footer={
+        <>
+          <Button disabled={busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            danger={decision === "approve"}
+            type="primary"
+            htmlType="submit"
+            form={formId}
+            loading={busy}
+          >
+            {decision === "approve" ? "确认归档" : "确认驳回"}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="catalog-form calm-form"
+        onSubmit={handleSubmit((values) => void submit(values))}
+        noValidate
+      >
+        <Form component={false} layout="vertical" requiredMark={false}>
+          <div className="dialog-form">
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+              {pending ? (
+                <Alert
+                  showIcon
+                  type="warning"
+                  title={pending.requestedByName + " 提交了归档申请"}
+                  description={pending.reason}
+                />
+              ) : (
+                <Alert
+                  showIcon
+                  type="warning"
+                  title="该申请已被处理"
+                  description="请刷新项目列表查看最新状态。"
+                />
+              )}
+              {decision === "approve" ? (
+                <Alert
+                  showIcon
+                  type="info"
+                  title={
+                    "批准后项目立即归档（当前版本 " + project.rowVersion + "）"
+                  }
+                  description="项目及全部下级数据只读，历史仍可查看；如需再次编辑请先恢复项目。"
+                />
+              ) : (
+                <Controller
+                  name="note"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item
+                      label="驳回批注（可选）"
+                      validateStatus={errors.note ? "error" : ""}
+                      help={errors.note?.message ?? ""}
+                    >
+                      <Input.TextArea
+                        {...field}
+                        aria-label="驳回批注"
+                        rows={3}
+                        maxLength={PROJECT_ARCHIVE_NOTE_MAX_LENGTH}
+                        placeholder="说明驳回原因，会记录到审计并通知申请人"
+                        disabled={busy}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              )}
+            </Space>
+            {reviewing.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectArchiveRequestError(
+                  reviewing.error,
+                  decision,
                 )}
                 style={{ marginTop: 16 }}
               />

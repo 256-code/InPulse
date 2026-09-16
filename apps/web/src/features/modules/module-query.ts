@@ -18,8 +18,11 @@ export type ModuleChange = {
 };
 export function moduleErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 409)
+    if (error.status === 409) {
+      if (error.code === "MODULE_ARCHIVE_TASKS_OPEN")
+        return `${error.message}。请先在任务弹窗底部完成或归档该模块的全部任务再重试。`;
       return `${error.message}。输入已保留，请检查冲突并加载最新版本后继续编辑。`;
+    }
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或模块不存在，或你已无权访问。";
     if (error.status === 403)

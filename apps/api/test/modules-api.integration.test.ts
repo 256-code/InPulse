@@ -217,6 +217,73 @@ describe("F-12 real HTTP + PostgreSQL", () => {
     const items = moduleListResponseSchema.parse(await listing.json()).items;
     expect(items.map((item) => item.id)).toEqual([project.moduleId, module.id]);
   });
+  it("orders module cards by lifecycle band and counts completed tasks", async () => {
+    const { member, project } = await fixture();
+    const started = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, { name: "已开始模块" })
+      ).json(),
+    );
+    const notStarted = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, { name: "未开始模块" })
+      ).json(),
+    );
+    const archived = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, { name: "归档模块" })
+      ).json(),
+    );
+    // 只有「已开始模块」下有已完成任务，其余模块都没有。
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, scope_type, code, title, work_status,
+          completion_note, completed_at, assignee_id, creator_id
+        )
+        VALUES (
+          ${project.projectId},
+          ${started.id},
+          'MODULE',
+          ${`${project.code}-T-1`},
+          '已完成任务',
+          'DONE',
+          '已完成',
+          now(),
+          ${member.userId},
+          ${member.userId}
+        )
+        RETURNING id, project_id
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, NULL, 'DONE', now(), '已完成', ${member.userId}
+        FROM created
+    `;
+    await client.sql`
+      UPDATE app.modules
+         SET status = 'ARCHIVED',
+             archived_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${archived.id}
+         AND project_id = ${project.projectId}
+    `;
+
+    const listing = await request(project.projectId, "GET", member);
+    expect(listing.status).toBe(200);
+    const items = moduleListResponseSchema.parse(await listing.json()).items;
+    expect(items.map((item) => item.id)).toEqual([
+      started.id,
+      project.moduleId,
+      notStarted.id,
+      archived.id,
+    ]);
+    expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
+      1, 0, 0, 0,
+    ]);
+  });
   it("maps normalized duplicate names and stale versions to safe 409; rejects identity injection", async () => {
     const { member, project } = await fixture();
     expect(
@@ -397,6 +464,123 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       rowVersion: 3,
     });
   });
+  it("blocks module archiving while the module still has unarchived tasks (ADR-034)", async () => {
+    const { member, project } = await fixture();
+    const module = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, {
+          name: "有任务的模块",
+        })
+      ).json(),
+    );
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, scope_type, code, title, assignee_id, creator_id
+        )
+        VALUES (
+          ${project.projectId},
+          ${module.id},
+          'MODULE',
+          ${project.code + "-T-1"},
+          '未归档任务',
+          ${member.userId},
+          ${member.userId}
+        )
+        RETURNING id, project_id
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status, changed_by
+      )
+      SELECT id, project_id, NULL, 'TODO', ${member.userId} FROM created
+    `;
+
+    await error(
+      await request(
+        project.projectId,
+        "POST",
+        member,
+        { reason: "任务未收尾" },
+        `/${module.id}/archive`,
+        module.rowVersion,
+      ),
+      409,
+      "MODULE_ARCHIVE_TASKS_OPEN",
+    );
+
+    await client.sql`
+      UPDATE app.tasks
+         SET lifecycle_status = 'ARCHIVED',
+             row_version = row_version + 1
+       WHERE project_id = ${project.projectId}
+         AND module_id = ${module.id}
+    `;
+
+    const archived = await request(
+      project.projectId,
+      "POST",
+      member,
+      { reason: "任务全部归档" },
+      `/${module.id}/archive`,
+      module.rowVersion,
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
+      status: "ARCHIVED",
+      rowVersion: module.rowVersion + 1,
+    });
+  });
+  it("archives a module whose tasks are finished but not archived", async () => {
+    const { member, project } = await fixture();
+    const module = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, {
+          name: "已完成任务的模块",
+        })
+      ).json(),
+    );
+    // ADR-034：任务完成（work_status = DONE）即视为已收尾，不再阻塞模块归档。
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, scope_type, code, title, assignee_id, creator_id,
+          work_status, completed_at
+        )
+        VALUES (
+          ${project.projectId},
+          ${module.id},
+          'MODULE',
+          ${project.code + "-T-1"},
+          '已完成任务',
+          ${member.userId},
+          ${member.userId},
+          'DONE',
+          now()
+        )
+        RETURNING id, project_id, completed_at
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, changed_by
+      )
+      SELECT id, project_id, NULL, 'DONE', completed_at, ${member.userId}
+        FROM created
+    `;
+
+    const archived = await request(
+      project.projectId,
+      "POST",
+      member,
+      { reason: "任务已完成" },
+      `/${module.id}/archive`,
+      module.rowVersion,
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
+      status: "ARCHIVED",
+    });
+  });
+
   it("replays equivalent normalized requests, rejects changed input and removed membership", async () => {
     const { member, project } = await fixture();
     const key = randomUUID();

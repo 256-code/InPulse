@@ -104,6 +104,7 @@ function baseClient() {
             activeModuleCount: 2,
             activeFeatureCount: 5,
             openTaskCount: 3,
+            completedTaskCount: 1,
           },
         },
       ],

@@ -26,6 +26,9 @@ const notificationTypeLabels: Readonly<Record<string, string>> = {
   PROJECT_JOINED: "加入项目",
   TASK_ASSIGNED: "任务指派",
   TASK_COMPLETED: "任务完成",
+  PROJECT_ARCHIVE_REQUESTED: "归档申请",
+  PROJECT_ARCHIVE_APPROVED: "归档通过",
+  PROJECT_ARCHIVE_REJECTED: "归档驳回",
   CHANGE_RECORD_VOIDED: "记录作废",
   CHANGE_RECORD_RESTORED: "记录恢复",
 };

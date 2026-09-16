@@ -31,9 +31,7 @@ import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "../src/auth/session-csrf-token.repository.js";
-import { PostgresUserCredentialRepository } from "../src/auth/user-credential.repository.js";
 import { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
-import { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { IdempotencyHttpService } from "../src/idempotency/http-service.js";
@@ -41,6 +39,8 @@ import { IdempotencyRunner } from "../src/idempotency/runner.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
+import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import { FeatureManagementRepository } from "../src/modules/features/feature-management.repository.js";
@@ -91,8 +91,9 @@ beforeAll(async () => {
   audit = new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key });
   search = new PostgresSearchProjectionWritePort();
   activity = new PostgresActivityWritePort();
+  const access = new PostgresProjectAccessQueryPort(client);
   management = new FeaturesManagementService(
-    new PostgresProjectAccessQueryPort(client),
+    access,
     new FeatureCandidatesQueryPort(),
     new PostgresModuleQueryPort(),
     new PostgresModuleReadPort(),
@@ -103,16 +104,11 @@ beforeAll(async () => {
     activity,
     search,
     new PostgresUserReadPort(),
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   const http = new FeaturesHttpService(
     auth,
     new AuthenticatedMutationService(auth, csrf, tokens),
-    new AdminHighRiskAuthService(
-      sessions,
-      csrf,
-      tokens,
-      new PostgresUserCredentialRepository(),
-    ),
     new IdempotencyHttpService(
       new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
       { currentVersion: 1, currentKey: () => key, keyFor: () => key },
@@ -157,6 +153,18 @@ async function actor(admin = false): Promise<Actor> {
 async function fixture(): Promise<{ member: Actor; project: ProjectFixture }> {
   const member = await actor();
   return { member, project: await createProject(client.sql, member.userId) };
+}
+/** ADR-033/ADR-034：把夹具创建者降级为普通成员（创建者默认回填 LEADER）。 */
+async function demoteToMember(
+  projectId: number,
+  userId: number,
+): Promise<void> {
+  await client.sql`
+    UPDATE app.project_members
+       SET role = 'MEMBER'
+     WHERE project_id = ${projectId}
+       AND user_id = ${userId}
+  `;
 }
 async function request(
   project: Pick<ProjectFixture, "projectId" | "moduleId">,
@@ -468,7 +476,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     ).toBe(200);
   });
 
-  it("requires administrator identity, archives history, rejects downstream writes and restores only itself", async () => {
+  it("rejects plain members, archives history, blocks downstream writes and restores only itself", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const item = await create(project, member);
@@ -479,6 +487,9 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       await tx.sql`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by) VALUES (${task!.id}, ${project.projectId}, NULL, 'TODO', ${member.userId})`;
       return task!;
     });
+    // ADR-034：夹具创建者默认是组长（可归档功能）；本用例验证普通成员无
+    // 归档权限，先把夹具成员降级为 MEMBER。
+    await demoteToMember(project.projectId, member.userId);
     await error(
       await request(
         project,
@@ -489,6 +500,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
         1,
       ),
       403,
+      "FEATURE_MANAGE_FORBIDDEN",
     );
     await error(
       await request(
@@ -556,6 +568,70 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     const [child] =
       await client.sql`SELECT lifecycle_status, row_version FROM app.tasks WHERE id = ${task!.id}`;
     expect(child).toEqual({ lifecycle_status: "ARCHIVED", row_version: 1 });
+  });
+
+  it("lets a project leader archive and restore features without any admin flag (ADR-034)", async () => {
+    const { member, project } = await fixture();
+    const item = await create(project, member);
+    // 夹具创建者默认回填 LEADER；非系统管理员的组长可归档/恢复功能。
+    const archived = await request(
+      project,
+      "POST",
+      member,
+      { reason: "组长封存功能" },
+      `/${item.id}/archive`,
+      1,
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+    expect(featureItemSchema.parse(await archived.json())).toMatchObject({
+      status: "ARCHIVED",
+      rowVersion: 2,
+    });
+    const restored = await request(
+      project,
+      "POST",
+      member,
+      { reason: "组长恢复功能" },
+      `/${item.id}/restore`,
+      2,
+    );
+    expect(restored.status, await restored.clone().text()).toBe(200);
+    expect(featureItemSchema.parse(await restored.json())).toMatchObject({
+      status: "ACTIVE",
+      rowVersion: 3,
+    });
+  });
+
+  it("rejects cross-project, removed member and non-member archive requests (ADR-034)", async () => {
+    const { member, project } = await fixture();
+    const outsider = await actor();
+    const item = await create(project, member);
+    await error(
+      await request(
+        project,
+        "POST",
+        outsider,
+        { reason: "越权归档" },
+        `/${item.id}/archive`,
+        1,
+      ),
+      404,
+      "FEATURE_NOT_FOUND",
+    );
+    // ADR-033：移除成员须同事务把角色复位为 MEMBER，否则违反
+    // project_members_removed_role_check。
+    await removeMember(client.sql, project.projectId, member.userId);
+    await error(
+      await request(
+        project,
+        "POST",
+        member,
+        { reason: "被移除后归档" },
+        `/${item.id}/archive`,
+        1,
+      ),
+      404,
+    );
   });
 
   it("replays same semantic key and rejects changes, stale If-Match and revoked result access", async () => {

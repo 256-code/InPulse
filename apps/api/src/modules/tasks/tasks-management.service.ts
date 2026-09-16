@@ -14,6 +14,7 @@ import {
   type ProjectAccessQueryPort,
   ProjectCodePort,
   ProjectMembersQueryPort,
+  ProjectRoleGateService,
 } from "../projects/index.js";
 import { ModuleQueryPort, ModuleReadPort } from "../modules/index.js";
 import { FeatureQueryPort, FeatureReadPort } from "../features/index.js";
@@ -26,8 +27,29 @@ import {
   type TaskRecord,
 } from "./task-management.repository.js";
 
+/**
+ * 任务写命令：创建/编辑之外，归档与恢复切换生命周期状态（lifecycle_status），
+ * 不改变工作状态与状态历史。
+ */
 export type TaskOperation =
-  "createTask" | "updateTask" | "createModuleTask" | "updateModuleTask";
+  | "createTask"
+  | "updateTask"
+  | "createModuleTask"
+  | "updateModuleTask"
+  | "archiveTask"
+  | "restoreTask"
+  | "archiveModuleTask"
+  | "restoreModuleTask";
+
+/** 需要项目内管理角色（系统管理员/组长/项目管理员）的任务命令。 */
+export function isTaskLifecycleOperation(operation: TaskOperation): boolean {
+  return (
+    operation === "archiveTask" ||
+    operation === "restoreTask" ||
+    operation === "archiveModuleTask" ||
+    operation === "restoreModuleTask"
+  );
+}
 export class TaskManagementError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422,
@@ -55,6 +77,8 @@ export class TasksManagementService {
     @Inject(ProjectCodePort) private readonly codes: ProjectCodePort,
     @Inject(ProjectMembersQueryPort)
     private readonly members: ProjectMembersQueryPort,
+    @Inject(ProjectRoleGateService)
+    private readonly roles: ProjectRoleGateService,
     @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
     @Inject(TaskManagementRepository)
     private readonly repository: TaskManagementRepository,
@@ -104,11 +128,16 @@ export class TasksManagementService {
       return { items: await this.repository.list(tx, scope) };
     });
   }
+  /**
+   * allowArchivedParents 仅供归档命令使用：父级模块/功能已归档时归档其任务属于收尾动作，
+   * 必须放行，否则「归档功能后任务无法归档」会锁死模块归档（ADR-034）；恢复仍要求父级活跃。
+   */
   async authorize(
     tx: TransactionContext,
     actorId: number,
     scope: TaskScope,
     taskId?: number,
+    options: { readonly allowArchivedParents?: boolean } = {},
   ): Promise<void> {
     const project = await this.access.checkProjectForWrite(tx, {
       actorUserId: actorId,
@@ -142,11 +171,23 @@ export class TasksManagementService {
           });
     if (module.kind === "not-found" || feature.kind === "not-found")
       throw missing();
-    if ([project.kind, module.kind, feature.kind].includes("parent-not-active"))
+    if (project.kind === "parent-not-active")
       throw new TaskManagementError(
         409,
         "TASK_PARENT_ARCHIVED",
-        "项目、模块或功能已归档，任务只读",
+        "项目已归档，任务只读",
+      );
+    // ADR-034：归档是收尾动作，已归档的模块或功能下仍必须允许归档其任务，
+    // 否则「归档功能后任务无法归档、模块也就永远无法归档」形成死锁。
+    if (
+      !options.allowArchivedParents &&
+      (module.kind === "parent-not-active" ||
+        feature.kind === "parent-not-active")
+    )
+      throw new TaskManagementError(
+        409,
+        "TASK_PARENT_ARCHIVED",
+        "模块或功能已归档，任务只读",
       );
   }
   async replay(
@@ -158,7 +199,10 @@ export class TasksManagementService {
     const resource = parsed.success
       ? { ...parsed.data, featureId: null }
       : taskReplayContextSchema.parse(context);
-    await this.authorize(tx, actorId, resource, resource.taskId);
+    // 重放只恢复既有结果，父级在之后被归档不应让已缓存响应失效。
+    await this.authorize(tx, actorId, resource, resource.taskId, {
+      allowArchivedParents: true,
+    });
     if (parsed.success)
       for (const featureId of parsed.data.impactFeatureIds)
         if (
@@ -242,9 +286,23 @@ export class TasksManagementService {
       requestId: string;
       impactFeatureIds?: number[];
       assignmentNotificationType?: "leftover.convert";
+      /** 归档/恢复原因；只用于生命周期命令。 */
+      reason?: string;
     },
   ): Promise<TaskRecord> {
-    await this.authorize(tx, input.actorId, input, input.taskId);
+    // 归档命令放行「父级已归档」（收尾），恢复命令仍要求父级链活跃。
+    await this.authorize(tx, input.actorId, input, input.taskId, {
+      allowArchivedParents:
+        input.operation === "archiveTask" ||
+        input.operation === "archiveModuleTask",
+    });
+    if (isTaskLifecycleOperation(input.operation))
+      return this.changeTaskLifecycle(tx, {
+        ...input,
+        taskId: input.taskId!,
+        version: input.version!,
+        reason: input.reason ?? "",
+      });
     let before: TaskRecord | undefined;
     const target = input.impactFeatureIds ?? [];
     let previousImpacts: Awaited<
@@ -382,6 +440,111 @@ export class TasksManagementService {
         createdAt: new Date(result.updatedAt),
       });
     return result;
+  }
+  /**
+   * 任务归档/恢复：系统管理员、本项目组长或项目管理员可执行（ADR-033 角色模型）；
+   * 只切换 lifecycle_status 与 row_version，工作状态、完成快照和状态历史保持不可变。
+   */
+  private async changeTaskLifecycle(
+    tx: TransactionContext,
+    input: TaskScope & {
+      operation: TaskOperation;
+      actorId: number;
+      taskId: number;
+      version: number;
+      reason: string;
+      requestId: string;
+    },
+  ): Promise<TaskRecord> {
+    await this.requireArchiveRole(tx, input.actorId, input.projectId);
+    const before =
+      input.featureId === null
+        ? (await this.lockModuleTask(tx, input, [])).before
+        : await this.repository.find(tx, input, input.taskId, true);
+    if (!before) throw missing();
+    if (before.rowVersion !== input.version)
+      throw new TaskManagementError(
+        409,
+        "TASK_VERSION_CONFLICT",
+        "任务版本已变化，请重新加载",
+      );
+    const archive = input.operation.startsWith("archive");
+    if (before.lifecycleStatus !== (archive ? "ACTIVE" : "ARCHIVED"))
+      throw new TaskManagementError(
+        409,
+        "TASK_STATE_CONFLICT",
+        archive ? "任务已归档或不可归档" : "任务尚未归档，不能恢复",
+      );
+    const result = await this.repository.setLifecycle(
+      tx,
+      before,
+      archive ? "ARCHIVED" : "ACTIVE",
+    );
+    if (!result)
+      throw new TaskManagementError(
+        409,
+        "TASK_VERSION_CONFLICT",
+        "任务版本已变化，请重新加载",
+      );
+    const event = await this.audit.append(tx, {
+      projectId: result.projectId,
+      actorType: "USER",
+      actorId: input.actorId,
+      action: archive ? "task.archive" : "task.unarchive",
+      targetType: "TASK",
+      targetId: String(result.id),
+      eventPayload: { reason: input.reason, before, after: result },
+      requestId: input.requestId,
+    });
+    await this.activity.append(tx, {
+      projectId: result.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "TASK",
+      sourceEntityId: result.id,
+      activityType: archive ? "TASK_ARCHIVED" : "TASK_RESTORED",
+      actorId: input.actorId,
+      summary: archive
+        ? `归档了任务 ${result.title}`
+        : `恢复了任务 ${result.title}`,
+      metadata: {
+        taskId: result.id,
+        moduleId: result.moduleId,
+        featureId: result.featureId,
+        reason: input.reason,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: result.workStatus,
+      sourceRowVersion: result.rowVersion,
+      occurredAt: new Date(result.updatedAt),
+    });
+    await this.search.upsert(tx, {
+      projectId: result.projectId,
+      entityType: "TASK",
+      entityId: result.id,
+      title: result.title,
+      summary: result.description.slice(0, 5000),
+      rawText: `${result.code}\n${result.title}\n${result.description}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: result.workStatus,
+      sourceRowVersion: result.rowVersion,
+    });
+    return result;
+  }
+  /** 归档任务的角色门禁：普通成员 403，非本项目成员 404。 */
+  private async requireArchiveRole(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+  ): Promise<void> {
+    const role = await this.roles.manageRole(tx, actorId, projectId);
+    if (role === "NOT_MEMBER") throw missing();
+    if (role === "MEMBER")
+      throw new TaskManagementError(
+        403,
+        "TASK_ARCHIVE_FORBIDDEN",
+        "只有系统管理员、项目组长或项目管理员可以归档或恢复任务",
+      );
   }
   async transition(
     tx: TransactionContext,

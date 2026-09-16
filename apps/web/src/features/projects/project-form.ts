@@ -75,6 +75,23 @@ export const projectRestoreFormSchema = z.object({
 
 export type ProjectArchiveFormValues = z.infer<typeof projectArchiveFormSchema>;
 
+/** ADR-034：驳回归档申请的批注可选，留空表示不附理由。 */
+export const PROJECT_ARCHIVE_NOTE_MAX_LENGTH = 2000;
+
+export const projectArchiveRejectionFormSchema = z.object({
+  note: z
+    .string()
+    .trim()
+    .max(
+      PROJECT_ARCHIVE_NOTE_MAX_LENGTH,
+      `批注不能超过 ${PROJECT_ARCHIVE_NOTE_MAX_LENGTH} 个字符`,
+    ),
+});
+
+export type ProjectArchiveRejectionFormValues = z.infer<
+  typeof projectArchiveRejectionFormSchema
+>;
+
 export type ProjectRestoreFormValues = z.infer<typeof projectRestoreFormSchema>;
 
 export function normalizeProjectCode(value: string): string {

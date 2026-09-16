@@ -255,3 +255,16 @@
 - 迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的表级 SELECT 与序列 USAGE/SELECT（pg_dump 一致性快照必需，与迁移 0007 同源），并把 `app.sso_login_attempts` 加入 `apps/ops/src/backup.ts` 的 `BACKUP_EXCLUDED_TABLE_DATA`：该表只保留结构、数据不进备份产物。新增表进入备份范围按 fail closed 处理——必须显式补一条备份授权迁移，不得改成 `ALTER DEFAULT PRIVILEGES` 默认授权（例外须新增 ADR）。
 - 本轮联调修复（均为真实缺陷，已落库）：① `apps/api/src/auth/auth.module.ts` 与 `sso-login.service.ts` 曾从 `audit/index.js` barrel 引入 `AuditWritePort`，与 `AuditLogReadModule -> AuthModule` 形成循环依赖，导致整个 `AppModule` 初始化时 Nest 拿到 `undefined` 并以 `process.abort()` 崩溃（8 个 API 集成测试文件直接退出）；改为直接引用 `audit/audit.port.js`，该循环由 `pnpm check:deps` 的 `[circular-dependency]` 拦住；② `apps/web/tools/vite-csp.ts` 的 dev/preview CSP 中间件原先会短路所有无扩展名且 `Accept: text/html` 的请求，把浏览器整页导航到 `/api/v1/auth/sso/start` 的请求当成 SPA 入口返回 `index.html`，使 SSO 回落在本地预览里自跳转成环（URL 与请求头超限后返回 431）；新增 `isApiPath` 放行 `/api/**` 交给代理，E2E 复跑 56/56；③ `sso.config.ts` 的回调地址变量由 `SSO_REDIRECT_URL` 更名为 `SSO_REDIRECT_URI`（与 OIDC `redirect_uri` 术语一致），因为 `scripts/check_secrets.mjs` 把所有 `*_URL` 键视为必须指向 `/run/secrets/*` 的敏感变量，改名避免误判而不放宽门禁。
 - 本文件上文历史条目中出现的 8 小时空闲超时、三条 `securityFlow` 等描述为当时事实，与本节冲突时以 ADR-032 与本节的现行规则为准。
+
+## 2026-09-16 ADR-034 项目归档申请与任务归档说明
+
+按用户确认的口径（项目归档保留「双方同意」，但审批权只归总管理员）把项目归档改为「申请—审核」，并同步确定任务归档与父级归档前置校验。实现细节与边界见 [ADR-034](./docs/adr/ADR-034.md)。
+
+- 项目组长（LEADER）、项目管理员（PROJECT_ADMIN）与系统管理员可发起项目归档申请，普通成员 403；但只有系统管理员能批准真正归档或驳回申请，申请权与审批权分离。
+- 拦截口径只针对任务，且以「已收尾」为准：项目归档的申请与批准、模块归档都要求作用域内不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'` 的任务（已完成、已取消与已归档都算收尾），否则分别 409 `PROJECT_ARCHIVE_TASKS_OPEN` 与 `MODULE_ARCHIVE_TASKS_OPEN`；功能不需要归档，也不作为任何一级的归档拦截条件。
+- 任务新增归档/恢复命令（`archiveTask`/`restoreTask` 与模块级 `archiveModuleTask`/`restoreModuleTask`），只切换 `tasks.lifecycle_status`，权限为系统管理员、本项目组长或项目管理员，普通成员 403 `TASK_ARCHIVE_FORBIDDEN`；不写 `task_status_history`，不改变完成统计口径，同事务写审计、活动与搜索投影。
+- 归档命令的父级口径：项目必须 ACTIVE；模块或功能已归档时**仍允许归档其任务**（收尾动作），否则「先归档功能→其任务无法归档→模块下永远存在 ACTIVE 任务」会锁死模块归档。恢复仍要求模块与功能父级链全部 ACTIVE。HTTP 幂等解析阶段与 `execute` 使用同一口径。
+- 任务归档/恢复入口与模块、功能一致，只放在任务编辑弹窗底部（`data-testid=task-modal-lifecycle`，文案「归档」/「恢复」），普通成员不可见；409 文案带未收尾任务数量并指引到该入口。父级已归档、任务只读时该弹窗对有归档角色的用户仍可打开（表单只读）。
+- 迁移 `0016_project_archive_requests.sql`（新表、枚举 CHECK、部分唯一索引、origin guard 触发器与 `app_runtime` 授权）；`docs/permissions.md` 已同步新增项目归档申请、批准、驳回与任务归档、恢复条目。
+- 功能归档/恢复（界口语「删除功能」）与任务、模块归档同一口径，自 ADR-034 起由系统管理员、本项目组长或项目管理员执行，普通成员 403 `FEATURE_MANAGE_FORBIDDEN`；前端入口与模块弹窗一致，只放在「编辑功能」弹窗底部（文案「归档」/「恢复」），卡片与详情页头只对已归档功能保留「恢复功能」；功能不参与任务归档前置校验，归档功能只要求项目与父模块 ACTIVE。
+- 本文件与三份基线设计文档中「项目归档由系统管理员单方执行」的历史描述为当时事实，与本节冲突时以 ADR-034 与本节的现行规则为准。

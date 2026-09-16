@@ -1,9 +1,35 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { ProjectItem } from "@inpulse/api-contract";
+import type { ProjectItem, ProjectListItem } from "@inpulse/api-contract";
 import type { DatabaseClient } from "@inpulse/database/client";
 import { DATABASE_CLIENT } from "../../database/database.constants.js";
-import { projectStatColumns } from "../../stats/card-stat-columns.js";
+import {
+  lifecycleRankExpression,
+  projectStatColumns,
+} from "../../stats/card-stat-columns.js";
 import { ProjectQueryPort } from "./project-query.port.js";
+
+interface ProjectListItemRow {
+  readonly id: number;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string;
+  readonly status: string;
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly memberCount: number;
+  readonly activeModuleCount: number;
+  readonly activeFeatureCount: number;
+  readonly openTaskCount: number;
+  readonly completedTaskCount: number;
+  readonly currentUserRole: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null;
+  readonly pendingRequestId: number | null;
+  readonly pendingRequestedBy: number | null;
+  readonly pendingRequestedByName: string | null;
+  readonly pendingReason: string | null;
+  readonly pendingRequestedAt: Date | null;
+}
 
 interface ProjectRow {
   readonly id: number;
@@ -19,6 +45,7 @@ interface ProjectRow {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 }
 
 /** 项目只读 PostgreSQL 适配器；不计入事务，在服务端授权范围之后执行。 */
@@ -31,7 +58,10 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
     super();
   }
 
-  async list(projectIds: readonly number[]): Promise<readonly ProjectItem[]> {
+  async list(
+    projectIds: readonly number[],
+    actorUserId?: number,
+  ): Promise<readonly ProjectListItem[]> {
     if (projectIds.length === 0) {
       return [];
     }
@@ -51,12 +81,26 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
                 WHERE m.project_id = p.id
                   AND m.status = 'ACTIVE'
              ) AS "memberCount",
-             ${projectStatColumns(this.client.sql, "p")}
+             ${projectStatColumns(this.client.sql, "p")},
+             m.role AS "currentUserRole",
+             r.id AS "pendingRequestId",
+             r.requested_by AS "pendingRequestedBy",
+             requester.name AS "pendingRequestedByName",
+             r.reason AS "pendingReason",
+             r.requested_at AS "pendingRequestedAt"
         FROM app.projects p
+        LEFT JOIN app.project_members m
+               ON m.project_id = p.id
+              AND m.user_id = ${actorUserId ?? null}
+              AND m.status = 'ACTIVE'
+        LEFT JOIN app.project_archive_requests r
+               ON r.project_id = p.id
+              AND r.status = 'PENDING'
+        LEFT JOIN app.users requester ON requester.id = r.requested_by
        WHERE p.id = ANY(${projectIds}::integer[])
-       ORDER BY p.id ASC
-    `) as unknown as readonly ProjectRow[];
-    return rows.map((row) => this.toItem(row));
+       ORDER BY ${lifecycleRankExpression(this.client.sql, "project", "p")}, p.id ASC
+    `) as unknown as readonly ProjectListItemRow[];
+    return rows.map((row) => this.toListItem(row));
   }
 
   async findActiveMemberRole(
@@ -101,6 +145,27 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
     return row === undefined ? undefined : this.toItem(row);
   }
 
+  private toListItem(row: ProjectListItemRow): ProjectListItem {
+    return {
+      ...this.toItem(row),
+      currentUserRole: row.currentUserRole,
+      pendingArchiveRequest:
+        row.pendingRequestId === null ||
+        row.pendingRequestedBy === null ||
+        row.pendingRequestedByName === null ||
+        row.pendingReason === null ||
+        row.pendingRequestedAt === null
+          ? null
+          : {
+              id: row.pendingRequestId,
+              requestedBy: row.pendingRequestedBy,
+              requestedByName: row.pendingRequestedByName,
+              reason: row.pendingReason,
+              requestedAt: new Date(row.pendingRequestedAt).toISOString(),
+            },
+    };
+  }
+
   private toItem(row: ProjectRow): ProjectItem {
     return {
       id: row.id,
@@ -117,6 +182,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
         activeModuleCount: row.activeModuleCount,
         activeFeatureCount: row.activeFeatureCount,
         openTaskCount: row.openTaskCount,
+        completedTaskCount: row.completedTaskCount,
       },
     };
   }

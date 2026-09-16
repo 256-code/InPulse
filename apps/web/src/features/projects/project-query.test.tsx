@@ -25,7 +25,12 @@ const projectItem: ProjectItem = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 1,
-  stats: { activeModuleCount: 0, activeFeatureCount: 0, openTaskCount: 0 },
+  stats: {
+    activeModuleCount: 0,
+    activeFeatureCount: 0,
+    openTaskCount: 0,
+    completedTaskCount: 1,
+  },
 };
 
 const createdProject: CreateProjectResponse = {

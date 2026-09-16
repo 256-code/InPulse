@@ -3132,6 +3132,10 @@ a:focus-visible {
   padding: 20px 0;
   margin-top: 12px;
 }
+/* ADR-033：模块弹层底部的归档/恢复入口靠左，与右侧的取消/保存分开。 */
+.calm-action-footer > .footer-leading {
+  margin-right: auto;
+}
 .view-description,
 .personal-scope,
 .task-toolbar > .secondary-button {
@@ -5470,5 +5474,10 @@ td.due-overdue {
 }
 .account-popover .account-identity small {
   color: #98a5b3;
+  font-size: 10px;
+}
+
+.card-pending-note {
+  color: #b26a00;
   font-size: 10px;
 }

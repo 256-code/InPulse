@@ -11,6 +11,7 @@ import { TaskStatusCompatibilityHttpService } from "../src/workflows/task-status
 import { ExistingTaskStatusCommandPort } from "../src/modules/tasks/task-status.port.js";
 import { TasksManagementService } from "../src/modules/tasks/tasks-management.service.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -179,6 +180,10 @@ beforeAll(async () => {
               featureRead,
               new PostgresProjectCodePort(),
               new PostgresProjectMembersQueryPort(),
+              new ProjectRoleGateService(
+                access,
+                new PostgresProjectMembersQueryPort(),
+              ),
               uow,
               tasks,
               audit,

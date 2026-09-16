@@ -176,6 +176,35 @@ export const taskRoutes: readonly RouteDefinition[] = [
         "COMPLETE uses TaskCompletionWorkflow with branch recheck and bounded retry; other transitions retain existing state semantics",
     },
   },
+  ...(["archiveTask", "restoreTask"] as const).map(
+    (operationId): RouteDefinition => {
+      const archive = operationId === "archiveTask";
+      return {
+        ...basicTaskRoutes[4]!,
+        method: "POST",
+        operationId,
+        path:
+          collection + (archive ? "/{taskId}/archive" : "/{taskId}/restore"),
+        summary: archive
+          ? "归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。"
+          : "恢复已归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
+        request: {
+          path: "TaskResourcePath",
+          query: "none",
+          headers: "TaskVersionHeaders",
+          body: {
+            contentTypes: [
+              {
+                contentType: "application/json",
+                schemaRef: "TaskArchiveRequest",
+              },
+            ],
+          },
+        },
+        auditAction: archive ? "task.archive" : "task.unarchive",
+      };
+    },
+  ),
 ];
 
 /** Same task commands and security policies, addressed through the true MODULE parent. */
@@ -183,13 +212,17 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
   (route) => {
     const write = route.method !== "GET";
     const create = route.operationId === "createTask";
+    const lifecycle =
+      route.operationId === "archiveTask" ||
+      route.operationId === "restoreTask";
     return {
       ...route,
       operationId: route.operationId.replace("Task", "ModuleTask"),
       path: route.path.replace("/features/{featureId}", ""),
-      summary:
-        route.operationId === "transitionTask" ||
-        route.operationId === "getTaskStatusHistory"
+      summary: lifecycle
+        ? "模块真实归属下的任务归档或恢复；要求系统管理员、本项目组长或项目管理员角色。"
+        : route.operationId === "transitionTask" ||
+            route.operationId === "getTaskStatusHistory"
           ? "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。"
           : "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
       request: {
@@ -199,7 +232,7 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
             ? "ModuleTaskResourcePath"
             : "ModuleTaskCollectionPath",
         body:
-          write && route.operationId !== "transitionTask"
+          write && !lifecycle && route.operationId !== "transitionTask"
             ? {
                 contentTypes: [
                   {
