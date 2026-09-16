@@ -42,24 +42,12 @@ export function auditChainKey(chain: AuditChain): string {
   return chain.kind === "system" ? "SYSTEM" : "PROJECT:" + chain.projectId;
 }
 
-export function isAdminReauthRequired(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    error.status === 403 &&
-    error.code === "ADMIN_REAUTH_REQUIRED"
-  );
-}
-
 export function describeAuditError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "登录状态已失效，请重新登录后再读取原始审计。";
     }
-    if (error.status === 403) {
-      return error.code === "ADMIN_REAUTH_REQUIRED"
-        ? "请先完成管理员安全验证（管理员密码 + 当前 TOTP）后再读取原始审计。"
-        : "原始审计仅系统管理员可读取。";
-    }
+    if (error.status === 403) return "原始审计仅系统管理员可读取。";
     if (error.status === 422) {
       return "审计查询参数无效或游标已过期，请调整筛选后重试。";
     }

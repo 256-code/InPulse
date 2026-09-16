@@ -11,7 +11,6 @@ import {
   type InpulseApiClient,
   type FeatureItem,
 } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
 import {
@@ -19,7 +18,6 @@ import {
   CalmEmptyState,
   CalmTabs,
 } from "@features/common/components/Calm";
-import { ProjectContextNav } from "@features/common/components/ProjectContextNav";
 import { useModules } from "@features/modules/module-query";
 import {
   ModuleEditorModal,
@@ -36,14 +34,21 @@ import {
 type Values = {
   name: string;
   currentBehavior: string;
+  acceptanceCriteria: string;
   reason: string;
   tags: string;
 };
-const editableFields = ["name", "currentBehavior", "tags"] as const;
+const editableFields = [
+  "name",
+  "currentBehavior",
+  "acceptanceCriteria",
+  "tags",
+] as const;
 type EditableField = (typeof editableFields)[number];
 const fieldLabels = {
   name: "功能名称",
   currentBehavior: "当前功能说明",
+  acceptanceCriteria: "验收标准",
   tags: "标签",
 };
 type Merge = {
@@ -87,7 +92,6 @@ export function FeaturesPageView({
     action: FeatureChange["action"];
     item?: FeatureItem;
   } | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   // 模块本体的编辑/归档/恢复与模块列表页共用同一个编辑器弹层。
   const [moduleRequest, setModuleRequest] =
@@ -108,7 +112,13 @@ export function FeaturesPageView({
     watch,
     formState: { errors },
   } = useForm<Values>({
-    defaultValues: { name: "", currentBehavior: "", reason: "", tags: "" },
+    defaultValues: {
+      name: "",
+      currentBehavior: "",
+      acceptanceCriteria: "",
+      reason: "",
+      tags: "",
+    },
   });
   const open = (action: FeatureChange["action"], item?: FeatureItem) => {
     editGeneration.current += 1;
@@ -117,6 +127,7 @@ export function FeaturesPageView({
     reset({
       name: item?.name ?? "",
       currentBehavior: item?.currentBehavior ?? "",
+      acceptanceCriteria: item?.acceptanceCriteria ?? "",
       reason: "",
       tags: item?.tags.join("\n") ?? "",
     });
@@ -277,24 +288,6 @@ export function FeaturesPageView({
   return (
     <>
       <div className="features-page">
-        {!featureId && (
-          <ProjectContextNav
-            modules={moduleQuery.query.data?.items ?? []}
-            active={moduleId}
-            onSelectOverview={() =>
-              navigate("/projects/" + projectId + "/overview")
-            }
-            onSelectModule={(nextModuleId) =>
-              navigate(
-                "/projects/" +
-                  projectId +
-                  "/modules/" +
-                  nextModuleId +
-                  "/features",
-              )
-            }
-          />
-        )}
         <div className="feature-breadcrumbs">
           <Button
             className="back-button"
@@ -379,10 +372,11 @@ export function FeaturesPageView({
             </div>
             <details className="calm-disclosure module-information">
               <summary>
-                模块资料 · {currentModule ? currentModule.name : "加载中"} ·{" "}
+                {currentModule?.code ?? "模块资料"} ·{" "}
+                {currentModule ? currentModule.name : "加载中"} ·{" "}
                 {currentModule?.status === "ARCHIVED" ? "已归档" : "正常"}
               </summary>
-              <h4>职责与范围</h4>
+              <h4>模块说明</h4>
               <p>
                 {currentModule?.description || "尚未补充，可通过编辑模块完善。"}
               </p>
@@ -529,7 +523,9 @@ export function FeaturesPageView({
                                 </span>
                               </Button>
                             </td>
-                            <td>{item.code}</td>
+                            <td>
+                              <InpulseIcon name="code" size={14} /> {item.code}
+                            </td>
                             <td>
                               <CalmBadge
                                 tone={
@@ -670,153 +666,118 @@ export function FeaturesPageView({
             description="该功能可能已从当前项目模块移除，或有权限限制。"
           />
         ) : (
-          <div className="feature-workspace">
-            <nav className="feature-switcher" aria-label="模块内功能">
-              <Button
-                className="back-button"
-                href={
-                  "/projects/" +
-                  projectId +
-                  "/modules/" +
-                  moduleId +
-                  "/features"
-                }
-              >
-                <InpulseIcon name="arrowLeft" size={14} />
-                功能目录
-              </Button>
-              {query.data?.items.map((item) => (
-                <Button
-                  key={item.id}
-                  className={
-                    "feature-switcher-item" +
-                    (item.id === featureId ? " active" : "")
-                  }
-                  href={
-                    "/projects/" +
-                    projectId +
-                    "/modules/" +
-                    moduleId +
-                    "/features/" +
-                    item.id
-                  }
-                >
-                  <InpulseIcon name="code" size={15} />
-                  {item.name}
-                </Button>
-              ))}
-            </nav>
-            <div className="feature-document">
-              <header className="feature-modal-header">
-                <div>
-                  <span className="detail-label">
-                    项目 {projectId} / 模块 {moduleId}
-                  </span>
-                  <h2>{activeItem.name}</h2>
-                  <p>
-                    {activeItem.currentBehavior || "尚未补充当前功能说明。"}
-                  </p>
-                  <div className="task-modal-badges">
-                    <span className="task-id">{activeItem.code}</span>
-                    <CalmBadge
-                      tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
-                    >
-                      {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
-                    </CalmBadge>
-                    <CalmBadge tone="gray">
-                      更新 {formatStamp(activeItem.updatedAt)}
-                    </CalmBadge>
-                  </div>
+          // 系统目录树（侧栏）承担模块内功能切换后，详情页不再渲染左栏
+          // feature-switcher，「返回功能列表」入口由上方 feature-breadcrumbs 提供。
+          <div className="feature-document">
+            <header className="feature-modal-header">
+              <div>
+                <span className="detail-label">
+                  项目 {projectId} / 模块 {moduleId}
+                </span>
+                <h2>{activeItem.name}</h2>
+                <p>{activeItem.currentBehavior || "尚未补充当前功能说明。"}</p>
+                <div className="task-modal-badges">
+                  <span className="task-id">{activeItem.code}</span>
+                  <CalmBadge
+                    tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
+                  >
+                    {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                  </CalmBadge>
+                  <CalmBadge tone="gray">
+                    更新 {formatStamp(activeItem.updatedAt)}
+                  </CalmBadge>
                 </div>
-                <div className="catalog-actions">
-                  <ExternalLinksPanel
-                    key={activeItem.id}
-                    targetType="FEATURE"
-                    targetId={activeItem.id}
-                    client={client}
-                  />
-                  {activeItem.status === "ACTIVE" && (
-                    <Button
-                      className="secondary-button"
-                      onClick={() => open("update", activeItem)}
-                    >
-                      编辑功能
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      className="secondary-button"
-                      onClick={() =>
-                        open(
-                          activeItem.status === "ACTIVE"
-                            ? "archive"
-                            : "restore",
-                          activeItem,
-                        )
-                      }
-                    >
-                      {activeItem.status === "ACTIVE" ? "归档功能" : "恢复功能"}
-                    </Button>
-                  )}
-                </div>
-              </header>
-              <div className="feature-modal-content">
-                <div className="feature-overview-grid">
-                  <div className="feature-reading">
-                    <section>
-                      <h3>当前功能说明</h3>
-                      <p>{activeItem.currentBehavior || "暂无功能说明"}</p>
-                    </section>
-                    <section>
-                      <h3>标签</h3>
-                      {activeItem.tags.length ? (
-                        <div className="tag-row">
-                          {activeItem.tags.map((tag) => (
-                            <CalmBadge key={tag}>{tag}</CalmBadge>
-                          ))}
-                        </div>
-                      ) : (
-                        <p>暂无标签，可在编辑功能时补充。</p>
-                      )}
-                    </section>
-                    {activeItem.status === "ARCHIVED" && (
-                      <section>
-                        <h3>归档状态</h3>
-                        <p>
-                          归档历史仍可查看；恢复前不能在此功能新增下级内容。
-                        </p>
-                      </section>
+              </div>
+              <div className="catalog-actions">
+                <ExternalLinksPanel
+                  key={activeItem.id}
+                  targetType="FEATURE"
+                  targetId={activeItem.id}
+                  client={client}
+                />
+                {activeItem.status === "ACTIVE" && (
+                  <Button
+                    className="secondary-button"
+                    onClick={() => open("update", activeItem)}
+                  >
+                    编辑功能
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    className="secondary-button"
+                    onClick={() =>
+                      open(
+                        activeItem.status === "ACTIVE" ? "archive" : "restore",
+                        activeItem,
+                      )
+                    }
+                  >
+                    {activeItem.status === "ACTIVE" ? "归档功能" : "恢复功能"}
+                  </Button>
+                )}
+              </div>
+            </header>
+            <div className="feature-modal-content">
+              <div className="feature-overview-grid">
+                <div className="feature-reading">
+                  <section>
+                    <h3>当前功能说明</h3>
+                    <p>{activeItem.currentBehavior || "暂无功能说明"}</p>
+                  </section>
+                  <section>
+                    <h3>验收标准</h3>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      {activeItem.acceptanceCriteria || "尚未填写验收标准"}
+                    </p>
+                  </section>
+                  <section>
+                    <h3>标签</h3>
+                    {activeItem.tags.length ? (
+                      <div className="tag-row">
+                        {activeItem.tags.map((tag) => (
+                          <CalmBadge key={tag}>{tag}</CalmBadge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>暂无标签，可在编辑功能时补充。</p>
                     )}
-                    <section className="feature-task-section">
-                      <TasksPanel
-                        projectId={projectId}
-                        moduleId={moduleId}
-                        featureId={activeItem.id}
-                        writable={activeItem.status === "ACTIVE"}
-                        client={client}
-                      />
+                  </section>
+                  {activeItem.status === "ARCHIVED" && (
+                    <section>
+                      <h3>归档状态</h3>
+                      <p>归档历史仍可查看；恢复前不能在此功能新增下级内容。</p>
                     </section>
-                  </div>
-                  <aside className="feature-facts">
-                    <h3>功能档案</h3>
-                    <dl>
-                      <dt>编号</dt>
-                      <dd>{activeItem.code}</dd>
-                      <dt>所属项目</dt>
-                      <dd>#{activeItem.projectId}</dd>
-                      <dt>所属模块</dt>
-                      <dd>#{activeItem.moduleId}</dd>
-                      <dt>创建人</dt>
-                      <dd>#{activeItem.createdBy}</dd>
-                      <dt>数据版本</dt>
-                      <dd>v{activeItem.rowVersion}</dd>
-                      <dt>状态</dt>
-                      <dd>
-                        {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
-                      </dd>
-                    </dl>
-                  </aside>
+                  )}
+                  <section className="feature-task-section">
+                    <TasksPanel
+                      projectId={projectId}
+                      moduleId={moduleId}
+                      featureId={activeItem.id}
+                      writable={activeItem.status === "ACTIVE"}
+                      client={client}
+                    />
+                  </section>
                 </div>
+                <aside className="feature-facts">
+                  <h3>功能档案</h3>
+                  <dl>
+                    <dt>编号</dt>
+                    <dd>{activeItem.code}</dd>
+                    <dt>所属项目</dt>
+                    <dd>{projectQuery.data?.name ?? "加载中"}</dd>
+                    <dt>所属模块</dt>
+                    <dd>{currentModule?.name ?? "加载中"}</dd>
+                    <dt>创建人</dt>
+                    <dd>{activeItem.createdByName ?? "名称暂不可用"}</dd>
+                    <dt>数据版本</dt>
+                    <dd>v{activeItem.rowVersion}</dd>
+                    <dt>状态</dt>
+                    <dd>
+                      {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                    </dd>
+                  </dl>
+                </aside>
               </div>
             </div>
           </div>
@@ -863,13 +824,6 @@ export function FeaturesPageView({
                   )}
                 />
                 <p role="alert">{errors.reason?.message}</p>
-                <Button
-                  className="secondary-button"
-                  onClick={() => setReauthOpen(true)}
-                  disabled={mutation.isPending || reloading || conflict}
-                >
-                  管理员安全验证
-                </Button>
               </div>
             ) : (
               <>
@@ -921,6 +875,30 @@ export function FeaturesPageView({
                     )}
                   />
                   <p role="alert">{errors.currentBehavior?.message}</p>
+                </div>
+                <div className="calm-field">
+                  <label htmlFor="feature-acceptanceCriteria">
+                    验收标准（选填）
+                  </label>
+                  <Controller
+                    name="acceptanceCriteria"
+                    control={control}
+                    rules={{
+                      maxLength: {
+                        value: 50000,
+                        message: "验收标准最多 50000 字",
+                      },
+                    }}
+                    render={({ field }) => (
+                      <Input.TextArea
+                        {...field}
+                        id="feature-acceptanceCriteria"
+                        rows={5}
+                        disabled={mutation.isPending || reloading || !!merge}
+                      />
+                    )}
+                  />
+                  <p role="alert">{errors.acceptanceCriteria?.message}</p>
                 </div>
                 <div className="calm-field">
                   <label htmlFor="feature-tags">
@@ -1043,14 +1021,6 @@ export function FeaturesPageView({
           </div>
         </form>
       </Modal>
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          mutation.reset();
-        }}
-      />
       <ModuleEditorModal
         projectId={projectId}
         client={client}

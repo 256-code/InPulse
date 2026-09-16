@@ -26,6 +26,15 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await page.getByTestId("open-created-project-activity").click();
     const projectId = page.url().match(/projects\/(\d+)/)![1];
     await page.goto(`/projects/${projectId}/modules`);
+    await expect(page.getByText("暂无模块", { exact: true })).toBeVisible();
+    await page
+      .locator(".project-detail-actions")
+      .getByRole("button", { name: "新增模块", exact: true })
+      .click();
+    const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
+    await moduleDialog.getByLabel("模块名称").fill(`支付模块-${suffix}`);
+    await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await expect(moduleDialog).toBeHidden();
     await page.getByRole("link", { name: "查看功能" }).first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const feature = page.getByRole("dialog", { name: "新增功能" });
@@ -34,7 +43,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await expect(feature).toBeHidden();
     await page.getByRole("link", { name: "查看详情" }).click();
     const featureUrl = page.url();
-    await page.getByRole("button", { name: "新建任务" }).click();
+    await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const form = page.getByRole("dialog", { name: "新建任务" });
     await form.getByLabel("任务标题").fill(`退款任务-${suffix}`);
     await form.getByLabel("任务说明").fill("最初说明");

@@ -1,5 +1,7 @@
 export const PREAUTH_COOKIE_NAME = "__Host-preauth";
 export const SESSION_COOKIE_NAME = "__Host-session";
+/** ADR-032：SSO state 与发起浏览器的绑定 Cookie，只存一次性 state 明文。 */
+export const SSO_STATE_COOKIE_NAME = "__Host-sso-state";
 export const PREAUTH_MAX_AGE_SECONDS = 9 * 60;
 export const AUTH_CSRF_MAX_AGE_SECONDS = 8 * 60 * 60;
 export const SESSION_IDLE_MAX_AGE_SECONDS = 8 * 60 * 60;

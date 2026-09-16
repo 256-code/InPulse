@@ -1,15 +1,13 @@
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loginAdminViaUi } from "../helpers/auth-context.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
-test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重认证、只读与恢复后读写", async ({
+test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢复后读写", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(300_000);
   // 本地长期 E2E 库中管理员可见的项目列表远大于 CI 空库，每次项目写操作后
@@ -21,7 +19,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
   const page = await context.newPage();
 
   try {
-    await loginAdminViaUi(page, runtime, mfaAdmin);
+    await loginAdminViaUi(page, runtime, admin);
     const created = await createProjectViaUi(page, runtime, "C6", {
       successTimeoutMs: listTimeoutMs,
     });
@@ -34,8 +32,16 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
     const taskTitle = "未完成任务-" + suffix;
     const featureName = "归档功能-" + suffix;
 
-    // 为归档预览准备一个未完成任务：未分类模块下新增功能与任务。
+    // 新项目允许零模块：先显式建模块，再创建功能与任务。
     await page.goto("/projects/" + projectId + "/modules");
+    await page
+      .locator(".project-detail-actions")
+      .getByRole("button", { name: "新增模块", exact: true })
+      .click();
+    const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
+    await moduleDialog.getByLabel("模块名称").fill("归档测试模块");
+    await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await expect(moduleDialog).toBeHidden();
     await page.getByRole("link", { name: "查看功能" }).first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const featureDialog = page.getByRole("dialog", { name: "新增功能" });
@@ -49,7 +55,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
       .getByRole("link", { name: "查看详情" })
       .click();
     const featureUrl = page.url();
-    await page.getByRole("button", { name: "新建任务" }).click();
+    await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
     await taskDialog
@@ -71,23 +77,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
       timeout: listTimeoutMs,
     });
 
-    // 归档属于高风险操作：先在账户菜单完成 5 分钟内密码 + TOTP 重认证，
-    // 归档弹窗才能读取未完成任务预览（未重认证时预览降级为「未能读取」告警）。
-    await page.getByRole("button", { name: "账户菜单" }).click();
-    await page.getByRole("button", { name: "管理员安全验证" }).click();
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible({ timeout: listTimeoutMs });
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth.getByText("重认证成功")).toBeVisible({
-      timeout: listTimeoutMs,
-    });
-    await reauth.getByRole("button", { name: /完\s*成/ }).click();
-    await expect(reauth).toBeHidden({ timeout: listTimeoutMs });
-
-    // 归档：预览未完成任务 -> 填写原因 -> 重认证窗口内直接确认成功。
+    // 归档：预览未完成任务 -> 填写原因 -> 确认成功。
     await page.getByTestId("archive-project-" + projectId).click();
     const archiveDialog = page.getByRole("dialog", { name: /归档项目/ });
     await expect(
@@ -128,7 +118,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、5 分钟重�
       timeout: listTimeoutMs,
     });
 
-    // 恢复：仍处于同一 5 分钟重认证窗口内，不需要第二次 TOTP。
+    // 恢复：普通管理员操作，无需额外验证步骤。
     await page.getByTestId("restore-project-" + projectId).click();
     const restoreDialog = page.getByRole("dialog", { name: /恢复项目/ });
     await restoreDialog

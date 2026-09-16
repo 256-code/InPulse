@@ -19,6 +19,7 @@ export * from "./contracts/notification.zod.js";
 export * from "./contracts/projects.zod.js";
 export * from "./contracts/users.zod.js";
 export * from "./contracts/auth.zod.js";
+export * from "./contracts/sso.zod.js";
 
 export * from "./contracts/features.zod.js";
 export * from "./contracts/tasks.zod.js";
@@ -32,3 +33,5 @@ export * from "./contracts/task-groups.zod.js";
 export * from "./contracts/task-completion.zod.js";
 export * from "./contracts/aggregate-read.zod.js";
 export * from "./contracts/leftover-task.zod.js";
+
+export * from "./contracts/task-create.zod.js";

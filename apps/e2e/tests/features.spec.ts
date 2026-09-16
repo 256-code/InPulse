@@ -1,9 +1,7 @@
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
 test("功能档案：模块入口、创建详情、双页面三方合并、刷新持久化", async ({
   browser,
@@ -92,13 +90,9 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
   }
 });
 
-test("功能管理员通过真实安全验证归档并恢复，刷新保留状态", async ({
-  browser,
-  mfaAdmin,
-}) => {
+test("管理员归档并恢复功能，刷新保留状态", async ({ browser, admin }) => {
   test.setTimeout(90_000);
   const runtime = await loadRuntime();
-  await resetAdminTotpReplayStep(mfaAdmin.userId);
   const { context: memberContext, page: memberPage } =
     await createAuthenticatedContext(browser, runtime);
   const context = await browser.newContext({ baseURL: runtime.webBaseUrl });
@@ -119,15 +113,12 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
       .click();
     const detailUrl = memberPage.url();
     await page.goto("/login");
-    await page.getByLabel("登录名").fill(mfaAdmin.account.loginName);
-    await page.getByLabel("密码").fill(mfaAdmin.account.password);
+    await page.getByLabel("登录名").fill(admin.account.loginName);
+    await page.getByLabel("密码").fill(admin.account.password);
     await page
       .locator("form")
       .getByRole("button", { name: /登\s*录/ })
       .click();
-    await expect(page.getByText("需要完成 TOTP 验证")).toBeVisible();
-    await page.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await page.getByRole("button", { name: "验证并进入系统" }).click();
     await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
     await page.goto(detailUrl);
     // 侧栏「系统目录」树把功能名渲染成按钮，动作按钮查询必须限定在主内容区。
@@ -135,14 +126,6 @@ test("功能管理员通过真实安全验证归档并恢复，刷新保留状�
     await detail.getByRole("button", { name: "归档功能" }).click();
     const archive = page.getByRole("dialog", { name: "归档功能" });
     await archive.getByLabel("操作原因").fill("功能下线，保留历史");
-    await archive.getByRole("button", { name: "管理员安全验证" }).click();
-    const security = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(security).toBeVisible({ timeout: 5000 });
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await security.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await security.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await security.getByRole("button", { name: "验证身份" }).click();
-    await expect(security).toBeHidden();
     await archive.getByRole("button", { name: /确\s*认/ }).click();
     await expect(archive).toBeHidden();
     await page.reload();

@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { ApiError } from "@generated/api";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import type { MyTaskFilters, MyTasksAdapter } from "./my-tasks-types";
@@ -55,9 +55,23 @@ export function useMyTasksQuery({
   viewerId,
   adapter = MY_TASKS_MOCK_ADAPTER,
 }: UseMyTasksQueryOptions) {
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["my-tasks", adapter.source, viewerId, filters],
-    queryFn: () => adapter.fetchMyTasks({ filters, viewerId }),
+    queryFn: ({ pageParam }) =>
+      adapter.fetchMyTasks({ filters, viewerId, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+    enabled: filters.scope !== "project" || filters.projectId !== null,
     retry: false,
   });
+  const first = query.data?.pages[0];
+  return {
+    ...query,
+    data: first
+      ? {
+          ...first,
+          items: query.data!.pages.flatMap((page) => [...page.items]),
+        }
+      : undefined,
+  };
 }

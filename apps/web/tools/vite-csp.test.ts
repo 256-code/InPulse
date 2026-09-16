@@ -12,6 +12,7 @@ import {
   createPreviewCspMiddleware,
   generateCspNonce,
   injectCspNonce,
+  isApiPath,
   resolveWebCspMode,
   rewriteHtmlBody,
 } from "./vite-csp";
@@ -170,6 +171,16 @@ describe("HTML security headers and body rewrite", () => {
   });
 });
 
+describe("isApiPath", () => {
+  it("separates the API namespace from SPA routes", () => {
+    expect(isApiPath("/api")).toBe(true);
+    expect(isApiPath("/api/v1/auth/sso/start")).toBe(true);
+    expect(isApiPath("/apiary")).toBe(false);
+    expect(isApiPath("/login")).toBe(false);
+    expect(isApiPath("/projects/1/activity")).toBe(false);
+  });
+});
+
 describe("createPreviewCspMiddleware", () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "inpulse-csp-"));
   const indexHtmlPath = path.join(tempDir, "index.html");
@@ -245,6 +256,23 @@ describe("createPreviewCspMiddleware", () => {
     );
     expect(next).toHaveBeenCalledTimes(1);
     expect(response.end).not.toHaveBeenCalled();
+  });
+
+  it("passes browser navigations to the API namespace through to the proxy", () => {
+    const { response } = createPreviewResponse();
+    const next = vi.fn();
+    handler(
+      {
+        method: "GET",
+        url: "/api/v1/auth/sso/start?returnTo=%2Fprojects",
+        headers: { accept: "text/html,application/xhtml+xml" },
+      } as never,
+      response as never,
+      next,
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(response.end).not.toHaveBeenCalled();
+    expect(response.setHeader).not.toHaveBeenCalled();
   });
 
   it("passes non-GET requests through", () => {

@@ -135,3 +135,63 @@ it("inline variant renders the github list in place, without a modal", async () 
   ).toBeEnabled();
   expect(screen.getByRole("button", { name: "解除 a/b#7" })).toBeEnabled();
 });
+
+it("explains an ordinary duplicate link without root repository wording", async () => {
+  mount({
+    listExternalLinks: vi.fn().mockResolvedValue(empty),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+    addExternalLink: vi.fn().mockRejectedValue(
+      new ApiError(409, {
+        code: "EXTERNAL_LINK_ALREADY_ASSOCIATED",
+        message: "duplicate",
+        details: {},
+        requestId: "r",
+      }),
+    ),
+  } as unknown as InpulseApiClient);
+  await screen.findByLabelText("GitHub URL");
+  fireEvent.change(screen.getByLabelText("GitHub URL"), {
+    target: { value: "https://github.com/a/b/pull/7" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "确认添加" }));
+  await waitFor(() =>
+    expect(screen.getByText("该链接已关联，请勿重复添加。")).toBeVisible(),
+  );
+  expect(screen.getByRole("button", { name: "确认添加" })).toBeDisabled();
+});
+
+it("renders the add form above the link list in the modal", async () => {
+  mount({
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 1,
+      rowVersion: 2,
+      writable: true,
+      items: [
+        {
+          id: 9,
+          projectId: 1,
+          normalizedUrl: "https://github.com/a/b/pull/7",
+          kind: "PULL_REQUEST",
+          label: "a/b#7",
+          repository: "a/b",
+          externalNumber: "7",
+          externalSha: null,
+          releaseTag: null,
+          isRootRepository: false,
+        },
+      ],
+    }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+    addExternalLink: vi.fn().mockResolvedValue({ rowVersion: 3 }),
+  } as unknown as InpulseApiClient);
+  const addBox = await screen
+    .findByLabelText("GitHub URL")
+    .then((input) => input.closest(".external-links-add"));
+  const firstItem = await screen.findByRole("link", { name: /a\/b#7/ });
+  expect(addBox).not.toBeNull();
+  // 添加表单必须排在链接列表之前（DOM 顺序）。
+  expect(
+    addBox!.compareDocumentPosition(firstItem) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});

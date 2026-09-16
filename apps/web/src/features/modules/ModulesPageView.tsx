@@ -56,18 +56,11 @@ export function ModulesPageView({
           projectLoading={projectQuery.isPending}
           onRetryProject={() => void projectQuery.refetch()}
           onBackToProjects={() => navigate("/projects")}
-          // 设计师稿 catalog.tsx L214：项目页的「项目概览」是当前页签（自指），
-          // 模块网格与概览同页，因此不再跳到不含模块的 /overview。
-          onOpenOverview={() => navigate("/projects/" + projectId + "/modules")}
-          onOpenModule={onOpenModule}
           onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
           onOpenRecords={() =>
             navigate("/records?view=published&projectId=" + projectId)
           }
           onOpenIssues={() => navigate("/issues")}
-          modules={query.data?.items ?? []}
-          // 设计师稿 catalog.tsx L214：进入项目页后「项目概览」恒为 active。
-          navActive="overview"
           adapter={overviewAdapter}
           extraActions={
             // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」
@@ -102,7 +95,7 @@ export function ModulesPageView({
             <CalmEmptyState
               icon="boxes"
               title="暂无模块"
-              description="项目创建时会自动生成未分类模块，可继续拆分为具体业务模块。"
+              description="创建一个业务模块，也可以在新建任务时同时创建模块。"
             >
               <Button className="primary-button" onClick={() => open("create")}>
                 <InpulseIcon name="plus" size={15} />
@@ -147,7 +140,7 @@ export function ModulesPageView({
                         <span className="feature-symbol">
                           <InpulseIcon name="boxes" size={21} />
                         </span>
-                        <span className="task-id">模块 #{item.id}</span>
+                        <span className="task-id">{item.code}</span>
                       </div>
                       <h2>{item.name}</h2>
                       <div className="task-card-badges">

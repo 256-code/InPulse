@@ -103,8 +103,8 @@ describe("SessionAuthService", () => {
     expect(unitOfWork.runs).toBe(0);
   });
 
-  test("MFA 受限 Session 不解析为业务身份", async () => {
-    const { service } = setup(validSession("MFA_CHALLENGE"));
+  test("历史 MFA 受限 Session 不解析为业务身份（兼容旧数据）", async () => {
+    const { service } = setup(validSession("MFA_CHALLENGE" as never));
     const token = generateOpaqueToken();
 
     await expect(
@@ -150,8 +150,8 @@ describe("SessionAuthService", () => {
     expect(sessionRepository.requestedHashCounts).toEqual([]);
   });
 
-  test("resolveActorInTransaction 拒绝受限 Session", async () => {
-    const { service } = setup(validSession("MFA_CHALLENGE"));
+  test("resolveActorInTransaction 拒绝历史受限 Session", async () => {
+    const { service } = setup(validSession("MFA_CHALLENGE" as never));
     const token = generateOpaqueToken();
 
     await expect(

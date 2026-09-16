@@ -86,7 +86,7 @@ describe("project member query", () => {
     );
   });
 
-  it("keeps the same idempotency key when retrying after admin reauth", async () => {
+  it("keeps the same idempotency key when retrying after a failed attempt", async () => {
     const issueCsrfToken = vi
       .fn()
       .mockResolvedValueOnce({ csrfToken: "csrf-1" })
@@ -94,8 +94,8 @@ describe("project member query", () => {
     const addProjectMember = vi
       .fn()
       .mockRejectedValueOnce(
-        new ApiError(403, {
-          code: "ADMIN_REAUTH_REQUIRED",
+        new ApiError(409, {
+          code: "PROJECT_MEMBER_ALREADY_ACTIVE",
           message: "internal",
           details: {},
           requestId: "r1",
@@ -190,9 +190,9 @@ describe("project member query", () => {
   });
 
   it("maps member errors without leaking internal messages", () => {
-    const reauth = new ApiError(403, {
-      code: "ADMIN_REAUTH_REQUIRED",
-      message: "internal-reauth",
+    const forbidden = new ApiError(403, {
+      code: "ADMIN_REQUIRED",
+      message: "internal-forbidden",
       details: {},
       requestId: "r",
     });
@@ -202,7 +202,9 @@ describe("project member query", () => {
       details: {},
       requestId: "r",
     });
-    expect(projectMemberErrorMessage(reauth)).toContain("管理员安全验证");
+    expect(projectMemberErrorMessage(forbidden)).toBe(
+      "只有系统管理员可以管理项目成员。",
+    );
     expect(projectMemberErrorMessage(notFound)).toBe(
       "项目或成员不存在，或你已无权访问。",
     );

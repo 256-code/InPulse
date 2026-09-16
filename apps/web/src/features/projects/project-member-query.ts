@@ -8,26 +8,11 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
-export function isAdminReauthRequired(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    "code" in error &&
-    (error as { readonly status: unknown }).status === 403 &&
-    (error as { readonly code: unknown }).code === "ADMIN_REAUTH_REQUIRED"
-  );
-}
-
 export function projectMemberErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401)
       return "登录状态已失效，请重新登录后再查看项目成员。";
-    if (error.status === 403) {
-      return error.code === "ADMIN_REAUTH_REQUIRED"
-        ? "请先完成管理员安全验证，再继续项目成员管理。"
-        : "只有系统管理员可以管理项目成员。";
-    }
+    if (error.status === 403) return "只有系统管理员可以管理项目成员。";
     if (error.status === 404) return "项目或成员不存在，或你已无权访问。";
     if (error.status === 409) {
       if (error.code === "PROJECT_MEMBER_ALREADY_ACTIVE")

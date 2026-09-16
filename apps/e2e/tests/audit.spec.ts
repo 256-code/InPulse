@@ -1,14 +1,12 @@
 import { expect } from "@playwright/test";
 
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
 test("普通成员不能访问审计页", async ({ browser }) => {
   test.setTimeout(60_000);
@@ -26,9 +24,9 @@ test("普通成员不能访问审计页", async ({ browser }) => {
   }
 });
 
-test("管理员重认证后读取原始审计、按动作过滤、查看快照并切换项目链", async ({
+test("管理员读取原始审计、按动作过滤、查看快照并切换项目链", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(240_000);
   const runtime = await loadRuntime();
@@ -42,30 +40,11 @@ test("管理员重认证后读取原始审计、按动作过滤、查看快照�
   const context = await browser.newContext({ baseURL: runtime.webBaseUrl });
   const page = await context.newPage();
   try {
-    await loginAdminViaUi(page, runtime, mfaAdmin);
+    await loginAdminViaUi(page, runtime, admin);
 
-    // 登录只完成 MFA 挑战，尚无 5 分钟内双因子重认证：首次读取被拒并自动弹出安全验证。
+    // ADR-031 之后高风险只读只要求完整管理员 Session，直接进入即可读取。
     await page.goto("/audit");
     await expect(page.getByRole("heading", { name: "动态审计" })).toBeVisible();
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible();
-    await expect(
-      page.getByText(
-        "请先完成管理员安全验证（管理员密码 + 当前 TOTP）后再读取原始审计。",
-        { exact: true },
-      ),
-    ).toBeVisible();
-
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth).toBeHidden();
-    await expect(
-      page.getByText("管理员安全验证已完成，正在重新读取原始审计。", {
-        exact: true,
-      }),
-    ).toBeVisible();
 
     // 首次读取返回（有行或空态）：成功后 SYSTEM 链必然已追加 AUDIT_LOG_READ。
     const list = page.locator(".audit-list");
@@ -89,7 +68,7 @@ test("管理员重认证后读取原始审计、按动作过滤、查看快照�
       .first();
     await expect(readRow).toBeVisible();
     await expect(readRow).toContainText("链 SYSTEM");
-    await expect(readRow).toContainText("用户 #" + mfaAdmin.userId);
+    await expect(readRow).toContainText("用户 #" + admin.userId);
     await expect(readRow.getByText("用户操作", { exact: true })).toBeVisible();
 
     // 行内原始快照：链、动作与事件载荷（returnedCount）可见。

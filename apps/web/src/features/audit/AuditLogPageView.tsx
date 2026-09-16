@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import type { AuditLogItem, InpulseApiClient } from "@generated/api";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import {
   CalmEmptyState,
   CalmSectionTitle,
@@ -12,7 +11,6 @@ import {
   AUDIT_PAGE_LIMIT,
   EMPTY_AUDIT_FILTERS,
   describeAuditError,
-  isAdminReauthRequired,
   useAuditLogsInfiniteQuery,
   validateAuditFilters,
   type AuditChain,
@@ -77,8 +75,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AuditLogItem | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthReady, setReauthReady] = useState(false);
 
   const projectsQuery = useProjects(client ? { client } : {});
   const auditQuery = useAuditLogsInfiniteQuery({
@@ -92,12 +88,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     [auditQuery.data],
   );
   const projects = projectsQuery.data?.items ?? [];
-
-  useEffect(() => {
-    if (auditQuery.isError && isAdminReauthRequired(auditQuery.error)) {
-      setReauthOpen(true);
-    }
-  }, [auditQuery.error, auditQuery.isError]);
 
   const updateDraft = (patch: Partial<AuditFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
@@ -147,23 +137,13 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         title="原始审计读取失败"
         description={describeAuditError(auditQuery.error)}
       >
-        {isAdminReauthRequired(auditQuery.error) ? (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setReauthOpen(true)}
-          >
-            完成管理员安全验证
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void auditQuery.refetch()}
-          >
-            重试
-          </button>
-        )}
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => void auditQuery.refetch()}
+        >
+          重试
+        </button>
       </CalmEmptyState>
     );
   } else if (items.length === 0) {
@@ -264,8 +244,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           <span className="eyebrow">动态与审计 · F-08</span>
           <h1>动态审计</h1>
           <p>
-            原始审计链仅系统管理员可读，需要 5 分钟内的管理员密码 + TOTP
-            重认证；每次读取都会向 SYSTEM 链写入 AUDIT_LOG_READ 留痕。
+            原始审计链仅系统管理员可读；每次读取都会向 SYSTEM 链写入
+            AUDIT_LOG_READ 留痕。
           </p>
         </div>
         <div className="catalog-actions activity-header-actions">
@@ -344,13 +324,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         to)，按浏览器本地时区换算为带时区时间；
         游标由服务端签名，不能跨查询复用。
       </p>
-
-      {reauthReady ? (
-        <div className="permission-note note-success" role="status">
-          <InpulseIcon name="check" size={16} />
-          <span>管理员安全验证已完成，正在重新读取原始审计。</span>
-        </div>
-      ) : null}
 
       {filterError ? (
         <div className="permission-note note-warning" role="alert">
@@ -449,16 +422,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           </div>
         ) : null}
       </Modal>
-
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
-        onSuccess={() => {
-          setReauthOpen(false);
-          setReauthReady(true);
-          void auditQuery.refetch();
-        }}
-      />
     </div>
   );
 };

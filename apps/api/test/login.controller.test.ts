@@ -66,7 +66,7 @@ describe("LoginController", () => {
     const result = await controller.login(
       requestFixture({}),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 
@@ -87,14 +87,13 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(result).toMatchObject({ authState: "AUTHENTICATED" });
     expect(service.calls).toBe(1);
-    expect(service.lastInput?.challengeMode).toBe("totp");
   });
 
   test("登录成功返回 CSRF Token、认证状态并设置 Cookie", async () => {
@@ -110,7 +109,7 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 
@@ -144,7 +143,7 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 
@@ -174,7 +173,7 @@ describe("LoginController", () => {
         "x-csrf-token": "A".repeat(43),
       }),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 
@@ -203,7 +202,7 @@ describe("LoginController", () => {
         { ip: "::ffff:127.0.0.1" },
       ),
       response as never,
-      { loginName: "alice", password: "secret", challengeMode: "totp" },
+      { loginName: "alice", password: "secret" },
       { "x-csrf-token": "A".repeat(43) },
     );
 

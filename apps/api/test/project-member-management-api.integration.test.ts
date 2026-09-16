@@ -88,7 +88,7 @@ interface Fixture {
   readonly featureId: number;
 }
 
-async function actor(admin = false, reauth = true): Promise<Actor> {
+async function actor(admin = false): Promise<Actor> {
   const userId = await createUser(client.sql, { admin });
   const cookie = randomBytes(32).toString("base64url");
   const csrf = randomBytes(32).toString("base64url");
@@ -99,12 +99,8 @@ async function actor(admin = false, reauth = true): Promise<Actor> {
       token_hash_key_version,
       auth_version_at_issue,
       auth_state,
-      recovery_rotation_generation,
-      recovery_rotation_consumed_generation,
       idle_expires_at,
-      absolute_expires_at,
-      reauthenticated_at,
-      mfa_verified_at
+      absolute_expires_at
     )
     VALUES (
       ${userId},
@@ -112,12 +108,8 @@ async function actor(admin = false, reauth = true): Promise<Actor> {
       1,
       1,
       'AUTHENTICATED',
-      0,
-      0,
       now() + interval '1 hour',
-      now() + interval '1 day',
-      ${admin && reauth ? client.sql`now()` : client.sql`NULL`},
-      ${admin && reauth ? client.sql`now()` : client.sql`NULL`}
+      now() + interval '1 day'
     )
     RETURNING id
   `;
@@ -365,10 +357,10 @@ describe("F-05 project member management API", () => {
     });
   });
 
-  it("rejects anonymous, non-admin, stale reauth and missing project reads", async () => {
+  it("rejects anonymous, non-admin and missing project reads", async () => {
     const value = await fixture();
     const normal = await actor(false);
-    const stale = await actor(true, false);
+    const secondAdmin = await actor(true);
     const path = `/projects/${value.project.projectId}/members`;
 
     await expectError(
@@ -381,11 +373,7 @@ describe("F-05 project member management API", () => {
       403,
       "ADMIN_REQUIRED",
     );
-    await expectError(
-      await request("GET", path, stale),
-      403,
-      "ADMIN_REAUTH_REQUIRED",
-    );
+    expect((await request("GET", path, secondAdmin)).status).toBe(200);
     await expectError(
       await request("GET", "/projects/999999/members", value.admin),
       404,

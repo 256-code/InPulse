@@ -1,3 +1,5 @@
+import { GlobalTaskCreateModal } from "./GlobalTaskCreateModal";
+import { taskDetailPath } from "./task-links";
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
 import { useNavigate } from "react-router-dom";
@@ -5,6 +7,7 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -90,6 +93,8 @@ function relationBadge(mark: TaskMark | undefined): {
 }
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
+const formatDay = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString("zh-CN") : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
 const recordDraftsHref = (item: TaskViewItem) =>
@@ -198,6 +203,7 @@ export function TasksPanel({
     formState: { errors },
   } = useForm<TaskDraft>({ defaultValues: empty });
   const navigate = useNavigate();
+  const [customCreateOpen, setCustomCreateOpen] = useState(false);
   const current = query.data?.items.find((item) => item.id === selectedId);
   // 页面级一次批量（R-5）：任务集合变化时整批重读，不按任务逐个请求。
   const marks = useTaskMarks(
@@ -211,6 +217,30 @@ export function TasksPanel({
   const currentGroupId =
     currentMark?.groupRole === "SOURCE" ? currentMark.groupId : null;
   const currentRecordCount = currentMark?.publishedRecordCount ?? 0;
+  // 迭代记录标签页按设计师稿直接列出本任务的已发布记录与草稿：两者都是既有
+  // 只读契约（listChangeRecords / getTaskRecordDrafts），客户端按 taskId 过滤，不新增路由。
+  const detailTaskId = current?.id ?? 0;
+  const detailModuleId = current?.moduleId ?? 0;
+  const taskRecords = useQuery({
+    queryKey: ["task-published-records", projectId, detailTaskId],
+    queryFn: ({ signal }) =>
+      api.listChangeRecords(projectId, { limit: 100 }, { signal }),
+    enabled: detailTaskId > 0,
+    retry: false,
+  });
+  const taskDrafts = useQuery({
+    queryKey: ["task-record-drafts", projectId, detailModuleId, detailTaskId],
+    queryFn: ({ signal }) =>
+      api.getTaskRecordDrafts(projectId, detailModuleId, detailTaskId, {
+        signal,
+      }),
+    enabled: detailTaskId > 0,
+    retry: false,
+  });
+  const taskPublished = (taskRecords.data?.items ?? []).filter(
+    (record) => record.taskId === detailTaskId,
+  );
+  const taskDraftItems = taskDrafts.data?.items ?? [];
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -230,6 +260,18 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
+  // 仍解析不到（已移出项目或停用）时回退中性编号，不冒充负责人语义。
+  const projectMembers = useQuery({
+    queryKey: ["project-active-members", projectId],
+    queryFn: ({ signal }) =>
+      api.listActiveProjectMembers(projectId, { signal }),
+    retry: false,
+  });
+  const personName = (id: number) =>
+    projectMembers.data?.items.find((m) => m.id === id)?.name ??
+    members.data?.items.find((m) => m.id === id)?.name ??
+    "用户 #" + id;
   const openDetail = (id: number) => {
     setSelectedId(id);
     setTab("info");
@@ -356,6 +398,19 @@ export function TasksPanel({
       aria-label={featureId === null ? "模块任务" : "功能任务"}
       className="tasks-panel"
     >
+      {customCreateOpen && (
+        <GlobalTaskCreateModal
+          open
+          onClose={() => setCustomCreateOpen(false)}
+          client={client}
+          preset={{
+            projectId,
+            moduleId,
+            ...(featureId !== null ? { featureId } : {}),
+          }}
+          onCreatedLocation={(task) => navigate(taskDetailPath(task))}
+        />
+      )}
       <div className="calm-section-title">
         <div>
           <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
@@ -366,6 +421,12 @@ export function TasksPanel({
           </small>
         </div>
         <div className="feature-view-controls">
+          <Button
+            disabled={!writable}
+            onClick={() => setCustomCreateOpen(true)}
+          >
+            自定义归属新建任务
+          </Button>
           <CalmSegmented
             label="展示方式"
             value={view}
@@ -815,7 +876,28 @@ export function TasksPanel({
                           记录一次迭代
                         </a>
                       </div>
-                      {currentRecordCount === 0 && (
+                      {taskRecords.isPending || taskDrafts.isPending ? (
+                        <div className="calm-state">
+                          <Spin />
+                          <span>正在加载迭代记录</span>
+                        </div>
+                      ) : taskRecords.isError || taskDrafts.isError ? (
+                        <Alert
+                          type="error"
+                          title="迭代记录加载失败，请重试。"
+                          action={
+                            <Button
+                              onClick={() => {
+                                void taskRecords.refetch();
+                                void taskDrafts.refetch();
+                              }}
+                            >
+                              重试
+                            </Button>
+                          }
+                        />
+                      ) : taskPublished.length === 0 &&
+                        taskDraftItems.length === 0 ? (
                         <div className="calm-empty">
                           <InpulseIcon name="gitBranch" size={25} />
                           <strong>该任务还没有迭代记录</strong>
@@ -823,6 +905,58 @@ export function TasksPanel({
                             完成任务时可以直接记录，也可以先在迭代记录草稿中保存内容。
                           </p>
                         </div>
+                      ) : (
+                        <ul className="task-record-list">
+                          {taskPublished.map((record) => (
+                            <li key={"published-" + record.id}>
+                              <a
+                                href={
+                                  "/records?projectId=" +
+                                  projectId +
+                                  "&publishedId=" +
+                                  record.id
+                                }
+                              >
+                                <strong>{record.title}</strong>
+                                <small>
+                                  {record.code +
+                                    " · " +
+                                    formatDay(record.publishedAt) +
+                                    " · " +
+                                    (record.handlerName ??
+                                      personName(record.handlerId))}
+                                </small>
+                              </a>
+                              <CalmBadge tone="green">已发布</CalmBadge>
+                            </li>
+                          ))}
+                          {taskDraftItems.map((draft) => (
+                            <li key={"draft-" + draft.id}>
+                              <a
+                                href={
+                                  "/records?projectId=" +
+                                  projectId +
+                                  "&moduleId=" +
+                                  draft.moduleId +
+                                  "&taskId=" +
+                                  detailTaskId +
+                                  "&recordId=" +
+                                  draft.id
+                                }
+                              >
+                                <strong>{draft.title || "未命名草稿"}</strong>
+                                <small>
+                                  {"草稿 · 更新于 " +
+                                    formatDay(draft.updatedAt) +
+                                    " · 处理人 " +
+                                    (draft.handlerName ??
+                                      personName(draft.handlerId))}
+                                </small>
+                              </a>
+                              <CalmBadge tone="amber">草稿</CalmBadge>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </>
                   )}
@@ -878,7 +1012,7 @@ export function TasksPanel({
                     <dt>负责人</dt>
                     <dd>{memberName(current.assigneeId)}</dd>
                     <dt>创建人</dt>
-                    <dd>#{current.creatorId}</dd>
+                    <dd>{personName(current.creatorId)}</dd>
                     <dt>截止时间</dt>
                     <dd>{formatDate(current.dueAt)}</dd>
                     <dt>创建时间</dt>
@@ -913,6 +1047,7 @@ export function TasksPanel({
                 writable={taskWritable}
                 action={statusAction}
                 onClose={() => setStatusAction(null)}
+                nameOf={personName}
               />
               {mergeInto && (
                 <MergeIntoTargetModal

@@ -11,14 +11,12 @@ import { PostgresAuthRateLimitRepository } from "../src/auth/auth-rate-limit.rep
 import { LoginRateLimitService } from "../src/auth/auth-rate-limit.service.js";
 import { LoginService } from "../src/auth/login.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
-import { PostgresMfaRecoveryCodeRepository } from "../src/auth/mfa-recovery-code.repository.js";
 import { PostgresPreauthSessionRepository } from "../src/auth/preauth-session.repository.js";
 import { PasswordService } from "../src/auth/password.service.js";
 import { PostgresSessionCsrfTokenRepository } from "../src/auth/session-csrf-token.repository.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { PostgresUserCredentialRepository } from "../src/auth/user-credential.repository.js";
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
-import { PostgresUserTotpFactorRepository } from "../src/auth/user-totp-factor.repository.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { testUrls } from "./database.helpers.js";
 
@@ -105,8 +103,6 @@ beforeAll(async () => {
     unitOfWork,
     new PostgresPreauthSessionRepository(),
     new PostgresUserCredentialRepository(),
-    new PostgresUserTotpFactorRepository(),
-    new PostgresMfaRecoveryCodeRepository(),
     new PostgresUserSessionRepository(),
     new PostgresSessionCsrfTokenRepository(),
     tokenService,
@@ -205,7 +201,7 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
     expect(sessions[0]?.count).toBe(0);
   });
 
-  test("管理员按 ACTIVE MFA 因子进入 MFA_CHALLENGE", async () => {
+  test("管理员带历史 TOTP 因子时直接获得完整认证 Session（ADR-031）", async () => {
     const user = await createLoginUser({ admin: true });
     await client!.sql`
       INSERT INTO app.user_totp_factors (
@@ -237,63 +233,14 @@ describe("登录纵切片（真实 PostgreSQL）", () => {
       cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
       csrfToken: preauth.csrfToken,
     });
-    expect(result.authState).toBe("MFA_CHALLENGE");
-  });
+    expect(result.authState).toBe("AUTHENTICATED");
 
-  test("管理员选择恢复码挑战且存在未用恢复码时进入 RECOVERY_CHALLENGE", async () => {
-    const user = await createLoginUser({ admin: true });
-    await client!.sql`
-      INSERT INTO app.user_totp_factors (
-        user_id,
-        status,
-        enrollment_generation,
-        key_version,
-        nonce,
-        ciphertext,
-        auth_tag,
-        enrolled_at
-      )
-      VALUES (
-        ${user.id},
-        'ACTIVE',
-        1,
-        1,
-        ${randomBytes(12)},
-        ${randomBytes(48)},
-        ${randomBytes(16)},
-        now()
-      )
-    `;
-    const codeHash = await hash("recovery-login-fixture", {
-      memoryCost: 19 * 1024,
-      timeCost: 2,
-      parallelism: 1,
-      outputLen: 32,
-      algorithm: 2,
-    });
-    await client!.sql`
-      INSERT INTO app.mfa_recovery_codes (
-        user_id,
-        batch_version,
-        code_hash
-      )
-      VALUES (
-        ${user.id},
-        1,
-        ${codeHash}
-      )
-    `;
-
-    const preauth = await issuePreauth();
-    const result = await loginService.login({
-      loginName: user.loginName,
-      password: LOGIN_FIXTURE_PASSWORD,
-      clientIp: "198.51.100.13",
-      cookieHeader: `__Host-preauth=${preauth.sessionToken}`,
-      csrfToken: preauth.csrfToken,
-      challengeMode: "recovery",
-    });
-
-    expect(result.authState).toBe("RECOVERY_CHALLENGE");
+    const sessions = (await client!.sql`
+      SELECT auth_state AS "authState"
+        FROM app.user_sessions
+       WHERE user_id = ${user.id}
+    `) as unknown as readonly { authState: string }[];
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.authState).toBe("AUTHENTICATED");
   });
 });

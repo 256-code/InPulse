@@ -136,7 +136,7 @@ export type AddProjectMemberRequest = z.infer<
   typeof addProjectMemberRequestSchema
 >;
 
-/** 写接口安全头；高风险管理员操作由服务端在同事务内再次校验重认证。 */
+/** 写接口安全头；高风险管理员操作由服务端在同事务内再次校验管理员身份与 CSRF。 */
 export const projectMemberMutationHeadersSchema = z
   .object({
     "x-csrf-token": z.string().min(43).max(43),
@@ -315,7 +315,6 @@ export const createProjectResponseSchema = z
       })
       .strict(),
     members: z.array(projectMemberItemSchema),
-    unclassifiedModuleId: z.number().int().positive(),
   })
   .strict()
   .meta({ id: "CreateProjectResponse" });

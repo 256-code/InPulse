@@ -919,6 +919,7 @@ describe("ProjectOverviewQueryService.getOverview", () => {
 });
 function myTasksSetup(
   options: {
+    readonly isSystemAdmin?: boolean;
     readonly scopeProjectIds?: readonly number[];
     readonly page?: MyTaskListPage;
     readonly stats?: MyTaskStatsResult;
@@ -954,7 +955,7 @@ function myTasksSetup(
   const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
     actorUserId: 5,
     projectIds: options.scopeProjectIds ?? [7],
-    isSystemAdmin: false,
+    isSystemAdmin: options.isSystemAdmin ?? false,
   });
   const listPage = vi
     .fn()
@@ -1041,6 +1042,46 @@ function myTasksSetup(
 }
 
 describe("MyTasksQueryService.list", () => {
+  it("项目范围去除个人过滤，仍在授权项目和逾期条件内分页", async () => {
+    const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
+    await setup.service.list({
+      actorUserId: 5,
+      scope: "project",
+      projectId: 9,
+      overdue: true,
+    });
+    const input = setup.listPage.mock.calls[0]![1];
+    expect(input.projectIds).toEqual([9]);
+    expect(input.overdue).toBe(true);
+    expect(input).not.toHaveProperty("assigneeId");
+    expect(input).not.toHaveProperty("creatorId");
+    expect(setup.stats).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ assigneeId: 5 }),
+    );
+  });
+  it("普通成员不能查询管理员全部任务；管理员仍使用服务端项目集合", async () => {
+    const denied = myTasksSetup();
+    await expect(
+      denied.service.list({ actorUserId: 5, scope: "all" }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(denied.listPage).not.toHaveBeenCalled();
+    const admin = myTasksSetup({
+      isSystemAdmin: true,
+      scopeProjectIds: [7, 9],
+    });
+    await admin.service.list({ actorUserId: 5, scope: "all" });
+    expect(admin.listPage.mock.calls[0]![1].projectIds).toEqual([7, 9]);
+    expect(admin.listPage.mock.calls[0]![1]).not.toHaveProperty("assigneeId");
+  });
+  it("未选择项目时返回明确参数错误", async () => {
+    const setup = myTasksSetup();
+    await expect(
+      setup.service.list({ actorUserId: 5, scope: "project" }),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(setup.listPage).not.toHaveBeenCalled();
+  });
+
   it("越权 projectId 收敛为空页而不是 404", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7] });
     const result = await setup.service.list({ actorUserId: 5, projectId: 9 });

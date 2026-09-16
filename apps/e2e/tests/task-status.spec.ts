@@ -30,7 +30,7 @@ for (const moduleScope of [false, true])
           .getByRole("link", { name: "查看详情" })
           .click();
       }
-      await page.getByRole("button", { name: "新建任务" }).click();
+      await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const create = page.getByRole("dialog", { name: "新建任务" });
       const title = `状态任务-${suffix}`;
       await create.getByLabel("任务标题").fill(title);

@@ -98,7 +98,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/archive-preview",
     operationId: "getProjectArchivePreview",
     summary:
-      "系统管理员在归档前读取未完成任务数提醒；要求完整管理员 Session 且密码与当前 TOTP 重认证均在 5 分钟内，不要求 CSRF 或幂等键。",
+      "系统管理员在归档前读取未完成任务数提醒；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF 或幂等键。",
     request: {
       path: "ProjectPath",
       query: "none",
@@ -109,7 +109,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
       "200": json("ProjectArchivePreviewResponse"),
       ...errors,
     },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "none",
     idempotencyPolicy: "none",
     idempotencyExceptionAdr: "none",
@@ -132,8 +132,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
         path: `/projects/{projectId}/${action}`,
         operationId,
         summary: archive
-          ? "系统管理员归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求 5 分钟内密码/TOTP 重认证；归档后全部下级只读、历史仍可读，审计、活动与搜索投影在同一事务更新。"
-          : "系统管理员恢复已归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求 5 分钟内密码/TOTP 重认证；只恢复项目自身状态、不改变下级数据，审计、活动与搜索投影在同一事务更新。",
+          ? "系统管理员归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求当前有效的完整管理员 Session（is_admin）；归档后全部下级只读、历史仍可读，审计、活动与搜索投影在同一事务更新。"
+          : "系统管理员恢复已归档项目：原因、If-Match、CSRF 与数据库幂等必填且要求当前有效的完整管理员 Session（is_admin）；只恢复项目自身状态、不改变下级数据，审计、活动与搜索投影在同一事务更新。",
         request: {
           path: "ProjectPath",
           query: "none",
@@ -148,7 +148,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
           },
         },
         responses: { "200": json("ProjectDetailResponse"), ...errors },
-        authPolicy: "adminSessionWithReauthentication",
+        authPolicy: "adminSession",
         csrfPolicy: "required",
         idempotencyPolicy: "idempotencyRequired",
         idempotencyExceptionAdr: "none",

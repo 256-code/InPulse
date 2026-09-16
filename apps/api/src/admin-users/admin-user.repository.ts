@@ -206,43 +206,21 @@ export class AdminUserRepository {
     return this.find(tx, current.id);
   }
 
-  async activeMfaAdminIds(tx: TransactionContext): Promise<readonly number[]> {
-    const users = (await tx.sql`
+  /**
+   * 锁定并返回全部可用管理员（ACTIVE 且未停用）。ADR-031 之后管理员身份
+   * 只按 `users.is_admin` 判定，不再要求已注册 TOTP；调用方据此保证不会
+   * 移除或停用最后一名管理员。
+   */
+  async activeAdminIds(tx: TransactionContext): Promise<readonly number[]> {
+    const rows = (await tx.sql`
       SELECT u.id
         FROM app.users AS u
-        JOIN app.user_totp_factors AS f
-          ON f.user_id = u.id
-         AND f.status = 'ACTIVE'
        WHERE u.is_admin = true
-        AND u.status = 'ACTIVE'
-        AND u.disabled_at IS NULL
-        ORDER BY u.id
-       FOR UPDATE OF u
-    `) as unknown as readonly { id: number }[];
-    const userIds = users.map((row) => row.id);
-    if (userIds.length === 0) {
-      return [];
-    }
-    await tx.sql`
-      SELECT f.user_id
-        FROM app.user_totp_factors AS f
-       WHERE f.user_id = ANY(${userIds}::integer[])
-         AND f.status = 'ACTIVE'
-       ORDER BY f.user_id
-       FOR UPDATE
-    `;
-    const active = (await tx.sql`
-      SELECT u.id
-        FROM app.users AS u
-        JOIN app.user_totp_factors AS f
-          ON f.user_id = u.id
-         AND f.status = 'ACTIVE'
-       WHERE u.id = ANY(${userIds}::integer[])
-         AND u.is_admin = true
          AND u.status = 'ACTIVE'
          AND u.disabled_at IS NULL
        ORDER BY u.id
+       FOR UPDATE OF u
     `) as unknown as readonly { id: number }[];
-    return active.map((row) => row.id);
+    return rows.map((row) => row.id);
   }
 }

@@ -160,30 +160,6 @@ export type ChangeRecordVersionPath = {
   readonly versionNo: number;
 };
 
-export type ConfirmMfaEnrollmentRequest = {
-  readonly expectedEnrollmentGeneration: number;
-  readonly code: string;
-};
-
-export type ConfirmMfaEnrollmentResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
-  readonly recoveryCodes: readonly string[];
-};
-
-export type ConsumeMfaRecoveryCodeHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ConsumeMfaRecoveryCodeRequest = {
-  readonly code: string;
-};
-
-export type ConsumeMfaRecoveryCodeResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
-};
-
 export type CreateProjectHeaders = {
   readonly "x-csrf-token": string;
 };
@@ -213,7 +189,6 @@ export type CreateProjectResponse = {
     readonly updatedAt: string;
   };
   readonly members: readonly ProjectMemberItem[];
-  readonly unclassifiedModuleId: number;
 };
 
 export type CsrfIssueResponse = {
@@ -241,6 +216,7 @@ export type ExternalLinkItem = {
   readonly id: number;
   readonly projectId: number;
   readonly normalizedUrl: string;
+  readonly isRootRepository?: boolean;
   readonly kind: ("ISSUE" | "PULL_REQUEST" | "COMMIT" | "OTHER");
   readonly label: string;
   readonly repository: (string | null);
@@ -265,6 +241,7 @@ export type ExternalLinkReplayContext = {
 
 export type ExternalLinkRequest = {
   readonly url: string;
+  readonly isRootRepository?: boolean;
 };
 
 export type ExternalLinkResourcePath = {
@@ -298,6 +275,7 @@ export type FeatureCollectionPath = {
 export type FeatureEditRequest = {
   readonly name: string;
   readonly currentBehavior: string;
+  readonly acceptanceCriteria?: string;
   readonly tags: readonly string[];
 };
 
@@ -307,9 +285,11 @@ export type FeatureItem = {
   readonly moduleId: number;
   readonly code: string;
   readonly createdBy: number;
+  readonly createdByName?: (string | null);
   readonly tags: readonly string[];
   readonly name: string;
   readonly currentBehavior: string;
+  readonly acceptanceCriteria: string;
   readonly status: ("ACTIVE" | "ARCHIVED");
   readonly rowVersion: number;
   readonly createdAt: string;
@@ -489,21 +469,15 @@ export type LoginHeaders = {
 export type LoginRequest = {
   readonly loginName: string;
   readonly password: string;
-  readonly challengeMode: ("totp" | "recovery");
 };
 
 export type LoginResponse = {
   readonly csrfToken: string;
-  readonly authState: ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
-  readonly enrollmentGeneration?: number;
+  readonly authState: "AUTHENTICATED";
 };
 
 export type LogoutHeaders = {
   readonly "x-csrf-token"?: string;
-};
-
-export type MfaEnrollmentHeaders = {
-  readonly "x-csrf-token": string;
 };
 
 export type ModuleArchiveRequest = {
@@ -518,6 +492,7 @@ export type ModuleEditRequest = {
 export type ModuleItem = {
   readonly id: number;
   readonly projectId: number;
+  readonly code: string;
   readonly name: string;
   readonly description: string;
   readonly kind: ("NORMAL" | "UNCLASSIFIED");
@@ -900,6 +875,11 @@ export type PublishedRecord = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "PUBLISHED";
   readonly code: string;
   readonly currentVersion: number;
@@ -948,15 +928,6 @@ export type ReadableRecordPage = {
   readonly hasMore: boolean;
 };
 
-export type ReauthenticateAdminHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ReauthenticateAdminRequest = {
-  readonly password: string;
-  readonly code: string;
-};
-
 export type RecentRecordItem = {
   readonly recordId: number;
   readonly code: string;
@@ -999,6 +970,11 @@ export type RecordDraftItem = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "DRAFT";
   readonly code: null;
   readonly currentVersion: 0;
@@ -1107,23 +1083,6 @@ export type RemoveProjectMemberResponse = {
   readonly unfinishedTaskCount: number;
 };
 
-export type ResetAdminMfaHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type ResetAdminMfaRequest = {
-  readonly userId: number;
-  readonly reason: string;
-};
-
-export type RotateMfaRecoveryCodesHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type RotateMfaRecoveryCodesResponse = {
-  readonly recoveryCodes: readonly string[];
-};
-
 export type SearchItem = {
   readonly projectId: number;
   readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP" | "LEFTOVER");
@@ -1145,14 +1104,15 @@ export type SearchQueryRequest = {
   readonly includeVoid?: boolean;
 };
 
-export type StartMfaEnrollmentRequest = {
-  readonly expectedEnrollmentGeneration: number;
+export type SsoCallbackQueryRequest = {
+  readonly code?: string;
+  readonly state?: string;
+  readonly error?: string;
+  readonly error_description?: string;
 };
 
-export type StartMfaEnrollmentResponse = {
-  readonly enrollmentGeneration: number;
-  readonly secret: string;
-  readonly otpauthUri: string;
+export type SsoStartQueryRequest = {
+  readonly returnTo?: string;
 };
 
 export type TaskAssigneesResponse = {
@@ -1161,6 +1121,20 @@ export type TaskAssigneesResponse = {
     readonly name: string;
     readonly avatarUrl: (string | null);
   })[];
+};
+
+export type TaskCenterQuery = {
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId?: number;
+  readonly ownership?: ("ASSIGNEE" | "CREATOR");
+  readonly scopeType?: ("FEATURE" | "MODULE");
+  readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
+  readonly hasPublishedRecord?: boolean;
+  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly includeCanceled?: boolean;
+  readonly scope: ("mine" | "created" | "project" | "all");
+  readonly overdue?: boolean;
 };
 
 export type TaskCollectionPath = {
@@ -1207,6 +1181,32 @@ export type TaskCompletionRequest = ({
 export type TaskCompletionResponse = {
   readonly task: (TaskItem | ModuleTaskItem);
   readonly record: (PublishedRecord | null);
+};
+
+export type TaskCreateRequest = {
+  readonly module: ({
+    readonly kind: "existing";
+    readonly id: number;
+  } | {
+    readonly kind: "new";
+    readonly input: ModuleEditRequest;
+  });
+  readonly feature: (({
+    readonly kind: "existing";
+    readonly id: number;
+  } | {
+    readonly kind: "new";
+    readonly input: FeatureEditRequest;
+  }) | null);
+  readonly task: TaskEditRequest;
+  readonly impactFeatureIds: readonly number[];
+};
+
+export type TaskCreateResult = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
 };
 
 export type TaskEditRequest = {
@@ -1487,6 +1487,7 @@ export type TaskRecordDraftsResponse = {
     readonly scopeType: ("FEATURE" | "MODULE");
     readonly title: string;
     readonly assigneeId: number;
+    readonly assigneeName?: (string | null);
     readonly workStatus: ("TODO" | "DONE" | "CANCELED");
     readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
     readonly rowVersion: number;
@@ -1546,7 +1547,7 @@ export type TaskVersionHeaders = {
   readonly "if-match": string;
 };
 
-export type UserAuthState = ("AUTHENTICATED" | "MFA_ENROLLMENT" | "MFA_CHALLENGE" | "RECOVERY_CHALLENGE");
+export type UserAuthState = "AUTHENTICATED";
 
 export type UserDirectoryItem = {
   readonly id: number;
@@ -1565,19 +1566,6 @@ export type UserRef = {
   readonly avatarUrl: (string | null);
 };
 
-export type VerifyMfaHeaders = {
-  readonly "x-csrf-token": string;
-};
-
-export type VerifyMfaRequest = {
-  readonly code: string;
-};
-
-export type VerifyMfaResponse = {
-  readonly csrfToken: string;
-  readonly authState: "AUTHENTICATED";
-};
-
 export type VoidedRecord = {
   readonly title: string;
   readonly contextProblem: string;
@@ -1593,6 +1581,11 @@ export type VoidedRecord = {
   readonly impactFeatureIds: readonly number[];
   readonly handlerId: number;
   readonly authorId: number;
+  readonly moduleName?: (string | null);
+  readonly featureName?: (string | null);
+  readonly impactFeatureNames?: readonly string[];
+  readonly authorName?: (string | null);
+  readonly handlerName?: (string | null);
   readonly status: "VOID";
   readonly code: string;
   readonly currentVersion: number;

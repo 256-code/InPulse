@@ -41,7 +41,6 @@ interface LoginControllerResponse {
 interface LoginResponseDto {
   readonly csrfToken: string;
   readonly authState: string;
-  readonly enrollmentGeneration?: number;
 }
 
 interface ErrorResponseDto {
@@ -94,7 +93,6 @@ export class LoginController {
         clientIp: resolveClientIp(request),
         cookieHeader: getHeader(request.headers, "cookie"),
         csrfToken: headers["x-csrf-token"],
-        challengeMode: body.challengeMode,
       });
       response.setHeader(
         "Set-Cookie",
@@ -105,9 +103,6 @@ export class LoginController {
       return {
         csrfToken: result.csrfToken,
         authState: result.authState,
-        ...(result.enrollmentGeneration === undefined
-          ? {}
-          : { enrollmentGeneration: result.enrollmentGeneration }),
       };
     } catch (error) {
       if (error instanceof LoginError) {

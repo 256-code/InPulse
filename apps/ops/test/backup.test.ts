@@ -250,6 +250,7 @@ describe("pg_dump 调用组装", () => {
       "--exclude-table-data=app.user_sessions",
       "--exclude-table-data=app.session_csrf_tokens",
       "--exclude-table-data=app.preauth_sessions",
+      "--exclude-table-data=app.sso_login_attempts",
       "--dbname=postgresql://app_backup@db:5432/app?sslmode=require",
     ]);
     expect(invocation.args.join(" ")).not.toContain(rawCredential);
@@ -478,6 +479,7 @@ describe("runBackup 编排", () => {
     const call = spawnStub.calls[0]!;
     expect(call.command).toBe("pg_dump");
     expect(call.args).toContain("--exclude-table-data=app.session_csrf_tokens");
+    expect(call.args).toContain("--exclude-table-data=app.sso_login_attempts");
     expect(call.env["PGPASSWORD"]).toBe(testDatabaseCredential);
     expect(call.env["BACKUP_UNRELATED"]).toBeUndefined();
 
@@ -517,6 +519,7 @@ describe("runBackup 编排", () => {
       "app.user_sessions",
       "app.session_csrf_tokens",
       "app.preauth_sessions",
+      "app.sso_login_attempts",
     ]);
     expect(summary.objects).toHaveLength(2);
     expect(summary.objects[0]!.created).toBe(true);

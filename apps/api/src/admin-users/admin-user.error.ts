@@ -3,7 +3,7 @@ export type AdminUserErrorReason =
   | "state-conflict"
   | "version-conflict"
   | "self-mutation"
-  | "last-mfa-admin";
+  | "last-active-admin";
 
 export class AdminUserError extends Error {
   constructor(
@@ -53,11 +53,11 @@ export function adminUserSelfMutation(): AdminUserError {
   );
 }
 
-export function lastMfaAdmin(): AdminUserError {
+export function lastActiveAdmin(): AdminUserError {
   return new AdminUserError(
     409,
-    "LAST_MFA_ADMIN_REQUIRES_OFFLINE_RECOVERY",
-    "不能移除最后一名可用 MFA 管理员，请先确认其他管理员的离线恢复能力",
-    "last-mfa-admin",
+    "LAST_ACTIVE_ADMIN_REQUIRED",
+    "不能移除或停用最后一名可用管理员，请先指定另一名管理员",
+    "last-active-admin",
   );
 }

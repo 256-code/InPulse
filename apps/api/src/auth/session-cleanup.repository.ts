@@ -3,6 +3,8 @@ export interface SessionCleanupBatch {
   readonly deletedUserSessions: number;
   readonly deletedSessionCsrfTokens: number;
   readonly deletedPreauthSessions: number;
+  /** ADR-032：已过期或已消费超过保留窗口的 SSO 登录尝试。 */
+  readonly deletedSsoLoginAttempts: number;
 }
 export interface SessionCleanupRepository {
   cleanupBatch(
@@ -16,7 +18,8 @@ export interface SessionCleanupRepository {
  * 每个批次在调用方事务内按主键分批锁定并删除三类数据：
  * - 撤销超过 30 天或绝对过期超过 7 天的 user_sessions；
  * - 已过期的 session_csrf_tokens；
- * - 已过期或已消费的 preauth_sessions。
+ * - 已过期或已消费的 preauth_sessions；
+ * - 已过期或已消费超过 1 小时的 sso_login_attempts（ADR-032）。
  *
  * 先删除 user_sessions 再删除 CSRF，锁序与签发路径一致
  * （旧 Session 行 -> 其 CSRF），避免一次全表扫描或无界删除。
@@ -89,10 +92,31 @@ export class PostgresSessionCleanupRepository implements SessionCleanupRepositor
               RETURNING id
             `) as unknown as readonly { id: number }[]
           ).length;
+    const attemptRows = (await tx.sql`
+      SELECT id
+        FROM app.sso_login_attempts
+       WHERE expires_at <= now()
+          OR consumed_at <= now() - interval '1 hour'
+       ORDER BY id
+       LIMIT ${batchSize}
+       FOR UPDATE SKIP LOCKED
+    `) as unknown as readonly { id: number }[];
+    const attemptIds = attemptRows.map((row) => row.id);
+    const deletedSsoLoginAttempts =
+      attemptIds.length === 0
+        ? 0
+        : (
+            (await tx.sql`
+              DELETE FROM app.sso_login_attempts
+               WHERE id = ANY(${attemptIds}::bigint[])
+              RETURNING id
+            `) as unknown as readonly { id: number }[]
+          ).length;
     return {
       deletedUserSessions,
       deletedSessionCsrfTokens,
       deletedPreauthSessions,
+      deletedSsoLoginAttempts,
     };
   }
 }

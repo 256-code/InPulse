@@ -111,7 +111,9 @@ describe("F-17 draft UI", () => {
       scopeType: "MODULE",
       impactFeatureIds: [],
     });
-    expect(await screen.findByText("暂无已知遗留问题")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByText("暂无已知遗留问题")).toBeVisible(),
+    );
   });
   it("preserves conflicting local content and requires a field choice before a new version", async () => {
     const update = vi
@@ -203,6 +205,17 @@ it("lists all source drafts without implicit selection and explicitly creates an
   expect(
     await screen.findAllByRole("button", { name: "查看草稿" }),
   ).toHaveLength(2);
+  // 来源任务头部是卡片容器，新建按钮位于「来源草稿」标题行右侧而非裸排。
+  expect(
+    screen
+      .getByRole("heading", { name: "来源标题", level: 2 })
+      .closest(".draft-source-head"),
+  ).not.toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "新建来源草稿" })
+      .closest(".calm-section-title"),
+  ).not.toBeNull();
   expect(
     screen.queryByRole("region", { name: "草稿详情" }),
   ).not.toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { LeftoverTaskWorkflow } from "../src/workflows/leftover-task.workflow.js";
 import { LeftoverTaskHttpService } from "../src/workflows/leftover-task-http.service.js";
 import { LeftoverTaskController } from "../src/workflows/leftover-task.controller.js";
@@ -116,6 +117,7 @@ beforeAll(async () => {
     uow,
     audit,
     new TimeCursorService(ring, "RECORD_DRAFTS"),
+    new PostgresUserReadPort(),
   );
   publication = new RecordPublicationService(
     new RecordPublicationAccess(access, modules, features, taskQuery, pubRepo),

@@ -79,7 +79,7 @@ const versionedWritePolicy = {
     rowVersion: "required" as const,
     lockOrder: "none" as const,
     retry:
-      "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃 MFA 管理员；版本或状态冲突返回 409，不自动重试",
+      "目标用户 FOR UPDATE；管理员移除前按 id 升序锁定全部活跃管理员；版本或状态冲突返回 409，不自动重试",
   },
 };
 
@@ -144,7 +144,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("AdminUserItem"), ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: [],
@@ -157,7 +157,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
     path: "/admin/users/{userId}",
     operationId: "updateUser",
     summary:
-      "系统管理员编辑用户资料与管理员角色；移除最后一名可用 MFA 管理员前按编号锁定全部 MFA 管理员并拒绝。",
+      "系统管理员编辑用户资料与管理员角色；移除最后一名可用管理员前按编号锁定全部活跃管理员并拒绝。",
     request: {
       path: "AdminUserPath",
       query: "none",
@@ -172,7 +172,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("AdminUserItem"), ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: ["If-Match"],
@@ -193,7 +193,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
       body: { noBody: true },
     },
     responses: { "204": { noBody: true }, ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: ["If-Match"],
@@ -214,7 +214,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
       body: { noBody: true },
     },
     responses: { "204": { noBody: true }, ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: ["If-Match"],
@@ -235,7 +235,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
       body: { noBody: true },
     },
     responses: { "204": { noBody: true }, ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: ["If-Match"],

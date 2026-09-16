@@ -16,7 +16,7 @@ const errors = {
 };
 
 const readPolicies = {
-  authPolicy: "adminSessionWithReauthentication" as const,
+  authPolicy: "adminSession" as const,
   csrfPolicy: "none" as const,
   idempotencyPolicy: "none" as const,
   idempotencyExceptionAdr: "none",
@@ -90,7 +90,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members",
     operationId: "listProjectMembers",
     summary:
-      "系统管理员读取项目成员完整历史，仅允许最近 5 分钟内完成密码与 TOTP 重认证；普通成员与非成员统一 403/404。",
+      "系统管理员读取项目成员完整历史，要求当前有效的完整管理员 Session（is_admin）；普通成员与非成员统一 403/404。",
     request: {
       path: "ProjectMemberCollectionPath",
       query: "none",
@@ -138,7 +138,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("AddProjectMemberResponse"), ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
@@ -181,7 +181,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("RemoveProjectMemberResponse"), ...errors },
-    authPolicy: "adminSessionWithReauthentication",
+    authPolicy: "adminSession",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",

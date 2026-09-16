@@ -60,7 +60,7 @@ export const taskCompletionRoutes: readonly RouteDefinition[] = [
         },
       },
     },
-    idempotencyContractVersion: "1.0.0",
+    idempotencyContractVersion: "1.1.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: {
       version: "1.0.0",

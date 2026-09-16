@@ -1,14 +1,8 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
@@ -23,6 +17,7 @@ const item: FeatureItem = {
   projectId: 2,
   name: "退款功能",
   currentBehavior: "",
+  acceptanceCriteria: "",
   moduleId: 4,
   code: "PR-F-1",
   createdBy: 1,
@@ -135,6 +130,7 @@ describe("F-13 forms", () => {
     const latest = {
       ...original,
       currentBehavior: "其他人更新的说明",
+      acceptanceCriteria: "",
       tags: ["别人更新的标签"],
       rowVersion: 2,
     };
@@ -181,6 +177,7 @@ describe("F-13 forms", () => {
       {
         name: "我的新名称",
         currentBehavior: "其他人更新的说明",
+        acceptanceCriteria: "",
         tags: ["别人更新的标签"],
       },
       expect.objectContaining({
@@ -196,6 +193,7 @@ describe("F-13 forms", () => {
       const latest = {
         ...original,
         currentBehavior: "其他人更新的说明",
+        acceptanceCriteria: "",
         rowVersion: 2,
       };
       const client = {
@@ -263,7 +261,12 @@ describe("F-13 forms", () => {
         2,
         4,
         3,
-        { name: original.name, currentBehavior: expectedDescription, tags: [] },
+        {
+          name: original.name,
+          currentBehavior: expectedDescription,
+          acceptanceCriteria: "",
+          tags: [],
+        },
         expect.objectContaining({
           headers: expect.objectContaining({ "If-Match": '"2"' }),
         }),
@@ -322,11 +325,6 @@ describe("F-13 forms", () => {
     } as unknown as InpulseApiClient;
     mount(client, true);
     fireEvent.click(await screen.findByRole("button", { name: "归档功能" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "管理员安全验证" }),
-      ).toBeVisible(),
-    );
     fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
     await screen.findByText("请填写操作原因");
     expect(client.archiveFeature).not.toHaveBeenCalled();
@@ -364,138 +362,6 @@ describe("F-13 forms", () => {
     expect(
       screen.queryByRole("button", { name: "归档功能" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("shows module siblings in the feature workspace using listFeatures", async () => {
-    const listFeatures = vi.fn().mockResolvedValue({
-      items: [item, { ...item, id: 4, code: "PR-F-2", name: "其他功能" }],
-    });
-    const client = {
-      listFeatures,
-      listTasks: vi.fn().mockResolvedValue({ items: [] }),
-      listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
-    } as unknown as InpulseApiClient;
-    mountDetail(client, 3);
-    await screen.findByRole("heading", { name: "退款功能" });
-    expect(listFeatures).toHaveBeenCalledWith(
-      2,
-      4,
-      expect.objectContaining({}),
-    );
-    expect(screen.getByRole("link", { name: "退款功能" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "其他功能" })).toBeInTheDocument();
-  });
-});
-
-const moduleRow = (id: number, name: string) => ({
-  id,
-  projectId: 2,
-  name,
-  description: "",
-  kind: "UNCLASSIFIED" as const,
-  status: "ACTIVE" as const,
-  sortOrder: id,
-  rowVersion: 1,
-  createdAt: "2026-09-09T00:00:00.000Z",
-  updatedAt: "2026-09-09T00:00:00.000Z",
-  archivedAt: null,
-});
-
-const moduleClient = (modules: readonly { id: number; name: string }[]) =>
-  ({
-    listFeatures: vi.fn().mockResolvedValue({ items: [] }),
-    findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
-    listModules: vi.fn().mockResolvedValue({ items: modules }),
-  }) as unknown as InpulseApiClient;
-
-describe("项目内导航", () => {
-  it("renders the project overview entry plus the project modules with the current module active", async () => {
-    mount(moduleClient([moduleRow(4, "退款模块"), moduleRow(5, "结算模块")]));
-    const nav = screen.getByRole("navigation", {
-      name: "项目内导航",
-    });
-    await within(nav).findByRole("button", { name: "结算模块" });
-    expect(
-      within(nav)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["项目概览", "退款模块", "结算模块"]);
-    expect(within(nav).getByRole("button", { name: "退款模块" })).toHaveClass(
-      "active",
-    );
-    expect(
-      within(nav).getByRole("button", { name: "项目概览" }),
-    ).not.toHaveClass("active");
-  });
-
-  it("hides the navigation while a single feature is open", async () => {
-    mountDetail(
-      {
-        listFeatures: vi.fn().mockResolvedValue({ items: [item] }),
-        findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
-        listTasks: vi.fn().mockResolvedValue({ items: [] }),
-        listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
-      } as unknown as InpulseApiClient,
-      3,
-    );
-    await screen.findByRole("heading", { name: "退款功能" });
-    expect(
-      screen.queryByRole("navigation", { name: "项目内导航" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("switches to the selected module feature list and back to the project overview", async () => {
-    const client = moduleClient([
-      moduleRow(4, "退款模块"),
-      moduleRow(5, "结算模块"),
-    ]);
-    const FeatureListRoute: React.FC = () => {
-      const params = useParams();
-      const moduleId = Number(params["moduleId"]);
-      return (
-        <>
-          <FeaturesPageView
-            projectId={2}
-            moduleId={moduleId}
-            isAdmin={false}
-            client={client}
-          />
-          <p>{`当前模块 ${moduleId}`}</p>
-        </>
-      );
-    };
-    render(
-      <ConfigProvider theme={{ token: { motion: false } }}>
-        <AuthStateProvider>
-          <QueryClientProvider
-            client={
-              new QueryClient({ defaultOptions: { queries: { retry: false } } })
-            }
-          >
-            <MemoryRouter initialEntries={["/projects/2/modules/4/features"]}>
-              <Routes>
-                <Route
-                  path="/projects/:projectId/modules/:moduleId/features"
-                  element={<FeatureListRoute />}
-                />
-                <Route
-                  path="/projects/:projectId/overview"
-                  element={<div>项目概览页</div>}
-                />
-              </Routes>
-            </MemoryRouter>
-          </QueryClientProvider>
-        </AuthStateProvider>
-      </ConfigProvider>,
-    );
-    await screen.findByText("当前模块 4");
-    fireEvent.click(await screen.findByRole("button", { name: "结算模块" }));
-    expect(await screen.findByText("当前模块 5")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "结算模块" })).toHaveClass(
-      "active",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "项目概览" }));
-    expect(await screen.findByText("项目概览页")).toBeInTheDocument();
   });
 });
 
@@ -565,4 +431,36 @@ describe("功能卡", () => {
       links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
     ).toBeNull();
   });
+});
+
+it("功能概览显示验收标准，编辑时保留并提交", async () => {
+  const updateFeature = vi.fn().mockResolvedValue({
+    ...item,
+    acceptanceCriteria: "响应低于 400ms",
+    rowVersion: 2,
+  });
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [{ ...item, acceptanceCriteria: "响应低于 500ms" }],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+    updateFeature,
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+  expect(await screen.findByText("响应低于 500ms")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "编辑功能" }));
+  const field = await screen.findByLabelText("验收标准（选填）");
+  expect(field).toHaveValue("响应低于 500ms");
+  fireEvent.change(field, { target: { value: "响应低于 400ms" } });
+  fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
+  await waitFor(() =>
+    expect(updateFeature).toHaveBeenCalledWith(
+      2,
+      4,
+      item.id,
+      expect.objectContaining({ acceptanceCriteria: "响应低于 400ms" }),
+      expect.anything(),
+    ),
+  );
 });

@@ -18,6 +18,7 @@ export const externalLinkItemSchema = z
     id,
     projectId: id,
     normalizedUrl: z.string().max(2048),
+    isRootRepository: z.boolean().optional(),
     kind: z.enum(["ISSUE", "PULL_REQUEST", "COMMIT", "OTHER"]),
     label: z.string().max(500),
     repository: z.string().nullable(),
@@ -52,7 +53,10 @@ export const externalLinkSchemas = {
   },
   ExternalLinkRequest: {
     schema: z
-      .object({ url: z.string().trim().min(1).max(2048) })
+      .object({
+        url: z.string().trim().min(1).max(2048),
+        isRootRepository: z.boolean().optional(),
+      })
       .strict()
       .meta({ id: "ExternalLinkRequest" }),
     summary: "用户提交的GitHub链接",

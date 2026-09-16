@@ -1,3 +1,6 @@
+import { ProjectRepositoryLink } from "@features/external-links/ProjectRepositoryLink";
+import { useNavigate } from "react-router-dom";
+import { taskDetailPath } from "@features/tasks/task-links";
 import React, { useState } from "react";
 import { Alert, Spin } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
@@ -7,11 +10,6 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
-import {
-  ProjectContextNav,
-  type ProjectContextNavActive,
-  type ProjectContextNavModule,
-} from "@features/common/components/ProjectContextNav";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
 import { PROJECT_OVERVIEW_MOCK_ADAPTER } from "./project-overview-mock";
 import {
@@ -41,12 +39,6 @@ export interface ProjectOverviewPageViewProps {
   readonly onOpenMembers: () => void;
   readonly onOpenRecords: () => void;
   readonly onOpenIssues: () => void;
-  /** 项目内导航的模块项（设计师稿 catalog.tsx L212 项目级导航）。 */
-  readonly modules: readonly ProjectContextNavModule[];
-  readonly onOpenModule: (moduleId: number) => void;
-  readonly onOpenOverview: () => void;
-  /** 项目内导航的高亮项；模块列表页传 `null`（该页不属于概览也不属于任一模块）。 */
-  readonly navActive?: ProjectContextNavActive;
   readonly adapter?: ProjectOverviewAdapter;
   readonly client?: InpulseApiClient | undefined;
   /**
@@ -77,15 +69,12 @@ export const ProjectOverviewPageView: React.FC<
   onOpenMembers,
   onOpenRecords,
   onOpenIssues,
-  modules,
-  onOpenModule,
-  onOpenOverview,
-  navActive = "overview",
   adapter,
   client,
   extraActions,
   children,
 }) => {
+  const navigate = useNavigate();
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const activeAdapter = adapter ?? PROJECT_OVERVIEW_MOCK_ADAPTER;
   const overviewQuery = useProjectOverviewQuery({
@@ -177,12 +166,6 @@ export const ProjectOverviewPageView: React.FC<
       aria-label="项目概览"
       data-testid="project-overview"
     >
-      <ProjectContextNav
-        modules={modules}
-        active={navActive}
-        onSelectOverview={onOpenOverview}
-        onSelectModule={onOpenModule}
-      />
       <div className="project-detail-head">
         <button
           type="button"
@@ -219,6 +202,7 @@ export const ProjectOverviewPageView: React.FC<
           </div>
         </div>
         <div className="project-detail-actions">
+          <ProjectRepositoryLink projectId={projectId} client={client} />
           {project === null ? null : (
             <CalmBadge tone={project.status === "ACTIVE" ? "blue" : "amber"}>
               {project.status === "ACTIVE" ? "正常" : "已归档"}
@@ -379,6 +363,7 @@ export const ProjectOverviewPageView: React.FC<
       {children}
 
       <GlobalTaskCreateModal
+        onCreatedLocation={(task) => navigate(taskDetailPath(task))}
         open={createTaskOpen}
         onClose={() => setCreateTaskOpen(false)}
         client={client}

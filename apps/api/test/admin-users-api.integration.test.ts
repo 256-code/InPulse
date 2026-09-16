@@ -129,40 +129,12 @@ async function userState(userId: number) {
   return rows[0]!;
 }
 
-async function seedUser(options: {
-  readonly admin: boolean;
-  readonly activeFactor?: boolean;
-  readonly reauth?: boolean;
-}): Promise<Actor> {
+async function seedUser(options: { readonly admin: boolean }): Promise<Actor> {
   const userId = await createUser(client.sql, { admin: options.admin });
   const authVersion = await authVersionFor(userId);
-  if (options.activeFactor === true) {
-    await client.sql`
-      INSERT INTO app.user_totp_factors (
-        user_id,
-        status,
-        enrollment_generation,
-        key_version,
-        nonce,
-        ciphertext,
-        auth_tag,
-        enrolled_at
-      )
-      VALUES (
-        ${userId},
-        'ACTIVE',
-        1,
-        1,
-        ${Buffer.alloc(16)},
-        ${Buffer.from("fixture-factor")},
-        ${Buffer.alloc(16)},
-        now()
-      )
-    `;
-  }
   const cookie = randomBytes(32).toString("base64url");
   const csrfToken = randomBytes(32).toString("base64url");
-  const sessionId = await uow.run(async (tx) => {
+  await uow.run(async (tx) => {
     const session = await sessions.create(tx, {
       userId,
       tokenHash: tokens.hash(cookie).hash,
@@ -179,9 +151,6 @@ async function seedUser(options: {
     });
     return session.id;
   });
-  if (options.reauth !== false) {
-    await uow.run((tx) => sessions.refreshReauthentication(tx, sessionId));
-  }
   return {
     userId,
     authVersion,
@@ -282,8 +251,8 @@ afterAll(async () => {
 
 describe("F-03 用户管理真实 PostgreSQL + HTTP", () => {
   it("管理员完成用户生命周期，幂等不重复创建，停用/强退同事务撤销 Session 并写审计", async () => {
-    const actor = await seedUser({ admin: true, activeFactor: true });
-    await seedUser({ admin: true, activeFactor: true });
+    const actor = await seedUser({ admin: true });
+    await seedUser({ admin: true });
     const normal = await seedUser({ admin: false });
     expect((await request("/admin/users", "GET", normal)).status).toBe(403);
 
@@ -415,20 +384,21 @@ describe("F-03 用户管理真实 PostgreSQL + HTTP", () => {
   });
 
   it("拒绝无重认证、无幂等键和非法字段，不泄露数据库错误", async () => {
-    const actor = await seedUser({ admin: true, activeFactor: true });
+    const actor = await seedUser({ admin: true });
     const loginName = `f03_reject_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
-    const noReauth = await seedUser({
-      admin: true,
-      activeFactor: true,
-      reauth: false,
-    });
-    const noReauthResponse = await request("/admin/users", "POST", noReauth, {
-      body: {
-        loginName,
-        name: "拒绝用户",
-        password: ADMIN_USER_INITIAL_PASSWORD,
+    const memberSession = await seedUser({ admin: false });
+    const noReauthResponse = await request(
+      "/admin/users",
+      "POST",
+      memberSession,
+      {
+        body: {
+          loginName,
+          name: "拒绝用户",
+          password: ADMIN_USER_INITIAL_PASSWORD,
+        },
       },
-    });
+    );
     expect(noReauthResponse.status).toBe(403);
 
     const invalidResponse = await request("/admin/users", "POST", actor, {
@@ -462,8 +432,8 @@ describe("F-03 用户管理真实 PostgreSQL + HTTP", () => {
     expect(JSON.stringify(payload)).not.toContain("constraint_name");
   });
 
-  it("拒绝自停用、保护最后一名 MFA 管理员，审计失败时整个用户创建回滚", async () => {
-    const actor = await seedUser({ admin: true, activeFactor: true });
+  it("拒绝自停用，审计失败时整个用户创建回滚", async () => {
+    const actor = await seedUser({ admin: true });
     const selfVersion = await authVersionFor(actor.userId);
     await expect(
       uow.run((tx) =>
@@ -479,32 +449,7 @@ describe("F-03 用户管理真实 PostgreSQL + HTTP", () => {
       code: "ADMIN_USER_SELF_MUTATION_REJECTED",
     });
 
-    const lastActor = await seedUser({ admin: true, activeFactor: false });
-    const target = await seedUser({ admin: true, activeFactor: true });
-    await expect(
-      uow.run(async (tx) => {
-        await tx.sql`
-          UPDATE app.users
-             SET is_admin = false,
-                 row_version = row_version + 1
-           WHERE id <> ${lastActor.userId}
-             AND id <> ${target.userId}
-             AND is_admin = true
-             AND status = 'ACTIVE'
-        `;
-        await userService.disable(
-          tx,
-          metaFor(lastActor, randomUUID()),
-          target.userId,
-          target.authVersion,
-        );
-      }),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "LAST_MFA_ADMIN_REQUIRES_OFFLINE_RECOVERY",
-    });
-
-    const rollbackActor = await seedUser({ admin: true, activeFactor: true });
+    const rollbackActor = await seedUser({ admin: true });
     const rollbackLogin = `f03_rollback_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
     const failingAudit = {
       append: vi.fn().mockRejectedValue(new Error("audit downstream failed")),

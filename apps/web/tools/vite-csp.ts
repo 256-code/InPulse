@@ -195,6 +195,21 @@ function wantsHtml(request: IncomingMessage): boolean {
   return String(request.headers.accept ?? "").includes("text/html");
 }
 
+function requestPathname(request: IncomingMessage): string {
+  return new URL(request.url ?? "/", "http://localhost").pathname;
+}
+
+/**
+ * `/api/**` 是 Vite 代理转给 API 的命名空间，CSP 中间件不得短路：
+ * ADR-032 的单点登录入口本身就是浏览器整页导航（`/api/v1/auth/sso/start`），
+ * 它没有文件扩展名又带 `Accept: text/html`，若被当作 SPA 入口就会返回
+ * `index.html` 而不是 API 的 302，登录流程会反复自跳转直至 URL 与请求头超限
+ * （本地 `vite preview` E2E 实测）。生产由 Nginx 先代理 `/api/`，语义一致。
+ */
+export function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
 /**
  * dev 模式：Vite 的 HTML 转换包含 React Refresh 前导脚本等逐请求内容，无法预读
  * 磁盘文件，因此在 body 写出发送前替换占位符（dev 不压缩，缓冲安全）。
@@ -208,7 +223,7 @@ export function installDevCspMiddleware(
     response,
     next,
   ): void => {
-    if (!wantsHtml(request)) {
+    if (!wantsHtml(request) || isApiPath(requestPathname(request))) {
       next();
       return;
     }
@@ -241,7 +256,11 @@ export function createPreviewCspMiddleware(
       next();
       return;
     }
-    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    const pathname = requestPathname(request);
+    if (isApiPath(pathname)) {
+      next();
+      return;
+    }
     const isEntry =
       pathname === "/" ||
       pathname === "/index.html" ||

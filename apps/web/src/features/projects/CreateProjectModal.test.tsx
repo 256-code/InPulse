@@ -25,7 +25,6 @@ const createdProject: CreateProjectResponse = {
   members: [
     { userId: 1, status: "ACTIVE", joinedAt: "2026-09-09T00:00:00.000Z" },
   ],
-  unclassifiedModuleId: 12,
 };
 
 function renderModal(client: InpulseApiClient) {
@@ -164,5 +163,18 @@ describe("CreateProjectModal", () => {
     );
     expect(onCreated).toHaveBeenCalledWith(createdProject);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("documents the current module rule instead of the removed default module", async () => {
+    const getUserDirectory = vi.fn().mockResolvedValue({ items: [] });
+    const client = { getUserDirectory } as unknown as InpulseApiClient;
+    renderModal(client);
+
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    const rules = within(dialog).getByText("创建规则").closest("aside");
+    expect(rules).not.toBeNull();
+    const scope = within(rules as HTMLElement);
+    expect(scope.getByText("模块")).toBeInTheDocument();
+    expect(scope.queryByText(/未分类/u)).not.toBeInTheDocument();
   });
 });

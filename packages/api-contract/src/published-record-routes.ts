@@ -73,6 +73,11 @@ const fields = [
   "impactFeatureIds[]",
   "handlerId",
   "authorId",
+  "authorName",
+  "handlerName",
+  "moduleName",
+  "featureName",
+  "impactFeatureNames[]",
   "status",
   "code",
   "currentVersion",
@@ -184,7 +189,7 @@ export const recordLifecycleRoutes: readonly RouteDefinition[] = (
     "/projects/{projectId}/change-records/{recordId}/" +
     (operationId === "voidChangeRecord" ? "void" : "restore"),
   summary: "ADR-024 管理员作废/恢复；只改记录状态及同事务审计/投影",
-  authPolicy: "adminSessionWithReauthentication",
+  authPolicy: "adminSession",
   request: {
     path: "RecordDraftResourcePath",
     query: "none",

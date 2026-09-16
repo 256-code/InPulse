@@ -79,13 +79,7 @@ describe("admin user query", () => {
     );
   });
 
-  it("maps admin reauth, conflict and permission errors without leaking internals", () => {
-    const reauth = new ApiError(403, {
-      code: "ADMIN_REAUTH_REQUIRED",
-      message: "internal-reauth",
-      details: {},
-      requestId: "r",
-    });
+  it("maps conflict and permission errors without leaking internals", () => {
     const version = new ApiError(409, {
       code: "ADMIN_USER_VERSION_CONFLICT",
       message: "internal-version",
@@ -98,12 +92,26 @@ describe("admin user query", () => {
       details: {},
       requestId: "f",
     });
-    expect(adminUserErrorMessage(reauth)).toBe(
-      "请先完成管理员安全验证，再重新提交。",
-    );
     expect(adminUserErrorMessage(version)).toContain("加载最新版本");
     expect(adminUserErrorMessage(forbidden)).not.toContain(
       "internal-forbidden",
     );
+  });
+
+  it("surfaces login name and email conflicts with their own messages", () => {
+    const loginConflict = new ApiError(409, {
+      code: "ADMIN_USER_LOGIN_CONFLICT",
+      message: "登录名已存在",
+      details: {},
+      requestId: "l",
+    });
+    const emailConflict = new ApiError(409, {
+      code: "ADMIN_USER_EMAIL_CONFLICT",
+      message: "邮箱已被使用",
+      details: {},
+      requestId: "e",
+    });
+    expect(adminUserErrorMessage(loginConflict)).toContain("登录名已存在");
+    expect(adminUserErrorMessage(emailConflict)).toContain("邮箱已被使用");
   });
 });

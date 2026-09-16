@@ -62,7 +62,7 @@ interface Fixture {
   readonly project: ProjectFixture;
 }
 
-async function actor(admin = false, reauth = true): Promise<Actor> {
+async function actor(admin = false): Promise<Actor> {
   const userId = await createUser(client.sql, { admin });
   const cookie = randomBytes(32).toString("base64url");
   const csrf = randomBytes(32).toString("base64url");
@@ -73,12 +73,8 @@ async function actor(admin = false, reauth = true): Promise<Actor> {
       token_hash_key_version,
       auth_version_at_issue,
       auth_state,
-      recovery_rotation_generation,
-      recovery_rotation_consumed_generation,
       idle_expires_at,
-      absolute_expires_at,
-      reauthenticated_at,
-      mfa_verified_at
+      absolute_expires_at
     )
     VALUES (
       ${userId},
@@ -86,12 +82,8 @@ async function actor(admin = false, reauth = true): Promise<Actor> {
       1,
       1,
       'AUTHENTICATED',
-      0,
-      0,
       now() + interval '1 hour',
-      now() + interval '1 day',
-      ${admin && reauth ? client.sql`now()` : client.sql`NULL`},
-      ${admin && reauth ? client.sql`now()` : client.sql`NULL`}
+      now() + interval '1 day'
     )
     RETURNING id
   `;
@@ -557,10 +549,10 @@ describe("F-06.2 project archive API", () => {
     );
   });
 
-  it("previews unfinished tasks for admins and enforces reauthentication gates", async () => {
+  it("previews unfinished tasks for admins and enforces admin identity gates", async () => {
     const value = await fixture();
     const outsider = await actor(false);
-    const staleAdmin = await actor(true, false);
+    const secondAdmin = await actor(true);
     const previewPath = `/projects/${value.project.projectId}/archive-preview`;
 
     const finishedAt = new Date();
@@ -656,11 +648,13 @@ describe("F-06.2 project archive API", () => {
       404,
       "PROJECT_NOT_FOUND",
     );
-    await expectError(
-      await request("GET", previewPath, staleAdmin),
-      403,
-      "ADMIN_REAUTH_REQUIRED",
-    );
+    const secondPreview = await request("GET", previewPath, secondAdmin);
+    expect(secondPreview.status).toBe(200);
+    expect(
+      schemaRegistry.ProjectArchivePreviewResponse.schema.parse(
+        await secondPreview.json(),
+      ).unfinishedTaskCount,
+    ).toBe(1);
 
     const archived = await request(
       "POST",
@@ -684,10 +678,9 @@ describe("F-06.2 project archive API", () => {
     ).toBe(1);
   });
 
-  it("rejects archive from non-admin, stale reauth, invalid protocol and revoked session replay", async () => {
+  it("rejects archive from non-admin, invalid protocol and revoked session replay", async () => {
     const value = await fixture();
     const outsider = await actor(false);
-    const staleAdmin = await actor(true, false);
     const path = `/projects/${value.project.projectId}/archive`;
     const archiveBody = { reason: "归档原因" };
 
@@ -707,11 +700,6 @@ describe("F-06.2 project archive API", () => {
       await request("POST", path, outsider, archiveBody),
       404,
       "PROJECT_NOT_FOUND",
-    );
-    await expectError(
-      await request("POST", path, staleAdmin, archiveBody),
-      403,
-      "ADMIN_REAUTH_REQUIRED",
     );
     await expectError(
       await request("POST", path, value.admin, {}),
@@ -867,10 +855,9 @@ describe("F-06.3 project restore API", () => {
     );
   });
 
-  it("rejects restore without admin reauthentication or project access", async () => {
+  it("rejects restore without admin identity or project access", async () => {
     const value = await fixture();
     const outsider = await actor(false);
-    const staleAdmin = await actor(true, false);
     const archivePath = `/projects/${value.project.projectId}/archive`;
     const restorePath = `/projects/${value.project.projectId}/restore`;
     const restoreBody = { reason: "恢复原因" };
@@ -886,13 +873,6 @@ describe("F-06.3 project restore API", () => {
       }),
       403,
       "ADMIN_REQUIRED",
-    );
-    await expectError(
-      await request("POST", restorePath, staleAdmin, restoreBody, {
-        ifMatch: '"2"',
-      }),
-      403,
-      "ADMIN_REAUTH_REQUIRED",
     );
     await expectError(
       await request("POST", restorePath, outsider, restoreBody, {

@@ -13,7 +13,6 @@ import {
   EMPTY_AUDIT_FILTERS,
   auditChainKey,
   describeAuditError,
-  isAdminReauthRequired,
   normalizeAuditFilters,
   useAuditLogsInfiniteQuery,
   validateAuditFilters,
@@ -172,25 +171,14 @@ describe("audit query helpers", () => {
     });
   });
 
-  it("maps gate errors to safe copy and detects reauthentication", () => {
-    const reauth = new ApiError(403, {
-      code: "ADMIN_REAUTH_REQUIRED",
+  it("maps gate errors to safe copy", () => {
+    const forbidden = new ApiError(403, {
+      code: "ADMIN_REQUIRED",
       message: "internal",
       details: {},
       requestId: "r",
     });
-    expect(isAdminReauthRequired(reauth)).toBe(true);
-    expect(describeAuditError(reauth)).toContain("管理员安全验证");
-    expect(
-      describeAuditError(
-        new ApiError(403, {
-          code: "ADMIN_REQUIRED",
-          message: "internal",
-          details: {},
-          requestId: "r",
-        }),
-      ),
-    ).toBe("原始审计仅系统管理员可读取。");
+    expect(describeAuditError(forbidden)).toBe("原始审计仅系统管理员可读取。");
     expect(
       describeAuditError(
         new ApiError(401, {
@@ -222,6 +210,5 @@ describe("audit query helpers", () => {
       ),
     ).toContain("过于频繁");
     expect(describeAuditError(new Error("boom"))).toContain("暂时不可用");
-    expect(isAdminReauthRequired(new Error("boom"))).toBe(false);
   });
 });

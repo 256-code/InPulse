@@ -1,3 +1,4 @@
+import { taskDetailPath, type TaskLocation } from "./task-links";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button } from "antd";
@@ -62,6 +63,7 @@ export interface GlobalTaskCreateModalProps {
       }
     | undefined;
   readonly onCreated?: (taskId: number) => void;
+  readonly onCreatedLocation?: ((task: TaskLocation) => void) | undefined;
 }
 
 /**
@@ -74,6 +76,7 @@ export function GlobalTaskCreateModal({
   client,
   preset,
   onCreated,
+  onCreatedLocation,
 }: GlobalTaskCreateModalProps) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
@@ -85,6 +88,11 @@ export function GlobalTaskCreateModal({
   const [projectId, setProjectId] = useState<number>(preset?.projectId ?? 0);
   const [moduleId, setModuleId] = useState<number>(preset?.moduleId ?? 0);
   const [featureId, setFeatureId] = useState<number>(preset?.featureId ?? 0);
+  const [createdLocation, setCreatedLocation] = useState<TaskLocation | null>(
+    null,
+  );
+  const [newModule, setNewModule] = useState("");
+  const [newFeature, setNewFeature] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("NORMAL");
@@ -101,12 +109,15 @@ export function GlobalTaskCreateModal({
 
   useEffect(() => {
     if (!open) return;
+    setCreatedLocation(null);
     setScope(
       presetFeatureId ? "FEATURE" : presetModuleId ? "MODULE" : "FEATURE",
     );
     setProjectId(presetProjectId);
     setModuleId(presetModuleId);
     setFeatureId(presetFeatureId);
+    setNewModule("");
+    setNewFeature("");
     setTitle("");
     setDescription("");
     setPriority("NORMAL");
@@ -129,7 +140,11 @@ export function GlobalTaskCreateModal({
   );
 
   const targetReady =
-    projectId > 0 && moduleId > 0 && (scope === "MODULE" || featureId > 0);
+    projectId > 0 &&
+    (moduleId > 0 || (moduleId === -1 && newModule.trim().length > 0)) &&
+    (scope === "MODULE" ||
+      featureId > 0 ||
+      (featureId === -1 && newFeature.trim().length > 0));
 
   const assignees = useQuery({
     queryKey: [
@@ -139,11 +154,9 @@ export function GlobalTaskCreateModal({
       scope === "MODULE" ? null : featureId,
     ],
     queryFn: ({ signal }) =>
-      scope === "MODULE"
-        ? api.listModuleTaskAssignees(projectId, moduleId, { signal })
-        : api.listTaskAssignees(projectId, moduleId, featureId, { signal }),
+      api.listActiveProjectMembers(projectId, { signal }),
     retry: false,
-    enabled: open && targetReady,
+    enabled: open && projectId > 0,
   });
 
   const impactOptions = useQuery({
@@ -183,12 +196,47 @@ export function GlobalTaskCreateModal({
               scope,
               body,
               impacts,
+              newModule,
+              newFeature,
             ]),
           ),
         },
       };
-      const task =
-        scope === "MODULE"
+      const createdScope =
+        moduleId === -1 || (scope === "FEATURE" && featureId === -1)
+          ? await api.createTaskWithScope(
+              projectId,
+              {
+                module:
+                  moduleId === -1
+                    ? {
+                        kind: "new",
+                        input: { name: newModule.trim(), description: "" },
+                      }
+                    : { kind: "existing", id: moduleId },
+                feature:
+                  scope === "MODULE"
+                    ? null
+                    : featureId === -1
+                      ? {
+                          kind: "new",
+                          input: {
+                            name: newFeature.trim(),
+                            currentBehavior: "",
+                            acceptanceCriteria: "",
+                            tags: [],
+                          },
+                        }
+                      : { kind: "existing", id: featureId },
+                task: body,
+                impactFeatureIds: scope === "MODULE" ? impacts : [],
+              },
+              init,
+            )
+          : null;
+      const task = createdScope
+        ? { id: createdScope.taskId }
+        : scope === "MODULE"
           ? await api.createModuleTask(
               projectId,
               moduleId,
@@ -201,6 +249,7 @@ export function GlobalTaskCreateModal({
       const rejected: string[] = [];
       for (const url of linksOf(linkText)) {
         try {
+          const currentLinks = await api.listExternalLinks("TASK", task.id);
           await api.addExternalLink(
             "TASK",
             task.id,
@@ -208,6 +257,7 @@ export function GlobalTaskCreateModal({
             {
               headers: {
                 "x-csrf-token": init.headers["x-csrf-token"],
+                "If-Match": `"${currentLinks.rowVersion}"`,
                 "Idempotency-Key": keyFor(
                   JSON.stringify(["link", task.id, url]),
                 ),
@@ -218,14 +268,26 @@ export function GlobalTaskCreateModal({
           rejected.push(url);
         }
       }
-      return { task, rejected };
+      return {
+        task,
+        rejected,
+        location: createdScope ?? {
+          projectId,
+          moduleId,
+          featureId: scope === "MODULE" ? null : featureId,
+          taskId: task.id,
+        },
+      };
     },
-    onSuccess: async ({ task, rejected }) => {
+    onSuccess: async ({ task, rejected, location }) => {
       retryKeys.current.clear();
       setFailedLinks(rejected);
+      setCreatedLocation(location);
       await Promise.all(
         [
           "tasks",
+          "modules",
+          "features",
           "activity",
           "search",
           "notifications",
@@ -241,11 +303,15 @@ export function GlobalTaskCreateModal({
       if (rejected.length === 0) {
         reset();
         onClose();
+        onCreatedLocation?.(location);
       }
     },
   });
 
   function reset(): void {
+    setCreatedLocation(null);
+    setNewModule("");
+    setNewFeature("");
     setTitle("");
     setDescription("");
     setPriority("NORMAL");
@@ -265,8 +331,9 @@ export function GlobalTaskCreateModal({
 
   function submit(event: FormEvent): void {
     event.preventDefault();
+    if (createdLocation || mutation.isPending) return;
     if (!targetReady) {
-      setInvalid("请先选择任务归属的项目、模块与功能。");
+      setInvalid("请选择任务归属，或填写自定义模块、功能名称。");
       return;
     }
     if (title.trim().length === 0) {
@@ -319,9 +386,17 @@ export function GlobalTaskCreateModal({
               title={`任务已创建，但 ${failedLinks.length} 个 GitHub 链接未能关联：${failedLinks.join("、")}`}
             />
           )}
+          {createdLocation && failedLinks.length > 0 && (
+            <a href={taskDetailPath(createdLocation)}>
+              查看已创建任务并管理 GitHub 链接
+            </a>
+          )}
           {invalid && <Alert type="warning" title={invalid} />}
 
-          <fieldset className="task-form-fields" disabled={busy}>
+          <fieldset
+            className="task-form-fields"
+            disabled={busy || createdLocation !== null}
+          >
             <div className="calm-field">
               <label htmlFor="global-task-title">任务标题</label>
               <input
@@ -333,7 +408,15 @@ export function GlobalTaskCreateModal({
             </div>
 
             <div className="calm-field">
-              <span className="field-label">任务范围</span>
+              <span
+                className="field-label"
+                title="功能级：推进一个具体功能；模块级：跨功能或模块整体工作。"
+              >
+                任务范围
+              </span>
+              <small>
+                功能级关联具体功能；模块级用于跨功能或模块整体工作。
+              </small>
               <CalmSegmented
                 label="任务范围"
                 options={scopeOptions}
@@ -379,7 +462,7 @@ export function GlobalTaskCreateModal({
                 disabled={projectId === 0}
                 onChange={(event) => {
                   setModuleId(Number(event.target.value));
-                  setFeatureId(0);
+                  setFeatureId(Number(event.target.value) === -1 ? -1 : 0);
                   setAssigneeId(0);
                   setImpactFeatureIds([]);
                 }}
@@ -387,14 +470,34 @@ export function GlobalTaskCreateModal({
                 <option value={0}>
                   {projectId === 0 ? "请先选择项目" : "请选择模块"}
                 </option>
+                <option value={-1}>自定义 · 创建新模块</option>
                 {modules.query.data?.items.map((module) => (
-                  <option key={module.id} value={module.id}>
+                  <option
+                    key={module.id}
+                    value={module.id}
+                    disabled={module.status !== "ACTIVE"}
+                  >
                     {module.name}
                   </option>
                 ))}
               </select>
             </div>
 
+            {moduleId === -1 && (
+              <div className="calm-field">
+                <label htmlFor="new-module-name">新模块名称</label>
+                <input
+                  id="new-module-name"
+                  value={newModule}
+                  maxLength={200}
+                  onChange={(e) => setNewModule(e.target.value)}
+                />
+                <small>提交任务时一起创建。</small>
+              </div>
+            )}
+            {modules.query.isError && (
+              <p role="alert">模块加载失败，请重试。</p>
+            )}
             {scope === "FEATURE" && (
               <div className="calm-field">
                 <label htmlFor="global-task-feature">所属功能</label>
@@ -410,8 +513,13 @@ export function GlobalTaskCreateModal({
                   <option value={0}>
                     {moduleId === 0 ? "请先选择模块" : "请选择功能"}
                   </option>
+                  <option value={-1}>自定义 · 创建新功能</option>
                   {features.query.data?.items.map((feature) => (
-                    <option key={feature.id} value={feature.id}>
+                    <option
+                      key={feature.id}
+                      value={feature.id}
+                      disabled={feature.status !== "ACTIVE"}
+                    >
                       {feature.name}
                       {feature.status === "ARCHIVED" ? "（已归档）" : ""}
                     </option>
@@ -420,6 +528,20 @@ export function GlobalTaskCreateModal({
               </div>
             )}
 
+            {scope === "FEATURE" && featureId === -1 && (
+              <div className="calm-field">
+                <label htmlFor="new-feature-name">新功能名称</label>
+                <input
+                  id="new-feature-name"
+                  value={newFeature}
+                  maxLength={500}
+                  onChange={(e) => setNewFeature(e.target.value)}
+                />
+                <small>
+                  提交任务时一起创建，稍后可在功能档案补充说明与验收标准。
+                </small>
+              </div>
+            )}
             <div className="calm-field">
               <label htmlFor="global-task-assignee">指派给</label>
               <select
@@ -563,7 +685,7 @@ export function GlobalTaskCreateModal({
             className="primary-button"
             htmlType="submit"
             loading={busy}
-            disabled={!targetReady}
+            disabled={!targetReady || createdLocation !== null}
           >
             创建任务
           </Button>

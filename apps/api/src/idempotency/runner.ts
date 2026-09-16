@@ -34,7 +34,7 @@ export interface IdempotencyExecutionResult {
  * 冲突者重放前必须通过的重放授权校验。
  *
  * 实现方须重新验证当前认证、原操作权限、`replay_auth_context` 中每个结果资源的
- * 当前可读权限以及该路由要求的高风险重认证新鲜度；任一门禁失败应抛错，
+ * 当前可读权限以及该路由要求的高风险管理员门禁；任一门禁失败应抛错，
  * 此时不得向客户端泄露已存状态码或响应体。
  */
 export type ReplayAuthorizer = (

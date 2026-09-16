@@ -21,9 +21,6 @@ export function describeProjectManagementError(
       return "登录状态已失效，请重新登录后再操作项目。";
     }
     if (error.status === 403) {
-      if (error.code === "ADMIN_REAUTH_REQUIRED") {
-        return "请先完成管理员安全验证，再继续归档或恢复项目。";
-      }
       if (error.code === "ADMIN_REQUIRED") {
         return "只有系统管理员可以归档或恢复项目。";
       }

@@ -17,6 +17,16 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     const projectId = new URL(page.url()).searchParams.get("projectId");
     expect(projectId).not.toBeNull();
 
+    await page.goto(`/projects/${projectId}/modules`);
+    await page
+      .locator(".project-detail-actions")
+      .getByRole("button", { name: "新增模块", exact: true })
+      .click();
+    const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
+    await moduleDialog.getByLabel("模块名称").fill("记录测试模块");
+    await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await expect(moduleDialog).toBeHidden();
+    await page.goto(`/records?projectId=${projectId}`);
     const title = `跨项目记录-${Date.now()}`;
     await page.getByRole("button", { name: "新建独立草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
@@ -34,7 +44,9 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     // 我的草稿条带：B-3b 起跨项目并回填项目 / 模块名称。
     const strip = page.getByRole("region", { name: "我的草稿" });
     await expect(strip.getByText(title)).toBeVisible();
-    await expect(strip.getByText(`${project.name} / 未分类`)).toBeVisible();
+    await expect(
+      strip.getByText(`${project.name} / 记录测试模块`),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "发布记录", exact: true }).click();
     const publish = page.getByRole("dialog", { name: "发布迭代记录" });

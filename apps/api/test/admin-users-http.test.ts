@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { reauthExpired } from "../src/auth/admin-high-risk.error.js";
+import { notAdmin } from "../src/auth/admin-high-risk.error.js";
 import type { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
 import type { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
 import type { PasswordService } from "../src/auth/password.service.js";
@@ -170,13 +170,13 @@ describe("F-03 AdminUsersHttpService", () => {
         })
       ).status,
     ).toBe(422);
-    s.highRiskVerify.mockRejectedValueOnce(reauthExpired());
+    s.highRiskVerify.mockRejectedValueOnce(notAdmin());
     expect((await s.service.handle("updateUser", request)).status).toBe(403);
     expect(s.create).not.toHaveBeenCalled();
     expect(s.update).not.toHaveBeenCalled();
   });
 
-  it("映射自身停用、最后一名 MFA 管理员与 409 状态冲突为安全错误", async () => {
+  it("映射自身停用与 409 状态冲突为安全错误", async () => {
     const s = setup();
     s.update.mockRejectedValueOnce(adminUserSelfMutation());
     const result = await s.service.handle("updateUser", validRequest());

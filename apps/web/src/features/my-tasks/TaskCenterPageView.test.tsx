@@ -230,13 +230,15 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByText("已完成任务-901")).toBeInTheDocument();
   });
 
-  it("explains the R-3 assignee boundary in the project-scoped empty state", async () => {
+  it("explains the project-wide empty state", async () => {
     renderView({
       filters: { scope: "project", projectId: 5, status: "all" },
       adapter: serverLikeAdapterWith([]),
     });
 
-    expect(await screen.findByText(/只返回你负责的任务/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/当前项目没有符合条件的任务/),
+    ).toBeInTheDocument();
   });
 
   it("resolves project names from the injected project port", async () => {
@@ -435,12 +437,27 @@ describe("TaskCenterPageView", () => {
     const merged = await screen.findByTestId("my-task-102");
     expect(within(merged).getByText("模块级")).toBeInTheDocument();
     expect(within(merged).getByText("主任务")).toBeInTheDocument();
-    expect(within(merged).getByText("高优先级")).toBeInTheDocument();
+    expect(within(merged).getByText("高")).toBeInTheDocument();
+    expect(within(merged).getByTitle("优先级：高")).toBeInTheDocument();
     expect(within(merged).getByText("记录 3 条")).toBeInTheDocument();
 
     const plain = await screen.findByTestId("my-task-101");
-    expect(within(plain).getByText("紧急优先级")).toBeInTheDocument();
+    expect(within(plain).getByText("紧急")).toBeInTheDocument();
+    expect(within(plain).getByTitle("优先级：紧急")).toBeInTheDocument();
     expect(within(plain).queryByText(/记录/)).toBeNull();
+  });
+
+  it("keeps every priority label within two characters in the filter", async () => {
+    renderView();
+
+    const select = await screen.findByLabelText("优先级");
+    const labels = Array.from(select.querySelectorAll("option")).map(
+      (option) => option.textContent?.trim() ?? "",
+    );
+    expect(labels).toEqual(["全部", "紧急", "高", "普通", "低"]);
+    for (const label of labels) {
+      expect([...label].length).toBeLessThanOrEqual(2);
+    }
   });
 
   it("offers an enabled create action that opens the cross-project form", async () => {
@@ -533,7 +550,7 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByRole("tab", { name: /全部任务/ })).toBeDisabled();
     expect(
       screen.getByRole("tab", { name: /全部任务/ }).getAttribute("title"),
-    ).toContain("跨用户的授权范围");
+    ).toContain("系统管理员");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: /我负责的/ }));
@@ -541,4 +558,52 @@ describe("TaskCenterPageView", () => {
       expect.objectContaining({ scope: "mine" }),
     );
   });
+});
+
+it("clears overdue when opening completed tasks", async () => {
+  const { onFiltersChange } = renderView({ filters: { overdue: true } });
+  await userEvent.click(
+    await screen.findByRole("button", { name: /本月完成/ }),
+  );
+  expect(onFiltersChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ status: "done", overdue: false }),
+  );
+});
+
+it("keeps the project when drilling into its overdue statistic", async () => {
+  const { onFiltersChange } = renderView({
+    filters: { scope: "project", projectId: 1 },
+  });
+  await userEvent.click(await screen.findByRole("button", { name: /已逾期/ }));
+  expect(onFiltersChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ scope: "mine", projectId: 1, overdue: true }),
+  );
+});
+
+it("loads the next page and keeps previously loaded tasks", async () => {
+  const fetchMyTasks = vi.fn(
+    async (input: Parameters<MyTasksAdapter["fetchMyTasks"]>[0]) => ({
+      ...(await MY_TASKS_MOCK_ADAPTER.fetchMyTasks(input)),
+      items: [
+        {
+          ...doneTask,
+          taskId: input.cursor ? 902 : 901,
+          title: input.cursor ? "第二页任务" : "第一页任务",
+          workStatus: "TODO" as const,
+        },
+      ],
+      nextCursor: input.cursor ? null : "next-page",
+      hasMore: !input.cursor,
+    }),
+  );
+  renderView({ adapter: { ...MY_TASKS_MOCK_ADAPTER, fetchMyTasks } });
+  await userEvent.click(
+    await screen.findByRole("button", { name: "加载更多任务" }),
+  );
+  expect(await screen.findByText("第二页任务")).toBeVisible();
+  expect(screen.getByText("第一页任务")).toBeVisible();
+  expect(fetchMyTasks).toHaveBeenLastCalledWith(
+    expect.objectContaining({ cursor: "next-page" }),
+  );
+  expect(screen.queryByRole("button", { name: "加载更多任务" })).toBeNull();
 });

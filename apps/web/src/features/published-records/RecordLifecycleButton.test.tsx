@@ -16,9 +16,6 @@ import {
   type InpulseApiClient,
 } from "@generated/api";
 import { RecordLifecycleButton } from "./RecordLifecycleButton";
-vi.mock("@features/auth/AdminReauthenticateModal", () => ({
-  AdminReauthenticateModal: () => <p>双因子验证测试入口</p>,
-}));
 const item: PublishedRecord = {
   id: 7,
   projectId: 1,
@@ -148,12 +145,12 @@ it("409 requires loading current state and explicit confirmation before restorin
     { headers: { "If-Match": '"3"' } },
   ]);
 });
-it("keeps the reason while opening dual-factor reauthentication", async () => {
+it("keeps the reason and reports the missing administrator rights on 403", async () => {
   const api = {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     voidChangeRecord: vi.fn().mockRejectedValue(
       new ApiError(403, {
-        code: "ADMIN_REAUTH_REQUIRED",
+        code: "ADMIN_REQUIRED",
         message: "验证",
         details: {},
         requestId: "r",
@@ -165,7 +162,7 @@ it("keeps the reason while opening dual-factor reauthentication", async () => {
     target: { value: "保留此原因" },
   });
   await clickConfirm("确认作废记录");
-  await screen.findByText("双因子验证测试入口");
+  await screen.findByText("只有系统管理员可以作废或恢复记录。");
   expect(screen.getByLabelText("作废原因")).toHaveValue("保留此原因");
 });
 

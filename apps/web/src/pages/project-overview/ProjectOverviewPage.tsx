@@ -6,11 +6,9 @@ import {
   describeProjectListError,
   useProjectDetail,
 } from "@features/projects/project-query";
-import { useModules } from "@features/modules/module-query";
 import type { ProjectOverviewAdapter } from "@features/project-overview/project-overview-types";
 import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
-import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 
 export interface ProjectOverviewPageProps {
   readonly client?: InpulseApiClient;
@@ -28,7 +26,6 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
 }) => {
   const navigate = useNavigate();
   const projectQuery = useProjectDetail({ client, projectId });
-  const moduleQuery = useModules(projectId, client);
   const projectError = projectQuery.isError
     ? describeProjectListError(projectQuery.error)
     : undefined;
@@ -43,29 +40,14 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
       client={client}
       project={projectQuery.data ?? null}
       projectLoading={projectQuery.isPending}
-      modules={moduleQuery.query.data?.items ?? []}
       onRetryProject={() => void projectQuery.refetch()}
       onBackToProjects={() => navigate("/projects")}
-      onOpenOverview={() => navigate("/projects/" + projectId + "/overview")}
-      onOpenModule={(moduleId) =>
-        navigate(
-          "/projects/" + projectId + "/modules/" + moduleId + "/features",
-        )
-      }
       onOpenModules={() => navigate("/projects/" + projectId + "/modules")}
       onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
       onOpenRecords={() =>
         navigate("/records?view=published&projectId=" + projectId)
       }
       onOpenIssues={() => navigate("/issues")}
-      extraActions={
-        <ExternalLinksPanel
-          targetType="PROJECT"
-          targetId={projectId}
-          client={client}
-          triggerClassName="secondary-button"
-        />
-      }
       {...(projectError === undefined ? {} : { projectError })}
       adapter={overviewAdapter}
     />

@@ -12,6 +12,7 @@ export interface SessionCleanupResult {
   readonly deletedUserSessions: number;
   readonly deletedSessionCsrfTokens: number;
   readonly deletedPreauthSessions: number;
+  readonly deletedSsoLoginAttempts: number;
   readonly batches: number;
 }
 
@@ -73,6 +74,7 @@ export class SessionCleanupService {
     let deletedUserSessions = 0;
     let deletedSessionCsrfTokens = 0;
     let deletedPreauthSessions = 0;
+    let deletedSsoLoginAttempts = 0;
     let batches = 0;
 
     for (let batchIndex = 0; batchIndex < options.maxBatches; batchIndex += 1) {
@@ -83,10 +85,12 @@ export class SessionCleanupService {
       deletedUserSessions += batch.deletedUserSessions;
       deletedSessionCsrfTokens += batch.deletedSessionCsrfTokens;
       deletedPreauthSessions += batch.deletedPreauthSessions;
+      deletedSsoLoginAttempts += batch.deletedSsoLoginAttempts;
       if (
         batch.deletedUserSessions === 0 &&
         batch.deletedSessionCsrfTokens === 0 &&
-        batch.deletedPreauthSessions === 0
+        batch.deletedPreauthSessions === 0 &&
+        batch.deletedSsoLoginAttempts === 0
       ) {
         break;
       }
@@ -96,6 +100,7 @@ export class SessionCleanupService {
       deletedUserSessions,
       deletedSessionCsrfTokens,
       deletedPreauthSessions,
+      deletedSsoLoginAttempts,
       batches,
     };
   }

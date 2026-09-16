@@ -48,14 +48,15 @@ function publishedService(
 function draftsService(repository: RecordDraftRepository) {
   return new RecordDraftsService(
     accessStub(),
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
+    { listNames: async () => [] } as never,
+    { listNames: async () => [] } as never,
+    { listNames: async () => [] } as never,
+    { listNames: async () => [] } as never,
     repository,
     uowStub(),
-    {} as never,
+    { listNames: async () => [] } as never,
     new TimeCursorService(ring, "RECORD_DRAFTS"),
+    { listByIds: async () => [] } as never,
   );
 }
 
@@ -150,7 +151,17 @@ describe("B-1 record list pagination", () => {
   });
   it("returns the draft page envelope with limit 1..100 default 20", async () => {
     const listPage = vi.fn().mockResolvedValue({
-      items: [{ id: 8 }],
+      items: [
+        {
+          id: 8,
+          projectId: 5,
+          moduleId: 2,
+          featureId: null,
+          impactFeatureIds: [],
+          authorId: 9,
+          handlerId: 9,
+        },
+      ],
       last: position,
       hasMore: true,
     });

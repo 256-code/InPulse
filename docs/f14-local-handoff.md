@@ -1,5 +1,6 @@
 # F-14 功能级任务本地交审
 
+> 2026-09-15 注：[ADR-031](adr/ADR-031.md) 已移除全部 TOTP 验证与管理员高风险重认证；本文件是当时交付事实的历史交审记录，其中「密码/TOTP 重认证」「`AdminReauthenticateModal`」「双时间戳门禁」等描述不再代表现行行为（现行门禁为有效完整管理员 Session + `is_admin` + 写操作 CSRF/幂等）。
 2026-09-09，B；工作区 `C:\Users\10348\.codex\worktrees\610b\InPulse`，分支 `codex/f14-feature-tasks`，fetch 后基线 `1c2b5bf`（F-13 PR #70）。本批只交付 F-14，F-15 必须在本批合入并收到协调通知后开始。本地提交供 PR 对话取用，不自行推送或合并，不修改 `D:\InPulse`。
 
 ## 用户结果与范围

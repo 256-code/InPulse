@@ -24,6 +24,7 @@ export const modules = appSchema.table(
   {
     id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     projectId: integer("project_id").notNull(),
+    code: text("code").notNull(),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     kind: text("kind").notNull().default("NORMAL"),
@@ -38,6 +39,13 @@ export const modules = appSchema.table(
     archivedAt: timestamptz("archived_at"),
   },
   (table) => [
+    unique("modules_project_code_unique").on(table.projectId, table.code),
+    check(
+      "modules_code_check",
+      sql.raw(
+        "code ~ '^[A-Z][A-Z0-9_]{1,31}-M-[1-9][0-9]*$' AND length(code) <= 64",
+      ),
+    ),
     unique("modules_id_project_unique").on(table.id, table.projectId),
     foreignKey({
       name: "modules_project_fk",
@@ -83,6 +91,7 @@ export const features = appSchema.table(
     code: text("code").notNull(),
     name: text("name").notNull(),
     currentBehavior: text("current_behavior").notNull().default(""),
+    acceptanceCriteria: text("acceptance_criteria").notNull().default(""),
     tags: text("tags").array().notNull().default(sql.raw("'{}'::text[]")),
     status: text("status").notNull().default("ACTIVE"),
     createdBy: integer("created_by")
@@ -125,6 +134,10 @@ export const features = appSchema.table(
     check(
       "features_behavior_check",
       sql.raw("length(current_behavior) <= 50000"),
+    ),
+    check(
+      "features_acceptance_check",
+      sql.raw("length(acceptance_criteria) <= 50000"),
     ),
     check(
       "features_tags_check",

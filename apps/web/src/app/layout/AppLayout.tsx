@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
+import { navigateToSsoStart } from "@features/auth/sso-navigation";
 import { CommandPalette } from "@features/command-palette/CommandPalette";
 import {
   InpulseIcon,
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { NotificationBell } from "@features/notifications/NotificationBell";
-import { AdminReauthenticateModal } from "@features/auth/AdminReauthenticateModal";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import { treeScopeOf } from "@features/project-tree/tree-selection";
 import { useCatalogTrail, useShellCounters } from "./shell-data";
@@ -118,9 +118,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [reauthOpen, setReauthOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // 系统目录内嵌在「项目与功能」导航项下：进入项目路由自动展开，也可手动开合。
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
   const selectedKey = resolveSelectedKey(location.pathname);
@@ -167,6 +168,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const catalogProjectId = isCatalogView ? catalogScope.projectId : null;
   const moduleCrumbName = isCatalogView ? trail.moduleName : null;
   const featureCrumbName = isCatalogView ? trail.featureName : null;
+
+  useEffect(() => {
+    if (resolveSelectedKey(location.pathname) === "projects") {
+      setCatalogOpen(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -219,7 +226,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const handleAccountAction = async () => {
     setAccountOpen(false);
     if (status !== "authenticated") {
-      navigate("/login");
+      // 直接整页进入统一身份认证，避免先渲染 InPulse 登录页再跳转的闪屏。
+      navigateToSsoStart("/");
       return;
     }
     setIsLoggingOut(true);
@@ -228,7 +236,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         .then(() => true)
         .catch(() => false);
       if (loggedOut) {
-        navigate("/login");
+        // 退出后直接整页跳到单点登录入口，不再经由 /login 中转渲染。
+        navigateToSsoStart("/");
       }
     } finally {
       setIsLoggingOut(false);
@@ -237,10 +246,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const renderNavigationItem = (item: NavigationItem) => {
     const count = shellCounts[item.key] ?? 0;
-    return (
+    const withCatalog = item.key === "projects";
+    const button = (
       <button
         type="button"
-        key={item.key}
         className={`nav-item${selectedKey === item.key ? " active" : ""}`}
         aria-current={selectedKey === item.key ? "page" : undefined}
         onClick={() => handleNavigation(item.path)}
@@ -253,6 +262,37 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </em>
         ) : null}
       </button>
+    );
+    if (!withCatalog) {
+      return <React.Fragment key={item.key}>{button}</React.Fragment>;
+    }
+    // 系统目录内嵌在「项目与功能」下：chevron 切换按钮与导航按钮平级，避免嵌套 button。
+    return (
+      <div key={item.key} className="nav-item-group">
+        <div className="nav-item-row">
+          {button}
+          <button
+            type="button"
+            className="nav-tree-toggle"
+            aria-label={catalogOpen ? "收起系统目录" : "展开系统目录"}
+            aria-expanded={catalogOpen}
+            onClick={() => setCatalogOpen((current) => !current)}
+          >
+            <InpulseIcon
+              name="chevron"
+              size={14}
+              className={catalogOpen ? "tree-chevron expanded" : "tree-chevron"}
+            />
+          </button>
+        </div>
+        {catalogOpen ? (
+          <ProjectTree
+            activeScope={treeScope}
+            onNavigate={handleNavigation}
+            {...(projectClient ? { client: projectClient } : {})}
+          />
+        ) : null}
+      </div>
     );
   };
 
@@ -287,17 +327,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             {workspaceNavigation.map(renderNavigationItem)}
             <p className="nav-section">系统</p>
             {visibleSystemNavigation.map(renderNavigationItem)}
-            {treeScope === null ? null : (
-              <>
-                <p className="nav-section">系统目录</p>
-                <ProjectTree
-                  projectId={treeScope.projectId}
-                  selection={treeScope.selection}
-                  onNavigate={handleNavigation}
-                  {...(projectClient ? { client: projectClient } : {})}
-                />
-              </>
-            )}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>
@@ -305,14 +334,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </div>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => handleNavigation("/settings")}
-            >
-              <InpulseIcon name="shield" size={14} />
-              查看权限矩阵
-            </button>
+            {/* 权限矩阵只存在于管理员专属的「成员与设置」页，
+                对普通成员显示入口只会落到「无权访问」，因此仅对管理员渲染。 */}
+            {user?.isAdmin ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => handleNavigation("/settings")}
+              >
+                <InpulseIcon name="shield" size={14} />
+                查看权限矩阵
+              </button>
+            ) : null}
           </div>
         </aside>
 
@@ -373,7 +406,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                           title={moduleCrumbName}
                           onClick={() =>
                             handleNavigation(
-                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}`,
+                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}/features`,
                             )
                           }
                         >
@@ -454,18 +487,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                         <small>{popoverRoleLabel}</small>
                       </div>
                     </div>
-                    {user?.isAdmin ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountOpen(false);
-                          setReauthOpen(true);
-                        }}
-                      >
-                        <InpulseIcon name="shield" size={15} />
-                        管理员安全验证
-                      </button>
-                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleNavigation("/settings")}
@@ -501,10 +522,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onClose={() => setPaletteOpen(false)}
         onNavigate={handleNavigation}
         onOpenSearch={handleOpenSearch}
-      />
-      <AdminReauthenticateModal
-        open={reauthOpen}
-        onClose={() => setReauthOpen(false)}
       />
     </>
   );

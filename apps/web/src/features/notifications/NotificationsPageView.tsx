@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Empty,
-  List,
   Space,
   Spin,
   Tag,
@@ -119,12 +118,20 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
     );
   } else {
     content = (
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <List
-          dataSource={items}
-          rowKey={(item) => item.id}
-          renderItem={(item) => (
-            <List.Item data-testid={`notification-item-${item.id}`}>
+      <Space orientation="vertical" size={16} style={{ width: "100%" }}>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {items.map((item, index) => (
+            <li
+              key={item.id}
+              data-testid={`notification-item-${item.id}`}
+              style={{
+                padding: "12px 0",
+                borderBottom:
+                  index === items.length - 1
+                    ? "none"
+                    : "1px solid var(--border)",
+              }}
+            >
               <div
                 role="button"
                 tabIndex={0}
@@ -177,9 +184,9 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
                   </Button>
                 </Space>
               </div>
-            </List.Item>
-          )}
-        />
+            </li>
+          ))}
+        </ul>
         {listQuery.hasNextPage ? (
           <Button
             type="primary"
@@ -196,7 +203,7 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
 
   return (
     <Card style={{ borderRadius: 10 }}>
-      <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={20} style={{ width: "100%" }}>
         <Space align="center" wrap>
           <Title level={3} style={{ margin: 0 }}>
             站内通知

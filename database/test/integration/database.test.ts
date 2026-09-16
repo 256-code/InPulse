@@ -56,10 +56,15 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0007_backup_role_pg_dump_grants.sql",
       "0008_records_cross_project_indexes.sql",
       "0009_tasks_creator_index.sql",
+      "0010_project_module_codes.sql",
+      "0011_feature_acceptance.sql",
+      "0012_project_root_repository.sql",
+      "0013_sso_login.sql",
+      "0014_sso_backup_grants.sql",
     ]);
   });
 
-  test("project bootstrap is atomic and requires creator history plus one unclassified module", async () => {
+  test("project bootstrap requires creator history and allows an empty module list", async () => {
     const userId = await createUser(runtime);
     const invalidCode = `P${Date.now().toString(36)}X`.toUpperCase();
 
@@ -72,6 +77,20 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       }),
       "23514",
     );
+
+    const emptyProjectId = await runtime.begin(async (tx) => {
+      const [project] = await tx<Array<{ id: number }>>`
+        INSERT INTO app.projects (code, name, created_by)
+        VALUES (${invalidCode + "E"}, 'Empty project', ${userId}) RETURNING id
+      `;
+      if (!project) throw new Error("Project insert returned no row");
+      await tx`INSERT INTO app.project_members (project_id, user_id) VALUES (${project.id}, ${userId})`;
+      return project.id;
+    });
+    const [emptyCounts] = await runtime<Array<{ modules: number }>>`
+      SELECT count(*)::integer AS modules FROM app.modules WHERE project_id=${emptyProjectId}
+    `;
+    expect(emptyCounts).toEqual({ modules: 0 });
 
     const fixture = await createProject(runtime, userId);
     const [counts] = await runtime<Array<{ members: number; modules: number }>>`
@@ -921,6 +940,15 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     ).resolves.toHaveLength(1);
     await expectPostgresError(
       backup.unsafe("DELETE FROM app.user_sessions"),
+      "42501",
+    );
+    // ADR-032 / 迁移 0014：一次性登录材料表同样必须有表级 SELECT，
+    // 这是 pg_dump 加 ACCESS SHARE 锁的前置条件；备份角色没有任何写权限。
+    await expect(
+      backup.unsafe("SELECT count(*) FROM app.sso_login_attempts"),
+    ).resolves.toHaveLength(1);
+    await expectPostgresError(
+      backup.unsafe("DELETE FROM app.sso_login_attempts"),
       "42501",
     );
     await expect(

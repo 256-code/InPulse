@@ -42,6 +42,10 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-09-12 登录入口与登录页视觉（C）：匿名访问不再显示「需要登录」提示页，任何受保护入口（含 `/`）都会直达登录页并携带 `from` 回跳参数，登录成功后回到原目标；登录页按设计师稿重做为独立全屏品牌页（Libiao Robotics 标志、图标药丸输入框、黄色主按钮与卡片底部品牌条），品牌样式经 `LoginForm` 的 `variant="brand"` 与 `apps/web/src/pages/login/login-page.css` 隔离，`RequireAdmin` 403 与登录状态异常的 500 空态语义未变。本片仅前端入口与视觉，未改后端、契约、迁移、角色、权限行与 CI；[PR #134](https://github.com/256-code/InPulse/pull/134)。
 
+> 2026-09-15 移除 TOTP（用户要求，[ADR-031](./docs/adr/ADR-031.md) 取代 ADR-016）：登录只做密码验证，成功后直接签发自 `AUTHENTICATED` 的完整 Session 与新 CSRF；删除 MFA 注册/验证/恢复码与管理员密码 + TOTP 重认证共 7 条路由与全部前后端实现，管理员高风险操作（用户管理、成员管理、归档/恢复、原始审计、记录作废/恢复）只要求当前有效的完整管理员 Session、`is_admin`、写操作 CSRF 与幂等；最后一名保护改为「最后一名可用管理员」（`LAST_ACTIVE_ADMIN_REQUIRED`）。数据库本期只停用不删除（保留 `user_totp_factors`、`mfa_recovery_codes` 与 `user_sessions` 历史列），TOTP KEK Secret 不再挂载；上文 2026-09-09 的 TOTP 条目为当时事实，已被本条取代。
+
+> 2026-09-15 接入立镖 Casdoor OIDC 单点登录（用户要求，[ADR-032](./docs/adr/ADR-032.md)）：`/login` 默认整页跳转到 `GET /api/v1/auth/sso/start`，回调 `GET /api/v1/auth/sso/callback` 先校验一次性 `state`（URL 与 `__Host-sso-state` Cookie 双绑定）与 id_token（RS256/JWKS，含 `iss`/`aud`/`exp`/`nbf`/`iat`/`nonce`），再复用与口令登录同一实现签发本地 Session；首次登录 JIT 开通账号（`is_admin=false`、`password_hash=NULL`、无项目权限），映射优先级为 `users.sso_subject` → 登录名命中且邮箱一致时绑定 → JIT，邮箱不一致或被占用一律按冲突拒绝，Casdoor 的 `isAdmin` 等 claim 不影响 InPulse 权限；`SSO_ENABLED` 未配置或配置非法时 fail closed，`/login` 回落 `?local=1&sso=disabled`，管理员应急入口为隐藏的 `/login?local=1`。迁移 `0013_sso_login.sql` 新增 `users.sso_subject`（部分唯一索引 + 绑定不可改写触发器）、允许 `password_hash` 为空并新增 `app.sso_login_attempts`；本地会话空闲有效期由 8 小时收紧为 30 分钟（口令与 SSO 共用，`SESSION_IDLE_MAX_AGE_SECONDS` 可覆盖）；`securityFlow` allowlist 由三条扩为五条，Route Registry 97 条路由；生产 Secret 为 `/run/secrets/sso_client_secret`；迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的 pg_dump 只读授权，并把该表数据加入备份排除清单（只保留结构）。 联调另修复三处真实缺陷：`AppModule` 经 `audit/index.js` barrel 引入 `AuditWritePort` 造成的循环依赖（Nest 扫描时 `process.abort()`，已由 `pnpm check:deps` 的 `[circular-dependency]` 覆盖）、`vite preview` 的 CSP 中间件短路 `/api/**` 使 SSO 回落在本地预览里自跳转成环（新增 `isApiPath`）、以及 `SSO_REDIRECT_URL` 更名 `SSO_REDIRECT_URI` 以符合 Secret 扫描门禁。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；五个生产容器镜像（API/Migration/Web/DB-bootstrap/Ops）的构建与 Trivy 扫描已在 main CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际通过，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E（`/audit` 审计页已补齐，见[测试矩阵](./docs/test-matrix.md)）、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份的真实全新主机恢复演练与启用仍未落库，补齐前请勿假设这些检查已执行。
 
 当前可运行的根级命令（§12.4 顺序）：
@@ -154,3 +158,12 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 ## 许可证
 
 本仓库目前未发布开源许可证，请勿将其视为可自由使用、修改或分发的开源项目。
+
+
+### 2026-09-14 项目与任务流程修订
+
+见 [ADR-030](docs/adr/ADR-030.md)。新项目从零模块开始；模块使用项目内业务编号，任务创建可同时创建模块和功能。普通成员可查看同项目成员，任务中心提供项目全员/管理员全部任务及分页前逾期筛选。功能可编辑验收标准，草稿详情改为弹窗与名称展示，聚合组提供详情/解除合并入口，项目概览可直达明确设置的根仓库。
+
+部署前执行新增迁移 `0010`–`0012`，再部署配套 API/Web。历史未分类模块保留，迁移包含历史编号回填；`0012` 只为 runtime 增加根仓库标记列的 UPDATE 权限。无新增生产依赖。
+
+本轮使用 Node 24、独立 PostgreSQL 18.6 + PGroonga 测试库完成相关服务层、HTTP/数据库与前端交互回归，并验证 `0000`–`0009` 历史数据升级后名称/ID/kind 保留、编号连续及空项目可提交。按用户要求未执行全量构建、静态检查或依赖审计；浏览器全量 E2E 未运行，不能将本轮定向测试视为完整 CI 通过。

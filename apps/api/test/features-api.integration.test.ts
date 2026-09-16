@@ -1,3 +1,4 @@
+import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
@@ -101,6 +102,7 @@ beforeAll(async () => {
     audit,
     activity,
     search,
+    new PostgresUserReadPort(),
   );
   const http = new FeaturesHttpService(
     auth,
@@ -143,7 +145,7 @@ async function actor(admin = false): Promise<Actor> {
   const csrf = randomBytes(32).toString("base64url");
   const [session] = await client.sql<
     { id: number }[]
-  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, recovery_rotation_generation, recovery_rotation_consumed_generation, idle_expires_at, absolute_expires_at, reauthenticated_at, mfa_verified_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', 0, 0, now() + interval '1 hour', now() + interval '1 day', ${admin ? client.sql`now()` : client.sql`NULL`}, ${admin ? client.sql`now()` : client.sql`NULL`}) RETURNING id`;
+  >`INSERT INTO app.user_sessions (user_id, token_hash, token_hash_key_version, auth_version_at_issue, auth_state, idle_expires_at, absolute_expires_at) VALUES (${userId}, ${tokens.hash(cookie).hash}, 1, 1, 'AUTHENTICATED', now() + interval '1 hour', now() + interval '1 day') RETURNING id`;
   await client.sql`INSERT INTO app.session_csrf_tokens (session_id, token_hash, expires_at) VALUES (${session!.id}, ${tokens.hash(csrf).hash}, now() + interval '1 hour')`;
   return {
     userId,
@@ -274,7 +276,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       "FEATURE_CODE_CONFLICT",
     );
     expect(
-      await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id = ${project.projectId}`,
+      await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id = ${project.projectId} AND entity_type = 'FEATURE'`,
     ).toHaveLength(0);
     const [row] =
       await client.sql`SELECT name FROM app.features WHERE project_id = ${project.projectId}`;
@@ -291,24 +293,30 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     });
     const list = await request(project, "GET", member);
     expect(featureListResponseSchema.parse(await list.json()).items).toEqual([
-      item,
+      { ...item, createdByName: expect.any(String) },
     ]);
     expect(
       await (
         await request(project, "GET", member, undefined, `/${item.id}`)
       ).json(),
-    ).toEqual(item);
+    ).toEqual({ ...item, createdByName: expect.any(String) });
     const update = await request(
       project,
       "PATCH",
       member,
-      { name: item.name, currentBehavior: "新说明", tags: ["新标签"] },
+      {
+        name: item.name,
+        currentBehavior: "新说明",
+        acceptanceCriteria: "低于 400ms",
+        tags: ["新标签"],
+      },
       `/${item.id}`,
       1,
     );
     expect(update.status).toBe(200);
     expect(featureItemSchema.parse(await update.json())).toMatchObject({
       currentBehavior: "新说明",
+      acceptanceCriteria: "低于 400ms",
       tags: ["新标签"],
       rowVersion: 2,
       code: item.code,
@@ -317,8 +325,8 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     const audits =
       await auditReader.sql`SELECT event_payload FROM app.audit_logs WHERE project_id = ${project.projectId} AND action = 'feature.update'`;
     expect(audits[0]?.event_payload).toMatchObject({
-      before: { currentBehavior: "原说明" },
-      after: { currentBehavior: "新说明" },
+      before: { currentBehavior: "原说明", acceptanceCriteria: "" },
+      after: { currentBehavior: "新说明", acceptanceCriteria: "低于 400ms" },
     });
     expect(
       await client.sql`SELECT id FROM app.change_records WHERE project_id = ${project.projectId}`,
@@ -460,7 +468,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     ).toBe(200);
   });
 
-  it("requires administrator reauthentication, archives history, rejects downstream writes and restores only itself", async () => {
+  it("requires administrator identity, archives history, rejects downstream writes and restores only itself", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const item = await create(project, member);
@@ -531,20 +539,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       ),
       409,
     );
-    await client.sql`UPDATE app.user_sessions SET mfa_verified_at = now() - interval '6 minutes' WHERE id = ${admin.sessionId}`;
-    await error(await archive(), 403, "ADMIN_REAUTH_REQUIRED");
-    await error(
-      await request(
-        project,
-        "POST",
-        admin,
-        { reason: "恢复" },
-        `/${item.id}/restore`,
-        2,
-      ),
-      403,
-    );
-    await client.sql`UPDATE app.user_sessions SET mfa_verified_at = now(), reauthenticated_at = now() WHERE id = ${admin.sessionId}`;
+    expect((await archive()).status).toBe(200);
     const restored = await request(
       project,
       "POST",
@@ -689,13 +684,15 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       );
       for (const table of [
         "features",
-        "code_sequences",
         "activity_projection",
         "search_projection",
       ])
         expect(
           await client.sql`SELECT 1 FROM ${client.sql(`app.${table}`)} WHERE project_id = ${project.projectId}`,
         ).toHaveLength(0);
+      expect(
+        await client.sql`SELECT entity_type,last_number FROM app.code_sequences WHERE project_id=${project.projectId}`,
+      ).toEqual([{ entity_type: "MODULE", last_number: 1 }]);
       expect(
         await auditReader.sql`SELECT 1 FROM app.audit_logs WHERE project_id = ${project.projectId}`,
       ).toHaveLength(0);

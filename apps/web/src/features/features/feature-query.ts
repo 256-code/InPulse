@@ -14,6 +14,7 @@ export type FeatureChange = {
   item?: FeatureItem;
   name: string;
   currentBehavior: string;
+  acceptanceCriteria: string;
   reason: string;
   tags: string;
 };
@@ -24,9 +25,7 @@ export function featureErrorMessage(error: unknown): string {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或功能不存在，或你已无权访问。";
     if (error.status === 403)
-      return error.code === "ADMIN_REAUTH_REQUIRED"
-        ? "请先完成管理员安全验证，再重新提交。"
-        : "你没有执行此操作的权限，或安全校验未通过。";
+      return "你没有执行此操作的权限，或安全校验未通过。";
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
     if (error.status === 422) return "请检查功能名称、描述或原因。";
   }
@@ -59,6 +58,7 @@ export function useFeatures(
       const edit: FeatureEditRequest = {
         name: change.name.trim(),
         currentBehavior: change.currentBehavior,
+        acceptanceCriteria: change.acceptanceCriteria,
         tags:
           change.item && change.tags === change.item.tags.join("\n")
             ? [...change.item.tags]

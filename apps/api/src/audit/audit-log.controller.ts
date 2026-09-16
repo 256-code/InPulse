@@ -58,7 +58,7 @@ function resolveUserAgent(headers: HttpHeaderBag): string | null {
 
 /**
  * F-08 原始审计读取入口：只绑定 Route Registry 中的 getAuditLogs。
- * 先要求完整管理员 Session 且密码 + 当前 TOTP 重认证在 5 分钟内
+ * 先要求完整管理员 Session（ADR-031 后不再要求重认证窗口）
  * （GET 只读路径不强制同步 CSRF），再由 AuditQueryService 用独立
  * `audit_reader` 连接查询；返回前向 SYSTEM 链写 AUDIT_LOG_READ，
  * 留痕失败整体失败、不返回未留痕结果。

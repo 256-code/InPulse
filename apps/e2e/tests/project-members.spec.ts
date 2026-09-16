@@ -1,25 +1,53 @@
 import { expect } from "@playwright/test";
-import { test } from "../helpers/mfa-fixture.js";
+import { test } from "../helpers/admin-fixture.js";
 
 import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
-import { resetAdminTotpReplayStep } from "../helpers/admin-totp.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { totpCode } from "../helpers/totp.js";
 
-test("普通成员不能访问项目成员管理页面", async ({ browser }) => {
+test("普通成员只能查看本项目成员，不能增删或读取其他项目", async ({
+  browser,
+}) => {
   test.setTimeout(60_000);
   const runtime = await loadRuntime();
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/projects/${runtime.projectId}/members`);
-    await expect(page.getByTestId("admin-forbidden")).toBeVisible();
-    await expect(page.getByText("无权访问", { exact: true })).toBeVisible();
+    // 只读视图复用管理员页的视觉语言：h1 为项目名，成员渲染为
+    // .calm-member-card 卡片；不再提供旧的 `.project-members` 列表结构。
+    const members = page.locator(".settings-panel");
     await expect(
-      page.getByText("此区域仅限系统管理员访问。", { exact: true }),
+      page.getByRole("heading", { name: runtime.projectName, level: 1 }),
     ).toBeVisible();
+    await expect(members).toBeVisible();
+    await expect(
+      members
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.user.name }),
+    ).toHaveCount(1);
+    await expect(members.getByRole("button", { name: "添加成员" })).toHaveCount(
+      0,
+    );
+    await expect(members.getByRole("button", { name: /移\s*除/ })).toHaveCount(
+      0,
+    );
+
+    const forbidden = page.waitForResponse((response) =>
+      response
+        .url()
+        .endsWith(`/api/v1/projects/${runtime.hiddenProjectId}/active-members`),
+    );
+    await page.goto(`/projects/${runtime.hiddenProjectId}/members`);
+    expect((await forbidden).status()).toBe(404);
+    await expect(
+      page.getByText("项目或成员不存在，或你已无权访问。", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".calm-member-card")).toHaveCount(0);
+    await expect(
+      page.getByText(runtime.member.name, { exact: true }),
+    ).toHaveCount(0);
   } finally {
     await context.close();
   }
@@ -27,7 +55,7 @@ test("普通成员不能访问项目成员管理页面", async ({ browser }) => 
 
 test("管理员完成成员添加与移除，并校验不存在项目的读取边界", async ({
   browser,
-  mfaAdmin,
+  admin,
 }) => {
   test.setTimeout(180_000);
   const runtime = await loadRuntime();
@@ -39,19 +67,11 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
     .last();
 
   try {
-    await loginAdminViaUi(page, runtime, mfaAdmin);
+    await loginAdminViaUi(page, runtime, admin);
     await page.goto(`/projects/${runtime.projectId}/members`);
     await expect(
-      page.getByRole("heading", { name: "项目成员管理" }),
+      page.getByRole("heading", { name: runtime.projectName, exact: true }),
     ).toBeVisible();
-
-    const reauth = page.getByRole("dialog", { name: "管理员安全验证" });
-    await expect(reauth).toBeVisible();
-    await resetAdminTotpReplayStep(mfaAdmin.userId);
-    await reauth.getByLabel("管理员密码").fill(mfaAdmin.account.password);
-    await reauth.getByLabel("6 位验证码").fill(totpCode(mfaAdmin.secret));
-    await reauth.getByRole("button", { name: "验证身份" }).click();
-    await expect(reauth).toBeHidden();
 
     await expect(page.getByRole("heading", { name: "项目成员" })).toBeVisible();
     await expect(

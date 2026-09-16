@@ -26,8 +26,7 @@ export const canonicalLockOrder = [
 
 export type LockTarget = (typeof canonicalLockOrder)[number];
 
-export type AuthPolicy =
-  "none" | "session" | "adminSessionWithReauthentication";
+export type AuthPolicy = "none" | "session" | "adminSession";
 
 export type CsrfPolicy = "none" | "required";
 

@@ -5,10 +5,8 @@ import {
   type Page,
 } from "@playwright/test";
 
+import type { AdminFixture } from "./admin-fixture.js";
 import type { E2EAccount, E2ERuntime } from "./runtime.js";
-import { resetAdminTotpReplayStep } from "./admin-totp.js";
-import { totpCode } from "./totp.js";
-import type { MfaAdminFixture } from "./mfa-fixture.js";
 
 export interface AuthenticatedContext {
   readonly context: BrowserContext;
@@ -20,7 +18,8 @@ export async function loginViaUi(
   runtime: E2ERuntime,
   account: E2EAccount = runtime.user,
 ): Promise<void> {
-  await page.goto("/login");
+  // ADR-032：/login 默认走单点登录；E2E 使用本地隐藏入口，避免依赖外部 IdP。
+  await page.goto("/login?local=1");
   await page.getByLabel("登录名").fill(account.loginName);
   await page.getByLabel("密码").fill(account.password);
   await page
@@ -33,19 +32,15 @@ export async function loginViaUi(
 export async function loginAdminViaUi(
   page: Page,
   runtime: E2ERuntime,
-  admin: MfaAdminFixture,
+  admin: AdminFixture,
 ): Promise<void> {
-  await resetAdminTotpReplayStep(admin.userId);
-  await page.goto("/login");
+  await page.goto("/login?local=1");
   await page.getByLabel("登录名").fill(admin.account.loginName);
   await page.getByLabel("密码").fill(admin.account.password);
   await page
     .locator("form")
     .getByRole("button", { name: /登\s*录/ })
     .click();
-  await expect(page.getByText("需要完成 TOTP 验证")).toBeVisible();
-  await page.getByLabel("6 位验证码").fill(totpCode(admin.secret));
-  await page.getByRole("button", { name: "验证并进入系统" }).click();
   await expect(page.getByText("系统管理员", { exact: true })).toBeVisible();
 }
 

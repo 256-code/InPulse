@@ -1,12 +1,6 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -16,7 +10,7 @@ import {
   type AuditLogPage,
   type InpulseApiClient,
 } from "@generated/api";
-import { AuthProvider, AuthStateProvider } from "@features/auth/auth-context";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { AuditLogPageView } from "./AuditLogPageView";
 
 const systemItem: AuditLogItem = {
@@ -78,18 +72,6 @@ function mount(client: InpulseApiClient) {
           <AuditLogPageView client={client} />
         </QueryClientProvider>
       </AuthStateProvider>
-    </ConfigProvider>,
-  );
-}
-
-function mountWithAuth(client: InpulseApiClient) {
-  return render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
-      <AuthProvider client={client}>
-        <QueryClientProvider client={queryClient()}>
-          <AuditLogPageView client={client} />
-        </QueryClientProvider>
-      </AuthProvider>
     </ConfigProvider>,
   );
 }
@@ -233,53 +215,24 @@ describe("F-08 audit page", () => {
     expect(screen.queryByText("加载更多")).not.toBeInTheDocument();
   });
 
-  it("opens admin reauthentication on 403 and reloads after success", async () => {
-    const user = userEvent.setup();
-    const getAuditLogs = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new ApiError(403, {
-          code: "ADMIN_REAUTH_REQUIRED",
-          message: "needs reauth",
-          details: {},
-          requestId: "reauth",
-        }),
-      )
-      .mockResolvedValueOnce(page([systemItem]));
-    const reauthenticateAdmin = vi.fn().mockResolvedValue(undefined);
-    const client = {
-      getCurrentUser: vi.fn().mockResolvedValue({
-        id: 1,
-        loginName: "admin",
-        name: "管理员",
-        email: null,
-        avatarUrl: null,
-        isAdmin: true,
-        status: "ACTIVE",
+  it("shows the administrator permission copy when the read is forbidden", async () => {
+    const getAuditLogs = vi.fn().mockRejectedValue(
+      new ApiError(403, {
+        code: "ADMIN_REQUIRED",
+        message: "internal-forbidden",
+        details: {},
+        requestId: "forbidden",
       }),
-      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "csrf-token" }),
-      reauthenticateAdmin,
-      getAuditLogs,
-      listProjects: vi.fn().mockResolvedValue({ items: [] }),
-    } as unknown as InpulseApiClient;
-    mountWithAuth(client);
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "管理员安全验证",
-    });
-    const typedValue = "vitest-reauth-value";
-    await user.type(within(dialog).getByLabelText("管理员密码"), typedValue);
-    await user.type(within(dialog).getByLabelText("6 位验证码"), "123456");
-    await user.click(within(dialog).getByRole("button", { name: "验证身份" }));
-
-    expect(await screen.findByText("admin.user.create")).toBeInTheDocument();
-    expect(reauthenticateAdmin).toHaveBeenCalledWith(
-      { password: typedValue, code: "123456" },
-      { headers: { "x-csrf-token": "csrf-token" } },
     );
+    const listProjects = vi.fn().mockResolvedValue({ items: [] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    expect(await screen.findByText("原始审计读取失败")).toBeInTheDocument();
     expect(
-      screen.getByText("管理员安全验证已完成，正在重新读取原始审计。"),
+      screen.getByText("原始审计仅系统管理员可读取。"),
     ).toBeInTheDocument();
+    expect(screen.queryByText("internal-forbidden")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
   it("maps read failures to safe copy with a retry entry", async () => {

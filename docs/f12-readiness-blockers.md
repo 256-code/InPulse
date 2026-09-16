@@ -1,6 +1,8 @@
 # F-12 接入核对与阻断交审
 
 > 当前状态：最新主线 `d2c5bbc` 已补齐 MFA/重认证前后端，原三个接入阻断均关闭；未分类可编辑已人工确认。B 已完成本地 F-12 实现，真实数据库/HTTP 集成与 E2E 待运行。以下为历史接入记录，当前交付与验证以 [F-12 本地交审](f12-local-handoff.md) 为准。
+>
+> 2026-09-15 更新：[ADR-031](adr/ADR-031.md) 移除全部 TOTP 验证与管理员高风险重认证，F12-BLOCK-01/02/03 涉及的 `startMfaEnrollment`/`verifyMfa`/`reauthenticateAdmin` 等路由与 `ADMIN_REAUTH_REQUIRED` 失效码已删除；管理员高风险门禁现为「完整管理员 Session + `is_admin` + 写操作 CSRF/幂等」，失效码为 401 `ADMIN_SESSION_REQUIRED`、403 `ADMIN_REQUIRED`、401 `ADMIN_CSRF_REJECTED`。下列历史记录保留原样。
 
 日期：2026-09-09。负责人：B。状态：**未完成；接入核对阶段，未实现 F-12 业务纵切片**。
 
@@ -30,7 +32,7 @@
 | 编号 | 事实与证据 | 影响 | 所需提供方与交付 |
 | --- | --- | --- | --- |
 | F12-BLOCK-01 | [LoginService](../apps/api/src/auth/login.service.ts) 的 `authStateFor` 将管理员送入 `MFA_CHALLENGE` 或 `MFA_ENROLLMENT`；[AuthModule](../apps/api/src/auth/auth.module.ts) 仅注册 CSRF、login、logout、me Controller；[Route Registry](../packages/api-contract/src/route-registry.ts) 尚未登记 MFA 完成和 `reauthenticateAdmin`，该名称目前仅在 [security-flow allowlist](../packages/api-contract/src/security-flow.ts) 中预留 | 管理员无法从现有登录 UI 达到可执行归档/恢复的完整认证及重认证状态 | A 提供 ADR-023 要求的 MFA 注册/验证与管理员重认证真实接口、Schema/Registry/生成客户端、同事务刷新两个新鲜度时间戳及相关验证；不是仅添加 Guard |
-| F12-BLOCK-02 | [RequireReauthGuard](../apps/api/src/auth/require-reauth.guard.ts) 只有公开 `canActivate(context)`，自行调用 UoW；读取元数据与新鲜度检查为 private，没有接受调用方 `TransactionContext` 的公开入口 | 不能直接在模块业务及幂等重放的同一事务内复用高风险检查；单独 Guard 不替代重放时重新校验 | A 提供接受现有 `tx` 与受信任会话上下文的公开重认证检查，明确安全错误码、过期语义，供业务执行与重放调用；B 不复制认证 SQL 或新建嵌套 UoW |
+| F12-BLOCK-02 | `RequireReauthGuard`（已随 [ADR-031](adr/ADR-031.md) 删除，现为 [AdminHighRiskAuthService](../apps/api/src/auth/admin-high-risk.service.ts)） 只有公开 `canActivate(context)`，自行调用 UoW；读取元数据与新鲜度检查为 private，没有接受调用方 `TransactionContext` 的公开入口 | 不能直接在模块业务及幂等重放的同一事务内复用高风险检查；单独 Guard 不替代重放时重新校验 | A 提供接受现有 `tx` 与受信任会话上下文的公开重认证检查，明确安全错误码、过期语义，供业务执行与重放调用；B 不复制认证 SQL 或新建嵌套 UoW |
 | F12-BLOCK-03 | [LoginForm](../apps/web/src/features/auth/LoginForm.tsx) 明确提示 MFA 尚未接入；[auth-context](../apps/web/src/features/auth/auth-context.tsx) 仅提供 login/logout/refresh 等，没有现成重认证流程 | 无法按任务要求接入现有管理员重认证交互 | A 负责认证前端与可复用重认证入口，涉及共享路由/组件时由 C 协调；B 接入成功后继续原表单操作，不持久化密码/TOTP |
 
 ## 需人工定案的规则冲突

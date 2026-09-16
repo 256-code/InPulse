@@ -1,12 +1,6 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +13,7 @@ import { ModulesPageView } from "./ModulesPageView";
 import { AuthStateProvider } from "@features/auth/auth-context";
 
 const item: ModuleItem = {
+  code: "INP-M-1",
   id: 3,
   projectId: 2,
   name: "未分类模块",
@@ -230,11 +225,6 @@ describe("F-12 forms", () => {
     } as unknown as InpulseApiClient;
     mount(client, true);
     fireEvent.click(await screen.findByRole("button", { name: /归\s*档/ }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "管理员安全验证" }),
-      ).toBeVisible(),
-    );
     fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
     await screen.findByText("请填写操作原因");
     expect(client.archiveModule).not.toHaveBeenCalled();
@@ -339,33 +329,5 @@ describe("模块卡", () => {
     expect(
       links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
     ).toBeNull();
-  });
-});
-
-describe("项目内导航", () => {
-  it("lists the project modules and marks the overview tab as current on the project page", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({ items: [item] }),
-    } as unknown as InpulseApiClient;
-    mount(client);
-    const nav = screen.getByRole("navigation", {
-      name: "项目内导航",
-    });
-    await within(nav).findByRole("button", { name: "未分类模块" });
-    expect(
-      within(nav)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["项目概览", "未分类模块"]);
-    // 设计师稿 catalog.tsx L214：项目页（概览 + 模块网格同页）的「项目概览」恒为当前页签。
-    expect(
-      within(nav)
-        .getAllByRole("button")
-        .filter((button) => button.classList.contains("active"))
-        .map((button) => button.textContent),
-    ).toEqual(["项目概览"]);
-    expect(
-      within(nav).getByRole("button", { name: "项目概览" }),
-    ).toHaveAttribute("aria-current", "page");
   });
 });

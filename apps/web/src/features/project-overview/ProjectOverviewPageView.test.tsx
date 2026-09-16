@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router-dom";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -72,13 +73,7 @@ interface RenderOverrides {
   readonly adapter?: ProjectOverviewAdapter;
   readonly project?: ProjectItem | null;
   readonly projectError?: string;
-  readonly modules?: readonly { readonly id: number; readonly name: string }[];
 }
-
-const projectModules = [
-  { id: 3, name: "未分类模块" },
-  { id: 4, name: "退款模块" },
-];
 
 const renderView = (overrides: RenderOverrides = {}) => {
   const handlers = {
@@ -88,36 +83,35 @@ const renderView = (overrides: RenderOverrides = {}) => {
     onOpenMembers: vi.fn(),
     onOpenRecords: vi.fn(),
     onOpenIssues: vi.fn(),
-    onOpenModule: vi.fn(),
-    onOpenOverview: vi.fn(),
   };
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: { queries: { retry: false } },
-        })
-      }
-    >
-      <ProjectOverviewPageView
-        projectId={1}
-        project={overrides.project === undefined ? project : overrides.project}
-        projectLoading={false}
-        onRetryProject={handlers.onRetryProject}
-        onBackToProjects={handlers.onBackToProjects}
-        onOpenModules={handlers.onOpenModules}
-        onOpenMembers={handlers.onOpenMembers}
-        onOpenRecords={handlers.onOpenRecords}
-        onOpenIssues={handlers.onOpenIssues}
-        modules={overrides.modules ?? projectModules}
-        onOpenModule={handlers.onOpenModule}
-        onOpenOverview={handlers.onOpenOverview}
-        adapter={overrides.adapter ?? createAdapter()}
-        {...(overrides.projectError === undefined
-          ? {}
-          : { projectError: overrides.projectError })}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <ProjectOverviewPageView
+          projectId={1}
+          project={
+            overrides.project === undefined ? project : overrides.project
+          }
+          projectLoading={false}
+          onRetryProject={handlers.onRetryProject}
+          onBackToProjects={handlers.onBackToProjects}
+          onOpenModules={handlers.onOpenModules}
+          onOpenMembers={handlers.onOpenMembers}
+          onOpenRecords={handlers.onOpenRecords}
+          onOpenIssues={handlers.onOpenIssues}
+          adapter={overrides.adapter ?? createAdapter()}
+          {...(overrides.projectError === undefined
+            ? {}
+            : { projectError: overrides.projectError })}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
   return handlers;
 };
@@ -270,28 +264,5 @@ describe("ProjectOverviewPageView", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(handlers.onRetryProject).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders the project context navigation with the overview entry active", async () => {
-    const handlers = renderView();
-    const nav = screen.getByRole("navigation", { name: "项目内导航" });
-    expect(
-      within(nav)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["项目概览", "未分类模块", "退款模块"]);
-    expect(within(nav).getByRole("button", { name: "项目概览" })).toHaveClass(
-      "active",
-    );
-    const user = userEvent.setup();
-    await user.click(within(nav).getByRole("button", { name: "退款模块" }));
-    expect(handlers.onOpenModule).toHaveBeenCalledWith(4);
-  });
-
-  it("keeps the navigation on the overview entry for a project without modules", () => {
-    renderView({ modules: [] });
-    const nav = screen.getByRole("navigation", { name: "项目内导航" });
-    expect(within(nav).getAllByRole("button")).toHaveLength(1);
-    expect(within(nav).getByRole("button")).toHaveClass("active");
   });
 });

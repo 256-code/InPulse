@@ -60,11 +60,15 @@ export const BACKUP_PACKAGE_ALGORITHM = "AES-256-GCM";
 export const BACKUP_PACKAGE_KDF = "HKDF-SHA256";
 export const BACKUP_PG_DUMP_FORMAT = "custom";
 
-/** pg_dump 排除数据（保留结构）的会话表清单，与迁移 0007 的注释保持一致。 */
+/**
+ * pg_dump 排除数据（保留结构）的清单，与迁移 0007 / 0014 的注释保持一致：
+ * 三张会话表与 ADR-032 的一次性登录材料表只保留结构，数据不进入备份产物。
+ */
 export const BACKUP_EXCLUDED_TABLE_DATA = [
   "app.user_sessions",
   "app.session_csrf_tokens",
   "app.preauth_sessions",
+  "app.sso_login_attempts",
 ] as const;
 
 const BACKUP_SALT_LENGTH = 32;

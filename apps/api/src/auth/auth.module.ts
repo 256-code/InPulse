@@ -1,31 +1,27 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module.js";
+// 直接引用 audit.port.js：audit/index.js 会再导出 AuditLogReadModule，
+// 而后者 import AuthModule，经 barrel 引入会形成循环依赖，Nest 扫描时拿到
+// undefined 并以 process.abort() 崩溃（AppModule 启动用例实测）。
+import { AuditWritePort } from "../audit/audit.port.js";
+import { PostgresUnitOfWork } from "../database/unit-of-work.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { IdempotencyModule } from "../idempotency/idempotency.module.js";
-import { SESSION_HMAC_KEYRING, TOTP_KEK_KEYRING } from "./auth.constants.js";
+import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
 import { LoginRateLimitService } from "./auth-rate-limit.service.js";
 import { PostgresAuthRateLimitRepository } from "./auth-rate-limit.repository.js";
 import { CsrfController } from "./csrf.controller.js";
 import { CsrfIssueService } from "./csrf-issue.service.js";
 import { VersionedHmacKeyring } from "./keyring.js";
 import { AuthenticatedMutationService } from "./authenticated-mutation.service.js";
-import { MfaRateLimitService } from "./mfa-rate-limit.service.js";
-import { MfaReauthenticateController } from "./mfa-reauthenticate.controller.js";
-import { MfaReauthenticateService } from "./mfa-reauthenticate.service.js";
 import { LoginController } from "./login.controller.js";
 import { LoginService } from "./login.service.js";
 import { LogoutController } from "./logout.controller.js";
 import { LogoutService } from "./logout.service.js";
-import { MfaEnrollmentController } from "./mfa-enrollment.controller.js";
-import { MfaEnrollmentService } from "./mfa-enrollment.service.js";
-import { PostgresMfaRecoveryCodeRepository } from "./mfa-recovery-code.repository.js";
-import { MfaVerifyController } from "./mfa-verify.controller.js";
-import { MfaVerifyService } from "./mfa-verify.service.js";
 import { MeController } from "./me.controller.js";
 import { MeService } from "./me.service.js";
 import { PasswordService } from "./password.service.js";
-import { RecoveryCodeService } from "./recovery-code.service.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
 import { PostgresSessionCleanupRepository } from "./session-cleanup.repository.js";
@@ -34,25 +30,34 @@ import { SessionCleanupScheduler } from "./session-cleanup.scheduler.js";
 import { SessionTokenService } from "./session-token.service.js";
 import { PostgresUserCredentialRepository } from "./user-credential.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
-import { PostgresUserTotpFactorRepository } from "./user-totp-factor.repository.js";
-import { RequireReauthGuard } from "./require-reauth.guard.js";
 import { SessionAuthService } from "./session-auth.service.js";
-import { TotpService } from "./totp.service.js";
-import { VersionedAeadKeyring } from "./totp-keyring.js";
+import { AdminHighRiskAuthService } from "./admin-high-risk.service.js";
 import { UserAuthInvalidationService } from "./user-auth-invalidation.service.js";
 import { PostgresUserProfileRepository } from "./user-profile.repository.js";
 import { UserDirectoryController } from "./user-directory.controller.js";
 import { PostgresUserDirectoryRepository } from "./user-directory.repository.js";
 import { UserDirectoryService } from "./user-directory.service.js";
 import { PostgresUserReadPort, UserReadPort } from "./user-read.port.js";
-import { AdminHighRiskAuthService } from "./admin-high-risk.service.js";
-import { AdminMfaResetController } from "./admin-mfa-reset.controller.js";
-import { AdminMfaResetService } from "./admin-mfa-reset.service.js";
-import { MfaRecoveryController } from "./mfa-recovery.controller.js";
-import { MfaRecoveryService } from "./mfa-recovery.service.js";
+import {
+  SESSION_TTL_POLICY,
+  sessionTtlPolicyFromEnv,
+  type SessionTtlPolicy,
+} from "./session-ttl.policy.js";
+import { PostgresSsoLoginAttemptRepository } from "./sso/sso-login-attempt.repository.js";
+import { PostgresSsoUserRepository } from "./sso/sso-user.repository.js";
+import { SsoOidcClient } from "./sso/sso-oidc.client.js";
+import { SsoController } from "./sso/sso.controller.js";
+import { SsoLoginService } from "./sso/sso-login.service.js";
+import { DisabledSsoGateway, SsoGateway } from "./sso/sso-gateway.js";
+import {
+  SSO_CONFIG,
+  loadSsoConfig,
+  type SsoConfigLoadResult,
+} from "./sso/sso.config.js";
 
 /**
- * 认证/会话支柱的 Nest 模块。
+ * 认证/会话支柱的 Nest 模块。ADR-031 之后不再包含 TOTP、恢复码与
+ * 管理员重认证：登录只保留口令因素，高风险操作只要求完整管理员 Session。
  *
  * 按保密基线，keyring 只从 `/run/secrets/*` 的
  * `SESSION_HASH_KEYRING_FILE` 加载并 fail closed；因此在生产 Secret 与
@@ -66,21 +71,12 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
       provide: SESSION_HMAC_KEYRING,
       useFactory: () => VersionedHmacKeyring.fromEnv(process.env),
     },
-    {
-      provide: TOTP_KEK_KEYRING,
-      useFactory: () => VersionedAeadKeyring.fromEnv(process.env),
-    },
     SessionTokenService,
-    TotpService,
-    RecoveryCodeService,
-    PostgresMfaRecoveryCodeRepository,
     PostgresAuthRateLimitRepository,
     LoginRateLimitService,
-    MfaRateLimitService,
     PostgresPreauthSessionRepository,
     PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
-    PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
     PostgresSessionCleanupRepository,
     SessionCleanupService,
@@ -92,18 +88,77 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     MeService,
     SessionAuthService,
     AuthenticatedMutationService,
-    RequireReauthGuard,
     UserAuthInvalidationService,
-    MfaEnrollmentService,
-    MfaVerifyService,
-    MfaReauthenticateService,
     PostgresUserProfileRepository,
     PostgresUserDirectoryRepository,
     UserDirectoryService,
     { provide: UserReadPort, useClass: PostgresUserReadPort },
+    {
+      provide: SESSION_TTL_POLICY,
+      useFactory: () => sessionTtlPolicyFromEnv(process.env),
+    },
+    {
+      provide: SSO_CONFIG,
+      useFactory: () => loadSsoConfig(process.env),
+    },
+    PostgresSsoLoginAttemptRepository,
+    PostgresSsoUserRepository,
+    {
+      provide: SsoGateway,
+      inject: [
+        SSO_CONFIG,
+        PostgresUnitOfWork,
+        PostgresSsoLoginAttemptRepository,
+        PostgresSsoUserRepository,
+        PostgresUserCredentialRepository,
+        PostgresUserSessionRepository,
+        PostgresSessionCsrfTokenRepository,
+        SessionTokenService,
+        LoginRateLimitService,
+        AuditWritePort,
+        SESSION_TTL_POLICY,
+        SESSION_HMAC_KEYRING,
+      ],
+      useFactory: (
+        config: SsoConfigLoadResult,
+        unitOfWork: PostgresUnitOfWork,
+        attempts: PostgresSsoLoginAttemptRepository,
+        ssoUsers: PostgresSsoUserRepository,
+        credentials: PostgresUserCredentialRepository,
+        sessions: PostgresUserSessionRepository,
+        csrfTokens: PostgresSessionCsrfTokenRepository,
+        tokens: SessionTokenService,
+        rateLimit: LoginRateLimitService,
+        audit: AuditWritePort,
+        ttl: SessionTtlPolicy,
+        keyring: VersionedHmacKeyring,
+      ): SsoGateway => {
+        if (config.config === undefined) {
+          if (config.invalidReason !== undefined) {
+            process.stderr.write(
+              `[auth] SSO 已启用但配置非法，已回落本地隐藏入口：${config.invalidReason}\n`,
+            );
+          }
+          return new DisabledSsoGateway();
+        }
+        return new SsoLoginService(
+          unitOfWork,
+          attempts,
+          ssoUsers,
+          credentials,
+          sessions,
+          csrfTokens,
+          tokens,
+          rateLimit,
+          audit,
+          config.config,
+          new SsoOidcClient(config.config),
+          ttl,
+          keyring,
+        );
+      },
+    },
     AdminHighRiskAuthService,
-    MfaRecoveryService,
-    AdminMfaResetService,
   ],
   controllers: [
     CsrfController,
@@ -111,27 +166,17 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     LogoutController,
     MeController,
     UserDirectoryController,
-    MfaEnrollmentController,
-    MfaVerifyController,
-    MfaReauthenticateController,
-    MfaRecoveryController,
-    AdminMfaResetController,
+    SsoController,
   ],
   exports: [
     UserReadPort,
     SESSION_HMAC_KEYRING,
-    TOTP_KEK_KEYRING,
     SessionTokenService,
-    TotpService,
-    RecoveryCodeService,
-    PostgresMfaRecoveryCodeRepository,
     PostgresAuthRateLimitRepository,
     LoginRateLimitService,
-    MfaRateLimitService,
     PostgresPreauthSessionRepository,
     PostgresUserCredentialRepository,
     PostgresUserSessionRepository,
-    PostgresUserTotpFactorRepository,
     PostgresSessionCsrfTokenRepository,
     PostgresSessionCleanupRepository,
     PasswordService,
@@ -141,14 +186,8 @@ import { MfaRecoveryService } from "./mfa-recovery.service.js";
     MeService,
     SessionAuthService,
     AuthenticatedMutationService,
-    RequireReauthGuard,
     UserAuthInvalidationService,
-    MfaEnrollmentService,
-    MfaVerifyService,
-    MfaReauthenticateService,
     AdminHighRiskAuthService,
-    MfaRecoveryService,
-    AdminMfaResetService,
   ],
 })
 export class AuthModule {}

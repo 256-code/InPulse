@@ -289,8 +289,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <dd>自动成为活跃成员，创建流程中不可取消</dd>
               <dt>编码</dt>
               <dd>创建后不可修改，仅用于溯源</dd>
-              <dt>未分类模块</dt>
-              <dd>创建成功后自动生成，可继续拆分</dd>
+              <dt>模块</dt>
+              <dd>按需手动创建，项目也可以没有模块</dd>
               <dt>系统管理员</dt>
               <dd>自动拥有项目访问权，即使不在成员列表</dd>
             </dl>

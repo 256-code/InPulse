@@ -58,7 +58,7 @@ R-1 是否追加子资源路由已由 A 于 2026-09-10 裁决（Q-02：采纳形
 
 ```ts
 // R-1、R-2、R-3 共用
-authPolicy: "session",                    // AuthPolicy = "none" | "session" | "adminSessionWithReauthentication"
+authPolicy: "session",                    // AuthPolicy = "none" | "session" | "adminSession"（ADR-031 重命名，语义为完整管理员 Session）
 csrfPolicy: "none",
 idempotencyPolicy: "none",
 idempotencyExceptionAdr: "none",

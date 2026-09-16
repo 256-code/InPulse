@@ -78,12 +78,12 @@
 - 聚合更新使用条件更新或显式行锁，并在成功后递增 `row_version`。唯一约束、版本冲突和状态冲突映射为明确的 409 业务错误。
 - 多聚合命令固定锁序为：任务 ID 升序 -> 任务组 ID 升序 -> 迭代记录 ID 升序 -> 遗留项 ID 升序。预读结果在获得锁后发生变化时，必须重新读取并从头有限重试。
 - 命令需要验证项目、模块或功能仍可写时，必须先按项目 -> 模块 -> 功能的父到子顺序和各层 ID 升序取得 `FOR SHARE`；归档方按相同顺序取得 `FOR UPDATE`，随后才进入上述业务聚合锁序，防止父级归档与子级写入竞态。
-- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；普通 GET、HEAD 和纯校验接口显式声明 `none`。[ADR-023](./docs/adr/ADR-023.md) allowlist 中的 operationId 必须且只能声明 `securityFlow`，包括签发/消费一次性安全材料及管理员重认证；新增例外必须另立 ADR。通用幂等记录禁止保存或重放 Cookie、CSRF Token、MFA Secret、验证码或恢复码。
+- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；普通 GET、HEAD 和纯校验接口显式声明 `none`。[ADR-023](./docs/adr/ADR-023.md) allowlist 中的 operationId 必须且只能声明 `securityFlow`，包括签发/消费一次性安全材料（预认证 CSRF、Session 与 CSRF）、登录/登出与 SSO 认证导航（`startSsoLogin`/`completeSsoLogin`，共五条，[ADR-032](./docs/adr/ADR-032.md)）；新增例外必须另立 ADR。通用幂等记录禁止保存或重放 Cookie、CSRF Token 或任何一次性安全材料。
 - `idempotencyRequired` 的请求摘要必须覆盖大写 method、operationId、幂等契约版本、摘要格式与请求 Schema 版本、Schema 解析后的 path 参数和规范 query、规范 Content-Type、Route Registry 声明的全部行为相关请求头以及 JCS 规范化 body；使用版本头的路由必须包含 `If-Match`。摘要使用独立、带版本密钥的 HMAC-SHA-256，不得把普通 SHA-256 用作密码、验证码或其他低熵输入的离线校验器。Cookie、Authorization、CSRF、追踪头和 Idempotency-Key 不进入摘要。任一语义输入或幂等契约版本不同都返回 409。幂等不能只依赖前端禁用按钮或进程内锁。
 - 每条 `idempotencyRequired` 路由必须登记带版本的 `idempotencyReplayPolicy`：逐个列出可能缓存的 2xx 状态；有 body 时列出精确响应 Schema 引用以及可安全持久化和重放的全部 body 叶子字段，无 body 时使用互斥的 `noBody` 分支。CI 必须拒绝遗漏状态、字段不全或越界、Schema 不一致、Secret 字段以及任何 `Set-Cookie`/认证响应头重放；`none` 与 `securityFlow` 路由的该策略只能为 `none`。请求或安全重放策略变化必须升级幂等契约版本，旧 Key 在新契约下返回 409。
-- 每条 `idempotencyRequired` 路由还必须登记 `replayAuthorizationPolicy`，以类型化、最小化的结果资源引用说明缓存响应暴露了哪些资源。幂等重放前必须重新验证当前认证、原操作权限、所有结果资源的当前可读权限及该路由要求的高风险重认证新鲜度；任一门禁失败时拒绝且不得泄露已存状态码或响应。只有全部门禁通过后，同 Key、同摘要和同契约版本才重放原 2xx。
+- 每条 `idempotencyRequired` 路由还必须登记 `replayAuthorizationPolicy`，以类型化、最小化的结果资源引用说明缓存响应暴露了哪些资源。幂等重放前必须重新验证当前认证、原操作权限、所有结果资源的当前可读权限及该路由要求的高风险门禁（当前有效的完整管理员 Session）；任一门禁失败时拒绝且不得泄露已存状态码或响应。只有全部门禁通过后，同 Key、同摘要和同契约版本才重放原 2xx。
 - 项目创建时，创建者必须自动成为活跃成员且创建流程不可取消该成员关系；创建完成后，系统管理员可以按普通成员规则移除创建者。`projects.created_by` 只用于不可变溯源，不赋予额外权限，也不得随成员移除而改变。普通成员创建者被移除后立即失去成员关系派生的项目权限；若创建者本身是系统管理员，其全局管理员权限不受成员记录影响。测试必须分别覆盖这两种身份。
-- 正式记录版本不可变；迭代记录状态只允许 `DRAFT -> PUBLISHED -> VOID`，以及经管理员重认证的 `VOID -> PUBLISHED` 恢复。`status` 是详情、统计、搜索和时间线可见性的唯一真相，不得因恢复后仍保留 `voided_at` 而继续隐藏。恢复必须保留作废快照与全部版本，原因进入不可变审计，具体不变量见 [ADR-024](./docs/adr/ADR-024.md)。任务组成员关系是 MAIN/SOURCE 身份的唯一真相。业务历史默认通过归档、作废或新版本保留，不物理覆盖或删除。
+- 正式记录版本不可变；迭代记录状态只允许 `DRAFT -> PUBLISHED -> VOID`，以及系统管理员执行的 `VOID -> PUBLISHED` 恢复（[ADR-031](./docs/adr/ADR-031.md) 起不再要求 TOTP 重认证）。`status` 是详情、统计、搜索和时间线可见性的唯一真相，不得因恢复后仍保留 `voided_at` 而继续隐藏。恢复必须保留作废快照与全部版本，原因进入不可变审计，具体不变量见 [ADR-024](./docs/adr/ADR-024.md)。任务组成员关系是 MAIN/SOURCE 身份的唯一真相。业务历史默认通过归档、作废或新版本保留，不物理覆盖或删除。
 - 历史迁移一经合并不得修改、删除或重排。新迁移采用 expand/contract 思路，必须支持从上一正式版本验证升级和回滚兼容窗口。
 - API 进程不得在启动时自动生成 Schema。迁移由独立、受限的 migration 任务执行。
 - Repository/Application 集成测试必须使用真实 PostgreSQL 验证事务、锁、约束和权限，不能只 Mock Repository。
@@ -94,10 +94,13 @@
 - 不信任客户端提交的 `projectId` 来证明资源归属。鉴权必须根据 actor、资源真实归属和实时成员关系在服务端完成。
 - 成员关系不得缓存到 Session 或长生命周期对象；搜索和动态查询必须先取得服务端生成的 `AuthorizedProjectScope`，并在 SQL 层过滤。
 - 资源不存在和无权访问统一返回 404，避免泄露资源存在性；已登录但缺少全局权限时返回 403。
-- Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF、MFA、重认证和安全响应头必须遵守技术设计。
+- Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF 和安全响应头必须遵守技术设计。
+- 单点登录（[ADR-032](./docs/adr/ADR-032.md)）是默认登录入口：`GET /api/v1/auth/sso/start` 只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
+- SSO 首次登录 JIT 开通 `is_admin=false`、`password_hash=NULL`、无任何项目成员关系的账号；映射优先级固定为 `sso_subject` 命中 → 登录名命中且未绑定且邮箱一致时绑定 → JIT；邮箱不一致或 subject 已绑定其它账号必须按冲突拒绝，禁止静默接管同名账号。无口令账号在本地入口必须干净地返回 401，不得抛错或 500。
+- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed 回落 `/login?local=1&sso=disabled`，`/login?local=1` 是管理员应急隐藏入口，不对外展示。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`。
 - 登录只接受匿名预认证 Session 及其 CSRF Token；已有普通、受限或完整认证 Session 必须先登出，再签发新的预认证 CSRF。停用用户的旧 Session 按无效处理；受保护或业务接口返回 401，但 `issueCsrfToken` 与无效 Session 的同源 `logout` 可按匿名安全语义执行且不得恢复身份。
-- 管理员密码与当前 TOTP 重认证成功时，必须以同一服务端事务时间原子刷新 Session 的 `reauthenticated_at` 与 `mfa_verified_at`；高风险接口检查两者均在 5 分钟内。
-- 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；管理员密码阶段只能进入 MFA 注册/验证受限态。恢复码只保存带独立 salt 和参数的 Argon2id 编码哈希，不允许普通 SHA-256 校验。
+- 管理员高风险接口只要求当前有效的完整管理员 Session（`AUTHENTICATED`）、`is_admin`、写操作 CSRF、数据库级幂等与审计留痕；[ADR-031](./docs/adr/ADR-031.md) 起不再要求管理员密码与 TOTP 重认证，`reauthenticated_at`/`mfa_verified_at` 不再作为门禁条件。
+- 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；[ADR-031](./docs/adr/ADR-031.md) 起 `user_sessions.auth_state` 只写入 `AUTHENTICATED`，历史取值不得作为有效认证态参与鉴权。
 - Markdown 不允许原始 HTML；用户链接必须使用标准 URL Parser 和协议/域名白名单。V1.2.2 仅保存 GitHub HTTPS 链接，不主动抓取远程内容。
 - 禁止读取、打印、记录、提交或复制 Secrets。`.env.example` 只放非敏感变量名，不放 Secret 示例值或占位值。
 - 生产 Secret 只从 `/run/secrets/*` 读取；缺失、空值、路径越界或权限不合规必须 fail closed，不允许敏感环境变量 fallback。
@@ -221,3 +224,32 @@
 - 阶段 1 A-3 `compose.init` 首次建库纵切片与灾难恢复离线 Runbook 已本地落库（A）：新增版本化一次性覆盖 `deploy/compose.init.yaml`（仅该次向 db 服务设置 `POSTGRES_DB=app` / `POSTGRES_USER=cluster_bootstrap` / `POSTGRES_PASSWORD_FILE`，只读挂载 bootstrap / migrator / runtime / backup / audit_reader / audit_archive 六份密码 Secret，target `/run/secrets/db_*`、mode 0400、uid/gid 999），新增 [灾难恢复离线 Runbook](./docs/runbooks/disaster-recovery.md)（离线材料清单、镜像 digest 校验、建库与角色探针、数据恢复、Session 处理、迁移与完整校验、RPO/RTO 门禁与故障处理；`backup-restore.md` §7 与 `database/README.md` 同步引用）；`database/bootstrap/010_passwords.sql` 容器内 Secret 路径对齐稳态命名 `db_*`（`database/.env.example` 同步）；`scripts/check_deploy_refs.mjs` 渲染 overlay 并静态保证稳态渲染不含 POSTGRES_* 与 db_bootstrap_password、六份 Secret 只挂 db、migrate/api/web/backup/audit-archive 从不挂 bootstrap、`.env.deploy.example` 占位符被拒；本地 Docker（Compose v5.5.0）实测构建 db-bootstrap 镜像后 overlay 首次建库（initdb 与 `000_roles.sql` / `010_passwords.sql` / `020_pgroonga.sql` 无报错、healthy）、角色/扩展探针（7 角色 NOLOGIN/LOGIN 与最小权限、`app_runtime` 密码登录且 `SET ROLE app_owner` 被拒、`pgroonga` 存在）、切回稳态 Compose 接管（同卷 healthy）；`pnpm check:deploy:test`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm check:docs`（75 个 Markdown）、`pnpm check:secrets` 本地通过；GitHub Actions 尚未执行；真实主机恢复演练（RECOVERY-001 / DEPLOY-003）仍属上线门禁。
 - 阶段 1 A-4 SEC-003 CSRF 完整生命周期 E2E 已本地落库（A）：新增 `apps/api/test/csrf-lifecycle.integration.test.ts`（真实 PostgreSQL 与完整 AppModule HTTP：错误 CSRF 登录不消费预认证材料、重签后重试一次成功且成功即单次消费（重复登录 409/401）、认证 Session 最多保留 4 个 CSRF 并淘汰最旧、认证 Session 与预认证材料过期后重签恢复、登录不写 `app.idempotency_records` 且模块创建缺 `Idempotency-Key` 返回 400）；新增 `apps/e2e/tests/csrf.spec.ts`（Playwright：首登后 `__Host-preauth` 清除与 `__Host-session` HttpOnly/Secure/SameSite=Lax 属性、`GET /auth/csrf` 与 login 不发送业务幂等键、刷新后写操作重新签发 CSRF、多标签各自签发并独立写成功、模块编辑 PATCH 携带 `If-Match`/CSRF/幂等键）；本地验证：集成 4/4、E2E 4/4、`pnpm build`、`apps/e2e` typecheck、`pnpm format:check`、`pnpm check:docs` 通过；GitHub Actions 尚未执行。
 - 阶段 1 项目主页恢复与「系统目录」导航（C，2026-09-14 本地落库）：上一轮目录改造（`codex/project-tree-nav`，未合并）把项目主页入口让给新建的只读复刻页（`/explorer` 重实现，从未进入任何提交），产品反馈项目主页面「严重丢失了好多功能和效果」并澄清「目录应该影响的是这个页面而不是新建页面」。本轮改为**目录只做导航**：新增 `apps/web/src/features/project-tree/`（`ProjectTree.tsx` 复用既有 `useProjectDetail` / `useModules` / `useFeatures` 与生成客户端渲染三级树；`tree-selection.ts` 的 `treeScopeOf` / `treePath` 负责选中层级与既有页面映射），在 `AppLayout` 既有 `nav[aria-label="工作区导航"]` 内新增「系统目录」分组（仅项目目录路径渲染），系统 / 模块 / 功能分别落到项目主页 `/projects/{p}/modules`、功能目录 `/projects/{p}/modules/{m}/features`、功能档案 `.../features/{f}`；删除只读复刻页与 `/explorer` 路由，项目卡片入口保持 `onOpenModules` → 项目主页；无新增路由、无 API / 契约 / 权限 / 迁移改动。本地验证：`project-tree` 2 文件 7 例与 `AppLayout.test.tsx` 新增 2 例、`pnpm test:web` 73 文件 399 例、`pnpm typecheck`（8 个 workspace）、`pnpm build`、`pnpm check:frontend:boundaries`（244 模块 / 1146 依赖）、`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（75 个 Markdown）通过，真实浏览器人工复验三级目录分别驱动既有页面；**尚无目录树的 Playwright 用例**（E2E 覆盖待补），整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）与全量 `pnpm test:e2e` 未运行，GitHub Actions 尚未执行；详见测试矩阵「项目主页目录树恢复」条目。 PR [#140](https://github.com/256-code/InPulse/pull/140) 首轮 CI 的 Browser E2E 暴露目录树节点与功能档案动作按钮的可访问名冲突：`features.spec.ts` 用例新建的功能名 `归档功能-<时间戳>` 同时命中树节点按钮与功能档案页的「归档功能」动作按钮（Playwright strict mode），已把该用例的动作按钮查询限定到 `page.getByRole` 的 `main` 主内容区，并在本地以 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app`、`E2E_API_PORT=3188`、`E2E_WEB_PORT=4188` 复跑 `features.spec.ts` 2 passed（22.9s）；本轮为选择器作用域修正，产品行为与断言强度均未变。
+
+## 2026-09-14 ADR-030 当前分支说明
+
+项目与任务流程按用户确认的 ADR-030 修订：新项目不自动创建未分类模块；保留旧模块历史并新增项目内模块编号；支持任务/新模块/新功能同事务创建；当前项目成员只读、任务中心授权范围/逾期分页、功能验收标准、草稿详情及根仓库入口同步。迁移 `0010`–`0012`、契约、生成客户端、权限和测试矩阵已同步。历史模块编号回填后须在同一迁移内 `SET CONSTRAINTS ALL IMMEDIATE` 清空延迟事件，再修改模块表约束。联合创建先取得项目排他锁再进入各域 CommandPort，避免编号序列与审计锁交叉等待。
+
+本轮仅进行了相关前端交互、服务层、真实 PostgreSQL 18.6/HTTP 回归和历史升级探针。遵循用户对本任务的限制，不执行全量构建、静态检查、依赖审计；不声明完整 CI 或浏览器 E2E 已通过。遗留问题转任务不属于本次修改范围。
+
+## 2026-09-15 ADR-031 TOTP 验证移除说明
+
+按用户明确要求，本期移除全部 TOTP 验证（连管理员高风险重认证一并取消），并以 ADR-031 取代 ADR-016；数据库本期只停用不删除（保留 `user_totp_factors`、`mfa_recovery_codes` 表与 `user_sessions.mfa_verified_at` 等列），后续 contract 迁移再删。因此：
+
+- 登录只做密码验证（Argon2id + 登录限流），成功后直接签发自 `AUTHENTICATED` 的完整认证 Session 与新 CSRF；不存在 MFA 注册/验证/恢复码挑战与受限 Session。
+- 管理员高风险操作（`listAdminUsers`/`createUser`/`updateUser`/`disableUser`/`enableUser`/`forceLogoutUser`、`getAuditLogs`、`getProjectArchivePreview`/`archiveProject`/`restoreProject`、`archiveModule`/`restoreModule`、`archiveFeature`/`restoreFeature`、`addProjectMember`/`removeProjectMember`、`voidChangeRecord`/`restoreChangeRecord`）只要求当前有效的完整管理员 Session、`is_admin`、写操作 CSRF 与数据库级幂等；不再要求管理员密码 + TOTP 重认证，错误码收敛为 401 `ADMIN_SESSION_REQUIRED`、403 `ADMIN_REQUIRED` 与 401 `ADMIN_CSRF_REJECTED`。
+- 删除 7 条 MFA 认证路由后 Route Registry 为 95 条；`securityFlow` allowlist 收敛为 `issueCsrfToken`/`login`/`logout` 三条。
+- 管理员最后一名保护由「最后一名可用 MFA 管理员」改为「最后一名可用管理员」（`LAST_ACTIVE_ADMIN_REQUIRED`）。
+- 本文件上文历史条目中出现的 TOTP/MFA/重认证描述均为当时事实，与本节冲突时以 ADR-031 与本节的现行规则为准。
+
+## 2026-09-15 ADR-032 Casdoor 单点登录接入说明
+
+按用户明确要求，InPulse 接入立镖公司 Casdoor OIDC 单点登录（ADR-032），口令入口降级为管理员应急通道。因此：
+
+- `/login` 默认整页跳转到 `/api/v1/auth/sso/start?returnTo=...`（查询参数名必须与契约 `SsoStartQueryRequest` 一致），回调 `/api/v1/auth/sso/callback` 成功后复用与口令登录同一实现签发本地 Session；`securityFlow` allowlist 由三条扩为五条，Route Registry 为 97 条路由。
+- 数据库迁移 `0013_sso_login.sql` 新增 `users.sso_subject`（部分唯一索引 + 绑定后不可改写触发器）、允许 `password_hash` 为空，并新增 `app.sso_login_attempts`；历史迁移不得修改。
+- 本地会话空闲有效期由 8 小时收紧为 30 分钟，口令与 SSO 共用 `SESSION_TTL_POLICY`（`SESSION_IDLE_MAX_AGE_SECONDS` 可覆盖），绝对有效期仍为 7 天。
+- 生产 Secret 为 `/run/secrets/sso_client_secret`（由 `SSO_CLIENT_SECRET_FILE` 指定）；本地与集成测试只允许 `NODE_ENV=test` 且 `SSO_CLIENT_SECRET_TEST_PATH=1` 时读取临时路径。
+- 新增覆盖：`sso.config.test.ts`、`sso-oidc.client.test.ts`、`sso.controller.test.ts`、`sso-return-to.test.ts`、`session-ttl.policy.test.ts`、`sso-login.integration.test.ts`（真实 PostgreSQL + 桩 IdP）以及登录页单测与 E2E 用例。
+- 迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的表级 SELECT 与序列 USAGE/SELECT（pg_dump 一致性快照必需，与迁移 0007 同源），并把 `app.sso_login_attempts` 加入 `apps/ops/src/backup.ts` 的 `BACKUP_EXCLUDED_TABLE_DATA`：该表只保留结构、数据不进备份产物。新增表进入备份范围按 fail closed 处理——必须显式补一条备份授权迁移，不得改成 `ALTER DEFAULT PRIVILEGES` 默认授权（例外须新增 ADR）。
+- 本轮联调修复（均为真实缺陷，已落库）：① `apps/api/src/auth/auth.module.ts` 与 `sso-login.service.ts` 曾从 `audit/index.js` barrel 引入 `AuditWritePort`，与 `AuditLogReadModule -> AuthModule` 形成循环依赖，导致整个 `AppModule` 初始化时 Nest 拿到 `undefined` 并以 `process.abort()` 崩溃（8 个 API 集成测试文件直接退出）；改为直接引用 `audit/audit.port.js`，该循环由 `pnpm check:deps` 的 `[circular-dependency]` 拦住；② `apps/web/tools/vite-csp.ts` 的 dev/preview CSP 中间件原先会短路所有无扩展名且 `Accept: text/html` 的请求，把浏览器整页导航到 `/api/v1/auth/sso/start` 的请求当成 SPA 入口返回 `index.html`，使 SSO 回落在本地预览里自跳转成环（URL 与请求头超限后返回 431）；新增 `isApiPath` 放行 `/api/**` 交给代理，E2E 复跑 56/56；③ `sso.config.ts` 的回调地址变量由 `SSO_REDIRECT_URL` 更名为 `SSO_REDIRECT_URI`（与 OIDC `redirect_uri` 术语一致），因为 `scripts/check_secrets.mjs` 把所有 `*_URL` 键视为必须指向 `/run/secrets/*` 的敏感变量，改名避免误判而不放宽门禁。
+- 本文件上文历史条目中出现的 8 小时空闲超时、三条 `securityFlow` 等描述为当时事实，与本节冲突时以 ADR-032 与本节的现行规则为准。

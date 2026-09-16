@@ -22,6 +22,7 @@ export interface MyTaskPageInput extends TaskListFilter {
    * 缺省表示不按归属列过滤（仅测试与非 R-3 调用会用到）。
    */
   readonly creatorId?: number;
+  readonly overdue?: boolean;
   /**
    * 记录维度筛选（R-3 的 hasPublishedRecord）：
    * true = 只返回已有 PUBLISHED 记录的任务；false = 只返回没有的；缺省 = 不筛选。
@@ -229,6 +230,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
        WHERE t.project_id = ANY(${projectIds}::integer[])
          AND (${assigneeId}::integer IS NULL OR t.assignee_id = ${assigneeId})
          AND (${creatorId}::integer IS NULL OR t.creator_id = ${creatorId})
+         AND (${input.overdue ?? false}::boolean = false OR (t.work_status = 'TODO' AND t.lifecycle_status <> 'INVALID' AND t.due_at < now()))
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${priority}::text IS NULL OR t.priority = ${priority})

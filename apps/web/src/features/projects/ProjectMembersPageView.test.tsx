@@ -57,16 +57,11 @@ const unfinishedTask: ProjectMemberUnfinishedTaskItem = {
   impactFeatureIds: [33],
 };
 
-function mount(
-  client: InpulseApiClient,
-  authValue: {
-    readonly reauthenticateAdmin?: () => Promise<void>;
-  } = {},
-) {
+function mount(client: InpulseApiClient) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <MemoryRouter>
-        <AuthStateProvider value={authValue}>
+        <AuthStateProvider>
           <QueryClientProvider
             client={
               new QueryClient({

@@ -103,7 +103,7 @@ export class ProjectManagementService {
   }
 
   /**
-   * 恢复专用授权：已归档项目允许继续；管理员身份与重认证新鲜度
+   * 恢复专用授权：已归档项目允许继续；管理员身份与 CSRF
    * 由 HTTP 层 `AdminHighRiskAuthService` 校验。
    */
   async authorizeArchived(

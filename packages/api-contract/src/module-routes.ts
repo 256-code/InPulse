@@ -16,6 +16,7 @@ const errors = {
 const fields = [
   "id",
   "projectId",
+  "code",
   "name",
   "description",
   "kind",
@@ -72,7 +73,7 @@ export const moduleRoutes: readonly RouteDefinition[] = [
       method: update ? "PATCH" : "POST",
       path: `/projects/{projectId}/modules${create ? "" : `/{moduleId}${highRisk ? `/${action}` : ""}`}`,
       operationId,
-      summary: `${action} 模块；项目可写，未分类身份不可变；归档/恢复需管理员重认证与原因。`,
+      summary: `${action} 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。`,
       request: {
         path: create ? "ModuleProjectPath" : "ModuleResourcePath",
         query: "none",
@@ -89,11 +90,11 @@ export const moduleRoutes: readonly RouteDefinition[] = [
         },
       },
       responses: { "200": json("ModuleItem"), ...errors },
-      authPolicy: highRisk ? "adminSessionWithReauthentication" : "session",
+      authPolicy: highRisk ? "adminSession" : "session",
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",
-      idempotencyContractVersion: "1.1.0",
+      idempotencyContractVersion: "1.2.0",
       idempotencyFingerprintVersion: "1.0.0",
       behaviorHeaders: create ? [] : ["If-Match"],
       idempotencyReplayPolicy: {

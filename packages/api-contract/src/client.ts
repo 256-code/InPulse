@@ -183,7 +183,11 @@ export function renderClientSource(
   routes: readonly RouteDefinition[],
   schemas: SchemaComponents,
 ): string {
-  const methods = [...routes]
+  // ADR-032：无 2xx 声明的浏览器导航路由（OIDC 302 端点）不参与生成客户端。
+  const clientRoutes = routes.filter(
+    (route) => successBinding(route) !== undefined,
+  );
+  const methods = [...clientRoutes]
     .sort((left, right) => left.operationId.localeCompare(right.operationId))
     .map((route) => renderMethod(route, schemas));
 
@@ -197,7 +201,9 @@ export function renderClientSource(
   // 只生成当前 Registry 真正用到的 helper，避免生成物出现未使用代码。
   const usesSend = methods.some((method) => method.resultType !== "void");
   const usesSendEmpty = methods.some((method) => method.resultType === "void");
-  const usesQuery = routes.some((route) => route.request.query !== "none");
+  const usesQuery = clientRoutes.some(
+    (route) => route.request.query !== "none",
+  );
   const usesTransport = usesSend || usesSendEmpty;
 
   const sections: string[] = [];

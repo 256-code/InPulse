@@ -16,7 +16,7 @@ it("registers high risk lifecycle commands and minimal safe replay", () => {
   for (const operationId of ["voidChangeRecord", "restoreChangeRecord"]) {
     const route = routeRegistry.find((r) => r.operationId === operationId)!;
     expect(route).toMatchObject({
-      authPolicy: "adminSessionWithReauthentication",
+      authPolicy: "adminSession",
       idempotencyPolicy: "idempotencyRequired",
       csrfPolicy: "required",
       behaviorHeaders: ["If-Match"],
