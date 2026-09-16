@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { TransactionContext } from "../src/database/transaction-context.js";
 import type { SessionAuthService } from "../src/auth/session-auth.service.js";
 import type { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
-import type { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
-import { notAdmin } from "../src/auth/admin-high-risk.error.js";
 import type {
   IdempotencyHttpService,
   IdempotencyHttpCommand,
@@ -30,7 +28,6 @@ const item = {
 function setup() {
   const resolveActor = vi.fn().mockResolvedValue({ userId: 7 });
   const verify = vi.fn().mockResolvedValue({ userId: 7 });
-  const adminVerify = vi.fn().mockResolvedValue({ userId: 7 });
   const authorize = vi.fn().mockResolvedValue(undefined);
   const replay = vi.fn().mockResolvedValue(undefined);
   const execute = vi.fn().mockResolvedValue(item);
@@ -47,7 +44,6 @@ function setup() {
   const service = new ModulesHttpService(
     { resolveActor } as unknown as SessionAuthService,
     { verify } as unknown as AuthenticatedMutationService,
-    { verify: adminVerify } as unknown as AdminHighRiskAuthService,
     { run } as unknown as IdempotencyHttpService,
     { list, authorize, replay, execute } as unknown as ModulesManagementService,
   );
@@ -69,10 +65,10 @@ function setup() {
     service,
     request,
     verify,
-    adminVerify,
     authorize,
     execute,
     list,
+    replay,
     resolveActor,
     run,
     command: () => command!,
@@ -105,20 +101,26 @@ describe("F-12 HTTP orchestration", () => {
     ).toBe(422);
     expect(s.execute).not.toHaveBeenCalled();
   });
-  it("revalidates admin identity on replay and refuses cached response disclosure", async () => {
+  it("revalidates manage role on replay and refuses cached response disclosure", async () => {
     const s = setup();
     const result = await s.service.handle("archiveModule", {
       ...s.request,
       body: { reason: "封存" },
     });
     expect(result.status).toBe(200);
-    s.adminVerify.mockRejectedValueOnce(notAdmin());
+    s.replay.mockRejectedValueOnce({ code: "MODULE_MANAGE_FORBIDDEN" });
     await expect(
       s.command().replayAuthorizer!(
         { replayAuthContext: { projectId: 2, moduleId: 3 } } as never,
         tx,
       ),
-    ).rejects.toMatchObject({ code: "ADMIN_REQUIRED" });
+    ).rejects.toMatchObject({ code: "MODULE_MANAGE_FORBIDDEN" });
+    expect(s.replay).toHaveBeenCalledWith(
+      tx,
+      7,
+      { projectId: 2, moduleId: 3 },
+      { requireManageRole: true },
+    );
   });
   it("normalizes name conflicts and never exposes database failures", async () => {
     const s = setup();

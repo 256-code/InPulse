@@ -20,6 +20,7 @@ import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres
 import { ProjectCreationLockPort } from "../src/modules/projects/project-creation-lock.port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { ModuleManagementRepository } from "../src/modules/modules/module-management.repository.js";
@@ -78,6 +79,7 @@ beforeAll(() => {
     audit,
     activity,
     search,
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   const features = new FeaturesManagementService(
     access,

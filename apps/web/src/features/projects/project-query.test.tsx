@@ -41,7 +41,12 @@ const createdProject: CreateProjectResponse = {
     updatedAt: "2026-09-09T00:00:00.000Z",
   },
   members: [
-    { userId: 1, status: "ACTIVE", joinedAt: "2026-09-09T00:00:00.000Z" },
+    {
+      userId: 1,
+      status: "ACTIVE",
+      role: "LEADER",
+      joinedAt: "2026-09-09T00:00:00.000Z",
+    },
   ],
 };
 

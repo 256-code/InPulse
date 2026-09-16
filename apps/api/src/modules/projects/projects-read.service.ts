@@ -50,7 +50,12 @@ export class ProjectsReadService {
     if (project === undefined) {
       throw this.notFound();
     }
-    return { project };
+    // ADR-033：详情响应携带当前用户的项目内角色，供前端显示管理入口。
+    const currentUserRole = await this.projects.findActiveMemberRole(
+      projectId,
+      actor.userId,
+    );
+    return { project, currentUserRole };
   }
 
   private async requireActor(

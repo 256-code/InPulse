@@ -38,7 +38,7 @@ const ProjectOverviewContainer: React.FC<ProjectOverviewContainerProps> = ({
     <ProjectOverviewPageView
       projectId={projectId}
       client={client}
-      project={projectQuery.data ?? null}
+      project={projectQuery.data?.project ?? null}
       projectLoading={projectQuery.isPending}
       onRetryProject={() => void projectQuery.refetch()}
       onBackToProjects={() => navigate("/projects")}

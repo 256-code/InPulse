@@ -262,6 +262,33 @@ describe("F-12 forms", () => {
       screen.queryByRole("button", { name: /归\s*档/ }),
     ).not.toBeInTheDocument();
   });
+  it("shows archive entries for a project leader without system admin flag (ADR-033)", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [item] }),
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 2,
+          code: "INP",
+          name: "项目",
+          description: "",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 9,
+          createdAt: "2026-09-09T00:00:00.000Z",
+          updatedAt: "2026-09-09T00:00:00.000Z",
+          memberCount: 2,
+          stats: {
+            activeModuleCount: 1,
+            activeFeatureCount: 0,
+            openTaskCount: 0,
+          },
+        },
+        currentUserRole: "LEADER",
+      }),
+    } as unknown as InpulseApiClient;
+    mount(client, false);
+    await screen.findByRole("button", { name: /归\s*档/ });
+  });
 });
 
 describe("模块卡", () => {

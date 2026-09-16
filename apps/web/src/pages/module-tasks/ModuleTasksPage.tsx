@@ -45,7 +45,7 @@ export default function ModuleTasksPage() {
             返回模块列表
           </Button>
           <span className="eyebrow">
-            {`模块 / ${projectQuery.data?.name ?? "加载中"}`}
+            {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
           </span>
           <h1>{module.name}</h1>
           <p>{module.description || "模块级任务与功能档案的公共工作区。"}</p>

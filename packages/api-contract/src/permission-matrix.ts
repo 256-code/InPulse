@@ -119,7 +119,12 @@ export const permissionMatrix = [
       匿名: { kind: "deny", status: 401 },
       活跃成员:
         operationId === "archiveModule" || operationId === "restoreModule"
-          ? { kind: "deny", status: 403 }
+          ? {
+              kind: "conditional",
+              allowedWhen:
+                "ADR-033：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+              deniedWith: 403,
+            }
           : { kind: "allow" },
       其他项目成员: { kind: "deny", status: 404 },
       已移除成员: { kind: "deny", status: 404 },
@@ -622,18 +627,47 @@ export const permissionMatrix = [
     operationId,
     outcomes: {
       匿名: { kind: "deny", status: 401 },
-      活跃成员: { kind: "deny", status: 403 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-033：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色）；普通成员 403" +
+          (operationId === "removeProjectMember"
+            ? "；目标为本项目 LEADER 时 409，须先由系统管理员转移/撤销"
+            : ""),
+        deniedWith: 403,
+      },
       其他项目成员: { kind: "deny", status: 404 },
       已移除成员: { kind: "deny", status: 404 },
       停用用户: { kind: "deny", status: 401 },
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权",
+          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权与角色；目标为本项目 LEADER 时 409",
         deniedWith: 403,
       },
     },
   })),
+  {
+    operationId: "setProjectMemberRole",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-033：本项目 LEADER 且目标角色仅 MEMBER/PROJECT_ADMIN；普通成员与 PROJECT_ADMIN 403",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；可设 MEMBER/PROJECT_ADMIN/LEADER（含转移组长），目标必须 ACTIVE 成员",
+        deniedWith: 403,
+      },
+    },
+  },
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

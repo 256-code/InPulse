@@ -1142,7 +1142,8 @@ export const routeRegistry = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "2.0.0",
+    // ADR-033：响应成员摘要新增 role，重放安全字段随之变化，旧 Key 409。
+    idempotencyContractVersion: "2.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: {
@@ -1163,6 +1164,7 @@ export const routeRegistry = [
               "project.updatedAt",
               "members[].userId",
               "members[].status",
+              "members[].role",
               "members[].joinedAt",
             ],
           },

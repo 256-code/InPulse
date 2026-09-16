@@ -4,6 +4,7 @@ import type { AuditWritePort } from "../src/audit/audit.port.js";
 import type { TransactionContext } from "../src/database/transaction-context.js";
 import type { ActivityWritePort } from "../src/modules/activity/activity.write-port.js";
 import type { ProjectAccessQueryPort } from "../src/modules/projects/project-access.port.js";
+import type { ProjectMembersQueryPort } from "../src/modules/projects/project-members-query.port.js";
 import {
   ProjectManagementService,
   ProjectManagementError,
@@ -64,6 +65,7 @@ function setup(
     .mockResolvedValue({ chainId: "chain-1", sequenceNo: 4 });
   const appendActivity = vi.fn().mockResolvedValue(undefined);
   const upsertSearch = vi.fn().mockResolvedValue(undefined);
+  const findActiveRole = vi.fn().mockResolvedValue("LEADER");
   const service = new ProjectManagementService(
     {
       findProjectForChange,
@@ -75,6 +77,7 @@ function setup(
     { append: appendAudit } as unknown as AuditWritePort,
     { append: appendActivity } as unknown as ActivityWritePort,
     { upsert: upsertSearch } as unknown as SearchProjectionWritePort,
+    { findActiveRole } as unknown as ProjectMembersQueryPort,
   );
   return {
     service,
@@ -86,6 +89,7 @@ function setup(
     appendAudit,
     appendActivity,
     upsertSearch,
+    findActiveRole,
   };
 }
 
@@ -155,6 +159,12 @@ describe("ProjectManagementService", () => {
       id: 7,
       name: "商城系统二期",
       rowVersion: 2,
+    });
+    // ADR-033：写命令响应携带当前用户的项目内角色。
+    expect(result.currentUserRole).toBe("LEADER");
+    expect(s.findActiveRole).toHaveBeenCalledWith(tx, {
+      projectId: 7,
+      userId: 5,
     });
   });
 

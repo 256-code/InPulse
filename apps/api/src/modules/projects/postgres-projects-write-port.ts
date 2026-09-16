@@ -28,6 +28,7 @@ interface ProjectInsertRow {
 interface MemberInsertRow {
   readonly user_id: number;
   readonly status: "ACTIVE" | "REMOVED";
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joined_at: Date;
 }
 
@@ -38,6 +39,7 @@ interface MemberRow {
   readonly name: string;
   readonly avatar_url: string | null;
   readonly status: "ACTIVE" | "REMOVED";
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joined_at: Date;
   readonly removed_at: Date | null;
 }
@@ -105,10 +107,11 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     tx: TransactionContext,
     input: AddProjectMemberInput,
   ): Promise<ProjectMemberAddedRecord> {
+    const role = input.role ?? "MEMBER";
     const rows = (await tx.sql`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${input.projectId}, ${input.userId})
-      RETURNING user_id, status, joined_at
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${input.projectId}, ${input.userId}, ${role})
+      RETURNING user_id, status, role, joined_at
     `) as unknown as readonly MemberInsertRow[];
     const row = rows[0];
     if (row === undefined) {
@@ -117,6 +120,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     return {
       userId: row.user_id,
       status: row.status,
+      role: row.role,
       joinedAt: new Date(row.joined_at).toISOString(),
     };
   }
@@ -132,6 +136,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.avatar_url,
              pm.status,
+             pm.role,
              pm.joined_at,
              pm.removed_at
         FROM app.project_members AS pm
@@ -322,6 +327,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.avatar_url,
              pm.status,
+             pm.role,
              pm.joined_at,
              pm.removed_at
         FROM app.project_members AS pm
@@ -366,8 +372,41 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     const updated = (await tx.sql`
       UPDATE app.project_members
          SET status = 'REMOVED',
-             removed_at = now()
+             removed_at = now(),
+             role = 'MEMBER'
        WHERE id = ${current.membershipId}
+         AND status = 'ACTIVE'
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    if (updated.length === 0) {
+      return undefined;
+    }
+    return this.findLatestMember(tx, input);
+  }
+
+  async setMemberRole(
+    tx: TransactionContext,
+    input: ProjectMemberIdentity & {
+      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    },
+  ): Promise<ProjectMemberRecord | undefined> {
+    // ADR-033：project_members_one_leader 是非延迟部分唯一索引，转移组长
+    // 必须先把原组长降级为普通成员，再提升目标，否则中途出现两名 LEADER。
+    if (input.role === "LEADER") {
+      await tx.sql`
+        UPDATE app.project_members
+           SET role = 'MEMBER'
+         WHERE project_id = ${input.projectId}
+           AND status = 'ACTIVE'
+           AND role = 'LEADER'
+           AND user_id <> ${input.userId}
+      `;
+    }
+    const updated = (await tx.sql`
+      UPDATE app.project_members
+         SET role = ${input.role}
+       WHERE project_id = ${input.projectId}
+         AND user_id = ${input.userId}
          AND status = 'ACTIVE'
       RETURNING id
     `) as unknown as readonly { id: number }[];
@@ -385,6 +424,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       name: row.name,
       avatarUrl: row.avatar_url,
       status: row.status,
+      role: row.role,
       joinedAt: new Date(row.joined_at).toISOString(),
       removedAt:
         row.removed_at === null ? null : new Date(row.removed_at).toISOString(),

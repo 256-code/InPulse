@@ -59,6 +59,23 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
     return rows.map((row) => this.toItem(row));
   }
 
+  async findActiveMemberRole(
+    projectId: number,
+    userId: number,
+  ): Promise<"MEMBER" | "PROJECT_ADMIN" | "LEADER" | null> {
+    const rows = (await this.client.sql`
+      SELECT role
+        FROM app.project_members
+       WHERE project_id = ${projectId}
+         AND user_id = ${userId}
+         AND status = 'ACTIVE'
+       LIMIT 1
+    `) as unknown as readonly {
+      role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    }[];
+    return rows[0]?.role ?? null;
+  }
+
   async find(projectId: number): Promise<ProjectItem | undefined> {
     const rows = (await this.client.sql`
       SELECT p.id,

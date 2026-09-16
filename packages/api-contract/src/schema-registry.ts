@@ -103,6 +103,8 @@ import {
   addProjectMemberResponseSchema,
   removeProjectMemberResponseSchema,
   projectMemberReplayContextSchema,
+  setProjectMemberRoleRequestSchema,
+  setProjectMemberRoleResponseSchema,
   projectCodeSchema,
   projectItemSchema,
   projectListResponseSchema,
@@ -552,6 +554,16 @@ export const schemaRegistry = {
   ProjectMemberReplayContext: {
     schema: projectMemberReplayContextSchema,
     summary: "成员写操作幂等重放的最小结果资源上下文",
+    sensitiveFieldPaths: [],
+  },
+  SetProjectMemberRoleRequest: {
+    schema: setProjectMemberRoleRequestSchema,
+    summary: "ADR-033 任命/撤销项目内角色请求",
+    sensitiveFieldPaths: [],
+  },
+  SetProjectMemberRoleResponse: {
+    schema: setProjectMemberRoleResponseSchema,
+    summary: "角色设置成功响应（200）",
     sensitiveFieldPaths: [],
   },
   CreateProjectResponse: {

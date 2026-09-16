@@ -63,9 +63,25 @@ export const projectListResponseSchema = z
 
 export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
 
+/** ADR-033：项目内角色；成员被移除即失效，重新加入从 MEMBER 开始。 */
+export const projectMemberRoleSchema = z.enum([
+  "MEMBER",
+  "PROJECT_ADMIN",
+  "LEADER",
+]);
+
+export type ProjectMemberRole = z.infer<typeof projectMemberRoleSchema>;
+
 /** 项目详情响应；缺失或无权限统一 404。 */
 export const projectDetailResponseSchema = z
-  .object({ project: projectItemSchema })
+  .object({
+    project: projectItemSchema,
+    /**
+     * ADR-033：当前用户在本项目的成员角色；非成员不会出现（404）。
+     * 服务端恒下发，字段标记 optional 仅为兼容既有客户端形状。
+     */
+    currentUserRole: projectMemberRoleSchema.nullable().optional(),
+  })
   .strict()
   .meta({ id: "ProjectDetailResponse" });
 
@@ -102,6 +118,7 @@ export const projectMemberRecordItemSchema = z
     name: z.string().min(1).max(200),
     avatarUrl: z.string().max(2048).nullable(),
     status: z.enum(["ACTIVE", "REMOVED"]),
+    role: projectMemberRoleSchema,
     joinedAt: z.iso.datetime(),
     removedAt: z.iso.datetime().nullable(),
   })
@@ -261,6 +278,32 @@ export type ProjectMemberReplayContext = z.infer<
 >;
 
 /**
+ * ADR-033：任命/撤销项目内角色。请求只携带目标角色；谁能设哪些角色由
+ * 服务端门禁决定（系统管理员三种皆可，本项目组长只能 MEMBER/PROJECT_ADMIN）。
+ */
+export const setProjectMemberRoleRequestSchema = z
+  .object({
+    role: projectMemberRoleSchema,
+  })
+  .strict()
+  .meta({ id: "SetProjectMemberRoleRequest" });
+
+export type SetProjectMemberRoleRequest = z.infer<
+  typeof setProjectMemberRoleRequestSchema
+>;
+
+export const setProjectMemberRoleResponseSchema = z
+  .object({
+    member: projectMemberRecordItemSchema,
+  })
+  .strict()
+  .meta({ id: "SetProjectMemberRoleResponse" });
+
+export type SetProjectMemberRoleResponse = z.infer<
+  typeof setProjectMemberRoleResponseSchema
+>;
+
+/**
  * 创建项目请求。创建者由服务端从认证 Session 解析，不接收客户端提交的
  * createdBy；memberIds 为可选初始成员（不含创建者），服务端校验其 ACTIVE 状态。
  */
@@ -291,6 +334,7 @@ export const projectMemberItemSchema = z
   .object({
     userId: z.number().int().positive(),
     status: z.enum(["ACTIVE", "REMOVED"]),
+    role: projectMemberRoleSchema,
     joinedAt: z.string().min(1).max(64),
   })
   .strict()

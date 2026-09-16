@@ -25,9 +25,7 @@ import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
 import { PostgresSessionCsrfTokenRepository } from "../src/auth/session-csrf-token.repository.js";
-import { PostgresUserCredentialRepository } from "../src/auth/user-credential.repository.js";
 import { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
-import { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { IdempotencyHttpService } from "../src/idempotency/http-service.js";
@@ -35,6 +33,8 @@ import { IdempotencyRunner } from "../src/idempotency/runner.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
+import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import { ModuleManagementRepository } from "../src/modules/modules/module-management.repository.js";
@@ -90,16 +90,14 @@ beforeAll(async () => {
     audit,
     new PostgresActivityWritePort(),
     search,
+    new ProjectRoleGateService(
+      new PostgresProjectAccessQueryPort(client),
+      new PostgresProjectMembersQueryPort(),
+    ),
   );
   const http = new ModulesHttpService(
     auth,
     new AuthenticatedMutationService(auth, csrf, tokens),
-    new AdminHighRiskAuthService(
-      sessions,
-      csrf,
-      tokens,
-      new PostgresUserCredentialRepository(),
-    ),
     new IdempotencyHttpService(
       new IdempotencyRunner(uow, new PostgresIdempotencyStore()),
       { currentVersion: 1, currentKey: () => key, keyFor: () => key },
@@ -144,6 +142,19 @@ async function actor(admin = false): Promise<Actor> {
 async function fixture(): Promise<{ member: Actor; project: ProjectFixture }> {
   const member = await actor();
   return { member, project: await createProject(client.sql, member.userId) };
+}
+/** ADR-033：把夹具成员降级为普通成员（创建者默认回填 LEADER）。 */
+async function demoteToMember(
+  sql: DatabaseClient["sql"],
+  projectId: number,
+  userId: number,
+): Promise<void> {
+  await sql`
+    UPDATE app.project_members
+       SET role = 'MEMBER'
+     WHERE project_id = ${projectId}
+       AND user_id = ${userId}
+  `;
 }
 async function request(
   projectId: number,
@@ -279,6 +290,9 @@ describe("F-12 real HTTP + PostgreSQL", () => {
   it("requires admin reauth and reason, preserves archived reads, rejects archived edit, restores without changing kind", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
+    // ADR-033：夹具创建者默认是组长（可归档模块）；本用例验证普通成员
+    // 无归档权限，先把夹具成员降级为 MEMBER。
+    await demoteToMember(client.sql, project.projectId, member.userId);
     await error(
       await request(
         project.projectId,
@@ -289,6 +303,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
         1,
       ),
       403,
+      "MODULE_MANAGE_FORBIDDEN",
     );
     await error(
       await request(
@@ -351,6 +366,36 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       3,
     );
     expect(archivedAgain.status).toBe(200);
+  });
+  it("lets a project leader archive and restore modules without any admin flag (ADR-033)", async () => {
+    const { member, project } = await fixture();
+    // 夹具创建者默认回填 LEADER；普通成员（非系统管理员）也可归档。
+    const archived = await request(
+      project.projectId,
+      "POST",
+      member,
+      { reason: "组长封存" },
+      `/${project.moduleId}/archive`,
+      1,
+    );
+    expect(archived.status).toBe(200);
+    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
+      status: "ARCHIVED",
+      rowVersion: 2,
+    });
+    const restored = await request(
+      project.projectId,
+      "POST",
+      member,
+      { reason: "组长恢复" },
+      `/${project.moduleId}/restore`,
+      2,
+    );
+    expect(restored.status).toBe(200);
+    expect(moduleItemSchema.parse(await restored.json())).toMatchObject({
+      status: "ACTIVE",
+      rowVersion: 3,
+    });
   });
   it("replays equivalent normalized requests, rejects changed input and removed membership", async () => {
     const { member, project } = await fixture();
@@ -533,6 +578,10 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
       new PostgresActivityWritePort(),
       new PostgresSearchProjectionWritePort(),
+      new ProjectRoleGateService(
+        new PostgresProjectAccessQueryPort(dedicatedClient),
+        new PostgresProjectMembersQueryPort(),
+      ),
     );
     let ready = 0;
     let release: (() => void) | undefined;

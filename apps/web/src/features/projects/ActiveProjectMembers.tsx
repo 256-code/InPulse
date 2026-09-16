@@ -37,7 +37,7 @@ export function ActiveProjectMembers({
     retry: false,
   });
   const items = members.data?.items ?? [];
-  const projectDetail = project.data ?? null;
+  const projectDetail = project.data?.project ?? null;
   const creatorName =
     projectDetail === null
       ? undefined

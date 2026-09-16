@@ -25,6 +25,7 @@ const owner: ProjectMemberRecordItem = {
   name: "开发者 C",
   avatarUrl: null,
   status: "ACTIVE",
+  role: "MEMBER",
   joinedAt: "2026-09-09T00:00:00.000Z",
   removedAt: null,
 };
@@ -36,6 +37,7 @@ const removed: ProjectMemberRecordItem = {
   name: "已移除成员",
   avatarUrl: null,
   status: "REMOVED",
+  role: "MEMBER",
   joinedAt: "2026-09-08T00:00:00.000Z",
   removedAt: "2026-09-09T00:00:00.000Z",
 };
@@ -57,7 +59,13 @@ const unfinishedTask: ProjectMemberUnfinishedTaskItem = {
   impactFeatureIds: [33],
 };
 
-function mount(client: InpulseApiClient) {
+function mount(
+  client: InpulseApiClient,
+  props: {
+    readonly isSystemAdmin?: boolean | undefined;
+    readonly currentUserRole?: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null;
+  } = {},
+) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <MemoryRouter>
@@ -69,7 +77,7 @@ function mount(client: InpulseApiClient) {
               })
             }
           >
-            <ProjectMembersPageView projectId={7} client={client} />
+            <ProjectMembersPageView projectId={7} client={client} {...props} />
           </QueryClientProvider>
         </AuthStateProvider>
       </MemoryRouter>
@@ -213,5 +221,90 @@ describe("ProjectMembersPageView", () => {
       }),
     );
     await screen.findByText(/成员已移出项目/);
+  });
+
+  it("lets the project leader appoint a project admin through the generated client", async () => {
+    const client = baseClient();
+    const setProjectMemberRole = vi.fn().mockResolvedValue({
+      member: { ...owner, role: "PROJECT_ADMIN" },
+    });
+    const api = {
+      ...client,
+      setProjectMemberRole,
+    } as unknown as InpulseApiClient;
+    mount(api, { isSystemAdmin: false, currentUserRole: "LEADER" });
+
+    await screen.findByText("开发者 C");
+    fireEvent.click(screen.getByRole("button", { name: "设置角色" }));
+    const dialog = await screen.findByRole("dialog", { name: "设置项目角色" });
+    // 组长不能任命或转移组长角色。
+    expect(
+      within(dialog).queryByRole("radio", { name: /组\s*长/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("radio", { name: /项目管理员/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存角色" }));
+
+    await waitFor(() => expect(setProjectMemberRole).toHaveBeenCalledTimes(1));
+    expect(setProjectMemberRole).toHaveBeenCalledWith(
+      7,
+      2,
+      { role: "PROJECT_ADMIN" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-token",
+          "Idempotency-Key": expect.stringContaining("project-member-role-"),
+        }),
+      }),
+    );
+    await screen.findByText(/已将 开发者 C 的项目角色设置为项目管理员/);
+  });
+
+  it("offers the leader role option to system admins and protects the leader card from removal", async () => {
+    const client = baseClient();
+    const leader: ProjectMemberRecordItem = {
+      ...owner,
+      membershipId: 12,
+      userId: 6,
+      name: "组长本人",
+      role: "LEADER",
+    };
+    client.listProjectMembers.mockResolvedValue({ items: [owner, leader] });
+    const api = client as unknown as InpulseApiClient;
+    mount(api, { isSystemAdmin: true, currentUserRole: null });
+
+    await screen.findByText("组长本人");
+    expect(screen.getByText("组长")).toBeInTheDocument();
+    const removeButtons = screen.getAllByRole("button", { name: /移\s*除/ });
+    // 组长卡片不提供移除入口，只有普通成员可以移除。
+    expect(removeButtons).toHaveLength(1);
+    fireEvent.click(removeButtons[0]!);
+    const dialog = await screen.findByRole("dialog", {
+      name: "移除项目成员",
+    });
+    expect(within(dialog).getByText(/开发者 C/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /取\s*消/ }));
+
+    const roleButtons = screen.getAllByRole("button", { name: "设置角色" });
+    expect(roleButtons).toHaveLength(2);
+    fireEvent.click(roleButtons[1]!);
+    const roleDialog = await screen.findByRole("dialog", {
+      name: "设置项目角色",
+    });
+    expect(
+      within(roleDialog).getByRole("radio", { name: /组\s*长/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("lets a project admin remove members but not appoint roles", async () => {
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient, {
+      isSystemAdmin: false,
+      currentUserRole: "PROJECT_ADMIN",
+    });
+    await screen.findByText("开发者 C");
+    expect(
+      screen.queryByRole("button", { name: "设置角色" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /移\s*除/ })).toBeInTheDocument();
   });
 });

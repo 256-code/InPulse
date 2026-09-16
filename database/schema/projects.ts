@@ -64,6 +64,8 @@ export const projectMembers = appSchema.table(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     status: text("status").notNull().default("ACTIVE"),
+    /** ADR-033：项目内角色；成员被移除即失效，重新加入从 MEMBER 开始。 */
+    role: text("role").notNull().default("MEMBER"),
     joinedAt: timestamptz("joined_at").notNull().defaultNow(),
     removedAt: timestamptz("removed_at"),
   },
@@ -77,12 +79,23 @@ export const projectMembers = appSchema.table(
     uniqueIndex("project_members_active_unique")
       .on(table.projectId, table.userId)
       .where(sql.raw("status = 'ACTIVE'")),
+    uniqueIndex("project_members_one_leader")
+      .on(table.projectId)
+      .where(sql.raw("status = 'ACTIVE' AND role = 'LEADER'")),
     index("project_members_user_active_idx")
       .on(table.userId, table.projectId)
       .where(sql.raw("status = 'ACTIVE'")),
     check(
       "project_members_status_check",
       sql.raw("status IN ('ACTIVE', 'REMOVED')"),
+    ),
+    check(
+      "project_members_role_check",
+      sql.raw("role IN ('MEMBER', 'PROJECT_ADMIN', 'LEADER')"),
+    ),
+    check(
+      "project_members_removed_role_check",
+      sql.raw("status = 'ACTIVE' OR role = 'MEMBER'"),
     ),
     check(
       "project_members_state_check",

@@ -43,6 +43,10 @@ export interface ProjectDetailOptions extends ProjectMutationOptions {
   readonly enabled?: boolean | undefined;
 }
 
+/**
+ * ADR-033：`getProject` 响应包含 `currentUserRole`，钩子返回完整响应；
+ * 消费方用 `data.project` 取项目、`data.currentUserRole` 判断项目内管理入口。
+ */
 export function useProjectDetail({
   client,
   projectId,
@@ -55,13 +59,20 @@ export function useProjectDetail({
       if (projectId === null) {
         throw new Error("projectId is required");
       }
-      const result = await apiClient.getProject(projectId);
-      return result.project;
+      return apiClient.getProject(projectId);
     },
     enabled: enabled && projectId !== null,
     retry: false,
     staleTime: 60_000,
   });
+}
+
+/** ADR-033：当前用户在项目内可执行成员/模块管理（系统管理员或组长/项目管理员）。 */
+export function canManageProjectResources(
+  isSystemAdmin: boolean,
+  role: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null | undefined,
+): boolean {
+  return isSystemAdmin || role === "LEADER" || role === "PROJECT_ADMIN";
 }
 
 export function describeCreateProjectError(error: unknown): string {

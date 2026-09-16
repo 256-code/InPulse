@@ -251,6 +251,7 @@ export class HealthController {
       "GET /api/v1/projects/{projectId}/members/{userId}/unfinished-tasks",
       "POST /api/v1/projects/{projectId}/members",
       "POST /api/v1/projects/{projectId}/members/{userId}/remove",
+      "POST /api/v1/projects/{projectId}/members/{userId}/role",
       "GET /api/v1/projects",
       "GET /api/v1/projects/{projectId}",
       "GET /api/v1/search",

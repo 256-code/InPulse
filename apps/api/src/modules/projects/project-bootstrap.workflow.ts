@@ -103,12 +103,15 @@ export class ProjectBootstrapWorkflow {
     const memberRecords: {
       userId: number;
       status: "ACTIVE";
+      role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
       joinedAt: string;
     }[] = [];
     for (const userId of allMemberIds) {
+      // ADR-033：创建者成员行以 LEADER 落库，其余初始成员为 MEMBER。
       const record = await this.projects.addMember(tx, {
         projectId: project.projectId,
         userId,
+        ...(userId === actorId ? { role: "LEADER" as const } : {}),
       });
       if (record.status !== "ACTIVE") {
         throw new ProjectBootstrapConflictError("项目成员必须为活跃状态");
@@ -116,6 +119,7 @@ export class ProjectBootstrapWorkflow {
       memberRecords.push({
         userId: record.userId,
         status: record.status,
+        role: record.role,
         joinedAt: record.joinedAt,
       });
     }

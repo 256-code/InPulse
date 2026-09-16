@@ -10,6 +10,7 @@ import { PostgresUnitOfWork } from "../../database/unit-of-work.js";
 import { ActivityWritePort } from "../activity/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
+  ProjectRoleGateService,
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
@@ -65,6 +66,8 @@ export class ModulesManagementService {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(ProjectRoleGateService)
+    private readonly roleGate: ProjectRoleGateService,
   ) {}
 
   async list(actorId: number, projectId: number) {
@@ -105,9 +108,31 @@ export class ModulesManagementService {
     tx: TransactionContext,
     actorId: number,
     context: unknown,
+    options: { readonly requireManageRole?: boolean } = {},
   ): Promise<void> {
     const resource = moduleReplayContextSchema.parse(context);
     await this.authorize(tx, actorId, resource.projectId, resource.moduleId);
+    if (options.requireManageRole === true)
+      await this.requireManageRole(tx, actorId, resource.projectId);
+  }
+
+  /**
+   * ADR-033：模块归档/恢复的项目内管理角色门禁；系统管理员或本项目
+   * LEADER/PROJECT_ADMIN 通过，普通成员 403，非成员 404。
+   */
+  async requireManageRole(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+  ): Promise<void> {
+    const role = await this.roleGate.manageRole(tx, actorId, projectId);
+    if (role === "NOT_MEMBER") throw missing();
+    if (role === "MEMBER")
+      throw new ModuleManagementError(
+        403,
+        "MODULE_MANAGE_FORBIDDEN",
+        "只有系统管理员、本项目组长或项目管理员可以归档或恢复模块",
+      );
   }
 
   async execute(
@@ -124,6 +149,11 @@ export class ModulesManagementService {
     },
   ): Promise<ModuleItem> {
     await this.authorize(tx, input.actorId, input.projectId, input.moduleId);
+    if (
+      input.operation === "archiveModule" ||
+      input.operation === "restoreModule"
+    )
+      await this.requireManageRole(tx, input.actorId, input.projectId);
     const action = input.operation.replace("Module", "");
     let previous: ModuleItem | undefined;
     let result: ModuleItem;

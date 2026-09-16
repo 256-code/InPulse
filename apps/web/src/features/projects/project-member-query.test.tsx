@@ -19,6 +19,7 @@ const activeMember: ProjectMemberRecordItem = {
   name: "开发者 C",
   avatarUrl: null,
   status: "ACTIVE",
+  role: "MEMBER",
   joinedAt: "2026-09-09T00:00:00.000Z",
   removedAt: null,
 };
@@ -191,8 +192,26 @@ describe("project member query", () => {
 
   it("maps member errors without leaking internal messages", () => {
     const forbidden = new ApiError(403, {
-      code: "ADMIN_REQUIRED",
+      code: "PROJECT_MEMBER_MANAGE_FORBIDDEN",
       message: "internal-forbidden",
+      details: {},
+      requestId: "r",
+    });
+    const roleForbidden = new ApiError(403, {
+      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
+      message: "internal-role-forbidden",
+      details: {},
+      requestId: "r",
+    });
+    const leaderAssignForbidden = new ApiError(403, {
+      code: "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
+      message: "internal-leader-assign",
+      details: {},
+      requestId: "r",
+    });
+    const leaderProtected = new ApiError(409, {
+      code: "PROJECT_MEMBER_LEADER_PROTECTED",
+      message: "internal-leader-protected",
       details: {},
       requestId: "r",
     });
@@ -203,7 +222,16 @@ describe("project member query", () => {
       requestId: "r",
     });
     expect(projectMemberErrorMessage(forbidden)).toBe(
-      "只有系统管理员可以管理项目成员。",
+      "只有系统管理员、本项目组长或项目管理员可以管理项目成员。",
+    );
+    expect(projectMemberErrorMessage(roleForbidden)).toBe(
+      "只有系统管理员或本项目组长可以任命或撤销项目内角色。",
+    );
+    expect(projectMemberErrorMessage(leaderAssignForbidden)).toBe(
+      "组长不能任命或转移组长角色，请联系系统管理员。",
+    );
+    expect(projectMemberErrorMessage(leaderProtected)).toBe(
+      "项目组长不能被移除，请先由系统管理员转移或撤销组长角色。",
     );
     expect(projectMemberErrorMessage(notFound)).toBe(
       "项目或成员不存在，或你已无权访问。",

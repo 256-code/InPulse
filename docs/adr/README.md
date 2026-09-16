@@ -25,7 +25,7 @@
 | [ADR-009](ADR-009.md) | Accepted | 本期不实现通用 Outbox |
 | [ADR-010](ADR-010.md) | Superseded | pg_trgm 与搜索投影的双阶段门禁，由 ADR-025 替代 |
 | [ADR-011](ADR-011.md) | Accepted | Argon2id 与服务端 Session 认证 |
-| [ADR-012](ADR-012.md) | Accepted | 两类角色与创建者成员关系语义 |
+| [ADR-012](ADR-012.md) | Superseded | 两类角色与创建者成员关系语义，由 ADR-033 扩展为项目内角色模型 |
 | [ADR-013](ADR-013.md) | Accepted | WorkflowModule 与显式 UnitOfWork |
 | [ADR-014](ADR-014.md) | Accepted | 使用脱敏 ActivityProjection |
 | [ADR-015](ADR-015.md) | Accepted | 同步 CSRF Token 与有限重签 |
@@ -46,6 +46,7 @@
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
 | [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
 | [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO） |
+| [ADR-033](ADR-033.md) | Accepted | 项目内角色（组长与项目管理员），扩展 ADR-012 |
 
 ## 关联基线
 

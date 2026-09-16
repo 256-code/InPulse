@@ -716,7 +716,7 @@ describe("F22 typed external links", () => {
         )
       ).status,
     ).toBe(200);
-    await db.sql`UPDATE app.project_members SET status='REMOVED',removed_at=now() WHERE project_id=${f.projectId} AND user_id=${f.userId}`;
+    await db.sql`UPDATE app.project_members SET status='REMOVED',removed_at=now(),role='MEMBER' WHERE project_id=${f.projectId} AND user_id=${f.userId}`;
     await failure(
       await linkRequest(
         "FEATURE",

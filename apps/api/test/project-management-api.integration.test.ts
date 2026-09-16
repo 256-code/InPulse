@@ -28,6 +28,7 @@ import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
+import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectManagementController } from "../src/modules/projects/project-management.controller.js";
 import { ProjectManagementHttpService } from "../src/modules/projects/project-management-http.service.js";
@@ -179,6 +180,7 @@ beforeAll(async () => {
     new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
     new PostgresActivityWritePort(),
     new PostgresSearchProjectionWritePort(),
+    new PostgresProjectMembersQueryPort(),
   );
   const http = new ProjectManagementHttpService(
     auth,
@@ -396,7 +398,8 @@ describe("F-06.1 project edit API", () => {
     await client.sql`
       UPDATE app.project_members
          SET status = 'REMOVED',
-             removed_at = now()
+             removed_at = now(),
+             role = 'MEMBER'
        WHERE project_id = ${removed.project.projectId}
          AND user_id = ${removed.owner.userId}
          AND status = 'ACTIVE'

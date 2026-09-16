@@ -715,6 +715,7 @@ export type ProjectCode = string;
 
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
+  readonly currentUserRole?: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
 };
 
 export type ProjectEditRequest = {
@@ -747,6 +748,7 @@ export type ProjectMemberCollectionPath = {
 export type ProjectMemberItem = {
   readonly userId: number;
   readonly status: ("ACTIVE" | "REMOVED");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -774,6 +776,7 @@ export type ProjectMemberRecordItem = {
   readonly name: string;
   readonly avatarUrl: (string | null);
   readonly status: ("ACTIVE" | "REMOVED");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
   readonly removedAt: (string | null);
 };
@@ -1102,6 +1105,14 @@ export type SearchQueryRequest = {
   readonly cursor?: string;
   readonly limit?: number;
   readonly includeVoid?: boolean;
+};
+
+export type SetProjectMemberRoleRequest = {
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+};
+
+export type SetProjectMemberRoleResponse = {
+  readonly member: ProjectMemberRecordItem;
 };
 
 export type SsoCallbackQueryRequest = {

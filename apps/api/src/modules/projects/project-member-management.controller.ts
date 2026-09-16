@@ -81,6 +81,18 @@ export class ProjectMemberManagementController {
     return this.respond("removeProjectMember", request, response, params);
   }
 
+  @Post(":projectId/members/:userId/role")
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("setProjectMemberRole")
+  async setMemberRole(
+    @Req() request: ProjectMemberHttpRequest,
+    @Res({ passthrough: true }) response: ProjectMemberControllerResponse,
+    @ContractPath("setProjectMemberRole") params: unknown,
+    @ContractHeaders("setProjectMemberRole") _headers: unknown,
+  ) {
+    return this.respond("setProjectMemberRole", request, response, params);
+  }
+
   private async respond(
     operation: Parameters<ProjectMemberManagementHttpService["handle"]>[0],
     request: ProjectMemberHttpRequest,

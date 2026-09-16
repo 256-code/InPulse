@@ -23,7 +23,10 @@ import {
   ModuleEditorModal,
   type ModuleEditorRequest,
 } from "@features/modules/ModuleEditorModal";
-import { useProjectDetail } from "@features/projects/project-query";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 import { useTasks } from "@features/tasks/task-query";
 import {
   featureErrorMessage,
@@ -271,12 +274,18 @@ export function FeaturesPageView({
     (item) => item.id === moduleId,
   );
   const projectQuery = useProjectDetail({ client, projectId });
+  // ADR-033：模块归档/恢复由系统管理员或本项目组长/项目管理员执行；
+  // 功能归档仍仅限系统管理员。
+  const canArchiveModule = canManageProjectResources(
+    isAdmin,
+    projectQuery.data?.currentUserRole ?? null,
+  );
   const projectName =
     projectQuery.data === undefined
       ? null
       : currentModule === undefined
-        ? projectQuery.data.name
-        : projectQuery.data.name + " / " + currentModule.name;
+        ? projectQuery.data.project.name
+        : projectQuery.data.project.name + " / " + currentModule.name;
   const keyword = search.trim().toLocaleLowerCase();
   const visibleItems = (query.data?.items ?? []).filter(
     (item) =>
@@ -312,7 +321,7 @@ export function FeaturesPageView({
             <div className="page-header">
               <div>
                 <span className="eyebrow">
-                  {`模块 / ${projectQuery.data?.name ?? "加载中"}`}
+                  {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
                 </span>
                 <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
                 <p>
@@ -331,7 +340,7 @@ export function FeaturesPageView({
                 >
                   编辑模块
                 </Button>
-                {isAdmin && currentModule ? (
+                {canArchiveModule && currentModule ? (
                   <Button
                     className="secondary-button"
                     onClick={() =>
@@ -765,7 +774,7 @@ export function FeaturesPageView({
                     <dt>编号</dt>
                     <dd>{activeItem.code}</dd>
                     <dt>所属项目</dt>
-                    <dd>{projectQuery.data?.name ?? "加载中"}</dd>
+                    <dd>{projectQuery.data?.project?.name ?? "加载中"}</dd>
                     <dt>所属模块</dt>
                     <dd>{currentModule?.name ?? "加载中"}</dd>
                     <dt>创建人</dt>
@@ -1024,7 +1033,7 @@ export function FeaturesPageView({
       <ModuleEditorModal
         projectId={projectId}
         client={client}
-        projectName={projectQuery.data?.name ?? null}
+        projectName={projectQuery.data?.project?.name ?? null}
         request={moduleRequest}
         onClose={() => setModuleRequest(null)}
         onSaved={() => setModuleSuccess(true)}

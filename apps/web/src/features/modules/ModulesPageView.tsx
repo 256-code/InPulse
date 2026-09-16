@@ -11,7 +11,10 @@ import {
 } from "@features/common/components/Calm";
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
 import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
-import { useProjectDetail } from "@features/projects/project-query";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 import { moduleErrorMessage, useModules } from "./module-query";
 import {
   ModuleEditorModal,
@@ -41,7 +44,12 @@ export function ModulesPageView({
     client,
     projectId,
   });
-  const projectName = projectQuery.data?.name ?? null;
+  const projectName = projectQuery.data?.project?.name ?? null;
+  // ADR-033：模块归档/恢复由系统管理员或本项目组长/项目管理员执行。
+  const canArchive = canManageProjectResources(
+    isAdmin,
+    projectQuery.data?.currentUserRole ?? null,
+  );
   const overviewAdapter = useMemo(
     () => createProjectOverviewServerAdapter(client),
     [client],
@@ -52,7 +60,7 @@ export function ModulesPageView({
         <ProjectOverviewPageView
           projectId={projectId}
           client={client}
-          project={projectQuery.data ?? null}
+          project={projectQuery.data?.project ?? null}
           projectLoading={projectQuery.isPending}
           onRetryProject={() => void projectQuery.refetch()}
           onBackToProjects={() => navigate("/projects")}
@@ -195,7 +203,7 @@ export function ModulesPageView({
                           编辑模块
                         </Button>
                       )}
-                      {isAdmin && (
+                      {canArchive && (
                         <Button
                           className="text-button"
                           onClick={() =>

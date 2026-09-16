@@ -15,6 +15,7 @@ import {
   PROJECT_ACCESS_QUERY_PORT,
   type ProjectAccessQueryPort,
 } from "./project-access.port.js";
+import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 import {
   ProjectsWritePort,
   type ProjectChangeRecord,
@@ -63,6 +64,8 @@ export class ProjectManagementService {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
+    @Inject(ProjectMembersQueryPort)
+    private readonly members: ProjectMembersQueryPort,
   ) {}
 
   /** 写前授权：实时成员关系与用户状态由 Port 读取，归档项目拒绝写入。 */
@@ -195,7 +198,14 @@ export class ProjectManagementService {
       sourceRowVersion: updated.rowVersion,
     });
 
-    return { project: this.toItem(updated) };
+    return {
+      project: this.toItem(updated),
+      currentUserRole:
+        (await this.members.findActiveRole(tx, {
+          projectId: updated.projectId,
+          userId: input.actorId,
+        })) ?? null,
+    };
   }
 
   async archiveProject(
@@ -328,7 +338,14 @@ export class ProjectManagementService {
       sourceStatus: updated.status,
       sourceRowVersion: updated.rowVersion,
     });
-    return { project: this.toItem(updated) };
+    return {
+      project: this.toItem(updated),
+      currentUserRole:
+        (await this.members.findActiveRole(tx, {
+          projectId: updated.projectId,
+          userId: input.actorId,
+        })) ?? null,
+    };
   }
 
   private toItem(record: ProjectChangeRecord): ProjectItem {

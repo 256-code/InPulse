@@ -3086,7 +3086,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "2.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -3107,6 +3107,7 @@
                     "project.updatedAt",
                     "members[].userId",
                     "members[].status",
+                    "members[].role",
                     "members[].joinedAt"
                   ]
                 }
@@ -3324,7 +3325,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3348,7 +3349,8 @@
                     "project.memberCount",
                     "project.stats.activeModuleCount",
                     "project.stats.activeFeatureCount",
-                    "project.stats.openTaskCount"
+                    "project.stats.openTaskCount",
+                    "currentUserRole"
                   ]
                 }
               }
@@ -3749,7 +3751,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3773,7 +3775,8 @@
                     "project.memberCount",
                     "project.stats.activeModuleCount",
                     "project.stats.activeFeatureCount",
-                    "project.stats.openTaskCount"
+                    "project.stats.openTaskCount",
+                    "currentUserRole"
                   ]
                 }
               }
@@ -5555,7 +5558,7 @@
     "/projects/{projectId}/members": {
       "get": {
         "operationId": "listProjectMembers",
-        "summary": "系统管理员读取项目成员完整历史，要求当前有效的完整管理员 Session（is_admin）；普通成员与非成员统一 403/404。",
+        "summary": "读取项目成员完整历史；系统管理员或本项目组长/项目管理员（ADR-033）可读，其余成员与非成员统一 403/404。",
         "responses": {
           "200": {
             "description": "成功",
@@ -5639,7 +5642,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -5668,7 +5671,7 @@
       },
       "post": {
         "operationId": "addProjectMember",
-        "summary": "系统管理员添加项目成员；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
+        "summary": "添加项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
         "responses": {
           "200": {
             "description": "成功",
@@ -5752,11 +5755,11 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -5772,6 +5775,7 @@
                     "member.name",
                     "member.avatarUrl",
                     "member.status",
+                    "member.role",
                     "member.joinedAt",
                     "member.removedAt"
                   ]
@@ -5839,7 +5843,7 @@
     "/projects/{projectId}/members/{userId}/remove": {
       "post": {
         "operationId": "removeProjectMember",
-        "summary": "系统管理员移除项目成员；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权，同事务写审计与活动。",
+        "summary": "移除项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写，但组长成员行不得被移除（先转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
         "responses": {
           "200": {
             "description": "成功",
@@ -5923,11 +5927,11 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -5943,6 +5947,7 @@
                     "member.name",
                     "member.avatarUrl",
                     "member.status",
+                    "member.role",
                     "member.joinedAt",
                     "member.removedAt",
                     "reassignedTaskIds[]",
@@ -6022,10 +6027,192 @@
         }
       }
     },
+    "/projects/{projectId}/members/{userId}/role": {
+      "post": {
+        "operationId": "setProjectMemberRole",
+        "summary": "ADR-033 任命/撤销项目内角色：系统管理员可设 MEMBER/PROJECT_ADMIN/LEADER（转移组长），本项目组长只能设 MEMBER/PROJECT_ADMIN；目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetProjectMemberRoleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "SetProjectMemberRoleResponse",
+                  "safeBodyFieldPaths": [
+                    "member.membershipId",
+                    "member.projectId",
+                    "member.userId",
+                    "member.name",
+                    "member.avatarUrl",
+                    "member.status",
+                    "member.role",
+                    "member.joinedAt",
+                    "member.removedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectMemberReplayContext",
+              "resultRefExtractor": "memberUserId",
+              "currentReadAuthorizer": "projectMemberReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "none"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": [
+              "project"
+            ],
+            "retry": "项目 FOR SHARE，成员行 FOR UPDATE；LEADER 唯一索引冲突映射 409，不自动重试"
+          },
+          "auditAction": "project.member.role.set"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProjectMemberRoleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{projectId}/members/{userId}/unfinished-tasks": {
       "get": {
         "operationId": "listProjectMemberUnfinishedTasks",
-        "summary": "系统管理员读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人。",
+        "summary": "读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人；系统管理员或本项目组长/项目管理员（ADR-033）可读。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6109,7 +6296,7 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "none",
           "idempotencyPolicy": "none",
           "idempotencyExceptionAdr": "none",
@@ -6263,7 +6450,7 @@
       },
       "post": {
         "operationId": "createModule",
-        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
+        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6440,7 +6627,7 @@
     "/projects/{projectId}/modules/{moduleId}": {
       "patch": {
         "operationId": "updateModule",
-        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
+        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6639,7 +6826,7 @@
     "/projects/{projectId}/modules/{moduleId}/archive": {
       "post": {
         "operationId": "archiveModule",
-        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
+        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6723,11 +6910,11 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.2.0",
+          "idempotencyContractVersion": "1.3.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -9547,7 +9734,7 @@
     "/projects/{projectId}/modules/{moduleId}/restore": {
       "post": {
         "operationId": "restoreModule",
-        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。",
+        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -9631,11 +9818,11 @@
           }
         },
         "x-inpulse-policy": {
-          "authPolicy": "adminSession",
+          "authPolicy": "session",
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.2.0",
+          "idempotencyContractVersion": "1.3.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -12271,7 +12458,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -12295,7 +12482,8 @@
                     "project.memberCount",
                     "project.stats.activeModuleCount",
                     "project.stats.activeFeatureCount",
-                    "project.stats.openTaskCount"
+                    "project.stats.openTaskCount",
+                    "currentUserRole"
                   ]
                 }
               }
@@ -17676,6 +17864,21 @@
         "properties": {
           "project": {
             "$ref": "#/components/schemas/ProjectItem"
+          },
+          "currentUserRole": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "MEMBER",
+                  "PROJECT_ADMIN",
+                  "LEADER"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -17818,6 +18021,14 @@
               "REMOVED"
             ]
           },
+          "role": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "PROJECT_ADMIN",
+              "LEADER"
+            ]
+          },
           "joinedAt": {
             "type": "string",
             "minLength": 1,
@@ -17827,6 +18038,7 @@
         "required": [
           "userId",
           "status",
+          "role",
           "joinedAt"
         ],
         "additionalProperties": false
@@ -17951,6 +18163,14 @@
               "REMOVED"
             ]
           },
+          "role": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "PROJECT_ADMIN",
+              "LEADER"
+            ]
+          },
           "joinedAt": {
             "type": "string",
             "format": "date-time",
@@ -17976,6 +18196,7 @@
           "name",
           "avatarUrl",
           "status",
+          "role",
           "joinedAt",
           "removedAt"
         ],
@@ -19651,6 +19872,35 @@
         },
         "required": [
           "q"
+        ],
+        "additionalProperties": false
+      },
+      "SetProjectMemberRoleRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "PROJECT_ADMIN",
+              "LEADER"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "SetProjectMemberRoleResponse": {
+        "type": "object",
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/ProjectMemberRecordItem"
+          }
+        },
+        "required": [
+          "member"
         ],
         "additionalProperties": false
       },

@@ -124,8 +124,8 @@ export async function createProject(
     }
 
     await transaction`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${project.id}, ${userId})
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${project.id}, ${userId}, 'LEADER')
     `;
     const [module] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.modules (
@@ -160,10 +160,12 @@ export async function removeMember(
   projectId: number,
   userId: number,
 ): Promise<void> {
+  // ADR-033：REMOVED 行不得保留非 MEMBER 角色（project_members_removed_role_check）。
   await sql`
     UPDATE app.project_members
        SET status = 'REMOVED',
-           removed_at = now()
+           removed_at = now(),
+           role = 'MEMBER'
      WHERE project_id = ${projectId}
        AND user_id = ${userId}
        AND status = 'ACTIVE'

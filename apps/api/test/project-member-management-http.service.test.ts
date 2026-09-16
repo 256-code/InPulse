@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AdminHighRiskAuthService } from "../src/auth/admin-high-risk.service.js";
+import type { SessionAuthService } from "../src/auth/session-auth.service.js";
 import type { AuthenticatedMutationService } from "../src/auth/authenticated-mutation.service.js";
 import type { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import type { TransactionContext } from "../src/database/transaction-context.js";
@@ -20,6 +20,7 @@ const member = {
   name: "张三",
   avatarUrl: null,
   status: "ACTIVE" as const,
+  role: "MEMBER" as const,
   joinedAt: "2026-09-09T00:00:00.000Z",
   removedAt: null,
 };
@@ -42,8 +43,7 @@ function validRequest() {
 }
 
 function setup() {
-  const verifyRead = vi.fn().mockResolvedValue(actor);
-  const verify = vi.fn().mockResolvedValue(actor);
+  const resolveActorInTransaction = vi.fn().mockResolvedValue(actor);
   const mutationVerify = vi.fn().mockResolvedValue(actor);
   const run = vi.fn(async (cb: (tx: TransactionContext) => Promise<unknown>) =>
     cb(tx),
@@ -82,10 +82,19 @@ function setup() {
       },
       replayAuthContext: { projectId: 7, memberUserId: 5 },
     }),
+    setRole: vi.fn().mockResolvedValue({
+      responseStatus: 200,
+      responseSchemaRef: "SetProjectMemberRoleResponse",
+      responseHasBody: true,
+      responseBody: { member: { ...member, role: "PROJECT_ADMIN" } },
+      replayAuthContext: { projectId: 7, memberUserId: 5 },
+    }),
     replayAuthorizer: vi.fn().mockResolvedValue(undefined),
   };
   const service = new ProjectMemberManagementHttpService(
-    { verifyRead, verify } as unknown as AdminHighRiskAuthService,
+    {
+      resolveActorInTransaction,
+    } as unknown as SessionAuthService,
     { verify: mutationVerify } as unknown as AuthenticatedMutationService,
     { run } as unknown as PostgresUnitOfWork,
     members as unknown as ProjectMemberManagementService,
@@ -93,8 +102,7 @@ function setup() {
   );
   return {
     service,
-    verifyRead,
-    verify,
+    resolveActorInTransaction,
     mutationVerify,
     members,
     command: () => command!,
@@ -107,8 +115,11 @@ describe("ProjectMemberManagementHttpService", () => {
     const listRequest = { ...validRequest(), params: { projectId: "7" } };
     const list = await s.service.handle("listProjectMembers", listRequest);
     expect(list.status).toBe(200);
-    expect(s.verifyRead).toHaveBeenCalledWith(tx, listRequest.headers);
-    expect(s.members.listMembers).toHaveBeenCalledWith(tx, 7);
+    expect(s.resolveActorInTransaction).toHaveBeenCalledWith(
+      tx,
+      "__Host-session=x",
+    );
+    expect(s.members.listMembers).toHaveBeenCalledWith(tx, 7, 1);
 
     const tasksRequest = validRequest();
     const tasks = await s.service.handle(
@@ -116,7 +127,7 @@ describe("ProjectMemberManagementHttpService", () => {
       tasksRequest,
     );
     expect(tasks.status).toBe(200);
-    expect(s.members.listUnfinishedTasks).toHaveBeenCalledWith(tx, 7, 5);
+    expect(s.members.listUnfinishedTasks).toHaveBeenCalledWith(tx, 7, 5, 1);
   });
 
   it("calls the idempotent add command with the resolved admin actor", async () => {
@@ -135,7 +146,7 @@ describe("ProjectMemberManagementHttpService", () => {
     );
   });
 
-  it("re-validates admin and membership resource before replay", async () => {
+  it("re-validates session, CSRF and manage role before replay", async () => {
     const s = setup();
     await s.service.handle("removeProjectMember", validRequest());
     const authorizer = s.command().replayAuthorizer!;
@@ -143,11 +154,42 @@ describe("ProjectMemberManagementHttpService", () => {
       { replayAuthContext: { projectId: 7, memberUserId: 5 } } as never,
       tx,
     );
-    expect(s.verify).toHaveBeenCalledWith(tx, validRequest().headers);
+    expect(s.mutationVerify).toHaveBeenCalledWith(tx, validRequest().headers);
     expect(s.members.replayAuthorizer).toHaveBeenCalledWith(tx, 1, {
       projectId: 7,
       memberUserId: 5,
     });
+  });
+
+  it("routes setProjectMemberRole through the idempotent role command", async () => {
+    const s = setup();
+    const result = await s.service.handle("setProjectMemberRole", {
+      ...validRequest(),
+      body: { role: "PROJECT_ADMIN" },
+    });
+    expect(result.status).toBe(200);
+    expect(s.command().operationId).toBe("setProjectMemberRole");
+    expect(s.members.setRole).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        actorId: 1,
+        projectId: 7,
+        userId: 5,
+        role: "PROJECT_ADMIN",
+      }),
+    );
+    // 幂等摘要 body 必须携带角色字段，防止不同角色复用同一 Key。
+    expect(s.command().request.body).toEqual({ role: "PROJECT_ADMIN" });
+  });
+
+  it("rejects an invalid role body with 422 before any command runs", async () => {
+    const s = setup();
+    const result = await s.service.handle("setProjectMemberRole", {
+      ...validRequest(),
+      body: { role: "SUPERUSER" },
+    });
+    expect(result.status).toBe(422);
+    expect(s.members.setRole).not.toHaveBeenCalled();
   });
 
   it("rejects write requests without JSON content type", async () => {
@@ -178,7 +220,7 @@ describe("ProjectMemberManagementHttpService", () => {
     });
     expect(noSession.status).toBe(401);
     expect(noSession.body).toMatchObject({
-      code: "ADMIN_SESSION_REQUIRED",
+      code: "PROJECT_MEMBER_SESSION_REQUIRED",
     });
 
     s.members.addMember.mockRejectedValueOnce(

@@ -7,8 +7,6 @@ import {
 } from "@inpulse/api-contract";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import { SessionAuthService } from "../../auth/session-auth.service.js";
-import { AdminHighRiskAuthService } from "../../auth/admin-high-risk.service.js";
-import { AdminHighRiskError } from "../../auth/admin-high-risk.error.js";
 import {
   getHeader,
   mutationSameOriginValidationError,
@@ -38,8 +36,6 @@ export class ModulesHttpService {
     @Inject(SessionAuthService) private readonly auth: SessionAuthService,
     @Inject(AuthenticatedMutationService)
     private readonly mutation: AuthenticatedMutationService,
-    @Inject(AdminHighRiskAuthService)
-    private readonly highRisk: AdminHighRiskAuthService,
     @Inject(IdempotencyHttpService)
     private readonly idempotency: IdempotencyHttpService,
     @Inject(ModulesManagementService)
@@ -148,7 +144,8 @@ export class ModulesHttpService {
           path.projectId,
           path.moduleId,
         );
-        if (highRisk) await this.highRisk.verify(tx, request.headers);
+        // ADR-033：归档/恢复不再要求系统管理员 Session，改由服务层在
+        // execute/replay 内校验项目内管理角色（系统管理员经 is_admin 旁路）。
         return current.userId;
       };
       const result = await this.idempotency.run({
@@ -190,7 +187,9 @@ export class ModulesHttpService {
         },
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
-          await this.modules.replay(tx, actorId, record.replayAuthContext);
+          await this.modules.replay(tx, actorId, record.replayAuthContext, {
+            requireManageRole: highRisk,
+          });
         },
       });
       return {
@@ -204,8 +203,7 @@ export class ModulesHttpService {
       let details: Record<string, string> = {};
       if (
         error instanceof ModuleManagementError ||
-        error instanceof IdempotencyHttpError ||
-        error instanceof AdminHighRiskError
+        error instanceof IdempotencyHttpError
       )
         ({ status, code, message } = error);
       else if (error instanceof ModuleInputError) {

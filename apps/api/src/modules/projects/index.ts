@@ -8,3 +8,8 @@ export {
   ProjectMembersQueryPort,
   type AssignableProjectMember,
 } from "./project-members-query.port.js";
+export {
+  ProjectRoleGateService,
+  type ProjectManageRole,
+  type ProjectRoleGateResult,
+} from "./project-role-gate.service.js";

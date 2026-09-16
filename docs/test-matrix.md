@@ -228,6 +228,38 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 `max_connections=200` 后完整通过；成员管理页面 Playwright E2E 已于 2026-09-10 由
 `apps/e2e/tests/project-members.spec.ts` 补齐（本地 2/2；该分支 rebase 到 `origin/main` `5020c0a` 后全量 29/29 通过）。
 
+## ADR-033 项目内角色（组长与项目管理员，A，2026-09-16 本地落库）
+
+[ADR-033](adr/ADR-033.md) 扩展 [ADR-012](adr/ADR-012.md)：项目创建者默认回填为 `LEADER`，
+可在**被赋予的项目内**添加/移除成员、归档/恢复模块、任命或撤销 `PROJECT_ADMIN`；`PROJECT_ADMIN`
+可管理成员与归档/恢复模块，但不能任命角色；系统管理员可任命/转移/撤销全部角色（含组长转移）。
+角色只存在于 `project_members.role`（迁移 `0015`），成员被移除即失去角色，重新加入从 `MEMBER` 开始；
+受影响路由 `authPolicy` 由 `adminSession` 调整为 `session`，角色门禁由 `ProjectRoleGateService`
+在同一事务内实时校验，并登记为权限矩阵 `conditional` 条目。新增路由 `setProjectMemberRole`
+（Session + CSRF + 数据库幂等，锁序 `["project"]`，审计 `project.member.role.set`，活动 `PROJECT_MEMBER_ROLE_CHANGED`）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR033-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `projectMemberRoleSchema`、`ProjectMemberRecordItem.role`、`ProjectMemberItem.role`、`SetProjectMemberRoleRequest/Response`、`ProjectDetailResponse.currentUserRole` 登记；`setProjectMemberRole` 完整登记策略；`add/remove/archiveModule/restoreModule/listProjectMembers/listProjectMemberUnfinishedTasks` 的 `authPolicy` 由 `adminSession` 调整为 `session`；幂等契约版本按重放字段变化升级 | 本地通过（`contract:drift` 5 产物、`contract:validate` 98 条、`permissions:check` 98/98） |
+| ADR033-DB-001 | PostgreSQL | 迁移 0015 列、约束、唯一索引与回填 | `role` 默认 `MEMBER`；`project_members_role_check` 固定枚举；`project_members_one_leader` 保证每项目至多一条 ACTIVE+LEADER；`project_members_removed_role_check` 保证 REMOVED 行 role=MEMBER；创建者活跃成员行回填为 LEADER；`app_runtime` 授权不变 | 本地通过（`db:migrate` 应用 0015；`migrations:check` 16 迁移；`database.test.ts` 不可变清单含 0015；database 单测 15/15、集成 26/26） |
+| ADR033-API-001 | API 单元 | 角色门禁与 setRole 编排 | `ProjectRoleGateService.manageRole` 返回 SYSTEM_ADMIN/LEADER/PROJECT_ADMIN/MEMBER/NOT_MEMBER；`roleSetterRole` 把 PROJECT_ADMIN 降级为 MEMBER（不能任命角色）；`setRole` 门禁 NOT_MEMBER→404、MEMBER→403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、LEADER 设 LEADER→403 `PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN`、唯一冲突→409 `PROJECT_MEMBER_LEADER_CONFLICT`；移除 LEADER→409 `PROJECT_MEMBER_LEADER_PROTECTED`；读/写路径经 `requireManageRole` | 本地通过（`project-member-management.service.test.ts`、`project-member-management-http.service.test.ts`；API 单测 64 文件 351 例） |
+| ADR033-API-002 | HTTP + PostgreSQL | 组长/项目管理员管理成员，跨项目与非成员隐藏 | 组长（非系统管理员）可查看成员列表、添加成员；普通成员管理成员 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`；非成员/已移除成员统一 404；PROJECT_ADMIN 可管理成员但任命角色 403 `PROJECT_MEMBER_ROLE_FORBIDDEN` | 本地通过（`project-member-management-api.integration.test.ts` 14/14，PostgreSQL 18.6 + PGroonga） |
+| ADR033-API-003 | HTTP + PostgreSQL | 角色任命、组长保护、转移与审计 | 组长任命 PROJECT_ADMIN 200 且写审计 `project.member.role.set` + 活动 `PROJECT_MEMBER_ROLE_CHANGED`；组长任命/转移 LEADER 403；移除 LEADER 409；系统管理员转移组长后目标 LEADER、原组长自动降级 MEMBER；非成员/已移除成员 404 | 本地通过（同上集成 14/14） |
+| ADR033-API-004 | HTTP + PostgreSQL | 组长归档/恢复模块与普通成员拒绝 | 组长（非系统管理员）可 archiveModule/restoreModule（200，状态/版本推进）；普通成员归档模块 403 `MODULE_MANAGE_FORBIDDEN` | 本地通过（`modules-api.integration.test.ts` 11/11） |
+| ADR033-IDEM-001 | HTTP + PostgreSQL | 角色写重放的角色门禁 | 同 Key、同 body 重放返回缓存响应；操作者被降级为普通成员后，新任命 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，原 Key 重放被重放授权器拒绝 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`，不泄露已存响应 | 本地通过（`project-member-management-api.integration.test.ts` 重放用例） |
+| ADR033-REMOVE-001 | HTTP + PostgreSQL | 移除重置角色（removed_role_check） | 移除 PROJECT_ADMIN/LEADER 成员时同事务把 role 重置为 MEMBER，不触发 `project_members_removed_role_check` 约束；已移除成员的角色不复活 | 本地通过（成员管理集成 + `database.helpers.removeMember` 与 `postgres-projects-write-port.removeMember` 均重置 role） |
+| ADR033-UI-001 | 前端单元 | 成员页角色入口与只读视图 | `getProject.currentUserRole` 驱动入口：系统管理员/组长/项目管理员进入管理视图，其余成员进入只读 `ActiveProjectMembers`；成员卡片显示角色徽标；组长/项目管理员显示移除入口（组长行不显示移除）；系统管理员与组长显示「设置角色」，组长仅 MEMBER/PROJECT_ADMIN 可选、系统管理员含 LEADER；`setProjectMemberRole` 经生成客户端携带 CSRF + Idempotency-Key | 本地通过（`ProjectMembersPageView.test.tsx` 6/6、`project-member-query.test.tsx` 5/5、`ModulesPageView.test.tsx` 8/8；Web 76 文件 425 例） |
+
+2026-09-16 本地验证说明：`contract:drift`（5 产物）、`contract:validate`（98 条路由）、
+`permissions:check`（98/98）、`lint`、`format:check`、`check:deps`（173 文件/173 模块）、
+`check:frontend:boundaries`（248 模块/1160 依赖）、`db:migrations:check`（16 迁移）、
+`check:secrets`（1002 文件）、API 单测 64 文件 351 例、Web 单测 76 文件 425 例、
+全 workspace typecheck、web/api 生产构建均通过；真实 PostgreSQL 18.6 + PGroonga 下
+API 集成 48 文件 444 例、database 单测 15/15 + 集成 26/26 通过。本机 `@node-rs/argon2`
+原生模块曾因缺少 VC++ 运行库（`vcruntime140.dll` 等系统目录缺失）无法加载，已在本地
+补齐运行库 DLL 后 API 单测/集成全绿；Playwright E2E 与 GitHub Actions 未运行。
+推送前已把工作区中与本任务无关的 SSO/ADR-032 回退改动（`AppLayout` 整页跳转、本文件 ADR-032 覆盖行、`开发日志.md` 两条 2026-09-16 条目）恢复为已合并内容，未纳入本批交付。
+
 ## F-03 用户管理（A，2026-09-09 本地交付）
 
 阶段 1 A 域用户管理纵切片：`/api/v1/admin/users` 六条路由，覆盖管理员列表、新增、编辑、

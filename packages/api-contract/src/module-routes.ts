@@ -73,7 +73,7 @@ export const moduleRoutes: readonly RouteDefinition[] = [
       method: update ? "PATCH" : "POST",
       path: `/projects/{projectId}/modules${create ? "" : `/{moduleId}${highRisk ? `/${action}` : ""}`}`,
       operationId,
-      summary: `${action} 模块；项目可写，未分类身份不可变；归档/恢复需管理员身份与原因。`,
+      summary: `${action} 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。`,
       request: {
         path: create ? "ModuleProjectPath" : "ModuleResourcePath",
         query: "none",
@@ -90,11 +90,14 @@ export const moduleRoutes: readonly RouteDefinition[] = [
         },
       },
       responses: { "200": json("ModuleItem"), ...errors },
-      authPolicy: highRisk ? "adminSession" : "session",
+      // ADR-033：归档/恢复下放给本项目组长/项目管理员，角色门禁在
+      // 权限矩阵 conditional 条目与服务层校验，系统管理员经 is_admin 旁路。
+      authPolicy: "session",
       csrfPolicy: "required",
       idempotencyPolicy: "idempotencyRequired",
       idempotencyExceptionAdr: "none",
-      idempotencyContractVersion: "1.2.0",
+      // ADR-033：归档/恢复的重放门禁加入项目角色复核，旧 Key 409。
+      idempotencyContractVersion: highRisk ? "1.3.0" : "1.2.0",
       idempotencyFingerprintVersion: "1.0.0",
       behaviorHeaders: create ? [] : ["If-Match"],
       idempotencyReplayPolicy: {

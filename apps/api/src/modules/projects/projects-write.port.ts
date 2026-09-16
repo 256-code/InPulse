@@ -23,11 +23,14 @@ export interface ProjectCreatedRecord {
 export interface AddProjectMemberInput {
   readonly projectId: number;
   readonly userId: number;
+  /** ADR-033：缺省 MEMBER；创建项目 Workflow 对创建者显式传 LEADER。 */
+  readonly role?: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
 }
 
 export interface ProjectMemberAddedRecord {
   readonly userId: number;
   readonly status: "ACTIVE" | "REMOVED";
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joinedAt: string;
 }
 
@@ -39,6 +42,8 @@ export interface ProjectMemberRecord {
   readonly name: string;
   readonly avatarUrl: string | null;
   readonly status: "ACTIVE" | "REMOVED";
+  /** ADR-033：项目内角色；REMOVED 行恒为 MEMBER。 */
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joinedAt: string;
   readonly removedAt: string | null;
 }
@@ -152,6 +157,17 @@ export abstract class ProjectsWritePort {
   abstract removeMember(
     tx: TransactionContext,
     input: ProjectMemberIdentity,
+  ): Promise<ProjectMemberRecord | undefined>;
+
+  /**
+   * ADR-033：条件更新 ACTIVE 成员行角色；目标非 ACTIVE 或不存在返回 undefined。
+   * LEADER 唯一性由部分唯一索引保证，冲突由调用方映射 409。
+   */
+  abstract setMemberRole(
+    tx: TransactionContext,
+    input: ProjectMemberIdentity & {
+      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    },
   ): Promise<ProjectMemberRecord | undefined>;
 }
 

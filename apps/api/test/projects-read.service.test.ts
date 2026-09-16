@@ -36,12 +36,20 @@ function setup(scopeProjectIds: readonly number[] = [7]) {
   });
   const list = vi.fn().mockResolvedValue([project]);
   const find = vi.fn().mockResolvedValue(project);
+  const findActiveMemberRole = vi.fn().mockResolvedValue("MEMBER");
   const service = new ProjectsReadService(
     { resolveActor } as unknown as SessionAuthService,
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
-    { list, find } as unknown as ProjectQueryPort,
+    { list, find, findActiveMemberRole } as unknown as ProjectQueryPort,
   );
-  return { service, resolveActor, getAuthorizedSearchScope, list, find };
+  return {
+    service,
+    resolveActor,
+    getAuthorizedSearchScope,
+    list,
+    find,
+    findActiveMemberRole,
+  };
 }
 
 describe("ProjectsReadService", () => {
@@ -59,8 +67,10 @@ describe("ProjectsReadService", () => {
     const allowed = setup([7]);
     await expect(allowed.service.detail("cookie", 7)).resolves.toEqual({
       project,
+      currentUserRole: "MEMBER",
     });
     expect(allowed.find).toHaveBeenCalledWith(7);
+    expect(allowed.findActiveMemberRole).toHaveBeenCalledWith(7, 5);
 
     const denied = setup([9]);
     await expect(denied.service.detail("cookie", 7)).rejects.toMatchObject({
@@ -68,6 +78,7 @@ describe("ProjectsReadService", () => {
       code: "PROJECT_NOT_FOUND",
     });
     expect(denied.find).not.toHaveBeenCalled();
+    expect(denied.findActiveMemberRole).not.toHaveBeenCalled();
   });
 
   it("maps missing session and missing committed project to safe errors", async () => {

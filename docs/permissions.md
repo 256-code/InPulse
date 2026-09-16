@@ -13,7 +13,7 @@
 | 停用用户 | 用户被停用；其全部 Session 按无效处理，不能恢复身份；仅可按匿名安全语义签发预认证 CSRF 或清 Cookie 登出 |
 | 系统管理员 | 全局管理员；高风险操作要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证） |
 
-项目创建者不是独立身份。创建时必须作为初始成员且表单不可取消；创建完成后可由系统管理员按普通成员规则移除。`projects.created_by` 永久保留用于溯源，不授予权限。普通成员创建者被移除后失去成员关系派生权限；系统管理员创建者仍保留与成员记录无关的全局权限。详见 [ADR-012](adr/ADR-012.md)。
+项目创建者不是独立身份。创建时必须作为初始成员且表单不可取消，创建者成员行以 `role='LEADER'` 落库（ADR-033）；创建完成后可由系统管理员转移/撤销其组长角色，或按普通成员规则移除（移除 LEADER 成员行前必须先转移/撤销组长）。`projects.created_by` 永久保留用于溯源，不直接授予权限；项目内权限来自成员行 `role`（`MEMBER | PROJECT_ADMIN | LEADER`，ADR-033），角色只在本项目内生效，成员被移除即失效、重新加入从 MEMBER 开始。系统管理员创建者仍保留与成员记录无关的全局权限。详见 [ADR-012](adr/ADR-012.md)（已被 [ADR-033](adr/ADR-033.md) 扩展）。
 
 ## 认证安全流程矩阵
 
@@ -38,8 +38,8 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | listModules | 当前活跃项目成员、系统管理员 | 匿名/无效 Session 401，其他项目/已移除成员 404；归档仍可读 |
 | createModule | 当前活跃项目成员、系统管理员 | 同上；父项目必须 ACTIVE，Session/CSRF 与幂等必需，只能创建 NORMAL |
 | updateModule | 当前活跃项目成员、系统管理员 | 同上；真实模块归属与父项目/模块 ACTIVE，If-Match；允许编辑未分类名称/描述 |
-| archiveModule | 完整认证的系统管理员 | 自己项目的普通成员 403，其他项目/已移除成员 404；原因、If-Match、父 ACTIVE 和模块 ACTIVE |
-| restoreModule | 完整认证的系统管理员 | 同上；父 ACTIVE 和模块 ARCHIVED；不恢复下级状态 |
+| archiveModule | 完整认证的系统管理员、本项目 LEADER、本项目 PROJECT_ADMIN（ADR-033） | 自己项目的普通成员 403，其他项目/已移除成员 404；原因、If-Match、父 ACTIVE 和模块 ACTIVE |
+| restoreModule | 同上 | 同上；父 ACTIVE 和模块 ARCHIVED；不恢复下级状态 |
 
 全部写接口重放前重查当前 Session/CSRF、原操作权限和结果模块可读权限。父级已归档则拒绝写入或重放为 409；这些状态门禁不作用于普通 GET。
 
@@ -68,11 +68,12 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | 跨项目记录清单（`listRecordFeed` · `GET /api/v1/change-records`） | 401 | 仅本人活跃项目 | 不返回本项目（可读其他活跃成员项目） | 不返回本项目（可读其他活跃成员项目） | 401 | 按服务端 Scope（可显式读 VOID） | 跨项目按服务端 `AuthorizedProjectScope` 汇总可见正式记录（PUBLISHED / VOID），`projectId` 只收窄范围，非成员项目不返回 404 而是空页（与 `listLeftoverItems`/`listTaskGroups` 同族）；`status` 为 PUBLISHED / VOID / ALL，非系统管理员请求 VOID 或 ALL 时收敛为只返回 PUBLISHED 行（不返回 403，也不泄露其他项目是否存在作废记录）；`source` 为 ALL / MAIN / SOURCE / MODULE / FEATURE（MAIN = 未入聚合组任务与聚合组主任务，SOURCE = ACTIVE 聚合组来源任务，MODULE = 无任务模块级记录，FEATURE = 无任务功能级记录）；`q` 走 CHANGE_RECORD 全文投影（PGroonga），最短 2、最长 200，归一化后不足 2 字返回 422；服务端批量回填项目 / 模块 / 功能名与作者引用（不含登录名与邮箱）；固定 `published_at DESC, id DESC` 排序，`limit` 1～100、默认 20，游标为服务端 HMAC 签名、绑定 actor / 命名空间 / `projectId`（null = 全部项目），TTL 15 分钟；不要求 CSRF 或幂等键 |
 | 我的草稿（`listMyRecordDrafts` · `GET /api/v1/me/record-drafts`） | 401 | 仅本人 | 仅本人 | 仅本人 | 401 | 仅本人 | 作者恒为当前 actor，拒绝客户端提交 `authorId`/`userId`/`projectIds` 等他人身份或授权范围参数；SQL 前强制 AuthorizedProjectScope，被移出项目后其草稿立即不可见（不返回 404 而是空页）；只返回 DRAFT，未发布不建搜索投影，故不接受 `q`；`limit` 1～100、默认 20，游标为服务端 HMAC 签名、绑定 actor 与命名空间，TTL 15 分钟；字段校验失败统一 422；不要求 CSRF 或幂等键 |
 | 通知列表、未读数、单条已读/未读、全部已读（`getNotifications`、`getNotificationUnreadCount`、`readNotification`、`unreadNotification`、`readAllNotifications`） | 401 | 仅本人 | 仅本人 | 仅本人 | 401 | 仅本人 | 服务端始终从 Session 解析收件人，不接受客户端传入 `recipientId`；查询按 `recipient_id = 当前用户` 过滤；单条不存在或非本人统一 404，管理员也不得代读其他用户；三个 POST 均要求 CSRF 与 `Idempotency-Key`，重复执行可安全重放 |
-| `listProjectMembers` · `GET /api/v1/projects/{projectId}/members` | 401 | 403 | 404 | 404 | 401 | 允许 | 完整管理员 Session；返回项目成员完整历史（含 REMOVED）与脱敏 `name/avatarUrl`，不返回登录名/邮箱；不要求 CSRF 或幂等键；项目不存在或无权限统一 404；响应 `no-store` |
-| `listProjectMemberUnfinishedTasks` · `GET /api/v1/projects/{projectId}/members/{userId}/unfinished-tasks` | 401 | 403 | 404 | 404 | 401 | 允许 | 同上；目标必须为 ACTIVE 成员，不存在、已移除或无权限统一 404；只返回当前 TODO 且 ACTIVE 的真实任务，提供改派所需 `rowVersion/moduleId/featureId` |
-| `addProjectMember` · `POST /api/v1/projects/{projectId}/members` | 401 | 403 | 404 | 404 | 401 | 允许 | 完整管理员 Session；项目 ACTIVE；目标用户必须 ACTIVE；CSRF 与 `Idempotency-Key` 必填；成员添加、审计、活动与通知在同一事务提交；重复活跃成员 409，停用/不存在用户 422；重放前重新验证管理员、项目可写与成员资源 |
-| `removeProjectMember` · `POST /api/v1/projects/{projectId}/members/{userId}/remove` | 401 | 403 | 404 | 404 | 401 | 允许 | 完整管理员 Session；项目 ACTIVE；目标必须为 ACTIVE 成员；CSRF 与 `Idempotency-Key` 必填；可提交真实任务改派，未改派任务保留原负责人但成员立即失去处理权限；任务改派、成员移除、审计与活动同一事务；`created_by` 不变；重放前重新验证管理员、项目可写与成员资源 |
-| 项目、模块或功能归档/恢复 | 401 | 403 | 404 | 404 | 401 | 允许 | 完整管理员 Session；写审计 |
+| `listProjectMembers` · `GET /api/v1/projects/{projectId}/members` | 401 | 条件允许（本项目 LEADER 或 PROJECT_ADMIN，ADR-033；普通成员 403） | 404 | 404 | 401 | 允许 | 完整管理员 Session 或本项目 LEADER/PROJECT_ADMIN 的认证 Session；返回项目成员完整历史（含 REMOVED）与脱敏 `name/avatarUrl/role`，不返回登录名/邮箱；不要求 CSRF 或幂等键；项目不存在或无权限统一 404；响应 `no-store` |
+| `listProjectMemberUnfinishedTasks` · `GET /api/v1/projects/{projectId}/members/{userId}/unfinished-tasks` | 401 | 条件允许（同上） | 404 | 404 | 401 | 允许 | 同上；目标必须为 ACTIVE 成员，不存在、已移除或无权限统一 404；只返回当前 TODO 且 ACTIVE 的真实任务，提供改派所需 `rowVersion/moduleId/featureId` |
+| `addProjectMember` · `POST /api/v1/projects/{projectId}/members` | 401 | 条件允许（本项目 LEADER 或 PROJECT_ADMIN，ADR-033；普通成员 403） | 404 | 404 | 401 | 允许 | 项目 ACTIVE；目标用户必须 ACTIVE；CSRF 与 `Idempotency-Key` 必填；新成员 `role='MEMBER'`；成员添加、审计、活动与通知在同一事务提交；重复活跃成员 409，停用/不存在用户 422；重放前重新验证当前认证、项目可写、成员资源与操作者仍具备管理员或本项目 LEADER/PROJECT_ADMIN 角色 |
+| `removeProjectMember` · `POST /api/v1/projects/{projectId}/members/{userId}/remove` | 401 | 条件允许（本项目 LEADER 或 PROJECT_ADMIN；目标为本项目 LEADER 时 409，须先转移/撤销） | 404 | 404 | 401 | 允许（目标为本项目 LEADER 时同样 409） | 项目 ACTIVE；目标必须为 ACTIVE 成员；CSRF 与 `Idempotency-Key` 必填；可提交真实任务改派，未改派任务保留原负责人但成员立即失去处理权限与角色（REMOVED 行 role 回落 MEMBER）；任务改派、成员移除、审计与活动同一事务；`created_by` 不变；重放前重新验证当前认证、项目可写、成员资源与操作者角色 |
+| `setProjectMemberRole` · `POST /api/v1/projects/{projectId}/members/{userId}/role` | 401 | 条件允许（本项目 LEADER 且目标角色仅 MEMBER/PROJECT_ADMIN；普通成员与 PROJECT_ADMIN 403） | 404 | 404 | 401 | 允许（可设 MEMBER/PROJECT_ADMIN/LEADER，含转移组长） | ADR-033 角色任命/撤销；项目 ACTIVE；目标必须为 ACTIVE 成员；CSRF 与 `Idempotency-Key` 必填；LEADER 唯一性由部分唯一索引保证，冲突 409；审计 `project.member.role.set`、活动同事务；重放前重新验证当前认证、项目可写、成员资源与操作者角色 |
+| 项目、模块或功能归档/恢复 | 401 | 模块归档/恢复条件允许（本项目 LEADER 或 PROJECT_ADMIN，ADR-033）；项目与功能归档/恢复 403 | 404 | 404 | 401 | 允许 | 完整管理员 Session 或对应项目角色；写审计 |
 | 原始审计读取（`getAuditLogs` · `GET /api/v1/audit-logs`） | 401 | 403 | 403 | 403 | 401 | 允许（完整管理员 Session；只读，不要求 CSRF 或幂等键） | 不传 `projectId` 读 SYSTEM 链，传则读 `PROJECT:<id>` 链，不接受客户端伪造归属；查询经独立只读 `audit_reader` 连接（`AUDIT_DB_*` / `AUDIT_DATABASE_URL(_FILE)`，缺失、路径越界或权限不合规在首次读取 fail closed），不与业务连接共用；返回前先以独立 `UnitOfWork` 向 SYSTEM 链写 `AUDIT_LOG_READ`（含操作者、filters、returnedCount、hasMore 与请求元数据，不含审计正文），留痕失败整体失败、不返回未留痕结果；`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹，TTL 15 分钟，跨查询/过期/非法 422；`from`/`to` 为半开区间且必须带时区；`limit` 默认 50、最大 100；响应 `no-store`；批量导出与远端 WORM 归档由 `apps/ops` 归档进程交付（`audit_archive_writer` 只读审计与链头、WORM 凭据只允许新建对象；见[审计归档 Runbook](./runbooks/audit-archive.md)） |
 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 401 | 403 | 403 | 403 | 401 | 允许 | 填写原因；写审计 |
 | `listAdminUsers` · `GET /api/v1/admin/users` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整系统管理员 Session；读取全部账号的登录名、姓名、邮箱、头像、管理员角色、状态、版本与时间，不返回密码哈希等认证材料；最多 1000 条；响应 `no-store`；不需要 CSRF 或幂等键 |

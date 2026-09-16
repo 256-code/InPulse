@@ -30,6 +30,7 @@ const projectDetailFields = [
   "project.stats.activeModuleCount",
   "project.stats.activeFeatureCount",
   "project.stats.openTaskCount",
+  "currentUserRole",
 ] as const;
 
 const replayPolicy = {
@@ -75,7 +76,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.1.0",
+    // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
+    idempotencyContractVersion: "1.2.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,
@@ -152,7 +154,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
         csrfPolicy: "required",
         idempotencyPolicy: "idempotencyRequired",
         idempotencyExceptionAdr: "none",
-        idempotencyContractVersion: "1.1.0",
+        // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
+        idempotencyContractVersion: "1.2.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: ["If-Match"],
         idempotencyReplayPolicy: replayPolicy,
