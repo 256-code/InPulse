@@ -51,7 +51,7 @@ export class PasswordService {
 
   async verify(
     password: string,
-    encodedHash: string | undefined,
+    encodedHash: string | null | undefined,
   ): Promise<boolean> {
     return this.verificationGate.run(() =>
       this.verifyInsideGate(password, encodedHash),
@@ -60,9 +60,14 @@ export class PasswordService {
 
   private async verifyInsideGate(
     password: string,
-    encodedHash: string | undefined,
+    encodedHash: string | null | undefined,
   ): Promise<boolean> {
-    if (encodedHash === undefined || !encodedHash.startsWith("$argon2id$")) {
+    // SSO 自动开通的账号没有本地口令（password_hash 为 NULL），
+    // 与缺失、非 Argon2id 编码一样走等时占位校验并拒绝登录。
+    if (
+      typeof encodedHash !== "string" ||
+      !encodedHash.startsWith("$argon2id$")
+    ) {
       await verify(ensureDummyPasswordHash(), password);
       return false;
     }

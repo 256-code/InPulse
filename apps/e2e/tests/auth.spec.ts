@@ -71,3 +71,35 @@ test("E2E 登录复用后的 Session 可以读取当前用户", async ({ request
   expect(body.loginName).toBe(runtime.user.loginName);
   expect(body.name).toBe(runtime.user.name);
 });
+
+test("未配置单点登录时 /login 回落到本地隐藏入口并保留原始目标", async ({
+  page,
+}) => {
+  await page.goto("/login?from=%2Fprojects");
+
+  await page.waitForURL(/\/login\?local=1&sso=disabled&from=/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("local")).toBe("1");
+  expect(url.searchParams.get("sso")).toBe("disabled");
+  expect(url.searchParams.get("from")).toBe("/projects");
+
+  await expect(page.getByTestId("login-page")).toBeVisible();
+  await expect(page.getByText(/统一身份认证未启用/)).toBeVisible();
+  await expect(page.getByLabel("登录名")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "使用统一身份认证登录" }),
+  ).toBeHidden();
+});
+
+test("单点登录入口在未配置时也 302 回落到本地入口", async ({ request }) => {
+  const runtime = await loadRuntime();
+  const response = await request.get(
+    `${runtime.webBaseUrl}/api/v1/auth/sso/start?returnTo=%2Fsearch`,
+    { maxRedirects: 0 },
+  );
+
+  expect(response.status()).toBe(302);
+  expect(response.headers()["location"]).toBe(
+    "/login?local=1&sso=disabled&from=%2Fsearch",
+  );
+});

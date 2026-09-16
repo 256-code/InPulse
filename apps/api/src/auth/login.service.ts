@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 
 import type { PreauthSession } from "./preauth-session.repository.js";
 import { PostgresPreauthSessionRepository } from "./preauth-session.repository.js";
@@ -8,25 +8,24 @@ import type { UserAuthState } from "./user-session.repository.js";
 import { PostgresUserSessionRepository } from "./user-session.repository.js";
 import type { TransactionContext } from "../database/transaction-context.js";
 import {
-  AUTH_CSRF_MAX_AGE_SECONDS,
   PREAUTH_COOKIE_NAME,
-  SESSION_ABSOLUTE_MAX_AGE_SECONDS,
   SESSION_COOKIE_NAME,
-  SESSION_IDLE_MAX_AGE_SECONDS,
   type CsrfSetCookie,
   parseCookieHeader,
 } from "./csrf.http.js";
 import { PostgresSessionCsrfTokenRepository } from "./session-csrf-token.repository.js";
 import { SessionTokenService } from "./session-token.service.js";
-import {
-  constantTimeEqual,
-  generateOpaqueToken,
-  isValidOpaqueToken,
-} from "./token.js";
+import { constantTimeEqual, isValidOpaqueToken } from "./token.js";
 import { PasswordService } from "./password.service.js";
 import { LoginError } from "./login.error.js";
 import { LoginRateLimitService } from "./auth-rate-limit.service.js";
 import { PostgresUnitOfWork } from "../database/unit-of-work.js";
+import { issueAuthenticatedSession } from "./session-issue.js";
+import {
+  SESSION_TTL_POLICY,
+  sessionTtlPolicyFromEnv,
+  type SessionTtlPolicy,
+} from "./session-ttl.policy.js";
 
 export interface LoginInput {
   readonly loginName: string;
@@ -68,6 +67,8 @@ export class LoginService {
     private readonly tokenService: SessionTokenService,
     private readonly passwordService: PasswordService,
     private readonly rateLimitService: LoginRateLimitService,
+    @Inject(SESSION_TTL_POLICY)
+    private readonly ttl: SessionTtlPolicy = sessionTtlPolicyFromEnv(),
   ) {}
 
   async login(input: LoginInput): Promise<LoginResult> {
@@ -220,17 +221,6 @@ export class LoginService {
         throw invalidCredentials();
       }
 
-      const authState: UserAuthState = "AUTHENTICATED";
-      const issuedSessionToken = generateOpaqueToken();
-      const issuedCsrfToken = generateOpaqueToken();
-      const sessionHash = this.tokenService.hash(issuedSessionToken);
-      const csrfHash = this.tokenService.hash(issuedCsrfToken);
-      const now = Date.now();
-      const absoluteExpiresAt = new Date(
-        now + SESSION_ABSOLUTE_MAX_AGE_SECONDS * 1000,
-      );
-      const idleExpiresAt = new Date(now + SESSION_IDLE_MAX_AGE_SECONDS * 1000);
-
       const consumed = await this.preauthRepository.consumeOnce(
         tx,
         prepared.preauth.id,
@@ -239,31 +229,27 @@ export class LoginService {
         throw invalidCredentials();
       }
 
-      const created = await this.sessionRepository.create(tx, {
-        userId: snapshot.id,
-        tokenHash: sessionHash.hash,
-        tokenHashKeyVersion: sessionHash.keyVersion,
-        authVersionAtIssue: snapshot.authVersion,
-        authState,
-        idleExpiresAt,
-        absoluteExpiresAt,
-      });
-      await this.csrfRepository.issue(tx, {
-        sessionId: created.id,
-        tokenHash: csrfHash.hash,
-        expiresAt: new Date(
-          Math.min(
-            Date.now() + AUTH_CSRF_MAX_AGE_SECONDS * 1000,
-            absoluteExpiresAt.getTime(),
-          ),
-        ),
-      });
+      // ADR-032：与 SSO 回调共用同一签发实现，保证两条路径的会话同构。
+      const issued = await issueAuthenticatedSession(
+        tx,
+        {
+          sessions: this.sessionRepository,
+          csrfTokens: this.csrfRepository,
+          tokens: this.tokenService,
+        },
+        {
+          userId: snapshot.id,
+          authVersion: snapshot.authVersion,
+          idleMaxAgeSeconds: this.ttl.idleMaxAgeSeconds,
+          absoluteMaxAgeSeconds: this.ttl.absoluteMaxAgeSeconds,
+        },
+      );
 
       await this.rateLimitService.clearAccount(tx, loginName);
 
       return {
-        csrfToken: issuedCsrfToken,
-        authState,
+        csrfToken: issued.csrfToken,
+        authState: "AUTHENTICATED",
         cookies: [
           {
             name: PREAUTH_COOKIE_NAME,
@@ -272,8 +258,8 @@ export class LoginService {
           },
           {
             name: SESSION_COOKIE_NAME,
-            value: issuedSessionToken,
-            maxAgeSeconds: SESSION_ABSOLUTE_MAX_AGE_SECONDS,
+            value: issued.sessionToken,
+            maxAgeSeconds: this.ttl.absoluteMaxAgeSeconds,
           },
         ],
       };

@@ -8,6 +8,7 @@ import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
 import {
   blockedUntil,
   DEFAULT_LOGIN_RATE_LIMIT_RULES,
+  type AuthRateLimitRule,
   normalizeClientIp,
   normalizeLoginName,
   windowStartedAt,
@@ -41,6 +42,34 @@ export class LoginRateLimitService {
     @Inject(SESSION_HMAC_KEYRING)
     private readonly keyring: VersionedHmacKeyring,
   ) {}
+
+  /**
+   * SSO 导航端点（ADR-032）没有本地账号维度，只按 IP 与全局两层门禁拦截，
+   * 与口令登录共用同一批窗口与阈值，维度摘要仍只保存 HMAC 哈希。
+   */
+  async assertIpAllowed(
+    tx: TransactionContext,
+    clientIp: string,
+  ): Promise<void> {
+    const now = new Date();
+    const dimensions = this.ipDimensions(clientIp);
+    const blocked = await this.repository.findBlocked(tx, dimensions, now);
+    if (blocked !== undefined) {
+      throw rateLimited();
+    }
+  }
+
+  async recordIpFailureInTransaction(
+    tx: TransactionContext,
+    clientIp: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.repository.recordFailures(
+      tx,
+      this.ipWriteDimensions(clientIp, now),
+      now,
+    );
+  }
 
   async assertAllowed(
     tx: TransactionContext,
@@ -78,6 +107,44 @@ export class LoginRateLimitService {
       normalizeLoginName(loginName),
     );
     await this.repository.clearAccount(tx, dimensionHashes);
+  }
+
+  private ipDimensions(
+    clientIp: string,
+  ): readonly AuthRateLimitCheckDimension[] {
+    const ipHashes = this.hashes("IP", normalizeClientIp(clientIp));
+    const globalHashes = this.hashes("GLOBAL", "global");
+    return this.ipRules().map((rule) => ({
+      bucketType: rule.bucketType,
+      dimensionHashes: rule.bucketType === "IP" ? ipHashes : globalHashes,
+    }));
+  }
+
+  private ipWriteDimensions(
+    clientIp: string,
+    now: Date,
+  ): readonly AuthRateLimitWriteDimension[] {
+    const ipHashes = this.hashes("IP", normalizeClientIp(clientIp));
+    const globalHashes = this.hashes("GLOBAL", "global");
+    const dimensions: AuthRateLimitWriteDimension[] = [];
+    for (const rule of this.ipRules()) {
+      const hashes = rule.bucketType === "IP" ? ipHashes : globalHashes;
+      const windowStart = windowStartedAt(now, rule.windowSeconds);
+      for (const dimensionHash of hashes) {
+        dimensions.push({
+          bucketType: rule.bucketType,
+          dimensionHash,
+          windowStartedAt: windowStart,
+          maxAttempts: rule.maxAttempts,
+          blockedUntil: blockedUntil(now, rule.blockSeconds),
+        });
+      }
+    }
+    return dimensions;
+  }
+
+  private ipRules(): readonly AuthRateLimitRule[] {
+    return this.rules.filter((rule) => rule.bucketType !== "ACCOUNT");
   }
 
   private checkDimensions(

@@ -267,6 +267,28 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "startSsoLogin",
+    outcomes: {
+      匿名: { kind: "allow" },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "allow" },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "completeSsoLogin",
+    outcomes: {
+      匿名: { kind: "allow" },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "allow" },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
     operationId: "getCurrentUser",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

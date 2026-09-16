@@ -35,6 +35,7 @@ class FakeCleanupRepository {
         deletedUserSessions: 0,
         deletedSessionCsrfTokens: 0,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       }
     );
   }
@@ -61,6 +62,7 @@ describe("SessionCleanupService", () => {
       deletedUserSessions: 0,
       deletedSessionCsrfTokens: 0,
       deletedPreauthSessions: 0,
+      deletedSsoLoginAttempts: 0,
       batches: 1,
     });
     expect(unitOfWork.runs).toBe(1);
@@ -73,16 +75,19 @@ describe("SessionCleanupService", () => {
         deletedUserSessions: 2,
         deletedSessionCsrfTokens: 1,
         deletedPreauthSessions: 3,
+        deletedSsoLoginAttempts: 0,
       },
       {
         deletedUserSessions: 0,
         deletedSessionCsrfTokens: 1,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       },
       {
         deletedUserSessions: 0,
         deletedSessionCsrfTokens: 0,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       },
     ]);
 
@@ -92,6 +97,7 @@ describe("SessionCleanupService", () => {
       deletedUserSessions: 2,
       deletedSessionCsrfTokens: 2,
       deletedPreauthSessions: 3,
+      deletedSsoLoginAttempts: 0,
       batches: 3,
     });
     expect(unitOfWork.runs).toBe(3);
@@ -104,16 +110,19 @@ describe("SessionCleanupService", () => {
         deletedUserSessions: 1,
         deletedSessionCsrfTokens: 0,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       },
       {
         deletedUserSessions: 1,
         deletedSessionCsrfTokens: 0,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       },
       {
         deletedUserSessions: 1,
         deletedSessionCsrfTokens: 0,
         deletedPreauthSessions: 0,
+        deletedSsoLoginAttempts: 0,
       },
     ]);
 
@@ -123,6 +132,7 @@ describe("SessionCleanupService", () => {
       deletedUserSessions: 2,
       deletedSessionCsrfTokens: 0,
       deletedPreauthSessions: 0,
+      deletedSsoLoginAttempts: 0,
       batches: 2,
     });
     expect(unitOfWork.runs).toBe(2);

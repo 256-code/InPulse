@@ -54,6 +54,8 @@ const requiredRequestKeys = ["path", "query", "headers", "body"] as const;
 const operationIdPattern = /^[a-z][A-Za-z0-9]*$/;
 const pathPattern = /^\/[A-Za-z0-9\-_{}/]*$/;
 const allowedStatuses = new Set(Object.keys(statusDescriptions));
+/** ADR-032：无响应体状态码由 204 扩展为 204/302（302 只服务认证导航路由）。 */
+const noBodyStatuses = new Set(["204", "302"]);
 const successStatusPattern = /^2[0-9]{2}$/;
 
 export function registrySensitivePaths(): Readonly<
@@ -159,11 +161,18 @@ export function validateRouteRegistry(
       }
       const binding = route.responses[status]!;
       const isNoBody = "noBody" in binding;
-      if (status === "204" && !isNoBody) {
-        add(route, "responses", "204 必须登记为 noBody");
+      if (noBodyStatuses.has(status) && !isNoBody) {
+        add(route, "responses", `${status} 必须登记为 noBody`);
       }
-      if (status !== "204" && isNoBody) {
-        add(route, "responses", `noBody 只允许用于 204，当前为 ${status}`);
+      if (!noBodyStatuses.has(status) && isNoBody) {
+        add(route, "responses", `noBody 只允许用于 204/302，当前为 ${status}`);
+      }
+      if (status === "302" && route.idempotencyPolicy !== "securityFlow") {
+        add(
+          route,
+          "responses",
+          "ADR-032：302 只允许用于 securityFlow 认证导航路由",
+        );
       }
       if (!isNoBody) {
         if (binding.body.contentTypes.length === 0) {

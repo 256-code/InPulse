@@ -36,7 +36,7 @@
 | [ADR-020](ADR-020.md) | Accepted | 加密逻辑备份与全新主机恢复验证 |
 | [ADR-021](ADR-021.md) | Accepted | 逐响应 nonce CSP |
 | [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型 |
-| [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外（allowlist 由 ADR-031 收缩为 `issueCsrfToken`、`login`、`logout`） |
+| [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外（allowlist 经 ADR-031 收缩、ADR-032 调整为 `issueCsrfToken`、`login`、`logout`、`startSsoLogin`、`completeSsoLogin`） |
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 | [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |
 | [ADR-026](ADR-026.md) | Accepted | NestJS 基线锁定 11.2.3 并延后 12.x 升级 |
@@ -45,6 +45,7 @@
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
 | [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
+| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO） |
 
 ## 关联基线
 

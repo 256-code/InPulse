@@ -1,6 +1,11 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module.js";
+// 直接引用 audit.port.js：audit/index.js 会再导出 AuditLogReadModule，
+// 而后者 import AuthModule，经 barrel 引入会形成循环依赖，Nest 扫描时拿到
+// undefined 并以 process.abort() 崩溃（AppModule 启动用例实测）。
+import { AuditWritePort } from "../audit/audit.port.js";
+import { PostgresUnitOfWork } from "../database/unit-of-work.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { IdempotencyModule } from "../idempotency/idempotency.module.js";
 import { SESSION_HMAC_KEYRING } from "./auth.constants.js";
@@ -33,6 +38,22 @@ import { UserDirectoryController } from "./user-directory.controller.js";
 import { PostgresUserDirectoryRepository } from "./user-directory.repository.js";
 import { UserDirectoryService } from "./user-directory.service.js";
 import { PostgresUserReadPort, UserReadPort } from "./user-read.port.js";
+import {
+  SESSION_TTL_POLICY,
+  sessionTtlPolicyFromEnv,
+  type SessionTtlPolicy,
+} from "./session-ttl.policy.js";
+import { PostgresSsoLoginAttemptRepository } from "./sso/sso-login-attempt.repository.js";
+import { PostgresSsoUserRepository } from "./sso/sso-user.repository.js";
+import { SsoOidcClient } from "./sso/sso-oidc.client.js";
+import { SsoController } from "./sso/sso.controller.js";
+import { SsoLoginService } from "./sso/sso-login.service.js";
+import { DisabledSsoGateway, SsoGateway } from "./sso/sso-gateway.js";
+import {
+  SSO_CONFIG,
+  loadSsoConfig,
+  type SsoConfigLoadResult,
+} from "./sso/sso.config.js";
 
 /**
  * 认证/会话支柱的 Nest 模块。ADR-031 之后不再包含 TOTP、恢复码与
@@ -72,6 +93,71 @@ import { PostgresUserReadPort, UserReadPort } from "./user-read.port.js";
     PostgresUserDirectoryRepository,
     UserDirectoryService,
     { provide: UserReadPort, useClass: PostgresUserReadPort },
+    {
+      provide: SESSION_TTL_POLICY,
+      useFactory: () => sessionTtlPolicyFromEnv(process.env),
+    },
+    {
+      provide: SSO_CONFIG,
+      useFactory: () => loadSsoConfig(process.env),
+    },
+    PostgresSsoLoginAttemptRepository,
+    PostgresSsoUserRepository,
+    {
+      provide: SsoGateway,
+      inject: [
+        SSO_CONFIG,
+        PostgresUnitOfWork,
+        PostgresSsoLoginAttemptRepository,
+        PostgresSsoUserRepository,
+        PostgresUserCredentialRepository,
+        PostgresUserSessionRepository,
+        PostgresSessionCsrfTokenRepository,
+        SessionTokenService,
+        LoginRateLimitService,
+        AuditWritePort,
+        SESSION_TTL_POLICY,
+        SESSION_HMAC_KEYRING,
+      ],
+      useFactory: (
+        config: SsoConfigLoadResult,
+        unitOfWork: PostgresUnitOfWork,
+        attempts: PostgresSsoLoginAttemptRepository,
+        ssoUsers: PostgresSsoUserRepository,
+        credentials: PostgresUserCredentialRepository,
+        sessions: PostgresUserSessionRepository,
+        csrfTokens: PostgresSessionCsrfTokenRepository,
+        tokens: SessionTokenService,
+        rateLimit: LoginRateLimitService,
+        audit: AuditWritePort,
+        ttl: SessionTtlPolicy,
+        keyring: VersionedHmacKeyring,
+      ): SsoGateway => {
+        if (config.config === undefined) {
+          if (config.invalidReason !== undefined) {
+            process.stderr.write(
+              `[auth] SSO 已启用但配置非法，已回落本地隐藏入口：${config.invalidReason}\n`,
+            );
+          }
+          return new DisabledSsoGateway();
+        }
+        return new SsoLoginService(
+          unitOfWork,
+          attempts,
+          ssoUsers,
+          credentials,
+          sessions,
+          csrfTokens,
+          tokens,
+          rateLimit,
+          audit,
+          config.config,
+          new SsoOidcClient(config.config),
+          ttl,
+          keyring,
+        );
+      },
+    },
     AdminHighRiskAuthService,
   ],
   controllers: [
@@ -80,6 +166,7 @@ import { PostgresUserReadPort, UserReadPort } from "./user-read.port.js";
     LogoutController,
     MeController,
     UserDirectoryController,
+    SsoController,
   ],
   exports: [
     UserReadPort,

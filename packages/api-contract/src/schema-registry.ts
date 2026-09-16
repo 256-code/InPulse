@@ -59,6 +59,10 @@ import {
   userAuthStateSchema,
 } from "./contracts/auth.zod.js";
 import { csrfIssueResponseSchema } from "./contracts/csrf.zod.js";
+import {
+  ssoCallbackQueryRequestSchema,
+  ssoStartQueryRequestSchema,
+} from "./contracts/sso.zod.js";
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
 import {
@@ -349,6 +353,17 @@ export const schemaRegistry = {
     schema: logoutHeadersSchema,
     summary: "登出请求头；有效 Session 必须携带当前 CSRF Token",
     sensitiveFieldPaths: ["x-csrf-token"],
+  },
+  SsoStartQueryRequest: {
+    schema: ssoStartQueryRequestSchema,
+    summary:
+      "单点登录发起参数；returnTo 为站内相对路径，服务端二次校验后写入 state",
+    sensitiveFieldPaths: [],
+  },
+  SsoCallbackQueryRequest: {
+    schema: ssoCallbackQueryRequestSchema,
+    summary: "单点登录回调参数；code 与 state 是一次性材料，不落库明文",
+    sensitiveFieldPaths: ["code", "state"],
   },
   SearchQueryRequest: {
     schema: searchQueryRequestSchema,

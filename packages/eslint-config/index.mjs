@@ -11,6 +11,9 @@ export default [
       "**/playwright-report/**",
       "**/test-results/**",
       "pnpm-lock.yaml",
+      // 本地联调用数据目录（如 .data/sso 的 Casdoor 凭据与冒烟脚本）不入版本库，
+      // 也不参与 lint 门禁。
+      "**/.data/**",
     ],
   },
   js.configs.recommended,

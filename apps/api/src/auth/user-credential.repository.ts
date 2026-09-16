@@ -3,7 +3,8 @@ import type { TransactionContext } from "../database/transaction-context.js";
 export interface UserCredential {
   readonly id: number;
   readonly loginName: string;
-  readonly passwordHash: string;
+  /** SSO 自动开通的账号没有本地口令，该字段为 NULL 且本地登录必然失败。 */
+  readonly passwordHash: string | null;
   readonly isAdmin: boolean;
   readonly status: "ACTIVE" | "DISABLED";
   readonly authVersion: number;

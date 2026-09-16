@@ -253,3 +253,27 @@
     font-size: 17px;
   }
 }
+/* ADR-032 单点登录：跳转中与登录失败状态 */
+.login-sso-pending,
+.login-sso-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 6px;
+}
+
+.login-sso-pending {
+  align-items: center;
+  text-align: center;
+}
+
+.login-sso-status {
+  margin: 0;
+  color: var(--login-ink);
+  font-size: 16px;
+}
+
+.login-sso-switch {
+  margin-top: 8px;
+  text-align: center;
+}

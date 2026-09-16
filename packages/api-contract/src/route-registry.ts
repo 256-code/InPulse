@@ -373,6 +373,72 @@ export const routeRegistry = [
   },
   {
     method: "GET",
+    path: "/auth/sso/start",
+    operationId: "startSsoLogin",
+    summary:
+      "生成 state、nonce 与 PKCE verifier（只保存 Hash 并绑定发起浏览器 Cookie）后 302 到 Casdoor 授权端点；SSO 未配置时 302 回本地隐藏入口。",
+    request: {
+      path: "none",
+      query: "SsoStartQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "302": { noBody: true },
+    },
+    authPolicy: "none",
+    csrfPolicy: "none",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash；同一 state 只允许一次 token 交换消费（条件更新）",
+      clientRecoveryPath: "重新调用 /api/v1/auth/sso/start 发起新的登录",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/auth/sso/callback",
+    operationId: "completeSsoLogin",
+    summary:
+      "校验 state（含发起浏览器 Cookie 绑定）后一次性消费，服务端换取 token 并验签 id_token，按用户映射签发本地会话后 302 回应用；失败一律 302 回登录页携带错误码。",
+    request: {
+      path: "none",
+      query: "SsoCallbackQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "302": { noBody: true },
+    },
+    authPolicy: "none",
+    csrfPolicy: "none",
+    idempotencyPolicy: "securityFlow",
+    idempotencyExceptionAdr: "ADR-023",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: {
+      singleConsumptionOrNaturalIdempotency:
+        "state 在同一事务内按 Hash 条件消费，只有一次 token 交换与一次本地会话签发成功；重复、过期或并发回调一律按失败重定向",
+      clientRecoveryPath: "重新调用 /api/v1/auth/sso/start 发起新的登录",
+    },
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "auth.sso_login",
+  },
+  {
+    method: "GET",
     path: "/search",
     operationId: "getSearch",
     summary:

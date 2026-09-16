@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
+import { navigateToSsoStart } from "@features/auth/sso-navigation";
 import { CommandPalette } from "@features/command-palette/CommandPalette";
 import {
   InpulseIcon,
@@ -225,7 +226,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const handleAccountAction = async () => {
     setAccountOpen(false);
     if (status !== "authenticated") {
-      navigate("/login");
+      // 直接整页进入统一身份认证，避免先渲染 InPulse 登录页再跳转的闪屏。
+      navigateToSsoStart("/");
       return;
     }
     setIsLoggingOut(true);
@@ -234,7 +236,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         .then(() => true)
         .catch(() => false);
       if (loggedOut) {
-        navigate("/login");
+        // 退出后直接整页跳到单点登录入口，不再经由 /login 中转渲染。
+        navigateToSsoStart("/");
       }
     } finally {
       setIsLoggingOut(false);

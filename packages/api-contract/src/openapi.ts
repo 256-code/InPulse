@@ -17,6 +17,7 @@ export const statusDescriptions: Readonly<Record<string, string>> = {
   "201": "已创建",
   "202": "已接受",
   "204": "成功且无响应体",
+  "302": "重定向：浏览器导航到 Location 目标（仅限 ADR-032 认证导航路由）",
   "400": "请求格式或业务参数错误",
   "401": "未登录或 Session 失效",
   "403": "已登录但无全局权限",
@@ -147,7 +148,20 @@ function buildResponses(
     const description = statusDescriptions[status] ?? "见技术设计 4.2";
     if ("noBody" in binding) {
       // ADR-019：noBody 响应不得出现 OpenAPI content。
-      responses[status] = { description };
+      // ADR-032：302 导航响应额外说明 Location 语义，供前端与联调方识别跳转目标。
+      responses[status] =
+        status === "302"
+          ? {
+              description,
+              headers: {
+                Location: {
+                  description:
+                    "浏览器导航目标：站内相对路径（本地入口或应用页）或 IdP 授权端点",
+                  schema: { type: "string" },
+                },
+              },
+            }
+          : { description };
       continue;
     }
     const content: JsonSchema = {};

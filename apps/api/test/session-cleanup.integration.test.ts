@@ -19,6 +19,8 @@ let activePreauthId: number | undefined;
 let expiredSessionIds: readonly number[] = [];
 let expiredCsrfHashes: readonly Buffer[] = [];
 let expiredPreauthIds: readonly number[] = [];
+let expiredSsoAttemptIds: readonly number[] = [];
+let activeSsoAttemptId: number | undefined;
 
 async function insertUserSession(options: {
   readonly createdAt: string;
@@ -120,6 +122,36 @@ async function insertPreauth(options: {
   return row.id;
 }
 
+async function insertSsoAttempt(options: {
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly consumedAt: string | null;
+}): Promise<number> {
+  const [row] = (await client!.sql`
+    INSERT INTO app.sso_login_attempts (
+      state_hash,
+      state_hash_key_version,
+      return_to,
+      created_at,
+      expires_at,
+      consumed_at
+    )
+    VALUES (
+      ${randomBytes(32)},
+      1,
+      '/projects',
+      ${options.createdAt}::timestamptz,
+      ${options.expiresAt}::timestamptz,
+      ${options.consumedAt}
+    )
+    RETURNING id
+  `) as unknown as readonly { id: number }[];
+  if (row === undefined) {
+    throw new Error("sso attempt fixture insert returned no row");
+  }
+  return row.id;
+}
+
 beforeAll(async () => {
   client = createDatabaseClient(testUrls().runtime, {
     applicationName: "inpulse-session-cleanup-test",
@@ -190,6 +222,24 @@ beforeAll(async () => {
     consumedAt: null,
   });
   activePreauthId = activePreauthRow;
+
+  expiredSsoAttemptIds = [
+    await insertSsoAttempt({
+      createdAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      consumedAt: null,
+    }),
+    await insertSsoAttempt({
+      createdAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      consumedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+    }),
+  ];
+  activeSsoAttemptId = await insertSsoAttempt({
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    consumedAt: null,
+  });
 });
 
 afterAll(async () => {
@@ -206,6 +256,7 @@ describe("Session 分批清理（真实 PostgreSQL）", () => {
       deletedUserSessions: 2,
       deletedSessionCsrfTokens: 1,
       deletedPreauthSessions: 2,
+      deletedSsoLoginAttempts: 2,
     });
     for (const id of expiredSessionIds) {
       const rows = (await client!.sql`
@@ -226,6 +277,12 @@ describe("Session 分批清理（真实 PostgreSQL）", () => {
       `) as unknown as readonly { id: number }[];
       expect(rows).toHaveLength(0);
     }
+    for (const id of expiredSsoAttemptIds) {
+      const rows = (await client!.sql`
+        SELECT id FROM app.sso_login_attempts WHERE id = ${id}
+      `) as unknown as readonly { id: number }[];
+      expect(rows).toHaveLength(0);
+    }
   });
 
   test("活跃 Session 与预认证 Session 未被清理", async () => {
@@ -242,7 +299,13 @@ describe("Session 分批清理（真实 PostgreSQL）", () => {
         FROM app.preauth_sessions
        WHERE id = ${activePreauthId}
     `) as unknown as readonly { id: number }[];
+    const ssoRows = (await client!.sql`
+      SELECT id
+        FROM app.sso_login_attempts
+       WHERE id = ${activeSsoAttemptId ?? 0}
+    `) as unknown as readonly { id: number }[];
     expect(rows).toHaveLength(1);
     expect(preauthRows).toHaveLength(1);
+    expect(ssoRows).toHaveLength(1);
   });
 });

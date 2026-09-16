@@ -78,7 +78,7 @@
 - 聚合更新使用条件更新或显式行锁，并在成功后递增 `row_version`。唯一约束、版本冲突和状态冲突映射为明确的 409 业务错误。
 - 多聚合命令固定锁序为：任务 ID 升序 -> 任务组 ID 升序 -> 迭代记录 ID 升序 -> 遗留项 ID 升序。预读结果在获得锁后发生变化时，必须重新读取并从头有限重试。
 - 命令需要验证项目、模块或功能仍可写时，必须先按项目 -> 模块 -> 功能的父到子顺序和各层 ID 升序取得 `FOR SHARE`；归档方按相同顺序取得 `FOR UPDATE`，随后才进入上述业务聚合锁序，防止父级归档与子级写入竞态。
-- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；普通 GET、HEAD 和纯校验接口显式声明 `none`。[ADR-023](./docs/adr/ADR-023.md) allowlist 中的 operationId 必须且只能声明 `securityFlow`，包括签发/消费一次性安全材料（预认证 CSRF、Session 与 CSRF）及登录/登出；新增例外必须另立 ADR。通用幂等记录禁止保存或重放 Cookie、CSRF Token 或任何一次性安全材料。
+- 所有写接口（POST、PUT、PATCH、DELETE）默认必须在 Route Registry 声明 `idempotencyRequired` 并实现数据库级幂等；普通 GET、HEAD 和纯校验接口显式声明 `none`。[ADR-023](./docs/adr/ADR-023.md) allowlist 中的 operationId 必须且只能声明 `securityFlow`，包括签发/消费一次性安全材料（预认证 CSRF、Session 与 CSRF）、登录/登出与 SSO 认证导航（`startSsoLogin`/`completeSsoLogin`，共五条，[ADR-032](./docs/adr/ADR-032.md)）；新增例外必须另立 ADR。通用幂等记录禁止保存或重放 Cookie、CSRF Token 或任何一次性安全材料。
 - `idempotencyRequired` 的请求摘要必须覆盖大写 method、operationId、幂等契约版本、摘要格式与请求 Schema 版本、Schema 解析后的 path 参数和规范 query、规范 Content-Type、Route Registry 声明的全部行为相关请求头以及 JCS 规范化 body；使用版本头的路由必须包含 `If-Match`。摘要使用独立、带版本密钥的 HMAC-SHA-256，不得把普通 SHA-256 用作密码、验证码或其他低熵输入的离线校验器。Cookie、Authorization、CSRF、追踪头和 Idempotency-Key 不进入摘要。任一语义输入或幂等契约版本不同都返回 409。幂等不能只依赖前端禁用按钮或进程内锁。
 - 每条 `idempotencyRequired` 路由必须登记带版本的 `idempotencyReplayPolicy`：逐个列出可能缓存的 2xx 状态；有 body 时列出精确响应 Schema 引用以及可安全持久化和重放的全部 body 叶子字段，无 body 时使用互斥的 `noBody` 分支。CI 必须拒绝遗漏状态、字段不全或越界、Schema 不一致、Secret 字段以及任何 `Set-Cookie`/认证响应头重放；`none` 与 `securityFlow` 路由的该策略只能为 `none`。请求或安全重放策略变化必须升级幂等契约版本，旧 Key 在新契约下返回 409。
 - 每条 `idempotencyRequired` 路由还必须登记 `replayAuthorizationPolicy`，以类型化、最小化的结果资源引用说明缓存响应暴露了哪些资源。幂等重放前必须重新验证当前认证、原操作权限、所有结果资源的当前可读权限及该路由要求的高风险门禁（当前有效的完整管理员 Session）；任一门禁失败时拒绝且不得泄露已存状态码或响应。只有全部门禁通过后，同 Key、同摘要和同契约版本才重放原 2xx。
@@ -95,6 +95,9 @@
 - 成员关系不得缓存到 Session 或长生命周期对象；搜索和动态查询必须先取得服务端生成的 `AuthorizedProjectScope`，并在 SQL 层过滤。
 - 资源不存在和无权访问统一返回 404，避免泄露资源存在性；已登录但缺少全局权限时返回 403。
 - Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF 和安全响应头必须遵守技术设计。
+- 单点登录（[ADR-032](./docs/adr/ADR-032.md)）是默认登录入口：`GET /api/v1/auth/sso/start` 只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
+- SSO 首次登录 JIT 开通 `is_admin=false`、`password_hash=NULL`、无任何项目成员关系的账号；映射优先级固定为 `sso_subject` 命中 → 登录名命中且未绑定且邮箱一致时绑定 → JIT；邮箱不一致或 subject 已绑定其它账号必须按冲突拒绝，禁止静默接管同名账号。无口令账号在本地入口必须干净地返回 401，不得抛错或 500。
+- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed 回落 `/login?local=1&sso=disabled`，`/login?local=1` 是管理员应急隐藏入口，不对外展示。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`。
 - 登录只接受匿名预认证 Session 及其 CSRF Token；已有普通、受限或完整认证 Session 必须先登出，再签发新的预认证 CSRF。停用用户的旧 Session 按无效处理；受保护或业务接口返回 401，但 `issueCsrfToken` 与无效 Session 的同源 `logout` 可按匿名安全语义执行且不得恢复身份。
 - 管理员高风险接口只要求当前有效的完整管理员 Session（`AUTHENTICATED`）、`is_admin`、写操作 CSRF、数据库级幂等与审计留痕；[ADR-031](./docs/adr/ADR-031.md) 起不再要求管理员密码与 TOTP 重认证，`reauthenticated_at`/`mfa_verified_at` 不再作为门禁条件。
 - 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；[ADR-031](./docs/adr/ADR-031.md) 起 `user_sessions.auth_state` 只写入 `AUTHENTICATED`，历史取值不得作为有效认证态参与鉴权。
@@ -237,3 +240,16 @@
 - 删除 7 条 MFA 认证路由后 Route Registry 为 95 条；`securityFlow` allowlist 收敛为 `issueCsrfToken`/`login`/`logout` 三条。
 - 管理员最后一名保护由「最后一名可用 MFA 管理员」改为「最后一名可用管理员」（`LAST_ACTIVE_ADMIN_REQUIRED`）。
 - 本文件上文历史条目中出现的 TOTP/MFA/重认证描述均为当时事实，与本节冲突时以 ADR-031 与本节的现行规则为准。
+
+## 2026-09-15 ADR-032 Casdoor 单点登录接入说明
+
+按用户明确要求，InPulse 接入立镖公司 Casdoor OIDC 单点登录（ADR-032），口令入口降级为管理员应急通道。因此：
+
+- `/login` 默认整页跳转到 `/api/v1/auth/sso/start?returnTo=...`（查询参数名必须与契约 `SsoStartQueryRequest` 一致），回调 `/api/v1/auth/sso/callback` 成功后复用与口令登录同一实现签发本地 Session；`securityFlow` allowlist 由三条扩为五条，Route Registry 为 97 条路由。
+- 数据库迁移 `0013_sso_login.sql` 新增 `users.sso_subject`（部分唯一索引 + 绑定后不可改写触发器）、允许 `password_hash` 为空，并新增 `app.sso_login_attempts`；历史迁移不得修改。
+- 本地会话空闲有效期由 8 小时收紧为 30 分钟，口令与 SSO 共用 `SESSION_TTL_POLICY`（`SESSION_IDLE_MAX_AGE_SECONDS` 可覆盖），绝对有效期仍为 7 天。
+- 生产 Secret 为 `/run/secrets/sso_client_secret`（由 `SSO_CLIENT_SECRET_FILE` 指定）；本地与集成测试只允许 `NODE_ENV=test` 且 `SSO_CLIENT_SECRET_TEST_PATH=1` 时读取临时路径。
+- 新增覆盖：`sso.config.test.ts`、`sso-oidc.client.test.ts`、`sso.controller.test.ts`、`sso-return-to.test.ts`、`session-ttl.policy.test.ts`、`sso-login.integration.test.ts`（真实 PostgreSQL + 桩 IdP）以及登录页单测与 E2E 用例。
+- 迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的表级 SELECT 与序列 USAGE/SELECT（pg_dump 一致性快照必需，与迁移 0007 同源），并把 `app.sso_login_attempts` 加入 `apps/ops/src/backup.ts` 的 `BACKUP_EXCLUDED_TABLE_DATA`：该表只保留结构、数据不进备份产物。新增表进入备份范围按 fail closed 处理——必须显式补一条备份授权迁移，不得改成 `ALTER DEFAULT PRIVILEGES` 默认授权（例外须新增 ADR）。
+- 本轮联调修复（均为真实缺陷，已落库）：① `apps/api/src/auth/auth.module.ts` 与 `sso-login.service.ts` 曾从 `audit/index.js` barrel 引入 `AuditWritePort`，与 `AuditLogReadModule -> AuthModule` 形成循环依赖，导致整个 `AppModule` 初始化时 Nest 拿到 `undefined` 并以 `process.abort()` 崩溃（8 个 API 集成测试文件直接退出）；改为直接引用 `audit/audit.port.js`，该循环由 `pnpm check:deps` 的 `[circular-dependency]` 拦住；② `apps/web/tools/vite-csp.ts` 的 dev/preview CSP 中间件原先会短路所有无扩展名且 `Accept: text/html` 的请求，把浏览器整页导航到 `/api/v1/auth/sso/start` 的请求当成 SPA 入口返回 `index.html`，使 SSO 回落在本地预览里自跳转成环（URL 与请求头超限后返回 431）；新增 `isApiPath` 放行 `/api/**` 交给代理，E2E 复跑 56/56；③ `sso.config.ts` 的回调地址变量由 `SSO_REDIRECT_URL` 更名为 `SSO_REDIRECT_URI`（与 OIDC `redirect_uri` 术语一致），因为 `scripts/check_secrets.mjs` 把所有 `*_URL` 键视为必须指向 `/run/secrets/*` 的敏感变量，改名避免误判而不放宽门禁。
+- 本文件上文历史条目中出现的 8 小时空闲超时、三条 `securityFlow` 等描述为当时事实，与本节冲突时以 ADR-032 与本节的现行规则为准。

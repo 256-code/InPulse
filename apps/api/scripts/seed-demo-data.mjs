@@ -242,9 +242,9 @@ function main() {
     console.log(`  ${label}：${counts[index]}`);
   });
   console.log(`  演示口令：${demoPassword}`);
-  console.log("  特哥 tege（管理员，首次登录需绑定动态验证码）");
+  console.log("  特哥 tege（管理员）");
   console.log("  小潘 xiaopan / 小吴 xiaowu / 小邵 xiaoshao");
-  console.log("  登录会话与动态验证码属于运行痕迹，不在演示数据内。");
+  console.log("  登录会话属于运行痕迹，不在演示数据内。");
 }
 
 main();

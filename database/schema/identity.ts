@@ -27,7 +27,8 @@ export const users = appSchema.table(
     name: text("name").notNull(),
     email: text("email"),
     avatarUrl: text("avatar_url"),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
+    ssoSubject: text("sso_subject"),
     isAdmin: boolean("is_admin").notNull().default(false),
     status: text("status").notNull().default("ACTIVE"),
     authVersion: integer("auth_version").notNull().default(1),
@@ -47,6 +48,9 @@ export const users = appSchema.table(
     uniqueIndex("users_email_normalized_unique")
       .on(sql.raw("lower(btrim(email))"))
       .where(sql.raw("email IS NOT NULL")),
+    uniqueIndex("users_sso_subject_unique")
+      .on(table.ssoSubject)
+      .where(sql.raw("sso_subject IS NOT NULL")),
     check(
       "users_login_name_length_check",
       sql.raw("length(btrim(login_name)) BETWEEN 1 AND 100"),
@@ -66,7 +70,17 @@ export const users = appSchema.table(
     check(
       "users_password_hash_check",
       sql.raw(
-        "length(password_hash) BETWEEN 20 AND 1024 AND password_hash LIKE '$argon2id$%'",
+        "password_hash IS NULL OR length(password_hash) BETWEEN 20 AND 1024",
+      ),
+    ),
+    check(
+      "users_password_algorithm_check",
+      sql.raw("password_hash IS NULL OR password_hash LIKE '$argon2id$%'"),
+    ),
+    check(
+      "users_sso_subject_check",
+      sql.raw(
+        "sso_subject IS NULL OR length(btrim(sso_subject)) BETWEEN 1 AND 200",
       ),
     ),
     check("users_status_check", sql.raw("status IN ('ACTIVE', 'DISABLED')")),
@@ -295,6 +309,51 @@ export const mfaRecoveryCodes = appSchema.table(
     check(
       "mfa_recovery_codes_used_at_check",
       sql.raw("used_at IS NULL OR used_at >= created_at"),
+    ),
+  ],
+);
+
+/**
+ * SSO 登录尝试（ADR-032）。只保存 state 的 HMAC-SHA-256 哈希与 return_to；
+ * nonce 与 PKCE code_verifier 由服务端从 state 派生，不落库可重放材料。
+ */
+export const ssoLoginAttempts = appSchema.table(
+  "sso_login_attempts",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedByDefaultAsIdentity(),
+    stateHash: bytea("state_hash").notNull(),
+    stateHashKeyVersion: smallint("state_hash_key_version").notNull(),
+    returnTo: text("return_to"),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    consumedAt: timestamptz("consumed_at"),
+  },
+  (table) => [
+    unique("sso_login_attempts_state_hash_unique").on(table.stateHash),
+    index("sso_login_attempts_cleanup_idx").on(table.expiresAt, table.id),
+    check(
+      "sso_login_attempts_state_hash_check",
+      sql.raw("octet_length(state_hash) = 32"),
+    ),
+    check(
+      "sso_login_attempts_key_version_check",
+      sql.raw("state_hash_key_version > 0"),
+    ),
+    check(
+      "sso_login_attempts_return_to_check",
+      sql.raw("return_to IS NULL OR length(return_to) BETWEEN 1 AND 2000"),
+    ),
+    check(
+      "sso_login_attempts_expiry_check",
+      sql.raw(
+        "expires_at > created_at AND expires_at <= created_at + INTERVAL '15 minutes'",
+      ),
+    ),
+    check(
+      "sso_login_attempts_consumed_check",
+      sql.raw("consumed_at IS NULL OR consumed_at >= created_at"),
     ),
   ],
 );

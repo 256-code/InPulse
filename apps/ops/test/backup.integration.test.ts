@@ -162,6 +162,7 @@ async function seedFixture(client: DatabaseClient): Promise<SeedFixture> {
   const prevHash = Buffer.alloc(32);
   const tokenHash = randomBytes(32);
   const csrfHash = randomBytes(32);
+  const ssoStateHash = randomBytes(32);
   const loginName = `backup_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const code = `BKUP${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
   const requestId = randomUUID();
@@ -283,6 +284,20 @@ async function seedFixture(client: DatabaseClient): Promise<SeedFixture> {
         1,
         ${csrfHash},
         now() + interval '5 minutes'
+      )
+    `;
+    await tx`
+      INSERT INTO app.sso_login_attempts (
+        state_hash,
+        state_hash_key_version,
+        return_to,
+        expires_at
+      )
+      VALUES (
+        ${ssoStateHash},
+        1,
+        '/projects',
+        now() + interval '10 minutes'
       )
     `;
     return {
@@ -412,6 +427,7 @@ describe("逻辑备份（真实 PostgreSQL + 真实 pg_dump + WORM 桩）", () =
       "app.user_sessions",
       "app.session_csrf_tokens",
       "app.preauth_sessions",
+      "app.sso_login_attempts",
     ]);
     expect(
       manifest.payload.auditChainAnchors.some(
@@ -462,10 +478,13 @@ describe("逻辑备份（真实 PostgreSQL + 真实 pg_dump + WORM 桩）", () =
     expect(listing.status).toBe(0);
     expect(listing.stdout).toContain("TABLE app user_sessions");
     expect(listing.stdout).toContain("TABLE app preauth_sessions");
+    // ADR-032（迁移 0014）：一次性登录材料表同样只保留结构。
+    expect(listing.stdout).toContain("TABLE app sso_login_attempts");
     expect(listing.stdout).toContain("TABLE DATA app projects");
     expect(listing.stdout).not.toContain("TABLE DATA app user_sessions");
     expect(listing.stdout).not.toContain("TABLE DATA app session_csrf_tokens");
     expect(listing.stdout).not.toContain("TABLE DATA app preauth_sessions");
+    expect(listing.stdout).not.toContain("TABLE DATA app sso_login_attempts");
 
     await withTempDatabase(async (url) => {
       const restore = spawnSync(
@@ -497,6 +516,9 @@ describe("逻辑备份（真实 PostgreSQL + 真实 pg_dump + WORM 桩）", () =
         const [preauth] = (await checker.sql`
           SELECT count(*)::int AS "count" FROM app.preauth_sessions
         `) as unknown as readonly { readonly count: number }[];
+        const [ssoAttempts] = (await checker.sql`
+          SELECT count(*)::int AS "count" FROM app.sso_login_attempts
+        `) as unknown as readonly { readonly count: number }[];
         const [users] = (await checker.sql`
           SELECT count(*)::int AS "count" FROM app.users
         `) as unknown as readonly { readonly count: number }[];
@@ -508,6 +530,7 @@ describe("逻辑备份（真实 PostgreSQL + 真实 pg_dump + WORM 桩）", () =
         `) as unknown as readonly { readonly count: number }[];
         expect(sessions!.count).toBe(0);
         expect(preauth!.count).toBe(0);
+        expect(ssoAttempts!.count).toBe(0);
         expect(users!.count).toBeGreaterThanOrEqual(1);
         expect(projects!.count).toBeGreaterThanOrEqual(1);
         expect(migrations!.count).toBeGreaterThanOrEqual(8);

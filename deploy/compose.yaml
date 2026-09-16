@@ -125,6 +125,15 @@ services:
       IDEMPOTENCY_FINGERPRINT_KEYRING_FILE: /run/secrets/idempotency_fingerprint_keyring
       AUDIT_HMAC_KEY_VERSION: "${AUDIT_HMAC_KEY_VERSION}"
       AUDIT_HMAC_KEYRING_FILE: /run/secrets/audit_hmac_keyring
+      # ADR-032 立镖 Casdoor OIDC 单点登录；SSO_ENABLED 非真值即整体关闭，
+      # Client Secret 只经 Secret 文件提供，禁止环境变量兜底。
+      SSO_ENABLED: "${SSO_ENABLED}"
+      SSO_ISSUER: "${SSO_ISSUER}"
+      SSO_CLIENT_ID: "${SSO_CLIENT_ID}"
+      SSO_CLIENT_SECRET_FILE: /run/secrets/sso_client_secret
+      SSO_REDIRECT_URI: "${SSO_REDIRECT_URI}"
+      # 本地会话空闲有效期（秒），默认 1800；口令与 SSO 两条签发路径共用。
+      SESSION_IDLE_MAX_AGE_SECONDS: "${SESSION_IDLE_MAX_AGE_SECONDS}"
     depends_on:
       db:
         condition: service_healthy
@@ -148,6 +157,11 @@ services:
         mode: "0400"
       - source: audit_hmac_keyring
         target: /run/secrets/audit_hmac_keyring
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: sso_client_secret
+        target: /run/secrets/sso_client_secret
         uid: "10001"
         gid: "10001"
         mode: "0400"
@@ -340,6 +354,8 @@ secrets:
     file: ./secrets/idempotency_fingerprint_keyring
   audit_hmac_keyring:
     file: ./secrets/audit_hmac_keyring
+  sso_client_secret:
+    file: ./secrets/sso_client_secret
   audit_worm_credentials:
     file: ./secrets/audit_worm_credentials
   audit_archive_signing_key:

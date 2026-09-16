@@ -1,11 +1,14 @@
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
-import { AuthStateProvider } from "@features/auth/auth-context";
+import {
+  AuthStateProvider,
+  type AuthContextValue,
+} from "@features/auth/auth-context";
 import { AppLayout } from "./AppLayout";
 
 describe("AppLayout", () => {
@@ -31,7 +34,11 @@ describe("AppLayout", () => {
     readNotification: vi.fn().mockResolvedValue(undefined),
   } as unknown as InpulseApiClient;
 
-  function renderLayout(ui: React.ReactElement, isAdmin = false) {
+  function renderLayout(
+    ui: React.ReactElement,
+    isAdmin = false,
+    authValue: Partial<AuthContextValue> = {},
+  ) {
     return render(
       <QueryClientProvider
         client={
@@ -52,6 +59,7 @@ describe("AppLayout", () => {
               isAdmin,
               status: "ACTIVE",
             },
+            ...authValue,
           }}
         >
           {ui}
@@ -501,5 +509,81 @@ describe("AppLayout", () => {
     await userEvent.click(toggle);
     expect(document.querySelector(".project-tree")).not.toBeNull();
     expect(screen.getByRole("button", { name: "收起系统目录" })).toBeTruthy();
+  });
+  describe("退出登录", () => {
+    const originalLocation = window.location;
+
+    beforeEach(() => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: {
+          href: originalLocation.href,
+          origin: originalLocation.origin,
+          pathname: originalLocation.pathname,
+          search: originalLocation.search,
+          assign: vi.fn(),
+          replace: vi.fn(),
+        },
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: originalLocation,
+      });
+    });
+
+    it("退出登录后整页跳转统一身份认证入口，不再经由登录页中转", async () => {
+      const user = userEvent.setup();
+      const logout = vi.fn().mockResolvedValue(undefined);
+      renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={notificationClient} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+        false,
+        { logout },
+      );
+
+      await user.click(screen.getByRole("button", { name: "账户菜单" }));
+      await user.click(screen.getByRole("button", { name: /退出登录/ }));
+
+      await waitFor(() => {
+        expect(logout).toHaveBeenCalledTimes(1);
+        expect(window.location.replace).toHaveBeenCalledWith(
+          "/api/v1/auth/sso/start?returnTo=%2F",
+        );
+      });
+    });
+
+    it("未登录时点击前往登录同样直接进入统一身份认证入口", async () => {
+      const user = userEvent.setup();
+      renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={notificationClient} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+        false,
+        { status: "anonymous", user: null },
+      );
+
+      await user.click(screen.getByRole("button", { name: "账户菜单" }));
+      await user.click(screen.getByRole("button", { name: /前往登录/ }));
+
+      expect(window.location.replace).toHaveBeenCalledWith(
+        "/api/v1/auth/sso/start?returnTo=%2F",
+      );
+    });
   });
 });

@@ -18,7 +18,8 @@ export async function loginViaUi(
   runtime: E2ERuntime,
   account: E2EAccount = runtime.user,
 ): Promise<void> {
-  await page.goto("/login");
+  // ADR-032：/login 默认走单点登录；E2E 使用本地隐藏入口，避免依赖外部 IdP。
+  await page.goto("/login?local=1");
   await page.getByLabel("登录名").fill(account.loginName);
   await page.getByLabel("密码").fill(account.password);
   await page
@@ -33,7 +34,7 @@ export async function loginAdminViaUi(
   runtime: E2ERuntime,
   admin: AdminFixture,
 ): Promise<void> {
-  await page.goto("/login");
+  await page.goto("/login?local=1");
   await page.getByLabel("登录名").fill(admin.account.loginName);
   await page.getByLabel("密码").fill(admin.account.password);
   await page

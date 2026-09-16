@@ -1104,6 +1104,17 @@ export type SearchQueryRequest = {
   readonly includeVoid?: boolean;
 };
 
+export type SsoCallbackQueryRequest = {
+  readonly code?: string;
+  readonly state?: string;
+  readonly error?: string;
+  readonly error_description?: string;
+};
+
+export type SsoStartQueryRequest = {
+  readonly returnTo?: string;
+};
+
 export type TaskAssigneesResponse = {
   readonly items: readonly ({
     readonly id: number;

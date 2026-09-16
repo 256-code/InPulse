@@ -17,13 +17,15 @@
 
 ## 认证安全流程矩阵
 
-下表的 operationId 集合必须与 [ADR-023](adr/ADR-023.md) allowlist 精确相等，并逐项镜像到 Route Registry 和可执行权限测试。“管理员完整 Session”指管理员密码登录成功后的完整认证态；ADR-031 起登录不再经过 MFA challenge，也不存在管理员受限 Session。即使某一身份列为允许，Origin、Fetch Metadata、CSRF、速率限制及指定前置状态仍可产生拒绝用例，确保每个 operationId 至少有一条允许和一条拒绝测试。
+下表的 operationId 集合必须与 [ADR-023](adr/ADR-023.md) allowlist 精确相等（经 [ADR-032](adr/ADR-032.md) 扩展为 `issueCsrfToken`、`login`、`logout`、`startSsoLogin`、`completeSsoLogin` 五条），并逐项镜像到 Route Registry 和可执行权限测试。“管理员完整 Session”指管理员密码登录成功后的完整认证态；ADR-031 起登录不再经过 MFA challenge，也不存在管理员受限 Session。即使某一身份列为允许，Origin、Fetch Metadata、CSRF、速率限制及指定前置状态仍可产生拒绝用例，确保每个 operationId 至少有一条允许和一条拒绝测试。
 
 | operationId | 匿名/预认证 Session | 已认证普通用户 | 管理员完整 Session | 停用目标用户 | 前置状态与结果 |
 |---|---:|---:|---:|---:|---|
 | `issueCsrfToken` | 允许 | 允许 | 允许 | 允许（按匿名） | Fetch Metadata、同源可读与限流通过；GET 的 Origin/Referer 若存在则精确校验，缺失不单独拒绝；按当前有效 Session 类型签发 Token；停用/无效 Session 先清认证 Cookie，再创建匿名预认证状态，不恢复身份 |
 | `login` | 仅有效 `PREAUTH` + CSRF 允许 | 409 | 409 | 401 | 只消费匿名预认证 Session 与其 CSRF；已有认证 Session 必须先登出/清 Cookie，再签发新预认证 CSRF；管理员密码验证成功后直接签发完整认证 Session 与新 CSRF，不再有 MFA 挑战步骤（[ADR-031](adr/ADR-031.md)） |
 | `logout` | 204 | 204 | 204 | 204 | 有效 Session 时要求其 CSRF 并条件撤销；Session 无效、已撤销或首次响应丢失后的重试仅在同源 Origin/Referer 与 Fetch Metadata 通过时清 Cookie 并返回 204，不执行状态写 |
+| `startSsoLogin` | 允许（302 到授权端点） | 允许（302） | 允许（302） | 允许（按匿名；302） | 每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash，同时下发短期 `__Host-sso-state` Cookie 绑定发起浏览器；`returnTo` 必须是站内相对路径，非法值回落默认路径；SSO 未配置时 302 回 `/login?local=1&sso=disabled`；302 只用于认证导航，本接口不签发本地会话（[ADR-032](adr/ADR-032.md)） |
+| `completeSsoLogin` | 允许（302 回应用页；成功即签发本地会话） | 允许（302，按重新登录处理） | 允许（302） | 拒绝（302 回登录页携带错误码，不恢复身份） | 必须同时匹配 URL 的 state 与 `__Host-sso-state` Cookie，并在同一事务内一次性消费；缺失、过期、重放或并发消费失败、token 交换失败、id_token 验签或 iss/aud/exp/nonce 校验失败、账号同名但邮箱不一致、账号已停用一律 302 回登录页并审计；成功时签发与口令登录同构的本地会话与 CSRF；Casdoor 的 `isAdmin` 等其余 claims 不得用于 InPulse 权限判定（[ADR-032](adr/ADR-032.md)） |
 
 用户修改、管理员用户管理及其他不签发或消费一次性安全材料的写操作不在本表，仍按普通业务命令使用 `idempotencyRequired`；管理员高风险操作只要求当前有效的完整管理员 Session（[ADR-031](adr/ADR-031.md)）。
 

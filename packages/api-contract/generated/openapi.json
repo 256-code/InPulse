@@ -1200,6 +1200,134 @@
         ]
       }
     },
+    "/auth/sso/callback": {
+      "get": {
+        "operationId": "completeSsoLogin",
+        "summary": "校验 state（含发起浏览器 Cookie 绑定）后一次性消费，服务端换取 token 并验签 id_token，按用户映射签发本地会话后 302 回应用；失败一律 302 回登录页携带错误码。",
+        "responses": {
+          "302": {
+            "description": "重定向：浏览器导航到 Location 目标（仅限 ADR-032 认证导航路由）",
+            "headers": {
+              "Location": {
+                "description": "浏览器导航目标：站内相对路径（本地入口或应用页）或 IdP 授权端点",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "none",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "securityFlow",
+          "idempotencyExceptionAdr": "ADR-023",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": {
+            "singleConsumptionOrNaturalIdempotency": "state 在同一事务内按 Hash 条件消费，只有一次 token 交换与一次本地会话签发成功；重复、过期或并发回调一律按失败重定向",
+            "clientRecoveryPath": "重新调用 /api/v1/auth/sso/start 发起新的登录"
+          },
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "auth.sso_login"
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          }
+        ]
+      }
+    },
+    "/auth/sso/start": {
+      "get": {
+        "operationId": "startSsoLogin",
+        "summary": "生成 state、nonce 与 PKCE verifier（只保存 Hash 并绑定发起浏览器 Cookie）后 302 到 Casdoor 授权端点；SSO 未配置时 302 回本地隐藏入口。",
+        "responses": {
+          "302": {
+            "description": "重定向：浏览器导航到 Location 目标（仅限 ADR-032 认证导航路由）",
+            "headers": {
+              "Location": {
+                "description": "浏览器导航目标：站内相对路径（本地入口或应用页）或 IdP 授权端点",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "none",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "securityFlow",
+          "idempotencyExceptionAdr": "ADR-023",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": {
+            "singleConsumptionOrNaturalIdempotency": "每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash；同一 state 只允许一次 token 交换消费（条件更新）",
+            "clientRecoveryPath": "重新调用 /api/v1/auth/sso/start 发起新的登录"
+          },
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "returnTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
+        ]
+      }
+    },
     "/change-records": {
       "get": {
         "operationId": "listRecordFeed",
@@ -19524,6 +19652,43 @@
         "required": [
           "q"
         ],
+        "additionalProperties": false
+      },
+      "SsoCallbackQueryRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "error": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "error_description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "additionalProperties": false
+      },
+      "SsoStartQueryRequest": {
+        "type": "object",
+        "properties": {
+          "returnTo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
         "additionalProperties": false
       },
       "TaskAssigneesResponse": {
