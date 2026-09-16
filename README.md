@@ -136,6 +136,47 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 
 基线冻结的剩余事项只在[仓库开发规则](./AGENTS.md#13-基线冻结剩余事项)维护；实施顺序和验收条件见[技术设计第 14 章](./技术设计v1.2.2.md#14-实施顺序)。
 
+## 本地开发启动
+
+本地开发要求一个已初始化的 PostgreSQL 18 + PGroonga 实例（初始化见[数据库说明](./database/README.md)）。
+仓库提供一键启动脚本，按「检查数据库 -> 构建 API -> 启动 API -> 启动 Vite」的顺序拉起开发环境，
+并在启动后探测统一身份认证跳转；脚本只服务本地开发，不参与 CI 门禁。
+
+```powershell
+node scripts/dev-start.mjs                # 按配置启动，默认启用统一身份认证
+node scripts/dev-start.mjs --skip-build   # 跳过 API 构建（dist 已是最新时）
+node scripts/dev-start.mjs --local-only   # 强制关闭 SSO，按本地口令登录
+```
+
+### 本地启用统一身份认证
+
+[ADR-032](./docs/adr/ADR-032.md) 的统一身份认证默认 fail closed，本地启用步骤：
+
+1. 复制模板 `deploy/.env.dev.example` 为 `deploy/.env.dev.local`（该文件名被 `.gitignore` 忽略，不进入仓库）；
+2. 向 Casdoor 应用负责人索取 `SSO_CLIENT_ID` 与 Client Secret，把 Client Secret 保存到仓库外的本地文件，
+   并在 `SSO_CLIENT_SECRET_FILE` 中填写该文件的绝对路径；
+3. 在 Casdoor 的 `INPulse` 应用中登记本地回调地址 `http://127.0.0.1:5173/api/v1/auth/sso/callback`；
+4. 重新运行 `node scripts/dev-start.mjs`，登录页会整页跳转到统一身份认证。
+
+本地读取 `/run/secrets/` 之外的 Secret 文件时，脚本会同时设置 `NODE_ENV=test` 与
+`SSO_CLIENT_SECRET_TEST_PATH=1`，这是仓库规则允许的本地/集成测试路径；生产只从
+`/run/secrets/sso_client_secret` 读取。配置缺失或非法时按 fail closed 回落
+`/login?local=1&sso=disabled`，管理员应急入口为 `/login?local=1`。
+
+## 部署
+
+稳态拓扑、镜像与发布门禁见[技术设计第 11 章](./技术设计v1.2.2.md#11-部署与运维)，
+升级与回滚步骤见[升级与回滚 Runbook](./docs/runbooks/upgrade-rollback.md)。
+部署默认启用统一身份认证（`deploy/.env.deploy.example` 中 `SSO_ENABLED=1`），上线前必须完成：
+
+- 用正式取值替换 `SSO_ISSUER`、`SSO_CLIENT_ID`、`SSO_REDIRECT_URI` 与全部 `REPLACE_ME_*` 占位；
+- 把 Casdoor 应用签发的 Client Secret 写入 `deploy/secrets/sso_client_secret`
+  （compose 以只读 Secret 挂载到 `/run/secrets/sso_client_secret`，禁止用环境变量代替）；
+- 在 Casdoor 应用中登记 `SSO_REDIRECT_URI` 指向的正式回调地址。
+
+配置非法或缺失时 API 按 fail closed 以本地登录模式启动，隐藏入口 `/login?local=1` 仍可用；
+决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)。
+
 ## 文档导航
 
 - [系统设计文档 V1.0.2](./系统设计文档v1.0.2.md)：范围、技术选型、模块划分与安全机制；
