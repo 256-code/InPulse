@@ -5,6 +5,7 @@ import {
   type InpulseApiClient,
   type PublishedRecord,
 } from "@generated/api";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 /**
@@ -70,21 +71,35 @@ export function AppendLeftoverForm({
       setBusy(false);
     }
   }
+  function close() {
+    setOpen(false);
+    setError(null);
+  }
   return (
-    <div className="record-leftover" aria-label="追加遗留问题">
+    <div className="leftover-append">
       {open ? (
-        <>
-          <label>
-            追加遗留问题
-            <Input.TextArea
-              aria-label="追加遗留问题内容"
-              rows={3}
-              maxLength={10000}
+        <div className="leftover-append-panel">
+          <div className="leftover-append-head">
+            <strong>追加遗留问题</strong>
+            <button
+              type="button"
+              className="leftover-append-close"
+              aria-label="取消追加遗留问题"
               disabled={busy}
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-            />
-          </label>
+              onClick={close}
+            >
+              ×
+            </button>
+          </div>
+          <Input.TextArea
+            aria-label="追加遗留问题内容"
+            rows={3}
+            maxLength={10000}
+            disabled={busy}
+            placeholder="写清问题现象与影响范围，保存后成为新版本的一条遗留问题。"
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+          />
           {!!error && (
             <Alert
               type="error"
@@ -93,40 +108,45 @@ export function AppendLeftoverForm({
                   ? `${error.message} 输入已保留。`
                   : "暂时无法追加，输入已保留，可重试。"
               }
+              action={
+                conflict ? (
+                  <Button size="small" disabled={busy} onClick={onAdded}>
+                    刷新最新版本
+                  </Button>
+                ) : undefined
+              }
             />
           )}
-          <div className="leftover-entry-actions">
-            <Button
-              type="primary"
-              size="small"
-              loading={busy}
-              disabled={!writable || !ready}
-              onClick={() => void submit()}
-            >
-              保存为新版本
-            </Button>
-            <Button
-              size="small"
-              disabled={busy}
-              onClick={() => {
-                setOpen(false);
-                setError(null);
-              }}
-            >
-              取消
-            </Button>
-            {conflict && (
-              <Button size="small" disabled={busy} onClick={onAdded}>
-                刷新最新版本
+          <div className="leftover-append-foot">
+            <span>
+              {content.length}/10000 · 追加会生成新版本，并按修订规则通知相关人。
+            </span>
+            <div className="leftover-append-actions">
+              <Button size="small" disabled={busy} onClick={close}>
+                取消
               </Button>
-            )}
-            <span>追加会生成新版本，并按修订规则通知相关人。</span>
+              <Button
+                type="primary"
+                size="small"
+                loading={busy}
+                disabled={!writable || !ready}
+                onClick={() => void submit()}
+              >
+                保存为新版本
+              </Button>
+            </div>
           </div>
-        </>
+        </div>
       ) : (
-        <Button size="small" disabled={!writable} onClick={() => setOpen(true)}>
+        <button
+          type="button"
+          className="leftover-append-trigger"
+          disabled={!writable}
+          onClick={() => setOpen(true)}
+        >
+          <InpulseIcon name="plus" size={14} />
           追加遗留问题
-        </Button>
+        </button>
       )}
     </div>
   );

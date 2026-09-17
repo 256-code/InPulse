@@ -127,6 +127,11 @@ export function PublishedRecordDetail({
     history.find((v) => v.versionNo === oldVersion) ??
     history[history.length - 1];
   const after = history.find((v) => v.versionNo === newVersion) ?? history[0];
+  // 版本对比只展示有修改的字段：无变化字段两列内容相同，重复渲染只会淹没真正改动。
+  const changedRows =
+    before === undefined || after === undefined
+      ? []
+      : compareRecordVersions(before, after).filter((row) => row.changed);
   if (detail.isPending)
     return (
       <section className="record-expanded" aria-label="正式记录详情">
@@ -240,7 +245,7 @@ export function PublishedRecordDetail({
           ) : (
             <section key={field}>
               <h4>{label}</h4>
-              <RecordMarkdown content={record[field] || "暂无已知遗留问题"} />
+              <RecordMarkdown content={record[field] || "（空）"} />
             </section>
           ),
         )}
@@ -319,7 +324,7 @@ export function PublishedRecordDetail({
             />
           ) : (
             <>
-              <p>选择两个版本，逐项查看当时保存的完整内容。</p>
+              <p>选择两个版本查看差异，只展示有修改的字段。</p>
               <div className="record-version-pickers">
                 <label>
                   较早版本
@@ -352,23 +357,25 @@ export function PublishedRecordDetail({
               </div>
               {before && after && (
                 <div aria-label="版本差异">
-                  {compareRecordVersions(before, after).map((row) => (
-                    <section key={row.field}>
-                      <h5>
-                        {row.label} · {row.changed ? "有修改" : "无变化"}
-                      </h5>
-                      <div className="record-version-columns">
-                        <div>
-                          <strong>v{before.versionNo}</strong>
-                          <RecordMarkdown content={row.before || "（空）"} />
+                  {changedRows.length === 0 ? (
+                    <p>这两个版本的内容完全一致。</p>
+                  ) : (
+                    changedRows.map((row) => (
+                      <section key={row.field}>
+                        <h5>{row.label}</h5>
+                        <div className="record-version-columns">
+                          <div>
+                            <strong>v{before.versionNo}</strong>
+                            <RecordMarkdown content={row.before || "（空）"} />
+                          </div>
+                          <div>
+                            <strong>v{after.versionNo}</strong>
+                            <RecordMarkdown content={row.after || "（空）"} />
+                          </div>
                         </div>
-                        <div>
-                          <strong>v{after.versionNo}</strong>
-                          <RecordMarkdown content={row.after || "（空）"} />
-                        </div>
-                      </div>
-                    </section>
-                  ))}
+                      </section>
+                    ))
+                  )}
                 </div>
               )}
             </>

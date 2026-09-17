@@ -3086,8 +3086,76 @@ a:focus-visible {
   background: white;
   color: #405a72;
 }
-.record-leftover .text-button {
-  margin-top: 12px;
+/* 遗留问题快捷追加：收起态是与列表同宽的虚线添加行，展开态为带标题栏、字数与动作脚注的内联面板。 */
+.leftover-append {
+  margin-top: 10px;
+}
+.leftover-append-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px dashed #c9d7e2;
+  border-radius: 10px;
+  background: #fbfdfe;
+  color: #37566f;
+  font-size: 13px;
+  cursor: pointer;
+}
+.leftover-append-trigger:hover:not(:disabled) {
+  border-color: #9db8cc;
+  background: #f3f8fb;
+}
+.leftover-append-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.leftover-append-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e7edf1;
+  border-radius: 10px;
+  background: #fbfdfe;
+}
+.leftover-append-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.leftover-append-head strong {
+  font-size: 13px;
+  color: #37566f;
+}
+.leftover-append-close {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #7b8fa2;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.leftover-append-close:hover:not(:disabled) {
+  background: #eef4f8;
+  color: #37566f;
+}
+.leftover-append-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.leftover-append-foot > span {
+  font-size: 12px;
+  color: #7b8fa2;
+}
+.leftover-append-actions {
+  display: flex;
+  gap: 8px;
 }
 .completion-flow {
   padding-top: 16px;

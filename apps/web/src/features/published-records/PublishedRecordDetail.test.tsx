@@ -93,12 +93,14 @@ it("loads real version data and permits selecting historical snapshots", async (
   const diff = within(await screen.findByRole("generic", { name: "版本差异" }));
   expect(diff.getByText("初次验证")).toBeVisible();
   expect(diff.getByText("追加并发验证")).toBeVisible();
+  // 无变化字段不再渲染：标题等四项不应出现在差异区。
+  expect(diff.queryByText("迭代标题")).toBeNull();
   const region = screen.getByRole("region", { name: "正式记录详情" });
   expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
   fireEvent.change(within(region).getByLabelText("对照版本"), {
     target: { value: "1" },
   });
-  expect(diff.getAllByText("初次验证")).toHaveLength(2);
+  expect(diff.getByText("这两个版本的内容完全一致。")).toBeVisible();
   expect(api.listChangeRecordVersions).toHaveBeenCalledWith(
     1,
     7,
