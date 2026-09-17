@@ -90,8 +90,11 @@ export function RecordsWorkspace({
     [projects.data],
   );
   /** 跨项目视图下每条记录按自身项目的状态判定可写，避免误用当前所选项目。 */
-  const canWrite = (recordProjectId: number) =>
-    projectStatus.get(recordProjectId) === "ACTIVE";
+  const canWrite = (recordProjectId: number) => {
+    // ADR-035：项目四态下只有已归档只读；列表里没有该项目时按只读处理。
+    const status = projectStatus.get(recordProjectId);
+    return status !== undefined && status !== "ARCHIVED";
+  };
   const reportCanCreate = useCallback((next: boolean) => {
     setCanCreate((prev) => (prev === next ? prev : next));
   }, []);

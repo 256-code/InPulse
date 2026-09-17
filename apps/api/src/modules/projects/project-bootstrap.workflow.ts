@@ -153,7 +153,7 @@ export class ProjectBootstrapWorkflow {
       summary: project.description,
       rawText: `${project.code} ${project.name} ${project.description}`,
       visibilityScope: "MEMBER",
-      sourceStatus: "ACTIVE",
+      sourceStatus: "NOT_STARTED",
       sourceRowVersion: 1,
     });
 
@@ -168,7 +168,7 @@ export class ProjectBootstrapWorkflow {
       summary: `创建了项目 ${project.name}`,
       metadata: { code: project.code },
       visibilityScope: "MEMBER",
-      sourceStatus: "ACTIVE",
+      sourceStatus: "NOT_STARTED",
       sourceRowVersion: 1,
       occurredAt,
     });
@@ -193,7 +193,7 @@ export class ProjectBootstrapWorkflow {
         code: project.code,
         name: project.name,
         description: project.description,
-        status: "ACTIVE",
+        status: "NOT_STARTED",
         rowVersion: project.rowVersion,
         createdBy: project.createdBy,
         createdAt: project.createdAt,

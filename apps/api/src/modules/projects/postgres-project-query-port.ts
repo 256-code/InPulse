@@ -1,9 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { ProjectItem, ProjectListItem } from "@inpulse/api-contract";
+import type {
+  ProjectItem,
+  ProjectListItem,
+  ProjectStatus,
+} from "@inpulse/api-contract";
 import type { DatabaseClient } from "@inpulse/database/client";
 import { DATABASE_CLIENT } from "../../database/database.constants.js";
 import {
-  lifecycleRankExpression,
+  projectLifecycleRankExpression,
   projectStatColumns,
 } from "../../stats/card-stat-columns.js";
 import { ProjectQueryPort } from "./project-query.port.js";
@@ -13,11 +17,12 @@ interface ProjectListItemRow {
   readonly code: string;
   readonly name: string;
   readonly description: string;
-  readonly status: string;
+  readonly status: ProjectStatus;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly firstTaskCompletedAt: Date | null;
   readonly memberCount: number;
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
@@ -36,11 +41,12 @@ interface ProjectRow {
   readonly code: string;
   readonly name: string;
   readonly description: string;
-  readonly status: string;
+  readonly status: ProjectStatus;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly firstTaskCompletedAt: Date | null;
   readonly memberCount: number;
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
@@ -48,7 +54,10 @@ interface ProjectRow {
   readonly completedTaskCount: number;
 }
 
-/** 项目只读 PostgreSQL 适配器；不计入事务，在服务端授权范围之后执行。 */
+/**
+ * 项目只读 PostgreSQL 适配器；不计入事务，在服务端授权范围之后执行。
+ * ADR-035：状态读存储四态，粘性标记 first_task_completed_at 只下发给前端一个布尔位。
+ */
 @Injectable()
 export class PostgresProjectQueryPort extends ProjectQueryPort {
   constructor(
@@ -75,6 +84,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
              p.created_by AS "createdBy",
              p.created_at AS "createdAt",
              p.updated_at AS "updatedAt",
+             p.first_task_completed_at AS "firstTaskCompletedAt",
              (
                SELECT COUNT(*)::integer
                  FROM app.project_members m
@@ -98,7 +108,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
               AND r.status = 'PENDING'
         LEFT JOIN app.users requester ON requester.id = r.requested_by
        WHERE p.id = ANY(${projectIds}::integer[])
-       ORDER BY ${lifecycleRankExpression(this.client.sql, "project", "p")}, p.id ASC
+       ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.id ASC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
   }
@@ -131,6 +141,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
              p.created_by AS "createdBy",
              p.created_at AS "createdAt",
              p.updated_at AS "updatedAt",
+             p.first_task_completed_at AS "firstTaskCompletedAt",
              (
                SELECT COUNT(*)::integer
                  FROM app.project_members m
@@ -172,7 +183,8 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
       code: row.code,
       name: row.name,
       description: row.description,
-      status: row.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE",
+      status: row.status,
+      hasCompletedTask: row.firstTaskCompletedAt !== null,
       rowVersion: row.rowVersion,
       createdBy: row.createdBy,
       createdAt: new Date(row.createdAt).toISOString(),

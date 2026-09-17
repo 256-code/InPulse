@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { projectStatusSchema } from "./projects.zod.js";
+
 const id = z.number().int().positive().max(2147483647);
 
 /** R-3 任务优先级；与 app.tasks.tasks_priority_check 的取值一致。 */
@@ -223,12 +225,15 @@ export type ProjectOverviewQueryRequest = z.infer<
   typeof projectOverviewQueryRequestSchema
 >;
 
-/** 项目概览的项目头；返回原始枚举，展示文案（「正常」）由前端映射（Q-15）。 */
+/**
+ * 项目概览的项目头；返回项目四态原始枚举，展示文案（未开始 / 进行中 / 维护中 / 已归档）
+ * 由前端映射（Q-15）。
+ */
 export const projectOverviewProjectSchema = z
   .object({
     projectId: id,
     name: z.string().min(1).max(200),
-    status: z.enum(["ACTIVE", "ARCHIVED"]),
+    status: projectStatusSchema,
   })
   .strict()
   .meta({ id: "ProjectOverviewProject" });

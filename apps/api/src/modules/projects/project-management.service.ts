@@ -17,6 +17,8 @@ import {
 } from "./project-access.port.js";
 import { ProjectArchiveRequestPort } from "./project-archive-request.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
+import { ProjectRoleGateService } from "./project-role-gate.service.js";
+import { ProjectStartNotifier } from "./project-start.notifier.js";
 import {
   ProjectsWritePort,
   type ProjectChangeRecord,
@@ -25,6 +27,17 @@ import {
 const PROJECT_UPDATE_ACTIVITY = "PROJECT_UPDATED";
 const PROJECT_ARCHIVED_ACTIVITY = "PROJECT_ARCHIVED";
 const PROJECT_RESTORED_ACTIVITY = "PROJECT_RESTORED";
+const PROJECT_STATUS_CHANGED_ACTIVITY = "PROJECT_STATUS_CHANGED";
+
+/** F-06.3 状态接口可写入的目标态：归档必须走归档流程，不在其中。 */
+export type ProjectLifecycleTarget = "NOT_STARTED" | "ACTIVE" | "MAINTENANCE";
+
+const PROJECT_STATUS_LABELS: Readonly<Record<string, string>> = {
+  NOT_STARTED: "未开始",
+  ACTIVE: "进行中",
+  MAINTENANCE: "维护中",
+  ARCHIVED: "已归档",
+};
 
 export class ProjectManagementError extends Error {
   constructor(
@@ -69,6 +82,10 @@ export class ProjectManagementService {
     private readonly members: ProjectMembersQueryPort,
     @Inject(ProjectArchiveRequestPort)
     private readonly archiveRequests: ProjectArchiveRequestPort,
+    @Inject(ProjectRoleGateService)
+    private readonly roles: ProjectRoleGateService,
+    @Inject(ProjectStartNotifier)
+    private readonly startNotifier: ProjectStartNotifier,
   ) {}
 
   /** 写前授权：实时成员关系与用户状态由 Port 读取，归档项目拒绝写入。 */
@@ -237,6 +254,155 @@ export class ProjectManagementService {
     return this.changeStatus(tx, { ...input, target: "ACTIVE" });
   }
 
+  /**
+   * F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始、
+   * 进行中、维护中之间手动切换。归档只能走归档流程，因此不是合法目标。
+   *
+   * 两条硬约束在服务端拦截，前端置灰只是提示：
+   * - 未开始与维护中之间禁止直接互改，必须先经过进行中；
+   * - 项目内出现过已完成任务后不可回退未开始（粘性标记永不回落）。
+   *
+   * 只有「未开始 → 进行中」通知全体活跃成员；维护中不通知，避免反复切换刷屏。
+   * 状态、审计 `project.status.change`、活动与搜索投影在同一事务提交。
+   */
+  async changeProjectStatus(
+    tx: TransactionContext,
+    input: {
+      readonly actorId: number;
+      readonly projectId: number;
+      readonly version: number;
+      readonly target: ProjectLifecycleTarget;
+      readonly requestId: string;
+    },
+  ): Promise<ProjectDetailResponse> {
+    const role = await this.roles.manageRole(
+      tx,
+      input.actorId,
+      input.projectId,
+    );
+    if (role === "NOT_MEMBER") throw missing();
+    if (role === "MEMBER") {
+      throw new ProjectManagementError(
+        403,
+        "PROJECT_STATUS_FORBIDDEN",
+        "只有本项目组长、项目管理员或系统管理员可以变更项目状态",
+      );
+    }
+    const current = await this.projects.findProjectForChange(
+      tx,
+      { projectId: input.projectId },
+      true,
+    );
+    if (current === undefined) throw missing();
+    if (current.status === "ARCHIVED") {
+      throw new ProjectManagementError(
+        409,
+        "PROJECT_ARCHIVED",
+        "项目已归档，项目只读",
+      );
+    }
+    if (current.rowVersion !== input.version) throw versionConflict();
+    if (current.status === input.target) {
+      throw new ProjectManagementError(
+        409,
+        "PROJECT_STATE_CONFLICT",
+        "项目已处于目标状态",
+      );
+    }
+    if (input.target === "NOT_STARTED") {
+      if (current.firstTaskCompletedAt !== null) {
+        throw new ProjectManagementError(
+          409,
+          "PROJECT_STATUS_NOT_STARTED_LOCKED",
+          "项目已有任务完成，不能回退为未开始",
+        );
+      }
+      if (current.status === "MAINTENANCE") {
+        throw new ProjectManagementError(
+          409,
+          "PROJECT_STATUS_LEVEL_SKIP",
+          "维护中的项目不能直接切换为未开始，请先切换为进行中",
+        );
+      }
+    }
+    if (input.target === "MAINTENANCE" && current.status === "NOT_STARTED") {
+      throw new ProjectManagementError(
+        409,
+        "PROJECT_STATUS_LEVEL_SKIP",
+        "未开始的项目不能直接切换为维护中，请先切换为进行中",
+      );
+    }
+    const updated = await this.projects.updateProjectStatus(tx, {
+      projectId: input.projectId,
+      expectedRowVersion: input.version,
+      status: input.target,
+    });
+    if (updated === undefined) throw versionConflict();
+    const occurredAt = new Date();
+    const event = await this.audit.append(tx, {
+      projectId: updated.projectId,
+      actorType: "USER",
+      actorId: input.actorId,
+      action: "project.status.change",
+      targetType: "PROJECT",
+      targetId: String(updated.projectId),
+      eventPayload: {
+        before: { status: current.status, rowVersion: current.rowVersion },
+        after: { status: updated.status, rowVersion: updated.rowVersion },
+      },
+      requestId: input.requestId,
+      occurredAt,
+    });
+    await this.activity.append(tx, {
+      projectId: updated.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "PROJECT",
+      sourceEntityId: updated.projectId,
+      activityType: PROJECT_STATUS_CHANGED_ACTIVITY,
+      actorId: input.actorId,
+      summary: `项目状态：${PROJECT_STATUS_LABELS[current.status] ?? current.status} → ${PROJECT_STATUS_LABELS[updated.status] ?? updated.status}（${updated.name}）`,
+      metadata: {
+        code: updated.code,
+        beforeStatus: current.status,
+        afterStatus: updated.status,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: updated.status,
+      sourceRowVersion: updated.rowVersion,
+      occurredAt,
+    });
+    await this.search.upsert(tx, {
+      projectId: updated.projectId,
+      entityType: "PROJECT",
+      entityId: updated.projectId,
+      title: updated.name,
+      summary: updated.description.slice(0, 5000),
+      rawText: `${updated.code} ${updated.name} ${updated.description}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: updated.status,
+      sourceRowVersion: updated.rowVersion,
+    });
+    if (current.status === "NOT_STARTED" && updated.status === "ACTIVE") {
+      await this.startNotifier.notify(tx, {
+        projectId: updated.projectId,
+        code: updated.code,
+        name: updated.name,
+        chainId: event.chainId,
+        sequenceNo: event.sequenceNo,
+        occurredAt,
+      });
+    }
+    return {
+      project: this.toItem(updated),
+      currentUserRole:
+        (await this.members.findActiveRole(tx, {
+          projectId: updated.projectId,
+          userId: input.actorId,
+        })) ?? null,
+    };
+  }
+
   /** 归档前未完成任务提醒；只读，归档项目也可查看。 */
   async archivePreview(
     tx: TransactionContext,
@@ -275,8 +441,13 @@ export class ProjectManagementService {
     );
     if (current === undefined) throw missing();
     if (current.rowVersion !== input.version) throw versionConflict();
-    const expected = input.target === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
-    if (current.status !== expected) {
+    // ADR-035：归档允许从任一未归档状态进入（未开始、进行中、维护中都可以直接归档）；
+    // 恢复一律回到进行中，不保留归档前的状态。
+    const stateConflict =
+      input.target === "ARCHIVED"
+        ? current.status === "ARCHIVED"
+        : current.status !== "ARCHIVED";
+    if (stateConflict) {
       throw new ProjectManagementError(
         409,
         "PROJECT_STATE_CONFLICT",
@@ -367,6 +538,7 @@ export class ProjectManagementService {
       name: record.name,
       description: record.description,
       status: record.status,
+      hasCompletedTask: record.firstTaskCompletedAt !== null,
       rowVersion: record.rowVersion,
       createdBy: record.createdBy,
       createdAt: record.createdAt,

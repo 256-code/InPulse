@@ -979,7 +979,7 @@ describe("GET /api/v1/projects/{projectId}/overview（R-2 项目概览）", () =
     expect(overview.project).toEqual({
       name: "Project " + project!.code,
       projectId: project!.projectId,
-      status: "ACTIVE",
+      status: "NOT_STARTED",
     });
     expect(overview.memberCount).toBe(2);
     // 活跃模块 / 活跃功能排除已归档行；未完成任务排除历史来源分支、

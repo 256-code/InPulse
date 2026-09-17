@@ -24,8 +24,8 @@ import { canManageProjectResources } from "./project-query";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
-  resourceLifecycleLabel,
-  resourceLifecycleTone,
+  projectLifecycleLabel,
+  projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 
 const hierarchyNotes = [
@@ -74,6 +74,8 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectItem | null>(null);
+  const [editingRole, setEditingRole] =
+    useState<ProjectListItem["currentUserRole"]>(null);
   const [archiving, setArchiving] = useState<ProjectItem | null>(null);
   const [restoring, setRestoring] = useState<ProjectItem | null>(null);
   const [managementSuccess, setManagementSuccess] = useState<string | null>(
@@ -236,16 +238,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                 <span className="card-top">
                   <ProjectLogo code={project.code} />
                   <CalmBadge
-                    tone={resourceLifecycleTone(
-                      project.status,
-                      project.stats.completedTaskCount,
-                      "blue",
-                    )}
+                    tone={projectLifecycleTone(project.status, "blue")}
                   >
-                    {resourceLifecycleLabel(
-                      project.status,
-                      project.stats.completedTaskCount,
-                    )}
+                    {projectLifecycleLabel(project.status)}
                   </CalmBadge>
                 </span>
                 <h2>{project.name}</h2>
@@ -278,12 +273,15 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                   <Button
                     className="text-button"
                     data-testid={`edit-project-${project.id}`}
-                    onClick={() => setEditing(project)}
+                    onClick={() => {
+                      setEditingRole(project.currentUserRole);
+                      setEditing(project);
+                    }}
                   >
                     编辑
                   </Button>
                   {isAdmin ? (
-                    project.status === "ACTIVE" ? (
+                    project.status !== "ARCHIVED" ? (
                       <Button
                         className="danger-button"
                         data-testid={`archive-project-${project.id}`}
@@ -311,7 +309,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     </span>
                   ) : null}
                   {isAdmin &&
-                  project.status === "ACTIVE" &&
+                  project.status !== "ARCHIVED" &&
                   project.pendingArchiveRequest ? (
                     <>
                       <Button
@@ -335,7 +333,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     </>
                   ) : null}
                   {!isAdmin &&
-                  project.status === "ACTIVE" &&
+                  project.status !== "ARCHIVED" &&
                   canManageProjectResources(
                     isAdmin,
                     project.currentUserRole,
@@ -399,11 +397,22 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           open
           project={editing}
           client={client}
-          onClose={() => setEditing(null)}
+          canChangeStatus={canManageProjectResources(isAdmin, editingRole)}
+          onClose={() => {
+            setEditing(null);
+            setEditingRole(null);
+          }}
           onUpdated={(updated) => {
             setEditing(null);
+            setEditingRole(null);
             setManagementSuccess(
               `项目「${updated.name}」已更新，当前版本 ${updated.rowVersion}。`,
+            );
+          }}
+          onStatusChanged={(updated) => {
+            setEditing(updated);
+            setManagementSuccess(
+              `项目「${updated.name}」状态已改为${projectLifecycleLabel(updated.status)}，当前版本 ${updated.rowVersion}。`,
             );
           }}
         />
@@ -430,7 +439,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           onClose={() => setRestoring(null)}
           onRestored={(updated) => {
             setRestoring(null);
-            setManagementSuccess(`项目「${updated.name}」已恢复为正常状态。`);
+            setManagementSuccess(`项目「${updated.name}」已恢复为进行中状态。`);
           }}
         />
       ) : null}
@@ -463,7 +472,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           }}
           onRejected={() => {
             setReviewing(null);
-            setManagementSuccess("已驳回该项目的归档申请，项目保持正常状态。");
+            setManagementSuccess(
+              "已驳回该项目的归档申请，项目保持进行中状态。",
+            );
           }}
         />
       ) : null}

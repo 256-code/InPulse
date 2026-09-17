@@ -9,8 +9,8 @@ import {
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
-  resourceLifecycleLabel,
-  resourceLifecycleTone,
+  projectLifecycleLabel,
+  projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import { useProjectDetail } from "./project-query";
 import { projectMemberErrorMessage } from "./project-member-query";
@@ -60,16 +60,9 @@ export function ActiveProjectMembers({
         {projectDetail ? (
           <div className="catalog-actions">
             <CalmBadge
-              tone={resourceLifecycleTone(
-                projectDetail.status,
-                projectDetail.stats.completedTaskCount,
-                "blue",
-              )}
+              tone={projectLifecycleTone(projectDetail.status, "blue")}
             >
-              {resourceLifecycleLabel(
-                projectDetail.status,
-                projectDetail.stats.completedTaskCount,
-              )}
+              {projectLifecycleLabel(projectDetail.status)}
             </CalmBadge>
           </div>
         ) : null}
@@ -114,12 +107,7 @@ export function ActiveProjectMembers({
                 <code>{projectDetail.code}</code>
               </dd>
               <dt>状态</dt>
-              <dd>
-                {resourceLifecycleLabel(
-                  projectDetail.status,
-                  projectDetail.stats.completedTaskCount,
-                )}
-              </dd>
+              <dd>{projectLifecycleLabel(projectDetail.status)}</dd>
               <dt>创建人</dt>
               <dd>{creatorName ?? "—"}（仅溯源，不授予额外权限）</dd>
               <dt>创建时间</dt>

@@ -587,6 +587,27 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "changeProjectStatus",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-035：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），未归档项目、CSRF、Idempotency-Key 与 If-Match 必填；普通成员 403，未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；未归档项目、CSRF、Idempotency-Key 与 If-Match 必填，两条硬约束同样返回 409",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
     operationId: "getProjectArchivePreview",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

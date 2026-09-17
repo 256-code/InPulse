@@ -10,8 +10,8 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 import {
-  resourceLifecycleLabel,
-  resourceLifecycleTone,
+  projectLifecycleLabel,
+  projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
@@ -208,17 +208,8 @@ export const ProjectOverviewPageView: React.FC<
         <div className="project-detail-actions">
           <ProjectRepositoryLink projectId={projectId} client={client} />
           {project === null ? null : (
-            <CalmBadge
-              tone={resourceLifecycleTone(
-                project.status,
-                project.stats.completedTaskCount,
-                "blue",
-              )}
-            >
-              {resourceLifecycleLabel(
-                project.status,
-                project.stats.completedTaskCount,
-              )}
+            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+              {projectLifecycleLabel(project.status)}
             </CalmBadge>
           )}
           {onOpenModules === undefined ? null : (

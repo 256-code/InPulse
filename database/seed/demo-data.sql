@@ -33,8 +33,8 @@ COPY app.users (id, login_name, name, email, avatar_url, password_hash, is_admin
 -- Data for Name: projects; Type: TABLE DATA; Schema: app
 --
 
-COPY app.projects (id, code, name, description, created_by, status, row_version, created_at, updated_at, archived_at) FROM stdin;
-1	INPULSE	InPulse 研发交付平台	模块化单体（React SPA + NestJS API + PostgreSQL）的研发交付平台：项目 / 模块 / 功能 / 任务 / 迭代记录 / 搜索 / 动态与通知 / 审计哈希链。所有能力按纵切片交付，每个切片配真库集成测试与 Playwright 关键路径。	1	ACTIVE	1	2026-09-04 01:12:00+00	2026-09-04 01:12:00+00	\N
+COPY app.projects (id, code, name, description, created_by, status, first_task_completed_at, row_version, created_at, updated_at, archived_at) FROM stdin;
+1	INPULSE	InPulse 研发交付平台	模块化单体（React SPA + NestJS API + PostgreSQL）的研发交付平台：项目 / 模块 / 功能 / 任务 / 迭代记录 / 搜索 / 动态与通知 / 审计哈希链。所有能力按纵切片交付，每个切片配真库集成测试与 Playwright 关键路径。	1	ACTIVE	2026-09-07 08:14:53+00	1	2026-09-04 01:12:00+00	2026-09-04 01:12:00+00	\N
 \.
 
 --

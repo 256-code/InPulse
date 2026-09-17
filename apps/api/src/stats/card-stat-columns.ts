@@ -8,7 +8,8 @@ import type { ISql } from "postgres";
  *   并排除仍挂在活跃聚合组下的历史来源分支（合并后不再计入待办，
  *   与任务查询的 effectiveOnly 一致）。
  * - `completedTaskCount`：同一「有效任务」口径下 `work_status = 'DONE'` 的任务数；
- *   项目卡与模块卡用它判定「未开始」标签（作用域内没有已完成任务即未开始）。
+ *   模块卡与功能卡用它判定「未开始」标签（作用域内没有已完成任务即未开始），
+ *   项目标签自 ADR-035 起改读存储状态，不再由该计数推导。
  * - `activeModuleCount` / `activeFeatureCount`：行自身 `status = 'ACTIVE'`。
  * - `recordCount`：只计 `status = 'PUBLISHED'`，不 join 影响功能
  *   （与 ChangeRecordReadPort 的计数口径一致）。
@@ -20,6 +21,13 @@ export type CardRowAlias = "p" | "u" | "m" | "f";
 
 /** 统计「哪一层的待办任务」：项目卡按项目、模块卡按模块、功能卡按功能。 */
 export type TaskScope = "project" | "module" | "feature";
+
+/**
+ * 推导式生命周期排序键适用的作用域：模块与功能仍是「作用域内有没有已完成任务」
+ * 推导出来的未开始 / 进行中；项目自 ADR-035 起改为读存储状态，走下面的
+ * `projectLifecycleRankExpression`。
+ */
+export type DerivedLifecycleScope = Exclude<TaskScope, "project">;
 
 /** 外层行主键：走 postgres.js 的标识符转义，不能改写为参数占位符。 */
 const rowId = (sql: ISql, table: CardRowAlias) => sql(`${table}.id`);
@@ -90,14 +98,29 @@ const completedTaskCountColumn = (
          ) AS "completedTaskCount"`;
 
 /**
- * 生命周期档位排序键：0 = 正常（`ACTIVE` 且已有完成任务）、1 = 未开始
- * （`ACTIVE` 且尚无完成任务）、2 = 已归档。前端
+ * 项目生命周期排序键（ADR-035）：直接读存储状态，四态各有固定档位——
+ * 0 = 进行中、1 = 未开始、2 = 维护中、3 = 已归档。
+ * 前端 `apps/web/src/features/common/resource-lifecycle.ts` 的
+ * `projectLifecycleKind` 按同一顺序渲染标签，两处必须一起修改。
+ */
+export function projectLifecycleRankExpression(sql: ISql, table: "p" | "u") {
+  return sql`CASE ${sql(`${table}.status`)}
+             WHEN 'ACTIVE' THEN 0
+             WHEN 'NOT_STARTED' THEN 1
+             WHEN 'MAINTENANCE' THEN 2
+             ELSE 3
+           END`;
+}
+
+/**
+ * 模块与功能的推导式生命周期排序键：0 = 进行中（作用域内已有完成任务）、
+ * 1 = 未开始（作用域内尚无完成任务）、2 = 已归档。前端
  * `apps/web/src/features/common/resource-lifecycle.ts` 按同一规则渲染标签，
  * 两处必须一起修改。
  */
 export function lifecycleRankExpression(
   sql: ISql,
-  scope: TaskScope,
+  scope: DerivedLifecycleScope,
   table: CardRowAlias,
 ) {
   return sql`CASE

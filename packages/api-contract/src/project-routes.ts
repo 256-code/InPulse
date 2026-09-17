@@ -22,6 +22,7 @@ const projectDetailFields = [
   "project.name",
   "project.description",
   "project.status",
+  "project.hasCompletedTask",
   "project.rowVersion",
   "project.createdBy",
   "project.createdAt",
@@ -118,7 +119,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
     idempotencyExceptionAdr: "none",
     // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
     // 2026-09-16：项目统计新增 completedTaskCount，重放安全字段变化，旧 Key 409。
-    idempotencyContractVersion: "1.3.0",
+    // 2026-09-17：项目四态改造后 ProjectItem 新增 hasCompletedTask，重放安全字段变化，旧 Key 409。
+    idempotencyContractVersion: "1.4.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,
@@ -135,6 +137,48 @@ export const projectRoutes: readonly RouteDefinition[] = [
       retry: "none; project FOR SHARE then FOR UPDATE, expected row_version",
     },
     auditAction: "project.update",
+  },
+  {
+    method: "PATCH",
+    path: "/projects/{projectId}/status",
+    operationId: "changeProjectStatus",
+    summary:
+      "F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
+    request: {
+      path: "ProjectPath",
+      query: "none",
+      headers: "ProjectVersionHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "ProjectStatusChangeRequest",
+          },
+        ],
+      },
+    },
+    responses: { "200": json("ProjectDetailResponse"), ...errors },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: ["If-Match"],
+    idempotencyReplayPolicy: replayPolicy,
+    replayAuthorizationPolicy: replayAuthorization,
+    securityFlowPolicy: "none",
+    versionPolicy: {
+      apiVersion: "v1",
+      schemaVersion: "1.0.0",
+      ifMatch: "required",
+    },
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project"],
+      retry: "none; project FOR UPDATE, expected row_version",
+    },
+    auditAction: "project.status.change",
   },
   {
     method: "GET",
@@ -197,7 +241,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
         idempotencyExceptionAdr: "none",
         // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
         // 2026-09-16：项目统计新增 completedTaskCount，重放安全字段变化，旧 Key 409。
-        idempotencyContractVersion: "1.3.0",
+        // 2026-09-17：项目四态改造后 ProjectItem 新增 hasCompletedTask，重放安全字段变化，旧 Key 409。
+        idempotencyContractVersion: "1.4.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: ["If-Match"],
         idempotencyReplayPolicy: replayPolicy,
@@ -276,7 +321,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    // 2026-09-17：项目四态改造后 ProjectItem 新增 hasCompletedTask，重放安全字段变化，旧 Key 409。
+    idempotencyContractVersion: "1.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,

@@ -162,6 +162,7 @@ function projectFixture(id: number, name: string): ProjectItem {
     name,
     description: "项目描述",
     status: "ACTIVE",
+    hasCompletedTask: true,
     rowVersion: 1,
     createdBy: 5,
     createdAt: "2026-09-09T00:00:00.000Z",

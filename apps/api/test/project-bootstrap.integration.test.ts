@@ -95,7 +95,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
       created_by: number;
     }[];
     expect(projects).toHaveLength(1);
-    expect(projects[0]!.status).toBe("ACTIVE");
+    expect(projects[0]!.status).toBe("NOT_STARTED");
     expect(projects[0]!.created_by).toBe(creatorId);
 
     const members = (await client!.sql`

@@ -160,8 +160,13 @@ export function RecordDraftsView({
     enabled: projectId > 0 && recordId > 0,
     retry: false,
   });
+  // ADR-035：项目四态下只有已归档只读；列表里还没有该项目时按只读处理。
+  const projectStatus = projects.data?.items.find(
+    (p) => p.id === projectId,
+  )?.status;
   const writable =
-    projects.data?.items.find((p) => p.id === projectId)?.status === "ACTIVE" &&
+    projectStatus !== undefined &&
+    projectStatus !== "ARCHIVED" &&
     (!taskId || sourceQuery.data?.source.lifecycleStatus === "ACTIVE");
   const canCreate = !!writable && (taskId === 0 || !!sourceQuery.data?.source);
   useEffect(() => {

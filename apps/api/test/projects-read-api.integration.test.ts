@@ -191,7 +191,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       (item) => item.id === memberProject.projectId,
     );
     expect(memberProjectItem).toMatchObject({
-      status: "ACTIVE",
+      status: "NOT_STARTED",
       memberCount: 2,
     });
 
@@ -469,10 +469,11 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     ).toBe(2);
   });
 
-  test("列表按生命周期档位排序：正常在最前、未开始其次、已归档最后", async () => {
+  test("列表按生命周期档位排序：进行中、未开始、维护中、已归档", async () => {
     const owner = await actor();
-    const normal = await createProject(client.sql, owner.userId);
+    const active = await createProject(client.sql, owner.userId);
     const notStarted = await createProject(client.sql, owner.userId);
+    const maintenance = await createProject(client.sql, owner.userId);
     const archived = await createProject(client.sql, owner.userId);
 
     await client.sql`
@@ -482,10 +483,10 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
           completion_note, completed_at, assignee_id, creator_id
         )
         VALUES (
-          ${normal.projectId},
-          ${normal.moduleId},
+          ${active.projectId},
+          ${active.moduleId},
           'MODULE',
-          ${`${normal.code}-T-1`},
+          ${`${active.code}-T-1`},
           '已完成任务',
           'DONE',
           '已完成',
@@ -502,6 +503,20 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       SELECT id, project_id, NULL, 'DONE', now(), '已完成', ${owner.userId}
         FROM created
     `;
+    // ADR-035：任务完成才让项目升级为进行中；夹具直接写库，这里手动补状态与粘性标记。
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'ACTIVE',
+             first_task_completed_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${active.projectId}
+    `;
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'MAINTENANCE',
+             row_version = row_version + 1
+       WHERE id = ${maintenance.projectId}
+    `;
     await client.sql`
       UPDATE app.projects
          SET status = 'ARCHIVED',
@@ -514,12 +529,13 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       await (await list(owner.cookie)).json(),
     ).items;
     expect(items.map((item) => item.id)).toEqual([
-      normal.projectId,
+      active.projectId,
       notStarted.projectId,
+      maintenance.projectId,
       archived.projectId,
     ]);
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
-      1, 0, 0,
+      1, 0, 0, 0,
     ]);
   });
 });

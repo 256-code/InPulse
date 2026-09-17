@@ -30,6 +30,7 @@ const project: ProjectItem = {
   name: "商城系统",
   description: "商城项目描述",
   status: "ACTIVE",
+  hasCompletedTask: false,
   rowVersion: 3,
   createdBy: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
@@ -153,6 +154,164 @@ describe("EditProjectModal", () => {
       ),
     ).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("组长或项目管理员可切换状态：走 If-Match 与幂等键，成功后不关闭弹窗", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const changeProjectStatus = vi.fn().mockResolvedValue({
+      project: { ...project, status: "MAINTENANCE", rowVersion: 4 },
+    });
+    const client = {
+      issueCsrfToken,
+      changeProjectStatus,
+    } as unknown as InpulseApiClient;
+    const onStatusChanged = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={project}
+        client={client}
+        canChangeStatus
+        onUpdated={vi.fn()}
+        onStatusChanged={onStatusChanged}
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    const saveStatus = within(dialog).getByRole("button", {
+      name: "保存状态",
+    });
+    expect(saveStatus).toBeDisabled();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "维护中" }),
+    );
+    expect(saveStatus).not.toBeDisabled();
+    await userEvent.click(saveStatus);
+
+    await waitFor(() => expect(changeProjectStatus).toHaveBeenCalledTimes(1));
+    expect(changeProjectStatus).toHaveBeenCalledWith(
+      7,
+      { status: "MAINTENANCE" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-1",
+          "If-Match": '"3"',
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+    expect(onStatusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "MAINTENANCE", rowVersion: 4 }),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("已有完成任务时不能再退回「未开始」，越级切换「维护中」也置灰", async () => {
+    const client = {
+      issueCsrfToken: vi.fn(),
+      changeProjectStatus: vi.fn(),
+    } as unknown as InpulseApiClient;
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={{ ...project, hasCompletedTask: true }}
+        client={client}
+        canChangeStatus
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    expect(
+      within(dialog).getByRole("button", { name: "未开始" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByRole("button", { name: "维护中" }),
+    ).not.toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "未开始" }).title).toBe(
+      "项目里已经出现过已完成任务，不能再退回未开始",
+    );
+  });
+
+  it("未开始的项目不能直接切到维护中", async () => {
+    const client = {
+      issueCsrfToken: vi.fn(),
+      changeProjectStatus: vi.fn(),
+    } as unknown as InpulseApiClient;
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={{ ...project, status: "NOT_STARTED" }}
+        client={client}
+        canChangeStatus
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    expect(within(dialog).getByRole("button", { name: "维护中" }).title).toBe(
+      "未开始与维护中不能直接互相切换，请先切到进行中",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "进行中" }),
+    ).not.toBeDisabled();
+  });
+
+  it("维护中的项目不能直接切回未开始", async () => {
+    const client = {
+      issueCsrfToken: vi.fn(),
+      changeProjectStatus: vi.fn(),
+    } as unknown as InpulseApiClient;
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={{ ...project, status: "MAINTENANCE" }}
+        client={client}
+        canChangeStatus
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    expect(
+      within(dialog).getByRole("button", { name: "未开始" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByRole("button", { name: "进行中" }),
+    ).not.toBeDisabled();
+  });
+
+  it("无状态变更权限时只展示标签，保存状态按钮不可用", async () => {
+    const client = {
+      issueCsrfToken: vi.fn(),
+      changeProjectStatus: vi.fn(),
+    } as unknown as InpulseApiClient;
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={project}
+        client={client}
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    expect(within(dialog).queryByRole("button", { name: "维护中" })).toBeNull();
+    expect(within(dialog).getByText("进行中")).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: "保存状态" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByText(
+        "只有系统管理员、项目组长或项目管理员可以更改项目状态。",
+      ),
+    ).toBeTruthy();
   });
 });
 

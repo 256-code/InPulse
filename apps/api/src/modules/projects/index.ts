@@ -8,6 +8,7 @@ export {
   ProjectMembersQueryPort,
   type AssignableProjectMember,
 } from "./project-members-query.port.js";
+export { ProjectStartNotifier } from "./project-start.notifier.js";
 export {
   ProjectRoleGateService,
   type ProjectManageRole,

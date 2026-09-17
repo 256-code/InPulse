@@ -2967,7 +2967,7 @@
     "/projects": {
       "get": {
         "operationId": "listProjects",
-        "summary": "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；按生命周期档位（正常、未开始、已归档）分组，组内再按项目 ID 升序；每个条目附带当前用户在本项目的成员角色与待审归档申请摘要（ADR-034），供列表页决定申请与审核入口；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
+        "summary": "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；按生命周期档位（进行中、未开始、已归档）分组，组内再按项目 ID 升序；每个条目附带当前用户在本项目的成员角色与待审归档申请摘要（ADR-034），供列表页决定申请与审核入口；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
         "responses": {
           "200": {
             "description": "成功",
@@ -3086,7 +3086,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.1.0",
+          "idempotencyContractVersion": "2.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -3325,7 +3325,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.3.0",
+          "idempotencyContractVersion": "1.4.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3342,6 +3342,7 @@
                     "project.name",
                     "project.description",
                     "project.status",
+                    "project.hasCompletedTask",
                     "project.rowVersion",
                     "project.createdBy",
                     "project.createdAt",
@@ -3752,7 +3753,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.3.0",
+          "idempotencyContractVersion": "1.4.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3769,6 +3770,7 @@
                     "project.name",
                     "project.description",
                     "project.status",
+                    "project.hasCompletedTask",
                     "project.rowVersion",
                     "project.createdBy",
                     "project.createdAt",
@@ -4231,7 +4233,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -4248,6 +4250,7 @@
                     "project.name",
                     "project.description",
                     "project.status",
+                    "project.hasCompletedTask",
                     "project.rowVersion",
                     "project.createdBy",
                     "project.createdAt",
@@ -6888,7 +6891,7 @@
     "/projects/{projectId}/modules": {
       "get": {
         "operationId": "listModules",
-        "summary": "读取可访问项目的全部模块，含归档历史；按生命周期档位（正常、未开始、已归档）分组，组内再按 sort_order、id 升序。",
+        "summary": "读取可访问项目的全部模块，含归档历史；按生命周期档位（进行中、未开始、已归档）分组，组内再按 sort_order、id 升序。",
         "responses": {
           "200": {
             "description": "成功",
@@ -13931,7 +13934,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.3.0",
+          "idempotencyContractVersion": "1.4.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -13948,6 +13951,7 @@
                     "project.name",
                     "project.description",
                     "project.status",
+                    "project.hasCompletedTask",
                     "project.rowVersion",
                     "project.createdBy",
                     "project.createdAt",
@@ -14023,6 +14027,196 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProjectArchiveRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/status": {
+      "patch": {
+        "operationId": "changeProjectStatus",
+        "summary": "F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [
+            "If-Match"
+          ],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "ProjectDetailResponse",
+                  "safeBodyFieldPaths": [
+                    "project.id",
+                    "project.code",
+                    "project.name",
+                    "project.description",
+                    "project.status",
+                    "project.hasCompletedTask",
+                    "project.rowVersion",
+                    "project.createdBy",
+                    "project.createdAt",
+                    "project.updatedAt",
+                    "project.memberCount",
+                    "project.stats.activeModuleCount",
+                    "project.stats.activeFeatureCount",
+                    "project.stats.openTaskCount",
+                    "project.stats.completedTaskCount",
+                    "currentUserRole"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectReplayContext",
+              "resultRefExtractor": "projectId",
+              "currentReadAuthorizer": "projectCurrentReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "required"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "required",
+            "lockOrder": [
+              "project"
+            ],
+            "retry": "none; project FOR UPDATE, expected row_version"
+          },
+          "auditAction": "project.status.change"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectStatusChangeRequest"
               }
             }
           }
@@ -16596,7 +16790,7 @@
               },
               "status": {
                 "type": "string",
-                "const": "ACTIVE"
+                "const": "NOT_STARTED"
               },
               "rowVersion": {
                 "type": "integer",
@@ -19627,11 +19821,10 @@
             "maxLength": 20000
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED"
-            ]
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "hasCompletedTask": {
+            "type": "boolean"
           },
           "rowVersion": {
             "type": "integer",
@@ -19668,6 +19861,7 @@
           "name",
           "description",
           "status",
+          "hasCompletedTask",
           "rowVersion",
           "createdBy",
           "createdAt",
@@ -19698,11 +19892,10 @@
             "maxLength": 20000
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED"
-            ]
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "hasCompletedTask": {
+            "type": "boolean"
           },
           "rowVersion": {
             "type": "integer",
@@ -19764,6 +19957,7 @@
           "name",
           "description",
           "status",
+          "hasCompletedTask",
           "rowVersion",
           "createdBy",
           "createdAt",
@@ -20192,11 +20386,7 @@
             "maxLength": 200
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED"
-            ]
+            "$ref": "#/components/schemas/ProjectStatus"
           }
         },
         "required": [
@@ -20355,6 +20545,32 @@
           "activeFeatureCount",
           "openTaskCount",
           "completedTaskCount"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectStatus": {
+        "type": "string",
+        "enum": [
+          "NOT_STARTED",
+          "ACTIVE",
+          "MAINTENANCE",
+          "ARCHIVED"
+        ]
+      },
+      "ProjectStatusChangeRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_STARTED",
+              "ACTIVE",
+              "MAINTENANCE"
+            ]
+          }
+        },
+        "required": [
+          "status"
         ],
         "additionalProperties": false
       },

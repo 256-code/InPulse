@@ -23,6 +23,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "317f0a6ce3d78c0bf858fe0226330285073bd9c1885ce4692e8be6bc5d00fcb7"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "755fa637a2eb5bcc6c3b12059f4b16650a8fa29ea9aaf685ba9ba2ac4550daee"
     }
   ],
   "archiveFeature": [
@@ -87,12 +91,22 @@
     {
       "version": "1.3.0",
       "fingerprint": "8adb9f496011a638d52114ed651ed882f1aae3aae3ec940166045e93fb9eab7e"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "dcf74da484c34f437067415050d0ae0fbded93088d874f3b6e7035a9e5f2259a"
     }
   ],
   "archiveTask": [
     {
       "version": "1.0.0",
       "fingerprint": "f9a4e83e5a36f9e7f374f0fd8d448e85f1fe1f4fd379d1eabfde9909f594176f"
+    }
+  ],
+  "changeProjectStatus": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "d18260cdaba59277df76be10698906ed1ece740c2d4f2f092b2d4f6eff59f326"
     }
   ],
   "completeTask": [
@@ -185,6 +199,10 @@
     {
       "version": "2.1.0",
       "fingerprint": "2a8994a7bce2ce7ece4288e95b143f7ca14c35c027029252410207992f6e4bcf"
+    },
+    {
+      "version": "2.2.0",
+      "fingerprint": "4d007992b35ff56698ed6493fc0a9e506504b8186a565e4487ca357a5234377f"
     }
   ],
   "createTask": [
@@ -365,6 +383,10 @@
     {
       "version": "1.3.0",
       "fingerprint": "94a14894d98f7a80a35757ddf615b1210d8e29f6507944438406944f6aadaa4f"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "fdb230bfaf147ea5e6f03e9b230ba408337906d8f90a45c9a6766be072296487"
     }
   ],
   "restoreTask": [
@@ -475,6 +497,10 @@
     {
       "version": "1.3.0",
       "fingerprint": "58f6f14a7988a1b87c1ac0c78c221fa2af7661fe3421a547dd73e3f27744523e"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "40c72c3a5e9d966dec4667bead89dd474d1a293d17e6b19e8ac852803db71d05"
     }
   ],
   "updateTask": [

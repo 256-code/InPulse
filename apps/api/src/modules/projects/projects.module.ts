@@ -10,11 +10,13 @@ import { PostgresProjectCodePort } from "./postgres-project-code-port.js";
 import { PostgresProjectQueryPort } from "./postgres-project-query-port.js";
 import { ProjectQueryPort } from "./project-query.port.js";
 import { ProjectRoleGateService } from "./project-role-gate.service.js";
+import { ProjectStartNotifier } from "./project-start.notifier.js";
 import { ProjectArchiveRequestPort } from "./project-archive-request.port.js";
 import { PostgresProjectArchiveRequestRepository } from "./postgres-project-archive-request.repository.js";
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../../database/database.module.js";
+import { NotificationProjectionModule } from "../notifications/index.js";
 import { PostgresProjectAccessQueryPort } from "./postgres-project-access-query-port.js";
 import { PROJECT_ACCESS_QUERY_PORT } from "./project-access.port.js";
 import {
@@ -33,7 +35,7 @@ import {
  * 查询服务只能通过该 token 取得服务端生成的 AuthorizedProjectScope。
  */
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, NotificationProjectionModule],
   providers: [
     ProjectLinkQueryPort,
     ProjectCreationLockPort,
@@ -58,6 +60,7 @@ import {
       useClass: PostgresActiveUsersQueryPort,
     },
     ProjectRoleGateService,
+    ProjectStartNotifier,
     {
       provide: ProjectArchiveRequestPort,
       useClass: PostgresProjectArchiveRequestRepository,
@@ -75,6 +78,7 @@ import {
     ActiveUsersQueryPort,
     ProjectRoleGateService,
     ProjectArchiveRequestPort,
+    ProjectStartNotifier,
   ],
 })
 export class ProjectsModule {}

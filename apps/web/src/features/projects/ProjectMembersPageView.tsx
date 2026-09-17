@@ -14,8 +14,8 @@ import {
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
-  resourceLifecycleLabel,
-  resourceLifecycleTone,
+  projectLifecycleLabel,
+  projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import {
   describeUserDirectoryError,
@@ -271,17 +271,8 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         </div>
         {project ? (
           <div className="catalog-actions">
-            <CalmBadge
-              tone={resourceLifecycleTone(
-                project.status,
-                project.stats.completedTaskCount,
-                "blue",
-              )}
-            >
-              {resourceLifecycleLabel(
-                project.status,
-                project.stats.completedTaskCount,
-              )}
+            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+              {projectLifecycleLabel(project.status)}
             </CalmBadge>
           </div>
         ) : null}
@@ -355,12 +346,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   <code>{project.code}</code>（创建后不可修改）
                 </dd>
                 <dt>状态</dt>
-                <dd>
-                  {resourceLifecycleLabel(
-                    project.status,
-                    project.stats.completedTaskCount,
-                  )}
-                </dd>
+                <dd>{projectLifecycleLabel(project.status)}</dd>
                 <dt>创建人</dt>
                 <dd>
                   {memberNames.get(project.createdBy) ?? "—"}
@@ -491,12 +477,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   className="danger-button"
                   onClick={() =>
                     setDangerAction(
-                      project.status === "ACTIVE" ? "archive" : "restore",
+                      project.status === "ARCHIVED" ? "restore" : "archive",
                     )
                   }
                 >
                   <InpulseIcon name="folder" size={15} />
-                  {project.status === "ACTIVE" ? "归档项目" : "恢复项目"}
+                  {project.status === "ARCHIVED" ? "恢复项目" : "归档项目"}
                 </Button>
               </div>
             </>

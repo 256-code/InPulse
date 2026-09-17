@@ -36,7 +36,7 @@ export const moduleRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/modules",
     operationId: "listModules",
     summary:
-      "读取可访问项目的全部模块，含归档历史；按生命周期档位（正常、未开始、已归档）分组，组内再按 sort_order、id 升序。",
+      "读取可访问项目的全部模块，含归档历史；按生命周期档位（进行中、未开始、已归档）分组，组内再按 sort_order、id 升序。",
     request: {
       path: "ModuleProjectPath",
       query: "none",

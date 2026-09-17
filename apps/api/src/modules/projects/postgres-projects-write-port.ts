@@ -8,7 +8,9 @@ import {
   type ProjectCreatedRecord,
   type ProjectMemberAddedRecord,
   type ProjectMemberIdentity,
+  type ProjectFirstTaskCompletionRecord,
   type ProjectMemberRecord,
+  type ProjectLifecycleStatus,
   type ProjectRecord,
   ProjectsWritePort,
 } from "./projects-write.port.js";
@@ -19,7 +21,7 @@ interface ProjectInsertRow {
   readonly name: string;
   readonly description: string;
   readonly created_by: number;
-  readonly status: "ACTIVE";
+  readonly status: "NOT_STARTED";
   readonly row_version: number;
   readonly created_at: Date;
   readonly updated_at: Date;
@@ -47,7 +49,7 @@ interface MemberRow {
 interface ProjectSummaryRow {
   readonly id: number;
   readonly name: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly status: ProjectLifecycleStatus;
   readonly row_version: number;
 }
 
@@ -56,7 +58,8 @@ interface ProjectChangeRow {
   readonly code: string;
   readonly name: string;
   readonly description: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly status: ProjectLifecycleStatus;
+  readonly firstTaskCompletedAt: Date | null;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: Date;
@@ -75,8 +78,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     input: CreateProjectRecordInput,
   ): Promise<ProjectCreatedRecord> {
     const rows = (await tx.sql`
-      INSERT INTO app.projects (code, name, description, created_by)
-      VALUES (${input.code}, ${input.name}, ${input.description}, ${input.createdBy})
+      INSERT INTO app.projects (code, name, description, created_by, status)
+      VALUES (${input.code}, ${input.name}, ${input.description}, ${input.createdBy}, 'NOT_STARTED')
       RETURNING id,
                 code,
                 name,
@@ -183,6 +186,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              p.name,
              p.description,
              p.status,
+             p.first_task_completed_at AS "firstTaskCompletedAt",
              p.row_version AS "rowVersion",
              p.created_by AS "createdBy",
              p.created_at AS "createdAt",
@@ -226,6 +230,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                   name,
                   description,
                   status,
+                  first_task_completed_at,
                   row_version,
                   created_by,
                   created_at,
@@ -236,6 +241,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.description,
              u.status,
+             u.first_task_completed_at AS "firstTaskCompletedAt",
              u.row_version AS "rowVersion",
              u.created_by AS "createdBy",
              u.created_at AS "createdAt",
@@ -258,7 +264,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     input: {
       readonly projectId: number;
       readonly expectedRowVersion: number;
-      readonly status: "ACTIVE" | "ARCHIVED";
+      readonly status: ProjectLifecycleStatus;
     },
   ): Promise<ProjectChangeRecord | undefined> {
     const rows = (await tx.sql`
@@ -275,6 +281,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                   name,
                   description,
                   status,
+                  first_task_completed_at,
                   row_version,
                   created_by,
                   created_at,
@@ -285,6 +292,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.description,
              u.status,
+             u.first_task_completed_at AS "firstTaskCompletedAt",
              u.row_version AS "rowVersion",
              u.created_by AS "createdBy",
              u.created_at AS "createdAt",
@@ -300,6 +308,79 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     `) as unknown as readonly ProjectChangeRow[];
     const row = rows[0];
     return row === undefined ? undefined : this.toChangeRecord(row);
+  }
+
+  /**
+   * ADR-035 任务完成粘性置位：first_task_completed_at 取最早一次完成时间且永不回落；
+   * 项目处于未开始时同一语句升级为进行中。
+   *
+   * `app.projects` 的 row_version 触发器要求每次 UPDATE 必须恰好 +1，因此这里用 WHERE
+   * 只命中真正需要变更的行：粘性标记已存在且项目不再是未开始时整条语句不写任何行并返回
+   * undefined，避免每次任务完成都把项目版本推高一格、连带作废在途的项目编辑 If-Match。
+   * 行锁在语句内的 before CTE 中获取，与项目写路径的 project 优先锁序一致。
+   */
+  async recordFirstTaskCompletion(
+    tx: TransactionContext,
+    input: { readonly projectId: number; readonly completedAt: Date },
+  ): Promise<ProjectFirstTaskCompletionRecord | undefined> {
+    const rows = (await tx.sql`
+      WITH before AS MATERIALIZED (
+        SELECT id, code, name, description, status AS previous_status
+          FROM app.projects
+         WHERE id = ${input.projectId}
+         FOR UPDATE
+      ),
+      updated AS (
+        UPDATE app.projects p
+           SET first_task_completed_at = ${input.completedAt.toISOString()}::TIMESTAMPTZ,
+               status = CASE
+                          WHEN p.status = 'NOT_STARTED' THEN 'ACTIVE'
+                          ELSE p.status
+                        END,
+               row_version = p.row_version + 1,
+               updated_at = now()
+         WHERE p.id = (SELECT id FROM before)
+           AND (p.first_task_completed_at IS NULL OR p.status = 'NOT_STARTED')
+        RETURNING p.id,
+                  p.code,
+                  p.name,
+                  p.description,
+                  p.status,
+                  p.row_version,
+                  p.first_task_completed_at
+      )
+      SELECT u.id,
+             u.code,
+             u.name,
+             u.description,
+             u.status,
+             u.row_version AS "rowVersion",
+             u.first_task_completed_at AS "firstTaskCompletedAt",
+             b.previous_status AS "previousStatus"
+        FROM updated u
+       CROSS JOIN before b
+    `) as unknown as readonly {
+      readonly id: number;
+      readonly code: string;
+      readonly name: string;
+      readonly description: string;
+      readonly status: ProjectLifecycleStatus;
+      readonly rowVersion: number;
+      readonly firstTaskCompletedAt: Date;
+      readonly previousStatus: ProjectLifecycleStatus;
+    }[];
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return {
+      projectId: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      previousStatus: row.previousStatus,
+      status: row.status,
+      rowVersion: row.rowVersion,
+      firstTaskCompletedAt: new Date(row.firstTaskCompletedAt).toISOString(),
+    };
   }
 
   async countUnfinishedTasks(
@@ -453,6 +534,10 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       name: row.name,
       description: row.description,
       status: row.status,
+      firstTaskCompletedAt:
+        row.firstTaskCompletedAt === null
+          ? null
+          : new Date(row.firstTaskCompletedAt).toISOString(),
       rowVersion: row.rowVersion,
       createdBy: row.createdBy,
       createdAt: new Date(row.createdAt).toISOString(),

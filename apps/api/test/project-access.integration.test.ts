@@ -126,7 +126,7 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
       kind: "allowed",
       resource: {
         projectId: project.projectId,
-        status: "ACTIVE",
+        status: "NOT_STARTED",
         rowVersion: 1,
         isSystemAdmin: false,
       },
@@ -165,7 +165,7 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
       kind: "allowed",
       resource: {
         projectId: project.projectId,
-        status: "ACTIVE",
+        status: "NOT_STARTED",
         rowVersion: 1,
         isSystemAdmin: true,
       },
@@ -192,6 +192,46 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
         projectId: project.projectId,
         status: "ARCHIVED",
         rowVersion: 2,
+        isSystemAdmin: false,
+      },
+    });
+  });
+
+  test("ADR-035：进行中与维护中都是活跃态，只有已归档拦截写入", async () => {
+    const member = await createUser(runtime);
+    const project = await createProject(runtime, member);
+
+    await runtime`
+      UPDATE app.projects
+         SET status = 'ACTIVE',
+             first_task_completed_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${project.projectId}
+    `;
+    const active = await checkProjectForWrite(member, project.projectId);
+    expect(active).toEqual({
+      kind: "allowed",
+      resource: {
+        projectId: project.projectId,
+        status: "ACTIVE",
+        rowVersion: 2,
+        isSystemAdmin: false,
+      },
+    });
+
+    await runtime`
+      UPDATE app.projects
+         SET status = 'MAINTENANCE',
+             row_version = row_version + 1
+       WHERE id = ${project.projectId}
+    `;
+    const maintenance = await checkProjectForWrite(member, project.projectId);
+    expect(maintenance).toEqual({
+      kind: "allowed",
+      resource: {
+        projectId: project.projectId,
+        status: "MAINTENANCE",
+        rowVersion: 3,
         isSystemAdmin: false,
       },
     });
