@@ -491,6 +491,81 @@ describe("AppLayout", () => {
     expect(await screen.findByText("功能目录内容")).toBeInTheDocument();
   });
 
+  it("returns to the project modules page from the breadcrumb project crumb", async () => {
+    const crumbClient = {
+      ...notificationClient,
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            code: "AGV",
+            name: "AGV 智能搬运平台",
+            status: "ACTIVE",
+          },
+        ],
+      }),
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 7,
+          code: "AGV",
+          name: "AGV 智能搬运平台",
+          description: "面向工厂的智能搬运调度项目",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 1,
+          createdAt: "2026-09-08T00:00:00.000Z",
+          updatedAt: "2026-09-08T00:00:00.000Z",
+          memberCount: 4,
+          stats: {
+            activeModuleCount: 1,
+            activeFeatureCount: 1,
+            openTaskCount: 1,
+            completedTaskCount: 1,
+          },
+        },
+      }),
+      listModules: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
+      listFeatures: vi
+        .fn()
+        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects/7/modules/3/features/5"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={crumbClient}
+              />
+            }
+          >
+            <Route
+              path="projects/:projectId/modules"
+              element={<div>模块列表内容</div>}
+            />
+            <Route
+              path="projects/:projectId/modules/:moduleId/features/:featureId"
+              element={<div>功能档案内容</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
+    // 项目名必须落到项目主页（模块列表页）：概览页把模块与功能藏在「查看模块」
+    // 入口后，不满足「从模块返回项目时功能不收起」。
+    await userEvent.click(
+      await within(crumb).findByRole("button", { name: "AGV 智能搬运平台" }),
+    );
+    expect(await screen.findByText("模块列表内容")).toBeInTheDocument();
+  });
+
   it("collapses the system directory tree outside project pages", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/tasks"]}>

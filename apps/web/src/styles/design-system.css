@@ -464,10 +464,14 @@ button {
 }
 .tree-folder {
   position: relative;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  color: #73c9cc;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: #63d6d3;
+}
+/* 模块与功能层使用 InpulseIcon（boxes / code），与命令面板、模块卡的图标语义一致。 */
+.tree-icon {
+  flex: 0 0 auto;
 }
 .tree-folder svg {
   position: absolute;
@@ -502,28 +506,31 @@ button {
 .module-node {
   padding-left: 18px;
 }
-.module-node .tree-folder {
-  color: #5fc4c4;
+.module-node .tree-icon {
+  color: #55c9cf;
 }
 .module-node.selected {
   background: #164a60;
   color: #e7ffff;
   box-shadow: inset 2px 0 #58d1cb;
 }
-.module-node.selected .tree-folder {
+.module-node.selected .tree-icon {
   color: #8ae5dc;
 }
 .module-node.in-path {
   background: #14324b;
   color: #cfe6f5;
 }
-.module-node.in-path .tree-folder {
+.module-node.in-path .tree-icon {
   color: #7fd8d3;
 }
 .feature-node {
   min-height: 28px;
-  padding-left: 50px;
+  padding-left: 26px;
   color: #8ba3b9;
+}
+.feature-node .tree-icon {
+  color: #9ab6d6;
 }
 .feature-node .tree-label strong {
   font-weight: 400;
@@ -532,6 +539,9 @@ button {
   background: #164a60;
   color: #e7ffff;
   box-shadow: inset 2px 0 #58d1cb;
+}
+.feature-node.selected .tree-icon {
+  color: #8ae5dc;
 }
 .feature-node.selected .tree-label strong {
   font-weight: 600;

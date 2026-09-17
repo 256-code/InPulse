@@ -383,9 +383,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                       <button
                         type="button"
                         title={projectCrumbName}
+                        // 项目名落到项目主页（模块列表页），与目录树、项目卡片一致；
+                        // 概览页会把模块/功能藏在「查看模块」入口后，不适合作为回到项目的落点。
                         onClick={() =>
                           handleNavigation(
-                            `/projects/${catalogProjectId}/overview`,
+                            `/projects/${catalogProjectId}/modules`,
                           )
                         }
                       >

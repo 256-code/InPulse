@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type {
   FeatureItem,
   InpulseApiClient,
   ModuleItem,
   ProjectItem,
 } from "@generated/api";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjects } from "@features/projects/project-query";
@@ -79,6 +80,7 @@ const FeatureRow: React.FC<FeatureRowProps> = ({
         onFeatureClick({ kind: "feature", moduleId, featureId: item.id })
       }
     >
+      <InpulseIcon name="code" size={16} className="tree-icon" />
       <span className="tree-label">
         <strong>{item.name}</strong>
       </span>
@@ -164,7 +166,7 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
           onModuleClick(key, projectId, { kind: "module", moduleId: item.id })
         }
       >
-        <FolderGlyph />
+        <InpulseIcon name="boxes" size={16} className="tree-icon" />
         <span className="tree-label">
           <strong>{item.name}</strong>
         </span>
@@ -187,7 +189,8 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
 /**
  * 侧栏系统目录：项目与功能导航展开后先罗列所有项目，点击项目再罗列模块、
  * 点击模块再罗列功能；点击节点跳转到既有的项目主页、功能目录与功能档案
- * 页面，内容区功能不在此重复实现。当前路由所在链路自动展开。
+ * 页面，内容区功能不在此重复实现。当前路由所在链路自动展开，且展开状态在
+ * 跳转到其它层级或页面后保持不变，避免回到项目概况时子级被收起。
  */
 interface ModuleListProps {
   readonly projectId: number;
@@ -345,6 +348,21 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     }
     return keys;
   }, [chainKeys, collapsed, extraExpanded]);
+  // 链路只负责自动展开、不负责收回：展开过的节点写入 extraExpanded 保留，
+  // 用面包屑回到项目概况等上层页面时子级不自动收起，只有点击节点才开合。
+  useEffect(() => {
+    setExtraExpanded((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const key of chainKeys) {
+        if (!next.has(key) && !collapsed.has(key)) {
+          next.add(key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [chainKeys, collapsed]);
 
   const toggle = (key: string) => {
     if (expandedKeys.has(key)) {

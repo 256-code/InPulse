@@ -131,6 +131,40 @@ describe("ProjectTree", () => {
     ).toBeTruthy();
   });
 
+  it("keeps the expanded chain when returning to the project overview", async () => {
+    const client = createClient();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const tree = (activeScope: TreeScope) => (
+      <QueryClientProvider client={queryClient}>
+        <ProjectTree
+          activeScope={activeScope}
+          onNavigate={vi.fn()}
+          client={client}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(
+      tree(scopeOf({ kind: "feature", moduleId: 3, featureId: 5 })),
+    );
+    expect(
+      (await screen.findByRole("button", { name: /调度模块/ })).getAttribute(
+        "aria-expanded",
+      ),
+    ).toBe("true");
+    await screen.findByRole("button", { name: /车辆调度/ });
+
+    // 面包屑回到项目概况（系统级作用域）后，已展开的模块与功能保持可见。
+    view.rerender(tree(scopeOf({ kind: "project" })));
+    expect(
+      screen
+        .getByRole("button", { name: /调度模块/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: /车辆调度/ })).toBeTruthy();
+  });
+
   it("keeps the module branch expanded while its features load", async () => {
     mount(createClient(), vi.fn(), scopeOf({ kind: "module", moduleId: 3 }));
     const moduleButton = await screen.findByRole("button", {
