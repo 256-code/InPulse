@@ -955,6 +955,7 @@ function myTasksSetup(
       readonly groupId: number;
       readonly role: "MAIN" | "SOURCE";
     }[];
+    readonly leftoverSourceTaskIds?: readonly number[];
   } = {},
 ) {
   const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
@@ -987,6 +988,9 @@ function myTasksSetup(
     .mockResolvedValue(
       options.publishedRecordCounts ?? [{ taskId: 501, count: 2 }],
     );
+  const listLeftoverSourceTaskIds = vi
+    .fn()
+    .mockResolvedValue(options.leftoverSourceTaskIds ?? []);
   const listHistoricalSourceTaskIds = vi.fn().mockResolvedValue([90]);
   const listGroupRoles = vi.fn().mockResolvedValue(options.groupRoles ?? []);
   const countTaskLinks = vi
@@ -1022,7 +1026,10 @@ function myTasksSetup(
     { list: listPage, stats, leftoverEntry } as unknown as MyTaskQueryPort,
     { listNames: listModuleNames } as unknown as ModuleReadPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
-    { countPublishedByTask } as unknown as ChangeRecordReadPort,
+    {
+      countPublishedByTask,
+      listLeftoverSourceTaskIds,
+    } as unknown as ChangeRecordReadPort,
     { countTaskLinks } as unknown as ExternalLinksQueryPort,
     {
       listHistoricalSourceTaskIds,
@@ -1037,6 +1044,7 @@ function myTasksSetup(
     cursor,
     listPage,
     countPublishedByTask,
+    listLeftoverSourceTaskIds,
     listProjects,
     listHistoricalSourceTaskIds,
     listGroupRoles,
@@ -1190,6 +1198,7 @@ describe("MyTasksQueryService.list", () => {
       },
       publishedRecordCounts: [{ taskId: 501, count: 2 }],
       groupRoles: [{ taskId: 501, groupId: 11, role: "MAIN" }],
+      leftoverSourceTaskIds: [502],
     });
 
     const result = await setup.service.list({ actorUserId: 5 });
@@ -1208,6 +1217,7 @@ describe("MyTasksQueryService.list", () => {
       hasPublishedRecord: false,
       groupRole: null,
       groupId: null,
+      hasLeftoverSource: true,
       updatedAt: baseTime.toISOString(),
     });
     expect(result.items[1]).toMatchObject({
@@ -1217,8 +1227,14 @@ describe("MyTasksQueryService.list", () => {
       githubLinkCount: 3,
       groupRole: "MAIN",
       groupId: 11,
+      hasLeftoverSource: false,
     });
     expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [502, 501],
+    );
+    expect(setup.listLeftoverSourceTaskIds).toHaveBeenCalledWith(
       expect.anything(),
       [7],
       [502, 501],
@@ -1358,6 +1374,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
         readonly taskId: number;
         readonly count: number;
       }[];
+      readonly leftoverSourceTaskIds?: readonly number[];
     } = {},
   ) {
     const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
@@ -1374,11 +1391,17 @@ describe("TaskGroupMembershipQueryService.list", () => {
     const countPublishedByTask = vi
       .fn()
       .mockResolvedValue(options.counts ?? []);
+    const listLeftoverSourceTaskIds = vi
+      .fn()
+      .mockResolvedValue(options.leftoverSourceTaskIds ?? []);
     const service = new TaskGroupMembershipQueryService(
       { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
       { listByIds } as unknown as TaskQueryPort,
       { listGroupRoles } as unknown as TaskGroupMembershipReadPort,
-      { countPublishedByTask } as unknown as ChangeRecordReadPort,
+      {
+        countPublishedByTask,
+        listLeftoverSourceTaskIds,
+      } as unknown as ChangeRecordReadPort,
       unitOfWork,
     );
     return {
@@ -1387,10 +1410,11 @@ describe("TaskGroupMembershipQueryService.list", () => {
       listByIds,
       listGroupRoles,
       countPublishedByTask,
+      listLeftoverSourceTaskIds,
     };
   }
 
-  it("覆盖每个有权 taskId：未入组返回 null，计数按映射补齐", async () => {
+  it("覆盖每个有权 taskId：未入组返回 null，计数与遗留来源标记按映射补齐", async () => {
     const setup = membershipSetup({
       authorizedTaskIds: [21, 22, 23],
       roles: [
@@ -1401,6 +1425,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
         { taskId: 21, count: 2 },
         { taskId: 22, count: 1 },
       ],
+      leftoverSourceTaskIds: [22],
     });
     const result = await setup.service.list({
       actorUserId: 5,
@@ -1413,18 +1438,21 @@ describe("TaskGroupMembershipQueryService.list", () => {
           groupId: 11,
           groupRole: "MAIN",
           publishedRecordCount: 2,
+          hasLeftoverSource: false,
         },
         {
           taskId: 22,
           groupId: 12,
           groupRole: "SOURCE",
           publishedRecordCount: 1,
+          hasLeftoverSource: true,
         },
         {
           taskId: 23,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1434,6 +1462,11 @@ describe("TaskGroupMembershipQueryService.list", () => {
       [21, 22, 23],
     );
     expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [21, 22, 23],
+    );
+    expect(setup.listLeftoverSourceTaskIds).toHaveBeenCalledWith(
       expect.anything(),
       [7],
       [21, 22, 23],
@@ -1453,6 +1486,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1468,5 +1502,6 @@ describe("TaskGroupMembershipQueryService.list", () => {
     expect(setup.listByIds).toHaveBeenCalledWith(expect.anything(), [], [999]);
     expect(setup.listGroupRoles).not.toHaveBeenCalled();
     expect(setup.countPublishedByTask).not.toHaveBeenCalled();
+    expect(setup.listLeftoverSourceTaskIds).not.toHaveBeenCalled();
   });
 });

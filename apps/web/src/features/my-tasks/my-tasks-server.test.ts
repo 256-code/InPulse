@@ -33,6 +33,7 @@ const page: MyTaskPage = {
       creatorId: 2,
       githubLinkCount: 0,
       groupId: null,
+      hasLeftoverSource: true,
     },
   ],
   nextCursor: "signed-cursor",
@@ -86,6 +87,7 @@ describe("my tasks server adapter", () => {
         publishedRecordCount: 1,
         groupRole: "MAIN",
         groupId: null,
+        hasLeftoverSource: true,
       },
     ]);
     expect(result.nextCursor).toBe("signed-cursor");

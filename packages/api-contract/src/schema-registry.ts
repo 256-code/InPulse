@@ -250,7 +250,7 @@ export const schemaRegistry = {
   MyTaskItem: {
     schema: myTaskItemSchema,
     summary:
-      "我的任务条目，含优先级、截止、完成时间、创建者、外部链接数与聚合组角色（R-3 / §10.3）",
+      "我的任务条目，含优先级、截止、完成时间、创建者、外部链接数、聚合组角色与遗留问题来源标记（R-3 / §10.3 / D-2）",
     sensitiveFieldPaths: [],
   },
   MyTaskStats: {
@@ -278,7 +278,8 @@ export const schemaRegistry = {
   },
   TaskGroupMembershipItem: {
     schema: taskGroupMembershipItemSchema,
-    summary: "任务卡片聚合关系条目：任务、聚合组与组内角色（R-5 / §10.4）",
+    summary:
+      "任务卡片聚合关系条目：任务、聚合组、组内角色与遗留问题来源标记（R-5 / §10.4 / D-2）",
     sensitiveFieldPaths: [],
   },
   TaskGroupMembershipResponse: {

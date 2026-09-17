@@ -219,6 +219,21 @@ export abstract class ChangeRecordReadPort {
   ): Promise<readonly TaskPublishedRecordCountItem[]>;
 
   /**
+   * 任务 → 遗留问题来源标记（裁决修订 D-2 / F-20）：返回 taskIds 中在
+   * leftover_task_links 存在链接行的任务 ID（升序）。链接行由转换 Workflow 写入
+   * 且永不删除（leftover_item_id 主键 + task_id 唯一），因此存在即「由遗留问题
+   * 转换而来」，与来源记录当前状态（PUBLISHED / VOID）及遗留项处置状态
+   * （CONVERTED / RESOLVED）无关；供 R-3 列表项与 R-5 批量标记同时消费。
+   * projectIds 或 taskIds 为空时短路返回空集，不发出 SQL；
+   * taskIds 上限 CHANGE_RECORD_TASK_IDS_MAX，超限抛 ChangeRecordReadInputError。
+   */
+  abstract listLeftoverSourceTaskIds(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly number[]>;
+
+  /**
    * R-4 聚合组记录分页：只返回 PUBLISHED 与 VOID（A 裁决 Q-13），
    * 固定 recordId DESC，taskIds 为空短路返回空页；只读、不取锁，
    * 调用方必须先取得 AuthorizedProjectScope 并把 taskIds 限制在组成员内。
@@ -477,6 +492,28 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
        GROUP BY cr.task_id
        ORDER BY cr.task_id ASC
     `) as unknown as readonly TaskPublishedRecordCountItem[];
+  }
+
+  async listLeftoverSourceTaskIds(
+    tx: TransactionContext,
+    projectIds: readonly number[],
+    taskIds: readonly number[],
+  ): Promise<readonly number[]> {
+    assertTaskIds(taskIds);
+    if (projectIds.length === 0 || taskIds.length === 0) {
+      return [];
+    }
+    const projects = [...projectIds];
+    const tasks = [...taskIds];
+    return (
+      await tx.sql<{ taskId: number }[]>`
+      SELECT ltl.task_id AS "taskId"
+        FROM app.leftover_task_links ltl
+       WHERE ltl.project_id = ANY(${projects}::integer[])
+         AND ltl.task_id = ANY(${tasks}::integer[])
+       ORDER BY ltl.task_id ASC
+    `
+    ).map((row) => row.taskId);
   }
 
   async listVisibleRecordsByTaskIds(

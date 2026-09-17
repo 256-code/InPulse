@@ -205,6 +205,7 @@ export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
     publishedRecordCount: item.publishedRecordCount,
     groupRole: item.groupRole,
     groupId: item.groupId,
+    hasLeftoverSource: item.hasLeftoverSource,
   };
 }
 

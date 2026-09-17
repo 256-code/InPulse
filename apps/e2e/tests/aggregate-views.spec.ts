@@ -177,29 +177,17 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       page.getByLabel("显示已取消任务（不计入完成率）"),
     ).toBeEnabled();
 
-    // 任务中心不弹只读详情：重新进入 /tasks（卡片视图），点击卡片直接定位到
-    // 功能档案，由 ?taskId= 打开任务详情弹窗，写操作（编辑 / 完成任务 / 合并 /
-    // 关联链接）都在这一个入口里，任务中心本身不再复制一份只读弹层。
+    // 任务中心不再跳转：重新进入 /tasks（卡片视图）后点击卡片，在当前页面就地
+    // 弹出功能档案同款的任务详情弹窗，写操作（编辑 / 完成任务 / 合并 / 关联链接）
+    // 仍只有这一个入口；地址栏与筛选参数保持不变，关闭后仍停留在任务中心。
     await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();
     const navCard = page
       .locator(".calm-task-card")
       .filter({ hasText: taskTitle });
     await expect(navCard).toBeVisible();
+    const taskCenterUrl = page.url();
     await navCard.click();
-    await expect
-      .poll(() => {
-        const url = new URL(page.url());
-        return url.pathname;
-      })
-      .toMatch(
-        new RegExp(
-          "^/projects/" + runtime.projectId + "/modules/\\d+/features/\\d+$",
-        ),
-      );
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get("taskId"))
-      .not.toBeNull();
     const archiveDetail = page.getByRole("dialog", { name: "任务详情" });
     await expect(archiveDetail).toBeVisible();
     await expect(archiveDetail.getByText(taskTitle)).toBeVisible();
@@ -209,8 +197,11 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(
       archiveDetail.getByRole("button", { name: "完成任务" }),
     ).toBeVisible();
+    expect(page.url()).toBe(taskCenterUrl);
     await archiveDetail.getByRole("button", { name: "关闭" }).click();
     await expect(archiveDetail).toBeHidden();
+    expect(page.url()).toBe(taskCenterUrl);
+    await expect(page.getByTestId("task-center")).toBeVisible();
 
     await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();

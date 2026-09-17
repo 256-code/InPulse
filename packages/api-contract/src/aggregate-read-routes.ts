@@ -112,7 +112,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/task-groups/memberships",
     operationId: "listTaskGroupMemberships",
     summary:
-      "F-25 任务记录标记批量读（R-5，裁决修订 D-1）：按逗号分隔的 1..100 个任务 ID，返回请求中每一个有权 taskId 的聚合组关系与 PUBLISHED 记录数；未入组任务以 groupId / groupRole 为 null 返回且计数照常；无权或不存在不入结果，不泄露资源存在性；数量、格式或重复校验失败返回 422。",
+      "F-25 任务记录标记批量读（R-5，裁决修订 D-1）：按逗号分隔的 1..100 个任务 ID，返回请求中每一个有权 taskId 的聚合组关系、PUBLISHED 记录数与遗留问题来源标记（hasLeftoverSource，裁决修订 D-2）；未入组任务以 groupId / groupRole 为 null 返回且计数照常；无权或不存在不入结果，不泄露资源存在性；数量、格式或重复校验失败返回 422。",
     request: {
       path: "none",
       query: "TaskGroupMembershipQueryRequest",
@@ -142,7 +142,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/me/tasks",
     operationId: "listMyTasks",
     summary:
-      "F-32 我的任务：跨项目列出当前用户负责或创建的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系与 PUBLISHED 记录数，并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 ownership / projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 七项筛选，其中 ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，不接受任何他人身份或授权范围参数。",
+      "F-32 我的任务：跨项目列出当前用户负责或创建的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系、PUBLISHED 记录数与遗留问题来源标记（hasLeftoverSource，裁决修订 D-2），并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 ownership / projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 七项筛选，其中 ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，不接受任何他人身份或授权范围参数。",
     request: {
       path: "none",
       query: "MyTasksQueryRequest",

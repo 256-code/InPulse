@@ -1090,10 +1090,67 @@ describe("ChangeRecordReadPort", () => {
     ).toEqual([]);
   });
 
+  test("leftover source marks only tasks that have leftover_task_links rows", async () => {
+    const scope = await newProject();
+    const other = await newProject();
+    const converted = await newTask(scope);
+    const record = await newPublishedRecord(scope, { taskId: converted });
+    const leftover = await newLeftover(scope, record, {
+      status: "CONVERTED",
+      contents: ["已转换遗留内容"],
+    });
+    await uow.run(
+      (tx) =>
+        tx.sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by) VALUES (${leftover}, ${converted}, ${scope.projectId}, ${scope.userId})`,
+    );
+    const plain = await newTask(scope);
+    const foreign = await newTask(other);
+    const foreignRecord = await newPublishedRecord(other, { taskId: foreign });
+    const foreignLeftover = await newLeftover(other, foreignRecord, {
+      status: "CONVERTED",
+      contents: ["其他项目遗留内容"],
+    });
+    await uow.run(
+      (tx) =>
+        tx.sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by) VALUES (${foreignLeftover}, ${foreign}, ${other.projectId}, ${other.userId})`,
+    );
+    const candidates = [converted, plain, foreign];
+    expect(
+      await uow.run((tx) =>
+        records.listLeftoverSourceTaskIds(
+          tx,
+          [scope.projectId, other.projectId],
+          candidates,
+        ),
+      ),
+    ).toEqual([converted, foreign].sort((left, right) => left - right));
+    // projectIds 收窄后其他项目的链接行不返回（不泄露存在性）。
+    expect(
+      await uow.run((tx) =>
+        records.listLeftoverSourceTaskIds(tx, [scope.projectId], candidates),
+      ),
+    ).toEqual([converted]);
+    expect(
+      await uow.run((tx) =>
+        records.listLeftoverSourceTaskIds(tx, [scope.projectId], [plain]),
+      ),
+    ).toEqual([]);
+  });
+
   test("record read validation rejects unbounded task sets before SQL", async () => {
     const { calls, tx } = captureTransaction();
     await expect(
       records.countPublishedByTask(
+        tx,
+        [1],
+        Array.from({ length: CHANGE_RECORD_TASK_IDS_MAX + 1 }, () => 1),
+      ),
+    ).rejects.toMatchObject({
+      name: "ChangeRecordReadInputError",
+      reason: "invalid-task-ids",
+    });
+    await expect(
+      records.listLeftoverSourceTaskIds(
         tx,
         [1],
         Array.from({ length: CHANGE_RECORD_TASK_IDS_MAX + 1 }, () => 1),
@@ -1118,6 +1175,12 @@ describe("ChangeRecordReadPort", () => {
     await expect(records.countPublishedByTask(tx, [1], [])).resolves.toEqual(
       [],
     );
+    await expect(
+      records.listLeftoverSourceTaskIds(tx, [], [1]),
+    ).resolves.toEqual([]);
+    await expect(
+      records.listLeftoverSourceTaskIds(tx, [1], []),
+    ).resolves.toEqual([]);
     expect(calls).toEqual([]);
   });
 });

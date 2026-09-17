@@ -20,6 +20,8 @@ export interface TaskMark {
   readonly groupId: number | null;
   readonly groupRole: "MAIN" | "SOURCE" | null;
   readonly publishedRecordCount: number;
+  /** 任务是否由遗留问题转换而来（裁决修订 D-2）；true 时显示「遗留问题」徽章。 */
+  readonly hasLeftoverSource: boolean;
 }
 
 /** 去重升序后按 1..100 分块；空列表返回空数组（不产生请求）。 */
@@ -44,6 +46,7 @@ export function toTaskMarkMap(
         groupId: item.groupId,
         groupRole: item.groupRole,
         publishedRecordCount: item.publishedRecordCount,
+        hasLeftoverSource: item.hasLeftoverSource,
       },
     ]),
   );

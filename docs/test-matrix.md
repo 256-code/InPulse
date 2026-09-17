@@ -1486,6 +1486,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 产品截图反馈：任务中心的任务卡片点开后是一个只读详情弹层（PR #136 引入的 `MyTaskDetailModal`），无法在里面完成任务编辑、生成迭代记录、合并到主任务、关联 GitHub 链接等写操作——这些写操作只在功能档案的任务详情弹窗里。只读弹层既不能操作又需要用户再点一次「在功能档案中查看」才能跳转，等于给同一份数据多套一层入口。本轮把任务中心收敛为纯定位入口：**删除 `MyTaskDetailModal`，卡片与列表行点击后经 `onOpenTask`（`TasksPage` → `taskDetailPath` 深链）直接跳转到功能档案的 `?taskId=` 深链，由 `TasksPanel` 打开承载全部写操作的任务详情弹窗，任务中心不再复制一份只读弹层**。
 
+> 2026-09-17 更新：本条的点击目标已被「任务中心卡片就地弹窗」条目取代——卡片、列表行与聚合组入口改为在当前页面就地打开同一个任务详情弹窗，不再深链跳转；「不复制只读弹层、写入口只有 `TasksPanel` 一处」的结论保持有效，下表的深链断言按新条目替换。
+
 契约与后端口径不变：任务中心仍走 R-3 `listMyTasks` 与 R-5 `listTaskGroupMemberships`（关系徽章、「迭代记录 n 条」与「查看主任务」保留），`taskDetailPath` 与 `TasksPanel` 的 `?taskId=` 弹窗均为既有能力，本轮只是把点击目标从页内弹层换成深链导航。删除的 `MyTaskDetailModal.tsx` / `.test.tsx` 无其它消费者；`.task-modal*` 系列样式仍被功能档案的 `TasksPanel` 使用，未产生死代码。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -1822,3 +1824,54 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-16）：`pnpm --filter @inpulse/api test:integration modules-api project-archive-request` 2 文件 18 例通过；`pnpm test:web` 77 文件 453 例通过；`pnpm lint`、`pnpm format:check`、`pnpm contract:validate`（105 条路由）、`pnpm permissions:check`（105/105）、`pnpm contract:drift`、`node scripts/check_docs.mjs` 通过。另注：全量 `pnpm --filter @inpulse/api test:integration` 本轮出现 1 例与本改动无关的不稳定失败（`preauth-session.integration.test.ts` 的 `preauth_sessions_consumed_at_check` 并发时钟边界），单独重跑该文件 4 例通过，未修改该测试。
 
 未运行 / 已知偏差：① 未跑 `pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 已完成但未归档的任务在模块归档后仍保持 ACTIVE，用户如需从活跃视图移除可继续手动归档；③ 新增测试需非作者人工评审。
+
+## 任务中心卡片就地弹窗（C，2026-09-17 本地落库）
+
+产品反馈：任务中心的任务卡片点击后不应离开当前页面跳转到功能档案深链，而要就地弹出与功能档案一致的任务详情弹窗。本轮把 `/tasks` 的卡片、列表行与聚合组入口（「分支」/「查看主任务」）全部改为**当前页就地打开 `TasksPanel` 的任务详情弹窗**，URL 不再变化；写操作入口仍只有 `TasksPanel` 一处，不复制只读弹层。F-32 条目下表的深链断言按本条替换（原文保留为该轮事实）。
+
+- 前端：`TasksPanel` 增加 `mode`（`panel` / `detail`）、`initialTaskId` 与 `onDetailClose`；新增 `TaskDetailOverlay`（按父模块与父功能是否 ACTIVE 决定可写性，数据未就绪按只读；`key={taskId}` 重挂载）并由 `TasksPage` 以 `React.lazy` + `Suspense` 懒加载——静态导入会把 `TasksPanel` 依赖图并入 `/tasks` 路由 chunk，导致 `app-router.test.tsx` 间歇性超时，故必须保持懒加载。
+- 测试：`TasksPage.test.tsx` 的深链断言（`ArchiveProbe` 改为 `LocationProbe`）替换为就地断言（弹出 `关闭任务详情`、标题可达、URL 恒为 `/tasks`）；`aggregate-views.spec.ts` 断言点击卡片后弹窗可见且 `page.url()` 不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| F32-INPLACE-PAGE-001 | 单元（页面层） | 功能级任务就地弹窗 | `TasksPage.test.tsx`：点击功能级任务卡片（7 / 71 / 711 / 320）后弹出任务详情（`关闭任务详情` 与标题可见），`location-probe` 恒为 `/tasks` | 本地通过 |
+| F32-INPLACE-PAGE-002 | 单元（页面层） | 模块级任务就地弹窗 | `TasksPage.test.tsx`：`moduleTask`（7 / 72 / null / 321）点击后就地弹窗，URL 不变 | 本地通过 |
+| F32-INPLACE-E2E-001 | Playwright | 真实数据卡片就地弹窗 | `aggregate-views.spec.ts`：点击任务卡片后 `dialog[name=任务详情]` 可见（含标题、「编辑任务」「完成任务」），`page.url()` 仍为任务中心地址，关闭后仍在任务中心 | 本地通过 |
+
+本地实际执行（2026-09-17）：`pnpm --filter @inpulse/web typecheck`；`pnpm --filter @inpulse/web exec vitest run src/pages/tasks/TasksPage.test.tsx`（8 例，连跑 3 次稳定）；`pnpm test:web`（77 文件 455 例）；`pnpm lint`（改动文件）；`prettier --check`（`apps/web/src`、`apps/e2e/tests`）；`pnpm check:frontend:boundaries`（251 模块 / 1189 依赖）；定向 Playwright `aggregate-views`、`task-groups` 各 2 例通过；全量 `pnpm test:e2e` 52 通过 / 4 失败（`features` 归档恢复、`leftover-task`、`project-archive`、`project-members` 超时，均不经任务中心卡片路径）。
+
+未运行 / 已知偏差：① 按项目负责人 2026-09-17 指示，此后纯前端改动不再运行测试；② 上述 4 例 E2E 失败与本改动无关，未修复；③ 新增/更新的用例需非作者人工评审。
+
+## E2E 夹具数据自动物理清理（2026-09-17 本地落库）
+
+项目负责人指示「每次测试完的数据要删除」。本地 55432 开发库此前累积了 17 个夹具项目、13 个夹具账号与派生数据；旧 `global-teardown` 只清通知、活动、搜索投影、幂等记录与用户会话，按「未分类模块不可物理删除」的业务不变量保留项目与用户骨架。本轮完成一次性清理，并把 teardown 机制改为自动物理清理。
+
+一次性清理（2026-09-17，`cluster_bootstrap`，事务内 `session_replication_role = replica`，先演练后提交）：删除夹具用户 13、夹具项目 17、业务行 314（任务 30、功能 18、记录 17、外链 6、通知 13、活动 4、搜索投影 19、成员 28、幂等 14、会话 3、序列 23 等）、`PROJECT:` 审计 157 条与链头 14 条；随后补删 8 条 `actor_id` 悬空的 SYSTEM 审计行；`users_id_seq` / `projects_id_seq` 回退到真实数据之后。清理前用 `pg_dump -Fc` 备份至宿主机临时目录（`inpulse-app-before-e2e-cleanup.dump`）。清理后复验：项目 1 与用户 1–5 完好、bootstrap 成员关系（`joined_at = created_at`）成立、无悬空外键、每项目唯一 UNCLASSIFIED 模块。
+
+自动清理机制：`apps/e2e/helpers/fixture-cleanup.ts` 按 `e2e_` / `f03_` 前缀识别夹具账号，再按 `created_by` 识别夹具项目，按依赖序物理删除全部业务数据与审计，删除后断言复核（夹具残留 0、无悬空审计 actor、bootstrap 完整、每项目唯一 UNCLASSIFIED 模块），失败回滚；`global-teardown.ts` 每次运行后自动调用，运行被中断时用 `pnpm --filter @inpulse/e2e cleanup` 手动补跑。SYSTEM 链夹具记录删除后链头回退到剩余最后一条；若夹具记录之后已有真实写入则留下一个可检测断点并打印提示。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| E2E-CLEANUP-SCRIPT-001 | 真实 PostgreSQL | 空库 no-op | 清理后库上执行 `pnpm --filter @inpulse/e2e cleanup` 输出「未发现 E2E 夹具数据」且无异常 | 本地通过 |
+| E2E-CLEANUP-TEARDOWN-001 | Playwright | teardown 自动清理 | `project-create.spec.ts` 运行结束后 teardown 报告「删除用户 2、项目 3、业务行 56、审计行 1」，随后库内夹具残留为 0 | 本地通过 |
+
+本地实际执行（2026-09-17）：一次性清理按上述清单执行并复验；`apps/e2e` typecheck、`prettier` 通过；`pnpm --filter @inpulse/api build` 后定向跑 `project-create.spec.ts` 1 例通过（10.0s）且 teardown 自动清理生效。
+
+未运行 / 已知偏差：① 未跑全量 `pnpm test:e2e` 与其他落库测试来验证 teardown（机制已由定向用例覆盖）；② 一次性清理在 SYSTEM 链 385→386 之间留下一个已知断点（386 为真实用户 01:56 的 SSO 登录，晚于夹具记录，删除中段无法保持哈希链完整），teardown 已实现「夹具段位于链尾时回退链头」的安全路径，同类场景默认不留断点；③ `test-results/`、`playwright-report/` 等 Playwright 产物默认保留用于失败调试，本次已手动清理。
+
+## 裁决修订 D-2：R-3 / R-5 增加 `hasLeftoverSource` 与「遗留问题」徽章（2026-09-17 本地落库）
+
+按[裁决修订 D-2](a-contract-review-f25-f29-f32.md) §12：R-3 `MyTaskItem` 与 R-5 `TaskGroupMembershipItem` 各增加 `hasLeftoverSource: boolean`（按 `leftover_task_links` 存在链接行判定，与来源记录当前状态无关）；记录侧 `ChangeRecordReadPort` 新增只读映射 `listLeftoverSourceTaskIds`（单条 SQL、按 task_id 升序、无链接缺席由消费端补 false，越界与空集短路与 `countPublishedByTask` 同口径）；R-3 `MyTasksQueryService` 与 R-5 `TaskGroupMembershipQueryService` 在同一只读事务内消费该映射。前端：任务中心卡片与列表行（R-3）、功能档案任务卡片、列表行与详情弹窗（R-5 页面级一次批量）显示「遗留问题」徽章（amber）。契约、Route Registry summary、Schema Registry 描述、权限矩阵、OpenAPI 与生成客户端同一批再生成（105 条路由，5 产物漂移检查通过）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| D2-CONTRACT-001 | 契约 | Schema 与生成物 | R-3 / R-5 条目增加 `hasLeftoverSource`；`contract:drift`（5 产物）、`contract:validate`（105 条）、`permissions:check`（105/105）通过 | 本地通过 |
+| D2-PORT-INT-001 | 真实 PostgreSQL | 端口映射 | `listLeftoverSourceTaskIds` 只返回存在链接行的任务（升序）；`projectIds` 收窄后他项目链接行不返回；无链接任务缺席；`taskIds` 超 `CHANGE_RECORD_TASK_IDS_MAX` 或含非正整数抛 `ChangeRecordReadInputError` 且不发 SQL；`projectIds`/`taskIds` 为空短路 | 本地通过（`apps/api/test/aggregate-read-ports.integration.test.ts`） |
+| D2-R3-INT-001 | 真实 PostgreSQL | R-3 条目映射 | `GET /api/v1/me/tasks` 中有 `leftover_task_links` 链接行的任务（CONVERTED 遗留项转换夹具）`hasLeftoverSource=true`，其余任务 false | 本地通过（`apps/api/test/aggregate-read-api.integration.test.ts`） |
+| D2-R5-INT-001 | 真实 PostgreSQL | R-5 批量标记 | `GET /api/v1/task-groups/memberships` 条目含 `hasLeftoverSource`；未入组、无权项目与既有覆盖/隐藏语义不变 | 本地通过（同上） |
+| D2-UNIT-API-001 | 单元 | R-3 / R-5 服务 | `MyTasksQueryService` 与 `TaskGroupMembershipQueryService` 经 `listLeftoverSourceTaskIds` 补齐标记；空授权范围不发后续 SQL | 本地通过（`apps/api/test/aggregate-read.service.test.ts`） |
+| D2-UNIT-WEB-001 | 单元 | 前端映射与徽章 | `fromV1MyTaskItem` / `toTaskMarkMap` / `useTaskMarks` 透传 `hasLeftoverSource`；`TasksPanel` 卡片与详情弹窗按标记渲染「遗留问题」徽章、无标记不渲染；mock 数据集 10 条同形 | 本地通过（`task-marks.test.tsx`、`TasksPanel.test.tsx`、`my-tasks-*.test.*`） |
+
+本地实际执行（2026-09-17）：API 单测 64 文件 351 例、Web 77 文件 455 例、契约 98 例、真库集成（aggregate-read-api / aggregate-read-ports / aggregate-read-list-api）3 文件 50 例、全 workspace typecheck、`eslint`（改动文件）、`prettier`（改动文件）、`check:frontend:boundaries`（251 模块 / 1189 依赖）、`permissions:check`（105/105）、`contract:drift`（5 产物）与 `contract:validate`（105 条）通过。真库集成测试的 `user_` 前缀夹具（database.helpers 的 createUser/createProject）不由测试生命周期自动清理：本轮测试后已用一次性事务脚本按依赖序物理删除夹具用户 35、夹具项目 30 与派生业务行 1266（聚合读测试只读、审计行为 0，SYSTEM 链未触碰），删除后复核剩余 6 个真实用户与 2 个真实项目、无悬空审计 actor、bootstrap 成员关系完整、无悬空任务；真实数据的既有异常（project 2 历史遗留 0 个 UNCLASSIFIED 模块）不在清理范围、清理前后不变。
+
+未运行 / 已知偏差：① 未跑全量 `pnpm test:integration`、`pnpm test:e2e` 与 `pnpm check` 整链（deps:audit 本机镜像无 audit endpoint 属已知限制）；② GitHub Actions 未执行；③ 新增/更新用例需非作者人工评审；④ 遗留问题页（`/issues`）与已发布记录页的既有「查看跟进任务」入口不变，本批只新增任务侧徽章。

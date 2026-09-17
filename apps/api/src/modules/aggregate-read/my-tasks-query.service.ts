@@ -236,6 +236,13 @@ export class MyTasksQueryService {
         pageProjectIds,
         taskIds,
       );
+      // 裁决修订 D-2：遗留问题来源标记与 R-5 批量读同源（leftover_task_links 存在性）。
+      const leftoverSourceTaskIds =
+        await this.records.listLeftoverSourceTaskIds(
+          tx,
+          pageProjectIds,
+          taskIds,
+        );
       const linkCounts = await this.links.countTaskLinks(
         tx,
         pageProjectIds,
@@ -259,6 +266,7 @@ export class MyTasksQueryService {
         assignees,
         publishedRecordCounts,
         groupRoles,
+        leftoverSourceTaskIds,
         linkCounts,
         stats,
         leftover,
@@ -290,6 +298,7 @@ export class MyTasksQueryService {
     const linkCountByTask = new Map(
       data.linkCounts.map((item) => [item.taskId, item.count]),
     );
+    const leftoverSourceTasks = new Set(data.leftoverSourceTaskIds);
 
     const items: MyTaskItem[] = data.page.items.map((row) => {
       const projectName = projectNameById.get(row.projectId);
@@ -340,6 +349,7 @@ export class MyTasksQueryService {
         publishedRecordCount,
         groupRole: roleByTask.get(row.taskId) ?? null,
         groupId: groupIdByTask.get(row.taskId) ?? null,
+        hasLeftoverSource: leftoverSourceTasks.has(row.taskId),
       };
     });
 

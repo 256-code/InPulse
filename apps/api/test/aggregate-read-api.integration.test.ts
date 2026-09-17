@@ -266,7 +266,7 @@ async function newLeftover(
   options: {
     readonly content: string;
     readonly createdAt: string;
-    readonly status?: "ACTIVE" | "RESOLVED";
+    readonly status?: "ACTIVE" | "CONVERTED" | "RESOLVED";
   },
 ): Promise<number> {
   const status = options.status ?? "ACTIVE";
@@ -550,6 +550,17 @@ beforeAll(async () => {
     createdAt: at(4),
     status: "RESOLVED",
   });
+  // 裁决修订 D-2：tSource 是一条真实的「遗留问题转任务」跟进任务
+  //（CONVERTED 遗留项 + leftover_task_links 链接行），其余任务都没有链接。
+  const loConvertedSource = await newLeftover(projectFixture, crSource, {
+    content: "已转换遗留问题",
+    createdAt: at(5),
+    status: "CONVERTED",
+  });
+  await runtime.sql`
+    INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+    VALUES (${loConvertedSource}, ${tSource}, ${projectFixture.projectId}, ${projectFixture.userId})
+  `;
 
   const sessionKey = randomBytes(32);
   const sessionKeyring = VersionedHmacKeyring.fromEntries(
@@ -1168,6 +1179,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
         (item) => item.hasPublishedRecord === item.publishedRecordCount > 0,
       ),
     ).toBe(true);
+    // 裁决修订 D-2：只有存在 leftover_task_links 链接行的任务标记遗留问题来源。
+    const leftoverSourceByTask = new Map(
+      page.items.map((item) => [item.taskId, item.hasLeftoverSource]),
+    );
+    expect(leftoverSourceByTask.get(tSource)).toBe(true);
+    expect(leftoverSourceByTask.get(tMain)).toBe(false);
+    expect(leftoverSourceByTask.get(tDone)).toBe(false);
     expect(page.items.find((item) => item.taskId === tModule)).toMatchObject({
       featureId: null,
       featureName: null,
@@ -1577,36 +1595,47 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       items: [
-        { taskId: tMain, groupId, groupRole: "MAIN", publishedRecordCount: 1 },
+        {
+          taskId: tMain,
+          groupId,
+          groupRole: "MAIN",
+          publishedRecordCount: 1,
+          hasLeftoverSource: false,
+        },
         {
           taskId: tSource,
           groupId,
           groupRole: "SOURCE",
           publishedRecordCount: 5,
+          hasLeftoverSource: true,
         },
         {
           taskId: tHistorical,
           groupId,
           groupRole: "SOURCE",
           publishedRecordCount: 1,
+          hasLeftoverSource: false,
         },
         {
           taskId: tDetached,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: tModule,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: ungroupedWithRecord,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 1,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1652,12 +1681,14 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
           groupId: foreignGroupId,
           groupRole: "MAIN",
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: foreignSource,
           groupId: foreignGroupId,
           groupRole: "SOURCE",
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });

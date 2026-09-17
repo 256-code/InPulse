@@ -401,8 +401,20 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
   const main: TaskItem = { ...item, id: 3, title: "主任务丙" };
   const marks = {
     items: [
-      { taskId: 1, groupId: 501, groupRole: "SOURCE", publishedRecordCount: 2 },
-      { taskId: 2, groupId: null, groupRole: null, publishedRecordCount: 0 },
+      {
+        taskId: 1,
+        groupId: 501,
+        groupRole: "SOURCE",
+        publishedRecordCount: 2,
+        hasLeftoverSource: true,
+      },
+      {
+        taskId: 2,
+        groupId: null,
+        groupRole: null,
+        publishedRecordCount: 0,
+        hasLeftoverSource: false,
+      },
     ],
   } as const;
   it("marks every card from one batch call and hides the entry for ungrouped tasks", async () => {
@@ -420,11 +432,14 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     expect(
       await within(sourceCard).findByText("迭代记录 2 条"),
     ).toBeInTheDocument();
+    // 裁决修订 D-2：遗留问题转化而来的任务在卡片上自带「遗留问题」徽章。
+    expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest("article") as HTMLElement;
     expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
     expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
     await waitFor(() =>
       expect(listTaskGroupMemberships).toHaveBeenCalledTimes(1),
@@ -444,6 +459,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
     expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
+    expect(await within(dialog).findByText("遗留问题")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
     expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
   });
@@ -458,6 +474,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
               groupId: 501,
               groupRole: "MAIN",
               publishedRecordCount: 0,
+              hasLeftoverSource: false,
             },
           ],
         }),
@@ -467,6 +484,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       "article",
     ) as HTMLElement;
     expect(await within(mainCard).findByText("主任务")).toBeInTheDocument();
+    expect(within(mainCard).queryByText("遗留问题")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("主任务")).toBeInTheDocument();
@@ -487,6 +505,7 @@ describe("C-3 任务详情弹窗标签页", () => {
         groupId: 501,
         groupRole: role,
         publishedRecordCount: 2,
+        hasLeftoverSource: false,
       },
     ],
   });

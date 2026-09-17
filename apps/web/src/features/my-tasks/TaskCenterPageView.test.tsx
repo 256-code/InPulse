@@ -160,6 +160,7 @@ const doneTask: MyTaskListItem = {
   groupRole: null,
   githubLinkCount: 0,
   groupId: null,
+  hasLeftoverSource: false,
 };
 
 describe("TaskCenterPageView", () => {

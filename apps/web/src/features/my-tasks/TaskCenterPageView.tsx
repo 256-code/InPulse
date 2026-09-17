@@ -397,9 +397,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
 
   /**
    * 任务中心只做跨项目查看与定位，不复制功能档案的写入口（状态推进 / 生成迭代记录 /
-   * 合并 / 删除 / 关联链接 / 任务编辑只在功能档案的任务抽屉中提供）。卡片与列表行点击
-   * 后经 onOpenTask（TasksPage → taskDetailPath 深链）直接进入项目 / 模块 / 功能定位，
-   * 由 ?taskId= 打开任务抽屉，不在任务中心弹出只读详情弹层。
+   * 合并 / 关联链接 / 任务编辑只在任务详情弹窗中提供）。卡片与列表行点击后经
+   * onOpenTask 交回页面，由 TasksPage 在当前页面就地打开功能档案同款的任务详情
+   * 弹窗（不改变地址栏、不跳转），写入口仍只有这一个。
    */
   const openTask = (item: MyTaskListItem) =>
     onOpenTask?.({
@@ -434,6 +434,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             {item.groupRole !== null ? (
               <CalmBadge tone={item.groupRole === "MAIN" ? "violet" : "cyan"}>
                 {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
+              </CalmBadge>
+            ) : null}
+            {item.hasLeftoverSource ? (
+              <CalmBadge tone="amber" title="由遗留问题转换而来的跟进任务">
+                遗留问题
               </CalmBadge>
             ) : null}
             <CalmBadge tone={statusTone[item.workStatus]}>
@@ -511,6 +516,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   <span>
                     {relationLabelOf(item)}
                     {item.scopeType === "MODULE" ? " · 模块级" : ""}
+                    {item.hasLeftoverSource ? " · 遗留问题" : ""}
                   </span>
                 </button>
               </td>

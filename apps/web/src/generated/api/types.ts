@@ -632,6 +632,7 @@ export type MyTaskItem = {
   readonly publishedRecordCount: number;
   readonly groupRole: (("MAIN" | "SOURCE") | null);
   readonly groupId: (number | null);
+  readonly hasLeftoverSource: boolean;
 };
 
 export type MyTaskLeftoverSample = {
@@ -1394,6 +1395,7 @@ export type TaskGroupMembershipItem = {
   readonly groupId: (number | null);
   readonly groupRole: (("MAIN" | "SOURCE") | null);
   readonly publishedRecordCount: number;
+  readonly hasLeftoverSource: boolean;
 };
 
 export type TaskGroupMembershipQueryRequest = {

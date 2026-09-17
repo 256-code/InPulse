@@ -7,9 +7,9 @@
 | 配套输入 | [F-29 / F-32 跨域只读端口扩展提案](./c-port-extension-proposal.md)（C 岗交 B 岗；本裁决同时对其 §7 的两处架构冲突给出结论） |
 | 上游编号 | C-003（聚合接口缺口）、C-010（候选接口尚未冻结） |
 | 文档性质 | 契约评审裁决记录；不是 ADR，不替代功能设计、系统设计、技术设计、权限矩阵或测试矩阵 |
-| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships` |
+| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships`。2026-09-17 追加裁决修订 D-2（§12）：R-3 / R-5 增加 `hasLeftoverSource` |
 | 基线 | `origin/main` `fc7bb68`（F-20 PR #88 之后）；本文引用的代码事实均按该提交复核 |
-| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付。§11 的 D-1 修订已由 B-7（记录侧计数映射，[PR #116](https://github.com/256-code/InPulse/pull/116)）与 A-7（R-3 `publishedRecordCount`、R-5 任务记录标记批量读，2026-09-11 本地落库）交付，C-1 前置解除 |
+| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付。§11 的 D-1 修订已由 B-7（记录侧计数映射，[PR #116](https://github.com/256-code/InPulse/pull/116)）与 A-7（R-3 `publishedRecordCount`、R-5 任务记录标记批量读，2026-09-11 本地落库）交付，C-1 前置解除。§12 的 D-2 修订（R-3 / R-5 `hasLeftoverSource`）已于 2026-09-17 本地落库（契约、端口、两个聚合读服务、生成客户端、前端徽章与测试同一批） |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 结论摘要
@@ -282,3 +282,22 @@ R-5 现状（§10.4）只返回属于 `ACTIVE` 聚合组的任务，未入组的
 
 **前置关系：** D-1.2 与 D-1.3 未落库前，C 侧不得以条数实现该标记；R-5 扩展落库后 F-25 步骤 3 才可闭环。A-7 与 B-7 的台账见[开发工作书](../开发工作书v1.0.md)「剩余工作清算与岗位重分配（2026-09-11 生效）」。
 **验收：** `pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；R-3 与 R-5 的真实 PostgreSQL 集成测试覆盖未入组任务的计数与空值；`EXPLAIN (ANALYZE, BUFFERS)` 证明计数未破坏先过滤后分页。
+
+## 12. 裁决修订 D-2：R-3 / R-5 增加 `hasLeftoverSource`（2026-09-17，用户要求）
+
+### 12.1 需求与定案
+
+用户要求「遗留问题转为的任务要自带遗留问题的标签」：F-20 转换生成的跟进任务必须在任务列表（任务中心与功能档案）里可见地标记来源，而不是只有任务详情弹窗底部一个来源链接。
+
+**定案：R-3 `MyTaskItem` 与 R-5 `TaskGroupMembershipItem` 各增加 `hasLeftoverSource: boolean`。** Q-03 / D-1.1 维持有效：任务基础 DTO（`tasks.zod.ts`）不动；标记沿用 D-1 的两条宿主——R-3 覆盖任务中心，R-5 页面级一次批量覆盖功能档案任务卡片与详情弹窗，不新增路由、不增加请求数。
+
+### 12.2 口径
+
+- 判定依据是 `leftover_task_links` 是否存在该任务的链接行；链接行由转换 Workflow 同事务写入且永不删除（`leftover_item_id` 主键、`task_id` 唯一），存在即「由遗留问题转换而来」。
+- 与来源记录当前状态（PUBLISHED / VOID）及遗留项处置状态（CONVERTED / RESOLVED）无关；记录后续作废不回撤标记。
+- 数据读取由记录侧 `ChangeRecordReadPort.listLeftoverSourceTaskIds`（单条 SQL、按 task_id 升序、无链接的任务缺席由消费端补 false）承担，与 B-7 `countPublishedByTask` 同模式、同宿主，不新增依赖边。
+- 前端展示为「遗留问题」徽章（`CalmBadge tone="amber"`）；R-5 读取失败降级为空标记集合时徽章隐藏，不回退为逐个请求。
+
+### 12.3 验收
+
+`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；R-3 与 R-5 的真实 PostgreSQL 集成测试覆盖有/无链接行的任务标记与 projectIds 收窄；端口越界校验（`CHANGE_RECORD_TASK_IDS_MAX`、空集短路不发 SQL）与 `countPublishedByTask` 同断言强度。
