@@ -218,6 +218,7 @@ export class HealthController {
       "GET /api/v1/projects/{projectId}/change-records/{recordId}/versions/{versionNo}",
       "POST /api/v1/projects/{projectId}/change-records/{recordId}/publish",
       "POST /api/v1/projects/{projectId}/change-records/{recordId}/versions",
+      "POST /api/v1/projects/{projectId}/change-records/{recordId}/leftovers",
       "GET /api/v1/projects/{projectId}/record-drafts",
       "GET /api/v1/projects/{projectId}/record-drafts/{recordId}",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/record-drafts",

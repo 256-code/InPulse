@@ -25,7 +25,7 @@ const first: ChangeRecordVersion = {
   contextProblem: "重复请求",
   changeSolution: "增加幂等",
   resultVerification: "初次验证",
-  remainingIssues: "",
+  remainingIssues: [],
   leftovers: [],
 };
 const second: ChangeRecordVersion = {
@@ -50,7 +50,6 @@ const item = {
   updatedAt: first.createdAt,
   rowVersion: 3,
   impactFeatureIds: [],
-  leftoverItem: null,
   leftovers: [],
 };
 function mountDetail(

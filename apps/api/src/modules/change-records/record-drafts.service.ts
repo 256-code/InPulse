@@ -490,7 +490,10 @@ export class RecordDraftsService
       contextProblem,
       changeSolution,
       resultVerification,
-      remainingIssues,
+      // 草稿里的遗留问题一律按新增保存：稳定遗留项只在发布或修订时分配。
+      remainingIssues: remainingIssues.map((entry) => ({
+        content: entry.content,
+      })),
     };
   }
   private async appendAudit(

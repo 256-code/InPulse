@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 async function createTask(
   page: Page,
@@ -52,7 +53,7 @@ for (const feature of [true, false])
       await form.getByRole("button", { name: /有，填写迭代记录/ }).click();
       for (const label of ["改动原因", "具体改动", "改动效果"])
         await form.getByLabel(label).fill("真实组合流程");
-      await form.getByLabel("遗留问题（选填）").fill("需要后续跟进");
+      await fillLeftovers(form, ["需要后续跟进"]);
       await form
         .getByRole("button", { name: "发布并完成任务", exact: true })
         .click();
@@ -93,9 +94,11 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建来源草稿" });
+    // 草稿与正式版本共用字段上限，超限只能在发布阶段由搜索容量触发；API 请求体默认上限
+    // 100KB，因此只能用单字节字符：33600×3 越过 100000 字符的搜索文本上限，请求体约 100KB。
+    const filler = "a".repeat(33600);
     for (const label of ["改动原因", "具体改动", "改动效果"])
-      await draft.getByLabel(label).fill("可保留的完整内容");
-    await draft.getByLabel("遗留问题（选填）").fill("文".repeat(10001));
+      await draft.getByLabel(label).fill(filler);
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.goto(url);
@@ -108,15 +111,15 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await form
       .getByRole("button", { name: "发布并完成任务", exact: true })
       .click();
-    await expect(
-      form.getByText(/发布和正式修订的遗留问题最多10000字符/),
-    ).toBeVisible();
+    await expect(form.getByText(/超出发布容量/)).toBeVisible();
     await expect(form.getByLabel("待发布草稿")).toHaveValue(selection);
     await expect(task.locator(".task-status-history > li")).toHaveCount(1);
     await form.getByRole("link", { name: "打开草稿继续编辑" }).click();
     await page.getByRole("button", { name: "继续编辑" }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
-    await edit.getByLabel("遗留问题（选填）").fill("后续跟进");
+    for (const label of ["改动原因", "具体改动", "改动效果"])
+      await edit.getByLabel(label).fill("可保留的完整内容");
+    await fillLeftovers(edit, ["后续跟进"]);
     await edit.getByRole("button", { name: "保存草稿" }).click();
     await expect(edit).toBeHidden();
     await page.goto(url);

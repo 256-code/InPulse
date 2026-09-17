@@ -15,4 +15,15 @@ export abstract class RecordPublicationCommandPort {
     expectedRowVersion: number,
     requestId: string,
   ): Promise<PublishedRecord>;
+  /** F-18 详情页快捷追加：只追加一条遗留问题，其余条目按当前版本原样沿用，仍写一次新版本。 */
+  abstract appendLeftover(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+    recordId: number,
+    rowVersion: number,
+    currentVersion: number,
+    content: string,
+    requestId: string,
+  ): Promise<PublishedRecord>;
 }

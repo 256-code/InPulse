@@ -85,7 +85,7 @@ const content = {
   contextProblem: "发现问题",
   changeSolution: "修复方案",
   resultVerification: "验证通过",
-  remainingIssues: "后续优化",
+  remainingIssues: [{ content: "后续优化" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -519,7 +519,7 @@ it("runs real HTTP authentication, CSRF, strict contract and concurrent idempote
     input: TaskCompletionRequest = {
       mode: "WITH_RECORD",
       expectedRowVersion: 1,
-      record: { ...content, remainingIssues: "" },
+      record: { ...content, remainingIssues: [] },
     },
     key = randomUUID();
   expect(
@@ -543,7 +543,7 @@ it("runs real HTTP authentication, CSRF, strict contract and concurrent idempote
     expect(response.status, await response.clone().text()).toBe(200);
   const first = taskCompletionResponseSchema.parse(await responses[0]!.json());
   expect(await responses[1]!.json()).toEqual(first);
-  expect(first.record?.leftoverItem).toBeNull();
+  expect(first.record?.leftovers).toEqual([]);
   expect(
     (
       await post(

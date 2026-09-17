@@ -92,7 +92,7 @@ const recordContent = {
   contextProblem: "上下文问题",
   changeSolution: "变更方案",
   resultVerification: "验证结果",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 
 function nextSuffix(kind: "T" | "F" | "CR"): string {

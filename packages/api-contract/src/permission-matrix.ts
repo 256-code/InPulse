@@ -153,6 +153,7 @@ export const permissionMatrix = [
       "previewLeftoverTask",
       "getLeftoverTaskSource",
       "createChangeRecordVersion",
+      "addChangeRecordLeftover",
       "getTaskRecordDrafts",
       "createTaskRecordDraft",
       "updateTaskRecordDraft",

@@ -10,6 +10,9 @@ import {
   type LeftoverTaskRequest,
   type LeftoverTaskResponse,
 } from "@generated/api";
+
+/** 正式记录里的一条遗留问题：状态与跟进任务都按条目自身判定。 */
+export type RecordLeftover = PublishedRecord["leftovers"][number];
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
@@ -83,6 +86,8 @@ export interface LeftoverConvertTarget {
   readonly featureId: number | null;
   readonly recordId: number;
   readonly recordTitle: string;
+  /** 目标遗留项：一条记录可以有多条遗留问题，预览与转换必须锁定其中一条。 */
+  readonly leftoverItemId: number;
 }
 
 export interface LeftoverTaskConvertModalProps {
@@ -146,6 +151,7 @@ export function LeftoverTaskConvertModal({
       const next = await api.previewLeftoverTask(
         target.projectId,
         target.recordId,
+        { leftoverItemId: target.leftoverItemId },
       );
       if (initial) {
         setPreview(next);
@@ -387,42 +393,29 @@ export function LeftoverTaskConvertModal({
 }
 
 /**
- * 已发布记录页的触发按钮：保持原有「已转换显示链接、否则显示按钮」的行为，
- * 逻辑全部复用转换弹窗。
+ * 已发布记录页的单条遗留项入口：已转任务的行只在列表里展示链接，未转换的行
+ * 提供「转为新任务」按钮，逻辑全部复用转换弹窗。
  */
 export function ConvertLeftoverTask({
   item,
+  leftover,
   api,
   writable,
+  onConverted,
 }: {
   item: PublishedRecord;
+  leftover: RecordLeftover;
   api: InpulseApiClient;
   writable: boolean;
+  onConverted?: (() => void) | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<LeftoverTaskResponse | null>(null);
-  const linked =
-    result ??
-    (item.leftoverItem?.linkedTaskId
-      ? {
-          projectId: item.projectId,
-          moduleId: item.moduleId,
-          featureId: item.featureId,
-          taskId: item.leftoverItem.linkedTaskId,
-        }
-      : null);
+  if (leftover.status !== "ACTIVE") return null;
   return (
     <>
-      {linked ? (
-        <a href={taskDetailPath(linked)}>查看跟进任务</a>
-      ) : (
-        item.leftoverItem?.status === "ACTIVE" &&
-        item.leftovers.some((l) => l.id === item.leftoverItem?.id) && (
-          <Button disabled={!writable} onClick={() => setOpen(true)}>
-            转为新任务
-          </Button>
-        )
-      )}
+      <Button disabled={!writable} onClick={() => setOpen(true)}>
+        转为新任务
+      </Button>
       <LeftoverTaskConvertModal
         target={{
           projectId: item.projectId,
@@ -430,13 +423,14 @@ export function ConvertLeftoverTask({
           featureId: item.featureId,
           recordId: item.id,
           recordTitle: item.title,
+          leftoverItemId: leftover.id,
         }}
         api={api}
         open={open}
         onClose={() => setOpen(false)}
-        onConverted={(created) => {
-          setResult(created);
+        onConverted={() => {
           setOpen(false);
+          onConverted?.();
         }}
       />
     </>

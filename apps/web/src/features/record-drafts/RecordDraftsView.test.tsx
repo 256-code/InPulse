@@ -37,7 +37,7 @@ const item: RecordDraftItem = {
   contextProblem: "重复请求",
   changeSolution: "增加幂等",
   resultVerification: "并发通过",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 function client(overrides: object = {}) {
   return {
@@ -121,7 +121,7 @@ describe("F-17 draft UI", () => {
       contextProblem: item.contextProblem,
       changeSolution: item.changeSolution,
       resultVerification: item.resultVerification,
-      remainingIssues: "",
+      remainingIssues: [],
       scopeType: "MODULE",
       impactFeatureIds: [],
     });
@@ -255,7 +255,7 @@ it("lists all source drafts without implicit selection and explicitly creates an
       contextProblem: "说明",
       changeSolution: "说明",
       resultVerification: "说明",
-      remainingIssues: "",
+      remainingIssues: [],
     },
   ]);
   expect(create.mock.calls[0]![4].headers["If-Match"]).toBe('"4"');
@@ -272,7 +272,8 @@ it("continues the selected source draft through the workflow without copying sou
   fireEvent.click(await screen.findByRole("button", { name: "查看草稿" }));
   fireEvent.click(await screen.findByRole("button", { name: "继续编辑" }));
   const modal = within(await screen.findByRole("dialog", { name: "编辑草稿" }));
-  fireEvent.change(modal.getByLabelText("遗留问题（选填）"), {
+  fireEvent.click(modal.getByRole("button", { name: "添加遗留问题" }));
+  fireEvent.change(modal.getByLabelText("遗留问题（选填，可添加多条） 1"), {
     target: { value: "补充" },
   });
   fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
@@ -283,7 +284,7 @@ it("continues the selected source draft through the workflow without copying sou
     contextProblem: item.contextProblem,
     changeSolution: item.changeSolution,
     resultVerification: item.resultVerification,
-    remainingIssues: "补充",
+    remainingIssues: [{ content: "补充" }],
   });
   expect(update.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
 });

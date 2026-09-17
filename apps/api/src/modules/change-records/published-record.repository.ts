@@ -9,6 +9,7 @@ import {
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type { TimeCursorValue } from "../../cursors/time-cursor.js";
+import { normalizedLeftoverEntries } from "./leftover-entries.js";
 /** B-3b 记录清单来源筛选：主任务 / 来源任务 / 模块级 / 功能直接创建。 */
 export type RecordFeedSourceFilter = "MAIN" | "SOURCE" | "MODULE" | "FEATURE";
 /** B-3b 跨项目清单入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
@@ -76,7 +77,6 @@ type Row = Omit<
   | "resultVerification"
   | "remainingIssues"
   | "leftovers"
-  | "leftoverItem"
   | "status"
 > & {
   status: "PUBLISHED" | "VOID";
@@ -106,15 +106,15 @@ export class PublishedRecordRepository {
   private async dto(tx: TransactionContext, row: Row) {
     const { currentPayload, ...identity } = row;
     const leftovers =
-      await tx.sql`SELECT l.id,l.status,l.row_version AS "rowVersion",v.content_snapshot AS content FROM app.change_record_version_leftovers v JOIN app.change_record_leftover_items l ON l.id=v.leftover_item_id AND l.project_id=v.project_id AND l.record_id=v.record_id WHERE v.record_id=${row.id} AND v.project_id=${row.projectId} AND v.version_no=${row.currentVersion} ORDER BY l.id`;
-    const [leftoverItem] =
-      await tx.sql`SELECT l.id,l.status,l.row_version AS "rowVersion",t.task_id AS "linkedTaskId" FROM app.change_record_leftover_items l LEFT JOIN app.leftover_task_links t ON t.leftover_item_id=l.id AND t.project_id=l.project_id WHERE l.record_id=${row.id} AND l.project_id=${row.projectId} ORDER BY l.id`;
+      await tx.sql`SELECT l.id,l.status,l.row_version AS "rowVersion",v.content_snapshot AS content,t.task_id AS "linkedTaskId" FROM app.change_record_version_leftovers v JOIN app.change_record_leftover_items l ON l.id=v.leftover_item_id AND l.project_id=v.project_id AND l.record_id=v.record_id LEFT JOIN app.leftover_task_links t ON t.leftover_item_id=l.id AND t.project_id=l.project_id WHERE v.record_id=${row.id} AND v.project_id=${row.projectId} AND v.version_no=${row.currentVersion} ORDER BY l.id`;
     return {
-      remainingIssues: "",
       ...currentPayload,
       ...identity,
+      remainingIssues: normalizedLeftoverEntries(
+        currentPayload.remainingIssues,
+        leftovers.map((leftover) => leftover.id),
+      ),
       leftovers,
-      leftoverItem: leftoverItem ?? null,
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
       publishedAt: new Date(row.publishedAt).toISOString(),
@@ -304,9 +304,12 @@ export class PublishedRecordRepository {
         const leftovers =
           await tx.sql`SELECT leftover_item_id AS id,content_snapshot AS content FROM app.change_record_version_leftovers WHERE record_id=${record.id} AND project_id=${record.projectId} AND version_no=${row.versionNo} ORDER BY leftover_item_id`;
         return changeRecordVersionSchema.parse({
-          remainingIssues: "",
           ...payload,
           ...identity,
+          remainingIssues: normalizedLeftoverEntries(
+            payload.remainingIssues,
+            leftovers.map((leftover) => leftover.id),
+          ),
           leftovers,
           createdAt: new Date(row.createdAt).toISOString(),
         });

@@ -89,16 +89,13 @@ const fields = [
   "contextProblem",
   "changeSolution",
   "resultVerification",
-  "remainingIssues",
+  "remainingIssues[].id",
+  "remainingIssues[].content",
   "leftovers[].id",
   "leftovers[].content",
   "leftovers[].status",
   "leftovers[].rowVersion",
-  "leftoverItem",
-  "leftoverItem.id",
-  "leftoverItem.status",
-  "leftoverItem.rowVersion",
-  "leftoverItem.linkedTaskId",
+  "leftovers[].linkedTaskId",
 ];
 export const recordPublicationRoutes: readonly RouteDefinition[] = (
   ["publishChangeRecord", "createChangeRecordVersion"] as const
@@ -141,6 +138,9 @@ export const recordPublicationRoutes: readonly RouteDefinition[] = (
       ),
     },
     behaviorHeaders: publish ? ["If-Match"] : ["If-Match", "X-Record-Version"],
+    // 1.2.0：遗留问题由单段文本改为条目数组，响应移除标量 leftoverItem。
+    idempotencyContractVersion: "1.2.0",
+    idempotencyFingerprintVersion: "1.2.0",
     idempotencyReplayPolicy: {
       version: "1.0.0",
       success: {
@@ -179,6 +179,34 @@ export const recordPublicationRoutes: readonly RouteDefinition[] = (
   };
 });
 
+const versionRoute = recordPublicationRoutes[1]!;
+/**
+ * F-18 详情页快捷追加：只追加一条遗留问题，其余条目按当前版本原样沿用；
+ * 服务端仍写一次记录版本，因此审计、活动、通知与搜索投影与修订完全一致。
+ */
+export const recordLeftoverRoutes: readonly RouteDefinition[] = [
+  {
+    ...versionRoute,
+    operationId: "addChangeRecordLeftover",
+    path: "/projects/{projectId}/change-records/{recordId}/leftovers",
+    summary: "在已有正式记录上追加一条遗留问题，仍形成一次记录版本",
+    request: {
+      ...versionRoute.request,
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "AddRecordLeftoverRequest",
+          },
+        ],
+      },
+    },
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    auditAction: "record.leftover.add",
+  },
+];
+
 export const recordLifecycleRoutes: readonly RouteDefinition[] = (
   ["voidChangeRecord", "restoreChangeRecord"] as const
 ).map((operationId) => ({
@@ -190,6 +218,9 @@ export const recordLifecycleRoutes: readonly RouteDefinition[] = (
     (operationId === "voidChangeRecord" ? "void" : "restore"),
   summary: "ADR-024 管理员作废/恢复；只改记录状态及同事务审计/投影",
   authPolicy: "adminSession",
+  // 该路由的请求/响应/重放策略未随记录内容变化，保持既有契约与 fingerprint 版本。
+  idempotencyContractVersion: "1.1.0",
+  idempotencyFingerprintVersion: "1.1.0",
   request: {
     path: "RecordDraftResourcePath",
     query: "none",

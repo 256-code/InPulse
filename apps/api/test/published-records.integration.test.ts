@@ -42,7 +42,7 @@ const content = {
   contextProblem: "版本并发问题",
   changeSolution: "数据库事务",
   resultVerification: "验证一",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 beforeAll(() => {
   client = createDatabaseClient(testUrls().runtime, {
@@ -155,6 +155,7 @@ describe("F18 formal record reads", () => {
       contextProblem: content.contextProblem,
       changeSolution: content.changeSolution,
       resultVerification: "验证二",
+      // 模拟多条化之前写入的历史版本：遗留问题仍是字符串，读取时必须归一化为数组。
       remainingIssues: "",
     };
     await uow.run(async (tx) => {
@@ -176,7 +177,12 @@ describe("F18 formal record reads", () => {
     ).toMatchObject({ ...content, versionNo: 1 });
     expect(
       await read.read(f.userId, f.projectId, f.draft.id, true),
-    ).toMatchObject({ items: [{ versionNo: 2 }, { versionNo: 1 }] });
+    ).toMatchObject({
+      items: [
+        { versionNo: 2, remainingIssues: [], leftovers: [] },
+        { versionNo: 1 },
+      ],
+    });
     await expect(
       read.read(f.userId, f.projectId, f.draft.id, true, 3),
     ).rejects.toMatchObject({ status: 404 });

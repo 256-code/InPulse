@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browser }) => {
   test.setTimeout(90000);
@@ -21,7 +22,7 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await expect(detail.getByText("暂无已知遗留问题")).toBeVisible();
     await page.getByRole("button", { name: "继续编辑" }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
-    await edit.getByLabel("遗留问题（选填）").fill("继续观察高峰流量");
+    await fillLeftovers(edit, ["继续观察高峰流量"]);
     await edit.getByRole("button", { name: "保存草稿" }).click();
     await expect(edit).toBeHidden();
     await page.reload();
@@ -113,7 +114,7 @@ for (const moduleScope of [false, true])
         .click();
       await page.getByRole("button", { name: "继续编辑" }).click();
       const edit = page.getByRole("dialog", { name: "编辑草稿" });
-      await edit.getByLabel("遗留问题（选填）").fill("来源草稿补充");
+      await fillLeftovers(edit, ["来源草稿补充"]);
       await edit.getByRole("button", { name: "保存草稿" }).click();
       await expect(edit).toBeHidden();
       await page.reload();

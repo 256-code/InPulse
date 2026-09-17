@@ -562,9 +562,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       contextProblem: "a",
       changeSolution: "b",
       resultVerification: "c",
-      remainingIssues: "",
+      remainingIssues: [],
       leftovers: [],
-      leftoverItem: null,
     };
     mount(
       client({
@@ -612,7 +611,7 @@ describe("C-3 任务详情弹窗标签页", () => {
               contextProblem: "a",
               changeSolution: "b",
               resultVerification: "c",
-              remainingIssues: "",
+              remainingIssues: [],
             },
           ],
         }),

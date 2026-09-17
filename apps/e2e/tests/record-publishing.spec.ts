@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 test("F18 独立发布、修订、明确解决遗留与不可变历史对比", async ({
   browser,
@@ -17,7 +18,7 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await draft.getByLabel("改动原因").fill("版本一问题");
     await draft.getByLabel("具体改动").fill("版本一方案");
     await draft.getByLabel("改动效果").fill("版本一验证");
-    await draft.getByLabel("遗留问题（选填）").fill("需要后续跟进");
+    await fillLeftovers(draft, ["需要后续跟进"]);
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.getByRole("button", { name: "发布记录", exact: true }).click();
@@ -33,12 +34,12 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await expect(edit).toBeHidden();
     await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
-    await edit.getByLabel("遗留问题（选填）").fill("");
+    await edit.getByRole("button", { name: /^移\s*除$/ }).click();
     await expect(
       edit.getByRole("button", { name: "保存新版本" }),
     ).toBeDisabled();
     await edit
-      .getByRole("checkbox", { name: "确认遗留问题已解决，清空本版本内容" })
+      .getByRole("checkbox", { name: /确认移除的遗留问题已解决/ })
       .check();
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
@@ -49,7 +50,7 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
       "已发布",
     );
     await expect(
-      detail.getByText("遗留问题已标记为解决，历史内容仍可查看。"),
+      detail.getByText("已标记解决的遗留问题保留历史内容，不再计入未闭环。"),
     ).toBeVisible();
     await detail.getByLabel("较早版本").selectOption("1");
     await detail.getByLabel("对照版本").selectOption("3");
@@ -57,6 +58,14 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await expect(diff.getByText("版本一方案")).toBeVisible();
     await expect(diff.getByText("版本二方案")).toBeVisible();
     await expect(diff.getByText("需要后续跟进")).toBeVisible();
+    // 详情页快捷追加：不改写整段正文也形成一次记录版本（v4），列表出现新条目且历史保留。
+    await detail.getByRole("button", { name: "追加遗留问题" }).click();
+    await detail.getByLabel("追加遗留问题内容").fill("追加的遗留问题");
+    await detail.getByRole("button", { name: "保存为新版本" }).click();
+    await expect(
+      detail.getByText("追加的遗留问题", { exact: true }),
+    ).toBeVisible();
+    await expect(card.locator("summary")).toContainText(/-CR-\d+ · v4 · 发布/);
     await page.screenshot({
       path: "test-results/f18-independent-versions.png",
       fullPage: true,

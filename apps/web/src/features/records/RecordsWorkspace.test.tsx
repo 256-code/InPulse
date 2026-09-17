@@ -67,8 +67,7 @@ const first: ReadableRecord = {
   contextProblem: "重复请求",
   changeSolution: "增加幂等",
   resultVerification: "并发通过",
-  remainingIssues: "",
-  leftoverItem: null,
+  remainingIssues: [],
   leftovers: [],
 };
 const second: ReadableRecord = {

@@ -171,4 +171,31 @@ export class PublishedRecordsController {
       );
     return result.body;
   }
+
+  @Post(":projectId/change-records/:recordId/leftovers")
+  @Operation("addChangeRecordLeftover")
+  async addChangeRecordLeftover(
+    @Req() request: DraftHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("addChangeRecordLeftover") params: unknown,
+    @ContractQuery("addChangeRecordLeftover") query: unknown,
+    @ContractBody("addChangeRecordLeftover") body: unknown,
+    @ContractHeaders("addChangeRecordLeftover") _headers: unknown,
+  ) {
+    const result = await this.publication.handle("addChangeRecordLeftover", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
 }

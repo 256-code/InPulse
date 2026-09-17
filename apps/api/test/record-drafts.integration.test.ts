@@ -68,7 +68,7 @@ const content = {
   contextProblem: "重复请求",
   changeSolution: "幂等处理",
   resultVerification: "回归通过",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 beforeAll(async () => {
   client = createDatabaseClient(testUrls().runtime, {

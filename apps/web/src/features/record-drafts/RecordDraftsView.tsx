@@ -1,5 +1,6 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import {
+  fieldText,
   fields,
   labels,
   mergeRecordDraft,
@@ -8,6 +9,7 @@ import {
 export { mergeRecordDraft } from "./record-content.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
 import {
   MY_RECORD_DRAFTS_QUERY_KEY,
@@ -42,7 +44,7 @@ const empty: RecordDraftContent = {
   contextProblem: "",
   changeSolution: "",
   resultVerification: "",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 const content = (item: RecordDraftContent): RecordDraftContent => ({
   title: item.title,
@@ -206,9 +208,15 @@ export function RecordDraftsView({
   const mutation = useMutation({
     retry: false,
     mutationFn: async (edit: RecordDraftContent) => {
-      const normalized = Object.fromEntries(
-        fields.map((field) => [field, edit[field].trim()]),
-      ) as RecordDraftContent;
+      const normalized: RecordDraftContent = {
+        title: edit.title.trim(),
+        contextProblem: edit.contextProblem.trim(),
+        changeSolution: edit.changeSolution.trim(),
+        resultVerification: edit.resultVerification.trim(),
+        remainingIssues: edit.remainingIssues.map((entry) => ({
+          content: entry.content.trim(),
+        })),
+      };
       const body = selection?.source
         ? {
             ...normalized,
@@ -394,7 +402,7 @@ export function RecordDraftsView({
     const values = { ...merge.values };
     for (const field of merge.conflicts)
       if (merge.choices[field] === "latest")
-        values[field] = merge.latest[field];
+        (values as Record<Field, unknown>)[field] = merge.latest[field];
     reset(values);
     setSelection({ item: merge.latest });
     setMerge(null);
@@ -645,7 +653,10 @@ export function RecordDraftsView({
                         <section key={field}>
                           <h3>{labels[field]}</h3>
                           <RecordMarkdown
-                            content={detail.data[field] || "暂无已知遗留问题"}
+                            content={
+                              fieldText(detail.data, field) ||
+                              "暂无已知遗留问题"
+                            }
                           />
                         </section>
                       ))}
@@ -750,7 +761,7 @@ export function RecordDraftsView({
                     <div className="record-field">
                       <span className="record-field-label">最新内容</span>
                       <RecordMarkdown
-                        content={merge.latest[field] || "（空）"}
+                        content={fieldText(merge.latest, field) || "（空）"}
                       />
                     </div>
                   </label>
@@ -887,43 +898,67 @@ export function RecordDraftsView({
                 )}
               </>
             )}
-            {fields.map((field) => (
-              <label key={field}>
-                {labels[field]}
-                <Controller
-                  name={field}
-                  control={control}
-                  rules={{
-                    validate: (value) =>
-                      field === "remainingIssues" ||
-                      value.trim().length > 0 ||
-                      "请填写此项",
-                    maxLength: field === "title" ? 500 : 50000,
-                  }}
-                  render={({ field: input }) =>
-                    field === "title" ? (
-                      <Input
-                        {...input}
-                        aria-label={labels[field]}
-                        maxLength={500}
-                      />
-                    ) : (
-                      <Input.TextArea
-                        {...input}
-                        aria-label={labels[field]}
-                        rows={4}
-                        maxLength={50000}
-                      />
-                    )
-                  }
-                />
-                {errors[field] && (
-                  <span role="alert">
-                    {errors[field]?.message || "内容过长"}
-                  </span>
+            {fields
+              .filter((field) => field !== "remainingIssues")
+              .map((field) => (
+                <label key={field}>
+                  {labels[field]}
+                  <Controller
+                    name={field}
+                    control={control}
+                    rules={{
+                      validate: (value) =>
+                        value.trim().length > 0 || "请填写此项",
+                      maxLength: field === "title" ? 500 : 50000,
+                    }}
+                    render={({ field: input }) =>
+                      field === "title" ? (
+                        <Input
+                          {...input}
+                          aria-label={labels[field]}
+                          maxLength={500}
+                        />
+                      ) : (
+                        <Input.TextArea
+                          {...input}
+                          aria-label={labels[field]}
+                          rows={4}
+                          maxLength={50000}
+                        />
+                      )
+                    }
+                  />
+                  {errors[field] && (
+                    <span role="alert">
+                      {errors[field]?.message || "内容过长"}
+                    </span>
+                  )}
+                </label>
+              ))}
+            <label>
+              {labels.remainingIssues}
+              <Controller
+                name="remainingIssues"
+                control={control}
+                rules={{
+                  validate: (entries) =>
+                    entries.every((entry) => entry.content.trim().length > 0) ||
+                    "每条遗留问题都不能为空，可移除不需要的条目",
+                }}
+                render={({ field: input }) => (
+                  <LeftoverEntriesField
+                    value={input.value}
+                    onChange={input.onChange}
+                    label={labels.remainingIssues}
+                  />
                 )}
-              </label>
-            ))}
+              />
+              {errors.remainingIssues && (
+                <span role="alert">
+                  {errors.remainingIssues?.message || "内容过长"}
+                </span>
+              )}
+            </label>
             <p>保存为草稿，可继续编辑；不会完成任务或发布记录。</p>
           </div>
           <div className="calm-action-footer">

@@ -100,6 +100,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
                     featureId: item.featureId,
                     recordId: item.recordId,
                     recordTitle: item.recordTitle,
+                    leftoverItemId: item.leftoverItemId,
                   })
                 }
               >

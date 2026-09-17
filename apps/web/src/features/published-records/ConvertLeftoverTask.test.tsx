@@ -13,7 +13,7 @@ const item = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "原文",
+  remainingIssues: [{ id: 8, content: "原文" }],
   taskId: null,
   handlerId: 3,
   authorId: 3,
@@ -31,8 +31,15 @@ const item = {
   featureId: null,
   scopeType: "MODULE",
   title: "记录",
-  leftoverItem: { id: 8, status: "ACTIVE", rowVersion: 1, linkedTaskId: null },
-  leftovers: [{ id: 8, content: "原文", status: "ACTIVE", rowVersion: 1 }],
+  leftovers: [
+    {
+      id: 8,
+      content: "原文",
+      status: "ACTIVE",
+      rowVersion: 1,
+      linkedTaskId: null,
+    },
+  ],
 } as PublishedRecord;
 const preview = {
   recordId: 7,
@@ -67,13 +74,21 @@ function mount(extra: object) {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
     ...extra,
   } as unknown as InpulseApiClient;
+  const onConverted = vi.fn();
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <QueryClientProvider client={new QueryClient()}>
-        <ConvertLeftoverTask item={item} api={api} writable />
+        <ConvertLeftoverTask
+          item={item}
+          leftover={item.leftovers[0]!}
+          api={api}
+          writable
+          onConverted={onConverted}
+        />
       </QueryClientProvider>
     </ConfigProvider>,
   );
+  return onConverted;
 }
 async function open() {
   fireEvent.click(screen.getByRole("button", { name: "转为新任务" }));
@@ -88,7 +103,7 @@ it("shows inherited/excluded history, retains input and reuses the key after unc
     .fn()
     .mockRejectedValueOnce(Error("network"))
     .mockResolvedValue(result);
-  mount({ convertLeftoverToTask: convert });
+  const converted = mount({ convertLeftoverToTask: convert });
   await open();
   await waitFor(() =>
     expect(screen.getByText(/历史归档影响不加入新任务：旧功能/)).toBeVisible(),
@@ -106,7 +121,8 @@ it("shows inherited/excluded history, retains input and reuses the key after unc
     "2026-10-10T18:30",
   );
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
-  await screen.findByRole("link", { name: "查看跟进任务" });
+  // 转换成功后由父级列表按 CONVERTED 渲染「查看跟进任务」链接，这里只断言回调与弹窗关闭。
+  await waitFor(() => expect(converted).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(convert.mock.calls[0]).toEqual(convert.mock.calls[1]);
   expect(convert.mock.calls[0]![2]).toMatchObject({
@@ -198,7 +214,7 @@ it("changes the key when the deadline changes and sends null when cleared", asyn
     .mockRejectedValueOnce(Error("network"))
     .mockRejectedValueOnce(Error("network"))
     .mockResolvedValue(result);
-  mount({ convertLeftoverToTask: convert });
+  const converted = mount({ convertLeftoverToTask: convert });
   await open();
   const due = screen.getByLabelText("跟进任务截止时间（选填）");
   fireEvent.change(due, { target: { value: "2026-10-10T18:30" } });
@@ -210,7 +226,7 @@ it("changes the key when the deadline changes and sends null when cleared", asyn
   await screen.findByText("暂时无法转换，输入已保留，请重试。");
   fireEvent.change(due, { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
-  await screen.findByRole("link", { name: "查看跟进任务" });
+  await waitFor(() => expect(converted).toHaveBeenCalledTimes(1));
   expect(convert.mock.calls.map((call) => call[2].dueAt)).toEqual([
     new Date(2026, 9, 10, 18, 30).toISOString(),
     new Date(2026, 9, 12, 8, 45).toISOString(),

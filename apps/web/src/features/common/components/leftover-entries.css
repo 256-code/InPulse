@@ -1,0 +1,34 @@
+/* 遗留问题多条编辑：逐条文本域 + 行尾移除/锁定标记，末行是添加按钮。 */
+.leftover-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leftover-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.leftover-entry > textarea {
+  flex: 1;
+  min-width: 0;
+}
+.leftover-entry-lock {
+  color: #7b8fa2;
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+}
+.leftover-entry-empty {
+  color: #7b8fa2;
+  font-size: 12px;
+}
+.leftover-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.leftover-entry-actions > span {
+  color: #7b8fa2;
+  font-size: 12px;
+}

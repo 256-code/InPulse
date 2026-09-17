@@ -5,10 +5,12 @@ import postgres from "postgres";
 /**
  * E2E 夹具数据物理清理。
  *
- * 夹具账号固定使用 `e2e_` / `f03_` 前缀（`global-setup.ts`、`admin-fixture.ts`
- * 与各 spec 的既有命名）。本模块按前缀识别夹具用户，再按其 `created_by`
+ * 夹具账号固定使用 `e2e_` / `f03_`（Playwright，`global-setup.ts`、
+ * `admin-fixture.ts` 与各 spec 的既有命名）以及 `user_` / `sso_` / `login_` /
+ * `invalidate_` / `csrf_`（API 集成测试 `database.helpers.createUser` 与各
+ * 集成 spec 的既有命名）前缀。本模块按前缀识别夹具用户，再按其 `created_by`
  * 识别夹具项目，然后按依赖顺序物理删除全部关联业务数据、PROJECT 审计链
- * 与夹具账号，供 `global-teardown.ts` 在每次运行后自动调用。
+ * 与夹具账号，供 `global-teardown.ts` 与集成测试收尾后手动调用。
  *
  * 数据库不变量禁止物理删除任何项目的 UNCLASSIFIED 模块
  * （`app.protect_unclassified_module`），因此删除只在清理会话内以
@@ -31,9 +33,20 @@ export interface FixtureCleanupReport {
   readonly systemChainBroken: boolean;
 }
 
-/** 夹具账号过滤条件（`\_` 匹配字面下划线）。 */
-const FIXTURE_LOGIN_FILTER =
-  "login_name LIKE 'e2e\\_%' OR login_name LIKE 'f03\\_%'";
+/**
+ * 夹具账号过滤条件（`\_` 匹配字面下划线）。
+ * `e2e_` / `f03_` 来自 Playwright 夹具；`user_`（`database.helpers.createUser`）、
+ * `sso_`、`login_`、`invalidate_`、`csrf_` 来自 API 集成测试的夹具命名。
+ */
+const FIXTURE_LOGIN_FILTER = [
+  "login_name LIKE 'e2e\\_%'",
+  "login_name LIKE 'f03\\_%'",
+  "login_name LIKE 'user\\_%'",
+  "login_name LIKE 'sso\\_%'",
+  "login_name LIKE 'login\\_%'",
+  "login_name LIKE 'invalidate\\_%'",
+  "login_name LIKE 'csrf\\_%'",
+].join(" OR ");
 
 export function formatFixtureCleanupReport(
   report: FixtureCleanupReport,
@@ -96,6 +109,27 @@ export async function cleanupFixtures(
       }
 
       let deletedRows = 0;
+      // 非夹具项目在清理前的不变量计数：删除动作不得让它变差。
+      const beforeInvariants = await transaction.unsafe(
+        `SELECT
+           (SELECT count(*)::int FROM app.projects p
+             WHERE p.id NOT IN (SELECT id FROM _cleanup_projects)
+               AND NOT EXISTS (
+                 SELECT 1 FROM app.project_members m
+                  WHERE m.project_id = p.id
+                    AND m.user_id = p.created_by
+                    AND m.joined_at = p.created_at
+               )) AS broken_bootstrap,
+           (SELECT count(*)::int FROM (
+             SELECT p.id
+               FROM app.projects p
+               LEFT JOIN app.modules m
+                 ON m.project_id = p.id AND m.kind = 'UNCLASSIFIED'
+              WHERE p.id NOT IN (SELECT id FROM _cleanup_projects)
+              GROUP BY p.id
+             HAVING count(m.id) <> 1
+           ) missing) AS missing_unclassified`,
+      );
       const remove = async (statement: string): Promise<number> => {
         const result = await transaction.unsafe(statement);
         const affected = Number(result.count ?? 0);
@@ -237,31 +271,6 @@ export async function cleanupFixtures(
           WHERE chain_id = 'SYSTEM'
             AND actor_id IN (SELECT id FROM _cleanup_users)`,
       );
-      const strayRows = await remove(
-        `DELETE FROM app.audit_logs
-          WHERE actor_id IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM app.users u WHERE u.id = app.audit_logs.actor_id
-            )`,
-      );
-
-      const rewind = await transaction.unsafe(
-        `UPDATE app.audit_chain_heads h
-            SET last_sequence = t.sequence_no,
-                last_hash = t.record_hash,
-                updated_at = t.occurred_at
-           FROM (
-             SELECT sequence_no, record_hash, occurred_at
-               FROM app.audit_logs
-              WHERE chain_id = 'SYSTEM'
-              ORDER BY sequence_no DESC
-              LIMIT 1
-           ) t
-          WHERE h.chain_id = 'SYSTEM'
-            AND h.last_sequence > t.sequence_no`,
-      );
-      const systemChainRewound = Number(rewind.count ?? 0) > 0;
-
       await remove(
         `DELETE FROM app.idempotency_records
           WHERE actor_id IN (SELECT id FROM _cleanup_users)`,
@@ -288,6 +297,32 @@ export async function cleanupFixtures(
       await remove(
         `DELETE FROM app.users WHERE id IN (SELECT id FROM _cleanup_users)`,
       );
+
+      // 夹具用户删除后才可能出现悬空 actor；覆盖全部链，含缺失 project_id 的 PROJECT 链行。
+      const strayRows = await remove(
+        `DELETE FROM app.audit_logs
+          WHERE actor_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM app.users u WHERE u.id = app.audit_logs.actor_id
+            )`,
+      );
+
+      const rewind = await transaction.unsafe(
+        `UPDATE app.audit_chain_heads h
+            SET last_sequence = t.sequence_no,
+                last_hash = t.record_hash,
+                updated_at = t.occurred_at
+           FROM (
+             SELECT sequence_no, record_hash, occurred_at
+               FROM app.audit_logs
+              WHERE chain_id = 'SYSTEM'
+              ORDER BY sequence_no DESC
+              LIMIT 1
+           ) t
+          WHERE h.chain_id = 'SYSTEM'
+            AND h.last_sequence > t.sequence_no`,
+      );
+      const systemChainRewound = Number(rewind.count ?? 0) > 0;
 
       await transaction.unsafe(
         `SELECT setval('app.users_id_seq',
@@ -317,7 +352,7 @@ export async function cleanupFixtures(
         systemChainBroken = Number(breaks[0]?.["n"] ?? 0) > 0;
       }
 
-      const checks = await transaction.unsafe(
+      const checkRows = await transaction.unsafe(
         `SELECT
            (SELECT count(*)::int FROM app.users
              WHERE ${FIXTURE_LOGIN_FILTER}) AS remaining_users,
@@ -345,13 +380,24 @@ export async function cleanupFixtures(
              HAVING count(m.id) <> 1
            ) missing) AS missing_unclassified`,
       );
-      const failedChecks = Object.entries(checks[0] ?? {}).filter(
-        ([, value]) => Number(value) !== 0,
-      );
+      const checks = (checkRows[0] ?? {}) as Record<string, number>;
+      const before = (beforeInvariants[0] ?? {}) as Record<string, number>;
+      const failedChecks = [
+        // 夹具残留与悬空审计 actor 必须为 0。
+        ...[
+          "remaining_users",
+          "remaining_projects",
+          "dangling_audit_actors",
+        ].filter((key) => Number(checks[key] ?? 0) !== 0),
+        // 项目不变量只要求清理未让计数变差：本地库可能存在规范化之前建立的历史项目。
+        ...["broken_bootstrap", "missing_unclassified"].filter(
+          (key) => Number(checks[key] ?? 0) > Number(before[key] ?? 0),
+        ),
+      ];
       if (failedChecks.length > 0) {
         throw new Error(
           `夹具清理后完整性断言失败：${failedChecks
-            .map(([key, value]) => `${key}=${String(value)}`)
+            .map((key) => `${key}=${String(checks[key])}`)
             .join(", ")}`,
         );
       }

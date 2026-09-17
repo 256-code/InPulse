@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "../helpers/admin-fixture.js";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", async ({
   browser,
@@ -22,7 +23,7 @@ test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", 
     await draft.getByLabel("改动原因").fill("原始问题");
     await draft.getByLabel("具体改动").fill("原始方案");
     await draft.getByLabel("改动效果").fill("原始验证");
-    await draft.getByLabel("遗留问题（选填）").fill("保留遗留问题");
+    await fillLeftovers(draft, ["保留遗留问题"]);
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await member.page

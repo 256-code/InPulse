@@ -4940,7 +4940,7 @@
     "/projects/{projectId}/change-records/{recordId}/leftover-task-preview": {
       "get": {
         "operationId": "previewLeftoverTask",
-        "summary": "预览遗留转任务的服务端影响继承",
+        "summary": "预览遗留转任务的服务端影响继承；可指定要处理的遗留项",
         "responses": {
           "200": {
             "description": "成功",
@@ -5028,8 +5028,258 @@
               "exclusiveMinimum": 0,
               "maximum": 2147483647
             }
+          },
+          {
+            "name": "leftoverItemId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           }
         ]
+      }
+    },
+    "/projects/{projectId}/change-records/{recordId}/leftovers": {
+      "post": {
+        "operationId": "addChangeRecordLeftover",
+        "summary": "在已有正式记录上追加一条遗留问题，仍形成一次记录版本",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "限流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [
+            "If-Match",
+            "X-Record-Version"
+          ],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "PublishedRecord",
+                  "safeBodyFieldPaths": [
+                    "id",
+                    "projectId",
+                    "moduleId",
+                    "featureId",
+                    "scopeType",
+                    "taskId",
+                    "impactFeatureIds[]",
+                    "handlerId",
+                    "authorId",
+                    "authorName",
+                    "handlerName",
+                    "moduleName",
+                    "featureName",
+                    "impactFeatureNames[]",
+                    "status",
+                    "code",
+                    "currentVersion",
+                    "publishedAt",
+                    "rowVersion",
+                    "createdAt",
+                    "updatedAt",
+                    "title",
+                    "contextProblem",
+                    "changeSolution",
+                    "resultVerification",
+                    "remainingIssues[].id",
+                    "remainingIssues[].content",
+                    "leftovers[].id",
+                    "leftovers[].content",
+                    "leftovers[].status",
+                    "leftovers[].rowVersion",
+                    "leftovers[].linkedTaskId"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "RecordPublicationReplayContext",
+              "resultRefExtractor": "recordPublicationResources",
+              "currentReadAuthorizer": "recordPublicationCurrentReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "required"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "required",
+            "lockOrder": [
+              "project",
+              "module",
+              "feature",
+              "changeRecord",
+              "leftoverItem"
+            ],
+            "retry": "source pre-read changes release savepoint locks and retry at most 3 times"
+          },
+          "auditAction": "record.leftover.add"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          },
+          {
+            "name": "x-record-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddRecordLeftoverRequest"
+              }
+            }
+          }
+        }
       }
     },
     "/projects/{projectId}/change-records/{recordId}/publish": {
@@ -5133,8 +5383,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -5170,16 +5420,13 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues",
+                    "remainingIssues[].id",
+                    "remainingIssues[].content",
                     "leftovers[].id",
                     "leftovers[].content",
                     "leftovers[].status",
                     "leftovers[].rowVersion",
-                    "leftoverItem",
-                    "leftoverItem.id",
-                    "leftoverItem.status",
-                    "leftoverItem.rowVersion",
-                    "leftoverItem.linkedTaskId"
+                    "leftovers[].linkedTaskId"
                   ]
                 }
               }
@@ -5661,8 +5908,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match",
             "X-Record-Version"
@@ -5699,16 +5946,13 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues",
+                    "remainingIssues[].id",
+                    "remainingIssues[].content",
                     "leftovers[].id",
                     "leftovers[].content",
                     "leftovers[].status",
                     "leftovers[].rowVersion",
-                    "leftoverItem",
-                    "leftoverItem.id",
-                    "leftoverItem.status",
-                    "leftoverItem.rowVersion",
-                    "leftoverItem.linkedTaskId"
+                    "leftovers[].linkedTaskId"
                   ]
                 }
               }
@@ -10646,8 +10890,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
             "version": "1.0.0",
@@ -10681,7 +10925,8 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues"
+                    "remainingIssues[].id",
+                    "remainingIssues[].content"
                   ]
                 }
               }
@@ -12129,8 +12374,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -12166,7 +12411,8 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues"
+                    "remainingIssues[].id",
+                    "remainingIssues[].content"
                   ]
                 }
               }
@@ -12363,8 +12609,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -12400,7 +12646,8 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues"
+                    "remainingIssues[].id",
+                    "remainingIssues[].content"
                   ]
                 }
               }
@@ -13731,8 +13978,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -13768,7 +14015,8 @@
                     "contextProblem",
                     "changeSolution",
                     "resultVerification",
-                    "remainingIssues"
+                    "remainingIssues[].id",
+                    "remainingIssues[].content"
                   ]
                 }
               }
@@ -15578,8 +15826,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -15634,16 +15882,13 @@
                     "record.contextProblem",
                     "record.changeSolution",
                     "record.resultVerification",
-                    "record.remainingIssues",
+                    "record.remainingIssues[].id",
+                    "record.remainingIssues[].content",
                     "record.leftovers[].id",
                     "record.leftovers[].content",
                     "record.leftovers[].status",
                     "record.leftovers[].rowVersion",
-                    "record.leftoverItem",
-                    "record.leftoverItem.id",
-                    "record.leftoverItem.status",
-                    "record.leftoverItem.rowVersion",
-                    "record.leftoverItem.linkedTaskId"
+                    "record.leftovers[].linkedTaskId"
                   ]
                 }
               }
@@ -16022,6 +16267,20 @@
         },
         "required": [
           "member"
+        ],
+        "additionalProperties": false
+      },
+      "AddRecordLeftoverRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          }
+        },
+        "required": [
+          "content"
         ],
         "additionalProperties": false
       },
@@ -16599,8 +16858,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           },
           "recordId": {
             "type": "integer",
@@ -17563,8 +17841,27 @@
                 "maxLength": 50000
               },
               "remainingIssues": {
-                "type": "string",
-                "maxLength": 50000
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": [
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "scopeType": {
                 "type": "string",
@@ -17611,8 +17908,27 @@
                 "maxLength": 50000
               },
               "remainingIssues": {
-                "type": "string",
-                "maxLength": 50000
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 2147483647
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": [
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "scopeType": {
                 "type": "string",
@@ -18016,6 +18332,17 @@
           "excludedImpacts",
           "linkedTask"
         ],
+        "additionalProperties": false
+      },
+      "LeftoverTaskPreviewQuery": {
+        "type": "object",
+        "properties": {
+          "leftoverItemId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          }
+        },
         "additionalProperties": false
       },
       "LeftoverTaskReplayContext": {
@@ -20636,8 +20963,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           },
           "id": {
             "type": "integer",
@@ -20767,55 +21113,6 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
-          "leftoverItem": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 2147483647
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "ACTIVE",
-                      "CONVERTED",
-                      "RESOLVED"
-                    ]
-                  },
-                  "rowVersion": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 2147483647
-                  },
-                  "linkedTaskId": {
-                    "anyOf": [
-                      {
-                        "type": "integer",
-                        "exclusiveMinimum": 0,
-                        "maximum": 2147483647
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "status",
-                  "rowVersion",
-                  "linkedTaskId"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "leftovers": {
             "type": "array",
             "items": {
@@ -20843,13 +21140,26 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 2147483647
+                },
+                "linkedTaskId": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 2147483647
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
                 "id",
                 "content",
                 "status",
-                "rowVersion"
+                "rowVersion",
+                "linkedTaskId"
               ],
               "additionalProperties": false
             }
@@ -20877,7 +21187,6 @@
           "rowVersion",
           "createdAt",
           "updatedAt",
-          "leftoverItem",
           "leftovers"
         ],
         "additionalProperties": false
@@ -20906,8 +21215,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 10000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           },
           "confirmLeftoverResolved": {
             "type": "boolean"
@@ -21093,8 +21421,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -21164,8 +21511,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           },
           "id": {
             "type": "integer",
@@ -22279,8 +22645,27 @@
                     "maxLength": 50000
                   },
                   "remainingIssues": {
-                    "type": "string",
-                    "maxLength": 10000
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 2147483647
+                        },
+                        "content": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 10000
+                        }
+                      },
+                      "required": [
+                        "content"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
@@ -24035,8 +24420,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -24611,8 +25015,27 @@
             "maxLength": 50000
           },
           "remainingIssues": {
-            "type": "string",
-            "maxLength": 50000
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "additionalProperties": false
+            }
           },
           "id": {
             "type": "integer",
@@ -24742,55 +25165,6 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
-          "leftoverItem": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 2147483647
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "ACTIVE",
-                      "CONVERTED",
-                      "RESOLVED"
-                    ]
-                  },
-                  "rowVersion": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 2147483647
-                  },
-                  "linkedTaskId": {
-                    "anyOf": [
-                      {
-                        "type": "integer",
-                        "exclusiveMinimum": 0,
-                        "maximum": 2147483647
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "status",
-                  "rowVersion",
-                  "linkedTaskId"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "leftovers": {
             "type": "array",
             "items": {
@@ -24818,13 +25192,26 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 2147483647
+                },
+                "linkedTaskId": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 2147483647
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
                 "id",
                 "content",
                 "status",
-                "rowVersion"
+                "rowVersion",
+                "linkedTaskId"
               ],
               "additionalProperties": false
             }
@@ -24861,7 +25248,6 @@
           "rowVersion",
           "createdAt",
           "updatedAt",
-          "leftoverItem",
           "leftovers",
           "voidedAt",
           "voidReason"

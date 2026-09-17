@@ -18,6 +18,7 @@ import { projectMemberRoutes } from "./project-member-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import {
   recordLifecycleRoutes,
+  recordLeftoverRoutes,
   publishedRecordRoutes,
   recordPublicationRoutes,
 } from "./published-record-routes.js";
@@ -42,6 +43,7 @@ export const routeRegistry = [
   ...publishedRecordRoutes,
   ...recordLifecycleRoutes,
   ...recordPublicationRoutes,
+  ...recordLeftoverRoutes,
   ...taskRecordDraftRoutes,
   ...taskGroupRoutes,
   ...aggregateReadRoutes,

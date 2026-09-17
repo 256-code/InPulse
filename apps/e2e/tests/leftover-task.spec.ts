@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import {
+  fillLeftovers,
+  leftoverField,
+} from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 async function createTask(
   page: Page,
@@ -50,7 +54,7 @@ async function createRecord(
   await form.getByRole("button", { name: /有，填写迭代记录/ }).click();
   for (const label of ["改动原因", "具体改动", "改动效果"])
     await form.getByLabel(label).fill("F20来源内容");
-  await form.getByLabel("遗留问题（选填）").fill("本次需要跟进的完整遗留原文");
+  await fillLeftovers(form, ["本次需要跟进的完整遗留原文"]);
   await form
     .getByRole("button", { name: "发布并完成任务", exact: true })
     .click();
@@ -133,10 +137,12 @@ for (const feature of [true, false])
         record.getByRole("button", { name: "转为新任务" }),
       ).toHaveCount(0);
       if (!feature) {
-        for (const value of ["", "转换后的再次填写"]) {
+        for (const value of ["转换后的再次填写", "再次改写同一问题"]) {
           await record.getByRole("button", { name: "修订内容" }).click();
           const edit = page.getByRole("dialog", { name: "修订迭代记录" });
-          await edit.getByLabel("遗留问题（选填）").fill(value);
+          // 已转任务的条目在新 UI 下锁定：只保留关联与文字，不提供移除按钮
+          await expect(edit.getByText("已转任务，保留关联")).toBeVisible();
+          await leftoverField(edit, 1).fill(value);
           await edit.getByRole("button", { name: "保存新版本" }).click();
           await expect(edit).toBeHidden();
           await expect(
@@ -176,7 +182,7 @@ test("F20 其他页面修订造成409，保留任务输入并明确确认最新�
     await other.goto(url);
     await other.getByRole("button", { name: "修订内容" }).click();
     const edit = other.getByRole("dialog", { name: "修订迭代记录" });
-    await edit.getByLabel("遗留问题（选填）").fill("并发修订后的最新遗留");
+    await leftoverField(edit, 1).fill("并发修订后的最新遗留");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
     await other.close();

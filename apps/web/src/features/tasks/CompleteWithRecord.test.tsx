@@ -35,7 +35,7 @@ const draft = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 function mount(extra: object) {
   const api = {
@@ -80,7 +80,7 @@ it("requires core content and reuses the exact request key after uncertain failu
       contextProblem: "真实内容",
       changeSolution: "真实内容",
       resultVerification: "真实内容",
-      remainingIssues: "",
+      remainingIssues: [],
     },
   });
 });

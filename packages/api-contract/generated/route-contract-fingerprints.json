@@ -1,4 +1,10 @@
 {
+  "addChangeRecordLeftover": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "f9fa60fe1f33e327d90e48d6ff70671eefd000ec735e929c98ecda89b3da7897"
+    }
+  ],
   "addExternalLink": [
     {
       "version": "1.0.0",
@@ -117,6 +123,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "a1bd3e27a3d26ecec75066ea60ab4f829d0d5e02f65e919209b693a4c06de05e"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "4cedca6c7cde79c566a13d08e2854fd10aff048de97ec0988af415617a4ee910"
     }
   ],
   "convertLeftoverToTask": [
@@ -137,6 +147,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "fab11c3039799c2329c3e619ce0eb5716f22c7c18c814ce618986a00396360ad"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "f9996aa00352b3e4921962b629d9bfed1cd13376f3c3f20537992373c50006ed"
     }
   ],
   "createFeature": [
@@ -161,6 +175,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "7eed42e3168ed681a985eb7ae37d1a91295f1402ef812c3894dbfe785f8dc399"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "bed00f803d92143ffb980da692ea90ca78cb7cd5149488d325fd48e181ba0283"
     }
   ],
   "createModule": [
@@ -219,6 +237,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "184229c2ec20f54276765a90a6e3dbd4e5d2b714d292398c69a2f9e2ead53879"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "932fc4f0e09ea6a5c35714becbfbfb47929992eafc31ff23c84a2c8c490fda3c"
     }
   ],
   "createTaskWithScope": [
@@ -265,6 +287,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "f6ec9a380f4269045a86fade69a7b1e0f3aec7bde02d3421f5a9658bf92ebbf6"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "78cf54b424a158de97213baded65ef3e2a793de2dfbb4431c7940d126b538957"
     }
   ],
   "readAllNotifications": [
@@ -455,6 +481,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "f27f071c3f632279323388ea0f4f4222e3bcdf899024dde2ec8fc4f487100d8b"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "a12f37698b4ff641294c5bd6e3b77c802a06ddb745ed365dddffbdbd9ef5bfbe"
     }
   ],
   "updateModule": [
@@ -517,6 +547,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "5e751cf9c9eddbeaf6dd41f8ec56c57fbb3c293a1ef3a34c7840fd868765a585"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "3e0bcfbf31e6bc8f9769bba51b3cce1e6a65f6ebb220db64d6daa9b9fc307686"
     }
   ],
   "updateUser": [

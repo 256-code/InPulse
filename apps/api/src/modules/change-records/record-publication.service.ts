@@ -66,7 +66,7 @@ export class RecordPublicationService implements RecordPublicationCommandPort {
       throw new RecordDraftError(
         422,
         "RECORD_PUBLICATION_VALIDATION_FAILED",
-        "请检查必填内容；发布和正式修订的遗留问题最多10000字符。草稿和输入已保留。",
+        "请检查必填内容；每条遗留问题最多10000字符、最多50条。草稿和输入已保留。",
       );
     return parsed.data;
   }
@@ -174,58 +174,136 @@ export class RecordPublicationService implements RecordPublicationCommandPort {
       record.projectId,
       record.id,
     );
-    if (items.length > 1)
-      throw new RecordDraftError(
-        409,
-        "RECORD_LEFTOVER_CONFLICT",
-        "记录存在多条遗留项，需要先确认其历史关联",
-      );
-    let item = items[0];
-    if (
-      item?.status === "ACTIVE" &&
-      !input.remainingIssues &&
-      !input.confirmLeftoverResolved
-    )
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    const submitted: {
+      content: string;
+      item: { id: number; status: string; rowVersion: number };
+    }[] = [];
+    for (const entry of input.remainingIssues) {
+      if (entry.id === undefined) {
+        submitted.push({
+          content: entry.content,
+          item: await this.repository.createLeftover(
+            tx,
+            record.projectId,
+            record.id,
+            actorId,
+          ),
+        });
+        continue;
+      }
+      const item = itemById.get(entry.id);
+      if (!item)
+        throw new RecordDraftError(
+          409,
+          "RECORD_LEFTOVER_CONFLICT",
+          "提交的遗留问题与当前记录版本不一致，请加载最新内容后重试",
+        );
+      submitted.push({ content: entry.content, item });
+    }
+    // 已转任务的条目即使未提交也必须留在新版本快照里：任务链接与记录必须始终对得上。
+    for (const item of items) {
+      if (item.status !== "CONVERTED") continue;
+      if (submitted.some((entry) => entry.item.id === item.id)) continue;
+      if (item.content === null) throw this.conflict();
+      submitted.push({ content: item.content, item });
+    }
+    // 已转任务的条目保持原状：既不改状态也不重复建任务，只保留其版本快照。
+    const removedActive = items.filter(
+      (item) =>
+        item.status === "ACTIVE" &&
+        !submitted.some((entry) => entry.item.id === item.id),
+    );
+    if (removedActive.length > 0 && !input.confirmLeftoverResolved)
       throw new RecordDraftError(
         422,
         "LEFTOVER_RESOLUTION_CONFIRMATION_REQUIRED",
-        "清空未转换的遗留问题前，请明确确认问题已解决",
+        "清空或移除未转换的遗留问题前，请明确确认问题已解决",
       );
-    if (input.remainingIssues && !item)
-      item = await this.repository.createLeftover(
-        tx,
-        record.projectId,
-        record.id,
-        actorId,
-      );
-    if (item && item.status !== "CONVERTED") {
-      const target = input.remainingIssues ? "ACTIVE" : "RESOLVED";
+    for (const entry of removedActive) {
       if (
-        item.status !== target &&
         !(await this.repository.setLeftoverStatus(
           tx,
           record.projectId,
           record.id,
-          item,
-          target,
+          entry,
+          "RESOLVED",
         ))
       )
         throw this.conflict();
     }
+    for (const entry of submitted) {
+      if (entry.item.status === "CONVERTED") continue;
+      // 历史条目被重新提交时恢复为 ACTIVE，保证状态与当前版本一致。
+      if (
+        entry.item.status !== "ACTIVE" &&
+        !(await this.repository.setLeftoverStatus(
+          tx,
+          record.projectId,
+          record.id,
+          entry.item,
+          "ACTIVE",
+        ))
+      )
+        throw this.conflict();
+    }
+    const content = {
+      ...this.content(input),
+      remainingIssues: submitted.map((entry) => ({
+        id: entry.item.id,
+        content: entry.content,
+      })),
+    };
     if (
-      !(await this.repository.writeVersion(
-        tx,
-        record,
-        actorId,
-        this.content(input),
-        code,
-        input.remainingIssues ? item!.id : null,
-      ))
+      !(await this.repository.writeVersion(tx, record, actorId, content, code))
     )
       throw this.conflict();
     const result = await this.published.find(tx, record.projectId, record.id);
     if (!result) throw this.conflict();
     return result;
+  }
+  async appendLeftover(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+    recordId: number,
+    rowVersion: number,
+    currentVersion: number,
+    content: string,
+    requestId: string,
+  ) {
+    const { record } = await this.access.prepare(
+      tx,
+      actorId,
+      projectId,
+      recordId,
+      false,
+    );
+    if (
+      record.rowVersion !== rowVersion ||
+      record.currentVersion !== currentVersion
+    )
+      throw this.conflict();
+    const before = await this.published.find(tx, projectId, recordId);
+    if (!before) throw this.conflict();
+    const validated = this.validate({
+      ...this.content(before),
+      remainingIssues: [...before.remainingIssues, { content }],
+      confirmLeftoverResolved: true,
+    });
+    validatePublishedRecordSearch({ ...before, ...validated });
+    const after = await this.save(tx, actorId, record, validated, before.code);
+    const assignee = await this.access.taskAssignee(tx, record);
+    await this.effects.append(
+      tx,
+      actorId,
+      before,
+      after,
+      "ADD_LEFTOVER",
+      requestId,
+      [before.authorId, ...(assignee === undefined ? [] : [assignee])],
+    );
+    return after;
   }
   async replay(tx: TransactionContext, actorId: number, context: unknown) {
     const saved = recordPublicationReplayContextSchema.parse(context);

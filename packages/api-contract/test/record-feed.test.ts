@@ -31,9 +31,8 @@ const publishedRecord = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "",
+  remainingIssues: [],
   leftovers: [],
-  leftoverItem: null,
 };
 
 const feedItem = {

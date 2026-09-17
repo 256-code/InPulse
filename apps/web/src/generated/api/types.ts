@@ -36,6 +36,10 @@ export type AddProjectMemberResponse = {
   readonly member: ProjectMemberRecordItem;
 };
 
+export type AddRecordLeftoverRequest = {
+  readonly content: string;
+};
+
 export type AdminUserCreateRequest = {
   readonly loginName: string;
   readonly name: string;
@@ -138,7 +142,10 @@ export type ChangeRecordVersion = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly recordId: number;
   readonly projectId: number;
   readonly versionNo: number;
@@ -341,7 +348,10 @@ export type IndependentRecordDraftRequest = ({
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly scopeType: "FEATURE";
   readonly featureId: number;
 } | {
@@ -349,7 +359,10 @@ export type IndependentRecordDraftRequest = ({
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly scopeType: "MODULE";
   readonly impactFeatureIds: readonly number[];
 });
@@ -417,6 +430,10 @@ export type LeftoverTaskPreview = {
     readonly featureId: (number | null);
     readonly taskId: number;
   } | null);
+};
+
+export type LeftoverTaskPreviewQuery = {
+  readonly leftoverItemId?: number;
 };
 
 export type LeftoverTaskReplayContext = {
@@ -938,7 +955,10 @@ export type PublishedRecord = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -960,17 +980,12 @@ export type PublishedRecord = {
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly leftoverItem: ({
-    readonly id: number;
-    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
-    readonly rowVersion: number;
-    readonly linkedTaskId: (number | null);
-  } | null);
   readonly leftovers: readonly ({
     readonly id: number;
     readonly content: string;
     readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
     readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
   })[];
 };
 
@@ -979,7 +994,10 @@ export type PublishedRecordContent = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly confirmLeftoverResolved: boolean;
 };
 
@@ -1016,7 +1034,10 @@ export type RecordDraftContent = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
 };
 
 export type RecordDraftCreatePath = {
@@ -1033,7 +1054,10 @@ export type RecordDraftItem = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -1255,7 +1279,10 @@ export type TaskCompletionRequest = ({
     readonly contextProblem: string;
     readonly changeSolution: string;
     readonly resultVerification: string;
-    readonly remainingIssues: string;
+    readonly remainingIssues: readonly ({
+      readonly id?: number;
+      readonly content: string;
+    })[];
   };
 } | {
   readonly mode: "WITH_RECORD";
@@ -1555,7 +1582,10 @@ export type TaskRecordDraftRequest = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
 };
 
 export type TaskRecordDraftResourcePath = {
@@ -1658,7 +1688,10 @@ export type VoidedRecord = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -1680,17 +1713,12 @@ export type VoidedRecord = {
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly leftoverItem: ({
-    readonly id: number;
-    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
-    readonly rowVersion: number;
-    readonly linkedTaskId: (number | null);
-  } | null);
   readonly leftovers: readonly ({
     readonly id: number;
     readonly content: string;
     readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
     readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
   })[];
   readonly voidedAt: string;
   readonly voidReason: string;

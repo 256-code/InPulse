@@ -104,7 +104,7 @@ const content = {
   contextProblem: "并发保存",
   changeSolution: "事务发布",
   resultVerification: "完整校验",
-  remainingIssues: "仍需跟进",
+  remainingIssues: [{ content: "仍需跟进" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -252,7 +252,10 @@ afterAll(async () => {
   await auditDb?.close();
 });
 async function fixture(
-  remainingIssues = content.remainingIssues,
+  remainingIssues: readonly {
+    readonly id?: number;
+    readonly content: string;
+  }[] = content.remainingIssues,
   feature = false,
 ) {
   const userId = await createUser(db.sql),
@@ -271,7 +274,7 @@ async function fixture(
         impactFeatureIds: feature ? [] : [f!.id],
       },
       userId,
-      { ...content, remainingIssues },
+      { ...content, remainingIssues: [...remainingIssues] },
     ),
   );
   return { ...p, userId, creator, featureId: f!.id, draft };
@@ -903,6 +906,11 @@ describe("F22 typed external links", () => {
           },
           body: JSON.stringify({
             ...contentValue,
+            // 提交当前版本的遗留问题条目本身，避免触发移除确认分支。
+            remainingIssues: f.record.leftovers.map((leftover) => ({
+              id: leftover.id,
+              content: leftover.content,
+            })),
             confirmLeftoverResolved: false,
           }),
         },

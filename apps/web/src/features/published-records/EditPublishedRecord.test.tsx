@@ -30,9 +30,16 @@ const item: PublishedRecord = {
   contextProblem: "问题",
   changeSolution: "原方案",
   resultVerification: "验证",
-  remainingIssues: "需要跟进",
-  leftovers: [{ id: 9, content: "需要跟进", status: "ACTIVE", rowVersion: 1 }],
-  leftoverItem: { id: 9, status: "ACTIVE", rowVersion: 1, linkedTaskId: null },
+  remainingIssues: [{ id: 9, content: "需要跟进" }],
+  leftovers: [
+    {
+      id: 9,
+      content: "需要跟进",
+      status: "ACTIVE",
+      rowVersion: 1,
+      linkedTaskId: null,
+    },
+  ],
 };
 function mount(api: InpulseApiClient) {
   render(
@@ -54,23 +61,23 @@ it("requires explicit resolution and preserves the same key and input when retry
     createChangeRecordVersion: save,
   } as unknown as InpulseApiClient;
   mount(api);
-  fireEvent.change(screen.getByLabelText("遗留问题（选填）"), {
-    target: { value: "" },
-  });
+  // Ant Design 会在两个汉字的按钮文字间插入空格。
+  fireEvent.click(screen.getByRole("button", { name: /^移\s*除$/ }));
+  expect(await screen.findByText("暂无遗留问题。")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "保存新版本" })).toBeDisabled();
   fireEvent.click(
     screen.getByRole("checkbox", {
-      name: "确认遗留问题已解决，清空本版本内容",
+      name: /确认移除的遗留问题已解决/,
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: "保存新版本" }));
   await screen.findByText("服务暂时不可用，输入已保留，可重试。");
-  expect(screen.getByLabelText("遗留问题（选填）")).toHaveValue("");
+  expect(await screen.findByText("暂无遗留问题。")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "保存新版本" }));
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
   expect(save.mock.calls[0]).toEqual(save.mock.calls[1]);
   expect(save.mock.calls[0]![2]).toMatchObject({
-    remainingIssues: "",
+    remainingIssues: [],
     confirmLeftoverResolved: true,
   });
   expect(save.mock.calls[0]![3]).toMatchObject({

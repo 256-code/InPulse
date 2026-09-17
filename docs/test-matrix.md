@@ -1916,3 +1916,43 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - Playwright：`tests/project-archive.spec.ts` 1/1 通过（40.0 秒，`E2E_API_PORT=3131` / `E2E_WEB_PORT=4191`）；全量套件 53 通过 / 3 失败，3 例失败均与本次改动无关，并已在推送中的 `test` 分支提交 `77d7beb` 与更早的 `b35ba9e` 上复现同样的失败：① `tests/features.spec.ts:93` 仍在点击详情页头的「归档功能」按钮，而该入口已被 `4c0d2c3` 移入「编辑功能」弹窗，属过期断言；② `tests/project-members.spec.ts:10` 的只读成员页在不可见项目下持续重挂死循环（60 秒内对 `/api/v1/projects/{id}` 与 `/api/v1/projects/{id}/active-members` 各发出 5000 余次被中止的请求，页面停在「正在确认项目内角色」），属存量前端缺陷；③ `tests/search.spec.ts` 的失败在长期累积库上随机出现，本轮 5 例全部通过。
 
 未运行 / 已知偏差：① 未跑 `pnpm check` 整链与 GitHub Actions（`.github/workflows/ci.yml` 只在 PR 与 `main` / `dev/*` 推送时触发，`test` 分支推送不产生 CI 运行）；② 上述 3 例 E2E 失败为存量问题，本次未修复，需单独排期；③ 本次改动尚未提交、未推送，新增测试需非作者人工评审。
+
+## 迭代记录多条遗留问题与快捷追加（F-18 多条化，2026-09-17 本地落库）
+
+用户反馈三点：① 一个迭代记录只能产生一条遗留问题；② 在已有记录上补记遗留问题必须重写整段正文；③ 已有遗留问题的记录不能再追加。本条把 `remainingIssues` 从单段文本改为条目数组，并新增不改写正文的「追加遗留问题」写入路径。
+
+锁定口径：
+
+- 条目结构 `{ id?: number, content: string }`，`content` 1..10000 字符、单个字段最多 50 条；带 `id` 表示沿用既有遗留项（转任务绑定与历史内容都挂在它上面），缺省表示新建。
+- 历史记录的单段文本在读取时归一化为一条（`normalizedLeftoverEntries`），稳定 `id` 由当前版本快照取回，旧记录第一次修订后即获得稳定标识。
+- 移除一条已有遗留问题等价于标记为已解决，必须显式勾选「确认移除的遗留问题已解决」，否则 422 `LEFTOVER_RESOLUTION_CONFIRMATION_REQUIRED`；被移除条目保留历史内容，不进入新版本快照。
+- 已转任务（`CONVERTED`）条目保留原任务关联，不提供移除入口，修订正文不会创建第二个任务。
+- 详情页「追加遗留问题」是独立路由 `addChangeRecordLeftover`，服务端在不改写正文的前提下追加一条并生成新版本，进入版本历史并按修订规则通知。
+- 转任务必须携带显式 `leftoverItemId`：记录有多条活跃遗留项而缺 id 返回 409 `LEFTOVER_SELECTION_REQUIRED`（`details.leftoverItemIds`），已解决条目 409 `LEFTOVER_NOT_ACTIVE`。
+- 提交条目带 `id` 但不在当前版本快照里返回 409 `RECORD_LEFTOVER_CONFLICT`，避免把已移除条目静默复活。
+- 发布容量：标题 + 三段正文 + 全部遗留问题条目正文合并后的搜索文本超过 100000 字符返回 422 `RECORD_SEARCH_CAPACITY_EXCEEDED`，草稿与输入保留。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F18-MULTI-CONTRACT-001 | 契约与权限 | 条目数组与追加路由 | `remainingIssues` 为条目数组（`id` 可选 + 1..10000 字符、≤50 条）、`leftovers`（`id`/`status`/`rowVersion`/`content`/`linkedTaskId`）进入正式记录与版本快照、`confirmLeftoverResolved` 为正文必填项；新增 `POST /api/v1/projects/{projectId}/change-records/{recordId}/leftovers`（`addChangeRecordLeftover`，幂等契约 1.0.0，审计 `record.leftover.add`），`recordPublicationRoutes` 升 1.2.0；`contract:validate`（107 条路由）、`permissions:check`（107 操作 / 107 路由）、`contract:drift`（5 产物）通过 | 本地通过 |
+| F18-MULTI-API-INT-001 | 真实 PostgreSQL | 多条发布、快捷追加与稳定 id 复用 | `record-publication.integration.test.ts`：发布两条遗留问题后再追加一条形成 v4，按稳定 `id` 解除与复活，清空后重填保留 `CONVERTED` 身份与任务链接 | 本地通过 |
+| F18-MULTI-API-INT-002 | 真实 PostgreSQL | 冲突、容量与 HTTP 重放 | 同上：带 `id` 但不在当前版本快照 409 `RECORD_LEFTOVER_CONFLICT`；超长条目与搜索容量溢出 422 且不改写正文、不消耗记录编号；追加路径校验 CSRF、双版本头（`If-Match` + `X-Record-Version`）与数据库幂等重放，撤回权限后重放返回 404 | 本地通过 |
+| F18-MULTI-API-INT-003 | 真实 PostgreSQL | 转任务选择与条目状态 | `leftover-task.integration.test.ts`：多条活跃条目缺 `leftoverItemId` 409 `LEFTOVER_SELECTION_REQUIRED`（`details.leftoverItemIds`）、已解决条目 409 `LEFTOVER_NOT_ACTIVE`、带显式 id 转任务后仅该条变 `CONVERTED` 并保留正文 | 本地通过 |
+| F18-MULTI-WEB-UNIT-001 | Web 单元 | 多条条目字段 | `LeftoverEntriesField.test.tsx` 4 例：逐条渲染且「添加遗留问题」追加空条目、就地编辑并只移除被点击的一行、已转任务条目只展示「已转任务，保留关联」且没有移除入口、空态与 50 条上限 | 本地通过 |
+| F18-MULTI-WEB-UNIT-002 | Web 单元 | 草稿、「完成任务并记录」与修订三条路径 | `RecordDraftsView.test.tsx`、`CompleteWithRecord.test.tsx`、`EditPublishedRecord.test.tsx`：三条路径共用条目字段，已有条目被移除时才出现确认勾选且未勾选不能保存 | 本地通过 |
+| F18-MULTI-E2E-001 | Playwright | 多条录入、快捷追加与历史保留 | `record-publishing.spec.ts`：发布带多条遗留问题的记录后，详情页「追加遗留问题」不改正文形成 v4、新条目可见、版本差异仍保留原条目；`task-completion.spec.ts` 覆盖「完成任务并记录」的多条路径与容量 422 提示 | 本地通过（定向 4 文件 11 例） |
+
+本轮同时修复的本地缺陷：
+
+- `PublishedRecordDetail.tsx` 的「已标记解决的遗留问题…」提示此前按当前条目状态判定，而当前版本快照本来就不保留被移除条目，属于永不触发的死代码；改为按相邻版本条目数差计算 `removedLeftovers`，对应 E2E 断言改为验证快捷追加路径。
+- `task-completion.spec.ts` 的容量用例原先用 CJK 字符填满三段正文（约 450KB，超过 Express 默认 100KB 请求体上限），实测触发的是 500 `request entity too large` 而不是 422；改用单字节字符（33600×3 ≈ 100.9KB 请求体 < 102.4KB，搜索文本 100840 > 100000）后「超出发布容量」422 断言才真正生效。
+
+本地实际执行（2026-09-17，Windows + PowerShell + 本机 PostgreSQL 18.6 + PGroonga 4.0.8）：
+
+- 契约与权限：`contract:validate`（107 条路由）、`contract:drift`（5 产物一致）、`permissions:check`（107 操作 / 107 路由）通过。
+- 单元与集成：API 单测 64 文件 351 例、契约 16 文件 100 例、Web 78 文件 469 例、真实 PostgreSQL API 集成 49 文件 468 例（连续两轮全绿）、database 15 例、ops 8 文件 52 例。
+- 静态门禁：`lint`、`format:check`、`typecheck`（8 个 workspace）、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test` 与公共 registry 依赖审计（No known vulnerabilities found）通过。
+- Playwright：定向 4 文件 11 例通过（1.3 分钟，`E2E_API_PORT=3158` / `E2E_WEB_PORT=4188`，teardown 清理用户 2 / 项目 2 / 业务行 391 / 审计行 58）；全量 53 通过 / 3 失败（7.6 分钟，`E2E_API_PORT=3159` / `E2E_WEB_PORT=4189`），3 例均为存量问题（`features.spec.ts:93` 过期断言、`project-members.spec.ts:10` 只读成员页重挂死循环、`search.spec.ts` 长期累积库随机失败），`search.spec.ts` 单文件复跑 5/5 通过；全量结束后手工补跑夹具清理报告「未发现 E2E 夹具数据」。
+- 浏览器人工复验：本地 dev 服务（API 3000 / Vite 5173）打开 `INPULSE-CR-7`（历史单段文本记录）确认详情页正常、修订弹窗把旧文本渲染为一条可移除条目且「添加遗留问题」能追加第二条；`INPULSE-CR-4` 的 `CONVERTED` 条目显示「已转任务，保留关联」且无移除入口。
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链（`check:docs` 被仓库根目录 8 个未跟踪 `.tmp-*` 文件阻断）、`db:migrations:check`、`db:seed:check` 与 GitHub Actions；② Web 单测首次复跑出现 2 例失败（与后台全量 E2E 同机并发），随后连续两轮 78 文件 469 例全绿，失败用例名未记录，再复现需单独排查；③ 上一条的 3 例存量 E2E 失败本次未修复，需单独排期；④ 本地开发服务器曾因 API 进程未重启（旧代码返回字符串、新前端按数组消费）导致「点开迭代记录即报错」，重建并重启 `scripts/dev-start.mjs` 后恢复，`remainingIssues` 属破坏性响应变更、API 与 Web 必须同批发布；⑤ 本轮改动尚未提交、未推送，新增与改写的测试需非作者人工评审。

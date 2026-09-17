@@ -6,6 +6,7 @@ import {
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type { TimeCursorValue } from "../../cursors/time-cursor.js";
+import { normalizedLeftoverEntries } from "./leftover-entries.js";
 
 export interface RecordDraftListPageInput {
   readonly projectId: number;
@@ -66,6 +67,10 @@ const dto = (row: Row) => {
   return recordDraftItemSchema.parse({
     ...currentPayload,
     ...fields,
+    remainingIssues: normalizedLeftoverEntries(
+      currentPayload.remainingIssues,
+      [],
+    ),
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   });

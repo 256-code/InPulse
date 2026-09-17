@@ -30,6 +30,8 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     responses: { ...write.responses, "200": json("LeftoverTaskResponse") },
     auditAction: "leftover.convert",
     idempotencyContractVersion: "1.1.0",
+    // 该路由的请求/响应/重放策略未变，保持既有 fingerprint 版本。
+    idempotencyFingerprintVersion: "1.1.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: {
       version: "1.0.0",
@@ -78,10 +80,10 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     ...read,
     operationId: "previewLeftoverTask",
     path: "/projects/{projectId}/change-records/{recordId}/leftover-task-preview",
-    summary: "预览遗留转任务的服务端影响继承",
+    summary: "预览遗留转任务的服务端影响继承；可指定要处理的遗留项",
     request: {
       ...read.request,
-      query: "none",
+      query: "LeftoverTaskPreviewQuery",
       path: "RecordDraftResourcePath",
     },
     responses: { ...read.responses, "200": json("LeftoverTaskPreview") },

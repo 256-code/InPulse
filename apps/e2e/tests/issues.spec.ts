@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 /**
@@ -37,7 +38,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await completion.getByRole("button", { name: /有，填写迭代记录/ }).click();
     for (const label of ["改动原因", "具体改动", "改动效果"])
       await completion.getByLabel(label).fill("F-20 E2E 内容 " + suffix);
-    await completion.getByLabel("遗留问题（选填）").fill(leftover);
+    await fillLeftovers(completion, [leftover]);
     await completion
       .getByRole("button", { name: "发布并完成任务", exact: true })
       .click();

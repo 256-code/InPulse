@@ -10,12 +10,14 @@ import {
   type RecordDraftContent,
 } from "@generated/api";
 import {
+  fieldText,
   fields,
   labels,
   mergeRecordDraft,
   recordContent,
   type Field,
 } from "@features/record-drafts/record-content";
+import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 type Merge = ReturnType<typeof mergeRecordDraft> & {
@@ -47,9 +49,19 @@ export function EditPublishedRecord({
     getValues,
     formState: { errors },
   } = useForm<RecordDraftContent>({ defaultValues: recordContent(item) });
-  const remaining = useWatch({ control, name: "remainingIssues" });
-  const needsConfirmation =
-    baseline?.leftoverItem?.status === "ACTIVE" && !remaining.trim();
+  const remaining = useWatch({ control, name: "remainingIssues" }) ?? [];
+  const submittedIds = new Set(
+    remaining.flatMap((entry) => (entry.id === undefined ? [] : [entry.id])),
+  );
+  // 移除（或清空）当前版本里未闭环的遗留项会被标记为已解决，必须显式确认。
+  const removedActive = (baseline ?? item).leftovers.filter(
+    (leftover) =>
+      leftover.status === "ACTIVE" && !submittedIds.has(leftover.id),
+  );
+  const needsConfirmation = removedActive.length > 0;
+  const convertedIds = item.leftovers
+    .filter((leftover) => leftover.status === "CONVERTED")
+    .map((leftover) => leftover.id);
   const conflict = error instanceof ApiError && error.status === 409;
   function open() {
     setBaseline(item);
@@ -93,7 +105,7 @@ export function EditPublishedRecord({
     const values = { ...merge.values };
     for (const field of merge.conflicts)
       if (merge.choices[field] === "latest")
-        values[field] = merge.latest[field];
+        (values as Record<Field, unknown>)[field] = merge.latest[field];
     setBaseline(merge.latest);
     reset(values);
     setMerge(null);
@@ -114,9 +126,15 @@ export function EditPublishedRecord({
     setError(null);
     try {
       const body = {
-        ...(Object.fromEntries(
-          fields.map((f) => [f, values[f].trim()]),
-        ) as RecordDraftContent),
+        title: values.title.trim(),
+        contextProblem: values.contextProblem.trim(),
+        changeSolution: values.changeSolution.trim(),
+        resultVerification: values.resultVerification.trim(),
+        remainingIssues: values.remainingIssues.map((entry) =>
+          entry.id === undefined
+            ? { content: entry.content.trim() }
+            : { id: entry.id, content: entry.content.trim() },
+        ),
         confirmLeftoverResolved: confirmed,
       };
       const signature = JSON.stringify([
@@ -250,7 +268,7 @@ export function EditPublishedRecord({
                     <div className="record-field">
                       <span className="record-field-label">最新内容</span>
                       <RecordMarkdown
-                        content={merge.latest[field] || "（空）"}
+                        content={fieldText(merge.latest, field) || "（空）"}
                       />
                     </div>
                   </label>
@@ -263,48 +281,67 @@ export function EditPublishedRecord({
                 </Button>
               </section>
             )}
-            {fields.map((field) => (
-              <label key={field}>
-                {labels[field]}
-                <Controller
-                  name={field}
-                  control={control}
-                  rules={{
-                    validate: (v) =>
-                      field === "remainingIssues" ||
-                      v.trim().length > 0 ||
-                      "请填写此项",
-                    maxLength:
-                      field === "title"
-                        ? 500
-                        : field === "remainingIssues"
-                          ? 10000
-                          : 50000,
-                  }}
-                  render={({ field: input }) =>
-                    field === "title" ? (
-                      <Input
-                        {...input}
-                        aria-label={labels[field]}
-                        maxLength={500}
-                      />
-                    ) : (
-                      <Input.TextArea
-                        {...input}
-                        aria-label={labels[field]}
-                        rows={4}
-                        maxLength={field === "remainingIssues" ? 10000 : 50000}
-                      />
-                    )
-                  }
-                />
-                {errors[field] && (
-                  <span role="alert">
-                    {errors[field]?.message || "内容超过长度限制"}
-                  </span>
+            {fields
+              .filter((field) => field !== "remainingIssues")
+              .map((field) => (
+                <label key={field}>
+                  {labels[field]}
+                  <Controller
+                    name={field}
+                    control={control}
+                    rules={{
+                      validate: (v) => v.trim().length > 0 || "请填写此项",
+                      maxLength: field === "title" ? 500 : 50000,
+                    }}
+                    render={({ field: input }) =>
+                      field === "title" ? (
+                        <Input
+                          {...input}
+                          aria-label={labels[field]}
+                          maxLength={500}
+                        />
+                      ) : (
+                        <Input.TextArea
+                          {...input}
+                          aria-label={labels[field]}
+                          rows={4}
+                          maxLength={50000}
+                        />
+                      )
+                    }
+                  />
+                  {errors[field] && (
+                    <span role="alert">
+                      {errors[field]?.message || "内容超过长度限制"}
+                    </span>
+                  )}
+                </label>
+              ))}
+            <label>
+              {labels.remainingIssues}
+              <Controller
+                name="remainingIssues"
+                control={control}
+                rules={{
+                  validate: (entries) =>
+                    entries.every((entry) => entry.content.trim().length > 0) ||
+                    "每条遗留问题都不能为空，可移除不需要的条目",
+                }}
+                render={({ field: input }) => (
+                  <LeftoverEntriesField
+                    value={input.value}
+                    onChange={input.onChange}
+                    lockedIds={convertedIds}
+                    label={labels.remainingIssues}
+                  />
                 )}
-              </label>
-            ))}
+              />
+              {errors.remainingIssues && (
+                <span role="alert">
+                  {errors.remainingIssues?.message || "内容超过长度限制"}
+                </span>
+              )}
+            </label>
             {needsConfirmation && (
               <label>
                 <input
@@ -312,16 +349,17 @@ export function EditPublishedRecord({
                   checked={confirmed}
                   onChange={(e) => setConfirmed(e.target.checked)}
                 />
-                确认遗留问题已解决，清空本版本内容
+                确认移除的遗留问题已解决（标记为已完成，不会删除历史；
+                {removedActive.length} 条）
               </label>
             )}
-            {baseline?.leftoverItem?.status === "CONVERTED" && (
+            {convertedIds.length > 0 && (
               <p>
-                此遗留项已转为跟进任务，修订或清空文字仍保留原任务关联。新的独立问题请新建记录。
+                已转任务的遗留问题保持原任务关联，修订文字不会创建第二个任务。新的独立问题请新建记录。
               </p>
             )}
             <p>
-              遗留问题最多10000字符。超出完整正文的发布容量时会保留输入并提示调整。
+              每条遗留问题最多10000字符、最多50条。超出完整正文的发布容量时会保留输入并提示调整。
             </p>
           </div>
         </form>

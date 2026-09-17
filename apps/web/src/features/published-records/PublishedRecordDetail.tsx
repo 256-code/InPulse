@@ -3,7 +3,9 @@ import { useAuth } from "@features/auth/auth-context";
 import { RecordLifecycleButton } from "./RecordLifecycleButton";
 import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
 import { EditPublishedRecord } from "./EditPublishedRecord";
+import { AppendLeftoverForm } from "./AppendLeftoverForm";
 import { taskDetailPath } from "@features/tasks/task-links";
+import { fieldText } from "@features/record-drafts/record-content";
 import React, { useMemo, useState } from "react";
 import { Alert, Button, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
@@ -26,7 +28,7 @@ export const recordContentFields = [
   ["remainingIssues", "遗留问题"],
 ] as const;
 
-/** 逐字段对比两个不可变版本，供「版本差异」区渲染。 */
+/** 逐字段对比两个不可变版本，供「版本差异」区渲染。数组字段先投影成文本再比较。 */
 export function compareRecordVersions(
   before: ChangeRecordVersion,
   after: ChangeRecordVersion,
@@ -34,9 +36,9 @@ export function compareRecordVersions(
   return recordContentFields.map(([field, label]) => ({
     field,
     label,
-    before: before[field],
-    after: after[field],
-    changed: before[field] !== after[field],
+    before: fieldText(before, field),
+    after: fieldText(after, field),
+    changed: fieldText(before, field) !== fieldText(after, field),
   }));
 }
 
@@ -146,6 +148,18 @@ export function PublishedRecordDetail({
   if (!detail.data)
     return <section className="record-expanded" aria-label="正式记录详情" />;
   const record = detail.data;
+  // 已解决的遗留项不在当前版本的列表里，只能通过相邻版本的条目数差判断是否移除过。
+  const removedLeftovers = (() => {
+    const current = history.find(
+      (version) => version.versionNo === record.currentVersion,
+    );
+    const previous = history.find(
+      (version) => version.versionNo === record.currentVersion - 1,
+    );
+    return current === undefined || previous === undefined
+      ? 0
+      : previous.leftovers.length - current.leftovers.length;
+  })();
   const impactNames =
     labels?.impactFeatures ??
     record.impactFeatureIds.map((id) => `功能 #${id}`);
@@ -178,36 +192,49 @@ export function PublishedRecordDetail({
                       <CalmBadge tone={leftoverTone[leftover.status]}>
                         {leftoverStatusText(leftover.status)}
                       </CalmBadge>
-                      {record.leftoverItem !== null &&
-                        leftover.id === record.leftoverItem.id &&
-                        record.leftoverItem.status === "CONVERTED" &&
-                        record.leftoverItem.linkedTaskId !== null && (
+                      {leftover.status === "CONVERTED" &&
+                        leftover.linkedTaskId !== null && (
                           <a
                             className="leftover-followup"
                             href={taskDetailPath({
                               projectId: record.projectId,
                               moduleId: record.moduleId,
                               featureId: record.featureId,
-                              taskId: record.leftoverItem.linkedTaskId,
+                              taskId: leftover.linkedTaskId,
                             })}
                           >
                             查看跟进任务
                           </a>
                         )}
-                      {record.leftoverItem !== null &&
-                        leftover.id === record.leftoverItem.id &&
-                        record.leftoverItem.status === "ACTIVE" &&
+                      {leftover.status === "ACTIVE" &&
                         record.status === "PUBLISHED" && (
                           <ConvertLeftoverTask
                             key={`convert-${record.id}-${leftover.id}`}
                             item={record}
+                            leftover={leftover}
                             api={api}
                             writable={writable}
+                            onConverted={() => {
+                              void detail.refetch();
+                              onListChanged?.();
+                            }}
                           />
                         )}
                     </li>
                   ))}
                 </ul>
+              )}
+              {record.status === "PUBLISHED" && (
+                <AppendLeftoverForm
+                  item={record}
+                  api={api}
+                  writable={writable}
+                  onAdded={() => {
+                    void detail.refetch();
+                    void versions.refetch();
+                    onListChanged?.();
+                  }}
+                />
               )}
             </section>
           ) : (
@@ -217,11 +244,11 @@ export function PublishedRecordDetail({
             </section>
           ),
         )}
-      {record.leftoverItem?.status === "CONVERTED" && (
-        <p>遗留项已转为跟进任务，修订文字不会创建第二个任务。</p>
+      {record.leftovers.some((leftover) => leftover.status === "CONVERTED") && (
+        <p>已转任务的遗留问题保留原任务关联，修订文字不会创建第二个任务。</p>
       )}
-      {record.leftoverItem?.status === "RESOLVED" && (
-        <p>遗留问题已标记为解决，历史内容仍可查看。</p>
+      {removedLeftovers > 0 && (
+        <p>已标记解决的遗留问题保留历史内容，不再计入未闭环。</p>
       )}
       <dl className="record-facts">
         <dt>归属</dt>
