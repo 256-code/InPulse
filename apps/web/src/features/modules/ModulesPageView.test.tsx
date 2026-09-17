@@ -379,7 +379,7 @@ describe("模块卡", () => {
     const badge = await screen.findByText("未开始");
     expect(badge.className).toContain("badge-cyan");
   });
-  it("keeps 正常 for completed work and 已归档 for archived modules", async () => {
+  it("keeps 进行中 for completed work and 已归档 for archived modules", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({
         items: [
@@ -396,7 +396,9 @@ describe("模块卡", () => {
       }),
     } as unknown as InpulseApiClient;
     mountRouted(client);
-    expect((await screen.findByText("正常")).className).toContain("badge-gray");
+    expect((await screen.findByText("进行中")).className).toContain(
+      "badge-gray",
+    );
     expect(screen.getByText("已归档").className).toContain("badge-amber");
   });
 });

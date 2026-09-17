@@ -106,11 +106,13 @@ import {
   setProjectMemberRoleRequestSchema,
   setProjectMemberRoleResponseSchema,
   projectCodeSchema,
+  projectStatusSchema,
   projectItemSchema,
   projectListResponseSchema,
   projectDetailResponseSchema,
   projectPathSchema,
   projectEditRequestSchema,
+  projectStatusChangeRequestSchema,
   projectMutationHeadersSchema,
   projectVersionHeadersSchema,
   projectReplayContextSchema,
@@ -466,9 +468,14 @@ export const schemaRegistry = {
     summary: "项目详情路径参数",
     sensitiveFieldPaths: [],
   },
+  ProjectStatus: {
+    schema: projectStatusSchema,
+    summary: "项目生命周期四态：未开始 / 进行中 / 维护中 / 已归档",
+    sensitiveFieldPaths: [],
+  },
   ProjectItem: {
     schema: projectItemSchema,
-    summary: "项目公开摘要；包含归档状态与活跃成员数",
+    summary: "项目公开摘要；包含四态状态、粘性完成标记与活跃成员数",
     sensitiveFieldPaths: [],
   },
   ProjectListResponse: {
@@ -585,6 +592,11 @@ export const schemaRegistry = {
   ProjectEditRequest: {
     schema: projectEditRequestSchema,
     summary: "项目编辑请求；编码不可修改，名称与描述整笔替换",
+    sensitiveFieldPaths: [],
+  },
+  ProjectStatusChangeRequest: {
+    schema: projectStatusChangeRequestSchema,
+    summary: "项目状态变更请求；只接受未开始 / 进行中 / 维护中",
     sensitiveFieldPaths: [],
   },
   ProjectMutationHeaders: {

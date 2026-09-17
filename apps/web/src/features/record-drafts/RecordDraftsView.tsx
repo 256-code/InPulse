@@ -171,10 +171,14 @@ export function RecordDraftsView({
     enabled: projectId > 0 && recordId > 0,
     retry: false,
   });
+  // ADR-035：项目四态下只有已归档只读；列表里还没有该项目时按只读处理。
+  const formProjectStatus = projects.data?.items.find(
+    (p) => p.id === formProjectId,
+  )?.status;
   const writable =
     formProjectId > 0 &&
-    projects.data?.items.find((p) => p.id === formProjectId)?.status ===
-      "ACTIVE" &&
+    formProjectStatus !== undefined &&
+    formProjectStatus !== "ARCHIVED" &&
     (!taskId || sourceQuery.data?.source.lifecycleStatus === "ACTIVE");
   /** 全部项目视图下只要存在可写项目即可发起创建，具体项目在弹窗内选定。 */
   const anyWritableProject = (projects.data?.items ?? []).some(

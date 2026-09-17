@@ -22,7 +22,7 @@ interface ProjectControllerResponse {
 }
 
 /**
- * F-06 项目编辑/归档/恢复 HTTP 入口；只绑定 operationId 与契约装饰器，
+ * F-06 项目编辑/状态变更/归档/恢复 HTTP 入口；只绑定 operationId 与契约装饰器，
  * 业务规则在服务与 Workflow 内，编码创建后不可修改。
  */
 @Controller("projects")
@@ -40,6 +40,16 @@ export class ProjectManagementController {
     @Res({ passthrough: true }) response: ProjectControllerResponse,
   ) {
     return this.respond("updateProject", request, response);
+  }
+
+  @Patch(":projectId/status")
+  @UseGuards(StrictSameOriginGuard)
+  @Operation("changeProjectStatus")
+  async changeStatus(
+    @Req() request: ProjectManagementHttpRequest,
+    @Res({ passthrough: true }) response: ProjectControllerResponse,
+  ) {
+    return this.respond("changeProjectStatus", request, response);
   }
 
   @Get(":projectId/archive-preview")

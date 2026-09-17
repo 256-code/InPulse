@@ -12,6 +12,7 @@ const project: ProjectListItem = {
   name: "InPulse 研发交付平台",
   description: "研发交付平台",
   status: "ACTIVE",
+  hasCompletedTask: false,
   rowVersion: 1,
   createdBy: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
@@ -90,7 +91,7 @@ describe("项目卡", () => {
     expect(screen.queryByRole("button", { name: "GitHub 链接" })).toBeNull();
   });
 
-  it("marks a project without completed tasks as 未开始 and keeps 正常 otherwise", () => {
+  it("项目状态标签直接映射四态，不再由完成任务数推导", () => {
     mount({
       projects: [
         {
@@ -98,13 +99,22 @@ describe("项目卡", () => {
           id: 3,
           code: "K1235",
           name: "未开始项目",
-          stats: { ...project.stats, completedTaskCount: 0 },
+          status: "NOT_STARTED",
+          stats: { ...project.stats, completedTaskCount: 9 },
         },
         project,
+        {
+          ...project,
+          id: 4,
+          code: "K1236",
+          name: "维护中项目",
+          status: "MAINTENANCE",
+        },
       ],
     });
     expect(screen.getByText("未开始").className).toContain("badge-cyan");
-    expect(screen.getByText("正常").className).toContain("badge-blue");
+    expect(screen.getByText("进行中").className).toContain("badge-blue");
+    expect(screen.getByText("维护中").className).toContain("badge-violet");
   });
 });
 

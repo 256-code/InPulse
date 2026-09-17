@@ -17,6 +17,7 @@ const project: ProjectItem = {
   name: "InPulse 平台",
   description: "平台项目描述",
   status: "ACTIVE",
+  hasCompletedTask: false,
   rowVersion: 2,
   createdBy: 1,
   createdAt: "2026-09-01T00:00:00.000Z",
@@ -127,7 +128,7 @@ describe("ProjectOverviewPageView", () => {
 
     expect(screen.getByText("INP / PROJECT")).toBeInTheDocument();
     expect(screen.getByText("InPulse 平台")).toBeInTheDocument();
-    expect(screen.getByText("正常")).toBeInTheDocument();
+    expect(screen.getByText("进行中")).toBeInTheDocument();
     await screen.findByTestId("overview-metric-members");
     expect(
       within(screen.getByTestId("overview-metric-members")).getByText("3 人"),

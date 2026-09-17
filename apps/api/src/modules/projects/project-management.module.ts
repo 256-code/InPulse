@@ -5,13 +5,14 @@ import { AuditModule } from "../../audit/audit.module.js";
 import { DatabaseModule } from "../../database/database.module.js";
 import { IdempotencyModule } from "../../idempotency/idempotency.module.js";
 import { ActivityProjectionModule } from "../activity/index.js";
+import { NotificationProjectionModule } from "../notifications/index.js";
 import { SearchProjectionModule } from "../search/index.js";
 import { ProjectManagementController } from "./project-management.controller.js";
 import { ProjectManagementHttpService } from "./project-management-http.service.js";
 import { ProjectManagementService } from "./project-management.service.js";
 import { ProjectsModule } from "./projects.module.js";
 
-/** F-06.1 项目编辑支柱；写命令只创建一个 UnitOfWork。 */
+/** F-06 项目编辑、状态变更与归档支柱；写命令只创建一个 UnitOfWork。 */
 @Module({
   imports: [
     AuthModule,
@@ -20,6 +21,7 @@ import { ProjectsModule } from "./projects.module.js";
     IdempotencyModule,
     ProjectsModule,
     ActivityProjectionModule,
+    NotificationProjectionModule,
     SearchProjectionModule,
   ],
   providers: [ProjectManagementService, ProjectManagementHttpService],

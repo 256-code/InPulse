@@ -7,6 +7,7 @@ import {
   schemaRegistry,
   type ProjectArchiveRequest,
   type ProjectEditRequest,
+  type ProjectStatusChangeRequest,
 } from "@inpulse/api-contract";
 
 import { AdminHighRiskError } from "../../auth/admin-high-risk.error.js";
@@ -31,6 +32,7 @@ import {
 
 export type ProjectManagementOperation =
   | "updateProject"
+  | "changeProjectStatus"
   | "getProjectArchivePreview"
   | "archiveProject"
   | "restoreProject";
@@ -57,7 +59,7 @@ class ProjectBodyValidationError extends Error {
 }
 
 /**
- * F-06 项目编辑/归档/恢复 HTTP 编排：写路径由幂等 runner 持有单事务；
+ * F-06 项目编辑/状态变更/归档/恢复 HTTP 编排：写路径由幂等 runner 持有单事务；
  * 归档预览为管理员只读路径，独立事务且不做状态变更。
  */
 @Injectable()
@@ -176,7 +178,10 @@ export class ProjectManagementHttpService {
       }
       const version = Number(parsedHeaders.data["if-match"].slice(1, -1));
 
-      const highRisk = operation !== "updateProject";
+      // 归档与恢复要求完整管理员 Session；编辑与状态变更只要求有效 Session，
+      // 权限由服务内的成员角色门禁判定。
+      const highRisk =
+        operation === "archiveProject" || operation === "restoreProject";
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (current === undefined) {
@@ -217,21 +222,30 @@ export class ProjectManagementHttpService {
                   edit: parsedBody.data as ProjectEditRequest,
                   requestId,
                 })
-              : operation === "archiveProject"
-                ? await this.projects.archiveProject(tx, {
+              : operation === "changeProjectStatus"
+                ? await this.projects.changeProjectStatus(tx, {
                     actorId,
                     projectId: path.data.projectId,
                     version,
-                    reason: (parsedBody.data as ProjectArchiveRequest).reason,
+                    target: (parsedBody.data as ProjectStatusChangeRequest)
+                      .status,
                     requestId,
                   })
-                : await this.projects.restoreProject(tx, {
-                    actorId,
-                    projectId: path.data.projectId,
-                    version,
-                    reason: (parsedBody.data as ProjectArchiveRequest).reason,
-                    requestId,
-                  });
+                : operation === "archiveProject"
+                  ? await this.projects.archiveProject(tx, {
+                      actorId,
+                      projectId: path.data.projectId,
+                      version,
+                      reason: (parsedBody.data as ProjectArchiveRequest).reason,
+                      requestId,
+                    })
+                  : await this.projects.restoreProject(tx, {
+                      actorId,
+                      projectId: path.data.projectId,
+                      version,
+                      reason: (parsedBody.data as ProjectArchiveRequest).reason,
+                      requestId,
+                    });
           return {
             responseStatus: 200,
             responseSchemaRef: "ProjectDetailResponse",
@@ -243,7 +257,7 @@ export class ProjectManagementHttpService {
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
           await this.projects.replay(tx, actorId, record.replayAuthContext, {
-            allowArchived: operation !== "updateProject",
+            allowArchived: highRisk,
           });
         },
       });

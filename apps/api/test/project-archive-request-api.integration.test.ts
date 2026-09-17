@@ -505,7 +505,10 @@ describe("F-06.2 项目归档申请 API（ADR-034）", () => {
         FROM app.projects
        WHERE id = ${value.project.projectId}
     `) as unknown as readonly { status: string; rowVersion: number }[];
-    expect(projectRows[0]).toMatchObject({ status: "ACTIVE", rowVersion: 1 });
+    expect(projectRows[0]).toMatchObject({
+      status: "NOT_STARTED",
+      rowVersion: 1,
+    });
 
     const notifications = await notificationRows(
       value.project.projectId,

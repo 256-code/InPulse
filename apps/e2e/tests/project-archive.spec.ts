@@ -73,7 +73,8 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢
       .locator("article.project-card")
       .filter({ hasText: new RegExp(created.code, "i") });
     await expect(card).toBeVisible({ timeout: listTimeoutMs });
-    await expect(card.getByText("正常", { exact: true })).toBeVisible({
+    // 新建项目从未开始起步：没有任何已完成任务时项目卡渲染「未开始」。
+    await expect(card.getByText("未开始", { exact: true })).toBeVisible({
       timeout: listTimeoutMs,
     });
 
@@ -127,10 +128,10 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢
     await restoreDialog.getByRole("button", { name: "确认恢复" }).click();
     await expect(restoreDialog).toBeHidden({ timeout: listTimeoutMs });
     await expect(page.getByTestId("project-management-success")).toContainText(
-      "项目「" + created.name + "」已恢复为正常状态",
+      "项目「" + created.name + "」已恢复为进行中状态",
       { timeout: listTimeoutMs },
     );
-    await expect(card.getByText("正常", { exact: true })).toBeVisible({
+    await expect(card.getByText("进行中", { exact: true })).toBeVisible({
       timeout: listTimeoutMs,
     });
     await expect(page.getByTestId("archive-project-" + projectId)).toBeVisible({

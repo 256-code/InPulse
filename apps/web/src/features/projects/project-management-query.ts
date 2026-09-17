@@ -5,17 +5,25 @@ import {
   createApiClient,
   type InpulseApiClient,
   type ProjectEditRequest,
+  type ProjectStatusChangeRequest,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
-export type ProjectManagementAction = "update" | "archive" | "restore";
+export type ProjectManagementAction =
+  "update" | "status" | "archive" | "restore";
 
 export function describeProjectManagementError(
   error: unknown,
   action: ProjectManagementAction,
 ): string {
   const actionLabel =
-    action === "update" ? "编辑" : action === "archive" ? "归档" : "恢复";
+    action === "update"
+      ? "编辑"
+      : action === "status"
+        ? "状态变更"
+        : action === "archive"
+          ? "归档"
+          : "恢复";
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "登录状态已失效，请重新登录后再操作项目。";
@@ -23,6 +31,9 @@ export function describeProjectManagementError(
     if (error.status === 403) {
       if (error.code === "ADMIN_REQUIRED") {
         return "只有系统管理员可以归档或恢复项目。";
+      }
+      if (error.code === "PROJECT_STATUS_FORBIDDEN") {
+        return "只有项目组长、项目管理员或系统管理员可以更改项目状态。";
       }
       return "安全校验未通过，请刷新页面后重试。";
     }
@@ -35,9 +46,16 @@ export function describeProjectManagementError(
         return "项目已归档，项目只读；需要先恢复后才能编辑。";
       }
       if (error.code === "PROJECT_STATE_CONFLICT") {
+        if (action === "status") return "项目已处于所选状态，请刷新后重试。";
         return action === "archive"
           ? "项目已归档，不能重复归档。"
           : "项目当前未归档，无法恢复。";
+      }
+      if (error.code === "PROJECT_STATUS_NOT_STARTED_LOCKED") {
+        return "项目里已经出现过已完成任务，不能再退回「未开始」。";
+      }
+      if (error.code === "PROJECT_STATUS_LEVEL_SKIP") {
+        return "「未开始」与「维护中」不能直接互相切换，请先切到「进行中」。";
       }
       return "项目状态已变化，请刷新列表后重试。";
     }
@@ -95,6 +113,42 @@ export function useUpdateProject(projectId: number, client?: InpulseApiClient) {
       return api.updateProject(projectId, input.edit, {
         headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion),
       });
+    },
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/**
+ * ADR-035：项目组长、项目管理员或系统管理员手动切换项目生命周期状态。
+ * 归档与恢复不走这里，仍由归档流程负责；「维护中」不通知，
+ * 「未开始 → 进行中」会由服务端通知全体活跃成员。
+ */
+export function useChangeProjectStatus(
+  projectId: number,
+  client?: InpulseApiClient,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      readonly status: ProjectStatusChangeRequest["status"];
+      readonly rowVersion: number;
+    }) => {
+      const key = retryKey(
+        JSON.stringify([projectId, input.rowVersion, input.status]),
+        "project-status",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.changeProjectStatus(
+        projectId,
+        { status: input.status },
+        { headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion) },
+      );
     },
     onSuccess: () => {
       void cache.invalidateQueries({ queryKey: ["projects"] });

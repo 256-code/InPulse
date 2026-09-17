@@ -247,6 +247,7 @@ export class HealthController {
       "POST /api/v1/projects/{projectId}/archive-requests/{requestId}/reject",
       "POST /api/v1/projects",
       "PATCH /api/v1/projects/{projectId}",
+      "PATCH /api/v1/projects/{projectId}/status",
       "GET /api/v1/projects/{projectId}/archive-preview",
       "POST /api/v1/projects/{projectId}/archive",
       "POST /api/v1/projects/{projectId}/restore",

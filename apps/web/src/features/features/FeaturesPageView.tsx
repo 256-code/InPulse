@@ -388,7 +388,7 @@ export function FeaturesPageView({
                       currentModule.status,
                       currentModule.stats.completedTaskCount,
                     )
-                  : "正常"}
+                  : "进行中"}
               </summary>
               <h4>模块说明</h4>
               <p>
@@ -546,7 +546,7 @@ export function FeaturesPageView({
                                   item.status === "ACTIVE" ? "blue" : "amber"
                                 }
                               >
-                                {item.status === "ACTIVE" ? "正常" : "已归档"}
+                                {item.status === "ACTIVE" ? "进行中" : "已归档"}
                               </CalmBadge>
                             </td>
                             <td>
@@ -591,7 +591,7 @@ export function FeaturesPageView({
                             <CalmBadge
                               tone={item.status === "ACTIVE" ? "gray" : "amber"}
                             >
-                              {item.status === "ACTIVE" ? "正常" : "已归档"}
+                              {item.status === "ACTIVE" ? "进行中" : "已归档"}
                             </CalmBadge>
                             {item.tags.slice(0, 3).map((tag) => (
                               <CalmBadge key={tag} tone="gray">
@@ -690,7 +690,7 @@ export function FeaturesPageView({
                   <CalmBadge
                     tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
                   >
-                    {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                    {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
                   </CalmBadge>
                   <CalmBadge tone="gray">
                     更新 {formatStamp(activeItem.updatedAt)}
@@ -780,7 +780,7 @@ export function FeaturesPageView({
                     <dd>v{activeItem.rowVersion}</dd>
                     <dt>状态</dt>
                     <dd>
-                      {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                      {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
                     </dd>
                   </dl>
                 </aside>

@@ -2,6 +2,8 @@ import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { PostgresFeatureReadPort } from "../src/modules/features/postgres-feature-read-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
+import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
 import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
@@ -189,6 +191,11 @@ beforeAll(async () => {
       search,
       notifications,
       access,
+      new PostgresProjectsWritePort(),
+      new ProjectStartNotifier(
+        new PostgresProjectMembersQueryPort(),
+        notifications,
+      ),
     ),
   );
   class TestModule {}

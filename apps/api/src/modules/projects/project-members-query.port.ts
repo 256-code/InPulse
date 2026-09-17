@@ -12,6 +12,14 @@ export abstract class ProjectMembersQueryPort {
     input: { actorUserId: number; projectId: number },
   ): Promise<AssignableProjectMember[] | undefined>;
   /**
+   * ADR-035：列出项目全部 ACTIVE 成员的 userId（按 id 升序），供项目开工时
+   * 通知全体成员。调用方已持有项目锁并完成写权限校验，这里不再二次授权。
+   */
+  abstract listActiveMemberIds(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<readonly number[]>;
+  /**
    * ADR-033：读取指定用户在项目内的 ACTIVE 成员角色；无 ACTIVE 成员关系
    * （含非成员与已移除）返回 undefined。调用方已持有事务与项目锁。
    */

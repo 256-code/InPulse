@@ -16,6 +16,26 @@ export class PostgresProjectMembersQueryPort extends ProjectMembersQueryPort {
       AssignableProjectMember[]
     >`SELECT u.id, u.name, u.avatar_url AS "avatarUrl" FROM app.users u WHERE u.status = 'ACTIVE' AND u.disabled_at IS NULL AND EXISTS (SELECT 1 FROM app.project_members m WHERE m.project_id = ${input.projectId} AND m.user_id = u.id AND m.status = 'ACTIVE') ORDER BY u.id`;
   }
+  async listActiveMemberIds(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<readonly number[]> {
+    const rows = await tx.sql<{ readonly id: number }[]>`
+      SELECT u.id
+        FROM app.users u
+       WHERE u.status = 'ACTIVE'
+         AND u.disabled_at IS NULL
+         AND EXISTS (
+           SELECT 1
+             FROM app.project_members m
+            WHERE m.project_id = ${input.projectId}
+              AND m.user_id = u.id
+              AND m.status = 'ACTIVE'
+         )
+       ORDER BY u.id
+    `;
+    return rows.map((row) => row.id);
+  }
   async findActiveRole(
     tx: TransactionContext,
     input: { projectId: number; userId: number },

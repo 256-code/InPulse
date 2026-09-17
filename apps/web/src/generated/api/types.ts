@@ -182,7 +182,7 @@ export type CreateProjectResponse = {
     readonly code: ProjectCode;
     readonly name: string;
     readonly description: string;
-    readonly status: "ACTIVE";
+    readonly status: "NOT_STARTED";
     readonly rowVersion: number;
     readonly createdBy: number;
     readonly createdAt: string;
@@ -773,7 +773,8 @@ export type ProjectItem = {
   readonly code: ProjectCode;
   readonly name: string;
   readonly description: string;
-  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly status: ProjectStatus;
+  readonly hasCompletedTask: boolean;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: string;
@@ -787,7 +788,8 @@ export type ProjectListItem = {
   readonly code: ProjectCode;
   readonly name: string;
   readonly description: string;
-  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly status: ProjectStatus;
+  readonly hasCompletedTask: boolean;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: string;
@@ -879,7 +881,7 @@ export type ProjectMutationHeaders = {
 export type ProjectOverviewProject = {
   readonly projectId: number;
   readonly name: string;
-  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly status: ProjectStatus;
 };
 
 export type ProjectOverviewQueryRequest = {
@@ -916,6 +918,12 @@ export type ProjectStats = {
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
   readonly completedTaskCount: number;
+};
+
+export type ProjectStatus = ("NOT_STARTED" | "ACTIVE" | "MAINTENANCE" | "ARCHIVED");
+
+export type ProjectStatusChangeRequest = {
+  readonly status: ("NOT_STARTED" | "ACTIVE" | "MAINTENANCE");
 };
 
 export type ProjectVersionHeaders = {

@@ -10,6 +10,7 @@ import type {
   ProjectForWriteResource,
   ProjectWriteCheckResult,
 } from "./project-access.port.js";
+import type { ProjectLifecycleStatus } from "./projects-write.port.js";
 
 /**
  * `ProjectAccessQueryPort` 的生产适配器，由 `ProjectsModule` 注入。
@@ -128,12 +129,25 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
   ): ProjectWriteCheckResult {
     const resource: ProjectForWriteResource = {
       projectId: project.id,
-      status: project.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE",
+      status: asProjectLifecycleStatus(project.status),
       rowVersion: project.rowVersion,
       isSystemAdmin,
     };
-    return resource.status === "ACTIVE"
-      ? { kind: "allowed", resource }
-      : { kind: "parent-not-active", resource };
+    return resource.status === "ARCHIVED"
+      ? { kind: "parent-not-active", resource }
+      : { kind: "allowed", resource };
   }
+}
+
+/**
+ * 数据库 status 是 text 列，这里收敛成四态联合类型；出现未知值时按「已归档」处理，
+ * 让写前检查保持 fail-closed，不因脏数据放行写入。
+ */
+function asProjectLifecycleStatus(value: string): ProjectLifecycleStatus {
+  return value === "NOT_STARTED" ||
+    value === "ACTIVE" ||
+    value === "MAINTENANCE" ||
+    value === "ARCHIVED"
+    ? value
+    : "ARCHIVED";
 }

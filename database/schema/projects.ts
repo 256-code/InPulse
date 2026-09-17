@@ -26,7 +26,13 @@ export const projects = appSchema.table(
     createdBy: integer("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    status: text("status").notNull().default("ACTIVE"),
+    /** ADR-035：项目生命周期四态；新建项目从未开始起步。 */
+    status: text("status").notNull().default("NOT_STARTED"),
+    /**
+     * 粘性标记：项目第一次有任务完成时置位，永不回落。
+     * 有值即表示项目已有产出，服务端禁止把项目回退为未开始。
+     */
+    firstTaskCompletedAt: timestamptz("first_task_completed_at"),
     rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
@@ -44,12 +50,19 @@ export const projects = appSchema.table(
       "projects_description_check",
       sql.raw("length(description) <= 20000"),
     ),
-    check("projects_status_check", sql.raw("status IN ('ACTIVE', 'ARCHIVED')")),
+    check(
+      "projects_status_check",
+      sql.raw("status IN ('NOT_STARTED', 'ACTIVE', 'MAINTENANCE', 'ARCHIVED')"),
+    ),
+    check(
+      "projects_not_started_lock_check",
+      sql.raw("status <> 'NOT_STARTED' OR first_task_completed_at IS NULL"),
+    ),
     check("projects_row_version_check", sql.raw("row_version > 0")),
     check(
       "projects_archive_state_check",
       sql.raw(
-        "(status = 'ACTIVE' AND archived_at IS NULL) OR (status = 'ARCHIVED' AND archived_at IS NOT NULL)",
+        "(status <> 'ARCHIVED' AND archived_at IS NULL) OR (status = 'ARCHIVED' AND archived_at IS NOT NULL)",
       ),
     ),
   ],

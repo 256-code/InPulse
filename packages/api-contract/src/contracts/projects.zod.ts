@@ -22,8 +22,8 @@ export type ProjectPath = z.infer<typeof projectPathSchema>;
  * 项目卡统计：与 R-2 项目概览（projectOverviewStatsSchema）同名同口径——
  * activeModuleCount / activeFeatureCount 只计行自身 status = ACTIVE，
  * openTaskCount 只计有效任务的 work_status = TODO（排除 INVALID、CANCELED 与历史来源分支）；
- * completedTaskCount 是同一有效任务口径下 work_status = DONE 的任务数，前端据此显示
- * 「未开始」标签（项目内没有已完成任务即未开始）。
+ * completedTaskCount 是同一有效任务口径下 work_status = DONE 的任务数。项目标签自
+ * 四态改造起读存储 status，不再由该计数推导；模块与功能的「未开始 / 进行中」仍按该计数推导。
  * 列表接口一次返回，项目卡无需按项目逐个再请求概览。
  */
 export const projectStatsSchema = z
@@ -38,6 +38,23 @@ export const projectStatsSchema = z
 
 export type ProjectStats = z.infer<typeof projectStatsSchema>;
 
+/**
+ * 项目生命周期四态：与 app.projects 的 projects_status_check 一致。
+ *
+ * - `NOT_STARTED`（未开始）：项目下还没有任何已完成任务；
+ * - `ACTIVE`（进行中）：项目已开工，含手动置为进行中与首次有任务完成后的自动升级；
+ * - `MAINTENANCE`（维护中）：主体已完成、只做小修小补且不打算归档；纯标签，不限制任何操作；
+ * - `ARCHIVED`（已归档）：只能由归档流程写入，项目及其下级只读。
+ *
+ * 未开始与维护中之间禁止直接互改（409 `PROJECT_STATUS_LEVEL_SKIP`）；
+ * 项目内出现过已完成任务后不可回退未开始（409 `PROJECT_STATUS_NOT_STARTED_LOCKED`）。
+ */
+export const projectStatusSchema = z
+  .enum(["NOT_STARTED", "ACTIVE", "MAINTENANCE", "ARCHIVED"])
+  .meta({ id: "ProjectStatus" });
+
+export type ProjectStatus = z.infer<typeof projectStatusSchema>;
+
 /** 项目公开摘要；包含归档状态、当前活跃成员数与项目卡统计，不暴露成员名单或内部字段。 */
 export const projectItemSchema = z
   .object({
@@ -45,7 +62,12 @@ export const projectItemSchema = z
     code: projectCodeSchema,
     name: z.string().min(1).max(200),
     description: z.string().max(20000),
-    status: z.enum(["ACTIVE", "ARCHIVED"]),
+    status: projectStatusSchema,
+    /**
+     * 粘性标记：项目内出现过已完成任务后恒为 true，永不回落。
+     * 前端据此置灰「未开始」选项；服务端独立校验并返回 409。
+     */
+    hasCompletedTask: z.boolean(),
     rowVersion: projectPositiveId,
     createdBy: projectPositiveId,
     createdAt: z.iso.datetime(),
@@ -337,7 +359,7 @@ export const projectMemberItemSchema = z
 
 export type ProjectMemberItem = z.infer<typeof projectMemberItemSchema>;
 
-/** 创建项目响应（成功状态码 200）。 */
+/** 创建项目响应（成功状态码 200）；新建项目从未开始起步，首次有任务完成时自动升级为进行中。 */
 export const createProjectResponseSchema = z
   .object({
     project: z
@@ -346,7 +368,7 @@ export const createProjectResponseSchema = z
         code: projectCodeSchema,
         name: z.string().min(1).max(200),
         description: z.string().max(20000),
-        status: z.literal("ACTIVE"),
+        status: z.literal("NOT_STARTED"),
         rowVersion: z.number().int().positive(),
         createdBy: z.number().int().positive(),
         createdAt: z.string().min(1).max(64),
@@ -386,6 +408,21 @@ export const projectEditRequestSchema = z
   .meta({ id: "ProjectEditRequest" });
 
 export type ProjectEditRequest = z.infer<typeof projectEditRequestSchema>;
+
+/**
+ * 项目状态变更请求（F-06.3）。只接受前三个目标态：归档必须走归档申请与批准流程。
+ * 目标态等于当前态视为无变化并返回 409 `PROJECT_STATE_CONFLICT`。
+ */
+export const projectStatusChangeRequestSchema = z
+  .object({
+    status: z.enum(["NOT_STARTED", "ACTIVE", "MAINTENANCE"]),
+  })
+  .strict()
+  .meta({ id: "ProjectStatusChangeRequest" });
+
+export type ProjectStatusChangeRequest = z.infer<
+  typeof projectStatusChangeRequestSchema
+>;
 
 /** 项目写请求安全头；要求同步 CSRF Token。 */
 export const projectMutationHeadersSchema = z

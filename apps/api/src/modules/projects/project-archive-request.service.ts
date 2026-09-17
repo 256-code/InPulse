@@ -252,7 +252,8 @@ export class ProjectArchiveRequestService {
     );
     if (current === undefined) throw missing();
     if (current.rowVersion !== input.version) throw versionConflict();
-    if (current.status !== "ACTIVE")
+    // ADR-035：项目四态后只有已归档项目不能再次归档；未开始与维护中也允许批准归档。
+    if (current.status === "ARCHIVED")
       throw new ProjectArchiveRequestError(
         409,
         "PROJECT_STATE_CONFLICT",
@@ -482,6 +483,7 @@ export class ProjectArchiveRequestService {
       name: record.name,
       description: record.description,
       status: record.status,
+      hasCompletedTask: record.firstTaskCompletedAt !== null,
       rowVersion: record.rowVersion,
       createdBy: record.createdBy,
       createdAt: record.createdAt,

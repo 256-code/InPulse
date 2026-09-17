@@ -158,7 +158,8 @@ export class ExternalLinkWorkflow {
       writable &&
       (type === "CHANGE_RECORD"
         ? ["DRAFT", "PUBLISHED"].includes(current.status)
-        : current.status === "ACTIVE");
+        : // ADR-035：项目是四态，只有已归档只读；功能与任务是 ACTIVE/ARCHIVED，恰好等价。
+          current.status !== "ARCHIVED");
     if (write && !writable)
       throw new ExternalLinkError(
         409,

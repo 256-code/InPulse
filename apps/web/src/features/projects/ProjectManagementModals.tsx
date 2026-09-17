@@ -1,6 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Button, Form, Input, Space, Typography } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import { CalmBadge, CalmSegmented } from "@features/common/components/Calm";
+import {
+  projectLifecycleLabel,
+  projectLifecycleTone,
+} from "@features/common/resource-lifecycle";
 import { Controller, useForm } from "react-hook-form";
 import type {
   InpulseApiClient,
@@ -13,6 +18,7 @@ import {
   describeProjectManagementError,
   useApproveProjectArchive,
   useArchiveProject,
+  useChangeProjectStatus,
   useProjectArchivePreview,
   useRejectProjectArchive,
   useRequestProjectArchive,
@@ -36,12 +42,22 @@ import {
 
 const { Text } = Typography;
 
+/** ADR-035：可手动切换的三个目标状态，归档不在其中。 */
+export type ProjectLifecycleTarget = "NOT_STARTED" | "ACTIVE" | "MAINTENANCE";
+
 export interface EditProjectModalProps {
   readonly open: boolean;
   readonly project: ProjectItem;
   readonly client?: InpulseApiClient | undefined;
   readonly onClose: () => void;
   readonly onUpdated: (updated: ProjectItem) => void;
+  /**
+   * ADR-035：调用方按「系统管理员或本项目组长 / 项目管理员」判定后传入，
+   * 默认 false 只展示当前状态标签。服务端仍会二次校验同一条件。
+   */
+  readonly canChangeStatus?: boolean | undefined;
+  /** 状态保存成功且不关闭弹窗时通知调用方刷新列表与版本。 */
+  readonly onStatusChanged?: ((updated: ProjectItem) => void) | undefined;
 }
 
 /** F-06.1 前端编辑入口；编码不可修改，保存走 If-Match 乐观锁。 */
@@ -51,6 +67,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   client,
   onClose,
   onUpdated,
+  canChangeStatus = false,
+  onStatusChanged,
 }) => {
   const {
     control,
@@ -63,14 +81,75 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     defaultValues: { name: project.name, description: project.description },
   });
   const mutation = useUpdateProject(project.id, client);
+  const statusMutation = useChangeProjectStatus(project.id, client);
   const formId = React.useId();
+  const [statusDraft, setStatusDraft] = useState<ProjectLifecycleTarget | null>(
+    null,
+  );
 
   useEffect(() => {
     if (open) {
       reset({ name: project.name, description: project.description });
       mutation.reset();
+      setStatusDraft(null);
+      statusMutation.reset();
     }
   }, [open, project.id, project.name, project.description]);
+
+  const statusLocked = project.status === "ARCHIVED";
+  const canEditStatus = canChangeStatus && !statusLocked;
+  const currentStatus: ProjectLifecycleTarget = statusLocked
+    ? "ACTIVE"
+    : (project.status as ProjectLifecycleTarget);
+  const statusValue = statusDraft ?? currentStatus;
+  const statusDirty = statusValue !== currentStatus;
+
+  const statusOptions = (
+    [
+      { value: "NOT_STARTED", label: "未开始" },
+      { value: "ACTIVE", label: "进行中" },
+      { value: "MAINTENANCE", label: "维护中" },
+    ] as const
+  ).map((option) => {
+    const backToNotStarted = option.value === "NOT_STARTED";
+    const skipLevel =
+      (backToNotStarted && project.status === "MAINTENANCE") ||
+      (option.value === "MAINTENANCE" && project.status === "NOT_STARTED");
+    const blockedByCompletedTask = backToNotStarted && project.hasCompletedTask;
+    return {
+      value: option.value,
+      label: option.label,
+      disabled: blockedByCompletedTask || skipLevel,
+      title: blockedByCompletedTask
+        ? "项目里已经出现过已完成任务，不能再退回未开始"
+        : skipLevel
+          ? "未开始与维护中不能直接互相切换，请先切到进行中"
+          : undefined,
+    };
+  });
+
+  const statusHint = statusLocked
+    ? "项目已归档，状态只读；请先恢复项目，恢复后状态为进行中。"
+    : !canChangeStatus
+      ? "只有系统管理员、项目组长或项目管理员可以更改项目状态。"
+      : "未开始 ⇄ 进行中 ⇄ 维护中；未开始与维护中不能直接互改。" +
+        (project.hasCompletedTask
+          ? "项目里已有完成任务，因此不能再退回未开始。"
+          : "");
+
+  const submitStatus = async () => {
+    if (!canEditStatus || !statusDirty) return;
+    try {
+      const updated = await statusMutation.mutateAsync({
+        status: statusValue,
+        rowVersion: project.rowVersion,
+      });
+      setStatusDraft(null);
+      onStatusChanged?.(updated.project);
+    } catch {
+      // statusMutation.error 负责展示，草稿保留。
+    }
+  };
 
   const submit = async (values: ProjectEditFormValues) => {
     const parsed = projectEditFormSchema.safeParse(values);
@@ -193,6 +272,61 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
                 title={describeProjectManagementError(mutation.error, "update")}
                 style={{ marginTop: 16 }}
               />
+            ) : null}
+          </div>
+          <div className="dialog-form project-status-section">
+            <Form.Item label="项目状态">
+              <div className="project-status-control">
+                {canEditStatus ? (
+                  <CalmSegmented
+                    label="项目状态"
+                    value={statusValue}
+                    options={statusOptions}
+                    onChange={(next) => {
+                      statusMutation.reset();
+                      setStatusDraft(next);
+                    }}
+                  />
+                ) : (
+                  <CalmBadge
+                    tone={projectLifecycleTone(project.status, "blue")}
+                  >
+                    {projectLifecycleLabel(project.status)}
+                  </CalmBadge>
+                )}
+                <Button
+                  htmlType="button"
+                  className="secondary-button"
+                  data-testid="save-project-status"
+                  disabled={!canEditStatus || !statusDirty}
+                  loading={statusMutation.isPending}
+                  onClick={() => void submitStatus()}
+                >
+                  保存状态
+                </Button>
+              </div>
+            </Form.Item>
+            <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+              {statusHint}
+            </Text>
+            {statusMutation.error ? (
+              <Alert
+                showIcon
+                type="error"
+                title={describeProjectManagementError(
+                  statusMutation.error,
+                  "status",
+                )}
+                style={{ marginTop: 16 }}
+              />
+            ) : null}
+            {statusMutation.isSuccess && !statusDirty ? (
+              <Text
+                data-testid="project-status-saved"
+                style={{ display: "block", marginTop: 8, fontSize: 12 }}
+              >
+                状态已更新为「{projectLifecycleLabel(project.status)}」。
+              </Text>
             ) : null}
           </div>
         </Form>

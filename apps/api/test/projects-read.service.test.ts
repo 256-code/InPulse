@@ -14,6 +14,7 @@ const project: ProjectItem = {
   name: "商城系统",
   description: "项目描述",
   status: "ACTIVE",
+  hasCompletedTask: true,
   rowVersion: 1,
   createdBy: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
