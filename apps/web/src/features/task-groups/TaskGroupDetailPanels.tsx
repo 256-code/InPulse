@@ -1,18 +1,25 @@
 import React, { useState } from "react";
 import { Alert, Spin } from "antd";
-import type { InpulseApiClient, TaskGroupRecordLink } from "@generated/api";
+import type { InpulseApiClient, TaskGroupRecordItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   CalmBadge,
   CalmEmptyState,
   CalmSegmented,
 } from "@features/common/components/Calm";
+import {
+  RecordDetailModal,
+  type RecordDetailTarget,
+} from "@features/published-records/RecordDetailModal";
+import type { TaskLocation } from "@features/tasks/task-links";
+import { TaskGroupRecordLinks } from "./TaskGroupRecordLinks";
 import { UnmergeTaskGroupButton } from "./UnmergeTaskGroupButton";
 import {
   describeTaskGroupError,
   useTaskGroupQuery,
   useTaskGroupRecordsQuery,
 } from "./task-groups-query";
+import { formatDateTime, formatDay } from "./task-groups-format";
 import {
   memberRoleLabel,
   type TaskGroupAdapter,
@@ -20,14 +27,31 @@ import {
 } from "./task-groups-types";
 
 /**
- * F-25 任务聚合组视图：主任务与来源分支的统一展示（R-1），组内记录按分支
- * 筛选、服务端过滤并以签名游标分页（R-4）。视图只消费服务端字段：不复制
- * 任务或记录实体，也不展示原始审计内容；GitHub 链接按关联时刻快照标注
- * （A 裁决 Q-13 / Q-14）。解除合并入口只对活跃 SOURCE 成员开放
- * （功能设计 18.14，F-24）。
+ * F-25 聚合组正文面板：成员与分支、组内记录（按分支筛选、服务端过滤并以签名
+ * 游标分页，R-4）。视图只消费服务端字段：不复制任务或记录实体，也不展示原始
+ * 审计内容；GitHub 链接按关联时刻快照标注（A 裁决 Q-13 / Q-14）。解除合并入口
+ * 只对活跃 SOURCE 成员开放（功能设计 18.14，F-24）。
+ *
+ * 本实现由 TaskGroupDetailModal 独占使用（`/task-groups/{id}` 独立页已删除），
+ * 记录筛选状态由宿主弹层持有，面板本身不读 URL。成员任务标题经宿主下发的
+ * `onOpenTask` 就地打开任务详情（与任务中心、功能档案同一实现）。
  */
 
 const ALL_RECORDS_VALUE = "all";
+
+/** 聚合组记录列表 → 详情弹窗入参：来源任务作为眉标语境，作废状态由弹窗补。 */
+function recordDetailTarget(record: TaskGroupRecordItem): RecordDetailTarget {
+  return {
+    recordId: record.recordId,
+    code: record.code,
+    title: record.title,
+    recordStatus: record.recordStatus,
+    publishedAt: record.publishedAt,
+    contextLabel:
+      record.sourceLabel === "主任务" ? "主任务" : "来源 " + record.sourceLabel,
+    externalLinks: record.externalLinks,
+  };
+}
 
 const workStatusLabels = {
   TODO: "未完成",
@@ -41,55 +65,38 @@ const workStatusTone = {
   CANCELED: "gray",
 } as const;
 
-function formatDay(iso: string): string {
-  const date = new Date(iso);
-  return date.getMonth() + 1 + "月" + date.getDate() + "日";
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", { hour12: false });
-}
-
-function linkKindLabel(kind: TaskGroupRecordLink["kind"]): string {
-  if (kind === "PULL_REQUEST") return "Pull Request";
-  if (kind === "ISSUE") return "Issue";
-  if (kind === "COMMIT") return "Commit";
-  return "链接";
-}
-
-function linkLabel(link: TaskGroupRecordLink): string {
-  const repository =
-    link.repository === null
-      ? ""
-      : " · " +
-        link.repository +
-        (link.externalNumber === null ? "" : " #" + link.externalNumber);
-  const sha =
-    link.externalSha === null ? "" : " · " + link.externalSha.slice(0, 7);
-  return linkKindLabel(link.kind) + repository + sha;
-}
-
-export interface TaskGroupPageViewProps {
+export interface TaskGroupDetailPanelsProps {
   readonly groupId: number;
   readonly adapter: TaskGroupAdapter;
   /** 解除合并写路径使用的生成客户端。 */
   readonly api: InpulseApiClient;
-  /** URL 承载的记录筛选（F-30）：null 表示全部记录。 */
+  /** 记录筛选命中的成员任务 id；null 表示全部记录。 */
   readonly memberTaskId: number | null;
   readonly onMemberTaskIdChange: (memberTaskId: number | null) => void;
-  readonly onBackToTasks: () => void;
+  /** 解除合并等写操作完成后回调宿主，供列表等上层数据刷新。 */
+  readonly onChanged?: (() => void) | undefined;
+  /**
+   * 点击成员任务标题时就地打开任务详情弹窗：由宿主页面下发（任务中心与功能档案
+   * 都传同一实现），缺省时标题按纯文本渲染，不给出点了没反应的入口。
+   */
+  readonly onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }
 
-export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
+export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
   groupId,
   adapter,
   api,
   memberTaskId,
   onMemberTaskIdChange,
-  onBackToTasks,
+  onChanged,
+  onOpenTask,
 }) => {
   const groupQuery = useTaskGroupQuery({ groupId, adapter });
   const [unmerged, setUnmerged] = useState(false);
+  /** 当前打开的记录详情（null 表示弹层关闭）。 */
+  const [openRecord, setOpenRecord] = useState<TaskGroupRecordItem | null>(
+    null,
+  );
 
   const group = groupQuery.data?.group ?? null;
   const members = groupQuery.data?.members ?? [];
@@ -109,6 +116,17 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
     adapter,
   });
   const records = recordsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+
+  /** 成员任务自带归属（moduleId / featureId），点击后按它自身的范围打开详情。 */
+  const openMemberTask = (member: TaskGroupMember) => {
+    if (onOpenTask === undefined || group === null) return;
+    onOpenTask({
+      projectId: group.projectId,
+      moduleId: member.moduleId,
+      featureId: member.featureId,
+      taskId: member.taskId,
+    });
+  };
 
   const filterOptions = [
     { value: ALL_RECORDS_VALUE, label: "全部记录" },
@@ -140,7 +158,19 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
           <CalmBadge tone="gray">已归档</CalmBadge>
         ) : null}
       </div>
-      <strong>{member.title}</strong>
+      {onOpenTask === undefined ? (
+        <strong>{member.title}</strong>
+      ) : (
+        <button
+          type="button"
+          className="task-group-member-title"
+          aria-haspopup="dialog"
+          data-testid={"task-group-member-open-" + member.taskId}
+          onClick={() => openMemberTask(member)}
+        >
+          <strong>{member.title}</strong>
+        </button>
+      )}
       <p className="task-group-member-meta">
         {"负责人 " +
           member.assignee.name +
@@ -189,7 +219,10 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
             onReload={async () => {
               await groupQuery.refetch();
             }}
-            onChanged={() => setUnmerged(true)}
+            onChanged={() => {
+              setUnmerged(true);
+              onChanged?.();
+            }}
           />
         </div>
       ) : null}
@@ -197,52 +230,7 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
   );
 
   return (
-    <section
-      className="task-group"
-      aria-label="任务聚合组"
-      data-testid="task-group"
-    >
-      <div className="page-header">
-        <div>
-          <button type="button" className="back-button" onClick={onBackToTasks}>
-            <InpulseIcon name="arrowLeft" size={16} />
-            任务中心
-          </button>
-          <div className="eyebrow">
-            {group === null
-              ? "聚合组 / TASK GROUP"
-              : group.code + " / TASK GROUP"}
-          </div>
-          <h1>
-            {group === null
-              ? groupQuery.isPending
-                ? "正在加载聚合组…"
-                : "任务聚合组"
-              : group.name}
-          </h1>
-          <p>
-            {group === null
-              ? "聚合组统一展示主任务与来源分支的合并关系、各自迭代记录与 GitHub 链接。"
-              : "主任务是统一入口；来源分支保留原任务编号、负责人与全部迭代记录，合并关系不删除历史。"}
-          </p>
-        </div>
-        <div className="catalog-actions">
-          {group === null ? null : (
-            <CalmBadge tone={group.status === "ACTIVE" ? "violet" : "gray"}>
-              {group.status === "ACTIVE" ? "进行中" : "已关闭"}
-            </CalmBadge>
-          )}
-          {group === null ? null : (
-            <span className="task-group-created">
-              {"创建于 " +
-                formatDay(group.createdAt) +
-                " · 项目 #" +
-                group.projectId}
-            </span>
-          )}
-        </div>
-      </div>
-
+    <>
       {unmerged ? (
         <div data-testid="task-group-unmerged-notice">
           <Alert type="success" title="已解除合并，聚合组状态与记录已刷新。" />
@@ -347,56 +335,52 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
                         key={record.recordId}
                         data-testid={"task-group-record-" + record.recordId}
                       >
-                        <div className="task-group-record-head">
-                          <span className="task-id">{record.code}</span>
-                          <CalmBadge
-                            tone={
-                              record.sourceLabel === "主任务"
-                                ? "violet"
-                                : "cyan"
-                            }
-                          >
-                            {record.sourceLabel === "主任务"
-                              ? "主任务"
-                              : "来源 " + record.sourceLabel}
-                          </CalmBadge>
-                          {record.recordStatus === "VOID" ? (
-                            <CalmBadge tone="gray">已作废</CalmBadge>
-                          ) : null}
-                        </div>
-                        <strong>{record.title}</strong>
-                        <small className="task-group-record-meta">
-                          {formatDay(record.publishedAt) + " 发布"}
-                          {record.featureId === null
-                            ? ""
-                            : " · 功能 #" + record.featureId}
-                        </small>
+                        {/* 整块摘要可点开详情弹窗；关联记录切换按钮留在按钮外，
+                            避免交互元素嵌套。 */}
+                        <button
+                          type="button"
+                          className="task-group-record-open"
+                          data-testid={
+                            "task-group-record-open-" + record.recordId
+                          }
+                          aria-haspopup="dialog"
+                          onClick={() => setOpenRecord(record)}
+                        >
+                          <span className="task-group-record-head">
+                            <span className="task-id">{record.code}</span>
+                            <CalmBadge
+                              tone={
+                                record.sourceLabel === "主任务"
+                                  ? "violet"
+                                  : "cyan"
+                              }
+                            >
+                              {record.sourceLabel === "主任务"
+                                ? "主任务"
+                                : "来源 " + record.sourceLabel}
+                            </CalmBadge>
+                            {record.recordStatus === "VOID" ? (
+                              <CalmBadge tone="gray">已作废</CalmBadge>
+                            ) : null}
+                            <InpulseIcon
+                              name="chevronRight"
+                              size={14}
+                              className="task-group-record-open-chevron"
+                            />
+                          </span>
+                          <strong>{record.title}</strong>
+                          <small className="task-group-record-meta">
+                            {formatDay(record.publishedAt) + " 发布"}
+                            {record.featureId === null
+                              ? ""
+                              : " · 功能 #" + record.featureId}
+                          </small>
+                        </button>
                         {record.externalLinks.length > 0 ? (
-                          <ul className="task-group-record-links">
-                            {record.externalLinks.map((link) => (
-                              <li key={link.linkId}>
-                                <a
-                                  href={link.displayUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <InpulseIcon name="externalLink" size={13} />
-                                  {linkLabel(link)}
-                                </a>
-                                <small
-                                  data-testid={
-                                    "task-group-link-snapshot-" + link.linkId
-                                  }
-                                >
-                                  {"快照：" +
-                                    (link.titleSnapshot ?? link.displayUrl) +
-                                    (link.stateSnapshot === null
-                                      ? ""
-                                      : " · " + link.stateSnapshot)}
-                                </small>
-                              </li>
-                            ))}
-                          </ul>
+                          <TaskGroupRecordLinks
+                            recordId={record.recordId}
+                            links={record.externalLinks}
+                          />
                         ) : null}
                       </li>
                     ))}
@@ -421,8 +405,24 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
           </div>
         </>
       )}
-    </section>
+      {group === null ? null : (
+        <RecordDetailModal
+          projectId={group.projectId}
+          record={openRecord === null ? null : recordDetailTarget(openRecord)}
+          api={api}
+          /* 本面板只出现在 `lg` 的聚合组弹窗里，记录详情必须收窄才能看出层级。 */
+          nested
+          onClose={() => setOpenRecord(null)}
+          onChanged={() => {
+            // 修订、作废与遗留项操作会改变记录正文、组成员计数与筛选结果。
+            void recordsQuery.refetch();
+            void groupQuery.refetch();
+            onChanged?.();
+          }}
+        />
+      )}
+    </>
   );
 };
 
-export default TaskGroupPageView;
+export default TaskGroupDetailPanels;

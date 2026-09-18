@@ -1,13 +1,23 @@
-import React from "react";
+import React, { lazy, Suspense, useState } from "react";
 import { Alert, Button, Spin } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
 import { useProjectDetail } from "@features/projects/project-query";
 import { useAuth } from "@features/auth/auth-context";
 import { TasksPanel } from "@features/tasks/TasksPanel";
+import type { TaskLocation } from "@features/tasks/task-links";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmSectionTitle, CalmTabs } from "@features/common/components/Calm";
 import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
+
+/**
+ * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
+ * 迭代记录、合并与外部链接等写入口全在同一处）。按需加载，模块任务页的初始包
+ * 不引入任务详情的完整实现。
+ */
+const TaskDetailOverlay = lazy(
+  () => import("@features/tasks/TaskDetailOverlay"),
+);
 
 export default function ModuleTasksPage() {
   const navigate = useNavigate();
@@ -17,6 +27,8 @@ export default function ModuleTasksPage() {
   const { query } = useModules(projectId);
   const projectQuery = useProjectDetail({ projectId });
   const { user } = useAuth();
+  /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
+  const [taskTarget, setTaskTarget] = useState<TaskLocation | null>(null);
   if (
     ![projectId, moduleId].every(
       (id) => Number.isInteger(id) && id > 0 && id <= 2147483647,
@@ -93,7 +105,18 @@ export default function ModuleTasksPage() {
         featureId={null}
         writable={module.status === "ACTIVE"}
         isAdmin={user?.isAdmin === true}
+        onOpenTask={setTaskTarget}
       />
+      <Suspense fallback={null}>
+        {taskTarget === null ? null : (
+          <TaskDetailOverlay
+            target={taskTarget}
+            isAdmin={user?.isAdmin === true}
+            onClose={() => setTaskTarget(null)}
+            onOpenTask={setTaskTarget}
+          />
+        )}
+      </Suspense>
     </>
   );
 }

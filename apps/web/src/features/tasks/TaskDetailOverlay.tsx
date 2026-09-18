@@ -19,6 +19,11 @@ export interface TaskDetailOverlayProps {
   readonly client?: InpulseApiClient | undefined;
   readonly isAdmin?: boolean | undefined;
   readonly onClose: () => void;
+  /**
+   * 详情内的聚合组弹窗点击成员任务标题时，交回宿主换一个任务重新就地打开。
+   * 缺省时成员标题按纯文本渲染。
+   */
+  readonly onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }
 
 export const TaskDetailOverlay: React.FC<TaskDetailOverlayProps> = ({
@@ -26,6 +31,7 @@ export const TaskDetailOverlay: React.FC<TaskDetailOverlayProps> = ({
   client,
   isAdmin,
   onClose,
+  onOpenTask,
 }) => {
   const modules = useModules(target.projectId, client);
   const features = useFeatures(
@@ -60,6 +66,7 @@ export const TaskDetailOverlay: React.FC<TaskDetailOverlayProps> = ({
       isAdmin={isAdmin}
       client={client}
       onDetailClose={onClose}
+      onOpenTask={onOpenTask}
     />
   );
 };

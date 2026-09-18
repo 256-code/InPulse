@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Alert, Button, Spin } from "antd";
-import type { InpulseApiClient, ProjectItem } from "@generated/api";
+import {
+  createApiClient,
+  type InpulseApiClient,
+  type ProjectItem,
+} from "@generated/api";
 import {
   InpulseIcon,
   type InpulseIconName,
@@ -29,6 +33,8 @@ import {
 } from "./my-tasks-v1-query";
 import { formatDayIso, isBeforeTodayIso, isTodayIso } from "./my-tasks-time";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
+import { TaskGroupDetailModal } from "@features/task-groups/TaskGroupDetailModal";
+import { createTaskGroupServerAdapter } from "@features/task-groups/task-groups-server";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskFilters,
@@ -240,6 +246,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   client,
 }) => {
   const activeAdapter = adapter ?? MY_TASKS_MOCK_ADAPTER;
+  // 聚合组详情经 C 域 R-1 / R-4 读取，与任务中心自己的 MyTasks 适配器无关。
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const groupAdapter = useMemo(() => createTaskGroupServerAdapter(api), [api]);
+  /** 当前打开的聚合组（null 表示弹层关闭）：卡片不再跳转详情页。 */
+  const [openGroupId, setOpenGroupId] = useState<number | null>(null);
   const taskQuery = useMyTasksQuery({
     filters,
     viewerId,
@@ -1009,9 +1020,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   <article className="group-card" key={group.groupId}>
                     <header>
                       <span className="task-id">{group.code}</span>
-                      <a href={"/task-groups/" + group.groupId}>
+                      <button
+                        type="button"
+                        className="group-card-title"
+                        aria-haspopup="dialog"
+                        onClick={() => setOpenGroupId(group.groupId)}
+                      >
                         <strong>{group.name}</strong>
-                      </a>
+                      </button>
                       <CalmBadge
                         tone={group.status === "ACTIVE" ? "blue" : "gray"}
                       >
@@ -1043,8 +1059,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                               })
                             }
                           >
-                            <strong>{branch.taskCode}</strong>
-                            <span>{branch.title}</span>
+                            <span className="branch-task-code">
+                              {branch.taskCode}
+                            </span>
+                            <strong>{branch.title}</strong>
                           </button>
                           <CalmBadge tone={statusTone[branch.workStatus]}>
                             {statusLabels[branch.workStatus]}
@@ -1059,11 +1077,16 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                         来源任务的原始状态、负责人、迭代记录与 GitHub
                         链接全部保留。
                       </span>
-                      <a href={"/task-groups/" + group.groupId}>
+                      <button
+                        type="button"
+                        className="group-card-open"
+                        aria-haspopup="dialog"
+                        onClick={() => setOpenGroupId(group.groupId)}
+                      >
                         {group.status === "ACTIVE"
                           ? "查看详情 / 解除合并"
                           : "查看聚合历史"}
-                      </a>
+                      </button>
                       {mainTask === null ? null : (
                         <button
                           type="button"
@@ -1101,6 +1124,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </>
         )}
       </section>
+
+      <TaskGroupDetailModal
+        groupId={openGroupId}
+        adapter={groupAdapter}
+        api={api}
+        onClose={() => setOpenGroupId(null)}
+        onChanged={() => void groupsQuery.refetch()}
+        onOpenTask={onOpenTask}
+      />
 
       <GlobalTaskCreateModal
         onCreatedLocation={onOpenTask}

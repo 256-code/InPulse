@@ -1,10 +1,20 @@
 import { GlobalTaskCreateModal } from "./GlobalTaskCreateModal";
-import { taskDetailPath } from "./task-links";
+import { taskDetailPath, type TaskLocation } from "./task-links";
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
+import { TaskGroupDetailModal } from "@features/task-groups/TaskGroupDetailModal";
+import { createTaskGroupServerAdapter } from "@features/task-groups/task-groups-server";
+import {
+  RecordDetailModal,
+  type RecordDetailTarget,
+} from "@features/published-records/RecordDetailModal";
+import {
+  RecordDraftEditorModal,
+  type RecordDraftEditorTarget,
+} from "@features/record-drafts/RecordDraftEditorModal";
 import { useNavigate } from "react-router-dom";
 import { LeftoverTaskSource } from "./LeftoverTaskSource";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +24,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
   type InpulseApiClient,
+  type ReadableRecord,
   type TaskStatusRequest,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -114,8 +125,19 @@ const formatDay = (value: string | null) =>
   value ? new Date(value).toLocaleDateString("zh-CN") : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
-const recordDraftsHref = (item: TaskViewItem) =>
-  `/records?projectId=${item.projectId}&moduleId=${item.moduleId}&taskId=${item.id}`;
+/**
+ * 任务详情的迭代记录列表只给摘要：整行可点开记录详情弹窗（与聚合组记录列表
+ * 同一实现），正文不在列表里预加载。
+ */
+function recordDetailTarget(record: ReadableRecord): RecordDetailTarget {
+  return {
+    recordId: record.id,
+    code: record.code,
+    title: record.title,
+    recordStatus: record.status,
+    publishedAt: record.publishedAt,
+  };
+}
 type DetailTab = "info" | "records" | "branches";
 /**
  * C-3：任务详情弹窗动作行的截止徽章（设计师稿 dueInfo）：按本地日历日计算
@@ -155,12 +177,13 @@ function MergeIntoTargetModal({
   task,
   api,
   onClose,
+  onMerged,
 }: {
   task: TaskViewItem;
   api: InpulseApiClient;
   onClose: () => void;
+  onMerged: (groupId: number) => void;
 }) {
-  const navigate = useNavigate();
   return (
     <MergeIntoMainTaskModal
       open
@@ -174,7 +197,7 @@ function MergeIntoTargetModal({
       onClose={onClose}
       onMerged={(groupId) => {
         onClose();
-        navigate("/task-groups/" + groupId);
+        onMerged(groupId);
       }}
     />
   );
@@ -190,6 +213,7 @@ export function TasksPanel({
   mode = "panel",
   initialTaskId,
   onDetailClose,
+  onOpenTask,
 }: TaskScope & {
   writable: boolean;
   client?: InpulseApiClient | undefined;
@@ -205,6 +229,12 @@ export function TasksPanel({
   initialTaskId?: number | null;
   /** 详情弹窗关闭后的回调；`detail` 模式由宿主卸载本组件，回到触发页面。 */
   onDetailClose?: () => void;
+  /**
+   * 聚合组详情里点击成员任务标题时就地打开任务详情：由宿主页面提供（与任务中心
+   * 同一实现），缺省时成员标题按纯文本渲染。成员任务可能属于其他功能或模块，
+   * 因此不能复用本面板自己那份按范围读取的详情弹窗。
+   */
+  onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }) {
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
@@ -228,6 +258,8 @@ export function TasksPanel({
   );
   const [merge, setMerge] = useState<Merge | null>(null);
   const [mergeInto, setMergeInto] = useState(false);
+  /** 当前就地打开的聚合组详情（null 表示弹层关闭）；聚合组入口不再整页跳转。 */
+  const [openGroupId, setOpenGroupId] = useState<number | null>(null);
   // ADR-034：归档/恢复是编辑弹窗底部的独立确认流程，与编辑表单状态互不影响。
   const [lifecycle, setLifecycle] = useState<{
     action: "archive" | "restore";
@@ -238,6 +270,12 @@ export function TasksPanel({
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [success, setSuccess] = useState(false);
+  /** 当前打开的迭代记录详情（null 表示弹层关闭）。 */
+  const [openRecordId, setOpenRecordId] = useState<number | null>(null);
+  /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
+  const [draftTarget, setDraftTarget] = useState<RecordDraftEditorTarget | null>(
+    null,
+  );
   const generation = useRef(0);
   const saving = useRef(false);
   const {
@@ -249,6 +287,8 @@ export function TasksPanel({
   } = useForm<TaskDraft>({ defaultValues: empty });
   const navigate = useNavigate();
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
+  // 聚合组详情与任务中心共用同一弹窗实现；本面板只负责把当前选中组传给它。
+  const groupAdapter = useMemo(() => createTaskGroupServerAdapter(api), [api]);
   const current = query.data?.items.find((item) => item.id === selectedId);
   // 页面级一次批量（R-5）：任务集合变化时整批重读，不按任务逐个请求。
   const marks = useTaskMarks(
@@ -285,6 +325,11 @@ export function TasksPanel({
   const taskPublished = (taskRecords.data?.items ?? []).filter(
     (record) => record.taskId === detailTaskId,
   );
+  // 列表刷新后按编号重新定位：弹窗不会因查询返回新对象而闪退。
+  const openRecord =
+    openRecordId === null
+      ? null
+      : (taskPublished.find((record) => record.id === openRecordId) ?? null);
   const taskDraftItems = taskDrafts.data?.items ?? [];
   // 详情头部与卡片归属展示名称而非裸 ID：项目/模块/功能名称均为既有只读契约。
   const projectDetail = useProjectDetail({ client, projectId });
@@ -412,6 +457,7 @@ export function TasksPanel({
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
+    setOpenRecordId(null);
     onDetailClose?.();
   };
   /**
@@ -426,6 +472,7 @@ export function TasksPanel({
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
+    setOpenRecordId(null);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
     reset(item ? taskEdit(item) : empty);
@@ -1047,9 +1094,7 @@ export function TasksPanel({
                           <button
                             type="button"
                             className="text-button"
-                            onClick={() =>
-                              navigate("/task-groups/" + currentGroupId)
-                            }
+                            onClick={() => setOpenGroupId(currentGroupId)}
                           >
                             <InpulseIcon name="gitBranch" size={14} />
                             查看主任务
@@ -1072,13 +1117,18 @@ export function TasksPanel({
                               : "一个任务可以没有记录，也可以产生多条记录"}
                           </small>
                         </div>
-                        <a
+                        <Button
                           className="primary-button"
-                          href={recordDraftsHref(current)}
+                          disabled={!taskWritable || !taskDrafts.data?.source}
+                          onClick={() => {
+                            const source = taskDrafts.data?.source;
+                            if (!source) return;
+                            setDraftTarget({ kind: "source", source });
+                          }}
                         >
                           <InpulseIcon name="zap" size={15} />
                           记录一次迭代
-                        </a>
+                        </Button>
                       </div>
                       {taskRecords.isPending || taskDrafts.isPending ? (
                         <div className="calm-state">
@@ -1113,25 +1163,39 @@ export function TasksPanel({
                         <ul className="task-record-list">
                           {taskPublished.map((record) => (
                             <li key={"published-" + record.id}>
-                              <a
-                                href={
-                                  "/records?projectId=" +
-                                  projectId +
-                                  "&publishedId=" +
-                                  record.id
+                              {/* 整行摘要可点开详情弹窗；关联链接与徽章留在按钮外，
+                                  避免交互元素嵌套。 */}
+                              <button
+                                type="button"
+                                className="task-record-open"
+                                data-testid={"task-record-open-" + record.id}
+                                aria-haspopup="dialog"
+                                onClick={() => setOpenRecordId(record.id)}
+                              >
+                                <span className="task-record-open-text">
+                                  <strong>{record.title}</strong>
+                                  <small>
+                                    {record.code +
+                                      " · " +
+                                      formatDay(record.publishedAt) +
+                                      " · " +
+                                      (record.handlerName ??
+                                        personName(record.handlerId))}
+                                  </small>
+                                </span>
+                                <InpulseIcon
+                                  name="chevronRight"
+                                  size={14}
+                                  className="task-record-open-chevron"
+                                />
+                              </button>
+                              <CalmBadge
+                                tone={
+                                  record.status === "VOID" ? "gray" : "green"
                                 }
                               >
-                                <strong>{record.title}</strong>
-                                <small>
-                                  {record.code +
-                                    " · " +
-                                    formatDay(record.publishedAt) +
-                                    " · " +
-                                    (record.handlerName ??
-                                      personName(record.handlerId))}
-                                </small>
-                              </a>
-                              <CalmBadge tone="green">已发布</CalmBadge>
+                                {record.status === "VOID" ? "已作废" : "已发布"}
+                              </CalmBadge>
                             </li>
                           ))}
                           {taskDraftItems.map((draft) => (
@@ -1195,9 +1259,7 @@ export function TasksPanel({
                             type="button"
                             className="text-button"
                             onClick={() =>
-                              navigate(
-                                "/task-groups/" + currentRelation.groupId,
-                              )
+                              setOpenGroupId(currentRelation.groupId)
                             }
                           >
                             <InpulseIcon name="gitBranch" size={14} />
@@ -1260,11 +1322,46 @@ export function TasksPanel({
                   task={current}
                   api={api}
                   onClose={() => setMergeInto(false)}
+                  onMerged={(groupId) => setOpenGroupId(groupId)}
                 />
               )}
             </>
           )}
         </Modal>
+      )}
+      <TaskGroupDetailModal
+        groupId={openGroupId}
+        adapter={groupAdapter}
+        api={api}
+        onClose={() => setOpenGroupId(null)}
+        onOpenTask={onOpenTask}
+        onChanged={() => {
+          // 解除合并会改变任务在聚合组里的关系标记，整批重读 R-5 标记。
+          void lifecycleCache.invalidateQueries({ queryKey: ["task-marks"] });
+        }}
+      />
+      {openRecord === null ? null : (
+        <RecordDetailModal
+          projectId={projectId}
+          record={recordDetailTarget(openRecord)}
+          api={api}
+          onClose={() => setOpenRecordId(null)}
+          onChanged={() => {
+            // 修订、作废与遗留项操作会改变列表里的编号状态与正文。
+            void taskRecords.refetch();
+          }}
+        />
+      )}
+      {draftTarget === null ? null : (
+        <RecordDraftEditorModal
+          api={api}
+          target={draftTarget}
+          projectId={projectId}
+          writable={taskWritable}
+          onClose={() => setDraftTarget(null)}
+          // 保存成功后弹窗内部会失效草稿查询，列表在下一次渲染时出现新草稿。
+          onSaved={() => setDraftTarget(null)}
+        />
       )}
       <Modal
         open={selection !== null}

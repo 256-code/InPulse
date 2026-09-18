@@ -40,7 +40,6 @@ const globalNavigation: readonly NavigationItem[] = [
 
 const sections = [
   { prefix: "/tasks", key: "tasks", label: "任务中心" },
-  { prefix: "/task-groups", key: "tasks", label: "任务中心" },
   { prefix: "/projects", key: "projects", label: "项目列表" },
   { prefix: "/records", key: "records", label: "迭代记录" },
   { prefix: "/issues", key: "issues", label: "遗留问题" },

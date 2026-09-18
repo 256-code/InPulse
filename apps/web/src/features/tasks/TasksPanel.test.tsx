@@ -9,8 +9,9 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { ApiError, type InpulseApiClient, type TaskItem } from "@generated/api";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { TasksPanel } from "./TasksPanel";
 import { mergeTask, taskEdit } from "./task-query";
 
@@ -39,6 +40,40 @@ function client(overrides: object = {}) {
     getModuleTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
     listTasks: vi.fn().mockResolvedValue({ items: [item] }),
     listTaskGroupMemberships: vi.fn().mockResolvedValue({ items: [] }),
+    getTaskGroup: vi.fn().mockResolvedValue({
+      group: {
+        groupId: 501,
+        projectId: 2,
+        code: "TG-501",
+        name: "退款聚合组",
+        status: "ACTIVE",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        closedAt: null,
+        rowVersion: 1,
+      },
+      members: [
+        {
+          taskId: 3,
+          taskCode: "PR-T-3",
+          title: "主任务丙",
+          role: "MAIN",
+          sourceKind: null,
+          memberStatus: "ACTIVE",
+          workStatus: "TODO",
+          lifecycleStatus: "ACTIVE",
+          moduleId: 3,
+          featureId: 4,
+          assignee: { userId: 5, name: "项目成员", avatarUrl: null },
+          joinedAt: "2026-09-01T12:00:00.000Z",
+          detachedAt: null,
+          detachReason: null,
+          publishedRecordCount: 0,
+        },
+      ],
+    }),
+    listTaskGroupRecords: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
     listTaskAssignees: vi.fn().mockResolvedValue({
       items: [{ id: 5, name: "项目成员", avatarUrl: null }],
     }),
@@ -78,13 +113,16 @@ function mount(api: InpulseApiClient, writable = true) {
         }
       >
         <MemoryRouter>
-          <TasksPanel
-            projectId={2}
-            moduleId={3}
-            featureId={4}
-            writable={writable}
-            client={api}
-          />
+          {/* 记录详情弹窗按 isAdmin 判断作废记录正文可读性，需要认证上下文。 */}
+          <AuthStateProvider>
+            <TasksPanel
+              projectId={2}
+              moduleId={3}
+              featureId={4}
+              writable={writable}
+              client={api}
+            />
+          </AuthStateProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
@@ -350,11 +388,11 @@ describe("F-14 task editing", () => {
   });
 });
 
-function GroupRouteProbe() {
-  const { groupId } = useParams();
-  return <p>{"聚合组 #" + groupId}</p>;
-}
-function mountWithGroupRoute(api: InpulseApiClient, writable = true) {
+/*
+ * 聚合组入口不再整页跳转 `/task-groups/{id}`（该页面已按方案 A 删除），而是
+ * 就地打开 TaskGroupDetailModal；断言改用弹窗角色与头部眉标。
+ */
+function mountWithGroupModal(api: InpulseApiClient, writable = true) {
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <QueryClientProvider
@@ -363,21 +401,13 @@ function mountWithGroupRoute(api: InpulseApiClient, writable = true) {
         }
       >
         <MemoryRouter initialEntries={["/features/4"]}>
-          <Routes>
-            <Route
-              path="/features/4"
-              element={
-                <TasksPanel
-                  projectId={2}
-                  moduleId={3}
-                  featureId={4}
-                  writable={writable}
-                  client={api}
-                />
-              }
-            />
-            <Route path="/task-groups/:groupId" element={<GroupRouteProbe />} />
-          </Routes>
+          <TasksPanel
+            projectId={2}
+            moduleId={3}
+            featureId={4}
+            writable={writable}
+            client={api}
+          />
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
@@ -448,8 +478,8 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       taskIds: [1, 2],
     });
   });
-  it("shows badge, record count and the main-task entry in the detail dialog, then routes to the group", async () => {
-    mountWithGroupRoute(
+  it("shows badge, record count and the main-task entry in the detail dialog, then opens the group dialog in place", async () => {
+    mountWithGroupModal(
       client({
         listTasks: vi.fn().mockResolvedValue({ items: [source] }),
         listTaskGroupMemberships: vi.fn().mockResolvedValue(marks),
@@ -461,7 +491,9 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
     expect(await within(dialog).findByText("遗留问题")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
-    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+    const group = await screen.findByRole("dialog", { name: "退款聚合组" });
+    expect(within(group).getByText("TG-501 / TASK GROUP")).toBeInTheDocument();
+    expect(await within(group).findByText("主任务丙")).toBeInTheDocument();
   });
   it("keeps the main task badge but hides the main-task entry on the MAIN task itself", async () => {
     mount(
@@ -536,9 +568,13 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).queryByRole("link", { name: "迭代记录草稿" }),
     ).toBeNull();
-    expect(
-      within(dialog).getByRole("link", { name: "记录一次迭代" }),
-    ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
+    // 记录一次迭代不再跳转记录页，而是与记录页共用草稿弹窗就地打开。
+    const draftEntry = within(dialog).getByRole("button", {
+      name: "记录一次迭代",
+    });
+    expect(draftEntry).toBeInTheDocument();
+    fireEvent.click(draftEntry);
+    expect(await screen.findByText("新建来源草稿")).toBeInTheDocument();
   });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {
@@ -621,14 +657,23 @@ describe("C-3 任务详情弹窗标签页", () => {
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
     fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
-    const publishedLink = await within(dialog).findByRole("link", {
+    // 迭代记录行整行是按钮：点开记录详情弹窗，不再跳记录页；草稿行仍为链接。
+    const publishedRow = await within(dialog).findByRole("button", {
       name: /已发布记录甲/,
     });
-    expect(publishedLink).toHaveAttribute(
-      "href",
-      "/records?projectId=2&publishedId=11",
-    );
+    expect(publishedRow).toHaveAttribute("aria-haspopup", "dialog");
     expect(within(dialog).getByText("已发布")).toBeInTheDocument();
+    fireEvent.click(publishedRow);
+    const recordDialog = await screen.findByRole("dialog", {
+      name: "已发布记录甲",
+    });
+    expect(within(recordDialog).getByText("PR-CR-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭迭代记录详情" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "已发布记录甲" }),
+      ).toBeNull(),
+    );
     const draftLink = within(dialog).getByRole("link", { name: /草稿乙/ });
     expect(draftLink).toHaveAttribute(
       "href",
@@ -667,8 +712,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       await within(dialog).findByText(/操作人\s*项目成员/),
     ).toBeInTheDocument();
   });
-  it("shows the source branch panel and routes to the group from the branches tab", async () => {
-    mountWithGroupRoute(
+  it("shows the source branch panel and opens the group dialog from the branches tab", async () => {
+    mountWithGroupModal(
       client({
         listTasks: vi.fn().mockResolvedValue({ items: [source] }),
         listTaskGroupMemberships: vi.fn().mockResolvedValue(marks("SOURCE")),
@@ -684,7 +729,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(dialog).getByRole("heading", { name: "来源分支 · 聚合组 #501" }),
     ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
-    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+    const group = await screen.findByRole("dialog", { name: "退款聚合组" });
+    expect(within(group).getByText("TG-501 / TASK GROUP")).toBeInTheDocument();
   });
   it("keeps the group marker but hides the main-task entry on the MAIN task", async () => {
     mount(

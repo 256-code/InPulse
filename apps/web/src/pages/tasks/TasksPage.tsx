@@ -106,6 +106,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
             client={client}
             isAdmin={isAdmin}
             onClose={handleCloseTask}
+            onOpenTask={handleOpenTask}
           />
         )}
       </Suspense>

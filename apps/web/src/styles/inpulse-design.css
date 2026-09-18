@@ -249,6 +249,10 @@
   .surface-modal > .modal-body {
     padding: 20px 20px 12px;
   }
+
+  .record-detail-modal > .drawer-header {
+    padding: 18px 20px 14px;
+  }
 }
 
 .workspace:hover {
@@ -915,6 +919,64 @@
   gap: 4px;
   color: #7f90a2;
   font-size: 11px;
+}
+
+/* 任务详情的迭代记录行与聚合组一致：摘要整块是打开详情弹窗的按钮。
+   design-system.css 的行样式只命中 `.task-record-list a`（草稿行仍是链接），
+   这里按同一节奏给按钮态还原，并补可点提示与键盘焦点环。 */
+.task-record-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: #3c5670;
+}
+
+.task-record-open-text {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+
+.task-record-open strong {
+  display: block;
+  font-size: 13px;
+  color: #22384f;
+}
+
+.task-record-open small {
+  display: block;
+  margin-top: 3px;
+  color: #98a5b3;
+  font-size: 11px;
+}
+
+.task-record-open:hover strong,
+.task-record-open:focus-visible strong {
+  color: #2671c9;
+}
+
+.task-record-open:focus-visible {
+  outline: 2px solid #2671c9;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.task-record-open-chevron {
+  flex: 0 0 auto;
+  color: #b6c1cc;
+}
+
+.task-record-open:hover .task-record-open-chevron,
+.task-record-open:focus-visible .task-record-open-chevron {
+  color: #2671c9;
 }
 
 /* C-3：详情弹窗的「状态历史」区块。动作行按设计师稿独立到标签栏之上后，
@@ -1897,7 +1959,7 @@
   font-size: 12px;
 }
 
-/* 聚合组详情页：成员与分支面板、记录筛选与分页。 */
+/* 聚合组详情：成员与分支面板、记录筛选与分页。 */
 .task-group-created {
   color: #8494a6;
   font-size: 11px;
@@ -1932,7 +1994,8 @@
   background: #fafbfd;
 }
 
-.task-group-member.detached > strong {
+.task-group-member.detached > strong,
+.task-group-member.detached .task-group-member-title > strong {
   color: #6d8498;
 }
 
@@ -1943,9 +2006,25 @@
   gap: 8px;
 }
 
-.task-group-member > strong {
+.task-group-member > strong,
+.task-group-member-title > strong {
   color: #22384f;
   font-size: 13px;
+}
+
+/* 成员任务标题就地打开任务详情弹窗（与任务中心、功能档案同一实现）：外观沿用
+   原来的纯文本，只在悬停时提示可点，不把整行变成按钮热区。 */
+.task-group-member-title {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.task-group-member-title:hover > strong {
+  color: #1467d8;
 }
 
 .task-group-member-meta {
@@ -1986,11 +2065,48 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
 }
 
-.task-group-record-list > li > strong {
+/* 记录摘要整块是打开详情弹窗的按钮；标题与尾部箭头给出可点提示，
+   关联记录切换按钮留在按钮外，避免交互元素嵌套。 */
+.task-group-record-open {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-group-record-open > strong {
   color: #22384f;
   font-size: 13px;
+}
+
+.task-group-record-open:hover > strong,
+.task-group-record-open:focus-visible > strong {
+  color: #2671c9;
+}
+
+.task-group-record-open:focus-visible {
+  outline: 2px solid #2671c9;
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.task-group-record-open-chevron {
+  margin-left: auto;
+  color: #b6c1cc;
+}
+
+.task-group-record-open:hover .task-group-record-open-chevron,
+.task-group-record-open:focus-visible .task-group-record-open-chevron {
+  color: #2671c9;
 }
 
 .task-group-record-meta {
@@ -2005,6 +2121,32 @@
   list-style: none;
   margin: 2px 0 0;
   padding: 0;
+}
+
+/* 关联记录（PR / Issue / Commit）默认收起，展开按钮与列表同缩进。 */
+.task-group-record-links-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #6b8199;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.task-group-record-links-toggle:hover {
+  color: #2671c9;
+}
+
+.task-group-record-links-toggle svg {
+  color: #93a1b0;
+  transition: transform 0.15s ease;
+}
+
+.task-group-record-links-toggle svg.expanded {
+  transform: rotate(90deg);
 }
 
 .task-group-record-links a {
@@ -2029,6 +2171,56 @@
   border-top: 1px solid #edf1f5;
 }
 
+/* 记录详情弹窗（聚合组记录列表与任务详情迭代记录共用）复用记录工作区的展开区：
+   内边距与滚动由 `.modal-body` 提供，`.record-expanded` 自带的内边距会叠成
+   双份，这里只保留正文节奏。 */
+.record-detail-modal .record-expanded {
+  padding: 0;
+}
+
+/* 该盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的默认头部
+   排版（同 `.project-picker-modal`），不补内边距眉标会顶到盒子左上角、关闭按钮
+   贴住右边缘，且正文滚动时会从标题下面穿过。 */
+.record-detail-modal > .drawer-header {
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+
+/* 展开区第一段自带的 `border-top` 会在头部下再画一条线：头部已有分隔线，
+   上边距由 `.modal-body` 提供，这里只让第一段接上节奏。 */
+.record-detail-modal .record-expanded > :first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* 聚合组详情弹窗本身就是 `lg`（840px），记录详情再按 `lg` 打开会与它等宽等高、
+   居中后完全重叠，分不出两层。嵌套打开时比下层窄 120px（`calc(100vw - 152px)` =
+   下层 `lg` 的 56px 视口内边距 + 60px 露出宽度，宽视口时封顶 720px），并把高度上限
+   从 `calc(100dvh - 56px)` 压到 `calc(100dvh - 96px)`，让下层弹窗的边框与阴影在
+   四周各露出一圈；两个盒子仍各自居中，不做位移。窄视口（≤700px）留给
+   `.surface-modal` 的全宽规则，此时只剩高度差。 */
+.record-detail-modal--nested {
+  max-height: calc(100dvh - 96px);
+}
+
+@media (min-width: 701px) {
+  .record-detail-modal--nested {
+    width: min(720px, calc(100vw - 152px));
+  }
+}
+
+/* 作废记录对成员只给摘要回退：提示、事实与链接快照按弹窗间距排列。 */
+.record-detail-void {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.record-detail-void .record-facts {
+  margin: 0;
+}
+
 @media (max-width: 1080px) {
   .task-group-panels {
     grid-template-columns: 1fr;
@@ -2045,4 +2237,43 @@
   display: flex;
   justify-content: center;
   padding: 14px 0 0;
+}
+
+/* 聚合组卡片：标题与「查看详情 / 解除合并」改为就地打开弹窗的按钮，外观沿用
+   原来的链接（继承字号与颜色、无下划线），不再导航到 /task-groups/{id}。 */
+.group-card > header > .group-card-title,
+.group-card > footer > .group-card-open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.group-card-title:hover > strong,
+.group-card-open:hover {
+  color: #1467d8;
+}
+
+/* 任务中心里的聚合组弹窗：该盒没有 `catalog-modal` 类，与 `.record-detail-modal`
+   同样要显式补头部内边距，否则眉标顶到盒子左上角、关闭按钮贴住右边缘，
+   正文滚动时会从标题下面穿过。 */
+.task-group-detail-modal > .drawer-header {
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+
+/* 两栏面板在 840px 的弹层里只能分到 380px 一栏，弹窗内统一收成单栏；
+   两栏默认值只在视口宽度足够（`.task-group-panels` 的 1080px 断点）时才生效。 */
+.task-group-detail-modal .task-group-panels {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.task-group-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }

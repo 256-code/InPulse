@@ -1,7 +1,7 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
-import React, { useRef, useState } from "react";
+import React, { lazy, Suspense, useRef, useState } from "react";
 import { Alert, Button, Input, Segmented, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -29,11 +29,21 @@ import {
   useProjectDetail,
 } from "@features/projects/project-query";
 import { useTasks } from "@features/tasks/task-query";
+import type { TaskLocation } from "@features/tasks/task-links";
 import {
   featureErrorMessage,
   useFeatures,
   type FeatureChange,
 } from "./feature-query";
+
+/**
+ * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
+ * 迭代记录、合并与外部链接等写入口全在同一处）。按需加载，功能档案的初始包
+ * 不引入任务详情的完整实现。
+ */
+const TaskDetailOverlay = lazy(
+  () => import("@features/tasks/TaskDetailOverlay"),
+);
 
 type Values = {
   name: string;
@@ -106,6 +116,8 @@ export function FeaturesPageView({
   const [merge, setMerge] = useState<Merge | null>(null);
   const [display, setDisplay] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
+  /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
+  const [taskTarget, setTaskTarget] = useState<TaskLocation | null>(null);
   const editGeneration = useRef(0);
   const submitting = useRef(false);
   const {
@@ -762,6 +774,7 @@ export function FeaturesPageView({
                       writable={activeItem.status === "ACTIVE"}
                       client={client}
                       isAdmin={isAdmin}
+                      onOpenTask={setTaskTarget}
                     />
                   </section>
                 </div>
@@ -1060,6 +1073,17 @@ export function FeaturesPageView({
           setModuleRequest({ action, item })
         }
       />
+      <Suspense fallback={null}>
+        {taskTarget === null ? null : (
+          <TaskDetailOverlay
+            target={taskTarget}
+            client={client}
+            isAdmin={isAdmin}
+            onClose={() => setTaskTarget(null)}
+            onOpenTask={setTaskTarget}
+          />
+        )}
+      </Suspense>
     </>
   );
 }

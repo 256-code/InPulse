@@ -4443,16 +4443,17 @@ td.due-overdue {
   flex-direction: column;
   gap: 3px;
 }
+/* 分支行以任务标题为主信息（深色），任务编号只作次要标识（浅色）。 */
 .branch-task strong {
   color: #2b4560;
   font-size: 12px;
-}
-.branch-task span {
-  color: #7b8b9c;
-  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.branch-task .branch-task-code {
+  color: #8b9aab;
+  font-size: 11px;
 }
 .branch-task:hover strong {
   color: #1467d8;
