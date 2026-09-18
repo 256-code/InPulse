@@ -10,12 +10,11 @@ import type { ProjectOverviewAdapter } from "./project-overview-types";
 
 export function describeProjectOverviewError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 401)
-      return "登录状态已失效，请重新登录后再查看项目概览。";
+    if (error.status === 401) return "登录状态已失效，请重新登录后再查看项目。";
     if (error.status === 404) return "项目不存在或已无权访问。";
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
   }
-  return "项目概览暂时不可用，请稍后重试。";
+  return "项目信息暂时不可用，请稍后重试。";
 }
 
 export interface UseProjectOverviewQueryOptions {

@@ -378,13 +378,13 @@ button {
   background: #2b82b8;
   color: white;
 }
-/* 「当前项目」分组下的目录面板：项目 → 子页 → 模块 → 功能 四层收纳其中。 */
+/* 项目分组之外的容器只提供底色，不再画一条贯穿所有项目的竖线：
+   分组边界交给每个项目自己。 */
 .nav-tree-panel {
   margin: 2px 0 10px;
-  padding: 6px 6px 6px 2px;
-  border-left: 2px solid #24486b;
-  border-radius: 0 8px 8px 0;
-  background: #0d1f35;
+  padding: 6px;
+  border-radius: 8px;
+  background: #0b1b2e;
 }
 
 /* 侧栏系统目录树：沿用导航行样式，罗列 项目 → 子页 → 模块 → 功能 四层。 */
@@ -402,6 +402,20 @@ button {
 .tree-project {
   display: flex;
   flex-direction: column;
+}
+/* 每个项目自成一组：项目之间断开，展开的子级收进自己的内框，
+   不再与其它项目共用一个外框（否则两个项目看起来像同一个下拉框里的两项）。 */
+.project-tree-scroll > .tree-project + .tree-project {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #1c3b5c;
+}
+.project-tree-scroll > .tree-project > .tree-children {
+  margin: 2px 0 4px;
+  padding: 2px 0 2px 6px;
+  border-left: 2px solid #2a5a86;
+  border-radius: 0 8px 8px 0;
+  background: #102a44;
 }
 .tree-row {
   width: 100%;
@@ -435,33 +449,9 @@ button {
 .tree-label strong {
   font-weight: 600;
 }
-.tree-folder {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  color: #63d6d3;
-}
 /* 模块与功能层使用 InpulseIcon（boxes / code），与命令面板、模块卡的图标语义一致。 */
 .tree-icon {
   flex: 0 0 auto;
-}
-.tree-folder svg {
-  position: absolute;
-  inset: 0;
-  transition: opacity 0.15s ease;
-}
-.tree-folder svg:first-child {
-  opacity: 1;
-}
-.tree-folder svg:last-child {
-  opacity: 0;
-}
-.tree-row.expanded .tree-folder svg:first-child {
-  opacity: 0;
-}
-.tree-row.expanded .tree-folder svg:last-child {
-  opacity: 1;
 }
 .tree-children {
   display: flex;
@@ -476,7 +466,28 @@ button {
   color: white;
   box-shadow: inset 3px 0 #45d2d5;
 }
-/* 项目子页行（概览/模块与功能/看板/成员）：介于项目与模块之间的第二层。 */
+/* 项目编码：行尾的短标识，配合项目标识色块区分相近的项目名。 */
+.tree-code {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #6d86a1;
+  font-variant-numeric: tabular-nums;
+}
+.tree-row:hover .tree-code,
+.project-node.selected .tree-code {
+  color: #cfe2f2;
+}
+/* 项目标识：编码前两位 + 由编码派生的色系，同一项目在侧栏与项目主页颜色一致。 */
+.tree-row .tree-logo {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 5px;
+  font-size: 8px;
+  letter-spacing: 0.02em;
+}
+/* 项目子页行（任务看板/模块与功能）：介于项目与模块之间的第二层。 */
 .page-node {
   padding-left: 22px;
 }

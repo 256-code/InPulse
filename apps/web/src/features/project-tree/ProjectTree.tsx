@@ -9,39 +9,11 @@ import {
   InpulseIcon,
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
+import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjects } from "@features/projects/project-query";
 import { treePath, type TreeScope, type TreeSelection } from "./tree-selection";
-
-const FOLDER_CLOSED_PATH =
-  "M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z";
-
-const FolderGlyph: React.FC = () => (
-  <span className="tree-folder" aria-hidden="true">
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={FOLDER_CLOSED_PATH} />
-    </svg>
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={FOLDER_CLOSED_PATH} />
-      <path d="M2 10h20" />
-    </svg>
-  </span>
-);
 
 export interface ProjectTreeProps {
   readonly activeScope: TreeScope | null;
@@ -51,16 +23,24 @@ export interface ProjectTreeProps {
   readonly client?: InpulseApiClient | undefined;
 }
 
-/** 项目节点下的子页行：点击跳转既有项目页，与目录树共用导航语义。 */
+/**
+ * 项目节点下的子页行：点击跳转既有项目页，与目录树共用导航语义。
+ * 「项目成员」不再单列一行（项目主页头部的「成员与设置」已覆盖），
+ * 任务看板排在模块与功能之前，但项目默认落点仍是模块与功能。
+ */
+/** 展开键归属的项目 ID：project:<id>[:...]；非项目键返回 null。 */
+function projectOwnerOf(key: string): number | null {
+  const match = /^project:(\d+)(?::|$)/.exec(key);
+  return match ? Number(match[1]) : null;
+}
+
 const PROJECT_PAGE_ROWS: readonly {
   readonly segment: string;
   readonly label: string;
   readonly icon: InpulseIconName;
 }[] = [
-  { segment: "overview", label: "项目概览", icon: "gauge" },
-  { segment: "modules", label: "模块与功能", icon: "boxes" },
   { segment: "task-board", label: "任务看板", icon: "kanban" },
-  { segment: "members", label: "项目成员", icon: "users" },
+  { segment: "modules", label: "模块与功能", icon: "boxes" },
 ];
 
 interface ProjectPageRowProps {
@@ -347,10 +327,12 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
         title={item.name}
         onClick={() => onProjectClick(item.id)}
       >
-        <FolderGlyph />
+        <ProjectLogo code={item.code} className="tree-logo" />
         <span className="tree-label">
           <strong>{item.name}</strong>
         </span>
+        {/* 项目编码是唯一短标识：同名/相近的项目行靠它区分。 */}
+        <span className="tree-code">{item.code}</span>
       </button>
       {expanded ? (
         <div className="tree-children">
@@ -442,6 +424,28 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     });
   }, [chainKeys, collapsed]);
 
+  // 手风琴语义：当前项目之外的展开态一律收起。挂在当前项目上而不是点击事件上，
+  // 从目录树、项目卡片或面包屑进入都能得到"同一时刻只铺开一个项目"的结果。
+  const activeProjectId = activeScope?.projectId ?? null;
+  useEffect(() => {
+    if (activeProjectId === null) {
+      return;
+    }
+    setExtraExpanded((prev) => {
+      const next = new Set<string>();
+      let changed = false;
+      for (const key of prev) {
+        const owner = projectOwnerOf(key);
+        if (owner !== null && owner !== activeProjectId) {
+          changed = true;
+          continue;
+        }
+        next.add(key);
+      }
+      return changed ? next : prev;
+    });
+  }, [activeProjectId]);
+
   const toggle = (key: string) => {
     if (expandedKeys.has(key)) {
       setExtraExpanded((prev) => {
@@ -461,6 +465,7 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
   };
   const handleProjectClick = (projectId: number) => {
     // 与模块节点一致：点击导航到项目主页并开合切换，再次点击收回子页列表。
+    // 其它项目的收起由下方手风琴副作用统一负责。
     onNavigate(treePath(projectId, { kind: "project" }));
     toggle(`project:${projectId}`);
   };

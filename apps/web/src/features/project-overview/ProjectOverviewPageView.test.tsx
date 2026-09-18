@@ -256,7 +256,7 @@ describe("ProjectOverviewPageView", () => {
       },
     });
     expect(
-      await screen.findByText("项目概览暂时不可用，请稍后重试。"),
+      await screen.findByText("项目信息暂时不可用，请稍后重试。"),
     ).toBeInTheDocument();
   });
 

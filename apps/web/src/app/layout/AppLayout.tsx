@@ -21,7 +21,6 @@ interface NavigationItem {
 
 /** 工作台：个人日常入口；系统目录树内嵌在「项目列表」行下。 */
 const workspaceNavigation: readonly NavigationItem[] = [
-  { key: "home", label: "首页", path: "/", icon: "home" },
   { key: "tasks", label: "任务中心", path: "/tasks", icon: "clipboard" },
   { key: "projects", label: "项目列表", path: "/projects", icon: "folder" },
 ];
@@ -54,7 +53,6 @@ const sections = [
 
 /** 项目子页面：/projects/:projectId/<segment> 的分段、选中键与面包屑标签。 */
 const projectPages = [
-  { segment: "overview", key: "project-overview", label: "项目概览" },
   { segment: "modules", key: "project-catalog", label: "项目与功能" },
   { segment: "task-board", key: "project-task-board", label: "任务看板" },
   { segment: "members", key: "project-members", label: "项目成员" },
@@ -116,9 +114,6 @@ function readCatalogScope(pathname: string): CatalogScope {
 }
 
 function resolveSection(pathname: string) {
-  if (pathname === "/") {
-    return { key: "home", label: "首页" };
-  }
   const projectPage = resolveProjectPage(pathname);
   if (projectPage) {
     return { key: projectPage.key, label: projectPage.label };
@@ -320,9 +315,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           <nav className="nav-group" aria-label="工作区导航">
             <p>工作台</p>
             {workspaceNavigation.map(renderNavigationItem)}
-            {projectScopeId === null ? null : (
+            {projectScopeId === null &&
+            location.pathname !== "/projects" ? null : (
               <>
-                <p className="nav-section">当前项目</p>
+                {/* 项目列表页也展开项目树：点「项目列表」即可直接进具体项目，
+                    不必先进某个项目再切换。 */}
+                <p className="nav-section">
+                  {projectScopeId === null ? "项目" : "当前项目"}
+                </p>
                 <div className="nav-tree-panel">
                   <ProjectTree
                     activeScope={treeScope}

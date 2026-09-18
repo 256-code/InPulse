@@ -33,7 +33,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
   const runtime = await loadRuntime(),
     { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
-    await page.goto(`/projects/${runtime.projectId}/overview`);
+    await page.goto(`/projects/${runtime.projectId}/modules`);
     await page.getByRole("button", { name: "GitHub 链接" }).click();
     let modal = await add(
       page,
