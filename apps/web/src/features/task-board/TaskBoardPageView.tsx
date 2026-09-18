@@ -55,6 +55,22 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
   const { user } = useAuth();
   const [detailTarget, setDetailTarget] = useState<TaskLocation | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // 折叠状态由看板与列表两种视图共享，且只存在于本次浏览：
+  // 刷新或切走再回来恢复全展开，避免隐藏的任务被误认为不存在。
+  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const toggleLane = (moduleId: number) => {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (next.has(moduleId)) {
+        next.delete(moduleId);
+      } else {
+        next.add(moduleId);
+      }
+      return next;
+    });
+  };
 
   const data = query.data;
   const allModules = data?.modules ?? [];
@@ -174,9 +190,19 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
           )}
         </div>
       ) : filters.view === "board" ? (
-        <TaskBoardLanes modules={visibleModules} onOpenTask={openTask} />
+        <TaskBoardLanes
+          modules={visibleModules}
+          collapsedIds={collapsedIds}
+          onToggleLane={toggleLane}
+          onOpenTask={openTask}
+        />
       ) : (
-        <TaskBoardTable modules={visibleModules} onOpenTask={openTask} />
+        <TaskBoardTable
+          modules={visibleModules}
+          collapsedIds={collapsedIds}
+          onToggleLane={toggleLane}
+          onOpenTask={openTask}
+        />
       )}
 
       <div className="tb-foot">

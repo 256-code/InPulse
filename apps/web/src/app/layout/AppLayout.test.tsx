@@ -1,5 +1,5 @@
 import React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -68,7 +68,7 @@ describe("AppLayout", () => {
     );
   }
 
-  it("renders the latest workspace navigation and header search trigger", async () => {
+  it("renders the latest workspace navigation and sidebar search/notification shortcuts", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -95,6 +95,9 @@ describe("AppLayout", () => {
     ).toBeInTheDocument();
     await screen.findByRole("button", { name: "通知" });
     expect(notificationClient.getNotificationUnreadCount).toHaveBeenCalled();
+    // 通知与搜索已收敛到侧栏底部图标，导航列表不再重复入口。
+    expect(screen.queryByText("站内通知")).not.toBeInTheDocument();
+    expect(screen.queryByText("全局搜索")).not.toBeInTheDocument();
   });
 
   it("shows the audit entry only to system administrators", async () => {
@@ -123,38 +126,6 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
-  });
-
-  it("shows the permission matrix shortcut only to system administrators", async () => {
-    const { unmount } = renderLayout(
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={<AppLayout notificationClient={notificationClient} />}
-          />
-        </Routes>
-      </MemoryRouter>,
-      true,
-    );
-    expect(
-      screen.getByRole("button", { name: "查看权限矩阵" }),
-    ).toBeInTheDocument();
-    unmount();
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={<AppLayout notificationClient={notificationClient} />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(
-      screen.queryByRole("button", { name: "查看权限矩阵" }),
-    ).not.toBeInTheDocument();
   });
 
   it("shows the project name in the breadcrumb on project routes", async () => {
@@ -328,7 +299,7 @@ describe("AppLayout", () => {
     expect(await screen.findByText("Projects content")).toBeInTheDocument();
   });
 
-  it("opens the global command palette from the header search button", async () => {
+  it("opens the global command palette from the sidebar search button", async () => {
     const user = userEvent.setup();
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
@@ -682,32 +653,7 @@ describe("AppLayout", () => {
     expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
   });
   describe("退出登录", () => {
-    const originalLocation = window.location;
-
-    beforeEach(() => {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        writable: true,
-        value: {
-          href: originalLocation.href,
-          origin: originalLocation.origin,
-          pathname: originalLocation.pathname,
-          search: originalLocation.search,
-          assign: vi.fn(),
-          replace: vi.fn(),
-        },
-      });
-    });
-
-    afterEach(() => {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        writable: true,
-        value: originalLocation,
-      });
-    });
-
-    it("退出登录后整页跳转统一身份认证入口，不再经由登录页中转", async () => {
+    it("退出登录后回到登录页而不是直接跳转统一身份认证", async () => {
       const user = userEvent.setup();
       const logout = vi.fn().mockResolvedValue(undefined);
       renderLayout(
@@ -717,6 +663,7 @@ describe("AppLayout", () => {
               path="/"
               element={<AppLayout notificationClient={notificationClient} />}
             />
+            <Route path="/login" element={<div>登录页占位</div>} />
           </Routes>
         </MemoryRouter>,
         false,
@@ -728,13 +675,11 @@ describe("AppLayout", () => {
 
       await waitFor(() => {
         expect(logout).toHaveBeenCalledTimes(1);
-        expect(window.location.replace).toHaveBeenCalledWith(
-          "/api/v1/auth/sso/start?returnTo=%2F",
-        );
       });
+      expect(await screen.findByText("登录页占位")).toBeInTheDocument();
     });
 
-    it("未登录时点击前往登录同样直接进入统一身份认证入口", async () => {
+    it("未登录时点击前往登录回到登录页", async () => {
       const user = userEvent.setup();
       renderLayout(
         <MemoryRouter initialEntries={["/"]}>
@@ -743,6 +688,7 @@ describe("AppLayout", () => {
               path="/"
               element={<AppLayout notificationClient={notificationClient} />}
             />
+            <Route path="/login" element={<div>登录页占位</div>} />
           </Routes>
         </MemoryRouter>,
         false,
@@ -752,9 +698,7 @@ describe("AppLayout", () => {
       await user.click(screen.getByRole("button", { name: "账户菜单" }));
       await user.click(screen.getByRole("button", { name: /前往登录/ }));
 
-      expect(window.location.replace).toHaveBeenCalledWith(
-        "/api/v1/auth/sso/start?returnTo=%2F",
-      );
+      expect(await screen.findByText("登录页占位")).toBeInTheDocument();
     });
   });
 });

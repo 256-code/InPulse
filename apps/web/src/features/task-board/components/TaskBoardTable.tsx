@@ -21,6 +21,8 @@ import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
  */
 export interface TaskBoardTableProps {
   readonly modules: readonly TaskBoardModule[];
+  readonly collapsedIds: ReadonlySet<number>;
+  readonly onToggleLane: (moduleId: number) => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
 
@@ -65,6 +67,8 @@ const TaskBoardTableRow: React.FC<{
 
 export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
   modules,
+  collapsedIds,
+  onToggleLane,
   onOpenTask,
 }) => {
   return (
@@ -80,9 +84,24 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
       </div>
       {modules.map((lane) => {
         const progress = laneProgressOf(lane);
+        const collapsed = collapsedIds.has(lane.moduleId);
         return (
           <React.Fragment key={lane.moduleId}>
-            <div className="tb-lgroup">
+            <div
+              className={
+                "tb-lgroup" + (collapsed ? " tb-lgroup--collapsed" : "")
+              }
+              onClick={() => onToggleLane(lane.moduleId)}
+            >
+              {/* 箭头按钮保留键盘焦点与可访问名；点击事件冒泡到整行头部统一切换。 */}
+              <button
+                type="button"
+                className="tb-lane-toggle"
+                aria-expanded={!collapsed}
+                aria-label={(collapsed ? "展开模块 " : "折叠模块 ") + lane.name}
+              >
+                <InpulseIcon name="chevron" size={14} />
+              </button>
               <span className={"tb-lane-icon " + laneToneOf(lane.moduleId)}>
                 <InpulseIcon name="boxes" size={14} />
               </span>
@@ -107,13 +126,15 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
                 <span>{progress.percent}%</span>
               </div>
             </div>
-            {lane.tasks.map((card) => (
-              <TaskBoardTableRow
-                key={card.taskId}
-                card={card}
-                onOpen={onOpenTask}
-              />
-            ))}
+            {collapsed
+              ? null
+              : lane.tasks.map((card) => (
+                  <TaskBoardTableRow
+                    key={card.taskId}
+                    card={card}
+                    onOpen={onOpenTask}
+                  />
+                ))}
           </React.Fragment>
         );
       })}

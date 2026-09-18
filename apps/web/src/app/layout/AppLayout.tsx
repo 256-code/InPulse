@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
-import { navigateToSsoStart } from "@features/auth/sso-navigation";
 import { CommandPalette } from "@features/command-palette/CommandPalette";
 import {
   InpulseIcon,
@@ -33,16 +32,9 @@ const deliveryNavigation: readonly NavigationItem[] = [
   { key: "issues", label: "遗留问题", path: "/issues", icon: "alert" },
 ];
 
-/** 全局导航：动态、通知、搜索与管理员专属审计。 */
+/** 全局导航：通知与搜索已收敛到侧栏底部工具条，审计仅管理员可见。 */
 const globalNavigation: readonly NavigationItem[] = [
   { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
-  {
-    key: "notifications",
-    label: "站内通知",
-    path: "/notifications",
-    icon: "bell",
-  },
-  { key: "search", label: "全局搜索", path: "/search", icon: "search" },
   { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
   { key: "audit", label: "审计日志", path: "/audit", icon: "shield" },
 ];
@@ -267,8 +259,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const handleAccountAction = async () => {
     setAccountOpen(false);
     if (status !== "authenticated") {
-      // 直接整页进入统一身份认证，避免先渲染 InPulse 登录页再跳转的闪屏。
-      navigateToSsoStart("/");
+      // 未登录先回登录页：默认本地口令表单 + 统一身份认证入口（ADR-036）。
+      navigate("/login");
       return;
     }
     setIsLoggingOut(true);
@@ -277,8 +269,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         .then(() => true)
         .catch(() => false);
       if (loggedOut) {
-        // 退出后直接整页跳到单点登录入口，不再经由 /login 中转渲染。
-        navigateToSsoStart("/");
+        // 退出后回到登录页，由用户选择本地口令或统一身份认证（ADR-036）。
+        navigate("/login");
       }
     } finally {
       setIsLoggingOut(false);
@@ -352,18 +344,22 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </div>
-            {/* 权限矩阵只存在于管理员专属的「成员与设置」页，
-                对普通成员显示入口只会落到「无权访问」，因此仅对管理员渲染。 */}
-            {user?.isAdmin ? (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => handleNavigation("/settings")}
-              >
-                <InpulseIcon name="shield" size={14} />
-                查看权限矩阵
-              </button>
-            ) : null}
+            {/* 搜索与通知收敛为底部常驻图标：窄屏不再隐藏，导航列表也不再重复入口。 */}
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="打开全局搜索"
+              title="全局搜索（Ctrl K）"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <InpulseIcon name="search" size={18} />
+            </button>
+            <NotificationBell
+              client={notificationClient}
+              enabled={status === "authenticated"}
+              onOpen={() => handleNavigation("/notifications")}
+              onOpenTarget={handleOpenTarget}
+            />
           </div>
         </aside>
 
@@ -483,22 +479,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               )}
             </nav>
             <div className="top-actions">
-              <button
-                type="button"
-                className="global-search"
-                aria-label="打开全局搜索"
-                onClick={() => setPaletteOpen(true)}
-              >
-                <InpulseIcon name="search" size={16} />
-                <span>搜索项目、功能、任务、迭代记录…</span>
-                <kbd>Ctrl K</kbd>
-              </button>
-              <NotificationBell
-                client={notificationClient}
-                enabled={status === "authenticated"}
-                onOpen={() => handleNavigation("/notifications")}
-                onOpenTarget={handleOpenTarget}
-              />
               <div className="popover-wrap" ref={accountRootRef}>
                 <button
                   type="button"

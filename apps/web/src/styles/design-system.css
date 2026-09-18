@@ -563,6 +563,38 @@ button {
 .sidebar-footer .muted-icon {
   margin-left: auto;
 }
+/* 底部工具条：用户信息自适应收窄，搜索与通知图标常驻。 */
+/* 账户弹层的 .account-identity 是「头像 + 文本」横排；底部这里只有姓名与角色，
+   必须恢复竖排两行，否则两个文本互相挤压成省略号。 */
+.sidebar-footer .account-identity {
+  display: block;
+}
+.sidebar-footer strong,
+.sidebar-footer small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-footer .icon-button {
+  flex-shrink: 0;
+  min-width: 28px;
+  min-height: 28px;
+  color: #9bb0c7;
+}
+.sidebar-footer .icon-button:hover {
+  background: #ffffff14;
+  color: #ffffff;
+}
+.sidebar-footer .bell-dot {
+  box-shadow: 0 0 0 1.5px var(--sidebar);
+}
+/* 底部空间不足，通知弹层改为向上展开，并向右越出侧栏宽度覆盖内容区。 */
+.sidebar-footer .popover {
+  top: auto;
+  bottom: calc(100% + 10px);
+  right: auto;
+  left: 0;
+}
 .user-avatar,
 .mini-avatar,
 .activity-avatar,
@@ -614,32 +646,12 @@ button {
   align-items: center;
   gap: 18px;
 }
-.global-search {
-  width: 275px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #9aa7b6;
-  background: #f7f9fb;
-  border: 1px solid #edf1f5;
-  border-radius: 6px;
-  height: 34px;
-  padding: 0 10px;
-}
-.global-search input,
 .task-search input {
   flex: 1;
   border: 0;
   background: transparent;
   outline: none;
   min-width: 0;
-}
-.global-search kbd {
-  color: #93a0af;
-  font-size: 10px;
-  border: 1px solid #dce4eb;
-  border-radius: 3px;
-  padding: 2px 5px;
 }
 .icon-button {
   border: 0;
@@ -2122,9 +2134,6 @@ td small {
   .crumb {
     font-size: 11px;
   }
-  .global-search {
-    display: none;
-  }
   .page-content {
     padding: 23px 14px 35px;
   }
@@ -3308,11 +3317,6 @@ a:focus-visible {
 }
 .top-actions {
   flex-shrink: 0;
-}
-@media (max-width: 1250px) {
-  .topbar .global-search {
-    display: none;
-  }
 }
 @media (max-width: 700px) {
   .topbar {
@@ -5014,6 +5018,14 @@ td.due-overdue {
 .popover-head strong {
   font-size: 13px;
   color: #2b4560;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popover-head .text-button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .popover-hint {
   margin: 0 16px 10px;
@@ -5034,7 +5046,8 @@ td.due-overdue {
 .notification-popover li:first-child {
   border-top: 0;
 }
-.notification-popover button {
+/* 竖排全宽只适用于通知条目；头部「全部已读」与底部「查看全部」保持各自行内布局。 */
+.notification-popover li button {
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -5046,7 +5059,7 @@ td.due-overdue {
   border-radius: 7px;
   text-align: left;
 }
-.notification-popover button:hover {
+.notification-popover li button:hover {
   background: #f4f9fe;
 }
 .notification-popover span {
@@ -5467,14 +5480,6 @@ td.due-overdue {
     top: 0;
   }
 }
-.global-search span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-}
 .catalog-modal .dialog-form > .form-row,
 .catalog-modal .dialog-form > fieldset,
 .catalog-modal .dialog-form > .field-inline {
@@ -5486,18 +5491,22 @@ td.due-overdue {
   gap: 6px;
 }
 @media (min-width: 701px) {
+  /* 滚动下沉到导航区：品牌与底部工具条固定，通知弹层才不会被侧栏裁剪。 */
   .sidebar {
     position: sticky;
     top: 0;
     height: 100dvh;
     min-height: 0;
+  }
+  .nav-group {
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .sidebar::-webkit-scrollbar {
+  .nav-group::-webkit-scrollbar {
     width: 6px;
   }
-  .sidebar::-webkit-scrollbar-thumb {
+  .nav-group::-webkit-scrollbar-thumb {
     background: #2b4a68;
     border-radius: 3px;
   }
@@ -5896,6 +5905,39 @@ td.due-overdue {
   padding: 9px 14px;
   border-bottom: 1px solid #eef2f7;
   background: #fbfdff;
+  cursor: pointer;
+  user-select: none;
+}
+.tb-lane-head:hover {
+  background: #f4f9fe;
+}
+/* 折叠时头部是泳道唯一可见部分，去掉底部分隔线避免「空盒子」观感。 */
+.tb-lane--collapsed .tb-lane-head {
+  border-bottom: 0;
+}
+.tb-lane-toggle {
+  border: 0;
+  background: transparent;
+  color: #9aa9ba;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.tb-lane-toggle:hover {
+  background: #eef4fa;
+  color: #2472c3;
+}
+/* 展开态箭头朝下，折叠态朝右，与目录树一致。 */
+.tb-lane-toggle svg {
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.tb-lane--collapsed .tb-lane-toggle svg,
+.tb-lgroup--collapsed .tb-lane-toggle svg {
+  transform: rotate(0deg);
 }
 .tb-lane-icon {
   width: 24px;
@@ -6220,6 +6262,11 @@ td.due-overdue {
   padding: 8px 14px;
   background: #fbfdff;
   border-top: 1px solid #eef2f7;
+  cursor: pointer;
+  user-select: none;
+}
+.tb-lgroup:hover {
+  background: #f4f9fe;
 }
 .tb-list-wrap > .tb-lgroup:first-child {
   border-top: 0;

@@ -21,6 +21,8 @@ import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
  */
 export interface TaskBoardLanesProps {
   readonly modules: readonly TaskBoardModule[];
+  readonly collapsedIds: ReadonlySet<number>;
+  readonly onToggleLane: (moduleId: number) => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
 
@@ -82,12 +84,25 @@ const TaskBoardCardItem: React.FC<{
 
 const TaskBoardLane: React.FC<{
   readonly lane: TaskBoardModule;
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
-}> = ({ lane, onOpenTask }) => {
+}> = ({ lane, collapsed, onToggle, onOpenTask }) => {
   const progress = laneProgressOf(lane);
   return (
-    <article className="tb-lane" aria-label={"模块 " + lane.name}>
-      <header className="tb-lane-head">
+    <article
+      className={"tb-lane" + (collapsed ? " tb-lane--collapsed" : "")}
+      aria-label={"模块 " + lane.name}
+    >      <header className="tb-lane-head" onClick={onToggle}>
+        {/* 箭头按钮保留键盘焦点与可访问名；点击事件冒泡到整行头部统一切换。 */}
+        <button
+          type="button"
+          className="tb-lane-toggle"
+          aria-expanded={!collapsed}
+          aria-label={(collapsed ? "展开模块 " : "折叠模块 ") + lane.name}
+        >
+          <InpulseIcon name="chevron" size={14} />
+        </button>
         <span className={"tb-lane-icon " + laneToneOf(lane.moduleId)}>
           <InpulseIcon name="boxes" size={14} />
         </span>
@@ -126,21 +141,25 @@ const TaskBoardLane: React.FC<{
           ))}
         </div>
       </header>
-      <ul className="tb-lane-cards">
-        {lane.tasks.map((card) => (
-          <TaskBoardCardItem
-            key={card.taskId}
-            card={card}
-            onOpen={onOpenTask}
-          />
-        ))}
-      </ul>
+      {collapsed ? null : (
+        <ul className="tb-lane-cards">
+          {lane.tasks.map((card) => (
+            <TaskBoardCardItem
+              key={card.taskId}
+              card={card}
+              onOpen={onOpenTask}
+            />
+          ))}
+        </ul>
+      )}
     </article>
   );
 };
 
 export const TaskBoardLanes: React.FC<TaskBoardLanesProps> = ({
   modules,
+  collapsedIds,
+  onToggleLane,
   onOpenTask,
 }) => {
   return (
@@ -149,6 +168,8 @@ export const TaskBoardLanes: React.FC<TaskBoardLanesProps> = ({
         <TaskBoardLane
           key={lane.moduleId}
           lane={lane}
+          collapsed={collapsedIds.has(lane.moduleId)}
+          onToggle={() => onToggleLane(lane.moduleId)}
           onOpenTask={onOpenTask}
         />
       ))}

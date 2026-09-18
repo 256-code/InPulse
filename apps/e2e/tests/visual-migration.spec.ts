@@ -36,7 +36,7 @@ test("captures the migrated command palette, notification popover and activity p
   await page.screenshot({ path: path.join(output, "02-command-palette.png") });
   await page.keyboard.press("Escape");
 
-  // 侧栏新增「站内通知」入口后，顶栏铃铛用 exact 名称消歧。
+  // 通知铃铛已收敛到侧栏底部工具条，exact 名称固定匹配该按钮。
   await page.getByRole("button", { name: "通知", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "通知中心" })).toBeVisible();
   await page.screenshot({
