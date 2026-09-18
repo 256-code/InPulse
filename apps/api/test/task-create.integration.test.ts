@@ -376,7 +376,7 @@ it("逾期在分页前过滤，新建未逾期任务不会挤掉较早的逾期�
   const first = await uow.run((tx) =>
     query.list(tx, { projectIds: [f.projectId], overdue: true, limit: 1 }),
   );
-  // ADR-036：两条逾期任务同桶、同优先级、同截止时间，按 id 升序兜底。
+  // ADR-037：两条逾期任务同桶、同优先级、同截止时间，按 id 升序兜底。
   expect(first.items.map((item) => item.taskId)).toEqual([created[0]!.id]);
   expect(first.hasMore).toBe(true);
   const second = await uow.run((tx) =>

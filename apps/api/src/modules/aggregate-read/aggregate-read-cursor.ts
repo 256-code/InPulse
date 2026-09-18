@@ -39,7 +39,7 @@ export interface AggregateReadCursorEncodeInput {
   readonly filterKey: string;
   readonly afterId: number;
   /**
-   * 多列排序键位置（ADR-036：MY_TASKS 的任务列表排序不再是单列 id）。
+   * 多列排序键位置（ADR-037：MY_TASKS 的任务列表排序不再是单列 id）。
    * 同时进入 HMAC 覆盖的载荷，缺省表示该命名空间仍用单列 afterId 断页。
    */
   readonly sortKey?: string;
@@ -169,7 +169,7 @@ function parsePayload(raw: string): AggregateReadCursorPayload {
  * actor、命名空间、规范化筛选与游标位置，并带绝对过期时间；校验失败由聚合读服务
  * 统一映射为 422 invalid-cursor。
  * 位置有两种形态：单列 afterId（其它命名空间）与「afterId + 多列排序键」（MY_TASKS，
- * ADR-036 把任务列表排序从单列 id 改成多列元组）；排序键一并进入签名载荷，因此
+ * ADR-037 把任务列表排序从单列 id 改成多列元组）；排序键一并进入签名载荷，因此
  * 篡改排序键会先被签名校验拒绝。
  */
 @Injectable()
@@ -220,7 +220,7 @@ export class AggregateReadCursorService {
   }
 
   /**
-   * 解码出完整位置：单列 afterId + 可选的多列排序键（MY_TASKS，ADR-036）。
+   * 解码出完整位置：单列 afterId + 可选的多列排序键（MY_TASKS，ADR-037）。
    * requireSortKey 为 true 时，缺少排序键的旧载荷按版本不符拒绝。
    */
   decodeKey(

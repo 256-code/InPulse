@@ -123,7 +123,7 @@ export interface MyTaskLeftoverEntry {
  * 1. 只读、不取锁；不校验项目授权，调用方必须先取得 AuthorizedProjectScope。
  * 2. projectIds 为空时短路返回空页，不发出任何 SQL。
  * 3. 排序固定，与 TaskQueryPort.list、任务面板共用 task-list-order.ts 的同一套
- *    排序键（状态分组 → 紧急桶 → 优先级 → 截止时间 → id，ADR-036）；游标位置
+ *    排序键（状态分组 → 紧急桶 → 优先级 → 截止时间 → id，ADR-037）；游标位置
  *    因此是排序键元组而不是单列 id。
  * 4. excludedTaskIds（C 域的历史来源分支）与 hasPublishedRecord 都在分页前过滤；
  *    计数映射（countPublishedByTask）只在分页后按本页 taskIds 补齐，不参与、也不

@@ -151,7 +151,7 @@ interface TaskOptions {
   readonly title?: string;
   /** 创建者（app.tasks.creator_id）；缺省用项目创建者，用于构造 creator ≠ assignee 的夹具。 */
   readonly actorUserId?: number;
-  /** 优先级（ADR-036 排序键的第二级）：缺省 NORMAL。 */
+  /** 优先级（ADR-037 排序键的第二级）：缺省 NORMAL。 */
   readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   /** 截止时间文本（由 SQL 直接转 timestamptz）：缺省无截止。 */
   readonly dueAt?: string | null;
@@ -521,7 +521,7 @@ describe("TaskQueryPort list and count", () => {
     const page = await uow.run((tx) =>
       taskQuery.list(tx, { projectIds: [scope.projectId], limit: 100 }),
     );
-    // ADR-036：状态分组为 未完成 → 已完成 → 已取消，组内按 id 升序。
+    // ADR-037：状态分组为 未完成 → 已完成 → 已取消，组内按 id 升序。
     expect(page.items.map((item) => item.taskId)).toEqual([
       todo,
       done,
@@ -1402,7 +1402,7 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
   });
 });
 
-describe("任务列表统一排序（ADR-036）", () => {
+describe("任务列表统一排序（ADR-037）", () => {
   /** 按 Asia/Shanghai 日历日取两个边界：已逾期（今天 00:00 之前）与今/明日截止（今天 00:00 之后）。 */
   async function dayBounds(): Promise<{
     readonly overdue: string;

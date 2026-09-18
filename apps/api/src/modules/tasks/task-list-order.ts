@@ -1,7 +1,7 @@
 import type { Fragment, ISql } from "postgres";
 
 /**
- * 任务列表统一排序键（2026-09-18 人工确认，ADR-036）。
+ * 任务列表统一排序键（2026-09-18 人工确认，ADR-037）。
  *
  * 任务中心（MyTaskQueryPort.list）、任务列表端口（TaskQueryPort.list）与任务面板
  * （TaskManagementRepository.list）必须共用本模块，禁止各自定义排序表达式。

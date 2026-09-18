@@ -95,9 +95,9 @@
 - 成员关系不得缓存到 Session 或长生命周期对象；搜索和动态查询必须先取得服务端生成的 `AuthorizedProjectScope`，并在 SQL 层过滤。
 - 资源不存在和无权访问统一返回 404，避免泄露资源存在性；已登录但缺少全局权限时返回 403。
 - Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF 和安全响应头必须遵守技术设计。
-- 单点登录（[ADR-032](./docs/adr/ADR-032.md)）是默认登录入口：`GET /api/v1/auth/sso/start` 只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
+- 单点登录（[ADR-032](./docs/adr/ADR-032.md)，前端入口经 [ADR-036](./docs/adr/ADR-036.md) 修订）是并列登录入口：`/login` 默认展示本地口令表单，登录框下方的「或以统一身份认证登录」图标入口整页跳转 `GET /api/v1/auth/sso/start`；该路由只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
 - SSO 首次登录 JIT 开通 `is_admin=false`、`password_hash=NULL`、无任何项目成员关系的账号；映射优先级固定为 `sso_subject` 命中 → 登录名命中且未绑定且邮箱一致时绑定 → JIT；邮箱不一致或 subject 已绑定其它账号必须按冲突拒绝，禁止静默接管同名账号。无口令账号在本地入口必须干净地返回 401，不得抛错或 500。
-- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed 回落 `/login?local=1&sso=disabled`，`/login?local=1` 是管理员应急隐藏入口，不对外展示。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`。
+- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed：点击统一身份认证入口后由服务端 302 回 `/login?local=1&sso=disabled`，登录页提示未启用并隐藏入口；`/login?local=1` 是管理员应急口令入口，渲染与默认登录页一致。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`，也不得新增 SSO 状态查询接口。
 - 登录只接受匿名预认证 Session 及其 CSRF Token；已有普通、受限或完整认证 Session 必须先登出，再签发新的预认证 CSRF。停用用户的旧 Session 按无效处理；受保护或业务接口返回 401，但 `issueCsrfToken` 与无效 Session 的同源 `logout` 可按匿名安全语义执行且不得恢复身份。
 - 管理员高风险接口只要求当前有效的完整管理员 Session（`AUTHENTICATED`）、`is_admin`、写操作 CSRF、数据库级幂等与审计留痕；[ADR-031](./docs/adr/ADR-031.md) 起不再要求管理员密码与 TOTP 重认证，`reauthenticated_at`/`mfa_verified_at` 不再作为门禁条件。
 - 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；[ADR-031](./docs/adr/ADR-031.md) 起 `user_sessions.auth_state` 只写入 `AUTHENTICATED`，历史取值不得作为有效认证态参与鉴权。
@@ -271,3 +271,13 @@
 - 本文件与三份基线设计文档中「项目归档由系统管理员单方执行」的历史描述为当时事实，与本节冲突时以 ADR-034 与本节的现行规则为准。
 - 2026-09-17 前端改动免测试（项目负责人指示）：只改前端（`apps/web`）且不涉及后端、契约、权限与数据库时，不再运行任何测试与门禁命令（含定向 vitest、`pnpm test:web`、Playwright、`pnpm check` 等），改动完成即交付；是否补跑由项目负责人决定。
 - 2026-09-17 测试数据必须清理（项目负责人指示）：每次跑完会落库的测试（Playwright E2E、真实 PostgreSQL 集成等）后必须删除测试数据，不得在本地或共享开发库留下夹具项目、夹具用户及派生数据。Playwright 的 `global-teardown` 已改为按 `e2e_` / `f03_` 账号前缀自动物理清理夹具（`apps/e2e/helpers/fixture-cleanup.ts`：按依赖序删除业务表、`PROJECT:` 审计链、悬空审计行与夹具账号，回退被清空的 SYSTEM 链头，并复核夹具残留为 0、项目 bootstrap 成员关系与每项目唯一 UNCLASSIFIED 模块不变量，断言失败即回滚）；运行被中断未触发 teardown 时用 `pnpm --filter @inpulse/e2e cleanup` 或 `node apps/e2e/helpers/fixture-cleanup.ts` 手动补跑（需要 `E2E_DATABASE_URL` / `TEST_DATABASE_URL` 的 bootstrap 角色）。清理以 `session_replication_role = replica` 关闭行级触发器执行（UNCLASSIFIED 禁删触发器会阻止删除夹具项目），该开关仅限测试夹具清理，业务代码不得使用；SYSTEM 链若在夹具记录之后已有真实写入会留下一个可检测的断点，清理报告会提示。
+
+## 2026-09-18 ADR-036 登录入口调整说明
+
+按用户要求把登录页默认入口从「自动整页跳转统一身份认证」改回「默认展示本地口令表单」，并在登录框下方并列提供「或以统一身份认证登录」图标入口（[ADR-036](./docs/adr/ADR-036.md) 修订 ADR-032 决策 7）。因此：
+
+- `/login`（含 `?from=`、`?local=1`）默认渲染本地口令表单，不再自动跳转 `/api/v1/auth/sso/start`；点击登录框下方的单点登录图标才整页跳转 SSO（仍走 ADR-032 的 302 导航与 fail closed 回落）。
+- `sso=disabled` 与 `sso_error=` 回落都保留本地口令表单：`sso=disabled` 时隐藏 SSO 入口并提示未启用；`sso_error=` 时错误提示置顶、SSO 入口保留可重试。
+- 退出登录与未登录态的「前往登录」回到 `/login`，不再直接整页跳 SSO。
+- ADR-032 的 OIDC 协议、两条 302-only 路由、`securityFlow` 五条 allowlist、用户映射、JIT 开通、会话与限流语义均不变；服务端路由与权限矩阵无改动。
+- 本文件上文历史条目中出现的「`/login` 默认整页跳转 SSO」为当时事实，与本节冲突时以 ADR-036 与本节的现行规则为准。

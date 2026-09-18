@@ -120,7 +120,7 @@ test("强制 CSP 下登录、主题、弹层、懒加载与错误页均无违规
   await page.keyboard.press("Escape");
   await expect(palette).toBeHidden();
 
-  // 侧栏新增「站内通知」入口后，顶栏铃铛用 exact 名称消歧。
+  // 通知铃铛已收敛到侧栏底部工具条，exact 名称固定匹配该按钮。
   await page.getByRole("button", { name: "通知", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "通知中心" })).toBeVisible();
   await page.keyboard.press("Escape");

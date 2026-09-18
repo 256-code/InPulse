@@ -63,7 +63,7 @@ function cursorMock(
   return {
     encode: vi.fn().mockReturnValue("cursor-next"),
     decode: vi.fn(options.decode ?? (() => null)),
-    // ADR-036：任务中心走 decodeKey，载荷必须带排序键；测试用最小合法键。
+    // ADR-037：任务中心走 decodeKey，载荷必须带排序键；测试用最小合法键。
     decodeKey: vi.fn(
       options.decodeKey ??
         (() => {
@@ -1148,7 +1148,7 @@ describe("MyTasksQueryService.list", () => {
       includeCanceled: true,
       limit: 5,
     });
-    // ADR-036：任务中心改用 decodeKey，并要求载荷带排序键。
+    // ADR-037：任务中心改用 decodeKey，并要求载荷带排序键。
     expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",

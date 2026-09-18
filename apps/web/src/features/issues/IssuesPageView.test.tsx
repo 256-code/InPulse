@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import {
   type InpulseApiClient,
   type LeftoverListItem,
@@ -120,9 +121,16 @@ const createClient = (options: ClientOptions = {}) => {
       return Promise.resolve(options.open ?? convertPage);
     },
   );
+  const listProjects = vi.fn().mockResolvedValue({
+    items: [
+      { id: 1, code: "AGV", name: "AGV 智能搬运平台", status: "ACTIVE" },
+      { id: 2, code: "WMS", name: "WMS 仓储调度平台", status: "ACTIVE" },
+    ],
+  });
   return {
-    client: { listLeftoverItems } as unknown as InpulseApiClient,
+    client: { listLeftoverItems, listProjects } as unknown as InpulseApiClient,
     listLeftoverItems,
+    listProjects,
   };
 };
 
@@ -141,11 +149,13 @@ const renderView = (options: RenderOptions = {}) => {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <IssuesPageView
-        client={client}
-        onBackToRecords={onBackToRecords}
-        onOpenTask={onOpenTask}
-      />
+      <MemoryRouter initialEntries={["/issues"]}>
+        <IssuesPageView
+          client={client}
+          onBackToRecords={onBackToRecords}
+          onOpenTask={onOpenTask}
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return { onBackToRecords, onOpenTask };
@@ -257,6 +267,34 @@ describe("IssuesPageView", () => {
         limit: 20,
         cursor: "cursor-1",
       }),
+    );
+  });
+
+  it("filters both buckets by the selected project", async () => {
+    const seen: unknown[] = [];
+    renderView({ onOpen: (query) => seen.push(query) });
+    const user = userEvent.setup();
+    await screen.findByTestId("leftover-item-8");
+
+    await user.selectOptions(screen.getByLabelText("项目"), "2");
+
+    await waitFor(() => {
+      expect(seen).toContainEqual({
+        bucket: "OPEN",
+        limit: 20,
+        projectId: 2,
+      });
+      expect(seen).toContainEqual({
+        bucket: "CLOSED",
+        limit: 20,
+        projectId: 2,
+      });
+    });
+
+    // 回到全部项目：请求不再携带 projectId（分桶查询与缓存键都回到全局）。
+    await user.selectOptions(screen.getByLabelText("项目"), "");
+    await waitFor(() =>
+      expect(seen).toContainEqual({ bucket: "OPEN", limit: 20 }),
     );
   });
 });

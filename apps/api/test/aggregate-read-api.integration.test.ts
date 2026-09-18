@@ -1141,7 +1141,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks", memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
-    // ADR-036：未完成 → 已完成 → 已取消；未完成内部按
+    // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
     // 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余，桶内按 ID 升序。
     expect(page.items.map((item) => item.taskId)).toEqual([
       tSource,
@@ -1526,7 +1526,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
-    // ADR-036：已逾期(0) → 今/明日截止(3) → 已完成 → 已取消。
+    // ADR-037：已逾期(0) → 今/明日截止(3) → 已完成 → 已取消。
     expect(page.items.map((item) => item.taskId)).toEqual([
       overdueTask,
       todayTask,

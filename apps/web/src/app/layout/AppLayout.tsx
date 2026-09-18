@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
-import { navigateToSsoStart } from "@features/auth/sso-navigation";
 import { CommandPalette } from "@features/command-palette/CommandPalette";
 import {
   InpulseIcon,
@@ -11,7 +10,7 @@ import {
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import { treeScopeOf } from "@features/project-tree/tree-selection";
-import { useCatalogTrail, useShellCounters } from "./shell-data";
+import { useShellCounters } from "./shell-data";
 
 interface NavigationItem {
   readonly key: string;
@@ -32,16 +31,9 @@ const deliveryNavigation: readonly NavigationItem[] = [
   { key: "issues", label: "遗留问题", path: "/issues", icon: "alert" },
 ];
 
-/** 全局导航：动态、通知、搜索与管理员专属审计。 */
+/** 全局导航：通知与搜索已收敛到侧栏底部工具条，审计仅管理员可见。 */
 const globalNavigation: readonly NavigationItem[] = [
   { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
-  {
-    key: "notifications",
-    label: "站内通知",
-    path: "/notifications",
-    icon: "bell",
-  },
-  { key: "search", label: "全局搜索", path: "/search", icon: "search" },
   { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
   { key: "audit", label: "审计日志", path: "/audit", icon: "shield" },
 ];
@@ -134,10 +126,6 @@ function resolveSelectedKey(pathname: string): string | undefined {
   return section?.key === "project-activity" ? "activity" : section?.key;
 }
 
-function resolveSectionLabel(pathname: string): string {
-  return resolveSection(pathname)?.label ?? "工作台";
-}
-
 export interface AppLayoutProps {
   readonly notificationClient?: InpulseApiClient;
   readonly projectClient?: InpulseApiClient;
@@ -161,25 +149,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     [location.pathname],
   );
   const treeScope = useMemo(() => treeScopeOf(catalogScope), [catalogScope]);
-  const sectionLabel = resolveSectionLabel(location.pathname);
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
   const roleLabel = user?.isAdmin ? "系统管理员" : user ? "成员" : "未登录";
   const popoverRoleLabel = user?.isAdmin
     ? "系统管理员 · 可执行高风险操作"
     : roleLabel;
-  const trail = useCatalogTrail({
-    projectId: catalogScope.projectId,
-    moduleId: catalogScope.moduleId,
-    featureId: catalogScope.featureId,
-    client: projectClient,
-    enabled: status === "authenticated",
-  });
   const shellCounters = useShellCounters({
     client: projectClient,
     enabled: status === "authenticated",
   });
-  const projectCrumbName = trail.projectName;
   const shellCounts: Readonly<Record<string, number>> = useMemo(
     () => ({
       tasks: shellCounters.myOpenTaskCount ?? 0,
@@ -187,12 +166,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }),
     [shellCounters.myOpenTaskCount, shellCounters.openLeftoverCount],
   );
-  // 设计师稿只在「模块与功能」视图渲染 项目 → 模块 → 功能 三段面包屑。
   const projectPage = useMemo(
     () => resolveProjectPage(location.pathname),
     [location.pathname],
   );
-  const isCatalogView = projectPage?.key === "project-catalog";
   const projectScopeId = catalogScope.projectId;
   // 全局「项目动态」在项目上下文内直达该项目动态页，避免与「当前项目」语义重复。
   const visibleGlobalNavigation = useMemo(
@@ -206,11 +183,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         ),
     [user?.isAdmin, projectScopeId],
   );
-  // 项目子页（概览 / 看板 / 成员 / 动态）的面包屑末级；目录视图走 项目 → 模块 → 功能。
-  const projectPageLabel = isCatalogView ? null : (projectPage?.label ?? null);
-  const moduleCrumbName = isCatalogView ? trail.moduleName : null;
-  const featureCrumbName = isCatalogView ? trail.featureName : null;
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -262,8 +234,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const handleAccountAction = async () => {
     setAccountOpen(false);
     if (status !== "authenticated") {
-      // 直接整页进入统一身份认证，避免先渲染 InPulse 登录页再跳转的闪屏。
-      navigateToSsoStart("/");
+      // 未登录先回登录页：默认本地口令表单 + 统一身份认证入口（ADR-036）。
+      navigate("/login");
       return;
     }
     setIsLoggingOut(true);
@@ -272,8 +244,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         .then(() => true)
         .catch(() => false);
       if (loggedOut) {
-        // 退出后直接整页跳到单点登录入口，不再经由 /login 中转渲染。
-        navigateToSsoStart("/");
+        // 退出后回到登录页，由用户选择本地口令或统一身份认证（ADR-036）。
+        navigate("/login");
       }
     } finally {
       setIsLoggingOut(false);
@@ -310,6 +282,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   return (
     <>
       <div className="app-shell">
+        {/* 顶栏已移除：窄屏导航开关改为左上角悬浮按钮（仅 ≤700px 显示）。 */}
+        <button
+          type="button"
+          className="icon-button menu-button"
+          aria-label={mobileNavOpen ? "关闭导航" : "打开导航"}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((current) => !current)}
+        >
+          <InpulseIcon name="menu" size={20} />
+        </button>
         <aside className={`sidebar${mobileNavOpen ? " sidebar-open" : ""}`}>
           <div className="brand brand-joint">
             <div className="joint-logo-frame">
@@ -347,207 +329,80 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             {visibleGlobalNavigation.map(renderNavigationItem)}
           </nav>
           <div className="sidebar-footer">
-            <span className="person-avatar">{avatarText}</span>
-            <div className="account-identity">
-              <strong>{displayName}</strong>
-              <small>{roleLabel}</small>
-            </div>
-            {/* 权限矩阵只存在于管理员专属的「成员与设置」页，
-                对普通成员显示入口只会落到「无权访问」，因此仅对管理员渲染。 */}
-            {user?.isAdmin ? (
+            {/* 顶栏移除后账户菜单并入身份区：点击头像与姓名打开同一分组菜单。 */}
+            <div
+              className="popover-wrap footer-account-wrap"
+              ref={accountRootRef}
+            >
               <button
                 type="button"
-                className="text-button"
-                onClick={() => handleNavigation("/settings")}
+                className="footer-account"
+                aria-label="账户菜单"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((current) => !current)}
               >
-                <InpulseIcon name="shield" size={14} />
-                查看权限矩阵
+                <span className="person-avatar">{avatarText}</span>
+                <span className="footer-account-text">
+                  <strong>{displayName}</strong>
+                  <small>{roleLabel}</small>
+                </span>
               </button>
-            ) : null}
+              {accountOpen ? (
+                <div
+                  className="popover account-popover"
+                  role="dialog"
+                  aria-label="账户菜单"
+                >
+                  <div className="account-identity">
+                    <span className="person-avatar">{avatarText}</span>
+                    <div>
+                      <strong>{displayName}</strong>
+                      <small>{user?.email ?? "未绑定邮箱"}</small>
+                      <small>{popoverRoleLabel}</small>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigation("/settings")}
+                  >
+                    <InpulseIcon name="users" size={15} />
+                    成员与权限
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLoggingOut}
+                    onClick={() => void handleAccountAction()}
+                  >
+                    <InpulseIcon name="logout" size={15} />
+                    {isLoggingOut
+                      ? "正在退出..."
+                      : status === "authenticated"
+                        ? "退出登录"
+                        : "前往登录"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            {/* 搜索与通知收敛为底部常驻图标：窄屏不再隐藏，导航列表也不再重复入口。 */}
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="打开全局搜索"
+              title="全局搜索（Ctrl K）"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <InpulseIcon name="search" size={18} />
+            </button>
+            <NotificationBell
+              client={notificationClient}
+              enabled={status === "authenticated"}
+              onOpen={() => handleNavigation("/notifications")}
+              onOpenTarget={handleOpenTarget}
+            />
           </div>
         </aside>
 
         <main className="content-shell">
-          <header className="topbar">
-            <button
-              type="button"
-              className="icon-button menu-button"
-              aria-label={mobileNavOpen ? "关闭导航" : "打开导航"}
-              aria-expanded={mobileNavOpen}
-              onClick={() => setMobileNavOpen((current) => !current)}
-            >
-              <InpulseIcon name="menu" size={20} />
-            </button>
-            <nav className="crumb" aria-label="面包屑导航">
-              <button
-                type="button"
-                className="crumb-home"
-                onClick={() => handleNavigation("/tasks")}
-              >
-                研发交付中心
-              </button>
-              <InpulseIcon name="chevron" size={14} />
-              {projectScopeId !== null && projectPage && projectCrumbName ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleNavigation("/projects")}
-                  >
-                    项目列表
-                  </button>
-                  <InpulseIcon name="chevron" size={14} />
-                  {isCatalogView && moduleCrumbName === null ? (
-                    <strong aria-current="page" title={projectCrumbName}>
-                      {projectCrumbName}
-                    </strong>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        title={projectCrumbName}
-                        // 项目名落到项目主页（模块列表页），与目录树、项目卡片一致；
-                        // 概览页会把模块/功能藏在「查看模块」入口后，不适合作为回到项目的落点。
-                        onClick={() =>
-                          handleNavigation(
-                            "/projects/" + projectScopeId + "/modules",
-                          )
-                        }
-                      >
-                        {projectCrumbName}
-                      </button>
-                      <InpulseIcon name="chevron" size={14} />
-                      {isCatalogView ? (
-                        featureCrumbName ? (
-                          <>
-                            <button
-                              type="button"
-                              title={moduleCrumbName ?? undefined}
-                              onClick={() =>
-                                handleNavigation(
-                                  "/projects/" +
-                                    projectScopeId +
-                                    "/modules/" +
-                                    catalogScope.moduleId +
-                                    "/features",
-                                )
-                              }
-                            >
-                              {moduleCrumbName}
-                            </button>
-                            <InpulseIcon name="chevron" size={14} />
-                            <strong
-                              aria-current="page"
-                              title={featureCrumbName}
-                            >
-                              {featureCrumbName}
-                            </strong>
-                          </>
-                        ) : (
-                          <strong
-                            aria-current="page"
-                            title={moduleCrumbName ?? undefined}
-                          >
-                            {moduleCrumbName}
-                          </strong>
-                        )
-                      ) : (
-                        <strong
-                          aria-current="page"
-                          title={projectPageLabel ?? undefined}
-                        >
-                          {projectPageLabel ?? sectionLabel}
-                        </strong>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : projectCrumbName ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleNavigation(
-                        selectedKey === "activity" ? "/activity" : "/projects",
-                      )
-                    }
-                  >
-                    {sectionLabel}
-                  </button>
-                  <InpulseIcon name="chevron" size={14} />
-                  <strong aria-current="page" title={projectCrumbName}>
-                    {projectCrumbName}
-                  </strong>
-                </>
-              ) : (
-                <strong aria-current="page">{sectionLabel}</strong>
-              )}
-            </nav>
-            <div className="top-actions">
-              <button
-                type="button"
-                className="global-search"
-                aria-label="打开全局搜索"
-                onClick={() => setPaletteOpen(true)}
-              >
-                <InpulseIcon name="search" size={16} />
-                <span>搜索项目、功能、任务、迭代记录…</span>
-                <kbd>Ctrl K</kbd>
-              </button>
-              <NotificationBell
-                client={notificationClient}
-                enabled={status === "authenticated"}
-                onOpen={() => handleNavigation("/notifications")}
-                onOpenTarget={handleOpenTarget}
-              />
-              <div className="popover-wrap" ref={accountRootRef}>
-                <button
-                  type="button"
-                  className="mini-avatar account-trigger"
-                  title={`${displayName} · ${popoverRoleLabel}`}
-                  aria-label="账户菜单"
-                  aria-expanded={accountOpen}
-                  onClick={() => setAccountOpen((current) => !current)}
-                >
-                  {avatarText}
-                </button>
-                {accountOpen ? (
-                  <div
-                    className="popover account-popover"
-                    role="dialog"
-                    aria-label="账户菜单"
-                  >
-                    <div className="account-identity">
-                      <span className="person-avatar">{avatarText}</span>
-                      <div>
-                        <strong>{displayName}</strong>
-                        <small>{user?.email ?? "未绑定邮箱"}</small>
-                        <small>{popoverRoleLabel}</small>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleNavigation("/settings")}
-                    >
-                      <InpulseIcon name="users" size={15} />
-                      成员与权限
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isLoggingOut}
-                      onClick={() => void handleAccountAction()}
-                    >
-                      <InpulseIcon name="logout" size={15} />
-                      {isLoggingOut
-                        ? "正在退出..."
-                        : status === "authenticated"
-                          ? "退出登录"
-                          : "前往登录"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </header>
           <div className="page-content">
             <Outlet />
           </div>

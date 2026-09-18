@@ -47,7 +47,7 @@ import {
  * 用于任务中心「我负责的 / 我创建的」分段。projectId 只用于缩小范围，最终仍按服务端
  * AuthorizedProjectScope 过滤，越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
  * 排序固定，由 task-list-order.ts 给出（状态分组 → 紧急桶 → 优先级 → 截止时间
- * → id，ADR-036 替代 Q-10 的单列 id DESC），游标签名绑定 actor 与七项筛选并携带
+ * → id，ADR-037 替代 Q-10 的单列 id DESC），游标签名绑定 actor 与七项筛选并携带
  * 完整排序键位置；旧格式游标按无效游标拒绝。
  * 记录维度：hasPublishedRecord 由任务 → PUBLISHED 记录数映射派生（count > 0，裁决
  * 修订 D-1），筛选仍由 MyTaskQueryPort.list 在同一分页 SQL 内先过滤后分页。

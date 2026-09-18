@@ -167,7 +167,7 @@ describe("AggregateReadCursorService", () => {
     expectReason(() => rotating.decode(token, context), "version");
   });
 
-  test("MY_TASKS 游标携带多列排序键并随签名绑定（ADR-036）", () => {
+  test("MY_TASKS 游标携带多列排序键并随签名绑定（ADR-037）", () => {
     const cursors = service();
     const sortKey = "1|0|1|2|2026-09-18T01:00:00.000Z|42";
     const token = cursors.encode({
