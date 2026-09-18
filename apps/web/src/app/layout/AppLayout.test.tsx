@@ -83,7 +83,6 @@ describe("AppLayout", () => {
     expect(
       screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
     // 首页与任务中心内容重复，已删除，侧栏不应再出现「首页」入口。
     expect(screen.queryByText("首页")).not.toBeInTheDocument();
     expect(screen.getByText("任务中心")).toBeInTheDocument();
@@ -128,61 +127,6 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
-  });
-
-  it("shows the project name in the breadcrumb on project routes", async () => {
-    const projectClient = {
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 7,
-          code: "AGV",
-          name: "AGV 智能搬运平台",
-          description: "面向工厂的智能搬运调度项目",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 1,
-          createdAt: "2026-09-08T00:00:00.000Z",
-          updatedAt: "2026-09-08T00:00:00.000Z",
-          memberCount: 4,
-          stats: {
-            activeModuleCount: 2,
-            activeFeatureCount: 5,
-            openTaskCount: 3,
-            completedTaskCount: 1,
-          },
-        },
-      }),
-    } as unknown as InpulseApiClient;
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/projects/7/modules"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AppLayout
-                notificationClient={notificationClient}
-                projectClient={projectClient}
-              />
-            }
-          >
-            <Route
-              path="projects/:projectId/modules"
-              element={<div>Modules content</div>}
-            />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
-    expect(
-      await within(crumb).findByText("AGV 智能搬运平台"),
-    ).toBeInTheDocument();
-    expect(
-      within(crumb).getByRole("button", { name: "项目列表" }),
-    ).toBeInTheDocument();
-    expect(projectClient.getProject).toHaveBeenCalledWith(7);
   });
 
   it("renders the current project group and the task board entry on project routes", async () => {
@@ -254,15 +198,6 @@ describe("AppLayout", () => {
       within(nav).getByRole("button", { name: "模块与功能" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("任务看板内容")).toBeInTheDocument();
-
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
-    expect(
-      await within(crumb).findByText("AGV 智能搬运平台"),
-    ).toBeInTheDocument();
-    expect(
-      within(crumb).getByRole("button", { name: "项目列表" }),
-    ).toBeInTheDocument();
-    expect(await within(crumb).findByText("任务看板")).toBeInTheDocument();
   });
 
   it("expands the project list on the projects page and hides it outside project routes", async () => {
@@ -522,155 +457,6 @@ describe("AppLayout", () => {
       await screen.findByRole("button", { name: /车辆调度/ }),
     );
     expect(await screen.findByText("功能档案内容")).toBeInTheDocument();
-  });
-
-  it("opens the feature catalog from the breadcrumb module crumb", async () => {
-    const catalogClient = {
-      ...notificationClient,
-      listProjects: vi.fn().mockResolvedValue({
-        items: [
-          {
-            id: 7,
-            code: "AGV",
-            name: "AGV 智能搬运平台",
-            status: "ACTIVE",
-          },
-        ],
-      }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 7,
-          code: "AGV",
-          name: "AGV 智能搬运平台",
-          description: "面向工厂的智能搬运调度项目",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 1,
-          createdAt: "2026-09-08T00:00:00.000Z",
-          updatedAt: "2026-09-08T00:00:00.000Z",
-          memberCount: 4,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 1,
-            openTaskCount: 1,
-            completedTaskCount: 1,
-          },
-        },
-      }),
-      listModules: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
-      listFeatures: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
-    } as unknown as InpulseApiClient;
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/projects/7/modules/3/features/5"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AppLayout
-                notificationClient={notificationClient}
-                projectClient={catalogClient}
-              />
-            }
-          >
-            <Route
-              path="projects/:projectId/modules/:moduleId/features"
-              element={<div>功能目录内容</div>}
-            />
-            <Route
-              path="projects/:projectId/modules/:moduleId/features/:featureId"
-              element={<div>功能档案内容</div>}
-            />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
-    // 面包屑的模块名必须落到已注册的功能目录路由，而不是未注册的模块路径。
-    await userEvent.click(
-      await within(crumb).findByRole("button", { name: "调度模块" }),
-    );
-    expect(await screen.findByText("功能目录内容")).toBeInTheDocument();
-  });
-
-  it("returns to the project modules page from the breadcrumb project crumb", async () => {
-    const crumbClient = {
-      ...notificationClient,
-      listProjects: vi.fn().mockResolvedValue({
-        items: [
-          {
-            id: 7,
-            code: "AGV",
-            name: "AGV 智能搬运平台",
-            status: "ACTIVE",
-          },
-        ],
-      }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 7,
-          code: "AGV",
-          name: "AGV 智能搬运平台",
-          description: "面向工厂的智能搬运调度项目",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 1,
-          createdAt: "2026-09-08T00:00:00.000Z",
-          updatedAt: "2026-09-08T00:00:00.000Z",
-          memberCount: 4,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 1,
-            openTaskCount: 1,
-            completedTaskCount: 1,
-          },
-        },
-      }),
-      listModules: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
-      listFeatures: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
-    } as unknown as InpulseApiClient;
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/projects/7/modules/3/features/5"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AppLayout
-                notificationClient={notificationClient}
-                projectClient={crumbClient}
-              />
-            }
-          >
-            <Route
-              path="projects/:projectId/modules"
-              element={<div>模块列表内容</div>}
-            />
-            <Route
-              path="projects/:projectId/modules/:moduleId/features/:featureId"
-              element={<div>功能档案内容</div>}
-            />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
-    // 项目名必须落到项目主页（模块列表页）：概览页把模块与功能藏在「查看模块」
-    // 入口后，不满足「从模块返回项目时功能不收起」。
-    await userEvent.click(
-      await within(crumb).findByRole("button", { name: "AGV 智能搬运平台" }),
-    );
-    expect(await screen.findByText("模块列表内容")).toBeInTheDocument();
   });
 
   it("hides the project tree outside project pages", async () => {

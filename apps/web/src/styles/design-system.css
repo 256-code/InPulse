@@ -297,7 +297,7 @@ button {
   letter-spacing: -0.2px;
 }
 .brand small,
-.sidebar-footer small {
+.footer-account-text small {
   display: block;
   color: #8ca6be;
   font-size: 10px;
@@ -566,22 +566,48 @@ button {
   align-items: center;
   gap: 9px;
 }
-.sidebar-footer strong {
+.sidebar-footer .muted-icon {
+  margin-left: auto;
+}
+/* 底部工具条：身份区作为账户菜单锚点自适应收窄，搜索与通知图标常驻。
+   选择器必须限定在 .footer-account-text 内：账户弹层也挂在这个底栏里，
+   用过宽的 .sidebar-footer strong/small 会把弹层文字也一并改写。 */
+.sidebar-footer .footer-account-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.footer-account {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 7px;
+  text-align: left;
+}
+.footer-account:hover,
+.footer-account[aria-expanded="true"] {
+  background: #ffffff14;
+}
+.footer-account:focus-visible {
+  outline: 2px solid #4b9de0;
+  outline-offset: 2px;
+}
+.footer-account-text {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+.footer-account-text strong {
   display: block;
   color: white;
   font-size: 12px;
 }
-.sidebar-footer .muted-icon {
-  margin-left: auto;
-}
-/* 底部工具条：用户信息自适应收窄，搜索与通知图标常驻。 */
-/* 账户弹层的 .account-identity 是「头像 + 文本」横排；底部这里只有姓名与角色，
-   必须恢复竖排两行，否则两个文本互相挤压成省略号。 */
-.sidebar-footer .account-identity {
-  display: block;
-}
-.sidebar-footer strong,
-.sidebar-footer small {
+.footer-account-text strong,
+.footer-account-text small {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -633,30 +659,6 @@ button {
   min-width: 0;
   flex: 1;
 }
-.topbar {
-  height: 64px;
-  background: white;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
-}
-.crumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #8997a9;
-}
-.crumb strong {
-  color: #1c2f45;
-  font-weight: 600;
-}
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
 .task-search input {
   flex: 1;
   border: 0;
@@ -679,17 +681,17 @@ button {
   background: #eff4f8;
   color: #2469b5;
 }
-.top-actions .icon-button i {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #e16666;
-  right: 4px;
-  top: 4px;
-}
+/* 顶栏移除后窄屏导航开关悬浮在内容左上角；z-index 低于侧栏（40），
+   侧栏滑出时自然覆盖它，保持与原先「展开后靠导航开关或条目收起」一致。 */
 .menu-button {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
   display: none;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px #16324d26;
 }
 .page-content {
   max-width: 1450px;
@@ -1583,30 +1585,57 @@ td small {
   grid-template-columns: 185px 1fr;
   gap: 18px;
 }
+/* 设置页左栏：卡片化导航，选中/悬停与侧栏同色系。 */
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  padding: 8px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 .settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   border: 0;
   text-align: left;
   background: transparent;
-  color: #718298;
+  color: #5b6f85;
+  font-size: 13px;
   padding: 10px 12px;
-  border-radius: 5px;
+  border-radius: 7px;
+}
+.settings-nav button svg {
+  flex: 0 0 auto;
+  color: #8aa0b6;
 }
 .settings-nav button.selected,
 .settings-nav button:hover {
-  background: white;
-  color: #2672bb;
+  background: #eaf3fc;
+  color: #1467d8;
+}
+.settings-nav button.selected svg,
+.settings-nav button:hover svg {
+  color: #1467d8;
 }
 .settings-panel {
   padding-bottom: 15px;
+  border-radius: 10px;
 }
-/* .panel 无内边距且标题自身无水平内缩，包裹层让标题与 project-facts（20px 外边距）左缘对齐。 */
+/* 面板标题带：与表格/列表之间用分隔线区隔，避免内容贴边。 */
+.settings-panel .calm-section-title {
+  margin: 0;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid #edf1f5;
+}
+.settings-panel > .member-list > .member-row:first-child {
+  border-top: 0;
+}
+/* 标题带自带内缩后，包裹层只保留结构语义，不再贡献留白。 */
 .settings-panel-head {
-  padding: 18px 20px 0;
+  padding: 0;
 }
 .member-row {
   display: flex;
@@ -2136,14 +2165,8 @@ td small {
   .content-shell {
     width: 100%;
   }
-  .topbar {
-    padding: 0 15px;
-  }
   .menu-button {
     display: inline-grid;
-  }
-  .crumb {
-    font-size: 11px;
   }
   .page-content {
     padding: 23px 14px 35px;
@@ -3246,7 +3269,8 @@ a:focus-visible {
 }
 @media (max-width: 700px) {
   .page-content {
-    padding: 24px 16px;
+    /* 顶部留白避开左上角悬浮导航开关。 */
+    padding: 58px 16px 24px;
   }
   .calm-task-grid,
   .calm-feature-grid {
@@ -3283,69 +3307,6 @@ a:focus-visible {
 .stat-card > p,
 .panel-head > div > p {
   display: none;
-}
-
-/* Clickable hierarchy, with compact overflow on narrow screens. */
-.topbar {
-  gap: 20px;
-  position: sticky;
-  top: 0;
-  z-index: 15;
-}
-.crumb {
-  flex: 1;
-  min-width: 0;
-  gap: 8px;
-  white-space: nowrap;
-}
-.crumb button {
-  border: 0;
-  background: transparent;
-  padding: 7px 3px;
-  color: #73869c;
-  font: inherit;
-  cursor: pointer;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-radius: 4px;
-}
-.crumb button:hover {
-  color: #2469b5;
-  background: #f0f6fc;
-}
-.crumb button:focus-visible {
-  outline: 2px solid #2d84e6;
-  outline-offset: 2px;
-}
-.crumb strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.crumb svg {
-  flex-shrink: 0;
-}
-.top-actions {
-  flex-shrink: 0;
-}
-@media (max-width: 700px) {
-  .topbar {
-    gap: 8px;
-  }
-  .crumb .crumb-home,
-  .crumb .crumb-home + svg {
-    display: none;
-  }
-  .crumb {
-    gap: 4px;
-  }
-  .crumb button {
-    max-width: 130px;
-  }
-  .top-actions {
-    gap: 6px;
-  }
 }
 
 .brand-joint {
@@ -4853,6 +4814,29 @@ td.due-overdue {
   margin-top: 14px;
 }
 
+/* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）。 */
+.issues-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.issues-toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.issues-toolbar-field select {
+  min-width: 180px;
+  height: 35px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: white;
+  color: #586a7e;
+  font: inherit;
+}
+
 .issue-list {
   display: flex;
   flex-direction: column;
@@ -5573,7 +5557,7 @@ td.due-overdue {
 }
 
 /* ===================== 任务看板（R-8 项目任务看板） =====================
-   来源：2026-09-18 定稿的静态预览（.design-preview/task-board-preview.html），
+   来源：2026-09-18 定稿的静态预览稿（随实现落库后删除），
    类名统一加 tb- 前缀避免与既有样式冲突；颜色取值与预览一致。 */
 
 :root {

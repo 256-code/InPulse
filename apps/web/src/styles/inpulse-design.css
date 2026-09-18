@@ -1457,9 +1457,105 @@
   line-height: 1.5;
 }
 
+/* 设置页左栏在长页面内保持可见；成员行给出悬停反馈。 */
+.settings-nav {
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 700px) {
+  .settings-nav {
+    position: static;
+  }
+}
+
+.member-row {
+  transition: background 0.15s ease;
+}
+
+.member-row:hover {
+  background: #f7fafd;
+}
+
+.identity-chip {
+  align-self: center;
+}
+
 .settings-panel .calm-section-title small {
   color: #61788e;
   font-size: 0.8em;
+}
+
+/* 「选择项目查看成员」弹层：头部带内边距与分隔线（该盒没有 catalog-modal 类，
+   不吃 `.catalog-modal > .drawer-header` 的默认头部排版），正文收紧让行列表自成卡片。 */
+.project-picker-modal > .drawer-header {
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.project-picker-modal > .modal-body {
+  padding: 8px 12px 12px;
+}
+
+/* 「选择项目查看成员」弹层：行式项目列表，与成员行节奏一致。 */
+.project-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.project-picker-row:hover {
+  background: #f4f9fe;
+}
+
+.project-picker-row .project-logo {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.project-picker-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-picker-meta strong {
+  color: #132238;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-picker-meta small {
+  color: #8191a2;
+  font-size: 11px;
+}
+
+.project-picker-row > svg {
+  flex: 0 0 auto;
+  color: #b6c4d2;
 }
 
 /* 设计师稿 latest-version/app/globals.css L55/L605：设置页说明表。 */
@@ -1513,7 +1609,11 @@
   flex-direction: column;
 }
 
+/* 通用规则 .member-row span 的 display:block 会压过 .person-avatar 的居中，
+   这里用更高优先级恢复圆形头像内文字居中。 */
 .member-row .person-avatar {
+  display: grid;
+  place-items: center;
   width: 34px !important;
   height: 34px !important;
   flex: 0 0 34px;
@@ -1548,12 +1648,26 @@
 .member-meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  min-width: 176px;
 }
 
 .member-row .member-status {
-  color: #4b6076;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #3f9d58;
+  font-size: 11px;
+}
+
+/* 状态点：启用绿、停用红，颜色随 currentColor 联动。 */
+.member-row .member-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .member-row .member-status.is-disabled {
@@ -1565,6 +1679,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
+  min-width: 168px;
 }
 
 .permission-note.note-success {
@@ -1594,6 +1709,7 @@
   .member-actions {
     grid-column: 2;
     justify-content: flex-start;
+    min-width: 0;
   }
 }
 
