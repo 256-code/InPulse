@@ -45,10 +45,11 @@
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
 | [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
-| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO） |
+| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO）；前端默认入口经 ADR-036 修订 |
 | [ADR-033](ADR-033.md) | Accepted | 项目内角色（组长与项目管理员），扩展 ADR-012 |
 | [ADR-034](ADR-034.md) | Accepted | 项目归档申请—审核（双人同意）、任务与功能归档及父级归档前置校验 |
 | [ADR-035](ADR-035.md) | Accepted | 项目生命周期四态（未开始 / 进行中 / 维护中 / 已归档）、粘性标记与项目写入口口径 |
+| [ADR-036](ADR-036.md) | Accepted | 登录页默认展示本地口令表单，统一身份认证改为并列入口 |
 
 ## 关联基线
 

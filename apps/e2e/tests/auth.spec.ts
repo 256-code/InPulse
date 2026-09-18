@@ -72,10 +72,18 @@ test("E2E 登录复用后的 Session 可以读取当前用户", async ({ request
   expect(body.name).toBe(runtime.user.name);
 });
 
-test("未配置单点登录时 /login 回落到本地隐藏入口并保留原始目标", async ({
+test("未配置单点登录时登录页保留本地表单，点击单点登录入口回落到隐藏口令入口", async ({
   page,
 }) => {
   await page.goto("/login?from=%2Fprojects");
+
+  // ADR-036：默认展示本地口令表单，不再自动跳转，原始目标保留在 from。
+  await expect(page.getByTestId("login-page")).toBeVisible();
+  await expect(page.getByLabel("登录名")).toBeVisible();
+  await expect(page.getByLabel("密码")).toBeVisible();
+  await expect(page.getByText("或以统一身份认证登录")).toBeVisible();
+
+  await page.getByRole("button", { name: "使用统一身份认证登录" }).click();
 
   await page.waitForURL(/\/login\?local=1&sso=disabled&from=/);
   const url = new URL(page.url());
@@ -83,7 +91,6 @@ test("未配置单点登录时 /login 回落到本地隐藏入口并保留原始
   expect(url.searchParams.get("sso")).toBe("disabled");
   expect(url.searchParams.get("from")).toBe("/projects");
 
-  await expect(page.getByTestId("login-page")).toBeVisible();
   await expect(page.getByText(/统一身份认证未启用/)).toBeVisible();
   await expect(page.getByLabel("登录名")).toBeVisible();
   await expect(

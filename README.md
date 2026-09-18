@@ -46,6 +46,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-09-15 接入立镖 Casdoor OIDC 单点登录（用户要求，[ADR-032](./docs/adr/ADR-032.md)）：`/login` 默认整页跳转到 `GET /api/v1/auth/sso/start`，回调 `GET /api/v1/auth/sso/callback` 先校验一次性 `state`（URL 与 `__Host-sso-state` Cookie 双绑定）与 id_token（RS256/JWKS，含 `iss`/`aud`/`exp`/`nbf`/`iat`/`nonce`），再复用与口令登录同一实现签发本地 Session；首次登录 JIT 开通账号（`is_admin=false`、`password_hash=NULL`、无项目权限），映射优先级为 `users.sso_subject` → 登录名命中且邮箱一致时绑定 → JIT，邮箱不一致或被占用一律按冲突拒绝，Casdoor 的 `isAdmin` 等 claim 不影响 InPulse 权限；`SSO_ENABLED` 未配置或配置非法时 fail closed，`/login` 回落 `?local=1&sso=disabled`，管理员应急入口为隐藏的 `/login?local=1`。迁移 `0013_sso_login.sql` 新增 `users.sso_subject`（部分唯一索引 + 绑定不可改写触发器）、允许 `password_hash` 为空并新增 `app.sso_login_attempts`；本地会话空闲有效期由 8 小时收紧为 30 分钟（口令与 SSO 共用，`SESSION_IDLE_MAX_AGE_SECONDS` 可覆盖）；`securityFlow` allowlist 由三条扩为五条，Route Registry 97 条路由；生产 Secret 为 `/run/secrets/sso_client_secret`；迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的 pg_dump 只读授权，并把该表数据加入备份排除清单（只保留结构）。 联调另修复三处真实缺陷：`AppModule` 经 `audit/index.js` barrel 引入 `AuditWritePort` 造成的循环依赖（Nest 扫描时 `process.abort()`，已由 `pnpm check:deps` 的 `[circular-dependency]` 覆盖）、`vite preview` 的 CSP 中间件短路 `/api/**` 使 SSO 回落在本地预览里自跳转成环（新增 `isApiPath`）、以及 `SSO_REDIRECT_URL` 更名 `SSO_REDIRECT_URI` 以符合 Secret 扫描门禁。
 
+> 2026-09-18 登录页默认入口调整（用户要求，[ADR-036](./docs/adr/ADR-036.md) 修订 ADR-032 决策 7）：`/login` 默认展示既有本地口令表单，不再自动整页跳转统一身份认证；登录框下方新增「或以统一身份认证登录」分隔文案与单点登录图标，点击后整页跳转 `GET /api/v1/auth/sso/start`（302 导航与 fail closed 回落不变：未启用时回落到 `/login?local=1&sso=disabled` 并提示、隐藏入口）。`?sso_error=` 回落保留本地表单与可重试的 SSO 入口；退出登录与「前往登录」回到 `/login`。服务端路由、契约与权限矩阵无改动。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；五个生产容器镜像（API/Migration/Web/DB-bootstrap/Ops）的构建与 Trivy 扫描已在 main CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际通过，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E（`/audit` 审计页已补齐，见[测试矩阵](./docs/test-matrix.md)）、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份的真实全新主机恢复演练与启用仍未落库，补齐前请勿假设这些检查已执行。
 
 当前可运行的根级命令（§12.4 顺序）：
@@ -156,12 +158,12 @@ node scripts/dev-start.mjs --local-only   # 强制关闭 SSO，按本地口令�
 2. 向 Casdoor 应用负责人索取 `SSO_CLIENT_ID` 与 Client Secret，把 Client Secret 保存到仓库外的本地文件，
    并在 `SSO_CLIENT_SECRET_FILE` 中填写该文件的绝对路径；
 3. 在 Casdoor 的 `INPulse` 应用中登记本地回调地址 `http://127.0.0.1:5173/api/v1/auth/sso/callback`；
-4. 重新运行 `node scripts/dev-start.mjs`，登录页会整页跳转到统一身份认证。
+4. 重新运行 `node scripts/dev-start.mjs`，在登录页点击登录框下方的单点登录图标即可跳出到统一身份认证。
 
 本地读取 `/run/secrets/` 之外的 Secret 文件时，脚本会同时设置 `NODE_ENV=test` 与
 `SSO_CLIENT_SECRET_TEST_PATH=1`，这是仓库规则允许的本地/集成测试路径；生产只从
-`/run/secrets/sso_client_secret` 读取。配置缺失或非法时按 fail closed 回落
-`/login?local=1&sso=disabled`，管理员应急入口为 `/login?local=1`。
+`/run/secrets/sso_client_secret` 读取。配置缺失或非法时按 fail closed：点击统一身份认证入口回落到
+`/login?local=1&sso=disabled` 并提示未启用；管理员应急口令入口为 `/login?local=1`。
 
 ## 部署
 
@@ -174,8 +176,8 @@ node scripts/dev-start.mjs --local-only   # 强制关闭 SSO，按本地口令�
   （compose 以只读 Secret 挂载到 `/run/secrets/sso_client_secret`，禁止用环境变量代替）；
 - 在 Casdoor 应用中登记 `SSO_REDIRECT_URI` 指向的正式回调地址。
 
-配置非法或缺失时 API 按 fail closed 以本地登录模式启动，隐藏入口 `/login?local=1` 仍可用；
-决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)。
+配置非法或缺失时 API 按 fail closed 以本地登录模式启动，点击统一身份认证入口回落到 `/login?local=1&sso=disabled`；`/login?local=1` 仍作为管理员应急口令入口可用。
+决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)与[登录入口 ADR](./docs/adr/ADR-036.md)。
 
 ## 文档导航
 

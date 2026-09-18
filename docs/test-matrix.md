@@ -7,6 +7,8 @@
 2026-09-15 修订（[ADR-031](adr/ADR-031.md) 移除 TOTP）：下表所有「TOTP / 双因子 / 管理员重认证 / 恢复码」表述均已被 ADR-031 取代——7 条 MFA 路由（注册、验证、重认证、恢复码轮换与消费、管理员 MFA 重置）、前后端实现与对应单元 / 集成 / E2E 用例已删除；登录只保留口令因素并直接签发 `AUTHENTICATED` Session；管理员高风险操作门禁改为「当前有效的完整管理员 Session（`is_admin`）+ 写操作同步 CSRF + 数据库幂等 + 审计留痕」，不再校验 `reauthenticated_at` / `mfa_verified_at`，最后一名保护改为 `LAST_ACTIVE_ADMIN_REQUIRED`。SEC-010 至 SEC-014、FE-011 与 CI-017 的 MFA 部分为已被取代的历史覆盖记录；`user_totp_factors`、`mfa_recovery_codes` 与 `user_sessions` 的历史 MFA 列按本期决定「只停用不删除」。
 
 2026-09-15 修订（[ADR-032](adr/ADR-032.md) 接入立镖 Casdoor OIDC 单点登录）：`/login` 默认整页跳转到 `GET /api/v1/auth/sso/start`，回调 `GET /api/v1/auth/sso/callback` 校验 state（URL + `__Host-sso-state` Cookie 双绑定）与 id_token 后，复用与口令登录同一实现签发本地 Session；首次登录 JIT 开通账号（`is_admin=false`、`password_hash=NULL`、无项目权限），映射优先级为 `sso_subject` → 登录名 + 邮箱一致绑定 → JIT；`SSO_ENABLED` 未配置或配置非法时 fail closed 回落 `/login?local=1&sso=disabled`。本地会话空闲有效期由 8 小时收紧为 30 分钟（口令与 SSO 共用，`SESSION_IDLE_MAX_AGE_SECONDS` 可覆盖）。新增 SEC-016 至 SEC-020 与 FE-012 覆盖本片；`securityFlow` allowlist 由三条（ADR-031 后）扩为五条；迁移 `0014_sso_backup_grants.sql` 为 `app_backup` 补齐 `app.sso_login_attempts` 的 pg_dump 只读授权，该表数据经 `--exclude-table-data` 排除（见 BACKUP-001）。
+
+2026-09-18 修订（[ADR-036](adr/ADR-036.md) 修订 ADR-032 前端入口）：`/login` 默认展示本地口令表单，不再自动整页跳转；登录框下方新增「或以统一身份认证登录」图标入口，点击后整页跳转 `/api/v1/auth/sso/start`（302 导航与 fail closed 回落不变：未启用时回落 `/login?local=1&sso=disabled` 并提示、隐藏入口）；`?sso_error=` 回落保留本地表单与可重试的 SSO 入口；退出登录与「前往登录」回 `/login`。登录页单测、`AppLayout` 退出用例与 E2E `auth.spec.ts` 的未配置回落用例已同步改写；服务端路由、契约与权限矩阵无改动。
 ## F-09 数据安全专项（A，2026-09-10 本地实现）
 
 数据安全专项第一个纵切片（对应技术设计 §7.5 与 [ADR-021](adr/ADR-021.md)，不降低安全基线）：
