@@ -207,6 +207,7 @@ export class HealthController {
       "GET /api/v1/me/tasks",
       "GET /api/v1/projects/{projectId}/overview",
       "GET /api/v1/change-records",
+      "GET /api/v1/projects/{projectId}/task-board",
       "GET /api/v1/tasks",
       "GET /api/v1/task-groups/memberships",
       "GET /api/v1/task-groups/{groupId}",

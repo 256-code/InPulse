@@ -1233,6 +1233,68 @@ export type TaskAssigneesResponse = {
   })[];
 };
 
+export type TaskBoardCard = {
+  readonly taskId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly dueAt: (string | null);
+  readonly completedAt: (string | null);
+  readonly dueState: ("OVERDUE" | "TODAY" | "SCHEDULED" | "NONE");
+  readonly assignee: UserRef;
+  readonly publishedRecordCount: number;
+};
+
+export type TaskBoardModule = {
+  readonly moduleId: number;
+  readonly name: string;
+  readonly featureCount: number;
+  readonly stats: TaskBoardModuleStats;
+  readonly assignees: readonly UserRef[];
+  readonly tasks: readonly TaskBoardCard[];
+};
+
+export type TaskBoardModuleStats = {
+  readonly total: number;
+  readonly done: number;
+  readonly open: number;
+  readonly canceled: number;
+  readonly overdue: number;
+  readonly completionRate: number;
+};
+
+export type TaskBoardProject = {
+  readonly projectId: number;
+  readonly name: string;
+  readonly status: ProjectStatus;
+};
+
+export type TaskBoardResponse = {
+  readonly project: TaskBoardProject;
+  readonly generatedAt: string;
+  readonly stats: TaskBoardStats;
+  readonly modules: readonly TaskBoardModule[];
+  readonly truncated: boolean;
+};
+
+export type TaskBoardStats = {
+  readonly total: number;
+  readonly done: number;
+  readonly open: number;
+  readonly canceled: number;
+  readonly overdue: number;
+  readonly dueToday: number;
+  readonly completedThisWeek: number;
+  readonly completionRate: number;
+  readonly featureCount: number;
+  readonly memberCount: number;
+};
+
 export type TaskCenterQuery = {
   readonly cursor?: string;
   readonly limit?: number;

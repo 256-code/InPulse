@@ -49,6 +49,14 @@ import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
 import { moduleSchemas } from "./contracts/modules.zod.js";
+import {
+  taskBoardCardSchema,
+  taskBoardModuleSchema,
+  taskBoardModuleStatsSchema,
+  taskBoardProjectSchema,
+  taskBoardResponseSchema,
+  taskBoardStatsSchema,
+} from "./contracts/task-board.zod.js";
 
 import {
   currentUserResponseSchema,
@@ -242,6 +250,38 @@ export const schemaRegistry = {
   ProjectOverviewResponse: {
     schema: projectOverviewResponseSchema,
     summary: "项目概览响应：项目头、成员数与聚合结果（R-2）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardProject: {
+    schema: taskBoardProjectSchema,
+    summary: "任务看板项目头，返回原始状态枚举（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardStats: {
+    schema: taskBoardStatsSchema,
+    summary:
+      "任务看板项目级统计：完成率、状态计数、逾期、今日到期、本周完成、功能数与成员数（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardCard: {
+    schema: taskBoardCardSchema,
+    summary:
+      "任务看板卡片：优先级、状态、截止与完成时间、服务端截止状态、负责人与 PUBLISHED 记录数（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardModuleStats: {
+    schema: taskBoardModuleStatsSchema,
+    summary: "任务看板泳道统计（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardModule: {
+    schema: taskBoardModuleSchema,
+    summary: "任务看板泳道：模块功能数、统计、负责人头像组与任务卡（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardResponse: {
+    schema: taskBoardResponseSchema,
+    summary: "任务看板响应：项目头、生成时间、项目级统计与模块泳道（R-8）",
     sensitiveFieldPaths: [],
   },
   MyTasksQueryRequest: {

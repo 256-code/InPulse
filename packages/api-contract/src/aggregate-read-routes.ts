@@ -109,6 +109,36 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
   },
   {
     method: "GET",
+    path: "/projects/{projectId}/task-board",
+    operationId: "getProjectTaskBoard",
+    summary:
+      "R-8 项目任务看板：服务端按项目聚合任务看板数据，返回项目级统计（完成率、未完成、逾期、今日到期、本周完成、功能数与成员数）、按模块分组的泳道（模块统计、负责人头像组与任务卡）。看板集合为项目内 lifecycle_status = ACTIVE 的任务并排除任务组历史来源分支，已取消任务保留为历史标记但不计入完成率分母；卡片截止状态（逾期 / 今日 / 计划中）由服务端按 Asia/Shanghai 计算；任务超过 1000 条时截断并置 truncated，统计仍为全量口径；无权限项目统一 404。",
+    request: {
+      path: "ProjectPath",
+      query: "none",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("TaskBoardResponse"),
+      ...errors([401, 404, 500]),
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
     path: "/task-groups/memberships",
     operationId: "listTaskGroupMemberships",
     summary:

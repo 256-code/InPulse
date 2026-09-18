@@ -115,6 +115,97 @@ export function mapTaskListRow(row: TaskListRowRaw): TaskListRow {
   };
 }
 
+interface TaskBoardTaskRowRaw extends Omit<
+  TaskBoardTaskRow,
+  "dueAt" | "completedAt"
+> {
+  readonly dueAt: string | null;
+  readonly completedAt: string | null;
+}
+
+interface TaskBoardStatsRowRaw extends TaskBoardStatsTotals {
+  readonly moduleId: number | null;
+}
+
+function mapTaskBoardTaskRow(row: TaskBoardTaskRowRaw): TaskBoardTaskRow {
+  return {
+    ...row,
+    dueAt: row.dueAt === null ? null : new Date(row.dueAt),
+    completedAt: row.completedAt === null ? null : new Date(row.completedAt),
+  };
+}
+
+/** R-8 任务看板：单项目一次返回的任务上限，超出截断并在响应上标记。 */
+export const TASK_BOARD_TASKS_MAX = 1000;
+
+/** 任务优先级；与 app.tasks.tasks_priority_check 的取值一致（R-8）。 */
+export type TaskPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+
+/**
+ * 卡片截止状态；只对未完成任务取值（已完成 / 已取消 / 未设截止为 NONE）。
+ * 由服务端按 Asia/Shanghai 与查询时刻的 now() 计算，前端不得按客户端时钟重算。
+ */
+export type TaskBoardDueState = "OVERDUE" | "TODAY" | "SCHEDULED" | "NONE";
+
+/** R-8 看板列表入参；excludedTaskIds 为 C 域历史来源分支，在 LIMIT 之前过滤。 */
+export interface TaskBoardListInput {
+  readonly projectId: number;
+  readonly excludedTaskIds?: readonly number[];
+}
+
+/** R-8 看板任务卡行；时间列在适配器边界还原为 Date。 */
+export interface TaskBoardTaskRow {
+  readonly taskId: number;
+  readonly moduleId: number;
+  readonly featureId: number | null;
+  readonly scopeType: TaskScopeType;
+  readonly code: string;
+  readonly title: string;
+  readonly assigneeId: number;
+  readonly priority: TaskPriority;
+  readonly workStatus: TaskWorkStatus;
+  readonly dueAt: Date | null;
+  readonly completedAt: Date | null;
+  readonly dueState: TaskBoardDueState;
+}
+
+/** R-8 看板任务页；truncated = true 表示超过 TASK_BOARD_TASKS_MAX 被截断。 */
+export interface TaskBoardTaskPage {
+  readonly items: readonly TaskBoardTaskRow[];
+  readonly truncated: boolean;
+}
+
+/** R-8 看板状态计数；项目级与模块级共用同一形状，日界与周界由 SQL 按 Asia/Shanghai 计算。 */
+export interface TaskBoardStatsTotals {
+  readonly total: number;
+  readonly done: number;
+  readonly open: number;
+  readonly canceled: number;
+  readonly overdue: number;
+  readonly dueToday: number;
+  readonly completedThisWeek: number;
+}
+
+/** R-8 看板统计入参；与列表同一集合口径，不受列表截断影响。 */
+export interface TaskBoardStatsInput {
+  readonly projectId: number;
+  readonly excludedTaskIds?: readonly number[];
+}
+
+/** R-8 模块级统计行（GROUPING SETS 的分组行）。 */
+export interface TaskBoardModuleStatsRow extends TaskBoardStatsTotals {
+  readonly moduleId: number;
+}
+
+/**
+ * R-8 统计结果：totals 为项目级（GROUPING SETS 的总计行，无任务时为零值），
+ * modules 为各模块分组行；两者同一集合、同一 now() 口径。
+ */
+export interface TaskBoardStatsResult {
+  readonly totals: TaskBoardStatsTotals;
+  readonly modules: readonly TaskBoardModuleStatsRow[];
+}
+
 /** Caller authorizes the project. lock requires project/module/sorted feature locks first. */
 export abstract class TaskQueryPort {
   /**
@@ -176,6 +267,34 @@ export abstract class TaskQueryPort {
     tx: TransactionContext,
     filter: TaskListFilter,
   ): Promise<number>;
+
+  /**
+   * R-8 任务看板列表：一次读取项目内全部未归档任务（lifecycle_status = ACTIVE，
+   * 含已取消，不含已归档与无效），并在 LIMIT 之前应用 excludedTaskIds。
+   *
+   * 约定：
+   * 1. 调用方必须先完成项目授权（与 find / list 同一约定），端口不校验成员关系。
+   * 2. 排序固定「逾期 -> 临近截止 -> 已完成（完成时间倒序）-> 已取消」，
+   *    末键 taskId ASC 保证稳定；不提供 sort 参数。
+   * 3. 上限 TASK_BOARD_TASKS_MAX，超出截断并置 truncated = true；调用方负责在
+   *    响应上向用户说明截断，不得静默丢弃。
+   * 4. dueState 在同一 SQL 内按 Asia/Shanghai 与 now() 计算。
+   */
+  abstract listForBoard(
+    tx: TransactionContext,
+    input: TaskBoardListInput,
+  ): Promise<TaskBoardTaskPage>;
+
+  /**
+   * R-8 看板统计：与 listForBoard 同一集合的 FILTER 聚合，不受列表截断影响。
+   * 日界（dueToday）与周界（completedThisWeek）按 Asia/Shanghai 计算，
+   * 与 R-3 统计同一表达式口径。项目级与模块级由 GROUPING SETS 一次返回。
+   * 只读、不取锁。
+   */
+  abstract boardStats(
+    tx: TransactionContext,
+    input: TaskBoardStatsInput,
+  ): Promise<TaskBoardStatsResult>;
 }
 
 function assertLimit(limit: number): void {
@@ -346,5 +465,116 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
          AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
     `;
     return row?.total ?? 0;
+  }
+
+  async listForBoard(
+    tx: TransactionContext,
+    input: TaskBoardListInput,
+  ): Promise<TaskBoardTaskPage> {
+    assertExcludedTaskIds(input.excludedTaskIds);
+    const excludedTaskIds = input.excludedTaskIds
+      ? [...input.excludedTaskIds]
+      : null;
+    const rows = await tx.sql<TaskBoardTaskRowRaw[]>`
+      SELECT t.id AS "taskId",
+             t.module_id AS "moduleId",
+             t.feature_id AS "featureId",
+             t.scope_type AS "scopeType",
+             t.code,
+             t.title,
+             t.assignee_id AS "assigneeId",
+             t.priority,
+             t.work_status AS "workStatus",
+             t.due_at AS "dueAt",
+             t.completed_at AS "completedAt",
+             CASE
+               WHEN t.work_status <> 'TODO' OR t.due_at IS NULL THEN 'NONE'
+               WHEN t.due_at < now() THEN 'OVERDUE'
+               WHEN t.due_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '1 day') AT TIME ZONE 'Asia/Shanghai' THEN 'TODAY'
+               ELSE 'SCHEDULED'
+             END AS "dueState"
+        FROM app.tasks t
+       WHERE t.project_id = ${input.projectId}
+         AND t.lifecycle_status = 'ACTIVE'
+         AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
+       ORDER BY CASE
+                  WHEN t.work_status = 'DONE' THEN 2
+                  WHEN t.work_status = 'CANCELED' THEN 3
+                  WHEN t.due_at IS NOT NULL AND t.due_at < now() THEN 0
+                  ELSE 1
+                END,
+                CASE WHEN t.work_status = 'DONE' THEN t.completed_at END DESC NULLS LAST,
+                t.due_at ASC NULLS LAST,
+                t.id ASC
+       LIMIT ${TASK_BOARD_TASKS_MAX + 1}
+    `;
+    const truncated = rows.length > TASK_BOARD_TASKS_MAX;
+    const visible = truncated ? rows.slice(0, TASK_BOARD_TASKS_MAX) : rows;
+    return {
+      items: visible.map(mapTaskBoardTaskRow),
+      truncated,
+    };
+  }
+
+  async boardStats(
+    tx: TransactionContext,
+    input: TaskBoardStatsInput,
+  ): Promise<TaskBoardStatsResult> {
+    assertExcludedTaskIds(input.excludedTaskIds);
+    const excludedTaskIds = input.excludedTaskIds
+      ? [...input.excludedTaskIds]
+      : null;
+    const rows = await tx.sql<TaskBoardStatsRowRaw[]>`
+      SELECT t.module_id AS "moduleId",
+             COUNT(*)::integer AS "total",
+             COUNT(*) FILTER (WHERE t.work_status = 'DONE')::integer AS "done",
+             COUNT(*) FILTER (WHERE t.work_status = 'TODO')::integer AS "open",
+             COUNT(*) FILTER (WHERE t.work_status = 'CANCELED')::integer AS "canceled",
+             COUNT(*) FILTER (WHERE t.work_status = 'TODO' AND t.due_at < now())::integer AS "overdue",
+             COUNT(*) FILTER (
+               WHERE t.work_status = 'TODO'
+                 AND t.due_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
+                 AND t.due_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '1 day') AT TIME ZONE 'Asia/Shanghai'
+             )::integer AS "dueToday",
+             COUNT(*) FILTER (
+               WHERE t.work_status = 'DONE'
+                 AND t.completed_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
+             )::integer AS "completedThisWeek"
+        FROM app.tasks t
+       WHERE t.project_id = ${input.projectId}
+         AND t.lifecycle_status = 'ACTIVE'
+         AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
+       GROUP BY GROUPING SETS ((), (t.module_id))
+    `;
+    let totals: TaskBoardStatsTotals | null = null;
+    const modules: TaskBoardModuleStatsRow[] = [];
+    for (const row of rows) {
+      const item: TaskBoardStatsTotals = {
+        total: row.total,
+        done: row.done,
+        open: row.open,
+        canceled: row.canceled,
+        overdue: row.overdue,
+        dueToday: row.dueToday,
+        completedThisWeek: row.completedThisWeek,
+      };
+      if (row.moduleId === null) {
+        totals = item;
+      } else {
+        modules.push({ moduleId: row.moduleId, ...item });
+      }
+    }
+    return {
+      totals: totals ?? {
+        total: 0,
+        done: 0,
+        open: 0,
+        canceled: 0,
+        overdue: 0,
+        dueToday: 0,
+        completedThisWeek: 0,
+      },
+      modules,
+    };
   }
 }

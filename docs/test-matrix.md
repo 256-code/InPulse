@@ -1956,3 +1956,31 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 浏览器人工复验：本地 dev 服务（API 3000 / Vite 5173）打开 `INPULSE-CR-7`（历史单段文本记录）确认详情页正常、修订弹窗把旧文本渲染为一条可移除条目且「添加遗留问题」能追加第二条；`INPULSE-CR-4` 的 `CONVERTED` 条目显示「已转任务，保留关联」且无移除入口。
 
 未运行 / 已知偏差：① 未跑 `pnpm check` 整链（`check:docs` 被仓库根目录 8 个未跟踪 `.tmp-*` 文件阻断）、`db:migrations:check`、`db:seed:check` 与 GitHub Actions；② Web 单测首次复跑出现 2 例失败（与后台全量 E2E 同机并发），随后连续两轮 78 文件 469 例全绿，失败用例名未记录，再复现需单独排查；③ 上一条的 3 例存量 E2E 失败本次未修复，需单独排期；④ 本地开发服务器曾因 API 进程未重启（旧代码返回字符串、新前端按数组消费）导致「点开迭代记录即报错」，重建并重启 `scripts/dev-start.mjs` 后恢复，`remainingIssues` 属破坏性响应变更、API 与 Web 必须同批发布；⑤ 本轮改动尚未提交、未推送，新增与改写的测试需非作者人工评审。
+
+## R-8 项目任务看板（任务看板，2026-09-18 本地落库）
+
+用户要求为项目增加「展现完成程度」的任务看板，定稿取舍是信息密度高、点击与下拉少，并且顶部统计恒为项目全量口径：筛选只在本地过滤卡片与泳道，图表区显示「筛选结果 N / 总数」而不是把筛选结果误读成项目完成率。
+
+锁定口径：
+
+- 新增只读路由 `GET /api/v1/projects/{projectId}/task-board`（`getProjectTaskBoard`，全部策略显式 `none` + `authPolicy: session`），经生成客户端调用，前端不裸写 `fetch`。
+- 看板集合 = 项目内 `lifecycle_status = ACTIVE` 的任务（不含已归档与无效），排除任务组历史来源分支；已取消任务保留为历史标记。
+- 完成率 = 已完成 ÷（已完成 + 未完成），已取消与历史来源分支不计入分母，分母为 0 取 0（功能设计 §29.2）。
+- 排序固定「逾期 → 临近截止 → 已完成（完成时间倒序）→ 已取消」，末键 taskId 升序；单项目上限 1000 条，超出置 `truncated = true` 并在页面上说明，统计不受截断影响。
+- 逾期、今日到期、本周完成与卡片 `dueState` 全部由 SQL 按 Asia/Shanghai 与 `now()` 计算，前端只做展示映射，不按客户端时钟重算。
+- 页面按模块分泳道；筛选覆盖状态、时间、优先级、负责人与关键词，视图切换（看板 / 列表）与全部筛选由 URL 承载（`view` / `status` / `time` / `priority` / `owner` / `q`），默认值不写入 URL。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| R8-CONTRACT-001 | 契约与权限 | Schema、路由与生成物 | `task-board.zod.ts` 六个 Schema（项目 / 统计 / 卡片 / 模块统计 / 泳道 / 响应）登记进 Schema Registry；路由全策略显式 `none` 且登记在权限矩阵；OpenAPI、fingerprints 与生成客户端由生成工具更新 | 本地通过（`contract:validate` 108 条路由、`permissions:check` 108 操作 / 108 路由） |
+| R8-SERVICE-UNIT-001 | API 单元 | 授权、口径与不一致防线 | `task-board-query.service.test.ts` 8 例：非成员与项目缺失统一 404 且零读取、历史来源分支在 LIMIT 前排除并透传 `truncated`、按模块组装泳道与卡片、完成率分母为 0 取 0、泳道头像去重并截断到 24、缺模块名与缺负责人按 `AGGREGATE_READ_INCONSISTENT` 500、覆盖功能数按项目级 + 逐模块计数 | 本地通过 |
+| R8-WEB-UNIT-001 | Web 单元 | URL 状态与本地筛选 | `task-board-filters.test.ts` 11 例：非法与缺失参数回退默认、默认值不写入 URL、读写往返一致、空白查询不算筛选、状态 / 时间 / 优先级 / 负责人 / 关键词匹配、空泳道隐藏且不改动入参、负责人选项按姓名排序去重 | 本地通过 |
+| R8-WEB-UNIT-002 | Web 单元 | 展示映射 | `task-board-format.test.ts` 16 例：跨日时间按上海时区落到次日、`dueLabelOf` / `dueListLabelOf` 各分支、优先级与工作状态文案色调、三段构成条百分比与分母为 0、环形进度 dashoffset 裁剪、头像与泳道色调按 ID 稳定分配 | 本地通过 |
+| R8-WEB-UNIT-003 | Web 单元 | 页面渲染与交互 | `TaskBoardPageView.test.tsx` 7 例：泳道与统计渲染、筛选后完成率仍为全量口径且显示「筛选结果 N / 42」、列表切换写回筛选状态、列表视图分组表格行、检索无命中与空项目两种空态、截断提示；`task-board-server.test.ts` 2 例：经生成客户端调用并原样抛出错误 | 本地通过 |
+| R8-LAYOUT-UNIT-001 | Web 单元 | 侧栏与面包屑 | `AppLayout.test.tsx` 16 例（新增 3 例）：项目路由渲染「当前项目」分组且「任务看板」子项为当前页并有 `sub` 样式、非项目路由隐藏该分组、任务看板面包屑为 项目列表 → 项目名 → 任务看板；原有系统目录、计数与退出登录用例保持通过 | 本地通过 |
+| R8-PG-INT-001 | 真实 PostgreSQL | 看板读端口 | `task-board-ports.integration.test.ts` 6 例：`dueState` 按 Asia/Shanghai 日界分类（今日零点前 1 秒与 `now() - 2 days` 为 OVERDUE、严格落在 `(now(), 明日 00:00)` 内为 TODAY、明日 00:00 与 `now() + 10 days` 为 SCHEDULED、未设截止与 DONE / CANCELED 一律 NONE）且列表按「逾期 → 截止升序（NULL 最后）→ 已完成（完成时间倒序）→ 已取消」排序；`boardStats` 项目级总计等于各模块分组之和、空项目为零值、无任务模块不产生分组行；ARCHIVED / INVALID 不进看板而 CANCELED 保留在列表与统计；插入 1001 条时列表截断为 1000 且 `truncated = true`，把可见的 1000 个 ID 作为 `excludedTaskIds` 传回后只剩 1 条且不再截断（过滤在 LIMIT 之前）；跨项目隔离；两条查询在 `enable_seqscan = off` 下都不回退 `Seq Scan on tasks` | 本地通过（临时 PostgreSQL 18.6 + PGroonga 集群；时间相关用例的夹具与读取同事务，`now()` 固定，测试不落库） |
+| R8-E2E-001 | Playwright | 看板关键路径 | `task-board.spec.ts`：打开看板看到完成率环与「已完成 X / Y」→ 从看板新建任务后 `task-board` 查询自动失效并出现卡片、详情弹窗可打开 → 看板 / 列表视图切换（URL `view=list`）→ 状态 chip、时间 chip、优先级下拉与关键词搜索逐项过滤并写回 URL → 无命中空态「清除筛选」恢复 → 列表行点击就地打开任务详情 | 本地通过（完整套件 53 passed / 4 failed，4 项均为既有问题，见下） |
+
+本地实际执行（2026-09-18，Windows + PowerShell + 新建的临时 PostgreSQL 18.6 集群）：`apps/api` 集成 50 文件 474 例（含本轮新增 6 例）、`apps/api` 单元 65 文件 359 例、Web 单元 82 文件 507 例、`apps/ops` 单元 8 文件 52 例、`lint` / `typecheck` / `build` / `contract:drift`（5 个产物与 Registry 一致）/ `contract:validate`（108 条路由）/ `permissions:check`（108 操作 / 108 路由）/ `check:frontend:boundaries` / `check:deps` / `check:secrets` 全部通过。两条看板查询与统计在同一事务内执行，共用同一个 `now()`，不存在日界漂移。
+
+未运行 / 已知偏差：① 完整 Playwright 套件 53 passed / 4 failed：`features.spec.ts:93`（管理员归档并恢复功能）与 `project-members.spec.ts:10`（普通成员只读成员页）在同一数据库上失败，且在未包含本改动的 HEAD 对照 worktree 上以完全相同的方式失败，属分支既有问题；`search.spec.ts:6` 与 `project-members.spec.ts:56` 在长期开发库（55432）通过、在新建空库失败，属夹具 / 数据依赖的既有环境问题。② `format:check` 仍失败于四个存量文件（`apps/e2e/helpers/record-leftovers.ts`、`apps/e2e/tests/leftover-task.spec.ts`、`apps/web/src/features/common/components/LeftoverEntriesField.test.tsx`、`apps/web/src/features/published-records/AppendLeftoverForm.tsx`）。③ `check:docs` 仍失败于仓库根未跟踪的 `.tmp-*` 存量文件（本轮未清理）。④ 侧栏改为 首页 / 任务中心 / 项目列表 / 迭代记录 / 遗留问题 +「当前项目」分组（项目概览 / 模块与功能 / 任务看板 / 项目成员）+「全局」分组（项目动态 / 站内通知 / 全局搜索 / 成员与设置 / 审计日志仅管理员），侧栏新增的「站内通知」与顶栏铃铛同名，让 `csp.spec.ts` 与 `visual-migration.spec.ts` 的通知定位出现歧义，已改为 `exact` 名称消歧；任务写操作（新建 / 编辑 / 状态流转 / 完成并记录 / 合并与解除合并）同时失效 `task-board` 查询。

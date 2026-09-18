@@ -157,6 +157,7 @@ export function CompleteWithRecord({
         await Promise.all(
           [
             "tasks",
+            "task-board",
             "task-history",
             "record-drafts",
             "task-record-drafts",

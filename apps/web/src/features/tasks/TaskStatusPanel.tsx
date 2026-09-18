@@ -134,9 +134,14 @@ export function TaskStatusPanel({
       retry.current = null;
       onClose();
       await Promise.all(
-        ["tasks", "task-history", "activity", "search", "notifications"].map(
-          (key) => cache.invalidateQueries({ queryKey: [key] }),
-        ),
+        [
+          "tasks",
+          "task-board",
+          "task-history",
+          "activity",
+          "search",
+          "notifications",
+        ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },
   });

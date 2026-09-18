@@ -14481,6 +14481,81 @@
         }
       }
     },
+    "/projects/{projectId}/task-board": {
+      "get": {
+        "operationId": "getProjectTaskBoard",
+        "summary": "R-8 项目任务看板：服务端按项目聚合任务看板数据，返回项目级统计（完成率、未完成、逾期、今日到期、本周完成、功能数与成员数）、按模块分组的泳道（模块统计、负责人头像组与任务卡）。看板集合为项目内 lifecycle_status = ACTIVE 的任务并排除任务组历史来源分支，已取消任务保留为历史标记但不计入完成率分母；卡片截止状态（逾期 / 今日 / 计划中）由服务端按 Asia/Shanghai 计算；任务超过 1000 条时截断并置 truncated，统计仍为全量口径；无权限项目统一 404。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBoardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        ]
+      }
+    },
     "/projects/{projectId}/tasks": {
       "post": {
         "operationId": "createTaskWithScope",
@@ -22395,6 +22470,353 @@
         },
         "required": [
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardCard": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "FEATURE",
+              "MODULE"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "workStatus": {
+            "type": "string",
+            "enum": [
+              "TODO",
+              "DONE",
+              "CANCELED"
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueState": {
+            "type": "string",
+            "enum": [
+              "OVERDUE",
+              "TODAY",
+              "SCHEDULED",
+              "NONE"
+            ]
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "publishedRecordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "taskId",
+          "code",
+          "title",
+          "moduleId",
+          "featureId",
+          "featureName",
+          "scopeType",
+          "priority",
+          "workStatus",
+          "dueAt",
+          "completedAt",
+          "dueState",
+          "assignee",
+          "publishedRecordCount"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardModule": {
+        "type": "object",
+        "properties": {
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "stats": {
+            "$ref": "#/components/schemas/TaskBoardModuleStats"
+          },
+          "assignees": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          },
+          "tasks": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskBoardCard"
+            }
+          }
+        },
+        "required": [
+          "moduleId",
+          "name",
+          "featureCount",
+          "stats",
+          "assignees",
+          "tasks"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardModuleStats": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "open": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "canceled": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completionRate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "total",
+          "done",
+          "open",
+          "canceled",
+          "overdue",
+          "completionRate"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardProject": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          }
+        },
+        "required": [
+          "projectId",
+          "name",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardResponse": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/TaskBoardProject"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/TaskBoardStats"
+          },
+          "modules": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskBoardModule"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "project",
+          "generatedAt",
+          "stats",
+          "modules",
+          "truncated"
+        ],
+        "additionalProperties": false
+      },
+      "TaskBoardStats": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "open": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "canceled": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "dueToday": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completedThisWeek": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completionRate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "featureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "total",
+          "done",
+          "open",
+          "canceled",
+          "overdue",
+          "dueToday",
+          "completedThisWeek",
+          "completionRate",
+          "featureCount",
+          "memberCount"
         ],
         "additionalProperties": false
       },

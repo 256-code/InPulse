@@ -1,0 +1,33 @@
+import { useQuery } from "@tanstack/react-query";
+import { ApiError } from "@generated/api";
+
+import type { TaskBoardAdapter } from "./task-board-types";
+
+/** R-8 数据访问层：沿用页面注入的适配器，不引入额外缓存层。 */
+
+export function describeTaskBoardError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录状态已失效，请重新登录后再查看任务看板。";
+    }
+    if (error.status === 404) return "项目不存在或已无权访问。";
+    if (error.status === 429) return "请求过于频繁，请稍后重试。";
+  }
+  return "任务看板暂时不可用，请稍后重试。";
+}
+
+export interface UseTaskBoardQueryOptions {
+  readonly projectId: number;
+  readonly adapter: TaskBoardAdapter;
+}
+
+export function useTaskBoardQuery({
+  projectId,
+  adapter,
+}: UseTaskBoardQueryOptions) {
+  return useQuery({
+    queryKey: ["task-board", adapter.source, projectId],
+    queryFn: () => adapter.fetchTaskBoard({ projectId }),
+    retry: false,
+  });
+}

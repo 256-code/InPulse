@@ -286,6 +286,7 @@ export function GlobalTaskCreateModal({
       await Promise.all(
         [
           "tasks",
+          "task-board",
           "modules",
           "features",
           "activity",

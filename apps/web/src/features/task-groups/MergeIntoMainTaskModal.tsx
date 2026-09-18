@@ -138,6 +138,7 @@ export function MergeIntoMainTaskModal({
       });
       await Promise.all([
         cache.invalidateQueries({ queryKey: ["tasks"] }),
+        cache.invalidateQueries({ queryKey: ["task-board"] }),
         cache.invalidateQueries({ queryKey: ["my-tasks"] }),
         cache.invalidateQueries({ queryKey: ["task-group"] }),
         cache.invalidateQueries({ queryKey: ["task-group-records"] }),
