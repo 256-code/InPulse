@@ -2,7 +2,6 @@ import React from "react";
 import { Alert, Button, Spin } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
-import { useProjectDetail } from "@features/projects/project-query";
 import { useAuth } from "@features/auth/auth-context";
 import { TasksPanel } from "@features/tasks/TasksPanel";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -15,7 +14,6 @@ export default function ModuleTasksPage() {
   const projectId = Number(params["projectId"]);
   const moduleId = Number(params["moduleId"]);
   const { query } = useModules(projectId);
-  const projectQuery = useProjectDetail({ projectId });
   const { user } = useAuth();
   if (
     ![projectId, moduleId].every(
@@ -47,9 +45,6 @@ export default function ModuleTasksPage() {
             <InpulseIcon name="arrowLeft" size={15} />
             返回模块列表
           </Button>
-          <span className="eyebrow">
-            {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
-          </span>
           <h1>{module.name}</h1>
           <p>{module.description || "模块级任务与功能档案的公共工作区。"}</p>
         </div>

@@ -555,7 +555,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     >
       <div className="page-header">
         <div>
-          <div className="eyebrow">任务中心 / {openItems.length} 项未完成</div>
           <h1>任务中心</h1>
           <p>
             所有工作从这里展开：任务负责推进，完成后沉淀为迭代记录，遗留问题继续转为新任务。

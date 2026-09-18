@@ -181,7 +181,6 @@ describe("IssuesPageView", () => {
     expect(
       within(row).getByRole("button", { name: /转为任务/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/2 条未闭环/)).toBeInTheDocument();
   });
   it("opens the source and follow-up tasks through onOpenTask", async () => {
     const { onOpenTask } = renderView();

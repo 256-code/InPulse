@@ -111,7 +111,6 @@ describe("ProjectsPage", () => {
     const projectName = await screen.findByText("商城系统");
     expect(projectName).toBeInTheDocument();
     expect(projectName.closest(".project-card")).toHaveTextContent("1 位成员");
-    expect(screen.getByText("项目 / 1 个")).toBeInTheDocument();
     expect(projectName.closest(".project-card")).toHaveTextContent("查看模块");
     expect(screen.getByText("层级说明")).toBeInTheDocument();
     expect(

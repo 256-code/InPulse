@@ -96,7 +96,7 @@ it("loads real version data and permits selecting historical snapshots", async (
   // 无变化字段不再渲染：标题等四项不应出现在差异区。
   expect(diff.queryByText("迭代标题")).toBeNull();
   const region = screen.getByRole("region", { name: "正式记录详情" });
-  expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
+  expect(within(region).getByText("支付修订")).toBeVisible();
   fireEvent.change(within(region).getByLabelText("对照版本"), {
     target: { value: "1" },
   });
@@ -154,7 +154,6 @@ it("leaves the record identity to the card summary when not standalone", async (
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   expect(await within(region).findByText("归属")).toBeVisible();
   expect(within(region).queryByText("支付修订")).toBeNull();
-  expect(within(region).queryByText("SHOP-CR-1 · v2 · 已发布")).toBeNull();
 });
 it("hides the version comparison until a record has more than one version", async () => {
   const api = {

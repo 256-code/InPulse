@@ -152,7 +152,6 @@ describe("RecordsWorkspace", () => {
       expect(
         screen.getByRole("heading", { name: "迭代记录" }),
       ).toBeInTheDocument();
-      expect(await screen.findByText("研发记录 / 2 条")).toBeInTheDocument();
       expect(screen.getByLabelText("项目")).toHaveValue("");
       expect(
         screen.getByRole("option", { name: "全部项目" }),

@@ -35,7 +35,6 @@ import {
   type TaskDraft,
 } from "./task-query";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
-import { useModules } from "@features/modules/module-query";
 import { useFeatures } from "@features/features/feature-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import {
@@ -290,10 +289,7 @@ export function TasksPanel({
   const taskDraftItems = taskDrafts.data?.items ?? [];
   // 详情头部与卡片归属展示名称而非裸 ID：项目/模块/功能名称均为既有只读契约。
   const projectDetail = useProjectDetail({ client, projectId });
-  const modules = useModules(projectId, client);
   const featureList = useFeatures(projectId, moduleId, undefined, client);
-  const moduleName = (id: number) =>
-    modules.query.data?.items.find((m) => m.id === id)?.name;
   const featureName = (id: number) =>
     featureList.query.data?.items.find((f) => f.id === id)?.name;
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
@@ -868,19 +864,6 @@ export function TasksPanel({
             <>
               <div className="drawer-header task-modal-header">
                 <div>
-                  <span className="detail-label">
-                    {projectDetail.data?.project.name ??
-                      "项目 #" + current.projectId}{" "}
-                    /{" "}
-                    {moduleName(current.moduleId) ??
-                      "模块 #" + current.moduleId}
-                    /
-                    {current.featureId === null
-                      ? " 模块级任务"
-                      : " " +
-                        (featureName(current.featureId) ??
-                          "功能 #" + current.featureId)}
-                  </span>
                   <h2>{current.title}</h2>
                   <div className="task-modal-badges">
                     <span className="task-id">{current.code}</span>

@@ -320,9 +320,6 @@ export function FeaturesPageView({
           <>
             <div className="page-header">
               <div>
-                <span className="eyebrow">
-                  {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
-                </span>
                 <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
                 <p>
                   {currentModule?.description ||
@@ -680,9 +677,6 @@ export function FeaturesPageView({
           <div className="feature-document">
             <header className="feature-modal-header">
               <div>
-                <span className="detail-label">
-                  项目 {projectId} / 模块 {moduleId}
-                </span>
                 <h2>{activeItem.name}</h2>
                 <p>{activeItem.currentBehavior || "尚未补充当前功能说明。"}</p>
                 <div className="task-modal-badges">

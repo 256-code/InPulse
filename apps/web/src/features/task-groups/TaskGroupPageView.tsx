@@ -208,11 +208,6 @@ export const TaskGroupPageView: React.FC<TaskGroupPageViewProps> = ({
             <InpulseIcon name="arrowLeft" size={16} />
             任务中心
           </button>
-          <div className="eyebrow">
-            {group === null
-              ? "聚合组 / TASK GROUP"
-              : group.code + " / TASK GROUP"}
-          </div>
           <h1>
             {group === null
               ? groupQuery.isPending

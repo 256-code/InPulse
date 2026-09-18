@@ -172,10 +172,6 @@ export function PublishedRecordDetail({
     <section className="record-expanded" aria-label="正式记录详情">
       {standalone ? (
         <div className="record-expanded-head">
-          <span className="detail-label">
-            {record.code} · v{record.currentVersion} ·{" "}
-            {record.status === "VOID" ? "已作废" : "已发布"}
-          </span>
           <h3>{record.title}</h3>
         </div>
       ) : null}

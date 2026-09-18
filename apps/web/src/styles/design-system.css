@@ -705,7 +705,6 @@ button {
   gap: 20px;
   margin-bottom: 27px;
 }
-.eyebrow,
 .detail-label {
   color: #6d8ca9;
   letter-spacing: 1.3px;
@@ -3754,6 +3753,7 @@ a:focus-visible {
 /* 功能档案页把任务面板嵌在 .feature-reading 里，那里的 .feature-reading h3 会给
    面板标题也补上 12px 下边距；在垂直居中的标题行里这会把标题顶高，这里显式清零。 */
 .task-panel-heading h3 {
+  font-size: 16px;
   margin: 0;
 }
 .task-status-filter select {
@@ -3875,7 +3875,7 @@ a:focus-visible {
   min-height: 620px;
 }
 .feature-document .feature-modal-header {
-  padding: 26px;
+  padding: 22px 26px 14px;
 }
 .feature-document > .calm-tabs {
   padding: 0 26px;
@@ -3883,7 +3883,7 @@ a:focus-visible {
 }
 .feature-document .feature-modal-content {
   overflow: visible;
-  padding: 26px;
+  padding: 14px 26px 26px;
 }
 .feature-document .feature-overview-grid {
   grid-template-columns: minmax(0, 1fr) 195px;

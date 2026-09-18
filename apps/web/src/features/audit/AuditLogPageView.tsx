@@ -241,7 +241,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     <div className="activity-page">
       <div className="page-header activity-page-header">
         <div>
-          <span className="eyebrow">动态与审计 · F-08</span>
           <h1>动态审计</h1>
           <p>
             原始审计链仅系统管理员可读；每次读取都会向 SYSTEM 链写入

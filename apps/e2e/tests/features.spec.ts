@@ -18,7 +18,6 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await expect(
       page.getByRole("heading", { name: firstModuleName }),
     ).toBeVisible();
-    await expect(page.getByText(`模块 / ${runtime.projectName}`)).toBeVisible();
     expect(page.url()).toMatch(/\/modules\/\d+\/features$/);
     const listUrl = page.url();
     const name = `退款功能-${Date.now()}`;

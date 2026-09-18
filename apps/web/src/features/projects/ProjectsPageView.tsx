@@ -86,16 +86,11 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
     readonly project: ProjectListItem;
     readonly decision: "approve" | "reject";
   } | null>(null);
-  const eyebrow =
-    projectsLoading || projectsError
-      ? "项目"
-      : "项目 / " + projects.length + " 个";
 
   return (
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">{eyebrow}</span>
           <h1>项目与功能</h1>
           <p>项目负责承载范围，模块负责分类，功能负责沉淀。</p>
         </div>

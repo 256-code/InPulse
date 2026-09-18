@@ -7,7 +7,6 @@ export interface WorkspacePlaceholderProps {
   readonly description: string;
   readonly status?: string;
   readonly icon?: InpulseIconName;
-  readonly eyebrow?: string;
 }
 
 export const WorkspacePlaceholder: React.FC<WorkspacePlaceholderProps> = ({
@@ -15,13 +14,11 @@ export const WorkspacePlaceholder: React.FC<WorkspacePlaceholderProps> = ({
   description,
   status = "待接入",
   icon = "boxes",
-  eyebrow = "工作区",
 }) => {
   return (
     <div className="workspace-placeholder">
       <div className="page-header">
         <div>
-          <span className="eyebrow">{eyebrow}</span>
           <h1>{title}</h1>
           <p>{description}</p>
         </div>
