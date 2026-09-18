@@ -84,6 +84,8 @@ describe("AppLayout", () => {
       screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
+    // 首页与任务中心内容重复，已删除，侧栏不应再出现「首页」入口。
+    expect(screen.queryByText("首页")).not.toBeInTheDocument();
     expect(screen.getByText("任务中心")).toBeInTheDocument();
     expect(screen.getByText("项目列表")).toBeInTheDocument();
     expect(screen.getByText("迭代记录")).toBeInTheDocument();
@@ -275,8 +277,10 @@ describe("AppLayout", () => {
     });
     expect(board).toHaveClass("page-node");
     expect(board).toHaveAttribute("aria-current", "true");
+    // 项目概览已与「模块与功能」合并：项目节点下不再有概览子页行。
+    expect(within(nav).queryByRole("button", { name: "项目概览" })).toBeNull();
     expect(
-      within(nav).getByRole("button", { name: "项目概览" }),
+      within(nav).getByRole("button", { name: "模块与功能" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("任务看板内容")).toBeInTheDocument();
 
@@ -290,15 +294,51 @@ describe("AppLayout", () => {
     expect(await within(crumb).findByText("任务看板")).toBeInTheDocument();
   });
 
-  it("hides the current project group outside project routes", () => {
-    renderLayout(
+  it("expands the project list on the projects page and hides it outside project routes", async () => {
+    const projectClient = {
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          { id: 7, code: "AGV", name: "AGV 智能搬运平台", status: "ACTIVE" },
+          { id: 8, code: "K1235", name: "项目1", status: "ACTIVE" },
+        ],
+      }),
+    } as unknown as InpulseApiClient;
+
+    const { unmount } = renderLayout(
       <MemoryRouter initialEntries={["/projects"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={projectClient}
+              />
+            }
+          >
+            <Route path="projects" element={<div>项目列表内容</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // 项目列表页直接展开项目树，不必先进某个项目才能切换。
+    const nav = screen.getByRole("navigation", { name: "工作区导航" });
+    expect(within(nav).getByText("项目")).toBeInTheDocument();
+    expect(
+      await within(nav).findByRole("button", { name: /AGV 智能搬运平台/ }),
+    ).toBeInTheDocument();
+    unmount();
+
+    // 项目路由之外（如任务中心）不渲染项目树。
+    renderLayout(
+      <MemoryRouter initialEntries={["/tasks"]}>
         <Routes>
           <Route
             path="/"
             element={<AppLayout notificationClient={notificationClient} />}
           >
-            <Route path="projects" element={<div>项目列表内容</div>} />
+            <Route path="tasks" element={<div>任务中心内容</div>} />
           </Route>
         </Routes>
       </MemoryRouter>,

@@ -167,7 +167,7 @@ export const ProjectOverviewPageView: React.FC<
   return (
     <section
       className="project-overview"
-      aria-label="项目概览"
+      aria-label="项目主页"
       data-testid="project-overview"
     >
       <div className="project-detail-head">
@@ -195,12 +195,12 @@ export const ProjectOverviewPageView: React.FC<
               {project === null
                 ? projectLoading
                   ? "正在加载项目…"
-                  : "项目概览"
+                  : "项目主页"
                 : project.name}
             </h1>
             <p>
               {project === null || project.description === ""
-                ? "项目概览汇总模块、功能、任务与迭代记录，是进入项目内各模块的起点。"
+                ? "这里汇总项目的模块、功能、任务与迭代记录，从模块开始进入项目。"
                 : project.description}
             </p>
           </div>
@@ -291,7 +291,7 @@ export const ProjectOverviewPageView: React.FC<
       {overviewQuery.isPending ? (
         <div className="calm-state">
           <Spin size="large" />
-          <p>正在加载项目概览…</p>
+          <p>正在加载项目…</p>
         </div>
       ) : overviewQuery.isError ? (
         <Alert

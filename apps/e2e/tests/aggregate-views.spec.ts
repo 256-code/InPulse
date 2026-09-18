@@ -4,7 +4,7 @@ import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 /**
- * F-29 项目概览 / F-32 任务中心的专属关键路径 E2E。
+ * F-29 项目主页（概览已并入模块与功能）/ F-32 任务中心的专属关键路径 E2E。
  * 两个页面默认注入服务端适配器（R-2 / R-3）：这里验证真实服务端数据进入
  * 视图（统计卡片、优先级筛选、遗留问题总数与优先级徽章）、仍无契约来源的
  * 条件按显式降级处理（关键词搜索只对已加载页生效并标注，「我创建的」经
@@ -215,7 +215,7 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
   }
 });
 
-test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入口导航", async ({
+test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入口导航", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -277,13 +277,15 @@ test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入
       String(runtime.projectId),
     );
 
+    // 项目概览已与「模块与功能」合并：旧地址整体重定向到项目主页，
+    // 重定向后仍是同一套项目头部 + 指标 + 面板。
     await page.goto("/projects/" + runtime.projectId + "/overview");
-    await page.getByRole("button", { name: "查看模块" }).click();
     await expect
       .poll(() => new URL(page.url()).pathname)
       .toBe("/projects/" + runtime.projectId + "/modules");
+    await expect(page.getByTestId("project-overview")).toBeVisible();
 
-    await page.goto("/projects/" + runtime.projectId + "/overview");
+    await page.goto("/projects/" + runtime.projectId + "/modules");
     await page.getByRole("button", { name: "全部项目" }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/projects");
   } finally {

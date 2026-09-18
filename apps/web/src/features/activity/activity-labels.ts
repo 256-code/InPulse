@@ -150,7 +150,7 @@ export function activityTargetPath(
   if (item.activityType.startsWith("PROJECT_MEMBER")) {
     return options.isAdmin
       ? `/projects/${projectId}/members`
-      : `/projects/${projectId}/overview`;
+      : `/projects/${projectId}/modules`;
   }
   switch (item.sourceEntityType) {
     case "CHANGE_RECORD":
@@ -164,7 +164,7 @@ export function activityTargetPath(
     case "TASK_GROUP":
       return `/tasks?project=${projectId}`;
     default:
-      return `/projects/${projectId}/overview`;
+      return `/projects/${projectId}/modules`;
   }
 }
 
