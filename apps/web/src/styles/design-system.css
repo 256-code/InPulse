@@ -3780,6 +3780,29 @@ a:focus-visible {
   align-items: center;
   flex-wrap: wrap;
 }
+/* 任务面板标题行：标题 + 任务数徽章同一行，控件区与标题垂直居中。 */
+.task-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 功能档案页把任务面板嵌在 .feature-reading 里，那里的 .feature-reading h3 会给
+   面板标题也补上 12px 下边距；在垂直居中的标题行里这会把标题顶高，这里显式清零。 */
+.task-panel-heading h3 {
+  margin: 0;
+}
+.task-status-filter select {
+  border: 1px solid #e0e8f1;
+  border-radius: 7px;
+  background: white;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #344b63;
+}
+.task-status-filter select:focus-visible {
+  outline: 2px solid #2b82b8;
+  outline-offset: 1px;
+}
 .feature-list-scroll {
   overflow-x: auto;
   background: white;
@@ -4125,6 +4148,14 @@ a:focus-visible {
   overflow: auto;
   flex: 1;
   min-height: 0;
+}
+/* 标签页内容区固定高度：切换「任务信息 / 迭代记录 / 合并与分支」时弹窗大小不变，
+   内容超高仍在区域内滚动。窄屏下交回自适应，避免固定高度挤压单列排版。 */
+@media (min-width: 701px) {
+  .task-modal > .calm-tabs + .task-modal-grid {
+    flex: 0 1 auto;
+    height: min(560px, 62dvh);
+  }
 }
 .task-modal-main {
   min-width: 0;

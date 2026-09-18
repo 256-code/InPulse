@@ -209,7 +209,9 @@ export function TasksPanel({
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState<"cards" | "list">("cards");
-  const [statusFilter, setStatusFilter] = useState("TODO");
+  // 2026-09-18 人工确认：面板进入时默认显示全部状态，未完成 → 已完成 → 已取消
+  // 的分组顺序由服务端排序给出，这里不再默认收敛到待办。
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState<number | null>(
     () =>
       initialTaskId ??
@@ -566,35 +568,53 @@ export function TasksPanel({
     >
       {mode === "detail" ? null : (
         <>
-          {customCreateOpen && (
+          {featureId === null && customCreateOpen && (
             <GlobalTaskCreateModal
               open
               onClose={() => setCustomCreateOpen(false)}
               client={client}
-              preset={{
-                projectId,
-                moduleId,
-                ...(featureId !== null ? { featureId } : {}),
-              }}
+              preset={{ projectId, moduleId }}
               onCreatedLocation={(task) => navigate(taskDetailPath(task))}
             />
           )}
           <div className="calm-section-title">
-            <div>
+            <div className="task-panel-heading">
               <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
-              <small>
-                {featureId === null
-                  ? "任务保存在模块下，可关联一个或多个功能；编号、版本与负责人以服务端为准。"
-                  : "任务保存在功能下，编号、版本与负责人以服务端为准。"}
-              </small>
+              {/* 计数与筛选合并进标题行：不再单起一行「任务数：…」与筛选行。 */}
+              {query.data && (
+                <CalmBadge
+                  tone="gray"
+                  title="按唯一任务计：同一任务关联多个功能时只计一次"
+                >
+                  {query.data.items.length} 个任务
+                </CalmBadge>
+              )}
             </div>
             <div className="feature-view-controls">
-              <Button
-                disabled={!writable}
-                onClick={() => setCustomCreateOpen(true)}
-              >
-                自定义归属新建任务
-              </Button>
+              {/* 功能级面板的新建任务固定归属当前功能，不需要自定义归属；
+                  只有模块级面板才需要选择归属到某个功能还是留在模块下。 */}
+              {featureId === null && (
+                <Button
+                  disabled={!writable}
+                  onClick={() => setCustomCreateOpen(true)}
+                >
+                  自定义归属新建任务
+                </Button>
+              )}
+              {query.data && (
+                <label className="task-status-filter">
+                  <span className="sr-only">任务状态筛选</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                  >
+                    <option value="TODO">未完成</option>
+                    <option value="DONE">已完成</option>
+                    <option value="CANCELED">已取消</option>
+                    <option value="ALL">全部状态</option>
+                  </select>
+                </label>
+              )}
               <CalmSegmented
                 label="展示方式"
                 value={view}
@@ -624,28 +644,7 @@ export function TasksPanel({
                 : "功能已归档，任务历史只读，不能新建或修改。"}
             </p>
           )}
-          {query.data && (
-            <p className="task-count">
-              任务数：{query.data.items.length}（按唯一任务计）
-            </p>
-          )}
           {success && <Alert type="success" title="任务已保存" />}
-          {query.data && (
-            <div className="feature-view-controls">
-              <label>
-                任务状态筛选
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                >
-                  <option value="TODO">未完成</option>
-                  <option value="DONE">已完成</option>
-                  <option value="CANCELED">已取消</option>
-                  <option value="ALL">全部状态</option>
-                </select>
-              </label>
-            </div>
-          )}
           {query.isPending ? (
             <div className="calm-state">
               <Spin />

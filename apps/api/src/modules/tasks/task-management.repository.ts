@@ -8,6 +8,7 @@ import {
   type TaskEditRequest,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
+import type { ISql } from "postgres";
 
 export type TaskRecord = TaskItem | ModuleTaskItem;
 type Row = Omit<TaskRecord, "createdAt" | "updatedAt" | "dueAt"> & {
@@ -27,6 +28,28 @@ const dto = (row: Row): TaskRecord =>
     updatedAt: new Date(row.updatedAt).toISOString(),
     dueAt: row.dueAt === null ? null : new Date(row.dueAt).toISOString(),
   });
+
+/**
+ * 任务面板列表排序：功能页与模块页共用同一口径（服务端出顺序，前端筛选不改写）。
+ *
+ * 1. 工作状态分组：未完成 → 已完成 → 已取消；面板默认显示「全部状态」，
+ *    这个分组顺序决定三组在列表里的先后。
+ * 2. 组内按优先级紧急程度：紧急 → 高 → 普通 → 低。
+ * 3. 同组同优先级再按 id 升序兜底，保证刷新前后顺序稳定。
+ */
+const panelOrderBy = (sql: ISql) => sql`CASE work_status
+             WHEN 'TODO' THEN 0
+             WHEN 'DONE' THEN 1
+             ELSE 2
+           END,
+           CASE priority
+             WHEN 'URGENT' THEN 0
+             WHEN 'HIGH' THEN 1
+             WHEN 'NORMAL' THEN 2
+             ELSE 3
+           END,
+           id`;
+
 export interface TaskScope {
   projectId: number;
   moduleId: number;
@@ -139,7 +162,7 @@ export class TaskManagementRepository {
   async list(tx: TransactionContext, scope: TaskScope): Promise<TaskRecord[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, assignee_id AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`((feature_id = ${scope.featureId} AND scope_type = 'FEATURE') OR (scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = app.tasks.id AND i.feature_id = ${scope.featureId})))`} ORDER BY id`;
+    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, assignee_id AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`((feature_id = ${scope.featureId} AND scope_type = 'FEATURE') OR (scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = app.tasks.id AND i.feature_id = ${scope.featureId})))`} ORDER BY ${panelOrderBy(tx.sql)}`;
     return rows.map(dto);
   }
   async find(

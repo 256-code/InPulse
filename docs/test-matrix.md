@@ -1985,3 +1985,17 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-18，Windows + PowerShell + 新建的临时 PostgreSQL 18.6 集群）：`apps/api` 集成 50 文件 474 例（含本轮新增 6 例）、`apps/api` 单元 65 文件 359 例、Web 单元 82 文件 507 例、`apps/ops` 单元 8 文件 52 例、`lint` / `typecheck` / `build` / `contract:drift`（5 个产物与 Registry 一致）/ `contract:validate`（108 条路由）/ `permissions:check`（108 操作 / 108 路由）/ `check:frontend:boundaries` / `check:deps` / `check:secrets` 全部通过。两条看板查询与统计在同一事务内执行，共用同一个 `now()`，不存在日界漂移。
 
 未运行 / 已知偏差：① 完整 Playwright 套件 53 passed / 4 failed：`features.spec.ts:93`（管理员归档并恢复功能）与 `project-members.spec.ts:10`（普通成员只读成员页）在同一数据库上失败，且在未包含本改动的 HEAD 对照 worktree 上以完全相同的方式失败，属分支既有问题；`search.spec.ts:6` 与 `project-members.spec.ts:56` 在长期开发库（55432）通过、在新建空库失败，属夹具 / 数据依赖的既有环境问题。② `format:check` 仍失败于四个存量文件（`apps/e2e/helpers/record-leftovers.ts`、`apps/e2e/tests/leftover-task.spec.ts`、`apps/web/src/features/common/components/LeftoverEntriesField.test.tsx`、`apps/web/src/features/published-records/AppendLeftoverForm.tsx`）。③ `check:docs` 仍失败于仓库根未跟踪的 `.tmp-*` 存量文件（本轮未清理）。④ 侧栏改为 首页 / 任务中心 / 项目列表 / 迭代记录 / 遗留问题 +「当前项目」分组（项目概览 / 模块与功能 / 任务看板 / 项目成员）+「全局」分组（项目动态 / 站内通知 / 全局搜索 / 成员与设置 / 审计日志仅管理员），侧栏新增的「站内通知」与顶栏铃铛同名，让 `csp.spec.ts` 与 `visual-migration.spec.ts` 的通知定位出现歧义，已改为 `exact` 名称消歧；任务写操作（新建 / 编辑 / 状态流转 / 完成并记录 / 合并与解除合并）同时失效 `task-board` 查询。
+
+## 列表默认状态与排序（2026-09-18 本地落库）
+
+用户确认：功能页与模块任务页的任务面板进入时默认显示「全部状态」，任务列表按 未完成 → 已完成 → 已取消 分组、未完成组内按优先级 紧急 → 高 → 普通 → 低 排序；项目、模块与功能列表按生命周期档位排序。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LIST-ORDER-001 | 真实 PostgreSQL | 功能列表按生命周期档位排序 | `features-api.integration.test.ts`：同一模块下按「未开始、进行中、已归档」的相反顺序建库（进行中 = 作用域内存在 `work_status = 'DONE'` 的有效任务）后，`GET .../features` 返回 进行中 → 未开始 → 已归档；反事实验证把排序退回 `f.id` 时该用例失败（`expected [609, 610, 611] to deeply equal [610, 609, 611]`） | 本地通过（`app_it`，2026-09-18） |
+| LIST-ORDER-002 | 真实 PostgreSQL | 任务面板列表按状态分组与优先级排序 | `tasks-api.integration.test.ts`：5 条任务按打乱顺序经真实 HTTP 登记后，一条改为 DONE、一条改为 CANCELED（同事务补 `task_status_history`），`GET .../tasks` 返回 未完成（紧急 → 普通 → 低）→ 已完成 → 已取消；反事实验证把排序退回 `id` 时该用例失败（`expected [915, 916, 917, 918, 919] to deeply equal [917, 918, 916, 915, 919]`） | 本地通过（`app_it`，2026-09-18） |
+| LIST-ORDER-003 | Web 单元 | 任务面板默认全部状态 | `TasksPanel.test.tsx`：进入面板时 `任务状态筛选` 的值为 `ALL`，TODO / DONE / CANCELED / INVALID 四种行一次列出（此前默认 `TODO`） | 本地通过 |
+
+本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration tasks-api features-api` 2 文件 63 例通过，全量 `pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（首次全量运行 `preauth-session.integration.test.ts` 的「同一预认证 Session 只能原子消费一次」抖动失败 1 例，该文件单独复跑 4/4、全量复跑 476/476 通过，与本轮改动无关）；`pnpm --filter @inpulse/api test:unit` 65 文件 359 例通过；`pnpm --filter @inpulse/web exec vitest run src/features/tasks/TasksPanel.test.tsx` 23 例通过；`pnpm --filter @inpulse/api typecheck`、`pnpm --filter @inpulse/e2e tsc --noEmit`、`pnpm lint`、`pnpm check:frontend:boundaries`、`pnpm check:docs` 通过；功能与模块列表排序另在临时脚本里用「建夹具 + 事务回滚」在真实 PostgreSQL 上复核（回滚后 `app.projects` / `app.modules` / `app.tasks` 零残留）。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:e2e`（避免把 E2E 夹具写进共享开发库 `app`）与 GitHub Actions；② `pnpm --filter @inpulse/web test` 复跑为 503 passed / 7 failed，失败全部落在既有的 `ProjectTree.test.tsx`（另有一次全量并行运行额外出现 `src/pages/tasks/TasksPage.test.tsx` 1 例失败，该文件单独运行 8/8 通过，判定为并行负载下的既有抖动，与本轮改动无关）；③ `format:check` 仍失败于存量文件（`apps/e2e/tests/leftover-task.spec.ts`、`apps/web/src/features/published-records/AppendLeftoverForm.tsx`）；④ 新增集成测试与 e2e 断言需非作者人工评审。
