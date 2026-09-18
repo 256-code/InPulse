@@ -167,6 +167,86 @@ describe("AggregateReadCursorService", () => {
     expectReason(() => rotating.decode(token, context), "version");
   });
 
+  test("MY_TASKS 游标携带多列排序键并随签名绑定（ADR-036）", () => {
+    const cursors = service();
+    const sortKey = "1|0|1|2|2026-09-18T01:00:00.000Z|42";
+    const token = cursors.encode({
+      actorUserId: 7,
+      namespace: "MY_TASKS",
+      filterKey: context.filterKey,
+      afterId: 42,
+      sortKey,
+      nowMs,
+    });
+
+    expect(
+      cursors.decodeKey(token, { ...context, requireSortKey: true }),
+    ).toEqual({ afterId: 42, sortKey });
+    expect(cursors.decode(token, { ...context, requireSortKey: true })).toBe(
+      42,
+    );
+    // 其它命名空间仍只有单列位置。
+    const groupToken = cursors.encode({
+      actorUserId: 7,
+      namespace: "TASK_GROUP_RECORDS",
+      filterKey: "TASK_GROUP_RECORDS:11:all",
+      afterId: 99,
+      nowMs,
+    });
+    expect(
+      cursors.decodeKey(groupToken, {
+        ...context,
+        filterKey: "TASK_GROUP_RECORDS:11:all",
+        namespace: "TASK_GROUP_RECORDS",
+      }),
+    ).toEqual({ afterId: 99, sortKey: null });
+  });
+
+  test("MY_TASKS 拒绝缺少排序键的旧载荷，且篡改排序键被签名拒绝", () => {
+    const cursors = service();
+    const legacy = cursors.encode({
+      actorUserId: 7,
+      namespace: "MY_TASKS",
+      filterKey: context.filterKey,
+      afterId: 42,
+      nowMs,
+    });
+    expectReason(
+      () => cursors.decodeKey(legacy, { ...context, requireSortKey: true }),
+      "version",
+    );
+    // 不要求排序键的调用方（如其它命名空间路径）仍可解出单列位置。
+    expect(cursors.decodeKey(legacy, context)).toEqual({
+      afterId: 42,
+      sortKey: null,
+    });
+
+    const token = cursors.encode({
+      actorUserId: 7,
+      namespace: "MY_TASKS",
+      filterKey: context.filterKey,
+      afterId: 42,
+      sortKey: "1|0|1|2|2026-09-18T01:00:00.000Z|42",
+      nowMs,
+    });
+    const [payloadRaw, signature] = token.split(".") as [string, string];
+    const payload = JSON.parse(
+      Buffer.from(payloadRaw, "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    const forged = Buffer.from(
+      JSON.stringify({ ...payload, k: "1|0|4|2||42" }),
+      "utf8",
+    ).toString("base64url");
+    expectReason(
+      () =>
+        cursors.decodeKey(forged + "." + signature, {
+          ...context,
+          requireSortKey: true,
+        }),
+      "signature",
+    );
+  });
+
   test("签发拒绝非正整数的 afterId", () => {
     const cursors = service();
     expect(() =>

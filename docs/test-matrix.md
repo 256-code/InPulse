@@ -1999,3 +1999,19 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration tasks-api features-api` 2 文件 63 例通过，全量 `pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（首次全量运行 `preauth-session.integration.test.ts` 的「同一预认证 Session 只能原子消费一次」抖动失败 1 例，该文件单独复跑 4/4、全量复跑 476/476 通过，与本轮改动无关）；`pnpm --filter @inpulse/api test:unit` 65 文件 359 例通过；`pnpm --filter @inpulse/web exec vitest run src/features/tasks/TasksPanel.test.tsx` 23 例通过；`pnpm --filter @inpulse/api typecheck`、`pnpm --filter @inpulse/e2e tsc --noEmit`、`pnpm lint`、`pnpm check:frontend:boundaries`、`pnpm check:docs` 通过；功能与模块列表排序另在临时脚本里用「建夹具 + 事务回滚」在真实 PostgreSQL 上复核（回滚后 `app.projects` / `app.modules` / `app.tasks` 零残留）。
 
 未运行 / 已知偏差：① 未跑 `pnpm test:e2e`（避免把 E2E 夹具写进共享开发库 `app`）与 GitHub Actions；② `pnpm --filter @inpulse/web test` 复跑为 503 passed / 7 failed，失败全部落在既有的 `ProjectTree.test.tsx`（另有一次全量并行运行额外出现 `src/pages/tasks/TasksPage.test.tsx` 1 例失败，该文件单独运行 8/8 通过，判定为并行负载下的既有抖动，与本轮改动无关）；③ `format:check` 仍失败于存量文件（`apps/e2e/tests/leftover-task.spec.ts`、`apps/web/src/features/published-records/AppendLeftoverForm.tsx`）；④ 新增集成测试与 e2e 断言需非作者人工评审。
+
+## 任务列表统一排序与多列游标（ADR-036，2026-09-18 本地落库，待人工批准）
+
+用户确认：任务中心与任务面板共用同一排序键 —— 状态分组 未完成 → 已完成 → 已取消；未完成内部按紧急桶 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余（命中第一个即定桶，按 `Asia/Shanghai` 日历日）；随后优先级 紧急 → 高 → 普通 → 低、截止时间升序（无截止最后）、任务 ID 升序兜底。任务中心的游标随之由单列 `afterId` 扩展为多列 keyset。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR036-ORDER-001 | 真实 PostgreSQL | 5 个紧急桶 × 3 个状态分组的排序 | `aggregate-read-ports.integration.test.ts`：每个状态分组各造 已逾期（今天 00:00 前）/ 遗留问题来源（`leftover_task_links` 链接）/ 标记紧急（URGENT，无截止）/ 今日截止（今天 00:00 后）/ 其余 + 2 条完全并列，共 21 条；`MyTaskQueryPort.list` 返回顺序严格等于「未完成桶 0→4、已完成 / 已取消 URGENT 优先且无截止最后」，`TaskQueryPort.list` 同序；链接查询反证来源桶由 `leftover_task_links` 决定。反事实验证把 `taskListOrderBy` 退回 `t.id DESC` 时本用例与 6 个既有顺序用例一起失败（`expected [ 10872, 10871, … ] to deeply equal [ 10866, 10867, … ]`），恢复后 22/22 通过 | 本地通过（`app_it`，2026-09-18） |
+| ADR036-CURSOR-001 | 真实 PostgreSQL | 多列 keyset 分页不漏不重 | `aggregate-read-ports.integration.test.ts`：逾期 + URGENT + 今日截止 + 5 条完全并列（无截止）共 8 条，按 `limit=2` 用 `next` 逐页走完，拼接顺序与不分页结果一致且无重复；反事实验证同上（退回 `t.id DESC` 时该用例失败） | 本地通过（2026-09-18） |
+| ADR036-CURSOR-002 | API 单元 | 游标排序键载荷 | `aggregate-read-cursor.test.ts` 8 例（新增 2 例）：`MY_TASKS` 游标带 `k` 时 `decodeKey(..., requireSortKey: true)` 返回 `{ afterId, sortKey }`；其它命名空间仍返回 `sortKey: null`；缺少 `k` 的旧载荷按 `version` 拒绝（422 语义）；改写 `k` 后重放按 `signature` 拒绝（排序键确实在 HMAC 载荷内） | 本地通过 |
+| ADR036-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序与筛选 | `aggregate-read-api.integration.test.ts` 20 例：主列表、`scopeType=FEATURE&workStatus=TODO`、`hasPublishedRecord`、`projectId` 全量与 `limit=3` 游标遍历的期望顺序全部改为 ADR-036 口径（遗留问题来源任务 `tSource` 提到未完成首位）；统计卡片用例改为 已逾期 → 今日截止 → 已完成 → 已取消 | 本地通过（`app_it`，2026-09-18） |
+| ADR036-FIX-001 | 真实 PostgreSQL | 原生 `sql` 绑定 `Date` 的前置缺陷 | 现象：drizzle-orm 构造时把 `client.options.serializers` 的 timestamptz 编码器改写为恒等函数，而 postgres.js 连接、原生 `sql` 与 Drizzle 共用同一 options 对象，原生 `sql` 传 `Date` 在 Bind 阶段抛 `Received an instance of Date`；修复为 `createDrizzleDb(sql)` 构造后只还原 1184 编码器（JSON 不还原，避免二次编码）。证据：事务内 `SELECT COALESCE($1::timestamptz, ```infinity```::timestamptz)` 修复前抛错、修复后返回 `2026-09-18 03:00:00+00`；全量集成 50 文件 476 例通过 | 本地通过（2026-09-18） |
+
+本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（含本轮新增 2 例）；`pnpm --filter @inpulse/api test:unit aggregate-read-cursor` 8 例通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）通过。反事实验证在真实 PostgreSQL 上执行：把 `taskListOrderBy` 临时替换为 `t.id DESC` 后 7 例失败，恢复后 22/22 通过。
+
+未运行 / 已知偏差：① 未跑 Web 单元与 `pnpm test:e2e`（任务中心前端只消费服务端顺序，本轮未改前端代码）、未跑 GitHub Actions；② ADR-036 仍为 `Proposed`，需人工批准；③ 新增集成与单元用例需非作者人工评审。

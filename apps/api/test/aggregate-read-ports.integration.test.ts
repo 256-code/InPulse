@@ -17,6 +17,7 @@ import {
   PostgresTaskQueryPort,
   TASK_EXCLUDED_IDS_MAX,
   TaskListInputError,
+  type TaskListSortKey,
 } from "../src/modules/tasks/index.js";
 import { TaskManagementRepository } from "../src/modules/tasks/task-management.repository.js";
 import {
@@ -150,6 +151,10 @@ interface TaskOptions {
   readonly title?: string;
   /** 创建者（app.tasks.creator_id）；缺省用项目创建者，用于构造 creator ≠ assignee 的夹具。 */
   readonly actorUserId?: number;
+  /** 优先级（ADR-036 排序键的第二级）：缺省 NORMAL。 */
+  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  /** 截止时间文本（由 SQL 直接转 timestamptz）：缺省无截止。 */
+  readonly dueAt?: string | null;
 }
 
 async function newTask(
@@ -170,8 +175,8 @@ async function newTask(
         title: options.title ?? "聚合读端口任务",
         description: "",
         assigneeId: options.assigneeId ?? scope.userId,
-        priority: "NORMAL",
-        dueAt: null,
+        priority: options.priority ?? "NORMAL",
+        dueAt: options.dueAt ?? null,
       },
     );
     const current =
@@ -325,21 +330,80 @@ async function newTaskBatch(
   });
 }
 
+/** postgres.js 的嵌套片段（sql 模板对象）形状：strings + args。 */
+function isFragment(value: unknown): value is {
+  readonly strings: readonly string[];
+  readonly args: readonly unknown[];
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { strings?: unknown }).strings) &&
+    Array.isArray((value as { args?: unknown }).args)
+  );
+}
+
+/** 与 postgres.js 一致：嵌套片段原地展开，普通值按出现顺序编号为 $n。 */
+function renderSql(
+  strings: readonly string[],
+  values: readonly unknown[],
+  parameters: unknown[],
+): string {
+  let text = strings[0] ?? "";
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    text += isFragment(value)
+      ? renderSql(value.strings, value.args, parameters)
+      : "$" + parameters.push(value);
+    text += strings[index + 1] ?? "";
+  }
+  return text;
+}
+
+/**
+ * 捕获顶层查询：postgres.js 的 sql 片段（如排序键表达式）本身也是 sql 模板对象，
+ * 被外层模板引用时不算一次独立查询。这里把「被别的调用当作值引用」的片段从
+ * calls 里剔除，只保留顶层语句，并支持嵌套渲染。
+ */
 function captureTransaction(): { calls: SqlCall[]; tx: TransactionContext } {
-  const calls: SqlCall[] = [];
-  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    let text = strings[0] ?? "";
-    for (let index = 0; index < values.length; index += 1) {
-      text += "$" + (index + 1) + (strings[index + 1] ?? "");
+  const calls: Array<SqlCall & { readonly hybrid: object }> = [];
+  const drop = (value: unknown): void => {
+    if (!isFragment(value)) {
+      return;
     }
-    calls.push({ text, values });
-    return Promise.resolve([]);
+    const index = calls.findIndex((call) => call.hybrid === value);
+    if (index >= 0) {
+      calls.splice(index, 1);
+    }
+    for (const argument of (value as { readonly args: readonly unknown[] })
+      .args) {
+      drop(argument);
+    }
+  };
+  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const parameters: unknown[] = [];
+    const text = renderSql(strings, values, parameters);
+    const hybrid = Object.assign(Promise.resolve([] as unknown[]), {
+      strings,
+      args: values,
+    });
+    // 片段总是先于外层调用创建，因此这里可以先剔除、再登记顶层语句。
+    for (const value of values) {
+      drop(value);
+    }
+    calls.push({ text, values: parameters, hybrid });
+    return hybrid;
   };
   const tx: TransactionContext = {
     db: {} as TransactionContext["db"],
     sql: sql as unknown as TransactionContext["sql"],
   };
-  return { calls, tx };
+  return {
+    get calls(): SqlCall[] {
+      return calls.map(({ text, values }) => ({ text, values }));
+    },
+    tx,
+  };
 }
 
 async function explain(call: SqlCall): Promise<string> {
@@ -457,19 +521,20 @@ describe("TaskQueryPort list and count", () => {
     const page = await uow.run((tx) =>
       taskQuery.list(tx, { projectIds: [scope.projectId], limit: 100 }),
     );
+    // ADR-036：状态分组为 未完成 → 已完成 → 已取消，组内按 id 升序。
     expect(page.items.map((item) => item.taskId)).toEqual([
-      canceled,
-      done,
       todo,
+      done,
+      canceled,
     ]);
     expect(page.hasMore).toBe(false);
-    expect(page.nextTaskId).toBeNull();
+    expect(page.next).toBeNull();
     expect(page.items[0]).toMatchObject({
       projectId: scope.projectId,
       moduleId: scope.moduleId,
       featureId: null,
       scopeType: "MODULE",
-      workStatus: "CANCELED",
+      workStatus: "TODO",
       lifecycleStatus: "ACTIVE",
     });
     expect(page.items[0]?.createdAt).toBeInstanceOf(Date);
@@ -501,7 +566,7 @@ describe("TaskQueryPort list and count", () => {
         limit: 100,
       }),
     );
-    expect(byStatus.items.map((item) => item.taskId)).toEqual([canceled, done]);
+    expect(byStatus.items.map((item) => item.taskId)).toEqual([done, canceled]);
     const crossProject = await uow.run((tx) =>
       taskQuery.list(tx, { projectIds: [other.projectId], limit: 100 }),
     );
@@ -585,7 +650,7 @@ describe("TaskQueryPort list and count", () => {
       taskQuery.list(tx, {
         projectIds: [scope.projectId],
         limit: 2,
-        afterTaskId: first.nextTaskId!,
+        after: first.next!,
       }),
     );
     expect(second.items).toHaveLength(2);
@@ -594,16 +659,17 @@ describe("TaskQueryPort list and count", () => {
       taskQuery.list(tx, {
         projectIds: [scope.projectId],
         limit: 2,
-        afterTaskId: second.nextTaskId!,
+        after: second.next!,
       }),
     );
     expect(third.items).toHaveLength(1);
     expect(third.hasMore).toBe(false);
-    expect(third.nextTaskId).toBeNull();
+    expect(third.next).toBeNull();
     const seen = [...first.items, ...second.items, ...third.items].map(
       (item) => item.taskId,
     );
-    expect(seen).toEqual([...created].sort((left, right) => right - left));
+    // 同状态、同优先级、无截止的并列任务按 id 升序，即创建顺序。
+    expect(seen).toEqual(created);
     expect(new Set(seen).size).toBe(seen.length);
   });
 
@@ -622,17 +688,17 @@ describe("TaskQueryPort list and count", () => {
         limit: 2,
       }),
     );
-    expect(page.items.map((item) => item.taskId)).toEqual([third, second]);
+    expect(page.items.map((item) => item.taskId)).toEqual([first, second]);
     expect(page.hasMore).toBe(true);
     const next = await uow.run((tx) =>
       taskQuery.list(tx, {
         projectIds: [scope.projectId],
         excludedTaskIds: excluded,
         limit: 2,
-        afterTaskId: page.nextTaskId!,
+        after: page.next!,
       }),
     );
-    expect(next.items.map((item) => item.taskId)).toEqual([first]);
+    expect(next.items.map((item) => item.taskId)).toEqual([third]);
     expect(next.hasMore).toBe(false);
     expect(
       await uow.run((tx) =>
@@ -699,7 +765,7 @@ describe("TaskQueryPort list and count", () => {
     const { calls, tx } = captureTransaction();
     await expect(
       taskQuery.list(tx, { projectIds: [], limit: 20 }),
-    ).resolves.toEqual({ items: [], nextTaskId: null, hasMore: false });
+    ).resolves.toEqual({ items: [], next: null, hasMore: false });
     await expect(taskQuery.count(tx, { projectIds: [] })).resolves.toBe(0);
     expect(calls).toEqual([]);
   });
@@ -717,9 +783,9 @@ describe("MyTaskQueryPort.list", () => {
       myTasks.list(tx, { projectIds: [scope.projectId], limit: 100 }),
     );
     expect(all.items.map((item) => item.taskId)).toEqual([
-      newestWithoutRecord,
-      newerPublished,
       olderPublished,
+      newerPublished,
+      newestWithoutRecord,
     ]);
     const withoutRecord = await uow.run((tx) =>
       myTasks.list(tx, {
@@ -740,7 +806,7 @@ describe("MyTaskQueryPort.list", () => {
       }),
     );
     expect(withRecord.items.map((item) => item.taskId)).toEqual([
-      newerPublished,
+      olderPublished,
     ]);
     expect(withRecord.hasMore).toBe(true);
     const nextPage = await uow.run((tx) =>
@@ -748,10 +814,10 @@ describe("MyTaskQueryPort.list", () => {
         projectIds: [scope.projectId],
         hasPublishedRecord: true,
         limit: 1,
-        afterTaskId: withRecord.nextTaskId!,
+        after: withRecord.next!,
       }),
     );
-    expect(nextPage.items.map((item) => item.taskId)).toEqual([olderPublished]);
+    expect(nextPage.items.map((item) => item.taskId)).toEqual([newerPublished]);
     expect(nextPage.hasMore).toBe(false);
     const other = await newProject();
     const foreign = await newTask(other);
@@ -767,8 +833,8 @@ describe("MyTaskQueryPort.list", () => {
       }),
     );
     expect(excluded.items.map((item) => item.taskId)).toEqual([
-      newerPublished,
       olderPublished,
+      newerPublished,
     ]);
     const byAssignee = await uow.run((tx) =>
       myTasks.list(tx, {
@@ -802,8 +868,8 @@ describe("MyTaskQueryPort.list", () => {
       }),
     );
     expect(byAssignee.items.map((item) => item.taskId)).toEqual([
-      teammateCreatedForMe,
       createdAndAssigned,
+      teammateCreatedForMe,
     ]);
 
     const byCreator = await uow.run((tx) =>
@@ -814,8 +880,8 @@ describe("MyTaskQueryPort.list", () => {
       }),
     );
     expect(byCreator.items.map((item) => item.taskId)).toEqual([
-      createdForTeammate,
       createdAndAssigned,
+      createdForTeammate,
     ]);
     expect(
       byCreator.items.every((item) => item.creatorId === scope.userId),
@@ -829,7 +895,7 @@ describe("MyTaskQueryPort.list", () => {
       }),
     );
     expect(firstPage.items.map((item) => item.taskId)).toEqual([
-      createdForTeammate,
+      createdAndAssigned,
     ]);
     expect(firstPage.hasMore).toBe(true);
     const secondPage = await uow.run((tx) =>
@@ -837,11 +903,11 @@ describe("MyTaskQueryPort.list", () => {
         projectIds: [scope.projectId],
         creatorId: scope.userId,
         limit: 1,
-        afterTaskId: firstPage.nextTaskId!,
+        after: firstPage.next!,
       }),
     );
     expect(secondPage.items.map((item) => item.taskId)).toEqual([
-      createdAndAssigned,
+      createdForTeammate,
     ]);
     expect(secondPage.hasMore).toBe(false);
 
@@ -862,7 +928,7 @@ describe("MyTaskQueryPort.list", () => {
     const { calls, tx } = captureTransaction();
     await expect(
       myTasks.list(tx, { projectIds: [], limit: 20 }),
-    ).resolves.toEqual({ items: [], nextTaskId: null, hasMore: false });
+    ).resolves.toEqual({ items: [], next: null, hasMore: false });
     await expect(
       myTasks.list(tx, { projectIds: [1], limit: 0 }),
     ).rejects.toBeInstanceOf(TaskListInputError);
@@ -1333,5 +1399,154 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
         /(?:Index (?:Only )?Scan using|Bitmap Index Scan on) change_records_/,
       );
     }
+  });
+});
+
+describe("任务列表统一排序（ADR-036）", () => {
+  /** 按 Asia/Shanghai 日历日取两个边界：已逾期（今天 00:00 之前）与今/明日截止（今天 00:00 之后）。 */
+  async function dayBounds(): Promise<{
+    readonly overdue: string;
+    readonly today: string;
+  }> {
+    const [row] = await client.sql<{ overdue: string; today: string }[]>`
+      SELECT (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' - interval '90 minutes')::text AS overdue,
+             (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' + interval '12 hours')::text AS today
+    `;
+    if (!row) throw new Error("day bounds query returned no row");
+    return row;
+  }
+
+  /**
+   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行：
+   * 已逾期 → 遗留问题来源（leftover_task_links 链接）→ 标记紧急 → 今/明日截止 → 其余。
+   * leftover_task_links 的 leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
+   */
+  async function seedOrderingMatrix(
+    scope: ProjectScope,
+    bounds: { readonly overdue: string; readonly today: string },
+  ) {
+    const recordId = await newPublishedRecord(scope);
+    const build = async (workStatus: "TODO" | "DONE" | "CANCELED") => {
+      const overdue = await newTask(scope, {
+        dueAt: bounds.overdue,
+        title: "已逾期",
+        workStatus,
+      });
+      const leftover = await newTask(scope, {
+        title: "遗留问题来源",
+        workStatus,
+      });
+      const urgent = await newTask(scope, {
+        priority: "URGENT",
+        title: "标记紧急",
+        workStatus,
+      });
+      const dueSoon = await newTask(scope, {
+        dueAt: bounds.today,
+        title: "今日截止",
+        workStatus,
+      });
+      const other = await newTask(scope, { title: "其余", workStatus });
+      const tieA = await newTask(scope, { title: "并列甲", workStatus });
+      const tieB = await newTask(scope, { title: "并列乙", workStatus });
+      const leftoverId = await newLeftover(scope, recordId, {
+        contents: ["排序夹具遗留问题"],
+      });
+      await client.sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+        VALUES (${leftoverId}, ${leftover}, ${scope.projectId}, ${scope.userId})`;
+      return { dueSoon, leftover, other, overdue, tieA, tieB, urgent };
+    };
+    return {
+      canceled: await build("CANCELED"),
+      done: await build("DONE"),
+      recordId,
+      todo: await build("TODO"),
+    };
+  }
+
+  test("状态分组与紧急桶的组合按口径排序，且两个任务端口同序", async () => {
+    const scope = await newProject();
+    const bounds = await dayBounds();
+    const matrix = await seedOrderingMatrix(scope, bounds);
+    const { canceled, done, todo } = matrix;
+
+    const mine = await uow.run((tx) =>
+      myTasks.list(tx, { projectIds: [scope.projectId], limit: 100 }),
+    );
+    const ids = mine.items.map((item) => item.taskId);
+    expect(ids).toEqual([
+      // 未完成：紧急桶 0 → 1 → 2 → 3 → 4，桶内完全并列的两条按 id 升序。
+      todo.overdue,
+      todo.leftover,
+      todo.urgent,
+      todo.dueSoon,
+      todo.other,
+      todo.tieA,
+      todo.tieB,
+      // 已完成 / 已取消不参与紧急桶：URGENT 优先，其后按截止时间升序、无截止最后。
+      done.urgent,
+      done.overdue,
+      done.dueSoon,
+      done.leftover,
+      done.other,
+      done.tieA,
+      done.tieB,
+      canceled.urgent,
+      canceled.overdue,
+      canceled.dueSoon,
+      canceled.leftover,
+      canceled.other,
+      canceled.tieA,
+      canceled.tieB,
+    ]);
+    // 遗留问题来源桶确实来自链接，而不是标题或优先级。
+    const linked = await client.sql<{ taskId: number }[]>`
+      SELECT task_id AS "taskId" FROM app.leftover_task_links WHERE project_id = ${scope.projectId}
+    `;
+    expect(linked.map((row) => row.taskId).sort((a, b) => a - b)).toEqual(
+      [todo.leftover, done.leftover, canceled.leftover].sort((a, b) => a - b),
+    );
+
+    // 任务列表端口（TaskQueryPort.list）必须共用同一排序键。
+    const listed = await uow.run((tx) =>
+      taskQuery.list(tx, { projectIds: [scope.projectId], limit: 100 }),
+    );
+    expect(listed.items.map((item) => item.taskId)).toEqual(ids);
+  });
+
+  test("多列 keyset 分页跨页不漏不重（含无截止与完全并列的行）", async () => {
+    const scope = await newProject();
+    const bounds = await dayBounds();
+    const created = [
+      await newTask(scope, { dueAt: bounds.overdue }),
+      await newTask(scope, { priority: "URGENT" }),
+      await newTask(scope, { dueAt: bounds.today }),
+    ];
+    for (let index = 0; index < 5; index += 1) {
+      created.push(await newTask(scope));
+    }
+    const unpaged = await uow.run((tx) =>
+      myTasks.list(tx, { projectIds: [scope.projectId], limit: 100 }),
+    );
+    expect(unpaged.items.map((item) => item.taskId)).toEqual(created);
+
+    const seen: number[] = [];
+    let after: TaskListSortKey | null = null;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await uow.run((tx) =>
+        myTasks.list(tx, {
+          projectIds: [scope.projectId],
+          limit: 2,
+          ...(after === null ? {} : { after }),
+        }),
+      );
+      seen.push(...result.items.map((item) => item.taskId));
+      if (result.next === null) {
+        break;
+      }
+      after = result.next;
+    }
+    expect(seen).toEqual(created);
+    expect(new Set(seen).size).toBe(seen.length);
   });
 });

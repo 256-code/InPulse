@@ -27,7 +27,7 @@
 | Q-07 | 由 B 域单条 SQL 实现 | 先过滤后分页；不转 ADR |
 | Q-08 | 固定「负责人 = 当前用户」 | 删除 `assigneeMe` 参数 |
 | Q-09 | V1 只落 F-32 的 4 项筛选 | 其余筛选留给后续迭代 |
-| Q-10 | 固定 `id DESC` | 不提供 `sort`；游标沿用 C-006 |
+| Q-10 | 固定 `id DESC`（2026-09-18 由 [ADR-036](adr/ADR-036.md) 替代，改按 状态分组 + 紧急桶 + 优先级 + 截止时间 + 任务 ID） | 不提供 `sort`；游标沿用 C-006（`MY_TASKS` 载荷按 ADR-036 扩展为多列 keyset） |
 | Q-11 | 标记数据放 R-1 / R-3 | 与 Q-03 一致 |
 | Q-12 | 拒绝路线 I 与路线 III | B 域单条 SQL 端口 + C 聚合服务组合 |
 | Q-13 | `DRAFT` 不可见 | 只返回 `PUBLISHED` 与 `VOID` |
@@ -81,7 +81,7 @@ auditAction: "none",
 | Q-07 | 由 B 域在单条 SQL 内实现，不经 C 只读适配器 | AGENTS.md §3 规定跨域读只允许通过稳定 QueryPort；技术设计 §5.3 明确 TasksModule 不反向持有记录外键；C 端口提案 §7.1 已实测 `ChangeRecordsModule → TaskQueryPort` 依赖边 | B 新增承载该查询的只读端口（宿主模块见 §6）；查询先过滤后分页；不转 ADR |
 | Q-08 | 固定为「负责人 = 当前用户」，删除该参数 | `/me` 语义不应接受他人身份；AGENTS.md §7 禁止用客户端提交的 `projectId` / 身份证明资源归属 | R-3 参数不含 `assigneeMe` / `userId` / `assigneeId` / `projectIds`；查看他人任务继续用已落库的 `listProjectMemberUnfinishedTasks` |
 | Q-09 | V1 只落 F-32 要求的 4 项筛选 | 工作书 F-32 步骤 3；功能设计 §24.3 的其余 9 项没有当前消费场景，登记未实现参数会污染正式契约 | R-3 参数固定为 `cursor` / `limit` / `projectId` / `scopeType` / `workStatus` / `hasPublishedRecord`；其余筛选留待后续迭代 |
-| Q-10 | 固定 `ORDER BY t.id DESC`，不提供 `sort` | 现有索引可命中 `ORDER BY t.id DESC`，`updated_at` 无可用索引（C 端口提案 §1.4）；游标约定沿用 C-006 | R-3 的 `limit` 默认 20、上限 100；游标签名绑定 actor 与筛选条件，TTL 15 分钟；无效、过期或越界返回 `422` |
+| Q-10 | 固定 `ORDER BY t.id DESC`，不提供 `sort` | 现有索引可命中 `ORDER BY t.id DESC`，`updated_at` 无可用索引（C 端口提案 §1.4）；游标约定沿用 C-006 | R-3 的 `limit` 默认 20、上限 100；游标签名绑定 actor 与筛选条件，TTL 15 分钟；无效、过期或越界返回 `422`。2026-09-18 由 [ADR-036](adr/ADR-036.md) 替代：排序改为固定「状态分组 + 紧急桶（已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余）+ 优先级 + 截止时间 + 任务 ID」，`MY_TASKS` 游标载荷扩展为多列 keyset 且缺失该键的旧载荷按无效游标 `422`（待人工批准） |
 | Q-11 | 与 Q-03 一致：标记数据放在 R-1 成员项与 R-3 项 | 既满足 F-25 步骤 3 的展示要求，又避免扩大被多条路由复用的任务基础 DTO | R-1 成员项保留 `role` 与 `publishedRecordCount`；R-3 项保留 `groupRole` |
 | Q-12 | 拒绝路线 I 与路线 III；采用 B 域单条 SQL 端口加 C 聚合读服务组合 | AGENTS.md §3 的跨域读约束、系统设计 §6 模块职责表、工作书 F-29 步骤 2 的处方 | 见 §6；路线 IV（投影）保留为后续性能优化，不在 V1 |
 | Q-13 | 不可见：只返回 `PUBLISHED` 与 `VOID` | 功能设计 §29.4 只把正式记录计入迭代历史；`change_records.status` 是详情、统计、搜索与时间线可见性的唯一真相（ADR-024） | R-4 响应不含 `DRAFT`；`code` 在非 `PUBLISHED` 场景按提案置空 |
@@ -192,7 +192,7 @@ auditAction: "none",
 
 | 参数 | A 裁决 | 说明 |
 | --- | --- | --- |
-| `priority` | 接受：单值 | 与 `workStatus` 正交；`dueAt` 级别的排序仍固定 `id DESC` |
+| `priority` | 接受：单值 | 与 `workStatus` 正交；`dueAt` 级别的排序由 [ADR-036](adr/ADR-036.md) 固定为「状态分组 + 紧急桶 + 优先级 + 截止时间 + 任务 ID」（原 `id DESC` 已替代） |
 | `includeCanceled` | 接受：布尔，缺省 `false` | 与 `workStatus` 组合表达「未完成并含已取消」（`TODO ∪ CANCELED`），替代 `workStatus` 多值写法 |
 | `relation` | 延后 | 需要 C 域聚合关系参与筛选，属 Q-07 同类跨域问题，须单独裁决 |
 | `query` | 延后 | 关键词检索属 F-26 搜索投影范畴，不得在聚合读里自建 `LIKE` |

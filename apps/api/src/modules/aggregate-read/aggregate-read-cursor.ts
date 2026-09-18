@@ -23,8 +23,14 @@ interface AggregateReadCursorPayload {
   readonly n: string;
   readonly f: string;
   readonly a: string;
+  /** MY_TASKS 的多列排序键位置（task-list-order.ts 的规范化文本）；其它命名空间缺省。 */
+  readonly k?: string;
   readonly e: number;
 }
+
+/** 排序键载荷允许的字符集：数字、分隔符与 ISO 时间。 */
+const SORT_KEY_PATTERN = /^[0-9A-Za-z|:.+-]+$/;
+const SORT_KEY_MAX_LENGTH = 256;
 
 export interface AggregateReadCursorEncodeInput {
   readonly actorUserId: number;
@@ -32,6 +38,11 @@ export interface AggregateReadCursorEncodeInput {
   /** 规范化筛选文本；必须稳定复现，否则解码按筛选不匹配拒绝。 */
   readonly filterKey: string;
   readonly afterId: number;
+  /**
+   * 多列排序键位置（ADR-036：MY_TASKS 的任务列表排序不再是单列 id）。
+   * 同时进入 HMAC 覆盖的载荷，缺省表示该命名空间仍用单列 afterId 断页。
+   */
+  readonly sortKey?: string;
   readonly nowMs?: number;
 }
 
@@ -39,7 +50,18 @@ export interface AggregateReadCursorDecodeContext {
   readonly actorUserId: number;
   readonly namespace: AggregateReadCursorNamespace;
   readonly filterKey: string;
+  /**
+   * true 时要求载荷必须带排序键（MY_TASKS）；缺少排序键的旧游标按版本不符拒绝，
+   * 避免用单列 id 的位置去断一个多列排序，造成翻页漏项 / 重项。
+   */
+  readonly requireSortKey?: boolean;
   readonly nowMs?: number;
+}
+
+/** 解码结果：单列位置 + 可选的排序键载荷。 */
+export interface AggregateReadCursorPosition {
+  readonly afterId: number;
+  readonly sortKey: string | null;
 }
 
 export type AggregateReadCursorErrorReason =
@@ -121,20 +143,34 @@ function parsePayload(raw: string): AggregateReadCursorPayload {
   if (!positiveInteger(payload.e ?? 0)) {
     fail("malformed", "aggregate read cursor expiry is invalid");
   }
+  if (payload.k !== undefined) {
+    if (
+      typeof payload.k !== "string" ||
+      payload.k.length === 0 ||
+      payload.k.length > SORT_KEY_MAX_LENGTH ||
+      !SORT_KEY_PATTERN.test(payload.k)
+    ) {
+      fail("malformed", "aggregate read cursor sort key is invalid");
+    }
+  }
   return {
     v: payload.v!,
     u: payload.u!,
     n: payload.n!,
     f: payload.f!,
     a: payload.a,
+    ...(payload.k === undefined ? {} : { k: payload.k }),
     e: payload.e!,
   };
 }
 
 /**
  * 聚合读游标：base64url(payload).base64url(HMAC-SHA256)。Token 绑定 keyring 版本、
- * actor、命名空间、规范化筛选与 afterId，并带绝对过期时间；校验失败由聚合读服务
+ * actor、命名空间、规范化筛选与游标位置，并带绝对过期时间；校验失败由聚合读服务
  * 统一映射为 422 invalid-cursor。
+ * 位置有两种形态：单列 afterId（其它命名空间）与「afterId + 多列排序键」（MY_TASKS，
+ * ADR-036 把任务列表排序从单列 id 改成多列元组）；排序键一并进入签名载荷，因此
+ * 篡改排序键会先被签名校验拒绝。
  */
 @Injectable()
 export class AggregateReadCursorService {
@@ -150,12 +186,21 @@ export class AggregateReadCursorService {
         "aggregate read cursor afterId must be a positive integer",
       );
     }
+    if (
+      input.sortKey !== undefined &&
+      (input.sortKey.length === 0 ||
+        input.sortKey.length > SORT_KEY_MAX_LENGTH ||
+        !SORT_KEY_PATTERN.test(input.sortKey))
+    ) {
+      throw new Error("aggregate read cursor sortKey is invalid");
+    }
     const payload: AggregateReadCursorPayload = {
       v: this.keyring.currentVersion,
       u: input.actorUserId,
       n: input.namespace,
       f: filterHash(input.namespace, input.filterKey),
       a: String(input.afterId),
+      ...(input.sortKey === undefined ? {} : { k: input.sortKey }),
       e: nowMs + AGGREGATE_READ_CURSOR_TTL_MS,
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
@@ -166,10 +211,22 @@ export class AggregateReadCursorService {
     )}`;
   }
 
+  /** 只取单列位置；语义与 decodeKey 完全一致（其它命名空间继续用它）。 */
   decode(
     cursor: string | undefined,
     context: AggregateReadCursorDecodeContext,
   ): number | null {
+    return this.decodeKey(cursor, context)?.afterId ?? null;
+  }
+
+  /**
+   * 解码出完整位置：单列 afterId + 可选的多列排序键（MY_TASKS，ADR-036）。
+   * requireSortKey 为 true 时，缺少排序键的旧载荷按版本不符拒绝。
+   */
+  decodeKey(
+    cursor: string | undefined,
+    context: AggregateReadCursorDecodeContext,
+  ): AggregateReadCursorPosition | null {
     if (cursor === undefined) {
       return null;
     }
@@ -230,6 +287,12 @@ export class AggregateReadCursorService {
     if (!positiveInteger(afterId)) {
       fail("malformed", "aggregate read cursor after id is out of range");
     }
-    return afterId;
+    if (context.requireSortKey === true && payload.k === undefined) {
+      fail(
+        "version",
+        "aggregate read cursor sort key version is not available",
+      );
+    }
+    return { afterId, sortKey: payload.k ?? null };
   }
 }
