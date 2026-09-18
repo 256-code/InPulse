@@ -1,9 +1,15 @@
 import React, { useMemo } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { ConfigProvider, type ConfigProviderProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import type { InpulseApiClient } from "@generated/api";
 import { AuthProvider } from "@features/auth/auth-context";
+import { reportSessionExpired } from "@features/auth/session-recovery";
 import { appTheme } from "../theme/theme";
 
 export interface AppProvidersProps {
@@ -40,6 +46,10 @@ export const AppProviders: React.FC<AppProvidersProps> = ({
     () =>
       queryClient ??
       new QueryClient({
+        // ADR-032：会话过期后受保护请求返回 401，这里统一收敛认证态，
+        // 由 RequireAuth 静默重走统一身份认证；403、404、409、500 等不参与。
+        queryCache: new QueryCache({ onError: reportSessionExpired }),
+        mutationCache: new MutationCache({ onError: reportSessionExpired }),
         defaultOptions: {
           queries: {
             retry: 1,
