@@ -469,6 +469,8 @@ it("功能详情：标签进标题行、验收标准排在功能任务之后", a
     "退款",
     expect.stringContaining("更新"),
   ]);
+  // 功能编号不在页头徽章行展示（仍保留在右侧「功能档案」里）。
+  expect(badgeRow?.textContent ?? "").not.toContain(item.code);
 
   // 验收标准落在功能任务之后。
   const tasks = screen.getByRole("heading", { name: "功能任务" });

@@ -22,6 +22,7 @@ export type InpulseIconName =
   | "arrowLeft"
   | "calendar"
   | "chevronRight"
+  | "chevronLeft"
   | "clock"
   | "externalLink"
   | "gitMerge"
@@ -214,6 +215,7 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
     </>
   ),
   chevronRight: <path d="m9 18 6-6-6-6" />,
+  chevronLeft: <path d="M15 18 9 12l6-6" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="10" />

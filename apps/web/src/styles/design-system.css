@@ -3874,8 +3874,10 @@ a:focus-visible {
   min-width: 0;
   min-height: 620px;
 }
+/* 上内边距 10px：让圆钮中心在卡片左上角 45° 斜角线上继续往左上收（与标题行负偏移 -9px 配合）；
+   下内边距 14px→6px 用于抵消说明行新增的 8px 上边距，保持下方正文位置不变。 */
 .feature-document .feature-modal-header {
-  padding: 22px 26px 14px;
+  padding: 10px 26px 6px;
 }
 .feature-document > .calm-tabs {
   padding: 0 26px;

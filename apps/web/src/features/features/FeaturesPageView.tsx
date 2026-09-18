@@ -297,30 +297,24 @@ export function FeaturesPageView({
   return (
     <>
       <div className="features-page">
-        <div className="feature-breadcrumbs">
-          <Button
-            className="back-button"
-            href={"/projects/" + projectId + "/modules"}
-          >
-            <InpulseIcon name="arrowLeft" size={15} />
-            返回模块列表
-          </Button>
-          {featureId && (
-            <Button
-              className="back-button"
-              href={
-                "/projects/" + projectId + "/modules/" + moduleId + "/features"
-              }
-            >
-              返回功能列表
-            </Button>
-          )}
-        </div>
         {!featureId ? (
           <>
             <div className="page-header">
               <div>
-                <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                <div className="page-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回模块列表"
+                    title="返回模块列表"
+                    onClick={() =>
+                      navigate("/projects/" + projectId + "/modules")
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                </div>
                 <p>
                   {currentModule?.description ||
                     "维护长期功能档案，说明修改会保留审计历史。"}
@@ -673,14 +667,33 @@ export function FeaturesPageView({
           />
         ) : (
           // 系统目录树（侧栏）承担模块内功能切换后，详情页不再渲染左栏
-          // feature-switcher，「返回功能列表」入口由上方 feature-breadcrumbs 提供。
+          // feature-switcher，返回入口由标题左侧的返回箭头提供。
           <div className="feature-document">
             <header className="feature-modal-header">
               <div>
-                <h2>{activeItem.name}</h2>
+                <div className="feature-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回功能列表"
+                    title="返回功能列表"
+                    onClick={() =>
+                      navigate(
+                        "/projects/" +
+                          projectId +
+                          "/modules/" +
+                          moduleId +
+                          "/features",
+                      )
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h2>{activeItem.name}</h2>
+                </div>
                 <p>{activeItem.currentBehavior || "尚未补充当前功能说明。"}</p>
                 <div className="task-modal-badges">
-                  <span className="task-id">{activeItem.code}</span>
+                  {/* 功能编号不在页头展示，保留右侧「功能档案」里的编号。 */}
                   <CalmBadge
                     tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
                   >
