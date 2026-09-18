@@ -338,7 +338,7 @@ button {
   text-transform: uppercase;
 }
 .nav-section {
-  margin-top: 27px !important;
+  margin-top: 18px !important;
 }
 .nav-item {
   width: 100%;
@@ -378,45 +378,18 @@ button {
   background: #2b82b8;
   color: white;
 }
-/* 「项目与功能」行：导航按钮与目录开合按钮平级排列，目录树嵌在行下方。 */
-.nav-item-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+/* 「当前项目」分组下的目录面板：项目 → 子页 → 模块 → 功能 四层收纳其中。 */
+.nav-tree-panel {
+  margin: 2px 0 10px;
+  padding: 6px 6px 6px 2px;
+  border-left: 2px solid #24486b;
+  border-radius: 0 8px 8px 0;
+  background: #0d1f35;
 }
-.nav-item-row .nav-item {
-  flex: 1;
-  min-width: 0;
-}
-.nav-tree-toggle {
-  flex: 0 0 auto;
-  width: 26px;
-  height: 32px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #7192af;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.nav-tree-toggle:hover {
-  background: #1a3957;
-  color: white;
-}
-.tree-chevron {
-  transition: transform 0.18s ease;
-  flex: 0 0 auto;
-  color: #6f91ad;
-}
-.tree-chevron.expanded {
-  transform: rotate(90deg);
-  color: #72d4d1;
-}
-/* 侧栏系统目录树：沿用导航行样式，罗列 项目 → 模块 → 功能 三层。 */
+
+/* 侧栏系统目录树：沿用导航行样式，罗列 项目 → 子页 → 模块 → 功能 四层。 */
 .project-tree {
-  margin: 0 0 12px;
+  margin: 0;
 }
 /* 罗列区间：目录过长时在固定高度内滚动，不把侧栏导航撑出视口。 */
 .project-tree-scroll {
@@ -503,8 +476,23 @@ button {
   color: white;
   box-shadow: inset 3px 0 #45d2d5;
 }
+/* 项目子页行（概览/模块与功能/看板/成员）：介于项目与模块之间的第二层。 */
+.page-node {
+  padding-left: 22px;
+}
+.page-node .tree-icon {
+  color: #7fb3d8;
+}
+.page-node.selected {
+  background: #1c69a2;
+  color: white;
+  box-shadow: inset 2px 0 #45d2d5;
+}
+.page-node.selected .tree-icon {
+  color: #bfe9ff;
+}
 .module-node {
-  padding-left: 18px;
+  padding-left: 34px;
 }
 .module-node .tree-icon {
   color: #55c9cf;
@@ -526,7 +514,7 @@ button {
 }
 .feature-node {
   min-height: 28px;
-  padding-left: 26px;
+  padding-left: 42px;
   color: #8ba3b9;
 }
 .feature-node .tree-icon {
@@ -549,9 +537,13 @@ button {
 .tree-hint {
   color: #6f91ad;
   font-size: 10px;
-  margin: 2px 0 4px 50px;
+  margin: 2px 0 4px 58px;
 }
-/* 项目层提示（加载/失败/空）与项目节点缩进对齐，而不是功能层的 50px。 */
+/* 功能层提示比模块层再深一级，与功能行文字对齐。 */
+.tree-children .tree-children .tree-hint {
+  margin-left: 66px;
+}
+/* 项目层提示（加载/失败/空）与项目节点缩进对齐，而不是功能层的 66px。 */
 .project-tree-scroll > .tree-hint {
   margin-left: 12px;
 }

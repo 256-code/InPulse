@@ -17,35 +17,69 @@ interface NavigationItem {
   readonly key: string;
   readonly label: string;
   readonly path: string;
-  readonly icon: InpulseIconName;
+  readonly icon?: InpulseIconName;
 }
 
+/** 工作台：个人日常入口；系统目录树内嵌在「项目列表」行下。 */
 const workspaceNavigation: readonly NavigationItem[] = [
+  { key: "home", label: "首页", path: "/", icon: "home" },
   { key: "tasks", label: "任务中心", path: "/tasks", icon: "clipboard" },
-  { key: "projects", label: "项目与功能", path: "/projects", icon: "folder" },
+  { key: "projects", label: "项目列表", path: "/projects", icon: "folder" },
+];
+
+/** 交付记录：跨项目的迭代记录与遗留问题台账。 */
+const deliveryNavigation: readonly NavigationItem[] = [
   { key: "records", label: "迭代记录", path: "/records", icon: "gitBranch" },
   { key: "issues", label: "遗留问题", path: "/issues", icon: "alert" },
 ];
 
-const systemNavigation: readonly NavigationItem[] = [
+/** 全局导航：动态、通知、搜索与管理员专属审计。 */
+const globalNavigation: readonly NavigationItem[] = [
   { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
+  {
+    key: "notifications",
+    label: "站内通知",
+    path: "/notifications",
+    icon: "bell",
+  },
+  { key: "search", label: "全局搜索", path: "/search", icon: "search" },
   { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
-  // 设计师稿的系统组只有上两项；动态审计是仓库已有能力，保留为管理员专属末项。
-  { key: "audit", label: "动态审计", path: "/audit", icon: "shield" },
+  { key: "audit", label: "审计日志", path: "/audit", icon: "shield" },
 ];
 
 const sections = [
   { prefix: "/tasks", key: "tasks", label: "任务中心" },
   { prefix: "/task-groups", key: "tasks", label: "任务中心" },
-  { prefix: "/projects", key: "projects", label: "项目与功能" },
+  { prefix: "/projects", key: "projects", label: "项目列表" },
   { prefix: "/records", key: "records", label: "迭代记录" },
   { prefix: "/issues", key: "issues", label: "遗留问题" },
   { prefix: "/activity", key: "activity", label: "项目动态" },
-  { prefix: "/audit", key: "audit", label: "动态审计" },
+  { prefix: "/audit", key: "audit", label: "审计日志" },
   { prefix: "/settings", key: "settings", label: "成员与设置" },
   { prefix: "/search", key: "search", label: "全局搜索" },
-  { prefix: "/notifications", key: "notifications", label: "通知中心" },
+  { prefix: "/notifications", key: "notifications", label: "站内通知" },
 ] as const;
+
+/** 项目子页面：/projects/:projectId/<segment> 的分段、选中键与面包屑标签。 */
+const projectPages = [
+  { segment: "overview", key: "project-overview", label: "项目概览" },
+  { segment: "modules", key: "project-catalog", label: "项目与功能" },
+  { segment: "task-board", key: "project-task-board", label: "任务看板" },
+  { segment: "members", key: "project-members", label: "项目成员" },
+  { segment: "activity", key: "project-activity", label: "项目动态" },
+] as const;
+
+const PROJECT_PAGE_PATTERN = /^\/projects\/\d+\/([a-z-]+)(?:\/|$)/;
+
+function resolveProjectPage(
+  pathname: string,
+): (typeof projectPages)[number] | null {
+  const match = PROJECT_PAGE_PATTERN.exec(pathname);
+  if (!match) {
+    return null;
+  }
+  return projectPages.find((page) => page.segment === match[1]) ?? null;
+}
 
 /** `/projects/:projectId[/modules/:moduleId[/features/:featureId]]` 的路径解析。 */
 interface CatalogScope {
@@ -90,8 +124,12 @@ function readCatalogScope(pathname: string): CatalogScope {
 }
 
 function resolveSection(pathname: string) {
-  if (/^\/projects\/[^/]+\/activity(?:\/|$)/.test(pathname)) {
-    return { key: "project-activity", label: "项目动态" };
+  if (pathname === "/") {
+    return { key: "home", label: "首页" };
+  }
+  const projectPage = resolveProjectPage(pathname);
+  if (projectPage) {
+    return { key: projectPage.key, label: projectPage.label };
   }
   return sections.find((section) => pathname.startsWith(section.prefix));
 }
@@ -120,18 +158,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [accountOpen, setAccountOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  // 系统目录内嵌在「项目与功能」导航项下：进入项目路由自动展开，也可手动开合。
-  const [catalogOpen, setCatalogOpen] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
   const selectedKey = resolveSelectedKey(location.pathname);
-  const visibleSystemNavigation = useMemo(
-    () =>
-      user?.isAdmin
-        ? systemNavigation
-        : systemNavigation.filter((item) => item.key !== "audit"),
-    [user?.isAdmin],
-  );
   const catalogScope = useMemo(
     () => readCatalogScope(location.pathname),
     [location.pathname],
@@ -163,17 +192,29 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }),
     [shellCounters.myOpenTaskCount, shellCounters.openLeftoverCount],
   );
-  // 设计师稿只在「项目与功能」视图渲染 项目 → 模块 → 功能 三段面包屑。
-  const isCatalogView = resolveSection(location.pathname)?.key === "projects";
-  const catalogProjectId = isCatalogView ? catalogScope.projectId : null;
+  // 设计师稿只在「模块与功能」视图渲染 项目 → 模块 → 功能 三段面包屑。
+  const projectPage = useMemo(
+    () => resolveProjectPage(location.pathname),
+    [location.pathname],
+  );
+  const isCatalogView = projectPage?.key === "project-catalog";
+  const projectScopeId = catalogScope.projectId;
+  // 全局「项目动态」在项目上下文内直达该项目动态页，避免与「当前项目」语义重复。
+  const visibleGlobalNavigation = useMemo(
+    () =>
+      globalNavigation
+        .filter((item) => user?.isAdmin || item.key !== "audit")
+        .map((item) =>
+          item.key === "activity" && projectScopeId !== null
+            ? { ...item, path: "/projects/" + projectScopeId + "/activity" }
+            : item,
+        ),
+    [user?.isAdmin, projectScopeId],
+  );
+  // 项目子页（概览 / 看板 / 成员 / 动态）的面包屑末级；目录视图走 项目 → 模块 → 功能。
+  const projectPageLabel = isCatalogView ? null : (projectPage?.label ?? null);
   const moduleCrumbName = isCatalogView ? trail.moduleName : null;
   const featureCrumbName = isCatalogView ? trail.featureName : null;
-
-  useEffect(() => {
-    if (resolveSelectedKey(location.pathname) === "projects") {
-      setCatalogOpen(true);
-    }
-  }, [location.pathname]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -246,53 +287,23 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const renderNavigationItem = (item: NavigationItem) => {
     const count = shellCounts[item.key] ?? 0;
-    const withCatalog = item.key === "projects";
-    const button = (
-      <button
-        type="button"
-        className={`nav-item${selectedKey === item.key ? " active" : ""}`}
-        aria-current={selectedKey === item.key ? "page" : undefined}
-        onClick={() => handleNavigation(item.path)}
-      >
-        <InpulseIcon name={item.icon} size={17} />
-        <span>{item.label}</span>
-        {count > 0 ? (
-          <em aria-hidden="true" title={`${count} 项待处理`}>
-            {count}
-          </em>
-        ) : null}
-      </button>
-    );
-    if (!withCatalog) {
-      return <React.Fragment key={item.key}>{button}</React.Fragment>;
-    }
-    // 系统目录内嵌在「项目与功能」下：chevron 切换按钮与导航按钮平级，避免嵌套 button。
     return (
-      <div key={item.key} className="nav-item-group">
-        <div className="nav-item-row">
-          {button}
-          <button
-            type="button"
-            className="nav-tree-toggle"
-            aria-label={catalogOpen ? "收起系统目录" : "展开系统目录"}
-            aria-expanded={catalogOpen}
-            onClick={() => setCatalogOpen((current) => !current)}
-          >
-            <InpulseIcon
-              name="chevron"
-              size={14}
-              className={catalogOpen ? "tree-chevron expanded" : "tree-chevron"}
-            />
-          </button>
-        </div>
-        {catalogOpen ? (
-          <ProjectTree
-            activeScope={treeScope}
-            onNavigate={handleNavigation}
-            {...(projectClient ? { client: projectClient } : {})}
-          />
-        ) : null}
-      </div>
+      <React.Fragment key={item.key}>
+        <button
+          type="button"
+          className={"nav-item" + (selectedKey === item.key ? " active" : "")}
+          aria-current={selectedKey === item.key ? "page" : undefined}
+          onClick={() => handleNavigation(item.path)}
+        >
+          {item.icon ? <InpulseIcon name={item.icon} size={17} /> : null}
+          <span>{item.label}</span>
+          {count > 0 ? (
+            <em aria-hidden="true" title={`${count} 项待处理`}>
+              {count}
+            </em>
+          ) : null}
+        </button>
+      </React.Fragment>
     );
   };
 
@@ -314,19 +325,26 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               />
             </div>
           </div>
-          <button
-            type="button"
-            className="workspace"
-            onClick={() => handleNavigation("/tasks")}
-          >
-            <span className="workspace-dot" />
-            <span>研发交付中心</span>
-          </button>
           <nav className="nav-group" aria-label="工作区导航">
-            <p>工作区</p>
+            <p>工作台</p>
             {workspaceNavigation.map(renderNavigationItem)}
-            <p className="nav-section">系统</p>
-            {visibleSystemNavigation.map(renderNavigationItem)}
+            {projectScopeId === null ? null : (
+              <>
+                <p className="nav-section">当前项目</p>
+                <div className="nav-tree-panel">
+                  <ProjectTree
+                    activeScope={treeScope}
+                    activePageSegment={projectPage?.segment ?? null}
+                    onNavigate={handleNavigation}
+                    {...(projectClient ? { client: projectClient } : {})}
+                  />
+                </div>
+              </>
+            )}
+            <p className="nav-section">交付记录</p>
+            {deliveryNavigation.map(renderNavigationItem)}
+            <p className="nav-section">全局</p>
+            {visibleGlobalNavigation.map(renderNavigationItem)}
           </nav>
           <div className="sidebar-footer">
             <span className="person-avatar">{avatarText}</span>
@@ -369,16 +387,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 研发交付中心
               </button>
               <InpulseIcon name="chevron" size={14} />
-              {catalogProjectId !== null && projectCrumbName ? (
+              {projectScopeId !== null && projectPage && projectCrumbName ? (
                 <>
                   <button
                     type="button"
                     onClick={() => handleNavigation("/projects")}
                   >
-                    项目与功能
+                    项目列表
                   </button>
                   <InpulseIcon name="chevron" size={14} />
-                  {moduleCrumbName ? (
+                  {isCatalogView && moduleCrumbName === null ? (
+                    <strong aria-current="page" title={projectCrumbName}>
+                      {projectCrumbName}
+                    </strong>
+                  ) : (
                     <>
                       <button
                         type="button"
@@ -387,44 +409,57 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                         // 概览页会把模块/功能藏在「查看模块」入口后，不适合作为回到项目的落点。
                         onClick={() =>
                           handleNavigation(
-                            `/projects/${catalogProjectId}/modules`,
+                            "/projects/" + projectScopeId + "/modules",
                           )
                         }
                       >
                         {projectCrumbName}
                       </button>
                       <InpulseIcon name="chevron" size={14} />
-                    </>
-                  ) : (
-                    <strong aria-current="page" title={projectCrumbName}>
-                      {projectCrumbName}
-                    </strong>
-                  )}
-                  {moduleCrumbName ? (
-                    featureCrumbName ? (
-                      <>
-                        <button
-                          type="button"
-                          title={moduleCrumbName}
-                          onClick={() =>
-                            handleNavigation(
-                              `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}/features`,
-                            )
-                          }
+                      {isCatalogView ? (
+                        featureCrumbName ? (
+                          <>
+                            <button
+                              type="button"
+                              title={moduleCrumbName ?? undefined}
+                              onClick={() =>
+                                handleNavigation(
+                                  "/projects/" +
+                                    projectScopeId +
+                                    "/modules/" +
+                                    catalogScope.moduleId +
+                                    "/features",
+                                )
+                              }
+                            >
+                              {moduleCrumbName}
+                            </button>
+                            <InpulseIcon name="chevron" size={14} />
+                            <strong
+                              aria-current="page"
+                              title={featureCrumbName}
+                            >
+                              {featureCrumbName}
+                            </strong>
+                          </>
+                        ) : (
+                          <strong
+                            aria-current="page"
+                            title={moduleCrumbName ?? undefined}
+                          >
+                            {moduleCrumbName}
+                          </strong>
+                        )
+                      ) : (
+                        <strong
+                          aria-current="page"
+                          title={projectPageLabel ?? undefined}
                         >
-                          {moduleCrumbName}
-                        </button>
-                        <InpulseIcon name="chevron" size={14} />
-                        <strong aria-current="page" title={featureCrumbName}>
-                          {featureCrumbName}
+                          {projectPageLabel ?? sectionLabel}
                         </strong>
-                      </>
-                    ) : (
-                      <strong aria-current="page" title={moduleCrumbName}>
-                        {moduleCrumbName}
-                      </strong>
-                    )
-                  ) : null}
+                      )}
+                    </>
+                  )}
                 </>
               ) : projectCrumbName ? (
                 <>

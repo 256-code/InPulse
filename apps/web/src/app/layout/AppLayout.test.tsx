@@ -85,7 +85,7 @@ describe("AppLayout", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
     expect(screen.getByText("任务中心")).toBeInTheDocument();
-    expect(screen.getByText("项目与功能")).toBeInTheDocument();
+    expect(screen.getByText("项目列表")).toBeInTheDocument();
     expect(screen.getByText("迭代记录")).toBeInTheDocument();
     expect(screen.getByText("遗留问题")).toBeInTheDocument();
     expect(screen.getByText("项目动态")).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("AppLayout", () => {
       </MemoryRouter>,
       true,
     );
-    expect(screen.getByText("动态审计")).toBeInTheDocument();
+    expect(screen.getByText("审计日志")).toBeInTheDocument();
     unmount();
 
     renderLayout(
@@ -122,7 +122,7 @@ describe("AppLayout", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.queryByText("动态审计")).not.toBeInTheDocument();
+    expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
   });
 
   it("shows the permission matrix shortcut only to system administrators", async () => {
@@ -207,9 +207,105 @@ describe("AppLayout", () => {
       await within(crumb).findByText("AGV 智能搬运平台"),
     ).toBeInTheDocument();
     expect(
-      within(crumb).getByRole("button", { name: "项目与功能" }),
+      within(crumb).getByRole("button", { name: "项目列表" }),
     ).toBeInTheDocument();
     expect(projectClient.getProject).toHaveBeenCalledWith(7);
+  });
+
+  it("renders the current project group and the task board entry on project routes", async () => {
+    const projectClient = {
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            code: "AGV",
+            name: "AGV 智能搬运平台",
+            status: "ACTIVE",
+          },
+        ],
+      }),
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 7,
+          code: "AGV",
+          name: "AGV 智能搬运平台",
+          description: "面向工厂的智能搬运调度项目",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 1,
+          createdAt: "2026-09-08T00:00:00.000Z",
+          updatedAt: "2026-09-08T00:00:00.000Z",
+          memberCount: 4,
+          stats: {
+            activeModuleCount: 2,
+            activeFeatureCount: 5,
+            openTaskCount: 3,
+            completedTaskCount: 1,
+          },
+        },
+      }),
+    } as unknown as InpulseApiClient;
+
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects/7/task-board"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={projectClient}
+              />
+            }
+          >
+            <Route
+              path="projects/:projectId/task-board"
+              element={<div>任务看板内容</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "工作区导航" });
+    expect(within(nav).getByText("当前项目")).toBeInTheDocument();
+    // 项目子页收进目录树：任务看板是项目节点下的子页行。
+    const board = await within(nav).findByRole("button", {
+      name: "任务看板",
+    });
+    expect(board).toHaveClass("page-node");
+    expect(board).toHaveAttribute("aria-current", "true");
+    expect(
+      within(nav).getByRole("button", { name: "项目概览" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("任务看板内容")).toBeInTheDocument();
+
+    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
+    expect(
+      await within(crumb).findByText("AGV 智能搬运平台"),
+    ).toBeInTheDocument();
+    expect(
+      within(crumb).getByRole("button", { name: "项目列表" }),
+    ).toBeInTheDocument();
+    expect(await within(crumb).findByText("任务看板")).toBeInTheDocument();
+  });
+
+  it("hides the current project group outside project routes", () => {
+    renderLayout(
+      <MemoryRouter initialEntries={["/projects"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          >
+            <Route path="projects" element={<div>项目列表内容</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "任务看板" })).toBeNull();
   });
 
   it("navigates to a registered workspace route", async () => {
@@ -228,7 +324,7 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByText("项目与功能"));
+    await user.click(screen.getByText("项目列表"));
     expect(await screen.findByText("Projects content")).toBeInTheDocument();
   });
 
@@ -566,7 +662,7 @@ describe("AppLayout", () => {
     expect(await screen.findByText("模块列表内容")).toBeInTheDocument();
   });
 
-  it("collapses the system directory tree outside project pages", async () => {
+  it("hides the project tree outside project pages", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/tasks"]}>
         <Routes>
@@ -581,12 +677,9 @@ describe("AppLayout", () => {
     );
 
     expect(await screen.findByText("任务中心内容")).toBeInTheDocument();
-    // 非项目路由默认收起；点击「项目与功能」行尾的 chevron 仍可展开。
+    // 目录树只存在于「当前项目」分组：非项目路由不渲染项目上下文。
     expect(document.querySelector(".project-tree")).toBeNull();
-    const toggle = screen.getByRole("button", { name: "展开系统目录" });
-    await userEvent.click(toggle);
-    expect(document.querySelector(".project-tree")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "收起系统目录" })).toBeTruthy();
+    expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
   });
   describe("退出登录", () => {
     const originalLocation = window.location;

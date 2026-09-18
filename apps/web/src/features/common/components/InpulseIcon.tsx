@@ -12,6 +12,9 @@ export type InpulseIconName =
   | "cornerDown"
   | "folder"
   | "gitBranch"
+  | "gauge"
+  | "home"
+  | "kanban"
   | "logout"
   | "menu"
   | "plus"
@@ -115,6 +118,26 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <circle cx="18" cy="6" r="3" />
       <circle cx="6" cy="18" r="3" />
       <path d="M18 9a9 9 0 0 1-9 9" />
+    </>
+  ),
+  gauge: (
+    <>
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M10 21v-6h4v6" />
+    </>
+  ),
+  kanban: (
+    <>
+      <path d="M5 3v14" />
+      <path d="M12 3v8" />
+      <path d="M19 3v18" />
     </>
   ),
   logout: (
