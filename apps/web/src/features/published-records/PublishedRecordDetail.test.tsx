@@ -97,9 +97,16 @@ it("loads real version data and permits selecting historical snapshots", async (
   expect(diff.queryByText("迭代标题")).toBeNull();
   const region = screen.getByRole("region", { name: "正式记录详情" });
   expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
-  fireEvent.change(within(region).getByLabelText("对照版本"), {
-    target: { value: "1" },
-  });
+  const compareField = within(region).getByLabelText("对照版本");
+  const compareTrigger = compareField.closest(".ant-select");
+  if (!compareTrigger) {
+    throw new Error("compare select not found");
+  }
+  fireEvent.mouseDown(compareTrigger);
+  // 「较早版本」与「对照版本」选项文案相同：按 aria-owns 定位本次打开的弹层，避免选错。
+  const listId = compareField.getAttribute("aria-owns") ?? "";
+  const list = document.getElementById(listId) ?? document.body;
+  fireEvent.click(within(list).getByTitle(/^v1 · /));
   expect(diff.getByText("这两个版本的内容完全一致。")).toBeVisible();
   expect(api.listChangeRecordVersions).toHaveBeenCalledWith(
     1,

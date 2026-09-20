@@ -3,6 +3,8 @@ import { Alert, Button, Input } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
@@ -87,7 +89,9 @@ export function RecordDraftEditorModal({
   const cache = useQueryClient();
   // 409 后重新加载会拿到更新的来源或草稿版本：用内部覆盖保存最新目标，
   // 不要求调用方改写自己持有的 target。
-  const [override, setOverride] = useState<RecordDraftEditorTarget | null>(null);
+  const [override, setOverride] = useState<RecordDraftEditorTarget | null>(
+    null,
+  );
   const editor = override ?? target;
   const item = editor?.kind === "item" ? editor.item : undefined;
   const source = editor?.kind === "source" ? editor.source : undefined;
@@ -298,7 +302,12 @@ export function RecordDraftEditorModal({
         );
         setOverride({ kind: "source", source: latest.source });
         cache.setQueryData(
-          ["task-record-drafts", projectId, latest.source.moduleId, latest.source.taskId],
+          [
+            "task-record-drafts",
+            projectId,
+            latest.source.moduleId,
+            latest.source.taskId,
+          ],
           latest,
         );
         mutation.reset();
@@ -399,22 +408,25 @@ export function RecordDraftEditorModal({
               {merge.conflicts.map((field) => (
                 <label key={field}>
                   {labels[field]}冲突
-                  <select
+                  <CalmSelect
+                    ariaLabel={labels[field] + "冲突"}
                     value={merge.choices[field] ?? ""}
-                    onChange={(e) =>
+                    appearance="menu"
+                    onChange={(next) =>
                       setMerge({
                         ...merge,
                         choices: {
                           ...merge.choices,
-                          [field]: e.target.value as "mine" | "latest",
+                          [field]: next as "mine" | "latest",
                         },
                       })
                     }
-                  >
-                    <option value="">请选择</option>
-                    <option value="mine">保留我的输入</option>
-                    <option value="latest">采用最新内容</option>
-                  </select>
+                    options={[
+                      { value: "", label: "请选择" },
+                      { value: "mine", label: "保留我的输入" },
+                      { value: "latest", label: "采用最新内容" },
+                    ]}
+                  />
                   <div className="record-field">
                     <span className="record-field-label">最新内容</span>
                     <RecordMarkdown
@@ -425,7 +437,9 @@ export function RecordDraftEditorModal({
               ))}
               <Button
                 onClick={applyMerge}
-                disabled={merge.conflicts.some((field) => !merge.choices[field])}
+                disabled={merge.conflicts.some(
+                  (field) => !merge.choices[field],
+                )}
               >
                 应用合并
               </Button>
@@ -443,85 +457,80 @@ export function RecordDraftEditorModal({
               {projectId === 0 && (
                 <label>
                   所属项目
-                  <select
-                    required
+                  <CalmSelect
+                    ariaLabel="所属项目"
                     value={createProjectId || ""}
-                    onChange={(e) => {
-                      setCreateProjectId(Number(e.target.value));
+                    appearance="rich"
+                    onChange={(next) => {
+                      setCreateProjectId(Number(next));
                       setModuleId(0);
                       setFeatureId(0);
                       setImpacts([]);
                     }}
-                  >
-                    <option value="">请选择项目</option>
-                    {projects.data?.items.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        disabled={p.status !== "ACTIVE"}
-                      >
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "请选择项目" },
+                      ...(projects.data?.items ?? []).map((p) => ({
+                        ...projectSelectOption(p),
+                        disabled: p.status !== "ACTIVE",
+                      })),
+                    ]}
+                  />
                 </label>
               )}
               <label>
                 所属模块
-                <select
-                  required
+                <CalmSelect
+                  ariaLabel="所属模块"
                   value={moduleId || ""}
-                  onChange={(e) => {
-                    setModuleId(Number(e.target.value));
+                  appearance="menu"
+                  onChange={(next) => {
+                    setModuleId(Number(next));
                     setFeatureId(0);
                     setImpacts([]);
                   }}
-                >
-                  <option value="">
-                    {formProjectId > 0 ? "请选择模块" : "请先选择项目"}
-                  </option>
-                  {modules.data?.items.map((m) => (
-                    <option
-                      key={m.id}
-                      value={m.id}
-                      disabled={m.status !== "ACTIVE"}
-                    >
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    {
+                      value: "",
+                      label: formProjectId > 0 ? "请选择模块" : "请先选择项目",
+                    },
+                    ...(modules.data?.items ?? []).map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                      disabled: m.status !== "ACTIVE",
+                    })),
+                  ]}
+                />
               </label>
               <label>
                 记录范围
-                <select
+                <CalmSelect
+                  ariaLabel="记录范围"
                   value={scopeType}
-                  onChange={(e) =>
-                    setScopeType(e.target.value as typeof scopeType)
-                  }
-                >
-                  <option value="MODULE">模块</option>
-                  <option value="FEATURE">功能</option>
-                </select>
+                  appearance="notion"
+                  onChange={(next) => setScopeType(next as typeof scopeType)}
+                  options={[
+                    { value: "MODULE", label: "模块", emoji: "\u{1F9E9}" },
+                    { value: "FEATURE", label: "功能", emoji: "\u{1F3AF}" },
+                  ]}
+                />
               </label>
               {scopeType === "FEATURE" ? (
                 <label>
                   所属功能
-                  <select
-                    required
+                  <CalmSelect
+                    ariaLabel="所属功能"
                     value={featureId || ""}
-                    onChange={(e) => setFeatureId(Number(e.target.value))}
-                  >
-                    <option value="">请选择功能</option>
-                    {features.data?.items.map((f) => (
-                      <option
-                        key={f.id}
-                        value={f.id}
-                        disabled={f.status !== "ACTIVE"}
-                      >
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
+                    appearance="menu"
+                    onChange={(next) => setFeatureId(Number(next))}
+                    options={[
+                      { value: "", label: "请选择功能" },
+                      ...(features.data?.items ?? []).map((f) => ({
+                        value: f.id,
+                        label: f.name,
+                        disabled: f.status !== "ACTIVE",
+                      })),
+                    ]}
+                  />
                 </label>
               ) : (
                 <fieldset>
@@ -546,7 +555,10 @@ export function RecordDraftEditorModal({
                 </fieldset>
               )}
               {(modules.isError || features.isError) && (
-                <Alert type="error" title="所属范围加载失败，请重新选择或刷新。" />
+                <Alert
+                  type="error"
+                  title="所属范围加载失败，请重新选择或刷新。"
+                />
               )}
             </>
           )}

@@ -4,6 +4,7 @@ import { test } from "../helpers/admin-fixture.js";
 import { loginAdminViaUi } from "../helpers/auth-context.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢复后读写", async ({
   browser,
@@ -58,9 +59,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
-    await taskDialog
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.member.name });
+    await pickCalmSelectOption(taskDialog, "负责人", runtime.member.name);
     await taskDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(taskDialog).toBeHidden({ timeout: listTimeoutMs });
     await expect(page.getByRole("dialog", { name: "任务详情" })).toContainText(

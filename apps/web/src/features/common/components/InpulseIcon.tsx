@@ -7,6 +7,7 @@ export type InpulseIconName =
   | "boxes"
   | "check"
   | "chevron"
+  | "chevronDown"
   | "clipboard"
   | "code"
   | "cornerDown"
@@ -82,6 +83,7 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
   ),
   check: <path d="M20 6 9 17l-5-5" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
   clipboard: (
     <>
       <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />

@@ -15,6 +15,9 @@ import {
   CalmSegmented,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import {
   describeMyTasksError,
@@ -743,19 +746,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       {filters.scope === "project" ? (
         <label className="inline-picker">
           选择项目
-          <select
+          <CalmSelect
             value={filters.projectId === null ? "" : String(filters.projectId)}
-            onChange={(event) =>
-              update({ projectId: Number(event.target.value) || null })
-            }
-          >
-            <option value="">请选择项目</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => update({ projectId: Number(next) || null })}
+            options={projects.map((project) => projectSelectOption(project))}
+            appearance="rich"
+            placeholder="请选择项目"
+            ariaLabel="选择项目"
+          />
         </label>
       ) : null}
 
@@ -776,42 +774,40 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           options={statusOptions}
           onChange={(status) => update({ status })}
         />
-        <select
-          aria-label="优先级"
+        <CalmSelect
+          ariaLabel="优先级"
           value={filters.priority ?? ""}
           disabled={!enabled("filter:priority")}
-          onChange={(event) =>
+          appearance="menu"
+          onChange={(next) =>
             update({
-              priority:
-                event.target.value === ""
-                  ? null
-                  : (event.target.value as MyTaskPriority),
+              priority: next === "" ? null : (next as MyTaskPriority),
             })
           }
-        >
-          <option value="">全部</option>
-          {priorityOrder.map((priority) => (
-            <option key={priority} value={priority}>
-              {priorityLabels[priority]}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="任务范围"
+          options={[
+            { value: "", label: "全部" },
+            ...priorityOrder.map((priority) => ({
+              value: priority,
+              label: priorityLabels[priority],
+              dotColor: priorityDotColor(priority),
+            })),
+          ]}
+        />
+        <CalmSelect
+          ariaLabel="任务范围"
           value={filters.level ?? ""}
-          onChange={(event) =>
+          appearance="notion"
+          onChange={(next) =>
             update({
-              level:
-                event.target.value === ""
-                  ? null
-                  : (event.target.value as MyTaskLevel),
+              level: next === "" ? null : (next as MyTaskLevel),
             })
           }
-        >
-          <option value="">功能级与模块级</option>
-          <option value="FEATURE">功能级任务</option>
-          <option value="MODULE">模块级任务</option>
-        </select>
+          options={[
+            { value: "", label: "功能级与模块级" },
+            { value: "FEATURE", label: "功能级任务", emoji: "\u{1F3AF}" },
+            { value: "MODULE", label: "模块级任务", emoji: "\u{1F9E9}" },
+          ]}
+        />
         <button
           type="button"
           className="secondary-button"
@@ -839,60 +835,60 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <div className="filter-panel">
           <label>
             合并关系
-            <select
+            <CalmSelect
+              ariaLabel="合并关系"
               value={filters.relation ?? ""}
               disabled={!enabled("filter:relation")}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  relation:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskRelation),
+                  relation: next === "" ? null : (next as MyTaskRelation),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="STANDALONE">独立任务</option>
-              <option value="MAIN">主任务</option>
-              <option value="SOURCE">来源任务</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "STANDALONE", label: "独立任务" },
+                { value: "MAIN", label: "主任务" },
+                { value: "SOURCE", label: "来源任务" },
+              ]}
+            />
           </label>
           <label>
             是否有迭代记录
-            <select
+            <CalmSelect
+              ariaLabel="是否有迭代记录"
               value={filters.hasRecord ?? ""}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  hasRecord:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskRecordFilter),
+                  hasRecord: next === "" ? null : (next as MyTaskRecordFilter),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="yes">有记录</option>
-              <option value="no">无记录</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "yes", label: "有记录" },
+                { value: "no", label: "无记录" },
+              ]}
+            />
           </label>
           <label>
             是否有 GitHub
-            <select
+            <CalmSelect
+              ariaLabel="是否有 GitHub"
               value={filters.hasGithub ?? ""}
               disabled={!enabled("filter:github")}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  hasGithub:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskGithubFilter),
+                  hasGithub: next === "" ? null : (next as MyTaskGithubFilter),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="yes">已关联</option>
-              <option value="no">未关联</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "yes", label: "已关联" },
+                { value: "no", label: "未关联" },
+              ]}
+            />
           </label>
           <label className="check-line">
             <input

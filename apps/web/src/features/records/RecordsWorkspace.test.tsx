@@ -142,6 +142,17 @@ function mount(
 
 const signalInit = expect.objectContaining({ signal: expect.any(AbortSignal) });
 
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 describe("RecordsWorkspace", () => {
   it(
     "loads the cross-project feed by default and keeps the header action" +
@@ -153,10 +164,9 @@ describe("RecordsWorkspace", () => {
         screen.getByRole("heading", { name: "迭代记录" }),
       ).toBeInTheDocument();
       expect(await screen.findByText("研发记录 / 2 条")).toBeInTheDocument();
-      expect(screen.getByLabelText("项目")).toHaveValue("");
       expect(
-        screen.getByRole("option", { name: "全部项目" }),
-      ).toBeInTheDocument();
+        screen.getByLabelText("项目").closest(".ant-select"),
+      ).toHaveTextContent("全部项目");
       await waitFor(() =>
         expect(
           screen.getByRole("button", { name: "记录一次迭代" }),
@@ -211,9 +221,7 @@ describe("RecordsWorkspace", () => {
     const client = baseClient();
     mount(client as unknown as InpulseApiClient, "/records?projectId=1");
     await screen.findByText("支付修正", { selector: "summary strong" });
-    fireEvent.change(screen.getByLabelText("来源"), {
-      target: { value: "MAIN" },
-    });
+    pickSelectOption("来源", "主任务");
     await waitFor(() =>
       expect(client.listRecordFeed).toHaveBeenLastCalledWith(
         {
@@ -254,7 +262,7 @@ describe("RecordsWorkspace", () => {
       "/records?projectId=1&publishedId=7",
     );
     await screen.findByRole("region", { name: "正式记录详情" });
-    fireEvent.change(screen.getByLabelText("项目"), { target: { value: "2" } });
+    pickSelectOption("项目", "风控项目");
     await waitFor(() =>
       expect(client.listRecordFeed).toHaveBeenLastCalledWith(
         { projectId: 2, status: "PUBLISHED", source: "ALL", limit: 20 },

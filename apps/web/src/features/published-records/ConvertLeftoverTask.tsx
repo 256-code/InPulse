@@ -15,7 +15,9 @@ import {
 export type RecordLeftover = PublishedRecord["leftovers"][number];
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskDetailPath } from "@features/tasks/task-links";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
+import { priorityDotColor } from "@features/common/priority-select-option";
 /** Match the task form's browser-local input and UTC API value, guarding invalid dates. */
 export function parseFollowupDueAt(value: string): string | null | undefined {
   if (value === "") return null;
@@ -324,19 +326,22 @@ export function LeftoverTaskConvertModal({
             onChange={(e) => setTitle(e.target.value)}
           />
           <label htmlFor="leftover-task-assignee">跟进任务负责人</label>
-          <select
+          <CalmSelect
             id="leftover-task-assignee"
+            ariaLabel="跟进任务负责人"
             value={assigneeId}
             disabled={busy}
-            onChange={(e) => setAssignee(Number(e.target.value))}
-          >
-            <option value={0}>请选择负责人</option>
-            {members.data?.items.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+            appearance="member"
+            onChange={(next) => setAssignee(Number(next))}
+            options={[
+              { value: 0, label: "请选择负责人" },
+              ...(members.data?.items ?? []).map((m) => ({
+                value: m.id,
+                label: m.name,
+                avatarUrl: m.avatarUrl ?? null,
+              })),
+            ]}
+          />
           {members.isError && (
             <Alert
               type="error"
@@ -349,19 +354,34 @@ export function LeftoverTaskConvertModal({
             />
           )}
           <label htmlFor="leftover-task-priority">跟进任务优先级</label>
-          <select
+          <CalmSelect
             id="leftover-task-priority"
+            ariaLabel="跟进任务优先级"
             value={priority}
             disabled={busy}
-            onChange={(e) =>
-              setPriority(e.target.value as LeftoverTaskRequest["priority"])
+            appearance="menu"
+            onChange={(next) =>
+              setPriority(next as LeftoverTaskRequest["priority"])
             }
-          >
-            <option value="LOW">低</option>
-            <option value="NORMAL">普通</option>
-            <option value="HIGH">高</option>
-            <option value="URGENT">紧急</option>
-          </select>
+            options={[
+              { value: "LOW", label: "低", dotColor: priorityDotColor("LOW") },
+              {
+                value: "NORMAL",
+                label: "普通",
+                dotColor: priorityDotColor("NORMAL"),
+              },
+              {
+                value: "HIGH",
+                label: "高",
+                dotColor: priorityDotColor("HIGH"),
+              },
+              {
+                value: "URGENT",
+                label: "紧急",
+                dotColor: priorityDotColor("URGENT"),
+              },
+            ]}
+          />
           <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
           <input
             id="leftover-task-due"

@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import {
+  calmSelectTrigger,
+  pickCalmSelectOption,
+  pickCalmSelectOptionByIndex,
+} from "../helpers/calm-select.js";
 
 test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", async ({ browser }) => {
   test.setTimeout(180000);
@@ -11,9 +16,9 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     // 新建第二个项目（创建者自动成为成员），用于验证跨项目读取。
     const project = await createProjectViaUi(page, runtime, "E2EFEED");
     await page.goto("/records");
-    await expect(page.getByLabel("项目")).toHaveValue("");
-    await page.getByLabel("项目").selectOption({ label: project.name });
-    await expect(page.getByLabel("项目")).not.toHaveValue("");
+    await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
+    await pickCalmSelectOption(page, "项目", project.name);
+    await expect(calmSelectTrigger(page, "项目")).toContainText(project.name);
     const projectId = new URL(page.url()).searchParams.get("projectId");
     expect(projectId).not.toBeNull();
 
@@ -30,7 +35,7 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     const title = `跨项目记录-${Date.now()}`;
     await page.getByRole("button", { name: "新建独立草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
-    await draft.getByLabel("所属模块").selectOption({ index: 1 });
+    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("B-3b 跨项目清单问题");
     await draft.getByLabel("具体改动").fill("B-3b 跨项目清单方案");
@@ -60,7 +65,7 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
 
     // 默认全部项目：不选项目即可看到刚发布的记录，并带回项目名称。
     await page.goto("/records");
-    await expect(page.getByLabel("项目")).toHaveValue("");
+    await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
     const card = page.locator(".record-card").filter({ hasText: title });
     await expect(card).toBeVisible();
     await expect(card.getByText(`归属 ${project.name} /`)).toBeVisible();

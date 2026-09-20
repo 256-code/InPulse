@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import {
+  pickCalmSelectOption,
+  pickCalmSelectOptionByIndex,
+} from "../helpers/calm-select.js";
 test("F18 独立发布、修订、明确解决遗留与不可变历史对比", async ({
   browser,
 }) => {
@@ -13,7 +17,7 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建独立草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
-    await draft.getByLabel("所属模块").selectOption({ index: 1 });
+    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("版本一问题");
     await draft.getByLabel("具体改动").fill("版本一方案");
@@ -52,8 +56,8 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await expect(
       detail.getByText("已标记解决的遗留问题保留历史内容，不再计入未闭环。"),
     ).toBeVisible();
-    await detail.getByLabel("较早版本").selectOption("1");
-    await detail.getByLabel("对照版本").selectOption("3");
+    await pickCalmSelectOption(detail, "较早版本", /^v1 · /);
+    await pickCalmSelectOption(detail, "对照版本", /^v3 · /);
     const diff = detail.getByLabel("版本差异");
     await expect(diff.getByText("版本一方案")).toBeVisible();
     await expect(diff.getByText("版本二方案")).toBeVisible();
@@ -97,9 +101,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskForm = page.getByRole("dialog", { name: "新建任务" });
     await taskForm.getByLabel("任务标题").fill(`发布来源-${suffix}`);
-    await taskForm
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(taskForm, "负责人", runtime.user.name);
     await taskForm.getByRole("button", { name: /保\s*存/ }).click();
     await expect(taskForm).toBeHidden();
     const task = page.getByRole("dialog", { name: "任务详情" });
@@ -109,7 +111,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       exact: true,
     });
     await complete.getByRole("button", { name: /没有，仅完成任务/ }).click();
-    await complete.getByLabel("完成原因").selectOption("测试验证");
+    await pickCalmSelectOption(complete, "完成原因", "测试验证");
     await complete.getByRole("button", { name: "确认完成任务" }).click();
     await expect(complete).toBeHidden();
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
@@ -136,7 +138,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     // 多个版本不重复计数）；未合并任务不显示关系徽章。
     await expect(task.getByText("迭代记录 1 条")).toBeVisible();
     await task.getByRole("button", { name: "关闭" }).click();
-    await page.getByLabel("任务状态筛选").selectOption("DONE");
+    await pickCalmSelectOption(page, "任务状态筛选", "已完成");
     const card = page
       .locator(".calm-task-card")
       .filter({ hasText: `发布来源-${suffix}` });

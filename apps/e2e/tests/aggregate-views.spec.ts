@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
  * F-29 项目主页（概览已并入模块与功能）/ F-32 任务中心的专属关键路径 E2E。
@@ -42,9 +43,7 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
-    await taskDialog
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(taskDialog, "负责人", runtime.user.name);
     await taskDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(taskDialog).toBeHidden();
 
@@ -131,11 +130,11 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(page.getByTestId("task-center-local-note")).toHaveCount(0);
 
     // 优先级筛选已接入服务端：选中写入 URL，清除后 URL 不再携带。
-    await page.getByLabel("优先级").selectOption("HIGH");
+    await pickCalmSelectOption(page, "优先级", "高");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBe("HIGH");
-    await page.getByLabel("优先级").selectOption("");
+    await pickCalmSelectOption(page, "优先级", "全部");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBeNull();

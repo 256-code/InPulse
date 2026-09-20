@@ -1,0 +1,271 @@
+/* CalmSelect：三种形态（menu / rich / member）的触发器与弹层样式。
+ * 弹层经 antd 的 classNames.popup.root 挂载，全部选择器都限定在
+ * .calm-select-popup-* 作用域内，避免影响其它 antd Select。 */
+
+/* ===== 触发器通用 ===== */
+/* antd 6 的触发器（.ant-select 根元素）边框与背景由主题 token 管理
+ * （colorBorder / selectorBg），此处不重复覆盖，保持与其它表单控件一致。 */
+.calm-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.calm-select-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calm-select-check {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+/* ===== 头像与图标 ===== */
+.calm-select-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+.calm-select-rich-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.calm-select-rich .calm-select-rich-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+/* ===== menu（浅色菜单） ===== */
+.calm-select-popup-menu.ant-select-dropdown {
+  min-width: 208px;
+  padding: 5px;
+  border: 1px solid #e4e4e7;
+  border-radius: 9px;
+  box-shadow:
+    0 12px 26px -6px #18181b1a,
+    0 4px 8px -4px #18181b12;
+}
+.ant-select-dropdown.calm-select-popup-menu .ant-select-item {
+  min-height: 33px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #18181b;
+}
+.ant-select-dropdown.calm-select-popup-menu
+  .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: #f4f4f5;
+}
+.ant-select-dropdown.calm-select-popup-menu
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: #f4f4f5;
+  color: #18181b;
+  font-weight: 600;
+}
+.calm-select-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.calm-select-menu-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calm-select-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.ant-select-dropdown.calm-select-popup-menu .calm-select-check {
+  margin-left: auto;
+  color: #18181b;
+}
+
+/* ===== rich（富信息项） ===== */
+.calm-select-popup-rich.ant-select-dropdown {
+  min-width: 280px;
+  padding: 5px;
+  border: 1px solid #e6e6e9;
+  border-radius: 12px;
+  box-shadow:
+    0 18px 44px -12px #09090b26,
+    0 3px 8px -2px #09090b0f;
+}
+.ant-select-dropdown.calm-select-popup-rich .ant-select-item {
+  padding: 0;
+  border-radius: 8px;
+}
+.ant-select-dropdown.calm-select-popup-rich
+  .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: #f6f6f7;
+}
+.ant-select-dropdown.calm-select-popup-rich
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: #f4f6fa;
+  box-shadow: inset 0 0 0 1px #dbe4f4;
+  color: inherit;
+  font-weight: inherit;
+}
+.calm-select-rich-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  width: 100%;
+}
+.ant-select-dropdown.calm-select-popup-rich .calm-select-rich-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.calm-select-rich-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.calm-select-rich-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #18181b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calm-select-rich-desc {
+  font-size: 11.5px;
+  color: #71717a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ant-select-dropdown.calm-select-popup-rich .badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.ant-select-dropdown.calm-select-popup-rich .calm-select-check {
+  margin-left: auto;
+  color: #1467d8;
+}
+
+/* ===== member（成员选项） ===== */
+.calm-select-popup-member.ant-select-dropdown {
+  min-width: 250px;
+  padding: 5px;
+  border: 1px solid #e1e8f0;
+  border-radius: 9px;
+  box-shadow: 0 14px 34px #16324d26;
+}
+.ant-select-dropdown.calm-select-popup-member .ant-select-item {
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #132238;
+}
+.ant-select-dropdown.calm-select-popup-member
+  .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: #f2f7fc;
+}
+.ant-select-dropdown.calm-select-popup-member
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: #eef4fc;
+  color: #1467d8;
+  font-weight: 600;
+}
+.calm-select-member-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.calm-select-member-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calm-select-member-note {
+  font-size: 11px;
+  color: #8492a1;
+  flex: 0 0 auto;
+}
+.ant-select-dropdown.calm-select-popup-member
+  .ant-select-item-option-selected
+  .calm-select-member-note {
+  color: #5d86c2;
+}
+.ant-select-dropdown.calm-select-popup-member .calm-select-check {
+  color: #1467d8;
+}
+
+/* ===== notion（3 号：Notion 风极简面板） ===== */
+.calm-select-notion .calm-select-trigger {
+  color: #37352f;
+}
+.calm-select-popup-notion.ant-select-dropdown {
+  min-width: 184px;
+  padding: 6px;
+  border: none;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px #0f0f0f0a,
+    0 3px 6px #0f0f0f14,
+    0 9px 24px #0f0f0f1f;
+}
+.ant-select-dropdown.calm-select-popup-notion .ant-select-item {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #37352f;
+}
+.ant-select-dropdown.calm-select-popup-notion
+  .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: #37352f0f;
+}
+.ant-select-dropdown.calm-select-popup-notion
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: #37352f0f;
+  color: #37352f;
+  font-weight: 500;
+}
+.calm-select-notion-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.calm-select-notion-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calm-select-emoji {
+  font-size: 14px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.ant-select-dropdown.calm-select-popup-notion .calm-select-check {
+  margin-left: auto;
+  color: #37352f;
+}

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 // R-8 项目任务看板关键路径（真实 UI，2026-09-18）：
 // 完成程度概览 -> 看板内新建任务并自动刷新 -> 看板 / 列表视图切换 ->
@@ -33,10 +34,8 @@ test("R-8 任务看板展示完成程度并支持视图切换与筛选", async (
       .getByRole("group", { name: "任务范围" })
       .getByRole("button", { name: "模块级" })
       .click();
-    await create.getByLabel("所属模块").selectOption({ label: "未分类" });
-    await create
-      .getByLabel("指派给")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(create, "所属模块", "未分类");
+    await pickCalmSelectOption(create, "指派给", runtime.user.name);
     await create.getByRole("button", { name: "创建任务" }).click();
     await expect(create).toBeHidden();
     const detail = page.getByRole("dialog", { name: "任务详情" });
@@ -75,11 +74,10 @@ test("R-8 任务看板展示完成程度并支持视图切换与筛选", async (
     await expect(cardOf(title)).toBeVisible();
 
     // 优先级下拉：普通优先级的任务在「紧急」下被过滤。
-    const priority = page.getByLabel("按优先级筛选");
-    await priority.selectOption("URGENT");
+    await pickCalmSelectOption(page, "按优先级筛选", "紧急");
     await expect(page).toHaveURL(/priority=URGENT/);
     await expect(cardOf(title)).toBeHidden();
-    await priority.selectOption("all");
+    await pickCalmSelectOption(page, "按优先级筛选", "全部优先级");
     await expect(cardOf(title)).toBeVisible();
 
     // 搜索：命中标题；无命中时给出空态，清除筛选后恢复。

@@ -1,10 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
-import {
-  fillLeftovers,
-  leftoverField,
-} from "../helpers/record-leftovers.js";
+import { fillLeftovers, leftoverField } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 async function createTask(
   page: Page,
   runtime: Awaited<ReturnType<typeof loadRuntime>>,
@@ -28,7 +26,7 @@ async function createTask(
   await page.getByRole("button", { name: "新建任务", exact: true }).click();
   const form = page.getByRole("dialog", { name: "新建任务" });
   await form.getByLabel("任务标题").fill(title);
-  await form.getByLabel("负责人").selectOption({ label: runtime.user.name });
+  await pickCalmSelectOption(form, "负责人", runtime.user.name);
   await form.getByRole("button", { name: /保\s*存/ }).click();
   await expect(form).toBeHidden();
   const task = page.getByRole("dialog", { name: "任务详情" });
@@ -91,9 +89,7 @@ for (const feature of [true, false])
       ).toBeDisabled();
       const title = `遗留跟进-${Date.now()}`;
       await dialog.getByLabel("跟进任务标题").fill(title);
-      await dialog
-        .getByLabel("跟进任务负责人")
-        .selectOption({ label: runtime.user.name });
+      await pickCalmSelectOption(dialog, "跟进任务负责人", runtime.user.name);
       if (feature)
         await dialog
           .getByLabel("跟进任务截止时间（选填）")
@@ -152,8 +148,8 @@ for (const feature of [true, false])
             record.getByRole("button", { name: "转为新任务" }),
           ).toHaveCount(0);
         }
-        await record.getByLabel("较早版本").selectOption("1");
-        await record.getByLabel("对照版本").selectOption("3");
+        await pickCalmSelectOption(record, "较早版本", /^v1 · /);
+        await pickCalmSelectOption(record, "对照版本", /^v3 · /);
         await expect(
           record.getByLabel("版本差异").getByText("本次需要跟进的完整遗留原文"),
         ).toBeVisible();
@@ -175,9 +171,7 @@ test("F20 其他页面修订造成409，保留任务输入并明确确认最新�
     const dialog = page.getByRole("dialog", { name: "遗留问题转为新任务" });
     await expect(dialog.getByText("本次需要跟进的完整遗留原文")).toBeVisible();
     await dialog.getByLabel("跟进任务标题").fill("冲突后保留的任务标题");
-    await dialog
-      .getByLabel("跟进任务负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(dialog, "跟进任务负责人", runtime.user.name);
     const other = await context.newPage();
     await other.goto(url);
     await other.getByRole("button", { name: "修订内容" }).click();

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 test("F-15 单份模块任务影响两功能，引用计数与增删关系持久化", async ({
   browser,
@@ -47,9 +48,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     const create = page.getByRole("dialog", { name: "新建任务" });
     const title = `公共任务-${suffix}`;
     await create.getByLabel("任务标题").fill(title);
-    await create
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(create, "负责人", runtime.user.name);
     await create.getByLabel(names[0]!, { exact: true }).check();
     await create.getByLabel(names[1]!, { exact: true }).check();
     await create.getByRole("button", { name: /保\s*存/ }).click();

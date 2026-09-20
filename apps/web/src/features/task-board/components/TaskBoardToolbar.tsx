@@ -1,5 +1,7 @@
 import React from "react";
 
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
 import type {
@@ -51,11 +53,12 @@ const timeChips: readonly {
 const priorityOptions: readonly {
   readonly value: TaskBoardPriority;
   readonly label: string;
+  readonly dotColor: string;
 }[] = [
-  { value: "URGENT", label: "紧急" },
-  { value: "HIGH", label: "高" },
-  { value: "NORMAL", label: "普通" },
-  { value: "LOW", label: "低" },
+  { value: "URGENT", label: "紧急", dotColor: priorityDotColor("URGENT") },
+  { value: "HIGH", label: "高", dotColor: priorityDotColor("HIGH") },
+  { value: "NORMAL", label: "普通", dotColor: priorityDotColor("NORMAL") },
+  { value: "LOW", label: "低", dotColor: priorityDotColor("LOW") },
 ];
 
 export interface TaskBoardToolbarProps {
@@ -140,50 +143,48 @@ export const TaskBoardToolbar: React.FC<TaskBoardToolbarProps> = ({
       </div>
 
       <div className="tb-toolbar-right">
-        <select
+        <CalmSelect
           className="tb-select"
-          aria-label="按优先级筛选"
+          ariaLabel="按优先级筛选"
           value={filters.priority ?? "all"}
-          onChange={(event) =>
+          appearance="menu"
+          onChange={(next) =>
             onChange({
               ...filters,
-              priority:
-                event.target.value === "all"
-                  ? null
-                  : (event.target.value as TaskBoardPriority),
+              priority: next === "all" ? null : (next as TaskBoardPriority),
             })
           }
-        >
-          <option value="all">全部优先级</option>
-          {priorityOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
+          options={[
+            { value: "all", label: "全部优先级" },
+            ...priorityOptions.map((option) => ({
+              value: option.value,
+              label: option.label,
+              dotColor: option.dotColor,
+            })),
+          ]}
+        />
+        <CalmSelect
           className="tb-select"
-          aria-label="按负责人筛选"
+          ariaLabel="按负责人筛选"
           value={
             filters.assigneeId === null ? "all" : String(filters.assigneeId)
           }
-          onChange={(event) =>
+          appearance="member"
+          onChange={(next) =>
             onChange({
               ...filters,
-              assigneeId:
-                event.target.value === "all"
-                  ? null
-                  : Number(event.target.value),
+              assigneeId: next === "all" ? null : Number(next),
             })
           }
-        >
-          <option value="all">全部负责人</option>
-          {assignees.map((user) => (
-            <option key={user.userId} value={user.userId}>
-              {user.name}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "all", label: "全部负责人" },
+            ...assignees.map((user) => ({
+              value: String(user.userId),
+              label: user.name,
+              avatarUrl: user.avatarUrl,
+            })),
+          ]}
+        />
         <input
           className="tb-search"
           type="search"

@@ -8,6 +8,8 @@ import {
   CalmEmptyState,
   CalmSegmented,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { useAuth } from "@features/auth/auth-context";
 import { RecordDraftsView } from "@features/record-drafts/RecordDraftsView";
 import {
@@ -189,34 +191,29 @@ export function RecordsWorkspace({
         </div>
         <label className="records-toolbar-field">
           项目
-          <select
-            aria-label="项目"
+          <CalmSelect
+            ariaLabel="项目"
             value={projectId > 0 ? String(projectId) : ""}
-            onChange={(event) => selectProject(event.target.value)}
-          >
-            <option value="">全部项目</option>
-            {projects.data?.items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => selectProject(String(next))}
+            appearance="rich"
+            options={[
+              { value: "", label: "全部项目" },
+              ...(projects.data?.items ?? []).map(projectSelectOption),
+            ]}
+          />
         </label>
         <label className="records-toolbar-field">
           来源
-          <select
-            aria-label="来源"
+          <CalmSelect
+            ariaLabel="来源"
             value={source}
-            onChange={(event) =>
-              setSource(event.target.value as RecordSourceFilter)
-            }
-          >
-            {RECORD_SOURCE_FILTERS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            appearance="menu"
+            onChange={(next) => setSource(next as RecordSourceFilter)}
+            options={RECORD_SOURCE_FILTERS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+          />
         </label>
         <CalmSegmented
           label="记录状态"

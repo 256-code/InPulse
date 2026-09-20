@@ -104,6 +104,17 @@ function client(overrides: object = {}) {
     ...overrides,
   } as unknown as InpulseApiClient;
 }
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 function mount(api: InpulseApiClient, writable = true) {
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
@@ -176,9 +187,7 @@ describe("F-14 task editing", () => {
     expect(completeTask).not.toHaveBeenCalled();
     fireEvent.click(modal.getByRole("button", { name: /上一步/ }));
     fireEvent.click(modal.getByRole("button", { name: /没有，仅完成任务/ }));
-    fireEvent.change(modal.getByLabelText("完成原因"), {
-      target: { value: "技术调研" },
-    });
+    pickSelectOption("完成原因", "技术调研");
     fireEvent.change(modal.getByLabelText("完成补充说明"), {
       target: { value: "保留我的说明" },
     });
@@ -225,18 +234,12 @@ describe("F-14 task editing", () => {
     await screen.findByText(item.title);
     expect(screen.queryByText("历史完成")).not.toBeInTheDocument();
     expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "CANCELED" },
-    });
+    pickSelectOption("任务状态筛选", "已取消");
     expect(screen.getByText("历史取消")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "DONE" },
-    });
+    pickSelectOption("任务状态筛选", "已完成");
     expect(screen.getByText("历史完成")).toBeVisible();
     expect(screen.getByText("无效历史")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "ALL" },
-    });
+    pickSelectOption("任务状态筛选", "全部状态");
     for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
       expect(screen.getByText(title)).toBeVisible();
     expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
@@ -308,9 +311,7 @@ describe("F-14 task editing", () => {
     fireEvent.change(screen.getByLabelText("任务标题"), {
       target: { value: "新任务" },
     });
-    fireEvent.change(screen.getByLabelText("负责人"), {
-      target: { value: "5" },
-    });
+    pickSelectOption("负责人", "项目成员");
     const save = screen.getByRole("button", { name: /保\s*存/ });
     fireEvent.click(save);
     await screen.findByText("任务服务暂时不可用，输入已保留，可重试。");
@@ -670,9 +671,7 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(within(recordDialog).getByText("PR-CR-1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭迭代记录详情" }));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "已发布记录甲" }),
-      ).toBeNull(),
+      expect(screen.queryByRole("dialog", { name: "已发布记录甲" })).toBeNull(),
     );
     const draftLink = within(dialog).getByRole("link", { name: /草稿乙/ });
     expect(draftLink).toHaveAttribute(

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
  * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情与任务中心聚合组区块的
@@ -47,9 +48,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
-      await dialog
-        .getByLabel("负责人")
-        .selectOption({ label: runtime.user.name });
+      await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
       // 任务保存后应用会自动打开该任务的详情弹窗（带遮罩），先关闭再继续，
@@ -98,7 +97,10 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     await expect(group.getByText("暂无迭代记录")).toBeVisible();
 
     // 记录筛选是弹层局部状态（不再写入 URL），点击后筛选按钮保持选中。
-    const mainFilter = group.getByRole("button", { name: "主任务", exact: true });
+    const mainFilter = group.getByRole("button", {
+      name: "主任务",
+      exact: true,
+    });
     await mainFilter.click();
     await expect(mainFilter).toHaveAttribute("aria-pressed", "true");
     expect(new URL(page.url()).searchParams.get("task")).toBeNull();
@@ -157,9 +159,7 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
       await page.getByRole("button", { name: "新建任务", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
-      await dialog
-        .getByLabel("负责人")
-        .selectOption({ label: runtime.user.name });
+      await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
       await dialog.getByRole("button", { name: /保\s*存/ }).click();
       await expect(dialog).toBeHidden();
       await expect(detail).toBeVisible();

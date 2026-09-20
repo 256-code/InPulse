@@ -1,6 +1,12 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
@@ -463,10 +469,14 @@ describe("TaskCenterPageView", () => {
   it("keeps every priority label within two characters in the filter", async () => {
     renderView();
 
-    const select = await screen.findByLabelText("优先级");
-    const labels = Array.from(select.querySelectorAll("option")).map(
-      (option) => option.textContent?.trim() ?? "",
-    );
+    const field = await screen.findByLabelText("优先级");
+    const trigger = field.closest(".ant-select");
+    if (!trigger) {
+      throw new Error("select trigger not found for 优先级");
+    }
+    fireEvent.mouseDown(trigger);
+    const options = await screen.findAllByRole("option");
+    const labels = options.map((option) => option.textContent?.trim() ?? "");
     expect(labels).toEqual(["全部", "紧急", "高", "普通", "低"]);
     for (const label of labels) {
       expect([...label].length).toBeLessThanOrEqual(2);
@@ -486,13 +496,17 @@ describe("TaskCenterPageView", () => {
     expect(
       await screen.findByRole("heading", { name: "新建任务" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("所属项目")).toBeInTheDocument();
+    const projectField = screen.getByLabelText("所属项目");
+    expect(projectField).toBeInTheDocument();
     expect(screen.getByLabelText("所属模块")).toBeInTheDocument();
     expect(screen.getByLabelText("指派给")).toBeDisabled();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
-    expect(
-      await screen.findByRole("option", { name: "注入项目名" }),
-    ).toBeInTheDocument();
+    const projectTrigger = projectField.closest(".ant-select");
+    if (!projectTrigger) {
+      throw new Error("select trigger not found for 所属项目");
+    }
+    fireEvent.mouseDown(projectTrigger);
+    expect(await screen.findByTitle("注入项目名")).toBeInTheDocument();
   });
 
   it("prefills the project when the view is scoped to a single project", async () => {
@@ -504,7 +518,10 @@ describe("TaskCenterPageView", () => {
 
     await user.click(screen.getByRole("button", { name: /新建任务/ }));
 
-    expect(await screen.findByLabelText("所属项目")).toHaveValue("5");
+    const projectField = await screen.findByLabelText("所属项目");
+    await waitFor(() =>
+      expect(projectField.closest(".ant-select")).toHaveTextContent("订单中台"),
+    );
     expect(screen.getByLabelText("所属模块")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "创建任务" })).toBeDisabled();
   });

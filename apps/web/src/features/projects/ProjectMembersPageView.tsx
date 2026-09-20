@@ -12,6 +12,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   projectLifecycleLabel,
@@ -323,19 +324,24 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               title="项目成员"
               hint="系统管理员、本项目组长与项目管理员可以添加或移除成员"
             >
-              <select
-                aria-label="选择项目"
+              <CalmSelect
                 value={projectId}
-                onChange={(event) =>
-                  navigate(`/projects/${event.target.value}/members`)
+                onChange={(next) =>
+                  navigate("/projects/" + String(next) + "/members")
                 }
-              >
-                {(projects.data?.items ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+                options={(projects.data?.items ?? []).map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                  description: String(item.memberCount) + " 名活跃成员",
+                  iconText: item.code.slice(0, 2).toUpperCase(),
+                  badge: {
+                    text: projectLifecycleLabel(item.status),
+                    tone: projectLifecycleTone(item.status, "blue"),
+                  },
+                }))}
+                appearance="rich"
+                ariaLabel="选择项目"
+              />
             </CalmSectionTitle>
           </div>
           {project ? (

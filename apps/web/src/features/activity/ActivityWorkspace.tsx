@@ -7,6 +7,8 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useProjects } from "@features/projects/project-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
@@ -321,18 +323,16 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
           ))}
         </div>
         {lockedProjectId === undefined ? (
-          <select
-            aria-label="项目"
+          <CalmSelect
+            ariaLabel="项目"
             value={projectFilter}
-            onChange={(event) => setProjectFilter(event.currentTarget.value)}
-          >
-            <option value={ALL_PROJECTS}>全部项目</option>
-            {projects.map((project) => (
-              <option key={project.id} value={String(project.id)}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+            appearance="rich"
+            onChange={(next) => setProjectFilter(String(next))}
+            options={[
+              { value: ALL_PROJECTS, label: "全部项目" },
+              ...projects.map(projectSelectOption),
+            ]}
+          />
         ) : null}
         {isAdmin ? (
           <label className="check-line activity-admin-toggle">

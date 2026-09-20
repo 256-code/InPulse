@@ -12,6 +12,8 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import {
   LeftoverTaskConvertModal,
   type LeftoverConvertTarget,
@@ -50,7 +52,11 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
   const projects = useProjects({ client });
   const [convertTarget, setConvertTarget] =
     useState<LeftoverConvertTarget | null>(null);
-  const openQuery = useLeftoverItemsQuery({ client, bucket: "OPEN", projectId });
+  const openQuery = useLeftoverItemsQuery({
+    client,
+    bucket: "OPEN",
+    projectId,
+  });
   const closedQuery = useLeftoverItemsQuery({
     client,
     bucket: "CLOSED",
@@ -179,18 +185,16 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
       <div className="toolbar task-toolbar issues-toolbar">
         <label className="issues-toolbar-field">
           项目
-          <select
-            aria-label="项目"
+          <CalmSelect
+            ariaLabel="项目"
             value={projectId > 0 ? String(projectId) : ""}
-            onChange={(event) => selectProject(event.target.value)}
-          >
-            <option value="">全部项目</option>
-            {(projects.data?.items ?? []).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => selectProject(String(next))}
+            appearance="rich"
+            options={[
+              { value: "", label: "全部项目" },
+              ...(projects.data?.items ?? []).map(projectSelectOption),
+            ]}
+          />
         </label>
       </div>
 

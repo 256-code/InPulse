@@ -17,6 +17,7 @@ import {
   recordContent,
   type Field,
 } from "@features/record-drafts/record-content";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
@@ -249,22 +250,25 @@ export function EditPublishedRecord({
                 {merge.conflicts.map((field) => (
                   <label key={field}>
                     {labels[field]}冲突
-                    <select
+                    <CalmSelect
+                      ariaLabel={labels[field] + "冲突"}
                       value={merge.choices[field] ?? ""}
-                      onChange={(e) =>
+                      appearance="menu"
+                      onChange={(next) =>
                         setMerge({
                           ...merge,
                           choices: {
                             ...merge.choices,
-                            [field]: e.target.value as "mine" | "latest",
+                            [field]: next as "mine" | "latest",
                           },
                         })
                       }
-                    >
-                      <option value="">请选择</option>
-                      <option value="mine">保留我的输入</option>
-                      <option value="latest">采用最新内容</option>
-                    </select>
+                      options={[
+                        { value: "", label: "请选择" },
+                        { value: "mine", label: "保留我的输入" },
+                        { value: "latest", label: "采用最新内容" },
+                      ]}
+                    />
                     <div className="record-field">
                       <span className="record-field-label">最新内容</span>
                       <RecordMarkdown

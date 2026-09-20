@@ -3,6 +3,7 @@ import { test } from "../helpers/admin-fixture.js";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOptionByIndex } from "../helpers/calm-select.js";
 test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", async ({
   browser,
   admin,
@@ -18,7 +19,7 @@ test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", 
     await member.page.goto(`/records?projectId=${runtime.projectId}`);
     await member.page.getByRole("button", { name: "新建独立草稿" }).click();
     const draft = member.page.getByRole("dialog", { name: "新建独立草稿" });
-    await draft.getByLabel("所属模块").selectOption({ index: 1 });
+    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("原始问题");
     await draft.getByLabel("具体改动").fill("原始方案");

@@ -35,6 +35,11 @@ import {
   CalmTabs,
 } from "@features/common/components/Calm";
 import {
+  CalmSelect,
+  type CalmSelectOption,
+} from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
+import {
   isFirstLoad,
   mergeTask,
   taskEdit,
@@ -80,6 +85,12 @@ const statusTone = {
   DONE: "green",
   CANCELED: "gray",
 } as const;
+const statusFilterOptions: readonly CalmSelectOption[] = [
+  { value: "TODO", label: "未完成", dotColor: "#1467d8" },
+  { value: "DONE", label: "已完成", dotColor: "#4a9278" },
+  { value: "CANCELED", label: "已取消", dotColor: "#a0adb9" },
+  { value: "ALL", label: "全部状态" },
+];
 const empty: TaskDraft = {
   title: "",
   description: "",
@@ -273,9 +284,8 @@ export function TasksPanel({
   /** 当前打开的迭代记录详情（null 表示弹层关闭）。 */
   const [openRecordId, setOpenRecordId] = useState<number | null>(null);
   /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
-  const [draftTarget, setDraftTarget] = useState<RecordDraftEditorTarget | null>(
-    null,
-  );
+  const [draftTarget, setDraftTarget] =
+    useState<RecordDraftEditorTarget | null>(null);
   const generation = useRef(0);
   const saving = useRef(false);
   const {
@@ -358,6 +368,27 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  /** 负责人候选项：活跃成员 + 当前任务的历史负责人（已不在成员列表时标注可保留）。 */
+  const assigneeOptions = useMemo(() => {
+    const items = members.data?.items ?? [];
+    const list: CalmSelectOption[] = items.map((member) => ({
+      value: member.id,
+      label: member.name,
+      avatarUrl: member.avatarUrl ?? null,
+    }));
+    const currentId = selection?.item?.assigneeId;
+    if (
+      currentId !== undefined &&
+      !list.some((option) => option.value === currentId)
+    ) {
+      list.unshift({
+        value: currentId,
+        label: memberName(currentId),
+        description: "可保留",
+      });
+    }
+    return list;
+  }, [members.data, selection]);
   // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
   // 仍解析不到（已移出项目或停用）时回退中性编号，不冒充负责人语义。
   const projectMembers = useQuery({
@@ -679,18 +710,14 @@ export function TasksPanel({
           {success && <Alert type="success" title="任务已保存" />}
           {query.data && (
             <div className="feature-view-controls">
-              <label>
-                任务状态筛选
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                >
-                  <option value="TODO">未完成</option>
-                  <option value="DONE">已完成</option>
-                  <option value="CANCELED">已取消</option>
-                  <option value="ALL">全部状态</option>
-                </select>
-              </label>
+              <label>任务状态筛选</label>
+              <CalmSelect
+                value={statusFilter}
+                onChange={(next) => setStatusFilter(String(next))}
+                options={statusFilterOptions}
+                appearance="menu"
+                ariaLabel="任务状态筛选"
+              />
             </div>
           )}
           {query.isPending ? (
@@ -1566,13 +1593,21 @@ export function TasksPanel({
                   name="priority"
                   control={control}
                   render={({ field }) => (
-                    <select {...field} id="task-priority">
-                      {Object.entries(priorityLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                    <CalmSelect
+                      id="task-priority"
+                      ariaLabel="优先级"
+                      value={field.value}
+                      appearance="menu"
+                      onChange={(next) => field.onChange(next)}
+                      onBlur={field.onBlur}
+                      options={Object.entries(priorityLabels).map(
+                        ([value, label]) => ({
+                          value,
+                          label,
+                          dotColor: priorityDotColor(value),
+                        }),
+                      )}
+                    />
                   )}
                 />
               </div>
@@ -1583,30 +1618,16 @@ export function TasksPanel({
                   control={control}
                   rules={{ validate: (value) => value > 0 || "请选择负责人" }}
                   render={({ field }) => (
-                    <select
+                    <CalmSelect
                       id="task-assignee"
-                      value={field.value}
-                      onChange={(event) =>
-                        field.onChange(Number(event.target.value))
-                      }
+                      value={field.value > 0 ? field.value : null}
+                      onChange={(next) => field.onChange(Number(next))}
                       onBlur={field.onBlur}
-                      ref={field.ref}
-                    >
-                      <option value={0}>请选择项目成员</option>
-                      {selection?.item &&
-                        !members.data?.items.some(
-                          (m) => m.id === selection.item!.assigneeId,
-                        ) && (
-                          <option value={selection.item.assigneeId}>
-                            {memberName(selection.item.assigneeId)}，可保留
-                          </option>
-                        )}
-                      {members.data?.items.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={assigneeOptions}
+                      appearance="member"
+                      placeholder="请选择项目成员"
+                      ariaLabel="负责人"
+                    />
                   )}
                 />
                 {errors.assigneeId && (

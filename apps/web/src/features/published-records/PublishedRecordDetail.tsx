@@ -18,6 +18,7 @@ import {
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -328,31 +329,39 @@ export function PublishedRecordDetail({
               <div className="record-version-pickers">
                 <label>
                   较早版本
-                  <select
+                  <CalmSelect
+                    ariaLabel="较早版本"
                     value={before?.versionNo ?? ""}
-                    onChange={(e) => setOldVersion(Number(e.target.value))}
-                  >
-                    {history.map((v) => (
-                      <option key={v.versionNo} value={v.versionNo}>
-                        v{v.versionNo} ·{" "}
-                        {new Date(v.createdAt).toLocaleString("zh-CN")}
-                      </option>
-                    ))}
-                  </select>
+                    appearance="menu"
+                    width={230}
+                    onChange={(next) => setOldVersion(Number(next))}
+                    options={history.map((v) => ({
+                      value: v.versionNo,
+                      label:
+                        "v" +
+                        v.versionNo +
+                        " · " +
+                        new Date(v.createdAt).toLocaleString("zh-CN"),
+                    }))}
+                  />
                 </label>
                 <label>
                   对照版本
-                  <select
+                  <CalmSelect
+                    ariaLabel="对照版本"
                     value={after?.versionNo ?? ""}
-                    onChange={(e) => setNewVersion(Number(e.target.value))}
-                  >
-                    {history.map((v) => (
-                      <option key={v.versionNo} value={v.versionNo}>
-                        v{v.versionNo} ·{" "}
-                        {new Date(v.createdAt).toLocaleString("zh-CN")}
-                      </option>
-                    ))}
-                  </select>
+                    appearance="menu"
+                    width={230}
+                    onChange={(next) => setNewVersion(Number(next))}
+                    options={history.map((v) => ({
+                      value: v.versionNo,
+                      label:
+                        "v" +
+                        v.versionNo +
+                        " · " +
+                        new Date(v.createdAt).toLocaleString("zh-CN"),
+                    }))}
+                  />
                 </label>
               </div>
               {before && after && (

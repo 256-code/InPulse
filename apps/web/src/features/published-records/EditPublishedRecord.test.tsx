@@ -119,7 +119,14 @@ it("retains input on conflict and requires choosing before saving against the la
   await screen.findByText("其他人的方案");
   expect(screen.getByLabelText("具体改动")).toHaveValue("我的方案");
   expect(screen.getByRole("button", { name: "应用合并" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("combobox"), { target: { value: "mine" } });
+  const conflictTrigger = screen
+    .getByLabelText("具体改动冲突")
+    .closest(".ant-select");
+  if (!conflictTrigger) {
+    throw new Error("conflict select not found");
+  }
+  fireEvent.mouseDown(conflictTrigger);
+  fireEvent.click(await screen.findByTitle("保留我的输入"));
   fireEvent.click(screen.getByRole("button", { name: "应用合并" }));
   fireEvent.click(screen.getByRole("button", { name: "保存新版本" }));
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2));

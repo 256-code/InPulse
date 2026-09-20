@@ -15,6 +15,7 @@ import {
   fields,
   labels,
 } from "@features/record-drafts/record-content";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
@@ -186,18 +187,21 @@ export function CompleteWithRecord({
       </a>
       <label>
         记录来源
-        <select
-          disabled={busy}
+        <CalmSelect
+          ariaLabel="记录来源"
           value={mode}
-          onChange={(e) => {
-            setMode(e.target.value as typeof mode);
+          disabled={busy}
+          appearance="menu"
+          onChange={(next) => {
+            setMode(next as typeof mode);
             setError(null);
             setLatest(null);
           }}
-        >
-          <option value="inline">填写新记录</option>
-          <option value="draft">选择已有草稿</option>
-        </select>
+          options={[
+            { value: "inline", label: "填写新记录" },
+            { value: "draft", label: "选择已有草稿" },
+          ]}
+        />
       </label>
       {!!error && (
         <Alert
@@ -303,26 +307,31 @@ export function CompleteWithRecord({
           ) : (
             <label>
               待发布草稿
-              <select
-                disabled={busy}
+              <CalmSelect
+                ariaLabel="待发布草稿"
                 value={selected?.id ?? ""}
-                onChange={(e) => {
+                disabled={busy}
+                appearance="menu"
+                onChange={(next) => {
                   setSelected(
-                    choices.find(
-                      (record) => record.id === Number(e.target.value),
-                    ) ?? null,
+                    choices.find((record) => record.id === Number(next)) ??
+                      null,
                   );
                   setLatest(null);
                 }}
-              >
-                <option value="">请选择一条草稿</option>
-                {choices.map((record) => (
-                  <option key={record.id} value={record.id}>
-                    {record.title} · 草稿 #{record.id} · 版本{" "}
-                    {record.rowVersion}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "请选择一条草稿" },
+                  ...choices.map((record) => ({
+                    value: record.id,
+                    label:
+                      record.title +
+                      " · 草稿 #" +
+                      record.id +
+                      " · 版本 " +
+                      record.rowVersion,
+                  })),
+                ]}
+              />
               {drafts.hasNextPage && (
                 <div className="record-load-more">
                   <Button

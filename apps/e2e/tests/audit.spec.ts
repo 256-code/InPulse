@@ -5,6 +5,7 @@ import {
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
 import { test } from "../helpers/admin-fixture.js";
+import { calmSelectTrigger } from "../helpers/calm-select.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
@@ -89,16 +90,18 @@ test("管理员读取原始审计、按动作过滤、查看快照并切换项�
     await expect(page.getByLabel("动作码")).toHaveValue("");
 
     // 切换项目链：project.create 只出现在对应 PROJECT 链。
-    const chainSelect = page.getByLabel("审计链");
-    const projectOption = chainSelect
-      .locator("option")
+    // CalmSelect 的选项 title 形如「PROJECT:<id> · <项目名>」，编号从 title 里取。
+    await calmSelectTrigger(page, "审计链").click();
+    const projectOption = page
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
       .filter({ hasText: project.name });
     await expect(projectOption).toHaveCount(1, { timeout: 30_000 });
-    const projectId = await projectOption.getAttribute("value");
+    const chainTitle = await projectOption.getAttribute("title");
+    const projectId = chainTitle?.match(/^PROJECT:(\d+) · /)?.[1] ?? null;
     if (projectId === null) {
-      throw new Error("项目链选项缺少 value");
+      throw new Error("项目链选项缺少编号");
     }
-    await chainSelect.selectOption(projectId);
+    await projectOption.click();
     await expect(page.getByText("PROJECT:" + projectId + " 链")).toBeVisible();
     const createRow = page
       .locator(".audit-row")

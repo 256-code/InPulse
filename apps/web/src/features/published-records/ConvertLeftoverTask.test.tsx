@@ -90,13 +90,19 @@ function mount(extra: object) {
   );
   return onConverted;
 }
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项在成员查询完成后才出现）。 */
+async function pickSelectOption(label: string, optionTitle: string) {
+  const trigger = screen.getByLabelText(label).closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(await screen.findByTitle(optionTitle));
+}
 async function open() {
   fireEvent.click(screen.getByRole("button", { name: "转为新任务" }));
   await screen.findByText("待跟进原文");
-  await screen.findByRole("option", { name: "成员" });
-  fireEvent.change(screen.getByLabelText("跟进任务负责人"), {
-    target: { value: "3" },
-  });
+  await pickSelectOption("跟进任务负责人", "成员");
 }
 it("shows inherited/excluded history, retains input and reuses the key after uncertain failure", async () => {
   const convert = vi

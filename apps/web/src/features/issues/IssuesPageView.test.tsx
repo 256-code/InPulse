@@ -4,7 +4,13 @@
  */
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -161,6 +167,17 @@ const renderView = (options: RenderOptions = {}) => {
   return { onBackToRecords, onOpenTask };
 };
 
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 describe("IssuesPageView", () => {
   it("renders open leftovers with badge, record code, content and origin", async () => {
     renderView();
@@ -273,10 +290,9 @@ describe("IssuesPageView", () => {
   it("filters both buckets by the selected project", async () => {
     const seen: unknown[] = [];
     renderView({ onOpen: (query) => seen.push(query) });
-    const user = userEvent.setup();
     await screen.findByTestId("leftover-item-8");
 
-    await user.selectOptions(screen.getByLabelText("项目"), "2");
+    pickSelectOption("项目", "WMS 仓储调度平台");
 
     await waitFor(() => {
       expect(seen).toContainEqual({
@@ -292,7 +308,7 @@ describe("IssuesPageView", () => {
     });
 
     // 回到全部项目：请求不再携带 projectId（分桶查询与缓存键都回到全局）。
-    await user.selectOptions(screen.getByLabelText("项目"), "");
+    pickSelectOption("项目", "全部项目");
     await waitFor(() =>
       expect(seen).toContainEqual({ bucket: "OPEN", limit: 20 }),
     );

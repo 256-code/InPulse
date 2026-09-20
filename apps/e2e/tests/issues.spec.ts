@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
  * F-20 遗留问题页（R-6）关键路径 E2E：发布带「遗留问题」的迭代记录后，
@@ -26,7 +27,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const form = page.getByRole("dialog", { name: "新建任务" });
     await form.getByLabel("任务标题").fill(taskTitle);
-    await form.getByLabel("负责人").selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(form, "负责人", runtime.user.name);
     await form.getByRole("button", { name: /保\s*存/ }).click();
     await expect(form).toBeHidden();
     const task = page.getByRole("dialog", { name: "任务详情" });
@@ -68,9 +69,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     const convert = page.getByRole("dialog", { name: "遗留问题转为新任务" });
     await expect(convert.getByText(leftover)).toBeVisible();
     await convert.getByLabel("跟进任务标题").fill(followupTitle);
-    await convert
-      .getByLabel("跟进任务负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(convert, "跟进任务负责人", runtime.user.name);
     await convert.getByRole("button", { name: "创建跟进任务" }).click();
     await expect(convert).toBeHidden();
 

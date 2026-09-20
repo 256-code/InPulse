@@ -91,6 +91,20 @@ function mount(
 ) {
   render(mountView(api, path, currentUserId));
 }
+/** CalmSelect 交互：在弹窗内打开下拉并点选目标项（弹层项挂在 body 上，带 title 属性）。 */
+async function pickInModal(
+  modal: ReturnType<typeof within>,
+  label: string,
+  optionTitle: string,
+) {
+  const trigger = modal.getByLabelText(label).closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(await screen.findByTitle(optionTitle));
+}
+
 describe("F-17 draft UI", () => {
   it("validates three sections and creates an independent draft through the client", async () => {
     const create = vi.fn().mockResolvedValue(item);
@@ -101,9 +115,7 @@ describe("F-17 draft UI", () => {
     const modal = within(
       await screen.findByRole("dialog", { name: "新建独立草稿" }),
     );
-    fireEvent.change(modal.getByLabelText("所属模块"), {
-      target: { value: "2" },
-    });
+    await pickInModal(modal, "所属模块", "支付模块");
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
     await modal.findAllByText("请填写此项");
     expect(create).not.toHaveBeenCalled();
@@ -168,9 +180,7 @@ describe("F-17 draft UI", () => {
       await modal.findByRole("button", { name: "应用合并" }),
     ).toBeDisabled();
     expect(modal.getByLabelText("具体改动")).toHaveValue("我的方案");
-    fireEvent.change(modal.getByLabelText(/具体改动冲突/), {
-      target: { value: "mine" },
-    });
+    await pickInModal(modal, "具体改动冲突", "保留我的输入");
     fireEvent.click(modal.getByRole("button", { name: "应用合并" }));
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
@@ -380,18 +390,9 @@ it("creates an independent draft in the project chosen inside the dialog from th
   // 未选项目前不请求模块，也不能提交。
   expect(listModules).not.toHaveBeenCalled();
   expect(modal.getByRole("button", { name: "保存草稿" })).toBeDisabled();
-  fireEvent.change(modal.getByLabelText("所属项目"), {
-    target: { value: "2" },
-  });
-  const moduleSelect = modal.getByLabelText("所属模块");
-  await waitFor(() =>
-    expect(
-      within(moduleSelect).getByRole("option", { name: "风控模块" }),
-    ).toBeInTheDocument(),
-  );
-  fireEvent.change(moduleSelect, {
-    target: { value: "9" },
-  });
+  await pickInModal(modal, "所属项目", "风控项目");
+  // 项目确定后模块选项来自所选项目：打开下拉确认后点选。
+  await pickInModal(modal, "所属模块", "风控模块");
   expect(listModules).toHaveBeenCalledWith(
     2,
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
