@@ -285,9 +285,8 @@ test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入
       .toBe("/projects/" + runtime.projectId + "/modules");
     await expect(page.getByTestId("project-overview")).toBeVisible();
 
-    await page.goto("/projects/" + runtime.projectId + "/modules");
-    await page.getByRole("button", { name: "全部项目" }).click();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/projects");
+    // 2026-09-19：项目头部的「全部项目」返回入口已按用户要求移除，
+    // 返回项目列表改由公共侧栏「项目列表」承担，这里不再断言该按钮。
   } finally {
     await context.close();
   }

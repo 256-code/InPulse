@@ -765,7 +765,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | 验收点 | 实际证据 |
 | --- | --- |
 | F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；开发期「接口说明」黄条按设计师稿 `task-center.tsx` 移除，断言 `task-center-mock-notice` 计数为 0；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；落库当时全量 `pnpm test:e2e` 42/42；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
-| F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、成员数为服务端真实值且 > 0、任务/记录/遗留三项以数字形态渲染、已取消的 `overview-metric-modules` 与 `overview-metric-features` 计数为 0、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页、「全部项目」→ `/projects` | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
+| F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、成员数为服务端真实值且 > 0、任务/记录/遗留三项以数字形态渲染、已取消的 `overview-metric-modules` 与 `overview-metric-features` 计数为 0、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页（项目头「全部项目」入口已于 2026-09-19 按用户要求移除，返回项目列表改走侧栏） | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
 | fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
 
 本地实际执行（2026-09-11）：`pnpm --filter @inpulse/e2e typecheck` 通过；定向 `pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2；全量 `pnpm test:e2e` 42/42（约 5.3 分钟）。推送后 GitHub Actions 已通过：`CI` push run [34508897744](https://github.com/256-code/InPulse/actions/runs/34508897744) 13m19s、`CI` pull_request run [34508916381](https://github.com/256-code/InPulse/actions/runs/34508916381) 13m43s、`Documentation` run [34508916277](https://github.com/256-code/InPulse/actions/runs/34508916277) 9s。
@@ -2019,3 +2019,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（含本轮新增 2 例）；`pnpm --filter @inpulse/api test:unit aggregate-read-cursor` 8 例通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）通过。反事实验证在真实 PostgreSQL 上执行：把 `taskListOrderBy` 临时替换为 `t.id DESC` 后 7 例失败，恢复后 22/22 通过。
 
 未运行 / 已知偏差：① 未跑 Web 单元与 `pnpm test:e2e`（任务中心前端只消费服务端顺序，本轮未改前端代码）、未跑 GitHub Actions；② ADR-037 仍为 `Proposed`，需人工批准；③ 新增集成与单元用例需非作者人工评审。
+## 项目头部移除「全部项目」返回入口（C，2026-09-19 本地落库）
+
+用户要求删掉项目头左上角的「← 全部项目」。`ProjectOverviewPageView` 移除 `.project-detail-head` 内的 `.back-button` 与该组件唯一的 `onBackToProjects` 属性（接口同步收窄），调用方 `ModulesPageView` 去掉传参；返回项目列表改由公共侧栏「项目列表」承担。`ProjectOverviewPageView.test.tsx` 基础渲染参数同步去掉该 handler；E2E `apps/e2e/tests/aggregate-views.spec.ts` 例 2 删除「`全部项目` → `/projects`」断言（保留「查看全部」「查看模块」与旧地址重定向断言），上表 F-29 行已同步。
+
+本地实际执行（2026-09-19）：`pnpm --filter @inpulse/web typecheck` 与 `pnpm --filter @inpulse/e2e typecheck` 通过；定向 `vitest run src/features/project-overview/ProjectOverviewPageView.test.tsx src/features/modules` 2 文件 24 例通过；全量 web 单测 82 文件通过、仅 `ProjectTree.test.tsx` 7 例既有失败；`pnpm lint`、改动文件 `prettier --check` 与 `pnpm check:docs` 通过；无头浏览器复验 `/projects/3/modules` 项目头内已无 `.back-button`（head 盒 270/27/1136×122），截图 `.data/project-head-no-back.png`。未运行：Playwright 全量、`pnpm check` 整链、后端测试。

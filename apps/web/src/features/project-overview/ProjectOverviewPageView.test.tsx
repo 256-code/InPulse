@@ -84,7 +84,6 @@ interface RenderOverrides {
 const renderView = (overrides: RenderOverrides = {}) => {
   const handlers = {
     onRetryProject: vi.fn(),
-    onBackToProjects: vi.fn(),
     onOpenModules: vi.fn(),
     onOpenMembers: vi.fn(),
     onOpenRecords: vi.fn(),
@@ -106,7 +105,6 @@ const renderView = (overrides: RenderOverrides = {}) => {
           }
           projectLoading={false}
           onRetryProject={handlers.onRetryProject}
-          onBackToProjects={handlers.onBackToProjects}
           onOpenModules={handlers.onOpenModules}
           onOpenMembers={handlers.onOpenMembers}
           onOpenRecords={handlers.onOpenRecords}

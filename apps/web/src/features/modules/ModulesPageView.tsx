@@ -67,7 +67,6 @@ export function ModulesPageView({
           project={projectQuery.data?.project ?? null}
           projectLoading={projectQuery.isPending}
           onRetryProject={() => void projectQuery.refetch()}
-          onBackToProjects={() => navigate("/projects")}
           onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
           onOpenRecords={() =>
             navigate("/records?view=published&projectId=" + projectId)
