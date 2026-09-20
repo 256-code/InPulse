@@ -8,7 +8,7 @@
 
 以下为原 Port 的历史接入说明。
 
-本模块提供项目初始化中的未分类模块写入，以及事务内模块写前检查，不代表项目创建闭环或模块管理已完成。
+本模块提供事务内模块写前检查；`createUnclassifiedModule` Port 为兼容保留——ADR-030（2026-09-14）起项目创建不再写入任何模块，生产路径已无调用方，仅模块命令集成测试使用。
 
 ## 事务内 ModuleQueryPort（数据库 CI 通过，待人工评审）
 
@@ -67,7 +67,7 @@ createUnclassifiedModule(
 ID 类型取自现有 modules Schema；`createdBy` 由受信任 Workflow 传入。
 名称固定为“未分类模块”，身份固定为 `UNCLASSIFIED`；数据库默认值提供
 空描述、ACTIVE、排序 0、版本 1、空归档时间以及 `now()` 创建/更新时间。
-已有 fixture 中的“未分类”并非名称约束，技术设计以不可变 kind 判定身份。
+已有 fixture 中的“未分类”并非名称约束，技术设计以不可变 kind 判定身份。ADR-030 起项目创建流程不再调用该 Port，新项目允许零模块，Port 与未分类数据仅为兼容与回归测试保留。
 
 以下是位于 `apps/api/src/workflows/` 的**接入示意**，其中项目创建、成员写入和后续步骤
 仍由 A 实现；不是已交付 Workflow：
