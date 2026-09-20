@@ -14,8 +14,7 @@ import { useSearchParams } from "react-router-dom";
  * `[params, setParams]` 契约——视图代码不变，地址栏不被弹窗交互污染。
  */
 export type SearchParamsInit =
-  | URLSearchParams
-  | Record<string, string | readonly string[]>;
+  URLSearchParams | Record<string, string | readonly string[]>;
 
 export type ScopedSetSearchParams = (
   next: SearchParamsInit,

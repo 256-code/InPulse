@@ -71,9 +71,12 @@ const MODAL_META: Record<
   },
 };
 
-export const ProjectWorkspaceModals: React.FC<
-  ProjectWorkspaceModalsProps
-> = ({ projectId, client, open, onClose }) => {
+export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
+  projectId,
+  client,
+  open,
+  onClose,
+}) => {
   const { user } = useAuth();
   const detail = useProjectDetail({ projectId, client });
   const isSystemAdmin = user?.isAdmin === true;
@@ -143,5 +146,3 @@ export const ProjectWorkspaceModals: React.FC<
     </>
   );
 };
-
-

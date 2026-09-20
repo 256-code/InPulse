@@ -879,10 +879,14 @@ export function TasksPanel({
                         (item.description === "" ? " is-placeholder" : "")
                       }
                       title={
-                        item.description === "" ? "暂无任务描述" : item.description
+                        item.description === ""
+                          ? "暂无任务描述"
+                          : item.description
                       }
                     >
-                      {item.description === "" ? "暂无任务描述" : item.description}
+                      {item.description === ""
+                        ? "暂无任务描述"
+                        : item.description}
                     </p>
                     <div className="calm-card-bottom">
                       <span title={"负责人：" + memberName(item.assigneeId)}>

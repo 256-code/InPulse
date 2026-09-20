@@ -274,9 +274,9 @@ test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入
     const recordsModal = page.getByRole("dialog", { name: "迭代记录" });
     await expect(recordsModal).toBeVisible();
     await expect(recordsModal).toContainText("迭代记录");
-    await expect.poll(() => new URL(page.url()).pathname).toBe(
-      "/projects/" + runtime.projectId + "/modules",
-    );
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toBe("/projects/" + runtime.projectId + "/modules");
     await recordsModal.getByRole("button", { name: "关闭迭代记录" }).click();
     await expect(recordsModal).toBeHidden();
 
