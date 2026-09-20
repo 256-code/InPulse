@@ -698,9 +698,12 @@ button {
   margin: 0 auto;
   padding: 31px 38px 52px;
 }
+/* 右侧动作组与标题横向中轴对齐：左块在浏览面上只剩标题一行（说明段落被
+   `.page-header > div > p { display: none }` 隐藏），因此居中左块即居中对齐标题行；
+   活动页此前已用 `.activity-page-header { align-items: center }` 这么做。 */
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 27px;
@@ -2173,6 +2176,8 @@ td small {
   .page-header {
     flex-direction: column;
     gap: 15px;
+    /* 纵向堆叠时 align-items: center 会把标题与动作组横向居中，这里恢复左对齐。 */
+    align-items: flex-start;
   }
   .page-header h1 {
     font-size: 24px;
@@ -3501,13 +3506,28 @@ a:focus-visible {
   flex-direction: column;
   height: fit-content;
 }
+/* 右侧动作组与标题横向中轴对齐：左块里除标题行外还有功能说明与徽章行，
+   flex 的 align-items 只能对齐整个左块（按钮会掉到说明与徽章之间）。
+   这里改成「左块 + 动作组」两列网格，左块用子网格继承行轨道，
+   动作组落在第 1 行（标题行）内居中，行数按左块最多四行留余量。 */
 .feature-modal-header {
   padding: 26px 30px 20px;
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: repeat(4, auto);
+  column-gap: 24px;
+  row-gap: 0;
+  align-items: start;
   flex-shrink: 0;
+}
+.feature-modal-header > div:first-child {
+  grid-area: 1 / 1 / -1 / 2;
+  display: grid;
+  grid-template-rows: subgrid;
+}
+.feature-modal-header > .catalog-actions {
+  grid-area: 1 / 2 / 2 / 3;
+  align-self: center;
 }
 .feature-modal-header h2 {
   font-size: 24px;
@@ -3686,8 +3706,22 @@ a:focus-visible {
   }
   .feature-modal-header {
     padding: 20px;
-    flex-wrap: wrap;
     gap: 12px;
+    /* 窄屏改为单列堆叠：标题块在上、动作组在下，不再按标题行对齐；
+       行轨道只留两行，避免空的自动行也被 row-gap 撑高。 */
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+  .feature-modal-header > div:first-child,
+  .feature-modal-header > .catalog-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .feature-modal-header > div:first-child {
+    display: block;
+  }
+  .feature-modal-header > .catalog-actions {
+    align-self: auto;
   }
   .feature-modal-header h2 {
     font-size: 21px;
