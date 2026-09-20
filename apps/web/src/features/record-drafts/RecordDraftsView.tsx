@@ -17,12 +17,12 @@ import "./record-drafts.css";
 import { Alert, Button, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
 import {
   createApiClient,
   type InpulseApiClient,
   type MyRecordDraftItem,
 } from "@generated/api";
+import { useScopedSearchParams } from "@features/common/search-params-scope";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -47,7 +47,7 @@ export function RecordDraftsView({
   onCanCreateChange?: ((canCreate: boolean) => void) | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useScopedSearchParams();
   const projectId = Number(params.get("projectId")) || 0;
   const recordId = Number(params.get("recordId")) || 0;
   const taskId = Number(params.get("taskId")) || 0;

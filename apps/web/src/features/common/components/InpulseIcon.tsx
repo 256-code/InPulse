@@ -16,6 +16,7 @@ export type InpulseIconName =
   | "gauge"
   | "home"
   | "kanban"
+  | "layers"
   | "logout"
   | "menu"
   | "plus"
@@ -26,6 +27,7 @@ export type InpulseIconName =
   | "chevronLeft"
   | "clock"
   | "externalLink"
+  | "fileText"
   | "gitMerge"
   | "layoutGrid"
   | "list"
@@ -143,6 +145,13 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <path d="M19 3v18" />
     </>
   ),
+  layers: (
+    <>
+      <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </>
+  ),
   logout: (
     <>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -229,6 +238,15 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <path d="M15 3h6v6" />
       <path d="M10 14 21 3" />
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </>
+  ),
+  fileText: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+      <path d="M10 9H8" />
     </>
   ),
   gitMerge: (

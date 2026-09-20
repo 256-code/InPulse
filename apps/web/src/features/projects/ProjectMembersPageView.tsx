@@ -46,6 +46,11 @@ export interface ProjectMembersPageViewProps {
   /** ADR-033：当前登录用户在本项目的角色，来自 getProject.currentUserRole。 */
   readonly currentUserRole?:
     "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null | undefined;
+  /**
+   * 嵌在项目主页弹窗内：项目已由外层固定，隐藏页内的项目切换器
+   * （切换器依赖整页路由，弹窗内无法生效）。
+   */
+  readonly embedded?: boolean | undefined;
 }
 
 const formatMemberDate = (value: string) =>
@@ -62,6 +67,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   client,
   isSystemAdmin = false,
   currentUserRole = null,
+  embedded = false,
 }) => {
   const { query, addMutation, removeMutation, roleMutation } =
     useProjectMembers(projectId, client);
@@ -260,23 +266,25 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>{project ? project.name : "项目成员管理"}</h1>
-          <p>
-            系统管理员、本项目组长与项目管理员可添加或移除项目成员；
-            移除不会删除任何历史数据，未改派任务保留原负责人，
-            但原成员将立即失去处理权限。
-          </p>
-        </div>
-        {project ? (
-          <div className="catalog-actions">
-            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
-              {projectLifecycleLabel(project.status)}
-            </CalmBadge>
+      {embedded ? null : (
+        <div className="page-header">
+          <div>
+            <h1>{project ? project.name : "项目成员管理"}</h1>
+            <p>
+              系统管理员、本项目组长与项目管理员可添加或移除项目成员；
+              移除不会删除任何历史数据，未改派任务保留原负责人，
+              但原成员将立即失去处理权限。
+            </p>
           </div>
-        ) : null}
-      </div>
+          {project ? (
+            <div className="catalog-actions">
+              <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+                {projectLifecycleLabel(project.status)}
+              </CalmBadge>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {success ? (
         <Alert
@@ -323,24 +331,26 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               title="项目成员"
               hint="系统管理员、本项目组长与项目管理员可以添加或移除成员"
             >
-              <CalmSelect
-                value={projectId}
-                onChange={(next) =>
-                  navigate("/projects/" + String(next) + "/members")
-                }
-                options={(projects.data?.items ?? []).map((item) => ({
-                  value: item.id,
-                  label: item.name,
-                  description: String(item.memberCount) + " 名活跃成员",
-                  iconText: item.code.slice(0, 2).toUpperCase(),
-                  badge: {
-                    text: projectLifecycleLabel(item.status),
-                    tone: projectLifecycleTone(item.status, "blue"),
-                  },
-                }))}
-                appearance="rich"
-                ariaLabel="选择项目"
-              />
+              {embedded ? null : (
+                <CalmSelect
+                  value={projectId}
+                  onChange={(next) =>
+                    navigate("/projects/" + String(next) + "/members")
+                  }
+                  options={(projects.data?.items ?? []).map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    description: String(item.memberCount) + " 名活跃成员",
+                    iconText: item.code.slice(0, 2).toUpperCase(),
+                    badge: {
+                      text: projectLifecycleLabel(item.status),
+                      tone: projectLifecycleTone(item.status, "blue"),
+                    },
+                  }))}
+                  appearance="rich"
+                  ariaLabel="选择项目"
+                />
+              )}
             </CalmSectionTitle>
           </div>
           {project ? (

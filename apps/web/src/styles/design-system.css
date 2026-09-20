@@ -2098,6 +2098,8 @@ td small {
 }
 .task-card-footer {
   padding-top: 15px;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 .empty-project-tasks {
   grid-column: 1 / -1;
@@ -2774,6 +2776,19 @@ a:focus-visible {
   font-size: 12px;
   margin: 0 0 23px;
 }
+/* 任务介绍固定两行：长短描述的卡片同高，底部信息行在整排卡片间对齐。 */
+.calm-task-card > p.task-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.6;
+  min-height: 38px;
+  margin-bottom: 16px;
+}
+.calm-task-card > p.task-card-desc.is-placeholder {
+  color: #a7b2c0;
+}
 .calm-card-bottom {
   border-top: 1px solid #edf1f5;
   padding-top: 15px;
@@ -3414,6 +3429,11 @@ a:focus-visible {
 .module-card .feature-symbol {
   background: #edf0ff;
   color: #6775c4;
+  /* 旧模块卡的 `.module-card span { display:block }` 选择器优先级更高，
+     会把符号盒的 inline-flex 居中顶掉，这里显式还原。 */
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
 }
 .calm-feature-toolbar h3 {
   margin: 0;

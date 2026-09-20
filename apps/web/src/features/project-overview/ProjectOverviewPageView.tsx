@@ -39,8 +39,13 @@ export interface ProjectOverviewPageViewProps {
   readonly onRetryProject: () => void;
   /** 省略时不渲染「查看模块」入口（模块列表页自身已位于该层级）。 */
   readonly onOpenModules?: (() => void) | undefined;
+  /** 标题左侧的返回箭头（与功能/模块页同款圆钮）；省略时不渲染。 */
+  readonly onBack?: (() => void) | undefined;
   readonly onOpenMembers: () => void;
+  /** 「查看全部」：打开项目迭代记录工作区弹窗。 */
   readonly onOpenRecords: () => void;
+  /** 单条最近迭代：就地打开该记录的详情弹窗。 */
+  readonly onOpenRecord: (record: ProjectOverviewIteration) => void;
   readonly onOpenIssues: () => void;
   readonly adapter?: ProjectOverviewAdapter;
   readonly client?: InpulseApiClient | undefined;
@@ -68,8 +73,10 @@ export const ProjectOverviewPageView: React.FC<
   projectError,
   onRetryProject,
   onOpenModules,
+  onBack,
   onOpenMembers,
   onOpenRecords,
+  onOpenRecord,
   onOpenIssues,
   adapter,
   client,
@@ -135,7 +142,7 @@ export const ProjectOverviewPageView: React.FC<
 
   const renderIteration = (item: ProjectOverviewIteration) => (
     <li key={item.recordId}>
-      <button type="button" onClick={onOpenRecords}>
+      <button type="button" onClick={() => onOpenRecord(item)}>
         <InpulseIcon name="gitBranch" size={15} />
         <span>
           {item.featureName === null ? "" : item.featureName + "："}
@@ -170,6 +177,17 @@ export const ProjectOverviewPageView: React.FC<
     >
       <div className="project-detail-head">
         <div className="project-detail-title">
+          {onBack === undefined ? null : (
+            <button
+              type="button"
+              className="title-back-button"
+              aria-label="返回项目列表"
+              title="返回项目列表"
+              onClick={onBack}
+            >
+              <InpulseIcon name="chevronLeft" size={20} />
+            </button>
+          )}
           {project === null ? (
             <span className="project-logo blue">—</span>
           ) : (

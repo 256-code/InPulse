@@ -51,7 +51,7 @@ import {
   type TaskDraft,
 } from "./task-query";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
-import { useFeatures } from "@features/features/feature-query";
+import { isCardClick } from "@features/common/card-click";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import {
   canManageProjectResources,
@@ -342,11 +342,8 @@ export function TasksPanel({
       ? null
       : (taskPublished.find((record) => record.id === openRecordId) ?? null);
   const taskDraftItems = taskDrafts.data?.items ?? [];
-  // 详情头部与卡片归属展示名称而非裸 ID：项目/模块/功能名称均为既有只读契约。
+  // 详情头部展示名称而非裸 ID：项目/模块名称为既有只读契约。
   const projectDetail = useProjectDetail({ client, projectId });
-  const featureList = useFeatures(projectId, moduleId, undefined, client);
-  const featureName = (id: number) =>
-    featureList.query.data?.items.find((f) => f.id === id)?.name;
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -834,10 +831,27 @@ export function TasksPanel({
                 const leftoverSource =
                   marks.get(item.id)?.hasLeftoverSource === true;
                 return (
-                  <article className="calm-task-card" key={item.id}>
+                  <article
+                    className="calm-task-card"
+                    key={item.id}
+                    tabIndex={0}
+                    onClick={(event) => {
+                      if (!isCardClick(event)) return;
+                      openDetail(item.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      if (event.target !== event.currentTarget) return;
+                      event.preventDefault();
+                      openDetail(item.id);
+                    }}
+                  >
                     <div className="calm-card-top">
                       <span className="task-id">{item.code}</span>
                       <span className="task-card-badges">
+                        {item.scopeType === "MODULE" && (
+                          <CalmBadge tone="violet">模块级</CalmBadge>
+                        )}
                         {badge !== null && (
                           <CalmBadge tone={badge.tone} title={badge.title}>
                             {badge.label}
@@ -854,17 +868,21 @@ export function TasksPanel({
                         <CalmBadge tone={statusTone[item.workStatus]}>
                           {statusLabels[item.workStatus]}
                         </CalmBadge>
-                        <CalmBadge tone={priorityTone[item.priority]}>
-                          {priorityLabels[item.priority]}
-                        </CalmBadge>
                       </span>
                     </div>
                     <h3>{item.title}</h3>
-                    <p className="task-belonging">
-                      {item.featureId === null
-                        ? "模块级任务" + (featureId === null ? "" : " · 引用")
-                        : (featureName(item.featureId) ??
-                          "功能 #" + item.featureId)}
+                    {/* 卡片正文是任务介绍；归属由页面语境与「模块级」徽标表达，
+                        不再重复一遍功能名。 */}
+                    <p
+                      className={
+                        "task-card-desc" +
+                        (item.description === "" ? " is-placeholder" : "")
+                      }
+                      title={
+                        item.description === "" ? "暂无任务描述" : item.description
+                      }
+                    >
+                      {item.description === "" ? "暂无任务描述" : item.description}
                     </p>
                     <div className="calm-card-bottom">
                       <span title={"负责人：" + memberName(item.assigneeId)}>
@@ -878,14 +896,17 @@ export function TasksPanel({
                     </div>
                     <div className="task-card-footer">
                       <span className="task-card-counts">
-                        <span>
+                        <CalmBadge tone={priorityTone[item.priority]}>
+                          {priorityLabels[item.priority]}
+                        </CalmBadge>
+                        <span title={"更新 " + formatDate(item.updatedAt)}>
                           <InpulseIcon name="calendar" size={13} />
-                          更新 {formatDate(item.updatedAt)}
+                          更新 {formatDay(item.updatedAt)}
                         </span>
                         {recordCount > 0 && (
                           <span title={recordCount + " 条已发布迭代记录"}>
                             <InpulseIcon name="gitBranch" size={13} />
-                            迭代记录 {recordCount} 条
+                            记录 {recordCount} 条
                           </span>
                         )}
                       </span>

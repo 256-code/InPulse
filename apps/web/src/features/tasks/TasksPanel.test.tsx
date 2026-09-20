@@ -290,7 +290,9 @@ describe("F-14 task editing", () => {
     mount(
       client({ listTasks: vi.fn().mockResolvedValue({ items: [module] }) }),
     );
-    await screen.findByText("模块级任务 · 引用");
+    // 卡片正文是任务介绍，模块级引用由「模块级」徽标表达（不再重复功能名）。
+    await screen.findByText("模块级");
+    expect(screen.getByText("原说明")).toBeVisible();
     expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
     expect(

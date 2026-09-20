@@ -1214,17 +1214,77 @@
   }
 }
 
-/* ===================== F-05 项目与成员 ===================== */
-.project-card > p {
-  min-height: 48px;
+/* 项目主页三个工作区弹窗：头部是「项目名眉标 + 视图标题」的正式头部带，
+   正文是整页级视图（页头标题在 embedded 下已交给弹层头部），弹窗内独立滚动。 */
+.project-workspace-modal > .drawer-header {
+  padding: 18px 28px 14px;
+  border-bottom: 1px solid #e8eef5;
+  align-items: center;
 }
 
+.project-workspace-modal > .project-workspace-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 28px 24px;
+  overflow-y: auto;
+}
+
+/* 记录视图 embedded 页头只保留 CTA：按钮靠右，不再占整行标题位。 */
+.project-workspace-modal .page-header.embedded {
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+/* ===================== F-05 项目与成员 ===================== */
+/* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。 */
+.project-card > p.project-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 44px;
+}
+
+.project-card > p.project-card-desc.is-placeholder {
+  color: #a7b2c0;
+}
+
+/* 操作行：常规操作居左、管理成员固定靠右；按钮统一高度与内边距，
+   不再一个描边大块、一个无边小字地混排。 */
 .project-card-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.project-card-actions-main {
+  display: flex;
+  align-items: center;
   gap: 2px;
   flex-wrap: wrap;
+}
+
+.project-card-actions .text-button.ant-btn,
+.project-card-actions .danger-button.ant-btn {
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* 卡片内的归档/批准等危险操作改为与文字按钮同重量的红色幽灵按钮，
+   避免描边大块与无边小字混排。 */
+.project-card-actions .danger-button.ant-btn {
+  border-color: transparent;
+  background: transparent;
+}
+
+.project-card-actions .danger-button.ant-btn:not(:disabled):hover {
+  background: #fff3f2 !important;
+  border-color: transparent !important;
+  color: #a43f39 !important;
 }
 
 /* 整卡可点击：卡片本体用 article/div 承载 onClick，内部按钮/链接由 isCardClick 拦截 */
@@ -1232,6 +1292,18 @@
 .module-card,
 .calm-feature-card {
   cursor: pointer;
+}
+
+/* 任务卡整卡点击打开详情弹窗；用 tabindex 识别可点击卡片，
+   草稿卡等不带 tabindex 的同名卡片不受影响。 */
+.calm-task-card[tabindex="0"] {
+  cursor: pointer;
+}
+
+.calm-task-card[tabindex="0"]:focus-visible {
+  outline: 2px solid #2f6fb5;
+  outline-offset: 2px;
+  border-radius: 12px;
 }
 
 .project-card:focus-visible,

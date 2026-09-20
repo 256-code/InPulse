@@ -478,20 +478,20 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </span>
         </div>
         <div className="task-card-footer">
-          <CalmBadge
-            tone={priorityTone[item.priority]}
-            title={`优先级：${priorityLabels[item.priority]}`}
-          >
-            {priorityLabels[item.priority]}
-          </CalmBadge>
-          {item.publishedRecordCount > 0 ? (
-            <span className="task-card-counts">
+          <span className="task-card-counts">
+            <CalmBadge
+              tone={priorityTone[item.priority]}
+              title={`优先级：${priorityLabels[item.priority]}`}
+            >
+              {priorityLabels[item.priority]}
+            </CalmBadge>
+            {item.publishedRecordCount > 0 ? (
               <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
-                <InpulseIcon name="calendar" size={13} />
+                <InpulseIcon name="gitBranch" size={13} />
                 记录 {item.publishedRecordCount} 条
               </span>
-            </span>
-          ) : null}
+            ) : null}
+          </span>
         </div>
       </button>
     );
