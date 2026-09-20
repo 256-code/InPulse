@@ -281,3 +281,13 @@
 - 退出登录与未登录态的「前往登录」回到 `/login`，不再直接整页跳 SSO。
 - ADR-032 的 OIDC 协议、两条 302-only 路由、`securityFlow` 五条 allowlist、用户映射、JIT 开通、会话与限流语义均不变；服务端路由与权限矩阵无改动。
 - 本文件上文历史条目中出现的「`/login` 默认整页跳转 SSO」为当时事实，与本节冲突时以 ADR-036 与本节的现行规则为准。
+
+## 2026-09-20 ADR-038 本地会话空闲时长调整说明
+
+按用户要求把本地会话空闲有效期由 30 分钟调长为 2 小时（[ADR-038](./docs/adr/ADR-038.md) 修订 ADR-032 决策 6 的时长取值）。因此：
+
+- 默认空闲有效期由 1800 秒改为 7200 秒（`apps/api/src/auth/session-ttl.policy.ts`），口令与 SSO 登录共用同一 `SESSION_TTL_POLICY`；`SESSION_IDLE_MAX_AGE_SECONDS` 仍可覆盖，非法取值继续启动失败。
+- 失效机制不变：空闲超时仍自签发起固定计算、不随请求滑动续期；绝对超时仍为 7 天；`auth_version` 实时失效、停用即失效、Session 清理与备份排除语义均无改动。
+- 部署配方同步为 2 小时：`deploy/.env.deploy.example` 与 `deploy/.env.deploy.test` 写入 `SESSION_IDLE_MAX_AGE_SECONDS=7200`，`deploy/compose.yaml` 注释同步。
+- 路由、契约、权限矩阵与数据库迁移无改动；测试断言已同步（`session-ttl.policy.test.ts` 默认 7200 秒、`sso-login.integration.test.ts` 以 7200 秒签发并断言窗口），测试矩阵新增 2026-09-20 修订行。
+- 本文件上文历史条目中出现的 30 分钟空闲超时为当时事实，与本节冲突时以 ADR-038 与本节的现行规则为准。
