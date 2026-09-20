@@ -5,7 +5,11 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  createSearchParams,
+  useSearchParams,
+  type URLSearchParamsInit,
+} from "react-router-dom";
 
 /**
  * 搜索参数作用域：整页视图（记录工作区、草稿条带、遗留问题）用 `useSearchParams`
@@ -13,8 +17,7 @@ import { useSearchParams } from "react-router-dom";
  * （react-router 禁止 Router 嵌套），改由本作用域用本地 state 提供同一份
  * `[params, setParams]` 契约——视图代码不变，地址栏不被弹窗交互污染。
  */
-export type SearchParamsInit =
-  URLSearchParams | Record<string, string | readonly string[]>;
+export type SearchParamsInit = URLSearchParamsInit;
 
 export type ScopedSetSearchParams = (
   next: SearchParamsInit,
@@ -34,7 +37,7 @@ export const SearchParamsScope: React.FC<{
 }> = ({ initial, children }) => {
   const [params, setParams] = useState(() => new URLSearchParams(initial));
   const set = useCallback<ScopedSetSearchParams>((next) => {
-    setParams(new URLSearchParams(next));
+    setParams(createSearchParams(next));
   }, []);
   const value = useMemo(() => [params, set] as const, [params, set]);
   return (
