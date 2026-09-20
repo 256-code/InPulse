@@ -37,7 +37,6 @@ export interface ProjectOverviewPageViewProps {
   readonly projectLoading: boolean;
   readonly projectError?: string | undefined;
   readonly onRetryProject: () => void;
-  readonly onBackToProjects: () => void;
   /** 省略时不渲染「查看模块」入口（模块列表页自身已位于该层级）。 */
   readonly onOpenModules?: (() => void) | undefined;
   readonly onOpenMembers: () => void;
@@ -68,7 +67,6 @@ export const ProjectOverviewPageView: React.FC<
   projectLoading,
   projectError,
   onRetryProject,
-  onBackToProjects,
   onOpenModules,
   onOpenMembers,
   onOpenRecords,
@@ -171,14 +169,6 @@ export const ProjectOverviewPageView: React.FC<
       data-testid="project-overview"
     >
       <div className="project-detail-head">
-        <button
-          type="button"
-          className="back-button"
-          onClick={onBackToProjects}
-        >
-          <InpulseIcon name="arrowLeft" size={16} />
-          全部项目
-        </button>
         <div className="project-detail-title">
           {project === null ? (
             <span className="project-logo blue">—</span>
