@@ -111,7 +111,9 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
       recipient.getByRole("dialog", { name: "任务详情" }),
     ).toBeVisible();
     await expect(
-      recipient.getByText("我的最终说明", { exact: true }),
+      recipient
+        .getByRole("dialog", { name: "任务详情" })
+        .getByText("我的最终说明", { exact: true }),
     ).toBeVisible();
     await other.close();
   } finally {

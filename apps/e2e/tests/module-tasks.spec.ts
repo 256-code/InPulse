@@ -90,15 +90,15 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     ).toContainText(names[0]!);
     for (const url of featureUrls) {
       await page.goto(url);
+      // 86dd2b2 起模块级任务在卡片上用「模块级」徽标标识，不再渲染「模块级任务 · 引用」文案。
+      const moduleCard = page
+        .getByRole("article")
+        .filter({ has: page.getByText(title, { exact: true }) });
       await expect(
-        page.getByText("模块级任务 · 引用", { exact: true }),
+        moduleCard.getByText("模块级", { exact: true }),
       ).toBeVisible();
       await expect(page.getByText("1 个任务")).toBeVisible();
-      await page
-        .getByRole("article")
-        .filter({ has: page.getByText(title, { exact: true }) })
-        .getByRole("button", { name: "任务详情" })
-        .click();
+      await moduleCard.getByRole("button", { name: "任务详情" }).click();
       await expect(
         page.getByRole("button", { name: "编辑任务" }),
       ).toBeDisabled();
