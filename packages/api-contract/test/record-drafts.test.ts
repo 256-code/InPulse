@@ -10,7 +10,7 @@ const content = {
   contextProblem: " 发现重复提交 ",
   changeSolution: "增加请求去重",
   resultVerification: "并发回归通过",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 describe("F-17 draft content", () => {
   it("lets the server derive the source title and rejects client-owned identity or state fields", () => {
@@ -43,7 +43,7 @@ describe("F-17 draft content", () => {
     expect(recordDraftContentSchema.parse(content)).toMatchObject({
       title: "支付重试验证",
       contextProblem: "发现重复提交",
-      remainingIssues: "",
+      remainingIssues: [],
     });
     for (const field of [
       "title",

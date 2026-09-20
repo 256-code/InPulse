@@ -1,0 +1,143 @@
+import React from "react";
+
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
+
+import {
+  avatarTextOf,
+  avatarToneOf,
+  dueListLabelOf,
+  laneProgressOf,
+  laneToneOf,
+  priorityMarkOf,
+  workStatusLabelOf,
+  workStatusToneOf,
+} from "../task-board-format";
+import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
+
+/**
+ * 列表视图：按模块分组的高密度表格，列固定为
+ * 编号 / 标题 / 功能 / 负责人 / 优先级 / 状态 / 截止或完成时间。
+ * 分组头沿用泳道统计（全量口径），行点击就地打开任务详情。
+ */
+export interface TaskBoardTableProps {
+  readonly modules: readonly TaskBoardModule[];
+  readonly collapsedIds: ReadonlySet<number>;
+  readonly onToggleLane: (moduleId: number) => void;
+  readonly onOpenTask: (card: TaskBoardCard) => void;
+}
+
+function rowClassNameOf(card: TaskBoardCard): string {
+  if (card.workStatus === "DONE") return "tb-row tb-row--done";
+  if (card.workStatus === "CANCELED") return "tb-row tb-row--canceled";
+  return "tb-row";
+}
+
+const TaskBoardTableRow: React.FC<{
+  readonly card: TaskBoardCard;
+  readonly onOpen: (card: TaskBoardCard) => void;
+}> = ({ card, onOpen }) => {
+  const due = dueListLabelOf(card);
+  const priority = priorityMarkOf(card.priority);
+  return (
+    <button
+      type="button"
+      className={rowClassNameOf(card)}
+      onClick={() => onOpen(card)}
+      aria-label={"打开任务 " + card.code + " " + card.title}
+    >
+      <span className="tb-code">{card.code}</span>
+      <span className="tb-row-title">{card.title}</span>
+      <span className="tb-row-sub">{card.featureName ?? "模块级任务"}</span>
+      <span className="tb-row-owner">
+        <span className={"tb-ava " + avatarToneOf(card.assignee.userId)}>
+          {avatarTextOf(card.assignee.name)}
+        </span>
+        {card.assignee.name}
+      </span>
+      <span className={"tb-prio tb-prio--" + priority.tone}>
+        {priority.label}
+      </span>
+      <span className={"tb-st tb-st--" + workStatusToneOf(card.workStatus)}>
+        {workStatusLabelOf(card.workStatus)}
+      </span>
+      <span className={"tb-row-date tb-date--" + due.tone}>{due.text}</span>
+    </button>
+  );
+};
+
+export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
+  modules,
+  collapsedIds,
+  onToggleLane,
+  onOpenTask,
+}) => {
+  return (
+    <div className="tb-list-wrap">
+      <div className="tb-list-head">
+        <span>编号</span>
+        <span>标题</span>
+        <span>功能</span>
+        <span>负责人</span>
+        <span>优先级</span>
+        <span>状态</span>
+        <span>截止 / 完成</span>
+      </div>
+      {modules.map((lane) => {
+        const progress = laneProgressOf(lane);
+        const collapsed = collapsedIds.has(lane.moduleId);
+        return (
+          <React.Fragment key={lane.moduleId}>
+            <div
+              className={
+                "tb-lgroup" + (collapsed ? " tb-lgroup--collapsed" : "")
+              }
+              onClick={() => onToggleLane(lane.moduleId)}
+            >
+              {/* 箭头按钮保留键盘焦点与可访问名；点击事件冒泡到整行头部统一切换。 */}
+              <button
+                type="button"
+                className="tb-lane-toggle"
+                aria-expanded={!collapsed}
+                aria-label={(collapsed ? "展开模块 " : "折叠模块 ") + lane.name}
+              >
+                <InpulseIcon name="chevron" size={14} />
+              </button>
+              <span className={"tb-lane-icon " + laneToneOf(lane.moduleId)}>
+                <InpulseIcon name="boxes" size={14} />
+              </span>
+              <strong>{lane.name}</strong>
+              <span className="tb-lgroup-sub">
+                {lane.stats.total} 个任务 · 进行中 {lane.stats.open}
+              </span>
+              {lane.stats.overdue > 0 ? (
+                <span className="tb-emergency">逾期 {lane.stats.overdue}</span>
+              ) : null}
+              <div className="tb-lane-spacer" />
+              <div className="tb-lane-progress">
+                <div className="tb-bar">
+                  <i
+                    className={progress.percent < 60 ? "low" : ""}
+                    style={{ width: progress.percent + "%" }}
+                  />
+                </div>
+                <b>
+                  {progress.done}/{progress.denominator}
+                </b>
+                <span>{progress.percent}%</span>
+              </div>
+            </div>
+            {collapsed
+              ? null
+              : lane.tasks.map((card) => (
+                  <TaskBoardTableRow
+                    key={card.taskId}
+                    card={card}
+                    onOpen={onOpenTask}
+                  />
+                ))}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};

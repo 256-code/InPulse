@@ -49,6 +49,14 @@ import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
 import { moduleSchemas } from "./contracts/modules.zod.js";
+import {
+  taskBoardCardSchema,
+  taskBoardModuleSchema,
+  taskBoardModuleStatsSchema,
+  taskBoardProjectSchema,
+  taskBoardResponseSchema,
+  taskBoardStatsSchema,
+} from "./contracts/task-board.zod.js";
 
 import {
   currentUserResponseSchema,
@@ -103,17 +111,26 @@ import {
   addProjectMemberResponseSchema,
   removeProjectMemberResponseSchema,
   projectMemberReplayContextSchema,
+  setProjectMemberRoleRequestSchema,
+  setProjectMemberRoleResponseSchema,
   projectCodeSchema,
+  projectStatusSchema,
   projectItemSchema,
   projectListResponseSchema,
   projectDetailResponseSchema,
   projectPathSchema,
   projectEditRequestSchema,
+  projectStatusChangeRequestSchema,
   projectMutationHeadersSchema,
   projectVersionHeadersSchema,
   projectReplayContextSchema,
   projectArchiveRequestSchema,
   projectArchivePreviewResponseSchema,
+  projectArchiveRequestPathSchema,
+  projectArchiveRequestSubmissionSchema,
+  projectArchiveRequestItemSchema,
+  projectArchiveRejectionRequestSchema,
+  projectArchiveRequestReplayContextSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -235,6 +252,38 @@ export const schemaRegistry = {
     summary: "项目概览响应：项目头、成员数与聚合结果（R-2）",
     sensitiveFieldPaths: [],
   },
+  TaskBoardProject: {
+    schema: taskBoardProjectSchema,
+    summary: "任务看板项目头，返回原始状态枚举（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardStats: {
+    schema: taskBoardStatsSchema,
+    summary:
+      "任务看板项目级统计：完成率、状态计数、逾期、今日到期、本周完成、功能数与成员数（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardCard: {
+    schema: taskBoardCardSchema,
+    summary:
+      "任务看板卡片：优先级、状态、截止与完成时间、服务端截止状态、负责人与 PUBLISHED 记录数（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardModuleStats: {
+    schema: taskBoardModuleStatsSchema,
+    summary: "任务看板泳道统计（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardModule: {
+    schema: taskBoardModuleSchema,
+    summary: "任务看板泳道：模块功能数、统计、负责人头像组与任务卡（R-8）",
+    sensitiveFieldPaths: [],
+  },
+  TaskBoardResponse: {
+    schema: taskBoardResponseSchema,
+    summary: "任务看板响应：项目头、生成时间、项目级统计与模块泳道（R-8）",
+    sensitiveFieldPaths: [],
+  },
   MyTasksQueryRequest: {
     schema: myTasksQueryRequestSchema,
     summary: "我的任务查询参数：四项筛选与游标，负责人固定为当前用户（R-3）",
@@ -243,7 +292,7 @@ export const schemaRegistry = {
   MyTaskItem: {
     schema: myTaskItemSchema,
     summary:
-      "我的任务条目，含优先级、截止、完成时间、创建者、外部链接数与聚合组角色（R-3 / §10.3）",
+      "我的任务条目，含优先级、截止、完成时间、创建者、外部链接数、聚合组角色与遗留问题来源标记（R-3 / §10.3 / D-2）",
     sensitiveFieldPaths: [],
   },
   MyTaskStats: {
@@ -271,7 +320,8 @@ export const schemaRegistry = {
   },
   TaskGroupMembershipItem: {
     schema: taskGroupMembershipItemSchema,
-    summary: "任务卡片聚合关系条目：任务、聚合组与组内角色（R-5 / §10.4）",
+    summary:
+      "任务卡片聚合关系条目：任务、聚合组、组内角色与遗留问题来源标记（R-5 / §10.4 / D-2）",
     sensitiveFieldPaths: [],
   },
   TaskGroupMembershipResponse: {
@@ -458,9 +508,14 @@ export const schemaRegistry = {
     summary: "项目详情路径参数",
     sensitiveFieldPaths: [],
   },
+  ProjectStatus: {
+    schema: projectStatusSchema,
+    summary: "项目生命周期四态：未开始 / 进行中 / 维护中 / 已归档",
+    sensitiveFieldPaths: [],
+  },
   ProjectItem: {
     schema: projectItemSchema,
-    summary: "项目公开摘要；包含归档状态与活跃成员数",
+    summary: "项目公开摘要；包含四态状态、粘性完成标记与活跃成员数",
     sensitiveFieldPaths: [],
   },
   ProjectListResponse: {
@@ -554,6 +609,16 @@ export const schemaRegistry = {
     summary: "成员写操作幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
+  SetProjectMemberRoleRequest: {
+    schema: setProjectMemberRoleRequestSchema,
+    summary: "ADR-033 任命/撤销项目内角色请求",
+    sensitiveFieldPaths: [],
+  },
+  SetProjectMemberRoleResponse: {
+    schema: setProjectMemberRoleResponseSchema,
+    summary: "角色设置成功响应（200）",
+    sensitiveFieldPaths: [],
+  },
   CreateProjectResponse: {
     schema: createProjectResponseSchema,
     summary: "创建项目成功响应（200）",
@@ -567,6 +632,11 @@ export const schemaRegistry = {
   ProjectEditRequest: {
     schema: projectEditRequestSchema,
     summary: "项目编辑请求；编码不可修改，名称与描述整笔替换",
+    sensitiveFieldPaths: [],
+  },
+  ProjectStatusChangeRequest: {
+    schema: projectStatusChangeRequestSchema,
+    summary: "项目状态变更请求；只接受未开始 / 进行中 / 维护中",
     sensitiveFieldPaths: [],
   },
   ProjectMutationHeaders: {
@@ -592,6 +662,31 @@ export const schemaRegistry = {
   ProjectArchivePreviewResponse: {
     schema: projectArchivePreviewResponseSchema,
     summary: "归档前未完成任务数提醒",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRequestPath: {
+    schema: projectArchiveRequestPathSchema,
+    summary: "项目归档申请路径参数（项目与申请）",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRequestSubmission: {
+    schema: projectArchiveRequestSubmissionSchema,
+    summary: "项目归档申请理由；申请本身不改变项目状态",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRequestItem: {
+    schema: projectArchiveRequestItemSchema,
+    summary: "项目归档申请公开条目；不暴露账号字段",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRejectionRequest: {
+    schema: projectArchiveRejectionRequestSchema,
+    summary: "驳回项目归档申请的可选批注",
+    sensitiveFieldPaths: [],
+  },
+  ProjectArchiveRequestReplayContext: {
+    schema: projectArchiveRequestReplayContextSchema,
+    summary: "项目归档申请审核幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
   UserAuthState: {

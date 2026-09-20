@@ -1,6 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
+
+/**
+ * 标题行内的标题、任务数徽章与右侧控件必须共用同一条垂直中线。
+ * 功能档案页把任务面板嵌在 `.feature-reading` 里，该容器的 `h3` 规则曾给面板标题
+ * 补上 12px 下边距，在垂直居中的标题行里把标题顶高了 6px。
+ */
+async function expectTaskPanelHeadingAligned(page: Page): Promise<void> {
+  const row = page
+    .locator(".calm-section-title", {
+      has: page.locator(".task-panel-heading"),
+    })
+    .first();
+  await expect(row).toBeVisible();
+  const centers = await row.evaluate((element) => {
+    const selectors = [
+      ".task-panel-heading h3",
+      ".task-panel-heading .badge",
+      ".task-status-filter",
+      ".segmented",
+      ".primary-button",
+    ];
+    return selectors
+      .map((selector) => element.querySelector(selector))
+      .filter((target): target is Element => target !== null)
+      .map((target) => {
+        const rect = target.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      });
+  });
+  expect(centers).toHaveLength(5);
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
+}
 
 test("F-15 单份模块任务影响两功能，引用计数与增删关系持久化", async ({
   browser,
@@ -47,9 +80,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     const create = page.getByRole("dialog", { name: "新建任务" });
     const title = `公共任务-${suffix}`;
     await create.getByLabel("任务标题").fill(title);
-    await create
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(create, "负责人", runtime.user.name);
     await create.getByLabel(names[0]!, { exact: true }).check();
     await create.getByLabel(names[1]!, { exact: true }).check();
     await create.getByRole("button", { name: /保\s*存/ }).click();
@@ -59,15 +90,15 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     ).toContainText(names[0]!);
     for (const url of featureUrls) {
       await page.goto(url);
-      await expect(
-        page.getByText("模块级任务 · 引用", { exact: true }),
-      ).toBeVisible();
-      await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
-      await page
+      // 86dd2b2 起模块级任务在卡片上用「模块级」徽标标识，不再渲染「模块级任务 · 引用」文案。
+      const moduleCard = page
         .getByRole("article")
-        .filter({ has: page.getByText(title, { exact: true }) })
-        .getByRole("button", { name: "任务详情" })
-        .click();
+        .filter({ has: page.getByText(title, { exact: true }) });
+      await expect(
+        moduleCard.getByText("模块级", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByText("1 个任务")).toBeVisible();
+      await moduleCard.getByRole("button", { name: "任务详情" }).click();
       await expect(
         page.getByRole("button", { name: "编辑任务" }),
       ).toBeDisabled();
@@ -81,7 +112,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await page.goto(featureUrls[0]!);
     await expect(page.getByText("暂无任务", { exact: true })).toBeVisible();
     await page.goto(featureUrls[1]!);
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
+    await expectTaskPanelHeadingAligned(page);
     await page.goto(`/projects/${runtime.projectId}/modules/${moduleId}/tasks`);
     await page
       .getByRole("article")
@@ -93,10 +125,10 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await page.reload();
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
     await page.goto(featureUrls[0]!);
     await expect(page.getByText(title, { exact: true })).toBeVisible();
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
     await page.goto("/notifications");
     await page.getByText(`任务指派：${title}`, { exact: true }).click();
     await expect(page).toHaveURL(

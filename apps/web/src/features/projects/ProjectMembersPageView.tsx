@@ -12,7 +12,12 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import {
+  projectLifecycleLabel,
+  projectLifecycleTone,
+} from "@features/common/resource-lifecycle";
 import {
   describeUserDirectoryError,
   useUserDirectoryQuery,
@@ -36,19 +41,36 @@ interface ReassignmentChoice {
 export interface ProjectMembersPageViewProps {
   readonly projectId: number;
   readonly client?: InpulseApiClient | undefined;
+  /** ADR-033：当前登录用户是否系统管理员（可任命/转移任意角色）。 */
+  readonly isSystemAdmin?: boolean | undefined;
+  /** ADR-033：当前登录用户在本项目的角色，来自 getProject.currentUserRole。 */
+  readonly currentUserRole?:
+    "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null | undefined;
+  /**
+   * 嵌在项目主页弹窗内：项目已由外层固定，隐藏页内的项目切换器
+   * （切换器依赖整页路由，弹窗内无法生效）。
+   */
+  readonly embedded?: boolean | undefined;
 }
 
 const formatMemberDate = (value: string) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 
+const roleLabel: Record<"MEMBER" | "PROJECT_ADMIN" | "LEADER", string> = {
+  MEMBER: "成员",
+  PROJECT_ADMIN: "项目管理员",
+  LEADER: "组长",
+};
+
 export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   projectId,
   client,
+  isSystemAdmin = false,
+  currentUserRole = null,
+  embedded = false,
 }) => {
-  const { query, addMutation, removeMutation } = useProjectMembers(
-    projectId,
-    client,
-  );
+  const { query, addMutation, removeMutation, roleMutation } =
+    useProjectMembers(projectId, client);
   const directory = useUserDirectoryQuery({ client });
   const [addOpen, setAddOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -133,6 +155,53 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     removeMutation.reset();
   };
 
+  // ADR-033：角色任命入口。系统管理员可设全部角色（含转移组长）；
+  // 本项目组长只能任命/撤销项目管理员。
+  const canSetRole = isSystemAdmin || currentUserRole === "LEADER";
+  const assignableRoles = isSystemAdmin
+    ? (["MEMBER", "PROJECT_ADMIN", "LEADER"] as const)
+    : (["MEMBER", "PROJECT_ADMIN"] as const);
+  const [roleTarget, setRoleTarget] = useState<ProjectMemberRecordItem | null>(
+    null,
+  );
+  const [selectedRole, setSelectedRole] = useState<
+    "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null
+  >(null);
+
+  const openRoleModal = (member: ProjectMemberRecordItem) => {
+    setRoleTarget(member);
+    setSelectedRole(member.role === "LEADER" ? null : member.role);
+    setActionError(null);
+    setSuccess(null);
+    roleMutation.reset();
+  };
+
+  const closeRoleModal = () => {
+    if (roleMutation.isPending) return;
+    setRoleTarget(null);
+    setSelectedRole(null);
+    roleMutation.reset();
+  };
+
+  const submitRole = async () => {
+    if (roleTarget === null || selectedRole === null) return;
+    if (roleMutation.isPending) return;
+    setActionError(null);
+    try {
+      await roleMutation.mutateAsync({
+        userId: roleTarget.userId,
+        role: selectedRole,
+      });
+      setSuccess(
+        `已将 ${roleTarget.name} 的项目角色设置为${roleLabel[selectedRole]}。`,
+      );
+      setRoleTarget(null);
+      setSelectedRole(null);
+    } catch (error) {
+      setActionError(projectMemberErrorMessage(error));
+    }
+  };
+
   const submitAdd = async () => {
     if (selectedUserId === null || addMutation.isPending) return;
     setActionError(null);
@@ -197,23 +266,25 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <span className="eyebrow">项目 / 成员与设置</span>
-          <h1>{project ? project.name : "项目成员管理"}</h1>
-          <p>
-            系统管理员可添加或移除项目成员；移除不会删除任何历史数据，
-            未改派任务保留原负责人，但原成员将立即失去处理权限。
-          </p>
-        </div>
-        {project ? (
-          <div className="catalog-actions">
-            <CalmBadge tone={project.status === "ACTIVE" ? "blue" : "amber"}>
-              {project.status === "ACTIVE" ? "正常" : "已归档"}
-            </CalmBadge>
+      {embedded ? null : (
+        <div className="page-header">
+          <div>
+            <h1>{project ? project.name : "项目成员管理"}</h1>
+            <p>
+              系统管理员、本项目组长与项目管理员可添加或移除项目成员；
+              移除不会删除任何历史数据，未改派任务保留原负责人，
+              但原成员将立即失去处理权限。
+            </p>
           </div>
-        ) : null}
-      </div>
+          {project ? (
+            <div className="catalog-actions">
+              <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+                {projectLifecycleLabel(project.status)}
+              </CalmBadge>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {success ? (
         <Alert
@@ -258,21 +329,28 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           <div className="settings-panel-head">
             <CalmSectionTitle
               title="项目成员"
-              hint="只有系统管理员可以添加或移除成员"
+              hint="系统管理员、本项目组长与项目管理员可以添加或移除成员"
             >
-              <select
-                aria-label="选择项目"
-                value={projectId}
-                onChange={(event) =>
-                  navigate(`/projects/${event.target.value}/members`)
-                }
-              >
-                {(projects.data?.items ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              {embedded ? null : (
+                <CalmSelect
+                  value={projectId}
+                  onChange={(next) =>
+                    navigate("/projects/" + String(next) + "/members")
+                  }
+                  options={(projects.data?.items ?? []).map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    description: String(item.memberCount) + " 名活跃成员",
+                    iconText: item.code.slice(0, 2).toUpperCase(),
+                    badge: {
+                      text: projectLifecycleLabel(item.status),
+                      tone: projectLifecycleTone(item.status, "blue"),
+                    },
+                  }))}
+                  appearance="rich"
+                  ariaLabel="选择项目"
+                />
+              )}
             </CalmSectionTitle>
           </div>
           {project ? (
@@ -283,7 +361,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   <code>{project.code}</code>（创建后不可修改）
                 </dd>
                 <dt>状态</dt>
-                <dd>{project.status === "ACTIVE" ? "正常" : "已归档"}</dd>
+                <dd>{projectLifecycleLabel(project.status)}</dd>
                 <dt>创建人</dt>
                 <dd>
                   {memberNames.get(project.createdBy) ?? "—"}
@@ -343,12 +421,29 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         >
                           {member.status === "ACTIVE" ? "活跃成员" : "已移除"}
                         </CalmBadge>
+                        {member.status === "ACTIVE" &&
+                        member.role !== "MEMBER" ? (
+                          <CalmBadge
+                            tone={member.role === "LEADER" ? "blue" : "violet"}
+                          >
+                            {roleLabel[member.role]}
+                          </CalmBadge>
+                        ) : null}
                         {member.status === "REMOVED" ? (
                           <small>历史记录已保留</small>
                         ) : null}
                       </div>
                       <div className="member-card-actions">
-                        {member.status === "ACTIVE" ? (
+                        {member.status === "ACTIVE" && canSetRole ? (
+                          <Button
+                            className="secondary-button"
+                            onClick={() => openRoleModal(member)}
+                          >
+                            设置角色
+                          </Button>
+                        ) : null}
+                        {member.status === "ACTIVE" &&
+                        member.role !== "LEADER" ? (
                           <Button
                             className="danger-button"
                             onClick={() => openRemove(member)}
@@ -397,12 +492,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   className="danger-button"
                   onClick={() =>
                     setDangerAction(
-                      project.status === "ACTIVE" ? "archive" : "restore",
+                      project.status === "ARCHIVED" ? "restore" : "archive",
                     )
                   }
                 >
                   <InpulseIcon name="folder" size={15} />
-                  {project.status === "ACTIVE" ? "归档项目" : "恢复项目"}
+                  {project.status === "ARCHIVED" ? "恢复项目" : "归档项目"}
                 </Button>
               </div>
             </>
@@ -592,6 +687,80 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 })}
               </div>
             )}
+            {actionError ? (
+              <Alert type="error" showIcon title={actionError} />
+            ) : null}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        className="catalog-modal"
+        open={roleTarget !== null}
+        eyebrow={project ? project.name + " / 成员管理" : "项目成员"}
+        title="设置项目角色"
+        onCancel={closeRoleModal}
+        mask={{ closable: !roleMutation.isPending }}
+        footer={
+          <>
+            <Button
+              className="secondary-button"
+              onClick={closeRoleModal}
+              disabled={roleMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              className="primary-button"
+              loading={roleMutation.isPending}
+              disabled={
+                selectedRole === null ||
+                selectedRole === (roleTarget?.role ?? null)
+              }
+              onClick={() => void submitRole()}
+            >
+              保存角色
+            </Button>
+          </>
+        }
+      >
+        <div className="catalog-form">
+          <div className="dialog-form">
+            <Alert
+              showIcon
+              type="info"
+              title={
+                "为 " +
+                (roleTarget?.name ?? "") +
+                " 设置项目内角色（仅在本项目生效）"
+              }
+              description={
+                isSystemAdmin
+                  ? "系统管理员可任命成员、项目管理员或转移组长；转移组长后原组长自动成为普通成员。"
+                  : "组长可任命或撤销项目管理员；组长角色的任命与转移只能由系统管理员执行。"
+              }
+            />
+            <div className="impact-fieldset member-candidate-list">
+              <div className="check-list">
+                {assignableRoles.map((role) => (
+                  <label key={role}>
+                    <input
+                      type="radio"
+                      name="project-member-role"
+                      checked={selectedRole === role}
+                      aria-label={"项目角色：" + roleLabel[role]}
+                      onChange={() => setSelectedRole(role)}
+                    />
+                    {roleLabel[role]}
+                    {role === "LEADER"
+                      ? "（可管理成员并任命项目管理员）"
+                      : role === "PROJECT_ADMIN"
+                        ? "（可管理成员，不能任命角色）"
+                        : "（普通项目成员）"}
+                  </label>
+                ))}
+              </div>
+            </div>
             {actionError ? (
               <Alert type="error" showIcon title={actionError} />
             ) : null}

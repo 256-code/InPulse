@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Spin } from "antd";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -8,7 +7,10 @@ import {
   CalmEmptyState,
   CalmSegmented,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { useAuth } from "@features/auth/auth-context";
+import { useScopedSearchParams } from "@features/common/search-params-scope";
 import { RecordDraftsView } from "@features/record-drafts/RecordDraftsView";
 import {
   useRecordFeedQuery,
@@ -24,6 +26,8 @@ import {
   groupRecordsByDate,
   RECORD_SEARCH_PLACEHOLDER,
   RECORD_SOURCE_FILTERS,
+  timelineDayLabel,
+  timelineTimeLabel,
   type RecordSourceFilter,
 } from "./record-timeline";
 import "./records-timeline.css";
@@ -36,16 +40,21 @@ const SEARCH_DEBOUNCE_MS = 350;
  * B-3b：项目下拉增加「全部项目」并作为默认视图（跨项目记录清单 + 名称回填），
  * 来源五档与关键词 `q` 改为服务端筛选，我的草稿条带改为全局 `listMyRecordDrafts`；
  * 页头 CTA → 我的草稿条带 → 项目草稿与草稿详情 → 筛选 toolbar → 按发布日分组。
- * 创建草稿仍要求先选定具体项目（草稿按项目 + 模块创建，服务端不接受「全部项目」）。
+ * 「全部项目」下 CTA 仍可用：草稿按项目 + 模块创建，目标项目在弹窗内选定；
+ * URL 已选项目时弹窗直接沿用该项目。
  */
 export function RecordsWorkspace({
   client,
+  embedded = false,
 }: {
   readonly client?: InpulseApiClient | undefined;
+  /** 嵌在项目主页弹窗内：标题由弹层头部承担，页头只保留 CTA。 */
+  readonly embedded?: boolean | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const { user } = useAuth();
-  const [params, setParams] = useSearchParams();
+  // 整页用路由搜索参数；装进项目主页弹窗时用作用域内的本地状态。
+  const [params, setParams] = useScopedSearchParams();
   const projectId = Number(params.get("projectId")) || 0;
   const publishedId = Number(params.get("publishedId")) || 0;
   const requestedStatus = params.get("status");
@@ -58,6 +67,17 @@ export function RecordsWorkspace({
   const [source, setSource] = useState<RecordSourceFilter>("ALL");
   const [createToken, setCreateToken] = useState(0);
   const [canCreate, setCanCreate] = useState(false);
+  /** 时间线按天折叠：记录日期键集合，默认全部展开。 */
+  const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleDay = (key: string) =>
+    setCollapsedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const featureNames = useProjectFeatureNames(projectId, client);
   useEffect(() => {
     const timer = window.setTimeout(
@@ -90,8 +110,11 @@ export function RecordsWorkspace({
     [projects.data],
   );
   /** 跨项目视图下每条记录按自身项目的状态判定可写，避免误用当前所选项目。 */
-  const canWrite = (recordProjectId: number) =>
-    projectStatus.get(recordProjectId) === "ACTIVE";
+  const canWrite = (recordProjectId: number) => {
+    // ADR-035：项目四态下只有已归档只读；列表里没有该项目时按只读处理。
+    const status = projectStatus.get(recordProjectId);
+    return status !== undefined && status !== "ARCHIVED";
+  };
   const reportCanCreate = useCallback((next: boolean) => {
     setCanCreate((prev) => (prev === next ? prev : next));
   }, []);
@@ -127,19 +150,26 @@ export function RecordsWorkspace({
   };
   return (
     <div className="records-workspace">
-      <div className="page-header">
-        <div>
-          <div className="eyebrow">研发记录 / {items.length} 条</div>
-          <h1>迭代记录</h1>
-          <p>
-            只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
-          </p>
-        </div>
+      <div className={"page-header" + (embedded ? " embedded" : "")}>
+        {embedded ? null : (
+          <div>
+            <h1>迭代记录</h1>
+            <p>
+              只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
+            </p>
+          </div>
+        )}
         <button
           type="button"
           className="primary-button"
-          disabled={projectId === 0 || !canCreate}
-          title={projectId === 0 ? "请先选择项目" : undefined}
+          disabled={!canCreate}
+          title={
+            canCreate
+              ? undefined
+              : projectId === 0
+                ? "当前没有可写入的项目"
+                : "请先选择项目"
+          }
           onClick={() => setCreateToken((token) => token + 1)}
         >
           <InpulseIcon name="plus" size={16} />
@@ -164,36 +194,33 @@ export function RecordsWorkspace({
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <label className="records-toolbar-field">
-          项目
-          <select
-            aria-label="项目"
-            value={projectId > 0 ? String(projectId) : ""}
-            onChange={(event) => selectProject(event.target.value)}
-          >
-            <option value="">全部项目</option>
-            {projects.data?.items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {embedded ? null : (
+          <label className="records-toolbar-field">
+            项目
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
+            />
+          </label>
+        )}
         <label className="records-toolbar-field">
           来源
-          <select
-            aria-label="来源"
+          <CalmSelect
+            ariaLabel="来源"
             value={source}
-            onChange={(event) =>
-              setSource(event.target.value as RecordSourceFilter)
-            }
-          >
-            {RECORD_SOURCE_FILTERS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            appearance="menu"
+            onChange={(next) => setSource(next as RecordSourceFilter)}
+            options={RECORD_SOURCE_FILTERS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+          />
         </label>
         <CalmSegmented
           label="记录状态"
@@ -246,29 +273,56 @@ export function RecordsWorkspace({
           }
         />
       ) : (
-        groups.map((group) => (
-          <section className="timeline-block" key={group.key}>
-            <div className="timeline-date">
-              <InpulseIcon name="gitBranch" size={15} />
-              <strong>{group.label}</strong>
-              <small>{group.records.length} 条</small>
-            </div>
-            <div className="record-card-list">
-              {group.records.map((item) => (
-                <PublishedRecordCard
-                  key={item.record.id}
-                  item={item}
-                  client={client}
-                  writable={canWrite(item.record.projectId)}
-                  open={publishedId === item.record.id}
-                  onToggle={(open) => toggleRecord(item.record.id, open)}
-                  onListChanged={() => void list.refetch()}
-                  featureNames={featureNames}
-                />
-              ))}
-            </div>
-          </section>
-        ))
+        <div className="record-timeline">
+          {groups.map((group) => {
+            const collapsed =
+              collapsedDays.has(group.key) &&
+              !group.records.some((item) => item.record.id === publishedId);
+            return (
+              <section className="timeline-block" key={group.key}>
+                <span aria-hidden="true" className="timeline-day">
+                  {timelineDayLabel(group.key)}
+                </span>
+                <button
+                  type="button"
+                  className="timeline-toggle"
+                  aria-expanded={!collapsed}
+                  onClick={() => toggleDay(group.key)}
+                >
+                  <InpulseIcon
+                    name="chevron"
+                    size={14}
+                    {...(collapsed ? {} : { className: "expanded" })}
+                  />
+                  <strong>{group.label}</strong>
+                  <small>{group.records.length} 条</small>
+                </button>
+                {!collapsed && (
+                  <div className="record-card-list">
+                    {group.records.map((item) => (
+                      <div className="timeline-item" key={item.record.id}>
+                        <span aria-hidden="true" className="timeline-time">
+                          {timelineTimeLabel(item.record.publishedAt)}
+                        </span>
+                        <PublishedRecordCard
+                          item={item}
+                          client={client}
+                          writable={canWrite(item.record.projectId)}
+                          open={publishedId === item.record.id}
+                          onToggle={(open) =>
+                            toggleRecord(item.record.id, open)
+                          }
+                          onListChanged={() => void list.refetch()}
+                          featureNames={featureNames}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
       {standaloneDetail && (
         <section className="record-standalone-detail">

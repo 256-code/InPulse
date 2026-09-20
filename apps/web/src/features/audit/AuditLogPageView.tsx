@@ -5,6 +5,8 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useProjects } from "@features/projects/project-query";
 import {
@@ -241,7 +243,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     <div className="activity-page">
       <div className="page-header activity-page-header">
         <div>
-          <span className="eyebrow">动态与审计 · F-08</span>
           <h1>动态审计</h1>
           <p>
             原始审计链仅系统管理员可读；每次读取都会向 SYSTEM 链写入
@@ -257,18 +258,19 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       </div>
 
       <div className="toolbar activity-toolbar audit-toolbar">
-        <select
-          aria-label="审计链"
+        <CalmSelect
+          ariaLabel="审计链"
           value={chain.kind === "system" ? "system" : String(chain.projectId)}
-          onChange={(event) => handleChainChange(event.currentTarget.value)}
-        >
-          <option value="system">SYSTEM 链（系统级）</option>
-          {projects.map((project) => (
-            <option key={project.id} value={String(project.id)}>
-              {"PROJECT:" + project.id + " · " + project.name}
-            </option>
-          ))}
-        </select>
+          appearance="rich"
+          onChange={(next) => handleChainChange(String(next))}
+          options={[
+            { value: "system", label: "SYSTEM 链（系统级）", iconText: "SY" },
+            ...projects.map((project) => ({
+              ...projectSelectOption(project),
+              label: "PROJECT:" + project.id + " · " + project.name,
+            })),
+          ]}
+        />
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
           <input

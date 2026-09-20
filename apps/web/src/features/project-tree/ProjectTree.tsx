@@ -1,49 +1,83 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type {
   FeatureItem,
   InpulseApiClient,
   ModuleItem,
   ProjectItem,
 } from "@generated/api";
+import {
+  InpulseIcon,
+  type InpulseIconName,
+} from "@features/common/components/InpulseIcon";
+import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjects } from "@features/projects/project-query";
 import { treePath, type TreeScope, type TreeSelection } from "./tree-selection";
 
-const FOLDER_CLOSED_PATH =
-  "M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z";
-
-const FolderGlyph: React.FC = () => (
-  <span className="tree-folder" aria-hidden="true">
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={FOLDER_CLOSED_PATH} />
-    </svg>
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={FOLDER_CLOSED_PATH} />
-      <path d="M2 10h20" />
-    </svg>
-  </span>
-);
-
 export interface ProjectTreeProps {
   readonly activeScope: TreeScope | null;
+  /** 当前项目页分段（overview/modules/task-board/members/activity），非项目页为 null。 */
+  readonly activePageSegment?: string | null;
   readonly onNavigate: (path: string) => void;
   readonly client?: InpulseApiClient | undefined;
 }
+
+/**
+ * 项目节点下的子页行：点击跳转既有项目页，与目录树共用导航语义。
+ * 「项目成员」不再单列一行（项目主页头部的「成员与设置」已覆盖），
+ * 任务看板排在模块与功能之前，但项目默认落点仍是模块与功能。
+ */
+/** 展开键归属的项目 ID：project:<id>[:...]；非项目键返回 null。 */
+function projectOwnerOf(key: string): number | null {
+  const match = /^project:(\d+)(?::|$)/.exec(key);
+  return match ? Number(match[1]) : null;
+}
+
+const PROJECT_PAGE_ROWS: readonly {
+  readonly segment: string;
+  readonly label: string;
+  readonly icon: InpulseIconName;
+}[] = [
+  { segment: "task-board", label: "任务看板", icon: "kanban" },
+  // 层级语义：layers=模块与功能目录，boxes=模块容器，fileText=功能档案条目。
+  { segment: "modules", label: "模块与功能", icon: "layers" },
+];
+
+interface ProjectPageRowProps {
+  readonly projectId: number;
+  readonly segment: string;
+  readonly label: string;
+  readonly icon: InpulseIconName;
+  readonly active: boolean;
+  readonly expanded: boolean;
+  readonly onClick: (segment: string, projectId: number) => void;
+}
+
+const ProjectPageRow: React.FC<ProjectPageRowProps> = ({
+  projectId,
+  segment,
+  label,
+  icon,
+  active,
+  expanded,
+  onClick,
+}) => (
+  <button
+    type="button"
+    className={`tree-row page-node${active ? " selected" : ""}${
+      expanded ? " expanded" : ""
+    }`}
+    aria-expanded={segment === "modules" ? expanded : undefined}
+    aria-current={active ? "true" : undefined}
+    onClick={() => onClick(segment, projectId)}
+  >
+    <InpulseIcon name={icon} size={16} className="tree-icon" />
+    <span className="tree-label">
+      <strong>{label}</strong>
+    </span>
+  </button>
+);
 
 interface FeatureRowProps {
   readonly moduleId: number;
@@ -79,6 +113,7 @@ const FeatureRow: React.FC<FeatureRowProps> = ({
         onFeatureClick({ kind: "feature", moduleId, featureId: item.id })
       }
     >
+      <InpulseIcon name="fileText" size={16} className="tree-icon" />
       <span className="tree-label">
         <strong>{item.name}</strong>
       </span>
@@ -164,7 +199,7 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
           onModuleClick(key, projectId, { kind: "module", moduleId: item.id })
         }
       >
-        <FolderGlyph />
+        <InpulseIcon name="boxes" size={16} className="tree-icon" />
         <span className="tree-label">
           <strong>{item.name}</strong>
         </span>
@@ -187,7 +222,8 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
 /**
  * 侧栏系统目录：项目与功能导航展开后先罗列所有项目，点击项目再罗列模块、
  * 点击模块再罗列功能；点击节点跳转到既有的项目主页、功能目录与功能档案
- * 页面，内容区功能不在此重复实现。当前路由所在链路自动展开。
+ * 页面，内容区功能不在此重复实现。当前路由所在链路自动展开，且展开状态在
+ * 跳转到其它层级或页面后保持不变，避免回到项目概况时子级被收起。
  */
 interface ModuleListProps {
   readonly projectId: number;
@@ -245,9 +281,12 @@ const ModuleList: React.FC<ModuleListProps> = ({
 interface ProjectBranchProps {
   readonly item: ProjectItem;
   readonly expanded: boolean;
+  readonly modulesExpanded: boolean;
   readonly activeScope: TreeScope | null;
+  readonly activePageSegment: string | null;
   readonly expandedKeys: ReadonlySet<string>;
   readonly onProjectClick: (projectId: number) => void;
+  readonly onPageClick: (segment: string, projectId: number) => void;
   readonly onModuleClick: (
     key: string,
     projectId: number,
@@ -263,9 +302,12 @@ interface ProjectBranchProps {
 const ProjectBranch: React.FC<ProjectBranchProps> = ({
   item,
   expanded,
+  modulesExpanded,
   activeScope,
+  activePageSegment,
   expandedKeys,
   onProjectClick,
+  onPageClick,
   onModuleClick,
   onFeatureClick,
   client,
@@ -273,6 +315,7 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
   const isActiveProject = activeScope?.projectId === item.id;
   const isSelected =
     isActiveProject && activeScope?.selection.kind === "project";
+  const pageSegment = isActiveProject ? activePageSegment : null;
   return (
     <div className="tree-project">
       <button
@@ -285,21 +328,37 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
         title={item.name}
         onClick={() => onProjectClick(item.id)}
       >
-        <FolderGlyph />
+        <ProjectLogo code={item.code} className="tree-logo" />
         <span className="tree-label">
           <strong>{item.name}</strong>
         </span>
+        {/* 项目编码是唯一短标识：同名/相近的项目行靠它区分。 */}
+        <span className="tree-code">{item.code}</span>
       </button>
       {expanded ? (
         <div className="tree-children">
-          <ModuleList
-            projectId={item.id}
-            selection={isActiveProject ? activeScope.selection : null}
-            expandedKeys={expandedKeys}
-            onModuleClick={onModuleClick}
-            onFeatureClick={onFeatureClick}
-            client={client}
-          />
+          {PROJECT_PAGE_ROWS.map((row) => (
+            <ProjectPageRow
+              key={row.segment}
+              projectId={item.id}
+              segment={row.segment}
+              label={row.label}
+              icon={row.icon}
+              active={pageSegment === row.segment}
+              expanded={row.segment === "modules" && modulesExpanded}
+              onClick={onPageClick}
+            />
+          ))}
+          {modulesExpanded ? (
+            <ModuleList
+              projectId={item.id}
+              selection={isActiveProject ? activeScope.selection : null}
+              expandedKeys={expandedKeys}
+              onModuleClick={onModuleClick}
+              onFeatureClick={onFeatureClick}
+              client={client}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -308,6 +367,7 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
 
 export const ProjectTree: React.FC<ProjectTreeProps> = ({
   activeScope,
+  activePageSegment = null,
   onNavigate,
   client,
 }) => {
@@ -324,13 +384,17 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
       return keys;
     }
     keys.add(`project:${activeScope.projectId}`);
+    // 模块列表挂在「模块与功能」子页行下：只有停留在该页时才自动展开。
+    if (activePageSegment === "modules") {
+      keys.add(`project:${activeScope.projectId}:pages:modules`);
+    }
     if (activeScope.selection.kind !== "project") {
       keys.add(
         `project:${activeScope.projectId}:module:${activeScope.selection.moduleId}`,
       );
     }
     return keys;
-  }, [activeScope]);
+  }, [activeScope, activePageSegment]);
   const expandedKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const key of chainKeys) {
@@ -345,6 +409,43 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     }
     return keys;
   }, [chainKeys, collapsed, extraExpanded]);
+  // 链路只负责自动展开、不负责收回：展开过的节点写入 extraExpanded 保留，
+  // 用面包屑回到项目概况等上层页面时子级不自动收起，只有点击节点才开合。
+  useEffect(() => {
+    setExtraExpanded((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const key of chainKeys) {
+        if (!next.has(key) && !collapsed.has(key)) {
+          next.add(key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [chainKeys, collapsed]);
+
+  // 手风琴语义：当前项目之外的展开态一律收起。挂在当前项目上而不是点击事件上，
+  // 从目录树、项目卡片或面包屑进入都能得到"同一时刻只铺开一个项目"的结果。
+  const activeProjectId = activeScope?.projectId ?? null;
+  useEffect(() => {
+    if (activeProjectId === null) {
+      return;
+    }
+    setExtraExpanded((prev) => {
+      const next = new Set<string>();
+      let changed = false;
+      for (const key of prev) {
+        const owner = projectOwnerOf(key);
+        if (owner !== null && owner !== activeProjectId) {
+          changed = true;
+          continue;
+        }
+        next.add(key);
+      }
+      return changed ? next : prev;
+    });
+  }, [activeProjectId]);
 
   const toggle = (key: string) => {
     if (expandedKeys.has(key)) {
@@ -364,9 +465,17 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     setExtraExpanded((prev) => new Set(prev).add(key));
   };
   const handleProjectClick = (projectId: number) => {
-    // 与模块节点一致：点击导航到项目主页并开合切换，再次点击收回模块列表。
+    // 与模块节点一致：点击导航到项目主页并开合切换，再次点击收回子页列表。
+    // 其它项目的收起由下方手风琴副作用统一负责。
     onNavigate(treePath(projectId, { kind: "project" }));
     toggle(`project:${projectId}`);
+  };
+  const handlePageClick = (segment: string, projectId: number) => {
+    onNavigate(`/projects/${projectId}/${segment}`);
+    // 只有「模块与功能」行控制模块列表开合；其余子页行只导航，不收起项目子级。
+    if (segment === "modules") {
+      toggle(`project:${projectId}:pages:modules`);
+    }
   };
   const handleModuleClick = (
     key: string,
@@ -396,9 +505,14 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
               key={item.id}
               item={item}
               expanded={expandedKeys.has(`project:${item.id}`)}
+              modulesExpanded={expandedKeys.has(
+                `project:${item.id}:pages:modules`,
+              )}
               activeScope={activeScope}
+              activePageSegment={activePageSegment}
               expandedKeys={expandedKeys}
               onProjectClick={handleProjectClick}
+              onPageClick={handlePageClick}
               onModuleClick={handleModuleClick}
               onFeatureClick={handleFeatureClick}
               client={client}

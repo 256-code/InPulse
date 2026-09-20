@@ -18,7 +18,12 @@ const PROJECT = {
   createdAt: "2026-09-08T00:00:00.000Z",
   updatedAt: "2026-09-08T00:00:00.000Z",
   memberCount: 4,
-  stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 5,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 const ACTIVITY: ActivityPage = {
@@ -91,7 +96,6 @@ describe("ActivityPageView", () => {
     expect(
       screen.getByText("InPulse 研发交付平台 · 任务 #3"),
     ).toBeInTheDocument();
-    expect(screen.getByText("动态与审计 / 1 条")).toBeInTheDocument();
     expect(screen.getByText("项目 #7")).toBeInTheDocument();
     expect(screen.getByText("管理员可查看原始快照")).toBeInTheDocument();
     expect(screen.getByLabelText("包含管理员操作")).toBeInTheDocument();

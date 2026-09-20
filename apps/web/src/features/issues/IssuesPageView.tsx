@@ -6,15 +6,19 @@ import {
   type LeftoverListItem,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { useScopedSearchParams } from "@features/common/search-params-scope";
 import {
   CalmBadge,
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { projectSelectOption } from "@features/common/project-select-option";
 import {
   LeftoverTaskConvertModal,
   type LeftoverConvertTarget,
 } from "@features/published-records/ConvertLeftoverTask";
+import { useProjects } from "@features/projects/project-query";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { issueOriginText, isLeftoverClosed } from "./issues-format";
 import { describeIssuesError, useLeftoverItemsQuery } from "./issues-query";
@@ -23,6 +27,7 @@ import { describeIssuesError, useLeftoverItemsQuery } from "./issues-query";
  * F-20 遗留问题页（R-6）：未闭环与已闭环两个分桶各自按服务端签名游标分页，
  * 行内保留来源记录与来源 / 跟进任务引用，未闭环项可直接转为跟进任务（复用
  * 已发布记录页的转换弹窗：CSRF、If-Match 与幂等键语义完全一致）。
+ * 项目筛选与迭代记录页同口径：projectId 进 URL（服务端参数），0 表示全部项目。
  *
  * 与设计稿的显式差异：CLOSED 桶按服务端口径同时包含 CONVERTED 与 RESOLVED，
  * 其中 RESOLVED 没有跟进任务，因此「转为任务」入口只出现在未闭环项；
@@ -33,22 +38,44 @@ export interface IssuesPageViewProps {
   readonly client?: InpulseApiClient;
   readonly onBackToRecords?: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  /** 嵌在项目主页弹窗内：标题由弹层头部承担，不渲染整页页头。 */
+  readonly embedded?: boolean | undefined;
 }
 
 export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
   client,
   onBackToRecords,
   onOpenTask,
+  embedded = false,
 }) => {
   const api = useMemo(() => client ?? createApiClient(), [client]);
+  const [params, setParams] = useScopedSearchParams();
+  /** 项目筛选：projectId 进 URL，非正整数一律回落为全部项目。 */
+  const projectId = Number(params.get("projectId")) || 0;
+  const projects = useProjects({ client });
   const [convertTarget, setConvertTarget] =
     useState<LeftoverConvertTarget | null>(null);
-  const openQuery = useLeftoverItemsQuery({ client, bucket: "OPEN" });
-  const closedQuery = useLeftoverItemsQuery({ client, bucket: "CLOSED" });
+  const openQuery = useLeftoverItemsQuery({
+    client,
+    bucket: "OPEN",
+    projectId,
+  });
+  const closedQuery = useLeftoverItemsQuery({
+    client,
+    bucket: "CLOSED",
+    projectId,
+  });
   const openItems =
     openQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const closedItems =
     closedQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
+
+  const selectProject = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (Number(value) > 0) next.set("projectId", value);
+    else next.delete("projectId");
+    setParams(next, { replace: true });
+  };
 
   const renderRow = (item: LeftoverListItem) => {
     const closed = isLeftoverClosed(item);
@@ -100,6 +127,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
                     featureId: item.featureId,
                     recordId: item.recordId,
                     recordTitle: item.recordTitle,
+                    leftoverItemId: item.leftoverItemId,
                   })
                 }
               >
@@ -135,27 +163,46 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
       aria-label="遗留问题"
       data-testid="issues-page"
     >
-      <div className="page-header">
-        <div>
-          <div className="eyebrow">
-            {"遗留问题 / " + String(openItems.length) + " 条未闭环"}
+      {embedded ? null : (
+        <div className="page-header">
+          <div>
+            <h1>遗留问题</h1>
+            <p>
+              迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
+            </p>
           </div>
-          <h1>遗留问题</h1>
-          <p>
-            迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
-          </p>
+          {onBackToRecords === undefined ? null : (
+            <div className="catalog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onBackToRecords}
+              >
+                <InpulseIcon name="gitBranch" size={15} />
+                回到迭代记录
+              </button>
+            </div>
+          )}
         </div>
-        <div className="catalog-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onBackToRecords}
-          >
-            <InpulseIcon name="gitBranch" size={15} />
-            回到迭代记录
-          </button>
+      )}
+
+      {embedded ? null : (
+        <div className="toolbar task-toolbar issues-toolbar">
+          <label className="issues-toolbar-field">
+            项目
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
+            />
+          </label>
         </div>
-      </div>
+      )}
 
       <div className="callout">
         <InpulseIcon name="alert" size={18} />
@@ -182,7 +229,11 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
         <CalmEmptyState
           icon="check"
           title="没有待闭环的遗留问题"
-          description="所有已发布记录的遗留事项都已经转为跟进任务。"
+          description={
+            projectId > 0
+              ? "该项目已发布记录的遗留事项都已经转为跟进任务。"
+              : "所有已发布记录的遗留事项都已经转为跟进任务。"
+          }
         />
       ) : (
         <>

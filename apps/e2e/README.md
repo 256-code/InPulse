@@ -46,11 +46,20 @@ E2E 用户、可见项目、无当前成员关系的隐藏项目与搜索投影�
 ADR-031 起高风险操作不再要求 TOTP 重认证，夹具因此不再注册 TOTP 因子。
 该逻辑只作用于 E2E 夹具，不改变生产认证行为。
 
-`global-teardown` 清理通知、活动、搜索投影、幂等记录与用户会话。
-由于项目必须保留唯一未分类模块，且数据库触发器禁止物理删除该模块，E2E 项目和
-用户骨架按业务不变量保留；本地通过唯一标识隔离，CI 使用一次性探针数据库，避免
-跨运行状态污染。若要实现项目/用户物理自清，需要先另行设计测试专用数据库策略或
-新增 ADR，不能在 E2E 中绕过数据库触发器。
+`global-teardown` 调用 `helpers/fixture-cleanup.ts` 物理删除 E2E 夹具：按
+`e2e_` / `f03_` 账号前缀识别夹具用户，再按其 `created_by` 识别夹具项目，按
+依赖顺序删除全部业务数据、`PROJECT:` 审计链与夹具账号，并在删除后用断言复核
+夹具残留为 0、审计无悬空 actor、项目 bootstrap 成员关系完整、每个项目恰好一个
+UNCLASSIFIED 模块，任一断言失败即回滚。数据库触发器禁止物理删除任何项目的
+未分类模块，清理只在清理会话内以 `session_replication_role = replica` 关闭
+行级触发器与外键检查；该开关只用于测试夹具清理，业务代码不得使用。
+
+SYSTEM 链中夹具账号产生的记录会一并删除并把链头回退到剩余的最后一条记录；
+若夹具记录之后已有真实用户写入，链上会留下一个可检测的断点并打印提示（删除
+链中段无法在保持哈希链完整的前提下完成）。运行被中断（如 Ctrl+C）未触发
+`globalTeardown` 时，用 `pnpm --filter @inpulse/e2e cleanup` 或
+`node apps/e2e/helpers/fixture-cleanup.ts` 手动补跑；两者都需要
+`E2E_DATABASE_URL` / `TEST_DATABASE_URL` 指向 bootstrap 角色。
 
 ## CI
 

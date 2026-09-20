@@ -32,12 +32,40 @@ export const CalmSectionTitle: React.FC<{
   readonly title: string;
   readonly hint?: string;
   readonly children?: React.ReactNode;
-}> = ({ title, hint, children }) => (
+  /** 提供后标题行成为展开/收起切换按钮（箭头随状态旋转）。 */
+  readonly collapsible?: {
+    readonly expanded: boolean;
+    readonly onToggle: () => void;
+    readonly controls?: string;
+  };
+}> = ({ title, hint, children, collapsible }) => (
   <div className="calm-section-title">
-    <div>
-      <h3>{title}</h3>
-      {hint ? <small>{hint}</small> : null}
-    </div>
+    {collapsible ? (
+      <button
+        type="button"
+        className="calm-section-toggle"
+        aria-expanded={collapsible.expanded}
+        {...(collapsible.controls === undefined
+          ? {}
+          : { "aria-controls": collapsible.controls })}
+        onClick={collapsible.onToggle}
+      >
+        <InpulseIcon
+          name="chevron"
+          size={14}
+          {...(collapsible.expanded ? { className: "expanded" } : {})}
+        />
+        <span className="calm-section-toggle-text">
+          <span className="calm-section-toggle-title">{title}</span>
+          {hint ? <small>{hint}</small> : null}
+        </span>
+      </button>
+    ) : (
+      <div>
+        <h3>{title}</h3>
+        {hint ? <small>{hint}</small> : null}
+      </div>
+    )}
     {children}
   </div>
 );
@@ -52,6 +80,10 @@ export const CalmSegmented = <T extends string>({
   readonly options: ReadonlyArray<{
     readonly value: T;
     readonly label: string;
+    /** 可选：业务上不可达的档位，例如项目状态里的越级切换。 */
+    readonly disabled?: boolean | undefined;
+    /** 可选：禁用原因，鼠标悬停时解释给使用者。 */
+    readonly title?: string | undefined;
   }>;
   readonly onChange: (value: T) => void;
   readonly label: string;
@@ -63,6 +95,8 @@ export const CalmSegmented = <T extends string>({
         type="button"
         aria-pressed={value === option.value}
         className={value === option.value ? "selected" : ""}
+        disabled={option.disabled ?? false}
+        title={option.title}
         onClick={() => onChange(option.value)}
       >
         {option.label}

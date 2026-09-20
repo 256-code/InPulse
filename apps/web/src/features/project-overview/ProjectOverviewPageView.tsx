@@ -9,6 +9,10 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import {
+  projectLifecycleLabel,
+  projectLifecycleTone,
+} from "@features/common/resource-lifecycle";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
 import { PROJECT_OVERVIEW_MOCK_ADAPTER } from "./project-overview-mock";
@@ -33,11 +37,15 @@ export interface ProjectOverviewPageViewProps {
   readonly projectLoading: boolean;
   readonly projectError?: string | undefined;
   readonly onRetryProject: () => void;
-  readonly onBackToProjects: () => void;
   /** 省略时不渲染「查看模块」入口（模块列表页自身已位于该层级）。 */
   readonly onOpenModules?: (() => void) | undefined;
+  /** 标题左侧的返回箭头（与功能/模块页同款圆钮）；省略时不渲染。 */
+  readonly onBack?: (() => void) | undefined;
   readonly onOpenMembers: () => void;
+  /** 「查看全部」：打开项目迭代记录工作区弹窗。 */
   readonly onOpenRecords: () => void;
+  /** 单条最近迭代：就地打开该记录的详情弹窗。 */
+  readonly onOpenRecord: (record: ProjectOverviewIteration) => void;
   readonly onOpenIssues: () => void;
   readonly adapter?: ProjectOverviewAdapter;
   readonly client?: InpulseApiClient | undefined;
@@ -64,10 +72,11 @@ export const ProjectOverviewPageView: React.FC<
   projectLoading,
   projectError,
   onRetryProject,
-  onBackToProjects,
   onOpenModules,
+  onBack,
   onOpenMembers,
   onOpenRecords,
+  onOpenRecord,
   onOpenIssues,
   adapter,
   client,
@@ -133,7 +142,7 @@ export const ProjectOverviewPageView: React.FC<
 
   const renderIteration = (item: ProjectOverviewIteration) => (
     <li key={item.recordId}>
-      <button type="button" onClick={onOpenRecords}>
+      <button type="button" onClick={() => onOpenRecord(item)}>
         <InpulseIcon name="gitBranch" size={15} />
         <span>
           {item.featureName === null ? "" : item.featureName + "："}
@@ -163,40 +172,38 @@ export const ProjectOverviewPageView: React.FC<
   return (
     <section
       className="project-overview"
-      aria-label="项目概览"
+      aria-label="项目主页"
       data-testid="project-overview"
     >
       <div className="project-detail-head">
-        <button
-          type="button"
-          className="back-button"
-          onClick={onBackToProjects}
-        >
-          <InpulseIcon name="arrowLeft" size={16} />
-          全部项目
-        </button>
         <div className="project-detail-title">
+          {onBack === undefined ? null : (
+            <button
+              type="button"
+              className="title-back-button"
+              aria-label="返回项目列表"
+              title="返回项目列表"
+              onClick={onBack}
+            >
+              <InpulseIcon name="chevronLeft" size={20} />
+            </button>
+          )}
           {project === null ? (
             <span className="project-logo blue">—</span>
           ) : (
             <ProjectLogo code={project.code} />
           )}
           <div>
-            <div className="eyebrow">
-              {project === null
-                ? "项目 / PROJECT"
-                : project.code + " / PROJECT"}
-            </div>
             <h1>
               {project === null
                 ? projectLoading
                   ? "正在加载项目…"
-                  : "项目概览"
+                  : "项目主页"
                 : project.name}
             </h1>
             <p>
               {project === null || project.description === ""
-                ? "项目概览汇总模块、功能、任务与迭代记录，是进入项目内各模块的起点。"
+                ? "这里汇总项目的模块、功能、任务与迭代记录，从模块开始进入项目。"
                 : project.description}
             </p>
           </div>
@@ -204,8 +211,8 @@ export const ProjectOverviewPageView: React.FC<
         <div className="project-detail-actions">
           <ProjectRepositoryLink projectId={projectId} client={client} />
           {project === null ? null : (
-            <CalmBadge tone={project.status === "ACTIVE" ? "blue" : "amber"}>
-              {project.status === "ACTIVE" ? "正常" : "已归档"}
+            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+              {projectLifecycleLabel(project.status)}
             </CalmBadge>
           )}
           {onOpenModules === undefined ? null : (
@@ -287,7 +294,7 @@ export const ProjectOverviewPageView: React.FC<
       {overviewQuery.isPending ? (
         <div className="calm-state">
           <Spin size="large" />
-          <p>正在加载项目概览…</p>
+          <p>正在加载项目…</p>
         </div>
       ) : overviewQuery.isError ? (
         <Alert

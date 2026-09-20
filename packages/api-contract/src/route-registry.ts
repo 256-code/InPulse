@@ -18,6 +18,7 @@ import { projectMemberRoutes } from "./project-member-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import {
   recordLifecycleRoutes,
+  recordLeftoverRoutes,
   publishedRecordRoutes,
   recordPublicationRoutes,
 } from "./published-record-routes.js";
@@ -42,6 +43,7 @@ export const routeRegistry = [
   ...publishedRecordRoutes,
   ...recordLifecycleRoutes,
   ...recordPublicationRoutes,
+  ...recordLeftoverRoutes,
   ...taskRecordDraftRoutes,
   ...taskGroupRoutes,
   ...aggregateReadRoutes,
@@ -624,7 +626,7 @@ export const routeRegistry = [
     path: "/projects",
     operationId: "listProjects",
     summary:
-      "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
+      "读取当前认证用户可见项目；系统管理员返回全部项目，普通用户只返回存在 ACTIVE 成员关系的项目，包含归档历史；按生命周期档位（进行中、未开始、已归档）分组，组内再按项目 ID 升序；每个条目附带当前用户在本项目的成员角色与待审归档申请摘要（ADR-034），供列表页决定申请与审核入口；SQL 前使用服务端 AuthorizedProjectScope，不接受客户端传入授权范围。",
     request: {
       path: "none",
       query: "none",
@@ -1077,7 +1079,7 @@ export const routeRegistry = [
     path: "/projects",
     operationId: "createProject",
     summary:
-      "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选初始成员；单事务内创建未分类模块并写审计、通知、活动与搜索投影；初始成员无效/停用/重复则整笔回滚。",
+      "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选初始成员；单事务内写审计、通知、活动与搜索投影，不创建任何模块（ADR-030 允许新项目零模块）；初始成员无效/停用/重复则整笔回滚。",
     request: {
       path: "none",
       query: "none",
@@ -1142,7 +1144,9 @@ export const routeRegistry = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "2.0.0",
+    // ADR-033：响应成员摘要新增 role，重放安全字段随之变化，旧 Key 409。
+    // 2026-09-17：项目四态改造后新建项目状态由 ACTIVE 改为 NOT_STARTED，响应 Schema 变化，旧 Key 409。
+    idempotencyContractVersion: "2.2.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: {
@@ -1163,6 +1167,7 @@ export const routeRegistry = [
               "project.updatedAt",
               "members[].userId",
               "members[].status",
+              "members[].role",
               "members[].joinedAt",
             ],
           },

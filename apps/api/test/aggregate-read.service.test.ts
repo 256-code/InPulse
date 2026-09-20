@@ -51,10 +51,28 @@ const unitOfWork = {
     fn({} as TransactionContext),
 } as unknown as UnitOfWork;
 
-function cursorMock(options: { readonly decode?: () => number | null } = {}) {
+function cursorMock(
+  options: {
+    readonly decode?: () => number | null;
+    readonly decodeKey?: () => {
+      readonly afterId: number;
+      readonly sortKey: string | null;
+    } | null;
+  } = {},
+) {
   return {
     encode: vi.fn().mockReturnValue("cursor-next"),
     decode: vi.fn(options.decode ?? (() => null)),
+    // ADR-037：任务中心走 decodeKey，载荷必须带排序键；测试用最小合法键。
+    decodeKey: vi.fn(
+      options.decodeKey ??
+        (() => {
+          const afterId = options.decode?.() ?? null;
+          return afterId === null
+            ? null
+            : { afterId, sortKey: `1|0|4|2||${afterId}` };
+        }),
+    ),
   };
 }
 
@@ -162,12 +180,18 @@ function projectFixture(id: number, name: string): ProjectItem {
     name,
     description: "项目描述",
     status: "ACTIVE",
+    hasCompletedTask: true,
     rowVersion: 1,
     createdBy: 5,
     createdAt: "2026-09-09T00:00:00.000Z",
     updatedAt: "2026-09-09T00:00:00.000Z",
     memberCount: 2,
-    stats: { activeModuleCount: 2, activeFeatureCount: 1, openTaskCount: 3 },
+    stats: {
+      activeModuleCount: 2,
+      activeFeatureCount: 1,
+      openTaskCount: 3,
+      completedTaskCount: 1,
+    },
   };
 }
 
@@ -950,6 +974,7 @@ function myTasksSetup(
       readonly groupId: number;
       readonly role: "MAIN" | "SOURCE";
     }[];
+    readonly leftoverSourceTaskIds?: readonly number[];
   } = {},
 ) {
   const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
@@ -960,7 +985,7 @@ function myTasksSetup(
   const listPage = vi
     .fn()
     .mockResolvedValue(
-      options.page ?? { items: [], nextTaskId: null, hasMore: false },
+      options.page ?? { items: [], next: null, hasMore: false },
     );
   const listProjects = vi
     .fn()
@@ -982,6 +1007,9 @@ function myTasksSetup(
     .mockResolvedValue(
       options.publishedRecordCounts ?? [{ taskId: 501, count: 2 }],
     );
+  const listLeftoverSourceTaskIds = vi
+    .fn()
+    .mockResolvedValue(options.leftoverSourceTaskIds ?? []);
   const listHistoricalSourceTaskIds = vi.fn().mockResolvedValue([90]);
   const listGroupRoles = vi.fn().mockResolvedValue(options.groupRoles ?? []);
   const countTaskLinks = vi
@@ -1017,7 +1045,10 @@ function myTasksSetup(
     { list: listPage, stats, leftoverEntry } as unknown as MyTaskQueryPort,
     { listNames: listModuleNames } as unknown as ModuleReadPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
-    { countPublishedByTask } as unknown as ChangeRecordReadPort,
+    {
+      countPublishedByTask,
+      listLeftoverSourceTaskIds,
+    } as unknown as ChangeRecordReadPort,
     { countTaskLinks } as unknown as ExternalLinksQueryPort,
     {
       listHistoricalSourceTaskIds,
@@ -1032,6 +1063,7 @@ function myTasksSetup(
     cursor,
     listPage,
     countPublishedByTask,
+    listLeftoverSourceTaskIds,
     listProjects,
     listHistoricalSourceTaskIds,
     listGroupRoles,
@@ -1116,7 +1148,8 @@ describe("MyTasksQueryService.list", () => {
       includeCanceled: true,
       limit: 5,
     });
-    expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
+    // ADR-037：任务中心改用 decodeKey，并要求载荷带排序键。
+    expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
       filterKey: JSON.stringify([
@@ -1128,6 +1161,7 @@ describe("MyTasksQueryService.list", () => {
         "HIGH",
         true,
       ]),
+      requireSortKey: true,
     });
     expect(setup.listPage).toHaveBeenCalledWith(
       expect.anything(),
@@ -1152,10 +1186,11 @@ describe("MyTasksQueryService.list", () => {
       projectId: 9,
       ownership: "CREATOR",
     });
-    expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
+    expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
       filterKey: JSON.stringify(["CREATOR", 9, null, null, null, null, null]),
+      requireSortKey: true,
     });
     const pageInput = setup.listPage.mock.calls[0]?.[1];
     expect(pageInput).toMatchObject({ projectIds: [9], creatorId: 5 });
@@ -1180,11 +1215,18 @@ describe("MyTasksQueryService.list", () => {
     const setup = myTasksSetup({
       page: {
         items: [taskRowFixture(502, { featureId: null }), taskRowFixture(501)],
-        nextTaskId: 501,
+        next: {
+          statusGroup: 0,
+          urgency: 4,
+          priority: 2,
+          dueAt: null,
+          taskId: 501,
+        },
         hasMore: true,
       },
       publishedRecordCounts: [{ taskId: 501, count: 2 }],
       groupRoles: [{ taskId: 501, groupId: 11, role: "MAIN" }],
+      leftoverSourceTaskIds: [502],
     });
 
     const result = await setup.service.list({ actorUserId: 5 });
@@ -1203,6 +1245,7 @@ describe("MyTasksQueryService.list", () => {
       hasPublishedRecord: false,
       groupRole: null,
       groupId: null,
+      hasLeftoverSource: true,
       updatedAt: baseTime.toISOString(),
     });
     expect(result.items[1]).toMatchObject({
@@ -1212,8 +1255,14 @@ describe("MyTasksQueryService.list", () => {
       githubLinkCount: 3,
       groupRole: "MAIN",
       groupId: 11,
+      hasLeftoverSource: false,
     });
     expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [502, 501],
+    );
+    expect(setup.listLeftoverSourceTaskIds).toHaveBeenCalledWith(
       expect.anything(),
       [7],
       [502, 501],
@@ -1244,6 +1293,7 @@ describe("MyTasksQueryService.list", () => {
         null,
       ]),
       afterId: 501,
+      sortKey: "1|0|4|2||501",
     });
   });
 
@@ -1271,7 +1321,7 @@ describe("MyTasksQueryService.list", () => {
             completedAt,
           }),
         ],
-        nextTaskId: null,
+        next: null,
         hasMore: false,
       },
       stats: {
@@ -1327,7 +1377,7 @@ describe("MyTasksQueryService.list", () => {
     const setup = myTasksSetup({
       page: {
         items: [taskRowFixture(501)],
-        nextTaskId: null,
+        next: null,
         hasMore: false,
       },
       projects: [],
@@ -1353,6 +1403,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
         readonly taskId: number;
         readonly count: number;
       }[];
+      readonly leftoverSourceTaskIds?: readonly number[];
     } = {},
   ) {
     const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
@@ -1369,11 +1420,17 @@ describe("TaskGroupMembershipQueryService.list", () => {
     const countPublishedByTask = vi
       .fn()
       .mockResolvedValue(options.counts ?? []);
+    const listLeftoverSourceTaskIds = vi
+      .fn()
+      .mockResolvedValue(options.leftoverSourceTaskIds ?? []);
     const service = new TaskGroupMembershipQueryService(
       { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
       { listByIds } as unknown as TaskQueryPort,
       { listGroupRoles } as unknown as TaskGroupMembershipReadPort,
-      { countPublishedByTask } as unknown as ChangeRecordReadPort,
+      {
+        countPublishedByTask,
+        listLeftoverSourceTaskIds,
+      } as unknown as ChangeRecordReadPort,
       unitOfWork,
     );
     return {
@@ -1382,10 +1439,11 @@ describe("TaskGroupMembershipQueryService.list", () => {
       listByIds,
       listGroupRoles,
       countPublishedByTask,
+      listLeftoverSourceTaskIds,
     };
   }
 
-  it("覆盖每个有权 taskId：未入组返回 null，计数按映射补齐", async () => {
+  it("覆盖每个有权 taskId：未入组返回 null，计数与遗留来源标记按映射补齐", async () => {
     const setup = membershipSetup({
       authorizedTaskIds: [21, 22, 23],
       roles: [
@@ -1396,6 +1454,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
         { taskId: 21, count: 2 },
         { taskId: 22, count: 1 },
       ],
+      leftoverSourceTaskIds: [22],
     });
     const result = await setup.service.list({
       actorUserId: 5,
@@ -1408,18 +1467,21 @@ describe("TaskGroupMembershipQueryService.list", () => {
           groupId: 11,
           groupRole: "MAIN",
           publishedRecordCount: 2,
+          hasLeftoverSource: false,
         },
         {
           taskId: 22,
           groupId: 12,
           groupRole: "SOURCE",
           publishedRecordCount: 1,
+          hasLeftoverSource: true,
         },
         {
           taskId: 23,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1429,6 +1491,11 @@ describe("TaskGroupMembershipQueryService.list", () => {
       [21, 22, 23],
     );
     expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [21, 22, 23],
+    );
+    expect(setup.listLeftoverSourceTaskIds).toHaveBeenCalledWith(
       expect.anything(),
       [7],
       [21, 22, 23],
@@ -1448,6 +1515,7 @@ describe("TaskGroupMembershipQueryService.list", () => {
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1463,5 +1531,6 @@ describe("TaskGroupMembershipQueryService.list", () => {
     expect(setup.listByIds).toHaveBeenCalledWith(expect.anything(), [], [999]);
     expect(setup.listGroupRoles).not.toHaveBeenCalled();
     expect(setup.countPublishedByTask).not.toHaveBeenCalled();
+    expect(setup.listLeftoverSourceTaskIds).not.toHaveBeenCalled();
   });
 });

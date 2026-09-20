@@ -85,6 +85,7 @@ export function PublishRecordButton({
   return (
     <>
       <Button
+        type="primary"
         disabled={!writable}
         onClick={() => {
           setOpen(true);

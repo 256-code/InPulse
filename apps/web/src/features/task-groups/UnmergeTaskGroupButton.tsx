@@ -84,6 +84,7 @@ export function UnmergeTaskGroupButton({
         cache.invalidateQueries({ queryKey: ["task-group"] }),
         cache.invalidateQueries({ queryKey: ["task-group-records"] }),
         cache.invalidateQueries({ queryKey: ["tasks"] }),
+        cache.invalidateQueries({ queryKey: ["task-board"] }),
         cache.invalidateQueries({ queryKey: ["my-tasks"] }),
       ]);
       setOpen(false);

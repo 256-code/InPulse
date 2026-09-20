@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { projectStatusSchema } from "./projects.zod.js";
+
 const id = z.number().int().positive().max(2147483647);
 
 /** R-3 任务优先级；与 app.tasks.tasks_priority_check 的取值一致。 */
@@ -223,12 +225,15 @@ export type ProjectOverviewQueryRequest = z.infer<
   typeof projectOverviewQueryRequestSchema
 >;
 
-/** 项目概览的项目头；返回原始枚举，展示文案（「正常」）由前端映射（Q-15）。 */
+/**
+ * 项目概览的项目头；返回项目四态原始枚举，展示文案（未开始 / 进行中 / 维护中 / 已归档）
+ * 由前端映射（Q-15）。
+ */
 export const projectOverviewProjectSchema = z
   .object({
     projectId: id,
     name: z.string().min(1).max(200),
-    status: z.enum(["ACTIVE", "ARCHIVED"]),
+    status: projectStatusSchema,
   })
   .strict()
   .meta({ id: "ProjectOverviewProject" });
@@ -350,7 +355,8 @@ export type MyTasksQueryRequest = z.infer<typeof myTasksQueryRequestSchema>;
  * publishedRecordCount 与它同源同口径（裁决修订 D-1：按 change_records 计数，
  * 不按版本计数、不按影响功能去重），恒有
  * hasPublishedRecord === publishedRecordCount > 0；
- * groupRole 是任务在当前 ACTIVE 聚合组中的角色，不属于任何组时为 null（Q-11）。
+ * groupRole 是任务在当前 ACTIVE 聚合组中的角色，不属于任何组时为 null（Q-11）；
+ * hasLeftoverSource 标记任务是否由遗留问题转换而来（裁决修订 D-2）。
  */
 export const myTaskItemSchema = z
   .object({
@@ -382,6 +388,11 @@ export const myTaskItemSchema = z
     groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
     /** 与 groupRole 同源、同空同非空；支撑「查看主任务」入口（A 裁决 §10.3）。 */
     groupId: id.nullable(),
+    /**
+     * 任务是否由遗留问题转换而来（F-20 / 裁决修订 D-2）：按 leftover_task_links
+     * 存在链接行判定，与来源记录当前状态（PUBLISHED / VOID）无关。
+     */
+    hasLeftoverSource: z.boolean(),
   })
   .strict()
   .meta({ id: "MyTaskItem" });
@@ -472,7 +483,8 @@ export type TaskGroupMembershipQueryRequest = z.infer<
 /**
  * R-5 任务记录标记条目（裁决修订 D-1 / §11.4）：groupRole / groupId 与既有
  * MyTaskItem 同源，未加入 ACTIVE 聚合组时同为空；publishedRecordCount 与
- * R-1 成员项、R-3 列表项同一口径（按 change_records 计数），无记录为 0。
+ * R-1 成员项、R-3 列表项同一口径（按 change_records 计数），无记录为 0；
+ * hasLeftoverSource 与 R-3 列表项同源同口径（裁决修订 D-2）。
  */
 export const taskGroupMembershipItemSchema = z
   .object({
@@ -480,6 +492,7 @@ export const taskGroupMembershipItemSchema = z
     groupId: id.nullable(),
     groupRole: z.enum(["MAIN", "SOURCE"]).nullable(),
     publishedRecordCount: z.number().int().nonnegative(),
+    hasLeftoverSource: z.boolean(),
   })
   .strict()
   .meta({ id: "TaskGroupMembershipItem" });

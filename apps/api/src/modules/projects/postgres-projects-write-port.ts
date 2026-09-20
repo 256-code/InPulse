@@ -8,7 +8,9 @@ import {
   type ProjectCreatedRecord,
   type ProjectMemberAddedRecord,
   type ProjectMemberIdentity,
+  type ProjectFirstTaskCompletionRecord,
   type ProjectMemberRecord,
+  type ProjectLifecycleStatus,
   type ProjectRecord,
   ProjectsWritePort,
 } from "./projects-write.port.js";
@@ -19,7 +21,7 @@ interface ProjectInsertRow {
   readonly name: string;
   readonly description: string;
   readonly created_by: number;
-  readonly status: "ACTIVE";
+  readonly status: "NOT_STARTED";
   readonly row_version: number;
   readonly created_at: Date;
   readonly updated_at: Date;
@@ -28,6 +30,7 @@ interface ProjectInsertRow {
 interface MemberInsertRow {
   readonly user_id: number;
   readonly status: "ACTIVE" | "REMOVED";
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joined_at: Date;
 }
 
@@ -38,6 +41,7 @@ interface MemberRow {
   readonly name: string;
   readonly avatar_url: string | null;
   readonly status: "ACTIVE" | "REMOVED";
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
   readonly joined_at: Date;
   readonly removed_at: Date | null;
 }
@@ -45,7 +49,7 @@ interface MemberRow {
 interface ProjectSummaryRow {
   readonly id: number;
   readonly name: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly status: ProjectLifecycleStatus;
   readonly row_version: number;
 }
 
@@ -54,7 +58,8 @@ interface ProjectChangeRow {
   readonly code: string;
   readonly name: string;
   readonly description: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
+  readonly status: ProjectLifecycleStatus;
+  readonly firstTaskCompletedAt: Date | null;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: Date;
@@ -63,6 +68,7 @@ interface ProjectChangeRow {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 }
 
 /** 项目写适配器；只接收显式 TransactionContext，从不开启事务或使用全局客户端。 */
@@ -72,8 +78,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     input: CreateProjectRecordInput,
   ): Promise<ProjectCreatedRecord> {
     const rows = (await tx.sql`
-      INSERT INTO app.projects (code, name, description, created_by)
-      VALUES (${input.code}, ${input.name}, ${input.description}, ${input.createdBy})
+      INSERT INTO app.projects (code, name, description, created_by, status)
+      VALUES (${input.code}, ${input.name}, ${input.description}, ${input.createdBy}, 'NOT_STARTED')
       RETURNING id,
                 code,
                 name,
@@ -105,10 +111,11 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     tx: TransactionContext,
     input: AddProjectMemberInput,
   ): Promise<ProjectMemberAddedRecord> {
+    const role = input.role ?? "MEMBER";
     const rows = (await tx.sql`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${input.projectId}, ${input.userId})
-      RETURNING user_id, status, joined_at
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${input.projectId}, ${input.userId}, ${role})
+      RETURNING user_id, status, role, joined_at
     `) as unknown as readonly MemberInsertRow[];
     const row = rows[0];
     if (row === undefined) {
@@ -117,6 +124,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     return {
       userId: row.user_id,
       status: row.status,
+      role: row.role,
       joinedAt: new Date(row.joined_at).toISOString(),
     };
   }
@@ -132,6 +140,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.avatar_url,
              pm.status,
+             pm.role,
              pm.joined_at,
              pm.removed_at
         FROM app.project_members AS pm
@@ -177,6 +186,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              p.name,
              p.description,
              p.status,
+             p.first_task_completed_at AS "firstTaskCompletedAt",
              p.row_version AS "rowVersion",
              p.created_by AS "createdBy",
              p.created_at AS "createdAt",
@@ -220,6 +230,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                   name,
                   description,
                   status,
+                  first_task_completed_at,
                   row_version,
                   created_by,
                   created_at,
@@ -230,6 +241,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.description,
              u.status,
+             u.first_task_completed_at AS "firstTaskCompletedAt",
              u.row_version AS "rowVersion",
              u.created_by AS "createdBy",
              u.created_at AS "createdAt",
@@ -252,7 +264,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     input: {
       readonly projectId: number;
       readonly expectedRowVersion: number;
-      readonly status: "ACTIVE" | "ARCHIVED";
+      readonly status: ProjectLifecycleStatus;
     },
   ): Promise<ProjectChangeRecord | undefined> {
     const rows = (await tx.sql`
@@ -269,6 +281,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
                   name,
                   description,
                   status,
+                  first_task_completed_at,
                   row_version,
                   created_by,
                   created_at,
@@ -279,6 +292,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.description,
              u.status,
+             u.first_task_completed_at AS "firstTaskCompletedAt",
              u.row_version AS "rowVersion",
              u.created_by AS "createdBy",
              u.created_at AS "createdAt",
@@ -296,6 +310,79 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     return row === undefined ? undefined : this.toChangeRecord(row);
   }
 
+  /**
+   * ADR-035 任务完成粘性置位：first_task_completed_at 取最早一次完成时间且永不回落；
+   * 项目处于未开始时同一语句升级为进行中。
+   *
+   * `app.projects` 的 row_version 触发器要求每次 UPDATE 必须恰好 +1，因此这里用 WHERE
+   * 只命中真正需要变更的行：粘性标记已存在且项目不再是未开始时整条语句不写任何行并返回
+   * undefined，避免每次任务完成都把项目版本推高一格、连带作废在途的项目编辑 If-Match。
+   * 行锁在语句内的 before CTE 中获取，与项目写路径的 project 优先锁序一致。
+   */
+  async recordFirstTaskCompletion(
+    tx: TransactionContext,
+    input: { readonly projectId: number; readonly completedAt: Date },
+  ): Promise<ProjectFirstTaskCompletionRecord | undefined> {
+    const rows = (await tx.sql`
+      WITH before AS MATERIALIZED (
+        SELECT id, code, name, description, status AS previous_status
+          FROM app.projects
+         WHERE id = ${input.projectId}
+         FOR UPDATE
+      ),
+      updated AS (
+        UPDATE app.projects p
+           SET first_task_completed_at = ${input.completedAt.toISOString()}::TIMESTAMPTZ,
+               status = CASE
+                          WHEN p.status = 'NOT_STARTED' THEN 'ACTIVE'
+                          ELSE p.status
+                        END,
+               row_version = p.row_version + 1,
+               updated_at = now()
+         WHERE p.id = (SELECT id FROM before)
+           AND (p.first_task_completed_at IS NULL OR p.status = 'NOT_STARTED')
+        RETURNING p.id,
+                  p.code,
+                  p.name,
+                  p.description,
+                  p.status,
+                  p.row_version,
+                  p.first_task_completed_at
+      )
+      SELECT u.id,
+             u.code,
+             u.name,
+             u.description,
+             u.status,
+             u.row_version AS "rowVersion",
+             u.first_task_completed_at AS "firstTaskCompletedAt",
+             b.previous_status AS "previousStatus"
+        FROM updated u
+       CROSS JOIN before b
+    `) as unknown as readonly {
+      readonly id: number;
+      readonly code: string;
+      readonly name: string;
+      readonly description: string;
+      readonly status: ProjectLifecycleStatus;
+      readonly rowVersion: number;
+      readonly firstTaskCompletedAt: Date;
+      readonly previousStatus: ProjectLifecycleStatus;
+    }[];
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return {
+      projectId: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      previousStatus: row.previousStatus,
+      status: row.status,
+      rowVersion: row.rowVersion,
+      firstTaskCompletedAt: new Date(row.firstTaskCompletedAt).toISOString(),
+    };
+  }
+
   async countUnfinishedTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },
@@ -306,6 +393,20 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
        WHERE project_id = ${input.projectId}
          AND work_status = 'TODO'
          AND lifecycle_status = 'ACTIVE'
+    `) as unknown as readonly { count: number }[];
+    return rows[0]?.count ?? 0;
+  }
+  /** 项目归档前置校验：未完成（TODO）且未归档的任务才阻塞，见 ADR-034。 */
+  async countUnarchivedTasks(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<number> {
+    const rows = (await tx.sql`
+      SELECT COUNT(*)::integer AS "count"
+        FROM app.tasks
+       WHERE project_id = ${input.projectId}
+         AND lifecycle_status = 'ACTIVE'
+         AND work_status NOT IN ('DONE', 'CANCELED')
     `) as unknown as readonly { count: number }[];
     return rows[0]?.count ?? 0;
   }
@@ -322,6 +423,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              u.name,
              u.avatar_url,
              pm.status,
+             pm.role,
              pm.joined_at,
              pm.removed_at
         FROM app.project_members AS pm
@@ -366,8 +468,41 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     const updated = (await tx.sql`
       UPDATE app.project_members
          SET status = 'REMOVED',
-             removed_at = now()
+             removed_at = now(),
+             role = 'MEMBER'
        WHERE id = ${current.membershipId}
+         AND status = 'ACTIVE'
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    if (updated.length === 0) {
+      return undefined;
+    }
+    return this.findLatestMember(tx, input);
+  }
+
+  async setMemberRole(
+    tx: TransactionContext,
+    input: ProjectMemberIdentity & {
+      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    },
+  ): Promise<ProjectMemberRecord | undefined> {
+    // ADR-033：project_members_one_leader 是非延迟部分唯一索引，转移组长
+    // 必须先把原组长降级为普通成员，再提升目标，否则中途出现两名 LEADER。
+    if (input.role === "LEADER") {
+      await tx.sql`
+        UPDATE app.project_members
+           SET role = 'MEMBER'
+         WHERE project_id = ${input.projectId}
+           AND status = 'ACTIVE'
+           AND role = 'LEADER'
+           AND user_id <> ${input.userId}
+      `;
+    }
+    const updated = (await tx.sql`
+      UPDATE app.project_members
+         SET role = ${input.role}
+       WHERE project_id = ${input.projectId}
+         AND user_id = ${input.userId}
          AND status = 'ACTIVE'
       RETURNING id
     `) as unknown as readonly { id: number }[];
@@ -385,6 +520,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       name: row.name,
       avatarUrl: row.avatar_url,
       status: row.status,
+      role: row.role,
       joinedAt: new Date(row.joined_at).toISOString(),
       removedAt:
         row.removed_at === null ? null : new Date(row.removed_at).toISOString(),
@@ -398,6 +534,10 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       name: row.name,
       description: row.description,
       status: row.status,
+      firstTaskCompletedAt:
+        row.firstTaskCompletedAt === null
+          ? null
+          : new Date(row.firstTaskCompletedAt).toISOString(),
       rowVersion: row.rowVersion,
       createdBy: row.createdBy,
       createdAt: new Date(row.createdAt).toISOString(),
@@ -407,6 +547,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
         activeModuleCount: row.activeModuleCount,
         activeFeatureCount: row.activeFeatureCount,
         openTaskCount: row.openTaskCount,
+        completedTaskCount: row.completedTaskCount,
       },
     };
   }

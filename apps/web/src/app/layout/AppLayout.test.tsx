@@ -1,5 +1,5 @@
 import React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -68,7 +68,7 @@ describe("AppLayout", () => {
     );
   }
 
-  it("renders the latest workspace navigation and header search trigger", async () => {
+  it("renders the latest workspace navigation and sidebar search/notification shortcuts", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -83,9 +83,10 @@ describe("AppLayout", () => {
     expect(
       screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("研发交付中心")).not.toHaveLength(0);
+    // 首页与任务中心内容重复，已删除，侧栏不应再出现「首页」入口。
+    expect(screen.queryByText("首页")).not.toBeInTheDocument();
     expect(screen.getByText("任务中心")).toBeInTheDocument();
-    expect(screen.getByText("项目与功能")).toBeInTheDocument();
+    expect(screen.getByText("项目列表")).toBeInTheDocument();
     expect(screen.getByText("迭代记录")).toBeInTheDocument();
     expect(screen.getByText("遗留问题")).toBeInTheDocument();
     expect(screen.getByText("项目动态")).toBeInTheDocument();
@@ -95,6 +96,9 @@ describe("AppLayout", () => {
     ).toBeInTheDocument();
     await screen.findByRole("button", { name: "通知" });
     expect(notificationClient.getNotificationUnreadCount).toHaveBeenCalled();
+    // 通知与搜索已收敛到侧栏底部图标，导航列表不再重复入口。
+    expect(screen.queryByText("站内通知")).not.toBeInTheDocument();
+    expect(screen.queryByText("全局搜索")).not.toBeInTheDocument();
   });
 
   it("shows the audit entry only to system administrators", async () => {
@@ -109,7 +113,7 @@ describe("AppLayout", () => {
       </MemoryRouter>,
       true,
     );
-    expect(screen.getByText("动态审计")).toBeInTheDocument();
+    expect(screen.getByText("审计日志")).toBeInTheDocument();
     unmount();
 
     renderLayout(
@@ -122,43 +126,21 @@ describe("AppLayout", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.queryByText("动态审计")).not.toBeInTheDocument();
+    expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
   });
 
-  it("shows the permission matrix shortcut only to system administrators", async () => {
-    const { unmount } = renderLayout(
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={<AppLayout notificationClient={notificationClient} />}
-          />
-        </Routes>
-      </MemoryRouter>,
-      true,
-    );
-    expect(
-      screen.getByRole("button", { name: "查看权限矩阵" }),
-    ).toBeInTheDocument();
-    unmount();
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={<AppLayout notificationClient={notificationClient} />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(
-      screen.queryByRole("button", { name: "查看权限矩阵" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows the project name in the breadcrumb on project routes", async () => {
+  it("renders the current project group and the task board entry on project routes", async () => {
     const projectClient = {
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            code: "AGV",
+            name: "AGV 智能搬运平台",
+            status: "ACTIVE",
+          },
+        ],
+      }),
       getProject: vi.fn().mockResolvedValue({
         project: {
           id: 7,
@@ -175,13 +157,14 @@ describe("AppLayout", () => {
             activeModuleCount: 2,
             activeFeatureCount: 5,
             openTaskCount: 3,
+            completedTaskCount: 1,
           },
         },
       }),
     } as unknown as InpulseApiClient;
 
     renderLayout(
-      <MemoryRouter initialEntries={["/projects/7/modules"]}>
+      <MemoryRouter initialEntries={["/projects/7/task-board"]}>
         <Routes>
           <Route
             path="/"
@@ -193,22 +176,82 @@ describe("AppLayout", () => {
             }
           >
             <Route
-              path="projects/:projectId/modules"
-              element={<div>Modules content</div>}
+              path="projects/:projectId/task-board"
+              element={<div>任务看板内容</div>}
             />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
+    const nav = screen.getByRole("navigation", { name: "工作区导航" });
+    expect(within(nav).getByText("当前项目")).toBeInTheDocument();
+    // 项目子页收进目录树：任务看板是项目节点下的子页行。
+    const board = await within(nav).findByRole("button", {
+      name: "任务看板",
+    });
+    expect(board).toHaveClass("page-node");
+    expect(board).toHaveAttribute("aria-current", "true");
+    // 项目概览已与「模块与功能」合并：项目节点下不再有概览子页行。
+    expect(within(nav).queryByRole("button", { name: "项目概览" })).toBeNull();
     expect(
-      await within(crumb).findByText("AGV 智能搬运平台"),
+      within(nav).getByRole("button", { name: "模块与功能" }),
     ).toBeInTheDocument();
+    expect(await screen.findByText("任务看板内容")).toBeInTheDocument();
+  });
+
+  it("expands the project list on the projects page and hides it outside project routes", async () => {
+    const projectClient = {
+      listProjects: vi.fn().mockResolvedValue({
+        items: [
+          { id: 7, code: "AGV", name: "AGV 智能搬运平台", status: "ACTIVE" },
+          { id: 8, code: "K1235", name: "项目1", status: "ACTIVE" },
+        ],
+      }),
+    } as unknown as InpulseApiClient;
+
+    const { unmount } = renderLayout(
+      <MemoryRouter initialEntries={["/projects"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <AppLayout
+                notificationClient={notificationClient}
+                projectClient={projectClient}
+              />
+            }
+          >
+            <Route path="projects" element={<div>项目列表内容</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // 项目列表页直接展开项目树，不必先进某个项目才能切换。
+    const nav = screen.getByRole("navigation", { name: "工作区导航" });
+    expect(within(nav).getByText("项目")).toBeInTheDocument();
     expect(
-      within(crumb).getByRole("button", { name: "项目与功能" }),
+      await within(nav).findByRole("button", { name: /AGV 智能搬运平台/ }),
     ).toBeInTheDocument();
-    expect(projectClient.getProject).toHaveBeenCalledWith(7);
+    unmount();
+
+    // 项目路由之外（如任务中心）不渲染项目树。
+    renderLayout(
+      <MemoryRouter initialEntries={["/tasks"]}>
+        <Routes>
+          <Route
+            path="/"
+            element={<AppLayout notificationClient={notificationClient} />}
+          >
+            <Route path="tasks" element={<div>任务中心内容</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "任务看板" })).toBeNull();
   });
 
   it("navigates to a registered workspace route", async () => {
@@ -227,11 +270,11 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByText("项目与功能"));
+    await user.click(screen.getByText("项目列表"));
     expect(await screen.findByText("Projects content")).toBeInTheDocument();
   });
 
-  it("opens the global command palette from the header search button", async () => {
+  it("opens the global command palette from the sidebar search button", async () => {
     const user = userEvent.setup();
     renderLayout(
       <MemoryRouter initialEntries={["/"]}>
@@ -352,6 +395,7 @@ describe("AppLayout", () => {
             activeModuleCount: 1,
             activeFeatureCount: 1,
             openTaskCount: 1,
+            completedTaskCount: 1,
           },
         },
       }),
@@ -415,80 +459,7 @@ describe("AppLayout", () => {
     expect(await screen.findByText("功能档案内容")).toBeInTheDocument();
   });
 
-  it("opens the feature catalog from the breadcrumb module crumb", async () => {
-    const catalogClient = {
-      ...notificationClient,
-      listProjects: vi.fn().mockResolvedValue({
-        items: [
-          {
-            id: 7,
-            code: "AGV",
-            name: "AGV 智能搬运平台",
-            status: "ACTIVE",
-          },
-        ],
-      }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 7,
-          code: "AGV",
-          name: "AGV 智能搬运平台",
-          description: "面向工厂的智能搬运调度项目",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 1,
-          createdAt: "2026-09-08T00:00:00.000Z",
-          updatedAt: "2026-09-08T00:00:00.000Z",
-          memberCount: 4,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 1,
-            openTaskCount: 1,
-          },
-        },
-      }),
-      listModules: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 3, name: "调度模块" }] }),
-      listFeatures: vi
-        .fn()
-        .mockResolvedValue({ items: [{ id: 5, name: "车辆调度" }] }),
-    } as unknown as InpulseApiClient;
-
-    renderLayout(
-      <MemoryRouter initialEntries={["/projects/7/modules/3/features/5"]}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AppLayout
-                notificationClient={notificationClient}
-                projectClient={catalogClient}
-              />
-            }
-          >
-            <Route
-              path="projects/:projectId/modules/:moduleId/features"
-              element={<div>功能目录内容</div>}
-            />
-            <Route
-              path="projects/:projectId/modules/:moduleId/features/:featureId"
-              element={<div>功能档案内容</div>}
-            />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    const crumb = screen.getByRole("navigation", { name: "面包屑导航" });
-    // 面包屑的模块名必须落到已注册的功能目录路由，而不是未注册的模块路径。
-    await userEvent.click(
-      await within(crumb).findByRole("button", { name: "调度模块" }),
-    );
-    expect(await screen.findByText("功能目录内容")).toBeInTheDocument();
-  });
-
-  it("collapses the system directory tree outside project pages", async () => {
+  it("hides the project tree outside project pages", async () => {
     renderLayout(
       <MemoryRouter initialEntries={["/tasks"]}>
         <Routes>
@@ -503,40 +474,12 @@ describe("AppLayout", () => {
     );
 
     expect(await screen.findByText("任务中心内容")).toBeInTheDocument();
-    // 非项目路由默认收起；点击「项目与功能」行尾的 chevron 仍可展开。
+    // 目录树只存在于「当前项目」分组：非项目路由不渲染项目上下文。
     expect(document.querySelector(".project-tree")).toBeNull();
-    const toggle = screen.getByRole("button", { name: "展开系统目录" });
-    await userEvent.click(toggle);
-    expect(document.querySelector(".project-tree")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "收起系统目录" })).toBeTruthy();
+    expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
   });
   describe("退出登录", () => {
-    const originalLocation = window.location;
-
-    beforeEach(() => {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        writable: true,
-        value: {
-          href: originalLocation.href,
-          origin: originalLocation.origin,
-          pathname: originalLocation.pathname,
-          search: originalLocation.search,
-          assign: vi.fn(),
-          replace: vi.fn(),
-        },
-      });
-    });
-
-    afterEach(() => {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        writable: true,
-        value: originalLocation,
-      });
-    });
-
-    it("退出登录后整页跳转统一身份认证入口，不再经由登录页中转", async () => {
+    it("退出登录后回到登录页而不是直接跳转统一身份认证", async () => {
       const user = userEvent.setup();
       const logout = vi.fn().mockResolvedValue(undefined);
       renderLayout(
@@ -546,6 +489,7 @@ describe("AppLayout", () => {
               path="/"
               element={<AppLayout notificationClient={notificationClient} />}
             />
+            <Route path="/login" element={<div>登录页占位</div>} />
           </Routes>
         </MemoryRouter>,
         false,
@@ -557,13 +501,11 @@ describe("AppLayout", () => {
 
       await waitFor(() => {
         expect(logout).toHaveBeenCalledTimes(1);
-        expect(window.location.replace).toHaveBeenCalledWith(
-          "/api/v1/auth/sso/start?returnTo=%2F",
-        );
       });
+      expect(await screen.findByText("登录页占位")).toBeInTheDocument();
     });
 
-    it("未登录时点击前往登录同样直接进入统一身份认证入口", async () => {
+    it("未登录时点击前往登录回到登录页", async () => {
       const user = userEvent.setup();
       renderLayout(
         <MemoryRouter initialEntries={["/"]}>
@@ -572,6 +514,7 @@ describe("AppLayout", () => {
               path="/"
               element={<AppLayout notificationClient={notificationClient} />}
             />
+            <Route path="/login" element={<div>登录页占位</div>} />
           </Routes>
         </MemoryRouter>,
         false,
@@ -581,9 +524,7 @@ describe("AppLayout", () => {
       await user.click(screen.getByRole("button", { name: "账户菜单" }));
       await user.click(screen.getByRole("button", { name: /前往登录/ }));
 
-      expect(window.location.replace).toHaveBeenCalledWith(
-        "/api/v1/auth/sso/start?returnTo=%2F",
-      );
+      expect(await screen.findByText("登录页占位")).toBeInTheDocument();
     });
   });
 });

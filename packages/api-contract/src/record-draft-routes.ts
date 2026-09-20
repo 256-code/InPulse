@@ -35,7 +35,8 @@ const fields = [
   "contextProblem",
   "changeSolution",
   "resultVerification",
-  "remainingIssues",
+  "remainingIssues[].id",
+  "remainingIssues[].content",
 ];
 export const recordDraftRoutes: readonly RouteDefinition[] = (
   [
@@ -88,8 +89,9 @@ export const recordDraftRoutes: readonly RouteDefinition[] = (
     csrfPolicy: write ? "required" : "none",
     idempotencyPolicy: write ? "idempotencyRequired" : "none",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: write ? "1.1.0" : "none",
-    idempotencyFingerprintVersion: write ? "1.1.0" : "none",
+    // 1.2.0：遗留问题由单段文本改为条目数组。
+    idempotencyContractVersion: write ? "1.2.0" : "none",
+    idempotencyFingerprintVersion: write ? "1.2.0" : "none",
     behaviorHeaders: write ? (create ? [] : ["If-Match"]) : "none",
     idempotencyReplayPolicy: write
       ? {

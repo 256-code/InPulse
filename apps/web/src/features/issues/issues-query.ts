@@ -9,7 +9,7 @@ import {
 /**
  * F-20 遗留问题聚合读：R-6 GET /api/v1/leftover-items 的服务端签名游标分页。
  * 未闭环与已闭环各自独立分页，列表顺序固定 leftoverItemId DESC（服务端口径），
- * 不在前端做过滤或重排。
+ * 不在前端做过滤或重排。projectId 是服务端筛选参数，0 或缺省表示全部项目。
  */
 
 export const LEFTOVER_ITEMS_PAGE_LIMIT = 20;
@@ -19,6 +19,7 @@ export type LeftoverBucket = "OPEN" | "CLOSED";
 export interface LeftoverItemsQueryOptions {
   readonly client?: InpulseApiClient | undefined;
   readonly bucket: LeftoverBucket;
+  readonly projectId?: number | undefined;
   readonly enabled?: boolean;
   readonly limit?: number;
 }
@@ -36,17 +37,21 @@ export function describeIssuesError(error: unknown): string {
 export function useLeftoverItemsQuery({
   client,
   bucket,
+  projectId,
   enabled = true,
   limit = LEFTOVER_ITEMS_PAGE_LIMIT,
 }: LeftoverItemsQueryOptions) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
+  const scopedProjectId =
+    typeof projectId === "number" && projectId > 0 ? projectId : 0;
   return useInfiniteQuery({
-    queryKey: ["leftover-items", bucket, limit],
+    queryKey: ["leftover-items", bucket, scopedProjectId, limit],
     queryFn: ({ pageParam, signal }) =>
       api.listLeftoverItems(
         {
           bucket,
           limit,
+          ...(scopedProjectId > 0 ? { projectId: scopedProjectId } : {}),
           ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
         },
         signal ? { signal } : undefined,

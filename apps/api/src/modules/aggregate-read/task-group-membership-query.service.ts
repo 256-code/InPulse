@@ -19,8 +19,9 @@ import { TaskQueryPort } from "../tasks/index.js";
  *
  * 只读：先取服务端 AuthorizedProjectScope，再校验请求中哪些 taskId 属于有权项目
  * （TaskQueryPort.listByIds），然后读取 ACTIVE 组内的 ACTIVE 成员关系
- * （TaskGroupMembershipReadPort.listGroupRoles）与任务 → PUBLISHED 记录数映射
- * （ChangeRecordReadPort.countPublishedByTask）。
+ * （TaskGroupMembershipReadPort.listGroupRoles）、任务 → PUBLISHED 记录数映射
+ * （ChangeRecordReadPort.countPublishedByTask）与遗留问题来源标记
+ * （ChangeRecordReadPort.listLeftoverSourceTaskIds，裁决修订 D-2）。
  *
  * 覆盖范围（D-1）：请求中每一个有权 taskId 都出现在结果中；未加入 ACTIVE 聚合组
  * （含已解除 DETACHED）的任务以 groupId / groupRole 为 null 返回，记录计数照常。
@@ -74,8 +75,15 @@ export class TaskGroupMembershipQueryService {
         scope.projectIds,
         authorizedTaskIds,
       );
+      const leftoverSourceTaskIds =
+        await this.records.listLeftoverSourceTaskIds(
+          tx,
+          scope.projectIds,
+          authorizedTaskIds,
+        );
       const roleByTask = new Map(roles.map((row) => [row.taskId, row]));
       const countByTask = new Map(counts.map((row) => [row.taskId, row.count]));
+      const leftoverSource = new Set(leftoverSourceTaskIds);
       const items = authorizedTaskIds.map((taskId) => {
         const role = roleByTask.get(taskId);
         return {
@@ -83,6 +91,7 @@ export class TaskGroupMembershipQueryService {
           groupId: role?.groupId ?? null,
           groupRole: role?.role ?? null,
           publishedRecordCount: countByTask.get(taskId) ?? 0,
+          hasLeftoverSource: leftoverSource.has(taskId),
         };
       });
       return { items };

@@ -81,12 +81,53 @@ export class LeftoverTaskWorkflow {
     if (check.kind === "not-found") throw missing();
     if (writable && check.kind === "parent-not-active") throw archived();
   }
+  private leftoverItem(
+    record: PublishedRecord,
+    leftoverItemId: number | undefined,
+  ) {
+    if (leftoverItemId !== undefined)
+      return record.leftovers.find(
+        (leftover) => leftover.id === leftoverItemId,
+      );
+    if (record.leftovers.length === 0) throw missing();
+    if (record.leftovers.length > 1)
+      throw new LeftoverTaskError(
+        409,
+        "LEFTOVER_SELECTION_REQUIRED",
+        "记录包含多条遗留问题，请指定要处理的遗留项",
+        {
+          leftoverItemIds: record.leftovers.map((leftover) => leftover.id),
+        },
+      );
+    return record.leftovers[0];
+  }
+  /**
+   * 指定条目已不在当前正式版本快照中时的处理：仍属于本记录说明已被移除，
+   * 按 LEFTOVER_NOT_ACTIVE 拒绝；完全不存在或不属于本记录返回 undefined，
+   * 由调用方按 404 处理，不泄露条目存在性。
+   */
+  private async removedItem(
+    tx: TransactionContext,
+    p: number,
+    r: number,
+    leftoverItemId: number | undefined,
+  ) {
+    if (leftoverItemId === undefined) return undefined;
+    if (await this.records.lockItem(tx, p, r, leftoverItemId))
+      throw new LeftoverTaskError(
+        409,
+        "LEFTOVER_NOT_ACTIVE",
+        "当前正式版本没有可转换的遗留问题",
+      );
+    return undefined;
+  }
   private async prepare(
     tx: TransactionContext,
     actorId: number,
     p: number,
     r: number,
     resultImpacts: number[] = [],
+    leftoverItemId?: number,
   ) {
     await this.authorize(tx, actorId, p);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -135,9 +176,10 @@ export class LeftoverTaskWorkflow {
         await tx.sql`RELEASE SAVEPOINT leftover_parent_locks`;
         continue;
       }
-      const item = record.leftoverItem
-        ? await this.records.lockItem(tx, p, r, record.leftoverItem.id)
-        : undefined;
+      const target = this.leftoverItem(record, leftoverItemId),
+        item = target
+          ? await this.records.lockItem(tx, p, r, target.id)
+          : await this.removedItem(tx, p, r, leftoverItemId);
       if (!item) throw missing();
       await tx.sql`RELEASE SAVEPOINT leftover_parent_locks`;
       return { record, item, inherited, excluded };
@@ -169,12 +211,20 @@ export class LeftoverTaskWorkflow {
       taskId,
     };
   }
-  async preview(tx: TransactionContext, actorId: number, p: number, r: number) {
+  async preview(
+    tx: TransactionContext,
+    actorId: number,
+    p: number,
+    r: number,
+    leftoverItemId?: number,
+  ) {
     const { record, item, inherited, excluded } = await this.prepare(
       tx,
       actorId,
       p,
       r,
+      [],
+      leftoverItemId,
     );
     return {
       recordId: r,
@@ -200,7 +250,14 @@ export class LeftoverTaskWorkflow {
     input: LeftoverTaskRequest,
     requestId: string,
   ) {
-    const { record, item, inherited } = await this.prepare(tx, actorId, p, r);
+    const { record, item, inherited } = await this.prepare(
+      tx,
+      actorId,
+      p,
+      r,
+      [],
+      input.leftoverItemId,
+    );
     if (item.id !== input.leftoverItemId) throw missing();
     if (item.linkedTaskId !== null)
       throw new LeftoverTaskError(
@@ -258,7 +315,7 @@ export class LeftoverTaskWorkflow {
         assigneeId: input.assigneeId,
         priority: input.priority,
         dueAt: input.dueAt,
-        description: `来源记录：${record.code} v${record.currentVersion}\n遗留项 #${item.id}\n\n${content}`,
+        description: `来源记录：${record.title}（${record.code} v${record.currentVersion}）\n遗留项 #${item.id}\n\n${content}`,
       },
       requestId,
     );
@@ -310,7 +367,7 @@ export class LeftoverTaskWorkflow {
         record.contextProblem,
         record.changeSolution,
         record.resultVerification,
-        record.remainingIssues,
+        ...record.remainingIssues.map((entry) => entry.content),
       ].join("\n"),
       visibilityScope: "MEMBER",
       sourceStatus: "PUBLISHED",

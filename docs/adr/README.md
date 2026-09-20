@@ -25,7 +25,7 @@
 | [ADR-009](ADR-009.md) | Accepted | 本期不实现通用 Outbox |
 | [ADR-010](ADR-010.md) | Superseded | pg_trgm 与搜索投影的双阶段门禁，由 ADR-025 替代 |
 | [ADR-011](ADR-011.md) | Accepted | Argon2id 与服务端 Session 认证 |
-| [ADR-012](ADR-012.md) | Accepted | 两类角色与创建者成员关系语义 |
+| [ADR-012](ADR-012.md) | Superseded | 两类角色与创建者成员关系语义，由 ADR-033 扩展为项目内角色模型 |
 | [ADR-013](ADR-013.md) | Accepted | WorkflowModule 与显式 UnitOfWork |
 | [ADR-014](ADR-014.md) | Accepted | 使用脱敏 ActivityProjection |
 | [ADR-015](ADR-015.md) | Accepted | 同步 CSRF Token 与有限重签 |
@@ -45,8 +45,13 @@
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
 | [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
-| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO） |
-
+| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO）；前端默认入口经 ADR-036 修订、会话空闲时长经 ADR-038 修订 |
+| [ADR-033](ADR-033.md) | Accepted | 项目内角色（组长与项目管理员），扩展 ADR-012 |
+| [ADR-034](ADR-034.md) | Accepted | 项目归档申请—审核（双人同意）、任务与功能归档及父级归档前置校验 |
+| [ADR-035](ADR-035.md) | Accepted | 项目生命周期四态（未开始 / 进行中 / 维护中 / 已归档）、粘性标记与项目写入口口径 |
+| [ADR-036](ADR-036.md) | Accepted | 登录页默认展示本地口令表单，统一身份认证改为并列入口 |
+| [ADR-037](ADR-037.md) | Proposed | 任务列表排序口径统一（紧急度优先 + 状态分组）与多列 keyset 游标 |
+| [ADR-038](ADR-038.md) | Accepted | 本地会话空闲有效期由 30 分钟调整为 2 小时 |
 ## 关联基线
 
 - [功能设计 V1.1](../../功能设计v1.1.md)

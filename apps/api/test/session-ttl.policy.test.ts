@@ -6,11 +6,11 @@ import {
 } from "../src/auth/session-ttl.policy.js";
 import { SESSION_ABSOLUTE_MAX_AGE_SECONDS } from "../src/auth/csrf.http.js";
 
-describe("本地会话有效期策略（ADR-032）", () => {
-  test("默认空闲有效期 30 分钟、绝对有效期 7 天", () => {
+describe("本地会话有效期策略（ADR-038）", () => {
+  test("默认空闲有效期 2 小时、绝对有效期 7 天", () => {
     const policy = sessionTtlPolicyFromEnv({});
-    expect(policy.idleMaxAgeSeconds).toBe(1800);
-    expect(DEFAULT_SESSION_IDLE_MAX_AGE_SECONDS).toBe(1800);
+    expect(policy.idleMaxAgeSeconds).toBe(7200);
+    expect(DEFAULT_SESSION_IDLE_MAX_AGE_SECONDS).toBe(7200);
     expect(policy.absoluteMaxAgeSeconds).toBe(SESSION_ABSOLUTE_MAX_AGE_SECONDS);
   });
 

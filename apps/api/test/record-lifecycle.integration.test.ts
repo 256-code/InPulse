@@ -82,7 +82,7 @@ const content = {
   contextProblem: "并发保存",
   changeSolution: "事务发布",
   resultVerification: "完整校验",
-  remainingIssues: "仍需跟进",
+  remainingIssues: [{ content: "仍需跟进" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -199,7 +199,10 @@ afterAll(async () => {
   await auditDb?.close();
 });
 async function fixture(
-  remainingIssues = content.remainingIssues,
+  remainingIssues: readonly {
+    readonly id?: number;
+    readonly content: string;
+  }[] = content.remainingIssues,
   feature = false,
 ) {
   const userId = await createUser(db.sql),
@@ -218,7 +221,7 @@ async function fixture(
         impactFeatureIds: feature ? [] : [f!.id],
       },
       userId,
-      { ...content, remainingIssues },
+      { ...content, remainingIssues: [...remainingIssues] },
     ),
   );
   return { ...p, userId, creator, featureId: f!.id, draft };
@@ -581,8 +584,8 @@ it("preserves converted links, exact history and source TODO without a restore g
         dueAt: null,
       },
     );
-    await tx.sql`INSERT INTO app.leftover_task_links(leftover_item_id,task_id,project_id,created_by) VALUES(${f.record.leftoverItem!.id},${t.id},${f.projectId},${f.userId})`;
-    await tx.sql`UPDATE app.change_record_leftover_items SET status='CONVERTED',row_version=row_version+1 WHERE id=${f.record.leftoverItem!.id}`;
+    await tx.sql`INSERT INTO app.leftover_task_links(leftover_item_id,task_id,project_id,created_by) VALUES(${f.record.leftovers[0]!.id},${t.id},${f.projectId},${f.userId})`;
+    await tx.sql`UPDATE app.change_record_leftover_items SET status='CONVERTED',row_version=row_version+1 WHERE id=${f.record.leftovers[0]!.id}`;
     return t;
   });
   // Formal source identity must already exist at publication. Create another draft bound to the same task, then publish it while DONE.

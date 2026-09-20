@@ -1,19 +1,30 @@
 import { GlobalTaskCreateModal } from "./GlobalTaskCreateModal";
-import { taskDetailPath } from "./task-links";
+import { taskDetailPath, type TaskLocation } from "./task-links";
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
+import { TaskGroupDetailModal } from "@features/task-groups/TaskGroupDetailModal";
+import { createTaskGroupServerAdapter } from "@features/task-groups/task-groups-server";
+import {
+  RecordDetailModal,
+  type RecordDetailTarget,
+} from "@features/published-records/RecordDetailModal";
+import {
+  RecordDraftEditorModal,
+  type RecordDraftEditorTarget,
+} from "@features/record-drafts/RecordDraftEditorModal";
 import { useNavigate } from "react-router-dom";
 import { LeftoverTaskSource } from "./LeftoverTaskSource";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
   type InpulseApiClient,
+  type ReadableRecord,
   type TaskStatusRequest,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -23,6 +34,11 @@ import {
   CalmSegmented,
   CalmTabs,
 } from "@features/common/components/Calm";
+import {
+  CalmSelect,
+  type CalmSelectOption,
+} from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
 import {
   isFirstLoad,
   mergeTask,
@@ -34,6 +50,13 @@ import {
   type TaskViewItem,
   type TaskDraft,
 } from "./task-query";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { isCardClick } from "@features/common/card-click";
+import { useUserDirectoryQuery } from "@features/users/user-directory-query";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 
 const labels: Record<TaskField, string> = {
   title: "任务标题",
@@ -61,6 +84,12 @@ const statusTone = {
   DONE: "green",
   CANCELED: "gray",
 } as const;
+const statusFilterOptions: readonly CalmSelectOption[] = [
+  { value: "TODO", label: "未完成", dotColor: "#1467d8" },
+  { value: "DONE", label: "已完成", dotColor: "#4a9278" },
+  { value: "CANCELED", label: "已取消", dotColor: "#a0adb9" },
+  { value: "ALL", label: "全部状态" },
+];
 const empty: TaskDraft = {
   title: "",
   description: "",
@@ -91,14 +120,34 @@ function relationBadge(mark: TaskMark | undefined): {
     };
   return null;
 }
+/**
+ * 裁决修订 D-2：由遗留问题转换而来的任务在卡片、列表与详情统一显示「遗留问题」
+ * 徽章；数据来自 R-5 批量标记（hasLeftoverSource），读取失败时按缺席隐藏。
+ */
+const LEFTOVER_SOURCE_BADGE = {
+  label: "遗留问题",
+  tone: "amber",
+  title: "由遗留问题转换而来的跟进任务",
+} as const;
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
 const formatDay = (value: string | null) =>
   value ? new Date(value).toLocaleDateString("zh-CN") : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
-const recordDraftsHref = (item: TaskViewItem) =>
-  `/records?projectId=${item.projectId}&moduleId=${item.moduleId}&taskId=${item.id}`;
+/**
+ * 任务详情的迭代记录列表只给摘要：整行可点开记录详情弹窗（与聚合组记录列表
+ * 同一实现），正文不在列表里预加载。
+ */
+function recordDetailTarget(record: ReadableRecord): RecordDetailTarget {
+  return {
+    recordId: record.id,
+    code: record.code,
+    title: record.title,
+    recordStatus: record.status,
+    publishedAt: record.publishedAt,
+  };
+}
 type DetailTab = "info" | "records" | "branches";
 /**
  * C-3：任务详情弹窗动作行的截止徽章（设计师稿 dueInfo）：按本地日历日计算
@@ -138,12 +187,13 @@ function MergeIntoTargetModal({
   task,
   api,
   onClose,
+  onMerged,
 }: {
   task: TaskViewItem;
   api: InpulseApiClient;
   onClose: () => void;
+  onMerged: (groupId: number) => void;
 }) {
-  const navigate = useNavigate();
   return (
     <MergeIntoMainTaskModal
       open
@@ -157,7 +207,7 @@ function MergeIntoTargetModal({
       onClose={onClose}
       onMerged={(groupId) => {
         onClose();
-        navigate("/task-groups/" + groupId);
+        onMerged(groupId);
       }}
     />
   );
@@ -169,14 +219,44 @@ export function TasksPanel({
   featureId,
   writable,
   client,
-}: TaskScope & { writable: boolean; client?: InpulseApiClient | undefined }) {
+  isAdmin = false,
+  mode = "panel",
+  initialTaskId,
+  onDetailClose,
+  onOpenTask,
+}: TaskScope & {
+  writable: boolean;
+  client?: InpulseApiClient | undefined;
+  /** ADR-034：任务归档/恢复入口只对系统管理员或项目内管理角色开放。 */
+  isAdmin?: boolean | undefined;
+  /**
+   * `detail`：只渲染任务详情弹窗及其子弹窗，不渲染面板头部、任务列表与新建入口，
+   * 供任务中心等跨项目页在当前页面就地打开完整任务详情（含写操作）；
+   * 缺省 `panel` 保持功能档案与模块任务页的完整面板。
+   */
+  mode?: "panel" | "detail";
+  /** `detail` 模式初始选中的任务；缺省回退 URL 的 `?taskId=`（功能档案深链）。 */
+  initialTaskId?: number | null;
+  /** 详情弹窗关闭后的回调；`detail` 模式由宿主卸载本组件，回到触发页面。 */
+  onDetailClose?: () => void;
+  /**
+   * 聚合组详情里点击成员任务标题时就地打开任务详情：由宿主页面提供（与任务中心
+   * 同一实现），缺省时成员标题按纯文本渲染。成员任务可能属于其他功能或模块，
+   * 因此不能复用本面板自己那份按范围读取的详情弹窗。
+   */
+  onOpenTask?: ((location: TaskLocation) => void) | undefined;
+}) {
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState<"cards" | "list">("cards");
-  const [statusFilter, setStatusFilter] = useState("TODO");
+  // 2026-09-18 人工确认：面板进入时默认显示全部状态，未完成 → 已完成 → 已取消
+  // 的分组顺序由服务端排序给出，这里不再默认收敛到待办。
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState<number | null>(
     () =>
-      Number(new URLSearchParams(window.location.search).get("taskId")) || null,
+      initialTaskId ??
+      (Number(new URLSearchParams(window.location.search).get("taskId")) ||
+        null),
   );
   // C-3：详情弹窗的标签页与状态操作。statusToken 每次打开动作弹窗递增，
   // 父级据此更换 key，让输入、冲突与幂等重试键随重新挂载清空。
@@ -190,9 +270,23 @@ export function TasksPanel({
   );
   const [merge, setMerge] = useState<Merge | null>(null);
   const [mergeInto, setMergeInto] = useState(false);
+  /** 当前就地打开的聚合组详情（null 表示弹层关闭）；聚合组入口不再整页跳转。 */
+  const [openGroupId, setOpenGroupId] = useState<number | null>(null);
+  // ADR-034：归档/恢复是编辑弹窗底部的独立确认流程，与编辑表单状态互不影响。
+  const [lifecycle, setLifecycle] = useState<{
+    action: "archive" | "restore";
+    item: TaskViewItem;
+  } | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [success, setSuccess] = useState(false);
+  /** 当前打开的迭代记录详情（null 表示弹层关闭）。 */
+  const [openRecordId, setOpenRecordId] = useState<number | null>(null);
+  /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
+  const [draftTarget, setDraftTarget] =
+    useState<RecordDraftEditorTarget | null>(null);
   const generation = useRef(0);
   const saving = useRef(false);
   const {
@@ -204,6 +298,8 @@ export function TasksPanel({
   } = useForm<TaskDraft>({ defaultValues: empty });
   const navigate = useNavigate();
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
+  // 聚合组详情与任务中心共用同一弹窗实现；本面板只负责把当前选中组传给它。
+  const groupAdapter = useMemo(() => createTaskGroupServerAdapter(api), [api]);
   const current = query.data?.items.find((item) => item.id === selectedId);
   // 页面级一次批量（R-5）：任务集合变化时整批重读，不按任务逐个请求。
   const marks = useTaskMarks(
@@ -240,7 +336,14 @@ export function TasksPanel({
   const taskPublished = (taskRecords.data?.items ?? []).filter(
     (record) => record.taskId === detailTaskId,
   );
+  // 列表刷新后按编号重新定位：弹窗不会因查询返回新对象而闪退。
+  const openRecord =
+    openRecordId === null
+      ? null
+      : (taskPublished.find((record) => record.id === openRecordId) ?? null);
   const taskDraftItems = taskDrafts.data?.items ?? [];
+  // 详情头部展示名称而非裸 ID：项目/模块名称为既有只读契约。
+  const projectDetail = useProjectDetail({ client, projectId });
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -260,6 +363,27 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  /** 负责人候选项：活跃成员 + 当前任务的历史负责人（已不在成员列表时标注可保留）。 */
+  const assigneeOptions = useMemo(() => {
+    const items = members.data?.items ?? [];
+    const list: CalmSelectOption[] = items.map((member) => ({
+      value: member.id,
+      label: member.name,
+      avatarUrl: member.avatarUrl ?? null,
+    }));
+    const currentId = selection?.item?.assigneeId;
+    if (
+      currentId !== undefined &&
+      !list.some((option) => option.value === currentId)
+    ) {
+      list.unshift({
+        value: currentId,
+        label: memberName(currentId),
+        description: "可保留",
+      });
+    }
+    return list;
+  }, [members.data, selection]);
   // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
   // 仍解析不到（已移出项目或停用）时回退中性编号，不冒充负责人语义。
   const projectMembers = useQuery({
@@ -268,10 +392,88 @@ export function TasksPanel({
       api.listActiveProjectMembers(projectId, { signal }),
     retry: false,
   });
+  // 创建人/操作人可能不是本项目成员（如系统管理员跨项目操作）：项目活跃成员与
+  // 指派人候选都解析不到时，用全站用户目录兜底姓名，仍解析不到才回退中性编号。
+  const userDirectory = useUserDirectoryQuery({ client });
   const personName = (id: number) =>
     projectMembers.data?.items.find((m) => m.id === id)?.name ??
     members.data?.items.find((m) => m.id === id)?.name ??
+    userDirectory.data?.find((u) => u.id === id)?.name ??
     "用户 #" + id;
+  // ADR-033/ADR-034：项目内管理角色或系统管理员才看到归档/恢复入口。
+  const canArchiveTasks = canManageProjectResources(
+    isAdmin,
+    projectDetail.data?.currentUserRole ?? null,
+  );
+  // ADR-034：父级或任务自身已归档时编辑表单只读，但归档/恢复入口必须仍然可达，
+  // 否则「功能已归档 → 任务无法归档 → 模块无法归档」会把入口锁死。
+  const editReadOnly =
+    selection?.item !== undefined &&
+    (!writable || selection.item.lifecycleStatus !== "ACTIVE");
+  const canOpenLifecycleDialog =
+    canArchiveTasks &&
+    current !== undefined &&
+    (current.lifecycleStatus === "ACTIVE" ||
+      current.lifecycleStatus === "ARCHIVED");
+  const lifecycleCache = useQueryClient();
+  const lifecycleMutation = useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      item: TaskViewItem;
+      action: "archive" | "restore";
+      reason: string;
+    }) => {
+      const csrf = await api.issueCsrfToken();
+      const init = {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "Idempotency-Key": createIdempotencyKey("task-lifecycle"),
+          "If-Match": '"' + input.item.rowVersion + '"',
+        },
+      };
+      const body = { reason: input.reason };
+      if (input.item.scopeType === "MODULE")
+        return input.action === "archive"
+          ? api.archiveModuleTask(
+              projectId,
+              moduleId,
+              input.item.id,
+              body,
+              init,
+            )
+          : api.restoreModuleTask(
+              projectId,
+              moduleId,
+              input.item.id,
+              body,
+              init,
+            );
+      return input.action === "archive"
+        ? api.archiveTask(
+            projectId,
+            moduleId,
+            input.item.featureId,
+            input.item.id,
+            body,
+            init,
+          )
+        : api.restoreTask(
+            projectId,
+            moduleId,
+            input.item.featureId,
+            input.item.id,
+            body,
+            init,
+          );
+    },
+    onSuccess: async () => {
+      await Promise.all(
+        ["tasks", "modules", "activity", "search", "notifications"].map((key) =>
+          lifecycleCache.invalidateQueries({ queryKey: [key] }),
+        ),
+      );
+    },
+  });
   const openDetail = (id: number) => {
     setSelectedId(id);
     setTab("info");
@@ -281,6 +483,8 @@ export function TasksPanel({
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
+    setOpenRecordId(null);
+    onDetailClose?.();
   };
   /**
    * C-3：状态操作入口。每次点击递增 token，任务状态弹窗重新挂载，
@@ -294,6 +498,7 @@ export function TasksPanel({
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
+    setOpenRecordId(null);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
     reset(item ? taskEdit(item) : empty);
@@ -310,8 +515,11 @@ export function TasksPanel({
   const close = () => {
     if (saving.current || reloading) return;
     generation.current++;
+    // detail 模式没有面板可回退：关闭编辑弹窗后重新打开任务详情弹窗。
+    const returnId = mode === "detail" ? (selection?.item?.id ?? null) : null;
     setSelection(null);
     setMerge(null);
+    if (returnId !== null) openDetail(returnId);
   };
   const save = handleSubmit(async (edit) => {
     if (
@@ -393,262 +601,335 @@ export function TasksPanel({
     mutation.reset();
     setReloadError(null);
   };
+  const openLifecycle = (action: "archive" | "restore", item: TaskViewItem) => {
+    lifecycleMutation.reset();
+    setLifecycleError(null);
+    setLifecycleReason("");
+    setLifecycle({ action, item });
+  };
+  const closeLifecycle = () => {
+    if (lifecycleMutation.isPending) return;
+    lifecycleMutation.reset();
+    setLifecycleError(null);
+    setLifecycleReason("");
+    setLifecycle(null);
+  };
+  const submitLifecycle = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!lifecycle || lifecycleMutation.isPending) return;
+    const reason = lifecycleReason.trim();
+    if (reason.length === 0) {
+      setLifecycleError("请填写操作原因。");
+      return;
+    }
+    setLifecycleError(null);
+    try {
+      await lifecycleMutation.mutateAsync({ ...lifecycle, reason });
+      setLifecycle(null);
+      setLifecycleReason("");
+      setSuccess(true);
+    } catch {
+      /* 失败时保留原因输入，便于按最新版本重试。 */
+    }
+  };
   return (
     <section
       aria-label={featureId === null ? "模块任务" : "功能任务"}
       className="tasks-panel"
     >
-      {customCreateOpen && (
-        <GlobalTaskCreateModal
-          open
-          onClose={() => setCustomCreateOpen(false)}
-          client={client}
-          preset={{
-            projectId,
-            moduleId,
-            ...(featureId !== null ? { featureId } : {}),
-          }}
-          onCreatedLocation={(task) => navigate(taskDetailPath(task))}
-        />
-      )}
-      <div className="calm-section-title">
-        <div>
-          <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
-          <small>
-            {featureId === null
-              ? "任务保存在模块下，可关联一个或多个功能；编号、版本与负责人以服务端为准。"
-              : "任务保存在功能下，编号、版本与负责人以服务端为准。"}
-          </small>
-        </div>
-        <div className="feature-view-controls">
-          <Button
-            disabled={!writable}
-            onClick={() => setCustomCreateOpen(true)}
-          >
-            自定义归属新建任务
-          </Button>
-          <CalmSegmented
-            label="展示方式"
-            value={view}
-            options={[
-              { value: "cards", label: "卡片" },
-              { value: "list", label: "列表" },
-            ]}
-            onChange={setView}
-          />
-          {query.isSuccess && !query.data?.items.length ? null : (
-            <Button
-              className="primary-button"
-              disabled={!writable}
-              onClick={() => open()}
-            >
-              <InpulseIcon name="plus" size={15} />
-              新建任务
-            </Button>
+      {mode === "detail" ? null : (
+        <>
+          {featureId === null && customCreateOpen && (
+            <GlobalTaskCreateModal
+              open
+              onClose={() => setCustomCreateOpen(false)}
+              client={client}
+              preset={{ projectId, moduleId }}
+              onCreatedLocation={(task) => navigate(taskDetailPath(task))}
+            />
           )}
-        </div>
-      </div>
-      {!writable && (
-        <p className="permission-hint">
-          <InpulseIcon name="alert" size={14} />
-          {featureId === null
-            ? "模块已归档，任务历史只读，不能新建或修改。"
-            : "功能已归档，任务历史只读，不能新建或修改。"}
-        </p>
-      )}
-      {query.data && (
-        <p className="task-count">
-          任务数：{query.data.items.length}（按唯一任务计）
-        </p>
-      )}
-      {success && <Alert type="success" title="任务已保存" />}
-      {query.data && (
-        <div className="feature-view-controls">
-          <label>
-            任务状态筛选
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+          <div className="calm-section-title">
+            <div className="task-panel-heading">
+              <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
+              {/* 计数与筛选合并进标题行：不再单起一行「任务数：…」与筛选行。 */}
+              {query.data && (
+                <CalmBadge
+                  tone="gray"
+                  title="按唯一任务计：同一任务关联多个功能时只计一次"
+                >
+                  {query.data.items.length} 个任务
+                </CalmBadge>
+              )}
+            </div>
+            <div className="feature-view-controls">
+              {/* 功能级面板的新建任务固定归属当前功能，不需要自定义归属；
+                  只有模块级面板才需要选择归属到某个功能还是留在模块下。 */}
+              {featureId === null && (
+                <Button
+                  disabled={!writable}
+                  onClick={() => setCustomCreateOpen(true)}
+                >
+                  自定义归属新建任务
+                </Button>
+              )}
+              {query.data && (
+                <CalmSelect
+                  className="task-status-filter"
+                  value={statusFilter}
+                  onChange={(next) => setStatusFilter(String(next))}
+                  options={statusFilterOptions}
+                  appearance="menu"
+                  ariaLabel="任务状态筛选"
+                />
+              )}
+              <CalmSegmented
+                label="展示方式"
+                value={view}
+                options={[
+                  { value: "cards", label: "卡片" },
+                  { value: "list", label: "列表" },
+                ]}
+                onChange={setView}
+              />
+              {query.isSuccess && !query.data?.items.length ? null : (
+                <Button
+                  className="primary-button"
+                  disabled={!writable}
+                  onClick={() => open()}
+                >
+                  <InpulseIcon name="plus" size={15} />
+                  新建任务
+                </Button>
+              )}
+            </div>
+          </div>
+          {!writable && (
+            <p className="permission-hint">
+              <InpulseIcon name="alert" size={14} />
+              {featureId === null
+                ? "模块已归档，任务历史只读，不能新建或修改。"
+                : "功能已归档，任务历史只读，不能新建或修改。"}
+            </p>
+          )}
+          {success && <Alert type="success" title="任务已保存" />}
+          {query.isPending ? (
+            <div className="calm-state">
+              <Spin />
+              <span>正在加载任务</span>
+            </div>
+          ) : query.isError ? (
+            <Alert
+              type="error"
+              title={taskError(query.error)}
+              action={
+                <Button
+                  className="secondary-button"
+                  onClick={() => void query.refetch()}
+                >
+                  重试任务列表
+                </Button>
+              }
+            />
+          ) : !query.data?.items.length ? (
+            <CalmEmptyState
+              icon="zap"
+              title="暂无任务"
+              description={
+                featureId === null
+                  ? "为当前模块创建一项可影响一个或多个功能的执行工作。"
+                  : "为当前功能创建一项具体执行工作。"
+              }
             >
-              <option value="TODO">未完成</option>
-              <option value="DONE">已完成</option>
-              <option value="CANCELED">已取消</option>
-              <option value="ALL">全部状态</option>
-            </select>
-          </label>
-        </div>
-      )}
-      {query.isPending ? (
-        <div className="calm-state">
-          <Spin />
-          <span>正在加载任务</span>
-        </div>
-      ) : query.isError ? (
-        <Alert
-          type="error"
-          title={taskError(query.error)}
-          action={
-            <Button
-              className="secondary-button"
-              onClick={() => void query.refetch()}
-            >
-              重试任务列表
-            </Button>
-          }
-        />
-      ) : !query.data?.items.length ? (
-        <CalmEmptyState
-          icon="zap"
-          title="暂无任务"
-          description={
-            featureId === null
-              ? "为当前模块创建一项可影响一个或多个功能的执行工作。"
-              : "为当前功能创建一项具体执行工作。"
-          }
-        >
-          <Button
-            className="primary-button"
-            disabled={!writable}
-            onClick={() => open()}
-          >
-            <InpulseIcon name="plus" size={15} />
-            新建任务
-          </Button>
-        </CalmEmptyState>
-      ) : !visibleItems.length ? (
-        <CalmEmptyState
-          icon="zap"
-          title="当前状态暂无任务"
-          description="可切换状态筛选查看历史任务。"
-        />
-      ) : view === "list" ? (
-        <div className="feature-list-scroll">
-          <table className="feature-list-table">
-            <caption className="sr-only">任务列表</caption>
-            <thead>
-              <tr>
-                <th scope="col">范围</th>
-                <th scope="col">编号</th>
-                <th scope="col">任务</th>
-                <th scope="col">负责人</th>
-                <th scope="col">优先级</th>
-                <th scope="col">截止</th>
-                <th scope="col">状态</th>
-              </tr>
-            </thead>
-            <tbody>
+              <Button
+                className="primary-button"
+                disabled={!writable}
+                onClick={() => open()}
+              >
+                <InpulseIcon name="plus" size={15} />
+                新建任务
+              </Button>
+            </CalmEmptyState>
+          ) : !visibleItems.length ? (
+            <CalmEmptyState
+              icon="zap"
+              title="当前状态暂无任务"
+              description="可切换状态筛选查看历史任务。"
+            />
+          ) : view === "list" ? (
+            <div className="feature-list-scroll">
+              <table className="feature-list-table">
+                <caption className="sr-only">任务列表</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">范围</th>
+                    <th scope="col">编号</th>
+                    <th scope="col">任务</th>
+                    <th scope="col">负责人</th>
+                    <th scope="col">优先级</th>
+                    <th scope="col">截止</th>
+                    <th scope="col">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleItems.map((item) => {
+                    const badge = relationBadge(marks.get(item.id));
+                    const leftoverSource =
+                      marks.get(item.id)?.hasLeftoverSource === true;
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          {item.scopeType === "MODULE" ? (
+                            <span className="task-scope">模块级任务</span>
+                          ) : (
+                            <span className="task-scope">功能级任务</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="task-id">{item.code}</span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="feature-list-open"
+                            aria-label={item.title}
+                            onClick={() => openDetail(item.id)}
+                          >
+                            <strong>{item.title}</strong>
+                            <span>
+                              {badge === null ? "" : badge.label + " · "}
+                              {leftoverSource
+                                ? LEFTOVER_SOURCE_BADGE.label + " · "
+                                : ""}
+                              查看任务详情
+                            </span>
+                          </button>
+                        </td>
+                        <td>{memberName(item.assigneeId)}</td>
+                        <td>
+                          <CalmBadge tone={priorityTone[item.priority]}>
+                            {priorityLabels[item.priority]}
+                          </CalmBadge>
+                        </td>
+                        <td className="due-overdue">{dueLabel(item.dueAt)}</td>
+                        <td>
+                          <CalmBadge tone={statusTone[item.workStatus]}>
+                            {statusLabels[item.workStatus]}
+                          </CalmBadge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="calm-task-grid">
               {visibleItems.map((item) => {
                 const badge = relationBadge(marks.get(item.id));
+                const recordCount =
+                  marks.get(item.id)?.publishedRecordCount ?? 0;
+                const leftoverSource =
+                  marks.get(item.id)?.hasLeftoverSource === true;
                 return (
-                  <tr key={item.id}>
-                    <td>
-                      {item.scopeType === "MODULE" ? (
-                        <span className="task-scope">模块级任务</span>
-                      ) : (
-                        <span className="task-scope">功能级任务</span>
-                      )}
-                    </td>
-                    <td>
+                  <article
+                    className="calm-task-card"
+                    key={item.id}
+                    tabIndex={0}
+                    onClick={(event) => {
+                      if (!isCardClick(event)) return;
+                      openDetail(item.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      if (event.target !== event.currentTarget) return;
+                      event.preventDefault();
+                      openDetail(item.id);
+                    }}
+                  >
+                    <div className="calm-card-top">
                       <span className="task-id">{item.code}</span>
-                    </td>
-                    <td>
+                      <span className="task-card-badges">
+                        {item.scopeType === "MODULE" && (
+                          <CalmBadge tone="violet">模块级</CalmBadge>
+                        )}
+                        {badge !== null && (
+                          <CalmBadge tone={badge.tone} title={badge.title}>
+                            {badge.label}
+                          </CalmBadge>
+                        )}
+                        {leftoverSource && (
+                          <CalmBadge
+                            tone={LEFTOVER_SOURCE_BADGE.tone}
+                            title={LEFTOVER_SOURCE_BADGE.title}
+                          >
+                            {LEFTOVER_SOURCE_BADGE.label}
+                          </CalmBadge>
+                        )}
+                        <CalmBadge tone={statusTone[item.workStatus]}>
+                          {statusLabels[item.workStatus]}
+                        </CalmBadge>
+                      </span>
+                    </div>
+                    <h3>{item.title}</h3>
+                    {/* 卡片正文是任务介绍；归属由页面语境与「模块级」徽标表达，
+                        不再重复一遍功能名。 */}
+                    <p
+                      className={
+                        "task-card-desc" +
+                        (item.description === "" ? " is-placeholder" : "")
+                      }
+                      title={
+                        item.description === ""
+                          ? "暂无任务描述"
+                          : item.description
+                      }
+                    >
+                      {item.description === ""
+                        ? "暂无任务描述"
+                        : item.description}
+                    </p>
+                    <div className="calm-card-bottom">
+                      <span title={"负责人：" + memberName(item.assigneeId)}>
+                        <InpulseIcon name="users" size={14} />
+                        {memberName(item.assigneeId)}
+                      </span>
+                      <span title={"截止：" + formatDate(item.dueAt)}>
+                        <InpulseIcon name="clock" size={14} />
+                        {dueLabel(item.dueAt)}
+                      </span>
+                    </div>
+                    <div className="task-card-footer">
+                      <span className="task-card-counts">
+                        <CalmBadge tone={priorityTone[item.priority]}>
+                          {priorityLabels[item.priority]}
+                        </CalmBadge>
+                        <span title={"更新 " + formatDate(item.updatedAt)}>
+                          <InpulseIcon name="calendar" size={13} />
+                          更新 {formatDay(item.updatedAt)}
+                        </span>
+                        {recordCount > 0 && (
+                          <span title={recordCount + " 条已发布迭代记录"}>
+                            <InpulseIcon name="gitBranch" size={13} />
+                            记录 {recordCount} 条
+                          </span>
+                        )}
+                      </span>
                       <button
                         type="button"
-                        className="feature-list-open"
-                        aria-label={item.title}
+                        className="text-button"
+                        aria-label="任务详情"
                         onClick={() => openDetail(item.id)}
                       >
-                        <strong>{item.title}</strong>
-                        <span>
-                          {badge === null ? "" : badge.label + " · "}
-                          查看任务详情
-                        </span>
+                        任务详情
+                        <InpulseIcon name="chevronRight" size={13} />
                       </button>
-                    </td>
-                    <td>{memberName(item.assigneeId)}</td>
-                    <td>
-                      <CalmBadge tone={priorityTone[item.priority]}>
-                        {priorityLabels[item.priority]}
-                      </CalmBadge>
-                    </td>
-                    <td className="due-overdue">{dueLabel(item.dueAt)}</td>
-                    <td>
-                      <CalmBadge tone={statusTone[item.workStatus]}>
-                        {statusLabels[item.workStatus]}
-                      </CalmBadge>
-                    </td>
-                  </tr>
+                    </div>
+                  </article>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="calm-task-grid">
-          {visibleItems.map((item) => {
-            const badge = relationBadge(marks.get(item.id));
-            const recordCount = marks.get(item.id)?.publishedRecordCount ?? 0;
-            return (
-              <article className="calm-task-card" key={item.id}>
-                <div className="calm-card-top">
-                  <span className="task-id">{item.code}</span>
-                  <span className="task-card-badges">
-                    {badge !== null && (
-                      <CalmBadge tone={badge.tone} title={badge.title}>
-                        {badge.label}
-                      </CalmBadge>
-                    )}
-                    <CalmBadge tone={statusTone[item.workStatus]}>
-                      {statusLabels[item.workStatus]}
-                    </CalmBadge>
-                    <CalmBadge tone={priorityTone[item.priority]}>
-                      {priorityLabels[item.priority]}
-                    </CalmBadge>
-                  </span>
-                </div>
-                <h3>{item.title}</h3>
-                <p className="task-belonging">
-                  {item.featureId === null
-                    ? "模块级任务" + (featureId === null ? "" : " · 引用")
-                    : "功能 #" + item.featureId}
-                </p>
-                <div className="calm-card-bottom">
-                  <span title={"负责人：" + memberName(item.assigneeId)}>
-                    <InpulseIcon name="users" size={14} />
-                    {memberName(item.assigneeId)}
-                  </span>
-                  <span title={"截止：" + formatDate(item.dueAt)}>
-                    <InpulseIcon name="clock" size={14} />
-                    {dueLabel(item.dueAt)}
-                  </span>
-                </div>
-                <div className="task-card-footer">
-                  <span className="task-card-counts">
-                    <span>
-                      <InpulseIcon name="calendar" size={13} />
-                      更新 {formatDate(item.updatedAt)}
-                    </span>
-                    {recordCount > 0 && (
-                      <span title={recordCount + " 条已发布迭代记录"}>
-                        <InpulseIcon name="gitBranch" size={13} />
-                        迭代记录 {recordCount} 条
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-button"
-                    aria-label="任务详情"
-                    onClick={() => openDetail(item.id)}
-                  >
-                    任务详情
-                    <InpulseIcon name="chevronRight" size={13} />
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+            </div>
+          )}
+        </>
       )}
       {selectedId !== null && (
         <Modal
@@ -682,19 +963,7 @@ export function TasksPanel({
             <>
               <div className="drawer-header task-modal-header">
                 <div>
-                  <span className="detail-label">
-                    项目 #{current.projectId} / 模块 #{current.moduleId} /
-                    {current.featureId === null
-                      ? " 模块级任务"
-                      : " 功能 #" + current.featureId}
-                  </span>
                   <h2>{current.title}</h2>
-                  <ExternalLinksPanel
-                    key={current.id}
-                    targetType="TASK"
-                    targetId={current.id}
-                    client={api}
-                  />
                   <div className="task-modal-badges">
                     <span className="task-id">{current.code}</span>
                     <CalmBadge tone={statusTone[current.workStatus]}>
@@ -711,6 +980,22 @@ export function TasksPanel({
                         {currentBadge.label}
                       </CalmBadge>
                     )}
+                    {currentMark?.hasLeftoverSource === true && (
+                      <CalmBadge
+                        tone={LEFTOVER_SOURCE_BADGE.tone}
+                        title={LEFTOVER_SOURCE_BADGE.title}
+                      >
+                        {LEFTOVER_SOURCE_BADGE.label}
+                      </CalmBadge>
+                    )}
+                  </div>
+                  <div className="task-modal-header-links">
+                    <ExternalLinksPanel
+                      key={current.id}
+                      targetType="TASK"
+                      targetId={current.id}
+                      client={api}
+                    />
                   </div>
                 </div>
                 <button
@@ -774,7 +1059,7 @@ export function TasksPanel({
                 )}
                 <Button
                   className="secondary-button"
-                  disabled={!taskWritable}
+                  disabled={!taskWritable && !canOpenLifecycleDialog}
                   onClick={() => open(current)}
                 >
                   <InpulseIcon name="pencil" size={14} />
@@ -843,9 +1128,7 @@ export function TasksPanel({
                           <button
                             type="button"
                             className="text-button"
-                            onClick={() =>
-                              navigate("/task-groups/" + currentGroupId)
-                            }
+                            onClick={() => setOpenGroupId(currentGroupId)}
                           >
                             <InpulseIcon name="gitBranch" size={14} />
                             查看主任务
@@ -868,13 +1151,18 @@ export function TasksPanel({
                               : "一个任务可以没有记录，也可以产生多条记录"}
                           </small>
                         </div>
-                        <a
+                        <Button
                           className="primary-button"
-                          href={recordDraftsHref(current)}
+                          disabled={!taskWritable || !taskDrafts.data?.source}
+                          onClick={() => {
+                            const source = taskDrafts.data?.source;
+                            if (!source) return;
+                            setDraftTarget({ kind: "source", source });
+                          }}
                         >
                           <InpulseIcon name="zap" size={15} />
                           记录一次迭代
-                        </a>
+                        </Button>
                       </div>
                       {taskRecords.isPending || taskDrafts.isPending ? (
                         <div className="calm-state">
@@ -909,25 +1197,39 @@ export function TasksPanel({
                         <ul className="task-record-list">
                           {taskPublished.map((record) => (
                             <li key={"published-" + record.id}>
-                              <a
-                                href={
-                                  "/records?projectId=" +
-                                  projectId +
-                                  "&publishedId=" +
-                                  record.id
+                              {/* 整行摘要可点开详情弹窗；关联链接与徽章留在按钮外，
+                                  避免交互元素嵌套。 */}
+                              <button
+                                type="button"
+                                className="task-record-open"
+                                data-testid={"task-record-open-" + record.id}
+                                aria-haspopup="dialog"
+                                onClick={() => setOpenRecordId(record.id)}
+                              >
+                                <span className="task-record-open-text">
+                                  <strong>{record.title}</strong>
+                                  <small>
+                                    {record.code +
+                                      " · " +
+                                      formatDay(record.publishedAt) +
+                                      " · " +
+                                      (record.handlerName ??
+                                        personName(record.handlerId))}
+                                  </small>
+                                </span>
+                                <InpulseIcon
+                                  name="chevronRight"
+                                  size={14}
+                                  className="task-record-open-chevron"
+                                />
+                              </button>
+                              <CalmBadge
+                                tone={
+                                  record.status === "VOID" ? "gray" : "green"
                                 }
                               >
-                                <strong>{record.title}</strong>
-                                <small>
-                                  {record.code +
-                                    " · " +
-                                    formatDay(record.publishedAt) +
-                                    " · " +
-                                    (record.handlerName ??
-                                      personName(record.handlerId))}
-                                </small>
-                              </a>
-                              <CalmBadge tone="green">已发布</CalmBadge>
+                                {record.status === "VOID" ? "已作废" : "已发布"}
+                              </CalmBadge>
                             </li>
                           ))}
                           {taskDraftItems.map((draft) => (
@@ -991,9 +1293,7 @@ export function TasksPanel({
                             type="button"
                             className="text-button"
                             onClick={() =>
-                              navigate(
-                                "/task-groups/" + currentRelation.groupId,
-                              )
+                              setOpenGroupId(currentRelation.groupId)
                             }
                           >
                             <InpulseIcon name="gitBranch" size={14} />
@@ -1039,26 +1339,63 @@ export function TasksPanel({
                   </dl>
                 </aside>
               </div>
-              <LeftoverTaskSource api={api} taskId={current.id} />
-              <TaskStatusPanel
-                key={statusToken}
-                item={current}
-                api={api}
-                writable={taskWritable}
-                action={statusAction}
-                onClose={() => setStatusAction(null)}
-                nameOf={personName}
-              />
+              <div className="task-modal-bottom">
+                <LeftoverTaskSource api={api} taskId={current.id} />
+                <TaskStatusPanel
+                  key={statusToken}
+                  item={current}
+                  api={api}
+                  writable={taskWritable}
+                  action={statusAction}
+                  onClose={() => setStatusAction(null)}
+                  nameOf={personName}
+                />
+              </div>
               {mergeInto && (
                 <MergeIntoTargetModal
                   task={current}
                   api={api}
                   onClose={() => setMergeInto(false)}
+                  onMerged={(groupId) => setOpenGroupId(groupId)}
                 />
               )}
             </>
           )}
         </Modal>
+      )}
+      <TaskGroupDetailModal
+        groupId={openGroupId}
+        adapter={groupAdapter}
+        api={api}
+        onClose={() => setOpenGroupId(null)}
+        onOpenTask={onOpenTask}
+        onChanged={() => {
+          // 解除合并会改变任务在聚合组里的关系标记，整批重读 R-5 标记。
+          void lifecycleCache.invalidateQueries({ queryKey: ["task-marks"] });
+        }}
+      />
+      {openRecord === null ? null : (
+        <RecordDetailModal
+          projectId={projectId}
+          record={recordDetailTarget(openRecord)}
+          api={api}
+          onClose={() => setOpenRecordId(null)}
+          onChanged={() => {
+            // 修订、作废与遗留项操作会改变列表里的编号状态与正文。
+            void taskRecords.refetch();
+          }}
+        />
+      )}
+      {draftTarget === null ? null : (
+        <RecordDraftEditorModal
+          api={api}
+          target={draftTarget}
+          projectId={projectId}
+          writable={taskWritable}
+          onClose={() => setDraftTarget(null)}
+          // 保存成功后弹窗内部会失效草稿查询，列表在下一次渲染时出现新草稿。
+          onSaved={() => setDraftTarget(null)}
+        />
       )}
       <Modal
         open={selection !== null}
@@ -1078,6 +1415,12 @@ export function TasksPanel({
           onSubmit={(event) => void save(event)}
         >
           <div className="dialog-form">
+            {editReadOnly && (
+              <Alert
+                type="info"
+                title="任务或所属模块、功能已归档，表单只读；可用下方按钮归档或恢复。"
+              />
+            )}
             {mutation.isError && (
               <Alert type="error" title={taskError(mutation.error)} />
             )}
@@ -1257,13 +1600,21 @@ export function TasksPanel({
                   name="priority"
                   control={control}
                   render={({ field }) => (
-                    <select {...field} id="task-priority">
-                      {Object.entries(priorityLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                    <CalmSelect
+                      id="task-priority"
+                      ariaLabel="优先级"
+                      value={field.value}
+                      appearance="menu"
+                      onChange={(next) => field.onChange(next)}
+                      onBlur={field.onBlur}
+                      options={Object.entries(priorityLabels).map(
+                        ([value, label]) => ({
+                          value,
+                          label,
+                          dotColor: priorityDotColor(value),
+                        }),
+                      )}
+                    />
                   )}
                 />
               </div>
@@ -1274,30 +1625,16 @@ export function TasksPanel({
                   control={control}
                   rules={{ validate: (value) => value > 0 || "请选择负责人" }}
                   render={({ field }) => (
-                    <select
+                    <CalmSelect
                       id="task-assignee"
-                      value={field.value}
-                      onChange={(event) =>
-                        field.onChange(Number(event.target.value))
-                      }
+                      value={field.value > 0 ? field.value : null}
+                      onChange={(next) => field.onChange(Number(next))}
                       onBlur={field.onBlur}
-                      ref={field.ref}
-                    >
-                      <option value={0}>请选择项目成员</option>
-                      {selection?.item &&
-                        !members.data?.items.some(
-                          (m) => m.id === selection.item!.assigneeId,
-                        ) && (
-                          <option value={selection.item.assigneeId}>
-                            {memberName(selection.item.assigneeId)}，可保留
-                          </option>
-                        )}
-                      {members.data?.items.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={assigneeOptions}
+                      appearance="member"
+                      placeholder="请选择项目成员"
+                      ariaLabel="负责人"
+                    />
                   )}
                 />
                 {errors.assigneeId && (
@@ -1355,6 +1692,30 @@ export function TasksPanel({
             </fieldset>
           </div>
           <div className="calm-action-footer">
+            {/* ADR-034：任务归档/恢复入口与模块、功能一致放在编辑弹窗底部；
+                普通成员看不到，系统管理员或项目内管理角色可直接切到归档流程。 */}
+            {selection?.item &&
+            canArchiveTasks &&
+            (selection.item.lifecycleStatus === "ACTIVE" ||
+              selection.item.lifecycleStatus === "ARCHIVED") ? (
+              <Button
+                className="secondary-button footer-leading"
+                data-testid="task-modal-lifecycle"
+                disabled={mutation.isPending || reloading || !!merge}
+                onClick={() =>
+                  openLifecycle(
+                    selection.item!.lifecycleStatus === "ARCHIVED"
+                      ? "restore"
+                      : "archive",
+                    selection.item!,
+                  )
+                }
+              >
+                {selection.item.lifecycleStatus === "ARCHIVED"
+                  ? "恢复"
+                  : "归档"}
+              </Button>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1371,6 +1732,65 @@ export function TasksPanel({
               }
             >
               保存
+            </Button>
+          </div>
+        </form>
+      </Modal>
+      <Modal
+        open={lifecycle !== null}
+        eyebrow={
+          lifecycle === null
+            ? "任务生命周期"
+            : lifecycle.item.code +
+              (lifecycle.action === "archive"
+                ? " · 归档只切换生命周期状态"
+                : " · 恢复后任务重新回到活跃列表")
+        }
+        title={lifecycle?.action === "restore" ? "恢复任务" : "归档任务"}
+        className="catalog-modal"
+        onCancel={closeLifecycle}
+        mask={{ closable: !lifecycleMutation.isPending }}
+      >
+        <form
+          className="catalog-form calm-form"
+          onSubmit={(event) => void submitLifecycle(event)}
+        >
+          <div className="dialog-form">
+            {lifecycleMutation.isError && (
+              <Alert type="error" title={taskError(lifecycleMutation.error)} />
+            )}
+            {lifecycleError && <Alert type="error" title={lifecycleError} />}
+            <div className="calm-field">
+              <label htmlFor="task-lifecycle-reason">操作原因</label>
+              <Input.TextArea
+                id="task-lifecycle-reason"
+                rows={3}
+                maxLength={2000}
+                value={lifecycleReason}
+                disabled={lifecycleMutation.isPending}
+                onChange={(event) => setLifecycleReason(event.target.value)}
+              />
+            </div>
+            <p className="calm-hint">
+              {lifecycle?.action === "restore"
+                ? "恢复只让任务重新可写；所属模块或功能已归档时，先恢复上一级再恢复任务。"
+                : "归档不改变工作状态、完成记录与状态历史；模块归档要求该模块下的全部任务都已归档。"}
+            </p>
+          </div>
+          <div className="calm-action-footer">
+            <Button
+              className="secondary-button"
+              onClick={closeLifecycle}
+              disabled={lifecycleMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              className="primary-button"
+              htmlType="submit"
+              loading={lifecycleMutation.isPending}
+            >
+              确认
             </Button>
           </div>
         </form>

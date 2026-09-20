@@ -3,9 +3,8 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { routeRegistry, schemaRegistry } from "@inpulse/api-contract";
 
-import { AdminHighRiskError } from "../../auth/admin-high-risk.error.js";
-import { AdminHighRiskAuthService } from "../../auth/admin-high-risk.service.js";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
+import { SessionAuthService } from "../../auth/session-auth.service.js";
 import {
   getHeader,
   mutationSameOriginValidationError,
@@ -26,7 +25,8 @@ export type ProjectMemberOperation =
   | "listProjectMembers"
   | "listProjectMemberUnfinishedTasks"
   | "addProjectMember"
-  | "removeProjectMember";
+  | "removeProjectMember"
+  | "setProjectMemberRole";
 
 export interface ProjectMemberHttpRequest {
   readonly headers: HttpHeaderBag;
@@ -57,8 +57,8 @@ class ProjectMemberInputError extends Error {
 @Injectable()
 export class ProjectMemberManagementHttpService {
   constructor(
-    @Inject(AdminHighRiskAuthService)
-    private readonly highRisk: AdminHighRiskAuthService,
+    @Inject(SessionAuthService)
+    private readonly sessionAuth: SessionAuthService,
     @Inject(AuthenticatedMutationService)
     private readonly mutation: AuthenticatedMutationService,
     @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
@@ -84,19 +84,20 @@ export class ProjectMemberManagementHttpService {
 
       if (operation === "listProjectMembers") {
         const body = await this.uow.run(async (tx) => {
-          await this.highRisk.verifyRead(tx, request.headers);
-          return this.members.listMembers(tx, path.projectId);
+          const actor = await this.resolveReadActor(tx, request.headers);
+          return this.members.listMembers(tx, path.projectId, actor);
         });
         return { status: 200, body };
       }
 
       if (operation === "listProjectMemberUnfinishedTasks") {
         const body = await this.uow.run(async (tx) => {
-          await this.highRisk.verifyRead(tx, request.headers);
+          const actor = await this.resolveReadActor(tx, request.headers);
           return this.members.listUnfinishedTasks(
             tx,
             path.projectId,
             path.userId,
+            actor,
           );
         });
         return { status: 200, body };
@@ -112,7 +113,8 @@ export class ProjectMemberManagementHttpService {
       }
       if (
         operation === "addProjectMember" ||
-        operation === "removeProjectMember"
+        operation === "removeProjectMember" ||
+        operation === "setProjectMemberRole"
       ) {
         const contentType = getHeader(request.headers, "content-type")
           ?.split(";")[0]
@@ -134,6 +136,10 @@ export class ProjectMemberManagementHttpService {
         operation === "removeProjectMember"
           ? this.parseRemoveBody(request.body)
           : undefined;
+      const roleBody =
+        operation === "setProjectMemberRole"
+          ? this.parseRoleBody(request.body)
+          : undefined;
       const execute = async (
         tx: Parameters<ProjectMemberManagementService["addMember"]>[0],
         actorId: number,
@@ -145,13 +151,21 @@ export class ProjectMemberManagementHttpService {
               userId: addBody!.userId,
               requestId,
             })
-          : this.members.removeMember(tx, {
-              actorId,
-              projectId: path.projectId,
-              userId: path.userId,
-              request: removeBody!,
-              requestId,
-            });
+          : operation === "removeProjectMember"
+            ? this.members.removeMember(tx, {
+                actorId,
+                projectId: path.projectId,
+                userId: path.userId,
+                request: removeBody!,
+                requestId,
+              })
+            : this.members.setRole(tx, {
+                actorId,
+                projectId: path.projectId,
+                userId: path.userId,
+                role: roleBody!.role,
+                requestId,
+              });
 
       const result = await this.idempotency.run({
         operationId: operation,
@@ -162,7 +176,7 @@ export class ProjectMemberManagementHttpService {
           pathParams: toPathParams(path),
           query: {},
           headers: request.headers,
-          body: addBody ?? removeBody,
+          body: addBody ?? removeBody ?? roleBody,
         },
         execute,
         replayAuthorizer: async (record, tx) => {
@@ -187,13 +201,25 @@ export class ProjectMemberManagementHttpService {
     }
   }
 
+  private parseRoleBody(value: unknown): {
+    role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+  } {
+    const parsed =
+      schemaRegistry.SetProjectMemberRoleRequest.schema.safeParse(value);
+    if (!parsed.success) {
+      throw new ProjectMemberInputError({ body: "角色设置请求体无效" });
+    }
+    return parsed.data;
+  }
+
   private parsePath(
     operation: ProjectMemberOperation,
     value: unknown,
   ): { readonly projectId: number; readonly userId: number } {
     const schema =
       operation === "listProjectMemberUnfinishedTasks" ||
-      operation === "removeProjectMember"
+      operation === "removeProjectMember" ||
+      operation === "setProjectMemberRole"
         ? schemaRegistry.ProjectMemberPath.schema
         : schemaRegistry.ProjectMemberCollectionPath.schema;
     const parsed = schema.safeParse(value);
@@ -237,6 +263,29 @@ export class ProjectMemberManagementHttpService {
     return parsed.data;
   }
 
+  /**
+   * ADR-033：写 actor 只要求有效认证 Session 与同步 CSRF；项目内管理角色
+   * （系统管理员/本项目 LEADER/PROJECT_ADMIN）由服务层在同一事务内校验。
+   * 读路径只要求有效认证 Session。
+   */
+  private async resolveReadActor(
+    tx: Parameters<ProjectMemberManagementService["listMembers"]>[0],
+    headers: HttpHeaderBag,
+  ): Promise<number> {
+    const actor = await this.sessionAuth.resolveActorInTransaction(
+      tx,
+      getHeader(headers, "cookie"),
+    );
+    if (actor === undefined) {
+      throw new ProjectMemberHttpError(
+        401,
+        "PROJECT_MEMBER_SESSION_REQUIRED",
+        "需要有效的认证 Session",
+      );
+    }
+    return actor.userId;
+  }
+
   private async resolveWriteActor(
     tx: Parameters<ProjectMemberManagementService["addMember"]>[0],
     headers: HttpHeaderBag,
@@ -245,16 +294,8 @@ export class ProjectMemberManagementHttpService {
     if (actor === undefined) {
       throw new ProjectMemberHttpError(
         401,
-        "ADMIN_SESSION_REQUIRED",
-        "需要有效的完整管理员 Session 与 CSRF Token",
-      );
-    }
-    const verified = await this.highRisk.verify(tx, headers);
-    if (verified.userId !== actor.userId) {
-      throw new ProjectMemberHttpError(
-        403,
-        "ADMIN_REQUIRED",
-        "管理员身份已变化，请重新验证",
+        "PROJECT_MEMBER_SESSION_REQUIRED",
+        "需要有效的认证 Session 与 CSRF Token",
       );
     }
     return actor.userId;
@@ -272,11 +313,6 @@ export class ProjectMemberManagementHttpService {
     }
     if (error instanceof ProjectMemberHttpError) {
       return errorBody(error.status, error.code, error.message, requestId);
-    }
-    if (error instanceof AdminHighRiskError) {
-      return errorBody(error.status, error.code, error.message, requestId, {
-        reason: error.reason,
-      });
     }
     if (error instanceof IdempotencyHttpError) {
       return errorBody(error.status, error.code, error.message, requestId);

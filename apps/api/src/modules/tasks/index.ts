@@ -3,6 +3,7 @@ export { TasksManagementModule } from "./tasks-management.module.js";
 
 export {
   PostgresTaskQueryPort,
+  TASK_BOARD_TASKS_MAX,
   TASK_EXCLUDED_IDS_MAX,
   TASK_READ_IDS_MAX,
   TaskListInputError,
@@ -14,11 +15,30 @@ export {
   type TaskListInputErrorReason,
   type TaskListPage,
   type TaskListPageInput,
+  type TaskBoardDueState,
+  type TaskBoardListInput,
+  type TaskBoardModuleStatsRow,
+  type TaskBoardStatsInput,
+  type TaskBoardStatsResult,
+  type TaskBoardStatsTotals,
+  type TaskBoardTaskPage,
+  type TaskBoardTaskRow,
   type TaskListRow,
+  type TaskPriority,
   type TaskReadModel,
   type TaskScopeType,
   type TaskWorkStatus,
 } from "./task-query.port.js";
+export {
+  TASK_LIST_SORT_KEY_VERSION,
+  encodeTaskListSortKey,
+  parseTaskListSortKey,
+  taskListKeysetPredicate,
+  taskListOrderBy,
+  taskListSortExpressions,
+  taskListSortKeyFor,
+  type TaskListSortKey,
+} from "./task-list-order.js";
 export { TaskCompletionCommandPort } from "./task-completion.port.js";
 export { TaskManagementError } from "./tasks-management.service.js";
 export {

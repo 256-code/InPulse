@@ -37,9 +37,16 @@ const item: PublishedRecord = {
   contextProblem: "问题",
   changeSolution: "原方案",
   resultVerification: "验证",
-  remainingIssues: "需要跟进",
-  leftovers: [{ id: 9, content: "需要跟进", status: "ACTIVE", rowVersion: 1 }],
-  leftoverItem: { id: 9, status: "ACTIVE", rowVersion: 1, linkedTaskId: null },
+  remainingIssues: [{ content: "需要跟进" }],
+  leftovers: [
+    {
+      id: 9,
+      content: "需要跟进",
+      status: "ACTIVE",
+      rowVersion: 1,
+      linkedTaskId: null,
+    },
+  ],
 };
 
 function mount(api: InpulseApiClient, record: ReadableRecord = item) {

@@ -37,7 +37,7 @@ const item: RecordDraftItem = {
   contextProblem: "重复请求",
   changeSolution: "增加幂等",
   resultVerification: "并发通过",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 function client(overrides: object = {}) {
   return {
@@ -58,12 +58,14 @@ function client(overrides: object = {}) {
     ...overrides,
   } as unknown as InpulseApiClient;
 }
-function mount(
+function mountView(
   api: InpulseApiClient,
   path = "/records?projectId=1",
   currentUserId?: number,
+  createToken = 0,
+  onCanCreateChange?: (value: boolean) => void,
 ) {
-  render(
+  return (
     <MemoryRouter initialEntries={[path]}>
       <ConfigProvider theme={{ token: { motion: false } }}>
         <QueryClientProvider
@@ -71,12 +73,38 @@ function mount(
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <RecordDraftsView client={api} currentUserId={currentUserId} />
+          <RecordDraftsView
+            client={api}
+            currentUserId={currentUserId}
+            createToken={createToken}
+            onCanCreateChange={onCanCreateChange}
+          />
         </QueryClientProvider>
       </ConfigProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
+function mount(
+  api: InpulseApiClient,
+  path = "/records?projectId=1",
+  currentUserId?: number,
+) {
+  render(mountView(api, path, currentUserId));
+}
+/** CalmSelect 交互：在弹窗内打开下拉并点选目标项（弹层项挂在 body 上，带 title 属性）。 */
+async function pickInModal(
+  modal: ReturnType<typeof within>,
+  label: string,
+  optionTitle: string,
+) {
+  const trigger = modal.getByLabelText(label).closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(await screen.findByTitle(optionTitle));
+}
+
 describe("F-17 draft UI", () => {
   it("validates three sections and creates an independent draft through the client", async () => {
     const create = vi.fn().mockResolvedValue(item);
@@ -87,9 +115,7 @@ describe("F-17 draft UI", () => {
     const modal = within(
       await screen.findByRole("dialog", { name: "新建独立草稿" }),
     );
-    fireEvent.change(modal.getByLabelText("所属模块"), {
-      target: { value: "2" },
-    });
+    await pickInModal(modal, "所属模块", "支付模块");
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
     await modal.findAllByText("请填写此项");
     expect(create).not.toHaveBeenCalled();
@@ -107,7 +133,7 @@ describe("F-17 draft UI", () => {
       contextProblem: item.contextProblem,
       changeSolution: item.changeSolution,
       resultVerification: item.resultVerification,
-      remainingIssues: "",
+      remainingIssues: [],
       scopeType: "MODULE",
       impactFeatureIds: [],
     });
@@ -154,9 +180,7 @@ describe("F-17 draft UI", () => {
       await modal.findByRole("button", { name: "应用合并" }),
     ).toBeDisabled();
     expect(modal.getByLabelText("具体改动")).toHaveValue("我的方案");
-    fireEvent.change(modal.getByLabelText(/具体改动冲突/), {
-      target: { value: "mine" },
-    });
+    await pickInModal(modal, "具体改动冲突", "保留我的输入");
     fireEvent.click(modal.getByRole("button", { name: "应用合并" }));
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
@@ -241,7 +265,7 @@ it("lists all source drafts without implicit selection and explicitly creates an
       contextProblem: "说明",
       changeSolution: "说明",
       resultVerification: "说明",
-      remainingIssues: "",
+      remainingIssues: [],
     },
   ]);
   expect(create.mock.calls[0]![4].headers["If-Match"]).toBe('"4"');
@@ -258,7 +282,8 @@ it("continues the selected source draft through the workflow without copying sou
   fireEvent.click(await screen.findByRole("button", { name: "查看草稿" }));
   fireEvent.click(await screen.findByRole("button", { name: "继续编辑" }));
   const modal = within(await screen.findByRole("dialog", { name: "编辑草稿" }));
-  fireEvent.change(modal.getByLabelText("遗留问题（选填）"), {
+  fireEvent.click(modal.getByRole("button", { name: "添加遗留问题" }));
+  fireEvent.change(modal.getByLabelText("遗留问题（选填，可添加多条） 1"), {
     target: { value: "补充" },
   });
   fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
@@ -269,7 +294,7 @@ it("continues the selected source draft through the workflow without copying sou
     contextProblem: item.contextProblem,
     changeSolution: item.changeSolution,
     resultVerification: item.resultVerification,
-    remainingIssues: "补充",
+    remainingIssues: [{ content: "补充" }],
   });
   expect(update.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
 });
@@ -335,4 +360,62 @@ it("lists my drafts across projects through the global query and opens the ownin
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     ),
   );
+});
+
+it("creates an independent draft in the project chosen inside the dialog from the all-projects view", async () => {
+  const create = vi
+    .fn()
+    .mockResolvedValue({ ...item, id: 12, projectId: 2, moduleId: 9 });
+  const listModules = vi.fn().mockResolvedValue({
+    items: [{ id: 9, name: "风控模块", status: "ACTIVE" }],
+  });
+  const api = client({
+    listProjects: vi.fn().mockResolvedValue({
+      items: [
+        { id: 1, name: "支付项目", status: "ACTIVE" },
+        { id: 2, name: "风控项目", status: "ACTIVE" },
+      ],
+    }),
+    listModules,
+    createIndependentRecordDraft: create,
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(mountView(api, "/records", 3, 0, canCreate));
+  // 「全部项目」下只要存在可写项目就允许发起创建。
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records", 3, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建独立草稿" }),
+  );
+  // 未选项目前不请求模块，也不能提交。
+  expect(listModules).not.toHaveBeenCalled();
+  expect(modal.getByRole("button", { name: "保存草稿" })).toBeDisabled();
+  await pickInModal(modal, "所属项目", "风控项目");
+  // 项目确定后模块选项来自所选项目：打开下拉确认后点选。
+  await pickInModal(modal, "所属模块", "风控模块");
+  expect(listModules).toHaveBeenCalledWith(
+    2,
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  for (const [label, value] of [
+    ["迭代标题", "风控修正"],
+    ["改动原因", "说明"],
+    ["具体改动", "说明"],
+    ["改动效果", "说明"],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0]!.slice(0, 2)).toEqual([2, 9]);
+});
+
+it("reports the header action as unavailable when every visible project is archived", async () => {
+  const canCreate = vi.fn();
+  const archived = client({
+    listProjects: vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "支付项目", status: "ARCHIVED" }],
+    }),
+  });
+  render(mountView(archived, "/records", 3, 0, canCreate));
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(false));
 });

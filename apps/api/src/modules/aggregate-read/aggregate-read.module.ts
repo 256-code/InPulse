@@ -33,6 +33,8 @@ import {
 } from "./record-feed-query.service.js";
 import { TaskGroupMembershipController } from "./task-group-membership.controller.js";
 import { TaskGroupMembershipQueryService } from "./task-group-membership-query.service.js";
+import { TaskBoardController } from "./task-board.controller.js";
+import { TaskBoardQueryService } from "./task-board-query.service.js";
 import { TaskGroupReadController } from "./task-group-read.controller.js";
 import { TaskGroupQueryService } from "./task-group-query.service.js";
 import { TimeCursorService } from "../../cursors/time-cursor.js";
@@ -80,6 +82,7 @@ import { TimeCursorService } from "../../cursors/time-cursor.js";
     ProjectOverviewQueryService,
     LeftoverItemsQueryService,
     MyTasksQueryService,
+    TaskBoardQueryService,
     RecordFeedQueryService,
     MyRecordDraftsQueryService,
   ],
@@ -91,6 +94,7 @@ import { TimeCursorService } from "../../cursors/time-cursor.js";
     ProjectOverviewController,
     LeftoverItemsController,
     MyTasksController,
+    TaskBoardController,
     TaskCenterController,
     RecordFeedController,
     MyRecordDraftsController,

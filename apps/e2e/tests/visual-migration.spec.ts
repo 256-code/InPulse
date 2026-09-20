@@ -36,7 +36,8 @@ test("captures the migrated command palette, notification popover and activity p
   await page.screenshot({ path: path.join(output, "02-command-palette.png") });
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "通知" }).click();
+  // 通知铃铛已收敛到侧栏底部工具条，exact 名称固定匹配该按钮。
+  await page.getByRole("button", { name: "通知", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "通知中心" })).toBeVisible();
   await page.screenshot({
     path: path.join(output, "03-notification-popover.png"),

@@ -80,7 +80,7 @@ const content = {
   contextProblem: "并发保存",
   changeSolution: "事务发布",
   resultVerification: "完整校验",
-  remainingIssues: "仍需跟进",
+  remainingIssues: [{ content: "仍需跟进" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -173,7 +173,10 @@ afterAll(async () => {
   await auditDb?.close();
 });
 async function fixture(
-  remainingIssues = content.remainingIssues,
+  remainingIssues: readonly {
+    readonly id?: number;
+    readonly content: string;
+  }[] = content.remainingIssues,
   feature = false,
 ) {
   const userId = await createUser(db.sql),
@@ -192,7 +195,7 @@ async function fixture(
         impactFeatureIds: feature ? [] : [f!.id],
       },
       userId,
-      { ...content, remainingIssues },
+      { ...content, remainingIssues: [...remainingIssues] },
     ),
   );
   return { ...p, userId, creator, featureId: f!.id, draft };
@@ -201,6 +204,10 @@ const publish = (f: Awaited<ReturnType<typeof fixture>>) =>
   uow.run((tx) =>
     service.publish(tx, f.userId, f.projectId, f.draft.id, 1, randomUUID()),
   );
+/**
+ * 修订：未提供的遗留项条目保持已发布内容，显式提供的数组按 id / 新条目处理。
+ * 与真实客户端行为一致，调用方可直接复用上一条目的 id 完成追加、修改或移除。
+ */
 const edit = (
   f: Awaited<ReturnType<typeof fixture>>,
   current: PublishedRecord,
@@ -216,6 +223,10 @@ const edit = (
       current.currentVersion,
       {
         ...content,
+        remainingIssues: current.remainingIssues.map((entry) => ({
+          id: entry.id!,
+          content: entry.content,
+        })),
         ...input,
         confirmLeftoverResolved: input.confirmLeftoverResolved ?? false,
       },
@@ -281,6 +292,33 @@ async function post(
     },
   );
 }
+/** 详情页快捷追加：单独路由，但 CSRF、If-Match、X-Record-Version 与幂等键完全一致。 */
+async function append(
+  f: Awaited<ReturnType<typeof fixture>>,
+  actor: Awaited<ReturnType<typeof session>>,
+  body: unknown,
+  rowVersion: number,
+  currentVersion: number,
+  idempotencyKey = randomUUID(),
+) {
+  return fetch(
+    `${base}/api/v1/projects/${f.projectId}/change-records/${f.draft.id}/leftovers`,
+    {
+      method: "POST",
+      headers: {
+        origin: base,
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+        cookie: actor.cookie,
+        "x-csrf-token": actor.csrf,
+        "If-Match": `"${rowVersion}"`,
+        "X-Record-Version": String(currentVersion),
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+}
 async function failure(response: Response, status: number) {
   expect(response.status, await response.clone().text()).toBe(status);
   const e = schemaRegistry.ErrorResponse.schema.parse(await response.json());
@@ -290,65 +328,158 @@ async function failure(response: Response, status: number) {
   );
 }
 describe("F18 publication and immutable revisions", () => {
-  it("publishes v1 with a stable item then revises, explicitly resolves and reactivates the same ID", async () => {
+  it("publishes multiple leftovers, appends one more, then resolves and reactivates by stable ID", async () => {
     const f = await fixture(),
       v1 = await publish(f),
-      id = v1.leftoverItem!.id;
+      first = v1.leftovers[0]!;
     expect(v1).toMatchObject({
       status: "PUBLISHED",
       code: f.code + "-CR-1",
       currentVersion: 1,
       rowVersion: 2,
-      leftovers: [{ id, content: content.remainingIssues }],
-      leftoverItem: { status: "ACTIVE" },
+      leftovers: [
+        {
+          id: first.id,
+          content: "仍需跟进",
+          status: "ACTIVE",
+          linkedTaskId: null,
+        },
+      ],
     });
-    const v2 = await edit(f, v1, { remainingIssues: "修订遗留文字" });
-    expect(v2.leftoverItem!.id).toBe(id);
-    await expect(edit(f, v2, { remainingIssues: "" })).rejects.toMatchObject({
+    // 保留原条目并新增一条：两条各自拿到稳定 id，无需重写已有内容
+    const v2 = await edit(f, v1, {
+      remainingIssues: [
+        { id: first.id, content: "修订遗留文字" },
+        { content: "新发现的遗留" },
+      ],
+    });
+    expect(v2).toMatchObject({ currentVersion: 2 });
+    expect(v2.leftovers.map((leftover) => leftover.id)).toContain(first.id);
+    const second = v2.leftovers.find((leftover) => leftover.id !== first.id)!;
+    expect(
+      v2.leftovers.map((leftover) => [
+        leftover.status,
+        leftover.content,
+        leftover.linkedTaskId,
+      ]),
+    ).toEqual([
+      ["ACTIVE", "修订遗留文字", null],
+      ["ACTIVE", "新发现的遗留", null],
+    ]);
+    // 带未知条目 id 的提交按冲突拒绝，防止串用其它记录或历史版本的条目
+    await expect(
+      edit(f, v2, {
+        remainingIssues: [
+          { id: first.id, content: "修订遗留文字" },
+          { id: 2147483647, content: "不属于本记录" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "RECORD_LEFTOVER_CONFLICT",
+    });
+    // 移除未闭环条目必须先明确确认已解决
+    await expect(
+      edit(f, v2, {
+        remainingIssues: [{ id: first.id, content: "修订遗留文字" }],
+      }),
+    ).rejects.toMatchObject({
       status: 422,
       code: "LEFTOVER_RESOLUTION_CONFIRMATION_REQUIRED",
     });
     const v3 = await edit(f, v2, {
-      remainingIssues: "",
+      remainingIssues: [{ id: first.id, content: "修订遗留文字" }],
       confirmLeftoverResolved: true,
     });
-    expect(v3).toMatchObject({
-      leftovers: [],
-      leftoverItem: { id, status: "RESOLVED" },
+    expect(
+      v3.leftovers.map((leftover) => [leftover.id, leftover.status]),
+    ).toEqual([[first.id, "ACTIVE"]]);
+    expect(
+      await db.sql`SELECT id,status FROM app.change_record_leftover_items WHERE record_id=${v1.id} ORDER BY id`,
+    ).toEqual([
+      { id: first.id, status: "ACTIVE" },
+      { id: second.id, status: "RESOLVED" },
+    ]);
+    const v4 = await edit(f, v3, {
+      remainingIssues: [
+        { id: first.id, content: "修订遗留文字" },
+        { id: second.id, content: "重新说明同一问题" },
+      ],
     });
-    const v4 = await edit(f, v3, { remainingIssues: "重新说明同一问题" });
     expect(v4).toMatchObject({
-      leftoverItem: { id, status: "ACTIVE" },
       currentVersion: 4,
       publishedAt: v1.publishedAt,
     });
     expect(
-      await db.sql`SELECT version_no,content_snapshot FROM app.change_record_version_leftovers WHERE record_id=${v1.id} ORDER BY version_no`,
+      v4.leftovers.map((leftover) => [
+        leftover.id,
+        leftover.status,
+        leftover.content,
+      ]),
     ).toEqual([
-      { version_no: 1, content_snapshot: content.remainingIssues },
-      { version_no: 2, content_snapshot: "修订遗留文字" },
-      { version_no: 4, content_snapshot: "重新说明同一问题" },
+      [first.id, "ACTIVE", "修订遗留文字"],
+      [second.id, "ACTIVE", "重新说明同一问题"],
+    ]);
+    expect(
+      await db.sql`SELECT version_no,leftover_item_id,content_snapshot FROM app.change_record_version_leftovers WHERE record_id=${v1.id} ORDER BY version_no,leftover_item_id`,
+    ).toEqual([
+      {
+        version_no: 1,
+        leftover_item_id: first.id,
+        content_snapshot: "仍需跟进",
+      },
+      {
+        version_no: 2,
+        leftover_item_id: first.id,
+        content_snapshot: "修订遗留文字",
+      },
+      {
+        version_no: 2,
+        leftover_item_id: second.id,
+        content_snapshot: "新发现的遗留",
+      },
+      {
+        version_no: 3,
+        leftover_item_id: first.id,
+        content_snapshot: "修订遗留文字",
+      },
+      {
+        version_no: 4,
+        leftover_item_id: first.id,
+        content_snapshot: "修订遗留文字",
+      },
+      {
+        version_no: 4,
+        leftover_item_id: second.id,
+        content_snapshot: "重新说明同一问题",
+      },
     ]);
     expect(
       await db.sql`SELECT 1 FROM app.change_record_leftover_items WHERE record_id=${v1.id}`,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(
-      await db.sql`SELECT entity_type,title,summary,visibility_scope,source_status,source_row_version FROM app.search_projection WHERE project_id=${f.projectId} AND entity_type='LEFTOVER'`,
+      await db.sql`SELECT entity_type,title,summary,visibility_scope,source_status FROM app.search_projection WHERE project_id=${f.projectId} AND entity_type='LEFTOVER' ORDER BY entity_id`,
     ).toEqual([
+      {
+        entity_type: "LEFTOVER",
+        title: "修订遗留文字",
+        summary: `待处理 · ${v1.code} ${v1.title}`,
+        visibility_scope: "MEMBER",
+        source_status: "ACTIVE",
+      },
       {
         entity_type: "LEFTOVER",
         title: "重新说明同一问题",
         summary: `待处理 · ${v1.code} ${v1.title}`,
         visibility_scope: "MEMBER",
         source_status: "ACTIVE",
-        source_row_version: 3,
       },
     ]);
   });
   it("retains CONVERTED identity and its task link through clearing and refilling", async () => {
     const f = await fixture(),
       v1 = await publish(f),
-      id = v1.leftoverItem!.id;
+      id = v1.leftovers[0]!.id;
     const task = await uow.run(async (tx) => {
       const t = await new TaskManagementRepository().create(
         tx,
@@ -367,11 +498,26 @@ describe("F18 publication and immutable revisions", () => {
       await tx.sql`UPDATE app.change_record_leftover_items SET status='CONVERTED',row_version=row_version+1 WHERE id=${id}`;
       return t;
     });
-    const v2 = await edit(f, v1, { remainingIssues: "" });
-    const v3 = await edit(f, v2, { remainingIssues: "澄清同一问题" });
-    expect(v3).toMatchObject({
-      leftoverItem: { id, status: "CONVERTED", linkedTaskId: task.id },
+    // 已转任务条目未提交也自动保留，且不需要解决确认
+    const v2 = await edit(f, v1, { remainingIssues: [] });
+    expect(
+      v2.leftovers.map((leftover) => [
+        leftover.id,
+        leftover.status,
+        leftover.linkedTaskId,
+      ]),
+    ).toEqual([[id, "CONVERTED", task.id]]);
+    const v3 = await edit(f, v2, {
+      remainingIssues: [{ id, content: "澄清同一问题" }],
     });
+    expect(
+      v3.leftovers.map((leftover) => [
+        leftover.id,
+        leftover.status,
+        leftover.linkedTaskId,
+        leftover.content,
+      ]),
+    ).toEqual([[id, "CONVERTED", task.id, "澄清同一问题"]]);
     expect(
       await db.sql`SELECT 1 FROM app.leftover_task_links WHERE leftover_item_id=${id}`,
     ).toHaveLength(1);
@@ -380,7 +526,7 @@ describe("F18 publication and immutable revisions", () => {
     ).toHaveLength(1);
     expect(
       await db.sql`SELECT content_snapshot FROM app.change_record_version_leftovers WHERE record_id=${v1.id} AND version_no=1`,
-    ).toEqual([{ content_snapshot: content.remainingIssues }]);
+    ).toEqual([{ content_snapshot: "仍需跟进" }]);
     expect(
       await db.sql`SELECT source_status,title FROM app.search_projection WHERE project_id=${f.projectId} AND entity_type='LEFTOVER'`,
     ).toEqual([{ source_status: "CONVERTED", title: "澄清同一问题" }]);
@@ -401,17 +547,45 @@ describe("F18 publication and immutable revisions", () => {
       await clean(f);
     },
   );
-  it("rejects legacy long leftovers and full search overflows without truncating drafts or consuming codes", async () => {
-    const f = await fixture("长".repeat(10001));
-    await expect(publish(f)).rejects.toMatchObject({ status: 422 });
-    await clean(f);
-    const g = await fixture("");
+  it("rejects oversize leftovers and full search overflows without truncating published content or consuming codes", async () => {
+    // 超长遗留问题由写入校验拒绝：已发布内容、版本与编码都不受影响。
+    const f = await fixture();
+    const v1 = await publish(f);
+    const codes =
+      await db.sql`SELECT project_id FROM app.code_sequences WHERE project_id=${f.projectId} AND entity_type='CHANGE_RECORD'`;
+    await expect(
+      edit(f, v1, {
+        remainingIssues: [{ content: "长".repeat(10001) }],
+        confirmLeftoverResolved: false,
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(
+      await db.sql`SELECT current_payload->'remainingIssues' AS issues, current_version, row_version FROM app.change_records WHERE id=${f.draft.id}`,
+    ).toEqual([
+      {
+        issues: [
+          {
+            id: v1.leftovers[0]!.id,
+            content: content.remainingIssues[0]!.content,
+          },
+        ],
+        current_version: 1,
+        row_version: v1.rowVersion,
+      },
+    ]);
+    expect(
+      await db.sql`SELECT version_no FROM app.change_record_versions WHERE record_id=${f.draft.id} ORDER BY version_no`,
+    ).toEqual([{ version_no: 1 }]);
+    expect(
+      await db.sql`SELECT project_id FROM app.code_sequences WHERE project_id=${f.projectId} AND entity_type='CHANGE_RECORD'`,
+    ).toEqual(codes);
+    const g = await fixture([]);
     await uow.run((tx) =>
       new RecordDraftRepository().update(tx, g.draft, {
         ...content,
         contextProblem: "中".repeat(50000),
         changeSolution: "文".repeat(50000),
-        remainingIssues: "",
+        remainingIssues: [],
       }),
     );
     await expect(
@@ -454,13 +628,13 @@ describe("F18 publication and immutable revisions", () => {
     ).toEqual([{ version_no: 1 }, { version_no: 2 }]);
   });
   it("deduplicates publication recipients, excludes revoked feature creators, and uses only the author for independent revisions", async () => {
-    const f = await fixture("", true);
+    const f = await fixture([], true);
     await removeMember(db.sql, f.projectId, f.creator);
     const v1 = await publish(f);
     expect(
       await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${f.projectId}`,
     ).toEqual([{ recipient_id: f.userId }]);
-    const g = await fixture("", true),
+    const g = await fixture([], true),
       g1 = await publish(g);
     expect(
       await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${g.projectId} ORDER BY recipient_id`,
@@ -469,14 +643,14 @@ describe("F18 publication and immutable revisions", () => {
         .sort((a, b) => a - b)
         .map((recipient_id) => ({ recipient_id })),
     );
-    await edit(g, g1, { title: "修订", remainingIssues: "" });
+    await edit(g, g1, { title: "修订", remainingIssues: [] });
     expect(
       await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${g.projectId} AND notification_type='record.version.create'`,
     ).toEqual([{ recipient_id: g.userId }]);
-    expect(v1.leftoverItem).toBeNull();
+    expect(v1.leftovers).toEqual([]);
   });
   it("uses real HTTP contract, CSRF, idempotency, two version headers and current replay authorization", async () => {
-    const f = await fixture(),
+    const f = await fixture([], true),
       actor = await session(f.userId),
       key = randomUUID();
     const response = await post(f, actor, true, {}, 1, 1, key);
@@ -490,30 +664,99 @@ describe("F18 publication and immutable revisions", () => {
     await failure(await post(f, actor, true, { status: "PUBLISHED" }), 422);
     await failure(await post(f, { ...actor, csrf: "a".repeat(43) }, true), 401);
     await failure(await post(f, actor, true), 409);
+    const appended = await append(
+      f,
+      actor,
+      { content: "快捷追加的遗留问题" },
+      v1.rowVersion,
+      v1.currentVersion,
+    );
+    expect(appended.status, await appended.clone().text()).toBe(200);
+    const v2 = schemaRegistry.PublishedRecord.schema.parse(
+      await appended.json(),
+    );
+    expect(v2).toMatchObject({ currentVersion: 2, code: v1.code });
+    expect(
+      v2.leftovers.map((leftover) => [
+        leftover.status,
+        leftover.content,
+        leftover.linkedTaskId,
+      ]),
+    ).toEqual([["ACTIVE", "快捷追加的遗留问题", null]]);
+    await failure(
+      await append(
+        f,
+        actor,
+        { content: "  " },
+        v2.rowVersion,
+        v2.currentVersion,
+      ),
+      422,
+    );
     const body = {
         ...content,
         title: "HTTP新版本",
+        remainingIssues: [
+          { id: v2.leftovers[0]!.id, content: "快捷追加的遗留问题" },
+          { content: "修订时新增的遗留问题" },
+        ],
         confirmLeftoverResolved: false,
       },
       editKey = randomUUID();
-    const update = await post(f, actor, false, body, 2, 1, editKey);
+    const update = await post(f, actor, false, body, v2.rowVersion, 2, editKey);
     expect(update.status, await update.clone().text()).toBe(200);
-    const v2 = await update.json();
+    const v3 = schemaRegistry.PublishedRecord.schema.parse(await update.json());
+    expect(v3.leftovers.map((leftover) => leftover.content)).toEqual([
+      "快捷追加的遗留问题",
+      "修订时新增的遗留问题",
+    ]);
     expect(
-      await (await post(f, actor, false, body, 2, 1, editKey)).json(),
-    ).toEqual(v2);
-    await failure(await post(f, actor, false, body, 2, 2, editKey), 409);
+      await (
+        await post(f, actor, false, body, v2.rowVersion, 2, editKey)
+      ).json(),
+    ).toEqual(v3);
     await failure(
-      await post(f, actor, false, { ...body, taskId: 5 }, 3, 2),
+      await post(f, actor, false, body, v2.rowVersion, 3, editKey),
+      409,
+    );
+    await failure(
+      await post(f, actor, false, { ...body, taskId: 5 }, v3.rowVersion, 3),
       422,
+    );
+    await failure(
+      await post(
+        f,
+        actor,
+        false,
+        {
+          ...body,
+          remainingIssues: [{ id: 2147483000, content: "不属于本记录" }],
+        },
+        v3.rowVersion,
+        3,
+      ),
+      409,
     );
     await removeMember(db.sql, f.projectId, f.userId);
     await failure(await post(f, actor, true, {}, 1, 1, key), 404);
-    await failure(await post(f, actor, false, body, 2, 1, editKey), 404);
+    await failure(
+      await post(f, actor, false, body, v2.rowVersion, 2, editKey),
+      404,
+    );
+    await failure(
+      await append(
+        f,
+        actor,
+        { content: "追加" },
+        v1.rowVersion,
+        v1.currentVersion,
+      ),
+      404,
+    );
   });
 });
 it("publishes a DONE source, uses its current assignee, and replays/revises history after later reopening", async () => {
-  const f = await fixture("", true),
+  const f = await fixture([], true),
     tasks = new TaskManagementRepository(),
     current = await createUser(db.sql);
   await db.sql`INSERT INTO app.project_members(project_id,user_id) VALUES(${f.projectId},${current})`;
@@ -538,7 +781,7 @@ it("publishes a DONE source, uses its current assignee, and replays/revises hist
       tx,
       { ...f, featureId: f.featureId, impactFeatureIds: [] },
       f.userId,
-      { ...content, remainingIssues: "" },
+      { ...content, remainingIssues: [] },
       { taskId: task.id, handlerId: f.creator },
     ),
   );
@@ -576,7 +819,7 @@ it("publishes a DONE source, uses its current assignee, and replays/revises hist
   expect(await (await post(source, actor, true, {}, 1, 1, key)).json()).toEqual(
     v1,
   );
-  await edit(source, v1, { title: "重开后仍可补充历史", remainingIssues: "" });
+  await edit(source, v1, { title: "重开后仍可补充历史", remainingIssues: [] });
   expect(
     await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${f.projectId} AND notification_type='record.version.create' ORDER BY recipient_id`,
   ).toEqual(
@@ -597,7 +840,7 @@ it("rolls back a failed revision and rejects publication after an actual parent-
   await expect(
     edit(f, v1, {
       title: "不应保留",
-      remainingIssues: "",
+      remainingIssues: [],
       confirmLeftoverResolved: true,
     }),
   ).rejects.toThrow("revision search failure");

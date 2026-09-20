@@ -46,6 +46,8 @@ export function ModuleEditorModal({
   request,
   onClose,
   onSaved,
+  canArchive = false,
+  onLifecycleRequest,
 }: {
   projectId: number;
   client?: InpulseApiClient | undefined;
@@ -53,6 +55,14 @@ export function ModuleEditorModal({
   request: ModuleEditorRequest | null;
   onClose: () => void;
   onSaved?: (() => void) | undefined;
+  /**
+   * ADR-033：当前用户是否可以归档/恢复本模块，即系统管理员、本项目组长
+   * 或本项目项目管理员。默认 false，由宿主按项目角色传入。
+   */
+  canArchive?: boolean | undefined;
+  /** 宿主把弹层切到归档/恢复动作；未提供时底部不渲染生命周期入口。 */
+  onLifecycleRequest?:
+    ((action: "archive" | "restore", item: ModuleItem) => void) | undefined;
 }) {
   const { query, mutation } = useModules(projectId, client);
   const [reloadError, setReloadError] = useState<string | null>(null);
@@ -214,6 +224,12 @@ export function ModuleEditorModal({
   };
   const lifecycle =
     selection?.action === "archive" || selection?.action === "restore";
+  // ADR-033：编辑既有模块时，若当前用户可管理本项目资源，弹层底部直接给出
+  // 归档/恢复入口，与列表页、模块详情页头部复用同一套动作与服务端门禁。
+  const archiveTarget =
+    canArchive && selection?.action === "update" && selection.item
+      ? selection.item
+      : null;
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
   const modalTitle =
@@ -388,6 +404,20 @@ export function ModuleEditorModal({
             )}
           </div>
           <div className="calm-action-footer">
+            {archiveTarget && (
+              <Button
+                className="secondary-button footer-leading"
+                disabled={mutation.isPending || reloading || !!merge}
+                onClick={() =>
+                  onLifecycleRequest?.(
+                    archiveTarget.status === "ARCHIVED" ? "restore" : "archive",
+                    archiveTarget,
+                  )
+                }
+              >
+                {archiveTarget.status === "ARCHIVED" ? "恢复模块" : "归档模块"}
+              </Button>
+            )}
             <Button
               className="secondary-button"
               onClick={close}

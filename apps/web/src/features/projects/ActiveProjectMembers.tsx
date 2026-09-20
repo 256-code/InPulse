@@ -1,14 +1,21 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "antd";
-import { createApiClient, type InpulseApiClient } from "@generated/api";
+import {
+  createApiClient,
+  type InpulseApiClient,
+  type ProjectItem,
+} from "@generated/api";
 import {
   CalmBadge,
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import { useProjectDetail } from "./project-query";
+import {
+  projectLifecycleLabel,
+  projectLifecycleTone,
+} from "@features/common/resource-lifecycle";
 import { projectMemberErrorMessage } from "./project-member-query";
 
 const formatMemberDate = (value: string) =>
@@ -20,16 +27,22 @@ const formatMemberDate = (value: string) =>
  * 但去掉全部写操作（添加、移除、任务重指派、归档、项目切换）。
  * 数据来自 `listActiveProjectMembers`（仅返回活跃成员的 id/name/avatarUrl），
  * 因此成员卡片不含加入时间与历史状态，只标注「活跃成员」。
+ *
+ * 项目详情由调用方传入：成员页与项目主页弹窗都已持有同一份
+ * `GET /projects/:id` 查询结果，本组件不再重复挂载同 key 的 observer，
+ * 否则项目不可访问（404）时 refetchOnMount 会与页面的错误分支反复切换，
+ * 形成「挂载、重取、回退」的请求与渲染循环。
  */
 export function ActiveProjectMembers({
   projectId,
+  projectDetail,
   client,
 }: {
   projectId: number;
+  projectDetail: ProjectItem | null;
   client?: InpulseApiClient | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
-  const project = useProjectDetail({ projectId, client });
   const members = useQuery({
     queryKey: ["active-project-members", projectId],
     queryFn: ({ signal }) =>
@@ -37,7 +50,6 @@ export function ActiveProjectMembers({
     retry: false,
   });
   const items = members.data?.items ?? [];
-  const projectDetail = project.data ?? null;
   const creatorName =
     projectDetail === null
       ? undefined
@@ -47,7 +59,6 @@ export function ActiveProjectMembers({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">项目 / 成员</span>
           <h1>{projectDetail ? projectDetail.name : "项目成员"}</h1>
           <p>
             当前项目的活跃成员为只读视图；成员的添加与移除由系统管理员处理。
@@ -56,9 +67,9 @@ export function ActiveProjectMembers({
         {projectDetail ? (
           <div className="catalog-actions">
             <CalmBadge
-              tone={projectDetail.status === "ACTIVE" ? "blue" : "amber"}
+              tone={projectLifecycleTone(projectDetail.status, "blue")}
             >
-              {projectDetail.status === "ACTIVE" ? "正常" : "已归档"}
+              {projectLifecycleLabel(projectDetail.status)}
             </CalmBadge>
           </div>
         ) : null}
@@ -103,7 +114,7 @@ export function ActiveProjectMembers({
                 <code>{projectDetail.code}</code>
               </dd>
               <dt>状态</dt>
-              <dd>{projectDetail.status === "ACTIVE" ? "正常" : "已归档"}</dd>
+              <dd>{projectLifecycleLabel(projectDetail.status)}</dd>
               <dt>创建人</dt>
               <dd>{creatorName ?? "—"}（仅溯源，不授予额外权限）</dd>
               <dt>创建时间</dt>

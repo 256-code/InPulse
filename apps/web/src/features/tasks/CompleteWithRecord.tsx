@@ -10,7 +10,13 @@ import {
   type TaskCompletionRequest,
   type PublishedRecord,
 } from "@generated/api";
-import { fields, labels } from "@features/record-drafts/record-content";
+import {
+  fieldText,
+  fields,
+  labels,
+} from "@features/record-drafts/record-content";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import type { TaskViewItem } from "./task-query";
@@ -37,7 +43,7 @@ export function CompleteWithRecord({
       contextProblem: "",
       changeSolution: "",
       resultVerification: "",
-      remainingIssues: "",
+      remainingIssues: [],
     }),
     [error, setError] = useState<unknown>(null),
     [busy, setBusyState] = useState(false);
@@ -61,24 +67,25 @@ export function CompleteWithRecord({
       (record.taskId === null || record.taskId === item.id),
   );
   const conflict = error instanceof ApiError && error.status === 409;
+  const textFields = fields.filter((field) => field !== "remainingIssues");
+  const textReady = textFields.every((field) =>
+    field === "title"
+      ? content.title.trim().length > 0 && content.title.length <= 500
+      : content[field].trim().length > 0 && content[field].length <= 50000,
+  );
+  const leftoversReady =
+    content.remainingIssues.length <= 50 &&
+    content.remainingIssues.every(
+      (entry) =>
+        entry.content.trim().length > 0 && entry.content.length <= 10000,
+    );
   const disabled =
     !writable ||
     busy ||
     conflict ||
     base.workStatus !== "TODO" ||
     base.lifecycleStatus !== "ACTIVE" ||
-    (mode === "draft"
-      ? !selected
-      : fields.some(
-          (field) =>
-            (field !== "remainingIssues" && !content[field].trim()) ||
-            content[field].length >
-              (field === "title"
-                ? 500
-                : field === "remainingIssues"
-                  ? 10000
-                  : 50000),
-        ));
+    (mode === "draft" ? !selected : !textReady || !leftoversReady);
   async function reload() {
     setBusy(true);
     try {
@@ -119,9 +126,15 @@ export function CompleteWithRecord({
           : {
               mode: "WITH_RECORD",
               expectedRowVersion: base.rowVersion,
-              record: Object.fromEntries(
-                fields.map((field) => [field, content[field].trim()]),
-              ) as RecordDraftContent,
+              record: {
+                title: content.title.trim(),
+                contextProblem: content.contextProblem.trim(),
+                changeSolution: content.changeSolution.trim(),
+                resultVerification: content.resultVerification.trim(),
+                remainingIssues: content.remainingIssues.map((entry) => ({
+                  content: entry.content.trim(),
+                })),
+              },
             };
       const signature = JSON.stringify([base.id, body]);
       if (retry.current?.signature !== signature)
@@ -145,6 +158,7 @@ export function CompleteWithRecord({
         await Promise.all(
           [
             "tasks",
+            "task-board",
             "task-history",
             "record-drafts",
             "task-record-drafts",
@@ -173,18 +187,21 @@ export function CompleteWithRecord({
       </a>
       <label>
         记录来源
-        <select
-          disabled={busy}
+        <CalmSelect
+          ariaLabel="记录来源"
           value={mode}
-          onChange={(e) => {
-            setMode(e.target.value as typeof mode);
+          disabled={busy}
+          appearance="menu"
+          onChange={(next) => {
+            setMode(next as typeof mode);
             setError(null);
             setLatest(null);
           }}
-        >
-          <option value="inline">填写新记录</option>
-          <option value="draft">选择已有草稿</option>
-        </select>
+          options={[
+            { value: "inline", label: "填写新记录" },
+            { value: "draft", label: "选择已有草稿" },
+          ]}
+        />
       </label>
       {!!error && (
         <Alert
@@ -217,7 +234,9 @@ export function CompleteWithRecord({
             .map((field) => (
               <div className="record-field" key={field}>
                 <span className="record-field-label">{labels[field]}</span>
-                <RecordMarkdown content={latest[field] || "（空）"} />
+                <RecordMarkdown
+                  content={fieldText(latest, field) || "（空）"}
+                />
               </div>
             ))}
           <Button
@@ -233,33 +252,46 @@ export function CompleteWithRecord({
         </section>
       )}
       {mode === "inline" ? (
-        fields.map((field) => (
-          <label key={field}>
-            {labels[field]}
-            {field === "title" ? (
-              <Input
-                disabled={busy}
-                aria-label={labels[field]}
-                value={content[field]}
-                maxLength={500}
-                onChange={(e) =>
-                  setContent({ ...content, [field]: e.target.value })
-                }
-              />
-            ) : (
-              <Input.TextArea
-                disabled={busy}
-                aria-label={labels[field]}
-                rows={3}
-                value={content[field]}
-                maxLength={field === "remainingIssues" ? 10000 : 50000}
-                onChange={(e) =>
-                  setContent({ ...content, [field]: e.target.value })
-                }
-              />
-            )}
+        <>
+          {textFields.map((field) => (
+            <label key={field}>
+              {labels[field]}
+              {field === "title" ? (
+                <Input
+                  disabled={busy}
+                  aria-label={labels[field]}
+                  value={content[field]}
+                  maxLength={500}
+                  onChange={(e) =>
+                    setContent({ ...content, [field]: e.target.value })
+                  }
+                />
+              ) : (
+                <Input.TextArea
+                  disabled={busy}
+                  aria-label={labels[field]}
+                  rows={3}
+                  value={content[field]}
+                  maxLength={50000}
+                  onChange={(e) =>
+                    setContent({ ...content, [field]: e.target.value })
+                  }
+                />
+              )}
+            </label>
+          ))}
+          <label>
+            {labels.remainingIssues}
+            <LeftoverEntriesField
+              value={content.remainingIssues}
+              onChange={(remainingIssues) =>
+                setContent({ ...content, remainingIssues })
+              }
+              disabled={busy}
+              label={labels.remainingIssues}
+            />
           </label>
-        ))
+        </>
       ) : (
         <>
           {drafts.isPending ? (
@@ -275,26 +307,31 @@ export function CompleteWithRecord({
           ) : (
             <label>
               待发布草稿
-              <select
-                disabled={busy}
+              <CalmSelect
+                ariaLabel="待发布草稿"
                 value={selected?.id ?? ""}
-                onChange={(e) => {
+                disabled={busy}
+                appearance="menu"
+                onChange={(next) => {
                   setSelected(
-                    choices.find(
-                      (record) => record.id === Number(e.target.value),
-                    ) ?? null,
+                    choices.find((record) => record.id === Number(next)) ??
+                      null,
                   );
                   setLatest(null);
                 }}
-              >
-                <option value="">请选择一条草稿</option>
-                {choices.map((record) => (
-                  <option key={record.id} value={record.id}>
-                    {record.title} · 草稿 #{record.id} · 版本{" "}
-                    {record.rowVersion}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "请选择一条草稿" },
+                  ...choices.map((record) => ({
+                    value: record.id,
+                    label:
+                      record.title +
+                      " · 草稿 #" +
+                      record.id +
+                      " · 版本 " +
+                      record.rowVersion,
+                  })),
+                ]}
+              />
               {drafts.hasNextPage && (
                 <div className="record-load-more">
                   <Button
@@ -312,7 +349,9 @@ export function CompleteWithRecord({
               {fields.map((field) => (
                 <div className="record-field" key={field}>
                   <span className="record-field-label">{labels[field]}</span>
-                  <RecordMarkdown content={selected[field] || "（空）"} />
+                  <RecordMarkdown
+                    content={fieldText(selected, field) || "（空）"}
+                  />
                 </div>
               ))}
               <a

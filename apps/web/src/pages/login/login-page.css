@@ -253,27 +253,55 @@
     font-size: 17px;
   }
 }
-/* ADR-032 单点登录：跳转中与登录失败状态 */
-.login-sso-pending,
-.login-sso-failed {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 4px 0 6px;
+/* ADR-036 登录方式切换：分隔文案 + 统一身份认证图标入口 */
+.login-sso-section {
+  margin-top: 20px;
+  text-align: center;
 }
 
-.login-sso-pending {
+.login-card .login-sso-divider.ant-divider {
+  margin: 0 0 18px;
+  border-block-start-color: #edeef1;
+}
+
+.login-card .login-sso-divider .ant-divider-inner-text {
+  color: #9aa0aa;
+  font-size: 13px;
+}
+
+.login-sso-icon-button {
+  display: inline-flex;
   align-items: center;
-  text-align: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--login-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #6b7280;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.login-sso-status {
-  margin: 0;
-  color: var(--login-ink);
-  font-size: 16px;
+.login-sso-icon-image {
+  display: block;
+  width: 30px;
+  height: 30px;
 }
 
-.login-sso-switch {
-  margin-top: 8px;
-  text-align: center;
+.login-sso-icon-button:hover {
+  border-color: var(--login-yellow);
+  background: #fffdf2;
+  color: #96700a;
+  box-shadow: 0 8px 20px rgba(247, 200, 0, 0.18);
+}
+
+.login-sso-icon-button:focus-visible {
+  outline: 2px solid var(--login-yellow);
+  outline-offset: 2px;
 }

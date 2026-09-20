@@ -7,6 +7,7 @@ import type {
   ProjectsWritePort,
 } from "../src/modules/projects/projects-write.port.js";
 import type { ProjectMemberTaskCommandPort } from "../src/modules/tasks/project-member-task.command-port.js";
+import type { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { ProjectMemberManagementService } from "../src/modules/projects/project-member-management.service.js";
 
 const tx = {} as TransactionContext;
@@ -23,6 +24,7 @@ const activeMember = {
   name: "张三",
   avatarUrl: null,
   status: "ACTIVE" as const,
+  role: "MEMBER" as const,
   joinedAt: "2026-09-09T00:00:00.000Z",
   removedAt: null,
 };
@@ -56,6 +58,7 @@ function setup() {
     findLatestMember: vi.fn().mockResolvedValue(activeMember),
     addMemberHistory: vi.fn().mockResolvedValue(activeMember),
     removeMember: vi.fn().mockResolvedValue(removedMember),
+    setMemberRole: vi.fn().mockResolvedValue(activeMember),
   };
   const access = {
     checkProjectForWrite: vi.fn().mockResolvedValue({
@@ -75,6 +78,10 @@ function setup() {
     listUnfinished: vi.fn().mockResolvedValue([unfinishedTask]),
     reassign: vi.fn().mockResolvedValue([12]),
   };
+  const roleGate = {
+    manageRole: vi.fn().mockResolvedValue("SYSTEM_ADMIN"),
+    roleSetterRole: vi.fn().mockResolvedValue("SYSTEM_ADMIN"),
+  };
   const audit = {
     append: vi.fn().mockResolvedValue({
       chainId: "PROJECT:7",
@@ -89,6 +96,7 @@ function setup() {
     activeUsers as unknown as ActiveUsersQueryPort,
     access as unknown as ProjectAccessQueryPort,
     tasks as unknown as ProjectMemberTaskCommandPort,
+    roleGate as unknown as ProjectRoleGateService,
     audit as never,
     activity as never,
     notifications as never,
@@ -99,6 +107,7 @@ function setup() {
     access,
     activeUsers,
     tasks,
+    roleGate,
     audit,
     activity,
     notifications,
@@ -108,23 +117,38 @@ function setup() {
 describe("ProjectMemberManagementService", () => {
   it("lists full member history for an existing project", async () => {
     const s = setup();
-    const body = await s.service.listMembers(tx, 7);
+    const body = await s.service.listMembers(tx, 7, 1);
     expect(body.items).toHaveLength(1);
     expect(s.projects.findProject).toHaveBeenCalledWith(tx, { projectId: 7 });
   });
 
   it("lists unfinished tasks only for an ACTIVE member", async () => {
     const s = setup();
-    await expect(s.service.listUnfinishedTasks(tx, 7, 5)).resolves.toEqual({
+    await expect(s.service.listUnfinishedTasks(tx, 7, 5, 1)).resolves.toEqual({
       items: [unfinishedTask],
     });
     s.projects.findLatestMember.mockResolvedValueOnce(removedMember);
-    await expect(s.service.listUnfinishedTasks(tx, 7, 5)).rejects.toMatchObject(
-      {
-        status: 404,
-        code: "PROJECT_MEMBER_NOT_FOUND",
-      },
-    );
+    await expect(
+      s.service.listUnfinishedTasks(tx, 7, 5, 1),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "PROJECT_MEMBER_NOT_FOUND",
+    });
+  });
+
+  it("denies member management to plain members and hides projects from non-members", async () => {
+    const s = setup();
+    s.roleGate.manageRole.mockResolvedValue("MEMBER");
+    await expect(s.service.listMembers(tx, 7, 1)).rejects.toMatchObject({
+      status: 403,
+      code: "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+    });
+    s.roleGate.manageRole.mockResolvedValue("NOT_MEMBER");
+    await expect(s.service.listMembers(tx, 7, 1)).rejects.toMatchObject({
+      status: 404,
+      code: "PROJECT_MEMBER_NOT_FOUND",
+    });
+    expect(s.projects.listMembers).not.toHaveBeenCalled();
   });
 
   it("adds a new ACTIVE member with audit/activity/notification in one transaction", async () => {
@@ -242,6 +266,110 @@ describe("ProjectMemberManagementService", () => {
       }),
     ).rejects.toMatchObject({ status: 404 });
     expect(s.tasks.reassign).not.toHaveBeenCalled();
+  });
+
+  it("refuses to remove the project LEADER (409) until the role is transferred", async () => {
+    const s = setup();
+    s.projects.findLatestMember.mockResolvedValueOnce({
+      ...activeMember,
+      role: "LEADER" as const,
+    });
+    await expect(
+      s.service.removeMember(tx, {
+        actorId: 1,
+        projectId: 7,
+        userId: 5,
+        request: { reassignments: [] },
+        requestId: "req-6",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_MEMBER_LEADER_PROTECTED",
+    });
+    expect(s.tasks.reassign).not.toHaveBeenCalled();
+  });
+
+  it("sets member roles with audit and activity, enforcing setter gates", async () => {
+    const s = setup();
+    s.projects.findLatestMember.mockResolvedValueOnce(activeMember);
+    s.projects.setMemberRole.mockResolvedValueOnce({
+      ...activeMember,
+      role: "PROJECT_ADMIN" as const,
+    });
+    const result = await s.service.setRole(tx, {
+      actorId: 1,
+      projectId: 7,
+      userId: 5,
+      role: "PROJECT_ADMIN",
+      requestId: "req-7",
+    });
+    expect(result.responseStatus).toBe(200);
+    expect(result.body).toMatchObject({
+      member: { userId: 5, role: "PROJECT_ADMIN" },
+    });
+    expect(s.projects.setMemberRole).toHaveBeenCalledWith(tx, {
+      projectId: 7,
+      userId: 5,
+      role: "PROJECT_ADMIN",
+    });
+    expect(s.audit.append).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "project.member.role.set" }),
+    );
+    expect(s.activity.append).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        activityType: "PROJECT_MEMBER_ROLE_CHANGED",
+      }),
+    );
+
+    // 普通成员任命角色 -> 403
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("MEMBER");
+    await expect(
+      s.service.setRole(tx, {
+        actorId: 2,
+        projectId: 7,
+        userId: 5,
+        role: "PROJECT_ADMIN",
+        requestId: "req-8",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    });
+
+    // 组长任命/转移组长 -> 403
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
+    await expect(
+      s.service.setRole(tx, {
+        actorId: 1,
+        projectId: 7,
+        userId: 5,
+        role: "LEADER",
+        requestId: "req-9",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
+    });
+
+    // 唯一组长约束冲突 -> 409
+    s.projects.setMemberRole.mockRejectedValueOnce({
+      code: "23505",
+      constraint_name: "project_members_one_leader",
+    });
+    await expect(
+      s.service.setRole(tx, {
+        actorId: 1,
+        projectId: 7,
+        userId: 5,
+        role: "LEADER",
+        requestId: "req-10",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_MEMBER_LEADER_CONFLICT",
+    });
   });
 
   it("re-checks project writability before replaying idempotent member writes", async () => {

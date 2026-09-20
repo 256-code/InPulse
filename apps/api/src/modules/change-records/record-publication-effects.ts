@@ -41,7 +41,7 @@ export function validatePublishedRecordSearch(
       record.contextProblem,
       record.changeSolution,
       record.resultVerification,
-      record.remainingIssues,
+      ...record.remainingIssues.map((entry) => entry.content),
     ].join("\n"),
     visibilityScope: "MEMBER",
     sourceStatus: "PUBLISHED",
@@ -79,12 +79,23 @@ export class RecordPublicationEffects {
     actorId: number,
     before: PublishedRecord | RecordDraftItem,
     after: PublishedRecord,
-    kind: "PUBLISH" | "UPDATE",
+    kind: "PUBLISH" | "UPDATE" | "ADD_LEFTOVER",
     requestId: string,
     recipients: readonly number[],
   ) {
     const input = validatePublishedRecordSearch(after),
-      action = kind === "PUBLISH" ? "record.publish" : "record.version.create";
+      action =
+        kind === "PUBLISH"
+          ? "record.publish"
+          : kind === "UPDATE"
+            ? "record.version.create"
+            : "record.leftover.add",
+      label =
+        kind === "PUBLISH"
+          ? "发布"
+          : kind === "UPDATE"
+            ? "修订"
+            : "追加遗留问题";
     const event = await this.audit.append(tx, {
       projectId: after.projectId,
       actorType: "USER",
@@ -103,7 +114,7 @@ export class RecordPublicationEffects {
       sourceEntityId: after.id,
       activityType: action,
       actorId,
-      summary: `${kind === "PUBLISH" ? "发布" : "修订"}迭代记录：${after.title}`,
+      summary: `${label}迭代记录：${after.title}`,
       metadata: {
         recordId: after.id,
         moduleId: after.moduleId,
@@ -130,11 +141,7 @@ export class RecordPublicationEffects {
         sourceChainId: event.chainId,
         sourceSequence: event.sequenceNo,
         notificationType: action,
-        title:
-          `${kind === "PUBLISH" ? "发布" : "修订"}迭代记录：${after.title}`.slice(
-            0,
-            500,
-          ),
+        title: `${label}迭代记录：${after.title}`.slice(0, 500),
         body: `${after.code} · v${after.currentVersion}`,
         targetPath: `/records?view=published&projectId=${after.projectId}&publishedId=${after.id}`,
         createdAt: new Date(after.updatedAt),

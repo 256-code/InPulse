@@ -6,11 +6,14 @@ import {
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type { TimeCursorValue } from "../../cursors/time-cursor.js";
+import { normalizedLeftoverEntries } from "./leftover-entries.js";
 
 export interface RecordDraftListPageInput {
   readonly projectId: number;
   readonly limit: number;
   readonly after: TimeCursorValue | null;
+  /** 只返回该作者创建的草稿（项目草稿区传当前用户）；省略返回项目内全部草稿。 */
+  readonly authorId?: number;
 }
 
 export interface RecordDraftListPageResult {
@@ -64,6 +67,10 @@ const dto = (row: Row) => {
   return recordDraftItemSchema.parse({
     ...currentPayload,
     ...fields,
+    remainingIssues: normalizedLeftoverEntries(
+      currentPayload.remainingIssues,
+      [],
+    ),
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   });
@@ -109,17 +116,18 @@ export class RecordDraftRepository {
   }
   /**
    * 草稿列表分页（B-1）：created_at DESC,id DESC 与签名游标 keyset 一致，
-   * 取 limit+1 判断 hasMore；last 只在还有下一页时返回。
+   * 取 limit+1 判断 hasMore；last 只在还有下一页时返回；可选作者过滤。
    */
   async listPage(
     tx: TransactionContext,
     input: RecordDraftListPageInput,
   ): Promise<RecordDraftListPageResult> {
     const afterAt = input.after?.at ?? null,
-      afterId = input.after?.id ?? "0";
+      afterId = input.after?.id ?? "0",
+      authorId = input.authorId ?? null;
     const rows = await tx.sql<
       (Row & { createdAtCursor: string })[]
-    >`SELECT ${this.columns(tx)},to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='DRAFT' AND (${afterAt}::timestamptz IS NULL OR created_at < ${afterAt}::timestamptz OR (created_at = ${afterAt}::timestamptz AND id < ${afterId}::bigint)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+    >`SELECT ${this.columns(tx)},to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAtCursor" FROM app.change_records WHERE project_id=${input.projectId} AND status='DRAFT' AND (${authorId}::integer IS NULL OR author_id=${authorId}::integer) AND (${afterAt}::timestamptz IS NULL OR created_at < ${afterAt}::timestamptz OR (created_at = ${afterAt}::timestamptz AND id < ${afterId}::bigint)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
     const hasMore = rows.length > input.limit,
       pageRows = hasMore ? rows.slice(0, input.limit) : rows;
     const items = pageRows.map((row) => {

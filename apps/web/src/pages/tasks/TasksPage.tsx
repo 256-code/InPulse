@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
@@ -13,8 +13,16 @@ import {
   writeMyTaskFilters,
 } from "@features/my-tasks/my-tasks-url";
 import { createMyTasksServerAdapter } from "@features/my-tasks/my-tasks-server";
-import { taskDetailPath, type TaskLocation } from "@features/tasks/task-links";
+import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskCenterPageView } from "@features/my-tasks/TaskCenterPageView";
+
+/**
+ * 任务详情弹窗按需加载：任务中心的初始包不引入功能档案的完整任务面板，
+ * 首次点击任务卡片时才加载详情弹窗与配套写入口。
+ */
+const TaskDetailOverlay = lazy(
+  () => import("@features/tasks/TaskDetailOverlay"),
+);
 
 export interface TasksPageProps {
   readonly client?: InpulseApiClient;
@@ -24,6 +32,7 @@ export interface TasksPageProps {
 export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [detailTarget, setDetailTarget] = useState<TaskLocation | null>(null);
   const { user } = useAuth();
   const projectList = useProjects({ client });
 
@@ -57,12 +66,18 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
     navigate("/issues");
   }, [navigate]);
 
-  const handleOpenTask = useCallback(
-    (task: TaskLocation) => {
-      navigate(taskDetailPath(task));
-    },
-    [navigate],
-  );
+  /**
+   * 任务卡片 / 列表行与聚合组入口点击后在当前页面就地打开任务详情弹窗：与功能档案
+   * 共用同一个完整详情（含状态推进、编辑、迭代记录等写操作），不改变地址栏、不跳转，
+   * 关闭后仍停留在任务中心。
+   */
+  const handleOpenTask = useCallback((task: TaskLocation) => {
+    setDetailTarget(task);
+  }, []);
+
+  const handleCloseTask = useCallback(() => {
+    setDetailTarget(null);
+  }, []);
 
   const taskAdapter = useMemo(
     () => adapter ?? createMyTasksServerAdapter(client),
@@ -70,19 +85,32 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
   );
 
   return (
-    <TaskCenterPageView
-      filters={filters}
-      onFiltersChange={handleFiltersChange}
-      viewerId={user?.id ?? null}
-      isAdmin={isAdmin}
-      projects={projectList.data?.items ?? []}
-      advancedOpen={advancedOpen}
-      onToggleAdvanced={handleToggleAdvanced}
-      onOpenIssues={handleOpenIssues}
-      onOpenTask={handleOpenTask}
-      adapter={taskAdapter}
-      client={client}
-    />
+    <>
+      <TaskCenterPageView
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        viewerId={user?.id ?? null}
+        isAdmin={isAdmin}
+        projects={projectList.data?.items ?? []}
+        advancedOpen={advancedOpen}
+        onToggleAdvanced={handleToggleAdvanced}
+        onOpenIssues={handleOpenIssues}
+        onOpenTask={handleOpenTask}
+        adapter={taskAdapter}
+        client={client}
+      />
+      <Suspense fallback={null}>
+        {detailTarget === null ? null : (
+          <TaskDetailOverlay
+            target={detailTarget}
+            client={client}
+            isAdmin={isAdmin}
+            onClose={handleCloseTask}
+            onOpenTask={handleOpenTask}
+          />
+        )}
+      </Suspense>
+    </>
   );
 };
 

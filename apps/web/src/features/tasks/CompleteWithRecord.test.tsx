@@ -35,8 +35,22 @@ const draft = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "",
+  remainingIssues: [],
 };
+function selectTrigger(label: string): HTMLElement {
+  const trigger = screen.getByLabelText(label).closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  return trigger as HTMLElement;
+}
+
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: RegExp | string) {
+  fireEvent.mouseDown(selectTrigger(label));
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 function mount(extra: object) {
   const api = {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
@@ -80,7 +94,7 @@ it("requires core content and reuses the exact request key after uncertain failu
       contextProblem: "真实内容",
       changeSolution: "真实内容",
       resultVerification: "真实内容",
-      remainingIssues: "",
+      remainingIssues: [],
     },
   });
 });
@@ -108,16 +122,12 @@ it("requires explicit draft selection and explicit confirmation of its changed c
       .mockResolvedValue({ ...draft, title: "新版标题", rowVersion: 3 }),
     getTask: vi.fn().mockResolvedValue({ ...task, rowVersion: 2 }),
   });
-  fireEvent.change(screen.getByLabelText("记录来源"), {
-    target: { value: "draft" },
-  });
-  const select = await screen.findByLabelText("待发布草稿");
-  expect(select).toHaveValue("");
-  expect(
-    screen.queryByRole("option", { name: /不匹配草稿/ }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "发布并完成任务" })).toBeDisabled();
-  fireEvent.change(select, { target: { value: "7" } });
+  pickSelectOption("记录来源", "选择已有草稿");
+  await screen.findByLabelText("待发布草稿");
+  expect(selectTrigger("待发布草稿")).toHaveTextContent("请选择一条草稿");
+  fireEvent.mouseDown(selectTrigger("待发布草稿"));
+  expect(screen.queryByTitle(/不匹配草稿/)).toBeNull();
+  pickSelectOption("待发布草稿", /草稿 #7 · 版本 2/);
   fireEvent.click(screen.getByRole("button", { name: "发布并完成任务" }));
   fireEvent.click(
     await screen.findByRole("button", { name: "加载最新任务和草稿" }),

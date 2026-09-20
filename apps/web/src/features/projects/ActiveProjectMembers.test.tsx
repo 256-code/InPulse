@@ -12,12 +12,18 @@ const project = {
   name: "InPulse 研发交付平台",
   description: "示例项目",
   status: "ACTIVE" as const,
+  hasCompletedTask: false,
   rowVersion: 2,
   createdBy: 2,
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 5,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 const activeMembers = [
@@ -33,7 +39,11 @@ function mount(client: InpulseApiClient) {
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
-        <ActiveProjectMembers projectId={7} client={client} />
+        <ActiveProjectMembers
+          projectId={7}
+          projectDetail={project}
+          client={client}
+        />
       </QueryClientProvider>
     </ConfigProvider>,
   );
@@ -41,7 +51,6 @@ function mount(client: InpulseApiClient) {
 
 function baseClient(overrides: Record<string, unknown> = {}) {
   return {
-    getProject: vi.fn().mockResolvedValue({ project }),
     listActiveProjectMembers: vi
       .fn()
       .mockResolvedValue({ items: activeMembers }),

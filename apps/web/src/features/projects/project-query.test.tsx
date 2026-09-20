@@ -20,12 +20,18 @@ const projectItem: ProjectItem = {
   name: "商城系统",
   description: "商城项目描述",
   status: "ACTIVE",
+  hasCompletedTask: false,
   rowVersion: 1,
   createdBy: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 1,
-  stats: { activeModuleCount: 0, activeFeatureCount: 0, openTaskCount: 0 },
+  stats: {
+    activeModuleCount: 0,
+    activeFeatureCount: 0,
+    openTaskCount: 0,
+    completedTaskCount: 1,
+  },
 };
 
 const createdProject: CreateProjectResponse = {
@@ -34,14 +40,19 @@ const createdProject: CreateProjectResponse = {
     code: "SHOP",
     name: "商城系统",
     description: "商城项目描述",
-    status: "ACTIVE",
+    status: "NOT_STARTED",
     rowVersion: 1,
     createdBy: 1,
     createdAt: "2026-09-09T00:00:00.000Z",
     updatedAt: "2026-09-09T00:00:00.000Z",
   },
   members: [
-    { userId: 1, status: "ACTIVE", joinedAt: "2026-09-09T00:00:00.000Z" },
+    {
+      userId: 1,
+      status: "ACTIVE",
+      role: "LEADER",
+      joinedAt: "2026-09-09T00:00:00.000Z",
+    },
   ],
 };
 

@@ -22,6 +22,9 @@ import { TaskStatusCompatibilityHttpService } from "../src/workflows/task-status
 import { ExistingTaskStatusCommandPort } from "../src/modules/tasks/task-status.port.js";
 import { TasksManagementService } from "../src/modules/tasks/tasks-management.service.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
+import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -89,7 +92,7 @@ const content = {
   contextProblem: "发现问题",
   changeSolution: "修复方案",
   resultVerification: "验证通过",
-  remainingIssues: "后续优化",
+  remainingIssues: [{ content: "后续优化" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -151,6 +154,11 @@ beforeAll(async () => {
       search,
       notifications,
       access,
+      new PostgresProjectsWritePort(),
+      new ProjectStartNotifier(
+        new PostgresProjectMembersQueryPort(),
+        notifications,
+      ),
     ),
   );
   const auth = new SessionAuthService(
@@ -182,6 +190,10 @@ beforeAll(async () => {
         featureRead,
         new PostgresProjectCodePort(),
         new PostgresProjectMembersQueryPort(),
+        new ProjectRoleGateService(
+          access,
+          new PostgresProjectMembersQueryPort(),
+        ),
         uow,
         tasks,
         audit,
@@ -231,6 +243,10 @@ beforeAll(async () => {
               featureRead,
               new PostgresProjectCodePort(),
               new PostgresProjectMembersQueryPort(),
+              new ProjectRoleGateService(
+                access,
+                new PostgresProjectMembersQueryPort(),
+              ),
               uow,
               tasks,
               audit,
@@ -414,7 +430,7 @@ for (const feature of [true, false])
       scopeType: feature ? "FEATURE" : "MODULE",
       featureId: f.featureId,
     });
-    expect(task?.description).toContain(content.remainingIssues);
+    expect(task?.description).toContain("后续优化");
     expect(task?.description).toContain(f.record.code + " v1");
     const after = await snapshot(f);
     for (const table of [
@@ -429,12 +445,14 @@ for (const feature of [true, false])
     ).toMatchObject({
       currentVersion: 1,
       rowVersion: f.record.rowVersion + 1,
-      remainingIssues: content.remainingIssues,
-      leftoverItem: {
-        id: input.leftoverItemId,
-        status: "CONVERTED",
-        linkedTaskId: result.taskId,
-      },
+      leftovers: [
+        {
+          id: input.leftoverItemId,
+          status: "CONVERTED",
+          linkedTaskId: result.taskId,
+          content: "后续优化",
+        },
+      ],
     });
     expect(
       await uow.run((tx) => leftover.source(tx, f.actor, result.taskId)),
@@ -644,7 +662,11 @@ it("retains the single link through CONVERTED edits, clearing and refilling, and
   ))!;
   const originalVersion =
     await db.sql`SELECT to_jsonb(v) AS row FROM app.change_record_versions v WHERE record_id=${record.id} AND version_no=1`;
-  for (const remainingIssues of ["改进后的遗留", "", "再填遗留"]) {
+  for (const entries of [
+    [{ id: input.leftoverItemId, content: "改进后的遗留" }],
+    [],
+    [{ id: input.leftoverItemId, content: "再填遗留" }],
+  ]) {
     record = await uow.run((tx) =>
       publication.update(
         tx,
@@ -653,21 +675,23 @@ it("retains the single link through CONVERTED edits, clearing and refilling, and
         record.id,
         record.rowVersion,
         record.currentVersion,
-        { ...content, remainingIssues, confirmLeftoverResolved: true },
+        { ...content, remainingIssues: entries, confirmLeftoverResolved: true },
         randomUUID(),
       ),
     );
-    expect(record.leftoverItem).toMatchObject({
-      id: input.leftoverItemId,
-      status: "CONVERTED",
-      linkedTaskId: result.taskId,
-    });
+    expect(
+      record.leftovers.map((leftover) => [
+        leftover.id,
+        leftover.status,
+        leftover.linkedTaskId,
+      ]),
+    ).toEqual([[input.leftoverItemId, "CONVERTED", result.taskId]]);
     expect(await (await post(f, actor, input, key)).json()).toEqual(result);
     const duplicate = await post(f, actor, {
       ...input,
       recordVersion: record.currentVersion,
       expectedRowVersion: record.rowVersion,
-      leftoverExpectedRowVersion: record.leftoverItem!.rowVersion,
+      leftoverExpectedRowVersion: record.leftovers[0]!.rowVersion,
     });
     expect(duplicate.status).toBe(409);
     expect(await duplicate.json()).toMatchObject({
@@ -692,7 +716,7 @@ it("rejects an item absent from the current version, then reuses its stable ID a
       f.record.id,
       f.record.rowVersion,
       1,
-      { ...content, remainingIssues: "", confirmLeftoverResolved: true },
+      { ...content, remainingIssues: [], confirmLeftoverResolved: true },
       randomUUID(),
     ),
   );
@@ -701,7 +725,8 @@ it("rejects an item absent from the current version, then reuses its stable ID a
       ...input,
       recordVersion: record.currentVersion,
       expectedRowVersion: record.rowVersion,
-      leftoverExpectedRowVersion: record.leftoverItem!.rowVersion,
+      // 条目已从当前版本移除，这里是客户端仍持有的上一个条目版本。
+      leftoverExpectedRowVersion: f.record.leftovers[0]!.rowVersion,
     }),
   ).rejects.toMatchObject({ code: "LEFTOVER_NOT_ACTIVE" });
   record = await uow.run((tx) =>
@@ -712,16 +737,57 @@ it("rejects an item absent from the current version, then reuses its stable ID a
       record.id,
       record.rowVersion,
       record.currentVersion,
-      { ...content, remainingIssues: "新遗留", confirmLeftoverResolved: false },
+      {
+        ...content,
+        remainingIssues: [{ id: input.leftoverItemId, content: "新遗留" }],
+        confirmLeftoverResolved: false,
+      },
       randomUUID(),
     ),
   );
-  expect(record.leftoverItem!.id).toBe(input.leftoverItemId);
+  expect(record.leftovers[0]!.id).toBe(input.leftoverItemId);
   const created = await convert(f, await inputFor(f));
   expect(created.leftoverItemId).toBe(input.leftoverItemId);
   expect(
     (await uow.run((tx) => tasks.find(tx, f, created.taskId)))!.description,
   ).toContain("新遗留");
+});
+it("requires an explicit leftover id once a record carries more than one active entry", async () => {
+  const f = await published(),
+    input = await inputFor(f),
+    // 记录已有两条 ACTIVE 条目：不指定 id 的预览与转换都必须要求客户端选择。
+    extra = await uow.run((tx) =>
+      publication.update(
+        tx,
+        f.actor,
+        f.projectId,
+        f.record.id,
+        f.record.rowVersion,
+        f.record.currentVersion,
+        {
+          ...content,
+          remainingIssues: [
+            { id: input.leftoverItemId, content: "既有遗留" },
+            { content: "新发现的遗留" },
+          ],
+          confirmLeftoverResolved: false,
+        },
+        randomUUID(),
+      ),
+    ),
+    ids = extra.leftovers.map((leftover) => leftover.id);
+  expect(ids).toHaveLength(2);
+  await expect(
+    uow.run((tx) => leftover.preview(tx, f.actor, f.projectId, f.record.id)),
+  ).rejects.toMatchObject({
+    code: "LEFTOVER_SELECTION_REQUIRED",
+    details: { leftoverItemIds: ids },
+  });
+  expect(
+    await uow.run((tx) =>
+      leftover.preview(tx, f.actor, f.projectId, f.record.id, ids[1]!),
+    ),
+  ).toMatchObject({ leftoverItemId: ids[1], content: "新发现的遗留" });
 });
 async function waitBlocked() {
   for (let attempt = 0; attempt < 100; attempt++) {

@@ -100,24 +100,95 @@
   background: #f2f8fe;
 }
 
-.timeline-block {
-  margin-bottom: 28px;
+/* 按天分组的时间线：左侧日期列 + 一条竖线贯穿，日期节点落在线上，点击日期可收起/展开该天。 */
+.record-timeline {
+  position: relative;
+  padding-left: 104px;
 }
 
-.timeline-date {
+.record-timeline::before {
+  content: "";
+  position: absolute;
+  left: 84px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: #e3ebf3;
+}
+
+.timeline-block {
+  position: relative;
+  margin-bottom: 26px;
+}
+
+.timeline-block::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #9db8d4;
+}
+
+/* 日期与时刻文字放在竖线左侧的留白列中，右对齐并与圆点保持间距。 */
+.timeline-day {
+  position: absolute;
+  top: 4px;
+  right: calc(100% + 30px);
+  color: #7b93ab;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.timeline-item {
+  position: relative;
+}
+
+.timeline-time {
+  position: absolute;
+  top: 26px;
+  right: calc(100% + 30px);
+  color: #93a1b0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.timeline-toggle {
   display: flex;
   align-items: center;
   gap: 9px;
   margin-bottom: 13px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #5b7892;
+  cursor: pointer;
+  text-align: left;
 }
 
-.timeline-date strong {
+.timeline-toggle svg {
+  color: #93a1b0;
+  transition: transform 0.15s ease;
+}
+
+.timeline-toggle svg.expanded {
+  transform: rotate(90deg);
+}
+
+.timeline-toggle strong {
   color: #31475e;
   font-size: 13px;
 }
 
-.timeline-date small {
+.timeline-toggle small {
   color: #93a1b0;
   font-size: 11px;
 }
@@ -292,6 +363,19 @@
   .records-toolbar-field {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .record-timeline {
+    padding-left: 28px;
+  }
+
+  .record-timeline::before {
+    left: 8px;
+  }
+
+  .timeline-day,
+  .timeline-time {
+    display: none;
   }
 
   .record-card summary {

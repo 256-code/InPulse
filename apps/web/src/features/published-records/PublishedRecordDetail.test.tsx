@@ -25,7 +25,7 @@ const first: ChangeRecordVersion = {
   contextProblem: "重复请求",
   changeSolution: "增加幂等",
   resultVerification: "初次验证",
-  remainingIssues: "",
+  remainingIssues: [],
   leftovers: [],
 };
 const second: ChangeRecordVersion = {
@@ -50,7 +50,6 @@ const item = {
   updatedAt: first.createdAt,
   rowVersion: 3,
   impactFeatureIds: [],
-  leftoverItem: null,
   leftovers: [],
 };
 function mountDetail(
@@ -94,12 +93,21 @@ it("loads real version data and permits selecting historical snapshots", async (
   const diff = within(await screen.findByRole("generic", { name: "版本差异" }));
   expect(diff.getByText("初次验证")).toBeVisible();
   expect(diff.getByText("追加并发验证")).toBeVisible();
+  // 无变化字段不再渲染：标题等四项不应出现在差异区。
+  expect(diff.queryByText("迭代标题")).toBeNull();
   const region = screen.getByRole("region", { name: "正式记录详情" });
-  expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
-  fireEvent.change(within(region).getByLabelText("对照版本"), {
-    target: { value: "1" },
-  });
-  expect(diff.getAllByText("初次验证")).toHaveLength(2);
+  // 2026-09-18 起详情页头只保留标题（页面标题上方的小字已移除），按合并后实现断言标题。
+  const compareField = within(region).getByLabelText("对照版本");
+  const compareTrigger = compareField.closest(".ant-select");
+  if (!compareTrigger) {
+    throw new Error("compare select not found");
+  }
+  fireEvent.mouseDown(compareTrigger);
+  // 「较早版本」与「对照版本」选项文案相同：按 aria-owns 定位本次打开的弹层，避免选错。
+  const listId = compareField.getAttribute("aria-owns") ?? "";
+  const list = document.getElementById(listId) ?? document.body;
+  fireEvent.click(within(list).getByTitle(/^v1 · /));
+  expect(diff.getByText("这两个版本的内容完全一致。")).toBeVisible();
   expect(api.listChangeRecordVersions).toHaveBeenCalledWith(
     1,
     7,
@@ -153,7 +161,6 @@ it("leaves the record identity to the card summary when not standalone", async (
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   expect(await within(region).findByText("归属")).toBeVisible();
   expect(within(region).queryByText("支付修订")).toBeNull();
-  expect(within(region).queryByText("SHOP-CR-1 · v2 · 已发布")).toBeNull();
 });
 it("hides the version comparison until a record has more than one version", async () => {
   const api = {

@@ -47,6 +47,17 @@ export const leftoverTaskPreviewSchema = z
   })
   .strict()
   .meta({ id: "LeftoverTaskPreview" });
+export const leftoverTaskPreviewQuerySchema = z
+  .object({
+    leftoverItemId: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(2147483647)
+      .optional(),
+  })
+  .strict()
+  .meta({ id: "LeftoverTaskPreviewQuery" });
 export const leftoverTaskSourceSchema = z
   .object({
     source: z
@@ -70,6 +81,11 @@ export const leftoverTaskSchemas = {
   LeftoverTaskPreview: {
     schema: leftoverTaskPreviewSchema,
     summary: "服务端推导的当前遗留内容和影响继承预览",
+    sensitiveFieldPaths: [],
+  },
+  LeftoverTaskPreviewQuery: {
+    schema: leftoverTaskPreviewQuerySchema,
+    summary: "指定要处理的遗留项；省略时记录必须只有一条遗留问题",
     sensitiveFieldPaths: [],
   },
   LeftoverTaskSource: {

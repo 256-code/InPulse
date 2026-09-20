@@ -32,6 +32,7 @@ export * from "./contracts/record-feed.zod.js";
 export * from "./contracts/task-groups.zod.js";
 export * from "./contracts/task-completion.zod.js";
 export * from "./contracts/aggregate-read.zod.js";
+export * from "./contracts/task-board.zod.js";
 export * from "./contracts/leftover-task.zod.js";
 
 export * from "./contracts/task-create.zod.js";

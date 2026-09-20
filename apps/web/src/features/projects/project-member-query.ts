@@ -12,7 +12,14 @@ export function projectMemberErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401)
       return "登录状态已失效，请重新登录后再查看项目成员。";
-    if (error.status === 403) return "只有系统管理员可以管理项目成员。";
+    if (error.status === 403) {
+      // ADR-033：管理操作限系统管理员、本项目组长或项目管理员。
+      if (error.code === "PROJECT_MEMBER_ROLE_FORBIDDEN")
+        return "只有系统管理员或本项目组长可以任命或撤销项目内角色。";
+      if (error.code === "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN")
+        return "组长不能任命或转移组长角色，请联系系统管理员。";
+      return "只有系统管理员、本项目组长或项目管理员可以管理项目成员。";
+    }
     if (error.status === 404) return "项目或成员不存在，或你已无权访问。";
     if (error.status === 409) {
       if (error.code === "PROJECT_MEMBER_ALREADY_ACTIVE")
@@ -21,6 +28,10 @@ export function projectMemberErrorMessage(error: unknown): string {
         return "项目已归档，不能变更项目成员。";
       if (error.code === "PROJECT_MEMBER_TASK_NOT_REASSIGNABLE")
         return "待改派任务已发生变化，请重新加载后重试。";
+      if (error.code === "PROJECT_MEMBER_LEADER_PROTECTED")
+        return "项目组长不能被移除，请先由系统管理员转移或撤销组长角色。";
+      if (error.code === "PROJECT_MEMBER_LEADER_CONFLICT")
+        return "该项目已存在组长，请先转移或撤销现有组长。";
       return "项目成员状态已变化，请刷新列表后重试。";
     }
     if (error.status === 422) return "请检查成员信息或任务改派参数。";
@@ -49,6 +60,7 @@ export function useProjectMembers(
   const removeRetryKey = useRef<{ signature: string; key: string } | null>(
     null,
   );
+  const roleRetryKey = useRef<{ signature: string; key: string } | null>(null);
 
   const query = useQuery({
     queryKey: ["project-members", projectId],
@@ -124,7 +136,43 @@ export function useProjectMembers(
     },
   });
 
-  return { query, addMutation, removeMutation };
+  // ADR-033：任命/撤销项目内角色（系统管理员或本项目组长）。
+  const roleMutation = useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      readonly userId: number;
+      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    }) => {
+      const signature = JSON.stringify([projectId, input.userId, input.role]);
+      if (roleRetryKey.current?.signature !== signature) {
+        roleRetryKey.current = {
+          signature,
+          key: createIdempotencyKey("project-member-role"),
+        };
+      }
+      const csrf = await api.issueCsrfToken();
+      return api.setProjectMemberRole(
+        projectId,
+        input.userId,
+        { role: input.role },
+        {
+          headers: mutationHeaders(csrf.csrfToken, roleRetryKey.current.key),
+        },
+      );
+    },
+    onSuccess: async () => {
+      roleRetryKey.current = null;
+      await Promise.all([
+        cache.invalidateQueries({ queryKey: ["project-members", projectId] }),
+        cache.invalidateQueries({ queryKey: ["projects"] }),
+        cache.invalidateQueries({
+          queryKey: ["projects", "detail", projectId],
+        }),
+      ]);
+    },
+  });
+
+  return { query, addMutation, removeMutation, roleMutation };
 }
 
 export function useProjectMemberUnfinishedTasks(

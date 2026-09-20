@@ -181,8 +181,8 @@ export function useTasks(
     onSuccess: async () => {
       retry.current = null;
       await Promise.all(
-        ["tasks", "activity", "search", "notifications"].map((key) =>
-          cache.invalidateQueries({ queryKey: [key] }),
+        ["tasks", "task-board", "activity", "search", "notifications"].map(
+          (key) => cache.invalidateQueries({ queryKey: [key] }),
         ),
       );
     },

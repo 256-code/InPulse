@@ -264,6 +264,118 @@ export class TasksController {
 
   // Keep the literal single-line for the repository's Controller binding scanner.
   // prettier-ignore
+  @Post(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/archive")
+  @Operation("archiveTask")
+  async archiveTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("archiveTask") params: unknown,
+    @ContractQuery("archiveTask") query: unknown,
+    @ContractBody("archiveTask") body: unknown,
+    @ContractHeaders("archiveTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("archiveTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  // Keep the literal single-line for the repository's Controller binding scanner.
+  // prettier-ignore
+  @Post(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/restore")
+  @Operation("restoreTask")
+  async restoreTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("restoreTask") params: unknown,
+    @ContractQuery("restoreTask") query: unknown,
+    @ContractBody("restoreTask") body: unknown,
+    @ContractHeaders("restoreTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("restoreTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Post(":projectId/modules/:moduleId/tasks/:taskId/archive")
+  @Operation("archiveModuleTask")
+  async archiveModuleTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("archiveModuleTask") params: unknown,
+    @ContractQuery("archiveModuleTask") query: unknown,
+    @ContractBody("archiveModuleTask") body: unknown,
+    @ContractHeaders("archiveModuleTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("archiveModuleTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Post(":projectId/modules/:moduleId/tasks/:taskId/restore")
+  @Operation("restoreModuleTask")
+  async restoreModuleTask(
+    @Req() request: TasksHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("restoreModuleTask") params: unknown,
+    @ContractQuery("restoreModuleTask") query: unknown,
+    @ContractBody("restoreModuleTask") body: unknown,
+    @ContractHeaders("restoreModuleTask") _headers: unknown,
+  ) {
+    const result = await this.service.handle("restoreModuleTask", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
+      body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  // Keep the literal single-line for the repository's Controller binding scanner.
+  // prettier-ignore
   @Get(":projectId/modules/:moduleId/features/:featureId/tasks/:taskId/status-history")
   @Operation("getTaskStatusHistory")
   async getTaskStatusHistory(

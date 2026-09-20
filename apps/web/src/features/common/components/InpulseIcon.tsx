@@ -7,11 +7,16 @@ export type InpulseIconName =
   | "boxes"
   | "check"
   | "chevron"
+  | "chevronDown"
   | "clipboard"
   | "code"
   | "cornerDown"
   | "folder"
   | "gitBranch"
+  | "gauge"
+  | "home"
+  | "kanban"
+  | "layers"
   | "logout"
   | "menu"
   | "plus"
@@ -19,8 +24,10 @@ export type InpulseIconName =
   | "arrowLeft"
   | "calendar"
   | "chevronRight"
+  | "chevronLeft"
   | "clock"
   | "externalLink"
+  | "fileText"
   | "gitMerge"
   | "layoutGrid"
   | "list"
@@ -79,6 +86,7 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
   ),
   check: <path d="M20 6 9 17l-5-5" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
   clipboard: (
     <>
       <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
@@ -115,6 +123,33 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <circle cx="18" cy="6" r="3" />
       <circle cx="6" cy="18" r="3" />
       <path d="M18 9a9 9 0 0 1-9 9" />
+    </>
+  ),
+  gauge: (
+    <>
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M10 21v-6h4v6" />
+    </>
+  ),
+  kanban: (
+    <>
+      <path d="M5 3v14" />
+      <path d="M12 3v8" />
+      <path d="M19 3v18" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
     </>
   ),
   logout: (
@@ -191,6 +226,7 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
     </>
   ),
   chevronRight: <path d="m9 18 6-6-6-6" />,
+  chevronLeft: <path d="M15 18 9 12l6-6" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="10" />
@@ -202,6 +238,15 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <path d="M15 3h6v6" />
       <path d="M10 14 21 3" />
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </>
+  ),
+  fileText: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+      <path d="M10 9H8" />
     </>
   ),
   gitMerge: (

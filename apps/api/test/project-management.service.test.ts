@@ -4,6 +4,10 @@ import type { AuditWritePort } from "../src/audit/audit.port.js";
 import type { TransactionContext } from "../src/database/transaction-context.js";
 import type { ActivityWritePort } from "../src/modules/activity/activity.write-port.js";
 import type { ProjectAccessQueryPort } from "../src/modules/projects/project-access.port.js";
+import type { ProjectMembersQueryPort } from "../src/modules/projects/project-members-query.port.js";
+import type { ProjectArchiveRequestPort } from "../src/modules/projects/project-archive-request.port.js";
+import type { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
+import type { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
 import {
   ProjectManagementService,
   ProjectManagementError,
@@ -20,12 +24,18 @@ const current: ProjectChangeRecord = {
   name: "商城系统",
   description: "旧描述",
   status: "ACTIVE",
+  firstTaskCompletedAt: "2026-09-09T01:00:00.000Z",
   rowVersion: 1,
   createdBy: 5,
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 2, activeFeatureCount: 1, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 1,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 const tx = {} as unknown as TransactionContext;
@@ -64,6 +74,10 @@ function setup(
     .mockResolvedValue({ chainId: "chain-1", sequenceNo: 4 });
   const appendActivity = vi.fn().mockResolvedValue(undefined);
   const upsertSearch = vi.fn().mockResolvedValue(undefined);
+  const findActiveRole = vi.fn().mockResolvedValue("LEADER");
+  const listActiveMemberIds = vi.fn().mockResolvedValue([2, 3]);
+  const manageRole = vi.fn().mockResolvedValue("LEADER");
+  const notifyProjectStarted = vi.fn().mockResolvedValue(undefined);
   const service = new ProjectManagementService(
     {
       findProjectForChange,
@@ -75,6 +89,15 @@ function setup(
     { append: appendAudit } as unknown as AuditWritePort,
     { append: appendActivity } as unknown as ActivityWritePort,
     { upsert: upsertSearch } as unknown as SearchProjectionWritePort,
+    {
+      findActiveRole,
+      listActiveMemberIds,
+    } as unknown as ProjectMembersQueryPort,
+    {
+      cancelPendingRequests: async () => [],
+    } as unknown as ProjectArchiveRequestPort,
+    { manageRole } as unknown as ProjectRoleGateService,
+    { notify: notifyProjectStarted } as unknown as ProjectStartNotifier,
   );
   return {
     service,
@@ -86,6 +109,7 @@ function setup(
     appendAudit,
     appendActivity,
     upsertSearch,
+    findActiveRole,
   };
 }
 
@@ -155,6 +179,12 @@ describe("ProjectManagementService", () => {
       id: 7,
       name: "商城系统二期",
       rowVersion: 2,
+    });
+    // ADR-033：写命令响应携带当前用户的项目内角色。
+    expect(result.currentUserRole).toBe("LEADER");
+    expect(s.findActiveRole).toHaveBeenCalledWith(tx, {
+      projectId: 7,
+      userId: 5,
     });
   });
 
@@ -246,6 +276,7 @@ describe("ProjectManagementService", () => {
           reason: "项目已交付",
           before: { status: "ACTIVE", rowVersion: 1 },
           after: { status: "ARCHIVED", rowVersion: 2 },
+          cancelledArchiveRequestIds: [],
         },
       }),
     );
@@ -323,6 +354,7 @@ describe("ProjectManagementService", () => {
     const restoredRecord: ProjectChangeRecord = {
       ...current,
       status: "ACTIVE",
+      firstTaskCompletedAt: "2026-09-09T01:00:00.000Z",
       rowVersion: 3,
     };
     const s = setup(
@@ -351,6 +383,7 @@ describe("ProjectManagementService", () => {
           reason: "项目重启",
           before: { status: "ARCHIVED", rowVersion: 2 },
           after: { status: "ACTIVE", rowVersion: 3 },
+          cancelledArchiveRequestIds: [],
         },
       }),
     );

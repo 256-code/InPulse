@@ -48,12 +48,26 @@ export class LeftoverTaskHttpService {
           ? schemaRegistry.TaskCompletionPath
           : schemaRegistry.RecordDraftResourcePath
       ).schema.safeParse(request.params);
-      if (!path.success || Object.keys(request.query ?? {}).length)
+      const previewQuery =
+        operation === "previewLeftoverTask"
+          ? schemaRegistry.LeftoverTaskPreviewQuery.schema.safeParse(
+              request.query ?? {},
+            )
+          : null;
+      if (
+        !path.success ||
+        (previewQuery === null
+          ? Object.keys(request.query ?? {}).length > 0
+          : !previewQuery.success)
+      )
         throw new TaskManagementError(
           422,
           "LEFTOVER_VALIDATION_FAILED",
           "请求参数不正确",
         );
+      const leftoverItemId = previewQuery?.success
+        ? previewQuery.data.leftoverItemId
+        : undefined;
       if (operation !== "convertLeftoverToTask") {
         return {
           status: 200,
@@ -78,6 +92,7 @@ export class LeftoverTaskHttpService {
                 actor.userId,
                 path.data.projectId,
                 path.data.recordId,
+                leftoverItemId,
               ),
             );
           }),

@@ -1,9 +1,23 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Button, Spin } from "antd";
 import { useNavigate } from "react-router-dom";
-import { type InpulseApiClient, type ModuleItem } from "@generated/api";
+import {
+  createApiClient,
+  type InpulseApiClient,
+  type ModuleItem,
+} from "@generated/api";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  RecordDetailModal,
+  type RecordDetailTarget,
+} from "@features/published-records/RecordDetailModal";
+import type { ProjectOverviewIteration } from "@features/project-overview/project-overview-types";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
+import {
+  resourceLifecycleLabel,
+  resourceLifecycleTone,
+} from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -11,7 +25,14 @@ import {
 } from "@features/common/components/Calm";
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
 import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
-import { useProjectDetail } from "@features/projects/project-query";
+import {
+  ProjectWorkspaceModals,
+  type ProjectWorkspaceModalKind,
+} from "@features/project-overview/ProjectWorkspaceModals";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 import { moduleErrorMessage, useModules } from "./module-query";
 import {
   ModuleEditorModal,
@@ -31,6 +52,14 @@ export function ModulesPageView({
   const navigate = useNavigate();
   const [request, setRequest] = useState<ModuleEditorRequest | null>(null);
   const [success, setSuccess] = useState(false);
+  /** 成员与设置 / 迭代记录 / 遗留问题：就地弹窗，不再整页跳转。 */
+  const [workspaceModal, setWorkspaceModal] =
+    useState<ProjectWorkspaceModalKind | null>(null);
+  /** 「最近迭代」单行：就地打开该条记录的详情弹窗。 */
+  const [recordTarget, setRecordTarget] =
+    useState<ProjectOverviewIteration | null>(null);
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const queryClient = useQueryClient();
   const open = (action: ModuleEditorRequest["action"], item?: ModuleItem) => {
     setSuccess(false);
     setRequest({ action, ...(item ? { item } : {}) });
@@ -41,7 +70,12 @@ export function ModulesPageView({
     client,
     projectId,
   });
-  const projectName = projectQuery.data?.name ?? null;
+  const projectName = projectQuery.data?.project?.name ?? null;
+  // ADR-033：模块归档/恢复由系统管理员或本项目组长/项目管理员执行。
+  const canArchive = canManageProjectResources(
+    isAdmin,
+    projectQuery.data?.currentUserRole ?? null,
+  );
   const overviewAdapter = useMemo(
     () => createProjectOverviewServerAdapter(client),
     [client],
@@ -52,15 +86,14 @@ export function ModulesPageView({
         <ProjectOverviewPageView
           projectId={projectId}
           client={client}
-          project={projectQuery.data ?? null}
+          project={projectQuery.data?.project ?? null}
           projectLoading={projectQuery.isPending}
           onRetryProject={() => void projectQuery.refetch()}
-          onBackToProjects={() => navigate("/projects")}
-          onOpenMembers={() => navigate("/projects/" + projectId + "/members")}
-          onOpenRecords={() =>
-            navigate("/records?view=published&projectId=" + projectId)
-          }
-          onOpenIssues={() => navigate("/issues")}
+          onBack={() => navigate("/projects")}
+          onOpenMembers={() => setWorkspaceModal("members")}
+          onOpenRecords={() => setWorkspaceModal("records")}
+          onOpenRecord={setRecordTarget}
+          onOpenIssues={() => setWorkspaceModal("issues")}
           adapter={overviewAdapter}
           extraActions={
             // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」
@@ -148,9 +181,16 @@ export function ModulesPageView({
                           <CalmBadge tone="violet">未分类</CalmBadge>
                         )}
                         <CalmBadge
-                          tone={item.status === "ACTIVE" ? "gray" : "amber"}
+                          tone={resourceLifecycleTone(
+                            item.status,
+                            item.stats.completedTaskCount,
+                            "gray",
+                          )}
                         >
-                          {item.status === "ACTIVE" ? "正常" : "已归档"}
+                          {resourceLifecycleLabel(
+                            item.status,
+                            item.stats.completedTaskCount,
+                          )}
                         </CalmBadge>
                       </div>
                       <p>{item.description || "暂无模块说明"}</p>
@@ -195,7 +235,7 @@ export function ModulesPageView({
                           编辑模块
                         </Button>
                       )}
-                      {isAdmin && (
+                      {canArchive && (
                         <Button
                           className="text-button"
                           onClick={() =>
@@ -216,6 +256,36 @@ export function ModulesPageView({
           )}
         </ProjectOverviewPageView>
       </div>
+      <RecordDetailModal
+        projectId={projectId}
+        api={api}
+        record={
+          recordTarget === null
+            ? null
+            : ({
+                recordId: recordTarget.recordId,
+                code: recordTarget.code,
+                title: recordTarget.title,
+                recordStatus: "PUBLISHED",
+                publishedAt: recordTarget.publishedAt,
+                contextLabel: recordTarget.featureName,
+                externalLinks: [],
+              } satisfies RecordDetailTarget)
+        }
+        onClose={() => setRecordTarget(null)}
+        onChanged={() => {
+          // 修订/作废后同步概览统计与最近迭代列表。
+          void queryClient.invalidateQueries({
+            queryKey: ["project-overview", projectId],
+          });
+        }}
+      />
+      <ProjectWorkspaceModals
+        projectId={projectId}
+        client={client}
+        open={workspaceModal}
+        onClose={() => setWorkspaceModal(null)}
+      />
       <ModuleEditorModal
         projectId={projectId}
         client={client}
@@ -223,6 +293,8 @@ export function ModulesPageView({
         request={request}
         onClose={() => setRequest(null)}
         onSaved={() => setSuccess(true)}
+        canArchive={canArchive}
+        onLifecycleRequest={(action, item) => open(action, item)}
       />
     </>
   );

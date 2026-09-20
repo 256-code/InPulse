@@ -1,5 +1,8 @@
 import { it, expect } from "vitest";
-import { leftoverTaskRequestSchema } from "../src/contracts/leftover-task.zod.js";
+import {
+  leftoverTaskRequestSchema,
+  leftoverTaskPreviewQuerySchema,
+} from "../src/contracts/leftover-task.zod.js";
 const input = {
   leftoverItemId: 1,
   recordVersion: 2,
@@ -23,4 +26,18 @@ it("requires stable item, current record and item versions and explicit impact c
     { ...input, assigneeId: 0 },
   ])
     expect(leftoverTaskRequestSchema.safeParse(body).success).toBe(false);
+});
+it("preview query either names one leftover item or omits it for multi-entry records", () => {
+  expect(leftoverTaskPreviewQuerySchema.parse({ leftoverItemId: "7" })).toEqual(
+    { leftoverItemId: 7 },
+  );
+  expect(leftoverTaskPreviewQuerySchema.parse({})).toEqual({});
+  for (const query of [
+    { leftoverItemId: 0 },
+    { leftoverItemId: "x" },
+    { leftoverItemId: 1.5 },
+    { leftoverItemId: null },
+    { recordVersion: 1 },
+  ])
+    expect(leftoverTaskPreviewQuerySchema.safeParse(query).success).toBe(false);
 });

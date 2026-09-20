@@ -1,7 +1,9 @@
 import React, { useMemo } from "react";
 import {
   createBrowserRouter,
+  Navigate,
   RouterProvider,
+  useParams,
   type RouteObject,
 } from "react-router-dom";
 import { Spin } from "antd";
@@ -10,6 +12,12 @@ import { buildRouteObjects } from "@shared/routing/route-registry";
 import { AppLayout } from "../layout/AppLayout";
 import { RequireAuth, RequireAdmin } from "../auth/auth-guard";
 import { RouteErrorPage } from "../errors/RouteErrorPage";
+
+/** 项目概览已与「模块与功能」合并：旧地址不再单独渲染页面，整体重定向到项目主页。 */
+const ProjectOverviewRedirect: React.FC = () => {
+  const { projectId } = useParams();
+  return <Navigate to={`/projects/${projectId ?? ""}/modules`} replace />;
+};
 
 export function loadPageRoutes(): AppRouteModule[] {
   // 静态自动聚合 pages 目录下所有领域 route.ts 导出
@@ -55,7 +63,15 @@ export function createInPulseRouter(
     element: <AppLayout />,
     // 兜底错误页：路由级异常与默认 404 都不再落到 React Router 的开发者页面。
     errorElement: <RouteErrorPage />,
-    children: childRoutes,
+    children: [
+      // 「/」不再有独立首页：首页与任务中心内容重复，根路径直接落到任务中心。
+      { index: true, element: <Navigate to="/tasks" replace /> },
+      {
+        path: "projects/:projectId/overview",
+        element: <ProjectOverviewRedirect />,
+      },
+      ...childRoutes,
+    ],
   };
 
   return createBrowserRouter([rootRoute]);

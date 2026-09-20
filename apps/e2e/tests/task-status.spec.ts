@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 for (const moduleScope of [false, true])
   test(`F-16 ${moduleScope ? "MODULE" : "FEATURE"} 状态闭环与不可变历史`, async ({
@@ -34,9 +35,7 @@ for (const moduleScope of [false, true])
       const create = page.getByRole("dialog", { name: "新建任务" });
       const title = `状态任务-${suffix}`;
       await create.getByLabel("任务标题").fill(title);
-      await create
-        .getByLabel("负责人")
-        .selectOption({ label: runtime.user.name });
+      await pickCalmSelectOption(create, "负责人", runtime.user.name);
       await create.getByRole("button", { name: /保\s*存/ }).click();
       await expect(create).toBeHidden();
       const detail = page.getByRole("dialog", { name: "任务详情" });
@@ -53,7 +52,7 @@ for (const moduleScope of [false, true])
       ).toBeDisabled();
       await complete.getByRole("button", { name: /上一步/ }).click();
       await complete.getByRole("button", { name: /没有，仅完成任务/ }).click();
-      await complete.getByLabel("完成原因").selectOption("测试验证");
+      await pickCalmSelectOption(complete, "完成原因", "测试验证");
       await complete.getByLabel("完成补充说明").fill("首次验证完成");
       await complete.getByRole("button", { name: "确认完成任务" }).click();
       await expect(complete).toBeHidden();
@@ -80,7 +79,7 @@ for (const moduleScope of [false, true])
         .getByRole("button", { name: "完成任务", exact: true })
         .click();
       await complete.getByRole("button", { name: /没有，仅完成任务/ }).click();
-      await complete.getByLabel("完成原因").selectOption("技术调研");
+      await pickCalmSelectOption(complete, "完成原因", "技术调研");
       await complete.getByLabel("完成补充说明").fill("二次完成");
       await complete.getByRole("button", { name: "确认完成任务" }).click();
       await expect(complete).toBeHidden();
@@ -90,7 +89,7 @@ for (const moduleScope of [false, true])
         fullPage: true,
       });
       await page.reload();
-      await page.getByLabel("任务状态筛选").selectOption("DONE");
+      await pickCalmSelectOption(page, "任务状态筛选", "已完成");
       await page
         .locator(".calm-task-card")
         .filter({ hasText: title })

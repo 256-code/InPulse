@@ -1,5 +1,4 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import * as schema from "@inpulse/database";
+import { createDrizzleDb } from "@inpulse/database/client";
 import type { DatabaseClient } from "@inpulse/database/client";
 import type { Sql, TransactionSql } from "postgres";
 import type { TransactionContext } from "./transaction-context.js";
@@ -24,7 +23,7 @@ export const defaultTransactionContextFactory: TransactionContextFactory = (
   txSql,
   parentSql,
 ) => ({
-  db: drizzle(withParentOptions(txSql, parentSql), { schema }),
+  db: createDrizzleDb(withParentOptions(txSql, parentSql)),
   sql: txSql,
 });
 

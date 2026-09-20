@@ -12,13 +12,24 @@ const impactIds = z
   .array(id)
   .max(1000)
   .overwrite((values) => [...new Set(values)].sort((a, b) => a - b));
+/**
+ * 一条遗留问题。`id` 只在正式记录的版本提交/响应里出现：草稿与发布请求
+ * 都按新增处理，服务端在发布时分配稳定遗留项。提交已有条目的 `id` 表示
+ * 沿用该稳定遗留项（保留其状态与跟进任务关联），省略则表示新增。
+ */
+export const recordLeftoverEntrySchema = z
+  .object({
+    id: id.optional(),
+    content: z.string().trim().min(1).max(10000),
+  })
+  .strict();
 export const recordDraftContentSchema = z
   .object({
     title: z.string().trim().min(1).max(500),
     contextProblem: z.string().trim().min(1).max(50000),
     changeSolution: z.string().trim().min(1).max(50000),
     resultVerification: z.string().trim().min(1).max(50000),
-    remainingIssues: z.string().trim().max(50000),
+    remainingIssues: z.array(recordLeftoverEntrySchema).max(50),
   })
   .strict()
   .meta({ id: "RecordDraftContent" });
@@ -63,6 +74,8 @@ export const recordDraftListQuerySchema = z
   .object({
     cursor: recordListCursorSchema,
     limit: recordListLimitSchema,
+    // 只看某个作者创建的草稿（项目草稿区传当前用户）；省略返回项目内全部草稿。
+    authorId: z.coerce.number().int().positive().max(2147483647).optional(),
   })
   .strict()
   .meta({ id: "RecordDraftListQuery" });
@@ -105,6 +118,7 @@ export const recordDraftVersionHeadersSchema = recordDraftHeadersSchema
   .extend({ "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/) })
   .meta({ id: "RecordDraftVersionHeaders" });
 export type RecordDraftContent = z.infer<typeof recordDraftContentSchema>;
+export type RecordLeftoverEntry = z.infer<typeof recordLeftoverEntrySchema>;
 export type RecordDraftItem = z.infer<typeof recordDraftItemSchema>;
 export type IndependentRecordDraftRequest = z.infer<
   typeof independentRecordDraftSchema

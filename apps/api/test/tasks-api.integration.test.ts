@@ -2,6 +2,9 @@ import { PostgresUserReadPort } from "../src/auth/user-read.port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { PostgresFeatureReadPort } from "../src/modules/features/postgres-feature-read-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
+import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
@@ -118,6 +121,10 @@ beforeAll(async () => {
     new PostgresFeatureReadPort(),
     new PostgresProjectCodePort(),
     new PostgresProjectMembersQueryPort(),
+    new ProjectRoleGateService(
+      new PostgresProjectAccessQueryPort(client),
+      new PostgresProjectMembersQueryPort(),
+    ),
     uow,
     new TaskManagementRepository(),
     audit,
@@ -184,6 +191,11 @@ beforeAll(async () => {
       search,
       notifications,
       access,
+      new PostgresProjectsWritePort(),
+      new ProjectStartNotifier(
+        new PostgresProjectMembersQueryPort(),
+        notifications,
+      ),
     ),
   );
   class TestModule {}
@@ -1171,6 +1183,70 @@ describe("F-14 real HTTP / PostgreSQL", () => {
       await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id=${project.projectId} AND entity_type='TASK'`,
     ).toHaveLength(0);
   });
+  it("orders the panel list by work status group then task priority", async () => {
+    const { project, member } = await fixture();
+    const post = async (title: string, priority: string) => {
+      const response = await request(project, "POST", member, {
+        ...edit(member.userId, title),
+        priority,
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+      return taskItemSchema.parse(await response.json());
+    };
+    // 登记顺序与期望顺序不同：排序键生效时结果不等于 id 升序。
+    const done = await post("已完成任务", "URGENT");
+    const lowTodo = await post("低优任务", "LOW");
+    const urgentTodo = await post("紧急任务", "URGENT");
+    const normalTodo = await post("普通任务", "NORMAL");
+    const canceled = await post("已取消任务", "HIGH");
+    // app.tasks 的状态历史不变量要求最后一条 task_status_history 与任务行一致，
+    // 因此改状态时同事务补上对应迁移。
+    await client.sql`
+      WITH updated AS (
+        UPDATE app.tasks
+           SET work_status = 'DONE',
+               completed_at = now(),
+               completion_note = '已完成',
+               row_version = row_version + 1
+         WHERE id = ${done.id} AND project_id = ${project.projectId}
+        RETURNING id, project_id, completed_at, completion_note
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, 'TODO', 'DONE', completed_at, completion_note,
+             ${member.userId}
+        FROM updated
+    `;
+    await client.sql`
+      WITH updated AS (
+        UPDATE app.tasks
+           SET work_status = 'CANCELED',
+               row_version = row_version + 1
+         WHERE id = ${canceled.id} AND project_id = ${project.projectId}
+        RETURNING id, project_id
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status, changed_by
+      )
+      SELECT id, project_id, 'TODO', 'CANCELED', ${member.userId}
+        FROM updated
+    `;
+
+    const items = taskListResponseSchema.parse(
+      await (await request(project, "GET", member)).json(),
+    ).items;
+    // 未完成（紧急 → 普通 → 低）在前，其后依次是已完成与已取消。
+    expect(items.map((item) => item.id)).toEqual([
+      urgentTodo.id,
+      normalTodo.id,
+      lowTodo.id,
+      done.id,
+      canceled.id,
+    ]);
+  });
+
   it("keeps archived history readable, rejects edits and stale successful replay after parent archival", async () => {
     const { project, member } = await fixture();
     const key = randomUUID();
@@ -1611,4 +1687,208 @@ describe("F-14 real HTTP / PostgreSQL", () => {
         await auditReader.sql`SELECT 1 FROM app.audit_logs WHERE project_id=${project.projectId}`,
       ).toHaveLength(0);
     });
+});
+
+describe("ADR-034 task archive and restore", () => {
+  it("archives and restores a module task without touching status history", async () => {
+    const { project, member } = await fixture();
+    const scope = { ...project, featureId: null };
+    const created = await request(scope, "POST", member, {
+      ...edit(member.userId),
+      impactFeatureIds: [project.featureId],
+    });
+    const task = moduleTaskItemSchema.parse(await created.json());
+
+    const archived = await request(
+      scope,
+      "POST",
+      member,
+      { reason: "阶段结束" },
+      `/${task.id}/archive`,
+      task.rowVersion,
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+    const archivedItem = moduleTaskItemSchema.parse(await archived.json());
+    expect(archivedItem).toMatchObject({
+      id: task.id,
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: task.rowVersion + 1,
+    });
+
+    // 生命周期只切换 lifecycle_status，不追加工作状态历史。
+    expect(
+      await client.sql`SELECT 1 FROM app.task_status_history WHERE task_id=${task.id}`,
+    ).toHaveLength(1);
+
+    const audits = (await auditReader.sql`
+      SELECT action, event_payload AS "payload"
+        FROM app.audit_logs
+       WHERE project_id = ${project.projectId}
+         AND target_type = 'TASK'
+         AND target_id = ${String(task.id)}
+         AND action = 'task.archive'
+    `) as unknown as readonly {
+      action: string;
+      payload: { reason: string };
+    }[];
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.payload).toMatchObject({ reason: "阶段结束" });
+
+    expect(
+      await client.sql`
+        SELECT 1
+          FROM app.activity_projection
+         WHERE project_id = ${project.projectId}
+           AND source_entity_type = 'TASK'
+           AND source_entity_id = ${task.id}
+           AND activity_type = 'TASK_ARCHIVED'
+      `,
+    ).toHaveLength(1);
+    expect(
+      await client.sql`
+        SELECT source_row_version AS "sourceRowVersion"
+          FROM app.search_projection
+         WHERE entity_type = 'TASK'
+           AND entity_id = ${task.id}
+      `,
+    ).toMatchObject([{ sourceRowVersion: archivedItem.rowVersion }]);
+
+    const restored = await request(
+      scope,
+      "POST",
+      member,
+      { reason: "提前恢复" },
+      `/${task.id}/restore`,
+      archivedItem.rowVersion,
+    );
+    expect(restored.status, await restored.clone().text()).toBe(200);
+    expect(moduleTaskItemSchema.parse(await restored.json())).toMatchObject({
+      lifecycleStatus: "ACTIVE",
+      rowVersion: archivedItem.rowVersion + 1,
+    });
+  });
+
+  it("archives a feature task after its parent feature was archived", async () => {
+    const { project, member } = await fixture();
+    const task = await create(project, member);
+    // ADR-034：功能归档不要求其下任务已归档，之后任务仍必须能归档收尾；
+    // 否则「功能已归档 → 任务无法归档 → 模块永远无法归档」会形成死锁。
+    await client.sql`
+      UPDATE app.features
+         SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1
+       WHERE id = ${project.featureId} AND project_id = ${project.projectId}
+    `;
+    const archived = await request(
+      project,
+      "POST",
+      member,
+      { reason: "功能归档后收尾" },
+      `/${task.id}/archive`,
+      task.rowVersion,
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+    const archivedItem = taskItemSchema.parse(await archived.json());
+    expect(archivedItem).toMatchObject({ lifecycleStatus: "ARCHIVED" });
+
+    // 恢复仍要求父级链活跃：功能已归档时先恢复功能，再恢复任务。
+    await error(
+      await request(
+        project,
+        "POST",
+        member,
+        { reason: "先恢复功能" },
+        `/${task.id}/restore`,
+        archivedItem.rowVersion,
+      ),
+      409,
+      "TASK_PARENT_ARCHIVED",
+    );
+  });
+
+  it("enforces role, project, version and lifecycle gates", async () => {
+    const { project, member } = await fixture();
+    const scope = { ...project, featureId: null };
+    const plain = await actor();
+    await addMember(project.projectId, plain.userId);
+    const outsider = await actor();
+    const task = moduleTaskItemSchema.parse(
+      await (
+        await request(scope, "POST", member, {
+          ...edit(member.userId),
+          impactFeatureIds: [project.featureId],
+        })
+      ).json(),
+    );
+
+    await error(
+      await request(
+        scope,
+        "POST",
+        plain,
+        { reason: "普通成员" },
+        `/${task.id}/archive`,
+        task.rowVersion,
+      ),
+      403,
+      "TASK_ARCHIVE_FORBIDDEN",
+    );
+    await error(
+      await request(
+        scope,
+        "POST",
+        outsider,
+        { reason: "非成员" },
+        `/${task.id}/archive`,
+        task.rowVersion,
+      ),
+      404,
+    );
+    await error(
+      await request(
+        scope,
+        "POST",
+        member,
+        { reason: "过期版本" },
+        `/${task.id}/archive`,
+        task.rowVersion + 5,
+      ),
+      409,
+      "TASK_VERSION_CONFLICT",
+    );
+    await error(
+      await request(
+        scope,
+        "POST",
+        member,
+        { reason: "尚未归档" },
+        `/${task.id}/restore`,
+        task.rowVersion,
+      ),
+      409,
+      "TASK_STATE_CONFLICT",
+    );
+
+    const first = await request(
+      scope,
+      "POST",
+      member,
+      { reason: "首次归档" },
+      `/${task.id}/archive`,
+      task.rowVersion,
+    );
+    expect(first.status, await first.clone().text()).toBe(200);
+    const archivedItem = moduleTaskItemSchema.parse(await first.json());
+    await error(
+      await request(
+        scope,
+        "POST",
+        member,
+        { reason: "重复归档" },
+        `/${task.id}/archive`,
+        archivedItem.rowVersion,
+      ),
+      409,
+      "TASK_STATE_CONFLICT",
+    );
+  });
 });

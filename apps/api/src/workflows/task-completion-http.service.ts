@@ -135,9 +135,9 @@ export class TaskCompletionHttpService {
                     featureId: record.featureId,
                     taskId: record.taskId,
                     impactFeatureIds: record.impactFeatureIds,
-                    leftoverItemIds: record.leftoverItem
-                      ? [record.leftoverItem.id]
-                      : [],
+                    leftoverItemIds: record.leftovers.map(
+                      (leftover) => leftover.id,
+                    ),
                   }
                 : null,
             },

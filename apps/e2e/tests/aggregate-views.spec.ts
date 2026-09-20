@@ -2,9 +2,10 @@ import { expect, test } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
- * F-29 项目概览 / F-32 任务中心的专属关键路径 E2E。
+ * F-29 项目主页（概览已并入模块与功能）/ F-32 任务中心的专属关键路径 E2E。
  * 两个页面默认注入服务端适配器（R-2 / R-3）：这里验证真实服务端数据进入
  * 视图（统计卡片、优先级筛选、遗留问题总数与优先级徽章）、仍无契约来源的
  * 条件按显式降级处理（关键词搜索只对已加载页生效并标注，「我创建的」经
@@ -42,9 +43,7 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
-    await taskDialog
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(taskDialog, "负责人", runtime.user.name);
     await taskDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(taskDialog).toBeHidden();
 
@@ -131,11 +130,11 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(page.getByTestId("task-center-local-note")).toHaveCount(0);
 
     // 优先级筛选已接入服务端：选中写入 URL，清除后 URL 不再携带。
-    await page.getByLabel("优先级").selectOption("HIGH");
+    await pickCalmSelectOption(page, "优先级", "高");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBe("HIGH");
-    await page.getByLabel("优先级").selectOption("");
+    await pickCalmSelectOption(page, "优先级", "全部");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBeNull();
@@ -177,29 +176,17 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       page.getByLabel("显示已取消任务（不计入完成率）"),
     ).toBeEnabled();
 
-    // 任务中心不弹只读详情：重新进入 /tasks（卡片视图），点击卡片直接定位到
-    // 功能档案，由 ?taskId= 打开任务详情弹窗，写操作（编辑 / 完成任务 / 合并 /
-    // 关联链接）都在这一个入口里，任务中心本身不再复制一份只读弹层。
+    // 任务中心不再跳转：重新进入 /tasks（卡片视图）后点击卡片，在当前页面就地
+    // 弹出功能档案同款的任务详情弹窗，写操作（编辑 / 完成任务 / 合并 / 关联链接）
+    // 仍只有这一个入口；地址栏与筛选参数保持不变，关闭后仍停留在任务中心。
     await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();
     const navCard = page
       .locator(".calm-task-card")
       .filter({ hasText: taskTitle });
     await expect(navCard).toBeVisible();
+    const taskCenterUrl = page.url();
     await navCard.click();
-    await expect
-      .poll(() => {
-        const url = new URL(page.url());
-        return url.pathname;
-      })
-      .toMatch(
-        new RegExp(
-          "^/projects/" + runtime.projectId + "/modules/\\d+/features/\\d+$",
-        ),
-      );
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get("taskId"))
-      .not.toBeNull();
     const archiveDetail = page.getByRole("dialog", { name: "任务详情" });
     await expect(archiveDetail).toBeVisible();
     await expect(archiveDetail.getByText(taskTitle)).toBeVisible();
@@ -209,8 +196,11 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(
       archiveDetail.getByRole("button", { name: "完成任务" }),
     ).toBeVisible();
+    expect(page.url()).toBe(taskCenterUrl);
     await archiveDetail.getByRole("button", { name: "关闭" }).click();
     await expect(archiveDetail).toBeHidden();
+    expect(page.url()).toBe(taskCenterUrl);
+    await expect(page.getByTestId("task-center")).toBeVisible();
 
     await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();
@@ -224,7 +214,7 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
   }
 });
 
-test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入口导航", async ({
+test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入口导航", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -278,23 +268,28 @@ test("F-29 项目概览：服务端真实指标（含遗留问题总数）与入
     await expect(page.getByText("暂无已发布记录")).toBeVisible();
     await expect(page.getByText("没有待闭环的遗留问题")).toBeVisible();
 
+    // 2026-09-20：项目主页三个入口改为就地弹窗——「查看全部」打开迭代记录
+    // 弹窗，地址栏保持在项目主页；弹窗内项目筛选已预置为当前项目。
     await page.getByRole("button", { name: "查看全部" }).click();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/records");
-    const recordsUrl = new URL(page.url());
-    expect(recordsUrl.searchParams.get("view")).toBe("published");
-    expect(recordsUrl.searchParams.get("projectId")).toBe(
-      String(runtime.projectId),
-    );
-
-    await page.goto("/projects/" + runtime.projectId + "/overview");
-    await page.getByRole("button", { name: "查看模块" }).click();
+    const recordsModal = page.getByRole("dialog", { name: "迭代记录" });
+    await expect(recordsModal).toBeVisible();
+    await expect(recordsModal).toContainText("迭代记录");
     await expect
       .poll(() => new URL(page.url()).pathname)
       .toBe("/projects/" + runtime.projectId + "/modules");
+    await recordsModal.getByRole("button", { name: "关闭迭代记录" }).click();
+    await expect(recordsModal).toBeHidden();
 
+    // 项目概览已与「模块与功能」合并：旧地址整体重定向到项目主页，
+    // 重定向后仍是同一套项目头部 + 指标 + 面板。
     await page.goto("/projects/" + runtime.projectId + "/overview");
-    await page.getByRole("button", { name: "全部项目" }).click();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/projects");
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toBe("/projects/" + runtime.projectId + "/modules");
+    await expect(page.getByTestId("project-overview")).toBeVisible();
+
+    // 2026-09-19：项目头部的「全部项目」返回入口已按用户要求移除，
+    // 返回项目列表改由公共侧栏「项目列表」承担，这里不再断言该按钮。
   } finally {
     await context.close();
   }

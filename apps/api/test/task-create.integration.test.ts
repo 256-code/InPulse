@@ -20,6 +20,7 @@ import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres
 import { ProjectCreationLockPort } from "../src/modules/projects/project-creation-lock.port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { ModuleManagementRepository } from "../src/modules/modules/module-management.repository.js";
@@ -78,6 +79,7 @@ beforeAll(() => {
     audit,
     activity,
     search,
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   const features = new FeaturesManagementService(
     access,
@@ -91,6 +93,7 @@ beforeAll(() => {
     activity,
     search,
     new PostgresUserReadPort(),
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   tasks = new TasksManagementService(
     access,
@@ -99,6 +102,7 @@ beforeAll(() => {
     featureRead,
     codes,
     new PostgresProjectMembersQueryPort(),
+    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
     uow,
     new TaskManagementRepository(),
     audit,
@@ -372,16 +376,17 @@ it("逾期在分页前过滤，新建未逾期任务不会挤掉较早的逾期�
   const first = await uow.run((tx) =>
     query.list(tx, { projectIds: [f.projectId], overdue: true, limit: 1 }),
   );
-  expect(first.items.map((item) => item.taskId)).toEqual([created[1]!.id]);
+  // ADR-037：两条逾期任务同桶、同优先级、同截止时间，按 id 升序兜底。
+  expect(first.items.map((item) => item.taskId)).toEqual([created[0]!.id]);
   expect(first.hasMore).toBe(true);
   const second = await uow.run((tx) =>
     query.list(tx, {
       projectIds: [f.projectId],
       overdue: true,
       limit: 1,
-      afterTaskId: first.nextTaskId!,
+      after: first.next!,
     }),
   );
-  expect(second.items.map((item) => item.taskId)).toEqual([created[0]!.id]);
+  expect(second.items.map((item) => item.taskId)).toEqual([created[1]!.id]);
   expect(second.hasMore).toBe(false);
 });

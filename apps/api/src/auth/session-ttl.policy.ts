@@ -4,10 +4,10 @@ import { SESSION_ABSOLUTE_MAX_AGE_SECONDS } from "./csrf.http.js";
 export const SESSION_TTL_POLICY = Symbol("SESSION_TTL_POLICY");
 
 /**
- * ADR-032：本地会话空闲有效期默认 30 分钟（自签发起，不随请求滑动续期）；
+ * ADR-038：本地会话空闲有效期默认 2 小时（7200 秒，自签发起，不随请求滑动续期）；
  * 口令登录与 SSO 登录共用同一策略，避免两条签发路径出现不一致的过期语义。
  */
-export const DEFAULT_SESSION_IDLE_MAX_AGE_SECONDS = 30 * 60;
+export const DEFAULT_SESSION_IDLE_MAX_AGE_SECONDS = 2 * 60 * 60;
 
 export interface SessionTtlPolicy {
   readonly idleMaxAgeSeconds: number;

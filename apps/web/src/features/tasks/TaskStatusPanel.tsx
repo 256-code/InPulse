@@ -10,6 +10,7 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskError, type TaskViewItem } from "./task-query";
 import { CompleteWithRecord } from "./CompleteWithRecord";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
 const labels = {
@@ -134,9 +135,14 @@ export function TaskStatusPanel({
       retry.current = null;
       onClose();
       await Promise.all(
-        ["tasks", "task-history", "activity", "search", "notifications"].map(
-          (key) => cache.invalidateQueries({ queryKey: [key] }),
-        ),
+        [
+          "tasks",
+          "task-board",
+          "task-history",
+          "activity",
+          "search",
+          "notifications",
+        ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },
   });
@@ -373,16 +379,16 @@ export function TaskStatusPanel({
                 <>
                   <label>
                     完成原因
-                    <select
+                    <CalmSelect
+                      ariaLabel="完成原因"
                       value={reason}
-                      onChange={(e) =>
-                        setReason(e.target.value as typeof reason)
-                      }
-                    >
-                      {reasons.map((value) => (
-                        <option key={value}>{value}</option>
-                      ))}
-                    </select>
+                      appearance="menu"
+                      onChange={(next) => setReason(next as typeof reason)}
+                      options={reasons.map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                    />
                   </label>
                   <p className="permission-hint">
                     该任务不会生成迭代记录，但会保留完成说明、完成时间与全部状态历史。

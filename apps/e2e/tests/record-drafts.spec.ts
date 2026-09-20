@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import {
+  pickCalmSelectOption,
+  pickCalmSelectOptionByIndex,
+} from "../helpers/calm-select.js";
 test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browser }) => {
   test.setTimeout(90000);
   const runtime = await loadRuntime();
@@ -9,7 +14,7 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建独立草稿" }).click();
     const create = page.getByRole("dialog", { name: "新建独立草稿" });
-    await create.getByLabel("所属模块").selectOption({ index: 1 });
+    await pickCalmSelectOptionByIndex(create, "所属模块", 1);
     const title = `独立草稿-${Date.now()}`;
     await create.getByLabel("迭代标题").fill(title);
     await create.getByLabel("改动原因").fill("重复提交造成状态冲突");
@@ -21,7 +26,7 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await expect(detail.getByText("暂无已知遗留问题")).toBeVisible();
     await page.getByRole("button", { name: "继续编辑" }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
-    await edit.getByLabel("遗留问题（选填）").fill("继续观察高峰流量");
+    await fillLeftovers(edit, ["继续观察高峰流量"]);
     await edit.getByRole("button", { name: "保存草稿" }).click();
     await expect(edit).toBeHidden();
     await page.reload();
@@ -69,9 +74,7 @@ for (const moduleScope of [false, true])
       const createTask = page.getByRole("dialog", { name: "新建任务" });
       const title = `草稿任务-${suffix}`;
       await createTask.getByLabel("任务标题").fill(title);
-      await createTask
-        .getByLabel("负责人")
-        .selectOption({ label: runtime.user.name });
+      await pickCalmSelectOption(createTask, "负责人", runtime.user.name);
       await createTask.getByRole("button", { name: /保\s*存/ }).click();
       await expect(createTask).toBeHidden();
       const task = page.getByRole("dialog", { name: "任务详情" });
@@ -113,7 +116,7 @@ for (const moduleScope of [false, true])
         .click();
       await page.getByRole("button", { name: "继续编辑" }).click();
       const edit = page.getByRole("dialog", { name: "编辑草稿" });
-      await edit.getByLabel("遗留问题（选填）").fill("来源草稿补充");
+      await fillLeftovers(edit, ["来源草稿补充"]);
       await edit.getByRole("button", { name: "保存草稿" }).click();
       await expect(edit).toBeHidden();
       await page.reload();

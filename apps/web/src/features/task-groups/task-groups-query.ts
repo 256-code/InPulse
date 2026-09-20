@@ -23,15 +23,19 @@ export function describeTaskGroupError(error: unknown): string {
 export interface UseTaskGroupQueryOptions {
   readonly groupId: number;
   readonly adapter: TaskGroupAdapter;
+  /** 宿主未打开时置 false，避免为关闭的弹层发起请求。 */
+  readonly enabled?: boolean;
 }
 
 export function useTaskGroupQuery({
   groupId,
   adapter,
+  enabled = true,
 }: UseTaskGroupQueryOptions) {
   return useQuery({
     queryKey: ["task-group", adapter.source, groupId],
     queryFn: () => adapter.fetchTaskGroup(groupId),
+    enabled,
     retry: false,
   });
 }

@@ -14,17 +14,8 @@ const id = z.number().int().positive().max(2147483647);
 export const recordVersionLeftoverSchema = z
   .object({ id, content: z.string().min(1).max(10000) })
   .strict();
-export const recordLeftoverStateSchema = z
-  .object({
-    id,
-    status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
-    rowVersion: id,
-    linkedTaskId: id.nullable(),
-  })
-  .strict();
 export const publishedRecordContentSchema = recordDraftContentSchema
   .extend({
-    remainingIssues: z.string().trim().max(10000),
     confirmLeftoverResolved: z.boolean(),
   })
   .meta({ id: "PublishedRecordContent" });
@@ -43,7 +34,6 @@ export const recordPublicationReplayContextSchema = z
 export const publishedRecordSchema = recordDraftItemSchema
   .extend({
     status: z.literal("PUBLISHED"),
-    leftoverItem: recordLeftoverStateSchema.nullable(),
     code: z.string().regex(/^[A-Z][A-Z0-9_]{1,31}-CR-[1-9][0-9]*$/),
     currentVersion: id,
     publishedAt: z.iso.datetime(),
@@ -51,6 +41,7 @@ export const publishedRecordSchema = recordDraftItemSchema
       recordVersionLeftoverSchema.extend({
         status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
         rowVersion: id,
+        linkedTaskId: id.nullable(),
       }),
     ),
   })
@@ -85,6 +76,13 @@ export const changeRecordVersionSchema = recordDraftContentSchema
     leftovers: z.array(recordVersionLeftoverSchema),
   })
   .meta({ id: "ChangeRecordVersion" });
+export const addRecordLeftoverRequestSchema = z
+  .object({ content: z.string().trim().min(1).max(10000) })
+  .strict()
+  .meta({ id: "AddRecordLeftoverRequest" });
+export type AddRecordLeftoverRequest = z.infer<
+  typeof addRecordLeftoverRequestSchema
+>;
 export const publishedRecordSchemas = {
   RecordLifecycleRequest: {
     schema: z
@@ -140,6 +138,11 @@ export const publishedRecordSchemas = {
   PublishedRecordContent: {
     schema: publishedRecordContentSchema,
     summary: "正式记录内容与清空遗留项确认",
+    sensitiveFieldPaths: [],
+  },
+  AddRecordLeftoverRequest: {
+    schema: addRecordLeftoverRequestSchema,
+    summary: "详情页在已有正式记录上追加一条遗留问题，仍形成一次记录版本",
     sensitiveFieldPaths: [],
   },
   PublishRecordRequest: {

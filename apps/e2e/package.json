@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "cleanup": "node helpers/fixture-cleanup.ts"
   },
   "devDependencies": {
     "@node-rs/argon2": "2.2.0",

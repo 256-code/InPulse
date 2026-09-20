@@ -11,12 +11,17 @@ import { NotificationWritePort } from "../notifications/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
+  ProjectStartNotifier,
+  ProjectsWritePort,
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { TaskManagementRepository } from "./task-management.repository.js";
 import { TaskManagementError } from "./tasks-management.service.js";
 import type { TaskReadModel } from "./task-query.port.js";
-/** Workflow owns authorization and all parent/task/branch locks. This port never opens a transaction. */
+/**
+ * Workflow owns authorization and all parent/task/branch locks. This port never opens a transaction.
+ * ADR-035：任务完成同时是项目「第一次有产出」的判定点，见 recordProjectOutput。
+ */
 export abstract class TaskCompletionCommandPort {
   abstract complete(
     tx: TransactionContext,
@@ -40,6 +45,9 @@ export class PostgresTaskCompletionCommandPort extends TaskCompletionCommandPort
     private readonly notifications: NotificationWritePort,
     @Inject(PROJECT_ACCESS_QUERY_PORT)
     private readonly access: ProjectAccessQueryPort,
+    @Inject(ProjectsWritePort) private readonly projects: ProjectsWritePort,
+    @Inject(ProjectStartNotifier)
+    private readonly projectStarted: ProjectStartNotifier,
   ) {
     super();
   }
@@ -153,6 +161,89 @@ export class PostgresTaskCompletionCommandPort extends TaskCompletionCommandPort
         createdAt: new Date(result.updatedAt),
       });
     }
+    await this.recordProjectOutput(tx, actorId, source, result, requestId);
     return result;
+  }
+
+  /**
+   * ADR-035：任务完成是项目「第一次有产出」的唯一来源，同一事务内完成两件事——
+   * 置位永不回落的 first_task_completed_at；项目仍为未开始时自动升级为进行中，
+   * 并按项目开工写审计、活动、搜索投影与全体成员通知。
+   * 其余状态只补标记，不产生任何额外副作用。
+   */
+  private async recordProjectOutput(
+    tx: TransactionContext,
+    actorId: number,
+    source: TaskReadModel,
+    result: TaskItem | ModuleTaskItem,
+    requestId: string,
+  ): Promise<void> {
+    const completion = await this.projects.recordFirstTaskCompletion(tx, {
+      projectId: source.projectId,
+      completedAt: new Date(result.updatedAt),
+    });
+    if (
+      completion === undefined ||
+      completion.previousStatus !== "NOT_STARTED" ||
+      completion.status !== "ACTIVE"
+    ) {
+      return;
+    }
+    const occurredAt = new Date(result.updatedAt);
+    const event = await this.audit.append(tx, {
+      projectId: completion.projectId,
+      actorType: "USER",
+      actorId,
+      action: "project.status.change",
+      targetType: "PROJECT",
+      targetId: String(completion.projectId),
+      eventPayload: {
+        automatic: true,
+        trigger: "TASK_COMPLETED",
+        taskId: source.taskId,
+        before: { status: completion.previousStatus },
+        after: { status: completion.status },
+      },
+      requestId,
+      occurredAt,
+    });
+    await this.activity.append(tx, {
+      projectId: completion.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "PROJECT",
+      sourceEntityId: completion.projectId,
+      activityType: "PROJECT_STATUS_CHANGED",
+      actorId,
+      summary: `项目开工：${completion.name} 由未开始进入进行中`,
+      metadata: {
+        code: completion.code,
+        trigger: "TASK_COMPLETED",
+        taskId: source.taskId,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: completion.status,
+      sourceRowVersion: completion.rowVersion,
+      occurredAt,
+    });
+    await this.search.upsert(tx, {
+      projectId: completion.projectId,
+      entityType: "PROJECT",
+      entityId: completion.projectId,
+      title: completion.name,
+      summary: completion.description.slice(0, 5000),
+      rawText: `${completion.code} ${completion.name} ${completion.description}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: completion.status,
+      sourceRowVersion: completion.rowVersion,
+    });
+    await this.projectStarted.notify(tx, {
+      projectId: completion.projectId,
+      code: completion.code,
+      name: completion.name,
+      chainId: event.chainId,
+      sequenceNo: event.sequenceNo,
+      occurredAt,
+    });
   }
 }

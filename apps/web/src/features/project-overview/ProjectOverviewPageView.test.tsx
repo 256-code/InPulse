@@ -17,12 +17,18 @@ const project: ProjectItem = {
   name: "InPulse 平台",
   description: "平台项目描述",
   status: "ACTIVE",
+  hasCompletedTask: false,
   rowVersion: 2,
   createdBy: 1,
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-02T00:00:00.000Z",
   memberCount: 3,
-  stats: { activeModuleCount: 4, activeFeatureCount: 11, openTaskCount: 6 },
+  stats: {
+    activeModuleCount: 4,
+    activeFeatureCount: 11,
+    openTaskCount: 6,
+    completedTaskCount: 1,
+  },
 };
 
 const overviewResult: ProjectOverviewResult = {
@@ -78,10 +84,10 @@ interface RenderOverrides {
 const renderView = (overrides: RenderOverrides = {}) => {
   const handlers = {
     onRetryProject: vi.fn(),
-    onBackToProjects: vi.fn(),
     onOpenModules: vi.fn(),
     onOpenMembers: vi.fn(),
     onOpenRecords: vi.fn(),
+    onOpenRecord: vi.fn(),
     onOpenIssues: vi.fn(),
   };
   render(
@@ -100,10 +106,10 @@ const renderView = (overrides: RenderOverrides = {}) => {
           }
           projectLoading={false}
           onRetryProject={handlers.onRetryProject}
-          onBackToProjects={handlers.onBackToProjects}
           onOpenModules={handlers.onOpenModules}
           onOpenMembers={handlers.onOpenMembers}
           onOpenRecords={handlers.onOpenRecords}
+          onOpenRecord={handlers.onOpenRecord}
           onOpenIssues={handlers.onOpenIssues}
           adapter={overrides.adapter ?? createAdapter()}
           {...(overrides.projectError === undefined
@@ -120,9 +126,8 @@ describe("ProjectOverviewPageView", () => {
   it("renders the project identity from the injected project port", async () => {
     renderView();
 
-    expect(screen.getByText("INP / PROJECT")).toBeInTheDocument();
     expect(screen.getByText("InPulse 平台")).toBeInTheDocument();
-    expect(screen.getByText("正常")).toBeInTheDocument();
+    expect(screen.getByText("进行中")).toBeInTheDocument();
     await screen.findByTestId("overview-metric-members");
     expect(
       within(screen.getByTestId("overview-metric-members")).getByText("3 人"),
@@ -155,7 +160,7 @@ describe("ProjectOverviewPageView", () => {
     ).toHaveTextContent("骨架数据");
   });
 
-  it("renders recent iterations and routes 查看全部 to records", async () => {
+  it("opens the single record detail from a recent iteration row", async () => {
     const handlers = renderView();
     const user = userEvent.setup();
 
@@ -163,10 +168,16 @@ describe("ProjectOverviewPageView", () => {
     expect(row).toHaveTextContent("任务中心：迭代一");
     expect(row).toHaveTextContent("R-301");
 
+    // 单行打开该条记录详情；「查看全部」才打开记录工作区弹窗。
+    await user.click(row);
+    expect(handlers.onOpenRecord).toHaveBeenCalledTimes(1);
+    expect(handlers.onOpenRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ recordId: 301, code: "R-301" }),
+    );
+    expect(handlers.onOpenRecords).not.toHaveBeenCalled();
+
     await user.click(screen.getByRole("button", { name: /查看全部/ }));
     expect(handlers.onOpenRecords).toHaveBeenCalledTimes(1);
-    await user.click(row);
-    expect(handlers.onOpenRecords).toHaveBeenCalledTimes(2);
   });
 
   it("routes the leftover entries to the issues page", async () => {
@@ -250,7 +261,7 @@ describe("ProjectOverviewPageView", () => {
       },
     });
     expect(
-      await screen.findByText("项目概览暂时不可用，请稍后重试。"),
+      await screen.findByText("项目信息暂时不可用，请稍后重试。"),
     ).toBeInTheDocument();
   });
 

@@ -5,7 +5,10 @@ import {
   type FeatureItem,
 } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
-import { featureStatColumns } from "../../stats/card-stat-columns.js";
+import {
+  featureStatColumns,
+  lifecycleRankExpression,
+} from "../../stats/card-stat-columns.js";
 
 type Row = Omit<
   FeatureItem,
@@ -38,7 +41,7 @@ export class FeatureManagementRepository {
   ): Promise<FeatureItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.module_id = ${moduleId} ORDER BY f.id`;
+    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.module_id = ${moduleId} ORDER BY ${lifecycleRankExpression(tx.sql, "feature", "f")}, f.id`;
     return rows.map(dto);
   }
 

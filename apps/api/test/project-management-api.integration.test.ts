@@ -28,6 +28,11 @@ import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
+import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
+import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
+import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
+import { PostgresProjectArchiveRequestRepository } from "../src/modules/projects/postgres-project-archive-request.repository.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectManagementController } from "../src/modules/projects/project-management.controller.js";
 import { ProjectManagementHttpService } from "../src/modules/projects/project-management-http.service.js";
@@ -179,6 +184,16 @@ beforeAll(async () => {
     new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
     new PostgresActivityWritePort(),
     new PostgresSearchProjectionWritePort(),
+    new PostgresProjectMembersQueryPort(),
+    new PostgresProjectArchiveRequestRepository(),
+    new ProjectRoleGateService(
+      new PostgresProjectAccessQueryPort(client),
+      new PostgresProjectMembersQueryPort(),
+    ),
+    new ProjectStartNotifier(
+      new PostgresProjectMembersQueryPort(),
+      new PostgresNotificationWritePort(),
+    ),
   );
   const http = new ProjectManagementHttpService(
     auth,
@@ -231,13 +246,14 @@ describe("F-06.1 project edit API", () => {
       code: value.project.code,
       name: "商城系统二期",
       description: "新的项目描述",
-      status: "ACTIVE",
+      status: "NOT_STARTED",
       rowVersion: 2,
       memberCount: 1,
       stats: {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 
@@ -396,7 +412,8 @@ describe("F-06.1 project edit API", () => {
     await client.sql`
       UPDATE app.project_members
          SET status = 'REMOVED',
-             removed_at = now()
+             removed_at = now(),
+             role = 'MEMBER'
        WHERE project_id = ${removed.project.projectId}
          AND user_id = ${removed.owner.userId}
          AND status = 'ACTIVE'
@@ -461,6 +478,7 @@ describe("F-06.2 project archive API", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 
@@ -746,6 +764,54 @@ describe("F-06.2 project archive API", () => {
       "PROJECT_SESSION_REQUIRED",
     );
   });
+
+  it("cancels a pending archive request when an admin archives the project directly (ADR-034)", async () => {
+    const value = await fixture();
+    const pendingRows = (await client.sql`
+      INSERT INTO app.project_archive_requests (project_id, requested_by, reason)
+      VALUES (${value.project.projectId}, ${value.owner.userId}, '组长申请归档')
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    const pending = pendingRows[0]!;
+
+    const archived = await request(
+      "POST",
+      `/projects/${value.project.projectId}/archive`,
+      value.admin,
+      { reason: "管理员直接归档" },
+      { ifMatch: '"1"' },
+    );
+    expect(archived.status, await archived.clone().text()).toBe(200);
+
+    const rows = (await client.sql`
+      SELECT status,
+             decided_by AS "decidedBy",
+             decision_note AS "decisionNote"
+        FROM app.project_archive_requests
+       WHERE id = ${pending.id}
+    `) as unknown as readonly {
+      status: string;
+      decidedBy: number;
+      decisionNote: string | null;
+    }[];
+    expect(rows[0]).toMatchObject({
+      status: "CANCELED",
+      decidedBy: value.admin.userId,
+      decisionNote: null,
+    });
+
+    const audits = (await auditReader.sql`
+      SELECT event_payload AS "payload"
+        FROM app.audit_logs
+       WHERE project_id = ${value.project.projectId}
+         AND action = 'project.archive'
+    `) as unknown as readonly {
+      payload: { cancelledArchiveRequestIds: readonly number[] };
+    }[];
+    expect(audits[0]!.payload).toMatchObject({
+      cancelledArchiveRequestIds: [pending.id],
+    });
+  });
 });
 
 describe("F-06.3 project restore API", () => {
@@ -779,6 +845,7 @@ describe("F-06.3 project restore API", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     });
 
@@ -891,6 +958,256 @@ describe("F-06.3 project restore API", () => {
       ),
       422,
       "PROJECT_VALIDATION_FAILED",
+    );
+  });
+});
+
+describe("F-06.3 项目状态变更 API", () => {
+  const statusPath = (projectId: number) => `/projects/${projectId}/status`;
+
+  it("组长把未开始改为进行中：写审计、活动、搜索投影并通知全体成员", async () => {
+    const value = await fixture();
+    const teammate = await actor(false);
+    await client.sql`
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${value.project.projectId}, ${teammate.userId}, 'MEMBER')
+    `;
+
+    const response = await request(
+      "PATCH",
+      statusPath(value.project.projectId),
+      value.owner,
+      { status: "ACTIVE" },
+      { key: randomUUID(), ifMatch: '"1"' },
+    );
+    expect(response.status).toBe(200);
+    const body = schemaRegistry.ProjectDetailResponse.schema.parse(
+      await response.json(),
+    );
+    expect(body.project).toMatchObject({
+      id: value.project.projectId,
+      status: "ACTIVE",
+      hasCompletedTask: false,
+      rowVersion: 2,
+    });
+
+    const audits = (await auditReader.sql`
+      SELECT action AS "action"
+        FROM app.audit_logs
+       WHERE project_id = ${value.project.projectId}
+         AND action = 'project.status.change'
+    `) as unknown as readonly { action: string }[];
+    expect(audits).toHaveLength(1);
+
+    const notifications = (await client.sql`
+      SELECT recipient_id AS "recipientId"
+        FROM app.notifications
+       WHERE project_id = ${value.project.projectId}
+       ORDER BY recipient_id ASC
+    `) as unknown as readonly { recipientId: number }[];
+    expect(notifications.map((row) => row.recipientId)).toEqual(
+      [value.owner.userId, teammate.userId].sort((left, right) => left - right),
+    );
+  });
+
+  it("维护中不通知，未开始与维护中禁止越级互改", async () => {
+    const value = await fixture();
+    const path = statusPath(value.project.projectId);
+
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "MAINTENANCE" },
+        { ifMatch: '"1"' },
+      ),
+      409,
+      "PROJECT_STATUS_LEVEL_SKIP",
+    );
+
+    const started = await request(
+      "PATCH",
+      path,
+      value.owner,
+      { status: "ACTIVE" },
+      { ifMatch: '"1"' },
+    );
+    expect(started.status).toBe(200);
+    const maintenance = await request(
+      "PATCH",
+      path,
+      value.owner,
+      { status: "MAINTENANCE" },
+      { ifMatch: '"2"' },
+    );
+    expect(maintenance.status).toBe(200);
+    expect(
+      schemaRegistry.ProjectDetailResponse.schema.parse(
+        await maintenance.json(),
+      ).project.status,
+    ).toBe("MAINTENANCE");
+
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "NOT_STARTED" },
+        { ifMatch: '"3"' },
+      ),
+      409,
+      "PROJECT_STATUS_LEVEL_SKIP",
+    );
+
+    const notifications = (await client.sql`
+      SELECT count(*)::int AS "total"
+        FROM app.notifications
+       WHERE project_id = ${value.project.projectId}
+         AND notification_type = 'project.status.change'
+    `) as unknown as readonly { total: number }[];
+    expect(notifications[0]!.total).toBe(1);
+
+    const activities = (await client.sql`
+      SELECT activity_type AS "activityType"
+        FROM app.activity_projection
+       WHERE project_id = ${value.project.projectId}
+       ORDER BY id ASC
+    `) as unknown as readonly { activityType: string }[];
+    expect(activities.map((row) => row.activityType)).toEqual([
+      "PROJECT_STATUS_CHANGED",
+      "PROJECT_STATUS_CHANGED",
+    ]);
+  });
+
+  it("普通成员 403、非成员 404、版本冲突与同态各自返回 409", async () => {
+    const value = await fixture();
+    const teammate = await actor(false);
+    const outsider = await actor(false);
+    await client.sql`
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${value.project.projectId}, ${teammate.userId}, 'MEMBER')
+    `;
+    const path = statusPath(value.project.projectId);
+
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        teammate,
+        { status: "ACTIVE" },
+        { ifMatch: '"2"' },
+      ),
+      403,
+      "PROJECT_STATUS_FORBIDDEN",
+    );
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        outsider,
+        { status: "ACTIVE" },
+        { ifMatch: '"2"' },
+      ),
+      404,
+      "PROJECT_NOT_FOUND",
+    );
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "ACTIVE" },
+        { ifMatch: '"9"' },
+      ),
+      409,
+      "PROJECT_VERSION_CONFLICT",
+    );
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "NOT_STARTED" },
+        { ifMatch: '"1"' },
+      ),
+      409,
+      "PROJECT_STATE_CONFLICT",
+    );
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "ARCHIVED" },
+        { ifMatch: '"1"' },
+      ),
+      422,
+      "PROJECT_VALIDATION_FAILED",
+    );
+  });
+
+  it("项目出现过已完成任务后不能回退未开始", async () => {
+    const value = await fixture();
+    const path = statusPath(value.project.projectId);
+
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'ACTIVE',
+             first_task_completed_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${value.project.projectId}
+    `;
+
+    await expectError(
+      await request(
+        "PATCH",
+        path,
+        value.owner,
+        { status: "NOT_STARTED" },
+        { ifMatch: '"2"' },
+      ),
+      409,
+      "PROJECT_STATUS_NOT_STARTED_LOCKED",
+    );
+
+    // 有已完成任务只锁定「回退未开始」这一条边，其余迁移照常放行。
+    const maintenance = await request(
+      "PATCH",
+      path,
+      value.owner,
+      { status: "MAINTENANCE" },
+      { ifMatch: '"2"' },
+    );
+    expect(maintenance.status).toBe(200);
+    expect(
+      schemaRegistry.ProjectDetailResponse.schema.parse(
+        await maintenance.json(),
+      ).project,
+    ).toMatchObject({ status: "MAINTENANCE", hasCompletedTask: true });
+  });
+
+  it("已归档项目拒绝状态变更，必须先恢复", async () => {
+    const value = await fixture();
+    const archived = await request(
+      "POST",
+      `/projects/${value.project.projectId}/archive`,
+      value.admin,
+      { reason: "本轮结束" },
+      { ifMatch: '"1"' },
+    );
+    expect(archived.status).toBe(200);
+
+    await expectError(
+      await request(
+        "PATCH",
+        statusPath(value.project.projectId),
+        value.owner,
+        { status: "ACTIVE" },
+        { ifMatch: '"2"' },
+      ),
+      409,
+      "PROJECT_ARCHIVED",
     );
   });
 });

@@ -92,7 +92,7 @@ const recordContent = {
   contextProblem: "上下文问题",
   changeSolution: "变更方案",
   resultVerification: "验证结果",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 
 function nextSuffix(kind: "T" | "F" | "CR"): string {
@@ -266,7 +266,7 @@ async function newLeftover(
   options: {
     readonly content: string;
     readonly createdAt: string;
-    readonly status?: "ACTIVE" | "RESOLVED";
+    readonly status?: "ACTIVE" | "CONVERTED" | "RESOLVED";
   },
 ): Promise<number> {
   const status = options.status ?? "ACTIVE";
@@ -550,6 +550,17 @@ beforeAll(async () => {
     createdAt: at(4),
     status: "RESOLVED",
   });
+  // 裁决修订 D-2：tSource 是一条真实的「遗留问题转任务」跟进任务
+  //（CONVERTED 遗留项 + leftover_task_links 链接行），其余任务都没有链接。
+  const loConvertedSource = await newLeftover(projectFixture, crSource, {
+    content: "已转换遗留问题",
+    createdAt: at(5),
+    status: "CONVERTED",
+  });
+  await runtime.sql`
+    INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+    VALUES (${loConvertedSource}, ${tSource}, ${projectFixture.projectId}, ${projectFixture.userId})
+  `;
 
   const sessionKey = randomBytes(32);
   const sessionKeyring = VersionedHmacKeyring.fromEntries(
@@ -979,7 +990,7 @@ describe("GET /api/v1/projects/{projectId}/overview（R-2 项目概览）", () =
     expect(overview.project).toEqual({
       name: "Project " + project!.code,
       projectId: project!.projectId,
-      status: "ACTIVE",
+      status: "NOT_STARTED",
     });
     expect(overview.memberCount).toBe(2);
     // 活跃模块 / 活跃功能排除已归档行；未完成任务排除历史来源分支、
@@ -1130,14 +1141,16 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks", memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
+    // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
+    // 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余，桶内按 ID 升序。
     expect(page.items.map((item) => item.taskId)).toEqual([
-      tInvalid,
-      tCanceled,
-      tDone,
-      tModule,
-      tDetached,
       tSource,
       tMain,
+      tDetached,
+      tModule,
+      tInvalid,
+      tDone,
+      tCanceled,
     ]);
     expect(page.items.some((item) => item.taskId === tHistorical)).toBe(false);
     expect(
@@ -1168,6 +1181,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
         (item) => item.hasPublishedRecord === item.publishedRecordCount > 0,
       ),
     ).toBe(true);
+    // 裁决修订 D-2：只有存在 leftover_task_links 链接行的任务标记遗留问题来源。
+    const leftoverSourceByTask = new Map(
+      page.items.map((item) => [item.taskId, item.hasLeftoverSource]),
+    );
+    expect(leftoverSourceByTask.get(tSource)).toBe(true);
+    expect(leftoverSourceByTask.get(tMain)).toBe(false);
+    expect(leftoverSourceByTask.get(tDone)).toBe(false);
     expect(page.items.find((item) => item.taskId === tModule)).toMatchObject({
       featureId: null,
       featureName: null,
@@ -1193,7 +1213,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       { path: "/api/v1/me/tasks?scopeType=MODULE", taskIds: [tModule] },
       {
         path: "/api/v1/me/tasks?scopeType=FEATURE&workStatus=TODO",
-        taskIds: [tInvalid, tDetached, tSource, tMain],
+        taskIds: [tSource, tMain, tDetached, tInvalid],
       },
       { path: "/api/v1/me/tasks?workStatus=DONE", taskIds: [tDone] },
       { path: "/api/v1/me/tasks?workStatus=CANCELED", taskIds: [tCanceled] },
@@ -1203,7 +1223,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       },
       {
         path: "/api/v1/me/tasks?hasPublishedRecord=false",
-        taskIds: [tInvalid, tCanceled, tDone, tModule, tDetached],
+        taskIds: [tDetached, tModule, tInvalid, tDone, tCanceled],
       },
       {
         path: "/api/v1/me/tasks?projectId=" + String(otherProject!.projectId),
@@ -1212,13 +1232,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       {
         path: "/api/v1/me/tasks?projectId=" + String(project!.projectId),
         taskIds: [
-          tInvalid,
-          tCanceled,
-          tDone,
-          tModule,
-          tDetached,
           tSource,
           tMain,
+          tDetached,
+          tModule,
+          tInvalid,
+          tDone,
+          tCanceled,
         ],
       },
     ];
@@ -1248,13 +1268,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       }
     }
     expect(collected).toEqual([
-      tInvalid,
-      tCanceled,
-      tDone,
-      tModule,
-      tDetached,
       tSource,
       tMain,
+      tDetached,
+      tModule,
+      tInvalid,
+      tDone,
+      tCanceled,
     ]);
     expect(new Set(collected).size).toBe(collected.length);
 
@@ -1506,11 +1526,12 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
+    // ADR-037：已逾期(0) → 今/明日截止(3) → 已完成 → 已取消。
     expect(page.items.map((item) => item.taskId)).toEqual([
-      canceledTask,
-      doneTask,
-      todayTask,
       overdueTask,
+      todayTask,
+      doneTask,
+      canceledTask,
     ]);
     expect(page.stats).toEqual({
       myOpen: 2,
@@ -1577,36 +1598,47 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       items: [
-        { taskId: tMain, groupId, groupRole: "MAIN", publishedRecordCount: 1 },
+        {
+          taskId: tMain,
+          groupId,
+          groupRole: "MAIN",
+          publishedRecordCount: 1,
+          hasLeftoverSource: false,
+        },
         {
           taskId: tSource,
           groupId,
           groupRole: "SOURCE",
           publishedRecordCount: 5,
+          hasLeftoverSource: true,
         },
         {
           taskId: tHistorical,
           groupId,
           groupRole: "SOURCE",
           publishedRecordCount: 1,
+          hasLeftoverSource: false,
         },
         {
           taskId: tDetached,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: tModule,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: ungroupedWithRecord,
           groupId: null,
           groupRole: null,
           publishedRecordCount: 1,
+          hasLeftoverSource: false,
         },
       ],
     });
@@ -1652,12 +1684,14 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
           groupId: foreignGroupId,
           groupRole: "MAIN",
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
         {
           taskId: foreignSource,
           groupId: foreignGroupId,
           groupRole: "SOURCE",
           publishedRecordCount: 0,
+          hasLeftoverSource: false,
         },
       ],
     });

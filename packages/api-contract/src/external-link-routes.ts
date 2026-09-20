@@ -16,6 +16,8 @@ export const externalLinkRoutes: readonly RouteDefinition[] = [
     ...(write ? recordDraftRoutes[3]! : publishedRecordRoutes[1]!),
     operationId,
     idempotencyContractVersion: write ? "2.0.0" : "none",
+    // 该路由的请求/响应/重放策略与记录内容无关，保持既有 fingerprint 版本。
+    idempotencyFingerprintVersion: write ? "1.1.0" : "none",
     method: write ? (remove ? "DELETE" : "POST") : "GET",
     path:
       "/external-links/{targetType}/{targetId}" + (remove ? "/{linkId}" : ""),

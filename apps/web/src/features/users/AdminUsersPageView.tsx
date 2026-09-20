@@ -279,7 +279,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">系统 / 成员与权限</span>
           <h1>成员与设置</h1>
         </div>
         <span className="identity-chip">
@@ -295,10 +294,12 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             aria-current={activeTab === "members" ? "page" : undefined}
             onClick={() => setActiveTab("members")}
           >
+            <InpulseIcon name="users" size={15} />
             成员与角色
           </button>
           {onOpenProjects ? (
             <button type="button" onClick={onOpenProjects}>
+              <InpulseIcon name="folder" size={15} />
               项目成员
             </button>
           ) : null}
@@ -308,6 +309,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             aria-current={activeTab === "permissions" ? "page" : undefined}
             onClick={() => setActiveTab("permissions")}
           >
+            <InpulseIcon name="shield" size={15} />
             权限矩阵
           </button>
           <button
@@ -316,6 +318,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             aria-current={activeTab === "notifications" ? "page" : undefined}
             onClick={() => setActiveTab("notifications")}
           >
+            <InpulseIcon name="bell" size={15} />
             通知策略
           </button>
         </nav>

@@ -65,6 +65,14 @@ function mergeClass(...names: (string | undefined)[]): string {
   return [...classes].join(" ");
 }
 
+/**
+ * 打开中的 AppModal 栈（栈顶 = 最上层）。rc-dialog 的 Esc 依赖它自己的 Portal
+ * 栈判定「是否顶层」，在本应用「常驻但关闭的弹层 + 多层叠加」混排下会误判，
+ * 表现为 Esc 时灵时不灵；这里改由 AppModal 自己维护栈并在捕获阶段接管 Esc：
+ * 只关栈顶、不穿透、关闭后焦点归还逻辑不变。
+ */
+const modalStack: symbol[] = [];
+
 function labelOf(
   label: string | undefined,
   eyebrow: ReactNode,
@@ -122,6 +130,8 @@ export function AppModal({
   const boxRef = useRef<HTMLDivElement>(null);
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
+  const stackIdRef = useRef<symbol | null>(null);
+  if (stackIdRef.current === null) stackIdRef.current = Symbol("app-modal");
 
   const active = open === true;
   const maskConfig = typeof mask === "object" ? mask : undefined;
@@ -145,6 +155,33 @@ export function AppModal({
     };
   }, [active]);
 
+  // 入栈/出栈：关闭与卸载都要把自己从栈里摘掉，避免残留项顶住 Esc。
+  useEffect(() => {
+    if (!active) return;
+    const id = stackIdRef.current as symbol;
+    modalStack.push(id);
+    return () => {
+      const at = modalStack.indexOf(id);
+      if (at >= 0) modalStack.splice(at, 1);
+    };
+  }, [active]);
+
+  // Esc 只关栈顶弹层：捕获阶段拦截，rc-dialog 与下层弹层都不会收到这次按键。
+  useEffect(() => {
+    if (!active || closable === false) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (modalStack[modalStack.length - 1] !== stackIdRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancel.current?.(
+        event as unknown as Parameters<NonNullable<ModalProps["onCancel"]>>[0],
+      );
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [active, closable]);
+
   const dismiss = (event: MouseEvent<HTMLElement>) => {
     cancel.current?.(
       event as unknown as Parameters<NonNullable<ModalProps["onCancel"]>>[0],
@@ -164,6 +201,7 @@ export function AppModal({
       open={active}
       footer={null}
       closable={false}
+      keyboard={false}
       scrollLock={false}
       focusable={{ focusTriggerAfterClose: false }}
       className="surface-modal-dialog"

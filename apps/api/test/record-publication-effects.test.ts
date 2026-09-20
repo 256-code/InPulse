@@ -8,27 +8,35 @@ const base = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "",
+  remainingIssues: [],
   rowVersion: 2,
 };
+const leftover = (contents: readonly string[]) =>
+  contents.map((content) => ({ content }));
 describe("F18 full search content capacity", () => {
-  it("counts actual code and all fields against the existing writer boundary without truncation", () => {
-    const prefix = [
-      base.code,
-      base.title,
-      base.contextProblem,
-      base.changeSolution,
-      base.resultVerification,
-      "",
-    ].join("\n").length;
-    const exact = { ...base, remainingIssues: "中".repeat(100000 - prefix) };
-    expect(validatePublishedRecordSearch(exact).rawText.length).toBe(100000);
-    expect(() =>
-      validatePublishedRecordSearch({
-        ...exact,
-        remainingIssues: exact.remainingIssues + "中",
+  it("counts actual code, all fields and every leftover entry against the existing writer boundary without truncation", () => {
+    // 写入侧用 "\n" 连接 code、四个正文段与每一条遗留问题；先量出最后一条之前的总长度（含分隔符）。
+    const entries = ["遗留一", "遗留二", "遗留三"],
+      build = (last: string) => ({
+        ...base,
+        remainingIssues: leftover([...entries.slice(0, -1), last]),
       }),
-    ).toThrowError(expect.objectContaining({ status: 422 }));
+      head = [
+        base.code,
+        base.title,
+        base.contextProblem,
+        base.changeSolution,
+        base.resultVerification,
+        ...entries.slice(0, -1),
+        "",
+      ].join("\n").length,
+      exact = build("中".repeat(100000 - head)),
+      overflow = build("中".repeat(100000 - head + 1));
+    expect(exact.remainingIssues).toHaveLength(entries.length);
+    expect(validatePublishedRecordSearch(exact).rawText.length).toBe(100000);
+    expect(() => validatePublishedRecordSearch(overflow)).toThrowError(
+      expect.objectContaining({ status: 422 }),
+    );
   });
   it("checks normalized expansion and UTF16 units using the same policy as the existing writer", () => {
     expect(() =>

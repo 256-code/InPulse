@@ -14,12 +14,18 @@ const project: ProjectItem = {
   name: "商城系统",
   description: "项目描述",
   status: "ACTIVE",
+  hasCompletedTask: true,
   rowVersion: 1,
   createdBy: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   memberCount: 2,
-  stats: { activeModuleCount: 2, activeFeatureCount: 1, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 1,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 function setup(scopeProjectIds: readonly number[] = [7]) {
@@ -36,12 +42,20 @@ function setup(scopeProjectIds: readonly number[] = [7]) {
   });
   const list = vi.fn().mockResolvedValue([project]);
   const find = vi.fn().mockResolvedValue(project);
+  const findActiveMemberRole = vi.fn().mockResolvedValue("MEMBER");
   const service = new ProjectsReadService(
     { resolveActor } as unknown as SessionAuthService,
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
-    { list, find } as unknown as ProjectQueryPort,
+    { list, find, findActiveMemberRole } as unknown as ProjectQueryPort,
   );
-  return { service, resolveActor, getAuthorizedSearchScope, list, find };
+  return {
+    service,
+    resolveActor,
+    getAuthorizedSearchScope,
+    list,
+    find,
+    findActiveMemberRole,
+  };
 }
 
 describe("ProjectsReadService", () => {
@@ -52,15 +66,17 @@ describe("ProjectsReadService", () => {
     });
     expect(s.resolveActor).toHaveBeenCalledWith("__Host-session=t");
     expect(s.getAuthorizedSearchScope).toHaveBeenCalledWith(5);
-    expect(s.list).toHaveBeenCalledWith([7, 9]);
+    expect(s.list).toHaveBeenCalledWith([7, 9], 5);
   });
 
   it("returns detail for a scoped project and 404 for inaccessible projects", async () => {
     const allowed = setup([7]);
     await expect(allowed.service.detail("cookie", 7)).resolves.toEqual({
       project,
+      currentUserRole: "MEMBER",
     });
     expect(allowed.find).toHaveBeenCalledWith(7);
+    expect(allowed.findActiveMemberRole).toHaveBeenCalledWith(7, 5);
 
     const denied = setup([9]);
     await expect(denied.service.detail("cookie", 7)).rejects.toMatchObject({
@@ -68,6 +84,7 @@ describe("ProjectsReadService", () => {
       code: "PROJECT_NOT_FOUND",
     });
     expect(denied.find).not.toHaveBeenCalled();
+    expect(denied.findActiveMemberRole).not.toHaveBeenCalled();
   });
 
   it("maps missing session and missing committed project to safe errors", async () => {

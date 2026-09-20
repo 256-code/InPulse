@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
+import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import {
+  pickCalmSelectOption,
+  pickCalmSelectOptionByIndex,
+} from "../helpers/calm-select.js";
 test("F18 独立发布、修订、明确解决遗留与不可变历史对比", async ({
   browser,
 }) => {
@@ -12,12 +17,12 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建独立草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建独立草稿" });
-    await draft.getByLabel("所属模块").selectOption({ index: 1 });
+    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("版本一问题");
     await draft.getByLabel("具体改动").fill("版本一方案");
     await draft.getByLabel("改动效果").fill("版本一验证");
-    await draft.getByLabel("遗留问题（选填）").fill("需要后续跟进");
+    await fillLeftovers(draft, ["需要后续跟进"]);
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await page.getByRole("button", { name: "发布记录", exact: true }).click();
@@ -25,20 +30,28 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
+    // 详情头部不再渲染「编号 · 版本」小字（0f34d7a），standalone 形态以标题为锚点。
+    await expect(detail.getByRole("heading", { name: title })).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
     await edit.getByLabel("具体改动").fill("版本二方案");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
-    await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();
+    await expect(
+      detail
+        .locator(":scope > section:not([aria-label])")
+        .filter({
+          has: page.getByRole("heading", { name: "具体改动", exact: true }),
+        })
+        .getByText("版本二方案", { exact: true }),
+    ).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
-    await edit.getByLabel("遗留问题（选填）").fill("");
+    await edit.getByRole("button", { name: /^移\s*除$/ }).click();
     await expect(
       edit.getByRole("button", { name: "保存新版本" }),
     ).toBeDisabled();
     await edit
-      .getByRole("checkbox", { name: "确认遗留问题已解决，清空本版本内容" })
+      .getByRole("checkbox", { name: /确认移除的遗留问题已解决/ })
       .check();
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
@@ -49,14 +62,22 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
       "已发布",
     );
     await expect(
-      detail.getByText("遗留问题已标记为解决，历史内容仍可查看。"),
+      detail.getByText("已标记解决的遗留问题保留历史内容，不再计入未闭环。"),
     ).toBeVisible();
-    await detail.getByLabel("较早版本").selectOption("1");
-    await detail.getByLabel("对照版本").selectOption("3");
+    await pickCalmSelectOption(detail, "较早版本", /^v1 · /);
+    await pickCalmSelectOption(detail, "对照版本", /^v3 · /);
     const diff = detail.getByLabel("版本差异");
     await expect(diff.getByText("版本一方案")).toBeVisible();
     await expect(diff.getByText("版本二方案")).toBeVisible();
     await expect(diff.getByText("需要后续跟进")).toBeVisible();
+    // 详情页快捷追加：不改写整段正文也形成一次记录版本（v4），列表出现新条目且历史保留。
+    await detail.getByRole("button", { name: "追加遗留问题" }).click();
+    await detail.getByLabel("追加遗留问题内容").fill("追加的遗留问题");
+    await detail.getByRole("button", { name: "保存为新版本" }).click();
+    await expect(
+      detail.getByText("追加的遗留问题", { exact: true }),
+    ).toBeVisible();
+    await expect(card.locator("summary")).toContainText(/-CR-\d+ · v4 · 发布/);
     await page.screenshot({
       path: "test-results/f18-independent-versions.png",
       fullPage: true,
@@ -88,9 +109,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskForm = page.getByRole("dialog", { name: "新建任务" });
     await taskForm.getByLabel("任务标题").fill(`发布来源-${suffix}`);
-    await taskForm
-      .getByLabel("负责人")
-      .selectOption({ label: runtime.user.name });
+    await pickCalmSelectOption(taskForm, "负责人", runtime.user.name);
     await taskForm.getByRole("button", { name: /保\s*存/ }).click();
     await expect(taskForm).toBeHidden();
     const task = page.getByRole("dialog", { name: "任务详情" });
@@ -100,7 +119,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       exact: true,
     });
     await complete.getByRole("button", { name: /没有，仅完成任务/ }).click();
-    await complete.getByLabel("完成原因").selectOption("测试验证");
+    await pickCalmSelectOption(complete, "完成原因", "测试验证");
     await complete.getByRole("button", { name: "确认完成任务" }).click();
     await expect(complete).toBeHidden();
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
@@ -117,7 +136,9 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       .getByRole("button", { name: "确认发布" })
       .click();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
+    await expect(
+      detail.getByRole("heading", { name: "发布来源-" + suffix }),
+    ).toBeVisible();
     await detail.getByRole("link", { name: "查看来源任务" }).click();
     await expect(
       task.getByRole("button", { name: "重新打开", exact: true }),
@@ -127,11 +148,12 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     // 多个版本不重复计数）；未合并任务不显示关系徽章。
     await expect(task.getByText("迭代记录 1 条")).toBeVisible();
     await task.getByRole("button", { name: "关闭" }).click();
-    await page.getByLabel("任务状态筛选").selectOption("DONE");
+    await pickCalmSelectOption(page, "任务状态筛选", "已完成");
     const card = page
       .locator(".calm-task-card")
       .filter({ hasText: `发布来源-${suffix}` });
-    await expect(card.getByText("迭代记录 1 条")).toBeVisible();
+    // 86dd2b2 起卡片计数文案简化为「记录 N 条」（详情弹窗仍为「迭代记录 N 条」）。
+    await expect(card.getByText("记录 1 条")).toBeVisible();
     await expect(card.getByText("来源任务")).toHaveCount(0);
     await expect(card.getByText("主任务")).toHaveCount(0);
   } finally {

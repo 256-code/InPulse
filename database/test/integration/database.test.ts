@@ -61,6 +61,10 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0012_project_root_repository.sql",
       "0013_sso_login.sql",
       "0014_sso_backup_grants.sql",
+      "0015_project_member_roles.sql",
+      "0016_project_archive_requests.sql",
+      "0017_project_status_lifecycle.sql",
+      "0018_project_archive_backup_grants.sql",
     ]);
   });
 

@@ -199,6 +199,7 @@ describe("my-tasks-v1-query", () => {
       creatorId: 9,
       githubLinkCount: 2,
       groupId: null,
+      hasLeftoverSource: false,
     });
     const matches = (overrides: Partial<MyTaskFilters>): boolean =>
       matchesMyTasksLocalFilters(
@@ -242,6 +243,7 @@ describe("my-tasks-v1-query", () => {
       creatorId: 9,
       githubLinkCount: 0,
       groupId: null,
+      hasLeftoverSource: true,
     });
     expect(item).toEqual({
       taskId: 7,
@@ -267,6 +269,7 @@ describe("my-tasks-v1-query", () => {
       publishedRecordCount: 1,
       groupRole: "SOURCE",
       groupId: null,
+      hasLeftoverSource: true,
     });
     expect(item.description).toBeUndefined();
   });

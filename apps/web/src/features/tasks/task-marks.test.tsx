@@ -36,20 +36,40 @@ describe("task marks helpers", () => {
 
   it("indexes the batch response by task id, keeping ungrouped entries", () => {
     const items: TaskGroupMembershipItem[] = [
-      { taskId: 1, groupId: 9, groupRole: "MAIN", publishedRecordCount: 3 },
-      { taskId: 2, groupId: null, groupRole: null, publishedRecordCount: 0 },
-      { taskId: 3, groupId: 9, groupRole: "SOURCE", publishedRecordCount: 1 },
+      {
+        taskId: 1,
+        groupId: 9,
+        groupRole: "MAIN",
+        publishedRecordCount: 3,
+        hasLeftoverSource: false,
+      },
+      {
+        taskId: 2,
+        groupId: null,
+        groupRole: null,
+        publishedRecordCount: 0,
+        hasLeftoverSource: true,
+      },
+      {
+        taskId: 3,
+        groupId: 9,
+        groupRole: "SOURCE",
+        publishedRecordCount: 1,
+        hasLeftoverSource: false,
+      },
     ];
     const marks = toTaskMarkMap(items);
     expect(marks.get(1)).toEqual({
       groupId: 9,
       groupRole: "MAIN",
       publishedRecordCount: 3,
+      hasLeftoverSource: false,
     });
     expect(marks.get(2)).toEqual({
       groupId: null,
       groupRole: null,
       publishedRecordCount: 0,
+      hasLeftoverSource: true,
     });
     expect(marks.get(3)?.groupRole).toBe("SOURCE");
   });
@@ -59,8 +79,20 @@ describe("useTaskMarks", () => {
   it("reads the whole page with one sorted batch call", async () => {
     const listTaskGroupMemberships = vi.fn().mockResolvedValue({
       items: [
-        { taskId: 2, groupId: null, groupRole: null, publishedRecordCount: 0 },
-        { taskId: 1, groupId: 9, groupRole: "MAIN", publishedRecordCount: 3 },
+        {
+          taskId: 2,
+          groupId: null,
+          groupRole: null,
+          publishedRecordCount: 0,
+          hasLeftoverSource: false,
+        },
+        {
+          taskId: 1,
+          groupId: 9,
+          groupRole: "MAIN",
+          publishedRecordCount: 3,
+          hasLeftoverSource: false,
+        },
       ],
     });
     const api = { listTaskGroupMemberships } as unknown as InpulseApiClient;
@@ -77,6 +109,7 @@ describe("useTaskMarks", () => {
       groupId: null,
       groupRole: null,
       publishedRecordCount: 0,
+      hasLeftoverSource: false,
     });
   });
 

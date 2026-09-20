@@ -1,3 +1,5 @@
+import type { ProjectStatus } from "@generated/api";
+
 import type {
   ProjectOverviewIteration,
   ProjectOverviewLeftover,
@@ -36,7 +38,8 @@ export interface ProjectOverviewV1QueryInput {
 export interface ProjectOverviewV1Project {
   readonly projectId: number;
   readonly name: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
+  /** ADR-035：项目四态与后端 projectStatusSchema 一致。 */
+  readonly status: ProjectStatus;
 }
 
 export interface ProjectOverviewV1Stats {

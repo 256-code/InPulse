@@ -14,6 +14,7 @@ import { PostgresUnitOfWork } from "../../database/unit-of-work.js";
 import { ActivityWritePort } from "../activity/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
+  ProjectRoleGateService,
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
@@ -75,6 +76,8 @@ export class FeaturesManagementService {
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
     @Inject(UserReadPort) private readonly users: UserReadPort,
+    @Inject(ProjectRoleGateService)
+    private readonly roleGate: ProjectRoleGateService,
   ) {}
 
   async read(
@@ -168,10 +171,30 @@ export class FeaturesManagementService {
       );
   }
 
+  /**
+   * ADR-034：功能归档/恢复的项目内管理角色门禁；系统管理员或本项目
+   * LEADER/PROJECT_ADMIN 通过，普通成员 403，非成员 404。
+   */
+  async requireManageRole(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+  ): Promise<void> {
+    const role = await this.roleGate.manageRole(tx, actorId, projectId);
+    if (role === "NOT_MEMBER") throw missing();
+    if (role === "MEMBER")
+      throw new FeatureManagementError(
+        403,
+        "FEATURE_MANAGE_FORBIDDEN",
+        "只有系统管理员、本项目组长或项目管理员可以归档或恢复功能",
+      );
+  }
+
   async replay(
     tx: TransactionContext,
     actorId: number,
     context: unknown,
+    options: { readonly requireManageRole?: boolean } = {},
   ): Promise<void> {
     const resource = featureReplayContextSchema.parse(context);
     await this.authorize(
@@ -181,6 +204,8 @@ export class FeaturesManagementService {
       resource.moduleId,
       resource.featureId,
     );
+    if (options.requireManageRole === true)
+      await this.requireManageRole(tx, actorId, resource.projectId);
   }
 
   async execute(
@@ -204,6 +229,12 @@ export class FeaturesManagementService {
       input.moduleId,
       input.featureId,
     );
+    // ADR-034：功能归档/恢复权限与任务、模块归档对齐。
+    if (
+      input.operation === "archiveFeature" ||
+      input.operation === "restoreFeature"
+    )
+      await this.requireManageRole(tx, input.actorId, input.projectId);
     const action = input.operation.replace("Feature", "");
     let previous: FeatureItem | undefined;
     let result: FeatureItem;

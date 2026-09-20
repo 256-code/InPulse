@@ -4,7 +4,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import type { InpulseApiClient } from "@generated/api";
+import type {
+  InpulseApiClient,
+  ModuleTaskItem,
+  TaskItem,
+} from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
@@ -16,15 +20,13 @@ import {
 } from "@features/my-tasks/my-tasks-types";
 import { TasksPage } from "./TasksPage";
 
+/** 任务中心地址探针：卡片点击只在当前页面弹出详情，pathname 与筛选参数都不变。 */
 const LocationProbe: React.FC = () => {
   const location = useLocation();
-  return <div data-testid="location-search">{location.search}</div>;
-};
-
-const ArchiveProbe: React.FC = () => {
-  const location = useLocation();
   return (
-    <div data-testid="archive-probe">{location.pathname + location.search}</div>
+    <div data-testid="location-probe">
+      {location.pathname + location.search}
+    </div>
   );
 };
 
@@ -63,6 +65,7 @@ const featureTask: MyTaskListItem = {
   groupRole: null,
   githubLinkCount: 0,
   groupId: null,
+  hasLeftoverSource: false,
 };
 
 const moduleTask: MyTaskListItem = {
@@ -74,6 +77,131 @@ const moduleTask: MyTaskListItem = {
   featureId: null,
   featureName: null,
   scopeType: "MODULE",
+};
+
+/** 详情弹窗读取的是功能档案同款任务列表（listTasks / listModuleTasks 的条目）。 */
+const featureTaskDetail: TaskItem = {
+  id: 320,
+  projectId: 7,
+  moduleId: 71,
+  featureId: 711,
+  scopeType: "FEATURE",
+  code: "INP-320",
+  title: "功能级任务",
+  description: "任务说明",
+  assigneeId: 1,
+  creatorId: 1,
+  priority: "NORMAL",
+  dueAt: null,
+  workStatus: "TODO",
+  lifecycleStatus: "ACTIVE",
+  rowVersion: 1,
+  createdAt: "2026-09-12T00:00:00.000Z",
+  updatedAt: "2026-09-12T00:00:00.000Z",
+};
+
+const moduleTaskDetail: ModuleTaskItem = {
+  id: 321,
+  projectId: 7,
+  moduleId: 72,
+  featureId: null,
+  scopeType: "MODULE",
+  code: "INP-321",
+  title: "模块级任务",
+  description: "模块级任务说明",
+  assigneeId: 1,
+  creatorId: 1,
+  priority: "NORMAL",
+  dueAt: null,
+  workStatus: "TODO",
+  lifecycleStatus: "ACTIVE",
+  rowVersion: 1,
+  impactFeatureIds: [],
+  createdAt: "2026-09-12T00:00:00.000Z",
+  updatedAt: "2026-09-12T00:00:00.000Z",
+};
+
+const moduleDetailItem = (id: number, name: string) => ({
+  id,
+  projectId: 7,
+  code: "INP-M-" + String(id),
+  name,
+  description: "",
+  kind: "NORMAL",
+  status: "ACTIVE",
+  sortOrder: id,
+  rowVersion: 1,
+  createdAt: "2026-09-12T00:00:00.000Z",
+  updatedAt: "2026-09-12T00:00:00.000Z",
+  archivedAt: null,
+  stats: { activeFeatureCount: 1, openTaskCount: 1, completedTaskCount: 0 },
+});
+
+const featureDetailItem = {
+  id: 711,
+  projectId: 7,
+  moduleId: 71,
+  code: "INP-F-1",
+  createdBy: 1,
+  tags: [],
+  name: "登录功能",
+  currentBehavior: "",
+  acceptanceCriteria: "",
+  status: "ACTIVE",
+  rowVersion: 1,
+  createdAt: "2026-09-12T00:00:00.000Z",
+  updatedAt: "2026-09-12T00:00:00.000Z",
+  archivedAt: null,
+  stats: { openTaskCount: 1, recordCount: 0 },
+};
+
+/**
+ * 就地详情弹窗的数据源 mock：点击卡片后 TasksPanel 以 detail 模式读取任务列表、
+ * 成员、聚合标记、迭代记录、项目 / 模块 / 功能与用户目录，这里返回最小可用数据。
+ */
+const createClient = () => {
+  const listProjects = vi.fn().mockResolvedValue({ items: [] });
+  const client = {
+    listProjects,
+    getProject: vi.fn().mockResolvedValue({
+      project: {
+        id: 7,
+        code: "INP",
+        name: "注入项目",
+        description: "",
+        status: "ACTIVE",
+        rowVersion: 1,
+        createdAt: "2026-09-12T00:00:00.000Z",
+        updatedAt: "2026-09-12T00:00:00.000Z",
+        archivedAt: null,
+      },
+      currentUserRole: "MEMBER",
+    }),
+    listModules: vi.fn().mockResolvedValue({
+      items: [moduleDetailItem(71, "未分类"), moduleDetailItem(72, "登录模块")],
+    }),
+    listFeatures: vi.fn().mockResolvedValue({ items: [featureDetailItem] }),
+    listTasks: vi.fn().mockResolvedValue({ items: [featureTaskDetail] }),
+    listModuleTasks: vi.fn().mockResolvedValue({ items: [moduleTaskDetail] }),
+    listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+    listModuleTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+    listTaskGroupMemberships: vi.fn().mockResolvedValue({ items: [] }),
+    listChangeRecords: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+    getTaskRecordDrafts: vi.fn().mockResolvedValue({ items: [] }),
+    listActiveProjectMembers: vi.fn().mockResolvedValue({ items: [] }),
+    getUserDirectory: vi.fn().mockResolvedValue({ items: [] }),
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 7,
+      rowVersion: 1,
+      writable: false,
+      items: [],
+    }),
+    getLeftoverTaskSource: vi.fn().mockResolvedValue({ source: null }),
+    getTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
+  } as unknown as InpulseApiClient;
+  return { client, listProjects };
 };
 
 const createAdapter = (items: MyTaskListItem[] = []) => {
@@ -105,8 +233,7 @@ interface RenderOptions {
 
 const renderPage = (options: RenderOptions = {}) => {
   const { adapter, fetchMyTasks } = createAdapter(options.items ?? []);
-  const listProjects = vi.fn().mockResolvedValue({ items: [] });
-  const client = { listProjects } as unknown as InpulseApiClient;
+  const { client, listProjects } = createClient();
   render(
     <QueryClientProvider
       client={
@@ -141,14 +268,6 @@ const renderPage = (options: RenderOptions = {}) => {
               }
             />
             <Route path="/issues" element={<div>遗留问题页</div>} />
-            <Route
-              path="/projects/:projectId/modules/:moduleId/features/:featureId?"
-              element={<ArchiveProbe />}
-            />
-            <Route
-              path="/projects/:projectId/modules/:moduleId/tasks"
-              element={<ArchiveProbe />}
-            />
           </Routes>
         </MemoryRouter>
       </AuthStateProvider>
@@ -183,7 +302,7 @@ describe("TasksPage", () => {
 
     await user.click(screen.getByRole("tab", { name: /我创建的/ }));
     await waitFor(() =>
-      expect(screen.getByTestId("location-search")).toHaveTextContent(
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
         "scope=created",
       ),
     );
@@ -203,7 +322,7 @@ describe("TasksPage", () => {
 
     await user.click(screen.getByRole("button", { name: /更多筛选/ }));
     await waitFor(() => expect(screen.queryByLabelText("合并关系")).toBeNull());
-    expect(screen.getByTestId("location-search")).not.toHaveTextContent(
+    expect(screen.getByTestId("location-probe")).not.toHaveTextContent(
       "more=1",
     );
   });
@@ -215,25 +334,39 @@ describe("TasksPage", () => {
     expect(await screen.findByText("遗留问题页")).toBeInTheDocument();
   });
 
-  it("navigates a feature task card straight into the feature archive", async () => {
+  it("opens the feature task detail in place without leaving the task center", async () => {
     renderPage({ items: [featureTask, moduleTask] });
     const user = userEvent.setup();
 
-    // 任务中心不弹只读详情：点击卡片直接定位到功能档案，由 ?taskId= 打开任务抽屉。
+    // 任务中心不再跳转：点击卡片后由 TaskDetailOverlay 在当前页面打开功能档案同款
+    // 任务详情弹窗（写操作仍只有这一个入口），地址栏与筛选参数保持不变。
     await user.click(await screen.findByTestId("my-task-320"));
-    expect(await screen.findByTestId("archive-probe")).toHaveTextContent(
-      "/projects/7/modules/71/features/711?taskId=320",
+    await screen.findByRole("button", { name: "关闭任务详情" });
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "功能级任务" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "完成任务" })).toBeEnabled();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/tasks");
+
+    // 关闭弹窗后仍停留在任务中心，不产生任何导航。
+    await user.click(screen.getByRole("button", { name: "关闭任务详情" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "关闭任务详情" })).toBeNull(),
     );
+    expect(await screen.findByTestId("my-task-320")).toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/tasks");
   });
 
-  it("navigates a module-level task row into the module task archive", async () => {
+  it("opens a module-level task row in place on the module scope", async () => {
     renderPage({ entries: "/tasks?view=list", items: [moduleTask] });
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /模块级任务/ }));
 
-    expect(await screen.findByTestId("archive-probe")).toHaveTextContent(
-      "/projects/7/modules/72/tasks?taskId=321",
-    );
+    await screen.findByRole("button", { name: "关闭任务详情" });
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "模块级任务" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/tasks");
   });
 
   it("demotes the admin-only scope for non-admins", async () => {

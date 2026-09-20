@@ -1,7 +1,7 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
-import React, { useRef, useState } from "react";
+import React, { lazy, Suspense, useRef, useState } from "react";
 import { Alert, Button, Input, Segmented, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -13,6 +13,7 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
+import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -23,13 +24,26 @@ import {
   ModuleEditorModal,
   type ModuleEditorRequest,
 } from "@features/modules/ModuleEditorModal";
-import { useProjectDetail } from "@features/projects/project-query";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 import { useTasks } from "@features/tasks/task-query";
+import type { TaskLocation } from "@features/tasks/task-links";
 import {
   featureErrorMessage,
   useFeatures,
   type FeatureChange,
 } from "./feature-query";
+
+/**
+ * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
+ * 迭代记录、合并与外部链接等写入口全在同一处）。按需加载，功能档案的初始包
+ * 不引入任务详情的完整实现。
+ */
+const TaskDetailOverlay = lazy(
+  () => import("@features/tasks/TaskDetailOverlay"),
+);
 
 type Values = {
   name: string;
@@ -102,6 +116,8 @@ export function FeaturesPageView({
   const [merge, setMerge] = useState<Merge | null>(null);
   const [display, setDisplay] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
+  /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
+  const [taskTarget, setTaskTarget] = useState<TaskLocation | null>(null);
   const editGeneration = useRef(0);
   const submitting = useRef(false);
   const {
@@ -271,12 +287,17 @@ export function FeaturesPageView({
     (item) => item.id === moduleId,
   );
   const projectQuery = useProjectDetail({ client, projectId });
+  // ADR-033/ADR-034：模块与功能的归档/恢复都由系统管理员或本项目组长/项目管理员执行。
+  const canArchiveResources = canManageProjectResources(
+    isAdmin,
+    projectQuery.data?.currentUserRole ?? null,
+  );
   const projectName =
     projectQuery.data === undefined
       ? null
       : currentModule === undefined
-        ? projectQuery.data.name
-        : projectQuery.data.name + " / " + currentModule.name;
+        ? projectQuery.data.project.name
+        : projectQuery.data.project.name + " / " + currentModule.name;
   const keyword = search.trim().toLocaleLowerCase();
   const visibleItems = (query.data?.items ?? []).filter(
     (item) =>
@@ -288,33 +309,24 @@ export function FeaturesPageView({
   return (
     <>
       <div className="features-page">
-        <div className="feature-breadcrumbs">
-          <Button
-            className="back-button"
-            href={"/projects/" + projectId + "/modules"}
-          >
-            <InpulseIcon name="arrowLeft" size={15} />
-            返回模块列表
-          </Button>
-          {featureId && (
-            <Button
-              className="back-button"
-              href={
-                "/projects/" + projectId + "/modules/" + moduleId + "/features"
-              }
-            >
-              返回功能列表
-            </Button>
-          )}
-        </div>
         {!featureId ? (
           <>
             <div className="page-header">
               <div>
-                <span className="eyebrow">
-                  {`模块 / ${projectQuery.data?.name ?? "加载中"}`}
-                </span>
-                <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                <div className="page-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回模块列表"
+                    title="返回模块列表"
+                    onClick={() =>
+                      navigate("/projects/" + projectId + "/modules")
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                </div>
                 <p>
                   {currentModule?.description ||
                     "维护长期功能档案，说明修改会保留审计历史。"}
@@ -331,7 +343,7 @@ export function FeaturesPageView({
                 >
                   编辑模块
                 </Button>
-                {isAdmin && currentModule ? (
+                {canArchiveResources && currentModule ? (
                   <Button
                     className="secondary-button"
                     onClick={() =>
@@ -374,7 +386,12 @@ export function FeaturesPageView({
               <summary>
                 {currentModule?.code ?? "模块资料"} ·{" "}
                 {currentModule ? currentModule.name : "加载中"} ·{" "}
-                {currentModule?.status === "ARCHIVED" ? "已归档" : "正常"}
+                {currentModule
+                  ? resourceLifecycleLabel(
+                      currentModule.status,
+                      currentModule.stats.completedTaskCount,
+                    )
+                  : "进行中"}
               </summary>
               <h4>模块说明</h4>
               <p>
@@ -532,7 +549,7 @@ export function FeaturesPageView({
                                   item.status === "ACTIVE" ? "blue" : "amber"
                                 }
                               >
-                                {item.status === "ACTIVE" ? "正常" : "已归档"}
+                                {item.status === "ACTIVE" ? "进行中" : "已归档"}
                               </CalmBadge>
                             </td>
                             <td>
@@ -577,7 +594,7 @@ export function FeaturesPageView({
                             <CalmBadge
                               tone={item.status === "ACTIVE" ? "gray" : "amber"}
                             >
-                              {item.status === "ACTIVE" ? "正常" : "已归档"}
+                              {item.status === "ACTIVE" ? "进行中" : "已归档"}
                             </CalmBadge>
                             {item.tags.slice(0, 3).map((tag) => (
                               <CalmBadge key={tag} tone="gray">
@@ -616,23 +633,18 @@ export function FeaturesPageView({
                               编辑功能
                             </Button>
                           )}
-                          {isAdmin && (
-                            <Button
-                              className="text-button"
-                              onClick={() =>
-                                open(
-                                  item.status === "ACTIVE"
-                                    ? "archive"
-                                    : "restore",
-                                  item,
-                                )
-                              }
-                            >
-                              {item.status === "ACTIVE"
-                                ? "归档功能"
-                                : "恢复功能"}
-                            </Button>
-                          )}
+                          {/* ADR-034：归档入口只在「编辑功能」弹窗底部提供，
+                              卡片上仅保留已归档功能的恢复入口。 */}
+                          {canArchiveResources &&
+                            item.status === "ARCHIVED" && (
+                              <Button
+                                className="text-button"
+                                data-testid={"feature-lifecycle-" + item.id}
+                                onClick={() => open("restore", item)}
+                              >
+                                恢复功能
+                              </Button>
+                            )}
                         </span>
                       </article>
                     ))}
@@ -667,22 +679,44 @@ export function FeaturesPageView({
           />
         ) : (
           // 系统目录树（侧栏）承担模块内功能切换后，详情页不再渲染左栏
-          // feature-switcher，「返回功能列表」入口由上方 feature-breadcrumbs 提供。
+          // feature-switcher，返回入口由标题左侧的返回箭头提供。
           <div className="feature-document">
             <header className="feature-modal-header">
               <div>
-                <span className="detail-label">
-                  项目 {projectId} / 模块 {moduleId}
-                </span>
-                <h2>{activeItem.name}</h2>
+                <div className="feature-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回功能列表"
+                    title="返回功能列表"
+                    onClick={() =>
+                      navigate(
+                        "/projects/" +
+                          projectId +
+                          "/modules/" +
+                          moduleId +
+                          "/features",
+                      )
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h2>{activeItem.name}</h2>
+                </div>
                 <p>{activeItem.currentBehavior || "尚未补充当前功能说明。"}</p>
                 <div className="task-modal-badges">
-                  <span className="task-id">{activeItem.code}</span>
+                  {/* 功能编号不在页头展示，保留右侧「功能档案」里的编号。 */}
                   <CalmBadge
                     tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
                   >
-                    {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                    {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
                   </CalmBadge>
+                  {/* 标签与状态并列成小徽章，放在状态和更新时间之间。 */}
+                  {activeItem.tags.map((tag) => (
+                    <CalmBadge key={tag} tone="violet">
+                      {tag}
+                    </CalmBadge>
+                  ))}
                   <CalmBadge tone="gray">
                     更新 {formatStamp(activeItem.updatedAt)}
                   </CalmBadge>
@@ -703,17 +737,13 @@ export function FeaturesPageView({
                     编辑功能
                   </Button>
                 )}
-                {isAdmin && (
+                {canArchiveResources && activeItem.status === "ARCHIVED" && (
                   <Button
                     className="secondary-button"
-                    onClick={() =>
-                      open(
-                        activeItem.status === "ACTIVE" ? "archive" : "restore",
-                        activeItem,
-                      )
-                    }
+                    data-testid={"feature-detail-lifecycle-" + activeItem.id}
+                    onClick={() => open("restore", activeItem)}
                   >
-                    {activeItem.status === "ACTIVE" ? "归档功能" : "恢复功能"}
+                    恢复功能
                   </Button>
                 )}
               </div>
@@ -721,28 +751,8 @@ export function FeaturesPageView({
             <div className="feature-modal-content">
               <div className="feature-overview-grid">
                 <div className="feature-reading">
-                  <section>
-                    <h3>当前功能说明</h3>
-                    <p>{activeItem.currentBehavior || "暂无功能说明"}</p>
-                  </section>
-                  <section>
-                    <h3>验收标准</h3>
-                    <p style={{ whiteSpace: "pre-wrap" }}>
-                      {activeItem.acceptanceCriteria || "尚未填写验收标准"}
-                    </p>
-                  </section>
-                  <section>
-                    <h3>标签</h3>
-                    {activeItem.tags.length ? (
-                      <div className="tag-row">
-                        {activeItem.tags.map((tag) => (
-                          <CalmBadge key={tag}>{tag}</CalmBadge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>暂无标签，可在编辑功能时补充。</p>
-                    )}
-                  </section>
+                  {/* 「当前功能说明」只在标题下方给出，正文不再重复一遍。
+                      标签改由标题行的小徽章展示（状态与更新时间之间）。 */}
                   {activeItem.status === "ARCHIVED" && (
                     <section>
                       <h3>归档状态</h3>
@@ -756,7 +766,16 @@ export function FeaturesPageView({
                       featureId={activeItem.id}
                       writable={activeItem.status === "ACTIVE"}
                       client={client}
+                      isAdmin={isAdmin}
+                      onOpenTask={setTaskTarget}
                     />
+                  </section>
+                  {/* 验收标准放到最底下：先看功能与任务，最后才是验收口径。 */}
+                  <section>
+                    <h3>验收标准</h3>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      {activeItem.acceptanceCriteria || "尚未填写验收标准"}
+                    </p>
                   </section>
                 </div>
                 <aside className="feature-facts">
@@ -765,7 +784,7 @@ export function FeaturesPageView({
                     <dt>编号</dt>
                     <dd>{activeItem.code}</dd>
                     <dt>所属项目</dt>
-                    <dd>{projectQuery.data?.name ?? "加载中"}</dd>
+                    <dd>{projectQuery.data?.project?.name ?? "加载中"}</dd>
                     <dt>所属模块</dt>
                     <dd>{currentModule?.name ?? "加载中"}</dd>
                     <dt>创建人</dt>
@@ -774,7 +793,7 @@ export function FeaturesPageView({
                     <dd>v{activeItem.rowVersion}</dd>
                     <dt>状态</dt>
                     <dd>
-                      {activeItem.status === "ACTIVE" ? "正常" : "已归档"}
+                      {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
                     </dd>
                   </dl>
                 </aside>
@@ -1003,6 +1022,27 @@ export function FeaturesPageView({
             )}
           </div>
           <div className="calm-action-footer">
+            {/* ADR-034：功能归档/恢复入口与模块弹窗一致放在编辑弹窗底部；
+                普通成员看不到，组长/项目管理员可直接切到归档流程。 */}
+            {selection?.action === "update" &&
+            selection.item &&
+            canArchiveResources ? (
+              <Button
+                className="secondary-button footer-leading"
+                data-testid="feature-modal-lifecycle"
+                disabled={mutation.isPending || reloading || !!merge}
+                onClick={() =>
+                  open(
+                    selection.item!.status === "ARCHIVED"
+                      ? "restore"
+                      : "archive",
+                    selection.item!,
+                  )
+                }
+              >
+                {selection.item.status === "ARCHIVED" ? "恢复" : "归档"}
+              </Button>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1024,11 +1064,26 @@ export function FeaturesPageView({
       <ModuleEditorModal
         projectId={projectId}
         client={client}
-        projectName={projectQuery.data?.name ?? null}
+        projectName={projectQuery.data?.project?.name ?? null}
         request={moduleRequest}
         onClose={() => setModuleRequest(null)}
         onSaved={() => setModuleSuccess(true)}
+        canArchive={canArchiveResources}
+        onLifecycleRequest={(action, item) =>
+          setModuleRequest({ action, item })
+        }
       />
+      <Suspense fallback={null}>
+        {taskTarget === null ? null : (
+          <TaskDetailOverlay
+            target={taskTarget}
+            client={client}
+            isAdmin={isAdmin}
+            onClose={() => setTaskTarget(null)}
+            onOpenTask={setTaskTarget}
+          />
+        )}
+      </Suspense>
     </>
   );
 }

@@ -104,6 +104,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 1,
+      hasLeftoverSource: true,
     },
     {
       taskId: 102,
@@ -131,6 +132,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: "MAIN",
       groupId: 501,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 103,
@@ -157,6 +159,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 104,
@@ -183,6 +186,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 1,
+      hasLeftoverSource: true,
     },
     {
       taskId: 105,
@@ -209,6 +213,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: "SOURCE",
       groupId: 501,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 106,
@@ -235,6 +240,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 107,
@@ -261,6 +267,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 108,
@@ -287,6 +294,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
     {
       taskId: 109,
@@ -313,6 +321,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 1,
+      hasLeftoverSource: false,
     },
     {
       taskId: 110,
@@ -339,6 +348,7 @@ function createMockItems(): readonly MockTaskItem[] {
       groupRole: null,
       groupId: null,
       githubLinkCount: 0,
+      hasLeftoverSource: false,
     },
   ];
 }

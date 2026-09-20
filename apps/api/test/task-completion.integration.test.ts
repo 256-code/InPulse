@@ -11,6 +11,9 @@ import { TaskStatusCompatibilityHttpService } from "../src/workflows/task-status
 import { ExistingTaskStatusCommandPort } from "../src/modules/tasks/task-status.port.js";
 import { TasksManagementService } from "../src/modules/tasks/tasks-management.service.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
+import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
+import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -82,7 +85,7 @@ const content = {
   contextProblem: "发现问题",
   changeSolution: "修复方案",
   resultVerification: "验证通过",
-  remainingIssues: "后续优化",
+  remainingIssues: [{ content: "后续优化" }],
 };
 beforeAll(async () => {
   db = createDatabaseClient(testUrls().runtime, {
@@ -144,6 +147,11 @@ beforeAll(async () => {
       search,
       notifications,
       access,
+      new PostgresProjectsWritePort(),
+      new ProjectStartNotifier(
+        new PostgresProjectMembersQueryPort(),
+        notifications,
+      ),
     ),
   );
   const auth = new SessionAuthService(
@@ -179,6 +187,10 @@ beforeAll(async () => {
               featureRead,
               new PostgresProjectCodePort(),
               new PostgresProjectMembersQueryPort(),
+              new ProjectRoleGateService(
+                access,
+                new PostgresProjectMembersQueryPort(),
+              ),
               uow,
               tasks,
               audit,
@@ -311,11 +323,16 @@ for (const feature of [true, false]) {
     expect(
       await db.sql`SELECT version_no FROM app.change_record_versions WHERE record_id=${result.record!.id}`,
     ).toEqual([{ version_no: 1 }]);
-    expect(
-      await db.sql`SELECT activity_type FROM app.activity_projection WHERE project_id=${f.projectId} ORDER BY activity_type`,
-    ).toEqual([
-      { activity_type: "record.publish" },
-      { activity_type: "task.complete" },
+    const activityTypes = (
+      (await db.sql`SELECT activity_type FROM app.activity_projection WHERE project_id=${f.projectId}`) as unknown as readonly {
+        activity_type: string;
+      }[]
+    ).map((row) => row.activity_type);
+    // ADR-035：首个任务完成会同事务写入项目开工活动。
+    expect(activityTypes.sort()).toEqual([
+      "PROJECT_STATUS_CHANGED",
+      "record.publish",
+      "task.complete",
     ]);
   });
   it(`binds matching ${feature ? "FEATURE" : "MODULE"} independent draft without replacing frozen identities or impacts`, async () => {
@@ -367,8 +384,11 @@ it("completes without a new record, preserving multiple historical records and n
     one,
   );
   expect(
-    await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${f.projectId}`,
-  ).toEqual([{ recipient_id: f.actor }]);
+    await db.sql`SELECT recipient_id, notification_type FROM app.notifications WHERE project_id=${f.projectId} ORDER BY notification_type`,
+  ).toEqual([
+    { recipient_id: f.actor, notification_type: "project.status.change" },
+    { recipient_id: f.actor, notification_type: "task.complete" },
+  ]);
 });
 it("keeps task, draft, code and all effects unchanged on search capacity or draft-version failure", async () => {
   const f = await fixture(),
@@ -499,7 +519,7 @@ it("runs real HTTP authentication, CSRF, strict contract and concurrent idempote
     input: TaskCompletionRequest = {
       mode: "WITH_RECORD",
       expectedRowVersion: 1,
-      record: { ...content, remainingIssues: "" },
+      record: { ...content, remainingIssues: [] },
     },
     key = randomUUID();
   expect(
@@ -523,7 +543,7 @@ it("runs real HTTP authentication, CSRF, strict contract and concurrent idempote
     expect(response.status, await response.clone().text()).toBe(200);
   const first = taskCompletionResponseSchema.parse(await responses[0]!.json());
   expect(await responses[1]!.json()).toEqual(first);
-  expect(first.record?.leftoverItem).toBeNull();
+  expect(first.record?.leftovers).toEqual([]);
   expect(
     (
       await post(
@@ -1130,4 +1150,61 @@ it("rolls back legacy completion and its effects when notification persistence f
   );
   expect((await legacyPost(f, actor)).status).toBe(500);
   await unchanged(f);
+});
+
+it("首个任务完成把项目从未开始升级为进行中，并写审计、活动与开工通知", async () => {
+  const f = await fixture();
+  const readProject = async () =>
+    (await db.sql`SELECT status, first_task_completed_at AS "firstTaskCompletedAt", row_version AS "rowVersion" FROM app.projects WHERE id = ${f.projectId}`) as unknown as readonly {
+      status: string;
+      firstTaskCompletedAt: Date | null;
+      rowVersion: number;
+    }[];
+
+  expect((await readProject())[0]).toMatchObject({
+    status: "NOT_STARTED",
+    firstTaskCompletedAt: null,
+    rowVersion: 1,
+  });
+
+  await complete(f);
+
+  const started = (await readProject())[0]!;
+  expect(started.status).toBe("ACTIVE");
+  expect(started.firstTaskCompletedAt).not.toBeNull();
+  expect(started.rowVersion).toBe(2);
+
+  expect(
+    await auditDb.sql`SELECT action FROM app.audit_logs WHERE project_id=${f.projectId} AND action='project.status.change'`,
+  ).toHaveLength(1);
+  expect(
+    await db.sql`SELECT activity_type FROM app.activity_projection WHERE project_id=${f.projectId} AND activity_type='PROJECT_STATUS_CHANGED'`,
+  ).toHaveLength(1);
+  expect(
+    (await db.sql`SELECT recipient_id FROM app.notifications WHERE project_id=${f.projectId} AND notification_type='project.status.change' ORDER BY recipient_id`) as unknown as readonly {
+      recipient_id: number;
+    }[],
+  ).toEqual(
+    [f.actor, f.author]
+      .sort((a, b) => a - b)
+      .map((recipient_id) => ({ recipient_id })),
+  );
+
+  const second = await uow.run((tx) =>
+    tasks.create(tx, f, f.actor, f.code + "-T-2", {
+      title: "第二个任务",
+      description: "说明",
+      assigneeId: f.actor,
+      priority: "NORMAL",
+      dueAt: null,
+    }),
+  );
+  await complete({ ...f, task: second });
+
+  const again = (await readProject())[0]!;
+  expect(again.status).toBe("ACTIVE");
+  expect(again.rowVersion).toBe(2);
+  expect(
+    await db.sql`SELECT activity_type FROM app.activity_projection WHERE project_id=${f.projectId} AND activity_type='PROJECT_STATUS_CHANGED'`,
+  ).toHaveLength(1);
 });

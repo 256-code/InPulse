@@ -57,7 +57,7 @@ export function SimilarFeatures({
             rel="noopener noreferrer"
           >
             {item.code} {item.name}（
-            {item.status === "ACTIVE" ? "正常" : "已归档"}）
+            {item.status === "ACTIVE" ? "进行中" : "已归档"}）
           </Button>
         ))}
       </Space>

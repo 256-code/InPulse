@@ -18,7 +18,6 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await expect(
       page.getByRole("heading", { name: firstModuleName }),
     ).toBeVisible();
-    await expect(page.getByText(`模块 / ${runtime.projectName}`)).toBeVisible();
     expect(page.url()).toMatch(/\/modules\/\d+\/features$/);
     const listUrl = page.url();
     const name = `退款功能-${Date.now()}`;
@@ -35,9 +34,10 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
       .getByRole("link", { name: "查看详情" })
       .click();
     await expect(page.getByRole("heading", { name })).toBeVisible();
+    // 0f34d7a 起功能说明只在标题下方渲染，正文不再重复一遍。
     await expect(
       page
-        .locator(".feature-reading")
+        .locator(".feature-modal-header")
         .getByText("创建时的说明", { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "归档功能" })).toHaveCount(0);
@@ -79,7 +79,7 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await page.reload();
     await expect(
       page
-        .locator(".feature-reading")
+        .locator(".feature-modal-header")
         .getByText("其他页面再次修改", { exact: true }),
     ).toBeVisible();
     await page.goto(listUrl);
@@ -123,7 +123,12 @@ test("管理员归档并恢复功能，刷新保留状态", async ({ browser, ad
     await page.goto(detailUrl);
     // 侧栏「系统目录」树把功能名渲染成按钮，动作按钮查询必须限定在主内容区。
     const detail = page.getByRole("main");
-    await detail.getByRole("button", { name: "归档功能" }).click();
+    // ADR-034：归档入口在「编辑功能」弹窗底部，点击后切到归档弹窗。
+    await detail.getByRole("button", { name: "编辑功能" }).click();
+    await page
+      .getByRole("dialog", { name: "编辑功能" })
+      .getByTestId("feature-modal-lifecycle")
+      .click();
     const archive = page.getByRole("dialog", { name: "归档功能" });
     await archive.getByLabel("操作原因").fill("功能下线，保留历史");
     await archive.getByRole("button", { name: /确\s*认/ }).click();

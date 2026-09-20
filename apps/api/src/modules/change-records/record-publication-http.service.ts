@@ -6,6 +6,7 @@ import {
   schemaRegistry,
   publishedRecordSchema,
   type PublishedRecordContent,
+  type AddRecordLeftoverRequest,
 } from "@inpulse/api-contract";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
 import {
@@ -22,7 +23,9 @@ import { RecordPublicationService } from "./record-publication.service.js";
 import { RecordPublicationAccess } from "./record-publication-access.js";
 import { RecordDraftError } from "./record-drafts.service.js";
 export type PublicationOperation =
-  "publishChangeRecord" | "createChangeRecordVersion";
+  | "publishChangeRecord"
+  | "createChangeRecordVersion"
+  | "addChangeRecordLeftover";
 @Injectable()
 export class RecordPublicationHttpService {
   constructor(
@@ -55,7 +58,7 @@ export class RecordPublicationHttpService {
           throw new RecordDraftError(
             422,
             "RECORD_PUBLICATION_VALIDATION_FAILED",
-            "请检查内容、记录版本和遗留问题长度（发布及正式修订最多10000字符）",
+            "请检查内容、记录版本和遗留问题（每条最多10000字符，最多50条）",
           );
         return parsed.data;
       };
@@ -130,6 +133,9 @@ export class RecordPublicationHttpService {
           const version = Number(
             getHeader(request.headers, "if-match")!.slice(1, -1),
           );
+          const recordVersion = Number(
+            getHeader(request.headers, "x-record-version"),
+          );
           const value = publish
             ? await this.service.publish(
                 tx,
@@ -139,16 +145,27 @@ export class RecordPublicationHttpService {
                 version,
                 requestId,
               )
-            : await this.service.update(
-                tx,
-                actorId,
-                path.projectId,
-                path.recordId,
-                version,
-                Number(getHeader(request.headers, "x-record-version")),
-                body as PublishedRecordContent,
-                requestId,
-              );
+            : operation === "addChangeRecordLeftover"
+              ? await this.service.appendLeftover(
+                  tx,
+                  actorId,
+                  path.projectId,
+                  path.recordId,
+                  version,
+                  recordVersion,
+                  (body as AddRecordLeftoverRequest).content,
+                  requestId,
+                )
+              : await this.service.update(
+                  tx,
+                  actorId,
+                  path.projectId,
+                  path.recordId,
+                  version,
+                  recordVersion,
+                  body as PublishedRecordContent,
+                  requestId,
+                );
           return {
             responseStatus: 200,
             responseSchemaRef: "PublishedRecord",
@@ -161,9 +178,7 @@ export class RecordPublicationHttpService {
               featureId: value.featureId,
               taskId: value.taskId,
               impactFeatureIds: value.impactFeatureIds,
-              leftoverItemIds: value.leftoverItem
-                ? [value.leftoverItem.id]
-                : [],
+              leftoverItemIds: value.leftovers.map((leftover) => leftover.id),
             },
           };
         },

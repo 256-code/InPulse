@@ -51,6 +51,7 @@ function mount(
   client: InpulseApiClient,
   onNavigate: (path: string) => void,
   activeScope: TreeScope | null = scopeOf({ kind: "project" }),
+  activePageSegment: string | null = null,
 ) {
   return render(
     <QueryClientProvider
@@ -60,6 +61,7 @@ function mount(
     >
       <ProjectTree
         activeScope={activeScope}
+        activePageSegment={activePageSegment}
         onNavigate={onNavigate}
         client={client}
       />
@@ -80,6 +82,8 @@ describe("ProjectTree", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /AGV 智能搬运平台/ }));
     expect(onNavigate).toHaveBeenCalledWith("/projects/2/modules");
+    // 模块列表挂在「模块与功能」子页行下：展开子页行后才加载模块。
+    fireEvent.click(await screen.findByRole("button", { name: "模块与功能" }));
     expect(
       await screen.findByRole("button", { name: /调度模块/ }),
     ).toBeTruthy();
@@ -94,11 +98,12 @@ describe("ProjectTree", () => {
     });
     fireEvent.click(projectButton);
     expect(projectButton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(await screen.findByRole("button", { name: "模块与功能" }));
     expect(
       await screen.findByRole("button", { name: /调度模块/ }),
     ).toBeTruthy();
 
-    // 再次点击项目节点收回模块列表，并仍导航到项目主页。
+    // 再次点击项目节点收回整个子页列表（含模块列表），并仍导航到项目主页。
     fireEvent.click(projectButton);
     expect(projectButton.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("button", { name: /调度模块/ })).toBeNull();
@@ -109,6 +114,8 @@ describe("ProjectTree", () => {
     const onNavigate = vi.fn();
     mount(createClient(), onNavigate);
 
+    // 当前项目作用域自动铺开子页行；模块列表要点开「模块与功能」。
+    fireEvent.click(await screen.findByRole("button", { name: "模块与功能" }));
     fireEvent.click(await screen.findByRole("button", { name: /调度模块/ }));
     expect(onNavigate).toHaveBeenCalledWith("/projects/2/modules/3/features");
 
@@ -117,7 +124,12 @@ describe("ProjectTree", () => {
   });
 
   it("auto-expands the chain of the active project scope", async () => {
-    mount(createClient(), vi.fn(), scopeOf({ kind: "module", moduleId: 3 }));
+    mount(
+      createClient(),
+      vi.fn(),
+      scopeOf({ kind: "module", moduleId: 3 }),
+      "modules",
+    );
     const projectButton = await screen.findByRole("button", {
       name: /AGV 智能搬运平台/,
     });
@@ -131,8 +143,48 @@ describe("ProjectTree", () => {
     ).toBeTruthy();
   });
 
+  it("keeps the expanded chain when returning to the project overview", async () => {
+    const client = createClient();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const tree = (activeScope: TreeScope, activePageSegment: string) => (
+      <QueryClientProvider client={queryClient}>
+        <ProjectTree
+          activeScope={activeScope}
+          activePageSegment={activePageSegment}
+          onNavigate={vi.fn()}
+          client={client}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(
+      tree(scopeOf({ kind: "feature", moduleId: 3, featureId: 5 }), "modules"),
+    );
+    expect(
+      (await screen.findByRole("button", { name: /调度模块/ })).getAttribute(
+        "aria-expanded",
+      ),
+    ).toBe("true");
+    await screen.findByRole("button", { name: /车辆调度/ });
+
+    // 面包屑回到项目概况（系统级作用域）后，已展开的模块与功能保持可见。
+    view.rerender(tree(scopeOf({ kind: "project" }), "overview"));
+    expect(
+      screen
+        .getByRole("button", { name: /调度模块/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: /车辆调度/ })).toBeTruthy();
+  });
+
   it("keeps the module branch expanded while its features load", async () => {
-    mount(createClient(), vi.fn(), scopeOf({ kind: "module", moduleId: 3 }));
+    mount(
+      createClient(),
+      vi.fn(),
+      scopeOf({ kind: "module", moduleId: 3 }),
+      "modules",
+    );
     const moduleButton = await screen.findByRole("button", {
       name: /调度模块/,
     });
@@ -149,6 +201,7 @@ describe("ProjectTree", () => {
       createClient(),
       vi.fn(),
       scopeOf({ kind: "feature", moduleId: 3, featureId: 5 }),
+      "modules",
     );
     const featureButton = await screen.findByRole("button", {
       name: /车辆调度/,

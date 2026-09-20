@@ -40,6 +40,8 @@ const expectedStats = {
   activeModuleCount: 2,
   activeFeatureCount: 2,
   openTaskCount: 4,
+  // 统计夹具里只有「统计夹具已完成任务」一条 DONE（历史来源分支不计）。
+  completedTaskCount: 1,
 } as const;
 
 async function issueSessionCookie(userId: number): Promise<string> {
@@ -189,7 +191,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       (item) => item.id === memberProject.projectId,
     );
     expect(memberProjectItem).toMatchObject({
-      status: "ACTIVE",
+      status: "NOT_STARTED",
       memberCount: 2,
     });
 
@@ -459,10 +461,81 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
         activeModuleCount: 1,
         activeFeatureCount: 0,
         openTaskCount: 0,
+        completedTaskCount: 0,
       },
     );
     expect(
       items.find((item) => item.id === project.projectId)?.memberCount,
     ).toBe(2);
+  });
+
+  test("列表按生命周期档位排序：进行中、未开始、维护中、已归档", async () => {
+    const owner = await actor();
+    const active = await createProject(client.sql, owner.userId);
+    const notStarted = await createProject(client.sql, owner.userId);
+    const maintenance = await createProject(client.sql, owner.userId);
+    const archived = await createProject(client.sql, owner.userId);
+
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, scope_type, code, title, work_status,
+          completion_note, completed_at, assignee_id, creator_id
+        )
+        VALUES (
+          ${active.projectId},
+          ${active.moduleId},
+          'MODULE',
+          ${`${active.code}-T-1`},
+          '已完成任务',
+          'DONE',
+          '已完成',
+          now(),
+          ${owner.userId},
+          ${owner.userId}
+        )
+        RETURNING id, project_id
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, NULL, 'DONE', now(), '已完成', ${owner.userId}
+        FROM created
+    `;
+    // ADR-035：任务完成才让项目升级为进行中；夹具直接写库，这里手动补状态与粘性标记。
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'ACTIVE',
+             first_task_completed_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${active.projectId}
+    `;
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'MAINTENANCE',
+             row_version = row_version + 1
+       WHERE id = ${maintenance.projectId}
+    `;
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'ARCHIVED',
+             archived_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${archived.projectId}
+    `;
+
+    const items = schemaRegistry.ProjectListResponse.schema.parse(
+      await (await list(owner.cookie)).json(),
+    ).items;
+    expect(items.map((item) => item.id)).toEqual([
+      active.projectId,
+      notStarted.projectId,
+      maintenance.projectId,
+      archived.projectId,
+    ]);
+    expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
+      1, 0, 0, 0,
+    ]);
   });
 });

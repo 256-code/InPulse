@@ -36,6 +36,10 @@ export type AddProjectMemberResponse = {
   readonly member: ProjectMemberRecordItem;
 };
 
+export type AddRecordLeftoverRequest = {
+  readonly content: string;
+};
+
 export type AdminUserCreateRequest = {
   readonly loginName: string;
   readonly name: string;
@@ -138,7 +142,10 @@ export type ChangeRecordVersion = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly recordId: number;
   readonly projectId: number;
   readonly versionNo: number;
@@ -182,7 +189,7 @@ export type CreateProjectResponse = {
     readonly code: ProjectCode;
     readonly name: string;
     readonly description: string;
-    readonly status: "ACTIVE";
+    readonly status: "NOT_STARTED";
     readonly rowVersion: number;
     readonly createdBy: number;
     readonly createdAt: string;
@@ -341,7 +348,10 @@ export type IndependentRecordDraftRequest = ({
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly scopeType: "FEATURE";
   readonly featureId: number;
 } | {
@@ -349,7 +359,10 @@ export type IndependentRecordDraftRequest = ({
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly scopeType: "MODULE";
   readonly impactFeatureIds: readonly number[];
 });
@@ -417,6 +430,10 @@ export type LeftoverTaskPreview = {
     readonly featureId: (number | null);
     readonly taskId: number;
   } | null);
+};
+
+export type LeftoverTaskPreviewQuery = {
+  readonly leftoverItemId?: number;
 };
 
 export type LeftoverTaskReplayContext = {
@@ -530,6 +547,7 @@ export type ModuleResourcePath = {
 export type ModuleStats = {
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
 };
 
 export type ModuleTaskCollectionPath = {
@@ -631,6 +649,7 @@ export type MyTaskItem = {
   readonly publishedRecordCount: number;
   readonly groupRole: (("MAIN" | "SOURCE") | null);
   readonly groupId: (number | null);
+  readonly hasLeftoverSource: boolean;
 };
 
 export type MyTaskLeftoverSample = {
@@ -702,12 +721,55 @@ export type NotificationUnreadCountResponse = {
   readonly unreadCount: number;
 };
 
+export type PendingProjectArchiveRequest = {
+  readonly id: number;
+  readonly requestedBy: number;
+  readonly requestedByName: string;
+  readonly reason: string;
+  readonly requestedAt: string;
+};
+
 export type ProjectArchivePreviewResponse = {
   readonly projectId: number;
   readonly unfinishedTaskCount: number;
 };
 
+export type ProjectArchiveRejectionRequest = {
+  readonly note: string;
+};
+
 export type ProjectArchiveRequest = {
+  readonly reason: string;
+};
+
+export type ProjectArchiveRequestItem = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly requestedBy: number;
+  readonly requestedByName: string;
+  readonly reason: string;
+  readonly status: ProjectArchiveRequestStatus;
+  readonly requestedAt: string;
+  readonly decidedBy: (number | null);
+  readonly decidedByName: (string | null);
+  readonly decidedAt: (string | null);
+  readonly decisionNote: (string | null);
+  readonly rowVersion: number;
+};
+
+export type ProjectArchiveRequestPath = {
+  readonly projectId: number;
+  readonly requestId: number;
+};
+
+export type ProjectArchiveRequestReplayContext = {
+  readonly projectId: number;
+  readonly requestId: number;
+};
+
+export type ProjectArchiveRequestStatus = ("PENDING" | "APPROVED" | "REJECTED" | "CANCELED");
+
+export type ProjectArchiveRequestSubmission = {
   readonly reason: string;
 };
 
@@ -715,6 +777,7 @@ export type ProjectCode = string;
 
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
+  readonly currentUserRole?: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
 };
 
 export type ProjectEditRequest = {
@@ -727,7 +790,8 @@ export type ProjectItem = {
   readonly code: ProjectCode;
   readonly name: string;
   readonly description: string;
-  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly status: ProjectStatus;
+  readonly hasCompletedTask: boolean;
   readonly rowVersion: number;
   readonly createdBy: number;
   readonly createdAt: string;
@@ -736,8 +800,25 @@ export type ProjectItem = {
   readonly stats: ProjectStats;
 };
 
+export type ProjectListItem = {
+  readonly id: number;
+  readonly code: ProjectCode;
+  readonly name: string;
+  readonly description: string;
+  readonly status: ProjectStatus;
+  readonly hasCompletedTask: boolean;
+  readonly rowVersion: number;
+  readonly createdBy: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly memberCount: number;
+  readonly stats: ProjectStats;
+  readonly currentUserRole: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
+  readonly pendingArchiveRequest: (PendingProjectArchiveRequest | null);
+};
+
 export type ProjectListResponse = {
-  readonly items: readonly ProjectItem[];
+  readonly items: readonly ProjectListItem[];
 };
 
 export type ProjectMemberCollectionPath = {
@@ -747,6 +828,7 @@ export type ProjectMemberCollectionPath = {
 export type ProjectMemberItem = {
   readonly userId: number;
   readonly status: ("ACTIVE" | "REMOVED");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -774,6 +856,7 @@ export type ProjectMemberRecordItem = {
   readonly name: string;
   readonly avatarUrl: (string | null);
   readonly status: ("ACTIVE" | "REMOVED");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
   readonly removedAt: (string | null);
 };
@@ -815,7 +898,7 @@ export type ProjectMutationHeaders = {
 export type ProjectOverviewProject = {
   readonly projectId: number;
   readonly name: string;
-  readonly status: ("ACTIVE" | "ARCHIVED");
+  readonly status: ProjectStatus;
 };
 
 export type ProjectOverviewQueryRequest = {
@@ -851,6 +934,13 @@ export type ProjectStats = {
   readonly activeModuleCount: number;
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
+  readonly completedTaskCount: number;
+};
+
+export type ProjectStatus = ("NOT_STARTED" | "ACTIVE" | "MAINTENANCE" | "ARCHIVED");
+
+export type ProjectStatusChangeRequest = {
+  readonly status: ("NOT_STARTED" | "ACTIVE" | "MAINTENANCE");
 };
 
 export type ProjectVersionHeaders = {
@@ -865,7 +955,10 @@ export type PublishedRecord = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -887,17 +980,12 @@ export type PublishedRecord = {
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly leftoverItem: ({
-    readonly id: number;
-    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
-    readonly rowVersion: number;
-    readonly linkedTaskId: (number | null);
-  } | null);
   readonly leftovers: readonly ({
     readonly id: number;
     readonly content: string;
     readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
     readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
   })[];
 };
 
@@ -906,7 +994,10 @@ export type PublishedRecordContent = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly confirmLeftoverResolved: boolean;
 };
 
@@ -943,7 +1034,10 @@ export type RecordDraftContent = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
 };
 
 export type RecordDraftCreatePath = {
@@ -960,7 +1054,10 @@ export type RecordDraftItem = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -987,6 +1084,7 @@ export type RecordDraftItem = {
 export type RecordDraftListQuery = {
   readonly cursor?: string;
   readonly limit?: number;
+  readonly authorId?: number;
 };
 
 export type RecordDraftPage = {
@@ -1104,6 +1202,14 @@ export type SearchQueryRequest = {
   readonly includeVoid?: boolean;
 };
 
+export type SetProjectMemberRoleRequest = {
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+};
+
+export type SetProjectMemberRoleResponse = {
+  readonly member: ProjectMemberRecordItem;
+};
+
 export type SsoCallbackQueryRequest = {
   readonly code?: string;
   readonly state?: string;
@@ -1115,12 +1221,78 @@ export type SsoStartQueryRequest = {
   readonly returnTo?: string;
 };
 
+export type TaskArchiveRequest = {
+  readonly reason: string;
+};
+
 export type TaskAssigneesResponse = {
   readonly items: readonly ({
     readonly id: number;
     readonly name: string;
     readonly avatarUrl: (string | null);
   })[];
+};
+
+export type TaskBoardCard = {
+  readonly taskId: number;
+  readonly code: string;
+  readonly title: string;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly dueAt: (string | null);
+  readonly completedAt: (string | null);
+  readonly dueState: ("OVERDUE" | "TODAY" | "SCHEDULED" | "NONE");
+  readonly assignee: UserRef;
+  readonly publishedRecordCount: number;
+};
+
+export type TaskBoardModule = {
+  readonly moduleId: number;
+  readonly name: string;
+  readonly featureCount: number;
+  readonly stats: TaskBoardModuleStats;
+  readonly assignees: readonly UserRef[];
+  readonly tasks: readonly TaskBoardCard[];
+};
+
+export type TaskBoardModuleStats = {
+  readonly total: number;
+  readonly done: number;
+  readonly open: number;
+  readonly canceled: number;
+  readonly overdue: number;
+  readonly completionRate: number;
+};
+
+export type TaskBoardProject = {
+  readonly projectId: number;
+  readonly name: string;
+  readonly status: ProjectStatus;
+};
+
+export type TaskBoardResponse = {
+  readonly project: TaskBoardProject;
+  readonly generatedAt: string;
+  readonly stats: TaskBoardStats;
+  readonly modules: readonly TaskBoardModule[];
+  readonly truncated: boolean;
+};
+
+export type TaskBoardStats = {
+  readonly total: number;
+  readonly done: number;
+  readonly open: number;
+  readonly canceled: number;
+  readonly overdue: number;
+  readonly dueToday: number;
+  readonly completedThisWeek: number;
+  readonly completionRate: number;
+  readonly featureCount: number;
+  readonly memberCount: number;
 };
 
 export type TaskCenterQuery = {
@@ -1169,7 +1341,10 @@ export type TaskCompletionRequest = ({
     readonly contextProblem: string;
     readonly changeSolution: string;
     readonly resultVerification: string;
-    readonly remainingIssues: string;
+    readonly remainingIssues: readonly ({
+      readonly id?: number;
+      readonly content: string;
+    })[];
   };
 } | {
   readonly mode: "WITH_RECORD";
@@ -1317,6 +1492,7 @@ export type TaskGroupMembershipItem = {
   readonly groupId: (number | null);
   readonly groupRole: (("MAIN" | "SOURCE") | null);
   readonly publishedRecordCount: number;
+  readonly hasLeftoverSource: boolean;
 };
 
 export type TaskGroupMembershipQueryRequest = {
@@ -1468,7 +1644,10 @@ export type TaskRecordDraftRequest = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
 };
 
 export type TaskRecordDraftResourcePath = {
@@ -1571,7 +1750,10 @@ export type VoidedRecord = {
   readonly contextProblem: string;
   readonly changeSolution: string;
   readonly resultVerification: string;
-  readonly remainingIssues: string;
+  readonly remainingIssues: readonly ({
+    readonly id?: number;
+    readonly content: string;
+  })[];
   readonly id: number;
   readonly projectId: number;
   readonly moduleId: number;
@@ -1593,17 +1775,12 @@ export type VoidedRecord = {
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly leftoverItem: ({
-    readonly id: number;
-    readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
-    readonly rowVersion: number;
-    readonly linkedTaskId: (number | null);
-  } | null);
   readonly leftovers: readonly ({
     readonly id: number;
     readonly content: string;
     readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
     readonly rowVersion: number;
+    readonly linkedTaskId: (number | null);
   })[];
   readonly voidedAt: string;
   readonly voidReason: string;

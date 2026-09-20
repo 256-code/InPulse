@@ -7,7 +7,7 @@ const record = {
   contextProblem: "问题",
   changeSolution: "方案",
   resultVerification: "验证",
-  remainingIssues: "",
+  remainingIssues: [],
 };
 it("versions both legacy status operations while preserving their original fingerprint history ", () => {
   const history = JSON.parse(
@@ -48,7 +48,19 @@ it("accepts exactly one inline record or explicit draft reference, never both", 
     { ...base, record, recordDraftId: 4, recordExpectedRowVersion: 1 },
     { ...base, recordDraftId: 4 },
     { ...base, record: { ...record, taskId: 5 } },
-    { ...base, record: { ...record, remainingIssues: "文".repeat(10001) } },
+    {
+      ...base,
+      record: { ...record, remainingIssues: [{ content: "文".repeat(10001) }] },
+    },
+    {
+      ...base,
+      record: {
+        ...record,
+        remainingIssues: Array.from({ length: 51 }, (_value, index) => ({
+          content: `第${index}条`,
+        })),
+      },
+    },
   ])
     expect(taskCompletionRequestSchema.safeParse(input).success).toBe(false);
 });

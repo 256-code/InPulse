@@ -9,8 +9,9 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { ApiError, type InpulseApiClient, type TaskItem } from "@generated/api";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { TasksPanel } from "./TasksPanel";
 import { mergeTask, taskEdit } from "./task-query";
 
@@ -39,6 +40,40 @@ function client(overrides: object = {}) {
     getModuleTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
     listTasks: vi.fn().mockResolvedValue({ items: [item] }),
     listTaskGroupMemberships: vi.fn().mockResolvedValue({ items: [] }),
+    getTaskGroup: vi.fn().mockResolvedValue({
+      group: {
+        groupId: 501,
+        projectId: 2,
+        code: "TG-501",
+        name: "退款聚合组",
+        status: "ACTIVE",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        closedAt: null,
+        rowVersion: 1,
+      },
+      members: [
+        {
+          taskId: 3,
+          taskCode: "PR-T-3",
+          title: "主任务丙",
+          role: "MAIN",
+          sourceKind: null,
+          memberStatus: "ACTIVE",
+          workStatus: "TODO",
+          lifecycleStatus: "ACTIVE",
+          moduleId: 3,
+          featureId: 4,
+          assignee: { userId: 5, name: "项目成员", avatarUrl: null },
+          joinedAt: "2026-09-01T12:00:00.000Z",
+          detachedAt: null,
+          detachReason: null,
+          publishedRecordCount: 0,
+        },
+      ],
+    }),
+    listTaskGroupRecords: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
     listTaskAssignees: vi.fn().mockResolvedValue({
       items: [{ id: 5, name: "项目成员", avatarUrl: null }],
     }),
@@ -69,6 +104,17 @@ function client(overrides: object = {}) {
     ...overrides,
   } as unknown as InpulseApiClient;
 }
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 function mount(api: InpulseApiClient, writable = true) {
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
@@ -78,18 +124,34 @@ function mount(api: InpulseApiClient, writable = true) {
         }
       >
         <MemoryRouter>
-          <TasksPanel
-            projectId={2}
-            moduleId={3}
-            featureId={4}
-            writable={writable}
-            client={api}
-          />
+          {/* 记录详情弹窗按 isAdmin 判断作废记录正文可读性，需要认证上下文。 */}
+          <AuthStateProvider>
+            <TasksPanel
+              projectId={2}
+              moduleId={3}
+              featureId={4}
+              writable={writable}
+              client={api}
+            />
+          </AuthStateProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
   );
 }
+describe("F-14 功能级任务入口", () => {
+  it("功能面板只保留固定归属的「新建任务」，没有自定义归属入口", async () => {
+    mount(client());
+    // 任务保存在当前功能下，不需要让用户再选一次归属。
+    expect(
+      await screen.findByRole("button", { name: "新建任务" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "自定义归属新建任务" }),
+    ).toBeNull();
+  });
+});
+
 describe("F-14 task editing", () => {
   it("keeps actual changes TODO and preserves completion input across a version conflict", async () => {
     const completeTask = vi
@@ -138,9 +200,7 @@ describe("F-14 task editing", () => {
     expect(completeTask).not.toHaveBeenCalled();
     fireEvent.click(modal.getByRole("button", { name: /上一步/ }));
     fireEvent.click(modal.getByRole("button", { name: /没有，仅完成任务/ }));
-    fireEvent.change(modal.getByLabelText("完成原因"), {
-      target: { value: "技术调研" },
-    });
+    pickSelectOption("完成原因", "技术调研");
     fireEvent.change(modal.getByLabelText("完成补充说明"), {
       target: { value: "保留我的说明" },
     });
@@ -165,7 +225,7 @@ describe("F-14 task editing", () => {
       completeTask.mock.calls[0]![2].headers["Idempotency-Key"],
     );
   });
-  it("defaults to TODO and retains all history without displaying an incomplete completion rate", async () => {
+  it("defaults to every status and retains all history without displaying an incomplete completion rate", async () => {
     mount(
       client({
         listTasks: vi.fn().mockResolvedValue({
@@ -184,21 +244,21 @@ describe("F-14 task editing", () => {
         }),
       }),
     );
+    // 默认「全部状态」：四种状态的任务一次列出，历史与无效行都不隐藏。
     await screen.findByText(item.title);
-    expect(screen.queryByText("历史完成")).not.toBeInTheDocument();
+    // 默认「全部状态」：CalmSelect 触发器直接显示当前选项文案。
+    expect(
+      screen.getByLabelText("任务状态筛选").closest(".ant-select"),
+    ).toHaveTextContent("全部状态");
+    for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
+      expect(screen.getByText(title)).toBeVisible();
     expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "CANCELED" },
-    });
+    pickSelectOption("任务状态筛选", "已取消");
     expect(screen.getByText("历史取消")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "DONE" },
-    });
+    pickSelectOption("任务状态筛选", "已完成");
     expect(screen.getByText("历史完成")).toBeVisible();
     expect(screen.getByText("无效历史")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("任务状态筛选"), {
-      target: { value: "ALL" },
-    });
+    pickSelectOption("任务状态筛选", "全部状态");
     for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
       expect(screen.getByText(title)).toBeVisible();
     expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
@@ -230,8 +290,10 @@ describe("F-14 task editing", () => {
     mount(
       client({ listTasks: vi.fn().mockResolvedValue({ items: [module] }) }),
     );
-    await screen.findByText("模块级任务 · 引用");
-    expect(screen.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    // 卡片正文是任务介绍，模块级引用由「模块级」徽标表达（不再重复功能名）。
+    await screen.findByText("模块级");
+    expect(screen.getByText("原说明")).toBeVisible();
+    expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
     expect(
       await screen.findByRole("link", { name: "打开模块任务" }),
@@ -270,9 +332,7 @@ describe("F-14 task editing", () => {
     fireEvent.change(screen.getByLabelText("任务标题"), {
       target: { value: "新任务" },
     });
-    fireEvent.change(screen.getByLabelText("负责人"), {
-      target: { value: "5" },
-    });
+    pickSelectOption("负责人", "项目成员");
     const save = screen.getByRole("button", { name: /保\s*存/ });
     fireEvent.click(save);
     await screen.findByText("任务服务暂时不可用，输入已保留，可重试。");
@@ -350,11 +410,11 @@ describe("F-14 task editing", () => {
   });
 });
 
-function GroupRouteProbe() {
-  const { groupId } = useParams();
-  return <p>{"聚合组 #" + groupId}</p>;
-}
-function mountWithGroupRoute(api: InpulseApiClient, writable = true) {
+/*
+ * 聚合组入口不再整页跳转 `/task-groups/{id}`（该页面已按方案 A 删除），而是
+ * 就地打开 TaskGroupDetailModal；断言改用弹窗角色与头部眉标。
+ */
+function mountWithGroupModal(api: InpulseApiClient, writable = true) {
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <QueryClientProvider
@@ -363,21 +423,16 @@ function mountWithGroupRoute(api: InpulseApiClient, writable = true) {
         }
       >
         <MemoryRouter initialEntries={["/features/4"]}>
-          <Routes>
-            <Route
-              path="/features/4"
-              element={
-                <TasksPanel
-                  projectId={2}
-                  moduleId={3}
-                  featureId={4}
-                  writable={writable}
-                  client={api}
-                />
-              }
+          {/* 聚合组弹窗里的记录详情按 isAdmin 判断正文可读性，需要认证上下文。 */}
+          <AuthStateProvider>
+            <TasksPanel
+              projectId={2}
+              moduleId={3}
+              featureId={4}
+              writable={writable}
+              client={api}
             />
-            <Route path="/task-groups/:groupId" element={<GroupRouteProbe />} />
-          </Routes>
+          </AuthStateProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
@@ -401,8 +456,20 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
   const main: TaskItem = { ...item, id: 3, title: "主任务丙" };
   const marks = {
     items: [
-      { taskId: 1, groupId: 501, groupRole: "SOURCE", publishedRecordCount: 2 },
-      { taskId: 2, groupId: null, groupRole: null, publishedRecordCount: 0 },
+      {
+        taskId: 1,
+        groupId: 501,
+        groupRole: "SOURCE",
+        publishedRecordCount: 2,
+        hasLeftoverSource: true,
+      },
+      {
+        taskId: 2,
+        groupId: null,
+        groupRole: null,
+        publishedRecordCount: 0,
+        hasLeftoverSource: false,
+      },
     ],
   } as const;
   it("marks every card from one batch call and hides the entry for ungrouped tasks", async () => {
@@ -418,13 +485,16 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     ) as HTMLElement;
     expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
     expect(
-      await within(sourceCard).findByText("迭代记录 2 条"),
+      await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
+    // 裁决修订 D-2：遗留问题转化而来的任务在卡片上自带「遗留问题」徽章。
+    expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest("article") as HTMLElement;
     expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
     expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
     await waitFor(() =>
       expect(listTaskGroupMemberships).toHaveBeenCalledTimes(1),
@@ -433,8 +503,8 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       taskIds: [1, 2],
     });
   });
-  it("shows badge, record count and the main-task entry in the detail dialog, then routes to the group", async () => {
-    mountWithGroupRoute(
+  it("shows badge, record count and the main-task entry in the detail dialog, then opens the group dialog in place", async () => {
+    mountWithGroupModal(
       client({
         listTasks: vi.fn().mockResolvedValue({ items: [source] }),
         listTaskGroupMemberships: vi.fn().mockResolvedValue(marks),
@@ -444,8 +514,11 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
     expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
+    expect(await within(dialog).findByText("遗留问题")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
-    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+    const group = await screen.findByRole("dialog", { name: "退款聚合组" });
+    expect(within(group).getByText("TG-501 / TASK GROUP")).toBeInTheDocument();
+    expect(await within(group).findByText("主任务丙")).toBeInTheDocument();
   });
   it("keeps the main task badge but hides the main-task entry on the MAIN task itself", async () => {
     mount(
@@ -458,6 +531,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
               groupId: 501,
               groupRole: "MAIN",
               publishedRecordCount: 0,
+              hasLeftoverSource: false,
             },
           ],
         }),
@@ -467,6 +541,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       "article",
     ) as HTMLElement;
     expect(await within(mainCard).findByText("主任务")).toBeInTheDocument();
+    expect(within(mainCard).queryByText("遗留问题")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("主任务")).toBeInTheDocument();
@@ -487,6 +562,7 @@ describe("C-3 任务详情弹窗标签页", () => {
         groupId: 501,
         groupRole: role,
         publishedRecordCount: 2,
+        hasLeftoverSource: false,
       },
     ],
   });
@@ -501,6 +577,10 @@ describe("C-3 任务详情弹窗标签页", () => {
       "true",
     );
     expect(within(dialog).getByText("原说明")).toBeInTheDocument();
+    // 标签页内容区是 .calm-tabs 的紧邻兄弟节点：样式靠这个关系固定内容区高度，
+    // 保证切换标签页时弹窗大小不变（见 design-system.css 的固定高度规则）。
+    const tabStrip = within(dialog).getByRole("tablist", { name: "任务内容" });
+    expect(tabStrip.nextElementSibling).toHaveClass("task-modal-grid");
     // jsdom 下弹窗首帧动画 opacity 为 0，仓库统一用 toBeInTheDocument 断言弹窗内容。
     expect(
       within(dialog).getByRole("link", { name: "迭代记录草稿" }),
@@ -517,9 +597,13 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).queryByRole("link", { name: "迭代记录草稿" }),
     ).toBeNull();
-    expect(
-      within(dialog).getByRole("link", { name: "记录一次迭代" }),
-    ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
+    // 记录一次迭代不再跳转记录页，而是与记录页共用草稿弹窗就地打开。
+    const draftEntry = within(dialog).getByRole("button", {
+      name: "记录一次迭代",
+    });
+    expect(draftEntry).toBeInTheDocument();
+    fireEvent.click(draftEntry);
+    expect(await screen.findByText("新建来源草稿")).toBeInTheDocument();
   });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {
@@ -543,9 +627,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       contextProblem: "a",
       changeSolution: "b",
       resultVerification: "c",
-      remainingIssues: "",
+      remainingIssues: [],
       leftovers: [],
-      leftoverItem: null,
     };
     mount(
       client({
@@ -593,7 +676,7 @@ describe("C-3 任务详情弹窗标签页", () => {
               contextProblem: "a",
               changeSolution: "b",
               resultVerification: "c",
-              remainingIssues: "",
+              remainingIssues: [],
             },
           ],
         }),
@@ -603,14 +686,21 @@ describe("C-3 任务详情弹窗标签页", () => {
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
     fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
-    const publishedLink = await within(dialog).findByRole("link", {
+    // 迭代记录行整行是按钮：点开记录详情弹窗，不再跳记录页；草稿行仍为链接。
+    const publishedRow = await within(dialog).findByRole("button", {
       name: /已发布记录甲/,
     });
-    expect(publishedLink).toHaveAttribute(
-      "href",
-      "/records?projectId=2&publishedId=11",
-    );
+    expect(publishedRow).toHaveAttribute("aria-haspopup", "dialog");
     expect(within(dialog).getByText("已发布")).toBeInTheDocument();
+    fireEvent.click(publishedRow);
+    const recordDialog = await screen.findByRole("dialog", {
+      name: "已发布记录甲",
+    });
+    expect(within(recordDialog).getByText("PR-CR-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭迭代记录详情" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "已发布记录甲" })).toBeNull(),
+    );
     const draftLink = within(dialog).getByRole("link", { name: /草稿乙/ });
     expect(draftLink).toHaveAttribute(
       "href",
@@ -649,8 +739,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       await within(dialog).findByText(/操作人\s*项目成员/),
     ).toBeInTheDocument();
   });
-  it("shows the source branch panel and routes to the group from the branches tab", async () => {
-    mountWithGroupRoute(
+  it("shows the source branch panel and opens the group dialog from the branches tab", async () => {
+    mountWithGroupModal(
       client({
         listTasks: vi.fn().mockResolvedValue({ items: [source] }),
         listTaskGroupMemberships: vi.fn().mockResolvedValue(marks("SOURCE")),
@@ -666,7 +756,8 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(dialog).getByRole("heading", { name: "来源分支 · 聚合组 #501" }),
     ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
-    expect(await screen.findByText("聚合组 #501")).toBeInTheDocument();
+    const group = await screen.findByRole("dialog", { name: "退款聚合组" });
+    expect(within(group).getByText("TG-501 / TASK GROUP")).toBeInTheDocument();
   });
   it("keeps the group marker but hides the main-task entry on the MAIN task", async () => {
     mount(
@@ -698,5 +789,83 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).queryByRole("button", { name: /查看主任务/ }),
     ).toBeNull();
+  });
+});
+
+describe("ADR-034 任务归档入口", () => {
+  it("archives the task from the edit dialog footer", async () => {
+    const archiveTask = vi.fn().mockResolvedValue({
+      ...item,
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: 2,
+    });
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({
+          project: { id: 1, code: "INPULSE", name: "演示项目" },
+          currentUserRole: "LEADER",
+        }),
+        archiveTask,
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    fireEvent.click(await modal.findByTestId("task-modal-lifecycle"));
+    const lifecycleModal = within(
+      screen.getByRole("dialog", { name: "归档任务" }),
+    );
+    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
+    expect(await lifecycleModal.findByRole("alert")).toHaveTextContent(
+      "请填写操作原因",
+    );
+    fireEvent.change(lifecycleModal.getByLabelText("操作原因"), {
+      target: { value: "阶段结束" },
+    });
+    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() => expect(archiveTask).toHaveBeenCalledTimes(1));
+    expect(archiveTask.mock.calls[0]![4]).toMatchObject({ reason: "阶段结束" });
+    expect(archiveTask.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
+  });
+
+  it("keeps the archive entry reachable when the parent feature is archived", async () => {
+    const archiveTask = vi.fn().mockResolvedValue({
+      ...item,
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: 2,
+    });
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({
+          project: { id: 1, code: "INPULSE", name: "演示项目" },
+          currentUserRole: "LEADER",
+        }),
+        archiveTask,
+      }),
+      false,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    const edit = await screen.findByRole("button", { name: "编辑任务" });
+    expect(edit).not.toBeDisabled();
+    fireEvent.click(edit);
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    expect(
+      await modal.findByTestId("task-modal-lifecycle"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the lifecycle entry from plain members", async () => {
+    mount(
+      client({
+        getProject: vi.fn().mockResolvedValue({
+          project: { id: 1, code: "INPULSE", name: "演示项目" },
+          currentUserRole: "MEMBER",
+        }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "任务详情" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    expect(modal.queryByTestId("task-modal-lifecycle")).toBeNull();
   });
 });

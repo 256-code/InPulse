@@ -7,9 +7,9 @@
 | 配套输入 | [F-29 / F-32 跨域只读端口扩展提案](./c-port-extension-proposal.md)（C 岗交 B 岗；本裁决同时对其 §7 的两处架构冲突给出结论） |
 | 上游编号 | C-003（聚合接口缺口）、C-010（候选接口尚未冻结） |
 | 文档性质 | 契约评审裁决记录；不是 ADR，不替代功能设计、系统设计、技术设计、权限矩阵或测试矩阵 |
-| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships` |
+| 状态 | 已裁决：C-003 / C-010 与 Q-01 ~ Q-15 全部给出结论；三条候选路由进入正式契约，并按 Q-02 新增第 4 条子资源路由。2026-09-11 追加第二轮裁决（§10）：R-2 / R-3 字段与统计扩展、新增 R-5 `listTaskGroupMemberships`。2026-09-17 追加裁决修订 D-2（§12）：R-3 / R-5 增加 `hasLeftoverSource` |
 | 基线 | `origin/main` `fc7bb68`（F-20 PR #88 之后）；本文引用的代码事实均按该提交复核 |
-| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付。§11 的 D-1 修订已由 B-7（记录侧计数映射，[PR #116](https://github.com/256-code/InPulse/pull/116)）与 A-7（R-3 `publishedRecordCount`、R-5 任务记录标记批量读，2026-09-11 本地落库）交付，C-1 前置解除 |
+| 落库状态 | R-1 ~ R-4 已按 §7 随实现同一个 PR 落库（[PR #97](https://github.com/256-code/InPulse/pull/97)，含 Route Registry 全策略、权限矩阵、OpenAPI 与生成客户端）；§10 的第二轮扩展（R-2 / R-3 字段与统计、新增 R-5 `listTaskGroupMemberships`）已随服务端实现同一个 PR 落库（[PR #102](https://github.com/256-code/InPulse/pull/102)），含权限矩阵、测试矩阵、OpenAPI 与生成客户端再生成和 `EXPLAIN` 证据；C 侧 R-5 前端接线与降级项替换仍按 §10.5 由 C 交付。§11 的 D-1 修订已由 B-7（记录侧计数映射，[PR #116](https://github.com/256-code/InPulse/pull/116)）与 A-7（R-3 `publishedRecordCount`、R-5 任务记录标记批量读，2026-09-11 本地落库）交付，C-1 前置解除。§12 的 D-2 修订（R-3 / R-5 `hasLeftoverSource`）已于 2026-09-17 本地落库（契约、端口、两个聚合读服务、生成客户端、前端徽章与测试同一批） |
 | 当前日期 | 2026-09-10 |
 
 ## 1. 结论摘要
@@ -27,7 +27,7 @@
 | Q-07 | 由 B 域单条 SQL 实现 | 先过滤后分页；不转 ADR |
 | Q-08 | 固定「负责人 = 当前用户」 | 删除 `assigneeMe` 参数 |
 | Q-09 | V1 只落 F-32 的 4 项筛选 | 其余筛选留给后续迭代 |
-| Q-10 | 固定 `id DESC` | 不提供 `sort`；游标沿用 C-006 |
+| Q-10 | 固定 `id DESC`（2026-09-18 由 [ADR-037](adr/ADR-037.md) 替代，改按 状态分组 + 紧急桶 + 优先级 + 截止时间 + 任务 ID） | 不提供 `sort`；游标沿用 C-006（`MY_TASKS` 载荷按 ADR-037 扩展为多列 keyset） |
 | Q-11 | 标记数据放 R-1 / R-3 | 与 Q-03 一致 |
 | Q-12 | 拒绝路线 I 与路线 III | B 域单条 SQL 端口 + C 聚合服务组合 |
 | Q-13 | `DRAFT` 不可见 | 只返回 `PUBLISHED` 与 `VOID` |
@@ -81,7 +81,7 @@ auditAction: "none",
 | Q-07 | 由 B 域在单条 SQL 内实现，不经 C 只读适配器 | AGENTS.md §3 规定跨域读只允许通过稳定 QueryPort；技术设计 §5.3 明确 TasksModule 不反向持有记录外键；C 端口提案 §7.1 已实测 `ChangeRecordsModule → TaskQueryPort` 依赖边 | B 新增承载该查询的只读端口（宿主模块见 §6）；查询先过滤后分页；不转 ADR |
 | Q-08 | 固定为「负责人 = 当前用户」，删除该参数 | `/me` 语义不应接受他人身份；AGENTS.md §7 禁止用客户端提交的 `projectId` / 身份证明资源归属 | R-3 参数不含 `assigneeMe` / `userId` / `assigneeId` / `projectIds`；查看他人任务继续用已落库的 `listProjectMemberUnfinishedTasks` |
 | Q-09 | V1 只落 F-32 要求的 4 项筛选 | 工作书 F-32 步骤 3；功能设计 §24.3 的其余 9 项没有当前消费场景，登记未实现参数会污染正式契约 | R-3 参数固定为 `cursor` / `limit` / `projectId` / `scopeType` / `workStatus` / `hasPublishedRecord`；其余筛选留待后续迭代 |
-| Q-10 | 固定 `ORDER BY t.id DESC`，不提供 `sort` | 现有索引可命中 `ORDER BY t.id DESC`，`updated_at` 无可用索引（C 端口提案 §1.4）；游标约定沿用 C-006 | R-3 的 `limit` 默认 20、上限 100；游标签名绑定 actor 与筛选条件，TTL 15 分钟；无效、过期或越界返回 `422` |
+| Q-10 | 固定 `ORDER BY t.id DESC`，不提供 `sort` | 现有索引可命中 `ORDER BY t.id DESC`，`updated_at` 无可用索引（C 端口提案 §1.4）；游标约定沿用 C-006 | R-3 的 `limit` 默认 20、上限 100；游标签名绑定 actor 与筛选条件，TTL 15 分钟；无效、过期或越界返回 `422`。2026-09-18 由 [ADR-037](adr/ADR-037.md) 替代：排序改为固定「状态分组 + 紧急桶（已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余）+ 优先级 + 截止时间 + 任务 ID」，`MY_TASKS` 游标载荷扩展为多列 keyset 且缺失该键的旧载荷按无效游标 `422`（待人工批准） |
 | Q-11 | 与 Q-03 一致：标记数据放在 R-1 成员项与 R-3 项 | 既满足 F-25 步骤 3 的展示要求，又避免扩大被多条路由复用的任务基础 DTO | R-1 成员项保留 `role` 与 `publishedRecordCount`；R-3 项保留 `groupRole` |
 | Q-12 | 拒绝路线 I 与路线 III；采用 B 域单条 SQL 端口加 C 聚合读服务组合 | AGENTS.md §3 的跨域读约束、系统设计 §6 模块职责表、工作书 F-29 步骤 2 的处方 | 见 §6；路线 IV（投影）保留为后续性能优化，不在 V1 |
 | Q-13 | 不可见：只返回 `PUBLISHED` 与 `VOID` | 功能设计 §29.4 只把正式记录计入迭代历史；`change_records.status` 是详情、统计、搜索与时间线可见性的唯一真相（ADR-024） | R-4 响应不含 `DRAFT`；`code` 在非 `PUBLISHED` 场景按提案置空 |
@@ -192,7 +192,7 @@ auditAction: "none",
 
 | 参数 | A 裁决 | 说明 |
 | --- | --- | --- |
-| `priority` | 接受：单值 | 与 `workStatus` 正交；`dueAt` 级别的排序仍固定 `id DESC` |
+| `priority` | 接受：单值 | 与 `workStatus` 正交；`dueAt` 级别的排序由 [ADR-037](adr/ADR-037.md) 固定为「状态分组 + 紧急桶 + 优先级 + 截止时间 + 任务 ID」（原 `id DESC` 已替代） |
 | `includeCanceled` | 接受：布尔，缺省 `false` | 与 `workStatus` 组合表达「未完成并含已取消」（`TODO ∪ CANCELED`），替代 `workStatus` 多值写法 |
 | `relation` | 延后 | 需要 C 域聚合关系参与筛选，属 Q-07 同类跨域问题，须单独裁决 |
 | `query` | 延后 | 关键词检索属 F-26 搜索投影范畴，不得在聚合读里自建 `LIKE` |
@@ -282,3 +282,22 @@ R-5 现状（§10.4）只返回属于 `ACTIVE` 聚合组的任务，未入组的
 
 **前置关系：** D-1.2 与 D-1.3 未落库前，C 侧不得以条数实现该标记；R-5 扩展落库后 F-25 步骤 3 才可闭环。A-7 与 B-7 的台账见[开发工作书](../开发工作书v1.0.md)「剩余工作清算与岗位重分配（2026-09-11 生效）」。
 **验收：** `pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；R-3 与 R-5 的真实 PostgreSQL 集成测试覆盖未入组任务的计数与空值；`EXPLAIN (ANALYZE, BUFFERS)` 证明计数未破坏先过滤后分页。
+
+## 12. 裁决修订 D-2：R-3 / R-5 增加 `hasLeftoverSource`（2026-09-17，用户要求）
+
+### 12.1 需求与定案
+
+用户要求「遗留问题转为的任务要自带遗留问题的标签」：F-20 转换生成的跟进任务必须在任务列表（任务中心与功能档案）里可见地标记来源，而不是只有任务详情弹窗底部一个来源链接。
+
+**定案：R-3 `MyTaskItem` 与 R-5 `TaskGroupMembershipItem` 各增加 `hasLeftoverSource: boolean`。** Q-03 / D-1.1 维持有效：任务基础 DTO（`tasks.zod.ts`）不动；标记沿用 D-1 的两条宿主——R-3 覆盖任务中心，R-5 页面级一次批量覆盖功能档案任务卡片与详情弹窗，不新增路由、不增加请求数。
+
+### 12.2 口径
+
+- 判定依据是 `leftover_task_links` 是否存在该任务的链接行；链接行由转换 Workflow 同事务写入且永不删除（`leftover_item_id` 主键、`task_id` 唯一），存在即「由遗留问题转换而来」。
+- 与来源记录当前状态（PUBLISHED / VOID）及遗留项处置状态（CONVERTED / RESOLVED）无关；记录后续作废不回撤标记。
+- 数据读取由记录侧 `ChangeRecordReadPort.listLeftoverSourceTaskIds`（单条 SQL、按 task_id 升序、无链接的任务缺席由消费端补 false）承担，与 B-7 `countPublishedByTask` 同模式、同宿主，不新增依赖边。
+- 前端展示为「遗留问题」徽章（`CalmBadge tone="amber"`）；R-5 读取失败降级为空标记集合时徽章隐藏，不回退为逐个请求。
+
+### 12.3 验收
+
+`pnpm contract:validate`、`pnpm contract:drift`、`pnpm permissions:check` 通过；R-3 与 R-5 的真实 PostgreSQL 集成测试覆盖有/无链接行的任务标记与 projectIds 收窄；端口越界校验（`CHANGE_RECORD_TASK_IDS_MAX`、空集短路不发 SQL）与 `countPublishedByTask` 同断言强度。

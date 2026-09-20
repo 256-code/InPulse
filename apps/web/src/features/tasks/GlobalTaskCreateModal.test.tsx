@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { InpulseApiClient } from "@generated/api";
@@ -18,7 +18,12 @@ const projects = [
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
     memberCount: 4,
-    stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 3 },
+    stats: {
+      activeModuleCount: 2,
+      activeFeatureCount: 5,
+      openTaskCount: 3,
+      completedTaskCount: 1,
+    },
   },
 ] as const;
 
@@ -155,6 +160,37 @@ function mount(
   );
 }
 
+function assigneeTrigger(): HTMLElement {
+  const trigger = screen.getByLabelText("指派给").closest(".ant-select");
+  if (!trigger) {
+    throw new Error("assignee select not found");
+  }
+  return trigger as HTMLElement;
+}
+
+/** CalmSelect 交互：打开指派人下拉并点选成员（弹层项带 title 属性）。 */
+async function pickAssignee(
+  user: ReturnType<typeof userEvent.setup>,
+  memberName: string,
+) {
+  await user.click(assigneeTrigger());
+  await user.click(await screen.findByTitle(memberName));
+}
+
+/** CalmSelect 交互：打开任意标签的下拉并点选目标项（弹层项带 title 属性）。 */
+async function pickOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  optionTitle: string,
+) {
+  const trigger = screen.getByLabelText(label).closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  await user.click(trigger as HTMLElement);
+  await user.click(await screen.findByTitle(optionTitle));
+}
+
 describe("GlobalTaskCreateModal", () => {
   it("keeps the form gated until the task has a real project/module/feature home", async () => {
     const test = harness();
@@ -167,11 +203,11 @@ describe("GlobalTaskCreateModal", () => {
     expect(screen.queryByText("正在加载项目成员…")).toBeNull();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
 
-    await user.selectOptions(await screen.findByLabelText("所属项目"), "1");
+    await pickOption(user, "所属项目", "InPulse 平台");
     await waitFor(() =>
       expect(screen.getByLabelText("所属模块")).toBeEnabled(),
     );
-    await user.selectOptions(screen.getByLabelText("所属模块"), "11");
+    await pickOption(user, "所属模块", "访问控制");
     await waitFor(() =>
       expect(screen.getByLabelText("所属功能")).toBeEnabled(),
     );
@@ -179,11 +215,10 @@ describe("GlobalTaskCreateModal", () => {
     // 归属尚未选到功能之前，指派人与提交按钮都不该解锁。
     expect(screen.getByLabelText("指派给")).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText("所属功能"), "111");
+    await pickOption(user, "所属功能", "MFA 登录");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-    expect(
-      await screen.findByRole("option", { name: "李雷" }),
-    ).toBeInTheDocument();
+    await user.click(assigneeTrigger());
+    expect(await screen.findByTitle("李雷")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeEnabled();
   });
 
@@ -209,9 +244,8 @@ describe("GlobalTaskCreateModal", () => {
     await waitFor(() =>
       expect(screen.queryByText("正在加载项目成员…")).toBeNull(),
     );
-    expect(
-      await screen.findByRole("option", { name: "李雷" }),
-    ).toBeInTheDocument();
+    fireEvent.mouseDown(assigneeTrigger());
+    expect(await screen.findByTitle("李雷")).toBeInTheDocument();
   });
 
   it("resets the dependent selections when the project changes", async () => {
@@ -219,14 +253,19 @@ describe("GlobalTaskCreateModal", () => {
     mount(test, { preset: { projectId: 1, moduleId: 11, featureId: 111 } });
     const user = userEvent.setup();
 
+    const featureField = await screen.findByLabelText("所属功能");
     await waitFor(() =>
-      expect(screen.getByLabelText("所属功能")).toHaveValue("111"),
+      expect(featureField.closest(".ant-select")).toHaveTextContent("MFA 登录"),
     );
 
-    await user.selectOptions(screen.getByLabelText("所属项目"), "0");
+    await pickOption(user, "所属项目", "请选择项目");
 
-    expect(screen.getByLabelText("所属模块")).toHaveValue("0");
-    expect(screen.getByLabelText("所属功能")).toHaveValue("0");
+    const moduleField = screen.getByLabelText("所属模块");
+    expect(moduleField).toBeDisabled();
+    expect(moduleField.closest(".ant-select")).toHaveTextContent(
+      "请先选择项目",
+    );
+    expect(screen.getByLabelText("所属功能")).toBeDisabled();
     expect(screen.getByLabelText("指派给")).toBeDisabled();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
   });
@@ -238,7 +277,7 @@ describe("GlobalTaskCreateModal", () => {
 
     await user.type(await screen.findByLabelText("任务标题"), "补齐恢复码入口");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-    await user.selectOptions(screen.getByLabelText("指派给"), "2");
+    await pickAssignee(user, "李雷");
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
     await waitFor(() => expect(test.createTask).toHaveBeenCalledTimes(1));
@@ -274,7 +313,7 @@ describe("GlobalTaskCreateModal", () => {
 
     await user.type(await screen.findByLabelText("任务标题"), "模块级任务");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-    await user.selectOptions(screen.getByLabelText("指派给"), "1");
+    await pickAssignee(user, "陈晓");
     await user.click(await screen.findByLabelText("会话管理"));
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
@@ -308,7 +347,7 @@ describe("GlobalTaskCreateModal", () => {
 
     await user.type(await screen.findByLabelText("任务标题"), "带链接的任务");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-    await user.selectOptions(screen.getByLabelText("指派给"), "1");
+    await pickAssignee(user, "陈晓");
     await user.type(
       screen.getByLabelText("GitHub 链接"),
       "https://github.com/256-code/InPulse/pull/1",
@@ -353,7 +392,7 @@ describe("GlobalTaskCreateModal", () => {
 
     await user.type(await screen.findByLabelText("任务标题"), "重复标题");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-    await user.selectOptions(screen.getByLabelText("指派给"), "1");
+    await pickAssignee(user, "陈晓");
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
     await waitFor(() => expect(test.createTask).toHaveBeenCalledTimes(1));
@@ -373,12 +412,12 @@ it("在一次提交中创建自定义模块、功能和任务，并返回真实�
   Object.assign(test.client, { createTaskWithScope });
   mount(test, { preset: { projectId: 1 } });
   const user = userEvent.setup();
-  await user.selectOptions(await screen.findByLabelText("所属模块"), "-1");
+  await pickOption(user, "所属模块", "自定义 · 创建新模块");
   await user.type(screen.getByLabelText("新模块名称"), "新业务模块");
   await user.type(screen.getByLabelText("新功能名称"), "新业务功能");
   await user.type(screen.getByLabelText("任务标题"), "一起创建");
   await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
-  await user.selectOptions(screen.getByLabelText("指派给"), "1");
+  await pickAssignee(user, "陈晓");
   await user.click(screen.getByRole("button", { name: "创建任务" }));
   await waitFor(() => expect(createTaskWithScope).toHaveBeenCalledTimes(1));
   expect(createTaskWithScope).toHaveBeenCalledWith(

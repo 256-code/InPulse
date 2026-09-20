@@ -11,6 +11,9 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CalmSegmented } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { useProjects } from "@features/projects/project-query";
 import { useModules } from "@features/modules/module-query";
 import { useFeatures } from "@features/features/feature-query";
@@ -286,6 +289,7 @@ export function GlobalTaskCreateModal({
       await Promise.all(
         [
           "tasks",
+          "task-board",
           "modules",
           "features",
           "activity",
@@ -431,24 +435,23 @@ export function GlobalTaskCreateModal({
 
             <div className="calm-field">
               <label htmlFor="global-task-project">所属项目</label>
-              <select
+              <CalmSelect
                 id="global-task-project"
+                ariaLabel="所属项目"
                 value={projectId}
-                onChange={(event) => {
-                  setProjectId(Number(event.target.value));
+                appearance="rich"
+                onChange={(next) => {
+                  setProjectId(Number(next));
                   setModuleId(0);
                   setFeatureId(0);
                   setAssigneeId(0);
                   setImpactFeatureIds([]);
                 }}
-              >
-                <option value={0}>请选择项目</option>
-                {projects.data?.items.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: 0, label: "请选择项目" },
+                  ...(projects.data?.items ?? []).map(projectSelectOption),
+                ]}
+              />
               {projects.isError && (
                 <p role="alert">项目列表加载失败，请稍后重试。</p>
               )}
@@ -456,31 +459,31 @@ export function GlobalTaskCreateModal({
 
             <div className="calm-field">
               <label htmlFor="global-task-module">所属模块</label>
-              <select
+              <CalmSelect
                 id="global-task-module"
+                ariaLabel="所属模块"
                 value={moduleId}
                 disabled={projectId === 0}
-                onChange={(event) => {
-                  setModuleId(Number(event.target.value));
-                  setFeatureId(Number(event.target.value) === -1 ? -1 : 0);
+                appearance="menu"
+                onChange={(next) => {
+                  setModuleId(Number(next));
+                  setFeatureId(Number(next) === -1 ? -1 : 0);
                   setAssigneeId(0);
                   setImpactFeatureIds([]);
                 }}
-              >
-                <option value={0}>
-                  {projectId === 0 ? "请先选择项目" : "请选择模块"}
-                </option>
-                <option value={-1}>自定义 · 创建新模块</option>
-                {modules.query.data?.items.map((module) => (
-                  <option
-                    key={module.id}
-                    value={module.id}
-                    disabled={module.status !== "ACTIVE"}
-                  >
-                    {module.name}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  {
+                    value: 0,
+                    label: projectId === 0 ? "请先选择项目" : "请选择模块",
+                  },
+                  { value: -1, label: "自定义 · 创建新模块" },
+                  ...(modules.query.data?.items ?? []).map((module) => ({
+                    value: module.id,
+                    label: module.name,
+                    disabled: module.status !== "ACTIVE",
+                  })),
+                ]}
+              />
             </div>
 
             {moduleId === -1 && (
@@ -501,30 +504,31 @@ export function GlobalTaskCreateModal({
             {scope === "FEATURE" && (
               <div className="calm-field">
                 <label htmlFor="global-task-feature">所属功能</label>
-                <select
+                <CalmSelect
                   id="global-task-feature"
+                  ariaLabel="所属功能"
                   value={featureId}
                   disabled={moduleId === 0}
-                  onChange={(event) => {
-                    setFeatureId(Number(event.target.value));
+                  appearance="menu"
+                  onChange={(next) => {
+                    setFeatureId(Number(next));
                     setAssigneeId(0);
                   }}
-                >
-                  <option value={0}>
-                    {moduleId === 0 ? "请先选择模块" : "请选择功能"}
-                  </option>
-                  <option value={-1}>自定义 · 创建新功能</option>
-                  {features.query.data?.items.map((feature) => (
-                    <option
-                      key={feature.id}
-                      value={feature.id}
-                      disabled={feature.status !== "ACTIVE"}
-                    >
-                      {feature.name}
-                      {feature.status === "ARCHIVED" ? "（已归档）" : ""}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    {
+                      value: 0,
+                      label: moduleId === 0 ? "请先选择模块" : "请选择功能",
+                    },
+                    { value: -1, label: "自定义 · 创建新功能" },
+                    ...(features.query.data?.items ?? []).map((feature) => ({
+                      value: feature.id,
+                      label:
+                        feature.name +
+                        (feature.status === "ARCHIVED" ? "（已归档）" : ""),
+                      disabled: feature.status !== "ACTIVE",
+                    })),
+                  ]}
+                />
               </div>
             )}
 
@@ -544,21 +548,22 @@ export function GlobalTaskCreateModal({
             )}
             <div className="calm-field">
               <label htmlFor="global-task-assignee">指派给</label>
-              <select
+              <CalmSelect
                 id="global-task-assignee"
-                value={assigneeId}
+                value={assigneeId > 0 ? assigneeId : null}
+                onChange={(next) => setAssigneeId(Number(next))}
+                options={(assignees.data?.items ?? []).map((member) => ({
+                  value: member.id,
+                  label: member.name,
+                  avatarUrl: member.avatarUrl ?? null,
+                }))}
+                appearance="member"
+                placeholder={
+                  targetReady ? "请选择项目成员" : "请先选择任务归属"
+                }
                 disabled={!targetReady}
-                onChange={(event) => setAssigneeId(Number(event.target.value))}
-              >
-                <option value={0}>
-                  {targetReady ? "请选择项目成员" : "请先选择任务归属"}
-                </option>
-                {assignees.data?.items.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
+                ariaLabel="指派给"
+              />
               {targetReady && isFirstLoad(assignees) && (
                 <p>正在加载项目成员…</p>
               )}
@@ -581,19 +586,20 @@ export function GlobalTaskCreateModal({
             <div className="form-row">
               <div className="calm-field">
                 <label htmlFor="global-task-priority">优先级</label>
-                <select
+                <CalmSelect
                   id="global-task-priority"
+                  ariaLabel="优先级"
                   value={priority}
-                  onChange={(event) =>
-                    setPriority(event.target.value as Priority)
-                  }
-                >
-                  {Object.entries(priorityLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  appearance="menu"
+                  onChange={(next) => setPriority(next as Priority)}
+                  options={Object.entries(priorityLabels).map(
+                    ([value, label]) => ({
+                      value,
+                      label,
+                      dotColor: priorityDotColor(value),
+                    }),
+                  )}
+                />
               </div>
               <div className="calm-field">
                 <label htmlFor="global-task-due">截止时间</label>

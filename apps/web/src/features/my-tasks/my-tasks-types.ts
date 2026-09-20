@@ -83,6 +83,11 @@ export interface MyTaskListItem {
   readonly githubLinkCount: number;
   /** 与 groupRole 同源、同空同非空；供「查看主任务」入口按组导航（C-1）。 */
   readonly groupId: number | null;
+  /**
+   * 任务是否由遗留问题转换而来（F-20，裁决修订 D-2）：按 leftover_task_links
+   * 存在链接行判定，与来源记录当前状态无关；true 时显示「遗留问题」徽章。
+   */
+  readonly hasLeftoverSource: boolean;
 }
 
 /** 统计卡片口径；与列表筛选相互独立，按当前范围（scope/project）计算。 */

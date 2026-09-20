@@ -108,7 +108,7 @@ export function useCatalogTrail({
   const featureList = features.query.data?.items;
 
   return {
-    projectName: project.data?.name ?? null,
+    projectName: project.data?.project?.name ?? null,
     moduleName:
       moduleId === null
         ? null

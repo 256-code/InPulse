@@ -18,16 +18,22 @@ import {
   PROJECT_ACCESS_QUERY_PORT,
   type ProjectAccessQueryPort,
 } from "./project-access.port.js";
+import { ProjectRoleGateService } from "./project-role-gate.service.js";
 import {
   ActiveUsersQueryPort,
   type ProjectMemberRecord,
   type ProjectRecord,
   ProjectsWritePort,
 } from "./projects-write.port.js";
-import type { RemoveProjectMemberRequest } from "@inpulse/api-contract";
+import type {
+  RemoveProjectMemberRequest,
+  SetProjectMemberRoleRequest,
+  SetProjectMemberRoleResponse,
+} from "@inpulse/api-contract";
 
 const PROJECT_MEMBER_ADD_ACTIVITY = "PROJECT_MEMBER_ADDED";
 const PROJECT_MEMBER_REMOVE_ACTIVITY = "PROJECT_MEMBER_REMOVED";
+const PROJECT_MEMBER_ROLE_CHANGE_ACTIVITY = "PROJECT_MEMBER_ROLE_CHANGED";
 const PROJECT_MEMBER_JOIN_NOTIFICATION = "PROJECT_JOINED";
 
 export class ProjectMemberManagementError extends Error {
@@ -42,7 +48,10 @@ export class ProjectMemberManagementError extends Error {
 }
 
 export interface ProjectMemberCommandResult extends IdempotencyExecutionResult {
-  readonly body: AddProjectMemberResponse | RemoveProjectMemberResponse;
+  readonly body:
+    | AddProjectMemberResponse
+    | RemoveProjectMemberResponse
+    | SetProjectMemberRoleResponse;
 }
 
 /**
@@ -59,6 +68,8 @@ export class ProjectMemberManagementService {
     private readonly access: ProjectAccessQueryPort,
     @Inject(ProjectMemberTaskCommandPort)
     private readonly tasks: ProjectMemberTaskCommandPort,
+    @Inject(ProjectRoleGateService)
+    private readonly roleGate: ProjectRoleGateService,
     @Inject(AuditWritePort) private readonly audit: AuditWritePort,
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(NotificationWritePort)
@@ -68,8 +79,10 @@ export class ProjectMemberManagementService {
   async listMembers(
     tx: TransactionContext,
     projectId: number,
+    actorId: number,
   ): Promise<ProjectMembersListResponse> {
     await this.requireReadProject(tx, projectId);
+    await this.requireManageRole(tx, actorId, projectId);
     const items = (await this.projects.listMembers(tx, { projectId })).map(
       (record) => this.toContractMember(record),
     );
@@ -80,8 +93,10 @@ export class ProjectMemberManagementService {
     tx: TransactionContext,
     projectId: number,
     userId: number,
+    actorId: number,
   ): Promise<ProjectMemberUnfinishedTasksResponse> {
     await this.requireReadProject(tx, projectId);
+    await this.requireManageRole(tx, actorId, projectId);
     const member = await this.projects.findLatestMember(tx, {
       projectId,
       userId,
@@ -103,6 +118,7 @@ export class ProjectMemberManagementService {
     },
   ): Promise<ProjectMemberCommandResult> {
     const project = await this.requireWritableProject(tx, input);
+    await this.requireManageRole(tx, input.actorId, input.projectId);
     const active = await this.activeUsers.findActiveUserIds(tx, [input.userId]);
     if (active.length !== 1) {
       throw new ProjectMemberManagementError(
@@ -207,12 +223,20 @@ export class ProjectMemberManagementService {
     },
   ): Promise<ProjectMemberCommandResult> {
     const project = await this.requireWritableProject(tx, input);
+    await this.requireManageRole(tx, input.actorId, input.projectId);
     const latest = await this.projects.findLatestMember(tx, {
       projectId: input.projectId,
       userId: input.userId,
     });
     if (latest === undefined || latest.status !== "ACTIVE") {
       throw this.notFound();
+    }
+    if (latest.role === "LEADER") {
+      throw new ProjectMemberManagementError(
+        409,
+        "PROJECT_MEMBER_LEADER_PROTECTED",
+        "项目组长不能被移除，请先由系统管理员转移或撤销组长角色",
+      );
     }
 
     const reassignedTaskIds = await this.tasks.reassign(tx, {
@@ -294,6 +318,121 @@ export class ProjectMemberManagementService {
     };
   }
 
+  /**
+   * ADR-033：任命/撤销项目内角色。系统管理员可设全部角色（含转移组长），
+   * 本项目组长只能设 MEMBER/PROJECT_ADMIN；目标必须为 ACTIVE 成员。
+   */
+  async setRole(
+    tx: TransactionContext,
+    input: {
+      readonly actorId: number;
+      readonly projectId: number;
+      readonly userId: number;
+      readonly role: SetProjectMemberRoleRequest["role"];
+      readonly requestId: string;
+    },
+  ): Promise<ProjectMemberCommandResult> {
+    const project = await this.requireWritableProject(tx, input);
+    const setter = await this.roleGate.roleSetterRole(
+      tx,
+      input.actorId,
+      input.projectId,
+    );
+    if (setter === "NOT_MEMBER") throw this.notFound();
+    if (setter === "MEMBER") {
+      throw new ProjectMemberManagementError(
+        403,
+        "PROJECT_MEMBER_ROLE_FORBIDDEN",
+        "只有系统管理员或本项目组长可以任命或撤销项目内角色",
+      );
+    }
+    if (setter === "LEADER" && input.role === "LEADER") {
+      throw new ProjectMemberManagementError(
+        403,
+        "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
+        "组长不能任命或转移组长角色，请联系系统管理员",
+      );
+    }
+    const target = await this.projects.findLatestMember(
+      tx,
+      { projectId: input.projectId, userId: input.userId },
+      true,
+    );
+    if (target === undefined || target.status !== "ACTIVE") {
+      throw this.notFound();
+    }
+    let updated: ProjectMemberRecord | undefined;
+    try {
+      updated = await this.projects.setMemberRole(tx, {
+        projectId: input.projectId,
+        userId: input.userId,
+        role: input.role,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error, "project_members_one_leader")) {
+        throw new ProjectMemberManagementError(
+          409,
+          "PROJECT_MEMBER_LEADER_CONFLICT",
+          "该项目已存在组长，请先转移或撤销现有组长",
+        );
+      }
+      throw error;
+    }
+    if (updated === undefined) {
+      throw this.notFound();
+    }
+
+    const occurredAt = new Date();
+    const event = await this.audit.append(tx, {
+      projectId: project.projectId,
+      actorType: "USER",
+      actorId: input.actorId,
+      action: "project.member.role.set",
+      targetType: "USER",
+      targetId: String(input.userId),
+      eventPayload: {
+        projectId: project.projectId,
+        userId: input.userId,
+        membershipId: updated.membershipId,
+        role: updated.role,
+      },
+      requestId: input.requestId,
+      occurredAt,
+    });
+    await this.activity.append(tx, {
+      projectId: project.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "PROJECT",
+      sourceEntityId: project.projectId,
+      activityType: PROJECT_MEMBER_ROLE_CHANGE_ACTIVITY,
+      actorId: input.actorId,
+      summary: `将用户 ${updated.name} 的项目角色设置为 ${updated.role}`,
+      metadata: {
+        userId: updated.userId,
+        membershipId: updated.membershipId,
+        role: updated.role,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: project.status,
+      sourceRowVersion: project.rowVersion,
+      occurredAt,
+    });
+
+    const body = { member: this.toContractMember(updated) };
+    return {
+      responseStatus: 200,
+      responseSchemaRef: "SetProjectMemberRoleResponse",
+      responseHasBody: true,
+      responseBody: body,
+      replayAuthContext: {
+        projectId: project.projectId,
+        memberUserId: updated.userId,
+      },
+      body,
+    };
+  }
+
   async replayAuthorizer(
     tx: TransactionContext,
     actorId: number,
@@ -307,6 +446,7 @@ export class ProjectMemberManagementService {
       actorId,
       projectId: parsed.data.projectId,
     });
+    await this.requireManageRole(tx, actorId, parsed.data.projectId);
     const project = await this.projects.findProject(tx, {
       projectId: parsed.data.projectId,
     });
@@ -331,6 +471,26 @@ export class ProjectMemberManagementService {
       throw this.notFound();
     }
     return project;
+  }
+
+  /**
+   * ADR-033 项目内管理角色门禁：系统管理员或本项目 LEADER/PROJECT_ADMIN
+   * 通过；普通成员 403；非成员/已移除 404（不泄露存在性）。
+   */
+  private async requireManageRole(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+  ): Promise<void> {
+    const role = await this.roleGate.manageRole(tx, actorId, projectId);
+    if (role === "NOT_MEMBER") throw this.notFound();
+    if (role === "MEMBER") {
+      throw new ProjectMemberManagementError(
+        403,
+        "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+        "只有系统管理员、本项目组长或项目管理员可以执行该操作",
+      );
+    }
   }
 
   private async requireWritableProject(
@@ -370,6 +530,7 @@ export class ProjectMemberManagementService {
       name: record.name,
       avatarUrl: record.avatarUrl,
       status: record.status,
+      role: record.role,
       joinedAt: record.joinedAt,
       removedAt: record.removedAt,
     };
@@ -393,12 +554,16 @@ export class ProjectMemberManagementService {
 }
 
 function isActiveUniqueViolation(error: unknown): boolean {
+  return isUniqueViolation(error, "project_members_active_unique");
+}
+
+function isUniqueViolation(error: unknown, constraint: string): boolean {
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
     error.code === "23505" &&
     "constraint_name" in error &&
-    error.constraint_name === "project_members_active_unique"
+    error.constraint_name === constraint
   );
 }

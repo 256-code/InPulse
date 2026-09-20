@@ -16,7 +16,9 @@ const errors = {
 };
 
 const readPolicies = {
-  authPolicy: "adminSession" as const,
+  // ADR-033：成员管理读路径下放给本项目组长/项目管理员，角色门禁在
+  // 权限矩阵 conditional 条目与服务层校验，系统管理员经 is_admin 旁路。
+  authPolicy: "session" as const,
   csrfPolicy: "none" as const,
   idempotencyPolicy: "none" as const,
   idempotencyExceptionAdr: "none",
@@ -44,6 +46,7 @@ const replayPolicy = {
           "member.name",
           "member.avatarUrl",
           "member.status",
+          "member.role",
           "member.joinedAt",
           "member.removedAt",
         ],
@@ -65,6 +68,7 @@ const removeReplayPolicy = {
           "member.name",
           "member.avatarUrl",
           "member.status",
+          "member.role",
           "member.joinedAt",
           "member.removedAt",
           "reassignedTaskIds[]",
@@ -90,7 +94,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members",
     operationId: "listProjectMembers",
     summary:
-      "系统管理员读取项目成员完整历史，要求当前有效的完整管理员 Session（is_admin）；普通成员与非成员统一 403/404。",
+      "读取项目成员完整历史；系统管理员或本项目组长/项目管理员（ADR-033）可读，其余成员与非成员统一 403/404。",
     request: {
       path: "ProjectMemberCollectionPath",
       query: "none",
@@ -105,7 +109,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members/{userId}/unfinished-tasks",
     operationId: "listProjectMemberUnfinishedTasks",
     summary:
-      "系统管理员读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人。",
+      "读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人；系统管理员或本项目组长/项目管理员（ADR-033）可读。",
     request: {
       path: "ProjectMemberPath",
       query: "none",
@@ -123,7 +127,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members",
     operationId: "addProjectMember",
     summary:
-      "系统管理员添加项目成员；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
+      "添加项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
     request: {
       path: "ProjectMemberCollectionPath",
       query: "none",
@@ -138,11 +142,12 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("AddProjectMemberResponse"), ...errors },
-    authPolicy: "adminSession",
+    authPolicy: "session",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    // ADR-033：响应新增 role 且重放门禁加入项目角色复核，旧 Key 409。
+    idempotencyContractVersion: "1.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: replayPolicy,
@@ -166,7 +171,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members/{userId}/remove",
     operationId: "removeProjectMember",
     summary:
-      "系统管理员移除项目成员；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权，同事务写审计与活动。",
+      "移除项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写，但组长成员行不得被移除（先转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
     request: {
       path: "ProjectMemberPath",
       query: "none",
@@ -181,11 +186,12 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
       },
     },
     responses: { "200": json("RemoveProjectMemberResponse"), ...errors },
-    authPolicy: "adminSession",
+    authPolicy: "session",
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    // ADR-033：响应新增 role、LEADER 移除保护与重放角色复核，旧 Key 409。
+    idempotencyContractVersion: "1.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: removeReplayPolicy,
@@ -203,5 +209,68 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
         "项目 FOR SHARE，任务按父级与 ID 锁序改派后成员 FOR UPDATE；任务版本冲突 409，不自动重试",
     },
     auditAction: "project.member.remove",
+  },
+  {
+    method: "POST",
+    path: "/projects/{projectId}/members/{userId}/role",
+    operationId: "setProjectMemberRole",
+    summary:
+      "ADR-033 任命/撤销项目内角色：系统管理员可设 MEMBER/PROJECT_ADMIN/LEADER（转移组长），本项目组长只能设 MEMBER/PROJECT_ADMIN；目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+    request: {
+      path: "ProjectMemberPath",
+      query: "none",
+      headers: "ProjectMemberMutationHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "SetProjectMemberRoleRequest",
+          },
+        ],
+      },
+    },
+    responses: { "200": json("SetProjectMemberRoleResponse"), ...errors },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: [],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "SetProjectMemberRoleResponse",
+            safeBodyFieldPaths: [
+              "member.membershipId",
+              "member.projectId",
+              "member.userId",
+              "member.name",
+              "member.avatarUrl",
+              "member.status",
+              "member.role",
+              "member.joinedAt",
+              "member.removedAt",
+            ],
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: replayAuthorization,
+    securityFlowPolicy: "none",
+    versionPolicy: {
+      apiVersion: "v1",
+      schemaVersion: "1.0.0",
+      ifMatch: "none",
+    },
+    concurrencyPolicy: {
+      rowVersion: "none",
+      lockOrder: ["project"],
+      retry:
+        "项目 FOR SHARE，成员行 FOR UPDATE；LEADER 唯一索引冲突映射 409，不自动重试",
+    },
+    auditAction: "project.member.role.set",
   },
 ];

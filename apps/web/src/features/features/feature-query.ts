@@ -25,7 +25,9 @@ export function featureErrorMessage(error: unknown): string {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或功能不存在，或你已无权访问。";
     if (error.status === 403)
-      return "你没有执行此操作的权限，或安全校验未通过。";
+      return error.code === "FEATURE_MANAGE_FORBIDDEN"
+        ? "只有系统管理员、本项目组长或项目管理员可以归档或恢复功能。"
+        : "你没有执行此操作的权限，或安全校验未通过。";
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
     if (error.status === 422) return "请检查功能名称、描述或原因。";
   }

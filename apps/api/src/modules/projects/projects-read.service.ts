@@ -34,7 +34,9 @@ export class ProjectsReadService {
   async list(cookieHeader: string | undefined): Promise<ProjectListResponse> {
     const actor = await this.requireActor(cookieHeader);
     const scope = await this.access.getAuthorizedSearchScope(actor.userId);
-    return { items: [...(await this.projects.list(scope.projectIds))] };
+    return {
+      items: [...(await this.projects.list(scope.projectIds, actor.userId))],
+    };
   }
 
   async detail(
@@ -50,7 +52,12 @@ export class ProjectsReadService {
     if (project === undefined) {
       throw this.notFound();
     }
-    return { project };
+    // ADR-033：详情响应携带当前用户的项目内角色，供前端显示管理入口。
+    const currentUserRole = await this.projects.findActiveMemberRole(
+      projectId,
+      actor.userId,
+    );
+    return { project, currentUserRole };
   }
 
   private async requireActor(

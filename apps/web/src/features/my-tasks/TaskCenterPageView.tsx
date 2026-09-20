@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Alert, Button, Spin } from "antd";
-import type { InpulseApiClient, ProjectItem } from "@generated/api";
+import {
+  createApiClient,
+  type InpulseApiClient,
+  type ProjectItem,
+} from "@generated/api";
 import {
   InpulseIcon,
   type InpulseIconName,
@@ -11,6 +15,9 @@ import {
   CalmSegmented,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { CalmSelect } from "@features/common/components/CalmSelect";
+import { priorityDotColor } from "@features/common/priority-select-option";
+import { projectSelectOption } from "@features/common/project-select-option";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import {
   describeMyTasksError,
@@ -29,6 +36,8 @@ import {
 } from "./my-tasks-v1-query";
 import { formatDayIso, isBeforeTodayIso, isTodayIso } from "./my-tasks-time";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
+import { TaskGroupDetailModal } from "@features/task-groups/TaskGroupDetailModal";
+import { createTaskGroupServerAdapter } from "@features/task-groups/task-groups-server";
 import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskFilters,
@@ -240,6 +249,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   client,
 }) => {
   const activeAdapter = adapter ?? MY_TASKS_MOCK_ADAPTER;
+  // 聚合组详情经 C 域 R-1 / R-4 读取，与任务中心自己的 MyTasks 适配器无关。
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const groupAdapter = useMemo(() => createTaskGroupServerAdapter(api), [api]);
+  /** 当前打开的聚合组（null 表示弹层关闭）：卡片不再跳转详情页。 */
+  const [openGroupId, setOpenGroupId] = useState<number | null>(null);
   const taskQuery = useMyTasksQuery({
     filters,
     viewerId,
@@ -397,9 +411,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
 
   /**
    * 任务中心只做跨项目查看与定位，不复制功能档案的写入口（状态推进 / 生成迭代记录 /
-   * 合并 / 删除 / 关联链接 / 任务编辑只在功能档案的任务抽屉中提供）。卡片与列表行点击
-   * 后经 onOpenTask（TasksPage → taskDetailPath 深链）直接进入项目 / 模块 / 功能定位，
-   * 由 ?taskId= 打开任务抽屉，不在任务中心弹出只读详情弹层。
+   * 合并 / 关联链接 / 任务编辑只在任务详情弹窗中提供）。卡片与列表行点击后经
+   * onOpenTask 交回页面，由 TasksPage 在当前页面就地打开功能档案同款的任务详情
+   * 弹窗（不改变地址栏、不跳转），写入口仍只有这一个。
    */
   const openTask = (item: MyTaskListItem) =>
     onOpenTask?.({
@@ -436,6 +450,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
               </CalmBadge>
             ) : null}
+            {item.hasLeftoverSource ? (
+              <CalmBadge tone="amber" title="由遗留问题转换而来的跟进任务">
+                遗留问题
+              </CalmBadge>
+            ) : null}
             <CalmBadge tone={statusTone[item.workStatus]}>
               {statusLabels[item.workStatus]}
             </CalmBadge>
@@ -459,20 +478,20 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </span>
         </div>
         <div className="task-card-footer">
-          <CalmBadge
-            tone={priorityTone[item.priority]}
-            title={`优先级：${priorityLabels[item.priority]}`}
-          >
-            {priorityLabels[item.priority]}
-          </CalmBadge>
-          {item.publishedRecordCount > 0 ? (
-            <span className="task-card-counts">
+          <span className="task-card-counts">
+            <CalmBadge
+              tone={priorityTone[item.priority]}
+              title={`优先级：${priorityLabels[item.priority]}`}
+            >
+              {priorityLabels[item.priority]}
+            </CalmBadge>
+            {item.publishedRecordCount > 0 ? (
               <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
-                <InpulseIcon name="calendar" size={13} />
+                <InpulseIcon name="gitBranch" size={13} />
                 记录 {item.publishedRecordCount} 条
               </span>
-            </span>
-          ) : null}
+            ) : null}
+          </span>
         </div>
       </button>
     );
@@ -511,6 +530,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   <span>
                     {relationLabelOf(item)}
                     {item.scopeType === "MODULE" ? " · 模块级" : ""}
+                    {item.hasLeftoverSource ? " · 遗留问题" : ""}
                   </span>
                 </button>
               </td>
@@ -549,7 +569,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     >
       <div className="page-header">
         <div>
-          <div className="eyebrow">任务中心 / {openItems.length} 项未完成</div>
           <h1>任务中心</h1>
           <p>
             所有工作从这里展开：任务负责推进，完成后沉淀为迭代记录，遗留问题继续转为新任务。
@@ -726,19 +745,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       {filters.scope === "project" ? (
         <label className="inline-picker">
           选择项目
-          <select
+          <CalmSelect
             value={filters.projectId === null ? "" : String(filters.projectId)}
-            onChange={(event) =>
-              update({ projectId: Number(event.target.value) || null })
-            }
-          >
-            <option value="">请选择项目</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => update({ projectId: Number(next) || null })}
+            options={projects.map((project) => projectSelectOption(project))}
+            appearance="rich"
+            placeholder="请选择项目"
+            ariaLabel="选择项目"
+          />
         </label>
       ) : null}
 
@@ -759,42 +773,40 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           options={statusOptions}
           onChange={(status) => update({ status })}
         />
-        <select
-          aria-label="优先级"
+        <CalmSelect
+          ariaLabel="优先级"
           value={filters.priority ?? ""}
           disabled={!enabled("filter:priority")}
-          onChange={(event) =>
+          appearance="menu"
+          onChange={(next) =>
             update({
-              priority:
-                event.target.value === ""
-                  ? null
-                  : (event.target.value as MyTaskPriority),
+              priority: next === "" ? null : (next as MyTaskPriority),
             })
           }
-        >
-          <option value="">全部</option>
-          {priorityOrder.map((priority) => (
-            <option key={priority} value={priority}>
-              {priorityLabels[priority]}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="任务范围"
+          options={[
+            { value: "", label: "全部" },
+            ...priorityOrder.map((priority) => ({
+              value: priority,
+              label: priorityLabels[priority],
+              dotColor: priorityDotColor(priority),
+            })),
+          ]}
+        />
+        <CalmSelect
+          ariaLabel="任务范围"
           value={filters.level ?? ""}
-          onChange={(event) =>
+          appearance="notion"
+          onChange={(next) =>
             update({
-              level:
-                event.target.value === ""
-                  ? null
-                  : (event.target.value as MyTaskLevel),
+              level: next === "" ? null : (next as MyTaskLevel),
             })
           }
-        >
-          <option value="">功能级与模块级</option>
-          <option value="FEATURE">功能级任务</option>
-          <option value="MODULE">模块级任务</option>
-        </select>
+          options={[
+            { value: "", label: "功能级与模块级" },
+            { value: "FEATURE", label: "功能级任务", emoji: "\u{1F3AF}" },
+            { value: "MODULE", label: "模块级任务", emoji: "\u{1F9E9}" },
+          ]}
+        />
         <button
           type="button"
           className="secondary-button"
@@ -822,60 +834,60 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <div className="filter-panel">
           <label>
             合并关系
-            <select
+            <CalmSelect
+              ariaLabel="合并关系"
               value={filters.relation ?? ""}
               disabled={!enabled("filter:relation")}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  relation:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskRelation),
+                  relation: next === "" ? null : (next as MyTaskRelation),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="STANDALONE">独立任务</option>
-              <option value="MAIN">主任务</option>
-              <option value="SOURCE">来源任务</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "STANDALONE", label: "独立任务" },
+                { value: "MAIN", label: "主任务" },
+                { value: "SOURCE", label: "来源任务" },
+              ]}
+            />
           </label>
           <label>
             是否有迭代记录
-            <select
+            <CalmSelect
+              ariaLabel="是否有迭代记录"
               value={filters.hasRecord ?? ""}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  hasRecord:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskRecordFilter),
+                  hasRecord: next === "" ? null : (next as MyTaskRecordFilter),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="yes">有记录</option>
-              <option value="no">无记录</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "yes", label: "有记录" },
+                { value: "no", label: "无记录" },
+              ]}
+            />
           </label>
           <label>
             是否有 GitHub
-            <select
+            <CalmSelect
+              ariaLabel="是否有 GitHub"
               value={filters.hasGithub ?? ""}
               disabled={!enabled("filter:github")}
-              onChange={(event) =>
+              appearance="menu"
+              onChange={(next) =>
                 update({
-                  hasGithub:
-                    event.target.value === ""
-                      ? null
-                      : (event.target.value as MyTaskGithubFilter),
+                  hasGithub: next === "" ? null : (next as MyTaskGithubFilter),
                 })
               }
-            >
-              <option value="">全部</option>
-              <option value="yes">已关联</option>
-              <option value="no">未关联</option>
-            </select>
+              options={[
+                { value: "", label: "全部" },
+                { value: "yes", label: "已关联" },
+                { value: "no", label: "未关联" },
+              ]}
+            />
           </label>
           <label className="check-line">
             <input
@@ -1003,9 +1015,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   <article className="group-card" key={group.groupId}>
                     <header>
                       <span className="task-id">{group.code}</span>
-                      <a href={"/task-groups/" + group.groupId}>
+                      <button
+                        type="button"
+                        className="group-card-title"
+                        aria-haspopup="dialog"
+                        onClick={() => setOpenGroupId(group.groupId)}
+                      >
                         <strong>{group.name}</strong>
-                      </a>
+                      </button>
                       <CalmBadge
                         tone={group.status === "ACTIVE" ? "blue" : "gray"}
                       >
@@ -1037,8 +1054,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                               })
                             }
                           >
-                            <strong>{branch.taskCode}</strong>
-                            <span>{branch.title}</span>
+                            <span className="branch-task-code">
+                              {branch.taskCode}
+                            </span>
+                            <strong>{branch.title}</strong>
                           </button>
                           <CalmBadge tone={statusTone[branch.workStatus]}>
                             {statusLabels[branch.workStatus]}
@@ -1053,11 +1072,16 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                         来源任务的原始状态、负责人、迭代记录与 GitHub
                         链接全部保留。
                       </span>
-                      <a href={"/task-groups/" + group.groupId}>
+                      <button
+                        type="button"
+                        className="group-card-open"
+                        aria-haspopup="dialog"
+                        onClick={() => setOpenGroupId(group.groupId)}
+                      >
                         {group.status === "ACTIVE"
                           ? "查看详情 / 解除合并"
                           : "查看聚合历史"}
-                      </a>
+                      </button>
                       {mainTask === null ? null : (
                         <button
                           type="button"
@@ -1095,6 +1119,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </>
         )}
       </section>
+
+      <TaskGroupDetailModal
+        groupId={openGroupId}
+        adapter={groupAdapter}
+        api={api}
+        onClose={() => setOpenGroupId(null)}
+        onChanged={() => void groupsQuery.refetch()}
+        onOpenTask={onOpenTask}
+      />
 
       <GlobalTaskCreateModal
         onCreatedLocation={onOpenTask}

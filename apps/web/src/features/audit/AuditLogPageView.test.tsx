@@ -55,7 +55,12 @@ const project = {
   createdAt: "2026-09-08T00:00:00.000Z",
   updatedAt: "2026-09-08T00:00:00.000Z",
   memberCount: 4,
-  stats: { activeModuleCount: 2, activeFeatureCount: 5, openTaskCount: 3 },
+  stats: {
+    activeModuleCount: 2,
+    activeFeatureCount: 5,
+    openTaskCount: 3,
+    completedTaskCount: 1,
+  },
 };
 
 function queryClient() {
@@ -80,6 +85,17 @@ function page(items: readonly AuditLogItem[]): AuditLogPage {
   return { items: [...items], nextCursor: null, hasMore: false };
 }
 
+/** CalmSelect 交互：打开下拉并点选目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  fireEvent.click(screen.getByTitle(optionTitle));
+}
+
 describe("F-08 audit page", () => {
   it("reads the SYSTEM chain by default and renders raw audit rows", async () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
@@ -97,16 +113,12 @@ describe("F-08 audit page", () => {
   });
 
   it("switches to a project chain and sends the project scope", async () => {
-    const user = userEvent.setup();
     const getAuditLogs = vi.fn().mockResolvedValue(page([projectItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
     await screen.findByText("project.update");
-    await user.selectOptions(
-      screen.getByLabelText("审计链"),
-      String(project.id),
-    );
+    pickSelectOption("审计链", "PROJECT:" + project.id + " · " + project.name);
 
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
