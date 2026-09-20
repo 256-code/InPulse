@@ -42,7 +42,7 @@ function uniqueSubject(): string {
 const SESSION_COOKIE_NAME = "__Host-session";
 const STATE_COOKIE_NAME = "__Host-sso-state";
 const STATE_MATERIAL_PURPOSE = "inpulse-sso-login-v1";
-const IDLE_MAX_AGE_SECONDS = 1800;
+const IDLE_MAX_AGE_SECONDS = 7200;
 const ABSOLUTE_MAX_AGE_SECONDS = 604800;
 
 const config: SsoConfig = {
@@ -388,7 +388,7 @@ afterAll(async () => {
 });
 
 describe("SSO 登录纵切片（真实 PostgreSQL + 桩 IdP）", () => {
-  test("首次登录 JIT 开通账号并签发 30 分钟空闲会话", async () => {
+  test("首次登录 JIT 开通账号并签发 2 小时空闲会话", async () => {
     const loginName = uniqueLoginName("sso_jit");
     const email = uniqueEmail();
     const subject = uniqueSubject();

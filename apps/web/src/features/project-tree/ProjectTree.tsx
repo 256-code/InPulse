@@ -40,7 +40,8 @@ const PROJECT_PAGE_ROWS: readonly {
   readonly icon: InpulseIconName;
 }[] = [
   { segment: "task-board", label: "任务看板", icon: "kanban" },
-  { segment: "modules", label: "模块与功能", icon: "boxes" },
+  // 层级语义：layers=模块与功能目录，boxes=模块容器，fileText=功能档案条目。
+  { segment: "modules", label: "模块与功能", icon: "layers" },
 ];
 
 interface ProjectPageRowProps {
@@ -112,7 +113,7 @@ const FeatureRow: React.FC<FeatureRowProps> = ({
         onFeatureClick({ kind: "feature", moduleId, featureId: item.id })
       }
     >
-      <InpulseIcon name="code" size={16} className="tree-icon" />
+      <InpulseIcon name="fileText" size={16} className="tree-icon" />
       <span className="tree-label">
         <strong>{item.name}</strong>
       </span>

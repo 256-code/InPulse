@@ -175,7 +175,7 @@ describe("F-14 task editing", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
     // Ant Design assigns the same aria title ID to nested dialogs in NODE_ENV=test.
@@ -292,9 +292,11 @@ describe("F-14 task editing", () => {
     mount(
       client({ listTasks: vi.fn().mockResolvedValue({ items: [module] }) }),
     );
-    await screen.findByText("模块级任务 · 引用");
+    // 卡片正文是任务介绍，模块级引用由「模块级」徽标表达（不再重复功能名）。
+    await screen.findByText("模块级");
+    expect(screen.getByText("原说明")).toBeVisible();
     expect(screen.getByText("1 个任务")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /^查看任务详情/ }));
+    fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
     expect(
       await screen.findByRole("link", { name: "打开模块任务" }),
     ).toHaveAttribute("href", "/projects/2/modules/3/tasks?taskId=1");
@@ -371,7 +373,7 @@ describe("F-14 task editing", () => {
       .mockResolvedValue({ ...latest, title: "我的标题", rowVersion: 3 });
     mount(client({ getTask: vi.fn().mockResolvedValue(latest), updateTask }));
     await screen.findByText("退款任务");
-    fireEvent.click(screen.getByRole("button", { name: /^查看任务详情/ }));
+    fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
     fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
     const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
     fireEvent.change(modal.getByLabelText("任务标题"), {
@@ -442,7 +444,7 @@ describe("F-23 merge entry", () => {
   it("opens the merge modal from the task detail dialog", async () => {
     mount(client());
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     fireEvent.click(
       await screen.findByRole("button", { name: "合并到主任务" }),
@@ -487,7 +489,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     ) as HTMLElement;
     expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
     expect(
-      await within(sourceCard).findByText("迭代记录 2 条"),
+      await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
     // 裁决修订 D-2：遗留问题转化而来的任务在卡片上自带「遗留问题」徽章。
     expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
@@ -513,7 +515,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
@@ -546,7 +548,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     ) as HTMLElement;
     expect(await within(mainCard).findByText("主任务")).toBeInTheDocument();
     expect(within(mainCard).queryByText("遗留问题")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^查看任务详情/ }));
+    fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     expect(await within(dialog).findByText("主任务")).toBeInTheDocument();
     expect(
@@ -573,7 +575,7 @@ describe("C-3 任务详情弹窗标签页", () => {
   it("renders the info tab first and switches to the records tab with the drafts entry", async () => {
     mount(client());
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
@@ -689,7 +691,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
@@ -740,7 +742,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     // 创建人与状态历史操作人都解析为姓名，不再显示裸编号。
@@ -757,7 +759,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
@@ -779,7 +781,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
@@ -796,7 +798,7 @@ describe("C-3 任务详情弹窗标签页", () => {
   it("shows the standalone empty state without a main-task entry for ungrouped tasks", async () => {
     mount(client());
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
@@ -825,7 +827,7 @@ describe("ADR-034 任务归档入口", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
     const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
@@ -863,7 +865,7 @@ describe("ADR-034 任务归档入口", () => {
       false,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const edit = await screen.findByRole("button", { name: "编辑任务" });
     expect(edit).not.toBeDisabled();
@@ -884,7 +886,7 @@ describe("ADR-034 任务归档入口", () => {
       }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /^查看任务详情/ }),
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
     const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));

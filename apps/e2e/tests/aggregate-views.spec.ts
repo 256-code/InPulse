@@ -301,13 +301,17 @@ test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入
     await expect(page.getByText("暂无已发布记录")).toBeVisible();
     await expect(page.getByText("没有待闭环的遗留问题")).toBeVisible();
 
+    // 2026-09-20：项目主页三个入口改为就地弹窗——「查看全部」打开迭代记录
+    // 弹窗，地址栏保持在项目主页；弹窗内项目筛选已预置为当前项目。
     await page.getByRole("button", { name: "查看全部" }).click();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/records");
-    const recordsUrl = new URL(page.url());
-    expect(recordsUrl.searchParams.get("view")).toBe("published");
-    expect(recordsUrl.searchParams.get("projectId")).toBe(
-      String(runtime.projectId),
-    );
+    const recordsModal = page.getByRole("dialog", { name: "迭代记录" });
+    await expect(recordsModal).toBeVisible();
+    await expect(recordsModal).toContainText("迭代记录");
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toBe("/projects/" + runtime.projectId + "/modules");
+    await recordsModal.getByRole("button", { name: "关闭迭代记录" }).click();
+    await expect(recordsModal).toBeHidden();
 
     // 项目概览已与「模块与功能」合并：旧地址整体重定向到项目主页，
     // 重定向后仍是同一套项目头部 + 指标 + 面板。

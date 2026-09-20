@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Spin } from "antd";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -11,6 +10,7 @@ import {
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { useAuth } from "@features/auth/auth-context";
+import { useScopedSearchParams } from "@features/common/search-params-scope";
 import { RecordDraftsView } from "@features/record-drafts/RecordDraftsView";
 import {
   useRecordFeedQuery,
@@ -45,12 +45,16 @@ const SEARCH_DEBOUNCE_MS = 350;
  */
 export function RecordsWorkspace({
   client,
+  embedded = false,
 }: {
   readonly client?: InpulseApiClient | undefined;
+  /** 嵌在项目主页弹窗内：标题由弹层头部承担，页头只保留 CTA。 */
+  readonly embedded?: boolean | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const { user } = useAuth();
-  const [params, setParams] = useSearchParams();
+  // 整页用路由搜索参数；装进项目主页弹窗时用作用域内的本地状态。
+  const [params, setParams] = useScopedSearchParams();
   const projectId = Number(params.get("projectId")) || 0;
   const publishedId = Number(params.get("publishedId")) || 0;
   const requestedStatus = params.get("status");
@@ -146,13 +150,15 @@ export function RecordsWorkspace({
   };
   return (
     <div className="records-workspace">
-      <div className="page-header">
-        <div>
-          <h1>迭代记录</h1>
-          <p>
-            只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
-          </p>
-        </div>
+      <div className={"page-header" + (embedded ? " embedded" : "")}>
+        {embedded ? null : (
+          <div>
+            <h1>迭代记录</h1>
+            <p>
+              只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
+            </p>
+          </div>
+        )}
         <button
           type="button"
           className="primary-button"
@@ -188,19 +194,21 @@ export function RecordsWorkspace({
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <label className="records-toolbar-field">
-          项目
-          <CalmSelect
-            ariaLabel="项目"
-            value={projectId > 0 ? String(projectId) : ""}
-            onChange={(next) => selectProject(String(next))}
-            appearance="rich"
-            options={[
-              { value: "", label: "全部项目" },
-              ...(projects.data?.items ?? []).map(projectSelectOption),
-            ]}
-          />
-        </label>
+        {embedded ? null : (
+          <label className="records-toolbar-field">
+            项目
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
+            />
+          </label>
+        )}
         <label className="records-toolbar-field">
           来源
           <CalmSelect

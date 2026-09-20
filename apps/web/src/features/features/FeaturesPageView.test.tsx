@@ -691,3 +691,189 @@ describe("功能归档入口权限（ADR-034）", () => {
     );
   });
 });
+
+it("功能详情：标签进标题行、验收标准排在功能任务之后", async () => {
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [
+        {
+          ...item,
+          currentBehavior: "退款回原支付渠道",
+          acceptanceCriteria: "响应低于 500ms",
+          tags: ["支付", "退款"],
+        },
+      ],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+
+  // 功能说明只保留标题下方那一处，正文不再重复同名区块。
+  expect(await screen.findByText("退款回原支付渠道")).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "当前功能说明" }),
+  ).not.toBeInTheDocument();
+
+  // 标签是标题行的小徽章，夹在状态与更新时间之间。
+  await screen.findByText("退款回原支付渠道");
+  const badgeRow = document.querySelector(".task-modal-badges");
+  expect(badgeRow).not.toBeNull();
+  const badges = Array.from(badgeRow?.children ?? []).map(
+    (node) => node.textContent ?? "",
+  );
+  expect(badges.slice(-3)).toEqual([
+    "支付",
+    "退款",
+    expect.stringContaining("更新"),
+  ]);
+  // 功能编号不在页头徽章行展示（仍保留在右侧「功能档案」里）。
+  expect(badgeRow?.textContent ?? "").not.toContain(item.code);
+
+  // 验收标准落在功能任务之后。
+  const tasks = screen.getByRole("heading", { name: "功能任务" });
+  const acceptance = screen.getByRole("heading", { name: "验收标准" });
+  expect(
+    tasks.compareDocumentPosition(acceptance) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("功能概览显示验收标准，编辑时保留并提交", async () => {
+  const updateFeature = vi.fn().mockResolvedValue({
+    ...item,
+    acceptanceCriteria: "响应低于 400ms",
+    rowVersion: 2,
+  });
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [{ ...item, acceptanceCriteria: "响应低于 500ms" }],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+    updateFeature,
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+  expect(await screen.findByText("响应低于 500ms")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "编辑功能" }));
+  const field = await screen.findByLabelText("验收标准（选填）");
+  expect(field).toHaveValue("响应低于 500ms");
+  fireEvent.change(field, { target: { value: "响应低于 400ms" } });
+  fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
+  await waitFor(() =>
+    expect(updateFeature).toHaveBeenCalledWith(
+      2,
+      4,
+      item.id,
+      expect.objectContaining({ acceptanceCriteria: "响应低于 400ms" }),
+      expect.anything(),
+    ),
+  );
+});
+
+describe("功能归档入口权限（ADR-034）", () => {
+  const project = {
+    id: 2,
+    code: "PR",
+    name: "项目",
+    description: null,
+    status: "ACTIVE" as const,
+    rowVersion: 1,
+    createdBy: 1,
+    createdAt: "2026-09-09T00:00:00.000Z",
+    updatedAt: "2026-09-09T00:00:00.000Z",
+    memberCount: 2,
+    stats: {
+      activeModuleCount: 1,
+      activeFeatureCount: 1,
+      openTaskCount: 0,
+      completedTaskCount: 0,
+    },
+  };
+  const archivedItem: FeatureItem = {
+    ...item,
+    status: "ARCHIVED",
+    rowVersion: 2,
+    archivedAt: "2026-09-10T00:00:00.000Z",
+  };
+  const lifecycleClient = (
+    role: string | null,
+    items: FeatureItem[] = [item],
+  ) =>
+    ({
+      listFeatures: vi.fn().mockResolvedValue({ items }),
+      getProject: vi.fn().mockResolvedValue({ project, currentUserRole: role }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+      archiveFeature: vi
+        .fn()
+        .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
+      restoreFeature: vi
+        .fn()
+        .mockResolvedValue({ ...item, status: "ACTIVE", rowVersion: 3 }),
+    }) as unknown as InpulseApiClient;
+
+  it("普通成员看不到归档与恢复入口", async () => {
+    mount(lifecycleClient("MEMBER"));
+    await screen.findByText("退款功能");
+    expect(screen.queryByTestId("feature-lifecycle-3")).toBeNull();
+    expect(screen.queryByRole("button", { name: "归档功能" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复功能" })).toBeNull();
+  });
+
+  it("组长在编辑弹窗底部归档，按钮文案为「归档」", async () => {
+    const client = lifecycleClient("LEADER");
+    mount(client);
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    const trigger = await screen.findByTestId("feature-modal-lifecycle");
+    // antd 会在 CJK 两字按钮里插入空格，按正则断言文案。
+    expect(trigger.textContent).toMatch(/归\s*档/);
+    fireEvent.click(trigger);
+    fireEvent.change(await screen.findByLabelText("操作原因"), {
+      target: { value: "弹窗内归档" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() =>
+      expect(client.archiveFeature).toHaveBeenCalledWith(
+        2,
+        4,
+        3,
+        { reason: "弹窗内归档" },
+        expect.objectContaining({ headers: expect.anything() }),
+      ),
+    );
+  });
+
+  it("卡片与编辑弹窗都不再提供归档按钮给普通成员", async () => {
+    mount(lifecycleClient("MEMBER"));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    await screen.findByLabelText("功能名称");
+    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
+  });
+
+  it("项目管理员同样在编辑弹窗底部看到归档入口", async () => {
+    mount(lifecycleClient("PROJECT_ADMIN"));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    expect(
+      (await screen.findByTestId("feature-modal-lifecycle")).textContent,
+    ).toMatch(/归\s*档/);
+  });
+
+  it("已归档功能只在卡片保留恢复入口，组长可直接恢复", async () => {
+    const client = lifecycleClient("LEADER", [archivedItem]);
+    mount(client);
+    expect(screen.queryByRole("button", { name: "归档功能" })).toBeNull();
+    fireEvent.click(await screen.findByTestId("feature-lifecycle-3"));
+    fireEvent.change(await screen.findByLabelText("操作原因"), {
+      target: { value: "恢复使用" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    await waitFor(() =>
+      expect(client.restoreFeature).toHaveBeenCalledWith(
+        2,
+        4,
+        3,
+        { reason: "恢复使用" },
+        expect.objectContaining({ headers: expect.anything() }),
+      ),
+    );
+  });
+});

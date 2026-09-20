@@ -151,7 +151,8 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     const card = page
       .locator(".calm-task-card")
       .filter({ hasText: `发布来源-${suffix}` });
-    await expect(card.getByText("迭代记录 1 条")).toBeVisible();
+    // 86dd2b2 起卡片计数文案简化为「记录 N 条」（详情弹窗仍为「迭代记录 N 条」）。
+    await expect(card.getByText("记录 1 条")).toBeVisible();
     await expect(card.getByText("来源任务")).toHaveCount(0);
     await expect(card.getByText("主任务")).toHaveCount(0);
   } finally {

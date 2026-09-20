@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { Alert, Spin } from "antd";
 import {
   createApiClient,
@@ -7,6 +6,7 @@ import {
   type LeftoverListItem,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { useScopedSearchParams } from "@features/common/search-params-scope";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -38,15 +38,18 @@ export interface IssuesPageViewProps {
   readonly client?: InpulseApiClient;
   readonly onBackToRecords?: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  /** 嵌在项目主页弹窗内：标题由弹层头部承担，不渲染整页页头。 */
+  readonly embedded?: boolean | undefined;
 }
 
 export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
   client,
   onBackToRecords,
   onOpenTask,
+  embedded = false,
 }) => {
   const api = useMemo(() => client ?? createApiClient(), [client]);
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useScopedSearchParams();
   /** 项目筛选：projectId 进 URL，非正整数一律回落为全部项目。 */
   const projectId = Number(params.get("projectId")) || 0;
   const projects = useProjects({ client });
@@ -160,40 +163,46 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
       aria-label="遗留问题"
       data-testid="issues-page"
     >
-      <div className="page-header">
-        <div>
-          <h1>遗留问题</h1>
-          <p>
-            迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
-          </p>
+      {embedded ? null : (
+        <div className="page-header">
+          <div>
+            <h1>遗留问题</h1>
+            <p>
+              迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
+            </p>
+          </div>
+          {onBackToRecords === undefined ? null : (
+            <div className="catalog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onBackToRecords}
+              >
+                <InpulseIcon name="gitBranch" size={15} />
+                回到迭代记录
+              </button>
+            </div>
+          )}
         </div>
-        <div className="catalog-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onBackToRecords}
-          >
-            <InpulseIcon name="gitBranch" size={15} />
-            回到迭代记录
-          </button>
-        </div>
-      </div>
+      )}
 
-      <div className="toolbar task-toolbar issues-toolbar">
-        <label className="issues-toolbar-field">
-          项目
-          <CalmSelect
-            ariaLabel="项目"
-            value={projectId > 0 ? String(projectId) : ""}
-            onChange={(next) => selectProject(String(next))}
-            appearance="rich"
-            options={[
-              { value: "", label: "全部项目" },
-              ...(projects.data?.items ?? []).map(projectSelectOption),
-            ]}
-          />
-        </label>
-      </div>
+      {embedded ? null : (
+        <div className="toolbar task-toolbar issues-toolbar">
+          <label className="issues-toolbar-field">
+            项目
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
+            />
+          </label>
+        </div>
+      )}
 
       <div className="callout">
         <InpulseIcon name="alert" size={18} />

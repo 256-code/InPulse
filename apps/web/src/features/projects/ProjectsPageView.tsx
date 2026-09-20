@@ -239,7 +239,14 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                   </CalmBadge>
                 </span>
                 <h2>{project.name}</h2>
-                <p>{project.description || "暂无项目描述"}</p>
+                <p
+                  className={
+                    "project-card-desc" +
+                    (project.description ? "" : " is-placeholder")
+                  }
+                >
+                  {project.description || "暂无项目描述"}
+                </p>
                 <span className="card-footer">
                   <span>
                     <InpulseIcon name="boxes" size={14} />
@@ -265,91 +272,93 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                   </span>
                 </span>
                 <div className="card-footer project-card-actions">
-                  <Button
-                    className="text-button"
-                    data-testid={`edit-project-${project.id}`}
-                    onClick={() => {
-                      setEditingRole(project.currentUserRole);
-                      setEditing(project);
-                    }}
-                  >
-                    编辑
-                  </Button>
-                  {isAdmin ? (
-                    project.status !== "ARCHIVED" ? (
-                      <Button
-                        className="danger-button"
-                        data-testid={`archive-project-${project.id}`}
-                        onClick={() => setArchiving(project)}
-                      >
-                        归档
-                      </Button>
-                    ) : (
-                      <Button
-                        className="text-button"
-                        data-testid={`restore-project-${project.id}`}
-                        onClick={() => setRestoring(project)}
-                      >
-                        恢复
-                      </Button>
-                    )
-                  ) : null}
-                  {isAdmin && project.pendingArchiveRequest ? (
-                    <span
-                      className="card-pending-note"
-                      data-testid={"archive-request-info-" + project.id}
+                  <div className="project-card-actions-main">
+                    <Button
+                      className="text-button"
+                      data-testid={`edit-project-${project.id}`}
+                      onClick={() => {
+                        setEditingRole(project.currentUserRole);
+                        setEditing(project);
+                      }}
                     >
-                      待审归档申请：
-                      {project.pendingArchiveRequest.requestedByName}
-                    </span>
-                  ) : null}
-                  {isAdmin &&
-                  project.status !== "ARCHIVED" &&
-                  project.pendingArchiveRequest ? (
-                    <>
-                      <Button
-                        className="danger-button"
-                        data-testid={"approve-archive-request-" + project.id}
-                        onClick={() =>
-                          setReviewing({ project, decision: "approve" })
-                        }
-                      >
-                        批准归档
-                      </Button>
-                      <Button
-                        className="text-button"
-                        data-testid={"reject-archive-request-" + project.id}
-                        onClick={() =>
-                          setReviewing({ project, decision: "reject" })
-                        }
-                      >
-                        驳回申请
-                      </Button>
-                    </>
-                  ) : null}
-                  {!isAdmin &&
-                  project.status !== "ARCHIVED" &&
-                  canManageProjectResources(
-                    isAdmin,
-                    project.currentUserRole,
-                  ) ? (
-                    project.pendingArchiveRequest ? (
+                      编辑
+                    </Button>
+                    {isAdmin ? (
+                      project.status !== "ARCHIVED" ? (
+                        <Button
+                          className="danger-button"
+                          data-testid={`archive-project-${project.id}`}
+                          onClick={() => setArchiving(project)}
+                        >
+                          归档
+                        </Button>
+                      ) : (
+                        <Button
+                          className="text-button"
+                          data-testid={`restore-project-${project.id}`}
+                          onClick={() => setRestoring(project)}
+                        >
+                          恢复
+                        </Button>
+                      )
+                    ) : null}
+                    {isAdmin && project.pendingArchiveRequest ? (
                       <span
                         className="card-pending-note"
-                        data-testid={"archive-request-pending-" + project.id}
+                        data-testid={"archive-request-info-" + project.id}
                       >
-                        归档申请审核中
+                        待审归档申请：
+                        {project.pendingArchiveRequest.requestedByName}
                       </span>
-                    ) : (
-                      <Button
-                        className="text-button"
-                        data-testid={"request-archive-" + project.id}
-                        onClick={() => setRequesting(project)}
-                      >
-                        申请归档
-                      </Button>
-                    )
-                  ) : null}
+                    ) : null}
+                    {isAdmin &&
+                    project.status !== "ARCHIVED" &&
+                    project.pendingArchiveRequest ? (
+                      <>
+                        <Button
+                          className="danger-button"
+                          data-testid={"approve-archive-request-" + project.id}
+                          onClick={() =>
+                            setReviewing({ project, decision: "approve" })
+                          }
+                        >
+                          批准归档
+                        </Button>
+                        <Button
+                          className="text-button"
+                          data-testid={"reject-archive-request-" + project.id}
+                          onClick={() =>
+                            setReviewing({ project, decision: "reject" })
+                          }
+                        >
+                          驳回申请
+                        </Button>
+                      </>
+                    ) : null}
+                    {!isAdmin &&
+                    project.status !== "ARCHIVED" &&
+                    canManageProjectResources(
+                      isAdmin,
+                      project.currentUserRole,
+                    ) ? (
+                      project.pendingArchiveRequest ? (
+                        <span
+                          className="card-pending-note"
+                          data-testid={"archive-request-pending-" + project.id}
+                        >
+                          归档申请审核中
+                        </span>
+                      ) : (
+                        <Button
+                          className="text-button"
+                          data-testid={"request-archive-" + project.id}
+                          onClick={() => setRequesting(project)}
+                        >
+                          申请归档
+                        </Button>
+                      )
+                    ) : null}
+                  </div>
                   {isAdmin && onOpenMembers ? (
                     <Button
                       className="text-button"

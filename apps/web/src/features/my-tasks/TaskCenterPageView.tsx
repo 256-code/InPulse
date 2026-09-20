@@ -457,7 +457,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           {item.publishedRecordCount > 0 ? (
             <span className="task-card-counts">
               <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
-                <InpulseIcon name="calendar" size={13} />
+                <InpulseIcon name="gitBranch" size={13} />
                 记录 {item.publishedRecordCount} 条
               </span>
             </span>
