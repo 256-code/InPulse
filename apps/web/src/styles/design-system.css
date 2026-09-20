@@ -1253,14 +1253,15 @@ button {
   border: 1px solid #e7edf3;
   border-radius: 6px;
   padding: 14px;
-  color: #317abd;
 }
 /* 旧版模块卡的 `.module-card div/strong/span/small` 元素选择器已删除（2026-09-20）：
    现在的模块卡是 `.calm-feature-card.module-card`，卡里的 span 分别是 `.feature-symbol`
    图标容器、`.task-id` 编号和状态徽章。旧规则以 (0,1,1) 的特异性盖掉 `.feature-symbol`
    自己的 `display: inline-flex` + 居中，把图标挤到 43×43 方块的左上角；同一批规则还把
    徽章压成 10px 灰字、把编号色改成 #8493a3，与功能卡不一致。删除后模块卡与功能卡的
-   图标、编号、徽章计算样式完全一致。 */
+   图标、编号、徽章计算样式完全一致。同一批规则里保留下来的 `.module-card { color: #317abd }`
+   也已删除（2026-09-20 定案）：它被卡内 h2 继承，导致模块卡标题与功能卡标题不同色；删掉后
+   两类卡片标题都落到全局 --card-foreground（#132238），与项目卡、任务卡标题一致。 */
 /* 任务中心工具栏：上方统计卡与下方列表区必须同一条节奏（下方 = 8 + 展示方式图标行 16 + 6），
    否则工具条紧贴统计卡、整体重心偏上；上下各 30px（2026-09-20 定案）。 */
 .task-toolbar {
