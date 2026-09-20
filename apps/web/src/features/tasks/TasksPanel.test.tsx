@@ -139,6 +139,19 @@ function mount(api: InpulseApiClient, writable = true) {
     </ConfigProvider>,
   );
 }
+describe("F-14 功能级任务入口", () => {
+  it("功能面板只保留固定归属的「新建任务」，没有自定义归属入口", async () => {
+    mount(client());
+    // 任务保存在当前功能下，不需要让用户再选一次归属。
+    expect(
+      await screen.findByRole("button", { name: "新建任务" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "自定义归属新建任务" }),
+    ).toBeNull();
+  });
+});
+
 describe("F-14 task editing", () => {
   it("keeps actual changes TODO and preserves completion input across a version conflict", async () => {
     const completeTask = vi
@@ -212,7 +225,7 @@ describe("F-14 task editing", () => {
       completeTask.mock.calls[0]![2].headers["Idempotency-Key"],
     );
   });
-  it("defaults to TODO and retains all history without displaying an incomplete completion rate", async () => {
+  it("defaults to every status and retains all history without displaying an incomplete completion rate", async () => {
     mount(
       client({
         listTasks: vi.fn().mockResolvedValue({
@@ -231,8 +244,14 @@ describe("F-14 task editing", () => {
         }),
       }),
     );
+    // 默认「全部状态」：四种状态的任务一次列出，历史与无效行都不隐藏。
     await screen.findByText(item.title);
-    expect(screen.queryByText("历史完成")).not.toBeInTheDocument();
+    // 默认「全部状态」：CalmSelect 触发器直接显示当前选项文案。
+    expect(
+      screen.getByLabelText("任务状态筛选").closest(".ant-select"),
+    ).toHaveTextContent("全部状态");
+    for (const title of [item.title, "历史完成", "历史取消", "无效历史"])
+      expect(screen.getByText(title)).toBeVisible();
     expect(screen.queryByText(/完成率/)).not.toBeInTheDocument();
     pickSelectOption("任务状态筛选", "已取消");
     expect(screen.getByText("历史取消")).toBeVisible();
@@ -272,7 +291,7 @@ describe("F-14 task editing", () => {
       client({ listTasks: vi.fn().mockResolvedValue({ items: [module] }) }),
     );
     await screen.findByText("模块级任务 · 引用");
-    expect(screen.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "任务详情" }));
     expect(
       await screen.findByRole("link", { name: "打开模块任务" }),
@@ -402,13 +421,16 @@ function mountWithGroupModal(api: InpulseApiClient, writable = true) {
         }
       >
         <MemoryRouter initialEntries={["/features/4"]}>
-          <TasksPanel
-            projectId={2}
-            moduleId={3}
-            featureId={4}
-            writable={writable}
-            client={api}
-          />
+          {/* 聚合组弹窗里的记录详情按 isAdmin 判断正文可读性，需要认证上下文。 */}
+          <AuthStateProvider>
+            <TasksPanel
+              projectId={2}
+              moduleId={3}
+              featureId={4}
+              writable={writable}
+              client={api}
+            />
+          </AuthStateProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
@@ -553,6 +575,10 @@ describe("C-3 任务详情弹窗标签页", () => {
       "true",
     );
     expect(within(dialog).getByText("原说明")).toBeInTheDocument();
+    // 标签页内容区是 .calm-tabs 的紧邻兄弟节点：样式靠这个关系固定内容区高度，
+    // 保证切换标签页时弹窗大小不变（见 design-system.css 的固定高度规则）。
+    const tabStrip = within(dialog).getByRole("tablist", { name: "任务内容" });
+    expect(tabStrip.nextElementSibling).toHaveClass("task-modal-grid");
     // jsdom 下弹窗首帧动画 opacity 为 0，仓库统一用 toBeInTheDocument 断言弹窗内容。
     expect(
       within(dialog).getByRole("link", { name: "迭代记录草稿" }),

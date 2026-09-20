@@ -96,7 +96,7 @@ it("loads real version data and permits selecting historical snapshots", async (
   // 无变化字段不再渲染：标题等四项不应出现在差异区。
   expect(diff.queryByText("迭代标题")).toBeNull();
   const region = screen.getByRole("region", { name: "正式记录详情" });
-  expect(within(region).getByText("SHOP-CR-1 · v2 · 已发布")).toBeVisible();
+  // 2026-09-18 起详情页头只保留标题（页面标题上方的小字已移除），按合并后实现断言标题。
   const compareField = within(region).getByLabelText("对照版本");
   const compareTrigger = compareField.closest(".ant-select");
   if (!compareTrigger) {
@@ -161,7 +161,6 @@ it("leaves the record identity to the card summary when not standalone", async (
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   expect(await within(region).findByText("归属")).toBeVisible();
   expect(within(region).queryByText("支付修订")).toBeNull();
-  expect(within(region).queryByText("SHOP-CR-1 · v2 · 已发布")).toBeNull();
 });
 it("hides the version comparison until a record has more than one version", async () => {
   const api = {

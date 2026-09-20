@@ -26,6 +26,11 @@ import {
 } from "../projects/index.js";
 import { TaskGroupMembershipReadPort } from "../task-groups/index.js";
 import {
+  encodeTaskListSortKey,
+  parseTaskListSortKey,
+  type TaskListSortKey,
+} from "../tasks/index.js";
+import {
   AggregateReadCursorError,
   AggregateReadCursorService,
 } from "./aggregate-read-cursor.js";
@@ -41,7 +46,9 @@ import {
  * ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，
  * 用于任务中心「我负责的 / 我创建的」分段。projectId 只用于缩小范围，最终仍按服务端
  * AuthorizedProjectScope 过滤，越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
- * 排序固定 ORDER BY t.id DESC（Q-10），游标签名绑定 actor 与七项筛选。
+ * 排序固定，由 task-list-order.ts 给出（状态分组 → 紧急桶 → 优先级 → 截止时间
+ * → id，ADR-037 替代 Q-10 的单列 id DESC），游标签名绑定 actor 与七项筛选并携带
+ * 完整排序键位置；旧格式游标按无效游标拒绝。
  * 记录维度：hasPublishedRecord 由任务 → PUBLISHED 记录数映射派生（count > 0，裁决
  * 修订 D-1），筛选仍由 MyTaskQueryPort.list 在同一分页 SQL 内先过滤后分页。
  * 统计卡片与遗留问题入口按 A 裁决 §10.3：基准集合只受负责人与 projectId 影响，
@@ -163,7 +170,7 @@ export class MyTasksQueryService {
       command.priority ?? null,
       command.includeCanceled ?? null,
     ]);
-    const afterTaskId = this.decodeCursor(
+    const after = this.decodeCursor(
       command.cursor,
       command.actorUserId,
       filterKey,
@@ -201,7 +208,7 @@ export class MyTasksQueryService {
         ...(command.priority === undefined
           ? {}
           : { priority: command.priority }),
-        ...(afterTaskId === null ? {} : { afterTaskId }),
+        ...(after === null ? {} : { after }),
       });
       const taskIds = page.items.map((item) => item.taskId);
       const pageProjectIds = [
@@ -356,13 +363,14 @@ export class MyTasksQueryService {
     return {
       items,
       nextCursor:
-        data.page.nextTaskId === null
+        data.page.next === null
           ? null
           : this.cursor.encode({
               actorUserId: command.actorUserId,
               namespace: "MY_TASKS",
               filterKey,
-              afterId: data.page.nextTaskId,
+              afterId: data.page.next.taskId,
+              sortKey: encodeTaskListSortKey(data.page.next),
             }),
       hasMore: data.page.hasMore,
       stats: data.stats,
@@ -379,16 +387,22 @@ export class MyTasksQueryService {
     };
   }
 
+  /**
+   * 解码任务中心游标：必须是带排序键的新格式（requireSortKey），并把载荷文本解析
+   * 回排序键元组。旧格式、版本不符或字段非法统一按无效游标 422。
+   */
   private decodeCursor(
     cursor: string | undefined,
     actorUserId: number,
     filterKey: string,
-  ): number | null {
+  ): TaskListSortKey | null {
+    let position: { afterId: number; sortKey: string | null } | null;
     try {
-      return this.cursor.decode(cursor, {
+      position = this.cursor.decodeKey(cursor, {
         actorUserId,
         namespace: "MY_TASKS",
         filterKey,
+        requireSortKey: true,
       });
     } catch (error) {
       if (error instanceof AggregateReadCursorError) {
@@ -396,5 +410,13 @@ export class MyTasksQueryService {
       }
       throw error;
     }
+    if (position === null) {
+      return null;
+    }
+    const sortKey = parseTaskListSortKey(position.sortKey!);
+    if (sortKey === null) {
+      throw invalidCursorError();
+    }
+    return sortKey;
   }
 }

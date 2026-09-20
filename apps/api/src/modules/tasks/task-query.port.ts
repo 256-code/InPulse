@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { TransactionContext } from "../../database/transaction-context.js";
+import {
+  taskListKeysetPredicate,
+  taskListOrderBy,
+  taskListSortKeyFor,
+  type TaskListSortKey,
+} from "./task-list-order.js";
 
 /** 任务身份、归属、状态与影响功能的稳定读模型。 */
 export interface TaskReadModel {
@@ -68,8 +74,8 @@ export interface TaskListFilter {
 export interface TaskListPageInput extends TaskListFilter {
   /** 1..100，上限由契约层拒绝；端口只校验正整数。 */
   readonly limit: number;
-  /** 上一页返回的 nextTaskId；缺省表示第一页。端口只接收已解码的游标位置。 */
-  readonly afterTaskId?: number;
+  /** 上一页返回的 next；缺省表示第一页。端口只接收已解码的排序键位置。 */
+  readonly after?: TaskListSortKey;
 }
 
 export interface TaskListRow {
@@ -90,8 +96,8 @@ export interface TaskListRow {
 
 export interface TaskListPage {
   readonly items: readonly TaskListRow[];
-  /** 还有下一页时为最后一条的 id（下一页游标签名的 keyset 位置），否则为 null。 */
-  readonly nextTaskId: number | null;
+  /** 还有下一页时为最后一条的排序键（下一页游标签名的 keyset 位置），否则为 null。 */
+  readonly next: TaskListSortKey | null;
   readonly hasMore: boolean;
 }
 
@@ -249,11 +255,13 @@ export abstract class TaskQueryPort {
    * 约定：
    * 1. projectIds 必须来自服务端生成的 AuthorizedProjectScope；端口不校验成员关系。
    * 2. projectIds 为空时短路返回空页，不发出任何 SQL。
-   * 3. 排序固定 ORDER BY t.id DESC，稳定且命中 tasks_project_status_idx /
-   *    tasks_assignee_status_idx 的末列，不需要新增迁移。
+   * 3. 排序固定，且与任务中心、任务面板共用 task-list-order.ts 的同一排序键
+   *    （状态分组 → 紧急桶 → 优先级 → 截止时间 → 任务 ID，ADR-037）；
+   *    该排序不命中 tasks_project_status_idx / tasks_assignee_status_idx 的排序尾，
+   *    当前不新增索引（见 ADR-037 §4）。
    * 4. excludedTaskIds 在分页前过滤，保证先过滤后分页。
-   * 5. 游标签名不属于端口职责：调用方解码游标后传入 afterTaskId，并用返回的
-   *    nextTaskId 自行签发（与 ActivityProjectionReader + TimeCursorService 同一分工）。
+   * 5. 游标签名不属于端口职责：调用方解码游标后传入 after（排序键元组），并
+   *    用返回的 next 自行签发（与 ActivityProjectionReader + TimeCursorService 同一分工）。
    * 6. 记录维度筛选（是否有正式记录）需要 change_records，本端口不承载，见
    *    MyTaskQueryPort（A 裁决 §6 冲突 A）。
    */
@@ -391,7 +399,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     assertLimit(input.limit);
     assertExcludedTaskIds(input.excludedTaskIds);
     if (input.projectIds.length === 0) {
-      return { items: [], nextTaskId: null, hasMore: false };
+      return { items: [], next: null, hasMore: false };
     }
     const projectIds = [...input.projectIds];
     const assigneeId = input.assigneeId ?? null;
@@ -401,7 +409,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const excludedTaskIds = input.excludedTaskIds
       ? [...input.excludedTaskIds]
       : null;
-    const afterTaskId = input.afterTaskId ?? null;
+    const after = input.after ?? null;
 
     const rows = await tx.sql<TaskListRowRaw[]>`
       SELECT t.id AS "taskId",
@@ -424,8 +432,8 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${effectiveOnly}::boolean = false OR (t.lifecycle_status <> 'INVALID' AND t.work_status <> 'CANCELED'))
          AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
-         AND (${afterTaskId}::integer IS NULL OR t.id < ${afterTaskId})
-       ORDER BY t.id DESC
+         AND ${taskListKeysetPredicate(tx.sql, after)}
+       ORDER BY ${taskListOrderBy(tx.sql)}
        LIMIT ${input.limit + 1}
     `;
     const hasMore = rows.length > input.limit;
@@ -433,10 +441,13 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
       mapTaskListRow,
     );
     const last = items.length === 0 ? null : items[items.length - 1];
+    // 排序键只在需要续页时为页尾任务查一次；查不到（并发删除）则视为没有下一页。
+    const next =
+      hasMore && last ? await taskListSortKeyFor(tx.sql, last.taskId) : null;
     return {
       items,
-      hasMore,
-      nextTaskId: hasMore && last ? last.taskId : null,
+      hasMore: hasMore && next !== null,
+      next,
     };
   }
 

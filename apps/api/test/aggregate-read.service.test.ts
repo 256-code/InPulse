@@ -51,10 +51,28 @@ const unitOfWork = {
     fn({} as TransactionContext),
 } as unknown as UnitOfWork;
 
-function cursorMock(options: { readonly decode?: () => number | null } = {}) {
+function cursorMock(
+  options: {
+    readonly decode?: () => number | null;
+    readonly decodeKey?: () => {
+      readonly afterId: number;
+      readonly sortKey: string | null;
+    } | null;
+  } = {},
+) {
   return {
     encode: vi.fn().mockReturnValue("cursor-next"),
     decode: vi.fn(options.decode ?? (() => null)),
+    // ADR-037：任务中心走 decodeKey，载荷必须带排序键；测试用最小合法键。
+    decodeKey: vi.fn(
+      options.decodeKey ??
+        (() => {
+          const afterId = options.decode?.() ?? null;
+          return afterId === null
+            ? null
+            : { afterId, sortKey: `1|0|4|2||${afterId}` };
+        }),
+    ),
   };
 }
 
@@ -967,7 +985,7 @@ function myTasksSetup(
   const listPage = vi
     .fn()
     .mockResolvedValue(
-      options.page ?? { items: [], nextTaskId: null, hasMore: false },
+      options.page ?? { items: [], next: null, hasMore: false },
     );
   const listProjects = vi
     .fn()
@@ -1130,7 +1148,8 @@ describe("MyTasksQueryService.list", () => {
       includeCanceled: true,
       limit: 5,
     });
-    expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
+    // ADR-037：任务中心改用 decodeKey，并要求载荷带排序键。
+    expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
       filterKey: JSON.stringify([
@@ -1142,6 +1161,7 @@ describe("MyTasksQueryService.list", () => {
         "HIGH",
         true,
       ]),
+      requireSortKey: true,
     });
     expect(setup.listPage).toHaveBeenCalledWith(
       expect.anything(),
@@ -1166,10 +1186,11 @@ describe("MyTasksQueryService.list", () => {
       projectId: 9,
       ownership: "CREATOR",
     });
-    expect(setup.cursor.decode).toHaveBeenCalledWith(undefined, {
+    expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
       actorUserId: 5,
       namespace: "MY_TASKS",
       filterKey: JSON.stringify(["CREATOR", 9, null, null, null, null, null]),
+      requireSortKey: true,
     });
     const pageInput = setup.listPage.mock.calls[0]?.[1];
     expect(pageInput).toMatchObject({ projectIds: [9], creatorId: 5 });
@@ -1194,7 +1215,13 @@ describe("MyTasksQueryService.list", () => {
     const setup = myTasksSetup({
       page: {
         items: [taskRowFixture(502, { featureId: null }), taskRowFixture(501)],
-        nextTaskId: 501,
+        next: {
+          statusGroup: 0,
+          urgency: 4,
+          priority: 2,
+          dueAt: null,
+          taskId: 501,
+        },
         hasMore: true,
       },
       publishedRecordCounts: [{ taskId: 501, count: 2 }],
@@ -1266,6 +1293,7 @@ describe("MyTasksQueryService.list", () => {
         null,
       ]),
       afterId: 501,
+      sortKey: "1|0|4|2||501",
     });
   });
 
@@ -1293,7 +1321,7 @@ describe("MyTasksQueryService.list", () => {
             completedAt,
           }),
         ],
-        nextTaskId: null,
+        next: null,
         hasMore: false,
       },
       stats: {
@@ -1349,7 +1377,7 @@ describe("MyTasksQueryService.list", () => {
     const setup = myTasksSetup({
       page: {
         items: [taskRowFixture(501)],
-        nextTaskId: null,
+        next: null,
         hasMore: false,
       },
       projects: [],

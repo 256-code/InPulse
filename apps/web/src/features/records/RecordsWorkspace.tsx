@@ -148,7 +148,6 @@ export function RecordsWorkspace({
     <div className="records-workspace">
       <div className="page-header">
         <div>
-          <div className="eyebrow">研发记录 / {items.length} 条</div>
           <h1>迭代记录</h1>
           <p>
             只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。

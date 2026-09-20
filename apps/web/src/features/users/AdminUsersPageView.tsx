@@ -279,7 +279,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">系统 / 成员与权限</span>
           <h1>成员与设置</h1>
         </div>
         <span className="identity-chip">

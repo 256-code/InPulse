@@ -71,9 +71,7 @@ export function RecordDetailModal({
     project.data !== undefined &&
     project.data.project.status !== "ARCHIVED";
   const voidedForMember =
-    record !== null &&
-    record.recordStatus === "VOID" &&
-    user?.isAdmin !== true;
+    record !== null && record.recordStatus === "VOID" && user?.isAdmin !== true;
   const links = record?.externalLinks ?? [];
 
   return (

@@ -96,7 +96,6 @@ describe("ActivityPageView", () => {
     expect(
       screen.getByText("InPulse 研发交付平台 · 任务 #3"),
     ).toBeInTheDocument();
-    expect(screen.getByText("动态与审计 / 1 条")).toBeInTheDocument();
     expect(screen.getByText("项目 #7")).toBeInTheDocument();
     expect(screen.getByText("管理员可查看原始快照")).toBeInTheDocument();
     expect(screen.getByLabelText("包含管理员操作")).toBeInTheDocument();

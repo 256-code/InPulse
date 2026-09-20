@@ -14,6 +14,7 @@ import {
   type LoginRequest,
 } from "@generated/api";
 import { describeLoginError, isUnauthenticated } from "./auth-errors";
+import { registerSessionExpiredHandler } from "./session-recovery";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated" | "error";
 
@@ -73,6 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const apiClient = useMemo(() => client ?? createApiClient(), [client]);
   const requestSequence = useRef(0);
   const csrfTokenRef = useRef<string | null>(null);
+  const statusRef = useRef<AuthStatus>("loading");
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<CurrentUserResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -184,6 +186,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       throw error;
     }
   }, [apiClient]);
+
+  // ADR-032：本地会话按签发时间过期，到期后任何受保护请求都会拿到 401。
+  // 这里把已认证态收敛为匿名，交给 RequireAuth 走 /login 并静默重走统一身份认证，
+  // 避免用户停在「重试也无效」的错误页上。
+  useEffect(() => {
+    registerSessionExpiredHandler(() => {
+      if (statusRef.current !== "authenticated") {
+        return;
+      }
+      // 同步更新 ref：并发请求会同时拿到 401，只允许第一次生效。
+      statusRef.current = "anonymous";
+      setStatus("anonymous");
+      setUser(null);
+      setErrorMessage(null);
+    });
+    return () => registerSessionExpiredHandler(null);
+  }, []);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     void refresh();

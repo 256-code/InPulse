@@ -2,7 +2,6 @@ import React, { lazy, Suspense, useState } from "react";
 import { Alert, Button, Spin } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
-import { useProjectDetail } from "@features/projects/project-query";
 import { useAuth } from "@features/auth/auth-context";
 import { TasksPanel } from "@features/tasks/TasksPanel";
 import type { TaskLocation } from "@features/tasks/task-links";
@@ -25,7 +24,6 @@ export default function ModuleTasksPage() {
   const projectId = Number(params["projectId"]);
   const moduleId = Number(params["moduleId"]);
   const { query } = useModules(projectId);
-  const projectQuery = useProjectDetail({ projectId });
   const { user } = useAuth();
   /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
   const [taskTarget, setTaskTarget] = useState<TaskLocation | null>(null);
@@ -59,9 +57,6 @@ export default function ModuleTasksPage() {
             <InpulseIcon name="arrowLeft" size={15} />
             返回模块列表
           </Button>
-          <span className="eyebrow">
-            {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
-          </span>
           <h1>{module.name}</h1>
           <p>{module.description || "模块级任务与功能档案的公共工作区。"}</p>
         </div>

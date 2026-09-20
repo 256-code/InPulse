@@ -1183,6 +1183,70 @@ describe("F-14 real HTTP / PostgreSQL", () => {
       await client.sql`SELECT 1 FROM app.code_sequences WHERE project_id=${project.projectId} AND entity_type='TASK'`,
     ).toHaveLength(0);
   });
+  it("orders the panel list by work status group then task priority", async () => {
+    const { project, member } = await fixture();
+    const post = async (title: string, priority: string) => {
+      const response = await request(project, "POST", member, {
+        ...edit(member.userId, title),
+        priority,
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+      return taskItemSchema.parse(await response.json());
+    };
+    // 登记顺序与期望顺序不同：排序键生效时结果不等于 id 升序。
+    const done = await post("已完成任务", "URGENT");
+    const lowTodo = await post("低优任务", "LOW");
+    const urgentTodo = await post("紧急任务", "URGENT");
+    const normalTodo = await post("普通任务", "NORMAL");
+    const canceled = await post("已取消任务", "HIGH");
+    // app.tasks 的状态历史不变量要求最后一条 task_status_history 与任务行一致，
+    // 因此改状态时同事务补上对应迁移。
+    await client.sql`
+      WITH updated AS (
+        UPDATE app.tasks
+           SET work_status = 'DONE',
+               completed_at = now(),
+               completion_note = '已完成',
+               row_version = row_version + 1
+         WHERE id = ${done.id} AND project_id = ${project.projectId}
+        RETURNING id, project_id, completed_at, completion_note
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, 'TODO', 'DONE', completed_at, completion_note,
+             ${member.userId}
+        FROM updated
+    `;
+    await client.sql`
+      WITH updated AS (
+        UPDATE app.tasks
+           SET work_status = 'CANCELED',
+               row_version = row_version + 1
+         WHERE id = ${canceled.id} AND project_id = ${project.projectId}
+        RETURNING id, project_id
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status, changed_by
+      )
+      SELECT id, project_id, 'TODO', 'CANCELED', ${member.userId}
+        FROM updated
+    `;
+
+    const items = taskListResponseSchema.parse(
+      await (await request(project, "GET", member)).json(),
+    ).items;
+    // 未完成（紧急 → 普通 → 低）在前，其后依次是已完成与已取消。
+    expect(items.map((item) => item.id)).toEqual([
+      urgentTodo.id,
+      normalTodo.id,
+      lowTodo.id,
+      done.id,
+      canceled.id,
+    ]);
+  });
+
   it("keeps archived history readable, rejects edits and stale successful replay after parent archival", async () => {
     const { project, member } = await fixture();
     const key = randomUUID();

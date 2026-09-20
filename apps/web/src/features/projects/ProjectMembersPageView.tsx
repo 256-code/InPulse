@@ -262,7 +262,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">项目 / 成员与设置</span>
           <h1>{project ? project.name : "项目成员管理"}</h1>
           <p>
             系统管理员、本项目组长与项目管理员可添加或移除项目成员；

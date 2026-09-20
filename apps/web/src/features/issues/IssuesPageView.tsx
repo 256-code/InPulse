@@ -162,9 +162,6 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
     >
       <div className="page-header">
         <div>
-          <div className="eyebrow">
-            {"遗留问题 / " + String(openItems.length) + " 条未闭环"}
-          </div>
           <h1>遗留问题</h1>
           <p>
             迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。

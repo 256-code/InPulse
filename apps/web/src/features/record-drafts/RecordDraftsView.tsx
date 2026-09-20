@@ -1,14 +1,13 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
-import {
-  fieldText,
-  fields,
-  labels,
-} from "./record-content.js";
+import { fieldText, fields, labels } from "./record-content.js";
 export { mergeRecordDraft } from "./record-content.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
-import { useMyRecordDraftsQuery, useRecordDraftsQuery } from "./record-drafts-query";
+import {
+  useMyRecordDraftsQuery,
+  useRecordDraftsQuery,
+} from "./record-drafts-query";
 import {
   RecordDraftEditorModal,
   type RecordDraftEditorTarget,
@@ -334,7 +333,10 @@ export function RecordDraftsView({
               (detail.isPending ? (
                 <Spin />
               ) : detail.isError ? (
-                <Alert type="error" title={recordDraftErrorMessage(detail.error)} />
+                <Alert
+                  type="error"
+                  title={recordDraftErrorMessage(detail.error)}
+                />
               ) : (
                 detail.data && (
                   <section className="draft-detail" aria-label="草稿详情">

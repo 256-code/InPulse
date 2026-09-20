@@ -93,7 +93,9 @@ const TaskBoardLane: React.FC<{
     <article
       className={"tb-lane" + (collapsed ? " tb-lane--collapsed" : "")}
       aria-label={"模块 " + lane.name}
-    >      <header className="tb-lane-head" onClick={onToggle}>
+    >
+      {" "}
+      <header className="tb-lane-head" onClick={onToggle}>
         {/* 箭头按钮保留键盘焦点与可访问名；点击事件冒泡到整行头部统一切换。 */}
         <button
           type="button"

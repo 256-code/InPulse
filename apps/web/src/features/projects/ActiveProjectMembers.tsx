@@ -51,7 +51,6 @@ export function ActiveProjectMembers({
     <>
       <div className="page-header">
         <div>
-          <span className="eyebrow">项目 / 成员</span>
           <h1>{projectDetail ? projectDetail.name : "项目成员"}</h1>
           <p>
             当前项目的活跃成员为只读视图；成员的添加与移除由系统管理员处理。

@@ -1,7 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import { pickCalmSelectOption } from "../helpers/calm-select.js";
+
+/**
+ * 标题行内的标题、任务数徽章与右侧控件必须共用同一条垂直中线。
+ * 功能档案页把任务面板嵌在 `.feature-reading` 里，该容器的 `h3` 规则曾给面板标题
+ * 补上 12px 下边距，在垂直居中的标题行里把标题顶高了 6px。
+ */
+async function expectTaskPanelHeadingAligned(page: Page): Promise<void> {
+  const row = page
+    .locator(".calm-section-title", {
+      has: page.locator(".task-panel-heading"),
+    })
+    .first();
+  await expect(row).toBeVisible();
+  const centers = await row.evaluate((element) => {
+    const selectors = [
+      ".task-panel-heading h3",
+      ".task-panel-heading .badge",
+      ".task-status-filter",
+      ".segmented",
+      ".primary-button",
+    ];
+    return selectors
+      .map((selector) => element.querySelector(selector))
+      .filter((target): target is Element => target !== null)
+      .map((target) => {
+        const rect = target.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      });
+  });
+  expect(centers).toHaveLength(5);
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
+}
 
 test("F-15 单份模块任务影响两功能，引用计数与增删关系持久化", async ({
   browser,
@@ -61,7 +93,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       await expect(
         page.getByText("模块级任务 · 引用", { exact: true }),
       ).toBeVisible();
-      await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+      await expect(page.getByText("1 个任务")).toBeVisible();
       await page
         .getByRole("article")
         .filter({ has: page.getByText(title, { exact: true }) })
@@ -80,7 +112,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await page.goto(featureUrls[0]!);
     await expect(page.getByText("暂无任务", { exact: true })).toBeVisible();
     await page.goto(featureUrls[1]!);
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
+    await expectTaskPanelHeadingAligned(page);
     await page.goto(`/projects/${runtime.projectId}/modules/${moduleId}/tasks`);
     await page
       .getByRole("article")
@@ -92,10 +125,10 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await page.reload();
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
     await page.goto(featureUrls[0]!);
     await expect(page.getByText(title, { exact: true })).toBeVisible();
-    await expect(page.getByText("任务数：1（按唯一任务计）")).toBeVisible();
+    await expect(page.getByText("1 个任务")).toBeVisible();
     await page.goto("/notifications");
     await page.getByText(`任务指派：${title}`, { exact: true }).click();
     await expect(page).toHaveURL(

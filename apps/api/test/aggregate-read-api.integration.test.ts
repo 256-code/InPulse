@@ -1141,14 +1141,16 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks", memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
+    // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
+    // 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余，桶内按 ID 升序。
     expect(page.items.map((item) => item.taskId)).toEqual([
-      tInvalid,
-      tCanceled,
-      tDone,
-      tModule,
-      tDetached,
       tSource,
       tMain,
+      tDetached,
+      tModule,
+      tInvalid,
+      tDone,
+      tCanceled,
     ]);
     expect(page.items.some((item) => item.taskId === tHistorical)).toBe(false);
     expect(
@@ -1211,7 +1213,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       { path: "/api/v1/me/tasks?scopeType=MODULE", taskIds: [tModule] },
       {
         path: "/api/v1/me/tasks?scopeType=FEATURE&workStatus=TODO",
-        taskIds: [tInvalid, tDetached, tSource, tMain],
+        taskIds: [tSource, tMain, tDetached, tInvalid],
       },
       { path: "/api/v1/me/tasks?workStatus=DONE", taskIds: [tDone] },
       { path: "/api/v1/me/tasks?workStatus=CANCELED", taskIds: [tCanceled] },
@@ -1221,7 +1223,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       },
       {
         path: "/api/v1/me/tasks?hasPublishedRecord=false",
-        taskIds: [tInvalid, tCanceled, tDone, tModule, tDetached],
+        taskIds: [tDetached, tModule, tInvalid, tDone, tCanceled],
       },
       {
         path: "/api/v1/me/tasks?projectId=" + String(otherProject!.projectId),
@@ -1230,13 +1232,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       {
         path: "/api/v1/me/tasks?projectId=" + String(project!.projectId),
         taskIds: [
-          tInvalid,
-          tCanceled,
-          tDone,
-          tModule,
-          tDetached,
           tSource,
           tMain,
+          tDetached,
+          tModule,
+          tInvalid,
+          tDone,
+          tCanceled,
         ],
       },
     ];
@@ -1266,13 +1268,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       }
     }
     expect(collected).toEqual([
-      tInvalid,
-      tCanceled,
-      tDone,
-      tModule,
-      tDetached,
       tSource,
       tMain,
+      tDetached,
+      tModule,
+      tInvalid,
+      tDone,
+      tCanceled,
     ]);
     expect(new Set(collected).size).toBe(collected.length);
 
@@ -1524,11 +1526,12 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
+    // ADR-037：已逾期(0) → 今/明日截止(3) → 已完成 → 已取消。
     expect(page.items.map((item) => item.taskId)).toEqual([
-      canceledTask,
-      doneTask,
-      todayTask,
       overdueTask,
+      todayTask,
+      doneTask,
+      canceledTask,
     ]);
     expect(page.stats).toEqual({
       myOpen: 2,

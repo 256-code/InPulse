@@ -361,7 +361,7 @@ interface MyTasksQueryRequest {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly hasPublishedRecord?: boolean;  // 冲突 A，见 Q-07 与端口提案 §7
   readonly assigneeMe?: boolean;          // 是否固定为 true，见 Q-08
-  readonly sort?: "id";                   // 见 Q-10
+  readonly sort?: "id";                   // 见 Q-10（已由 ADR-037 替代：排序固定，不提供 sort）
 }
 ```
 
@@ -470,7 +470,7 @@ interface MyTaskItem {
 | Q-07 | `hasPublishedRecord` 筛选的服务端实现归属？它需要 `change_records`，而 `tasks` 与 `change_records` 分属 B 域两个模块 | §3.3.3、端口提案 §7.1 | 由 C 的只读适配器实现并补 ADR（端口提案路线 III；对 F-32 同时是替代工作书步骤 1 的处方）；或按路线 IV 建投影。端口提案已排除「直接塞进 `TaskQueryPort`」的路线 I | 由 B 域单条 SQL 实现，不经 C 只读适配器；不转 ADR |
 | Q-08 | `assigneeMe` 是否固定为「负责人=我」？是否允许省略以查询项目内全部任务？ | §3.3.2 | 固定为"负责人=我"；查询他人任务走另一条明确授权的路由 | 固定「负责人 = 我」并删除 `assigneeMe`；查他人仍走 `listProjectMemberUnfinishedTasks` |
 | Q-09 | R-3 的筛选参数一次覆盖功能设计 §24.3 的 13 项，还是先实现 F-32 要求的 4 项？ | §3.3.2 | 先 4 项（状态、范围、是否有记录、负责人），其余后续扩展 | V1 只落 4 项，其余筛选留给后续迭代，不登记未实现参数 |
-| Q-10 | R-3 的排序键与游标键？现有索引可命中 `ORDER BY t.id DESC`，不能命中按 `updated_at` 排序 | §3.3.2、端口提案 §1.4 | `id DESC`；若产品要求按更新时间排序，需先补索引 | 固定 `id DESC`，不提供 `sort`；`limit` 默认 20、上限 100；游标沿用 C-006 |
+| Q-10 | R-3 的排序键与游标键？现有索引可命中 `ORDER BY t.id DESC`，不能命中按 `updated_at` 排序 | §3.3.2、端口提案 §1.4 | `id DESC`；若产品要求按更新时间排序，需先补索引 | 固定 `id DESC`，不提供 `sort`；`limit` 默认 20、上限 100；游标沿用 C-006。2026-09-18 由 [ADR-037](adr/ADR-037.md) 替代：固定「状态分组 + 紧急桶 + 优先级 + 截止时间 + 任务 ID」，`MY_TASKS` 游标载荷扩展为多列 keyset（待人工批准） |
 | Q-11 | F-25 的任务卡片标记（「主任务/来源任务/迭代记录 n 条」）数据放在哪个契约？ | Q-03 | 放任务基础 DTO；若不宜扩大，则放 R-3 与任务列表 DTO | 与 Q-03 一致：R-1 成员项（`role`、`publishedRecordCount`）加 R-3 项（`groupRole`） |
 | Q-12 | 三条路由的服务端聚合实现放在 C 聚合域（只读适配器）还是由 B 提供 QueryPort？ | §4.2 | 统计类由 B 端口提供；跨域筛选类（`hasPublishedRecord`、历史来源分支排除）由 C 只读适配器加 ADR 实现 | 拒绝路线 I 与路线 III；B 域单条 SQL 端口加 C 聚合服务；路线 IV 留待后续 |
 | Q-13 | R-1 的记录列表中，`DRAFT` 状态记录是否可见？ | §3.1.3 | 不可见，只返回 `PUBLISHED` 与 `VOID`；功能设计只把正式记录计入迭代历史 | 不可见，只返回 `PUBLISHED` 与 `VOID` |

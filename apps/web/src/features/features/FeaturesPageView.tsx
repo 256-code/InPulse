@@ -309,33 +309,24 @@ export function FeaturesPageView({
   return (
     <>
       <div className="features-page">
-        <div className="feature-breadcrumbs">
-          <Button
-            className="back-button"
-            href={"/projects/" + projectId + "/modules"}
-          >
-            <InpulseIcon name="arrowLeft" size={15} />
-            返回模块列表
-          </Button>
-          {featureId && (
-            <Button
-              className="back-button"
-              href={
-                "/projects/" + projectId + "/modules/" + moduleId + "/features"
-              }
-            >
-              返回功能列表
-            </Button>
-          )}
-        </div>
         {!featureId ? (
           <>
             <div className="page-header">
               <div>
-                <span className="eyebrow">
-                  {`模块 / ${projectQuery.data?.project?.name ?? "加载中"}`}
-                </span>
-                <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                <div className="page-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回模块列表"
+                    title="返回模块列表"
+                    onClick={() =>
+                      navigate("/projects/" + projectId + "/modules")
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h1>{currentModule ? currentModule.name : "功能档案"}</h1>
+                </div>
                 <p>
                   {currentModule?.description ||
                     "维护长期功能档案，说明修改会保留审计历史。"}
@@ -688,22 +679,44 @@ export function FeaturesPageView({
           />
         ) : (
           // 系统目录树（侧栏）承担模块内功能切换后，详情页不再渲染左栏
-          // feature-switcher，「返回功能列表」入口由上方 feature-breadcrumbs 提供。
+          // feature-switcher，返回入口由标题左侧的返回箭头提供。
           <div className="feature-document">
             <header className="feature-modal-header">
               <div>
-                <span className="detail-label">
-                  项目 {projectId} / 模块 {moduleId}
-                </span>
-                <h2>{activeItem.name}</h2>
+                <div className="feature-title-row">
+                  <button
+                    type="button"
+                    className="title-back-button"
+                    aria-label="返回功能列表"
+                    title="返回功能列表"
+                    onClick={() =>
+                      navigate(
+                        "/projects/" +
+                          projectId +
+                          "/modules/" +
+                          moduleId +
+                          "/features",
+                      )
+                    }
+                  >
+                    <InpulseIcon name="chevronLeft" size={20} />
+                  </button>
+                  <h2>{activeItem.name}</h2>
+                </div>
                 <p>{activeItem.currentBehavior || "尚未补充当前功能说明。"}</p>
                 <div className="task-modal-badges">
-                  <span className="task-id">{activeItem.code}</span>
+                  {/* 功能编号不在页头展示，保留右侧「功能档案」里的编号。 */}
                   <CalmBadge
                     tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
                   >
                     {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
                   </CalmBadge>
+                  {/* 标签与状态并列成小徽章，放在状态和更新时间之间。 */}
+                  {activeItem.tags.map((tag) => (
+                    <CalmBadge key={tag} tone="violet">
+                      {tag}
+                    </CalmBadge>
+                  ))}
                   <CalmBadge tone="gray">
                     更新 {formatStamp(activeItem.updatedAt)}
                   </CalmBadge>
@@ -738,28 +751,8 @@ export function FeaturesPageView({
             <div className="feature-modal-content">
               <div className="feature-overview-grid">
                 <div className="feature-reading">
-                  <section>
-                    <h3>当前功能说明</h3>
-                    <p>{activeItem.currentBehavior || "暂无功能说明"}</p>
-                  </section>
-                  <section>
-                    <h3>验收标准</h3>
-                    <p style={{ whiteSpace: "pre-wrap" }}>
-                      {activeItem.acceptanceCriteria || "尚未填写验收标准"}
-                    </p>
-                  </section>
-                  <section>
-                    <h3>标签</h3>
-                    {activeItem.tags.length ? (
-                      <div className="tag-row">
-                        {activeItem.tags.map((tag) => (
-                          <CalmBadge key={tag}>{tag}</CalmBadge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>暂无标签，可在编辑功能时补充。</p>
-                    )}
-                  </section>
+                  {/* 「当前功能说明」只在标题下方给出，正文不再重复一遍。
+                      标签改由标题行的小徽章展示（状态与更新时间之间）。 */}
                   {activeItem.status === "ARCHIVED" && (
                     <section>
                       <h3>归档状态</h3>
@@ -776,6 +769,13 @@ export function FeaturesPageView({
                       isAdmin={isAdmin}
                       onOpenTask={setTaskTarget}
                     />
+                  </section>
+                  {/* 验收标准放到最底下：先看功能与任务，最后才是验收口径。 */}
+                  <section>
+                    <h3>验收标准</h3>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      {activeItem.acceptanceCriteria || "尚未填写验收标准"}
+                    </p>
                   </section>
                 </div>
                 <aside className="feature-facts">

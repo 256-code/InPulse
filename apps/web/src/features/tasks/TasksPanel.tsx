@@ -51,7 +51,6 @@ import {
   type TaskDraft,
 } from "./task-query";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
-import { useModules } from "@features/modules/module-query";
 import { useFeatures } from "@features/features/feature-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import {
@@ -250,7 +249,9 @@ export function TasksPanel({
   const scope = { projectId, moduleId, featureId };
   const { api, query, members, mutation, features } = useTasks(scope, client);
   const [view, setView] = useState<"cards" | "list">("cards");
-  const [statusFilter, setStatusFilter] = useState("TODO");
+  // 2026-09-18 人工确认：面板进入时默认显示全部状态，未完成 → 已完成 → 已取消
+  // 的分组顺序由服务端排序给出，这里不再默认收敛到待办。
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState<number | null>(
     () =>
       initialTaskId ??
@@ -343,10 +344,7 @@ export function TasksPanel({
   const taskDraftItems = taskDrafts.data?.items ?? [];
   // 详情头部与卡片归属展示名称而非裸 ID：项目/模块/功能名称均为既有只读契约。
   const projectDetail = useProjectDetail({ client, projectId });
-  const modules = useModules(projectId, client);
   const featureList = useFeatures(projectId, moduleId, undefined, client);
-  const moduleName = (id: number) =>
-    modules.query.data?.items.find((m) => m.id === id)?.name;
   const featureName = (id: number) =>
     featureList.query.data?.items.find((f) => f.id === id)?.name;
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
@@ -644,35 +642,49 @@ export function TasksPanel({
     >
       {mode === "detail" ? null : (
         <>
-          {customCreateOpen && (
+          {featureId === null && customCreateOpen && (
             <GlobalTaskCreateModal
               open
               onClose={() => setCustomCreateOpen(false)}
               client={client}
-              preset={{
-                projectId,
-                moduleId,
-                ...(featureId !== null ? { featureId } : {}),
-              }}
+              preset={{ projectId, moduleId }}
               onCreatedLocation={(task) => navigate(taskDetailPath(task))}
             />
           )}
           <div className="calm-section-title">
-            <div>
+            <div className="task-panel-heading">
               <h3>{featureId === null ? "模块任务" : "功能任务"}</h3>
-              <small>
-                {featureId === null
-                  ? "任务保存在模块下，可关联一个或多个功能；编号、版本与负责人以服务端为准。"
-                  : "任务保存在功能下，编号、版本与负责人以服务端为准。"}
-              </small>
+              {/* 计数与筛选合并进标题行：不再单起一行「任务数：…」与筛选行。 */}
+              {query.data && (
+                <CalmBadge
+                  tone="gray"
+                  title="按唯一任务计：同一任务关联多个功能时只计一次"
+                >
+                  {query.data.items.length} 个任务
+                </CalmBadge>
+              )}
             </div>
             <div className="feature-view-controls">
-              <Button
-                disabled={!writable}
-                onClick={() => setCustomCreateOpen(true)}
-              >
-                自定义归属新建任务
-              </Button>
+              {/* 功能级面板的新建任务固定归属当前功能，不需要自定义归属；
+                  只有模块级面板才需要选择归属到某个功能还是留在模块下。 */}
+              {featureId === null && (
+                <Button
+                  disabled={!writable}
+                  onClick={() => setCustomCreateOpen(true)}
+                >
+                  自定义归属新建任务
+                </Button>
+              )}
+              {query.data && (
+                <CalmSelect
+                  className="task-status-filter"
+                  value={statusFilter}
+                  onChange={(next) => setStatusFilter(String(next))}
+                  options={statusFilterOptions}
+                  appearance="menu"
+                  ariaLabel="任务状态筛选"
+                />
+              )}
               <CalmSegmented
                 label="展示方式"
                 value={view}
@@ -702,24 +714,7 @@ export function TasksPanel({
                 : "功能已归档，任务历史只读，不能新建或修改。"}
             </p>
           )}
-          {query.data && (
-            <p className="task-count">
-              任务数：{query.data.items.length}（按唯一任务计）
-            </p>
-          )}
           {success && <Alert type="success" title="任务已保存" />}
-          {query.data && (
-            <div className="feature-view-controls">
-              <label>任务状态筛选</label>
-              <CalmSelect
-                value={statusFilter}
-                onChange={(next) => setStatusFilter(String(next))}
-                options={statusFilterOptions}
-                appearance="menu"
-                ariaLabel="任务状态筛选"
-              />
-            </div>
-          )}
           {query.isPending ? (
             <div className="calm-state">
               <Spin />
@@ -943,19 +938,6 @@ export function TasksPanel({
             <>
               <div className="drawer-header task-modal-header">
                 <div>
-                  <span className="detail-label">
-                    {projectDetail.data?.project.name ??
-                      "项目 #" + current.projectId}{" "}
-                    /{" "}
-                    {moduleName(current.moduleId) ??
-                      "模块 #" + current.moduleId}
-                    /
-                    {current.featureId === null
-                      ? " 模块级任务"
-                      : " " +
-                        (featureName(current.featureId) ??
-                          "功能 #" + current.featureId)}
-                  </span>
                   <h2>{current.title}</h2>
                   <div className="task-modal-badges">
                     <span className="task-id">{current.code}</span>

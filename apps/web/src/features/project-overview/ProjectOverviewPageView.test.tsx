@@ -126,7 +126,6 @@ describe("ProjectOverviewPageView", () => {
   it("renders the project identity from the injected project port", async () => {
     renderView();
 
-    expect(screen.getByText("INP / PROJECT")).toBeInTheDocument();
     expect(screen.getByText("InPulse 平台")).toBeInTheDocument();
     expect(screen.getByText("进行中")).toBeInTheDocument();
     await screen.findByTestId("overview-metric-members");

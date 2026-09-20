@@ -85,7 +85,10 @@ test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", 
     await restore.getByRole("button", { name: "确认恢复记录" }).click();
     await expect(restore).toBeHidden();
     // 恢复后记录离开「已作废」列表，页面回落到独立详情形态。
-    await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
+    // 恢复后回到已发布形态：重新出现「作废记录」按钮（standalone 头部不再有小字）。
+    await expect(
+      detail.getByRole("button", { name: "作废记录" }),
+    ).toBeVisible();
     await expect(detail.getByText(privateReason)).toHaveCount(0);
     await member.page.goto(recordUrl);
     const memberCard = member.page

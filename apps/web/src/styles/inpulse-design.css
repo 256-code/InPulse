@@ -752,13 +752,6 @@
   margin-bottom: 24px;
 }
 
-.page-header .eyebrow {
-  color: #6d8ca9;
-  letter-spacing: 1.3px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
 .calm-state {
   display: flex;
   align-items: center;
@@ -847,10 +840,52 @@
   flex-wrap: wrap;
 }
 
-.feature-breadcrumbs {
+/* 页面标题行：返回箭头紧贴标题，取代原先的文字面包屑行。 */
+.page-title-row,
+.feature-title-row {
   display: flex;
-  gap: 10px;
-  margin: -4px 0 8px;
+  align-items: center;
+  gap: 22px;
+}
+
+/* 圆钮中心落在卡片左上角的 45° 斜角线上：圆钮纵向中心距卡片上边缘 34px，
+   横向取同一距离 → 圆钮左边缘距卡片左边缘 18px。 */
+.feature-title-row {
+  margin-left: -9px;
+}
+
+/* 说明与徽章跟卡片正文同列顶格（内容列 297px），只有标题需要为圆钮让位；
+   圆钮自身的横向位置由上面的斜角线规则决定。
+   说明行与标题之间再留 8px，避免说明/徽章贴住标题（徽章行随说明行一同下移）。 */
+.feature-modal-header > div:first-child > p {
+  margin-top: 8px;
+}
+
+.title-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #e8f1fb;
+  color: #3273bb;
+  cursor: pointer;
+  /* 与标题视觉中线对齐：圆形按钮按盒子居中会略低 2px。 */
+  margin-top: -2px;
+}
+
+/* 参考稿的返回箭头是加粗圆头折角，InpulseIcon 默认 1.7 描边偏细。 */
+.title-back-button svg {
+  stroke-width: 3;
+}
+
+.title-back-button:hover {
+  color: #1d5fa8;
+  background: #dbe9fa;
 }
 
 .modal-badges,

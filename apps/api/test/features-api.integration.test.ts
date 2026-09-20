@@ -363,6 +363,47 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       );
   });
 
+  it("orders the feature list by lifecycle rank: 进行中、未开始、已归档", async () => {
+    const { member, project } = await fixture();
+    // 创建顺序刻意与目标顺序相反：若排序键没生效，断言会退化成「按 id 升序」。
+    const notStarted = await create(project, member, "未开始功能");
+    const active = await create(project, member, "进行中功能");
+    const archived = await create(project, member, "已归档功能");
+    await client.sql`UPDATE app.features SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${archived.id} AND project_id = ${project.projectId}`;
+    // 功能下有一条已完成的有效任务，作用域内即「进行中」。
+    // app.tasks 的状态历史不变量要求任务行与最后一条 task_status_history 对齐，
+    // 同一语句里带上完工快照，夹具才能落库。
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, feature_id, scope_type, code, title,
+          work_status, completion_note, completed_at, assignee_id, creator_id
+        ) VALUES (
+          ${project.projectId}, ${project.moduleId}, ${active.id}, 'FEATURE',
+          ${project.code + "-T-1"}, '已完成任务', 'DONE', '已完成', now(),
+          ${member.userId}, ${member.userId}
+        )
+        RETURNING id, project_id, completed_at, completion_note
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, NULL, 'DONE', completed_at, completion_note,
+             ${member.userId}
+        FROM created
+    `;
+
+    const items = featureListResponseSchema.parse(
+      await (await request(project, "GET", member)).json(),
+    ).items;
+    expect(items.map((item) => item.id)).toEqual([
+      active.id,
+      notStarted.id,
+      archived.id,
+    ]);
+  });
+
   it("allocates unique project-wide numbers concurrently across modules and allows identical names", async () => {
     const { member, project } = await fixture();
     const [module] = await client.sql<

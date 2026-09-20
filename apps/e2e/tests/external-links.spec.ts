@@ -169,7 +169,14 @@ test("F22 draft links survive publication and revision without changing old vers
     await edit.getByLabel("具体改动").fill("修订方案");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
-    await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();
+    await expect(
+      detail
+        .locator(":scope > section:not([aria-label])")
+        .filter({
+          has: page.getByRole("heading", { name: "具体改动", exact: true }),
+        })
+        .getByText("修订方案", { exact: true }),
+    ).toBeVisible();
     await pickCalmSelectOption(detail, "较早版本", /^v1 · /);
     await pickCalmSelectOption(detail, "对照版本", /^v2 · /);
     await expect(

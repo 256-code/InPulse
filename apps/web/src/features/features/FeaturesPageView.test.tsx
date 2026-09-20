@@ -435,6 +435,52 @@ describe("功能卡", () => {
   });
 });
 
+it("功能详情：标签进标题行、验收标准排在功能任务之后", async () => {
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [
+        {
+          ...item,
+          currentBehavior: "退款回原支付渠道",
+          acceptanceCriteria: "响应低于 500ms",
+          tags: ["支付", "退款"],
+        },
+      ],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+
+  // 功能说明只保留标题下方那一处，正文不再重复同名区块。
+  expect(await screen.findByText("退款回原支付渠道")).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "当前功能说明" }),
+  ).not.toBeInTheDocument();
+
+  // 标签是标题行的小徽章，夹在状态与更新时间之间。
+  await screen.findByText("退款回原支付渠道");
+  const badgeRow = document.querySelector(".task-modal-badges");
+  expect(badgeRow).not.toBeNull();
+  const badges = Array.from(badgeRow?.children ?? []).map(
+    (node) => node.textContent ?? "",
+  );
+  expect(badges.slice(-3)).toEqual([
+    "支付",
+    "退款",
+    expect.stringContaining("更新"),
+  ]);
+  // 功能编号不在页头徽章行展示（仍保留在右侧「功能档案」里）。
+  expect(badgeRow?.textContent ?? "").not.toContain(item.code);
+
+  // 验收标准落在功能任务之后。
+  const tasks = screen.getByRole("heading", { name: "功能任务" });
+  const acceptance = screen.getByRole("heading", { name: "验收标准" });
+  expect(
+    tasks.compareDocumentPosition(acceptance) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 it("功能概览显示验收标准，编辑时保留并提交", async () => {
   const updateFeature = vi.fn().mockResolvedValue({
     ...item,

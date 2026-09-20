@@ -186,11 +186,6 @@ export const ProjectOverviewPageView: React.FC<
             <ProjectLogo code={project.code} />
           )}
           <div>
-            <div className="eyebrow">
-              {project === null
-                ? "项目 / PROJECT"
-                : project.code + " / PROJECT"}
-            </div>
             <h1>
               {project === null
                 ? projectLoading

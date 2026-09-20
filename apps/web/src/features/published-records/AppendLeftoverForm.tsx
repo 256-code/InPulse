@@ -119,7 +119,8 @@ export function AppendLeftoverForm({
           )}
           <div className="leftover-append-foot">
             <span>
-              {content.length}/10000 · 追加会生成新版本，并按修订规则通知相关人。
+              {content.length}/10000 ·
+              追加会生成新版本，并按修订规则通知相关人。
             </span>
             <div className="leftover-append-actions">
               <Button size="small" disabled={busy} onClick={close}>

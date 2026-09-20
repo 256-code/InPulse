@@ -281,7 +281,6 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     <div className="activity-page">
       <div className="page-header activity-page-header">
         <div>
-          <span className="eyebrow">{`动态与审计 / ${filteredItems.length} 条`}</span>
           <h1>项目动态</h1>
           <p>
             创建、指派、完成、合并、记录发布与版本修改全部留痕；审计日志不允许删除。

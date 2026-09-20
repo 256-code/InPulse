@@ -29,6 +29,16 @@ export {
   type TaskScopeType,
   type TaskWorkStatus,
 } from "./task-query.port.js";
+export {
+  TASK_LIST_SORT_KEY_VERSION,
+  encodeTaskListSortKey,
+  parseTaskListSortKey,
+  taskListKeysetPredicate,
+  taskListOrderBy,
+  taskListSortExpressions,
+  taskListSortKeyFor,
+  type TaskListSortKey,
+} from "./task-list-order.js";
 export { TaskCompletionCommandPort } from "./task-completion.port.js";
 export { TaskManagementError } from "./tasks-management.service.js";
 export {

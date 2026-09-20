@@ -60,7 +60,7 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     await expect(
       page
         .getByRole("region", { name: "正式记录详情" })
-        .getByText(/-CR-\d+ · v1 · 已发布/),
+        .getByRole("heading", { name: title }),
     ).toBeVisible();
 
     // 默认全部项目：不选项目即可看到刚发布的记录，并带回项目名称。

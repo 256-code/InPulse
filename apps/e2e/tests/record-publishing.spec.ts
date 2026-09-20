@@ -30,13 +30,21 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
+    // 详情头部不再渲染「编号 · 版本」小字（0f34d7a），standalone 形态以标题为锚点。
+    await expect(detail.getByRole("heading", { name: title })).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
     await edit.getByLabel("具体改动").fill("版本二方案");
     await edit.getByRole("button", { name: "保存新版本" }).click();
     await expect(edit).toBeHidden();
-    await expect(detail.getByText(/-CR-\d+ · v2 · 已发布/)).toBeVisible();
+    await expect(
+      detail
+        .locator(":scope > section:not([aria-label])")
+        .filter({
+          has: page.getByRole("heading", { name: "具体改动", exact: true }),
+        })
+        .getByText("版本二方案", { exact: true }),
+    ).toBeVisible();
     await detail.getByRole("button", { name: "修订内容" }).click();
     await edit.getByRole("button", { name: /^移\s*除$/ }).click();
     await expect(
@@ -128,7 +136,9 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       .getByRole("button", { name: "确认发布" })
       .click();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    await expect(detail.getByText(/-CR-\d+ · v1 · 已发布/)).toBeVisible();
+    await expect(
+      detail.getByRole("heading", { name: "发布来源-" + suffix }),
+    ).toBeVisible();
     await detail.getByRole("link", { name: "查看来源任务" }).click();
     await expect(
       task.getByRole("button", { name: "重新打开", exact: true }),
