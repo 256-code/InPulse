@@ -116,6 +116,7 @@ export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
                 ) : (
                   <ActiveProjectMembers
                     projectId={projectId}
+                    projectDetail={detail.data?.project ?? null}
                     {...(client ? { client } : {})}
                   />
                 )

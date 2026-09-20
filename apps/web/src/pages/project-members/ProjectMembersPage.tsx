@@ -41,7 +41,13 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
     isSystemAdmin ||
     canManageProjectResources(false, detail.data?.currentUserRole ?? null);
   if (!canManage)
-    return <ActiveProjectMembers projectId={id} client={client} />;
+    return (
+      <ActiveProjectMembers
+        projectId={id}
+        projectDetail={detail.data?.project ?? null}
+        client={client}
+      />
+    );
   return (
     <ProjectMembersPageView
       key={id}
