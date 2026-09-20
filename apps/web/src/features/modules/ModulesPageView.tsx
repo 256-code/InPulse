@@ -76,8 +76,9 @@ export function ModulesPageView({
           extraActions={
             // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」
             //（secondary）与 L307 SectionTitle 行内的「新增模块」（primary）是设计
-            // 稿同时存在的两个入口，共用同一个模块编辑器。
-            <Button className="secondary-button" onClick={() => open("create")}>
+            // 稿同时存在的两个入口，共用同一个模块编辑器。三处「新增模块」统一
+            // 走淡蓝 `soft-blue-button`，与页头主操作「新建任务」拉开层级。
+            <Button className="soft-blue-button" onClick={() => open("create")}>
               <InpulseIcon name="plus" size={15} />
               新增模块
             </Button>
@@ -108,7 +109,10 @@ export function ModulesPageView({
               title="暂无模块"
               description="创建一个业务模块，也可以在新建任务时同时创建模块。"
             >
-              <Button className="primary-button" onClick={() => open("create")}>
+              <Button
+                className="soft-blue-button"
+                onClick={() => open("create")}
+              >
                 <InpulseIcon name="plus" size={15} />
                 新增模块
               </Button>
@@ -120,7 +124,7 @@ export function ModulesPageView({
                 hint={`${(query.data?.items ?? []).length} 个模块 · 模块负责分类，功能负责沉淀`}
               >
                 <Button
-                  className="primary-button"
+                  className="soft-blue-button"
                   onClick={() => open("create")}
                 >
                   <InpulseIcon name="plus" size={15} />
@@ -162,7 +166,7 @@ export function ModulesPageView({
                           tone={resourceLifecycleTone(
                             item.status,
                             item.stats.completedTaskCount,
-                            "gray",
+                            "blue",
                           )}
                         >
                           {resourceLifecycleLabel(
@@ -177,56 +181,26 @@ export function ModulesPageView({
                           {item.stats.activeFeatureCount} 个功能 ·{" "}
                           {item.stats.openTaskCount} 项待办
                         </span>
-                        <Button
-                          className="text-button"
-                          href={
-                            "/projects/" +
-                            projectId +
-                            "/modules/" +
-                            item.id +
-                            "/features"
-                          }
-                        >
-                          查看功能
-                          <InpulseIcon name="chevronRight" size={14} />
-                        </Button>
+                        {/* 整卡点击已经进入模块页，卡内只留「编辑模块」一个动作：
+                            查看功能由整卡点击承担，模块任务在模块页「模块级任务」
+                            页签，归档/恢复在编辑弹窗底部（ADR-034 同款收敛）。 */}
+                        {item.status === "ACTIVE" ? (
+                          <Button
+                            className="text-button"
+                            onClick={() => open("update", item)}
+                          >
+                            编辑模块
+                          </Button>
+                        ) : canArchive ? (
+                          <Button
+                            className="text-button"
+                            onClick={() => open("restore", item)}
+                          >
+                            恢复模块
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
-                    <span className="catalog-edit-link">
-                      <Button
-                        className="text-button"
-                        href={
-                          "/projects/" +
-                          projectId +
-                          "/modules/" +
-                          item.id +
-                          "/tasks"
-                        }
-                      >
-                        模块任务
-                      </Button>
-                      {item.status === "ACTIVE" && (
-                        <Button
-                          className="text-button"
-                          onClick={() => open("update", item)}
-                        >
-                          编辑模块
-                        </Button>
-                      )}
-                      {canArchive && (
-                        <Button
-                          className="text-button"
-                          onClick={() =>
-                            open(
-                              item.status === "ACTIVE" ? "archive" : "restore",
-                              item,
-                            )
-                          }
-                        >
-                          {item.status === "ACTIVE" ? "归档模块" : "恢复模块"}
-                        </Button>
-                      )}
-                    </span>
                   </article>
                 ))}
               </div>

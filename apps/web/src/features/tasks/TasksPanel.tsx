@@ -778,6 +778,13 @@ export function TasksPanel({
                     const badge = relationBadge(marks.get(item.id));
                     const leftoverSource =
                       marks.get(item.id)?.hasLeftoverSource === true;
+                    const subtitle = [
+                      badge === null ? null : badge.label,
+                      leftoverSource ? LEFTOVER_SOURCE_BADGE.label : null,
+                    ]
+                      .filter((part) => part !== null)
+                      .join(" · ");
+                    // 标题本身就是入口，副标题只留归属提示，不再重复详情入口文案。
                     return (
                       <tr key={item.id}>
                         <td>
@@ -798,13 +805,7 @@ export function TasksPanel({
                             onClick={() => openDetail(item.id)}
                           >
                             <strong>{item.title}</strong>
-                            <span>
-                              {badge === null ? "" : badge.label + " · "}
-                              {leftoverSource
-                                ? LEFTOVER_SOURCE_BADGE.label + " · "
-                                : ""}
-                              查看任务详情
-                            </span>
+                            {subtitle === "" ? null : <span>{subtitle}</span>}
                           </button>
                         </td>
                         <td>{memberName(item.assigneeId)}</td>
@@ -834,7 +835,14 @@ export function TasksPanel({
                 const leftoverSource =
                   marks.get(item.id)?.hasLeftoverSource === true;
                 return (
-                  <article className="calm-task-card" key={item.id}>
+                  <button
+                    type="button"
+                    className="calm-task-card"
+                    key={item.id}
+                    aria-label={"查看任务详情：" + item.title}
+                    aria-haspopup="dialog"
+                    onClick={() => openDetail(item.id)}
+                  >
                     <div className="calm-card-top">
                       <span className="task-id">{item.code}</span>
                       <span className="task-card-badges">
@@ -889,17 +897,8 @@ export function TasksPanel({
                           </span>
                         )}
                       </span>
-                      <button
-                        type="button"
-                        className="text-button"
-                        aria-label="任务详情"
-                        onClick={() => openDetail(item.id)}
-                      >
-                        任务详情
-                        <InpulseIcon name="chevronRight" size={13} />
-                      </button>
                     </div>
-                  </article>
+                  </button>
                 );
               })}
             </div>

@@ -51,9 +51,10 @@ import {
  * 完整排序键位置；旧格式游标按无效游标拒绝。
  * 记录维度：hasPublishedRecord 由任务 → PUBLISHED 记录数映射派生（count > 0，裁决
  * 修订 D-1），筛选仍由 MyTaskQueryPort.list 在同一分页 SQL 内先过滤后分页。
- * 统计卡片与遗留问题入口按 A 裁决 §10.3：基准集合只受负责人与 projectId 影响，
- * 与 ownership 无关（卡片文案恒为「我负责的」口径），分页与游标不影响计数，
- * 日界/月界由 SQL 按 Asia/Shanghai 计算。
+ * 统计卡片与遗留问题入口按 A 裁决 §10.3（2026-09-20 按任务中心新卡片重定口径）：
+ * 基准集合只受 projectId 影响，与 ownership 无关；todayTodo / myOpen / completed 取负责人
+ * 维度，created 取创建人维度，两者都是当前用户自指，分页与游标不影响计数，
+ * 日界由 SQL 按 Asia/Shanghai 计算。
  *
  * effectiveOnly 不在此处使用：R-3 需要返回 CANCELED / INVALID 任务才能让
  * workStatus 筛选有意义；§29.1 的「有效任务」口径只服务 R-2 的未完成任务计数。
@@ -63,6 +64,8 @@ export interface MyTasksQueryCommand {
   readonly actorUserId: number;
   readonly scope?: "mine" | "created" | "project" | "all";
   readonly overdue?: boolean;
+  /** 「今日待办」集合（契约 todayTodo）：逾期 ∪ 遗留来源 ∪ 紧急 ∪ 7 个日历日内到期。 */
+  readonly todayTodo?: boolean;
   readonly cursor?: string;
   readonly limit?: number;
   readonly projectId?: number;
@@ -159,9 +162,15 @@ export class MyTasksQueryService {
             (projectId) => projectId === command.projectId,
           );
     const filterKey = JSON.stringify([
-      ...(command.scope === undefined && command.overdue === undefined
+      ...(command.scope === undefined &&
+      command.overdue === undefined &&
+      command.todayTodo === undefined
         ? []
-        : [command.scope ?? "mine", command.overdue ?? false]),
+        : [
+            command.scope ?? "mine",
+            command.overdue ?? false,
+            command.todayTodo ?? false,
+          ]),
       command.ownership ?? "ASSIGNEE",
       command.projectId ?? null,
       command.scopeType ?? null,
@@ -196,6 +205,9 @@ export class MyTasksQueryService {
             ? { creatorId: command.actorUserId }
             : { assigneeId: command.actorUserId }),
         ...(command.overdue === undefined ? {} : { overdue: command.overdue }),
+        ...(command.todayTodo === undefined
+          ? {}
+          : { todayTodo: command.todayTodo }),
         limit,
         excludedTaskIds,
         ...(workStatuses === undefined ? {} : { workStatuses }),

@@ -41,6 +41,8 @@ export interface MyTasksV1Query {
   readonly priority?: MyTaskPriority;
   /** 与 workStatus=TODO 组合表达「未完成并含已取消」（A 裁决 §10.3）。 */
   readonly includeCanceled?: boolean;
+  /** 今日待办集合：未完成且命中 逾期 / 遗留来源 / 紧急 / 7 个日历日内到期 之一。 */
+  readonly todayTodo?: boolean;
 }
 
 export interface MyTasksV1QueryOptions {
@@ -99,7 +101,8 @@ export const MY_TASKS_V1_MISSING_ITEM_FIELDS = ["description"] as const;
 
 /**
  * 响应维度的缺口：第二轮扩展后 stats / leftoverCount / leftoverSample
- * 已由 R-3 提供；scopeCounts 为 A 裁决 §10.3 延后项，保持 null。
+ * 已由 R-3 提供；scopeCounts 为 A 裁决 §10.3 延后项，保持 null（2026-09-20
+ * 起任务中心移除范围分段行，显示层不再渲染该计数）。
  */
 export const MY_TASKS_V1_MISSING_RESPONSE_PARTS = ["scopeCounts"] as const;
 
@@ -150,6 +153,7 @@ export function toMyTasksV1Query(
     hasPublishedRecord?: boolean;
     priority?: MyTaskPriority;
     includeCanceled?: boolean;
+    todayTodo?: boolean;
   } = {
     limit: clampMyTasksV1Limit(options.limit ?? MY_TASKS_V1_LIMIT_DEFAULT),
   };
@@ -158,9 +162,9 @@ export function toMyTasksV1Query(
   if (cursor !== null && cursor.length > 0) query.cursor = cursor;
   const ownership = toMyTasksV1Ownership(filters);
   if (ownership !== null) query.ownership = ownership;
-  if (filters.scope === "project" && filters.projectId !== null) {
-    query.projectId = filters.projectId;
-  }
+  // 项目筛选是工具栏的常驻条件：选定项目后，与 scope / ownership 一起收窄，
+  // 「我负责的 / 我创建的 + 所选项目」都要下发 projectId。
+  if (filters.projectId !== null) query.projectId = filters.projectId;
   if (filters.level !== null) query.scopeType = filters.level;
   const workStatus = toMyTasksV1WorkStatus(filters);
   if (workStatus !== null) query.workStatus = workStatus;
@@ -169,6 +173,10 @@ export function toMyTasksV1Query(
   }
   if (filters.priority !== null) query.priority = filters.priority;
   if (requiresCanceledUnion(filters)) query.includeCanceled = true;
+  // 今日待办只存在于「未完成」视图（服务端 todayTodo 与 DONE / CANCELED 求交恒为空），
+  // 已完成 / 全部视图即使过滤器带该位也不下发，避免发出必然为空的组合。
+  if (filters.status === "open" && filters.todayTodo === true)
+    query.todayTodo = true;
   return query;
 }
 

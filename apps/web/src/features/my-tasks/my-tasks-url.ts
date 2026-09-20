@@ -14,7 +14,7 @@ import type {
  *
  * 参数约定：scope=mine|created|project|all、project=<项目 id>、
  * status=open|done|all、priority、level、relation、record=yes|no、
- * github=yes|no、canceled=1、q=<关键词>、view=cards|list、more=1。
+ * github=yes|no、canceled=1、q=<关键词>、view=cards|list、more=1、today=1|0、overdue=1。
  * 与默认值相同的项不写入 URL；非法值一律回退默认值。
  */
 
@@ -24,6 +24,8 @@ export const DEFAULT_MY_TASK_FILTERS: MyTaskFilters = {
   scope: "mine",
   projectId: null,
   status: "open",
+  // 今日待办是「未完成」视图的缺省口径：不带参数打开任务中心即看今日待办。
+  todayTodo: true,
   priority: null,
   level: null,
   relation: null,
@@ -72,6 +74,25 @@ function readPositiveId(raw: string | null): number | null {
   return parsed;
 }
 
+/**
+ * 「今日待办」只在工作状态为「未完成」时有意义：服务端 todayTodo 与 DONE / CANCELED 求交恒为空。
+ * URL 不带 today 时按工作状态推断——未完成 → 今日待办（任务中心默认落地视图），
+ * 已完成 / 全部 → 关闭，避免旧链接（如 ?status=done）被静默套上今日筛选而显示空页。
+ */
+function defaultTodayTodo(status: MyTaskStatusFilter): boolean {
+  return status === "open";
+}
+
+function readTodayTodo(
+  params: URLSearchParams,
+  status: MyTaskStatusFilter,
+): boolean {
+  const raw = params.get("today");
+  if (raw === "1") return true;
+  if (raw === "0") return false;
+  return defaultTodayTodo(status);
+}
+
 export interface ReadMyTaskFiltersOptions {
   readonly isAdmin?: boolean;
 }
@@ -82,13 +103,14 @@ export function readMyTaskFilters(
 ): MyTaskFilters {
   const scope =
     pick(scopeValues, params.get("scope")) ?? DEFAULT_MY_TASK_FILTERS.scope;
+  const status =
+    pick(statusValues, params.get("status")) ?? DEFAULT_MY_TASK_FILTERS.status;
   return {
     scope: scope === "all" && options.isAdmin !== true ? "mine" : scope,
     projectId: readPositiveId(params.get("project")),
     ...(params.get("overdue") === "1" ? { overdue: true } : {}),
-    status:
-      pick(statusValues, params.get("status")) ??
-      DEFAULT_MY_TASK_FILTERS.status,
+    todayTodo: readTodayTodo(params, status),
+    status,
     priority: pick(priorityValues, params.get("priority")),
     level: pick(levelValues, params.get("level")),
     relation: pick(relationValues, params.get("relation")),
@@ -113,10 +135,9 @@ export function writeMyTaskFilters(
   const params = new URLSearchParams();
   if (filters.scope !== DEFAULT_MY_TASK_FILTERS.scope)
     params.set("scope", filters.scope);
-  if (
-    (filters.scope === "project" || filters.overdue) &&
-    filters.projectId !== null
-  )
+  // 项目筛选（工具栏「项目」下拉）是常驻条件：选定项目即写入 URL，
+  // 不再要求 scope=project 或逾期钻取才保留。
+  if (filters.projectId !== null)
     params.set("project", String(filters.projectId));
   if (filters.status !== DEFAULT_MY_TASK_FILTERS.status)
     params.set("status", filters.status);
@@ -131,6 +152,10 @@ export function writeMyTaskFilters(
   if (filters.display !== DEFAULT_MY_TASK_FILTERS.display)
     params.set("view", filters.display);
   if (filters.overdue) params.set("overdue", "1");
+  // 今日待办只在「未完成」视图下存在：缺省（未完成 + 今日待办）不写参数，
+  // 「未完成但不限今日」写 today=0；已完成 / 全部视图不存在该筛选，不写。
+  if (filters.status === "open" && filters.todayTodo === false)
+    params.set("today", "0");
   if (options.advancedOpen === true) params.set(MY_TASKS_MORE_PARAM, "1");
   return params;
 }

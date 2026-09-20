@@ -230,14 +230,24 @@ describe("F-12 forms", () => {
         .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
     } as unknown as InpulseApiClient;
     mount(client, true);
-    fireEvent.click(await screen.findByRole("button", { name: /归\s*档/ }));
-    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    // 卡内不再有归档入口：先打开「编辑模块」，归档按钮在弹窗底部（ADR-034 同款收敛）。
+    expect(
+      screen.queryByRole("button", { name: /归\s*档/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
+    const footer = dialog.querySelector(".calm-action-footer");
+    fireEvent.click(
+      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
+    );
+    const archiving = await screen.findByRole("dialog", { name: "归档模块" });
+    fireEvent.click(within(archiving).getByRole("button", { name: /确\s*认/ }));
     await screen.findByText("请填写操作原因");
     expect(client.archiveModule).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("操作原因"), {
+    fireEvent.change(within(archiving).getByLabelText("操作原因"), {
       target: { value: "暂时封存" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /确\s*认/ }));
+    fireEvent.click(within(archiving).getByRole("button", { name: /确\s*认/ }));
     await waitFor(() =>
       expect(client.archiveModule).toHaveBeenCalledWith(
         2,
@@ -294,7 +304,13 @@ describe("F-12 forms", () => {
       }),
     } as unknown as InpulseApiClient;
     mount(client, false);
-    await screen.findByRole("button", { name: /归\s*档/ });
+    // 卡内只留「编辑模块」，组长的归档入口在编辑弹窗底部。
+    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
+    const footer = dialog.querySelector(".calm-action-footer");
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -350,19 +366,24 @@ describe("模块卡", () => {
     fireEvent.click(await screen.findByRole("heading", { name: "未分类模块" }));
     await screen.findByText("功能列表页");
   });
-  it("keeps 查看功能 as the single link inside the card so card clicks stay unambiguous", async () => {
+  it("keeps 编辑模块 as the only control inside the card so card clicks stay unambiguous", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({ items: [withStats] }),
     } as unknown as InpulseApiClient;
     mountRouted(client);
-    const links = await screen.findAllByRole("link", { name: "查看功能" });
-    expect(links).toHaveLength(1);
-    expect(links[0]!.getAttribute("href")).toBe(
-      "/projects/2/modules/3/features",
-    );
+    const heading = await screen.findByRole("heading", { name: "未分类模块" });
+    const card = heading.closest(".calm-feature-card") as HTMLElement;
+    // 「查看功能」与整卡点击同义，已删除；卡内不再有任何链接。
+    expect(within(card).queryByRole("link")).toBeNull();
+    expect(within(card).getAllByRole("button")).toHaveLength(1);
     expect(
-      links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
-    ).toBeNull();
+      within(card).getByRole("button", { name: "编辑模块" }),
+    ).toBeInTheDocument();
+    // 模块任务与归档入口已移出卡片：模块任务在模块页「模块级任务」页签，
+    // 归档/恢复在编辑弹窗底部。
+    expect(within(card).queryByText("模块任务")).toBeNull();
+    expect(within(card).queryByText("归档模块")).toBeNull();
+    expect(card.getAttribute("role")).toBeNull();
   });
   it("marks an active module without completed tasks as 未开始", async () => {
     const client = {
@@ -397,7 +418,7 @@ describe("模块卡", () => {
     } as unknown as InpulseApiClient;
     mountRouted(client);
     expect((await screen.findByText("进行中")).className).toContain(
-      "badge-gray",
+      "badge-blue",
     );
     expect(screen.getByText("已归档").className).toContain("badge-amber");
   });

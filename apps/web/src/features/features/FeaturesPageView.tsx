@@ -592,12 +592,12 @@ export function FeaturesPageView({
                           <h2>{item.name}</h2>
                           <div className="task-card-badges">
                             <CalmBadge
-                              tone={item.status === "ACTIVE" ? "gray" : "amber"}
+                              tone={item.status === "ACTIVE" ? "blue" : "amber"}
                             >
                               {item.status === "ACTIVE" ? "进行中" : "已归档"}
                             </CalmBadge>
                             {item.tags.slice(0, 3).map((tag) => (
-                              <CalmBadge key={tag} tone="gray">
+                              <CalmBadge key={tag} tone="violet">
                                 {tag}
                               </CalmBadge>
                             ))}
@@ -608,20 +608,6 @@ export function FeaturesPageView({
                               {item.stats.openTaskCount} 项待办 ·{" "}
                               {item.stats.recordCount} 条迭代
                             </span>
-                            <Button
-                              className="text-button"
-                              href={
-                                "/projects/" +
-                                projectId +
-                                "/modules/" +
-                                moduleId +
-                                "/features/" +
-                                item.id
-                              }
-                            >
-                              查看详情
-                              <InpulseIcon name="chevronRight" size={14} />
-                            </Button>
                           </div>
                         </div>
                         <span className="catalog-edit-link">
@@ -753,12 +739,6 @@ export function FeaturesPageView({
                 <div className="feature-reading">
                   {/* 「当前功能说明」只在标题下方给出，正文不再重复一遍。
                       标签改由标题行的小徽章展示（状态与更新时间之间）。 */}
-                  {activeItem.status === "ARCHIVED" && (
-                    <section>
-                      <h3>归档状态</h3>
-                      <p>归档历史仍可查看；恢复前不能在此功能新增下级内容。</p>
-                    </section>
-                  )}
                   <section className="feature-task-section">
                     <TasksPanel
                       projectId={projectId}
@@ -777,6 +757,13 @@ export function FeaturesPageView({
                       {activeItem.acceptanceCriteria || "尚未填写验收标准"}
                     </p>
                   </section>
+                  {/* 归档状态排在验收标准之后：它是附加说明，不再插在功能任务之前。 */}
+                  {activeItem.status === "ARCHIVED" && (
+                    <section>
+                      <h3>归档状态</h3>
+                      <p>归档历史仍可查看；恢复前不能在此功能新增下级内容。</p>
+                    </section>
+                  )}
                 </div>
                 <aside className="feature-facts">
                   <h3>功能档案</h3>

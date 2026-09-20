@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { ApiError } from "@generated/api";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import type { MyTaskFilters, MyTasksAdapter } from "./my-tasks-types";
@@ -26,7 +26,7 @@ export interface UseMyTasksQueryOptions {
 }
 
 export interface UseMyTaskGroupsQueryOptions {
-  /** 按项目范围筛选时传入当前项目；null 表示跨项目（服务端授权范围）。 */
+  /** 工具栏「项目」下拉选定的项目；null 表示「全部项目」（服务端授权范围内跨项目）。 */
   readonly projectId: number | null;
   readonly adapter?: MyTasksAdapter;
 }
@@ -44,6 +44,9 @@ export function useMyTaskGroupsQuery({
     queryKey: ["my-task-groups", adapter.source, projectId],
     queryFn: ({ pageParam }) =>
       adapter.fetchTaskGroups({ projectId, cursor: pageParam }),
+    // 换项目会换 queryKey，此时保留上一份聚合组继续渲染：
+    // 否则该区块会先塌成 140px 的转圈占位再撑回，下方内容随之上下跳（2026-09-20 修）。
+    placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     retry: false,
@@ -59,6 +62,10 @@ export function useMyTasksQuery({
     queryKey: ["my-tasks", adapter.source, viewerId, filters],
     queryFn: ({ pageParam }) =>
       adapter.fetchMyTasks({ filters, viewerId, cursor: pageParam }),
+    // 同一处根因：切换统计卡 / 筛选会换 queryKey，若不保留上一份列表，
+    // 列表区（含展示方式图标行）会被「正在加载任务列表…」占位替换，
+    // 高度先缩后涨，下方「任务聚合组」随之上跳再落回（2026-09-20 修）。
+    placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled: filters.scope !== "project" || filters.projectId !== null,

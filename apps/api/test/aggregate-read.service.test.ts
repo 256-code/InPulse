@@ -1017,10 +1017,16 @@ function myTasksSetup(
     .mockResolvedValue(options.linkCounts ?? [{ taskId: 501, count: 3 }]);
   const stats = vi.fn().mockResolvedValue(
     options.stats ?? {
+      todayTodo: 3,
+      todayTodoBreakdown: {
+        overdue: 2,
+        leftover: 1,
+        urgent: 1,
+        dueWithinDays: 1,
+      },
       myOpen: 4,
-      dueToday: 1,
-      overdue: 2,
-      completedThisMonth: 3,
+      completed: 3,
+      created: 6,
     },
   );
   const leftoverEntry = vi.fn().mockResolvedValue(
@@ -1121,7 +1127,18 @@ describe("MyTasksQueryService.list", () => {
       items: [],
       nextCursor: null,
       hasMore: false,
-      stats: { myOpen: 4, dueToday: 1, overdue: 2, completedThisMonth: 3 },
+      stats: {
+        todayTodo: 3,
+        todayTodoBreakdown: {
+          overdue: 2,
+          leftover: 1,
+          urgent: 1,
+          dueWithinDays: 1,
+        },
+        myOpen: 4,
+        completed: 3,
+        created: 6,
+      },
       leftoverCount: 2,
       leftoverSample: { recordCode: "SHOP-CR-41", summary: "最新遗留内容" },
     });
@@ -1179,6 +1196,32 @@ describe("MyTasksQueryService.list", () => {
     expect(setup.listPage.mock.calls[0]?.[1]).not.toHaveProperty("creatorId");
   });
 
+  it("todayTodo 进入端口与游标 filterKey（今日待办卡片）", async () => {
+    const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
+    await setup.service.list({ actorUserId: 5, todayTodo: true });
+    expect(setup.cursor.decodeKey).toHaveBeenCalledWith(undefined, {
+      actorUserId: 5,
+      namespace: "MY_TASKS",
+      filterKey: JSON.stringify([
+        "mine",
+        false,
+        true,
+        "ASSIGNEE",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]),
+      requireSortKey: true,
+    });
+    expect(setup.listPage.mock.calls[0]?.[1]).toMatchObject({
+      projectIds: [7, 9],
+      assigneeId: 5,
+      todayTodo: true,
+    });
+  });
   it("ownership=CREATOR 只在当前用户身份内改走 creatorId，并绑定游标签名", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
     await setup.service.list({
@@ -1268,10 +1311,16 @@ describe("MyTasksQueryService.list", () => {
       [502, 501],
     );
     expect(result.stats).toEqual({
+      todayTodo: 3,
+      todayTodoBreakdown: {
+        overdue: 2,
+        leftover: 1,
+        urgent: 1,
+        dueWithinDays: 1,
+      },
       myOpen: 4,
-      dueToday: 1,
-      overdue: 2,
-      completedThisMonth: 3,
+      completed: 3,
+      created: 6,
     });
     expect(result.leftoverCount).toBe(2);
     expect(result.leftoverSample).toEqual({
@@ -1325,10 +1374,16 @@ describe("MyTasksQueryService.list", () => {
         hasMore: false,
       },
       stats: {
+        todayTodo: 3,
+        todayTodoBreakdown: {
+          overdue: 2,
+          leftover: 1,
+          urgent: 1,
+          dueWithinDays: 1,
+        },
         myOpen: 0,
-        dueToday: 0,
-        overdue: 0,
-        completedThisMonth: 1,
+        completed: 1,
+        created: 2,
       },
       leftover: {
         count: 1,
@@ -1346,10 +1401,16 @@ describe("MyTasksQueryService.list", () => {
       completedAt: completedAt.toISOString(),
     });
     expect(result.stats).toEqual({
+      todayTodo: 3,
+      todayTodoBreakdown: {
+        overdue: 2,
+        leftover: 1,
+        urgent: 1,
+        dueWithinDays: 1,
+      },
       myOpen: 0,
-      dueToday: 0,
-      overdue: 0,
-      completedThisMonth: 1,
+      completed: 1,
+      created: 2,
     });
     expect(result.leftoverCount).toBe(1);
     expect(result.leftoverSample).toEqual({

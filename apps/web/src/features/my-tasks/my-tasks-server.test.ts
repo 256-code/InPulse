@@ -38,7 +38,18 @@ const page: MyTaskPage = {
   ],
   nextCursor: "signed-cursor",
   hasMore: true,
-  stats: { myOpen: 1, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+  stats: {
+    todayTodo: 1,
+    todayTodoBreakdown: {
+      overdue: 0,
+      leftover: 1,
+      urgent: 0,
+      dueWithinDays: 1,
+    },
+    myOpen: 1,
+    completed: 0,
+    created: 2,
+  },
   leftoverCount: 1,
   leftoverSample: { recordCode: "R-021", summary: "恢复码入口待补齐" },
 };
@@ -57,10 +68,12 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
+    // 默认筛选是「未完成 + 今日待办」，todayTodo 会随请求一起下发。
     expect(listTaskCenter).toHaveBeenCalledWith({
       scope: "mine",
       limit: 20,
       workStatus: "TODO",
+      todayTodo: true,
     });
     expect(result.items).toEqual([
       {
@@ -113,6 +126,7 @@ describe("my tasks server adapter", () => {
       scope: "mine",
       limit: 20,
       workStatus: "TODO",
+      todayTodo: true,
       priority: "HIGH",
       includeCanceled: true,
     });
@@ -214,8 +228,8 @@ describe("my tasks server adapter", () => {
 
   it("keeps the notice explicit about the wired data and the remaining gaps", () => {
     expect(MY_TASKS_SERVER_NOTICE).toContain("统计卡片");
-    expect(MY_TASKS_SERVER_NOTICE).toContain("项目内全员任务");
-    expect(MY_TASKS_SERVER_NOTICE).toContain("管理员");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("项目筛选");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("我创建的");
   });
 });
 

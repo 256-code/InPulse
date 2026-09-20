@@ -28,6 +28,12 @@ export interface MyTaskPageInput extends TaskListFilter {
   readonly creatorId?: number;
   readonly overdue?: boolean;
   /**
+   * 「今日待办」集合（契约 todayTodo）：work_status = 'TODO' 且满足 逾期 ∪
+   * 遗留来源 ∪ 标记紧急 ∪ 距截止 7 个日历日内（Asia/Shanghai）任一条件。
+   * 与 overdue 各自独立生效，缺省不产生额外过滤。
+   */
+  readonly todayTodo?: boolean;
+  /**
    * 记录维度筛选（R-3 的 hasPublishedRecord）：
    * true = 只返回已有 PUBLISHED 记录的任务；false = 只返回没有的；缺省 = 不筛选。
    * 与 ChangeRecordReadPort.countPublishedByTask 同源同口径（等价 count > 0），
@@ -81,6 +87,8 @@ function mapMyTaskListRow(row: MyTaskListRowRaw): MyTaskListRow {
 /**
  * R-3 统计基准集合入参（A 裁决 §10.3）：projectIds 已按 projectId 参数收窄，
  * excludedTaskIds 为 C 域历史来源分支；分页与游标不影响统计。
+ * assigneeId 是当前用户：todayTodo / myOpen / completed 按 assignee_id 比较，
+ * created 用同一个 id 与 creator_id 比较（自指维度，不接受他人身份）。
  */
 export interface MyTaskBaseSetInput {
   readonly projectIds: readonly number[];
@@ -88,12 +96,23 @@ export interface MyTaskBaseSetInput {
   readonly excludedTaskIds?: readonly number[];
 }
 
-/** R-3 四项统计；同一条 SQL 内以 FILTER 聚合，日界/月界由 SQL 按 Asia/Shanghai 计算。 */
+/**
+ * R-3 五项统计（契约 MyTaskStats）；同一条 SQL 内以 FILTER 聚合，日界由 SQL 按
+ * Asia/Shanghai 计算，客户端不自行推导。
+ * todayTodo / todayTodoBreakdown / myOpen / completed 取负责人维度，created 取创建人维度。
+ * todayTodoBreakdown 的四个子项可以互相重叠，其并集即 todayTodo。
+ */
 export interface MyTaskStatsResult {
+  readonly todayTodo: number;
+  readonly todayTodoBreakdown: {
+    readonly overdue: number;
+    readonly leftover: number;
+    readonly urgent: number;
+    readonly dueWithinDays: number;
+  };
   readonly myOpen: number;
-  readonly dueToday: number;
-  readonly overdue: number;
-  readonly completedThisMonth: number;
+  readonly completed: number;
+  readonly created: number;
 }
 
 /** R-3 遗留问题样例：contentPrefix 为最新版本 content 的前 200 字符。 */
@@ -188,6 +207,49 @@ function assertExcludedTaskIds(
   }
 }
 
+/** 空基准集合（无可读项目）时的零值统计，与 SQL 结果形状保持一致。 */
+function emptyMyTaskStats(): MyTaskStatsResult {
+  return {
+    todayTodo: 0,
+    todayTodoBreakdown: {
+      overdue: 0,
+      leftover: 0,
+      urgent: 0,
+      dueWithinDays: 0,
+    },
+    myOpen: 0,
+    completed: 0,
+    created: 0,
+  };
+}
+
+/** stats() 的单行结果：四个 todayTodo 子项在 SQL 里平铺，读取后组装为契约嵌套结构。 */
+interface MyTaskStatsRowRaw {
+  readonly todayTodo: number;
+  readonly todayTodoOverdue: number;
+  readonly todayTodoLeftover: number;
+  readonly todayTodoUrgent: number;
+  readonly todayTodoDueWithinDays: number;
+  readonly myOpen: number;
+  readonly completed: number;
+  readonly created: number;
+}
+
+function mapMyTaskStatsRow(row: MyTaskStatsRowRaw): MyTaskStatsResult {
+  return {
+    todayTodo: row.todayTodo,
+    todayTodoBreakdown: {
+      overdue: row.todayTodoOverdue,
+      leftover: row.todayTodoLeftover,
+      urgent: row.todayTodoUrgent,
+      dueWithinDays: row.todayTodoDueWithinDays,
+    },
+    myOpen: row.myOpen,
+    completed: row.completed,
+    created: row.created,
+  };
+}
+
 @Injectable()
 export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
   async list(
@@ -214,6 +276,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
       input.hasPublishedRecord === undefined
         ? null
         : input.hasPublishedRecord === true;
+    const todayTodo = input.todayTodo === true;
 
     const rows = await tx.sql<MyTaskListRowRaw[]>`
       SELECT t.id AS "taskId",
@@ -241,6 +304,19 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${priority}::text IS NULL OR t.priority = ${priority})
+         AND (${todayTodo}::boolean = false OR (
+              t.work_status = 'TODO'
+              AND (
+                t.due_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '7 days') AT TIME ZONE 'Asia/Shanghai'
+                OR t.priority = 'URGENT'
+                OR EXISTS (
+                     SELECT 1
+                       FROM app.leftover_task_links ltl
+                      WHERE ltl.project_id = t.project_id
+                        AND ltl.task_id = t.id
+                   )
+              )
+            ))
          AND (${effectiveOnly}::boolean = false OR (t.lifecycle_status <> 'INVALID' AND t.work_status <> 'CANCELED'))
          AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
          AND (${hasPublishedRecord}::boolean IS NULL
@@ -276,38 +352,56 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
   ): Promise<MyTaskStatsResult> {
     assertExcludedTaskIds(input.excludedTaskIds);
     if (input.projectIds.length === 0) {
-      return { myOpen: 0, dueToday: 0, overdue: 0, completedThisMonth: 0 };
+      return emptyMyTaskStats();
     }
     const projectIds = [...input.projectIds];
     const excludedTaskIds = input.excludedTaskIds
       ? [...input.excludedTaskIds]
       : null;
-    const [row] = await tx.sql<MyTaskStatsResult[]>`
-      SELECT (COUNT(*) FILTER (WHERE t.work_status = 'TODO'))::integer AS "myOpen",
-             (COUNT(*) FILTER (
-               WHERE t.work_status = 'TODO'
+    const viewerId = input.assigneeId;
+    // 基准集合：本项目范围内的有效任务（排除 INVALID / CANCELED 与历史来源分支），
+    // 只保留与当前用户相关（负责或创建）的行，再用 FILTER 分别按两个维度计数。
+    // 今日待办四个子项可以互相重叠，其并集即 todayTodo。
+    const [row] = await tx.sql<MyTaskStatsRowRaw[]>`
+      WITH base AS (
+        SELECT t.work_status AS "workStatus",
+               (t.assignee_id = ${viewerId}) AS "isMine",
+               (t.creator_id = ${viewerId}) AS "isCreated",
+               (t.work_status = 'TODO'
+                 AND t.due_at IS NOT NULL
+                 AND t.due_at < now()) AS "overdue",
+               (t.work_status = 'TODO'
+                 AND t.due_at IS NOT NULL
                  AND t.due_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
-                 AND t.due_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '1 day') AT TIME ZONE 'Asia/Shanghai'
-             ))::integer AS "dueToday",
-             (COUNT(*) FILTER (
-               WHERE t.work_status = 'TODO'
-                 AND t.due_at < now()
-             ))::integer AS "overdue",
-             (COUNT(*) FILTER (
-               WHERE t.work_status = 'DONE'
-                 AND t.completed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
-                 AND t.completed_at < (date_trunc('month', now() AT TIME ZONE 'Asia/Shanghai') + interval '1 month') AT TIME ZONE 'Asia/Shanghai'
-             ))::integer AS "completedThisMonth"
-        FROM app.tasks t
-       WHERE t.project_id = ANY(${projectIds}::integer[])
-         AND t.assignee_id = ${input.assigneeId}
-         AND t.lifecycle_status <> 'INVALID'
-         AND t.work_status <> 'CANCELED'
-         AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
+                 AND t.due_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '7 days') AT TIME ZONE 'Asia/Shanghai') AS "dueWithinDays",
+               (t.work_status = 'TODO' AND t.priority = 'URGENT') AS "urgent",
+               (t.work_status = 'TODO' AND EXISTS (
+                    SELECT 1
+                      FROM app.leftover_task_links ltl
+                     WHERE ltl.project_id = t.project_id
+                       AND ltl.task_id = t.id
+                  )) AS "leftover"
+          FROM app.tasks t
+         WHERE t.project_id = ANY(${projectIds}::integer[])
+           AND (t.assignee_id = ${viewerId} OR t.creator_id = ${viewerId})
+           AND t.lifecycle_status <> 'INVALID'
+           AND t.work_status <> 'CANCELED'
+           AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
+      )
+      SELECT (COUNT(*) FILTER (
+                WHERE "isMine" AND ("overdue" OR "dueWithinDays" OR "urgent" OR "leftover")
+              ))::integer AS "todayTodo",
+             (COUNT(*) FILTER (WHERE "isMine" AND "overdue"))::integer AS "todayTodoOverdue",
+             (COUNT(*) FILTER (WHERE "isMine" AND "leftover"))::integer AS "todayTodoLeftover",
+             (COUNT(*) FILTER (WHERE "isMine" AND "urgent"))::integer AS "todayTodoUrgent",
+             (COUNT(*) FILTER (WHERE "isMine" AND "dueWithinDays"))::integer AS "todayTodoDueWithinDays",
+             (COUNT(*) FILTER (WHERE "isMine" AND "workStatus" = 'TODO'))::integer AS "myOpen",
+             (COUNT(*) FILTER (WHERE "isMine" AND "workStatus" = 'DONE'))::integer AS "completed",
+             (COUNT(*) FILTER (WHERE "isCreated"))::integer AS "created"
+        FROM base
     `;
-    return row ?? { myOpen: 0, dueToday: 0, overdue: 0, completedThisMonth: 0 };
+    return row === undefined ? emptyMyTaskStats() : mapMyTaskStatsRow(row);
   }
-
   async leftoverEntry(
     tx: TransactionContext,
     input: MyTaskBaseSetInput,

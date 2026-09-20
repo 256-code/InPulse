@@ -16,10 +16,11 @@ for (const moduleScope of [false, true])
     try {
       await page.goto(`/projects/${runtime.projectId}/modules`);
       const suffix = Date.now();
-      if (moduleScope)
-        await page.getByRole("link", { name: "模块任务" }).first().click();
-      else {
-        await page.getByRole("link", { name: "查看功能" }).first().click();
+      if (moduleScope) {
+        await page.locator(".module-card").first().click();
+        await page.getByRole("tab", { name: /模块级任务/ }).click();
+      } else {
+        await page.locator(".module-card").first().click();
         await page.getByRole("button", { name: "新增功能" }).click();
         const feature = page.getByRole("dialog", { name: "新增功能" });
         await feature.getByLabel("功能名称").fill(`状态功能-${suffix}`);
@@ -28,7 +29,6 @@ for (const moduleScope of [false, true])
         await page
           .locator(".calm-feature-card")
           .filter({ hasText: `状态功能-${suffix}` })
-          .getByRole("link", { name: "查看详情" })
           .click();
       }
       await page.getByRole("button", { name: "新建任务", exact: true }).click();
@@ -90,11 +90,7 @@ for (const moduleScope of [false, true])
       });
       await page.reload();
       await pickCalmSelectOption(page, "任务状态筛选", "已完成");
-      await page
-        .locator(".calm-task-card")
-        .filter({ hasText: title })
-        .getByRole("button", { name: "任务详情" })
-        .click();
+      await page.locator(".calm-task-card").filter({ hasText: title }).click();
       await expect(detail.locator(".task-status-history > li")).toHaveCount(6);
       await expect(
         detail.getByText("完成说明：技术调研，不涉及功能变化：二次完成"),

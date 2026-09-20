@@ -73,7 +73,7 @@ export function TaskGroupDetailModal({
     >
       <div className="task-group-modal-meta">
         {group === null ? null : (
-          <CalmBadge tone={group.status === "ACTIVE" ? "violet" : "gray"}>
+          <CalmBadge tone={group.status === "ACTIVE" ? "blue" : "gray"}>
             {group.status === "ACTIVE" ? "进行中" : "已关闭"}
           </CalmBadge>
         )}

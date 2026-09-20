@@ -22,7 +22,8 @@ describe("my-tasks mock adapter", () => {
     const result = await fetchDefault();
     expect(result.filterSupport).toEqual(MY_TASKS_FULL_FILTER_SUPPORT);
     expect(result.items.every((item) => item.workStatus === "TODO")).toBe(true);
-    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103", "T-108"]);
+    // 默认筛选是「未完成 + 今日待办」：T-108（20 天后到期、非紧急、无遗留）不在今日待办里。
+    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103"]);
     expect(result.items.find((item) => item.code === "T-102")?.groupId).toBe(
       501,
     );
@@ -50,13 +51,7 @@ describe("my-tasks mock adapter", () => {
 
   it("filters the created scope by creator instead of assignee", async () => {
     const result = await fetchDefault({ scope: "created" });
-    expect(codesOf(result.items)).toEqual([
-      "T-101",
-      "T-102",
-      "T-105",
-      "T-103",
-      "T-108",
-    ]);
+    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-105", "T-103"]);
   });
 
   it("filters the project scope by project id", async () => {
@@ -66,14 +61,7 @@ describe("my-tasks mock adapter", () => {
 
   it("orders the admin scope across all projects", async () => {
     const result = await fetchDefault({ scope: "all" });
-    expect(codesOf(result.items)).toEqual([
-      "T-101",
-      "T-102",
-      "T-105",
-      "T-103",
-      "T-110",
-      "T-108",
-    ]);
+    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-105", "T-103"]);
   });
 
   it("supports priority, level, relation, record and github filters", async () => {
@@ -101,9 +89,10 @@ describe("my-tasks mock adapter", () => {
     expect(
       codesOf((await fetchDefault({ query: "标题不存在的词" })).items),
     ).toEqual([]);
-    expect(codesOf((await fetchDefault({ query: "t-108" })).items)).toEqual([
-      "T-108",
-    ]);
+    // T-108 不在今日待办里，这条搜索用例按「未完成」视图取数。
+    expect(
+      codesOf((await fetchDefault({ query: "t-108", todayTodo: false })).items),
+    ).toEqual(["T-108"]);
   });
 
   it("computes date-independent stats and leftover facts for the scope", async () => {
@@ -113,10 +102,17 @@ describe("my-tasks mock adapter", () => {
       throw new Error("mock adapter must return stats");
     }
     expect(stats.myOpen).toBe(4);
-    expect(stats.dueToday).toBe(1);
-    expect(stats.overdue).toBe(1);
-    expect(stats.completedThisMonth).toBeGreaterThanOrEqual(2);
-    expect(stats.completedThisMonth).toBeLessThanOrEqual(3);
+    // 今日待办（T-101 逾期+遗留+紧急、T-102 今天到期、T-103 5 天后到期）。
+    expect(stats.todayTodo).toBe(3);
+    expect(stats.todayTodoBreakdown).toEqual({
+      overdue: 1,
+      leftover: 1,
+      urgent: 1,
+      dueWithinDays: 2,
+    });
+    expect(stats.completed).toBe(3);
+    // 我创建的按创建人维度统计，与当前 scope（负责）无关。
+    expect(stats.created).toBe(8);
     expect(result.leftoverCount).toBe(3);
     expect(result.leftoverSample?.recordCode).toBe("R-021");
     expect(result.scopeCounts).toEqual({

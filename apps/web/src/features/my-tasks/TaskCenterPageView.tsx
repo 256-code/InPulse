@@ -47,46 +47,12 @@ import {
   type MyTaskPriority,
   type MyTaskRecordFilter,
   type MyTaskRelation,
-  type MyTaskScope,
   type MyTaskStatusFilter,
   type MyTasksAdapter,
   type MyTasksFilterGap,
   type MyTasksFilterSupport,
   type MyTaskWorkStatus,
 } from "./my-tasks-types";
-
-const scopeOrder: readonly MyTaskScope[] = [
-  "mine",
-  "created",
-  "project",
-  "all",
-];
-
-const scopeLabels: Record<MyTaskScope, string> = {
-  mine: "我负责的",
-  created: "我创建的",
-  project: "按项目",
-  all: "全部任务",
-};
-
-/** 视图说明；`project` 一栏按 R-3 的真实能力收窄措辞：R-3 只服务当前会话用户的
- * 自指维度（负责 / 创建），「按项目查看全部任务」需要项目任务列表路由，属延后项。 */
-const scopeHints: Record<MyTaskScope, string> = {
-  mine: "我负责的任务；项目成员平权，任何人都可以推进与更新。",
-  created: "我创建的任务；即使指派给他人，也会在这里跟踪。",
-  project: "查看所选项目内所有成员的任务。",
-  all: "管理员视图：查看全部项目的任务。",
-};
-
-/** 可用但能力受限的范围，需要显式说明服务端边界，不能让视图看起来返回了全部任务。 */
-const scopeTitles: Partial<Record<MyTaskScope, string>> = {
-  project: "查看项目内所有成员的任务",
-};
-
-/** 仍不可用的范围与原因；禁用按钮必须有可读原因，不能让用户以为界面坏了。 */
-const scopeDisabledTitles: Partial<Record<MyTaskScope, string>> = {
-  all: "全部任务仅对系统管理员开放。",
-};
 
 const statusLabels: Record<MyTaskWorkStatus, string> = {
   TODO: "未完成",
@@ -132,28 +98,30 @@ const priorityOrder: readonly MyTaskPriority[] = [
   "LOW",
 ];
 
-const statusOptions = [
-  { value: "open" as const, label: "未完成" },
-  { value: "done" as const, label: "已完成" },
-  { value: "all" as const, label: "全部" },
-];
-
 /**
- * 列表区块标题与空态必须跟随工作状态分段控件：服务端按 workStatus 收窄，
- * 只把「未完成」主列表做标题、把其余结果留在折叠面板里，会让「已完成 / 全部」
- * 看起来像没有数据（标题恒为「未完成 0 项」）。
+ * 列表区块只保留空态文案：工作状态由上方统计卡的选中态表达，
+ * 「未完成 / n 项 · 服务端按任务编号倒序」两行文字已按产品要求删除（2026-09-20）。
+ * 空态仍必须跟随工作状态，否则「已完成 0 项」会看起来像数据丢失。
  */
-const listTitles: Record<MyTaskStatusFilter, string> = {
-  open: "未完成",
-  done: "已完成",
-  all: "全部任务",
-};
-
 const listEmptyTitles: Record<MyTaskStatusFilter, string> = {
   open: "没有匹配的未完成任务",
   done: "没有匹配的已完成任务",
   all: "没有匹配的任务",
 };
+
+/**
+ * 统计卡选中态：四张卡各对应一组筛选，按当前筛选反推唯一命中项。
+ * 今日待办是「未完成」视图的缺省口径（todayTodo 未显式关闭即今日待办）；
+ * 组合对不上（例如 URL 直接给 scope=all 或 status=all）时不选中任何卡，
+ * 避免误报「列表当前就是这个口径」。
+ */
+function selectedStatCardKey(filters: MyTaskFilters): string | null {
+  if (filters.scope === "created" && filters.status === "all") return "created";
+  if (filters.scope === "mine" && filters.status === "done") return "completed";
+  if (filters.scope === "mine" && filters.status === "open")
+    return filters.todayTodo === false ? "my-open" : "today-todo";
+  return null;
+}
 
 const displayOptions = [
   { value: "cards" as const, label: "卡片" },
@@ -170,15 +138,6 @@ const filterGapLabels: Record<MyTasksFilterGap, string> = {
   "filter:query": "关键词搜索",
   "filter:canceled-with-open": "已取消与未完成合并显示",
 };
-
-function isScopeFilterSupported(
-  scope: MyTaskScope,
-  support: MyTasksFilterSupport,
-): boolean {
-  if (scope === "created") return support["scope:created"];
-  if (scope === "all") return support["scope:all"];
-  return true;
-}
 
 /**
  * 本地筛选提示：服务端没有对应参数、只对已加载页生效时必须显式说明，
@@ -217,7 +176,6 @@ export interface TaskCenterPageViewProps {
   readonly filters: MyTaskFilters;
   readonly onFiltersChange: (next: MyTaskFilters) => void;
   readonly viewerId: number | null;
-  readonly isAdmin: boolean;
   readonly projects: readonly ProjectItem[];
   readonly advancedOpen: boolean;
   readonly onToggleAdvanced: () => void;
@@ -239,7 +197,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   filters,
   onFiltersChange,
   viewerId,
-  isAdmin,
   projects,
   advancedOpen,
   onToggleAdvanced,
@@ -260,7 +217,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     adapter: activeAdapter,
   });
   const groupsQuery = useMyTaskGroupsQuery({
-    projectId: filters.scope === "project" ? filters.projectId : null,
+    projectId: filters.projectId,
     adapter: activeAdapter,
   });
   const groups =
@@ -268,7 +225,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const result = taskQuery.data;
   const items = result?.items ?? [];
   const stats = result?.stats ?? null;
-  const scopeCounts = result?.scopeCounts ?? null;
   const leftoverCount = result?.leftoverCount ?? null;
   const leftoverSample = result?.leftoverSample ?? null;
   const filterSupport: MyTasksFilterSupport =
@@ -276,7 +232,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   /**
    * 服务端缺口的两个分支：可本地计算的条件（relation / github / query）保持控件可用，
    * 只在提示条里说明"仅对已加载页生效"；无法本地计算的条件（scope:created /
-   * scope:all）必须继续禁用，由 tab 的 title 说明原因。
+   * scope:all）不做本地降级，避免把部分结果说成服务端收敛。
    */
   const localGaps = listMyTasksV1Gaps(filters).filter(
     (gap) => !filterSupport[gap] && MY_TASKS_V1_LOCAL_FILTER_SUPPORT[gap],
@@ -299,7 +255,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const overdueItem = openItems.find((item) => isOverdue(item)) ?? null;
   /**
    * 主列表取当前工作状态对应的集合：「已完成 / 全部」的结果必须直接可见，
-   * 否则切换分段控件时页面上仍只有「未完成 0 项」与空态。
+   * 否则统计数据卡切到「已完成」时页面上仍只有「未完成 0 项」与空态。
    */
   const primaryItems =
     filters.status === "done"
@@ -307,11 +263,19 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       : filters.status === "all"
         ? visibleItems
         : openItems;
-  const listTitle = listTitles[filters.status];
-  const listEmptyTitle = listEmptyTitles[filters.status];
+  const selectedCardKey = selectedStatCardKey(filters);
+  /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
+  const todayTodoActive =
+    filters.status === "open" && filters.todayTodo !== false;
+  const listEmptyTitle = todayTodoActive
+    ? "今天没有待办任务"
+    : listEmptyTitles[filters.status];
   /** 空态按范围说明服务端边界：R-3 的负责人固定为当前会话用户。 */
-  const listEmptyDescription =
-    filters.scope === "project"
+  const listEmptyDescription = todayTodoActive
+    ? filters.projectId === null
+      ? "逾期、遗留、紧急或 7 天内到期的未完成任务会出现在这里；点「未完成」卡可看全部未完成任务。"
+      : "当前项目没有逾期、遗留、紧急或 7 天内到期的未完成任务。"
+    : filters.projectId !== null
       ? "当前项目没有符合条件的任务，可调整筛选或新建任务。"
       : "调整筛选条件，或到对应功能页创建新任务。";
   const activeFilterCount = countActiveMyTaskFilters(filters);
@@ -320,21 +284,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const update = (patch: Partial<MyTaskFilters>) => {
     onFiltersChange({
       ...filters,
-      ...(patch.status !== undefined ? { overdue: false } : {}),
+      ...(patch.status !== undefined
+        ? { overdue: false, todayTodo: false }
+        : {}),
       ...patch,
     });
-  };
-
-  const handleScopeChange = (scope: MyTaskScope) => {
-    if (scope === "project") {
-      update({
-        scope,
-        overdue: false,
-        projectId: filters.projectId ?? projects[0]?.id ?? null,
-      });
-      return;
-    }
-    update({ scope, overdue: false });
   };
 
   const statCards: ReadonlyArray<{
@@ -347,49 +301,29 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     readonly onSelect: () => void;
   }> = [
     {
-      key: "my-open",
-      label: "我负责的未完成",
-      value: stats === null ? "—" : stats.myOpen,
-      hint: stats === null ? "聚合统计暂未接入" : "点击切换到我的未完成任务",
-      icon: "clipboard",
-      tone: "blue",
-      onSelect: () => update({ scope: "mine", status: "open" }),
-    },
-    {
-      key: "due-today",
-      label: "今天截止",
-      value: stats === null ? "—" : stats.dueToday,
+      key: "today-todo",
+      label: "今日待办",
+      value: stats === null ? "—" : stats.todayTodo,
+      // 四个来源子计数各自独立、可以重叠，其并集即总数；卡片等宽，这里只做一行说明。
       hint:
         stats === null
           ? "聚合统计暂未接入"
-          : stats.dueToday > 0
-            ? "优先安排今天的工作"
-            : "今天没有到期任务",
+          : "逾期 " +
+            String(stats.todayTodoBreakdown.overdue) +
+            " · 遗留 " +
+            String(stats.todayTodoBreakdown.leftover) +
+            " · 紧急 " +
+            String(stats.todayTodoBreakdown.urgent) +
+            " · 7 天内 " +
+            String(stats.todayTodoBreakdown.dueWithinDays),
       icon: "calendar",
-      tone: "violet",
-      onSelect: () => update({ scope: "mine", status: "open", query: "" }),
-    },
-    {
-      key: "overdue",
-      label: "已逾期",
-      value: stats === null ? "—" : stats.overdue,
-      hint:
-        stats === null
-          ? "聚合统计暂未接入"
-          : stats.overdue > 0
-            ? "需要协调依赖或改期"
-            : "没有逾期任务",
-      icon: "alert",
-      tone: stats !== null && stats.overdue > 0 ? "red" : "green",
+      tone: "blue",
       onSelect: () =>
         update({
           scope: "mine",
           status: "open",
-          overdue: true,
-          projectId:
-            filters.scope === "project" || filters.overdue
-              ? filters.projectId
-              : null,
+          todayTodo: true,
+          overdue: false,
           query: "",
           priority: null,
           level: null,
@@ -399,13 +333,49 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         }),
     },
     {
+      key: "my-open",
+      label: "未完成",
+      value: stats === null ? "—" : stats.myOpen,
+      hint: stats === null ? "聚合统计暂未接入" : "我负责且尚未完成的任务",
+      icon: "clipboard",
+      tone: "violet",
+      onSelect: () =>
+        update({
+          scope: "mine",
+          status: "open",
+          todayTodo: false,
+          overdue: false,
+        }),
+    },
+    {
       key: "completed",
-      label: "本月完成",
-      value: stats === null ? "—" : stats.completedThisMonth,
+      label: "已完成",
+      value: stats === null ? "—" : stats.completed,
       hint: stats === null ? "聚合统计暂未接入" : "已完成任务不会消失",
       icon: "check",
       tone: "green",
-      onSelect: () => update({ scope: "mine", status: "done" }),
+      onSelect: () =>
+        update({
+          scope: "mine",
+          status: "done",
+          todayTodo: false,
+          overdue: false,
+        }),
+    },
+    {
+      key: "created",
+      label: "我创建的",
+      value: stats === null ? "—" : stats.created,
+      hint: stats === null ? "聚合统计暂未接入" : "无论任务指派给谁",
+      icon: "user",
+      tone: "cyan",
+      onSelect: () =>
+        update({
+          scope: "created",
+          status: "all",
+          todayTodo: false,
+          overdue: false,
+        }),
     },
   ];
 
@@ -499,11 +469,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
 
   const renderTable = (rows: readonly MyTaskListItem[]) => (
     <div className="feature-list-scroll">
-      <table className="feature-list-table">
+      <table className="feature-list-table task-center-table">
         <caption className="sr-only">跨项目任务列表</caption>
         <thead>
           <tr>
-            <th scope="col">编号</th>
             <th scope="col">任务</th>
             <th scope="col">项目</th>
             <th scope="col">归属</th>
@@ -518,17 +487,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           {rows.map((item) => (
             <tr key={item.taskId}>
               <td>
-                <span className="task-id">{item.code}</span>
-              </td>
-              <td>
                 <button
                   type="button"
                   className="feature-list-open"
                   onClick={() => openTask(item)}
                 >
                   <strong>{item.title}</strong>
+                  {/* 编号不再是独立列：并入标题下方小字，把列宽让给标题。 */}
                   <span>
-                    {relationLabelOf(item)}
+                    {item.code + " · " + relationLabelOf(item)}
                     {item.scopeType === "MODULE" ? " · 模块级" : ""}
                     {item.hasLeftoverSource ? " · 遗留问题" : ""}
                   </span>
@@ -607,22 +574,21 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </div>
       ) : null}
 
-      {(stats !== null && stats.overdue > 0) ||
+      {(stats !== null && stats.todayTodoBreakdown.overdue > 0) ||
       (leftoverCount !== null && leftoverCount > 0) ? (
         <div className="risk-strip">
-          {stats !== null && stats.overdue > 0 ? (
+          {stats !== null && stats.todayTodoBreakdown.overdue > 0 ? (
             <button
               type="button"
               className="risk-banner"
               onClick={() =>
+                // 项目筛选是常驻条件：钻取个人逾期明细不会清掉已选项目，
+                // 否则统计卡与列表会在点击后静默换成全局口径。
                 update({
                   scope: "mine",
                   status: "open",
                   overdue: true,
-                  projectId:
-                    filters.scope === "project" || filters.overdue
-                      ? filters.projectId
-                      : null,
+                  todayTodo: false,
                   query: "",
                   priority: null,
                   level: null,
@@ -634,7 +600,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             >
               <InpulseIcon name="alert" size={20} />
               <span>
-                <strong>{stats.overdue} 项我负责的任务已逾期</strong>
+                <strong>
+                  {stats.todayTodoBreakdown.overdue} 项我负责的任务已逾期
+                </strong>
                 <small>
                   {overdueItem === null
                     ? "切换到我的任务查看明细"
@@ -679,24 +647,31 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       ) : null}
 
       <div className="stats-grid">
-        {statCards.map((card) => (
-          <button
-            key={card.key}
-            type="button"
-            className="stat-card stat-card-button"
-            data-testid={"stat-" + card.key}
-            onClick={card.onSelect}
-          >
-            <span className={"stat-icon " + card.tone}>
-              <InpulseIcon name={card.icon} size={19} />
-            </span>
-            <span className="stat-body">
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
-              <small>{card.hint}</small>
-            </span>
-          </button>
-        ))}
+        {statCards.map((card) => {
+          const selected = card.key === selectedCardKey;
+          return (
+            <button
+              key={card.key}
+              type="button"
+              className={
+                "stat-card stat-card-button" +
+                (selected ? " stat-card-selected" : "")
+              }
+              data-testid={"stat-" + card.key}
+              aria-pressed={selected}
+              onClick={card.onSelect}
+            >
+              <span className={"stat-icon " + card.tone}>
+                <InpulseIcon name={card.icon} size={19} />
+              </span>
+              <span className="stat-body">
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.hint}</small>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {filters.overdue && (
@@ -710,52 +685,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </button>
         </p>
       )}
-      <div className="task-view-tabs" role="tablist" aria-label="任务范围">
-        {scopeOrder
-          .filter((scope) => scope !== "all" || isAdmin)
-          .map((scope) => {
-            const supported = isScopeFilterSupported(scope, filterSupport);
-            return (
-              <button
-                key={scope}
-                type="button"
-                role="tab"
-                aria-selected={filters.scope === scope}
-                className={filters.scope === scope ? "selected" : ""}
-                onClick={() => handleScopeChange(scope)}
-                disabled={!supported}
-                title={
-                  supported
-                    ? scopeTitles[scope]
-                    : (scopeDisabledTitles[scope] ??
-                      "服务端聚合读未提供该范围，对应 tab 保持禁用")
-                }
-              >
-                {scopeLabels[scope]}
-                {scopeCounts === null ? null : (
-                  <span>{scopeCounts[scope]}</span>
-                )}
-                {scope === "all" ? <small>管理员</small> : null}
-              </button>
-            );
-          })}
-      </div>
-      <p className="view-description">{scopeHints[filters.scope]}</p>
-
-      {filters.scope === "project" ? (
-        <label className="inline-picker">
-          选择项目
-          <CalmSelect
-            value={filters.projectId === null ? "" : String(filters.projectId)}
-            onChange={(next) => update({ projectId: Number(next) || null })}
-            options={projects.map((project) => projectSelectOption(project))}
-            appearance="rich"
-            placeholder="请选择项目"
-            ariaLabel="选择项目"
-          />
-        </label>
-      ) : null}
-
       <div className="toolbar task-toolbar">
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
@@ -767,11 +696,22 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
-        <CalmSegmented
-          label="工作状态"
-          value={filters.status}
-          options={statusOptions}
-          onChange={(status) => update({ status })}
+        {/* 下拉自身已显示「全部项目 / 项目名」，重复的文字标签已按产品要求删除；
+            无障碍定位仍由 CalmSelect 的 aria-label 提供。 */}
+        <CalmSelect
+          ariaLabel="项目"
+          value={filters.projectId === null ? "" : String(filters.projectId)}
+          onChange={(next) => {
+            const parsed = typeof next === "number" ? next : Number(next);
+            update({
+              projectId: Number.isInteger(parsed) && parsed > 0 ? parsed : null,
+            });
+          }}
+          options={[
+            { value: "", label: "全部项目" },
+            ...projects.map((project) => projectSelectOption(project)),
+          ]}
+          appearance="rich"
         />
         <CalmSelect
           ariaLabel="优先级"
@@ -925,21 +865,16 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <Alert type="error" title={describeMyTasksError(taskQuery.error)} />
       ) : (
         <>
-          <CalmSectionTitle
-            title={listTitle}
-            hint={
-              primaryItems.length +
-              " 项 · " +
-              (activeAdapter.source === "mock"
-                ? "按逾期、今天截止、优先级排序"
-                : "服务端按任务编号倒序")
-            }
-          >
+          {/*
+            工作状态已由上方统计卡选中态表达，这里不再重复标题与「n 项 · 排序」两行文字，
+            只留展示方式图标（列表当前是卡片还是表格）。
+          */}
+          <div className="task-list-mark">
             <InpulseIcon
               name={filters.display === "cards" ? "layoutGrid" : "list"}
               size={16}
             />
-          </CalmSectionTitle>
+          </div>
           {primaryItems.length > 0 ? (
             filters.display === "cards" ? (
               <div className="calm-task-grid">
@@ -1135,7 +1070,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         onClose={() => setCreateOpen(false)}
         client={client}
         preset={
-          filters.scope === "project" && filters.projectId !== null
+          filters.projectId !== null
             ? { projectId: filters.projectId }
             : undefined
         }

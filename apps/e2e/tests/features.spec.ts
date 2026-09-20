@@ -14,7 +14,7 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     const firstModuleName = (
       await firstModule.getByRole("heading").first().innerText()
     ).trim();
-    await firstModule.getByRole("link", { name: "查看功能" }).click();
+    await firstModule.click();
     await expect(
       page.getByRole("heading", { name: firstModuleName }),
     ).toBeVisible();
@@ -28,11 +28,7 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     await create.getByLabel("标签（每行一个，最多 50 个）").fill("支付\n退款");
     await create.getByRole("button", { name: /保\s*存/ }).click();
     await expect(create).toBeHidden();
-    await page
-      .locator(".calm-feature-card")
-      .filter({ hasText: name })
-      .getByRole("link", { name: "查看详情" })
-      .click();
+    await page.locator(".calm-feature-card").filter({ hasText: name }).click();
     await expect(page.getByRole("heading", { name })).toBeVisible();
     // 0f34d7a 起功能说明只在标题下方渲染，正文不再重复一遍。
     await expect(
@@ -99,7 +95,7 @@ test("管理员归档并恢复功能，刷新保留状态", async ({ browser, ad
   const page = await context.newPage();
   try {
     await memberPage.goto(`/projects/${runtime.projectId}/modules`);
-    await memberPage.getByRole("link", { name: "查看功能" }).first().click();
+    await memberPage.locator(".module-card").first().click();
     await memberPage.getByRole("button", { name: "新增功能" }).click();
     const create = memberPage.getByRole("dialog", { name: "新增功能" });
     const name = `归档功能-${Date.now()}`;
@@ -109,7 +105,6 @@ test("管理员归档并恢复功能，刷新保留状态", async ({ browser, ad
     await memberPage
       .locator(".calm-feature-card")
       .filter({ hasText: name })
-      .getByRole("link", { name: "查看详情" })
       .click();
     const detailUrl = memberPage.url();
     await page.goto("/login");

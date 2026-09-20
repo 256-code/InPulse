@@ -1712,13 +1712,13 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - `apps/api/src/stats/card-stat-columns.ts`：抽出 `effectiveTaskWhere`，新增 `completedTaskCountColumn` 与 `lifecycleRankExpression`（模块与功能的档位排序键，档位 0/1/2 与前端同规则；项目在四态改造后改用 `projectLifecycleRankExpression`，档位 0/1/2/3）。
 - `apps/api/src/modules/modules/module-management.repository.ts`、`apps/api/src/modules/projects/postgres-project-query-port.ts`、`postgres-projects-write-port.ts`、`projects-write.port.ts`：返回新字段；项目列表与模块列表的 `ORDER BY` 改为「生命周期档位 → sort_order/id（项目为 id）」。
 - `packages/api-contract/src/module-routes.ts` / `route-registry.ts`：`listModules` 与 `listProjects` 摘要同步新排序；4 条模块写路由与 3 条项目写路由的 `safeBodyFieldPaths` 补 `stats.completedTaskCount` / `project.stats.completedTaskCount`，并升 `idempotencyContractVersion`（模块 1.2.0→1.3.0、1.3.0→1.4.0；项目 1.2.0→1.3.0），旧 Key 在新契约下返回 409；OpenAPI 与生成客户端由 `pnpm contract:generate` 重生成。
-- `apps/web/src/features/common/resource-lifecycle.ts`（新增）：标签与配色判定，规则与后端 `lifecycleRankExpression` 一致；未开始用 `cyan`，进行中沿用各页原有主色（项目蓝、模块灰），已归档沿用琥珀。
+- `apps/web/src/features/common/resource-lifecycle.ts`（新增）：标签与配色判定，规则与后端 `lifecycleRankExpression` 一致；未开始用 `cyan`，进行中沿用各页原有主色（项目蓝、模块灰；2026-09-20 起统一为蓝，见文末《生命周期与标签徽章同色》），已归档沿用琥珀。
 - 项目标签接入：`ProjectsPageView` 卡片、`ProjectOverviewPageView` 头部、`ProjectMembersPageView` 头部与状态项、`ActiveProjectMembers` 头部与状态项；模块标签接入：`ModulesPageView` 卡片、`FeaturesPageView` 模块资料行、`ModuleTasksPage` 模块资料行。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | LIFECYCLE-WEB-UNIT-001 | Web 单元 | 三档判定与配色 | `resource-lifecycle.test.ts`：`ARCHIVED` 优先于未开始；`ACTIVE` + 0 已完成 = 未开始且配色为 `cyan`；`ACTIVE` + ≥1 已完成 = 进行中并沿用调用方主色 | 本地通过 |
-| LIFECYCLE-WEB-UNIT-002 | Web 单元 | 模块卡标签 | `ModulesPageView.test.tsx`：`completedTaskCount = 0` 的活跃模块渲染「未开始」且 class 含 `badge-cyan`；有已完成任务的模块为「进行中」，已归档模块为「已归档」 | 本地通过 |
+| LIFECYCLE-WEB-UNIT-002 | Web 单元 | 模块卡标签 | `ModulesPageView.test.tsx`：`completedTaskCount = 0` 的活跃模块渲染「未开始」且 class 含 `badge-cyan`；有已完成任务的模块为「进行中」且 class 含 `badge-blue`（同色收敛前断言的是 `badge-gray`，见文末《生命周期与标签徽章同色》），已归档模块为「已归档」且 class 含 `badge-amber` | 本地通过 |
 | LIFECYCLE-WEB-UNIT-003 | Web 单元 | 项目卡标签 | `ProjectsPageView.test.tsx`：`completedTaskCount = 0` 的项目渲染「未开始」，另一项目仍为「进行中」；该用例已在四态改造中改写为按存储状态断言，见下文《项目生命周期四态（ADR-035）》 | 本地通过 |
 | LIFECYCLE-API-INT-001 | 真实 PostgreSQL | 模块列表按档位排序 | `modules-api.integration.test.ts`：同项目内「有已完成任务 / 无已完成任务 / 已归档」三个模块按 进行中→未开始→已归档 返回，`stats.completedTaskCount` 分别为 1/0/0 | 本地通过 |
 | LIFECYCLE-API-INT-002 | 真实 PostgreSQL | 项目列表按档位排序 | `projects-read-api.integration.test.ts`：三个项目按 进行中→未开始→已归档 返回，`completedTaskCount` 为 1/0/0；该用例已在四态改造中改写为四个项目，见下文《项目生命周期四态（ADR-035）》 | 本地通过 |
@@ -2024,3 +2024,245 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 用户要求删掉项目头左上角的「← 全部项目」。`ProjectOverviewPageView` 移除 `.project-detail-head` 内的 `.back-button` 与该组件唯一的 `onBackToProjects` 属性（接口同步收窄），调用方 `ModulesPageView` 去掉传参；返回项目列表改由公共侧栏「项目列表」承担。`ProjectOverviewPageView.test.tsx` 基础渲染参数同步去掉该 handler；E2E `apps/e2e/tests/aggregate-views.spec.ts` 例 2 删除「`全部项目` → `/projects`」断言（保留「查看全部」「查看模块」与旧地址重定向断言），上表 F-29 行已同步。
 
 本地实际执行（2026-09-19）：`pnpm --filter @inpulse/web typecheck` 与 `pnpm --filter @inpulse/e2e typecheck` 通过；定向 `vitest run src/features/project-overview/ProjectOverviewPageView.test.tsx src/features/modules` 2 文件 24 例通过；全量 web 单测 82 文件通过、仅 `ProjectTree.test.tsx` 7 例既有失败；`pnpm lint`、改动文件 `prettier --check` 与 `pnpm check:docs` 通过；无头浏览器复验 `/projects/3/modules` 项目头内已无 `.back-button`（head 盒 270/27/1136×122），截图 `.data/project-head-no-back.png`。未运行：Playwright 全量、`pnpm check` 整链、后端测试。
+
+## 任务中心统计卡改四张与「今日待办」筛选（2026-09-20 本地落库）
+
+用户定案：任务中心顶部四张统计卡改为「今日待办 / 未完成 / 已完成 / 我创建的」。今日待办 = 未完成且命中 逾期 ∪ 遗留来源（`leftover_task_links` 存在链接行）∪ 标记紧急（`priority = 'URGENT'`）∪ 距截止 7 个日历日内 之一；今日待办 / 未完成 / 已完成按负责人维度（assignee = 当前用户），我创建的按创建人维度（creator = 当前用户，无论指派给谁）。今日待办卡另外用一行灰字展示四个来源子计数（逾期 n · 遗留 n · 紧急 n · 7 天内 n）。
+
+锁定口径：
+
+- `MyTaskStats` 由 `myOpen`/`dueToday`/`overdue`/`completedThisMonth` 重定为 `todayTodo` + `todayTodoBreakdown`（`overdue`/`leftover`/`urgent`/`dueWithinDays`）+ `myOpen` + `completed` + `created`；四个子项各自独立计数、可以重叠，其并集即 `todayTodo`，不保证四项之和等于 `todayTodo`；`completed` 不再限制在本月。
+- 基准集合排除 `INVALID` / `CANCELED` 与历史来源分支，与筛选、分页、游标正交；日界与 7 天窗口全部由 SQL 按 Asia/Shanghai 计算，客户端不自行推导。
+- `todayTodo` 作为新增查询参数进入 `MyTasksQueryRequest`（`TaskCenterQuery` 继承同一扩展），布尔筛选，缺省不产生额外过滤；`todayTodo=true` 只返回未完成且命中上述四类之一的任务，服务端在分页 SQL 内先过滤后分页。
+- 前端 `MyTaskFilters` 增加 `todayTodo`，URL 参数 `today=1`（服务端适配器经生成客户端 `listTaskCenter` 透传，`projectId` 已选定时同样收窄）；四张卡分别切到 `mine+open+todayTodo`、`mine+open`、`mine+done`、`created+all`；切换状态分段或点击风险横幅时清除今日待办筛选。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F32-STATS-CONTRACT-001 | 契约与权限 | Schema 与生成物 | `myTaskStatsSchema`、新增 `myTaskTodayTodoBreakdownSchema`（`MyTaskTodayTodoBreakdown`）与 `myTasksQueryRequestSchema.todayTodo` 登记进 Schema Registry；OpenAPI、fingerprints 与生成客户端由生成工具更新；`contract:drift`、`contract:validate`（108 条路由）与 `permissions:check`（108 操作 / 108 路由）通过 | 本地通过 |
+| F32-STATS-UNIT-001 | API 单元 | 筛选进入端口与游标 | `aggregate-read.service.test.ts` 29 例：`todayTodo` 进入 `MyTaskQueryPort.list` 入参与游标 `filterKey`；统计与遗留问题样本不随 `ownership` 变化 | 本地通过 |
+| F32-STATS-DB-001 | 真实 PostgreSQL | 统计口径与筛选同源 | `aggregate-read-api.integration.test.ts` 20 例：`projectId` 收窄后 `todayTodo = 2`（逾期 + 今天到期），`todayTodoBreakdown` 四个子项分别为 1 / 1 / 1 / 1，`myOpen = 2`、`completed = 1`、`created = 3`（已取消任务不计入）；`todayTodo=true` 只返回该 2 条且 `items.length === stats.todayTodo`；`todayTodo=maybe` 返回 422；无成员身份返回全零统计 | 本地通过（`app_it`，2026-09-20） |
+| F32-STATS-WEB-UNIT-001 | Web 单元 | URL、映射、适配器与视图 | `my-tasks-mock.test.ts`（`todayTodo = 3`、四个子项 1/1/1/2、`created = 8` 且与 scope 无关）、`my-tasks-server.test.ts`、`TaskCenterPageView.test.tsx`（四张卡与来源行渲染、点击「已完成」卡清 `overdue`、点击风险横幅保留项目）、`TasksPage.test.tsx`、`AppLayout.test.tsx` 夹具同步 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/api-contract typecheck`、`pnpm contract:generate`、`contract:drift`、`contract:validate`、`permissions:check` 通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）与 `test:unit` 65 文件 362 例通过；`pnpm --filter @inpulse/api test:integration`（`app_it`）50 文件 478 例通过；`pnpm --filter @inpulse/web typecheck` 与定向 `vitest run src/features/my-tasks src/pages/tasks` 6 文件 82 例通过；全量 web 单测 82 文件 499 例中仅 `ProjectTree.test.tsx` 7 例存量失败（改动前即失败）；`pnpm lint`、`pnpm build` 通过；`pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2 通过（12.4s，夹具清理删除用户 2 / 项目 2 / 业务行 62 / 审计行 2）。
+
+未运行 / 已知偏差：① 未跑 Playwright 全量、`pnpm check` 整链、`db:migrations:check` / `db:seed:check` 与 GitHub Actions（`ci.yml` 只在 PR 与 push `main` / `dev/*` 触发）；② 上文 2026-09-11 增量段第 5 条「统计口径」与 [C 域对齐表](c-v1-alignment.md) 第 57 行表格中的 `stats` 字段列表由本段取代，`docs/a-contract-review-f25-f29-f32.md` §10.3 的历史裁决文本保留不改写；③ 本轮改动尚未提交、未推送，新增与改写的测试需非作者人工评审。
+
+## 任务中心移除范围分段行、项目筛选移入工具栏（C，2026-09-20 本地落库）
+
+用户定案（承接同日的统计卡改四张与「今日待办」筛选）：任务中心顶部范围分段行（「我负责的 / 我创建的 / 按项目」）**整体删除** —— 今日待办 / 未完成 / 已完成 三张卡就是「我负责的」口径，我创建的由第 4 张卡承担；原「按项目」能力改为工具栏里的常驻**项目筛选**；同一条工具栏里的「未完成 / 已完成 / 全部」状态滑块一并删除（工作状态改由统计卡设定）。
+
+落地口径：
+
+- 范围仍由 URL `scope`（`mine|created|project|all`）承载，非管理员 `scope=all` 回落 `mine` 的降级语义不变；页面不再渲染任何范围 tab，`scopeOrder` / `scopeLabels` / `scopeHints` / `scopeTitles` / `scopeDisabledTitles` / `isScopeFilterSupported` / `handleScopeChange` 与 `scopeCounts` 渲染一并移除。
+- 工具栏新增常驻「项目」`CalmSelect`（`appearance="rich"`）：首项「全部项目」（value `""`），其余项复用 `projectSelectOption`（图标块 + 名称 + 「n 名活跃成员」+ 生命周期徽标 + 选中对勾），与遗留问题页 `/issues` 同口径；视觉新增 `.task-toolbar-field`（标签 + 下拉靠左排版）。
+- `filters.projectId` 由「仅 `scope=project` 或逾期钻取时保留」改为常驻条件：`writeMyTaskFilters` 只要 `projectId !== null` 就写 `project`；`toMyTasksV1Query` 只要选定项目就下发 `projectId`（与 `ownership` / `scopeType` / `workStatus` 组合收窄）；`my-tasks-server.ts` 删除重复的 `projectId` 拼装。
+- 连带行为（均在视图层，无服务端改动）：任务聚合组区块（R-7 `listTaskGroups`）跟随项目筛选；四张统计卡随项目收窄（R-3 统计基准集合本就只受 `projectId` 影响，`todayTodo` / `myOpen` / `completed` / `created` 口径不变）；新建任务弹窗在项目筛选选定即预填 `preset.projectId`；`TaskCenterPageView` 的 `isAdmin` 属性随之删除（唯一用途是范围 tab 的显示条件）。
+- 样式清理：删除 `.task-view-tabs` 相关规则（`design-system.css` 5 条 + `inpulse-design.css` 2 条）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F32-PROJECT-FILTER-WEB-001 | Web 单元 | 范围分段行与状态滑块移除 | `TaskCenterPageView.test.tsx`：`queryByRole("tablist")` 与 `queryByRole("group", { name: "工作状态" })` 均为 null；工具栏仍渲染「搜索任务」与项目筛选，项目触发器默认显示「全部项目」 | 本地通过 |
+| F32-PROJECT-FILTER-WEB-002 | Web 单元 | 项目筛选回调与「范围由卡片设定」 | 同文件：打开项目下拉选「订单中台」→ `onFiltersChange({ projectId: 5 })`；点 `stat-created` → `{ scope: "created", status: "all" }`、点 `stat-my-open` → `{ scope: "mine", status: "open" }`；URL `scope=created&status=all` 下列表标题为「全部任务」且页面无任何 tab；`projectId=1` 时点逾期风险横幅 → `{ scope: "mine", projectId: 1, overdue: true }`（项目筛选不被钻取清掉） | 本地通过 |
+| F32-PROJECT-FILTER-URL-001 | Web 单元 | `project` 参数成为常驻条件 | `my-tasks-url.test.ts`：`scope=mine + projectId=9` 写出 `project=9` 并读回，`projectId=null` 不写参数；`my-tasks-v1-query.test.ts`：`mine + projectId=7` → `{ limit: 20, projectId: 7 }`，`created + projectId=7` → 追加 `ownership: "CREATOR"` | 本地通过 |
+| F32-PROJECT-FILTER-PAGE-001 | Web 单元 / 路由 | 页面接线与管理员范围 | `TasksPage.test.tsx`：点 `stat-created` 写入 `scope=created`；`scope=all` 在非管理员回落 `mine`、管理员保持 `all` 且页面无 tablist | 本地通过 |
+| F32-PROJECT-FILTER-E2E-001 | 真实 UI / API | 项目筛选端到端 | `apps/e2e/tests/aggregate-views.spec.ts` 例 1：工具栏项目字段默认「全部项目」；选 fixture 项目 → URL `project=<id>` 且刚创建的任务仍在列表；回到「全部项目」→ 参数移除；`stat-created` 写 `scope=created`、`stat-completed` 写 `status=done` 且列表标题变「已完成」 | 本地通过（2/2，12.1s） |
+| F32-PROJECT-FILTER-NOTICE-001 | Web 单元 | 适配器说明同步 | `my-tasks-server.test.ts`：`MY_TASKS_SERVER_NOTICE` 断言改为含「统计卡片」「项目筛选」「我创建的」 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web typecheck` 通过；定向 `vitest run src/features/my-tasks src/pages/tasks/TasksPage.test.tsx` 6 文件 83 例通过；全量 `pnpm --filter @inpulse/web test` 82 文件 499 例中仅 `ProjectTree.test.tsx` 7 例存量失败（改动前即失败，与本轮无关）；`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm check:frontend:boundaries`（275 模块 1337 依赖，无违规）与 `pnpm --filter @inpulse/e2e typecheck` 通过；`pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2 通过（12.1s，夹具清理删除用户 2 / 项目 2 / 业务行 62 / 审计行 2）。浏览器实测（无头 Chromium，本地 `http://127.0.0.1:5173/tasks`）：范围 tablist 与「工作状态」分段计数均为 0，项目下拉展开后呈现「全部项目 + 4 个项目（图标块 / 名称 / n 名活跃成员 / 进行中徽标 / 对勾）」；选项目后 URL 变为 `?scope=created&project=2&status=all`；旧地址 `?scope=project&project=2&status=all` 仍显示「项目1」并列出该项目全员任务。截图证据：`.data/tasks-toolbar.png`、`.data/tasks-project-dropdown.png`、`.data/tasks-legacy-project.png`（`.data/` 已 gitignore）。
+
+未运行 / 已知偏差：① 未跑 Playwright 全量、`pnpm check` 整链与 GitHub Actions；② 本轮是纯前端改动，未跑 API 单测 / 集成测试（服务端未改）；③ 项目筛选会同时收窄统计卡与任务聚合组区块，若产品希望「统计卡只看全局」需再定案；④ 新增与改写的用例需非作者人工评审。
+
+## 任务中心统计卡选中态、默认落地「今日待办」与列表标题行删除（C，2026-09-20 本地落库）
+
+用户定案：① 任务中心打开即落在「今日待办」，因此今日待办卡必须是选中态；点其余三张卡后对应卡片选中、未选中的保持普通态。② 列表区块不再重复「未完成 / n 项 · 服务端按任务编号倒序」两行文字——工作状态由上方统计卡的选中态表达。③ 工具栏项目筛选去掉与下拉内容重复的「项目」文字标签（无障碍定位仍由 `aria-label="项目"` 提供）。
+
+锁定口径：
+
+- 「今日待办」只在工作状态为「未完成」时有意义（服务端 `todayTodo` 与 `DONE` / `CANCELED` 求交恒为空）。URL 规则：`today=1` → 今日待办；`today=0` → 未完成但不限今日；不带 `today` 且 `status=open` → 今日待办（默认落地）；`status=done|all` → 该筛选不存在。`DEFAULT_MY_TASK_FILTERS.todayTodo = true`，`writeMyTaskFilters` 只在「未完成 + 显式关闭」时写 `today=0`；读 URL 与写 URL 使用同一推断，因此 `?status=done` 这类旧链接不会被静默套上今日筛选而变空。
+- `toMyTasksV1Query` 与 mock 适配器只在 `status === "open"` 时套用 `todayTodo`，不发出必然为空的组合（已完成 / 全部视图不下发该参数）。
+- 统计卡选中态由筛选反推（`selectedStatCardKey`）：`created+all` → 我创建的；`mine+done` → 已完成；`mine+open`（`todayTodo !== false`）→ 今日待办；`mine+open`（`todayTodo === false`）→ 未完成；组合对不上（如 URL 直接给 `scope=all`）时不选中任何卡。选中态同时写 `aria-pressed`。
+- 列表区块只保留展示方式图标（`.task-list-mark`）与空态；今日待办空态改说「今天没有待办任务」，不再沿用「没有匹配的未完成任务」——今日待办是未完成的子集，沿用会让空态看起来像漏了任务。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F32-STAT-CARD-SELECTED-WEB-001 | Web 单元 | 四张卡选中态唯一命中 | `TaskCenterPageView.test.tsx`：默认（未完成 + 今日待办）下 `stat-today-todo` 同时具备 `aria-pressed="true"` 与 `stat-card-selected`，其余三张为 `false` 且无该类；`todayTodo:false` → `stat-my-open`、`status=done` → `stat-completed`、`scope=created&status=all` → `stat-created` | 本地通过 |
+| F32-STAT-CARD-SELECTED-WEB-002 | Web 单元 | 今日待办空态 | 同文件：默认视图空态为「今天没有待办任务」，且不再出现「没有匹配的未完成任务」 | 本地通过 |
+| F32-LIST-TITLE-REMOVED-WEB-001 | Web 单元 | 列表标题与计数行删除 | 同文件：`status=all` 下列表仍渲染任务，且 `queryByText("1 项 · 服务端按任务编号倒序")` 与 `queryByRole("heading", { name: "全部任务" })` 均为 null；`status=done` 时只剩空态文案与统计卡选中态 | 本地通过 |
+| F32-TODAY-DEFAULT-URL-001 | Web 单元 | 默认落地与 `today` 往返 | `my-tasks-url.test.ts`：空 URL 读出 `DEFAULT_MY_TASK_FILTERS`（含 `todayTodo: true`）；`todayTodo:false` 经 `status=all` 往返一致；`writeMyTaskFilters(DEFAULT_MY_TASK_FILTERS)` 仍写出空串 | 本地通过 |
+| F32-TODAY-DEFAULT-QUERY-001 | Web 单元 | 适配器只在未完成视图下发今日待办 | `my-tasks-v1-query.test.ts`（默认请求含 `todayTodo: true`，`status=done|all` 不带该参数）、`my-tasks-server.test.ts`（默认请求与「未完成 + 优先级 + 含已取消」请求含 `todayTodo: true`）、`my-tasks-mock.test.ts`（默认视图为 T-101 / T-102 / T-103；T-108 在 20 天后到期、非紧急无遗留，不在今日待办） | 本地通过 |
+| F32-TODAY-DEFAULT-E2E-001 | 真实 UI / API | 默认选中态与工具栏标签 | `apps/e2e/tests/aggregate-views.spec.ts` 例 1：`/tasks` 默认 `stat-today-todo` 为 `aria-pressed="true"`、`stat-my-open` 为 `false`；点未完成卡写 `today=0`；项目字段改为断言 `calmSelectTrigger(page, "项目")` 含「全部项目」；`stat-completed` 后 `.task-list-mark` 计数为 1 | 本地通过（2/2，13.6s） |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm check:frontend:boundaries`（275 模块 1337 依赖，无违规）与 `pnpm check:docs`（83 个 Markdown 文件链接与锚点有效）通过；定向 `vitest run src/features/my-tasks src/pages/tasks` 6 文件 88 例通过；全量 `pnpm --filter @inpulse/web test` 82 文件 505 例中仅 `ProjectTree.test.tsx` 7 例存量失败（改动前即失败，与本轮无关）；`pnpm --filter @inpulse/e2e exec playwright test aggregate-views` 2/2 通过（13.6s，夹具清理删除用户 2 / 项目 2 / 业务行 62 / 审计行 2）。浏览器实测（无头 Chromium，本地 `http://127.0.0.1:5173/tasks`）：默认恰好 1 张卡选中且为今日待办；点「未完成」→ `?today=0`、点「已完成」→ `?status=done`、点「我创建的」→ `?scope=created&status=all`、点「今日待办」→ 回到 `/tasks`，每步选中卡随之切换；旧链接 `?status=done` 仍列出已完成任务（未被今日筛选清空）；`.task-toolbar-field` 计数 0、`.task-list-mark` 计数 1。
+
+未运行 / 已知偏差：① 未跑 Playwright 全量、`pnpm check` 整链与 GitHub Actions；② 本轮为纯前端改动，未跑 API 单测 / 集成测试（服务端契约与行为未改）；③ 默认落地由「未完成」改为「今日待办」是本次唯一行为变化，历史收藏链接 `?status=done|all` 按新规则推断为无今日筛选，已由 URL 单测与 E2E 覆盖；④ `/issues` 仍是「项目 + 文字标签」写法，本次只改任务中心；⑤ 新增与改写的用例需非作者人工评审。
+
+## 生命周期与标签徽章同色（C，2026-09-20 本地落库）
+
+用户定案：同一个文案的徽章无论出现在哪个页面、哪张卡片上都必须同色，且应当是彩色而不是灰色。
+
+锁定口径：
+
+- 「进行中」全站统一项目蓝（`blue`）。原先配色由各调用点各自决定：模块卡经 `resourceLifecycleTone(..., "gray")` 得到灰、功能列表卡写死 `"gray"`，而项目卡、功能详情页头、任务聚合组列表卡写死蓝，同一个「进行中」在四处出现三种颜色；本轮全部收敛为 `blue`，并在 `resource-lifecycle.ts` 注释里写明第三个参数必须传 `blue`。
+- 「未开始」保持 `cyan`、「维护中」保持 `violet`、「已归档」保持 `amber`，项目四态（ADR-035）口径不变。
+- 功能自定义标签在两个呈现位置（功能列表卡、功能详情页头）统一 `violet`；标签色只表达「这是标签」，不按标签名派生颜色，避免与状态、优先级、角色等语义色冲突。
+- 任务聚合组详情弹层的「进行中」由 `violet` 改为 `blue`，与聚合组列表卡一致。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LIFECYCLE-TONE-WEB-001 | Web 单元 | 模块卡「进行中」同色 | `ModulesPageView.test.tsx`：有已完成任务的模块渲染「进行中」且 class 含 `badge-blue`；`completedTaskCount = 0` 的模块仍为 `badge-cyan` | 本地通过 |
+| LIFECYCLE-TONE-WEB-002 | Web 单元 | 列表卡与详情页头同色 | `FeaturesPageView.test.tsx`：功能卡的「进行中」为 `badge-blue`、自定义标签为 `badge-violet`，且详情页头前几个徽章的 `badge-*` 序列与该卡片完全一致 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 无输出、`pnpm lint` 通过、改动过的 6 个文件 `pnpm --filter @inpulse/web exec prettier --check` 通过；定向 `vitest run src/features/features src/features/modules src/features/common src/features/task-groups src/features/my-tasks` 15 文件 156 例通过。浏览器实测（无头 Chromium 1440×950，本地 dev 服务）：项目 1 模块卡 8 个「进行中」全为 `badge-blue`、项目 3 模块卡「未开始」为 `badge-cyan`、项目 2 模块卡「已归档」为 `badge-amber`；功能列表卡（`/projects/3/modules/3843/features`）为 `badge-blue` + `badge-violet`；功能 1783 与 1786 的详情页头同为 `badge-blue` + `badge-violet`。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm format:check` 整仓、`pnpm check:docs`、`check:frontend:boundaries`、全量 web 单测、Playwright E2E 与 API 测试（本轮为纯前端展示改动，服务端未改）；② 功能列表卡的「进行中」仍不区分「未开始」（卡片只按 `status` 判定，与模块卡的 `completedTaskCount` 口径不同），本轮未动；③ 聚合组成员行的「已归档」仍为 `badge-gray`，迭代记录的「已作废」为灰、`VOID` 为红，未纳入本轮统一；④ 新增与改写的用例需非作者人工评审。
+
+## 任务中心列表列宽重排（C，2026-09-20 本地落库）
+
+用户定案：任务中心的列表视图里「编号」没那么重要，「任务」列要能放下更长的标题。
+
+锁定口径：
+
+- 「编号」不再是独立列，并进任务标题下方的小字，与归属类型拼成一行（`K123-T-5 · 独立任务`，模块级 / 遗留问题继续追加在后面）；列表视图的表头顺序固定为 任务 → 项目 → 归属 → 负责人 → 优先级 → 截止 → 迭代 → 状态。
+- 表格改用 `table-layout: fixed` 并显式分配列宽（32% / 12% / 18% / 8% / 8% / 9% / 5% / 8%），单元格左右内边距由 20px 收到 14px。此前 8 列在自动布局下互相抢宽，`th:first-child { width: 48% }` 实际只落到实处约 19%，标题被挤成窄条。
+- 「任务」列允许折行（长标题最多按内容换行）、标题下方小字用满列宽；「归属」列不够宽时折行而不是截断；其余列保持不换行并以省略号收尾。
+- 列宽按 1440px 视口标定：8 列实测 363 / 136 / 204 / 91 / 91 / 102 / 57 / 91px，全部单元格 `scrollWidth == clientWidth`（无截断、无溢出）。窄视口由 `.feature-list-scroll` 横向滚动兜底。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F32-TASK-TABLE-LAYOUT-WEB-001 | Web 单元 | 列序与编号归位 | `TaskCenterPageView.test.tsx`「列表视图：标题领衔、编号并入标题下方小字」：表头顺序为 任务/项目/归属/负责人/优先级/截止/迭代/状态（`编号` 已不在表头），首行标题下方小字为 `INP-901 · 独立任务 · 模块级` 且落在该行第一个 `td` | 本地通过 |
+| F32-TASK-TABLE-LAYOUT-BROWSER-001 | 浏览器实测 | 列宽与不截断 | 真实 dev 页面 `/tasks?scope=created&status=all&view=list`：表头顺序为 任务/项目/归属/负责人/优先级/截止/迭代/状态，列宽 363/136/204/91/91/102/57/91px，`tbody td` 溢出数 0；`/tasks?scope=mine&status=done&view=list` 同宽同序 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks src/pages/tasks` 6 文件 89 例通过（含新增用例「列表视图：标题领衔、编号并入标题下方小字」）、`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 无输出、`pnpm lint` 通过、改动文件 `prettier --check` 通过。浏览器实测（无头 Chromium 1440×950，本地 dev）：见上表 F32-TASK-TABLE-LAYOUT-BROWSER-001；另注入一条超长标题确认标题按列宽换行（`td` 高度 83px → 104px，`white-space: normal`），注入仅改 DOM、未写库。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、Playwright E2E 与全量 web 单测；② 项目任务面板（`TasksPanel` 列表视图，列序为 范围 → 编号 → 任务 → …）本轮未动，仍沿用旧列序与 48% 首列宽；③ 窄视口（<700px）下表格仍是横向滚动，未做列折叠；④ 新增与改写的用例需非作者人工评审。
+
+## 取消重复的详情入口（整卡即入口，C，2026-09-20 本地落库）
+
+用户定案：取消所有「任务详情」链接，整卡点击就等于查看任务详情；功能卡上「编辑功能」仍打开编辑弹窗，点卡片其余位置等于查看详情。
+
+锁定口径：
+
+- 卡片整块是唯一主入口，同义文字入口一律删除：功能列表卡不再渲染「查看详情」链接；功能详情页的任务卡不再渲染「任务详情」按钮。
+- 任务卡容器由 `article` 改为 `button.calm-task-card`，带 `aria-haspopup="dialog"` 与无障碍名「查看任务详情：<标题>」，点击就地打开任务详情弹窗（不跳页）；`Enter`/`Space` 与点击等价。
+- 功能卡保留 `catalog-edit-link` 里的「编辑功能」（`ACTIVE`）与「恢复功能」（`ARCHIVED`），点击打开对应弹窗且不触发整卡导航；判定沿用 `card-click.ts` 的 `isCardClick`（排除 `a[href]`、`button`、`summary`、`input`、`textarea`、`select`、`label`）。
+- 任务面板列表视图的副标题不再写死「查看任务详情」，只留归属提示（「主任务 / 来源任务」·「遗留问题」）；两者都没有时整行不渲染。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CARD-ENTRY-WEB-001 | Web 单元 | 任务卡整卡即入口 | `TasksPanel.test.tsx` 及 `TasksPage.test.tsx`：卡片以无障碍名匹配 `/^查看任务详情/` 取到且 `.calm-task-card` 可点，点击后任务详情弹窗可见；卡片内不再存在名为「任务详情」的按钮 | 本地通过 |
+| TASK-CARD-ENTRY-WEB-002 | Web 单元 | 功能卡不再有同义入口 | `FeaturesPageView.test.tsx`：卡片容器内 `queryByRole("link")` 与 `queryByRole("button")`（限定在 `.calm-feature-card` 内）均为 `null`；「编辑功能」仍在 `catalog-edit-link` 中 | 本地通过 |
+| TASK-CARD-ENTRY-E2E-001 | E2E | 12 个受影响关键路径回归 | `aggregate-views`、`external-links`、`features`、`leftover-task`、`module-tasks`、`project-archive`、`record-drafts`、`record-publishing`、`task-completion`、`task-groups`、`task-status`、`tasks`：24 passed | 本地通过 |
+| TASK-CARD-ENTRY-BROWSER-001 | 浏览器实测 | 点击行为分流 | 真实 dev 页面 `/projects/3/modules/3843/features/1783`：页面内「任务详情 / 查看详情」文字入口数为 0，点击 `.calm-task-card` 就地在当前 URL 打开 `role=dialog`；`/projects/3/modules/3843/features`：无「查看详情」，点「编辑功能」弹出「编辑功能」弹窗且 URL 不变，点卡片内容区跳转 `/projects/3/modules/3843/features/1783` | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec vitest run src/features/tasks src/features/features src/features/task-groups src/pages` 14 文件 91 例通过；全量 `pnpm --filter @inpulse/web exec vitest run` 82 文件 508 例中 501 通过、7 失败（全部为 `src/features/project-tree/ProjectTree.test.tsx` 存量失败，该目录本轮未改动）；`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 退出码 0；`pnpm lint` 退出码 0；`pnpm --filter @inpulse/e2e typecheck` 通过；Playwright 12 个 spec 24 passed (2.9m)；浏览器实测见 TASK-CARD-ENTRY-BROWSER-001（无头 Chromium 1440×900）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、整仓 `pnpm format:check`、`pnpm check:docs`、`check:frontend:boundaries` 与 API 测试；② 同类重复入口只在用户指定范围收敛（任务卡、功能卡），项目卡 / 项目概述的「查看模块」、模块卡的「查看功能」、聚合组卡的「查看详情 / 解除合并」仍在，两处口径暂不一致；③ `ProjectTree.test.tsx` 7 例存量失败未修，与本轮无关；④ 新增与改写的用例需非作者人工评审。
+
+## 模块卡动作收敛与页头返回按钮统一（C，2026-09-20 本地落库）
+
+用户定案：模块卡去掉「查看功能」「模块任务」「归档模块」，把「编辑模块」放到原「查看功能」的位置并压矮卡片；页头返回入口全站保持同一种样式，不要再一页一页找差异。
+
+锁定口径：
+
+- 模块卡页脚固定为「N 个功能 · N 项待办」在左、单个动作在右：`ACTIVE` 模块是「编辑模块」（打开编辑弹窗），`ARCHIVED` 模块且当前用户有归档权限时是「恢复模块」，两者互斥，卡内不再有第二个控件。
+- 「查看功能」由整卡点击承担（`isCardClick` 放行卡片本身），「模块任务」在模块页「模块级任务」页签，「归档模块」在「编辑模块」弹窗底部（与 ADR-034 的功能卡口径一致）。
+- `.catalog-module-wrap > .calm-feature-card.module-card` 不再预留 58px 外挂动作行留白，改为常规 22px；模块卡的 `h2` 上下边距 23/10 → 14/8、描述行 `min-height` 44 → 20 且下边距 25 → 16。1440px 视口、卡片宽 365px 实测 310px → 232px。功能卡（`FeaturesPageView`）保持原样，`catalog-edit-link` 仅由功能卡使用。
+- 页面级返回入口统一为 32px 圆形折角箭头（`.title-back-button` + `chevronLeft` 20、描边 3），紧贴标题构成 `.page-title-row`，可见文本为空、无障碍名保留「返回模块列表 / 返回功能列表」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MODULE-CARD-ACTIONS-WEB-001 | Web 单元 | 卡内只剩一个动作 | `ModulesPageView.test.tsx`「keeps 编辑模块 as the only control inside the card」：卡内 `queryByRole("link")` 为 `null`、`getAllByRole("button")` 长度为 1 且名为「编辑模块」、`queryByText("模块任务")` 与 `queryByText("归档模块")` 均为 `null`，卡容器无 `role` | 本地通过 |
+| MODULE-CARD-ACTIONS-WEB-002 | Web 单元 | 归档走弹窗底部 | 同文件「requires an archive reason…」与「shows archive entries for a project leader…」：卡片阶段 `queryByRole("button", { name: /归档/ })` 为 `null`，打开「编辑模块」后 `.calm-action-footer` 内可见「归档模块」，点它进入归档流程并仍按原因必填校验 | 本地通过 |
+| MODULE-CARD-ACTIONS-WEB-003 | Web 单元 | 已归档卡只留恢复 | 同文件「offers restore instead of edit for archived modules」：卡片有「恢复模块」，无「编辑模块」与「归档模块」 | 本地通过 |
+| MODULE-CARD-ACTIONS-BROWSER-001 | 浏览器实测 | 卡片几何与点击分流 | 真实 dev 页面 `/projects/3/modules`：卡内 `button/a` 仅 `["编辑模块"]`、`.catalog-edit-link` 计数 0，卡片高 310px → 232px（同宽度 365px 下注入旧规则对照）；点卡片中心进入 `/projects/3/modules/3843/features`，点「编辑模块」不改变 URL 且弹窗底部为 `归档模块/取消/保存`；`/projects/2/modules` 的两个已归档模块卡只渲染「恢复模块」 | 本地通过 |
+| PAGE-BACK-UNIFY-BROWSER-001 | 浏览器实测 | 页头返回入口一致 | 16 条真实路由逐一扫描页头：`/projects/2/modules/9/features`、`/projects/2/modules/9/features/33`、`/projects/2/modules/9/tasks` 三处返回按钮均为 `title-back-button`、`border-radius: 50%`、32×32、可见文本为空；除完成任务弹层内按设计稿保留的「上一步 / 返回任务」外，无其它页面级文字返回入口 | 本地通过 |
+| MODULE-CARD-ACTIONS-E2E-001 | E2E | 受影响关键路径回归 | `modules`、`aggregate-views`、`external-links`、`features`、`leftover-task`、`module-tasks`、`project-archive`、`record-drafts`、`record-publishing`、`task-completion`、`task-groups`、`task-status`、`tasks`、`issues`：26 passed | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec vitest run src/features/modules` 16 例通过；全量 `pnpm --filter @inpulse/web exec vitest run` 82 文件 508 例中 501 通过、7 失败（全部为 `ProjectTree.test.tsx` 存量失败）；`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 退出码 0；`pnpm --filter @inpulse/e2e typecheck` 通过；`pnpm lint`、`pnpm format:check` 通过；Playwright 14 个 spec 26 passed (2.8m)；浏览器实测见上表。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries` 与 API 测试；② 13 个 E2E spec 的进入模块方式由链接改为点卡片（需要模块级任务页的用例再点「模块级任务」页签），`record-drafts` / `task-status` 的 `if/else` 同步补了大括号，需非作者人工评审；③ `/projects/:id/modules/:moduleId/tasks` 页头的「查看功能目录」按钮与同页「功能目录」页签目的地相同，属同类重复入口，本轮按用户指定范围保留；④ 项目卡的「查看模块 ›」是非交互 `span`，未动；⑤ `ProjectTree.test.tsx` 7 例存量失败未修，与本轮无关。
+
+## 「新增模块」淡蓝色按钮（C，2026-09-20 本地落库）
+
+用户定案：页头动作行里的「新增模块」给一个淡蓝色，不要再用白底描边。
+
+锁定口径：
+
+- 新增 `.soft-blue-button`：淡蓝底 `#e6f2ff`、蓝字 `#2472c3`、淡蓝描边 `#cfe4fa`，hover 变 `#d7e9fd` / 描边 `#b6d4f4` / 字色 `#1d5fa8`。色值取自既有 `.badge-blue` 同族，不新增设计 token。
+- 页头动作行、模块区块标题行、无模块空态三处「新增模块」共用该类名，同一动作在同一页只有一种外观，并与实心 `--primary` 的「新建任务」拉开层级。
+- `.soft-blue-button` 同时进入 `design-system.css` 中 `.primary-button/.secondary-button/.small-button` 的几何基线组，非 antd 场景（原生 `button`）也能直接使用。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SOFT-BLUE-BUTTON-BROWSER-001 | 浏览器实测 | 计算样式与三处一致 | 真实 dev 页面 `/projects/2/modules`：两个可见「新增模块」按钮（页头动作行 y≈114、模块区块标题行 y≈566）类名均为 `soft-blue-button`，`backgroundColor: rgb(230, 242, 255)`、`color: rgb(36, 114, 195)`、`borderColor: rgb(207, 228, 250)`，尺寸 102×35 | 本地通过 |
+| SOFT-BLUE-BUTTON-BROWSER-002 | 浏览器实测 | 空态同色 | 用 Playwright 路由拦截 `GET /api/v1/projects/2/modules` 返回 `{"items":[]}`（不写库）复现空态：页面出现「暂无模块」，空态按钮类名为 `soft-blue-button`、底色 `rgb(230, 242, 255)` | 本地通过 |
+| SOFT-BLUE-BUTTON-E2E-001 | E2E | 点「新增模块」的路径不回归 | `modules`、`tasks`、`task-groups`、`aggregate-views`、`project-archive` 5 个 spec 全部通过（按 role+name 定位，不依赖类名） | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 退出码 0；`pnpm lint`、`pnpm format:check` 通过；`pnpm --filter @inpulse/web exec vitest run src/features/modules` 16 例通过；Playwright 5 个 spec 通过；浏览器实测见上表。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、全量 web 单测与 API 测试；② 空态按钮也是淡蓝色（与另两处一致），若产品认为空态应保留实心主色需另行改回；③ 色值为写死的十六进制，未收进 `:root` 变量；④ 改动的类名与配色需非作者人工评审。
+
+## 任务聚合组与任务卡网格对齐（C，2026-09-20 本地落库）
+
+用户定案：任务聚合组这一块要跟上面的任务卡对齐；「任务聚合组」标题与说明再往右一点点（先在浏览器按 18px 落库，产品复核后定为 10px）。
+
+锁定口径：
+
+- `.group-panel` 横向不再内缩：`padding: 20px` → `padding: 20px 0`，标题块与卡片左沿都回到页面内容基准线 270px，与任务卡网格、工具栏、统计卡同一条线。
+- `.group-list` 固定两列：`repeat(auto-fill, minmax(360px, 1fr))` + `gap: 14px` → `repeat(2, minmax(0, 1fr))` + `gap: 20px`。容器 1136px 时 auto-fill 会算出 3 列、卡片宽掉到 369px，任务编号被折断、页脚说明折成 3 行（卡片高度 253px → 462px）；1000px 以下沿用既有单列回落规则。
+- `.group-panel > .calm-section-title` 增加 `padding-left: 10px`：标题与说明整体落在 280px；右侧计数走 `justify-content: space-between`，位置不受左内边距影响。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-ALIGN-BROWSER-001 | 浏览器实测 | 左右边界与任务卡一致 | 真实 dev 页面 `/tasks?status=done`：`.calm-task-grid` 与 `.group-panel` 同为 `x=270, w=1136`；`.group-card` `x=270, w=558`；`.group-panel > .calm-section-title h3` 与说明 `x=280`，右侧计数仍为 `x=1333` | 本地通过 |
+| TASKGROUP-ALIGN-BROWSER-002 | 浏览器实测 | 三列方案被否 | 注入 3 列样式复现：卡片宽 369px、任务编号折行、卡片高度 253px → 462px，确认不采用 | 本地通过 |
+| TASKGROUP-ALIGN-E2E-001 | E2E | 聚合组关键路径不回归 | `aggregate-views.spec.ts`（F-32、F-29）与 `task-groups.spec.ts`（F-23/F-24/F-25、F-25）：4 passed | 本地通过 |
+| TASKGROUP-ALIGN-WEB-001 | Web 单元 | 任务中心渲染不回归 | `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks src/pages/tasks`：6 文件 89 例通过 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 退出码 0；`pnpm lint`、`pnpm format:check` 通过；web 单测 6 文件 89 例；Playwright 4 passed；浏览器实测见上表。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、全量 web 单测与 API 测试；② 标题内缩 10px 只作用于任务聚合组，模块页/功能页/记录页的区块标题仍是与卡片外沿齐平（实测 `/projects/2/modules` 的「模块」标题 `x=270`），全站是否统一待定；③ 聚合组列表在 1000px 断点以上固定两列，不再随宽度自动增列；④ 样式改动需非作者人工评审。
+
+## 任务中心统计卡标签对齐与字号（C，2026-09-20 本地落库）
+
+用户定案：四张统计卡的标签（今日待办 / 未完成 / 已完成 / 我创建的）先对齐，再加大加粗；对照模拟后选中 16px/700，并要求文案块整体「往右下挪一点点」，最终定案右 3px / 下 3px。
+
+锁定口径：
+
+- 病根是垂直居中而不是字号：`.stat-card` 原为 `align-items: center`，第一张卡的提示文案（逾期 0 · 遗留 0 · 紧急 0 · 7 天内 0）在窄窗口折成两行，这一卡的文案块变高 16.5px，整块被居中顶上去 8px —— 四张卡的标签因此不在同一水平线上。
+- 修法：`inpulse-design.css` 的 `.stat-card` 改为 `align-items: flex-start`（文案块顶部锚定，提示折几行都不再影响标签行）；`.stat-card .stat-icon { align-self: center }` 让彩色图标块仍垂直居中。
+- 字号：`.stat-card .stat-body > span` 由 11px/400 `#79899b` 改为 16px/700 `#3b4d61`；数字仍 25px、提示仍 11px。
+- 位移：`.stat-body { position: relative; left: 3px; top: 3px }`，相对位移不改变卡片高度、也不影响图标居中。
+- 选择器必须写成 `.stat-card .stat-body > span`：design-system.css 的 `.stat-card span:not(.stat-icon)` 特异性为 (0,2,1)，低特异性写法（`.stat-body > span`，(0,1,1)）会被它盖掉。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| STATCARD-ALIGN-BROWSER-001 | 浏览器实测 | 复现对齐问题 | 1300px 视口 `/tasks?view=list&today=0`：今日待办标签卡内 y=19（提示 2 行），未完成 / 已完成 / 我创建的均为 y=27（提示 1 行） | 本地通过 |
+| STATCARD-ALIGN-BROWSER-002 | 浏览器实测 | 改动后四卡对齐 | 同页 1300px：四卡标签均 x=71 / y=22，卡高 143px；1780px：四卡标签均 x=71 / y=22，卡高 126px；标签计算样式 `16px/700 rgb(59, 77, 97)` | 本地通过 |
+| STATCARD-ALIGN-WEB-001 | Web 单元 | 任务中心渲染不回归 | `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks`：5 文件 81 例通过 | 本地通过 |
+| STATCARD-ALIGN-GATE-001 | 静态门禁 | 类型与格式 | `pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 退出码 0；`pnpm lint`、`pnpm format:check` 通过 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm format:check`、`pnpm lint` 通过；web 单测 5 文件 81 例通过；浏览器实测见上表（无头 Chromium，本地 dev `5173`，用本机测试账号登录）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、Playwright E2E 与 API 测试（本次只改 CSS，未动 TSX、文案与接口）；② 「今日待办」的提示文案在窄窗口仍折成两行，只是折行不再影响对齐，是否缩短文案待产品确认；③ 「今日待办」标签左起实测 69px、其余三卡 71px，2px 差来自「今」字自身的字形左侧边距，未做补偿；④ 图标仍是垂直居中（未改成与文案块顶部对齐）；⑤ 样式改动需非作者人工评审。
+
+## 模块卡图标居中与旧版遗留规则清理（C，2026-09-20 本地落库）
+
+产品反馈：模块页卡片左上角紫色方块里的图标没居中（贴左上角）。
+
+锁定口径：
+
+- 根因不是图标本身，而是 design-system.css 里旧版模块卡的 `.module-card div/strong/span/small` 元素选择器仍在：`.module-card span { display: block; color: #8493a3; font-size: 10px }` 的特异性 (0,1,1) 高于 `.feature-symbol`（(0,1,0)）的 `display: inline-flex` + `justify-content/align-items: center`，图标容器被降级为 `block`，21×21 的 svg 因此落在 43×43 方块的左上角。
+- 这 5 条规则针对的旧结构（`.module-card` 的直接子 `strong/span/small` 与文本 `div`）在新的 `.calm-feature-card.module-card` 里已不存在，仅剩泄漏作用，因此整块删除并在原位留注释；`.module-card` 类名本身保留（`.catalog-module-wrap > .calm-feature-card.module-card` 仍按它定位）。
+- 一并被修掉的泄漏：徽章（`10px` 灰字 → `11px` 琥珀字）、`.task-id` 编号色（`#8493a3` → `#788ea6`），两者均恢复到与功能卡一致的计算样式。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MODULE-ICON-CENTER-001 | 浏览器实测 | 影响面预演 | 运行时用 CSSOM 删除这 5 条规则：`.feature-symbol` 由 `display:block`（svg 偏移 0,0）变为 `flex`（11,11）；徽章 `10px / rgb(132,147,163)` → `11px / rgb(134,91,13)`；`.task-id` `rgb(132,147,163)` → `rgb(120,144,166)` | 本地通过 |
+| MODULE-ICON-CENTER-002 | 浏览器实测 | 落库后模块卡图标居中 | `/projects/2/modules` 两张模块卡：图标容器 `display:flex`、svg 相对方块偏移 `11,11`（方块 43×43），卡高 237px | 本地通过 |
+| MODULE-ICON-CENTER-003 | 浏览器实测 | 与功能卡一致 | `/projects/2/modules/9/features` 同类容器同为 `display:flex`、偏移 `11,11`；徽章与编号色两页逐项一致 | 本地通过 |
+| MODULE-ICON-CENTER-WEB-001 | Web 单元 | 模块页渲染不回归 | `pnpm --filter @inpulse/web exec vitest run src/features/modules`：1 文件 16 例通过 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm format:check` 通过；web 单测 `src/features/modules` 16 例通过；浏览器实测见上表（无头 Chromium，本地 dev `5173`）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、`pnpm lint`、`tsc`、Playwright E2E 与 API 测试（本次只删 CSS 规则、未动 TSX 与文案）；② 模块卡标题仍是蓝色 `#317abd`（同一旧规则块里保留的 `.module-card { color: #317abd }` 继承到 `h2`），功能卡标题为深色 `#132238`，是否统一已给对照图待产品确认；③ 模块卡高度由 232px 变为 237px，来自徽章恢复 11px 字号；④ 样式改动需非作者人工评审。

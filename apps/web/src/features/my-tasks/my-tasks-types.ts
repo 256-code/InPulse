@@ -32,6 +32,8 @@ export type MyTaskWorkStatus = "TODO" | "DONE" | "CANCELED";
 export interface MyTaskFilters {
   readonly scope: MyTaskScope;
   readonly overdue?: boolean;
+  /** 「今日待办」筛选：未完成且命中 逾期 / 遗留来源 / 紧急 / 7 个日历日内到期 之一。 */
+  readonly todayTodo?: boolean;
   readonly projectId: number | null;
   readonly status: MyTaskStatusFilter;
   readonly priority: MyTaskPriority | null;
@@ -90,12 +92,27 @@ export interface MyTaskListItem {
   readonly hasLeftoverSource: boolean;
 }
 
-/** 统计卡片口径；与列表筛选相互独立，按当前范围（scope/project）计算。 */
-export interface MyTaskStats {
-  readonly myOpen: number;
-  readonly dueToday: number;
+/**
+ * 今日待办卡的四个来源子计数：各自独立计数、可以互相重叠（同一任务既逾期又来自遗留问题
+ * 时两个子项都 +1），其并集即 todayTodo，不保证四项之和等于 todayTodo。
+ */
+export interface MyTaskTodayTodoBreakdown {
   readonly overdue: number;
-  readonly completedThisMonth: number;
+  readonly leftover: number;
+  readonly urgent: number;
+  readonly dueWithinDays: number;
+}
+
+/**
+ * 统计卡片口径；与列表筛选相互独立，按当前范围（scope/project）计算。
+ * todayTodo / myOpen / completed 取负责人维度，created 取创建人维度（无论指派给谁）。
+ */
+export interface MyTaskStats {
+  readonly todayTodo: number;
+  readonly todayTodoBreakdown: MyTaskTodayTodoBreakdown;
+  readonly myOpen: number;
+  readonly completed: number;
+  readonly created: number;
 }
 
 export interface MyTaskLeftoverSample {
@@ -149,7 +166,7 @@ export interface MyTaskGroupsResult {
 }
 
 export interface MyTaskGroupsQueryInput {
-  /** 按项目范围筛选时传入当前项目；null 表示跨项目（服务端 AuthorizedProjectScope）。 */
+  /** 工具栏「项目」下拉选定的项目；null 表示「全部项目」，跨项目（服务端 AuthorizedProjectScope）。 */
   readonly projectId: number | null;
   readonly cursor: string | null;
 }
@@ -160,7 +177,8 @@ export interface MyTaskListResult {
   readonly hasMore: boolean;
   /** R-3 已提供聚合统计；null 仅表示适配器未接线或尚未加载。 */
   readonly stats: MyTaskStats | null;
-  /** 延后项（A 裁决 §10.3）：R-3 暂缓返回；null 表示不可知，显示层不渲染计数。 */
+  /** 延后项（A 裁决 §10.3）：R-3 暂缓返回；null 表示不可知。2026-09-20 起任务中心
+   * 移除范围分段行，显示层不再渲染该计数（字段保留供契约回填）。 */
   readonly scopeCounts: Readonly<Record<MyTaskScope, number>> | null;
   /** R-3 已提供遗留问题计数；null 仅表示适配器未接线。 */
   readonly leftoverCount: number | null;

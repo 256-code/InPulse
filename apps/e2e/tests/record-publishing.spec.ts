@@ -95,7 +95,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
   try {
     const suffix = Date.now();
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await page.getByRole("link", { name: "查看功能" }).first().click();
+    await page.locator(".module-card").first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const feature = page.getByRole("dialog", { name: "新增功能" });
     await feature.getByLabel("功能名称").fill(`发布功能-${suffix}`);
@@ -104,7 +104,6 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     await page
       .locator(".calm-feature-card")
       .filter({ hasText: `发布功能-${suffix}` })
-      .getByRole("link", { name: "查看详情" })
       .click();
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const taskForm = page.getByRole("dialog", { name: "新建任务" });

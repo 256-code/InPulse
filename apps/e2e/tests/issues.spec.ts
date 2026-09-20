@@ -23,7 +23,8 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
       "遗留页跟原文 " + suffix + "：充电策略参数配置项缺少默认值校验。";
 
     await page.goto("/projects/" + runtime.projectId + "/modules");
-    await page.getByRole("link", { name: "模块任务" }).first().click();
+    await page.locator(".module-card").first().click();
+    await page.getByRole("tab", { name: /模块级任务/ }).click();
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const form = page.getByRole("dialog", { name: "新建任务" });
     await form.getByLabel("任务标题").fill(taskTitle);

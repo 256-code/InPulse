@@ -11,7 +11,7 @@ async function createTask(
   const title = `组合任务-${Date.now()}`;
   await page.goto(`/projects/${runtime.projectId}/modules`);
   if (feature) {
-    await page.getByRole("link", { name: "查看功能" }).first().click();
+    await page.locator(".module-card").first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const dialog = page.getByRole("dialog", { name: "新增功能" });
     await dialog.getByLabel("功能名称").fill(title + "功能");
@@ -20,9 +20,11 @@ async function createTask(
     await page
       .locator(".calm-feature-card")
       .filter({ hasText: title + "功能" })
-      .getByRole("link", { name: "查看详情" })
       .click();
-  } else await page.getByRole("link", { name: "模块任务" }).first().click();
+  } else {
+    await page.locator(".module-card").first().click();
+    await page.getByRole("tab", { name: /模块级任务/ }).click();
+  }
   await page.getByRole("button", { name: "新建任务", exact: true }).click();
   const form = page.getByRole("dialog", { name: "新建任务" });
   await form.getByLabel("任务标题").fill(title);

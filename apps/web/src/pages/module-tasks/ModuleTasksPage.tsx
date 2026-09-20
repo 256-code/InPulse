@@ -50,14 +50,19 @@ export default function ModuleTasksPage() {
     <>
       <div className="page-header">
         <div>
-          <Button
-            className="back-button"
-            onClick={() => navigate("/projects/" + projectId + "/modules")}
-          >
-            <InpulseIcon name="arrowLeft" size={15} />
-            返回模块列表
-          </Button>
-          <h1>{module.name}</h1>
+          {/* 与功能目录页头保持同一种返回样式：圆形折角箭头紧贴标题。 */}
+          <div className="page-title-row">
+            <button
+              type="button"
+              className="title-back-button"
+              aria-label="返回模块列表"
+              title="返回模块列表"
+              onClick={() => navigate("/projects/" + projectId + "/modules")}
+            >
+              <InpulseIcon name="chevronLeft" size={20} />
+            </button>
+            <h1>{module.name}</h1>
+          </div>
           <p>{module.description || "模块级任务与功能档案的公共工作区。"}</p>
         </div>
         <div className="catalog-actions">

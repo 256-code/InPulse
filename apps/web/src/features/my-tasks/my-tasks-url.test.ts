@@ -28,6 +28,8 @@ describe("my-tasks-url", () => {
       hasGithub: "yes",
       includeCanceled: true,
       query: "登录",
+      // 已完成 / 全部视图不存在今日待办筛选（与读 URL 的推断一致），显式写 false 才能往返一致。
+      todayTodo: false,
       display: "list",
     };
 
@@ -45,13 +47,20 @@ describe("my-tasks-url", () => {
     ).toBe("");
   });
 
-  it("keeps the project id only for the project scope", () => {
+  it("writes and reads the project filter for every scope", () => {
+    // 工具栏「项目」下拉是常驻条件：scope=mine / created 也会写入并读回 project。
     const params = writeMyTaskFilters({
       ...DEFAULT_MY_TASK_FILTERS,
       scope: "mine",
       projectId: 9,
     });
-    expect(params.get("project")).toBeNull();
+    expect(params.get("project")).toBe("9");
+    expect(readMyTaskFilters(params).projectId).toBe(9);
+    expect(
+      writeMyTaskFilters({ ...DEFAULT_MY_TASK_FILTERS, projectId: null }).get(
+        "project",
+      ),
+    ).toBeNull();
   });
 
   it("falls back to defaults for invalid values", () => {

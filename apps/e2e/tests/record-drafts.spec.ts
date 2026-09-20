@@ -55,10 +55,11 @@ for (const moduleScope of [false, true])
     try {
       await page.goto(`/projects/${runtime.projectId}/modules`);
       const suffix = Date.now();
-      if (moduleScope)
-        await page.getByRole("link", { name: "模块任务" }).first().click();
-      else {
-        await page.getByRole("link", { name: "查看功能" }).first().click();
+      if (moduleScope) {
+        await page.locator(".module-card").first().click();
+        await page.getByRole("tab", { name: /模块级任务/ }).click();
+      } else {
+        await page.locator(".module-card").first().click();
         await page.getByRole("button", { name: "新增功能" }).click();
         const feature = page.getByRole("dialog", { name: "新增功能" });
         await feature.getByLabel("功能名称").fill(`草稿功能-${suffix}`);
@@ -67,7 +68,6 @@ for (const moduleScope of [false, true])
         await page
           .locator(".calm-feature-card")
           .filter({ hasText: `草稿功能-${suffix}` })
-          .getByRole("link", { name: "查看详情" })
           .click();
       }
       await page.getByRole("button", { name: "新建任务", exact: true }).click();

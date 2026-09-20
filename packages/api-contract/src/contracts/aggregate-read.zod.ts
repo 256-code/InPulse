@@ -344,6 +344,12 @@ export const myTasksQueryRequestSchema = z
      * workStatus 缺省时的全集本就包含 CANCELED，该参数不产生额外过滤。
      */
     includeCanceled: queryBoolean.optional(),
+    /**
+     * 「今日待办」集合（F-32 统计卡与列表联动）：work_status = 'TODO' 且满足
+     * 逾期 ∪ 遗留来源 ∪ 标记紧急 ∪ 距截止 7 个日历日内（Asia/Shanghai）任一条件；
+     * 缺省 false 时该参数不产生额外过滤。
+     */
+    todayTodo: queryBoolean.optional(),
   })
   .strict()
   .meta({ id: "MyTasksQueryRequest" });
@@ -400,16 +406,37 @@ export const myTaskItemSchema = z
 export type MyTaskItem = z.infer<typeof myTaskItemSchema>;
 
 /**
- * R-3 统计卡片口径（A 裁决 §10.3）：基准集合 = 当前用户负责、projectId 生效、
- * 排除 INVALID / CANCELED 与历史来源分支的有效任务；分页与游标不影响计数，
- * 日界与月界按业务时区 Asia/Shanghai 由服务端计算，客户端不得自行推导。
+ * R-3 统计卡片口径（A 裁决 §10.3；2026-09-20 按任务中心新卡片重定口径）：
+ * 基准集合 = projectId 生效、排除 INVALID / CANCELED 与历史来源分支的有效任务；
+ * 分页与游标不影响计数，日界按业务时区 Asia/Shanghai 由服务端计算，客户端不得自行推导。
+ * `todayTodo` / `myOpen` / `completed` 取负责人维度（assignee = 当前用户），
+ * `created` 取创建人维度（creator = 当前用户，无论任务指派给谁）。
+ */
+export const myTaskTodayTodoBreakdownSchema = z
+  .object({
+    overdue: z.number().int().nonnegative(),
+    leftover: z.number().int().nonnegative(),
+    urgent: z.number().int().nonnegative(),
+    dueWithinDays: z.number().int().nonnegative(),
+  })
+  .strict()
+  .meta({ id: "MyTaskTodayTodoBreakdown" });
+
+export type MyTaskTodayTodoBreakdown = z.infer<
+  typeof myTaskTodayTodoBreakdownSchema
+>;
+
+/**
+ * todayTodoBreakdown 的四个子项各自独立计数、可以互相重叠（例如同一任务既逾期又来自遗留问题），
+ * 其并集即 todayTodo，不保证四项之和等于 todayTodo。
  */
 export const myTaskStatsSchema = z
   .object({
+    todayTodo: z.number().int().nonnegative(),
+    todayTodoBreakdown: myTaskTodayTodoBreakdownSchema,
     myOpen: z.number().int().nonnegative(),
-    dueToday: z.number().int().nonnegative(),
-    overdue: z.number().int().nonnegative(),
-    completedThisMonth: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    created: z.number().int().nonnegative(),
   })
   .strict()
   .meta({ id: "MyTaskStats" });

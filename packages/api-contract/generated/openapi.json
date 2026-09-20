@@ -2504,6 +2504,14 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "todayTodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ]
       }
@@ -15775,6 +15783,14 @@
             }
           },
           {
+            "name": "todayTodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "scope",
             "in": "query",
             "required": true,
@@ -19648,32 +19664,68 @@
       "MyTaskStats": {
         "type": "object",
         "properties": {
+          "todayTodo": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "todayTodoBreakdown": {
+            "$ref": "#/components/schemas/MyTaskTodayTodoBreakdown"
+          },
           "myOpen": {
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
           },
-          "dueToday": {
+          "completed": {
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
           },
-          "overdue": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "completedThisMonth": {
+          "created": {
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
           }
         },
         "required": [
+          "todayTodo",
+          "todayTodoBreakdown",
           "myOpen",
-          "dueToday",
+          "completed",
+          "created"
+        ],
+        "additionalProperties": false
+      },
+      "MyTaskTodayTodoBreakdown": {
+        "type": "object",
+        "properties": {
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "leftover": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "urgent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "dueWithinDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
           "overdue",
-          "completedThisMonth"
+          "leftover",
+          "urgent",
+          "dueWithinDays"
         ],
         "additionalProperties": false
       },
@@ -19730,6 +19782,9 @@
             ]
           },
           "includeCanceled": {
+            "type": "boolean"
+          },
+          "todayTodo": {
             "type": "boolean"
           }
         },
@@ -22873,6 +22928,9 @@
             ]
           },
           "includeCanceled": {
+            "type": "boolean"
+          },
+          "todayTodo": {
             "type": "boolean"
           },
           "scope": {

@@ -1,6 +1,12 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -89,6 +95,15 @@ function mountDetail(client: InpulseApiClient, featureId: number) {
     </ConfigProvider>,
   );
 }
+
+/** 读取容器内每个徽章的 `badge-*` class，用于断言「同一文案全站同色」。 */
+const badgeTones = (selector: string): string[] =>
+  Array.from(document.querySelector(selector)?.children ?? []).map(
+    (node) =>
+      Array.from(node.classList).find((name) => name.startsWith("badge-")) ??
+      "",
+  );
+
 describe("F-13 forms", () => {
   it("reuses the key for an uncertain retry and changes it when semantics change", async () => {
     const createFeature = vi.fn().mockRejectedValue(new Error("response lost"));
@@ -422,16 +437,40 @@ describe("功能卡", () => {
     await screen.findByText("功能详情页");
   });
 
-  it("keeps 查看详情 as the single link inside the card", async () => {
+  it("keeps the card body as the only entry: no 查看详情 link inside", async () => {
     mountCardList();
-    const links = await screen.findAllByRole("link", { name: "查看详情" });
-    expect(links).toHaveLength(1);
-    expect(links[0]!.getAttribute("href")).toBe(
-      "/projects/2/modules/4/features/3",
-    );
-    expect(
-      links[0]!.closest(".calm-feature-card")?.getAttribute("role"),
-    ).toBeNull();
+    const card = (
+      await screen.findByRole("heading", { name: "退款功能" })
+    ).closest(".calm-feature-card");
+    expect(card).not.toBeNull();
+    // 整卡点击就是唯一入口，卡内不再有重复的链接或按钮。
+    expect(within(card as HTMLElement).queryByRole("link")).toBeNull();
+    expect(within(card as HTMLElement).queryByRole("button")).toBeNull();
+  });
+
+  it("同一文案同色：功能卡与详情页头的「进行中」和自定义标签配色一致", async () => {
+    const api = withModules({
+      listFeatures: vi.fn().mockResolvedValue({
+        items: [{ ...withStats, tags: ["校验", "实践"] }],
+      }),
+      findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+      getProject: vi
+        .fn()
+        .mockResolvedValue({ project: { id: 2, name: "项目" } }),
+    } as unknown as InpulseApiClient);
+
+    const card = mount(api);
+    await screen.findByRole("heading", { name: "退款功能" });
+    const cardTones = badgeTones(".task-card-badges");
+    card.unmount();
+
+    mountDetail(api, item.id);
+    await screen.findByRole("heading", { name: "退款功能" });
+    const detailTones = badgeTones(".task-modal-badges");
+
+    // 同一个「进行中」在列表卡和详情页头都是蓝色，自定义标签在两处都是紫色。
+    expect(cardTones).toEqual(["badge-blue", "badge-violet", "badge-violet"]);
+    expect(detailTones.slice(0, cardTones.length)).toEqual(cardTones);
   });
 });
 
@@ -475,6 +514,38 @@ it("功能详情：标签进标题行、验收标准排在功能任务之后", a
   // 验收标准落在功能任务之后。
   const tasks = screen.getByRole("heading", { name: "功能任务" });
   const acceptance = screen.getByRole("heading", { name: "验收标准" });
+  expect(
+    tasks.compareDocumentPosition(acceptance) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("功能详情：归档状态排在验收标准之后", async () => {
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [
+        {
+          ...item,
+          status: "ARCHIVED",
+          acceptanceCriteria: "响应低于 500ms",
+          rowVersion: 2,
+          archivedAt: "2026-09-10T00:00:00.000Z",
+        },
+      ],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+
+  // 三块正文顺序固定为 功能任务 → 验收标准 → 归档状态。
+  const acceptance = await screen.findByRole("heading", { name: "验收标准" });
+  const archive = screen.getByRole("heading", { name: "归档状态" });
+  expect(
+    acceptance.compareDocumentPosition(archive) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+
+  const tasks = screen.getByRole("heading", { name: "功能任务" });
   expect(
     tasks.compareDocumentPosition(acceptance) &
       Node.DOCUMENT_POSITION_FOLLOWING,

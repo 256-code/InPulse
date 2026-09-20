@@ -27,10 +27,9 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
 
     await page.goto("/projects/" + runtime.projectId + "/modules");
     await page
-      .locator(".calm-feature-card")
+      .locator(".module-card")
       .filter({ hasText: "未分类" })
       .first()
-      .getByRole("link", { name: "查看功能" })
       .click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const featureDialog = page.getByRole("dialog", { name: "新增功能" });
@@ -40,7 +39,6 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     await page
       .locator(".calm-feature-card")
       .filter({ hasText: featureName })
-      .getByRole("link", { name: "查看详情" })
       .click();
 
     const detail = page.getByRole("dialog", { name: "任务详情" });
@@ -62,7 +60,6 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     await page
       .locator(".calm-task-card")
       .filter({ hasText: sourceTaskTitle })
-      .getByRole("button", { name: "任务详情" })
       .click();
     await expect(detail).toBeVisible();
     await detail.getByRole("button", { name: "合并到主任务" }).click();
@@ -137,10 +134,9 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
 
     await page.goto("/projects/" + runtime.projectId + "/modules");
     await page
-      .locator(".calm-feature-card")
+      .locator(".module-card")
       .filter({ hasText: "未分类" })
       .first()
-      .getByRole("link", { name: "查看功能" })
       .click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const featureDialog = page.getByRole("dialog", { name: "新增功能" });
@@ -150,7 +146,6 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
     await page
       .locator(".calm-feature-card")
       .filter({ hasText: featureName })
-      .getByRole("link", { name: "查看详情" })
       .click();
     const featurePath = new URL(page.url()).pathname;
 
@@ -170,7 +165,6 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
     await page
       .locator(".calm-task-card")
       .filter({ hasText: sourceTaskTitle })
-      .getByRole("button", { name: "任务详情" })
       .click();
     await expect(detail).toBeVisible();
     await detail.getByRole("button", { name: "合并到主任务" }).click();
@@ -200,7 +194,7 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
         .filter({ hasText: mainTaskTitle })
         .getByText("主任务", { exact: true }),
     ).toBeVisible();
-    await sourceCard.getByRole("button", { name: "任务详情" }).click();
+    await sourceCard.click();
     await expect(detail.getByText("来源任务", { exact: true })).toBeVisible();
     await detail.getByRole("button", { name: "查看主任务" }).click();
     // 聚合组入口就地打开弹窗，不再离开当前功能页。

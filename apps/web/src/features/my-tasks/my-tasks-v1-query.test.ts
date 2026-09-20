@@ -25,9 +25,11 @@ function filters(overrides: Partial<MyTaskFilters> = {}): MyTaskFilters {
 describe("my-tasks-v1-query", () => {
   it("keeps the frozen R-3 path and defaults", () => {
     expect(MY_TASKS_V1_PATH).toBe("/api/v1/me/tasks");
+    // 默认筛选就是「我负责的未完成 + 今日待办」，因此默认请求会带上 todayTodo。
     expect(toMyTasksV1Query(filters())).toEqual({
       limit: 20,
       workStatus: "TODO",
+      todayTodo: true,
     });
     expect(MY_TASKS_V1_LIMIT_DEFAULT).toBe(20);
     expect(MY_TASKS_V1_LIMIT_MAX).toBe(100);
@@ -48,6 +50,19 @@ describe("my-tasks-v1-query", () => {
       toMyTasksV1Query(filters({ scope: "project", projectId: null }))
         .projectId,
     ).toBeUndefined();
+    // 项目筛选不再是 project 范围专属：个人范围 + 所选项目同样下发 projectId。
+    expect(
+      toMyTasksV1Query(filters({ scope: "mine", projectId: 7, status: "all" })),
+    ).toEqual({ limit: 20, projectId: 7 });
+    expect(
+      toMyTasksV1Query(filters({ scope: "created", projectId: 7 })),
+    ).toEqual({
+      limit: 20,
+      ownership: "CREATOR",
+      projectId: 7,
+      workStatus: "TODO",
+      todayTodo: true,
+    });
   });
 
   it("maps workStatus for open and done only", () => {

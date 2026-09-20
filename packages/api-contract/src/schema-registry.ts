@@ -19,6 +19,7 @@ import {
   myTaskLeftoverSampleSchema,
   myTaskPageSchema,
   myTaskStatsSchema,
+  myTaskTodayTodoBreakdownSchema,
   myTasksQueryRequestSchema,
   projectOverviewProjectSchema,
   projectOverviewQueryRequestSchema,
@@ -286,7 +287,8 @@ export const schemaRegistry = {
   },
   MyTasksQueryRequest: {
     schema: myTasksQueryRequestSchema,
-    summary: "我的任务查询参数：四项筛选与游标，负责人固定为当前用户（R-3）",
+    summary:
+      "我的任务查询参数：筛选与游标（含 todayTodo 今日待办），负责人 / 创建人固定为当前用户（R-3）",
     sensitiveFieldPaths: [],
   },
   MyTaskItem: {
@@ -298,7 +300,13 @@ export const schemaRegistry = {
   MyTaskStats: {
     schema: myTaskStatsSchema,
     summary:
-      "我的任务统计卡片：未完成、今日截止、逾期与本月完成（R-3 / §10.3，业务时区 Asia/Shanghai）",
+      "我的任务统计卡片：今日待办、未完成、已完成（负责人维度）与我创建的（创建人维度），日界按业务时区 Asia/Shanghai（R-3 / 2026-09-20 口径）",
+    sensitiveFieldPaths: [],
+  },
+  MyTaskTodayTodoBreakdown: {
+    schema: myTaskTodayTodoBreakdownSchema,
+    summary:
+      "今日待办的四个来源子计数：逾期 / 遗留来源 / 标记紧急 / 7 个日历日内到期，四项可重叠（R-3 / 2026-09-20）",
     sensitiveFieldPaths: [],
   },
   MyTaskLeftoverSample: {

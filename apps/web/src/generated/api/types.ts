@@ -667,10 +667,18 @@ export type MyTaskPage = {
 };
 
 export type MyTaskStats = {
+  readonly todayTodo: number;
+  readonly todayTodoBreakdown: MyTaskTodayTodoBreakdown;
   readonly myOpen: number;
-  readonly dueToday: number;
+  readonly completed: number;
+  readonly created: number;
+};
+
+export type MyTaskTodayTodoBreakdown = {
   readonly overdue: number;
-  readonly completedThisMonth: number;
+  readonly leftover: number;
+  readonly urgent: number;
+  readonly dueWithinDays: number;
 };
 
 export type MyTasksQueryRequest = {
@@ -683,6 +691,7 @@ export type MyTasksQueryRequest = {
   readonly hasPublishedRecord?: boolean;
   readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly includeCanceled?: boolean;
+  readonly todayTodo?: boolean;
 };
 
 export type NotificationItem = {
@@ -1305,6 +1314,7 @@ export type TaskCenterQuery = {
   readonly hasPublishedRecord?: boolean;
   readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly includeCanceled?: boolean;
+  readonly todayTodo?: boolean;
   readonly scope: ("mine" | "created" | "project" | "all");
   readonly overdue?: boolean;
 };

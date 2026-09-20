@@ -60,6 +60,9 @@ export class TaskCenterController {
         actorUserId: actor.userId,
         scope: query.scope,
         ...(query.overdue === undefined ? {} : { overdue: query.overdue }),
+        ...(query.todayTodo === undefined
+          ? {}
+          : { todayTodo: query.todayTodo }),
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         ...(query.limit === undefined ? {} : { limit: query.limit }),
         ...(query.projectId === undefined

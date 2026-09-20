@@ -36,13 +36,13 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await moduleDialog.getByLabel("模块名称").fill(`支付模块-${suffix}`);
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(moduleDialog).toBeHidden();
-    await page.getByRole("link", { name: "查看功能" }).first().click();
+    await page.locator(".module-card").first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const feature = page.getByRole("dialog", { name: "新增功能" });
     await feature.getByLabel("功能名称").fill(`支付-${suffix}`);
     await feature.getByRole("button", { name: /保\s*存/ }).click();
     await expect(feature).toBeHidden();
-    await page.getByRole("link", { name: "查看详情" }).click();
+    await page.locator(".calm-feature-card").first().click();
     const featureUrl = page.url();
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const form = page.getByRole("dialog", { name: "新建任务" });
@@ -65,7 +65,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await edit.getByLabel("任务标题").fill(`我的标题-${suffix}`);
     const other = await context.newPage();
     await other.goto(featureUrl);
-    await other.getByRole("button", { name: "任务详情" }).click();
+    await other.locator(".calm-task-card").first().click();
     await other.getByRole("button", { name: "编辑任务" }).click();
     const otherEdit = other.getByRole("dialog", { name: "编辑任务" });
     await otherEdit.getByLabel("任务说明").fill("另一页面说明");
@@ -81,7 +81,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await page.getByRole("button", { name: "编辑任务" }).click();
     await edit.getByLabel("任务说明").fill("我的最终说明");
     await other.reload();
-    await other.getByRole("button", { name: "任务详情" }).click();
+    await other.locator(".calm-task-card").first().click();
     await other.getByRole("button", { name: "编辑任务" }).click();
     await otherEdit.getByLabel("任务说明").fill("他人的最终说明");
     await otherEdit.getByRole("button", { name: /保\s*存/ }).click();

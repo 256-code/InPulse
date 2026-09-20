@@ -55,7 +55,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     const moduleEntry = page
       .locator("article.catalog-module-wrap")
       .filter({ hasText: moduleName });
-    await moduleEntry.getByRole("link", { name: "查看功能" }).click();
+    await moduleEntry.locator(".module-card").click();
     const listUrl = page.url();
     const moduleId = listUrl.match(/modules\/(\d+)/)![1];
     const names = [`影响甲-${suffix}`, `影响乙-${suffix}`];
@@ -70,12 +70,12 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       await page
         .locator(".calm-feature-card")
         .filter({ hasText: name })
-        .getByRole("link", { name: "查看详情" })
         .click();
       featureUrls.push(page.url());
     }
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await moduleEntry.getByRole("link", { name: "模块任务" }).click();
+    await moduleEntry.locator(".module-card").click();
+    await page.getByRole("tab", { name: /模块级任务/ }).click();
     await page.getByRole("button", { name: "新建任务", exact: true }).click();
     const create = page.getByRole("dialog", { name: "新建任务" });
     const title = `公共任务-${suffix}`;
@@ -95,9 +95,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       ).toBeVisible();
       await expect(page.getByText("1 个任务")).toBeVisible();
       await page
-        .getByRole("article")
+        .locator(".calm-task-card")
         .filter({ has: page.getByText(title, { exact: true }) })
-        .getByRole("button", { name: "任务详情" })
         .click();
       await expect(
         page.getByRole("button", { name: "编辑任务" }),
@@ -116,9 +115,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     await expectTaskPanelHeadingAligned(page);
     await page.goto(`/projects/${runtime.projectId}/modules/${moduleId}/tasks`);
     await page
-      .getByRole("article")
+      .locator(".calm-task-card")
       .filter({ has: page.getByText(title, { exact: true }) })
-      .getByRole("button", { name: "任务详情" })
       .click();
     await page.getByRole("button", { name: "编辑任务" }).click();
     await edit.getByLabel(names[0]!, { exact: true }).check();

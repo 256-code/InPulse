@@ -90,7 +90,6 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
         filters={filters}
         onFiltersChange={handleFiltersChange}
         viewerId={user?.id ?? null}
-        isAdmin={isAdmin}
         projects={projectList.data?.items ?? []}
         advancedOpen={advancedOpen}
         onToggleAdvanced={handleToggleAdvanced}

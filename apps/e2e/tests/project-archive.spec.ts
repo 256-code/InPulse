@@ -43,7 +43,7 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢
     await moduleDialog.getByLabel("模块名称").fill("归档测试模块");
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
     await expect(moduleDialog).toBeHidden();
-    await page.getByRole("link", { name: "查看功能" }).first().click();
+    await page.locator(".module-card").first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const featureDialog = page.getByRole("dialog", { name: "新增功能" });
     await featureDialog.getByLabel("功能名称").fill(featureName);
@@ -53,7 +53,6 @@ test("F-06 管理员归档与恢复项目：未完成任务提醒、只读与恢
     await page
       .locator(".calm-feature-card")
       .filter({ hasText: featureName })
-      .getByRole("link", { name: "查看详情" })
       .click();
     const featureUrl = page.url();
     await page.getByRole("button", { name: "新建任务", exact: true }).click();

@@ -82,6 +82,9 @@ export class MyTasksController {
         ...(query.includeCanceled === undefined
           ? {}
           : { includeCanceled: query.includeCanceled }),
+        ...(query.todayTodo === undefined
+          ? {}
+          : { todayTodo: query.todayTodo }),
       });
     } catch (error) {
       if (error instanceof AggregateReadError) {

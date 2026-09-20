@@ -31,6 +31,18 @@ export function isBeforeTodayIso(iso: string): boolean {
   return new Date(iso).getTime() < startOfToday().getTime();
 }
 
+/** 是否落在「今天起 days 个日历日内」的区间（含今天，不含第 days 天的 0 点）。 */
+export function isWithinNextDaysIso(iso: string, days: number): boolean {
+  const start = startOfToday();
+  const end = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate() + days,
+  );
+  const value = new Date(iso).getTime();
+  return value >= start.getTime() && value < end.getTime();
+}
+
 export function isSameMonthIso(iso: string): boolean {
   const now = new Date();
   const value = new Date(iso);

@@ -14,7 +14,7 @@ import {
 import {
   isBeforeTodayIso,
   isSameDayIso,
-  isSameMonthIso,
+  isWithinNextDaysIso,
 } from "./my-tasks-time";
 
 /**
@@ -390,6 +390,13 @@ function matchesFilters(
   }
   if (filters.status === "open" && item.workStatus !== "TODO") return false;
   if (filters.status === "done" && item.workStatus !== "DONE") return false;
+  // 与 URL 读取和 R-3 适配器同口径：今日待办只在「未完成」视图下生效。
+  if (
+    filters.status === "open" &&
+    filters.todayTodo === true &&
+    !isTodayTodoItem(item)
+  )
+    return false;
   if (filters.priority !== null && item.priority !== filters.priority)
     return false;
   if (filters.level !== null && item.scopeType !== filters.level) return false;
@@ -432,33 +439,61 @@ function compareItems(a: MockTaskItem, b: MockTaskItem): number {
   return bucket === "open" ? compareOpen(a, b) : compareClosed(a, b);
 }
 
+/** 有效任务口径与服务端统计一致：排除作废来源分支与已取消。 */
+function isEffective(item: MockTaskItem): boolean {
+  return item.lifecycleStatus !== "INVALID" && item.workStatus !== "CANCELED";
+}
+
+/** 今日待办的四个来源判定；四个子项可以互相重叠，其并集即 todayTodo。 */
+function isOverdueSource(item: MockTaskItem): boolean {
+  return item.dueAt !== null && isBeforeTodayIso(item.dueAt);
+}
+
+function isDueWithinDaysSource(item: MockTaskItem): boolean {
+  return item.dueAt !== null && isWithinNextDaysIso(item.dueAt, 7);
+}
+
+function isUrgentSource(item: MockTaskItem): boolean {
+  return item.priority === "URGENT";
+}
+
+function isLeftoverSource(item: MockTaskItem): boolean {
+  return item.hasLeftoverSource;
+}
+
+function isTodayTodoItem(item: MockTaskItem): boolean {
+  if (item.workStatus !== "TODO") return false;
+  return (
+    isOverdueSource(item) ||
+    isDueWithinDaysSource(item) ||
+    isUrgentSource(item) ||
+    isLeftoverSource(item)
+  );
+}
+
 function buildStats(
   scoped: readonly MockTaskItem[],
   viewerId: number,
 ): MyTaskStats {
-  const mine = scoped.filter((item) => item.assignee.userId === viewerId);
+  const effective = scoped.filter(isEffective);
+  const mine = effective.filter(
+    (item) => item.assignee.userId === viewerId && item.workStatus === "TODO",
+  );
   return {
-    myOpen: mine.filter((item) => item.workStatus === "TODO").length,
-    dueToday: mine.filter(
-      (item) =>
-        item.workStatus === "TODO" &&
-        item.dueAt !== null &&
-        isSameDayIso(item.dueAt, 0),
+    todayTodo: mine.filter(isTodayTodoItem).length,
+    todayTodoBreakdown: {
+      overdue: mine.filter(isOverdueSource).length,
+      leftover: mine.filter(isLeftoverSource).length,
+      urgent: mine.filter(isUrgentSource).length,
+      dueWithinDays: mine.filter(isDueWithinDaysSource).length,
+    },
+    myOpen: mine.length,
+    completed: effective.filter(
+      (item) => item.assignee.userId === viewerId && item.workStatus === "DONE",
     ).length,
-    overdue: mine.filter(
-      (item) =>
-        item.workStatus === "TODO" &&
-        item.dueAt !== null &&
-        isBeforeTodayIso(item.dueAt),
-    ).length,
-    completedThisMonth: mine.filter(
-      (item) =>
-        item.workStatus === "DONE" &&
-        isSameMonthIso(item.completedAt ?? item.updatedAt),
-    ).length,
+    created: effective.filter((item) => item.creatorId === viewerId).length,
   };
 }
-
 /** 惰性构造演示数据：到期日相对当前日期生成，避免注释型日期随时间漂移。 */
 export function createTasksMockItems(): readonly MockTaskItem[] {
   return createMockItems();
@@ -551,6 +586,11 @@ export const MY_TASKS_MOCK_ADAPTER: MyTasksAdapter = {
     const scoped = dataset.filter((item) =>
       matchesScope(item, input.filters, viewerId),
     );
+    // 统计口径与服务端一致：只受 projectId 收窄，与 scope（负责 / 创建）无关。
+    const projectScoped =
+      input.filters.projectId === null
+        ? dataset
+        : dataset.filter((item) => item.projectId === input.filters.projectId);
     const items = scoped
       .filter((item) => matchesFilters(item, input.filters))
       .slice()
@@ -560,7 +600,7 @@ export const MY_TASKS_MOCK_ADAPTER: MyTasksAdapter = {
       nextCursor: null,
       hasMore: false,
       filterSupport: MY_TASKS_FULL_FILTER_SUPPORT,
-      stats: buildStats(scoped, viewerId),
+      stats: buildStats(projectScoped, viewerId),
       scopeCounts: {
         mine: dataset.filter((item) => item.assignee.userId === viewerId)
           .length,

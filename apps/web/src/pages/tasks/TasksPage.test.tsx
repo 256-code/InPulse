@@ -34,7 +34,18 @@ const emptyResult: MyTaskListResult = {
   items: [],
   nextCursor: null,
   hasMore: false,
-  stats: { myOpen: 0, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+  stats: {
+    todayTodo: 0,
+    todayTodoBreakdown: {
+      overdue: 0,
+      leftover: 0,
+      urgent: 0,
+      dueWithinDays: 0,
+    },
+    myOpen: 0,
+    completed: 0,
+    created: 0,
+  },
   scopeCounts: { mine: 0, created: 0, project: 0, all: 0 },
   leftoverCount: 0,
   leftoverSample: null,
@@ -300,7 +311,8 @@ describe("TasksPage", () => {
     const user = userEvent.setup();
     await waitFor(() => expect(fetchMyTasks).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("tab", { name: /我创建的/ }));
+    // 范围分段行已移除：范围由上方统计卡设定（我创建的 = 创建人维度）。
+    await user.click(await screen.findByTestId("stat-created"));
     await waitFor(() =>
       expect(screen.getByTestId("location-probe")).toHaveTextContent(
         "scope=created",
@@ -378,7 +390,8 @@ describe("TasksPage", () => {
         cursor: null,
       }),
     );
-    expect(screen.queryByRole("tab", { name: /全部任务/ })).toBeNull();
+    // 范围分段行已整体移除：非管理员看不到管理员范围，页面上也不再有范围 tab。
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 
   it("keeps the admin scope for admins", async () => {
@@ -393,8 +406,8 @@ describe("TasksPage", () => {
         cursor: null,
       }),
     );
-    expect(
-      await screen.findByRole("tab", { name: /全部任务/ }),
-    ).toHaveAttribute("aria-selected", "true");
+    // 管理员范围仍由 URL 承载并被服务端接受；页面不再提供范围 tab。
+    expect(await screen.findByTestId("task-center")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 });

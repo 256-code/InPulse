@@ -337,7 +337,18 @@ describe("AppLayout", () => {
         items: [],
         nextCursor: null,
         hasMore: false,
-        stats: { myOpen: 7, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+        stats: {
+          todayTodo: 0,
+          todayTodoBreakdown: {
+            overdue: 0,
+            leftover: 0,
+            urgent: 0,
+            dueWithinDays: 0,
+          },
+          myOpen: 7,
+          completed: 0,
+          created: 0,
+        },
       }),
       listLeftoverItems: vi.fn().mockResolvedValue({
         items: [{ id: 1 }, { id: 2 }, { id: 3 }],

@@ -52,18 +52,14 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
         .filter({ hasText: runtime.projectTitle }),
     ).toBeVisible();
     await page.goto(`/projects/${runtime.projectId}/modules`);
-    await page.getByRole("link", { name: "查看功能" }).first().click();
+    await page.locator(".module-card").first().click();
     await page.getByRole("button", { name: "新增功能" }).click();
     const create = page.getByRole("dialog", { name: "新增功能" }),
       name = "链接功能" + Date.now();
     await create.getByLabel("功能名称").fill(name);
     await create.getByRole("button", { name: /保\s*存/ }).click();
     await expect(create).toBeHidden();
-    await page
-      .locator(".calm-feature-card")
-      .filter({ hasText: name })
-      .getByRole("link", { name: "查看详情" })
-      .click();
+    await page.locator(".calm-feature-card").filter({ hasText: name }).click();
     await page
       .getByRole("button", { name: "GitHub 链接", exact: true })
       .click();
@@ -105,7 +101,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
     );
     await modal.getByRole("button", { name: "关闭关联" }).click();
     await page.reload();
-    await page.getByRole("button", { name: "任务详情", exact: true }).click();
+    await page.locator(".calm-task-card").first().click();
     await detail.getByRole("button", { name: "GitHub 链接" }).click();
     await expect(modal.getByRole("link", { name: "PR #22002" })).toBeVisible();
     await modal.getByRole("button", { name: "解除 PR #22002" }).click();

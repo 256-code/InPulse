@@ -29,7 +29,7 @@ export const projectLifecycleLabel = (status: ProjectStatus): string =>
   projectLabels[projectLifecycleKind(status)];
 
 /**
- * 项目标签配色：进行中沿用卡片原有主色（项目蓝），未开始用中性青与进行中区分，
+ * 项目标签配色：「进行中」全站统一项目蓝，未开始用中性青与进行中区分，
  * 维护中用紫，已归档沿用琥珀，与列表卡片既有的 `card-archived` 视觉一致。
  */
 export const projectLifecycleTone = (
@@ -74,8 +74,10 @@ export const resourceLifecycleLabel = (
 ): string => labels[resourceLifecycleKind(status, completedTaskCount)];
 
 /**
- * 标签配色：进行中沿用卡片原有主色（项目蓝、模块灰），未开始用中性青与进行中区分，
+ * 标签配色：「进行中」全站统一项目蓝（模块与功能列表卡的「进行中」必须与项目、详情页同色），未开始用中性青与进行中区分，
  * 已归档沿用琥珀，与列表卡片既有的 `card-archived` 视觉一致。
+ *
+ * 第三个参数是「进行中」档位的主色；按「同一文案同色」的规则，调用方必须传 `blue`。
  */
 export const resourceLifecycleTone = (
   status: "ACTIVE" | "ARCHIVED",

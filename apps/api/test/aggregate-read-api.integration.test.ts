@@ -1340,7 +1340,8 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const assignedIds = assignedPage.items.map((item) => item.taskId);
     expect(assignedIds).toContain(createdByOtherForMe);
     expect(assignedIds).not.toContain(createdForOther);
-    // 统计口径与遗留问题样本只描述「我负责的」，不随 ownership 变化。
+    // 统计与遗留问题样本不随 ownership 变化：todayTodo / myOpen / completed 取负责人维度，
+    // created 取创建人维度，两者都是当前用户自指口径。
     expect(createdPage.stats).toEqual(assignedPage.stats);
     expect(createdPage.leftoverCount).toBe(assignedPage.leftoverCount);
 
@@ -1383,7 +1384,18 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       hasMore: false,
       items: [],
       nextCursor: null,
-      stats: { myOpen: 0, dueToday: 0, overdue: 0, completedThisMonth: 0 },
+      stats: {
+        todayTodo: 0,
+        todayTodoBreakdown: {
+          overdue: 0,
+          leftover: 0,
+          urgent: 0,
+          dueWithinDays: 0,
+        },
+        myOpen: 0,
+        completed: 0,
+        created: 0,
+      },
       leftoverCount: 0,
       leftoverSample: null,
     });
@@ -1534,16 +1546,42 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       canceledTask,
     ]);
     expect(page.stats).toEqual({
+      // 逾期 ∪ 遗留 ∪ 紧急 ∪ 7 个日历日内到期，去重后 2 条。
+      todayTodo: 2,
+      todayTodoBreakdown: {
+        overdue: 1,
+        leftover: 1,
+        urgent: 1,
+        dueWithinDays: 1,
+      },
       myOpen: 2,
-      dueToday: 1,
-      overdue: 1,
-      completedThisMonth: 1,
+      completed: 1,
+      created: 3,
     });
     expect(page.leftoverCount).toBe(1);
     expect(page.leftoverSample).toEqual({
       recordCode: recordRow!.code,
       summary: "统计遗留内容",
     });
+
+    // todayTodo 筛选：只返回未完成且命中四类条件之一的任务，并与统计同口径。
+    const todayTodoResponse = await getJson(
+      "/api/v1/me/tasks?" + scope + "&todayTodo=true",
+      memberCookie,
+    );
+    expect(todayTodoResponse.status).toBe(200);
+    const todayTodoPage = myTaskPageSchema.parse(todayTodoResponse.body);
+    expect(todayTodoPage.items.map((item) => item.taskId)).toEqual([
+      overdueTask,
+      todayTask,
+    ]);
+    expect(todayTodoPage.items).toHaveLength(page.stats.todayTodo);
+    await expectError(
+      "/api/v1/me/tasks?" + scope + "&todayTodo=maybe",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
 
     // 统计与遗留计数与筛选正交：workStatus / priority 只影响 items。
     const filtered = await getJson(
