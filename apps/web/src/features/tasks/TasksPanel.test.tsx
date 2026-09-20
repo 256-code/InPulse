@@ -485,7 +485,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     ) as HTMLElement;
     expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
     expect(
-      await within(sourceCard).findByText("迭代记录 2 条"),
+      await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
     // 裁决修订 D-2：遗留问题转化而来的任务在卡片上自带「遗留问题」徽章。
     expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
