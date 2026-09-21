@@ -48,7 +48,9 @@
 .calm-select-multiple.ant-select .ant-select-selection-item {
   border-radius: 6px;
 }
-.calm-select-multiple.ant-select .ant-select-selection-item .calm-select-trigger {
+.calm-select-multiple.ant-select
+  .ant-select-selection-item
+  .calm-select-trigger {
   gap: 6px;
 }
 .calm-select-multiple.ant-select

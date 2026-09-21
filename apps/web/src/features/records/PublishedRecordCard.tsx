@@ -69,7 +69,9 @@ export function PublishedRecordCard({
           {record.leftovers.length > 0 ? (
             <CalmBadge
               tone={
-                record.leftovers.every((leftover) => leftover.status !== "ACTIVE")
+                record.leftovers.every(
+                  (leftover) => leftover.status !== "ACTIVE",
+                )
                   ? "gray"
                   : "amber"
               }

@@ -119,7 +119,9 @@ describe("project member query", () => {
     const keys = addProjectMember.mock.calls.map(
       (call) =>
         (
-          call[2] as { readonly headers: { readonly "Idempotency-Key": string } }
+          call[2] as {
+            readonly headers: { readonly "Idempotency-Key": string };
+          }
         ).headers["Idempotency-Key"],
     );
     expect(new Set(keys).size).toBe(3);

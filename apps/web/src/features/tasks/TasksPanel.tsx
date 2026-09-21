@@ -478,9 +478,7 @@ export function TasksPanel({
           "my-tasks",
           "my-task-groups",
           "task-marks",
-        ].map((key) =>
-          lifecycleCache.invalidateQueries({ queryKey: [key] }),
-        ),
+        ].map((key) => lifecycleCache.invalidateQueries({ queryKey: [key] })),
       );
     },
   });

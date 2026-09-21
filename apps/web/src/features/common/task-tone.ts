@@ -7,12 +7,7 @@
  * 映射，避免同一优先级在不同页面颜色不一。
  */
 export type TaskToneName =
-  | "urgent"
-  | "high"
-  | "normal"
-  | "low"
-  | "done"
-  | "canceled";
+  "urgent" | "high" | "normal" | "low" | "done" | "canceled";
 
 /**
  * 完成态覆盖优先级：已完成整卡/整行转绿，已取消转灰；

@@ -153,9 +153,7 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
 
   const hasEmptyOption = byValue.has("");
   const selectedOption =
-    props.multiple === true ||
-    props.value === null ||
-    props.value === undefined
+    props.multiple === true || props.value === null || props.value === undefined
       ? undefined
       : byValue.get(valueKey(props.value));
   const isPlaceholder = (raw: number | string | null | undefined) =>
@@ -309,8 +307,10 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
       classNames={{
         popup: { root: "calm-select-popup calm-select-popup-" + appearance },
       }}
-      mode={multiple ? "multiple" : undefined}
-      maxTagCount={props.multiple === true ? (props.maxTagCount ?? 2) : undefined}
+      {...(multiple ? { mode: "multiple" as const } : {})}
+      {...(props.multiple === true
+        ? { maxTagCount: props.maxTagCount ?? 2 }
+        : {})}
       value={selectValue}
       onChange={(next: unknown) => {
         if (props.multiple === true) {

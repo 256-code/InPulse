@@ -593,7 +593,8 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 />
                 {selectedUserIds.length > 1 ? (
                   <p className="member-hint">
-                    已选择 {selectedUserIds.length} 位用户，确认后一次性加入项目。
+                    已选择 {selectedUserIds.length}{" "}
+                    位用户，确认后一次性加入项目。
                   </p>
                 ) : null}
               </div>
