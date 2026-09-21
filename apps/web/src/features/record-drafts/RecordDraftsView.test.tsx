@@ -109,11 +109,11 @@ describe("F-17 draft UI", () => {
   it("validates three sections and creates an independent draft through the client", async () => {
     const create = vi.fn().mockResolvedValue(item);
     mount(client({ createIndependentRecordDraft: create }));
-    const button = await screen.findByRole("button", { name: "新建独立草稿" });
+    const button = await screen.findByRole("button", { name: "新建迭代记录" });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     const modal = within(
-      await screen.findByRole("dialog", { name: "新建独立草稿" }),
+      await screen.findByRole("dialog", { name: "新建迭代记录" }),
     );
     await pickInModal(modal, "所属模块", "支付模块");
     fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
@@ -213,6 +213,30 @@ const source = {
   rowVersion: 4,
   impactFeatureIds: [],
 };
+it("shows the draft title in the modal header instead of repeating it in the body", async () => {
+  mount(client(), "/records?projectId=1&recordId=7");
+  const dialog = await screen.findByRole("dialog", { name: "草稿详情" });
+  // 弹层标题是记录标题本身，眉标是「草稿」（同正式记录详情弹层的写法）。
+  expect(
+    await within(dialog).findByRole("heading", {
+      name: "支付修正",
+      level: 2,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    within(dialog).getByText("草稿", { selector: ".detail-label" }),
+  ).toBeInTheDocument();
+  const detail = within(
+    await screen.findByRole("region", { name: "草稿详情" }),
+  );
+  // 正文不再重复标题，也不再出现与弹层标题同级的第二个 h2。
+  expect(detail.queryByRole("heading", { name: "支付修正" })).toBeNull();
+  expect(detail.getByText(/记录作者/)).toBeInTheDocument();
+  expect(
+    detail.getByRole("heading", { name: "改动原因", level: 3 }),
+  ).toBeInTheDocument();
+});
+
 it("lists all source drafts without implicit selection and explicitly creates another with task version", async () => {
   const create = vi.fn().mockResolvedValue({ ...item, id: 10, taskId: 8 });
   const api = client({
@@ -385,7 +409,7 @@ it("creates an independent draft in the project chosen inside the dialog from th
   await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
   rerender(mountView(api, "/records", 3, 1, canCreate));
   const modal = within(
-    await screen.findByRole("dialog", { name: "新建独立草稿" }),
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
   );
   // 未选项目前不请求模块，也不能提交。
   expect(listModules).not.toHaveBeenCalled();

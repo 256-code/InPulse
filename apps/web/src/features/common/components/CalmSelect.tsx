@@ -357,6 +357,9 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
         ).toLowerCase();
         return haystack.includes(needle);
       }}
+      // antd 多选模式自带选中图标，会和 optionRender 里按形态渲染的勾重复成一个选项两个勾；
+      // 这里关掉自带的，选中态统一由 `.calm-select-check` 表达。
+      menuItemSelectedIcon={null}
       suffixIcon={<InpulseIcon name="chevronDown" size={14} />}
       popupMatchSelectWidth={false}
       {...(width === undefined ? {} : { style: { width } })}

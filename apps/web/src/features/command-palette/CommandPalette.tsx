@@ -33,6 +33,8 @@ interface SearchResult {
 export interface CommandPaletteProps {
   readonly open: boolean;
   readonly client?: InpulseApiClient;
+  /** 系统管理员专属快捷命令（成员与设置）据此过滤。 */
+  readonly isAdmin?: boolean;
   readonly onClose: () => void;
   readonly onNavigate: (path: string) => void;
   readonly onOpenSearch: (query: string) => void;
@@ -69,6 +71,7 @@ const entityMeta: Readonly<
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
   open,
   client,
+  isAdmin = false,
   onClose,
   onNavigate,
   onOpenSearch,
@@ -84,49 +87,52 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   });
 
   const quickActions: QuickAction[] = useMemo(
-    () => [
-      {
-        key: "quick-projects",
-        group: "操作",
-        icon: "folder",
-        title: "打开项目与功能",
-        hint: "新建项目或查看刚创建的项目动态",
-        run: () => onNavigate("/projects"),
-      },
-      {
-        key: "quick-tasks",
-        group: "操作",
-        icon: "clipboard",
-        title: "打开任务中心",
-        hint: "跨项目任务列表入口",
-        run: () => onNavigate("/tasks"),
-      },
-      {
-        key: "quick-records",
-        group: "操作",
-        icon: "gitBranch",
-        title: "打开迭代记录",
-        hint: "已发生变化的业务历史入口",
-        run: () => onNavigate("/records"),
-      },
-      {
-        key: "quick-notifications",
-        group: "操作",
-        icon: "bell",
-        title: "打开通知中心",
-        hint: "查看全部站内通知",
-        run: () => onNavigate("/notifications"),
-      },
-      {
-        key: "quick-settings",
-        group: "操作",
-        icon: "settings",
-        title: "打开成员与设置",
-        hint: "成员、角色与权限入口",
-        run: () => onNavigate("/settings"),
-      },
-    ],
-    [onNavigate],
+    () =>
+      (
+        [
+          {
+            key: "quick-projects",
+            group: "操作",
+            icon: "folder",
+            title: "打开项目与功能",
+            hint: "新建项目或查看刚创建的项目动态",
+            run: () => onNavigate("/projects"),
+          },
+          {
+            key: "quick-tasks",
+            group: "操作",
+            icon: "clipboard",
+            title: "打开任务中心",
+            hint: "跨项目任务列表入口",
+            run: () => onNavigate("/tasks"),
+          },
+          {
+            key: "quick-records",
+            group: "操作",
+            icon: "gitBranch",
+            title: "打开迭代记录",
+            hint: "已发生变化的业务历史入口",
+            run: () => onNavigate("/records"),
+          },
+          {
+            key: "quick-notifications",
+            group: "操作",
+            icon: "bell",
+            title: "打开通知中心",
+            hint: "查看全部站内通知",
+            run: () => onNavigate("/notifications"),
+          },
+          {
+            key: "quick-settings",
+            group: "操作",
+            icon: "settings",
+            title: "打开成员与设置",
+            hint: "成员、角色与权限入口",
+            run: () => onNavigate("/settings"),
+          },
+        ] satisfies readonly QuickAction[]
+      ).filter((action) => isAdmin || action.key !== "quick-settings"),
+    [isAdmin, onNavigate],
   );
 
   const searchResults = useMemo<SearchResult[]>(() => {

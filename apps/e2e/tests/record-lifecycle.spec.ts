@@ -17,8 +17,8 @@ test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", 
     const title = "生命周期-" + Date.now(),
       privateReason = "仅管理员原因-" + Date.now();
     await member.page.goto(`/records?projectId=${runtime.projectId}`);
-    await member.page.getByRole("button", { name: "新建独立草稿" }).click();
-    const draft = member.page.getByRole("dialog", { name: "新建独立草稿" });
+    await member.page.getByRole("button", { name: "新建迭代记录" }).click();
+    const draft = member.page.getByRole("dialog", { name: "新建迭代记录" });
     await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("原始问题");

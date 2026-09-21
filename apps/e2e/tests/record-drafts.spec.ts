@@ -12,8 +12,8 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/records?projectId=${runtime.projectId}`);
-    await page.getByRole("button", { name: "新建独立草稿" }).click();
-    const create = page.getByRole("dialog", { name: "新建独立草稿" });
+    await page.getByRole("button", { name: "新建迭代记录" }).click();
+    const create = page.getByRole("dialog", { name: "新建迭代记录" });
     await pickCalmSelectOptionByIndex(create, "所属模块", 1);
     const title = `独立草稿-${Date.now()}`;
     await create.getByLabel("迭代标题").fill(title);

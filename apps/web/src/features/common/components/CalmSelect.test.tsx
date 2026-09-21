@@ -148,6 +148,18 @@ describe("CalmSelect", () => {
     expect(tagTexts.filter((text) => text.includes("周子昂"))).toHaveLength(1);
     expect(tagTexts.some((text) => /\+.*1/.test(text))).toBe(true);
     expect(tagTexts.some((text) => text.includes("陈默"))).toBe(false);
+    // antd 多选模式会额外渲染一个自带选中图标（`.ant-select-item-option-state` 内），
+    // 与 optionRender 里的 `.calm-select-check` 重复成一个选项两个勾；这里锁定只剩一个。
+    const selectedRows = [
+      ...dropdownOf().querySelectorAll(".ant-select-item-option-selected"),
+    ];
+    expect(selectedRows).toHaveLength(3);
+    for (const row of selectedRows) {
+      expect(row.querySelectorAll(".calm-select-check")).toHaveLength(1);
+      expect(
+        row.querySelector(".ant-select-item-option-state")?.innerHTML,
+      ).toBe("");
+    }
     // 触发器内输入框的复位样式挂在 antd 6 的 `.ant-select-input` 上：类名变化会让宿主表单
     // 的边框/内边距样式重新把这个小输入框露出来，因此在这里锁定类名契约。
     expect(view.container.querySelector(".ant-select-input")).not.toBeNull();

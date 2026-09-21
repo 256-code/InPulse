@@ -126,8 +126,8 @@ test("F22 draft links survive publication and revision without changing old vers
     { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto(`/records?projectId=${runtime.projectId}`);
-    await page.getByRole("button", { name: "新建独立草稿" }).click();
-    const draft = page.getByRole("dialog", { name: "新建独立草稿" });
+    await page.getByRole("button", { name: "新建迭代记录" }).click();
+    const draft = page.getByRole("dialog", { name: "新建迭代记录" });
     await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill("F22记录" + Date.now());
     await draft.getByLabel("改动原因").fill("原始问题");

@@ -90,7 +90,8 @@ describe("AppLayout", () => {
     expect(screen.getByText("迭代记录")).toBeInTheDocument();
     expect(screen.getByText("遗留问题")).toBeInTheDocument();
     expect(screen.getByText("项目动态")).toBeInTheDocument();
-    expect(screen.getByText("成员与设置")).toBeInTheDocument();
+    // 成员与设置属于系统管理员专属入口，普通成员不渲染。
+    expect(screen.queryByText("成员与设置")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "打开全局搜索" }),
     ).toBeInTheDocument();
@@ -101,7 +102,7 @@ describe("AppLayout", () => {
     expect(screen.queryByText("全局搜索")).not.toBeInTheDocument();
   });
 
-  it("shows the audit entry only to system administrators", async () => {
+  it("renders the administrator-only entries only for system administrators", async () => {
     const { unmount } = renderLayout(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -114,6 +115,7 @@ describe("AppLayout", () => {
       true,
     );
     expect(screen.getByText("审计日志")).toBeInTheDocument();
+    expect(screen.getByText("成员与设置")).toBeInTheDocument();
     unmount();
 
     renderLayout(
@@ -127,6 +129,7 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
+    expect(screen.queryByText("成员与设置")).not.toBeInTheDocument();
   });
 
   it("renders the current project group and the task board entry on project routes", async () => {
@@ -536,6 +539,28 @@ describe("AppLayout", () => {
       await user.click(screen.getByRole("button", { name: /前往登录/ }));
 
       expect(await screen.findByText("登录页占位")).toBeInTheDocument();
+    });
+
+    it("非管理员账户菜单不显示成员与权限入口", async () => {
+      const user = userEvent.setup();
+      renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={notificationClient} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "账户菜单" }));
+      expect(
+        screen.queryByRole("button", { name: /成员与权限/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /退出登录/ }),
+      ).toBeInTheDocument();
     });
   });
 });

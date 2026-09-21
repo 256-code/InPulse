@@ -15,8 +15,8 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
   try {
     const title = `正式记录-${Date.now()}`;
     await page.goto(`/records?projectId=${runtime.projectId}`);
-    await page.getByRole("button", { name: "新建独立草稿" }).click();
-    const draft = page.getByRole("dialog", { name: "新建独立草稿" });
+    await page.getByRole("button", { name: "新建迭代记录" }).click();
+    const draft = page.getByRole("dialog", { name: "新建迭代记录" });
     await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("版本一问题");
