@@ -136,6 +136,17 @@ export function cardMarkOf(card: TaskBoardCard): CardMark {
   return { kind: "badge", label: mark.label, tone: mark.tone };
 }
 
+/**
+ * 裁决修订 D-2：由遗留问题转换而来的任务在看板卡片与列表行显示「遗留问题」
+ * 徽章；数据来自 R-5 批量标记（hasLeftoverSource），读取失败时按缺席隐藏，
+ * 与功能档案任务面板同一文案与色调。
+ */
+export const LEFTOVER_SOURCE_BADGE = {
+  label: "遗留问题",
+  className: "badge badge-amber",
+  title: "由遗留问题转换而来的跟进任务",
+} as const;
+
 export function workStatusLabelOf(status: TaskBoardWorkStatus): string {
   if (status === "DONE") return "已完成";
   if (status === "CANCELED") return "已取消";

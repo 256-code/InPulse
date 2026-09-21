@@ -10,19 +10,21 @@ import {
   dueLabelOf,
   laneProgressOf,
   laneToneOf,
+  LEFTOVER_SOURCE_BADGE,
 } from "../task-board-format";
 import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
 
 /**
  * 看板视图：按模块分泳道，泳道头含模块名、功能与任务计数、逾期角标、
- * 完成进度与负责人头像组；泳道内任务卡按服务端排序（逾期 -> 临近截止 ->
- * 已完成 -> 已取消）。点击卡片就地打开任务详情（TaskDetailOverlay）。
+ * 完成进度与负责人头像组；泳道内任务卡按服务端排序（逾期 -> 未完成按优先级与
+ * 截止 -> 已完成 -> 已取消）。点击卡片就地打开任务详情（TaskDetailOverlay）。
  *
  * 泳道头统计恒为全量口径，不随筛选跳变；被筛空的泳道整体隐藏。
  */
 export interface TaskBoardLanesProps {
   readonly modules: readonly TaskBoardModule[];
   readonly collapsedIds: ReadonlySet<number>;
+  readonly leftoverIds: ReadonlySet<number>;
   readonly onToggleLane: (moduleId: number) => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
@@ -34,8 +36,9 @@ function cardClassNameOf(card: TaskBoardCard): string {
 
 const TaskBoardCardItem: React.FC<{
   readonly card: TaskBoardCard;
+  readonly leftoverSource: boolean;
   readonly onOpen: (card: TaskBoardCard) => void;
-}> = ({ card, onOpen }) => {
+}> = ({ card, leftoverSource, onOpen }) => {
   const mark = cardMarkOf(card);
   const due = dueLabelOf(card);
   return (
@@ -48,17 +51,27 @@ const TaskBoardCardItem: React.FC<{
       >
         <span className="tb-card-top">
           <span className="tb-code">{card.code}</span>
-          {mark.kind === "done" ? (
-            <span
-              className="tb-check"
-              title={mark.label}
-              aria-label={mark.label}
-            >
-              ✓
-            </span>
-          ) : (
-            <span className={"badge badge-" + mark.tone}>{mark.label}</span>
-          )}
+          <span className="tb-card-flags">
+            {leftoverSource ? (
+              <span
+                className={LEFTOVER_SOURCE_BADGE.className}
+                title={LEFTOVER_SOURCE_BADGE.title}
+              >
+                {LEFTOVER_SOURCE_BADGE.label}
+              </span>
+            ) : null}
+            {mark.kind === "done" ? (
+              <span
+                className="tb-check"
+                title={mark.label}
+                aria-label={mark.label}
+              >
+                ✓
+              </span>
+            ) : (
+              <span className={"badge badge-" + mark.tone}>{mark.label}</span>
+            )}
+          </span>
         </span>
         <span className="tb-card-title">{card.title}</span>
         <span className="tb-card-meta">
@@ -84,9 +97,10 @@ const TaskBoardCardItem: React.FC<{
 const TaskBoardLane: React.FC<{
   readonly lane: TaskBoardModule;
   readonly collapsed: boolean;
+  readonly leftoverIds: ReadonlySet<number>;
   readonly onToggle: () => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
-}> = ({ lane, collapsed, onToggle, onOpenTask }) => {
+}> = ({ lane, collapsed, leftoverIds, onToggle, onOpenTask }) => {
   const progress = laneProgressOf(lane);
   return (
     <article
@@ -148,6 +162,7 @@ const TaskBoardLane: React.FC<{
             <TaskBoardCardItem
               key={card.taskId}
               card={card}
+              leftoverSource={leftoverIds.has(card.taskId)}
               onOpen={onOpenTask}
             />
           ))}
@@ -160,6 +175,7 @@ const TaskBoardLane: React.FC<{
 export const TaskBoardLanes: React.FC<TaskBoardLanesProps> = ({
   modules,
   collapsedIds,
+  leftoverIds,
   onToggleLane,
   onOpenTask,
 }) => {
@@ -170,6 +186,7 @@ export const TaskBoardLanes: React.FC<TaskBoardLanesProps> = ({
           key={lane.moduleId}
           lane={lane}
           collapsed={collapsedIds.has(lane.moduleId)}
+          leftoverIds={leftoverIds}
           onToggle={() => onToggleLane(lane.moduleId)}
           onOpenTask={onOpenTask}
         />

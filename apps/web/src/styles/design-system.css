@@ -6491,6 +6491,13 @@ td.due-overdue {
   justify-content: space-between;
   gap: 8px;
 }
+/* 右上角标记组：遗留问题徽章与优先级 / 完成标记并排，不参与收缩。 */
+.tb-card-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .tb-code {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -6709,11 +6716,21 @@ td.due-overdue {
   --tb-row-fg: #75828f;
 }
 .tb-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-weight: 600;
   color: var(--tb-row-fg, #2a4058);
+}
+/* 省略号只作用于标题文本，徽章始终完整可见。 */
+.tb-row-title-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tb-row-title .badge {
+  flex-shrink: 0;
 }
 .tb-row .tb-code {
   color: var(--tb-row-fg, #7f93a8);
@@ -6726,8 +6743,10 @@ td.due-overdue {
   color: #58937a;
 }
 .tb-row--canceled .tb-row-title {
-  text-decoration: line-through;
   font-weight: 400;
+}
+.tb-row--canceled .tb-row-title-text {
+  text-decoration: line-through;
 }
 .tb-row-sub {
   color: var(--tb-sub);

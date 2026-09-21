@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Spin } from "antd";
-import type { InpulseApiClient } from "@generated/api";
+import { createApiClient, type InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
 import { TaskDetailOverlay } from "@features/tasks/TaskDetailOverlay";
+import { useTaskMarks } from "@features/tasks/task-marks";
 import type { TaskLocation } from "@features/tasks/task-links";
 
 import { TaskBoardLanes } from "./components/TaskBoardLanes";
@@ -85,6 +86,24 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
     [allModules],
   );
   const filtered = hasActiveTaskBoardFilters(filters);
+  // 裁决修订 D-2：遗留问题来源标记（hasLeftoverSource）不在看板契约里，
+  // 按 R-5 页面级一次批量读取，读取失败时徽章按缺席隐藏。
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const boardTaskIds = useMemo(
+    () =>
+      (data?.modules ?? []).flatMap((lane) =>
+        lane.tasks.map((card) => card.taskId),
+      ),
+    [data],
+  );
+  const marks = useTaskMarks(api, boardTaskIds);
+  const leftoverIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const [taskId, mark] of marks) {
+      if (mark.hasLeftoverSource) ids.add(taskId);
+    }
+    return ids;
+  }, [marks]);
 
   const openTask = (card: TaskBoardCard) => {
     setDetailTarget({
@@ -193,6 +212,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
         <TaskBoardLanes
           modules={visibleModules}
           collapsedIds={collapsedIds}
+          leftoverIds={leftoverIds}
           onToggleLane={toggleLane}
           onOpenTask={openTask}
         />
@@ -200,6 +220,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
         <TaskBoardTable
           modules={visibleModules}
           collapsedIds={collapsedIds}
+          leftoverIds={leftoverIds}
           onToggleLane={toggleLane}
           onOpenTask={openTask}
         />
@@ -225,7 +246,8 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
           </span>
         </div>
         <span>
-          卡片顺序：逾期 → 临近截止 → 已完成 → 已取消 · 点击卡片查看任务详情
+          卡片顺序：逾期 → 未完成按优先级与截止 → 已完成 → 已取消 ·
+          点击卡片查看任务详情
         </span>
       </div>
 

@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { TaskBoardCard, TaskBoardResponse } from "@generated/api";
+import type {
+  InpulseApiClient,
+  TaskBoardCard,
+  TaskBoardResponse,
+  TaskGroupMembershipItem,
+} from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 
 import { TaskBoardPageView } from "./TaskBoardPageView";
@@ -126,14 +131,32 @@ const emptyResponse: TaskBoardResponse = {
 interface RenderOptions {
   readonly response?: TaskBoardResponse;
   readonly filters?: TaskBoardFilters;
+  readonly marks?: readonly TaskGroupMembershipItem[];
   readonly onFiltersChange?: (next: TaskBoardFilters) => void;
   readonly onOpenModules?: () => void;
+}
+
+/** 裁决修订 D-2：R-5 条目，未入组以 null 返回，只关心遗留问题来源标记。 */
+function membershipOf(
+  taskId: number,
+  hasLeftoverSource: boolean,
+): TaskGroupMembershipItem {
+  return {
+    taskId,
+    groupId: null,
+    groupRole: null,
+    publishedRecordCount: 0,
+    hasLeftoverSource,
+  };
 }
 
 function renderView(options: RenderOptions = {}) {
   const fetchTaskBoard = vi
     .fn()
     .mockResolvedValue(options.response ?? response);
+  const listTaskGroupMemberships = vi
+    .fn()
+    .mockResolvedValue({ items: options.marks ?? [] });
   const adapter: TaskBoardAdapter = {
     source: "test",
     notice: "测试看板骨架",
@@ -165,12 +188,13 @@ function renderView(options: RenderOptions = {}) {
           filters={options.filters ?? DEFAULT_TASK_BOARD_FILTERS}
           onFiltersChange={onFiltersChange}
           adapter={adapter}
+          client={{ listTaskGroupMemberships } as unknown as InpulseApiClient}
           onOpenModules={options.onOpenModules ?? vi.fn()}
         />
       </AuthStateProvider>
     </QueryClientProvider>,
   );
-  return { fetchTaskBoard, onFiltersChange };
+  return { fetchTaskBoard, listTaskGroupMemberships, onFiltersChange };
 }
 
 describe("TaskBoardPageView", () => {
@@ -290,5 +314,42 @@ describe("TaskBoardPageView", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "任务超过 1000 条",
     );
+  });
+
+  it("遗留问题来源任务在卡片上显示徽章", async () => {
+    const { listTaskGroupMemberships } = renderView({
+      marks: [membershipOf(1, true), membershipOf(2, false)],
+    });
+
+    const sourceCard = await screen.findByRole("button", {
+      name: "打开任务 T-1001 实现任务看板",
+    });
+    // 裁决修订 D-2：由遗留问题转换而来的任务自带「遗留问题」徽章。
+    expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
+    const plainCard = screen.getByRole("button", {
+      name: "打开任务 T-1002 补齐看板筛选",
+    });
+    expect(within(plainCard).queryByText("遗留问题")).toBeNull();
+    // 页面级一次批量：整页任务 ID 一次请求，不按任务逐个请求。
+    expect(listTaskGroupMemberships).toHaveBeenCalledTimes(1);
+    expect(listTaskGroupMemberships.mock.calls[0]![0]).toEqual({
+      taskIds: [1, 2, 3],
+    });
+  });
+
+  it("列表视图在标题前显示遗留问题徽章", async () => {
+    renderView({
+      filters: { ...DEFAULT_TASK_BOARD_FILTERS, view: "list" },
+      marks: [membershipOf(3, true)],
+    });
+
+    const row = await screen.findByRole("button", {
+      name: "打开任务 T-1003 结算对账",
+    });
+    expect(await within(row).findByText("遗留问题")).toBeInTheDocument();
+    const plainRow = screen.getByRole("button", {
+      name: "打开任务 T-1001 实现任务看板",
+    });
+    expect(within(plainRow).queryByText("遗留问题")).toBeNull();
   });
 });

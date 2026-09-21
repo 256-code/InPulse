@@ -282,8 +282,10 @@ export abstract class TaskQueryPort {
    *
    * 约定：
    * 1. 调用方必须先完成项目授权（与 find / list 同一约定），端口不校验成员关系。
-   * 2. 排序固定「逾期 -> 临近截止 -> 已完成（完成时间倒序）-> 已取消」，
-   *    末键 taskId ASC 保证稳定；不提供 sort 参数。
+   * 2. 排序固定「逾期 -> 未完成 -> 已完成（完成时间倒序）-> 已取消」；未完成
+   *    桶内先按优先级 紧急 -> 高 -> 普通 -> 低，再按截止时间升序（NULL 最后）。
+   *    已完成与已取消不参与优先级排序。末键 taskId ASC 保证稳定；
+   *    不提供 sort 参数。
    * 3. 上限 TASK_BOARD_TASKS_MAX，超出截断并置 truncated = true；调用方负责在
    *    响应上向用户说明截断，不得静默丢弃。
    * 4. dueState 在同一 SQL 内按 Asia/Shanghai 与 now() 计算。
@@ -514,6 +516,12 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
                   WHEN t.due_at IS NOT NULL AND t.due_at < now() THEN 0
                   ELSE 1
                 END,
+                CASE WHEN t.work_status = 'TODO' THEN CASE t.priority
+                  WHEN 'URGENT' THEN 0
+                  WHEN 'HIGH' THEN 1
+                  WHEN 'NORMAL' THEN 2
+                  ELSE 3
+                END END ASC NULLS LAST,
                 CASE WHEN t.work_status = 'DONE' THEN t.completed_at END DESC NULLS LAST,
                 t.due_at ASC NULLS LAST,
                 t.id ASC

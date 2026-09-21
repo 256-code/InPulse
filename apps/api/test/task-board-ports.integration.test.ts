@@ -23,8 +23,9 @@ import type { TestUrls } from "./database.helpers.js";
 // R-8 项目任务看板只读端口验收（真实 PostgreSQL）：
 // 1. dueState 与统计日界 / 周界由 SQL 按 Asia/Shanghai 与 now() 计算；
 //    DONE / CANCELED / 未设截止时间一律 NONE（前端不得按客户端时钟重算）。
-// 2. 列表顺序：逾期未完成 -> 其他未完成（截止升序，NULL 最后）-> 已完成
-//    （完成时间倒序）-> 已取消。
+// 2. 列表顺序：逾期未完成 -> 其他未完成（先按优先级 紧急 -> 高 -> 普通 -> 低，
+//    再按截止升序，NULL 最后）-> 已完成（完成时间倒序）-> 已取消；已完成与
+//    已取消不参与优先级排序。
 // 3. ARCHIVED / INVALID 不进看板；CANCELED 保留在列表与统计中
 //    （功能设计 29.1 / 29.2 口径）。
 // 4. excludedTaskIds 在 LIMIT 之前过滤；超过 TASK_BOARD_TASKS_MAX 截断并置
@@ -283,39 +284,44 @@ afterAll(async () => {
 });
 
 describe("PostgresTaskQueryPort 看板读（R-8）", () => {
-  test("dueState 按 Asia/Shanghai 日界分类，列表按逾期、截止、完成时间排序", async () => {
+  test("dueState 按 Asia/Shanghai 日界分类，未完成按优先级与截止、已完成按完成时间排序", async () => {
     const scope = await newProject();
     await rollbackFixture(async (tx) => {
       const overdue = await insertBoardTask(tx, scope, {
         due: "overdue",
-        title: "逾期任务",
+        title: "逾期普通任务",
       });
-      const yesterdayEnd = await insertBoardTask(tx, scope, {
+      const yesterdayEndHigh = await insertBoardTask(tx, scope, {
         due: "yesterdayEnd",
-        title: "昨日末尾任务",
+        priority: "HIGH",
+        title: "昨日末尾高优任务",
       });
-      const today = await insertBoardTask(tx, scope, {
+      const todayLow = await insertBoardTask(tx, scope, {
         due: "today",
-        title: "今日到期任务",
+        priority: "LOW",
+        title: "今日到期低优任务",
       });
       const tomorrowStart = await insertBoardTask(tx, scope, {
         due: "tomorrowStart",
         title: "明日零点任务",
       });
-      const future = await insertBoardTask(tx, scope, {
+      const futureUrgent = await insertBoardTask(tx, scope, {
         due: "future",
-        title: "十日之后任务",
+        priority: "URGENT",
+        title: "十日之后紧急任务",
       });
       const noDue = await insertBoardTask(tx, scope, { title: "未设截止任务" });
-      const doneRecent = await insertBoardTask(tx, scope, {
+      const doneRecentLow = await insertBoardTask(tx, scope, {
         due: "overdue",
+        priority: "LOW",
         workStatus: "DONE",
-        title: "最近完成",
+        title: "最近完成的低优任务",
       });
-      const doneOld = await insertBoardTask(tx, scope, {
+      const doneOldUrgent = await insertBoardTask(tx, scope, {
         completedAt: "now() - interval '20 days'",
+        priority: "URGENT",
         workStatus: "DONE",
-        title: "较早完成",
+        title: "较早完成的紧急任务",
       });
       const canceled = await insertBoardTask(tx, scope, {
         due: "overdue",
@@ -327,32 +333,35 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
         projectId: scope.projectId,
       });
       expect(page.truncated).toBe(false);
+      // 未完成桶内优先级压过截止时间：高优的昨日末尾任务在普通逾期任务之前、
+      // 十日后到期的紧急任务在明日零点任务之前；已完成仍按完成时间倒序，
+      // 低优但新近完成的先于紧急但较早完成的。
       expect(page.items.map((row) => row.taskId)).toEqual([
+        yesterdayEndHigh,
         overdue,
-        yesterdayEnd,
-        today,
+        futureUrgent,
         tomorrowStart,
-        future,
         noDue,
-        doneRecent,
-        doneOld,
+        todayLow,
+        doneRecentLow,
+        doneOldUrgent,
         canceled,
       ]);
       const dueStateById = new Map(
         page.items.map((row) => [row.taskId, row.dueState] as const),
       );
       expect(dueStateById.get(overdue)).toBe("OVERDUE");
-      expect(dueStateById.get(yesterdayEnd)).toBe("OVERDUE");
-      expect(dueStateById.get(today)).toBe("TODAY");
+      expect(dueStateById.get(yesterdayEndHigh)).toBe("OVERDUE");
+      expect(dueStateById.get(todayLow)).toBe("TODAY");
       expect(dueStateById.get(tomorrowStart)).toBe("SCHEDULED");
-      expect(dueStateById.get(future)).toBe("SCHEDULED");
+      expect(dueStateById.get(futureUrgent)).toBe("SCHEDULED");
       expect(dueStateById.get(noDue)).toBe("NONE");
-      expect(dueStateById.get(doneRecent)).toBe("NONE");
-      expect(dueStateById.get(doneOld)).toBe("NONE");
+      expect(dueStateById.get(doneRecentLow)).toBe("NONE");
+      expect(dueStateById.get(doneOldUrgent)).toBe("NONE");
       expect(dueStateById.get(canceled)).toBe("NONE");
       const canceledRow = page.items.find((row) => row.taskId === canceled);
       expect(canceledRow?.completedAt).toBeNull();
-      const doneRow = page.items.find((row) => row.taskId === doneRecent);
+      const doneRow = page.items.find((row) => row.taskId === doneRecentLow);
       expect(doneRow?.completedAt).toBeInstanceOf(Date);
     });
   });

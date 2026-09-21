@@ -8,6 +8,7 @@ import {
   dueListLabelOf,
   laneProgressOf,
   laneToneOf,
+  LEFTOVER_SOURCE_BADGE,
   priorityMarkOf,
   workStatusLabelOf,
   workStatusToneOf,
@@ -20,10 +21,12 @@ import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
  * 分组头沿用泳道统计（全量口径），行点击就地打开任务详情。
  * 行底色按优先级区分程度（紧急红 / 高橙 / 普通蓝 / 低灰），已完成与
  * 已取消覆盖为对应状态色；色值只在 design-system.css 的 --tb-row-* 维护。
+ * 遗留问题来源任务在标题前带「遗留问题」徽章（与卡片同一标记）。
  */
 export interface TaskBoardTableProps {
   readonly modules: readonly TaskBoardModule[];
   readonly collapsedIds: ReadonlySet<number>;
+  readonly leftoverIds: ReadonlySet<number>;
   readonly onToggleLane: (moduleId: number) => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
@@ -41,8 +44,9 @@ function rowClassNameOf(card: TaskBoardCard): string {
 
 const TaskBoardTableRow: React.FC<{
   readonly card: TaskBoardCard;
+  readonly leftoverSource: boolean;
   readonly onOpen: (card: TaskBoardCard) => void;
-}> = ({ card, onOpen }) => {
+}> = ({ card, leftoverSource, onOpen }) => {
   const due = dueListLabelOf(card);
   const priority = priorityMarkOf(card.priority);
   return (
@@ -53,7 +57,17 @@ const TaskBoardTableRow: React.FC<{
       aria-label={"打开任务 " + card.code + " " + card.title}
     >
       <span className="tb-code">{card.code}</span>
-      <span className="tb-row-title">{card.title}</span>
+      <span className="tb-row-title">
+        {leftoverSource ? (
+          <span
+            className={LEFTOVER_SOURCE_BADGE.className}
+            title={LEFTOVER_SOURCE_BADGE.title}
+          >
+            {LEFTOVER_SOURCE_BADGE.label}
+          </span>
+        ) : null}
+        <span className="tb-row-title-text">{card.title}</span>
+      </span>
       <span className="tb-row-sub">{card.featureName ?? "模块级任务"}</span>
       <span className="tb-row-owner">
         <span className={"tb-ava " + avatarToneOf(card.assignee.userId)}>
@@ -75,6 +89,7 @@ const TaskBoardTableRow: React.FC<{
 export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
   modules,
   collapsedIds,
+  leftoverIds,
   onToggleLane,
   onOpenTask,
 }) => {
@@ -139,6 +154,7 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
                   <TaskBoardTableRow
                     key={card.taskId}
                     card={card}
+                    leftoverSource={leftoverIds.has(card.taskId)}
                     onOpen={onOpenTask}
                   />
                 ))}
