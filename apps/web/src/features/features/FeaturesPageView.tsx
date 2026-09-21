@@ -2,7 +2,7 @@ import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel"
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
 import React, { lazy, Suspense, useRef, useState } from "react";
-import { Alert, Button, Input, Segmented, Spin } from "antd";
+import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
   CalmEmptyState,
+  CalmSegmented,
   CalmTabs,
 } from "@features/common/components/Calm";
 import { useModules } from "@features/modules/module-query";
@@ -471,17 +472,14 @@ export function FeaturesPageView({
                 <div className="calm-feature-toolbar">
                   <h3>功能</h3>
                   <div className="feature-view-controls">
-                    <Segmented<string>
-                      className="segmented"
-                      role="group"
-                      aria-label="功能展示方式"
-                      tabIndex={undefined}
+                    <CalmSegmented
+                      label="功能展示方式"
                       value={display}
                       options={[
                         { value: "cards", label: "卡片" },
                         { value: "list", label: "列表" },
                       ]}
-                      onChange={(next) => setDisplay(next as "cards" | "list")}
+                      onChange={setDisplay}
                     />
                     <div className="task-search">
                       <InpulseIcon name="search" size={15} />
