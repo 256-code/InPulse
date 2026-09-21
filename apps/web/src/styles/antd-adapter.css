@@ -23,8 +23,9 @@
  * 这里逐层把 antd 的外壳还原成「无外观容器」，只留下遮罩和全屏定位。 */
 
 .surface-modal-root .ant-modal-mask {
-  background: #10253e70;
-  backdrop-filter: blur(2px);
+  /* 方案 M2：深蓝 65% + blur 7px，把背景压得更沉、焦点集中在弹层上。 */
+  background: #0d2038a6;
+  backdrop-filter: blur(7px);
   animation: none;
 }
 

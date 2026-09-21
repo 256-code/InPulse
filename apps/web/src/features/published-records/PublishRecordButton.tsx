@@ -99,6 +99,8 @@ export function PublishRecordButton({
         open={open}
         eyebrow={item.code + " · " + item.title}
         title="发布迭代记录"
+        tone="info"
+        icon="fileText"
         body
         onCancel={() => {
           if (!busy) setOpen(false);

@@ -619,6 +619,21 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           lifecycle ? "账号 · " + lifecycle.user.loginName : "账号生命周期"
         }
         title={lifecycle ? lifecycleCopy[lifecycle.action].title : ""}
+        // 停用是破坏性动作（红）、强制退出是告警（橙）、启用是挽回（绿）。
+        tone={
+          lifecycle !== null && lifecycle.action === "enable"
+            ? "success"
+            : lifecycle !== null && lifecycle.action === "forceLogout"
+              ? "warning"
+              : "danger"
+        }
+        icon={
+          lifecycle === null || lifecycle.action === "disable"
+            ? "alert"
+            : lifecycle.action === "forceLogout"
+              ? "logout"
+              : "check"
+        }
         body
         onCancel={closeLifecycle}
         mask={{ closable: !mutation.isPending }}

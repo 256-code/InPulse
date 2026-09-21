@@ -393,6 +393,8 @@ export const ArchiveProjectModal: React.FC<ArchiveProjectModalProps> = ({
       className="catalog-modal"
       eyebrow="仅系统管理员可执行"
       title="归档项目"
+      tone="danger"
+      icon="alert"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
@@ -555,6 +557,8 @@ export const RestoreProjectModal: React.FC<RestoreProjectModalProps> = ({
       className="catalog-modal"
       eyebrow="仅系统管理员可执行"
       title="恢复项目"
+      tone="success"
+      icon="rotateCcw"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
@@ -687,6 +691,8 @@ export const RequestProjectArchiveModal: React.FC<
       className="catalog-modal"
       eyebrow="项目组长或项目管理员可发起"
       title="申请项目归档"
+      tone="warning"
+      icon="alert"
       destroyOnHidden
       mask={{ closable: false }}
       open={open}
@@ -845,6 +851,8 @@ export const ReviewProjectArchiveModal: React.FC<
       className="catalog-modal"
       eyebrow="仅系统管理员可执行"
       title={decision === "approve" ? "批准项目归档" : "驳回项目归档申请"}
+      tone={decision === "approve" ? "danger" : "info"}
+      icon={decision === "approve" ? "alert" : "x"}
       destroyOnHidden
       mask={{ closable: false }}
       open={open}

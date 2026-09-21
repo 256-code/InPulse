@@ -141,19 +141,8 @@
   line-height: 16.5px;
 }
 
-/* 设计契约把 `.dialog-form` 的第 1 个与第 3 个子级并排放在第一行（第 3 个落在第二条
- * 180px 窄列），其余子级整行（design-system.css L3440-3451）。仓库的「新建项目」表单
- * 与设计稿同序（名称 / 编码+简称 `.form-row` / 描述 / 成员），按同一序号映射到
- * `.ant-form-item` 即可得到设计稿的行高节奏。 */
-.catalog-modal .catalog-form-create .dialog-form > .ant-form-item:first-child {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.catalog-modal .catalog-form-create .dialog-form > .ant-form-item:nth-child(3) {
-  grid-column: 2;
-  grid-row: 1;
-}
+/* 新建项目表单字段一律整行堆叠（并排只保留「编码 + 卡片简称」`.form-row`）：
+ * 设计契约预留的 180px 窄列曾把「项目描述」textarea 压成窄条，序号映射已废弃。 */
 
 .catalog-modal .ant-input,
 .catalog-modal .ant-input-affix-wrapper,

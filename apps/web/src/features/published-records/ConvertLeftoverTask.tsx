@@ -258,6 +258,8 @@ export function LeftoverTaskConvertModal({
       open={open}
       eyebrow="转换后生成新任务，并保留与来源遗留问题的时间线关联"
       title="遗留问题转为新任务"
+      tone="info"
+      icon="cornerDown"
       onCancel={() => {
         if (!saving.current) onClose();
       }}

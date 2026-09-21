@@ -3565,12 +3565,17 @@ a:focus-visible {
   position: fixed;
   inset: 0;
   margin: auto;
-  border: 1px solid #e1e8f0;
+  border: 0;
   padding: 0;
-  border-radius: 16px;
+  border-radius: 18px;
   background: white;
   color: #243b53;
-  box-shadow: 0 28px 90px #10253e40;
+  /* 无边框悬浮（方案 B）：三层阴影分别承担贴边描边、中距扩散与远距抬升，
+     替代原先的 1px 边框 + 单层投影。 */
+  box-shadow:
+    0 1px 2px #10253e14,
+    0 14px 34px #10253e1f,
+    0 44px 96px #10253e1a;
   max-height: calc(100dvh - 56px);
   width: min(1020px, calc(100vw - 64px));
   max-width: none;
@@ -3578,6 +3583,94 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   height: fit-content;
+}
+/*
+ * 确认类弹窗（方案 C）：顶部 4px 语义色条 + 标题前的圆角图标片，色值与任务卡
+ * tone 同源——红=危险、橙=警告、蓝=信息、绿=成功。由 AppModal 的 tone / icon
+ * 两个属性按需开启；不传时保持无顶条、无图标片的普通悬浮卡。
+ */
+.surface-modal.tone-danger {
+  --tone: #c0453f;
+  --tone-bg: #fdf2f1;
+  --tone-strong: #a93a35;
+}
+.surface-modal.tone-warning {
+  --tone: #c9821a;
+  --tone-bg: #fdf8ee;
+  --tone-strong: #a86c12;
+}
+.surface-modal.tone-info {
+  --tone: #1467d8;
+  --tone-bg: #f0f5fd;
+  --tone-strong: #0f58b8;
+}
+.surface-modal.tone-success {
+  --tone: #34815d;
+  --tone-bg: #eef8f3;
+  --tone-strong: #2a6b4c;
+}
+.surface-modal.tone-danger::before,
+.surface-modal.tone-warning::before,
+.surface-modal.tone-info::before,
+.surface-modal.tone-success::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: var(--tone);
+}
+.modal-head-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+}
+.modal-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--tone-bg, #f0f5fd);
+  color: var(--tone, #1467d8);
+  flex-shrink: 0;
+}
+/* 弹层自带操作区：浅灰页脚 + 极浅分隔线，正文滚动时按钮不与内容黏连（方案 B）。 */
+.surface-modal > .calm-action-footer {
+  margin: 0;
+  padding: 18px 28px 20px;
+  border-top: 1px solid #eef2f7;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+/* 破坏性确认的主按钮跟随 tone 转红：顶条、图标片、按钮同源，
+   其余 tone 保持全局主色，避免把可逆操作也画成危险动作。 */
+.surface-modal.tone-danger .calm-action-footer .primary-button {
+  background: var(--tone);
+  border-color: var(--tone);
+  box-shadow: 0 2px 4px #c0453f26;
+}
+.surface-modal.tone-danger .calm-action-footer .primary-button:hover {
+  background: var(--tone-strong);
+}
+/* 危险弹层里的权限/影响说明条同步转红，避免蓝块把破坏性语义冲淡。 */
+.surface-modal.tone-danger .permission-hint {
+  background: #fdf2f1;
+  color: #8f3f3f;
+}
+.surface-modal.tone-danger .permission-hint svg {
+  color: #c0453f;
+}
+/* 弹层内按钮统一 8px 圆角，与 18px 盒子圆角配套；页面上的按钮维持原样。 */
+.surface-modal .primary-button,
+.surface-modal .secondary-button,
+.surface-modal .soft-blue-button,
+.surface-modal .small-button,
+.surface-modal .danger-button,
+.surface-modal .icon-button {
+  border-radius: 8px;
 }
 /* 右侧动作组与标题横向中轴对齐：左块里除标题行外还有功能说明与徽章行，
    flex 的 align-items 只能对齐整个左块（按钮会掉到说明与徽章之间）。
@@ -5729,6 +5822,12 @@ td.due-overdue {
     top: 0;
   }
 }
+/* 窄屏下表单回退为纵向 flex，说明面板拉满整行，避免悬空窄块与多余滚动。 */
+@media (max-width: 1000px) {
+  .catalog-form:has(> .writing-context) > .writing-context {
+    align-self: stretch;
+  }
+}
 .catalog-modal .dialog-form > .form-row,
 .catalog-modal .dialog-form > fieldset,
 .catalog-modal .dialog-form > .field-inline {
@@ -5744,6 +5843,9 @@ td.due-overdue {
   .sidebar {
     position: sticky;
     top: 0;
+    /* 与窄屏（.sidebar fixed z-index:40）同层级：sticky 默认 z-index:auto 会让整个侧栏
+       停在根层叠上下文，底部通知弹层（.popover z-index:40）被后置的任务卡压住。 */
+    z-index: 40;
     height: 100dvh;
     min-height: 0;
   }

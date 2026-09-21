@@ -1,7 +1,7 @@
 import { Modal, type ModalProps } from "antd";
 import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 
-import { InpulseIcon } from "./InpulseIcon";
+import { InpulseIcon, type InpulseIconName } from "./InpulseIcon";
 
 /**
  * 弹层宽度分档，与设计系统 `design-system.css` 的
@@ -11,6 +11,13 @@ import { InpulseIcon } from "./InpulseIcon";
  * 优先级高于任何类规则，所以这里不接受 antd 的 `width`。
  */
 export type ModalWidth = "md" | "lg" | "xl";
+
+/**
+ * 确认类弹层的语义色调：盒子顶部画 4px 色条，并给标题前的图标片定底色。
+ * 色值与任务卡 tone 同源（红=危险、橙=警告、蓝=信息、绿=成功）；
+ * 表单类弹层不传，保持纯悬浮卡。
+ */
+export type ModalTone = "danger" | "warning" | "info" | "success";
 
 const WIDTH_CLASS: Record<ModalWidth, string> = {
   md: "surface-modal-md",
@@ -32,8 +39,16 @@ export interface AppModalProps extends Omit<
   ModalProps,
   "width" | "centered" | "footer"
 > {
-  /** 宽度分档。默认 `md`，对应设计稿的新建项目、模块/功能编辑与各类操作弹层。 */
+  /**
+   * 宽度分档。默认 `md`，对应设计稿的模块/功能编辑与各类操作弹层；
+   * 带侧栏说明（`.writing-context`）的表单弹层（如新建项目）用 `lg`，
+   * 宽屏下说明列才会落到字段右侧（design-system.css 的两列规则只挂 lg/xl）。
+   */
   readonly size?: ModalWidth;
+  /** 语义色调；传了才渲染顶部 4px 色条，配合 `icon` 用于归档/删除/发布等确认弹层。 */
+  readonly tone?: ModalTone | undefined;
+  /** 标题前的图标片（38×38 圆角底 + 图标）。不传则不占位，标题仍在最左。 */
+  readonly icon?: InpulseIconName | undefined;
   /**
    * 无障碍名称。不传时取 `title`、再取 `eyebrow` 的字符串值。
    * 供自渲 `.drawer-header` 的弹层（任务详情等）单独指定 `role="dialog"` 的名字。
@@ -110,6 +125,8 @@ function labelOf(
  */
 export function AppModal({
   size = "md",
+  tone,
+  icon,
   label,
   eyebrow,
   closeLabel = "关闭",
@@ -212,7 +229,12 @@ export function AppModal({
       modalRender={() => (
         <div
           ref={boxRef}
-          className={mergeClass("surface-modal", WIDTH_CLASS[size], className)}
+          className={mergeClass(
+            "surface-modal",
+            WIDTH_CLASS[size],
+            tone === undefined ? undefined : "tone-" + tone,
+            className,
+          )}
           style={{ pointerEvents: "auto" }}
           role="dialog"
           aria-modal="true"
@@ -226,11 +248,21 @@ export function AppModal({
         >
           {hasHeader ? (
             <div className="drawer-header">
-              <div>
-                {eyebrow === undefined ? null : (
-                  <span className="detail-label">{eyebrow}</span>
+              {/* 图标片是可选装饰：只有确认类弹层传 `icon`，此时标题块整体右移一格。 */}
+              <div
+                className={icon === undefined ? undefined : "modal-head-main"}
+              >
+                {icon === undefined ? null : (
+                  <span className="modal-chip" aria-hidden="true">
+                    <InpulseIcon name={icon} size={19} />
+                  </span>
                 )}
-                {title === undefined ? null : <h2>{title}</h2>}
+                <div>
+                  {eyebrow === undefined ? null : (
+                    <span className="detail-label">{eyebrow}</span>
+                  )}
+                  {title === undefined ? null : <h2>{title}</h2>}
+                </div>
               </div>
               {closable === false ? null : (
                 <button

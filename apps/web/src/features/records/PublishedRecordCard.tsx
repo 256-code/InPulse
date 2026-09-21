@@ -66,6 +66,24 @@ export function PublishedRecordCard({
           {record.currentVersion > 1 ? (
             <CalmBadge tone="cyan">v{record.currentVersion}</CalmBadge>
           ) : null}
+          {record.leftovers.length > 0 ? (
+            <CalmBadge
+              tone={
+                record.leftovers.every((leftover) => leftover.status !== "ACTIVE")
+                  ? "gray"
+                  : "amber"
+              }
+              title={
+                record.leftovers.every(
+                  (leftover) => leftover.status !== "ACTIVE",
+                )
+                  ? "遗留问题已全部转为任务或已闭环"
+                  : "本记录仍有未闭环的遗留问题"
+              }
+            >
+              遗留问题
+            </CalmBadge>
+          ) : null}
           <CalmBadge tone={record.status === "VOID" ? "red" : "green"}>
             {recordStatusLabel(record.status)}
           </CalmBadge>

@@ -610,6 +610,8 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         open={removing !== null}
         eyebrow={project ? project.name + " / 成员管理" : "项目成员"}
         title="移除项目成员"
+        tone="danger"
+        icon="alert"
         onCancel={closeRemove}
         mask={{ closable: !removeMutation.isPending }}
         footer={

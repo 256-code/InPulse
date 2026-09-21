@@ -125,6 +125,9 @@ export function RecordLifecycleButton({
         className="catalog-modal"
         eyebrow={item.code + " · " + item.title}
         title={label}
+        // 作废是破坏性动作（红顶条），恢复是挽回（绿顶条）。
+        tone={restore ? "success" : "danger"}
+        icon={restore ? "rotateCcw" : "alert"}
         open={open}
         body
         onCancel={() => {

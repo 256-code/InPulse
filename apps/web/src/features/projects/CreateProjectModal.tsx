@@ -108,6 +108,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   return (
     <Modal
       className="catalog-modal"
+      size="lg"
       eyebrow="项目是顶层业务容器"
       title="新建项目"
       destroyOnHidden

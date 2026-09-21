@@ -135,6 +135,8 @@ export function UnmergeTaskGroupButton({
         className="catalog-modal"
         eyebrow={member.taskCode + " · " + member.title}
         title="解除合并"
+        tone="warning"
+        icon="gitMerge"
         open={open}
         body
         onCancel={() => {

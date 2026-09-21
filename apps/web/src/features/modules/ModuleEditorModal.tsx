@@ -247,6 +247,20 @@ export function ModuleEditorModal({
         className="catalog-modal"
         eyebrow={projectName}
         title={modalTitle}
+        tone={
+          selection?.action === "archive"
+            ? "danger"
+            : selection?.action === "restore"
+              ? "success"
+              : undefined
+        }
+        icon={
+          selection?.action === "archive"
+            ? "alert"
+            : selection?.action === "restore"
+              ? "rotateCcw"
+              : undefined
+        }
         onCancel={close}
         mask={{ closable: !mutation.isPending }}
       >

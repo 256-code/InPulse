@@ -1753,6 +1753,9 @@ export function TasksPanel({
                 : " · 恢复后任务重新回到活跃列表")
         }
         title={lifecycle?.action === "restore" ? "恢复任务" : "归档任务"}
+        // 归档是不可逆感知的破坏性动作，恢复则是挽回：两者用不同语义色顶条区分。
+        tone={lifecycle?.action === "restore" ? "success" : "danger"}
+        icon={lifecycle?.action === "restore" ? "rotateCcw" : "alert"}
         className="catalog-modal"
         onCancel={closeLifecycle}
         mask={{ closable: !lifecycleMutation.isPending }}
