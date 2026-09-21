@@ -15,6 +15,7 @@ import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import { MY_TASKS_V1_FILTER_SUPPORT } from "./my-tasks-v1-query";
 import { DEFAULT_MY_TASK_FILTERS } from "./my-tasks-url";
 import type { MyTaskFilters } from "./my-tasks-types";
+import type { MyTaskGroupItem } from "./my-tasks-types";
 import type { MyTaskListItem } from "./my-tasks-types";
 import type { MyTasksAdapter } from "./my-tasks-types";
 import type { TaskLocation } from "@features/tasks/task-links";
@@ -140,9 +141,13 @@ const serverLikeAdapter = (): MyTasksAdapter => ({
 /**
  * 固定任务集合的服务端适配器：用于断言「主列表跟随工作状态筛选」，
  * mock 数据集无法构造「0 个未完成 + 1 个已完成」这类边界。
+ *
+ * 聚合组默认清空：组卡不随工作状态收窄，列表区有内容就不显示空态（2026-09-21 定案），
+ * 这些用例针对空态文案，必须同时没有任务与聚合组。需要组卡的用例自行覆盖 fetchTaskGroups。
  */
 const serverLikeAdapterWith = (
   items: readonly MyTaskListItem[],
+  groups: readonly MyTaskGroupItem[] = [],
 ): MyTasksAdapter => ({
   ...MY_TASKS_MOCK_ADAPTER,
   source: "server",
@@ -155,6 +160,11 @@ const serverLikeAdapterWith = (
     leftoverCount: null,
     leftoverSample: null,
     filterSupport: MY_TASKS_V1_FILTER_SUPPORT,
+  }),
+  fetchTaskGroups: async () => ({
+    items: [...groups],
+    nextCursor: null,
+    hasMore: false,
   }),
 });
 
@@ -472,50 +482,149 @@ describe("TaskCenterPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the task group panel with branches, statuses and assignees", async () => {
+  it("renders task groups as cards inside the task grid", async () => {
     renderView();
 
-    const panel = await screen.findByRole("region", { name: "任务聚合组" });
-    expect(await within(panel).findByText("1 个聚合组")).toBeInTheDocument();
-    expect(within(panel).getByText("TG-001")).toBeInTheDocument();
+    const card = await screen.findByTestId("my-task-group-501");
+    expect(within(card).getByText("TG-001")).toBeInTheDocument();
     expect(
-      within(panel).getByText("任务合并后来源分支历史保留"),
+      within(card).getByText("任务合并后来源分支历史保留"),
     ).toBeInTheDocument();
-    expect(within(panel).getByText("进行中")).toBeInTheDocument();
-    expect(within(panel).getByText("注入项目名")).toBeInTheDocument();
-    expect(within(panel).getByText("主分支")).toBeInTheDocument();
-    expect(within(panel).getByText("活动来源")).toBeInTheDocument();
-    expect(within(panel).getAllByText("历史来源")).toHaveLength(2);
-    expect(within(panel).getByText("已完成")).toBeInTheDocument();
-    expect(within(panel).getByText("已取消")).toBeInTheDocument();
-    expect(within(panel).getByText("旧版任务导出脚本下线")).toBeInTheDocument();
+    expect(within(card).getByText("聚合组")).toBeInTheDocument();
+    expect(within(card).getByText("进行中")).toBeInTheDocument();
+    expect(within(card).getByText("注入项目名")).toBeInTheDocument();
+    // 分支明细不再复制到卡片上：卡片只给负责人、分支数、完成情况与弹窗入口。
+    // mock 组 501 的四条分支都是同一人负责，去重后只有一个名字。
+    expect(within(card).getByText("陈晓")).toBeInTheDocument();
+    expect(within(card).getByText("4 条分支")).toBeInTheDocument();
+    expect(within(card).getByText("已完成 1/4")).toBeInTheDocument();
+    // 组优先级按未完成分支里的最高一档派生（分支 T-101 为紧急）：卡片显示
+    // 优先级徽章并注明来源；该分支完成后自动落到第二高，见下一条用例。
+    expect(within(card).getByText("紧急")).toBeInTheDocument();
+    expect(
+      within(card).getByTitle("优先级：紧急（未完成分支中最高）"),
+    ).toBeInTheDocument();
+    // 整卡配色跟随派生优先级（复用任务卡片的 tone-prio-* 色调）。
+    expect(card).toHaveClass("tone-prio-urgent");
+    expect(within(card).getByText("查看详情 / 解除合并")).toBeInTheDocument();
+    // 独立聚合组区块已删除：组卡与任务卡在同一网格里。
+    expect(card.closest(".calm-task-grid")).not.toBeNull();
+    expect(document.querySelector(".group-panel")).toBeNull();
   });
 
-  it("opens a branch task and the main task through onOpenTask", async () => {
-    const { onOpenTask } = renderView();
+  it("lists every branch owner on the group card when members differ", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 第 2 条来源分支换人、第 4 条置回主任务负责人：卡片应去重后列出全部负责人。
+            branches: group.branches.map((branch, index) =>
+              index === 1
+                ? {
+                    ...branch,
+                    assignee: { userId: 2, name: "王敏", avatarUrl: null },
+                  }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    const card = await screen.findByTestId("my-task-group-501");
+    // 主任务负责人在最前，其余负责人依次追加；同一人不重复出现。
+    expect(within(card).getByText("陈晓、王敏")).toBeInTheDocument();
+  });
+
+  it("falls back to the next highest branch priority after the urgent branch is done", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 紧急分支（T-101）完成后，组优先级落到剩下的最高一档：高（T-102）。
+            branches: group.branches.map((branch) =>
+              branch.taskId === 101
+                ? { ...branch, workStatus: "DONE" }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    const card = await screen.findByTestId("my-task-group-501");
+    expect(within(card).getByText("高")).toBeInTheDocument();
+    expect(within(card).queryByText("紧急")).toBeNull();
+    // 还有未完成分支，组仍是进行中；完成计数与整卡配色同步落到第二高的一档。
+    expect(within(card).getByText("进行中")).toBeInTheDocument();
+    expect(within(card).getByText("已完成 2/4")).toBeInTheDocument();
+    expect(card).toHaveClass("tone-prio-high");
+  });
+
+  it("marks the group complete when every branch is wound up", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 未完成分支全部收尾后，整卡按「已完成」呈现并隐藏优先级徽章；
+            // 组本身仍未关闭，卡片保留解除合并入口。
+            branches: group.branches.map((branch) =>
+              branch.workStatus === "TODO"
+                ? { ...branch, workStatus: "DONE" }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    const card = await screen.findByTestId("my-task-group-501");
+    expect(within(card).getByText("已完成")).toBeInTheDocument();
+    expect(within(card).queryByText("进行中")).toBeNull();
+    expect(within(card).queryByText("紧急")).toBeNull();
+    expect(within(card).queryByText("高")).toBeNull();
+    // 页脚只计 DONE：已取消的分支算收尾（不压着组优先级）、但不计入完成数。
+    expect(within(card).getByText("已完成 3/4")).toBeInTheDocument();
+    // 整卡转完成绿并与任务卡片共用同一条 h3 配色规则。
+    expect(card).toHaveClass("tone-prio-done");
+  });
+
+  it("opens the task group detail dialog from the group card", async () => {
+    const { onOpenTask } = renderView({ client: stubClient(projects) });
     const user = userEvent.setup();
-    const panel = await screen.findByRole("region", { name: "任务聚合组" });
+    const card = await screen.findByTestId("my-task-group-501");
 
-    await user.click(
-      await within(panel).findByRole("button", { name: /T-104/ }),
-    );
-    expect(onOpenTask).toHaveBeenCalledWith({
-      projectId: 1,
-      moduleId: 13,
-      featureId: 131,
-      taskId: 104,
-    });
+    await user.click(card);
 
-    await user.click(within(panel).getByRole("button", { name: /查看主任务/ }));
-    expect(onOpenTask).toHaveBeenLastCalledWith({
-      projectId: 1,
-      moduleId: 12,
-      featureId: 121,
-      taskId: 102,
-    });
+    // 组卡是弹窗入口：分支任务与主任务入口都在弹窗里，卡片点击不再回调 onOpenTask。
+    expect(onOpenTask).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("dialog", { name: /聚合组/ }),
+    ).toBeInTheDocument();
   });
 
-  it("renders the group empty state when the adapter returns no groups", async () => {
+  it("keeps task cards visible without a group empty state when there are no groups", async () => {
     renderView({
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
@@ -526,24 +635,39 @@ describe("TaskCenterPageView", () => {
         }),
       },
     });
-    expect(await screen.findByText("还没有聚合组")).toBeInTheDocument();
+    // 空聚合组不再单列空态区块：任务卡片照常呈现，页面上没有组卡。
+    expect(await screen.findByTestId("my-task-101")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
+    expect(screen.queryByText("还没有聚合组")).toBeNull();
   });
 
-  it("keeps the group panel visible with an error alert when groups fail", async () => {
+  it("keeps the task list visible with an error alert when groups fail", async () => {
     renderView({
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
         fetchTaskGroups: () => Promise.reject(new Error("boom")),
       },
     });
-    const panel = await screen.findByRole("region", { name: "任务聚合组" });
+    // 聚合组读取失败不隐藏任务卡片：错误就地提示在列表下方。
+    expect(await screen.findByTestId("my-task-101")).toBeInTheDocument();
     expect(
-      await within(panel).findByText("任务列表暂时不可用，请稍后重试。"),
+      await screen.findByText("任务列表暂时不可用，请稍后重试。"),
     ).toBeInTheDocument();
   });
 
-  it("marks module scope, merge role and priority on task cards", async () => {
+  it("hides the card of a task that is already merged into a group", async () => {
     renderView();
+
+    // T-102 是聚合组 501 的主任务（groupRole=MAIN）：卡片不再单独渲染，入口收敛到
+    // 聚合组卡片；未入组的 T-103 照常出卡片。
+    expect(await screen.findByTestId("my-task-103")).toBeInTheDocument();
+    expect(await screen.findByTestId("my-task-group-501")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-102")).toBeNull();
+  });
+
+  it("marks module scope, merge role and priority on member cards opened by the merge filter", async () => {
+    // 合并关系筛选是查看已合并任务本身的唯一入口，这条路径下卡片保留且徽章完整。
+    renderView({ filters: { relation: "MAIN" } });
 
     const merged = await screen.findByTestId("my-task-102");
     expect(within(merged).getByText("模块级")).toBeInTheDocument();
@@ -551,10 +675,14 @@ describe("TaskCenterPageView", () => {
     expect(within(merged).getByText("高")).toBeInTheDocument();
     expect(within(merged).getByTitle("优先级：高")).toBeInTheDocument();
     expect(within(merged).getByText("记录 3 条")).toBeInTheDocument();
+  });
 
-    const plain = await screen.findByTestId("my-task-101");
-    expect(within(plain).getByText("紧急")).toBeInTheDocument();
-    expect(within(plain).getByTitle("优先级：紧急")).toBeInTheDocument();
+  it("marks priority and omits the record badge on a standalone card", async () => {
+    renderView();
+
+    const plain = await screen.findByTestId("my-task-103");
+    expect(within(plain).getByText("普通")).toBeInTheDocument();
+    expect(within(plain).getByTitle("优先级：普通")).toBeInTheDocument();
     expect(within(plain).queryByText(/记录/)).toBeNull();
   });
 

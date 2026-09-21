@@ -11,6 +11,11 @@ import {
   RecordDetailModal,
   type RecordDetailTarget,
 } from "@features/published-records/RecordDetailModal";
+import {
+  taskPriorityBadgeTone,
+  taskPriorityLabel,
+  taskToneClassName,
+} from "@features/common/task-tone";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskGroupRecordLinks } from "./TaskGroupRecordLinks";
 import { UnmergeTaskGroupButton } from "./UnmergeTaskGroupButton";
@@ -136,98 +141,108 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
     })),
   ];
 
-  const renderMember = (member: TaskGroupMember) => (
-    <li
-      key={member.taskId}
-      className={
-        member.memberStatus === "DETACHED"
-          ? "task-group-member detached"
-          : "task-group-member"
-      }
-      data-testid={"task-group-member-" + member.taskId}
-    >
-      <div className="task-group-member-head">
-        <span className="task-id">{member.taskCode}</span>
-        <CalmBadge tone={member.role === "MAIN" ? "violet" : "cyan"}>
-          {memberRoleLabel(member)}
-        </CalmBadge>
-        <CalmBadge tone={workStatusTone[member.workStatus]}>
-          {workStatusLabels[member.workStatus]}
-        </CalmBadge>
-        {member.lifecycleStatus === "ARCHIVED" ? (
-          <CalmBadge tone="gray">已归档</CalmBadge>
-        ) : null}
-      </div>
-      {onOpenTask === undefined ? (
-        <strong>{member.title}</strong>
-      ) : (
-        <button
-          type="button"
-          className="task-group-member-title"
-          aria-haspopup="dialog"
-          data-testid={"task-group-member-open-" + member.taskId}
-          onClick={() => openMemberTask(member)}
-        >
-          <strong>{member.title}</strong>
-        </button>
-      )}
-      <p className="task-group-member-meta">
-        {"负责人 " +
-          member.assignee.name +
-          " · 已发布记录 " +
-          member.publishedRecordCount +
-          " 条 · 合并于 " +
-          formatDay(member.joinedAt)}
-        {member.featureId === null ? "" : " · 功能 #" + member.featureId}
-      </p>
-      {member.memberStatus === "DETACHED" ? (
-        <p
-          className="permission-hint"
-          data-testid={"task-group-detached-" + member.taskId}
-        >
-          <InpulseIcon name="alert" size={14} />
-          {member.detachedAt === null
-            ? "已解除合并"
-            : "已于 " + formatDateTime(member.detachedAt) + " 解除合并"}
-          {member.detachReason === null ? "" : "：" + member.detachReason}
-        </p>
-      ) : null}
-      {member.role === "SOURCE" &&
-      member.memberStatus === "ACTIVE" &&
-      member.sourceKind === "HISTORICAL" ? (
-        <p
-          className="permission-hint"
-          data-testid={"task-group-historical-" + member.taskId}
-        >
-          <InpulseIcon name="alert" size={14} />
-          {"历史来源分支：后续工作建议归入主任务" +
-            (mainMember === null ? "" : " " + mainMember.taskCode) +
-            "。"}
-        </p>
-      ) : null}
-      {member.role === "SOURCE" && member.memberStatus === "ACTIVE" ? (
-        <div className="task-group-member-actions">
-          <UnmergeTaskGroupButton
-            groupId={groupId}
-            member={{
-              taskId: member.taskId,
-              taskCode: member.taskCode,
-              title: member.title,
-            }}
-            closesGroup={activeSources.length === 1}
-            api={api}
-            onReload={async () => {
-              await groupQuery.refetch();
-            }}
-            onChanged={() => {
-              setUnmerged(true);
-              onChanged?.();
-            }}
-          />
+  // 分支卡片与任务卡片同一套配色（2026-09-21）：未完成按优先级铺淡色底与左侧
+  // 色条，已完成转绿、已取消转灰；已解除合并的历史成员保持灰底。
+  const renderMember = (member: TaskGroupMember) => {
+    const detached = member.memberStatus === "DETACHED";
+    return (
+      <li
+        key={member.taskId}
+        className={
+          detached
+            ? "task-group-member detached"
+            : "task-group-member " +
+              taskToneClassName(member.priority, member.workStatus)
+        }
+        data-testid={"task-group-member-" + member.taskId}
+      >
+        <div className="task-group-member-head">
+          <span className="task-id">{member.taskCode}</span>
+          <CalmBadge tone={member.role === "MAIN" ? "violet" : "cyan"}>
+            {memberRoleLabel(member)}
+          </CalmBadge>
+          <CalmBadge tone={workStatusTone[member.workStatus]}>
+            {workStatusLabels[member.workStatus]}
+          </CalmBadge>
+          <CalmBadge
+            tone={taskPriorityBadgeTone(member.priority)}
+            title={"优先级：" + taskPriorityLabel(member.priority)}
+          >
+            {taskPriorityLabel(member.priority)}
+          </CalmBadge>
+          {member.lifecycleStatus === "ARCHIVED" ? (
+            <CalmBadge tone="gray">已归档</CalmBadge>
+          ) : null}
+          {member.role === "SOURCE" && member.memberStatus === "ACTIVE" ? (
+            <UnmergeTaskGroupButton
+              groupId={groupId}
+              member={{
+                taskId: member.taskId,
+                taskCode: member.taskCode,
+                title: member.title,
+              }}
+              closesGroup={activeSources.length === 1}
+              api={api}
+              onReload={async () => {
+                await groupQuery.refetch();
+              }}
+              onChanged={() => {
+                setUnmerged(true);
+                onChanged?.();
+              }}
+            />
+          ) : null}
         </div>
-      ) : null}
-    </li>
-  );
+        {onOpenTask === undefined ? (
+          <strong>{member.title}</strong>
+        ) : (
+          <button
+            type="button"
+            className="task-group-member-title"
+            aria-haspopup="dialog"
+            data-testid={"task-group-member-open-" + member.taskId}
+            onClick={() => openMemberTask(member)}
+          >
+            <strong>{member.title}</strong>
+          </button>
+        )}
+        <p className="task-group-member-meta">
+          {"负责人 " +
+            member.assignee.name +
+            " · 已发布记录 " +
+            member.publishedRecordCount +
+            " 条 · 合并于 " +
+            formatDay(member.joinedAt)}
+          {member.featureName === null ? "" : " · 功能 " + member.featureName}
+        </p>
+        {detached ? (
+          <p
+            className="permission-hint"
+            data-testid={"task-group-detached-" + member.taskId}
+          >
+            <InpulseIcon name="alert" size={14} />
+            {member.detachedAt === null
+              ? "已解除合并"
+              : "已于 " + formatDateTime(member.detachedAt) + " 解除合并"}
+            {member.detachReason === null ? "" : "：" + member.detachReason}
+          </p>
+        ) : null}
+        {member.role === "SOURCE" &&
+        member.memberStatus === "ACTIVE" &&
+        member.sourceKind === "HISTORICAL" ? (
+          <p
+            className="permission-hint"
+            data-testid={"task-group-historical-" + member.taskId}
+          >
+            <InpulseIcon name="alert" size={14} />
+            {"历史来源分支：后续工作建议归入主任务" +
+              (mainMember === null ? "" : " " + mainMember.taskCode) +
+              "。"}
+          </p>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <>
@@ -371,9 +386,9 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                           <strong>{record.title}</strong>
                           <small className="task-group-record-meta">
                             {formatDay(record.publishedAt) + " 发布"}
-                            {record.featureId === null
+                            {record.featureName === null
                               ? ""
-                              : " · 功能 #" + record.featureId}
+                              : " · 功能 " + record.featureName}
                           </small>
                         </button>
                         {record.externalLinks.length > 0 ? (

@@ -746,6 +746,18 @@ describe("GET /api/v1/task-groups/{groupId}（R-1 聚合组视图）", () => {
     expect(detail.members.map((member) => member.publishedRecordCount)).toEqual(
       [1, 5, 1, 0],
     );
+    // 2026-09-21：分支卡片需要展示任务优先级与所属功能名称而不是功能编号。
+    expect(
+      detail.members.map((member) => ({
+        featureName: member.featureName,
+        priority: member.priority,
+      })),
+    ).toEqual([
+      { featureName: "聚合读接口功能A", priority: "NORMAL" },
+      { featureName: "聚合读接口功能B", priority: "NORMAL" },
+      { featureName: "聚合读接口功能A", priority: "NORMAL" },
+      { featureName: "聚合读接口功能B", priority: "NORMAL" },
+    ]);
     expect(detail.members[0]!.taskCode).toContain("-T-");
     expect(detail.members[0]!.title.length).toBeGreaterThan(0);
     expect(detail.members[0]!.assignee).toMatchObject({ userId: memberUser });
@@ -801,6 +813,17 @@ describe("GET /api/v1/task-groups/{groupId}/records（R-4 聚合组记录）", (
     expect(
       page.items.find((item) => item.recordId === crHistorical)?.sourceLabel,
     ).toContain("-T-");
+    // 2026-09-21：记录的功能也按名称返回，顺序与 items 一致。
+    expect(page.items.map((item) => item.featureName)).toEqual([
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+      "聚合读接口功能A",
+      "聚合读接口功能B",
+      "聚合读接口功能B",
+      "聚合读接口功能A",
+    ]);
     expect(page.items.every((item) => item.externalLinks.length === 0)).toBe(
       true,
     );

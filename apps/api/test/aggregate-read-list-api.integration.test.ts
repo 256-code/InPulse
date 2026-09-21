@@ -150,6 +150,7 @@ interface TaskOptions {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
+  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
 }
 
 async function newTask(
@@ -169,7 +170,7 @@ async function newTask(
         title: options.title ?? "聚合读列表接口任务",
         description: "",
         assigneeId: options.assigneeId ?? scope.userId,
-        priority: "NORMAL",
+        priority: options.priority ?? "NORMAL",
         dueAt: null,
       },
     );
@@ -436,7 +437,10 @@ beforeAll(async () => {
     title: "遗留跟进任务",
   });
 
-  tGroupMain = await newTask(projectFixture, { title: "聚合组主任务" });
+  tGroupMain = await newTask(projectFixture, {
+    title: "聚合组主任务",
+    priority: "HIGH",
+  });
   tGroupSource = await newTask(projectFixture, {
     title: "聚合组活动来源",
     workStatus: "DONE",
@@ -444,6 +448,7 @@ beforeAll(async () => {
   tGroupHistorical = await newTask(projectFixture, {
     title: "聚合组历史来源",
     workStatus: "CANCELED",
+    priority: "LOW",
   });
   tGroupDetached = await newTask(projectFixture, { title: "聚合组已解除来源" });
   tClosedDetached = await newTask(projectFixture, { title: "已关闭组来源" });
@@ -977,17 +982,27 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         branch.role,
         branch.sourceKind,
         branch.workStatus,
+        branch.priority,
         branch.moduleId,
         branch.featureId,
       ]),
     ).toEqual([
-      [tGroupMain, "MAIN", null, "TODO", project!.moduleId, null],
-      [tGroupSource, "SOURCE", "ACTIVE", "DONE", project!.moduleId, null],
+      [tGroupMain, "MAIN", null, "TODO", "HIGH", project!.moduleId, null],
+      [
+        tGroupSource,
+        "SOURCE",
+        "ACTIVE",
+        "DONE",
+        "NORMAL",
+        project!.moduleId,
+        null,
+      ],
       [
         tGroupHistorical,
         "SOURCE",
         "HISTORICAL",
         "CANCELED",
+        "LOW",
         project!.moduleId,
         null,
       ],

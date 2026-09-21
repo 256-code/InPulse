@@ -5,12 +5,12 @@ import { loadRuntime } from "../helpers/runtime.js";
 import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
- * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情与任务中心聚合组区块的
- * 关键路径 E2E。从功能页任务详情发起合并（搜索主任务 → 选择 → 确认），合并在
- * 当前页面就地打开聚合组弹窗（`/task-groups/{id}` 独立页已改为弹层，地址不变），
- * 在弹窗里验证主任务与来源分支的展示与记录筛选；并在任务中心验证「任务聚合组」
- * 区块（主分支 / 来源分支 / 查看主任务跳转）；随后解除合并，验证组关闭、关系
- * 标记已解除但历史保留。用例依赖任务创建时同事务写入的搜索投影。
+ * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情与任务中心聚合组卡片的关键
+ * 路径 E2E。从功能页任务详情发起合并（搜索主任务 → 选择 → 确认），合并在当前页面
+ * 就地打开聚合组弹窗（`/task-groups/{id}` 独立页已改为弹层，地址不变），在弹窗里
+ * 验证主任务与来源分支的展示与记录筛选；任务中心验证聚合组卡片（任务卡片同款混排、
+ * 已合并任务不再单独出卡片），随后解除合并，验证组关闭、关系标记已解除但历史保留。
+ * 用例依赖任务创建时同事务写入的搜索投影。
  */
 
 test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async ({
@@ -120,7 +120,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
   }
 });
 
-test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主任务", async ({
+test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分支与来源分支", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -201,38 +201,63 @@ test("F-25 任务中心聚合组区块展示主分支、来源分支与查看主
     await expect(page.locator(".task-group-detail-modal")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(featurePath);
 
-    // 任务中心「任务聚合组」区块：组头、主分支与活动来源分支。
-    await page.goto("/tasks");
-    const panel = page.locator(".group-panel");
-    await expect(panel).toBeVisible();
-    await expect(panel.getByText(/\d+ 个聚合组/)).toBeVisible();
-    const card = panel
-      .locator(".group-card")
+    // 任务中心：聚合组以任务卡片同款外观与任务卡片同网格混排（2026-09-21 定案），
+    // 不再有独立「任务聚合组」区块；分支明细与主任务入口都在组卡打开的弹窗里。
+    // 口径切到「未完成」（today=0）：这两个已合并任务本身属于该口径，若未被隐藏就会
+    // 以任务卡片出现，因此能证明它们只由聚合组卡片代表。
+    const taskCenterLoaded = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/v1/tasks",
+    );
+    await page.goto("/tasks?today=0");
+    await taskCenterLoaded;
+    const groupCard = page
+      .locator(".calm-task-grid .task-group-card")
       .filter({ hasText: mainTaskTitle });
-    await expect(card).toBeVisible();
-    await expect(card.locator("header .task-id")).toContainText("TG-");
-    await expect(card.getByText("进行中")).toBeVisible();
-    await expect(card.locator("header")).toContainText(runtime.projectName);
-    await expect(card).toContainText("来源任务的原始状态");
-    const mainRow = card.locator("li").filter({ hasText: mainTaskTitle });
-    await expect(mainRow).toContainText("主分支");
-    await expect(mainRow).toContainText("未完成");
-    await expect(mainRow).toContainText(runtime.user.name);
-    const sourceRow = card.locator("li").filter({ hasText: sourceTaskTitle });
-    await expect(sourceRow).toContainText("活动来源");
+    await expect(groupCard).toBeVisible();
+    await expect(groupCard.locator(".task-id")).toContainText("TG-");
+    await expect(groupCard.getByText("聚合组", { exact: true })).toBeVisible();
+    await expect(groupCard.getByText("进行中")).toBeVisible();
+    await expect(groupCard).toContainText(runtime.projectName);
+    // 组卡列出各分支负责人（本例两条分支同一人负责，按 userId 去重后只出现一次）。
+    await expect(groupCard).toContainText(runtime.user.name);
+    // 组优先级按未完成分支里的最高一档派生（2026-09-21 产品要求）：两条分支都以
+    // 默认优先级「普通」创建且都未完成，组卡显示「普通」优先级徽章，整卡套用
+    // 同一档色调（tone-prio-normal），与任务卡片的配色体系一致。
+    await expect(groupCard.getByText("普通", { exact: true })).toBeVisible();
+    await expect(groupCard).toHaveClass(/tone-prio-normal/);
+    // 已合并任务不再单独出卡片：来源任务标题在组卡上不出现；主任务标题只由组卡
+    // 承载（组名=主任务标题，所以这里必须排除组卡本身）。
+    await expect(
+      page.locator(".calm-task-card").filter({ hasText: sourceTaskTitle }),
+    ).toHaveCount(0);
+    await expect(
+      page
+        .locator(".calm-task-card:not(.task-group-card)")
+        .filter({ hasText: mainTaskTitle }),
+    ).toHaveCount(0);
 
-    // 分支按钮按统一模式打开任务详情；返回任务中心后「查看主任务」直达主任务。
-    await sourceRow.locator("button.branch-task").click();
+    // 点击组卡就地打开聚合组弹窗（地址不变），弹窗保留主分支与活动来源分支。
+    await groupCard.click();
+    const group = page.locator(".task-group-detail-modal");
+    await expect(group).toBeVisible();
+    expect(new URL(page.url()).pathname).not.toContain("/task-groups/");
+    const mainMemberRow = group
+      .locator(".task-group-member")
+      .filter({ hasText: mainTaskTitle });
+    await expect(mainMemberRow).toContainText("主任务");
+    await expect(mainMemberRow).toContainText(runtime.user.name);
+    const sourceMemberRow = group
+      .locator(".task-group-member")
+      .filter({ hasText: sourceTaskTitle });
+    await expect(sourceMemberRow).toContainText("活动来源分支");
+
+    // 弹窗成员标题按统一模式就地打开任务详情：来源任务与主任务都可直达。
+    await sourceMemberRow.locator(".task-group-member-title").click();
     await expect(detail).toBeVisible();
     await expect(detail.getByText(sourceTaskTitle)).toBeVisible();
     await detail.getByRole("button", { name: "关闭" }).click();
     await expect(detail).toBeHidden();
-
-    await page.goto("/tasks");
-    const cardAgain = page
-      .locator(".group-panel .group-card")
-      .filter({ hasText: mainTaskTitle });
-    await cardAgain.getByRole("button", { name: "查看主任务" }).click();
+    await mainMemberRow.locator(".task-group-member-title").click();
     await expect(detail).toBeVisible();
     await expect(detail.getByText(mainTaskTitle)).toBeVisible();
   } finally {

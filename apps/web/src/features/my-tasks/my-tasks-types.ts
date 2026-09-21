@@ -199,6 +199,6 @@ export interface MyTasksAdapter {
   readonly source: "mock" | "server";
   readonly notice: string;
   fetchMyTasks(input: MyTasksQueryInput): Promise<MyTaskListResult>;
-  /** R-7 聚合组列表（任务中心「任务聚合组」区块）；缺数据时返回空页而不是隐藏区块。 */
+  /** R-7 聚合组列表（与任务卡片同一网格呈现）；缺数据时返回空页而不是隐藏列表区。 */
   fetchTaskGroups(input: MyTaskGroupsQueryInput): Promise<MyTaskGroupsResult>;
 }

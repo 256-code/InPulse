@@ -34,7 +34,7 @@ export interface UseMyTaskGroupsQueryOptions {
 /**
  * R-7 任务聚合组列表：按 groupId 倒序签名游标分页；服务端已按
  * AuthorizedProjectScope 过滤，非成员项目不会出现在结果中。
- * 失败时不隐藏「任务聚合组」区块，由视图渲染错误态。
+ * 失败时不隐藏任务卡片，由视图在列表下方渲染错误态。
  */
 export function useMyTaskGroupsQuery({
   projectId,
@@ -64,7 +64,7 @@ export function useMyTasksQuery({
       adapter.fetchMyTasks({ filters, viewerId, cursor: pageParam }),
     // 同一处根因：切换统计卡 / 筛选会换 queryKey，若不保留上一份列表，
     // 列表区（含展示方式图标行）会被「正在加载任务列表…」占位替换，
-    // 高度先缩后涨，下方「任务聚合组」随之上跳再落回（2026-09-20 修）。
+    // 高度先缩后涨，下方的聚合组卡片随之上跳再落回（2026-09-20 修）。
     placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),

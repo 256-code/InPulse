@@ -26,6 +26,7 @@ import {
   ExternalLinksQueryPort,
   type ChangeRecordLinkRow,
 } from "../external-links/index.js";
+import { FeatureReadPort } from "../features/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
   ProjectQueryPort,
@@ -100,6 +101,26 @@ function toUserRef(user: UserRefItem): {
   return { userId: user.userId, name: user.name, avatarUrl: user.avatarUrl };
 }
 
+/**
+ * 功能名称解析（2026-09-21 聚合组弹窗按名称而非编号展示功能）：featureId 为 null
+ * 时为 null（模块级作用域）；已归属功能却解析不到名称属于聚合读数据不完整——
+ * 功能只归档不删除，成员或记录不会悬空——显式失败而不是回退成编号。
+ */
+function resolveFeatureName(
+  featureNameById: ReadonlyMap<number, string>,
+  featureId: number | null,
+  subjectLabel: "任务" | "记录",
+): string | null {
+  if (featureId === null) {
+    return null;
+  }
+  const name = featureNameById.get(featureId);
+  if (name === undefined) {
+    throw inconsistentError(subjectLabel + "缺少功能 " + String(featureId));
+  }
+  return name;
+}
+
 function toGroupSummary(group: TaskGroupReadRecord): TaskGroupSummary {
   return {
     groupId: group.groupId,
@@ -123,6 +144,7 @@ function toMemberDetails(
   taskById: ReadonlyMap<number, TaskReadModel>,
   countByTask: ReadonlyMap<number, number>,
   userById: ReadonlyMap<number, UserRefItem>,
+  featureNameById: ReadonlyMap<number, string>,
 ): TaskGroupMemberDetail[] {
   const sorted = [...members].sort((left, right) => {
     if (left.role !== right.role) {
@@ -153,9 +175,11 @@ function toMemberDetails(
       sourceKind: member.sourceKind,
       memberStatus: member.status,
       workStatus: task.workStatus,
+      priority: task.priority,
       lifecycleStatus: task.lifecycleStatus,
       moduleId: task.moduleId,
       featureId: task.featureId,
+      featureName: resolveFeatureName(featureNameById, task.featureId, "任务"),
       assignee: toUserRef(assignee),
       joinedAt: member.joinedAt.toISOString(),
       detachedAt:
@@ -193,6 +217,7 @@ export class TaskGroupQueryService {
     @Inject(UserReadPort) private readonly users: UserReadPort,
     @Inject(ExternalLinksQueryPort)
     private readonly links: ExternalLinksQueryPort,
+    @Inject(FeatureReadPort) private readonly features: FeatureReadPort,
     @Inject(PostgresUnitOfWork) private readonly unitOfWork: UnitOfWork,
     private readonly cursor: AggregateReadCursorService,
   ) {}
@@ -227,6 +252,16 @@ export class TaskGroupQueryService {
       const assignees = await this.users.listByIds(tx, [
         ...new Set(taskRows.map((row) => row.assigneeId)),
       ]);
+      const featureNames = await this.features.listNames(tx, {
+        projectIds: [group.projectId],
+        featureIds: [
+          ...new Set(
+            taskRows
+              .map((row) => row.featureId)
+              .filter((featureId): featureId is number => featureId !== null),
+          ),
+        ],
+      });
       return {
         group: toGroupSummary(group),
         members: toMemberDetails(
@@ -234,6 +269,7 @@ export class TaskGroupQueryService {
           new Map(taskRows.map((row) => [row.taskId, row])),
           new Map(counts.map((item) => [item.taskId, item.count])),
           new Map(assignees.map((item) => [item.userId, item])),
+          new Map(featureNames.map((item) => [item.featureId, item.name])),
         ),
       };
     });
@@ -334,6 +370,7 @@ export class TaskGroupQueryService {
             role: member.role,
             sourceKind: member.sourceKind,
             workStatus: task.workStatus,
+            priority: task.priority,
             moduleId: task.moduleId,
             featureId: task.featureId,
             assignee: toUserRef(assignee),
@@ -428,6 +465,19 @@ export class TaskGroupQueryService {
         [group.projectId],
         pageTaskIds,
       );
+      const featureNames = await this.features.listNames(tx, {
+        projectIds: [group.projectId],
+        featureIds: [
+          ...new Set(
+            page.items
+              .map((item) => item.featureId)
+              .filter((featureId): featureId is number => featureId !== null),
+          ),
+        ],
+      });
+      const featureNameById = new Map(
+        featureNames.map((item) => [item.featureId, item.name]),
+      );
       const taskCodeById = new Map(
         pageTasks.map((task) => [task.taskId, task.code]),
       );
@@ -451,6 +501,7 @@ export class TaskGroupQueryService {
         taskId: row.taskId,
         sourceLabel: this.sourceLabel(row.taskId, roleByTask, taskCodeById),
         featureId: row.featureId,
+        featureName: resolveFeatureName(featureNameById, row.featureId, "记录"),
         publishedAt: row.publishedAt.toISOString(),
         externalLinks: linksByRecord.get(row.recordId) ?? [],
       }));

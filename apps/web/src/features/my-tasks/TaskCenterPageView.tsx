@@ -13,11 +13,14 @@ import {
   CalmBadge,
   CalmEmptyState,
   CalmSegmented,
-  CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { priorityDotColor } from "@features/common/priority-select-option";
-import { taskToneClassName } from "@features/common/task-tone";
+import {
+  taskPriorityBadgeTone,
+  taskPriorityLabel,
+  taskToneClassName,
+} from "@features/common/task-tone";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import {
@@ -43,6 +46,7 @@ import {
   MY_TASKS_FULL_FILTER_SUPPORT,
   type MyTaskFilters,
   type MyTaskGithubFilter,
+  type MyTaskGroupItem,
   type MyTaskLevel,
   type MyTaskListItem,
   type MyTaskPriority,
@@ -66,31 +70,6 @@ const statusTone: Record<MyTaskWorkStatus, "blue" | "green" | "gray"> = {
   DONE: "green",
   CANCELED: "gray",
 };
-
-const sourceKindLabels: Record<"ACTIVE" | "HISTORICAL", string> = {
-  ACTIVE: "活动来源",
-  HISTORICAL: "历史来源",
-};
-
-/** 来源分支标签：sourceKind 缺失时退回通用「来源分支」，不虚构活动/历史。 */
-function sourceKindLabel(sourceKind: "ACTIVE" | "HISTORICAL" | null): string {
-  return sourceKind === null ? "来源分支" : sourceKindLabels[sourceKind];
-}
-
-const priorityLabels: Record<MyTaskPriority, string> = {
-  LOW: "低",
-  NORMAL: "普通",
-  HIGH: "高",
-  URGENT: "紧急",
-};
-
-const priorityTone: Record<MyTaskPriority, "gray" | "blue" | "amber" | "red"> =
-  {
-    LOW: "gray",
-    NORMAL: "blue",
-    HIGH: "amber",
-    URGENT: "red",
-  };
 
 const priorityOrder: readonly MyTaskPriority[] = [
   "URGENT",
@@ -245,9 +224,21 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   );
   const projectNameOf = (item: MyTaskListItem): string =>
     projectNames.get(item.projectId) ?? item.projectName;
-  const visibleItems = items.filter((item) =>
+  const matchedItems = items.filter((item) =>
     matchesMyTasksLocalFilters(item, filters, filterSupport),
   );
+  /**
+   * 已合并任务不再单独出卡片（2026-09-21 产品定案）：ACTIVE 聚合组的主任务与来源
+   * 分支由聚合组卡片代表，任务卡片、列表行与折叠明细都不再重复这一份。
+   * 判定用 R-3 的 groupRole——服务端只对 ACTIVE 组的 ACTIVE 成员返回，解除合并后
+   * 自动回 null，因此不受聚合组列表分页与读取失败影响。
+   * 例外：用户显式按合并关系筛选（主任务 / 来源任务）时保留成员卡片本身，
+   * 否则这两个选项永远筛不出任何结果。
+   */
+  const visibleItems =
+    filters.relation === "MAIN" || filters.relation === "SOURCE"
+      ? matchedItems
+      : matchedItems.filter((item) => item.groupRole === null);
   const openItems = visibleItems.filter((item) => item.workStatus === "TODO");
   const doneItems = visibleItems.filter((item) => item.workStatus === "DONE");
   const canceledItems = visibleItems.filter(
@@ -264,6 +255,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       : filters.status === "all"
         ? visibleItems
         : openItems;
+  /**
+   * 任务卡片与聚合组卡片任一存在即渲染列表区：聚合组混排进任务网格后不再单列
+   * 「还没有聚合组」空态，任务为空但聚合组存在时也不能显示任务空态；
+   * 已合并任务被隐藏时同理，它由聚合组卡片代表。
+   */
+  const hasListContent = primaryItems.length > 0 || groups.length > 0;
   const selectedCardKey = selectedStatCardKey(filters);
   /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
   const todayTodoActive =
@@ -452,10 +449,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </div>
         <div className="task-card-footer">
           <CalmBadge
-            tone={priorityTone[item.priority]}
-            title={`优先级：${priorityLabels[item.priority]}`}
+            tone={taskPriorityBadgeTone(item.priority)}
+            title={`优先级：${taskPriorityLabel(item.priority)}`}
           >
-            {priorityLabels[item.priority]}
+            {taskPriorityLabel(item.priority)}
           </CalmBadge>
           {item.publishedRecordCount > 0 ? (
             <span className="task-card-counts">
@@ -465,6 +462,144 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </span>
             </span>
           ) : null}
+        </div>
+      </button>
+    );
+  };
+
+  /**
+   * 聚合组卡片的负责人名单（2026-09-21 产品要求）：组内分支可以由不同人负责，
+   * 卡片要把全部负责人都列出来，不能只显示主任务负责人。按 userId 去重（同一人
+   * 同时挂主任务与来源分支时只出现一次）；服务端已把主任务排在分支首位，保持
+   * 原始顺序即可让主任务负责人在最前。
+   */
+  const branchAssigneeNames = (group: MyTaskGroupItem): readonly string[] => {
+    const seen = new Set<number>();
+    const names: string[] = [];
+    for (const branch of group.branches) {
+      if (seen.has(branch.assignee.userId)) continue;
+      seen.add(branch.assignee.userId);
+      names.push(branch.assignee.name);
+    }
+    return names;
+  };
+
+  /**
+   * 聚合组卡片（2026-09-21 产品定案）：与任务卡片同款外观、同一网格呈现，
+   * 卡片只做入口——分支明细、来源类型、解除合并与主任务直达都在聚合组弹窗里，
+   * 卡片上只额外列出去重后的分支负责人（可能多人）。CLOSED 组按服务端口径
+   * 没有分支，只保留组名与状态。
+   *
+   * 组优先级与完成态（2026-09-21 产品要求，同批）：优先级取未完成（TODO）分支中
+   * 最高的一档；该分支完成后自动落到第二高，全部分支收尾后整卡按「已完成」呈现
+   * 并隐藏优先级徽章。整卡配色同步跟随派生结果（tone-prio-*，与任务卡片同一套
+   * 色调），已关闭且无分支的组没有事实可派生，退回聚合组紫色。组自身的
+   * ACTIVE / CLOSED 合并语义不变，解除入口照旧。
+   * 已取消与已完成一样算收尾，否则被取消的分支会永远压住组优先级。
+   */
+  const renderGroupCard = (group: MyTaskGroupItem) => {
+    const mainBranch =
+      group.branches.find((branch) => branch.role === "MAIN") ?? null;
+    const assigneeNames = branchAssigneeNames(group);
+    const assigneeText =
+      assigneeNames.length === 0 ? "—" : assigneeNames.join("、");
+    const assigneeTitle =
+      assigneeNames.length === 0
+        ? "已关闭的聚合组：负责人保留在详情中"
+        : assigneeNames.length === 1 && mainBranch !== null
+          ? "主任务负责人：" + assigneeText
+          : "各分支负责人：" + assigneeText + "（含主任务与全部来源分支）";
+    const doneCount = group.branches.filter(
+      (branch) => branch.workStatus === "DONE",
+    ).length;
+    const active = group.status === "ACTIVE";
+    const openBranches = group.branches.filter(
+      (branch) => branch.workStatus === "TODO",
+    );
+    const groupPriority =
+      priorityOrder.find((priority) =>
+        openBranches.some((branch) => branch.priority === priority),
+      ) ?? null;
+    const completed = group.branches.length > 0 && groupPriority === null;
+    // 卡片配色跟随派生的组优先级（2026-09-21 产品要求）：未完成取最高一档色调，
+    // 全部收尾转完成绿；已关闭且无分支的组没有事实可派生，退回聚合组紫色。
+    const groupTone = completed
+      ? "tone-prio-done"
+      : groupPriority === null
+        ? "tone-group"
+        : taskToneClassName(groupPriority, "TODO");
+    return (
+      <button
+        type="button"
+        className={"calm-task-card task-group-card " + groupTone}
+        key={"group-" + group.groupId}
+        data-testid={"my-task-group-" + group.groupId}
+        aria-haspopup="dialog"
+        onClick={() => setOpenGroupId(group.groupId)}
+      >
+        <div className="calm-card-top">
+          <span className="task-id">{group.code}</span>
+          <span className="task-card-badges">
+            <CalmBadge tone="violet">聚合组</CalmBadge>
+            <CalmBadge tone={completed ? "green" : active ? "blue" : "gray"}>
+              {completed ? "已完成" : active ? "进行中" : "已关闭"}
+            </CalmBadge>
+          </span>
+        </div>
+        <h3>{group.name}</h3>
+        <p className="task-belonging">
+          {projectNames.get(group.projectId) ?? group.projectName}
+        </p>
+        <div className="calm-card-bottom">
+          <span className="task-group-assignees" title={assigneeTitle}>
+            <InpulseIcon name="users" size={14} />
+            <span className="task-group-assignee-names">{assigneeText}</span>
+          </span>
+          <span
+            title={
+              group.branches.length > 0
+                ? "包含主分支与全部来源分支"
+                : "已关闭的聚合组：分支历史保留在详情中"
+            }
+          >
+            <InpulseIcon name="gitMerge" size={14} />
+            {group.branches.length > 0
+              ? group.branches.length + " 条分支"
+              : "—"}
+          </span>
+        </div>
+        <div className="task-card-footer">
+          {groupPriority === null ? null : (
+            <CalmBadge
+              tone={taskPriorityBadgeTone(groupPriority)}
+              title={
+                "优先级：" +
+                taskPriorityLabel(groupPriority) +
+                "（未完成分支中最高）"
+              }
+            >
+              {taskPriorityLabel(groupPriority)}
+            </CalmBadge>
+          )}
+          {group.branches.length > 0 ? (
+            <span className="task-card-counts">
+              <span
+                title={
+                  doneCount +
+                  " / " +
+                  group.branches.length +
+                  " 条分支任务已完成"
+                }
+              >
+                <InpulseIcon name="check" size={13} />
+                已完成 {doneCount}/{group.branches.length}
+              </span>
+            </span>
+          ) : null}
+          <span className="task-group-card-open">
+            {active ? "查看详情 / 解除合并" : "查看聚合历史"}
+            <InpulseIcon name="chevronRight" size={13} />
+          </span>
         </div>
       </button>
     );
@@ -514,8 +649,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </td>
               <td>{item.assignee.name}</td>
               <td>
-                <CalmBadge tone={priorityTone[item.priority]}>
-                  {priorityLabels[item.priority]}
+                <CalmBadge tone={taskPriorityBadgeTone(item.priority)}>
+                  {taskPriorityLabel(item.priority)}
                 </CalmBadge>
               </td>
               <td className={isOverdue(item) ? "due-overdue" : undefined}>
@@ -733,7 +868,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             { value: "", label: "全部" },
             ...priorityOrder.map((priority) => ({
               value: priority,
-              label: priorityLabels[priority],
+              label: taskPriorityLabel(priority),
               dotColor: priorityDotColor(priority),
             })),
           ]}
@@ -881,14 +1016,30 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               size={16}
             />
           </div>
-          {primaryItems.length > 0 ? (
+          {hasListContent ? (
             filters.display === "cards" ? (
+              // 聚合组卡片与任务卡片同一网格混排：两侧列表各自签名游标分页，无法
+              // 跨源合并排序，任务在前、聚合组追加在网格尾部。
               <div className="calm-task-grid">
                 {primaryItems.map(renderCard)}
+                {groups.map(renderGroupCard)}
               </div>
             ) : (
-              renderTable(primaryItems)
+              <>
+                {primaryItems.length > 0 ? renderTable(primaryItems) : null}
+                {groups.length > 0 ? (
+                  <div className="calm-task-grid task-group-grid">
+                    {groups.map(renderGroupCard)}
+                  </div>
+                ) : null}
+              </>
             )
+          ) : groupsQuery.isPending ? (
+            // 任务为空且聚合组仍在加载：先给加载态，避免空态一闪再被组卡片顶掉。
+            <div className="calm-state">
+              <Spin size="large" />
+              <p>正在加载任务列表…</p>
+            </div>
           ) : (
             <CalmEmptyState
               icon="check"
@@ -918,148 +1069,34 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </>
       )}
 
-      {taskQuery.hasNextPage && (
-        <Button
-          loading={taskQuery.isFetchingNextPage}
-          onClick={() => void taskQuery.fetchNextPage()}
-        >
-          加载更多任务
-        </Button>
-      )}
+      {groupsQuery.isError ? (
+        // 聚合组读取失败不回退成员去重（判据在任务侧 groupRole）：错误就地提示，
+        // 未入组的任务卡片照常可用。
+        <Alert type="error" title={describeMyTasksError(groupsQuery.error)} />
+      ) : null}
 
-      <section className="group-panel" aria-label="任务聚合组">
-        <CalmSectionTitle
-          title="任务聚合组"
-          hint="合并后主任务是统一入口，来源任务作为独立分支保留全部历史"
-        >
-          <CalmBadge tone="violet">{groups.length} 个聚合组</CalmBadge>
-        </CalmSectionTitle>
-        {groupsQuery.isPending ? (
-          <div className="calm-state">
-            <Spin size="large" />
-            <p>正在加载聚合组…</p>
-          </div>
-        ) : groupsQuery.isError ? (
-          <Alert type="error" title={describeMyTasksError(groupsQuery.error)} />
-        ) : groups.length === 0 ? (
-          <CalmEmptyState
-            icon="gitMerge"
-            title="还没有聚合组"
-            description="发现重复任务时，可在任务详情中合并到主任务。"
-          />
-        ) : (
-          <>
-            <div className="group-list">
-              {groups.map((group) => {
-                const mainTask = group.mainTask;
-                return (
-                  <article className="group-card" key={group.groupId}>
-                    <header>
-                      <span className="task-id">{group.code}</span>
-                      <button
-                        type="button"
-                        className="group-card-title"
-                        aria-haspopup="dialog"
-                        onClick={() => setOpenGroupId(group.groupId)}
-                      >
-                        <strong>{group.name}</strong>
-                      </button>
-                      <CalmBadge
-                        tone={group.status === "ACTIVE" ? "blue" : "gray"}
-                      >
-                        {group.status === "ACTIVE" ? "进行中" : "已关闭"}
-                      </CalmBadge>
-                      <small>
-                        {projectNames.get(group.projectId) ?? group.projectName}
-                      </small>
-                    </header>
-                    <ul>
-                      {group.branches.map((branch) => (
-                        <li key={branch.taskId}>
-                          <CalmBadge
-                            tone={branch.role === "MAIN" ? "violet" : "cyan"}
-                          >
-                            {branch.role === "MAIN"
-                              ? "主分支"
-                              : sourceKindLabel(branch.sourceKind)}
-                          </CalmBadge>
-                          <button
-                            type="button"
-                            className="branch-task"
-                            onClick={() =>
-                              onOpenTask?.({
-                                projectId: group.projectId,
-                                moduleId: branch.moduleId,
-                                featureId: branch.featureId,
-                                taskId: branch.taskId,
-                              })
-                            }
-                          >
-                            <span className="branch-task-code">
-                              {branch.taskCode}
-                            </span>
-                            <strong>{branch.title}</strong>
-                          </button>
-                          <CalmBadge tone={statusTone[branch.workStatus]}>
-                            {statusLabels[branch.workStatus]}
-                          </CalmBadge>
-                          <small>{branch.assignee.name}</small>
-                        </li>
-                      ))}
-                    </ul>
-                    <footer>
-                      <InpulseIcon name="gitMerge" size={14} />
-                      <span>
-                        来源任务的原始状态、负责人、迭代记录与 GitHub
-                        链接全部保留。
-                      </span>
-                      <button
-                        type="button"
-                        className="group-card-open"
-                        aria-haspopup="dialog"
-                        onClick={() => setOpenGroupId(group.groupId)}
-                      >
-                        {group.status === "ACTIVE"
-                          ? "查看详情 / 解除合并"
-                          : "查看聚合历史"}
-                      </button>
-                      {mainTask === null ? null : (
-                        <button
-                          type="button"
-                          className="text-button"
-                          onClick={() =>
-                            onOpenTask?.({
-                              projectId: mainTask.projectId,
-                              moduleId: mainTask.moduleId,
-                              featureId: mainTask.featureId,
-                              taskId: mainTask.taskId,
-                            })
-                          }
-                        >
-                          查看主任务
-                          <InpulseIcon name="chevronRight" size={14} />
-                        </button>
-                      )}
-                    </footer>
-                  </article>
-                );
-              })}
-            </div>
-            {groupsQuery.hasNextPage ? (
-              <div className="group-panel-load-more">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={groupsQuery.isFetchingNextPage}
-                  onClick={() => void groupsQuery.fetchNextPage()}
-                >
-                  {groupsQuery.isFetchingNextPage ? "正在加载…" : "加载更多"}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
-      </section>
+      {taskQuery.hasNextPage || groupsQuery.hasNextPage ? (
+        <div className="task-more-row">
+          {taskQuery.hasNextPage ? (
+            <Button
+              loading={taskQuery.isFetchingNextPage}
+              onClick={() => void taskQuery.fetchNextPage()}
+            >
+              加载更多任务
+            </Button>
+          ) : null}
+          {groupsQuery.hasNextPage ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={groupsQuery.isFetchingNextPage}
+              onClick={() => void groupsQuery.fetchNextPage()}
+            >
+              {groupsQuery.isFetchingNextPage ? "正在加载…" : "加载更多聚合组"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <TaskGroupDetailModal
         groupId={openGroupId}

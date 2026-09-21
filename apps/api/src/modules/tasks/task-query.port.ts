@@ -18,6 +18,7 @@ export interface TaskReadModel {
   title: string;
   creatorId: number;
   assigneeId: number;
+  priority: TaskPriority;
   workStatus: "TODO" | "DONE" | "CANCELED";
   lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
   rowVersion: number;
@@ -360,14 +361,14 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
   async findByTaskId(tx: TransactionContext, taskId: number) {
     const [row] = await tx.sql<
       TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
       ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId}`;
     return row;
   }
   async find(tx: TransactionContext, projectId: number, taskId: number) {
     const [row] = await tx.sql<
       TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
       ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId}`;
     return row;
   }
@@ -390,7 +391,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const tasks = [...taskIds];
     return (await tx.sql<
       TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
       ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) ORDER BY id ASC`) as unknown as readonly TaskReadModel[];
   }
 

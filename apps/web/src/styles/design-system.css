@@ -4699,110 +4699,42 @@ td.due-overdue {
   gap: 4px;
 }
 
-/* 任务聚合组与上方任务卡网格共用同一条左基准线：面板横向不再内缩 20px。 */
-.group-panel {
-  padding: 20px 0;
-  margin-top: 28px;
+/* 任务聚合组卡片（2026-09-21 产品定案）：与任务卡片同网格混排，外框、色条、
+   内边距全部复用 `.calm-task-card`。卡片配色自 2026-09-21 起跟随派生的组优先级
+   （复用 .tone-prio-*），紫色只作为「已关闭且无分支、无可派生优先级」组卡的兜底。
+   独立区块（.group-panel / .group-card / .branch-task）已随该定案删除。 */
+.tone-group {
+  --task-c: #7c6bd0;
+  --task-bg: #f8f6ff;
+  --task-hov: #f0edfd;
+  --task-bd: #e2ddf4;
+  --task-fg: #5b4aa3;
 }
-/* 标题块（标题 + 说明 + 右侧计数）比卡片外沿再内缩 10px，与卡片正文拉开
-   一点呼吸感；数值由产品在浏览器里定案。 */
-.group-panel > .calm-section-title {
-  margin-bottom: 16px;
-  padding-left: 10px;
-}
-/* 固定在两列（并在 1000px 以下回落单列）：auto-fill 在 1136px 容器里会算出
-   三列，卡片宽度掉到 369px 后任务编号与页脚文案都会折行。 */
-.group-list {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.group-card {
-  border: 1px solid #e2eaf3;
-  border-radius: 10px;
-  background: #fbfdff;
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.group-card > header {
+/* 卡片页脚右侧的「查看详情 / 解除合并」提示：整卡可点，这里只给视觉指示；
+   文字色跟随整卡色调（.tone-prio-* 的 --task-fg），无色调时退回聚合组紫色。 */
+.task-group-card-open {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.group-card > header strong {
-  font-size: 13px;
-  color: #2b4560;
-}
-.group-card > header small {
-  color: #8b9aab;
-  font-size: 11px;
-  margin-left: auto;
-}
-.group-card > ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.group-card > ul li {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 11px;
-  background: white;
-  border: 1px solid #e8eef5;
-  border-radius: 7px;
-}
-.group-card > ul li > small {
-  color: #8b9aab;
-  font-size: 11px;
-  margin-left: auto;
-  white-space: nowrap;
-}
-.group-card > footer {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #8494a6;
-  font-size: 11px;
-  border-top: 1px solid #eaf0f6;
-  padding-top: 11px;
-  line-height: 1.6;
-}
-.group-card > footer > span {
-  flex: 1;
-  min-width: 0;
-}
-.branch-task {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
   gap: 3px;
+  margin-left: auto;
+  color: var(--task-fg, #6b58c4);
+  font-size: 11px;
 }
-/* 分支行以任务标题为主信息（深色），任务编号只作次要标识（浅色）。 */
-.branch-task strong {
-  color: #2b4560;
-  font-size: 12px;
+/* 聚合组卡片的负责人（2026-09-21 产品要求）：分支可能由不同人负责，名单较长时
+   省略显示，完整名单由 title 给出；负责人一侧允许收缩，分支数保持完整可见。 */
+.task-group-assignees {
+  min-width: 0;
+}
+.task-group-assignee-names {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.branch-task .branch-task-code {
-  color: #8b9aab;
-  font-size: 11px;
-}
-.branch-task:hover strong {
-  color: #1467d8;
+/* 聚合组全部分支收尾后的完成态走 `.calm-task-card.tone-prio-done` 的共用规则
+   （整卡转绿、标题转完成绿），组卡不再单列样式。 */
+/* 列表视图下聚合组仍以卡片形式追加在表格之后，与卡片视图保持同一外观。 */
+.task-group-grid {
+  margin-top: 20px;
 }
 .branch-list {
   list-style: none;
@@ -5754,9 +5686,6 @@ td.due-overdue {
   }
   .rule-list-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .group-list {
-    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 820px) {

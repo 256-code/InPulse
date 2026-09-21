@@ -139,6 +139,7 @@ function taskFixture(
     title: "任务 " + String(taskId),
     creatorId: 5,
     assigneeId: 5,
+    priority: "NORMAL",
     workStatus: "TODO",
     lifecycleStatus: "ACTIVE",
     rowVersion: 1,
@@ -207,6 +208,12 @@ function taskGroupSetup(
     }[];
     readonly page?: TaskGroupRecordPage;
     readonly projects?: readonly ProjectItem[];
+    readonly featureNames?: readonly {
+      readonly featureId: number;
+      readonly projectId: number;
+      readonly moduleId: number;
+      readonly name: string;
+    }[];
     readonly decode?: () => number | null;
   } = {},
 ) {
@@ -218,6 +225,13 @@ function taskGroupSetup(
   const findGroupById = vi.fn().mockResolvedValue(options.group);
   const listMembers = vi.fn().mockResolvedValue(options.members ?? []);
   const listByIds = vi.fn().mockResolvedValue(options.tasks ?? []);
+  const listFeatureNames = vi
+    .fn()
+    .mockResolvedValue(
+      options.featureNames ?? [
+        { featureId: 4, projectId: 7, moduleId: 3, name: "登录页" },
+      ],
+    );
   const countPublishedByTask = vi.fn().mockResolvedValue(options.counts ?? []);
   const listVisibleRecordsByTaskIds = vi
     .fn()
@@ -245,6 +259,7 @@ function taskGroupSetup(
     } as unknown as ChangeRecordReadPort,
     { listByIds: listUsers } as unknown as UserReadPort,
     { listChangeRecordLinks } as unknown as ExternalLinksQueryPort,
+    { listNames: listFeatureNames } as unknown as FeatureReadPort,
     unitOfWork,
     cursor as unknown as AggregateReadCursorService,
   );
@@ -254,6 +269,7 @@ function taskGroupSetup(
     findGroupById,
     listMembers,
     listByIds,
+    listFeatureNames,
     countPublishedByTask,
     listVisibleRecordsByTaskIds,
     listChangeRecordLinks,
@@ -308,6 +324,7 @@ function taskGroupListSetup(
     {} as unknown as ChangeRecordReadPort,
     { listByIds: listUsers } as unknown as UserReadPort,
     {} as unknown as ExternalLinksQueryPort,
+    {} as unknown as FeatureReadPort,
     unitOfWork,
     cursor as unknown as AggregateReadCursorService,
   );
@@ -401,12 +418,20 @@ describe("TaskGroupQueryService.getTaskGroup", () => {
       memberStatus: "ACTIVE",
       publishedRecordCount: 2,
       featureId: 4,
+      featureName: "登录页",
+      priority: "NORMAL",
       assignee: { userId: 5, name: "成员", avatarUrl: null },
       joinedAt: baseTime.toISOString(),
       detachedAt: null,
     });
+    // 功能名称按成员任务的 featureId 批量解析：只查去重后的已归属功能 ID。
+    expect(setup.listFeatureNames).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      featureIds: [4],
+    });
     expect(result.members[1]!.role).toBe("SOURCE");
     expect(result.members[1]!.featureId).toBeNull();
+    expect(result.members[1]!.featureName).toBeNull();
     expect(result.members[1]!.publishedRecordCount).toBe(0);
     expect(result.members[3]).toMatchObject({
       taskId: 24,
@@ -430,6 +455,24 @@ describe("TaskGroupQueryService.getTaskGroup", () => {
       status: 500,
       code: "AGGREGATE_READ_INCONSISTENT",
     });
+  });
+
+  it("已归属功能解析不到名称时以 500 失败而不是回退编号", async () => {
+    const setup = taskGroupSetup({
+      group: groupFixture(),
+      members: [memberFixture({ taskId: 21 })],
+      tasks: [taskFixture(21)],
+      featureNames: [],
+    });
+    await expect(
+      setup.service.getTaskGroup({ actorUserId: 5, groupId: 11 }),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "AGGREGATE_READ_INCONSISTENT",
+    });
+    await expect(
+      setup.service.getTaskGroup({ actorUserId: 5, groupId: 11 }),
+    ).rejects.toThrowError("任务缺少功能 4");
   });
 });
 describe("TaskGroupQueryService.listTaskGroupRecords", () => {
@@ -490,10 +533,14 @@ describe("TaskGroupQueryService.listTaskGroupRecords", () => {
       recordStatus: "PUBLISHED",
       taskId: 21,
       featureId: null,
+      featureName: null,
       externalLinks: [],
       publishedAt: baseTime.toISOString(),
     });
     expect(result.items[1]!.recordStatus).toBe("VOID");
+    // 记录所属功能同样按名称返回（featureId 4 → 登录页）。
+    expect(result.items[1]!.featureId).toBe(4);
+    expect(result.items[1]!.featureName).toBe("登录页");
     expect(result.hasMore).toBe(true);
     expect(result.nextCursor).toBe("cursor-next");
     expect(setup.listVisibleRecordsByTaskIds).toHaveBeenCalledWith(
@@ -592,9 +639,13 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
         }),
       ],
       tasks: [
-        taskFixture(22, { workStatus: "TODO" }),
-        taskFixture(23, { workStatus: "DONE" }),
-        taskFixture(24, { workStatus: "CANCELED", assigneeId: 6 }),
+        taskFixture(22, { workStatus: "TODO", priority: "HIGH" }),
+        taskFixture(23, { workStatus: "DONE", priority: "URGENT" }),
+        taskFixture(24, {
+          workStatus: "CANCELED",
+          assigneeId: 6,
+          priority: "LOW",
+        }),
       ],
       users: [
         { userId: 5, name: "成员", avatarUrl: null },
@@ -641,13 +692,14 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
         branch.role,
         branch.sourceKind,
         branch.workStatus,
+        branch.priority,
         branch.moduleId,
         branch.featureId,
       ]),
     ).toEqual([
-      [22, "MAIN", null, "TODO", 3, 4],
-      [23, "SOURCE", "HISTORICAL", "DONE", 3, 4],
-      [24, "SOURCE", "ACTIVE", "CANCELED", 3, 4],
+      [22, "MAIN", null, "TODO", "HIGH", 3, 4],
+      [23, "SOURCE", "HISTORICAL", "DONE", "URGENT", 3, 4],
+      [24, "SOURCE", "ACTIVE", "CANCELED", "LOW", 3, 4],
     ]);
     expect(group.branches[2]!.assignee).toEqual({
       userId: 6,

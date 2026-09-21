@@ -95,6 +95,7 @@ function taskFixture(
     title: "任务 " + String(taskId),
     creatorId: 5,
     assigneeId: 5,
+    priority: "NORMAL",
     workStatus: "TODO",
     lifecycleStatus: "ACTIVE",
     rowVersion: 1,

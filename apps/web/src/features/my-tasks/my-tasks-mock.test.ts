@@ -144,12 +144,13 @@ describe("my-tasks mock adapter", () => {
         branch.role,
         branch.sourceKind,
         branch.workStatus,
+        branch.priority,
       ]),
     ).toEqual([
-      ["T-102", "MAIN", null, "TODO"],
-      ["T-101", "SOURCE", "ACTIVE", "TODO"],
-      ["T-104", "SOURCE", "HISTORICAL", "DONE"],
-      ["T-107", "SOURCE", "HISTORICAL", "CANCELED"],
+      ["T-102", "MAIN", null, "TODO", "HIGH"],
+      ["T-101", "SOURCE", "ACTIVE", "TODO", "URGENT"],
+      ["T-104", "SOURCE", "HISTORICAL", "DONE", "NORMAL"],
+      ["T-107", "SOURCE", "HISTORICAL", "CANCELED", "NORMAL"],
     ]);
 
     const otherProject = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({

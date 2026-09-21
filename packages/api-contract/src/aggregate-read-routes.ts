@@ -22,7 +22,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/task-groups/{groupId}",
     operationId: "getTaskGroup",
     summary:
-      "F-25 任务聚合组视图：按 groupId 反查项目归属并按实时成员关系授权，返回组标识与全部成员（含已解除成员、任务原数据与每任务 PUBLISHED 记录数）；记录列表由 listTaskGroupRecords 子资源分页提供。",
+      "F-25 任务聚合组视图：按 groupId 反查项目归属并按实时成员关系授权，返回组标识与全部成员（含已解除成员、任务原数据、任务优先级、所属功能名称与每任务 PUBLISHED 记录数）；记录列表由 listTaskGroupRecords 子资源分页提供。",
     request: {
       path: "TaskGroupPath",
       query: "none",
@@ -52,7 +52,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/task-groups/{groupId}/records",
     operationId: "listTaskGroupRecords",
     summary:
-      "F-25 聚合组记录列表：只返回 PUBLISHED 与 VOID 记录，可按成员任务过滤，按 recordId DESC 游标分页，并附记录上的 GitHub 链接快照。",
+      "F-25 聚合组记录列表：只返回 PUBLISHED 与 VOID 记录，可按成员任务过滤，按 recordId DESC 游标分页，并附记录所属功能名称与记录上的 GitHub 链接快照。",
     request: {
       path: "TaskGroupPath",
       query: "TaskGroupRecordQueryRequest",
@@ -232,7 +232,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/task-groups",
     operationId: "listTaskGroups",
     summary:
-      "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总聚合组与当前生效分支（主任务在前，来源任务按 joinedAt 升序）；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
+      "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总聚合组与当前生效分支（主任务在前，来源任务按 joinedAt 升序，分支携带优先级与工作状态）；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
     request: {
       path: "none",
       query: "TaskGroupListQueryRequest",

@@ -1452,6 +1452,7 @@ export type TaskGroupListBranch = {
   readonly role: ("MAIN" | "SOURCE");
   readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly moduleId: number;
   readonly featureId: (number | null);
   readonly assignee: UserRef;
@@ -1488,9 +1489,11 @@ export type TaskGroupMemberDetail = {
   readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
   readonly memberStatus: ("ACTIVE" | "DETACHED");
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly moduleId: number;
   readonly featureId: (number | null);
+  readonly featureName: (string | null);
   readonly assignee: UserRef;
   readonly joinedAt: string;
   readonly detachedAt: (string | null);
@@ -1554,6 +1557,7 @@ export type TaskGroupRecordItem = {
   readonly taskId: number;
   readonly sourceLabel: string;
   readonly featureId: (number | null);
+  readonly featureName: (string | null);
   readonly publishedAt: string;
   readonly externalLinks: readonly TaskGroupRecordLink[];
 };

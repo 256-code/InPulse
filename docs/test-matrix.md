@@ -2233,6 +2233,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、全量 web 单测与 API 测试；② 标题内缩 10px 只作用于任务聚合组，模块页/功能页/记录页的区块标题仍是与卡片外沿齐平（实测 `/projects/2/modules` 的「模块」标题 `x=270`），全站是否统一待定；③ 聚合组列表在 1000px 断点以上固定两列，不再随宽度自动增列；④ 样式改动需非作者人工评审。
 
+> 2026-09-21 更新：产品定案把「任务聚合组」改为任务卡片与任务卡片同网格混排（见文末「任务聚合组改为任务卡片混排」章节），本章节的 `.group-panel` / `.group-list` / `.group-card` 区块、标题内缩 10px 与固定两列口径随之作废；`.calm-section-title` 的其它样式不受影响。
+
 ## 任务中心统计卡标签对齐与字号（C，2026-09-20 本地落库）
 
 用户定案：四张统计卡的标签（今日待办 / 未完成 / 已完成 / 我创建的）先对齐，再加大加粗；对照模拟后选中 16px/700，并要求文案块整体「往右下挪一点点」，最终定案右 3px / 下 3px。
@@ -2578,3 +2580,148 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号只读量测，未点「新建迭代」本身，未新增或修改业务数据）。
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿为什么没有发布入口是产品口径问题，若要求补上需先确认 F-19 任务完成事务的边界；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
+
+## 任务聚合组改为任务卡片混排（产品要求，2026-09-21 本地落库）
+
+产品截图反馈（`/tasks` 任务卡片网格下方的「任务聚合组」区块）：「把任务聚合组也改成任务卡片，和其他任务卡片一起呈现」。本批为纯前端呈现改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+> 2026-09-21 更新：已并入 ACTIVE 聚合组的任务不再单独渲染卡片、列表行与折叠明细，去重判据、例外与覆盖范围见下一节「聚合成员的重复卡片下线」；本节组卡的外观与交互不变。
+
+> 2026-09-21 二次更新：组卡整卡配色改为跟随派生的组优先级（复用任务卡片的 `.tone-prio-*`），本节「色调」与「卡片信息取舍」两处描述以末节「聚合组优先级派生、完成态与整卡配色」为准：`.tone-group` 紫色降为「已关闭且无分支」组卡的兜底色，R-7 分支已扩 `priority` 并由组卡显示派生优先级。
+
+锁定口径：
+
+- 呈现方式：聚合组不再有独立区块（`section.group-panel`、`.group-list`、`article.group-card`、分支行 `.branch-task` 与页脚「查看主任务」全部删除），改渲染为 `.calm-task-card.task-group-card.tone-group`，与任务卡片同一 `.calm-task-grid` 混排；列表视图下任务表格保持原样，聚合组仍以同款卡片追加在表格之后（`.task-group-grid`）。
+- 排列顺序：任务在前、聚合组在后。两侧列表各自签名游标分页（R-3 与 R-7），无法跨源合并排序，追加是唯一不破坏分页语义的顺序。
+- 卡片信息取舍：按冻结的 R-7 契约，`TaskGroupListItem` 只有 `{ groupId, projectId, projectName, code, name, status, mainTask, branches }`，分支不带 priority / dueAt / 模块名 / 记录数，因此组卡**不伪造**这些字段，只显示：编号（`TG-*`）、「聚合组」+「进行中 / 已关闭」徽章、组名、项目名、主分支负责人、`N 条分支`、`已完成 n/N`（分支数 > 0 时）与「查看详情 / 解除合并」（CLOSED 组为「查看聚合历史」）。
+- 卡片交互：整卡是 `<button>`（`data-testid="my-task-group-{groupId}"`），点击就地打开既有 `TaskGroupDetailModal`（不离开页面、不改地址栏）；分支明细、来源类型徽章、解除合并与主任务直达都只在弹窗里提供一份，不在卡片上复制。CLOSED 组按服务端口径返回空 `branches` 与 `null mainTask`，卡片退化为组名 + 状态 + 「—」。
+- 空态与错误态：`hasListContent = 任务卡片数 > 0 || 聚合组数 > 0`；两者都空才显示任务空态（原「还没有聚合组」独立空态删除——聚合组现在只是列表的一部分）。聚合组读取失败时任务卡片照常渲染，错误 Alert 移到列表下方就地提示；任务为空且聚合组仍在加载时先给加载态，避免空态一闪再被组卡顶掉。
+- 分页：两侧「加载更多」合并到同一行 `.task-more-row`（主按钮「加载更多任务」+ 次级按钮「加载更多聚合组」），R-7 游标语义不变。
+- 色调：新增 `.tone-group` 变量组（紫色条 `#7c6bd0` / 底 `#f8f6ff` / 描边 `#e2ddf4`），与聚合组「主任务」「聚合组」徽章同一色系；外框、内边距、色条几何全部复用 `.calm-task-card`，不新写卡片骨架。
+- 取代关系：本节取代 2026-09-20「任务聚合组与任务卡网格对齐」章节（`.group-panel` 标题内缩 10px、`.group-list` 固定两列随区块一并作废，聚合组卡片改为跟随 `.calm-task-grid` 的响应式：3 列 / ≤1100px 两列 / ≤700px 单列），也取代 F-20 章节（2026-09-11）与 2026-09-17「任务中心卡片就地弹窗」章节里对聚合组区块、分支行与「查看主任务」按钮的描述；`TaskGroupDetailModal`、R-7 路由与弹窗内成员标题入口（`task-group-member-title`）均未改。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-AS-CARD-WEB-001 | Web 单元 | 组卡与任务卡同网格 | `TaskCenterPageView.test.tsx`「renders task groups as cards inside the task grid」：`my-task-group-501` 可见，卡内 `TG-001` / 组名 / 「聚合组」/「进行中」/ 项目名 / 「4 条分支」/「已完成 1/4」/「查看详情 / 解除合并」都可定位，`card.closest(".calm-task-grid")` 非空，`document.querySelector(".group-panel")` 为 null | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-AS-CARD-WEB-002 | Web 单元 | 组卡就地打开弹窗 | 同文件「opens the task group detail dialog from the group card」：点击组卡后 `onOpenTask` 未被调用、出现名称含「聚合组」的 `dialog` | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-AS-CARD-WEB-003 | Web 单元 | 空聚合组不占位 | 同文件「keeps task cards visible without a group empty state when there are no groups」：任务卡 `my-task-101` 可见，无 `my-task-group-501`，无「还没有聚合组」 | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-AS-CARD-WEB-004 | Web 单元 | 聚合组失败不遮任务 | 同文件「keeps the task list visible with an error alert when groups fail」：任务卡可见且「任务列表暂时不可用，请稍后重试。」可定位 | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-AS-CARD-E2E-001 | Playwright | 真实浏览器关键路径 | `task-groups.spec.ts` 第 2 例改写：`/tasks` 组卡（`.calm-task-grid .task-group-card`，含主任务标题）可见且 `TG-`、「聚合组」、「进行中」、项目名齐备；点击后 `.task-group-detail-modal` 打开、地址栏不含 `/task-groups/`；弹窗内主分支行含「主任务」与负责人、来源分支行含「活动来源分支」；点成员标题就地打开「任务详情」弹窗（来源与主任务都可直达） | 本地通过（2026-09-21 同批补跑） |
+
+本地实际执行（2026-09-21）：按 2026-09-17 项目负责人指示「只改前端（`apps/web`）且不涉及后端、契约、权限与数据库时，不再运行任何测试与门禁命令」，本批未运行任何测试与门禁；改动文件经 IDE 静态诊断确认无类型与语法错误，删除的 `.group-panel` / `.group-card` / `.branch-task` 样式经全仓检索确认已无消费方（`.branch-list` / `.merge-panel` / `.task-group-panels` 属其它弹窗使用，未动）。
+
+后续同批（优先级派生批次，见末节）补跑：定向 Web 单测 2 文件 53 例、Playwright `task-groups.spec.ts` 2/2 均通过，本节 5 条用例随之转为「本地通过」。
+
+未运行 / 已知偏差：① 4 例改写的 Web 单测与 `task-groups.spec.ts` 第 2 例已于 2026-09-21 同批补跑通过；全量 `pnpm test:web` / `pnpm test:e2e`、`pnpm build`、`check:frontend:boundaries`、`pnpm check` 与 API / 集成全量测试仍未运行；② 组卡不显示截止时间与迭代记录数，原因是冻结的 R-7 契约分支不带这些字段（要显示需再扩契约，属 A 域；2026-09-21 二次更新：`priority` 已扩并由组卡用于派生显示）；③ 两侧「加载更多」合到同一行，若同时还有下一页会并排出现两个按钮；④ 任务与聚合组两个数据源无法跨源排序，网格顺序固定为「任务在前、聚合组在后」；⑤ 卡片类名、强调色与信息密度需非作者人工评审（2026-09-21 二次更新：组卡强调色已改为跟随派生优先级）。
+
+## 聚合成员的重复卡片下线（产品要求，2026-09-21 本地落库）
+
+产品截图反馈（`/tasks` 任务卡片网格里，已合并的任务仍以独立任务卡片出现）：「我要求就是，如果两个任务合并成了一个任务聚合组，那么那两个任务卡片就不需要显示了，就只显示任务聚合组的任务卡片」。本批为纯前端呈现改动，后端零改动；上一节「任务聚合组改为任务卡片混排」的组卡外观、同网格混排、弹窗入口与分页语义全部保留。
+
+锁定口径：
+
+- 去重判据取任务侧字段：`item.groupRole !== null` 即「已并入 ACTIVE 聚合组」。R-3 的 `groupRole` / `groupId` 由 `MyTasksQueryService` 经 `TaskGroupMembershipReadPort.listGroupRoles` 映射，服务端只对 `g.status = 'ACTIVE' AND m.status = 'ACTIVE'` 的成员返回，解除合并（成员标记 `DETACHED`）或组关闭后自动回 `null`。判据因此不依赖聚合组列表的分页与读取结果，也不需要新增契约字段。
+- 一次收敛三处：过滤点放在 `TaskCenterPageView` 的 `visibleItems` 派生处（本地筛选之后，`openItems` / `doneItems` / `canceledItems` / `primaryItems` 之前），卡片网格、列表视图表格与「已完成 n 项」「已取消」折叠明细共用同一份数据，三种形态不会各显各的。
+- 例外（显式筛选）：`filters.relation` 为 `MAIN` 或 `SOURCE` 时不做去重。合并关系是 R-3 已冻结的筛选维度，无条件隐藏会让这两个选项永远筛不出结果；该路径下卡片照常显示「主任务 / 来源任务」徽章。
+- 聚合组卡片是唯一入口：成员任务不再出卡片后，分支明细、负责人、来源类型、解除合并与主任务直达仍只在组卡打开的 `TaskGroupDetailModal` 里提供一份，网格与列表行不补副本。
+- 统计卡不变：`stats`（今日待办 / 未完成 / 已完成 / 我创建的）与遗留问题入口仍是服务端口径，已合并任务继续计入统计数字；列表去重是呈现层行为，不按可见卡片数改写数字（列表本身分页，改数字反而失真）。
+- 未覆盖界面：任务看板（[ADR-037](adr/ADR-037.md) 口径不变）、功能档案与模块任务面板（那里的卡片必须带「主任务 / 来源任务」徽章并就地提供合并 / 解除合并）、全局搜索、项目动态与站内通知。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-MERGE-HIDE-WEB-001 | Web 单元 | 已合并任务不再出卡片 | `TaskCenterPageView.test.tsx` 新增「hides the card of a task that is already merged into a group」：默认视图下未入组的 `my-task-103` 与 `my-task-group-501` 可见、组 501 主任务 `my-task-102` 为 null | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-MERGE-HIDE-WEB-002 | Web 单元 | 合并关系筛选仍可看成员本身 | 同文件「marks module scope, merge role and priority on member cards opened by the merge filter」：`relation=MAIN` 视图下 `my-task-102` 可见且「模块级」/「主任务」/「高」/`优先级：高`/「记录 3 条」齐备 | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-MERGE-HIDE-WEB-003 | Web 单元 | 独立任务卡不带记录徽章 | 同文件「marks priority and omits the record badge on a standalone card」：`my-task-103` 显示「普通」与 `优先级：普通`，无「记录」徽章（承接原用例被替换掉的独立卡断言） | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-MERGE-HIDE-E2E-001 | Playwright | 真实浏览器关键路径 | `task-groups.spec.ts` 第 2 例：合并后进 `/tasks?today=0`（该口径本身包含这两个任务）并等 `/api/v1/tasks` 响应返回，`.calm-task-grid .task-group-card` 组卡可见；`.calm-task-card` 中来源任务标题 0 张、非组卡中主任务标题 0 张 | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-MERGE-HIDE-BROWSER-001 | 浏览器实测 | 默认视图只剩组卡 | `/tasks`（今日待办）：任务网格里唯一卡片是 `INPULSE-TG-1`（聚合组 · 进行中 · 3 条分支 · 已完成 2/3 · 查看详情 / 解除合并），已合并的紧急任务 `INPULSE-T-59` 不再出卡片，且没有闪出任务空态 | 本地通过 |
+| TASKGROUP-MERGE-HIDE-BROWSER-002 | 浏览器实测 | 「未完成」口径同样去重 | `/tasks?today=0`：卡片为 `INPULSE-T-62`、`INPULSE-T-60` 与组卡 `INPULSE-TG-1`，`INPULSE-T-59`（已合并、负责人为当前用户）不再出现 | 本地通过 |
+
+本地实际执行（2026-09-21）：浏览器实测见上表（本地 dev 5173，登录账号在既有项目 1 的真实数据上只读查看，未新增、修改或删除任何数据）；按 2026-09-17 项目负责人指示「只改前端（`apps/web`）且不涉及后端、契约、权限与数据库时，不再运行任何测试与门禁命令」，本批未运行任何测试与门禁命令；改动文件经 IDE 静态诊断确认无类型与语法错误，去重判据的服务端口径在阅读 `TaskGroupMembershipReadPort.listGroupRoles` 与 `MyTasksQueryService` 后确认（未改后端）。
+
+后续同批（优先级派生批次，见下节）补跑：定向 Web 单测 2 文件 53 例、Playwright `task-groups.spec.ts` 2/2 均通过，本节 4 条用例随之转为「本地通过」。
+
+未运行 / 已知偏差：① 3 例 Web 单测（2 例新增 + 1 例拆分改写）与 `task-groups.spec.ts` 第 2 例已于 2026-09-21 同批补跑通过；全量 `pnpm test:web` / `pnpm test:e2e`、`pnpm build`、`check:frontend:boundaries`、`pnpm check` 与 API / 集成全量测试仍未运行；② `my-tasks-mock.ts` 的夹具自相矛盾（既有问题）：任务侧只有 `T-102`（MAIN）与 `T-105`（SOURCE，但属项目 2、不在任何组的 `branches` 里）带聚合组标注，而组 501 的 `MOCK_GROUP_BRANCH_SEEDS` 列出 `T-102` / `T-101` / `T-104` / `T-107`，两边不一致；生产数据同源于 `task_group_members` 不会出现该情况。本次按任务侧字段实现且未改夹具，因此 mock 数据下 `T-101` / `T-104` / `T-107` 仍会出卡片（与组卡列出的分支重复），是否把夹具改成一致并同步受影响的用例属独立决定；③ 统计卡与服务端统计仍是服务端口径：实测 `/tasks` 显示「今日待办 1」（紧急 1）而网格里只有组卡，这个 1 就是被合并的那个任务，现在由组卡代表；「未完成 3」同理比可见任务卡片多 1，数字不按可见卡片数改写（列表分页，改数字反而失真）；④ 逾期风险条的样本任务取自当前可见集合，若唯一的逾期任务已合并则退化为「切换到我的任务查看明细」文案；⑤ 聚合组读取失败时成员任务仍被隐藏（判据在任务侧），页面只留错误 Alert；⑥ 组卡与任务卡同网格、成员默认隐藏的视觉与信息密度需非作者人工评审。
+
+## 聚合组卡片列出全部负责人（产品要求，2026-09-21 本地落库）
+
+产品要求（聚合组卡片当时只显示主任务负责人）：「如果任务聚合组里的任务是不同人负责的，那么卡片上的任务负责人也都要加上去」。本批只调聚合组卡片的负责人展示，属纯前端改动，后端、契约、权限与迁移零改动；上一节「聚合成员的重复卡片下线」的去重口径不变，组卡现在同时承担「成员卡已下线」与「负责人全列出」两件事。
+
+锁定口径：
+
+- 数据源用 R-7 已冻结的分支字段，不扩契约：`TaskGroupListItem.branches[].assignee`（`userRef`）。服务端按 [A 的契约评审裁决](a-contract-review-f25-f29-f32.md) 的 R-7 口径返回分支（主任务在前、来源任务按 `joinedAt` 与 `taskId` 升序，只含 ACTIVE 成员），保持服务端顺序即可让主任务负责人在最前，不需要另读 `mainTask` 引用。
+- 按 `assignee.userId` 去重：同一人同时挂主任务与多个来源分支时只出现一次；全部分支同一人时卡片外观与改动前一致（仍是单个名字，tooltip 仍是「主任务负责人：X」）。
+- 多人时以「、」连接列出全部负责人，不做人数截断：卡片宽度不足时由 CSS 省略号收敛（`.task-group-assignees` / `.task-group-assignee-names`），完整名单在 `title` 中给出——「各分支负责人：a、b、c（含主任务与全部来源分支）」。
+- CLOSED 组按服务端口径 `branches` 为空，保持「—」与「已关闭的聚合组：负责人保留在详情中」，不虚构名单。
+- 卡片其余信息不变：分支明细、来源类型、已发布记录数、解除合并与主任务直达仍在组卡打开的 `TaskGroupDetailModal` 里，卡片仍只列负责人、分支数与完成情况。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-OWNERS-WEB-001 | Web 单元 | 同人分支仍是单名 | `TaskCenterPageView.test.tsx`「renders task groups as cards inside the task grid」追加断言：组 501 四条分支同一人（陈晓）时卡片出现「陈晓」且不重复 | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-OWNERS-WEB-002 | Web 单元 | 不同人分支全部列出且去重 | 同文件新增「lists every branch owner on the group card when members differ」：把第 2 条分支换成王敏后，组卡文本为 `陈晓、王敏`（主任务负责人在前、按 userId 去重） | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-OWNERS-E2E-001 | Playwright | 真实浏览器关键路径 | `task-groups.spec.ts` 第 2 例：任务中心 `groupCard` 增加 `toContainText(runtime.user.name)`（本例两条分支同一人负责，去重后只出现一次） | 本地通过（2026-09-21 同批补跑） |
+| TASKGROUP-OWNERS-BROWSER-001 | 浏览器实测 | 真实数据多负责人 | `/tasks` 的 `INPULSE-TG-1`（3 条分支：主任务 T-20 小潘、历史来源 T-21 小潘、活动来源 T-59 邵晨宇）组卡显示「小潘、邵晨宇」，tooltip 为「各分支负责人：小潘、邵晨宇（含主任务与全部来源分支）」；同弹窗成员列表口径一致 | 本地通过 |
+
+本地实际执行（2026-09-21）：浏览器实测见上表（本地 dev 5173，在既有项目 1 的真实数据上只读查看，未新增、修改或删除任何数据；打开组卡弹窗后已关闭，未提交任何写操作）；按 2026-09-17 项目负责人指示「只改前端（`apps/web`）且不涉及后端、契约、权限与数据库时，不再运行任何测试与门禁命令」，本批未运行任何测试与门禁命令；改动文件经 IDE 静态诊断确认无类型与语法错误。
+
+后续同批（优先级派生批次，见下节）补跑：定向 Web 单测 2 文件 53 例、Playwright `task-groups.spec.ts` 2/2 均通过，本节 3 条用例随之转为「本地通过」。
+
+未运行 / 已知偏差：① 1 例新增 Web 单测与 2 例扩展（Web 单测、`task-groups.spec.ts` 第 2 例）已于 2026-09-21 同批补跑通过；全量 `pnpm test:web` / `pnpm test:e2e`、`pnpm build`、`check:frontend:boundaries`、`pnpm check` 与 API / 集成全量测试仍未运行；② `my-tasks-mock.ts` 的演示组四条分支都是同一人（陈晓），因此 mock 模式看不出多负责人效果，只有真实数据会出现多名；未改夹具（见上一节偏差 ②）；③ 负责人数量不设上限，极端情况下（大量分支分属不同人）名单会以省略号收敛，需要悬停 `title` 才能看到全量，是否符合设计师预期需非作者人工评审；④ 卡片不区分「谁是主任务负责人」，仅按服务端顺序把主任务负责人排在首位。
+
+## 聚合组优先级派生、完成态与整卡配色（产品要求，2026-09-21 本地落库）
+
+产品要求（原文）：「任务聚合组的优先级按未完成任务中优先级最高的来，如果那个任务完成了就按第二高的来，如果全部任务都完成就，任务聚合组就算完成」；追加要求：「卡片颜色也按优先级的来」。本批从纯前端呈现跨出到契约与后端：R-7 分支 DTO 原本没有优先级字段，而组优先级必须覆盖他人负责的分支（当前用户视角的 R-3 读不到），因此按仓库规则同步 Schema、Route Registry 摘要、OpenAPI 与生成客户端，需非作者人工评审。
+
+锁定口径：
+
+- 组优先级 = 未完成（`workStatus === "TODO"`）分支中最高一档（紧急 > 高 > 普通 > 低）；分支状态变化后自动重算，不写库、不新增派生字段。
+- 已取消（CANCELED）与已完成一样算收尾、不参与组优先级——否则被取消的分支会永久压住组优先级；口径与 [ADR-034](adr/ADR-034.md) 的「已收尾」一致。
+- 全部分支收尾且 `branches` 非空 ⇒ 组卡按「已完成」呈现：绿色状态徽章、整卡 `tone-prio-done` 配色、标题转完成绿，优先级徽章隐藏。组自身仍是 ACTIVE（`status` 不变、解除合并入口保留），不写任何数据。
+- 已关闭组（`status=CLOSED`，服务端 `branches` 为空）没有事实可派生，整卡退回聚合组紫色 `tone-group`，状态仍「已关闭」。
+- 整卡配色与任务卡片共用 `@features/common/task-tone` 的 `.tone-prio-*` 一套色值：底色、左侧色条、边框与页脚「查看详情 / 解除合并」文字色（`var(--task-fg)`）同步；紫色不再是 ACTIVE 组卡的固定身份色。
+- 「已完成 n/N」只计 DONE：已取消算收尾但不计入分子（计入分母 N=分支总数），与任务中心统计口径一致。
+- 服务端只透传事实字段：R-7 `taskGroupListBranchSchema` 新增 `priority`（`TASK_PRIORITIES` 枚举），`TaskReadModel` 补 `priority` 并同步 `findByTaskId` / `find` / `listByIds` 三处查询；派生逻辑在客户端，服务端不做组优先级计算。拒绝方案：前端与 R-3 联表——R-3 只返回当前用户可见任务，他人负责的分支会拿不到优先级而算错组优先级。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-PRIORITY-CONTRACT-001 | 契约 | R-7 分支新增 `priority` | `contract:validate`（108 条路由）全过、`contract:drift`（5 产物一致）、`permissions:check`（108/108） | 本地通过 |
+| TASKGROUP-PRIORITY-API-001 | API 单测 | 分支优先级透传 | `aggregate-read.service.test.ts` R-7 以 `(TODO,HIGH)` / `(DONE,URGENT)` / `(CANCELED,LOW)` 三条分支断言元组含 `priority`；定向 2 文件 32 例通过 | 本地通过 |
+| TASKGROUP-PRIORITY-API-002 | 真库集成 | 查询层与 HTTP 全链 | `aggregate-read-list-api.integration.test.ts`（主任务 HIGH、历史来源 LOW、活动来源 NORMAL）分支元组断言成功；10/10 通过（真实 PostgreSQL 18.6 + PGroonga） | 本地通过 |
+| TASKGROUP-PRIORITY-WEB-001 | Web 单元 | 最高档优先级与整卡配色 | `TaskCenterPageView.test.tsx`「renders task groups as cards inside the task grid」：紧急徽章 + `优先级：紧急（未完成分支中最高）` + `toHaveClass("tone-prio-urgent")` | 本地通过 |
+| TASKGROUP-PRIORITY-WEB-002 | Web 单元 | 完成后落到第二高 | 同文件「falls back to the next highest branch priority after the urgent branch is done」：T-101 置 DONE 后显示「高」、无「紧急」、仍「进行中」、`已完成 2/4`、`tone-prio-high` | 本地通过 |
+| TASKGROUP-PRIORITY-WEB-003 | Web 单元 | 全部收尾即完成 | 同文件「marks the group complete when every branch is wound up」：TODO 分支全置 DONE 后显示「已完成」、无「进行中」与优先级徽章、`已完成 3/4`、`tone-prio-done` | 本地通过 |
+| TASKGROUP-PRIORITY-WEB-004 | Web 单元 | mock 夹具带优先级 | `my-tasks-mock.test.ts` 分支元组升级为含 `priority`（101 紧急 / 102 高 / 104 普通 / 107 普通） | 本地通过 |
+| TASKGROUP-PRIORITY-E2E-001 | Playwright | 真实浏览器关键路径 | `task-groups.spec.ts` 第 2 例：两条默认「普通」且均未完成的分支 ⇒ 组卡显示「普通」徽章且 `toHaveClass(/tone-prio-normal/)`；2/2 通过 | 本地通过 |
+| TASKGROUP-PRIORITY-BROWSER-001 | 浏览器实测 | 真实数据整卡配色 | `/tasks` 的 `INPULSE-TG-1`（未完成分支 T-59 紧急）：`className=calm-task-card task-group-card tone-prio-urgent`，底色 `rgb(253,242,241)`、左侧色条 `rgb(192,69,63)`、徽章「紧急」+ `优先级：紧急（未完成分支中最高）`，状态「进行中」、`已完成 2/3` | 本地通过 |
+
+本地实际执行（2026-09-21）：`contract:generate`（5 产物重生成）/ `contract:drift`（5 产物一致）/ `contract:validate`（108 条路由）/ `permissions:check`（108/108）；Web 全量单测 84 文件 544 例（含定向 2 文件 53 例）、API 定向单测 2 文件 32 例、真实 PostgreSQL 集成 3 文件 52 例（`aggregate-read-api` / `aggregate-read-ports` / `aggregate-read-list-api`，其中目标文件 10/10）、Playwright `task-groups.spec.ts` 2/2 全部通过；Web `tsc --noEmit`、`check:boundaries`（280 模块 / 1368 依赖）与生产构建、改动文件 ESLint 与 Prettier 检查通过；浏览器实测见上表。真库测试后已按 2026-09-17 指示运行 `apps/e2e/helpers/fixture-cleanup.ts` 清理夹具（删除夹具账号 3、项目 2、业务行 76、审计行 0，复核残留为 0）。
+
+未运行 / 已知偏差：① `pnpm test:unit` / `test:integration` / `test:e2e` 全量与 `pnpm check` 整链、`check:deps` / `check:secrets` / `check:deploy:test` 与 GitHub Actions 未运行（定向与全量 Web 单测、聚合读三文件集成与目标 E2E 已跑，见上）；② 本批含契约与后端改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（契约新增字段、`TaskReadModel` 扩字段与三处 SQL 是重点）；③ 已关闭组退回紫色 `tone-group` 的兜底缺少真实数据样本（夹具组已清理，真实数据暂无 CLOSED 组），仅由实现与代码路径保证；④ 组优先级派生只在任务中心组卡生效，任务看板、功能档案与模块任务面板的聚合组呈现未改；⑤ 「已完成」是呈现层完成态，组 `status` 仍 ACTIVE，关闭聚合组仍只由解除合并最后一个活跃来源触发。
+
+## 聚合组详情弹窗布局、分支优先级与功能名称（产品要求，2026-09-21 本地落库）
+
+产品要求（附聚合组详情弹窗截图，指向分支行的「负责人 小潘 · 已发布记录 1 条 · 合并于 9月12日 · 功能 #1」）：「这里布局和优先级还有颜色需要修改，然后功能怎么是编号#1，要改成名称」。经确认的两项口径：布局按「分支卡片对齐任务卡片（编号/徽章/标题/元信息分行，解除合并按钮不单独占行）」；优先级按「分支卡片显示优先级徽章并按优先级上色（与任务卡片同一套色调）」。本批从纯前端呈现跨出到契约与后端：R-1 / R-4 的成员与记录 DTO 原本只有 `featureId` 数字，解析名称必须由服务端按归属项目批量查功能表，因此同步 Schema、Route Registry 摘要、OpenAPI 与生成客户端，需非作者人工评审。
+
+锁定口径：
+
+- 布局：分支行的「编号 → 角色徽章 → 工作状态徽章 → 优先级徽章」与动作按钮同在 `.task-group-member-head` 一行（解除合并按钮 `margin-left: auto` 靠右），标题与元信息在下方分行；原独立占行的 `.task-group-member-actions` 包装层删除，`.task-group-member-head .secondary-button` 样式取而代之。
+- 分支卡片沿用任务卡片的 `.tone-prio-*` 一套色值（`@features/common/task-tone`）：`li` 类名为 `task-group-member tone-prio-<派生>`，底色取 `--task-bg`、左侧 3px 色条取 `--task-c`，标题色取 `--task-fg`；派生规则与任务卡一致（已完成/已取消 → done、否则按优先级），DETACHED 分支保持历史灰（`.task-group-member.detached`、底色 `#fafbfd`、无色条），不参与优先级上色。
+- 优先级徽章复用共享 helper：`taskPriorityLabel`（紧急 / 高 / 普通 / 低）与 `taskPriorityBadgeTone`（`CalmBadgeTone`：紧急 red、高 amber、普通 blue、低 gray），`title` 为「优先级：X」。任务卡、组卡、列表行、优先级筛选选项与分支行改用同一份实现，删除 `TaskCenterPageView` 内的本地 `priorityLabels` / `priorityTone`。
+- 功能名称由服务端解析：`taskGroupMemberDetailSchema` 与 `taskGroupRecordItemSchema` 均新增可空 `featureName`（`string().min(1).max(500).nullable()`，紧跟 `featureId`）；`TaskGroupQueryService` 经既有的 `FeatureReadPort.listNames(tx, { projectIds, featureIds })` 按归属项目批量取名称（R-1 用该组 `projectId` + 成员任务去重后的非空 `featureId`；R-4 用当页记录的 `featureId`），服务端只透传事实字段。
+- fail loudly：`featureId` 非空但解析不到名称时抛 `AGGREGATE_READ_INCONSISTENT`（500，message 分别为「任务缺少功能 N」/「记录缺少功能 N」），不回落显示编号——与其它聚合读服务同一策略，避免「编号又冒出来」。
+- 模块级任务与模块级记录的 `featureId` 为 `null` ⇒ `featureName` 为 `null`，元信息不渲染「功能 …」；前端两处元信息分别为「… · 功能 <名称>」与「<日期> 发布 · 功能 <名称>」。
+- Route Registry 摘要（R-1 增加「任务原数据、任务优先级、所属功能名称与每任务 PUBLISHED 记录数」；R-4 增加「并附记录所属功能名称与记录上的 GitHub 链接快照」）与 OpenAPI、生成客户端同一批再生成，5 产物无漂移。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-MODAL-CONTRACT-001 | 契约 | R-1 / R-4 新增 `priority` 与 `featureName` | `contract:generate` 重生成 5 产物、`contract:drift` 一致、`contract:validate`（108 条路由）、`permissions:check`（108/108）全过；生成类型含 `TaskGroupMemberDetail.priority` / `.featureName` 与 `TaskGroupRecordItem.featureName` | 本地通过 |
+| TASKGROUP-MODAL-API-001 | API 单测 | 名称解析与 fail loudly | `aggregate-read.service.test.ts` 定向 29/29：成员 `featureName: "登录页"`、`priority: "NORMAL"`、`listNames` 入参断言、`featureId = null` 用例，以及新增「已归属功能解析不到名称时以 500 失败而不是回退编号」（`AGGREGATE_READ_INCONSISTENT` + `任务缺少功能 4`） | 本地通过 |
+| TASKGROUP-MODAL-API-002 | 真库集成 | R-1 / R-4 HTTP 全链 | `aggregate-read-api.integration.test.ts` 20/20（真实 PostgreSQL 18.6 + PGroonga）：R-1 成员元组 `featureName` 齐全且与功能 A/B 对齐、R-4 当页记录 `featureName` 顺序逐个匹配 | 本地通过 |
+| TASKGROUP-MODAL-WEB-001 | Web 单元 | 共享优先级 helper | Web 全量单测 84 文件 544 例通过（含 `TaskCenterPageView.test.tsx` 既有优先级用例改用共享 helper 后仍绿） | 本地通过 |
+| TASKGROUP-MODAL-WEB-002 | Web 单元 | 分支行徽章与配色（无独立 actions 行） | 上一批 `TaskCenterPageView.test.tsx` / `my-tasks-mock.test.ts` 断言不变；本批未新增分支行单测（`TaskGroupDetailPanels` 无组件测试），DOM 结构变化由浏览器实测与 E2E 覆盖 | 本地通过（E2E + 浏览器实测） |
+| TASKGROUP-MODAL-E2E-001 | Playwright | 真实浏览器关键路径 | `task-groups.spec.ts` 2/2（16.3s）：弹窗内 `.task-group-member` 行、`.task-group-member-title` 与行内「解除合并」按钮按 role 定位仍成立，`global-teardown` 清理夹具（账号 2、项目 2、业务行 113、审计行 9） | 本地通过 |
+| TASKGROUP-MODAL-BROWSER-001 | 浏览器实测 | 分支行布局、徽章、配色与功能名 | `/tasks` 打开 `INPULSE-TG-1`：T-20 `task-group-member tone-prio-done`（底 `rgb(238,248,243)`、条 `rgb(52,129,93) 3px inset`）徽章「INPULSE-T-20 / 主任务 / 已完成 / 紧急」、无解除合并；T-21 同色系「历史来源分支 / 已完成 / 低 / 解除合并」；T-59 `tone-prio-urgent`（底 `rgb(253,242,241)`、条 `rgb(192,69,63)`）「活动来源分支 / 未完成 / 紧急 / 解除合并」；三行 `unmergeInHead` 为 true/false/true 且均无 `.task-group-member-actions`；元信息「负责人 X · 已发布记录 N 条 · 合并于 M月D日 · 功能 用户登录与会话管理」 | 本地通过 |
+| TASKGROUP-MODAL-BROWSER-002 | 浏览器实测 | 记录侧功能名称 | 打开「聚合读接口聚合组」：记录元信息为「9月21日 发布 · 功能 聚合读接口功能B / 功能 聚合读接口功能A」，成员名称为「功能 聚合读接口功能A / B」；`INPULSE-TG-1` 的记录 `INPULSE-CR-8` 为模块级（`featureId: null`）故只显示「9月12日 发布」，与契约的「模块级不渲染功能名」一致 | 本地通过 |
+
+本地实际执行（2026-09-21）：契约 `contract:generate`（5 产物）/ `contract:drift` / `contract:validate`（108 条）/ `permissions:check`（108/108）；API 定向单测 `aggregate-read.service.test.ts` 29/29 与真库 `aggregate-read-api.integration.test.ts` 20/20；Web 全量单测 84 文件 544 例、`tsc --noEmit`、`check:boundaries`（280 模块 / 1370 依赖）与生产构建、API `tsc --noEmit`；改动文件 ESLint、全仓 `prettier --check .`（All matched files）与 `check:docs`（84 个 Markdown）通过；Playwright `task-groups.spec.ts` 2/2；浏览器实测见上表（本地 dev 5173，登录账号在既有项目 1 与夹具项目上只读查看，记录侧名称样例取自当次夹具组，未提交任何写操作）。真库与 E2E 测试后已按 2026-09-17 指示运行 `apps/e2e/helpers/fixture-cleanup.ts`（删除夹具账号 4、项目 3、业务行 119、审计行 0）与 Playwright `global-teardown` 清理。
+
+未运行 / 已知偏差：① `pnpm test:unit` / `test:integration` / `test:e2e` 全量与 `pnpm check` 整链、`check:deps` / `check:secrets` / `check:deploy:test` 与 GitHub Actions 未运行；② 本批含契约与后端改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（契约新增字段、`FeatureReadPort` 注入与两处名称解析、Route Registry 摘要变更是重点）；③ DETACHED 分支保持灰色历史样式（不按优先级上色）是刻意保留的状态区分，如产品希望历史分支也上色需再改；④ 分支行仍不显示截止时间与工作量等字段，R-1 未扩；⑤ 记录侧只显示功能名称，模块级记录不显示功能名与模块名（`featureId` 为 null），如需显示模块名需再扩契约；⑥ 浏览器实测的「记录侧功能名称（非空分支）」样例来自当次夹具数据，清理后真实数据只剩模块级记录样例。

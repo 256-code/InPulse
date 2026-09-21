@@ -82,6 +82,8 @@ export type TaskGroupSummary = z.infer<typeof taskGroupSummarySchema>;
  *
  * publishedRecordCount 是该任务 PUBLISHED 正式记录数（功能设计 §29.4：按
  * change_records 计数，不按版本计数，也不按影响功能去重）。
+ * priority 是分支任务当前优先级，featureName 是所属功能名称；任务为模块级作用域时
+ * featureId 与 featureName 同时为 null（2026-09-21 聚合组弹窗按名称展示功能）。
  */
 export const taskGroupMemberDetailSchema = z
   .object({
@@ -92,9 +94,11 @@ export const taskGroupMemberDetailSchema = z
     sourceKind: z.enum(["ACTIVE", "HISTORICAL"]).nullable(),
     memberStatus: z.enum(["ACTIVE", "DETACHED"]),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+    priority: z.enum(TASK_PRIORITIES),
     lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
     moduleId: id,
     featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
     assignee: userRefSchema,
     joinedAt: z.iso.datetime(),
     detachedAt: z.iso.datetime().nullable(),
@@ -165,7 +169,8 @@ export type TaskGroupRecordLink = z.infer<typeof taskGroupRecordLinkSchema>;
 
 /**
  * R-4 记录条目：只含 PUBLISHED 与 VOID（Q-13，DRAFT 不可见）；
- * sourceLabel 为「主任务」或来源任务编号，由服务端按组成员推导。
+ * sourceLabel 为「主任务」或来源任务编号，由服务端按组成员推导；
+ * featureName 是记录所属功能名称，与 featureId 同为 null 表示记录属模块级作用域。
  */
 export const taskGroupRecordItemSchema = z
   .object({
@@ -176,6 +181,7 @@ export const taskGroupRecordItemSchema = z
     taskId: id,
     sourceLabel: z.string().min(1).max(64),
     featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
     publishedAt: z.iso.datetime(),
     externalLinks: z.array(taskGroupRecordLinkSchema).max(100),
   })
@@ -658,6 +664,8 @@ export type TaskGroupListQueryRequest = z.infer<
 /**
  * R-7 聚合组分支：只含当前生效（ACTIVE）成员，主任务在前、来源任务按
  * joinedAt 与 taskId 升序；sourceKind 的可空性由 role 决定（MAIN 恒为 null）。
+ * priority 是分支任务自身优先级（2026-09-21 产品要求）：组卡片的组优先级与
+ * 完成态由客户端按「未完成分支中的最高优先级」派生，服务端只透传事实字段。
  * moduleId / featureId 是任务所在位置（featureId 为 null 表示模块级任务）。
  * 已解除（DETACHED）成员不出现在列表摘要中，仍由 R-1 详情页展示。
  */
@@ -669,6 +677,7 @@ export const taskGroupListBranchSchema = z
     role: z.enum(["MAIN", "SOURCE"]),
     sourceKind: z.enum(["ACTIVE", "HISTORICAL"]).nullable(),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
+    priority: z.enum(TASK_PRIORITIES),
     moduleId: id,
     featureId: id.nullable(),
     assignee: userRefSchema,
