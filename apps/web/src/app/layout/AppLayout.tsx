@@ -17,6 +17,8 @@ interface NavigationItem {
   readonly label: string;
   readonly path: string;
   readonly icon?: InpulseIconName;
+  /** 系统管理员专属入口：普通成员不渲染该项。 */
+  readonly adminOnly?: boolean;
 }
 
 /** 工作台：个人日常入口；系统目录树内嵌在「项目列表」行下。 */
@@ -31,11 +33,28 @@ const deliveryNavigation: readonly NavigationItem[] = [
   { key: "issues", label: "遗留问题", path: "/issues", icon: "alert" },
 ];
 
-/** 全局导航：通知与搜索已收敛到侧栏底部工具条，审计仅管理员可见。 */
+/** 全局导航：通知与搜索已收敛到侧栏底部工具条，成员与设置、审计仅管理员可见。 */
 const globalNavigation: readonly NavigationItem[] = [
-  { key: "activity", label: "项目动态", path: "/activity", icon: "activity" },
-  { key: "settings", label: "成员与设置", path: "/settings", icon: "settings" },
-  { key: "audit", label: "审计日志", path: "/audit", icon: "shield" },
+  {
+    key: "activity",
+    label: "项目动态",
+    path: "/activity",
+    icon: "activity",
+  },
+  {
+    key: "settings",
+    label: "成员与设置",
+    path: "/settings",
+    icon: "settings",
+    adminOnly: true,
+  },
+  {
+    key: "audit",
+    label: "审计日志",
+    path: "/audit",
+    icon: "shield",
+    adminOnly: true,
+  },
 ];
 
 const sections = [
@@ -174,7 +193,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const visibleGlobalNavigation = useMemo(
     () =>
       globalNavigation
-        .filter((item) => user?.isAdmin || item.key !== "audit")
+        .filter((item) => user?.isAdmin === true || item.adminOnly !== true)
         .map((item) =>
           item.key === "activity" && projectScopeId !== null
             ? { ...item, path: "/projects/" + projectScopeId + "/activity" }
@@ -360,13 +379,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                       <small>{popoverRoleLabel}</small>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleNavigation("/settings")}
-                  >
-                    <InpulseIcon name="users" size={15} />
-                    成员与权限
-                  </button>
+                  {user?.isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => handleNavigation("/settings")}
+                    >
+                      <InpulseIcon name="users" size={15} />
+                      成员与权限
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={isLoggingOut}
@@ -409,6 +430,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       </div>
       <CommandPalette
         open={paletteOpen}
+        isAdmin={user?.isAdmin === true}
         {...(notificationClient ? { client: notificationClient } : {})}
         onClose={() => setPaletteOpen(false)}
         onNavigate={handleNavigation}

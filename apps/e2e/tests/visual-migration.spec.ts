@@ -50,6 +50,45 @@ test("captures the migrated command palette, notification popover and activity p
   await expect(page.getByText(/创建了项目/)).toBeVisible();
   await page.screenshot({ path: path.join(output, "04-project-activity.png") });
 
+  // 侧栏目录树：展开某个项目后，罗列区必须完整展示所有项目行，
+  // 不能再把其它项目挤进内滚动区（产品要求 2026-09-21）。
+  await expect(page.locator(".nav-tree-panel")).toBeVisible();
+  const treeLayout = await page.evaluate(() => {
+    const panel = document.querySelector(".nav-tree-panel");
+    const list = document.querySelector(".project-tree-scroll");
+    if (panel === null || list === null) {
+      throw new Error("侧栏目录树未渲染");
+    }
+    const panelBottom = Math.round(panel.getBoundingClientRect().bottom);
+    const rows = Array.from(
+      document.querySelectorAll(
+        ".project-tree-scroll > .tree-project > .tree-row",
+      ),
+    ).map((row) => {
+      const rect = row.getBoundingClientRect();
+      return {
+        text: row.textContent,
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+      };
+    });
+    return {
+      overflowY: getComputedStyle(list).overflowY,
+      listClientHeight: list.clientHeight,
+      listScrollHeight: list.scrollHeight,
+      panelBottom: panelBottom,
+      rows: rows,
+    };
+  });
+  // 先看用户可见的症状：每个项目行都完整落在罗列区盒子里，没有被裁掉。
+  expect(treeLayout.rows.length).toBeGreaterThan(1);
+  for (const row of treeLayout.rows) {
+    expect(row.bottom).toBeLessThanOrEqual(treeLayout.panelBottom);
+  }
+  // 再看实现约束：罗列区自己不再限高，展开内容不会把它变成内滚动区。
+  expect(treeLayout.overflowY).toBe("visible");
+  expect(treeLayout.listScrollHeight).toBe(treeLayout.listClientHeight);
+
   await page.goto("/activity");
   await expect(page.getByRole("heading", { name: "项目动态" })).toBeVisible();
   await page.getByLabel("搜索动态").fill(code);

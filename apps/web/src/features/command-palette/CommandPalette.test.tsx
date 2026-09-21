@@ -95,4 +95,36 @@ describe("CommandPalette", () => {
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
   });
+  it("只对系统管理员显示成员与设置快捷命令", async () => {
+    const renderPalette = (isAdmin: boolean) =>
+      render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <CommandPalette
+            open
+            isAdmin={isAdmin}
+            onClose={vi.fn()}
+            onNavigate={vi.fn()}
+            onOpenSearch={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+
+    const { unmount } = renderPalette(false);
+    expect(
+      screen.queryByRole("button", { name: /^打开成员与设置/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^打开任务中心/ }),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderPalette(true);
+    expect(
+      screen.getByRole("button", { name: /^打开成员与设置/ }),
+    ).toBeInTheDocument();
+  });
 });

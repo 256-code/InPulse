@@ -33,8 +33,8 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     await expect(moduleDialog).toBeHidden();
     await page.goto(`/records?projectId=${projectId}`);
     const title = `跨项目记录-${Date.now()}`;
-    await page.getByRole("button", { name: "新建独立草稿" }).click();
-    const draft = page.getByRole("dialog", { name: "新建独立草稿" });
+    await page.getByRole("button", { name: "新建迭代记录" }).click();
+    const draft = page.getByRole("dialog", { name: "新建迭代记录" });
     await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("B-3b 跨项目清单问题");
@@ -43,7 +43,7 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await expect(
-      page.getByRole("region", { name: "草稿详情" }).getByText(title),
+      page.getByRole("dialog", { name: "草稿详情" }).getByText(title),
     ).toBeVisible();
 
     // 我的草稿条带：B-3b 起跨项目并回填项目 / 模块名称。

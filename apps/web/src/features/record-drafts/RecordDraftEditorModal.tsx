@@ -27,7 +27,7 @@ import { recordDraftErrorMessage } from "./record-draft-errors";
 import "./record-drafts.css";
 
 /**
- * 弹窗要处理的目标：编辑已有草稿 / 从任务创建来源草稿 / 新建独立草稿。
+ * 弹窗要处理的目标：编辑已有草稿 / 从任务创建来源草稿 / 新建迭代记录。
  * 每次传入新对象都视为一次「打开」，弹窗据此重置表单与冲突状态。
  */
 export type RecordDraftEditorTarget =
@@ -377,7 +377,7 @@ export function RecordDraftEditorModal({
             ? "来源任务 · " + source.title
             : "项目与功能 / 迭代记录"
       }
-      title={item ? "编辑草稿" : source ? "新建来源草稿" : "新建独立草稿"}
+      title={item ? "编辑草稿" : source ? "新建来源草稿" : "新建迭代记录"}
       className="catalog-modal"
       size="lg"
       onCancel={() => {
@@ -535,23 +535,21 @@ export function RecordDraftEditorModal({
               ) : (
                 <fieldset>
                   <legend>影响功能（选填）</legend>
-                  {features.data?.items.map((f) => (
-                    <label key={f.id}>
-                      <input
-                        type="checkbox"
-                        checked={impacts.includes(f.id)}
-                        disabled={f.status !== "ACTIVE"}
-                        onChange={(e) =>
-                          setImpacts(
-                            e.target.checked
-                              ? [...impacts, f.id]
-                              : impacts.filter((id) => id !== f.id),
-                          )
-                        }
-                      />
-                      {f.name}
-                    </label>
-                  ))}
+                  <CalmSelect
+                    ariaLabel="影响功能"
+                    multiple
+                    searchable
+                    appearance="rich"
+                    width="100%"
+                    value={impacts}
+                    placeholder="输入功能名称搜索，可多选"
+                    onChange={(next) => setImpacts(next.map(Number))}
+                    options={(features.data?.items ?? []).map((f) => ({
+                      value: f.id,
+                      label: f.name,
+                      disabled: f.status !== "ACTIVE",
+                    }))}
+                  />
                 </fieldset>
               )}
               {(modules.isError || features.isError) && (

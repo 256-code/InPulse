@@ -2365,3 +2365,110 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-20）：`corepack pnpm --filter @inpulse/web exec vitest run src/features/common/components/CalmSelect.test.tsx src/features/projects/CreateProjectModal.test.tsx src/features/projects/ProjectMembersPageView.test.tsx src/features/projects/project-member-query.test.tsx` 4 文件 22 例通过（4.78s）；`$env:E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; $env:E2E_API_PORT=3188; $env:E2E_WEB_PORT=4188; corepack pnpm --filter @inpulse/e2e exec playwright test tests/project-members.spec.ts tests/project-create.spec.ts tests/tasks.spec.ts --reporter=line` 4 passed（26.5s），随后 `playwright test tests/activity.spec.ts tests/audit.spec.ts tests/csrf.spec.ts tests/notifications.spec.ts tests/project-archive.spec.ts tests/record-feed.spec.ts --reporter=line` 10 passed（39.0s），`global-teardown` 已清理夹具（删除用户 4、项目 10、业务行 216、审计行 22）；`corepack pnpm --filter @inpulse/e2e exec tsc --noEmit -p tsconfig.json` 退出码 0。
 
 未运行 / 已知偏差：① 未跑 `pnpm test:web` 全量、`pnpm build`、全 workspace `pnpm typecheck`、`check:frontend:boundaries`、API / 集成测试与 `pnpm check`（本批只改 `apps/web` 前端与 `apps/e2e`，未动契约、权限、数据库与后端）；② 同页「设置项目角色」弹窗仍是 `.member-candidate-list` + `.check-list` 单选列表；③ 本批未做浏览器手工外观复验，外观结论来自真实浏览器 E2E 通过；④ 夹具清理报告 SYSTEM 审计链在夹具记录之后已有真实写入，删除中段会留下可检测断点（夹具清理既有行为，非本批改动）；⑤ 前端与 E2E 改动需非作者人工评审。
+
+## 侧栏与账户菜单的「成员与设置」入口改为系统管理员专属（产品要求，2026-09-21 本地落库）
+
+产品要求（附侧栏截图，指向「全局」分组下的「成员与设置」）：「普通使用者也就是非系统管理员把这个成员与设置隐藏吧」。本批为前端可见性收敛：不改路由契约、Route Registry、数据库不变量、迁移、鉴权与幂等策略，后端零改动，`docs/permissions.md` 与 `packages/api-contract` 不受影响。
+
+锁定口径：
+
+- `AppLayout` 的 `NavigationItem` 新增 `adminOnly` 标记，「成员与设置」与「审计日志」两项都标记为 `adminOnly: true`；侧栏可见性过滤由 `item.key !== "audit"` 改为 `item.adminOnly !== true`，对「审计日志」行为等价，并覆盖新增的管理员专属项。
+- 账户菜单内的「成员与权限」（同指 `/settings`）只在 `user.isAdmin` 为真时渲染；`CommandPalette` 新增 `isAdmin` 属性，「打开成员与设置」快捷命令对非管理员过滤，避免仅隐藏侧栏后仍可从命令面板直达。
+- `/settings` 的既有门禁不变：路由保留 `requiresAuth` + 系统管理员守卫，普通成员用 URL 直达仍渲染「无权访问 / 此区域仅限系统管理员访问。」，`apps/e2e/tests/admin-users.spec.ts` 的既有断言（例 1）继续有效。
+- 侧栏「当前项目」分组下的项目成员入口（`/projects/:projectId/members`）与项目主页的成员入口不受影响，那是项目级只读成员视图，普通成员按既有规则可访问。
+- 面包屑 `sections` 中 `/settings → 成员与设置` 保留，管理员访问时仍显示。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SHELL-ADMIN-ONLY-SETTINGS-UNIT-001 | Web 单元 | 侧栏对普通成员隐藏「成员与设置」 | `AppLayout.test.tsx`：默认（非管理员）渲染时 `queryByText("成员与设置")` 为空；管理员用例断言「审计日志」与「成员与设置」都可见，非管理员分支断言两者都不可见 | 本地通过 |
+| SHELL-ADMIN-ONLY-SETTINGS-UNIT-002 | Web 单元 | 账户菜单不显示「成员与权限」 | `AppLayout.test.tsx` 新增用例：非管理员打开账户菜单后 `queryByRole("button", { name: /成员与权限/ })` 为空，「退出登录」仍可见 | 本地通过 |
+| SHELL-ADMIN-ONLY-SETTINGS-UNIT-003 | Web 单元 | 命令面板按身份过滤快捷命令 | `CommandPalette.test.tsx` 新增用例：非管理员无「打开成员与设置」而仍有「打开任务中心」；`isAdmin` 为真时该命令出现 | 本地通过 |
+| SHELL-ADMIN-ONLY-SETTINGS-E2E-001 | Playwright | 普通成员侧栏不出现该入口 | 未新增断言；既有 `admin-users.spec.ts` 例 1 仍覆盖「普通成员 `goto /settings` 显示无权访问」 | 未运行 |
+
+本地实际执行（2026-09-21）：`corepack pnpm --filter @inpulse/web exec vitest run src/app/layout/AppLayout.test.tsx src/features/command-palette/CommandPalette.test.tsx` 2 文件 16 例通过（2.09s）；`corepack pnpm --filter @inpulse/web test` 83 文件 525 例通过（24.27s）；`corepack pnpm exec eslint`（4 个改动文件）退出码 0；4 个改动文件已 `prettier --write`。
+
+未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`：`apps/web` 的 `tsc -p tsconfig.json --noEmit` 在当前远端 `test` 提交上因 `apps/web/src/features/common/components/CalmSelect.tsx` 的 `mode={multiple ? "multiple" : undefined}` 与 `exactOptionalPropertyTypes` 冲突失败，经 `git show da80dbc:apps/web/src/features/common/components/CalmSelect.tsx` 对照确认该行由远端 `f8d3712` 引入，与本批改动无关，本批未修改；② 未跑 `pnpm build`、`check:frontend:boundaries`、API / 集成测试与整链 `pnpm check`；③ 未运行 Playwright E2E，本批未新增 E2E 断言；④ 本批改动尚未提交、推送，位于为启动远端最新 `test` 创建的干净检出 worktree；⑤ 前端改动需非作者人工评审。
+
+## 草稿详情弹层标题排版对齐正式记录详情（产品要求，2026-09-21 本地落库）
+
+产品要求（附草稿详情弹窗截图）：「这个草稿详情标题排版改一下」。本批为纯前端排版与标题层级收敛：不改路由契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+锁定口径：
+
+- 根因一：设计系统里 `.drawer-header` 默认没有内边距，弹层头部排版由各弹层盒自己补（`.catalog-modal`、`.record-detail-modal`、`.project-picker-modal`、`.task-group-detail-modal` 各自补 `padding` 与 `border-bottom`）。草稿详情弹层此前没有给自己加类，所以「草稿详情」标题与关闭按钮顶到盒子边缘。
+- 根因二：正文里还有一个与弹层标题同级的 `<h2>{记录标题}</h2>`，同一个弹层出现两个 h2，语义与视觉都在互相打架。
+- 收敛方式对齐同页「正式记录详情」（`RecordDetailModal`）与任务详情（`TasksPanel` 的 `label="任务详情"`）：草稿详情弹层改为 `className="draft-detail-modal"` + `eyebrow="草稿"` + `title={记录标题}`，并用 `label="草稿详情"` 继续提供弹层无障碍名；正文去掉重复标题，首个区块直接是元信息（处理人 / 记录作者、项目 / 模块 / 功能），小节标题仍是 h3。
+- CSS：新增 `.draft-detail-modal > .drawer-header { padding: 24px 28px 18px; border-bottom: 1px solid #e8eef5; flex-shrink: 0 }`，与 `.record-detail-modal > .drawer-header` 同值；删除只服务旧正文标题的 `.draft-detail h2` 规则（删除后用户 Markdown 里的 `## 标题` 回归 `.record-markdown h2`，不再被 17px 覆盖）。
+- 既有无障碍名与 E2E 触点不变：弹层名仍是「草稿详情」，正文 `region 草稿详情` 与关闭按钮「关闭」都保留；只有 `record-feed.spec.ts` 里「标题在 region 内」的断言改为「标题在 dialog 内」，因为标题现在属于弹层头部。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DRAFT-DETAIL-HEADER-WEB-001 | Web 单元 | 记录标题只在弹层头部出现一次 | `RecordDraftsView.test.tsx` 新增用例：以 `/records?projectId=1&recordId=7` 打开 `dialog 草稿详情` 后，头部有 `heading 支付修正 level 2` 与 `.detail-label` 文本「草稿」；正文 `region 草稿详情` 内 `queryByRole("heading", { name: "支付修正" })` 为 null，「改动原因」仍是 `level 3` | 本地通过（把该文件回写成 HEAD 旧实现重跑为 1 failed，确认用例能捕获旧排版） |
+| DRAFT-DETAIL-HEADER-E2E-001 | Playwright | 真实浏览器下草稿详情与既有流程不回归 | `record-feed.spec.ts` 1 passed（11.8s）；`record-drafts.spec.ts` + `external-links.spec.ts` 5 passed（31.4s） | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx` 10/10（3.63s）；`pnpm --filter @inpulse/web test` 83 文件 526 例通过（25.11s）；`pnpm exec eslint`（2 个改动文件）退出码 0，`prettier --write`（3 个改动文件）已执行；真实浏览器核对用仓库内 Playwright 的 chromium 登录本地 dev（web :5173 + API :3000）打开 `/records?projectId=1&recordId=47`，读到的计算样式为头部 padding `24px 28px 18px`、`border-bottom 1px rgb(232, 238, 245)`、眉标「草稿」、h2 = 记录标题（18px）、正文只剩 h3 小节，`dialog 草稿详情` 计数 1 且包含标题文本，`region 草稿详情` 与关闭按钮「关闭」都在；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; pnpm --filter @inpulse/e2e exec playwright test record-feed.spec.ts --reporter=line` 1 passed（11.8s，夹具清理：删除用户 2、项目 3、业务行 72、审计行 4）；同法 `playwright test record-drafts.spec.ts external-links.spec.ts` 5 passed（31.4s，夹具清理：删除用户 2、项目 2、业务行 167、审计行 23）。
+
+未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`：`apps/web` 的 `tsc -p tsconfig.json --noEmit` 在当前远端 `test` 提交上因 `apps/web/src/features/common/components/CalmSelect.tsx` 的 `mode={multiple ? "multiple" : undefined}` 与 `exactOptionalPropertyTypes` 冲突失败，该行由远端 `f8d3712` 引入，与本批改动无关，本批未修改；② 未跑 `pnpm build`、`check:frontend:boundaries`、`pnpm check`、API 与数据库集成测试（本批只改 `apps/web` 的样式与标题层级、其单测和一条 E2E 断言）；③ 未做像素级设计师稿比对，间距与分隔线颜色直接沿用 `.record-detail-modal > .drawer-header` 同值；④ 本批改动尚未提交、推送，位于为启动远端最新 `test` 创建的干净检出 worktree；⑤ 前端与 E2E 改动需非作者人工评审。
+
+## 草稿编辑器入口改名与影响功能改多选下拉（产品要求，2026-09-21 本地落库）
+
+产品要求（附「新建独立草稿」弹窗与影响功能勾选区两张截图）：「新建独立草稿改为新建迭代记录」「影响功能改成类似选择成员那样的多选」。本批为纯前端改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+锁定口径：
+
+- 改名范围只有「新建独立草稿」这一处：`RecordDraftsView` 的页头 CTA 文案与 `RecordDraftEditorModal` 的弹层 `title` 同时改为「新建迭代记录」。「新建来源草稿」「编辑草稿」「我的草稿」「草稿详情」等其它草稿文案与来源任务分支都不动。
+- 弹层无障碍名沿用 `title`，因此同步改名；受影响的是 1 个 Web 单测文件与 5 个 Playwright 规格里的定位器（`新建独立草稿` → `新建迭代记录`）。
+- 「影响功能」由原生复选框列表改为 `CalmSelect` 多选：`multiple` + `searchable` + `appearance="rich"` + `width="100%"`，`value` 仍是既有的 `impacts: number[]`，`onChange` 走 `next.map(Number)`，选项沿用 `disabled: f.status !== "ACTIVE"`。
+- 原实现的缺陷：字段直接渲染 `<label><input type="checkbox"/>{名称}</label>`，`.calm-form input` 的 `width: 100%; min-height: 34px` 把复选框拉成整行 34px 高、复选框图形漂到行中间，7 个功能占 419px。改后 fieldset 高度 52px。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DRAFT-IMPACT-SELECT-WEB-001 | Web 单元 | 入口改名后仍能打开弹层并保存草稿 | `RecordDraftsView.test.tsx`：`new-iteration` 名称下 `findByRole("button", { name: "新建迭代记录" })` 与 `findByRole("dialog", { name: "新建迭代记录" })` 均可定位，原有校验与创建用例保持通过（该文件 10 例） | 本地通过 |
+| DRAFT-IMPACT-SELECT-E2E-001 | Playwright | 真实浏览器下改名与多选不影响既有流程 | `record-drafts.spec.ts`、`record-feed.spec.ts`、`record-publishing.spec.ts`、`record-lifecycle.spec.ts`、`external-links.spec.ts` 共 9 passed（58.2s） | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts` 10/10（3.56s）；`pnpm --filter @inpulse/web test` 83 文件 526 例通过（24.06s）；`pnpm exec eslint`（2 个改动文件）退出码 0，`prettier --write`（改动文件）已执行；真实浏览器（仓库内 Playwright chromium + 本地 dev web :5173 / API :3000）：`/records?projectId=1` → 「新建迭代记录」→ 所属模块「平台与访问」，实测弹层标题「新建迭代记录」、影响功能全宽多选框 782×32、fieldset 高度 419px → 52px、未选占位「输入功能名称搜索，可多选」、连选 3 项后标签「用 用户登录与会话管理」「数 数据安全专项（数据库角色、CSP、SSRF、Secrets）」「+ 1 ...」、下拉项右侧对已选项显示勾、触发器内搜索 input 边框与内边距为 0；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; pnpm --filter @inpulse/e2e exec playwright test record-drafts.spec.ts record-feed.spec.ts record-publishing.spec.ts record-lifecycle.spec.ts external-links.spec.ts --reporter=line` 9 passed（58.2s，夹具清理：删除用户 3、项目 3、业务行 291、审计行 42）。
+
+未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`：`apps/web` 的 `tsc` 在当前远端提交上因 `CalmSelect.tsx` 的 `mode={multiple ? "multiple" : undefined}` 与 `exactOptionalPropertyTypes` 冲突失败（`f8d3712` 引入，与本批无关）；② 未跑 `pnpm build`、`check:frontend:boundaries`、`pnpm check`、API 与数据库集成测试（本批只改 `apps/web` 的一个弹层与文案、其单测和 5 个 E2E 定位器）；③ `pnpm format:check` 在当前分支对 8 个与本批无关的文件报格式问题（`apps/e2e/tests/tasks.spec.ts`、`apps/web/src/features/common/components/calm-select.css`、`CalmSelect.tsx`、`task-tone.ts`、`CreateProjectModal.test.tsx`、`project-member-query.test.tsx`、`ProjectMembersPageView.test.tsx`、`ProjectMembersPageView.tsx`），`git log` 确认全部由 `f8d3712` 引入，本批未修改；④ 任务侧的同名影响功能勾选区（`TasksPanel`、`GlobalTaskCreateModal` 的 `.task-impact-features`）本批未改，仍是原生复选框；⑤ 前端与 E2E 改动需非作者人工评审。
+
+## CalmSelect 多选下拉的重复选中勾修复（产品要求，2026-09-21 本地落库）
+
+产品要求（附「影响功能」多选下拉截图）：「这张图和上张图不知道为甚，末尾都是两个打勾，只要一个就行了可以稍微粗一点」。本批为纯前端选中态修复：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+锁定口径：
+
+- 根因：`CalmSelect` 用 `optionRender` 自己渲染选中勾（`.calm-select-check`），而 antd 6 在 `multiple` 模式下经 `useIcons` 额外渲染自带 `CheckOutlined`（`mergedItemIcon = fallbackProp(menuItemSelectedIcon, contextMenuItemSelectedIcon, multiple ? <CheckOutlined/> : null)`），两个勾叠加成一个选项两个勾。antd 的 `fallbackProp` 取第一个非 `undefined` 的值，因此显式传 `menuItemSelectedIcon={null}` 才会覆盖默认值（传 `undefined` 会退回默认图标）。关掉后选中态统一由 `.calm-select-check` 表达；单选形态本来就拿 `null`，行为不变。
+- 加粗：`.calm-select-check` 增加 `stroke-width: 2.6`。勾是 `InpulseIcon`，SVG 上的 `strokeWidth={1.7}` 是表现属性，优先级低于任何作者 CSS 规则，因此该声明生效、内部 `path` 通过继承得到 `2.6px`；尺寸不变（14×14），只是「稍微粗一点」。
+- 影响面：`CalmSelect` 是共用组件，所有 `multiple` 形态（影响功能、成员多选等）都会少掉重复的勾；menu / rich / member / notion 单选形态渲染结果不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CALM-SELECT-SINGLE-CHECK-UNIT-001 | Web 单元 | 多选已选项只剩一个勾 | `CalmSelect.test.tsx` 的 multiple 用例：3 个已选项各自 `.calm-select-check` 计 1，且 `.ant-select-item-option-state` 的 `innerHTML` 为 `""`（antd 自带图标已关） | 本地通过 |
+| CALM-SELECT-SINGLE-CHECK-UNIT-002 | Web 单元（回归验证） | 断言能拦住重复勾 | 临时移除 `menuItemSelectedIcon={null}` 后同用例失败（1 failed / 5 passed），恢复后 6 例通过 | 本地通过 |
+| CALM-SELECT-SINGLE-CHECK-E2E-001 | Playwright | 多选下拉的真实交互未回归 | `project-create.spec.ts`（选择初始成员）、`project-members.spec.ts`（选择要添加的用户）、`record-drafts.spec.ts`（影响功能 + 入口改名）6 passed（30.0s） | 本地通过 |
+| CALM-SELECT-SINGLE-CHECK-BROWSER-001 | 真实浏览器实测 | 下拉里只剩一个勾且更粗 | Playwright chromium 登录本地 dev，`/records?projectId=1` → 新建迭代记录 → 所属模块「平台与访问」→ 影响功能连选 3 项：3 个已选项各 `checkCount = 1`、自带图标容器 `innerHTML` 为空、`.calm-select-check` 与其内部 `path` 的 `getComputedStyle(...).strokeWidth` 均为 `2.6px`、勾仍是 14×14，截图确认 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/common/components/CalmSelect.test.tsx` 6/6（1.95s）；`pnpm --filter @inpulse/web test` 83 文件 526 例通过（23.83s）；`pnpm exec prettier --check apps/web/src/features/common/components/CalmSelect.test.tsx` 通过；把当前 `calm-select.css` 交给 prettier 格式化后，本批新增的注释与 `stroke-width: 2.6;` 逐字保持；`pnpm check:frontend:boundaries` 通过（279 模块 / 1363 依赖，无越界）；`pnpm check:docs` 通过（84 个 Markdown 文件）；真实浏览器实测见上表第 4 行（临时脚本与截图已删除，`git status` 无未跟踪残留）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app pnpm --filter @inpulse/e2e exec playwright test project-create.spec.ts record-drafts.spec.ts project-members.spec.ts --reporter=line` 6 passed（30.0s，夹具清理：删除用户 3、项目 3、业务行 124、审计行 14）。
+
+未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`：`apps/web` 的 `tsc` 在当前远端提交上只报 `CalmSelect.tsx(307,6)` 的 `mode={multiple ? "multiple" : undefined}` 与 `exactOptionalPropertyTypes` 冲突（`f8d3712` 引入，与本批无关），本批新增行无报错；② 未跑 `pnpm build`、`pnpm check`、Playwright E2E 全套（只跑了用到多选下拉的 3 个规格，其余规格未跑）与 API / 数据库集成测试（本批只改共用组件的一行属性、一条 CSS 声明与其单测）；③ `pnpm format:check` 在当前分支对 8 个与本批无关的文件报格式问题（`f8d3712` 引入），其中 `calm-select.css` 与 `CalmSelect.tsx` 含本批改动，为避免把既有格式问题混进本批 diff 未顺手重排；④ 本批只修 `CalmSelect` 多选下拉；任务侧的 `.task-impact-features` 仍是原生复选框，不存在重复勾；⑤ 前端改动需非作者人工评审。
+
+## 侧栏目录树：展开项目不再遮挡其它项目（产品要求，2026-09-21 本地落库）
+
+产品要求（附侧栏「当前项目」截图）：「我希望这个下拉条只属于其中一个项目，理想状态是点击项目列表下方展示所有项目，打开其中一个项目会展开项目的模块列表，但是即使展开状态所有项目依旧是展示的不会被隐藏」。本批为纯样式改动：只改 `apps/web/src/styles/design-system.css` 的项目树罗列区与展开内框，不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，TS 组件与后端零改动。
+
+锁定口径：
+
+- 症状：`.project-tree-scroll` 原先整块 `max-height: 264px; overflow-y: auto`，展开一个项目后模块列表把其它项目行推到 264px 之外，只能在罗列区里滚动才能看见，观感上等于「被隐藏」。实测 `/projects/1/modules`：罗列区可视区 233–497px，项目 1 行 233–265px，其它两个项目行在 630–662 / 677–709px，`scrollHeight 478 > clientHeight 264`。
+- 改法：罗列区不再整块限高（`.project-tree-scroll { overflow: visible }`），所有项目行始终完整展示；滚动下沉到被展开项目自己的内框（`.project-tree-scroll > .tree-project > .tree-children { max-height: 260px; overflow-y: auto }`），因此滚动条只属于被打开的那个项目，其它项目行不会被展开内容顶走。
+- 展开高度的取值：产品反馈「展开太高」后先由 42vh 收矮到 32vh（900px 视口 288px），再按像素值定为 260px；子树内容超出时在项目内框里滚动（项目 1 的模块层 344px、展开模块看功能时 464px，内框固定 260px）。
+- 手风琴语义不变：同一时刻只展开一个项目，`ProjectTree` 的既有展开副作用与 `ProjectTree.accordion.test.tsx` 未改。
+- 取代 2026-09-15 章节的「罗列区 264px 限高」实现说明：该章节记录的是当时的实现与实测，本批按产品要求把限高下沉到项目内框。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-TREE-VISIBLE-UNIT-001 | Web 单元 | 展开一个项目后其它项目行仍在树里 | `ProjectTree.test.tsx` 新增用例：展开 AGV 并铺开模块后 WMS 行仍在、AGV 行仍只有一份 | 本地通过 |
+| SIDEBAR-TREE-VISIBLE-E2E-001 | Playwright | 展开项目不遮挡其它项目 | `visual-migration.spec.ts` 在项目页断言 `.project-tree-scroll` 里的项目行全部完整落在 `.nav-tree-panel` 盒内，且罗列区 `overflow-y` 为 `visible`、`scrollHeight === clientHeight` | 本地通过 |
+| SIDEBAR-TREE-VISIBLE-E2E-002 | Playwright（回归验证） | 断言能拦住回退到整块限高 | 临时把 CSS 改回 `max-height: 264px; overflow-y: auto` 后同用例失败（`Expected "visible"` / `Received "auto"`），恢复后通过 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/project-tree` 3 文件 12 例通过（1.50s）；`pnpm --filter @inpulse/web test` 83 文件 527 例通过（25.04s）；`pnpm --filter @inpulse/e2e typecheck` 退出码 0，改动文件的 `prettier --check` 与 `eslint` 通过；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app pnpm --filter @inpulse/e2e exec playwright test visual-migration.spec.ts project-create.spec.ts aggregate-views.spec.ts --reporter=line` 4 passed（19.8s，夹具清理：删除用户 2、项目 4、业务行 90、审计行 4）；真实浏览器量测（Vite :5173，1220×900）：`/projects` 罗列区 128px 无滚动、三个项目行 233/280/327px 全可见；`/projects/1/modules` 面板 227–633px（406px 高）、罗列区 394px，三个项目行 233–265 / 546–578 / 593–625px 全部落在面板内，子树内框 260px（内容 344px）、`/projects/1/modules/3/features` 内框同样 260px（内容 464px，在框内滚动）。
+
+未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`（`apps/web` 只报远端 `f8d3712` 引入的 `CalmSelect.tsx(307,6)` 既有错误）、`pnpm build`、`pnpm check`、Playwright 全套与 API / 数据库集成测试；② 项目数量很多时罗列区会随内容变长、侧栏整体高度随之增加，超出视口时靠页面滚动，本批按「项目行优先完整展示」取舍，未改侧栏整体滚动结构；③ 260px 为本地量测并按产品反馈定下的固定值（不随视口变化），未做设计师稿比对；④ 前端与 E2E 改动需非作者人工评审。

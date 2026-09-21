@@ -16,9 +16,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 选中态的勾由 optionRender 统一渲染（antd 自带的选中图标已在 CalmSelect 里关掉）。
+ * 反馈：勾比设计稿细，这里按 1.7 → 2.6 加粗，尺寸不变。 */
 .calm-select-check {
   flex: 0 0 auto;
   color: currentColor;
+  stroke-width: 2.6;
 }
 
 /* 搜索输入框是真实 <input>：宿主表单（.calm-form / .dialog-form）会给容器内所有

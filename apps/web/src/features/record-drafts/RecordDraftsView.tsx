@@ -246,7 +246,7 @@ export function RecordDraftsView({
                 )
               }
             >
-              {taskId ? "新建来源草稿" : "新建独立草稿"}
+              {taskId ? "新建来源草稿" : "新建迭代记录"}
             </Button>
           </CalmSectionTitle>
           {draftsOpen && (
@@ -319,7 +319,10 @@ export function RecordDraftsView({
           )}
           <Modal
             open={recordId > 0 && editorTarget === null}
-            title="草稿详情"
+            className="draft-detail-modal"
+            label="草稿详情"
+            eyebrow="草稿"
+            title={detail.data === undefined ? undefined : detail.data.title}
             body
             size="lg"
             onCancel={() => {
@@ -340,12 +343,10 @@ export function RecordDraftsView({
               ) : (
                 detail.data && (
                   <section className="draft-detail" aria-label="草稿详情">
-                    <h2>{detail.data.title}</h2>
                     <div className="draft-detail-meta">
                       <p>
-                        草稿 · 处理人{" "}
-                        {detail.data.handlerName ?? "名称暂不可用"} · 记录作者{" "}
-                        {detail.data.authorName ?? "名称暂不可用"}
+                        处理人 {detail.data.handlerName ?? "名称暂不可用"} ·
+                        记录作者 {detail.data.authorName ?? "名称暂不可用"}
                       </p>
                       <p>
                         项目{" "}

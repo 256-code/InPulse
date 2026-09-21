@@ -89,6 +89,23 @@ describe("ProjectTree", () => {
     ).toBeTruthy();
   });
 
+  it("keeps every project row listed while one project is expanded", async () => {
+    mount(createClient(), vi.fn(), null);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /AGV 智能搬运平台/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "模块与功能" }));
+    expect(
+      await screen.findByRole("button", { name: /调度模块/ }),
+    ).toBeTruthy();
+    // 展开的子树只挂在被打开的项目下面：其它项目行仍留在同一个罗列区里，
+    // 不因为某个项目展开而消失（产品要求 2026-09-21）。
+    expect(screen.getByRole("button", { name: /WMS 仓储管理/ })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /AGV 智能搬运平台/ }),
+    ).toHaveLength(1);
+  });
+
   it("collapses the project branch when its node is clicked again", async () => {
     const onNavigate = vi.fn();
     mount(createClient(), onNavigate, null);

@@ -55,19 +55,21 @@
   justify-self: start;
 }
 
+/* 草稿详情弹层盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的
+   默认头部排版（同 `.record-detail-modal`）：不补内边距时「草稿详情」会顶到盒子
+   左上角、关闭按钮贴住右边缘，且正文滚动时会从标题下面穿过。 */
+.draft-detail-modal > .drawer-header {
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+
 .draft-detail {
   margin-top: 24px;
   padding: 28px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card);
-}
-
-.draft-detail h2 {
-  margin: 0 0 10px;
-  font-size: 17px;
-  font-weight: 600;
-  color: #24405c;
 }
 
 .draft-detail-meta p {

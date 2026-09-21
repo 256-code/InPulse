@@ -391,13 +391,11 @@ button {
 .project-tree {
   margin: 0;
 }
-/* 罗列区间：目录过长时在固定高度内滚动，不把侧栏导航撑出视口。 */
+/* 罗列区间不再整块限高：所有项目行始终完整展示，展开某个项目也不会把其它项目
+   挤出可视区（产品要求 2026-09-21，取代原先 264px 的整块限高）。目录过长时
+   滚动收进被展开项目自己的内框，见下面的 `.tree-children`。 */
 .project-tree-scroll {
-  max-height: 264px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #2c4a66 transparent;
+  overflow: visible;
 }
 .tree-project {
   display: flex;
@@ -416,6 +414,14 @@ button {
   border-left: 2px solid #2a5a86;
   border-radius: 0 8px 8px 0;
   background: #102a44;
+  /* 滚动条属于被展开的这个项目：模块与功能在它自己的内框里滚动，项目行留在原位。
+     展开高度按产品反馈定为 260px（42vh → 32vh → 260px）：内框不再占满侧栏，
+     超出部分在这里滚动。 */
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #2c4a66 transparent;
 }
 .tree-row {
   width: 100%;
