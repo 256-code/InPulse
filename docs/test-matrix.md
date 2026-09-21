@@ -2472,3 +2472,26 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/project-tree` 3 文件 12 例通过（1.50s）；`pnpm --filter @inpulse/web test` 83 文件 527 例通过（25.04s）；`pnpm --filter @inpulse/e2e typecheck` 退出码 0，改动文件的 `prettier --check` 与 `eslint` 通过；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app pnpm --filter @inpulse/e2e exec playwright test visual-migration.spec.ts project-create.spec.ts aggregate-views.spec.ts --reporter=line` 4 passed（19.8s，夹具清理：删除用户 2、项目 4、业务行 90、审计行 4）；真实浏览器量测（Vite :5173，1220×900）：`/projects` 罗列区 128px 无滚动、三个项目行 233/280/327px 全可见；`/projects/1/modules` 面板 227–633px（406px 高）、罗列区 394px，三个项目行 233–265 / 546–578 / 593–625px 全部落在面板内，子树内框 260px（内容 344px）、`/projects/1/modules/3/features` 内框同样 260px（内容 464px，在框内滚动）。
 
 未运行 / 已知偏差：① 未跑全 workspace `pnpm typecheck`（`apps/web` 只报远端 `f8d3712` 引入的 `CalmSelect.tsx(307,6)` 既有错误）、`pnpm build`、`pnpm check`、Playwright 全套与 API / 数据库集成测试；② 项目数量很多时罗列区会随内容变长、侧栏整体高度随之增加，超出视口时靠页面滚动，本批按「项目行优先完整展示」取舍，未改侧栏整体滚动结构；③ 260px 为本地量测并按产品反馈定下的固定值（不随视口变化），未做设计师稿比对；④ 前端与 E2E 改动需非作者人工评审。
+
+## 侧栏项目树：滚动区收进模块列表并降到 200px（C，2026-09-21 本地落库）
+
+产品在 11:01 那版（罗列区不再整块限高、滚动下沉到项目内框 260px）上复核后提两点：滚动区只该属于被展开的那一个项目；高度由 260px 改为 200px。
+
+锁定口径：
+
+- 滚动范围：`.project-tree-scroll > .tree-project > .tree-children` 去掉 `max-height: 260px` 与 `overflow-y: auto`，滚动下移到只包模块列表的 `.tree-modules`（`max-height: 200px`，并以 `flex: none` 防止模块分支被压扁）；两个子页行「任务看板 / 模块与功能」留在滚动区之外。
+- 与上一版的关系：外层罗列区 `overflow: visible`（项目行全部展示）的口径不变，11:01 章节里「内框 260px」的口径由本章节取代。
+- `ProjectBranch` 把 `<ModuleList>` 包进 `<div className="tree-modules">`，作为上述 CSS 的 DOM 契约。
+- 手风琴语义（同一时刻只铺开一个项目）、接口、契约、数据库与权限矩阵均未改。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-TREE-MODULES-001 | Web 单元 | 滚动区 DOM 契约 | `ProjectTree.test.tsx` 新增用例：模块列表位于 `.project-tree-scroll > .tree-project > .tree-children > .tree-modules` 内，且「模块与功能」子页行不在该滚动区内 | 本地通过 |
+| SIDEBAR-TREE-MODULES-002 | 浏览器实测 | 模块区高度与滚动 | `/projects/1/modules`：`.tree-modules` 高 200px、内容 272px 自行滚动，8 个模块里 5 个完整可见；`/projects/1/modules/2/features/2` 内容 482px 时同样 200px | 本地通过 |
+| SIDEBAR-TREE-MODULES-003 | 浏览器实测 | 子页行与项目行不被滚走 | 同一页：罗列区 `406x406`、`overflow-y: visible`、无外层滚动；三个项目行都落在 `.nav-tree-panel` 内；子页行 y 271–303 / 305–337 在模块区之外 | 本地通过 |
+| SIDEBAR-TREE-MODULES-004 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：83 文件 528 例通过 | 本地通过 |
+| SIDEBAR-TREE-MODULES-GATE-001 | 静态门禁 | 类型与风格 | `pnpm --filter @inpulse/web typecheck`、改动文件 `prettier --check` 与 `eslint` 通过 | 本地通过 |
+
+本地实际执行（2026-09-21，干净检出 worktree detached 于 `a3ee0ce`）：`pnpm --filter @inpulse/web exec vitest run src/features/project-tree` 3 文件 13 例通过；`pnpm --filter @inpulse/web test` 83 文件 528 例通过；`pnpm --filter @inpulse/web typecheck` 退出码 0；改动文件 `prettier --check`、`eslint` 通过；浏览器量测用本工作树自带的 Vite（:5199，代理到既有 API :3000）与无头 Chromium 完成，未新增或修改业务数据。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check`、`check:deps`、`permissions:check`、Playwright 全套与 API / 数据库集成测试；② 项目很多时罗列区随内容变长、超出视口靠页面滚动（沿用上一版取舍）；③ 200px 为产品在浏览器里复核的值，未与设计稿标注逐项比对；④ 模块展开后的功能行也在同一 200px 区内滚动，功能层独立限高需另开需求；⑤ 前端与单测改动需非作者人工评审。

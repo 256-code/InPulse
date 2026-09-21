@@ -89,6 +89,28 @@ describe("ProjectTree", () => {
     ).toBeTruthy();
   });
 
+  it("keeps the module list in its own scroll area so other projects stay visible", async () => {
+    const { container } = mount(createClient(), vi.fn(), null);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /AGV 智能搬运平台/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "模块与功能" }));
+    const moduleButton = await screen.findByRole("button", {
+      name: /调度模块/,
+    });
+
+    // 回归防线：模块列表必须落在自己的滚动区（.tree-modules，CSS 限高 200px）里，
+    // 侧栏不再让所有项目共用一条滚动条；子页行留在滚动区之外，始终可见。
+    const scrollArea = container.querySelector(
+      ".project-tree-scroll > .tree-project > .tree-children > .tree-modules",
+    );
+    expect(scrollArea?.contains(moduleButton)).toBe(true);
+    expect(
+      scrollArea?.contains(screen.getByRole("button", { name: "模块与功能" })),
+    ).toBe(false);
+  });
+
   it("keeps every project row listed while one project is expanded", async () => {
     mount(createClient(), vi.fn(), null);
     fireEvent.click(
