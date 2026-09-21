@@ -196,9 +196,16 @@ describe("TaskBoardPageView", () => {
     expect(
       screen.getByRole("article", { name: "模块 结算模块" }),
     ).toBeInTheDocument();
+    // 卡片配色与列表行同源：优先级决定底色与左侧色条，已完成 / 已取消覆盖状态色。
     expect(
       screen.getByRole("button", { name: "打开任务 T-1001 实现任务看板" }),
-    ).toBeInTheDocument();
+    ).toHaveClass("tb-card", "tone-prio-normal");
+    expect(
+      screen.getByRole("button", { name: "打开任务 T-1002 补齐看板筛选" }),
+    ).toHaveClass("tb-card", "tone-prio-done");
+    expect(
+      screen.getByRole("button", { name: "打开任务 T-1003 结算对账" }),
+    ).toHaveClass("tb-card", "tone-prio-canceled");
     expect(screen.getByText("完成 09-18 · 迭代 2")).toBeInTheDocument();
   });
 
@@ -243,6 +250,13 @@ describe("TaskBoardPageView", () => {
     });
     expect(within(row).getByText("模块级任务")).toBeInTheDocument();
     expect(within(row).getByText("已取消")).toBeInTheDocument();
+    // 行配色：优先级决定底色（tone 类），已取消覆盖状态色。
+    expect(row).toHaveClass("tb-row", "tb-row--tone-blue", "tb-row--canceled");
+
+    const doneRow = screen.getByRole("button", {
+      name: "打开任务 T-1002 补齐看板筛选",
+    });
+    expect(doneRow).toHaveClass("tb-row", "tb-row--tone-blue", "tb-row--done");
   });
 
   it("检索无命中时提示调整筛选并保留清除入口", async () => {

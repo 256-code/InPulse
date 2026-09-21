@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 
+import { pickCalmSelectOptions } from "./calm-select.js";
 import type { E2ERuntime } from "./runtime.js";
 
 export interface CreatedProject {
@@ -35,7 +36,8 @@ export async function createProjectViaUi(
   await dialog
     .getByLabel("项目描述")
     .fill("由 Playwright E2E 创建，用于验证项目动态与站内通知。");
-  await dialog.getByLabel(`选择成员：${runtime.member.name}`).check();
+  // 初始成员是可搜索多选下拉（不再是逐人复选框）。
+  await pickCalmSelectOptions(dialog, "选择初始成员", [runtime.member.name]);
   await expect(dialog.getByText(/已选择 1 位其他成员/)).toBeVisible();
   await dialog.getByRole("button", { name: "创建项目" }).click();
 

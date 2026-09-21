@@ -18,6 +18,8 @@ import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
  * 列表视图：按模块分组的高密度表格，列固定为
  * 编号 / 标题 / 功能 / 负责人 / 优先级 / 状态 / 截止或完成时间。
  * 分组头沿用泳道统计（全量口径），行点击就地打开任务详情。
+ * 行底色按优先级区分程度（紧急红 / 高橙 / 普通蓝 / 低灰），已完成与
+ * 已取消覆盖为对应状态色；色值只在 design-system.css 的 --tb-row-* 维护。
  */
 export interface TaskBoardTableProps {
   readonly modules: readonly TaskBoardModule[];
@@ -26,10 +28,15 @@ export interface TaskBoardTableProps {
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
 
+/**
+ * 行配色类：优先级决定底色与左侧色条，DONE / CANCELED 覆盖状态色。
+ * 类名与 design-system.css 的 --tb-row-* 变量一一对应。
+ */
 function rowClassNameOf(card: TaskBoardCard): string {
-  if (card.workStatus === "DONE") return "tb-row tb-row--done";
-  if (card.workStatus === "CANCELED") return "tb-row tb-row--canceled";
-  return "tb-row";
+  const base = "tb-row tb-row--tone-" + priorityMarkOf(card.priority).tone;
+  if (card.workStatus === "DONE") return base + " tb-row--done";
+  if (card.workStatus === "CANCELED") return base + " tb-row--canceled";
+  return base;
 }
 
 const TaskBoardTableRow: React.FC<{

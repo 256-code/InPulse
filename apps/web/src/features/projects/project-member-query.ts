@@ -50,13 +50,24 @@ function mutationHeaders(
   };
 }
 
+export interface ProjectMemberAddFailure {
+  readonly userId: number;
+  readonly error: unknown;
+}
+
+export interface ProjectMemberAddResult {
+  readonly added: readonly number[];
+  readonly failures: readonly ProjectMemberAddFailure[];
+}
+
 export function useProjectMembers(
   projectId: number,
   client?: InpulseApiClient,
 ) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
-  const addRetryKey = useRef<{ signature: string; key: string } | null>(null);
+  /** 每个待添加用户各自留一个幂等键，失败重试时沿用同一键。 */
+  const addRetryKeys = useRef(new Map<string, string>());
   const removeRetryKey = useRef<{ signature: string; key: string } | null>(
     null,
   );
@@ -71,25 +82,37 @@ export function useProjectMembers(
 
   const addMutation = useMutation({
     retry: false,
-    mutationFn: async (input: { readonly userId: number }) => {
-      const signature = JSON.stringify([projectId, input.userId]);
-      if (addRetryKey.current?.signature !== signature) {
-        addRetryKey.current = {
-          signature,
-          key: createIdempotencyKey("project-member-add"),
-        };
-      }
+    mutationFn: async (input: {
+      readonly userIds: readonly number[];
+    }): Promise<ProjectMemberAddResult> => {
       const csrf = await api.issueCsrfToken();
-      return api.addProjectMember(
-        projectId,
-        { userId: input.userId },
-        {
-          headers: mutationHeaders(csrf.csrfToken, addRetryKey.current.key),
-        },
-      );
+      const added: number[] = [];
+      const failures: ProjectMemberAddFailure[] = [];
+      // 后端一次只接受一个 userId，逐个提交：每人独立幂等键与签名，
+      // 失败不中断其余用户，返回结果由调用方决定提示与保留勾选。
+      for (const userId of input.userIds) {
+        const signature = JSON.stringify([projectId, userId]);
+        const cached = addRetryKeys.current.get(signature);
+        const idempotencyKey =
+          cached ?? createIdempotencyKey("project-member-add");
+        if (cached === undefined) {
+          addRetryKeys.current.set(signature, idempotencyKey);
+        }
+        try {
+          await api.addProjectMember(
+            projectId,
+            { userId },
+            { headers: mutationHeaders(csrf.csrfToken, idempotencyKey) },
+          );
+          addRetryKeys.current.delete(signature);
+          added.push(userId);
+        } catch (error) {
+          failures.push({ userId, error });
+        }
+      }
+      return { added, failures };
     },
     onSuccess: async () => {
-      addRetryKey.current = null;
       await Promise.all([
         cache.invalidateQueries({ queryKey: ["project-members", projectId] }),
         cache.invalidateQueries({ queryKey: ["projects"] }),

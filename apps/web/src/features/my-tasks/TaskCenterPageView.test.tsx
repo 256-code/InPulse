@@ -222,7 +222,11 @@ describe("TaskCenterPageView", () => {
   it("shows open tasks only by default and hides done and canceled", async () => {
     renderView();
 
-    expect(await screen.findByTestId("my-task-101")).toBeInTheDocument();
+    // 卡片按程度铺色：紧急任务取红色 tone 类。
+    expect(await screen.findByTestId("my-task-101")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-urgent",
+    );
     expect(screen.queryByTestId("my-task-104")).toBeNull();
     expect(screen.queryByTestId("my-task-107")).toBeNull();
     expect(screen.queryByText(/已完成 .* 项/)).toBeNull();
@@ -236,7 +240,11 @@ describe("TaskCenterPageView", () => {
 
     // 2026-09-20 定案：列表区块不再重复「全部任务 / 1 项 · 服务端按任务编号倒序」两行文字，
     // 工作状态只由上方统计卡的选中态表达；status=all 不对应任何一张卡，因此这里没有选中项。
-    expect(await screen.findByTestId("my-task-901")).toBeInTheDocument();
+    // 已完成卡片取绿色完成态（状态覆盖优先级）。
+    expect(await screen.findByTestId("my-task-901")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-done",
+    );
     expect(screen.queryByText("1 项 · 服务端按任务编号倒序")).toBeNull();
     expect(screen.queryByRole("heading", { name: "全部任务" })).toBeNull();
     expect(screen.queryByText(/没有匹配/)).toBeNull();
@@ -264,8 +272,10 @@ describe("TaskCenterPageView", () => {
       "状态",
     ]);
 
-    // 编号不再是独立列：跟在标题下面，和归属类型拼成一行。
+    // 编号不再是独立列：跟在标题下面，和归属类型拼成一行；
+    // 整行沿用卡片同款程度配色，已完成覆盖为绿色。
     const row = table.querySelector("tbody tr");
+    expect(row).toHaveClass("tone-prio-done");
     const subtitle = row?.querySelector<HTMLElement>(".feature-list-open span");
     expect(subtitle?.textContent).toBe("INP-901 · 独立任务 · 模块级");
     expect(subtitle?.closest("td")).toBe(row?.children[0]);

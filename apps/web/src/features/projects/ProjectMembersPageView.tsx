@@ -73,7 +73,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     useProjectMembers(projectId, client);
   const directory = useUserDirectoryQuery({ client });
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<readonly number[]>([]);
   const [removing, setRemoving] = useState<ProjectMemberRecordItem | null>(
     null,
   );
@@ -129,7 +129,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   );
   const openAdd = () => {
     setAddOpen(true);
-    setSelectedUserId(null);
+    setSelectedUserIds([]);
     setActionError(null);
     setSuccess(null);
     addMutation.reset();
@@ -203,12 +203,28 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   };
 
   const submitAdd = async () => {
-    if (selectedUserId === null || addMutation.isPending) return;
+    if (selectedUserIds.length === 0 || addMutation.isPending) return;
     setActionError(null);
     try {
-      await addMutation.mutateAsync({ userId: selectedUserId });
-      setAddOpen(false);
-      setSuccess("成员已添加，项目成员列表已更新。");
+      const { added, failures } = await addMutation.mutateAsync({
+        userIds: selectedUserIds,
+      });
+      if (failures.length === 0) {
+        setAddOpen(false);
+        setSuccess(`已添加 ${added.length} 位项目成员，项目成员列表已更新。`);
+        return;
+      }
+      // 后端一次只接受一个用户，逐个提交后汇总：失败的用户保留勾选，
+      // 修正原因后可以直接重试，已加入的成员不再重复选择。
+      const [firstFailure] = failures;
+      const reason = projectMemberErrorMessage(firstFailure?.error);
+      setSelectedUserIds(failures.map((failure) => failure.userId));
+      if (added.length === 0) {
+        setActionError(reason);
+        return;
+      }
+      setSuccess(`已添加 ${added.length} 位项目成员，项目成员列表已更新。`);
+      setActionError(`其余 ${failures.length} 位成员添加失败：${reason}`);
     } catch (error) {
       setActionError(projectMemberErrorMessage(error));
     }
@@ -524,7 +540,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             <Button
               className="primary-button"
               loading={addMutation.isPending}
-              disabled={selectedUserId === null}
+              disabled={selectedUserIds.length === 0}
               onClick={() => void submitAdd()}
             >
               添加成员
@@ -558,24 +574,28 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 description="请先在用户目录中启用用户，再回来添加项目成员。"
               />
             ) : (
-              <div className="impact-fieldset member-candidate-list">
-                <div className="check-list">
-                  {addCandidates.map((user) => (
-                    <label key={user.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedUserId === user.id}
-                        aria-label={"选择成员：" + user.name}
-                        onChange={(event) =>
-                          setSelectedUserId(
-                            event.target.checked ? user.id : null,
-                          )
-                        }
-                      />
-                      {user.name} · {user.isAdmin ? "系统管理员" : "启用用户"}
-                    </label>
-                  ))}
-                </div>
+              <div className="calm-field">
+                <label htmlFor="project-member-candidate">选择用户</label>
+                <CalmSelect
+                  id="project-member-candidate"
+                  ariaLabel="选择要添加的用户"
+                  appearance="member"
+                  multiple
+                  value={selectedUserIds}
+                  onChange={(next) => setSelectedUserIds(next.map(Number))}
+                  placeholder="输入姓名搜索，可一次选择多位启用用户"
+                  options={addCandidates.map((user) => ({
+                    value: user.id,
+                    label: user.name,
+                    avatarUrl: user.avatarUrl ?? null,
+                    description: user.isAdmin ? "系统管理员" : "启用用户",
+                  }))}
+                />
+                {selectedUserIds.length > 1 ? (
+                  <p className="member-hint">
+                    已选择 {selectedUserIds.length} 位用户，确认后一次性加入项目。
+                  </p>
+                ) : null}
               </div>
             )}
             {actionError ? (

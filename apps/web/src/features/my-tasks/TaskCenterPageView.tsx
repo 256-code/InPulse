@@ -17,6 +17,7 @@ import {
 } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { priorityDotColor } from "@features/common/priority-select-option";
+import { taskToneClassName } from "@features/common/task-tone";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import {
@@ -404,7 +405,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     return (
       <button
         type="button"
-        className="calm-task-card"
+        className={
+          "calm-task-card " + taskToneClassName(item.priority, item.workStatus)
+        }
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
         onClick={() => openTask(item)}
@@ -485,7 +488,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </thead>
         <tbody>
           {rows.map((item) => (
-            <tr key={item.taskId}>
+            <tr
+              key={item.taskId}
+              className={taskToneClassName(item.priority, item.workStatus)}
+            >
               <td>
                 <button
                   type="button"

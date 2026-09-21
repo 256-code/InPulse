@@ -5,6 +5,7 @@ import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
+import { pickCalmSelectOptions } from "../helpers/calm-select.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 test("普通成员只能查看本项目成员，不能增删或读取其他项目", async ({
@@ -80,10 +81,21 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
 
     await page.getByRole("button", { name: "添加成员" }).click();
     const addDialog = page.getByRole("dialog", { name: "添加项目成员" });
-    await addDialog.getByLabel(`选择成员：${runtime.member.name}`).check();
+    // 搜索框是真实 <input>：宿主表单会给它加边框、内边距与聚焦光环，触发器里因此
+    // 会多出一个「空输入小方框」。真实浏览器里锁定它已被复位。
+    const triggerInput = addDialog
+      .locator(".calm-select-multiple .ant-select-input")
+      .first();
+    await expect(triggerInput).toHaveCount(1);
+    await expect(triggerInput).toHaveCSS("border-top-width", "0px");
+    await expect(triggerInput).toHaveCSS("padding-left", "0px");
+    await expect(triggerInput).toHaveCSS("box-shadow", "none");
+    await pickCalmSelectOptions(addDialog, "选择要添加的用户", [
+      runtime.member.name,
+    ]);
     await addDialog.getByRole("button", { name: "添加成员" }).click();
     await expect(
-      page.getByText("成员已添加，项目成员列表已更新。"),
+      page.getByText("已添加 1 位项目成员，项目成员列表已更新。"),
     ).toBeVisible();
     await expect(
       memberCard.getByText("活跃成员", { exact: true }),

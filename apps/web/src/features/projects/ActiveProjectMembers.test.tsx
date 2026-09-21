@@ -27,8 +27,20 @@ const project = {
 };
 
 const activeMembers = [
-  { id: 2, name: "开发者 C", avatarUrl: null },
-  { id: 5, name: "小邵", avatarUrl: null },
+  {
+    id: 2,
+    name: "开发者 C",
+    avatarUrl: null,
+    role: "LEADER" as const,
+    joinedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: 5,
+    name: "小邵",
+    avatarUrl: null,
+    role: "MEMBER" as const,
+    joinedAt: "2026-09-05T08:00:00.000Z",
+  },
 ];
 
 function mount(client: InpulseApiClient) {
@@ -112,6 +124,32 @@ describe("ActiveProjectMembers（普通成员只读视图）", () => {
     for (const card of cards) {
       expect(within(card as HTMLElement).getByText("活跃成员")).toBeTruthy();
     }
+  });
+
+  it("shows joined time and role badges without role management", async () => {
+    mount(baseClient());
+    await screen.findByText("开发者 C（创建者）");
+
+    const cards = Array.from(
+      document.querySelectorAll<HTMLElement>(".calm-member-card"),
+    );
+    const leaderCard = cards.find((card) =>
+      card.textContent?.includes("开发者 C"),
+    );
+    const memberCard = cards.find((card) => card.textContent?.includes("小邵"));
+    expect(leaderCard).toBeTruthy();
+    expect(memberCard).toBeTruthy();
+
+    // 与管理员视图一致：显示加入时间，非默认角色显示身份徽标。
+    expect(leaderCard?.textContent).toContain("加入时间：");
+    expect(within(leaderCard!).getByText("组长")).toBeTruthy();
+    // MEMBER 不渲染角色徽标，也不出现已移除历史。
+    expect(within(memberCard!).queryByText("成员")).toBeNull();
+    expect(screen.queryByText("移除时间：")).not.toBeInTheDocument();
+    // 角色管理仍属管理员视图。
+    expect(
+      screen.queryByRole("button", { name: /设置角色/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the empty state when the project has no active members", async () => {

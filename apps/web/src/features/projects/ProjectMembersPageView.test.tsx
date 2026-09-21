@@ -116,6 +116,35 @@ function baseClient() {
   };
 }
 
+/** CalmSelect 多选交互：打开「选择用户」下拉，按顺序点选目标项；弹层在中途保持展开。 */
+async function pickCandidates(
+  picks: readonly {
+    readonly name: string;
+    readonly search?: string;
+    /** 输入 search 后应当被过滤掉的候选姓名。 */
+    readonly hides?: string;
+  }[],
+) {
+  const trigger = screen
+    .getByLabelText("选择要添加的用户")
+    .closest(".ant-select");
+  if (!trigger) {
+    throw new Error("candidate select not found");
+  }
+  fireEvent.mouseDown(trigger);
+  for (const pick of picks) {
+    if (pick.search !== undefined) {
+      fireEvent.change(screen.getByLabelText("选择要添加的用户"), {
+        target: { value: pick.search },
+      });
+    }
+    if (pick.hides !== undefined) {
+      expect(screen.queryByTitle(pick.hides, { exact: true })).toBeNull();
+    }
+    fireEvent.click(await screen.findByTitle(pick.name));
+  }
+}
+
 describe("ProjectMembersPageView", () => {
   it("lists project member history and opens remove confirmation", async () => {
     const client = baseClient() as unknown as InpulseApiClient;
@@ -144,11 +173,14 @@ describe("ProjectMembersPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("adds a candidate member through the generated client with security headers", async () => {
+  it("adds several candidate members in one submit with per-user security headers", async () => {
     const client = baseClient();
     client.listProjectMembers.mockResolvedValue({ items: [owner] });
     client.getUserDirectory.mockResolvedValue({
-      items: [{ id: 3, name: "新成员", avatarUrl: null, isAdmin: false }],
+      items: [
+        { id: 3, name: "新成员", avatarUrl: null, isAdmin: false },
+        { id: 5, name: "旧同事", avatarUrl: null, isAdmin: true },
+      ],
     });
     const addProjectMember = vi.fn().mockResolvedValue({ member: owner });
     const api = {
@@ -162,13 +194,19 @@ describe("ProjectMembersPageView", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "添加项目成员",
     });
-    fireEvent.click(
-      within(dialog).getByRole("checkbox", { name: "选择成员：新成员" }),
-    );
+    // 下拉可搜索且可多选：输入姓名后不匹配的候选被过滤掉，再逐个点选两位候选。
+    await pickCandidates([
+      { name: "新成员", search: "新", hides: "旧同事" },
+      { name: "旧同事" },
+    ]);
+    expect(
+      within(dialog).getByText(/已选择 2 位用户，确认后一次性加入项目。/),
+    ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "添加成员" }));
 
-    await waitFor(() => expect(addProjectMember).toHaveBeenCalledTimes(1));
-    expect(addProjectMember).toHaveBeenCalledWith(
+    await waitFor(() => expect(addProjectMember).toHaveBeenCalledTimes(2));
+    expect(addProjectMember).toHaveBeenNthCalledWith(
+      1,
       7,
       { userId: 3 },
       expect.objectContaining({
@@ -178,7 +216,25 @@ describe("ProjectMembersPageView", () => {
         }),
       }),
     );
-    await screen.findByText("成员已添加，项目成员列表已更新。");
+    expect(addProjectMember).toHaveBeenNthCalledWith(
+      2,
+      7,
+      { userId: 5 },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-token",
+          "Idempotency-Key": expect.stringContaining("project-member-add-"),
+        }),
+      }),
+    );
+    const keys = addProjectMember.mock.calls.map(
+      (call) =>
+        (
+          call[2] as { readonly headers: { readonly "Idempotency-Key": string } }
+        ).headers["Idempotency-Key"],
+    );
+    expect(new Set(keys).size).toBe(2);
+    await screen.findByText("已添加 2 位项目成员，项目成员列表已更新。");
   });
 
   it("removes a member and sends the original unfinished task by default", async () => {

@@ -235,13 +235,23 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     expect(page.url()).toBe(taskCenterUrl);
     await expect(page.getByTestId("task-center")).toBeVisible();
 
+    // 遗留问题入口与任务卡片同一口径：就地弹出 F-20 视图（项目筛选跟随任务中心
+    // 当前筛选），不跳转 `/issues`，地址栏保持不变，关闭后仍停在任务中心。
     await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();
+    const issuesEntryUrl = page.url();
     await page
       .getByTestId("task-center")
       .getByRole("button", { name: "遗留问题" })
       .click();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/issues");
+    const issuesDialog = page.getByRole("dialog", { name: "遗留问题" });
+    await expect(issuesDialog).toBeVisible();
+    await expect(issuesDialog.getByTestId("issues-page")).toBeVisible();
+    expect(page.url()).toBe(issuesEntryUrl);
+    await issuesDialog.getByRole("button", { name: "关闭遗留问题" }).click();
+    await expect(issuesDialog).toBeHidden();
+    expect(page.url()).toBe(issuesEntryUrl);
+    await expect(page.getByTestId("task-center")).toBeVisible();
   } finally {
     await context.close();
   }

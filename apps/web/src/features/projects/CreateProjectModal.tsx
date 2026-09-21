@@ -3,6 +3,7 @@ import { Alert, Button, Empty, Form, Input, Spin, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import {
   useUserDirectoryQuery,
   describeUserDirectoryError,
@@ -102,14 +103,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     if (!mutation.isPending) {
       onClose();
     }
-  };
-
-  const toggleMember = (memberId: number) => {
-    setSelectedMemberIds((current) =>
-      current.includes(memberId)
-        ? current.filter((id) => id !== memberId)
-        : [...current, memberId],
-    );
   };
 
   return (
@@ -235,30 +228,32 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             />
             <fieldset className="impact-fieldset">
               <legend>初始项目成员</legend>
-              <div className="check-list">
-                <span className="creator-locked">
-                  <input
-                    type="checkbox"
-                    checked
-                    readOnly
-                    aria-label="创建者（不可取消）"
+              <p className="member-hint">
+                创建者 {creatorName} 自动成为活跃成员，创建流程中不可取消。
+              </p>
+              {!directory.isPending &&
+              !directory.isError &&
+              candidates.length > 0 ? (
+                <div className="calm-field">
+                  <label htmlFor="project-member-candidates">选择成员</label>
+                  <CalmSelect
+                    id="project-member-candidates"
+                    ariaLabel="选择初始成员"
+                    appearance="member"
+                    multiple
+                    value={selectedMemberIds}
+                    onChange={(next) => setSelectedMemberIds(next.map(Number))}
+                    placeholder="输入姓名搜索，可一次选择多位启用用户"
+                    disabled={mutation.isPending}
+                    options={candidates.map((user) => ({
+                      value: user.id,
+                      label: user.name,
+                      avatarUrl: user.avatarUrl ?? null,
+                      description: user.isAdmin ? "系统管理员" : "项目成员",
+                    }))}
                   />
-                  {creatorName}（创建者，不可取消）
-                </span>
-                {!directory.isPending &&
-                  !directory.isError &&
-                  candidates.map((user) => (
-                    <label key={user.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedMemberIds.includes(user.id)}
-                        aria-label={`选择成员：${user.name}`}
-                        onChange={() => toggleMember(user.id)}
-                      />
-                      {user.name} · {user.isAdmin ? "系统管理员" : "项目成员"}
-                    </label>
-                  ))}
-              </div>
+                </div>
+              ) : null}
               {directory.isPending ? (
                 <div className="member-loading">
                   <Spin size="small" description="正在加载成员..." />

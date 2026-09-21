@@ -107,6 +107,52 @@ describe("CalmSelect", () => {
     expect(within(dropdown).getByText("陈默")).toBeInTheDocument();
   });
 
+  it("multiple 形态：连续多选按数组回调、标签上限 2 并保留原生输入框类名", () => {
+    const onChange = vi.fn();
+    function StatefulMulti() {
+      const [selected, setSelected] = React.useState<readonly number[]>([]);
+      return (
+        <CalmSelect
+          value={selected}
+          onChange={(next) => {
+            onChange(next);
+            setSelected(next.map(Number));
+          }}
+          options={memberOptions}
+          appearance="member"
+          multiple
+          ariaLabel="选择成员"
+        />
+      );
+    }
+    const view = mount(<StatefulMulti />);
+    expect(
+      view.container.querySelector(".calm-select-multiple"),
+    ).not.toBeNull();
+
+    openSelect(view.container);
+    fireEvent.click(within(dropdownOf()).getByText("林晚晴"));
+    fireEvent.click(within(dropdownOf()).getByText("周子昂"));
+    expect(onChange).toHaveBeenNthCalledWith(1, [5]);
+    expect(onChange).toHaveBeenNthCalledWith(2, [5, 7]);
+
+    fireEvent.click(within(dropdownOf()).getByText("陈默"));
+    expect(onChange).toHaveBeenNthCalledWith(3, [5, 7, 9]);
+    // maxTagCount 默认 2：前两个值渲染成标签，第 3 个折叠成「+ N」计数项
+    // （计数项自身也是 `.ant-select-selection-item`）。
+    const tagTexts = [
+      ...view.container.querySelectorAll(".ant-select-selection-item"),
+    ].map((node) => node.textContent ?? "");
+    expect(tagTexts).toHaveLength(3);
+    expect(tagTexts.filter((text) => text.includes("林晚晴"))).toHaveLength(1);
+    expect(tagTexts.filter((text) => text.includes("周子昂"))).toHaveLength(1);
+    expect(tagTexts.some((text) => /\+.*1/.test(text))).toBe(true);
+    expect(tagTexts.some((text) => text.includes("陈默"))).toBe(false);
+    // 触发器内输入框的复位样式挂在 antd 6 的 `.ant-select-input` 上：类名变化会让宿主表单
+    // 的边框/内边距样式重新把这个小输入框露出来，因此在这里锁定类名契约。
+    expect(view.container.querySelector(".ant-select-input")).not.toBeNull();
+  });
+
   it("rich 形态：渲染副标题与状态徽标", () => {
     const view = mount(
       <CalmSelect

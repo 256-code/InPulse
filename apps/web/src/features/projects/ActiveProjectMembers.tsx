@@ -21,12 +21,20 @@ import { projectMemberErrorMessage } from "./project-member-query";
 const formatMemberDate = (value: string) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 
+/** 与管理视图 `ProjectMembersPageView` 一致的角色标签。 */
+const roleLabel: Record<"MEMBER" | "PROJECT_ADMIN" | "LEADER", string> = {
+  MEMBER: "成员",
+  PROJECT_ADMIN: "项目管理员",
+  LEADER: "组长",
+};
+
 /**
  * 普通成员视角的项目成员只读视图：复用管理员 `ProjectMembersPageView` 的
  * 视觉语言（page-header / settings-panel / project-facts / calm-member-card），
  * 但去掉全部写操作（添加、移除、任务重指派、归档、项目切换）。
- * 数据来自 `listActiveProjectMembers`（仅返回活跃成员的 id/name/avatarUrl），
- * 因此成员卡片不含加入时间与历史状态，只标注「活跃成员」。
+ * 数据来自 `listActiveProjectMembers`（只返回活跃成员的
+ * id/name/avatarUrl/role/joinedAt），因此成员卡片不含已移除历史，
+ * 只标注「活跃成员」与项目内角色（ADR-033）。
  *
  * 项目详情由调用方传入：成员页与项目主页弹窗都已持有同一份
  * `GET /projects/:id` 查询结果，本组件不再重复挂载同 key 的 observer，
@@ -61,7 +69,8 @@ export function ActiveProjectMembers({
         <div>
           <h1>{projectDetail ? projectDetail.name : "项目成员"}</h1>
           <p>
-            当前项目的活跃成员为只读视图；成员的添加与移除由系统管理员处理。
+            当前项目的活跃成员为只读视图；成员的添加与移除由系统管理员、
+            本项目组长或项目管理员处理。
           </p>
         </div>
         {projectDetail ? (
@@ -97,7 +106,7 @@ export function ActiveProjectMembers({
         <CalmEmptyState
           icon="users"
           title="暂无项目成员"
-          description="项目还没有活跃成员；成员由系统管理员添加。"
+          description="项目还没有活跃成员；成员由系统管理员、本项目组长或项目管理员添加。"
         />
       ) : (
         <section className="panel settings-panel">
@@ -142,11 +151,18 @@ export function ActiveProjectMembers({
                           ? "（创建者）"
                           : ""}
                       </strong>
-                      <span>项目活跃成员</span>
+                      <span>加入时间：{formatMemberDate(member.joinedAt)}</span>
                     </div>
                   </div>
                   <div className="member-status">
                     <CalmBadge tone="green">活跃成员</CalmBadge>
+                    {member.role !== "MEMBER" ? (
+                      <CalmBadge
+                        tone={member.role === "LEADER" ? "blue" : "violet"}
+                      >
+                        {roleLabel[member.role]}
+                      </CalmBadge>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -162,7 +178,7 @@ export function ActiveProjectMembers({
             <p className="permission-hint">
               <InpulseIcon name="shield" size={15} />
               <span>
-                成员关系由系统管理员维护；此页面仅供查看当前项目的活跃成员，
+                成员关系由系统管理员、本项目组长或项目管理员维护；此页面仅供查看当前项目的活跃成员，
                 不提供添加、移除或任务改派能力。
               </span>
             </p>

@@ -8,7 +8,8 @@ import postgres from "postgres";
  * 夹具账号固定使用 `e2e_` / `f03_`（Playwright，`global-setup.ts`、
  * `admin-fixture.ts` 与各 spec 的既有命名）以及 `user_` / `sso_` / `login_` /
  * `invalidate_` / `csrf_`（API 集成测试 `database.helpers.createUser` 与各
- * 集成 spec 的既有命名）前缀。本模块按前缀识别夹具用户，再按其 `created_by`
+ * 集成 spec 的既有命名）以及 `backup_` / `archive_`（`apps/ops` 备份与审计归档
+ * 集成测试）前缀。本模块按前缀识别夹具用户，再按其 `created_by`
  * 识别夹具项目，然后按依赖顺序物理删除全部关联业务数据、PROJECT 审计链
  * 与夹具账号，供 `global-teardown.ts` 与集成测试收尾后手动调用。
  *
@@ -36,7 +37,8 @@ export interface FixtureCleanupReport {
 /**
  * 夹具账号过滤条件（`\_` 匹配字面下划线）。
  * `e2e_` / `f03_` 来自 Playwright 夹具；`user_`（`database.helpers.createUser`）、
- * `sso_`、`login_`、`invalidate_`、`csrf_` 来自 API 集成测试的夹具命名。
+ * `sso_`、`login_`、`invalidate_`、`csrf_` 来自 API 集成测试的夹具命名；
+ * `backup_` / `archive_` 来自 `apps/ops` 备份与审计归档集成测试。
  */
 const FIXTURE_LOGIN_FILTER = [
   "login_name LIKE 'e2e\\_%'",
@@ -46,6 +48,8 @@ const FIXTURE_LOGIN_FILTER = [
   "login_name LIKE 'login\\_%'",
   "login_name LIKE 'invalidate\\_%'",
   "login_name LIKE 'csrf\\_%'",
+  "login_name LIKE 'backup\\_%'",
+  "login_name LIKE 'archive\\_%'",
 ].join(" OR ");
 
 export function formatFixtureCleanupReport(

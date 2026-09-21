@@ -72,7 +72,7 @@ describe("project member query", () => {
     });
 
     await act(async () => {
-      await result.current.addMutation.mutateAsync({ userId: 2 });
+      await result.current.addMutation.mutateAsync({ userIds: [2] });
     });
 
     expect(addProjectMember).toHaveBeenCalledWith(
@@ -85,6 +85,45 @@ describe("project member query", () => {
         }),
       }),
     );
+  });
+
+  it("adds several members in one submit with one idempotency key per user", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const addProjectMember = vi
+      .fn()
+      .mockResolvedValue({ member: activeMember });
+    const client = {
+      issueCsrfToken,
+      addProjectMember,
+    } as unknown as InpulseApiClient;
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useProjectMembers(7, client), {
+      wrapper,
+    });
+
+    let outcome: Awaited<
+      ReturnType<typeof result.current.addMutation.mutateAsync>
+    > | null = null;
+    await act(async () => {
+      outcome = await result.current.addMutation.mutateAsync({
+        userIds: [2, 4, 6],
+      });
+    });
+
+    expect(addProjectMember).toHaveBeenCalledTimes(3);
+    expect(addProjectMember.mock.calls.map((call) => call[1])).toEqual([
+      { userId: 2 },
+      { userId: 4 },
+      { userId: 6 },
+    ]);
+    const keys = addProjectMember.mock.calls.map(
+      (call) =>
+        (
+          call[2] as { readonly headers: { readonly "Idempotency-Key": string } }
+        ).headers["Idempotency-Key"],
+    );
+    expect(new Set(keys).size).toBe(3);
+    expect(outcome).toEqual({ added: [2, 4, 6], failures: [] });
   });
 
   it("keeps the same idempotency key when retrying after a failed attempt", async () => {
@@ -113,11 +152,11 @@ describe("project member query", () => {
     });
 
     await expect(
-      result.current.addMutation.mutateAsync({ userId: 2 }),
-    ).rejects.toBeInstanceOf(ApiError);
+      result.current.addMutation.mutateAsync({ userIds: [2] }),
+    ).resolves.toMatchObject({ added: [], failures: [{ userId: 2 }] });
     await expect(
-      result.current.addMutation.mutateAsync({ userId: 2 }),
-    ).resolves.toEqual({ member: activeMember });
+      result.current.addMutation.mutateAsync({ userIds: [2] }),
+    ).resolves.toMatchObject({ added: [2], failures: [] });
 
     const firstKey = (
       addProjectMember.mock.calls[0]![2] as {

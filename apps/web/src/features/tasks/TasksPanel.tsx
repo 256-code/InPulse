@@ -39,6 +39,7 @@ import {
   type CalmSelectOption,
 } from "@features/common/components/CalmSelect";
 import { priorityDotColor } from "@features/common/priority-select-option";
+import { taskToneClassName } from "@features/common/task-tone";
 import {
   isFirstLoad,
   mergeTask,
@@ -783,7 +784,13 @@ export function TasksPanel({
                       .join(" · ");
                     // 标题本身就是入口，副标题只留归属提示，不再重复详情入口文案。
                     return (
-                      <tr key={item.id}>
+                      <tr
+                        key={item.id}
+                        className={taskToneClassName(
+                          item.priority,
+                          item.workStatus,
+                        )}
+                      >
                         <td>
                           {item.scopeType === "MODULE" ? (
                             <span className="task-scope">模块级任务</span>
@@ -833,7 +840,10 @@ export function TasksPanel({
                   marks.get(item.id)?.hasLeftoverSource === true;
                 return (
                   <article
-                    className="calm-task-card"
+                    className={
+                      "calm-task-card " +
+                      taskToneClassName(item.priority, item.workStatus)
+                    }
                     key={item.id}
                     tabIndex={0}
                     /* 整卡即详情入口：卡片本身带可读名称，键盘 Tab 到卡片时

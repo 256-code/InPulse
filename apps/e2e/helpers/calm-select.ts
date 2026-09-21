@@ -74,3 +74,42 @@ export async function pickCalmSelectOptionByIndex(
   const listbox = await openListbox(scope, label);
   await listbox.locator(".ant-select-item-option").nth(index).click();
 }
+
+/**
+ * 作用域自身的元素（页面作用域兜底到 body），用于必要时派发「选择器之外」的事件。
+ * `first()` 是因为 antd Modal 的外壳与 AppModal 的盒子都带 `role="dialog"`：
+ * 按 `role` 抓到的作用域通常是两个元素，派发事件本身要求唯一定位。
+ */
+function outsideOf(scope: Page | Locator): Locator {
+  return typeof (scope as Locator).page === "function"
+    ? (scope as Locator).first()
+    : (scope as Page).locator("body");
+}
+
+/**
+ * 多选（`multiple`）：点开下拉后依次点选多个选项。多选弹层不会在每次选择后收起，
+ * 选项支持重复点击取消，所以收尾要显式收起弹层；键盘收尾都不行：Esc 被 AppModal
+ * 在捕获阶段接管「只关栈顶弹层」，会连带关掉整个弹窗，Tab 则会把焦点落进弹层自身，
+ * 被 rc-select 的 `cancelFun` 判定为「仍在选择器内」而取消收起。
+ * 收起动作也不能用真实点击：弹层会按空间向上翻转，覆盖弹窗标题等候选落点，真实点击
+ * 会被 Playwright 的命中检测判为「被选项行拦截 pointer events」而一直重试到超时。
+ * 因此改为把 mousedown 直接派发到作用域本身（弹窗盒子，必然在触发器之外）：rc-select
+ * 的 `useSelectTriggerControl` 收到选择器之外的 mousedown 就会收起弹层；AppModal 只在
+ * `event.target` 是盒子自身时关闭的那套逻辑走的是 click，不受影响。
+ */
+export async function pickCalmSelectOptions(
+  scope: Page | Locator,
+  label: string,
+  options: readonly (string | RegExp)[],
+): Promise<void> {
+  const listbox = await openListbox(scope, label);
+  for (const option of options) {
+    const item =
+      typeof option === "string"
+        ? listbox.getByTitle(option, { exact: true })
+        : listbox.getByTitle(option);
+    await item.first().click();
+  }
+  await outsideOf(scope).dispatchEvent("mousedown");
+  await expect(listbox).toBeHidden();
+}

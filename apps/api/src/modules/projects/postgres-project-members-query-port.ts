@@ -1,6 +1,7 @@
 import type { TransactionContext } from "../../database/transaction-context.js";
 import {
   ProjectMembersQueryPort,
+  type ActiveProjectMemberProfile,
   type AssignableProjectMember,
 } from "./project-members-query.port.js";
 
@@ -9,12 +10,50 @@ export class PostgresProjectMembersQueryPort extends ProjectMembersQueryPort {
     tx: TransactionContext,
     input: { actorUserId: number; projectId: number },
   ): Promise<AssignableProjectMember[] | undefined> {
+    // 任务指派人响应（TaskAssigneesResponse）是 strict Schema：
+    // 这里必须裁掉角色与加入时间，否则响应序列化会因未知字段失败。
+    const profiles = await this.listActiveMemberProfiles(tx, input);
+    return profiles?.map(({ id, name, avatarUrl }) => ({
+      id,
+      name,
+      avatarUrl,
+    }));
+  }
+  async listActiveMemberProfiles(
+    tx: TransactionContext,
+    input: { actorUserId: number; projectId: number },
+  ): Promise<ActiveProjectMemberProfile[] | undefined> {
     const [authorized] =
       await tx.sql`SELECT 1 FROM app.projects p JOIN app.users actor ON actor.id = ${input.actorUserId} AND actor.status = 'ACTIVE' AND actor.disabled_at IS NULL WHERE p.id = ${input.projectId} AND (actor.is_admin OR EXISTS (SELECT 1 FROM app.project_members m WHERE m.project_id = p.id AND m.user_id = actor.id AND m.status = 'ACTIVE'))`;
     if (!authorized) return undefined;
-    return tx.sql<
-      AssignableProjectMember[]
-    >`SELECT u.id, u.name, u.avatar_url AS "avatarUrl" FROM app.users u WHERE u.status = 'ACTIVE' AND u.disabled_at IS NULL AND EXISTS (SELECT 1 FROM app.project_members m WHERE m.project_id = ${input.projectId} AND m.user_id = u.id AND m.status = 'ACTIVE') ORDER BY u.id`;
+    const rows = await tx.sql<
+      {
+        readonly id: number;
+        readonly name: string;
+        readonly avatarUrl: string | null;
+        readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+        readonly joinedAt: Date | string;
+      }[]
+    >`SELECT u.id,
+             u.name,
+             u.avatar_url AS "avatarUrl",
+             m.role,
+             m.joined_at AS "joinedAt"
+        FROM app.users u
+        JOIN app.project_members m
+          ON m.user_id = u.id
+         AND m.project_id = ${input.projectId}
+         AND m.status = 'ACTIVE'
+       WHERE u.status = 'ACTIVE'
+         AND u.disabled_at IS NULL
+       ORDER BY u.id`;
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      avatarUrl: row.avatarUrl,
+      role: row.role,
+      joinedAt: new Date(row.joinedAt).toISOString(),
+    }));
   }
   async listActiveMemberIds(
     tx: TransactionContext,

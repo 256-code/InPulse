@@ -219,7 +219,7 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
 | `createTaskWithScope` | 401 | 允许 | 404 | 404 | 401 | 允许 | 父级可写，同项目负责人和完整归属；CSRF、整笔幂等、同事务审计；失败回滚新模块/功能 |
-| `listActiveProjectMembers` | 401 | 允许 | 404 | 404 | 401 | 允许 | 仅当前项目启用成员的 id/name/avatarUrl；不返回管理历史和写权限 |
+| `listActiveProjectMembers` | 401 | 允许 | 404 | 404 | 401 | 允许 | 仅当前项目启用成员的 id/name/avatarUrl/role/joinedAt（ADR-033）；不返回成员历史与管理写权限 |
 | `listTaskCenter` | 401 | 条件允许 | 条件允许 | 条件允许 | 401 | 允许 | 非管理员只可 mine/created/project，all 返回 403；每次 SQL 均限制当前授权项目，已移除项目不返回；project 必须指定项目；`todayTodo` 与统计卡同口径（未完成且命中 逾期 ∪ 遗留来源 ∪ 紧急 ∪ 距截止 7 个日历日内） |
 
 `addExternalLink` 设置根仓库沿用项目写权限、If-Match 和幂等；`removeExternalLink` 解除当前根仓库后概览不显示入口。历史草稿姓名通过 UserReadPort 读取授权资源的用户引用，不能把这些历史用户用于新任务指派。

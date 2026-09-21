@@ -16,7 +16,7 @@ export class ActiveMembersService {
       const actor = await this.auth.resolveActorInTransaction(tx, cookie);
       if (!actor)
         throw new ApiHttpError(401, "PROJECT_SESSION_REQUIRED", "请先登录");
-      const items = await this.members.listActiveMembers(tx, {
+      const items = await this.members.listActiveMemberProfiles(tx, {
         actorUserId: actor.userId,
         projectId,
       });

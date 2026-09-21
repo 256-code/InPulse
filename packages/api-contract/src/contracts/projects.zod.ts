@@ -158,6 +158,35 @@ export type ProjectMembersListResponse = z.infer<
   typeof projectMembersListResponseSchema
 >;
 
+/**
+ * ADR-033：普通成员只读成员视图可见字段。授权范围与任务指派人相同
+ * （项目活跃成员或系统管理员），额外带项目内角色与加入时间供身份徽标展示；
+ * 不含移除时间等成员历史。
+ */
+export const activeProjectMemberItemSchema = z
+  .object({
+    id: projectPositiveId,
+    name: z.string().min(1).max(200),
+    avatarUrl: z.string().max(2048).nullable(),
+    role: projectMemberRoleSchema,
+    joinedAt: z.iso.datetime(),
+  })
+  .strict()
+  .meta({ id: "ActiveProjectMemberItem" });
+
+export type ActiveProjectMemberItem = z.infer<
+  typeof activeProjectMemberItemSchema
+>;
+
+export const activeProjectMembersResponseSchema = z
+  .object({ items: z.array(activeProjectMemberItemSchema) })
+  .strict()
+  .meta({ id: "ActiveProjectMembersResponse" });
+
+export type ActiveProjectMembersResponse = z.infer<
+  typeof activeProjectMembersResponseSchema
+>;
+
 /** 添加项目成员请求；目标用户由服务端校验必须为启用状态。 */
 export const addProjectMemberRequestSchema = z
   .object({

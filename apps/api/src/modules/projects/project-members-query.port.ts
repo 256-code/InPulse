@@ -5,12 +5,26 @@ export interface AssignableProjectMember {
   readonly name: string;
   readonly avatarUrl: string | null;
 }
+
+/** ADR-033：只读成员视图在指派人字段外附带项目内角色与加入时间。 */
+export interface ActiveProjectMemberProfile extends AssignableProjectMember {
+  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+  readonly joinedAt: string;
+}
 export abstract class ProjectMembersQueryPort {
   /** Reauthorizes inside tx; undefined means project missing or inaccessible. */
   abstract listActiveMembers(
     tx: TransactionContext,
     input: { actorUserId: number; projectId: number },
   ): Promise<AssignableProjectMember[] | undefined>;
+  /**
+   * ADR-033：只读成员列表附带项目内角色与加入时间，授权范围与
+   * listActiveMembers 相同；供 `listActiveProjectMembers` 序列化。
+   */
+  abstract listActiveMemberProfiles(
+    tx: TransactionContext,
+    input: { actorUserId: number; projectId: number },
+  ): Promise<ActiveProjectMemberProfile[] | undefined>;
   /**
    * ADR-035：列出项目全部 ACTIVE 成员的 userId（按 id 升序），供项目开工时
    * 通知全体成员。调用方已持有项目锁并完成写权限校验，这里不再二次授权。

@@ -94,6 +94,8 @@ import {
   searchQueryRequestSchema,
 } from "./contracts/search.zod.js";
 import {
+  activeProjectMemberItemSchema,
+  activeProjectMembersResponseSchema,
   createProjectHeadersSchema,
   createProjectReplayContextSchema,
   createProjectRequestSchema,
@@ -570,6 +572,16 @@ export const schemaRegistry = {
   ProjectMembersListResponse: {
     schema: projectMembersListResponseSchema,
     summary: "系统管理员项目成员历史列表",
+    sensitiveFieldPaths: [],
+  },
+  ActiveProjectMemberItem: {
+    schema: activeProjectMemberItemSchema,
+    summary: "只读成员卡片可见字段：姓名、头像、项目内角色与加入时间",
+    sensitiveFieldPaths: [],
+  },
+  ActiveProjectMembersResponse: {
+    schema: activeProjectMembersResponseSchema,
+    summary: "普通成员只读项目成员列表（活跃成员与项目内角色）",
     sensitiveFieldPaths: [],
   },
   AddProjectMemberRequest: {

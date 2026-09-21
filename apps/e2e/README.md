@@ -47,8 +47,10 @@ ADR-031 起高风险操作不再要求 TOTP 重认证，夹具因此不再注册
 该逻辑只作用于 E2E 夹具，不改变生产认证行为。
 
 `global-teardown` 调用 `helpers/fixture-cleanup.ts` 物理删除 E2E 夹具：按
-`e2e_` / `f03_` 账号前缀识别夹具用户，再按其 `created_by` 识别夹具项目，按
-依赖顺序删除全部业务数据、`PROJECT:` 审计链与夹具账号，并在删除后用断言复核
+`e2e_` / `f03_`（Playwright）与 `user_` / `sso_` / `login_` / `invalidate_` /
+`csrf_` / `backup_` / `archive_`（集成测试）账号前缀识别夹具用户，再按其
+`created_by` 识别夹具项目，按依赖顺序删除全部业务数据、`PROJECT:` 审计链与
+夹具账号，并在删除后用断言复核
 夹具残留为 0、审计无悬空 actor、项目 bootstrap 成员关系完整、每个项目恰好一个
 UNCLASSIFIED 模块，任一断言失败即回滚。数据库触发器禁止物理删除任何项目的
 未分类模块，清理只在清理会话内以 `session_replication_role = replica` 关闭

@@ -733,7 +733,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | F-32 URL 筛选状态：scope/project/status/priority/level/relation/record/github/canceled/q/view/more 的默认值省略、非法值回退、非管理员降级 mine、project 仅在 scope=project 时写入、查询词去空白 | `my-tasks-url.test.ts` 9 例 |
 | F-32 mock 适配器口径：默认视图排除已完成与已取消、created 按创建者、project 按项目、全部范围跨项目、优先级/层级/关系/记录/GitHub 过滤、关键词跨编号与归属匹配、统计卡片与遗留问题事实 | `my-tasks-mock.test.ts` 10 例 |
 | F-32 页面渲染与交互：骨架提示、统计卡片、scope 标签、项目名从项目端口解析、高级范围仅管理员、筛选变更回调、遗留问题入口与风险条、适配器错误态、卡片徽章（模块级 / 主任务）与页脚优先级全称、有已发布记录时才显示记录数 | `TaskCenterPageView.test.tsx` 10 例 |
-| F-32 页面层：URL 读取筛选、筛选写回 URL、more 参数控制高级面板、跳转遗留问题、非管理员降级与管理员保留 | `pages/tasks/TasksPage.test.tsx` 6 例 |
+| F-32 页面层：URL 读取筛选、筛选写回 URL、more 参数控制高级面板、遗留问题就地弹窗（2026-09-20 起不再跳转 `/issues`，见文末条目）、非管理员降级与管理员保留 | `pages/tasks/TasksPage.test.tsx`（当前 8 例） |
 | F-29 指标与数据源：4 项指标卡（未完成任务/迭代记录/遗留问题来自 adapter，成员数来自项目端口 memberCount）、mock 指标口径、迭代按发布时间倒序、项目 id 在契约冻结前不参与过滤；2026-09-14 按用户确认，活跃模块与活跃功能从展示层取消（R-2 服务端口径与适配器返回值不变，页面不渲染对应卡片） | `ProjectOverviewPageView.test.tsx`（含「不再渲染活跃模块/活跃功能」反向断言）、`project-overview-mock.test.ts` 3 例 |
 | F-29 交互与容错：最近迭代行与「查看全部」进入记录页、遗留问题行与「进入遗留问题」进入问题页、空态、adapter 错误态、项目错误重试 | `ProjectOverviewPageView.test.tsx` 7 例 |
 | F-29 页面层：按路由 projectId 读取项目与概览、非法 projectId 错误态、遗留问题跳转、返回项目列表 | `ProjectOverviewPage.test.tsx` 4 例 |
@@ -765,7 +765,7 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 
 | 验收点 | 实际证据 |
 | --- | --- |
-| F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；开发期「接口说明」黄条按设计师稿 `task-center.tsx` 移除，断言 `task-center-mock-notice` 计数为 0；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues` | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；落库当时全量 `pnpm test:e2e` 42/42；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
+| F-32 关键路径：在 fixture 项目经真实 UI 创建功能并把任务指派给当前用户后，`/tasks` 默认「我负责的 + 未完成」返回该任务（卡片含负责人、不显示无契约来源的优先级徽章）；开发期「接口说明」黄条按设计师稿 `task-center.tsx` 移除，断言 `task-center-mock-notice` 计数为 0；统计卡 `stat-my-open` 为「—」；搜索任务 / 优先级 / 「我创建的」按契约缺口禁用；F-30 URL 状态 `status=done`、`view=list`、`more=1` 写回地址栏；「遗留问题」入口跳转 `/issues`（2026-09-20 起改为就地弹窗，见文末条目） | `apps/e2e/tests/aggregate-views.spec.ts` 例 1；定向 `playwright test aggregate-views` 2/2；落库当时全量 `pnpm test:e2e` 42/42；`接口说明` 断言于 2026-09-12 前端大改后改为计数 0（见文末「前端交互大改」条目） |
 | F-29 关键路径：`/projects/{projectId}/overview` 标题为服务端项目名、成员数为服务端真实值且 > 0、任务/记录/遗留三项以数字形态渲染、已取消的 `overview-metric-modules` 与 `overview-metric-features` 计数为 0、最近迭代与待处理遗留问题面板及空态；「查看全部」→ `/records?view=published&projectId=`、「查看模块」→ 模块页（项目头「全部项目」入口已于 2026-09-19 按用户要求移除，返回项目列表改走侧栏） | `apps/e2e/tests/aggregate-views.spec.ts` 例 2；同上 |
 | fixture 扩展：`global-setup` 把 fixture 项目名以 `projectName` 写入 runtime（既有字段未变），供概览标题断言使用 | `apps/e2e/helpers/runtime.ts`、`apps/e2e/global-setup.ts` |
 
@@ -1602,18 +1602,26 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 **二、普通成员项目成员页只读视觉对齐（`ActiveProjectMembers`）**
 
 - 原实现是 ADR-030（PR #137）落库的无样式占位（裸 `<ul>` 名单）；本轮重做为与管理员 `ProjectMembersPageView` 相同视觉语言的只读视图：`page-header`（项目名 + 状态徽章）、`panel settings-panel`、`project-facts`（编码 / 状态 / 创建人 / 创建时间 / 当前成员）、`member-editor` + `.calm-member-card` 成员卡片（头像、姓名、创建者标注、「活跃成员」徽章）、「刷新成员」与只读权限提示；**不含**添加 / 移除 / 任务改派 / 归档 / 项目切换任何写入口。
-- 数据源不变：`getProject` + `listActiveProjectMembers`（只返回活跃成员 `id/name/avatarUrl`，无加入时间 / 历史状态，卡片按此裁剪字段）。
+- 数据源：`getProject` + `listActiveProjectMembers`。2026-09-21 该只读路由的响应扩为专用契约 `ActiveProjectMembersResponse`（停留在活跃成员的 `id/name/avatarUrl/role/joinedAt`），卡片因此显示加入时间与项目内角色徽标；仍不返回移除时间等成员历史，也不提供任何写入口。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | NAV-CLEAN-UNIT-001 | 单元 | 概览视图收窄后的 props 与渲染 | `ProjectOverviewPageView.test.tsx` 8 例：删除 2 个「项目内导航」用例后其余（指标卡、面板、错误态、跳转）全通过；`ProjectOverviewPage.test.tsx` 6 例：2 个导航用例替换为「查看模块」入口用例 | 本地通过 |
 | NAV-CLEAN-UNIT-002 | 单元 | 模块页 / 功能页移除横条与左栏后无回归 | `ModulesPageView.test.tsx` 8 例（删除「项目内导航」describe）、`FeaturesPageView.test.tsx` 10 例（删除「项目内导航」describe 与「module siblings」用例及其 `moduleRow`/`moduleClient` 辅助）全通过 | 本地通过 |
-| MEMBER-RO-UNIT-001 | 单元 | 只读成员视图渲染与只读语义 | `ActiveProjectMembers.test.tsx` 5 例（新增）：复用管理员视觉（h1 项目名、`.panel.settings-panel`、`.calm-member-card` 数量）；无添加 / 移除 / 归档 / dialog、仅「刷新成员」；创建者标注且全员「活跃成员」；空态；加载失败出「项目成员加载失败」+ 重试 | 本地通过 |
+| MEMBER-RO-UNIT-001 | 单元 | 只读成员视图渲染与只读语义 | `ActiveProjectMembers.test.tsx` 6 例：复用管理员视觉（h1 项目名、`.panel.settings-panel`、`.calm-member-card` 数量）；无添加 / 移除 / 归档 / dialog、仅「刷新成员」；创建者标注且全员「活跃成员」；加入时间与角色徽标（LEADER 显「组长」、MEMBER 不显徽标、无「移除时间」、无「设置角色」）；空态；加载失败出「项目成员加载失败」+ 重试 | 本地通过 |
+| MEMBER-RO-API-001 | 集成（真实 HTTP + PostgreSQL） | `listActiveProjectMembers` 响应契约与授权 | `projects-read-api.integration.test.ts` 2 例：200 且 `Cache-Control: no-store`，`ActiveProjectMembersResponse` strict parse 通过并返回 `[创建者 LEADER, 新成员 PROJECT_ADMIN]` 的 `{id, role}` 与 ISO `joinedAt`；成员置 REMOVED 后从只读列表消失、历史行仍为 `REMOVED`；非成员 404 `PROJECT_NOT_FOUND`、匿名 401 `PROJECT_SESSION_REQUIRED`、不存在项目 404 | 本地通过 |
 | MEMBER-RO-E2E-001 | 浏览器 E2E | 普通成员只读成员页与隐藏项目 404 | `project-members.spec.ts` 例 1 选择器同步：`.project-members`/`listitem`/旧 h1 文案断言改为 `.settings-panel` + `.calm-member-card` + h1 项目名；「无添加 / 移除按钮」「隐藏项目 404 且不泄露成员姓名」断言语义不变；管理员用例（例 2）不受影响 | **未运行**（本机 `@node-rs/argon2` win32-x64-msvc 原生二进制加载失败 error 126，API 无法启动，属环境问题；`@inpulse/e2e` typecheck 通过） |
 
 本地实际执行（2026-09-15，前端专项，无后端 / 契约 / 迁移改动）：`pnpm --filter @inpulse/web test` **74 文件 401 例通过**（新增 `ActiveProjectMembers.test.tsx` 5 例，删除导航相关 7 例、替换 2 例）；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/web build`、`pnpm --filter @inpulse/web check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 检查通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects/1/members` 渲染新只读视图（4 名成员、特哥标注创建者、无任何写入口）。
 
 未运行 / 已知偏差：① `project-members.spec.ts` 因上述 argon2 环境问题未实跑，仅 typecheck；② 全量 `pnpm test:e2e`、整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、`pnpm check:docs` 未运行；③ 窄屏（侧栏折叠）下模块切换只剩面包屑与返回按钮，属本次收敛的已知取舍；④ `ProjectContextNav` 为设计师稿组件，本次删除属用户明确授权的设计偏离；⑤ 新增 / 修改测试需非作者人工评审。
+
+**2026-09-21 补充：只读成员卡片补角色与加入时间（用户要求「和管理员视角一致，但没有写功能」）**
+
+- 契约：新增 `ActiveProjectMemberItem` / `ActiveProjectMembersResponse`（`projects.zod.ts`，strict），`listActiveProjectMembers` 的 200 响应从借用 `TaskAssigneesResponse` 改为专用 Schema；任务指派人另两条路由（`listTaskAssignees` / `listModuleTaskAssignees`）继续返回 `TaskAssigneesResponse`。
+- 服务端：`ProjectMembersQueryPort` 新增 `listActiveMemberProfiles`，`listActiveMembers` 改为从同一结果裁剪 `id/name/avatarUrl`（`TaskAssigneesResponse` 是 strict Schema，泄漏新字段会让任务指派人响应 500）。
+- 前端：`ActiveProjectMembers` 成员卡改为「加入时间：…」+ 非 MEMBER 角色徽标（LEADER 蓝「组长」、PROJECT_ADMIN 紫「项目管理员」），仍无任何写入口。
+- 本地执行（2026-09-21）：契约 `drift`（5 产物）、`validate`、`permissions:check`（108/108）、`pnpm typecheck`、`ActiveProjectMembers.test.tsx` 6/6、真库 `projects-read-api.integration.test.ts` 6/6（含 MEMBER-RO-API-001 两例）、真库 `tasks-api.integration.test.ts` 45/45（回归任务指派人 strict 响应）。未运行：全量集成 / E2E / 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）。
 
 ## 系统目录并入「项目与功能」导航（C，2026-09-15 本地落库）
 
@@ -1852,7 +1860,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 一次性清理（2026-09-17，`cluster_bootstrap`，事务内 `session_replication_role = replica`，先演练后提交）：删除夹具用户 13、夹具项目 17、业务行 314（任务 30、功能 18、记录 17、外链 6、通知 13、活动 4、搜索投影 19、成员 28、幂等 14、会话 3、序列 23 等）、`PROJECT:` 审计 157 条与链头 14 条；随后补删 8 条 `actor_id` 悬空的 SYSTEM 审计行；`users_id_seq` / `projects_id_seq` 回退到真实数据之后。清理前用 `pg_dump -Fc` 备份至宿主机临时目录（`inpulse-app-before-e2e-cleanup.dump`）。清理后复验：项目 1 与用户 1–5 完好、bootstrap 成员关系（`joined_at = created_at`）成立、无悬空外键、每项目唯一 UNCLASSIFIED 模块。
 
-自动清理机制：`apps/e2e/helpers/fixture-cleanup.ts` 按 `e2e_` / `f03_` 前缀识别夹具账号，再按 `created_by` 识别夹具项目，按依赖序物理删除全部业务数据与审计，删除后断言复核（夹具残留 0、无悬空审计 actor、bootstrap 完整、每项目唯一 UNCLASSIFIED 模块），失败回滚；`global-teardown.ts` 每次运行后自动调用，运行被中断时用 `pnpm --filter @inpulse/e2e cleanup` 手动补跑。SYSTEM 链夹具记录删除后链头回退到剩余最后一条；若夹具记录之后已有真实写入则留下一个可检测断点并打印提示。
+自动清理机制：`apps/e2e/helpers/fixture-cleanup.ts` 按 `e2e_` / `f03_`（Playwright）与 `user_` / `sso_` / `login_` / `invalidate_` / `csrf_` / `backup_` / `archive_`（集成测试）前缀识别夹具账号，再按 `created_by` 识别夹具项目，按依赖序物理删除全部业务数据与审计，删除后断言复核（夹具残留 0、无悬空审计 actor、bootstrap 完整、每项目唯一 UNCLASSIFIED 模块），失败回滚；`global-teardown.ts` 每次运行后自动调用，运行被中断时用 `pnpm --filter @inpulse/e2e cleanup` 手动补跑。SYSTEM 链夹具记录删除后链头回退到剩余最后一条；若夹具记录之后已有真实写入则留下一个可检测断点并打印提示。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
@@ -2267,3 +2275,71 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-20）：`pnpm format:check` 通过；web 单测 `src/features/modules` 16 例通过；浏览器实测见上表（无头 Chromium，本地 dev `5173`）。
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、`pnpm lint`、`tsc`、Playwright E2E 与 API 测试（本次只删 CSS 规则、未动 TSX 与文案）；② 模块卡标题仍是蓝色 `#317abd`（同一旧规则块里保留的 `.module-card { color: #317abd }` 继承到 `h2`），功能卡标题为深色 `#132238`，是否统一已给对照图待产品确认；③ 模块卡高度由 232px 变为 237px，来自徽章恢复 11px 字号；④ 样式改动需非作者人工评审。
+
+## 任务中心「遗留问题」入口改为就地弹窗（C，2026-09-20 本地落库）
+
+产品反馈：任务中心页头的「遗留问题」入口点击后整页跳到 `/issues`，要求与项目主页一样就地弹窗。
+
+锁定口径：
+
+- 入口只有一处：`TasksPage` 的 `onOpenIssues` 同时供页头按钮与「N 条遗留问题尚未闭环」风险条使用，因此改成弹窗后两处同时生效，`TaskCenterPageView` 的 props 契约与视图代码不变。
+- 弹窗复用项目主页同一套模式：`AppModal size="xl"` + `.project-workspace-modal` / `.project-workspace-modal-body` + `SearchParamsScope` 包住按需加载的 `IssuesPageView embedded`——与 `/issues` 整页是同一份 F-20 视图（含「转为任务」的 CSRF、`If-Match` 与幂等语义），不另写一份。
+- 项目筛选跟随任务中心当前筛选（打开时把 `filters.projectId` 写进弹窗作用域的初始地址），与页头计数同口径：R-3 的 `leftoverCount` 本身就按 `projectId` 收窄。弹窗内切项目只改弹窗本地作用域，不写浏览器地址栏。
+- 弹窗内的来源 / 跟进任务入口继续走 `handleOpenTask`，与任务卡片同一路径：在当前页面叠开功能档案同款任务详情弹窗，不跳转；两层都是 `AppModal`，Esc 只关栈顶。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F32-ISSUES-MODAL-WEB-001 | Web 单元 | 入口就地弹窗且地址不变 | `pages/tasks/TasksPage.test.tsx`：点击「遗留问题」后出现 `role=dialog` 且无障碍名称为「遗留问题」的弹窗（内含 `issues-page`），`location-probe` 的 pathname + search 与点击前完全一致；测试路由表不再声明 `/issues` 占位路由 | 本地通过（该文件 8 例） |
+| F32-ISSUES-MODAL-E2E-001 | Playwright | 真实浏览器关键路径 | `apps/e2e/tests/aggregate-views.spec.ts` 例 1：`/tasks` 点击「遗留问题」→ 弹窗可见且 `issues-page` 在弹窗内可见 → 地址栏与点击前完全相同 → 点「关闭遗留问题」后弹窗消失、仍在任务中心 | 本地通过（定向 1 例；`vite build && vite preview` 的生产构建，非 dev server） |
+
+本地实际执行（2026-09-20）：`corepack pnpm --filter @inpulse/web exec vitest run src/pages/tasks/TasksPage.test.tsx` 8/8（4.5s）；`$env:E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; corepack pnpm --filter @inpulse/e2e exec playwright test aggregate-views.spec.ts -g "F-32"` 1 passed（10.7s），`global-teardown` 已清理夹具（删除用户 2、项目 2、业务行 60、审计行 2）；`corepack pnpm exec prettier --check`（本文档、`开发日志.md` 与三个改动文件）通过；`corepack pnpm exec eslint`（三个改动文件）退出码 0；`corepack pnpm --filter @inpulse/web exec tsc --noEmit` 与 `corepack pnpm --filter @inpulse/e2e exec tsc --noEmit` 均退出码 0；`pnpm check:docs`（84 个 Markdown）通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:web` 全量、`pnpm build`、`pnpm typecheck`（全 workspace）、`check:frontend:boundaries` 与 API / 集成测试（本次只改 `apps/web` 页面容器、`TasksPage.test.tsx` 与 E2E 断言，未动契约、权限与数据库）；② `/issues` 整页路由与侧栏「遗留问题」入口保持不变，仍可整页访问；③ 弹窗内不显示项目选择器（沿用 `IssuesPageView embedded` 的既有口径，与项目主页弹窗一致），换项目需关闭弹窗后在任务中心改筛选；④ 弹窗内视图为懒加载 chunk，单测需 `findByTestId` 等到 chunk 就绪后再断言；⑤ 前端改动需非作者人工评审。
+
+## 添加项目成员改为可搜索下拉（C，2026-09-20 本地落库）
+
+产品反馈（附「添加项目成员」弹窗与「指派给」下拉两张截图）：添加新成员原来是复选框候选列表，要求改成下拉框加搜索，样式对齐「指派给」的成员选择器。本轮为纯前端交互替换，未改契约、权限、数据库与后端。
+
+锁定口径：
+
+- 控件换成既有 `CalmSelect appearance="member"`（与「指派给」同一个组件）：`appearance="member"` 按组件既有规则默认开启搜索（`withSearch = searchable ?? appearance === "member"`），过滤匹配 `label + " " + description`，因此按姓名与身份说明都能搜到；头像、说明与选中对勾由组件统一渲染，不新写样式。
+- 候选来自原有 `addCandidates`（用户目录减去当前活跃成员），不再改口径：`options` 为 `{ value: user.id, label: user.name, avatarUrl, description: user.isAdmin ? "系统管理员" : "启用用户" }`——身份说明由原先拼接在姓名后的「· 系统管理员 / · 启用用户」改为选项副标题。
+- 选中态与提交链路不变：仍用 `selectedUserId` 单一状态，底部「添加成员」仍按 `selectedUserId === null` 禁用，`submitAdd()` 仍先签发 CSRF Token 再带 `x-csrf-token` 与幂等键调用 `addProjectMember`；加载中 / 目录错误 / 无可添加用户三个分支的文案与顺序保持原样。
+- 只替换添加成员弹窗：同页「设置项目角色」弹窗仍用 `.member-candidate-list` + `.check-list` 单选列表；`创建项目` 弹窗的初始成员当时仍是 `选择成员：<姓名>` 复选框，已在后续批次一并换成同款多选下拉（见下一节）。
+- 无障碍名从复选框的 `选择成员：<姓名>` 改为下拉触发器的 `ariaLabel="选择要添加的用户"`；`<label htmlFor="project-member-candidate">选择用户</label>` 提供可见标签。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F05-MEMBER-ADD-SELECT-WEB-001 | Web 单元 | 下拉可搜索并提交正确 userId | `ProjectMembersPageView.test.tsx`：打开「添加项目成员」后在「选择要添加的用户」下拉中输入「新」→ 不匹配的候选「旧同事」不再可定位（`queryByTitle` 为 null）→ 点选「新成员」→ 点「添加成员」→ `addProjectMember(7, { userId: 3 })` 仅调用一次且带 `x-csrf-token` 与 `project-member-add-` 前缀的 `Idempotency-Key`，随后出现「成员已添加，项目成员列表已更新。」 | 本地通过（该文件 6 例） |
+| F05-MEMBER-ADD-SELECT-E2E-001 | Playwright | 真实浏览器成员添加关键路径 | `apps/e2e/tests/project-members.spec.ts` 例 2：管理员登录 → `/projects/:id/members` 点「添加成员」→ 在「添加项目成员」弹窗内用 `pickCalmSelectOption` 打开「选择要添加的用户」下拉并按姓名点选 → 点「添加成员」→ 出现成功提示与「活跃成员」徽标；后续移除流程与不存在项目读取边界断言不变 | 本地通过（该文件 2/2，8.0s） |
+
+本地实际执行（2026-09-20）：`corepack pnpm --filter @inpulse/web exec vitest run src/features/projects/ProjectMembersPageView.test.tsx` 6/6（3.10s）；`$env:E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; corepack pnpm --filter @inpulse/e2e exec playwright test project-members.spec.ts` 2 passed（8.0s，`vite build && vite preview` 的生产构建），`global-teardown` 已清理夹具（删除用户 3、项目 2、业务行 53、审计行 2）；`corepack pnpm exec prettier --check`（3 个改动文件）与 `corepack pnpm exec eslint`（3 个改动文件）均退出码 0；`corepack pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 与 `corepack pnpm --filter @inpulse/e2e exec tsc --noEmit -p tsconfig.json` 均退出码 0。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:web` 全量、`pnpm build`、全 workspace `pnpm typecheck`、`check:frontend:boundaries` 与 API / 集成测试（本次只改 `apps/web` 一个页面文件、其单测与 E2E 交互方式，未动契约、权限、数据库与后端）；② `ProjectMembersPageView` 上仍保留 `.member-candidate-list` / `.check-list` 样式（「设置项目角色」弹窗继续使用），本轮只删除添加成员弹窗对这两个类的使用；③ 未在浏览器手工登录复验界面外观（本地 dev 会话被并发操作影响，登录返回「登录请求与当前浏览器不匹配」），外观结论来自真实浏览器 E2E 通过而非人工截图比对，配色/间距若需像素级对齐设计师稿仍需产品确认；④ 前端改动需非作者人工评审。
+
+## 创建项目初始成员改为可搜索多选下拉（C，2026-09-20 本地落库）
+
+承接上一节：产品要求「新建项目里面初始成员也要改」，因此「新建项目」弹窗的初始成员选择由逐人复选框（`选择成员：<姓名>`）换成与「添加项目成员」「指派给」同一个 `CalmSelect`。纯前端交互替换，未改契约、权限、数据库与后端。
+
+锁定口径：
+
+- 组件形态为 `multiple`：`CalmSelect` 增加判别联合的 `multiple: true` 分支（数组 `value`、`maxTagCount` 默认 2、根节点加 `calm-select-multiple`），每段标签仍走 `labelRender`（头像 + 姓名），触发器内保留原生搜索 input（`.ant-select-input`）以支持输入过滤；`calm-select.css` 为此复位该 input 在宿主表单里的边框、内边距与聚焦光环。
+- 弹窗内的候选、排除创建者、受控状态与提交链路全部不变：候选仍是用户目录里的启用用户（选项说明沿用「系统管理员 / 项目成员」），创建者仍自动成为活跃成员且在创建流程中不可取消，提交仍复用既有 `memberIds` 字段，底部提示仍是「已选择 N 位其他成员」。
+- 无障碍名从 `选择成员：<姓名>` 改为触发器的 `ariaLabel="选择初始成员"`，可见标签为 `<label htmlFor="project-member-candidates">选择成员</label>`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F04-CREATE-MEMBER-MULTISELECT-WEB-001 | Web 单元 | 多选回调、标签折叠与提交载荷 | `CalmSelect.test.tsx` 新增 `multiple` 用例：连续点选按数组回调（`[5]` → `[5,7]` → `[5,7,9]`）、`.calm-select-multiple` 就位、`.ant-select-selection-item` 共 3 个且其中 1 个是 `+N` 折叠计数、原生搜索 input 保留；`CreateProjectModal.test.tsx`「sends several selected active members while excluding the creator」：展开「选择初始成员」→ 点选「开发者 B」「管理员 A」→ 出现「已选择 2 位其他成员」→ `createProject` 仅调用一次且 `memberIds` 为 `[2, 3]`（创建者 `1` 被排除）→ `onCreated` / `onClose` 各一次 | 本地通过（4 文件 22 例，4.78s；`CalmSelect.test.tsx` 单文件 6 例） |
+| F04-CREATE-MEMBER-MULTISELECT-E2E-001 | Playwright | 真实浏览器创建项目关键路径 | `apps/e2e/helpers/calm-select.ts` 新增 `pickCalmSelectOptions`（按选项 title 依次点选后收起弹层），`helpers/project-create.ts`、`tests/project-create.spec.ts`、`tests/tasks.spec.ts` 由旧的 `getByLabel('选择成员：…').check()` 改为该辅助；`project-create.spec.ts` 在选中后仍断言「已选择 1 位其他成员」 | 本地通过：`tests/project-members.spec.ts`、`tests/project-create.spec.ts`、`tests/tasks.spec.ts` 共 4 passed（26.5s） |
+| F04-CREATE-MEMBER-MULTISELECT-E2E-002 | Playwright | 复用 `createProjectViaUi` 的其余关键路径无回归 | `tests/activity.spec.ts`、`tests/audit.spec.ts`（2 例）、`tests/csrf.spec.ts`（4 例）、`tests/notifications.spec.ts`、`tests/project-archive.spec.ts`、`tests/record-feed.spec.ts` 全部经同一辅助创建项目 | 本地通过：10 passed（39.0s） |
+
+多选弹层的收起方式与约束（`pickCalmSelectOptions` 收尾步骤）：
+
+- Esc 不可用：`AppModal` 在 `document` 上以**捕获阶段**接管 Esc「只关栈顶弹层」，连整个弹窗一起关闭，表单输入一并丢弃；
+- Tab 不可用：焦点会落进弹层自身，被 rc-select 的 `cancelFun`（`isInside`）判定为「仍在选择器内」而取消收起；
+- 真实点击也不可用：弹层按空间向上翻转时会覆盖弹窗标题等候选落点，Playwright 判为「被 `<div class="ant-select-item-option-content">` 拦截 pointer events」并重试到超时（实测 `project-members.spec.ts` 例 2 卡到 180s 超时）；
+- 因此改为把 `mousedown` 派发到作用域本身（antd Modal 外壳与 AppModal 盒子都带 `role="dialog"`，需 `.first()` 消除严格模式歧义）：目标在选择器之外，rc-select 的 `useSelectTriggerControl` 立即收起；`AppModal` 的「点盒子留白关闭」走的是 `click` 且判 `event.target === boxRef.current`，不受该派发影响。
+
+本地实际执行（2026-09-20）：`corepack pnpm --filter @inpulse/web exec vitest run src/features/common/components/CalmSelect.test.tsx src/features/projects/CreateProjectModal.test.tsx src/features/projects/ProjectMembersPageView.test.tsx src/features/projects/project-member-query.test.tsx` 4 文件 22 例通过（4.78s）；`$env:E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app; $env:E2E_API_PORT=3188; $env:E2E_WEB_PORT=4188; corepack pnpm --filter @inpulse/e2e exec playwright test tests/project-members.spec.ts tests/project-create.spec.ts tests/tasks.spec.ts --reporter=line` 4 passed（26.5s），随后 `playwright test tests/activity.spec.ts tests/audit.spec.ts tests/csrf.spec.ts tests/notifications.spec.ts tests/project-archive.spec.ts tests/record-feed.spec.ts --reporter=line` 10 passed（39.0s），`global-teardown` 已清理夹具（删除用户 4、项目 10、业务行 216、审计行 22）；`corepack pnpm --filter @inpulse/e2e exec tsc --noEmit -p tsconfig.json` 退出码 0。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:web` 全量、`pnpm build`、全 workspace `pnpm typecheck`、`check:frontend:boundaries`、API / 集成测试与 `pnpm check`（本批只改 `apps/web` 前端与 `apps/e2e`，未动契约、权限、数据库与后端）；② 同页「设置项目角色」弹窗仍是 `.member-candidate-list` + `.check-list` 单选列表；③ 本批未做浏览器手工外观复验，外观结论来自真实浏览器 E2E 通过；④ 夹具清理报告 SYSTEM 审计链在夹具记录之后已有真实写入，删除中段会留下可检测断点（夹具清理既有行为，非本批改动）；⑤ 前端与 E2E 改动需非作者人工评审。

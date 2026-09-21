@@ -16,7 +16,10 @@ import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { generateOpaqueToken } from "../src/auth/token.js";
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
+import { ActiveMembersController } from "../src/modules/projects/active-members.controller.js";
+import { ActiveMembersService } from "../src/modules/projects/active-members.service.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
+import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresProjectQueryPort } from "../src/modules/projects/postgres-project-query-port.js";
 import { ProjectsReadController } from "../src/modules/projects/projects-read.controller.js";
 import { ProjectsReadService } from "../src/modules/projects/projects-read.service.js";
@@ -134,8 +137,18 @@ beforeAll(async () => {
 
   class TestModule {}
   Module({
-    controllers: [ProjectsReadController],
-    providers: [{ provide: ProjectsReadService, useValue: service }],
+    controllers: [ProjectsReadController, ActiveMembersController],
+    providers: [
+      { provide: ProjectsReadService, useValue: service },
+      {
+        provide: ActiveMembersService,
+        useValue: new ActiveMembersService(
+          auth,
+          uow,
+          new PostgresProjectMembersQueryPort(),
+        ),
+      },
+    ],
   })(TestModule);
   app = await NestFactory.create(TestModule, { logger: false });
   app.useGlobalFilters(new ApiExceptionFilter());
@@ -537,5 +550,76 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
       1, 0, 0, 0,
     ]);
+  });
+});
+
+describe("F-05.2 只读成员档案 listActiveProjectMembers", () => {
+  async function activeMembers(
+    projectId: number,
+    cookie?: string,
+  ): Promise<Response> {
+    return fetch(`${base}/api/v1/projects/${projectId}/active-members`, {
+      headers: cookie === undefined ? {} : { cookie },
+    });
+  }
+
+  test("返回活跃成员的项目内角色与加入时间（ADR-033）", async () => {
+    const owner = await actor();
+    const member = await actor();
+    const project = await createProject(client.sql, owner.userId);
+    await client.sql`
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${project.projectId}, ${member.userId}, 'PROJECT_ADMIN')
+    `;
+
+    const response = await activeMembers(project.projectId, member.cookie);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const body = schemaRegistry.ActiveProjectMembersResponse.schema.parse(
+      await response.json(),
+    );
+    expect(body.items.map((item) => [item.id, item.role])).toEqual([
+      [owner.userId, "LEADER"],
+      [member.userId, "PROJECT_ADMIN"],
+    ]);
+    for (const item of body.items) {
+      expect(item.name.length).toBeGreaterThan(0);
+      expect(item.joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/u);
+    }
+
+    // 已移除成员立即从只读视图消失，但历史行本身保留为 REMOVED。
+    await removeMember(client.sql, project.projectId, member.userId);
+    const afterRemoval =
+      schemaRegistry.ActiveProjectMembersResponse.schema.parse(
+        await (await activeMembers(project.projectId, owner.cookie)).json(),
+      );
+    expect(afterRemoval.items.map((item) => item.id)).toEqual([owner.userId]);
+    const [removedRow] = await client.sql<Array<{ status: string }>>`
+      SELECT status FROM app.project_members
+       WHERE project_id = ${project.projectId} AND user_id = ${member.userId}
+    `;
+    expect(removedRow?.status).toBe("REMOVED");
+  });
+
+  test("非成员 404、匿名 401、不存在的项目 404", async () => {
+    const owner = await actor();
+    const outsider = await actor();
+    const project = await createProject(client.sql, owner.userId);
+
+    await errorBody(
+      await activeMembers(project.projectId, outsider.cookie),
+      404,
+      "PROJECT_NOT_FOUND",
+    );
+    await errorBody(
+      await activeMembers(project.projectId),
+      401,
+      "PROJECT_SESSION_REQUIRED",
+    );
+    await errorBody(
+      await activeMembers(2_147_483_647, owner.cookie),
+      404,
+      "PROJECT_NOT_FOUND",
+    );
   });
 });

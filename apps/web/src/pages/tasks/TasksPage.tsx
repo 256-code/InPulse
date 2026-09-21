@@ -1,7 +1,9 @@
 import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
+import { AppModal as Modal } from "@features/common/components/AppModal";
+import { SearchParamsScope } from "@features/common/search-params-scope";
 import { useProjects } from "@features/projects/project-query";
 import type {
   MyTaskFilters,
@@ -24,15 +26,24 @@ const TaskDetailOverlay = lazy(
   () => import("@features/tasks/TaskDetailOverlay"),
 );
 
+/**
+ * 遗留问题弹窗同样按需加载：与项目主页共用 F-20 视图，任务中心不再整页跳转到
+ * `/issues`。视图自带 `useSearchParams` 状态，弹窗内用 `SearchParamsScope` 给它
+ * 一份独立地址（项目筛选跟随任务中心当前筛选，与页面上的计数同口径），
+ * 交互不污染浏览器地址栏。
+ */
+const IssuesPageView = lazy(() => import("@features/issues/IssuesPageView"));
+
 export interface TasksPageProps {
   readonly client?: InpulseApiClient;
   readonly adapter?: MyTasksAdapter;
 }
 
 export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [detailTarget, setDetailTarget] = useState<TaskLocation | null>(null);
+  /** 遗留问题就地弹窗：false 表示关闭，打开时按当前项目筛选初始化视图作用域。 */
+  const [issuesOpen, setIssuesOpen] = useState(false);
   const { user } = useAuth();
   const projectList = useProjects({ client });
 
@@ -62,9 +73,17 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
     );
   }, [advancedOpen, filters, setSearchParams]);
 
+  /**
+   * 遗留问题不再整页跳转：头部入口与风险条都经这里就地打开弹窗，
+   * 关闭后仍停留在任务中心，筛选状态与地址栏不变。
+   */
   const handleOpenIssues = useCallback(() => {
-    navigate("/issues");
-  }, [navigate]);
+    setIssuesOpen(true);
+  }, []);
+
+  const handleCloseIssues = useCallback(() => {
+    setIssuesOpen(false);
+  }, []);
 
   /**
    * 任务卡片 / 列表行与聚合组入口点击后在当前页面就地打开任务详情弹窗：与功能档案
@@ -98,6 +117,36 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
         adapter={taskAdapter}
         client={client}
       />
+      {issuesOpen ? (
+        <Modal
+          open
+          size="xl"
+          label="遗留问题"
+          eyebrow="任务中心"
+          title="遗留问题"
+          closeLabel="关闭遗留问题"
+          onCancel={handleCloseIssues}
+          className="project-workspace-modal"
+        >
+          <div className="project-workspace-modal-body">
+            <Suspense fallback={null}>
+              <SearchParamsScope
+                initial={
+                  filters.projectId === null
+                    ? ""
+                    : "projectId=" + String(filters.projectId)
+                }
+              >
+                <IssuesPageView
+                  {...(client ? { client } : {})}
+                  onOpenTask={handleOpenTask}
+                  embedded
+                />
+              </SearchParamsScope>
+            </Suspense>
+          </div>
+        </Modal>
+      ) : null}
       <Suspense fallback={null}>
         {detailTarget === null ? null : (
           <TaskDetailOverlay

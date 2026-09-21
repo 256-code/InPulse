@@ -3435,14 +3435,14 @@
     "/projects/{projectId}/active-members": {
       "get": {
         "operationId": "listActiveProjectMembers",
-        "summary": "同项目当前成员基本资料；只读，不暴露成员历史。",
+        "summary": "同项目当前成员基本资料与项目内角色（ADR-033）；只读，不暴露成员历史。",
         "responses": {
           "200": {
             "description": "成功",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskAssigneesResponse"
+                  "$ref": "#/components/schemas/ActiveProjectMembersResponse"
                 }
               }
             }
@@ -16198,6 +16198,68 @@
   },
   "components": {
     "schemas": {
+      "ActiveProjectMemberItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "PROJECT_ADMIN",
+              "LEADER"
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "avatarUrl",
+          "role",
+          "joinedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ActiveProjectMembersResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveProjectMemberItem"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "ActivityItem": {
         "type": "object",
         "properties": {

@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -138,7 +138,7 @@ describe("CreateProjectModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("sends selected active members while excluding the creator", async () => {
+  it("sends several selected active members while excluding the creator", async () => {
     const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
     const getUserDirectory = vi.fn().mockResolvedValue({
       items: [
@@ -158,12 +158,21 @@ describe("CreateProjectModal", () => {
     const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     await fillForm(dialog);
     const user = userEvent.setup();
-    await user.click(await screen.findByLabelText("选择成员：开发者 B"));
+    const trigger = within(dialog)
+      .getByLabelText("选择初始成员")
+      .closest(".ant-select");
+    expect(trigger).not.toBeNull();
+    fireEvent.mouseDown(trigger as HTMLElement);
+    fireEvent.click(await screen.findByTitle("开发者 B"));
+    fireEvent.click(await screen.findByTitle("管理员 A"));
+    await expect(
+      within(dialog).findByText(/已选择 2 位其他成员/),
+    ).resolves.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
 
     await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
     expect(createProject).toHaveBeenCalledWith(
-      expect.objectContaining({ memberIds: [2] }),
+      expect.objectContaining({ memberIds: [2, 3] }),
       expect.any(Object),
     );
     expect(onCreated).toHaveBeenCalledWith(createdProject);

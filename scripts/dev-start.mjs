@@ -205,8 +205,11 @@ function buildApi(skipBuild) {
     console.log("  已跳过（--skip-build）");
     return;
   }
-  runPnpm("pnpm --filter @inpulse/api build");
-  console.log("  构建完成：apps/api/dist");
+  // API 运行时按 package exports 从 workspace 依赖的 dist 解析（如
+  // @inpulse/api-contract）；只构建 apps/api 会让这些包停留在旧产物，
+  // 出现「响应契约校验失败」等假故障，因此连同依赖一起构建。
+  runPnpm("pnpm --filter @inpulse/api... build");
+  console.log("  构建完成：apps/api 及其 workspace 依赖的 dist");
 }
 
 function stopPortOwner(port) {

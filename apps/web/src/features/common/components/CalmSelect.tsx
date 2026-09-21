@@ -37,10 +37,7 @@ export interface CalmSelectOption {
   readonly disabled?: boolean | undefined;
 }
 
-export interface CalmSelectProps {
-  readonly value: number | string | null | undefined;
-  readonly onChange: (value: number | string) => void;
-  readonly onBlur?: (() => void) | undefined;
+interface CalmSelectBaseProps {
   readonly options: readonly CalmSelectOption[];
   readonly appearance?: CalmSelectAppearance | undefined;
   readonly placeholder?: string | undefined;
@@ -55,6 +52,27 @@ export interface CalmSelectProps {
   /** 触发器宽度（数字按 px）；不设置时随内容自适应。 */
   readonly width?: number | string | undefined;
 }
+
+export interface CalmSelectProps extends CalmSelectBaseProps {
+  readonly value: number | string | null | undefined;
+  readonly onChange: (value: number | string) => void;
+  readonly onBlur?: (() => void) | undefined;
+  readonly multiple?: false | undefined;
+}
+
+/**
+ * 多选形态：值与回调换成数组，触发器渲染为可逐个移除的标签。
+ * 搜索与勾选行为与单选一致，弹层在每次选择后保持展开。
+ */
+export interface CalmMultiSelectProps extends CalmSelectBaseProps {
+  readonly multiple: true;
+  readonly value: readonly (number | string)[];
+  readonly onChange: (values: readonly (number | string)[]) => void;
+  /** 触发器最多展示的标签数，超出折叠为 +N；默认 2。 */
+  readonly maxTagCount?: number | undefined;
+}
+
+export type CalmSelectComponentProps = CalmSelectProps | CalmMultiSelectProps;
 
 /** 成员头像色板：与设计系统的好友色一致，按姓名取稳定色。 */
 const AVATAR_COLORS = [
@@ -93,21 +111,20 @@ const OptionAvatar: React.FC<{ readonly option: CalmSelectOption }> = ({
     </span>
   );
 
-export const CalmSelect: React.FC<CalmSelectProps> = ({
-  value,
-  onChange,
-  onBlur,
-  options,
-  appearance = "menu",
-  placeholder,
-  disabled,
-  loading,
-  searchable,
-  className,
-  ariaLabel,
-  id,
-  width,
-}) => {
+export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
+  const {
+    options,
+    appearance = "menu",
+    placeholder,
+    disabled,
+    loading,
+    searchable,
+    className,
+    ariaLabel,
+    id,
+    width,
+  } = props;
+  const multiple = props.multiple === true;
   const withSearch = searchable ?? appearance === "member";
   /**
    * 选项值与当前值按字符串比对：项目筛选器一侧来自 URL/筛选参数（数字），
@@ -126,11 +143,21 @@ export const CalmSelect: React.FC<CalmSelectProps> = ({
     return map;
   }, [options]);
 
+  const selectedValues: readonly (number | string)[] =
+    props.multiple === true
+      ? props.value
+      : props.value === null || props.value === undefined
+        ? []
+        : [props.value];
+  const selectedKeys = new Set(selectedValues.map(valueKey));
+
   const hasEmptyOption = byValue.has("");
   const selectedOption =
-    value === null || value === undefined
+    props.multiple === true ||
+    props.value === null ||
+    props.value === undefined
       ? undefined
-      : byValue.get(valueKey(value));
+      : byValue.get(valueKey(props.value));
   const isPlaceholder = (raw: number | string | null | undefined) =>
     raw === null || raw === undefined || (raw === "" && !hasEmptyOption);
 
@@ -200,10 +227,7 @@ export const CalmSelect: React.FC<CalmSelectProps> = ({
   );
 
   const renderOption = (option: CalmSelectOption) => {
-    const selected =
-      value !== null &&
-      value !== undefined &&
-      valueKey(option.value) === valueKey(value);
+    const selected = selectedKeys.has(valueKey(option.value));
     if (appearance === "rich") {
       return (
         <span className="calm-select-rich-item">
@@ -266,10 +290,18 @@ export const CalmSelect: React.FC<CalmSelectProps> = ({
   const rootClass = [
     "calm-select",
     "calm-select-" + appearance,
+    multiple ? "calm-select-multiple" : "",
     className ?? "",
   ]
     .filter((part) => part.length > 0)
     .join(" ");
+
+  const selectValue =
+    props.multiple === true
+      ? [...props.value]
+      : isPlaceholder(props.value)
+        ? undefined
+        : (selectedOption?.value ?? props.value);
 
   return (
     <Select
@@ -277,17 +309,25 @@ export const CalmSelect: React.FC<CalmSelectProps> = ({
       classNames={{
         popup: { root: "calm-select-popup calm-select-popup-" + appearance },
       }}
-      value={
-        isPlaceholder(value)
-          ? undefined
-          : (selectedOption?.value ?? (value as number | string))
-      }
-      onChange={(next) => {
+      mode={multiple ? "multiple" : undefined}
+      maxTagCount={props.multiple === true ? (props.maxTagCount ?? 2) : undefined}
+      value={selectValue}
+      onChange={(next: unknown) => {
+        if (props.multiple === true) {
+          props.onChange(
+            Array.isArray(next) ? (next as (number | string)[]) : [],
+          );
+          return;
+        }
         if (next !== undefined) {
-          onChange(next);
+          props.onChange(next as number | string);
         }
       }}
-      onBlur={() => onBlur?.()}
+      onBlur={() => {
+        if (props.multiple !== true) {
+          props.onBlur?.();
+        }
+      }}
       options={options.map((option) => ({
         ...option,
         disabled: option.disabled ?? false,

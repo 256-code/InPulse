@@ -70,14 +70,15 @@ export const taskCreateRoutes: readonly RouteDefinition[] = [
     method: "GET",
     path: "/projects/{projectId}/active-members",
     operationId: "listActiveProjectMembers",
-    summary: "同项目当前成员基本资料；只读，不暴露成员历史。",
+    summary:
+      "同项目当前成员基本资料与项目内角色（ADR-033）；只读，不暴露成员历史。",
     request: {
       path: "ProjectPath",
       query: "none",
       headers: "none",
       body: { noBody: true },
     },
-    responses: { "200": json("TaskAssigneesResponse"), ...errors },
+    responses: { "200": json("ActiveProjectMembersResponse"), ...errors },
     authPolicy: "session",
     csrfPolicy: "none",
     idempotencyPolicy: "none",

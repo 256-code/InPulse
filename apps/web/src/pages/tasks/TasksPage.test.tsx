@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -211,6 +211,9 @@ const createClient = () => {
     }),
     getLeftoverTaskSource: vi.fn().mockResolvedValue({ source: null }),
     getTaskStatusHistory: vi.fn().mockResolvedValue({ items: [] }),
+    listLeftoverItems: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
   } as unknown as InpulseApiClient;
   return { client, listProjects };
 };
@@ -278,7 +281,6 @@ const renderPage = (options: RenderOptions = {}) => {
                 </>
               }
             />
-            <Route path="/issues" element={<div>遗留问题页</div>} />
           </Routes>
         </MemoryRouter>
       </AuthStateProvider>
@@ -339,11 +341,26 @@ describe("TasksPage", () => {
     );
   });
 
-  it("navigates to the leftover issues page", async () => {
+  it("opens the leftover issues modal in place without leaving the task center", async () => {
     renderPage();
     const user = userEvent.setup();
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toBeInTheDocument(),
+    );
+    const before = screen.getByTestId("location-probe").textContent;
+
+    // 任务中心不再跳转 `/issues`：头部入口就地打开 F-20 遗留问题弹窗，
+    // 关闭后仍停在任务中心，地址栏与筛选参数不变。
     await user.click(screen.getByRole("button", { name: /遗留问题/ }));
-    expect(await screen.findByText("遗留问题页")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "遗留问题" });
+    expect(dialog).toBeInTheDocument();
+    // 弹窗内是 F-20 视图本体（懒加载 chunk 就绪前 Suspense 渲染为空）。
+    expect(
+      await within(dialog).findByTestId("issues-page"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      before ?? "",
+    );
   });
 
   it("opens the feature task detail in place without leaving the task center", async () => {

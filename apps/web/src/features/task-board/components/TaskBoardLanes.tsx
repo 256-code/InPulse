@@ -1,6 +1,7 @@
 import React from "react";
 
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { taskToneOf } from "@features/common/task-tone";
 
 import {
   avatarTextOf,
@@ -26,11 +27,9 @@ export interface TaskBoardLanesProps {
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
 
+/** 卡片配色与列表行、任务中心同源：优先级决定底色与左侧色条，已完成 / 已取消覆盖状态色。 */
 function cardClassNameOf(card: TaskBoardCard): string {
-  if (card.workStatus === "DONE") return "tb-card tb-card--done";
-  if (card.workStatus === "CANCELED") return "tb-card tb-card--canceled";
-  if (card.dueState === "OVERDUE") return "tb-card tb-card--overdue";
-  return "tb-card";
+  return "tb-card tone-prio-" + taskToneOf(card.priority, card.workStatus);
 }
 
 const TaskBoardCardItem: React.FC<{

@@ -21,6 +21,46 @@
   color: currentColor;
 }
 
+/* 搜索输入框是真实 <input>：宿主表单（.calm-form / .dialog-form）会给容器内所有
+ * input 加边框、内边距与聚焦光环，多选触发器里因此会多出一个「空输入小方框」。
+ * antd 自身的 border/padding 归零受宿主规则影响时需要在此以更高特异性兜底。 */
+.calm-select.ant-select .ant-select-input,
+.calm-select.ant-select .ant-select-input:hover,
+.calm-select.ant-select .ant-select-input:focus {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  height: auto;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* ===== 多选（multiple）：触发器内每个已选值是独立标签 ===== */
+.calm-select-multiple {
+  min-height: 32px;
+}
+.calm-select-multiple.ant-select .ant-select-selection-item {
+  border-radius: 6px;
+}
+.calm-select-multiple.ant-select .ant-select-selection-item .calm-select-trigger {
+  gap: 6px;
+}
+.calm-select-multiple.ant-select
+  .ant-select-selection-item
+  .calm-select-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+}
+.calm-select-multiple.ant-select
+  .ant-select-selection-item
+  .calm-select-trigger-label {
+  max-width: 168px;
+}
+
 /* ===== 头像与图标 ===== */
 .calm-select-avatar {
   width: 22px;

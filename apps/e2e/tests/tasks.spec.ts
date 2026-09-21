@@ -4,7 +4,10 @@ import {
   loginViaUi,
 } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { pickCalmSelectOption } from "../helpers/calm-select.js";
+import {
+  pickCalmSelectOption,
+  pickCalmSelectOptions,
+} from "../helpers/calm-select.js";
 
 test("F-14 项目成员创建/指派任务，双页面合并，通知直达和刷新持久化", async ({
   browser,
@@ -22,7 +25,9 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     const project = page.getByRole("dialog");
     await project.getByLabel("项目名称").fill(`任务验收-${suffix}`);
     await project.getByLabel("项目编码").fill(`T14${suffix}`);
-    await project.getByLabel(`选择成员：${runtime.member.name}`).check();
+    await pickCalmSelectOptions(project, "选择初始成员", [
+      runtime.member.name,
+    ]);
     await project.getByRole("button", { name: "创建项目" }).click();
     await page.getByTestId("open-created-project-activity").click();
     const projectId = page.url().match(/projects\/(\d+)/)![1];

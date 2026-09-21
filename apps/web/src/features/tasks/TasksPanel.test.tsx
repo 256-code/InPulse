@@ -496,6 +496,8 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest(".calm-task-card") as HTMLElement;
+    // 卡片与列表行共用程度配色：普通优先级取蓝色 tone 类。
+    expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
@@ -506,6 +508,45 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     expect(listTaskGroupMemberships.mock.calls[0]![0]).toEqual({
       taskIds: [1, 2],
     });
+  });
+  it("列表视图沿用同一套程度配色：优先级铺色，已完成转绿、已取消转灰", async () => {
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({
+          items: [
+            item,
+            {
+              ...item,
+              id: 11,
+              code: "PR-T-11",
+              title: "已完成任务",
+              priority: "URGENT",
+              workStatus: "DONE",
+            },
+            {
+              ...item,
+              id: 12,
+              code: "PR-T-12",
+              title: "已取消任务",
+              workStatus: "CANCELED",
+            },
+          ],
+        }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "列表" }));
+
+    const plainRow = (await screen.findByText("退款任务")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(plainRow).toHaveClass("tone-prio-normal");
+    // 状态覆盖优先级：紧急的已完成任务整行转绿，已取消整行转灰。
+    expect(screen.getByText("已完成任务").closest("tr")).toHaveClass(
+      "tone-prio-done",
+    );
+    expect(screen.getByText("已取消任务").closest("tr")).toHaveClass(
+      "tone-prio-canceled",
+    );
   });
   it("shows badge, record count and the main-task entry in the detail dialog, then opens the group dialog in place", async () => {
     mountWithGroupModal(
