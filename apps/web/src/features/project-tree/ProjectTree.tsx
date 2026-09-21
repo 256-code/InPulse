@@ -349,15 +349,19 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
               onClick={onPageClick}
             />
           ))}
+          {/* 模块列表单独放进滚动区：展开某个项目时其它项目仍然完整露出，
+              滚动条只属于这个项目（高度上限见 design-system.css 的 .tree-modules）。 */}
           {modulesExpanded ? (
-            <ModuleList
-              projectId={item.id}
-              selection={isActiveProject ? activeScope.selection : null}
-              expandedKeys={expandedKeys}
-              onModuleClick={onModuleClick}
-              onFeatureClick={onFeatureClick}
-              client={client}
-            />
+            <div className="tree-modules">
+              <ModuleList
+                projectId={item.id}
+                selection={isActiveProject ? activeScope.selection : null}
+                expandedKeys={expandedKeys}
+                onModuleClick={onModuleClick}
+                onFeatureClick={onFeatureClick}
+                client={client}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}
