@@ -786,62 +786,6 @@ button {
   gap: 4px;
   font-size: 12px;
 }
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 18px;
-}
-.stat-card {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 18px;
-  display: flex;
-  /* 彩色图标块与文案块在卡片内垂直居中，不贴顶。 */
-  align-items: center;
-  gap: 13px;
-}
-.stat-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 7px;
-}
-.stat-icon.blue {
-  color: #2671c9;
-  background: #e6f1ff;
-}
-.stat-icon.cyan {
-  color: #158e9b;
-  background: #e2f8f6;
-}
-.stat-icon.violet {
-  color: #7565b9;
-  background: #eeeaff;
-}
-.stat-icon.amber {
-  color: #bc7b1e;
-  background: #fff3dc;
-}
-/* 只作用于文案 span：.stat-icon 同样是 span，会被这条通用规则改成 display: block，
-   从而盖掉 .stat-icon 自己的 display: grid / place-items: center——
-   结果是彩色方块整体居中、方块里的图形却贴顶（2026-09-20 修）。 */
-.stat-card span:not(.stat-icon),
-.stat-card small {
-  display: block;
-  color: #79899b;
-  font-size: 11px;
-}
-.stat-card strong {
-  display: block;
-  font-size: 25px;
-  margin: 6px 0 4px;
-}
-.stat-card small {
-  color: #4c9c7c;
-}
 .overview-grid {
   display: grid;
   grid-template-columns: 1.25fr 0.75fr;
@@ -1278,12 +1222,21 @@ button {
    图标、编号、徽章计算样式完全一致。同一批规则里保留下来的 `.module-card { color: #317abd }`
    也已删除（2026-09-20 定案）：它被卡内 h2 继承，导致模块卡标题与功能卡标题不同色；删掉后
    两类卡片标题都落到全局 --card-foreground（#132238），与项目卡、任务卡标题一致。 */
-/* 任务中心工具栏：上方统计卡与下方列表区必须同一条节奏（下方 = 8 + 展示方式图标行 16 + 6），
-   否则工具条紧贴统计卡、整体重心偏上；上下各 30px（2026-09-20 定案）。 */
+/* 任务中心工具栏：与下方列表区同一条节奏（下方 = 8 + 展示方式图标行 16 + 6 = 30px）。
+   上方四张统计卡删除后，工具栏之上只剩页头标题（2026-09-21 定案）：标题行高 40.5px 而
+   表意文字只占 27px，上下各有 6.75px 半行距，所以页头盒底到工具栏取 15px 时，标题墨迹
+   到工具栏约 30px，与下方 30px 视觉对齐。只作用于任务中心，活动 / 迭代记录 / 遗留问题
+   页仍用下面的 30px。 */
 .task-toolbar {
   justify-content: flex-start;
   margin-top: 30px;
   margin-bottom: 8px;
+}
+.task-center .page-header {
+  margin-bottom: 15px;
+}
+.task-center .task-toolbar {
+  margin-top: 15px;
 }
 .task-toolbar .secondary-button {
   margin-left: auto;
@@ -2164,9 +2117,6 @@ td small {
   .page-content {
     padding: 27px 22px;
   }
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .cards-grid,
   .module-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2205,7 +2155,6 @@ td small {
   .page-header h1 {
     font-size: 24px;
   }
-  .stats-grid,
   .cards-grid,
   .module-grid {
     grid-template-columns: 1fr;
@@ -2314,40 +2263,6 @@ td small,
 .drawer-status > span:last-child {
   margin-left: auto;
 }
-.risk-banner {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 15px 18px;
-  margin-bottom: 20px;
-  border: 1px solid #edc9cc;
-  border-left: 3px solid #bd4651;
-  border-radius: 7px;
-  background: #fff6f6;
-  color: #9e3540;
-  text-align: left;
-}
-.risk-banner strong,
-.risk-banner small {
-  display: block;
-}
-.risk-banner small {
-  margin-top: 5px;
-  color: #76565d;
-  font-size: 12px;
-}
-.risk-action {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  white-space: nowrap;
-  font-weight: 600;
-}
-.risk-banner:hover {
-  background: #ffeded;
-}
 .task-title-button {
   border: 0;
   background: transparent;
@@ -2375,27 +2290,6 @@ a:focus-visible {
 }
 .github-link {
   overflow-wrap: anywhere;
-}
-@media (max-width: 700px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .risk-banner {
-    flex-wrap: wrap;
-  }
-  .risk-banner > span:not(.risk-action) {
-    flex: 1;
-  }
-  .risk-action {
-    width: 100%;
-    margin-left: 32px;
-  }
-  .stat-card {
-    padding: 14px;
-  }
-  .stat-card small {
-    line-height: 1.5;
-  }
 }
 
 /* Personal task scopes and assignment. */
@@ -3329,9 +3223,6 @@ a:focus-visible {
 .task-toolbar > .secondary-button {
   display: none;
 }
-.stat-card small {
-  color: #6d8498;
-}
 .primary-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -3379,7 +3270,6 @@ a:focus-visible {
 
 /* Reduce repeated explanatory copy on browsing surfaces. */
 .page-header > div > p,
-.stat-card > p,
 .panel-head > div > p {
   display: none;
 }
@@ -4311,44 +4201,10 @@ a:focus-visible {
   color: #0d7f8d;
   background: #e2f7f6;
 }
-.stat-icon.gray {
-  color: #6f8091;
-  background: #eef2f6;
-}
-.stat-icon.green {
-  color: #2f8a5b;
-  background: #e6f6ec;
-}
-.stat-icon.red {
-  color: #bd4a4a;
-  background: #ffecec;
-}
-.stat-card-button {
-  width: 100%;
-  text-align: left;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s,
-    transform 0.15s;
-}
-.stat-card-button:hover {
-  border-color: #86afd7;
-  box-shadow: 0 5px 18px #1735520c;
-}
-.stat-card-button:active {
-  transform: translateY(1px);
-}
-/* 统计卡是任务中心的工作状态开关：选中态必须和悬浮样式区分开，
-   用深一档描边 + 浅底表达「列表当前就是这个口径」（2026-09-20 定案）。 */
-.stat-card-selected,
-.stat-card-selected:hover {
-  border-color: #4a86c8;
-  background: #f4f9ff;
-  box-shadow: 0 4px 14px #17355212;
-}
-/* 任务列表区块只留展示方式图标：工作状态由上方统计卡选中态表达，
+/* 任务列表区块只留展示方式图标：工作状态由工具栏「未完成 / 已完成」筛选表达，
    「未完成 / n 项 · 服务端按任务编号倒序」两行文字已按产品要求删除；
-   下间距 6px 与工具栏的上间距一起构成上下各 30px 的节奏。 */
+   本行 16px 加自身下间距 6px，再叠加工具栏下间距 8px，构成工具栏到列表的 30px，
+   与页头标题墨迹到工具栏的视觉间距对齐（见上方 .task-center .task-toolbar）。 */
 .task-list-mark {
   display: flex;
   justify-content: flex-end;
@@ -4655,30 +4511,6 @@ td.due-overdue {
   color: #7b8b9c;
 }
 
-.risk-strip {
-  display: grid;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.risk-strip .risk-banner {
-  margin-bottom: 0;
-}
-.risk-strip .risk-banner > span:not(.risk-action) {
-  flex: 1;
-  min-width: 0;
-}
-.risk-banner-amber {
-  border-color: #f0dcb4;
-  border-left-color: #c08a25;
-  background: #fffaf0;
-  color: #a3701d;
-}
-.risk-banner-amber small {
-  color: #96794a;
-}
-.risk-banner-amber:hover {
-  background: #fff5e4;
-}
 .task-card-badges {
   display: flex;
   gap: 6px;

@@ -25,11 +25,10 @@ function filters(overrides: Partial<MyTaskFilters> = {}): MyTaskFilters {
 describe("my-tasks-v1-query", () => {
   it("keeps the frozen R-3 path and defaults", () => {
     expect(MY_TASKS_V1_PATH).toBe("/api/v1/me/tasks");
-    // 默认筛选就是「我负责的未完成 + 今日待办」，因此默认请求会带上 todayTodo。
+    // 默认筛选是「我负责的全部未完成」：工具栏只有工作状态两档，不再下发 todayTodo。
     expect(toMyTasksV1Query(filters())).toEqual({
       limit: 20,
       workStatus: "TODO",
-      todayTodo: true,
     });
     expect(MY_TASKS_V1_LIMIT_DEFAULT).toBe(20);
     expect(MY_TASKS_V1_LIMIT_MAX).toBe(100);
@@ -61,7 +60,6 @@ describe("my-tasks-v1-query", () => {
       ownership: "CREATOR",
       projectId: 7,
       workStatus: "TODO",
-      todayTodo: true,
     });
   });
 
@@ -73,6 +71,9 @@ describe("my-tasks-v1-query", () => {
     expect(toMyTasksV1Query(filters({ status: "done" })).workStatus).toBe(
       "DONE",
     );
+    // 只有显式 todayTodo（URL ?today=1 的链路）才下发，缺省不下发。
+    expect(toMyTasksV1Query(filters({ todayTodo: true })).todayTodo).toBe(true);
+    expect(toMyTasksV1Query(filters()).todayTodo).toBeUndefined();
   });
 
   it("maps the record filter onto hasPublishedRecord", () => {

@@ -10,7 +10,7 @@ import type { MyTasksAdapter } from "./my-tasks-types";
 /** 任务中心经生成客户端查询；任务和聚合组均传递服务端签名游标。 */
 
 export const MY_TASKS_SERVER_NOTICE =
-  "项目筛选把列表与统计卡片一起收窄到所选项目。统计卡片中今日待办 / 未完成 / 已完成按我负责的任务计算，我创建的按我创建的任务计算。";
+  "项目筛选把列表、工作状态（未完成 / 已完成）与遗留问题入口一起收窄到所选项目；我创建的按创建人维度计算。";
 
 export function createMyTasksServerAdapter(
   client?: InpulseApiClient | undefined,
@@ -26,8 +26,8 @@ export function createMyTasksServerAdapter(
           ...(cursor ? { cursor } : {}),
         }),
         scope: filters.scope,
-        // 今日待办与统计卡同口径：projectId 由 toMyTasksV1Query 统一下发，
-        // 选定项目后列表、统计与遗留问题入口一起收敛。
+        // projectId 由 toMyTasksV1Query 统一下发：选定项目后列表、工作状态与遗留问题
+        // 入口一起收敛（统计卡已从页面删除，服务端仍返回该字段）。
         ...(filters.overdue ? { overdue: true } : {}),
       });
       return {
