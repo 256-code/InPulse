@@ -461,19 +461,17 @@ export function RecordDraftEditorModal({
                     ariaLabel="所属项目"
                     value={createProjectId || ""}
                     appearance="rich"
+                    placeholder="请选择项目"
                     onChange={(next) => {
                       setCreateProjectId(Number(next));
                       setModuleId(0);
                       setFeatureId(0);
                       setImpacts([]);
                     }}
-                    options={[
-                      { value: "", label: "请选择项目" },
-                      ...(projects.data?.items ?? []).map((p) => ({
-                        ...projectSelectOption(p),
-                        disabled: p.status !== "ACTIVE",
-                      })),
-                    ]}
+                    options={(projects.data?.items ?? []).map((p) => ({
+                      ...projectSelectOption(p),
+                      disabled: p.status !== "ACTIVE",
+                    }))}
                   />
                 </label>
               )}
@@ -482,23 +480,22 @@ export function RecordDraftEditorModal({
                 <CalmSelect
                   ariaLabel="所属模块"
                   value={moduleId || ""}
-                  appearance="menu"
+                  appearance="rich"
+                  searchable
+                  width="100%"
+                  placeholder={
+                    formProjectId > 0 ? "输入模块名称搜索" : "请先选择项目"
+                  }
                   onChange={(next) => {
                     setModuleId(Number(next));
                     setFeatureId(0);
                     setImpacts([]);
                   }}
-                  options={[
-                    {
-                      value: "",
-                      label: formProjectId > 0 ? "请选择模块" : "请先选择项目",
-                    },
-                    ...(modules.data?.items ?? []).map((m) => ({
-                      value: m.id,
-                      label: m.name,
-                      disabled: m.status !== "ACTIVE",
-                    })),
-                  ]}
+                  options={(modules.data?.items ?? []).map((m) => ({
+                    value: m.id,
+                    label: m.name,
+                    disabled: m.status !== "ACTIVE",
+                  }))}
                 />
               </label>
               <label>
@@ -520,16 +517,16 @@ export function RecordDraftEditorModal({
                   <CalmSelect
                     ariaLabel="所属功能"
                     value={featureId || ""}
-                    appearance="menu"
+                    appearance="rich"
+                    searchable
+                    width="100%"
+                    placeholder="输入功能名称搜索"
                     onChange={(next) => setFeatureId(Number(next))}
-                    options={[
-                      { value: "", label: "请选择功能" },
-                      ...(features.data?.items ?? []).map((f) => ({
-                        value: f.id,
-                        label: f.name,
-                        disabled: f.status !== "ACTIVE",
-                      })),
-                    ]}
+                    options={(features.data?.items ?? []).map((f) => ({
+                      value: f.id,
+                      label: f.name,
+                      disabled: f.status !== "ACTIVE",
+                    }))}
                   />
                 </label>
               ) : (
