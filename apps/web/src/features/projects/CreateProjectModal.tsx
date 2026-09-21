@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Empty, Form, Input, Spin, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
@@ -10,6 +10,7 @@ import {
 } from "@features/users/user-directory-query";
 import {
   deriveProjectCardShortname,
+  deriveProjectCodeFromName,
   normalizeProjectCode,
   projectFormSchema,
   PROJECT_CODE_MAX_LENGTH,
@@ -51,6 +52,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     reset,
     watch,
     setError,
+    setValue,
     clearErrors,
     formState: { errors },
   } = useForm<ProjectFormValues>({
@@ -61,6 +63,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const formId = React.useId();
   const directory = useUserDirectoryQuery({ client, enabled: open });
   const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
+  // 用户手动填过编码就不再被名称推导覆盖；清空编码视为交回自动推导。
+  const codeManuallyEditedRef = useRef(false);
   const code = watch("code") ?? "";
   const cardShortname = deriveProjectCardShortname(code);
   const candidates = useMemo(
@@ -72,6 +76,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     if (open) {
       reset(defaultValues);
       setSelectedMemberIds([]);
+      codeManuallyEditedRef.current = false;
       mutation.reset();
     }
   }, [open]);
@@ -157,8 +162,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                     placeholder="例如：商城系统"
                     disabled={mutation.isPending}
                     onChange={(event) => {
-                      field.onChange(event.currentTarget.value);
+                      const nextName = event.currentTarget.value;
+                      field.onChange(nextName);
                       clearErrors("name");
+                      if (!codeManuallyEditedRef.current) {
+                        setValue("code", deriveProjectCodeFromName(nextName));
+                        clearErrors("code");
+                      }
                     }}
                   />
                 </Form.Item>
@@ -184,10 +194,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       placeholder="SHOP"
                       disabled={mutation.isPending}
                       onChange={(event) => {
-                        field.onChange(
-                          normalizeProjectCode(event.currentTarget.value),
+                        const nextCode = normalizeProjectCode(
+                          event.currentTarget.value,
                         );
+                        field.onChange(nextCode);
                         clearErrors("code");
+                        codeManuallyEditedRef.current = nextCode.length > 0;
                       }}
                     />
                   </Form.Item>

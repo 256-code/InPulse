@@ -98,6 +98,18 @@ export function normalizeProjectCode(value: string): string {
   return value.trim().toUpperCase();
 }
 
+/**
+ * 从名称自动推导项目编码：只取其中的英文与数字，中文、空格与符号作为分隔丢弃。
+ * 推导结果不满足编码规则时返回空串，避免自动写入无法提交的值，改由用户手填。
+ */
+export function deriveProjectCodeFromName(name: string): string {
+  const candidate = name
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, PROJECT_CODE_MAX_LENGTH);
+  return projectCodePattern.test(candidate) ? candidate : "";
+}
+
 export function deriveProjectCardShortname(code: string): string {
   const normalized = normalizeProjectCode(code);
   return normalized.slice(0, PROJECT_CARD_SHORTNAME_LENGTH) || "—";

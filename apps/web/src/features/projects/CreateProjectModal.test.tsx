@@ -197,4 +197,27 @@ describe("CreateProjectModal", () => {
     expect(scope.getByText("模块")).toBeInTheDocument();
     expect(scope.queryByText(/未分类/u)).not.toBeInTheDocument();
   });
+
+  it("derives the project code from the name until the code is edited manually", async () => {
+    const getUserDirectory = vi.fn().mockResolvedValue({ items: [] });
+    const client = { getUserDirectory } as unknown as InpulseApiClient;
+    renderModal(client);
+
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    const user = userEvent.setup();
+    const nameInput = within(dialog).getByLabelText("项目名称");
+    const codeInput = within(dialog).getByLabelText("项目编码");
+
+    await user.type(nameInput, "商城系统 Shop2");
+    expect(codeInput).toHaveValue("SHOP2");
+
+    await user.clear(codeInput);
+    await user.type(codeInput, "mall");
+    await user.type(nameInput, " 二期");
+    expect(codeInput).toHaveValue("MALL");
+
+    await user.clear(codeInput);
+    await user.type(nameInput, " 三期");
+    expect(codeInput).toHaveValue("SHOP2");
+  });
 });
