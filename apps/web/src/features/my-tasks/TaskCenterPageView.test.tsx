@@ -72,22 +72,6 @@ interface ViewOverrides {
   readonly onOpenTask?: (task: TaskLocation) => void;
 }
 
-/** 四张统计卡各自的筛选组合：选中态必须唯一命中当前生效的那一张。 */
-const selectedStatCardCases: ReadonlyArray<{
-  readonly label: string;
-  readonly patch: Partial<MyTaskFilters>;
-  readonly testId: string;
-}> = [
-  { label: "今日待办（默认）", patch: {}, testId: "stat-today-todo" },
-  { label: "未完成", patch: { todayTodo: false }, testId: "stat-my-open" },
-  { label: "已完成", patch: { status: "done" }, testId: "stat-completed" },
-  {
-    label: "我创建的",
-    patch: { scope: "created", status: "all" },
-    testId: "stat-created",
-  },
-];
-
 const renderView = (overrides: ViewOverrides = {}) => {
   const onFiltersChange = overrides.onFiltersChange ?? vi.fn();
   const onToggleAdvanced = overrides.onToggleAdvanced ?? vi.fn();
@@ -196,7 +180,7 @@ const doneTask: MyTaskListItem = {
 };
 
 describe("TaskCenterPageView", () => {
-  it("renders the stat cards and the project filter with a mock-data notice only", async () => {
+  it("renders the toolbar work-status filter with a mock-data notice only", async () => {
     renderView();
 
     // mock 适配器只在测试与降级演示中使用：此时必须显式标注骨架数据，且不再复述接口说明。
@@ -204,26 +188,20 @@ describe("TaskCenterPageView", () => {
     expect(notice).toHaveTextContent("骨架数据：");
     expect(screen.queryByText(/接口说明/)).toBeNull();
 
-    // 今日待办卡：总数 + 一行来源说明（逾期 / 遗留 / 紧急 / 7 天内到期）。
-    const todayTodo = await screen.findByTestId("stat-today-todo");
-    expect(await within(todayTodo).findByText("3")).toBeInTheDocument();
+    // 2026-09-21 定案：逾期风险条与四张统计卡整体删除，工作状态改由工具栏分段控件承担。
+    expect(screen.queryByTestId("stat-my-open")).toBeNull();
+    expect(document.querySelector(".stats-grid")).toBeNull();
+    expect(document.querySelector(".risk-strip")).toBeNull();
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
     expect(
-      within(todayTodo).getByText("逾期 1 · 遗留 1 · 紧急 1 · 7 天内 2"),
-    ).toBeInTheDocument();
+      within(statusFilter).getByRole("button", { name: "未完成" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(statusFilter).getByRole("button", { name: "已完成" }),
+    ).toHaveAttribute("aria-pressed", "false");
 
-    const myOpen = screen.getByTestId("stat-my-open");
-    expect(await within(myOpen).findByText("4")).toBeInTheDocument();
-    expect(
-      await within(screen.getByTestId("stat-completed")).findByText("3"),
-    ).toBeInTheDocument();
-    expect(
-      await within(screen.getByTestId("stat-created")).findByText("8"),
-    ).toBeInTheDocument();
-
-    // 范围分段行已整体移除：今日待办 / 未完成 / 已完成 就是「我负责的」，
-    // 我创建的由第 4 张卡承担；工作状态滑块同样不再渲染，项目筛选移入工具栏。
+    // 范围分段行已整体移除：工作状态由工具栏承担，项目筛选同样在工具栏里。
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByRole("group", { name: "工作状态" })).toBeNull();
     expect(screen.getByLabelText("搜索任务")).toBeEnabled();
     const projectTrigger = screen.getByLabelText("项目").closest(".ant-select");
     expect(projectTrigger).toHaveTextContent("全部项目");
@@ -242,15 +220,15 @@ describe("TaskCenterPageView", () => {
     expect(screen.queryByText(/已完成 .* 项/)).toBeNull();
   });
 
-  it("drops the list title and count now that the stat cards carry the state", async () => {
+  it("drops the list title and count now that the toolbar filter carries the state", async () => {
     renderView({
       filters: { status: "all", todayTodo: false },
       adapter: serverLikeAdapterWith([doneTask]),
     });
 
     // 2026-09-20 定案：列表区块不再重复「全部任务 / 1 项 · 服务端按任务编号倒序」两行文字，
-    // 工作状态只由上方统计卡的选中态表达；status=all 不对应任何一张卡，因此这里没有选中项。
-    // 已完成卡片取绿色完成态（状态覆盖优先级）。
+    // 工作状态只由工具栏「未完成 / 已完成」筛选表达；status=all 不属于任何档位，因此不高亮。
+    // 已完成任务取绿色完成态（状态覆盖优先级）。
     expect(await screen.findByTestId("my-task-901")).toHaveClass(
       "calm-task-card",
       "tone-prio-done",
@@ -298,12 +276,14 @@ describe("TaskCenterPageView", () => {
     });
 
     expect(await screen.findByText("没有匹配的已完成任务")).toBeInTheDocument();
-    // 标题行已删除，工作状态由「已完成」卡的选中态表达。
+    // 标题行已删除，工作状态由工具栏「已完成」档的选中态表达。
     expect(screen.queryByRole("heading", { name: "已完成" })).toBeNull();
-    expect(await screen.findByTestId("stat-completed")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(screen.getByRole("group", { name: "工作状态" })).getByRole(
+        "button",
+        { name: "已完成" },
+      ),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("expands the done disclosure instead of hiding it behind the open empty state", async () => {
@@ -386,44 +366,43 @@ describe("TaskCenterPageView", () => {
     });
   });
 
-  it("reports scope changes from the statistics cards", async () => {
+  it("reports the work-status change from the toolbar filter", async () => {
     const { onFiltersChange } = renderView();
     const user = userEvent.setup();
 
-    // 「我创建的」= 创建人维度、不限状态；「未完成」= 负责人维度的未完成集合。
-    await user.click(await screen.findByTestId("stat-created"));
-    expect(onFiltersChange).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: "created", status: "all" }),
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    // 切到「已完成」：工作状态写入 URL，与工作状态无关的逾期 / 今日待办口径一并清除。
+    await user.click(
+      within(statusFilter).getByRole("button", { name: "已完成" }),
     );
-    await user.click(screen.getByTestId("stat-my-open"));
+    expect(onFiltersChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "done",
+        overdue: false,
+        todayTodo: false,
+      }),
+    );
+    await user.click(
+      within(statusFilter).getByRole("button", { name: "未完成" }),
+    );
     expect(onFiltersChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ scope: "mine", status: "open" }),
+      expect.objectContaining({ status: "open" }),
     );
   });
 
-  it.each(selectedStatCardCases)(
-    "marks the $label card as the only selected stat card",
-    async ({ patch, testId }) => {
-      renderView({ adapter: serverLikeAdapterWith([]), filters: patch });
+  it("uses the plain open wording for the default view now that today-todo has no entry", async () => {
+    renderView({ adapter: serverLikeAdapterWith([]) });
 
-      const selected = await screen.findByTestId(testId);
-      expect(selected).toHaveAttribute("aria-pressed", "true");
-      expect(selected).toHaveClass("stat-card-selected");
-      for (const other of selectedStatCardCases) {
-        if (other.testId === testId) continue;
-        expect(screen.getByTestId(other.testId)).toHaveAttribute(
-          "aria-pressed",
-          "false",
-        );
-        expect(screen.getByTestId(other.testId)).not.toHaveClass(
-          "stat-card-selected",
-        );
-      }
-    },
-  );
+    // 缺省口径是「全部未完成任务」：空态就是未完成的措辞，不再出现「今天没有待办任务」。
+    expect(await screen.findByText("没有匹配的未完成任务")).toBeInTheDocument();
+    expect(screen.queryByText("今天没有待办任务")).toBeNull();
+  });
 
   it("explains the today-todo empty state instead of reusing the open wording", async () => {
-    renderView({ adapter: serverLikeAdapterWith([]) });
+    renderView({
+      adapter: serverLikeAdapterWith([]),
+      filters: { todayTodo: true },
+    });
 
     // 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。
     expect(await screen.findByText("今天没有待办任务")).toBeInTheDocument();
@@ -451,16 +430,6 @@ describe("TaskCenterPageView", () => {
     const user = userEvent.setup();
     const button = await screen.findByRole("button", { name: /遗留问题 3/ });
     await user.click(button);
-    expect(onOpenIssues).toHaveBeenCalledTimes(1);
-  });
-
-  it("invokes onOpenIssues from the leftover risk banner", async () => {
-    const { onOpenIssues } = renderView();
-    const user = userEvent.setup();
-    const banner = await screen.findByRole("button", {
-      name: /条遗留问题尚未闭环/,
-    });
-    await user.click(banner);
     expect(onOpenIssues).toHaveBeenCalledTimes(1);
   });
 
@@ -786,59 +755,41 @@ describe("TaskCenterPageView", () => {
     expect(screen.queryByText(/骨架数据/)).toBeNull();
   });
 
-  it("renders a server-provided scope without the removed scope tabs", async () => {
-    const { onFiltersChange } = renderView({
+  it("renders a server-provided scope without scope tabs or stat cards", async () => {
+    renderView({
       adapter: serverLikeAdapter(),
       filters: { scope: "created", status: "all" },
     });
 
-    // URL 里仍可携带 scope=created（任务中心不删除该参数），页面只按卡片的
-    // 工作状态渲染列表：不再有任何范围 tab。
+    // URL 里仍可携带 scope=created（任务中心不删除该参数），页面按工具栏工作状态渲染
+    // 列表：不再有任何范围 tab，也不再有统计卡。
     expect(await screen.findByTestId("my-task-101")).toBeInTheDocument();
-    // 标题行已删除：scope=created + status=all 只由「我创建的」卡的选中态表达。
     expect(screen.queryByRole("heading", { name: "全部任务" })).toBeNull();
-    expect(await screen.findByTestId("stat-created")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.queryByTestId("stat-created")).toBeNull();
+    expect(document.querySelector(".stats-grid")).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tab", { name: /全部任务/ })).toBeNull();
-
-    const user = userEvent.setup();
-    await user.click(screen.getByTestId("stat-my-open"));
-    expect(onFiltersChange).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: "mine", status: "open" }),
-    );
+    // status=all 不属于「未完成 / 已完成」任何一档：两个档位都不高亮。
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    expect(
+      within(statusFilter).getByRole("button", { name: "未完成" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(statusFilter).getByRole("button", { name: "已完成" }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 });
 
 it("clears overdue when opening completed tasks", async () => {
   const { onFiltersChange } = renderView({ filters: { overdue: true } });
-  await userEvent.click(await screen.findByTestId("stat-completed"));
+  await userEvent.click(
+    within(screen.getByRole("group", { name: "工作状态" })).getByRole(
+      "button",
+      { name: "已完成" },
+    ),
+  );
   expect(onFiltersChange).toHaveBeenLastCalledWith(
     expect.objectContaining({ status: "done", overdue: false }),
-  );
-});
-
-it("keeps the project filter when drilling into the personal overdue statistic", async () => {
-  const { onFiltersChange } = renderView({ filters: { projectId: 1 } });
-  await userEvent.click(
-    await screen.findByRole("button", { name: /项我负责的任务已逾期/ }),
-  );
-  expect(onFiltersChange).toHaveBeenLastCalledWith(
-    expect.objectContaining({ scope: "mine", projectId: 1, overdue: true }),
-  );
-});
-
-it("keeps the project when drilling into its overdue statistic", async () => {
-  const { onFiltersChange } = renderView({
-    filters: { scope: "project", projectId: 1 },
-  });
-  await userEvent.click(
-    await screen.findByRole("button", { name: /项我负责的任务已逾期/ }),
-  );
-  expect(onFiltersChange).toHaveBeenLastCalledWith(
-    expect.objectContaining({ scope: "mine", projectId: 1, overdue: true }),
   );
 });
 

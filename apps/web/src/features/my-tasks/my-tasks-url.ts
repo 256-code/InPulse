@@ -14,7 +14,7 @@ import type {
  *
  * 参数约定：scope=mine|created|project|all、project=<项目 id>、
  * status=open|done|all、priority、level、relation、record=yes|no、
- * github=yes|no、canceled=1、q=<关键词>、view=cards|list、more=1、today=1|0、overdue=1。
+ * github=yes|no、canceled=1、q=<关键词>、view=cards|list、more=1、today=1、overdue=1。
  * 与默认值相同的项不写入 URL；非法值一律回退默认值。
  */
 
@@ -24,8 +24,9 @@ export const DEFAULT_MY_TASK_FILTERS: MyTaskFilters = {
   scope: "mine",
   projectId: null,
   status: "open",
-  // 今日待办是「未完成」视图的缺省口径：不带参数打开任务中心即看今日待办。
-  todayTodo: true,
+  // 2026-09-21 起「今日待办」不再有 UI 入口（原四张统计卡已删除）：缺省口径
+  // 是「全部未完成任务」，只有显式 ?today=1 才收窄到今日待办。
+  todayTodo: false,
   priority: null,
   level: null,
   relation: null,
@@ -76,21 +77,11 @@ function readPositiveId(raw: string | null): number | null {
 
 /**
  * 「今日待办」只在工作状态为「未完成」时有意义：服务端 todayTodo 与 DONE / CANCELED 求交恒为空。
- * URL 不带 today 时按工作状态推断——未完成 → 今日待办（任务中心默认落地视图），
- * 已完成 / 全部 → 关闭，避免旧链接（如 ?status=done）被静默套上今日筛选而显示空页。
+ * 2026-09-21 起工具栏只提供「未完成 / 已完成」两档，今日待办不再有 UI 入口，
+ * 因此不带 today 时一律按「全部未完成任务」处理，只有显式 today=1 才收窄。
  */
-function defaultTodayTodo(status: MyTaskStatusFilter): boolean {
-  return status === "open";
-}
-
-function readTodayTodo(
-  params: URLSearchParams,
-  status: MyTaskStatusFilter,
-): boolean {
-  const raw = params.get("today");
-  if (raw === "1") return true;
-  if (raw === "0") return false;
-  return defaultTodayTodo(status);
+function readTodayTodo(params: URLSearchParams): boolean {
+  return params.get("today") === "1";
 }
 
 export interface ReadMyTaskFiltersOptions {
@@ -109,7 +100,7 @@ export function readMyTaskFilters(
     scope: scope === "all" && options.isAdmin !== true ? "mine" : scope,
     projectId: readPositiveId(params.get("project")),
     ...(params.get("overdue") === "1" ? { overdue: true } : {}),
-    todayTodo: readTodayTodo(params, status),
+    todayTodo: readTodayTodo(params),
     status,
     priority: pick(priorityValues, params.get("priority")),
     level: pick(levelValues, params.get("level")),
@@ -152,10 +143,10 @@ export function writeMyTaskFilters(
   if (filters.display !== DEFAULT_MY_TASK_FILTERS.display)
     params.set("view", filters.display);
   if (filters.overdue) params.set("overdue", "1");
-  // 今日待办只在「未完成」视图下存在：缺省（未完成 + 今日待办）不写参数，
-  // 「未完成但不限今日」写 today=0；已完成 / 全部视图不存在该筛选，不写。
-  if (filters.status === "open" && filters.todayTodo === false)
-    params.set("today", "0");
+  // 今日待办只在「未完成」视图下存在，且缺省即「全部未完成」：
+  // 只有显式收窄到今日待办才写 today=1；已完成 / 全部视图不存在该筛选，不写。
+  if (filters.status === "open" && filters.todayTodo === true)
+    params.set("today", "1");
   if (options.advancedOpen === true) params.set(MY_TASKS_MORE_PARAM, "1");
   return params;
 }

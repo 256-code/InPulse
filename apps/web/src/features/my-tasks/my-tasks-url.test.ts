@@ -28,7 +28,7 @@ describe("my-tasks-url", () => {
       hasGithub: "yes",
       includeCanceled: true,
       query: "登录",
-      // 已完成 / 全部视图不存在今日待办筛选（与读 URL 的推断一致），显式写 false 才能往返一致。
+      // 缺省口径即「全部未完成」（todayTodo=false）；只有显式 today=1 才收窄到今日待办。
       todayTodo: false,
       display: "list",
     };
@@ -45,6 +45,20 @@ describe("my-tasks-url", () => {
         advancedOpen: false,
       }).toString(),
     ).toBe("");
+  });
+
+  it("narrows to the today todo view only when today=1 is present", () => {
+    expect(readMyTaskFilters(new URLSearchParams()).todayTodo).toBe(false);
+    expect(readMyTaskFilters(new URLSearchParams("today=1")).todayTodo).toBe(
+      true,
+    );
+    // 只有显式收窄才写参数；缺省（全部未完成）不写，地址栏不出现 today=0 噪音。
+    expect(
+      writeMyTaskFilters({ ...DEFAULT_MY_TASK_FILTERS, todayTodo: true }).get(
+        "today",
+      ),
+    ).toBe("1");
+    expect(writeMyTaskFilters(DEFAULT_MY_TASK_FILTERS).get("today")).toBeNull();
   });
 
   it("writes and reads the project filter for every scope", () => {

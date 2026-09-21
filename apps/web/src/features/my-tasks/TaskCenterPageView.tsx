@@ -5,10 +5,7 @@ import {
   type InpulseApiClient,
   type ProjectItem,
 } from "@generated/api";
-import {
-  InpulseIcon,
-  type InpulseIconName,
-} from "@features/common/components/InpulseIcon";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -79,7 +76,7 @@ const priorityOrder: readonly MyTaskPriority[] = [
 ];
 
 /**
- * 列表区块只保留空态文案：工作状态由上方统计卡的选中态表达，
+ * 列表区块只保留空态文案：工作状态由工具栏「未完成 / 已完成」筛选项表达，
  * 「未完成 / n 项 · 服务端按任务编号倒序」两行文字已按产品要求删除（2026-09-20）。
  * 空态仍必须跟随工作状态，否则「已完成 0 项」会看起来像数据丢失。
  */
@@ -89,23 +86,22 @@ const listEmptyTitles: Record<MyTaskStatusFilter, string> = {
   all: "没有匹配的任务",
 };
 
-/**
- * 统计卡选中态：四张卡各对应一组筛选，按当前筛选反推唯一命中项。
- * 今日待办是「未完成」视图的缺省口径（todayTodo 未显式关闭即今日待办）；
- * 组合对不上（例如 URL 直接给 scope=all 或 status=all）时不选中任何卡，
- * 避免误报「列表当前就是这个口径」。
- */
-function selectedStatCardKey(filters: MyTaskFilters): string | null {
-  if (filters.scope === "created" && filters.status === "all") return "created";
-  if (filters.scope === "mine" && filters.status === "done") return "completed";
-  if (filters.scope === "mine" && filters.status === "open")
-    return filters.todayTodo === false ? "my-open" : "today-todo";
-  return null;
-}
-
 const displayOptions = [
   { value: "cards" as const, label: "卡片" },
   { value: "list" as const, label: "列表" },
+];
+
+/**
+ * 工具栏「工作状态」筛选（2026-09-21 定案）：承接原先由四张统计卡承担的工作状态切换，
+ * 只保留产品要求的「未完成 / 已完成」两档；URL 里遗留的 status=all 不属于任何档位，
+ * 因此不高亮任何一项，而不是把它误报成「未完成」。
+ */
+const statusOptions: ReadonlyArray<{
+  readonly value: MyTaskStatusFilter;
+  readonly label: string;
+}> = [
+  { value: "open", label: "未完成" },
+  { value: "done", label: "已完成" },
 ];
 
 const filterGapLabels: Record<MyTasksFilterGap, string> = {
@@ -204,9 +200,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     groupsQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const result = taskQuery.data;
   const items = result?.items ?? [];
-  const stats = result?.stats ?? null;
   const leftoverCount = result?.leftoverCount ?? null;
-  const leftoverSample = result?.leftoverSample ?? null;
   const filterSupport: MyTasksFilterSupport =
     result?.filterSupport ?? MY_TASKS_FULL_FILTER_SUPPORT;
   /**
@@ -244,10 +238,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const canceledItems = visibleItems.filter(
     (item) => item.workStatus === "CANCELED",
   );
-  const overdueItem = openItems.find((item) => isOverdue(item)) ?? null;
   /**
    * 主列表取当前工作状态对应的集合：「已完成 / 全部」的结果必须直接可见，
-   * 否则统计数据卡切到「已完成」时页面上仍只有「未完成 0 项」与空态。
+   * 否则工具栏切到「已完成」时页面上仍只有「未完成 0 项」与空态。
    */
   const primaryItems =
     filters.status === "done"
@@ -261,7 +254,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
    * 已合并任务被隐藏时同理，它由聚合组卡片代表。
    */
   const hasListContent = primaryItems.length > 0 || groups.length > 0;
-  const selectedCardKey = selectedStatCardKey(filters);
   /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
   const todayTodoActive =
     filters.status === "open" && filters.todayTodo !== false;
@@ -271,7 +263,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   /** 空态按范围说明服务端边界：R-3 的负责人固定为当前会话用户。 */
   const listEmptyDescription = todayTodoActive
     ? filters.projectId === null
-      ? "逾期、遗留、紧急或 7 天内到期的未完成任务会出现在这里；点「未完成」卡可看全部未完成任务。"
+      ? "今日待办只含逾期、遗留、紧急或 7 天内到期的任务；点工具栏「未完成」可看全部未完成任务。"
       : "当前项目没有逾期、遗留、紧急或 7 天内到期的未完成任务。"
     : filters.projectId !== null
       ? "当前项目没有符合条件的任务，可调整筛选或新建任务。"
@@ -288,94 +280,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       ...patch,
     });
   };
-
-  const statCards: ReadonlyArray<{
-    readonly key: string;
-    readonly label: string;
-    readonly value: number | string;
-    readonly hint: string;
-    readonly icon: InpulseIconName;
-    readonly tone: string;
-    readonly onSelect: () => void;
-  }> = [
-    {
-      key: "today-todo",
-      label: "今日待办",
-      value: stats === null ? "—" : stats.todayTodo,
-      // 四个来源子计数各自独立、可以重叠，其并集即总数；卡片等宽，这里只做一行说明。
-      hint:
-        stats === null
-          ? "聚合统计暂未接入"
-          : "逾期 " +
-            String(stats.todayTodoBreakdown.overdue) +
-            " · 遗留 " +
-            String(stats.todayTodoBreakdown.leftover) +
-            " · 紧急 " +
-            String(stats.todayTodoBreakdown.urgent) +
-            " · 7 天内 " +
-            String(stats.todayTodoBreakdown.dueWithinDays),
-      icon: "calendar",
-      tone: "blue",
-      onSelect: () =>
-        update({
-          scope: "mine",
-          status: "open",
-          todayTodo: true,
-          overdue: false,
-          query: "",
-          priority: null,
-          level: null,
-          relation: null,
-          hasRecord: null,
-          hasGithub: null,
-        }),
-    },
-    {
-      key: "my-open",
-      label: "未完成",
-      value: stats === null ? "—" : stats.myOpen,
-      hint: stats === null ? "聚合统计暂未接入" : "我负责且尚未完成的任务",
-      icon: "clipboard",
-      tone: "violet",
-      onSelect: () =>
-        update({
-          scope: "mine",
-          status: "open",
-          todayTodo: false,
-          overdue: false,
-        }),
-    },
-    {
-      key: "completed",
-      label: "已完成",
-      value: stats === null ? "—" : stats.completed,
-      hint: stats === null ? "聚合统计暂未接入" : "已完成任务不会消失",
-      icon: "check",
-      tone: "green",
-      onSelect: () =>
-        update({
-          scope: "mine",
-          status: "done",
-          todayTodo: false,
-          overdue: false,
-        }),
-    },
-    {
-      key: "created",
-      label: "我创建的",
-      value: stats === null ? "—" : stats.created,
-      hint: stats === null ? "聚合统计暂未接入" : "无论任务指派给谁",
-      icon: "user",
-      tone: "cyan",
-      onSelect: () =>
-        update({
-          scope: "created",
-          status: "all",
-          todayTodo: false,
-          overdue: false,
-        }),
-    },
-  ];
 
   /**
    * 任务中心只做跨项目查看与定位，不复制功能档案的写入口（状态推进 / 生成迭代记录 /
@@ -715,106 +619,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         </div>
       ) : null}
 
-      {(stats !== null && stats.todayTodoBreakdown.overdue > 0) ||
-      (leftoverCount !== null && leftoverCount > 0) ? (
-        <div className="risk-strip">
-          {stats !== null && stats.todayTodoBreakdown.overdue > 0 ? (
-            <button
-              type="button"
-              className="risk-banner"
-              onClick={() =>
-                // 项目筛选是常驻条件：钻取个人逾期明细不会清掉已选项目，
-                // 否则统计卡与列表会在点击后静默换成全局口径。
-                update({
-                  scope: "mine",
-                  status: "open",
-                  overdue: true,
-                  todayTodo: false,
-                  query: "",
-                  priority: null,
-                  level: null,
-                  relation: null,
-                  hasRecord: null,
-                  hasGithub: null,
-                })
-              }
-            >
-              <InpulseIcon name="alert" size={20} />
-              <span>
-                <strong>
-                  {stats.todayTodoBreakdown.overdue} 项我负责的任务已逾期
-                </strong>
-                <small>
-                  {overdueItem === null
-                    ? "切换到我的任务查看明细"
-                    : overdueItem.code +
-                      " " +
-                      overdueItem.title +
-                      " · " +
-                      (dueLabel(overdueItem) ?? "—")}
-                </small>
-              </span>
-              <span className="risk-action">
-                处理
-                <InpulseIcon name="chevronRight" size={16} />
-              </span>
-            </button>
-          ) : null}
-          {leftoverCount !== null && leftoverCount > 0 ? (
-            <button
-              type="button"
-              className="risk-banner risk-banner-amber"
-              onClick={onOpenIssues}
-            >
-              <InpulseIcon name="alert" size={20} />
-              <span>
-                <strong>{leftoverCount} 条遗留问题尚未闭环</strong>
-                <small>
-                  {leftoverSample === null
-                    ? "在遗留问题页继续处理"
-                    : "来自 " +
-                      leftoverSample.recordCode +
-                      " " +
-                      leftoverSample.summary}
-                </small>
-              </span>
-              <span className="risk-action">
-                转为任务
-                <InpulseIcon name="chevronRight" size={16} />
-              </span>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="stats-grid">
-        {statCards.map((card) => {
-          const selected = card.key === selectedCardKey;
-          return (
-            <button
-              key={card.key}
-              type="button"
-              className={
-                "stat-card stat-card-button" +
-                (selected ? " stat-card-selected" : "")
-              }
-              data-testid={"stat-" + card.key}
-              aria-pressed={selected}
-              onClick={card.onSelect}
-            >
-              <span className={"stat-icon " + card.tone}>
-                <InpulseIcon name={card.icon} size={19} />
-              </span>
-              <span className="stat-body">
-                <span>{card.label}</span>
-                <strong>{card.value}</strong>
-                <small>{card.hint}</small>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
       {filters.overdue && (
         <p>
           仅显示已逾期任务
@@ -837,6 +641,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
+        <CalmSegmented
+          label="工作状态"
+          value={filters.status}
+          options={statusOptions}
+          onChange={(status) => update({ status })}
+        />
         {/* 下拉自身已显示「全部项目 / 项目名」，重复的文字标签已按产品要求删除；
             无障碍定位仍由 CalmSelect 的 aria-label 提供。 */}
         <CalmSelect
@@ -1007,8 +817,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       ) : (
         <>
           {/*
-            工作状态已由上方统计卡选中态表达，这里不再重复标题与「n 项 · 排序」两行文字，
-            只留展示方式图标（列表当前是卡片还是表格）。
+            工作状态已由工具栏「未完成 / 已完成」筛选表达，这里不再重复标题与
+            「n 项 · 排序」两行文字，只留展示方式图标（列表当前是卡片还是表格）。
           */}
           <div className="task-list-mark">
             <InpulseIcon

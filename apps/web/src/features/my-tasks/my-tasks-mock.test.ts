@@ -22,8 +22,9 @@ describe("my-tasks mock adapter", () => {
     const result = await fetchDefault();
     expect(result.filterSupport).toEqual(MY_TASKS_FULL_FILTER_SUPPORT);
     expect(result.items.every((item) => item.workStatus === "TODO")).toBe(true);
-    // 默认筛选是「未完成 + 今日待办」：T-108（20 天后到期、非紧急、无遗留）不在今日待办里。
-    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103"]);
+    // 默认筛选是「我负责的全部未完成」：T-108（20 天后到期、非紧急、无遗留）也在缺省视图里，
+    // 只有显式 todayTodo 才收窄到今日待办。
+    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-103", "T-108"]);
     expect(result.items.find((item) => item.code === "T-102")?.groupId).toBe(
       501,
     );
@@ -51,7 +52,13 @@ describe("my-tasks mock adapter", () => {
 
   it("filters the created scope by creator instead of assignee", async () => {
     const result = await fetchDefault({ scope: "created" });
-    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-105", "T-103"]);
+    expect(codesOf(result.items)).toEqual([
+      "T-101",
+      "T-102",
+      "T-105",
+      "T-103",
+      "T-108",
+    ]);
   });
 
   it("filters the project scope by project id", async () => {
@@ -61,7 +68,14 @@ describe("my-tasks mock adapter", () => {
 
   it("orders the admin scope across all projects", async () => {
     const result = await fetchDefault({ scope: "all" });
-    expect(codesOf(result.items)).toEqual(["T-101", "T-102", "T-105", "T-103"]);
+    expect(codesOf(result.items)).toEqual([
+      "T-101",
+      "T-102",
+      "T-105",
+      "T-103",
+      "T-110",
+      "T-108",
+    ]);
   });
 
   it("supports priority, level, relation, record and github filters", async () => {
@@ -89,10 +103,13 @@ describe("my-tasks mock adapter", () => {
     expect(
       codesOf((await fetchDefault({ query: "标题不存在的词" })).items),
     ).toEqual([]);
-    // T-108 不在今日待办里，这条搜索用例按「未完成」视图取数。
+    // T-108（20 天后到期）在缺省「全部未完成」视图里；显式收窄到今日待办后不再命中。
+    expect(codesOf((await fetchDefault({ query: "t-108" })).items)).toEqual([
+      "T-108",
+    ]);
     expect(
-      codesOf((await fetchDefault({ query: "t-108", todayTodo: false })).items),
-    ).toEqual(["T-108"]);
+      codesOf((await fetchDefault({ query: "t-108", todayTodo: true })).items),
+    ).toEqual([]);
   });
 
   it("computes date-independent stats and leftover facts for the scope", async () => {

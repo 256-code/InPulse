@@ -68,12 +68,11 @@ describe("my tasks server adapter", () => {
       viewerId: 2,
     });
 
-    // 默认筛选是「未完成 + 今日待办」，todayTodo 会随请求一起下发。
+    // 默认筛选是「我负责的全部未完成」：工具栏只有工作状态两档，不再下发 todayTodo。
     expect(listTaskCenter).toHaveBeenCalledWith({
       scope: "mine",
       limit: 20,
       workStatus: "TODO",
-      todayTodo: true,
     });
     expect(result.items).toEqual([
       {
@@ -126,7 +125,6 @@ describe("my tasks server adapter", () => {
       scope: "mine",
       limit: 20,
       workStatus: "TODO",
-      todayTodo: true,
       priority: "HIGH",
       includeCanceled: true,
     });
@@ -227,7 +225,7 @@ describe("my tasks server adapter", () => {
   });
 
   it("keeps the notice explicit about the wired data and the remaining gaps", () => {
-    expect(MY_TASKS_SERVER_NOTICE).toContain("统计卡片");
+    expect(MY_TASKS_SERVER_NOTICE).toContain("工作状态");
     expect(MY_TASKS_SERVER_NOTICE).toContain("项目筛选");
     expect(MY_TASKS_SERVER_NOTICE).toContain("我创建的");
   });

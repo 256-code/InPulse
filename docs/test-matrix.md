@@ -2581,6 +2581,41 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿为什么没有发布入口是产品口径问题，若要求补上需先确认 F-19 任务完成事务的边界；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
 
+## 任务中心删除统计卡与「未完成 / 已完成」筛选（C，2026-09-21 本地落库）
+
+产品截图反馈：① 任务中心头部的逾期风险条与四张统计卡（今日待办 / 未完成 / 已完成 / 我创建的）整块删除；② 筛选行新增「未完成 / 已完成」筛选；③ 登录当前网站默认进入任务中心，且默认呈现未完成任务卡片。
+
+锁定口径：
+
+- 工作状态筛选：工具栏新增 `CalmSegmented`（`role=group`，无障碍名称为「工作状态」）两档「未完成 / 已完成」，位置在搜索框之后、项目下拉之前；选中档写 URL `status=open|done`（`open` 是默认值因此省略）。
+- 删除面：`risk-strip`（逾期红条 + 遗留问题黄条）、`stats-grid`（四张 `stat-card`）、`selectedStatCardKey` 与 `statCards` 一起删除；服务端仍返回 `stats` / `leftoverSample`，前端不再读取（契约未改）。遗留问题入口保留在页头「遗留问题 n」按钮。
+- 默认口径变化：`DEFAULT_MY_TASK_FILTERS.todayTodo` 由 `true` 改为 `false`。今日待办不再是落地视图（它原来的唯一 UI 入口就是被删掉的统计卡），因此缺省是「我负责的全部未完成任务」，请求不再下发 `todayTodo`。
+- `today=1` 仍然可用（URL 直达时收窄到今日待办），`writeMyTaskFilters` 只在显式打开该筛选时写 `today=1`，不再写噪音参数 `today=0`。
+- 登录落地：`LoginPage` 的默认目标是 `/`，`AppRouter` 的 index 路由 `Navigate to=/tasks`，因此登录后默认进任务中心；本次只改默认筛选，不改路由。
+- 页头间距：原本 `.page-header { margin-bottom: 27px }` 与 `.task-toolbar { margin-top: 30px }` 折叠后取 30px，而 `.page-header h1` 行高 40.5px 里表意文字只占 27px（上下各 6.75px 半行距），所以视觉上标题到筛选行约 44px、筛选行到卡片只有 30px。新增 `.task-center .page-header { margin-bottom: 15px }` 与 `.task-center .task-toolbar { margin-top: 15px }`，把标题墨迹到筛选行对齐到约 30px；只作用于任务中心，活动 / 迭代记录 / 遗留问题页共用 `.task-toolbar` 的 30px 上间距不变。
+- 样式：`design-system.css` 删除 `.stats-grid` / `.stat-card*` / `.stat-icon*` / `.stat-body*` / `.risk-banner*` / `.risk-strip` 死规则（含两处媒体查询与一处合并选择器），`inpulse-design.css` 删除对应的统计卡调优块，共 222 行。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CENTER-STATS-UNIT-001 | Web 单元 | 统计卡与风险条整体消失 | `TaskCenterPageView.test.tsx`：默认渲染下 `stat-my-open` 查询为空，`document.querySelector` 取 `.stats-grid` 与 `.risk-strip` 均为 null | 本地通过 |
+| TASK-CENTER-STATS-UNIT-002 | Web 单元 | 工作状态筛选默认与切换 | 同一用例断言「工作状态」组内「未完成」`aria-pressed` 为 `true`、「已完成」为 `false`；「reports the work-status change from the toolbar filter」点「已完成」发出 `status=done` 并清 `overdue` / `todayTodo`，点「未完成」回到 `status=open` | 本地通过 |
+| TASK-CENTER-STATS-UNIT-003 | Web 单元 | 空态跟随档位 | `status=done` 空集合给出「没有匹配的已完成任务」且「已完成」档选中；`status=all`（URL 直达）两档都不选中；缺省空态是「没有匹配的未完成任务」，不再出现「今天没有待办任务」；`todayTodo: true` 时仍给出更窄的今日待办空态 | 本地通过 |
+| TASK-CENTER-STATS-UNIT-004 | Web 单元 | URL 与请求的默认口径 | `my-tasks-url.test.ts`：空 URL 得 `todayTodo` 为 `false`、`?today=1` 得 `true`、显式 `todayTodo: true` 写出 `today=1`、缺省不写 `today`；`my-tasks-v1-query.test.ts` 与 `my-tasks-server.test.ts`：缺省请求不再带 `todayTodo`，只有显式 `todayTodo` 才下发 | 本地通过 |
+| TASK-CENTER-STATS-UNIT-005 | Web 单元 | 页面级写回 | `TasksPage.test.tsx` 改断言：点「已完成」后地址探针含 `status=done`，同时 `fetchMyTasks` 收到 `status: done` | 本地通过 |
+| TASK-CENTER-STATS-MOCK-001 | Web 单元 | mock 数据集口径 | `my-tasks-mock.test.ts`：缺省视图含 T-101 / T-102 / T-103 / T-108（20 天后到期也在内）；`created` 与管理员 `all` 视图补上 T-108 / T-110；搜索 T-108 时显式 `todayTodo: true` 命中为空 | 本地通过 |
+| TASK-CENTER-STATS-BROWSER-001 | 浏览器实测 | 登录默认落地 + 默认未完成 | 本地 dev 5173 登录（成员账号）：落地 URL 为 `/tasks`，`.task-toolbar .segmented` 两组（工作状态、展示方式），工作状态为「未完成 true / 已完成 false」，`.calm-task-card` 4 张，`.stats-grid` 与 `.risk-strip` 均为 0 个 | 本地通过 |
+| TASK-CENTER-STATS-BROWSER-002 | 浏览器实测 | 切换已完成 | 点「已完成」后 URL 变为 `/tasks?status=done`，列表换成已完成任务卡片（绿色完成态） | 本地通过 |
+| TASK-CENTER-STATS-BROWSER-003 | 浏览器实测 | 管理员视角无残留 | 系统管理员账号登录落地 `/tasks`：`.stats-grid` 0、`.risk-strip` 0，工作状态默认落在「未完成」 | 本地通过 |
+| TASK-CENTER-STATS-E2E-001 | Playwright | 关键路径改写 | `apps/e2e/tests/aggregate-views.spec.ts`：断言无统计卡 / 无风险条、工作状态分段可控、默认 URL 不带 `today`、`scope=created` 经 URL 直达仍下发 `ownership`（本地未实跑） | 已改写未实跑 |
+| TASK-CENTER-STATS-BROWSER-004 | 浏览器实测 | 页头间距与列表节奏一致 | 无头 Chromium 1440×900：标题墨迹底边到工具栏顶 29px、工具栏盒底边到卡片顶 30px、搜索框底边到卡片顶 32px（改前为 44px 对 30px） | 本地通过 |
+| TASK-CENTER-STATS-E2E-002 | Playwright | 间距回归断言 | `aggregate-views.spec.ts` 用 `page.evaluate` 按计算样式的行高与字号算出标题墨迹底边，断言「标题→工具栏」与「工具栏→卡片」两段间距相差不超过 4px（本地未实跑） | 已改写未实跑 |
+| TASK-CENTER-STATS-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 534 例通过 | 本地通过 |
+| TASK-CENTER-STATS-GATE-001 | 静态门禁 | 类型、风格、依赖边界与文档 | `pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（280 模块 1368 依赖）、`pnpm check:docs`（84 个 Markdown 文件）通过 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 534 例）、`pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`、`pnpm check:docs`；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，只用既有演示数据只读浏览，未新增或修改业务数据）。
+
+未运行 / 已知偏差：⓪ 页头间距的 Playwright 断言（`TASK-CENTER-STATS-E2E-002`）只改写未实跑，本地没有独立 E2E 数据库（`E2E_DATABASE_URL`），未拿演示库代替；① 未跑 `pnpm build`、`check:deps`、`permissions:check`、`pnpm test:e2e` 实跑与真实 PostgreSQL 集成测试，GitHub Actions 未执行；② 删除统计卡后「今日待办」「我创建的」不再有 UI 入口（`?today=1`、`?scope=created` 仍可直达），「逾期钻取」入口消失但 `overdue` 参数与「仅显示已逾期任务」提示条保留，若产品需要找回入口需先确认位置；③ 服务端仍返回 `stats` / `leftoverSample` / `todayTodoBreakdown`，前端不再读取，契约与 OpenAPI 未动；④ `.view-description` 与「更多筛选」触发按钮仍是 `display:none` 的历史约定，本次未动；⑤ 视觉与文案需非作者人工评审。
+
 ## 任务聚合组改为任务卡片混排（产品要求，2026-09-21 本地落库）
 
 产品截图反馈（`/tasks` 任务卡片网格下方的「任务聚合组」区块）：「把任务聚合组也改成任务卡片，和其他任务卡片一起呈现」。本批为纯前端呈现改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。

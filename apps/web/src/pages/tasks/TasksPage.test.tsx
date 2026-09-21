@@ -313,16 +313,21 @@ describe("TasksPage", () => {
     const user = userEvent.setup();
     await waitFor(() => expect(fetchMyTasks).toHaveBeenCalledTimes(1));
 
-    // 范围分段行已移除：范围由上方统计卡设定（我创建的 = 创建人维度）。
-    await user.click(await screen.findByTestId("stat-created"));
+    // 工作状态由工具栏「未完成 / 已完成」筛选设定：切到「已完成」写入 URL 并重新查询。
+    await user.click(
+      within(screen.getByRole("group", { name: "工作状态" })).getByRole(
+        "button",
+        { name: "已完成" },
+      ),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("location-probe")).toHaveTextContent(
-        "scope=created",
+        "status=done",
       ),
     );
     await waitFor(() =>
       expect(fetchMyTasks).toHaveBeenLastCalledWith({
-        filters: expect.objectContaining({ scope: "created" }),
+        filters: expect.objectContaining({ status: "done" }),
         viewerId: 1,
         cursor: null,
       }),

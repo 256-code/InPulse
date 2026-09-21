@@ -10,13 +10,13 @@ import {
 /**
  * F-29 项目主页（概览已并入模块与功能）/ F-32 任务中心的专属关键路径 E2E。
  * 两个页面默认注入服务端适配器（R-2 / R-3）：这里验证真实服务端数据进入
- * 视图（统计卡片、优先级筛选、遗留问题总数与优先级徽章）、仍无契约来源的
- * 条件按显式降级处理（关键词搜索只对已加载页生效并标注，「我创建的」经
+ * 视图（工具栏工作状态筛选、优先级筛选、遗留问题总数与优先级徽章）、仍无契约
+ * 来源的条件按显式降级处理（关键词搜索只对已加载页生效并标注，「我创建的」经
  * ownership 参数接入服务端），
  * 以及 F-30 约定下筛选状态由 URL 承载。
  */
 
-test("F-32 任务中心：真实任务进入列表，统计与优先级接线，筛选状态写入 URL", async ({
+test("F-32 任务中心：真实任务进入列表，工作状态与优先级接线，筛选状态写入 URL", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -55,50 +55,34 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
 
     const notice = page.getByTestId("task-center-mock-notice");
     // 设计师稿 task-center.tsx 没有「接口说明」黄条：默认服务端适配器下页面只呈现
-    // 统计、风险条与任务列表，骨架数据提示只在 mock 降级时出现。
+    // 工具栏筛选与任务列表，骨架数据提示只在 mock 降级时出现。
     await expect(notice).toHaveCount(0);
 
-    // 四张统计卡：今日待办（含四个来源胶囊）/ 未完成 / 已完成 / 我创建的。
-    await expect(page.getByTestId("stat-today-todo")).toBeVisible();
-    await expect(page.getByTestId("stat-completed")).toBeVisible();
-    await expect(page.getByTestId("stat-created")).toBeVisible();
+    // 2026-09-21 定案：逾期风险条与四张统计卡（今日待办 / 未完成 / 已完成 / 我创建的）
+    // 整体删除，工作状态改由工具栏分段控件承担（缺省落在「未完成」）。
+    await expect(page.locator(".stats-grid")).toHaveCount(0);
+    await expect(page.locator(".risk-strip")).toHaveCount(0);
+    await expect(page.getByTestId("stat-my-open")).toHaveCount(0);
+    await expect(page.getByTestId("stat-created")).toHaveCount(0);
 
-    // 第二轮契约接线：统计卡片为服务端实时数字、优先级筛选可用；
-    // 「我创建的」由 R-3 的 ownership 参数承载，可点击并走服务端过滤。
-    await expect
-      .poll(async () =>
-        Number.parseInt(
-          (await page
-            .getByTestId("stat-my-open")
-            .locator("strong")
-            .textContent()) ?? "",
-          10,
-        ),
-      )
-      .toBeGreaterThan(0);
+    const statusFilter = page.getByRole("group", { name: "工作状态" });
+    await expect(
+      statusFilter.getByRole("button", { name: "未完成" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      statusFilter.getByRole("button", { name: "已完成" }),
+    ).toHaveAttribute("aria-pressed", "false");
     await expect(page.getByLabel("搜索任务")).toBeEnabled();
     await expect(page.getByLabel("优先级")).toBeEnabled();
     // 范围分段行已移除：工具栏常驻项目筛选（默认「全部项目」），与遗留问题页同口径；
     // 2026-09-20 起去掉与下拉内容重复的「项目」文字标签，改为直接断言下拉本身。
     await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
 
-    // 默认落地是「今日待办」（未完成里逾期 / 遗留 / 紧急 / 7 天内到期的子集）：
-    // 今日待办卡必须是选中态，「未完成」卡则是普通态。
-    await expect(page.getByTestId("stat-today-todo")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(page.getByTestId("stat-my-open")).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-
-    // 服务端真实数据：切到「未完成」（不限今日）看刚创建的任务——它没有截止时间，
-    // 不属于今日待办，因此先点未完成卡把今日待办关掉（URL 写 today=0）。
-    await page.getByTestId("stat-my-open").click();
+    // 缺省口径是「全部未完成任务」（不再默认收窄到今日待办）：URL 不写 today 参数，
+    // 刚创建的任务没有截止时间，也必须直接出现在卡片列表里。
     await expect
       .poll(() => new URL(page.url()).searchParams.get("today"))
-      .toBe("0");
+      .toBeNull();
 
     const taskCard = page
       .locator(".calm-task-card")
@@ -108,24 +92,58 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     await expect(taskCard.locator('[title="优先级：普通"]')).toHaveText("普通");
     await expect(taskCard).toContainText("未设置截止");
 
-    // 切到「我创建的」：范围由统计数据卡承接，任务中心请求必须携带
-    // scope=created 且状态写入 URL；本次刚用当前用户身份创建的任务
-    // （创建者=当前用户）仍然在列表中。
+    // 产品要求（2026-09-21）：标题「任务中心」到筛选行的距离，必须和筛选行到卡片的
+    // 距离一致。h1 行高 40.5px 而表意文字只占 27px，上下各有 6.75px 半行距，所以
+    // 比较的是标题可见墨迹的底边，不能直接拿 h1 行盒底边（那会少算半行距）。
+    const headerSpacing = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const element = document.querySelector(selector);
+        if (element === null) {
+          throw new Error("任务中心缺少元素：" + selector);
+        }
+        return element.getBoundingClientRect();
+      };
+      const title = document.querySelector(".task-center .page-header h1");
+      if (title === null) {
+        throw new Error("任务中心缺少标题");
+      }
+      const styles = getComputedStyle(title);
+      const halfLeading =
+        (Number.parseFloat(styles.lineHeight) -
+          Number.parseFloat(styles.fontSize)) /
+        2;
+      const inkBottom =
+        title.getBoundingClientRect().top +
+        halfLeading +
+        Number.parseFloat(styles.fontSize);
+      const toolbar = rect(".task-toolbar");
+      return {
+        titleToToolbar: toolbar.top - inkBottom,
+        toolbarToCards: rect(".calm-task-grid").top - toolbar.bottom,
+      };
+    });
+    expect(headerSpacing.titleToToolbar).toBeGreaterThan(0);
+    expect(
+      Math.abs(headerSpacing.titleToToolbar - headerSpacing.toolbarToCards),
+    ).toBeLessThanOrEqual(4);
+
+    // 「我创建的」卡片入口已删除，但 R-3 的 ownership 参数仍然生效：按 URL 直接打开
+    // scope=created 时，任务中心请求必须携带 scope=created，且这次由当前用户创建的任务
+    // （创建者=当前用户）仍在列表里。
     const createdRequest = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/v1/tasks" &&
         new URL(request.url()).searchParams.get("scope") === "created",
     );
-    await page.getByTestId("stat-created").click();
+    await page.goto("/tasks?scope=created");
     await createdRequest;
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get("scope"))
-      .toBe("created");
-    await expect(taskCard).toBeVisible();
+    await expect(page.getByTestId("task-center")).toBeVisible();
+    await expect(
+      page.locator(".calm-task-card").filter({ hasText: taskTitle }),
+    ).toBeVisible();
 
-    // 切回「未完成」（我负责的）：范围写回 URL 默认值（F-30 省略默认值）。
-    // 只断言 UI 状态：该范围查询在 staleTime 窗口内命中缓存，不保证重新发请求。
-    await page.getByTestId("stat-my-open").click();
+    // 回到缺省「全部未完成」视图：scope 参数不再写入 URL（F-30 省略默认值）。
+    await page.goto("/tasks");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("scope"))
       .toBeNull();
@@ -170,17 +188,16 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBeNull();
 
-    // F-30：筛选状态由 URL 承载，工作状态改由统计数据卡设定（工具条滑块已移除）。
-    await page.getByTestId("stat-completed").click();
+    // F-30：筛选状态由 URL 承载，工作状态由工具栏「未完成 / 已完成」筛选设定。
+    await statusFilter.getByRole("button", { name: "已完成" }).click();
     await expect
       .poll(() => new URL(page.url()).searchParams.get("status"))
       .toBe("done");
-    // 列表区块标题行与「n 项 · 排序」说明已按产品要求删除：工作状态只由统计卡选中态表达，
+    // 列表区块标题行与「n 项 · 排序」说明已按产品要求删除：工作状态只由工具栏筛选表达，
     // 切到「已完成」后既没有残留标题，也不能再出现任何「未完成」措辞。
-    await expect(page.getByTestId("stat-completed")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      statusFilter.getByRole("button", { name: "已完成" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".task-list-mark")).toHaveCount(1);
     await expect(page.getByText("没有匹配的未完成任务")).toHaveCount(0);
     await page
@@ -210,9 +227,9 @@ test("F-32 任务中心：真实任务进入列表，统计与优先级接线，
     // 任务中心不再跳转：重新进入 /tasks（卡片视图）后点击卡片，在当前页面就地
     // 弹出功能档案同款的任务详情弹窗，写操作（编辑 / 完成任务 / 合并 / 关联链接）
     // 仍只有这一个入口；地址栏与筛选参数保持不变，关闭后仍停留在任务中心。
-    // 重新进「未完成」（URL 写 today=0）：本用例的任务没有截止时间，
-    // 不属于默认的今日待办视图。
-    await page.goto("/tasks?today=0");
+    // 重新进任务中心：缺省即「全部未完成」，本用例的任务（没有截止时间）直接可见，
+    // 不再需要 today=0 这类旧参数。
+    await page.goto("/tasks");
     await expect(page.getByTestId("task-center")).toBeVisible();
     const navCard = page
       .locator(".calm-task-card")
