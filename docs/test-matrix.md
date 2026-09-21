@@ -2496,3 +2496,85 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-21，干净检出 worktree detached 于 `a3ee0ce`）：`pnpm --filter @inpulse/web exec vitest run src/features/project-tree` 3 文件 13 例通过；`pnpm --filter @inpulse/web test` 83 文件 528 例通过；`pnpm --filter @inpulse/web typecheck` 退出码 0；改动文件 `prettier --check`、`eslint` 通过；浏览器量测用本工作树自带的 Vite（:5199，代理到既有 API :3000）与无头 Chromium 完成，未新增或修改业务数据。
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check`、`check:deps`、`permissions:check`、Playwright 全套与 API / 数据库集成测试；② 项目很多时罗列区随内容变长、超出视口靠页面滚动（沿用上一版取舍）；③ 200px 为产品在浏览器里复核的值，未与设计稿标注逐项比对；④ 模块展开后的功能行也在同一 200px 区内滚动，功能层独立限高需另开需求；⑤ 前端与单测改动需非作者人工评审。
+
+## 迭代记录草稿箱去重与卡片尺寸对齐任务卡（C，2026-09-21 本地落库）
+
+产品截图反馈 `/records` 草稿区「有点重复、太占位置」，要求「草稿箱里的稿件是展现的而不是折叠的，每个草稿展示的大小参考任务卡，不太占位置但信息密度也不低」。
+
+锁定口径：
+
+- 去重：删掉顶部 `draft-strip`「我的草稿」条带（与下方卡片同源、同一批草稿渲染两遍）、删掉区块标题里的 `CalmBadge` 与第二个新建按钮、统一条带「继续编辑 →」与卡片「查看草稿」两套说法。
+- 不折叠：`CalmSectionTitle` 不再传 `collapsible`，`draftsOpen` state 与 `{draftsOpen && …}` 包裹一起删除，`#record-draft-list` 始终渲染。
+- 卡片尺寸：`calm-task-grid` / `calm-task-card` 换成 `draft-card-grid` / `draft-card`，三列网格、`min-height: 96px`、左侧琥珀竖条；卡片本身是 `button`，整卡可点。
+- 入口唯一：页头 CTA 文案由「记录一次迭代」改为「新建迭代记录」；`taskId > 0` 的「来源草稿」语境保留区块内「新建来源草稿」按钮。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFTS-CARD-001 | 浏览器实测 | 草稿箱默认平铺 | `/records?projectId=1`：`.draft-strip` 0 个、标题无折叠箭头、`.calm-section-title .badge` 0 个、区块内按钮 0 个 | 本地通过 |
+| RECORD-DRAFTS-CARD-002 | 浏览器实测 | 卡片尺寸 | `.draft-card` 1 张：高 100px、宽 371px（三列之一），`#record-draft-list` 高 100px（改前单列大卡 270px） | 本地通过 |
+| RECORD-DRAFTS-CARD-003 | 浏览器实测 | 整卡可点 | 点击 `.draft-card` 后 URL 带 `recordId`，「草稿详情」弹层可见 | 本地通过 |
+| RECORD-DRAFTS-CARD-004 | 浏览器实测 | 入口唯一 | 页头「新建迭代记录」按钮 1 个、旧文案「记录一次迭代」0 个；`/records`（全部项目）草稿区不渲染而 CTA 可用 | 本地通过 |
+| RECORD-DRAFTS-CARD-UNIT-001 | Web 单元 | 平铺与打开 | `RecordDraftsView.test.tsx`：`findAllByRole` 匹配 `/继续编辑/` 得到 1 张，点击后出现「草稿详情」弹层 | 本地通过 |
+| RECORD-DRAFTS-CARD-UNIT-002 | Web 单元 | 新建入口走页头令牌 | 两个独立草稿用例改为 `createToken` 0→1 触发弹窗（等 `onCanCreateChange(true)` 后再推进） | 本地通过 |
+| RECORD-DRAFTS-CARD-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
+| RECORD-DRAFTS-CARD-GATE-001 | 静态门禁 | 类型与风格 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm exec prettier --write`（9 文件）通过 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号在既有项目 1 的 `/records?projectId=1` 量测，未新增或修改业务数据）。
+
+未运行 / 已知偏差：① 删掉条带后跨项目草稿没有入口，待定是否在「全部项目」视图补跨项目草稿区；② 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；③ 五个 E2E 规格（`record-drafts`、`record-feed`、`record-publishing`、`record-lifecycle`、`external-links`）同步了定位字符串但未实跑；④ 用例「lists my drafts across projects through the global query and opens the owning project」是随条带功能一并移除，替代用例为「lists project drafts as flat cards and opens one straight away」；⑤ 卡片视觉与文案需非作者人工评审。
+
+## 全部项目视图草稿箱与草稿区位置（C，2026-09-21 本地落库）
+
+产品截图反馈：「为什么点进迭代记录草稿被隐藏了，我希望把草稿放在筛选条下方，点击进迭代记录就要展示」。
+
+锁定口径：
+
+- 入口恢复：`RecordDraftsView` 不再用 `{projectId > 0 && …}` 把整块包起来；全部项目视图（URL 不带 `projectId`）改走 `useMyRecordDraftsQuery`（`listMyRecordDrafts`，服务端只返回当前 actor 的草稿并回填项目名），区块标题变为「我的草稿」，卡片前缀补 `项目名 / `。
+- 两种来源归一：新增 `DraftCardItem { draft, projectName, moduleName, featureName, authorName }` 与 `toDraftCard()`，来源任务 / 项目草稿 / 全部项目三种来源产出同一张卡片模型；分页只对草稿列表生效（来源任务草稿是单页读取）。
+- 打开语义：`openDraft` 改用 `item.draft.projectId`（原实现写 URL 里的 `projectId`，全部项目视图下恒为 0），跨项目点卡片先切到草稿自己的项目再打开详情。
+- 位置：`RecordsWorkspace` 里 `<div className="record-drafts-block">` 从「页头 CTA 之下、筛选条之上」整块移到筛选条 `records-toolbar` 之后，两个视图都生效。
+- 名称回填：`/me/record-drafts` 不返回作者名（`authorName` 由项目草稿列表服务回填，跨项目列表没有这一步），全部项目视图用登录用户名兜底，不再显示「名称暂不可用」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFTS-ALLPROJ-001 | 浏览器实测 | 全部项目视图展示草稿箱 | `/records`：`.calm-section-title h3` = 「我的草稿」，`.draft-card` 1 张，卡片文案含「InPulse 研发交付平台 / 平台与访问」与登录用户名「特哥」 | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-002 | 浏览器实测 | 草稿区位于筛选条下方 | `/records` 与 `/records?projectId=1` 两个视图：`.record-drafts-block` 顶边（164）≥ `.records-toolbar` 底边（154） | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-003 | 浏览器实测 | 跨项目点卡片落到草稿自己的项目 | `/records` 点卡片后 URL = `/records?projectId=1&recordId=1135`，弹层显示「项目 InPulse 研发交付平台 / 模块 平台与访问」 | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-004 | 浏览器实测 | 项目内视图不改口径 | `/records?projectId=1`：标题仍是「项目草稿」，卡片 371×100 | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-UNIT-001 | Web 单元 | 全部项目视图列表与打开 | `RecordDraftsView.test.tsx`：`listMyRecordDrafts` 以 `{ limit: 20 }` 调用、「我的草稿」标题可见、卡片显示「风控项目 / 风控模块」、点开后 `getRecordDraft(5, 21)` | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-UNIT-002 | Web 单元 | 草稿区在筛选条之后 | `RecordsWorkspace.test.tsx`：`.records-toolbar` 相对 `[data-testid=drafts-block]` 为 `DOCUMENT_POSITION_FOLLOWING` | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
+| RECORD-DRAFTS-ALLPROJ-GATE-001 | 静态门禁 | 类型、风格与依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`（279 模块 1359 依赖）通过 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号在既有项目 1 上只读量测，未新增或修改业务数据）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 全部项目视图在没有任何草稿时会渲染「暂无草稿」空态，占位是否可接受待产品确认；③ 全部视图卡片的作者名用登录用户名兜底，`/me/record-drafts` 服务端仍未回填 `authorName`（要让该接口独立正确需另开后端契约变更）；④ 跨项目卡片仍复用 `recordId` 打开详情、不回填 `moduleId`，与项目内视图一致；⑤ 视觉与文案需非作者人工评审。
+
+## 弹窗页脚「新建迭代」（保存并发布，C，2026-09-21 本地落库）
+
+产品截图反馈：在「新建迭代记录」弹窗页脚原来「保存草稿」的位置增加一个按钮「新建迭代」，原本的「保存草稿」改成淡蓝色并位于「新建迭代」左侧。
+
+锁定口径：
+
+- 语义：「新建迭代」= 保存草稿后立刻发布成正式 v1（`publishChangeRecord`），调用方式与草稿详情的 `PublishRecordButton` 同构（CSRF + `If-Match` 用创建响应的 `rowVersion` + 独立 `Idempotency-Key`）；「保存草稿」语义不变，仍是只写草稿。
+- 文案：新建时主按钮为「新建迭代」；编辑一条未发布的独立草稿时同一动作为「保存并发布」。
+- 位置与配色：页脚两键右对齐，「保存草稿」在左、用既有淡蓝 `.soft-blue-button`（`#e6f2ff` / `#2472c3`），主按钮在右、用 `.primary-button`（`#1466d8` / 白字），两键同为 35px 高。
+- 来源任务的草稿不给发布入口：带 `taskId` 的记录必须由任务完成流程（F-19）在同一事务里发布，服务端也会因为任务不是 DONE 而拒绝，因此 `canPublish = !source && (item ? item.taskId === null : true)`，这种情况页脚维持单个主按钮「保存草稿」。
+- 发布失败不丢内容、不重复建：先建草稿再发布，发布失败时把弹窗切到刚建出来的那条草稿的编辑态并刷新草稿列表，重试是更新同一条而不是又建一条；错误仍走既有 `mutation.error` 提示。
+- 成功后跳转：`onSaved(draft, published)` 增加第二个参数，`RecordDraftsView` 在 `published` 非空时用 `publishedId` 落 URL（正式记录详情），否则维持原来的 `recordId`（草稿详情）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DRAFT-FOOTER-PUBLISH-UNIT-001 | Web 单元 | 新建并发布 | 填好四项后点「新建迭代」：`createIndependentRecordDraft(1, 2, body)` 与 `publishChangeRecord(1, 12, {}, init)` 各调用一次，`init.headers["If-Match"]` 为创建响应的 `"1"`、`x-csrf-token` 为签发的 token、`Idempotency-Key` 为字符串 | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-UNIT-002 | Web 单元 | 成功后落到正式记录 | 发布成功后编辑弹窗关闭，且不再打开「草稿详情」（URL 用 `publishedId` 而不是 `recordId`） | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-UNIT-003 | Web 单元 | 按钮层级 | 新建弹窗：「保存草稿」类名含 `soft-blue-button`、「新建迭代」类名含 `primary-button` | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-UNIT-005 | Web 单元 | 发布失败不重复建草稿 | `publishChangeRecord` 以 422 失败后弹窗留在原地并切到该草稿的编辑态（按钮变「保存并发布」、标题输入仍是原值），再点一次走 `updateIndependentRecordDraft(1, 12, …)` 且 `createIndependentRecordDraft` 仍只调用一次 | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-UNIT-004 | Web 单元 | 来源草稿不给发布入口 | 打开「新建来源草稿」弹窗：无「新建迭代」按钮，「保存草稿」类名含 `primary-button` | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-BROWSER-001 | 浏览器实测 | 位置与配色 | `/records?projectId=1` 打开「新建迭代记录」：页脚两键高 35px，「保存草稿」`rgb(230,242,255)` / `rgb(36,114,195)` 在 x=941，「新建迭代」`rgb(20,103,216)` / 白字在 x=1031（右端） | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案 | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「保存并发布」（蓝），提示语同步为「保存草稿可继续编辑；「保存并发布」会立即生成正式编号与 v1，之后只能新增版本或作废。」 | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-GATE-001 | 静态门禁 | 类型、风格与依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`（279 模块 1359 依赖）通过 | 本地通过 |
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号只读量测，未点「新建迭代」本身，未新增或修改业务数据）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿为什么没有发布入口是产品口径问题，若要求补上需先确认 F-19 任务完成事务的边界；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。

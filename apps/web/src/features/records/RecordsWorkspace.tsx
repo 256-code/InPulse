@@ -173,16 +173,8 @@ export function RecordsWorkspace({
           onClick={() => setCreateToken((token) => token + 1)}
         >
           <InpulseIcon name="plus" size={16} />
-          记录一次迭代
+          新建迭代记录
         </button>
-      </div>
-      <div className="record-drafts-block">
-        <RecordDraftsView
-          client={client}
-          createToken={createToken}
-          currentUserId={user?.id}
-          onCanCreateChange={reportCanCreate}
-        />
       </div>
       <div className="toolbar task-toolbar records-toolbar">
         <div className="task-search">
@@ -235,6 +227,15 @@ export function RecordsWorkspace({
               : [{ value: "PUBLISHED", label: "已发布" }]
           }
           onChange={selectStatus}
+        />
+      </div>
+      <div className="record-drafts-block">
+        <RecordDraftsView
+          client={client}
+          createToken={createToken}
+          currentUserId={user?.id}
+          currentUserName={user?.name}
+          onCanCreateChange={reportCanCreate}
         />
       </div>
       {projects.isError && (

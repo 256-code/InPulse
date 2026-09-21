@@ -4205,22 +4205,6 @@ a:focus-visible {
 .module-work-tabs {
   margin-bottom: 24px;
 }
-.draft-record {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  border: 1px dashed #cddbea;
-  padding: 18px;
-  margin-bottom: 12px;
-  border-radius: 8px;
-  background: #f8fbff;
-  text-align: left;
-  color: #4e6a85;
-}
-.draft-record strong {
-  flex: 1;
-}
 .record-workbench {
   padding: 26px;
 }
@@ -5133,19 +5117,6 @@ td.due-overdue {
   flex-shrink: 0;
 }
 
-.draft-strip {
-  margin-bottom: 22px;
-  padding: 18px 20px;
-  background: #fbfcfe;
-  border: 1px solid #e6edf4;
-  border-radius: 10px;
-}
-.draft-strip .calm-section-title {
-  margin-bottom: 12px;
-}
-.draft-strip .draft-record:last-child {
-  margin-bottom: 0;
-}
 .timeline-block {
   margin-bottom: 28px;
 }

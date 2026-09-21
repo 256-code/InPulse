@@ -43,16 +43,13 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
     await expect(
-      page.getByRole("dialog", { name: "草稿详情" }).getByText(title),
+      page.getByRole("region", { name: "草稿详情" }).getByText(title),
     ).toBeVisible();
 
-    // 我的草稿条带：B-3b 起跨项目并回填项目 / 模块名称。
-    const strip = page.getByRole("region", { name: "我的草稿" });
-    await expect(strip.getByText(title)).toBeVisible();
-    await expect(
-      strip.getByText(`${project.name} / 记录测试模块`),
-    ).toBeVisible();
-
+    // 草稿箱：项目草稿平铺成卡片，不再有单独的「我的草稿」条带。
+    const draftList = page.locator("#record-draft-list");
+    await expect(draftList.getByText(title)).toBeVisible();
+    await expect(draftList.getByText("记录测试模块")).toBeVisible();
     await page.getByRole("button", { name: "发布记录", exact: true }).click();
     const publish = page.getByRole("dialog", { name: "发布迭代记录" });
     await publish.getByRole("button", { name: "确认发布" }).click();
@@ -66,6 +63,8 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     // 默认全部项目：不选项目即可看到刚发布的记录，并带回项目名称。
     await page.goto("/records");
     await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
+    // 全部项目视图同样展示草稿箱（跨项目汇总当前用户的草稿），标题为「我的草稿」。
+    await expect(page.getByRole("heading", { name: "我的草稿" })).toBeVisible();
     const card = page.locator(".record-card").filter({ hasText: title });
     await expect(card).toBeVisible();
     await expect(card.getByText(`归属 ${project.name} /`)).toBeVisible();

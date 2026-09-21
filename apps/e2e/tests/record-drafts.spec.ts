@@ -106,13 +106,12 @@ for (const moduleScope of [false, true])
         await detail.getByRole("button", { name: "关闭", exact: true }).click();
         await expect(detail).toBeHidden();
         await expect(
-          page.getByRole("button", { name: "查看草稿" }),
+          page.getByRole("button", { name: /继续编辑/ }),
         ).toHaveCount(i);
       }
       await page
-        .locator(".calm-task-card")
+        .locator(".draft-card")
         .filter({ hasText: title + "第二条" })
-        .getByRole("button", { name: "查看草稿" })
         .click();
       await page.getByRole("button", { name: "继续编辑" }).click();
       const edit = page.getByRole("dialog", { name: "编辑草稿" });

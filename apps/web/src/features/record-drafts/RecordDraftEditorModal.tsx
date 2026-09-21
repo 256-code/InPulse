@@ -11,6 +11,7 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import {
   ApiError,
   type InpulseApiClient,
+  type PublishedRecord,
   type RecordDraftContent,
   type RecordDraftItem,
   type TaskRecordDraftsResponse,
@@ -27,7 +28,7 @@ import { recordDraftErrorMessage } from "./record-draft-errors";
 import "./record-drafts.css";
 
 /**
- * 弹窗要处理的目标：编辑已有草稿 / 从任务创建来源草稿 / 新建迭代记录。
+ * 弹窗要处理的目标：编辑已有草稿 / 从任务创建来源草稿 / 新建迭代记录（独立草稿）。
  * 每次传入新对象都视为一次「打开」，弹窗据此重置表单与冲突状态。
  */
 export type RecordDraftEditorTarget =
@@ -83,8 +84,14 @@ export function RecordDraftEditorModal({
   /** 调用方附加的可写条件（如来源任务已归档）；弹窗内部再叠加目标项目状态。 */
   writable: boolean;
   onClose: () => void;
-  /** 保存成功回调：调用方决定关闭、刷新或导航；缓存失效已由弹窗完成。 */
-  onSaved: (draft: RecordDraftItem) => void;
+  /**
+   * 保存成功回调：调用方决定关闭、刷新或导航；缓存失效已由弹窗完成。
+   * published 非空表示这次保存顺带发布成了正式迭代记录。
+   */
+  onSaved: (
+    draft: RecordDraftItem,
+    published?: PublishedRecord | null | undefined,
+  ) => void;
 }) {
   const cache = useQueryClient();
   // 409 后重新加载会拿到更新的来源或草稿版本：用内部覆盖保存最新目标，
@@ -113,7 +120,10 @@ export function RecordDraftEditorModal({
   /** 创建草稿的目标项目：草稿按项目创建，服务端不接受「全部项目」。 */
   const formProjectId = projectId > 0 ? projectId : createProjectId;
   const retry = useRef<{ signature: string; key: string } | null>(null);
+  const publishRetry = useRef<{ signature: string; key: string } | null>(null);
   const saving = useRef(false);
+  /** 当前正在跑的动作：两个页脚按钮各自显示自己的 loading。 */
+  const [pending, setPending] = useState<"save" | "publish" | null>(null);
   const lastTarget = useRef<RecordDraftEditorTarget | null>(null);
   const {
     control,
@@ -142,7 +152,12 @@ export function RecordDraftEditorModal({
   });
   const mutation = useMutation({
     retry: false,
-    mutationFn: async (edit: RecordDraftContent) => {
+    mutationFn: async (input: {
+      readonly edit: RecordDraftContent;
+      /** 保存后立即发布成正式迭代记录（页脚「新建迭代」/「保存并发布」）。 */
+      readonly publish: boolean;
+    }) => {
+      const edit = input.edit;
       const normalized: RecordDraftContent = {
         title: edit.title.trim(),
         contextProblem: edit.contextProblem.trim(),
@@ -194,43 +209,89 @@ export function RecordDraftEditorModal({
               : {}),
         },
       };
-      if (item && item.taskId !== null)
-        return api.updateTaskRecordDraft(
-          projectId,
-          item.moduleId,
-          item.taskId,
-          item.id,
-          normalized,
-          init,
+      const saved: RecordDraftItem =
+        item && item.taskId !== null
+          ? await api.updateTaskRecordDraft(
+              projectId,
+              item.moduleId,
+              item.taskId,
+              item.id,
+              normalized,
+              init,
+            )
+          : source
+            ? await api.createTaskRecordDraft(
+                projectId,
+                source.moduleId,
+                source.taskId,
+                body as Parameters<
+                  InpulseApiClient["createTaskRecordDraft"]
+                >[3],
+                init,
+              )
+            : item
+              ? await api.updateIndependentRecordDraft(
+                  projectId,
+                  item.id,
+                  normalized,
+                  init,
+                )
+              : await api.createIndependentRecordDraft(
+                  formProjectId,
+                  moduleId,
+                  body as Parameters<
+                    InpulseApiClient["createIndependentRecordDraft"]
+                  >[2],
+                  init,
+                );
+      if (!input.publish) return { draft: saved, published: null };
+      const publishSignature = saved.id + ":" + saved.rowVersion;
+      if (publishRetry.current?.signature !== publishSignature)
+        publishRetry.current = {
+          signature: publishSignature,
+          key: createIdempotencyKey("record-publish"),
+        };
+      try {
+        const publishCsrf = await api.issueCsrfToken();
+        const published = await api.publishChangeRecord(
+          saved.projectId,
+          saved.id,
+          {},
+          {
+            headers: {
+              "x-csrf-token": publishCsrf.csrfToken,
+              "If-Match": JSON.stringify(String(saved.rowVersion)),
+              "Idempotency-Key": publishRetry.current.key,
+            },
+          },
         );
-      if (source)
-        return api.createTaskRecordDraft(
-          projectId,
-          source.moduleId,
-          source.taskId,
-          body as Parameters<InpulseApiClient["createTaskRecordDraft"]>[3],
-          init,
-        );
-      if (item)
-        return api.updateIndependentRecordDraft(
-          projectId,
-          item.id,
-          normalized,
-          init,
-        );
-      return api.createIndependentRecordDraft(
-        formProjectId,
-        moduleId,
-        body as Parameters<InpulseApiClient["createIndependentRecordDraft"]>[2],
-        init,
-      );
+        publishRetry.current = null;
+        return { draft: saved, published };
+      } catch (error) {
+        // 发布失败时草稿已经落库：把弹窗切到这条草稿的编辑态并刷新列表，
+        // 重试「新建迭代」就是更新同一条，不会再建出重复草稿。
+        setOverride({ kind: "item", item: saved });
+        await cache.invalidateQueries({
+          queryKey: ["record-drafts", saved.projectId],
+        });
+        await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
+        await cache.invalidateQueries({
+          queryKey: ["task-record-drafts", projectId],
+        });
+        throw error;
+      }
     },
-    onSuccess: async (result) => {
+    onSuccess: async ({ draft, published }) => {
       retry.current = null;
-      onSaved(result);
-      cache.setQueryData(["record-draft", formProjectId, result.id], result);
+      onSaved(draft, published);
+      cache.setQueryData(["record-draft", formProjectId, draft.id], draft);
+      if (published)
+        cache.setQueryData(
+          ["published-record", published.projectId, published.id],
+          published,
+        );
       await cache.invalidateQueries({
-        queryKey: ["record-draft", formProjectId, result.id],
+        queryKey: ["record-draft", formProjectId, draft.id],
       });
       await cache.invalidateQueries({
         queryKey: ["record-drafts", formProjectId],
@@ -239,6 +300,9 @@ export function RecordDraftEditorModal({
       await cache.invalidateQueries({
         queryKey: ["task-record-drafts", projectId],
       });
+      // 刚发布的记录要立刻出现在时间线里，草稿箱则少一条。
+      if (published)
+        await cache.invalidateQueries({ queryKey: ["record-feed"] });
     },
   });
   // 每次传入新 target 视为一次打开：同步表单与范围选择器，清空冲突与错误态。
@@ -347,7 +411,7 @@ export function RecordDraftEditorModal({
     mutation.reset();
     setReloadError(null);
   };
-  const save = handleSubmit(async (edit) => {
+  const run = async (edit: RecordDraftContent, publish: boolean) => {
     if (
       saving.current ||
       !editor ||
@@ -359,14 +423,34 @@ export function RecordDraftEditorModal({
     )
       return;
     saving.current = true;
+    setPending(publish ? "publish" : "save");
     try {
-      await mutation.mutateAsync(edit);
+      await mutation.mutateAsync({ edit, publish });
     } catch {
       /* Preserve input and key. */
     } finally {
+      setPending(null);
       saving.current = false;
     }
-  });
+  };
+  const save = handleSubmit((edit) => run(edit, false));
+  const saveAndPublish = handleSubmit((edit) => run(edit, true));
+  /**
+   * 页脚主按钮：无来源任务的草稿可以直接发布成正式 v1。带来源任务时必须由任务完成
+   * 流程（F-19）发布，服务端会因为任务不是 DONE 拒绝，所以这里不给这个入口。
+   */
+  const canPublish = !source && (item ? item.taskId === null : true);
+  /** 两个页脚动作共用同一套禁用条件：不可写、有冲突或范围没选全都不能提交。 */
+  const submitBlocked =
+    mutation.isPending ||
+    !canWrite ||
+    conflict ||
+    !!merge ||
+    reloading ||
+    !!reloadError ||
+    (!item &&
+      !source &&
+      (!formProjectId || !moduleId || (scopeType === "FEATURE" && !featureId)));
   return (
     <Modal
       open={target !== null}
@@ -618,28 +702,33 @@ export function RecordDraftEditorModal({
               </span>
             )}
           </label>
-          <p>保存为草稿，可继续编辑；不会完成任务或发布记录。</p>
+          <p>
+            {canPublish
+              ? "保存草稿可继续编辑；" +
+                (item ? "「保存并发布」" : "「新建迭代」") +
+                "会立即生成正式编号与 v1，之后只能新增版本或作废。"
+              : "保存为草稿，可继续编辑；不会完成任务或发布记录。"}
+          </p>
         </div>
         <div className="calm-action-footer">
           <Button
             htmlType="submit"
-            className="primary-button"
-            loading={mutation.isPending}
-            disabled={
-              !canWrite ||
-              conflict ||
-              !!merge ||
-              reloading ||
-              !!reloadError ||
-              (!item &&
-                !source &&
-                (!formProjectId ||
-                  !moduleId ||
-                  (scopeType === "FEATURE" && !featureId)))
-            }
+            className={canPublish ? "soft-blue-button" : "primary-button"}
+            loading={pending === "save"}
+            disabled={submitBlocked}
           >
             保存草稿
           </Button>
+          {canPublish && (
+            <Button
+              className="primary-button"
+              loading={pending === "publish"}
+              disabled={submitBlocked}
+              onClick={() => void saveAndPublish()}
+            >
+              {item ? "保存并发布" : "新建迭代"}
+            </Button>
+          )}
         </div>
       </form>
     </Modal>

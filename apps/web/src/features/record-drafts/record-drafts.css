@@ -51,19 +51,6 @@
   gap: 10px;
 }
 
-.record-drafts-page .calm-task-card > .badge {
-  justify-self: start;
-}
-
-/* 草稿详情弹层盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的
-   默认头部排版（同 `.record-detail-modal`）：不补内边距时「草稿详情」会顶到盒子
-   左上角、关闭按钮贴住右边缘，且正文滚动时会从标题下面穿过。 */
-.draft-detail-modal > .drawer-header {
-  padding: 24px 28px 18px;
-  border-bottom: 1px solid #e8eef5;
-  flex-shrink: 0;
-}
-
 .draft-detail {
   margin-top: 24px;
   padding: 28px;
@@ -148,4 +135,136 @@
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* 草稿详情弹层盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的
+   默认头部排版（同 `.record-detail-modal`）：不补内边距时「草稿详情」会顶到盒子
+   左上角、关闭按钮贴住右边缘，且正文滚动时会从标题下面穿过。 */
+.draft-detail-modal > .drawer-header {
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+
+/* F-17 草稿箱：卡片尺寸对齐任务卡（3 列、约 100px 高），一屏能连草稿带历史一起看。
+   草稿箱不再折叠，这里只负责网格与卡片本身。 */
+.draft-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.draft-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 96px;
+  padding: 11px 14px 11px 20px;
+  border: 1px solid var(--border, #e5edf5);
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 左侧竖条用草稿的琥珀色；任务卡是绿色，两者不混。 */
+.draft-card::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 2px;
+  background: #e0a83c;
+}
+
+.draft-card:hover {
+  border-color: #cfe0f0;
+  box-shadow: 0 2px 8px rgba(23, 53, 82, 0.08);
+}
+
+.draft-card:focus-visible {
+  outline: 2px solid #2472c3;
+  outline-offset: 2px;
+}
+
+.draft-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.draft-card-action {
+  color: #2472c3;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.draft-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: #132238;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.draft-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  color: #93a4b5;
+  font-size: 11px;
+}
+
+.draft-card-scope {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-card-author {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.draft-card-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2472c3;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.draft-card-time {
+  flex: none;
+}
+
+@media (max-width: 1100px) {
+  .draft-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .draft-card-grid {
+    grid-template-columns: 1fr;
+  }
 }

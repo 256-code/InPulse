@@ -169,7 +169,7 @@ describe("RecordsWorkspace", () => {
       ).toHaveTextContent("全部项目");
       await waitFor(() =>
         expect(
-          screen.getByRole("button", { name: "记录一次迭代" }),
+          screen.getByRole("button", { name: "新建迭代记录" }),
         ).toBeEnabled(),
       );
       expect(client.listRecordFeed).toHaveBeenCalledWith(
@@ -344,13 +344,24 @@ describe("RecordsWorkspace", () => {
     );
   });
 
+  it("keeps the draft block below the filter toolbar", async () => {
+    mount(baseClient() as unknown as InpulseApiClient, "/records");
+    const drafts = await screen.findByTestId("drafts-block");
+    const toolbar = document.querySelector(".records-toolbar");
+    expect(toolbar).not.toBeNull();
+    expect(
+      toolbar!.compareDocumentPosition(drafts) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("passes the current user and an increasing create token to the draft block", async () => {
     const client = baseClient();
     mount(client as unknown as InpulseApiClient, "/records?projectId=1");
     expect(await screen.findByTestId("drafts-block")).toHaveTextContent(
       "草稿令牌 0 · 当前用户 3",
     );
-    const cta = screen.getByRole("button", { name: "记录一次迭代" });
+    const cta = screen.getByRole("button", { name: "新建迭代记录" });
     await waitFor(() => expect(cta).toBeEnabled());
     fireEvent.click(cta);
     expect(screen.getByTestId("drafts-block")).toHaveTextContent(

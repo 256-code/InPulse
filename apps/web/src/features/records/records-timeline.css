@@ -28,76 +28,12 @@
   font: inherit;
 }
 
-.draft-strip-error {
-  margin: 0 0 14px;
-  color: #b45309;
-  font-size: 12px;
-}
-
 .record-drafts-block {
   margin: 0 0 6px;
 }
 
 .record-drafts-block > .calm-section-title {
   margin-bottom: 14px;
-}
-
-.draft-strip {
-  margin: 0 0 22px;
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #fbfcfe;
-}
-
-.draft-strip .calm-section-title {
-  margin-bottom: 12px;
-}
-
-.draft-record {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  margin-bottom: 10px;
-  border: 1px dashed #cddbea;
-  border-radius: 8px;
-  background: #f8fbff;
-  color: #4e6a85;
-  text-align: left;
-  cursor: pointer;
-}
-
-.draft-record:last-child {
-  margin-bottom: 0;
-}
-
-.draft-record strong {
-  flex: 1;
-  min-width: 0;
-  color: #2b4560;
-}
-
-.draft-record small.draft-record-project {
-  flex-shrink: 0;
-  color: #7b93ab;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.draft-record > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #3f648a;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.draft-record:hover {
-  border-color: #86afd7;
-  background: #f2f8fe;
 }
 
 /* 按天分组的时间线：左侧日期列 + 一条竖线贯穿，日期节点落在线上，点击日期可收起/展开该天。 */
