@@ -166,6 +166,9 @@ export function CompleteWithRecord({
             "activity",
             "search",
             "notifications",
+            "my-tasks",
+            "my-task-groups",
+            "task-marks",
           ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
         );
         onSuccess(result.record);

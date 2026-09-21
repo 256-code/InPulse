@@ -469,7 +469,16 @@ export function TasksPanel({
     },
     onSuccess: async () => {
       await Promise.all(
-        ["tasks", "modules", "activity", "search", "notifications"].map((key) =>
+        [
+          "tasks",
+          "modules",
+          "activity",
+          "search",
+          "notifications",
+          "my-tasks",
+          "my-task-groups",
+          "task-marks",
+        ].map((key) =>
           lifecycleCache.invalidateQueries({ queryKey: [key] }),
         ),
       );

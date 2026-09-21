@@ -142,6 +142,9 @@ export function TaskStatusPanel({
           "activity",
           "search",
           "notifications",
+          "my-tasks",
+          "my-task-groups",
+          "task-marks",
         ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },

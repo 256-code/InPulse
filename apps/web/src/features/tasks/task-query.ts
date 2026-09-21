@@ -181,9 +181,18 @@ export function useTasks(
     onSuccess: async () => {
       retry.current = null;
       await Promise.all(
-        ["tasks", "task-board", "activity", "search", "notifications"].map(
-          (key) => cache.invalidateQueries({ queryKey: [key] }),
-        ),
+        // my-tasks / my-task-groups / task-marks：任务中心与聚合视图按这些键缓存，
+        // 编辑（含负责人变化）后必须同批失效，否则中心列表停留旧数据。
+        [
+          "tasks",
+          "task-board",
+          "activity",
+          "search",
+          "notifications",
+          "my-tasks",
+          "my-task-groups",
+          "task-marks",
+        ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },
   });
