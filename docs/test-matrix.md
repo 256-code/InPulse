@@ -2276,6 +2276,28 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、`pnpm lint`、`tsc`、Playwright E2E 与 API 测试（本次只删 CSS 规则、未动 TSX 与文案）；② 模块卡标题仍是蓝色 `#317abd`（同一旧规则块里保留的 `.module-card { color: #317abd }` 继承到 `h2`），功能卡标题为深色 `#132238`，是否统一已给对照图待产品确认；③ 模块卡高度由 232px 变为 237px，来自徽章恢复 11px 字号；④ 样式改动需非作者人工评审。
 
+## 模块卡与功能卡标题统一为深色（C，2026-09-20 本地落库）
+
+产品定案：上一节遗留的「模块卡标题蓝 `#317abd` / 功能卡标题深色 `#132238`」需要统一。先按「统一蓝色」实现并给过真实渲染对照，产品看过后改判为深色，最终统一到 `#132238`。
+
+锁定口径：
+
+- 差异来源只有一处：`.module-card { color: #317abd }` 这份旧版遗留声明被卡内 `h2` 继承；功能卡的 `.calm-feature-card h2` 没有自己的颜色，落到全局 `--card-foreground: #132238`。
+- 处理方式：删掉 `.module-card` 上这份会被继承的 `color`，让模块卡与功能卡标题一起走全局前景色；改完 `#317abd` 在应用代码里不再出现（仅 `.module-card` 上方注释留档说明）。
+- `.calm-feature-card` 全仓只用于模块卡与功能卡两处（`ModulesPageView.tsx`、`FeaturesPageView.tsx`），本次不额外给 `h2` 写颜色，因此项目卡标题与任务卡标题（`.calm-task-card h3` 的 `#243d54`）保持原样。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CARDTITLE-DARK-001 | 浏览器实测 | 改动前基线 | `/projects/3/modules` 模块卡 `h2` = `rgb(49, 122, 189)`；`/projects/3/modules/3843/features` 功能卡 `h2` = `rgb(19, 34, 56)` | 本地通过 |
+| CARDTITLE-DARK-002 | 浏览器实测 | 改动后四处一致 | 模块卡 `h2`、功能列表页功能卡 `h2`、模块详情页（`/projects/2/modules/9/features`）功能卡 `h2`、项目卡 `h2` 全部为 `rgb(19, 34, 56)` | 本地通过 |
+| CARDTITLE-DARK-003 | 浏览器实测 | 卡内其它文字不受影响 | 逐元素比对改动前后的计算颜色：编号 `rgb(120,144,166)`、说明 `rgb(100,124,146)`、页脚 `rgb(132,146,161)`、徽章与图标块颜色全部未变；仅模块卡容器自身继承色由 `rgb(49,122,189)` 回落为 `rgb(19,34,56)`，其子元素各有显式颜色故无视觉影响 | 本地通过 |
+| CARDTITLE-DARK-WEB-001 | Web 单元 | 相关页面渲染不回归 | `pnpm --filter @inpulse/web exec vitest run src/features/modules src/features/features src/features/my-tasks src/features/tasks`：12 文件 164 例通过 | 本地通过 |
+| CARDTITLE-DARK-GATE-001 | 静态门禁 | 类型、风格与文档 | `pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过 | 本地通过 |
+
+本地实际执行（2026-09-20）：`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过；web 单测 12 文件 164 例通过；浏览器实测见上表（无头 Chromium，本地 dev `5173`，用本机测试账号登录）。
+
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:frontend:boundaries`、Playwright E2E 与真实 PostgreSQL 集成测试（本次只改 CSS 一条声明，未动 TSX、文案与接口）；② 上一节《模块卡图标居中与旧版遗留规则清理》「未运行 / 已知偏差」第 ② 条的待确认项已由本次定案关闭，该历史条目按日志规则不改写；③ 卡片标题颜色现在依赖全局 `--card-foreground` 继承，若后续有卡片需要标题异色，应显式声明而不是复用 `.module-card` 这类容器级 `color`；④ 样式改动需非作者人工评审。
+
 ## 任务中心「遗留问题」入口改为就地弹窗（C，2026-09-20 本地落库）
 
 产品反馈：任务中心页头的「遗留问题」入口点击后整页跳到 `/issues`，要求与项目主页一样就地弹窗。
