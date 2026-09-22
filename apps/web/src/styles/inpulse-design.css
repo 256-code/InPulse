@@ -96,10 +96,25 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin: 24px -30px -26px;
+  margin: 0 -30px -26px;
   padding: 14px 30px;
   background: #fff;
   border-top: 1px solid #e8eef5;
+}
+/* 「填写迭代记录」整块是 `section[aria-label="发布并完成"]`，`.dialog-form` 的 15px
+ * 间距只作用于它的直接子级，section 内的字段被 `* { margin: 0 }` 抹平后实测只剩
+ * 0–3px（2026-09-22 实测子级间 gap [2,3,0,0,0,0,0,0,3]）；同层 `<label>` 又被
+ * `.calm-form label { display: block }`（本文件后加载）覆盖掉 `.dialog-form label`
+ * 的 flex + 6px，标签与控件贴在一起。这里按设计稿恢复两级纵向 flex 间距。 */
+.catalog-modal .completion-flow section[aria-label="发布并完成"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.catalog-modal .completion-flow .dialog-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* 设计稿没有只读态（静态稿不可交互）；仓库需要表达「不可写 / 冲突 / 状态已变化」。 */
