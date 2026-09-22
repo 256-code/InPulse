@@ -210,6 +210,36 @@ describe("TaskCenterPageView", () => {
     expect(screen.queryByText(/已完成 .* 项/)).toBeNull();
   });
 
+  it("标签落到左下角、负责人贴在分隔线上方右侧", async () => {
+    renderView();
+
+    const card = await screen.findByTestId("my-task-101");
+    // 编号与「未完成」都不再占位：卡片顶部那一行整行消失。
+    expect(card.querySelector(".calm-card-top")).toBeNull();
+    expect(card.querySelector(".task-id")).toBeNull();
+    expect(within(card).queryByText("T-101")).toBeNull();
+    expect(within(card).queryByText("未完成")).toBeNull();
+    // 标签（含优先级）落到分隔线以下的左下角，由底部那一排承载。
+    const bottom = card.querySelector(".calm-card-bottom") as HTMLElement;
+    const badges = card.querySelector(
+      ".calm-card-bottom > .task-card-badges",
+    ) as HTMLElement;
+    expect(badges).not.toBeNull();
+    expect(badges.parentElement).toBe(bottom);
+    expect(within(badges).getByText("紧急")).toBeInTheDocument();
+    // 2026-09-22 定案：「遗留问题」用固定深锈红徽章，不再与优先级标签同款。
+    expect(within(badges).getByText("遗留问题")).toHaveClass("badge-leftover");
+    // 负责人单独一行贴在分隔线上方并右对齐：它是底部那一排的前一个兄弟节点。
+    const assignee = card.querySelector(".calm-card-assignee") as HTMLElement;
+    expect(assignee).not.toBeNull();
+    expect(assignee.nextElementSibling).toBe(bottom);
+    expect(assignee.firstElementChild?.getAttribute("title")).toMatch(
+      /^负责人：/,
+    );
+    // 页脚已无内容（没有迭代记录）时整块不渲染，不留空行。
+    expect(card.querySelector(".task-card-footer")).toBeNull();
+  });
+
   it("drops the list title and count now that the toolbar filter carries the state", async () => {
     renderView({
       filters: { status: "all", todayTodo: false },
@@ -219,10 +249,10 @@ describe("TaskCenterPageView", () => {
     // 2026-09-20 定案：列表区块不再重复「全部任务 / 1 项 · 服务端按任务编号倒序」两行文字，
     // 工作状态只由工具栏「未完成 / 已完成」筛选表达；status=all 不属于任何档位，因此不高亮。
     // 已完成任务取绿色完成态（状态覆盖优先级）。
-    expect(await screen.findByTestId("my-task-901")).toHaveClass(
-      "calm-task-card",
-      "tone-prio-done",
-    );
+    const doneCard = await screen.findByTestId("my-task-901");
+    expect(doneCard).toHaveClass("calm-task-card", "tone-prio-done");
+    // 已办结状态有信息量：徽章留在右上角标签组里。
+    expect(within(doneCard).getByText("已完成")).toBeInTheDocument();
     expect(screen.queryByText("1 项 · 服务端按任务编号倒序")).toBeNull();
     expect(screen.queryByRole("heading", { name: "全部任务" })).toBeNull();
     expect(screen.queryByText(/没有匹配/)).toBeNull();

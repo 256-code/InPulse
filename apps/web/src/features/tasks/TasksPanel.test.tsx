@@ -492,7 +492,10 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
     // 裁决修订 D-2：遗留问题转化而来的任务在卡片上自带「遗留问题」徽章。
-    expect(await within(sourceCard).findByText("遗留问题")).toBeInTheDocument();
+    const leftoverBadge = await within(sourceCard).findByText("遗留问题");
+    expect(leftoverBadge).toBeInTheDocument();
+    // 2026-09-22 定案：「遗留问题」用固定深锈红徽章（badge-leftover），不与优先级标签同款。
+    expect(leftoverBadge).toHaveClass("badge-leftover");
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest(".calm-task-card") as HTMLElement;
@@ -607,6 +610,30 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     expect(dueCellOf("今天到期任务")).toHaveClass("due-soon");
     expect(dueCellOf("更远任务")).not.toHaveClass("due-overdue");
     expect(dueCellOf("已完成逾期任务")).not.toHaveClass("due-overdue");
+  });
+  it("标签落到左下角、负责人贴在分隔线上方右侧", async () => {
+    mount(client({ listTasks: vi.fn().mockResolvedValue({ items: [item] }) }));
+
+    const card = (await screen.findByText("退款任务")).closest(
+      ".calm-task-card",
+    ) as HTMLElement;
+    expect(card.querySelector(".calm-card-top")).toBeNull();
+    expect(card.querySelector(".task-id")).toBeNull();
+    expect(within(card).queryByText("PR-T-1")).toBeNull();
+    expect(within(card).queryByText("未完成")).toBeNull();
+    const bottom = card.querySelector(".calm-card-bottom") as HTMLElement;
+    const badges = card.querySelector(
+      ".calm-card-bottom > .task-card-badges",
+    ) as HTMLElement;
+    expect(badges).not.toBeNull();
+    expect(badges.parentElement).toBe(bottom);
+    expect(within(badges).getByText("普通")).toBeInTheDocument();
+    const assignee = card.querySelector(".calm-card-assignee") as HTMLElement;
+    expect(assignee).not.toBeNull();
+    expect(assignee.nextElementSibling).toBe(bottom);
+    expect(assignee.firstElementChild?.getAttribute("title")).toMatch(
+      /^负责人：/,
+    );
   });
   it("卡片视图整卡铺红：逾期深红、今天到期橙红，明天到期与已完成不铺红", async () => {
     const now = new Date();

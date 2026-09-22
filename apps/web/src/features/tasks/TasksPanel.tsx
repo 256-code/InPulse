@@ -130,7 +130,7 @@ function relationBadge(mark: TaskMark | undefined): {
  */
 const LEFTOVER_SOURCE_BADGE = {
   label: "遗留问题",
-  tone: "amber",
+  tone: "leftover",
   title: "由遗留问题转换而来的跟进任务",
 } as const;
 const formatDate = (value: string | null) =>
@@ -912,30 +912,8 @@ export function TasksPanel({
                       openDetail(item.id);
                     }}
                   >
-                    <div className="calm-card-top">
-                      <span className="task-id">{item.code}</span>
-                      <span className="task-card-badges">
-                        {item.scopeType === "MODULE" && (
-                          <CalmBadge tone="violet">模块级</CalmBadge>
-                        )}
-                        {badge !== null && (
-                          <CalmBadge tone={badge.tone} title={badge.title}>
-                            {badge.label}
-                          </CalmBadge>
-                        )}
-                        {leftoverSource && (
-                          <CalmBadge
-                            tone={LEFTOVER_SOURCE_BADGE.tone}
-                            title={LEFTOVER_SOURCE_BADGE.title}
-                          >
-                            {LEFTOVER_SOURCE_BADGE.label}
-                          </CalmBadge>
-                        )}
-                        <CalmBadge tone={statusTone[item.workStatus]}>
-                          {statusLabels[item.workStatus]}
-                        </CalmBadge>
-                      </span>
-                    </div>
+                    {/* 与任务中心卡片同款：编号与「未完成」都不占徽章位；
+                        标签落到分隔线以下的左下角，负责人移到横线上方右侧。 */}
                     <h3>{item.title}</h3>
                     {/* 卡片正文是任务介绍；归属由页面语境与「模块级」徽标表达，
                         不再重复一遍功能名。 */}
@@ -954,10 +932,41 @@ export function TasksPanel({
                         ? "暂无任务描述"
                         : item.description}
                     </p>
-                    <div className="calm-card-bottom">
+                    <div className="calm-card-assignee">
                       <span title={"负责人：" + memberName(item.assigneeId)}>
                         <InpulseIcon name="users" size={14} />
                         {memberName(item.assigneeId)}
+                      </span>
+                    </div>
+                    <div className="calm-card-bottom">
+                      <span className="task-card-badges">
+                        <CalmBadge
+                          tone={priorityTone[item.priority]}
+                          title={"优先级：" + priorityLabels[item.priority]}
+                        >
+                          {priorityLabels[item.priority]}
+                        </CalmBadge>
+                        {item.scopeType === "MODULE" && (
+                          <CalmBadge tone="violet">模块级</CalmBadge>
+                        )}
+                        {badge !== null && (
+                          <CalmBadge tone={badge.tone} title={badge.title}>
+                            {badge.label}
+                          </CalmBadge>
+                        )}
+                        {leftoverSource && (
+                          <CalmBadge
+                            tone={LEFTOVER_SOURCE_BADGE.tone}
+                            title={LEFTOVER_SOURCE_BADGE.title}
+                          >
+                            {LEFTOVER_SOURCE_BADGE.label}
+                          </CalmBadge>
+                        )}
+                        {item.workStatus === "TODO" ? null : (
+                          <CalmBadge tone={statusTone[item.workStatus]}>
+                            {statusLabels[item.workStatus]}
+                          </CalmBadge>
+                        )}
                       </span>
                       <span title={"截止：" + formatDate(item.dueAt)}>
                         <InpulseIcon name="clock" size={14} />
@@ -966,9 +975,6 @@ export function TasksPanel({
                     </div>
                     <div className="task-card-footer">
                       <span className="task-card-counts">
-                        <CalmBadge tone={priorityTone[item.priority]}>
-                          {priorityLabels[item.priority]}
-                        </CalmBadge>
                         <span title={"更新 " + formatDate(item.updatedAt)}>
                           <InpulseIcon name="calendar" size={13} />
                           更新 {formatDay(item.updatedAt)}

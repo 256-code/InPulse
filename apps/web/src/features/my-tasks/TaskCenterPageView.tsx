@@ -347,9 +347,29 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         data-testid={"my-task-" + item.taskId}
         onClick={() => openTask(item)}
       >
-        <div className="calm-card-top">
-          <span className="task-id">{item.code}</span>
+        {/* 2026-09-22 二次定案：编号与「未完成」都不占徽章位；标签从右上角下移到分隔线
+            以下的左下角，负责人移到分隔线上方的右侧。 */}
+        <h3>{item.title}</h3>
+        <p className="task-belonging">
+          {projectNameOf(item) +
+            " · " +
+            item.moduleName +
+            (item.featureName === null ? "" : " · " + item.featureName)}
+        </p>
+        <div className="calm-card-assignee">
+          <span title={"负责人：" + item.assignee.name}>
+            <InpulseIcon name="users" size={14} />
+            {item.assignee.name}
+          </span>
+        </div>
+        <div className="calm-card-bottom">
           <span className="task-card-badges">
+            <CalmBadge
+              tone={priorityTone[item.priority]}
+              title={"优先级：" + priorityLabels[item.priority]}
+            >
+              {priorityLabels[item.priority]}
+            </CalmBadge>
             {item.scopeType === "MODULE" ? (
               <CalmBadge tone="violet">模块级</CalmBadge>
             ) : null}
@@ -359,48 +379,31 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </CalmBadge>
             ) : null}
             {item.hasLeftoverSource ? (
-              <CalmBadge tone="amber" title="由遗留问题转换而来的跟进任务">
+              <CalmBadge tone="leftover" title="由遗留问题转换而来的跟进任务">
                 遗留问题
               </CalmBadge>
             ) : null}
-            <CalmBadge tone={statusTone[item.workStatus]}>
-              {statusLabels[item.workStatus]}
-            </CalmBadge>
-          </span>
-        </div>
-        <h3>{item.title}</h3>
-        <p className="task-belonging">
-          {projectNameOf(item) +
-            " · " +
-            item.moduleName +
-            (item.featureName === null ? "" : " · " + item.featureName)}
-        </p>
-        <div className="calm-card-bottom">
-          <span title={"负责人：" + item.assignee.name}>
-            <InpulseIcon name="users" size={14} />
-            {item.assignee.name}
+            {item.workStatus === "TODO" ? null : (
+              <CalmBadge tone={statusTone[item.workStatus]}>
+                {statusLabels[item.workStatus]}
+              </CalmBadge>
+            )}
           </span>
           <span title={"截止：" + due}>
             <InpulseIcon name="clock" size={14} />
             {due}
           </span>
         </div>
-        <div className="task-card-footer">
-          <CalmBadge
-            tone={priorityTone[item.priority]}
-            title={`优先级：${priorityLabels[item.priority]}`}
-          >
-            {priorityLabels[item.priority]}
-          </CalmBadge>
-          {item.publishedRecordCount > 0 ? (
+        {item.publishedRecordCount > 0 ? (
+          <div className="task-card-footer">
             <span className="task-card-counts">
               <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
                 <InpulseIcon name="gitBranch" size={13} />
                 记录 {item.publishedRecordCount} 条
               </span>
             </span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </button>
     );
   };
