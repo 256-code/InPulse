@@ -36,9 +36,10 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
         .locator(".feature-modal-header")
         .getByText("创建时的说明", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "归档功能" })).toHaveCount(0);
+    // ADR-039：项目内管理权全员等同，普通成员也能在编辑弹层底部看到归档入口。
     await page.getByRole("button", { name: "编辑功能" }).click();
     const edit = page.getByRole("dialog", { name: "编辑功能" });
+    await expect(edit.getByTestId("feature-modal-lifecycle")).toBeVisible();
     await edit.getByLabel("功能名称").fill(`${name}-更新`);
     const other = await context.newPage();
     await other.goto(page.url());

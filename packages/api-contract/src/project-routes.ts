@@ -120,7 +120,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
     // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
     // 2026-09-16：项目统计新增 completedTaskCount，重放安全字段变化，旧 Key 409。
     // 2026-09-17：项目四态改造后 ProjectItem 新增 hasCompletedTask，重放安全字段变化，旧 Key 409。
-    idempotencyContractVersion: "1.4.0",
+    // 2026-09-22：ADR-039 移除 PROJECT_ADMIN，currentUserRole 枚举收窄，旧 Key 409。
+    idempotencyContractVersion: "1.5.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,
@@ -143,7 +144,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/status",
     operationId: "changeProjectStatus",
     summary:
-      "F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
+      "F-06.3 项目状态变更：本项目任意活跃成员或系统管理员（ADR-039）把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
     request: {
       path: "ProjectPath",
       query: "none",
@@ -162,7 +163,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    // 2026-09-22：ADR-039 门禁改为任意活跃成员且 currentUserRole 枚举收窄，旧 Key 409。
+    idempotencyContractVersion: "1.1.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: replayPolicy,
@@ -242,7 +244,8 @@ export const projectRoutes: readonly RouteDefinition[] = [
         // ADR-033：详情响应新增 currentUserRole，重放安全字段变化，旧 Key 409。
         // 2026-09-16：项目统计新增 completedTaskCount，重放安全字段变化，旧 Key 409。
         // 2026-09-17：项目四态改造后 ProjectItem 新增 hasCompletedTask，重放安全字段变化，旧 Key 409。
-        idempotencyContractVersion: "1.4.0",
+        // 2026-09-22：ADR-039 移除 PROJECT_ADMIN，currentUserRole 枚举收窄，旧 Key 409。
+        idempotencyContractVersion: "1.5.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: ["If-Match"],
         idempotencyReplayPolicy: replayPolicy,
@@ -267,7 +270,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/archive-requests",
     operationId: "requestProjectArchive",
     summary:
-      "ADR-034 项目归档申请：本项目组长、项目管理员或系统管理员提交；项目必须处于 ACTIVE 且项目下没有未完成任务，同一项目同时只允许一条待审申请；申请不改变项目状态，审计、活动与通知全部系统管理员的站内通知在同一事务提交；项目已归档或仍有未完成任务返回 409。",
+      "ADR-034/ADR-039 项目归档申请：本项目任意活跃成员或系统管理员提交；项目必须处于 ACTIVE 且项目下没有未完成任务，同一项目同时只允许一条待审申请；申请不改变项目状态，审计、活动与通知全部系统管理员的站内通知在同一事务提交；项目已归档或仍有未完成任务返回 409。",
     request: {
       path: "ProjectPath",
       query: "none",

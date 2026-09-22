@@ -232,6 +232,8 @@ describe("project member query", () => {
   });
 
   it("maps member errors without leaking internal messages", () => {
+    // ADR-039 后服务端不再返回 `PROJECT_MEMBER_MANAGE_FORBIDDEN`，这里用旧码
+    // 验证 403 兜底文案仍然泛化、不泄露内部信息。
     const forbidden = new ApiError(403, {
       code: "PROJECT_MEMBER_MANAGE_FORBIDDEN",
       message: "internal-forbidden",
@@ -241,12 +243,6 @@ describe("project member query", () => {
     const roleForbidden = new ApiError(403, {
       code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
       message: "internal-role-forbidden",
-      details: {},
-      requestId: "r",
-    });
-    const leaderAssignForbidden = new ApiError(403, {
-      code: "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
-      message: "internal-leader-assign",
       details: {},
       requestId: "r",
     });
@@ -263,13 +259,10 @@ describe("project member query", () => {
       requestId: "r",
     });
     expect(projectMemberErrorMessage(forbidden)).toBe(
-      "只有系统管理员、本项目组长或项目管理员可以管理项目成员。",
+      "安全校验未通过，请刷新页面后重试。",
     );
     expect(projectMemberErrorMessage(roleForbidden)).toBe(
-      "只有系统管理员或本项目组长可以任命或撤销项目内角色。",
-    );
-    expect(projectMemberErrorMessage(leaderAssignForbidden)).toBe(
-      "组长不能任命或转移组长角色，请联系系统管理员。",
+      "只有系统管理员可以任命或撤销项目组长。",
     );
     expect(projectMemberErrorMessage(leaderProtected)).toBe(
       "项目组长不能被移除，请先由系统管理员转移或撤销组长角色。",

@@ -32,9 +32,6 @@ export function describeProjectManagementError(
       if (error.code === "ADMIN_REQUIRED") {
         return "只有系统管理员可以归档或恢复项目。";
       }
-      if (error.code === "PROJECT_STATUS_FORBIDDEN") {
-        return "只有项目组长、项目管理员或系统管理员可以更改项目状态。";
-      }
       return "安全校验未通过，请刷新页面后重试。";
     }
     if (error.status === 404) return "项目不存在或你已无权访问。";
@@ -121,7 +118,7 @@ export function useUpdateProject(projectId: number, client?: InpulseApiClient) {
 }
 
 /**
- * ADR-035：项目组长、项目管理员或系统管理员手动切换项目生命周期状态。
+ * ADR-035/ADR-039：本项目任意活跃成员或系统管理员手动切换项目生命周期状态。
  * 归档与恢复不走这里，仍由归档流程负责；「维护中」不通知，
  * 「未开始 → 进行中」会由服务端通知全体活跃成员。
  */
@@ -251,8 +248,6 @@ export function describeProjectArchiveRequestError(
   if (error instanceof ApiError) {
     if (error.status === 401) return "登录状态已失效，请重新登录后再操作。";
     if (error.status === 403) {
-      if (error.code === "PROJECT_ARCHIVE_REQUEST_FORBIDDEN")
-        return "只有项目组长或项目管理员可以发起归档申请。";
       if (error.code === "ADMIN_REQUIRED")
         return "只有系统管理员可以审核项目归档申请。";
       return "安全校验未通过，请刷新页面后重试。";
@@ -284,7 +279,7 @@ function archiveRequestHeaders(csrfToken: string, idempotencyKey: string) {
 }
 
 /**
- * ADR-034：项目组长或项目管理员发起归档申请；申请不改变项目状态，
+ * ADR-034/ADR-039：本项目任意活跃成员或系统管理员发起归档申请；申请不改变项目状态，
  * 只有系统管理员批准后才归档。
  */
 export function useRequestProjectArchive(

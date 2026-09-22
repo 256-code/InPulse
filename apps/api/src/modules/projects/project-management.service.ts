@@ -255,7 +255,7 @@ export class ProjectManagementService {
   }
 
   /**
-   * F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始、
+   * F-06.3 项目状态变更：本项目任意活跃成员或系统管理员把项目在未开始、
    * 进行中、维护中之间手动切换。归档只能走归档流程，因此不是合法目标。
    *
    * 两条硬约束在服务端拦截，前端置灰只是提示：
@@ -281,13 +281,6 @@ export class ProjectManagementService {
       input.projectId,
     );
     if (role === "NOT_MEMBER") throw missing();
-    if (role === "MEMBER") {
-      throw new ProjectManagementError(
-        403,
-        "PROJECT_STATUS_FORBIDDEN",
-        "只有本项目组长、项目管理员或系统管理员可以变更项目状态",
-      );
-    }
     const current = await this.projects.findProjectForChange(
       tx,
       { projectId: input.projectId },

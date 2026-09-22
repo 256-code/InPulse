@@ -108,13 +108,14 @@ describe("F-12 HTTP orchestration", () => {
       body: { reason: "封存" },
     });
     expect(result.status).toBe(200);
-    s.replay.mockRejectedValueOnce({ code: "MODULE_MANAGE_FORBIDDEN" });
+    // ADR-039：归档门禁只排除非成员，回放时重新鉴权失败即 404。
+    s.replay.mockRejectedValueOnce({ code: "PROJECT_NOT_FOUND" });
     await expect(
       s.command().replayAuthorizer!(
         { replayAuthContext: { projectId: 2, moduleId: 3 } } as never,
         tx,
       ),
-    ).rejects.toMatchObject({ code: "MODULE_MANAGE_FORBIDDEN" });
+    ).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
     expect(s.replay).toHaveBeenCalledWith(
       tx,
       7,

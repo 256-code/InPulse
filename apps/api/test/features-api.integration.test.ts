@@ -517,7 +517,7 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     ).toBe(200);
   });
 
-  it("rejects plain members, archives history, blocks downstream writes and restores only itself", async () => {
+  it("allows any active member to archive, archives history, blocks downstream writes and restores only itself", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const item = await create(project, member);
@@ -528,21 +528,22 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       await tx.sql`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by) VALUES (${task!.id}, ${project.projectId}, NULL, 'TODO', ${member.userId})`;
       return task!;
     });
-    // ADR-034：夹具创建者默认是组长（可归档功能）；本用例验证普通成员无
-    // 归档权限，先把夹具成员降级为 MEMBER。
+    // ADR-039：归档不再要求组长或系统管理员，降级为 MEMBER 的成员同样可归档。
     await demoteToMember(project.projectId, member.userId);
-    await error(
-      await request(
-        project,
-        "POST",
-        member,
-        { reason: "归档" },
-        `/${item.id}/archive`,
-        1,
-      ),
-      403,
-      "FEATURE_MANAGE_FORBIDDEN",
+    const memberItem = await create(project, member, "成员归档功能");
+    const memberArchived = await request(
+      project,
+      "POST",
+      member,
+      { reason: "成员归档" },
+      `/${memberItem.id}/archive`,
+      1,
     );
+    expect(memberArchived.status).toBe(200);
+    expect(featureItemSchema.parse(await memberArchived.json())).toMatchObject({
+      status: "ARCHIVED",
+      rowVersion: 2,
+    });
     await error(
       await request(
         project,

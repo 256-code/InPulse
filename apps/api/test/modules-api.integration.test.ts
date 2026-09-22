@@ -354,24 +354,29 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       404,
     );
   });
-  it("requires admin reauth and reason, preserves archived reads, rejects archived edit, restores without changing kind", async () => {
+  it("allows any active member to archive, preserves archived reads, rejects archived edit, restores without changing kind", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
-    // ADR-033：夹具创建者默认是组长（可归档模块）；本用例验证普通成员
-    // 无归档权限，先把夹具成员降级为 MEMBER。
+    // ADR-039：归档不再要求组长或系统管理员，降级为 MEMBER 的成员同样可归档。
     await demoteToMember(client.sql, project.projectId, member.userId);
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        member,
-        { reason: "归档" },
-        `/${project.moduleId}/archive`,
-        1,
-      ),
-      403,
-      "MODULE_MANAGE_FORBIDDEN",
+    const memberModule = moduleItemSchema.parse(
+      await (
+        await request(project.projectId, "POST", member, { name: "成员归档" })
+      ).json(),
     );
+    const memberArchived = await request(
+      project.projectId,
+      "POST",
+      member,
+      { reason: "成员归档" },
+      `/${memberModule.id}/archive`,
+      1,
+    );
+    expect(memberArchived.status).toBe(200);
+    expect(moduleItemSchema.parse(await memberArchived.json())).toMatchObject({
+      status: "ARCHIVED",
+      rowVersion: 2,
+    });
     await error(
       await request(
         project.projectId,

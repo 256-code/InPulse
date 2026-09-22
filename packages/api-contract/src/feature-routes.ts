@@ -133,7 +133,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
       method: update ? "PATCH" : "POST",
       path: `/projects/{projectId}/modules/{moduleId}/features${create ? "" : `/{featureId}${highRisk ? `/${action}` : ""}`}`,
       operationId,
-      summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-034）与原因。`,
+      summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。`,
       request: {
         path: create ? "FeatureCollectionPath" : "FeatureResourcePath",
         query: "none",
@@ -150,7 +150,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
         },
       },
       responses: { "200": json("FeatureItem"), ...errors },
-      // ADR-034：功能归档/恢复与任务、模块归档对齐，下放给本项目组长/项目管理员，
+      // ADR-034/ADR-039：功能归档/恢复与任务、模块归档对齐，下放给本项目全体活跃成员，
       // 角色门禁在权限矩阵 conditional 条目与服务层校验，系统管理员经 is_admin 旁路。
       authPolicy: "session",
       csrfPolicy: "required",

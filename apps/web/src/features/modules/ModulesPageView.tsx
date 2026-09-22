@@ -71,7 +71,7 @@ export function ModulesPageView({
     projectId,
   });
   const projectName = projectQuery.data?.project?.name ?? null;
-  // ADR-033：模块归档/恢复由系统管理员或本项目组长/项目管理员执行。
+  // ADR-039：模块归档/恢复对系统管理员或本项目任意活跃成员开放。
   const canArchive = canManageProjectResources(
     isAdmin,
     projectQuery.data?.currentUserRole ?? null,

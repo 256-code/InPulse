@@ -341,7 +341,7 @@ describe("F-06.2 项目归档申请 API（ADR-034）", () => {
     expect(submitted.status, await submitted.clone().text()).toBe(200);
   });
 
-  it("blocks members and open tasks, then lets a leader submit and replay", async () => {
+  it("blocks open tasks for every active member, then lets a leader submit and replay", async () => {
     const value = await fixture();
     const taskId = await seedTask(
       value.project,
@@ -350,10 +350,12 @@ describe("F-06.2 项目归档申请 API（ADR-034）", () => {
     );
     const path = "/projects/" + value.project.projectId + "/archive-requests";
 
+    // ADR-039：提交归档申请不再要求组长，普通成员也能穿过角色门；
+    // 此处仍因存在未归档任务而 409，证明拒绝理由已不再是权限。
     await expectError(
       await request("POST", path, value.member, { reason: "阶段性收尾" }),
-      403,
-      "PROJECT_ARCHIVE_REQUEST_FORBIDDEN",
+      409,
+      "PROJECT_ARCHIVE_TASKS_OPEN",
     );
     await expectError(
       await request("POST", path, value.outsider, { reason: "阶段性收尾" }),

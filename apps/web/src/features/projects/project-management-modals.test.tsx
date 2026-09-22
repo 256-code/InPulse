@@ -309,7 +309,7 @@ describe("EditProjectModal", () => {
     ).toBeDisabled();
     expect(
       within(dialog).getByText(
-        "只有系统管理员、项目组长或项目管理员可以更改项目状态。",
+        "只有本项目活跃成员或系统管理员可以更改项目状态。",
       ),
     ).toBeTruthy();
   });

@@ -13,12 +13,10 @@ export function projectMemberErrorMessage(error: unknown): string {
     if (error.status === 401)
       return "登录状态已失效，请重新登录后再查看项目成员。";
     if (error.status === 403) {
-      // ADR-033：管理操作限系统管理员、本项目组长或项目管理员。
+      // ADR-039：管理操作对全体活跃成员开放，只剩角色任命仍限系统管理员。
       if (error.code === "PROJECT_MEMBER_ROLE_FORBIDDEN")
-        return "只有系统管理员或本项目组长可以任命或撤销项目内角色。";
-      if (error.code === "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN")
-        return "组长不能任命或转移组长角色，请联系系统管理员。";
-      return "只有系统管理员、本项目组长或项目管理员可以管理项目成员。";
+        return "只有系统管理员可以任命或撤销项目组长。";
+      return "安全校验未通过，请刷新页面后重试。";
     }
     if (error.status === 404) return "项目或成员不存在，或你已无权访问。";
     if (error.status === 409) {
@@ -159,12 +157,12 @@ export function useProjectMembers(
     },
   });
 
-  // ADR-033：任命/撤销项目内角色（系统管理员或本项目组长）。
+  // ADR-039：任命/撤销组长（仅系统管理员可调用）。
   const roleMutation = useMutation({
     retry: false,
     mutationFn: async (input: {
       readonly userId: number;
-      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+      readonly role: "MEMBER" | "LEADER";
     }) => {
       const signature = JSON.stringify([projectId, input.userId, input.role]);
       if (roleRetryKey.current?.signature !== signature) {

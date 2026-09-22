@@ -86,7 +86,7 @@ function setup() {
       responseStatus: 200,
       responseSchemaRef: "SetProjectMemberRoleResponse",
       responseHasBody: true,
-      responseBody: { member: { ...member, role: "PROJECT_ADMIN" } },
+      responseBody: { member: { ...member, role: "LEADER" } },
       replayAuthContext: { projectId: 7, memberUserId: 5 },
     }),
     replayAuthorizer: vi.fn().mockResolvedValue(undefined),
@@ -165,7 +165,7 @@ describe("ProjectMemberManagementHttpService", () => {
     const s = setup();
     const result = await s.service.handle("setProjectMemberRole", {
       ...validRequest(),
-      body: { role: "PROJECT_ADMIN" },
+      body: { role: "LEADER" },
     });
     expect(result.status).toBe(200);
     expect(s.command().operationId).toBe("setProjectMemberRole");
@@ -175,11 +175,21 @@ describe("ProjectMemberManagementHttpService", () => {
         actorId: 1,
         projectId: 7,
         userId: 5,
-        role: "PROJECT_ADMIN",
+        role: "LEADER",
       }),
     );
     // 幂等摘要 body 必须携带角色字段，防止不同角色复用同一 Key。
-    expect(s.command().request.body).toEqual({ role: "PROJECT_ADMIN" });
+    expect(s.command().request.body).toEqual({ role: "LEADER" });
+  });
+
+  it("rejects a removed PROJECT_ADMIN role body (ADR-039) with 422", async () => {
+    const s = setup();
+    const result = await s.service.handle("setProjectMemberRole", {
+      ...validRequest(),
+      body: { role: "PROJECT_ADMIN" },
+    });
+    expect(result.status).toBe(422);
+    expect(s.members.setRole).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid role body with 422 before any command runs", async () => {

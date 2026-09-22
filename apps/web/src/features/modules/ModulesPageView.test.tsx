@@ -487,40 +487,7 @@ describe("ADR-033 模块弹层底部归档入口", () => {
     );
   });
 
-  it("项目管理员同样在弹窗底部看到归档入口", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({ items: [item] }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 2,
-          code: "INP",
-          name: "项目",
-          description: "",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 9,
-          createdAt: "2026-09-09T00:00:00.000Z",
-          updatedAt: "2026-09-09T00:00:00.000Z",
-          memberCount: 2,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 0,
-            openTaskCount: 0,
-            completedTaskCount: 1,
-          },
-        },
-        currentUserRole: "PROJECT_ADMIN",
-      }),
-    } as unknown as InpulseApiClient;
-    mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    expect(
-      within(dialog).getByRole("button", { name: "归档模块" }),
-    ).toBeInTheDocument();
-  });
-
-  it("普通成员打开的模块弹窗底部没有归档入口", async () => {
+  it("普通成员同样在弹窗底部看到归档入口（ADR-039）", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({ items: [item] }),
       getProject: vi.fn().mockResolvedValue({
@@ -543,6 +510,39 @@ describe("ADR-033 模块弹层底部归档入口", () => {
           },
         },
         currentUserRole: "MEMBER",
+      }),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
+    expect(
+      within(dialog).getByRole("button", { name: "归档模块" }),
+    ).toBeInTheDocument();
+  });
+
+  it("无项目内角色（非成员）打开的模块弹窗底部没有归档入口（ADR-039）", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [item] }),
+      getProject: vi.fn().mockResolvedValue({
+        project: {
+          id: 2,
+          code: "INP",
+          name: "项目",
+          description: "",
+          status: "ACTIVE",
+          rowVersion: 1,
+          createdBy: 9,
+          createdAt: "2026-09-09T00:00:00.000Z",
+          updatedAt: "2026-09-09T00:00:00.000Z",
+          memberCount: 2,
+          stats: {
+            activeModuleCount: 1,
+            activeFeatureCount: 0,
+            openTaskCount: 0,
+            completedTaskCount: 1,
+          },
+        },
+        currentUserRole: null,
       }),
     } as unknown as InpulseApiClient;
     mount(client);

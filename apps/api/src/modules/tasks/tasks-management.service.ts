@@ -531,7 +531,7 @@ export class TasksManagementService {
     });
     return result;
   }
-  /** 归档任务的角色门禁：普通成员 403，非本项目成员 404。 */
+  /** ADR-039 归档任务门禁：系统管理员或本项目任意活跃成员通过，非成员 404。 */
   private async requireArchiveRole(
     tx: TransactionContext,
     actorId: number,
@@ -539,12 +539,6 @@ export class TasksManagementService {
   ): Promise<void> {
     const role = await this.roles.manageRole(tx, actorId, projectId);
     if (role === "NOT_MEMBER") throw missing();
-    if (role === "MEMBER")
-      throw new TaskManagementError(
-        403,
-        "TASK_ARCHIVE_FORBIDDEN",
-        "只有系统管理员、项目组长或项目管理员可以归档或恢复任务",
-      );
   }
   async transition(
     tx: TransactionContext,

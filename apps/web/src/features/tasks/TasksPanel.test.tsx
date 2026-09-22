@@ -1048,12 +1048,12 @@ describe("ADR-034 任务归档入口", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the lifecycle entry from plain members", async () => {
+  it("hides the lifecycle entry from viewers without a project role (ADR-039)", async () => {
     mount(
       client({
         getProject: vi.fn().mockResolvedValue({
           project: { id: 1, code: "INPULSE", name: "演示项目" },
-          currentUserRole: "MEMBER",
+          currentUserRole: null,
         }),
       }),
     );

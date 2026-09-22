@@ -178,18 +178,6 @@ async function revokeLeaderRole(
   }
 }
 
-/** ADR-033：测试夹具直接写入项目内角色（迁移 0015 的 role 列）。 */
-async function addMemberWithRole(
-  projectId: number,
-  userId: number,
-  role: "MEMBER" | "PROJECT_ADMIN" | "LEADER",
-): Promise<void> {
-  await client.sql`
-    INSERT INTO app.project_members (project_id, user_id, role)
-    VALUES (${projectId}, ${userId}, ${role})
-  `;
-}
-
 async function createFeatureTask(
   fixtureValue: Fixture,
   assigneeId: number,
@@ -385,7 +373,7 @@ describe("F-05 project member management API", () => {
     });
   });
 
-  it("rejects anonymous reads, hides projects from non-members and forbids plain members (ADR-033)", async () => {
+  it("rejects anonymous reads, hides projects from non-members and allows any active member (ADR-039)", async () => {
     const value = await fixture();
     const normal = await actor(false);
     const secondAdmin = await actor(true);
@@ -404,14 +392,10 @@ describe("F-05 project member management API", () => {
     );
     expect((await request("GET", path, secondAdmin)).status).toBe(200);
 
-    // 本项目普通成员 403。
+    // 本项目普通成员同样可以查看成员（ADR-039 把管理权限下放给全体活跃成员）。
     const plain = await actor(false);
     await addMember(value.project.projectId, plain.userId);
-    await expectError(
-      await request("GET", path, plain),
-      403,
-      "PROJECT_MEMBER_MANAGE_FORBIDDEN",
-    );
+    expect((await request("GET", path, plain)).status).toBe(200);
 
     await expectError(
       await request("GET", "/projects/999999/members", value.admin),
@@ -777,8 +761,9 @@ describe("F-05 project member management API", () => {
     expect(normal?.role).toBe("MEMBER");
   });
 
-  it("lets the project leader manage members without any system admin flag (ADR-033)", async () => {
+  it("lets any active member manage members without any system admin flag (ADR-039)", async () => {
     const value = await fixture();
+    const remover = await actor(false);
     const candidate = await actor(false);
 
     // 组长（创建者本人，非系统管理员）可以查看成员。
@@ -796,82 +781,97 @@ describe("F-05 project member management API", () => {
       "POST",
       `/projects/${value.project.projectId}/members`,
       value.owner,
-      { userId: candidate.userId },
+      { userId: remover.userId },
       { key: randomUUID() },
     );
     expect(added.status).toBe(200);
-
-    // 本项目普通成员不能管理成员（403）。
-    await expectError(
-      await request(
-        "GET",
-        `/projects/${value.project.projectId}/members`,
-        candidate,
-        undefined,
-        {
-          omitCsrf: true,
-        },
-      ),
-      403,
-      "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+    const addedCandidate = await request(
+      "POST",
+      `/projects/${value.project.projectId}/members`,
+      value.owner,
+      { userId: candidate.userId },
+      { key: randomUUID() },
     );
+    expect(addedCandidate.status).toBe(200);
+
+    // 本项目普通成员同样可以移除其他成员（ADR-039）。
+    const removedByMember = await request(
+      "POST",
+      `/projects/${value.project.projectId}/members/${candidate.userId}/remove`,
+      remover,
+      { reassignments: [] },
+      { key: randomUUID() },
+    );
+    expect(removedByMember.status).toBe(200);
+
+    // 组长成员行仍受保护：普通成员无法移除组长（409）。
     await expectError(
       await request(
         "POST",
-        `/projects/${value.project.projectId}/members/${candidate.userId}/remove`,
-        candidate,
+        `/projects/${value.project.projectId}/members/${value.owner.userId}/remove`,
+        remover,
         { reassignments: [] },
         { key: randomUUID() },
       ),
-      403,
-      "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+      409,
+      "PROJECT_MEMBER_LEADER_PROTECTED",
     );
   });
 
-  it("lets a project admin manage members but never appoint roles (ADR-033)", async () => {
+  it("forbids every non-admin, including the leader, from appointing roles (ADR-039)", async () => {
     const value = await fixture();
-    const projectAdmin = await actor(false);
-    await addMemberWithRole(
-      value.project.projectId,
-      projectAdmin.userId,
-      "PROJECT_ADMIN",
-    );
-    const candidate = await actor(false);
+    const member = await actor(false);
+    await addMember(value.project.projectId, member.userId);
+    const rolePath = `/projects/${value.project.projectId}/members/${member.userId}/role`;
 
-    const added = await request(
-      "POST",
-      `/projects/${value.project.projectId}/members`,
-      projectAdmin,
-      { userId: candidate.userId },
-      { key: randomUUID() },
-    );
-    expect(added.status).toBe(200);
-
+    // 组长不再拥有任命权。
     await expectError(
       await request(
         "POST",
-        `/projects/${value.project.projectId}/members/${candidate.userId}/role`,
-        projectAdmin,
-        { role: "PROJECT_ADMIN" },
+        rolePath,
+        value.owner,
+        { role: "LEADER" },
         { key: randomUUID() },
       ),
       403,
       "PROJECT_MEMBER_ROLE_FORBIDDEN",
     );
+
+    // 普通成员也不可以。
+    await expectError(
+      await request(
+        "POST",
+        rolePath,
+        member,
+        { role: "LEADER" },
+        { key: randomUUID() },
+      ),
+      403,
+      "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    );
+
+    // 被拒绝的调用不留下审计与活动。
+    const auditRows = (await auditReader.sql`
+      SELECT action AS "action"
+        FROM app.audit_logs
+       WHERE project_id = ${value.project.projectId}
+         AND action = 'project.member.role.set'
+    `) as unknown as readonly { action: string }[];
+    expect(auditRows).toHaveLength(0);
   });
 
-  it("appoints project admins as the leader, protects the leader row and forbids leader self-appointment", async () => {
+  it("transfers the leader role as system admin, protects the leader row and keeps the role audit trail (ADR-039)", async () => {
     const value = await fixture();
     const target = await actor(false);
     await addMember(value.project.projectId, target.userId);
     const rolePath = `/projects/${value.project.projectId}/members/${target.userId}/role`;
 
-    // 组长任命项目管理员。
+    // 系统管理员把目标提升为组长。
     const promoted = await request(
       "POST",
       rolePath,
-      value.owner,
-      { role: "PROJECT_ADMIN" },
+      value.admin,
+      { role: "LEADER" },
       { key: randomUUID() },
     );
     expect(promoted.status).toBe(200);
@@ -879,7 +879,7 @@ describe("F-05 project member management API", () => {
       schemaRegistry.SetProjectMemberRoleResponse.schema.parse(
         await promoted.json(),
       );
-    expect(promotedBody.member.role).toBe("PROJECT_ADMIN");
+    expect(promotedBody.member.role).toBe("LEADER");
 
     const auditRows = (await auditReader.sql`
       SELECT action AS "action"
@@ -897,47 +897,7 @@ describe("F-05 project member management API", () => {
     `) as unknown as readonly { activityType: string }[];
     expect(activityRows).toHaveLength(1);
 
-    // 组长不能任命或转移组长角色。
-    await expectError(
-      await request(
-        "POST",
-        rolePath,
-        value.owner,
-        { role: "LEADER" },
-        { key: randomUUID() },
-      ),
-      403,
-      "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
-    );
-
-    // 组长不能被移除。
-    await expectError(
-      await request(
-        "POST",
-        `/projects/${value.project.projectId}/members/${value.owner.userId}/remove`,
-        value.admin,
-        { reassignments: [] },
-        { key: randomUUID() },
-      ),
-      409,
-      "PROJECT_MEMBER_LEADER_PROTECTED",
-    );
-
-    // 系统管理员转移组长：目标成为 LEADER，原组长自动降级为 MEMBER。
-    const transferred = await request(
-      "POST",
-      rolePath,
-      value.admin,
-      { role: "LEADER" },
-      { key: randomUUID() },
-    );
-    expect(transferred.status).toBe(200);
-    const transferredBody =
-      schemaRegistry.SetProjectMemberRoleResponse.schema.parse(
-        await transferred.json(),
-      );
-    expect(transferredBody.member.role).toBe("LEADER");
-
+    // 转移后原组长自动降级为普通成员，全项目只有一名 ACTIVE 组长。
     const roleRows = (await client.sql`
       SELECT user_id AS "userId", role
         FROM app.project_members
@@ -951,6 +911,32 @@ describe("F-05 project member management API", () => {
     expect(
       roleRows.find((row) => row.userId === value.owner.userId)?.role,
     ).toBe("MEMBER");
+
+    // 组长成员行不能被移除（即使调用者是系统管理员）。
+    await expectError(
+      await request(
+        "POST",
+        `/projects/${value.project.projectId}/members/${target.userId}/remove`,
+        value.admin,
+        { reassignments: [] },
+        { key: randomUUID() },
+      ),
+      409,
+      "PROJECT_MEMBER_LEADER_PROTECTED",
+    );
+
+    // ADR-039：角色枚举已收窄，PROJECT_ADMIN 不再是合法请求体。
+    await expectError(
+      await request(
+        "POST",
+        rolePath,
+        value.admin,
+        { role: "PROJECT_ADMIN" },
+        { key: randomUUID() },
+      ),
+      422,
+      "PROJECT_MEMBER_VALIDATION_FAILED",
+    );
   });
 
   it("refuses role writes for non-members and removed members without leaking existence", async () => {
@@ -970,7 +956,7 @@ describe("F-05 project member management API", () => {
         "POST",
         `/projects/${value.project.projectId}/members/${outsider.userId}/role`,
         value.admin,
-        { role: "PROJECT_ADMIN" },
+        { role: "LEADER" },
         { key: randomUUID() },
       ),
       404,
@@ -981,7 +967,7 @@ describe("F-05 project member management API", () => {
         "POST",
         `/projects/${value.project.projectId}/members/${removed.userId}/role`,
         value.admin,
-        { role: "PROJECT_ADMIN" },
+        { role: "LEADER" },
         { key: randomUUID() },
       ),
       404,
@@ -993,7 +979,7 @@ describe("F-05 project member management API", () => {
         "POST",
         `/projects/${value.project.projectId}/members/${value.owner.userId}/role`,
         outsider,
-        { role: "PROJECT_ADMIN" },
+        { role: "LEADER" },
         { key: randomUUID() },
       ),
       404,
@@ -1001,68 +987,64 @@ describe("F-05 project member management API", () => {
     );
   });
 
-  it("replays role writes only after re-verifying the manage role (ADR-033)", async () => {
+  it("replays role writes only after re-verifying project write access (ADR-039)", async () => {
     const value = await fixture();
+    // 用另一个系统管理员作操作者，方便稍后单独降权。
+    const operator = await actor(true);
     const target = await actor(false);
     await addMember(value.project.projectId, target.userId);
     const rolePath = `/projects/${value.project.projectId}/members/${target.userId}/role`;
     const key = randomUUID();
 
-    // 组长（非系统管理员）任命项目管理员。
+    // 系统管理员任命组长。
     const first = await request(
       "POST",
       rolePath,
-      value.owner,
-      { role: "PROJECT_ADMIN" },
+      operator,
+      { role: "LEADER" },
       { key },
     );
     expect(first.status).toBe(200);
     const firstBody = schemaRegistry.SetProjectMemberRoleResponse.schema.parse(
       await first.json(),
     );
+    expect(firstBody.member.role).toBe("LEADER");
 
     // 同 Key、同 body 重放返回缓存响应。
     const replay = await request(
       "POST",
       rolePath,
-      value.owner,
-      { role: "PROJECT_ADMIN" },
+      operator,
+      { role: "LEADER" },
       { key },
     );
     expect(replay.status).toBe(200);
     expect(await replay.json()).toEqual(firstBody);
 
-    // 组长被降级为普通成员后：新的角色任命被门禁拒绝（403）。
+    // 操作者被降权且不是项目成员：新的角色写按资源不存在拒绝。
     await client.sql`
-      UPDATE app.project_members
-         SET role = 'MEMBER'
-       WHERE project_id = ${value.project.projectId}
-         AND user_id = ${value.owner.userId}
+      UPDATE app.users
+         SET is_admin = false, row_version = row_version + 1
+       WHERE id = ${operator.userId}
     `;
     await expectError(
       await request(
         "POST",
         rolePath,
-        value.owner,
+        operator,
         { role: "MEMBER" },
         { key: randomUUID() },
       ),
-      403,
-      "PROJECT_MEMBER_ROLE_FORBIDDEN",
+      404,
+      "PROJECT_MEMBER_NOT_FOUND",
     );
 
-    // 同一操作者降级后用原 Key 重放：重放授权器必须重新校验项目内
-    // 管理角色并拒绝，不泄露已存响应。
+    // 同一操作者降权后用原 Key 重放：重放授权器必须重新校验项目写权限
+    // 并拒绝，不泄露已存响应。
     await expectError(
-      await request(
-        "POST",
-        rolePath,
-        value.owner,
-        { role: "PROJECT_ADMIN" },
-        { key },
-      ),
-      403,
-      "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+      await request("POST", rolePath, operator, { role: "LEADER" }, { key }),
+      404,
+      "PROJECT_MEMBER_NOT_FOUND",
     );
   });
 });

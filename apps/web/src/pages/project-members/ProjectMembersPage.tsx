@@ -15,8 +15,8 @@ export interface ProjectMembersPageProps {
 }
 
 /**
- * ADR-033：成员管理入口不再只看系统管理员标记——本项目组长与项目管理员
- * 同样进入管理视图；其余成员使用活跃成员只读视图。
+ * ADR-039：成员管理入口对全体活跃成员开放（含组长）——非成员（`currentUserRole`
+ * 为 null）使用活跃成员只读视图，其余进入管理视图。
  */
 export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
   client,
@@ -54,7 +54,6 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
       projectId={id}
       client={client}
       isSystemAdmin={isSystemAdmin}
-      currentUserRole={detail.data?.currentUserRole ?? null}
     />
   );
 };

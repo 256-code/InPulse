@@ -202,7 +202,7 @@ export class ProjectMemberManagementHttpService {
   }
 
   private parseRoleBody(value: unknown): {
-    role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+    role: "MEMBER" | "LEADER";
   } {
     const parsed =
       schemaRegistry.SetProjectMemberRoleRequest.schema.safeParse(value);
@@ -264,8 +264,8 @@ export class ProjectMemberManagementHttpService {
   }
 
   /**
-   * ADR-033：写 actor 只要求有效认证 Session 与同步 CSRF；项目内管理角色
-   * （系统管理员/本项目 LEADER/PROJECT_ADMIN）由服务层在同一事务内校验。
+   * ADR-033/ADR-039：写 actor 只要求有效认证 Session 与同步 CSRF；项目内管理权限
+   * （系统管理员或本项目任意活跃成员）由服务层在同一事务内校验。
    * 读路径只要求有效认证 Session。
    */
   private async resolveReadActor(

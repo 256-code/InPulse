@@ -41,11 +41,8 @@ interface ReassignmentChoice {
 export interface ProjectMembersPageViewProps {
   readonly projectId: number;
   readonly client?: InpulseApiClient | undefined;
-  /** ADR-033：当前登录用户是否系统管理员（可任命/转移任意角色）。 */
+  /** ADR-033：当前登录用户是否系统管理员（可转移/撤销组长）。 */
   readonly isSystemAdmin?: boolean | undefined;
-  /** ADR-033：当前登录用户在本项目的角色，来自 getProject.currentUserRole。 */
-  readonly currentUserRole?:
-    "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null | undefined;
   /**
    * 嵌在项目主页弹窗内：项目已由外层固定，隐藏页内的项目切换器
    * （切换器依赖整页路由，弹窗内无法生效）。
@@ -56,9 +53,8 @@ export interface ProjectMembersPageViewProps {
 const formatMemberDate = (value: string) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 
-const roleLabel: Record<"MEMBER" | "PROJECT_ADMIN" | "LEADER", string> = {
+const roleLabel: Record<"MEMBER" | "LEADER", string> = {
   MEMBER: "成员",
-  PROJECT_ADMIN: "项目管理员",
   LEADER: "组长",
 };
 
@@ -66,7 +62,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   projectId,
   client,
   isSystemAdmin = false,
-  currentUserRole = null,
   embedded = false,
 }) => {
   const { query, addMutation, removeMutation, roleMutation } =
@@ -155,18 +150,14 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     removeMutation.reset();
   };
 
-  // ADR-033：角色任命入口。系统管理员可设全部角色（含转移组长）；
-  // 本项目组长只能任命/撤销项目管理员。
-  const canSetRole = isSystemAdmin || currentUserRole === "LEADER";
-  const assignableRoles = isSystemAdmin
-    ? (["MEMBER", "PROJECT_ADMIN", "LEADER"] as const)
-    : (["MEMBER", "PROJECT_ADMIN"] as const);
+  // ADR-039：项目内角色任命只剩「任命/撤销组长」，且只能由系统管理员执行。
+  const assignableRoles = ["MEMBER", "LEADER"] as const;
   const [roleTarget, setRoleTarget] = useState<ProjectMemberRecordItem | null>(
     null,
   );
-  const [selectedRole, setSelectedRole] = useState<
-    "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null
-  >(null);
+  const [selectedRole, setSelectedRole] = useState<"MEMBER" | "LEADER" | null>(
+    null,
+  );
 
   const openRoleModal = (member: ProjectMemberRecordItem) => {
     setRoleTarget(member);
@@ -287,7 +278,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           <div>
             <h1>{project ? project.name : "项目成员管理"}</h1>
             <p>
-              系统管理员、本项目组长与项目管理员可添加或移除项目成员；
+              本项目任意活跃成员都可添加或移除项目成员；
               移除不会删除任何历史数据，未改派任务保留原负责人，
               但原成员将立即失去处理权限。
             </p>
@@ -345,7 +336,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           <div className="settings-panel-head">
             <CalmSectionTitle
               title="项目成员"
-              hint="系统管理员、本项目组长与项目管理员可以添加或移除成员"
+              hint="本项目任意活跃成员都可以添加或移除成员"
             >
               {embedded ? null : (
                 <CalmSelect
@@ -439,9 +430,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         </CalmBadge>
                         {member.status === "ACTIVE" &&
                         member.role !== "MEMBER" ? (
-                          <CalmBadge
-                            tone={member.role === "LEADER" ? "blue" : "violet"}
-                          >
+                          <CalmBadge tone="blue">
                             {roleLabel[member.role]}
                           </CalmBadge>
                         ) : null}
@@ -450,7 +439,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         ) : null}
                       </div>
                       <div className="member-card-actions">
-                        {member.status === "ACTIVE" && canSetRole ? (
+                        {member.status === "ACTIVE" && isSystemAdmin ? (
                           <Button
                             className="secondary-button"
                             onClick={() => openRoleModal(member)}
@@ -758,9 +747,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 " 设置项目内角色（仅在本项目生效）"
               }
               description={
-                isSystemAdmin
-                  ? "系统管理员可任命成员、项目管理员或转移组长；转移组长后原组长自动成为普通成员。"
-                  : "组长可任命或撤销项目管理员；组长角色的任命与转移只能由系统管理员执行。"
+                "可将成员设为组长或撤销组长；每个项目只能有一名组长，转移组长后原组长自动成为普通成员。"
               }
             />
             <div className="impact-fieldset member-candidate-list">
@@ -776,10 +763,8 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     />
                     {roleLabel[role]}
                     {role === "LEADER"
-                      ? "（可管理成员并任命项目管理员）"
-                      : role === "PROJECT_ADMIN"
-                        ? "（可管理成员，不能任命角色）"
-                        : "（普通项目成员）"}
+                      ? "（每项目唯一，仅作身份标识，管理权限与成员相同）"
+                      : "（普通项目成员）"}
                   </label>
                 ))}
               </div>

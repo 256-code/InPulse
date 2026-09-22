@@ -127,9 +127,9 @@ describe("项目归档申请入口", () => {
     requestedAt: "2026-09-16T01:00:00.000Z",
   } as const;
 
-  it("hides both entries from ordinary members", () => {
+  it("lets any active member request archiving while approvals stay admin-only (ADR-039)", () => {
     mount({ projects: [{ ...project, currentUserRole: "MEMBER" }] });
-    expect(screen.queryByTestId("request-archive-2")).toBeNull();
+    expect(screen.getByTestId("request-archive-2")).toBeInTheDocument();
     expect(screen.queryByTestId("approve-archive-request-2")).toBeNull();
   });
 
@@ -140,9 +140,10 @@ describe("项目归档申请入口", () => {
     expect(screen.getByLabelText("归档申请原因")).toBeInTheDocument();
   });
 
-  it("lets a project admin request archiving as well", () => {
-    mount({ projects: [{ ...project, currentUserRole: "PROJECT_ADMIN" }] });
-    expect(screen.getByTestId("request-archive-2")).toBeInTheDocument();
+  it("hides the request entry when the viewer has no project role (ADR-039)", () => {
+    mount({ projects: [{ ...project, currentUserRole: null }] });
+    expect(screen.queryByTestId("request-archive-2")).toBeNull();
+    expect(screen.queryByTestId("approve-archive-request-2")).toBeNull();
   });
 
   it("replaces the request entry with a pending note once a request exists", () => {

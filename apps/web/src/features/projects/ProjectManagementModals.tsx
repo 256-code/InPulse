@@ -52,7 +52,7 @@ export interface EditProjectModalProps {
   readonly onClose: () => void;
   readonly onUpdated: (updated: ProjectItem) => void;
   /**
-   * ADR-035：调用方按「系统管理员或本项目组长 / 项目管理员」判定后传入，
+   * ADR-039：调用方按「系统管理员或本项目任意活跃成员」判定后传入，
    * 默认 false 只展示当前状态标签。服务端仍会二次校验同一条件。
    */
   readonly canChangeStatus?: boolean | undefined;
@@ -131,7 +131,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   const statusHint = statusLocked
     ? "项目已归档，状态只读；请先恢复项目，恢复后状态为进行中。"
     : !canChangeStatus
-      ? "只有系统管理员、项目组长或项目管理员可以更改项目状态。"
+      ? "只有本项目活跃成员或系统管理员可以更改项目状态。"
       : "未开始 ⇄ 进行中 ⇄ 维护中；未开始与维护中不能直接互改。" +
         (project.hasCompletedTask
           ? "项目里已有完成任务，因此不能再退回未开始。"
@@ -644,7 +644,7 @@ export interface RequestProjectArchiveModalProps {
 }
 
 /**
- * ADR-034：项目组长或项目管理员发起归档申请；申请只进入待审状态，
+ * ADR-034/ADR-039：本项目任意活跃成员或系统管理员发起归档申请；申请只进入待审状态，
  * 只有系统管理员批准后项目才会归档。
  */
 export const RequestProjectArchiveModal: React.FC<
@@ -689,7 +689,7 @@ export const RequestProjectArchiveModal: React.FC<
   return (
     <Modal
       className="catalog-modal"
-      eyebrow="项目组长或项目管理员可发起"
+      eyebrow="本项目活跃成员可发起"
       title="申请项目归档"
       tone="warning"
       icon="alert"

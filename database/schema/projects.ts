@@ -77,7 +77,7 @@ export const projectMembers = appSchema.table(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     status: text("status").notNull().default("ACTIVE"),
-    /** ADR-033：项目内角色；成员被移除即失效，重新加入从 MEMBER 开始。 */
+    /** ADR-033/ADR-039：项目内角色（组长或普通成员）；成员被移除即失效，重新加入从 MEMBER 开始。 */
     role: text("role").notNull().default("MEMBER"),
     joinedAt: timestamptz("joined_at").notNull().defaultNow(),
     removedAt: timestamptz("removed_at"),
@@ -104,7 +104,7 @@ export const projectMembers = appSchema.table(
     ),
     check(
       "project_members_role_check",
-      sql.raw("role IN ('MEMBER', 'PROJECT_ADMIN', 'LEADER')"),
+      sql.raw("role IN ('MEMBER', 'LEADER')"),
     ),
     check(
       "project_members_removed_role_check",

@@ -103,7 +103,7 @@ export class ProjectBootstrapWorkflow {
     const memberRecords: {
       userId: number;
       status: "ACTIVE";
-      role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+      role: "MEMBER" | "LEADER";
       joinedAt: string;
     }[] = [];
     for (const userId of allMemberIds) {

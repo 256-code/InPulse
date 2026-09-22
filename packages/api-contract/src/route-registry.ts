@@ -1146,7 +1146,8 @@ export const routeRegistry = [
     idempotencyExceptionAdr: "none",
     // ADR-033：响应成员摘要新增 role，重放安全字段随之变化，旧 Key 409。
     // 2026-09-17：项目四态改造后新建项目状态由 ACTIVE 改为 NOT_STARTED，响应 Schema 变化，旧 Key 409。
-    idempotencyContractVersion: "2.2.0",
+    // 2026-09-22：ADR-039 移除 PROJECT_ADMIN，members[].role 枚举收窄，旧 Key 409。
+    idempotencyContractVersion: "2.3.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: {

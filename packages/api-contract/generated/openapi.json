@@ -3094,7 +3094,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.2.0",
+          "idempotencyContractVersion": "2.3.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -3333,7 +3333,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.4.0",
+          "idempotencyContractVersion": "1.5.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3761,7 +3761,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.4.0",
+          "idempotencyContractVersion": "1.5.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -3978,7 +3978,7 @@
     "/projects/{projectId}/archive-requests": {
       "post": {
         "operationId": "requestProjectArchive",
-        "summary": "ADR-034 项目归档申请：本项目组长、项目管理员或系统管理员提交；项目必须处于 ACTIVE 且项目下没有未完成任务，同一项目同时只允许一条待审申请；申请不改变项目状态，审计、活动与通知全部系统管理员的站内通知在同一事务提交；项目已归档或仍有未完成任务返回 409。",
+        "summary": "ADR-034/ADR-039 项目归档申请：本项目任意活跃成员或系统管理员提交；项目必须处于 ACTIVE 且项目下没有未完成任务，同一项目同时只允许一条待审申请；申请不改变项目状态，审计、活动与通知全部系统管理员的站内通知在同一事务提交；项目已归档或仍有未完成任务返回 409。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6364,7 +6364,7 @@
     "/projects/{projectId}/members": {
       "get": {
         "operationId": "listProjectMembers",
-        "summary": "读取项目成员完整历史；系统管理员或本项目组长/项目管理员（ADR-033）可读，其余成员与非成员统一 403/404。",
+        "summary": "读取项目成员完整历史；系统管理员或本项目任意活跃成员（ADR-039）可读，其余成员与非成员统一 403/404。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6477,7 +6477,7 @@
       },
       "post": {
         "operationId": "addProjectMember",
-        "summary": "添加项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
+        "summary": "添加项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写；已停用或不存在用户 422，重复活跃成员 409，重新加入新增历史记录并同事务发送通知与审计。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6565,7 +6565,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -6649,7 +6649,7 @@
     "/projects/{projectId}/members/{userId}/remove": {
       "post": {
         "operationId": "removeProjectMember",
-        "summary": "移除项目成员；系统管理员或本项目组长/项目管理员（ADR-033）可写，但组长成员行不得被移除（先转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6737,7 +6737,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -6836,7 +6836,7 @@
     "/projects/{projectId}/members/{userId}/role": {
       "post": {
         "operationId": "setProjectMemberRole",
-        "summary": "ADR-033 任命/撤销项目内角色：系统管理员可设 MEMBER/PROJECT_ADMIN/LEADER（转移组长），本项目组长只能设 MEMBER/PROJECT_ADMIN；目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+        "summary": "ADR-039 任命/撤销组长：仅系统管理员可设 MEMBER/LEADER（转移或撤销组长），目标必须为 ACTIVE 成员；本项目组长与普通成员一律 403，LEADER 唯一性由部分唯一索引保证，冲突 409。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6924,7 +6924,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -7018,7 +7018,7 @@
     "/projects/{projectId}/members/{userId}/unfinished-tasks": {
       "get": {
         "operationId": "listProjectMemberUnfinishedTasks",
-        "summary": "读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人；系统管理员或本项目组长/项目管理员（ADR-033）可读。",
+        "summary": "读取项目成员当前未完成任务，用于移除前提示改派或保留原负责人；系统管理员或本项目任意活跃成员（ADR-039）可读。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7256,7 +7256,7 @@
       },
       "post": {
         "operationId": "createModule",
-        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
+        "summary": "create 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7434,7 +7434,7 @@
     "/projects/{projectId}/modules/{moduleId}": {
       "patch": {
         "operationId": "updateModule",
-        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
+        "summary": "update 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7634,7 +7634,7 @@
     "/projects/{projectId}/modules/{moduleId}/archive": {
       "post": {
         "operationId": "archiveModule",
-        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
+        "summary": "archive 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -7957,7 +7957,7 @@
       },
       "post": {
         "operationId": "createFeature",
-        "summary": "create 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-034）与原因。",
+        "summary": "create 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8281,7 +8281,7 @@
       },
       "patch": {
         "operationId": "updateFeature",
-        "summary": "update 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-034）与原因。",
+        "summary": "update 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8494,7 +8494,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/archive": {
       "post": {
         "operationId": "archiveFeature",
-        "summary": "archive 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-034）与原因。",
+        "summary": "archive 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -8707,7 +8707,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/restore": {
       "post": {
         "operationId": "restoreFeature",
-        "summary": "restore 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-034）与原因。",
+        "summary": "restore 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -9662,7 +9662,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/archive": {
       "post": {
         "operationId": "archiveTask",
-        "summary": "归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。",
+        "summary": "归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。",
         "responses": {
           "200": {
             "description": "成功",
@@ -9896,7 +9896,7 @@
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/restore": {
       "post": {
         "operationId": "restoreTask",
-        "summary": "恢复已归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
+        "summary": "恢复已归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
         "responses": {
           "200": {
             "description": "成功",
@@ -11012,7 +11012,7 @@
     "/projects/{projectId}/modules/{moduleId}/restore": {
       "post": {
         "operationId": "restoreModule",
-        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目组长/项目管理员（ADR-033）与原因。",
+        "summary": "restore 模块；项目可写，未分类身份不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。",
         "responses": {
           "200": {
             "description": "成功",
@@ -11916,7 +11916,7 @@
     "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/archive": {
       "post": {
         "operationId": "archiveModuleTask",
-        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员、本项目组长或项目管理员角色。",
+        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。",
         "responses": {
           "200": {
             "description": "成功",
@@ -12764,7 +12764,7 @@
     "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/restore": {
       "post": {
         "operationId": "restoreModuleTask",
-        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员、本项目组长或项目管理员角色。",
+        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。",
         "responses": {
           "200": {
             "description": "成功",
@@ -14200,7 +14200,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.4.0",
+          "idempotencyContractVersion": "1.5.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -14302,7 +14302,7 @@
     "/projects/{projectId}/status": {
       "patch": {
         "operationId": "changeProjectStatus",
-        "summary": "F-06.3 项目状态变更：本项目组长、项目管理员或系统管理员把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
+        "summary": "F-06.3 项目状态变更：本项目任意活跃成员或系统管理员（ADR-039）把项目在未开始 / 进行中 / 维护中之间手动切换，归档只能走归档流程所以不是合法目标；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
         "responses": {
           "200": {
             "description": "成功",
@@ -14390,7 +14390,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -14845,7 +14845,7 @@
     "/task-groups": {
       "get": {
         "operationId": "listTaskGroups",
-        "summary": "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总聚合组与当前生效分支（主任务在前，来源任务按 joinedAt 升序，分支携带优先级与工作状态）；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
+        "summary": "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总当前用户作为活跃分支任务负责人的聚合组（与自己无关的组不返回，组关闭后成员全部解除因此不再返回）；分支主任务在前、来源任务按 joinedAt 升序，携带优先级与工作状态；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
         "responses": {
           "200": {
             "description": "成功",
@@ -16226,7 +16226,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -20298,7 +20297,6 @@
                 "type": "string",
                 "enum": [
                   "MEMBER",
-                  "PROJECT_ADMIN",
                   "LEADER"
                 ]
               },
@@ -20464,7 +20462,6 @@
                 "type": "string",
                 "enum": [
                   "MEMBER",
-                  "PROJECT_ADMIN",
                   "LEADER"
                 ]
               },
@@ -20550,7 +20547,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -20692,7 +20688,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -22479,7 +22474,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           }

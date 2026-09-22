@@ -136,19 +136,17 @@ describe("ProjectMemberManagementService", () => {
     });
   });
 
-  it("denies member management to plain members and hides projects from non-members", async () => {
+  it("allows member management for any active member and hides projects from non-members", async () => {
     const s = setup();
     s.roleGate.manageRole.mockResolvedValue("MEMBER");
-    await expect(s.service.listMembers(tx, 7, 1)).rejects.toMatchObject({
-      status: 403,
-      code: "PROJECT_MEMBER_MANAGE_FORBIDDEN",
+    await expect(s.service.listMembers(tx, 7, 1)).resolves.toMatchObject({
+      items: expect.any(Array),
     });
     s.roleGate.manageRole.mockResolvedValue("NOT_MEMBER");
     await expect(s.service.listMembers(tx, 7, 1)).rejects.toMatchObject({
       status: 404,
       code: "PROJECT_MEMBER_NOT_FOUND",
     });
-    expect(s.projects.listMembers).not.toHaveBeenCalled();
   });
 
   it("adds a new ACTIVE member with audit/activity/notification in one transaction", async () => {
@@ -294,23 +292,23 @@ describe("ProjectMemberManagementService", () => {
     s.projects.findLatestMember.mockResolvedValueOnce(activeMember);
     s.projects.setMemberRole.mockResolvedValueOnce({
       ...activeMember,
-      role: "PROJECT_ADMIN" as const,
+      role: "LEADER" as const,
     });
     const result = await s.service.setRole(tx, {
       actorId: 1,
       projectId: 7,
       userId: 5,
-      role: "PROJECT_ADMIN",
+      role: "LEADER",
       requestId: "req-7",
     });
     expect(result.responseStatus).toBe(200);
     expect(result.body).toMatchObject({
-      member: { userId: 5, role: "PROJECT_ADMIN" },
+      member: { userId: 5, role: "LEADER" },
     });
     expect(s.projects.setMemberRole).toHaveBeenCalledWith(tx, {
       projectId: 7,
       userId: 5,
-      role: "PROJECT_ADMIN",
+      role: "LEADER",
     });
     expect(s.audit.append).toHaveBeenCalledWith(
       tx,
@@ -323,14 +321,14 @@ describe("ProjectMemberManagementService", () => {
       }),
     );
 
-    // 普通成员任命角色 -> 403
+    // ADR-039：普通成员调用角色任命 -> 403
     s.roleGate.roleSetterRole.mockResolvedValueOnce("MEMBER");
     await expect(
       s.service.setRole(tx, {
         actorId: 2,
         projectId: 7,
         userId: 5,
-        role: "PROJECT_ADMIN",
+        role: "LEADER",
         requestId: "req-8",
       }),
     ).rejects.toMatchObject({
@@ -338,8 +336,8 @@ describe("ProjectMemberManagementService", () => {
       code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
     });
 
-    // 组长任命/转移组长 -> 403
-    s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
+    // ADR-039：组长也不再有任命权（`roleSetterRole` 把 LEADER 归入 MEMBER）
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("MEMBER");
     await expect(
       s.service.setRole(tx, {
         actorId: 1,
@@ -350,7 +348,7 @@ describe("ProjectMemberManagementService", () => {
       }),
     ).rejects.toMatchObject({
       status: 403,
-      code: "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
+      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
     });
 
     // 唯一组长约束冲突 -> 409

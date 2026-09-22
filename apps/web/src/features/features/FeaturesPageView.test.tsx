@@ -656,19 +656,19 @@ describe("功能归档入口权限（ADR-034）", () => {
     );
   });
 
-  it("卡片与编辑弹窗都不再提供归档按钮给普通成员", async () => {
+  it("普通成员同样在编辑弹窗底部看到归档入口（ADR-039）", async () => {
     mount(lifecycleClient("MEMBER"));
-    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
-    await screen.findByLabelText("功能名称");
-    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
-  });
-
-  it("项目管理员同样在编辑弹窗底部看到归档入口", async () => {
-    mount(lifecycleClient("PROJECT_ADMIN"));
     fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
     expect(
       (await screen.findByTestId("feature-modal-lifecycle")).textContent,
     ).toMatch(/归\s*档/);
+  });
+
+  it("无项目内角色（非成员）在编辑弹窗底部没有归档入口（ADR-039）", async () => {
+    mount(lifecycleClient(null));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    await screen.findByLabelText("功能名称");
+    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
   });
 
   it("已归档功能只在卡片保留恢复入口，组长可直接恢复", async () => {
@@ -842,19 +842,19 @@ describe("功能归档入口权限（ADR-034）", () => {
     );
   });
 
-  it("卡片与编辑弹窗都不再提供归档按钮给普通成员", async () => {
+  it("普通成员同样在编辑弹窗底部看到归档入口（ADR-039）", async () => {
     mount(lifecycleClient("MEMBER"));
-    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
-    await screen.findByLabelText("功能名称");
-    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
-  });
-
-  it("项目管理员同样在编辑弹窗底部看到归档入口", async () => {
-    mount(lifecycleClient("PROJECT_ADMIN"));
     fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
     expect(
       (await screen.findByTestId("feature-modal-lifecycle")).textContent,
     ).toMatch(/归\s*档/);
+  });
+
+  it("无项目内角色（非成员）在编辑弹窗底部没有归档入口（ADR-039）", async () => {
+    mount(lifecycleClient(null));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    await screen.findByLabelText("功能名称");
+    expect(screen.queryByTestId("feature-modal-lifecycle")).toBeNull();
   });
 
   it("已归档功能只在卡片保留恢复入口，组长可直接恢复", async () => {

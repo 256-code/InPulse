@@ -82,6 +82,7 @@
 - `idempotencyRequired` 的请求摘要必须覆盖大写 method、operationId、幂等契约版本、摘要格式与请求 Schema 版本、Schema 解析后的 path 参数和规范 query、规范 Content-Type、Route Registry 声明的全部行为相关请求头以及 JCS 规范化 body；使用版本头的路由必须包含 `If-Match`。摘要使用独立、带版本密钥的 HMAC-SHA-256，不得把普通 SHA-256 用作密码、验证码或其他低熵输入的离线校验器。Cookie、Authorization、CSRF、追踪头和 Idempotency-Key 不进入摘要。任一语义输入或幂等契约版本不同都返回 409。幂等不能只依赖前端禁用按钮或进程内锁。
 - 每条 `idempotencyRequired` 路由必须登记带版本的 `idempotencyReplayPolicy`：逐个列出可能缓存的 2xx 状态；有 body 时列出精确响应 Schema 引用以及可安全持久化和重放的全部 body 叶子字段，无 body 时使用互斥的 `noBody` 分支。CI 必须拒绝遗漏状态、字段不全或越界、Schema 不一致、Secret 字段以及任何 `Set-Cookie`/认证响应头重放；`none` 与 `securityFlow` 路由的该策略只能为 `none`。请求或安全重放策略变化必须升级幂等契约版本，旧 Key 在新契约下返回 409。
 - 每条 `idempotencyRequired` 路由还必须登记 `replayAuthorizationPolicy`，以类型化、最小化的结果资源引用说明缓存响应暴露了哪些资源。幂等重放前必须重新验证当前认证、原操作权限、所有结果资源的当前可读权限及该路由要求的高风险门禁（当前有效的完整管理员 Session）；任一门禁失败时拒绝且不得泄露已存状态码或响应。只有全部门禁通过后，同 Key、同摘要和同契约版本才重放原 2xx。
+- 项目内角色只有 `MEMBER` 与 `LEADER` 两种：`LEADER` 仅标识创建者/组长身份，不附带任何额外管理权；项目内管理操作（成员增删、模块/功能/任务归档恢复、项目状态变更、项目归档申请）只区分「本项目活跃成员」与「非成员」（404），不再有 403 角色分支（[ADR-039](./docs/adr/ADR-039.md)）。任命/撤销组长只能由系统管理员执行，通过 `setProjectMemberRole` 传入 `MEMBER` / `LEADER`。
 - 项目创建时，创建者必须自动成为活跃成员且创建流程不可取消该成员关系；创建完成后，系统管理员可以按普通成员规则移除创建者（[ADR-033](./docs/adr/ADR-033.md) 起创建者成员行默认担任组长 LEADER，组长须先由系统管理员转移或撤销后才能被移除）。`projects.created_by` 只用于不可变溯源，不赋予额外权限，也不得随成员移除而改变。普通成员创建者被移除后立即失去成员关系派生的项目权限；若创建者本身是系统管理员，其全局管理员权限不受成员记录影响。测试必须分别覆盖这两种身份。
 - 正式记录版本不可变；迭代记录状态只允许 `DRAFT -> PUBLISHED -> VOID`，以及系统管理员执行的 `VOID -> PUBLISHED` 恢复（[ADR-031](./docs/adr/ADR-031.md) 起不再要求 TOTP 重认证）。`status` 是详情、统计、搜索和时间线可见性的唯一真相，不得因恢复后仍保留 `voided_at` 而继续隐藏。恢复必须保留作废快照与全部版本，原因进入不可变审计，具体不变量见 [ADR-024](./docs/adr/ADR-024.md)。任务组成员关系是 MAIN/SOURCE 身份的唯一真相。业务历史默认通过归档、作废或新版本保留，不物理覆盖或删除。
 - 历史迁移一经合并不得修改、删除或重排。新迁移采用 expand/contract 思路，必须支持从上一正式版本验证升级和回滚兼容窗口。
@@ -292,3 +293,14 @@
 - 部署配方同步为 2 小时：`deploy/.env.deploy.example` 与 `deploy/.env.deploy.test` 写入 `SESSION_IDLE_MAX_AGE_SECONDS=7200`，`deploy/compose.yaml` 注释同步。
 - 路由、契约、权限矩阵与数据库迁移无改动；测试断言已同步（`session-ttl.policy.test.ts` 默认 7200 秒、`sso-login.integration.test.ts` 以 7200 秒签发并断言窗口），测试矩阵新增 2026-09-20 修订行。
 - 本文件上文历史条目中出现的 30 分钟空闲超时为当时事实，与本节冲突时以 ADR-038 与本节的现行规则为准。
+
+## 2026-09-22 ADR-039 移除项目管理员角色说明
+
+按用户明确要求「项目里面不需要有项目管理员，并且所有项目的成员所拥有的管理权限都和组长一样」移除项目管理员角色，并把项目内管理权下发给全体活跃成员（[ADR-039](./docs/adr/ADR-039.md) 修订 ADR-033/034/035 的角色口径）。因此：
+
+- 项目内角色收敛为 `MEMBER` | `LEADER`；存量 `PROJECT_ADMIN` 行在迁移 `0019_drop_project_admin_role.sql` 中降级为 `MEMBER`，随后收紧 `project_members_role_check`（必须先降级再收紧，中间用 `SET CONSTRAINTS ALL IMMEDIATE` 结算延迟约束触发器事件，否则 `ALTER TABLE` 报 55006）。
+- `LEADER` 只保留身份含义（创建者标记、组长唯一性、组长行移除保护 409 `PROJECT_MEMBER_LEADER_PROTECTED`、转移组长时原组长同事务降级为 `MEMBER`），不再单独授予任何管理权。
+- 成员增删、模块/功能/任务归档与恢复、项目状态变更、项目归档申请的角色门禁统一为「系统管理员或本项目活跃成员放行，非成员 404」；相关错误码 `PROJECT_MEMBER_MANAGE_FORBIDDEN` / `MODULE_MANAGE_FORBIDDEN` / `FEATURE_MANAGE_FORBIDDEN` / `TASK_ARCHIVE_FORBIDDEN` / `PROJECT_STATUS_FORBIDDEN` / `PROJECT_ARCHIVE_REQUEST_FORBIDDEN` / `PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN` 已全部移除，前端与测试不得再依赖它们。
+- `setProjectMemberRole` 保留但收窄：请求 `role` 只能是 `MEMBER` / `LEADER`（其他值 422 `PROJECT_MEMBER_VALIDATION_FAILED`），且只有系统管理员可调用，其他活跃成员 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，非成员 404。前端「设置角色」入口只对系统管理员渲染。
+- 因重放 body 携带角色枚举或 `currentUserRole`，下列路由的幂等契约版本已升级（旧 Key 409）：`setProjectMemberRole` 2.0.0、`addProjectMember`/`removeProjectMember` 1.2.0、`updateProject`/`archiveProject`/`restoreProject` 1.5.0、`changeProjectStatus` 1.1.0、`createProject` 2.3.0；模块/功能/任务归档恢复与 `requestProjectArchive` 的重放体不含角色字段，版本不变。
+- 本文件上文及三份基线设计文档中出现的「项目管理员」「组长拥有额外管理权」「普通成员 403」为当时事实，与本节冲突时以 ADR-039 与本节的现行规则为准；ADR-033/034/035 文档标题下的「修订」行与 `docs/adr/README.md` 已标注该口径变更。

@@ -122,7 +122,7 @@ export const permissionMatrix = [
           ? {
               kind: "conditional",
               allowedWhen:
-                "ADR-033：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+                "ADR-039：本项目任意活跃成员（实时成员关系），项目 ACTIVE、原因/If-Match/CSRF 与幂等必填",
               deniedWith: 403,
             }
           : { kind: "allow" },
@@ -194,7 +194,7 @@ export const permissionMatrix = [
           ? {
               kind: "conditional",
               allowedWhen:
-                "ADR-034：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目/模块 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+                "ADR-039：本项目任意活跃成员（实时成员关系），项目/模块 ACTIVE、原因/If-Match/CSRF 与幂等必填",
               deniedWith: 403,
             }
           : { kind: "allow" },
@@ -605,7 +605,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-035：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），未归档项目、CSRF、Idempotency-Key 与 If-Match 必填；普通成员 403，未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
+          "ADR-039：本项目任意活跃成员（实时成员关系），未归档项目、CSRF、Idempotency-Key 与 If-Match 必填，未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -668,7 +668,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-033：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色）；普通成员 403" +
+          "ADR-039：本项目任意活跃成员（实时成员关系）" +
           (operationId === "removeProjectMember"
             ? "；目标为本项目 LEADER 时 409，须先由系统管理员转移/撤销"
             : ""),
@@ -692,7 +692,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-033：本项目 LEADER 且目标角色仅 MEMBER/PROJECT_ADMIN；普通成员与 PROJECT_ADMIN 403",
+          "ADR-039：仅系统管理员可任命/撤销组长；本项目组长与普通成员一律 403 PROJECT_MEMBER_ROLE_FORBIDDEN，非成员 404",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -701,7 +701,7 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；可设 MEMBER/PROJECT_ADMIN/LEADER（含转移组长），目标必须 ACTIVE 成员",
+          "完整系统管理员 Session；可设 MEMBER/LEADER（含转移组长），目标必须 ACTIVE 成员，LEADER 唯一性冲突 409 PROJECT_MEMBER_LEADER_CONFLICT",
         deniedWith: 403,
       },
     },
@@ -713,7 +713,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-034：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填；普通成员 403",
+          "ADR-034/ADR-039：本项目任意活跃成员（实时成员关系），项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -761,7 +761,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-033 角色模型：本项目 LEADER 或 PROJECT_ADMIN（实时成员角色），父级 ACTIVE、原因/If-Match/CSRF 与幂等必填；普通成员 403",
+          "ADR-033/ADR-039：本项目任意活跃成员（实时成员关系），父级 ACTIVE、原因/If-Match/CSRF 与幂等必填",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },

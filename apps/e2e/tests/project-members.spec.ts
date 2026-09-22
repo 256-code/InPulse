@@ -8,7 +8,7 @@ import {
 import { pickCalmSelectOptions } from "../helpers/calm-select.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
-test("普通成员只能查看本项目成员，不能增删或读取其他项目", async ({
+test("普通成员可查看并管理本项目成员，不能读取其他项目", async ({
   browser,
 }) => {
   test.setTimeout(60_000);
@@ -28,12 +28,18 @@ test("普通成员只能查看本项目成员，不能增删或读取其他项�
         .locator(".calm-member-card")
         .filter({ hasText: runtime.user.name }),
     ).toHaveCount(1);
-    await expect(members.getByRole("button", { name: "添加成员" })).toHaveCount(
-      0,
-    );
-    await expect(members.getByRole("button", { name: /移\s*除/ })).toHaveCount(
-      0,
-    );
+    await expect(
+      members.getByRole("button", { name: "添加成员" }),
+    ).toBeVisible();
+    // ADR-039：项目内管理权对全体活跃成员等同，视图不再按角色降级——普通成员
+    // （此处即项目创建者）同样看到完整管理入口。授权仍由服务端强制，同文件末尾
+    // 的隐藏项目 404 断言覆盖。
+    await expect(
+      members
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.user.name })
+        .getByRole("button", { name: /移\s*除/ }),
+    ).toBeVisible();
 
     const forbidden = page.waitForResponse((response) =>
       response

@@ -67,12 +67,13 @@ export function useProjectDetail({
   });
 }
 
-/** ADR-033：当前用户在项目内可执行成员/模块管理（系统管理员或组长/项目管理员）。 */
+/** ADR-039：项目内管理入口对全体活跃成员开放（含组长）；非成员 `role` 为 null。 */
 export function canManageProjectResources(
   isSystemAdmin: boolean,
-  role: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null | undefined,
+  role: "MEMBER" | "LEADER" | null | undefined,
 ): boolean {
-  return isSystemAdmin || role === "LEADER" || role === "PROJECT_ADMIN";
+  if (isSystemAdmin) return true;
+  return role === "MEMBER" || role === "LEADER";
 }
 
 export function describeCreateProjectError(error: unknown): string {

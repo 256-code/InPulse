@@ -63,7 +63,6 @@ function mount(
   client: InpulseApiClient,
   props: {
     readonly isSystemAdmin?: boolean | undefined;
-    readonly currentUserRole?: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null;
   } = {},
 ) {
   return render(
@@ -282,32 +281,28 @@ describe("ProjectMembersPageView", () => {
     await screen.findByText(/成员已移出项目/);
   });
 
-  it("lets the project leader appoint a project admin through the generated client", async () => {
+  it("lets a system admin transfer the leader role through the generated client (ADR-039)", async () => {
     const client = baseClient();
     const setProjectMemberRole = vi.fn().mockResolvedValue({
-      member: { ...owner, role: "PROJECT_ADMIN" },
+      member: { ...owner, role: "LEADER" },
     });
     const api = {
       ...client,
       setProjectMemberRole,
     } as unknown as InpulseApiClient;
-    mount(api, { isSystemAdmin: false, currentUserRole: "LEADER" });
+    mount(api, { isSystemAdmin: true });
 
     await screen.findByText("开发者 C");
     fireEvent.click(screen.getByRole("button", { name: "设置角色" }));
     const dialog = await screen.findByRole("dialog", { name: "设置项目角色" });
-    // 组长不能任命或转移组长角色。
-    expect(
-      within(dialog).queryByRole("radio", { name: /组\s*长/ }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("radio", { name: /项目管理员/ }));
+    fireEvent.click(within(dialog).getByRole("radio", { name: /组\s*长/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "保存角色" }));
 
     await waitFor(() => expect(setProjectMemberRole).toHaveBeenCalledTimes(1));
     expect(setProjectMemberRole).toHaveBeenCalledWith(
       7,
       2,
-      { role: "PROJECT_ADMIN" },
+      { role: "LEADER" },
       expect.objectContaining({
         headers: expect.objectContaining({
           "x-csrf-token": "csrf-token",
@@ -315,7 +310,7 @@ describe("ProjectMembersPageView", () => {
         }),
       }),
     );
-    await screen.findByText(/已将 开发者 C 的项目角色设置为项目管理员/);
+    await screen.findByText(/已将 开发者 C 的项目角色设置为组长/);
   });
 
   it("offers the leader role option to system admins and protects the leader card from removal", async () => {
@@ -329,7 +324,7 @@ describe("ProjectMembersPageView", () => {
     };
     client.listProjectMembers.mockResolvedValue({ items: [owner, leader] });
     const api = client as unknown as InpulseApiClient;
-    mount(api, { isSystemAdmin: true, currentUserRole: null });
+    mount(api, { isSystemAdmin: true });
 
     await screen.findByText("组长本人");
     expect(screen.getByText("组长")).toBeInTheDocument();
@@ -354,12 +349,9 @@ describe("ProjectMembersPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets a project admin remove members but not appoint roles", async () => {
+  it("lets a non-admin member remove members but never appoint roles (ADR-039)", async () => {
     const client = baseClient();
-    mount(client as unknown as InpulseApiClient, {
-      isSystemAdmin: false,
-      currentUserRole: "PROJECT_ADMIN",
-    });
+    mount(client as unknown as InpulseApiClient, { isSystemAdmin: false });
     await screen.findByText("开发者 C");
     expect(
       screen.queryByRole("button", { name: "设置角色" }),

@@ -186,8 +186,8 @@ export const taskRoutes: readonly RouteDefinition[] = [
         path:
           collection + (archive ? "/{taskId}/archive" : "/{taskId}/restore"),
         summary: archive
-          ? "归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。"
-          : "恢复已归档任务：系统管理员、本项目组长或项目管理员可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
+          ? "归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。"
+          : "恢复已归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
         request: {
           path: "TaskResourcePath",
           query: "none",
@@ -220,7 +220,7 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
       operationId: route.operationId.replace("Task", "ModuleTask"),
       path: route.path.replace("/features/{featureId}", ""),
       summary: lifecycle
-        ? "模块真实归属下的任务归档或恢复；要求系统管理员、本项目组长或项目管理员角色。"
+        ? "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。"
         : route.operationId === "transitionTask" ||
             route.operationId === "getTaskStatusHistory"
           ? "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。"

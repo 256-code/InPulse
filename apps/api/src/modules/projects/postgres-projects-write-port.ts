@@ -30,7 +30,7 @@ interface ProjectInsertRow {
 interface MemberInsertRow {
   readonly user_id: number;
   readonly status: "ACTIVE" | "REMOVED";
-  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+  readonly role: "MEMBER" | "LEADER";
   readonly joined_at: Date;
 }
 
@@ -41,7 +41,7 @@ interface MemberRow {
   readonly name: string;
   readonly avatar_url: string | null;
   readonly status: "ACTIVE" | "REMOVED";
-  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+  readonly role: "MEMBER" | "LEADER";
   readonly joined_at: Date;
   readonly removed_at: Date | null;
 }
@@ -483,7 +483,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
   async setMemberRole(
     tx: TransactionContext,
     input: ProjectMemberIdentity & {
-      readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+      readonly role: "MEMBER" | "LEADER";
     },
   ): Promise<ProjectMemberRecord | undefined> {
     // ADR-033：project_members_one_leader 是非延迟部分唯一索引，转移组长

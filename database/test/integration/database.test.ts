@@ -65,6 +65,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0016_project_archive_requests.sql",
       "0017_project_status_lifecycle.sql",
       "0018_project_archive_backup_grants.sql",
+      "0019_drop_project_admin_role.sql",
     ]);
   });
 

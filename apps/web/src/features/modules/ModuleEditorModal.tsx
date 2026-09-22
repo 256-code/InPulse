@@ -56,8 +56,8 @@ export function ModuleEditorModal({
   onClose: () => void;
   onSaved?: (() => void) | undefined;
   /**
-   * ADR-033：当前用户是否可以归档/恢复本模块，即系统管理员、本项目组长
-   * 或本项目项目管理员。默认 false，由宿主按项目角色传入。
+   * ADR-039：当前用户是否可以归档/恢复本模块，即系统管理员或本项目
+   * 任意活跃成员。默认 false，由宿主按项目角色传入。
    */
   canArchive?: boolean | undefined;
   /** 宿主把弹层切到归档/恢复动作；未提供时底部不渲染生命周期入口。 */

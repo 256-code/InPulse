@@ -117,12 +117,6 @@ export class ProjectArchiveRequestService {
     }
     const role = await this.roles.manageRole(tx, actorId, projectId);
     if (role === "NOT_MEMBER") throw missing();
-    if (role === "MEMBER")
-      throw new ProjectArchiveRequestError(
-        403,
-        "PROJECT_ARCHIVE_REQUEST_FORBIDDEN",
-        "普通成员不能发起项目归档申请",
-      );
   }
 
   /** 提交项目归档申请：项目必须 ACTIVE 且全部任务已归档。 */
@@ -146,12 +140,6 @@ export class ProjectArchiveRequestService {
       input.projectId,
     );
     if (role === "NOT_MEMBER") throw missing();
-    if (role === "MEMBER")
-      throw new ProjectArchiveRequestError(
-        403,
-        "PROJECT_ARCHIVE_REQUEST_FORBIDDEN",
-        "普通成员不能发起项目归档申请，请联系项目组长或项目管理员",
-      );
     if (check.kind === "parent-not-active")
       throw new ProjectArchiveRequestError(
         409,

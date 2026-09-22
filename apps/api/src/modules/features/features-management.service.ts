@@ -172,8 +172,8 @@ export class FeaturesManagementService {
   }
 
   /**
-   * ADR-034：功能归档/恢复的项目内管理角色门禁；系统管理员或本项目
-   * LEADER/PROJECT_ADMIN 通过，普通成员 403，非成员 404。
+   * ADR-034/ADR-039：功能归档/恢复的项目内管理门禁；系统管理员或本项目
+   * 任意活跃成员通过，非成员 404。
    */
   async requireManageRole(
     tx: TransactionContext,
@@ -182,12 +182,6 @@ export class FeaturesManagementService {
   ): Promise<void> {
     const role = await this.roleGate.manageRole(tx, actorId, projectId);
     if (role === "NOT_MEMBER") throw missing();
-    if (role === "MEMBER")
-      throw new FeatureManagementError(
-        403,
-        "FEATURE_MANAGE_FORBIDDEN",
-        "只有系统管理员、本项目组长或项目管理员可以归档或恢复功能",
-      );
   }
 
   async replay(

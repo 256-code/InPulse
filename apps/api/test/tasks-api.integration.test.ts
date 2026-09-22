@@ -1805,7 +1805,7 @@ describe("ADR-034 task archive and restore", () => {
     );
   });
 
-  it("enforces role, project, version and lifecycle gates", async () => {
+  it("enforces member, project, version and lifecycle gates", async () => {
     const { project, member } = await fixture();
     const scope = { ...project, featureId: null };
     const plain = await actor();
@@ -1820,18 +1820,31 @@ describe("ADR-034 task archive and restore", () => {
       ).json(),
     );
 
-    await error(
-      await request(
-        scope,
-        "POST",
-        plain,
-        { reason: "普通成员" },
-        `/${task.id}/archive`,
-        task.rowVersion,
-      ),
-      403,
-      "TASK_ARCHIVE_FORBIDDEN",
+    // ADR-039：归档任务不再要求组长或系统管理员，普通活跃成员同样可归档。
+    const plainTask = moduleTaskItemSchema.parse(
+      await (
+        await request(scope, "POST", plain, {
+          ...edit(plain.userId, "普通成员归档"),
+          impactFeatureIds: [project.featureId],
+        })
+      ).json(),
     );
+    const plainArchived = await request(
+      scope,
+      "POST",
+      plain,
+      { reason: "普通成员" },
+      `/${plainTask.id}/archive`,
+      plainTask.rowVersion,
+    );
+    expect(plainArchived.status, await plainArchived.clone().text()).toBe(200);
+    expect(
+      moduleTaskItemSchema.parse(await plainArchived.json()),
+    ).toMatchObject({
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: plainTask.rowVersion + 1,
+    });
+
     await error(
       await request(
         scope,

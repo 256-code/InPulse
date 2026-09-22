@@ -17,5 +17,5 @@ export abstract class ProjectQueryPort {
   abstract findActiveMemberRole(
     projectId: number,
     userId: number,
-  ): Promise<"MEMBER" | "PROJECT_ADMIN" | "LEADER" | null>;
+  ): Promise<"MEMBER" | "LEADER" | null>;
 }

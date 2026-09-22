@@ -288,7 +288,7 @@ export function FeaturesPageView({
     (item) => item.id === moduleId,
   );
   const projectQuery = useProjectDetail({ client, projectId });
-  // ADR-033/ADR-034：模块与功能的归档/恢复都由系统管理员或本项目组长/项目管理员执行。
+  // ADR-034/ADR-039：模块与功能的归档/恢复对系统管理员或本项目任意活跃成员开放。
   const canArchiveResources = canManageProjectResources(
     isAdmin,
     projectQuery.data?.currentUserRole ?? null,
@@ -1021,8 +1021,8 @@ export function FeaturesPageView({
             )}
           </div>
           <div className="calm-action-footer">
-            {/* ADR-034：功能归档/恢复入口与模块弹窗一致放在编辑弹窗底部；
-                普通成员看不到，组长/项目管理员可直接切到归档流程。 */}
+            {/* ADR-034/ADR-039：功能归档/恢复入口与模块弹窗一致放在编辑弹窗底部；
+                非本项目成员看不到，活跃成员可直接切到归档流程。 */}
             {selection?.action === "update" &&
             selection.item &&
             canArchiveResources ? (

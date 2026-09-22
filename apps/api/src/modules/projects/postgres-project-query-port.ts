@@ -28,7 +28,7 @@ interface ProjectListItemRow {
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
   readonly completedTaskCount: number;
-  readonly currentUserRole: "MEMBER" | "PROJECT_ADMIN" | "LEADER" | null;
+  readonly currentUserRole: "MEMBER" | "LEADER" | null;
   readonly pendingRequestId: number | null;
   readonly pendingRequestedBy: number | null;
   readonly pendingRequestedByName: string | null;
@@ -116,7 +116,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
   async findActiveMemberRole(
     projectId: number,
     userId: number,
-  ): Promise<"MEMBER" | "PROJECT_ADMIN" | "LEADER" | null> {
+  ): Promise<"MEMBER" | "LEADER" | null> {
     const rows = (await this.client.sql`
       SELECT role
         FROM app.project_members
@@ -125,7 +125,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
          AND status = 'ACTIVE'
        LIMIT 1
     `) as unknown as readonly {
-      role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+      role: "MEMBER" | "LEADER";
     }[];
     return rows[0]?.role ?? null;
   }

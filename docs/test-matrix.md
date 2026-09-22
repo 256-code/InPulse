@@ -123,7 +123,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 | ID | 层级 | 场景 | 通过标准 | 当前证据 |
 | --- | --- | --- | --- | --- |
 | MOD-HTTP-001 | HTTP + PostgreSQL | listModules/createModule/updateModule 允许与拒绝 | 匿名 401，其他项目/已移除成员 404；管理员可读；普通创建固定 NORMAL；未分类可改名，输入身份字段拒绝 | modules-api.integration.test.ts 10/10 本地通过 |
-| MOD-HTTP-002 | HTTP + PostgreSQL | archiveModule/restoreModule 允许与拒绝 | 成员 403，管理员需完整管理员 Session（ADR-031 起不再要求 TOTP 重认证）及原因；状态/版本冲突 409；归档父级拒绝写但允许历史读取 | 同上，已通过 |
+| MOD-HTTP-002 | HTTP + PostgreSQL | archiveModule/restoreModule 允许与拒绝 | 普通成员与组长同等允许（ADR-039）；匿名/停用 401、非成员 404；状态/版本冲突 409；归档父级拒绝写但允许历史读取 | 同上，已通过（ADR-039 后重写为正向断言） |
 | MOD-IDEM-001 | HTTP + PostgreSQL | 幂等与重放权限 | Schema 解析后等价输入重放；不同输入 409；成员移除或管理员身份失效拒绝返回缓存 | 同上，已通过；modules-http.test.ts 管理员门禁回调单元验证通过 |
 | MOD-TX-001 | PostgreSQL | 审计或搜索失败 | 业务、审计、活动、搜索、幂等同事务回滚；相同 Key 可在故障解除后重试 | 同上，2 个故障注入用例均通过 |
 | MOD-LOCK-001 | PostgreSQL | 项目归档和模块创建竞争 | 真实 FOR UPDATE 阻塞子写，pg_stat_activity 观察 Lock 等待；父归档提交后子写拒绝 | 同上，已通过 |
@@ -222,7 +222,7 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 | F05-MEMBER-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名/停用 401；非管理员、CSRF 失败 403；非成员/不存在 404；重复活跃或状态冲突 409；非法字段 422；非 JSON 请求 400；统一返回 `{ code, message, details, requestId }` | 本地通过（同集成 8/8；HTTP 单测覆盖 400 与脱敏） |
 | F05-MEMBER-TX-001 | PostgreSQL 集成 | 同事务与幂等 | 审计失败时成员写、通知、活动或任务改派整体回滚；同 Key、同摘要、同契约版本重放不重复写；项目归档后旧 Key 拒绝返回缓存 | 本地通过（集成 8/8 覆盖回滚与重放；归档后重放已由服务单测覆盖） |
 | F05-MEMBER-UI-001 | 前端单元 | 成员管理页面 | 管理员入口仅系统管理员可见；成员历史、添加、移除、未完成任务提示、改派、CSRF/幂等键与成功后缓存失效均经生成客户端调用 | 本地通过（`ProjectMembersPageView.test.tsx`、`project-member-query.test.tsx` 等，Web 33 文件 104 例） |
-| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 普通成员访问 `/projects/:id/members` 由 `RequireAdmin` 拦截并显示 403 空态；管理员登录后直接展示成员历史（ADR-031 起不再要求 TOTP 重认证）；通过页面添加成员出现成功提示与「活跃成员」徽标；移除成员出现确认对话框与「该成员没有未完成任务。」，确认后保留历史记录卡并标记「已移除」「历史记录已保留」；不存在的项目返回前端映射的读取失败空态 | 本地通过（`apps/e2e/tests/project-members.spec.ts` 2/2；全量 `pnpm test:e2e` 29/29，4.7m，基线 `5020c0a`） |
+| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 活跃成员访问 `/projects/:id/members` 直接展示管理视图（ADR-039；本行早期记录的 `RequireAdmin` 403 空态已在 ADR-033 后失效）；通过页面添加成员出现成功提示与「活跃成员」徽标；移除成员出现确认对话框与「该成员没有未完成任务。」，确认后保留历史记录卡并标记「已移除」「历史记录已保留」；不存在的项目返回前端映射的读取失败空态 | 本地通过（`apps/e2e/tests/project-members.spec.ts`；ADR-039 后断言已反转） |
 | F05-READ-E2E-001 | Playwright | 项目页面回归 | 项目创建关键路径与全量 E2E 结果如实记录 | 本地通过（`pnpm test:e2e` 29/29，4.7m，含本 diff 新增的成员管理 2 例与既有 F-18 记录发布、搜索/动态/通知/任务用例） |
 
 2026-09-09 本地验证说明：`pnpm test:unit` 数据库 5 例、api-contract 67 例、Web 33 文件
@@ -232,6 +232,9 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 `apps/e2e/tests/project-members.spec.ts` 补齐（本地 2/2；该分支 rebase 到 `origin/main` `5020c0a` 后全量 29/29 通过）。
 
 ## ADR-033 项目内角色（组长与项目管理员，A，2026-09-16 本地落库）
+
+> 2026-09-22 跟进：[ADR-039](adr/ADR-039.md) 移除了 `PROJECT_ADMIN` 并把项目内管理权下发给全体活跃成员，
+> 本节全部「通过标准」描述的是当时事实；与本节冲突时以本文末「ADR-039 移除项目管理员角色」章节为准。
 
 [ADR-033](adr/ADR-033.md) 扩展 [ADR-012](adr/ADR-012.md)：项目创建者默认回填为 `LEADER`，
 可在**被赋予的项目内**添加/移除成员、归档/恢复模块、任命或撤销 `PROJECT_ADMIN`；`PROJECT_ADMIN`
@@ -245,13 +248,13 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 |---|---|---|---|---|
 | ADR033-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `projectMemberRoleSchema`、`ProjectMemberRecordItem.role`、`ProjectMemberItem.role`、`SetProjectMemberRoleRequest/Response`、`ProjectDetailResponse.currentUserRole` 登记；`setProjectMemberRole` 完整登记策略；`add/remove/archiveModule/restoreModule/listProjectMembers/listProjectMemberUnfinishedTasks` 的 `authPolicy` 由 `adminSession` 调整为 `session`；幂等契约版本按重放字段变化升级 | 本地通过（`contract:drift` 5 产物、`contract:validate` 98 条、`permissions:check` 98/98） |
 | ADR033-DB-001 | PostgreSQL | 迁移 0015 列、约束、唯一索引与回填 | `role` 默认 `MEMBER`；`project_members_role_check` 固定枚举；`project_members_one_leader` 保证每项目至多一条 ACTIVE+LEADER；`project_members_removed_role_check` 保证 REMOVED 行 role=MEMBER；创建者活跃成员行回填为 LEADER；`app_runtime` 授权不变 | 本地通过（`db:migrate` 应用 0015；`migrations:check` 16 迁移；`database.test.ts` 不可变清单含 0015；database 单测 15/15、集成 26/26） |
-| ADR033-API-001 | API 单元 | 角色门禁与 setRole 编排 | `ProjectRoleGateService.manageRole` 返回 SYSTEM_ADMIN/LEADER/PROJECT_ADMIN/MEMBER/NOT_MEMBER；`roleSetterRole` 把 PROJECT_ADMIN 降级为 MEMBER（不能任命角色）；`setRole` 门禁 NOT_MEMBER→404、MEMBER→403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、LEADER 设 LEADER→403 `PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN`、唯一冲突→409 `PROJECT_MEMBER_LEADER_CONFLICT`；移除 LEADER→409 `PROJECT_MEMBER_LEADER_PROTECTED`；读/写路径经 `requireManageRole` | 本地通过（`project-member-management.service.test.ts`、`project-member-management-http.service.test.ts`；API 单测 64 文件 351 例） |
-| ADR033-API-002 | HTTP + PostgreSQL | 组长/项目管理员管理成员，跨项目与非成员隐藏 | 组长（非系统管理员）可查看成员列表、添加成员；普通成员管理成员 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`；非成员/已移除成员统一 404；PROJECT_ADMIN 可管理成员但任命角色 403 `PROJECT_MEMBER_ROLE_FORBIDDEN` | 本地通过（`project-member-management-api.integration.test.ts` 14/14，PostgreSQL 18.6 + PGroonga） |
-| ADR033-API-003 | HTTP + PostgreSQL | 角色任命、组长保护、转移与审计 | 组长任命 PROJECT_ADMIN 200 且写审计 `project.member.role.set` + 活动 `PROJECT_MEMBER_ROLE_CHANGED`；组长任命/转移 LEADER 403；移除 LEADER 409；系统管理员转移组长后目标 LEADER、原组长自动降级 MEMBER；非成员/已移除成员 404 | 本地通过（同上集成 14/14） |
-| ADR033-API-004 | HTTP + PostgreSQL | 组长归档/恢复模块与普通成员拒绝 | 组长（非系统管理员）可 archiveModule/restoreModule（200，状态/版本推进）；普通成员归档模块 403 `MODULE_MANAGE_FORBIDDEN` | 本地通过（`modules-api.integration.test.ts` 11/11） |
-| ADR033-IDEM-001 | HTTP + PostgreSQL | 角色写重放的角色门禁 | 同 Key、同 body 重放返回缓存响应；操作者被降级为普通成员后，新任命 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，原 Key 重放被重放授权器拒绝 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`，不泄露已存响应 | 本地通过（`project-member-management-api.integration.test.ts` 重放用例） |
-| ADR033-REMOVE-001 | HTTP + PostgreSQL | 移除重置角色（removed_role_check） | 移除 PROJECT_ADMIN/LEADER 成员时同事务把 role 重置为 MEMBER，不触发 `project_members_removed_role_check` 约束；已移除成员的角色不复活 | 本地通过（成员管理集成 + `database.helpers.removeMember` 与 `postgres-projects-write-port.removeMember` 均重置 role） |
-| ADR033-UI-001 | 前端单元 | 成员页角色入口与只读视图 | `getProject.currentUserRole` 驱动入口：系统管理员/组长/项目管理员进入管理视图，其余成员进入只读 `ActiveProjectMembers`；成员卡片显示角色徽标；组长/项目管理员显示移除入口（组长行不显示移除）；系统管理员与组长显示「设置角色」，组长仅 MEMBER/PROJECT_ADMIN 可选、系统管理员含 LEADER；`setProjectMemberRole` 经生成客户端携带 CSRF + Idempotency-Key | 本地通过（`ProjectMembersPageView.test.tsx` 6/6、`project-member-query.test.tsx` 5/5、`ModulesPageView.test.tsx` 8/8；Web 76 文件 425 例） |
+| ADR033-API-001 | API 单元 | 角色门禁与 setRole 编排（~~已被 ADR-039 取代~~） | `ProjectRoleGateService.manageRole` 返回 SYSTEM_ADMIN/LEADER/PROJECT_ADMIN/MEMBER/NOT_MEMBER；`roleSetterRole` 把 PROJECT_ADMIN 降级为 MEMBER（不能任命角色）；`setRole` 门禁 NOT_MEMBER→404、MEMBER→403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、LEADER 设 LEADER→403 `PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN`、唯一冲突→409 `PROJECT_MEMBER_LEADER_CONFLICT`；移除 LEADER→409 `PROJECT_MEMBER_LEADER_PROTECTED`；读/写路径经 `requireManageRole` | 历史通过（当时 `project-member-management.service.test.ts`、`project-member-management-http.service.test.ts`；角色口径已由 ADR-039 取代） |
+| ADR033-API-002 | HTTP + PostgreSQL | 组长/项目管理员管理成员，跨项目与非成员隐藏（~~已被 ADR-039 取代~~） | 组长（非系统管理员）可查看成员列表、添加成员；普通成员管理成员 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`；非成员/已移除成员统一 404；PROJECT_ADMIN 可管理成员但任命角色 403 `PROJECT_MEMBER_ROLE_FORBIDDEN` | 历史通过（当时 `project-member-management-api.integration.test.ts` 14/14；「普通成员 403」已由 ADR-039 取消） |
+| ADR033-API-003 | HTTP + PostgreSQL | 角色任命、组长保护、转移与审计（~~已被 ADR-039 取代~~） | 组长任命 PROJECT_ADMIN 200 且写审计 `project.member.role.set` + 活动 `PROJECT_MEMBER_ROLE_CHANGED`；组长任命/转移 LEADER 403；移除 LEADER 409；系统管理员转移组长后目标 LEADER、原组长自动降级 MEMBER；非成员/已移除成员 404 | 历史通过（当时集成 14/14；ADR-039 后只有系统管理员能任命/转移角色） |
+| ADR033-API-004 | HTTP + PostgreSQL | 组长归档/恢复模块与普通成员拒绝（~~已被 ADR-039 取代~~） | 组长（非系统管理员）可 archiveModule/restoreModule（200，状态/版本推进）；普通成员归档模块 403 `MODULE_MANAGE_FORBIDDEN` | 历史通过（当时 `modules-api.integration.test.ts` 11/11；ADR-039 后普通成员同样可归档） |
+| ADR033-IDEM-001 | HTTP + PostgreSQL | 角色写重放的角色门禁（~~已被 ADR-039 取代~~） | 同 Key、同 body 重放返回缓存响应；操作者被降级为普通成员后，新任命 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，原 Key 重放被重放授权器拒绝 403 `PROJECT_MEMBER_MANAGE_FORBIDDEN`，不泄露已存响应 | 历史通过（ADR-039 后降级成员重放改用「被降级的系统管理员且非项目成员」→404） |
+| ADR033-REMOVE-001 | HTTP + PostgreSQL | 移除重置角色（removed_role_check） | 移除 LEADER 成员时同事务把 role 重置为 MEMBER（ADR-039 后目标只能是 LEADER 或 MEMBER），不触发 `project_members_removed_role_check` 约束；已移除成员的角色不复活 | 本地通过（成员管理集成 + `database.helpers.removeMember` 与 `postgres-projects-write-port.removeMember` 均重置 role） |
+| ADR033-UI-001 | 前端单元 | 成员页角色入口与只读视图（~~已被 ADR-039 取代~~） | `getProject.currentUserRole` 驱动入口：系统管理员进入管理视图，其余活跃成员同样可管理（ADR-039）；成员卡片只对 LEADER 显示角色徽标；「设置角色」只对系统管理员显示；`setProjectMemberRole` 经生成客户端携带 CSRF + Idempotency-Key | 历史通过（当时 `ProjectMembersPageView.test.tsx` 6/6、`project-member-query.test.tsx` 5/5；ADR-039 后已重写断言） |
 
 2026-09-16 本地验证说明：`contract:drift`（5 产物）、`contract:validate`（98 条路由）、
 `permissions:check`（98/98）、`lint`、`format:check`、`check:deps`（173 文件/173 模块）、
@@ -374,7 +377,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | AUTHZ-004 | Workflow 集成 | 管理员移除普通成员身份的项目创建者 | ACTIVE 成员记录关闭；`projects.created_by` 值不变；创建者立即失去成员关系派生权限 | 已自动化（`project-member-management-api.integration.test.ts` 移除创建者：`created_by` 不变且权限消失；CI 已执行） |
 | AUTHZ-005 | Workflow 集成 | 创建者重新加入 | 新增成员历史，不覆盖之前 `joined_at/removed_at` | Required（2026-09-12 清账核对：未找到「创建者移除后重新加入」的直接用例，保持待补） |
 | AUTHZ-006 | API 集成 | 停用用户旧 Session | 所有受保护/业务路由及使用停用凭据的登录统一 401；`issueCsrfToken` 只能按匿名创建无身份预认证状态；同源 `logout` 仅清 Cookie 返回 204；其他用户不受影响 | 已自动化（`user-auth-invalidation.integration.test.ts` 与 `login.integration.test.ts` 停用用户 401 且不签发 Session；CI 已执行） |
-| AUTHZ-007 | API 集成 | 项目、模块或功能归档/恢复 | 项目成员为 403；跨项目或已移除成员为 404；管理员须持有当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证）并写审计 | 已自动化（`features-api.integration.test.ts` 归档/恢复与管理员门禁、`apps/e2e/tests/project-archive.spec.ts`；CI 已执行） |
+| AUTHZ-007 | API 集成 | 项目、模块或功能归档/恢复 | 本项目任意活跃成员（含 LEADER，ADR-039）允许；跨项目或已移除成员为 404；非成员 404（ADR-039 起不再有成员 403 分支） | 已自动化（`features-api.integration.test.ts` 归档/恢复与成员门禁、`apps/e2e/tests/project-archive.spec.ts`；CI 已执行） |
 | AUTHZ-008 | API 集成 | 管理员移除成员 | 缺少完整管理员 Session 或写操作 CSRF 时拒绝；管理员门禁满足时只关闭成员历史并写审计 | 已自动化（`project-member-management-api.integration.test.ts` 管理员门禁与审计用例；CI 已执行） |
 | AUTHZ-009 | API 集成 | 作废 PUBLISHED / 恢复 VOID 迭代记录 | 项目成员为 403；管理员须持有当前有效完整管理员 Session、填写原因并写审计 | 已自动化（`record-lifecycle.integration.test.ts` 含管理员门禁与恢复；CI 已执行） |
 | AUTHZ-010 | Workflow 集成 | 移除系统管理员身份的项目创建者成员记录 | ACTIVE 成员记录关闭且 `created_by` 不变；其成员权限消失，但全局管理员权限仍可访问项目 | 已自动化（`project-member-management-api.integration.test.ts` 移除系统管理员创建者分支；CI 已执行） |
@@ -1609,8 +1612,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | NAV-CLEAN-UNIT-001 | 单元 | 概览视图收窄后的 props 与渲染 | `ProjectOverviewPageView.test.tsx` 8 例：删除 2 个「项目内导航」用例后其余（指标卡、面板、错误态、跳转）全通过；`ProjectOverviewPage.test.tsx` 6 例：2 个导航用例替换为「查看模块」入口用例 | 本地通过 |
 | NAV-CLEAN-UNIT-002 | 单元 | 模块页 / 功能页移除横条与左栏后无回归 | `ModulesPageView.test.tsx` 8 例（删除「项目内导航」describe）、`FeaturesPageView.test.tsx` 10 例（删除「项目内导航」describe 与「module siblings」用例及其 `moduleRow`/`moduleClient` 辅助）全通过 | 本地通过 |
 | MEMBER-RO-UNIT-001 | 单元 | 只读成员视图渲染与只读语义 | `ActiveProjectMembers.test.tsx` 6 例：复用管理员视觉（h1 项目名、`.panel.settings-panel`、`.calm-member-card` 数量）；无添加 / 移除 / 归档 / dialog、仅「刷新成员」；创建者标注且全员「活跃成员」；加入时间与角色徽标（LEADER 显「组长」、MEMBER 不显徽标、无「移除时间」、无「设置角色」）；空态；加载失败出「项目成员加载失败」+ 重试 | 本地通过 |
-| MEMBER-RO-API-001 | 集成（真实 HTTP + PostgreSQL） | `listActiveProjectMembers` 响应契约与授权 | `projects-read-api.integration.test.ts` 2 例：200 且 `Cache-Control: no-store`，`ActiveProjectMembersResponse` strict parse 通过并返回 `[创建者 LEADER, 新成员 PROJECT_ADMIN]` 的 `{id, role}` 与 ISO `joinedAt`；成员置 REMOVED 后从只读列表消失、历史行仍为 `REMOVED`；非成员 404 `PROJECT_NOT_FOUND`、匿名 401 `PROJECT_SESSION_REQUIRED`、不存在项目 404 | 本地通过 |
-| MEMBER-RO-E2E-001 | 浏览器 E2E | 普通成员只读成员页与隐藏项目 404 | `project-members.spec.ts` 例 1 选择器同步：`.project-members`/`listitem`/旧 h1 文案断言改为 `.settings-panel` + `.calm-member-card` + h1 项目名；「无添加 / 移除按钮」「隐藏项目 404 且不泄露成员姓名」断言语义不变；管理员用例（例 2）不受影响 | **未运行**（本机 `@node-rs/argon2` win32-x64-msvc 原生二进制加载失败 error 126，API 无法启动，属环境问题；`@inpulse/e2e` typecheck 通过） |
+| MEMBER-RO-API-001 | 集成（真实 HTTP + PostgreSQL） | `listActiveProjectMembers` 响应契约与授权 | `projects-read-api.integration.test.ts` 2 例：200 且 `Cache-Control: no-store`，`ActiveProjectMembersResponse` strict parse 通过并返回 `[创建者 LEADER, 新成员 MEMBER]` 的 `{id, role}` 与 ISO `joinedAt`（ADR-039 后新成员不再写 `PROJECT_ADMIN`）；成员置 REMOVED 后从只读列表消失、历史行仍为 `REMOVED`；非成员 404 `PROJECT_NOT_FOUND`、匿名 401 `PROJECT_SESSION_REQUIRED`、不存在项目 404 | 本地通过（ADR-039 后已同步修复物） |
+| MEMBER-RO-E2E-001 | 浏览器 E2E | 活跃成员成员页与隐藏项目 404 | `project-members.spec.ts` 例 1：活跃成员（ADR-039 起不再进入只读视图）可查看并管理本项目成员（「添加成员」「移除」可见），隐藏项目 404 且不泄露成员姓名；管理员用例（例 2）不受影响 | 待重跑（ADR-039 已反转断言；本机需先启动 E2E 环境） |
 
 本地实际执行（2026-09-15，前端专项，无后端 / 契约 / 迁移改动）：`pnpm --filter @inpulse/web test` **74 文件 401 例通过**（新增 `ActiveProjectMembers.test.tsx` 5 例，删除导航相关 7 例、替换 2 例）；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/web build`、`pnpm --filter @inpulse/web check:boundaries`（246 模块 / 1171 依赖，无违规）、改动文件 ESLint 与 Prettier 检查通过；真实浏览器人工复验（Vite 5173，普通成员「小邵」登录）：`/projects/1/members` 渲染新只读视图（4 名成员、特哥标注创建者、无任何写入口）。
 
@@ -1620,7 +1623,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 - 契约：新增 `ActiveProjectMemberItem` / `ActiveProjectMembersResponse`（`projects.zod.ts`，strict），`listActiveProjectMembers` 的 200 响应从借用 `TaskAssigneesResponse` 改为专用 Schema；任务指派人另两条路由（`listTaskAssignees` / `listModuleTaskAssignees`）继续返回 `TaskAssigneesResponse`。
 - 服务端：`ProjectMembersQueryPort` 新增 `listActiveMemberProfiles`，`listActiveMembers` 改为从同一结果裁剪 `id/name/avatarUrl`（`TaskAssigneesResponse` 是 strict Schema，泄漏新字段会让任务指派人响应 500）。
-- 前端：`ActiveProjectMembers` 成员卡改为「加入时间：…」+ 非 MEMBER 角色徽标（LEADER 蓝「组长」、PROJECT_ADMIN 紫「项目管理员」），仍无任何写入口。
+- 前端：`ActiveProjectMembers` 成员卡改为「加入时间：…」+ 非 MEMBER 角色徽标（LEADER 蓝「组长」；`PROJECT_ADMIN` 紫「项目管理员」已在 [ADR-039](adr/ADR-039.md) 随角色移除），仍无任何写入口。
 - 本地执行（2026-09-21）：契约 `drift`（5 产物）、`validate`、`permissions:check`（108/108）、`pnpm typecheck`、`ActiveProjectMembers.test.tsx` 6/6、真库 `projects-read-api.integration.test.ts` 6/6（含 MEMBER-RO-API-001 两例）、真库 `tasks-api.integration.test.ts` 45/45（回归任务指派人 strict 响应）。未运行：全量集成 / E2E / 整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）。
 
 ## 系统目录并入「项目与功能」导航（C，2026-09-15 本地落库）
@@ -1706,7 +1709,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | ADR033-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在模块弹窗底部看到归档入口 | `ModulesPageView.test.tsx`：当前用户角色为 `LEADER` 时打开「编辑模块」，弹层 `.calm-action-footer` 内出现「归档模块」，点击后弹层切到「归档模块」并出现「操作原因」，填原因确认后以 `If-Match` 调用 `archiveModule` | 本地通过 |
-| ADR033-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 项目管理员同样可见 | 当前用户角色为 `PROJECT_ADMIN` 时弹层底部出现「归档模块」 | 本地通过 |
+| ADR033-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员同样可见（ADR-039 修订） | 当前用户角色为 `MEMBER` 时弹层底部同样出现「归档模块」；`currentUserRole = null`（非成员）时不渲染 | 本地通过（ADR-039 后已重写） |
 | ADR033-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 普通成员不可见 | 当前用户角色为 `MEMBER` 时弹层底部既无「归档」也无「恢复」按钮 | 本地通过 |
 
 本地实际执行（2026-09-16）：`pnpm --filter @inpulse/web exec vitest run src/features/modules/ModulesPageView.test.tsx` 14 例通过、同一命令跑 `src/features/features/FeaturesPageView.test.tsx` 12 例通过、`pnpm exec eslint`（4 个改动文件）无告警、`prettier --write` 已应用。未运行：`pnpm test:web` 全量、`pnpm test:e2e`、GitHub Actions；全 workspace `pnpm typecheck` 当前被拉取到的 `b35ba9e` 中 `apps/web/src/features/published-records/PublishedRecordDetail.tsx` 的 `InpulseIcon className` 类型错误阻断，与本次改动无关。
@@ -1739,7 +1742,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 ## 项目归档申请—审核与任务归档（C，2026-09-16 本地落库）
 
-用户确认的口径：① 项目归档保留「双方同意」，但申请权与审批权分离——项目组长（LEADER）、项目管理员（PROJECT_ADMIN）与系统管理员可发起申请，只有总管理员（系统管理员）能批准真正归档；② 拦截口径只针对任务——项目归档的申请与批准、模块归档都要求作用域内任务均已收尾，功能不需要归档、也不参与任何一级的拦截。（该口径在 2026-09-16 第二轮按用户反馈修正：任务「完成」即算收尾，不再要求必须归档。）完整决策与边界见 [ADR-034](adr/ADR-034.md)。
+用户确认的口径：① 项目归档保留「双方同意」，但申请权与审批权分离——活跃成员（ADR-039 前为项目组长、项目管理员与系统管理员）可发起申请，只有总管理员（系统管理员）能批准真正归档；② 拦截口径只针对任务——项目归档的申请与批准、模块归档都要求作用域内任务均已收尾，功能不需要归档、也不参与任何一级的拦截。（该口径在 2026-09-16 第二轮按用户反馈修正：任务「完成」即算收尾，不再要求必须归档。）完整决策与边界见 [ADR-034](adr/ADR-034.md)。
 
 - 迁移 `database/migrations/0016_project_archive_requests.sql`：新表 `app.project_archive_requests`（`status` 枚举 CHECK、`project_archive_requests_one_pending` 部分唯一索引、origin guard 触发器，`app_runtime` 授予 SELECT/INSERT/UPDATE）。该迁移尚未合并，初版用 `BIGINT` 主键导致 postgres.js 返回字符串并使响应 Schema 校验失败，改为 `integer` 后手动回退该迁移并重新 apply 验证通过。
 - 契约与权限：新增 `requestProjectArchive`/`approveProjectArchive`/`rejectProjectArchive` 与 `archiveTask`/`restoreTask`/`archiveModuleTask`/`restoreModuleTask` 共 7 条路由（Route Registry 98 → 105 条）；`projectListItemSchema` 增加 `currentUserRole`/`pendingArchiveRequest`；`docs/permissions.md` 同步新增条目，`archiveModule` 行补充 409 说明。
@@ -1748,15 +1751,15 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| ADR034-API-INT-001 | 真实 PostgreSQL | 归档申请角色矩阵 | `project-archive-request-api.integration.test.ts`：普通成员申请 403 `PROJECT_ARCHIVE_REQUEST_FORBIDDEN`、非成员与其他项目 404 | 本地通过 |
+| ADR034-API-INT-001 | 真实 PostgreSQL | 归档申请角色矩阵（~~角色口径已被 ADR-039 修订~~） | `project-archive-request-api.integration.test.ts`：活跃成员（LEADER 或 MEMBER 同等）可发起申请，任务未收尾时 409 `PROJECT_ARCHIVE_TASKS_OPEN`；非成员与其他项目 404 | 本地通过（ADR-039 后已重写） |
 | ADR034-API-INT-002 | 真实 PostgreSQL | 申请前置校验与幂等 | 项目下存在未完成且未归档的任务时申请 409 `PROJECT_ARCHIVE_TASKS_OPEN`；提交成功后同 Key 同摘要重放原响应，同一项目重复申请 409 | 本地通过 |
-| ADR034-API-INT-003 | 真实 PostgreSQL | 只有系统管理员能审核 | 组长与项目管理员审核 403 `ADMIN_REQUIRED`；不存在项目 404；驳回后项目仍为 ACTIVE 且 `row_version` 不变 | 本地通过 |
+| ADR034-API-INT-003 | 真实 PostgreSQL | 只有系统管理员能审核 | 活跃成员（含 LEADER）审核 403 `ADMIN_REQUIRED`；不存在项目 404；驳回后项目仍为 ACTIVE 且 `row_version` 不变 | 本地通过 |
 | ADR034-API-INT-004 | 真实 PostgreSQL | 批准按 If-Match 归档 | 版本不匹配 409 `PROJECT_VERSION_CONFLICT`；批准后项目 ARCHIVED、申请 APPROVED，重复批准 409 `PROJECT_STATE_CONFLICT` | 本地通过 |
 | ADR034-API-INT-005 | 真实 PostgreSQL | 申请同事务副作用与列表字段 | 审计 `project.archive.request`、活动 `PROJECT_ARCHIVE_REQUESTED` 与发给系统管理员的站内通知同事务提交；项目列表返回 `currentUserRole` 与 `pendingArchiveRequest` | 本地通过 |
-| ADR034-API-INT-006 | 真实 PostgreSQL | 任务归档与恢复 | `tasks-api.integration.test.ts`：只切换 `lifecycle_status` 且不写 `task_status_history`；审计 `task.archive`/`task.unarchive`、活动与搜索投影同事务；普通成员 403、跨项目 404、版本 409、状态 409 | 本地通过 |
+| ADR034-API-INT-006 | 真实 PostgreSQL | 任务归档与恢复 | `tasks-api.integration.test.ts`：只切换 `lifecycle_status` 且不写 `task_status_history`；审计 `task.archive`/`task.unarchive`、活动与搜索投影同事务；普通成员可在本项目内归档自己的任务（ADR-039）、跨项目 404、版本 409、状态 409 | 本地通过（ADR-039 后已重写） |
 | ADR034-API-INT-007 | 真实 PostgreSQL | 模块归档前置校验 | `modules-api.integration.test.ts`：模块下仍有活跃任务时归档 409 `MODULE_ARCHIVE_TASKS_OPEN`，任务归档后可成功归档 | 本地通过 |
 | ADR034-API-INT-008 | 真实 PostgreSQL | 直接归档取消待审申请 | `project-management-api.integration.test.ts`：系统管理员直接 `archiveProject` 时 PENDING 申请被置为 CANCELED，审计 payload 记录 `cancelledArchiveRequestIds` | 本地通过 |
-| ADR034-WEB-UNIT-001 | Web 单元 | 项目列表归档入口 | `ProjectsPageView.test.tsx`：LEADER 与 PROJECT_ADMIN 看到「申请归档」，待审时显示「归档申请审核中」，系统管理员看到「批准归档」「驳回申请」，普通成员看不到入口 | 本地通过 |
+| ADR034-WEB-UNIT-001 | Web 单元 | 项目列表归档入口 | `ProjectsPageView.test.tsx`：活跃成员（含 LEADER）可看到「申请归档」，待审时显示「归档申请审核中」，系统管理员看到「批准归档」「驳回申请」，非成员看不到入口 | 本地通过（ADR-039 后已重写） |
 | ADR034-WEB-UNIT-002 | Web 单元 | 申请与审核弹窗 | `project-management-modals.test.tsx`：申请提交带 CSRF 与幂等键、409 冲突显示专用文案、批准携带 `If-Match`、驳回批注可空 | 本地通过 |
 
 本地实际执行（2026-09-16）：`pnpm contract:generate`；`pnpm contract:validate`（105 条路由全部通过）；`pnpm permissions:check`（105 条操作 / 105 条路由）；`pnpm contract:drift`（5 个产物一致）；`pnpm lint`；`pnpm format:check`；`node scripts/check_docs.mjs`（80 个 Markdown 文件的链接与锚点）；真实 PostgreSQL 18.6 + PGroonga 下 `pnpm --filter @inpulse/api test:integration` 49 文件 453 例通过；`pnpm --filter @inpulse/api test:unit` 64 文件 351 例通过；`pnpm test:web` 77 文件 445 例通过。
@@ -1765,18 +1768,18 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 ## 功能归档权限与任务、模块对齐（C，2026-09-16 本地落库）
 
-用户要求「功能应该也要有可以删除的按钮，删除权限与任务相同」。按 BR-011「项目、模块、功能只能归档」，「删除功能」的唯一实现是逻辑归档，因此本轮把功能归档/恢复的权限与任务、模块归档对齐（系统管理员、本项目组长或项目管理员；普通成员没有），不新增物理删除、迁移或新路由。
+用户要求「功能应该也要有可以删除的按钮，删除权限与任务相同」。按 BR-011「项目、模块、功能只能归档」，「删除功能」的唯一实现是逻辑归档，因此本轮把功能归档/恢复的权限与任务、模块归档对齐（当时为系统管理员、本项目组长或项目管理员；[ADR-039](adr/ADR-039.md) 起改为本项目任意活跃成员），不新增物理删除、迁移或新路由。
 
 - 契约：`archiveFeature`/`restoreFeature` 的 `authPolicy` 由 `adminSession` 调整为 `session`，权限矩阵 `活跃成员` 改为 ADR-034 的 conditional 条目；高风险管理路由幂等契约版本 1.2.0 → 1.3.0（旧 Key 409），OpenAPI 与生成客户端由 `pnpm contract:generate` 重生成。
-- 后端：`FeaturesManagementService` 注入 `ProjectRoleGateService`，新增 `requireManageRole`（非成员 404、普通成员 403 `FEATURE_MANAGE_FORBIDDEN`），在 `execute` 与 `replay`（`requireManageRole: highRisk`）执行；`FeaturesHttpService` 移除管理员高风险 Session 门禁与 `AdminHighRiskAuthService` 依赖。
+- 后端：`FeaturesManagementService` 注入 `ProjectRoleGateService`，新增 `requireManageRole`（当时为：非成员 404、普通成员 403 `FEATURE_MANAGE_FORBIDDEN`；ADR-039 起只保留非成员 404），在 `execute` 与 `replay`（`requireManageRole: highRisk`）执行；`FeaturesHttpService` 移除管理员高风险 Session 门禁与 `AdminHighRiskAuthService` 依赖。
 - 前端：`FeaturesPageView` 的列表行与详情页头归档/恢复入口由 `isAdmin` 改为 `canManageProjectResources(isAdmin, currentUserRole)`，入口加 `feature-lifecycle-{id}` / `feature-detail-lifecycle-{id}` 测试 id；`feature-query.ts` 对 403 `FEATURE_MANAGE_FORBIDDEN` 给出专用文案。
 - 功能不参与任务归档前置校验：归档功能只要求项目与父模块 ACTIVE、功能自身 ACTIVE（恢复要求 ARCHIVED）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| ADR034-API-INT-009 | 真实 PostgreSQL | 功能归档角色矩阵 | `features-api.integration.test.ts`：普通成员（显式降级为 MEMBER）归档 403 `FEATURE_MANAGE_FORBIDDEN`；组长无 `is_admin` 也能归档（`ARCHIVED`、rowVersion 2）与恢复（`ACTIVE`、rowVersion 3） | 本地通过 |
+| ADR034-API-INT-009 | 真实 PostgreSQL | 功能归档角色矩阵（~~角色口径已被 ADR-039 修订~~） | `features-api.integration.test.ts`：普通成员（显式题为 MEMBER）可归档（`ARCHIVED`、rowVersion 2）与恢复（`ACTIVE`、rowVersion 3）；组长无 `is_admin` 同样可归档 | 本地通过（ADR-039 后已重写为正向断言） |
 | ADR034-API-INT-010 | 真实 PostgreSQL | 功能归档越权与移除成员 | 跨项目非成员归档 404 `FEATURE_NOT_FOUND`；被移除成员归档 404 | 本地通过 |
-| ADR034-WEB-UNIT-003 | Web 单元 | 功能归档入口按角色显示 | `FeaturesPageView.test.tsx`：`currentUserRole = MEMBER` 时列表既无 `feature-lifecycle-3` 也无「归档功能」按钮；`LEADER` 与 `PROJECT_ADMIN` 可见并可提交归档（携带原因） | 本地通过 |
+| ADR034-WEB-UNIT-003 | Web 单元 | 功能归档入口按角色显示（~~角色口径已被 ADR-039 修订~~） | `FeaturesPageView.test.tsx`：活跃成员（`MEMBER` 或 `LEADER`）可见 `feature-lifecycle-*` 与编辑弹层内的归档入口并可提交归档（携带原因）；`currentUserRole = null`（非成员）不显示入口 | 本地通过（ADR-039 后已重写） |
 
 本地实际执行（2026-09-16）：`pnpm contract:generate`、`pnpm contract:validate`（105 条路由）、`pnpm permissions:check`（105/105）、`pnpm contract:drift`、`pnpm lint`、`pnpm format:check`、`node scripts/check_docs.mjs`（80 个 Markdown 文件）；`pnpm --filter @inpulse/api typecheck`；真实 PostgreSQL 18.6 + PGroonga：API 集成 49 文件 455 例、API 单测 64 文件 351 例、Web 单测 77 文件 448 例。
 
@@ -1784,7 +1787,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 ## 功能归档入口迁移到「编辑功能」弹窗（C，2026-09-16 本地落库）
 
-用户要求「归档功能按钮和模块一样放在编辑弹窗里面」，随后进一步要求「把原来右上角的归档功能去掉，编辑里面的按钮把归档功能改为归档两字」。因此功能归档入口只保留在编辑弹窗底部左侧（按钮文案「归档」/「恢复」），功能卡片与功能详情页头不再提供归档按钮，仅对已归档功能保留「恢复功能」入口以避免恢复无路可走；权限与任务、模块归档一致（系统管理员、本项目组长或项目管理员；普通成员不可见）。
+用户要求「归档功能按钮和模块一样放在编辑弹窗里面」，随后进一步要求「把原来右上角的归档功能去掉，编辑里面的按钮把归档功能改为归档两字」。因此功能归档入口只保留在编辑弹窗底部左侧（按钮文案「归档」/「恢复」），功能卡片与功能详情页头不再提供归档按钮，仅对已归档功能保留「恢复功能」入口以避免恢复无路可走；权限与任务、模块归档一致（当时为系统管理员、本项目组长或项目管理员；[ADR-039](adr/ADR-039.md) 起为本项目任意活跃成员）。
 
 - `apps/web/src/features/features/FeaturesPageView.tsx`：编辑弹窗 `.calm-action-footer` 增加 `footer-leading` 按钮（`data-testid="feature-modal-lifecycle"`），仅当处于 `update` 且 `canManageProjectResources(isAdmin, currentUserRole)` 为真时渲染，文案「归档」/「恢复」；点击后调用既有 `open("archive" | "restore", item)` 切到归档/恢复确认流程，原因必填、`If-Match`、CSRF 与幂等全部沿用。卡片与详情页头的归档按钮已删除，`feature-lifecycle-{id}` 只渲染已归档功能的「恢复功能」。
 - 复用模块弹窗既有样式 `.calm-action-footer > .footer-leading`（`apps/web/src/styles/design-system.css`），未新增 CSS 或接口。
@@ -1792,7 +1795,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | ADR034-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在功能编辑弹窗底部归档 | `FeaturesPageView.test.tsx`：`currentUserRole = LEADER` 时点「编辑功能」，弹窗底部出现文案为「归档」的 `feature-modal-lifecycle`，点击后出现「操作原因」，填原因确认即以 `archiveFeature(2, 4, 3, { reason })` 调用 | 本地通过 |
-| ADR034-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员看不到该入口 | `currentUserRole = MEMBER` 时打开同一编辑弹窗，`feature-modal-lifecycle` 不存在，卡片上也没有归档或恢复按钮 | 本地通过 |
+| ADR034-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员同样可见（ADR-039 修订） | `currentUserRole = MEMBER` 时打开同一编辑弹窗，`feature-modal-lifecycle` 同样存在且可提交归档；`currentUserRole = null`（非成员）时才不渲染 | 本地通过（ADR-039 后已重写） |
 | ADR034-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 页面不再有独立归档按钮 | ACTIVE 功能卡片与详情页头均无「归档功能」按钮；已归档功能卡片保留「恢复功能」，点击后走恢复确认并以 `restoreFeature` 调用 | 本地通过 |
 
 本地实际执行（2026-09-16）：`pnpm --filter @inpulse/web exec vitest run src/features/features/FeaturesPageView.test.tsx` 17 例通过；`pnpm test:web` 77 文件 450 例通过；`pnpm lint`、`pnpm format:check`、`node scripts/check_docs.mjs` 通过；管理员一次性归档用例改为经「编辑功能」弹窗底部触发，仍断言未填原因不发请求且携带 `If-Match`。
@@ -1894,7 +1897,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 锁定口径：
 
-- 可改状态的角色：项目组长（`LEADER`）、项目管理员（`PROJECT_ADMIN`）与系统管理员；普通成员 403 `PROJECT_STATUS_FORBIDDEN`，非成员与不存在的项目 404；创建者身份本身不额外授权，只看当前角色。
+- 可改状态的角色（ADR-039 修订）：本项目任意活跃成员（`MEMBER` 或 `LEADER`，[ADR-039](adr/ADR-039.md) 起角色不再区分管理权）与系统管理员；非成员与不存在的项目 404；创建者身份本身不额外授权，只看当前成员身份。
 - 存量迁移（`0017_project_status_lifecycle.sql`）：项目内出现过已完成任务（`app.task_status_history.to_work_status = 'DONE'`）→ 进行中，其余原 ACTIVE 项目 → 未开始，展示标签与改造前完全一致；迁移不递增 `row_version`、不写审计。 回填期间临时关闭 `projects_row_version` 触发器（该触发器要求每次 UPDATE 恰好 +1），并用 `SET CONSTRAINTS ALL IMMEDIATE` 结算挂起的延迟约束触发器事件后再恢复，空库上是空操作。
 - 禁止越级：未开始 ⇄ 维护中双向 409 `PROJECT_STATUS_LEVEL_SKIP`，必须先经过进行中。
 - 粘性锁：`app.projects.first_task_completed_at` 取最早一次任务完成时间且永不回落，有值后回退未开始 409 `PROJECT_STATUS_NOT_STARTED_LOCKED`；数据库兜底约束 `projects_not_started_lock_check` 拒绝同一组合。
@@ -1909,9 +1912,9 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 |---|---|---|---|---|
 | ADR035-WEB-UNIT-001 | Web 单元 | 四态标签与配色 | `resource-lifecycle.test.ts`：`projectLifecycleLabel` 四态分别为未开始 / 进行中 / 维护中 / 已归档；`projectLifecycleTone` 为 cyan / violet / amber，进行中沿用调用方主色；`projectLifecycleKind` 直接透传存储状态 | 本地通过 |
 | ADR035-WEB-UNIT-002 | Web 单元 | 项目卡渲染四态 | `ProjectsPageView.test.tsx`：`NOT_STARTED` 渲染「未开始」+ `badge-cyan`、`ACTIVE` 渲染「进行中」+ `badge-blue`、`MAINTENANCE` 渲染「维护中」+ `badge-violet`；`completedTaskCount` 不再影响项目标签 | 本地通过 |
-| ADR035-WEB-UNIT-003 | Web 单元 | 编辑弹窗状态栏 | `project-management-modals.test.tsx`：点「保存状态」以 CSRF + `Idempotency-Key` + `If-Match` 调 `PATCH /projects/{id}/status`，成功后不关闭弹窗并回调 `onStatusChanged`；已有完成任务时「未开始」置灰并带原因 title；未开始 → 维护中、维护中 → 未开始同样置灰；无权限时只读展示标签 | 本地通过 |
+| ADR035-WEB-UNIT-003 | Web 单元 | 编辑弹窗状态栏 | `project-management-modals.test.tsx`：点「保存状态」以 CSRF + `Idempotency-Key` + `If-Match` 调 `PATCH /projects/{id}/status`，成功后不关闭弹窗并回调 `onStatusChanged`；已有完成任务时「未开始」置灰并带原因 title；未开始 → 维护中、维护中 → 未开始同样置灰；非成员时只读展示标签 | 本地通过 |
 | ADR035-API-INT-001 | 真实 PostgreSQL | 手动开工 | `project-management-api.integration.test.ts`：组长把未开始改为进行中返回 200 且 `hasCompletedTask: false`；审计 `project.status.change`、活动 `PROJECT_STATUS_CHANGED`、搜索投影与发给全体活跃成员的 `project.status.change` 通知同事务提交 | 本地通过 |
-| ADR035-API-INT-002 | 真实 PostgreSQL | 越级与角色门禁 | 同上：未开始 → 维护中与维护中 → 未开始都 409 `PROJECT_STATUS_LEVEL_SKIP`（且不发通知）；普通成员 403 `PROJECT_STATUS_FORBIDDEN`、非成员 404、版本冲突 409 `PROJECT_VERSION_CONFLICT`、同态 409 `PROJECT_STATE_CONFLICT`、目标态 `ARCHIVED` 422 `PROJECT_VALIDATION_FAILED` | 本地通过 |
+| ADR035-API-INT-002 | 真实 PostgreSQL | 越级与成员门禁（~~角色口径已被 ADR-039 修订~~） | 同上：未开始 → 维护中与维护中 → 未开始都 409 `PROJECT_STATUS_LEVEL_SKIP`（且不发通知）；普通成员同样可改状态（200）、非成员 404、版本冲突 409 `PROJECT_VERSION_CONFLICT`、同态 409 `PROJECT_STATE_CONFLICT`、目标态 `ARCHIVED` 422 `PROJECT_VALIDATION_FAILED` | 本地通过（ADR-039 后已重写为正向断言） |
 | ADR035-API-INT-003 | 真实 PostgreSQL | 粘性锁与已归档只读 | 同上：项目出现过已完成任务后回退未开始 409 `PROJECT_STATUS_NOT_STARTED_LOCKED`，切到维护中仍放行且 `hasCompletedTask: true`；已归档项目改状态 409 `PROJECT_ARCHIVED` | 本地通过 |
 | ADR035-API-INT-004 | 真实 PostgreSQL | 任务完成自动开工 | `task-completion.integration.test.ts`：首个任务完成后项目由未开始变为进行中、`first_task_completed_at` 置位、`row_version` 递增，审计 `project.status.change`（`automatic: true` / `trigger: TASK_COMPLETED`）、活动、搜索投影与开工通知同事务；第二个任务完成不重复升级、不再推高项目版本 | 本地通过 |
 | ADR035-API-INT-005 | 真实 PostgreSQL | 写入口径 | `project-access.integration.test.ts`：进行中与维护中都是 `allowed`，只有已归档返回 `parent-not-active`；`external-links.integration.test.ts` 的 PROJECT / FEATURE / TASK 目标在未开始项目下恢复可写 | 本地通过 |
@@ -2802,3 +2805,66 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（85 文件 536 例）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`、`pnpm check:docs`；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，只读浏览既有演示数据，未新增或修改业务数据）。
 
 未运行 / 已知偏差：① 未新增 Playwright 配色断言，`pnpm test:e2e` 未实跑（本地没有独立 E2E 数据库 `E2E_DATABASE_URL`，未拿演示库代替）；② 「高」已由土黄 `#c47b00` 换成明黄 `#ffdb4d` + 深棕字 `#3f2d00`（9.8:1），对比度不再有未达标项；③ 实色配色目前只覆盖卡片，看板 / 任务中心的列表行仍是浅色底，两者并存是刻意选择；④ 配色属视觉主观项，需非作者人工评审；⑤ 未跑 `pnpm build`、`check:deps`、`permissions:check`、真实 PostgreSQL 集成测试与 GitHub Actions。
+
+## ADR-039 移除项目管理员角色、项目内管理权下放全体活跃成员（A，2026-09-22 本地落库）
+
+用户要求：「项目里面不需要有项目管理员，并且所有项目的成员所拥有的管理权限都和组长一样」。经确认锁定三条口径：
+① 保留组长（`LEADER`）身份但管理权全员等同；② 存量 `PROJECT_ADMIN` 成员降级为 `MEMBER`；③ 整体移除「任命项目管理员」入口。
+完整决策与边界见 [ADR-039](adr/ADR-039.md)；[ADR-033](adr/ADR-033.md)/[ADR-034](adr/ADR-034.md)/[ADR-035](adr/ADR-035.md) 的角色口径由本节修订。
+
+锁定口径：
+
+- 角色枚举收窄到 `MEMBER | LEADER`。`LEADER` 只是创建者/组长身份标识，不再附带任何额外管理权；`PROJECT_ADMIN` 从枚举、契约、权限矩阵与数据库中一并移除（迁移 `0019_drop_project_admin_role.sql`：先把存量 `PROJECT_ADMIN` 降级为 `MEMBER`，`SET CONSTRAINTS ALL IMMEDIATE` 结算 `project_members_bootstrap_complete` 延迟约束触发器事件后再收紧 `project_members_role_check` 为 `role IN ('MEMBER','LEADER')`；不改列定义、不递增 `row_version`、不写审计）。
+- 13 条项目内管理操作的门禁统一放宽为「本项目任意活跃成员」：成员增删查、成员未完成任务读取、`archiveModule`/`restoreModule`、`archiveFeature`/`restoreFeature`、`archiveTask`/`restoreTask`、`archiveModuleTask`/`restoreModuleTask`、`changeProjectStatus`、`requestProjectArchive`。非成员/跨项目/已移除成员统一 404。
+- 移除 7 个不再可达的错误码：`PROJECT_MEMBER_MANAGE_FORBIDDEN`、`PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN`、`MODULE_MANAGE_FORBIDDEN`、`FEATURE_MANAGE_FORBIDDEN`、`TASK_ARCHIVE_FORBIDDEN`、`PROJECT_STATUS_FORBIDDEN`、`PROJECT_ARCHIVE_REQUEST_FORBIDDEN`（对 `apps/api/src` 全量 grep 已无残留）。
+- `setProjectMemberRole` 路由保留但收窄为**系统管理员专属**：本项目成员（含 `LEADER`）调用返回 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，非成员 404，`role` 只接受 `MEMBER`/`LEADER`，其他值 422 `PROJECT_MEMBER_VALIDATION_FAILED`。
+- 保留不变量：`project_members_one_leader` 部分唯一索引、`project_members_removed_role_check`（REMOVED 行 role=MEMBER）、移除/撤销 `LEADER` 时的 409 `PROJECT_MEMBER_LEADER_PROTECTED`、`PROJECT_MEMBER_LEADER_CONFLICT`、审计 `project.member.role.set` 与活动 `PROJECT_MEMBER_ROLE_CHANGED`。
+- 幂等契约版本：只有重放响应体携带 `role`/`currentUserRole` 的操作才升版（`setProjectMemberRole` 1.0.0→2.0.0；`addProjectMember`/`removeProjectMember` 1.1.0→1.2.0；`updateProject`/`archiveProject`/`restoreProject` 1.4.0→1.5.0；`changeProjectStatus` 1.0.0→1.1.0；`createProject` 2.2.0→2.3.0），模块/功能/任务归档恢复与 `requestProjectArchive` 不变。
+- 前端：`canManageProjectResources` 改为「系统管理员或本项目 `MEMBER`/`LEADER`」；成员页角色徽标只剩「组长」，「设置角色」仅系统管理员可见；「归档模块」「归档功能」入口对全体活跃成员可见。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| ADR039-DB-001 | PostgreSQL | 迁移 0019 收窄角色枚举 | 存量 `PROJECT_ADMIN` 全部降级为 `MEMBER`；`project_members_role_check` 变为 `role IN ('MEMBER','LEADER')`；`project_members_one_leader` 与 `project_members_removed_role_check` 不变；`database.test.ts` 不可变迁移清单新增 `0019_drop_project_admin_role.sql` | 本地通过（`db:migrate` 应用 0019，输出 `Migration complete: 1 applied, 19 already present.`） |
+| ADR039-CONTRACT-001 | 契约与数据 | Schema、路由摘要与权限矩阵 | `projectMemberRoleSchema` 收窄为 `MEMBER`/`LEADER` 并传播到 `currentUserRole`、`ProjectMemberRecordItem.role`、`ActiveProjectMemberItem.role`、`setProjectMemberRoleRequest`；7 条 `permission-matrix.ts` 条目改为「活跃成员」口径；`pnpm contract:generate` 重生成 5 产物且生成客户端与 OpenAPI 内已无 `PROJECT_ADMIN` | 本地通过（`contract:generate`；`apps/web/src/generated/**` 已核对无残留） |
+| ADR039-API-UNIT-001 | API 单元 | 角色门禁收窄与重放授权 | `ProjectRoleGateService.manageRole` 返回 `SYSTEM_ADMIN`/`MEMBER`/`LEADER`/`NOT_MEMBER`（不再有 `PROJECT_ADMIN`）；`roleSetterRole` 把 `LEADER` 与 `MEMBER` 一起折叠为 `MEMBER`（→403）；`setRole` 门禁非成员 404、非系统管理员 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、唯一冲突 409、移除 `LEADER` 409；HTTP 层 `{ role: "PROJECT_ADMIN" }` 422 | 本地通过（API 单测 65 文件 364 例） |
+| ADR039-API-INT-001 | 真实 PostgreSQL | 成员管理全员可写 | `project-member-management-api.integration.test.ts`：普通成员查看成员列表、添加成员、移除成员均 200；非成员与已移除成员 404；`LEADER` 或普通成员调 `setProjectMemberRole` 403；`PROJECT_MEMBER_LEADER_PROTECTED` 与组长转移自动降级不变量保留 | 本地通过 |
+| ADR039-API-INT-002 | 真实 PostgreSQL | 模块与功能归档全员可写 | `modules-api.integration.test.ts`：显式降级为 `MEMBER` 的成员创建模块并归档 → 200 / `ARCHIVED` / `rowVersion 2`；`features-api.integration.test.ts`：同样由 `MEMBER` 创建功能并归档 → 200 / `ARCHIVED` / `rowVersion 2`；组长路径用例不受影响 | 本地通过 |
+| ADR039-API-INT-003 | 真实 PostgreSQL | 任务归档与项目状态全员可写 | `tasks-api.integration.test.ts`：`MEMBER` 归档自己创建的任务 → 200 / `ARCHIVED` / `rowVersion +1`；`project-management-api.integration.test.ts`：`MEMBER` `PATCH /projects/{id}/status` → 200 / `{ status: "ACTIVE", rowVersion: 2 }`，非成员 404、版本冲突与同态 409 | 本地通过 |
+| ADR039-API-INT-004 | 真实 PostgreSQL | 归档申请门禁与任务前置校验分层 | `project-archive-request-api.integration.test.ts`：普通成员不再被角色拒绝，而是被状态门禁拦下 409 `PROJECT_ARCHIVE_TASKS_OPEN`（证明拒绝原因已不是权限）；组长提交与重放仍成功 | 本地通过 |
+| ADR039-API-INT-005 | 真实 PostgreSQL | 读接口角色口径 | `projects-read-api.integration.test.ts`：活跃成员列表的 `role` 为 `LEADER`/`MEMBER`（夹具由 `PROJECT_ADMIN` 改为 `MEMBER`） | 本地通过 |
+| ADR039-WEB-UNIT-001 | Web 单元 | 管理入口按成员身份显示 | `ProjectMembersPageView.test.tsx`：活跃成员可见「添加成员」与行内「移除」，「设置角色」只对系统管理员渲染；`ProjectsPageView`/`ModulesPageView`/`FeaturesPageView` 归档入口对 `MEMBER` 与 `LEADER` 均可见、对 `currentUserRole: null` 不可见；`TasksPanel.test.tsx` 生命周期入口同理 | 本地通过（Web 单测 84 文件 539 例） |
+| ADR039-WEB-UNIT-002 | Web 单元 | 文案与错误码收敛 | `project-management-modals.test.tsx` 状态栏提示为「只有本项目活跃成员或系统管理员可以更改项目状态。」；`project-member-query.ts` 的 403 分支改写；`project-management-query.ts` 移除 `PROJECT_STATUS_FORBIDDEN` 与 `PROJECT_ARCHIVE_REQUEST_FORBIDDEN` 专用分支 | 本地通过 |
+| ADR039-E2E-001 | Playwright | 成员视角关键路径 | `features.spec.ts` 在编辑弹层断言 `feature-modal-lifecycle` 可见（原「看不到归档功能」断言反转）；`modules.spec.ts` 断言编辑弹层「归档模块」可见；`project-members.spec.ts` 断言活跃成员可见「添加成员」与成员卡「移除」 | 本地通过（定向与全量分别执行，见下） |
+
+本地实际执行（2026-09-22，Windows + PowerShell；真实 PostgreSQL 18.6 + PGroonga，集成库 `app` @ 127.0.0.1:55432）：
+`pnpm contract:generate`（5 产物）、`pnpm contract:drift`（5 产物无漂移）、`pnpm contract:validate`（108 条路由）、`pnpm permissions:check`（108 操作 / 108 路由）通过；
+`pnpm typecheck`（8 个 workspace 项目）、`pnpm lint`、`pnpm build`（web + api 生产构建）通过；
+`pnpm test:unit` 通过：api 65 文件 364 例、web 84 文件 539 例、api-contract 16 文件 100 例、ops 8 文件 52 例、database 1 文件 15 例、canonical-json 1 文件 5 例；
+`pnpm --filter @inpulse/api test:integration` 50 文件 480 例通过、`pnpm db:test` 通过（数据库单测 15 例 + 集成 2 文件 26 例）、`pnpm --filter @inpulse/e2e typecheck` 通过（迁移 0019 已先应用）；
+`pnpm db:migrations:check`（20 个迁移）、`pnpm db:seed:check`、`pnpm check:deploy:test`、`pnpm check:deps`、`pnpm check:frontend:boundaries`（281 模块）、`pnpm check:secrets`（1057 文件）、`pnpm check:docs`（85 个 Markdown）通过；
+`pnpm test:e2e` 全量 46 passed / 11 failed，其中本批改写的 `features.spec.ts`、`modules.spec.ts`、`project-members.spec.ts` 全部通过（`project-members.spec.ts` 单跑 2 passed / 10.3s），11 例失败全部落在与本批无关的既有用例（`record-drafts` ×3、`record-feed` ×1、`record-publishing` ×1、`task-completion` ×1、`search` ×1、`aggregate-views`/`external-links`/`leftover-task`/`module-tasks` 各 ×1），形态为 `[role="listbox"]` 选择器 strict-mode 命中 2 元素、`继续编辑` 按钮 strict-mode 冲突与 `browserContext.close` 竞态，均未触及项目成员 / 模块 / 功能 / 任务归档权限路径。
+
+未运行 / 已知偏差：① `pnpm check` 整链与 GitHub Actions 未运行（各分项门禁已逐条单独执行，见上）；② `pnpm test:integration` 全包执行时 `@inpulse/ops` 2 例失败（`Error: pg_dump exited with code null`，本机未安装 `pg_dump`；`@inpulse/ops` 与 ADR-039 无关，API 与 database 集成测试单独执行全部通过）；③ 11 例 E2E 失败待单独定位，不属于本批改动范围；④ 存量 `PROJECT_ADMIN` 成员的降级是数据迁移，本地库已执行，远端环境需按运维流程应用 0019（不可逆：降级后原任命信息不再保留）；⑤ 本批含契约、迁移与后端改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（迁移顺序、幂等版本升版范围与 7 个已删错误码是重点）。
+
+## 2026-09-22 任务中心聚合组卡可见性收窄（R-7）
+
+产品要求（原文）：「需要完成聚合组的任务卡只有所属负责的人可以看到，而不是所有人都可以看到未完成，没关系的人不需要看到」。本批采用的口径（记录为本次裁决，未另立 ADR：只收窄可见性，不改 ADR-030/037 的聚合组语义）：**「所属负责人」= 该聚合组任一 `status = 'ACTIVE'` 分支任务的负责人**；系统管理员不开例外；已解除（`DETACHED`）分支不参与判定，因此组关闭（成员全部解除）后对所有人不再返回。R-1 详情（`getTaskGroup`）不受影响，仍是项目成员可读，历史成员不丢。
+
+- 收窄固定在服务端执行（AGENTS.md §7：鉴权不得依赖客户端）：`TaskGroupListReadInput` 新增 `actorUserId`，`TaskGroupRepository.listGroupsPage` 在 `project_id = ANY(...)` 之外追加 `EXISTS (SELECT 1 FROM app.task_group_members m JOIN app.tasks t ON t.id = m.task_id AND t.project_id = m.project_id WHERE m.project_id = tg.project_id AND m.group_id = tg.id AND m.status = 'ACTIVE' AND t.assignee_id = $actor)`；`task_group_members` 没有 `assignee_id` 列，判定必须回落到任务表的实时负责人。
+- 前端零改动：`TaskCenterPageView` 的 `groups` 与 `hasListContent` 直接消费服务端结果，收窄后「与我无关的组」不会到达渲染层。
+- 游标 `filterKey` 保持 `JSON.stringify([projectId ?? null])` 不变：可见性已由 actor 绑定承载（游标本就绑定 `actorUserId`），同一用户口径不变，未升版、未让已签发游标失效。
+- 契约表面无新增参数：只有 R-7 `summary`（Route Registry → OpenAPI）与 [权限矩阵](permissions.md) 聚合组列表行同步口径；`permission-matrix.ts` 条目仍是「活跃成员 allow」（可调用性不变，返回集合收窄）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+|---|---|---|---|---|
+| TASKGROUP-VISIBILITY-CONTRACT-001 | 契约 | R-7 摘要与 OpenAPI 同步可见性口径 | `contract:generate`（5 产物）、`contract:drift`（5 产物一致）、`contract:validate`（108 条路由）、`permissions:check`（108/108）全过；OpenAPI `listTaskGroups` summary 含「与自己无关的组不返回」 | 本地通过 |
+| TASKGROUP-VISIBILITY-API-UNIT-001 | API 单元 | 端口入参携带 `actorUserId` | `aggregate-read.service.test.ts` R-7 断言 `listGroups` 收到 `{ actorUserId, projectIds, limit }`（含 `projectIds` 收敛为空页路径）；定向 1 文件 29 例 | 本地通过 |
+| TASKGROUP-VISIBILITY-API-INT-001 | 真实 PostgreSQL | 只返回本人负责的活跃组 | `aggregate-read-list-api.integration.test.ts` 新增用例：同一项目内 `memberUser` 只见 `[groupSourceOnly, groupOwnSecond, groupActive]`、`foreignUser` 只见 `[groupSourceOnly, groupForeign]`（`projectId` 收窄后一致）；他人负责的 `groupForeign` 与已关闭的 `groupClosed` 对双方都不返回；`groupSourceOnly` 同时证明「只作为来源分支负责人也可见」、`groupActive` 证明「主任务负责人可见」 | 本地通过（该文件 11 例） |
+| TASKGROUP-VISIBILITY-API-INT-002 | 真实 PostgreSQL | 关闭组不再返回但详情不丢 | 同文件：`memberCookie` 与 `foreignCookie` 的列表都不含 `groupClosed`；`GET /task-groups/{groupId}` 仍 200 且 `status = CLOSED`、成员 `memberStatus = DETACHED` | 本地通过 |
+| TASKGROUP-VISIBILITY-API-INT-003 | 真实 PostgreSQL | 分页与游标语义不变 | 同文件：`limit=1` 三页依次 `groupSourceOnly` → `groupOwnSecond` → `groupActive`，`hasMore` / `nextCursor` 递进正确；跨 `projectId` 或跨用户复用游标仍 422 `INVALID_CURSOR` | 本地通过 |
+
+本地实际执行（2026-09-22，Windows + PowerShell；真实 PostgreSQL 18.6 + PGroonga，集成库 `app` @ 127.0.0.1:55432）：
+`pnpm typecheck`（8 个 workspace 项目）、`pnpm lint`、`pnpm build`、`pnpm check:deps`、`pnpm check:frontend:boundaries`（281 模块 / 1376 依赖）、`pnpm check:secrets`（1057 文件）、`pnpm check:docs`（85 个 Markdown）通过；
+`pnpm --filter @inpulse/api test:unit` 65 文件 364 例、`pnpm --filter @inpulse/api test:integration` 50 文件 481 例（含本批新增的可见性用例）全部通过；契约四项门禁见上表。
+
+未运行 / 已知偏差：① `pnpm check` 整链、`pnpm test:e2e` 与 GitHub Actions 未运行（本批未改前端，E2E 无对应断言）；② `pnpm db:test` 与 `@inpulse/ops` 集成未跑（无迁移、无 ops 改动）；③ `EXPLAIN` 证据未采集：`EXISTS` 子查询在本地夹具规模下由规划器自行选择访问方式，本批以真库可见性矩阵为通过标准，索引使用未作为门禁（若后续数据量增长出现回退，再补 `EXPLAIN (ANALYZE, BUFFERS)` 证据）；④ 本批含契约摘要与后端行为改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（可见性口径、关闭组处理与游标 `filterKey` 不变的理由）。

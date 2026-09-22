@@ -319,8 +319,8 @@ export class ProjectMemberManagementService {
   }
 
   /**
-   * ADR-033：任命/撤销项目内角色。系统管理员可设全部角色（含转移组长），
-   * 本项目组长只能设 MEMBER/PROJECT_ADMIN；目标必须为 ACTIVE 成员。
+   * ADR-033/ADR-039：任命/撤销组长。只有系统管理员可调用（本项目组长与普通
+   * 成员 403），目标必须为 ACTIVE 成员，组长唯一性由部分唯一索引报 409。
    */
   async setRole(
     tx: TransactionContext,
@@ -339,18 +339,11 @@ export class ProjectMemberManagementService {
       input.projectId,
     );
     if (setter === "NOT_MEMBER") throw this.notFound();
-    if (setter === "MEMBER") {
+    if (setter !== "SYSTEM_ADMIN") {
       throw new ProjectMemberManagementError(
         403,
         "PROJECT_MEMBER_ROLE_FORBIDDEN",
-        "只有系统管理员或本项目组长可以任命或撤销项目内角色",
-      );
-    }
-    if (setter === "LEADER" && input.role === "LEADER") {
-      throw new ProjectMemberManagementError(
-        403,
-        "PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN",
-        "组长不能任命或转移组长角色，请联系系统管理员",
+        "只有系统管理员可以任命或撤销项目组长",
       );
     }
     const target = await this.projects.findLatestMember(
@@ -474,8 +467,8 @@ export class ProjectMemberManagementService {
   }
 
   /**
-   * ADR-033 项目内管理角色门禁：系统管理员或本项目 LEADER/PROJECT_ADMIN
-   * 通过；普通成员 403；非成员/已移除 404（不泄露存在性）。
+   * ADR-039 项目内管理门禁：系统管理员或本项目任意活跃成员通过；
+   * 非成员/已移除 404（不泄露项目存在性）。
    */
   private async requireManageRole(
     tx: TransactionContext,
@@ -484,13 +477,6 @@ export class ProjectMemberManagementService {
   ): Promise<void> {
     const role = await this.roleGate.manageRole(tx, actorId, projectId);
     if (role === "NOT_MEMBER") throw this.notFound();
-    if (role === "MEMBER") {
-      throw new ProjectMemberManagementError(
-        403,
-        "PROJECT_MEMBER_MANAGE_FORBIDDEN",
-        "只有系统管理员、本项目组长或项目管理员可以执行该操作",
-      );
-    }
   }
 
   private async requireWritableProject(

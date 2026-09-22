@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
-test("成员创建编辑模块、解决并发字段冲突，不能看到管理员归档入口", async ({
+test("成员创建编辑模块、解决并发字段冲突，并能看到归档入口", async ({
   browser,
 }) => {
   const runtime = await loadRuntime();
@@ -12,7 +12,6 @@ test("成员创建编辑模块、解决并发字段冲突，不能看到管理�
     await expect(
       page.getByRole("heading", { name: runtime.projectName }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "归档模块" })).toHaveCount(0);
     const name = `模块-${Date.now()}`;
     await page.getByRole("button", { name: "新增模块" }).first().click();
     const dialog = page.getByRole("dialog", { name: "新增模块" });
@@ -23,6 +22,8 @@ test("成员创建编辑模块、解决并发字段冲突，不能看到管理�
     const card = page.locator(".catalog-module-wrap").filter({ hasText: name });
     await card.getByRole("button", { name: "编辑模块" }).click();
     const edit = page.getByRole("dialog", { name: "编辑模块" });
+    // ADR-039：项目内管理权全员等同，普通成员也能在编辑弹层底部看到归档入口。
+    await expect(edit.getByRole("button", { name: "归档模块" })).toBeVisible();
     await edit.getByLabel("模块名称").fill(`${name}-已修改`);
 
     const other = await context.newPage();

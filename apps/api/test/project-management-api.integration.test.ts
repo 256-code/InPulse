@@ -1080,7 +1080,7 @@ describe("F-06.3 项目状态变更 API", () => {
     ]);
   });
 
-  it("普通成员 403、非成员 404、版本冲突与同态各自返回 409", async () => {
+  it("普通成员可改状态、非成员 404、版本冲突与同态各自返回 409", async () => {
     const value = await fixture();
     const teammate = await actor(false);
     const outsider = await actor(false);
@@ -1090,17 +1090,6 @@ describe("F-06.3 项目状态变更 API", () => {
     `;
     const path = statusPath(value.project.projectId);
 
-    await expectError(
-      await request(
-        "PATCH",
-        path,
-        teammate,
-        { status: "ACTIVE" },
-        { ifMatch: '"2"' },
-      ),
-      403,
-      "PROJECT_STATUS_FORBIDDEN",
-    );
     await expectError(
       await request(
         "PATCH",
@@ -1145,6 +1134,22 @@ describe("F-06.3 项目状态变更 API", () => {
       422,
       "PROJECT_VALIDATION_FAILED",
     );
+
+    // ADR-039：项目内管理权全员等同，普通成员（非组长、非系统管理员）
+    // 直接改状态成功。
+    const memberChange = await request(
+      "PATCH",
+      path,
+      teammate,
+      { status: "ACTIVE" },
+      { key: randomUUID(), ifMatch: '"1"' },
+    );
+    expect(memberChange.status, await memberChange.clone().text()).toBe(200);
+    expect(
+      schemaRegistry.ProjectDetailResponse.schema.parse(
+        await memberChange.json(),
+      ).project,
+    ).toMatchObject({ status: "ACTIVE", rowVersion: 2 });
   });
 
   it("项目出现过已完成任务后不能回退未开始", async () => {
