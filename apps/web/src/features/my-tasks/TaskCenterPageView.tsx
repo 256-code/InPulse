@@ -277,11 +277,27 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         ? visibleItems
         : openItems;
   /**
+   * 聚合组的工作状态口径与卡片徽章同源（2026-09-22 产品口径）：只要还有未收尾
+   * （TODO）分支就是「未完成」——「进行中」属于未完成；全部分支收尾（已完成 /
+   * 已取消）才是「已完成」。工具栏两档因此同时作用于任务与聚合组，已完成的组
+   * 不再留在未完成视图里；服务端对 CLOSED 组不返回分支，这类无分支的组按
+   * 「无未收尾工作」同样落到已完成档，不会永远占着未完成。
+   */
+  const groupHasOpenWork = (group: MyTaskGroupItem): boolean =>
+    group.branches.some((branch) => branch.workStatus === "TODO");
+  const primaryGroups =
+    filters.status === "done"
+      ? groups.filter((group) => !groupHasOpenWork(group))
+      : filters.status === "all"
+        ? groups
+        : groups.filter(groupHasOpenWork);
+  /**
    * 任务卡片与聚合组卡片任一存在即渲染列表区：聚合组混排进任务网格后不再单列
    * 「还没有聚合组」空态，任务为空但聚合组存在时也不能显示任务空态；
    * 已合并任务被隐藏时同理，它由聚合组卡片代表。
    */
-  const hasListContent = primaryItems.length > 0 || groups.length > 0;
+  const hasListContent =
+    primaryItems.length > 0 || primaryGroups.length > 0;
   /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
   const todayTodoActive =
     filters.status === "open" && filters.todayTodo !== false;
@@ -1029,12 +1045,12 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               // 跨源合并排序，任务在前、聚合组追加在网格尾部。
               <div className="calm-task-grid">
                 {primaryItems.map(renderCard)}
-                {groups.map(renderGroupCard)}
+                {primaryGroups.map(renderGroupCard)}
               </div>
             ) : (
               // 聚合组跟随展示方式切换（2026-09-22 产品要求）：列表视图下组行与
               // 任务行同表追加在末尾，不再单独渲染卡片网格。
-              renderTable(primaryItems, groups)
+              renderTable(primaryItems, primaryGroups)
             )
           ) : groupsQuery.isPending ? (
             // 任务为空且聚合组仍在加载：先给加载态，避免空态一闪再被组卡片顶掉。

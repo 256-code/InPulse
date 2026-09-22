@@ -126,8 +126,9 @@ const serverLikeAdapter = (): MyTasksAdapter => ({
  * 固定任务集合的服务端适配器：用于断言「主列表跟随工作状态筛选」，
  * mock 数据集无法构造「0 个未完成 + 1 个已完成」这类边界。
  *
- * 聚合组默认清空：组卡不随工作状态收窄，列表区有内容就不显示空态（2026-09-21 定案），
- * 这些用例针对空态文案，必须同时没有任务与聚合组。需要组卡的用例自行覆盖 fetchTaskGroups。
+ * 聚合组默认清空：这些用例针对空态文案，必须同时没有任务与聚合组；需要组卡的用例
+ * 自行覆盖 fetchTaskGroups。2026-09-22 起聚合组与任务同一口径跟随工作状态筛选，
+ * 需要组卡可见的用例也要把 filters.status 调成组所在的那一档。
  */
 const serverLikeAdapterWith = (
   items: readonly MyTaskListItem[],
@@ -630,7 +631,7 @@ describe("TaskCenterPageView", () => {
       cursor: null,
     });
     renderView({
-      filters: { display: "list" },
+      filters: { display: "list", status: "done" },
       client: stubClient(projects),
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
@@ -640,6 +641,7 @@ describe("TaskCenterPageView", () => {
             ...group,
             // 两个未完成分支（T-101、T-102）都收尾后组里不再有未完成截止：
             // 与任务行同文案「未设置截止」，而不是列表里的占位符「—」。
+            // 组因此落到「已完成」档，必须显式切到该档才能看到这一行（2026-09-22）。
             branches: group.branches.map((branch) =>
               branch.workStatus === "TODO"
                 ? { ...branch, workStatus: "DONE" }
@@ -701,6 +703,7 @@ describe("TaskCenterPageView", () => {
       cursor: null,
     });
     renderView({
+      filters: { status: "done" },
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
         fetchTaskGroups: async () => ({
@@ -708,7 +711,8 @@ describe("TaskCenterPageView", () => {
           items: groups.items.map((group) => ({
             ...group,
             // 未完成分支全部收尾后，整卡按「已完成」呈现并隐藏优先级徽章；
-            // 组本身仍未关闭，卡片保留解除合并入口。
+            // 组本身仍未关闭，卡片保留解除合并入口。组同时从「未完成」档移出，
+            // 所以这一档在「已完成」下断言（2026-09-22 产品口径）。
             branches: group.branches.map((branch) =>
               branch.workStatus === "TODO"
                 ? { ...branch, workStatus: "DONE" }
@@ -728,6 +732,45 @@ describe("TaskCenterPageView", () => {
     expect(within(card).getByText("已完成 3/4")).toBeInTheDocument();
     // 整卡转完成绿并与任务卡片共用同一条 h3 配色规则。
     expect(card).toHaveClass("tone-prio-done");
+  });
+
+  it("keeps a fully wound-up task group out of the unfinished view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { status: "open" },
+      adapter: serverLikeAdapterWith(
+        [],
+        groups.items.map((group) => ({
+          ...group,
+          // 全部分支收尾的组属于「已完成」：未完成档不再留着它（2026-09-22 产品口径）。
+          branches: group.branches.map((branch) => ({
+            ...branch,
+            workStatus: "DONE",
+          })),
+        })),
+      ),
+    });
+
+    expect(await screen.findByText("没有匹配的未完成任务")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
+  });
+
+  it("keeps a group with unfinished branches out of the finished view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { status: "done" },
+      // mock 组 501 仍有未完成分支（进行中）：已完成档只收全部分支收尾的组。
+      adapter: serverLikeAdapterWith([], groups.items),
+    });
+
+    expect(await screen.findByText("没有匹配的已完成任务")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
   });
 
   it("opens the task group detail dialog from the group card", async () => {
