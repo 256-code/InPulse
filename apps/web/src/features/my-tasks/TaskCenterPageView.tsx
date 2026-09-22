@@ -296,8 +296,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
    * 「还没有聚合组」空态，任务为空但聚合组存在时也不能显示任务空态；
    * 已合并任务被隐藏时同理，它由聚合组卡片代表。
    */
-  const hasListContent =
-    primaryItems.length > 0 || primaryGroups.length > 0;
+  const hasListContent = primaryItems.length > 0 || primaryGroups.length > 0;
   /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
   const todayTodoActive =
     filters.status === "open" && filters.todayTodo !== false;
@@ -345,8 +344,18 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     return "独立任务";
   };
 
+  /**
+   * 任务负责人展示（ADR-040）：负责人是平权集合，卡片与列表行都要列出全部人，
+   * 用「、」连接，与聚合组卡、功能档案任务面板同一口径。
+   */
+  const assigneeNamesOf = (item: MyTaskListItem): string => {
+    const names = item.assignees.map((assignee) => assignee.name);
+    return names.length === 0 ? "—" : names.join("、");
+  };
+
   const renderCard = (item: MyTaskListItem) => {
     const due = dueLabel(item);
+    const assigneeNames = assigneeNamesOf(item);
     return (
       <button
         type="button"
@@ -368,9 +377,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             (item.featureName === null ? "" : " · " + item.featureName)}
         </p>
         <div className="calm-card-assignee">
-          <span title={"负责人：" + item.assignee.name}>
+          <span title={"负责人：" + assigneeNames}>
             <InpulseIcon name="users" size={14} />
-            {item.assignee.name}
+            {assigneeNames}
           </span>
         </div>
         <div className="calm-card-bottom">
@@ -765,7 +774,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 {item.moduleName +
                   (item.featureName === null ? "" : " / " + item.featureName)}
               </td>
-              <td>{item.assignee.name}</td>
+              <td title={assigneeNamesOf(item)}>{assigneeNamesOf(item)}</td>
               <td>
                 <CalmBadge tone={taskPriorityBadgeTone(item.priority)}>
                   {taskPriorityLabel(item.priority)}

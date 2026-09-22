@@ -652,6 +652,7 @@ export type MyTaskItem = {
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly assignee: UserRef;
+  readonly assignees: readonly UserRef[];
   readonly updatedAt: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly dueAt: (string | null);

@@ -49,6 +49,11 @@ export interface MyTaskPageInput extends TaskListFilter {
  * 时间列在适配器边界统一还原为 Date（与 TaskListRow 同一约定）。
  */
 export interface MyTaskListRow extends TaskListRow {
+  /**
+   * 全部负责人，按 user_id 升序且恒非空（ADR-040）；继承的 assigneeId 是它的派生
+   * 标量（等于 assigneeIds[0]），保留给仍按单值消费的调用方（统计、看板等）。
+   */
+  readonly assigneeIds: readonly number[];
   readonly priority: MyTaskPriority;
   /** null = 未设置截止；与骨架的 undefined（不可知）语义不同。 */
   readonly dueAt: Date | null;
@@ -66,12 +71,14 @@ export interface MyTaskListPage {
 
 interface MyTaskListRowRaw extends Omit<
   MyTaskListRow,
-  "createdAt" | "updatedAt" | "dueAt" | "completedAt"
+  "createdAt" | "updatedAt" | "dueAt" | "completedAt" | "assigneeIds"
 > {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly dueAt: string | null;
   readonly completedAt: string | null;
+  /** array_agg 在无关联行时返回 NULL，边界处归一为空数组。 */
+  readonly assigneeIds: readonly number[] | null;
 }
 
 function mapMyTaskListRow(row: MyTaskListRowRaw): MyTaskListRow {
@@ -81,6 +88,7 @@ function mapMyTaskListRow(row: MyTaskListRowRaw): MyTaskListRow {
     dueAt: row.dueAt === null ? null : new Date(row.dueAt),
     completedAt: row.completedAt === null ? null : new Date(row.completedAt),
     creatorId: row.creatorId,
+    assigneeIds: row.assigneeIds ?? [],
   };
 }
 
@@ -287,6 +295,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
              t.code,
              t.title,
              (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId",
+             (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeIds",
              t.work_status AS "workStatus",
              t.lifecycle_status AS "lifecycleStatus",
              t.row_version AS "rowVersion",

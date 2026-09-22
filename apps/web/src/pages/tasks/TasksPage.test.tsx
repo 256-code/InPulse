@@ -71,6 +71,7 @@ const featureTask: MyTaskListItem = {
   completedAt: null,
   creatorId: 1,
   assignee: { userId: 1, name: "开发者 C", avatarUrl: null },
+  assignees: [{ userId: 1, name: "开发者 C", avatarUrl: null }],
   hasPublishedRecord: false,
   publishedRecordCount: 0,
   groupRole: null,

@@ -172,6 +172,7 @@ const doneTask: MyTaskListItem = {
   completedAt: "2026-09-03T00:00:00.000Z",
   creatorId: 1,
   assignee: { userId: 1, name: "特哥", avatarUrl: null },
+  assignees: [{ userId: 1, name: "特哥", avatarUrl: null }],
   hasPublishedRecord: false,
   publishedRecordCount: 0,
   groupRole: null,
@@ -249,6 +250,47 @@ describe("TaskCenterPageView", () => {
     );
     // 页脚已无内容（没有迭代记录）时整块不渲染，不留空行。
     expect(card.querySelector(".task-card-footer")).toBeNull();
+  });
+
+  /**
+   * ADR-040：负责人是平权集合，服务端返回 assignees（assignee 只是它的派生标量），
+   * 卡片与列表行都必须列出全部负责人，而不是只显示第一个。
+   */
+  const multiAssigneeTask: MyTaskListItem = {
+    ...doneTask,
+    taskId: 902,
+    code: "INP-902",
+    title: "多负责人任务-902",
+    assignees: [
+      { userId: 1, name: "特哥", avatarUrl: null },
+      { userId: 2, name: "林雨妍", avatarUrl: null },
+    ],
+    assignee: { userId: 1, name: "特哥", avatarUrl: null },
+  };
+
+  it("卡片列出全部负责人而不是只显示第一位", async () => {
+    renderView({
+      filters: { status: "all", todayTodo: false },
+      adapter: serverLikeAdapterWith([multiAssigneeTask]),
+    });
+
+    const card = await screen.findByTestId("my-task-902");
+    const assignee = card.querySelector(".calm-card-assignee") as HTMLElement;
+    expect(assignee.textContent).toContain("特哥、林雨妍");
+    expect(assignee.firstElementChild?.getAttribute("title")).toBe(
+      "负责人：特哥、林雨妍",
+    );
+  });
+
+  it("列表行的负责人列同样列出全部负责人", async () => {
+    renderView({
+      filters: { status: "all", todayTodo: false, display: "list" },
+      adapter: serverLikeAdapterWith([multiAssigneeTask]),
+    });
+
+    const table = await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = table.querySelector("tbody tr");
+    expect(row?.children[3]?.textContent).toBe("特哥、林雨妍");
   });
 
   it("drops the list title and count now that the toolbar filter carries the state", async () => {

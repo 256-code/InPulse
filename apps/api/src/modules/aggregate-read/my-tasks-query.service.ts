@@ -243,7 +243,7 @@ export class MyTasksQueryService {
         featureIds,
       });
       const assignees = await this.users.listByIds(tx, [
-        ...new Set(page.items.map((item) => item.assigneeId)),
+        ...new Set(page.items.flatMap((item) => item.assigneeIds)),
       ]);
       const publishedRecordCounts = await this.records.countPublishedByTask(
         tx,
@@ -328,9 +328,18 @@ export class MyTasksQueryService {
       if (moduleName === undefined) {
         throw inconsistentError("任务缺少模块 " + String(row.moduleId));
       }
-      const assignee = userById.get(row.assigneeId);
+      // ADR-040：负责人是集合，卡片与列表要展示全部负责人；assignee 保留为派生标量
+      // （等于 assignees[0]），供未改造的调用方继续按单值消费。
+      const assigneeRefs = row.assigneeIds.map((assigneeId) => {
+        const user = userById.get(assigneeId);
+        if (user === undefined) {
+          throw inconsistentError("任务负责人不存在 " + String(assigneeId));
+        }
+        return toUserRef(user);
+      });
+      const assignee = assigneeRefs[0];
       if (assignee === undefined) {
-        throw inconsistentError("任务负责人不存在 " + String(row.assigneeId));
+        throw inconsistentError("任务没有负责人 " + String(row.taskId));
       }
       let featureName: string | null = null;
       if (row.featureId !== null) {
@@ -356,7 +365,8 @@ export class MyTasksQueryService {
         scopeType: row.scopeType,
         workStatus: row.workStatus,
         lifecycleStatus: row.lifecycleStatus,
-        assignee: toUserRef(assignee),
+        assignee,
+        assignees: assigneeRefs,
         updatedAt: row.updatedAt.toISOString(),
         priority: row.priority,
         dueAt: row.dueAt === null ? null : row.dueAt.toISOString(),
