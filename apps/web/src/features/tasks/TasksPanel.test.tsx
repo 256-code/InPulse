@@ -548,6 +548,137 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       "tone-prio-canceled",
     );
   });
+  it("列表视图的截止列只在逾期与马上到期时上色", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({
+          items: [
+            {
+              ...item,
+              id: 21,
+              code: "PR-T-21",
+              title: "逾期任务",
+              dueAt: dayOffset(-3),
+            },
+            {
+              ...item,
+              id: 22,
+              code: "PR-T-22",
+              title: "今天到期任务",
+              dueAt: dayOffset(0),
+            },
+            {
+              ...item,
+              id: 23,
+              code: "PR-T-23",
+              title: "更远任务",
+              dueAt: dayOffset(5),
+            },
+            {
+              ...item,
+              id: 24,
+              code: "PR-T-24",
+              title: "已完成逾期任务",
+              workStatus: "DONE",
+              dueAt: dayOffset(-3),
+            },
+          ],
+        }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "列表" }));
+
+    const dueCellOf = (title: string): HTMLElement => {
+      const row = screen.getByText(title).closest("tr") as HTMLElement;
+      const cells = within(row).getAllByRole("cell");
+      return cells[cells.length - 2] as HTMLElement;
+    };
+    expect(dueCellOf("逾期任务")).toHaveClass("due-overdue");
+    expect(dueCellOf("今天到期任务")).toHaveClass("due-soon");
+    expect(dueCellOf("更远任务")).not.toHaveClass("due-overdue");
+    expect(dueCellOf("已完成逾期任务")).not.toHaveClass("due-overdue");
+  });
+  it("卡片视图整卡铺红：逾期深红、今天到期橙红，明天到期与已完成不铺红", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    mount(
+      client({
+        listTasks: vi.fn().mockResolvedValue({
+          items: [
+            {
+              ...item,
+              id: 31,
+              code: "PR-T-31",
+              title: "逾期卡片",
+              dueAt: dayOffset(-3),
+            },
+            {
+              ...item,
+              id: 32,
+              code: "PR-T-32",
+              title: "今天卡片",
+              dueAt: dayOffset(0),
+            },
+            {
+              ...item,
+              id: 33,
+              code: "PR-T-33",
+              title: "明天卡片",
+              dueAt: dayOffset(1),
+            },
+            {
+              ...item,
+              id: 34,
+              code: "PR-T-34",
+              title: "已完成卡片",
+              workStatus: "DONE",
+              dueAt: dayOffset(-3),
+            },
+          ],
+        }),
+      }),
+    );
+
+    const cardOf = async (title: string): Promise<HTMLElement> =>
+      (await screen.findByText(title)).closest(
+        ".calm-task-card",
+      ) as HTMLElement;
+    expect(await cardOf("逾期卡片")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-overdue",
+    );
+    expect(await cardOf("今天卡片")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-soon",
+    );
+    // 明天到期不在红档内，仍按优先级铺蓝底。
+    expect(await cardOf("明天卡片")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-normal",
+    );
+    expect(await cardOf("已完成卡片")).toHaveClass(
+      "calm-task-card",
+      "tone-prio-done",
+    );
+  });
   it("shows badge, record count and the main-task entry in the detail dialog, then opens the group dialog in place", async () => {
     mountWithGroupModal(
       client({

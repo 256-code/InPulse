@@ -2760,3 +2760,45 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-21）：契约 `contract:generate`（5 产物）/ `contract:drift` / `contract:validate`（108 条）/ `permissions:check`（108/108）；API 定向单测 `aggregate-read.service.test.ts` 29/29 与真库 `aggregate-read-api.integration.test.ts` 20/20；Web 全量单测 84 文件 544 例、`tsc --noEmit`、`check:boundaries`（280 模块 / 1370 依赖）与生产构建、API `tsc --noEmit`；改动文件 ESLint、全仓 `prettier --check .`（All matched files）与 `check:docs`（84 个 Markdown）通过；Playwright `task-groups.spec.ts` 2/2；浏览器实测见上表（本地 dev 5173，登录账号在既有项目 1 与夹具项目上只读查看，记录侧名称样例取自当次夹具组，未提交任何写操作）。真库与 E2E 测试后已按 2026-09-17 指示运行 `apps/e2e/helpers/fixture-cleanup.ts`（删除夹具账号 4、项目 3、业务行 119、审计行 0）与 Playwright `global-teardown` 清理。
 
 未运行 / 已知偏差：① `pnpm test:unit` / `test:integration` / `test:e2e` 全量与 `pnpm check` 整链、`check:deps` / `check:secrets` / `check:deploy:test` 与 GitHub Actions 未运行；② 本批含契约与后端改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（契约新增字段、`FeatureReadPort` 注入与两处名称解析、Route Registry 摘要变更是重点）；③ DETACHED 分支保持灰色历史样式（不按优先级上色）是刻意保留的状态区分，如产品希望历史分支也上色需再改；④ 分支行仍不显示截止时间与工作量等字段，R-1 未扩；⑤ 记录侧只显示功能名称，模块级记录不显示功能名与模块名（`featureId` 为 null），如需显示模块名需再扩契约；⑥ 浏览器实测的「记录侧功能名称（非空分支）」样例来自当次夹具数据，清理后真实数据只剩模块级记录样例。
+
+## 任务卡片实色配色（D2，2026-09-21 本地落库）
+
+产品反馈「任务卡片不够醒目」。先按真实页面渲染了 7 套候选方案（含「紧急 / 高 / 普通 / 低 / 已完成 / 已取消」六色全展示），产品选定 D2「实色更艳」：卡片整卡铺优先级实色 + 白字，只有「低 / 已取消」保持浅底深字（「低」后改为白底）。
+
+锁定口径：
+
+- 卡片实色写在 `design-system.css` 末尾新增的「任务卡片醒目配色」块，选择器为 `:is(.calm-task-card, .tb-card).tone-prio-*`（比 `.tone-prio-*` 高一级，因此不影响列表行 / 表格行）：紧急 `#d63b31`、高 `#ffdb4d`（明黄底 + 深棕字 `#3f2d00`）、普通 `#0f6ae8`、已完成 `#a8e6b0`（极浅嫩绿 + 深绿字 `#2f4031`，描边取同色更浅的 `#bfe8c6`）。
+- 「低」`#ffffff` 白底、「已取消」`#f2f5f8` 浅灰底，均保留深色正文，低优先级不抢注意力；`.tone-prio-*` 的原有浅色值本次未改，继续供列表行与表格行使用。
+- 「已完成」与「高」同属浅底卡：深字组颜色由 `--task-ink-*` 变量统一驱动，两张卡只在各自色值块里赋值，改底色只需改一处。
+- 卡片描边统一 2px；卡片不再显示左侧色条（`::before { display: none }`）——整卡底色已表达优先级，多一条深色边在实色卡上显得脏（产品 2026-09-21 反馈「这个边边不要了」后去掉）。
+- 实色卡反白范围：标题、编号、正文、底部负责人 / 截止行、`.badge`（半透明白底）、`.tb-date`、`.tb-dot-sep`、`.tb-check`；优先级徽章（`.task-card-footer .badge`）反相成白底深字，`.tb-check` 改半透明白底；悬停从浅蓝描边改为半透明白描边。
+- 不改列表行 / 表格行：`.feature-list-table tbody tr`（项目任务面板列表）与 `.tb-row--tone-*`（看板列表视图）继续用浅色底与色条——表格里深底配深字不可读。
+- 优先级圆点（`priority-select-option.ts`）同步为卡片实色同值：URGENT `#d63b31`、HIGH `#8a6e00`、NORMAL `#0f6ae8`，LOW 保持中性灰 `#a0adb9`；`task-tone.ts` 的注释同步说明色值分两处维护。
+- 已知对比度（WCAG AA 正常文字要求 4.5:1，实测计算值）：普通白字 4.9:1、紧急白字 4.6:1、已完成深绿字 7.7:1、高（明黄底 `#ffdb4d` + 深棕字 `#3f2d00`）9.8:1（`#ffdb4d` 与 `#3f2d00` 的计算值为 9.76:1，此处按 9.8:1 记）。「高」原用土黄 `#c47b00` + 白字只有 3.4:1 未达 AA，按产品反馈换成明黄深棕字后已达标，不再保留已知取舍。
+- 2026-09-22 追加「三档整卡红」：紧急 = 正红 `#d63b31`（沿用 D2）、已逾期 = 深砖红 `#b3261e`、马上到期（今天到期）= 橙红 `#c2410c`，三档全部整卡铺色 + 白字（白字对比度 4.6:1 / 6.5:1 / 5.2:1）；卡内不再挂红色日期签——整卡已红，红签会被同色吃掉。
+- 判档类名为 `tone-prio-overdue` / `tone-prio-soon`，由 `taskToneOf(priority, workStatus, dueTone)` 生成：完成态最优先（已完成 / 已取消不参与红档），日期档覆盖优先级档；任务中心与项目任务面板按 `dueAt` 与当地日历日比较（不含「明天到期」），任务看板只读服务端 `dueState`（OVERDUE / TODAY）。白底表面（任务中心表格、任务详情弹窗徽章）不铺整卡色，只用文字色 `#b3261e` / `#c9472c` 加粗。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CARD-COLOR-UNIT-001 | Web 单元 | 优先级圆点与卡片实色同值 | 新增 `priority-select-option.test.ts`：URGENT / HIGH / NORMAL / LOW 分别返回 `#d63b31` / `#8a6e00` / `#0f6ae8` / `#a0adb9`，未知优先级回退低灰 | 本地通过 |
+| CARD-COLOR-BROWSER-001 | 浏览器实测 | 任务中心卡片实色 | 无头 Chromium 1440 宽（成员账号 `/tasks`）：`.calm-task-card.tone-prio-normal` 背景 `rgb(15, 106, 232)`、文字 `rgb(255, 255, 255)`；`.tone-prio-high` 背景 `rgb(255, 219, 77)`、标题 `rgb(63, 45, 0)` | 本地通过 |
+| CARD-COLOR-BROWSER-002 | 浏览器实测 | 看板卡片实色与卡内文字 | `/projects/1/task-board`：`.tb-card.tone-prio-high` 背景 `rgb(255, 219, 77)`，标题 / 编号 / meta / 日期 / 分隔符 / 徽章的计算色为 `#3f2d00` 或其透明变体；`.tone-prio-done` 背景 `rgb(168, 230, 176)`、描边 `rgb(191, 232, 198)`、卡内文字 `#2f4031` 系 | 本地通过 |
+| CARD-COLOR-BROWSER-003 | 浏览器实测 | 项目任务面板卡片 | `/projects/1/modules/2/features/2` 的 `.calm-task-card.tone-prio-done`：背景 `rgb(168, 230, 176)`、标题 `rgb(47, 64, 49)`、正文与底部行 `rgba(47, 64, 49, 0.8)`、优先级徽章白底深字 | 本地通过 |
+| CARD-COLOR-BROWSER-004 | 浏览器实测 | 列表 / 表格行不被实色污染 | `/tasks` 切「列表」视图：`.task-center-table` 各行仍是浅色底深字（普通浅蓝、高浅橙），未出现深底深字 | 本地通过 |
+| CARD-COLOR-BROWSER-005 | 浏览器实测 | 卡片不再出现左侧深色色条 | 无头 Chromium 1440 宽 `/tasks`：`.calm-task-card` 的 `::before` 计算 `display: none`，实拍黄卡（`.tone-prio-high`）与蓝卡左缘均无深色竖条 | 本地通过 |
+| CARD-COLOR-UNIT-002 | Web 单元 | 任务中心整卡红与列表文字色 | `TaskCenterPageView.test.tsx`：逾期卡 `my-task-801` 得 `tone-prio-overdue`、今天到期卡 `my-task-802` 得 `tone-prio-soon`、已完成卡 `my-task-803` 得 `tone-prio-done` 且卡内截止元素不带任何 `due-*` 类；列表视图里同三条分别落在 `td.due-overdue` / `td.due-soon` / 无色类 | 本地通过 |
+| CARD-COLOR-UNIT-003 | Web 单元 | 项目任务面板卡片与表格的截止判定 | `TasksPanel.test.tsx`：卡片视图逾期卡 `tone-prio-overdue`、今天到期卡 `tone-prio-soon`、明天到期卡与已完成卡不铺红（分别 `tone-prio-normal` / `tone-prio-done`）；列表视图截止列逾期 `due-overdue`、今天到期 `due-soon`、更远日期与已完成逾期任务不上色（回归原先写死 `due-overdue` 的问题） | 本地通过 |
+| CARD-COLOR-UNIT-004 | Web 单元 | tone 映射：完成态优先、日期档覆盖优先级档 | `task-tone.test.ts`：`taskToneOf("LOW", "TODO", "overdue")` 与 `("URGENT", "TODO", "overdue")` 均为 `overdue`、`("HIGH", "TODO", "soon")` 为 `soon`；已完成 / 已取消传任何日期档仍返回 `done` / `canceled`；`taskToneClassName` 输出 `tone-prio-overdue` / `tone-prio-soon` | 本地通过 |
+| CARD-COLOR-BROWSER-006 | 浏览器实测 | 任务中心卡片的整卡红 | 无头 Chromium 1500 宽（成员账号 `/tasks`）：逾期卡 `.calm-task-card.tone-prio-overdue` 背景 `rgb(179, 38, 30)`、描边 `rgb(143, 29, 23)`、文字 `rgb(255, 255, 255)`；卡内截止文案是反白文字、无底色（旧的红签规则已删除），未逾期卡仍为蓝 / 黄底 | 本地通过 |
+| CARD-COLOR-BROWSER-007 | 浏览器实测 | 看板卡片的整卡红 | `/projects/1/task-board`：`INPULSE-T-18` 的 `.tb-card.tone-prio-overdue` 背景 `rgb(179, 38, 30)`，日期文案 `09-19 逾期` 随反白组变白；同页 `.tone-prio-done` 仍是 `rgb(168, 230, 176)`、`.tone-prio-high` 仍是 `rgb(255, 219, 77)` | 本地通过 |
+| CARD-COLOR-BROWSER-008 | 浏览器实测 | 白底表面只改文字色 | `/tasks` 切「列表」视图：`td.due-overdue` 为 `#b3261e` 加粗且无底色；任务详情弹窗 `.calm-due.due-red`（已逾期 6天）为 `rgb(179, 38, 30)`、底透明 | 本地通过 |
+| CARD-COLOR-BROWSER-009 | 浏览器实测 | 已完成 / 已取消不参与红档 | `/projects/1/task-board`：48 张已完成卡全部保持 `rgb(168, 230, 176)` 底与 `rgb(47, 64, 49)` 文字，没有一张因日期变红 | 本地通过 |
+| CARD-COLOR-WEB-001 | Web 单元 | 前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 542 例通过（含本轮新增 4 例） | 本地通过 |
+| CARD-COLOR-DOC-001 | 文档同步 | 六种程度配色可查阅 | 新增 `docs/task-card-colors.md`《任务卡片配色规范》：六种程度的卡片底色 / 描边 / 悬停 / 文字 / 对比度、卡内元素取色、看板卡片、列表行浅色对照、下拉圆点色、实现位置与变更历史；`README.md` 文档索引已登记；`pnpm check:docs` 通过（85 个 Markdown） | 本地通过 |
+| CARD-COLOR-GATE-001 | 静态门禁 | 类型、风格、依赖边界与文档 | `pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（281 模块 1370 依赖）、`pnpm check:docs`（85 个 Markdown 文件）通过 | 本地通过 |
+
+本地实际执行（2026-09-22 三档整卡红）：「三档整卡红」的浏览器实测见 CARD-COLOR-BROWSER-006 / 007 / 008 / 009；`pnpm --filter @inpulse/web test`（85 文件 542 例）、`pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`、`pnpm check:docs`（85 个 Markdown）通过；`docs/task-card-colors.md` 的《逾期与马上到期：三档整卡红》一节与两张配图 `due-tiers.png` / `due-tiers-board.png` 同步。
+
+本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（85 文件 536 例）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`、`pnpm check:docs`；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，只读浏览既有演示数据，未新增或修改业务数据）。
+
+未运行 / 已知偏差：① 未新增 Playwright 配色断言，`pnpm test:e2e` 未实跑（本地没有独立 E2E 数据库 `E2E_DATABASE_URL`，未拿演示库代替）；② 「高」已由土黄 `#c47b00` 换成明黄 `#ffdb4d` + 深棕字 `#3f2d00`（9.8:1），对比度不再有未达标项；③ 实色配色目前只覆盖卡片，看板 / 任务中心的列表行仍是浅色底，两者并存是刻意选择；④ 配色属视觉主观项，需非作者人工评审；⑤ 未跑 `pnpm build`、`check:deps`、`permissions:check`、真实 PostgreSQL 集成测试与 GitHub Actions。

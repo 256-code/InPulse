@@ -17,6 +17,7 @@ import {
   taskPriorityBadgeTone,
   taskPriorityLabel,
   taskToneClassName,
+  type TaskDueTone,
 } from "@features/common/task-tone";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
@@ -146,6 +147,33 @@ function isOverdue(item: MyTaskListItem): boolean {
     typeof item.dueAt === "string" &&
     isBeforeTodayIso(item.dueAt)
   );
+}
+
+/**
+ * 截止紧迫度：已逾期 / 今天到期（马上到期），其余（已完成、已取消、明天以后）
+ * 返回 null。卡片整卡红与列表截止列的文字色都从这里派生，判定只此一处。
+ */
+function dueToneOf(item: MyTaskListItem): TaskDueTone | null {
+  if (isOverdue(item)) return "overdue";
+  if (
+    item.workStatus === "TODO" &&
+    typeof item.dueAt === "string" &&
+    isTodayIso(item.dueAt)
+  ) {
+    return "soon";
+  }
+  return null;
+}
+
+/**
+ * 白底表面上的两档红文字色（色值见 design-system.css「任务卡红色三档」），
+ * 只用在列表视图的截止列：卡片整卡已经是红的，不再往里套一层签。
+ */
+function dueToneClass(item: MyTaskListItem): string | undefined {
+  const tone = dueToneOf(item);
+  if (tone === "overdue") return "due-overdue";
+  if (tone === "soon") return "due-soon";
+  return undefined;
 }
 
 export interface TaskCenterPageViewProps {
@@ -307,7 +335,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <button
         type="button"
         className={
-          "calm-task-card " + taskToneClassName(item.priority, item.workStatus)
+          "calm-task-card " +
+          taskToneClassName(item.priority, item.workStatus, dueToneOf(item))
         }
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
@@ -557,9 +586,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                   {taskPriorityLabel(item.priority)}
                 </CalmBadge>
               </td>
-              <td className={isOverdue(item) ? "due-overdue" : undefined}>
-                {dueLabel(item) ?? "—"}
-              </td>
+              <td className={dueToneClass(item)}>{dueLabel(item) ?? "—"}</td>
               <td>{item.publishedRecordCount}</td>
               <td>
                 <CalmBadge tone={statusTone[item.workStatus]}>

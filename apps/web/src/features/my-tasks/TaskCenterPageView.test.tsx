@@ -210,10 +210,10 @@ describe("TaskCenterPageView", () => {
   it("shows open tasks only by default and hides done and canceled", async () => {
     renderView();
 
-    // 卡片按程度铺色：紧急任务取红色 tone 类。
+    // 卡片按程度铺色：这张紧急任务同时已逾期，日期档盖过优先级档取深红。
     expect(await screen.findByTestId("my-task-101")).toHaveClass(
       "calm-task-card",
-      "tone-prio-urgent",
+      "tone-prio-overdue",
     );
     expect(screen.queryByTestId("my-task-104")).toBeNull();
     expect(screen.queryByTestId("my-task-107")).toBeNull();
@@ -777,6 +777,97 @@ describe("TaskCenterPageView", () => {
     expect(
       within(statusFilter).getByRole("button", { name: "已完成" }),
     ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("整卡铺红：已逾期深红、今天到期橙红，已完成不参与红档", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    const openItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      workStatus: "TODO",
+      completedAt: null,
+      dueAt: null,
+      ...over,
+    });
+    renderView({
+      adapter: serverLikeAdapterWith([
+        openItem({ taskId: 801, code: "INP-801", dueAt: dayOffset(-3) }),
+        openItem({ taskId: 802, code: "INP-802", dueAt: dayOffset(0) }),
+        openItem({
+          taskId: 803,
+          code: "INP-803",
+          workStatus: "DONE",
+          completedAt: "2026-09-03T00:00:00.000Z",
+          dueAt: dayOffset(-3),
+        }),
+      ]),
+      filters: { status: "all" },
+    });
+    const cardOf = (taskId: number): HTMLElement =>
+      screen.getByTestId("my-task-" + taskId);
+    await screen.findByTestId("my-task-801");
+    // 卡片整卡铺红：逾期深红、今天到期橙红（tone 色值见 design-system.css）。
+    expect(cardOf(801)).toHaveClass("calm-task-card", "tone-prio-overdue");
+    expect(cardOf(802)).toHaveClass("calm-task-card", "tone-prio-soon");
+    // 已完成不参与红档：状态色优先，卡上也不再挂红色日期签。
+    expect(cardOf(803)).toHaveClass("calm-task-card", "tone-prio-done");
+    expect(within(cardOf(803)).getByTitle(/^截止：/).className).toBe("");
+  });
+
+  it("列表视图是白底表面：整卡不铺红，只把截止列染成深红 / 橙红", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    const openItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      workStatus: "TODO",
+      completedAt: null,
+      dueAt: null,
+      ...over,
+    });
+    renderView({
+      adapter: serverLikeAdapterWith([
+        openItem({ taskId: 811, code: "INP-811", dueAt: dayOffset(-3) }),
+        openItem({ taskId: 812, code: "INP-812", dueAt: dayOffset(0) }),
+        openItem({
+          taskId: 813,
+          code: "INP-813",
+          workStatus: "DONE",
+          completedAt: "2026-09-03T00:00:00.000Z",
+          dueAt: dayOffset(-3),
+        }),
+      ]),
+      filters: { status: "all", display: "list" },
+    });
+    const table = await screen.findByRole("table", { name: "跨项目任务列表" });
+    const dueIndex = within(table)
+      .getAllByRole("columnheader")
+      .findIndex((node) => node.textContent === "截止");
+    const dueCellOf = (code: string): HTMLElement => {
+      const row = screen
+        .getByText(new RegExp("^" + code))
+        .closest("tr") as HTMLElement;
+      return within(row).getAllByRole("cell")[dueIndex] as HTMLElement;
+    };
+    expect(dueCellOf("INP-811")).toHaveClass("due-overdue");
+    expect(dueCellOf("INP-812")).toHaveClass("due-soon");
+    // 已完成不参与红档，截止列回到默认字色。
+    expect(dueCellOf("INP-813").className).toBe("");
   });
 });
 
