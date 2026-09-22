@@ -1039,7 +1039,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                       ? ""
                       : " / " + entry.item.featureName)}
                 </td>
-                <td title={assigneeNamesOf(entry.item)}>{assigneeNamesOf(entry.item)}</td>
+                <td title={assigneeNamesOf(entry.item)}>
+                  {assigneeNamesOf(entry.item)}
+                </td>
                 <td>
                   <CalmBadge tone={taskPriorityBadgeTone(entry.item.priority)}>
                     {taskPriorityLabel(entry.item.priority)}
