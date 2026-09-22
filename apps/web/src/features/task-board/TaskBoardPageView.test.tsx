@@ -220,11 +220,12 @@ describe("TaskBoardPageView", () => {
     expect(
       screen.getByRole("article", { name: "模块 结算模块" }),
     ).toBeInTheDocument();
-    // 卡片配色与列表行同源：优先级决定底色，已完成 / 已取消覆盖状态色，
-    // 已逾期 / 今天到期再覆盖成整卡红；这张卡服务端口径是今天到期，因此取橙红。
+    // 卡片配色与列表行同源：优先级决定底色，已完成 / 已取消覆盖状态色。2026-09-22
+    // 三次定案后已逾期 / 今天到期不再覆盖底色，这张卡服务端口径虽是今天到期，
+    // 整卡仍按自己的普通优先级取普通蓝（逾期只在日期文案上提示）。
     expect(
       screen.getByRole("button", { name: "打开任务 T-1001 实现任务看板" }),
-    ).toHaveClass("tb-card", "tone-prio-soon");
+    ).toHaveClass("tb-card", "tone-prio-normal");
     expect(
       screen.getByRole("button", { name: "打开任务 T-1002 补齐看板筛选" }),
     ).toHaveClass("tb-card", "tone-prio-done");

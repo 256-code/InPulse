@@ -580,6 +580,26 @@ describe("TaskQueryPort list and count", () => {
     ).toBe(4);
   });
 
+  /**
+   * R-7 组卡事实字段回归（2026-09-22）：`listByIds` 不显式选择 due_at 时
+   * 聚合组列表分支的 dueAt 会是 undefined，响应契约校验直接 500；时间列在
+   * 驱动层以文本返回，读取边界必须还原为 Date。
+   */
+  test("listByIds 还原截止时间为 Date 并透传优先级", async () => {
+    const scope = await newProject();
+    const dueAt = "2026-10-02 05:33:00+08";
+    const withDue = await newTask(scope, { dueAt, priority: "URGENT" });
+    const withoutDue = await newTask(scope);
+    const rows = await uow.run((tx) =>
+      taskQuery.listByIds(tx, [scope.projectId], [withDue, withoutDue]),
+    );
+    expect(rows.map((row) => row.taskId)).toEqual([withDue, withoutDue]);
+    expect(rows[0]?.dueAt).toBeInstanceOf(Date);
+    expect(rows[0]?.dueAt?.toISOString()).toBe(new Date(dueAt).toISOString());
+    expect(rows[0]?.priority).toBe("URGENT");
+    expect(rows[1]?.dueAt).toBeNull();
+  });
+
   test("effectiveOnly drops invalid and canceled tasks but keeps archived ones", async () => {
     const scope = await newProject();
     const featureId = await newFeature(scope, scope.moduleId, "影响功能");
@@ -1417,8 +1437,8 @@ describe("任务列表统一排序（ADR-037）", () => {
   }
 
   /**
-   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行：
-   * 已逾期 → 遗留问题来源（leftover_task_links 链接）→ 标记紧急 → 今/明日截止 → 其余。
+   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到紧急之后一档）：
+   * 遗留问题来源（leftover_task_links 链接）→ 标记紧急 → 已逾期 → 今/明日截止 → 其余。
    * leftover_task_links 的 leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
    */
   async function seedOrderingMatrix(
@@ -1464,7 +1484,7 @@ describe("任务列表统一排序（ADR-037）", () => {
     };
   }
 
-  test("状态分组与紧急桶的组合按口径排序，且两个任务端口同序", async () => {
+  test("状态分组 / 完成时间 / 紧急桶的组合按口径排序，且两个任务端口同序", async () => {
     const scope = await newProject();
     const bounds = await dayBounds();
     const matrix = await seedOrderingMatrix(scope, bounds);
@@ -1476,21 +1496,26 @@ describe("任务列表统一排序（ADR-037）", () => {
     const ids = mine.items.map((item) => item.taskId);
     expect(ids).toEqual([
       // 未完成：紧急桶 0 → 1 → 2 → 3 → 4，桶内完全并列的两条按 id 升序。
-      todo.overdue,
       todo.leftover,
       todo.urgent,
+      todo.overdue,
       todo.dueSoon,
       todo.other,
       todo.tieA,
       todo.tieB,
-      // 已完成 / 已取消不参与紧急桶：URGENT 优先，其后按截止时间升序、无截止最后。
-      done.urgent,
-      done.overdue,
-      done.dueSoon,
-      done.leftover,
-      done.other,
-      done.tieA,
+      // 已完成按完成时间倒序（2026-09-22 产品口径「这个排序按照完成时间，越晚越排前面」）：
+      // 优先级 / 截止 / 紧急桶都退出这一组。夹具按 已逾期 → 遗留问题来源 → 标记紧急 →
+      // 今日截止 → 其余 → 并列甲 → 并列乙 的顺序创建，每条各起一个事务、completed_at 随
+      // 创建顺序严格递增（下面的 doneStamps 断言先固化这个前提），因此期望顺序是创建顺序的
+      // 完全倒序——URGENT 的「标记紧急」反而靠后，证明已完成组不再按优先级排。
       done.tieB,
+      done.tieA,
+      done.other,
+      done.dueSoon,
+      done.urgent,
+      done.leftover,
+      done.overdue,
+      // 已取消仍不参与紧急桶与完成时间：URGENT 优先，其后按截止时间升序、无截止最后。
       canceled.urgent,
       canceled.overdue,
       canceled.dueSoon,
@@ -1499,6 +1524,36 @@ describe("任务列表统一排序（ADR-037）", () => {
       canceled.tieA,
       canceled.tieB,
     ]);
+    /**
+     * 前置断言：已完成夹具的 completed_at 必须随创建顺序严格递增，上面的倒序期望才成立
+     * （每条夹具各起一个事务，事务 now() 就是完成时间）。
+     */
+    const createdOrder = [
+      done.overdue,
+      done.leftover,
+      done.urgent,
+      done.dueSoon,
+      done.other,
+      done.tieA,
+      done.tieB,
+    ];
+    const stampRows = await uow.run(
+      (tx) =>
+        tx.sql<{ taskId: number; completedAt: Date | string }[]>`
+        SELECT id AS "taskId", completed_at AS "completedAt"
+          FROM app.tasks
+         WHERE id = ANY(${createdOrder}::integer[])
+      `,
+    );
+    const stamps = createdOrder.map((taskId) => {
+      const row = stampRows.find((candidate) => candidate.taskId === taskId);
+      if (row === undefined)
+        throw new Error(`missing stamp for task ${taskId}`);
+      return new Date(row.completedAt).getTime();
+    });
+    expect(stamps).toEqual([...stamps].sort((left, right) => left - right));
+    expect(new Set(stamps).size).toBe(stamps.length);
+
     // 遗留问题来源桶确实来自链接，而不是标题或优先级。
     const linked = await client.sql<{ taskId: number }[]>`
       SELECT task_id AS "taskId" FROM app.leftover_task_links WHERE project_id = ${scope.projectId}
@@ -1517,9 +1572,12 @@ describe("任务列表统一排序（ADR-037）", () => {
   test("多列 keyset 分页跨页不漏不重（含无截止与完全并列的行）", async () => {
     const scope = await newProject();
     const bounds = await dayBounds();
+    // 造数据的顺序即期望的返回顺序：紧急桶现在是
+    // 遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)，
+    // 因此「标记紧急」要排在「已逾期」之前（2026-09-22 逾期退到紧急之后一档）。
     const created = [
-      await newTask(scope, { dueAt: bounds.overdue }),
       await newTask(scope, { priority: "URGENT" }),
+      await newTask(scope, { dueAt: bounds.overdue }),
       await newTask(scope, { dueAt: bounds.today }),
     ];
     for (let index = 0; index < 5; index += 1) {

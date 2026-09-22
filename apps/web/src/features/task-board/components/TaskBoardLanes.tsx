@@ -1,10 +1,7 @@
 import React from "react";
 
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import {
-  taskToneClassName,
-  type TaskDueTone,
-} from "@features/common/task-tone";
+import { taskToneClassName } from "@features/common/task-tone";
 
 import {
   avatarTextOf,
@@ -19,8 +16,9 @@ import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
 
 /**
  * 看板视图：按模块分泳道，泳道头含模块名、功能与任务计数、逾期角标、
- * 完成进度与负责人头像组；泳道内任务卡按服务端排序（逾期 -> 未完成按优先级与
- * 截止 -> 已完成 -> 已取消）。点击卡片就地打开任务详情（TaskDetailOverlay）。
+ * 完成进度与负责人头像组；泳道内任务卡按服务端排序（与任务中心共用
+ * apps/api/src/modules/tasks/task-list-order.ts 的同一套排序键）。点击卡片就地打开
+ * 任务详情（TaskDetailOverlay）。
  *
  * 泳道头统计恒为全量口径，不随筛选跳变；被筛空的泳道整体隐藏。
  */
@@ -34,18 +32,15 @@ export interface TaskBoardLanesProps {
 
 /**
  * 卡片配色与列表行、任务中心同源：优先级决定底色，已完成 / 已取消覆盖状态色，
- * 已逾期 / 今天到期再覆盖成整卡红。看板只读服务端 dueState，不在前端重算逾期。
+ * 遗留问题来源覆盖锈红。已逾期 / 今天到期不参与配色（2026-09-22 产品口径
+ * 「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」）：看板只在日期文案上
+ * 用 .tb-date--overdue / .tb-date--today 提示，且只读服务端 dueState，
+ * 不在前端按本地时钟重算。
  */
-function dueToneOfCard(card: TaskBoardCard): TaskDueTone | null {
-  if (card.dueState === "OVERDUE") return "overdue";
-  if (card.dueState === "TODAY") return "soon";
-  return null;
-}
-
-function cardClassNameOf(card: TaskBoardCard): string {
+function cardClassNameOf(card: TaskBoardCard, leftoverSource: boolean): string {
   return (
     "tb-card " +
-    taskToneClassName(card.priority, card.workStatus, dueToneOfCard(card))
+    taskToneClassName(card.priority, card.workStatus, leftoverSource)
   );
 }
 
@@ -60,7 +55,7 @@ const TaskBoardCardItem: React.FC<{
     <li>
       <button
         type="button"
-        className={cardClassNameOf(card)}
+        className={cardClassNameOf(card, leftoverSource)}
         onClick={() => onOpen(card)}
         aria-label={"打开任务 " + card.code + " " + card.title}
       >

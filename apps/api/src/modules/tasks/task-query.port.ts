@@ -21,6 +21,8 @@ export interface TaskReadModel {
   priority: TaskPriority;
   workStatus: "TODO" | "DONE" | "CANCELED";
   lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
+  /** 截止时间（null = 未设置）；由适配器在读取边界还原为 Date。 */
+  dueAt: Date | null;
   rowVersion: number;
   impactFeatureIds: number[];
 }
@@ -119,6 +121,21 @@ export function mapTaskListRow(row: TaskListRowRaw): TaskListRow {
     ...row,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
+  };
+}
+
+/**
+ * TaskReadModel 的时间列在驱动层以文本返回，读取边界统一还原为 Date；
+ * 三处 SQL 必须显式选择 `due_at AS "dueAt"`，遗漏会让契约校验拿到 undefined。
+ */
+interface TaskReadRowRaw extends Omit<TaskReadModel, "dueAt"> {
+  readonly dueAt: string | null;
+}
+
+function mapTaskReadRow(row: TaskReadRowRaw): TaskReadModel {
+  return {
+    ...row,
+    dueAt: row.dueAt === null ? null : new Date(row.dueAt),
   };
 }
 
@@ -360,17 +377,17 @@ function assertExcludedTaskIds(
 export class PostgresTaskQueryPort extends TaskQueryPort {
   async findByTaskId(tx: TransactionContext, taskId: number) {
     const [row] = await tx.sql<
-      TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+      TaskReadRowRaw[]
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",due_at AS "dueAt",
       ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId}`;
-    return row;
+    return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async find(tx: TransactionContext, projectId: number, taskId: number) {
     const [row] = await tx.sql<
-      TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
+      TaskReadRowRaw[]
+    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",due_at AS "dueAt",
       ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId}`;
-    return row;
+    return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async lock(tx: TransactionContext, projectId: number, taskId: number) {
     await tx.sql`SELECT id FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} FOR UPDATE`;
@@ -389,10 +406,12 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     }
     const projects = [...projectIds];
     const tasks = [...taskIds];
-    return (await tx.sql<
-      TaskReadModel[]
-    >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) ORDER BY id ASC`) as unknown as readonly TaskReadModel[];
+    return (
+      await tx.sql<
+        TaskReadRowRaw[]
+      >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",assignee_id AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",row_version AS "rowVersion",due_at AS "dueAt",
+      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) ORDER BY id ASC`
+    ).map(mapTaskReadRow);
   }
 
   async list(

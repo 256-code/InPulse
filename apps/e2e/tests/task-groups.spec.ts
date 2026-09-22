@@ -214,15 +214,28 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
       .locator(".calm-task-grid .task-group-card")
       .filter({ hasText: mainTaskTitle });
     await expect(groupCard).toBeVisible();
-    await expect(groupCard.locator(".task-id")).toContainText("TG-");
+    // 2026-09-22 起组卡与任务卡同一套纵向排版（产品要求「组卡的布局要和 P2 一样」）：
+    // 卡片上不再有编号行，编号只留在列表视图的标题下方与聚合组弹窗里。
+    await expect(groupCard.locator(".task-id")).toHaveCount(0);
+    await expect(groupCard.locator(".calm-card-top")).toHaveCount(0);
+    // 底部那一排只留三枚徽章（2026-09-22 三次调整）：分支数改成「聚合组」徽章的 title，
+    // 这一排才和任务卡片一样只占一行；列表视图仍逐字给出「编号 · 聚合组 · n 条分支」。
     await expect(groupCard.getByText("聚合组", { exact: true })).toBeVisible();
-    await expect(groupCard.getByText("进行中")).toBeVisible();
+    await expect(
+      groupCard.getByTitle("聚合组：包含 2 条分支（主分支与全部来源分支）"),
+    ).toBeVisible();
+    // 状态徽章按组内分支完成情况派生（2026-09-22 产品口径）：没有任何分支完成 → 未开始；
+    // 任意分支完成 → 进行中；全部分支收尾 → 已完成，并归到工具栏「已完成」档。本例两条
+    // 分支都未完成，因此是「未开始」，明细计数留在徽章的 title 里。
+    await expect(groupCard.getByText("未开始", { exact: true })).toBeVisible();
+    await expect(groupCard.locator(".task-group-card-top")).toHaveCount(0);
+    await expect(groupCard.getByTitle("0 / 2 条分支任务已完成")).toBeVisible();
     await expect(groupCard).toContainText(runtime.projectName);
     // 组卡列出各分支负责人（本例两条分支同一人负责，按 userId 去重后只出现一次）。
     await expect(groupCard).toContainText(runtime.user.name);
     // 组优先级按未完成分支里的最高一档派生（2026-09-21 产品要求）：两条分支都以
-    // 默认优先级「普通」创建且都未完成，组卡显示「普通」优先级徽章，整卡套用
-    // 同一档色调（tone-prio-normal），与任务卡片的配色体系一致。
+    // 默认优先级「普通」创建且都未完成，组卡显示「普通」优先级徽章。整卡底色自
+    // 2026-09-22 起跟随派生优先级（复用任务卡片的 .tone-prio-*），因此是普通蓝。
     await expect(groupCard.getByText("普通", { exact: true })).toBeVisible();
     await expect(groupCard).toHaveClass(/tone-prio-normal/);
     // 已合并任务不再单独出卡片：来源任务标题在组卡上不出现；主任务标题只由组卡

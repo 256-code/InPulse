@@ -499,11 +499,13 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest(".calm-task-card") as HTMLElement;
-    // 卡片与列表行共用程度配色：普通优先级取蓝色 tone 类。
-    expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-normal");
+    // 卡片与列表行共用程度配色：这张卡是遗留问题来源，整卡取锈红 tone 类而不是普通蓝。
+    expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-leftover");
     expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
+    // 不是遗留项来源的卡片维持普通优先级蓝色，证明锈红只随来源标记出现。
+    expect(ungroupedCard).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
     await waitFor(() =>
       expect(listTaskGroupMemberships).toHaveBeenCalledTimes(1),
@@ -512,7 +514,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       taskIds: [1, 2],
     });
   });
-  it("列表视图沿用同一套程度配色：优先级铺色，已完成转绿、已取消转灰", async () => {
+  it("列表视图沿用同一套程度配色：优先级铺色，已完成转青碧、已取消转灰", async () => {
     mount(
       client({
         listTasks: vi.fn().mockResolvedValue({
@@ -543,7 +545,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       "tr",
     ) as HTMLElement;
     expect(plainRow).toHaveClass("tone-prio-normal");
-    // 状态覆盖优先级：紧急的已完成任务整行转绿，已取消整行转灰。
+    // 状态覆盖优先级：紧急的已完成任务整行转青碧，已取消整行转灰。
     expect(screen.getByText("已完成任务").closest("tr")).toHaveClass(
       "tone-prio-done",
     );
@@ -635,7 +637,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       /^负责人：/,
     );
   });
-  it("卡片视图整卡铺红：逾期深红、今天到期橙红，明天到期与已完成不铺红", async () => {
+  it("卡片视图按优先级铺色：逾期与今天到期都不再改色", async () => {
     const now = new Date();
     const dayOffset = (offsetDays: number) =>
       new Date(
@@ -688,15 +690,17 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       (await screen.findByText(title)).closest(
         ".calm-task-card",
       ) as HTMLElement;
+    // 2026-09-22 三次定案「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」：
+    // 逾期与今天到期只影响排序和截止列文字色，卡片一律按任务自己的优先级铺色
+    // （这四张都是普通优先级，因此都是普通蓝）。
     expect(await cardOf("逾期卡片")).toHaveClass(
       "calm-task-card",
-      "tone-prio-overdue",
+      "tone-prio-normal",
     );
     expect(await cardOf("今天卡片")).toHaveClass(
       "calm-task-card",
-      "tone-prio-soon",
+      "tone-prio-normal",
     );
-    // 明天到期不在红档内，仍按优先级铺蓝底。
     expect(await cardOf("明天卡片")).toHaveClass(
       "calm-task-card",
       "tone-prio-normal",

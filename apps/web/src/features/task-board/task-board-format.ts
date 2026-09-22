@@ -124,7 +124,7 @@ export function priorityMarkOf(priority: TaskBoardPriority): {
   }
 }
 
-/** 看板卡右上角标记：已完成绿勾 / 已取消灰徽章 / 其余按优先级彩色徽章。 */
+/** 看板卡右上角标记：已完成勾选 / 已取消灰徽章 / 其余按优先级彩色徽章。 */
 export function cardMarkOf(card: TaskBoardCard): CardMark {
   if (card.workStatus === "DONE") {
     return { kind: "done", label: "已完成", tone: "green" };

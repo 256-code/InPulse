@@ -1,8 +1,14 @@
 /**
- * 任务程度配色（优先级 / 完成状态 / 截止紧迫度）→ 卡片与列表共用的 tone 类名。
+ * 任务程度配色（优先级 / 完成状态 / 遗留来源）→ 卡片与列表共用的 tone 类名。
  *
  * 与 priority-select-option.ts 的优先级圆点色同源：紧急红 / 高明黄 / 普通蓝 /
- * 低灰，已完成绿、已取消灰；已逾期与马上到期另有两支红，都铺整张卡。
+ * 低灰，已完成青碧、已取消灰；遗留问题来源整卡锈红。
+ * 截止紧迫度（已逾期 / 今天到期）不参与卡片配色——2026-09-22 产品口径
+ * 「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」：
+ * 逾期只在两处体现，一是服务端排序（见 apps/api/src/modules/tasks/task-list-order.ts
+ * 的 urgency 桶「遗留问题 → 标记紧急 → 已逾期 → 今/明日截止 → 其余」），
+ * 二是白底表面的红色日期文案（design-system.css 的 .due-overdue / .due-soon 与
+ * .tb-date--overdue / .tb-date--today），不再整卡换色。
  * 色值分两处维护：design-system.css 中段的 .tone-prio-* 管列表行 / 表格行的浅色底
  * 与色条，「任务卡片醒目配色」块管卡片实色；优先级圆点取卡片实色的同值。
  * 任务看板（卡片 + 列表）、任务中心（卡片 + 列表）与功能任务面板共用同一
@@ -11,14 +17,7 @@
 import type { CalmBadgeTone } from "./components/Calm";
 
 export type TaskToneName =
-  | "urgent"
-  | "high"
-  | "normal"
-  | "low"
-  | "done"
-  | "canceled"
-  | "overdue"
-  | "soon";
+  "urgent" | "high" | "normal" | "low" | "done" | "canceled" | "leftover";
 
 /**
  * 优先级中文名：任务卡片、聚合组卡片与聚合组弹窗分支共用同一文案，
@@ -51,30 +50,37 @@ export function taskPriorityBadgeTone(priority: string): CalmBadgeTone {
 }
 
 /**
- * 截止紧迫度，由调用方按各自口径判定后传入第三参数：
+ * 截止紧迫度，由调用方按各自口径判定后使用：
  * - 任务中心 / 项目任务面板：按 dueAt 与当地日历日比较（已过期 / 今天到期）；
  * - 任务看板：只读服务端 dueState（OVERDUE / TODAY），不在前端按本地时钟重算。
- * 「明天到期」与更远的日期都不进档，避免整卡红提前出现。
+ * 「明天到期」与更远的日期都不进档。它现在只驱动日期文字色，不再决定卡片 tone。
  */
 export type TaskDueTone = "overdue" | "soon";
 
 /**
- * 完成态覆盖一切：已完成整卡 / 整行转绿，已取消转灰；
- * 未完成时截止紧迫度覆盖优先级——已逾期整卡深红、马上到期整卡橙红；
- * 其余按优先级取色，未知优先级按「低」的中性灰处理。
+ * 完成态覆盖一切：已完成整卡 / 整行转青碧，已取消转灰；
+ * 未完成时紧急仍是紧急红；其余由遗留问题来源覆盖成整卡锈红（看第 3 个参数）；
+ * 再其余按优先级取色，未知优先级按「低」的中性灰处理。
+ *
+ * 截止紧迫度（已逾期 / 今天到期）不再是覆盖档：2026-09-22 产品要求「逾期的不搞特殊了，
+ * 原本的优先级是什么就呈现什么颜色」，卡片只表达任务自己的优先级身份；
+ * 逾期靠排序靠前 + 日期文案提示，见上面的 TaskDueTone 说明。
+ *
+ * 第三个参数 hasLeftoverSource（2026-09-22 产品要求「遗留问题整个卡片都要是红色的」）：
+ * 由遗留项转换而来的任务整卡铺深锈红 `#8a2b06`（与「遗留问题」徽章同色系），
+ * 让它在同屏里一眼可辨；已完成 / 已取消 / 紧急三档仍优先——完成态与真正的优先级身份
+ * 都不该被来源标记盖掉。
  */
 export function taskToneOf(
   priority: string,
   workStatus: string,
-  dueTone: TaskDueTone | null = null,
+  hasLeftoverSource = false,
 ): TaskToneName {
   if (workStatus === "DONE") return "done";
   if (workStatus === "CANCELED") return "canceled";
-  if (dueTone === "overdue") return "overdue";
-  if (dueTone === "soon") return "soon";
+  if (priority === "URGENT") return "urgent";
+  if (hasLeftoverSource) return "leftover";
   switch (priority) {
-    case "URGENT":
-      return "urgent";
     case "HIGH":
       return "high";
     case "NORMAL":
@@ -88,7 +94,7 @@ export function taskToneOf(
 export function taskToneClassName(
   priority: string,
   workStatus: string,
-  dueTone: TaskDueTone | null = null,
+  hasLeftoverSource = false,
 ): string {
-  return "tone-prio-" + taskToneOf(priority, workStatus, dueTone);
+  return "tone-prio-" + taskToneOf(priority, workStatus, hasLeftoverSource);
 }

@@ -2645,11 +2645,11 @@ a:focus-visible {
   --task-fg: #5f6d7a;
 }
 .tone-prio-done {
-  --task-c: #34815d;
-  --task-bg: #eef8f3;
-  --task-hov: #ddf0e5;
-  --task-bd: #d4e8dd;
-  --task-fg: #2f6a4e;
+  --task-c: #1d5b62;
+  --task-bg: #e1f2f2;
+  --task-hov: #d6edee;
+  --task-bd: #bcdddf;
+  --task-fg: #1d5b62;
 }
 .tone-prio-canceled {
   --task-c: #aab7c4;
@@ -2657,6 +2657,16 @@ a:focus-visible {
   --task-hov: #ebeff3;
   --task-bd: #e3e8ed;
   --task-fg: #75828f;
+}
+/* 「遗留问题」（2026-09-22 产品要求「遗留问题整个卡片都要是红色的」）：由遗留项转换
+   而来的任务用深锈红标识来源，色值与「遗留问题」徽章（.badge-leftover）同源。列表行 /
+   表格行走这里的浅色底与色条；卡片走下面「任务卡片醒目配色」块的实色覆盖。 */
+.tone-prio-leftover {
+  --task-c: #8a2b06;
+  --task-bg: #fbeee9;
+  --task-hov: #f7e3da;
+  --task-bd: #f0d5c9;
+  --task-fg: #8a2b06;
 }
 .calm-task-grid,
 .calm-feature-grid {
@@ -2677,7 +2687,7 @@ a:focus-visible {
     border-color 0.15s,
     box-shadow 0.15s;
 }
-/* 任务卡整卡按优先级铺淡色底，左侧 4px 色条同色；已完成转绿、已取消转灰。
+/* 任务卡整卡按优先级铺淡色底，左侧 4px 色条同色；已完成转青碧、已取消转灰。
    overflow 只为让色条跟随圆角裁切，卡片自身不滚动。 */
 .calm-task-card {
   position: relative;
@@ -2712,9 +2722,9 @@ a:focus-visible {
   color: #243d54;
   min-height: 51px;
 }
-/* 已完成 / 已取消卡片：标题随状态柔和转绿或转灰（已取消加删除线），与看板卡片同款。 */
+/* 已完成 / 已取消卡片：标题随状态柔和转青碧或转灰（已取消加删除线），与看板卡片同款。 */
 .calm-task-card.tone-prio-done h3 {
-  color: #5c7a6a;
+  color: #1d5b62;
 }
 .calm-task-card.tone-prio-canceled h3 {
   color: #8b98a6;
@@ -2774,6 +2784,13 @@ a:focus-visible {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+/* 底部那一排的右侧是截止：任务卡与组卡都要求它整行显示（2026-09-22 组卡对齐）。
+   组卡的截止取未完成分支里最早的一条，文案可能更长（如「已逾期 9月16日」），左侧标签
+   一旦挤过来就会折成两行；这里让右侧固定不换行、优先占满所需宽度，左侧标签组换行。 */
+.calm-task-card .calm-card-bottom > span:last-child {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .calm-section-title {
   display: flex;
@@ -4013,7 +4030,7 @@ a:focus-visible {
 }
 /*
  * 任务列表行（项目任务面板 / 任务中心）：整行按优先级铺淡色底（tone-prio-* 提供），
- * 首格左侧 3px 色条同色，标题用同色系深色；已完成转绿、已取消转灰。
+ * 首格左侧 3px 色条同色，标题用同色系深色；已完成转青碧、已取消转灰。
  * 不带 tone 类的功能 / 记录列表回退到原样式（透明底、浅蓝悬停），互不影响。
  * 悬停只加深底色，不做位移，避免表格列错位。
  */
@@ -4065,7 +4082,8 @@ a:focus-visible {
     .tone-prio-normal,
     .tone-prio-low,
     .tone-prio-done,
-    .tone-prio-canceled
+    .tone-prio-canceled,
+    .tone-prio-leftover
   )
   .feature-list-open
   strong {
@@ -4555,9 +4573,10 @@ button.danger-text {
   line-height: 1.75;
 }
 
-/* 「逾期 / 马上到期」两档红（2026-09-22 定案）：白底表面（表格单元格、看板列表行、
-   详情弹窗徽章）只用文字色——逾期 #b3261e、马上到期 #c9472c；卡片改成整卡铺红，
-   见文件末尾「任务卡红色三档」。 */
+/* 「逾期 / 马上到期」两档红文字色（2026-09-22 定案；同日三次定案后卡片不再铺红）：
+   白底表面（表格单元格、看板列表行、详情弹窗徽章）只用文字色——逾期 #b3261e、
+   马上到期 #c9472c；卡片按任务自己的优先级铺色，逾期只保留排序与这里的文字提示，
+   见文件末尾「红档收敛成一支」。 */
 .calm-due.due-red,
 .due-overdue,
 td.due-overdue {
@@ -4607,26 +4626,23 @@ td.due-overdue {
 }
 
 /* 任务聚合组卡片（2026-09-21 产品定案）：与任务卡片同网格混排，外框、色条、
-   内边距全部复用 `.calm-task-card`。卡片配色自 2026-09-21 起跟随派生的组优先级
-   （复用 .tone-prio-*），紫色只作为「已关闭且无分支、无可派生优先级」组卡的兜底。
-   独立区块（.group-panel / .group-card / .branch-task）已随该定案删除。 */
-.tone-group {
-  --task-c: #7c6bd0;
-  --task-bg: #f8f6ff;
-  --task-hov: #f0edfd;
-  --task-bd: #e2ddf4;
-  --task-fg: #5b4aa3;
-}
-/* 卡片页脚右侧的「查看详情 / 解除合并」提示：整卡可点，这里只给视觉指示；
-   文字色跟随整卡色调（.tone-prio-* 的 --task-fg），无色调时退回聚合组紫色。 */
-.task-group-card-open {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: auto;
-  color: var(--task-fg, #6b58c4);
-  font-size: 11px;
-}
+   内边距全部复用 `.calm-task-card`。独立区块（.group-panel / .group-card /
+   .branch-task）已随该定案删除。
+   组卡配色（2026-09-22 产品定案）：整卡底色与任务卡片共用同一套 `.tone-prio-*`，取
+   「组内未完成（TODO）分支中的最高优先级」——紧急红 / 高明黄 / 普通蓝 / 低白四支；
+   全部分支收尾后按「已完成」铺完成青碧 `tone-prio-done`，已关闭且无分支（没有事实可派生）
+   走中性灰 `tone-prio-canceled`。组卡不再有独立色族：2026-09-22 按产品要求「组合任务
+   取消紫色，按合并任务以内部未完成任务中的最高优先级显示颜色」，删除了上一版的
+   `.tone-group`（实色紫）/ `.tone-group-open`（实色靛蓝）/ `.tone-group-done`（青碧）
+   三支组专用色与配套的整卡反白——组卡本身带 `.calm-task-card`，卡内文字取色自动命中
+   下面「任务卡片醒目配色」块的白字组 / 深字组同一套规则。列表视图的组行同样只吃
+   `.tone-prio-*` 的浅色变量，不再有组专用浅紫兜底。 */
+/* 组卡的纵向结构与任务卡片逐行同构（2026-09-22 三次调整：产品要求「组合任务的排版和
+   单个任务排版对齐统一」）：标题 → 归属 → 负责人 → 标签组 + 截止，卡片不存在任何
+   只在组卡上出现的独立行。上一版把「已完成 n/N」单独放在卡片右上角（.task-group-card-top
+   + `.task-card-counts`），现在由分隔线以下的「未开始 / 进行中 / 已完成」状态徽章表达，
+   明细计数（n / N）只留在该徽章的 title 里，因此这两条样式整块删除；`.task-card-counts`
+   本身仍被任务卡片的记录计数页脚使用，保留不动。 */
 /* 聚合组卡片的负责人（2026-09-21 产品要求）：分支可能由不同人负责，名单较长时
    省略显示，完整名单由 title 给出；负责人一侧允许收缩，分支数保持完整可见。 */
 .task-group-assignees {
@@ -4638,7 +4654,7 @@ td.due-overdue {
   white-space: nowrap;
 }
 /* 聚合组全部分支收尾后的完成态走 `.calm-task-card.tone-prio-done` 的共用规则
-   （整卡转绿、标题转完成绿），组卡不再单列样式。 */
+   （整卡转青碧、标题转深青），组卡不再单列样式。 */
 /* 列表视图下聚合组仍以卡片形式追加在表格之后，与卡片视图保持同一外观。 */
 .task-group-grid {
   margin-top: 20px;
@@ -6322,7 +6338,7 @@ td.due-overdue {
   overflow: hidden;
 }
 .tone-prio-done .tb-card-title {
-  color: #5c7a6a;
+  color: #1d5b62;
   font-weight: 500;
 }
 .tone-prio-canceled .tb-card-title {
@@ -6511,16 +6527,23 @@ td.due-overdue {
   --tb-row-fg: #5f6d7a;
 }
 .tb-row--done {
-  --tb-row-accent: #34815d;
-  --tb-row-bg: #eef8f3;
-  --tb-row-hover: #ddf0e5;
-  --tb-row-fg: #2f6a4e;
+  --tb-row-accent: #1d5b62;
+  --tb-row-bg: #e1f2f2;
+  --tb-row-hover: #d6edee;
+  --tb-row-fg: #1d5b62;
 }
 .tb-row--canceled {
   --tb-row-accent: #aab7c4;
   --tb-row-bg: #f5f7f9;
   --tb-row-hover: #ebeff3;
   --tb-row-fg: #75828f;
+}
+/* 「遗留问题」行（2026-09-22）：与卡片同色系，看板列表里也能一眼认出遗留项来源。 */
+.tb-row--leftover {
+  --tb-row-accent: #8a2b06;
+  --tb-row-bg: #fbeee9;
+  --tb-row-hover: #f7e3da;
+  --tb-row-fg: #8a2b06;
 }
 .tb-row-title {
   display: flex;
@@ -6668,22 +6691,36 @@ td.due-overdue {
   background: #ccd6e0;
 }
 
-/* ===================== 任务卡片醒目配色（D2，2026-09-21 定案） =====================
+/* ===================== 任务卡片醒目配色（D2，2026-09-21 定案；2026-09-22 定色口径） =====================
    产品反馈「任务卡片不够醒目」，先选定 D2「实色更艳」；随后又按反馈把「高」从土黄
    #c47b00 换成明黄，末轮候选对比后定为 #ffdb4d + 深棕字 #3f2d00（土黄的白字只有 3.4:1 且发闷，明黄深字 9.8:1）。
-   「已完成」先由 #2f9a68 换成 #12875f，再按反馈逐轮放浅：任务中心与项目任务面板定为 #cdf1d3，任务看板的 .tb-card 按产品给的截图再浅一档 #eef8f3（原本只用于列表行的浅色）；深绿字 #2f4031 共用，且只在「已完成」视图内出现。
-   因此卡片整卡铺色：紧急 / 普通 / 已逾期 / 马上到期用白字，「高」「已完成」两张浅底卡用各自的
+   「已完成」先由 #2f9a68 换成 #12875f，再逐轮放浅（#57c98d → #a8e6b0 → #cdf1d3）；2026-09-22 末轮
+   按产品在「聚合组配色候选」样板上拍板的 D「青碧」收成一套 #e1f2f2 / #bcdddf / #d6edee，深青字 #1d5b62
+   （对比度 6.67:1），任务中心、项目任务面板与任务看板不再分色。
+   因此卡片整卡铺色：紧急 / 普通 / 遗留问题用白字，「高」「已完成」两张浅底卡用各自的
    --task-ink 深字，
    「低」用白底、「已取消」用浅灰底，均保留深色正文。
    覆盖范围：任务中心与项目任务面板的 .calm-task-card、任务看板的 .tb-card。
    列表行 / 表格行（.feature-list-table tbody tr 与 .tb-row--tone-*）继续用上面 .tone-prio-* 的
    浅色底与色条：表格里深底配深字读不出来，因此不做实色。
-   取字对比度（WCAG AA 正常文字要求 4.5:1，均为实测计算值）：普通白字 4.9:1、紧急白字 4.6:1、
-   高（#ffdb4d + #3f2d00）9.8:1、已完成（#cdf1d3 + #2f4031）9.0:1，看板另用更浅的一档 #eef8f3（10.2:1）。 */
+   2026-09-22 定色口径（产品在「红色取中 / 全色统一 / 全色样板」三轮样板上拍板）：实色卡饱和度
+   封顶 78%、感知明度对齐 L* 53，档位靠色相区分而不是靠明度；实色卡描边统一取「底色压暗 14%」。
+   按该口径重定的实色卡：普通 #337ee6（原 #0f6ae8，S88→78、L*47→53）。
+   同日最后一轮：红档由「三档整卡红（紧急 / 已逾期 / 马上到期）」收敛成一支——产品要求
+   「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」，
+   已逾期 / 马上到期因此退出卡片配色，只在排序（task-list-order.ts 的 urgency 桶）与白底表面的
+   红色日期文案上体现；紧急按红档「取中」从 #e84138 换成 #ce342b（sRGB 中点与 Oklab 中点同值
+   #ce342b / #cd342b，按 sRGB 取 #ce342b），描边 #b12c25（压暗 14%）、悬停 #b92e27（压暗 10%）。
+   浅底族（高 / 已完成）与中性族（低 / 已取消）的底色与描边同日定稿，其中「已完成」按上面的 D 青碧执行。
+   取字对比度（WCAG AA 正常文字要求 4.5:1，均为实测计算值）：紧急白字 5.09:1（旧 #e84138 为 4.00:1）、
+   普通白字 3.99:1、高（#ffdb4d + #3f2d00）9.76:1、
+   已完成（#e1f2f2 + #1d5b62）6.67:1。
+   注意：普通卡仍落在 4.0:1 上下，仍在 AA 的 4.5:1 之下——16px 标题没问题，
+   11–12px 的小字（归属、徽章、到期文案）严格说未达标，产品已知悉并选择先定观感。 */
 :is(.calm-task-card, .tb-card).tone-prio-urgent {
-  --task-bg: #d63b31;
-  --task-bd: #b62f27;
-  --task-hov: #c8342b;
+  --task-bg: #ce342b;
+  --task-bd: #b12c25;
+  --task-hov: #b92e27;
 }
 /* 「高」是浅底卡：明黄底配深棕字，描边取同色的深版，深字组其余取值见下方 --task-ink-* 说明。 */
 :is(.calm-task-card, .tb-card).tone-prio-high {
@@ -6700,34 +6737,28 @@ td.due-overdue {
   --task-ink-edge: #3f2d0066;
 }
 :is(.calm-task-card, .tb-card).tone-prio-normal {
-  --task-bg: #0f6ae8;
-  --task-bd: #0a55bd;
-  --task-hov: #0c5ed4;
+  --task-bg: #337ee6;
+  --task-bd: #2c6cc6;
+  --task-hov: #3076d8;
 }
-/* 「已完成」同样走浅底卡：极浅嫩绿 + 深绿字，用轻盈明亮的绿色表达完成感。
-   2026-09-22 定案：任务中心与项目任务面板保留 #cdf1d3，任务看板的 .tb-card 单独用产品截图里的
-   更浅一档 #eef8f3；两块只差底色 / 描边 / 悬停，深绿字共用。
-   同日补：描边由 #ddf4e1（比底色浅，视觉上等于没有边框）改成 #a3d9b0，与其余实色卡
-   「描边比底色深一档」的口径一致（对 #cdf1d3 的对比度 1.31:1，与「紧急」的 1.32:1 同档）。 */
+/* 「已完成」同样走浅底卡：青碧底 + 深青字，用冷静明亮的青碧表达完成感。
+   2026-09-22 定案（产品在聚合组配色候选样板上拍板 D「青碧」#e1f2f2 / #bcdddf）：
+   任务中心、项目任务面板与任务看板的卡片、列表行统一这一套色值，
+   上一版「任务中心 #cdf1d3、看板另用更浅一档 #eef8f3」的分色同日作废。
+   描边 #bcdddf 比底色深一档（对 #e1f2f2 的对比度 1.25:1），与其余卡
+   「描边比底色深一档」的口径一致。 */
 :is(.calm-task-card, .tb-card).tone-prio-done {
-  --task-bg: #cdf1d3;
-  --task-bd: #a3d9b0;
-  --task-hov: #c0ebc7;
-  --task-ink: #2f4031;
-  --task-ink-soft: #2f4031cc;
-  --task-ink-faint: #2f403199;
-  --task-ink-divider: #2f403133;
-  --task-ink-badge: #2f40311f;
-  --task-ink-icon: #2f4031bf;
-  --task-ink-check: #2f403124;
-  --task-ink-edge: #2f403166;
-}
-/* 任务看板的「已完成」单独浅一档（产品 2026-09-22 给的截图色）：
-   与上面的任务中心色值块同优先级，靠源码顺序覆盖。 */
-.tb-card.tone-prio-done {
-  --task-bg: #eef8f3;
-  --task-bd: #d4e8dd;
-  --task-hov: #ddf0e5;
+  --task-bg: #e1f2f2;
+  --task-bd: #bcdddf;
+  --task-hov: #d6edee;
+  --task-ink: #1d5b62;
+  --task-ink-soft: #1d5b62cc;
+  --task-ink-faint: #1d5b6299;
+  --task-ink-divider: #1d5b6233;
+  --task-ink-badge: #1d5b621f;
+  --task-ink-icon: #1d5b62bf;
+  --task-ink-check: #1d5b6224;
+  --task-ink-edge: #1d5b6266;
 }
 :is(.calm-task-card, .tb-card).tone-prio-low {
   --task-bg: #ffffff;
@@ -6739,17 +6770,17 @@ td.due-overdue {
   --task-bd: #d5dde4;
   --task-hov: #e8edf1;
 }
-/* 「已逾期」「马上到期」是日期档、不是优先级档：组件判定后覆盖优先级 tone
-   （task-tone.ts 的 taskToneClassName 第三参数），三档红的分工见文件末尾说明。 */
-:is(.calm-task-card, .tb-card).tone-prio-overdue {
-  --task-bg: #b3261e;
-  --task-bd: #8f1d17;
-  --task-hov: #a1211a;
-}
-:is(.calm-task-card, .tb-card).tone-prio-soon {
-  --task-bg: #c2410c;
-  --task-bd: #9c3409;
-  --task-hov: #ad3a0a;
+/* 2026-09-22 起卡片不再有「已逾期」「马上到期」两支日期档：整卡换色是强提示，产品要求
+   「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」，逾期只保留排序与白底表面的
+   红色日期文案（.due-overdue / .due-soon、.tb-date--overdue / .tb-date--today）。
+   这两支 tone 类名也已从 task-tone.ts 的 TaskToneName 与下面的白字组选择器里移除。 */
+/* 「遗留问题」整卡实色：深锈红 #8a2b06 铺满卡片 + 白字（白字对比度 8.65:1），
+   与「紧急」的 #ce342b 同属红族但更深、更冷，同屏放一起仍分得出来源与优先级。
+   描边按既定口径取底色压暗 14%（#772505），悬停取压暗 10%（#7c2705）。 */
+:is(.calm-task-card, .tb-card).tone-prio-leftover {
+  --task-bg: #8a2b06;
+  --task-bd: #772505;
+  --task-hov: #7c2705;
 }
 /* 卡片描边加粗一档；卡片不再显示左侧色条——底色已表达优先级，多一条深边反而显脏。 */
 :is(.calm-task-card, .tb-card) {
@@ -6758,12 +6789,11 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card)::before {
   display: none;
 }
-/* 白字组（紧急 / 普通 / 已逾期 / 马上到期）：标题、编号、正文、底部信息、徽章与到期文案整体反白。 */
+/* 白字组（紧急 / 普通 / 遗留问题）：标题、编号、正文、底部信息、徽章与到期文案整体反白。 */
 :is(.calm-task-card, .tb-card):is(
   .tone-prio-urgent,
   .tone-prio-normal,
-  .tone-prio-overdue,
-  .tone-prio-soon
+  .tone-prio-leftover
 ) {
   --tb-sub: #ffffffd9;
   color: #fff;
@@ -6771,8 +6801,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   :is(h3, .tb-card-title) {
   color: #fff;
@@ -6780,8 +6809,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   :is(.task-id, .tb-code) {
   color: #ffffffd9;
@@ -6789,8 +6817,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   > p {
   color: #ffffffd9;
@@ -6798,8 +6825,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   p.is-placeholder {
   color: #ffffffa6;
@@ -6807,8 +6833,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   :is(
     .calm-card-bottom,
@@ -6824,8 +6849,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   .calm-card-bottom {
   border-top-color: #ffffff3d;
@@ -6833,8 +6857,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   .badge {
   background: #ffffff2e;
@@ -6843,8 +6866,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   :is(.tb-dot-sep, .tb-check) {
   color: #ffffffd9;
@@ -6852,8 +6874,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   )
   .tb-check {
   background: #ffffff33;
@@ -6861,8 +6882,7 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
     .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
+    .tone-prio-leftover
   ):hover {
   border-color: #ffffff66;
   box-shadow: 0 5px 18px #17355226;
@@ -6910,16 +6930,18 @@ td.due-overdue {
 }
 /* 遗留问题徽章不受卡内统一反白影响：实色卡把所有 .badge 压成同一种半透明底之后，
    「遗留问题」这种来源标记就分辨不出来了，这里在实色组与浅底组上都还原成深锈红实底。 */
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-normal)
   .badge-leftover,
 :is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
   .badge-leftover {
   background: #8a2b06;
+  color: #ffffff;
+}
+/* 卡片本身已是锈红（tone-prio-leftover）时，「遗留问题」徽章再铺同色会整块糊进底色，
+   所以这一档让它与卡内其余徽章一样走半透明白底——来源标记此时由整张卡的底色承担，
+   徽章只留文字。 */
+:is(.calm-task-card, .tb-card).tone-prio-leftover .badge-leftover {
+  background: #ffffff2e;
   color: #ffffff;
 }
 :is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
@@ -6934,16 +6956,15 @@ td.due-overdue {
   box-shadow: 0 5px 18px #17355226;
 }
 
-/* ===================== 任务卡红色三档（2026-09-22 二次定案：整卡铺红） =====================
-   产品反馈「已逾期、紧急等等，卡片整个颜色要是红的」，于是三档全部改成整卡实色 + 白字，
-   靠明度与色相分开：紧急 #d63b31（正红，沿用 D2，不改）、已逾期 #b3261e（深砖红，最重）、
-   马上到期 #c2410c（橙红，最轻）。三档的 --task-bg / --task-bd / --task-hov 写在上面
-   「任务卡片醒目配色」块的两个 .tone-prio-overdue / .tone-prio-soon 色值块里，白字组的
-   选择器也已包含这两个 tone，卡内文字与紧急卡完全同款反白。
-   卡片上不再加红色日期签：整卡已经是红的，红签会被同色吃掉，只保留反白的
-   「已逾期 9月16日」/「今天截止」文案——红色本身已经说明档位。
-   白底表面（任务中心表格、看板列表行、详情弹窗徽章）不铺整卡色，只用文字色，
-   见上面的 .calm-due.due-red / .due-soon；已完成与已取消不参与红档，走各自的浅底深字。
-   判档口径：任务中心与项目任务面板按 dueAt 与当地日历日比（已过期 / 今天到期），
-   任务看板只读服务端 dueState（OVERDUE / TODAY）；「明天到期」不算。
-   白字 / 整卡底对比度（WCAG AA 正常文字需 4.5:1）：逾期 6.5:1、紧急 4.6:1、马上到期 5.2:1。 */
+/* ===================== 红档收敛成一支（2026-09-22 三次定案：逾期不再整卡换色） =====================
+   产品先在「红色取中 / 全色统一 / 全色样板」几轮样板上把紧急定为 #ce342b（白字 5.09:1），
+   随后要求「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」，
+   于是卡片配色只剩一支红：紧急 #ce342b 整卡实色 + 白字，色值块写在上面
+   「任务卡片醒目配色」块的第一条，卡内文字走白字组。
+   逾期的两处体现（都不再是整卡色）：
+   1. 排序——服务端 task-list-order.ts 的 urgency 桶把未完成任务排成
+      「遗留问题来源 → 标记紧急 → 已逾期 → 今/明日截止 → 其余」，已逾期落在紧急之后一档；
+   2. 日期文案——白底表面的截止列 / 看板日期用红色文字提示：.due-overdue（#b3261e）、
+      .due-soon（#c9472c）、.tb-date--overdue、.tb-date--today；卡片右下角的
+      「已逾期 9月16日」/「今天截止」只是文案，跟随卡内统一反白，不再是独立色签。
+   已完成与已取消不参与红档，走各自的浅底深字；「遗留问题」另有自己的锈红实色（见上）。 */

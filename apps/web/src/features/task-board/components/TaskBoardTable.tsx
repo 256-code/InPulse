@@ -35,10 +35,11 @@ export interface TaskBoardTableProps {
  * 行配色类：优先级决定底色与左侧色条，DONE / CANCELED 覆盖状态色。
  * 类名与 design-system.css 的 --tb-row-* 变量一一对应。
  */
-function rowClassNameOf(card: TaskBoardCard): string {
+function rowClassNameOf(card: TaskBoardCard, leftoverSource: boolean): string {
   const base = "tb-row tb-row--tone-" + priorityMarkOf(card.priority).tone;
   if (card.workStatus === "DONE") return base + " tb-row--done";
   if (card.workStatus === "CANCELED") return base + " tb-row--canceled";
+  if (leftoverSource) return base + " tb-row--leftover";
   return base;
 }
 
@@ -52,7 +53,7 @@ const TaskBoardTableRow: React.FC<{
   return (
     <button
       type="button"
-      className={rowClassNameOf(card)}
+      className={rowClassNameOf(card, leftoverSource)}
       onClick={() => onOpen(card)}
       aria-label={"打开任务 " + card.code + " " + card.title}
     >

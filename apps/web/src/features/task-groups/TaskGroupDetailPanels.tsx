@@ -142,7 +142,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
   ];
 
   // 分支卡片与任务卡片同一套配色（2026-09-21）：未完成按优先级铺淡色底与左侧
-  // 色条，已完成转绿、已取消转灰；已解除合并的历史成员保持灰底。
+  // 色条，已完成转青碧、已取消转灰；已解除合并的历史成员保持灰底。
   const renderMember = (member: TaskGroupMember) => {
     const detached = member.memberStatus === "DETACHED";
     return (

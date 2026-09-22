@@ -15,6 +15,7 @@ import { MY_TASKS_MOCK_ADAPTER } from "./my-tasks-mock";
 import { MY_TASKS_V1_FILTER_SUPPORT } from "./my-tasks-v1-query";
 import { DEFAULT_MY_TASK_FILTERS } from "./my-tasks-url";
 import type { MyTaskFilters } from "./my-tasks-types";
+import type { MyTaskPriority } from "./my-tasks-types";
 import type { MyTaskGroupItem } from "./my-tasks-types";
 import type { MyTaskListItem } from "./my-tasks-types";
 import type { MyTasksAdapter } from "./my-tasks-types";
@@ -179,6 +180,18 @@ const doneTask: MyTaskListItem = {
   hasLeftoverSource: false,
 };
 
+/** 由遗留问题转换而来、既不紧急也不逾期的任务：整卡应该铺锈红（2026-09-22 产品要求）。 */
+const leftoverTask: MyTaskListItem = {
+  ...doneTask,
+  taskId: 905,
+  code: "INP-905",
+  title: "遗留问题转来的跟进任务-905",
+  workStatus: "TODO",
+  priority: "NORMAL",
+  completedAt: null,
+  hasLeftoverSource: true,
+};
+
 describe("TaskCenterPageView", () => {
   it("renders the toolbar work-status filter with a mock-data notice only", async () => {
     renderView();
@@ -210,10 +223,11 @@ describe("TaskCenterPageView", () => {
   it("shows open tasks only by default and hides done and canceled", async () => {
     renderView();
 
-    // 卡片按程度铺色：这张紧急任务同时已逾期，日期档盖过优先级档取深红。
+    // 卡片按程度铺色：这张紧急任务同时已逾期，2026-09-22 三次定案后逾期不再覆盖底色，
+    // 仍按任务自己的优先级取紧急红（逾期只影响排序与列表截止列的文字色）。
     expect(await screen.findByTestId("my-task-101")).toHaveClass(
       "calm-task-card",
-      "tone-prio-overdue",
+      "tone-prio-urgent",
     );
     expect(screen.queryByTestId("my-task-104")).toBeNull();
     expect(screen.queryByTestId("my-task-107")).toBeNull();
@@ -248,6 +262,24 @@ describe("TaskCenterPageView", () => {
     );
     // 页脚已无内容（没有迭代记录）时整块不渲染，不留空行。
     expect(card.querySelector(".task-card-footer")).toBeNull();
+  });
+
+  it("遗留问题来源的任务整卡转锈红，徽章保留深锈红实底", async () => {
+    renderView({ adapter: serverLikeAdapterWith([leftoverTask]) });
+
+    const card = await screen.findByTestId("my-task-905");
+    expect(card).toHaveClass("calm-task-card", "tone-prio-leftover");
+    expect(within(card).getByText("遗留问题")).toHaveClass("badge-leftover");
+  });
+
+  it("列表视图的遗留问题行与卡片同源取色", async () => {
+    renderView({
+      filters: { display: "list" },
+      adapter: serverLikeAdapterWith([leftoverTask]),
+    });
+
+    const row = await screen.findByText(leftoverTask.title);
+    expect(row.closest("tr")).toHaveClass("tone-prio-leftover");
   });
 
   it("drops the list title and count now that the toolbar filter carries the state", async () => {
@@ -485,27 +517,69 @@ describe("TaskCenterPageView", () => {
     renderView();
 
     const card = await screen.findByTestId("my-task-group-501");
-    expect(within(card).getByText("TG-001")).toBeInTheDocument();
+    // 2026-09-22 产品要求「组卡的布局要和 P2 一样」：组卡与任务卡同一套纵向排版，
+    // 顶部「编号 + 徽章」行整行不再渲染，编号只留在列表视图与弹窗里。
+    expect(card.querySelector(".calm-card-top")).toBeNull();
+    expect(card.querySelector(".task-id")).toBeNull();
+    expect(within(card).queryByText("TG-001")).toBeNull();
     expect(
       within(card).getByText("任务合并后来源分支历史保留"),
     ).toBeInTheDocument();
-    expect(within(card).getByText("聚合组")).toBeInTheDocument();
-    expect(within(card).getByText("进行中")).toBeInTheDocument();
     expect(within(card).getByText("注入项目名")).toBeInTheDocument();
-    // 分支明细不再复制到卡片上：卡片只给负责人、分支数、完成情况与弹窗入口。
+    // 标签组（优先级 + 聚合组 + 状态）落到分隔线以下的左下角，与任务卡同款。
+    const badges = card.querySelector(
+      ".calm-card-bottom > .task-card-badges",
+    ) as HTMLElement;
+    expect(badges).not.toBeNull();
+    // 底部那一排只留三枚徽章（2026-09-22 三次调整）：四个标签在 272px 卡片里必然折成
+    // 三行，把底部那一排顶高；分支数改成「聚合组」徽章的 title，列表视图仍逐字给出。
+    expect(within(badges).getByText("聚合组")).toBeInTheDocument();
+    expect(
+      within(badges).getByTitle(
+        "聚合组：包含 4 条分支（主分支与全部来源分支）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(badges).getByText("进行中")).toBeInTheDocument();
+    // 负责人单独一行贴在分隔线上方并右对齐：它是底部那一排的前一个兄弟节点。
+    const assignee = card.querySelector(".calm-card-assignee") as HTMLElement;
+    expect(assignee).not.toBeNull();
+    expect(assignee.nextElementSibling).toBe(
+      card.querySelector(".calm-card-bottom"),
+    );
+    // 分支明细不再复制到卡片上：卡片只给负责人、分支数与状态徽章。
     // mock 组 501 的四条分支都是同一人负责，去重后只有一个名字。
     expect(within(card).getByText("陈晓")).toBeInTheDocument();
-    expect(within(card).getByText("4 条分支")).toBeInTheDocument();
-    expect(within(card).getByText("已完成 1/4")).toBeInTheDocument();
+    // 2026-09-22 三次调整（产品要求「组合任务的排版和单个任务排版对齐统一」）：分支完成
+    // 计数不再单占右上角一行，改由状态徽章表达（任意分支完成 → 进行中），明细计数只留在
+    // 徽章的 title 里；卡片首行回到标题，与任务卡片逐行同构。
+    expect(card.querySelector(".task-group-card-top")).toBeNull();
+    expect(card.firstElementChild?.tagName).toBe("H3");
+    const stateBadge = within(badges).getByText("进行中");
+    expect(stateBadge).toHaveAttribute("title", "1 / 4 条分支任务已完成");
+    // 右下角让给与任务卡片同款的截止（未完成分支中最早的一条：T-101 已逾期）。
+    const cardDeadline = card.querySelector(
+      ".calm-card-bottom > span:last-child",
+    ) as HTMLElement;
+    expect(cardDeadline).not.toBeNull();
+    expect(cardDeadline).toHaveTextContent(/^已逾期 \d+月\d+日$/);
+    expect(cardDeadline).toHaveAttribute(
+      "title",
+      expect.stringContaining("未完成分支中最早的截止"),
+    );
     // 组优先级按未完成分支里的最高一档派生（分支 T-101 为紧急）：卡片显示
     // 优先级徽章并注明来源；该分支完成后自动落到第二高，见下一条用例。
     expect(within(card).getByText("紧急")).toBeInTheDocument();
     expect(
       within(card).getByTitle("优先级：紧急（未完成分支中最高）"),
     ).toBeInTheDocument();
-    // 整卡配色跟随派生优先级（复用任务卡片的 tone-prio-* 色调）。
+    // 组卡配色跟随派生优先级（复用任务卡片的 .tone-prio-*）。2026-09-22 三次定案后逾期
+    // 不再覆盖底色，组卡按未完成分支里的最高一档取色（T-101 为紧急），因此是紧急红；
+    // 最早一条已逾期只体现在右下角日期文案（上一段已断言）。
     expect(card).toHaveClass("tone-prio-urgent");
-    expect(within(card).getByText("查看详情 / 解除合并")).toBeInTheDocument();
+    // 「查看详情 / 解除合并」提示已删除：整卡本身就是弹窗入口，页脚整块不再渲染。
+    expect(card.querySelector(".task-group-card-open")).toBeNull();
+    expect(within(card).queryByText("查看详情 / 解除合并")).toBeNull();
+    expect(card.querySelector(".task-card-footer")).toBeNull();
     // 独立聚合组区块已删除：组卡与任务卡在同一网格里。
     expect(card.closest(".calm-task-grid")).not.toBeNull();
     expect(document.querySelector(".group-panel")).toBeNull();
@@ -549,7 +623,7 @@ describe("TaskCenterPageView", () => {
     // 迭代含已完成的 T-104（2 条）与主任务 T-102（3 条）：合计 5，不只算主任务。
     expect(cells[6]).toHaveTextContent("5");
     expect(within(cells[7]!).getByText("进行中")).toBeInTheDocument();
-    // 整行沿用派生优先级配色，与卡片视图同一套色值。
+    // 组行与卡片同源（只吃浅色变量）：逾期不再改底色，整行落到派生优先级的紧急档浅底。
     expect(row).toHaveClass("tone-prio-urgent");
 
     // 组行是弹窗入口，与卡片一致：点击不回调 onOpenTask。
@@ -630,7 +704,8 @@ describe("TaskCenterPageView", () => {
       cursor: null,
     });
     renderView({
-      filters: { display: "list" },
+      // 未完成分支全部收尾 → 组归「已完成」档，列表视图也要切到该档才看得到组行。
+      filters: { display: "list", status: "done" },
       client: stubClient(projects),
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
@@ -689,9 +764,15 @@ describe("TaskCenterPageView", () => {
     const card = await screen.findByTestId("my-task-group-501");
     expect(within(card).getByText("高")).toBeInTheDocument();
     expect(within(card).queryByText("紧急")).toBeNull();
-    // 还有未完成分支，组仍是进行中；完成计数与整卡配色同步落到第二高的一档。
+    // 还有未完成分支，组仍是进行中；整卡底色落到剩下的最高一档「高」（浅底深字），
+    // 与页脚徽章的优先级同源。
     expect(within(card).getByText("进行中")).toBeInTheDocument();
-    expect(within(card).getByText("已完成 2/4")).toBeInTheDocument();
+    expect(
+      within(card).getByTitle("2 / 4 条分支任务已完成"),
+    ).toBeInTheDocument();
+    // 紧急分支 T-101 收尾后，最高一档变成「高」；今天到期的 T-102 不再覆盖底色
+    // （2026-09-22 三次定案：逾期 / 今天到期不参与配色），整卡就是「高」那档明黄底，
+    // 优先级徽章同为「高」。
     expect(card).toHaveClass("tone-prio-high");
   });
 
@@ -701,6 +782,8 @@ describe("TaskCenterPageView", () => {
       cursor: null,
     });
     renderView({
+      // 全部分支收尾的组归「已完成」那一档（工具栏筛选项），未完成档位下不再出现。
+      filters: { status: "done" },
       adapter: {
         ...MY_TASKS_MOCK_ADAPTER,
         fetchTaskGroups: async () => ({
@@ -725,9 +808,258 @@ describe("TaskCenterPageView", () => {
     expect(within(card).queryByText("紧急")).toBeNull();
     expect(within(card).queryByText("高")).toBeNull();
     // 页脚只计 DONE：已取消的分支算收尾（不压着组优先级）、但不计入完成数。
-    expect(within(card).getByText("已完成 3/4")).toBeInTheDocument();
-    // 整卡转完成绿并与任务卡片共用同一条 h3 配色规则。
+    expect(
+      within(card).getByTitle("3 / 4 条分支任务已完成"),
+    ).toBeInTheDocument();
+    // 组卡转「已完成」，与任务卡片共用同一套完成青碧（tone-prio-done）。
     expect(card).toHaveClass("tone-prio-done");
+  });
+
+  it("labels a group with no finished branch as 未开始 and keeps it in the open view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 已完成 / 已取消的分支都置回未完成：组内没有任何分支完成 →「未开始」。
+            branches: group.branches.map((branch) => ({
+              ...branch,
+              workStatus: "TODO",
+            })),
+          })),
+        }),
+      },
+    });
+
+    const card = await screen.findByTestId("my-task-group-501");
+    expect(within(card).getByText("未开始")).toBeInTheDocument();
+    expect(within(card).queryByText("进行中")).toBeNull();
+    expect(
+      within(card).getByTitle("0 / 4 条分支任务已完成"),
+    ).toBeInTheDocument();
+    // 所有分支置回未完成后，组内最高一档仍是紧急的 T-101，整卡取紧急红；已逾期的 T-101
+    // 不再让底色变成日期档（2026-09-22 三次定案：逾期不参与配色）。
+    expect(card).toHaveClass("tone-prio-urgent");
+  });
+
+  it("moves a fully wound up group out of the open view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            branches: group.branches.map((branch) =>
+              branch.workStatus === "TODO"
+                ? { ...branch, workStatus: "DONE" }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    // 未完成档位下组卡不再出现：组内分支全部收尾后，组的入口只留在「已完成」档；
+    // 未入组的 T-103 照常出卡片，说明只是组卡被移走，列表没有整体变空。
+    expect(await screen.findByTestId("my-task-103")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
+  });
+
+  it("sorts open groups by the highest unfinished branch priority", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    const base = groups.items[0]!;
+    const variant = (
+      groupId: number,
+      name: string,
+      priority: MyTaskPriority,
+    ) => ({
+      ...base,
+      groupId,
+      name,
+      // 全部置回未完成并清掉截止：底色只由派生优先级决定，排序断言不被截止档干扰。
+      branches: base.branches.map((branch) => ({
+        ...branch,
+        workStatus: "TODO" as const,
+        priority,
+        dueAt: null,
+      })),
+    });
+    renderView({
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          // R-7 按 id 倒序返回：普通在前、紧急在后；排序必须由前端按派生优先级收敛。
+          items: [
+            variant(903, "普通优先级的组", "NORMAL"),
+            variant(902, "紧急优先级的组", "URGENT"),
+            variant(901, "低优先级的组", "LOW"),
+          ],
+        }),
+      },
+    });
+
+    const cards = await screen.findAllByTestId(/^my-task-group-/);
+    expect(cards.map((card) => card.getAttribute("data-testid"))).toEqual([
+      "my-task-group-902",
+      "my-task-group-903",
+      "my-task-group-901",
+    ]);
+    // 没有未完成截止时不触发截止档，底色就是各组的派生优先级那一档。
+    expect(cards[0]).toHaveClass("tone-prio-urgent");
+    expect(cards[1]).toHaveClass("tone-prio-normal");
+    expect(cards[2]).toHaveClass("tone-prio-low");
+  });
+
+  it("组卡与任务卡同一顺序：同优先级按截止日期从近到远", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    const mockGroups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    const baseGroup = mockGroups.items[0]!;
+    const openItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      workStatus: "TODO",
+      completedAt: null,
+      dueAt: null,
+      ...over,
+    });
+    renderView({
+      adapter: serverLikeAdapterWith(
+        [
+          openItem({
+            taskId: 921,
+            code: "INP-921",
+            priority: "HIGH",
+            dueAt: dayOffset(23),
+          }),
+          openItem({ taskId: 922, code: "INP-922", dueAt: null }),
+        ],
+        [
+          {
+            ...baseGroup,
+            groupId: 930,
+            branches: baseGroup.branches.map((branch) => ({
+              ...branch,
+              workStatus: "TODO" as const,
+              priority: "NORMAL" as const,
+              dueAt: dayOffset(-6),
+            })),
+          },
+        ],
+      ),
+    });
+
+    await screen.findByTestId("my-task-group-930");
+    // 2026-09-22 产品口径「（它们）同样是一个优先级的，按照截止日期从近到远排序」：组卡不再
+    // 固定追加在网格尾部，而与任务卡共用同一把尺子（状态分组 → 紧急桶 → 优先级 → 截止时间）。
+    // 组卡取未完成分支里最早的一条作为自己的截止，本例已逾期 → 紧急桶 2，与逾期任务卡同口径：
+    // 排在所有未逾期任务（含高优先级）之前；同为普通优先级时，也排在未设截止的任务卡之前。
+    expect(
+      screen
+        .getAllByTestId(/^my-task-(92[12]|group-930)$/)
+        .map((node) => node.getAttribute("data-testid")),
+    ).toEqual(["my-task-group-930", "my-task-921", "my-task-922"]);
+  });
+
+  it("同优先级内按截止日期从近到远，未设截止排最后", async () => {
+    const now = new Date();
+    const dayOffset = (offsetDays: number) =>
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + offsetDays,
+        18,
+        0,
+        0,
+      ).toISOString();
+    const openItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      workStatus: "TODO",
+      completedAt: null,
+      ...over,
+    });
+    // 造数刻意打乱：三张同为普通优先级，期望按 8 天后 → 3 天后 → 未设截止 收敛。
+    renderView({
+      adapter: serverLikeAdapterWith([
+        openItem({ taskId: 931, code: "INP-931", dueAt: null }),
+        openItem({ taskId: 932, code: "INP-932", dueAt: dayOffset(8) }),
+        openItem({ taskId: 933, code: "INP-933", dueAt: dayOffset(3) }),
+      ]),
+    });
+
+    await screen.findByTestId("my-task-931");
+    expect(
+      screen
+        .getAllByTestId(/^my-task-93[123]$/)
+        .map((node) => node.getAttribute("data-testid")),
+    ).toEqual(["my-task-933", "my-task-932", "my-task-931"]);
+  });
+
+  it("已完成按完成时间从晚到早排序，优先级不参与", async () => {
+    const completedItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      dueAt: null,
+      ...over,
+    });
+    // 造数刻意让优先级与完成时间相反：只按完成时间收敛才可能得到 942 → 943 → 941。
+    renderView({
+      adapter: serverLikeAdapterWith([
+        completedItem({
+          taskId: 941,
+          code: "INP-941",
+          priority: "URGENT",
+          completedAt: "2026-09-01T00:00:00.000Z",
+        }),
+        completedItem({
+          taskId: 942,
+          code: "INP-942",
+          priority: "LOW",
+          completedAt: "2026-09-12T00:00:00.000Z",
+        }),
+        completedItem({
+          taskId: 943,
+          code: "INP-943",
+          priority: "NORMAL",
+          completedAt: "2026-09-06T00:00:00.000Z",
+        }),
+      ]),
+      filters: { status: "done" },
+    });
+
+    await screen.findByTestId("my-task-941");
+    // 2026-09-22 产品口径「这个排序按照完成时间，越晚越排前面」：服务端 task-list-order.ts
+    // 在状态分组之后新增「完成时间倒序」一级，前端按同一把尺子复现（时间戳取负参与升序），
+    // 因此已完成卡片不再按优先级 / 截止排，越晚完成越靠前。
+    expect(
+      screen
+        .getAllByTestId(/^my-task-94[123]$/)
+        .map((node) => node.getAttribute("data-testid")),
+    ).toEqual(["my-task-942", "my-task-943", "my-task-941"]);
   });
 
   it("opens the task group detail dialog from the group card", async () => {
@@ -930,7 +1262,7 @@ describe("TaskCenterPageView", () => {
     ).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("整卡铺红：已逾期深红、今天到期橙红，已完成不参与红档", async () => {
+  it("整卡按优先级铺色：逾期与今天到期都不再改色，已完成仍是完成青碧", async () => {
     const now = new Date();
     const dayOffset = (offsetDays: number) =>
       new Date(
@@ -965,10 +1297,13 @@ describe("TaskCenterPageView", () => {
     const cardOf = (taskId: number): HTMLElement =>
       screen.getByTestId("my-task-" + taskId);
     await screen.findByTestId("my-task-801");
-    // 卡片整卡铺红：逾期深红、今天到期橙红（tone 色值见 design-system.css）。
-    expect(cardOf(801)).toHaveClass("calm-task-card", "tone-prio-overdue");
-    expect(cardOf(802)).toHaveClass("calm-task-card", "tone-prio-soon");
-    // 已完成不参与红档：状态色优先，卡上也不再挂红色日期签。
+    // 2026-09-22 三次定案：卡片按任务自己的优先级铺色（这三张都是普通优先级），
+    // 已逾期 / 今天到期不再换色，右下角保留「已逾期 …」/「今天截止」文案作为提示。
+    expect(cardOf(801)).toHaveClass("calm-task-card", "tone-prio-normal");
+    expect(cardOf(802)).toHaveClass("calm-task-card", "tone-prio-normal");
+    expect(cardOf(801)).toHaveTextContent(/已逾期/);
+    expect(cardOf(802)).toHaveTextContent("今天截止");
+    // 已完成走状态色，卡上也不再挂红色日期签。
     expect(cardOf(803)).toHaveClass("calm-task-card", "tone-prio-done");
     expect(within(cardOf(803)).getByTitle(/^截止：/).className).toBe("");
   });
