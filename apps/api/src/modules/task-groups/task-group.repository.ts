@@ -116,11 +116,15 @@ export class TaskGroupRepository {
 
   /**
    * R-7 聚合组列表：按授权项目范围列出组，固定 id DESC keyset 分页。
+   * 只返回「当前用户在组内有活跃分支任务」的组（2026-09-22 产品定案）：
+   * 分支任务的负责人看不到与自己无关的组，已解除（DETACHED）的分支不算在内；
+   * 组关闭时成员全部解除，因此关闭组对所有人不再返回。
    * 只读、不取锁；projectIds 为空短路返回空数组，不发出 SQL。
    */
   async listGroupsPage(
     tx: TransactionContext,
     projectIds: readonly number[],
+    actorUserId: number,
     limit: number,
     afterGroupId?: number,
   ): Promise<TaskGroupRecord[]> {
@@ -130,20 +134,31 @@ export class TaskGroupRepository {
     const projects = [...projectIds];
     const after = afterGroupId ?? null;
     return tx.sql<TaskGroupRecord[]>`
-      SELECT id AS "groupId",
-             project_id AS "projectId",
-             code,
-             name,
-             status,
-             created_by AS "createdBy",
-             row_version AS "rowVersion",
-             created_at AS "createdAt",
-             updated_at AS "updatedAt",
-             closed_at AS "closedAt"
-        FROM app.task_groups
-       WHERE project_id = ANY(${projects}::integer[])
-         AND (${after}::integer IS NULL OR id < ${after})
-       ORDER BY id DESC
+      SELECT tg.id AS "groupId",
+             tg.project_id AS "projectId",
+             tg.code,
+             tg.name,
+             tg.status,
+             tg.created_by AS "createdBy",
+             tg.row_version AS "rowVersion",
+             tg.created_at AS "createdAt",
+             tg.updated_at AS "updatedAt",
+             tg.closed_at AS "closedAt"
+        FROM app.task_groups tg
+       WHERE tg.project_id = ANY(${projects}::integer[])
+         AND EXISTS (
+               SELECT 1
+                 FROM app.task_group_members m
+                 JOIN app.tasks t
+                   ON t.id = m.task_id
+                  AND t.project_id = m.project_id
+                WHERE m.project_id = tg.project_id
+                  AND m.group_id = tg.id
+                  AND m.status = 'ACTIVE'
+                  AND t.assignee_id = ${actorUserId}
+             )
+         AND (${after}::integer IS NULL OR tg.id < ${after})
+       ORDER BY tg.id DESC
        LIMIT ${limit + 1}
     `;
   }

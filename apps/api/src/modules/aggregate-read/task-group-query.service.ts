@@ -69,7 +69,11 @@ export interface TaskGroupRecordQueryCommand {
   readonly limit?: number;
 }
 
-/** R-7 聚合组列表命令；projectId 只用于缩小服务端授权范围。 */
+/**
+ * R-7 聚合组列表命令；projectId 只用于缩小服务端授权范围。
+ * 列表只返回当前用户作为活跃分支任务负责人的组（2026-09-22 产品定案），
+ * 因此 actorUserId 同时是可见性条件，不只是游标绑定。
+ */
 export interface TaskGroupListQueryCommand {
   readonly actorUserId: number;
   readonly cursor?: string;
@@ -298,6 +302,7 @@ export class TaskGroupQueryService {
     const data = await this.unitOfWork.run(async (tx) => {
       const page = await this.groups.listGroups(tx, {
         projectIds,
+        actorUserId: command.actorUserId,
         limit,
         ...(afterGroupId === null ? {} : { afterGroupId }),
       });

@@ -663,6 +663,7 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
     });
 
     expect(setup.listGroups).toHaveBeenCalledWith(expect.anything(), {
+      actorUserId: 5,
       projectIds: [7],
       limit: 2,
     });
@@ -730,6 +731,7 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
     });
     expect(result).toEqual({ items: [], nextCursor: null, hasMore: false });
     expect(setup.listGroups).toHaveBeenCalledWith(expect.anything(), {
+      actorUserId: 5,
       projectIds: [],
       limit: 20,
     });

@@ -232,7 +232,7 @@ export const aggregateReadRoutes: readonly RouteDefinition[] = [
     path: "/task-groups",
     operationId: "listTaskGroups",
     summary:
-      "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总聚合组与当前生效分支（主任务在前，来源任务按 joinedAt 升序，分支携带优先级与工作状态）；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
+      "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总当前用户作为活跃分支任务负责人的聚合组（与自己无关的组不返回，组关闭后成员全部解除因此不再返回）；分支主任务在前、来源任务按 joinedAt 升序，携带优先级与工作状态；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举。",
     request: {
       path: "none",
       query: "TaskGroupListQueryRequest",

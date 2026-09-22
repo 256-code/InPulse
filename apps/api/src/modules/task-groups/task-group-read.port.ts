@@ -27,6 +27,8 @@ export interface TaskGroupMemberRow {
 /** R-7 聚合组列表入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
 export interface TaskGroupListReadInput {
   readonly projectIds: readonly number[];
+  /** 当前会话用户：只返回他在组内有活跃分支任务的组（2026-09-22 产品定案）。 */
+  readonly actorUserId: number;
   readonly limit: number;
   readonly afterGroupId?: number;
 }
@@ -67,8 +69,8 @@ export abstract class TaskGroupReadPort {
   ): Promise<readonly TaskGroupMemberRow[]>;
 
   /**
-   * R-7 聚合组列表：只返回授权项目范围内的组，固定 groupId DESC keyset 分页。
-   * 只读、不取锁；projectIds 为空短路返回空页，不发出 SQL。
+   * R-7 聚合组列表：只返回授权项目范围内、且当前用户是组内活跃分支任务负责人的组，
+   * 固定 groupId DESC keyset 分页。只读、不取锁；projectIds 为空短路返回空页，不发出 SQL。
    */
   abstract listGroups(
     tx: TransactionContext,
@@ -141,6 +143,7 @@ export class PostgresTaskGroupReadPort extends TaskGroupReadPort {
     const rows = await this.repository.listGroupsPage(
       tx,
       input.projectIds,
+      input.actorUserId,
       input.limit,
       input.afterGroupId,
     );

@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { migrate } from "../../../database/src/migrate.ts";
 import {
   leftoverItemPageSchema,
+  taskGroupDetailResponseSchema,
   taskGroupListPageSchema,
 } from "../../../packages/api-contract/src/index.ts";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -69,9 +70,11 @@ let otherProject: ProjectFixture | undefined;
 let memberUser = 0;
 let otherUser = 0;
 let outsiderUser = 0;
+let foreignUser = 0;
 let memberCookie = "";
 let otherCookie = "";
 let outsiderCookie = "";
+let foreignCookie = "";
 
 let featureA = 0;
 let featureB = 0;
@@ -100,9 +103,18 @@ let tGroupDetached = 0;
 let tClosedDetached = 0;
 let tOtherMain = 0;
 let tOtherSource = 0;
+let tForeignMain = 0;
+let tForeignSource = 0;
+let tOwnSecondMain = 0;
+let tOwnSecondSource = 0;
+let tSourceOnlyMain = 0;
+let tSourceOnlySource = 0;
 let groupActive = 0;
 let groupClosed = 0;
 let groupOther = 0;
+let groupForeign = 0;
+let groupOwnSecond = 0;
+let groupSourceOnly = 0;
 
 const taskWrites = new TaskManagementRepository();
 const draftWrites = new RecordDraftRepository();
@@ -407,10 +419,16 @@ beforeAll(async () => {
   memberUser = await createUser(runtime.sql);
   otherUser = await createUser(runtime.sql);
   outsiderUser = await createUser(runtime.sql);
+  foreignUser = await createUser(runtime.sql);
   const projectFixture = await createProject(runtime.sql, memberUser);
   project = projectFixture;
   const otherFixture = await createProject(runtime.sql, otherUser);
   otherProject = otherFixture;
+  // R-7 可见性收窄夹具（2026-09-22）：项目内另一名成员，用于验证「他人负责的组不返回」。
+  await runtime.sql`
+    INSERT INTO app.project_members (project_id, user_id, role)
+    VALUES (${projectFixture.projectId}, ${foreignUser}, ${"MEMBER"})
+  `;
 
   await newModule(projectFixture, "遗留模块");
   featureA = await newFeature(
@@ -568,6 +586,56 @@ beforeAll(async () => {
     },
   ]);
 
+  // R-7 可见性收窄夹具（2026-09-22）：他人负责的活跃组、仅作为来源负责人的组与本人第二个组。
+  tForeignMain = await newTask(projectFixture, {
+    assigneeId: foreignUser,
+    title: "他人聚合组主任务",
+  });
+  tForeignSource = await newTask(projectFixture, {
+    assigneeId: foreignUser,
+    title: "他人聚合组来源任务",
+  });
+  groupForeign = await seedTaskGroup(projectFixture, 3, "他人聚合组", [
+    { joinedAt: isoBefore(300), role: "MAIN", taskId: tForeignMain },
+    {
+      joinedAt: isoBefore(200),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tForeignSource,
+    },
+  ]);
+  tOwnSecondMain = await newTask(projectFixture, {
+    title: "本人第二个组主任务",
+  });
+  tOwnSecondSource = await newTask(projectFixture, {
+    title: "本人第二个组来源任务",
+  });
+  groupOwnSecond = await seedTaskGroup(projectFixture, 4, "本人第二个聚合组", [
+    { joinedAt: isoBefore(120), role: "MAIN", taskId: tOwnSecondMain },
+    {
+      joinedAt: isoBefore(100),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tOwnSecondSource,
+    },
+  ]);
+  tSourceOnlyMain = await newTask(projectFixture, {
+    assigneeId: foreignUser,
+    title: "来源负责人本人组主任务",
+  });
+  tSourceOnlySource = await newTask(projectFixture, {
+    title: "来源负责人本人组来源任务",
+  });
+  groupSourceOnly = await seedTaskGroup(projectFixture, 5, "来源负责人本人组", [
+    { joinedAt: isoBefore(300), role: "MAIN", taskId: tSourceOnlyMain },
+    {
+      joinedAt: isoBefore(200),
+      role: "SOURCE",
+      sourceKind: "ACTIVE",
+      taskId: tSourceOnlySource,
+    },
+  ]);
+
   const sessionKey = randomBytes(32);
   const sessionKeyring = VersionedHmacKeyring.fromEntries(
     [{ key: sessionKey, version: 1 }],
@@ -590,6 +658,9 @@ beforeAll(async () => {
   ).cookie;
   outsiderCookie = (
     await createAuthenticatedSession(runtime.sql, sessionKeyring, outsiderUser)
+  ).cookie;
+  foreignCookie = (
+    await createAuthenticatedSession(runtime.sql, sessionKeyring, foreignUser)
   ).cookie;
 
   idempotencyKeyringDirectory = await mkdtemp(
@@ -957,11 +1028,12 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
     expect(response.status).toBe(200);
     const page = taskGroupListPageSchema.parse(response.body);
     expect(page.items.map((group) => group.groupId)).toEqual([
-      groupClosed,
+      groupSourceOnly,
+      groupOwnSecond,
       groupActive,
     ]);
 
-    const active = page.items[1]!;
+    const active = page.items[2]!;
     expect(active).toMatchObject({
       code: project!.code + "-TG-1",
       name: "遗留聚合组",
@@ -1013,25 +1085,81 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
     expect(mainBranch.assignee.userId).toBe(memberUser);
   });
 
-  test("已关闭聚合组没有活跃成员：branches 为空且 mainTask 为 null", async () => {
-    const page = taskGroupListPageSchema.parse(
+  test("只返回当前用户是活跃分支负责人的聚合组（2026-09-22 可见性收窄）", async () => {
+    const own = taskGroupListPageSchema.parse(
       (await getJson("/api/v1/task-groups", memberCookie)).body,
     );
-    const closed = page.items[0]!;
-    expect(closed).toMatchObject({
-      code: project!.code + "-TG-2",
-      mainTask: null,
-      name: "已关闭聚合组",
+    // 本人作为主任务负责人（TG-1 / TG-4）与作为来源任务负责人（TG-5）都可见；
+    // 他人负责的活跃组（TG-3）与已关闭组（TG-2）不返回。
+    expect(own.items.map((group) => group.groupId)).toEqual([
+      groupSourceOnly,
+      groupOwnSecond,
+      groupActive,
+    ]);
+    expect(own.items.map((group) => group.groupId)).not.toContain(groupForeign);
+    expect(own.items.map((group) => group.groupId)).not.toContain(groupClosed);
+
+    const foreign = taskGroupListPageSchema.parse(
+      (await getJson("/api/v1/task-groups", foreignCookie)).body,
+    );
+    // 同一项目内另一名成员：只能看到主任务在自己名下的组，以及自己作为来源负责人的组。
+    expect(foreign.items.map((group) => group.groupId)).toEqual([
+      groupSourceOnly,
+      groupForeign,
+    ]);
+    expect(foreign.items.map((group) => group.groupId)).not.toContain(
+      groupActive,
+    );
+
+    const scoped = taskGroupListPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups?projectId=" + String(project!.projectId),
+          foreignCookie,
+        )
+      ).body,
+    );
+    expect(scoped.items.map((group) => group.groupId)).toEqual([
+      groupSourceOnly,
+      groupForeign,
+    ]);
+  });
+
+  test("已关闭聚合组列表不返回，R-1 详情仍可见全部成员", async () => {
+    for (const cookie of [memberCookie, foreignCookie]) {
+      const page = taskGroupListPageSchema.parse(
+        (await getJson("/api/v1/task-groups", cookie)).body,
+      );
+      expect(page.items.map((group) => group.groupId)).not.toContain(
+        groupClosed,
+      );
+    }
+    // 关闭组在关闭时已解除全部成员，列表按活跃分支负责人过滤后不再返回；
+    // 详情（R-1）仍按项目成员关系可读，组与历史成员不丢。
+    const detail = taskGroupDetailResponseSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups/" + String(groupClosed),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(detail.group).toMatchObject({
+      groupId: groupClosed,
       status: "CLOSED",
     });
-    expect(closed.branches).toEqual([]);
+    expect(
+      detail.members.map((member) => [member.taskId, member.memberStatus]),
+    ).toEqual([[tClosedDetached, "DETACHED"]]);
   });
 
   test("分页与游标绑定：跨 projectId 复用或跨用户复用游标一律 422", async () => {
     const first = taskGroupListPageSchema.parse(
       (await getJson("/api/v1/task-groups?limit=1", memberCookie)).body,
     );
-    expect(first.items.map((group) => group.groupId)).toEqual([groupClosed]);
+    expect(first.items.map((group) => group.groupId)).toEqual([
+      groupSourceOnly,
+    ]);
     expect(first.hasMore).toBe(true);
     expect(first.nextCursor).not.toBeNull();
 
@@ -1044,9 +1172,24 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         )
       ).body,
     );
-    expect(second.items.map((group) => group.groupId)).toEqual([groupActive]);
-    expect(second.hasMore).toBe(false);
-    expect(second.nextCursor).toBeNull();
+    expect(second.items.map((group) => group.groupId)).toEqual([
+      groupOwnSecond,
+    ]);
+    expect(second.hasMore).toBe(true);
+    expect(second.nextCursor).not.toBeNull();
+
+    const third = taskGroupListPageSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups?limit=1&cursor=" +
+            encodeURIComponent(second.nextCursor!),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(third.items.map((group) => group.groupId)).toEqual([groupActive]);
+    expect(third.hasMore).toBe(false);
+    expect(third.nextCursor).toBeNull();
 
     await expectError(
       "/api/v1/task-groups?projectId=" +
