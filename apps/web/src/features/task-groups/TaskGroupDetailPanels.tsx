@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Alert, Spin } from "antd";
 import type { InpulseApiClient, TaskGroupRecordItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { isCardClick } from "@features/common/card-click";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -143,6 +144,10 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
 
   // 分支卡片与任务卡片同一套配色（2026-09-21）：未完成按优先级铺淡色底与左侧
   // 色条，已完成转绿、已取消转灰；已解除合并的历史成员保持灰底。
+  // 整块成员区就是任务入口（2026-09-22 产品要求）：点空白处、徽章或元信息文字
+  // 都能打开任务详情，不必瞄准标题；块内的按钮（解除合并）由 isCardClick 拦截，
+  // 不会顺带触发。宿主未下发 onOpenTask 时保持纯展示，不加焦点也不给手型。
+  const memberOpenable = onOpenTask !== undefined;
   const renderMember = (member: TaskGroupMember) => {
     const detached = member.memberStatus === "DETACHED";
     return (
@@ -155,6 +160,21 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
               taskToneClassName(member.priority, member.workStatus)
         }
         data-testid={"task-group-member-" + member.taskId}
+        tabIndex={memberOpenable ? 0 : undefined}
+        aria-label={
+          memberOpenable ? "查看任务详情：" + member.title : undefined
+        }
+        onClick={(event) => {
+          if (!memberOpenable || !isCardClick(event)) return;
+          openMemberTask(member);
+        }}
+        onKeyDown={(event) => {
+          if (!memberOpenable) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          openMemberTask(member);
+        }}
       >
         <div className="task-group-member-head">
           <span className="task-id">{member.taskCode}</span>

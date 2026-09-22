@@ -156,6 +156,8 @@ export function CompleteWithRecord({
           result.record,
         );
         await Promise.all(
+          // task-group / task-group-records：完成并发布记录会同时改变聚合组详情
+          // 的分支状态与「已发布记录」计数，以及组内记录列表（2026-09-22 修）。
           [
             "tasks",
             "task-board",
@@ -169,6 +171,8 @@ export function CompleteWithRecord({
             "my-tasks",
             "my-task-groups",
             "task-marks",
+            "task-group",
+            "task-group-records",
           ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
         );
         onSuccess(result.record);

@@ -136,6 +136,8 @@ export function TaskStatusPanel({
       retry.current = null;
       onClose();
       await Promise.all(
+        // task-group / task-group-records：状态推进改变聚合组详情里的工作状态、
+        // 已完成计数与记录可见性，同批失效才不用手动刷新（2026-09-22 修）。
         [
           "tasks",
           "task-board",
@@ -146,6 +148,8 @@ export function TaskStatusPanel({
           "my-tasks",
           "my-task-groups",
           "task-marks",
+          "task-group",
+          "task-group-records",
         ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },

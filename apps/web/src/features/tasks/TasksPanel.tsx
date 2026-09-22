@@ -519,6 +519,9 @@ export function TasksPanel({
           "my-tasks",
           "my-task-groups",
           "task-marks",
+          // 归档/恢复会改变聚合组详情里的分支状态与归档徽标（2026-09-22 修）。
+          "task-group",
+          "task-group-records",
         ].map((key) => lifecycleCache.invalidateQueries({ queryKey: [key] })),
       );
     },
