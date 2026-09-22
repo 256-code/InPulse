@@ -241,7 +241,7 @@ async function fixture(feature = false) {
       const task = await tasks.create(tx, scope, actor, p.code + "-T-1", {
         title: "待完成任务",
         description: "说明",
-        assigneeId: actor,
+        assigneeIds: [actor],
         priority: "NORMAL",
         dueAt: null,
       });
@@ -633,7 +633,7 @@ it("rejects wrong scope, foreign project, another source, revoked actor and stal
       tasks.create(tx, j, j.actor, j.code + "-T-2", {
         title: "其他任务",
         description: "",
-        assigneeId: j.actor,
+        assigneeIds: [j.actor],
         priority: "NORMAL",
         dueAt: null,
       }),
@@ -660,7 +660,7 @@ async function branchFixture(sourceKind: "ACTIVE" | "HISTORICAL") {
       tasks.create(tx, f, f.actor, f.code + "-T-2", {
         title: "主任务",
         description: "",
-        assigneeId: f.actor,
+        assigneeIds: [f.actor],
         priority: "NORMAL",
         dueAt: null,
       }),
@@ -817,7 +817,7 @@ it("rechecks edited draft contents and task versions after real lock waits", asy
     await tasks.update(tx, g.task, {
       title: "最新任务",
       description: g.task.description,
-      assigneeId: g.actor,
+      assigneeIds: [g.actor],
       priority: g.task.priority,
       dueAt: g.task.dueAt,
     });
@@ -1194,7 +1194,7 @@ it("首个任务完成把项目从未开始升级为进行中，并写审计、�
     tasks.create(tx, f, f.actor, f.code + "-T-2", {
       title: "第二个任务",
       description: "说明",
-      assigneeId: f.actor,
+      assigneeIds: [f.actor],
       priority: "NORMAL",
       dueAt: null,
     }),

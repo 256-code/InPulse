@@ -5,7 +5,7 @@ export type ActiveProjectMemberItem = {
   readonly id: number;
   readonly name: string;
   readonly avatarUrl: (string | null);
-  readonly role: ("MEMBER" | "LEADER");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -461,7 +461,7 @@ export type LeftoverTaskReplayContext = {
 export type LeftoverTaskRequest = {
   readonly title: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly leftoverItemId: number;
   readonly recordVersion: number;
@@ -571,7 +571,7 @@ export type ModuleTaskEditRequest = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly impactFeatureIds: readonly number[];
 };
@@ -580,7 +580,7 @@ export type ModuleTaskItem = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;
   readonly projectId: number;
@@ -588,6 +588,7 @@ export type ModuleTaskItem = {
   readonly featureId: null;
   readonly scopeType: "MODULE";
   readonly code: string;
+  readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
@@ -798,7 +799,7 @@ export type ProjectCode = string;
 
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
-  readonly currentUserRole?: (("MEMBER" | "LEADER") | null);
+  readonly currentUserRole?: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
 };
 
 export type ProjectEditRequest = {
@@ -834,7 +835,7 @@ export type ProjectListItem = {
   readonly updatedAt: string;
   readonly memberCount: number;
   readonly stats: ProjectStats;
-  readonly currentUserRole: (("MEMBER" | "LEADER") | null);
+  readonly currentUserRole: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
   readonly pendingArchiveRequest: (PendingProjectArchiveRequest | null);
 };
 
@@ -849,7 +850,7 @@ export type ProjectMemberCollectionPath = {
 export type ProjectMemberItem = {
   readonly userId: number;
   readonly status: ("ACTIVE" | "REMOVED");
-  readonly role: ("MEMBER" | "LEADER");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -877,7 +878,7 @@ export type ProjectMemberRecordItem = {
   readonly name: string;
   readonly avatarUrl: (string | null);
   readonly status: ("ACTIVE" | "REMOVED");
-  readonly role: ("MEMBER" | "LEADER");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
   readonly joinedAt: string;
   readonly removedAt: (string | null);
 };
@@ -1224,7 +1225,7 @@ export type SearchQueryRequest = {
 };
 
 export type SetProjectMemberRoleRequest = {
-  readonly role: ("MEMBER" | "LEADER");
+  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
 };
 
 export type SetProjectMemberRoleResponse = {
@@ -1410,7 +1411,7 @@ export type TaskEditRequest = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
 };
 
@@ -1639,7 +1640,7 @@ export type TaskItem = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;
   readonly projectId: number;
@@ -1647,6 +1648,7 @@ export type TaskItem = {
   readonly featureId: number;
   readonly scopeType: "FEATURE";
   readonly code: string;
+  readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");

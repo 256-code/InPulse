@@ -579,7 +579,7 @@ it("preserves converted links, exact history and source TODO without a restore g
       {
         title: "既有任务",
         description: "fixture",
-        assigneeId: f.userId,
+        assigneeIds: [f.userId],
         priority: "NORMAL",
         dueAt: null,
       },

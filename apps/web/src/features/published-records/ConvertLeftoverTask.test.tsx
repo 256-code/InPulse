@@ -138,7 +138,7 @@ it("shows inherited/excluded history, retains input and reuses the key after unc
     leftoverExpectedRowVersion: 1,
     expectedImpactFeatureIds: [4],
     title: "我的跟进标题",
-    assigneeId: 3,
+    assigneeIds: [3],
     dueAt: new Date(2026, 9, 10, 18, 30).toISOString(),
   });
   expect(convert.mock.calls[0]![2]).not.toHaveProperty("description");

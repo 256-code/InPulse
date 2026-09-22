@@ -25,6 +25,7 @@ const item: TaskItem = {
   title: "退款任务",
   description: "原说明",
   assigneeId: 5,
+  assigneeIds: [5],
   creatorId: 5,
   priority: "NORMAL",
   dueAt: null,
@@ -307,18 +308,18 @@ describe("F-14 task editing", () => {
     const draft = {
       ...base,
       title: "我的标题",
-      assigneeId: 6,
+      assigneeIds: [6],
       dueAt: "2026-09-10T00:00:00Z",
     };
     const latest = {
       ...base,
       description: "他人说明",
-      assigneeId: 7,
+      assigneeIds: [7],
       dueAt: "2026-09-11T00:00:00Z",
     };
     expect(mergeTask(base, draft, latest)).toEqual({
       values: { ...draft, description: "他人说明" },
-      conflicts: ["assigneeId", "dueAt"],
+      conflicts: ["assigneeIds", "dueAt"],
     });
   });
   it("retains identical retry key after uncertain failure and changes key with semantics", async () => {
@@ -408,7 +409,9 @@ describe("F-14 task editing", () => {
       target: { value: "新任务" },
     });
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("请选择负责人");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "请至少选择一名负责人",
+    );
   });
 });
 

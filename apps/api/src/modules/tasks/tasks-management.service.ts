@@ -332,19 +332,25 @@ export class TasksManagementService {
           "任务当前只读",
         );
     }
-    const assigned = !before || before.assigneeId !== input.edit.assigneeId;
-    if (
-      assigned &&
-      (await this.members.checkAssignableMember(tx, {
-        projectId: input.projectId,
-        userId: input.edit.assigneeId,
-      })) !== "allowed"
-    )
-      throw new TaskManagementError(
-        422,
-        "TASK_ASSIGNEE_INVALID",
-        "负责人必须是当前项目的活跃成员",
-      );
+    const assigneeIds = input.edit.assigneeIds;
+    const assigned =
+      !before ||
+      before.assigneeIds.length !== assigneeIds.length ||
+      before.assigneeIds.some((userId, index) => userId !== assigneeIds[index]);
+    // 多负责人平权：集合内每个人都必须是当前项目的活跃成员（ADR-040）。
+    if (assigned)
+      for (const userId of assigneeIds)
+        if (
+          (await this.members.checkAssignableMember(tx, {
+            projectId: input.projectId,
+            userId,
+          })) !== "allowed"
+        )
+          throw new TaskManagementError(
+            422,
+            "TASK_ASSIGNEE_INVALID",
+            "负责人必须是当前项目的活跃成员",
+          );
     let result = before
       ? await this.repository.update(tx, before, input.edit)
       : await this.repository.create(
@@ -424,21 +430,27 @@ export class TasksManagementService {
       sourceStatus: result.workStatus,
       sourceRowVersion: result.rowVersion,
     });
-    if (assigned)
-      await this.notifications.write(tx, {
-        projectId: result.projectId,
-        recipientId: result.assigneeId,
-        sourceChainId: event.chainId,
-        sourceSequence: event.sequenceNo,
-        notificationType: input.assignmentNotificationType ?? "task.assigned",
-        title: `任务指派：${result.title}`.slice(0, 500),
-        body: result.code,
-        targetPath:
-          result.featureId === null
-            ? `/projects/${result.projectId}/modules/${result.moduleId}/tasks?taskId=${result.id}`
-            : `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
-        createdAt: new Date(result.updatedAt),
-      });
+    if (assigned) {
+      // 只通知本次新增的负责人：留任者已持有任务，重复提醒会造成噪声（ADR-040）。
+      const previousAssignees = new Set(before?.assigneeIds ?? []);
+      for (const recipientId of assigneeIds.filter(
+        (userId) => !previousAssignees.has(userId),
+      ))
+        await this.notifications.write(tx, {
+          projectId: result.projectId,
+          recipientId,
+          sourceChainId: event.chainId,
+          sourceSequence: event.sequenceNo,
+          notificationType: input.assignmentNotificationType ?? "task.assigned",
+          title: `任务指派：${result.title}`.slice(0, 500),
+          body: result.code,
+          targetPath:
+            result.featureId === null
+              ? `/projects/${result.projectId}/modules/${result.moduleId}/tasks?taskId=${result.id}`
+              : `/projects/${result.projectId}/modules/${result.moduleId}/features/${result.featureId}?taskId=${result.id}`,
+          createdAt: new Date(result.updatedAt),
+        });
+    }
     return result;
   }
   /**
@@ -649,7 +661,7 @@ export class TasksManagementService {
         ...new Set(
           command.action === "COMPLETE"
             ? [result.creatorId]
-            : [result.assigneeId, result.creatorId],
+            : [...result.assigneeIds, result.creatorId],
         ),
       ].sort((a, b) => a - b);
       for (const recipientId of recipients)

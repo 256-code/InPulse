@@ -157,7 +157,7 @@ async function newFeature(
 }
 
 interface TaskOptions {
-  readonly assigneeId?: number;
+  readonly assigneeIds?: number[];
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
@@ -182,7 +182,7 @@ async function newTask(
       {
         title: options.title ?? "聚合读列表接口任务",
         description: "",
-        assigneeId: options.assigneeId ?? scope.userId,
+        assigneeIds: options.assigneeIds ?? [scope.userId],
         priority: options.priority ?? "NORMAL",
         dueAt: options.dueAt ?? null,
       },
@@ -591,11 +591,11 @@ beforeAll(async () => {
 
   // R-7 可见性收窄夹具（2026-09-22）：他人负责的活跃组、仅作为来源负责人的组与本人第二个组。
   tForeignMain = await newTask(projectFixture, {
-    assigneeId: foreignUser,
+    assigneeIds: [foreignUser],
     title: "他人聚合组主任务",
   });
   tForeignSource = await newTask(projectFixture, {
-    assigneeId: foreignUser,
+    assigneeIds: [foreignUser],
     title: "他人聚合组来源任务",
   });
   groupForeign = await seedTaskGroup(projectFixture, 3, "他人聚合组", [
@@ -623,7 +623,7 @@ beforeAll(async () => {
     },
   ]);
   tSourceOnlyMain = await newTask(projectFixture, {
-    assigneeId: foreignUser,
+    assigneeIds: [foreignUser],
     title: "来源负责人本人组主任务",
   });
   tSourceOnlySource = await newTask(projectFixture, {
@@ -703,7 +703,7 @@ beforeAll(async () => {
   process.env["IDEMPOTENCY_FINGERPRINT_KEY_VERSION"] = String(HMAC_KEY_VERSION);
 
   const { AppModule } = await import("../src/app.module.js");
-  app = await NestFactory.create(AppModule, { logger: false });
+  app = await NestFactory.create(AppModule, { logger: ["error"] });
   app.setGlobalPrefix("api/v1");
   await app.listen(0, "127.0.0.1");
   const address = app.getHttpServer().address() as AddressInfo;

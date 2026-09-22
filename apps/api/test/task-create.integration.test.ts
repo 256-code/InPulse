@@ -134,7 +134,7 @@ const input = (assigneeId: number, moduleName = "自建模块") =>
       description: "",
       priority: "NORMAL",
       dueAt: null,
-      assigneeId,
+      assigneeIds: [assigneeId],
     },
     impactFeatureIds: [],
   });
@@ -366,7 +366,12 @@ it("逾期在分页前过滤，新建未逾期任务不会挤掉较早的逾期�
           moduleId: f.moduleId,
           featureId: null,
           impactFeatureIds: [],
-          edit: { ...input(f.userId).task, title, dueAt: due, assigneeId },
+          edit: {
+            ...input(f.userId).task,
+            title,
+            dueAt: due,
+            assigneeIds: [assigneeId],
+          },
           requestId: randomUUID(),
         }),
       ),

@@ -239,7 +239,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       WITH created AS (
         INSERT INTO app.tasks (
           project_id, module_id, scope_type, code, title, work_status,
-          completion_note, completed_at, assignee_id, creator_id
+          completion_note, completed_at, creator_id
         )
         VALUES (
           ${project.projectId},
@@ -250,10 +250,13 @@ describe("F-12 real HTTP + PostgreSQL", () => {
           'DONE',
           '已完成',
           now(),
-          ${member.userId},
           ${member.userId}
         )
         RETURNING id, project_id
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${member.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,
@@ -481,7 +484,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
     await client.sql`
       WITH created AS (
         INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, assignee_id, creator_id
+          project_id, module_id, scope_type, code, title, creator_id
         )
         VALUES (
           ${project.projectId},
@@ -489,10 +492,13 @@ describe("F-12 real HTTP + PostgreSQL", () => {
           'MODULE',
           ${project.code + "-T-1"},
           '未归档任务',
-          ${member.userId},
           ${member.userId}
         )
         RETURNING id, project_id
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${member.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status, changed_by
@@ -548,7 +554,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
     await client.sql`
       WITH created AS (
         INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, assignee_id, creator_id,
+          project_id, module_id, scope_type, code, title, creator_id,
           work_status, completed_at
         )
         VALUES (
@@ -558,11 +564,14 @@ describe("F-12 real HTTP + PostgreSQL", () => {
           ${project.code + "-T-1"},
           '已完成任务',
           ${member.userId},
-          ${member.userId},
           'DONE',
           now()
         )
         RETURNING id, project_id, completed_at
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${member.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,

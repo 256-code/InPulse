@@ -153,7 +153,7 @@ async function newTask(
       {
         title,
         description: "",
-        assigneeId: scope.userId,
+        assigneeIds: [scope.userId],
         priority: "NORMAL",
         dueAt: null,
       },

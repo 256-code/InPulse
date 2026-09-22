@@ -10,7 +10,7 @@ describe("F-15 module task contract", () => {
       title: "公共支付",
       description: "",
       priority: "NORMAL",
-      assigneeId: 1,
+      assigneeIds: [1],
       dueAt: null,
       impactFeatureIds: [3, 2, 3],
     };

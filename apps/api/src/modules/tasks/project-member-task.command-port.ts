@@ -71,7 +71,7 @@ export class ProjectMemberTaskCommandPort {
              t.priority,
              t.due_at AS "dueAt",
              t.work_status AS "workStatus",
-             t.assignee_id AS "assigneeId",
+             ${userId}::integer AS "assigneeId",
              t.row_version AS "rowVersion",
              ARRAY(
                SELECT i.feature_id
@@ -81,7 +81,7 @@ export class ProjectMemberTaskCommandPort {
              ) AS "impactFeatureIds"
         FROM app.tasks AS t
        WHERE t.project_id = ${projectId}
-         AND t.assignee_id = ${userId}
+         AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${userId})
          AND t.work_status = 'TODO'
          AND t.lifecycle_status = 'ACTIVE'
        ORDER BY t.id ASC
@@ -141,7 +141,7 @@ export class ProjectMemberTaskCommandPort {
         );
       }
       if (
-        current.assigneeId !== input.targetUserId ||
+        !current.assigneeIds.includes(input.targetUserId) ||
         current.workStatus !== "TODO" ||
         current.lifecycleStatus !== "ACTIVE"
       ) {
@@ -158,6 +158,11 @@ export class ProjectMemberTaskCommandPort {
           "不能把任务改派给当前成员本人",
         );
       }
+      // 多负责人平权（ADR-040）：只摘掉被移除的成员，其佘人继续负责；
+      // 唯一负责人时才由接手人顶上。
+      const retained = current.assigneeIds.filter(
+        (userId) => userId !== input.targetUserId,
+      );
       try {
         await this.tasks.execute(tx, {
           operation:
@@ -172,7 +177,8 @@ export class ProjectMemberTaskCommandPort {
             title: current.title,
             description: current.description,
             priority: current.priority,
-            assigneeId: assignment.assigneeId,
+            assigneeIds:
+              retained.length > 0 ? retained : [assignment.assigneeId],
             dueAt: current.dueAt,
           },
           ...(current.featureId === null

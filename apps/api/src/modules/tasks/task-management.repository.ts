@@ -141,7 +141,7 @@ export class TaskManagementRepository {
   async list(tx: TransactionContext, scope: TaskScope): Promise<TaskRecord[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT t.id, t.project_id AS "projectId", t.module_id AS "moduleId", t.feature_id AS "featureId", t.scope_type AS "scopeType", t.code, t.title, t.description, t.assignee_id AS "assigneeId", t.creator_id AS "creatorId", t.priority, t.work_status AS "workStatus", t.lifecycle_status AS "lifecycleStatus", t.due_at AS "dueAt", t.row_version AS "rowVersion", t.created_at AS "createdAt", t.updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=t.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks t WHERE t.project_id = ${scope.projectId} AND t.module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`t.scope_type = 'MODULE' AND t.feature_id IS NULL` : tx.sql`((t.feature_id = ${scope.featureId} AND t.scope_type = 'FEATURE') OR (t.scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = t.id AND i.feature_id = ${scope.featureId})))`} ORDER BY ${taskListOrderBy(tx.sql)}`;
+    >`SELECT t.id, t.project_id AS "projectId", t.module_id AS "moduleId", t.feature_id AS "featureId", t.scope_type AS "scopeType", t.code, t.title, t.description, a.ids AS "assigneeIds", a.ids[1] AS "assigneeId", t.creator_id AS "creatorId", t.priority, t.work_status AS "workStatus", t.lifecycle_status AS "lifecycleStatus", t.due_at AS "dueAt", t.row_version AS "rowVersion", t.created_at AS "createdAt", t.updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=t.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks t LEFT JOIN LATERAL (SELECT array_agg(ta.user_id ORDER BY ta.user_id) AS ids FROM app.task_assignees ta WHERE ta.task_id=t.id) AS a ON true WHERE t.project_id = ${scope.projectId} AND t.module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`t.scope_type = 'MODULE' AND t.feature_id IS NULL` : tx.sql`((t.feature_id = ${scope.featureId} AND t.scope_type = 'FEATURE') OR (t.scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = t.id AND i.feature_id = ${scope.featureId})))`} ORDER BY ${taskListOrderBy(tx.sql)}`;
     return rows.map(dto);
   }
   async find(
@@ -152,7 +152,7 @@ export class TaskManagementRepository {
   ): Promise<TaskRecord | undefined> {
     const [row] = await tx.sql<
       Row[]
-    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, assignee_id AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`} AND id = ${taskId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeIds", (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`} AND id = ${taskId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return row ? dto(row) : undefined;
   }
   async create(
@@ -164,7 +164,8 @@ export class TaskManagementRepository {
   ): Promise<TaskRecord> {
     const [row] = await tx.sql<
       { id: number }[]
-    >`INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, assignee_id, creator_id, priority, due_at, work_status, lifecycle_status) VALUES (${scope.projectId}, ${scope.moduleId}, ${scope.featureId}, ${scope.featureId === null ? "MODULE" : "FEATURE"}, ${code}, ${edit.title}, ${edit.description}, ${edit.assigneeId}, ${actorId}, ${edit.priority}, ${edit.dueAt}, 'TODO', 'ACTIVE') RETURNING id`;
+    >`INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, creator_id, priority, due_at, work_status, lifecycle_status) VALUES (${scope.projectId}, ${scope.moduleId}, ${scope.featureId}, ${scope.featureId === null ? "MODULE" : "FEATURE"}, ${code}, ${edit.title}, ${edit.description}, ${actorId}, ${edit.priority}, ${edit.dueAt}, 'TODO', 'ACTIVE') RETURNING id`;
+    await this.replaceAssignees(tx, scope.projectId, row!.id, edit.assigneeIds);
     await tx.sql`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by) VALUES (${row!.id}, ${scope.projectId}, NULL, 'TODO', ${actorId})`;
     return (await this.find(tx, scope, row!.id))!;
   }
@@ -173,13 +174,38 @@ export class TaskManagementRepository {
     current: TaskRecord,
     edit: TaskEditRequest,
   ): Promise<TaskRecord | undefined> {
-    // Omit assignee_id entirely when unchanged: historical removed members may be retained.
-    const assignee =
-      current.assigneeId === edit.assigneeId
-        ? tx.sql``
-        : tx.sql`, assignee_id = ${edit.assigneeId}`;
     const rows =
-      await tx.sql`UPDATE app.tasks SET title = ${edit.title}, description = ${edit.description}, priority = ${edit.priority}, due_at = ${edit.dueAt}, row_version = row_version + 1, updated_at = now() ${assignee} WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} RETURNING id`;
-    return rows.length ? this.find(tx, current, current.id) : undefined;
+      await tx.sql`UPDATE app.tasks SET title = ${edit.title}, description = ${edit.description}, priority = ${edit.priority}, due_at = ${edit.dueAt}, row_version = row_version + 1, updated_at = now() WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} RETURNING id`;
+    if (rows.length === 0) return undefined;
+    await this.replaceAssignees(
+      tx,
+      current.projectId,
+      current.id,
+      edit.assigneeIds,
+      current.assigneeIds,
+    );
+    return this.find(tx, current, current.id);
+  }
+  /**
+   * 负责人集合的唯一写入路径：先删后插（app_runtime 不持有 UPDATE）。
+   *
+   * 集合未变化时整体跳过：已完成任务允许保留历史已移除成员的负责人，
+   * 重写会触发 task_assignees_active_assignee 校验并把这些任务锁死（功能设计 §824）。
+   */
+  private async replaceAssignees(
+    tx: TransactionContext,
+    projectId: number,
+    taskId: number,
+    target: readonly number[],
+    current: readonly number[] = [],
+  ): Promise<void> {
+    if (
+      current.length === target.length &&
+      current.every((userId, index) => userId === target[index])
+    )
+      return;
+    await tx.sql`DELETE FROM app.task_assignees WHERE task_id = ${taskId} AND project_id = ${projectId}`;
+    for (const userId of target)
+      await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES (${taskId}, ${userId}, ${projectId})`;
   }
 }

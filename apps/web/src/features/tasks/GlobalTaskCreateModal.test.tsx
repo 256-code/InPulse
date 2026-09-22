@@ -281,9 +281,7 @@ describe("GlobalTaskCreateModal", () => {
 
     const moduleField = screen.getByLabelText("所属模块");
     await waitFor(() => expect(moduleField).not.toBeDisabled());
-    expect(moduleField.closest(".ant-select")).toHaveTextContent(
-      "请选择模块",
-    );
+    expect(moduleField.closest(".ant-select")).toHaveTextContent("请选择模块");
     expect(screen.getByLabelText("所属功能")).toBeDisabled();
     expect(screen.getByLabelText("指派给")).toBeDisabled();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
@@ -299,9 +297,7 @@ describe("GlobalTaskCreateModal", () => {
       if (!trigger) throw new Error("feature select not found");
       return trigger as HTMLElement;
     };
-    await waitFor(() =>
-      expect(featureTrigger()).toHaveTextContent("MFA 登录"),
-    );
+    await waitFor(() => expect(featureTrigger()).toHaveTextContent("MFA 登录"));
 
     // 「请选择功能」只是提示位：点它不会把已选功能清回未选择（2026-09-22 产品反馈）。
     await user.click(featureTrigger());
@@ -330,7 +326,7 @@ describe("GlobalTaskCreateModal", () => {
         title: "补齐恢复码入口",
         description: "",
         priority: "NORMAL",
-        assigneeId: 2,
+        assigneeIds: [2],
         dueAt: null,
       },
       {
@@ -366,7 +362,7 @@ describe("GlobalTaskCreateModal", () => {
         title: "模块级任务",
         description: "",
         priority: "NORMAL",
-        assigneeId: 1,
+        assigneeIds: [1],
         dueAt: null,
         impactFeatureIds: [112],
       },

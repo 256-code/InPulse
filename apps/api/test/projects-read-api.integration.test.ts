@@ -350,7 +350,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
           {
             title,
             description: "",
-            assigneeId: owner.userId,
+            assigneeIds: [owner.userId],
             priority: "NORMAL",
             dueAt: null,
           },
@@ -493,7 +493,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       WITH created AS (
         INSERT INTO app.tasks (
           project_id, module_id, scope_type, code, title, work_status,
-          completion_note, completed_at, assignee_id, creator_id
+          completion_note, completed_at, creator_id
         )
         VALUES (
           ${active.projectId},
@@ -504,10 +504,13 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
           'DONE',
           '已完成',
           now(),
-          ${owner.userId},
           ${owner.userId}
         )
         RETURNING id, project_id
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${owner.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,

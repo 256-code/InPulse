@@ -21,7 +21,7 @@ export const taskFields = [
   "title",
   "description",
   "priority",
-  "assigneeId",
+  "assigneeIds",
   "dueAt",
   "impactFeatureIds",
 ] as const;
@@ -31,7 +31,7 @@ export function taskEdit(item: TaskViewItem): TaskDraft {
     title: item.title,
     description: item.description,
     priority: item.priority,
-    assigneeId: item.assigneeId,
+    assigneeIds: [...item.assigneeIds],
     dueAt: item.dueAt,
     ...(item.scopeType === "MODULE"
       ? { impactFeatureIds: [...item.impactFeatureIds] }

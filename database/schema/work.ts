@@ -165,9 +165,6 @@ export const tasks = appSchema.table(
     code: text("code").notNull(),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
-    assigneeId: integer("assignee_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
     creatorId: integer("creator_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -202,11 +199,6 @@ export const tasks = appSchema.table(
     index("tasks_project_status_idx").on(
       table.projectId,
       table.lifecycleStatus,
-      table.workStatus,
-      table.id,
-    ),
-    index("tasks_assignee_status_idx").on(
-      table.assigneeId,
       table.workStatus,
       table.id,
     ),
@@ -290,6 +282,34 @@ export const taskFeatureImpacts = appSchema.table(
       "task_feature_impacts_type_check",
       sql.raw("relation_type = 'IMPACT'"),
     ),
+  ],
+);
+
+/**
+ * 任务负责人集合（ADR-040）：多负责人平权，本表是唯一真相。
+ * 集合变更以“先删后插”实现，因此运行角色不持有 UPDATE。
+ */
+export const taskAssignees = appSchema.table(
+  "task_assignees",
+  {
+    taskId: integer("task_id").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    projectId: integer("project_id").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "task_assignees_pkey",
+      columns: [table.taskId, table.userId],
+    }),
+    foreignKey({
+      name: "task_assignees_task_project_fk",
+      columns: [table.taskId, table.projectId],
+      foreignColumns: [tasks.id, tasks.projectId],
+    }).onDelete("restrict"),
+    index("task_assignees_user_idx").on(table.userId, table.taskId),
   ],
 );
 

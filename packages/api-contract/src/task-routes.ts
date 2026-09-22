@@ -22,6 +22,7 @@ const fields = [
   "title",
   "description",
   "assigneeId",
+  "assigneeIds[]",
   "creatorId",
   "priority",
   "workStatus",
@@ -94,7 +95,8 @@ const basicTaskRoutes: readonly RouteDefinition[] = [
         csrfPolicy: "required",
         idempotencyPolicy: "idempotencyRequired",
         idempotencyExceptionAdr: "none",
-        idempotencyContractVersion: "1.0.0",
+        // ADR-040：请求体 assigneeId 改为 assigneeIds，响应新增 assigneeIds，属破坏性契约变更，主版本递增。
+        idempotencyContractVersion: "2.0.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: create ? [] : ["If-Match"],
         idempotencyReplayPolicy: {
@@ -149,7 +151,8 @@ export const taskRoutes: readonly RouteDefinition[] = [
     ...basicTaskRoutes[4]!,
     method: "POST",
     operationId: "transitionTask",
-    idempotencyContractVersion: "2.0.0",
+    // ADR-040：响应 TaskItem 新增 assigneeIds，属破坏性契约变更，主版本递增。
+    idempotencyContractVersion: "3.0.0",
     replayAuthorizationPolicy: {
       version: "2.0.0",
       resources: {

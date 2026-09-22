@@ -216,8 +216,9 @@ async function createTask(
   return client.sql.begin(async (tx) => {
     const [row] = await tx<
       { id: number }[]
-    >`INSERT INTO app.tasks(project_id,module_id,feature_id,scope_type,code,title,assignee_id,creator_id,work_status,lifecycle_status,completed_at) VALUES (${project.projectId},${project.moduleId},${featureId},${featureId === null ? "MODULE" : "FEATURE"},${`${project.code}-T-${sequences}`},${title},${assigneeId},${creatorId},${workStatus},${options.lifecycleStatus ?? "ACTIVE"},${completedAt}) RETURNING id`;
+    >`INSERT INTO app.tasks(project_id,module_id,feature_id,scope_type,code,title,creator_id,work_status,lifecycle_status,completed_at) VALUES (${project.projectId},${project.moduleId},${featureId},${featureId === null ? "MODULE" : "FEATURE"},${`${project.code}-T-${sequences}`},${title},${creatorId},${workStatus},${options.lifecycleStatus ?? "ACTIVE"},${completedAt}) RETURNING id`;
     if (!row) throw new Error("task fixture returned no row");
+    await tx`INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES (${row.id}, ${assigneeId}, ${project.projectId})`;
     await tx`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, completed_at_snapshot, changed_by) VALUES (${row.id}, ${project.projectId}, NULL, ${workStatus}, ${completedAt}, ${creatorId})`;
     return row.id;
   });
@@ -347,7 +348,7 @@ describe("F-23 task group merge", () => {
         rowVersion: number;
         workStatus: string;
       }>
-    >`SELECT id, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", assignee_id AS "assigneeId", row_version AS "rowVersion" FROM app.tasks WHERE project_id = ${f.project.projectId} ORDER BY id`;
+    >`SELECT id, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = app.tasks.id) AS "assigneeId", row_version AS "rowVersion" FROM app.tasks WHERE project_id = ${f.project.projectId} ORDER BY id`;
     expect(tasks.find((task) => task.id === f.sourceTaskId)).toMatchObject({
       workStatus: "DONE",
       lifecycleStatus: "ACTIVE",

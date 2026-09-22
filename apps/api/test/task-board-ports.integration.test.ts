@@ -136,8 +136,8 @@ async function insertBoardTask(
         "GREATEST(now() - interval '5 minutes', " + WEEK_START + ")")
       : "NULL";
   const statement =
-    "INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, assignee_id, creator_id, priority, work_status, lifecycle_status, completed_at, due_at)" +
-    " VALUES ($1, $2, NULL, 'MODULE', $3, $4, '', $5, $5, $6, $7, $8, " +
+    "INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, creator_id, priority, work_status, lifecycle_status, completed_at, due_at)" +
+    " VALUES ($1, $2, NULL, 'MODULE', $3, $4, '', $5, $6, $7, $8, " +
     completedAt +
     ", " +
     DUE_EXPRESSION[options.due ?? "none"] +
@@ -156,6 +156,11 @@ async function insertBoardTask(
   if (typeof taskId !== "number") {
     throw new Error("task fixture insert returned no row");
   }
+  await runRaw(
+    executor,
+    "INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES ($1, $2, $3)",
+    [taskId, scope.userId, scope.projectId],
+  );
   await runRaw(
     executor,
     "INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, completed_at_snapshot, changed_by)" +
@@ -177,9 +182,12 @@ async function insertBoardTaskBatch(
 }> {
   const statement =
     "WITH inserted AS (" +
-    "INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, assignee_id, creator_id, priority, work_status, lifecycle_status)" +
-    " SELECT $1, $2, NULL, 'MODULE', $3 || n, '批量夹具任务 ' || n, '', $4, $4, 'NORMAL', 'TODO', 'ACTIVE'" +
+    "INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, creator_id, priority, work_status, lifecycle_status)" +
+    " SELECT $1, $2, NULL, 'MODULE', $3 || n, '批量夹具任务 ' || n, '', $4, 'NORMAL', 'TODO', 'ACTIVE'" +
     " FROM generate_series(1, $5) AS n RETURNING id, project_id, work_status), " +
+    "assignees AS (" +
+    "INSERT INTO app.task_assignees (task_id, user_id, project_id)" +
+    " SELECT id, $4, project_id FROM inserted), " +
     "history AS (" +
     "INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, completed_at_snapshot, changed_by)" +
     " SELECT id, project_id, NULL, work_status, NULL, $4 FROM inserted) " +

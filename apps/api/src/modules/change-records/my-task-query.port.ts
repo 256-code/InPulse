@@ -286,7 +286,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
              t.scope_type AS "scopeType",
              t.code,
              t.title,
-             t.assignee_id AS "assigneeId",
+             (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId",
              t.work_status AS "workStatus",
              t.lifecycle_status AS "lifecycleStatus",
              t.row_version AS "rowVersion",
@@ -298,7 +298,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
              t.creator_id AS "creatorId"
         FROM app.tasks t
        WHERE t.project_id = ANY(${projectIds}::integer[])
-         AND (${assigneeId}::integer IS NULL OR t.assignee_id = ${assigneeId})
+         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
          AND (${creatorId}::integer IS NULL OR t.creator_id = ${creatorId})
          AND (${input.overdue ?? false}::boolean = false OR (t.work_status = 'TODO' AND t.lifecycle_status <> 'INVALID' AND t.due_at < now()))
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
@@ -365,7 +365,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
     const [row] = await tx.sql<MyTaskStatsRowRaw[]>`
       WITH base AS (
         SELECT t.work_status AS "workStatus",
-               (t.assignee_id = ${viewerId}) AS "isMine",
+               EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${viewerId}) AS "isMine",
                (t.creator_id = ${viewerId}) AS "isCreated",
                (t.work_status = 'TODO'
                  AND t.due_at IS NOT NULL
@@ -383,7 +383,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
                   )) AS "leftover"
           FROM app.tasks t
          WHERE t.project_id = ANY(${projectIds}::integer[])
-           AND (t.assignee_id = ${viewerId} OR t.creator_id = ${viewerId})
+           AND (EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${viewerId}) OR t.creator_id = ${viewerId})
            AND t.lifecycle_status <> 'INVALID'
            AND t.work_status <> 'CANCELED'
            AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
@@ -419,7 +419,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
         SELECT t.id AS task_id, t.project_id
           FROM app.tasks t
          WHERE t.project_id = ANY(${projectIds}::integer[])
-           AND t.assignee_id = ${input.assigneeId}
+           AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${input.assigneeId})
            AND t.lifecycle_status <> 'INVALID'
            AND t.work_status <> 'CANCELED'
            AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))

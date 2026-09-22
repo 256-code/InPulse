@@ -407,7 +407,7 @@ async function taskFixture(f: Awaited<ReturnType<typeof fixture>>, number = 1) {
       {
         title: "链接任务",
         description: "",
-        assigneeId: f.userId,
+        assigneeIds: [f.userId],
         priority: "NORMAL",
         dueAt: null,
       },

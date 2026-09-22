@@ -67,7 +67,7 @@ const labels: Record<TaskField, string> = {
   title: "任务标题",
   description: "任务说明",
   priority: "优先级",
-  assigneeId: "负责人",
+  assigneeIds: "负责人",
   dueAt: "截止时间",
   impactFeatureIds: "影响功能",
 };
@@ -99,7 +99,7 @@ const empty: TaskDraft = {
   title: "",
   description: "",
   priority: "NORMAL",
-  assigneeId: 0,
+  assigneeIds: [],
   dueAt: null,
 };
 type Merge = ReturnType<typeof mergeTask> & {
@@ -405,6 +405,9 @@ export function TasksPanel({
   const memberName = (id: number) =>
     members.data?.items.find((m) => m.id === id)?.name ??
     "用户 #" + id + "（历史负责人）";
+  /** 多负责人平权（ADR-040）：逐人解析后顺次展示。 */
+  const memberNames = (ids: readonly number[]) =>
+    ids.length === 0 ? "未指派" : ids.map(memberName).join("、");
   /** 负责人候选项：活跃成员 + 当前任务的历史负责人（已不在成员列表时标注可保留）。 */
   const assigneeOptions = useMemo(() => {
     const items = members.data?.items ?? [];
@@ -413,17 +416,13 @@ export function TasksPanel({
       label: member.name,
       avatarUrl: member.avatarUrl ?? null,
     }));
-    const currentId = selection?.item?.assigneeId;
-    if (
-      currentId !== undefined &&
-      !list.some((option) => option.value === currentId)
-    ) {
-      list.unshift({
-        value: currentId,
-        label: memberName(currentId),
-        description: "可保留",
-      });
-    }
+    for (const currentId of selection?.item?.assigneeIds ?? [])
+      if (!list.some((option) => option.value === currentId))
+        list.unshift({
+          value: currentId,
+          label: memberName(currentId),
+          description: "可保留",
+        });
     return list;
   }, [members.data, selection]);
   // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
@@ -863,7 +862,7 @@ export function TasksPanel({
                             {subtitle === "" ? null : <span>{subtitle}</span>}
                           </button>
                         </td>
-                        <td>{memberName(item.assigneeId)}</td>
+                        <td>{memberNames(item.assigneeIds)}</td>
                         <td>
                           <CalmBadge tone={priorityTone[item.priority]}>
                             {priorityLabels[item.priority]}
@@ -941,9 +940,9 @@ export function TasksPanel({
                         : item.description}
                     </p>
                     <div className="calm-card-assignee">
-                      <span title={"负责人：" + memberName(item.assigneeId)}>
+                      <span title={"负责人：" + memberNames(item.assigneeIds)}>
                         <InpulseIcon name="users" size={14} />
-                        {memberName(item.assigneeId)}
+                        {memberNames(item.assigneeIds)}
                       </span>
                     </div>
                     <div className="calm-card-bottom">
@@ -1408,7 +1407,7 @@ export function TasksPanel({
                       client={client}
                     />
                     <dt>负责人</dt>
-                    <dd>{memberName(current.assigneeId)}</dd>
+                    <dd>{memberNames(current.assigneeIds)}</dd>
                     <dt>创建人</dt>
                     <dd>{personName(current.creatorId)}</dd>
                     <dt>截止时间</dt>
@@ -1719,24 +1718,28 @@ export function TasksPanel({
               <div className="calm-field">
                 <label htmlFor="task-assignee">负责人</label>
                 <Controller
-                  name="assigneeId"
+                  name="assigneeIds"
                   control={control}
-                  rules={{ validate: (value) => value > 0 || "请选择负责人" }}
+                  rules={{
+                    validate: (value) =>
+                      value.length > 0 || "请至少选择一名负责人",
+                  }}
                   render={({ field }) => (
                     <CalmSelect
                       id="task-assignee"
-                      value={field.value > 0 ? field.value : null}
-                      onChange={(next) => field.onChange(Number(next))}
-                      onBlur={field.onBlur}
+                      value={field.value}
+                      onChange={(next) => field.onChange(next.map(Number))}
                       options={assigneeOptions}
                       appearance="member"
-                      placeholder="请选择项目成员"
+                      multiple
+                      maxTagCount={2}
+                      placeholder="请选择项目成员（可多选）"
                       ariaLabel="负责人"
                     />
                   )}
                 />
-                {errors.assigneeId && (
-                  <p role="alert">{errors.assigneeId.message}</p>
+                {errors.assigneeIds && (
+                  <p role="alert">{errors.assigneeIds.message}</p>
                 )}
                 {isFirstLoad(members) && <p>正在加载项目成员…</p>}
                 {members.isError && (

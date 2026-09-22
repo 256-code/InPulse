@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const id = z.number().int().positive().max(2147483647);
 const pathId = z.coerce.number().int().positive().max(2147483647);
+/**
+ * 任务负责人集合（ADR-040）：至少一人、至多 20 人，去重后按 ID 升序规范化。
+ */
+const assigneeIds = z
+  .array(id)
+  .min(1)
+  .max(20)
+  .overwrite((values) => [...new Set(values)].sort((a, b) => a - b));
 export const taskCollectionPathSchema = z
   .object({ projectId: pathId, moduleId: pathId, featureId: pathId })
   .strict()
@@ -14,7 +22,7 @@ export const taskEditRequestSchema = z
     title: z.string().trim().min(1).max(500),
     description: z.string().max(50000),
     priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]),
-    assigneeId: id,
+    assigneeIds,
     dueAt: z.iso.datetime().nullable(),
   })
   .strict()
@@ -34,6 +42,11 @@ export const taskItemSchema = taskEditRequestSchema
     featureId: id,
     scopeType: z.literal("FEATURE"),
     code: z.string().max(64),
+    /**
+     * 派生展示字段：恒等于 assigneeIds[0]，与 assigneeIds 同源同口径（ADR-040）。
+     * 集合本身是唯一真相，取值不一致时以 assigneeIds 为准。
+     */
+    assigneeId: id,
     creatorId: id,
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
     lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),

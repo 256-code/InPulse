@@ -801,7 +801,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | R-5 路由顺序：`/task-groups/memberships` 不被 `/task-groups/{groupId}` 吞掉 | `aggregate-read-api.integration.test.ts` 实际断言（Controller 注册顺序） |
 | `priority` / `includeCanceled` 的 `EXPLAIN (ANALYZE, BUFFERS)`（裁决 §10.3 验收要求）：30,481 行真实结构 `app.tasks` 下两条查询均走反向主键索引扫描，非顺序扫描 | 见下方计划文本 |
 
-`EXPLAIN (ANALYZE, BUFFERS)` 关键输出（本地 PostgreSQL 18.6，`app.tasks` 30,481 行，含 `tasks_assignee_status_idx (assignee_id, work_status, id)` 与 `tasks_pkey`）：
+`EXPLAIN (ANALYZE, BUFFERS)` 关键输出（本地 PostgreSQL 18.6，`app.tasks` 30,481 行，含 `tasks_assignee_status_idx (assignee_id, work_status, id)` 与 `tasks_pkey`；该索引已随 [ADR-040](adr/ADR-040.md) 的 `0021_contract_task_assignees.sql` 删除，下方为当时证据，现对应索引为 `task_assignees_user_idx (user_id, task_id)`）：
 
 - `priority = 'HIGH'` + 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 111，Buffers shared hit: 40，Execution Time: 0.149 ms。
 - `work_status = ANY('{TODO,CANCELED}')`（`includeCanceled` 组合）+ 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 51，Buffers shared hit: 34，Execution Time: 0.058 ms。
@@ -2931,3 +2931,23 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-22 二次改动）：`pnpm contract:generate`（5 产物）→ `contract:drift` → `contract:validate`（108 条）→ `permissions:check`（108/108）；`pnpm --filter @inpulse/api exec vitest run src/modules/aggregate-read` 11 例；`pnpm test:unit`（api 65 文件 364 例）、`pnpm test:web`（85 文件 550 例，其中 `TaskCenterPageView.test.tsx` 41 例通过；另有 4 例失败于用户正在编辑的 `TasksPanel.test.tsx` 与 `app-router.test.tsx`，与本批 diff 无交集）；真实 PostgreSQL 集成 `aggregate-read-list-api` 11/11 与 `aggregate-read-api` + `aggregate-read-ports` 42 例；`pnpm lint`、`pnpm typecheck`、`pnpm build` 通过。
 
 未运行 / 已知偏差：① 分支项新增字段改变 `strict()` 契约，按仓库规则需非作者人工评审后才能合入；② 未跑 `pnpm check` 整链、Playwright E2E 与 GitHub Actions，`pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP，本批未改动）；③ 列表行不展开分支级明细，仍按上一节口径由组详情弹窗承担。
+
+## 任务多负责人（ADR-040，2026-09-22 本地落库）
+
+任务负责人由 `app.tasks.assignee_id` 单一列改为 `app.task_assignees(task_id, user_id, project_id, created_at)` 关联表，语义为**平权多负责人**（任一负责人都能推进状态与编辑、都进「我的任务」、都收指派通知）。迁移 `0020_task_assignees.sql`（expand：建表、复合外键 `(task_id, project_id) → tasks(id, project_id)`、`task_assignees_active_assignee` 活跃成员防线、`task_assignees_immutable_columns`、索引 `task_assignees_user_idx`、`app_runtime`/`app_backup` 授权、按旧列回填）与 `0021_contract_task_assignees.sql`（contract：删除 `tasks.assignee_id` 与 `tasks_assignee_status_idx`）。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR040-CONTRACT-001 | 契约 | `assigneeIds` 边界与规范化 | `tasks.test.ts`：`assigneeIds` 1～20 人、空数组与 `0` 值 422、服务端去重并按用户 ID 升序；响应派生 `assigneeId === assigneeIds[0]` | 本地通过（api-contract 16 文件 100 例） |
+| ADR040-FINGERPRINT-001 | 契约 | 幂等契约版本随破坏性变更递增 | `createTask`/`updateTask` 升 `2.0.0`、`transitionTask` 升 `3.0.0`、`completeTask` 与模块变体升 `2.0.0`，`archiveTask`/`restoreTask` 继承；`task-completion.test.ts` 断言历史指纹 `["1.0.0","2.0.0","3.0.0"]`；`contract:validate` 无 `[contract-fingerprint]` 违例 | 本地通过（108 条路由） |
+| ADR040-DB-001 | PostgreSQL | 关联表防线 | 主键 `(task_id, user_id)` 拒绝重复指派；任务与项目错配被复合外键拒绝 23503；停用用户或非项目活跃成员被 `task_assignees_active_assignee` 拒绝；`task_id`/`user_id`/`project_id`/`created_at` 不可改写；`app_runtime` 无 `UPDATE` 授权 | 本地通过（真实 PostgreSQL 集成） |
+| ADR040-DB-002 | 迁移 | expand/contract 与回填 | `db:migrations:check` 22 条通过；升级后每个任务在关联表恰有一行（本地演示库 `tasks` 58 = `task_assignees` 58），`tasks.assignee_id` 与 `tasks_assignee_status_idx` 均已不存在 | 本地通过 |
+| ADR040-API-INT-001 | HTTP + PostgreSQL | 多负责人读写 | 创建/编辑/改派多名负责人落库回读；集合未变化时不重写关联表（保留失效成员历史）；仅新绑定的负责人收到通知；`TaskReadModel.dueAt` 为 `Date`（原始行 + 边界映射），锁读查询不使用 `LATERAL`（PostgreSQL `0A000`） | 本地通过（API 集成 50 文件 481 例） |
+| ADR040-READPORT-001 | PostgreSQL | 归属与筛选按集合判定 | 「我的任务」、看板、聚合组、遗留项工作流均以 `EXISTS (… task_assignees …)` 判定负责人，标量 `assigneeId` 由 `min(user_id)` 派生；`aggregate-read-ports.integration.test.ts` 断言规划器采用 `task_assignees_user_idx` | 本地通过 |
+| ADR040-SEED-001 | 数据 | 演示种子与夹具清理 | `database/seed/demo-data.sql` 新增 `app.task_assignees` COPY 段（53 行）、`export-demo-seed.mjs` 表清单同步，`pnpm db:seed:check` 无漂移；`apps/e2e/helpers/fixture-cleanup.ts` 按关联表删除夹具负责人行 | 本地通过 |
+| ADR040-WEB-001 | Web 单元 | 多选与展示 | `GlobalTaskCreateModal`/`TasksPanel`/`ConvertLeftoverTask` 使用多选（至少一名校验），列表与详情以「、」连接多名负责人；Web 单测 85 文件 555 例通过 | 本地通过 |
+| ADR040-BROWSER-001 | 浏览器实测 | 真实创建多负责人任务 | 开发实例（`127.0.0.1:5173` + API `127.0.0.1:3000`）：新建任务指派邵晨宇与林雨妍两人，列表行与详情面板均显示两名负责人，`GET /api/v1/tasks?scope=mine` 返回该任务 | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm db:migrate`（应用 `0020`/`0021`）→ `db:migrations:check`（22 条）→ `db:seed:check`（28 张业务表）→ `contract:generate`（5 产物）→ `contract:drift` → `contract:validate`（108 条）→ `permissions:check`（108/108）；`apps/api` 单测 65 文件 364 例、`apps/web` 85 文件 555 例、`packages/api-contract` 16 文件 100 例、`apps/ops` 52 例、`database` 15 例；真实 PostgreSQL 集成 `apps/api` 50 文件 481 例；`pnpm lint`、`check:deps`（528 文件）、`check:frontend:boundaries`（282 模块）、`check:secrets`（1065 文件）、`check:docs`（86 个 Markdown）、`check:deploy:test`（5 refs）、各包生产构建均通过；改动文件 Prettier 检查通过。验证后已按 2026-09-17 指示清理测试夹具（删除夹具用户 3663、夹具项目 1923、业务行 67226、审计行 3009，保留 3 个真实项目；SYSTEM 审计链因中段删除留下一个可检测断点，清理脚本已提示）。
+
+未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入。
