@@ -3085,3 +3085,22 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web test`（85 文件 563 例；既有 `app-router.test.tsx` 1 例在 HEAD 版本上用 `git stash` 对照同样失败，属本地负载敏感的间歇失败，与本批 diff 无关）；本批相关定向 `vitest` 11 文件 105 例全绿；`pnpm check:frontend:boundaries`（283 模块 1393 依赖）通过；真实 E2E 定向用例通过。
 
 未运行 / 已知偏差：① 未跑 `pnpm check` 整链、全量 `pnpm test:e2e`、`deps:audit`（需 registry 访问）与 GitHub Actions；② R-3 的 `leftoverCount` / `leftoverSample` 后端恒 0 缺陷本次未改后端——页面已不再依赖该字段，但契约字段仍在，建议后续单独修复（其集成测试夹具需同步改成真实路径）或收敛契约；③ 页头计数与侧栏一样是全局范围，选定项目筛选后不随列表一起收窄，弹窗内容在选定项目时可能小于该数字（既有设计，本次未改）。
+
+## 迭代记录草稿箱「空则收起」（产品要求，2026-09-22 本地落库）
+
+产品反馈（原文）：「这个草稿箱在没有草稿的时候默认收起状态，在有草稿的时候默认显示，也就是保持现有状态」（附图为 `/records` 全部项目视图的「我的草稿」区，下方是已发布记录时间线）。本批为纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+口径：草稿箱的**内容区**只在真有内容可渲染时出现——有草稿卡片，或读取失败需要给出重试入口；空草稿箱（含首次加载中）默认收起，不再渲染「暂无草稿」空态卡片，记录时间线上移。标题行（`我的草稿` / `项目草稿` / `来源草稿`）与说明、以及来源任务语境下的「新建来源草稿」入口都在标题行 `CalmSectionTitle` 里，始终保留：收起既不带走创建入口，也不吞掉错误提示；同时沿用 RECORD-DRAFTS-CARD-001 的「草稿箱默认平铺、标题无折叠箭头」口径，没有重新引入折叠控件。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFTS-EMPTY-WEB-001 | Web 单元 | 空草稿箱收起 | `RecordDraftsView.test.tsx`「收起草稿箱：空草稿时只留标题行，不渲染内容区与「暂无草稿」空态」：`listRecordDrafts` 返回空页时 `heading 项目草稿` 可见，`#record-draft-list` 与文本「暂无草稿」都不存在 | 本地通过（2026-09-22） |
+| RECORD-DRAFTS-EMPTY-WEB-002 | Web 单元 | 有草稿时照旧展开 | 同文件「展开草稿箱：有草稿时默认照旧平铺卡片」：`#record-draft-list` 存在且「继续编辑」按钮 1 个 | 本地通过（2026-09-22） |
+| RECORD-DRAFTS-EMPTY-WEB-003 | Web 单元 | 全部项目视图同样收起 | 同文件「全部项目视图的空草稿箱同样收起，标题仍是「我的草稿」」：`listMyRecordDrafts` 返回空页时 `heading 我的草稿` 可见、`#record-draft-list` 为 null | 本地通过（2026-09-22） |
+| RECORD-DRAFTS-EMPTY-WEB-004 | Web 单元 | 来源任务语境保留创建入口 | 同文件「来源任务的空草稿箱收起，标题行的「新建来源草稿」入口保留」：`getTaskRecordDrafts` 返回空列表时按钮「新建来源草稿」可见、`#record-draft-list` 为 null | 本地通过（2026-09-22） |
+| RECORD-DRAFTS-EMPTY-WEB-005 | Web 单元 | 读取失败不被收起吞掉 | 同文件「草稿读取失败时内容区仍然展开，保留错误与重试入口」：`listRecordDrafts` 以 `ApiError(500)` 拒绝时按钮「重试草稿列表」可见 | 本地通过（2026-09-22） |
+| RECORD-DRAFTS-EMPTY-GATE-001 | 静态门禁 | 类型、风格与全量前端 | `pnpm --filter @inpulse/web test`（85 文件 576 例）、`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（19 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm exec prettier --write`（2 个改动文件）、`pnpm lint` 通过 | 本地通过（2026-09-22） |
+
+本地实际执行（2026-09-22 草稿箱「空则收起」）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（19 例通过）、`pnpm --filter @inpulse/web test`（85 文件 576 例通过）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`（eslint .）、`pnpm exec prettier --write`（`RecordDraftsView.tsx`、`RecordDraftsView.test.tsx`）通过。
+
+未运行：整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright；`record-feed.spec.ts` 的 `#record-draft-list` 与 `heading 我的草稿` 断言、`record-drafts.spec.ts` 的 `.draft-card` 断言都在「已创建草稿」路径上，按本口径不受影响但本轮未跑）、`pnpm deps:audit`、GitHub Actions。浏览器实测本轮未做。

@@ -23,11 +23,7 @@ import {
   type RecordDraftItem,
 } from "@generated/api";
 import { useScopedSearchParams } from "@features/common/search-params-scope";
-import {
-  CalmBadge,
-  CalmEmptyState,
-  CalmSectionTitle,
-} from "@features/common/components/Calm";
+import { CalmBadge, CalmSectionTitle } from "@features/common/components/Calm";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 /** 卡片时间用 9/21 11:35 这种短格式，1/3 宽的卡片才放得下。 */
 function formatDraftTime(value: string) {
@@ -153,6 +149,12 @@ export function RecordDraftsView({
       : isAllProjects
         ? myDrafts.isError
         : projectDrafts.isError;
+  /**
+   * 草稿箱内容区只在真的有内容可展示时渲染：有草稿卡片，或读取失败需要给出重试入口。
+   * 空草稿箱（含首次加载中）默认收起，不占记录列表上方的竖向空间；标题行、说明与
+   * 「新建来源草稿」入口仍在标题行里，所以收起不会带走创建入口，也不会吞掉错误提示。
+   */
+  const showDraftList = draftCards.length > 0 || listFailed;
   const reloadList = () =>
     void (taskId > 0
       ? sourceQuery.refetch()
@@ -294,71 +296,65 @@ export function RecordDraftsView({
           </Button>
         ) : null}
       </CalmSectionTitle>
-      <div id="record-draft-list">
-        {listPending ? (
-          <Spin />
-        ) : listFailed ? (
-          <Alert
-            type="error"
-            title={recordDraftErrorMessage(listError)}
-            action={<Button onClick={reloadList}>重试草稿列表</Button>}
-          />
-        ) : !draftCards.length ? (
-          <CalmEmptyState
-            icon="gitBranch"
-            title="暂无草稿"
-            description={
-              taskId
-                ? "此任务还没有草稿，可以显式新建。"
-                : isAllProjects
-                  ? "你还没有在任何项目中创建过草稿。"
-                  : "你还没有在该项目中创建草稿。"
-            }
-          />
-        ) : (
-          <div className="draft-card-grid">
-            {draftCards.map((item) => (
-              <button
-                type="button"
-                className="draft-card"
-                key={item.draft.id}
-                onClick={() => openDraft(item)}
-              >
-                <span className="draft-card-top">
-                  <CalmBadge tone="amber">草稿</CalmBadge>
-                  <span className="draft-card-action">继续编辑 →</span>
-                </span>
-                <strong className="draft-card-title">{item.draft.title}</strong>
-                <span className="draft-card-meta">
-                  <span className="draft-card-scope">
-                    {item.projectName === null ? "" : item.projectName + " / "}
-                    {item.moduleName ?? "名称暂不可用"}
-                    {item.draft.featureId
-                      ? " / " + (item.featureName ?? "名称暂不可用")
-                      : ""}
+      {showDraftList && (
+        <div id="record-draft-list">
+          {listPending ? (
+            <Spin />
+          ) : listFailed ? (
+            <Alert
+              type="error"
+              title={recordDraftErrorMessage(listError)}
+              action={<Button onClick={reloadList}>重试草稿列表</Button>}
+            />
+          ) : (
+            <div className="draft-card-grid">
+              {draftCards.map((item) => (
+                <button
+                  type="button"
+                  className="draft-card"
+                  key={item.draft.id}
+                  onClick={() => openDraft(item)}
+                >
+                  <span className="draft-card-top">
+                    <CalmBadge tone="amber">草稿</CalmBadge>
+                    <span className="draft-card-action">继续编辑 →</span>
                   </span>
-                  <span className="draft-card-author">
-                    <span className="draft-card-avatar" aria-hidden="true">
-                      {(item.authorName ?? "?").slice(0, 1)}
+                  <strong className="draft-card-title">
+                    {item.draft.title}
+                  </strong>
+                  <span className="draft-card-meta">
+                    <span className="draft-card-scope">
+                      {item.projectName === null
+                        ? ""
+                        : item.projectName + " / "}
+                      {item.moduleName ?? "名称暂不可用"}
+                      {item.draft.featureId
+                        ? " / " + (item.featureName ?? "名称暂不可用")
+                        : ""}
                     </span>
-                    {item.authorName ?? "名称暂不可用"}
+                    <span className="draft-card-author">
+                      <span className="draft-card-avatar" aria-hidden="true">
+                        {(item.authorName ?? "?").slice(0, 1)}
+                      </span>
+                      {item.authorName ?? "名称暂不可用"}
+                    </span>
+                    <span className="draft-card-time">
+                      更新 {formatDraftTime(item.draft.updatedAt)}
+                    </span>
                   </span>
-                  <span className="draft-card-time">
-                    更新 {formatDraftTime(item.draft.updatedAt)}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        {listHasMore && (
-          <div className="record-load-more">
-            <Button disabled={listFetchingMore} onClick={loadMore}>
-              {listFetchingMore ? "正在加载…" : "加载更多"}
-            </Button>
-          </div>
-        )}
-      </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {listHasMore && (
+            <div className="record-load-more">
+              <Button disabled={listFetchingMore} onClick={loadMore}>
+                {listFetchingMore ? "正在加载…" : "加载更多"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       <Modal
         className="draft-detail-modal"
         open={recordId > 0 && editorTarget === null}

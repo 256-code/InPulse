@@ -630,3 +630,72 @@ it("reports the header action as unavailable when every visible project is archi
   render(mountView(archived, "/records", 3, 0, canCreate));
   await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(false));
 });
+
+it("收起草稿箱：空草稿时只留标题行，不渲染内容区与「暂无草稿」空态", async () => {
+  mount(
+    client({
+      listRecordDrafts: vi.fn().mockResolvedValue({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+      }),
+    }),
+  );
+  // 空草稿箱是「收起」而不是「整块消失」：标题行仍在，内容区不占竖向空间。
+  expect(
+    await screen.findByRole("heading", { name: "项目草稿" }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(document.querySelector("#record-draft-list")).toBeNull(),
+  );
+  expect(screen.queryByText("暂无草稿")).toBeNull();
+});
+
+it("展开草稿箱：有草稿时默认照旧平铺卡片", async () => {
+  mount(client());
+  expect(
+    await screen.findByRole("heading", { name: "项目草稿" }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(document.querySelector("#record-draft-list")).not.toBeNull(),
+  );
+  expect(
+    await screen.findAllByRole("button", { name: /继续编辑/ }),
+  ).toHaveLength(1);
+});
+
+it("全部项目视图的空草稿箱同样收起，标题仍是「我的草稿」", async () => {
+  render(mountView(client(), "/records", 3));
+  expect(
+    await screen.findByRole("heading", { name: "我的草稿" }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(document.querySelector("#record-draft-list")).toBeNull(),
+  );
+});
+
+it("来源任务的空草稿箱收起，标题行的「新建来源草稿」入口保留", async () => {
+  const api = client({
+    getTaskRecordDrafts: vi.fn().mockResolvedValue({ source, items: [] }),
+  });
+  mount(api, "/records?projectId=1&moduleId=2&taskId=8");
+  expect(
+    await screen.findByRole("button", { name: "新建来源草稿" }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(document.querySelector("#record-draft-list")).toBeNull(),
+  );
+});
+
+it("草稿读取失败时内容区仍然展开，保留错误与重试入口", async () => {
+  mount(
+    client({
+      listRecordDrafts: vi
+        .fn()
+        .mockRejectedValue(new ApiError(500, { code: "boom" })),
+    }),
+  );
+  expect(
+    await screen.findByRole("button", { name: "重试草稿列表" }),
+  ).toBeVisible();
+});
