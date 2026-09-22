@@ -22,7 +22,7 @@ export interface RecordDetailTarget {
   readonly title: string;
   readonly recordStatus: "PUBLISHED" | "VOID";
   readonly publishedAt: string;
-  /** 编号后的语境标签（聚合组的来源任务等）；缺省时眉标只显示编号。 */
+  /** 编号后的语境标签（聚合组的分支任务等）；缺省时眉标只显示编号。 */
   readonly contextLabel?: string | null;
   /** 作废回退里唯一可读的链接快照；调用方没有链接数据时给空数组。 */
   readonly externalLinks?: readonly TaskGroupRecordLink[];

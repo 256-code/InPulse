@@ -194,7 +194,7 @@ export class TaskGroupsHttpService {
       ) {
         status = 409;
         code = "TASK_ALREADY_MERGED";
-        message = "来源任务已属于聚合组，请先解除原关系";
+        message = "分支任务已属于聚合组，请先解除原关系";
       } else if (
         uniqueViolation(error, "task_group_members_one_active_main_unique")
       ) {

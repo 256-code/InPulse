@@ -80,12 +80,8 @@ export const projectItemSchema = z
 
 export type ProjectItem = z.infer<typeof projectItemSchema>;
 
-/** ADR-033：项目内角色；成员被移除即失效，重新加入从 MEMBER 开始。 */
-export const projectMemberRoleSchema = z.enum([
-  "MEMBER",
-  "PROJECT_ADMIN",
-  "LEADER",
-]);
+/** ADR-033/ADR-039：项目内角色（组长或普通成员）；成员被移除即失效，重新加入从 MEMBER 开始。 */
+export const projectMemberRoleSchema = z.enum(["MEMBER", "LEADER"]);
 
 export type ProjectMemberRole = z.infer<typeof projectMemberRoleSchema>;
 
@@ -324,8 +320,8 @@ export type ProjectMemberReplayContext = z.infer<
 >;
 
 /**
- * ADR-033：任命/撤销项目内角色。请求只携带目标角色；谁能设哪些角色由
- * 服务端门禁决定（系统管理员三种皆可，本项目组长只能 MEMBER/PROJECT_ADMIN）。
+ * ADR-033/ADR-039：任命/撤销组长。请求只携带目标角色（MEMBER 或 LEADER）；
+ * 谁能设哪些角色由服务端门禁决定（仅系统管理员可调用，用于转移或撤销组长）。
  */
 export const setProjectMemberRoleRequestSchema = z
   .object({

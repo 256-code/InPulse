@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
+import { SHELL_COUNTERS_QUERY_KEY } from "@shared/api/shell-counters";
 import { useFeatures } from "@features/features/feature-query";
+import { useOpenLeftoverCount } from "@features/issues/issues-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjectDetail } from "@features/projects/project-query";
 
@@ -15,8 +17,6 @@ import { useProjectDetail } from "@features/projects/project-query";
  */
 
 const SHELL_COUNTER_STALE_TIME = 60_000;
-/** R-6 单页上限（AGGREGATE_READ_PAGE_LIMIT_MAX）；超出时只显示上限值。 */
-const SHELL_COUNTER_PAGE_LIMIT = 100;
 
 export interface ShellQueryOptions {
   readonly client?: InpulseApiClient | undefined;
@@ -37,33 +37,24 @@ export function useShellCounters({
   const api = useMemo(() => client ?? createApiClient(), [client]);
 
   const tasks = useQuery({
-    queryKey: ["shell-counters", "my-open-tasks"],
+    queryKey: [...SHELL_COUNTERS_QUERY_KEY, "my-open-tasks"],
     queryFn: ({ signal }) => api.listMyTasks({ limit: 1 }, { signal }),
     enabled,
     staleTime: SHELL_COUNTER_STALE_TIME,
     retry: false,
   });
 
-  const leftovers = useQuery({
-    queryKey: ["shell-counters", "open-leftovers"],
-    queryFn: ({ signal }) =>
-      api.listLeftoverItems(
-        { bucket: "OPEN", limit: SHELL_COUNTER_PAGE_LIMIT },
-        { signal },
-      ),
+  // 未闭环遗留项计数与任务中心页头共用同一个查询（2026-09-22 修）：查询键挂在
+  // shell-counters 前缀下，写成功后由全局 MutationCache 一起失效，两处数字一致。
+  const openLeftoverCount = useOpenLeftoverCount({
+    client: api,
     enabled,
     staleTime: SHELL_COUNTER_STALE_TIME,
-    retry: false,
   });
 
-  const leftoverPage = leftovers.data;
   return {
     myOpenTaskCount: tasks.data?.stats.myOpen ?? null,
-    openLeftoverCount: leftoverPage
-      ? leftoverPage.hasMore
-        ? SHELL_COUNTER_PAGE_LIMIT
-        : leftoverPage.items.length
-      : null,
+    openLeftoverCount,
   };
 }
 

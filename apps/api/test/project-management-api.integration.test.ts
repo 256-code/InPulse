@@ -577,7 +577,7 @@ describe("F-06.2 project archive API", () => {
     await client.sql.begin(async (transaction) => {
       const [unfinished] = await transaction<Array<{ id: number }>>`
         INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, assignee_id, creator_id
+          project_id, module_id, scope_type, code, title, creator_id
         )
         VALUES (
           ${value.project.projectId},
@@ -585,10 +585,13 @@ describe("F-06.2 project archive API", () => {
           'MODULE',
           ${`${value.project.code}-T-1`},
           '未完成任务',
-          ${value.owner.userId},
           ${value.owner.userId}
         )
         RETURNING id
+      `;
+      await transaction`
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        VALUES (${unfinished!.id}, ${value.owner.userId}, ${value.project.projectId})
       `;
       await transaction`
         INSERT INTO app.task_status_history (
@@ -605,7 +608,7 @@ describe("F-06.2 project archive API", () => {
       const [finished] = await transaction<Array<{ id: number }>>`
         INSERT INTO app.tasks (
           project_id, module_id, scope_type, code, title, work_status,
-          completion_note, completed_at, assignee_id, creator_id
+          completion_note, completed_at, creator_id
         )
         VALUES (
           ${value.project.projectId},
@@ -616,10 +619,13 @@ describe("F-06.2 project archive API", () => {
           'DONE',
           '已完成',
           ${finishedAt.toISOString()}::timestamptz,
-          ${value.owner.userId},
           ${value.owner.userId}
         )
         RETURNING id
+      `;
+      await transaction`
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        VALUES (${finished!.id}, ${value.owner.userId}, ${value.project.projectId})
       `;
       await transaction`
         INSERT INTO app.task_status_history (

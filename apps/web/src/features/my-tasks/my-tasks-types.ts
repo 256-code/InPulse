@@ -73,6 +73,11 @@ export interface MyTaskListItem {
   readonly updatedAt: string;
   readonly completedAt: string | null;
   readonly creatorId: number;
+  /**
+   * 全部负责人，恒非空、按 userId 升序（ADR-040）。assignee 是它的派生标量
+   * （等于 assignees[0]），保留给只关心单个负责人的调用方；展示一律用 assignees。
+   */
+  readonly assignees: readonly MyTaskAssigneeRef[];
   readonly assignee: MyTaskAssigneeRef;
   readonly hasPublishedRecord: boolean;
   /**

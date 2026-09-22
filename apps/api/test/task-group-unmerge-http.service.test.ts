@@ -237,14 +237,14 @@ describe("F-24 解除合并 HTTP 边界", () => {
       failWith: new TaskGroupCommandError(
         409,
         "TASK_NOT_MERGED",
-        "任务当前不是活跃来源分支，无法解除合并",
+        "任务当前不是活跃分支，无法解除合并",
       ),
     });
     const result = await service.handle(request());
     expect(result).toMatchObject({ status: 409 });
     expect(result.body).toMatchObject({
       code: "TASK_NOT_MERGED",
-      message: "任务当前不是活跃来源分支，无法解除合并",
+      message: "任务当前不是活跃分支，无法解除合并",
     });
   });
 

@@ -164,7 +164,7 @@ export function MergeIntoMainTaskModal({
           : error.status === 404
             ? "任务不存在，或当前无法访问（跨项目任务不能直接合并）。"
             : error.status === 409
-              ? "来源任务已属于其他聚合组，或任务状态已变化。请重新选择主任务后再试。"
+              ? "分支任务已属于其他聚合组，或任务状态已变化。请重新选择主任务后再试。"
               : error.status === 422
                 ? "请求未被接受：不能把任务合并到自己，或字段不合法。"
                 : error.status === 429
@@ -203,7 +203,7 @@ export function MergeIntoMainTaskModal({
       }
     >
       <p>
-        当前任务：{task.code} {task.title}。合并后当前任务作为来源分支保留，
+        当前任务：{task.code} {task.title}。合并后当前任务作为分支任务保留，
         不删除、不覆盖任何历史。
       </p>
       <label htmlFor="merge-main-search">
@@ -281,7 +281,7 @@ export function MergeIntoMainTaskModal({
             disabled={busy}
             onChange={() => setSourceKind("ACTIVE")}
           />
-          活动来源分支（合并后仍继续推进）
+          活动分支（合并后仍继续推进）
         </label>
         <label>
           <input
@@ -291,7 +291,7 @@ export function MergeIntoMainTaskModal({
             disabled={busy}
             onChange={() => setSourceKind("HISTORICAL")}
           />
-          历史来源分支（仅保留历史，不再推进）
+          历史分支（仅保留历史，不再推进）
         </label>
       </fieldset>
       <label htmlFor="merge-note">合并说明（选填）</label>
@@ -313,7 +313,7 @@ export function MergeIntoMainTaskModal({
           type="error"
           title={
             error === null && needsRefresh
-              ? "来源任务已属于其他聚合组，或任务状态已变化。请重新选择主任务后再试。"
+              ? "分支任务已属于其他聚合组，或任务状态已变化。请重新选择主任务后再试。"
               : errorText
           }
           action={

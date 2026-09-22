@@ -144,7 +144,7 @@ async function addMember(projectId: number, userId: number): Promise<void> {
 }
 
 interface TaskOptions {
-  readonly assigneeId?: number;
+  readonly assigneeIds?: number[];
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
@@ -174,7 +174,7 @@ async function newTask(
       {
         title: options.title ?? "聚合读端口任务",
         description: "",
-        assigneeId: options.assigneeId ?? scope.userId,
+        assigneeIds: options.assigneeIds ?? [scope.userId],
         priority: options.priority ?? "NORMAL",
         dueAt: options.dueAt ?? null,
       },
@@ -317,10 +317,15 @@ async function newTaskBatch(
 ): Promise<void> {
   await client.sql.begin(async (tx) => {
     const rows = await tx<{ id: number }[]>`
-      INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, assignee_id, creator_id, priority, work_status, lifecycle_status)
-      SELECT ${scope.projectId}, ${scope.moduleId}, NULL, 'MODULE', ${scope.code + "-T-"} || (${startCode} + n), '批量夹具任务 ' || n, '', ${scope.userId}, ${scope.userId}, 'NORMAL', 'TODO', 'ACTIVE'
+      INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, description, creator_id, priority, work_status, lifecycle_status)
+      SELECT ${scope.projectId}, ${scope.moduleId}, NULL, 'MODULE', ${scope.code + "-T-"} || (${startCode} + n), '批量夹具任务 ' || n, '', ${scope.userId}, 'NORMAL', 'TODO', 'ACTIVE'
         FROM generate_series(1, ${count}) AS n
       RETURNING id
+    `;
+    await tx`
+      INSERT INTO app.task_assignees (task_id, user_id, project_id)
+      SELECT id, ${scope.userId}, ${scope.projectId}
+        FROM unnest(${rows.map((row) => row.id)}::integer[]) AS id
     `;
     await tx`
       INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by)
@@ -514,7 +519,7 @@ describe("TaskQueryPort list and count", () => {
     const other = await newProject();
     const colleague = await createUser(client.sql);
     await addMember(scope.projectId, colleague);
-    const todo = await newTask(scope, { assigneeId: colleague });
+    const todo = await newTask(scope, { assigneeIds: [colleague] });
     const done = await newTask(scope, { workStatus: "DONE" });
     const canceled = await newTask(scope, { workStatus: "CANCELED" });
     const foreign = await newTask(other);
@@ -873,11 +878,11 @@ describe("MyTaskQueryPort.list", () => {
 
     const createdAndAssigned = await newTask(scope);
     const createdForTeammate = await newTask(scope, {
-      assigneeId: teammateUserId,
+      assigneeIds: [teammateUserId],
     });
     const teammateCreatedForMe = await newTask(scope, {
       actorUserId: teammateUserId,
-      assigneeId: scope.userId,
+      assigneeIds: [scope.userId],
     });
 
     const byAssignee = await uow.run((tx) =>
@@ -1276,13 +1281,13 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     const rows = await client.sql.unsafe<
       { indexname: string; indexdef: string }[]
     >(
-      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'tasks' AND indexname IN ('tasks_project_status_idx', 'tasks_assignee_status_idx', 'tasks_creator_status_idx') ORDER BY indexname",
+      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'app' AND ((tablename = 'tasks' AND indexname IN ('tasks_project_status_idx', 'tasks_creator_status_idx')) OR (tablename = 'task_assignees' AND indexname = 'task_assignees_user_idx')) ORDER BY indexname",
     );
     const projectIndex = rows.find(
       (row) => row.indexname === "tasks_project_status_idx",
     );
     const assigneeIndex = rows.find(
-      (row) => row.indexname === "tasks_assignee_status_idx",
+      (row) => row.indexname === "task_assignees_user_idx",
     );
     const creatorIndex = rows.find(
       (row) => row.indexname === "tasks_creator_status_idx",
@@ -1290,7 +1295,7 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     expect(projectIndex?.indexdef).toContain(
       "(project_id, lifecycle_status, work_status, id)",
     );
-    expect(assigneeIndex?.indexdef).toContain("(assignee_id, work_status, id)");
+    expect(assigneeIndex?.indexdef).toContain("(user_id, task_id)");
     expect(creatorIndex?.indexdef).toContain("(creator_id, work_status, id)");
   });
 
@@ -1298,7 +1303,7 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     const scope = await newProject();
     const bulk = await newProject();
     await newTaskBatch(bulk, 200, 400);
-    const mine = await newTask(scope, { assigneeId: scope.userId });
+    const mine = await newTask(scope, { assigneeIds: [scope.userId] });
     const listCall = captureTransaction();
     await taskQuery.list(listCall.tx, {
       projectIds: [scope.projectId],
@@ -1333,7 +1338,8 @@ describe("读端口查询计划（A 裁决 §6 冲突 B 的 EXPLAIN 上限依据
     const excludedPlan = await explain(excludedCall.calls[0]!);
 
     expect(listPlan).toContain("tasks_project_status_idx");
-    expect(assigneePlan).toContain("tasks_assignee_status_idx");
+    // 负责人已迁到 app.task_assignees（ADR-040）：EXISTS 子查询应命中关联表索引，tasks 上不再有负责人索引
+    expect(assigneePlan).toMatch(/task_assignees_user_idx|task_assignees_pkey/);
     for (const plan of [listPlan, countPlan, assigneePlan, excludedPlan]) {
       expect(plan).toMatch(/Index Only Scan|Index Scan|Bitmap Heap Scan/);
       expect(plan).not.toMatch(/Seq Scan on tasks/);

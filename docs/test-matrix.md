@@ -801,7 +801,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 | R-5 路由顺序：`/task-groups/memberships` 不被 `/task-groups/{groupId}` 吞掉 | `aggregate-read-api.integration.test.ts` 实际断言（Controller 注册顺序） |
 | `priority` / `includeCanceled` 的 `EXPLAIN (ANALYZE, BUFFERS)`（裁决 §10.3 验收要求）：30,481 行真实结构 `app.tasks` 下两条查询均走反向主键索引扫描，非顺序扫描 | 见下方计划文本 |
 
-`EXPLAIN (ANALYZE, BUFFERS)` 关键输出（本地 PostgreSQL 18.6，`app.tasks` 30,481 行，含 `tasks_assignee_status_idx (assignee_id, work_status, id)` 与 `tasks_pkey`）：
+`EXPLAIN (ANALYZE, BUFFERS)` 关键输出（本地 PostgreSQL 18.6，`app.tasks` 30,481 行，含 `tasks_assignee_status_idx (assignee_id, work_status, id)` 与 `tasks_pkey`；该索引已随 [ADR-040](adr/ADR-040.md) 的 `0021_contract_task_assignees.sql` 删除，下方为当时证据，现对应索引为 `task_assignees_user_idx (user_id, task_id)`）：
 
 - `priority = 'HIGH'` + 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 111，Buffers shared hit: 40，Execution Time: 0.149 ms。
 - `work_status = ANY('{TODO,CANCELED}')`（`includeCanceled` 组合）+ 有效任务过滤 + `ORDER BY id DESC LIMIT 21`：`Index Scan Backward using tasks_pkey`，Rows Removed by Filter: 51，Buffers shared hit: 34，Execution Time: 0.058 ms。
@@ -2998,3 +2998,90 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-BROWSER-026 | 浏览器实测 | D 青碧落地取色与已完成顺序 | 无头 Chromium 1500 宽（本地 dev 5173，成员账号 xiaoshao，只读浏览既有演示数据）：`/tasks?status=done` 的 `.calm-task-card.tone-prio-done` 计算底色 `rgb(225, 242, 242)`（`#e1f2f2`）、描边 `rgb(188, 221, 223)`（`#bcdddf`）、标题 `rgb(29, 91, 98)`（`#1d5b62`），15 张已完成卡在页面上的先后顺序与数据库 `WHERE work_status = 'DONE' ORDER BY completed_at DESC` 逐条一致（F-01 09-12 07:39:03 → … → F-07 09-08 11:31:17）；`/projects/1/task-board` 的 `.tb-card.tone-prio-done` 同值，切「列表」视图后 `.tb-row--done` 底色 `rgb(225, 242, 242)`、`--tb-row-accent` `#1d5b62`（该行日期文案仍是看板自带的语义绿 `#58937a`）；页面内 `.tone-prio-overdue` / `.tone-prio-soon` 节点数仍为 0 | 本地通过（2026-09-22） |
 
 本地实际执行（2026-09-22 「已完成」改 D 青碧 + 完成时间倒序）：`pnpm --filter @inpulse/web test`（85 文件 560 例）、`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`（50 例）、`pnpm --filter @inpulse/api exec vitest run test/aggregate-read.service.test.ts test/aggregate-read-cursor.test.ts`（37 例）、真实 PostgreSQL 集成 `--config vitest.integration.config.ts test/aggregate-read-ports.integration.test.ts`（23 例）、真实 PostgreSQL 集成全量 `--config vitest.integration.config.ts`（48 文件 480 例通过，另有 2 例与本轮无关的失败：`project-member-management-api.integration.test.ts` 期望 422 得 500、`projects-read-api.integration.test.ts` 插入 `PROJECT_ADMIN` 违反 CHECK）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm --filter @inpulse/api exec tsc -p tsconfig.test.json --noEmit`（仅剩 3 处与本轮无关的 `PROJECT_ADMIN` 错误）、`pnpm exec prettier --write`（12 个改动文件）、`pnpm format:check`、`pnpm exec eslint`（改动文件）通过；浏览器实测见 CARD-COLOR-BROWSER-026（无头 Chromium 1500 宽指向本地 dev 5173，只读浏览既有演示数据，未新增或修改业务数据）；dev 树 `apps/api/dist` 已重建并重启 :3000（`TASK_LIST_SORT_KEY_VERSION = 3` 已生效）；`docs/task-card-colors.md` 的《「已完成」》章节改写为青碧一套色值，配图 `cards-overview.png` / `board-overview.png` / `group-states.png` 按新色重出。未运行：整链 `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright；`apps/e2e/tests/task-groups.spec.ts` 的断言已按新口径同步但本轮未跑）、`pnpm deps:audit`、GitHub Actions；`apps/api` 的 3 处 `PROJECT_ADMIN` 类型错误与本轮无关，未修。
+
+## 任务多负责人（ADR-040，2026-09-22 本地落库）
+
+任务负责人由 `app.tasks.assignee_id` 单一列改为 `app.task_assignees(task_id, user_id, project_id, created_at)` 关联表，语义为**平权多负责人**（任一负责人都能推进状态与编辑、都进「我的任务」、都收指派通知）。迁移 `0020_task_assignees.sql`（expand：建表、复合外键 `(task_id, project_id) → tasks(id, project_id)`、`task_assignees_active_assignee` 活跃成员防线、`task_assignees_immutable_columns`、索引 `task_assignees_user_idx`、`app_runtime`/`app_backup` 授权、按旧列回填）与 `0021_contract_task_assignees.sql`（contract：删除 `tasks.assignee_id` 与 `tasks_assignee_status_idx`）。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR040-CONTRACT-001 | 契约 | `assigneeIds` 边界与规范化 | `tasks.test.ts`：`assigneeIds` 1～20 人、空数组与 `0` 值 422、服务端去重并按用户 ID 升序；响应派生 `assigneeId === assigneeIds[0]` | 本地通过（api-contract 16 文件 100 例） |
+| ADR040-FINGERPRINT-001 | 契约 | 幂等契约版本随破坏性变更递增 | `createTask`/`updateTask` 升 `2.0.0`、`transitionTask` 升 `3.0.0`、`completeTask` 与模块变体升 `2.0.0`，`archiveTask`/`restoreTask` 继承；`task-completion.test.ts` 断言历史指纹 `["1.0.0","2.0.0","3.0.0"]`；`contract:validate` 无 `[contract-fingerprint]` 违例 | 本地通过（108 条路由） |
+| ADR040-DB-001 | PostgreSQL | 关联表防线 | 主键 `(task_id, user_id)` 拒绝重复指派；任务与项目错配被复合外键拒绝 23503；停用用户或非项目活跃成员被 `task_assignees_active_assignee` 拒绝；`task_id`/`user_id`/`project_id`/`created_at` 不可改写；`app_runtime` 无 `UPDATE` 授权 | 本地通过（真实 PostgreSQL 集成） |
+| ADR040-DB-002 | 迁移 | expand/contract 与回填 | `db:migrations:check` 22 条通过；升级后每个任务在关联表恰有一行（本地演示库 `tasks` 58 = `task_assignees` 58），`tasks.assignee_id` 与 `tasks_assignee_status_idx` 均已不存在 | 本地通过 |
+| ADR040-API-INT-001 | HTTP + PostgreSQL | 多负责人读写 | 创建/编辑/改派多名负责人落库回读；集合未变化时不重写关联表（保留失效成员历史）；仅新绑定的负责人收到通知；`TaskReadModel.dueAt` 为 `Date`（原始行 + 边界映射），锁读查询不使用 `LATERAL`（PostgreSQL `0A000`） | 本地通过（API 集成 50 文件 481 例） |
+| ADR040-READPORT-001 | PostgreSQL | 归属与筛选按集合判定 | 「我的任务」、看板、聚合组、遗留项工作流均以 `EXISTS (… task_assignees …)` 判定负责人，标量 `assigneeId` 由 `min(user_id)` 派生；`aggregate-read-ports.integration.test.ts` 断言规划器采用 `task_assignees_user_idx` | 本地通过 |
+| ADR040-SEED-001 | 数据 | 演示种子与夹具清理 | `database/seed/demo-data.sql` 新增 `app.task_assignees` COPY 段（53 行）、`export-demo-seed.mjs` 表清单同步，`pnpm db:seed:check` 无漂移；`apps/e2e/helpers/fixture-cleanup.ts` 按关联表删除夹具负责人行 | 本地通过 |
+| ADR040-WEB-001 | Web 单元 | 多选与展示 | `GlobalTaskCreateModal`/`TasksPanel`/`ConvertLeftoverTask` 使用多选（至少一名校验），列表与详情以「、」连接多名负责人；Web 单测 85 文件 555 例通过 | 本地通过 |
+| ADR040-BROWSER-001 | 浏览器实测 | 真实创建多负责人任务 | 开发实例（`127.0.0.1:5173` + API `127.0.0.1:3000`）：新建任务指派邵晨宇与林雨妍两人，列表行与详情面板均显示两名负责人，`GET /api/v1/tasks?scope=mine` 返回该任务 | 本地通过 |
+| ADR040-CONTRACT-002 | 契约 | 任务中心（R-3）返回全部负责人 | `myTaskItemSchema.assignees` 为 `userRefSchema` 数组（1～20 名），标量 `assignee` 保留为派生字段（恒等于 `assignees[0]`）；R-3 是 GET 路由（幂等策略 `none`），契约版本无需递增；`contract:drift`（5 产物）、`contract:validate`（108 条）、`permissions:check`（108/108）通过 | 本地通过 |
+| ADR040-READPORT-002 | PostgreSQL | R-3 读端口输出负责人集合 | `MyTaskListRow` 增加 `assigneeIds`（`array_agg(user_id ORDER BY user_id)`，`NULL` 在边界归一为空数组），原 `min(user_id)` 继续供看板等标量调用方使用；单测断言条目 `assignees` 为两人引用且派生 `assignee` 等于首位 | 本地通过（api 单测 65 文件 365 例，其中 1 例为既有 `PROJECT_ADMIN` 失败） |
+| ADR040-WEB-002 | Web 单元 | 任务中心卡片与列表列出全部负责人 | `TaskCenterPageView` 用 `assigneeNamesOf()` 以「、」连接全部负责人（卡片 `calm-card-assignee` 与列表负责人列都带 `title`，集合为空时回落「—」）；`my-tasks-v1-query` 的本地过滤按全部负责人姓名匹配；新增「卡片列出全部负责人而不是只显示第一位」与「列表行的负责人列同样列出全部负责人」2 例 | 本地通过（web 85 文件 557 例） |
+| ADR040-BROWSER-002 | 浏览器实测 | 任务中心显示多负责人 | 本地开发实例（`127.0.0.1:5173` + API `127.0.0.1:3000`，登录邵晨宇）：`GET /api/v1/me/tasks?limit=100` 的 `INPULSE-T-64` 返回 `assignees` 两人（小潘、邵晨宇）且 `assignee` 为小潘；卡片视图显示「负责人：小潘、邵晨宇」，`?view=list` 列表视图负责人列为「小潘、邵晨宇」 | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm db:migrate`（应用 `0020`/`0021`）→ `db:migrations:check`（22 条）→ `db:seed:check`（28 张业务表）→ `contract:generate`（5 产物）→ `contract:drift` → `contract:validate`（108 条）→ `permissions:check`（108/108）；`apps/api` 单测 65 文件 364 例、`apps/web` 85 文件 555 例、`packages/api-contract` 16 文件 100 例、`apps/ops` 52 例、`database` 15 例；真实 PostgreSQL 集成 `apps/api` 50 文件 481 例；`pnpm lint`、`check:deps`（528 文件）、`check:frontend:boundaries`（282 模块）、`check:secrets`（1065 文件）、`check:docs`（86 个 Markdown）、`check:deploy:test`（5 refs）、各包生产构建均通过；改动文件 Prettier 检查通过。验证后已按 2026-09-17 指示清理测试夹具（删除夹具用户 3663、夹具项目 1923、业务行 67226、审计行 3009，保留 3 个真实项目；SYSTEM 审计链因中段删除留下一个可检测断点，清理脚本已提示）。
+
+任务中心「负责人」多值展示（2026-09-22 追加，`fix(tasks)`）：多负责人落库后用户反馈「任务卡片上的负责人怎么只显示一个人」，定位为 R-3 任务中心契约只带派生标量 `assignee`（`min(user_id)`），集合本身没有出接口，视图无法渲染第二名负责人。本批把集合贯通契约、读端口、服务与前端（新增 `ADR040-CONTRACT-002` / `ADR040-READPORT-002` / `ADR040-WEB-002` / `ADR040-BROWSER-002` 四行），标量 `assignee` 保留为派生字段以便看板、统计等按单值消费的调用方无需同批改造。本轮另修复一处会被误判为「代码没生效」的运行时陷阱：`@inpulse/api-contract` 的 `exports.default` 指向 `dist`，只改契约源码而不重建该包产物时，全局响应校验会按旧 Schema 剔除新增字段（表现为接口 200 但响应缺 `assignees`）；改契约后必须同时重建 `packages/api-contract` 的 dist 再重启 API。
+
+未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入。
+
+## 任务中心页头 + 控制条一体化与「未完成 / 已完成」数量角标（方案 A，产品要求，2026-09-22 本地落库）
+
+产品要求（原文）：「这一片区域我希望你帮我重新设计一下，可以网上查查 ui 样式，然后完成和未完成需要有数量显示，最后先展示个样式给我再决定要不要修改」。先交付三套样式预览（A 一体化控制条 / B 下划线标签页 / C 状态统计块），用户看过预览后选定方案 A（「根据方案 A 改」），本批把方案 A 落库为真实实现。纯前端呈现变更：不改契约、不改接口、不动数据库。
+
+口径与实现：
+
+- 数量取自既有 R-3 契约的 `stats.myOpen` / `stats.completed`（负责人维度、按当前 project 范围，与列表筛选同口径），不新增接口、不重复计算；`stats` 不可知（适配器未接线或尚未加载）时两档都不渲染角标，不把「不知道」显示成 0。
+- 控制条：`.task-toolbar-bar` 把「工作状态（带数量）→ 分隔线 → 搜索框（flex:1）→ 项目 / 优先级 / 任务范围三个浅底无描边下拉 → 靠右展示方式」收进一条白底控制条；条内分段控件与搜索框同为 34px 高，标题 → 控制条 → 卡片 的纵向节奏不变。
+- 页头「遗留问题」入口数量由裸文字改为数量签 `.header-count`；数量签与分段角标都对辅助技术隐藏（与侧栏 `.nav-item em` 同口径），按钮可访问名由 `aria-label` 显式给出，仍是「遗留问题 N」。
+- 旧固定宽搜索框规则限定为 `.task-toolbar:not(.task-toolbar-bar)`，迭代记录 / 遗留问题 / 项目动态页不受影响。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKBAR-COUNT-WEB-001 | Web 单元 | 两档显示服务端统计数量 | `TaskCenterPageView.test.tsx` 新增用例：stats 为 `myOpen: 7 / completed: 23` 时「未完成 / 已完成」按钮内 `.segmented-count` 分别为 7 / 23，角标 `aria-hidden="true"` 且 `title="未完成 7 项"`，按钮可访问名仍是「未完成」 | 本地通过 |
+| TASKBAR-COUNT-WEB-002 | Web 单元 | 统计不可知不显示假 0 | 同文件新增用例：适配器不返回 stats 时 `.segmented-count` 数量为 0（空态出现后才断言，避免时序误判）；`CalmSegmented` 只对 `typeof count === "number"` 渲染角标 | 本地通过 |
+| TASKBAR-LEFTCOUNT-WEB-003 | Web 单元 | 遗留问题入口数量签 | 「遗留问题 3」按钮内 `.header-count` 文本为 3 且 `aria-hidden="true"`，按钮名仍为「遗留问题 3」，既有断言口径不变 | 本地通过 |
+| TASKBAR-BROWSER-001 | 浏览器实测 | 真实控制条结构与实测取值 | 真实 E2E 环境（Docker PostgreSQL 18.6 + 生产构建 Vite preview）：控制条高 51px、条内 Select 高 34px、背景 `rgb(243,246,250)`、选中档位角标底色 `rgb(230,242,255)`；1280px 视口下控制条右缘 1246 / 最末控件右缘 1236，不折行 | 本地通过 |
+| TASKBAR-BROWSER-002 | 浏览器实测 | 真实数量闭环 | 临时 E2E 用例在夹具项目创建 3 个任务并完成 2 个后进入 `/tasks`：`.task-toolbar-bar .segmented-count` 恰为 2 个，文本依次为 1（未完成）与 2（已完成），截图留档（用例已删，不入库） | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web test`（85 文件 559 例全绿，改前 557，新增 2 例）；改动文件 ESLint 与 Prettier 通过；真实 E2E 定向运行 `aggregate-views`（2 例）、`task-groups`（2 例）与临时截图用例（1 例）通过；`pnpm --filter @inpulse/web typecheck` 的失败与本次无关（既有 `PROJECT_ADMIN` 残留，`git stash` 对照改动前同样失败，7 个文件）。
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链、全量 `pnpm test:e2e`、`deps:audit`（需 registry 访问）与 GitHub Actions；② 数量角标只跟随 R-3 统计，不随关键词 / 优先级等本地筛选二次计算，细粒度数字以列表为准；③ 窄视口依赖控制条既有 `flex-wrap` 折行，未新增专项用例；④ 纯前端呈现变更，按仓库规则仍需非作者人工评审。
+
+## 侧栏计数随写操作即时更新（前端缺陷修复，2026-09-22 本地落库）
+
+用户报告（附侧栏截图「任务中心 4 / 遗留问题 2」）：「任务中心新建任务完成任务或者遗留问题产生遗留问题或转成任务那些发生修改变化左边导航栏数字不会及时变化需要刷新才变」。定位为侧栏两个计数查询（`["shell-counters","my-open-tasks"]`、`["shell-counters","open-leftovers"]`，带 60 秒 `staleTime`）从未被任何写路径失效，数字只在整页重挂载后更新；本批只改前端缓存失效，不改契约、接口、权限与数据库。
+
+- 新增 `apps/web/src/shared/api/shell-counters.ts`：查询键常量 + `invalidateShellCounters(queryClient)`；放 `shared` 层以便 `app`（布局与全局 provider）与 `features`（写路径）同时引用且不产生反向依赖。
+- 两条失效路径：① `AppProviders` 的全局 `MutationCache.onSuccess` 统一失效，覆盖所有经 React Query mutation 的写操作（不再逐条补 `onSuccess`，避免漏路径）；② 6 条直接调用生成客户端、不经 mutation 的写路径显式调用 `invalidateShellCounters`——`PublishRecordButton`、`RecordLifecycleButton`（作废 / 恢复）、`EditPublishedRecord`（保存修订）、`AppendLeftoverForm`（追加遗留问题）、`ConvertLeftoverTask`（遗留问题转任务）、`CompleteWithRecord`（发布并完成，不带记录也刷新）。
+- `shell-data.ts` 的遗留问题计数改用任务中心页头同一查询 `useOpenLeftoverCount`，两处不再各算一次。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SHELLCOUNT-WEB-001 | Web 单元 | 经 mutation 的写操作自动失效侧栏计数 | `AppProviders.test.tsx`：挂载带站内通知计数、我的任务数与遗留问题数的 provider 后触发一次 `useMutation`，`listMyTasks` 与 `listLeftoverItems` 调用次数由 1 变 2 | 本地通过 |
+| SHELLCOUNT-WEB-002 | Web 单元 | 直调生成客户端的写路径可显式失效 | 同文件：直接调用 `invalidateShellCounters(cache)` 后两个查询各重取一次（覆盖不经 mutation 的 6 条写路径共用的入口） | 本地通过 |
+| SHELLCOUNT-WEB-003 | Web 单元（反向对照） | 用例能捕捉缺陷本身 | 把 `invalidateShellCounters` 临时改为空实现：同文件 2 failed / 4 passed；恢复实现后 6 passed | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web exec vitest run src/app/providers/AppProviders.test.tsx` 6 例通过（新增 2 例）；受影响区域定向复跑（providers + published-records + tasks）9 文件 67 例通过；全量 `pnpm --filter @inpulse/web exec vitest run` 85 文件 563 例全绿；改动文件 `eslint` 退出码 0、`prettier --check` 通过；`pnpm check:frontend:boundaries` → `no dependency violations found (283 modules, 1380 dependencies)`。
+
+未运行 / 已知偏差：① 未跑 Playwright E2E（缺陷本身是缓存失效，单测已覆盖两条失效路径；真实浏览器复验待补）、`pnpm check` 整链、`deps:audit` 与 GitHub Actions；② `pnpm --filter @inpulse/web typecheck` 仍有 7 文件 9 处既有 `PROJECT_ADMIN` 残留错误（`git stash` 对照改动前同样失败，属他人在途改动，与本批无关）；③ 全局失效会让侧栏与任务中心页头的遗留问题计数一起重新取数（未挂载时只标记过期、不发请求）。
+
+## 任务中心「遗留问题」计数与侧栏同源（缺陷修复，2026-09-22 本地落库）
+
+现象：任务中心页头「遗留问题」入口从不显示数字，而侧栏导航的「遗留问题」有数字。排查结论是两条叠加：
+
+1. 页头数字来自 R-3 的 `leftoverCount`（`MyTaskQueryPort.leftoverEntry`）：其 SQL 要求「任务经 `leftover_task_links` 关联」与「遗留项 `status = "ACTIVE"`」同时成立，但链接行只在「遗留项转任务」事务内写入、且同一事务把该条目置成 `CONVERTED`（`leftover-record.repository.ts` 的 `link()`：INSERT 链接 + UPDATE 状态），两者在真实业务路径下互斥，计数恒为 0；集成测试用夹具直接 INSERT 链接并保持 ACTIVE，构造了真实路径不可达的组合，因此一直是绿的（`aggregate-read-api.integration.test.ts`「统计卡片与遗留问题入口按基准集合计算」）。
+2. 侧栏数字来自 R-6 `bucket=OPEN` 桶条数，与页头原口径不同；即便 R-3 口径修好，两处也会在「我负责 vs 全部」上长期不一致。
+
+修复（前端，不动契约与数据库）：把「未闭环遗留项计数」下沉到 `features/issues/issues-query.ts` 的 `useOpenLeftoverCount`（R-6 `bucket=OPEN`、单页上限 100、超出显示上限、`staleTime` 60s；查询键挂在 `shell-counters` 前缀下），侧栏（`useShellCounters`）与任务中心页头（`TasksPage` 注入视图）共用同一个查询键与缓存，写后由全局 MutationCache 统一失效。视图语义固定为「`undefined` = 未接线、回退适配器字段；`null` = 尚未加载、不显示角标」。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVERCOUNT-WEB-001 | Web 单元 | 注入计数优先于适配器字段 | `TaskCenterPageView.test.tsx` 新增用例：注入 `leftoverCount: 6` 时按钮可访问名为「遗留问题 6」、`.header-count` 文本为 6，点击仍触发 `onOpenIssues` | 本地通过 |
+| LEFTOVERCOUNT-WEB-002 | Web 单元 | 尚未加载不回退成假值 | 同文件新增用例：适配器字段为 3、注入 `leftoverCount: null` 时按钮名仍是「遗留问题」且不渲染 `.header-count`（空态出现后才断言） | 本地通过 |
+| LEFTOVERCOUNT-WEB-003 | Web 单元 | 页面接线与定向回归 | `TasksPage.test.tsx`、`features/issues`、`src/app` 定向 11 文件 105 例保持通过；新增的 `app -> features` 导入不违反依赖边界 | 本地通过 |
+| LEFTOVERCOUNT-BROWSER-001 | 浏览器实测 | 两处数字同源 | 临时 E2E 用例走真实路径（新建任务 → 完成任务并发布带一条遗留问题的记录）后进入 `/tasks`：侧栏「遗留问题」`em` 与页头「遗留问题 1」数量签同时为 1；点开弹窗后该条出现在「未闭环」桶（截图留档，用例已删） | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web test`（85 文件 563 例；既有 `app-router.test.tsx` 1 例在 HEAD 版本上用 `git stash` 对照同样失败，属本地负载敏感的间歇失败，与本批 diff 无关）；本批相关定向 `vitest` 11 文件 105 例全绿；`pnpm check:frontend:boundaries`（283 模块 1393 依赖）通过；真实 E2E 定向用例通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链、全量 `pnpm test:e2e`、`deps:audit`（需 registry 访问）与 GitHub Actions；② R-3 的 `leftoverCount` / `leftoverSample` 后端恒 0 缺陷本次未改后端——页面已不再依赖该字段，但契约字段仍在，建议后续单独修复（其集成测试夹具需同步改成真实路径）或收敛契约；③ 页头计数与侧栏一样是全局范围，选定项目筛选后不随列表一起收窄，弹窗内容在选定项目时可能小于该数字（既有设计，本次未改）。

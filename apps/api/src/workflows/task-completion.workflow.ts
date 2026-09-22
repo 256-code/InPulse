@@ -154,7 +154,7 @@ export class TaskCompletionWorkflow {
         throw new TaskManagementError(
           409,
           "TASK_HISTORICAL_SOURCE",
-          "历史来源分支不承接新的执行工作，请转到主任务",
+          "历史分支不承接新的执行工作，请转到主任务",
         );
       await tx.sql`RELEASE SAVEPOINT task_completion_locks`;
       return { source, record: lockedRecord };

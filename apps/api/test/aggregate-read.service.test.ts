@@ -162,6 +162,7 @@ function taskRowFixture(
     code: "SHOP-T-" + String(taskId),
     title: "任务 " + String(taskId),
     assigneeId: 5,
+    assigneeIds: [5],
     workStatus: "TODO",
     lifecycleStatus: "ACTIVE",
     rowVersion: 1,
@@ -1158,6 +1159,8 @@ function myTasksSetup(
       readonly role: "MAIN" | "SOURCE";
     }[];
     readonly leftoverSourceTaskIds?: readonly number[];
+    /** 负责人解析的目标用户；多负责人用例需要把它扩到两人以上（ADR-040）。 */
+    readonly users?: readonly UserRefItem[];
   } = {},
 ) {
   const getAuthorizedSearchScope = vi.fn().mockResolvedValue({
@@ -1224,7 +1227,9 @@ function myTasksSetup(
   );
   const listUsers = vi
     .fn()
-    .mockResolvedValue([{ userId: 5, name: "成员", avatarUrl: null }]);
+    .mockResolvedValue(
+      options.users ?? [{ userId: 5, name: "成员", avatarUrl: null }],
+    );
   const cursor = cursorMock(
     options.decode === undefined ? {} : { decode: options.decode },
   );
@@ -1616,6 +1621,30 @@ describe("MyTasksQueryService.list", () => {
       [7],
       [501],
     );
+  });
+
+  it("条目返回全部负责人，标量 assignee 取集合首位（ADR-040）", async () => {
+    const setup = myTasksSetup({
+      users: [
+        { userId: 5, name: "成员", avatarUrl: null },
+        { userId: 6, name: "协作者", avatarUrl: null },
+      ],
+      page: {
+        items: [taskRowFixture(501, { assigneeId: 5, assigneeIds: [5, 6] })],
+        next: null,
+        hasMore: false,
+      },
+    });
+    const result = await setup.service.list({ actorUserId: 5 });
+    expect(result.items[0]?.assignees).toEqual([
+      { userId: 5, name: "成员", avatarUrl: null },
+      { userId: 6, name: "协作者", avatarUrl: null },
+    ]);
+    expect(result.items[0]?.assignee).toEqual({
+      userId: 5,
+      name: "成员",
+      avatarUrl: null,
+    });
   });
 
   it("条目缺少项目或模块时以 500 失败而不是静默丢行", async () => {

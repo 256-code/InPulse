@@ -99,7 +99,7 @@ export function GlobalTaskCreateModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("NORMAL");
-  const [assigneeId, setAssigneeId] = useState<number>(0);
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([]);
   const [dueAt, setDueAt] = useState<string | null>(null);
   const [impactFeatureIds, setImpactFeatureIds] = useState<number[]>([]);
   const [linkText, setLinkText] = useState("");
@@ -124,7 +124,7 @@ export function GlobalTaskCreateModal({
     setTitle("");
     setDescription("");
     setPriority("NORMAL");
-    setAssigneeId(0);
+    setAssigneeIds([]);
     setDueAt(null);
     setImpactFeatureIds([]);
     setLinkText("");
@@ -184,7 +184,7 @@ export function GlobalTaskCreateModal({
         title: title.trim(),
         description,
         priority,
-        assigneeId,
+        assigneeIds,
         dueAt,
       };
       const impacts = [...new Set(impactFeatureIds)].sort((a, b) => a - b);
@@ -319,7 +319,7 @@ export function GlobalTaskCreateModal({
     setTitle("");
     setDescription("");
     setPriority("NORMAL");
-    setAssigneeId(0);
+    setAssigneeIds([]);
     setDueAt(null);
     setImpactFeatureIds([]);
     setLinkText("");
@@ -352,8 +352,8 @@ export function GlobalTaskCreateModal({
       setInvalid("任务说明最多 50000 字。");
       return;
     }
-    if (assigneeId <= 0) {
-      setInvalid("请选择项目活跃成员作为负责人。");
+    if (assigneeIds.length === 0) {
+      setInvalid("请至少指派一名项目活跃成员作为负责人。");
       return;
     }
     setInvalid(null);
@@ -427,7 +427,7 @@ export function GlobalTaskCreateModal({
                 value={scope}
                 onChange={(next) => {
                   setScope(next);
-                  setAssigneeId(0);
+                  setAssigneeIds([]);
                   if (next === "MODULE") setFeatureId(0);
                 }}
               />
@@ -444,11 +444,12 @@ export function GlobalTaskCreateModal({
                   setProjectId(Number(next));
                   setModuleId(0);
                   setFeatureId(0);
-                  setAssigneeId(0);
+                  setAssigneeIds([]);
                   setImpactFeatureIds([]);
                 }}
                 options={[
-                  { value: 0, label: "请选择项目" },
+                  // 占位项只作提示，禁用以防用户主动选回「未选择」清掉归属（2026-09-22 产品反馈）。
+                  { value: 0, label: "请选择项目", disabled: true },
                   ...(projects.data?.items ?? []).map(projectSelectOption),
                 ]}
               />
@@ -468,13 +469,14 @@ export function GlobalTaskCreateModal({
                 onChange={(next) => {
                   setModuleId(Number(next));
                   setFeatureId(Number(next) === -1 ? -1 : 0);
-                  setAssigneeId(0);
+                  setAssigneeIds([]);
                   setImpactFeatureIds([]);
                 }}
                 options={[
                   {
                     value: 0,
                     label: projectId === 0 ? "请先选择项目" : "请选择模块",
+                    disabled: true,
                   },
                   { value: -1, label: "自定义 · 创建新模块" },
                   ...(modules.query.data?.items ?? []).map((module) => ({
@@ -512,12 +514,13 @@ export function GlobalTaskCreateModal({
                   appearance="menu"
                   onChange={(next) => {
                     setFeatureId(Number(next));
-                    setAssigneeId(0);
+                    setAssigneeIds([]);
                   }}
                   options={[
                     {
                       value: 0,
                       label: moduleId === 0 ? "请先选择模块" : "请选择功能",
+                      disabled: true,
                     },
                     { value: -1, label: "自定义 · 创建新功能" },
                     ...(features.query.data?.items ?? []).map((feature) => ({
@@ -550,19 +553,21 @@ export function GlobalTaskCreateModal({
               <label htmlFor="global-task-assignee">指派给</label>
               <CalmSelect
                 id="global-task-assignee"
-                value={assigneeId > 0 ? assigneeId : null}
-                onChange={(next) => setAssigneeId(Number(next))}
+                value={assigneeIds}
+                onChange={(next) => setAssigneeIds(next.map(Number))}
                 options={(assignees.data?.items ?? []).map((member) => ({
                   value: member.id,
                   label: member.name,
                   avatarUrl: member.avatarUrl ?? null,
                 }))}
                 appearance="member"
+                multiple
+                maxTagCount={2}
                 placeholder={
-                  targetReady ? "请选择项目成员" : "请先选择任务归属"
+                  targetReady ? "请选择项目成员（可多选）" : "请先选择任务归属"
                 }
                 disabled={!targetReady}
-                ariaLabel="指派给"
+                ariaLabel="负责人"
               />
               {targetReady && isFirstLoad(assignees) && (
                 <p>正在加载项目成员…</p>

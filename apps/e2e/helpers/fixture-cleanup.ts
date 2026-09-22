@@ -226,9 +226,13 @@ export async function cleanupFixtures(
              OR created_by IN (SELECT id FROM _cleanup_users)`,
       );
       await remove(
+        `DELETE FROM app.task_assignees
+          WHERE project_id IN (SELECT id FROM _cleanup_projects)
+             OR user_id IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
         `DELETE FROM app.tasks
           WHERE project_id IN (SELECT id FROM _cleanup_projects)
-             OR assignee_id IN (SELECT id FROM _cleanup_users)
              OR creator_id IN (SELECT id FROM _cleanup_users)`,
       );
       await remove(

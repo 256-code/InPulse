@@ -489,7 +489,7 @@ describe("F18 publication and immutable revisions", () => {
         {
           title: "既有跟进任务",
           description: "fixture",
-          assigneeId: f.userId,
+          assigneeIds: [f.userId],
           priority: "NORMAL",
           dueAt: null,
         },
@@ -769,7 +769,7 @@ it("publishes a DONE source, uses its current assignee, and replays/revises hist
       {
         title: "已完成来源",
         description: "",
-        assigneeId: f.creator,
+        assigneeIds: [f.creator],
         priority: "NORMAL",
         dueAt: null,
       },
@@ -789,7 +789,7 @@ it("publishes a DONE source, uses its current assignee, and replays/revises hist
     tasks.update(tx, task, {
       title: task.title,
       description: task.description,
-      assigneeId: current,
+      assigneeIds: [current],
       priority: task.priority,
       dueAt: task.dueAt,
     }),

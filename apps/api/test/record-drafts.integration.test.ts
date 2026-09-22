@@ -663,7 +663,7 @@ async function taskFixture(scope: "FEATURE" | "MODULE" = "FEATURE") {
       {
         title: "来源任务",
         description: "来源说明",
-        assigneeId: f.userId,
+        assigneeIds: [f.userId],
         priority: "NORMAL",
         dueAt: null,
       },
@@ -837,7 +837,10 @@ describe("F-17 source drafts", () => {
     await uow.run(async (tx) => {
       await tx.sql`SELECT id FROM app.tasks WHERE id=${f.task.id} FOR UPDATE`;
       await f.repo.replaceImpacts(tx, f.task, []);
-      await tx.sql`UPDATE app.tasks SET title='已改名',assignee_id=${f.member},row_version=row_version+1 WHERE id=${f.task.id}`;
+      await tx.sql`UPDATE app.tasks SET title='已改名',row_version=row_version+1 WHERE id=${f.task.id}`;
+      // ADR-040：任务负责人已改为关联表，用关联表写入保持原「改派给 f.member」语义。
+      await tx.sql`DELETE FROM app.task_assignees WHERE task_id=${f.task.id}`;
+      await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) SELECT ${f.task.id}, ${f.member}, project_id FROM app.tasks WHERE id=${f.task.id}`;
     });
     await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.featureId}`;
     const edited = await uow.run((tx) =>
@@ -973,7 +976,10 @@ describe("F-17 source drafts", () => {
     const update = uow.run(async (tx) => {
       await tx.sql`SELECT id FROM app.tasks WHERE id=${f.task.id} FOR UPDATE`;
       await f.repo.replaceImpacts(tx, f.task, []);
-      await tx.sql`UPDATE app.tasks SET title='锁后最新标题',assignee_id=${f.member},row_version=row_version+1 WHERE id=${f.task.id}`;
+      await tx.sql`UPDATE app.tasks SET title='锁后最新标题',row_version=row_version+1 WHERE id=${f.task.id}`;
+      // ADR-040：同上，改派经关联表完成。
+      await tx.sql`DELETE FROM app.task_assignees WHERE task_id=${f.task.id}`;
+      await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) SELECT ${f.task.id}, ${f.member}, project_id FROM app.tasks WHERE id=${f.task.id}`;
       acquired();
       await gate;
     });

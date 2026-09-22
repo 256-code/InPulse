@@ -1241,6 +1241,94 @@ button {
 .task-toolbar .secondary-button {
   margin-left: auto;
 }
+
+/* 任务中心一体化控制条（2026-09-22 方案 A 定稿）：工作状态（带数量角标）· 搜索 ·
+   项目 / 优先级 / 任务范围 · 展示方式收进同一条白底控制条。只作用于任务中心——
+   迭代记录 / 遗留问题 / 项目动态仍用 `.toolbar.task-toolbar` 的散开排布。
+   纵向节奏不变：标题到控制条、控制条到卡片仍由上面 .page-header / .task-toolbar
+   的外边距决定（E2E 按同一组外边距断言两侧间距一致）。 */
+.task-toolbar-bar {
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 9px;
+  box-shadow: 0 1px 2px #1735520a;
+}
+/* 条内的分段控件比页面其它位置紧凑一档（轨道 3px、条目 29px），控制条整体高度与
+   搜索框 34px 同量级，不把下方列表区的节奏顶开。 */
+.task-toolbar-bar .segmented {
+  gap: 2px;
+  padding: 3px;
+  background: #eef3f8;
+  border-radius: 7px;
+}
+.task-toolbar-bar .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 29px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+/* 分段项数量角标：未选中用中性灰签、选中项转蓝签（与 .badge-blue 同色系）。
+   数量取自 R-3 统计，不可知时不渲染，见 TaskCenterPageView 的 statusOptions。 */
+.segmented-count {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 9px;
+  background: #e6ecf3;
+  color: #5b7188;
+}
+.segmented button.selected .segmented-count {
+  background: #e6f2ff;
+  color: #2472c3;
+}
+/* 页头「遗留问题」入口的数量签：与 .badge-amber 同色，比裸数字更明确。 */
+.header-count {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 9px;
+  background: #fff3dc;
+  color: #ae741b;
+}
+.task-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 1px;
+  background: #eaeff5;
+}
+.task-toolbar-bar .task-search {
+  flex: 1;
+  min-width: 210px;
+  height: 34px;
+  border: 0;
+  background: #f3f6fa;
+}
+/* 条内三个下拉收成浅底无描边的 chip：与搜索框同一层，一条里不混三种控件形态。
+   antd 6 的触发器外框画在 .ant-select 根元素上（内容区是 .ant-select-content），
+   hover / focus 的取色也走根元素的 CSS 变量，因此这里直接覆盖根元素的取值。 */
+.task-toolbar-bar .calm-select.ant-select {
+  /* 触发器高度走 antd 的 --ant-select-height：与同行的搜索框对齐到 34px。 */
+  --ant-select-height: 34px;
+  background: #f3f6fa;
+  border-color: transparent;
+}
+.task-toolbar-bar .calm-select.ant-select:hover {
+  background: #e9eff6;
+}
+/* 展示方式固定贴右：控制条里唯一靠右的动作组。 */
+.task-toolbar-view {
+  margin-left: auto;
+}
 .task-search {
   width: 320px;
   height: 35px;

@@ -4,6 +4,7 @@ import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { SearchParamsScope } from "@features/common/search-params-scope";
+import { useOpenLeftoverCount } from "@features/issues/issues-query";
 import { useProjects } from "@features/projects/project-query";
 import type {
   MyTaskFilters,
@@ -46,6 +47,12 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
   const [issuesOpen, setIssuesOpen] = useState(false);
   const { user } = useAuth();
   const projectList = useProjects({ client });
+  /**
+   * 页头「遗留问题」入口的计数与侧栏导航同源（2026-09-22 修）：两者都是 R-6 未闭环
+   * 桶条数，共用同一个查询键与写后失效，数字永远一致。项目筛选只收窄列表与工作状态，
+   * 不再试图用一个恒为 0 的口径去猜「我的遗留问题」（原因见视图 props 注释）。
+   */
+  const openLeftoverCount = useOpenLeftoverCount({ client });
 
   const isAdmin = user?.isAdmin === true;
   const filters = useMemo(
@@ -114,6 +121,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
         onToggleAdvanced={handleToggleAdvanced}
         onOpenIssues={handleOpenIssues}
         onOpenTask={handleOpenTask}
+        leftoverCount={openLeftoverCount}
         adapter={taskAdapter}
         client={client}
       />

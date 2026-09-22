@@ -131,7 +131,7 @@ async function seedTask(
   return client.sql.begin(async (tx) => {
     const rows = (await tx`
     INSERT INTO app.tasks (
-      project_id, module_id, scope_type, code, title, assignee_id, creator_id
+      project_id, module_id, scope_type, code, title, creator_id
     )
     VALUES (
       ${project.projectId},
@@ -139,12 +139,15 @@ async function seedTask(
       'MODULE',
       ${code},
       '未归档任务',
-      ${assigneeId},
       ${assigneeId}
     )
     RETURNING id
   `) as unknown as readonly { id: number }[];
     const taskId = rows[0]!.id;
+    await tx`
+      INSERT INTO app.task_assignees (task_id, user_id, project_id)
+      VALUES (${taskId}, ${assigneeId}, ${project.projectId})
+    `;
     await tx`
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status, changed_by
@@ -311,7 +314,7 @@ describe("F-06.2 项目归档申请 API（ADR-034）", () => {
     await client.sql`
       WITH created AS (
         INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, assignee_id, creator_id,
+          project_id, module_id, scope_type, code, title, creator_id,
           work_status, completed_at
         )
         VALUES (
@@ -321,11 +324,14 @@ describe("F-06.2 项目归档申请 API（ADR-034）", () => {
           ${value.project.code + "-T-1"},
           '已完成任务',
           ${value.leader.userId},
-          ${value.leader.userId},
           'DONE',
           now()
         )
         RETURNING id, project_id, completed_at
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${value.leader.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,

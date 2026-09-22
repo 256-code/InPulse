@@ -18,6 +18,7 @@ const taskFields = [
   "title",
   "description",
   "assigneeId",
+  "assigneeIds[]",
   "creatorId",
   "priority",
   "workStatus",
@@ -60,7 +61,8 @@ export const taskCompletionRoutes: readonly RouteDefinition[] = [
         },
       },
     },
-    idempotencyContractVersion: "1.2.0",
+    // ADR-040：响应内嵌 TaskItem 新增 assigneeIds，属破坏性契约变更，主版本递增。
+    idempotencyContractVersion: "2.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: {
       version: "1.0.0",

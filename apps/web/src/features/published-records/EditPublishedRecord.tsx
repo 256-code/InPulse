@@ -21,6 +21,7 @@ import { CalmSelect } from "@features/common/components/CalmSelect";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 type Merge = ReturnType<typeof mergeRecordDraft> & {
   latest: PublishedRecord;
   choices: Partial<Record<Field, "mine" | "latest">>;
@@ -170,6 +171,8 @@ export function EditPublishedRecord({
       await cache.invalidateQueries({
         queryKey: ["published-records", item.projectId],
       });
+      // 修订会增删正文里的剩余问题，侧栏遗留项计数随即变化。
+      await invalidateShellCounters(cache);
       setBaseline(null);
       retry.current = null;
     } catch (e) {

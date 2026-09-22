@@ -137,7 +137,7 @@ export const notificationScenarios: readonly NotificationScenarioRow[] = [
   { event: "任务重新打开", audience: "任务负责人、创建人" },
   {
     event: "任务被合并",
-    audience: "主任务负责人、来源任务负责人、双方创建人",
+    audience: "主任务负责人、分支任务负责人、双方创建人",
   },
   { event: "任务解除合并", audience: "相关任务负责人和创建人" },
   { event: "迭代记录发布", audience: "相关任务负责人、功能相关人员" },

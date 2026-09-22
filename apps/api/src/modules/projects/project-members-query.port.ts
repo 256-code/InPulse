@@ -8,7 +8,7 @@ export interface AssignableProjectMember {
 
 /** ADR-033：只读成员视图在指派人字段外附带项目内角色与加入时间。 */
 export interface ActiveProjectMemberProfile extends AssignableProjectMember {
-  readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+  readonly role: "MEMBER" | "LEADER";
   readonly joinedAt: string;
 }
 export abstract class ProjectMembersQueryPort {
@@ -40,7 +40,7 @@ export abstract class ProjectMembersQueryPort {
   abstract findActiveRole(
     tx: TransactionContext,
     input: { projectId: number; userId: number },
-  ): Promise<"MEMBER" | "PROJECT_ADMIN" | "LEADER" | undefined>;
+  ): Promise<"MEMBER" | "LEADER" | undefined>;
   /** Caller already authorizes and locks project/module/feature, then locks task for edits.
    * Locks user then membership FOR SHARE; only for creation or changed assignee.
    * Never use this to invalidate an unchanged historical assignee.

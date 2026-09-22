@@ -83,6 +83,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "f2c491a5e0afd3f11dff31ebc6398ded5683468217b6f6afba94de1c2cc9a0a6"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "f81dfa224ded704d1703e6963a13f386237609a55aa24a69e624850b4136b28d"
     }
   ],
   "archiveProject": [
@@ -115,6 +119,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "f9a4e83e5a36f9e7f374f0fd8d448e85f1fe1f4fd379d1eabfde9909f594176f"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "9e6adf89cc3caad7d7cd8ab177fcc281fc847b24f3a43e4239ee54690ddbf005"
     }
   ],
   "changeProjectStatus": [
@@ -139,6 +147,10 @@
     {
       "version": "1.2.0",
       "fingerprint": "4cedca6c7cde79c566a13d08e2854fd10aff048de97ec0988af415617a4ee910"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "d5a359d4f97db77acbebc03122a4c0926fc01d37cf80a59f20dd3bff11646bbb"
     }
   ],
   "convertLeftoverToTask": [
@@ -215,6 +227,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "cd1a215b94ab2cf67a9d3013865be31204480c57728ce5db52e38b5b1ed1723b"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "ee57fa64d6145975790cd8405773518163b20fdd784df70f754ff3ca3e86e219"
     }
   ],
   "createProject": [
@@ -243,6 +259,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "31f261ff5c1a58e596d5789a249c3a438e277876a4568e34a8e0c1d46f545c7e"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "e864b8bea67ce0df0252f9968deb2cf5b647d4bfa8b2a65373d533b798de2e00"
     }
   ],
   "createTaskRecordDraft": [
@@ -411,6 +431,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "5508b31bc5ecd750e160daefe45793a6f791325b85a119c7c640dfec63c231c3"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "92ac72fdb96850a7905902632e69154d40e628889b3d9e1cdec7e00c580a7aa3"
     }
   ],
   "restoreProject": [
@@ -443,6 +467,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "146521fabdb854881b053dfd65f2e1fa097326b959e3d2ae4efd616cb7186e13"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "a344ca6f0043516b362c2f05d51100397883346a1e5b895dde105b117d5cda66"
     }
   ],
   "setProjectMemberRole": [
@@ -463,6 +491,10 @@
     {
       "version": "2.0.0",
       "fingerprint": "88fe334f27ed554526129ba89b78b0f176645555aee886d1c26dae73160df00a"
+    },
+    {
+      "version": "3.0.0",
+      "fingerprint": "37f659dca60fbfc183735c8792e55524491fe63d488f6a24ac23eead6df39d38"
     }
   ],
   "transitionTask": [
@@ -473,6 +505,10 @@
     {
       "version": "2.0.0",
       "fingerprint": "19fe7fc462f6e72c8e7bb8caa4182727b4320d43816de9113755e58a24f64b6e"
+    },
+    {
+      "version": "3.0.0",
+      "fingerprint": "a0920e96b4123aa9c0b044c45d34d59c9e3a3a4286695944cb25b3d592ef089e"
     }
   ],
   "unmergeTaskGroup": [
@@ -537,6 +573,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "075791029125955c79b8ebc7eb50bf6faa4e5b872c4843b17c159850f9dc57bc"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "2bad2ce6275da6c1656813fd715e2c0f6e71e9e076cbad493cbf0c79f821899a"
     }
   ],
   "updateProject": [
@@ -569,6 +609,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "ec4d82558f597182a2c41832097eb53d2e08764d65039cfd32395c5f307892ca"
+    },
+    {
+      "version": "2.0.0",
+      "fingerprint": "02def8ca86847ecb01fe8e2823e7e9e19b05306421d403f55f7591fbd3e6d193"
     }
   ],
   "updateTaskRecordDraft": [

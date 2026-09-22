@@ -302,7 +302,7 @@ async function fixture(feature = false) {
         {
           title: "待完成任务",
           description: "说明",
-          assigneeId: actor,
+          assigneeIds: [actor],
           priority: "NORMAL",
           dueAt: null,
         },
@@ -345,7 +345,7 @@ async function inputFor(f: PublishedFixture): Promise<LeftoverTaskRequest> {
     leftoverExpectedRowVersion: preview.leftoverRowVersion,
     expectedImpactFeatureIds: preview.inheritedImpacts.map((i) => i.id),
     title: "跟进遗留问题",
-    assigneeId: f.author,
+    assigneeIds: [f.author],
     priority: "HIGH",
     dueAt: null,
   };
@@ -426,7 +426,7 @@ for (const feature of [true, false])
     expect(task).toMatchObject({
       workStatus: "TODO",
       rowVersion: 1,
-      assigneeId: f.author,
+      assigneeIds: [f.author],
       scopeType: feature ? "FEATURE" : "MODULE",
       featureId: f.featureId,
     });
@@ -509,12 +509,12 @@ it("rejects stale record/item versions, foreign item, non-member assignee and hi
     { ...input, recordVersion: 99 },
     { ...input, leftoverExpectedRowVersion: 99 },
     { ...input, leftoverItemId: 2147483647 },
-    { ...input, assigneeId: outsider },
+    { ...input, assigneeIds: [outsider] },
     { ...input, expectedImpactFeatureIds: [] },
   ]) {
     await expect(convert(f, changed)).rejects.toMatchObject({
       status:
-        changed.assigneeId === outsider
+        changed.assigneeIds[0] === outsider
           ? 422
           : changed.leftoverItemId === 2147483647
             ? 404

@@ -31,13 +31,13 @@ describe("F-14 task input", () => {
       title: " 修复支付 ",
       description: "",
       priority: "NORMAL",
-      assigneeId: 1,
+      assigneeIds: [1],
       dueAt: null,
     };
     expect(taskEditRequestSchema.parse(valid).title).toBe("修复支付");
     for (const invalid of [
-      { ...valid, assigneeId: null },
-      { ...valid, assigneeId: 0 },
+      { ...valid, assigneeIds: [] },
+      { ...valid, assigneeIds: [0] },
       { ...valid, title: " " },
       { ...valid, title: "x".repeat(501) },
       { ...valid, description: "x".repeat(50001) },

@@ -461,7 +461,7 @@ export type LeftoverTaskReplayContext = {
 export type LeftoverTaskRequest = {
   readonly title: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly leftoverItemId: number;
   readonly recordVersion: number;
@@ -571,7 +571,7 @@ export type ModuleTaskEditRequest = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly impactFeatureIds: readonly number[];
 };
@@ -580,7 +580,7 @@ export type ModuleTaskItem = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;
   readonly projectId: number;
@@ -588,6 +588,7 @@ export type ModuleTaskItem = {
   readonly featureId: null;
   readonly scopeType: "MODULE";
   readonly code: string;
+  readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
@@ -651,6 +652,7 @@ export type MyTaskItem = {
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly assignee: UserRef;
+  readonly assignees: readonly UserRef[];
   readonly updatedAt: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly dueAt: (string | null);
@@ -1410,7 +1412,7 @@ export type TaskEditRequest = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
 };
 
@@ -1639,7 +1641,7 @@ export type TaskItem = {
   readonly title: string;
   readonly description: string;
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;
   readonly projectId: number;
@@ -1647,6 +1649,7 @@ export type TaskItem = {
   readonly featureId: number;
   readonly scopeType: "FEATURE";
   readonly code: string;
+  readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");

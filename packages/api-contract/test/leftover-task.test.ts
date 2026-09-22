@@ -10,7 +10,7 @@ const input = {
   leftoverExpectedRowVersion: 1,
   expectedImpactFeatureIds: [4],
   title: "跟进",
-  assigneeId: 5,
+  assigneeIds: [5],
   priority: "NORMAL",
   dueAt: null,
 };
@@ -23,7 +23,8 @@ it("requires stable item, current record and item versions and explicit impact c
     { ...input, projectId: 10 },
     { ...input, description: "覆盖原文" },
     { ...input, workStatus: "DONE" },
-    { ...input, assigneeId: 0 },
+    { ...input, assigneeIds: [] },
+    { ...input, assigneeIds: [0] },
   ])
     expect(leftoverTaskRequestSchema.safeParse(body).success).toBe(false);
 });

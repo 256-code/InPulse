@@ -31,7 +31,7 @@ export class PostgresProjectMembersQueryPort extends ProjectMembersQueryPort {
         readonly id: number;
         readonly name: string;
         readonly avatarUrl: string | null;
-        readonly role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+        readonly role: "MEMBER" | "LEADER";
         readonly joinedAt: Date | string;
       }[]
     >`SELECT u.id,
@@ -78,10 +78,10 @@ export class PostgresProjectMembersQueryPort extends ProjectMembersQueryPort {
   async findActiveRole(
     tx: TransactionContext,
     input: { projectId: number; userId: number },
-  ): Promise<"MEMBER" | "PROJECT_ADMIN" | "LEADER" | undefined> {
+  ): Promise<"MEMBER" | "LEADER" | undefined> {
     const [row] = await tx.sql<
       {
-        role: "MEMBER" | "PROJECT_ADMIN" | "LEADER";
+        role: "MEMBER" | "LEADER";
       }[]
     >`SELECT role FROM app.project_members WHERE project_id = ${input.projectId} AND user_id = ${input.userId} AND status = 'ACTIVE' LIMIT 1`;
     return row?.role;

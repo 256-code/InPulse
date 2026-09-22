@@ -15,6 +15,7 @@ const task: TaskItem = {
   title: "任务标题",
   description: "",
   assigneeId: 5,
+  assigneeIds: [5],
   creatorId: 5,
   priority: "NORMAL",
   workStatus: "TODO",

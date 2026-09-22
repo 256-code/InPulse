@@ -221,7 +221,7 @@ describe("RecordsWorkspace", () => {
     const client = baseClient();
     mount(client as unknown as InpulseApiClient, "/records?projectId=1");
     await screen.findByText("支付修正", { selector: "summary strong" });
-    pickSelectOption("来源", "主任务");
+    pickSelectOption("归属", "主任务");
     await waitFor(() =>
       expect(client.listRecordFeed).toHaveBeenLastCalledWith(
         {

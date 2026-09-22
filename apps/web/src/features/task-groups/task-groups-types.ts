@@ -33,7 +33,6 @@ export type TaskGroupMember = TaskGroupMemberDetail;
 export function memberRoleLabel(member: TaskGroupMember): string {
   if (member.role === "MAIN")
     return member.memberStatus === "DETACHED" ? "主任务（已解除）" : "主任务";
-  const kind =
-    member.sourceKind === "HISTORICAL" ? "历史来源分支" : "活动来源分支";
+  const kind = member.sourceKind === "HISTORICAL" ? "历史分支" : "活动分支";
   return member.memberStatus === "DETACHED" ? kind + "（已解除）" : kind;
 }

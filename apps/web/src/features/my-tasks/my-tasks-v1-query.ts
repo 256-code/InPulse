@@ -199,6 +199,11 @@ export function fromV1MyTaskItem(item: MyTaskItem): MyTaskListItem {
     workStatus: item.workStatus,
     lifecycleStatus: item.lifecycleStatus,
     updatedAt: item.updatedAt,
+    assignees: item.assignees.map((assignee) => ({
+      userId: assignee.userId,
+      name: assignee.name,
+      avatarUrl: assignee.avatarUrl,
+    })),
     assignee: {
       userId: item.assignee.userId,
       name: item.assignee.name,
@@ -258,7 +263,7 @@ export function matchesMyTasksLocalFilters(
       item.projectName,
       item.moduleName,
       item.featureName ?? "",
-      item.assignee.name,
+      ...item.assignees.map((assignee) => assignee.name),
     ]
       .join(" ")
       .toLowerCase();

@@ -350,7 +350,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
           {
             title,
             description: "",
-            assigneeId: owner.userId,
+            assigneeIds: [owner.userId],
             priority: "NORMAL",
             dueAt: null,
           },
@@ -493,7 +493,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       WITH created AS (
         INSERT INTO app.tasks (
           project_id, module_id, scope_type, code, title, work_status,
-          completion_note, completed_at, assignee_id, creator_id
+          completion_note, completed_at, creator_id
         )
         VALUES (
           ${active.projectId},
@@ -504,10 +504,13 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
           'DONE',
           '已完成',
           now(),
-          ${owner.userId},
           ${owner.userId}
         )
         RETURNING id, project_id
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${owner.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,
@@ -563,13 +566,13 @@ describe("F-05.2 只读成员档案 listActiveProjectMembers", () => {
     });
   }
 
-  test("返回活跃成员的项目内角色与加入时间（ADR-033）", async () => {
+  test("返回活跃成员的项目内角色与加入时间（ADR-033 / ADR-039）", async () => {
     const owner = await actor();
     const member = await actor();
     const project = await createProject(client.sql, owner.userId);
     await client.sql`
       INSERT INTO app.project_members (project_id, user_id, role)
-      VALUES (${project.projectId}, ${member.userId}, 'PROJECT_ADMIN')
+      VALUES (${project.projectId}, ${member.userId}, 'MEMBER')
     `;
 
     const response = await activeMembers(project.projectId, member.cookie);
@@ -580,7 +583,7 @@ describe("F-05.2 只读成员档案 listActiveProjectMembers", () => {
     );
     expect(body.items.map((item) => [item.id, item.role])).toEqual([
       [owner.userId, "LEADER"],
-      [member.userId, "PROJECT_ADMIN"],
+      [member.userId, "MEMBER"],
     ]);
     for (const item of body.items) {
       expect(item.name.length).toBeGreaterThan(0);

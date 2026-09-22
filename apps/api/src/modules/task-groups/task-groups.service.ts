@@ -37,7 +37,7 @@ const UNMERGE_NOTIFICATION_TYPE = "task.unmerge";
 /** 功能设计 18.14 把解除原因定义为「建议填写」；未填写时用固定文案满足数据库非空约束。 */
 const DEFAULT_UNMERGE_REASON = "未填写解除原因";
 const MAIN_UNMERGE_MESSAGE =
-  "主任务不能直接解除合并；解除最后一个来源任务后系统会自动关闭聚合组";
+  "主任务不能直接解除合并；解除最后一个分支任务后系统会自动关闭聚合组";
 
 /** 合并与解除合并共用的业务错误：状态码与错误码由调用点显式指定。 */
 export class TaskGroupCommandError extends Error {
@@ -89,7 +89,7 @@ const notMerged = () =>
   new TaskGroupCommandError(
     409,
     "TASK_NOT_MERGED",
-    "任务当前不是活跃来源分支，无法解除合并",
+    "任务当前不是活跃分支，无法解除合并",
   );
 const unmergeConflict = (message: string) =>
   new TaskGroupCommandError(409, "TASK_GROUP_STATE_CONFLICT", message);
@@ -307,7 +307,7 @@ export class TaskGroupsService {
       source.taskId,
     );
     if (sourceActive)
-      throw alreadyMerged("来源任务已属于聚合组，请先解除原关系");
+      throw alreadyMerged("分支任务已属于聚合组，请先解除原关系");
 
     const mainActive = await this.groups.findActiveMember(
       tx,
@@ -346,7 +346,7 @@ export class TaskGroupsService {
       );
       if (!lockedGroup) throw missing();
       if (lockedGroup.status !== "ACTIVE")
-        throw groupStateConflict("聚合组已关闭，不能新增来源任务");
+        throw groupStateConflict("聚合组已关闭，不能新增分支任务");
       const members = await this.groups.listMembers(
         tx,
         projectId,
@@ -359,7 +359,7 @@ export class TaskGroupsService {
         throw groupStateConflict("聚合组主任务已变化，请重新加载后再合并");
       // 唯一约束禁止同组第二条历史成员，锁内提前给出稳定的业务错误。
       if (members.some((member) => member.taskId === source.taskId))
-        throw alreadyMerged("来源任务与该聚合组已有历史关系，不能重复合并");
+        throw alreadyMerged("分支任务与该聚合组已有历史关系，不能重复合并");
       before = {
         groupId: lockedGroup.groupId,
         rowVersion: lockedGroup.rowVersion,

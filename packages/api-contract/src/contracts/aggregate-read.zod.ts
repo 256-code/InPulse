@@ -384,7 +384,13 @@ export const myTaskItemSchema = z
     scopeType: z.enum(["FEATURE", "MODULE"]),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
     lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    /**
+     * 派生展示字段：恒等于 assignees[0]，与 assignees 同源同口径（ADR-040）。
+     * 集合本身是唯一真相，取值不一致时以 assignees 为准。
+     */
     assignee: userRefSchema,
+    /** 全部负责人，按 userId 升序且至少一名、至多 20 名（ADR-040 多负责人平权）。 */
+    assignees: z.array(userRefSchema).min(1).max(20),
     updatedAt: z.iso.datetime(),
     priority: z.enum(TASK_PRIORITIES),
     /** null = 未设置截止；与骨架的 undefined（不可知）语义不同。 */

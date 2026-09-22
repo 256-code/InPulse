@@ -18,7 +18,7 @@ export interface UnmergeTaskGroupButtonProps {
     readonly taskCode: string;
     readonly title: string;
   };
-  /** 当前是否为组内最后一个活跃来源分支（解除后聚合组将关闭）。 */
+  /** 当前是否为组内最后一个活跃分支（解除后聚合组将关闭）。 */
   readonly closesGroup: boolean;
   readonly api: InpulseApiClient;
   readonly onReload: () => Promise<void>;
@@ -112,7 +112,7 @@ export function UnmergeTaskGroupButton({
             : error.status === 409
               ? "关系或任务状态已变化。请加载最新状态，核对后重新确认。"
               : error.status === 422
-                ? "仅活跃来源分支可以解除合并；请检查所选任务。"
+                ? "仅活跃分支可以解除合并；请检查所选任务。"
                 : error.status === 429
                   ? "操作频繁，请稍后重试。"
                   : "暂时无法解除合并，输入已保留，可重试。"
@@ -168,7 +168,7 @@ export function UnmergeTaskGroupButton({
         {closesGroup ? (
           <Alert
             type="warning"
-            title="这是组内最后一个活跃来源分支：解除后聚合组将关闭，主任务恢复独立。"
+            title="这是组内最后一个活跃分支：解除后聚合组将关闭，主任务恢复独立。"
           />
         ) : null}
         <label htmlFor="task-group-unmerge-reason">解除原因（选填）</label>

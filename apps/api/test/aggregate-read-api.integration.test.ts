@@ -125,7 +125,7 @@ async function newFeature(
 }
 
 interface TaskOptions {
-  readonly assigneeId?: number;
+  readonly assigneeIds?: number[];
   /** 任务创建者；缺省为项目夹具所有者，用于构造 creator ≠ assignee 的场景。 */
   readonly actorUserId?: number;
   readonly featureId?: number | null;
@@ -152,7 +152,7 @@ async function newTask(
       {
         title: options.title ?? "聚合读接口任务",
         description: "",
-        assigneeId: options.assigneeId ?? scope.userId,
+        assigneeIds: options.assigneeIds ?? [scope.userId],
         priority: options.priority ?? "NORMAL",
         dueAt: options.dueAt ?? null,
       },
@@ -1339,12 +1339,12 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
 
   test("ownership 归属维度正交：CREATOR 只返回本人创建，且游标签名绑定（F-32「我创建的」）", async () => {
     const createdForOther = await newTask(project!, {
-      assigneeId: secondMemberUser,
+      assigneeIds: [secondMemberUser],
       dueAt: "2027-04-01T03:00:00.000Z",
     });
     const createdByOtherForMe = await newTask(project!, {
       actorUserId: secondMemberUser,
-      assigneeId: memberUser,
+      assigneeIds: [memberUser],
     });
 
     const createdPage = myTaskPageSchema.parse(
@@ -1714,10 +1714,10 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
 
   test("无权项目的聚合关系不返回，也不泄露存在性", async () => {
     const foreignMain = await newTask(otherProject!, {
-      assigneeId: otherUser,
+      assigneeIds: [otherUser],
     });
     const foreignSource = await newTask(otherProject!, {
-      assigneeId: otherUser,
+      assigneeIds: [otherUser],
     });
     const joinedAt = new Date(Date.now() - 60_000).toISOString();
     const foreignGroupId = await seedTaskGroup(otherProject!, 9, "外部聚合组", [

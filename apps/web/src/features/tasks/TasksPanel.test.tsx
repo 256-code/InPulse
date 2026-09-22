@@ -25,6 +25,7 @@ const item: TaskItem = {
   title: "退款任务",
   description: "原说明",
   assigneeId: 5,
+  assigneeIds: [5],
   creatorId: 5,
   priority: "NORMAL",
   dueAt: null,
@@ -307,18 +308,18 @@ describe("F-14 task editing", () => {
     const draft = {
       ...base,
       title: "我的标题",
-      assigneeId: 6,
+      assigneeIds: [6],
       dueAt: "2026-09-10T00:00:00Z",
     };
     const latest = {
       ...base,
       description: "他人说明",
-      assigneeId: 7,
+      assigneeIds: [7],
       dueAt: "2026-09-11T00:00:00Z",
     };
     expect(mergeTask(base, draft, latest)).toEqual({
       values: { ...draft, description: "他人说明" },
-      conflicts: ["assigneeId", "dueAt"],
+      conflicts: ["assigneeIds", "dueAt"],
     });
   });
   it("retains identical retry key after uncertain failure and changes key with semantics", async () => {
@@ -408,7 +409,9 @@ describe("F-14 task editing", () => {
       target: { value: "新任务" },
     });
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("请选择负责人");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "请至少选择一名负责人",
+    );
   });
 });
 
@@ -487,7 +490,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const sourceCard = (await screen.findByText("来源任务甲")).closest(
       ".calm-task-card",
     ) as HTMLElement;
-    expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
+    expect(await within(sourceCard).findByText("分支任务")).toBeInTheDocument();
     expect(
       await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
@@ -501,7 +504,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       .closest(".calm-task-card") as HTMLElement;
     // 卡片与列表行共用程度配色：这张卡是遗留问题来源，整卡取锈红 tone 类而不是普通蓝。
     expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-leftover");
-    expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText("分支任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
     // 不是遗留项来源的卡片维持普通优先级蓝色，证明锈红只随来源标记出现。
@@ -721,7 +724,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
-    expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
+    expect(await within(dialog).findByText("分支任务")).toBeInTheDocument();
     expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
     expect(await within(dialog).findByText("遗留问题")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
@@ -970,7 +973,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(tabs).getByRole("tab", { name: "合并与分支 · #501" }),
     );
     expect(
-      within(dialog).getByRole("heading", { name: "来源分支 · 聚合组 #501" }),
+      within(dialog).getByRole("heading", { name: "分支任务 · 聚合组 #501" }),
     ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
     const group = await screen.findByRole("dialog", { name: "退款聚合组" });

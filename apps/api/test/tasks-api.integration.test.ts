@@ -293,7 +293,7 @@ const edit = (assigneeId: number, title = "修复退款") => ({
   title,
   description: "支付退款说明",
   priority: "NORMAL",
-  assigneeId,
+  assigneeIds: [assigneeId],
   dueAt: null,
 });
 async function create(project: ScopeFixture, member: Actor) {
@@ -1171,7 +1171,8 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     await uow.run(async (tx) => {
       const [task] = await tx.sql<
         { id: number }[]
-      >`INSERT INTO app.tasks (project_id,module_id,feature_id,scope_type,code,title,assignee_id,creator_id) VALUES (${project.projectId},${project.moduleId},${project.featureId},'FEATURE',${project.code + "-T-1"},'导入任务',${member.userId},${member.userId}) RETURNING id`;
+      >`INSERT INTO app.tasks (project_id,module_id,feature_id,scope_type,code,title,creator_id) VALUES (${project.projectId},${project.moduleId},${project.featureId},'FEATURE',${project.code + "-T-1"},'导入任务',${member.userId}) RETURNING id`;
+      await tx.sql`INSERT INTO app.task_assignees (task_id,user_id,project_id) VALUES (${task!.id},${member.userId},${project.projectId})`;
       await tx.sql`INSERT INTO app.task_status_history (task_id,project_id,to_work_status,changed_by) VALUES (${task!.id},${project.projectId},'TODO',${member.userId})`;
     });
     await error(
@@ -1474,7 +1475,7 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     await error(
       await request(project, "POST", member, {
         ...edit(member.userId),
-        assigneeId: null,
+        assigneeIds: [null],
       }),
       422,
     );

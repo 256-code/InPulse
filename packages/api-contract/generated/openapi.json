@@ -9161,7 +9161,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -9180,6 +9180,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -9526,7 +9527,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -9547,6 +9548,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -9760,7 +9762,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -9781,6 +9783,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -9994,7 +9997,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -10015,6 +10018,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -10228,7 +10232,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -10249,6 +10253,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -11443,7 +11448,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -11462,6 +11467,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -11789,7 +11795,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -11810,6 +11816,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -12014,7 +12021,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -12035,6 +12042,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -12862,7 +12870,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -12883,6 +12891,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -13087,7 +13096,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -13108,6 +13117,7 @@
                     "title",
                     "description",
                     "assigneeId",
+                    "assigneeIds[]",
                     "creatorId",
                     "priority",
                     "workStatus",
@@ -15917,7 +15927,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.2.0",
+          "idempotencyContractVersion": "2.0.0",
           "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
@@ -15938,6 +15948,7 @@
                     "task.title",
                     "task.description",
                     "task.assigneeId",
+                    "task.assigneeIds[]",
                     "task.creatorId",
                     "task.priority",
                     "task.workStatus",
@@ -18574,10 +18585,15 @@
               "URGENT"
             ]
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           },
           "dueAt": {
             "anyOf": [
@@ -18624,7 +18640,7 @@
         "required": [
           "title",
           "priority",
-          "assigneeId",
+          "assigneeIds",
           "dueAt",
           "leftoverItemId",
           "recordVersion",
@@ -19095,10 +19111,15 @@
               "URGENT"
             ]
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           },
           "dueAt": {
             "anyOf": [
@@ -19126,7 +19147,7 @@
           "title",
           "description",
           "priority",
-          "assigneeId",
+          "assigneeIds",
           "dueAt",
           "impactFeatureIds"
         ],
@@ -19153,10 +19174,15 @@
               "URGENT"
             ]
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           },
           "dueAt": {
             "anyOf": [
@@ -19195,6 +19221,11 @@
           "code": {
             "type": "string",
             "maxLength": 64
+          },
+          "assigneeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
           },
           "creatorId": {
             "type": "integer",
@@ -19246,7 +19277,7 @@
           "title",
           "description",
           "priority",
-          "assigneeId",
+          "assigneeIds",
           "dueAt",
           "id",
           "projectId",
@@ -19254,6 +19285,7 @@
           "featureId",
           "scopeType",
           "code",
+          "assigneeId",
           "creatorId",
           "workStatus",
           "lifecycleStatus",
@@ -19534,6 +19566,14 @@
           "assignee": {
             "$ref": "#/components/schemas/UserRef"
           },
+          "assignees": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time",
@@ -19634,6 +19674,7 @@
           "workStatus",
           "lifecycleStatus",
           "assignee",
+          "assignees",
           "updatedAt",
           "priority",
           "dueAt",
@@ -23456,10 +23497,15 @@
               "URGENT"
             ]
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           },
           "dueAt": {
             "anyOf": [
@@ -23478,7 +23524,7 @@
           "title",
           "description",
           "priority",
-          "assigneeId",
+          "assigneeIds",
           "dueAt"
         ],
         "additionalProperties": false
@@ -24844,10 +24890,15 @@
               "URGENT"
             ]
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           },
           "dueAt": {
             "anyOf": [
@@ -24888,6 +24939,11 @@
           "code": {
             "type": "string",
             "maxLength": 64
+          },
+          "assigneeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
           },
           "creatorId": {
             "type": "integer",
@@ -24930,7 +24986,7 @@
           "title",
           "description",
           "priority",
-          "assigneeId",
+          "assigneeIds",
           "dueAt",
           "id",
           "projectId",
@@ -24938,6 +24994,7 @@
           "featureId",
           "scopeType",
           "code",
+          "assigneeId",
           "creatorId",
           "workStatus",
           "lifecycleStatus",

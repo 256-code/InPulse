@@ -71,6 +71,7 @@ interface ViewOverrides {
   readonly onToggleAdvanced?: () => void;
   readonly onOpenIssues?: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  readonly leftoverCount?: number | null;
 }
 
 const renderView = (overrides: ViewOverrides = {}) => {
@@ -95,6 +96,9 @@ const renderView = (overrides: ViewOverrides = {}) => {
         onToggleAdvanced={onToggleAdvanced}
         onOpenIssues={onOpenIssues}
         onOpenTask={onOpenTask}
+        {...(overrides.leftoverCount !== undefined
+          ? { leftoverCount: overrides.leftoverCount }
+          : {})}
         {...(overrides.adapter ? { adapter: overrides.adapter } : {})}
         {...(overrides.client ? { client: overrides.client } : {})}
       />
@@ -127,8 +131,9 @@ const serverLikeAdapter = (): MyTasksAdapter => ({
  * 固定任务集合的服务端适配器：用于断言「主列表跟随工作状态筛选」，
  * mock 数据集无法构造「0 个未完成 + 1 个已完成」这类边界。
  *
- * 聚合组默认清空：组卡不随工作状态收窄，列表区有内容就不显示空态（2026-09-21 定案），
- * 这些用例针对空态文案，必须同时没有任务与聚合组。需要组卡的用例自行覆盖 fetchTaskGroups。
+ * 聚合组默认清空：这些用例针对空态文案，必须同时没有任务与聚合组；需要组卡的用例
+ * 自行覆盖 fetchTaskGroups。2026-09-22 起聚合组与任务同一口径跟随工作状态筛选，
+ * 需要组卡可见的用例也要把 filters.status 调成组所在的那一档。
  */
 const serverLikeAdapterWith = (
   items: readonly MyTaskListItem[],
@@ -172,6 +177,7 @@ const doneTask: MyTaskListItem = {
   completedAt: "2026-09-03T00:00:00.000Z",
   creatorId: 1,
   assignee: { userId: 1, name: "特哥", avatarUrl: null },
+  assignees: [{ userId: 1, name: "特哥", avatarUrl: null }],
   hasPublishedRecord: false,
   publishedRecordCount: 0,
   groupRole: null,
@@ -218,6 +224,93 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByLabelText("搜索任务")).toBeEnabled();
     const projectTrigger = screen.getByLabelText("项目").closest(".ant-select");
     expect(projectTrigger).toHaveTextContent("全部项目");
+  });
+
+  it("工作状态两档显示服务端统计的数量角标", async () => {
+    const statsAdapter: MyTasksAdapter = {
+      ...serverLikeAdapterWith([]),
+      fetchMyTasks: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        stats: {
+          todayTodo: 3,
+          todayTodoBreakdown: {
+            overdue: 1,
+            leftover: 0,
+            urgent: 1,
+            dueWithinDays: 1,
+          },
+          myOpen: 7,
+          completed: 23,
+          created: 9,
+        },
+        scopeCounts: null,
+        leftoverCount: 0,
+        leftoverSample: null,
+        filterSupport: MY_TASKS_V1_FILTER_SUPPORT,
+      }),
+    };
+    renderView({ adapter: statsAdapter });
+
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    const open = within(statusFilter).getByRole("button", { name: "未完成" });
+    const done = within(statusFilter).getByRole("button", { name: "已完成" });
+    await waitFor(() =>
+      expect(open.querySelector(".segmented-count")).toHaveTextContent("7"),
+    );
+    expect(done.querySelector(".segmented-count")).toHaveTextContent("23");
+    // 角标对辅助技术隐藏（与侧栏 .nav-item em 同口径），档位名因此保持「未完成」；
+    // 数量通过 title 说明，读屏听到的按钮名不受角标影响。
+    expect(open.querySelector(".segmented-count")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(open.querySelector(".segmented-count")).toHaveAttribute(
+      "title",
+      "未完成 7 项",
+    );
+    expect(open).toHaveAccessibleName("未完成");
+  });
+
+  it("统计不可知（stats: null）时不渲染数量角标，不把未知显示成 0", async () => {
+    renderView({ adapter: serverLikeAdapterWith([]) });
+
+    // 空态出现即代表 R-3 结果已进入视图，此时才断言角标确实没有渲染。
+    await screen.findByText("没有匹配的未完成任务");
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    expect(statusFilter.querySelectorAll(".segmented-count")).toHaveLength(0);
+    expect(
+      within(statusFilter).getByRole("button", { name: "未完成" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("遗留问题入口优先显示页面注入的外壳计数（与侧栏同源）", async () => {
+    const { onOpenIssues } = renderView({ leftoverCount: 6 });
+    const button = await screen.findByRole("button", { name: /遗留问题 6/ });
+    expect(button.querySelector(".header-count")).toHaveTextContent("6");
+    await userEvent.setup().click(button);
+    expect(onOpenIssues).toHaveBeenCalledTimes(1);
+  });
+
+  it("外壳计数尚未加载（null）时不显示角标，也不回退适配器字段", async () => {
+    const adapter: MyTasksAdapter = {
+      ...serverLikeAdapterWith([]),
+      fetchMyTasks: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        stats: null,
+        scopeCounts: null,
+        leftoverCount: 3,
+        leftoverSample: null,
+        filterSupport: MY_TASKS_V1_FILTER_SUPPORT,
+      }),
+    };
+    renderView({ leftoverCount: null, adapter });
+    await screen.findByText("没有匹配的未完成任务");
+    const button = screen.getByRole("button", { name: "遗留问题" });
+    expect(button.querySelector(".header-count")).toBeNull();
   });
 
   it("shows open tasks only by default and hides done and canceled", async () => {
@@ -280,6 +373,47 @@ describe("TaskCenterPageView", () => {
 
     const row = await screen.findByText(leftoverTask.title);
     expect(row.closest("tr")).toHaveClass("tone-prio-leftover");
+  });
+
+  /**
+   * ADR-040：负责人是平权集合，服务端返回 assignees（assignee 只是它的派生标量），
+   * 卡片与列表行都必须列出全部负责人，而不是只显示第一个。
+   */
+  const multiAssigneeTask: MyTaskListItem = {
+    ...doneTask,
+    taskId: 902,
+    code: "INP-902",
+    title: "多负责人任务-902",
+    assignees: [
+      { userId: 1, name: "特哥", avatarUrl: null },
+      { userId: 2, name: "林雨妍", avatarUrl: null },
+    ],
+    assignee: { userId: 1, name: "特哥", avatarUrl: null },
+  };
+
+  it("卡片列出全部负责人而不是只显示第一位", async () => {
+    renderView({
+      filters: { status: "all", todayTodo: false },
+      adapter: serverLikeAdapterWith([multiAssigneeTask]),
+    });
+
+    const card = await screen.findByTestId("my-task-902");
+    const assignee = card.querySelector(".calm-card-assignee") as HTMLElement;
+    expect(assignee.textContent).toContain("特哥、林雨妍");
+    expect(assignee.firstElementChild?.getAttribute("title")).toBe(
+      "负责人：特哥、林雨妍",
+    );
+  });
+
+  it("列表行的负责人列同样列出全部负责人", async () => {
+    renderView({
+      filters: { status: "all", todayTodo: false, display: "list" },
+      adapter: serverLikeAdapterWith([multiAssigneeTask]),
+    });
+
+    const table = await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = table.querySelector("tbody tr");
+    expect(row?.children[3]?.textContent).toBe("特哥、林雨妍");
   });
 
   it("drops the list title and count now that the toolbar filter carries the state", async () => {
@@ -491,6 +625,13 @@ describe("TaskCenterPageView", () => {
     const { onOpenIssues } = renderView();
     const user = userEvent.setup();
     const button = await screen.findByRole("button", { name: /遗留问题 3/ });
+    // 2026-09-22（方案 A）：数量由裸文字改为数量签；签对辅助技术隐藏（与侧栏计数同口径），
+    // 按钮名仍带数量，由 aria-label 显式给出，读屏与既有断言口径不变。
+    expect(button.querySelector(".header-count")).toHaveTextContent("3");
+    expect(button.querySelector(".header-count")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     await user.click(button);
     expect(onOpenIssues).toHaveBeenCalledTimes(1);
   });
@@ -715,6 +856,7 @@ describe("TaskCenterPageView", () => {
             ...group,
             // 两个未完成分支（T-101、T-102）都收尾后组里不再有未完成截止：
             // 与任务行同文案「未设置截止」，而不是列表里的占位符「—」。
+            // 组因此落到「已完成」档，必须显式切到该档才能看到这一行（2026-09-22）。
             branches: group.branches.map((branch) =>
               branch.workStatus === "TODO"
                 ? { ...branch, workStatus: "DONE" }
@@ -791,7 +933,8 @@ describe("TaskCenterPageView", () => {
           items: groups.items.map((group) => ({
             ...group,
             // 未完成分支全部收尾后，整卡按「已完成」呈现并隐藏优先级徽章；
-            // 组本身仍未关闭，卡片保留解除合并入口。
+            // 组本身仍未关闭，卡片保留解除合并入口。组同时从「未完成」档移出，
+            // 所以这一档在「已完成」下断言（2026-09-22 产品口径）。
             branches: group.branches.map((branch) =>
               branch.workStatus === "TODO"
                 ? { ...branch, workStatus: "DONE" }
@@ -1062,6 +1205,45 @@ describe("TaskCenterPageView", () => {
     ).toEqual(["my-task-942", "my-task-943", "my-task-941"]);
   });
 
+  it("keeps a fully wound-up task group out of the unfinished view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { status: "open" },
+      adapter: serverLikeAdapterWith(
+        [],
+        groups.items.map((group) => ({
+          ...group,
+          // 全部分支收尾的组属于「已完成」：未完成档不再留着它（2026-09-22 产品口径）。
+          branches: group.branches.map((branch) => ({
+            ...branch,
+            workStatus: "DONE",
+          })),
+        })),
+      ),
+    });
+
+    expect(await screen.findByText("没有匹配的未完成任务")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
+  });
+
+  it("keeps a group with unfinished branches out of the finished view", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { status: "done" },
+      // mock 组 501 仍有未完成分支（进行中）：已完成档只收全部分支收尾的组。
+      adapter: serverLikeAdapterWith([], groups.items),
+    });
+
+    expect(await screen.findByText("没有匹配的已完成任务")).toBeInTheDocument();
+    expect(screen.queryByTestId("my-task-group-501")).toBeNull();
+  });
+
   it("opens the task group detail dialog from the group card", async () => {
     const { onOpenTask } = renderView({ client: stubClient(projects) });
     const user = userEvent.setup();
@@ -1138,7 +1320,7 @@ describe("TaskCenterPageView", () => {
     expect(within(plain).queryByText(/记录/)).toBeNull();
   });
 
-  it("keeps every priority label within two characters in the filter", async () => {
+  it("names the priority dimension on the empty option and keeps tier labels short", async () => {
     renderView();
 
     const field = await screen.findByLabelText("优先级");
@@ -1149,8 +1331,11 @@ describe("TaskCenterPageView", () => {
     fireEvent.mouseDown(trigger);
     const options = await screen.findAllByRole("option");
     const labels = options.map((option) => option.textContent?.trim() ?? "");
-    expect(labels).toEqual(["全部", "紧急", "高", "普通", "低"]);
-    for (const label of labels) {
+    // 空值项必须写明这是优先级筛选：工具栏里没有重复的文字标签（产品已删除），
+    // 只显示「全部」时看不出维度。口径与任务看板 TaskBoardToolbar 的同名选项一致。
+    expect(labels).toEqual(["全部优先级", "紧急", "高", "普通", "低"]);
+    // 具体档位仍是两个字，保持工具栏紧凑；只有空值项带维度名。
+    for (const label of labels.slice(1)) {
       expect([...label].length).toBeLessThanOrEqual(2);
     }
   });

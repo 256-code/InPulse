@@ -21,7 +21,7 @@ export const taskFields = [
   "title",
   "description",
   "priority",
-  "assigneeId",
+  "assigneeIds",
   "dueAt",
   "impactFeatureIds",
 ] as const;
@@ -31,7 +31,7 @@ export function taskEdit(item: TaskViewItem): TaskDraft {
     title: item.title,
     description: item.description,
     priority: item.priority,
-    assigneeId: item.assigneeId,
+    assigneeIds: [...item.assigneeIds],
     dueAt: item.dueAt,
     ...(item.scopeType === "MODULE"
       ? { impactFeatureIds: [...item.impactFeatureIds] }
@@ -183,6 +183,9 @@ export function useTasks(
       await Promise.all(
         // my-tasks / my-task-groups / task-marks：任务中心与聚合视图按这些键缓存，
         // 编辑（含负责人变化）后必须同批失效，否则中心列表停留旧数据。
+        // task-group / task-group-records：聚合组详情的成员块正是这些字段（标题、
+        // 负责人、状态、优先级、记录数），编辑后若不失效会一直显示旧值，
+        // 只能靠手动刷新（2026-09-22 修）。
         [
           "tasks",
           "task-board",
@@ -192,6 +195,8 @@ export function useTasks(
           "my-tasks",
           "my-task-groups",
           "task-marks",
+          "task-group",
+          "task-group-records",
         ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
       );
     },

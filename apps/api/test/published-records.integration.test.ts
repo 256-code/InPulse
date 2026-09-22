@@ -270,7 +270,7 @@ async function sourceFixture(status: "TODO" | "DONE" | "CANCELED") {
       {
         title: "来源任务",
         description: "",
-        assigneeId: userId,
+        assigneeIds: [userId],
         priority: "NORMAL",
         dueAt: null,
       },

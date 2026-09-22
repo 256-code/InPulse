@@ -25,6 +25,24 @@ const projects = [
       completedTaskCount: 1,
     },
   },
+  {
+    id: 2,
+    code: "ORD",
+    name: "订单中台",
+    description: "说明",
+    status: "ACTIVE",
+    rowVersion: 1,
+    createdBy: 1,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+    memberCount: 2,
+    stats: {
+      activeModuleCount: 1,
+      activeFeatureCount: 1,
+      openTaskCount: 0,
+      completedTaskCount: 0,
+    },
+  },
 ] as const;
 
 const modules = [
@@ -258,16 +276,35 @@ describe("GlobalTaskCreateModal", () => {
       expect(featureField.closest(".ant-select")).toHaveTextContent("MFA 登录"),
     );
 
-    await pickOption(user, "所属项目", "请选择项目");
+    // 占位项已禁用，切换项目只能选另一个真实项目（2026-09-22 修复）。
+    await pickOption(user, "所属项目", "订单中台");
 
     const moduleField = screen.getByLabelText("所属模块");
-    expect(moduleField).toBeDisabled();
-    expect(moduleField.closest(".ant-select")).toHaveTextContent(
-      "请先选择项目",
-    );
+    await waitFor(() => expect(moduleField).not.toBeDisabled());
+    expect(moduleField.closest(".ant-select")).toHaveTextContent("请选择模块");
     expect(screen.getByLabelText("所属功能")).toBeDisabled();
     expect(screen.getByLabelText("指派给")).toBeDisabled();
     expect(screen.getByRole("button", { name: "创建任务" })).toBeDisabled();
+  });
+
+  it("keeps the placeholder options unpickable", async () => {
+    const test = harness();
+    mount(test, { preset: { projectId: 1, moduleId: 11, featureId: 111 } });
+    const user = userEvent.setup();
+
+    const featureTrigger = () => {
+      const trigger = screen.getByLabelText("所属功能").closest(".ant-select");
+      if (!trigger) throw new Error("feature select not found");
+      return trigger as HTMLElement;
+    };
+    await waitFor(() => expect(featureTrigger()).toHaveTextContent("MFA 登录"));
+
+    // 「请选择功能」只是提示位：点它不会把已选功能清回未选择（2026-09-22 产品反馈）。
+    await user.click(featureTrigger());
+    const placeholder = await screen.findByTitle("请选择功能");
+    expect(placeholder).toHaveClass("ant-select-item-option-disabled");
+    await user.click(placeholder);
+    expect(featureTrigger()).toHaveTextContent("MFA 登录");
   });
 
   it("creates a feature task with CSRF and an idempotency key, then closes", async () => {
@@ -289,7 +326,7 @@ describe("GlobalTaskCreateModal", () => {
         title: "补齐恢复码入口",
         description: "",
         priority: "NORMAL",
-        assigneeId: 2,
+        assigneeIds: [2],
         dueAt: null,
       },
       {
@@ -325,7 +362,7 @@ describe("GlobalTaskCreateModal", () => {
         title: "模块级任务",
         description: "",
         priority: "NORMAL",
-        assigneeId: 1,
+        assigneeIds: [1],
         dueAt: null,
         impactFeatureIds: [112],
       },

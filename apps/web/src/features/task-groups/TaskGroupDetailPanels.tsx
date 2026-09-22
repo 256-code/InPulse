@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Alert, Spin } from "antd";
 import type { InpulseApiClient, TaskGroupRecordItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { isCardClick } from "@features/common/card-click";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -44,7 +45,7 @@ import {
 
 const ALL_RECORDS_VALUE = "all";
 
-/** 聚合组记录列表 → 详情弹窗入参：来源任务作为眉标语境，作废状态由弹窗补。 */
+/** 聚合组记录列表 → 详情弹窗入参：分支任务作为眉标语境，作废状态由弹窗补。 */
 function recordDetailTarget(record: TaskGroupRecordItem): RecordDetailTarget {
   return {
     recordId: record.recordId,
@@ -53,7 +54,9 @@ function recordDetailTarget(record: TaskGroupRecordItem): RecordDetailTarget {
     recordStatus: record.recordStatus,
     publishedAt: record.publishedAt,
     contextLabel:
-      record.sourceLabel === "主任务" ? "主任务" : "来源 " + record.sourceLabel,
+      record.sourceLabel === "主任务"
+        ? "主任务"
+        : "分支任务 " + record.sourceLabel,
     externalLinks: record.externalLinks,
   };
 }
@@ -137,12 +140,16 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
     { value: ALL_RECORDS_VALUE, label: "全部记录" },
     ...members.map((member) => ({
       value: String(member.taskId),
-      label: member.role === "MAIN" ? "主任务" : "来源任务 " + member.taskCode,
+      label: member.role === "MAIN" ? "主任务" : "分支任务 " + member.taskCode,
     })),
   ];
 
   // 分支卡片与任务卡片同一套配色（2026-09-21）：未完成按优先级铺淡色底与左侧
   // 色条，已完成转青碧、已取消转灰；已解除合并的历史成员保持灰底。
+  // 整块成员区就是任务入口（2026-09-22 产品要求）：点空白处、徽章或元信息文字
+  // 都能打开任务详情，不必瞄准标题；块内的按钮（解除合并）由 isCardClick 拦截，
+  // 不会顺带触发。宿主未下发 onOpenTask 时保持纯展示，不加焦点也不给手型。
+  const memberOpenable = onOpenTask !== undefined;
   const renderMember = (member: TaskGroupMember) => {
     const detached = member.memberStatus === "DETACHED";
     return (
@@ -155,6 +162,21 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
               taskToneClassName(member.priority, member.workStatus)
         }
         data-testid={"task-group-member-" + member.taskId}
+        tabIndex={memberOpenable ? 0 : undefined}
+        aria-label={
+          memberOpenable ? "查看任务详情：" + member.title : undefined
+        }
+        onClick={(event) => {
+          if (!memberOpenable || !isCardClick(event)) return;
+          openMemberTask(member);
+        }}
+        onKeyDown={(event) => {
+          if (!memberOpenable) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          openMemberTask(member);
+        }}
       >
         <div className="task-group-member-head">
           <span className="task-id">{member.taskCode}</span>
@@ -235,7 +257,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
             data-testid={"task-group-historical-" + member.taskId}
           >
             <InpulseIcon name="alert" size={14} />
-            {"历史来源分支：后续工作建议归入主任务" +
+            {"历史分支：后续工作建议归入主任务" +
               (mainMember === null ? "" : " " + mainMember.taskCode) +
               "。"}
           </p>
@@ -264,7 +286,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
           {group !== null && group.status === "CLOSED" ? (
             <Alert
               type="warning"
-              title="聚合组已关闭：组内来源分支已全部解除，历史关系与记录仍可查看。"
+              title="聚合组已关闭：组内分支已全部解除，历史关系与记录仍可查看。"
             />
           ) : null}
           <div className="task-group-panels">
@@ -277,10 +299,10 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                   <h2 id="task-group-members-title">成员与分支</h2>
                   <p>
                     {activeSources.length > 0
-                      ? "活跃来源分支 " +
+                      ? "活跃分支 " +
                         activeSources.length +
                         " 个 · 可逐个解除合并"
-                      : "没有活跃来源分支"}
+                      : "没有活跃分支"}
                   </p>
                 </div>
               </div>
@@ -292,7 +314,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                 <CalmEmptyState
                   icon="gitMerge"
                   title="暂无组成员"
-                  description="聚合组创建后，主任务与来源分支会显示在这里。"
+                  description="聚合组创建后，主任务与分支任务会显示在这里。"
                 />
               )}
             </section>
@@ -303,7 +325,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
               <div className="panel-head">
                 <div>
                   <h2 id="task-group-records-title">迭代记录</h2>
-                  <p>组内已发布与已作废记录；来源按记录归属任务标注</p>
+                  <p>组内已发布与已作废记录；按记录归属的分支任务标注</p>
                 </div>
               </div>
               <div className="task-group-record-filter">
@@ -338,7 +360,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                   title="暂无迭代记录"
                   description={
                     effectiveMemberTaskId === null
-                      ? "组内任务发布迭代记录后会按来源汇聚在这里。"
+                      ? "组内任务发布迭代记录后会按分支汇聚在这里。"
                       : "该分支还没有已发布或已作废的迭代记录。"
                   }
                 />
@@ -372,7 +394,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                             >
                               {record.sourceLabel === "主任务"
                                 ? "主任务"
-                                : "来源 " + record.sourceLabel}
+                                : "分支任务 " + record.sourceLabel}
                             </CalmBadge>
                             {record.recordStatus === "VOID" ? (
                               <CalmBadge tone="gray">已作废</CalmBadge>

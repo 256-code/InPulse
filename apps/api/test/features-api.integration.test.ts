@@ -377,13 +377,17 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       WITH created AS (
         INSERT INTO app.tasks (
           project_id, module_id, feature_id, scope_type, code, title,
-          work_status, completion_note, completed_at, assignee_id, creator_id
+          work_status, completion_note, completed_at, creator_id
         ) VALUES (
           ${project.projectId}, ${project.moduleId}, ${active.id}, 'FEATURE',
           ${project.code + "-T-1"}, '已完成任务', 'DONE', '已完成', now(),
-          ${member.userId}, ${member.userId}
+          ${member.userId}
         )
         RETURNING id, project_id, completed_at, completion_note
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${member.userId}, project_id FROM created
       )
       INSERT INTO app.task_status_history (
         task_id, project_id, from_work_status, to_work_status,
@@ -524,7 +528,8 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     const task = await uow.run(async (tx) => {
       const [task] = await tx.sql<
         { id: number }[]
-      >`INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, assignee_id, creator_id, lifecycle_status) VALUES (${project.projectId}, ${project.moduleId}, ${item.id}, 'FEATURE', ${`${project.code}-T-1`}, '已归档历史任务', ${member.userId}, ${member.userId}, 'ARCHIVED') RETURNING id`;
+      >`INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, creator_id, lifecycle_status) VALUES (${project.projectId}, ${project.moduleId}, ${item.id}, 'FEATURE', ${`${project.code}-T-1`}, '已归档历史任务', ${member.userId}, 'ARCHIVED') RETURNING id`;
+      await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES (${task!.id}, ${member.userId}, ${project.projectId})`;
       await tx.sql`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by) VALUES (${task!.id}, ${project.projectId}, NULL, 'TODO', ${member.userId})`;
       return task!;
     });

@@ -14,6 +14,7 @@ import {
 /** 正式记录里的一条遗留问题：状态与跟进任务都按条目自身判定。 */
 export type RecordLeftover = PublishedRecord["leftovers"][number];
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
@@ -119,7 +120,7 @@ export function LeftoverTaskConvertModal({
     [latest, setLatest] = useState<LeftoverTaskPreview | null>(null),
     [error, setError] = useState<unknown>(null),
     [title, setTitle] = useState(""),
-    [assigneeId, setAssignee] = useState(0),
+    [assigneeIds, setAssignees] = useState<number[]>([]),
     [dueInput, setDueInput] = useState(""),
     [dueBadInput, setDueBadInput] = useState(false),
     [priority, setPriority] =
@@ -178,7 +179,7 @@ export function LeftoverTaskConvertModal({
     setLatest(null);
     setError(null);
     setTitle((target.recordTitle + " · 遗留跟进").slice(0, 500));
-    setAssignee(0);
+    setAssignees([]);
     setDueInput("");
     setDueBadInput(false);
     setPriority("NORMAL");
@@ -192,7 +193,7 @@ export function LeftoverTaskConvertModal({
       preview.status !== "ACTIVE" ||
       !preview.content ||
       !title.trim() ||
-      !assigneeId ||
+      assigneeIds.length === 0 ||
       latest ||
       dueBadInput ||
       dueAt === undefined ||
@@ -206,7 +207,7 @@ export function LeftoverTaskConvertModal({
         leftoverExpectedRowVersion: preview.leftoverRowVersion,
         expectedImpactFeatureIds: preview.inheritedImpacts.map((f) => f.id),
         title: title.trim(),
-        assigneeId,
+        assigneeIds,
         priority,
         dueAt,
       },
@@ -244,6 +245,8 @@ export function LeftoverTaskConvertModal({
         "notifications-unread-count",
       ])
         void cache.invalidateQueries({ queryKey: [key] });
+      // 转任务会把遗留项移出 OPEN 桶并新增一条属于我的待办，两个侧栏计数都变。
+      void invalidateShellCounters(cache);
     } catch (e) {
       setError(e);
       if (e instanceof ApiError && e.status === 409) setConflict(true);
@@ -274,7 +277,7 @@ export function LeftoverTaskConvertModal({
             !preview.content ||
             preview.status !== "ACTIVE" ||
             !title.trim() ||
-            !assigneeId ||
+            assigneeIds.length === 0 ||
             dueInvalid ||
             !!latest ||
             conflict ||
@@ -331,18 +334,18 @@ export function LeftoverTaskConvertModal({
           <CalmSelect
             id="leftover-task-assignee"
             ariaLabel="跟进任务负责人"
-            value={assigneeId}
+            value={assigneeIds}
             disabled={busy}
             appearance="member"
-            onChange={(next) => setAssignee(Number(next))}
-            options={[
-              { value: 0, label: "请选择负责人" },
-              ...(members.data?.items ?? []).map((m) => ({
-                value: m.id,
-                label: m.name,
-                avatarUrl: m.avatarUrl ?? null,
-              })),
-            ]}
+            multiple
+            maxTagCount={2}
+            placeholder="请选择负责人（可多选）"
+            onChange={(next) => setAssignees(next.map(Number))}
+            options={(members.data?.items ?? []).map((m) => ({
+              value: m.id,
+              label: m.name,
+              avatarUrl: m.avatarUrl ?? null,
+            }))}
           />
           {members.isError && (
             <Alert

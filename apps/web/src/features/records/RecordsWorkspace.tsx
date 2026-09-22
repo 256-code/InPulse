@@ -202,9 +202,9 @@ export function RecordsWorkspace({
           </label>
         )}
         <label className="records-toolbar-field">
-          来源
+          归属
           <CalmSelect
-            ariaLabel="来源"
+            ariaLabel="归属"
             value={source}
             appearance="menu"
             onChange={(next) => setSource(next as RecordSourceFilter)}

@@ -1936,12 +1936,14 @@
   color: #7a5410;
 }
 
-.task-toolbar .task-search {
+/* 任务中心 2026-09-22 起改用一体化控制条：条内搜索框自己 `flex: 1` 撑满
+   剩余宽度，这里的固定宽度只留给迭代记录 / 遗留问题 / 项目动态那几个散开工具栏。 */
+.task-toolbar:not(.task-toolbar-bar) .task-search {
   width: 320px;
 }
 
 @media (max-width: 900px) {
-  .task-toolbar .task-search {
+  .task-toolbar:not(.task-toolbar-bar) .task-search {
     width: 100%;
   }
 }
@@ -2098,6 +2100,21 @@
   border-top: 1px solid #edf1f5;
 }
 
+/* 整块成员区即任务入口：只有渲染了 tabindex（宿主下发了 onOpenTask）时才是可点的，
+   否则纯展示的成员块不该给出可点暗示（2026-09-22）。 */
+.task-group-member[tabindex="0"] {
+  cursor: pointer;
+}
+
+.task-group-member[tabindex="0"]:hover {
+  filter: brightness(0.97);
+}
+
+.task-group-member[tabindex="0"]:focus-visible {
+  outline: 2px solid #2f6fb5;
+  outline-offset: -2px;
+}
+
 .task-group-member > strong,
 .task-group-member-title > strong {
   color: var(--task-fg, #22384f);
@@ -2127,7 +2144,8 @@
 }
 
 /* 成员任务标题就地打开任务详情弹窗（与任务中心、功能档案同一实现）：外观沿用
-   原来的纯文本，只在悬停时提示可点，不把整行变成按钮热区。 */
+   原来的纯文本，只在悬停时提示可点。整块成员区本身已是入口（2026-09-22），
+   这里的标题按钮保留为可聚焦的显式入口。 */
 .task-group-member-title {
   align-self: flex-start;
   border: 0;

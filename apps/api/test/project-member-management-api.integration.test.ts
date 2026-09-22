@@ -193,7 +193,7 @@ async function createFeatureTask(
         title: "成员管理任务",
         description: "用于验证成员移除与改派",
         priority: "NORMAL",
-        assigneeId,
+        assigneeIds: [assigneeId],
         dueAt: null,
       },
       requestId: randomUUID(),
@@ -561,7 +561,7 @@ describe("F-05 project member management API", () => {
     });
 
     const taskRows = (await client.sql`
-      SELECT assignee_id AS "assigneeId"
+      SELECT (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = app.tasks.id) AS "assigneeId"
         FROM app.tasks
        WHERE id = ${task.id}
     `) as unknown as readonly { assigneeId: number }[];
@@ -611,7 +611,7 @@ describe("F-05 project member management API", () => {
     expect(body.unfinishedTaskCount).toBe(1);
 
     const taskRows = (await client.sql`
-      SELECT assignee_id AS "assigneeId"
+      SELECT (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = app.tasks.id) AS "assigneeId"
         FROM app.tasks
        WHERE id = ${task.id}
     `) as unknown as readonly { assigneeId: number }[];
@@ -726,7 +726,7 @@ describe("F-05 project member management API", () => {
     await expectError(response, 500, "INTERNAL_ERROR");
 
     const taskRows = (await client.sql`
-      SELECT assignee_id AS "assigneeId"
+      SELECT (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = app.tasks.id) AS "assigneeId"
         FROM app.tasks
        WHERE id = ${task.id}
     `) as unknown as readonly { assigneeId: number }[];

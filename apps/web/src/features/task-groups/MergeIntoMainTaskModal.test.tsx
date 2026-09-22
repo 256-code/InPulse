@@ -135,7 +135,7 @@ describe("F-23 merge into main task", () => {
     expect(
       screen.getByText("已选择主任务：重复回调任务 A"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /历史来源分支/ }));
+    await user.click(screen.getByRole("radio", { name: /历史分支/ }));
     await user.type(
       screen.getByLabelText("合并说明（选填）"),
       "  合并不删历史  ",
@@ -190,7 +190,7 @@ describe("F-23 merge into main task", () => {
     );
     await user.click(screen.getByRole("button", { name: "确认合并" }));
     expect(
-      await screen.findByText(/来源任务已属于其他聚合组/),
+      await screen.findByText(/分支任务已属于其他聚合组/),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重新搜索" }));
     await waitFor(() => expect(getSearch).toHaveBeenCalledTimes(2));

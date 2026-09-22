@@ -56,6 +56,7 @@ import {
   type MyTaskPriority,
   type MyTaskRecordFilter,
   type MyTaskRelation,
+  type MyTaskStats,
   type MyTaskStatusFilter,
   type MyTasksAdapter,
   type MyTasksFilterGap,
@@ -260,14 +261,21 @@ const displayOptions = [
  * 工具栏「工作状态」筛选（2026-09-21 定案）：承接原先由四张统计卡承担的工作状态切换，
  * 只保留产品要求的「未完成 / 已完成」两档；URL 里遗留的 status=all 不属于任何档位，
  * 因此不高亮任何一项，而不是把它误报成「未完成」。
+ *
+ * 2026-09-22（方案 A 定稿）：两档各自带 R-3 统计的数量——myOpen / completed 取负责人
+ * 维度、按当前 project 范围计算，与列表筛选同口径；stats 不可知（适配器未接线或尚未
+ * 加载）时两档都传 null，由 CalmSegmented 不渲染角标，不把「不知道」显示成 0。
  */
-const statusOptions: ReadonlyArray<{
+function statusOptions(stats: MyTaskStats | null): ReadonlyArray<{
   readonly value: MyTaskStatusFilter;
   readonly label: string;
-}> = [
-  { value: "open", label: "未完成" },
-  { value: "done", label: "已完成" },
-];
+  readonly count: number | null;
+}> {
+  return [
+    { value: "open", label: "未完成", count: stats?.myOpen ?? null },
+    { value: "done", label: "已完成", count: stats?.completed ?? null },
+  ];
+}
 
 const filterGapLabels: Record<MyTasksFilterGap, string> = {
   "scope:created": "我创建的",
@@ -350,6 +358,17 @@ export interface TaskCenterPageViewProps {
   readonly onToggleAdvanced: () => void;
   readonly onOpenIssues: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  /**
+   * 页头「遗留问题」入口的计数（2026-09-22 修）：页面层注入外壳计数
+   * （R-6 未闭环桶，与侧栏导航同一个数字）。undefined 表示调用方未接线，
+   * 回退适配器字段；null 表示计数尚未加载——不显示角标。
+   *
+   * 为什么不用 R-3 的 leftoverCount：它的 SQL 要求 leftover_task_links 与
+   * ACTIVE 同时成立，而链接行只在「遗留项转任务」事务内写入、同一事务把条目
+   * 置成 CONVERTED，两者互斥使该字段在真实数据下恒为 0（集成测试用夹具直接
+   * 插链接才得到非零），页头因此改与侧栏同源。
+   */
+  readonly leftoverCount?: number | null;
   readonly adapter?: MyTasksAdapter;
   /** 与页面共用同一个生成客户端；缺省时弹窗自行创建。 */
   readonly client?: InpulseApiClient | undefined;
@@ -371,6 +390,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   onToggleAdvanced,
   onOpenIssues,
   onOpenTask,
+  leftoverCount: leftoverCountOverride,
   adapter,
   client,
 }) => {
@@ -391,22 +411,16 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   });
   const groups =
     groupsQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
-  /**
-   * 聚合组跟随工具栏「未完成 / 已完成」归属（2026-09-22 产品口径：全部分支完成后就归到
-   * 已完成那边）。R-7 不接受 status 参数，因此归属在渲染前用同一条 `isTaskGroupCompleted`
-   * 判据收敛，不在服务端另立口径；URL 里遗留的 status=all 两档都展示。
-   * 组的先后不在这里定：组卡与任务卡共用下文 `gridEntries` 的那一把尺子（状态分组 →
-   * 紧急桶 → 优先级 → 截止时间近到远），排序只此一处，卡片视图与列表视图同一顺序。
-   */
-  const visibleGroups =
-    filters.status === "done"
-      ? groups.filter(isTaskGroupCompleted)
-      : filters.status === "open"
-        ? groups.filter((group) => !isTaskGroupCompleted(group))
-        : groups;
   const result = taskQuery.data;
   const items = result?.items ?? [];
-  const leftoverCount = result?.leftoverCount ?? null;
+  /** R-3 统计：工作状态两档的数量角标用它，null 表示不可知（不渲染角标）。 */
+  const stats = result?.stats ?? null;
+  // 优先用页面注入的外壳计数（R-6 未闭环桶，与侧栏一致）；只有调用方未接线
+  // （undefined）才回退适配器字段，null 表示计数尚未加载、不显示角标。
+  const leftoverCount =
+    leftoverCountOverride !== undefined
+      ? leftoverCountOverride
+      : (result?.leftoverCount ?? null);
   const filterSupport: MyTasksFilterSupport =
     result?.filterSupport ?? MY_TASKS_FULL_FILTER_SUPPORT;
   /**
@@ -432,7 +446,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
    * 分支由聚合组卡片代表，任务卡片、列表行与折叠明细都不再重复这一份。
    * 判定用 R-3 的 groupRole——服务端只对 ACTIVE 组的 ACTIVE 成员返回，解除合并后
    * 自动回 null，因此不受聚合组列表分页与读取失败影响。
-   * 例外：用户显式按合并关系筛选（主任务 / 来源任务）时保留成员卡片本身，
+   * 例外：用户显式按合并关系筛选（主任务 / 分支任务）时保留成员卡片本身，
    * 否则这两个选项永远筛不出任何结果。
    */
   const visibleItems =
@@ -455,11 +469,26 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         ? visibleItems
         : openItems;
   /**
+   * 聚合组的工作状态口径与卡片徽章同源（2026-09-22 产品口径）：只要还有未收尾
+   * （TODO）分支就是「未完成」——「进行中」属于未完成；全部分支收尾（已完成 /
+   * 已取消）才是「已完成」。工具栏两档因此同时作用于任务与聚合组，已完成的组
+   * 不再留在未完成视图里；服务端对 CLOSED 组不返回分支，这类无分支的组按
+   * 「无未收尾工作」同样落到已完成档，不会永远占着未完成。
+   */
+  const groupHasOpenWork = (group: MyTaskGroupItem): boolean =>
+    group.branches.some((branch) => branch.workStatus === "TODO");
+  const primaryGroups =
+    filters.status === "done"
+      ? groups.filter((group) => !groupHasOpenWork(group))
+      : filters.status === "all"
+        ? groups
+        : groups.filter(groupHasOpenWork);
+  /**
    * 任务卡片与聚合组卡片任一存在即渲染列表区：聚合组混排进任务网格后不再单列
    * 「还没有聚合组」空态，任务为空但聚合组存在时也不能显示任务空态；
    * 已合并任务被隐藏时同理，它由聚合组卡片代表。
    */
-  const hasListContent = primaryItems.length > 0 || visibleGroups.length > 0;
+  const hasListContent = primaryItems.length > 0 || primaryGroups.length > 0;
   /** 今日待办是「未完成」的子集，空态必须点明它更窄，否则看起来像漏了任务。 */
   const todayTodoActive =
     filters.status === "open" && filters.todayTodo !== false;
@@ -503,12 +532,22 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
 
   const relationLabelOf = (item: MyTaskListItem): string => {
     if (item.groupRole === "MAIN") return "主任务";
-    if (item.groupRole === "SOURCE") return "来源任务";
+    if (item.groupRole === "SOURCE") return "分支任务";
     return "独立任务";
+  };
+
+  /**
+   * 任务负责人展示（ADR-040）：负责人是平权集合，卡片与列表行都要列出全部人，
+   * 用「、」连接，与聚合组卡、功能档案任务面板同一口径。
+   */
+  const assigneeNamesOf = (item: MyTaskListItem): string => {
+    const names = item.assignees.map((assignee) => assignee.name);
+    return names.length === 0 ? "—" : names.join("、");
   };
 
   const renderCard = (item: MyTaskListItem) => {
     const due = dueLabel(item);
+    const assigneeNames = assigneeNamesOf(item);
     return (
       <button
         type="button"
@@ -534,9 +573,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             (item.featureName === null ? "" : " · " + item.featureName)}
         </p>
         <div className="calm-card-assignee">
-          <span title={"负责人：" + item.assignee.name}>
+          <span title={"负责人：" + assigneeNames}>
             <InpulseIcon name="users" size={14} />
-            {item.assignee.name}
+            {assigneeNames}
           </span>
         </div>
         <div className="calm-card-bottom">
@@ -552,7 +591,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             ) : null}
             {item.groupRole !== null ? (
               <CalmBadge tone={item.groupRole === "MAIN" ? "violet" : "cyan"}>
-                {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
+                {item.groupRole === "MAIN" ? "主任务" : "分支任务"}
               </CalmBadge>
             ) : null}
             {item.hasLeftoverSource ? (
@@ -588,7 +627,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   /**
    * 聚合组卡片的负责人名单（2026-09-21 产品要求）：组内分支可以由不同人负责，
    * 卡片要把全部负责人都列出来，不能只显示主任务负责人。按 userId 去重（同一人
-   * 同时挂主任务与来源分支时只出现一次）；服务端已把主任务排在分支首位，保持
+   * 同时挂主任务与分支任务时只出现一次）；服务端已把主任务排在分支首位，保持
    * 原始顺序即可让主任务负责人在最前。
    */
   const branchAssigneeNames = (group: MyTaskGroupItem): readonly string[] => {
@@ -623,7 +662,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         ? "已关闭的聚合组：负责人保留在详情中"
         : assigneeNames.length === 1 && mainBranch !== null
           ? "主任务负责人：" + assigneeText
-          : "各分支负责人：" + assigneeText + "（含主任务与全部来源分支）";
+          : "各分支负责人：" + assigneeText + "（含主任务与全部分支任务）";
     const doneCount = group.branches.filter(
       (branch) => branch.workStatus === "DONE",
     ).length;
@@ -662,7 +701,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     // 列表行的「归属 / 截止 / 迭代」三列（2026-09-22 产品口径）：归属跟随主任务所在
     // 模块 / 功能；截止取未完成（TODO）分支中最早的一条——该条完成后自动落到下一条，
     // 未完成分支都没设截止时与任务行同文案「未设置截止」（2026-09-22 产品补充）；
-    // 迭代汇总全部分支的 PUBLISHED 记录数（与任务行同口径，含来源分支而不只是主任务）。
+    // 迭代汇总全部分支的 PUBLISHED 记录数（与任务行同口径，含分支任务而不只是主任务）。
     // 三列都只读服务端透传的事实字段，不在渲染处另算。
     const ownershipText =
       mainBranch === null
@@ -781,7 +820,19 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <div className="calm-card-assignee">
           <span title={assigneeTitle}>
             <InpulseIcon name="users" size={14} />
-            {assigneeText}
+            <span className="task-group-assignee-names">{assigneeText}</span>
+          </span>
+          <span
+            title={
+              group.branches.length > 0
+                ? "包含主分支与全部分支任务"
+                : "已关闭的聚合组：分支历史保留在详情中"
+            }
+          >
+            <InpulseIcon name="gitMerge" size={14} />
+            {group.branches.length > 0
+              ? group.branches.length + " 条分支"
+              : "—"}
           </span>
         </div>
         <div className="calm-card-bottom">
@@ -922,11 +973,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     }));
   const gridEntries: readonly TaskCenterGridEntry[] = [
     ...taskEntriesOf(primaryItems),
-    ...visibleGroups.map((group) => ({
+    ...primaryGroups.map((group) => ({
       kind: "group" as const,
       group,
       rank: [
-        isTaskGroupCompleted(group) ? 1 : 0,
+        groupHasOpenWork(group) ? 0 : 1,
         // 组卡没有完成时间这个事实（R-7 分支 DTO 不透传 completed_at），取归一值 0：
         // 已完成的组排在已完成任务之后，组之间保持服务端的 groupId DESC 顺序。
         0,
@@ -988,7 +1039,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                       ? ""
                       : " / " + entry.item.featureName)}
                 </td>
-                <td>{entry.item.assignee.name}</td>
+                <td title={assigneeNamesOf(entry.item)}>{assigneeNamesOf(entry.item)}</td>
                 <td>
                   <CalmBadge tone={taskPriorityBadgeTone(entry.item.priority)}>
                     {taskPriorityLabel(entry.item.priority)}
@@ -1025,16 +1076,26 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </p>
         </div>
         <div className="catalog-actions">
+          {/* 2026-09-22（方案 A）：数量由裸文字改为数量签，与工具栏的状态角标同一种表达。
+              签对辅助技术隐藏（与侧栏 `.nav-item em` 同口径），按钮名改由 aria-label
+              显式给出，仍是「遗留问题 N」，读屏与既有用例口径不变。 */}
           <button
             type="button"
             className="secondary-button"
+            aria-label={
+              leftoverCount !== null && leftoverCount > 0
+                ? "遗留问题 " + leftoverCount
+                : "遗留问题"
+            }
             onClick={onOpenIssues}
           >
             <InpulseIcon name="alert" size={15} />
             遗留问题
-            {leftoverCount !== null && leftoverCount > 0
-              ? " " + leftoverCount
-              : ""}
+            {leftoverCount !== null && leftoverCount > 0 ? (
+              <em className="header-count" aria-hidden="true">
+                {leftoverCount}
+              </em>
+            ) : null}
           </button>
           <button
             type="button"
@@ -1068,7 +1129,19 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </button>
         </p>
       )}
-      <div className="toolbar task-toolbar">
+      {/* 2026-09-22（方案 A）一体化控制条：工作状态（带数量）· 搜索 · 项目 / 优先级 /
+          任务范围 · 展示方式收进同一条白底控制条。既有结构全部保留——「更多筛选」仍是
+          `.task-toolbar` 的直接子元素与 `.secondary-button`（设计系统按定案把它常驻
+          display:none，靠 DOM 事件展开面板），间距仍由 `.task-center` 的页头 / 工具栏
+          外边距决定，标题到工具栏与工具栏到卡片的节奏不变。 */}
+      <div className="toolbar task-toolbar task-toolbar-bar">
+        <CalmSegmented
+          label="工作状态"
+          value={filters.status}
+          options={statusOptions(stats)}
+          onChange={(status) => update({ status })}
+        />
+        <span className="task-toolbar-divider" aria-hidden="true" />
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
           <input
@@ -1079,12 +1152,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
-        <CalmSegmented
-          label="工作状态"
-          value={filters.status}
-          options={statusOptions}
-          onChange={(status) => update({ status })}
-        />
         {/* 下拉自身已显示「全部项目 / 项目名」，重复的文字标签已按产品要求删除；
             无障碍定位仍由 CalmSelect 的 aria-label 提供。 */}
         <CalmSelect
@@ -1113,7 +1180,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             })
           }
           options={[
-            { value: "", label: "全部" },
+            // 收起态直接显示「全部优先级」而不是「全部」，否则单看触发器看不出
+            // 这是哪个维度的筛选；与任务看板 TaskBoardToolbar 的同名选项保持一致。
+            { value: "", label: "全部优先级" },
             ...priorityOrder.map((priority) => ({
               value: priority,
               label: taskPriorityLabel(priority),
@@ -1145,12 +1214,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <InpulseIcon name="sliders" size={15} />
           更多筛选{activeFilterCount > 0 ? " · " + activeFilterCount : ""}
         </button>
-        <CalmSegmented
-          label="展示方式"
-          value={filters.display}
-          options={displayOptions}
-          onChange={(display) => update({ display })}
-        />
+        <div className="task-toolbar-view">
+          <CalmSegmented
+            label="展示方式"
+            value={filters.display}
+            options={displayOptions}
+            onChange={(display) => update({ display })}
+          />
+        </div>
       </div>
 
       {localGaps.length > 0 ? (
@@ -1177,7 +1248,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 { value: "", label: "全部" },
                 { value: "STANDALONE", label: "独立任务" },
                 { value: "MAIN", label: "主任务" },
-                { value: "SOURCE", label: "来源任务" },
+                { value: "SOURCE", label: "分支任务" },
               ]}
             />
           </label>

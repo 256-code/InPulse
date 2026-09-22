@@ -39,6 +39,7 @@ export const SEED_TABLES = [
   "modules",
   "features",
   "tasks",
+  "task_assignees",
   "task_feature_impacts",
   "task_groups",
   "task_group_members",

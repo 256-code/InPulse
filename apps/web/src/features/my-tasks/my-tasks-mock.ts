@@ -32,6 +32,12 @@ export const MY_TASKS_MOCK_NOTICE =
  */
 type MockTaskItem = MyTaskListItem & { description: string };
 
+/**
+ * 种子只声明单个负责人（示例数据足够）；assignees 由 createMockItems 统一补全，
+ * 避免 10 份示例重复写集合，同时保证导出条目仍是完整 MyTaskListItem。
+ */
+type MockItemSeed = Omit<MockTaskItem, "assignees">;
+
 type Bucket = "open" | "done" | "canceled";
 
 const bucketRank: Record<Bucket, number> = { open: 0, done: 1, canceled: 2 };
@@ -76,7 +82,7 @@ function bucketOf(status: MyTaskWorkStatus): Bucket {
   return "canceled";
 }
 
-function createMockItems(): readonly MockTaskItem[] {
+function createMockItemSeeds(): readonly MockItemSeed[] {
   return [
     {
       taskId: 101,
@@ -351,6 +357,14 @@ function createMockItems(): readonly MockTaskItem[] {
       hasLeftoverSource: false,
     },
   ];
+}
+
+/** ADR-040：负责人是集合，标量 assignee 是它的派生视图（等于 assignees[0]）。 */
+function createMockItems(): readonly MockTaskItem[] {
+  return createMockItemSeeds().map((seed) => ({
+    ...seed,
+    assignees: [seed.assignee],
+  }));
 }
 
 function haystack(item: MockTaskItem): string {

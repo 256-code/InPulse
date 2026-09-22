@@ -155,7 +155,7 @@ export class TaskGroupRepository {
                 WHERE m.project_id = tg.project_id
                   AND m.group_id = tg.id
                   AND m.status = 'ACTIVE'
-                  AND t.assignee_id = ${actorUserId}
+                  AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${actorUserId})
              )
          AND (${after}::integer IS NULL OR tg.id < ${after})
        ORDER BY tg.id DESC
