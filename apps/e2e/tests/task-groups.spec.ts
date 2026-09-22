@@ -90,7 +90,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     const sourceMember = group
       .locator(".task-group-member")
       .filter({ hasText: sourceTaskTitle });
-    await expect(sourceMember).toContainText("活动来源分支");
+    await expect(sourceMember).toContainText("活动分支");
     await expect(group.getByText("暂无迭代记录")).toBeVisible();
 
     // 记录筛选是弹层局部状态（不再写入 URL），点击后筛选按钮保持选中。
@@ -105,7 +105,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     // F-24：解除合并需要二次确认，最后一个活跃来源分支会关闭聚合组。
     await sourceMember.getByRole("button", { name: "解除合并" }).click();
     const unmergeDialog = page.getByRole("dialog", { name: "解除合并" });
-    await expect(unmergeDialog).toContainText("最后一个活跃来源分支");
+    await expect(unmergeDialog).toContainText("最后一个活跃分支");
     await unmergeDialog
       .getByLabel("解除原因（选填）")
       .fill("E2E：两个任务实际不重复");
@@ -186,7 +186,7 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
       .locator(".calm-task-card")
       .filter({ hasText: sourceTaskTitle });
     await expect(
-      sourceCard.getByText("来源任务", { exact: true }),
+      sourceCard.getByText("分支任务", { exact: true }),
     ).toBeVisible();
     await expect(
       page
@@ -195,7 +195,7 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
         .getByText("主任务", { exact: true }),
     ).toBeVisible();
     await sourceCard.click();
-    await expect(detail.getByText("来源任务", { exact: true })).toBeVisible();
+    await expect(detail.getByText("分支任务", { exact: true })).toBeVisible();
     await detail.getByRole("button", { name: "查看主任务" }).click();
     // 聚合组入口就地打开弹窗，不再离开当前功能页。
     await expect(page.locator(".task-group-detail-modal")).toBeVisible();
@@ -249,7 +249,7 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
     const sourceMemberRow = group
       .locator(".task-group-member")
       .filter({ hasText: sourceTaskTitle });
-    await expect(sourceMemberRow).toContainText("活动来源分支");
+    await expect(sourceMemberRow).toContainText("活动分支");
 
     // 弹窗成员标题按统一模式就地打开任务详情：来源任务与主任务都可直达。
     await sourceMemberRow.locator(".task-group-member-title").click();

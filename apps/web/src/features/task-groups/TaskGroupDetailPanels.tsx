@@ -45,7 +45,7 @@ import {
 
 const ALL_RECORDS_VALUE = "all";
 
-/** 聚合组记录列表 → 详情弹窗入参：来源任务作为眉标语境，作废状态由弹窗补。 */
+/** 聚合组记录列表 → 详情弹窗入参：分支任务作为眉标语境，作废状态由弹窗补。 */
 function recordDetailTarget(record: TaskGroupRecordItem): RecordDetailTarget {
   return {
     recordId: record.recordId,
@@ -54,7 +54,9 @@ function recordDetailTarget(record: TaskGroupRecordItem): RecordDetailTarget {
     recordStatus: record.recordStatus,
     publishedAt: record.publishedAt,
     contextLabel:
-      record.sourceLabel === "主任务" ? "主任务" : "来源 " + record.sourceLabel,
+      record.sourceLabel === "主任务"
+        ? "主任务"
+        : "分支任务 " + record.sourceLabel,
     externalLinks: record.externalLinks,
   };
 }
@@ -138,7 +140,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
     { value: ALL_RECORDS_VALUE, label: "全部记录" },
     ...members.map((member) => ({
       value: String(member.taskId),
-      label: member.role === "MAIN" ? "主任务" : "来源任务 " + member.taskCode,
+      label: member.role === "MAIN" ? "主任务" : "分支任务 " + member.taskCode,
     })),
   ];
 
@@ -255,7 +257,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
             data-testid={"task-group-historical-" + member.taskId}
           >
             <InpulseIcon name="alert" size={14} />
-            {"历史来源分支：后续工作建议归入主任务" +
+            {"历史分支：后续工作建议归入主任务" +
               (mainMember === null ? "" : " " + mainMember.taskCode) +
               "。"}
           </p>
@@ -284,7 +286,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
           {group !== null && group.status === "CLOSED" ? (
             <Alert
               type="warning"
-              title="聚合组已关闭：组内来源分支已全部解除，历史关系与记录仍可查看。"
+              title="聚合组已关闭：组内分支已全部解除，历史关系与记录仍可查看。"
             />
           ) : null}
           <div className="task-group-panels">
@@ -297,10 +299,10 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                   <h2 id="task-group-members-title">成员与分支</h2>
                   <p>
                     {activeSources.length > 0
-                      ? "活跃来源分支 " +
+                      ? "活跃分支 " +
                         activeSources.length +
                         " 个 · 可逐个解除合并"
-                      : "没有活跃来源分支"}
+                      : "没有活跃分支"}
                   </p>
                 </div>
               </div>
@@ -312,7 +314,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                 <CalmEmptyState
                   icon="gitMerge"
                   title="暂无组成员"
-                  description="聚合组创建后，主任务与来源分支会显示在这里。"
+                  description="聚合组创建后，主任务与分支任务会显示在这里。"
                 />
               )}
             </section>
@@ -323,7 +325,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
               <div className="panel-head">
                 <div>
                   <h2 id="task-group-records-title">迭代记录</h2>
-                  <p>组内已发布与已作废记录；来源按记录归属任务标注</p>
+                  <p>组内已发布与已作废记录；按记录归属的分支任务标注</p>
                 </div>
               </div>
               <div className="task-group-record-filter">
@@ -358,7 +360,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                   title="暂无迭代记录"
                   description={
                     effectiveMemberTaskId === null
-                      ? "组内任务发布迭代记录后会按来源汇聚在这里。"
+                      ? "组内任务发布迭代记录后会按分支汇聚在这里。"
                       : "该分支还没有已发布或已作废的迭代记录。"
                   }
                 />
@@ -392,7 +394,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                             >
                               {record.sourceLabel === "主任务"
                                 ? "主任务"
-                                : "来源 " + record.sourceLabel}
+                                : "分支任务 " + record.sourceLabel}
                             </CalmBadge>
                             {record.recordStatus === "VOID" ? (
                               <CalmBadge tone="gray">已作废</CalmBadge>

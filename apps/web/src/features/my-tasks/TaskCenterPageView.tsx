@@ -254,7 +254,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
    * 分支由聚合组卡片代表，任务卡片、列表行与折叠明细都不再重复这一份。
    * 判定用 R-3 的 groupRole——服务端只对 ACTIVE 组的 ACTIVE 成员返回，解除合并后
    * 自动回 null，因此不受聚合组列表分页与读取失败影响。
-   * 例外：用户显式按合并关系筛选（主任务 / 来源任务）时保留成员卡片本身，
+   * 例外：用户显式按合并关系筛选（主任务 / 分支任务）时保留成员卡片本身，
    * 否则这两个选项永远筛不出任何结果。
    */
   const visibleItems =
@@ -340,7 +340,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
 
   const relationLabelOf = (item: MyTaskListItem): string => {
     if (item.groupRole === "MAIN") return "主任务";
-    if (item.groupRole === "SOURCE") return "来源任务";
+    if (item.groupRole === "SOURCE") return "分支任务";
     return "独立任务";
   };
 
@@ -395,7 +395,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             ) : null}
             {item.groupRole !== null ? (
               <CalmBadge tone={item.groupRole === "MAIN" ? "violet" : "cyan"}>
-                {item.groupRole === "MAIN" ? "主任务" : "来源任务"}
+                {item.groupRole === "MAIN" ? "主任务" : "分支任务"}
               </CalmBadge>
             ) : null}
             {item.hasLeftoverSource ? (
@@ -431,7 +431,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   /**
    * 聚合组卡片的负责人名单（2026-09-21 产品要求）：组内分支可以由不同人负责，
    * 卡片要把全部负责人都列出来，不能只显示主任务负责人。按 userId 去重（同一人
-   * 同时挂主任务与来源分支时只出现一次）；服务端已把主任务排在分支首位，保持
+   * 同时挂主任务与分支任务时只出现一次）；服务端已把主任务排在分支首位，保持
    * 原始顺序即可让主任务负责人在最前。
    */
   const branchAssigneeNames = (group: MyTaskGroupItem): readonly string[] => {
@@ -464,7 +464,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         ? "已关闭的聚合组：负责人保留在详情中"
         : assigneeNames.length === 1 && mainBranch !== null
           ? "主任务负责人：" + assigneeText
-          : "各分支负责人：" + assigneeText + "（含主任务与全部来源分支）";
+          : "各分支负责人：" + assigneeText + "（含主任务与全部分支任务）";
     const doneCount = group.branches.filter(
       (branch) => branch.workStatus === "DONE",
     ).length;
@@ -485,7 +485,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     // 列表行的「归属 / 截止 / 迭代」三列（2026-09-22 产品口径）：归属跟随主任务所在
     // 模块 / 功能；截止取未完成（TODO）分支中最早的一条——该条完成后自动落到下一条，
     // 未完成分支都没设截止时与任务行同文案「未设置截止」（2026-09-22 产品补充）；
-    // 迭代汇总全部分支的 PUBLISHED 记录数（与任务行同口径，含来源分支而不只是主任务）。
+    // 迭代汇总全部分支的 PUBLISHED 记录数（与任务行同口径，含分支任务而不只是主任务）。
     // 三列都只读服务端透传的事实字段，不在渲染处另算。
     const ownershipText =
       mainBranch === null
@@ -593,7 +593,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <span
             title={
               group.branches.length > 0
-                ? "包含主分支与全部来源分支"
+                ? "包含主分支与全部分支任务"
                 : "已关闭的聚合组：分支历史保留在详情中"
             }
           >
@@ -961,7 +961,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 { value: "", label: "全部" },
                 { value: "STANDALONE", label: "独立任务" },
                 { value: "MAIN", label: "主任务" },
-                { value: "SOURCE", label: "来源任务" },
+                { value: "SOURCE", label: "分支任务" },
               ]}
             />
           </label>

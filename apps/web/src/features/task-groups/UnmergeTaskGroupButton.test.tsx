@@ -177,7 +177,7 @@ describe("F-24 unmerge task group", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "确认解除合并" }),
     );
-    await screen.findByText(/仅活跃来源分支可以解除合并/);
+    await screen.findByText(/仅活跃分支可以解除合并/);
   });
 
   it("warns when the group will close after this unmerge", async () => {
@@ -185,8 +185,6 @@ describe("F-24 unmerge task group", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "解除合并" }));
     const dialog = await screen.findByRole("dialog", { name: "解除合并" });
-    expect(
-      within(dialog).getByText(/最后一个活跃来源分支/),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/最后一个活跃分支/)).toBeInTheDocument();
   });
 });

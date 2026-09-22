@@ -4,7 +4,7 @@ import type { RecordFeedQueryRequest } from "@generated/api";
  * B-3b：记录清单的展示分组与筛选选项。
  * 跨项目清单、来源与 `q` 全文检索都由服务端 `listRecordFeed` 完成（B-3a 在已加载页
  * 内做的本地过滤与服务端结果不一致，已随名称回填一起移除）；这里只保留设计师稿的
- * 筛选文案与按发布日分组。主任务 / 来源任务的拆分来自服务端任务组合并关系（R-5）。
+ * 筛选文案与按发布日分组。主任务 / 分支任务的拆分来自服务端任务组合并关系（R-5）。
  */
 export type RecordSourceFilter = NonNullable<RecordFeedQueryRequest["source"]>;
 
@@ -12,9 +12,9 @@ export const RECORD_SOURCE_FILTERS: ReadonlyArray<{
   readonly value: RecordSourceFilter;
   readonly label: string;
 }> = [
-  { value: "ALL", label: "全部来源" },
+  { value: "ALL", label: "全部" },
   { value: "MAIN", label: "主任务" },
-  { value: "SOURCE", label: "来源任务" },
+  { value: "SOURCE", label: "分支任务" },
   { value: "MODULE", label: "模块级影响" },
   { value: "FEATURE", label: "功能直接创建" },
 ];

@@ -34,7 +34,7 @@ const hierarchyNotes = [
   { label: "功能", text: "长期档案，保存当前说明与全部迭代历史。" },
   { label: "任务", text: "一次具体执行工作，功能级或模块级。" },
   { label: "迭代记录", text: "已经发生的变化，人员与时间自动生成。" },
-  { label: "来源分支", text: "合并后保留的历史，不删除不覆盖。" },
+  { label: "分支任务", text: "合并后保留的历史，不删除不覆盖。" },
 ];
 
 export interface ProjectsPageViewProps {

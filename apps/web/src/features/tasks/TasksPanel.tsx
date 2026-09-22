@@ -111,7 +111,7 @@ type Merge = ReturnType<typeof mergeTask> & {
  * 徽章与「查看主任务」入口一并隐藏；数据来自页面级一次批量 R-5 调用。
  */
 function relationBadge(mark: TaskMark | undefined): {
-  readonly label: "主任务" | "来源任务";
+  readonly label: "主任务" | "分支任务";
   readonly tone: "violet" | "cyan";
   readonly title: string;
 } | null {
@@ -119,9 +119,9 @@ function relationBadge(mark: TaskMark | undefined): {
     return { label: "主任务", tone: "violet", title: "聚合组统一入口" };
   if (mark?.groupRole === "SOURCE")
     return {
-      label: "来源任务",
+      label: "分支任务",
       tone: "cyan",
-      title: "来源分支，保留原始状态与历史",
+      title: "分支任务，保留原始状态与历史",
     };
   return null;
 }
@@ -350,7 +350,7 @@ export function TasksPanel({
   );
   const currentMark = current ? marks.get(current.id) : undefined;
   const currentBadge = relationBadge(currentMark);
-  // 主任务自身就是统一入口，只有来源分支显示「查看主任务」；
+  // 主任务自身就是统一入口，只有分支任务显示「查看主任务」；
   // groupRole 为 null（未入组）时不显示任何导航入口（C-1）。
   const currentGroupId =
     currentMark?.groupRole === "SOURCE" ? currentMark.groupId : null;
@@ -1360,7 +1360,7 @@ export function TasksPanel({
                           <InpulseIcon name="gitMerge" size={25} />
                           <strong>当前是独立任务</strong>
                           <p>
-                            发现重复任务时可以合并到主任务，合并后形成主分支与来源分支，历史全部保留。
+                            发现重复任务时可以合并到主任务，合并后形成主分支与分支任务，历史全部保留。
                           </p>
                         </div>
                       ) : (
@@ -1370,13 +1370,13 @@ export function TasksPanel({
                               <h3>
                                 {currentRelation.role === "MAIN"
                                   ? "主任务"
-                                  : "来源分支"}{" "}
+                                  : "分支任务"}{" "}
                                 · 聚合组 #{currentRelation.groupId}
                               </h3>
                               <small>
                                 {currentRelation.role === "MAIN"
-                                  ? "本任务是聚合组的统一入口，来源分支保留各自的状态与历史。"
-                                  : "本任务是来源分支，原始状态、负责人、迭代记录与外部链接全部保留。"}
+                                  ? "本任务是聚合组的统一入口，分支任务保留各自的状态与历史。"
+                                  : "本任务是分支任务，原始状态、负责人、迭代记录与外部链接全部保留。"}
                               </small>
                             </div>
                           </div>

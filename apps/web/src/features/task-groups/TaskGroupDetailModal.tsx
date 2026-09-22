@@ -78,7 +78,7 @@ export function TaskGroupDetailModal({
           </CalmBadge>
         )}
         <span className="task-group-created">
-          主任务是统一入口；来源分支保留原任务编号、负责人与全部迭代记录，合并关系不删除历史。
+          主任务是统一入口；分支任务保留原任务编号、负责人与全部迭代记录，合并关系不删除历史。
         </span>
       </div>
       {groupId === null ? null : (

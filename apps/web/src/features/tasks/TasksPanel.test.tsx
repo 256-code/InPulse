@@ -490,7 +490,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const sourceCard = (await screen.findByText("来源任务甲")).closest(
       ".calm-task-card",
     ) as HTMLElement;
-    expect(await within(sourceCard).findByText("来源任务")).toBeInTheDocument();
+    expect(await within(sourceCard).findByText("分支任务")).toBeInTheDocument();
     expect(
       await within(sourceCard).findByText("记录 2 条"),
     ).toBeInTheDocument();
@@ -504,7 +504,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       .closest(".calm-task-card") as HTMLElement;
     // 卡片与列表行共用程度配色：普通优先级取蓝色 tone 类。
     expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-normal");
-    expect(within(ungroupedCard).queryByText("来源任务")).toBeNull();
+    expect(within(ungroupedCard).queryByText("分支任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
     expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
@@ -720,7 +720,7 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
-    expect(await within(dialog).findByText("来源任务")).toBeInTheDocument();
+    expect(await within(dialog).findByText("分支任务")).toBeInTheDocument();
     expect(within(dialog).getByText("迭代记录 2 条")).toBeInTheDocument();
     expect(await within(dialog).findByText("遗留问题")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
@@ -969,7 +969,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(tabs).getByRole("tab", { name: "合并与分支 · #501" }),
     );
     expect(
-      within(dialog).getByRole("heading", { name: "来源分支 · 聚合组 #501" }),
+      within(dialog).getByRole("heading", { name: "分支任务 · 聚合组 #501" }),
     ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /查看主任务/ }));
     const group = await screen.findByRole("dialog", { name: "退款聚合组" });
