@@ -16237,7 +16237,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -20339,7 +20338,6 @@
                 "type": "string",
                 "enum": [
                   "MEMBER",
-                  "PROJECT_ADMIN",
                   "LEADER"
                 ]
               },
@@ -20505,7 +20503,6 @@
                 "type": "string",
                 "enum": [
                   "MEMBER",
-                  "PROJECT_ADMIN",
                   "LEADER"
                 ]
               },
@@ -20591,7 +20588,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -20733,7 +20729,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           },
@@ -22520,7 +22515,6 @@
             "type": "string",
             "enum": [
               "MEMBER",
-              "PROJECT_ADMIN",
               "LEADER"
             ]
           }

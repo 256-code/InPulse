@@ -5,7 +5,7 @@ export type ActiveProjectMemberItem = {
   readonly id: number;
   readonly name: string;
   readonly avatarUrl: (string | null);
-  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+  readonly role: ("MEMBER" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -800,7 +800,7 @@ export type ProjectCode = string;
 
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
-  readonly currentUserRole?: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
+  readonly currentUserRole?: (("MEMBER" | "LEADER") | null);
 };
 
 export type ProjectEditRequest = {
@@ -836,7 +836,7 @@ export type ProjectListItem = {
   readonly updatedAt: string;
   readonly memberCount: number;
   readonly stats: ProjectStats;
-  readonly currentUserRole: (("MEMBER" | "PROJECT_ADMIN" | "LEADER") | null);
+  readonly currentUserRole: (("MEMBER" | "LEADER") | null);
   readonly pendingArchiveRequest: (PendingProjectArchiveRequest | null);
 };
 
@@ -851,7 +851,7 @@ export type ProjectMemberCollectionPath = {
 export type ProjectMemberItem = {
   readonly userId: number;
   readonly status: ("ACTIVE" | "REMOVED");
-  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+  readonly role: ("MEMBER" | "LEADER");
   readonly joinedAt: string;
 };
 
@@ -879,7 +879,7 @@ export type ProjectMemberRecordItem = {
   readonly name: string;
   readonly avatarUrl: (string | null);
   readonly status: ("ACTIVE" | "REMOVED");
-  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+  readonly role: ("MEMBER" | "LEADER");
   readonly joinedAt: string;
   readonly removedAt: (string | null);
 };
@@ -1226,7 +1226,7 @@ export type SearchQueryRequest = {
 };
 
 export type SetProjectMemberRoleRequest = {
-  readonly role: ("MEMBER" | "PROJECT_ADMIN" | "LEADER");
+  readonly role: ("MEMBER" | "LEADER");
 };
 
 export type SetProjectMemberRoleResponse = {
