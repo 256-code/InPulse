@@ -10,6 +10,7 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { taskError, type TaskViewItem } from "./task-query";
 import { CompleteWithRecord } from "./CompleteWithRecord";
+import { TaskOriginCrumb } from "./task-origin";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 
@@ -191,14 +192,16 @@ export function TaskStatusPanel({
     !!reloadError ||
     invalidState;
   const disabled = blocked || (action === "COMPLETE" && actualChange !== "no");
-  // 设计稿 completion-flow 的三个步骤各有一个引导标题；仓库的「完成任务」弹层标题
-  // 已经承担第三步骤（完成任务）的措辞，这里只补前两步的问句与标题。
+  // 设计稿 completion-flow 的三个步骤各有一个引导标题；弹层头部只保留来源面包屑，
+  // 标题统一由正文承担，避免同一条文案在头部与正文各出现一次。
   const completionStepTitle =
-    action !== "COMPLETE" || actualChange === "no"
+    action !== "COMPLETE"
       ? null
       : actualChange === ""
         ? "本次工作是否产生了实际功能变化？"
-        : "记录这次变化";
+        : actualChange === "yes"
+          ? "记录这次变化"
+          : labels.COMPLETE;
   // 设计稿 task-modal.tsx 的取消流程复用同一骨架：返回按钮 + `h2` 标题 + 任务副标题。
   const stepTitle =
     action === "COMPLETE"
@@ -280,10 +283,15 @@ export function TaskStatusPanel({
         className="catalog-modal"
         size="xl"
         open={action !== null}
-        eyebrow={`项目 #${item.projectId} / 模块 #${item.moduleId} / ${
-          item.featureId === null ? "模块级任务" : `功能 #${item.featureId}`
-        }`}
-        title={action ? labels[action] : "任务状态"}
+        eyebrow={
+          <TaskOriginCrumb
+            projectId={item.projectId}
+            moduleId={item.moduleId}
+            featureId={item.featureId}
+            client={api}
+          />
+        }
+        label={action ? labels[action] : "任务状态"}
         onCancel={() => {
           if (!saving.current && !reloading && !recordBusy) onClose();
         }}

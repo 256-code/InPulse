@@ -631,7 +631,7 @@ export const schemaRegistry = {
   },
   SetProjectMemberRoleRequest: {
     schema: setProjectMemberRoleRequestSchema,
-    summary: "ADR-039 任命/撤销组长请求（仅系统管理员，MEMBER 或 LEADER）",
+    summary: "ADR-033 任命/撤销项目内角色请求",
     sensitiveFieldPaths: [],
   },
   SetProjectMemberRoleResponse: {

@@ -563,13 +563,13 @@ describe("F-05.2 只读成员档案 listActiveProjectMembers", () => {
     });
   }
 
-  test("返回活跃成员的项目内角色与加入时间（ADR-033 / ADR-039）", async () => {
+  test("返回活跃成员的项目内角色与加入时间（ADR-033）", async () => {
     const owner = await actor();
     const member = await actor();
     const project = await createProject(client.sql, owner.userId);
     await client.sql`
       INSERT INTO app.project_members (project_id, user_id, role)
-      VALUES (${project.projectId}, ${member.userId}, 'MEMBER')
+      VALUES (${project.projectId}, ${member.userId}, 'PROJECT_ADMIN')
     `;
 
     const response = await activeMembers(project.projectId, member.cookie);
@@ -580,7 +580,7 @@ describe("F-05.2 只读成员档案 listActiveProjectMembers", () => {
     );
     expect(body.items.map((item) => [item.id, item.role])).toEqual([
       [owner.userId, "LEADER"],
-      [member.userId, "MEMBER"],
+      [member.userId, "PROJECT_ADMIN"],
     ]);
     for (const item of body.items) {
       expect(item.name.length).toBeGreaterThan(0);

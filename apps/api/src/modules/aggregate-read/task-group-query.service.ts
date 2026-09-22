@@ -27,6 +27,7 @@ import {
   type ChangeRecordLinkRow,
 } from "../external-links/index.js";
 import { FeatureReadPort } from "../features/index.js";
+import { ModuleReadPort } from "../modules/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
   ProjectQueryPort,
@@ -222,6 +223,7 @@ export class TaskGroupQueryService {
     @Inject(ExternalLinksQueryPort)
     private readonly links: ExternalLinksQueryPort,
     @Inject(FeatureReadPort) private readonly features: FeatureReadPort,
+    @Inject(ModuleReadPort) private readonly modules: ModuleReadPort,
     @Inject(PostgresUnitOfWork) private readonly unitOfWork: UnitOfWork,
     private readonly cursor: AggregateReadCursorService,
   ) {}
@@ -319,7 +321,37 @@ export class TaskGroupQueryService {
       const assignees = await this.users.listByIds(tx, [
         ...new Set(tasks.map((row) => row.assigneeId)),
       ]);
-      return { page, pageProjectIds, members, tasks, assignees };
+      // 列表行的「归属 / 截止 / 迭代」三列由客户端派生，服务端只在同一只读事务内
+      // 补齐事实字段（模块名、功能名、截止时间、PUBLISHED 记录数）。
+      const modules = await this.modules.listNames(tx, {
+        projectIds: pageProjectIds,
+        moduleIds: [...new Set(tasks.map((row) => row.moduleId))],
+      });
+      const features = await this.features.listNames(tx, {
+        projectIds: pageProjectIds,
+        featureIds: [
+          ...new Set(
+            tasks
+              .map((row) => row.featureId)
+              .filter((featureId): featureId is number => featureId !== null),
+          ),
+        ],
+      });
+      const counts = await this.records.countPublishedByTask(
+        tx,
+        pageProjectIds,
+        taskIds,
+      );
+      return {
+        page,
+        pageProjectIds,
+        members,
+        tasks,
+        assignees,
+        modules,
+        features,
+        counts,
+      };
     });
 
     const projects = await this.projects.list(data.pageProjectIds);
@@ -328,6 +360,15 @@ export class TaskGroupQueryService {
     );
     const taskById = new Map(data.tasks.map((row) => [row.taskId, row]));
     const userById = new Map(data.assignees.map((row) => [row.userId, row]));
+    const moduleNameById = new Map(
+      data.modules.map((row) => [row.moduleId, row.name]),
+    );
+    const featureNameById = new Map(
+      data.features.map((row) => [row.featureId, row.name]),
+    );
+    const countByTask = new Map(
+      data.counts.map((row) => [row.taskId, row.count]),
+    );
     const membersByGroup = new Map<number, TaskGroupActiveMemberRow[]>();
     for (const member of data.members) {
       const bucket = membersByGroup.get(member.groupId);
@@ -368,6 +409,10 @@ export class TaskGroupQueryService {
               "任务负责人不存在 " + String(task.assigneeId),
             );
           }
+          const moduleName = moduleNameById.get(task.moduleId);
+          if (moduleName === undefined) {
+            throw inconsistentError("任务缺少模块 " + String(task.moduleId));
+          }
           return {
             taskId: task.taskId,
             taskCode: task.code,
@@ -377,7 +422,14 @@ export class TaskGroupQueryService {
             workStatus: task.workStatus,
             priority: task.priority,
             moduleId: task.moduleId,
+            moduleName,
             featureId: task.featureId,
+            featureName:
+              task.featureId === null
+                ? null
+                : resolveFeatureName(featureNameById, task.featureId, "任务"),
+            dueAt: task.dueAt === null ? null : task.dueAt.toISOString(),
+            publishedRecordCount: countByTask.get(task.taskId) ?? 0,
             assignee: toUserRef(assignee),
           };
         });

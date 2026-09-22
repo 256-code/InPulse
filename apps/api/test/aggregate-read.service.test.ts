@@ -142,6 +142,7 @@ function taskFixture(
     priority: "NORMAL",
     workStatus: "TODO",
     lifecycleStatus: "ACTIVE",
+    dueAt: null,
     rowVersion: 1,
     impactFeatureIds: [],
     ...overrides,
@@ -260,6 +261,11 @@ function taskGroupSetup(
     { listByIds: listUsers } as unknown as UserReadPort,
     { listChangeRecordLinks } as unknown as ExternalLinksQueryPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
+    {
+      listNames: vi
+        .fn()
+        .mockResolvedValue([{ moduleId: 3, projectId: 7, name: "模块" }]),
+    } as unknown as ModuleReadPort,
     unitOfWork,
     cursor as unknown as AggregateReadCursorService,
   );
@@ -285,6 +291,21 @@ function taskGroupListSetup(
     readonly tasks?: readonly TaskReadModel[];
     readonly users?: readonly UserRefItem[];
     readonly projects?: readonly ProjectItem[];
+    readonly moduleNames?: readonly {
+      readonly moduleId: number;
+      readonly projectId: number;
+      readonly name: string;
+    }[];
+    readonly featureNames?: readonly {
+      readonly featureId: number;
+      readonly projectId: number;
+      readonly moduleId: number;
+      readonly name: string;
+    }[];
+    readonly publishedRecordCounts?: readonly {
+      readonly taskId: number;
+      readonly count: number;
+    }[];
     readonly decode?: () => number | null;
   } = {},
 ) {
@@ -310,6 +331,21 @@ function taskGroupListSetup(
   const listProjects = vi
     .fn()
     .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
+  const listModuleNames = vi
+    .fn()
+    .mockResolvedValue(
+      options.moduleNames ?? [{ moduleId: 3, projectId: 7, name: "模块" }],
+    );
+  const listFeatureNames = vi
+    .fn()
+    .mockResolvedValue(
+      options.featureNames ?? [
+        { featureId: 4, projectId: 7, moduleId: 3, name: "功能" },
+      ],
+    );
+  const countPublishedByTask = vi
+    .fn()
+    .mockResolvedValue(options.publishedRecordCounts ?? []);
   const cursor = cursorMock(
     options.decode === undefined ? {} : { decode: options.decode },
   );
@@ -321,10 +357,11 @@ function taskGroupListSetup(
     } as unknown as TaskGroupReadPort,
     { list: listProjects } as unknown as ProjectQueryPort,
     { listByIds } as unknown as TaskQueryPort,
-    {} as unknown as ChangeRecordReadPort,
+    { countPublishedByTask } as unknown as ChangeRecordReadPort,
     { listByIds: listUsers } as unknown as UserReadPort,
     {} as unknown as ExternalLinksQueryPort,
-    {} as unknown as FeatureReadPort,
+    { listNames: listFeatureNames } as unknown as FeatureReadPort,
+    { listNames: listModuleNames } as unknown as ModuleReadPort,
     unitOfWork,
     cursor as unknown as AggregateReadCursorService,
   );
@@ -333,6 +370,9 @@ function taskGroupListSetup(
     listGroups,
     listActiveMembersForGroups,
     listByIds,
+    listModuleNames,
+    listFeatureNames,
+    countPublishedByTask,
     listProjects,
     cursor,
   };
@@ -639,13 +679,28 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
         }),
       ],
       tasks: [
-        taskFixture(22, { workStatus: "TODO", priority: "HIGH" }),
-        taskFixture(23, { workStatus: "DONE", priority: "URGENT" }),
+        taskFixture(22, {
+          workStatus: "TODO",
+          priority: "HIGH",
+          dueAt: new Date("2026-09-20T02:00:00.000Z"),
+        }),
+        taskFixture(23, {
+          workStatus: "DONE",
+          priority: "URGENT",
+          dueAt: new Date("2026-09-11T02:00:00.000Z"),
+        }),
         taskFixture(24, {
           workStatus: "CANCELED",
           assigneeId: 6,
           priority: "LOW",
+          featureId: null,
         }),
+      ],
+      moduleNames: [{ moduleId: 3, projectId: 7, name: "订单" }],
+      featureNames: [{ featureId: 4, projectId: 7, moduleId: 3, name: "结算" }],
+      publishedRecordCounts: [
+        { taskId: 22, count: 3 },
+        { taskId: 23, count: 2 },
       ],
       users: [
         { userId: 5, name: "成员", avatarUrl: null },
@@ -695,13 +750,68 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
         branch.workStatus,
         branch.priority,
         branch.moduleId,
+        branch.moduleName,
         branch.featureId,
+        branch.featureName,
+        branch.dueAt,
+        branch.publishedRecordCount,
       ]),
     ).toEqual([
-      [22, "MAIN", null, "TODO", "HIGH", 3, 4],
-      [23, "SOURCE", "HISTORICAL", "DONE", "URGENT", 3, 4],
-      [24, "SOURCE", "ACTIVE", "CANCELED", "LOW", 3, 4],
+      [
+        22,
+        "MAIN",
+        null,
+        "TODO",
+        "HIGH",
+        3,
+        "订单",
+        4,
+        "结算",
+        "2026-09-20T02:00:00.000Z",
+        3,
+      ],
+      [
+        23,
+        "SOURCE",
+        "HISTORICAL",
+        "DONE",
+        "URGENT",
+        3,
+        "订单",
+        4,
+        "结算",
+        "2026-09-11T02:00:00.000Z",
+        2,
+      ],
+      [
+        24,
+        "SOURCE",
+        "ACTIVE",
+        "CANCELED",
+        "LOW",
+        3,
+        "订单",
+        null,
+        null,
+        null,
+        0,
+      ],
     ]);
+    // 列表行的「归属 / 截止 / 迭代」三列只靠本页事实字段：模块/功能名按本页 ID 批量取、
+    // 记录数按本页 taskIds 批量取，不拉全组或全项目的数据。
+    expect(setup.listModuleNames).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      moduleIds: [3],
+    });
+    expect(setup.listFeatureNames).toHaveBeenCalledWith(expect.anything(), {
+      projectIds: [7],
+      featureIds: [4],
+    });
+    expect(setup.countPublishedByTask).toHaveBeenCalledWith(
+      expect.anything(),
+      [7],
+      [24, 22, 23],
+    );
     expect(group.branches[2]!.assignee).toEqual({
       userId: 6,
       name: "另一成员",
@@ -774,6 +884,25 @@ describe("TaskGroupQueryService.listTaskGroups", () => {
     });
     await expect(
       missingAssignee.service.listTaskGroups({ actorUserId: 5 }),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "AGGREGATE_READ_INCONSISTENT",
+    });
+
+    // 归属列读模块名：模块查不到时不能静默留空，否则列表会把缺失读成「无归属」。
+    const missingModule = taskGroupListSetup({
+      page: {
+        items: [groupFixture()],
+        nextGroupId: null,
+        hasMore: false,
+      },
+      members: [activeMemberFixture()],
+      tasks: [taskFixture(21)],
+      users: [{ userId: 5, name: "成员", avatarUrl: null }],
+      moduleNames: [],
+    });
+    await expect(
+      missingModule.service.listTaskGroups({ actorUserId: 5 }),
     ).rejects.toMatchObject({
       status: 500,
       code: "AGGREGATE_READ_INCONSISTENT",

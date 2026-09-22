@@ -367,14 +367,16 @@ export function CompleteWithRecord({
         </>
       )}
       <p>遗留问题最多10000字符，完整正文超出发布容量时保留输入并提示调整。</p>
-      <Button
-        type="primary"
-        loading={busy}
-        disabled={disabled}
-        onClick={() => void submit()}
-      >
-        发布并完成任务
-      </Button>
+      <div className="completion-flow-submit-bar">
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={disabled}
+          onClick={() => void submit()}
+        >
+          发布并完成任务
+        </Button>
+      </div>
     </section>
   );
 }

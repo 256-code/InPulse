@@ -1,10 +1,7 @@
 import React from "react";
 
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import {
-  taskToneClassName,
-  type TaskDueTone,
-} from "@features/common/task-tone";
+import { taskToneOf } from "@features/common/task-tone";
 
 import {
   avatarTextOf,
@@ -32,21 +29,9 @@ export interface TaskBoardLanesProps {
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
 
-/**
- * 卡片配色与列表行、任务中心同源：优先级决定底色，已完成 / 已取消覆盖状态色，
- * 已逾期 / 今天到期再覆盖成整卡红。看板只读服务端 dueState，不在前端重算逾期。
- */
-function dueToneOfCard(card: TaskBoardCard): TaskDueTone | null {
-  if (card.dueState === "OVERDUE") return "overdue";
-  if (card.dueState === "TODAY") return "soon";
-  return null;
-}
-
+/** 卡片配色与列表行、任务中心同源：优先级决定底色与左侧色条，已完成 / 已取消覆盖状态色。 */
 function cardClassNameOf(card: TaskBoardCard): string {
-  return (
-    "tb-card " +
-    taskToneClassName(card.priority, card.workStatus, dueToneOfCard(card))
-  );
+  return "tb-card tone-prio-" + taskToneOf(card.priority, card.workStatus);
 }
 
 const TaskBoardCardItem: React.FC<{

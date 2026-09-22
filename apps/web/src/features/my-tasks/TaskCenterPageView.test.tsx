@@ -481,6 +481,55 @@ describe("TaskCenterPageView", () => {
     expect(document.querySelector(".group-panel")).toBeNull();
   });
 
+  it("lists aggregate groups in the same table when the list display mode is active", async () => {
+    const { onOpenTask } = renderView({
+      filters: { display: "list" },
+      client: stubClient(projects),
+    });
+    const user = userEvent.setup();
+
+    const table = await screen.findByRole("table", { name: "跨项目任务列表" });
+    // 2026-09-22 产品要求：聚合组跟随「卡片 / 列表」切换，组行与任务行同表，
+    // 不再以卡片网格追加在表格之后。
+    const row = await screen.findByTestId("my-task-group-501");
+    expect(row.tagName).toBe("TR");
+    expect(row.closest("table")).toBe(table);
+    expect(document.querySelector(".task-group-grid")).toBeNull();
+
+    // 列语义与任务行对齐，归属 / 截止 / 迭代三列读真实派生值（2026-09-22 产品口径）：
+    // 归属跟随主任务，截止取未完成分支中最早的一条，迭代汇总全部分支的 PUBLISHED 记录数。
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("任务合并后来源分支历史保留");
+    expect(cells[0]).toHaveTextContent("TG-001 · 聚合组 · 4 条分支");
+    expect(cells[1]).toHaveTextContent("注入项目名");
+    expect(cells[2]).toHaveTextContent("任务与聚合 / 任务合并");
+    expect(cells[2]).toHaveAttribute(
+      "title",
+      "归属跟随主任务：任务与聚合 / 任务合并",
+    );
+    expect(cells[3]).toHaveTextContent("陈晓");
+    expect(within(cells[4]!).getByText("紧急")).toBeInTheDocument();
+    // T-101 已逾期两天、T-102 今天到期：取更早的 T-101，文字色落到逾期的红档。
+    expect(cells[5]).toHaveTextContent(/^已逾期 \d+月\d+日$/);
+    expect(cells[5]).toHaveClass("due-overdue");
+    expect(cells[5]).toHaveAttribute(
+      "title",
+      expect.stringContaining("未完成分支中最早的截止"),
+    );
+    // 迭代含已完成的 T-104（2 条）与主任务 T-102（3 条）：合计 5，不只算主任务。
+    expect(cells[6]).toHaveTextContent("5");
+    expect(within(cells[7]!).getByText("进行中")).toBeInTheDocument();
+    // 整行沿用派生优先级配色，与卡片视图同一套色值。
+    expect(row).toHaveClass("tone-prio-urgent");
+
+    // 组行是弹窗入口，与卡片一致：点击不回调 onOpenTask。
+    await user.click(within(row).getByRole("button"));
+    expect(onOpenTask).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("dialog", { name: /聚合组/ }),
+    ).toBeInTheDocument();
+  });
+
   it("lists every branch owner on the group card when members differ", async () => {
     const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
       projectId: null,
@@ -510,6 +559,78 @@ describe("TaskCenterPageView", () => {
     const card = await screen.findByTestId("my-task-group-501");
     // 主任务负责人在最前，其余负责人依次追加；同一人不重复出现。
     expect(within(card).getByText("陈晓、王敏")).toBeInTheDocument();
+  });
+
+  it("moves the group deadline to the next unfinished branch once the earliest one is done", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { display: "list" },
+      client: stubClient(projects),
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 截止最早的 T-101 完成后，组截止自动顺延到下一个最近的未完成分支：T-102 今天到期。
+            branches: group.branches.map((branch) =>
+              branch.taskId === 101
+                ? { ...branch, workStatus: "DONE" }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    const row = await screen.findByTestId("my-task-group-501");
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[5]).toHaveTextContent("今天截止");
+    expect(cells[5]).toHaveClass("due-soon");
+    // 收尾分支的记录仍计入迭代合计；已取消的 T-107 没设截止，不参与截止取数。
+    expect(cells[6]).toHaveTextContent("5");
+  });
+
+  it("labels the group deadline as unset when no unfinished branch has a due date", async () => {
+    const groups = await MY_TASKS_MOCK_ADAPTER.fetchTaskGroups({
+      projectId: null,
+      cursor: null,
+    });
+    renderView({
+      filters: { display: "list" },
+      client: stubClient(projects),
+      adapter: {
+        ...MY_TASKS_MOCK_ADAPTER,
+        fetchTaskGroups: async () => ({
+          ...groups,
+          items: groups.items.map((group) => ({
+            ...group,
+            // 两个未完成分支（T-101、T-102）都收尾后组里不再有未完成截止：
+            // 与任务行同文案「未设置截止」，而不是列表里的占位符「—」。
+            branches: group.branches.map((branch) =>
+              branch.workStatus === "TODO"
+                ? { ...branch, workStatus: "DONE" }
+                : branch,
+            ),
+          })),
+        }),
+      },
+    });
+
+    const row = await screen.findByTestId("my-task-group-501");
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[5]).toHaveTextContent("未设置截止");
+    expect(cells[5]).toHaveAttribute(
+      "title",
+      "未完成分支都没有设置截止时间（分支截止见详情）",
+    );
+    // 无紧迫度就不加红档文字色，也不把历史上已完成分支的截止抬上来。
+    expect(cells[5]).not.toHaveClass("due-overdue");
+    expect(cells[5]).not.toHaveClass("due-soon");
+    expect(cells[6]).toHaveTextContent("5");
   });
 
   it("falls back to the next highest branch priority after the urgent branch is done", async () => {

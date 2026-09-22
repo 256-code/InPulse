@@ -88,6 +88,19 @@
 .catalog-modal .completion-flow .completion-choices {
   margin-top: 0;
 }
+/* 「发布并完成任务」深在滚动区内，矮视口下要滚到底才看得到；吸底常驻可见，
+ * 负 margin 抵消 `.completion-flow` 的左右内边距让白条通到弹层边缘。 */
+.catalog-modal .completion-flow .completion-flow-submit-bar {
+  position: sticky;
+  bottom: -26px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 24px -30px -26px;
+  padding: 14px 30px;
+  background: #fff;
+  border-top: 1px solid #e8eef5;
+}
 
 /* 设计稿没有只读态（静态稿不可交互）；仓库需要表达「不可写 / 冲突 / 状态已变化」。 */
 .completion-choices > button:disabled {

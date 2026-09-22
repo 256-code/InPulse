@@ -666,7 +666,12 @@ export type TaskGroupListQueryRequest = z.infer<
  * joinedAt 与 taskId 升序；sourceKind 的可空性由 role 决定（MAIN 恒为 null）。
  * priority 是分支任务自身优先级（2026-09-21 产品要求）：组卡片的组优先级与
  * 完成态由客户端按「未完成分支中的最高优先级」派生，服务端只透传事实字段。
- * moduleId / featureId 是任务所在位置（featureId 为 null 表示模块级任务）。
+ * moduleId / moduleName 与 featureId / featureName 是任务所在位置
+ * （featureId 与 featureName 同为 null 表示模块级任务）。
+ * dueAt 是分支任务自身截止时间（null = 未设置），publishedRecordCount 是该任务
+ * PUBLISHED 正式记录数（与 R-1 成员项、R-3 列表项同一口径，2026-09-22 产品要求）：
+ * 列表行的「归属 / 截止 / 迭代」三列同样由客户端按事实派生（归属取主任务、截止取
+ * 未完成分支中最快到期的、迭代取全部活跃分支之和），服务端不算派生结果。
  * 已解除（DETACHED）成员不出现在列表摘要中，仍由 R-1 详情页展示。
  */
 export const taskGroupListBranchSchema = z
@@ -679,7 +684,11 @@ export const taskGroupListBranchSchema = z
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
     priority: z.enum(TASK_PRIORITIES),
     moduleId: id,
+    moduleName: z.string().min(1).max(200),
     featureId: id.nullable(),
+    featureName: z.string().min(1).max(500).nullable(),
+    dueAt: z.iso.datetime().nullable(),
+    publishedRecordCount: z.number().int().nonnegative(),
     assignee: userRefSchema,
   })
   .strict()

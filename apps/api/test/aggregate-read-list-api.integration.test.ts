@@ -163,6 +163,7 @@ interface TaskOptions {
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
   readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly dueAt?: string | null;
 }
 
 async function newTask(
@@ -183,7 +184,7 @@ async function newTask(
         description: "",
         assigneeId: options.assigneeId ?? scope.userId,
         priority: options.priority ?? "NORMAL",
-        dueAt: null,
+        dueAt: options.dueAt ?? null,
       },
     );
     const current =
@@ -458,10 +459,12 @@ beforeAll(async () => {
   tGroupMain = await newTask(projectFixture, {
     title: "聚合组主任务",
     priority: "HIGH",
+    dueAt: isoAt(9),
   });
   tGroupSource = await newTask(projectFixture, {
     title: "聚合组活动来源",
     workStatus: "DONE",
+    dueAt: isoAt(7),
   });
   tGroupHistorical = await newTask(projectFixture, {
     title: "聚合组历史来源",
@@ -1056,10 +1059,26 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         branch.workStatus,
         branch.priority,
         branch.moduleId,
+        branch.moduleName,
         branch.featureId,
+        branch.featureName,
+        branch.dueAt,
+        branch.publishedRecordCount,
       ]),
     ).toEqual([
-      [tGroupMain, "MAIN", null, "TODO", "HIGH", project!.moduleId, null],
+      [
+        tGroupMain,
+        "MAIN",
+        null,
+        "TODO",
+        "HIGH",
+        project!.moduleId,
+        "未分类",
+        null,
+        null,
+        isoAt(9),
+        0,
+      ],
       [
         tGroupSource,
         "SOURCE",
@@ -1067,7 +1086,11 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         "DONE",
         "NORMAL",
         project!.moduleId,
+        "未分类",
         null,
+        null,
+        isoAt(7),
+        0,
       ],
       [
         tGroupHistorical,
@@ -1076,7 +1099,11 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         "CANCELED",
         "LOW",
         project!.moduleId,
+        "未分类",
         null,
+        null,
+        null,
+        0,
       ],
     ]);
     const mainBranch = active.branches[0]!;

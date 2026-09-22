@@ -3729,6 +3729,27 @@ a:focus-visible {
   padding: 25px 28px 20px;
   border-bottom: 1px solid #e8eef5;
 }
+/* 弹层头部的来源面包屑：`.detail-label` 原本服务短英文小标题（10px、1.3px 加字距、
+ * 700 字重），中文名称在这个规格下会挤成一团。头部左右两列都允许收缩，名称再长
+ * 也只占一行省略号，不会把标题与关闭按钮挤走。 */
+.catalog-modal > .drawer-header > div,
+.catalog-modal > .drawer-header > div > div {
+  min-width: 0;
+}
+.catalog-modal > .drawer-header > button.icon-button {
+  flex: none;
+}
+.catalog-modal > .drawer-header .task-origin-crumb {
+  display: block;
+  color: #6d8ca9;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .catalog-modal .catalog-form {
   margin: 0;
   overflow: hidden;
@@ -4243,6 +4264,10 @@ a:focus-visible {
   align-items: center;
 }
 .task-modal-header-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 10px;
 }
 .task-modal > .calm-task-actions {
@@ -4490,19 +4515,14 @@ button.danger-text {
   line-height: 1.75;
 }
 
-/* 「逾期 / 马上到期」两档红（2026-09-22 定案）：白底表面（表格单元格、看板列表行、
-   详情弹窗徽章）只用文字色——逾期 #b3261e、马上到期 #c9472c；卡片改成整卡铺红，
-   见文件末尾「任务卡红色三档」。 */
 .calm-due.due-red,
 .due-overdue,
 td.due-overdue {
-  color: #b3261e;
-  font-weight: 700;
+  color: #c0453f;
 }
 .calm-due.due-amber,
 .due-soon {
-  color: #c9472c;
-  font-weight: 700;
+  color: #b0761d;
 }
 .calm-due.due-blue {
   color: #2f6fb2;
@@ -6300,12 +6320,12 @@ td.due-overdue {
   white-space: nowrap;
 }
 .tb-date--overdue {
-  color: #b3261e;
-  font-weight: 700;
+  color: var(--tb-red);
+  font-weight: 600;
 }
 .tb-date--today {
-  color: #c9472c;
-  font-weight: 700;
+  color: var(--tb-amber);
+  font-weight: 600;
 }
 .tb-date--done {
   color: #6fa88a;
@@ -6597,273 +6617,3 @@ td.due-overdue {
 .tb-dot-canceled {
   background: #ccd6e0;
 }
-
-/* ===================== 任务卡片醒目配色（D2，2026-09-21 定案） =====================
-   产品反馈「任务卡片不够醒目」，先选定 D2「实色更艳」；随后又按反馈把「高」从土黄
-   #c47b00 换成明黄，末轮候选对比后定为 #ffdb4d + 深棕字 #3f2d00（土黄的白字只有 3.4:1 且发闷，明黄深字 9.8:1）。
-   「已完成」先由 #2f9a68 换成 #12875f，再按反馈逐轮放浅，最终定为极浅嫩绿 #a8e6b0 + 深绿字 #2f4031，且只在「已完成」视图内出现。
-   因此卡片整卡铺色：紧急 / 普通 / 已逾期 / 马上到期用白字，「高」「已完成」两张浅底卡用各自的
-   --task-ink 深字，
-   「低」用白底、「已取消」用浅灰底，均保留深色正文。
-   覆盖范围：任务中心与项目任务面板的 .calm-task-card、任务看板的 .tb-card。
-   列表行 / 表格行（.feature-list-table tbody tr 与 .tb-row--tone-*）继续用上面 .tone-prio-* 的
-   浅色底与色条：表格里深底配深字读不出来，因此不做实色。
-   取字对比度（WCAG AA 正常文字要求 4.5:1，均为实测计算值）：普通白字 4.9:1、紧急白字 4.6:1、
-   高（#ffdb4d + #3f2d00）9.8:1、已完成（#a8e6b0 + #2f4031）7.7:1。 */
-:is(.calm-task-card, .tb-card).tone-prio-urgent {
-  --task-bg: #d63b31;
-  --task-bd: #b62f27;
-  --task-hov: #c8342b;
-}
-/* 「高」是浅底卡：明黄底配深棕字，描边取同色的深版，深字组其余取值见下方 --task-ink-* 说明。 */
-:is(.calm-task-card, .tb-card).tone-prio-high {
-  --task-bg: #ffdb4d;
-  --task-bd: #d6b841;
-  --task-hov: #edcc48;
-  --task-ink: #3f2d00;
-  --task-ink-soft: #3f2d00cc;
-  --task-ink-faint: #3f2d0099;
-  --task-ink-divider: #3f2d0033;
-  --task-ink-badge: #3f2d001f;
-  --task-ink-icon: #3f2d00bf;
-  --task-ink-check: #3f2d0024;
-  --task-ink-edge: #3f2d0066;
-}
-:is(.calm-task-card, .tb-card).tone-prio-normal {
-  --task-bg: #0f6ae8;
-  --task-bd: #0a55bd;
-  --task-hov: #0c5ed4;
-}
-/* 「已完成」同样走浅底卡：极浅嫩绿 + 深绿字，用轻盈明亮的绿色表达完成感。 */
-:is(.calm-task-card, .tb-card).tone-prio-done {
-  --task-bg: #a8e6b0;
-  --task-bd: #bfe8c6;
-  --task-hov: #9bd4a2;
-  --task-ink: #2f4031;
-  --task-ink-soft: #2f4031cc;
-  --task-ink-faint: #2f403199;
-  --task-ink-divider: #2f403133;
-  --task-ink-badge: #2f40311f;
-  --task-ink-icon: #2f4031bf;
-  --task-ink-check: #2f403124;
-  --task-ink-edge: #2f403166;
-}
-:is(.calm-task-card, .tb-card).tone-prio-low {
-  --task-bg: #ffffff;
-  --task-bd: #d9e0e7;
-  --task-hov: #f5f8fa;
-}
-:is(.calm-task-card, .tb-card).tone-prio-canceled {
-  --task-bg: #f2f5f8;
-  --task-bd: #d5dde4;
-  --task-hov: #e8edf1;
-}
-/* 「已逾期」「马上到期」是日期档、不是优先级档：组件判定后覆盖优先级 tone
-   （task-tone.ts 的 taskToneClassName 第三参数），三档红的分工见文件末尾说明。 */
-:is(.calm-task-card, .tb-card).tone-prio-overdue {
-  --task-bg: #b3261e;
-  --task-bd: #8f1d17;
-  --task-hov: #a1211a;
-}
-:is(.calm-task-card, .tb-card).tone-prio-soon {
-  --task-bg: #c2410c;
-  --task-bd: #9c3409;
-  --task-hov: #ad3a0a;
-}
-/* 卡片描边加粗一档；卡片不再显示左侧色条——底色已表达优先级，多一条深边反而显脏。 */
-:is(.calm-task-card, .tb-card) {
-  border-width: 2px;
-}
-:is(.calm-task-card, .tb-card)::before {
-  display: none;
-}
-/* 白字组（紧急 / 普通 / 已逾期 / 马上到期）：标题、编号、正文、底部信息、徽章与到期文案整体反白。 */
-:is(.calm-task-card, .tb-card):is(
-  .tone-prio-urgent,
-  .tone-prio-normal,
-  .tone-prio-overdue,
-  .tone-prio-soon
-) {
-  --tb-sub: #ffffffd9;
-  color: #fff;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  :is(h3, .tb-card-title) {
-  color: #fff;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  :is(.task-id, .tb-code) {
-  color: #ffffffd9;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  > p {
-  color: #ffffffd9;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  p.is-placeholder {
-  color: #ffffffa6;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  :is(
-    .calm-card-bottom,
-    .task-card-meta,
-    .tb-card-meta,
-    .task-card-counts,
-    .calm-due,
-    .tb-date
-  ) {
-  color: #ffffffd9;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  .calm-card-bottom {
-  border-top-color: #ffffff3d;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  .badge {
-  background: #ffffff2e;
-  color: #fff;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  .task-card-footer
-  .badge {
-  background: #fff;
-  color: #243d54;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  :is(.tb-dot-sep, .tb-check) {
-  color: #ffffffd9;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  )
-  .tb-check {
-  background: #ffffff33;
-}
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-overdue,
-    .tone-prio-soon
-  ):hover {
-  border-color: #ffffff66;
-  box-shadow: 0 5px 18px #17355226;
-}
-/* 深字组（高 / 已完成）：两张浅底卡上的文字统一取 --task-ink 及其透明变体，
-   具体取值写在各自的 .tone-prio-* 色值块里，换底色时只改那一处。 */
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done) {
-  --tb-sub: var(--task-ink-soft);
-  color: var(--task-ink);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  :is(h3, .tb-card-title) {
-  color: var(--task-ink);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  :is(.task-id, .tb-code) {
-  color: var(--task-ink-soft);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done) > p {
-  color: var(--task-ink-soft);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  p.is-placeholder {
-  color: var(--task-ink-faint);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  :is(
-    .calm-card-bottom,
-    .task-card-meta,
-    .tb-card-meta,
-    .task-card-counts,
-    .calm-due,
-    .tb-date
-  ) {
-  color: var(--task-ink-soft);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  .calm-card-bottom {
-  border-top-color: var(--task-ink-divider);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done) .badge {
-  background: var(--task-ink-badge);
-  color: var(--task-ink);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  .task-card-footer
-  .badge {
-  background: #fff;
-  color: #243d54;
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
-  :is(.tb-dot-sep, .tb-check) {
-  color: var(--task-ink-icon);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done) .tb-check {
-  background: var(--task-ink-check);
-}
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done):hover {
-  border-color: var(--task-ink-edge);
-  box-shadow: 0 5px 18px #17355226;
-}
-
-/* ===================== 任务卡红色三档（2026-09-22 二次定案：整卡铺红） =====================
-   产品反馈「已逾期、紧急等等，卡片整个颜色要是红的」，于是三档全部改成整卡实色 + 白字，
-   靠明度与色相分开：紧急 #d63b31（正红，沿用 D2，不改）、已逾期 #b3261e（深砖红，最重）、
-   马上到期 #c2410c（橙红，最轻）。三档的 --task-bg / --task-bd / --task-hov 写在上面
-   「任务卡片醒目配色」块的两个 .tone-prio-overdue / .tone-prio-soon 色值块里，白字组的
-   选择器也已包含这两个 tone，卡内文字与紧急卡完全同款反白。
-   卡片上不再加红色日期签：整卡已经是红的，红签会被同色吃掉，只保留反白的
-   「已逾期 9月16日」/「今天截止」文案——红色本身已经说明档位。
-   白底表面（任务中心表格、看板列表行、详情弹窗徽章）不铺整卡色，只用文字色，
-   见上面的 .calm-due.due-red / .due-soon；已完成与已取消不参与红档，走各自的浅底深字。
-   判档口径：任务中心与项目任务面板按 dueAt 与当地日历日比（已过期 / 今天到期），
-   任务看板只读服务端 dueState（OVERDUE / TODAY）；「明天到期」不算。
-   白字 / 整卡底对比度（WCAG AA 正常文字需 4.5:1）：逾期 6.5:1、紧急 4.6:1、马上到期 5.2:1。 */

@@ -133,35 +133,35 @@ function localFilterNote(
   );
 }
 
-function dueLabel(item: MyTaskListItem): string {
-  if (item.dueAt === null) return "未设置截止";
-  if (item.workStatus === "TODO" && isBeforeTodayIso(item.dueAt))
-    return "已逾期 " + formatDayIso(item.dueAt);
-  if (isTodayIso(item.dueAt)) return "今天截止";
-  return formatDayIso(item.dueAt);
+/**
+ * 截止文案与紧迫度只认「工作状态 + 截止时间」两个事实：任务行传自己的字段，
+ * 聚合组行传未完成分支里最早的一条（2026-09-22 口径），判定只此一处。
+ */
+interface DueSubject {
+  readonly workStatus: MyTaskListItem["workStatus"];
+  readonly dueAt: string | null;
 }
 
-function isOverdue(item: MyTaskListItem): boolean {
-  return (
-    item.workStatus === "TODO" &&
-    typeof item.dueAt === "string" &&
-    isBeforeTodayIso(item.dueAt)
-  );
+function dueLabelOf(subject: DueSubject): string {
+  if (subject.dueAt === null) return "未设置截止";
+  if (subject.workStatus === "TODO" && isBeforeTodayIso(subject.dueAt))
+    return "已逾期 " + formatDayIso(subject.dueAt);
+  if (isTodayIso(subject.dueAt)) return "今天截止";
+  return formatDayIso(subject.dueAt);
+}
+
+function dueLabel(item: MyTaskListItem): string {
+  return dueLabelOf(item);
 }
 
 /**
  * 截止紧迫度：已逾期 / 今天到期（马上到期），其余（已完成、已取消、明天以后）
  * 返回 null。卡片整卡红与列表截止列的文字色都从这里派生，判定只此一处。
  */
-function dueToneOf(item: MyTaskListItem): TaskDueTone | null {
-  if (isOverdue(item)) return "overdue";
-  if (
-    item.workStatus === "TODO" &&
-    typeof item.dueAt === "string" &&
-    isTodayIso(item.dueAt)
-  ) {
-    return "soon";
-  }
+function dueToneOf(subject: DueSubject): TaskDueTone | null {
+  if (subject.dueAt === null || subject.workStatus !== "TODO") return null;
+  if (isBeforeTodayIso(subject.dueAt)) return "overdue";
+  if (isTodayIso(subject.dueAt)) return "soon";
   return null;
 }
 
@@ -169,8 +169,8 @@ function dueToneOf(item: MyTaskListItem): TaskDueTone | null {
  * 白底表面上的两档红文字色（色值见 design-system.css「任务卡红色三档」），
  * 只用在列表视图的截止列：卡片整卡已经是红的，不再往里套一层签。
  */
-function dueToneClass(item: MyTaskListItem): string | undefined {
-  const tone = dueToneOf(item);
+function dueToneClass(subject: DueSubject): string | undefined {
+  const tone = dueToneOf(subject);
   if (tone === "overdue") return "due-overdue";
   if (tone === "soon") return "due-soon";
   return undefined;
@@ -418,19 +418,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   };
 
   /**
-   * 聚合组卡片（2026-09-21 产品定案）：与任务卡片同款外观、同一网格呈现，
-   * 卡片只做入口——分支明细、来源类型、解除合并与主任务直达都在聚合组弹窗里，
-   * 卡片上只额外列出去重后的分支负责人（可能多人）。CLOSED 组按服务端口径
-   * 没有分支，只保留组名与状态。
-   *
-   * 组优先级与完成态（2026-09-21 产品要求，同批）：优先级取未完成（TODO）分支中
-   * 最高的一档；该分支完成后自动落到第二高，全部分支收尾后整卡按「已完成」呈现
-   * 并隐藏优先级徽章。整卡配色同步跟随派生结果（tone-prio-*，与任务卡片同一套
-   * 色调），已关闭且无分支的组没有事实可派生，退回聚合组紫色。组自身的
-   * ACTIVE / CLOSED 合并语义不变，解除入口照旧。
+   * 聚合组的派生态（2026-09-21 产品定案）：卡片与列表行共用同一份事实，避免两处
+   * 判定漂移。优先级取未完成（TODO）分支中最高的一档；该分支完成后自动落到第二高，
+   * 全部分支收尾后按「已完成」呈现并隐藏优先级徽章。配色跟随派生结果
+   * （tone-prio-*，与任务卡片同一套色调），已关闭且无分支的组没有事实可派生，
+   * 退回聚合组紫色。组自身的 ACTIVE / CLOSED 合并语义不变。
    * 已取消与已完成一样算收尾，否则被取消的分支会永远压住组优先级。
    */
-  const renderGroupCard = (group: MyTaskGroupItem) => {
+  const describeTaskGroup = (group: MyTaskGroupItem) => {
     const mainBranch =
       group.branches.find((branch) => branch.role === "MAIN") ?? null;
     const assigneeNames = branchAssigneeNames(group);
@@ -449,18 +444,97 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     const openBranches = group.branches.filter(
       (branch) => branch.workStatus === "TODO",
     );
-    const groupPriority =
-      priorityOrder.find((priority) =>
-        openBranches.some((branch) => branch.priority === priority),
+    const priority =
+      priorityOrder.find((candidate) =>
+        openBranches.some((branch) => branch.priority === candidate),
       ) ?? null;
-    const completed = group.branches.length > 0 && groupPriority === null;
-    // 卡片配色跟随派生的组优先级（2026-09-21 产品要求）：未完成取最高一档色调，
-    // 全部收尾转完成绿；已关闭且无分支的组没有事实可派生，退回聚合组紫色。
-    const groupTone = completed
+    const completed = group.branches.length > 0 && priority === null;
+    const tone = completed
       ? "tone-prio-done"
-      : groupPriority === null
+      : priority === null
         ? "tone-group"
-        : taskToneClassName(groupPriority, "TODO");
+        : taskToneClassName(priority, "TODO");
+    // 列表行的「归属 / 截止 / 迭代」三列（2026-09-22 产品口径）：归属跟随主任务所在
+    // 模块 / 功能；截止取未完成（TODO）分支中最早的一条——该条完成后自动落到下一条，
+    // 未完成分支都没设截止时与任务行同文案「未设置截止」（2026-09-22 产品补充）；
+    // 迭代汇总全部分支的 PUBLISHED 记录数（与任务行同口径，含来源分支而不只是主任务）。
+    // 三列都只读服务端透传的事实字段，不在渲染处另算。
+    const ownershipText =
+      mainBranch === null
+        ? "—"
+        : mainBranch.moduleName +
+          (mainBranch.featureName === null
+            ? ""
+            : " / " + mainBranch.featureName);
+    const ownershipTitle =
+      mainBranch === null
+        ? "已关闭的聚合组：分支归属保留在详情中"
+        : "归属跟随主任务：" + ownershipText;
+    const unfinishedDueAt =
+      openBranches
+        .map((branch) => branch.dueAt)
+        .filter((dueAt): dueAt is string => dueAt !== null)
+        .sort((left, right) => Date.parse(left) - Date.parse(right))[0] ?? null;
+    // 未完成分支都没设截止时走 dueLabelOf 的既有口径（「未设置截止」），与任务行同文案；
+    // 只有无分支的 CLOSED 组才保留「—」，此时不存在任何分支截止事实。
+    const hasBranches = group.branches.length > 0;
+    const dueSubject: DueSubject = {
+      workStatus: "TODO",
+      dueAt: unfinishedDueAt,
+    };
+    const dueText = hasBranches ? dueLabelOf(dueSubject) : "—";
+    const dueTitle =
+      unfinishedDueAt === null
+        ? hasBranches
+          ? "未完成分支都没有设置截止时间（分支截止见详情）"
+          : "已关闭的聚合组：分支历史保留在详情中"
+        : "未完成分支中最早的截止：" + dueText;
+    const dueTone = dueToneClass(dueSubject);
+    const recordTotal = group.branches.reduce(
+      (total, branch) => total + branch.publishedRecordCount,
+      0,
+    );
+    const recordTitle =
+      group.branches.length === 0
+        ? "已关闭的聚合组：分支历史保留在详情中"
+        : recordTotal +
+          " 条 PUBLISHED 迭代记录（合计 " +
+          group.branches.length +
+          " 条分支，与任务行同口径）";
+    return {
+      assigneeText,
+      assigneeTitle,
+      doneCount,
+      active,
+      priority,
+      completed,
+      tone,
+      ownershipText,
+      ownershipTitle,
+      dueText,
+      dueTitle,
+      dueTone,
+      recordTotal,
+      recordTitle,
+    };
+  };
+
+  /**
+   * 聚合组卡片（2026-09-21 产品定案）：与任务卡片同款外观、同一网格呈现，
+   * 卡片只做入口——分支明细、来源类型、解除合并与主任务直达都在聚合组弹窗里，
+   * 卡片上只额外列出去重后的分支负责人（可能多人）。CLOSED 组按服务端口径
+   * 没有分支，只保留组名与状态。
+   */
+  const renderGroupCard = (group: MyTaskGroupItem) => {
+    const {
+      assigneeText,
+      assigneeTitle,
+      doneCount,
+      active,
+      priority: groupPriority,
+      completed,
+      tone: groupTone,
+    } = describeTaskGroup(group);
     return (
       <button
         type="button"
@@ -538,7 +612,99 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     );
   };
 
-  const renderTable = (rows: readonly MyTaskListItem[]) => (
+  /**
+   * 列表视图下的聚合组行（2026-09-22 产品要求：聚合组要跟随「卡片 / 列表」切换）：
+   * 与任务行共用同一张表格与表头，列语义保持一致——任务列给组名、「编号 · 聚合组」
+   * 与分支数，负责人取去重后的分支名单，优先级与状态取派生态。归属跟随主任务所在
+   * 模块 / 功能；截止取未完成分支中最早的一条（该条完成后自动落到下一条）；迭代汇总
+   * 全部分支的 PUBLISHED 记录数——三列与卡片共用 `describeTaskGroup`，不在渲染处另算。
+   * 整行沿用派生优先级配色，与卡片视图同一套 `tone-prio-*` / `tone-group` 色值。
+   */
+  const renderGroupRow = (group: MyTaskGroupItem) => {
+    const {
+      assigneeText,
+      assigneeTitle,
+      doneCount,
+      active,
+      priority: groupPriority,
+      completed,
+      tone: groupTone,
+      ownershipText,
+      ownershipTitle,
+      dueText,
+      dueTitle,
+      dueTone,
+      recordTotal,
+      recordTitle,
+    } = describeTaskGroup(group);
+    return (
+      <tr
+        key={"group-" + group.groupId}
+        data-testid={"my-task-group-" + group.groupId}
+        className={groupTone}
+      >
+        <td>
+          <button
+            type="button"
+            className="feature-list-open"
+            aria-haspopup="dialog"
+            onClick={() => setOpenGroupId(group.groupId)}
+          >
+            <strong>{group.name}</strong>
+            <span>
+              {group.code + " · 聚合组"}
+              {group.branches.length > 0
+                ? " · " + group.branches.length + " 条分支"
+                : ""}
+            </span>
+          </button>
+        </td>
+        <td>{projectNames.get(group.projectId) ?? group.projectName}</td>
+        <td title={ownershipTitle}>{ownershipText}</td>
+        <td title={assigneeTitle}>{assigneeText}</td>
+        <td>
+          {groupPriority === null ? (
+            "—"
+          ) : (
+            <CalmBadge
+              tone={taskPriorityBadgeTone(groupPriority)}
+              title={
+                "优先级：" +
+                taskPriorityLabel(groupPriority) +
+                "（未完成分支中最高）"
+              }
+            >
+              {taskPriorityLabel(groupPriority)}
+            </CalmBadge>
+          )}
+        </td>
+        <td className={dueTone} title={dueTitle}>
+          {dueText}
+        </td>
+        <td title={recordTitle}>{recordTotal}</td>
+        <td>
+          <CalmBadge
+            tone={completed ? "green" : active ? "blue" : "gray"}
+            title={
+              group.branches.length > 0
+                ? doneCount +
+                  " / " +
+                  group.branches.length +
+                  " 条分支任务已完成"
+                : "已关闭的聚合组：分支历史保留在详情中"
+            }
+          >
+            {completed ? "已完成" : active ? "进行中" : "已关闭"}
+          </CalmBadge>
+        </td>
+      </tr>
+    );
+  };
+
+  const renderTable = (
+    rows: readonly MyTaskListItem[],
+    groupRows: readonly MyTaskGroupItem[] = [],
+  ) => (
     <div className="feature-list-scroll">
       <table className="feature-list-table task-center-table">
         <caption className="sr-only">跨项目任务列表</caption>
@@ -595,6 +761,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </td>
             </tr>
           ))}
+          {groupRows.map(renderGroupRow)}
         </tbody>
       </table>
     </div>
@@ -862,14 +1029,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 {groups.map(renderGroupCard)}
               </div>
             ) : (
-              <>
-                {primaryItems.length > 0 ? renderTable(primaryItems) : null}
-                {groups.length > 0 ? (
-                  <div className="calm-task-grid task-group-grid">
-                    {groups.map(renderGroupCard)}
-                  </div>
-                ) : null}
-              </>
+              // 聚合组跟随展示方式切换（2026-09-22 产品要求）：列表视图下组行与
+              // 任务行同表追加在末尾，不再单独渲染卡片网格。
+              renderTable(primaryItems, groups)
             )
           ) : groupsQuery.isPending ? (
             // 任务为空且聚合组仍在加载：先给加载态，避免空态一闪再被组卡片顶掉。

@@ -98,6 +98,7 @@ function taskFixture(
     priority: "NORMAL",
     workStatus: "TODO",
     lifecycleStatus: "ACTIVE",
+    dueAt: null,
     rowVersion: 1,
     impactFeatureIds: [],
     ...overrides,

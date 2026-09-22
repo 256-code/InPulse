@@ -2627,6 +2627,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 > 2026-09-21 二次更新：组卡整卡配色改为跟随派生的组优先级（复用任务卡片的 `.tone-prio-*`），本节「色调」与「卡片信息取舍」两处描述以末节「聚合组优先级派生、完成态与整卡配色」为准：`.tone-group` 紫色降为「已关闭且无分支」组卡的兜底色，R-7 分支已扩 `priority` 并由组卡显示派生优先级。
 
+> 2026-09-22 更新（产品要求「聚合任务不会切换列表」，C 本地落库）：列表视图下聚合组不再以卡片追加在表格之后，改为与任务行同一张 `.task-center-table` 的组行（`.task-group-grid` 规则删除）。本节「呈现方式」中「列表视图下任务表格保持原样，聚合组仍以同款卡片追加在表格之后（`.task-group-grid`）」按本行修订；卡片视图不变。组行的渲染与断言见末节「聚合组跟随卡片 / 列表切换」。
+
 锁定口径：
 
 - 呈现方式：聚合组不再有独立区块（`section.group-panel`、`.group-list`、`article.group-card`、分支行 `.branch-task` 与页脚「查看主任务」全部删除），改渲染为 `.calm-task-card.task-group-card.tone-group`，与任务卡片同一 `.calm-task-grid` 混排；列表视图下任务表格保持原样，聚合组仍以同款卡片追加在表格之后（`.task-group-grid`）。
@@ -2868,3 +2870,51 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 `pnpm --filter @inpulse/api test:unit` 65 文件 364 例、`pnpm --filter @inpulse/api test:integration` 50 文件 481 例（含本批新增的可见性用例）全部通过；契约四项门禁见上表。
 
 未运行 / 已知偏差：① `pnpm check` 整链、`pnpm test:e2e` 与 GitHub Actions 未运行（本批未改前端，E2E 无对应断言）；② `pnpm db:test` 与 `@inpulse/ops` 集成未跑（无迁移、无 ops 改动）；③ `EXPLAIN` 证据未采集：`EXISTS` 子查询在本地夹具规模下由规划器自行选择访问方式，本批以真库可见性矩阵为通过标准，索引使用未作为门禁（若后续数据量增长出现回退，再补 `EXPLAIN (ANALYZE, BUFFERS)` 证据）；④ 本批含契约摘要与后端行为改动，不适用 2026-09-17 的纯前端免测试指示，须非作者人工评审（可见性口径、关闭组处理与游标 `filterKey` 不变的理由）。
+
+## 聚合组跟随卡片 / 列表切换（产品要求，2026-09-22 本地落库）
+
+产品反馈（原文）：「聚合任务不会切换列表」（附 `/tasks?view=list` 截图：任务已是表格，聚合组仍以整块卡片追加在表格下方）。本批为纯前端呈现改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动，适用 2026-09-17 的纯前端免测试指示（仍按验证要求跑了组件定向单测与真实浏览器实测）。
+
+锁定口径：
+
+- 列表视图（`filters.display === "list"`）下聚合组渲染为与任务行同一张 `.feature-list-table.task-center-table` 的 `<tr>`（`data-testid="my-task-group-{groupId}"`、行类名取派生 tone），追加在任务行之后；`.task-group-grid` 规则与「卡片网格追加在表格后」的写法删除。
+- 列语义与任务行一致（任务 / 项目 / 归属 / 负责人 / 优先级 / 截止 / 迭代 / 状态）：任务列 = 组名 + 「编号 · 聚合组 · N 条分支」，项目 = 项目名，负责人 = 去重后的分支负责人名单（`title` 区分「主任务负责人」与「各分支负责人」），优先级 = 派生优先级徽章（无未完成分支时隐藏，与卡片一致），状态 = 已完成 / 进行中 / 已关闭徽章（`title` 给「已完成 n/N 条分支任务」）。归属 / 截止 / 迭代三列显示按事实派生的真实值（无对应事实时按列回退：截止回退为与任务行同文案的「未设置截止」，只有无分支的 CLOSED 组与无主任务才用「—」；详见下一节）：迭代 = 组内全部分支的 PUBLISHED 迭代记录数合计（与任务行同口径），截止 = 未完成分支中最早的截止时间（该条完成后顺延到下一条次早的），归属 = 主任务的模块名 +（有功能时）` / 功能名`；派生规则、契约字段与实测见下一节。
+- 组行是弹窗入口，与卡片一致：任务列的 `<button class="feature-list-open">` 打开既有 `TaskGroupDetailModal`，不回调 `onOpenTask`。
+- 卡片视图（`display === "cards"`）行为不变：组卡仍在 `.calm-task-grid` 里与任务卡混排。
+- 派生逻辑抽成 `describeTaskGroup`，卡片与组行共用同一份事实（负责人名单、完成计数、组优先级、完成态与 tone），避免两处判定漂移。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-LISTVIEW-WEB-001 | Web 单元 | 列表视图下聚合组为同表组行 | `TaskCenterPageView.test.tsx` 新增「lists aggregate groups in the same table when the list display mode is active」：`data-testid="my-task-group-501"` 为 `TR` 且 `closest("table")` 是「跨项目任务列表」，`.task-group-grid` 不存在；八列断言（组名 + `TG-001 · 聚合组 · 4 条分支` / 项目名 / 三列「—」/ 陈晓 / 紧急 / 进行中）；行类名 `tone-prio-urgent`；点击任务列按钮打开组详情弹窗且不回调 `onOpenTask` | 本地通过 |
+| TASKGROUP-LISTVIEW-WEB-002 | Web 单元 | 卡片视图不回归 | 同文件既有组卡用例（`renders task groups as cards inside the task grid` 等）保持通过；定向文件 39/39 | 本地通过 |
+| TASKGROUP-LISTVIEW-BROWSER-001 | 浏览器实测 | 真实数据两种视图 | `/tasks?view=list`：表格 3 行（T-62 / T-60 / `INPULSE-TG-1`），组行为 `TR`、类名 `tone-prio-urgent`、八列文本与小字「INPULSE-TG-1 · 聚合组 · 3 条分支」符合预期，`.task-group-grid` 与 `.calm-task-grid` 计数均为 0；点击组行按钮弹出「匿名入口直达登录页 + 登录页视觉重做」组详情；切回「卡片」后组仍是 `BUTTON.calm-task-card.task-group-card`、`.calm-task-grid` 计数 1、表格计数 0 | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx` 39 例通过；浏览器实测见上表（开发实例 `127.0.0.1:5173` + API `127.0.0.1:3000`）。
+
+未运行 / 已知偏差：① 按 2026-09-17 的纯前端免测试指示未跑 `pnpm test:web` 全量、`pnpm check` 整链、Playwright E2E 与 GitHub Actions（组件定向单测与浏览器实测已跑）；② 组行不复制卡片页脚的「已完成 n/N」与「查看详情 / 解除合并」文案（等价信息由状态徽章 `title` 与行点击承担），若产品要求在列表里直读完成计数需另开呈现改动；③ 列表视图下 CLOSED 组（无分支）行归属与截止为「—」、迭代为 0，并带「已关闭」徽章；真实数据暂无 CLOSED 组样本。
+
+## 聚合组列表行的归属 / 截止 / 迭代按事实派生（产品要求，2026-09-22 二次落库）
+
+产品反馈（原文）：「这里迭代数据就是任务组里面的所有迭代数，截至时间就按哪个任务时间快截至了，按哪个任务来，任务完成了就按第二个快截至的，归属就按主任务来」（附 `/tasks?view=list` 截图：组行三列只有「—」）。本批跨契约、API 与前端，属破坏性契约变更，不适用 2026-09-17 的纯前端免测试指示。
+
+锁定口径（服务端只传事实，派生展示值由客户端唯一计算，避免卡片视图与列表视图各算一套）：
+
+- 迭代 = 组内全部分支（主任务、来源分支与历史分支）的 PUBLISHED 迭代记录数合计，与任务行 `publishedRecordCount` 同口径；无分支的组显示 0。
+- 截止 = 未完成（`TODO`）分支中最早的截止时间；最早那条完成后自动改取下一个次早的（下文 WEB-002 覆盖该顺延）；未完成分支都没有设置截止时间时显示「未设置截止」（与任务行同文案，下文 WEB-003 覆盖该回退）。
+- 归属 = 主任务（`role = MAIN`）的模块名 +（有功能时）` / 功能名`；主任务缺失时显示「—」。
+- 三列都带 `title` 说明取值来源（如「未完成分支中最早的截止」），不伪造数值。
+
+服务端只新增事实字段，不计算派生值：R-7 `listTaskGroups` 的分支项新增 `moduleName`、`featureId`、`featureName`、`dueAt`、`publishedRecordCount`（源定义 `packages/api-contract/src/contracts/aggregate-read.zod.ts`、`packages/api-contract/src/aggregate-read-routes.ts`，Route Registry summary 同步说明「派生展示值由客户端按事实计算」）。`TaskReadModel` 新增 `dueAt`，并新增 `TaskReadModelRaw` + `mapTaskReadModel` 边界映射（postgres-js 把 `timestamptz` 返回为文本，避免直接断言 `Date`）；`TaskGroupQueryService` 在同一只读事务内批量取模块名、功能名与 PUBLISHED 记录数，任务缺模块时按既有口径 500 `AGGREGATE_READ_INCONSISTENT`。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKGROUP-GROUPROW-FACTS-WEB-001 | Web 单元 | 组行三列按事实派生 | `TaskCenterPageView.test.tsx`：组行显示归属「任务与聚合 / 任务合并」、截止「已逾期 …」（带逾期色调与来源 `title`）、迭代「5」；点击行仍打开组详情弹窗且不回调 `onOpenTask` | 本地通过 |
+| TASKGROUP-GROUPROW-FACTS-WEB-002 | Web 单元 | 最快截止完成后顺延 | 同文件新增用例：把最早未完成分支改为 DONE 后，截止改取下一个次早的（「今天截止」+ 即将到期色调），迭代合计不变 | 本地通过 |
+| TASKGROUP-GROUPROW-FACTS-WEB-003 | Web 单元 | 未完成分支都没设截止 | 同文件新增用例：两个未完成分支都收尾后截止列显示「未设置截止」（与任务行同文案）、`title` 说明原因、不带逾期 / 即将到期文字色，迭代合计不变 | 本地通过 |
+| TASKGROUP-GROUPROW-FACTS-API-UNIT-001 | API 单元 | 分支事实字段装配 | `aggregate-read.service.test.ts`：R-7 分支项字段断言含 `moduleName` / `featureName` / `dueAt` / `publishedRecordCount`，并断言模块名、功能名、记录数三个只读端口的调用参数；任务缺模块返回 500 `AGGREGATE_READ_INCONSISTENT` | 本地通过 |
+| TASKGROUP-GROUPROW-FACTS-API-INT-001 | API 集成（真实 PostgreSQL） | 分支事实字段落库回读 | `aggregate-read-list-api.integration.test.ts` 11/11：三个分支分别返回自身模块名、功能名、各自 `dueAt` 与 `publishedRecordCount` | 本地通过 |
+| TASKGROUP-GROUPROW-FACTS-BROWSER-001 | 浏览器实测 | 真实组行三列 | 开发实例 `/tasks?view=list`（`127.0.0.1:5173` + API `127.0.0.1:3000`）：`INPULSE-TG-1` 行归属「平台与访问 / 用户登录与会话管理」、迭代 1、截止「未设置截止」（唯一未完成分支 `INPULSE-T-59` 未设置截止时间，与组详情内分支明细一致） | 本地通过 |
+
+本地实际执行（2026-09-22 二次改动）：`pnpm contract:generate`（5 产物）→ `contract:drift` → `contract:validate`（108 条）→ `permissions:check`（108/108）；`pnpm --filter @inpulse/api exec vitest run src/modules/aggregate-read` 11 例；`pnpm test:unit`（api 65 文件 364 例）、`pnpm test:web`（85 文件 550 例，其中 `TaskCenterPageView.test.tsx` 41 例通过；另有 4 例失败于用户正在编辑的 `TasksPanel.test.tsx` 与 `app-router.test.tsx`，与本批 diff 无交集）；真实 PostgreSQL 集成 `aggregate-read-list-api` 11/11 与 `aggregate-read-api` + `aggregate-read-ports` 42 例；`pnpm lint`、`pnpm typecheck`、`pnpm build` 通过。
+
+未运行 / 已知偏差：① 分支项新增字段改变 `strict()` 契约，按仓库规则需非作者人工评审后才能合入；② 未跑 `pnpm check` 整链、Playwright E2E 与 GitHub Actions，`pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP，本批未改动）；③ 列表行不展开分支级明细，仍按上一节口径由组详情弹窗承担。

@@ -1454,7 +1454,11 @@ export type TaskGroupListBranch = {
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
   readonly moduleId: number;
+  readonly moduleName: string;
   readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly dueAt: (string | null);
+  readonly publishedRecordCount: number;
   readonly assignee: UserRef;
 };
 
