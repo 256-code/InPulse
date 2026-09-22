@@ -10,7 +10,8 @@ export const appTheme: ThemeConfig = {
     colorLink: "#1467d8",
     colorInfo: "#1467d8",
     colorSuccess: "#4a9278",
-    // 原型里危险色只有一处取值：`.danger-button` / `.danger-text` / `due-overdue` 都用 `#c0453f`。
+    // 原型里危险色只有一处取值：`.danger-button` / `.danger-text` 都用 `#c0453f`。
+    // 任务日期另走「任务卡红色三档」（逾期 `#b3261e` / 马上到期 `#c9472c`），见 design-system.css。
     colorError: "#c0453f",
     colorWarning: "#c9821a",
     colorText: "#132238",
