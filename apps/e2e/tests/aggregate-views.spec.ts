@@ -126,6 +126,24 @@ test("F-32 任务中心：真实任务进入列表，工作状态与优先级接
     expect(
       Math.abs(headerSpacing.titleToToolbar - headerSpacing.toolbarToCards),
     ).toBeLessThanOrEqual(4);
+    // 2026-09-22 定案：卡片网格在窗口拉到最大时一行四张（内容区 1420px 上限与 236px
+    // 侧栏决定四列就是宽屏上限），分界宽度 1440px；再窄一档回到三张。
+    const gridColumnCount = () =>
+      page.evaluate(() => {
+        const grid = document.querySelector(".calm-task-grid");
+        if (grid === null) {
+          throw new Error("任务中心缺少卡片网格");
+        }
+        return getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+      });
+    await page.setViewportSize({ width: 1439, height: 900 });
+    await expect.poll(gridColumnCount).toBe(3);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect.poll(gridColumnCount).toBe(4);
+    await page.setViewportSize({ width: 1680, height: 900 });
+    await expect.poll(gridColumnCount).toBe(4);
+    // 后续断言沿用 Desktop Chrome 的缺省视口。
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     // 「我创建的」卡片入口已删除，但 R-3 的 ownership 参数仍然生效：按 URL 直接打开
     // scope=created 时，任务中心请求必须携带 scope=created，且这次由当前用户创建的任务

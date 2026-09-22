@@ -143,7 +143,7 @@ export function cardMarkOf(card: TaskBoardCard): CardMark {
  */
 export const LEFTOVER_SOURCE_BADGE = {
   label: "遗留问题",
-  className: "badge badge-amber",
+  className: "badge badge-leftover",
   title: "由遗留问题转换而来的跟进任务",
 } as const;
 

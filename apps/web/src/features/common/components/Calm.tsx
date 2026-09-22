@@ -2,7 +2,7 @@ import React from "react";
 import { InpulseIcon, type InpulseIconName } from "./InpulseIcon";
 
 export type CalmBadgeTone =
-  "gray" | "blue" | "green" | "red" | "amber" | "violet" | "cyan";
+  "gray" | "blue" | "green" | "red" | "amber" | "violet" | "cyan" | "leftover";
 
 export const CalmBadge: React.FC<{
   readonly children: React.ReactNode;
