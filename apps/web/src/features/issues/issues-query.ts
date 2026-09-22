@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -61,4 +61,49 @@ export function useLeftoverItemsQuery({
       lastPage.hasMore ? lastPage.nextCursor : undefined,
     enabled,
   });
+}
+
+/**
+ * 未闭环遗留项计数：侧栏导航与任务中心页头共用的轻量查询（2026-09-22 修）。
+ *
+ * 与遗留问题页的未闭环列表同源（R-6 `bucket=OPEN`，服务端按 AuthorizedProjectScope
+ * 过滤），取首页条数；单页上限 100，超出时只显示上限值，不伪造精确值。查询键挂在
+ * `shell-counters` 前缀下，由 AppProviders 的全局 MutationCache 在写成功后统一失效，
+ * 两处入口数字始终一致。
+ */
+export const OPEN_LEFTOVER_COUNT_QUERY_KEY = [
+  "shell-counters",
+  "open-leftovers",
+] as const;
+
+/** R-6 单页上限（AGGREGATE_READ_PAGE_LIMIT_MAX）；超出时计数显示为该上限。 */
+export const OPEN_LEFTOVER_COUNT_LIMIT = 100;
+
+export interface OpenLeftoverCountOptions {
+  readonly client?: InpulseApiClient | undefined;
+  readonly enabled?: boolean;
+  readonly staleTime?: number;
+}
+
+/** 返回未闭环遗留项条数；null 表示尚未加载或不可用（调用方不显示数字）。 */
+export function useOpenLeftoverCount({
+  client,
+  enabled = true,
+  staleTime = 60_000,
+}: OpenLeftoverCountOptions = {}): number | null {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const query = useQuery({
+    queryKey: OPEN_LEFTOVER_COUNT_QUERY_KEY,
+    queryFn: ({ signal }) =>
+      api.listLeftoverItems(
+        { bucket: "OPEN", limit: OPEN_LEFTOVER_COUNT_LIMIT },
+        signal ? { signal } : undefined,
+      ),
+    enabled,
+    staleTime,
+    retry: false,
+  });
+  const page = query.data;
+  if (!page) return null;
+  return page.hasMore ? OPEN_LEFTOVER_COUNT_LIMIT : page.items.length;
 }

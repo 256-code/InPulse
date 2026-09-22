@@ -9,6 +9,7 @@ import {
   type RecordDraftItem,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 export function PublishRecordButton({
   item,
   api,
@@ -61,6 +62,8 @@ export function PublishRecordButton({
       await cache.invalidateQueries({
         queryKey: ["published-records", item.projectId],
       });
+      // 发布会把正文里的剩余问题变成待处理遗留项，侧栏计数随即变化。
+      await invalidateShellCounters(cache);
       setOpen(false);
       navigate(target);
     } catch (e) {

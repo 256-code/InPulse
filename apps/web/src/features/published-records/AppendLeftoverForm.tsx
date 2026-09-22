@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Alert, Button, Input } from "antd";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   type InpulseApiClient,
@@ -7,6 +8,7 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 
 /**
  * 详情页快捷追加遗留问题：不再改写整段正文，服务端仍会形成一次记录版本，
@@ -27,7 +29,8 @@ export function AppendLeftoverForm({
     [content, setContent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null);
-  const retry = useRef<{ signature: string; key: string } | null>(null),
+  const cache = useQueryClient(),
+    retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
   const trimmed = content.trim();
   const ready = trimmed.length > 0 && content.length <= 10000;
@@ -60,6 +63,8 @@ export function AppendLeftoverForm({
         },
       });
       retry.current = null;
+      // 新增遗留项直接改变侧栏的待处理计数。
+      await invalidateShellCounters(cache);
       setContent("");
       setOpen(false);
       onAdded();

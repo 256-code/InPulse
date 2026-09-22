@@ -14,6 +14,7 @@ import {
 /** 正式记录里的一条遗留问题：状态与跟进任务都按条目自身判定。 */
 export type RecordLeftover = PublishedRecord["leftovers"][number];
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
@@ -244,6 +245,8 @@ export function LeftoverTaskConvertModal({
         "notifications-unread-count",
       ])
         void cache.invalidateQueries({ queryKey: [key] });
+      // 转任务会把遗留项移出 OPEN 桶并新增一条属于我的待办，两个侧栏计数都变。
+      void invalidateShellCounters(cache);
     } catch (e) {
       setError(e);
       if (e instanceof ApiError && e.status === 409) setConflict(true);

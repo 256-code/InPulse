@@ -2957,3 +2957,22 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 任务中心「负责人」多值展示（2026-09-22 追加，`fix(tasks)`）：多负责人落库后用户反馈「任务卡片上的负责人怎么只显示一个人」，定位为 R-3 任务中心契约只带派生标量 `assignee`（`min(user_id)`），集合本身没有出接口，视图无法渲染第二名负责人。本批把集合贯通契约、读端口、服务与前端（新增 `ADR040-CONTRACT-002` / `ADR040-READPORT-002` / `ADR040-WEB-002` / `ADR040-BROWSER-002` 四行），标量 `assignee` 保留为派生字段以便看板、统计等按单值消费的调用方无需同批改造。本轮另修复一处会被误判为「代码没生效」的运行时陷阱：`@inpulse/api-contract` 的 `exports.default` 指向 `dist`，只改契约源码而不重建该包产物时，全局响应校验会按旧 Schema 剔除新增字段（表现为接口 200 但响应缺 `assignees`）；改契约后必须同时重建 `packages/api-contract` 的 dist 再重启 API。
 
 未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入。
+
+## 侧栏计数随写操作即时更新（前端缺陷修复，2026-09-22 本地落库）
+
+用户报告（附侧栏截图「任务中心 4 / 遗留问题 2」）：「任务中心新建任务完成任务或者遗留问题产生遗留问题或转成任务那些发生修改变化左边导航栏数字不会及时变化需要刷新才变」。定位为侧栏两个计数查询（`["shell-counters","my-open-tasks"]`、`["shell-counters","open-leftovers"]`，带 60 秒 `staleTime`）从未被任何写路径失效，数字只在整页重挂载后更新；本批只改前端缓存失效，不改契约、接口、权限与数据库。
+
+- 新增 `apps/web/src/shared/api/shell-counters.ts`：查询键常量 + `invalidateShellCounters(queryClient)`；放 `shared` 层以便 `app`（布局与全局 provider）与 `features`（写路径）同时引用且不产生反向依赖。
+- 两条失效路径：① `AppProviders` 的全局 `MutationCache.onSuccess` 统一失效，覆盖所有经 React Query mutation 的写操作（不再逐条补 `onSuccess`，避免漏路径）；② 6 条直接调用生成客户端、不经 mutation 的写路径显式调用 `invalidateShellCounters`——`PublishRecordButton`、`RecordLifecycleButton`（作废 / 恢复）、`EditPublishedRecord`（保存修订）、`AppendLeftoverForm`（追加遗留问题）、`ConvertLeftoverTask`（遗留问题转任务）、`CompleteWithRecord`（发布并完成，不带记录也刷新）。
+- `shell-data.ts` 的遗留问题计数改用任务中心页头同一查询 `useOpenLeftoverCount`，两处不再各算一次。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SHELLCOUNT-WEB-001 | Web 单元 | 经 mutation 的写操作自动失效侧栏计数 | `AppProviders.test.tsx`：挂载带站内通知计数、我的任务数与遗留问题数的 provider 后触发一次 `useMutation`，`listMyTasks` 与 `listLeftoverItems` 调用次数由 1 变 2 | 本地通过 |
+| SHELLCOUNT-WEB-002 | Web 单元 | 直调生成客户端的写路径可显式失效 | 同文件：直接调用 `invalidateShellCounters(cache)` 后两个查询各重取一次（覆盖不经 mutation 的 6 条写路径共用的入口） | 本地通过 |
+| SHELLCOUNT-WEB-003 | Web 单元（反向对照） | 用例能捕捉缺陷本身 | 把 `invalidateShellCounters` 临时改为空实现：同文件 2 failed / 4 passed；恢复实现后 6 passed | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web exec vitest run src/app/providers/AppProviders.test.tsx` 6 例通过（新增 2 例）；受影响区域定向复跑（providers + published-records + tasks）9 文件 67 例通过；全量 `pnpm --filter @inpulse/web exec vitest run` 85 文件 563 例全绿；改动文件 `eslint` 退出码 0、`prettier --check` 通过；`pnpm check:frontend:boundaries` → `no dependency violations found (283 modules, 1380 dependencies)`。
+
+未运行 / 已知偏差：① 未跑 Playwright E2E（缺陷本身是缓存失效，单测已覆盖两条失效路径；真实浏览器复验待补）、`pnpm check` 整链、`deps:audit` 与 GitHub Actions；② `pnpm --filter @inpulse/web typecheck` 仍有 7 文件 9 处既有 `PROJECT_ADMIN` 残留错误（`git stash` 对照改动前同样失败，属他人在途改动，与本批无关）；③ 全局失效会让侧栏与任务中心页头的遗留问题计数一起重新取数（未挂载时只标记过期、不发请求）。
+

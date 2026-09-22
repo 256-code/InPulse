@@ -8,6 +8,7 @@ import {
   type ReadableRecord,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 export function RecordLifecycleButton({
   item,
   api,
@@ -81,6 +82,8 @@ export function RecordLifecycleButton({
           ["activity-center"],
         ].map((queryKey) => cache.invalidateQueries({ queryKey })),
       );
+      // 作废 / 恢复会隐藏或恢复记录下的遗留项，侧栏计数随即变化。
+      await invalidateShellCounters(cache);
       setOpen(false);
       setReason("");
       retry.current = null;

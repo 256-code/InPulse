@@ -10,6 +10,7 @@ import zhCN from "antd/locale/zh_CN";
 import type { InpulseApiClient } from "@generated/api";
 import { AuthProvider } from "@features/auth/auth-context";
 import { reportSessionExpired } from "@features/auth/session-recovery";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 import { appTheme } from "../theme/theme";
 
 export interface AppProvidersProps {
@@ -49,7 +50,17 @@ export const AppProviders: React.FC<AppProvidersProps> = ({
         // ADR-032：会话过期后受保护请求返回 401，这里统一收敛认证态，
         // 由 RequireAuth 静默重走统一身份认证；403、404、409、500 等不参与。
         queryCache: new QueryCache({ onError: reportSessionExpired }),
-        mutationCache: new MutationCache({ onError: reportSessionExpired }),
+        // 侧栏导航计数是服务端聚合的派生值，写操作成功后必须重新取数，否则
+        // 新建 / 完成任务、发布记录产生遗留项、遗留问题转任务后，数字要刷新
+        // 页面才更新（2026-09-22 修）。逐条写在各自 mutation 的 onSuccess 里
+        // 必然漏路径，因此这里统一失效；直接调用生成客户端的写路径见
+        // @shared/api/shell-counters。
+        mutationCache: new MutationCache({
+          onError: reportSessionExpired,
+          onSuccess: (_data, _variables, _result, _mutation, context) => {
+            void invalidateShellCounters(context.client);
+          },
+        }),
         defaultOptions: {
           queries: {
             retry: 1,

@@ -19,6 +19,7 @@ import { CalmSelect } from "@features/common/components/CalmSelect";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 import type { TaskViewItem } from "./task-query";
 export function CompleteWithRecord({
   item,
@@ -177,6 +178,8 @@ export function CompleteWithRecord({
         );
         onSuccess(result.record);
       }
+      // 完成任务会减少我的未完成数；带记录时正文里的剩余问题同时变成待处理遗留项。
+      await invalidateShellCounters(cache);
     } catch (e) {
       setError(e);
     } finally {
