@@ -1936,12 +1936,14 @@
   color: #7a5410;
 }
 
-.task-toolbar .task-search {
+/* 任务中心 2026-09-22 起改用一体化控制条：条内搜索框自己 `flex: 1` 撑满
+   剩余宽度，这里的固定宽度只留给迭代记录 / 遗留问题 / 项目动态那几个散开工具栏。 */
+.task-toolbar:not(.task-toolbar-bar) .task-search {
   width: 320px;
 }
 
 @media (max-width: 900px) {
-  .task-toolbar .task-search {
+  .task-toolbar:not(.task-toolbar-bar) .task-search {
     width: 100%;
   }
 }

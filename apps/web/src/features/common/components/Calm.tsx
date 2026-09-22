@@ -80,6 +80,12 @@ export const CalmSegmented = <T extends string>({
   readonly options: ReadonlyArray<{
     readonly value: T;
     readonly label: string;
+    /**
+     * 可选：该档位的数量。数量角标对辅助技术隐藏（与侧栏 `.nav-item em` 同口径），
+     * 因此 `null` 与缺省都表示「不可知」——不渲染角标，也不显示会被读成
+     * 「0 项」的假零；传 0 才渲染 0。
+     */
+    readonly count?: number | null | undefined;
     /** 可选：业务上不可达的档位，例如项目状态里的越级切换。 */
     readonly disabled?: boolean | undefined;
     /** 可选：禁用原因，鼠标悬停时解释给使用者。 */
@@ -100,6 +106,15 @@ export const CalmSegmented = <T extends string>({
         onClick={() => onChange(option.value)}
       >
         {option.label}
+        {typeof option.count === "number" ? (
+          <em
+            className="segmented-count"
+            aria-hidden="true"
+            title={option.label + " " + option.count + " 项"}
+          >
+            {option.count}
+          </em>
+        ) : null}
       </button>
     ))}
   </div>

@@ -201,7 +201,7 @@ test("F-32 任务中心：真实任务进入列表，工作状态与优先级接
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBe("HIGH");
-    await pickCalmSelectOption(page, "优先级", "全部");
+    await pickCalmSelectOption(page, "优先级", "全部优先级");
     await expect
       .poll(() => new URL(page.url()).searchParams.get("priority"))
       .toBeNull();

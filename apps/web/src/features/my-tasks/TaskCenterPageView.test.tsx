@@ -70,6 +70,7 @@ interface ViewOverrides {
   readonly onToggleAdvanced?: () => void;
   readonly onOpenIssues?: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  readonly leftoverCount?: number | null;
 }
 
 const renderView = (overrides: ViewOverrides = {}) => {
@@ -94,6 +95,9 @@ const renderView = (overrides: ViewOverrides = {}) => {
         onToggleAdvanced={onToggleAdvanced}
         onOpenIssues={onOpenIssues}
         onOpenTask={onOpenTask}
+        {...(overrides.leftoverCount !== undefined
+          ? { leftoverCount: overrides.leftoverCount }
+          : {})}
         {...(overrides.adapter ? { adapter: overrides.adapter } : {})}
         {...(overrides.client ? { client: overrides.client } : {})}
       />
@@ -207,6 +211,93 @@ describe("TaskCenterPageView", () => {
     expect(screen.getByLabelText("搜索任务")).toBeEnabled();
     const projectTrigger = screen.getByLabelText("项目").closest(".ant-select");
     expect(projectTrigger).toHaveTextContent("全部项目");
+  });
+
+  it("工作状态两档显示服务端统计的数量角标", async () => {
+    const statsAdapter: MyTasksAdapter = {
+      ...serverLikeAdapterWith([]),
+      fetchMyTasks: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        stats: {
+          todayTodo: 3,
+          todayTodoBreakdown: {
+            overdue: 1,
+            leftover: 0,
+            urgent: 1,
+            dueWithinDays: 1,
+          },
+          myOpen: 7,
+          completed: 23,
+          created: 9,
+        },
+        scopeCounts: null,
+        leftoverCount: 0,
+        leftoverSample: null,
+        filterSupport: MY_TASKS_V1_FILTER_SUPPORT,
+      }),
+    };
+    renderView({ adapter: statsAdapter });
+
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    const open = within(statusFilter).getByRole("button", { name: "未完成" });
+    const done = within(statusFilter).getByRole("button", { name: "已完成" });
+    await waitFor(() =>
+      expect(open.querySelector(".segmented-count")).toHaveTextContent("7"),
+    );
+    expect(done.querySelector(".segmented-count")).toHaveTextContent("23");
+    // 角标对辅助技术隐藏（与侧栏 .nav-item em 同口径），档位名因此保持「未完成」；
+    // 数量通过 title 说明，读屏听到的按钮名不受角标影响。
+    expect(open.querySelector(".segmented-count")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(open.querySelector(".segmented-count")).toHaveAttribute(
+      "title",
+      "未完成 7 项",
+    );
+    expect(open).toHaveAccessibleName("未完成");
+  });
+
+  it("统计不可知（stats: null）时不渲染数量角标，不把未知显示成 0", async () => {
+    renderView({ adapter: serverLikeAdapterWith([]) });
+
+    // 空态出现即代表 R-3 结果已进入视图，此时才断言角标确实没有渲染。
+    await screen.findByText("没有匹配的未完成任务");
+    const statusFilter = screen.getByRole("group", { name: "工作状态" });
+    expect(statusFilter.querySelectorAll(".segmented-count")).toHaveLength(0);
+    expect(
+      within(statusFilter).getByRole("button", { name: "未完成" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("遗留问题入口优先显示页面注入的外壳计数（与侧栏同源）", async () => {
+    const { onOpenIssues } = renderView({ leftoverCount: 6 });
+    const button = await screen.findByRole("button", { name: /遗留问题 6/ });
+    expect(button.querySelector(".header-count")).toHaveTextContent("6");
+    await userEvent.setup().click(button);
+    expect(onOpenIssues).toHaveBeenCalledTimes(1);
+  });
+
+  it("外壳计数尚未加载（null）时不显示角标，也不回退适配器字段", async () => {
+    const adapter: MyTasksAdapter = {
+      ...serverLikeAdapterWith([]),
+      fetchMyTasks: async () => ({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        stats: null,
+        scopeCounts: null,
+        leftoverCount: 3,
+        leftoverSample: null,
+        filterSupport: MY_TASKS_V1_FILTER_SUPPORT,
+      }),
+    };
+    renderView({ leftoverCount: null, adapter });
+    await screen.findByText("没有匹配的未完成任务");
+    const button = screen.getByRole("button", { name: "遗留问题" });
+    expect(button.querySelector(".header-count")).toBeNull();
   });
 
   it("shows open tasks only by default and hides done and canceled", async () => {
@@ -502,6 +593,13 @@ describe("TaskCenterPageView", () => {
     const { onOpenIssues } = renderView();
     const user = userEvent.setup();
     const button = await screen.findByRole("button", { name: /遗留问题 3/ });
+    // 2026-09-22（方案 A）：数量由裸文字改为数量签；签对辅助技术隐藏（与侧栏计数同口径），
+    // 按钮名仍带数量，由 aria-label 显式给出，读屏与既有断言口径不变。
+    expect(button.querySelector(".header-count")).toHaveTextContent("3");
+    expect(button.querySelector(".header-count")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     await user.click(button);
     expect(onOpenIssues).toHaveBeenCalledTimes(1);
   });
@@ -891,7 +989,7 @@ describe("TaskCenterPageView", () => {
     expect(within(plain).queryByText(/记录/)).toBeNull();
   });
 
-  it("keeps every priority label within two characters in the filter", async () => {
+  it("names the priority dimension on the empty option and keeps tier labels short", async () => {
     renderView();
 
     const field = await screen.findByLabelText("优先级");
@@ -902,8 +1000,11 @@ describe("TaskCenterPageView", () => {
     fireEvent.mouseDown(trigger);
     const options = await screen.findAllByRole("option");
     const labels = options.map((option) => option.textContent?.trim() ?? "");
-    expect(labels).toEqual(["全部", "紧急", "高", "普通", "低"]);
-    for (const label of labels) {
+    // 空值项必须写明这是优先级筛选：工具栏里没有重复的文字标签（产品已删除），
+    // 只显示「全部」时看不出维度。口径与任务看板 TaskBoardToolbar 的同名选项一致。
+    expect(labels).toEqual(["全部优先级", "紧急", "高", "普通", "低"]);
+    // 具体档位仍是两个字，保持工具栏紧凑；只有空值项带维度名。
+    for (const label of labels.slice(1)) {
       expect([...label].length).toBeLessThanOrEqual(2);
     }
   });

@@ -50,6 +50,7 @@ import {
   type MyTaskPriority,
   type MyTaskRecordFilter,
   type MyTaskRelation,
+  type MyTaskStats,
   type MyTaskStatusFilter,
   type MyTasksAdapter,
   type MyTasksFilterGap,
@@ -96,14 +97,21 @@ const displayOptions = [
  * 工具栏「工作状态」筛选（2026-09-21 定案）：承接原先由四张统计卡承担的工作状态切换，
  * 只保留产品要求的「未完成 / 已完成」两档；URL 里遗留的 status=all 不属于任何档位，
  * 因此不高亮任何一项，而不是把它误报成「未完成」。
+ *
+ * 2026-09-22（方案 A 定稿）：两档各自带 R-3 统计的数量——myOpen / completed 取负责人
+ * 维度、按当前 project 范围计算，与列表筛选同口径；stats 不可知（适配器未接线或尚未
+ * 加载）时两档都传 null，由 CalmSegmented 不渲染角标，不把「不知道」显示成 0。
  */
-const statusOptions: ReadonlyArray<{
+function statusOptions(stats: MyTaskStats | null): ReadonlyArray<{
   readonly value: MyTaskStatusFilter;
   readonly label: string;
-}> = [
-  { value: "open", label: "未完成" },
-  { value: "done", label: "已完成" },
-];
+  readonly count: number | null;
+}> {
+  return [
+    { value: "open", label: "未完成", count: stats?.myOpen ?? null },
+    { value: "done", label: "已完成", count: stats?.completed ?? null },
+  ];
+}
 
 const filterGapLabels: Record<MyTasksFilterGap, string> = {
   "scope:created": "我创建的",
@@ -185,6 +193,17 @@ export interface TaskCenterPageViewProps {
   readonly onToggleAdvanced: () => void;
   readonly onOpenIssues: () => void;
   readonly onOpenTask?: (task: TaskLocation) => void;
+  /**
+   * 页头「遗留问题」入口的计数（2026-09-22 修）：页面层注入外壳计数
+   * （R-6 未闭环桶，与侧栏导航同一个数字）。undefined 表示调用方未接线，
+   * 回退适配器字段；null 表示计数尚未加载——不显示角标。
+   *
+   * 为什么不用 R-3 的 leftoverCount：它的 SQL 要求 leftover_task_links 与
+   * ACTIVE 同时成立，而链接行只在「遗留项转任务」事务内写入、同一事务把条目
+   * 置成 CONVERTED，两者互斥使该字段在真实数据下恒为 0（集成测试用夹具直接
+   * 插链接才得到非零），页头因此改与侧栏同源。
+   */
+  readonly leftoverCount?: number | null;
   readonly adapter?: MyTasksAdapter;
   /** 与页面共用同一个生成客户端；缺省时弹窗自行创建。 */
   readonly client?: InpulseApiClient | undefined;
@@ -206,6 +225,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   onToggleAdvanced,
   onOpenIssues,
   onOpenTask,
+  leftoverCount: leftoverCountOverride,
   adapter,
   client,
 }) => {
@@ -228,7 +248,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     groupsQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const result = taskQuery.data;
   const items = result?.items ?? [];
-  const leftoverCount = result?.leftoverCount ?? null;
+  /** R-3 统计：工作状态两档的数量角标用它，null 表示不可知（不渲染角标）。 */
+  const stats = result?.stats ?? null;
+  // 优先用页面注入的外壳计数（R-6 未闭环桶，与侧栏一致）；只有调用方未接线
+  // （undefined）才回退适配器字段，null 表示计数尚未加载、不显示角标。
+  const leftoverCount =
+    leftoverCountOverride !== undefined
+      ? leftoverCountOverride
+      : (result?.leftoverCount ?? null);
   const filterSupport: MyTasksFilterSupport =
     result?.filterSupport ?? MY_TASKS_FULL_FILTER_SUPPORT;
   /**
@@ -809,16 +836,26 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </p>
         </div>
         <div className="catalog-actions">
+          {/* 2026-09-22（方案 A）：数量由裸文字改为数量签，与工具栏的状态角标同一种表达。
+              签对辅助技术隐藏（与侧栏 `.nav-item em` 同口径），按钮名改由 aria-label
+              显式给出，仍是「遗留问题 N」，读屏与既有用例口径不变。 */}
           <button
             type="button"
             className="secondary-button"
+            aria-label={
+              leftoverCount !== null && leftoverCount > 0
+                ? "遗留问题 " + leftoverCount
+                : "遗留问题"
+            }
             onClick={onOpenIssues}
           >
             <InpulseIcon name="alert" size={15} />
             遗留问题
-            {leftoverCount !== null && leftoverCount > 0
-              ? " " + leftoverCount
-              : ""}
+            {leftoverCount !== null && leftoverCount > 0 ? (
+              <em className="header-count" aria-hidden="true">
+                {leftoverCount}
+              </em>
+            ) : null}
           </button>
           <button
             type="button"
@@ -852,7 +889,19 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           </button>
         </p>
       )}
-      <div className="toolbar task-toolbar">
+      {/* 2026-09-22（方案 A）一体化控制条：工作状态（带数量）· 搜索 · 项目 / 优先级 /
+          任务范围 · 展示方式收进同一条白底控制条。既有结构全部保留——「更多筛选」仍是
+          `.task-toolbar` 的直接子元素与 `.secondary-button`（设计系统按定案把它常驻
+          display:none，靠 DOM 事件展开面板），间距仍由 `.task-center` 的页头 / 工具栏
+          外边距决定，标题到工具栏与工具栏到卡片的节奏不变。 */}
+      <div className="toolbar task-toolbar task-toolbar-bar">
+        <CalmSegmented
+          label="工作状态"
+          value={filters.status}
+          options={statusOptions(stats)}
+          onChange={(status) => update({ status })}
+        />
+        <span className="task-toolbar-divider" aria-hidden="true" />
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
           <input
@@ -863,12 +912,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             onChange={(event) => update({ query: event.target.value })}
           />
         </div>
-        <CalmSegmented
-          label="工作状态"
-          value={filters.status}
-          options={statusOptions}
-          onChange={(status) => update({ status })}
-        />
         {/* 下拉自身已显示「全部项目 / 项目名」，重复的文字标签已按产品要求删除；
             无障碍定位仍由 CalmSelect 的 aria-label 提供。 */}
         <CalmSelect
@@ -897,7 +940,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             })
           }
           options={[
-            { value: "", label: "全部" },
+            // 收起态直接显示「全部优先级」而不是「全部」，否则单看触发器看不出
+            // 这是哪个维度的筛选；与任务看板 TaskBoardToolbar 的同名选项保持一致。
+            { value: "", label: "全部优先级" },
             ...priorityOrder.map((priority) => ({
               value: priority,
               label: taskPriorityLabel(priority),
@@ -929,12 +974,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           <InpulseIcon name="sliders" size={15} />
           更多筛选{activeFilterCount > 0 ? " · " + activeFilterCount : ""}
         </button>
-        <CalmSegmented
-          label="展示方式"
-          value={filters.display}
-          options={displayOptions}
-          onChange={(display) => update({ display })}
-        />
+        <div className="task-toolbar-view">
+          <CalmSegmented
+            label="展示方式"
+            value={filters.display}
+            options={displayOptions}
+            onChange={(display) => update({ display })}
+          />
+        </div>
       </div>
 
       {localGaps.length > 0 ? (

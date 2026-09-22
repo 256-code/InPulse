@@ -2958,6 +2958,29 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入。
 
+## 任务中心页头 + 控制条一体化与「未完成 / 已完成」数量角标（方案 A，产品要求，2026-09-22 本地落库）
+
+产品要求（原文）：「这一片区域我希望你帮我重新设计一下，可以网上查查 ui 样式，然后完成和未完成需要有数量显示，最后先展示个样式给我再决定要不要修改」。先交付三套样式预览（A 一体化控制条 / B 下划线标签页 / C 状态统计块），用户看过预览后选定方案 A（「根据方案 A 改」），本批把方案 A 落库为真实实现。纯前端呈现变更：不改契约、不改接口、不动数据库。
+
+口径与实现：
+
+- 数量取自既有 R-3 契约的 `stats.myOpen` / `stats.completed`（负责人维度、按当前 project 范围，与列表筛选同口径），不新增接口、不重复计算；`stats` 不可知（适配器未接线或尚未加载）时两档都不渲染角标，不把「不知道」显示成 0。
+- 控制条：`.task-toolbar-bar` 把「工作状态（带数量）→ 分隔线 → 搜索框（flex:1）→ 项目 / 优先级 / 任务范围三个浅底无描边下拉 → 靠右展示方式」收进一条白底控制条；条内分段控件与搜索框同为 34px 高，标题 → 控制条 → 卡片 的纵向节奏不变。
+- 页头「遗留问题」入口数量由裸文字改为数量签 `.header-count`；数量签与分段角标都对辅助技术隐藏（与侧栏 `.nav-item em` 同口径），按钮可访问名由 `aria-label` 显式给出，仍是「遗留问题 N」。
+- 旧固定宽搜索框规则限定为 `.task-toolbar:not(.task-toolbar-bar)`，迭代记录 / 遗留问题 / 项目动态页不受影响。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASKBAR-COUNT-WEB-001 | Web 单元 | 两档显示服务端统计数量 | `TaskCenterPageView.test.tsx` 新增用例：stats 为 `myOpen: 7 / completed: 23` 时「未完成 / 已完成」按钮内 `.segmented-count` 分别为 7 / 23，角标 `aria-hidden="true"` 且 `title="未完成 7 项"`，按钮可访问名仍是「未完成」 | 本地通过 |
+| TASKBAR-COUNT-WEB-002 | Web 单元 | 统计不可知不显示假 0 | 同文件新增用例：适配器不返回 stats 时 `.segmented-count` 数量为 0（空态出现后才断言，避免时序误判）；`CalmSegmented` 只对 `typeof count === "number"` 渲染角标 | 本地通过 |
+| TASKBAR-LEFTCOUNT-WEB-003 | Web 单元 | 遗留问题入口数量签 | 「遗留问题 3」按钮内 `.header-count` 文本为 3 且 `aria-hidden="true"`，按钮名仍为「遗留问题 3」，既有断言口径不变 | 本地通过 |
+| TASKBAR-BROWSER-001 | 浏览器实测 | 真实控制条结构与实测取值 | 真实 E2E 环境（Docker PostgreSQL 18.6 + 生产构建 Vite preview）：控制条高 51px、条内 Select 高 34px、背景 `rgb(243,246,250)`、选中档位角标底色 `rgb(230,242,255)`；1280px 视口下控制条右缘 1246 / 最末控件右缘 1236，不折行 | 本地通过 |
+| TASKBAR-BROWSER-002 | 浏览器实测 | 真实数量闭环 | 临时 E2E 用例在夹具项目创建 3 个任务并完成 2 个后进入 `/tasks`：`.task-toolbar-bar .segmented-count` 恰为 2 个，文本依次为 1（未完成）与 2（已完成），截图留档（用例已删，不入库） | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web test`（85 文件 559 例全绿，改前 557，新增 2 例）；改动文件 ESLint 与 Prettier 通过；真实 E2E 定向运行 `aggregate-views`（2 例）、`task-groups`（2 例）与临时截图用例（1 例）通过；`pnpm --filter @inpulse/web typecheck` 的失败与本次无关（既有 `PROJECT_ADMIN` 残留，`git stash` 对照改动前同样失败，7 个文件）。
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链、全量 `pnpm test:e2e`、`deps:audit`（需 registry 访问）与 GitHub Actions；② 数量角标只跟随 R-3 统计，不随关键词 / 优先级等本地筛选二次计算，细粒度数字以列表为准；③ 窄视口依赖控制条既有 `flex-wrap` 折行，未新增专项用例；④ 纯前端呈现变更，按仓库规则仍需非作者人工评审。
+
 ## 侧栏计数随写操作即时更新（前端缺陷修复，2026-09-22 本地落库）
 
 用户报告（附侧栏截图「任务中心 4 / 遗留问题 2」）：「任务中心新建任务完成任务或者遗留问题产生遗留问题或转成任务那些发生修改变化左边导航栏数字不会及时变化需要刷新才变」。定位为侧栏两个计数查询（`["shell-counters","my-open-tasks"]`、`["shell-counters","open-leftovers"]`，带 60 秒 `staleTime`）从未被任何写路径失效，数字只在整页重挂载后更新；本批只改前端缓存失效，不改契约、接口、权限与数据库。
@@ -2976,3 +2999,22 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 Playwright E2E（缺陷本身是缓存失效，单测已覆盖两条失效路径；真实浏览器复验待补）、`pnpm check` 整链、`deps:audit` 与 GitHub Actions；② `pnpm --filter @inpulse/web typecheck` 仍有 7 文件 9 处既有 `PROJECT_ADMIN` 残留错误（`git stash` 对照改动前同样失败，属他人在途改动，与本批无关）；③ 全局失效会让侧栏与任务中心页头的遗留问题计数一起重新取数（未挂载时只标记过期、不发请求）。
 
+## 任务中心「遗留问题」计数与侧栏同源（缺陷修复，2026-09-22 本地落库）
+
+现象：任务中心页头「遗留问题」入口从不显示数字，而侧栏导航的「遗留问题」有数字。排查结论是两条叠加：
+
+1. 页头数字来自 R-3 的 `leftoverCount`（`MyTaskQueryPort.leftoverEntry`）：其 SQL 要求「任务经 `leftover_task_links` 关联」与「遗留项 `status = "ACTIVE"`」同时成立，但链接行只在「遗留项转任务」事务内写入、且同一事务把该条目置成 `CONVERTED`（`leftover-record.repository.ts` 的 `link()`：INSERT 链接 + UPDATE 状态），两者在真实业务路径下互斥，计数恒为 0；集成测试用夹具直接 INSERT 链接并保持 ACTIVE，构造了真实路径不可达的组合，因此一直是绿的（`aggregate-read-api.integration.test.ts`「统计卡片与遗留问题入口按基准集合计算」）。
+2. 侧栏数字来自 R-6 `bucket=OPEN` 桶条数，与页头原口径不同；即便 R-3 口径修好，两处也会在「我负责 vs 全部」上长期不一致。
+
+修复（前端，不动契约与数据库）：把「未闭环遗留项计数」下沉到 `features/issues/issues-query.ts` 的 `useOpenLeftoverCount`（R-6 `bucket=OPEN`、单页上限 100、超出显示上限、`staleTime` 60s；查询键挂在 `shell-counters` 前缀下），侧栏（`useShellCounters`）与任务中心页头（`TasksPage` 注入视图）共用同一个查询键与缓存，写后由全局 MutationCache 统一失效。视图语义固定为「`undefined` = 未接线、回退适配器字段；`null` = 尚未加载、不显示角标」。
+
+| 编号 | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVERCOUNT-WEB-001 | Web 单元 | 注入计数优先于适配器字段 | `TaskCenterPageView.test.tsx` 新增用例：注入 `leftoverCount: 6` 时按钮可访问名为「遗留问题 6」、`.header-count` 文本为 6，点击仍触发 `onOpenIssues` | 本地通过 |
+| LEFTOVERCOUNT-WEB-002 | Web 单元 | 尚未加载不回退成假值 | 同文件新增用例：适配器字段为 3、注入 `leftoverCount: null` 时按钮名仍是「遗留问题」且不渲染 `.header-count`（空态出现后才断言） | 本地通过 |
+| LEFTOVERCOUNT-WEB-003 | Web 单元 | 页面接线与定向回归 | `TasksPage.test.tsx`、`features/issues`、`src/app` 定向 11 文件 105 例保持通过；新增的 `app -> features` 导入不违反依赖边界 | 本地通过 |
+| LEFTOVERCOUNT-BROWSER-001 | 浏览器实测 | 两处数字同源 | 临时 E2E 用例走真实路径（新建任务 → 完成任务并发布带一条遗留问题的记录）后进入 `/tasks`：侧栏「遗留问题」`em` 与页头「遗留问题 1」数量签同时为 1；点开弹窗后该条出现在「未闭环」桶（截图留档，用例已删） | 本地通过 |
+
+本地实际执行（2026-09-22）：`pnpm --filter @inpulse/web test`（85 文件 563 例；既有 `app-router.test.tsx` 1 例在 HEAD 版本上用 `git stash` 对照同样失败，属本地负载敏感的间歇失败，与本批 diff 无关）；本批相关定向 `vitest` 11 文件 105 例全绿；`pnpm check:frontend:boundaries`（283 模块 1393 依赖）通过；真实 E2E 定向用例通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链、全量 `pnpm test:e2e`、`deps:audit`（需 registry 访问）与 GitHub Actions；② R-3 的 `leftoverCount` / `leftoverSample` 后端恒 0 缺陷本次未改后端——页面已不再依赖该字段，但契约字段仍在，建议后续单独修复（其集成测试夹具需同步改成真实路径）或收敛契约；③ 页头计数与侧栏一样是全局范围，选定项目筛选后不随列表一起收窄，弹窗内容在选定项目时可能小于该数字（既有设计，本次未改）。
