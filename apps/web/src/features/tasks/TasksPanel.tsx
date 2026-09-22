@@ -40,7 +40,10 @@ import {
   type CalmSelectOption,
 } from "@features/common/components/CalmSelect";
 import { priorityDotColor } from "@features/common/priority-select-option";
-import { taskToneClassName } from "@features/common/task-tone";
+import {
+  taskToneClassName,
+  type TaskDueTone,
+} from "@features/common/task-tone";
 import {
   isFirstLoad,
   mergeTask,
@@ -158,21 +161,54 @@ type DetailTab = "info" | "records" | "branches";
 function dueInfo(
   value: string | null,
   workStatus: TaskViewItem["workStatus"],
-): { label: string; tone: "gray" | "red" | "amber" | "blue" } {
-  if (value === null) return { label: "未设置截止", tone: "gray" };
-  if (workStatus === "DONE") return { label: "已完成", tone: "gray" };
-  if (workStatus === "CANCELED") return { label: "已取消", tone: "gray" };
+): {
+  label: string;
+  tone: "gray" | "red" | "amber" | "blue";
+  /** 卡片整卡红档用的细分：已逾期 / 今天到期，其余（含明天到期）为 null。 */
+  urgency: TaskDueTone | null;
+} {
+  if (value === null)
+    return { label: "未设置截止", tone: "gray", urgency: null };
+  if (workStatus === "DONE")
+    return { label: "已完成", tone: "gray", urgency: null };
+  if (workStatus === "CANCELED")
+    return { label: "已取消", tone: "gray", urgency: null };
   const startOfDay = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const days = Math.round(
     (startOfDay(new Date(value)) - startOfDay(new Date())) / 86_400_000,
   );
   if (days < 0)
-    return { label: "已逾期 " + Math.abs(days) + "天", tone: "red" };
-  if (days === 0) return { label: "今天截止", tone: "amber" };
-  if (days === 1) return { label: "明天截止", tone: "amber" };
-  if (days <= 7) return { label: days + " 天后截止", tone: "blue" };
-  return { label: "截止 " + formatDate(value), tone: "gray" };
+    return {
+      label: "已逾期 " + Math.abs(days) + "天",
+      tone: "red",
+      urgency: "overdue",
+    };
+  if (days === 0) return { label: "今天截止", tone: "amber", urgency: "soon" };
+  if (days === 1) return { label: "明天截止", tone: "amber", urgency: null };
+  if (days <= 7)
+    return { label: days + " 天后截止", tone: "blue", urgency: null };
+  return { label: "截止 " + formatDate(value), tone: "gray", urgency: null };
+}
+/**
+ * 任务表格的截止色调：与详情徽章同一套判定——逾期实心深红签、马上到期浅红签，
+ * 未设置 / 已完成 / 已取消 / 更远日期不上色（原先这里对每一行都写死了 due-overdue）。
+ */
+function dueToneClass(
+  value: string | null,
+  workStatus: TaskViewItem["workStatus"],
+): string | undefined {
+  const tone = dueInfo(value, workStatus).tone;
+  if (tone === "red") return "due-overdue";
+  if (tone === "amber") return "due-soon";
+  return undefined;
+}
+/**
+ * 卡片整卡红档：只对「已逾期 / 今天到期」生效，明天到期与更远日期不铺红，
+ * 与任务中心口径一致（色值见 design-system.css「任务卡红色三档」）。
+ */
+function cardDueTone(item: TaskViewItem): TaskDueTone | null {
+  return dueInfo(item.dueAt, item.workStatus).urgency;
 }
 /** C-3：动作行左端的截止徽章。 */
 function TaskDueBadge({ item }: { readonly item: TaskViewItem }) {
@@ -830,7 +866,11 @@ export function TasksPanel({
                             {priorityLabels[item.priority]}
                           </CalmBadge>
                         </td>
-                        <td className="due-overdue">{dueLabel(item.dueAt)}</td>
+                        <td
+                          className={dueToneClass(item.dueAt, item.workStatus)}
+                        >
+                          {dueLabel(item.dueAt)}
+                        </td>
                         <td>
                           <CalmBadge tone={statusTone[item.workStatus]}>
                             {statusLabels[item.workStatus]}
@@ -854,7 +894,11 @@ export function TasksPanel({
                   <article
                     className={
                       "calm-task-card " +
-                      taskToneClassName(item.priority, item.workStatus)
+                      taskToneClassName(
+                        item.priority,
+                        item.workStatus,
+                        cardDueTone(item),
+                      )
                     }
                     key={item.id}
                     tabIndex={0}
