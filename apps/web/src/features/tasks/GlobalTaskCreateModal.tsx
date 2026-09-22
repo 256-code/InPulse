@@ -448,7 +448,8 @@ export function GlobalTaskCreateModal({
                   setImpactFeatureIds([]);
                 }}
                 options={[
-                  { value: 0, label: "请选择项目" },
+                  // 占位项只作提示，禁用以防用户主动选回「未选择」清掉归属（2026-09-22 产品反馈）。
+                  { value: 0, label: "请选择项目", disabled: true },
                   ...(projects.data?.items ?? []).map(projectSelectOption),
                 ]}
               />
@@ -475,6 +476,7 @@ export function GlobalTaskCreateModal({
                   {
                     value: 0,
                     label: projectId === 0 ? "请先选择项目" : "请选择模块",
+                    disabled: true,
                   },
                   { value: -1, label: "自定义 · 创建新模块" },
                   ...(modules.query.data?.items ?? []).map((module) => ({
@@ -518,6 +520,7 @@ export function GlobalTaskCreateModal({
                     {
                       value: 0,
                       label: moduleId === 0 ? "请先选择模块" : "请选择功能",
+                      disabled: true,
                     },
                     { value: -1, label: "自定义 · 创建新功能" },
                     ...(features.query.data?.items ?? []).map((feature) => ({
