@@ -493,34 +493,45 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             ))}
           </datalist>
         </div>
-        <input
-          type="number"
-          min={1}
-          value={draftFilters.actorId}
-          placeholder="操作人：输入 ID 或选择"
-          aria-label="操作人 ID"
-          list="audit-actor-options"
-          onChange={(event) =>
-            updateDraft({ actorId: event.currentTarget.value })
+        <CalmSelect
+          ariaLabel="操作人"
+          appearance="member"
+          multiple
+          maxTagCount={1}
+          width={200}
+          value={draftFilters.actorIds}
+          onChange={(next) =>
+            updateDraft({ actorIds: next.map((value) => Number(value)) })
           }
+          placeholder="全体操作人（可搜索多选）"
+          loading={directoryQuery.isPending}
+          options={(directoryQuery.data ?? []).map((entry) => ({
+            value: entry.id,
+            label: entry.name,
+            avatarUrl: entry.avatarUrl ?? null,
+            description: entry.isAdmin ? "系统管理员" : "项目成员",
+          }))}
         />
-        <datalist id="audit-actor-options">
-          {(directoryQuery.data ?? []).map((entry) => (
-            <option key={entry.id} value={entry.id} label={entry.name} />
-          ))}
-        </datalist>
-        <input
-          type="datetime-local"
-          value={draftFilters.from}
-          aria-label="开始时间"
-          onChange={(event) => updateDraft({ from: event.currentTarget.value })}
-        />
-        <input
-          type="datetime-local"
-          value={draftFilters.to}
-          aria-label="结束时间"
-          onChange={(event) => updateDraft({ to: event.currentTarget.value })}
-        />
+        <label className="audit-time-field">
+          <span>开始时间</span>
+          <input
+            type="datetime-local"
+            value={draftFilters.from}
+            aria-label="开始时间"
+            onChange={(event) =>
+              updateDraft({ from: event.currentTarget.value })
+            }
+          />
+        </label>
+        <label className="audit-time-field">
+          <span>结束时间</span>
+          <input
+            type="datetime-local"
+            value={draftFilters.to}
+            aria-label="结束时间"
+            onChange={(event) => updateDraft({ to: event.currentTarget.value })}
+          />
+        </label>
         <button
           type="button"
           className="secondary-button"
@@ -539,7 +550,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
 
       <p className="permission-hint">
         <InpulseIcon name="shield" size={14} />
-        每页 {AUDIT_PAGE_LIMIT} 条（契约默认值）； from / to 为半开区间 [from,
+        每页 {AUDIT_PAGE_LIMIT} 条（契约默认值）；
+        操作人不选即全体，可搜索多选； from / to 为半开区间 [from,
         to)，按浏览器本地时区换算为带时区时间；
         游标由服务端签名，不能跨查询复用。
       </p>

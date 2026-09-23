@@ -171,7 +171,7 @@ describe("useAuditLogsInfiniteQuery", () => {
           chain: { kind: "project", projectId: 7 },
           filters: {
             action: " project.update ",
-            actorId: "3",
+            actorIds: [7, 3],
             from: "2026-09-01T08:00",
             to: "2026-09-02T08:00",
           },
@@ -184,7 +184,7 @@ describe("useAuditLogsInfiniteQuery", () => {
       {
         projectId: 7,
         action: "project.update",
-        actorId: 3,
+        actorIds: [3, 7],
         from: new Date("2026-09-01T08:00").toISOString(),
         to: new Date("2026-09-02T08:00").toISOString(),
         limit: AUDIT_PAGE_LIMIT,
@@ -202,12 +202,6 @@ describe("audit query helpers", () => {
 
   it("validates filters before submit", () => {
     expect(
-      validateAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: "abc" }),
-    ).toBe("操作人 ID 必须是正整数。");
-    expect(validateAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: "0" })).toBe(
-      "操作人 ID 必须是正整数。",
-    );
-    expect(
       validateAuditFilters({
         ...EMPTY_AUDIT_FILTERS,
         from: "2026-09-02T08:00",
@@ -217,7 +211,7 @@ describe("audit query helpers", () => {
     expect(
       validateAuditFilters({
         action: " project.update ",
-        actorId: "3",
+        actorIds: [3],
         from: "2026-09-01T08:00",
         to: "2026-09-02T08:00",
       }),
@@ -226,13 +220,15 @@ describe("audit query helpers", () => {
 
   it("normalizes empty filters to the contract optional shape", () => {
     expect(
-      normalizeAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: " 3 " }),
+      normalizeAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorIds: [9, 3, 9] }),
     ).toEqual({
       action: undefined,
-      actorId: 3,
+      actorIds: [3, 9],
       from: undefined,
       to: undefined,
     });
+    // 多选清空后回到「全体操作人」：不传该参数，而不是传空列表。
+    expect(normalizeAuditFilters(EMPTY_AUDIT_FILTERS).actorIds).toBeUndefined();
   });
 
   it("maps gate errors to safe copy", () => {

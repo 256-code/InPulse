@@ -353,6 +353,10 @@ button {
   padding: 0 11px;
   text-align: left;
   margin-bottom: 3px;
+  /* 底色与文字色走短过渡：hover / 选中不再像开关一样跳变。 */
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 .nav-item:hover {
   background: #1a3957;
@@ -393,7 +397,7 @@ button {
 }
 /* 罗列区间不再整块限高：所有项目行始终完整展示，展开某个项目也不会把其它项目
    挤出可视区（产品要求 2026-09-21，取代原先 264px 的整块限高）。滚动收进被展开
-   项目的模块列表，见下面的 `.tree-modules`。 */
+   项目的模块列表，见下面的 `.tree-modules-scroll`。 */
 .project-tree-scroll {
   overflow: visible;
 }
@@ -408,28 +412,70 @@ button {
   padding-top: 6px;
   border-top: 1px solid #1c3b5c;
 }
-.project-tree-scroll > .tree-project > .tree-children {
+/* 缩进、左边框与底色挂在裁剪层上：折叠区块自身不留 padding，收起态高度才是
+   真正的 0，罗列区不会因为「所有项目都收起」而多出可滚动的一点点高度。 */
+.project-tree-scroll > .tree-project > .tree-children > .tree-children-clip {
   margin: 2px 0 4px;
   padding: 2px 0 2px 6px;
   border-left: 2px solid #2a5a86;
   border-radius: 0 8px 8px 0;
   background: #102a44;
 }
+/* 收起态把内边距与外边距一起归零：高度完全交给 grid 行，折叠区块不占任何空间，
+   罗列区不会因为「所有项目都收起」多出 1px 级溢出（展开时这些留白与动画同帧生效）。 */
+.project-tree-scroll
+  > .tree-project
+  > .tree-children[data-open="false"]
+  > .tree-children-clip {
+  margin: 0;
+  padding: 0;
+}
 /* 滚动条只属于被展开的这个项目，且只包住它的模块列表：子页行（任务看板 / 模块与
    功能）留在滚动区之外，翻模块时不会被一起滚走；限高按产品复核由 260px 收到 200px
-   （2026-09-21）。 */
-.tree-modules {
-  display: flex;
-  flex-direction: column;
+   （2026-09-21）。滚动条槽常驻（scrollbar-gutter）并换成 6px 细条：模块多少都不再
+   挤动行宽，也不会出现带箭头的系统滚动条（2026-09-23）。 */
+.tree-modules-scroll {
   max-height: 200px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #2c4a66 transparent;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+/* 细滚动条：Chromium 走 ::-webkit-scrollbar（6px、圆角、无系统箭头），Firefox 走
+   标准属性；两者不要同时声明，否则 Chromium 会忽略自定义条。 */
+.tree-modules-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.tree-modules-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tree-modules-scroll::-webkit-scrollbar-thumb {
+  background: #3f6d94;
+  border-radius: 999px;
+}
+.tree-modules-scroll::-webkit-scrollbar-thumb:hover {
+  background: #5b90bb;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .tree-modules-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #3f6d94 transparent;
+  }
 }
 /* 模块分支不参与收缩：滚动区再矮也按内容高度排版，超出部分交给滚动条。 */
-.tree-modules > .tree-project {
+.tree-modules-scroll > .tree-project {
   flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-children,
+  .tree-modules,
+  .tree-children > .tree-children-clip,
+  .tree-modules > .tree-modules-scroll,
+  .tree-row,
+  .nav-item {
+    transition: none;
+  }
 }
 .tree-row {
   width: 100%;
@@ -446,6 +492,10 @@ button {
   text-align: left;
   font-size: 12px;
   cursor: pointer;
+  /* 同 .nav-item：目录行的 hover / 选中用短过渡，展开与滚动因此更连贯。 */
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 .tree-row:hover {
   background: #1a3957;
@@ -467,9 +517,51 @@ button {
 .tree-icon {
   flex: 0 0 auto;
 }
-.tree-children {
+/* 折叠区块（项目子级 / 模块列表 / 模块下的功能列表）：grid-template-rows 的
+   0fr ↔ 1fr 过渡给出「按内容高度」的展开收起，不需要 JS 量高；clip 层负责裁剪与
+   延迟隐藏，收起动画走完（240ms，与组件里的 COLLAPSE_MS 一致）内容才不可见。 */
+.tree-children,
+.tree-modules {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.tree-children[data-open="true"],
+.tree-modules[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.tree-children > .tree-children-clip,
+.tree-modules > .tree-modules-scroll {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.24s;
+}
+.tree-children[data-open="true"] > .tree-children-clip,
+.tree-modules[data-open="true"] > .tree-modules-scroll {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+/* 裁剪层真的裁剪：行始终按最终位置排版，展开 / 收起只改外框高度，可见部分由外框
+   裁出。否则动画中的行会全尺寸画到下一个项目行上（视觉重影），还会把罗列区撑出
+   瞬时溢出。 */
+.tree-children > .tree-children-clip {
+  overflow: clip;
+}
+/* 裁剪余量只在展开态给：展开时行可以被键盘聚焦，6px 余量容得下 2px 聚焦环 + 3px
+   偏移，不被切边；收起 / 动画中不留余量，被裁出的内容也不会在罗列区之外留下
+   “可见余量”把 scrollHeight 撑大（收起动画实测会多 6px）。 */
+.tree-children[data-open="true"] > .tree-children-clip {
+  overflow-clip-margin: 6px;
+}
+/* 裁剪层里的行不参与收缩：高度压缩必须表现为裁剪，否则动画中行会被压扁。 */
+.tree-children > .tree-children-clip > * {
+  flex: none;
 }
 .project-node {
   padding-left: 8px;
@@ -1610,6 +1702,19 @@ td small {
   margin-left: auto;
   color: #a0aab5;
   font-size: 10px;
+}
+/* 时间范围字段：.audit-toolbar 的直接提示 span 靠 margin-left:auto 贴右，这里
+   显式回零，让「开始时间 / 结束时间」贴着各自的输入框，说明哪端是哪端。 */
+.audit-toolbar .audit-time-field span {
+  margin-left: 0;
+  color: #586d83;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.audit-time-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .audit-list {
   background: white;
@@ -2821,6 +2926,10 @@ a:focus-visible {
 .calm-task-card {
   position: relative;
   overflow: hidden;
+  /* 2026-09-23 产品要求「这个布局太紧凑了」：卡片内边距 22 → 26/24，标题、归属、
+     负责人、标签四段之间同步放宽，详见下面各行的日期注释。组卡与功能档案任务卡
+     共用本块，一并生效。 */
+  padding: 26px 24px;
 }
 .calm-task-card::before {
   content: "";
@@ -2846,7 +2955,8 @@ a:focus-visible {
 .calm-task-card h3 {
   font-size: 16px;
   line-height: 1.6;
-  margin: 20px 0 8px;
+  /* 2026-09-23 放宽：标题与归属行由 8px → 12px。 */
+  margin: 20px 0 12px;
   font-weight: 600;
   color: #243d54;
   min-height: 51px;
@@ -2862,16 +2972,18 @@ a:focus-visible {
 }
 /* 卡片顶部那一行（编号 + 徽章）取消后 <h3> 成了卡片首行（2026-09-22 定案）：
    原来的 20px 上边距会和外层 22px 内边距叠成 42px 的空档，收到 4px，
-   让标题回到常规内边距附近，卡片整体随之变矮。 */
+   让标题回到常规内边距附近，卡片整体随之变矮。
+   2026-09-23 放宽：随内边距一起收到 8px，标题不再贴顶。 */
 .calm-task-card > h3:first-child {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .calm-task-card > p {
   color: #687f93;
   font-size: 12px;
   margin: 0 0 23px;
 }
-/* 任务介绍固定两行：长短描述的卡片同高，底部信息行在整排卡片间对齐。 */
+/* 任务介绍固定两行：长短描述的卡片同高，底部信息行在整排卡片间对齐。
+   2026-09-23 放宽：与负责人行之间由 16px → 18px，与同批的归属行间距协调。 */
 .calm-task-card > p.task-card-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -2879,24 +2991,29 @@ a:focus-visible {
   overflow: hidden;
   line-height: 1.6;
   min-height: 38px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .calm-task-card > p.task-card-desc.is-placeholder {
   color: #a7b2c0;
 }
 /* 归属行下面紧接着负责人行（2026-09-22 定案）：原来 23px 的下边距会把两行
-   撑成双倍行距，收到 8px 后「归属 + 负责人」整体仍占原来 meta 区的高度。 */
+   撑成双倍行距，收到 8px 后「归属 + 负责人」整体仍占原来 meta 区的高度。
+   2026-09-23 放宽：8px → 14px，两行不再挨在一起。 */
 .calm-task-card > p.task-belonging {
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 /* 负责人单独一行贴在卡片分隔线上方并右对齐：横线以上右侧只放负责人，
-   横线以下的左下角给标签、右下角给截止时间。 */
+   横线以下的左下角给标签、右下角给截止时间。
+   2026-09-23 放宽：聚合组卡在这一行会并排「负责人」与「N 条分支」两个 span，
+   它们原先没有间距、直接贴在一起，这里补 12px。 */
 .calm-card-assignee {
   display: flex;
+  gap: 12px;
   justify-content: flex-end;
   color: #637b91;
   font-size: 12px;
-  margin: 0 0 15px;
+  /* 2026-09-23 放宽：与分隔线之间由 15px → 18px。 */
+  margin: 0 0 18px;
 }
 .calm-card-assignee > span {
   display: flex;
@@ -2905,7 +3022,8 @@ a:focus-visible {
 }
 .calm-card-bottom {
   border-top: 1px solid #edf1f5;
-  padding-top: 15px;
+  /* 2026-09-23 放宽：分隔线与底部标签行之间由 15px → 18px。 */
+  padding-top: 18px;
   color: #637b91;
   font-size: 12px;
 }
@@ -6526,7 +6644,9 @@ td.due-overdue {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 72px;
+  /* 2026-09-23 ADR-040 收口：卡片列出全部负责人（「、」连接），
+     72px 只够一个人名，放宽到 110px；空间仍不够时省略，完整名单在 title。 */
+  max-width: 110px;
 }
 .tb-ava {
   display: inline-grid;
@@ -6751,9 +6871,17 @@ td.due-overdue {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: #4c6178;
   font-size: 11px;
   white-space: nowrap;
+}
+/* 2026-09-23 ADR-040：负责人列列出全部负责人，超出 116px 列宽时省略，
+   完整名单在行内 title；min-width: 0 是 flex 子项能收缩出省略号的前提。 */
+.tb-owner-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tb-row-owner .tb-ava {
   width: 16px;

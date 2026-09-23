@@ -135,7 +135,9 @@ export function matchesTaskBoardCard(
   }
   if (
     filters.assigneeId !== null &&
-    card.assignee.userId !== filters.assigneeId
+    !card.assignees.some(
+      (assignee) => assignee.userId === filters.assigneeId,
+    )
   ) {
     return false;
   }
@@ -145,7 +147,7 @@ export function matchesTaskBoardCard(
       card.code,
       card.title,
       card.featureName ?? "",
-      card.assignee.name,
+      ...card.assignees.map((assignee) => assignee.name),
     ]
       .join(" ")
       .toLowerCase();
@@ -181,8 +183,9 @@ export function countTaskBoardTasks(
 }
 
 /**
- * 负责人下拉选项：看板内实际出现的负责人按姓名排序去重。
- * 选项来自全量看板（不受筛选影响），避免「筛选后选项消失」无法回退。
+ * 负责人下拉选项：看板内实际出现的负责人按姓名排序去重（ADR-040 集合口径，
+ * 多负责人的任务每个人都要进选项）。选项来自全量看板（不受筛选影响），
+ * 避免「筛选后选项消失」无法回退。
  */
 export function collectTaskBoardAssignees(
   modules: readonly TaskBoardModule[],
@@ -190,8 +193,10 @@ export function collectTaskBoardAssignees(
   const byId = new Map<number, UserRef>();
   for (const lane of modules) {
     for (const card of lane.tasks) {
-      if (!byId.has(card.assignee.userId)) {
-        byId.set(card.assignee.userId, card.assignee);
+      for (const assignee of card.assignees) {
+        if (!byId.has(assignee.userId)) {
+          byId.set(assignee.userId, assignee);
+        }
       }
     }
   }

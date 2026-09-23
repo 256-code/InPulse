@@ -74,7 +74,7 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
     }
     return {
       action: "",
-      actorId: item.actorId === null ? "" : String(item.actorId),
+      actorIds: item.actorId === null ? [] : [item.actorId],
       from: new Date(occurred - SNAPSHOT_WINDOW_MS).toISOString(),
       to: new Date(occurred + SNAPSHOT_WINDOW_MS).toISOString(),
     };

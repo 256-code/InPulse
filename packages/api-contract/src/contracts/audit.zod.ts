@@ -9,11 +9,18 @@ export const AUDIT_CHAIN_ID_MAX_LENGTH = 100;
 
 export const auditActorTypeSchema = z.enum(["USER", "SYSTEM"]);
 
+/** 操作人筛选一次最多指定 100 个用户；省略即不过滤（全体操作人）。 */
+export const AUDIT_LOG_ACTOR_IDS_MAX = 100;
+
 /**
  * 原始审计查询参数（F-08 步骤 4）。不传 projectId 读 SYSTEM 链，传 projectId
- * 读 PROJECT:<id> 链；action 精确匹配动作码；from/to 为半开区间 [from, to)，
- * 必须带时区偏移；cursor 为服务端签名、绑定操作者与查询条件的不透明字符串，
- * 客户端不得解析或修改；limit 默认 50、最大 100。
+ * 读 PROJECT:<id> 链；action 精确匹配动作码；actorIds 为操作人筛选；from/to 为
+ * 半开区间 [from, to)，必须带时区偏移；cursor 为服务端签名、绑定操作者与查询
+ * 条件的不透明字符串，客户端不得解析或修改；limit 默认 50、最大 100。
+ *
+ * actorIds 是以英文逗号分隔的 1..100 个正整数用户 ID，服务端按此解析并做
+ * `actor_id IN (...)` 过滤；生成客户端对数组参数序列化为同一格式。省略表示不
+ * 按操作人过滤（等价于「全体操作人」）；数量、格式或重复校验失败统一返回 422。
  *
  * readTrail 是读取留痕意图（ADR-042）：读取留痕按「查看」而不是「每次请求」
  * 计数，只有开启一次新查看的请求（进入审计页、切换审计链）才写
@@ -25,7 +32,21 @@ export const auditLogQueryRequestSchema = z
   .object({
     projectId: z.coerce.number().int().positive().optional(),
     action: z.string().min(1).max(200).optional(),
-    actorId: z.coerce.number().int().positive().optional(),
+    actorIds: z
+      .preprocess(
+        (value) =>
+          typeof value === "string" && value.length > 0
+            ? value.split(",")
+            : undefined,
+        z
+          .array(z.coerce.number().int().positive())
+          .min(1)
+          .max(AUDIT_LOG_ACTOR_IDS_MAX)
+          .refine((ids) => new Set(ids).size === ids.length, {
+            message: "actorIds 不得重复",
+          }),
+      )
+      .optional(),
     from: z.iso.datetime({ offset: true }).optional(),
     to: z.iso.datetime({ offset: true }).optional(),
     cursor: z.string().min(1).max(AUDIT_LOG_CURSOR_MAX_LENGTH).optional(),

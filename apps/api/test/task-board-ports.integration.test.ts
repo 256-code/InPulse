@@ -375,6 +375,39 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
     });
   });
 
+  test("卡片负责人为全部负责人的升序集合，不再只取最小 user_id", async () => {
+    const scope = await newProject();
+    const secondUserId = await createUser(client.sql);
+    const thirdUserId = await createUser(client.sql);
+    await runRaw(
+      client.sql,
+      "INSERT INTO app.project_members (project_id, user_id, role) VALUES ($1, $2, 'MEMBER'), ($1, $3, 'MEMBER')",
+      [scope.projectId, secondUserId, thirdUserId],
+    );
+    await rollbackFixture(async (tx) => {
+      const multi = await insertBoardTask(tx, scope, { title: "多负责人任务" });
+      await runRaw(
+        tx,
+        "INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES ($1, $2, $3), ($1, $4, $3)",
+        [multi, secondUserId, scope.projectId, thirdUserId],
+      );
+      const single = await insertBoardTask(tx, scope, { title: "单负责人任务" });
+
+      const page = await taskQuery.listForBoard(transactionContext(tx), {
+        projectId: scope.projectId,
+      });
+
+      // ADR-040：负责人是平权集合，端口按 user_id 升序返回全部成员。
+      const expectedMulti = [scope.userId, secondUserId, thirdUserId].sort(
+        (left, right) => left - right,
+      );
+      const multiRow = page.items.find((row) => row.taskId === multi);
+      expect(multiRow?.assigneeIds).toEqual(expectedMulti);
+      const singleRow = page.items.find((row) => row.taskId === single);
+      expect(singleRow?.assigneeIds).toEqual([scope.userId]);
+    });
+  });
+
   test("统计与列表同一集合口径：项目级总计等于各模块之和，空项目为零值", async () => {
     const scope = await newProject();
     const secondModuleId = await newModule(scope, "第二模块");

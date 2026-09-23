@@ -33,7 +33,7 @@ function cardOf(overrides: Partial<TaskBoardCard> = {}): TaskBoardCard {
     dueAt: "2026-09-17T18:30:00.000Z",
     completedAt: null,
     dueState: "SCHEDULED",
-    assignee: { userId: 9, name: "张启明", avatarUrl: null },
+    assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
     publishedRecordCount: 0,
     ...overrides,
   };

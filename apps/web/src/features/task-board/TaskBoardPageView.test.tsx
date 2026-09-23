@@ -29,7 +29,7 @@ function cardOf(overrides: Partial<TaskBoardCard> = {}): TaskBoardCard {
     dueAt: "2026-09-17T18:30:00.000Z",
     completedAt: null,
     dueState: "TODAY",
-    assignee: { userId: 9, name: "张启明", avatarUrl: null },
+    assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
     publishedRecordCount: 0,
     ...overrides,
   };
@@ -65,7 +65,12 @@ const response: TaskBoardResponse = {
       },
       assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
       tasks: [
-        cardOf(),
+        cardOf({
+          assignees: [
+            { userId: 9, name: "张启明", avatarUrl: null },
+            { userId: 4, name: "林沐", avatarUrl: null },
+          ],
+        }),
         cardOf({
           taskId: 2,
           code: "T-1002",
@@ -233,6 +238,8 @@ describe("TaskBoardPageView", () => {
       screen.getByRole("button", { name: "打开任务 T-1003 结算对账" }),
     ).toHaveClass("tb-card", "tone-prio-canceled");
     expect(screen.getByText("完成 09-18 · 迭代 2")).toBeInTheDocument();
+    // ADR-040 平权集合：卡片列出全部负责人，不再只显示 min(user_id)。
+    expect(screen.getByText("张启明、林沐")).toBeInTheDocument();
   });
 
   it("筛选只影响卡片与泳道，顶部完成率仍为全量口径", async () => {
@@ -285,6 +292,12 @@ describe("TaskBoardPageView", () => {
       name: "打开任务 T-1002 补齐看板筛选",
     });
     expect(doneRow).toHaveClass("tb-row", "tb-row--tone-gray", "tb-row--done");
+
+    // ADR-040 平权集合：列表行同样列出全部负责人。
+    const multiOwnerRow = screen.getByRole("button", {
+      name: "打开任务 T-1001 实现任务看板",
+    });
+    expect(within(multiOwnerRow).getByText("张启明、林沐")).toBeInTheDocument();
   });
 
   it("检索无命中时提示调整筛选并保留清除入口", async () => {

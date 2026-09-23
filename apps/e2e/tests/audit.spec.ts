@@ -53,17 +53,30 @@ test("管理员读取原始审计、按动作过滤、查看快照并切换项�
     const readsOnly = page.getByText("本页记录均为读取留痕", { exact: true });
     await expect(list.or(empty).or(readsOnly).first()).toBeVisible();
 
-    // 客户端校验：操作人 ID 必须为正整数，本地拦截不发请求。
-    await page.getByLabel("操作人 ID").fill("0");
-    await page.getByRole("button", { name: "查询" }).click();
+    // 操作人多选：默认不选即全体操作人，选中后按 actor_id 过滤。
     await expect(
-      page.getByText("操作人 ID 必须是正整数。", { exact: true }),
+      page.getByText("全体操作人（可搜索多选）", { exact: true }),
     ).toBeVisible();
-    await page.getByLabel("操作人 ID").fill("");
+    await calmSelectTrigger(page, "操作人").click();
+    const actorOption = page
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: admin.account.name });
+    await expect(actorOption).toHaveCount(1, { timeout: 30_000 });
+    await actorOption.click();
+    await page.keyboard.press("Escape");
 
     // 按动作码过滤：上一次成功读取留下的 AUDIT_LOG_READ 必然命中。
     await page.getByLabel("动作码").fill("AUDIT_LOG_READ");
+    // 选中的操作人必须真的进入请求：动作码与 actorIds 同时出现。
+    const filteredRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes("/api/v1/audit-logs?") &&
+        request.url().includes("action=AUDIT_LOG_READ") &&
+        request.url().includes(`actorIds=${admin.userId}`),
+      { timeout: 30_000 },
+    );
     await page.getByRole("button", { name: "查询" }).click();
+    await filteredRequest;
     const readRow = page
       .locator(".audit-row")
       .filter({ hasText: "读取审计日志" })
@@ -89,6 +102,10 @@ test("管理员读取原始审计、按动作过滤、查看快照并切换项�
 
     await page.getByRole("button", { name: "重置" }).click();
     await expect(page.getByLabel("动作码")).toHaveValue("");
+    // 重置回到「全体操作人」：操作人多选清空。
+    await expect(
+      page.getByText("全体操作人（可搜索多选）", { exact: true }),
+    ).toBeVisible();
 
     // 切换项目链：project.create 只出现在对应 PROJECT 链。
     // CalmSelect 的选项 title 形如「PROJECT:<id> · <项目名>」，编号从 title 里取。

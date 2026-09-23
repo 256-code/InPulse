@@ -913,7 +913,7 @@
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
-        "summary": "系统管理员读取原始审计链；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF；AuditQueryService 使用独立 audit_reader 只读连接查询；读取留痕按「查看」而不是「每次请求」计数（ADR-042）：只有开启一次新查看的请求（未带 cursor 且 readTrail 非 false，例如进入审计页或切换审计链）才由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；带 cursor 的分页请求与 readTrail=false 的延续请求不写新留痕；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
+        "summary": "系统管理员读取原始审计链；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF；AuditQueryService 使用独立 audit_reader 只读连接查询；读取留痕按「查看」而不是「每次请求」计数（ADR-042）：只有开启一次新查看的请求（未带 cursor 且 readTrail 非 false，例如进入审计页或切换审计链）才由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；带 cursor 的分页请求与 readTrail=false 的延续请求不写新留痕；action 精确匹配动作码，actorIds 为逗号分隔的 1..100 个操作人 ID（省略即不过滤，等价于全体操作人），from/to 为半开区间；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
         "responses": {
           "200": {
             "description": "成功",
@@ -1003,14 +1003,21 @@
             }
           },
           {
-            "name": "actorId",
+            "name": "actorIds",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            }
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "style": "form",
+            "explode": false
           },
           {
             "name": "from",
@@ -16979,10 +16986,15 @@
             "minLength": 1,
             "maxLength": 200
           },
-          "actorId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
+          "actorIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
           },
           "from": {
             "type": "string",
@@ -22739,8 +22751,13 @@
               "NONE"
             ]
           },
-          "assignee": {
-            "$ref": "#/components/schemas/UserRef"
+          "assignees": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
           },
           "publishedRecordCount": {
             "type": "integer",
@@ -22761,7 +22778,7 @@
           "dueAt",
           "completedAt",
           "dueState",
-          "assignee",
+          "assignees",
           "publishedRecordCount"
         ],
         "additionalProperties": false

@@ -217,9 +217,7 @@ describe("F-08 audit page", () => {
     fireEvent.change(screen.getByLabelText("动作码"), {
       target: { value: "project.update" },
     });
-    fireEvent.change(screen.getByLabelText("操作人 ID"), {
-      target: { value: "3" },
-    });
+    pickSelectOption("操作人", "邵昱宇");
     fireEvent.change(screen.getByLabelText("开始时间"), {
       target: { value: "2026-09-01T08:00" },
     });
@@ -230,7 +228,7 @@ describe("F-08 audit page", () => {
       expect(getAuditLogs).toHaveBeenLastCalledWith(
         expect.objectContaining({
           action: "project.update",
-          actorId: 3,
+          actorIds: [1],
           from: new Date("2026-09-01T08:00").toISOString(),
           // 筛选属于同一次查看，不写新留痕（ADR-042）。
           readTrail: "false",
@@ -240,18 +238,21 @@ describe("F-08 audit page", () => {
     );
   });
 
-  it("rejects invalid filters before calling the server", async () => {
+  it("rejects an inverted time range before calling the server", async () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
     await screen.findByText("创建用户");
 
-    fireEvent.change(screen.getByLabelText("操作人 ID"), {
-      target: { value: "0" },
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-09-02T08:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-09-01T08:00" },
     });
     fireEvent.click(screen.getByRole("button", { name: "查询" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "操作人 ID 必须是正整数。",
+      "开始时间必须早于结束时间",
     );
     expect(getAuditLogs).toHaveBeenCalledTimes(1);
   });

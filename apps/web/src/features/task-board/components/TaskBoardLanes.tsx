@@ -51,6 +51,12 @@ const TaskBoardCardItem: React.FC<{
 }> = ({ card, leftoverSource, onOpen }) => {
   const mark = cardMarkOf(card);
   const due = dueLabelOf(card);
+  // ADR-040：负责人是平权集合，卡片要列出全部人（与任务中心、功能档案同一口径），
+  // 头像取首位、姓名用「、」连接，空间不足时由 .tb-meta-name 省略并以 title 兑底全名单。
+  const lead = card.assignees[0];
+  const assigneeNames = card.assignees
+    .map((assignee) => assignee.name)
+    .join("、");
   return (
     <li>
       <button
@@ -88,15 +94,17 @@ const TaskBoardCardItem: React.FC<{
           <span className="tb-meta-feature">
             {card.featureName ?? "模块级任务"}
           </span>
-          {card.assignee.name ? (
+          {lead === undefined ? null : (
             <>
               <span className="tb-dot-sep">·</span>
-              <span className={"tb-ava " + avatarToneOf(card.assignee.userId)}>
-                {avatarTextOf(card.assignee.name)}
+              <span className={"tb-ava " + avatarToneOf(lead.userId)}>
+                {avatarTextOf(lead.name)}
               </span>
-              <span className="tb-meta-name">{card.assignee.name}</span>
+              <span className="tb-meta-name" title={"负责人：" + assigneeNames}>
+                {assigneeNames}
+              </span>
             </>
-          ) : null}
+          )}
           <span className={"tb-date tb-date--" + due.tone}>{due.text}</span>
         </span>
       </button>

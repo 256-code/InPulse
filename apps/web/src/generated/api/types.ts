@@ -142,7 +142,7 @@ export type AuditLogPage = {
 export type AuditLogQueryRequest = {
   readonly projectId?: number;
   readonly action?: string;
-  readonly actorId?: number;
+  readonly actorIds?: readonly number[];
   readonly from?: string;
   readonly to?: string;
   readonly cursor?: string;
@@ -1270,7 +1270,7 @@ export type TaskBoardCard = {
   readonly dueAt: (string | null);
   readonly completedAt: (string | null);
   readonly dueState: ("OVERDUE" | "TODAY" | "SCHEDULED" | "NONE");
-  readonly assignee: UserRef;
+  readonly assignees: readonly UserRef[];
   readonly publishedRecordCount: number;
 };
 

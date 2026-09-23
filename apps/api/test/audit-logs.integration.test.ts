@@ -168,6 +168,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
   let previousEnvironment: Readonly<Record<string, string | undefined>> = {};
   let urls: TestUrls;
   let seedAction: string;
+  let actorFilterAction: string;
 
   beforeAll(async () => {
     urls = testUrls();
@@ -176,6 +177,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     await migrate(urls.migrator);
 
     seedAction = `AUDIT_SEED_${randomBytes(4).toString("hex").toUpperCase()}`;
+    actorFilterAction = `AUDIT_ACTOR_${randomBytes(4).toString("hex").toUpperCase()}`;
 
     const adminUserId = await createUser(runtime, { admin: true });
     const memberUserId = await createUser(runtime);
@@ -216,6 +218,24 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
         requestId: "audit-seed-project",
       }),
     );
+    // 操作人筛选需要同一动作下的两个不同操作人，都落在 SYSTEM 链内。
+    for (const [requestId, actorId] of [
+      ["audit-actor-admin", adminUserId],
+      ["audit-actor-member", memberUserId],
+    ] as const) {
+      await uow.run((tx) =>
+        port.append(tx, {
+          projectId: null,
+          actorType: "USER",
+          actorId,
+          action: actorFilterAction,
+          targetType: "USER",
+          targetId: String(actorId),
+          eventPayload: { note: requestId },
+          requestId,
+        }),
+      );
+    }
     await writeClient.close();
 
     const keyringKey = randomBytes(32);
@@ -343,6 +363,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     const filters = trail[0]?.eventPayload["filters"] as
       Record<string, unknown> | undefined;
     expect(filters?.["action"]).toBeNull();
+    expect(filters?.["actorIds"]).toBeNull();
   });
 
   test("readTrail=false 与带游标的分页属于同一次查看，不写新留痕（ADR-042）", async () => {
@@ -434,6 +455,87 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       422,
     );
     expect(mismatched.code).toBe("VALIDATION_FAILED");
+  });
+
+  test("actorIds 多操作人过滤、去重约束与留痕载荷", async () => {
+    const single = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          action: actorFilterAction,
+          actorIds: String(fixture.adminUserId),
+          readTrail: "false",
+        },
+      }),
+    );
+    expect(single.items).toHaveLength(1);
+    expect(single.items[0]?.actorId).toBe(fixture.adminUserId);
+
+    const both = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          action: actorFilterAction,
+          actorIds: `${fixture.memberUserId},${fixture.adminUserId}`,
+          readTrail: "false",
+        },
+      }),
+    );
+    expect(both.items).toHaveLength(2);
+    expect(new Set(both.items.map((item) => item.actorId))).toEqual(
+      new Set([fixture.adminUserId, fixture.memberUserId]),
+    );
+
+    const none = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          action: actorFilterAction,
+          actorIds: "999999",
+          readTrail: "false",
+        },
+      }),
+    );
+    expect(none.items).toHaveLength(0);
+    expect(none.hasMore).toBe(false);
+
+    const duplicated = await expectError(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          actorIds: `${fixture.adminUserId},${fixture.adminUserId}`,
+        },
+      }),
+      422,
+    );
+    expect(duplicated.code).toBe("VALIDATION_FAILED");
+
+    // 开启新查看时，留痕载荷按请求原样记录多选操作人（ADR-042）。
+    await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          action: actorFilterAction,
+          actorIds: `${fixture.memberUserId},${fixture.adminUserId}`,
+        },
+      }),
+    );
+    const trails = (await reader!`
+      SELECT event_payload AS "eventPayload"
+        FROM app.audit_logs
+       WHERE chain_id = 'SYSTEM'
+         AND action = 'AUDIT_LOG_READ'
+       ORDER BY sequence_no DESC
+       LIMIT 1
+    `) as unknown as readonly {
+      readonly eventPayload: Readonly<Record<string, unknown>>;
+    }[];
+    const trailFilters = trails[0]?.eventPayload["filters"] as
+      Record<string, unknown> | undefined;
+    expect(trailFilters?.["actorIds"]).toEqual([
+      fixture.memberUserId,
+      fixture.adminUserId,
+    ]);
   });
 
   test("非法游标、时间范围与 limit 返回 422", async () => {

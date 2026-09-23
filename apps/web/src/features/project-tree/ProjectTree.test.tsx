@@ -100,15 +100,40 @@ describe("ProjectTree", () => {
       name: /调度模块/,
     });
 
-    // 回归防线：模块列表必须落在自己的滚动区（.tree-modules，CSS 限高 200px）里，
-    // 侧栏不再让所有项目共用一条滚动条；子页行留在滚动区之外，始终可见。
+    // 回归防线：模块列表必须落在自己的滚动区（.tree-modules-scroll，CSS 限高
+    // 200px 且滚动条槽常驻）里，侧栏不再让所有项目共用一条滚动条；子页行留在
+    // 滚动区之外，始终可见。折叠动画在 .tree-children / .tree-modules 两层上，
+    // 中间多一层 .tree-children-clip 负责裁剪，故这里用后代选择器定位。
     const scrollArea = container.querySelector(
-      ".project-tree-scroll > .tree-project > .tree-children > .tree-modules",
+      ".project-tree-scroll > .tree-project > .tree-children .tree-modules-scroll",
     );
     expect(scrollArea?.contains(moduleButton)).toBe(true);
     expect(
       scrollArea?.contains(screen.getByRole("button", { name: "模块与功能" })),
     ).toBe(false);
+  });
+
+  it("marks collapsed branches as hidden while the fold animation runs", async () => {
+    const { container } = mount(createClient(), vi.fn(), null);
+    const agv = await screen.findByRole("button", { name: /AGV 智能搬运平台/ });
+    const branch = container.querySelector(
+      ".project-tree-scroll > .tree-project > .tree-children",
+    );
+    // 收起态：高度交给 CSS 的 grid-template-rows 过渡压到 0，data-open 记录状态，
+    // aria-hidden 让内容在收起（含动画窗口）期间对辅助技术与查询都不可见。
+    expect(branch).toHaveAttribute("data-open", "false");
+    expect(branch).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.click(agv);
+    expect(branch).toHaveAttribute("data-open", "true");
+    expect(branch).not.toHaveAttribute("aria-hidden");
+
+    // 再次点击立即翻转状态：内容仍在 DOM 里等收起动画走完（延迟卸载），
+    // 但已不可查询，不会出现「动画还在放、列表却已能点到」的中间态。
+    fireEvent.click(agv);
+    expect(branch).toHaveAttribute("data-open", "false");
+    expect(branch).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("button", { name: "模块与功能" })).toBeNull();
   });
 
   it("keeps every project row listed while one project is expanded", async () => {

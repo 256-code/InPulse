@@ -19,21 +19,22 @@ export type AuditChain =
 
 export interface AuditFilters {
   readonly action: string;
-  readonly actorId: string;
+  /** 操作人筛选：空数组表示不过滤（全体操作人）。 */
+  readonly actorIds: readonly number[];
   readonly from: string;
   readonly to: string;
 }
 
 export const EMPTY_AUDIT_FILTERS: AuditFilters = {
   action: "",
-  actorId: "",
+  actorIds: [],
   from: "",
   to: "",
 };
 
 export interface NormalizedAuditFilters {
   readonly action: string | undefined;
-  readonly actorId: number | undefined;
+  readonly actorIds: readonly number[] | undefined;
   readonly from: string | undefined;
   readonly to: string | undefined;
 }
@@ -76,13 +77,6 @@ export function toQueryIsoString(value: string): string | undefined {
 
 /** 提交前校验；返回错误文案或 null。服务端仍会独立校验同一套规则。 */
 export function validateAuditFilters(filters: AuditFilters): string | null {
-  const actorId = filters.actorId.trim();
-  if (
-    actorId.length > 0 &&
-    (!/^[0-9]+$/.test(actorId) || Number(actorId) < 1)
-  ) {
-    return "操作人 ID 必须是正整数。";
-  }
   const from = filters.from.trim();
   const to = filters.to.trim();
   if (from.length > 0 && toQueryIsoString(from) === undefined) {
@@ -107,10 +101,13 @@ export function normalizeAuditFilters(
   filters: AuditFilters,
 ): NormalizedAuditFilters {
   const action = filters.action.trim();
-  const actorId = filters.actorId.trim();
+  // 排序去重后参与 queryKey 与请求参数，保证选择顺序不同不会重复取数。
+  const actorIds = [...new Set(filters.actorIds)].sort(
+    (left, right) => left - right,
+  );
   return {
     action: action.length > 0 ? action : undefined,
-    actorId: actorId.length > 0 ? Number(actorId) : undefined,
+    actorIds: actorIds.length > 0 ? actorIds : undefined,
     from: toQueryIsoString(filters.from),
     to: toQueryIsoString(filters.to),
   };
@@ -147,7 +144,7 @@ export function useAuditLogsInfiniteQuery({
       "audit-logs",
       chainKey,
       normalized.action ?? "",
-      normalized.actorId ?? null,
+      normalized.actorIds?.join(",") ?? "",
       normalized.from ?? "",
       normalized.to ?? "",
     ],
@@ -163,8 +160,8 @@ export function useAuditLogsInfiniteQuery({
           ...(normalized.action !== undefined
             ? { action: normalized.action }
             : {}),
-          ...(normalized.actorId !== undefined
-            ? { actorId: normalized.actorId }
+          ...(normalized.actorIds !== undefined
+            ? { actorIds: normalized.actorIds }
             : {}),
           ...(normalized.from !== undefined ? { from: normalized.from } : {}),
           ...(normalized.to !== undefined ? { to: normalized.to } : {}),

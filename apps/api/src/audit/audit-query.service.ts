@@ -76,7 +76,7 @@ function buildQueryFingerprint(
   return [
     `chain=${chainId}`,
     `action=${query.action ?? ""}`,
-    `actor=${query.actorId ?? ""}`,
+    `actor=${query.actorIds?.join(",") ?? ""}`,
     `from=${query.from ?? ""}`,
     `to=${query.to ?? ""}`,
   ].join("&");
@@ -182,7 +182,7 @@ export class AuditQueryService {
             chainId,
             filters: {
               action: query.action ?? null,
-              actorId: query.actorId ?? null,
+              actorIds: query.actorIds ?? null,
               from: query.from ?? null,
               to: query.to ?? null,
             },
@@ -211,8 +211,8 @@ export class AuditQueryService {
     if (query.action !== undefined) {
       where = sql`${where} AND action = ${query.action}`;
     }
-    if (query.actorId !== undefined) {
-      where = sql`${where} AND actor_id = ${query.actorId}`;
+    if (query.actorIds !== undefined) {
+      where = sql`${where} AND actor_id = ANY(${query.actorIds}::integer[])`;
     }
     if (query.from !== undefined) {
       where = sql`${where} AND occurred_at >= ${query.from}::TIMESTAMPTZ`;

@@ -141,10 +141,11 @@ function mapTaskReadRow(row: TaskReadRowRaw): TaskReadModel {
 
 interface TaskBoardTaskRowRaw extends Omit<
   TaskBoardTaskRow,
-  "dueAt" | "completedAt"
+  "dueAt" | "completedAt" | "assigneeIds"
 > {
   readonly dueAt: string | null;
   readonly completedAt: string | null;
+  readonly assigneeIds: number[] | null;
 }
 
 interface TaskBoardStatsRowRaw extends TaskBoardStatsTotals {
@@ -156,6 +157,8 @@ function mapTaskBoardTaskRow(row: TaskBoardTaskRowRaw): TaskBoardTaskRow {
     ...row,
     dueAt: row.dueAt === null ? null : new Date(row.dueAt),
     completedAt: row.completedAt === null ? null : new Date(row.completedAt),
+    // array_agg 对无负责人的任务返回 NULL；集合为空由聚合读按数据不一致拒绝。
+    assigneeIds: row.assigneeIds ?? [],
   };
 }
 
@@ -185,7 +188,8 @@ export interface TaskBoardTaskRow {
   readonly scopeType: TaskScopeType;
   readonly code: string;
   readonly title: string;
-  readonly assigneeId: number;
+  /** 全部负责人，按 user_id 升序（ADR-040）；无负责人的任务在适配器边界归一为空数组。 */
+  readonly assigneeIds: readonly number[];
   readonly priority: TaskPriority;
   readonly workStatus: TaskWorkStatus;
   readonly dueAt: Date | null;
@@ -514,7 +518,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
              t.scope_type AS "scopeType",
              t.code,
              t.title,
-             (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId",
+             (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeIds",
              t.priority,
              t.work_status AS "workStatus",
              t.due_at AS "dueAt",

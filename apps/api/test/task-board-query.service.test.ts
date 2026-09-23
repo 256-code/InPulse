@@ -73,7 +73,7 @@ function rowFixture(
     scopeType: "FEATURE",
     code: "SHOP-T-" + String(taskId),
     title: "任务 " + String(taskId),
-    assigneeId: 9,
+    assigneeIds: [9],
     priority: "NORMAL",
     workStatus: "TODO",
     dueAt: new Date("2026-09-20T02:00:00.000Z"),
@@ -297,7 +297,7 @@ describe("TaskBoardQueryService.getBoard", () => {
       workStatus: "DONE",
       dueState: "NONE",
       publishedRecordCount: 2,
-      assignee: { userId: 9, name: "张启明", avatarUrl: null },
+      assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
     });
     expect(first?.tasks[1]?.completedAt).toBe("2026-09-17T02:00:00.000Z");
     expect(second?.tasks[0]).toMatchObject({
@@ -337,12 +337,12 @@ describe("TaskBoardQueryService.getBoard", () => {
 
   it("泳道头像按出现顺序去重并截断到上限", async () => {
     const rows = Array.from({ length: 30 }, (_, index) =>
-      rowFixture(100 + index, { assigneeId: 1000 + index }),
+      rowFixture(100 + index, { assigneeIds: [1000 + index] }),
     );
     const setup = boardSetup({
       rows,
       users: rows.map((row) =>
-        userFixture(row.assigneeId, "成员" + String(row.assigneeId)),
+        userFixture(row.assigneeIds[0]!, "成员" + String(row.assigneeIds[0])),
       ),
       moduleStats: [{ moduleId: 3, ...totalsFixture({ total: 30 }) }],
     });
@@ -355,6 +355,39 @@ describe("TaskBoardQueryService.getBoard", () => {
     expect(result.modules[0]?.assignees).toHaveLength(24);
     expect(result.modules[0]?.assignees[0]?.userId).toBe(1000);
     expect(result.modules[0]?.tasks).toHaveLength(30);
+  });
+
+  it("卡片列出全部负责人，泳道头像按 userId 去重", async () => {
+    const setup = boardSetup({
+      rows: [
+        rowFixture(21, { assigneeIds: [9, 4] }),
+        rowFixture(22, { assigneeIds: [4] }),
+      ],
+      users: [userFixture(9, "张启明"), userFixture(4, "林沐")],
+      moduleStats: [{ moduleId: 3, ...totalsFixture({ total: 2 }) }],
+    });
+
+    const result = await setup.service.getBoard({
+      actorUserId: 5,
+      projectId: 7,
+    });
+
+    // ADR-040：卡片列出全部负责人，不再只取 min(user_id) 的单个负责人。
+    expect(result.modules[0]?.tasks[0]?.assignees).toEqual([
+      { userId: 9, name: "张启明", avatarUrl: null },
+      { userId: 4, name: "林沐", avatarUrl: null },
+    ]);
+    expect(result.modules[0]?.tasks[1]?.assignees).toEqual([
+      { userId: 4, name: "林沐", avatarUrl: null },
+    ]);
+    // 泳道头像组按卡片出现顺序去重，同一人不重复。
+    expect(result.modules[0]?.assignees).toEqual([
+      { userId: 9, name: "张启明", avatarUrl: null },
+      { userId: 4, name: "林沐", avatarUrl: null },
+    ]);
+    // 用户解析一次批量覆盖全部去重后的负责人。
+    expect(setup.listUsers).toHaveBeenCalledTimes(1);
+    expect(setup.listUsers.mock.calls[0]![1]).toEqual([9, 4]);
   });
 
   it("任务缺少模块名时按聚合读不一致返回 500", async () => {

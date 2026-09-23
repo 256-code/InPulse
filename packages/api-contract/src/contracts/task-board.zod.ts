@@ -20,6 +20,8 @@ const id = z.number().int().positive().max(2147483647);
 export const TASK_BOARD_TASKS_MAX = 1000;
 export const TASK_BOARD_MODULES_MAX = 200;
 export const TASK_BOARD_LANE_AVATARS_MAX = 24;
+/** 卡片负责人上限；与 ADR-040 的请求侧 assigneeIds 上限（20）保持一致。 */
+export const TASK_BOARD_CARD_ASSIGNEES_MAX = 20;
 
 /** 卡片截止状态；只对未完成任务取值，已完成 / 已取消 / 未设截止为 NONE。 */
 export const TASK_BOARD_DUE_STATES = [
@@ -65,9 +67,10 @@ export const taskBoardStatsSchema = z
 export type TaskBoardStats = z.infer<typeof taskBoardStatsSchema>;
 
 /**
- * 看板任务卡。assignee 只含展示字段；featureName 为任务所在功能名（模块级任务为
- * null）；publishedRecordCount 为该任务 PUBLISHED 记录数（29.4 节，不按版本计数）；
- * dueState 由服务端按 Asia/Shanghai 计算。
+ * 看板任务卡。assignees 为全部负责人的展示字段（ADR-040 平权集合，按 userId 升序，
+ * 至少一人，2026-09-23 由单值 assignee 收口为集合）；featureName 为任务所在功能名
+ * （模块级任务为 null）；publishedRecordCount 为该任务 PUBLISHED 记录数（29.4 节，
+ * 不按版本计数）；dueState 由服务端按 Asia/Shanghai 计算。
  */
 export const taskBoardCardSchema = z
   .object({
@@ -83,7 +86,10 @@ export const taskBoardCardSchema = z
     dueAt: z.iso.datetime().nullable(),
     completedAt: z.iso.datetime().nullable(),
     dueState: z.enum(TASK_BOARD_DUE_STATES),
-    assignee: userRefSchema,
+    assignees: z
+      .array(userRefSchema)
+      .min(1)
+      .max(TASK_BOARD_CARD_ASSIGNEES_MAX),
     publishedRecordCount: z.number().int().nonnegative(),
   })
   .strict()
