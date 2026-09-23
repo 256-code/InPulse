@@ -4086,6 +4086,14 @@ a:focus-visible {
 .task-center-table td:first-child {
   white-space: normal;
 }
+/*
+ * 整行可点（2026-09-23 产品要求）：任务行与聚合组行的横向任意位置都能打开详情，
+ * 行本身给出可点提示。只作用于任务中心列表，功能档案 / 模块任务列表的同名表格
+ * 不跟着变手型。
+ */
+.task-center-table tbody tr {
+  cursor: pointer;
+}
 .task-center-table .feature-list-open strong {
   line-height: 1.5;
 }

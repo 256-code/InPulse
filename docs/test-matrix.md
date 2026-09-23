@@ -3357,3 +3357,26 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-23 十一次定案）：`pnpm --filter @inpulse/web exec vitest run`（两个相关文件）、`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，量取计算值并留档候选样板页与落地实拍图。
 
 未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、`pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮未触碰类型、契约、依赖边界与后端）；② 全量前端套件首跑时 `src/app/router/app-router.test.tsx` 的「mounts AppRouter inside AppProviders and AppErrorBoundary」在并行负载下偶发 `Unable to find role="heading" and name "任务中心"`，该文件单跑两次与随后整套重跑均通过，判定为既有并行 flake，本轮未改路由与懒加载；③ 演示库里唯一的逾期任务是聚合组卡（最高优先级为普通），金黄卡与紧急卡上的取值由级联探针与候选样板页覆盖，没有真实数据；④ 功能档案任务面板当天没有逾期任务，该面板的卡片由单元用例覆盖，未做浏览器实测；⑤ 配色属视觉主观项，需非作者人工评审。
+
+## 2026-09-23 十二次定案：列表模式的任务行 / 聚合组行整行可点（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「我们现在来改一下列表模式的任务，现在状态是点击任务名称会跳出任务，我希望点击这个任务横向区域内都会弹出」（附图为 `/tasks?view=list`）。现状：任务中心的列表视图把任务行铺成 8 列（任务 / 项目 / 归属 / 负责人 / 优先级 / 截止 / 迭代 / 状态），但只有第 1 列「任务」里的标题按钮 `.feature-list-open` 是热区，行内其余 7 列与整行空白都点不动；同表的聚合组行同理，只有组名可点。悬停反馈倒是全行铺开的（`.feature-list-table tbody tr:hover`），所以「看起来能点、点下去没反应」的落差集中在这一屏。
+
+定案口径：① 行级热区挂在 `<tr>` 上，任务行开该任务详情（`openTask`）、聚合组行开聚合组弹窗（`setOpenGroupId`），两个入口都复用既有回调，不新增状态；② 行内唯一的交互元素是标题按钮，行级处理命中按钮时直接返回、交给按钮自己的 `onClick`，避免一次点击触发两遍；③ 行不加 `tabIndex`、不加 `role`，键盘与读屏仍只认标题按钮，不新增 Tab 停靠点；④ 行内已有拖选（`window.getSelection()` 非空）时不打开弹窗，避免用户拖选标题 / 编号想复制时误弹；⑤ 只改任务中心列表（`.task-center-table` 作用域），功能档案列表（`FeaturesPageView`）与模块任务面板列表（`TasksPanel`）共用的 `.feature-list-table` 不变；⑥ 行底色与悬停反馈沿用既有规则，本轮只补 `cursor: pointer`，不改列宽、省略号与左侧色条。
+
+实现范围（纯前端交互 + 一处作用域 CSS）：`apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 新增 `rowClickOpens(open)` 帮助函数并挂到聚合组行与任务行两个 `<tr>`；`apps/web/src/styles/design-system.css` 在 `.task-center-table` 段落新增 `.task-center-table tbody tr { cursor: pointer; }`；`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 新增 3 个用例。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| TASK-ROW-CLICK-UNIT-001 | Web 单元 | 任务行非标题列也能打开 | `TaskCenterPageView.test.tsx` 新增用例：列表模式下取任务行（`INP-821`）最后一列（状态）点击，`onOpenTask` 被调用 1 次且参数为 `{ projectId: 1, moduleId: 11, featureId: null, taskId: 821 }` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-002 | Web 单元 | 标题按钮不重复触发 | 同一用例内再点行内标题按钮，调用数由 1 变 2（两次各 1 次），确认行级热区命中按钮时让位给按钮、没有双开 | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-003 | Web 单元 | 聚合组行非标题列也能打开 | 新增用例：列表模式下点 `my-task-group-501` 的第 2 列（项目），聚合组弹窗出现，且 `onOpenTask` 未被回调（组行是弹窗入口） | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-004 | Web 单元 | 行内拖选时不打开 | 新增用例：用 `document.createRange()` 选中行内容后点击整行，`onOpenTask` 未被调用；清空选区后再点同一行恢复调用 1 次（证明上一跳是被选区挡下，不是热区失效） | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-WEB-001 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 582 例通过（本轮 579 → 582）；单文件 `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx` 60 例通过 | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-BROWSER-001 | 浏览器实测 | 真实登录态下任务行整行可点 | 无头 Chromium 1500×980，演示账号在 5173 走 `/login?local=1` 真实登录后打开 `/tasks?view=list`：首行 `getComputedStyle(tr).cursor` = `pointer`（5 行任务行同表）；点任务行「状态」列（末列，避开标题）弹出该任务详情弹层（标题「A-5 残余：5 年峰值模型定稿与 1.2 倍条件人工复核」）；点任务行「项目」列同样弹出；点标题按钮仍正常打开且只开一次；实拍图留档 `列表整行可点-任务行点状态列.png` / `列表整行可点-任务行点项目列.png` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-BROWSER-002 | 浏览器实测 | 聚合组行整行可点 | 同会话 `/tasks?view=list` 上点聚合组行（副标题含「聚合组」）的「截止」列，弹出聚合组弹窗（`K123-TG-1 / TASK GROUP`）；弹层内成员与分支、迭代记录区块正常渲染，实拍图留档 `列表整行可点-组行点截止列.png` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-GATE-001 | 静态门禁 | 类型、风格、依赖边界与格式 | `pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`（All matched files use Prettier code style!）、`pnpm check:frontend:boundaries`（283 模块 1395 依赖无违规）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 十二次定案）：`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`、`pnpm --filter @inpulse/web test`（85 文件 582 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，点击非标题列并留档实拍图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮未触碰契约、数据库与后端）；② 项目任务面板列表（`TasksPanel`）与功能档案任务列表（`FeaturesPageView`）保持「只有标题可点」，用户本次只提任务中心的列表模式；若产品要求全站一致需另立一轮；③ 行级热区是鼠标增强，键盘与读屏仍走标题按钮（不新增 Tab 停靠点），因此整行不会被读成按钮；④ 拖选保护按「当前选区非空」判定，拖选后不重新拖选直接单击同一行仍会被挡下一次，属有意行为；⑤ 交互与排版属主观项，需非作者人工评审。

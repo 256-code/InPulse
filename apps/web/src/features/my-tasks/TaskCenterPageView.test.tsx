@@ -1548,6 +1548,89 @@ describe("TaskCenterPageView", () => {
     // 已完成不参与红档，截止列回到默认字色。
     expect(dueCellOf("INP-813").className).toBe("");
   });
+
+  it("列表模式整行可点：点非标题列也能打开任务，标题按钮不会触发两次", async () => {
+    const item: MyTaskListItem = {
+      ...doneTask,
+      taskId: 821,
+      code: "INP-821",
+      title: "整行可点-821",
+      workStatus: "TODO",
+      completedAt: null,
+    };
+    const { onOpenTask } = renderView({
+      adapter: serverLikeAdapterWith([item]),
+      filters: { status: "all", display: "list" },
+    });
+    const user = userEvent.setup();
+
+    await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = screen.getByText(/^INP-821/).closest("tr") as HTMLElement;
+    const cells = within(row).getAllByRole("cell");
+    // 2026-09-23 十二次定案：热区从「任务」列标题扩到整行的横向区域。点最后一列（状态）
+    // 这种跟标题无关的位置同样要打开任务，且只开一次。
+    await user.click(cells[cells.length - 1]!);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
+    expect(onOpenTask).toHaveBeenCalledWith({
+      projectId: 1,
+      moduleId: 11,
+      featureId: null,
+      taskId: 821,
+    });
+
+    // 标题按钮仍是唯一键盘入口；行级热区命中按钮时让位给按钮自己，不会各开一次。
+    await user.click(within(row).getByRole("button"));
+    expect(onOpenTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("列表模式整行可点：点聚合组行的非标题列也能打开组弹窗", async () => {
+    const { onOpenTask } = renderView({
+      filters: { display: "list" },
+      client: stubClient(projects),
+    });
+    const user = userEvent.setup();
+
+    const row = await screen.findByTestId("my-task-group-501");
+    // 项目列与组名无关，改口径前点它不会打开任何弹窗。
+    await user.click(within(row).getAllByRole("cell")[1]!);
+    expect(
+      await screen.findByRole("dialog", { name: /聚合组/ }),
+    ).toBeInTheDocument();
+    // 组行是弹窗入口：不开任务，也不回调 onOpenTask。
+    expect(onOpenTask).not.toHaveBeenCalled();
+  });
+
+  it("列表模式整行可点：行内已有拖选时不打开任务", async () => {
+    const { onOpenTask } = renderView({
+      adapter: serverLikeAdapterWith([
+        {
+          ...doneTask,
+          taskId: 831,
+          code: "INP-831",
+          title: "拖选保护-831",
+          workStatus: "TODO",
+          completedAt: null,
+        },
+      ]),
+      filters: { status: "all", display: "list" },
+    });
+
+    await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = screen.getByText(/^INP-831/).closest("tr") as HTMLElement;
+    // 用户想复制标题 / 编号时会先拖选，此时点行不该弹详情。
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.click(row);
+    expect(onOpenTask).not.toHaveBeenCalled();
+    selection?.removeAllRanges();
+
+    // 选区清空后同一位置恢复可点（确认上一步是被选区挡下，不是热区失效）。
+    fireEvent.click(row);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
+  });
 });
 
 it("clears overdue when opening completed tasks", async () => {
