@@ -81,7 +81,7 @@ interface BoardTaskOptions {
   readonly due?: DueSpec;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
-  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly moduleId?: number;
   readonly title?: string;
   /** completed_at 的 SQL 表达式；缺省落在本周内且不晚于 now()。 */
@@ -304,10 +304,10 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
         priority: "HIGH",
         title: "昨日末尾高优任务",
       });
-      const todayLow = await insertBoardTask(tx, scope, {
+      const todayNormal = await insertBoardTask(tx, scope, {
         due: "today",
-        priority: "LOW",
-        title: "今日到期低优任务",
+        priority: "NORMAL",
+        title: "今日到期普通任务",
       });
       const tomorrowStart = await insertBoardTask(tx, scope, {
         due: "tomorrowStart",
@@ -319,11 +319,11 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
         title: "十日之后紧急任务",
       });
       const noDue = await insertBoardTask(tx, scope, { title: "未设截止任务" });
-      const doneRecentLow = await insertBoardTask(tx, scope, {
+      const doneRecentNormal = await insertBoardTask(tx, scope, {
         due: "overdue",
-        priority: "LOW",
+        priority: "NORMAL",
         workStatus: "DONE",
-        title: "最近完成的低优任务",
+        title: "最近完成的普通任务",
       });
       const doneOldUrgent = await insertBoardTask(tx, scope, {
         completedAt: "now() - interval '20 days'",
@@ -342,16 +342,17 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
       });
       expect(page.truncated).toBe(false);
       // 未完成桶内优先级压过截止时间：高优的昨日末尾任务在普通逾期任务之前、
-      // 十日后到期的紧急任务在明日零点任务之前；已完成仍按完成时间倒序，
-      // 低优但新近完成的先于紧急但较早完成的。
+      // 十日后到期的紧急任务在明日零点任务之前；同为普通档时按截止时间升序
+      // （今日到期 → 明日零点 → 未设截止排最后）；已完成仍按完成时间倒序，
+      // 新近完成的先于较早完成的。
       expect(page.items.map((row) => row.taskId)).toEqual([
         yesterdayEndHigh,
         overdue,
         futureUrgent,
+        todayNormal,
         tomorrowStart,
         noDue,
-        todayLow,
-        doneRecentLow,
+        doneRecentNormal,
         doneOldUrgent,
         canceled,
       ]);
@@ -360,16 +361,16 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
       );
       expect(dueStateById.get(overdue)).toBe("OVERDUE");
       expect(dueStateById.get(yesterdayEndHigh)).toBe("OVERDUE");
-      expect(dueStateById.get(todayLow)).toBe("TODAY");
+      expect(dueStateById.get(todayNormal)).toBe("TODAY");
       expect(dueStateById.get(tomorrowStart)).toBe("SCHEDULED");
       expect(dueStateById.get(futureUrgent)).toBe("SCHEDULED");
       expect(dueStateById.get(noDue)).toBe("NONE");
-      expect(dueStateById.get(doneRecentLow)).toBe("NONE");
+      expect(dueStateById.get(doneRecentNormal)).toBe("NONE");
       expect(dueStateById.get(doneOldUrgent)).toBe("NONE");
       expect(dueStateById.get(canceled)).toBe("NONE");
       const canceledRow = page.items.find((row) => row.taskId === canceled);
       expect(canceledRow?.completedAt).toBeNull();
-      const doneRow = page.items.find((row) => row.taskId === doneRecentLow);
+      const doneRow = page.items.find((row) => row.taskId === doneRecentNormal);
       expect(doneRow?.completedAt).toBeInstanceOf(Date);
     });
   });

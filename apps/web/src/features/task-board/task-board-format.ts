@@ -117,10 +117,8 @@ export function priorityMarkOf(priority: TaskBoardPriority): {
     case "HIGH":
       return { label: "高", tone: "amber" };
     case "NORMAL":
-      return { label: "普通", tone: "blue" };
-    case "LOW":
     default:
-      return { label: "低", tone: "gray" };
+      return { label: "普通", tone: "gray" };
   }
 }
 

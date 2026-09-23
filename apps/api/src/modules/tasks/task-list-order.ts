@@ -17,7 +17,7 @@ import type { Fragment, ISql } from "postgres";
  *      已逾期(2) → 今/明日截止(3) → 其余(4)。已逾期排在标记紧急之后是 2026-09-22
  *      产品口径「逾期的不搞特殊了……只是排序靠前，比紧急低一档」：逾期不再整卡
  *      换色，但仍在未完成的普通任务之前。
- *   4. 优先级：紧急(0) → 高(1) → 普通(2) → 低(3)
+ *   4. 优先级：紧急(0) → 高(1) → 普通(2)
  *   5. 截止时间：due_at 升序，NULL 最后（用 'infinity' 归一，便于 keyset 比较）
  *   6. 任务 ID 升序：唯一兜底，保证刷新前后顺序稳定
  *
@@ -38,9 +38,11 @@ export interface TaskListSortKey {
  * 游标键版本：排序口径变化必须递增，旧版本游标按无效游标拒绝。
  * 2026-09-22 由 2 升到 3：新增「完成时间倒序」一级（已完成分组按 completed_at 从晚到早），
  * 载荷由 6 段变 7 段，旧游标继续使用会跳页 / 重项。
- * （更早一次 1 → 2：紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
+ * 2026-09-23 由 3 升到 4：删除「低」（LOW）档位后优先级序号由 0/1/2/3 收窄为 0/1/2，
+ * 旧游标里遗留的 3（原「低」）在新口径下不再是任何任务的序号，继续使用会跳页 / 漏项。
+ * （更早两次：2 → 3 新增「完成时间倒序」一级；1 → 2 紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
  */
-export const TASK_LIST_SORT_KEY_VERSION = 3;
+export const TASK_LIST_SORT_KEY_VERSION = 4;
 
 interface TaskListSortExpressions {
   readonly statusGroup: PostgresFragment;
@@ -79,7 +81,7 @@ export function taskListSortExpressions(sql: ISql): TaskListSortExpressions {
              WHEN 'URGENT' THEN 0
              WHEN 'HIGH' THEN 1
              WHEN 'NORMAL' THEN 2
-             ELSE 3
+             ELSE 2
            END`;
   /**
    * 完成时间倒序：已完成任务取 completed_at，未完成 / 已取消用 '-infinity' 归一，

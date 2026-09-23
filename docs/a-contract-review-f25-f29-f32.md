@@ -162,7 +162,7 @@ auditAction: "none",
 
 | 字段 | A 裁决 | 口径 |
 | --- | --- | --- |
-| `priority` | 接受：`LOW` / `NORMAL` / `HIGH` / `URGENT` | 来源 `tasks.priority`，数据库非空且默认 `NORMAL` |
+| `priority` | 接受：`LOW` / `NORMAL` / `HIGH` / `URGENT`（2026-09-23 起「低」下线，枚举收窄为 `NORMAL` / `HIGH` / `URGENT`，见 [ADR-041](./adr/ADR-041.md)） | 来源 `tasks.priority`，数据库非空且默认 `NORMAL` |
 | `dueAt` | 接受：ISO 8601 字符串或 `null` | `null` 表示未设置截止；与骨架 `undefined`（不可知）语义不同，契约落地后不得再用 `undefined` |
 | `completedAt` | 接受：ISO 8601 字符串或 `null` | 与 `work_status = 'DONE'` 同真（`tasks_completion_state_check` 保证） |
 | `creatorId` | 接受：正整数 | 来源 `tasks.creator_id` |

@@ -227,7 +227,7 @@ export const tasks = appSchema.table(
     check("tasks_description_check", sql.raw("length(description) <= 50000")),
     check(
       "tasks_priority_check",
-      sql.raw("priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')"),
+      sql.raw("priority IN ('NORMAL', 'HIGH', 'URGENT')"),
     ),
     check(
       "tasks_work_status_check",

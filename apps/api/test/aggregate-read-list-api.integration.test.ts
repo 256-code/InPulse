@@ -162,7 +162,7 @@ interface TaskOptions {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
-  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt?: string | null;
 }
 
@@ -469,7 +469,7 @@ beforeAll(async () => {
   tGroupHistorical = await newTask(projectFixture, {
     title: "聚合组历史来源",
     workStatus: "CANCELED",
-    priority: "LOW",
+    priority: "NORMAL",
   });
   tGroupDetached = await newTask(projectFixture, { title: "聚合组已解除来源" });
   tClosedDetached = await newTask(projectFixture, { title: "已关闭组来源" });
@@ -1097,7 +1097,7 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
         "SOURCE",
         "HISTORICAL",
         "CANCELED",
-        "LOW",
+        "NORMAL",
         project!.moduleId,
         "未分类",
         null,

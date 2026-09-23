@@ -2490,7 +2490,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "LOW",
                 "NORMAL",
                 "HIGH",
                 "URGENT"
@@ -15777,7 +15776,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "LOW",
                 "NORMAL",
                 "HIGH",
                 "URGENT"
@@ -18579,7 +18577,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -19105,7 +19102,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -19168,7 +19164,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -19582,7 +19577,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -19877,7 +19871,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -20837,7 +20830,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -22682,7 +22674,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -23018,7 +23009,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -23491,7 +23481,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -23762,7 +23751,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -24017,7 +24005,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"
@@ -24884,7 +24871,6 @@
           "priority": {
             "type": "string",
             "enum": [
-              "LOW",
               "NORMAL",
               "HIGH",
               "URGENT"

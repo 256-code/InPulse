@@ -277,12 +277,14 @@ describe("TaskBoardPageView", () => {
     expect(within(row).getByText("模块级任务")).toBeInTheDocument();
     expect(within(row).getByText("已取消")).toBeInTheDocument();
     // 行配色：优先级决定底色（tone 类），已取消覆盖状态色。
-    expect(row).toHaveClass("tb-row", "tb-row--tone-blue", "tb-row--canceled");
+    // 这两行都是「普通」任务：「普通」是白底卡，列表行取同族的近白中性一套，2026-09-23 起
+    // 由原「低」的 tone-gray 承担（此前「普通」是蓝卡，这里断言的是 tone-blue）。
+    expect(row).toHaveClass("tb-row", "tb-row--tone-gray", "tb-row--canceled");
 
     const doneRow = screen.getByRole("button", {
       name: "打开任务 T-1002 补齐看板筛选",
     });
-    expect(doneRow).toHaveClass("tb-row", "tb-row--tone-blue", "tb-row--done");
+    expect(doneRow).toHaveClass("tb-row", "tb-row--tone-gray", "tb-row--done");
   });
 
   it("检索无命中时提示调整筛选并保留清除入口", async () => {

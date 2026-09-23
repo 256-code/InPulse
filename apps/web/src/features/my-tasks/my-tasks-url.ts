@@ -44,12 +44,7 @@ const scopeValues: readonly MyTaskScope[] = [
   "all",
 ];
 const statusValues: readonly MyTaskStatusFilter[] = ["open", "done", "all"];
-const priorityValues: readonly MyTaskPriority[] = [
-  "LOW",
-  "NORMAL",
-  "HIGH",
-  "URGENT",
-];
+const priorityValues: readonly MyTaskPriority[] = ["NORMAL", "HIGH", "URGENT"];
 const levelValues: readonly MyTaskLevel[] = ["FEATURE", "MODULE"];
 const relationValues: readonly MyTaskRelation[] = [
   "STANDALONE",

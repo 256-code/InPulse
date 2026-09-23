@@ -24,7 +24,6 @@ type TaskScope = "FEATURE" | "MODULE";
 type Priority = TaskEditRequest["priority"];
 
 const priorityLabels: Record<Priority, string> = {
-  LOW: "低",
   NORMAL: "普通",
   HIGH: "高",
   URGENT: "紧急",

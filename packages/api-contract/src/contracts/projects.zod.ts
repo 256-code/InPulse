@@ -218,7 +218,7 @@ export const projectMemberUnfinishedTaskItemSchema = z
     code: z.string().min(1).max(64),
     title: z.string().min(1).max(500),
     description: z.string().max(50000),
-    priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]),
+    priority: z.enum(["NORMAL", "HIGH", "URGENT"]),
     dueAt: z.iso.datetime().nullable(),
     workStatus: z.literal("TODO"),
     assigneeId: projectPositiveId,

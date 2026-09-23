@@ -1,8 +1,9 @@
 /**
  * 任务程度配色（优先级 / 完成状态 / 遗留来源）→ 卡片与列表共用的 tone 类名。
  *
- * 与 priority-select-option.ts 的优先级圆点色同源：紧急红 / 高明黄 / 普通蓝 /
- * 低灰，已完成青碧、已取消灰；遗留问题来源整卡锈红。
+ * 与 priority-select-option.ts 的优先级圆点色同源（2026-09-23 二次定案「高改蓝、普通改白」，
+ * 同日三次定案把「高」改成产品给的金黄 #fdc106）：
+ * 紧急红 / 高金 / 普通白（白底卡配中性灰圆点），已完成青碧、已取消灰；遗留问题来源整卡锈红。
  * 截止紧迫度（已逾期 / 今天到期）不参与卡片配色——2026-09-22 产品口径
  * 「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」：
  * 逾期只在两处体现，一是服务端排序（见 apps/api/src/modules/tasks/task-list-order.ts
@@ -17,7 +18,7 @@
 import type { CalmBadgeTone } from "./components/Calm";
 
 export type TaskToneName =
-  "urgent" | "high" | "normal" | "low" | "done" | "canceled" | "leftover";
+  "urgent" | "high" | "normal" | "done" | "canceled" | "leftover";
 
 /**
  * 优先级中文名：任务卡片、聚合组卡片与聚合组弹窗分支共用同一文案，
@@ -27,7 +28,6 @@ const PRIORITY_LABELS: Readonly<Record<string, string>> = {
   URGENT: "紧急",
   HIGH: "高",
   NORMAL: "普通",
-  LOW: "低",
 };
 
 export function taskPriorityLabel(priority: string): string {
@@ -35,14 +35,14 @@ export function taskPriorityLabel(priority: string): string {
 }
 
 /**
- * 优先级徽章色调：CalmBadge 的 red/amber/blue/gray 与 .tone-prio-* 同源语义
- * （紧急红 / 高橙 / 普通蓝 / 低灰），未知优先级按「低」的中性灰处理。
+ * 优先级徽章色调：CalmBadge 的 red/amber/gray 与 .tone-prio-* 同源语义
+ * （紧急红 / 高金（amber 色阶）/ 普通灰——「普通」是白底卡，徽章取中性灰才与卡片同一调性），
+ * 未知优先级按中性灰处理。
  */
 const PRIORITY_BADGE_TONES: Readonly<Record<string, CalmBadgeTone>> = {
   URGENT: "red",
   HIGH: "amber",
-  NORMAL: "blue",
-  LOW: "gray",
+  NORMAL: "gray",
 };
 
 export function taskPriorityBadgeTone(priority: string): CalmBadgeTone {
@@ -60,7 +60,7 @@ export type TaskDueTone = "overdue" | "soon";
 /**
  * 完成态覆盖一切：已完成整卡 / 整行转青碧，已取消转灰；
  * 未完成时紧急仍是紧急红；其余由遗留问题来源覆盖成整卡锈红（看第 3 个参数）；
- * 再其余按优先级取色，未知优先级按「低」的中性灰处理。
+ * 再其余按优先级取色，未知优先级按「普通」处理（2026-09-23 起「低」档位已下线）。
  *
  * 截止紧迫度（已逾期 / 今天到期）不再是覆盖档：2026-09-22 产品要求「逾期的不搞特殊了，
  * 原本的优先级是什么就呈现什么颜色」，卡片只表达任务自己的优先级身份；
@@ -83,10 +83,8 @@ export function taskToneOf(
   switch (priority) {
     case "HIGH":
       return "high";
-    case "NORMAL":
-      return "normal";
     default:
-      return "low";
+      return "normal";
   }
 }
 

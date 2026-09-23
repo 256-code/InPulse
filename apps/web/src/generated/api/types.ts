@@ -460,7 +460,7 @@ export type LeftoverTaskReplayContext = {
 
 export type LeftoverTaskRequest = {
   readonly title: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly leftoverItemId: number;
@@ -570,7 +570,7 @@ export type ModuleTaskCollectionPath = {
 export type ModuleTaskEditRequest = {
   readonly title: string;
   readonly description: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly impactFeatureIds: readonly number[];
@@ -579,7 +579,7 @@ export type ModuleTaskEditRequest = {
 export type ModuleTaskItem = {
   readonly title: string;
   readonly description: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;
@@ -654,7 +654,7 @@ export type MyTaskItem = {
   readonly assignee: UserRef;
   readonly assignees: readonly UserRef[];
   readonly updatedAt: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly dueAt: (string | null);
   readonly completedAt: (string | null);
   readonly creatorId: number;
@@ -703,7 +703,7 @@ export type MyTasksQueryRequest = {
   readonly scopeType?: ("FEATURE" | "MODULE");
   readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
   readonly hasPublishedRecord?: boolean;
-  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority?: ("NORMAL" | "HIGH" | "URGENT");
   readonly includeCanceled?: boolean;
   readonly todayTodo?: boolean;
 };
@@ -898,7 +898,7 @@ export type ProjectMemberUnfinishedTaskItem = {
   readonly code: string;
   readonly title: string;
   readonly description: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly dueAt: (string | null);
   readonly workStatus: "TODO";
   readonly assigneeId: number;
@@ -1264,7 +1264,7 @@ export type TaskBoardCard = {
   readonly featureId: (number | null);
   readonly featureName: (string | null);
   readonly scopeType: ("FEATURE" | "MODULE");
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly dueAt: (string | null);
   readonly completedAt: (string | null);
@@ -1326,7 +1326,7 @@ export type TaskCenterQuery = {
   readonly scopeType?: ("FEATURE" | "MODULE");
   readonly workStatus?: ("TODO" | "DONE" | "CANCELED");
   readonly hasPublishedRecord?: boolean;
-  readonly priority?: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority?: ("NORMAL" | "HIGH" | "URGENT");
   readonly includeCanceled?: boolean;
   readonly todayTodo?: boolean;
   readonly scope: ("mine" | "created" | "project" | "all");
@@ -1411,7 +1411,7 @@ export type TaskCreateResult = {
 export type TaskEditRequest = {
   readonly title: string;
   readonly description: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
 };
@@ -1454,7 +1454,7 @@ export type TaskGroupListBranch = {
   readonly role: ("MAIN" | "SOURCE");
   readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly moduleId: number;
   readonly moduleName: string;
   readonly featureId: (number | null);
@@ -1495,7 +1495,7 @@ export type TaskGroupMemberDetail = {
   readonly sourceKind: (("ACTIVE" | "HISTORICAL") | null);
   readonly memberStatus: ("ACTIVE" | "DETACHED");
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
   readonly moduleId: number;
   readonly featureId: (number | null);
@@ -1640,7 +1640,7 @@ export type TaskGroupUnmergeResponse = {
 export type TaskItem = {
   readonly title: string;
   readonly description: string;
-  readonly priority: ("LOW" | "NORMAL" | "HIGH" | "URGENT");
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
   readonly id: number;

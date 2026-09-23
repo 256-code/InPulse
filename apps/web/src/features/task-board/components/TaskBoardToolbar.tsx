@@ -58,7 +58,6 @@ const priorityOptions: readonly {
   { value: "URGENT", label: "紧急", dotColor: priorityDotColor("URGENT") },
   { value: "HIGH", label: "高", dotColor: priorityDotColor("HIGH") },
   { value: "NORMAL", label: "普通", dotColor: priorityDotColor("NORMAL") },
-  { value: "LOW", label: "低", dotColor: priorityDotColor("LOW") },
 ];
 
 export interface TaskBoardToolbarProps {
