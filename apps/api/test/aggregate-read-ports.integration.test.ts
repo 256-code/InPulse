@@ -1443,9 +1443,11 @@ describe("任务列表统一排序（ADR-037）", () => {
   }
 
   /**
-   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到紧急之后一档）：
-   * 遗留问题来源（leftover_task_links 链接）→ 标记紧急 → 已逾期 → 今/明日截止 → 其余。
-   * leftover_task_links 的 leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
+   * 每个状态分组造齐 4 个紧急桶档位 + 1 条遗留问题来源 + 2 条完全并列的行：
+   * 标记紧急 → 已逾期 → 今/明日截止 → 其余。遗留问题来源自 2026-09-23 起退出紧急桶，
+   * 改为紧跟优先级之后的独立一级（产品口径「遗留问题只需要比同优先级的高就行了」），
+   * 这里取 NORMAL 优先级，因此只在同优先级内提前。leftover_task_links 的
+   * leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
    */
   async function seedOrderingMatrix(
     scope: ProjectScope,
@@ -1482,11 +1484,28 @@ describe("任务列表统一排序（ADR-037）", () => {
         VALUES (${leftoverId}, ${leftover}, ${scope.projectId}, ${scope.userId})`;
       return { dueSoon, leftover, other, overdue, tieA, tieB, urgent };
     };
+    const canceled = await build("CANCELED");
+    const done = await build("DONE");
+    const todoBase = await build("TODO");
+    /**
+     * 遗留问题与优先级的对照（2026-09-23 产品口径）：`highPriority` 是优先级更高但不带
+     * 遗留问题的任务，`leftoverPeer` 与 `todo.leftover` 同优先级但不带遗留问题。
+     * 两者一起证明遗留问题只在同优先级内提前，不会越过更高优先级的任务。
+     */
+    const highPriority = await newTask(scope, {
+      priority: "HIGH",
+      title: "高优先级无遗留",
+      workStatus: "TODO",
+    });
+    const leftoverPeer = await newTask(scope, {
+      title: "同优先级无遗留",
+      workStatus: "TODO",
+    });
     return {
-      canceled: await build("CANCELED"),
-      done: await build("DONE"),
+      canceled,
+      done,
       recordId,
-      todo: await build("TODO"),
+      todo: { ...todoBase, highPriority, leftoverPeer },
     };
   }
 
@@ -1501,19 +1520,25 @@ describe("任务列表统一排序（ADR-037）", () => {
     );
     const ids = mine.items.map((item) => item.taskId);
     expect(ids).toEqual([
-      // 未完成：紧急桶 0 → 1 → 2 → 3 → 4，桶内完全并列的两条按 id 升序。
-      todo.leftover,
+      // 未完成：紧急桶 0 → 1 → 2 → 3（遗留问题来源已退出紧急桶），桶内完全并列的几条按 id 升序。
       todo.urgent,
       todo.overdue,
       todo.dueSoon,
+      // 紧急桶之后依次比优先级 → 遗留问题：更高优先级的「高优先级无遗留」先于普通优先级的
+      // 「遗留问题来源」，后者再于同优先级内排到其它普通任务之前——前两条共同定义了
+      // 「遗留问题只在同优先级内提前，不越过高优先级」（2026-09-23 产品口径）。
+      todo.highPriority,
+      todo.leftover,
       todo.other,
       todo.tieA,
       todo.tieB,
+      todo.leftoverPeer,
       // 已完成按完成时间倒序（2026-09-22 产品口径「这个排序按照完成时间，越晚越排前面」）：
-      // 优先级 / 截止 / 紧急桶都退出这一组。夹具按 已逾期 → 遗留问题来源 → 标记紧急 →
-      // 今日截止 → 其余 → 并列甲 → 并列乙 的顺序创建，每条各起一个事务、completed_at 随
-      // 创建顺序严格递增（下面的 doneStamps 断言先固化这个前提），因此期望顺序是创建顺序的
-      // 完全倒序——URGENT 的「标记紧急」反而靠后，证明已完成组不再按优先级排。
+      // 优先级 / 截止 / 紧急桶 / 遗留问题都退出这一组（非未完成的遗留问题序号恒为 1）。
+      // 夹具按 已逾期 → 遗留问题来源 → 标记紧急 → 今日截止 → 其余 → 并列甲 → 并列乙 的顺序
+      // 创建，每条各起一个事务、completed_at 随创建顺序严格递增（下面的 doneStamps 断言先
+      // 固化这个前提），因此期望顺序是创建顺序的完全倒序——URGENT 的「标记紧急」反而靠后，
+      // 证明已完成组不再按优先级排。
       done.tieB,
       done.tieA,
       done.other,
@@ -1521,7 +1546,7 @@ describe("任务列表统一排序（ADR-037）", () => {
       done.urgent,
       done.leftover,
       done.overdue,
-      // 已取消仍不参与紧急桶与完成时间：URGENT 优先，其后按截止时间升序、无截止最后。
+      // 已取消仍不参与紧急桶、完成时间与遗留问题：URGENT 优先，其后按截止时间升序、无截止最后。
       canceled.urgent,
       canceled.overdue,
       canceled.dueSoon,
@@ -1579,8 +1604,8 @@ describe("任务列表统一排序（ADR-037）", () => {
     const scope = await newProject();
     const bounds = await dayBounds();
     // 造数据的顺序即期望的返回顺序：紧急桶现在是
-    // 遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)，
-    // 因此「标记紧急」要排在「已逾期」之前（2026-09-22 逾期退到紧急之后一档）。
+    // 标记紧急(0) → 已逾期(1) → 今/明日截止(2) → 其余(3)
+    // （2026-09-23 起遗留问题来源退出紧急桶、改为优先级之后的独立一级，本例无此类任务）。
     const created = [
       await newTask(scope, { priority: "URGENT" }),
       await newTask(scope, { dueAt: bounds.overdue }),

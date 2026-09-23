@@ -1165,7 +1165,9 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
     // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
-    // 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余，桶内按 ID 升序。
+    // 标记紧急 → 已逾期 → 今/明日截止 → 其余，随后 优先级 → 遗留问题来源 → 截止时间，
+    // 未完成桶内按 ID 升序。2026-09-23 起遗留问题来源只在同优先级内提前（不再占紧急桶最高档），
+    // 因此 tSource 排在同为普通优先级的其它任务之前、而不是越过更高优先级的任务。
     expect(page.items.map((item) => item.taskId)).toEqual([
       tSource,
       tMain,

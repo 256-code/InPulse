@@ -278,7 +278,7 @@ export abstract class TaskQueryPort {
    * 1. projectIds 必须来自服务端生成的 AuthorizedProjectScope；端口不校验成员关系。
    * 2. projectIds 为空时短路返回空页，不发出任何 SQL。
    * 3. 排序固定，且与任务中心、任务面板共用 task-list-order.ts 的同一排序键
-   *    （状态分组 → 紧急桶 → 优先级 → 截止时间 → 任务 ID，ADR-037）；
+   *    （状态分组 → 紧急桶 → 优先级 → 遗留问题 → 截止时间 → 任务 ID，ADR-037）；
    *    该排序不命中 tasks_project_status_idx / tasks_assignee_status_idx 的排序尾，
    *    当前不新增索引（见 ADR-037 §4）。
    * 4. excludedTaskIds 在分页前过滤，保证先过滤后分页。
