@@ -75,9 +75,9 @@ const priorityLabels = {
 };
 const statusLabels = { TODO: "未完成", DONE: "已完成", CANCELED: "已取消" };
 /* 优先级徽章色调与 task-tone.ts 的 taskPriorityBadgeTone 同源：紧急红 / 高金（amber）/
-   普通灰——「普通」是白底卡，徽章取中性灰才与卡片同一调性。 */
+   普通淡蓝（2026-09-23 九次配色定案，与「进行中」同一套蓝）。 */
 const priorityTone = {
-  NORMAL: "gray",
+  NORMAL: "blue",
   HIGH: "amber",
   URGENT: "red",
 } as const;
@@ -820,7 +820,6 @@ export function TasksPanel({
                         className={taskToneClassName(
                           item.priority,
                           item.workStatus,
-                          leftoverSource,
                         )}
                       >
                         <td>
@@ -878,11 +877,7 @@ export function TasksPanel({
                   <article
                     className={
                       "calm-task-card " +
-                      taskToneClassName(
-                        item.priority,
-                        item.workStatus,
-                        leftoverSource,
-                      )
+                      taskToneClassName(item.priority, item.workStatus)
                     }
                     key={item.id}
                     tabIndex={0}
@@ -957,7 +952,10 @@ export function TasksPanel({
                           </CalmBadge>
                         )}
                       </span>
-                      <span title={"截止：" + formatDate(item.dueAt)}>
+                      <span
+                        className={dueToneClass(item.dueAt, item.workStatus)}
+                        title={"截止：" + formatDate(item.dueAt)}
+                      >
                         <InpulseIcon name="clock" size={14} />
                         {dueLabel(item.dueAt)}
                       </span>

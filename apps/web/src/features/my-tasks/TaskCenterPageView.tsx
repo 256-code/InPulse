@@ -547,12 +547,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <button
         type="button"
         className={
-          "calm-task-card " +
-          taskToneClassName(
-            item.priority,
-            item.workStatus,
-            item.hasLeftoverSource,
-          )
+          "calm-task-card " + taskToneClassName(item.priority, item.workStatus)
         }
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
@@ -600,7 +595,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </CalmBadge>
             )}
           </span>
-          <span title={"截止：" + due}>
+          <span className={dueToneClass(item)} title={"截止：" + due}>
             <InpulseIcon name="clock" size={14} />
             {due}
           </span>
@@ -788,6 +783,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       tone: groupTone,
       dueText,
       dueTitle,
+      dueTone,
     } = describeTaskGroup(group);
     return (
       <button
@@ -863,7 +859,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               {stateLabel}
             </CalmBadge>
           </span>
-          <span title={dueTitle}>
+          <span className={dueTone} title={dueTitle}>
             <InpulseIcon name="clock" size={14} />
             {dueText}
           </span>
@@ -1009,7 +1005,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 className={taskToneClassName(
                   entry.item.priority,
                   entry.item.workStatus,
-                  entry.item.hasLeftoverSource,
                 )}
               >
                 <td>

@@ -186,7 +186,10 @@ const doneTask: MyTaskListItem = {
   hasLeftoverSource: false,
 };
 
-/** 由遗留问题转换而来、既不紧急也不逾期的任务：整卡应该铺锈红（2026-09-22 产品要求）。 */
+/**
+ * 由遗留问题转换而来、既不紧急也不逾期的普通优先级任务。
+ * 2026-09-23 八次配色定案：整卡按自己的优先级取色（白底），来源只由「遗留问题」徽章表达。
+ */
 const leftoverTask: MyTaskListItem = {
   ...doneTask,
   taskId: 905,
@@ -357,22 +360,22 @@ describe("TaskCenterPageView", () => {
     expect(card.querySelector(".task-card-footer")).toBeNull();
   });
 
-  it("遗留问题来源的任务整卡转锈红，徽章保留深锈红实底", async () => {
+  it("遗留问题来源的任务按自己的优先级取色，徽章保留深锈红实底", async () => {
     renderView({ adapter: serverLikeAdapterWith([leftoverTask]) });
 
     const card = await screen.findByTestId("my-task-905");
-    expect(card).toHaveClass("calm-task-card", "tone-prio-leftover");
+    expect(card).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(card).getByText("遗留问题")).toHaveClass("badge-leftover");
   });
 
-  it("列表视图的遗留问题行与卡片同源取色", async () => {
+  it("列表视图的遗留问题行与卡片同源取色（只按优先级，不按来源）", async () => {
     renderView({
       filters: { display: "list" },
       adapter: serverLikeAdapterWith([leftoverTask]),
     });
 
     const row = await screen.findByText(leftoverTask.title);
-    expect(row.closest("tr")).toHaveClass("tone-prio-leftover");
+    expect(row.closest("tr")).toHaveClass("tone-prio-normal");
   });
 
   /**
@@ -1483,11 +1486,16 @@ describe("TaskCenterPageView", () => {
       screen.getByTestId("my-task-" + taskId);
     await screen.findByTestId("my-task-801");
     // 2026-09-22 三次定案：卡片按任务自己的优先级铺色（这三张都是普通优先级），
-    // 已逾期 / 今天到期不再换色，右下角保留「已逾期 …」/「今天截止」文案作为提示。
+    // 已逾期 / 今天到期不换整卡底色；2026-09-23 十一次定案起右下角那行文案本身按
+    // 紧迫度染色（类名与列表截止列同源），已完成不提示逾期所以类名缺席。
     expect(cardOf(801)).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(cardOf(802)).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(cardOf(801)).toHaveTextContent(/已逾期/);
     expect(cardOf(802)).toHaveTextContent("今天截止");
+    const dueSpanOf = (card: HTMLElement): HTMLElement =>
+      card.querySelector(".calm-card-bottom > span:last-child") as HTMLElement;
+    expect(dueSpanOf(cardOf(801))).toHaveClass("due-overdue");
+    expect(dueSpanOf(cardOf(802))).toHaveClass("due-soon");
     // 已完成走状态色，卡上也不再挂红色日期签。
     expect(cardOf(803)).toHaveClass("calm-task-card", "tone-prio-done");
     expect(within(cardOf(803)).getByTitle(/^截止：/).className).toBe("");
