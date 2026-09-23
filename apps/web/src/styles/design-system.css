@@ -1269,7 +1269,9 @@ button {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 轨道下限必须写 0：`1fr` 等价 `minmax(auto, 1fr)`，卡片里不可断行的长项目编号
+     会把轨道撑到 min-content，列宽不等并溢出网格。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -1278,6 +1280,10 @@ button {
   border: 1px solid var(--border);
   border-radius: 7px;
   box-shadow: 0 2px 5px #17355205;
+  /* 网格把同行卡片拉成等高，纵向 flex 让多出的空间由描述区吸收，
+     统计行与操作行才能在整排卡片间对齐。 */
+  display: flex;
+  flex-direction: column;
 }
 .card-top,
 .card-progress > div:first-child,
@@ -1289,6 +1295,8 @@ button {
 .project-card h2 {
   font-size: 15px;
   margin: 17px 0 8px;
+  /* 项目编号可能很长且不含空格，允许在任意位置断行，避免撑破卡片。 */
+  overflow-wrap: anywhere;
 }
 .project-card p {
   color: #7b8998;
@@ -2342,7 +2350,7 @@ td small {
   }
   .cards-grid,
   .module-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .overview-grid,
   .bottom-grid,
@@ -2380,7 +2388,7 @@ td small {
   }
   .cards-grid,
   .module-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .toolbar,
   .task-toolbar {

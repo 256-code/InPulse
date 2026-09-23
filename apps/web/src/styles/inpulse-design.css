@@ -1280,13 +1280,15 @@
 }
 
 /* ===================== F-05 项目与成员 ===================== */
-/* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。 */
+/* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。
+   描述区同时是卡片内唯一的弹性区，同行卡片的高度差全部由它吸收。 */
 .project-card > p.project-card-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   min-height: 44px;
+  flex: 1 1 auto;
 }
 
 .project-card > p.project-card-desc.is-placeholder {
@@ -1502,30 +1504,6 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-}
-
-.member-card-removed {
-  background: #fbfcfd;
-}
-
-.member-removed-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  flex: 1 0 100%;
-  margin: 0;
-  padding: 9px 10px;
-  border-radius: 7px;
-  background: #f6f9fc;
-  color: #71869a;
-  font-size: 11px;
-  line-height: 1.7;
-}
-
-.member-removed-note svg {
-  flex: 0 0 auto;
-  color: #8eabc3;
-  margin-top: 2px;
 }
 
 .member-history-note {

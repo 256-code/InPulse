@@ -123,11 +123,13 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
         "成员已移出项目，未改派任务保留原负责人且该成员已失去处理权限。",
       ),
     ).toBeVisible();
-    await expect(memberCard.getByText("已移除", { exact: true })).toBeVisible();
+    // 2026-09-23：列表只展示活跃成员，移除后该成员卡片立即从列表消失。
     await expect(
-      memberCard.getByText("历史记录已保留", { exact: true }),
-    ).toBeVisible();
-    await expect(memberCard.locator(".member-removed-note")).toBeVisible();
+      page
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.member.name }),
+    ).toHaveCount(0);
+    await expect(page.getByText("已移除", { exact: true })).toHaveCount(0);
 
     await page.goto("/projects/999999999/members");
     await expect(

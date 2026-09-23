@@ -145,12 +145,14 @@ async function pickCandidates(
 }
 
 describe("ProjectMembersPageView", () => {
-  it("lists project member history and opens remove confirmation", async () => {
+  it("lists active project members and opens remove confirmation", async () => {
     const client = baseClient() as unknown as InpulseApiClient;
     mount(client);
 
     await screen.findByText("开发者 C");
-    expect(screen.getByText("已移除成员")).toBeInTheDocument();
+    // 2026-09-23：列表只展示活跃成员，接口返回的 REMOVED 行不再渲染。
+    expect(screen.queryByText("已移除成员")).not.toBeInTheDocument();
+    expect(screen.queryByText("历史记录已保留")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /移\s*除/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /移\s*除/ }));
