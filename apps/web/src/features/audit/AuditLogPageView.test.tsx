@@ -194,7 +194,7 @@ describe("F-08 audit page", () => {
     await screen.findByText("更新项目");
     pickSelectOption("审计链", "PROJECT:" + project.id + " · " + project.name);
 
-    // 切换审计对象开启一次新查看：不带 readTrail，服务端写读取留痕（ADR-041）。
+    // 切换审计对象开启一次新查看：不带 readTrail，服务端写读取留痕（ADR-042）。
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
         { projectId: 7, limit: 50 },
@@ -232,7 +232,7 @@ describe("F-08 audit page", () => {
           action: "project.update",
           actorId: 3,
           from: new Date("2026-09-01T08:00").toISOString(),
-          // 筛选属于同一次查看，不写新留痕（ADR-041）。
+          // 筛选属于同一次查看，不写新留痕（ADR-042）。
           readTrail: "false",
         }),
         expect.anything(),
@@ -296,7 +296,7 @@ describe("F-08 audit page", () => {
     await user.click(await screen.findByRole("button", { name: "加载更多" }));
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
-        // 分页是同一次查看的延续，不带新留痕（ADR-041）。
+        // 分页是同一次查看的延续，不带新留痕（ADR-042）。
         { cursor: "cursor-1", limit: 50, readTrail: "false" },
         expect.anything(),
       ),

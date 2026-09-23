@@ -152,7 +152,7 @@ interface TaskOptions {
   /** 创建者（app.tasks.creator_id）；缺省用项目创建者，用于构造 creator ≠ assignee 的夹具。 */
   readonly actorUserId?: number;
   /** 优先级（ADR-037 排序键的第二级）：缺省 NORMAL。 */
-  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   /** 截止时间文本（由 SQL 直接转 timestamptz）：缺省无截止。 */
   readonly dueAt?: string | null;
 }

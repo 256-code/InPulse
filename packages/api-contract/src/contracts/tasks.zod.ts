@@ -21,7 +21,7 @@ export const taskEditRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(500),
     description: z.string().max(50000),
-    priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]),
+    priority: z.enum(["NORMAL", "HIGH", "URGENT"]),
     assigneeIds,
     dueAt: z.iso.datetime().nullable(),
   })

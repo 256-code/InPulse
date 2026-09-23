@@ -131,7 +131,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   const [draftFilters, setDraftFilters] =
     useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
-  // 读取留痕按「查看」计数（ADR-041）：进入页面与切换审计链开启一次新查看，
+  // 读取留痕按「查看」计数（ADR-042）：进入页面与切换审计链开启一次新查看，
   // 同一次查看内的重复请求、筛选、重置与重试不重复写 AUDIT_LOG_READ。
   const [newViewToken, setNewViewToken] = useState(0);
   const [filterError, setFilterError] = useState<string | null>(null);
@@ -275,7 +275,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       return;
     }
     setFilterError(null);
-    // 筛选是同一次查看内的操作，不写新留痕（ADR-041）。
+    // 筛选是同一次查看内的操作，不写新留痕（ADR-042）。
     setFilters(draftFilters);
   };
 
@@ -287,7 +287,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
 
   const handleChainChange = (value: string) => {
     if (value === "system") {
-      // 切换审计对象开启一次新查看：重新写读取留痕（ADR-041）。
+      // 切换审计对象开启一次新查看：重新写读取留痕（ADR-042）。
       setNewViewToken((token) => token + 1);
       setChain({ kind: "system" });
       return;

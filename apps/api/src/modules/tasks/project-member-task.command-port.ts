@@ -19,7 +19,7 @@ export interface ProjectMemberUnfinishedTask {
   readonly code: string;
   readonly title: string;
   readonly description: string;
-  readonly priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly priority: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt: string | null;
   readonly workStatus: "TODO";
   readonly assigneeId: number;
@@ -94,7 +94,7 @@ export class ProjectMemberTaskCommandPort {
       code: string;
       title: string;
       description: string;
-      priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+      priority: "NORMAL" | "HIGH" | "URGENT";
       dueAt: Date | null;
       workStatus: "TODO";
       assigneeId: number;

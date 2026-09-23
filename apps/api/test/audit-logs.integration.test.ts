@@ -345,7 +345,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(filters?.["action"]).toBeNull();
   });
 
-  test("readTrail=false 与带游标的分页属于同一次查看，不写新留痕（ADR-041）", async () => {
+  test("readTrail=false 与带游标的分页属于同一次查看，不写新留痕（ADR-042）", async () => {
     const countTrails = async (): Promise<number> => {
       const rows = (await reader!`
         SELECT count(*)::int AS "count"

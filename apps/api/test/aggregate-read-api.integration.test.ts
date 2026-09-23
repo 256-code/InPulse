@@ -132,7 +132,7 @@ interface TaskOptions {
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
   readonly title?: string;
-  readonly priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt?: string | null;
 }
 
@@ -1485,6 +1485,13 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       422,
       "VALIDATION_FAILED",
     );
+    // 2026-09-23 起「低」档位已下线：priority=LOW 与 CRITICAL 同为非法枚举，服务端拒绝。
+    await expectError(
+      "/api/v1/me/tasks?priority=LOW",
+      memberCookie,
+      422,
+      "VALIDATION_FAILED",
+    );
     await expectError(
       "/api/v1/me/tasks?includeCanceled=maybe",
       memberCookie,
@@ -1608,7 +1615,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
 
     // 统计与遗留计数与筛选正交：workStatus / priority 只影响 items。
     const filtered = await getJson(
-      "/api/v1/me/tasks?" + scope + "&workStatus=DONE&priority=LOW",
+      "/api/v1/me/tasks?" + scope + "&workStatus=DONE&priority=URGENT",
       memberCookie,
     );
     const filteredPage = myTaskPageSchema.parse(filtered.body);

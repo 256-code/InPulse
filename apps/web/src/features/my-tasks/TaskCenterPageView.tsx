@@ -89,12 +89,7 @@ function isTaskGroupCompleted(group: MyTaskGroupItem): boolean {
   );
 }
 
-const priorityOrder: readonly MyTaskPriority[] = [
-  "URGENT",
-  "HIGH",
-  "NORMAL",
-  "LOW",
-];
+const priorityOrder: readonly MyTaskPriority[] = ["URGENT", "HIGH", "NORMAL"];
 
 /**
  * 组内未完成（TODO）分支里最高的一档优先级，没有未完成分支时返回 null。
@@ -114,7 +109,7 @@ function highestOpenPriority(group: MyTaskGroupItem): MyTaskPriority | null {
 
 /**
  * 聚合组的排序档位（2026-09-22 产品口径「未完成状态（未开始 / 进行中）的组合任务按内部
- * 未完成任务中的最高优先级排序」）：紧急 → 高 → 普通 → 低，没有未完成分支的组（已完成、
+ * 未完成任务中的最高优先级排序」）：紧急 → 高 → 普通，没有未完成分支的组（已完成、
  * 已关闭且无分支）排到最后。同档内不动服务端给的顺序（R-7 按 id 倒序），前端不另立次级口径。
  */
 function taskGroupPriorityRank(group: MyTaskGroupItem): number {
@@ -727,9 +722,9 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     // 「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」），只在右下角日期文案与列表截止
     // 列用红色提示；组卡底色因此与任务卡片、列表组行三处同源。
     const tone = completed
-      ? taskToneClassName("LOW", "DONE")
+      ? taskToneClassName("NORMAL", "DONE")
       : priority === null
-        ? taskToneClassName("LOW", "CANCELED")
+        ? taskToneClassName("NORMAL", "CANCELED")
         : taskToneClassName(priority, "TODO");
     const dueText = hasBranches ? dueLabelOf(dueSubject) : "—";
     const dueTitle =

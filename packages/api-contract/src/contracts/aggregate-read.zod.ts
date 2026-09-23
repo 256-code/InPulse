@@ -5,7 +5,7 @@ import { projectStatusSchema } from "./projects.zod.js";
 const id = z.number().int().positive().max(2147483647);
 
 /** R-3 任务优先级；与 app.tasks.tasks_priority_check 的取值一致。 */
-export const TASK_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
+export const TASK_PRIORITIES = ["NORMAL", "HIGH", "URGENT"] as const;
 
 /** R-5 批量任务 ID 上限：单次 1..100 个；数量、格式或重复校验失败返回 422。 */
 export const TASK_GROUP_MEMBERSHIP_IDS_MAX = 100;

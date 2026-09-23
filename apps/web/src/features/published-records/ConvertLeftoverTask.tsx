@@ -369,7 +369,6 @@ export function LeftoverTaskConvertModal({
               setPriority(next as LeftoverTaskRequest["priority"])
             }
             options={[
-              { value: "LOW", label: "低", dotColor: priorityDotColor("LOW") },
               {
                 value: "NORMAL",
                 label: "普通",

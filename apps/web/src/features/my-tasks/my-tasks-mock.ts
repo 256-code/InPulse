@@ -46,7 +46,6 @@ const priorityRank: Record<MyTaskPriority, number> = {
   URGENT: 0,
   HIGH: 1,
   NORMAL: 2,
-  LOW: 3,
 };
 
 function startOfDay(offsetDays: number, hour = 10): string {
@@ -235,7 +234,7 @@ function createMockItemSeeds(): readonly MockItemSeed[] {
       scopeType: "FEATURE",
       workStatus: "DONE",
       lifecycleStatus: "ACTIVE",
-      priority: "LOW",
+      priority: "NORMAL",
       dueAt: dayOfMonth(6),
       updatedAt: dayOfMonth(2),
       completedAt: dayOfMonth(2),
@@ -289,7 +288,7 @@ function createMockItemSeeds(): readonly MockItemSeed[] {
       scopeType: "FEATURE",
       workStatus: "TODO",
       lifecycleStatus: "ACTIVE",
-      priority: "LOW",
+      priority: "NORMAL",
       dueAt: startOfDay(20),
       updatedAt: startOfDay(-3, 11),
       completedAt: null,

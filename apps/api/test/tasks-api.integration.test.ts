@@ -1196,7 +1196,7 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     };
     // 登记顺序与期望顺序不同：排序键生效时结果不等于 id 升序。
     const done = await post("已完成任务", "URGENT");
-    const lowTodo = await post("低优任务", "LOW");
+    const highTodo = await post("高优任务", "HIGH");
     const urgentTodo = await post("紧急任务", "URGENT");
     const normalTodo = await post("普通任务", "NORMAL");
     const canceled = await post("已取消任务", "HIGH");
@@ -1238,11 +1238,11 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     const items = taskListResponseSchema.parse(
       await (await request(project, "GET", member)).json(),
     ).items;
-    // 未完成（紧急 → 普通 → 低）在前，其后依次是已完成与已取消。
+    // 未完成（紧急 → 高 → 普通）在前，其后依次是已完成与已取消。
     expect(items.map((item) => item.id)).toEqual([
       urgentTodo.id,
+      highTodo.id,
       normalTodo.id,
-      lowTodo.id,
       done.id,
       canceled.id,
     ]);

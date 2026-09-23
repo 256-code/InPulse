@@ -117,7 +117,7 @@ describe("writeTaskBoardFilters", () => {
       view: "list",
       status: "canceled",
       time: "all",
-      priority: "LOW",
+      priority: "NORMAL",
       assigneeId: 3,
       query: "回归",
     } as const;

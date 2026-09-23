@@ -500,7 +500,7 @@ export const routeRegistry = [
     path: "/audit-logs",
     operationId: "getAuditLogs",
     summary:
-      "系统管理员读取原始审计链；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF；AuditQueryService 使用独立 audit_reader 只读连接查询；读取留痕按「查看」而不是「每次请求」计数（ADR-041）：只有开启一次新查看的请求（未带 cursor 且 readTrail 非 false，例如进入审计页或切换审计链）才由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；带 cursor 的分页请求与 readTrail=false 的延续请求不写新留痕；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
+      "系统管理员读取原始审计链；要求当前有效的完整管理员 Session（is_admin），不要求 CSRF；AuditQueryService 使用独立 audit_reader 只读连接查询；读取留痕按「查看」而不是「每次请求」计数（ADR-042）：只有开启一次新查看的请求（未带 cursor 且 readTrail 非 false，例如进入审计页或切换审计链）才由 app_runtime 通过受限追加函数向 SYSTEM 链写入 AUDIT_LOG_READ（查询条件与返回条数，不记录返回正文），留痕失败则整体失败；带 cursor 的分页请求与 readTrail=false 的延续请求不写新留痕；不传 projectId 读 SYSTEM 链，传 projectId 读 PROJECT:<id> 链。",
     request: {
       path: "none",
       query: "AuditLogQueryRequest",

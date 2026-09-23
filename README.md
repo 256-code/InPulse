@@ -187,7 +187,7 @@ node scripts/dev-start.mjs --local-only   # 强制关闭 SSO，按本地口令�
 - [ADR 索引](./docs/adr/README.md)：架构决策的唯一编号、状态和正式记录；
 - [权限矩阵](./docs/permissions.md)：身份、操作与资源级授权规则；
 - [测试矩阵](./docs/test-matrix.md)：规则到自动化验收的覆盖关系；
-- [任务卡片配色规范](./docs/task-card-colors.md)：六种优先级与完成状态的卡片实色、对比度、下拉圆点色，以及列表行保持浅色的差异；
+- [任务卡片配色规范](./docs/task-card-colors.md)：五种程度（紧急 / 高 / 普通 / 已完成 / 已取消）的卡片实色、对比度、下拉圆点色，以及列表行保持浅色的差异（「低」档位已于 2026-09-23 下线，见 [ADR-041](./docs/adr/ADR-041.md)）；
 - [AGENTS.md](./AGENTS.md)：人工开发者与编码代理都必须遵守的仓库规则；
 - [CONTRIBUTING.md](./CONTRIBUTING.md)：分支、提交、Pull Request、评审和发布规则。
 - [开发日志](./开发日志.md)：每次推送前记录代码变更、功能、优化、测试验证和后续事项。

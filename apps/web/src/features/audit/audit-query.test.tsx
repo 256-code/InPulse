@@ -141,7 +141,7 @@ describe("useAuditLogsInfiniteQuery", () => {
       ),
     );
 
-    // 切换审计对象：令牌递增开启新查看，请求重新不带 readTrail（ADR-041）。
+    // 切换审计对象：令牌递增开启新查看，请求重新不带 readTrail（ADR-042）。
     await act(async () => {
       view.rerender({
         filters: EMPTY_AUDIT_FILTERS,

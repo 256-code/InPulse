@@ -15,7 +15,7 @@ export const auditActorTypeSchema = z.enum(["USER", "SYSTEM"]);
  * 必须带时区偏移；cursor 为服务端签名、绑定操作者与查询条件的不透明字符串，
  * 客户端不得解析或修改；limit 默认 50、最大 100。
  *
- * readTrail 是读取留痕意图（ADR-041）：读取留痕按「查看」而不是「每次请求」
+ * readTrail 是读取留痕意图（ADR-042）：读取留痕按「查看」而不是「每次请求」
  * 计数，只有开启一次新查看的请求（进入审计页、切换审计链）才写
  * `AUDIT_LOG_READ`；同一次查看内的筛选、重置与重试传 `false`。省略按 `true`
  * 处理；带 cursor 的分页请求由服务端按同一次查看处理，该参数被忽略。

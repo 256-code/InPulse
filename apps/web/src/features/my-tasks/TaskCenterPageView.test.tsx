@@ -1046,11 +1046,11 @@ describe("TaskCenterPageView", () => {
         ...MY_TASKS_MOCK_ADAPTER,
         fetchTaskGroups: async () => ({
           ...groups,
-          // R-7 按 id 倒序返回：普通在前、紧急在后；排序必须由前端按派生优先级收敛。
+          // R-7 按 id 倒序返回：普通 → 紧急 → 高；排序必须由前端按派生优先级收敛。
           items: [
             variant(903, "普通优先级的组", "NORMAL"),
             variant(902, "紧急优先级的组", "URGENT"),
-            variant(901, "低优先级的组", "LOW"),
+            variant(901, "高优先级的组", "HIGH"),
           ],
         }),
       },
@@ -1059,13 +1059,13 @@ describe("TaskCenterPageView", () => {
     const cards = await screen.findAllByTestId(/^my-task-group-/);
     expect(cards.map((card) => card.getAttribute("data-testid"))).toEqual([
       "my-task-group-902",
-      "my-task-group-903",
       "my-task-group-901",
+      "my-task-group-903",
     ]);
     // 没有未完成截止时不触发截止档，底色就是各组的派生优先级那一档。
     expect(cards[0]).toHaveClass("tone-prio-urgent");
-    expect(cards[1]).toHaveClass("tone-prio-normal");
-    expect(cards[2]).toHaveClass("tone-prio-low");
+    expect(cards[1]).toHaveClass("tone-prio-high");
+    expect(cards[2]).toHaveClass("tone-prio-normal");
   });
 
   it("组卡与任务卡同一顺序：同优先级按截止日期从近到远", async () => {
@@ -1181,7 +1181,7 @@ describe("TaskCenterPageView", () => {
         completedItem({
           taskId: 942,
           code: "INP-942",
-          priority: "LOW",
+          priority: "HIGH",
           completedAt: "2026-09-12T00:00:00.000Z",
         }),
         completedItem({
@@ -1333,7 +1333,7 @@ describe("TaskCenterPageView", () => {
     const labels = options.map((option) => option.textContent?.trim() ?? "");
     // 空值项必须写明这是优先级筛选：工具栏里没有重复的文字标签（产品已删除），
     // 只显示「全部」时看不出维度。口径与任务看板 TaskBoardToolbar 的同名选项一致。
-    expect(labels).toEqual(["全部优先级", "紧急", "高", "普通", "低"]);
+    expect(labels).toEqual(["全部优先级", "紧急", "高", "普通"]);
     // 具体档位仍是两个字，保持工具栏紧凑；只有空值项带维度名。
     for (const label of labels.slice(1)) {
       expect([...label].length).toBeLessThanOrEqual(2);

@@ -69,15 +69,15 @@ const labels: Record<TaskField, string> = {
   impactFeatureIds: "影响功能",
 };
 const priorityLabels = {
-  LOW: "低",
   NORMAL: "普通",
   HIGH: "高",
   URGENT: "紧急",
 };
 const statusLabels = { TODO: "未完成", DONE: "已完成", CANCELED: "已取消" };
+/* 优先级徽章色调与 task-tone.ts 的 taskPriorityBadgeTone 同源：紧急红 / 高金（amber）/
+   普通灰——「普通」是白底卡，徽章取中性灰才与卡片同一调性。 */
 const priorityTone = {
-  LOW: "gray",
-  NORMAL: "blue",
+  NORMAL: "gray",
   HIGH: "amber",
   URGENT: "red",
 } as const;

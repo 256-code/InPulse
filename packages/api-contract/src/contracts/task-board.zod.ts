@@ -78,7 +78,7 @@ export const taskBoardCardSchema = z
     featureId: id.nullable(),
     featureName: z.string().min(1).max(500).nullable(),
     scopeType: z.enum(["FEATURE", "MODULE"]),
-    priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]),
+    priority: z.enum(["NORMAL", "HIGH", "URGENT"]),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
     dueAt: z.iso.datetime().nullable(),
     completedAt: z.iso.datetime().nullable(),

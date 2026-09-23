@@ -13,7 +13,7 @@ import {
 } from "../tasks/index.js";
 
 /** R-3 任务优先级；与 app.tasks.tasks_priority_check 的取值一致（A 裁决 §10.3）。 */
-export type MyTaskPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type MyTaskPriority = "NORMAL" | "HIGH" | "URGENT";
 
 export interface MyTaskPageInput extends TaskListFilter {
   /** 1..100，上限由契约层拒绝；端口只校验正整数。 */

@@ -14,7 +14,7 @@ import type {
  *
  * 与 F-30（任务中心）同一约定：筛选状态由 URL 承载，页面不保留内部副本。
  * 参数：view=board|list、status=all|open|done|canceled、time=all|overdue|today、
- * priority=LOW|NORMAL|HIGH|URGENT、owner=<userId>、q=<关键词>。
+ * priority=NORMAL|HIGH|URGENT、owner=<userId>、q=<关键词>。
  * 与默认值相同的项不写入 URL；非法值一律回退默认值。
  *
  * 筛选在本地执行（服务端一次返回项目全量看板），顶部统计不受筛选影响，
@@ -39,7 +39,6 @@ const statusValues: readonly TaskBoardStatusFilter[] = [
 ];
 const timeValues: readonly TaskBoardTimeFilter[] = ["all", "overdue", "today"];
 const priorityValues: readonly TaskBoardPriority[] = [
-  "LOW",
   "NORMAL",
   "HIGH",
   "URGENT",

@@ -163,7 +163,7 @@ function mapTaskBoardTaskRow(row: TaskBoardTaskRowRaw): TaskBoardTaskRow {
 export const TASK_BOARD_TASKS_MAX = 1000;
 
 /** 任务优先级；与 app.tasks.tasks_priority_check 的取值一致（R-8）。 */
-export type TaskPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type TaskPriority = "NORMAL" | "HIGH" | "URGENT";
 
 /**
  * 卡片截止状态；只对未完成任务取值（已完成 / 已取消 / 未设截止为 NONE）。
@@ -301,7 +301,7 @@ export abstract class TaskQueryPort {
    * 约定：
    * 1. 调用方必须先完成项目授权（与 find / list 同一约定），端口不校验成员关系。
    * 2. 排序固定「逾期 -> 未完成 -> 已完成（完成时间倒序）-> 已取消」；未完成
-   *    桶内先按优先级 紧急 -> 高 -> 普通 -> 低，再按截止时间升序（NULL 最后）。
+   *    桶内先按优先级 紧急 -> 高 -> 普通，再按截止时间升序（NULL 最后）。
    *    已完成与已取消不参与优先级排序。末键 taskId ASC 保证稳定；
    *    不提供 sort 参数。
    * 3. 上限 TASK_BOARD_TASKS_MAX，超出截断并置 truncated = true；调用方负责在
@@ -539,7 +539,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
                   WHEN 'URGENT' THEN 0
                   WHEN 'HIGH' THEN 1
                   WHEN 'NORMAL' THEN 2
-                  ELSE 3
+                  ELSE 2
                 END END ASC NULLS LAST,
                 CASE WHEN t.work_status = 'DONE' THEN t.completed_at END DESC NULLS LAST,
                 t.due_at ASC NULLS LAST,

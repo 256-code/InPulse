@@ -2734,57 +2734,68 @@ a:focus-visible {
  * 覆盖（状态类写在优先级之后）。色值与 priority-select-option.ts 的优先级圆点同源，
  * 消费方：.tb-card / .tb-row / .calm-task-card / .feature-list-table 行。
  */
+/* 2026-09-23 四次定案（产品要求「把这个模式下的颜色也改一改，和卡片对应」）把列表行 / 表格行改成
+   按卡片色派生：色条取卡片实色、底色是卡片色的极浅调、标题是同色系深字。同日五次定案（产品要求
+   「颜色再深一点」）在此基础上整体加深一档：底色按卡片色混白 86% → 78%（紧急）、84% → 76%（高），
+   色条与标题取该档更深一级，六档一起动，保持表格内部的相对关系。紧急行色条 #be3028、标题 #8f1f18
+   （对底色 7.06:1）。 */
 .tone-prio-urgent {
-  --task-c: #c0453f;
-  --task-bg: #fdf2f1;
-  --task-hov: #fbe7e5;
-  --task-bd: #f2d3d0;
-  --task-fg: #8f3f3f;
+  --task-c: #be3028;
+  --task-bg: #fae0dd;
+  --task-hov: #f5cfcb;
+  --task-bd: #eec4bf;
+  --task-fg: #8f1f18;
 }
+/* 2026-09-23 三次定案：「高」回到金黄族；四次定案把列表行拉回卡片同族（色条取卡片金、底色取
+   卡片色的极浅调），五次定案再整体加深一档：色条换成更深一级的 #e6b005、底色 #fff3c9、
+   标题 #5f4500（对底色 8.09:1）。三次定案那支偏脏的米黄 #fdf8ee + 土金 #c9821a 与卡片差得
+   太远，随四次定案退出。 */
 .tone-prio-high {
-  --task-c: #c9821a;
-  --task-bg: #fdf8ee;
-  --task-hov: #faeed7;
-  --task-bd: #f0dfc0;
-  --task-fg: #7d5310;
+  --task-c: #e6b005;
+  --task-bg: #fff3c9;
+  --task-hov: #fbe7a6;
+  --task-bd: #efd88c;
+  --task-fg: #5f4500;
 }
+/* 2026-09-23 六次定案（产品要求「普通的任务在列表模式下改为蓝色边边，白色底」）：列表行 /
+   表格行的「普通」改成蓝色色条 #1467d8 + 白底 —— 白底靠左侧蓝边与单元格分隔线（#edf1f6）
+   分界，行内文字仍用中性深色 #51606e（对白底 6.6:1）。卡片侧不跟随：白底卡保持自己的
+   中性灰竖条，见下面卡片块里的 --task-c。 */
 .tone-prio-normal {
   --task-c: #1467d8;
-  --task-bg: #f0f5fd;
-  --task-hov: #e1ecfa;
-  --task-bd: #cfdff7;
-  --task-fg: #16528f;
+  --task-bg: #ffffff;
+  --task-hov: #f2f7fe;
+  --task-bd: #dbe6f5;
+  --task-fg: #51606e;
 }
-.tone-prio-low {
-  --task-c: #a0adb9;
-  --task-bg: #f6f8fa;
-  --task-hov: #ebeff3;
-  --task-bd: #dfe5ea;
-  --task-fg: #5f6d7a;
-}
+/* 2026-09-23 七次定案（产品要求「我想 p1 用 p2 的颜色」，指任务中心 /tasks?status=done 的已完成列表行
+   要用卡片的青碧）：把「已完成」一档的列表行拉回与卡片同值——底色 #e1f2f2、悬停 #d6edee、
+   描边 #bcdddf；色条与标题仍是 #17535a（对 #e1f2f2 7.42:1）。这一档因此不再遵守五次定案
+   「列表行比卡片深一档」的规律，卡片侧本就被下面卡片块覆盖成同一组值，行为不变。 */
 .tone-prio-done {
-  --task-c: #1d5b62;
+  --task-c: #17535a;
   --task-bg: #e1f2f2;
   --task-hov: #d6edee;
   --task-bd: #bcdddf;
-  --task-fg: #1d5b62;
+  --task-fg: #17535a;
 }
+/* 已取消与「普通」同为中性灰，加深时压得更冷一档，避免和「普通」行分不出来。 */
 .tone-prio-canceled {
-  --task-c: #aab7c4;
-  --task-bg: #f5f7f9;
-  --task-hov: #ebeff3;
-  --task-bd: #e3e8ed;
-  --task-fg: #75828f;
+  --task-c: #96a4b2;
+  --task-bg: #e9edf1;
+  --task-hov: #dbe2e9;
+  --task-bd: #ccd5de;
+  --task-fg: #5b6875;
 }
 /* 「遗留问题」（2026-09-22 产品要求「遗留问题整个卡片都要是红色的」）：由遗留项转换
    而来的任务用深锈红标识来源，色值与「遗留问题」徽章（.badge-leftover）同源。列表行 /
    表格行走这里的浅色底与色条；卡片走下面「任务卡片醒目配色」块的实色覆盖。 */
 .tone-prio-leftover {
-  --task-c: #8a2b06;
-  --task-bg: #fbeee9;
-  --task-hov: #f7e3da;
-  --task-bd: #f0d5c9;
-  --task-fg: #8a2b06;
+  --task-c: #7c2705;
+  --task-bg: #f7dfd3;
+  --task-hov: #f2cdbd;
+  --task-bd: #e8bda8;
+  --task-fg: #7c2705;
 }
 .calm-task-grid,
 .calm-feature-grid {
@@ -4198,7 +4209,6 @@ a:focus-visible {
     .tone-prio-urgent,
     .tone-prio-high,
     .tone-prio-normal,
-    .tone-prio-low,
     .tone-prio-done,
     .tone-prio-canceled,
     .tone-prio-leftover
@@ -4747,7 +4757,8 @@ td.due-overdue {
    内边距全部复用 `.calm-task-card`。独立区块（.group-panel / .group-card /
    .branch-task）已随该定案删除。
    组卡配色（2026-09-22 产品定案）：整卡底色与任务卡片共用同一套 `.tone-prio-*`，取
-   「组内未完成（TODO）分支中的最高优先级」——紧急红 / 高明黄 / 普通蓝 / 低白四支；
+   「组内未完成（TODO）分支中的最高优先级」——紧急红 / 高金 #fdc106 / 普通白三支（2026-09-23
+   起「低」档位已下线，同日二次 / 三次配色定案把「高」定为金黄、「普通」定为白底卡）；
    全部分支收尾后按「已完成」铺完成青碧 `tone-prio-done`，已关闭且无分支（没有事实可派生）
    走中性灰 `tone-prio-canceled`。组卡不再有独立色族：2026-09-22 按产品要求「组合任务
    取消紫色，按合并任务以内部未完成任务中的最高优先级显示颜色」，删除了上一版的
@@ -6651,16 +6662,16 @@ td.due-overdue {
 }
 /* 行配色：优先级决定底色与色条，已完成 / 已取消按状态覆盖（后者声明在后面）。 */
 .tb-row--tone-red {
-  --tb-row-accent: #c0453f;
-  --tb-row-bg: #fdf2f1;
-  --tb-row-hover: #fbe7e5;
-  --tb-row-fg: #8f3f3f;
+  --tb-row-accent: #be3028;
+  --tb-row-bg: #fae0dd;
+  --tb-row-hover: #f5cfcb;
+  --tb-row-fg: #8f1f18;
 }
 .tb-row--tone-amber {
-  --tb-row-accent: #c9821a;
-  --tb-row-bg: #fdf8ee;
-  --tb-row-hover: #faeed7;
-  --tb-row-fg: #7d5310;
+  --tb-row-accent: #e6b005;
+  --tb-row-bg: #fff3c9;
+  --tb-row-hover: #fbe7a6;
+  --tb-row-fg: #5f4500;
 }
 .tb-row--tone-blue {
   --tb-row-accent: #1467d8;
@@ -6668,30 +6679,33 @@ td.due-overdue {
   --tb-row-hover: #e1ecfa;
   --tb-row-fg: #16528f;
 }
+/* 类名里的 gray 来自 task-tone 的色调映射（同一个 tone 值同时喂徽章与看板行类名），
+   2026-09-23 六次定案后这两行的颜色已改成蓝边白底，名字不再描述颜色。 */
 .tb-row--tone-gray {
-  --tb-row-accent: #a0adb9;
-  --tb-row-bg: #f6f8fa;
-  --tb-row-hover: #ebeff3;
-  --tb-row-fg: #5f6d7a;
+  --tb-row-accent: #1467d8;
+  --tb-row-bg: #ffffff;
+  --tb-row-hover: #f2f7fe;
+  --tb-row-fg: #51606e;
 }
+/* 完成行随之与卡片同值（2026-09-23 七次定案）：底 #e1f2f2、悬停 #d6edee、色条与文字 #17535a。 */
 .tb-row--done {
-  --tb-row-accent: #1d5b62;
+  --tb-row-accent: #17535a;
   --tb-row-bg: #e1f2f2;
   --tb-row-hover: #d6edee;
-  --tb-row-fg: #1d5b62;
+  --tb-row-fg: #17535a;
 }
 .tb-row--canceled {
-  --tb-row-accent: #aab7c4;
-  --tb-row-bg: #f5f7f9;
-  --tb-row-hover: #ebeff3;
-  --tb-row-fg: #75828f;
+  --tb-row-accent: #96a4b2;
+  --tb-row-bg: #e9edf1;
+  --tb-row-hover: #dbe2e9;
+  --tb-row-fg: #5b6875;
 }
 /* 「遗留问题」行（2026-09-22）：与卡片同色系，看板列表里也能一眼认出遗留项来源。 */
 .tb-row--leftover {
-  --tb-row-accent: #8a2b06;
-  --tb-row-bg: #fbeee9;
-  --tb-row-hover: #f7e3da;
-  --tb-row-fg: #8a2b06;
+  --tb-row-accent: #7c2705;
+  --tb-row-bg: #f7dfd3;
+  --tb-row-hover: #f2cdbd;
+  --tb-row-fg: #7c2705;
 }
 .tb-row-title {
   display: flex;
@@ -6751,16 +6765,18 @@ td.due-overdue {
   font-weight: 600;
 }
 .tb-prio--red {
-  color: #c0453f;
+  color: #8f1f18;
 }
 .tb-prio--amber {
-  color: #c9821a;
+  color: #5f4500;
 }
 .tb-prio--blue {
   color: #1467d8;
 }
+/* 看板列表行的优先级标签与状态标签跟随该档的行文字色，不再单配一色：
+   底色加深后 #8b99a7（灰标签旧值）对 #eef2f6 只有 2.59:1、「普通」行读不出来。 */
 .tb-prio--gray {
-  color: #8b99a7;
+  color: #5f6d7a;
 }
 .tb-prio--green {
   color: #34815d;
@@ -6839,42 +6855,54 @@ td.due-overdue {
   background: #ccd6e0;
 }
 
-/* ===================== 任务卡片醒目配色（D2，2026-09-21 定案；2026-09-22 定色口径） =====================
+/* ===================== 任务卡片醒目配色（D2，2026-09-21 定案；2026-09-22 / 2026-09-23 三轮定色口径） =====================
    产品反馈「任务卡片不够醒目」，先选定 D2「实色更艳」；随后又按反馈把「高」从土黄
    #c47b00 换成明黄，末轮候选对比后定为 #ffdb4d + 深棕字 #3f2d00（土黄的白字只有 3.4:1 且发闷，明黄深字 9.8:1）。
+   2026-09-23 二次定案（产品要求「紧急颜色不变，优先级高改为蓝色的，优先级普通改为白色的」）：
+   紧急不变（#ce342b + 白字），「高」接原「普通」的蓝 #337ee6 + 白字（3.99:1），
+   「普通」接原「低」的白底卡 #ffffff + 深色正文（描边 #d9e0e7）。
+   2026-09-23 三次定案（产品要求「优先级高的这个卡片颜色改为这个图里的黄色」，附图为品牌 Logo 的盾形金色）：
+   那支蓝只在位半天即退出，「高」换成本次给定的金黄 #fdc106 + 深棕字 #3f2d00（8.07:1），
+   描边 #daa605（压暗 14%）、悬停 #e4ae05（压暗 10%）；「普通」白底卡与其余档位不变。
    「已完成」先由 #2f9a68 换成 #12875f，再逐轮放浅（#57c98d → #a8e6b0 → #cdf1d3）；2026-09-22 末轮
    按产品在「聚合组配色候选」样板上拍板的 D「青碧」收成一套 #e1f2f2 / #bcdddf / #d6edee，深青字 #1d5b62
    （对比度 6.67:1），任务中心、项目任务面板与任务看板不再分色。
-   因此卡片整卡铺色：紧急 / 普通 / 遗留问题用白字，「高」「已完成」两张浅底卡用各自的
-   --task-ink 深字，
-   「低」用白底、「已取消」用浅灰底，均保留深色正文。
+   因此卡片整卡铺色：紧急 / 遗留问题用白字，「高」与「已完成」两张浅底卡各用自己的
+   --task-ink 深字，「普通」白底卡与「已取消」浅灰底都继承页面深色正文。
    覆盖范围：任务中心与项目任务面板的 .calm-task-card、任务看板的 .tb-card。
    列表行 / 表格行（.feature-list-table tbody tr 与 .tb-row--tone-*）继续用上面 .tone-prio-* 的
    浅色底与色条：表格里深底配深字读不出来，因此不做实色。
    2026-09-22 定色口径（产品在「红色取中 / 全色统一 / 全色样板」三轮样板上拍板）：实色卡饱和度
    封顶 78%、感知明度对齐 L* 53，档位靠色相区分而不是靠明度；实色卡描边统一取「底色压暗 14%」。
-   按该口径重定的实色卡：普通 #337ee6（原 #0f6ae8，S88→78、L*47→53）。
+   按该口径重定的实色卡：原「普通」的蓝 #337ee6（原 #0f6ae8，S88→78、L*47→53）——
+   2026-09-23 二次定案起这支蓝曾挂在「高」上，同日三次定案又撤下（「高」改用品牌金 #fdc106）。
    同日最后一轮：红档由「三档整卡红（紧急 / 已逾期 / 马上到期）」收敛成一支——产品要求
    「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」，
    已逾期 / 马上到期因此退出卡片配色，只在排序（task-list-order.ts 的 urgency 桶）与白底表面的
    红色日期文案上体现；紧急按红档「取中」从 #e84138 换成 #ce342b（sRGB 中点与 Oklab 中点同值
    #ce342b / #cd342b，按 sRGB 取 #ce342b），描边 #b12c25（压暗 14%）、悬停 #b92e27（压暗 10%）。
-   浅底族（高 / 已完成）与中性族（低 / 已取消）的底色与描边同日定稿，其中「已完成」按上面的 D 青碧执行。
+   浅底族（当时的「高」/ 已完成）与中性族（已取消）的底色与描边同日定稿，其中「已完成」按上面的 D 青碧执行。
+   当时的「高」明黄已于 2026-09-23 二次定案退出：浅底族现在只剩「已完成」与接替「低」的「普通」白卡。
+   2026-09-23：「低」档位整体下线（ADR-041），卡片、列表行、下拉与徽章都不再有低档配色；
+   同日二次定案把「高」改为蓝、「普通」改为白，三次定案再把「高」改为金黄（见本块开头）。
    取字对比度（WCAG AA 正常文字要求 4.5:1，均为实测计算值）：紧急白字 5.09:1（旧 #e84138 为 4.00:1）、
-   普通白字 3.99:1、高（#ffdb4d + #3f2d00）9.76:1、
-   已完成（#e1f2f2 + #1d5b62）6.67:1。
-   注意：普通卡仍落在 4.0:1 上下，仍在 AA 的 4.5:1 之下——16px 标题没问题，
-   11–12px 的小字（归属、徽章、到期文案）严格说未达标，产品已知悉并选择先定观感。 */
+   高（#fdc106 + #3f2d00）8.07:1、已完成（#e1f2f2 + #1d5b62）6.67:1；
+   「普通」白底卡与「已取消」浅灰底都是深色正文，属常规。
+   二次定案的「高蓝 + 白字 3.99:1」随三次定案退出：改回浅底深字后，实色卡里不再有低于 AA 的档位，
+   11–12px 的小字（归属、徽章、到期文案）也不再是取舍项。 */
 :is(.calm-task-card, .tb-card).tone-prio-urgent {
   --task-bg: #ce342b;
   --task-bd: #b12c25;
   --task-hov: #b92e27;
 }
-/* 「高」是浅底卡：明黄底配深棕字，描边取同色的深版，深字组其余取值见下方 --task-ink-* 说明。 */
+/* 「高」2026-09-23 三次定案（产品要求「优先级高的这个卡片颜色改为这个图里的黄色」）：整卡金黄
+   #fdc106 + 深棕字 #3f2d00（8.07:1），描边按既定口径取底色压暗 14%（#daa605）、悬停压暗 10%（#e4ae05）。
+   与当年的明黄 #ffdb4d 同族但更深、更饱和；二次定案那支蓝只在位半天即退出。
+   卡内文字走下面的深字组（与「已完成」共用一套规则），九个 --task-ink-* 变量写在本块。 */
 :is(.calm-task-card, .tb-card).tone-prio-high {
-  --task-bg: #ffdb4d;
-  --task-bd: #d6b841;
-  --task-hov: #edcc48;
+  --task-bg: #fdc106;
+  --task-bd: #daa605;
+  --task-hov: #e4ae05;
   --task-ink: #3f2d00;
   --task-ink-soft: #3f2d00cc;
   --task-ink-faint: #3f2d0099;
@@ -6884,10 +6912,14 @@ td.due-overdue {
   --task-ink-check: #3f2d0024;
   --task-ink-edge: #3f2d0066;
 }
+/* 「普通」2026-09-23 二次定案（产品要求「优先级普通改为白色的」）：接原「低」的白底卡
+   #ffffff（描边 #d9e0e7、悬停 #f5f8fa）。白底卡不写 --task-ink-*，卡内文字继承页面深色正文，
+   因此既不进白字组也不进深字组——与它接替的旧「低」白卡同一套取值。 */
 :is(.calm-task-card, .tb-card).tone-prio-normal {
-  --task-bg: #337ee6;
-  --task-bd: #2c6cc6;
-  --task-hov: #3076d8;
+  --task-c: #8b99a7;
+  --task-bg: #ffffff;
+  --task-bd: #d9e0e7;
+  --task-hov: #f5f8fa;
 }
 /* 「已完成」同样走浅底卡：青碧底 + 深青字，用冷静明亮的青碧表达完成感。
    2026-09-22 定案（产品在聚合组配色候选样板上拍板 D「青碧」#e1f2f2 / #bcdddf）：
@@ -6907,11 +6939,6 @@ td.due-overdue {
   --task-ink-icon: #1d5b62bf;
   --task-ink-check: #1d5b6224;
   --task-ink-edge: #1d5b6266;
-}
-:is(.calm-task-card, .tb-card).tone-prio-low {
-  --task-bg: #ffffff;
-  --task-bd: #d9e0e7;
-  --task-hov: #f5f8fa;
 }
 :is(.calm-task-card, .tb-card).tone-prio-canceled {
   --task-bg: #f2f5f8;
@@ -6937,52 +6964,29 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card)::before {
   display: none;
 }
-/* 白字组（紧急 / 普通 / 遗留问题）：标题、编号、正文、底部信息、徽章与到期文案整体反白。 */
-:is(.calm-task-card, .tb-card):is(
-  .tone-prio-urgent,
-  .tone-prio-normal,
-  .tone-prio-leftover
-) {
+/* 白字组（紧急 / 遗留问题）：标题、编号、正文、底部信息、徽章与到期文案整体反白。
+   「高」2026-09-23 三次定案（产品给的品牌金 #fdc106）后已离开本组：金黄底配深棕字，
+   与「已完成」共用下面的深字组。 */
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover) {
   --tb-sub: #ffffffd9;
   color: #fff;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   :is(h3, .tb-card-title) {
   color: #fff;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   :is(.task-id, .tb-code) {
   color: #ffffffd9;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
-  > p {
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover) > p {
   color: #ffffffd9;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   p.is-placeholder {
   color: #ffffffa6;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   :is(
     .calm-card-bottom,
     .task-card-meta,
@@ -6994,49 +6998,33 @@ td.due-overdue {
   ) {
   color: #ffffffd9;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   .calm-card-bottom {
   border-top-color: #ffffff3d;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   .badge {
   background: #ffffff2e;
   color: #fff;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   :is(.tb-dot-sep, .tb-check) {
   color: #ffffffd9;
 }
-:is(.calm-task-card, .tb-card):is(
-    .tone-prio-urgent,
-    .tone-prio-normal,
-    .tone-prio-leftover
-  )
+:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-leftover)
   .tb-check {
   background: #ffffff33;
 }
 :is(.calm-task-card, .tb-card):is(
     .tone-prio-urgent,
-    .tone-prio-normal,
     .tone-prio-leftover
   ):hover {
   border-color: #ffffff66;
   box-shadow: 0 5px 18px #17355226;
 }
-/* 深字组（高 / 已完成）：两张浅底卡上的文字统一取 --task-ink 及其透明变体，
-   具体取值写在各自的 .tone-prio-* 色值块里，换底色时只改那一处。 */
+/* 深字组（高 / 已完成）：浅底卡上的文字统一取 --task-ink 及其透明变体，具体取值写在各档
+   自己的色值块里（「高」= #3f2d00 深棕、已完成 = #1d5b62 深青），换底色时只改那一处。
+   「普通」的白底卡不在这里：它不写 --task-ink-*，直接继承页面深色正文。 */
 :is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done) {
   --tb-sub: var(--task-ink-soft);
   color: var(--task-ink);
@@ -7078,9 +7066,12 @@ td.due-overdue {
 }
 /* 遗留问题徽章不受卡内统一反白影响：实色卡把所有 .badge 压成同一种半透明底之后，
    「遗留问题」这种来源标记就分辨不出来了，这里在实色组与浅底组上都还原成深锈红实底。 */
-:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-normal)
-  .badge-leftover,
-:is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
+:is(.calm-task-card, .tb-card):is(
+    .tone-prio-urgent,
+    .tone-prio-high,
+    .tone-prio-normal,
+    .tone-prio-done
+  )
   .badge-leftover {
   background: #8a2b06;
   color: #ffffff;

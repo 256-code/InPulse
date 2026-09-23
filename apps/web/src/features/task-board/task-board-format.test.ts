@@ -135,11 +135,10 @@ describe("dueListLabelOf", () => {
 });
 
 describe("标记映射", () => {
-  it("优先级四档各有独立文案与色调", () => {
+  it("优先级三档各有独立文案与色调", () => {
     expect(priorityMarkOf("URGENT")).toEqual({ label: "紧急", tone: "red" });
     expect(priorityMarkOf("HIGH")).toEqual({ label: "高", tone: "amber" });
-    expect(priorityMarkOf("NORMAL")).toEqual({ label: "普通", tone: "blue" });
-    expect(priorityMarkOf("LOW")).toEqual({ label: "低", tone: "gray" });
+    expect(priorityMarkOf("NORMAL")).toEqual({ label: "普通", tone: "gray" });
   });
 
   it("已完成渲染绿勾，已取消渲染灰徽章，其余按优先级", () => {

@@ -14,7 +14,7 @@ export type MyTaskScope = "mine" | "created" | "project" | "all";
 
 export type MyTaskStatusFilter = "open" | "done" | "all";
 
-export type MyTaskPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type MyTaskPriority = "NORMAL" | "HIGH" | "URGENT";
 
 export type MyTaskLevel = "FEATURE" | "MODULE";
 

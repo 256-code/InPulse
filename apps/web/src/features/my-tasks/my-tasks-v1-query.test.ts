@@ -155,7 +155,7 @@ describe("my-tasks-v1-query", () => {
     ).toEqual([]);
     expect(
       listMyTasksV1Gaps(
-        filters({ status: "all", priority: "LOW", includeCanceled: true }),
+        filters({ status: "all", priority: "NORMAL", includeCanceled: true }),
       ),
     ).toEqual([]);
   });
