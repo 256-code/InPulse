@@ -345,6 +345,54 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(filters?.["action"]).toBeNull();
   });
 
+  test("readTrail=false 与带游标的分页属于同一次查看，不写新留痕（ADR-041）", async () => {
+    const countTrails = async (): Promise<number> => {
+      const rows = (await reader!`
+        SELECT count(*)::int AS "count"
+          FROM app.audit_logs
+         WHERE chain_id = 'SYSTEM'
+           AND action = 'AUDIT_LOG_READ'
+      `) as unknown as readonly { readonly count: number }[];
+      return rows[0]?.count ?? -1;
+    };
+
+    const before = await countTrails();
+
+    // 筛选：客户端声明为同一次查看的延续，不写新留痕。
+    await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { action: seedAction, readTrail: "false" },
+      }),
+    );
+    expect(await countTrails()).toBe(before);
+
+    // 非分页且未声明延续：开启一次新查看，恰写一条留痕。
+    const first = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { action: seedAction, limit: 1 },
+      }),
+    );
+    const afterNewView = await countTrails();
+    expect(afterNewView).toBe(before + 1);
+    expect(first.nextCursor).not.toBeNull();
+
+    // 分页由服务端按同一次查看排除，即使显式要求 readTrail=true 也不写。
+    await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          action: seedAction,
+          limit: 1,
+          cursor: first.nextCursor as string,
+          readTrail: "true",
+        },
+      }),
+    );
+    expect(await countTrails()).toBe(afterNewView);
+  });
+
   test("action 过滤与签名游标分页不重叠", async () => {
     const first = await expectAuditPage(
       await requestAuditLogs(baseUrl, {
@@ -419,6 +467,16 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       422,
     );
     expect(badLimit.code).toBe("VALIDATION_FAILED");
+
+    // readTrail 只接受 "true"/"false"，不接受其他写法（避免 "false" 被误判为真值）。
+    const badTrail = await expectError(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { readTrail: "yes" },
+      }),
+      422,
+    );
+    expect(badTrail.code).toBe("VALIDATION_FAILED");
   });
 
   test("projectId 查询返回 PROJECT 链数据且不跨链", async () => {

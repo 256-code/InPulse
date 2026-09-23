@@ -147,6 +147,7 @@ export type AuditLogQueryRequest = {
   readonly to?: string;
   readonly cursor?: string;
   readonly limit?: number;
+  readonly readTrail?: ("true" | "false");
 };
 
 export type ChangeRecordVersion = {

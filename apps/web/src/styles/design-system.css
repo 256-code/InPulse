@@ -1146,6 +1146,35 @@ button {
   background: white;
   box-shadow: 0 1px 3px #203c5515;
 }
+
+/* 分段控件切换滑块（2026-09-22）：选中底色与投影从 .selected 按钮迁到滑块上，由
+   CalmSegmented 实测选中按钮的矩形后写 transform / width，档位切换只做 0.15s ease
+   位移（参考 Uiverse radio-input 的滑块动画）。取值与原 .selected 完全一致，观感不变；
+   手写 .segmented（任务面板工具栏）不带 .segmented-slide，不受影响。 */
+.segmented-slide {
+  position: relative;
+}
+.segmented-slide button {
+  position: relative;
+  z-index: 1;
+}
+.segmented-slide button.selected {
+  background: transparent;
+  box-shadow: none;
+}
+.segmented-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 1px 3px #203c5515;
+  pointer-events: none;
+  transition:
+    transform 0.15s ease,
+    width 0.15s ease;
+}
+
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1630,6 +1659,7 @@ td small {
   color: #2e455c;
 }
 .audit-content strong span {
+  margin-left: 6px;
   font-weight: 400;
   color: #718398;
 }
@@ -5629,12 +5659,42 @@ td.due-overdue {
   color: #4d6479;
   font-size: 11px;
   line-height: 1.75;
-  overflow-x: auto;
+  max-height: 46vh;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .snapshot-body .permission-hint {
   margin-top: 18px;
+}
+/* 该盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的默认头部
+   排版（同 `.project-picker-modal` / `.record-detail-modal`）：不补内边距时眉标会顶到
+   盒子左上角并被 18px 圆角裁掉，关闭按钮也贴住右边缘。 */
+.snapshot-modal > .drawer-header {
+  padding: 22px 26px 16px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+/* 原始审计快照按「基本信息 / 请求上下文 / 完整性校验 / 事件载荷」分组，
+   长哈希与载荷各自成块，避免一条字段列表从弹层顶部排到底部。 */
+.snapshot-group + .snapshot-group {
+  margin-top: 24px;
+}
+.snapshot-group-title {
+  margin: 0 0 13px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #8b9cb0;
+}
+.snapshot-group .calm-meta {
+  margin: 0;
+  padding-top: 0;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px 15px;
+}
+.snapshot-group .calm-meta code {
+  font-size: 11px;
 }
 
 .field-inline {

@@ -1,5 +1,9 @@
 import React from "react";
 
+import {
+  CalmSegmentedThumb,
+  useCalmSegmentedThumb,
+} from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { priorityDotColor } from "@features/common/priority-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -74,9 +78,16 @@ export const TaskBoardToolbar: React.FC<TaskBoardToolbarProps> = ({
   assignees,
   onChange,
 }) => {
+  const { trackRef, thumb } = useCalmSegmentedThumb();
+
   return (
     <section className="tb-toolbar" aria-label="任务看板视图与筛选">
-      <div className="segmented" role="group" aria-label="视图切换">
+      <div
+        className="segmented segmented-slide"
+        role="group"
+        aria-label="视图切换"
+        ref={trackRef}
+      >
         <button
           type="button"
           className={filters.view === "board" ? "selected" : undefined}
@@ -95,6 +106,7 @@ export const TaskBoardToolbar: React.FC<TaskBoardToolbarProps> = ({
           <InpulseIcon name="list" size={12} />
           列表
         </button>
+        <CalmSegmentedThumb box={thumb} />
       </div>
 
       <div className="tb-chips" role="group" aria-label="按状态筛选">

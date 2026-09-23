@@ -484,6 +484,21 @@
   margin-left: auto;
 }
 
+/* 审计页的读取留痕（`AUDIT_LOG_READ`）是打开本页时自动生成的自我噪音，列表默认隐藏；
+ * 这一行给出开关与已隐藏条数，直接复用设计系统的 `.check-line`，不新增控件样式。 */
+.audit-trail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.audit-trail-bar > span {
+  color: #8291a1;
+  font-size: 11px;
+}
+
 .audit-row:last-child {
   border-bottom: 0;
 }

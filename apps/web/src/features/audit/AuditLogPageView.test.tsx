@@ -44,6 +44,38 @@ const projectItem: AuditLogItem = {
   targetId: "7",
 };
 
+const readTrailItem: AuditLogItem = {
+  ...systemItem,
+  sequenceNo: 13,
+  action: "AUDIT_LOG_READ",
+  targetType: "AUDIT_CHAIN",
+  targetId: "SYSTEM",
+  eventPayload: { returnedCount: 50, hasMore: true },
+};
+
+const taskItem: AuditLogItem = {
+  ...systemItem,
+  chainId: "PROJECT:7",
+  sequenceNo: 14,
+  projectId: 7,
+  action: "task.status",
+  targetType: "TASK",
+  targetId: "9370",
+  eventPayload: { after: { code: "INPULSE-T-59", title: "登录测试" } },
+};
+
+// 演示种子数据是平铺载荷，没有 after/before 包裹。
+const seedFeatureItem: AuditLogItem = {
+  ...systemItem,
+  chainId: "PROJECT:7",
+  sequenceNo: 15,
+  projectId: 7,
+  action: "feature.create",
+  targetType: "FEATURE",
+  targetId: "20",
+  eventPayload: { code: "INPULSE-F-11", name: "工程基建" },
+};
+
 const project = {
   id: 7,
   code: "AGV",
@@ -69,12 +101,25 @@ function queryClient() {
   });
 }
 
+/** 渲染前统一补一个用户目录 mock，断言里就能看到人名而不是「用户 #N」。 */
+function withUserDirectory(client: InpulseApiClient): InpulseApiClient {
+  return {
+    ...client,
+    getUserDirectory: vi.fn().mockResolvedValue({
+      items: [
+        { id: 1, name: "邵昱宇", avatarUrl: null, isAdmin: true },
+        { id: 2, name: "Bob", avatarUrl: null, isAdmin: false },
+      ],
+    }),
+  } as unknown as InpulseApiClient;
+}
+
 function mount(client: InpulseApiClient) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <AuthStateProvider value={{}}>
         <QueryClientProvider client={queryClient()}>
-          <AuditLogPageView client={client} />
+          <AuditLogPageView client={withUserDirectory(client)} />
         </QueryClientProvider>
       </AuthStateProvider>
     </ConfigProvider>,
@@ -102,14 +147,43 @@ describe("F-08 audit page", () => {
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
-    expect(await screen.findByText("admin.user.create")).toBeInTheDocument();
+    expect(await screen.findByText("创建用户")).toBeInTheDocument();
     expect(getAuditLogs.mock.calls[0]?.[0]).toEqual({ limit: 50 });
-    expect(screen.getByText("用户 #1")).toBeInTheDocument();
-    expect(screen.getByText("USER #2")).toBeInTheDocument();
-    expect(
-      screen.getByText("链 SYSTEM · 序号 12 · 系统级"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("邵昱宇")).toBeInTheDocument();
+    expect(screen.getByText("对象：用户 Bob")).toBeInTheDocument();
+    expect(screen.getByText("第 12 条 · 系统链")).toBeInTheDocument();
     expect(screen.queryByText("加载更多")).not.toBeInTheDocument();
+  });
+
+  it("labels entity targets with the code and name carried by the payload", async () => {
+    const getAuditLogs = vi
+      .fn()
+      .mockResolvedValue(page([taskItem, seedFeatureItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    const taskLabel = "对象：任务 INPULSE-T-59「登录测试」";
+    const featureLabel = "对象：功能 INPULSE-F-11「工程基建」";
+    expect(await screen.findByText(taskLabel)).toBeInTheDocument();
+    expect(screen.getByText(featureLabel)).toBeInTheDocument();
+  });
+
+  it("hides read-trail rows by default and reveals them on demand", async () => {
+    const getAuditLogs = vi
+      .fn()
+      .mockResolvedValue(page([readTrailItem, systemItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    expect(await screen.findByText("创建用户")).toBeInTheDocument();
+    expect(screen.queryByText("读取审计日志")).not.toBeInTheDocument();
+    expect(screen.getByText("本页已隐藏 1 条读取留痕")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("隐藏读取留痕"));
+    expect(await screen.findByText("读取审计日志")).toBeInTheDocument();
+    expect(
+      screen.queryByText("本页已隐藏 1 条读取留痕"),
+    ).not.toBeInTheDocument();
   });
 
   it("switches to a project chain and sends the project scope", async () => {
@@ -117,18 +191,19 @@ describe("F-08 audit page", () => {
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
-    await screen.findByText("project.update");
+    await screen.findByText("更新项目");
     pickSelectOption("审计链", "PROJECT:" + project.id + " · " + project.name);
 
+    // 切换审计对象开启一次新查看：不带 readTrail，服务端写读取留痕（ADR-041）。
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
-        expect.objectContaining({ projectId: 7, limit: 50 }),
+        { projectId: 7, limit: 50 },
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("project.update")).toBeInTheDocument();
+    expect(await screen.findByText("更新项目")).toBeInTheDocument();
     expect(
-      screen.getByText("链 PROJECT:7 · 序号 3 · 项目 #7"),
+      screen.getByText("第 3 条 · 项目 AGV 智能搬运平台"),
     ).toBeInTheDocument();
   });
 
@@ -136,7 +211,7 @@ describe("F-08 audit page", () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
-    await screen.findByText("admin.user.create");
+    await screen.findByText("创建用户");
     expect(getAuditLogs).toHaveBeenCalledTimes(1);
 
     fireEvent.change(screen.getByLabelText("动作码"), {
@@ -157,6 +232,8 @@ describe("F-08 audit page", () => {
           action: "project.update",
           actorId: 3,
           from: new Date("2026-09-01T08:00").toISOString(),
+          // 筛选属于同一次查看，不写新留痕（ADR-041）。
+          readTrail: "false",
         }),
         expect.anything(),
       ),
@@ -167,7 +244,7 @@ describe("F-08 audit page", () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
-    await screen.findByText("admin.user.create");
+    await screen.findByText("创建用户");
 
     fireEvent.change(screen.getByLabelText("操作人 ID"), {
       target: { value: "0" },
@@ -186,7 +263,7 @@ describe("F-08 audit page", () => {
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
     await user.click(
-      await screen.findByRole("button", { name: "查看原始快照 序号 12" }),
+      await screen.findByRole("button", { name: "查看原始快照 第 12 条" }),
     );
     expect(await screen.findByText("原始审计快照")).toBeInTheDocument();
     const payload = screen.getByTestId("audit-snapshot-payload");
@@ -219,11 +296,12 @@ describe("F-08 audit page", () => {
     await user.click(await screen.findByRole("button", { name: "加载更多" }));
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
-        { cursor: "cursor-1", limit: 50 },
+        // 分页是同一次查看的延续，不带新留痕（ADR-041）。
+        { cursor: "cursor-1", limit: 50, readTrail: "false" },
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("project.update")).toBeInTheDocument();
+    expect(await screen.findByText("更新项目")).toBeInTheDocument();
     expect(screen.queryByText("加载更多")).not.toBeInTheDocument();
   });
 

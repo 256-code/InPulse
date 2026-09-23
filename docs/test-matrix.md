@@ -828,14 +828,15 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
-`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。留痕按「查看」而不是「每次请求」计数（[ADR-041](adr/ADR-041.md)）：只有开启一次新查看的请求（进入审计页或切换审计对象）才写，同一次查看内的筛选、重置、重试与分页不写新留痕（带游标的分页由服务端排除，延续请求以 `readTrail=false` 声明）。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-11） |
+| F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；开启一次新查看的请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-23 更新为「查看」粒度口径） |
 | F08-READ-API-002 | HTTP + PostgreSQL | 身份与管理员门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；只读路径不强制同步 CSRF，完整管理员 Session 即可读取（ADR-031 起不再要求 TOTP 重认证） | 同上 |
 | F08-READ-API-003 | HTTP + PostgreSQL | action 过滤与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
+| F08-READ-API-005 | HTTP + PostgreSQL | 留痕按「查看」计数 | 带 `readTrail=false` 的筛选请求不写新留痕；非分页且未声明延续的请求恰写一条；带签名游标的分页即使显式传 `readTrail=true` 也不写；`readTrail` 取枚举外取值返回 422 | 本地通过（同上 7/7，2026-09-23） |
 | F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人 ID 必须正整数、`from/to` 由 `datetime-local` 换算为带时区 ISO，`from >= to` 与非法 ID 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-11） |
 | F08-READ-WEB-002 | 前端单元（jsdom） | 错误映射 | 403 `ADMIN_REQUIRED` 展示管理员权限文案并保留重试入口；401/403/422/429 与未知失败映射为安全文案、不泄露服务端 `message`；行内「原始快照」展示 `eventPayload` JSON、前后哈希与请求元数据；`/audit` 路由 `requiresAdmin` 且侧栏入口仅管理员可见（`AppLayout.test.tsx`） | 同上 |
 
@@ -3104,3 +3105,21 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-22 草稿箱「空则收起」）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（19 例通过）、`pnpm --filter @inpulse/web test`（85 文件 576 例通过）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`（eslint .）、`pnpm exec prettier --write`（`RecordDraftsView.tsx`、`RecordDraftsView.test.tsx`）通过。
 
 未运行：整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright；`record-feed.spec.ts` 的 `#record-draft-list` 与 `heading 我的草稿` 断言、`record-drafts.spec.ts` 的 `.draft-card` 断言都在「已创建草稿」路径上，按本口径不受影响但本轮未跑）、`pnpm deps:audit`、GitHub Actions。浏览器实测本轮未做。
+
+## 分段控件切换滑块动画（用户指示，2026-09-23 本地落库）
+
+需求（原文）：「我现在想改未完成和已完成还有卡片列表滑块的切换动画……只需要参考动画就行，样式不要改」，随后追加「任务看板那边也记得改」；参考实现是 Uiverse 的 radio-input（轨道 `position: relative`、绝对定位滑块、`transform: translateX` 位移 + 0.15s ease）。本批为纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+实现：选中底色与投影从 `.segmented button.selected` 迁到滑块 `.segmented-thumb`，取值与原规则完全一致（`background: white`、`box-shadow: 0 1px 3px #203c5515`，按钮与滑块同为 4px 圆角），按钮只保留 `color` 变化；`useCalmSegmentedThumb` 以 `button[aria-pressed=true]` 反查选中按钮并按其 `getBoundingClientRect()` 相对轨道实测矩形，写滑块的 `transform` 与 `width`，CSS 只负责 `transform 0.15s ease, width 0.15s ease`；测量在 layout effect 中每次渲染后执行（值未变时回传同一对象，避免测量自转），`ResizeObserver` 观察轨道与各按钮以兜住窗口缩放、字体加载与弹窗由隐藏转显示；滑块只在首次测量完成后挂载，因此首帧不会从左侧滑入。任务看板工具栏（手写 `.segmented`）复用同一 hook 与滑块组件。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SEGMENT-SLIDE-BROWSER-001 | 浏览器实测 | 任务中心滑块与选中按钮完全重合 | 临时 E2E：`/tasks?status=open` 打开态滑块 box 与选中按钮一致（x=283、w=86.63、h=29），`transition` 为 `transform 0.15s, width 0.15s` | 本地通过（2026-09-23，用例已删） |
+| SEGMENT-SLIDE-BROWSER-002 | 浏览器实测 | 切换过程确有位移过渡 | 同上：点「已完成」后逐帧采样得到 283 → 293 → 358.54 → 371.63 的中间值（不是瞬移） | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-BROWSER-003 | 浏览器实测 | 任务看板视图切换同样生效 | 临时 E2E：`/projects/{id}/task-board` 滑块 box 与「看板」按钮一致（x=286、w=65、h=28），切「列表」采样 286 → 293.68 → 343.97 → 354 | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-WEB-001 | Web 单元 | 既有分段控件断言不受影响 | `pnpm --filter @inpulse/web test` 85 文件 578 例通过（含 `TaskCenterPageView.test.tsx` 58 例与 `src/features/task-board` 4 文件 38 例） | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-GATE-001 | 静态门禁 | 类型、风格与格式 | `pnpm exec eslint`（`Calm.tsx`、`TaskBoardToolbar.tsx`）通过；`pnpm exec prettier --check` 通过；`pnpm --filter @inpulse/web typecheck` 仅剩并行 audit 改动的 1 个错误 | 本地通过（typecheck 见偏差说明） |
+
+本地实际执行（2026-09-23 滑块动画）：`pnpm --filter @inpulse/web test`（85 文件 578 例；首次整套并发运行出现过 2 例超时，单独复跑与随后整套复跑均通过，属既有负载敏感间歇失败）、`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`（58 例）、`pnpm --filter @inpulse/web exec vitest run src/features/task-board`（4 文件 38 例）、`pnpm exec eslint`（2 个改动文件）、`pnpm exec prettier --write` 与 `--check`、`pnpm --filter @inpulse/web typecheck`、真实浏览器临时用例（任务中心与任务看板三处滑块，截图留档）。
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`、全量 `pnpm test:e2e`、`pnpm deps:audit` 与 GitHub Actions；② `pnpm --filter @inpulse/web typecheck` 仍有 1 个并行 audit 改动的错误（`AuditLogPageView.test.tsx(107,5) TS2783: getUserDirectory is specified more than once`），与本批无关；③ `apps/e2e/tests/task-board.spec.ts` 的 R-8 在本机 180s 超时：用 `git stash` 只还原本批 3 个文件后同一用例同样超时（均卡在新建任务弹窗选完「所属模块」后负责人未选中、弹窗不关闭），确认为既有失败，本批未修；④ 本机 E2E 的 API 与 Web 由 Playwright 自建构建（端口 3100 / 4173），不使用手动启动的实例。

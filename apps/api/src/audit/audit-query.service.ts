@@ -11,7 +11,7 @@ import { PostgresUnitOfWork } from "../database/unit-of-work.js";
 import { AuditCursorError, AuditCursorService } from "./audit-cursor.js";
 import { AuditWritePort } from "./audit.port.js";
 
-/** 原始审计读取动作码（技术设计 7）：每次读取返回前写入 SYSTEM 链。 */
+/** 原始审计读取动作码（技术设计 7 / ADR-041）：每次新查看返回前写入 SYSTEM 链。 */
 export const AUDIT_LOG_READ_ACTION = "AUDIT_LOG_READ";
 
 /** 查询参数或游标非法 → 422；其他读取/留痕失败由调用方映射为 500。 */
@@ -84,8 +84,9 @@ function buildQueryFingerprint(
 
 /**
  * F-08 步骤 4：原始审计读取。查询使用独立 `audit_reader` 只读连接，
- * 不占用业务事务；结果只在内存中暂存，返回前必须由 `app_runtime` 在
- * 单独事务内通过受限追加函数向 SYSTEM 链写入 `AUDIT_LOG_READ`
+ * 不占用业务事务；结果只在内存中暂存，开启一次新查看时（进入审计页、
+ * 切换审计链；ADR-041 起按查看而不是每次请求计数）必须由 `app_runtime`
+ * 在单独事务内通过受限追加函数向 SYSTEM 链写入 `AUDIT_LOG_READ`
  * （链、过滤条件、返回条数与操作者，不含返回正文）；留痕失败时丢弃
  * 结果并整体失败，绝不把未留痕的审计返回给调用方。
  */
@@ -163,31 +164,38 @@ export class AuditQueryService {
           })
         : null;
 
-    await this.unitOfWork.run(async (tx) => {
-      await this.audit.append(tx, {
-        projectId: null,
-        actorType: "USER",
-        actorId: actorUserId,
-        action: AUDIT_LOG_READ_ACTION,
-        targetType: "AUDIT_CHAIN",
-        targetId: chainId,
-        eventPayload: {
-          chainId,
-          filters: {
-            action: query.action ?? null,
-            actorId: query.actorId ?? null,
-            from: query.from ?? null,
-            to: query.to ?? null,
+    // 留痕按「查看」而不是「每次请求」计数（ADR-041）：带签名游标的分页是
+    // 同一次查看的延续，服务端直接排除；筛选、重置与重试由客户端传
+    // readTrail=false 声明为延续。只有开启一次新查看的请求才写留痕。
+    const opensNewView =
+      query.cursor === undefined && query.readTrail !== "false";
+    if (opensNewView) {
+      await this.unitOfWork.run(async (tx) => {
+        await this.audit.append(tx, {
+          projectId: null,
+          actorType: "USER",
+          actorId: actorUserId,
+          action: AUDIT_LOG_READ_ACTION,
+          targetType: "AUDIT_CHAIN",
+          targetId: chainId,
+          eventPayload: {
+            chainId,
+            filters: {
+              action: query.action ?? null,
+              actorId: query.actorId ?? null,
+              from: query.from ?? null,
+              to: query.to ?? null,
+            },
+            returnedCount: items.length,
+            hasMore,
           },
-          returnedCount: items.length,
-          hasMore,
-        },
-        requestId: trail.requestId,
-        clientRequestId: trail.clientRequestId ?? null,
-        ipAddress: trail.ipAddress ?? null,
-        userAgent: trail.userAgent ?? null,
+          requestId: trail.requestId,
+          clientRequestId: trail.clientRequestId ?? null,
+          ipAddress: trail.ipAddress ?? null,
+          userAgent: trail.userAgent ?? null,
+        });
       });
-    });
+    }
 
     return { items, nextCursor, hasMore };
   }
