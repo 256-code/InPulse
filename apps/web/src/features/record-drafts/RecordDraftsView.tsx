@@ -150,11 +150,26 @@ export function RecordDraftsView({
         ? myDrafts.isError
         : projectDrafts.isError;
   /**
-   * 草稿箱内容区只在真的有内容可展示时渲染：有草稿卡片，或读取失败需要给出重试入口。
-   * 空草稿箱（含首次加载中）默认收起，不占记录列表上方的竖向空间；标题行、说明与
-   * 「新建来源草稿」入口仍在标题行里，所以收起不会带走创建入口，也不会吞掉错误提示。
+   * 内容区只在有东西可展示时占位：有草稿卡片，或读取失败需要给出重试入口。
+   * （首次加载中不占位，空结果也不占位。）
    */
-  const showDraftList = draftCards.length > 0 || listFailed;
+  const hasDraftContent = listFailed || draftCards.length > 0;
+  /**
+   * 草稿箱（我的草稿 / 项目草稿）整块渲染的条件：解析完仍是空的时候，标题、说明、
+   * 折叠按钮与列表一律不渲染，页面上不留任何与草稿箱有关的字样。
+   * 两个例外：读取失败必须给出重试入口；来源任务视图的标题行带着「新建来源草稿」，
+   * 那是那一屏唯一不随草稿数量消失的创建入口，因此照旧保留标题行。
+   */
+  const showDraftBox = taskId > 0 || (!listPending && hasDraftContent);
+  /**
+   * 有草稿时草稿箱默认展开，标题行右侧的小按钮可以把内容区折叠起来；切换项目或进出
+   * 来源任务语境时回到默认展开，换语境后先让人看见草稿，而不是继承上一个语境的收起态。
+   */
+  const [draftsCollapsed, setDraftsCollapsed] = useState(false);
+  useEffect(() => {
+    setDraftsCollapsed(false);
+  }, [projectId, taskId]);
+  const showDraftList = hasDraftContent && !draftsCollapsed;
   const reloadList = () =>
     void (taskId > 0
       ? sourceQuery.refetch()
@@ -270,32 +285,56 @@ export function RecordDraftsView({
           </section>
         </div>
       )}
-      <CalmSectionTitle
-        title={
-          taskId > 0 ? "来源草稿" : isAllProjects ? "我的草稿" : "项目草稿"
-        }
-        hint={
-          taskId > 0
-            ? "先把变化写清楚，保存后可与项目成员继续补充。"
-            : isAllProjects
-              ? "跨项目汇总你创建的草稿，打开即回到所属项目继续编辑。"
-              : "只显示你自己创建的草稿，保存后可与项目成员继续补充。"
-        }
-      >
-        {taskId > 0 ? (
-          <Button
-            className="primary-button"
-            disabled={!writable}
-            onClick={() =>
-              setEditorTarget(
-                source ? { kind: "source", source } : { kind: "independent" },
-              )
-            }
-          >
-            新建来源草稿
-          </Button>
-        ) : null}
-      </CalmSectionTitle>
+      {showDraftBox && (
+        <CalmSectionTitle
+          title={
+            taskId > 0 ? "来源草稿" : isAllProjects ? "我的草稿" : "项目草稿"
+          }
+          hint={
+            taskId > 0
+              ? "先把变化写清楚，保存后可与项目成员继续补充。"
+              : isAllProjects
+                ? "跨项目汇总你创建的草稿，打开即回到所属项目继续编辑。"
+                : "只显示你自己创建的草稿，保存后可与项目成员继续补充。"
+          }
+        >
+          <div className="draft-box-actions">
+            {/* 折叠按钮只属于草稿箱：来源任务视图的标题行保持原样，不夺它的创建入口。 */}
+            {taskId === 0 ? (
+              <button
+                type="button"
+                className="draft-box-toggle"
+                aria-expanded={!draftsCollapsed}
+                {...(draftsCollapsed
+                  ? { title: "展开草稿箱", "aria-label": "展开草稿箱" }
+                  : {
+                      title: "收起草稿箱",
+                      "aria-label": "收起草稿箱",
+                      "aria-controls": "record-draft-list",
+                    })}
+                onClick={() => setDraftsCollapsed((value) => !value)}
+              >
+                <InpulseIcon name="chevronDown" size={14} />
+              </button>
+            ) : null}
+            {taskId > 0 ? (
+              <Button
+                className="primary-button"
+                disabled={!writable}
+                onClick={() =>
+                  setEditorTarget(
+                    source
+                      ? { kind: "source", source }
+                      : { kind: "independent" },
+                  )
+                }
+              >
+                新建来源草稿
+              </Button>
+            ) : null}
+          </div>
+        </CalmSectionTitle>
+      )}
       {showDraftList && (
         <div id="record-draft-list">
           {listPending ? (
@@ -313,11 +352,11 @@ export function RecordDraftsView({
                   type="button"
                   className="draft-card"
                   key={item.draft.id}
+                  aria-label={`继续编辑草稿：${item.draft.title}`}
                   onClick={() => openDraft(item)}
                 >
                   <span className="draft-card-top">
                     <CalmBadge tone="amber">草稿</CalmBadge>
-                    <span className="draft-card-action">继续编辑 →</span>
                   </span>
                   <strong className="draft-card-title">
                     {item.draft.title}
@@ -368,7 +407,30 @@ export function RecordDraftsView({
           next.delete("recordId");
           setParams(next);
         }}
-        footer={null}
+        footer={
+          detail.data === undefined ? null : (
+            <>
+              <p className="draft-detail-note">
+                草稿尚未发布，不计入正式迭代统计。
+              </p>
+              <Button
+                disabled={!writable}
+                onClick={() => {
+                  if (detail.data) {
+                    setEditorTarget({ kind: "item", item: detail.data });
+                  }
+                }}
+              >
+                继续编辑
+              </Button>
+              <PublishRecordButton
+                item={detail.data}
+                api={api}
+                writable={!!writable}
+              />
+            </>
+          )
+        }
       >
         {recordId > 0 &&
           (detail.isPending ? (
@@ -378,22 +440,32 @@ export function RecordDraftsView({
           ) : (
             detail.data && (
               <section className="draft-detail" aria-label="草稿详情">
-                <div className="draft-detail-meta">
-                  <p>
-                    处理人 {detail.data.handlerName ?? "名称暂不可用"} ·
-                    记录作者 {detail.data.authorName ?? "名称暂不可用"}
-                  </p>
-                  <p>
-                    项目{" "}
+                <dl className="record-facts draft-detail-facts">
+                  <dt>归属</dt>
+                  <dd>
                     {projects.data?.items.find(
                       (p) => p.id === detail.data.projectId,
-                    )?.name ?? "名称暂不可用"}{" "}
-                    / 模块 {detail.data.moduleName ?? "名称暂不可用"}
+                    )?.name ?? "名称暂不可用"}
+                    {" / "}
+                    {detail.data.moduleName ?? "名称暂不可用"}
                     {detail.data.featureId
-                      ? ` / 功能 ${detail.data.featureName ?? "名称暂不可用"}`
-                      : ` / 影响功能：${detail.data.impactFeatureNames?.join("、") || "未选择"}`}
-                  </p>
-                </div>
+                      ? ` / ${detail.data.featureName ?? "名称暂不可用"}`
+                      : ""}
+                  </dd>
+                  {detail.data.featureId === null && (
+                    <>
+                      <dt>影响功能</dt>
+                      <dd>
+                        {detail.data.impactFeatureNames?.join("、") || "未选择"}
+                      </dd>
+                    </>
+                  )}
+                  <dt>人员</dt>
+                  <dd>
+                    处理人 {detail.data.handlerName ?? "名称暂不可用"} ·
+                    记录作者 {detail.data.authorName ?? "名称暂不可用"}
+                  </dd>
+                </dl>
                 {fields
                   .filter((field) => field !== "title")
                   .map((field) => (
@@ -423,24 +495,6 @@ export function RecordDraftsView({
                     </a>
                   )}
                 </div>
-                <div className="draft-detail-actions">
-                  <Button
-                    disabled={!writable}
-                    onClick={() =>
-                      setEditorTarget({ kind: "item", item: detail.data })
-                    }
-                  >
-                    继续编辑
-                  </Button>
-                  <PublishRecordButton
-                    item={detail.data}
-                    api={api}
-                    writable={!!writable}
-                  />
-                </div>
-                <p className="draft-detail-note">
-                  草稿尚未发布，不计入正式迭代统计。
-                </p>
               </section>
             )
           ))}

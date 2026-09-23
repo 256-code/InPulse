@@ -59,16 +59,23 @@
   background: var(--card);
 }
 
-.draft-detail-meta p {
+/* 草稿详情与正式记录详情（`.record-expanded`）共用一套排版节奏：同分隔线、同正文字号
+   与灰度，两个详情弹层不看起来像两套系统（2026-09-23）。 */
+/* 选择器带上 .draft-detail 才压得住 `.record-facts` 自带的外距（两者同权时
+   后加载的 design-system.css 会赢）。 */
+.draft-detail > .draft-detail-facts {
   margin: 0 0 4px;
-  color: #74869a;
-  font-size: 12px;
 }
 
 .draft-detail > section {
   margin: 0;
-  padding: 14px 0;
+  padding: 16px 0;
   border-top: 1px solid #edf1f5;
+}
+
+/* 首段紧接元信息块，不再画一条贴着浅底块的缝线。 */
+.draft-detail > section:first-of-type {
+  border-top: 0;
 }
 
 .draft-detail h3 {
@@ -78,14 +85,20 @@
   color: #314b65;
 }
 
-.draft-detail-links,
-.draft-detail-actions {
+/* 正文与正式记录详情同档：13px、灰蓝 #60768b、1.8 行高。 */
+.draft-detail .record-markdown {
+  color: #60768b;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.draft-detail-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
   align-items: center;
-  margin-top: 4px;
-  padding-top: 14px;
+  gap: 9px;
+  margin-top: 0;
+  padding-top: 16px;
   border-top: 1px solid #edf1f5;
 }
 
@@ -93,6 +106,12 @@
   margin: 10px 0 0;
   color: #8b9aac;
   font-size: 12px;
+}
+
+/* 说明落在操作区左侧：`.calm-action-footer` 是 flex，靠右的是按钮组。 */
+.calm-action-footer > .draft-detail-note {
+  align-self: center;
+  margin: 0 auto 0 0;
 }
 
 @media (max-width: 640px) {
@@ -199,12 +218,6 @@
   gap: 8px;
 }
 
-.draft-card-action {
-  color: #2472c3;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .draft-card-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -255,6 +268,46 @@
 
 .draft-card-time {
   flex: none;
+}
+
+/* 草稿箱标题行右侧的动作区：折叠小按钮 + 来源任务视图的「新建来源草稿」。
+   折叠按钮是 26px 的幽灵方钮，箭头朝下有草稿展开中、朝右表示已收起。 */
+.draft-box-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.draft-box-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border, #e2e9f0);
+  border-radius: 8px;
+  background: var(--card, #fff);
+  color: #7a8b9c;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.draft-box-toggle:hover {
+  border-color: #cbdcec;
+  background: #f4f8fd;
+  color: #2c5f92;
+}
+
+.draft-box-toggle > svg {
+  transition: transform 0.15s ease;
+}
+
+.draft-box-toggle[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
 }
 
 @media (max-width: 1100px) {

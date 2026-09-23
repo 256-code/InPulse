@@ -1,9 +1,17 @@
 /* B-5：迭代记录 Markdown 白名单渲染的展示样式。
-   沿用 .draft-content 的换行策略（pre-wrap），保留历史纯文本记录里的换行。 */
+   换行策略：Markdown 输出的块与块之间自带换行符，容器若沿用 pre-wrap 会把这些 \n
+   渲染成空行——段落之间、列表项之间都会被凭空撑开一行（实测列表项间距 29px→3px、
+   段落间距 31px→8px）。因此容器用 normal，只在真正承载历史纯文本换行的文本块
+   （段落、列表项）上保留 pre-wrap。 */
 .record-markdown {
   min-width: 0;
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.record-markdown p,
+.record-markdown li {
+  white-space: pre-wrap;
 }
 
 .record-markdown > :first-child {
@@ -29,14 +37,32 @@
   font-size: 14px;
 }
 
+/* 全局 reset 把 ul/ol 的 list-style 清成 none（design-system.css），正文列表因此在
+   详情弹层里退化成缩进段落、看不见符号；这里按 Markdown 语义补回圆点与序号。 */
 .record-markdown ul,
 .record-markdown ol {
   margin: 0 0 8px;
   padding-left: 22px;
 }
 
+.record-markdown ul {
+  list-style: disc;
+}
+
+.record-markdown ul ul {
+  list-style: circle;
+}
+
+.record-markdown ol {
+  list-style: decimal;
+}
+
+.record-markdown li::marker {
+  color: #93a4b5;
+}
+
 .record-markdown li {
-  margin: 2px 0;
+  margin: 3px 0;
 }
 
 .record-markdown code {

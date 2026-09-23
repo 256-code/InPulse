@@ -6,8 +6,9 @@ import {
   fireEvent,
   within,
   waitFor,
+  act,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi } from "vitest";
 import {
@@ -98,6 +99,21 @@ function mount(
 ) {
   render(mountView(api, path, currentUserId));
 }
+/**
+ * 受控草稿查询：先挂起、由测试决定何时解析，用来分别断言「首次加载中」与「解析为空」
+ * 两种情形下草稿箱都不该出现任何字样。
+ */
+function deferredDrafts() {
+  let resolve: (value: unknown) => void = () => {};
+  const fn = vi.fn(
+    () =>
+      new Promise((res) => {
+        resolve = res;
+      }),
+  );
+  return { fn, resolve: (value: unknown) => resolve(value) };
+}
+
 /** CalmSelect 交互：在弹窗内打开下拉并点选目标项（弹层项挂在 body 上，带 title 属性）。 */
 async function pickInModal(
   modal: ReturnType<typeof within>,
@@ -418,6 +434,9 @@ it("lists project drafts as flat cards and opens one straight away", async () =>
   const cards = await screen.findAllByRole("button", { name: /继续编辑/ });
   expect(cards).toHaveLength(1);
   expect(within(cards[0]!).getByText("支付修正")).toBeVisible();
+  // 卡片上不再有可见的「继续编辑 →」：整卡就是入口，动作名只留在无障碍名称里。
+  expect(cards[0]).not.toHaveTextContent("继续编辑");
+  expect(cards[0]).toHaveAccessibleName("继续编辑草稿：支付修正");
   fireEvent.click(cards[0]!);
   await waitFor(() =>
     expect(screen.getByRole("dialog", { name: "草稿详情" })).toBeVisible(),
@@ -631,47 +650,131 @@ it("reports the header action as unavailable when every visible project is archi
   await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(false));
 });
 
-it("收起草稿箱：空草稿时只留标题行，不渲染内容区与「暂无草稿」空态", async () => {
-  mount(
-    client({
-      listRecordDrafts: vi.fn().mockResolvedValue({
-        items: [],
-        nextCursor: null,
-        hasMore: false,
-      }),
-    }),
-  );
-  // 空草稿箱是「收起」而不是「整块消失」：标题行仍在，内容区不占竖向空间。
+it("空草稿箱整块不渲染：没有草稿时不留任何与草稿箱有关的字样", async () => {
+  const pending = deferredDrafts();
+  mount(client({ listRecordDrafts: pending.fn }));
+  // 首次加载中还不知道有没有草稿，不抢先渲染标题行。
+  expect(screen.queryByRole("heading", { name: "项目草稿" })).toBeNull();
+  await act(async () => {
+    pending.resolve({ items: [], nextCursor: null, hasMore: false });
+  });
+  // 解析为空后整块消失：标题、说明、折叠按钮、内容区一个都不留。
+  expect(screen.queryByRole("heading", { name: "项目草稿" })).toBeNull();
   expect(
-    await screen.findByRole("heading", { name: "项目草稿" }),
-  ).toBeVisible();
-  await waitFor(() =>
-    expect(document.querySelector("#record-draft-list")).toBeNull(),
-  );
-  expect(screen.queryByText("暂无草稿")).toBeNull();
+    screen.queryByText("只显示你自己创建的草稿，保存后可与项目成员继续补充。"),
+  ).toBeNull();
+  expect(screen.queryByRole("button", { name: "收起草稿箱" })).toBeNull();
+  expect(document.querySelector("#record-draft-list")).toBeNull();
 });
 
-it("展开草稿箱：有草稿时默认照旧平铺卡片", async () => {
+it("全部项目视图的空草稿箱整块不渲染，连「我的草稿」标题也不出现", async () => {
+  const pending = deferredDrafts();
+  render(mountView(client({ listMyRecordDrafts: pending.fn }), "/records", 3));
+  await act(async () => {
+    pending.resolve({ items: [], nextCursor: null, hasMore: false });
+  });
+  expect(screen.queryByRole("heading", { name: "我的草稿" })).toBeNull();
+  expect(
+    screen.queryByText("跨项目汇总你创建的草稿，打开即回到所属项目继续编辑。"),
+  ).toBeNull();
+  expect(screen.queryByRole("button", { name: "收起草稿箱" })).toBeNull();
+  expect(document.querySelector("#record-draft-list")).toBeNull();
+});
+
+it("有草稿时默认展开，标题行的小按钮能把内容区折叠再展开", async () => {
   mount(client());
   expect(
     await screen.findByRole("heading", { name: "项目草稿" }),
   ).toBeVisible();
+  const toggle = screen.getByRole("button", { name: "收起草稿箱" });
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  expect(toggle).toHaveAttribute("aria-controls", "record-draft-list");
+  expect(
+    await screen.findAllByRole("button", { name: /继续编辑/ }),
+  ).toHaveLength(1);
+  fireEvent.click(toggle);
+  // 折叠只收内容：标题行与按钮留在原地，内容区与草稿卡片一起消失。
+  expect(screen.getByRole("heading", { name: "项目草稿" })).toBeVisible();
   await waitFor(() =>
-    expect(document.querySelector("#record-draft-list")).not.toBeNull(),
+    expect(document.querySelector("#record-draft-list")).toBeNull(),
   );
+  expect(screen.queryByRole("button", { name: /继续编辑/ })).toBeNull();
+  const reopen = screen.getByRole("button", { name: "展开草稿箱" });
+  expect(reopen).toHaveAttribute("aria-expanded", "false");
+  expect(reopen).not.toHaveAttribute("aria-controls");
+  fireEvent.click(reopen);
   expect(
     await screen.findAllByRole("button", { name: /继续编辑/ }),
   ).toHaveLength(1);
 });
 
-it("全部项目视图的空草稿箱同样收起，标题仍是「我的草稿」", async () => {
-  render(mountView(client(), "/records", 3));
-  expect(
-    await screen.findByRole("heading", { name: "我的草稿" }),
-  ).toBeVisible();
+it("筛选项目时草稿箱跟着筛选：切到没有草稿的项目整块消失，切回后回到默认展开", async () => {
+  const listRecordDrafts = vi.fn((projectId: number) =>
+    Promise.resolve({
+      items: projectId === 2 ? [] : [item],
+      nextCursor: null,
+      hasMore: false,
+    }),
+  );
+  const listMyRecordDrafts = vi.fn().mockResolvedValue({
+    items: [
+      {
+        draft: item,
+        projectName: "支付项目",
+        moduleName: "支付模块",
+        featureName: null,
+      },
+    ],
+    nextCursor: null,
+    hasMore: false,
+  });
+  const api = client({ listRecordDrafts, listMyRecordDrafts });
+  const router: { go: (path: string) => void } = { go: () => {} };
+  function NavCapture() {
+    const navigate = useNavigate();
+    router.go = (path) => void navigate(path);
+    return null;
+  }
+  render(
+    <MemoryRouter initialEntries={["/records"]}>
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <NavCapture />
+          <RecordDraftsView client={api} currentUserId={3} />
+        </QueryClientProvider>
+      </ConfigProvider>
+    </MemoryRouter>,
+  );
+  // 全部项目：跨项目草稿箱默认展开，先手动收起。
+  fireEvent.click(await screen.findByRole("button", { name: "收起草稿箱" }));
   await waitFor(() =>
     expect(document.querySelector("#record-draft-list")).toBeNull(),
   );
+  // 切到没有草稿的项目 2：草稿箱整块消失，标题与折叠按钮一起走。
+  await act(async () => {
+    router.go("/records?projectId=2");
+  });
+  await waitFor(() =>
+    expect(screen.queryByRole("heading", { name: "项目草稿" })).toBeNull(),
+  );
+  expect(screen.queryByRole("button", { name: "展开草稿箱" })).toBeNull();
+  // 草稿查询跟着 URL 里的项目走，并且只看当前用户创建的草稿。
+  expect(listRecordDrafts).toHaveBeenCalledWith(
+    2,
+    { limit: 20, authorId: 3 },
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  // 切回全部项目：回到默认展开，不继承上一步的收起态。
+  await act(async () => {
+    router.go("/records");
+  });
+  expect(
+    await screen.findAllByRole("button", { name: /继续编辑/ }),
+  ).toHaveLength(1);
 });
 
 it("来源任务的空草稿箱收起，标题行的「新建来源草稿」入口保留", async () => {

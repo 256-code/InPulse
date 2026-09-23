@@ -3105,6 +3105,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行：整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright；`record-feed.spec.ts` 的 `#record-draft-list` 与 `heading 我的草稿` 断言、`record-drafts.spec.ts` 的 `.draft-card` 断言都在「已创建草稿」路径上，按本口径不受影响但本轮未跑）、`pnpm deps:audit`、GitHub Actions。浏览器实测本轮未做。
 
+> 2026-09-23 更新：本节的「内容区收起 / 标题行常驻」口径已被当天的八次定案取代——空草稿箱改为标题、说明、折叠按钮与内容区整块隐藏，有草稿时默认展开并可用标题行小按钮折叠内容区，草稿箱随项目筛选一起筛（见本文件末节《2026-09-23 八次定案：草稿箱空则整块隐藏 + 可折叠 + 跟随项目筛选》）。正文保留当时的执行事实，不改写。
+
 ## 删除「低」（LOW）优先级档位（ADR-041，产品要求，2026-09-23 本地落库）
 
 产品反馈（原文）：「取消低优先级，彻底删除所有和低优先级有关的代码ui」（附图为 `/tasks` 顶部「全部优先级」下拉，仍列出 全部优先级 / 紧急 / 高 / 普通 / 低）。定案口径：优先级由四档收窄为 `URGENT / HIGH / NORMAL` 三档，任务中心筛选、新建与编辑任务表单、遗留项转任务、任务看板筛选、卡片配色、列表行样式与数据库 CHECK 一起下线；存量 `LOW` 任务按默认档 `NORMAL` 归一，不删除任务本体、状态历史、审计、活动与搜索投影、聚合关系。决策记录见 [ADR-041](./adr/ADR-041.md)（`Accepted`，修订 [ADR-037](./adr/ADR-037.md) 的排序键与游标版本）。
@@ -3226,3 +3228,51 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-23 七次配色定案）：`pnpm --filter @inpulse/web test`（85 文件 578 例）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（283 模块 1393 依赖）、`pnpm check:docs`（88 个 Markdown 文件）；渲染计算值与同页改前 / 改后对照见 PRIORITY-COLOR-SEVEN-BROWSER-001。
 
 未运行 / 已知偏差：① 本轮只改前端视觉（`design-system.css` 里「已完成」一档的列表行变量与看板列表行变量），未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、`pnpm build`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② 「已完成」列表行底色改用卡片青碧后，它与卡片同面同色，两者靠「卡片是圆角实色块、列表行是带 3px 色条的表格行」区分，不再是深浅差；③ 真实登录态的任务中心页面未用无头浏览器截屏（dev 环境为统一身份认证登录），本轮用同标记 + 真实样式表的注入渲染替代，需要人工在浏览器里复核观感；④ 配色属视觉主观项，需非作者人工评审；⑤ 本轮另出了一张《已完成行用卡片青碧-对照》样图，`docs/assets/task-card-colors` 目录下的历史样图仍未重出。
+
+
+## 2026-09-23 八次定案：草稿箱空则整块隐藏 + 可折叠 + 跟随项目筛选（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「现在我们改草稿箱，当点击迭代记录的时候，会显示全部项目的迭代记录，没有草稿的情况下不出现任何和草稿箱有关的字样。同理筛选到没有草稿的项目也隐藏所有有关草稿箱。假如当前已经有草稿了，则点击迭代记录的时候默认打开草稿箱，但是我希望可以有一个小按钮将草稿箱内容折叠。当筛选项目的时候草稿箱也要被筛选」（附图为 `/records` 全部项目视图的「我的草稿」区与下方的已发布时间线）。定案口径把 2026-09-22 的「空则收起」升级成「空则整块隐藏」：草稿箱的**标题行、说明、折叠按钮与内容区**在有草稿（或读取失败需要给出重试入口）之前一律不渲染，页面上不留「我的草稿 / 项目草稿」任何字样；有草稿时默认展开，标题行右侧新增 26px 幽灵方钮折叠内容区（箭头朝下＝展开中、朝右＝已收起），折叠只收内容区，标题、说明与按钮留在原地；切换项目或进出来源任务语境时回到默认展开；草稿查询本就按 URL `projectId` 走 `listRecordDrafts(projectId, …)` / `listMyRecordDrafts`，因此项目筛选天然把草稿箱一起筛，空结果整块消失。纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFTS-HIDE-WEB-001 | Web 单元 | 空草稿箱整块不渲染 | `RecordDraftsView.test.tsx`「空草稿箱整块不渲染：没有草稿时不留任何与草稿箱有关的字样」：`listRecordDrafts` 解析为空页（含首次挂起中）时 `heading 项目草稿`、`#record-draft-list`、文本「暂无草稿」与折叠按钮都不存在 | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-WEB-002 | Web 单元 | 全部项目视图同样整块不渲染 | 同文件「全部项目视图的空草稿箱整块不渲染，连「我的草稿」标题也不出现」：`listMyRecordDrafts` 返回空页时 `heading 我的草稿` 为 null、`#record-draft-list` 为 null | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-WEB-003 | Web 单元 | 有草稿默认展开 + 小按钮折叠 / 展开 | 同文件「有草稿时默认展开，标题行的小按钮能把内容区折叠再展开」：初始 `#record-draft-list` 存在；点「收起草稿箱」后列表消失而标题与按钮仍在、按钮 `aria-expanded` 为 `false`；再点「展开草稿箱」后卡片回来 | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-WEB-004 | Web 单元 | 草稿箱跟随项目筛选 | 同文件「筛选项目时草稿箱跟着筛选：切到没有草稿的项目整块消失，切回后回到默认展开」：切到没有草稿的项目 2 时整块消失，切回项目 1 后列表回到默认展开；断言 `listRecordDrafts(2, {limit: 20, authorId: 3}, signal)` | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-WEB-005 | Web 单元 | 来源任务视图保留创建入口 | 同文件「来源任务的空草稿箱收起，标题行的「新建来源草稿」入口保留」：`getTaskRecordDrafts` 返回空列表时按钮「新建来源草稿」仍可见、不渲染折叠按钮、`#record-draft-list` 为 null | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-WEB-006 | Web 单元 | 读取失败不被隐藏吞掉 | 同文件「草稿读取失败时内容区仍然展开，保留错误与重试入口」：`listRecordDrafts` 以 `ApiError(500)` 拒绝时标题行与按钮「重试草稿列表」都在 | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-HIDE-GATE-001 | 静态门禁 | 类型、风格、文档与全量前端 | `pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（20 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 草稿箱整块隐藏）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（20 例通过，改前 19 例：删 3 条旧口径用例、补 4 条新用例）、`pnpm --filter @inpulse/web test`（85 文件 579 例通过，改前 578 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过；dev 5173 经 Vite 热更新已把改动送到运行中的服务（`GET /src/features/record-drafts/RecordDraftsView.tsx` 200 且含 `draft-box-toggle` 与 `showDraftBox`，`record-drafts.css` 200）。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright：`record-feed.spec.ts` 的 `#record-draft-list` 与 `heading 我的草稿` 断言、`record-drafts.spec.ts` 的 `.draft-card` 断言都落在「已创建草稿」路径上，按本口径不受影响，但本轮未跑）与 GitHub Actions；② 折叠控件是标题行右侧的小方钮，不是整行可点，`CalmSectionTitle` 自带的 `collapsible` 整行折叠能力本轮没有复用；③ 折叠状态不持久化，换项目、进出来源任务语境或重进页面都回到默认展开（定案如此，若要记住需另加偏好）；④ 空态下「新建迭代记录」的入口仍在页面顶部 CTA，不在草稿箱里，因此草稿箱整块隐藏不会带走创建入口，但需人工在 `/records` 复核「无草稿时页面上确实没有任何草稿箱字样」；⑤ 本轮未做登录态页面的无头浏览器截屏（dev 环境为统一身份认证登录），交互观感需人工复核。
+
+## 2026-09-23 九次定案：草稿卡片去掉「继续编辑 →」，整卡即入口（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个按钮去掉，编辑就直接点击草稿卡片即可」（附图为 `/records` 草稿卡片右上角的「继续编辑 →」，被用户划掉）。口径：草稿卡片右上角的可见动作文案整条删除，右上角只留琥珀色「草稿」徽标；打开草稿继续走既有「整卡可点」——点击卡片仍是原来的 `openDraft`（写入 `recordId` 后打开草稿详情弹层），弹层里的「继续编辑」按钮与发布入口不变。动作名不丢：卡片按钮补 `aria-label`（`继续编辑草稿：<标题>`），因此读屏语义与既有的「按 `继续编辑` 找卡片」的单元 / E2E 选择器都保持成立；悬停描边、阴影与 `cursor: pointer` 不变。纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFTS-CARD-ENTRY-WEB-001 | Web 单元 | 卡片上不再有可见动作文案 | `RecordDraftsView.test.tsx`「lists project drafts as flat cards and opens one straight away」新增断言：卡片按钮 `not.toHaveTextContent("继续编辑")`，且 `toHaveAccessibleName("继续编辑草稿：支付修正")` | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-CARD-ENTRY-WEB-002 | Web 单元 | 整卡点击仍打开草稿详情 | 同用例保留的断言：`fireEvent.click(cards[0])` 后「草稿详情」弹层可见 | 本地通过（2026-09-23） |
+| RECORD-DRAFTS-CARD-ENTRY-GATE-001 | 静态门禁 | 类型、风格、文档与全量前端 | `pnpm --filter @inpulse/web test`、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过；`.draft-card-action` 规则已从 `record-drafts.css` 删除且全仓库无残留引用 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 草稿卡片整卡即入口）：`pnpm --filter @inpulse/web exec vitest run src/features/record-drafts/RecordDraftsView.test.tsx`（20 例通过，用例数不变——断言并入既有用例）、`pnpm --filter @inpulse/web test`、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs` 通过；`rg "draft-card-action"` 全仓库无命中。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、GitHub Actions；② `pnpm test:e2e`（Playwright）本轮未跑：`apps/e2e/tests/record-drafts.spec.ts` 里按 `继续编辑` 找卡片的计数断言与点击依赖卡片无障碍名称，本轮用 `aria-label` 保住了这条路径，但需要下一轮 E2E 复核；该文件里「卡片与弹层同名导致 strict-mode 命中 2 个元素」的问题是本轮之前就存在的失败，不在本次范围内；③ 卡片去掉可见文案后，可点性只靠 `cursor: pointer` 与悬停描边 / 阴影表达，若后续觉得不够明显，可再补一个弱的箭头或标题下划线（需另定案）；④ 登录态页面未做无头浏览器截屏，观感需人工在 `/records` 复核。
+
+## 2026-09-23 十次定案：草稿详情弹层排版对齐正式记录详情（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个界面有点丑稍微调整调整排版」（附图为 `/records?projectId=1&recordId=49` 的草稿详情弹层截图）。定案口径：草稿详情的排版向已发布记录详情（`.record-expanded` + `.record-facts`）对齐，不再自成一套——① 元信息从两行灰色斜杠句改成 `.record-facts` 网格块（浅底、标签列 + 值列）：`归属`（项目 / 模块 / 功能）与 `人员`（处理人 · 记录作者），没有关联功能时另起 `影响功能` 行；② 字段区与正式记录同节奏：分隔线 `#edf1f5`、`16px 0` 内距、标签 13px/600 `#314b65`、正文 13px `#60768b`、1.8 行高，首段紧接元信息块且不再画一条贴着浅底块的缝线；③ 「继续编辑 / 发布记录」从正文底部移到弹层 footer（`.surface-modal > .calm-action-footer`：浅底 `#f8fafc`、上分隔线、不随正文滚动），「草稿尚未发布，不计入正式迭代统计。」作为 footer 左侧说明；④ 修掉正文的「块间空行」——`.record-markdown` 原本整块 `white-space: pre-wrap`，Markdown 块与块之间自带的换行符被渲染成空行，改为容器 `normal` + 段落/列表项各自 `pre-wrap`；⑤ 补回列表符号——全局 reset 把 `ul/ol` 的 `list-style` 清成 none，正文列表此前退化成缩进段落，现按 Markdown 语义补回 `disc` / `circle` / `decimal` 与浅灰 marker。①~③ 只动草稿详情弹层；④⑤ 属全局 `.record-markdown` 口径，已发布记录详情、记录工作区与任务详情里的正文一起受益。纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-DETAIL-LAYOUT-WEB-001 | Web 单元 | 详情弹层语义与操作路径不变 | `RecordDraftsView.test.tsx` 20 例通过（本轮未改用例）：卡片 → 详情 → 「继续编辑」进编辑弹层、草稿冲突合并、遗留项补充、发布链路均照旧 | 本地通过（2026-09-23） |
+| RECORD-DRAFT-DETAIL-LAYOUT-BROWSER-001 | 浏览器实测 | 真实登录态下的计算样式 | 无头 Chromium 1360 宽 / 设备像素比 2，用演示账号真实登录 5173 后打开 `/records?projectId=1&recordId=49`：facts 块 `display: grid`、列宽 `96px + 638px`、底色 `rgb(247, 250, 253)`；字段区 `padding 16px 0`、分隔线 `rgb(237, 241, 245)`；字段标签 `13px / 600 / rgb(49, 75, 101)`；正文 `13px / rgb(96, 118, 139)`、行高 `23.4px`；列表 `list-style-type: disc`、`padding-left: 22px`；footer `display: flex`、`justify-content: flex-end`、`padding 18px 28px 20px`、底色 `rgb(248, 250, 252)`；说明靠左侧居中（`align-self: center`，`margin-right` 解析为剩余空间 400px）；实拍图留档 | 本地通过（2026-09-23） |
+| RECORD-DRAFT-DETAIL-LAYOUT-BROWSER-002 | 浏览器实测 | 块间空行与列表符号的前后对照 | 同一页面注入候选规则前后各测一次：列表项间距 `29.39px → 3px`、段落间距 `31.39px → 8px`，列表项自身高度不变（`23.39px`，说明消掉的只是多出来的一整行空行） | 本地通过（2026-09-23） |
+| RECORD-DRAFT-DETAIL-LAYOUT-GATE-001 | 静态门禁 | 类型、风格、依赖边界与全量前端 | `pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`（283 模块 1393 依赖无违规）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 草稿详情排版）：`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 走 `/login?local=1` 真实登录，随后打开草稿详情弹层量取计算样式并留档实拍图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② ④⑤ 是全局 `.record-markdown` 口径，已发布记录详情与记录工作区里的正文一起变化，本轮只实测了草稿详情这一屏，其余屏需人工抽查；③ 草稿详情把 facts 块放在正文之前，而已发布记录详情放在正文之后（草稿要先看清归属再读正文），是有意保留的差异，若要完全一致需另定案；④ 弹层标题里的「（草稿）」与眉标「草稿」仍重复，来自业务数据本身，本轮未改；⑤ 视觉调整属主观项，需非作者人工评审。
