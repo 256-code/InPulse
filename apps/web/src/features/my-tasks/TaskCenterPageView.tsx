@@ -547,12 +547,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <button
         type="button"
         className={
-          "calm-task-card " +
-          taskToneClassName(
-            item.priority,
-            item.workStatus,
-            item.hasLeftoverSource,
-          )
+          "calm-task-card " + taskToneClassName(item.priority, item.workStatus)
         }
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
@@ -600,7 +595,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </CalmBadge>
             )}
           </span>
-          <span title={"截止：" + due}>
+          <span className={dueToneClass(item)} title={"截止：" + due}>
             <InpulseIcon name="clock" size={14} />
             {due}
           </span>
@@ -788,6 +783,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       tone: groupTone,
       dueText,
       dueTitle,
+      dueTone,
     } = describeTaskGroup(group);
     return (
       <button
@@ -863,7 +859,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               {stateLabel}
             </CalmBadge>
           </span>
-          <span title={dueTitle}>
+          <span className={dueTone} title={dueTitle}>
             <InpulseIcon name="clock" size={14} />
             {dueText}
           </span>
@@ -871,6 +867,23 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       </button>
     );
   };
+
+  /**
+   * 列表模式整行可点（2026-09-23 产品要求）：点击任务行 / 聚合组行的任意横向位置都能
+   * 打开详情，不再只靠「任务」列那一小块标题热区。三点约束：
+   * 1. 行内唯一的交互元素是标题按钮，命中按钮时直接返回、交给按钮自己的 onClick，避免
+   *    一次点击触发两遍；键盘可达性仍由该按钮承担（行不加 tabIndex，不新增 Tab 停靠点）。
+   * 2. 拖选标题 / 编号想复制（选区非空）时不打开弹窗。
+   * 3. 只挂在 <tr> 上，不改列结构，列宽与省略号规则不受影响。
+   */
+  const rowClickOpens =
+    (open: () => void) => (event: React.MouseEvent<HTMLTableRowElement>) => {
+      const { target } = event;
+      if (target instanceof Element && target.closest("button") !== null)
+        return;
+      if ((window.getSelection()?.toString() ?? "") !== "") return;
+      open();
+    };
 
   /**
    * 列表视图下的聚合组行（2026-09-22 产品要求：聚合组要跟随「卡片 / 列表」切换）：
@@ -903,6 +916,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         key={"group-" + group.groupId}
         data-testid={"my-task-group-" + group.groupId}
         className={groupTone}
+        onClick={rowClickOpens(() => setOpenGroupId(group.groupId))}
       >
         <td>
           <button
@@ -1009,8 +1023,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 className={taskToneClassName(
                   entry.item.priority,
                   entry.item.workStatus,
-                  entry.item.hasLeftoverSource,
                 )}
+                onClick={rowClickOpens(() => openTask(entry.item))}
               >
                 <td>
                   <button

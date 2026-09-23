@@ -1,3 +1,6 @@
+import type { CalmBadgeTone } from "@features/common/components/Calm";
+import { taskPriorityBadgeTone } from "@features/common/task-tone";
+
 import type {
   TaskBoardCard,
   TaskBoardModule,
@@ -104,7 +107,7 @@ export interface CardMark {
   /** "done" 渲染绿色对勾；"badge" 渲染彩色徽章。 */
   readonly kind: "done" | "badge";
   readonly label: string;
-  readonly tone: BadgeTone;
+  readonly tone: CalmBadgeTone;
 }
 
 export function priorityMarkOf(priority: TaskBoardPriority): {
@@ -122,7 +125,12 @@ export function priorityMarkOf(priority: TaskBoardPriority): {
   }
 }
 
-/** 看板卡右上角标记：已完成勾选 / 已取消灰徽章 / 其余按优先级彩色徽章。 */
+/**
+ * 看板卡右上角标记：已完成勾选 / 已取消灰徽章 / 其余按优先级彩色徽章。
+ * 徽章色调取自共用的 `taskPriorityBadgeTone`（普通 = 淡蓝，2026-09-23 九次配色定案），
+ * 与 `priorityMarkOf` 的 tone 刻意分开：后者同时喂看板列表行的行色类与优先级单元格，
+ * 仍要保持六次定案那一档「白底蓝边」的行配色。
+ */
 export function cardMarkOf(card: TaskBoardCard): CardMark {
   if (card.workStatus === "DONE") {
     return { kind: "done", label: "已完成", tone: "green" };
@@ -130,8 +138,11 @@ export function cardMarkOf(card: TaskBoardCard): CardMark {
   if (card.workStatus === "CANCELED") {
     return { kind: "badge", label: "已取消", tone: "gray" };
   }
-  const mark = priorityMarkOf(card.priority);
-  return { kind: "badge", label: mark.label, tone: mark.tone };
+  return {
+    kind: "badge",
+    label: priorityMarkOf(card.priority).label,
+    tone: taskPriorityBadgeTone(card.priority),
+  };
 }
 
 /**

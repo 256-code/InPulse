@@ -502,12 +502,13 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
     const ungroupedCard = screen
       .getByText("未入组任务乙")
       .closest(".calm-task-card") as HTMLElement;
-    // 卡片与列表行共用程度配色：这张卡是遗留问题来源，整卡取锈红 tone 类而不是普通蓝。
-    expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-leftover");
+    // 2026-09-23 八次配色定案：遗留问题来源不再改整卡配色，这张普通优先级卡与同优先级的
+    // 非遗留卡取同一档 tone 类，来源只由上面那枚徽章表达。
+    expect(sourceCard).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(ungroupedCard).queryByText("分支任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("主任务")).toBeNull();
     expect(within(ungroupedCard).queryByText("遗留问题")).toBeNull();
-    // 不是遗留项来源的卡片维持普通优先级蓝色，证明锈红只随来源标记出现。
+    // 不是遗留项来源的卡片同样是普通优先级白卡，与上面那张只差一枚「遗留问题」徽章。
     expect(ungroupedCard).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(ungroupedCard).queryByText(/迭代记录/)).toBeNull();
     await waitFor(() =>
@@ -694,8 +695,14 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
         ".calm-task-card",
       ) as HTMLElement;
     // 2026-09-22 三次定案「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」：
-    // 逾期与今天到期只影响排序和截止列文字色，卡片一律按任务自己的优先级铺色
+    // 逾期与今天到期不影响整卡底色，卡片一律按任务自己的优先级铺色
     // （这四张都是普通优先级，因此都是普通蓝）。
+    // 2026-09-23 十一次定案（产品要求「这个已经逾期可不可以加点颜色」）：卡片右下角
+    // 那行截止文案本身按紧迫度染色，类名与列表截止列同源；已完成不提示逾期，类名缺席。
+    const dueSpanOf = async (title: string): Promise<HTMLElement> =>
+      (await cardOf(title)).querySelector(
+        ".calm-card-bottom > span:last-child",
+      ) as HTMLElement;
     expect(await cardOf("逾期卡片")).toHaveClass(
       "calm-task-card",
       "tone-prio-normal",
@@ -712,6 +719,13 @@ describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
       "calm-task-card",
       "tone-prio-done",
     );
+    expect(await dueSpanOf("逾期卡片")).toHaveClass("due-overdue");
+    expect(await dueSpanOf("今天卡片")).toHaveClass("due-soon");
+    // 本面板的 dueInfo 把「明天截止」也算 amber 档（与列表截止列同源），所以明天也带
+    // due-soon；更远的日期两档都不带。
+    expect(await dueSpanOf("明天卡片")).toHaveClass("due-soon");
+    expect(await dueSpanOf("已完成卡片")).not.toHaveClass("due-overdue");
+    expect(await dueSpanOf("已完成卡片")).not.toHaveClass("due-soon");
   });
   it("shows badge, record count and the main-task entry in the detail dialog, then opens the group dialog in place", async () => {
     mountWithGroupModal(

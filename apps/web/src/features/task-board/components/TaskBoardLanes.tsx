@@ -31,17 +31,15 @@ export interface TaskBoardLanesProps {
 }
 
 /**
- * 卡片配色与列表行、任务中心同源：优先级决定底色，已完成 / 已取消覆盖状态色，
- * 遗留问题来源覆盖锈红。已逾期 / 今天到期不参与配色（2026-09-22 产品口径
+ * 卡片配色与列表行、任务中心同源：优先级决定底色，已完成 / 已取消覆盖状态色。
+ * 遗留问题来源同样不参与配色（2026-09-23 八次配色定案），来源只由卡片上的
+ * 「遗留问题」徽章表达。已逾期 / 今天到期不参与配色（2026-09-22 产品口径
  * 「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」）：看板只在日期文案上
  * 用 .tb-date--overdue / .tb-date--today 提示，且只读服务端 dueState，
  * 不在前端按本地时钟重算。
  */
-function cardClassNameOf(card: TaskBoardCard, leftoverSource: boolean): string {
-  return (
-    "tb-card " +
-    taskToneClassName(card.priority, card.workStatus, leftoverSource)
-  );
+function cardClassNameOf(card: TaskBoardCard): string {
+  return "tb-card " + taskToneClassName(card.priority, card.workStatus);
 }
 
 const TaskBoardCardItem: React.FC<{
@@ -61,7 +59,7 @@ const TaskBoardCardItem: React.FC<{
     <li>
       <button
         type="button"
-        className={cardClassNameOf(card, leftoverSource)}
+        className={cardClassNameOf(card)}
         onClick={() => onOpen(card)}
         aria-label={"打开任务 " + card.code + " " + card.title}
       >
