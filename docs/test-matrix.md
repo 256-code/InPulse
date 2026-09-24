@@ -3577,7 +3577,7 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 2. `database.test/integration/database.test.ts` 的「migrations are immutable and idempotent」硬编码 `alreadyApplied` 清单停在 `0024`，未同步本轮新增的 `0025_feature_archive_removal.sql`。修复：清单补齐 `0025`。
 3. 同一步骤里 `apps/ops/test/backup.integration.test.ts` 的 `expect(summary.databaseName).toBe("app")` 与本仓库 [AGENTS.md](../AGENTS.md) 第 8 节「本地集成测试必须指向独立测试库 `app_ci`」的新约定冲突（CI 上库名确实是 `app`，本地按约定是 `app_ci`）。修复：断言改为按 `TEST_DATABASE_URL` 推导库名（`new URL(baseUrl).pathname.slice(1)`），仍然是「备份摘要报告的就是实际连的库」，CI 上的期望值不变。
 
-本地验证（`TEST_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci`，库内 26 条迁移，另设 `INPULSE_BACKUP_PG_DUMP`/`INPULSE_BACKUP_PG_RESTORE` 指向 PostgreSQL 18 客户端）：`pnpm test:integration` 全绿 —— database 2 文件 26 例、ops 2 文件 7 例、api 49 文件 455 例（101.17 s）。未跑：`pnpm test:e2e`、`deps:audit`、GitHub Actions 的后续步骤（本轮推送后回填）。
+本地验证（`TEST_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci`，库内 26 条迁移，另设 `INPULSE_BACKUP_PG_DUMP`/`INPULSE_BACKUP_PG_RESTORE` 指向 PostgreSQL 18 客户端）：`pnpm test:integration` 全绿 —— database 2 文件 26 例、ops 2 文件 7 例、api 49 文件 455 例（101.17 s）。CI 回填：本批连同第二十四条的单测等待预算修复推送 `9ddc14e`、`2da522d` 后，PR [#145](https://github.com/256-code/InPulse/pull/145) 的 `CI / workspace`（run `35962777061`，16 分钟）全绿，含 Playwright Browser E2E、五个生产镜像构建与 Trivy 扫描、`deps:audit`；本机未单独跑 `pnpm test:e2e`。
 
 ## 2026-09-24 三层列表排序统一（ADR-046，本地落库）
 
