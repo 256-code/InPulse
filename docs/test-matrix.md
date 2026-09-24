@@ -629,6 +629,8 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 
 具体命令、环境与尚未覆盖的记录域边界见 [F15交审](f15-local-handoff.md)。未新增迁移，不以本批替代F16/F19验收。
 
+2026-09-24 修订（产品要求「这里打开模块任务有点多余,去除掉」）：删除任务详情弹窗正文里的「打开模块任务」链接。该链接的 `href` 与 `taskDetailPath()` 对 MODULE 范围生成的地址完全相同——任务中心详情头部的「在项目中打开」按钮指向同一地址，功能页头部还有「模块级任务」页签，模块任务页本身就是该地址的宿主页，正文入口在三处都属重复；弹窗正文的 `.task-modal-links` 只保留「迭代记录草稿」。同步改动：`TasksPanel.test.tsx` 的模块引用用例（原「shows a MODULE reference only once and directs editing to its module」）改名并改为断言链接不存在（`queryByRole` 为 `null`，「编辑任务」仍禁用）；`apps/e2e/tests/module-tasks.spec.ts` 用 `toHaveCount(0)` 断言链接已删除，并改用 `page.goto('/projects/{p}/modules/{m}/tasks')` + 点击 `.calm-task-card` 回到模块任务页继续编辑影响功能（只改导航路径，不影响功能断言强度）。按 2026-09-17 纯前端免测试指示，本批**未运行任何测试与门禁**；本地 dev 页面实测模块级任务 `INPULSE-T-57` 的详情弹窗：「打开模块任务」节点数为 0、「在项目中打开」与「迭代记录草稿」仍在、`.task-modal-links` 文本仅剩「迭代记录草稿」。
+
 ## F-16 任务状态和历史（2026-09-10 本地交审）
 
 | ID | 层级 | 场景 | 实际结果 |
@@ -888,6 +890,18 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 契约编号（已按建议顺延落库）：A 于 2026-09-11 的第二轮裁决（[A 的契约评审裁决](a-contract-review-f25-f29-f32.md) §10）把 **R-5 定义为 `GET /api/v1/task-groups/memberships`（`listTaskGroupMemberships`）**，并已由 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库。本批新增的两条路由原按 R-5 / R-6 标注，与已冻结编号冲突；现按建议顺延为 **R-6 `listLeftoverItems`（`GET /api/v1/leftover-items`）** 与 **R-7 `listTaskGroups`（`GET /api/v1/task-groups`）**，路由 summary、Schema Registry 描述、实现注释与引用测试均已同步，冲突编号不再存在。
 
 分工提示：A 的 §10 裁决同时把 F-25 步骤 3（功能页任务卡片 / 详情抽屉的「主任务 / 来源任务 / 迭代记录 n 条」标记与「查看主任务」）的落地方式定为页面级一次批量调用 R-5 `listTaskGroupMemberships`，并明确**不扩大任务基础 DTO**（不接受 `TaskItem.groupRole`）。该条不在本 PR 范围内，仍待实现；R-5 契约已由 [PR #102](https://github.com/256-code/InPulse/pull/102) 落库且编号已冻结，前端接线可直接开始。
+
+### F-20 /issues 页面布局修订（C，2026-09-24）
+
+按产品 2026-09-24 指示（原文「将项目刷选的位置放在回到迭代记录边上」「然后问题不是任务的描述放在页面最底下」）调整 `/issues` 的非嵌入视图布局，只改前端、不动数据与契约：
+
+| 验收点 | 实际证据 |
+| --- | --- |
+| 页头动作区为「项目筛选 + 回到迭代记录」同一行（顺序：筛选在左、按钮在右），不再有独占一行的 `.toolbar.issues-toolbar` | `apps/web/src/features/issues/IssuesPageView.tsx` 把 `CalmSelect`（`ariaLabel="项目"`，首项「全部项目」）移入既有 `.catalog-actions` 并置于按钮之前，`apps/web/src/styles/design-system.css` 删除 `.issues-toolbar` / `.issues-toolbar-field` / `.issues-toolbar-field select` 三条规则、新增 `.issues-project-field`；dev 页面实测 `.issues-project-field` 与 `.catalog-actions .secondary-button` 的 `top` 同为 42、高同为 35、垂直中心同为 60、水平间距 8px，`.issues-toolbar` 节点数为 0 |
+| 「问题不是任务」提示由页首移到页面最底部（已闭环折叠区之后），class 为 `callout issues-callout` | 同文件把该块移到 `details.history-block` 之后；实测 `details.history-block` `top` 479 / 高 52、`.issues-callout` `top` 555，间距 24px，无障碍快照顺序为「未闭环 → 已闭环 3 条 → 问题不是任务」 |
+| 既有定位契约不变（`aria-label="项目"`、`issues-page` / `leftover-item-*` testid、「转为任务」「查看跟进任务」「加载更多」文案） | 保留全部 `aria-label` 与 testid；嵌入式用法（任务中心 / 项目主页的遗留问题弹窗）不渲染页头，筛选位置变化对其无影响，但该提示块在弹窗内也一并移到底部（副作用，产品确认后再定是否回退） |
+
+本地实际执行（2026-09-24）：只做了编辑器诊断（两文件无报错）与 dev 页面（`http://127.0.0.1:5173/issues`，系统管理员登录态）的 DOM 几何 / 无障碍快照实测。按项目负责人 2026-09-17 指示（只改前端且不涉及后端 / 契约 / 权限 / 数据库时不再运行测试与门禁），本批**未运行任何测试与门禁**：未跑 `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 与 GitHub Actions，`IssuesPageView.test.tsx`（`getByLabelText("项目")`）与 `apps/e2e/tests/issues.spec.ts` 均未复跑。
 
 ## B-1 记录列表分页（F-17 / F-18，2026-09-11 本地落库）
 
@@ -3673,3 +3687,18 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 本地实际执行（2026-09-24）：仅编辑器诊断（`get_errors`）三个改动文件无报错与浏览器人工实测（见上表）。按项目负责人 2026-09-17 指示（只改前端、不涉及后端 / 契约 / 权限 / 数据库时不运行测试与门禁），本批**未运行** `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions。
 
 未运行 / 已知偏差：① 两处 E2E 定位器改动未复跑；② 缓存失效修复未跑单测——`apps/web/src/features/modules/ModulesPageView.test.tsx` 使用 `findByRole("button", { name: /编\s*辑/ })`，新按钮 `aria-label="编辑项目"` 有可能触发 strict mode 多匹配（未验证），下次跑 `pnpm test:web` 时需确认；③ 圆钮淡蓝底色的具体色值属主观项，需非作者人工评审；④ 验证中临时改动的演示数据（项目 118 的描述与状态）已全部复原，项目本身是用户真实数据，未删除，未落库任何测试夹具。
+
+## 2026-09-24 全站滚动条按需显形（用户指示，本地落库）
+
+用户指示（原文）：「我现在要求所有的滚轮条不用的时候是隐藏的」。原生 CSS 没有「容器正在滚动」这一状态，`:hover` 也不行——指针停在窗口任意位置都算悬停，常显的根滚动条会一直亮着；因此实现为「捕获阶段收听全站 `scroll` → 给滚动容器打 `data-scrolling` 属性 → 停手 1 秒后摘除」＋「thumb 默认透明、带属性时才显色」。改动文件：`apps/web/src/app/auto-hide-scrollbars.ts`（新建，`installAutoHideScrollbars`）、`apps/web/src/app/App.tsx`（应用根挂载，全路由生效）、`apps/web/src/styles/design-system.css`（全局 8px 条 + 深色侧栏 `.tree-modules-scroll` / `.nav-group`）、`apps/web/src/styles/inpulse-design.css`（`.sidebar`）。`html { overflow-y: scroll }` 保留未动（槽位常驻，内容区不因内容长短跳宽），只让槽里的 thumb 默认透明。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| SCROLLBAR-AUTOHIDE-ATTR-001 | 浏览器实测（DOM） | 滚动打属性、停手摘属性 | MutationObserver 监听 `document.documentElement`：根滚动一次后 `data-scrolling` 在 t=2778ms 打上、t=3782ms 摘掉（间隔 1004ms，与 `HIDE_DELAY_MS = 1000` 吻合） | 本地通过（Playwright 脚本实测） |
+| SCROLLBAR-AUTOHIDE-PIXEL-001 | 浏览器实测（绘制像素） | 静止隐藏 → 滚动浮现 → 停手再隐藏 | `.task-modal-bottom` 右缘 `8px × 105.5px` 条带（DPR 2，共 2110 像素）：静止时 1782 个纯白像素（无 thumb）；脚本以 300ms 间隔来回滚动时主色 `177,185,197`（1538 像素），正是 `rgba(113,128,150,0.55)` 叠白底的合成值；停手 1.5s 后回到 1782 个纯白像素 | 本地通过（Playwright 脚本实测） |
+| SCROLLBAR-AUTOHIDE-STYLE-001 | 浏览器实测（计算样式 + 几何） | 槽宽与三态配色 | 根槽 8px（`innerWidth 1118` / 根 `clientWidth 1110`，改造前为系统默认 15px）；thumb 静止 `rgba(0, 0, 0, 0)`、滚动中 `rgba(113, 128, 150, 0.55)`、悬浮 `rgba(113, 128, 150, 0.8)`；`.nav-group` 静止透明 | 本地通过（Playwright 脚本实测） |
+| SCROLLBAR-AUTOHIDE-OVERLAY-001 | 浏览器实测（几何） | 弹窗遮罩仍铺满视口、右缘无亮带 | 弹窗打开时 `.ant-modal-mask` 与 `.ant-modal-wrap` 覆盖 `0..1118`；antd 滚动锁使根条让出槽（`gutter = 0`）属既有行为，与本次改动无关 | 本地通过（Playwright 脚本实测） |
+| SCROLLBAR-AUTOHIDE-LIMIT-001 | 浏览器实测（已知限制） | 视口滚动条的像素观感 | 本环境的浏览器不绘制视口滚动条：给 `html::-webkit-scrollbar-thumb` 强塞 `background: red !important` 后同一 8px 条带 **0 个红像素**；对照实验中不在视口内的普通容器滚动条能正常绘出（探针 `div` 条带 375 个红像素 thumb + 1875 个蓝像素 track）。根滚动条的绘制观感**未取证**，需有头浏览器人工确认 | 未验证（环境不绘制视口滚动条） |
+| SCROLLBAR-AUTOHIDE-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示：只改前端、不涉及后端 / 契约 / 权限 / 数据库时不跑测试与门禁）；既有侧栏 / 项目树相关用例未复跑。唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档）→ 通过（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」） | 未运行（除文档检查） |
+
+未运行 / 已知偏差：① 既有 `apps/web` 单测里涉及侧栏与项目树的用例未复跑（未验证）；② 深色侧栏三处的 hover 口径不完全一致——`.tree-modules-scroll` 保留既有 `#5b90bb` hover，`.nav-group` / `.sidebar` 静止悬浮仍透明（继承既有规则，未新增）；③ 操作系统开启「自动隐藏滚动条」（overlay scrollbars）时 Chromium 不使用 `::-webkit-scrollbar`，本改动对其无影响（未验证）；④ 根滚动条的像素观感需人工在有头浏览器确认。本条只改前端样式与文档，后端、契约、权限矩阵、迁移与生成物零改动。
