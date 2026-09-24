@@ -47,6 +47,54 @@
   grid-row: auto;
 }
 
+/* 「新增 / 编辑用户」弹层的字段节奏（2026-09-24）。这块表单是裸的 `label + Input +
+ * 错误 p`，没有 `.dialog-form` 的 grid：标签是行内盒，和上一个控件、和它自己的输入框
+ * 全都零间距，管理员角色开关还挤在标签同一行。这里按设计系统弹窗字段的规格补齐：
+ * 标签小号灰字独占一行、其后 6px 接控件、字段之间 16px；错误段落常驻但空文本时不占位
+ * （`role="alert"` 需要节点在 DOM 里）；开关与按钮保持自身宽度，不被 flex 拉成整行。 */
+.admin-user-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-user-form > label {
+  margin: 16px 0 6px;
+  color: #586d83;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.admin-user-form > label:first-child {
+  margin-top: 0;
+}
+
+.admin-user-form > p {
+  margin: 6px 0 0;
+  color: #6d8ca9;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.admin-user-form > p:first-child {
+  margin-top: 0;
+}
+
+.admin-user-form > p[role="alert"] {
+  color: #a6343f;
+}
+
+.admin-user-form > p:empty {
+  display: none;
+}
+
+.admin-user-form > button {
+  align-self: flex-start;
+}
+
+.admin-user-form > div {
+  margin-top: 12px;
+}
+
 /* 完成任务 / 取消任务的正文骨架。设计稿把「返回 / 上一步」、步骤标题与副标题放在
  * `.completion-flow` 的直接子级，只有表单区在 `.dialog-form` 内（design-system.css
  * L2920-2965 与 task-modal 实测：flow 1179px、h2 1119px、双卡片 1119px）。仓库此前把
@@ -224,9 +272,13 @@
 
 /* 「移除项目成员」的改派勾选区不在 `.calm-form` 内，单独给出与设计稿
  * `.member-editor input[type="checkbox"]`（design-system.css L2529）一致的尺寸。
- * `.check-list` 保持设计稿的 `flex-wrap` 行内流，让每个 `label` 收缩到内容宽度。 */
+ * `.check-list` 保持设计稿的 `flex-wrap` 行内流，让每个 `label` 收缩到内容宽度。
+ * 设计系统遗留规则 `.dialog-form label`（design-system.css L2052）会把弹层内的
+ * `label` 排成 `flex-direction: column`，方框因此被 `align-items: center` 顶到
+ * 文案上方居中（实测 label 38px 两行、方框偏移 42px）；这里显式回到行向。 */
 .calm-member-task-card .check-list > label {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
   color: #586d83;
@@ -1651,14 +1703,18 @@
   min-width: 0;
 }
 
+/* 编号是次要线索（灰色小字），标题是主体内容（近黑加粗），
+ * 避免编号比任务标题更抢眼。 */
 .member-task-main strong {
-  color: #2f4a63;
-  font-size: 12px;
+  color: #7b8b9b;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .member-task-main span {
-  color: #647c92;
+  color: #132238;
   font-size: 12px;
+  font-weight: 600;
   line-height: 1.6;
 }
 

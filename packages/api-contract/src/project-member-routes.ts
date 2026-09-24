@@ -172,7 +172,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members/{userId}/remove",
     operationId: "removeProjectMember",
     summary:
-      "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+      "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
     request: {
       path: "ProjectMemberPath",
       query: "none",
@@ -193,7 +193,8 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     idempotencyExceptionAdr: "none",
     // ADR-033/ADR-039：响应新增 role、LEADER 移除保护与重放角色复核，旧 Key 409。
     // 2026-09-22：role 枚举收窄（移除 PROJECT_ADMIN），重放安全字段变化，旧 Key 409。
-    idempotencyContractVersion: "1.2.0",
+    // 2026-09-24：请求体改派目标由 assigneeId 改为 assigneeIds，请求 Schema 与摘要变化，旧 Key 409。
+    idempotencyContractVersion: "1.3.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: removeReplayPolicy,

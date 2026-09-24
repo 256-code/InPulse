@@ -369,6 +369,10 @@
     {
       "version": "1.2.0",
       "fingerprint": "8b6910970b88040aee8e8d0d669e325ccca117f967584d42368c57aa3470a861"
+    },
+    {
+      "version": "1.3.0",
+      "fingerprint": "a0bf683107213f39e38e0a6f7df8977ac3889780c795808f15c7a598c74089d5"
     }
   ],
   "requestProjectArchive": [

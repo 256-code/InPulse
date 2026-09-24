@@ -180,7 +180,7 @@ async function revokeLeaderRole(
 
 async function createFeatureTask(
   fixtureValue: Fixture,
-  assigneeId: number,
+  assigneeIds: number | readonly number[],
 ): Promise<{ readonly id: number; readonly rowVersion: number }> {
   const task = await uow.run((tx) =>
     management.execute(tx, {
@@ -193,13 +193,25 @@ async function createFeatureTask(
         title: "成员管理任务",
         description: "用于验证成员移除与改派",
         priority: "NORMAL",
-        assigneeIds: [assigneeId],
+        assigneeIds:
+          typeof assigneeIds === "number" ? [assigneeIds] : [...assigneeIds],
         dueAt: null,
       },
       requestId: randomUUID(),
     }),
   );
   return { id: task.id, rowVersion: task.rowVersion };
+}
+
+/** 读取任务当前负责人集合（升序），用于验证改派后的落库结果。 */
+async function taskAssigneeIds(taskId: number): Promise<number[]> {
+  const rows = (await client.sql`
+    SELECT user_id AS "userId"
+      FROM app.task_assignees
+     WHERE task_id = ${taskId}
+     ORDER BY user_id
+  `) as unknown as readonly { userId: number }[];
+  return rows.map((row) => row.userId);
 }
 
 async function request(
@@ -543,7 +555,7 @@ describe("F-05 project member management API", () => {
             moduleId: value.project.moduleId,
             featureId: value.featureId,
             rowVersion: task.rowVersion,
-            assigneeId: assignee.userId,
+            assigneeIds: [assignee.userId],
           },
         ],
       },
@@ -583,6 +595,66 @@ describe("F-05 project member management API", () => {
       404,
       "PROJECT_MEMBER_NOT_FOUND",
     );
+  });
+
+  it("accepts several replacement members for one task and keeps the other owners (ADR-040)", async () => {
+    const value = await fixture();
+    const first = await actor(false);
+    const second = await actor(false);
+    await addMember(value.project.projectId, first.userId);
+    await addMember(value.project.projectId, second.userId);
+    // 唯一负责人的任务：两位接手人同时顶上。
+    const soloTask = await createFeatureTask(value, value.owner.userId);
+    // 多负责人任务：被移除成员以外还有在任负责人，改派只摘掉被移除的成员。
+    const sharedTask = await createFeatureTask(value, [
+      value.owner.userId,
+      first.userId,
+    ]);
+    // ADR-033：创建者默认是组长，移除前需先撤销组长角色。
+    await revokeLeaderRole(
+      value.project.projectId,
+      value.admin,
+      value.owner.userId,
+    );
+
+    const response = await request(
+      "POST",
+      `/projects/${value.project.projectId}/members/${value.owner.userId}/remove`,
+      value.admin,
+      {
+        reassignments: [
+          {
+            taskId: soloTask.id,
+            moduleId: value.project.moduleId,
+            featureId: value.featureId,
+            rowVersion: soloTask.rowVersion,
+            // 重复成员由契约去重升序，不应产生重复负责人行。
+            assigneeIds: [second.userId, first.userId, first.userId],
+          },
+          {
+            taskId: sharedTask.id,
+            moduleId: value.project.moduleId,
+            featureId: value.featureId,
+            rowVersion: sharedTask.rowVersion,
+            assigneeIds: [second.userId],
+          },
+        ],
+      },
+      { key: randomUUID() },
+    );
+    expect(response.status).toBe(200);
+    const body = schemaRegistry.RemoveProjectMemberResponse.schema.parse(
+      await response.json(),
+    );
+    expect([...body.reassignedTaskIds]).toEqual(
+      [soloTask.id, sharedTask.id].sort((a, b) => a - b),
+    );
+    expect(body.unfinishedTaskCount).toBe(0);
+
+    const expected = [first.userId, second.userId].sort((a, b) => a - b);
+    expect(await taskAssigneeIds(soloTask.id)).toEqual(expected);
+    // ADR-040：同一任务的其他负责人不变，所选接手人不顶掉在任负责人。
+    expect(await taskAssigneeIds(sharedTask.id)).toEqual([first.userId]);
   });
 
   it("keeps un-reassigned tasks on the removed owner and reports unfinished count", async () => {
@@ -717,7 +789,7 @@ describe("F-05 project member management API", () => {
             moduleId: value.project.moduleId,
             featureId: value.featureId,
             rowVersion: task.rowVersion,
-            assigneeId: assignee.userId,
+            assigneeIds: [assignee.userId],
           },
         ],
       },

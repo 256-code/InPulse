@@ -32,7 +32,7 @@ export interface ProjectMemberReassignmentInput {
   readonly moduleId: number;
   readonly featureId: number | null;
   readonly rowVersion: number;
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
 }
 
 export class ProjectMemberTaskCommandError extends Error {
@@ -151,15 +151,15 @@ export class ProjectMemberTaskCommandPort {
           "任务当前负责人或状态已变化，不能随成员移除改派",
         );
       }
-      if (current.assigneeId === assignment.assigneeId) {
+      if (assignment.assigneeIds.includes(input.targetUserId)) {
         throw new ProjectMemberTaskCommandError(
           422,
           "PROJECT_MEMBER_REASSIGNMENT_NOOP",
           "不能把任务改派给当前成员本人",
         );
       }
-      // 多负责人平权（ADR-040）：只摘掉被移除的成员，其佘人继续负责；
-      // 唯一负责人时才由接手人顶上。
+      // 多负责人平权（ADR-040）：只摘掉被移除的成员，其余人继续负责；
+      // 唯一负责人时才由接手人顶上（2026-09-24 起可同时指定多位接手人）。
       const retained = current.assigneeIds.filter(
         (userId) => userId !== input.targetUserId,
       );
@@ -178,7 +178,7 @@ export class ProjectMemberTaskCommandPort {
             description: current.description,
             priority: current.priority,
             assigneeIds:
-              retained.length > 0 ? retained : [assignment.assigneeId],
+              retained.length > 0 ? retained : [...assignment.assigneeIds],
             dueAt: current.dueAt,
           },
           ...(current.featureId === null

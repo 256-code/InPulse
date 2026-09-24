@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Select, Spin } from "antd";
+import { Alert, Button, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import type {
   InpulseApiClient,
@@ -35,7 +35,8 @@ import {
 
 interface ReassignmentChoice {
   readonly enabled: boolean;
-  readonly assigneeId?: number | undefined;
+  /** ADR-040 口径：改派目标可同时指定多位活跃成员。 */
+  readonly assigneeIds?: readonly number[] | undefined;
 }
 
 export interface ProjectMembersPageViewProps {
@@ -112,6 +113,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         .map((member) => ({
           value: member.userId,
           label: member.name,
+          avatarUrl: member.avatarUrl ?? null,
         })),
     [activeMembers, removing?.userId],
   );
@@ -228,7 +230,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     for (const task of tasks) {
       const choice = reassignChoices[task.taskId];
       if (!choice?.enabled) continue;
-      if (choice.assigneeId === undefined) {
+      if (choice.assigneeIds === undefined || choice.assigneeIds.length === 0) {
         setActionError("请为任务 " + task.code + " 选择改派成员。");
         return;
       }
@@ -237,7 +239,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         moduleId: task.moduleId,
         featureId: task.featureId,
         rowVersion: task.rowVersion,
-        assigneeId: choice.assigneeId,
+        assigneeIds: [...choice.assigneeIds],
       });
     }
     setActionError(null);
@@ -260,14 +262,17 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       ...current,
       [taskId]: enabled
         ? { enabled: true }
-        : { enabled: false, assigneeId: undefined },
+        : { enabled: false, assigneeIds: undefined },
     }));
   };
 
-  const setReassignmentAssignee = (taskId: number, assigneeId: number) => {
+  const setReassignmentAssignees = (
+    taskId: number,
+    assigneeIds: readonly number[],
+  ) => {
     setReassignChoices((current) => ({
       ...current,
-      [taskId]: { enabled: true, assigneeId },
+      [taskId]: { enabled: true, assigneeIds },
     }));
   };
 
@@ -609,7 +614,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             />
             <CalmSectionTitle
               title="未完成任务"
-              hint="勾选改派后必须选择其他活跃成员；不勾选则保留原负责人。"
+              hint="勾选改派后须选择其他活跃成员，可同时指定多位；不勾选则任务保留原负责人。"
             />
             {unfinished.isPending ? (
               <div className="calm-state modal-loading">
@@ -651,17 +656,21 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         </label>
                       </div>
                       {choice?.enabled ? (
-                        <Select
-                          aria-label={"选择 " + task.code + " 的改派成员"}
-                          value={choice.assigneeId ?? undefined}
-                          placeholder="选择改派成员"
+                        <CalmSelect
+                          ariaLabel={"选择 " + task.code + " 的改派成员"}
+                          appearance="member"
+                          multiple
+                          maxTagCount={2}
+                          value={choice.assigneeIds ?? []}
+                          placeholder="输入姓名搜索，可选择多位活跃成员"
                           options={assigneeOptions}
                           disabled={assigneeOptions.length === 0}
-                          onChange={(value) => {
-                            if (value !== undefined) {
-                              setReassignmentAssignee(task.taskId, value);
-                            }
-                          }}
+                          onChange={(next) =>
+                            setReassignmentAssignees(
+                              task.taskId,
+                              next.map(Number),
+                            )
+                          }
                         />
                       ) : (
                         <span className="member-task-keep">

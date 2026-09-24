@@ -228,7 +228,7 @@ describe("ProjectMemberManagementService", () => {
             moduleId: 3,
             featureId: null,
             rowVersion: 2,
-            assigneeId: 6,
+            assigneeIds: [6],
           },
         ],
       },

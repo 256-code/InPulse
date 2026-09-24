@@ -606,7 +606,7 @@ export const schemaRegistry = {
   },
   ProjectMemberReassignmentItem: {
     schema: projectMemberReassignmentItemSchema,
-    summary: "成员移除时单任务改派参数",
+    summary: "成员移除时单任务改派参数（可指定一位或多位接手成员）",
     sensitiveFieldPaths: [],
   },
   RemoveProjectMemberRequest: {

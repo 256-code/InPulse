@@ -870,7 +870,7 @@ export type ProjectMemberReassignmentItem = {
   readonly moduleId: number;
   readonly featureId: (number | null);
   readonly rowVersion: number;
-  readonly assigneeId: number;
+  readonly assigneeIds: readonly number[];
 };
 
 export type ProjectMemberRecordItem = {
