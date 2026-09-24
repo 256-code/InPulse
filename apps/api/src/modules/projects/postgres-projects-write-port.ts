@@ -271,7 +271,6 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       WITH updated AS (
         UPDATE app.projects
            SET status = ${input.status},
-               archived_at = ${input.status === "ARCHIVED" ? tx.sql`now()` : tx.sql`NULL`},
                updated_at = now(),
                row_version = row_version + 1
          WHERE id = ${input.projectId}
@@ -383,20 +382,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     };
   }
 
-  async countUnfinishedTasks(
-    tx: TransactionContext,
-    input: { readonly projectId: number },
-  ): Promise<number> {
-    const rows = (await tx.sql`
-      SELECT COUNT(*)::integer AS "count"
-        FROM app.tasks
-       WHERE project_id = ${input.projectId}
-         AND work_status = 'TODO'
-         AND lifecycle_status = 'ACTIVE'
-    `) as unknown as readonly { count: number }[];
-    return rows[0]?.count ?? 0;
-  }
-  /** 项目归档前置校验：未完成（TODO）且未归档的任务才阻塞，见 ADR-034。 */
+  /** ADR-043：进入维护中要求项目下任务全部收尾，统计口径同模块归档。 */
   async countUnarchivedTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },

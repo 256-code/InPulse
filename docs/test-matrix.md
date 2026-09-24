@@ -10,6 +10,7 @@
 
 2026-09-18 修订（[ADR-036](adr/ADR-036.md) 修订 ADR-032 前端入口）：`/login` 默认展示本地口令表单，不再自动整页跳转；登录框下方新增「或以统一身份认证登录」图标入口，点击后整页跳转 `/api/v1/auth/sso/start`（302 导航与 fail closed 回落不变：未启用时回落 `/login?local=1&sso=disabled` 并提示、隐藏入口）；`?sso_error=` 回落保留本地表单与可重试的 SSO 入口；退出登录与「前往登录」回 `/login`。登录页单测、`AppLayout` 退出用例与 E2E `auth.spec.ts` 的未配置回落用例已同步改写；服务端路由、契约与权限矩阵无改动。
 2026-09-20 修订（[ADR-038](adr/ADR-038.md) 调整本地会话空闲时长）：本地会话空闲有效期由 30 分钟（1800 秒）改为默认 2 小时（7200 秒），口令与 SSO 共用 `SESSION_TTL_POLICY`，`SESSION_IDLE_MAX_AGE_SECONDS` 仍可覆盖；「自签发起固定计算、不随请求滑动续期」与绝对超时 7 天的语义不变。SEC-018 的期望窗口改为 7200 秒，`session-ttl.policy.test.ts` 与 `sso-login.integration.test.ts` 的断言同步更新；部署示例 `deploy/.env.deploy.example` 与 `deploy/.env.deploy.test` 写入 `SESSION_IDLE_MAX_AGE_SECONDS=7200`。无契约、权限矩阵与数据库改动。
+
 ## F-09 数据安全专项（A，2026-09-10 本地实现）
 
 数据安全专项第一个纵切片（对应技术设计 §7.5 与 [ADR-021](adr/ADR-021.md)，不降低安全基线）：
@@ -37,7 +38,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 另见「审计与安全」表。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F09-CSP-UNIT-001 | Web 单元 | 策略串、nonce 与 HTML 改写 | `resolveWebCspMode` 对非法值 fail closed；策略串与设计 §7.5 一致且不含 `unsafe-inline`；`applyHtmlSecurityHeaders` 只对 HTML 响应写头；`rewriteHtmlBody` 替换全部占位符；nonce 为 32 位十六进制且逐响应用新；`/api/**` 命名空间不会被 dev/preview 中间件短路（ADR-032 的整页导航入口必须拿到 API 的 302） | 本地通过（`apps/web/tools/vite-csp.test.ts` 17 例与 `AppProviders.test.tsx`） |
 | F09-CSP-E2E-001 | 浏览器 E2E | 入口 nonce 一致性与强制模式零违规 | 同一入口两次响应的 nonce 不同，CSP 头 nonce 与 meta/script 标签一致，占位符无残留；登录、主题色、命令面板、通知弹层、懒加载与错误页在 CSP enforce 下 `securitypolicyviolation` 零违规；安全检查头齐全 | 本地通过（`apps/e2e/tests/csp.spec.ts` 2/2，2026-09-10） |
 | F09-CSP-IMAGE-001 | 部署集成 | 真实镜像与 Nginx | HTTP 非 ACME 请求 308 跳同主机 HTTPS；入口/SPA 回退/代理路径逐项校验 nonce、`no-store` 与安全头；代理上游不可达时仍保留安全头；条件请求返回 200 而非带旧 nonce 的 304；哈希资源 `immutable` | 本地通过（`scripts/check-web-image-csp.sh inpulse/web:local`，2026-09-10；已加入 CI 生产镜像构建之后） |
@@ -52,7 +53,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 `POST /api/v1/task-groups/merge` 把来源任务并入主任务所属聚合组：服务端按请求体的任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE` 后建立或复用聚合组，并保存来源任务的原工作状态与原负责人快照；来源已属活跃组、主任务在组内不是 MAIN、组已关闭或主任务在锁内变化统一 409，跨项目与非成员统一 404。合并不修改任何任务字段，审计 `task.merge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-23 交审说明](f23-local-handoff.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F23-CONTRACT-001 | 契约与 CI | Schema、Route Registry、生成物与权限矩阵 | `TaskGroupMergeRequest`、`TaskGroupItem`、`TaskGroupMergeHeaders`、`TaskGroupMergeReplayContext` 登记；唯一路由声明 Session/CSRF、数据库幂等、重放策略与锁序；OpenAPI 与生成客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate` 73 条、`permissions:check` 73/73）；10 文件 75/75 契约单测 |
 | F23-MERGE-API-001 | HTTP + PostgreSQL | 新建聚合组合并 | 200 返回 `TaskGroupItem`：编号 `项目编码-TG-1`、名称为主任务标题、主成员无快照、来源成员带 `HISTORICAL` 快照；两个任务的行版本与字段不变；审计/活动/通知（3 接收人）/搜索各恰一条；同 Key 同摘要重放返回同一响应，摘要不同 409，再合并 409，成员被移除后重放 404 | 本地通过（`task-groups-merge.integration.test.ts` 6/6） |
 | F23-MERGE-API-002 | HTTP + PostgreSQL | 追加来源到既有组 | 第二次合并复用同一聚合组并返回 3 名成员、`rowVersion` 递增为 2，`ACTIVE` 分支来源记录当前快照；搜索投影 `source_row_version` 同步为 2，审计与活动各 2 条 | 同上 |
@@ -70,7 +71,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 `POST /api/v1/task-groups/unmerge` 解除来源任务与聚合组的合并关系：服务端按请求体的来源任务 ID 解析归属项目（路由不含 `projectId`），在项目 -> 模块 -> 影响功能 `FOR SHARE`、任务 ID 升序 `FOR UPDATE`、聚合组行 `FOR UPDATE` 并重读成员后，仅允许解除活跃 SOURCE；来源已不是活跃成员 404，来源是 MAIN、组已关闭或锁内关系变化 409。解除只把成员关系标记为 `DETACHED`（记录时间与原因）并在最后一个来源解除时同事务关闭聚合组、解除 MAIN，不修改任务工作状态、负责人、迭代记录与行版本；审计 `task.unmerge`、活动、通知与搜索投影在同一事务提交，幂等重放前重新验证当前认证与结果资源可读性（组可为 `CLOSED`）。不新增数据库迁移（约束已存在于 `0000_initial.sql`），无权限放宽。范围、锁序与未运行项见 [F-24 交审说明](f24-local-handoff.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F24-CONTRACT-001 | 契约与 CI | Schema、Route Registry、生成物与权限矩阵 | `TaskGroupUnmergeRequest`、`TaskGroupUnmergeResponse`、`TaskGroupUnmergeHeaders`、`TaskGroupUnmergeReplayContext` 登记；唯一路由声明 Session/CSRF、数据库幂等、重放策略与锁序；OpenAPI 与生成客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate` 80 条、`permissions:check` 80/80） |
 | F24-UNMERGE-API-001 | HTTP + PostgreSQL | 解除两个来源之一 | 200 返回 `TaskGroupUnmergeResponse`：组保持 `ACTIVE`、`rowVersion` 递增、`detachedMembers` 含来源快照与解除原因/时间；来源任务工作状态、负责人、生命周期与行版本不变；审计/活动/投影各恰一条、通知按去重接收人逐条深链来源任务；同 Key 同摘要重放返回同一响应，摘要不同 409，重复解除 409，同组再合并 409，成员被移除后重放 404 | 本地通过（`task-group-unmerge.integration.test.ts` 8/8） |
 | F24-UNMERGE-API-002 | HTTP + PostgreSQL | 解除最后一个来源 | 组转为 `CLOSED` 且 `closedAt` 非空、MAIN 一并解除；CLOSED 组无活跃成员；随后可成功创建新的 `项目编码-TG-2` 聚合组 | 同上 |
@@ -83,32 +84,29 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 
 本轮真实 PostgreSQL 集成全量 40 文件 260 例（两轮各 1 例既有偶发失败：`project-member-management-api` 与 `preauth-session`，单文件复跑分别 8/8 与 4/4 通过）、解除文件 8/8、API 单测 63 文件 303 例（含 HTTP 边界 10 例）、契约 11 文件 81 例、前端 37 文件 124 例（并行负载下两个既有计时敏感用例偶发失败，单跑 4/4 通过）；`pnpm lint`、`format:check`、`typecheck`、`build`、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 审计均通过。未运行 `pnpm test:e2e`（无前端改动）、GitHub Actions 与镜像构建扫描（本地时点；F-24 由 PR #87 合入，CI 已通过 run 34453066198）。
 
-## F-06 项目编辑与归档/恢复（A，2026-09-10 本地实现）
+## F-06 项目编辑与状态（A，2026-09-10 本地实现；2026-09-23 按 ADR-043 收窄为三态）
 
-阶段 1 A 域项目编辑/归档/恢复纵切片：`PATCH /api/v1/projects/{projectId}` 由项目活跃成员或
-系统管理员整笔替换 `name` 与 `description`；编码创建后不可修改；父项目必须 ACTIVE，归档
-项目返回 409 `PROJECT_ARCHIVED`；CSRF、`Idempotency-Key` 与 `If-Match` 必填，版本冲突
-409；名称/描述、审计 `project.update`、活动 `PROJECT_UPDATED` 与搜索投影在同一事务内提交；
-重放前重新验证当前成员关系与项目可写性。`GET /api/v1/projects/{projectId}/archive-preview`
-为管理员只读路径，统计未完成（TODO + ACTIVE）任务数用于归档提醒；`POST
-/api/v1/projects/{projectId}/archive` 与 `restore` 要求完整管理员 Session（[ADR-031](adr/ADR-031.md) 起不再要求 TOTP 重认证）
-，原因、CSRF、`Idempotency-Key`、`If-Match` 必填，状态不符返回 409
-`PROJECT_STATE_CONFLICT`，归档后全部下级只读而历史仍可读，恢复只恢复项目自身状态，审计、
-活动与搜索投影同一事务。复用现有 `projects.status/archived_at/row_version` 约束，无数据库
-迁移；前端编辑/归档/恢复入口与未完成任务提醒已接入项目页。E2E 已覆盖归档/恢复关键路径（`apps/e2e/tests/project-archive.spec.ts`，2026-09-11 本地 1/1 通过）。
+阶段 1 A 域项目编辑纵切片：`PATCH /api/v1/projects/{projectId}` 由项目活跃成员或
+系统管理员整笔替换 `name` 与 `description`；编码创建后不可修改；项目三态（未开始 /
+进行中 / 维护中）下都可写，[ADR-043](adr/ADR-043.md) 起项目不再有归档态；CSRF、
+`Idempotency-Key` 与 `If-Match` 必填，版本冲突 409；名称/描述、审计 `project.update`、
+活动 `PROJECT_UPDATED` 与搜索投影在同一事务内提交；重放前重新验证当前成员关系与
+项目可写性。`PATCH /api/v1/projects/{projectId}/status` 由本项目任意活跃成员或系统
+管理员在三态之间切换，进入「维护中」要求项目下任务全部收尾，否则 409
+`PROJECT_MAINTENANCE_TASKS_OPEN`。项目归档与归档申请的整体下线、`ARCHIVED` 存量行
+回填与 `project_archive_requests` 写权限收回见下方 ADR-043 小节，历史行仍可读。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
-| F06-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `ProjectEditRequest`、`ProjectArchiveRequest`、`ProjectArchivePreviewResponse`、`ProjectMutationHeaders`、`ProjectVersionHeaders`、`ProjectReplayContext` 登记；四条路由声明 Session/管理员重认证、CSRF、数据库幂等、`If-Match` 行为头与资源型重放授权；OpenAPI 与前端客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，61/61 条路由） |
-| F06-EDIT-API-001 | API 单元 | 服务端编排 | 写前实时校验成员关系与用户状态；归档 409、缺失 404、版本冲突 409 均不写审计；成功时审计前后快照、活动与搜索同一事务；重放上下文严格校验 | 本地通过（`project-management.service.test.ts` 7 例） |
-| F06-EDIT-API-002 | HTTP + PostgreSQL | 编辑、审计与投影 | 活跃成员编辑返回 200 与递增 `rowVersion`；`app.audit_logs` 恰一条 `project.update`；`PROJECT_UPDATED` 活动与搜索投影同步；同 Key 同摘要重放返回相同响应 | 本地通过（`project-management-api.integration.test.ts` 9/9，PostgreSQL 18.6 + PGroonga） |
-| F06-EDIT-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名 401；非成员/已移除 404；版本冲突与归档项目 409；缺 CSRF、缺/非法 `If-Match`、非法名称 422；非 JSON 400；缺幂等键 400；错误体不泄露数据库细节 | 同上 |
-| F06-EDIT-API-004 | HTTP + PostgreSQL | 重放授权复核 | 成员被移除后同 Key 重放 404；项目归档后编辑重放 409，均不返回已存成功响应 | 同上 |
-| F06-ARCHIVE-API-001 | HTTP + PostgreSQL | 归档与影响预览 | 管理员归档返回 200、`archived_at` 非空、`rowVersion` 递增；审计 `project.archive`、活动 `PROJECT_ARCHIVED` 与搜索投影 `source_status = 'ARCHIVED'` 同事务；归档后成员编辑 409、重复归档 409；预览只统计 TODO + ACTIVE 任务，匿名 401、非管理员成员 403、非成员 404、管理员身份失效 403，且 GET 不要求 CSRF | 本地通过（同上 9/9） |
-| F06-ARCHIVE-API-002 | HTTP + PostgreSQL | 恢复与状态门禁 | 恢复返回 200、`archived_at` 置空、`rowVersion` 递增，审计 `project.restore`、活动 `PROJECT_RESTORED` 与搜索投影 `source_status = 'ACTIVE'` 同事务；恢复后成员可再次编辑；未归档恢复 409 `PROJECT_STATE_CONFLICT`；非管理员 403、非成员 404 | 同上 |
-| F06-ARCHIVE-API-003 | HTTP + PostgreSQL | 幂等重放 | 归档/恢复成功后同 Key 同摘要重放返回相同 200 响应（归档态重放不因只读被拒）；会话被撤销后同 Key 重放 401，不返回已存成功响应 | 同上 |
-| F06-ARCHIVE-UI-001 | 前端 | 编辑/归档/恢复入口 | 项目卡片提供编辑入口（活跃成员）、归档/恢复入口（管理员）；编辑提交携带 CSRF、`If-Match`、`Idempotency-Key`，版本冲突展示重新加载提示；归档弹窗展示未完成任务提醒并要求原因，403 `ADMIN_REAUTH_REQUIRED` 打开管理员安全验证；恢复弹窗要求原因并说明不改动下级归档状态 | 本地通过（`project-management-modals.test.tsx` 6 例、`ProjectsPage.test.tsx` 归档入口 1 例） |
-| F06-ARCHIVE-E2E-001 | Playwright | 归档→只读→恢复关键路径 | 管理员登录后创建项目/功能/任务；归档预览提示“仍有 1 个未完成任务”；项目卡徽标“未开始”（新建项目从未开始起步）、归档后徽标“已归档”、编辑被拒“项目已归档，项目只读…”且名称未落库；恢复“进行中”后可改名成功、原任务保留 | 本地 1/1（2.6 分钟；E2E_API_PORT=3131 / E2E_WEB_PORT=4191） |
+| --- | --- | --- | --- | --- |
+| F06-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `ProjectEditRequest`、`ProjectStatusChangeRequest`、`ProjectMutationHeaders`、`ProjectVersionHeaders`、`ProjectReplayContext` 登记；两条路由声明 Session、CSRF、数据库幂等、`If-Match` 行为头与资源型重放授权；`ProjectArchiveRequest` / `ProjectArchivePreviewResponse` 与四条归档路由已删除；OpenAPI 与前端客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`） |
+| F06-EDIT-API-001 | API 单元 | 服务端编排 | 写前实时校验成员关系与用户状态；缺失 404、版本冲突 409 均不写审计；成功时审计前后快照、活动与搜索同一事务；重放上下文严格校验 | 本地通过（`project-management.service.test.ts`） |
+| F06-EDIT-API-002 | HTTP + PostgreSQL | 编辑、审计与投影 | 活跃成员编辑返回 200 与递增 `rowVersion`；`app.audit_logs` 恰一条 `project.update`；`PROJECT_UPDATED` 活动与搜索投影同步；同 Key 同摘要重放返回相同响应 | 本地通过（`project-management-api.integration.test.ts`，PostgreSQL 18.6 + PGroonga） |
+| F06-EDIT-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名 401；非成员/已移除 404；版本冲突 409；缺 CSRF、缺/非法 `If-Match`、非法名称 422；非 JSON 400；缺幂等键 400；错误体不泄露数据库细节 | 同上 |
+| F06-EDIT-API-004 | HTTP + PostgreSQL | 重放授权复核 | 成员被移除后同 Key 重放 404，不返回已存成功响应 | 同上 |
+| F06-MAINTENANCE-API-001 | HTTP + PostgreSQL | 维护中门禁 | 项目下存在未收尾（`lifecycle_status = 'ACTIVE'` 且 `work_status NOT IN ('DONE','CANCELED')`）任务时切「维护中」409 `PROJECT_MAINTENANCE_TASKS_OPEN`，且零副作用；全部收尾后 200 且 `rowVersion` 递增 | 本地通过（`project-management-api.integration.test.ts`、`project-management.service.test.ts`） |
+| F06-MAINTENANCE-API-002 | HTTP + PostgreSQL | 已归档 / 已取消任务不算未收尾 | 任务已归档或已取消时切「维护中」放行 | 同上 |
+| F06-MAINTENANCE-UI-001 | 前端 | 项目卡与编辑弹窗 | 项目卡片只有编辑与管理成员入口，不再有归档 / 恢复 / 申请 / 批准 / 驳回入口；编辑弹窗按三态切换并提示「切到维护中要求项目下任务全部收尾」 | 本地通过（`ProjectsPageView.test.tsx`、`project-management-modals.test.tsx`） |
+| F06-ARCHIVE-E2E-001 | Playwright | ~~归档→只读→恢复关键路径~~ | ~~已被 ADR-043 取代~~：项目层面归档整体下线，`apps/e2e/tests/project-archive.spec.ts` 已删除 | 已下线（2026-09-23） |
 
 ## F-12 未分类模块编辑（2026-09-09 人工确认）
 
@@ -137,7 +135,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 接入说明见 [Modules CommandPort](../apps/api/src/modules/modules/README.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | MOD-BOOT-001 | PostgreSQL 集成 | 成功初始化 | runtime 同事务写项目、创建者及初始成员、唯一未分类模块，默认字段与事务时间正确 | CI 已通过（e826483，见下方证据） |
 | MOD-BOOT-002 | PostgreSQL 集成 | 后续步骤失败 | 外层抛错后，独立查询项目、成员、模块均为零 | 同上 |
 | MOD-BOOT-003 | PostgreSQL 集成 | 同项目重复 | 同事务第二次创建冲突并整体回滚；已提交项目再次创建冲突且原数据不变 | 同上 |
@@ -162,7 +160,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 仅记录已被当前 API 实现消费的契约运行期组合；生成工具链见 [ADR-027](adr/ADR-027.md)，运行期定案见 [ADR-029](adr/ADR-029.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | CONTRACT-001 | 单元 | Zod Pipe body | `ContractBody` 从 Route Registry + Schema Registry 解析；默认值生效；失败统一抛 `ContractValidationError` | 本地通过（`contract-validation.pipe.test.ts` 6 例，2026-09-09） |
 | CONTRACT-002 | 单元 | path/query | path 数字字符串与 query `limit/includeVoid` 按契约 coerce；严格 Schema 拒绝未知字段 | 同上 |
 | CONTRACT-003 | 单元 | headers | 只提取 Schema `shape` 声明字段，Express 附加头部不触发 422；缺 CSRF 拒绝 | 同上 |
@@ -182,7 +180,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 投影与通知；任一初始成员无效（停用/不存在）时整笔回滚，创建者始终以活跃成员写入。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | PROJ-CREATE-001 | PostgreSQL 集成 | 成功创建 | 同事务写入项目、创建者与初始成员（ACTIVE）、唯一 UNCLASSIFIED 模块、`project.create` 审计链、`PROJECT_CREATED` 活动投影、项目搜索投影与每成员一条通知；响应 200，`replayAuthContext` 携带项目与创建者 | 本机 PostgreSQL 4/4 通过（2026-09-08） |
 | PROJ-CREATE-002 | PostgreSQL 集成 | 仅创建者 | 创建者为唯一 ACTIVE 成员；每个项目恰好一个 UNCLASSIFIED 模块 | 同上 |
 | PROJ-CREATE-003 | PostgreSQL 集成 | 停用成员回滚 | 初始成员停用时整笔回滚，无残留项目 | 同上 |
@@ -211,7 +209,7 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 与概览统计仍未实现。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F05-READ-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `ProjectPath`、`ProjectItem`、`ProjectListResponse`、`ProjectDetailResponse` 登记；两条 GET 路由声明 Session 认证、CSRF/幂等 `none`、只读状态码与精确权限矩阵；OpenAPI 和前端客户端由生成工具更新 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，57/57 条路由；`permissions.test.ts` 14 例） |
 | F05-READ-API-001 | API 单元 | 服务端授权编排 | 从 Session 解析 actor，列表/详情只使用服务端 `AuthorizedProjectScope`；无权限与不存在统一 404；匿名 401；异常不泄露数据库细节 | 本地通过（`projects-read.service.test.ts` 3 例、`projects-read.controller.test.ts` 3 例；API 单测 59 文件 274 例） |
 | F05-READ-API-002 | HTTP + PostgreSQL | 真实权限与归档读取 | 系统管理员可见全部项目；普通成员只返回 ACTIVE 成员项目；非成员/已移除成员详情 404；匿名与停用 401；非法路径 422；归档后详情仍为 `ARCHIVED` | 本地通过（`projects-read-api.integration.test.ts` 2 例；API 集成 34 文件 190/190，PostgreSQL 18.6 + PGroonga） |
@@ -245,7 +243,7 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 （Session + CSRF + 数据库幂等，锁序 `["project"]`，审计 `project.member.role.set`，活动 `PROJECT_MEMBER_ROLE_CHANGED`）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR033-CONTRACT-001 | 契约与 CI | Schema、Route Registry 与生成客户端 | `projectMemberRoleSchema`、`ProjectMemberRecordItem.role`、`ProjectMemberItem.role`、`SetProjectMemberRoleRequest/Response`、`ProjectDetailResponse.currentUserRole` 登记；`setProjectMemberRole` 完整登记策略；`add/remove/archiveModule/restoreModule/listProjectMembers/listProjectMemberUnfinishedTasks` 的 `authPolicy` 由 `adminSession` 调整为 `session`；幂等契约版本按重放字段变化升级 | 本地通过（`contract:drift` 5 产物、`contract:validate` 98 条、`permissions:check` 98/98） |
 | ADR033-DB-001 | PostgreSQL | 迁移 0015 列、约束、唯一索引与回填 | `role` 默认 `MEMBER`；`project_members_role_check` 固定枚举；`project_members_one_leader` 保证每项目至多一条 ACTIVE+LEADER；`project_members_removed_role_check` 保证 REMOVED 行 role=MEMBER；创建者活跃成员行回填为 LEADER；`app_runtime` 授权不变 | 本地通过（`db:migrate` 应用 0015；`migrations:check` 16 迁移；`database.test.ts` 不可变清单含 0015；database 单测 15/15、集成 26/26） |
 | ADR033-API-001 | API 单元 | 角色门禁与 setRole 编排（~~已被 ADR-039 取代~~） | `ProjectRoleGateService.manageRole` 返回 SYSTEM_ADMIN/LEADER/PROJECT_ADMIN/MEMBER/NOT_MEMBER；`roleSetterRole` 把 PROJECT_ADMIN 降级为 MEMBER（不能任命角色）；`setRole` 门禁 NOT_MEMBER→404、MEMBER→403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、LEADER 设 LEADER→403 `PROJECT_MEMBER_LEADER_ASSIGN_FORBIDDEN`、唯一冲突→409 `PROJECT_MEMBER_LEADER_CONFLICT`；移除 LEADER→409 `PROJECT_MEMBER_LEADER_PROTECTED`；读/写路径经 `requireManageRole` | 历史通过（当时 `project-member-management.service.test.ts`、`project-member-management-http.service.test.ts`；角色口径已由 ADR-039 取代） |
@@ -272,7 +270,7 @@ API 集成 48 文件 444 例、database 单测 15/15 + 集成 26/26 通过。本
 启停、启用与强制退出；无新数据库迁移，复用现有 `users`/`user_sessions`/审计与密钥机制。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F03-CONTRACT-001 | 契约与 CI | 六条路由登记 | Schema Registry、Route Registry、Controller 绑定、OpenAPI、Web 客户端与权限矩阵一致；41 条路由全部由 `contract:drift`/`contract:validate`/`permissions:check` 覆盖 | 本地通过（`contract:drift`、`contract:validate`、`permissions:check`，41/41） |
 | F03-API-001 | 单元 | HTTP 编排 | `listAdminUsers` 允许管理员、普通用户 403、匿名 401；create 的事务外 Argon2id 哈希、CSRF/幂等键/`If-Match` 传递、失败映射与幂等回放授权回调 | 本地通过（`admin-users-http.test.ts`，API 单测 55 文件 256 例） |
 | F03-API-002 | HTTP + PostgreSQL | 完整生命周期 | 管理员创建用户后同 Key 重放不重复；编辑、停用、启用、强退分别递增版本；停用/强退同事务递增 `auth_version` 并撤销 Session；停用后旧 Session 请求 401；五类审计事件齐全；审计失败时创建整体回滚 | 本地通过（`admin-users-api.integration.test.ts`；API 集成 31 文件 152 例，PostgreSQL 18.6 + PGroonga） |
@@ -292,7 +290,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 文档与仓库治理
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | DOC-001 | CI | Git 文本、空白与冲突标记 | `node scripts/check_docs.mjs` 对 HEAD、暂存区、工作区及未忽略新文件无报错 | 已自动化 |
 | DOC-002 | CI | Markdown 相对/引用式链接与本地锚点 | 不存在断链、未定义引用、危险 scheme、越界路径或缺失锚点 | 已自动化 |
 | DOC-003 | Review | ADR 引用与编号 | 所有 ADR 编号唯一，设计只引用 `docs/adr` 权威记录 | Required |
@@ -303,7 +301,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 下表按[技术设计 §12.4](../技术设计v1.2.2.md#124-ci-门禁)的执行顺序登记阶段 0 CI 最小链路。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | CI-001 | CI | frozen lockfile 安装 | `pnpm install --frozen-lockfile` 在 Node 24.20.0 / pnpm 11.19.0 下成功，且不修改 `pnpm-lock.yaml` | 已自动化 |
 | CI-002 | CI | ESLint | `pnpm lint` 对全部工作区源码零错误 | 已自动化 |
 | CI-003 | CI | Prettier 格式 | `pnpm format:check` 对 `.prettierignore` 之外的全部文件通过；Markdown、lockfile、迁移与生成物按 `.prettierignore` 排除 | 已自动化 |
@@ -355,11 +353,10 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 > Trivy 扫描已按 §12.4 顺序插入 CI；真实镜像 digest 绑定与签名发布清单仍待发布环节。
 > F-31 覆盖见“Playwright 浏览器测试基座”一节。
 
-
 ## 健康探针
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | OPS-001 | 单元 + API 集成 | `/health` 与 `/health/live` | 返回 200 `{"status":"ok"}`；`/health/live` 不访问数据库 | 单元已通过（controller 2 例）；2026-09-08 本地 PostgreSQL 18.6 + PGroonga 集成 2 例通过 |
 | OPS-002 | 单元 + API 集成 | `/health/ready` 就绪 | 数据库可连接且迁移版本存在时返回 200 `{"status":"ok"}` | 单元已通过（controller 1 例 + service 1 例）；2026-09-08 本地真实 PG 集成 1 例通过 |
 | OPS-003 | 单元 + API 集成 | `/health/ready` 未就绪 | 数据库不可连或迁移缺失时返回 503 统一错误体 `{code:"SERVICE_NOT_READY",message,details,requestId}`，不泄露连接串/版本/堆栈 | 单元已通过（controller 1 例 + service 2 例）；2026-09-08 本地无 DB 集成 2 例通过（不可达 DB URL） |
@@ -370,7 +367,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 权限与成员关系
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | AUTHZ-001 | API 集成 | 每条 Route Registry 操作 | 至少一条允许与一条拒绝用例，身份覆盖与[权限矩阵](permissions.md)一致 | 已自动化（`packages/api-contract/test/permissions.test.ts` 扫描需认证路由的允许/拒绝用例并与 Registry 一致，`pnpm permissions:check` 双向校验；CI 已执行） |
 | AUTHZ-002 | PostgreSQL 集成 | 跨项目 IDOR | 其他项目成员和已移除成员均得到 404，SQL 不返回目标行 | 已自动化（`features-api.integration.test.ts` 跨项目/已移除成员 404 与 `project-member-management-api.integration.test.ts`；CI 已执行） |
 | AUTHZ-003 | Workflow 集成 | 创建项目时取消创建者 | 请求被 Schema/业务规则拒绝；创建者必为初始成员 | 已自动化（`project-bootstrap.integration.test.ts` 创建者同事务写入与仅创建者用例；CI 已执行） |
@@ -387,7 +384,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 幂等、版本与事务
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | IDEMP-001 | Registry CI | POST/PUT/PATCH/DELETE 默认策略 | 默认登记 `idempotencyRequired`；显式豁免同时登记原因并引用对应的 Accepted ADR | 已自动化（`packages/api-contract/test/validate.test.ts` 写方法不得 `none` 与豁免理由校验；CI 已执行） |
 | IDEMP-002 | API 集成 | 相同 Key、相同请求重放 | 当前认证、权限及所需高风险管理员门禁（完整管理员 Session 与写操作 CSRF）均通过时只执行一次并重放原状态码和脱敏响应；任一门禁失败则拒绝且不泄露已存响应 | 已自动化（`idempotency-runner.integration.test.ts` 与 `idempotency-runner.test.ts` 重放与门禁用例；CI 已执行） |
 | IDEMP-003 | API 集成 | 相同 Key、任一语义输入不同 | body、path 参数、query、Content-Type、适用的 `If-Match` 或 Registry 声明的行为头任一不同均返回 409，不改变业务数据 | 已自动化（`idempotency-http.test.ts` 与 runner 集成用例；CI 已执行） |
@@ -412,7 +409,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 审计与安全
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | AUDIT-001 | PostgreSQL 并发 | 至少 100 个同 scope 并发业务事务 | 链无分叉、无序号缺口，每个成功业务事件恰有一条审计；见 [ADR-008](adr/ADR-008.md) | 已自动化（阶段 0 数据库层：100 并发事务追加同一项目链；2026-09-09 已在 F-12 `createModule` 真实业务命令上以 100 笔并发事务重跑，序号连续且无分叉，见 MOD-AUDIT-CONC-001） |
 | AUDIT-002 | PostgreSQL 并发 | 多 scope 与链头初始化竞争 | 按 UTF-8 scope 顺序加锁，无死锁或重复链头 | Required（2026-09-12 清账核对：未找到多 scope 链头竞争的并发用例，保持待补） |
 | AUDIT-003 | PostgreSQL 集成 | 事务回滚 | 业务、审计行与链头同时回滚 | 已自动化（`audit-write.integration.test.ts` 4/4，2026-09-09；CI 已执行） |
@@ -442,7 +439,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 搜索、部署与恢复
 
 | ID | 阶段 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | SEARCH-001 | 阶段 0 | 中文/标识符可行性金标 | ≥1,000 投影、≥100 查询、Recall@20 ≥90%，目标查询使用 PGroonga `pgroonga_text_full_text_search_ops_v2`，普通输入经 `pgroonga_query_escape`，跨项目 0 条 | 已自动化（`apps/api/test/search-query.integration.test.ts` 冻结 200 条金标与 Recall@20 ≥ 90% 断言（≥180/200）；101000 行规模、Recall 189/190 与容量证据见 SEARCH-002 与 A-5 章节，CI 已执行） |
 | SEARCH-002 | 阶段 4 | 峰值容量 | ≥100,000 且 ≥五年峰值 1.2 倍；30 并发 10 分钟；预热 P95 <500ms/P99 <1s | 本地通过（2026-09-11：101000 行规模表、30 并发 × 600.8s、2,362,344 次 SQL、0 错误、P95 10.171ms / P99 13.284ms、Recall@20 189/190、行级跨项目越界 0、冷缓存 30 条单独记录；证据 [`pgroonga-capacity-report.json`](../database/poc/search-pgroonga/artifacts/pgroonga-capacity-report.json) 与本文件 A-5 章节；该门禁不进入 CI；5 年峰值模型未在设计中定稿，1.2 倍条件以上界形式记录） |
 | SEARCH-003 | 阶段 0 | `GET /api/v1/search` API 契约纵切片 | Schema Registry、Route Registry、权限矩阵与 Controller 绑定一致；生成 OpenAPI 与客户端无漂移；`q/cursor/limit/includeVoid` 边界、`SearchItem` 判别字段、`SearchPage` 的 `items/nextCursor/hasMore` envelope、不透明游标的 HMAC 签名/篡改/过期/绑定验证与 `422` 映射由单元测试覆盖；真实 PostgreSQL 分页继续验证签名游标可用 | 已自动化（契约、游标、Controller 单测和真实 HTTP API 集成测试已落库；前端搜索页面单测已本地覆盖；Playwright E2E 已本地覆盖 13/13（跨项目隔离、空态、签名游标分页与中文短词/特殊标识符）；PR #68 CI 已通过（workspace 10m14s，docs 通过）） |
@@ -496,7 +493,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 前端基础框架与边界治理 (F-30)
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | FE-001 | 单元测试 | 动态路由聚合与防重 | `buildRouteObjects` 支持 `AppRouteModule` 转换，检测并拒绝重复路径，正确传递 `requiresAuth`/`requiresAdmin` | 已自动化 |
 | FE-002 | 单元测试 | 声明式鉴权与管理员守卫 | `RequireAuth` / `RequireAdmin` 支持 `loading`、`anonymous`、`error` 提示，普通用户拦截及管理员放行 | 已自动化 |
 | FE-003 | 单元测试 | 全局错误边界与恢复 | `AppErrorBoundary` 捕获 UI 渲染异常，展示 Ant Design 提示并支持重置重试 | 已自动化 |
@@ -508,7 +505,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 ## 项目动态与站内通知（F-27 / F-28，C 本地交付 2026-09-08）
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ACT-001 | PostgreSQL 集成 | 活动投影写入 | 同一 `TransactionContext` 写审计链与 `activity_projection`；同一来源事件不重复；派生可见性只向更高 `row_version` 推进并更新同一实体全部动态；后续步骤失败整体回滚 | 本地通过（`activity-projection.integration.test.ts` 4 例） |
 | ACT-002 | PostgreSQL 集成 | 活动查询授权与分页 | 普通成员只读本人项目的 `MEMBER` 投影，`includeAdminOnly=true` 不扩大范围；系统管理员默认排除 `ADMIN_ONLY`、显式开启后可见；跨项目与已移除成员统一 404；签名游标绑定用户/项目且分页无重叠；响应只暴露脱敏白名单字段 | 本地通过（`activity-query.integration.test.ts` 4 例、`activity-notifications-api.integration.test.ts` 2 例） |
 | ACT-003 | 单元测试 | 活动游标安全 | 签发并校验绑定用户、命名空间和项目的签名游标；拒绝篡改、过期、绑定其他用户/项目、畸形游标、未知 key 版本和错误命名空间 | 本地通过（`time-cursor.test.ts` 3 例） |
@@ -525,11 +522,10 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | CONTRACT-001 | 契约与权限 | F-27/F-28 与用户目录路由登记 | 16 条 Route Registry 与 Schema、OpenAPI、生成客户端、Controller 扫描、权限矩阵一一对应；`contract:drift`、`contract:validate`、`permissions:check` 均通过 | 本地通过；PR #63 CI 已通过 |
 
 后端本阶段 F-27/F-28 与用户目录相关的真实 PostgreSQL 集成共 89 例（22 文件）；前端本阶段搜索、活动、通知、项目创建、视觉迁移与 MFA 认证相关单测共 63 例（25 文件）。F-04 项目创建 Workflow 已接入活动、通知与搜索投影；任务完成、记录作废/恢复、合并等业务 Workflow 尚未接入活动/通知写端口，因此这些业务事件尚未在生产侧生成（本地时点；2026-09-12 回填：此后任务域创建/编辑/状态流转、记录作废/恢复、任务组合并与解除、外部链接和遗留项转任务等已陆续接入活动/通知写端口，实现见 apps/api/src/modules/tasks/tasks-management.service.ts、apps/api/src/modules/change-records/record-lifecycle.service.ts、apps/api/src/modules/task-groups/task-groups.service.ts 与 apps/api/src/workflows/external-link.workflow.ts、apps/api/src/workflows/leftover-task.workflow.ts）。
->
+
 > 2026-09-09 更新：F-04 项目创建前端纵切片新增 `project-form.ts`、`project-query.ts`、`CreateProjectModal.tsx`、`ProjectsPageView.tsx`；`/projects` 改为 `requiresAuth`；Playwright 项目创建用例覆盖创建（含选择第二成员）→ 动态 → 搜索 → 创建者与成员通知。同一批次新增 `GET /api/v1/users` 用户目录、设计师最新公共应用壳/项目页、全局命令面板、通知弹层与活动页视觉迁移以及前端 MFA 注册、验证、恢复码与管理员重认证；活动页拆为项目选择入口和项目动态详情，通知点击直达项目动态。API 单测 47 文件 224 例、前端 25 文件 63 例、本次重跑 API 集成 22 文件 89 例、database 集成 13 例、Playwright 8/8 均本地通过；PR #63 GitHub Actions 已通过（workspace 10m2s，docs 通过）。
 
 > 2026-09-09 搜索边界 E2E 新增：全局搜索覆盖无权限项目不返回、无匹配空态、服务端签名游标加载更多、中文短词与特殊标识符；`global-setup` 增加隐藏项目、25 条分页投影及语义查询 fixture，`global-teardown` 同步清理。本地 `pnpm test:e2e` 为 13/13，`apps/e2e` typecheck 与 API build 通过；PR #68 GitHub Actions 已通过（workspace 10m14s，docs 通过）。
-
 
 > 2026-09-09 F-27/F-28 E2E 新增：`activity.spec.ts` 覆盖“创建项目 → 项目动态 → `project.create` 条目”专属路径；`notifications.spec.ts` 覆盖已读 ↔ 未读切换、全部已读与铃铛未读数联动；抽取 `createProjectViaUi` 复用项目创建。本分支已 rebase 到 `origin/main` `1c2b5bf`，本地 `pnpm build`、`pnpm test:e2e` 为 16/16（含搜索边界与 F-13 功能档案），`apps/e2e` typecheck、`pnpm format:check`、`pnpm check:docs` 与 `git diff --check` 通过；PR #67 首次 CI 已通过（workspace 9m58s，docs 通过）；rebase 到 1c2b5bf 后仅文档同步，未等待新 CI。
 
@@ -539,12 +535,13 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 - 修复竞态时必须保留能在真实 PostgreSQL 上复现旧缺陷的测试。
 - 不得用 mock 数据库替代锁、唯一约束、迁移或事务测试。
 - PR 中只报告实际执行过的测试；尚未具备运行条件的条目标记为 `Required`，不得写成通过。
+
 ## ModuleQueryPort / FeatureQueryPort 写前检查增量（2026-09-08）
 
 本节仅记录事务内写前检查，不代表 CRUD、HTTP 或归档流程已完成。
 
 | 场景 | 自动化入口 | 验证状态 |
-|---|---|---|
+| --- | --- | --- |
 | 两域活跃返回 ID/归属/状态/版本；归档返回 parent-not-active 摘要 | `apps/api/test/write-query-ports.integration.test.ts`，两域各 1 个结果用例 | CI 6/6 已通过（58acbe7），待人工评审 |
 | 两域不存在、项目归属不匹配；功能模块归属不匹配；归档但归属错误不泄露 | 同上，使用精确结果断言 | CI 6/6 已通过（58acbe7），待人工评审 |
 | 两域 FOR SHARE 阻塞另一连接的归档 UPDATE，提交后释放 | 同上，两域各 1 个提交用例，检查 pg_blocking_pids 与最终状态/版本 | CI 6/6 已通过（58acbe7），待人工评审 |
@@ -564,7 +561,7 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 本节记录镜像闭环门禁的落库与验证状态；2026-09-12 回填：五个生产镜像（API/migration/web/db-bootstrap/ops）已由 main `4141e1d` 的 CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际构建并完成 Trivy 扫描；真实镜像 Tag/digest 绑定与签名发布清单仍属发布环节。
 
 | 场景 | 自动化入口 | 验证状态 |
-|---|---|---|
+| --- | --- | --- |
 | 四个生产 Dockerfile 存在且每个 `FROM` 固定 `@sha256:<64hex>`；API/Web/Migration runtime 为数值非 root `USER`；Web 内置 `nginx.conf`；API 内置 `healthcheck.mjs` | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；`.env.deploy.example` 占位符负例被拒绝 |
 | Compose 稳态拓扑渲染、`exact-tag@sha256` 格式、PostgreSQL 18 命名卷挂载、非 root/只读、独立迁移、健康检查、仅 Nginx 暴露 8080/8443 | `pnpm check:deploy:test` | 本地通过 |
 | 每个服务级 secret 使用长语法且 `mode=0400`、`uid/gid` 与容器数值 user 一致、`target` 为 `/run/secrets` 直接子项 | `scripts/check_deploy_refs.mjs`（经 `pnpm check:deploy:test`） | 本地通过；短语法负例被拒绝 |
@@ -580,7 +577,7 @@ CI / workspace 成功，API 集成合计 11 文件、46 用例通过。仅确认
 范围与复跑环境详见 [F-13 交审说明](f13-local-handoff.md)。本轮没有提交、推送、PR 或 CI 结果。
 
 | ID | 层级 | 场景 | 实际结果 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | F13-001 | 契约 | 只允许名称/当前说明/标签；长度边界、身份注入拒绝；七路由安全/重放/版本策略及精确 Controller 绑定 | `features.test.ts` + `permissions.test.ts`，16/16 |
 | F13-002 | PostgreSQL + HTTP | 创建、列表、详情、说明审计前后快照且不生成记录；同名提示不阻断；12 请求跨模块并发编号唯一；编号冲突安全 409 且回滚序列 | F-13 HTTP 真库文件 15/15 的对应场景通过 |
 | F13-003 | PostgreSQL + HTTP | 匿名、停用、非成员、移除成员、完整归属错误；普通成员管理员操作拒绝；重认证过期拒绝状态命令与重放 | 同上 |
@@ -599,7 +596,7 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 具体命令和独享数据库见 [F-14 交审说明](f14-local-handoff.md)。阶段 0 未完成，本批不含 F-15/F-16/F-19。
 
 | ID | 层级 | 场景 | 实际结果 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | F14-001 | 契约 | 字段边界、负责人必选、身份/状态注入拒绝；五路由 CSRF/幂等/重放/版本策略与真实 Controller 绑定 | tasks.test.ts / permissions.test.ts 16/16 |
 | F14-002 | PostgreSQL + HTTP | 创建 FEATURE/TODO/ACTIVE 及初始历史、列表详情/项目成员、项目唯一编号、12 并发编号、导入冲突安全 409 | F-14 20/20 |
 | F14-003 | PostgreSQL + HTTP | 匿名/停用/非成员/移除及错误项目模块功能；创建/改派非成员拒绝；管理员不能指派项目外用户；历史未变负责人可继续编辑 | 同上 |
@@ -613,7 +610,7 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 ## F-15 模块级任务（2026-09-09 本地交审）
 
 | ID | 层级 | 场景 | 实际结果 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | F15-001 | 契约 | MODULE/feature_id NULL，输入去重排序、空集合、字段边界；五模块路由与权限/Controller绑定 | 三契约文件18/18 |
 | F15-002 | PostgreSQL+HTTP | 单份任务/多引用不重复，共用项目编号、空关系；错误归属、PK/FK/MODULE scope trigger拒绝 | tasks-api.integration 28/28（F15 8 + F14 20） |
 | F15-003 | PostgreSQL+HTTP | 删除当前关系及完整不可变审计快照、重加新时间、审计故障整体回滚 | 同上 |
@@ -624,11 +621,10 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 
 具体命令、环境与尚未覆盖的记录域边界见 [F15交审](f15-local-handoff.md)。未新增迁移，不以本批替代F16/F19验收。
 
-
 ## F-16 任务状态和历史（2026-09-10 本地交审）
 
 | ID | 层级 | 场景 | 实际结果 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | F16-001 | PostgreSQL+HTTP | FEATURE/MODULE 连续完成/重开/再次完成、取消恢复、快照与不可变历史 | tasks-api.integration 41/41（F16 13 + 原28） |
 | F16-002 | PostgreSQL+HTTP | 非法状态/实际变化模式/字段、CSRF、真实归属、父级归档、权限撤销重放 | 同上 |
 | F16-003 | PostgreSQL并发 | 完成/取消只成功一方、历史影响保留、旧起始事务重开时间不倒退 | 同上 |
@@ -683,6 +679,7 @@ PR #71 交付增量：features/mfa 的管理员 E2E 改用每用例/重试独立
 API/契约仅作 E2E 所需编译，API 测试/Web/E2E 局部类型检查通过。必要跨域检查 466 源文件无循环/越界，前端144模块边界通过。F16–F19浏览器四文件最终合跑 10/10（2.0分钟），详见 [F-19 交审说明](f19-local-handoff.md)。首轮草稿返回详情的测试 URL 缺 taskId 导致超时；F17旧按钮/提示入口断言在首次合跑两例失败，已同步当前实际流程及保留草稿直达，不降低保存草稿后任务仍待办、历史仍一条的业务断言。未运行全仓静态/构建/测试/无关审计、默认Chromium或本批CI（本地时点；F-19 随后由 PR #85 合入，CI 已通过 run 34449977136）；F20/F21入口未实现。
 
 F-19 旧状态 API 兼容回归：两范围旧 COMPLETE 的响应与相关作者通知、原草稿不变；MAIN/ACTIVE SOURCE 成功、HISTORICAL 当前执行与变更后重放拒绝；旧 1.0.0 Key 在 2.0.0 下 409；REOPEN/CANCEL/RESTORE 及同 Key 重放保持原 DTO；新旧完成竞态仅一条成功、通知故障全部回滚。新增 task-completion 真库 30/30；原 tasks-api 41/41（测试模块同步实际兼容 Controller，原断言保留）。契约五文件 46/46，指纹保留 1.0.0 并追加 2.0.0。
+
 ## F-20 遗留项转换定向验证（2026-09-10）
 
 新增leftover-task.integration.test.ts 21例，覆盖两范围成功/原文与版本不变/双向来源；MODULE混合及全归档影响继承；版本/ID/成员/伪造输入；三层真实父级归档；7种不同阶段故障整体回滚；HTTP同Key重放/不同Key并发唯一/当前撤权与已有任务引用保护；CONVERTED修订/清空/回填稳定链接和重放；ACTIVE解决/回填同ID；两范围归档锁等待及功能先于记录的锁序；预览与任务来源GET隔离。与record-publication、published-records、tasks-api真库四文件82/82。
@@ -742,7 +739,6 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 | F-29 页面层：按路由 projectId 读取项目与概览、非法 projectId 错误态、遗留问题跳转、返回项目列表 | `ProjectOverviewPage.test.tsx` 4 例 |
 
 本地实际执行：`pnpm --filter @inpulse/web exec vitest run src/features/project-overview src/pages/project-overview` 3 文件 14/14；`pnpm --filter @inpulse/web test:unit` 48 文件 195/195；`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/web build`、变更目录 ESLint 与 `pnpm check:frontend:boundaries`（167 模块）通过；2026-09-10 截图对比迁移后重跑定向 `src/features/my-tasks src/features/project-overview src/pages/tasks` 6 文件 45/45、`pnpm lint` 与 `pnpm format:check` 通过。rebase 到 `origin/main` `5087f0a` 后重跑上述门禁：`pnpm --filter @inpulse/web test:unit` 49 文件 199/199（含主线 F-21 新增用例）、`pnpm check:frontend:boundaries`（169 模块 753 依赖）、`pnpm check:docs`（68 个 Markdown）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（6 项目）与 `pnpm --filter @inpulse/web build` 通过。未运行 API/集成/数据库测试（无后端改动）、`pnpm test:e2e`（骨架路由尚无 E2E）与 GitHub Actions（PR #92 的 CI 后续已通过，run 34473214899）。骨架数据不代表已实现能力；F-32 补充字段（priority/dueAt/completedAt/description/creatorId）与 F-29 统计口径等待 A 对 C 域提案的裁定。
-
 
 ## C 域聚合读 R-1 ~ R-4 契约、后端与 F-29 / F-32 接线（C，2026-09-11 本地落库，PR #97）
 
@@ -831,7 +827,7 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 `GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-11） |
 | F08-READ-API-002 | HTTP + PostgreSQL | 身份与管理员门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；只读路径不强制同步 CSRF，完整管理员 Session 即可读取（ADR-031 起不再要求 TOTP 重认证） | 同上 |
 | F08-READ-API-003 | HTTP + PostgreSQL | action 过滤与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
@@ -848,7 +844,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 `apps/ops` 交付 F-08 步骤 6：每小时把链头（`chain_id`/`last_sequence`/`last_hash`/`key_version`/`headUpdatedAt`）的签名检查点写入 WORM；每日导出前一 UTC 自然日的加密审计明细（AES-256-GCM，子密钥由归档签名密钥经 HKDF-SHA256 派生）与 HMAC-SHA256 签名清单。归档进程使用 `audit_archive_writer`（只读 `app.audit_logs` 与 `app.audit_chain_heads`），不挂载在线审计 HMAC；WORM PUT 携带对象锁（COMPLIANCE + 保留天数），409/412 按「对象已存在」幂等处理，不覆盖、不删除。宿主调度由 `deploy/backup/audit-archivectl.sh`（`flock` 并发锁、`--confirm-go-live` 门禁）与两个 timer 承担（每小时检查点、每日 UTC 00:20 导出），静态校验并入 `pnpm check:deploy:test`；操作步骤见[审计归档 Runbook](./runbooks/audit-archive.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F08-ARCHIVE-UNIT-001 | 单元 | 检查点构造/编码/验签 | envelope 为 JCS 规范化 JSON + 末尾换行；篡改 payload 或未知签名密钥版本验签失败 | 本地通过（`checkpoint.test.ts` 3 例，2026-09-11） |
 | F08-ARCHIVE-UNIT-002 | 单元 | 导出包加密、密钥派生与清单 | 加解密往返一致；明文哈希不符、密文截断、未知密钥版本抛错；空窗口导出可解密为空包 | 本地通过（`export.test.ts`、`crypto.test.ts`，2026-09-11） |
 | F08-ARCHIVE-UNIT-003 | 单元 | SigV4 与 WORM 客户端 | AWS 官方向量 `get-vanilla` 通过；对象锁头、path/virtual-host URL、409/412 幂等、5xx 指数退避、4xx 不重试、GET 404 抛错 | 本地通过（`sigv4.test.ts`、`worm.test.ts`，2026-09-11） |
@@ -889,7 +885,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 `listRecordDrafts`（F-17）与 `listChangeRecords`（F-18）由单页数组改为 C-006 服务端签名游标分页：契约以 `RecordDraftPage` / `ReadableRecordPage`（items/nextCursor/hasMore）替换 `RecordDraftList` / `ReadableRecordList`，新增 `RecordDraftListQuery`，`RecordListQuery` 增补 `cursor` 与 `limit`（1～100、默认 20，越界或未知字段 422）。草稿按 `created_at DESC,id DESC`、正式记录按 `published_at DESC,id DESC` 取 `limit+1` 条判断 `hasMore`，服务端把本页最后一条位置编码为签名游标；游标绑定 actor、命名空间与项目，TTL 15 分钟，篡改 / 过期 / 跨项目 / 跨命名空间统一 422 `INVALID_CURSOR`。查询参数不改变可见性：无权限项目先收敛为 404，通过后才校验游标。2026-09-16 起 `RecordDraftListQuery` 另接受可选 `authorId`（`z.coerce` 正整数，越界、非数字与未知字段 422），只返回该作者创建的草稿（前端项目草稿区传当前用户 id），并把作者过滤编入游标绑定 `filterKey`：同一游标换作者或去掉作者统一 422 `INVALID_CURSOR`，避免切换筛选后复用旧游标造成错位。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B1-CONTRACT-001 | 契约 | 分页参数与 envelope | `RecordListQuery` / `RecordDraftListQuery` 接受 `cursor`+`limit`（字符串 “20” 归一为 20）并拒绝 0、101、非整数、超长游标与未知字段；`ReadableRecordPage` / `RecordDraftPage` 严格校验 `items`/`nextCursor`/`hasMore`，缺字段、空 `nextCursor`、未知字段均拒绝 | 本地通过（`packages/api-contract/test/published-records.test.ts`、`test/record-drafts.test.ts`；契约 15 文件 93 例通过） |
 | B1-API-UNIT-001 | 单元 | 游标编码、解码与错误映射 | 第 1 页以本页最后一条位置编码 `nextCursor`，第 2 页以其为排他 keyset 边界；篡改、跨 actor、跨项目、跨命名空间 422 `INVALID_CURSOR`；无权限项目先 404 且不按游标状态区分；成员请求 VOID 列表 404；`limit` 1..100 透传、缺省 20 | 本地通过（`apps/api/test/record-list-pagination.test.ts` 4 例） |
 | B1-WEB-001 | 前端单元 | 「加载更多」与签名游标 | 已发布记录与草稿列表点击「加载更多」后用服务端 `nextCursor` 请求下一页并追加渲染，第二次调用携带 `cursor`、`limit: 20` 与 AbortSignal；`hasMore=false` 后不再请求 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`、`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
@@ -905,7 +901,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 记录侧只读端口 `ChangeRecordReadPort` 删除「已发布任务 ID 集合」方法 `listTaskIdsWithPublishedRecords`，统一为「任务 → PUBLISHED 正式记录数」映射 `countPublishedByTask`（单条 SQL、按 `task_id` 升序、计数为 0 的任务缺席由消费端 `?? 0` 补齐，恒有 `hasPublishedRecord === (count > 0)`）。R-3 `MyTasksQueryService.list` 改为消费计数映射并由计数派生 `hasPublishedRecord`；存在性筛选仍在 `MyTaskQueryPort.list` 的同一分页 SQL 内以等价 EXISTS 先过滤后分页，不改锁序、不新增依赖边。R-3 的 `publishedRecordCount` 契约字段与 R-5 的「任务记录标记批量读」扩展属 A-7（裁决 §11.6），不在本批。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B7-INT-001 | PostgreSQL 集成 | 计数口径与范围 | 同一任务 2 条 PUBLISHED 记录（其中 1 条含第 2 版）→ `count = 2`；仅 VOID / 仅草稿 / 无记录任务缺席（消费端补 0）；跨项目任务只在传入该项目 ID 时返回；空 `projectIds` / 空 `taskIds` 短路且不发出 SQL；越界 `taskIds`（超上限、非正整数）抛 `invalid-task-ids` 且不发出 SQL | CI 已通过（PR #116，run 34574310447；本机当时无 PostgreSQL 实例与 Docker，用例由 CI 首次执行） |
 | B7-PLAN-001 | PostgreSQL 集成 | EXPLAIN (ANALYZE, BUFFERS) | R-3「先过滤后分页」SQL 与计数 SQL 均命中 `change_records` 既有索引（`change_records_project_task_idx` / `change_records_project_status_idx`），无 `Seq Scan on change_records` 与 `Seq Scan on tasks`；证明计数未破坏先过滤后分页、不需要新增迁移 | CI 已通过（PR #116，run 34574310447） |
 | B7-API-UNIT-001 | 单元 | R-3 服务消费计数映射 | `MyTasksQueryService.list` 以本页 `taskIds` 调用 `countPublishedByTask(tx, pageProjectIds, taskIds)`；有条目 → `hasPublishedRecord: true`，缺席 → `false` | 本地通过（`apps/api/test/aggregate-read.service.test.ts`，22 例） |
@@ -919,7 +915,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 按[裁决修订 D-1](a-contract-review-f25-f29-f32.md) §11：R-3 `MyTaskItem` 增加 `publishedRecordCount`（与 `hasPublishedRecord` 同源同口径，恒有 `hasPublishedRecord === (publishedRecordCount > 0)`）；R-5 由「聚合组成员关系」扩为「任务记录标记批量读」，条目为 `{ taskId, groupId, groupRole, publishedRecordCount }`，`groupId` / `groupRole` 可空，请求中每一个有权 taskId 都出现（未入组以 null 返回且计数照常），无权或不存在（含跨项目）仍不出现。B-7 记录侧计数端口不变，R-5 只消费既有 `countPublishedByTask`，不新增依赖边、不新增路由。本节取代上方向后兼容的旧 R-5 语义描述（PR #102 章节保留为历史记录）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | A7-CONTRACT-001 | 契约 | Schema 与生成物 | R-3 `myTaskItemSchema` 增加 `publishedRecordCount`；R-5 条目 `groupId`/`groupRole` 可空并新增 `publishedRecordCount`；`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（97 条路由）、`pnpm permissions:check`（97/97）通过 | 本地通过 |
 | A7-R3-INT-001 | PostgreSQL 集成 | R-3 计数与存在性同源 | `GET /api/v1/me/tasks` 条目计数：`tMain` = 1（草稿不计）、`tSource` = 5（作废记录不计）、`tDone` = 0；逐条满足 `hasPublishedRecord === (publishedRecordCount > 0)` | 本地通过（`apps/api/test/aggregate-read-api.integration.test.ts` 19/19） |
 | A7-R5-INT-001 | PostgreSQL 集成 | R-5 覆盖 / 空值 / 授权 | 一次请求 6 个有权 taskId：全部出现且按 taskId 升序；未入组任务 `groupId`/`groupRole` 为 null（含带 1 条 PUBLISHED 记录者计数为 1、已解除 DETACHED 成员关系按未入组返回）；不存在的 `2147483647` 返回空集；跨项目任务对无权限用户不出现、对成员返回带计数的关系项 | 本地通过（同上，3 例） |
@@ -935,7 +931,7 @@ B-4 前端本地执行（2026-09-11）：`pnpm --filter @inpulse/web test:unit` 
 按 [A 的契约评审裁决](a-contract-review-frontend-consumption.md)（对应 [C 的消费需求清单](frontend-generated-client-consumption-requirements.md) §6 五条开放项）：C-001 生成客户端输出位置冻结为 `apps/web/src/generated/api/`；C-004 `details` 保持开放对象并冻结保留键 `issues` / `reason`（判别联合延后，恢复条件见裁决 §3.2）；C-005 冻结 CSRF 四码族；C-007 生成客户端不做运行时 Schema 校验；C-008 `message` 为稳定诊断文案、前端只按 `code` 分支。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | A2-RULING-001 | 文档 | 五项裁决记录 | 五项全部定案并写入裁决文档；消费清单 §6 状态列与 §7 评审请求同步；技术设计仓库结构“客户端”修订为“客户端生成器” | 本地通过 |
 | A2-CONTRACT-001 | 契约 | ErrorResponse 字段说明与生成物 | `error.zod.ts` 四字段补 `description`（含空对象约定与保留键）；`pnpm contract:generate` 重生成 5 个产物、`contract:drift` 无漂移、`contract:validate`（97 条路由）、`permissions:check`（97/97） | 本地通过 |
 | A2-UNIT-001 | 单元 | 生成客户端不做运行时校验（C-007） | `generation.test.ts` 断言真实 Registry 的客户端与类型产物不含 `zod` / `safeParse`，错误解析走 `JSON.parse` 与 `response.ok` | 本地通过（api-contract 94 例） |
@@ -955,7 +951,7 @@ db 容器不挂载任何登录密码，禁止把一次性覆盖用于日常 `up`
 [灾难恢复离线 Runbook](./runbooks/disaster-recovery.md)。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | A3-INIT-001 | 部署预检 | compose.init.yaml 结构与静态防线 | `pnpm check:deploy:test`：overlay 渲染出 db 的三个 POSTGRES_* 环境变量与六份 `db_*` Secret（target `/run/secrets/db_*`、mode 0400、uid/gid 999）；稳态渲染的 db 无 POSTGRES_* 且 db/migrate/api/web/backup/audit-archive 均不挂 `db_bootstrap_password`；负例（篡改 target、`.env.deploy.example` 占位符）被拒绝 | 本地通过 |
 | A3-INIT-002 | 集成 / 容器 | 真实首次建库（db-bootstrap 镜像） | 本地 Docker 构建 `deploy/docker/db-bootstrap.Dockerfile` 后以 overlay 启动 db：initdb 与 `000_roles.sql` / `010_passwords.sql` / `020_pgroonga.sql` 依次执行无报错；容器 healthy | 本地通过（2026-09-11） |
 | A3-INIT-003 | 集成 / 容器 | 角色与扩展探针 | 7 个角色：`app_owner` / `audit_writer` NOLOGIN，其余 5 个 LOGIN；全部非超级用户、无 CREATEDB/CREATEROLE；`app_runtime` 密码可登录且 `SET ROLE app_owner` 被拒（42501）；`pgroonga` 扩展存在 | 本地通过 |
@@ -984,7 +980,7 @@ DEPLOY-003）仍是上线门禁，未在本批执行；③ 六份密码、发布
 在真实 PostgreSQL 与真实 HTTP（完整 AppModule）上覆盖。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | SEC3-E2E-001 | 浏览器 E2E | 首登与轮换 | 登录请求带 43 字符 `x-csrf-token` 且不带 Idempotency-Key；`GET /auth/csrf` 不发送业务幂等键；登录成功后 `__Host-session` 为 HttpOnly/Secure/SameSite=Lax/Path=/ 且 `__Host-preauth` 被清除 | 本地通过（2026-09-11） |
 | SEC3-E2E-002 | 浏览器 E2E | 刷新 | 登录后刷新页面仍为已认证；随后 `POST /projects` 重新签发 CSRF 并携带 `x-csrf-token` 与 `Idempotency-Key` | 本地通过 |
 | SEC3-E2E-003 | 浏览器 E2E | 多标签 | 同一会话两个标签各自签发 CSRF 并分别完成项目创建；第二个标签签发后第一个标签仍能完成「全部已读」写操作 | 本地通过 |
@@ -1008,7 +1004,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 按[裁决](a-contract-review-f25-f29-f32.md) §10.4 与 §11 落地 F-25 步骤 3：任务中心的任务列表、任务卡片与任务详情新增「主任务 / 来源任务」关系徽章、「迭代记录 n 条」与「查看主任务」入口；数据源为 R-5 `GET /api/v1/task-groups/memberships` 的页面级一次批量调用（`taskIds` 1..100，常规页面单块即一次请求），禁止按任务逐个请求；「未入组」按条目本身（`groupId` / `groupRole` 为 `null`）判断而非按条目缺失，`groupRole` 为 `null` 时隐藏徽章与导航入口，`groupId` 导航 `/task-groups/{groupId}`；条数取自 D-1 落库的 `publishedRecordCount`，未扩展任务基础 DTO。任务详情由右侧抽屉改为居中弹窗（`Modal centered width={1000}` + `catalog-modal task-detail-modal`），视觉与交互对齐设计师稿（`D:\design\latest-version` 的任务卡片与任务弹窗）；弹窗内 tabs 属 C-3，不在本项范围。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | C1-UNIT-001 | 单元 | 批量标记 Hook | `useTaskMarks` 去重升序、按 `TASK_MARK_IDS_MAX=100` 分块、空集合不发请求（`enabled: key.length > 0`）、读取失败降级为空 Map 且不重试；`toTaskMarkMap` 按 taskId 建索引 | 本地通过（`apps/web/src/features/tasks/task-marks.test.tsx` 5 例） |
 | C1-UNIT-002 | 单元 | 任务面板徽章、计数与入口 | 列表行与卡片按 `groupRole` 显示「主任务 / 来源任务」徽章、卡片页脚与详情显示「迭代记录 n 条」（0 条不渲染）、详情「查看主任务」仅 `SOURCE` 显示并导航 `/task-groups/{groupId}`、`MAIN` 自身隐藏入口；整页只发一次标记请求（`taskIds: [1, 2]`） | 本地通过（`apps/web/src/features/tasks/TasksPanel.test.tsx`，含 C-1 3 例） |
 | C1-UNIT-003 | 单元 | 任务中心真实计数 | 任务中心卡片改读 `item.publishedRecordCount`（原写死「记录 1 条」），>0 显示「记录 n 条」且 `title` 为「n 条已发布迭代记录」，0 不渲染 | 本地通过（`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`，期望「记录 3 条」） |
@@ -1027,7 +1023,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 按 C-3 完成 F-29 / F-32 页面视觉收尾，并为任务详情弹窗切换设计稿的标签页结构（页面不再使用抽屉，按用户 2026-09-11 指令）：`TasksPanel.tsx` 弹窗头部改为动作行（`TaskDueBadge` 截止徽章 + 完成任务 / 取消任务 / 合并到主任务 / 重新打开 / 恢复任务 / 编辑任务，`disabled={!taskWritable}`），中部新增 `CalmTabs`（`role=tablist/tab` + `aria-selected`）承载「任务信息 / 迭代记录 [n] / 合并与分支 [· #groupId]」三个标签页，右侧 facts 面板保留「影响功能：」等字段；`TaskStatusPanel.tsx` 重写为受控 `action` 面板（外层 `section.task-status-section`，保留 `.task-status-history` 时间线与完成 / 重开 / 取消 / 恢复弹窗、冲突重载与幂等键）；`Calm.tsx` 新增 `CalmTabs`、`InpulseIcon.tsx` 新增 `x` 图标；`inpulse-design.css` 新增 `.calm-task-actions` / `.calm-due`(+tone) / `.calm-tabs` / `.task-status-section` / `.task-status-published` / `.task-status-history`。C-4 对 `.page-content` 与 `.badge` 全局样式改动做全站人工视觉复核。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | C3-UNIT-001 | 单元 | 弹窗标签页与分支面板 | 任务详情弹窗标签页切换（任务信息 / 迭代记录 / 合并与分支）；SOURCE / MAIN / 未入组三种分支面板渲染；`TasksPanel.test.tsx` 新增 4 例 | 本地通过 |
 | C3-E2E-001 | Playwright | 状态历史与动作行回归 | `task-status.spec.ts`（FEATURE / MODULE 两例）、`record-publishing.spec.ts`、`record-drafts.spec.ts`、`issues.spec.ts` 在弹窗 tabs 改造后仍通过（`.task-status-history` 计数、动作按钮、查看已发布记录链接） | 本地通过 |
 | C3-E2E-002 | Playwright | 各页面弹窗 / 关系标记回归 | `tasks.spec.ts`、`module-tasks.spec.ts`、`external-links.spec.ts`、`task-groups.spec.ts`、`aggregate-views.spec.ts`、`leftover-task.spec.ts`、`task-completion.spec.ts` 随全量 `pnpm test:e2e` 通过 | 本地通过 |
@@ -1047,7 +1043,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 报告见 [`pgroonga-capacity-report.json`](../database/poc/search-pgroonga/artifacts/pgroonga-capacity-report.json)（`version: pgroonga-capacity-v1`，全部 gate 通过才以 0 退出）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | SEARCH2-CAP-001 | 真实 PostgreSQL 压测 | 投影规模与冻结金标 | 规模表 ≥ 100,000 行（实测 101000）、冻结金标 200 条且版本 `phase4-v1`、预热 Recall@20 ≥ 90%（实测 189/190 = 99.47%，缺失 `G007:通知`） | 本地通过 |
 | SEARCH2-CAP-002 | 真实 PostgreSQL 压测 | 30 并发 × 10 分钟 | 30 并发持续 ≥ 600s（实测 600.8s）、2,362,344 次 SQL、0 错误、P95 < 500ms（实测 10.171ms）、P99 < 1s（实测 13.284ms）、qps 3991.8 | 本地通过 |
 | SEARCH2-CAP-003 | 真实 PostgreSQL 压测 | 跨项目隔离 | 行级断言任何越界 `project_id` 计违规（实测 0），持续压测前后各一次负向探针（`G043` 在非授权项目返回 0 行） | 本地通过 |
@@ -1057,6 +1053,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 本地实际执行（2026-09-11）：`powershell -NoProfile -ExecutionPolicy Bypass -File database/scripts/poc-search-pgroonga-local.ps1 -Image inpulse/pgroonga-pg18.6:repro -Port 55434 -RestorePort 55435 -Capacity` 一体化路径成功退出——8 个迁移校验与迁移、数据库单测 15 例、数据库集成 26 例、10 个 PGroonga 策略 PoC、容量门禁（30 并发 × 600.8s、2,398,317 次请求 / 2,362,344 次 SQL、0 错误、P95 10.171ms、P99 13.284ms、召回 189/190、冷缓存 30 条）、升级路径（`0000-0002` 手工应用后由 runner 应用 `0003`-`0007`，4 applied / 4 already present）与 `0003`/`0004`/`0005` 逐迁移事务内回滚、逻辑备份恢复验证；`database/package.json` 新增 `poc:search:capacity`，`database/scripts/poc-search-pgroonga-local.ps1` 新增 `-Capacity` 参数。
 
 未运行 / 已知偏差：① 本批 [PR #128](https://github.com/256-code/InPulse/pull/128) 的 GitHub Actions 已通过（run 34612213457 / 34612213472）；② 容量门禁不进入 CI（含 10 分钟持续负载与容器重启），端到端 P95（Nginx / TLS / API 与鉴权开销）需在部署环境复测；③ 5 年容量模型峰值未在设计中定稿，1.2 倍条件以上界形式记录（峰值 ≤ 84166 时成立），定稿后需人工复核并按需复测；④ 冷缓存只清空 PostgreSQL shared_buffers，宿主页缓存与存储层缓存未清空；⑤ 30 并发由单进程发起，未覆盖真实成员关系变更并发；⑥ 本批三个既有 PoC artifact 由同一次脚本运行重生成后已还原，避免夹带与 A-5 无关的时序噪声。
+
 ## B-5 迭代记录 Markdown 白名单渲染（2026-09-11 本地落库）
 
 按[技术设计 §7.5](../技术设计v1.2.2.md)与[系统设计 §3.6](../系统设计文档v1.0.2.md)：迭代记录
@@ -1074,7 +1071,7 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 草稿、遗留项转任务预览、版本冲突「最新内容」预览；编辑表单保持纯文本 textarea。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B5-UNIT-001 | Web 单元 | CommonMark 结构渲染 | 标题 / 列表 / 引用 / 代码块 / 行内代码 / 粗斜体 / 分隔线按白名单渲染；行内代码中的 `<div>` 文本保留；空内容不产生节点并保留调用方类名 | 本地通过（`RecordMarkdown.test.tsx`） |
 | B5-UNIT-002 | Web 单元 | 原始 HTML 惰性 | `<script>`、事件处理器与原始标签不进入 DOM（无 script/img/onerror 节点与全局探针赋值）；原始 HTML 文本按策略丢弃、历史纯文本换行保留 | 本地通过 |
 | B5-UNIT-003 | Web 单元 | 协议与域名白名单 | `javascript:` / `data:` / `vbscript:` 不产出 href；`https://github.com/...` 产出安全外链且 autolink 同口径；http、非 GitHub 域名、混淆域名、userinfo、非默认端口、相对路径与畸形 URL 只保留文本 | 本地通过 |
@@ -1104,7 +1101,7 @@ http、非 `github.com` 域名、混淆域名、userinfo、非默认端口与畸
 （`projectId`/`status`/`publishedId`/`moduleId`/`taskId` 与 `view=published` 兼容忽略）与 E2E 依赖的可访问名保持不变。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B3A-UNIT-001 | Web 单元 | 本地来源与关键词筛选 | 来源筛选覆盖「全部来源 / 任务来源 / 模块级影响 / 功能直接创建」（按 `taskId` 与 `scopeType` 判定）；关键词命中编号、标题、原因、改动、验证与遗留问题，大小写不敏感，空关键词不过滤 | 本地通过（`apps/web/src/features/records/RecordsWorkspace.test.tsx`） |
 | B3A-UNIT-002 | Web 单元 | 按发布日分组 | 当前已加载页按 `publishedAt` 日期键分组，组内保持服务端 `published_at DESC` 顺序、组间按日期降序，并给出中文日期与条数 | 本地通过 |
 | B3A-UNIT-003 | Web 单元 | 卡片展开、详情与生命周期 | `record-card` 摘要显示标题、编号、版本与状态徽标；展开状态由 URL `publishedId` 驱动，展开后渲染 `正式记录详情` region（版本对比、历史版本、GitHub 关联与管理员生命周期操作）；VOID 记录对成员只读 | 本地通过（`PublishedRecordDetail.test.tsx` 4 例 + `RecordsWorkspace.test.tsx`） |
@@ -1138,8 +1135,9 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 项目 / 模块 / 功能名与作者引用）与 `listMyRecordDrafts`（`GET /api/v1/me/record-drafts`，当前 actor 的全局未发布草稿，
 跨项目回填名称）；迁移 `0008_records_cross_project_indexes.sql` 增加跨项目读索引（`database/schema/change-records.ts` 同步）；
 `/records` 据此打开「全部项目」（不传 `projectId` 即默认全量），B-3a 的本地降级筛选被服务端筛选与 `q` 取代。
+
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B3B-CONTRACT-001 | 契约 | Schema、路由与权限登记 | 6 个 Schema（`RecordFeedQueryRequest` / `RecordFeedItem` / `RecordFeedPage` / `MyRecordDraftItem` / `MyRecordDraftPage` / `MyRecordDraftListQuery`）与 2 条 GET 路由全策略显式登记；OpenAPI、生成客户端与 Registry 无漂移；`docs/permissions.md` 新增两行 | 本地通过（`packages/api-contract/test/record-feed.test.ts`；`pnpm contract:drift` 5 个产物、`pnpm contract:validate` 99 条路由、`pnpm permissions:check` 99 条操作 / 99 条路由） |
 | B3B-API-001 | API 集成 | 鉴权与输入边界 | 匿名 401；`limit` 越界、归一化后不足 2 字的 `q` 与非法 `status` 返回 422；两条路由均不要求 CSRF 与幂等键 | 本地通过（`apps/api/test/record-feed-api.integration.test.ts`） |
 | B3B-API-002 | API 集成 | 授权范围与状态口径 | 默认只返回成员项目 PUBLISHED 行并回填名称；非成员 `projectId` 收敛为空页（不返回 404）；非管理员请求 `VOID` / `ALL` 收敛为 PUBLISHED，管理员可读作废行 | 本地通过 |
@@ -1150,16 +1148,16 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 | B3B-UNIT-002 | Web 单元 | 来源 / 状态收敛与 `q` 防抖 | 来源五档与状态选项按角色收敛（非管理员只有「已发布」）；关键词 350ms 防抖后以 `q` 下发（不足 2 字不下发）；「加载更多」携带服务端游标 | 本地通过 |
 | B3B-UNIT-003 | Web 单元 | 全局我的草稿条带 | 条带用全局查询列出跨项目本人草稿与「项目 / 模块」归属，点击回到所属项目的草稿详情，保存成功后失效刷新 | 本地通过（`apps/web/src/features/record-drafts/RecordDraftsView.test.tsx`） |
 | B3B-E2E-001 | 浏览器 E2E | 跨项目清单闭环 | 创建第二个项目 → `/records` 选该项目建独立草稿（条带显示标题与「项目 / 未分类」）→ 发布 → 回到未选项目的 `/records` 看到卡片与「归属 项目 /」；`q` 检索无匹配空态与命中；展开摘要显示 `-CR-\d+ · v1 · 已发布` | 本地通过（`apps/e2e/tests/record-feed.spec.ts`；`pnpm test:e2e` 全量 51 例） |
-本地实际执行（2026-09-12）：`pnpm --filter @inpulse/api-contract test` 16 文件 98 例；`pnpm test:unit`
-（database 15、canonical-json 5、api-contract 16 文件 98、web 69 文件 340、ops 8 文件 52、api 68 文件 351）全部通过；
-真库 `apps/api` 集成 51 文件 442 例（新增 `record-feed-api.integration.test.ts` 10 例），两次全量各出现无关文件 500 偶发
-（首轮 `task-group-unmerge` 2 例、次轮 `external-links` 6 例 + `features-api` 3 例），逐文件复跑 3 文件 59 例通过；`database` 集成 26 例（25 通过，1 例为本机长跑库 `project_id` 越 int4 的环境性失败，与本片无关）；
-`pnpm test:e2e` 全量 51 例通过（先定向复跑 `record-feed.spec.ts` 1 例）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、
-`pnpm build`、`pnpm db:migrations:check`（9 条迁移）、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（99 条路由）、
-`pnpm permissions:check`（99 条操作 / 99 条路由）、`pnpm check:deploy:test`、`pnpm check:deps`（655 文件）、
-`pnpm check:frontend:boundaries`（225 模块 1026 依赖）、`pnpm check:secrets`（960 文件）与 `pnpm check:docs` 通过；
-`pnpm deps:audit` 因本机 npm 镜像缺 audit endpoint 失败，改用公共 registry
-`pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
+| 本地实际执行（2026-09-12）：`pnpm --filter @inpulse/api-contract test` 16 文件 98 例；`pnpm test:unit` |
+| （database 15、canonical-json 5、api-contract 16 文件 98、web 69 文件 340、ops 8 文件 52、api 68 文件 351）全部通过； |
+| 真库 `apps/api` 集成 51 文件 442 例（新增 `record-feed-api.integration.test.ts` 10 例），两次全量各出现无关文件 500 偶发 |
+| （首轮 `task-group-unmerge` 2 例、次轮 `external-links` 6 例 + `features-api` 3 例），逐文件复跑 3 文件 59 例通过；`database` 集成 26 例（25 通过，1 例为本机长跑库 `project_id` 越 int4 的环境性失败，与本片无关）； |
+| `pnpm test:e2e` 全量 51 例通过（先定向复跑 `record-feed.spec.ts` 1 例）；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、 |
+| `pnpm build`、`pnpm db:migrations:check`（9 条迁移）、`pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（99 条路由）、 |
+| `pnpm permissions:check`（99 条操作 / 99 条路由）、`pnpm check:deploy:test`、`pnpm check:deps`（655 文件）、 |
+| `pnpm check:frontend:boundaries`（225 模块 1026 依赖）、`pnpm check:secrets`（960 文件）与 `pnpm check:docs` 通过； |
+| `pnpm deps:audit` 因本机 npm 镜像缺 audit endpoint 失败，改用公共 registry |
+| `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。 |
 
 未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #132 检查记录；② 真库两次全量的 500 偶发属既有
 `idempotency_records_retention_check` 时钟偏差族（失败文件每次不同、单文件复跑全过），不得视为已修复；
@@ -1171,7 +1169,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 补齐 B-4 遗留的 `/audit` 浏览器 E2E：`apps/e2e/tests/audit.spec.ts` 两例覆盖普通成员 403 与管理员完整 Session 后的真实读取链路；E2E 基建同步为 API 进程注入 `AUDIT_DATABASE_URL`（由 `E2E_DATABASE_URL` 派生 `audit_reader` 只读账号，`apps/e2e/helpers/runtime.ts` 的 `auditDatabaseUrl()`）。此前 E2E API 进程只有 `DATABASE_URL`，审计读取按设计 fail closed 返回 500——本次是 E2E 环境配置补齐，生产配置、`apps/api/src/database/audit-reader.client.ts` 的 fail closed 行为、角色与鉴权均未放宽。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F08-E2E-001 | 浏览器 E2E | 普通成员访问审计页 | 普通成员打开 `/audit` 命中 `admin-forbidden` 空态与「无权访问」「此区域仅限系统管理员访问。」，页面不展示任何审计内容 | 本地通过（`apps/e2e/tests/audit.spec.ts` 2/2，2026-09-12） |
 | F08-E2E-002 | 浏览器 E2E | 管理员读取原始审计 | 管理员进入 `/audit` 直接读取原始审计（ADR-031 起不再要求 TOTP 重认证）；动作码 `AUDIT_LOG_READ` 过滤命中「链 SYSTEM / 用户 #id / 用户操作」；行内「原始快照」弹窗展示 `eventPayload`（含 `returnedCount`）并以 Escape 关闭；切到 `PROJECT:<id>` 链命中 `project.create` 行与 `PROJECT #id` 归属；操作人 ID 非正整数在本地被拦截且不发请求 | 同上 |
 
@@ -1184,7 +1182,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 按产品要求把匿名入口改为直达登录页，并按设计师稿重做登录页视觉：`RequireAuth` 匿名分支不再渲染「需要登录」Result，改为 `<Navigate to="/login?from=...">`（`buildLoginRedirect` 对非 `/` 开头、`//` 开头或指向 `/login` 的目标回退 `/login`）；登录成功后按 `from` 回跳，页面侧 `resolveLoginTarget` 再次校验。`AppLayout` 在 `/login` 只渲染 `<Outlet />`；`LoginForm` 新增 `variant="brand"`（默认 `"default"` 行为不变），品牌样式收敛在 `apps/web/src/pages/login/login-page.css` 的 `.login-card` 作用域；新增素材 `apps/web/public/libiao-robotics-logo.png`。`status === "error"` 的 500「登录状态异常」Result 与 `RequireAdmin` 403 空态语义未变，仍由既有 E2E 约束。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | LOGIN-UI-001 | 浏览器 E2E | 匿名直达登录页 | 匿名访问 `/search` 与 `/projects` 均不再出现「需要登录」，`waitForURL(/\/login\?from=/)` 后 `from` 参数等于原目标，`login-page` 容器、`Libiao Robotics` 标志与「登录名 / 密码」两个可访问标签可见，「需要登录」不可见 | 本地通过（`apps/e2e/tests/auth.spec.ts` 5/5，2026-09-12） |
 | LOGIN-UI-002 | 浏览器 E2E | 品牌表单与黄色主按钮 | 登录页提交按钮计算样式 `background-color` 为 `rgb(247, 200, 0)`，品牌表单与标志渲染 | 同上 |
 | LOGIN-UI-003 | 浏览器 E2E | 登录后回跳 `from` | 匿名打开 `/projects` 被送到登录页，完成真实登录后落回 `/projects` 并看到「项目与功能」标题 | 同上 |
@@ -1204,7 +1202,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 此前 `pnpm test:e2e` 全量 46 passed / 9 failed，其中数例报错位置全在 `finally` 的 `browserContext.close`（主体无断言错误，而是某步无限等待）。用「合并全部 `*-trace.trace` chunk 的 `before` / `after` 事件差集」定位到卡住的那一步后，确认为 4 个真实缺陷 / 定位器缺陷：
 
 | # | 用例 | 卡住的选择器 | 真因 | 修复 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | `module-tasks.spec.ts` | `.calm-feature-card >> has-text 模块名 >> link "模块任务"` | 「模块任务」链接在 `.calm-feature-card` 的**兄弟**节点 `span.catalog-edit-link` 内（`ModulesPageView.tsx`），而「查看功能」才在卡片内；同一 `moduleCard` 作用域既查卡片内又查卡片外，后者永久挂起 | 父范围改为两者共同的 `article.catalog-module-wrap`（变量名同步为 `moduleEntry`） |
 | 2 | `audit.spec.ts`（4 处） | `button "查询"` / `button "重置"` | 审计页工具栏误挂 `.task-toolbar`，而 `design-system.css` 的 `.task-toolbar > .secondary-button { display: none }` 是设计稿**刻意隐藏**规则 → 两个按钮被隐藏；`applyFilters` 只以「查询」按钮为唯一入口（无 `form onSubmit`、无 Enter 处理）→ **审计筛选功能完全不可用** | 去掉 `task-toolbar` 类；在 `inpulse-design.css` 用 `.activity-toolbar.audit-toolbar > .secondary-button` 显式还原次级按钮外观并写死 `display: inline-flex`，防止再次被隐藏 |
 | 3 | `record-publishing.spec.ts`、`task-groups.spec.ts`（3 处） | `role=dialog[name="任务详情"] >> button "关闭"` | `TasksPanel.tsx` 任务详情弹层只传 `label` 未传 `title` / `eyebrow`，而 `AppModal.tsx` 的 `hasHeader = eyebrow !== undefined \|\| title !== undefined` **不认 `label`** → 整个 `.drawer-header`（含关闭按钮）不渲染。正文另用 `.task-modal-header` 自渲标题区，造成「像有头部但没有任何关闭按钮」 | `.task-modal-header` 补回 `drawer-header` 类并内联关闭按钮（`aria-label="关闭任务详情"`），与设计稿 `task-modal.tsx:150` 一致；移除已无意义的 `closeLabel` |
@@ -1498,7 +1496,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 契约与后端口径不变：任务中心仍走 R-3 `listMyTasks` 与 R-5 `listTaskGroupMemberships`（关系徽章、「迭代记录 n 条」与「查看主任务」保留），`taskDetailPath` 与 `TasksPanel` 的 `?taskId=` 弹窗均为既有能力，本轮只是把点击目标从页内弹层换成深链导航。删除的 `MyTaskDetailModal.tsx` / `.test.tsx` 无其它消费者；`.task-modal*` 系列样式仍被功能档案的 `TasksPanel` 使用，未产生死代码。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F32-NAV-UNIT-001 | 单元 | 功能级卡片点击直达 | `TaskCenterPageView.test.tsx`：点击功能级任务卡片（项目 1 / 模块 11 / 功能 111 / 任务 101）后 `onOpenTask` 收到 `{ projectId:1, moduleId:11, featureId:111, taskId:101 }`，页面内**不出现** `role=dialog`、不出现「关闭」按钮（证明不再弹只读详情） | 本地通过 |
 | F32-NAV-UNIT-002 | 单元 | 模块级已完成任务点击直达 | `TaskCenterPageView.test.tsx`：`serverLikeAdapterWith` + `filters:{status:"done"}` 下点击模块级 `doneTask`（任务 901，`featureId:null`）后 `onOpenTask` 收到 `{ projectId:1, moduleId:11, featureId:null, taskId:901 }` | 本地通过 |
 | F32-NAV-PAGE-001 | 单元（页面层） | 功能级深链路径 | `TasksPage.test.tsx`：注入 `featureTask`（7 / 71 / 711 / 320），点击卡片后 `ArchiveProbe` 文本为 `/projects/7/modules/71/features/711?taskId=320` | 本地通过 |
@@ -1530,7 +1528,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 无新增路由、无 API / 契约 / 权限 / 迁移改动；项目卡片入口保持 `onOpenModules` → `/projects/{projectId}/modules`。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | CAT-NAV-UNIT-001 | 单元 | 树层级与既有页面映射 | `tree-selection.test.ts` 2 例：`treeScopeOf` 对 4 种路径形状分别返回 `null` / 系统 / 模块 / 功能；`treePath` 三级分别得到 `/projects/2/modules`、`/projects/2/modules/3/features`、`/projects/2/modules/3/features/5` | 本地通过 |
 | CAT-NAV-UNIT-002 | 单元 | 树渲染、展开与选中态 | `ProjectTree.test.tsx` 5 例：根节点为系统名并加载模块；三级点击分别调用既有页面路径（并验证系统节点重复点击不收起模块列表）；模块分支在其功能列表加载期间保持 `aria-expanded=true`；功能行 `aria-current=true` 且所属模块保持 `in-path`；项目主页激活时系统节点 `aria-current=true`。**注**：本条「重复点击不收起」语义已被下方「系统目录并入『项目与功能』导航」章节的 NAV-TREE-UNIT-001 取代（项目节点改为与模块一致的点击开合） | 本地通过 |
 | CAT-NAV-UNIT-003 | 单元（布局） | 目录树只在项目目录范围内出现，且与主导航同容器 | `AppLayout.test.tsx` 新增 2 例：项目主页下同一 `nav[name="工作区导航"]` 内既有「任务中心」也有「系统目录」分组，点模块 / 功能分别渲染功能目录 / 功能档案内容，且项目主页内容仍完整渲染；`/tasks` 下不出现「系统目录」分组与 `.project-tree` | 本地通过 |
@@ -1544,7 +1542,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 ## ADR-030 定向回归
 
 | 变更 | 验收证据入口 |
-|---|---|
+| --- | --- |
 | 空项目与创建者历史 | `apps/api/test/project-bootstrap.integration.test.ts`，零模块、成员/审计/投影同事务 |
 | 业务编号与联合创建 | `apps/api/test/task-create.integration.test.ts`，真实 PostgreSQL 唯一编号、并发、无效指派回滚、幂等与撤销权限 |
 | 成员隔离 | 同上，授权成员名单、外部项目用户、已移除成员 |
@@ -1608,7 +1606,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 数据源：`getProject` + `listActiveProjectMembers`。2026-09-21 该只读路由的响应扩为专用契约 `ActiveProjectMembersResponse`（停留在活跃成员的 `id/name/avatarUrl/role/joinedAt`），卡片因此显示加入时间与项目内角色徽标；仍不返回移除时间等成员历史，也不提供任何写入口。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | NAV-CLEAN-UNIT-001 | 单元 | 概览视图收窄后的 props 与渲染 | `ProjectOverviewPageView.test.tsx` 8 例：删除 2 个「项目内导航」用例后其余（指标卡、面板、错误态、跳转）全通过；`ProjectOverviewPage.test.tsx` 6 例：2 个导航用例替换为「查看模块」入口用例 | 本地通过 |
 | NAV-CLEAN-UNIT-002 | 单元 | 模块页 / 功能页移除横条与左栏后无回归 | `ModulesPageView.test.tsx` 8 例（删除「项目内导航」describe）、`FeaturesPageView.test.tsx` 10 例（删除「项目内导航」describe 与「module siblings」用例及其 `moduleRow`/`moduleClient` 辅助）全通过 | 本地通过 |
 | MEMBER-RO-UNIT-001 | 单元 | 只读成员视图渲染与只读语义 | `ActiveProjectMembers.test.tsx` 6 例：复用管理员视觉（h1 项目名、`.panel.settings-panel`、`.calm-member-card` 数量）；无添加 / 移除 / 归档 / dialog、仅「刷新成员」；创建者标注且全员「活跃成员」；加入时间与角色徽标（LEADER 显「组长」、MEMBER 不显徽标、无「移除时间」、无「设置角色」）；空态；加载失败出「项目成员加载失败」+ 重试 | 本地通过 |
@@ -1635,7 +1633,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 罗列区间：新增 `.project-tree-scroll { max-height: 264px; overflow-y: auto }`（含细滚动条样式），目录过长时在固定高度内滚动，不再把侧栏导航撑出视口；项目层提示文案缩进与项目节点对齐。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | NAV-TREE-UNIT-001 | 单元 | 目录树多项目渐进展开 | `ProjectTree.test.tsx` 7 例：先罗列所有项目且未点击不加载模块；点击项目导航 `/projects/2/modules` 并展开模块；**再次点击项目节点收回模块列表（`aria-expanded` true→false、模块行消失）且仍导航项目主页**；模块 / 功能点击导航既有页面；activeScope 链路自动展开；模块分支 toggle；选中态与 in-path 高亮 | 本地通过 |
 | NAV-TREE-UNIT-002 | 单元 | 目录树内嵌「项目与功能」导航项 | `AppLayout.test.tsx` 更新 2 例：项目路由下树渲染在「工作区导航」内且无独立「系统目录」分组标题，模块 / 功能节点点击驱动既有路由；非项目路由默认收起（无 `.project-tree`），点击「展开系统目录」chevron 可展开 / 收起 | 本地通过 |
 
@@ -1654,7 +1652,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - **P3-1 antd 弃用告警**：搜索页 3 处、通知页 2 处 `Space direction` 改为 `orientation`；两页的 `List`/`List.Item` 换成语义化 `ul`/`li`（保留 `data-testid="search-result-item"` 与 `notification-item-*`，12px 行距 + `var(--border)` 分隔线，末行无下边框），不再触发 `[antd: List]` 弃用告警。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | UI-BUG-NOTFOUND-UNIT-001 | Web 单元 | 未匹配路径兜底与外壳保留 | `NotFoundPage.test.tsx`：品牌化 404、无 `Hey developer`、点击「回到任务中心」跳到 `/tasks`；`route-error-page.test.tsx`：404 响应与未知异常分别渲染「页面不存在」「页面加载失败」；`app-router.test.tsx` 新增用例在 `/definitely-not-a-route` 下断言 `route-not-found` 可见且品牌图仍在（外壳未被替换） | 本地通过 |
 | UI-BUG-ADMIN-CONFLICT-UNIT-001 | Web 单元 | 用户管理 409 冲突文案 | `admin-user-query.test.tsx` 新增用例：两个冲突 code 分别输出「登录名已存在」「邮箱已被使用」，不再落到状态兜底文案 | 本地通过 |
 | UI-BUG-RULES-UNIT-001 | Web 单元 | 创建项目规则文案 | `CreateProjectModal.test.tsx` 新增用例：规则面板包含「模块」且不包含「未分类」 | 本地通过 |
@@ -1674,7 +1672,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 同一筛选栏的优先级下拉首项由「全部优先级」改为「全部」，与该栏其它筛选（状态、任务范围）已用的「全部」保持一致。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | UI-PRIORITY-LABEL-UNIT-001 | Web 单元 | 卡片徽章与筛选选项长度 | `TaskCenterPageView.test.tsx`：高 / 紧急卡片徽章文本恰为「高」「紧急」且 `title` 为「优先级：高 / 紧急」；优先级筛选选项严格等于 `["全部","紧急","高","普通","低"]` 且每项不超过 2 个字符 | 本地通过 |
 | UI-PRIORITY-LABEL-E2E-001 | 浏览器 E2E | 任务中心真实数据 | `aggregate-views.spec.ts` 2 passed：卡片徽章 `locator('[title="优先级：普通"]')` 文本为「普通」；优先级筛选仍可写入 / 清除 URL | 本地通过 |
 
@@ -1689,7 +1687,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 修复：`apps/web/src/app/layout/AppLayout.tsx` 面包屑模块按钮改为 `/projects/${catalogProjectId}/modules/${catalogScope.moduleId}/features`，与 `treePath`（模块 -> 功能目录）一致；未新增路由、未改契约，后端零改动。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | UI-BUG-MODULE-CRUMB-UNIT-001 | Web 单元 | 面包屑模块名落地页 | `AppLayout.test.tsx` 新增用例：在 `/projects/7/modules/3/features/5` 点击面包屑「调度模块」后渲染「功能目录内容」；把该行回退为无 `/features` 的路径后同一用例失败（已实测） | 本地通过 |
 
 真实浏览器验证（临时 Playwright 用例，验证后已删除）：普通成员登录后进入功能详情页，点击面包屑中的模块名，修复后落在 `/projects/49/modules/44/features`、页面渲染功能目录且无「页面不存在」；把该行回退为无 `/features` 的路径后，同一步骤渲染「页面不存在」并留下失败截图，与用户反馈完全一致。
@@ -1707,7 +1705,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - `apps/web/src/styles/design-system.css`：新增 `.calm-action-footer > .footer-leading`，让底部归档入口靠左、与右侧「取消 / 保存」分离。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR033-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在模块弹窗底部看到归档入口 | `ModulesPageView.test.tsx`：当前用户角色为 `LEADER` 时打开「编辑模块」，弹层 `.calm-action-footer` 内出现「归档模块」，点击后弹层切到「归档模块」并出现「操作原因」，填原因确认后以 `If-Match` 调用 `archiveModule` | 本地通过 |
 | ADR033-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员同样可见（ADR-039 修订） | 当前用户角色为 `MEMBER` 时弹层底部同样出现「归档模块」；`currentUserRole = null`（非成员）时不渲染 | 本地通过（ADR-039 后已重写） |
 | ADR033-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 普通成员不可见 | 当前用户角色为 `MEMBER` 时弹层底部既无「归档」也无「恢复」按钮 | 本地通过 |
@@ -1728,7 +1726,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 项目标签接入：`ProjectsPageView` 卡片、`ProjectOverviewPageView` 头部、`ProjectMembersPageView` 头部与状态项、`ActiveProjectMembers` 头部与状态项；模块标签接入：`ModulesPageView` 卡片、`FeaturesPageView` 模块资料行、`ModuleTasksPage` 模块资料行。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | LIFECYCLE-WEB-UNIT-001 | Web 单元 | 三档判定与配色 | `resource-lifecycle.test.ts`：`ARCHIVED` 优先于未开始；`ACTIVE` + 0 已完成 = 未开始且配色为 `cyan`；`ACTIVE` + ≥1 已完成 = 进行中并沿用调用方主色 | 本地通过 |
 | LIFECYCLE-WEB-UNIT-002 | Web 单元 | 模块卡标签 | `ModulesPageView.test.tsx`：`completedTaskCount = 0` 的活跃模块渲染「未开始」且 class 含 `badge-cyan`；有已完成任务的模块为「进行中」且 class 含 `badge-blue`（同色收敛前断言的是 `badge-gray`，见文末《生命周期与标签徽章同色》），已归档模块为「已归档」且 class 含 `badge-amber` | 本地通过 |
 | LIFECYCLE-WEB-UNIT-003 | Web 单元 | 项目卡标签 | `ProjectsPageView.test.tsx`：`completedTaskCount = 0` 的项目渲染「未开始」，另一项目仍为「进行中」；该用例已在四态改造中改写为按存储状态断言，见下文《项目生命周期四态（ADR-035）》 | 本地通过 |
@@ -1750,7 +1748,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 前端：项目列表按角色区分「申请归档」「归档申请审核中」「批准归档」「驳回申请」入口；模块与任务弹窗底部归档入口；409 使用专用文案。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR034-API-INT-001 | 真实 PostgreSQL | 归档申请角色矩阵（~~角色口径已被 ADR-039 修订~~） | `project-archive-request-api.integration.test.ts`：活跃成员（LEADER 或 MEMBER 同等）可发起申请，任务未收尾时 409 `PROJECT_ARCHIVE_TASKS_OPEN`；非成员与其他项目 404 | 本地通过（ADR-039 后已重写） |
 | ADR034-API-INT-002 | 真实 PostgreSQL | 申请前置校验与幂等 | 项目下存在未完成且未归档的任务时申请 409 `PROJECT_ARCHIVE_TASKS_OPEN`；提交成功后同 Key 同摘要重放原响应，同一项目重复申请 409 | 本地通过 |
 | ADR034-API-INT-003 | 真实 PostgreSQL | 只有系统管理员能审核 | 活跃成员（含 LEADER）审核 403 `ADMIN_REQUIRED`；不存在项目 404；驳回后项目仍为 ACTIVE 且 `row_version` 不变 | 本地通过 |
@@ -1776,7 +1774,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 功能不参与任务归档前置校验：归档功能只要求项目与父模块 ACTIVE、功能自身 ACTIVE（恢复要求 ARCHIVED）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR034-API-INT-009 | 真实 PostgreSQL | 功能归档角色矩阵（~~角色口径已被 ADR-039 修订~~） | `features-api.integration.test.ts`：普通成员（显式题为 MEMBER）可归档（`ARCHIVED`、rowVersion 2）与恢复（`ACTIVE`、rowVersion 3）；组长无 `is_admin` 同样可归档 | 本地通过（ADR-039 后已重写为正向断言） |
 | ADR034-API-INT-010 | 真实 PostgreSQL | 功能归档越权与移除成员 | 跨项目非成员归档 404 `FEATURE_NOT_FOUND`；被移除成员归档 404 | 本地通过 |
 | ADR034-WEB-UNIT-003 | Web 单元 | 功能归档入口按角色显示（~~角色口径已被 ADR-039 修订~~） | `FeaturesPageView.test.tsx`：活跃成员（`MEMBER` 或 `LEADER`）可见 `feature-lifecycle-*` 与编辑弹层内的归档入口并可提交归档（携带原因）；`currentUserRole = null`（非成员）不显示入口 | 本地通过（ADR-039 后已重写） |
@@ -1793,7 +1791,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 复用模块弹窗既有样式 `.calm-action-footer > .footer-leading`（`apps/web/src/styles/design-system.css`），未新增 CSS 或接口。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR034-WEB-MODAL-ARCHIVE-UNIT-001 | Web 单元 | 组长在功能编辑弹窗底部归档 | `FeaturesPageView.test.tsx`：`currentUserRole = LEADER` 时点「编辑功能」，弹窗底部出现文案为「归档」的 `feature-modal-lifecycle`，点击后出现「操作原因」，填原因确认即以 `archiveFeature(2, 4, 3, { reason })` 调用 | 本地通过 |
 | ADR034-WEB-MODAL-ARCHIVE-UNIT-002 | Web 单元 | 普通成员同样可见（ADR-039 修订） | `currentUserRole = MEMBER` 时打开同一编辑弹窗，`feature-modal-lifecycle` 同样存在且可提交归档；`currentUserRole = null`（非成员）时才不渲染 | 本地通过（ADR-039 后已重写） |
 | ADR034-WEB-MODAL-ARCHIVE-UNIT-003 | Web 单元 | 页面不再有独立归档按钮 | ACTIVE 功能卡片与详情页头均无「归档功能」按钮；已归档功能卡片保留「恢复功能」，点击后走恢复确认并以 `restoreFeature` 调用 | 本地通过 |
@@ -1811,7 +1809,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 前端：`TasksPanel` 新增 `isAdmin` 可选属性与 `canManageProjectResources(isAdmin, currentUserRole)` 判定，编辑弹窗 `.calm-action-footer` 左侧渲染 `data-testid=task-modal-lifecycle` 按钮（文案「归档」/「恢复」），点击后独立确认弹窗要求填写操作原因并经生成客户端携带 `If-Match` 与 `Idempotency-Key` 提交；`FeaturesPageView` 与 `ModuleTasksPage` 传入 `isAdmin`。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR034-API-INT-011 | 真实 PostgreSQL | 功能已归档后归档其任务 | `tasks-api.integration.test.ts`：功能置为 ARCHIVED 后 `POST .../tasks/{taskId}/archive` 200 且 `lifecycleStatus = ARCHIVED`；随后 `restore` 仍 409 `TASK_PARENT_ARCHIVED` | 本地通过 |
 | ADR034-WEB-UNIT-004 | Web 单元 | 任务编辑弹窗底部归档 | `TasksPanel.test.tsx`：`currentUserRole = LEADER` 时编辑弹窗出现 `task-modal-lifecycle`，未填原因先提示「请填写操作原因」，填原因确认后以 `archiveTask(2, 3, 4, 1, { reason })` 与 `If-Match: "1"` 调用 | 本地通过 |
 | ADR034-WEB-UNIT-005 | Web 单元 | 普通成员看不到任务归档入口 | `currentUserRole = MEMBER` 时同一编辑弹窗内 `task-modal-lifecycle` 不存在 | 本地通过 |
@@ -1831,7 +1829,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 文档：ADR-034 的决策与 §2 前置校验、`AGENTS.md` ADR-034 节、系统设计、技术设计、功能设计、开发工作书与 `docs/permissions.md` 的同一口径全部改为「已收尾」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR034-API-INT-012 | 真实 PostgreSQL | 任务完成即可归档模块 | `modules-api.integration.test.ts`：模块下任务 `work_status = DONE` 且未归档时 `POST /modules/{id}/archive` 200 且返回 `ARCHIVED` | 本地通过 |
 | ADR034-API-INT-013 | 真实 PostgreSQL | 任务完成即可申请项目归档 | `project-archive-request-api.integration.test.ts`：项目下任务为 DONE 且未归档时组长提交申请 200 | 本地通过 |
 | ADR034-WEB-UNIT-009 | Web 单元 | 409 文案同步 | `project-management-modals.test.tsx` 断言 `PROJECT_ARCHIVE_TASKS_OPEN` 文案为「项目下仍有未完成、也未归档的任务…」 | 本地通过 |
@@ -1848,7 +1846,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 测试：`TasksPage.test.tsx` 的深链断言（`ArchiveProbe` 改为 `LocationProbe`）替换为就地断言（弹出 `关闭任务详情`、标题可达、URL 恒为 `/tasks`）；`aggregate-views.spec.ts` 断言点击卡片后弹窗可见且 `page.url()` 不变。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | F32-INPLACE-PAGE-001 | 单元（页面层） | 功能级任务就地弹窗 | `TasksPage.test.tsx`：点击功能级任务卡片（7 / 71 / 711 / 320）后弹出任务详情（`关闭任务详情` 与标题可见），`location-probe` 恒为 `/tasks` | 本地通过 |
 | F32-INPLACE-PAGE-002 | 单元（页面层） | 模块级任务就地弹窗 | `TasksPage.test.tsx`：`moduleTask`（7 / 72 / null / 321）点击后就地弹窗，URL 不变 | 本地通过 |
 | F32-INPLACE-E2E-001 | Playwright | 真实数据卡片就地弹窗 | `aggregate-views.spec.ts`：点击任务卡片后 `dialog[name=任务详情]` 可见（含标题、「编辑任务」「完成任务」），`page.url()` 仍为任务中心地址，关闭后仍在任务中心 | 本地通过 |
@@ -1866,7 +1864,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 自动清理机制：`apps/e2e/helpers/fixture-cleanup.ts` 按 `e2e_` / `f03_`（Playwright）与 `user_` / `sso_` / `login_` / `invalidate_` / `csrf_` / `backup_` / `archive_`（集成测试）前缀识别夹具账号，再按 `created_by` 识别夹具项目，按依赖序物理删除全部业务数据与审计，删除后断言复核（夹具残留 0、无悬空审计 actor、bootstrap 完整、每项目唯一 UNCLASSIFIED 模块），失败回滚；`global-teardown.ts` 每次运行后自动调用，运行被中断时用 `pnpm --filter @inpulse/e2e cleanup` 手动补跑。SYSTEM 链夹具记录删除后链头回退到剩余最后一条；若夹具记录之后已有真实写入则留下一个可检测断点并打印提示。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | E2E-CLEANUP-SCRIPT-001 | 真实 PostgreSQL | 空库 no-op | 清理后库上执行 `pnpm --filter @inpulse/e2e cleanup` 输出「未发现 E2E 夹具数据」且无异常 | 本地通过 |
 | E2E-CLEANUP-TEARDOWN-001 | Playwright | teardown 自动清理 | `project-create.spec.ts` 运行结束后 teardown 报告「删除用户 2、项目 3、业务行 56、审计行 1」，随后库内夹具残留为 0 | 本地通过 |
 
@@ -1879,7 +1877,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 按[裁决修订 D-2](a-contract-review-f25-f29-f32.md) §12：R-3 `MyTaskItem` 与 R-5 `TaskGroupMembershipItem` 各增加 `hasLeftoverSource: boolean`（按 `leftover_task_links` 存在链接行判定，与来源记录当前状态无关）；记录侧 `ChangeRecordReadPort` 新增只读映射 `listLeftoverSourceTaskIds`（单条 SQL、按 task_id 升序、无链接缺席由消费端补 false，越界与空集短路与 `countPublishedByTask` 同口径）；R-3 `MyTasksQueryService` 与 R-5 `TaskGroupMembershipQueryService` 在同一只读事务内消费该映射。前端：任务中心卡片与列表行（R-3）、功能档案任务卡片、列表行与详情弹窗（R-5 页面级一次批量）显示「遗留问题」徽章（amber）。契约、Route Registry summary、Schema Registry 描述、权限矩阵、OpenAPI 与生成客户端同一批再生成（105 条路由，5 产物漂移检查通过）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | D2-CONTRACT-001 | 契约 | Schema 与生成物 | R-3 / R-5 条目增加 `hasLeftoverSource`；`contract:drift`（5 产物）、`contract:validate`（105 条）、`permissions:check`（105/105）通过 | 本地通过 |
 | D2-PORT-INT-001 | 真实 PostgreSQL | 端口映射 | `listLeftoverSourceTaskIds` 只返回存在链接行的任务（升序）；`projectIds` 收窄后他项目链接行不返回；无链接任务缺席；`taskIds` 超 `CHANGE_RECORD_TASK_IDS_MAX` 或含非正整数抛 `ChangeRecordReadInputError` 且不发 SQL；`projectIds`/`taskIds` 为空短路 | 本地通过（`apps/api/test/aggregate-read-ports.integration.test.ts`） |
 | D2-R3-INT-001 | 真实 PostgreSQL | R-3 条目映射 | `GET /api/v1/me/tasks` 中有 `leftover_task_links` 链接行的任务（CONVERTED 遗留项转换夹具）`hasLeftoverSource=true`，其余任务 false | 本地通过（`apps/api/test/aggregate-read-api.integration.test.ts`） |
@@ -1909,7 +1907,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 排序：项目列表与项目概览按 进行中 → 未开始 → 维护中 → 已归档 分档，组内按 id 升序。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR035-WEB-UNIT-001 | Web 单元 | 四态标签与配色 | `resource-lifecycle.test.ts`：`projectLifecycleLabel` 四态分别为未开始 / 进行中 / 维护中 / 已归档；`projectLifecycleTone` 为 cyan / violet / amber，进行中沿用调用方主色；`projectLifecycleKind` 直接透传存储状态 | 本地通过 |
 | ADR035-WEB-UNIT-002 | Web 单元 | 项目卡渲染四态 | `ProjectsPageView.test.tsx`：`NOT_STARTED` 渲染「未开始」+ `badge-cyan`、`ACTIVE` 渲染「进行中」+ `badge-blue`、`MAINTENANCE` 渲染「维护中」+ `badge-violet`；`completedTaskCount` 不再影响项目标签 | 本地通过 |
 | ADR035-WEB-UNIT-003 | Web 单元 | 编辑弹窗状态栏 | `project-management-modals.test.tsx`：点「保存状态」以 CSRF + `Idempotency-Key` + `If-Match` 调 `PATCH /projects/{id}/status`，成功后不关闭弹窗并回调 `onStatusChanged`；已有完成任务时「未开始」置灰并带原因 title；未开始 → 维护中、维护中 → 未开始同样置灰；非成员时只读展示标签 | 本地通过 |
@@ -2032,6 +2030,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（含本轮新增 2 例）；`pnpm --filter @inpulse/api test:unit aggregate-read-cursor` 8 例通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）通过。反事实验证在真实 PostgreSQL 上执行：把 `taskListOrderBy` 临时替换为 `t.id DESC` 后 7 例失败，恢复后 22/22 通过。
 
 未运行 / 已知偏差：① 未跑 Web 单元与 `pnpm test:e2e`（任务中心前端只消费服务端顺序，本轮未改前端代码）、未跑 GitHub Actions；② ADR-037 仍为 `Proposed`，需人工批准；③ 新增集成与单元用例需非作者人工评审。
+
 ## 项目头部移除「全部项目」返回入口（C，2026-09-19 本地落库）
 
 用户要求删掉项目头左上角的「← 全部项目」。`ProjectOverviewPageView` 移除 `.project-detail-head` 内的 `.back-button` 与该组件唯一的 `onBackToProjects` 属性（接口同步收窄），调用方 `ModulesPageView` 去掉传参；返回项目列表改由公共侧栏「项目列表」承担。`ProjectOverviewPageView.test.tsx` 基础渲染参数同步去掉该 handler；E2E `apps/e2e/tests/aggregate-views.spec.ts` 例 2 删除「`全部项目` → `/projects`」断言（保留「查看全部」「查看模块」与旧地址重定向断言），上表 F-29 行已同步。
@@ -2174,6 +2173,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 ## 模块卡动作收敛与页头返回按钮统一（C，2026-09-20 本地落库）
 
 用户定案：模块卡去掉「查看功能」「模块任务」「归档模块」，把「编辑模块」放到原「查看功能」的位置并压矮卡片；页头返回入口全站保持同一种样式，不要再一页一页找差异。
+
+2026-09-23 修订（[ADR-044](adr/ADR-044.md)）：模块层面归档整体下线，模块只剩 `ACTIVE`。下表 `MODULE-CARD-ACTIONS-WEB-002`、`MODULE-CARD-ACTIONS-WEB-003` 与 `MODULE-CARD-ACTIONS-BROWSER-001` 中「归档模块 / 恢复模块 / 已归档卡」的断言已不适用（均为 2026-09-20 当时事实）；`MODULE-CARD-ACTIONS-WEB-001`、`PAGE-BACK-UNIFY-BROWSER-001` 与 `MODULE-CARD-ACTIONS-E2E-001` 仍有效。
 
 锁定口径：
 
@@ -2792,7 +2793,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 2026-09-22 聚合组卡片按「组状态」定色（产品在候选样板上逐状态选定，`describeTaskGroup` 派生）：进行中 `tone-group-open` 实色靛蓝 `#5b6fd6` / 描边 `#4c5ebf` / 悬停 `#5467cb` + 白字（4.48:1）、已完成 `tone-group-done` 青碧 `#e1f2f2` / `#bcdddf` / `#d6edee` + 深青字 `#1d5b62`（6.67:1）、已关闭 `tone-group` 实色紫 `#7c6bd0` / `#6a58c0` / `#7361c8` + 白字（4.31:1）。此前组卡跟随分支的派生优先级（复用 `.tone-prio-*`、兜底浅紫 `#f8f6ff`），本轮起优先级只由页脚徽章表达。实色只加在 `.calm-task-card.task-group-card` 上（普通任务卡片与看板卡片不受影响），列表视图的组行继续用三支类名的浅色变量（左侧 3px 色条 + 浅色底）。
 - 2026-09-22 卡片布局：任务编号与「未完成」徽章从卡片移除（编号只留在列表视图的标题下方）；`.calm-card-top` 整行删除，标签组（优先级 + 模块级 / 主任务 / 来源任务 / 遗留问题 / 已办结）落到分隔线以下的左下角，负责人拆成独立的 `.calm-card-assignee` 贴在分隔线上方并右对齐，截止时间仍在右下角。`h3` 成为卡片首行后上边距收到 `4px`。已完成 / 已取消仍保留状态徽章。
 - 2026-09-22 「遗留问题」徽章：由遗留项转换而来的任务（`hasLeftoverSource`）在卡片与列表行固定用深锈红 `#8a2b06` 实底 + 白字（白字对比度 8.6:1），对应 `CalmBadgeTone` 的 `leftover` 档与 `.badge-leftover`；实色卡上「卡内所有 `.badge` 一律半透明白」的统一反白不再覆盖它，浅底卡同样取这条色值，四处（任务中心卡片、项目任务面板卡片与详情、任务看板卡片、看板列表行）同一文案同一底色。
-- 2026-09-22 「遗留问题」整卡锈红（产品要求「遗留问题整个卡片都要是红色的」）：由遗留项转换而来的任务（`hasLeftoverSource`）整卡铺 `#8a2b06` / 描边 `#772505` / 悬停 `#7c2705` + 白字（8.65:1），列表行与表格行浅锈红 `#fbeee9` + `#8a2b06`，看板列表视图新增 `.tb-row--leftover`；`taskToneOf(priority, workStatus, hasLeftoverSource)` 的覆盖次序为完成态 → 已取消 → 紧急 → 遗留问题 → 优先级（2026-09-22 三次定案后只剩三个参数），因此遗留项来源的卡片恒为红系两档（紧急红 / 锈红）之一。卡片本身已是锈红时「遗留问题」徽章走半透明白底（`:is(.calm-task-card, .tb-card).tone-prio-leftover .badge-leftover`），其余四档实色卡上仍是深锈红实底。
+- 2026-09-22 「遗留问题」整卡锈红（产品要求「遗留问题整个卡片都要是红色的」）：由遗留项转换而来的任务（`hasLeftoverSource`）整卡铺 `#8a2b06` / 描边 `#772505` / 悬停 `#7c2705` + 白字（8.65:1），列表行与表格行浅锈红 `#fbeee9` + `#8a2b06`，看板列表视图新增 `.tb-row--leftover`；`taskToneOf(priority, workStatus, hasLeftoverSource)` 的覆盖次序为完成态 → 已取消 → 紧急 → 遗留问题 → 优先级（2026-09-22 三次定案后只剩三个参数），因此遗留项来源的卡片恒为红系两档（紧急红 / 锈红）之一。（2026-09-23 八次配色定案已取代整卡锈红：卡片改按自己的优先级取色、徽章保留棕色，见末节 LEFTOVER-PRIORITY-COLOR-*。）卡片本身已是锈红时「遗留问题」徽章走半透明白底（`:is(.calm-task-card, .tb-card).tone-prio-leftover .badge-leftover`），其余四档实色卡上仍是深锈红实底。
 - 2026-09-22 聚合组排序口径：未完成组按「未完成分支最高一档」排序（紧急 → 高 → 普通 → 低，同档保持 R-7 服务端顺序，卡片与列表共用）。同日一度落过「组卡底走日期档（未完成分支最早一条已逾期 → `tone-prio-overdue`、今天到期 → `tone-prio-soon`）」，该口径已按「红档收敛成一支」作废。
 - 2026-09-22 三次定案「红档收敛成一支」（产品要求「`#CE342B` 紧急用这个颜色，然后逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」）：
   - 紧急由 `#e84138` 改为 `#ce342b`（描边 `#b12c25`、悬停 `#b92e27`，白字对比度 4.00:1 → 5.09:1），`priority-select-option.ts` 的 URGENT 圆点同步。
@@ -2809,7 +2810,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-BROWSER-005 | 浏览器实测 | 卡片不再出现左侧深色色条 | 无头 Chromium 1440 宽 `/tasks`：`.calm-task-card` 的 `::before` 计算 `display: none`，实拍黄卡（`.tone-prio-high`）与蓝卡左缘均无深色竖条 | 本地通过 |
 | CARD-COLOR-UNIT-002 | Web 单元 | 任务中心卡片按优先级上色 + 列表文字色 | `TaskCenterPageView.test.tsx`：逾期卡 `my-task-801` 与今天到期卡 `my-task-802` 都不再改色，各自按优先级得 `calm-task-card tone-prio-normal`（2026-09-22 前是 `tone-prio-overdue` / `tone-prio-soon`，随「逾期的不搞特殊了」作废），两卡卡内仍保留「已逾期 …」「今天截止」文案；已完成卡 `my-task-803` 得 `tone-prio-done` 且卡内截止元素不带任何 `due-*` 类；列表视图里同三条分别落在 `td.due-overdue` / `td.due-soon` / 无色类 | 本地通过（2026-09-22 重跑） |
 | CARD-COLOR-UNIT-003 | Web 单元 | 项目任务面板卡片与表格的截止判定 | `TasksPanel.test.tsx`：卡片视图的三张卡（已逾期 / 今天到期 / 明天到期）现在一律 `tone-prio-normal`——整卡底色只由优先级决定，日期不再改色；已完成卡仍 `tone-prio-done`；列表视图截止列逾期 `due-overdue`、今天到期 `due-soon`、更远日期与已完成逾期任务不上色（回归原先写死 `due-overdue` 的问题，该列是日期紧迫度唯一的颜色出口） | 本地通过（2026-09-22 重跑） |
-| CARD-COLOR-UNIT-004 | Web 单元 | tone 映射：完成态优先、日期档退出配色 | `task-tone.test.ts`：`taskToneOf` 按优先级返回 `urgent` / `high` / `normal` / `low`，已完成 / 已取消覆盖优先级返回 `done` / `canceled`，遗留来源覆盖为 `leftover`（紧急与完成态仍优先），未知优先级按 `low` 兜底；`taskToneClassName` 输出 `tone-prio-*`，并断言不再产出 `tone-prio-overdue` / `tone-prio-soon`（逾期任务按自己的优先级取色） | 本地通过（2026-09-22 重跑） |
+| CARD-COLOR-UNIT-004 | Web 单元 | tone 映射：完成态优先、日期档退出配色 | `task-tone.test.ts`：`taskToneOf` 按优先级返回 `urgent` / `high` / `normal` / `low`，已完成 / 已取消覆盖优先级返回 `done` / `canceled`，遗留来源覆盖为 `leftover`（紧急与完成态仍优先；2026-09-23 八次配色定案已删除该档，见末节），未知优先级按 `low` 兜底；`taskToneClassName` 输出 `tone-prio-*`，并断言不再产出 `tone-prio-overdue` / `tone-prio-soon`（逾期任务按自己的优先级取色） | 本地通过（2026-09-22 重跑） |
 | CARD-COLOR-BROWSER-006 | 浏览器实测 | 任务中心卡片的整卡红（2026-09-22 已作废） | 随产品口径「逾期的不搞特殊了」作废：`.tone-prio-overdue` 整卡红已从样式表删除，逾期任务卡改为按自身优先级上色（新实测见 CARD-COLOR-BROWSER-024）。作废前记录：无头 Chromium 1500 宽（成员账号 `/tasks`）逾期卡 `.calm-task-card.tone-prio-overdue` 背景 `rgb(179, 38, 30)`、描边 `rgb(154, 33, 26)`、文字 `rgb(255, 255, 255)`；卡内截止文案是反白文字、无底色 | 已作废 |
 | CARD-COLOR-BROWSER-007 | 浏览器实测 | 看板卡片的整卡红（2026-09-22 已作废） | 同 CARD-COLOR-BROWSER-006 一并作废：看板卡片不再有整卡红档，逾期分支卡只按优先级上色。作废前记录：`/projects/1/task-board` 的 `INPULSE-T-18` `.tb-card.tone-prio-overdue` 背景 `rgb(179, 38, 30)`，日期文案 `09-19 逾期` 随反白组变白 | 已作废 |
 | CARD-COLOR-BROWSER-008 | 浏览器实测 | 白底表面只改文字色 | `/tasks` 切「列表」视图：`td.due-overdue` 为 `#b3261e` 加粗且无底色；任务详情弹窗 `.calm-due.due-red`（已逾期 6天）为 `rgb(179, 38, 30)`、底透明 | 本地通过 |
@@ -2817,7 +2818,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-UNIT-005 | Web 单元 | 卡片纵向排版：标签在左下角、负责人在分隔线上方（任务卡与聚合组卡同构） | `TaskCenterPageView.test.tsx` / `TasksPanel.test.tsx` 的对应用例：卡片不含 `.calm-card-top` 与 `.task-id`、TODO 卡片不渲染「未完成」徽章、`.task-card-badges` 是 `.calm-card-bottom` 的首个子元素（内含优先级与其他标签）、`.calm-card-assignee` 紧接在 `.calm-card-bottom` 之前且带「负责人：」标题；任务中心无迭代记录时 `.task-card-footer` 整块不渲染，已完成卡片仍保留「已完成」徽章 | 本地通过 |
 | CARD-COLOR-BROWSER-010 | 浏览器实测 | 卡片纵向排版与顶部空档 | 无头 Chromium 1500 宽 `/tasks`：四张卡 `.calm-card-top` 与 `.task-id` 全为 null，标签组左缩进 24px（贴左）、负责人右缩进 24px（贴右）且位于分隔线上方 15px、截止时间在右下角；同页注入旧 `20px` 上边距复现改前态，测得标题上方空档 `44px → 28px`、卡片高度 `227px → 211px`；`/tasks?status=done` 与项目任务面板同款卡片一致 | 本地通过 |
 | CARD-COLOR-UNIT-006 | Web 单元 | 遗留问题徽章取色 | `TaskCenterPageView.test.tsx` 与 `TasksPanel.test.tsx` 的用例断言「遗留问题」徽章带 `badge-leftover` 类（不再与优先级标签同款）；`task-board-format.ts` 的 `LEFTOVER_SOURCE_BADGE.className` 为 `badge badge-leftover`，看板卡片与列表行共用 | 本地通过 |
-| CARD-COLOR-BROWSER-011 | 浏览器实测 | 遗留问题徽章在可承载卡片底色上的取值 | 无头 Chromium 1440 宽（本地 dev 5173，把遗留项卡片上的 tone 类逐档替换后读徽章计算值）：同一枚「遗留问题」徽章在 `tone-prio-urgent` / `normal` / `high` / `done` / `canceled` 五档卡片上恒为 `background rgb(138, 43, 6)` + `color rgb(255, 255, 255)`；卡片自身是 `tone-prio-leftover` 时，卡内所有 `.badge`（含「普通」「遗留问题」）统一转 `rgba(255, 255, 255, 0.18)` 底 + 白字。取样集合由旧八档收敛为五档——已逾期 / 马上到期两档卡片随整卡红一并作废 | 本地通过（2026-09-22 重测） |
+| CARD-COLOR-BROWSER-011 | 浏览器实测 | 遗留问题徽章在可承载卡片底色上的取值 | 无头 Chromium 1440 宽（本地 dev 5173，把遗留项卡片上的 tone 类逐档替换后读徽章计算值）：同一枚「遗留问题」徽章在 `tone-prio-urgent` / `normal` / `high` / `done` / `canceled` 五档卡片上恒为 `background rgb(138, 43, 6)` + `color rgb(255, 255, 255)`；卡片自身是 `tone-prio-leftover` 时，卡内所有 `.badge`（含「普通」「遗留问题」）统一转 `rgba(255, 255, 255, 0.18)` 底 + 白字。（2026-09-23 八次配色定案删除了 `tone-prio-leftover` 卡片档，后半句作废，五档取值由末节 LEFTOVER-PRIORITY-COLOR-BROWSER-002 重测。）取样集合由旧八档收敛为五档——已逾期 / 马上到期两档卡片随整卡红一并作废 | 本地通过（2026-09-22 重测） |
 | CARD-COLOR-BROWSER-012 | 浏览器实测 | 任务中心卡片网格宽屏四列 | 无头 Chromium（本地 dev 5173，成员账号 `/tasks`，只读浏览既有演示数据）依次取视口 1280 / 1360 / 1439 / 1440 / 1536 / 1680 / 1920：`1440px` 起首行四张、网格宽度自 1680px 起封顶 `1352px`；卡片宽度四列时为 `272px`（1440）/ `296px`（1536）/ `326px`（1680、1920），三列时为 `312px`（1280）/ `339px`（1360）/ `365px`（1439） | 本地通过 |
 | CARD-COLOR-BROWSER-013 | Playwright E2E | 网格列数随视口切换 | `apps/e2e/tests/aggregate-views.spec.ts` 的 F-32 任务中心用例新增断言：`getComputedStyle(.calm-task-grid).gridTemplateColumns` 的拆分项数在 1439px 视口为 3、在 1440px 与 1680px 视口为 4，断言后把视口恢复 Desktop Chrome 缺省值 | 本地通过（`pnpm --filter @inpulse/e2e exec playwright test tests/aggregate-views.spec.ts --grep F-32`：1 passed / 15.3s） |
 | CARD-COLOR-BROWSER-014 | 浏览器实测 | 「已完成」绿色第四轮放淡 | 无头 Chromium 1500 宽（本地 dev 5173 `/tasks?status=done`）：`.calm-task-card.tone-prio-done` 底色由 `rgb(168, 230, 176)` 变为 `rgb(205, 241, 211)`、描边 `rgb(221, 244, 225)`，悬停 `#c0ebc7`，深绿字 `#2f4031` 不动（对比度 7.7:1 → 9.0:1）；同轮另出五档候选实拍（`#a8e6b0` / `#bcebc4` / `#cdf1d3` / `#dcf6e1` / `#eaf9ee`）供人工挑选 | 本地通过 |
@@ -2872,7 +2873,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 前端：`canManageProjectResources` 改为「系统管理员或本项目 `MEMBER`/`LEADER`」；成员页角色徽标只剩「组长」，「设置角色」仅系统管理员可见；「归档模块」「归档功能」入口对全体活跃成员可见。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADR039-DB-001 | PostgreSQL | 迁移 0019 收窄角色枚举 | 存量 `PROJECT_ADMIN` 全部降级为 `MEMBER`；`project_members_role_check` 变为 `role IN ('MEMBER','LEADER')`；`project_members_one_leader` 与 `project_members_removed_role_check` 不变；`database.test.ts` 不可变迁移清单新增 `0019_drop_project_admin_role.sql` | 本地通过（`db:migrate` 应用 0019，输出 `Migration complete: 1 applied, 19 already present.`） |
 | ADR039-CONTRACT-001 | 契约与数据 | Schema、路由摘要与权限矩阵 | `projectMemberRoleSchema` 收窄为 `MEMBER`/`LEADER` 并传播到 `currentUserRole`、`ProjectMemberRecordItem.role`、`ActiveProjectMemberItem.role`、`setProjectMemberRoleRequest`；7 条 `permission-matrix.ts` 条目改为「活跃成员」口径；`pnpm contract:generate` 重生成 5 产物且生成客户端与 OpenAPI 内已无 `PROJECT_ADMIN` | 本地通过（`contract:generate`；`apps/web/src/generated/**` 已核对无残留） |
 | ADR039-API-UNIT-001 | API 单元 | 角色门禁收窄与重放授权 | `ProjectRoleGateService.manageRole` 返回 `SYSTEM_ADMIN`/`MEMBER`/`LEADER`/`NOT_MEMBER`（不再有 `PROJECT_ADMIN`）；`roleSetterRole` 把 `LEADER` 与 `MEMBER` 一起折叠为 `MEMBER`（→403）；`setRole` 门禁非成员 404、非系统管理员 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`、唯一冲突 409、移除 `LEADER` 409；HTTP 层 `{ role: "PROJECT_ADMIN" }` 422 | 本地通过（API 单测 65 文件 364 例） |
@@ -2905,7 +2906,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 契约表面无新增参数：只有 R-7 `summary`（Route Registry → OpenAPI）与 [权限矩阵](permissions.md) 聚合组列表行同步口径；`permission-matrix.ts` 条目仍是「活跃成员 allow」（可调用性不变，返回集合收窄）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | TASKGROUP-VISIBILITY-CONTRACT-001 | 契约 | R-7 摘要与 OpenAPI 同步可见性口径 | `contract:generate`（5 产物）、`contract:drift`（5 产物一致）、`contract:validate`（108 条路由）、`permissions:check`（108/108）全过；OpenAPI `listTaskGroups` summary 含「与自己无关的组不返回」 | 本地通过 |
 | TASKGROUP-VISIBILITY-API-UNIT-001 | API 单元 | 端口入参携带 `actorUserId` | `aggregate-read.service.test.ts` R-7 断言 `listGroups` 收到 `{ actorUserId, projectIds, limit }`（含 `projectIds` 收敛为空页路径）；定向 1 文件 29 例 | 本地通过 |
 | TASKGROUP-VISIBILITY-API-INT-001 | 真实 PostgreSQL | 只返回本人负责的活跃组 | `aggregate-read-list-api.integration.test.ts` 新增用例：同一项目内 `memberUser` 只见 `[groupSourceOnly, groupOwnSecond, groupActive]`、`foreignUser` 只见 `[groupSourceOnly, groupForeign]`（`projectId` 收窄后一致）；他人负责的 `groupForeign` 与已关闭的 `groupClosed` 对双方都不返回；`groupSourceOnly` 同时证明「只作为来源分支负责人也可见」、`groupActive` 证明「主任务负责人可见」 | 本地通过（该文件 11 例） |
@@ -3229,7 +3230,6 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 本轮只改前端视觉（`design-system.css` 里「已完成」一档的列表行变量与看板列表行变量），未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、`pnpm build`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② 「已完成」列表行底色改用卡片青碧后，它与卡片同面同色，两者靠「卡片是圆角实色块、列表行是带 3px 色条的表格行」区分，不再是深浅差；③ 真实登录态的任务中心页面未用无头浏览器截屏（dev 环境为统一身份认证登录），本轮用同标记 + 真实样式表的注入渲染替代，需要人工在浏览器里复核观感；④ 配色属视觉主观项，需非作者人工评审；⑤ 本轮另出了一张《已完成行用卡片青碧-对照》样图，`docs/assets/task-card-colors` 目录下的历史样图仍未重出。
 
-
 ## 2026-09-23 八次定案：草稿箱空则整块隐藏 + 可折叠 + 跟随项目筛选（产品要求，2026-09-23 本地落库）
 
 产品反馈（原文）：「现在我们改草稿箱，当点击迭代记录的时候，会显示全部项目的迭代记录，没有草稿的情况下不出现任何和草稿箱有关的字样。同理筛选到没有草稿的项目也隐藏所有有关草稿箱。假如当前已经有草稿了，则点击迭代记录的时候默认打开草稿箱，但是我希望可以有一个小按钮将草稿箱内容折叠。当筛选项目的时候草稿箱也要被筛选」（附图为 `/records` 全部项目视图的「我的草稿」区与下方的已发布时间线）。定案口径把 2026-09-22 的「空则收起」升级成「空则整块隐藏」：草稿箱的**标题行、说明、折叠按钮与内容区**在有草稿（或读取失败需要给出重试入口）之前一律不渲染，页面上不留「我的草稿 / 项目草稿」任何字样；有草稿时默认展开，标题行右侧新增 26px 幽灵方钮折叠内容区（箭头朝下＝展开中、朝右＝已收起），折叠只收内容区，标题、说明与按钮留在原地；切换项目或进出来源任务语境时回到默认展开；草稿查询本就按 URL `projectId` 走 `listRecordDrafts(projectId, …)` / `listMyRecordDrafts`，因此项目筛选天然把草稿箱一起筛，空结果整块消失。纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
@@ -3276,3 +3276,219 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-23 草稿详情排版）：`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 走 `/login?local=1` 真实登录，随后打开草稿详情弹层量取计算样式并留档实拍图。
 
 未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② ④⑤ 是全局 `.record-markdown` 口径，已发布记录详情与记录工作区里的正文一起变化，本轮只实测了草稿详情这一屏，其余屏需人工抽查；③ 草稿详情把 facts 块放在正文之前，而已发布记录详情放在正文之后（草稿要先看清归属再读正文），是有意保留的差异，若要完全一致需另定案；④ 弹层标题里的「（草稿）」与眉标「草稿」仍重复，来自业务数据本身，本轮未改；⑤ 视觉调整属主观项，需非作者人工评审。
+
+## 2026-09-23 八次配色定案：遗留问题按优先级取色，「遗留问题」徽章保留棕色（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个遗留问题也按照优先级呈现颜色，然后遗留问题这个标签保留这个棕色状态」（附图为 `/tasks` 上一张整卡锈红的遗留项卡片，底部「普通」与「遗留问题」两枚标签）。定案口径：① 由遗留项转换而来的任务（`hasLeftoverSource`）退出整卡 / 整行配色，卡片与列表行一律按任务自己的优先级取色——紧急 `#ce342b`、高 `#fdc106`、普通白底（已完成青碧、已取消灰仍按状态覆盖）；② 「遗留问题」徽章（`CalmBadgeTone` 的 `leftover` 档 / `.badge-leftover`）保持深锈红 `#8a2b06` 实底 + 白字，成为来源标记的唯一载体。2026-09-22 那支「遗留问题整个卡片都要是红色的」口径由本次定案取代。
+
+实现范围（纯前端展示）：`task-tone.ts` 删除 `TaskToneName` 的 `leftover` 档与 `taskToneOf` / `taskToneClassName` 的第三个参数 `hasLeftoverSource`，覆盖次序回到「完成态 → 已取消 → 紧急 → 优先级」；6 处调用点（任务中心卡片与列表行、功能任务面板卡片与列表行、任务看板卡片与看板列表行）同步去掉实参，`TaskBoardTable.tsx` 的 `tb-row--leftover` 拼接删除；`design-system.css` 删除 `.tone-prio-leftover`（列表行 / 表格行浅色档）、卡片实色档、`.tb-row--leftover`，白字组选择器由 `:is(.tone-prio-urgent, .tone-prio-leftover)` 收敛为 `.tone-prio-urgent`；`.badge-leftover` 与其「不受卡内统一反白影响」的同色覆盖保留。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-PRIORITY-COLOR-UNIT-001 | Web 单元 | tone 映射不再有来源档 | `task-tone.test.ts`：两个函数收成 `(priority, workStatus)` 两个参数；改用例「遗留问题来源不参与配色：转换而来的任务按自己的优先级取色」断言普通 / 高 / 紧急 / 已完成 / 已取消五档；反向断言组新增 `expect(className).not.toBe("tone-prio-leftover")`（与 `tone-prio-low`、`tone-prio-overdue`、`tone-prio-soon` 同组） | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-WEB-001 | Web 单元 | 卡片、列表行与徽章的类名 | `TaskCenterPageView.test.tsx`：遗留项卡片 `calm-task-card tone-prio-normal`、列表视图 `tr.tone-prio-normal`、「遗留问题」徽章仍是 `badge-leftover`；`TasksPanel.test.tsx`：同一批 R-5 标记里来源任务卡回到 `tone-prio-normal`，与同优先级的非遗留卡只差一枚徽章 | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-WEB-002 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 579 例通过（改写 3 个用例的断言，未新增 / 删除用例） | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-BROWSER-001 | 浏览器实测 | 真实登录态下的遗留项卡片与列表行 | 无头 Chromium 1360 宽 / 设备像素比 2，演示账号在 5173 走 `/login?local=1` 真实登录后打开 `/tasks`：「A-5 残余…」卡为 `calm-task-card tone-prio-normal`、底 `rgb(255, 255, 255)`、描边 `rgb(217, 224, 231)`、正文 `rgb(19, 34, 56)`，「遗留问题」徽章 `rgb(138, 43, 6)` + `rgb(255, 255, 255)`；同页紧急卡 `rgb(206, 52, 43)`、高卡 `rgb(253, 193, 6)` 未变；`/tasks?view=list` 该任务行 `tr.tone-prio-normal`、底 `rgb(255, 255, 255)`；`/projects/1/task-board` 的两张遗留项卡（INPULSE-T-18 / INPULSE-T-14）同为 `tb-card tone-prio-normal` + 棕色徽章；实拍图留档 | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-BROWSER-002 | 浏览器实测 | 徽章在五档卡上的取值 | 在同一真实页面注入五档探针卡（`.calm-task-card` × urgent / high / normal / done / canceled）：卡片底依次为 `rgb(206, 52, 43)` / `rgb(253, 193, 6)` / `rgb(255, 255, 255)` / `rgb(225, 242, 242)` / `rgb(242, 245, 248)`，「遗留问题」徽章五档恒为 `rgb(138, 43, 6)` + `rgb(255, 255, 255)`；同卡其它徽章仍走卡内统一反白 / 墨色底（紧急卡 `rgba(255, 255, 255, 0.18)`、高卡 `rgba(63, 45, 0, 0.12)`、已完成 `rgba(29, 91, 98, 0.12)`）；探针截图留档。本用例取代 CARD-COLOR-BROWSER-011 中「卡片本身是 `tone-prio-leftover` 时徽章走半透明白底」那一半 | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-BROWSER-003 | 浏览器实测 | dev 5173 已服务新样式表 | 同一会话内取 `GET /src/styles/design-system.css`：`.tone-prio-leftover {` 与 `.tb-row--leftover {` 均不存在、`.badge-leftover` 的 `#8a2b06` 仍在、`.tone-prio-urgent` 选择器 12 处（全部只剩紧急一支） | 本地通过（2026-09-23） |
+| LEFTOVER-PRIORITY-COLOR-GATE-001 | 静态门禁 | 类型、风格、依赖边界与全量前端 | `pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`（All matched files use Prettier code style!）、`pnpm check:frontend:boundaries`（283 模块 1393 依赖无违规）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 八次配色定案）：`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，量取计算值并留档实拍图与五档探针图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② 演示库里只有普通优先级的遗留项任务，紧急 / 高 / 已完成 / 已取消四档的「遗留问题」徽章取值由注入探针卡的浏览器实测覆盖，没有真实账号数据；③ 列表视图里遗留项此前也只靠副标题的「 · 遗留问题」文字表达（本轮未新增徽章），改色后列表行的来源识别强度不变；④ 配色属视觉主观项，需非作者人工评审。
+
+## 2026-09-23 九次配色定案：「普通」优先级徽章改淡蓝（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个显示淡蓝色吧参考 p2」（附图 p1 是 `/tasks` 上「普通」优先级的中性灰徽章 `#eef2f6` / `#6c7c8e`，p2 是同一页「进行中」的淡蓝徽章 `#e6f2ff` / `#2472c3`）。定案口径：①「普通」优先级徽章由 `badge-gray` 改成 `badge-blue`，与「进行中」完全同色 `#e6f2ff` / `#2472c3`；任务卡、任务中心与项目任务面板的卡片 / 列表行、任务看板卡片、任务详情弹窗与聚合组弹窗成员行共用同一映射（`taskPriorityBadgeTone`），一次改动全站生效。② 未知优先级仍按中性灰兜底——它会原样显示优先级原文，不是「普通」这枚标签。③ 看板列表行的行配色保持六次定案的「白底蓝边」（`priorityMarkOf` 的 tone 仍为 `gray`，`--tb-row--tone-gray` 的底 / 边 / 悬停不变），该视图的优先级小字仍是行文字灰 `#5f6d7a`；本轮只动徽章。
+
+实现范围（纯前端展示）：`features/common/task-tone.ts` 的 `PRIORITY_BADGE_TONES.NORMAL` 由 `gray` 改为 `blue`；`features/tasks/TasksPanel.tsx` 的本地 `priorityTone.NORMAL` 同步改为 `blue`；`features/task-board/task-board-format.ts` 的 `cardMarkOf` 普通档改取共用的 `taskPriorityBadgeTone(card.priority)`，`CardMark.tone` 类型由 `BadgeTone` 收窄为 `CalmBadgeTone`，而同时喂行色类与优先级单元格的 `priorityMarkOf` 刻意保持 `gray`（注释写明两者为何分开）。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| PRIORITY-BADGE-BLUE-UNIT-001 | Web 单元 | 徽章 tone 映射 | `task-tone.test.ts`：`taskPriorityBadgeTone("NORMAL")` 由 `"gray"` 改为断言 `"blue"`，用例名标明「普通 = 淡蓝（2026-09-23 九次配色定案，参考『进行中』）」；未知优先级仍断言 `"gray"` | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-UNIT-002 | Web 单元 | 看板卡右上角标记 | `task-board-format.test.ts` 的「标记映射」：`cardMarkOf(NORMAL)` 断言 `{ kind: "badge", label: "普通", tone: "blue" }`；同组的 URGENT / HIGH / DONE / CANCELED 断言不变（`priorityMarkOf` 的 tone 仍是 `gray`，用它与行配色解耦） | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-WEB-001 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 579 例通过（只改断言，未新增 / 删除用例） | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-BROWSER-001 | 浏览器实测 | 真实登录态下四屏的计算色 | 无头 Chromium 1440 宽，演示账号在 5173 走 `/login?local=1` 真实登录后逐屏量文本为「普通」的 `.badge` 节点：`/tasks` 卡片 3 枚、`/tasks?view=list` 行 3 枚、`/projects/1/task-board` 卡片 2 枚、任务详情弹层 1 枚（另有 3 枚在弹层背后），**全部**为 `badge-blue` / 底 `rgb(230, 242, 255)` + 字 `rgb(36, 114, 195)`，宿主卡 `tone-prio-normal` + 白底 `rgb(255, 255, 255)` | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-BROWSER-002 | 浏览器实测 | 看板列表行未受牵连 | 同一会话在 `/projects/1/task-board` 点工具栏「列表」（`aria-pressed` 由 `看板` 切到 `列表`）后读 53 行：普通任务行仍是 `tb-row tb-row--tone-gray`（白底 + 蓝边），优先级单元格是 `tb-prio tb-prio--gray` 文本 `普通`——与六次定案的「白底蓝边」行配色一致，本轮未改 | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-DOC-001 | 交付物 | 「小标签总览」页重生成 | 用仓库真实 `design-system.css` 重新生成 `小标签总览.html`（10 组 / 49 枚标签 / 4 张实色卡）：`badge-blue">普通` 出现 2 处（① 任务优先级行 + ⑨ 普通白卡行）、`badge-gray">普通` 0 处；整页截图留档 | 本地通过（2026-09-23） |
+| PRIORITY-BADGE-BLUE-GATE-001 | 静态门禁 | 类型、风格、依赖边界与全量前端 | `pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`（All matched files use Prettier code style!）、`pnpm check:frontend:boundaries`（283 模块 1395 依赖无违规）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 九次配色定案）：`pnpm --filter @inpulse/web exec vitest run`（5 个相关文件 118 例）、`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，量取计算色并留档整页截图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions；② 改完后「普通」与「未完成 / 进行中」在普通白卡上是同一枚淡蓝徽章，同屏要区分优先级与状态只能靠标签文字，这是产品本次明确选择的取向；③ 看板列表行的优先级小字仍是行文字灰，与徽章淡蓝不同色，属六次定案「白底蓝边」行配色的既有结果，若要求统一需另立定案（改 `priorityMarkOf` 的 tone 会连带换掉该行底色与色条）；④ 配色属视觉主观项，需非作者人工评审。
+
+## 2026-09-23 十次配色定案：「遗留问题」徽章由深锈红实底柔化成浅棕底（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个颜色有点突兀，太实了」（附图为 `/tasks` 卡片左下角的「遗留问题」徽章，深锈红 `#8a2b06` 实底 + 白字，紧挨着一枚淡蓝的「普通」徽章）。定案口径：保留棕色身份，只降低实感——`#8a2b06` 由实底改成同色系淡底 `#f6e6dd` + 深棕字 `#8a2b06`（对比度 7.1:1），与红 `#ffebeb` / `#bd5656`、琥珀 `#fff3dc` / `#ae741b`、蓝 `#e6f2ff` / `#2472c3`、绿 `#e7f6ed` / `#34815d` 几枚徽章同属「淡底彩字」一族。判断依据：实底深棕在普通白卡上比同排任何标签都重，这正是「突兀」的来源；八次配色定案「遗留问题这个标签保留这个棕色状态」的棕色身份不变。
+
+实现范围（纯前端展示）：`styles/design-system.css` 的 `.badge-leftover`（基础色值块）与「实色卡上的同一色覆盖」（`:is(.calm-task-card, .tb-card):is(.tone-prio-urgent, .tone-prio-high, .tone-prio-normal, .tone-prio-done) .badge-leftover`）两处色值一起改成 `#f6e6dd` / `#8a2b06`，保证紧急 / 高 / 普通 / 已完成四档卡与已取消卡上取值一致（已取消卡内没有 `.badge` 覆盖规则，直接吃基础块）。类名、`CalmBadgeTone` 的 `leftover` 档、`LEFTOVER_SOURCE_BADGE` 常量、各卡片与列表行的渲染逻辑都不动，现有用例断言的是类名而非色值，因此无需改用例。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-BADGE-SOFT-UNIT-001 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 579 例通过（本轮只改 CSS 色值，未使用例改动；`TasksPanel.test.tsx` / `TaskCenterPageView.test.tsx` 断言的 `badge-leftover` 类名不变） | 本地通过（2026-09-23） |
+| LEFTOVER-BADGE-SOFT-BROWSER-001 | 浏览器实测 | 真实登录态下四屏的计算色 | 无头 Chromium 1440 宽，演示账号在 5173 走 `/login?local=1` 真实登录后逐屏量 `.badge-leftover`：`/tasks` 卡片 1 枚（普通白卡）、`/projects/1/task-board` 卡片 2 枚（普通白卡）、同页「列表」视图行 2 枚（`tb-row tb-row--tone-gray`），**全部**为底 `rgb(246, 230, 221)` + 字 `rgb(138, 43, 6)`；改动前为底 `rgb(138, 43, 6)` + 字 `rgb(255, 255, 255)` | 本地通过（2026-09-23） |
+| LEFTOVER-BADGE-SOFT-BROWSER-002 | 浏览器实测 | 候选样板逐档渲染 | 用仓库真实 `design-system.css` 渲染 6 档候选（A 淡棕底 `#f6e6dd`、B 更淡 `#faf1ec`、C 半透明棕 `rgba(138,43,6,.10)`、D 提亮实底 `#a9522b` / 白字、E 白底棕描边、F 中性棕 `#efe4de` / `#6b3a22`），每档都在普通白卡 + 紧急 / 高 / 已完成 / 已取消四档卡上各渲染一次；产品选定 A 档后落库，样板页与整页截图留档 | 本地通过（2026-09-23） |
+| LEFTOVER-BADGE-SOFT-BROWSER-003 | 浏览器实测 | 任务中心列表视图不受影响 | `/tasks?view=list` 的遗留项标记仍是副标题小字「普通 · 遗留问题」，不是徽章（八次配色定案以来的既有实现），本页 `.badge-leftover` 数为 0，本轮无变化 | 本地通过（2026-09-23） |
+| LEFTOVER-BADGE-SOFT-DOC-001 | 交付物 | 「小标签总览」页重生成 | 用仓库真实 `design-system.css` 重新生成 `小标签总览.html`（10 组 / 49 枚标签 / 4 张实色卡），① 任务来源与关系的「遗留问题」行、⑩ 实色卡行的色值列由 `#8A2B06 / #FFFFFF` 改为 `#F6E6DD / #8A2B06`；整页截图留档 | 本地通过（2026-09-23） |
+| LEFTOVER-BADGE-SOFT-GATE-001 | 静态门禁 | 风格与全量前端 | `pnpm format:check`（All matched files use Prettier code style!）、`pnpm --filter @inpulse/web test`（85 文件 579 例）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 十次配色定案）：`pnpm format:check`、`pnpm --filter @inpulse/web test`（85 文件 579 例）；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，量取计算色并留档候选样板页、落地实拍图与总览页截图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮只改了两处 CSS 色值，`pnpm typecheck` 已在上一轮九次配色定案时全 workspace 通过）；② 柔化后「遗留问题」在白卡上的视觉重量与「普通 / 未完成」那枚淡蓝接近，靠色相区分来源，若产品认为识别强度不够需回 A 档之外的重一档（B~F 样板仍在留档页里）；③ 演示库里只有普通优先级的遗留项任务，紧急 / 高 / 已完成 / 已取消四档的取值由样板页与注入探针覆盖，没有真实数据；④ 配色属视觉主观项，需非作者人工评审。
+
+## 2026-09-23 十一次定案：卡片右下角的「已逾期 / 今天截止」按紧迫度染色（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「这个已经逾期可不可以加点颜色」（附图为 `/tasks` 卡片右下角那行灰蓝的「已逾期 9月16日」）。现状：列表视图的截止列早就是红字（`.due-overdue` / `.due-soon`），但卡片右下角那行只是文案，跟随卡内统一文字色（普通白卡上是一档灰蓝 `#6b8195`），逾期在卡片上没有任何颜色提示。
+
+定案口径：① 卡片右下角的截止文案与列表截止列同一口径按紧迫度染色——逾期 `#b3261e`、今天截止 `#c9472c`，都加粗；② 金黄卡底 `#fdc106` 上两档红对比度不足（`#b3261e` 3.99:1、`#c9472c` 2.90:1），改用更深一档 `#8f1f18`（5.4:1）/ `#9a2c0a`（4.7:1）；③「紧急」是实底红 `#ce342b` 整卡铺色，红字在它上面读不出来：那里沿用卡内白字（`#ffffffd9`，与白字组同值）只按紧迫度加粗；④ 已完成 / 已取消不提示逾期（`dueToneOf` 对非 TODO 一律返回 null），两档卡上根本不挂这两个类名；整卡底色仍然只表达任务自己的优先级，2026-09-22 三次定案「逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色」不变。
+
+实现范围（纯前端展示）：`features/my-tasks/TaskCenterPageView.tsx` 的任务卡与聚合组卡右下角截止 `<span>` 分别加上 `dueToneClass(item)` 与 `describeTaskGroup` 已经算好的 `dueTone`（后者原来只在列表组行使用，本轮补进组卡的解构）；`features/tasks/TasksPanel.tsx` 的功能档案任务面板卡片加上 `dueToneClass(item.dueAt, item.workStatus)`；`styles/design-system.css` 新增卡片作用域的紧迫度染色规则——卡片这一侧的文字元素不一定带 `.calm-due`（任务中心与功能档案任务面板的卡片就是裸 `<span>` + 紧迫度类名，看板卡片带 `.tb-date`），所以规则只按卡片 tone 类匹配、不要求同时命中 `.calm-due` / `.tb-date`，作用域限定在 `.calm-task-card` / `.tb-card` 之内，列表行、看板列表行与详情弹窗的既有取值不动。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| DUE-COLOR-CARD-UNIT-001 | Web 单元 | 任务中心任务卡 | `TaskCenterPageView.test.tsx` 在既有「整卡按优先级铺色：逾期与今天到期都不再改色，已完成仍是完成青碧」用例里补断言：`my-task-801` 卡内 `.calm-card-bottom > span:last-child` 带 `due-overdue`、`my-task-802` 带 `due-soon`、已完成 `my-task-803` 右侧截止 span 仍然没有类名 | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-UNIT-002 | Web 单元 | 功能档案任务面板卡片 | `TasksPanel.test.tsx`「卡片视图按优先级铺色：逾期与今天到期都不再改色」补断言：逾期卡片带 `due-overdue`、今天卡片带 `due-soon`、明天卡片带 `due-soon`（本面板 `dueInfo` 把「明天截止」也算 amber 档，与列表截止列同源）、已完成卡片两档都不带 | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-WEB-001 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 579 例通过 | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-BROWSER-001 | 浏览器实测 | 真实页面上的取值 | 无头 Chromium 1440 宽，演示账号在 5173 走 `/login?local=1` 真实登录后量 `/tasks`：卡上的「已逾期 9月16日」由改动前的灰蓝 `rgb(107, 129, 149)` 变成 `rgb(179, 38, 30)` + `font-weight 700`，宿主是 `calm-task-card task-group-card tone-prio-normal`（聚合组卡）；`/tasks?view=list` 与 `/projects/1/task-board` 的逾期取值本来就是 `rgb(179, 38, 30)`，本轮未变 | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-BROWSER-002 | 浏览器实测 | 五档卡 × 两档紧迫度的级联探针 | 在真实页面注入 `.calm-task-card` × 五档 tone × `due-overdue` / `due-soon` 并读计算值：普通 `rgb(179, 38, 30)` / `rgb(201, 71, 44)`；金黄 `rgb(143, 31, 24)` / `rgb(154, 44, 10)`；紧急两档都是 `rgba(255, 255, 255, 0.85)`；已完成与已取消两档落在基础红（真实业务里这两种卡不挂这两个类名，探针是人为注入的） | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-BROWSER-003 | 浏览器实测 | 候选样板三档 | 用仓库真实 `design-system.css` 渲染三档候选（A 染红 + 加粗 / B 只染红不加粗 / C 浅红药丸签），每档在普通白卡、金黄卡、紧急卡上各渲染「已逾期」与「今天截止」；产品选定 A 档后落库，样板页与截图留档 | 本地通过（2026-09-23） |
+| DUE-COLOR-CARD-GATE-001 | 静态门禁 | 类型、风格与全量前端 | `pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/web test`（85 文件 579 例）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 十一次定案）：`pnpm --filter @inpulse/web exec vitest run`（两个相关文件）、`pnpm --filter @inpulse/web test`（85 文件 579 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，量取计算值并留档候选样板页与落地实拍图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、`pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮未触碰类型、契约、依赖边界与后端）；② 全量前端套件首跑时 `src/app/router/app-router.test.tsx` 的「mounts AppRouter inside AppProviders and AppErrorBoundary」在并行负载下偶发 `Unable to find role="heading" and name "任务中心"`，该文件单跑两次与随后整套重跑均通过，判定为既有并行 flake，本轮未改路由与懒加载；③ 演示库里唯一的逾期任务是聚合组卡（最高优先级为普通），金黄卡与紧急卡上的取值由级联探针与候选样板页覆盖，没有真实数据；④ 功能档案任务面板当天没有逾期任务，该面板的卡片由单元用例覆盖，未做浏览器实测；⑤ 配色属视觉主观项，需非作者人工评审。
+
+## 2026-09-23 十二次定案：列表模式的任务行 / 聚合组行整行可点（产品要求，2026-09-23 本地落库）
+
+产品反馈（原文）：「我们现在来改一下列表模式的任务，现在状态是点击任务名称会跳出任务，我希望点击这个任务横向区域内都会弹出」（附图为 `/tasks?view=list`）。现状：任务中心的列表视图把任务行铺成 8 列（任务 / 项目 / 归属 / 负责人 / 优先级 / 截止 / 迭代 / 状态），但只有第 1 列「任务」里的标题按钮 `.feature-list-open` 是热区，行内其余 7 列与整行空白都点不动；同表的聚合组行同理，只有组名可点。悬停反馈倒是全行铺开的（`.feature-list-table tbody tr:hover`），所以「看起来能点、点下去没反应」的落差集中在这一屏。
+
+定案口径：① 行级热区挂在 `<tr>` 上，任务行开该任务详情（`openTask`）、聚合组行开聚合组弹窗（`setOpenGroupId`），两个入口都复用既有回调，不新增状态；② 行内唯一的交互元素是标题按钮，行级处理命中按钮时直接返回、交给按钮自己的 `onClick`，避免一次点击触发两遍；③ 行不加 `tabIndex`、不加 `role`，键盘与读屏仍只认标题按钮，不新增 Tab 停靠点；④ 行内已有拖选（`window.getSelection()` 非空）时不打开弹窗，避免用户拖选标题 / 编号想复制时误弹；⑤ 只改任务中心列表（`.task-center-table` 作用域），功能档案列表（`FeaturesPageView`）与模块任务面板列表（`TasksPanel`）共用的 `.feature-list-table` 不变；⑥ 行底色与悬停反馈沿用既有规则，本轮只补 `cursor: pointer`，不改列宽、省略号与左侧色条。
+
+实现范围（纯前端交互 + 一处作用域 CSS）：`apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 新增 `rowClickOpens(open)` 帮助函数并挂到聚合组行与任务行两个 `<tr>`；`apps/web/src/styles/design-system.css` 在 `.task-center-table` 段落新增 `.task-center-table tbody tr { cursor: pointer; }`；`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 新增 3 个用例。不改契约、Route Registry、权限矩阵、数据库不变量、迁移、排序键、鉴权与幂等策略，后端零改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| TASK-ROW-CLICK-UNIT-001 | Web 单元 | 任务行非标题列也能打开 | `TaskCenterPageView.test.tsx` 新增用例：列表模式下取任务行（`INP-821`）最后一列（状态）点击，`onOpenTask` 被调用 1 次且参数为 `{ projectId: 1, moduleId: 11, featureId: null, taskId: 821 }` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-002 | Web 单元 | 标题按钮不重复触发 | 同一用例内再点行内标题按钮，调用数由 1 变 2（两次各 1 次），确认行级热区命中按钮时让位给按钮、没有双开 | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-003 | Web 单元 | 聚合组行非标题列也能打开 | 新增用例：列表模式下点 `my-task-group-501` 的第 2 列（项目），聚合组弹窗出现，且 `onOpenTask` 未被回调（组行是弹窗入口） | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-UNIT-004 | Web 单元 | 行内拖选时不打开 | 新增用例：用 `document.createRange()` 选中行内容后点击整行，`onOpenTask` 未被调用；清空选区后再点同一行恢复调用 1 次（证明上一跳是被选区挡下，不是热区失效） | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-WEB-001 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` 85 文件 582 例通过（本轮 579 → 582）；单文件 `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx` 60 例通过 | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-BROWSER-001 | 浏览器实测 | 真实登录态下任务行整行可点 | 无头 Chromium 1500×980，演示账号在 5173 走 `/login?local=1` 真实登录后打开 `/tasks?view=list`：首行 `getComputedStyle(tr).cursor` = `pointer`（5 行任务行同表）；点任务行「状态」列（末列，避开标题）弹出该任务详情弹层（标题「A-5 残余：5 年峰值模型定稿与 1.2 倍条件人工复核」）；点任务行「项目」列同样弹出；点标题按钮仍正常打开且只开一次；实拍图留档 `列表整行可点-任务行点状态列.png` / `列表整行可点-任务行点项目列.png` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-BROWSER-002 | 浏览器实测 | 聚合组行整行可点 | 同会话 `/tasks?view=list` 上点聚合组行（副标题含「聚合组」）的「截止」列，弹出聚合组弹窗（`K123-TG-1 / TASK GROUP`）；弹层内成员与分支、迭代记录区块正常渲染，实拍图留档 `列表整行可点-组行点截止列.png` | 本地通过（2026-09-23） |
+| TASK-ROW-CLICK-GATE-001 | 静态门禁 | 类型、风格、依赖边界与格式 | `pnpm --filter @inpulse/web exec tsc --noEmit`（exit 0）、`pnpm lint`、`pnpm format:check`（All matched files use Prettier code style!）、`pnpm check:frontend:boundaries`（283 模块 1395 依赖无违规）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23 十二次定案）：`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`、`pnpm --filter @inpulse/web test`（85 文件 582 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm lint`、`pnpm format:check`、`pnpm check:frontend:boundaries`；浏览器实测走 `apps/api/scripts/seed-demo-data.mjs` 统一的演示口令（默认值见该脚本，本记录不复述口令原文）在 5173 真实登录，点击非标题列并留档实拍图。
+
+未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮未触碰契约、数据库与后端）；② 项目任务面板列表（`TasksPanel`）与功能档案任务列表（`FeaturesPageView`）保持「只有标题可点」，用户本次只提任务中心的列表模式；若产品要求全站一致需另立一轮；③ 行级热区是鼠标增强，键盘与读屏仍走标题按钮（不新增 Tab 停靠点），因此整行不会被读成按钮；④ 拖选保护按「当前选区非空」判定，拖选后不重新拖选直接单击同一行仍会被挡下一次，属有意行为；⑤ 交互与排版属主观项，需非作者人工评审。
+
+## 2026-09-23 模块层面下线归档（ADR-044，本地落库）
+
+用户指示（原文：「好接下来我们改模块的归档，直接去掉这个功能」）：模块层面整体下线归档，模块只有 `ACTIVE`；功能、任务、迭代记录与遗留项的归档 / 恢复完全不变。决策落 [ADR-044](adr/ADR-044.md)，与同日的 [ADR-043](adr/ADR-043.md) 项目三态同属一个尚未推送的批次。
+
+锁定口径：
+
+- 模块不再有归档与恢复：`archiveModule`、`restoreModule` 两条路由与 `ModuleArchiveRequest`（原因）Schema 整体删除（Route Registry 102 → 100 条）；`moduleItemSchema` 去掉 `status` 与 `archivedAt`，`updateModule` 幂等契约版本 1.3.0 → 1.4.0（旧 Key 在新契约下 409）。
+- `ModuleWriteCheckResult` 收窄为 `allowed | not-found`；`MODULE_ARCHIVE_TASKS_OPEN`、`FEATURE_MODULE_ARCHIVED` 与 `ProjectWriteAccessFailure.module-not-active` 一并删除；功能级 `parent-not-active`（`feature.status = 'ARCHIVED'`）保持不变。
+- 数据库：`modules_status_check` 收紧为 `status = 'ACTIVE'`，`archived_at` 恒为空（`modules_archived_at_null_check`）；迁移 `0024_module_archive_removal.sql` 在临时关闭 `modules_row_version` 触发器的情况下把历史 `ARCHIVED` 行回填为 `ACTIVE` 并清空 `archived_at`（不递增 `row_version`），`archived_at` 列保留不删。
+- 展示：模块卡档位标签仍由 `stats.completedTaskCount` 派生，只剩「进行中 / 未开始」两档，列表分组与组内 `sort_order, id` 顺序不变；模块卡内只剩「编辑模块」，编辑弹层底部只剩「取消 / 保存」。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| ADR043-API-INT-001 | 真实 PostgreSQL | 归档与恢复路由已下线 | `modules-api.integration.test.ts`「serves no module archive or restore route and drops lifecycle fields from the module DTO (ADR-044)」：`POST /api/v1/projects/2/modules/3/archive` 与 `/restore` 均 404，创建 / 编辑响应无 `status`、`archivedAt`，改名后 `rowVersion` 为 2 | 本地通过（2026-09-23） |
+| ADR043-API-INT-002 | 真实 PostgreSQL | 幂等重放与成员门禁 | 同文件「replays an updateModule request by key without a second write and refuses removed membership」：同 Key 重放不产生第二次写入，已移除成员重放被拒（契约版本 1.4.0） | 本地通过（2026-09-23） |
+| ADR043-API-INT-003 | 真实 PostgreSQL | 模块列表只剩派生两档 | 同文件「orders module cards by derived lifecycle band…」改为 `[进行中模块, 项目默认模块, 未开始模块]` 与 `[1, 0, 0]`，不再存在「已归档」档位 | 本地通过（2026-09-23） |
+| ADR043-API-INT-004 | 真实 PostgreSQL | 写前检查只剩功能父级 | `write-query-ports.integration.test.ts`：模块写前检查返回 `allowed` 且摘要不含 status；功能归档后仍返回 `parent-not-active` | 本地通过（2026-09-23） |
+| ADR043-API-INT-005 | 真实 PostgreSQL | 父级归档拒写只剩功能层 | `leftover-task` / `external-links` / `projects-read-api` 三个集成文件改为只对功能层断言归档父级拒写（模块夹具不再写 `ARCHIVED`），全量 API 集成 49 文件 459 例通过 | 本地通过（2026-09-23） |
+| ADR043-WEB-UNIT-001 | Web 单元 | 模块卡与弹层无归档入口 | `ModulesPageView.test.tsx`「模块卡与编辑弹窗都不再有归档 / 恢复入口（ADR-044）」与 `describe("模块弹层的归档入口（ADR-044 已下线）")`：卡内只有「编辑模块」，弹层无「归档模块」「恢复模块」「操作原因」 | 本地通过（2026-09-23） |
+| ADR043-WEB-UNIT-002 | Web 单元 | 档位标签只有两档 | `ModulesPageView.test.tsx`「按模块内是否已有完成任务分档：进行中 / 未开始（ADR-044 无归档档位）」与 `resource-lifecycle.test.ts`「模块已无归档档位：任何完成任务数都不会得到「已归档」」：0 个已完成为「未开始」青色、>0 为「进行中」 | 本地通过（2026-09-23） |
+| ADR043-E2E-001 | Playwright | 编辑弹层回归 | `apps/e2e/tests/modules.spec.ts` 用例改名为「…且弹层已无归档入口」，弹层断言「归档模块」与「操作原因」计数为 0，创建 / 编辑 / 并发冲突解决路径不变 | 待运行（本轮未跑 `pnpm test:e2e`，改以 ADR043-BROWSER-001 真机核对） |
+| ADR043-BROWSER-001 | 浏览器实测 | 真实登录态下模块页已无归档入口 | 无头 Chromium 1500×1000 在 5173 走 `/login?local=1` 真实登录：`/projects/2/modules` 卡内唯一控件为「编辑模块」（页面上唯一含「归档 / 恢复」字样的按钮是名为「归档入口验证」的演示模块卡本体），卡上徽章只有「进行中 / 未开始」；「编辑模块」弹层底部为「取消 / 保存」、无「归档模块」与「操作原因」；`/projects/2/modules/9/features` 页头无归档 / 恢复按钮；页面内 `fetch` 实测 `POST /api/v1/projects/2/modules/3/archive`、`/restore` 均 404 `NOT_FOUND`，`GET /api/v1/projects/2/modules` 的 item 无 `status` / `archivedAt` | 本地通过（2026-09-23） |
+| ADR043-GATE-001 | 静态门禁 | 契约、权限、迁移与依赖边界 | 契约 `generate` / `drift` / `validate`、`permissions:check`（100 条）、`db:migrations:check`（25 条）、全 workspace `typecheck`、`lint`、`format:check`、`check:frontend:boundaries` 通过；`database/test/integration` 的 4 条失败与 `assignee_id` 陈旧夹具有关（HEAD 即失败，与本轮无关） | 本地通过 / 见偏差（2026-09-23） |
+
+本地实际执行（2026-09-23）：`apps/api` 单测 66 文件 367 例、真实 PostgreSQL 集成 49 文件 459 例；`apps/web` 单测 85 文件 567 例；`packages/api-contract` 16 文件 100 例；`pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm build` 与上表门禁按本节结论执行。
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② `db:test:local` 全链因 `database/test/integration/helpers.ts` 仍向已删除的 `app.tasks.assignee_id` 插入数据而失败 4 例（13 例因该套件初始化失败被 skip），该夹具在 HEAD 即已陈旧，与本轮改动无关，本轮只把 `0024_module_archive_removal.sql` 计入迁移清单断言；③ 模块卡档位与配色属主观项，需非作者人工评审。
+
+## 2026-09-24 功能层面下线归档（ADR-045，本地落库）
+
+用户指示（承接功能卡上仍显示琥珀色「已归档」徽章的追问，答复「要继续」）：功能层面整体下线归档，功能只有 `ACTIVE`；任务、迭代记录与遗留项的归档 / 恢复不变。决策落 [ADR-045](adr/ADR-045.md)，与 2026-09-23 的 [ADR-043](adr/ADR-043.md) 项目三态、[ADR-044](adr/ADR-044.md) 模块归档下线同属一个尚未推送的批次。至此项目、模块、功能三层都不再有归档态。
+
+锁定口径：
+
+- 功能不再有归档与恢复：`archiveFeature`、`restoreFeature` 两条路由与 `FeatureArchiveRequest`（原因）Schema 整体删除（Route Registry 100 → 98 条）；`featureItemSchema` 去掉 `status` 与 `archivedAt`，`featureStatsSchema` 新增 `completedTaskCount`；`createFeature` 与 `updateFeature` 幂等契约版本统一升 1.4.0（旧 Key 在新契约下 409）。
+- 数据库：`features_status_check` 收紧为 `status = 'ACTIVE'`，`archived_at` 恒为空（`features_archived_at_null_check`）；迁移 `0025_feature_archive_removal.sql` 在临时关闭 `features_row_version` 触发器的情况下把历史 `ARCHIVED` 行回填为 `ACTIVE` 并清空 `archived_at`（不递增 `row_version`），`archived_at` 列保留不删；`status` 成为常量列后，`features_module_status_idx` 重建为 `features_module_id_idx (project_id, module_id, id)`。
+- 写入与展示：`FeatureQueryPort.checkFeatureForWrite` 收窄为 `allowed | not-found`，`ProjectWriteAccessFailure` 去掉 `feature-not-active`，`FeatureReadPort` 去掉按状态过滤，`FEATURE_STATE_CONFLICT` 随单态消失；任务、聚合组、迭代记录、遗留项、外部链接、记录发布与聚合读里 11 处「所属功能已归档」分支（`TASK_PARENT_ARCHIVED` 等）一并删除；功能卡档位标签改由 `stats.completedTaskCount` 派生「进行中 / 未开始」两档（与模块同口径），功能卡与编辑弹层只剩「编辑功能」。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| ADR044-API-INT-001 | 真实 PostgreSQL | 归档与恢复路由已下线 | `features-api.integration.test.ts`「removes feature archive entirely: no archive routes, no status field and always writable (ADR-045)」：`POST /api/v1/projects/2/modules/9/features/{id}/archive` 与 `/restore` 均 404，创建 / 编辑响应无 `status`、`archivedAt`，功能在父级可写时始终可编辑 | 本地通过（2026-09-24） |
+| ADR044-API-INT-002 | 真实 PostgreSQL | 功能列表只剩派生两档 | 同文件「orders the feature list by lifecycle rank: 进行中、未开始」：排序键只按 `completedTaskCount` 分档，不再出现「已归档」档位 | 本地通过（2026-09-24） |
+| ADR044-API-INT-003 | 真实 PostgreSQL | 写前检查与计数收窄 | `write-query-ports.integration.test.ts` 两域都只断言 `allowed` / `not-found`（功能侧不再有 `parent-not-active`）；`aggregate-read-ports.integration.test.ts` 的 `FeatureReadPort.count` 只按 `project_id` + 可选 `module_id` 统计，去掉 status 过滤后仍不跨项目 | 本地通过（2026-09-24） |
+| ADR044-API-INT-004 | 真实 PostgreSQL | 下级分支清理后的回归 | `leftover-task`、`external-links`、`record-drafts`、`record-lifecycle`、`record-publication`、`task-completion`、`task-create`、`tasks-api`、`task-groups-merge`、`task-group-unmerge`、`projects-read-api`、`aggregate-read-api` 全部改为只覆盖「存在 + 归属」口径，全量 API 集成 49 文件 451 例通过 | 本地通过（2026-09-24） |
+| ADR044-CONTRACT-UNIT-001 | 契约单元 | 五条功能路由与权限矩阵 | `features.test.ts`「registers all five operations with explicit write/replay/version policies」：只剩 `listFeatures` / `getFeature` / `findSimilarFeatures` / `createFeature` / `updateFeature`，两条归档路由与注入 `status` 的用例删除；`permissions.test.ts` 路由清单同步，`pnpm permissions:check` = 98 条操作 / 98 条路由 | 本地通过（2026-09-24） |
+| ADR044-WEB-UNIT-001 | Web 单元 | 功能卡无归档入口 | `FeaturesPageView.test.tsx`「档位只由已完成任务数推导，且不再有归档入口（ADR-045）」：0 个已完成为「未开始」、>0 为「进行中」，卡片与编辑弹层均无归档 / 恢复按钮；`resource-lifecycle.test.ts`、`SimilarFeatures.test.tsx`、`ConvertLeftoverTask.test.tsx` 同步 | 本地通过（2026-09-24） |
+| ADR044-E2E-001 | Playwright | 功能页回归 | `apps/e2e/tests/features.spec.ts`「功能页不再有归档与恢复入口，功能始终可编辑（ADR-045）」在真实 UI + 真实 API 下断言功能卡与编辑弹层都没有归档 / 恢复按钮、「归档功能 / 恢复功能」计数为 0（`exact: true`），功能始终可编辑；`modules.spec.ts` 上轮已去掉模块归档断言。整包 `pnpm --filter @inpulse/e2e exec playwright test` 56 例全绿（4.0 分钟） | 本地通过（2026-09-24） |
+| ADR044-BROWSER-001 | 浏览器实测 | 真实登录态下功能页无归档痕迹 | 真机核对（同步运行树 `D:\InPulse` 后 `node scripts/dev-start.mjs --local-only` 重建并重启 API / Vite，无头 Chromium 1500×1000，演示账号 `xiaoshao` 在 5173 走 `/login?local=1` 真实登录）：`/projects/1/modules/3/features`（4 张功能卡）与 `/projects/2/modules/9/features`（1 张）页面文本均不含「已归档」，页面上含「归档 / 恢复」字样的按钮只有功能名「项目编辑、归档与恢复」与模块 / 功能名「归档入口验证」本身，没有任何「归档功能」「恢复功能」这类动作标签；页面内 `fetch` 实测 `POST /api/v1/projects/{projectId}/modules/{moduleId}/features/1/archive` 与 `/restore` 均返回 404，`GET .../features` 返回 200 且 item 字段为 `acceptanceCriteria,code,createdAt,createdBy,createdByName,currentBehavior,id,moduleId,name,projectId,rowVersion,stats,tags,updatedAt`（无 `status` / `archivedAt`）；无未捕获 JS 异常 | 本地通过（2026-09-24） |
+| ADR044-GATE-001 | 静态门禁 | 契约、权限、迁移与依赖边界 | `pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm format:check`、`pnpm build`、`contract:drift`、`permissions:check`（98 条）、`db:migrations:check`（26 条）、`db:seed:check`、`check:secrets`、`check:deps`、`check:frontend:boundaries`、`check:deploy:test` 全部通过 | 本地通过（2026-09-24） |
+
+本地实际执行（2026-09-24）：`apps/api` 单测 66 文件 367 例、真实 PostgreSQL 集成 49 文件 451 例（首跑唯一失败为 `aggregate-read-ports.integration.test.ts` 遗留的旧 `status: 'ACTIVE'` 断言，修正后该文件 23/23 通过）；`apps/web` 单测 85 文件 553 例；`packages/api-contract` 16 文件 100 例；`apps/ops` 8 文件 52 例；`packages/canonical-json` 1 文件 5 例；`database` 1 文件 15 例；`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build` 与上表门禁按本节结论执行。本轮 Playwright E2E 整包 56 例全绿（4.0 分钟），并在同步运行树后完成真机核对，两项见上表 ADR044-E2E-001 与 ADR044-BROWSER-001。
+
+本轮为跑通 E2E 一并修掉的既有 spec 漂移与夹具缺陷（都只改测试代码，不改产品行为）：
+
+- `apps/e2e/playwright.config.ts` 新增 `actionTimeout: 30_000`。Playwright 的 `actionTimeout` 默认为 0（不超时），定位器对不上时会静默等到用例 180s 超时，只报「测试超时」而看不出真正原因；收敛后同一组 6 个文件由 7.2 分钟降到 1.6 分钟。这也是本轮 E2E 体感「特别慢」的直接原因。
+- 迭代记录 / 遗留项 / 发布 / 生命周期 / 外部链接 5 个 spec 的「所属模块」由 `pickCalmSelectOptionByIndex(x, "所属模块", 1)` 改为新增的 `pickFirstCalmSelectOption`：记录草稿编辑器的「所属模块」没有占位项，下标 0 就是第一个真实模块，原下标 1 并不存在。
+- `record-drafts.spec.ts` / `record-feed.spec.ts` 的草稿标题与说明断言作用域由 `region["草稿详情"]` 改为 `dialog["草稿详情"]`（标题在弹层页头、说明在页脚）。
+- 「继续编辑」断言补 `exact: true`（草稿卡片的可访问名是「继续编辑草稿：…」）；`task-board.spec.ts` 的「指派给」改为「负责人」（aria-label 与可见 label 不一致）；`features.spec.ts` 的「归档功能 / 恢复功能」计数断言补 `exact: true`（新功能名「无归档功能-…」会被默认子串匹配命中）；`module-tasks.spec.ts` 里过时的 `编辑任务` `toBeDisabled()` 改为按 ADR-045 口径断言（任务自身 `ACTIVE` 即可编辑）。
+- `search.spec.ts`「登录用户通过全局搜索页面找到 E2E 投影」批量失败的真实原因不在断言，而在 `apps/e2e/global-setup.ts`：夹具人工插入的 PROJECT 投影行原先用 `${projectId}` 作 `entity_id`，与真实项目投影行共用唯一键 `(project_id, entity_type, entity_id)`（约束 `search_projection_entity_unique`），成员变更等合法写入会按该唯一键覆盖它、把夹具文案冲成真实项目文案，于是单跑通过、批量（`project-members.spec.ts` 先跑）失败。改为夹具专用的正数实体号 `2_100_000` / `2_100_001`；不能用 0 或负数，响应契约校验会拒绝非正 `entityId` 并让 `/api/v1/search` 直接返回 `INTERNAL_ERROR`。修复后按 `project-members` -> `external-links` -> `search` 顺序复现 9/9 通过，整包 56/56 通过。
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② `database/test/integration` 仍因既有 `helpers.ts` 的 `assignee_id` 陈旧夹具在 HEAD 即失败，与本轮无关；③ 功能卡档位与配色属主观项，需非作者人工评审。
+
+## 2026-09-24 三层列表排序统一（ADR-046，本地落库）
+
+用户指示：「项目排序首先大体按照状态，进行中，未开始，维护中，细化按照创建时间排序。模块和功能按照创建时间从近到远」。此前三层列表的次级排序键各不相同（项目 `id` 升序、模块 `sort_order` 后接 `id` 升序、功能 `id` 升序），其中 `app.modules.sort_order` 应用代码从不写入（`ModuleManagementRepository.create` 的 INSERT 不含该列，恒为默认 0），只有演示种子给项目 1 的 8 个模块写过 1~8，排序键形同虚设。决策落 [ADR-046](adr/ADR-046.md)，与 [ADR-043](adr/ADR-043.md) / [ADR-044](adr/ADR-044.md) / [ADR-045](adr/ADR-045.md) 同属本次尚未推送的批次。
+
+锁定口径：
+
+- 项目：档位（进行中 → 未开始 → 维护中）不变，同档位内 `created_at DESC, id DESC`（原为 `p.id ASC`）。
+- 模块与功能：保留既有的「进行中 / 未开始」派生档位（ADR-044 / ADR-045 口径不变），档位内 `created_at DESC, id DESC`；模块排序不再使用 `sort_order`（列与 `sortOrder` 字段保留，不删列、不改写入路径）。
+- 实现位置：`postgres-project-query-port.ts`、`module-management.repository.ts`、`feature-management.repository.ts` 三处 `ORDER BY`；档位表达式的追加键说明写在 `apps/api/src/stats/card-stat-columns.ts`，前端档位映射 `apps/web/src/features/common/resource-lifecycle.ts` 无需改动（列表渲染只按搜索词过滤，不重排）。
+- 不新增索引、不新增迁移：三层列表都是项目内小集合，`created_at` 相同时用 `id DESC` 兜底保证顺序确定；迁移仍为 0026 之前的 26 条（本轮无新迁移）。
+- 契约：`listProjects` / `listModules` / `listFeatures` 的 Route Registry summary 改为「档位优先、同档位创建时间从近到远」，`pnpm contract:generate` 重生成后 `contract:drift` 与 Registry 一致；顺带清掉 `listProjects` 里残留的「包含归档历史 / 已归档档位」过时文案。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| ADR045-API-INT-001 | 真实 PostgreSQL | 项目列表档位 + 创建时间 | `projects-read-api.integration.test.ts`：新增后建的「未开始」项目，断言顺序 `[active, newerNotStarted, notStarted, maintenance]`（同档位内后建的在前）与档位计数 `[1, 0, 0, 0]` | 本地通过（2026-09-24） |
+| ADR045-API-INT-002 | 真实 PostgreSQL | 模块列表档位 + 创建时间 | `modules-api.integration.test.ts`：未分类模块列表断言改为 `[module.id, project.moduleId]`（后建的在前）；档位用例断言 `[started.id, notStarted.id, project.moduleId]` | 本地通过（2026-09-24） |
+| ADR045-API-INT-003 | 真实 PostgreSQL | 功能列表档位 + 创建时间 | `features-api.integration.test.ts`：新增后建的「未开始」功能，断言 `[active.id, newerNotStarted.id, notStarted.id]` | 本地通过（2026-09-24） |
+| ADR045-CONTRACT-001 | 静态门禁 | 契约与权限矩阵 | `pnpm contract:generate` 重生成后 `pnpm contract:drift`（5 个产物一致）、`pnpm contract:validate`（98 条路由）、`pnpm permissions:check`（98 条操作 / 98 条路由）通过 | 本地通过（2026-09-24） |
+| ADR045-GATE-001 | 静态门禁 | 全套代码与文档门禁 | `pnpm lint`、`pnpm typecheck`（8 个 workspace）、`pnpm format:check`、`pnpm build`、`pnpm db:migrations:check`（26 条）、`pnpm check:docs`（92 个 Markdown）、`pnpm check:frontend:boundaries`（283 模块 / 1392 依赖）通过 | 本地通过（2026-09-24） |
+
+本地实际执行（2026-09-24）：`apps/api` 单测 66 文件 367 例、真实 PostgreSQL 集成 49 文件 451 例；`apps/web` 单测 85 文件 553 例（`src/app/router/app-router.test.tsx` 在全量批次下 1 例失败，单独复跑 3/3 通过，属既有偶发，与本轮无关）；`packages/api-contract` 16 文件 100 例随 `pnpm test:unit` 通过；Playwright E2E 整包 56 例全绿（4.9 分钟）。上表门禁按本节结论逐项执行。
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② 未跑 `pnpm check` 整链（`deps:audit` 依赖本机 npm 镜像的 audit endpoint，历史结论是需改用公共 registry）；③ 模块与功能保留「进行中 / 未开始」档位是本轮的实现口径假设（用户只说「按创建时间从近到远」，未要求取消档位分组），如产品要求纯创建时间排序需另立 ADR；④ 既有偏差与本轮无关：`database/test/integration` 全链被 `helpers.ts` 向已删除列 `app.tasks.assignee_id` 插数据阻断，HEAD 即失败。
+
+## 2026-09-24 遗留问题来源改排到已逾期之后（产品要求，本地落库）
+
+产品反馈（原文）：「这个排序稍微改一下，把遗留问题排到已经逾期后面」（附图为 `/tasks` 任务中心卡片视图）。现状：未完成任务的紧急桶是「遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)」，第 0 桶的遗留问题来源排在标记紧急与已逾期之前；同一屏里「普通 + 遗留问题」的白卡排在「紧急」红卡与「已逾期」黄卡之前。
+
+定案口径：紧急桶改为「标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)」——遗留问题来源整体降到已逾期之后一档，「今/明日截止」与「其余」两桶不动；桶内仍按 优先级 → 截止时间 → ID。这是排序口径变更而非配色变更：卡片取色、优先级徽章、遗留问题徽章与截止日期文案全部不变。
+
+锁定口径：
+
+- 服务端 `apps/api/src/modules/tasks/task-list-order.ts` 的 `urgency` 表达式重排，任务中心、任务列表端口与任务面板继续共用同一排序键；`TASK_LIST_SORT_KEY_VERSION` 由 4 升到 5，旧版本游标整版拒绝（旧游标里的 0 表示「遗留问题来源」，新口径下 0 是「标记紧急」，放行会把遗留问题任务当紧急任务排到最前）。
+- 前端 `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 的 `urgencyBucketOf` 同步重排（组卡与任务卡共用这一处判定：组卡「来源」不适用，「紧急」取未完成分支最高一档、「截止」取最早一条），保证已加载页内组卡与任务卡仍用同一把尺子。
+- 文档口径同步：[ADR-037](adr/ADR-037.md) §3 增加 2026-09-22 与 2026-09-24 两条修订（此前 §1/§3 表格里的桶顺序自 2026-09-22 起已与代码不一致，本次一并记录）、`功能设计v1.1.md` 的排序条目、`docs/task-card-colors.md` 的当前口径与变更历史、`docs/c-v1-alignment.md` 的冻结事实。
+- 不改契约、Route Registry、权限矩阵、数据库不变量、迁移与鉴权；无新增索引（桶序变化不影响既有计划）。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| TASK-URGENCY-ORDER-PG-INT-001 | 真实 PostgreSQL | 5 桶重排后的完整顺序 | `aggregate-read-ports.integration.test.ts`「状态分组 / 完成时间 / 紧急桶的组合按口径排序，且两个任务端口同序」：未完成期望改为 `[todo.urgent, todo.overdue, todo.leftover, todo.dueSoon, todo.other, todo.tieA, todo.tieB]`，且 `MyTaskQueryPort.list` 与 `TaskQueryPort.list` 同序；已完成（完成时间倒序）与已取消（优先级 → 截止 → id）分组期望不变 | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-PG-INT-002 | 真实 PostgreSQL | keyset 分页跨页不漏不重 | 同文件「多列 keyset 分页跨页不漏不重」：造数顺序仍等于返回顺序（标记紧急 → 已逾期 → 今/明日截止 → 其余），逐页翻完得到同一序列 | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-API-INT-001 | HTTP + PostgreSQL | R-3 我的任务实际返回顺序 | `aggregate-read-api.integration.test.ts`「只返回本人负责的任务，排除历史来源分支并标注组角色」：夹具里只有 `tSource` 命中遗留问题来源桶（其余未完成任务同为「其余」桶），期望顺序不变，仍为 `[tSource, tMain, tDetached, tModule, tInvalid, tDone, tCanceled]` | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-UNIT-001 | API 单元 | 游标版本随口径升级 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` = 5，当前版本载荷往返为 `5|0||4|2||501`，版本 4 / 3 / 2 的游标全部返回 null（含专门构造的 `4|0||0|2||501`：旧 0 桶在新口径下会被读成「标记紧急」） | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-WEB-UNIT-001 | Web 单元 | 组卡与任务卡同一把尺子 | `TaskCenterPageView.test.tsx`「组卡与任务卡同一顺序：同优先级按截止日期从近到远」：已逾期组卡落在紧急桶 1，仍排在紧急桶 4 的高优先级任务卡之前，顺序为 组卡 → 高任务卡 → 普通任务卡；「同优先级内按截止日期从近到远，未设截止排最后」不受影响 | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-GATE-001 | 静态门禁 | 类型、风格、契约与格式 | `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`contract:drift`、`contract:validate`（98 条）、`permissions:check`（98 条）、`check:docs`、`check:frontend:boundaries` 通过 | 本地通过（2026-09-24） |
+
+本地实际执行（2026-09-24）：`pnpm --filter @inpulse/api test:unit`（66 文件 367 例）、真实 PostgreSQL 集成 49 文件 451 例、`apps/web` 单测（85 文件 553 例）、Playwright E2E 整包 56 例，以及上表列出的门禁；无头 Chromium 用演示账号在 5173 真实登录后打开 `/tasks` 卡片视图，实测未完成卡片顺序为「222（紧急）→ 啊J（聚合组 · 已逾期 9月16日）→ A-5 残余…（遗留问题）→ A-6 上线门禁…（高 · 10月15日）→ 呈现出（普通 · 无截止）」——遗留问题卡由改编前的第 1 位落到已逾期卡之后，与本次口径一致。
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② 任务看板的四桶口径（逾期 → 未完成 → 已完成 → 已取消）按 [ADR-037](adr/ADR-037.md) §3 保持不变，本轮不涉及；③ 排序属主观项，需非作者人工评审。

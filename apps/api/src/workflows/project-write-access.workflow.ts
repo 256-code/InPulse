@@ -24,14 +24,16 @@ import {
  *
  * 只负责在调用方已经持有的事务中解析 Session actor，并按
  * 项目 -> 模块 -> 功能 的顺序取得对应行的 FOR SHARE；业务写入与归档操作
- * 不在此处实现。任意一层返回 `not-found` / `parent-not-active` 时，
- * 后续 Port 不得被调用，调用方也不应继续业务写入。
+ * 不在此处实现。任意一层返回 `not-found` 时，后续 Port 不得被调用，
+ * 调用方也不应继续业务写入。ADR-043：项目层为三态；ADR-044：模块层下线归档；
+ * ADR-045：功能层下线归档。三层都不再有归档只读态，因此这里只可能返回
+ * `unauthenticated` / `project-not-found` / `module-not-found` /
+ * `feature-not-found`。
  */
 
 export type ProjectWriteAccessStep =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "project-not-found" }
-  | { readonly kind: "project-not-active" }
   | {
       readonly kind: "allowed";
       readonly actor: AuthenticatedSessionActor;
@@ -41,9 +43,7 @@ export type ProjectWriteAccessStep =
 export type ModuleWriteAccessFailure =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "project-not-found" }
-  | { readonly kind: "project-not-active" }
-  | { readonly kind: "module-not-found" }
-  | { readonly kind: "module-not-active" };
+  | { readonly kind: "module-not-found" };
 
 export type ModuleWriteAccessResult =
   | ModuleWriteAccessFailure
@@ -55,9 +55,7 @@ export type ModuleWriteAccessResult =
     };
 
 export type FeatureWriteAccessFailure =
-  | ModuleWriteAccessFailure
-  | { readonly kind: "feature-not-found" }
-  | { readonly kind: "feature-not-active" };
+  ModuleWriteAccessFailure | { readonly kind: "feature-not-found" };
 
 export type FeatureWriteAccessResult =
   | FeatureWriteAccessFailure
@@ -112,9 +110,6 @@ export class ProjectWriteAccessWorkflow {
     if (module.kind === "not-found") {
       return { kind: "module-not-found" };
     }
-    if (module.kind === "parent-not-active") {
-      return { kind: "module-not-active" };
-    }
 
     return {
       kind: "allowed",
@@ -140,9 +135,6 @@ export class ProjectWriteAccessWorkflow {
     });
     if (feature.kind === "not-found") {
       return { kind: "feature-not-found" };
-    }
-    if (feature.kind === "parent-not-active") {
-      return { kind: "feature-not-active" };
     }
 
     return {
@@ -173,9 +165,6 @@ export class ProjectWriteAccessWorkflow {
     });
     if (project.kind === "not-found") {
       return { kind: "project-not-found" };
-    }
-    if (project.kind === "parent-not-active") {
-      return { kind: "project-not-active" };
     }
 
     return {

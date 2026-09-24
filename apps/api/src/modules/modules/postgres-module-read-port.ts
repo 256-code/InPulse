@@ -15,7 +15,7 @@ export class PostgresModuleReadPort extends ModuleReadPort {
   ): Promise<ModuleReadResource | undefined> {
     const [row] = await tx.sql<
       ModuleReadResource[]
-    >`SELECT id AS "moduleId", project_id AS "projectId", name, status FROM app.modules WHERE id = ${moduleId} AND project_id = ${projectId}`;
+    >`SELECT id AS "moduleId", project_id AS "projectId", name FROM app.modules WHERE id = ${moduleId} AND project_id = ${projectId}`;
     return row;
   }
 
@@ -41,12 +41,10 @@ export class PostgresModuleReadPort extends ModuleReadPort {
     tx: TransactionContext,
     input: ModuleCountInput,
   ): Promise<number> {
-    const status = input.status ?? null;
     const [row] = await tx.sql<{ total: number }[]>`
       SELECT COUNT(*)::integer AS total
         FROM app.modules
        WHERE project_id = ${input.projectId}
-         AND (${status}::text IS NULL OR status = ${status})
     `;
     return row?.total ?? 0;
   }

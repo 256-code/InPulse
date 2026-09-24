@@ -28,10 +28,6 @@ import {
   useProjectMembers,
 } from "./project-member-query";
 import { useProjects } from "./project-query";
-import {
-  ArchiveProjectModal,
-  RestoreProjectModal,
-} from "./ProjectManagementModals";
 
 interface ReassignmentChoice {
   readonly enabled: boolean;
@@ -77,9 +73,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   >({});
   const [success, setSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [dangerAction, setDangerAction] = useState<
-    "archive" | "restore" | null
-  >(null);
   const projects = useProjects({ client });
   const navigate = useNavigate();
   const project = (projects.data?.items ?? []).find(
@@ -487,24 +480,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   </span>
                 </p>
               </div>
-
-              <div className="danger-zone">
-                <strong>高风险操作</strong>
-                <p>
-                  归档后项目不再接受新的写入，历史数据全部保留；恢复后按普通项目继续。
-                </p>
-                <Button
-                  className="danger-button"
-                  onClick={() =>
-                    setDangerAction(
-                      project.status === "ARCHIVED" ? "restore" : "archive",
-                    )
-                  }
-                >
-                  <InpulseIcon name="folder" size={15} />
-                  {project.status === "ARCHIVED" ? "恢复项目" : "归档项目"}
-                </Button>
-              </div>
             </>
           ) : null}
         </section>
@@ -775,33 +750,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           </div>
         </div>
       </Modal>
-
-      {project && dangerAction === "archive" ? (
-        <ArchiveProjectModal
-          open
-          project={project}
-          client={client}
-          onClose={() => setDangerAction(null)}
-          onArchived={() => {
-            setDangerAction(null);
-            void projects.refetch();
-            setSuccess("项目已归档，历史数据全部保留。");
-          }}
-        />
-      ) : null}
-      {project && dangerAction === "restore" ? (
-        <RestoreProjectModal
-          open
-          project={project}
-          client={client}
-          onClose={() => setDangerAction(null)}
-          onRestored={() => {
-            setDangerAction(null);
-            void projects.refetch();
-            setSuccess("项目已恢复，可按普通项目继续使用。");
-          }}
-        />
-      ) : null}
     </>
   );
 };

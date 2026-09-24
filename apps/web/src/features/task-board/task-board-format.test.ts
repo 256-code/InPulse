@@ -157,6 +157,13 @@ describe("标记映射", () => {
       label: "紧急",
       tone: "red",
     });
+    // 2026-09-23 九次配色定案：卡上「普通」徽章与任务中心同一套淡蓝；
+    // priorityMarkOf 的 tone 仍留给看板列表行的行配色，两者刻意不共用。
+    expect(cardMarkOf(cardOf({ priority: "NORMAL" }))).toEqual({
+      kind: "badge",
+      label: "普通",
+      tone: "blue",
+    });
   });
 
   it("工作状态文案与色调固定", () => {

@@ -14,7 +14,7 @@ import {
   type ModuleChange,
 } from "./module-query";
 
-type Values = { name: string; description: string; reason: string };
+type Values = { name: string; description: string };
 const editableFields = ["name", "description"] as const;
 type EditableField = (typeof editableFields)[number];
 const fieldLabels = { name: "模块名称", description: "模块说明" };
@@ -34,10 +34,10 @@ export type ModuleEditorRequest = {
 };
 
 /**
- * 模块编辑器弹层：新增、编辑、归档、恢复四种动作共用同一份表单与冲突处理。
- * 模块列表页（模块卡「编辑模块」/「归档」）与模块详情页头部（设计师稿
- * catalog.tsx L55-60 的「编辑模块」「归档模块」）都复用本组件，避免两处实现
- * 出现漂移；动作选择由宿主页面通过 `request` 驱动。
+ * 模块编辑器弹层：新增与编辑共用同一份表单与冲突处理。模块列表页（模块卡
+ * 「编辑模块」）与模块详情页头部（设计师稿 catalog.tsx L55-60）都复用本组件，
+ * 避免两处实现出现漂移；动作选择由宿主页面通过 `request` 驱动。
+ * ADR-044：模块层面已下线归档，弹层不再有归档/恢复动作与操作原因。
  */
 export function ModuleEditorModal({
   projectId,
@@ -46,8 +46,6 @@ export function ModuleEditorModal({
   request,
   onClose,
   onSaved,
-  canArchive = false,
-  onLifecycleRequest,
 }: {
   projectId: number;
   client?: InpulseApiClient | undefined;
@@ -55,14 +53,6 @@ export function ModuleEditorModal({
   request: ModuleEditorRequest | null;
   onClose: () => void;
   onSaved?: (() => void) | undefined;
-  /**
-   * ADR-039：当前用户是否可以归档/恢复本模块，即系统管理员或本项目
-   * 任意活跃成员。默认 false，由宿主按项目角色传入。
-   */
-  canArchive?: boolean | undefined;
-  /** 宿主把弹层切到归档/恢复动作；未提供时底部不渲染生命周期入口。 */
-  onLifecycleRequest?:
-    ((action: "archive" | "restore", item: ModuleItem) => void) | undefined;
 }) {
   const { query, mutation } = useModules(projectId, client);
   const [reloadError, setReloadError] = useState<string | null>(null);
@@ -82,7 +72,7 @@ export function ModuleEditorModal({
     getValues,
     formState: { errors },
   } = useForm<Values>({
-    defaultValues: { name: "", description: "", reason: "" },
+    defaultValues: { name: "", description: "" },
   });
   const selection: {
     action: ModuleChange["action"];
@@ -92,7 +82,7 @@ export function ModuleEditorModal({
       ? null
       : { action: request.action, ...(baseItem ? { item: baseItem } : {}) };
 
-  // 每次动作切换（含同一模块的编辑 → 归档）都要回到干净状态：
+  // 每次动作切换（含同一模块的重开）都要回到干净状态：
   // 重排编辑代数以丢弃过期的 reload 结果，并清空上一次的冲突与错误。
   const requestKey =
     request === null
@@ -109,7 +99,6 @@ export function ModuleEditorModal({
     reset({
       name: request.item?.name ?? "",
       description: request.item?.description ?? "",
-      reason: "",
     });
     // 依赖只取 requestKey：mutation 与 reset 是 react-query / react-hook-form
     // 的稳定引用，按下标展开不会带来额外的重跑。
@@ -162,12 +151,6 @@ export function ModuleEditorModal({
           return;
         }
         if (selection.action === "update") {
-          if (item.status !== "ACTIVE") {
-            setReloadError(
-              "模块已归档，草稿已保留，请取消编辑并在恢复后重试。",
-            );
-            return;
-          }
           const values = { ...draft };
           const conflicts: EditableField[] = [];
           for (const field of editableFields) {
@@ -222,24 +205,9 @@ export function ModuleEditorModal({
     setMerge(null);
     mutation.reset();
   };
-  const lifecycle =
-    selection?.action === "archive" || selection?.action === "restore";
-  // ADR-033：编辑既有模块时，若当前用户可管理本项目资源，弹层底部直接给出
-  // 归档/恢复入口，与列表页、模块详情页头部复用同一套动作与服务端门禁。
-  const archiveTarget =
-    canArchive && selection?.action === "update" && selection.item
-      ? selection.item
-      : null;
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
-  const modalTitle =
-    selection?.action === "create"
-      ? "新增模块"
-      : selection?.action === "update"
-        ? "编辑模块"
-        : selection?.action === "archive"
-          ? "归档模块"
-          : "恢复模块";
+  const modalTitle = selection?.action === "create" ? "新增模块" : "编辑模块";
   return (
     <>
       <Modal
@@ -247,20 +215,6 @@ export function ModuleEditorModal({
         className="catalog-modal"
         eyebrow={projectName}
         title={modalTitle}
-        tone={
-          selection?.action === "archive"
-            ? "danger"
-            : selection?.action === "restore"
-              ? "success"
-              : undefined
-        }
-        icon={
-          selection?.action === "archive"
-            ? "alert"
-            : selection?.action === "restore"
-              ? "rotateCcw"
-              : undefined
-        }
         onCancel={close}
         mask={{ closable: !mutation.isPending }}
       >
@@ -271,75 +225,46 @@ export function ModuleEditorModal({
           <div className="dialog-form">
             <p className="permission-hint">
               <InpulseIcon name="shield" size={14} />
-              {selection?.action === "archive"
-                ? "归档后模块及下级内容不可写，历史将保留。"
-                : selection?.action === "restore"
-                  ? "恢复模块本身的可写状态，不改变下级资源各自的归档状态。"
-                  : "名称与说明会保留完整的版本与审计历史。"}
+              名称与说明会保留完整的版本与审计历史。
             </p>
-            {lifecycle ? (
-              <div className="calm-field">
-                <label htmlFor="module-reason">操作原因</label>
-                <Controller
-                  name="reason"
-                  control={control}
-                  rules={{
-                    validate: (v) => v.trim().length > 0 || "请填写操作原因",
-                    maxLength: { value: 2000, message: "原因最多 2000 字" },
-                  }}
-                  render={({ field }) => (
-                    <Input.TextArea
-                      {...field}
-                      id="module-reason"
-                      disabled={mutation.isPending || reloading || !!merge}
-                      rows={3}
-                    />
-                  )}
-                />
-                <p role="alert">{errors.reason?.message}</p>
-              </div>
-            ) : (
-              <>
-                <div className="calm-field">
-                  <label htmlFor="module-name">模块名称</label>
-                  <Controller
-                    name="name"
-                    control={control}
-                    rules={{
-                      validate: (v) => v.trim().length > 0 || "请填写模块名称",
-                      maxLength: { value: 200, message: "名称最多 200 字" },
-                    }}
-                    render={({ field }) => (
-                      <Input
-                        {...field}
-                        id="module-name"
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
+            <div className="calm-field">
+              <label htmlFor="module-name">模块名称</label>
+              <Controller
+                name="name"
+                control={control}
+                rules={{
+                  validate: (v) => v.trim().length > 0 || "请填写模块名称",
+                  maxLength: { value: 200, message: "名称最多 200 字" },
+                }}
+                render={({ field }) => (
+                  <Input
+                    {...field}
+                    id="module-name"
+                    disabled={mutation.isPending || reloading || !!merge}
                   />
-                  <p role="alert">{errors.name?.message}</p>
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="module-description">模块说明</label>
-                  <Controller
-                    name="description"
-                    control={control}
-                    rules={{
-                      maxLength: { value: 20000, message: "说明最多 20000 字" },
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="module-description"
-                        rows={5}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
+                )}
+              />
+              <p role="alert">{errors.name?.message}</p>
+            </div>
+            <div className="calm-field">
+              <label htmlFor="module-description">模块说明</label>
+              <Controller
+                name="description"
+                control={control}
+                rules={{
+                  maxLength: { value: 20000, message: "说明最多 20000 字" },
+                }}
+                render={({ field }) => (
+                  <Input.TextArea
+                    {...field}
+                    id="module-description"
+                    rows={5}
+                    disabled={mutation.isPending || reloading || !!merge}
                   />
-                  <p role="alert">{errors.description?.message}</p>
-                </div>
-              </>
-            )}
+                )}
+              />
+              <p role="alert">{errors.description?.message}</p>
+            </div>
             {mutation.isError && (
               <Alert type="error" title={moduleErrorMessage(mutation.error)} />
             )}
@@ -418,20 +343,6 @@ export function ModuleEditorModal({
             )}
           </div>
           <div className="calm-action-footer">
-            {archiveTarget && (
-              <Button
-                className="secondary-button footer-leading"
-                disabled={mutation.isPending || reloading || !!merge}
-                onClick={() =>
-                  onLifecycleRequest?.(
-                    archiveTarget.status === "ARCHIVED" ? "restore" : "archive",
-                    archiveTarget,
-                  )
-                }
-              >
-                {archiveTarget.status === "ARCHIVED" ? "恢复模块" : "归档模块"}
-              </Button>
-            )}
             <Button
               className="secondary-button"
               onClick={close}
@@ -445,7 +356,7 @@ export function ModuleEditorModal({
               loading={mutation.isPending}
               disabled={reloading || conflict || !!reloadError || !!merge}
             >
-              {lifecycle ? "确认" : "保存"}
+              保存
             </Button>
           </div>
         </form>

@@ -431,45 +431,32 @@ async function explain(call: SqlCall): Promise<string> {
 }
 
 describe("ModuleReadPort.count and FeatureReadPort.count", () => {
-  test("module count keeps archived history and never crosses projects", async () => {
+  test("module count covers every module of one project and never crosses projects", async () => {
     const scope = await newProject();
     const other = await newProject();
     const extraModule = await newModule(scope, "正常模块");
     expect(
       await uow.run((tx) => modules.count(tx, { projectId: scope.projectId })),
     ).toBe(2);
-    expect(
-      await uow.run((tx) =>
-        modules.count(tx, { projectId: scope.projectId, status: "ACTIVE" }),
-      ),
-    ).toBe(2);
-    await client.sql`UPDATE app.modules SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${extraModule}`;
+    // ADR-044：模块不再有归档态，count 只按 project_id 统计，且不随模块改名变化。
+    await client.sql`UPDATE app.modules SET name = '重命名模块', row_version = row_version + 1 WHERE id = ${extraModule}`;
     expect(
       await uow.run((tx) => modules.count(tx, { projectId: scope.projectId })),
     ).toBe(2);
     expect(
-      await uow.run((tx) =>
-        modules.count(tx, { projectId: scope.projectId, status: "ACTIVE" }),
-      ),
-    ).toBe(1);
-    expect(
-      await uow.run((tx) =>
-        modules.count(tx, { projectId: scope.projectId, status: "ARCHIVED" }),
-      ),
-    ).toBe(1);
-    expect(
       await uow.run((tx) => modules.count(tx, { projectId: other.projectId })),
     ).toBe(1);
+    expect(await uow.run((tx) => modules.count(tx, { projectId: -1 }))).toBe(0);
   });
 
-  test("feature count narrows by module and status without leaking projects", async () => {
+  // ADR-045：功能不再有归档态，count 只按 project_id + 可选 module_id 统计。
+  test("feature count narrows by module without leaking projects", async () => {
     const scope = await newProject();
     const other = await newProject();
     const secondModule = await newModule(scope, "第二模块");
     await newFeature(scope, scope.moduleId, "功能甲");
-    const archived = await newFeature(scope, scope.moduleId, "功能乙");
+    await newFeature(scope, scope.moduleId, "功能乙");
     await newFeature(scope, secondModule, "功能丙");
-    await client.sql`UPDATE app.features SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${archived}`;
     expect(
       await uow.run((tx) => features.count(tx, { projectId: scope.projectId })),
     ).toBe(3);
@@ -485,17 +472,7 @@ describe("ModuleReadPort.count and FeatureReadPort.count", () => {
       await uow.run((tx) =>
         features.count(tx, {
           projectId: scope.projectId,
-          moduleId: scope.moduleId,
-          status: "ACTIVE",
-        }),
-      ),
-    ).toBe(1);
-    expect(
-      await uow.run((tx) =>
-        features.count(tx, {
-          projectId: scope.projectId,
           moduleId: secondModule,
-          status: "ACTIVE",
         }),
       ),
     ).toBe(1);
@@ -1443,8 +1420,9 @@ describe("任务列表统一排序（ADR-037）", () => {
   }
 
   /**
-   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到紧急之后一档）：
-   * 遗留问题来源（leftover_task_links 链接）→ 标记紧急 → 已逾期 → 今/明日截止 → 其余。
+   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到标记紧急之后一档，
+   * 2026-09-24 起遗留问题来源再降到已逾期之后一档）：
+   * 标记紧急 → 已逾期 → 遗留问题来源（leftover_task_links 链接）→ 今/明日截止 → 其余。
    * leftover_task_links 的 leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
    */
   async function seedOrderingMatrix(
@@ -1501,10 +1479,11 @@ describe("任务列表统一排序（ADR-037）", () => {
     );
     const ids = mine.items.map((item) => item.taskId);
     expect(ids).toEqual([
-      // 未完成：紧急桶 0 → 1 → 2 → 3 → 4，桶内完全并列的两条按 id 升序。
-      todo.leftover,
+      // 未完成：紧急桶 0 → 1 → 2 → 3 → 4（标记紧急 → 已逾期 → 遗留问题来源 →
+      // 今/明日截止 → 其余），桶内完全并列的两条按 id 升序。
       todo.urgent,
       todo.overdue,
+      todo.leftover,
       todo.dueSoon,
       todo.other,
       todo.tieA,
@@ -1579,8 +1558,9 @@ describe("任务列表统一排序（ADR-037）", () => {
     const scope = await newProject();
     const bounds = await dayBounds();
     // 造数据的顺序即期望的返回顺序：紧急桶现在是
-    // 遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)，
-    // 因此「标记紧急」要排在「已逾期」之前（2026-09-22 逾期退到紧急之后一档）。
+    // 标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)，
+    // 因此「标记紧急」要排在「已逾期」之前（2026-09-22 逾期退到标记紧急之后一档），
+    // 本用例不含遗留问题来源任务（2026-09-24 起它在已逾期之后一档）。
     const created = [
       await newTask(scope, { priority: "URGENT" }),
       await newTask(scope, { dueAt: bounds.overdue }),

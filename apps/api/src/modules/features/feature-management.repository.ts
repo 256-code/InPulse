@@ -10,25 +10,20 @@ import {
   lifecycleRankExpression,
 } from "../../stats/card-stat-columns.js";
 
-type Row = Omit<
-  FeatureItem,
-  "createdAt" | "updatedAt" | "archivedAt" | "stats"
-> & {
+type Row = Omit<FeatureItem, "createdAt" | "updatedAt" | "stats"> & {
   createdAt: string | Date;
   updatedAt: string | Date;
-  archivedAt: string | Date | null;
   openTaskCount: number;
+  completedTaskCount: number;
   recordCount: number;
 };
 const dto = (row: Row): FeatureItem => {
-  const { openTaskCount, recordCount, ...rest } = row;
+  const { openTaskCount, completedTaskCount, recordCount, ...rest } = row;
   return featureItemSchema.parse({
     ...rest,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
-    archivedAt:
-      row.archivedAt === null ? null : new Date(row.archivedAt).toISOString(),
-    stats: { openTaskCount, recordCount },
+    stats: { openTaskCount, completedTaskCount, recordCount },
   });
 };
 
@@ -41,7 +36,7 @@ export class FeatureManagementRepository {
   ): Promise<FeatureItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.module_id = ${moduleId} ORDER BY ${lifecycleRankExpression(tx.sql, "feature", "f")}, f.id`;
+    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.module_id = ${moduleId} ORDER BY ${lifecycleRankExpression(tx.sql, "feature", "f")}, f.created_at DESC, f.id DESC`;
     return rows.map(dto);
   }
 
@@ -54,7 +49,7 @@ export class FeatureManagementRepository {
   ): Promise<FeatureItem | undefined> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.status, f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", f.archived_at AS "archivedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.id = ${featureId} AND f.module_id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT f.id, f.project_id AS "projectId", f.module_id AS "moduleId", f.code, f.name, f.current_behavior AS "currentBehavior", f.acceptance_criteria AS "acceptanceCriteria", f.tags, f.created_by AS "createdBy", f.row_version AS "rowVersion", f.created_at AS "createdAt", f.updated_at AS "updatedAt", ${featureStatColumns(tx.sql, "f")} FROM app.features f WHERE f.project_id = ${projectId} AND f.id = ${featureId} AND f.module_id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return rows[0] === undefined ? undefined : dto(rows[0]);
   }
 
@@ -96,12 +91,11 @@ export class FeatureManagementRepository {
       currentBehavior: string;
       acceptanceCriteria: string;
       tags: string[];
-      status: "ACTIVE" | "ARCHIVED";
     },
   ): Promise<FeatureItem | undefined> {
     const rows = await tx.sql<
       { id: number }[]
-    >`UPDATE app.features SET name = ${next.name}, current_behavior = ${next.currentBehavior}, acceptance_criteria = ${next.acceptanceCriteria}, tags = ${tx.sql.array(next.tags)}, status = ${next.status}, archived_at = ${next.status === "ARCHIVED" ? tx.sql`now()` : tx.sql`NULL`}, updated_at = now(), row_version = row_version + 1 WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} RETURNING id`;
+    >`UPDATE app.features SET name = ${next.name}, current_behavior = ${next.currentBehavior}, acceptance_criteria = ${next.acceptanceCriteria}, tags = ${tx.sql.array(next.tags)}, updated_at = now(), row_version = row_version + 1 WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} RETURNING id`;
     return rows.length
       ? this.find(tx, current.projectId, current.id, current.moduleId)
       : undefined;

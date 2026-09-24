@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  Inject,
-  Patch,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Inject, Patch, Req, Res, UseGuards } from "@nestjs/common";
 
 import { StrictSameOriginGuard } from "../../auth/csrf.guard.js";
 import { Operation } from "../../http/contract.decorators.js";
@@ -22,7 +13,7 @@ interface ProjectControllerResponse {
 }
 
 /**
- * F-06 项目编辑/状态变更/归档/恢复 HTTP 入口；只绑定 operationId 与契约装饰器，
+ * F-06 项目编辑与状态变更 HTTP 入口；只绑定 operationId 与契约装饰器，
  * 业务规则在服务与 Workflow 内，编码创建后不可修改。
  */
 @Controller("projects")
@@ -50,35 +41,6 @@ export class ProjectManagementController {
     @Res({ passthrough: true }) response: ProjectControllerResponse,
   ) {
     return this.respond("changeProjectStatus", request, response);
-  }
-
-  @Get(":projectId/archive-preview")
-  @Operation("getProjectArchivePreview")
-  async archivePreview(
-    @Req() request: ProjectManagementHttpRequest,
-    @Res({ passthrough: true }) response: ProjectControllerResponse,
-  ) {
-    return this.respond("getProjectArchivePreview", request, response);
-  }
-
-  @Post(":projectId/archive")
-  @UseGuards(StrictSameOriginGuard)
-  @Operation("archiveProject")
-  async archive(
-    @Req() request: ProjectManagementHttpRequest,
-    @Res({ passthrough: true }) response: ProjectControllerResponse,
-  ) {
-    return this.respond("archiveProject", request, response);
-  }
-
-  @Post(":projectId/restore")
-  @UseGuards(StrictSameOriginGuard)
-  @Operation("restoreProject")
-  async restore(
-    @Req() request: ProjectManagementHttpRequest,
-    @Res({ passthrough: true }) response: ProjectControllerResponse,
-  ) {
-    return this.respond("restoreProject", request, response);
   }
 
   private async respond(

@@ -5,7 +5,6 @@ import { loadRuntime } from "../helpers/runtime.js";
 import {
   calmSelectTrigger,
   pickCalmSelectOption,
-  pickCalmSelectOptionByIndex,
 } from "../helpers/calm-select.js";
 
 test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", async ({ browser }) => {
@@ -35,15 +34,19 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     const title = `跨项目记录-${Date.now()}`;
     await page.getByRole("button", { name: "新建迭代记录" }).click();
     const draft = page.getByRole("dialog", { name: "新建迭代记录" });
-    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
+    // 新建项目不会自动生成「未分类」占位模块：按名称选中本用例刚建的模块。
+    await pickCalmSelectOption(draft, "所属模块", "记录测试模块");
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("B-3b 跨项目清单问题");
     await draft.getByLabel("具体改动").fill("B-3b 跨项目清单方案");
     await draft.getByLabel("改动效果").fill("B-3b 跨项目清单验证");
     await draft.getByRole("button", { name: "保存草稿" }).click();
     await expect(draft).toBeHidden();
+    // 14808b1 起草稿标题渲染在弹层页头，不在 region「草稿详情」内。
     await expect(
-      page.getByRole("region", { name: "草稿详情" }).getByText(title),
+      page
+        .getByRole("dialog", { name: "草稿详情", exact: true })
+        .getByText(title),
     ).toBeVisible();
 
     // 草稿箱：项目草稿平铺成卡片，不再有单独的「我的草稿」条带。

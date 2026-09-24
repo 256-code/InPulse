@@ -53,9 +53,7 @@ export class TaskGroupCommandError extends Error {
 
 /** 供共享锁序代码复用的错误构造器；action 用于「不能{action}任务」提示语。 */
 interface CommandErrors {
-  readonly action: string;
   readonly missing: () => Error;
-  readonly parentArchived: (message: string) => Error;
 }
 
 const missing = () =>
@@ -71,9 +69,7 @@ const alreadyMerged = (message: string) =>
 const groupStateConflict = (message: string) =>
   new TaskGroupCommandError(409, "TASK_GROUP_STATE_CONFLICT", message);
 const MERGE_ERRORS: CommandErrors = {
-  action: "合并",
   missing,
-  parentArchived,
 };
 
 const unmergeMissing = () =>
@@ -82,8 +78,6 @@ const unmergeMissing = () =>
     "TASK_UNMERGE_NOT_FOUND",
     "任务不存在或无法访问",
   );
-const unmergeParentArchived = (message: string) =>
-  new TaskGroupCommandError(409, "TASK_UNMERGE_PARENT_ARCHIVED", message);
 /** 任务当前没有活跃成员关系：未合并、已解除或所在聚合组已关闭。 */
 const notMerged = () =>
   new TaskGroupCommandError(
@@ -94,9 +88,7 @@ const notMerged = () =>
 const unmergeConflict = (message: string) =>
   new TaskGroupCommandError(409, "TASK_GROUP_STATE_CONFLICT", message);
 const UNMERGE_ERRORS: CommandErrors = {
-  action: "解除合并",
   missing: unmergeMissing,
-  parentArchived: unmergeParentArchived,
 };
 
 /** 空白原因按未填写处理，避免触发 detach_state_check 的 btrim 非空约束。 */
@@ -148,8 +140,6 @@ export class TaskGroupsService {
       projectId,
     });
     if (project.kind === "not-found") throw errors.missing();
-    if (project.kind === "parent-not-active")
-      throw errors.parentArchived(`项目已归档，不能${errors.action}任务`);
   }
 
   /** 父级锁：模块按 ID 升序、影响功能按所属模块分组后按 ID 升序取 FOR SHARE。 */
@@ -168,8 +158,6 @@ export class TaskGroupsService {
         moduleId,
       });
       if (module.kind === "not-found") throw errors.missing();
-      if (module.kind === "parent-not-active")
-        throw errors.parentArchived(`所属模块已归档，不能${errors.action}任务`);
     }
     for (const task of tasks) {
       const featureIds = [
@@ -185,10 +173,6 @@ export class TaskGroupsService {
           featureId,
         });
         if (feature.kind === "not-found") throw errors.missing();
-        if (feature.kind === "parent-not-active")
-          throw errors.parentArchived(
-            `所属功能已归档，不能${errors.action}任务`,
-          );
       }
     }
   }

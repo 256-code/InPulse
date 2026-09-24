@@ -5,7 +5,6 @@ import type { TransactionContext } from "../src/database/transaction-context.js"
 import type { ActivityWritePort } from "../src/modules/activity/activity.write-port.js";
 import type { ProjectAccessQueryPort } from "../src/modules/projects/project-access.port.js";
 import type { ProjectMembersQueryPort } from "../src/modules/projects/project-members-query.port.js";
-import type { ProjectArchiveRequestPort } from "../src/modules/projects/project-archive-request.port.js";
 import type { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import type { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
 import {
@@ -53,7 +52,7 @@ function setup(
   found: ProjectChangeRecord | undefined = current,
   statusUpdated: ProjectChangeRecord | undefined = {
     ...current,
-    status: "ARCHIVED",
+    status: "MAINTENANCE",
     rowVersion: 2,
     updatedAt: "2026-09-10T00:00:00.000Z",
   },
@@ -68,7 +67,7 @@ function setup(
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
   const updateProjectStatus = vi.fn().mockResolvedValue(statusUpdated);
-  const countUnfinishedTasks = vi.fn().mockResolvedValue(3);
+  const countUnarchivedTasks = vi.fn().mockResolvedValue(0);
   const appendAudit = vi
     .fn()
     .mockResolvedValue({ chainId: "chain-1", sequenceNo: 4 });
@@ -83,7 +82,7 @@ function setup(
       findProjectForChange,
       updateProjectDetails,
       updateProjectStatus,
-      countUnfinishedTasks,
+      countUnarchivedTasks,
     } as unknown as ProjectsWritePort,
     { checkProjectForWrite } as unknown as ProjectAccessQueryPort,
     { append: appendAudit } as unknown as AuditWritePort,
@@ -93,9 +92,6 @@ function setup(
       findActiveRole,
       listActiveMemberIds,
     } as unknown as ProjectMembersQueryPort,
-    {
-      cancelPendingRequests: async () => [],
-    } as unknown as ProjectArchiveRequestPort,
     { manageRole } as unknown as ProjectRoleGateService,
     { notify: notifyProjectStarted } as unknown as ProjectStartNotifier,
   );
@@ -105,7 +101,7 @@ function setup(
     findProjectForChange,
     updateProjectDetails,
     updateProjectStatus,
-    countUnfinishedTasks,
+    countUnarchivedTasks,
     appendAudit,
     appendActivity,
     upsertSearch,
@@ -209,7 +205,7 @@ describe("ProjectManagementService", () => {
     expect(s.appendAudit).not.toHaveBeenCalled();
   });
 
-  it("rejects missing projects and archived writes, and validates replay context", async () => {
+  it("rejects missing projects and validates replay context", async () => {
     const missing = setup({ kind: "not-found" });
     await expect(
       missing.service.updateProject(tx, {
@@ -221,208 +217,109 @@ describe("ProjectManagementService", () => {
       }),
     ).rejects.toMatchObject({ status: 404, code: "PROJECT_NOT_FOUND" });
 
-    const archived = setup({
-      kind: "parent-not-active",
-      resource: {
-        projectId: 7,
-        status: "ARCHIVED",
-        rowVersion: 2,
-        isSystemAdmin: false,
-      },
-    });
     await expect(
-      archived.service.updateProject(tx, {
-        actorId: 5,
-        projectId: 7,
-        version: 2,
-        edit: { name: "x", description: "" },
-        requestId: "req-4",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PROJECT_ARCHIVED" });
-
-    await expect(
-      archived.service.replay(tx, 5, { projectId: "not-a-number" }),
+      missing.service.replay(tx, 5, { projectId: "not-a-number" }),
     ).rejects.toThrow();
     await expect(
-      archived.service.replay(tx, 5, { projectId: 7 }),
+      missing.service.replay(tx, 5, { projectId: 7 }),
     ).rejects.toBeInstanceOf(ProjectManagementError);
   });
 
-  it("archives with reason, audit, activity and search projection in one transaction", async () => {
+  it("把项目切换为维护中：写审计、活动与搜索投影", async () => {
     const s = setup();
-    const result = await s.service.archiveProject(tx, {
+    const result = await s.service.changeProjectStatus(tx, {
       actorId: 9,
       projectId: 7,
       version: 1,
-      reason: "项目已交付",
-      requestId: "req-archive",
+      target: "MAINTENANCE",
+      requestId: "req-status",
     });
 
-    expect(s.checkProjectForWrite).toHaveBeenCalledWith(tx, {
-      actorUserId: 9,
-      projectId: 7,
-    });
+    expect(s.countUnarchivedTasks).toHaveBeenCalledWith(tx, { projectId: 7 });
     expect(s.updateProjectStatus).toHaveBeenCalledWith(tx, {
       projectId: 7,
       expectedRowVersion: 1,
-      status: "ARCHIVED",
+      status: "MAINTENANCE",
     });
     expect(s.appendAudit).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        action: "project.archive",
-        requestId: "req-archive",
-        eventPayload: {
-          reason: "项目已交付",
-          before: { status: "ACTIVE", rowVersion: 1 },
-          after: { status: "ARCHIVED", rowVersion: 2 },
-          cancelledArchiveRequestIds: [],
-        },
+        action: "project.status.change",
+        requestId: "req-status",
       }),
     );
     expect(s.appendActivity).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        activityType: "PROJECT_ARCHIVED",
+        activityType: "PROJECT_STATUS_CHANGED",
         sourceRowVersion: 2,
       }),
     );
     expect(s.upsertSearch).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        entityType: "PROJECT",
-        sourceStatus: "ARCHIVED",
+        sourceStatus: "MAINTENANCE",
         sourceRowVersion: 2,
       }),
     );
     expect(result.project).toMatchObject({
-      id: 7,
-      status: "ARCHIVED",
+      status: "MAINTENANCE",
       rowVersion: 2,
     });
   });
 
-  it("rejects archive of an archived or stale project without writing", async () => {
-    const archived = setup({
-      kind: "parent-not-active",
-      resource: {
-        projectId: 7,
-        status: "ARCHIVED",
-        rowVersion: 2,
-        isSystemAdmin: true,
-      },
-    });
-    await expect(
-      archived.service.archiveProject(tx, {
-        actorId: 9,
-        projectId: 7,
-        version: 2,
-        reason: "重复归档",
-        requestId: "req-5",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PROJECT_ARCHIVED" });
-    expect(archived.updateProjectStatus).not.toHaveBeenCalled();
-
-    const stale = setup(undefined, { ...current, rowVersion: 4 });
-    await expect(
-      stale.service.archiveProject(tx, {
-        actorId: 9,
-        projectId: 7,
-        version: 1,
-        reason: "过期归档",
-        requestId: "req-6",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PROJECT_VERSION_CONFLICT" });
-
-    const stateConflict = setup(undefined, {
-      ...current,
-      status: "ARCHIVED",
-      rowVersion: 1,
-    });
-    await expect(
-      stateConflict.service.archiveProject(tx, {
-        actorId: 9,
-        projectId: 7,
-        version: 1,
-        reason: "状态冲突",
-        requestId: "req-7",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PROJECT_STATE_CONFLICT" });
-  });
-
-  it("restores an archived project and allows replay for archived scopes", async () => {
-    const restoredRecord: ProjectChangeRecord = {
-      ...current,
-      status: "ACTIVE",
-      firstTaskCompletedAt: "2026-09-09T01:00:00.000Z",
-      rowVersion: 3,
-    };
-    const s = setup(
-      undefined,
-      { ...current, status: "ARCHIVED", rowVersion: 2 },
-      restoredRecord,
-    );
-    const result = await s.service.restoreProject(tx, {
-      actorId: 9,
-      projectId: 7,
-      version: 2,
-      reason: "项目重启",
-      requestId: "req-restore",
-    });
-
-    expect(s.updateProjectStatus).toHaveBeenCalledWith(tx, {
-      projectId: 7,
-      expectedRowVersion: 2,
-      status: "ACTIVE",
-    });
-    expect(s.appendAudit).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({
-        action: "project.restore",
-        eventPayload: {
-          reason: "项目重启",
-          before: { status: "ARCHIVED", rowVersion: 2 },
-          after: { status: "ACTIVE", rowVersion: 3 },
-          cancelledArchiveRequestIds: [],
-        },
-      }),
-    );
-    expect(s.appendActivity).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({
-        activityType: "PROJECT_RESTORED",
-        sourceRowVersion: 3,
-      }),
-    );
-    expect(s.upsertSearch).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({
-        sourceStatus: "ACTIVE",
-        sourceRowVersion: 3,
-      }),
-    );
-    expect(result.project).toMatchObject({ status: "ACTIVE", rowVersion: 3 });
-
-    await expect(
-      s.service.replay(tx, 9, { projectId: 7 }, { allowArchived: true }),
-    ).resolves.toBeUndefined();
-
-    const active = setup();
-    await expect(
-      active.service.restoreProject(tx, {
-        actorId: 9,
-        projectId: 7,
-        version: 1,
-        reason: "未归档",
-        requestId: "req-8",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PROJECT_STATE_CONFLICT" });
-  });
-
-  it("counts unfinished tasks for the archive preview", async () => {
+  it("维护中门禁：仍有未收尾任务时拒绝进入维护中且不写任何副作用", async () => {
     const s = setup();
-    const result = await s.service.archivePreview(tx, 9, 7);
-    expect(result).toEqual({ projectId: 7, unfinishedTaskCount: 3 });
-    expect(s.countUnfinishedTasks).toHaveBeenCalledWith(tx, { projectId: 7 });
+    s.countUnarchivedTasks.mockResolvedValueOnce(2);
+    await expect(
+      s.service.changeProjectStatus(tx, {
+        actorId: 9,
+        projectId: 7,
+        version: 1,
+        target: "MAINTENANCE",
+        requestId: "req-gate",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_MAINTENANCE_TASKS_OPEN",
+    });
+    expect(s.updateProjectStatus).not.toHaveBeenCalled();
+    expect(s.appendAudit).not.toHaveBeenCalled();
+    expect(s.appendActivity).not.toHaveBeenCalled();
+  });
+
+  it("未开始与维护中禁止越级互改，目标态与当前态相同返回 409", async () => {
+    const notStarted = setup(undefined, {
+      ...current,
+      status: "NOT_STARTED",
+      firstTaskCompletedAt: null,
+    });
+    await expect(
+      notStarted.service.changeProjectStatus(tx, {
+        actorId: 9,
+        projectId: 7,
+        version: 1,
+        target: "MAINTENANCE",
+        requestId: "req-skip",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_STATUS_LEVEL_SKIP",
+    });
+    expect(notStarted.countUnarchivedTasks).not.toHaveBeenCalled();
+
+    const same = setup();
+    await expect(
+      same.service.changeProjectStatus(tx, {
+        actorId: 9,
+        projectId: 7,
+        version: 1,
+        target: "ACTIVE",
+        requestId: "req-same",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_STATE_CONFLICT",
+    });
   });
 });

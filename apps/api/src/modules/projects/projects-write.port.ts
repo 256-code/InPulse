@@ -3,8 +3,8 @@ import type { ProjectStatus } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 
 /**
- * ADR-035 项目生命周期四态：未开始 / 进行中 / 维护中 / 已归档。
- * 新建项目固定从未开始起步，归档只能经归档流程写入。
+ * ADR-043 项目生命周期三态：未开始 / 进行中 / 维护中。
+ * 新建项目固定从未开始起步，项目层不再有归档目标态。
  */
 export type ProjectLifecycleStatus = ProjectStatus;
 
@@ -159,8 +159,8 @@ export abstract class ProjectsWritePort {
   ): Promise<ProjectChangeRecord | undefined>;
 
   /**
-   * 条件迁移项目状态并递增 row_version；只有 ARCHIVED 允许 archived_at 非空，
-   * 其余三态一律置空，版本不匹配返回 undefined。
+   * 条件迁移项目状态并递增 row_version；版本不匹配返回 undefined。
+   * ADR-043：项目状态只有三态，archived_at 是归档时代的只读历史列，不再写入。
    */
   abstract updateProjectStatus(
     tx: TransactionContext,
@@ -183,15 +183,9 @@ export abstract class ProjectsWritePort {
     input: { readonly projectId: number; readonly completedAt: Date },
   ): Promise<ProjectFirstTaskCompletionRecord | undefined>;
 
-  /** 统计项目当前未完成（TODO 且 ACTIVE）任务数；只读，用于归档提醒。 */
-  abstract countUnfinishedTasks(
-    tx: TransactionContext,
-    input: { readonly projectId: number },
-  ): Promise<number>;
-
   /**
-   * ADR-034：统计项目下尚未归档（lifecycle_status 为 ACTIVE）的任务数；
-   * 项目归档申请与批准都要求结果为 0。
+   * 统计项目下尚未收尾的任务数（lifecycle_status 为 ACTIVE 且工作状态既非 DONE
+   * 也非 CANCELED）；ADR-043：项目进入维护中要求结果为 0。
    */
   abstract countUnarchivedTasks(
     tx: TransactionContext,

@@ -5,21 +5,17 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   routeRegistry,
   schemaRegistry,
-  type ProjectArchiveRequest,
   type ProjectEditRequest,
   type ProjectStatusChangeRequest,
 } from "@inpulse/api-contract";
 
 import { AdminHighRiskError } from "../../auth/admin-high-risk.error.js";
-import { AdminHighRiskAuthService } from "../../auth/admin-high-risk.service.js";
 import { AuthenticatedMutationService } from "../../auth/authenticated-mutation.service.js";
-import { SessionAuthService } from "../../auth/session-auth.service.js";
 import {
   getHeader,
   mutationSameOriginValidationError,
   type HttpHeaderBag,
 } from "../../auth/csrf.http.js";
-import { PostgresUnitOfWork } from "../../database/unit-of-work.js";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import {
   IdempotencyHttpError,
@@ -31,11 +27,7 @@ import {
 } from "./project-management.service.js";
 
 export type ProjectManagementOperation =
-  | "updateProject"
-  | "changeProjectStatus"
-  | "getProjectArchivePreview"
-  | "archiveProject"
-  | "restoreProject";
+  "updateProject" | "changeProjectStatus";
 
 export interface ProjectManagementHttpRequest {
   readonly headers: HttpHeaderBag;
@@ -59,18 +51,14 @@ class ProjectBodyValidationError extends Error {
 }
 
 /**
- * F-06 项目编辑/状态变更/归档/恢复 HTTP 编排：写路径由幂等 runner 持有单事务；
- * 归档预览为管理员只读路径，独立事务且不做状态变更。
+ * F-06 项目编辑与状态变更 HTTP 编排：写路径由幂等 runner 持有单事务，
+ * 权限在事务内按实时成员关系判定；项目三态下不再有归档/恢复操作。
  */
 @Injectable()
 export class ProjectManagementHttpService {
   constructor(
-    @Inject(SessionAuthService) private readonly auth: SessionAuthService,
     @Inject(AuthenticatedMutationService)
     private readonly mutation: AuthenticatedMutationService,
-    @Inject(AdminHighRiskAuthService)
-    private readonly highRisk: AdminHighRiskAuthService,
-    @Inject(PostgresUnitOfWork) private readonly uow: PostgresUnitOfWork,
     @Inject(IdempotencyHttpService)
     private readonly idempotency: IdempotencyHttpService,
     @Inject(ProjectManagementService)
@@ -95,35 +83,6 @@ export class ProjectManagementHttpService {
       }
       if (Object.keys((request.query ?? {}) as object).length) {
         throw new ProjectInputError({ query: "此接口不接受查询参数" });
-      }
-
-      if (operation === "getProjectArchivePreview") {
-        const preview = await this.uow.run(async (tx) => {
-          const actor = await this.auth.resolveActorInTransaction(
-            tx,
-            getHeader(request.headers, "cookie"),
-          );
-          if (actor === undefined) {
-            throw new ProjectManagementError(
-              401,
-              "PROJECT_SESSION_REQUIRED",
-              "请先登录",
-            );
-          }
-          const body = await this.projects.archivePreview(
-            tx,
-            actor.userId,
-            path.data.projectId,
-          );
-          await this.highRisk.verifyRead(tx, request.headers);
-          return body;
-        });
-        return {
-          status: 200,
-          body: schemaRegistry.ProjectArchivePreviewResponse.schema.parse(
-            preview,
-          ),
-        };
       }
 
       if (mutationSameOriginValidationError(request.headers) !== undefined) {
@@ -178,10 +137,7 @@ export class ProjectManagementHttpService {
       }
       const version = Number(parsedHeaders.data["if-match"].slice(1, -1));
 
-      // 归档与恢复要求完整管理员 Session；编辑与状态变更只要求有效 Session，
-      // 权限由服务内的成员角色门禁判定。
-      const highRisk =
-        operation === "archiveProject" || operation === "restoreProject";
+      // 编辑与状态变更只要求有效 Session，权限由服务内的成员角色门禁判定。
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (current === undefined) {
@@ -191,13 +147,8 @@ export class ProjectManagementHttpService {
             "登录或 CSRF 状态已失效",
           );
         }
-        // 只做当前可读性与管理员门禁；ACTIVE 写前置条件由服务在执行/重放时判定。
-        await this.projects.authorizeArchived(
-          tx,
-          current.userId,
-          path.data.projectId,
-        );
-        if (highRisk) await this.highRisk.verify(tx, request.headers);
+        // 只做当前可读性；写前置条件由服务在执行/重放时判定。
+        await this.projects.authorize(tx, current.userId, path.data.projectId);
         return current.userId;
       };
 
@@ -222,30 +173,14 @@ export class ProjectManagementHttpService {
                   edit: parsedBody.data as ProjectEditRequest,
                   requestId,
                 })
-              : operation === "changeProjectStatus"
-                ? await this.projects.changeProjectStatus(tx, {
-                    actorId,
-                    projectId: path.data.projectId,
-                    version,
-                    target: (parsedBody.data as ProjectStatusChangeRequest)
-                      .status,
-                    requestId,
-                  })
-                : operation === "archiveProject"
-                  ? await this.projects.archiveProject(tx, {
-                      actorId,
-                      projectId: path.data.projectId,
-                      version,
-                      reason: (parsedBody.data as ProjectArchiveRequest).reason,
-                      requestId,
-                    })
-                  : await this.projects.restoreProject(tx, {
-                      actorId,
-                      projectId: path.data.projectId,
-                      version,
-                      reason: (parsedBody.data as ProjectArchiveRequest).reason,
-                      requestId,
-                    });
+              : await this.projects.changeProjectStatus(tx, {
+                  actorId,
+                  projectId: path.data.projectId,
+                  version,
+                  target: (parsedBody.data as ProjectStatusChangeRequest)
+                    .status,
+                  requestId,
+                });
           return {
             responseStatus: 200,
             responseSchemaRef: "ProjectDetailResponse",
@@ -256,9 +191,7 @@ export class ProjectManagementHttpService {
         },
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
-          await this.projects.replay(tx, actorId, record.replayAuthContext, {
-            allowArchived: highRisk,
-          });
+          await this.projects.replay(tx, actorId, record.replayAuthContext);
         },
       });
       return {

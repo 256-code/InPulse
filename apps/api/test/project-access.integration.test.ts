@@ -172,32 +172,7 @@ describe("PostgresProjectAccessQueryPort.checkProjectForWrite（真实 PostgreSQ
     });
   });
 
-  test("已归档项目返回 parent-not-active，且不按状态过滤掉记录", async () => {
-    const member = await createUser(runtime);
-    const project = await createProject(runtime, member);
-
-    await runtime`
-      UPDATE app.projects
-         SET status = 'ARCHIVED',
-             archived_at = now(),
-             row_version = row_version + 1
-       WHERE id = ${project.projectId}
-    `;
-
-    const result = await checkProjectForWrite(member, project.projectId);
-
-    expect(result).toEqual({
-      kind: "parent-not-active",
-      resource: {
-        projectId: project.projectId,
-        status: "ARCHIVED",
-        rowVersion: 2,
-        isSystemAdmin: false,
-      },
-    });
-  });
-
-  test("ADR-035：进行中与维护中都是活跃态，只有已归档拦截写入", async () => {
+  test("ADR-043：未开始 / 进行中 / 维护中都是活跃态，都可写", async () => {
     const member = await createUser(runtime);
     const project = await createProject(runtime, member);
 

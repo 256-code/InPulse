@@ -412,9 +412,8 @@ beforeAll(async () => {
   otherProject = otherFixture;
   await runtime.sql`INSERT INTO app.project_members (project_id, user_id) VALUES (${projectFixture.projectId}, ${secondMemberUser})`;
 
+  // ADR-044：模块已无归档态，夹具只保留两个活跃模块。
   await newModule(projectFixture, "聚合读接口模块");
-  const archivedModuleId = await newModule(projectFixture, "已归档模块");
-  await runtime.sql`UPDATE app.modules SET status = ${"ARCHIVED"}, archived_at = clock_timestamp(), updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archivedModuleId} AND project_id = ${projectFixture.projectId}`;
 
   featureA = await newFeature(
     projectFixture,
@@ -426,13 +425,6 @@ beforeAll(async () => {
     projectFixture.moduleId,
     "聚合读接口功能B",
   );
-  const archivedFeatureId = await newFeature(
-    projectFixture,
-    projectFixture.moduleId,
-    "已归档功能",
-  );
-  await runtime.sql`UPDATE app.features SET status = ${"ARCHIVED"}, archived_at = clock_timestamp(), updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archivedFeatureId} AND project_id = ${projectFixture.projectId}`;
-
   tMain = await newTask(projectFixture, { featureId: featureA });
   tSource = await newTask(projectFixture, { featureId: featureB });
   tHistorical = await newTask(projectFixture, { featureId: featureA });
@@ -1016,8 +1008,8 @@ describe("GET /api/v1/projects/{projectId}/overview（R-2 项目概览）", () =
       status: "NOT_STARTED",
     });
     expect(overview.memberCount).toBe(2);
-    // 活跃模块 / 活跃功能排除已归档行；未完成任务排除历史来源分支、
-    // CANCELED、INVALID 与 DONE，并包含 §29.3 的模块级任务。
+    // 活跃功能排除已归档行；模块自 ADR-044 起无归档态，活跃模块数即项目模块数。
+    // 未完成任务排除历史来源分支、CANCELED、INVALID 与 DONE，并包含 §29.3 的模块级任务。
     expect(overview.stats).toEqual({
       activeFeatureCount: 2,
       activeModuleCount: 2,
@@ -1165,7 +1157,9 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
     // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
-    // 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余，桶内按 ID 升序。
+    // 标记紧急 → 已逾期 → 遗留问题来源 → 今/明日截止 → 其余（2026-09-24 起
+    // 遗留问题来源降到已逾期之后一档），桶内按 ID 升序。本夹具只有 tSource 命中
+    // 「遗留问题来源」桶，其余未完成任务都落在「其余」桶，故期望顺序不变。
     expect(page.items.map((item) => item.taskId)).toEqual([
       tSource,
       tMain,

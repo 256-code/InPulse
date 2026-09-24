@@ -655,23 +655,6 @@ describe("F-24 task group unmerge", () => {
       mergeLogs: "2",
       unmergeLogs: "0",
     });
-    // 被移除的创建者不再具备成员权限，但仍是项目成员身份之外的普通用户
-    const archived = await mergeFixture();
-    await client.sql`UPDATE app.projects SET status = ${"ARCHIVED"}, archived_at = now(), row_version = row_version + 1 WHERE id = ${archived.project.projectId}`;
-    const blocked = await failure(
-      await unmerge(archived.actor, unmergeBody(archived.sourceTaskId, null)),
-      409,
-    );
-    expect(blocked.code).toBe("TASK_UNMERGE_PARENT_ARCHIVED");
-    expect(await countSideEffects(archived.project.projectId)).toMatchObject({
-      groups: "1",
-      members: "2",
-      activities: "1",
-      notifications: "3",
-      search: "1",
-      mergeLogs: "1",
-      unmergeLogs: "0",
-    });
   });
 
   it("enforces the HTTP security, validation and idempotency boundary", async () => {

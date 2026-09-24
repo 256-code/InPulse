@@ -21,7 +21,7 @@ it("debounces names and never shows a late response for an obsolete query", asyn
           moduleId: 4,
           code: "PR-F-8",
           name: "新候选",
-          status: "ACTIVE",
+          stats: { openTaskCount: 0, completedTaskCount: 0, recordCount: 0 },
         },
       ],
     });
@@ -49,7 +49,7 @@ it("debounces names and never shows a late response for an obsolete query", asyn
           moduleId: 4,
           code: "PR-F-7",
           name: "过期候选",
-          status: "ACTIVE",
+          stats: { openTaskCount: 0, completedTaskCount: 0, recordCount: 0 },
         },
       ],
     });

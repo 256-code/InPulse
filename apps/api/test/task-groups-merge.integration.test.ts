@@ -551,7 +551,8 @@ describe("F-23 task group merge", () => {
       404,
     );
     const archived = await mergeFixture();
-    await client.sql`UPDATE app.projects SET status = ${"ARCHIVED"}, archived_at = now(), row_version = row_version + 1 WHERE id = ${archived.project.projectId}`;
+    // ADR-045：功能不再有归档态，父级拒写改由任务自身的归档承接（错误码不变）。
+    await client.sql`UPDATE app.tasks SET lifecycle_status = ${"ARCHIVED"}, updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archived.sourceTaskId}`;
     const blocked = await failure(
       await merge(
         archived.actor,

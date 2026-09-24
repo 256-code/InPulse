@@ -79,7 +79,6 @@ beforeAll(() => {
     audit,
     activity,
     search,
-    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   const features = new FeaturesManagementService(
     access,
@@ -93,7 +92,6 @@ beforeAll(() => {
     activity,
     search,
     new PostgresUserReadPort(),
-    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   tasks = new TasksManagementService(
     access,

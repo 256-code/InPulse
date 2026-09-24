@@ -40,7 +40,7 @@ const taskWrites = new TaskManagementRepository();
 
 /** 项目统计夹具的期望值：与 R-2 getProjectOverview 同口径。 */
 const expectedStats = {
-  activeModuleCount: 2,
+  activeModuleCount: 3,
   activeFeatureCount: 2,
   openTaskCount: 4,
   // 统计夹具里只有「统计夹具已完成任务」一条 DONE（历史来源分支不计）。
@@ -210,18 +210,20 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
 
     await client.sql`
       UPDATE app.projects
-         SET status = 'ARCHIVED',
-             archived_at = now(),
+         SET status = 'MAINTENANCE',
              row_version = row_version + 1
        WHERE id = ${memberProject.projectId}
     `;
-    const archivedDetail = await detail(memberProject.projectId, member.cookie);
-    expect(archivedDetail.status).toBe(200);
+    const maintenanceDetail = await detail(
+      memberProject.projectId,
+      member.cookie,
+    );
+    expect(maintenanceDetail.status).toBe(200);
     expect(
       schemaRegistry.ProjectDetailResponse.schema.parse(
-        await archivedDetail.json(),
+        await maintenanceDetail.json(),
       ).project.status,
-    ).toBe("ARCHIVED");
+    ).toBe("MAINTENANCE");
   });
 
   test("非成员、移除、匿名、停用和非法路径分别安全返回 404/401/422", async () => {
@@ -304,32 +306,22 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       RETURNING id
     `;
     await client.sql`
-      INSERT INTO app.modules (project_id, name, created_by, status, archived_at)
-      VALUES (
-        ${project.projectId},
-        ${"统计夹具模块 C"},
-        ${owner.userId},
-        ${"ARCHIVED"},
-        clock_timestamp()
-      )
+      INSERT INTO app.modules (project_id, name, created_by)
+      VALUES (${project.projectId}, ${"统计夹具模块 C"}, ${owner.userId})
     `;
-    for (const [code, name, moduleId, status] of [
-      [`${project.code}-F-1`, "统计夹具功能 1", project.moduleId, "ACTIVE"],
-      [`${project.code}-F-2`, "统计夹具功能 2", secondModule!.id, "ACTIVE"],
-      [`${project.code}-F-3`, "统计夹具功能 3", project.moduleId, "ARCHIVED"],
+    // ADR-045：功能已无归档态，统计夹具只保留两条活跃功能。
+    for (const [code, name, moduleId] of [
+      [`${project.code}-F-1`, "统计夹具功能 1", project.moduleId],
+      [`${project.code}-F-2`, "统计夹具功能 2", secondModule!.id],
     ] as const) {
       await client.sql`
-        INSERT INTO app.features (
-          project_id, module_id, code, name, created_by, status, archived_at
-        )
+        INSERT INTO app.features (project_id, module_id, code, name, created_by)
         VALUES (
           ${project.projectId},
           ${moduleId},
           ${code},
           ${name},
-          ${owner.userId},
-          ${status},
-          ${status === "ARCHIVED" ? new Date().toISOString() : null}::timestamptz
+          ${owner.userId}
         )
       `;
     }
@@ -482,12 +474,13 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     ).toBe(2);
   });
 
-  test("列表按生命周期档位排序：进行中、未开始、维护中、已归档", async () => {
+  test("列表先按生命周期档位排序：进行中、未开始、维护中，同档位内按创建时间从近到远", async () => {
     const owner = await actor();
     const active = await createProject(client.sql, owner.userId);
     const notStarted = await createProject(client.sql, owner.userId);
     const maintenance = await createProject(client.sql, owner.userId);
-    const archived = await createProject(client.sql, owner.userId);
+    // ADR-046：与 notStarted 同属「未开始」档但创建更晚，应排在它前面。
+    const newerNotStarted = await createProject(client.sql, owner.userId);
 
     await client.sql`
       WITH created AS (
@@ -533,22 +526,15 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
              row_version = row_version + 1
        WHERE id = ${maintenance.projectId}
     `;
-    await client.sql`
-      UPDATE app.projects
-         SET status = 'ARCHIVED',
-             archived_at = now(),
-             row_version = row_version + 1
-       WHERE id = ${archived.projectId}
-    `;
 
     const items = schemaRegistry.ProjectListResponse.schema.parse(
       await (await list(owner.cookie)).json(),
     ).items;
     expect(items.map((item) => item.id)).toEqual([
       active.projectId,
+      newerNotStarted.projectId,
       notStarted.projectId,
       maintenance.projectId,
-      archived.projectId,
     ]);
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
       1, 0, 0, 0,

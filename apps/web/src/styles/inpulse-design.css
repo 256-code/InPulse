@@ -169,6 +169,27 @@
   line-height: 16.5px;
 }
 
+/* 「编辑项目」弹层的状态分区：灰色分段条与「保存状态」按钮同行。
+ * `.dialog-form` 的 grid 会把每个子级拉成整行（本文件 L37），`.segmented` 自身又是
+ * `display: flex` 的块级盒，未声明的 `.project-status-control` 因此只是普通块级容器，
+ * 按钮被挤到第二行。这里让容器成为行内 flex：分段条占满剩余宽度，按钮吸排在
+ * 该行右端；只读态（`CalmBadge`）不伸展，靠按钮的 `margin-left: auto` 仍贴右。 */
+.project-status-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-status-control > .segmented {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-status-control > .ant-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 /* 新建项目表单字段一律整行堆叠（并排只保留「编码 + 卡片简称」`.form-row`）：
  * 设计契约预留的 180px 窄列曾把「项目描述」textarea 压成窄条，序号映射已废弃。 */
 
@@ -835,8 +856,7 @@
   gap: 16px;
 }
 
-.calm-feature-card.card-archived,
-.project-card.card-archived {
+.calm-feature-card.card-archived {
   background: #fbfcfd;
   opacity: 0.92;
 }

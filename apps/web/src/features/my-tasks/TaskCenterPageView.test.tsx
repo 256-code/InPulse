@@ -186,7 +186,10 @@ const doneTask: MyTaskListItem = {
   hasLeftoverSource: false,
 };
 
-/** 由遗留问题转换而来、既不紧急也不逾期的任务：整卡应该铺锈红（2026-09-22 产品要求）。 */
+/**
+ * 由遗留问题转换而来、既不紧急也不逾期的普通优先级任务。
+ * 2026-09-23 八次配色定案：整卡按自己的优先级取色（白底），来源只由「遗留问题」徽章表达。
+ */
 const leftoverTask: MyTaskListItem = {
   ...doneTask,
   taskId: 905,
@@ -357,22 +360,22 @@ describe("TaskCenterPageView", () => {
     expect(card.querySelector(".task-card-footer")).toBeNull();
   });
 
-  it("遗留问题来源的任务整卡转锈红，徽章保留深锈红实底", async () => {
+  it("遗留问题来源的任务按自己的优先级取色，徽章保留深锈红实底", async () => {
     renderView({ adapter: serverLikeAdapterWith([leftoverTask]) });
 
     const card = await screen.findByTestId("my-task-905");
-    expect(card).toHaveClass("calm-task-card", "tone-prio-leftover");
+    expect(card).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(within(card).getByText("遗留问题")).toHaveClass("badge-leftover");
   });
 
-  it("列表视图的遗留问题行与卡片同源取色", async () => {
+  it("列表视图的遗留问题行与卡片同源取色（只按优先级，不按来源）", async () => {
     renderView({
       filters: { display: "list" },
       adapter: serverLikeAdapterWith([leftoverTask]),
     });
 
     const row = await screen.findByText(leftoverTask.title);
-    expect(row.closest("tr")).toHaveClass("tone-prio-leftover");
+    expect(row.closest("tr")).toHaveClass("tone-prio-normal");
   });
 
   /**
@@ -1120,7 +1123,7 @@ describe("TaskCenterPageView", () => {
     await screen.findByTestId("my-task-group-930");
     // 2026-09-22 产品口径「（它们）同样是一个优先级的，按照截止日期从近到远排序」：组卡不再
     // 固定追加在网格尾部，而与任务卡共用同一把尺子（状态分组 → 紧急桶 → 优先级 → 截止时间）。
-    // 组卡取未完成分支里最早的一条作为自己的截止，本例已逾期 → 紧急桶 2，与逾期任务卡同口径：
+    // 组卡取未完成分支里最早的一条作为自己的截止，本例已逾期 → 紧急桶 1，与逾期任务卡同口径：
     // 排在所有未逾期任务（含高优先级）之前；同为普通优先级时，也排在未设截止的任务卡之前。
     expect(
       screen
@@ -1483,11 +1486,16 @@ describe("TaskCenterPageView", () => {
       screen.getByTestId("my-task-" + taskId);
     await screen.findByTestId("my-task-801");
     // 2026-09-22 三次定案：卡片按任务自己的优先级铺色（这三张都是普通优先级），
-    // 已逾期 / 今天到期不再换色，右下角保留「已逾期 …」/「今天截止」文案作为提示。
+    // 已逾期 / 今天到期不换整卡底色；2026-09-23 十一次定案起右下角那行文案本身按
+    // 紧迫度染色（类名与列表截止列同源），已完成不提示逾期所以类名缺席。
     expect(cardOf(801)).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(cardOf(802)).toHaveClass("calm-task-card", "tone-prio-normal");
     expect(cardOf(801)).toHaveTextContent(/已逾期/);
     expect(cardOf(802)).toHaveTextContent("今天截止");
+    const dueSpanOf = (card: HTMLElement): HTMLElement =>
+      card.querySelector(".calm-card-bottom > span:last-child") as HTMLElement;
+    expect(dueSpanOf(cardOf(801))).toHaveClass("due-overdue");
+    expect(dueSpanOf(cardOf(802))).toHaveClass("due-soon");
     // 已完成走状态色，卡上也不再挂红色日期签。
     expect(cardOf(803)).toHaveClass("calm-task-card", "tone-prio-done");
     expect(within(cardOf(803)).getByTitle(/^截止：/).className).toBe("");
@@ -1539,6 +1547,89 @@ describe("TaskCenterPageView", () => {
     expect(dueCellOf("INP-812")).toHaveClass("due-soon");
     // 已完成不参与红档，截止列回到默认字色。
     expect(dueCellOf("INP-813").className).toBe("");
+  });
+
+  it("列表模式整行可点：点非标题列也能打开任务，标题按钮不会触发两次", async () => {
+    const item: MyTaskListItem = {
+      ...doneTask,
+      taskId: 821,
+      code: "INP-821",
+      title: "整行可点-821",
+      workStatus: "TODO",
+      completedAt: null,
+    };
+    const { onOpenTask } = renderView({
+      adapter: serverLikeAdapterWith([item]),
+      filters: { status: "all", display: "list" },
+    });
+    const user = userEvent.setup();
+
+    await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = screen.getByText(/^INP-821/).closest("tr") as HTMLElement;
+    const cells = within(row).getAllByRole("cell");
+    // 2026-09-23 十二次定案：热区从「任务」列标题扩到整行的横向区域。点最后一列（状态）
+    // 这种跟标题无关的位置同样要打开任务，且只开一次。
+    await user.click(cells[cells.length - 1]!);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
+    expect(onOpenTask).toHaveBeenCalledWith({
+      projectId: 1,
+      moduleId: 11,
+      featureId: null,
+      taskId: 821,
+    });
+
+    // 标题按钮仍是唯一键盘入口；行级热区命中按钮时让位给按钮自己，不会各开一次。
+    await user.click(within(row).getByRole("button"));
+    expect(onOpenTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("列表模式整行可点：点聚合组行的非标题列也能打开组弹窗", async () => {
+    const { onOpenTask } = renderView({
+      filters: { display: "list" },
+      client: stubClient(projects),
+    });
+    const user = userEvent.setup();
+
+    const row = await screen.findByTestId("my-task-group-501");
+    // 项目列与组名无关，改口径前点它不会打开任何弹窗。
+    await user.click(within(row).getAllByRole("cell")[1]!);
+    expect(
+      await screen.findByRole("dialog", { name: /聚合组/ }),
+    ).toBeInTheDocument();
+    // 组行是弹窗入口：不开任务，也不回调 onOpenTask。
+    expect(onOpenTask).not.toHaveBeenCalled();
+  });
+
+  it("列表模式整行可点：行内已有拖选时不打开任务", async () => {
+    const { onOpenTask } = renderView({
+      adapter: serverLikeAdapterWith([
+        {
+          ...doneTask,
+          taskId: 831,
+          code: "INP-831",
+          title: "拖选保护-831",
+          workStatus: "TODO",
+          completedAt: null,
+        },
+      ]),
+      filters: { status: "all", display: "list" },
+    });
+
+    await screen.findByRole("table", { name: "跨项目任务列表" });
+    const row = screen.getByText(/^INP-831/).closest("tr") as HTMLElement;
+    // 用户想复制标题 / 编号时会先拖选，此时点行不该弹详情。
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.click(row);
+    expect(onOpenTask).not.toHaveBeenCalled();
+    selection?.removeAllRanges();
+
+    // 选区清空后同一位置恢复可点（确认上一步是被选区挡下，不是热区失效）。
+    fireEvent.click(row);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
   });
 });
 

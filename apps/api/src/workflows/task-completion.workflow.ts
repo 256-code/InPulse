@@ -32,12 +32,6 @@ const missing = () =>
     "TASK_COMPLETION_NOT_FOUND",
     "任务或记录不存在或无法访问",
   );
-const archived = () =>
-  new TaskManagementError(
-    409,
-    "TASK_PARENT_ARCHIVED",
-    "所属项目、模块或功能已归档",
-  );
 @Injectable()
 export class TaskCompletionWorkflow {
   constructor(
@@ -64,7 +58,6 @@ export class TaskCompletionWorkflow {
       projectId: source.projectId,
     });
     if (project.kind === "not-found") throw missing();
-    if (project.kind !== "allowed") throw archived();
     return source;
   }
   private async prepare(
@@ -98,9 +91,9 @@ export class TaskCompletionWorkflow {
       )
         throw missing();
       const branch = await this.branches.find(tx, previous.projectId, taskId);
+      // ADR-044/ADR-045：模块与功能都已无归档只读态，这里只保留归属校验与父级 FOR SHARE 取锁。
       const module = await this.modules.checkModuleForWrite(tx, previous);
       if (module.kind === "not-found") throw missing();
-      if (module.kind !== "allowed") throw archived();
       const ids = [
         ...new Set([
           ...(previous.featureId === null
@@ -118,8 +111,6 @@ export class TaskCompletionWorkflow {
           featureId,
         });
         if (feature.kind === "not-found") throw missing();
-        if (featureId === previous.featureId && feature.kind !== "allowed")
-          throw archived();
       }
       const source = await this.tasks.lock(tx, previous.projectId, taskId);
       const currentBranch = await this.branches.lock(

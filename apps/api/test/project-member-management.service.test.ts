@@ -384,13 +384,7 @@ describe("ProjectMemberManagementService", () => {
     });
 
     s.access.checkProjectForWrite.mockResolvedValueOnce({
-      kind: "parent-not-active",
-      resource: {
-        projectId: 7,
-        status: "ARCHIVED",
-        rowVersion: 2,
-        isSystemAdmin: true,
-      },
+      kind: "not-found",
     });
     await expect(
       s.service.replayAuthorizer(tx, 1, {
@@ -398,8 +392,8 @@ describe("ProjectMemberManagementService", () => {
         memberUserId: 5,
       }),
     ).rejects.toMatchObject({
-      status: 409,
-      code: "PROJECT_MEMBER_PROJECT_ARCHIVED",
+      status: 404,
+      code: "PROJECT_MEMBER_NOT_FOUND",
     });
   });
 });

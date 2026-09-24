@@ -11,8 +11,6 @@ import { PostgresProjectQueryPort } from "./postgres-project-query-port.js";
 import { ProjectQueryPort } from "./project-query.port.js";
 import { ProjectRoleGateService } from "./project-role-gate.service.js";
 import { ProjectStartNotifier } from "./project-start.notifier.js";
-import { ProjectArchiveRequestPort } from "./project-archive-request.port.js";
-import { PostgresProjectArchiveRequestRepository } from "./postgres-project-archive-request.repository.js";
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../../database/database.module.js";
@@ -61,10 +59,6 @@ import {
     },
     ProjectRoleGateService,
     ProjectStartNotifier,
-    {
-      provide: ProjectArchiveRequestPort,
-      useClass: PostgresProjectArchiveRequestRepository,
-    },
   ],
   exports: [
     ProjectLinkQueryPort,
@@ -77,7 +71,6 @@ import {
     ProjectsWritePort,
     ActiveUsersQueryPort,
     ProjectRoleGateService,
-    ProjectArchiveRequestPort,
     ProjectStartNotifier,
   ],
 })

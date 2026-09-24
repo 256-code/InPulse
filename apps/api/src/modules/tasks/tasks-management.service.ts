@@ -128,16 +128,12 @@ export class TasksManagementService {
       return { items: await this.repository.list(tx, scope) };
     });
   }
-  /**
-   * allowArchivedParents 仅供归档命令使用：父级模块/功能已归档时归档其任务属于收尾动作，
-   * 必须放行，否则「归档功能后任务无法归档」会锁死模块归档（ADR-034）；恢复仍要求父级活跃。
-   */
+  /** ADR-045：功能与模块都不再有归档只读态，写前检查只剩归属与父级取锁。 */
   async authorize(
     tx: TransactionContext,
     actorId: number,
     scope: TaskScope,
     taskId?: number,
-    options: { readonly allowArchivedParents?: boolean } = {},
   ): Promise<void> {
     const project = await this.access.checkProjectForWrite(tx, {
       actorUserId: actorId,
@@ -171,24 +167,6 @@ export class TasksManagementService {
           });
     if (module.kind === "not-found" || feature.kind === "not-found")
       throw missing();
-    if (project.kind === "parent-not-active")
-      throw new TaskManagementError(
-        409,
-        "TASK_PARENT_ARCHIVED",
-        "项目已归档，任务只读",
-      );
-    // ADR-034：归档是收尾动作，已归档的模块或功能下仍必须允许归档其任务，
-    // 否则「归档功能后任务无法归档、模块也就永远无法归档」形成死锁。
-    if (
-      !options.allowArchivedParents &&
-      (module.kind === "parent-not-active" ||
-        feature.kind === "parent-not-active")
-    )
-      throw new TaskManagementError(
-        409,
-        "TASK_PARENT_ARCHIVED",
-        "模块或功能已归档，任务只读",
-      );
   }
   async replay(
     tx: TransactionContext,
@@ -199,10 +177,7 @@ export class TasksManagementService {
     const resource = parsed.success
       ? { ...parsed.data, featureId: null }
       : taskReplayContextSchema.parse(context);
-    // 重放只恢复既有结果，父级在之后被归档不应让已缓存响应失效。
-    await this.authorize(tx, actorId, resource, resource.taskId, {
-      allowArchivedParents: true,
-    });
+    await this.authorize(tx, actorId, resource, resource.taskId);
     if (parsed.success)
       for (const featureId of parsed.data.impactFeatureIds)
         if (
@@ -236,16 +211,6 @@ export class TasksManagementService {
           featureId,
         });
         if (check.kind === "not-found") throw missing();
-        if (
-          check.kind === "parent-not-active" &&
-          target.includes(featureId) &&
-          !previous.some((r) => r.featureId === featureId)
-        )
-          throw new TaskManagementError(
-            409,
-            "TASK_IMPACT_ARCHIVED",
-            "不能新增已归档的影响功能",
-          );
       }
       const before =
         input.taskId === undefined
@@ -290,12 +255,7 @@ export class TasksManagementService {
       reason?: string;
     },
   ): Promise<TaskRecord> {
-    // 归档命令放行「父级已归档」（收尾），恢复命令仍要求父级链活跃。
-    await this.authorize(tx, input.actorId, input, input.taskId, {
-      allowArchivedParents:
-        input.operation === "archiveTask" ||
-        input.operation === "archiveModuleTask",
-    });
+    await this.authorize(tx, input.actorId, input, input.taskId);
     if (isTaskLifecycleOperation(input.operation))
       return this.changeTaskLifecycle(tx, {
         ...input,

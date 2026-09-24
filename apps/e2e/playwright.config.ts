@@ -61,6 +61,10 @@ export default defineConfig({
   outputDir: "test-results",
   use: {
     baseURL: WEB_BASE_URL,
+    // Playwright 的 actionTimeout 默认为 0（不超时）：定位器不存在时动作会一直等到
+    // 用例整体超时，只留下「测试超时」而看不出失败原因。这里收敛到 30s，让同类问题
+    // 立刻以「定位器找不到 / 元素不可点」的形式暴露。
+    actionTimeout: 30_000,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

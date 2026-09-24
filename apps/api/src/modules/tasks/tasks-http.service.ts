@@ -156,11 +156,7 @@ export class TasksHttpService {
             "TASK_SESSION_REQUIRED",
             "登录或 CSRF 状态已失效",
           );
-        // 归档命令放行「父级已归档」（收尾），与 management.execute 的口径一致。
-        await this.tasks.authorize(tx, current.userId, path, path.taskId, {
-          allowArchivedParents:
-            operation === "archiveTask" || operation === "archiveModuleTask",
-        });
+        await this.tasks.authorize(tx, current.userId, path, path.taskId);
 
         return current.userId;
       };

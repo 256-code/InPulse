@@ -10,12 +10,11 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 export type FeatureChange = {
-  action: "create" | "update" | "archive" | "restore";
+  action: "create" | "update";
   item?: FeatureItem;
   name: string;
   currentBehavior: string;
   acceptanceCriteria: string;
-  reason: string;
   tags: string;
 };
 export function featureErrorMessage(error: unknown): string {
@@ -25,11 +24,9 @@ export function featureErrorMessage(error: unknown): string {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或功能不存在，或你已无权访问。";
     if (error.status === 403)
-      return error.code === "FEATURE_MANAGE_FORBIDDEN"
-        ? "系统管理员或本项目任意活跃成员可以归档或恢复功能。"
-        : "你没有执行此操作的权限，或安全校验未通过。";
+      return "你没有执行此操作的权限，或安全校验未通过。";
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
-    if (error.status === 422) return "请检查功能名称、描述或原因。";
+    if (error.status === 422) return "请检查功能名称与描述。";
   }
   return "功能服务暂时不可用，请重试。";
 }
@@ -69,17 +66,13 @@ export function useFeatures(
                 .map((tag) => tag.trim())
                 .filter(Boolean),
       };
-      const body =
-        change.action === "archive" || change.action === "restore"
-          ? { reason: change.reason.trim() }
-          : edit;
       const signature = JSON.stringify([
         projectId,
         moduleId,
         change.action,
         change.item?.id,
         change.item?.rowVersion,
-        body,
+        edit,
       ]);
       if (retryKey.current?.signature !== signature)
         retryKey.current = { signature, key: createIdempotencyKey("feature") };
@@ -94,23 +87,7 @@ export function useFeatures(
       if (change.action === "create")
         return api.createFeature(projectId, moduleId, edit, init);
       if (!change.item) throw new Error("Feature selection missing");
-      if (change.action === "update")
-        return api.updateFeature(
-          projectId,
-          moduleId,
-          change.item.id,
-          edit,
-          init,
-        );
-      return api[
-        change.action === "archive" ? "archiveFeature" : "restoreFeature"
-      ](
-        projectId,
-        moduleId,
-        change.item.id,
-        { reason: change.reason.trim() },
-        init,
-      );
+      return api.updateFeature(projectId, moduleId, change.item.id, edit, init);
     },
     onSuccess: async () => {
       retryKey.current = null;

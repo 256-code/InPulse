@@ -237,7 +237,7 @@ export const ProjectOverviewPageView: React.FC<
           <button
             type="button"
             className="primary-button"
-            disabled={project === null || project.status === "ARCHIVED"}
+            disabled={project === null}
             onClick={() => setCreateTaskOpen(true)}
           >
             <InpulseIcon name="plus" size={16} />

@@ -50,7 +50,6 @@ const preview = {
   status: "ACTIVE",
   content: "待跟进原文",
   inheritedImpacts: [{ id: 4, name: "支付" }],
-  excludedImpacts: [{ id: 6, name: "旧功能" }],
   linkedTask: null,
 };
 const result = {
@@ -104,16 +103,15 @@ async function open() {
   await screen.findByText("待跟进原文");
   await pickSelectOption("跟进任务负责人", "成员");
 }
-it("shows inherited/excluded history, retains input and reuses the key after uncertain failure", async () => {
+it("shows inherited history, retains input and reuses the key after uncertain failure", async () => {
   const convert = vi
     .fn()
     .mockRejectedValueOnce(Error("network"))
     .mockResolvedValue(result);
   const converted = mount({ convertLeftoverToTask: convert });
   await open();
-  await waitFor(() =>
-    expect(screen.getByText(/历史归档影响不加入新任务：旧功能/)).toBeVisible(),
-  );
+  // ADR-045：功能不再有归档态，记录上的影响全部继承，弹层不再展示「历史归档影响」块。
+  expect(screen.getByText(/将继承的影响功能：支付/)).toBeVisible();
   fireEvent.change(screen.getByLabelText("跟进任务标题"), {
     target: { value: "我的跟进标题" },
   });
@@ -168,10 +166,6 @@ it("requires explicit confirmation after 409 impact/content change, retaining ta
         recordVersion: 2,
         content: "最新遗留全文",
         inheritedImpacts: [],
-        excludedImpacts: [
-          { id: 4, name: "支付" },
-          { id: 6, name: "旧功能" },
-        ],
       }),
   });
   await open();

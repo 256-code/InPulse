@@ -26,7 +26,7 @@ export const projects = appSchema.table(
     createdBy: integer("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    /** ADR-035：项目生命周期四态；新建项目从未开始起步。 */
+    /** ADR-043：项目生命周期三态（未开始 / 进行中 / 维护中）；新建项目从未开始起步，归档已下线。 */
     status: text("status").notNull().default("NOT_STARTED"),
     /**
      * 粘性标记：项目第一次有任务完成时置位，永不回落。
@@ -36,6 +36,7 @@ export const projects = appSchema.table(
     rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+    /** ADR-043：归档时代的只读历史列，项目侧恒为空（见 projects_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
   },
   (table) => [
@@ -52,19 +53,14 @@ export const projects = appSchema.table(
     ),
     check(
       "projects_status_check",
-      sql.raw("status IN ('NOT_STARTED', 'ACTIVE', 'MAINTENANCE', 'ARCHIVED')"),
+      sql.raw("status IN ('NOT_STARTED', 'ACTIVE', 'MAINTENANCE')"),
     ),
     check(
       "projects_not_started_lock_check",
       sql.raw("status <> 'NOT_STARTED' OR first_task_completed_at IS NULL"),
     ),
     check("projects_row_version_check", sql.raw("row_version > 0")),
-    check(
-      "projects_archive_state_check",
-      sql.raw(
-        "(status <> 'ARCHIVED' AND archived_at IS NULL) OR (status = 'ARCHIVED' AND archived_at IS NOT NULL)",
-      ),
-    ),
+    check("projects_archived_at_null_check", sql.raw("archived_at IS NULL")),
   ],
 );
 

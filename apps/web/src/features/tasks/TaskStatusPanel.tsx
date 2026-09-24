@@ -169,15 +169,8 @@ export function TaskStatusPanel({
               base.id,
             );
       setBase(latest);
-      if (
-        mutation.error instanceof ApiError &&
-        mutation.error.code === "TASK_PARENT_ARCHIVED"
-      )
-        setReloadError("所属项目、模块或功能已归档，输入已保留，当前只读。");
-      else {
-        setReloadError(null);
-        mutation.reset();
-      }
+      setReloadError(null);
+      mutation.reset();
     } catch (error) {
       setReloadError(taskError(error));
     } finally {

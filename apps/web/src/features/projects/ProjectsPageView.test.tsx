@@ -25,7 +25,6 @@ const project: ProjectListItem = {
     completedTaskCount: 1,
   },
   currentUserRole: "MEMBER",
-  pendingArchiveRequest: null,
 };
 
 function mount(
@@ -91,7 +90,7 @@ describe("项目卡", () => {
     expect(screen.queryByRole("button", { name: "GitHub 链接" })).toBeNull();
   });
 
-  it("项目状态标签直接映射四态，不再由完成任务数推导", () => {
+  it("项目状态标签直接映射三态，不再由完成任务数推导", () => {
     mount({
       projects: [
         {
@@ -118,62 +117,14 @@ describe("项目卡", () => {
   });
 });
 
-describe("项目归档申请入口", () => {
-  const pending = {
-    id: 11,
-    requestedBy: 5,
-    requestedByName: "组长甲",
-    reason: "本阶段交付结束",
-    requestedAt: "2026-09-16T01:00:00.000Z",
-  } as const;
-
-  it("lets any active member request archiving while approvals stay admin-only (ADR-039)", () => {
-    mount({ projects: [{ ...project, currentUserRole: "MEMBER" }] });
-    expect(screen.getByTestId("request-archive-2")).toBeInTheDocument();
-    expect(screen.queryByTestId("approve-archive-request-2")).toBeNull();
-  });
-
-  it("lets a project leader open the archive request modal", () => {
-    mount({ projects: [{ ...project, currentUserRole: "LEADER" }] });
-    fireEvent.click(screen.getByTestId("request-archive-2"));
-    expect(screen.getByText("申请项目归档")).toBeInTheDocument();
-    expect(screen.getByLabelText("归档申请原因")).toBeInTheDocument();
-  });
-
-  it("hides the request entry when the viewer has no project role (ADR-039)", () => {
-    mount({ projects: [{ ...project, currentUserRole: null }] });
+describe("项目归档入口下线（ADR-043）", () => {
+  it("项目层面不再有归档入口，系统管理员也只能编辑与管理成员", () => {
+    mount({ isAdmin: true });
+    expect(screen.getByTestId("edit-project-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("archive-project-2")).toBeNull();
+    expect(screen.queryByTestId("restore-project-2")).toBeNull();
     expect(screen.queryByTestId("request-archive-2")).toBeNull();
     expect(screen.queryByTestId("approve-archive-request-2")).toBeNull();
-  });
-
-  it("replaces the request entry with a pending note once a request exists", () => {
-    mount({
-      projects: [
-        {
-          ...project,
-          currentUserRole: "LEADER",
-          pendingArchiveRequest: pending,
-        },
-      ],
-    });
-    expect(screen.queryByTestId("request-archive-2")).toBeNull();
-    expect(screen.getByTestId("archive-request-pending-2")).toBeInTheDocument();
-  });
-
-  it("shows approve and reject entries to the system administrator", () => {
-    mount({
-      isAdmin: true,
-      projects: [
-        {
-          ...project,
-          currentUserRole: "MEMBER",
-          pendingArchiveRequest: pending,
-        },
-      ],
-    });
-    expect(screen.getByTestId("approve-archive-request-2")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("reject-archive-request-2"));
-    expect(screen.getByText("驳回项目归档申请")).toBeInTheDocument();
-    expect(screen.getByLabelText("驳回批注")).toBeInTheDocument();
+    expect(screen.queryByTestId("reject-archive-request-2")).toBeNull();
   });
 });

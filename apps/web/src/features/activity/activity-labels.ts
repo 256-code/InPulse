@@ -39,6 +39,7 @@ const ENTITY_LABELS: Readonly<Record<string, string>> = {
 const ACTION_LABELS: Readonly<Record<string, string>> = {
   PROJECT_CREATED: "创建项目",
   PROJECT_UPDATED: "更新项目",
+  // ADR-043：项目归档已下线，以下四条只用于展示历史动态与历史通知。
   PROJECT_ARCHIVED: "归档项目",
   PROJECT_RESTORED: "恢复项目",
   PROJECT_MEMBER_ADDED: "添加成员",

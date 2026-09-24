@@ -20,10 +20,6 @@ export const featureEditRequestSchema = z
   })
   .strict()
   .meta({ id: "FeatureEditRequest" });
-export const featureArchiveRequestSchema = z
-  .object({ reason: z.string().trim().min(1).max(2000) })
-  .strict()
-  .meta({ id: "FeatureArchiveRequest" });
 export const featureMutationHeadersSchema = z
   .object({ "x-csrf-token": z.string().length(43) })
   .strict()
@@ -32,12 +28,14 @@ export const featureVersionHeadersSchema = featureMutationHeadersSchema
   .extend({ "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/) })
   .meta({ id: "FeatureVersionHeaders" });
 /**
- * 功能卡统计：openTaskCount 与项目/模块卡同口径，只计该功能下 work_status = TODO 的有效任务；
- * recordCount 只计 status = PUBLISHED 的正式迭代记录，与功能档案的迭代历史一致。
+ * 功能卡统计：openTaskCount / completedTaskCount 与项目/模块卡同口径，只计该功能下的有效任务
+ * （模块级任务通过影响关系计入）；recordCount 只计 status = PUBLISHED 的正式迭代记录，
+ * 与功能档案的迭代历史一致。ADR-045 起功能没有归档态，卡片档位由 completedTaskCount 派生。
  */
 export const featureStatsSchema = z
   .object({
     openTaskCount: z.number().int().nonnegative(),
+    completedTaskCount: z.number().int().nonnegative(),
     recordCount: z.number().int().nonnegative(),
   })
   .strict()
@@ -57,11 +55,9 @@ export const featureItemSchema = z
     name: z.string().min(1).max(500),
     currentBehavior: z.string().max(50000),
     acceptanceCriteria: z.string().max(50000),
-    status: z.enum(["ACTIVE", "ARCHIVED"]),
     rowVersion: id,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
-    archivedAt: z.iso.datetime().nullable(),
     stats: featureStatsSchema,
   })
   .strict()
@@ -102,11 +98,6 @@ export const featureSchemas = {
     summary: "功能名称、当前说明与标签",
     sensitiveFieldPaths: [],
   },
-  FeatureArchiveRequest: {
-    schema: featureArchiveRequestSchema,
-    summary: "归档或恢复原因",
-    sensitiveFieldPaths: [],
-  },
   FeatureMutationHeaders: {
     schema: featureMutationHeadersSchema,
     summary: "功能创建安全头",
@@ -124,7 +115,7 @@ export const featureSchemas = {
   },
   FeatureListResponse: {
     schema: featureListResponseSchema,
-    summary: "含归档功能的列表",
+    summary: "功能列表",
     sensitiveFieldPaths: [],
   },
   FeatureReplayContext: {

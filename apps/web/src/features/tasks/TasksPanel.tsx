@@ -75,9 +75,9 @@ const priorityLabels = {
 };
 const statusLabels = { TODO: "未完成", DONE: "已完成", CANCELED: "已取消" };
 /* 优先级徽章色调与 task-tone.ts 的 taskPriorityBadgeTone 同源：紧急红 / 高金（amber）/
-   普通灰——「普通」是白底卡，徽章取中性灰才与卡片同一调性。 */
+   普通淡蓝（2026-09-23 九次配色定案，与「进行中」同一套蓝）。 */
 const priorityTone = {
-  NORMAL: "gray",
+  NORMAL: "blue",
   HIGH: "amber",
   URGENT: "red",
 } as const;
@@ -427,8 +427,7 @@ export function TasksPanel({
     isAdmin,
     projectDetail.data?.currentUserRole ?? null,
   );
-  // ADR-034：父级或任务自身已归档时编辑表单只读，但归档/恢复入口必须仍然可达，
-  // 否则「功能已归档 → 任务无法归档 → 模块无法归档」会把入口锁死。
+  // ADR-045：父级不再有归档只读态，只读只可能来自任务自身或调用方传入的只读范围。
   const editReadOnly =
     selection?.item !== undefined &&
     (!writable || selection.item.lifecycleStatus !== "ACTIVE");
@@ -578,13 +577,6 @@ export function TasksPanel({
   });
   const reload = async () => {
     if (!selection?.item) return;
-    if (
-      mutation.error instanceof ApiError &&
-      mutation.error.code === "TASK_PARENT_ARCHIVED"
-    ) {
-      setReloadError("项目、模块或功能已归档，草稿已保留，当前不能保存。");
-      return;
-    }
     const stamp = generation.current;
     const base = selection.item;
     const draft = getValues();
@@ -595,15 +587,9 @@ export function TasksPanel({
           ? await api.getModuleTask(projectId, moduleId, base.id)
           : await api.getTask(projectId, moduleId, featureId, base.id);
       if (stamp !== generation.current) return;
-      const parent =
-        featureId === null
-          ? (await api.listModules(projectId)).items.find(
-              (m) => m.id === moduleId,
-            )
-          : await api.getFeature(projectId, moduleId, featureId);
       if (stamp !== generation.current) return;
-      if (latest.lifecycleStatus !== "ACTIVE" || parent?.status !== "ACTIVE") {
-        setReloadError("任务或功能已归档，草稿已保留，当前不能保存。");
+      if (latest.lifecycleStatus !== "ACTIVE") {
+        setReloadError("任务已归档，草稿已保留，当前不能保存。");
         return;
       }
       const result = mergeTask(taskEdit(base), draft, taskEdit(latest));
@@ -738,9 +724,7 @@ export function TasksPanel({
           {!writable && (
             <p className="permission-hint">
               <InpulseIcon name="alert" size={14} />
-              {featureId === null
-                ? "模块已归档，任务历史只读，不能新建或修改。"
-                : "功能已归档，任务历史只读，不能新建或修改。"}
+              当前范围只读，不能新建或修改任务。
             </p>
           )}
           {success && <Alert type="success" title="任务已保存" />}
@@ -820,7 +804,6 @@ export function TasksPanel({
                         className={taskToneClassName(
                           item.priority,
                           item.workStatus,
-                          leftoverSource,
                         )}
                       >
                         <td>
@@ -878,11 +861,7 @@ export function TasksPanel({
                   <article
                     className={
                       "calm-task-card " +
-                      taskToneClassName(
-                        item.priority,
-                        item.workStatus,
-                        leftoverSource,
-                      )
+                      taskToneClassName(item.priority, item.workStatus)
                     }
                     key={item.id}
                     tabIndex={0}
@@ -957,7 +936,10 @@ export function TasksPanel({
                           </CalmBadge>
                         )}
                       </span>
-                      <span title={"截止：" + formatDate(item.dueAt)}>
+                      <span
+                        className={dueToneClass(item.dueAt, item.workStatus)}
+                        title={"截止：" + formatDate(item.dueAt)}
+                      >
                         <InpulseIcon name="clock" size={14} />
                         {dueLabel(item.dueAt)}
                       </span>
@@ -1497,7 +1479,7 @@ export function TasksPanel({
             {editReadOnly && (
               <Alert
                 type="info"
-                title="任务或所属模块、功能已归档，表单只读；可用下方按钮归档或恢复。"
+                title="任务已归档，表单只读；可用下方按钮恢复。"
               />
             )}
             {mutation.isError && (
@@ -1604,13 +1586,6 @@ export function TasksPanel({
                             <input
                               type="checkbox"
                               checked={(field.value ?? []).includes(f.id)}
-                              disabled={
-                                f.status !== "ACTIVE" &&
-                                !(
-                                  selection?.item?.scopeType === "MODULE" &&
-                                  selection.item.impactFeatureIds.includes(f.id)
-                                )
-                              }
                               onChange={(event) =>
                                 field.onChange(
                                   event.target.checked
@@ -1627,7 +1602,6 @@ export function TasksPanel({
                               }
                             />
                             {f.name}
-                            {f.status === "ARCHIVED" ? "（已归档）" : ""}
                           </label>
                         ))}
                       </fieldset>

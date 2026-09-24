@@ -42,12 +42,6 @@ const missing = () =>
     "LEFTOVER_NOT_FOUND",
     "记录、遗留项或任务不存在或无法访问",
   );
-const archived = () =>
-  new LeftoverTaskError(
-    409,
-    "LEFTOVER_PARENT_ARCHIVED",
-    "所属项目、模块或功能已归档",
-  );
 @Injectable()
 export class LeftoverTaskWorkflow {
   constructor(
@@ -68,18 +62,12 @@ export class LeftoverTaskWorkflow {
     @Inject(LeftoverSearchProjectionSync)
     private readonly leftovers: LeftoverSearchProjectionSync,
   ) {}
-  async authorize(
-    tx: TransactionContext,
-    actorId: number,
-    projectId: number,
-    writable = true,
-  ) {
+  async authorize(tx: TransactionContext, actorId: number, projectId: number) {
     const check = await this.access.checkProjectForWrite(tx, {
       actorUserId: actorId,
       projectId,
     });
     if (check.kind === "not-found") throw missing();
-    if (writable && check.kind === "parent-not-active") throw archived();
   }
   private leftoverItem(
     record: PublishedRecord,
@@ -134,11 +122,10 @@ export class LeftoverTaskWorkflow {
       await tx.sql`SAVEPOINT leftover_parent_locks`;
       const before = await this.records.find(tx, p, r);
       if (!before) throw missing();
+      // ADR-044/ADR-045：模块与功能都已无归档只读态，这里只保留归属校验与父级 FOR SHARE 取锁。
       const module = await this.modules.checkModuleForWrite(tx, before);
       if (module.kind === "not-found") throw missing();
-      if (module.kind === "parent-not-active") throw archived();
-      const inherited: { id: number; name: string }[] = [],
-        excluded: { id: number; name: string }[] = [];
+      const inherited: { id: number; name: string }[] = [];
       const ids = [
         ...new Set([
           ...(before.featureId === null
@@ -154,15 +141,10 @@ export class LeftoverTaskWorkflow {
           featureId: id,
         });
         if (check.kind === "not-found") throw missing();
-        if (check.kind === "parent-not-active" && id === before.featureId)
-          throw archived();
         const feature = await this.featureRead.find(tx, p, before.moduleId, id);
         if (!feature) throw missing();
         if (before.featureId === null && before.impactFeatureIds.includes(id))
-          (feature.status === "ACTIVE" ? inherited : excluded).push({
-            id,
-            name: feature.name,
-          });
+          inherited.push({ id, name: feature.name });
       }
       const record = await this.records.lock(tx, p, r);
       if (!record) throw missing();
@@ -182,7 +164,7 @@ export class LeftoverTaskWorkflow {
           : await this.removedItem(tx, p, r, leftoverItemId);
       if (!item) throw missing();
       await tx.sql`RELEASE SAVEPOINT leftover_parent_locks`;
-      return { record, item, inherited, excluded };
+      return { record, item, inherited };
     }
     throw new LeftoverTaskError(
       409,
@@ -203,7 +185,7 @@ export class LeftoverTaskWorkflow {
       task.featureId !== record.featureId
     )
       throw missing();
-    await this.authorize(tx, actorId, task.projectId, false);
+    await this.authorize(tx, actorId, task.projectId);
     return {
       projectId: task.projectId,
       moduleId: task.moduleId,
@@ -218,7 +200,7 @@ export class LeftoverTaskWorkflow {
     r: number,
     leftoverItemId?: number,
   ) {
-    const { record, item, inherited, excluded } = await this.prepare(
+    const { record, item, inherited } = await this.prepare(
       tx,
       actorId,
       p,
@@ -235,7 +217,6 @@ export class LeftoverTaskWorkflow {
       status: item.status,
       content: record.leftovers.find((l) => l.id === item.id)?.content ?? "",
       inheritedImpacts: inherited,
-      excludedImpacts: excluded,
       linkedTask:
         item.linkedTaskId === null
           ? null
@@ -418,7 +399,7 @@ export class LeftoverTaskWorkflow {
   async source(tx: TransactionContext, actorId: number, taskId: number) {
     const task = await this.tasks.findByTaskId(tx, taskId);
     if (!task) throw missing();
-    await this.authorize(tx, actorId, task.projectId, false);
+    await this.authorize(tx, actorId, task.projectId);
     const source = await this.records.source(tx, task.projectId, taskId);
     if (source) {
       const record = await this.records.find(

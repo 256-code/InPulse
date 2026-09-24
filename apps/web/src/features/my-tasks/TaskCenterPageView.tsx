@@ -138,19 +138,20 @@ function earliestOpenDueAt(group: MyTaskGroupItem): string | null {
 }
 
 /**
- * 服务端 apps/api/src/modules/tasks/task-list-order.ts 的紧急桶：遗留问题来源 0 →
- * 标记紧急 1 → 已逾期 2 → 今/明日截止 3 → 其余 4。任务卡与组卡共用这一处判定：
+ * 服务端 apps/api/src/modules/tasks/task-list-order.ts 的紧急桶：标记紧急 0 →
+ * 已逾期 1 → 遗留问题来源 2 → 今/明日截止 3 → 其余 4。任务卡与组卡共用这一处判定：
  * 组卡的「来源」不适用，「紧急」取未完成分支最高一档，「截止」取未完成分支最早一条。
+ * 2026-09-24 产品口径「把遗留问题排到已经逾期后面」：遗留问题来源由第 0 桶降到第 2 桶。
  */
 function urgencyBucketOf(
   priority: MyTaskPriority | null,
   dueAt: string | null,
   hasLeftoverSource: boolean,
 ): number {
-  if (hasLeftoverSource) return 0;
-  if (priority === "URGENT") return 1;
+  if (priority === "URGENT") return 0;
+  if (dueAt !== null && isBeforeTodayIso(dueAt)) return 1;
+  if (hasLeftoverSource) return 2;
   if (dueAt === null) return 4;
-  if (isBeforeTodayIso(dueAt)) return 2;
   // 「今/明日截止」= 今天 0 点起、后天 0 点前，与日期文案的同日判定同一把尺子。
   if (isWithinNextDaysIso(dueAt, 2)) return 3;
   return 4;
@@ -547,12 +548,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       <button
         type="button"
         className={
-          "calm-task-card " +
-          taskToneClassName(
-            item.priority,
-            item.workStatus,
-            item.hasLeftoverSource,
-          )
+          "calm-task-card " + taskToneClassName(item.priority, item.workStatus)
         }
         key={item.taskId}
         data-testid={"my-task-" + item.taskId}
@@ -600,7 +596,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               </CalmBadge>
             )}
           </span>
-          <span title={"截止：" + due}>
+          <span className={dueToneClass(item)} title={"截止：" + due}>
             <InpulseIcon name="clock" size={14} />
             {due}
           </span>
@@ -788,6 +784,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       tone: groupTone,
       dueText,
       dueTitle,
+      dueTone,
     } = describeTaskGroup(group);
     return (
       <button
@@ -863,7 +860,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
               {stateLabel}
             </CalmBadge>
           </span>
-          <span title={dueTitle}>
+          <span className={dueTone} title={dueTitle}>
             <InpulseIcon name="clock" size={14} />
             {dueText}
           </span>
@@ -871,6 +868,23 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       </button>
     );
   };
+
+  /**
+   * 列表模式整行可点（2026-09-23 产品要求）：点击任务行 / 聚合组行的任意横向位置都能
+   * 打开详情，不再只靠「任务」列那一小块标题热区。三点约束：
+   * 1. 行内唯一的交互元素是标题按钮，命中按钮时直接返回、交给按钮自己的 onClick，避免
+   *    一次点击触发两遍；键盘可达性仍由该按钮承担（行不加 tabIndex，不新增 Tab 停靠点）。
+   * 2. 拖选标题 / 编号想复制（选区非空）时不打开弹窗。
+   * 3. 只挂在 <tr> 上，不改列结构，列宽与省略号规则不受影响。
+   */
+  const rowClickOpens =
+    (open: () => void) => (event: React.MouseEvent<HTMLTableRowElement>) => {
+      const { target } = event;
+      if (target instanceof Element && target.closest("button") !== null)
+        return;
+      if ((window.getSelection()?.toString() ?? "") !== "") return;
+      open();
+    };
 
   /**
    * 列表视图下的聚合组行（2026-09-22 产品要求：聚合组要跟随「卡片 / 列表」切换）：
@@ -903,6 +917,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         key={"group-" + group.groupId}
         data-testid={"my-task-group-" + group.groupId}
         className={groupTone}
+        onClick={rowClickOpens(() => setOpenGroupId(group.groupId))}
       >
         <td>
           <button
@@ -1009,8 +1024,8 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
                 className={taskToneClassName(
                   entry.item.priority,
                   entry.item.workStatus,
-                  entry.item.hasLeftoverSource,
                 )}
+                onClick={rowClickOpens(() => openTask(entry.item))}
               >
                 <td>
                   <button

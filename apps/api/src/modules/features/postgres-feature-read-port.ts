@@ -16,7 +16,7 @@ export class PostgresFeatureReadPort extends FeatureReadPort {
   ): Promise<FeatureReadResource | undefined> {
     const [row] = await tx.sql<
       FeatureReadResource[]
-    >`SELECT id AS "featureId", project_id AS "projectId", module_id AS "moduleId", name, status, created_by AS "createdBy" FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} AND id = ${featureId}`;
+    >`SELECT id AS "featureId", project_id AS "projectId", module_id AS "moduleId", name, created_by AS "createdBy" FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} AND id = ${featureId}`;
     return row;
   }
 
@@ -43,13 +43,11 @@ export class PostgresFeatureReadPort extends FeatureReadPort {
     input: FeatureCountInput,
   ): Promise<number> {
     const moduleId = input.moduleId ?? null;
-    const status = input.status ?? null;
     const [row] = await tx.sql<{ total: number }[]>`
       SELECT COUNT(*)::integer AS total
         FROM app.features
        WHERE project_id = ${input.projectId}
          AND (${moduleId}::integer IS NULL OR module_id = ${moduleId})
-         AND (${status}::text IS NULL OR status = ${status})
     `;
     return row?.total ?? 0;
   }

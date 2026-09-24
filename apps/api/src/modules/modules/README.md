@@ -3,6 +3,8 @@
 ## F-12 模块管理本地交审（2026-09-09）
 
 新增独立 `ModulesManagementModule` 装配列表、创建、编辑、归档、恢复 HTTP 纵切片；保留下面的项目初始化 Port 与下级写前 QueryPort 原边界。
+
+2026-09-23 [ADR-044](../../../../../docs/adr/ADR-044.md) 起模块层面归档整体下线：`ModulesManagementModule` 只剩列表 / 创建 / 编辑，`archiveModule`、`restoreModule`、`ModuleArchiveRequest` 与 `MODULE_ARCHIVE_TASKS_OPEN` 已删除，`app.modules.status` 只有 `ACTIVE`；下文与 [F-12 本地交审](../../../../../docs/f12-local-handoff.md) 中「归档 / 恢复 / 管理员重认证」的描述为当时事实。
 完整接口、未分类可编辑规则、单事务/重放授权、前端入口与实际验证记录见 [F-12 本地交审](../../../../../docs/f12-local-handoff.md)。
 当前针对性单元验证通过，真实数据库/HTTP 集成和 Playwright 已写用例但未运行，不能据此宣称完整验收通过。
 
@@ -23,15 +25,14 @@ checkModuleForWrite(
 ): Promise<ModuleWriteCheckResult>;
 ```
 
-结果为 `{ kind: 'allowed', resource }`、`{ kind: 'not-found' }` 或
-`{ kind: 'parent-not-active', resource }`。摘要仅含 `moduleId`、`projectId`、
-`status: 'ACTIVE' | 'ARCHIVED'`、`rowVersion`，ID 与版本沿用 Schema 的 integer/number。
-不存在或项目归属不匹配时不返回摘要；归属正确且已归档时返回 parent-not-active。
+结果为 `{ kind: 'allowed', resource }` 或 `{ kind: 'not-found' }`（ADR-044 起模块无归档态，
+原来的 `parent-not-active` 已删除）。摘要仅含 `moduleId`、`projectId`、`rowVersion`，
+ID 与版本沿用 Schema 的 integer/number；不存在或项目归属不匹配时不返回摘要。
 
-适配器只查询 `app.modules`，按 ID 与项目归属取得 `FOR SHARE` 后判断状态；
+适配器只查询 `app.modules`，按 ID 与项目归属取得 `FOR SHARE` 后确认存在性；
 锁随调用方事务提交或回滚释放。无事务创建、全局 Client、认证或成员查询。
 数据库错误原样向事务调用方传播，由外层决定安全的 HTTP 映射，禁止泄露数据库错误文本。
-此接口只用于事务内写前检查，不能用于普通详情读取或归档（归档需要 FOR UPDATE）。
+此接口只用于事务内写前检查，不能用于普通详情读取（模块自 ADR-044 起已无归档操作）。
 调用方必须先通过 A 的身份解析和项目授权，按项目 → 模块 → 功能顺序持锁；
 多资源同层按 ID 升序，任一步非 allowed 必须停止后续业务写入。
 

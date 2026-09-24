@@ -42,7 +42,6 @@ export const leftoverTaskPreviewSchema = z
     status: z.enum(["ACTIVE", "CONVERTED", "RESOLVED"]),
     content: z.string().max(10000),
     inheritedImpacts: z.array(z.object({ id, name: z.string() }).strict()),
-    excludedImpacts: z.array(z.object({ id, name: z.string() }).strict()),
     linkedTask: leftoverTaskReferenceSchema.nullable(),
   })
   .strict()

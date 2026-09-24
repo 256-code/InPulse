@@ -127,13 +127,6 @@ import {
   projectMutationHeadersSchema,
   projectVersionHeadersSchema,
   projectReplayContextSchema,
-  projectArchiveRequestSchema,
-  projectArchivePreviewResponseSchema,
-  projectArchiveRequestPathSchema,
-  projectArchiveRequestSubmissionSchema,
-  projectArchiveRequestItemSchema,
-  projectArchiveRejectionRequestSchema,
-  projectArchiveRequestReplayContextSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -672,41 +665,6 @@ export const schemaRegistry = {
   ProjectReplayContext: {
     schema: projectReplayContextSchema,
     summary: "项目写操作幂等重放的最小结果资源上下文",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRequest: {
-    schema: projectArchiveRequestSchema,
-    summary: "项目归档或恢复原因；高风险操作必须显式填写",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchivePreviewResponse: {
-    schema: projectArchivePreviewResponseSchema,
-    summary: "归档前未完成任务数提醒",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRequestPath: {
-    schema: projectArchiveRequestPathSchema,
-    summary: "项目归档申请路径参数（项目与申请）",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRequestSubmission: {
-    schema: projectArchiveRequestSubmissionSchema,
-    summary: "项目归档申请理由；申请本身不改变项目状态",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRequestItem: {
-    schema: projectArchiveRequestItemSchema,
-    summary: "项目归档申请公开条目；不暴露账号字段",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRejectionRequest: {
-    schema: projectArchiveRejectionRequestSchema,
-    summary: "驳回项目归档申请的可选批注",
-    sensitiveFieldPaths: [],
-  },
-  ProjectArchiveRequestReplayContext: {
-    schema: projectArchiveRequestReplayContextSchema,
-    summary: "项目归档申请审核幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
   UserAuthState: {

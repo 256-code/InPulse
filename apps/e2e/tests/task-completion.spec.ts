@@ -132,7 +132,7 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await expect(calmSelectTrigger(form, "待发布草稿")).toHaveText(selection);
     await expect(task.locator(".task-status-history > li")).toHaveCount(1);
     await form.getByRole("link", { name: "打开草稿继续编辑" }).click();
-    await page.getByRole("button", { name: "继续编辑" }).click();
+    await page.getByRole("button", { name: "继续编辑", exact: true }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
     for (const label of ["改动原因", "具体改动", "改动效果"])
       await edit.getByLabel(label).fill("可保留的完整内容");

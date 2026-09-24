@@ -13,10 +13,12 @@ import type { Fragment, ISql } from "postgres";
  *      '-infinity' 归一后恒等、不参与比较。2026-09-22 产品口径「这个排序按照完成
  *      时间，越晚越排前面」，与任务看板 listForBoard 的「已完成按完成时间倒序」对齐；
  *      已完成任务之间因此先看完成时间，优先级 / 截止只做完成时间相同时的兜底。
- *   3. 紧急桶（仅未完成参与，命中第一个）：遗留问题来源(0) → 标记紧急(1) →
- *      已逾期(2) → 今/明日截止(3) → 其余(4)。已逾期排在标记紧急之后是 2026-09-22
- *      产品口径「逾期的不搞特殊了……只是排序靠前，比紧急低一档」：逾期不再整卡
- *      换色，但仍在未完成的普通任务之前。
+ *   3. 紧急桶（仅未完成参与，命中第一个）：标记紧急(0) → 已逾期(1) →
+ *      遗留问题来源(2) → 今/明日截止(3) → 其余(4)。已逾期排在标记紧急之后是
+ *      2026-09-22 产品口径「逾期的不搞特殊了……只是排序靠前，比紧急低一档」：
+ *      逾期不再整卡换色，但仍在未完成的普通任务之前；2026-09-24 产品口径
+ *      「把遗留问题排到已经逾期后面」再把遗留问题来源降到已逾期之后一档
+ *      （此前它是第 0 桶、排在标记紧急之前）。
  *   4. 优先级：紧急(0) → 高(1) → 普通(2)
  *   5. 截止时间：due_at 升序，NULL 最后（用 'infinity' 归一，便于 keyset 比较）
  *   6. 任务 ID 升序：唯一兜底，保证刷新前后顺序稳定
@@ -40,9 +42,11 @@ export interface TaskListSortKey {
  * 载荷由 6 段变 7 段，旧游标继续使用会跳页 / 重项。
  * 2026-09-23 由 3 升到 4：删除「低」（LOW）档位后优先级序号由 0/1/2/3 收窄为 0/1/2，
  * 旧游标里遗留的 3（原「低」）在新口径下不再是任何任务的序号，继续使用会跳页 / 漏项。
- * （更早两次：2 → 3 新增「完成时间倒序」一级；1 → 2 紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
+ * 2026-09-24 由 4 升到 5：紧急桶重排为「标记紧急(0) → 已逾期(1) → 遗留问题来源(2) →
+ * 今/明日截止(3) → 其余(4)」，旧的 0（遗留问题来源）现在是 2，继续使用旧游标会跳页 / 漏项。
+ * （更早三次：2 → 3 新增「完成时间倒序」一级；1 → 2 紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
  */
-export const TASK_LIST_SORT_KEY_VERSION = 4;
+export const TASK_LIST_SORT_KEY_VERSION = 5;
 
 interface TaskListSortExpressions {
   readonly statusGroup: PostgresFragment;
@@ -67,11 +71,11 @@ export function taskListSortExpressions(sql: ISql): TaskListSortExpressions {
            END`;
   const urgency = sql`CASE
              WHEN t.work_status <> 'TODO' THEN 4
-             WHEN EXISTS (SELECT 1 FROM app.leftover_task_links l WHERE l.task_id = t.id) THEN 0
-             WHEN t.priority = 'URGENT' THEN 1
+             WHEN t.priority = 'URGENT' THEN 0
              WHEN t.due_at IS NOT NULL AND t.due_at < (
                date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
-             ) THEN 2
+             ) THEN 1
+             WHEN EXISTS (SELECT 1 FROM app.leftover_task_links l WHERE l.task_id = t.id) THEN 2
              WHEN t.due_at IS NOT NULL AND t.due_at < (
                (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '2 days') AT TIME ZONE 'Asia/Shanghai'
              ) THEN 3

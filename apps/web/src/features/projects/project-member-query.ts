@@ -22,8 +22,6 @@ export function projectMemberErrorMessage(error: unknown): string {
     if (error.status === 409) {
       if (error.code === "PROJECT_MEMBER_ALREADY_ACTIVE")
         return "该用户已经是项目活跃成员。";
-      if (error.code === "PROJECT_MEMBER_PROJECT_ARCHIVED")
-        return "项目已归档，不能变更项目成员。";
       if (error.code === "PROJECT_MEMBER_TASK_NOT_REASSIGNABLE")
         return "待改派任务已发生变化，请重新加载后重试。";
       if (error.code === "PROJECT_MEMBER_LEADER_PROTECTED")

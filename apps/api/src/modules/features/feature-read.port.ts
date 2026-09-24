@@ -5,7 +5,6 @@ export interface FeatureReadResource {
   readonly projectId: number;
   readonly moduleId: number;
   readonly name: string;
-  readonly status: "ACTIVE" | "ARCHIVED";
   readonly createdBy: number;
 }
 
@@ -26,11 +25,9 @@ export interface FeatureCountInput {
   readonly projectId: number;
   /** 省略 = 项目内全部模块。 */
   readonly moduleId?: number;
-  /** 省略 = 不按状态过滤，归档行同样计入。 */
-  readonly status?: "ACTIVE" | "ARCHIVED";
 }
 
-/** Caller authorizes project access. Includes archived history. */
+/** Caller authorizes project access. */
 export abstract class FeatureReadPort {
   abstract find(
     tx: TransactionContext,
@@ -51,7 +48,7 @@ export abstract class FeatureReadPort {
   /**
    * 项目（可选模块）内功能计数（F-29「活跃功能数」）。只读、不取锁，且不校验
    * 项目授权。SQL 同时带 project_id 与 module_id，防止跨项目串联，并完整命中
-   * features_module_status_idx。
+   * features_module_id_idx（ADR-045 去掉常量列 status 后的三列索引）。
    */
   abstract count(
     tx: TransactionContext,

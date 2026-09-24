@@ -39,22 +39,6 @@ export class ModulesController {
   ) {
     return this.respond("updateModule", request, response);
   }
-  @Post(":projectId/modules/:moduleId/archive")
-  @Operation("archiveModule")
-  async archive(
-    @Req() request: ModulesHttpRequest,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    return this.respond("archiveModule", request, response);
-  }
-  @Post(":projectId/modules/:moduleId/restore")
-  @Operation("restoreModule")
-  async restore(
-    @Req() request: ModulesHttpRequest,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    return this.respond("restoreModule", request, response);
-  }
   private async respond(
     operation: Parameters<ModulesHttpService["handle"]>[0],
     request: ModulesHttpRequest,

@@ -1077,13 +1077,13 @@ describe("ProjectOverviewQueryService.getOverview", () => {
         createdAt: createdAt.toISOString(),
       },
     ]);
+    // ADR-044：模块已无归档态，投影计数只按 projectId。
     expect(setup.modulesCount).toHaveBeenCalledWith(expect.anything(), {
       projectId: 7,
-      status: "ACTIVE",
     });
+    // ADR-045：功能同样已无归档态，投影计数也只按 projectId / moduleId。
     expect(setup.featuresCount).toHaveBeenCalledWith(expect.anything(), {
       projectId: 7,
-      status: "ACTIVE",
     });
     expect(setup.tasksCount).toHaveBeenCalledWith(expect.anything(), {
       projectIds: [7],

@@ -1,6 +1,8 @@
 # F-13 功能档案本地交审
 
 > 2026-09-15 注：[ADR-031](adr/ADR-031.md) 已移除全部 TOTP 验证与管理员高风险重认证；本文件是当时交付事实的历史交审记录，其中「密码/TOTP 重认证」「`AdminReauthenticateModal`」「双时间戳门禁」等描述不再代表现行行为（现行门禁为有效完整管理员 Session + `is_admin` + 写操作 CSRF/幂等）。
+>
+> 2026-09-24 注：功能归档与恢复已由 [ADR-045](adr/ADR-045.md) 整体下线（功能只有 `ACTIVE`，`archiveFeature` / `restoreFeature` 两条路由与 `FeatureArchiveRequest` 已从契约删除，功能卡与编辑弹层不再有归档入口）；项目归档、模块归档此前已分别由 [ADR-043](adr/ADR-043.md)、[ADR-044](adr/ADR-044.md) 下线。下文「七个接口」的路由表、`ACTIVE / ARCHIVED` 状态语义与「归档后只读 / 恢复」描述均为 2026-09-09 交审时的事实，现行只有 `listFeatures` / `getFeature` / `findSimilarFeatures` / `createFeature` / `updateFeature` 五个接口。
 2026-09-09，B，分支 `dev/b`。本地实现完成，等待非作者审核；没有提交、推送、开 PR 或合并。开工 HEAD、origin/dev/b、origin/main 的本地引用均为 `58abb407a958c3e09d129b8ea0e1086727847d2f`；本轮没有 fetch 或改变分支基线。
 
 ## PR 交付准备（2026-09-09）

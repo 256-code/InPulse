@@ -28,6 +28,7 @@ export const modules = appSchema.table(
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     kind: text("kind").notNull().default("NORMAL"),
+    /** ADR-044：模块层面下线归档，`status` 只有 `ACTIVE`（见 modules_status_check）。 */
     status: text("status").notNull().default("ACTIVE"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdBy: integer("created_by")
@@ -36,6 +37,7 @@ export const modules = appSchema.table(
     rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+    /** ADR-044：归档时代的只读历史列，模块侧恒为空（见 modules_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
   },
   (table) => [
@@ -70,15 +72,10 @@ export const modules = appSchema.table(
     ),
     check("modules_description_check", sql.raw("length(description) <= 20000")),
     check("modules_kind_check", sql.raw("kind IN ('NORMAL', 'UNCLASSIFIED')")),
-    check("modules_status_check", sql.raw("status IN ('ACTIVE', 'ARCHIVED')")),
+    check("modules_status_check", sql.raw("status = 'ACTIVE'")),
     check("modules_sort_order_check", sql.raw("sort_order >= 0")),
     check("modules_row_version_check", sql.raw("row_version > 0")),
-    check(
-      "modules_archive_state_check",
-      sql.raw(
-        "(status = 'ACTIVE' AND archived_at IS NULL) OR (status = 'ARCHIVED' AND archived_at IS NOT NULL)",
-      ),
-    ),
+    check("modules_archived_at_null_check", sql.raw("archived_at IS NULL")),
   ],
 );
 
@@ -93,6 +90,7 @@ export const features = appSchema.table(
     currentBehavior: text("current_behavior").notNull().default(""),
     acceptanceCriteria: text("acceptance_criteria").notNull().default(""),
     tags: text("tags").array().notNull().default(sql.raw("'{}'::text[]")),
+    /** ADR-045：功能层面下线归档，`status` 只有 `ACTIVE`（见 features_status_check）。 */
     status: text("status").notNull().default("ACTIVE"),
     createdBy: integer("created_by")
       .notNull()
@@ -100,6 +98,7 @@ export const features = appSchema.table(
     rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+    /** ADR-045：归档时代的只读历史列，功能侧恒为空（见 features_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
   },
   (table) => [
@@ -115,10 +114,9 @@ export const features = appSchema.table(
       columns: [table.moduleId, table.projectId],
       foreignColumns: [modules.id, modules.projectId],
     }).onDelete("restrict"),
-    index("features_module_status_idx").on(
+    index("features_module_id_idx").on(
       table.projectId,
       table.moduleId,
-      table.status,
       table.id,
     ),
     check(
@@ -143,14 +141,9 @@ export const features = appSchema.table(
       "features_tags_check",
       sql.raw("cardinality(tags) <= 50 AND array_position(tags, NULL) IS NULL"),
     ),
-    check("features_status_check", sql.raw("status IN ('ACTIVE', 'ARCHIVED')")),
+    check("features_status_check", sql.raw("status = 'ACTIVE'")),
     check("features_row_version_check", sql.raw("row_version > 0")),
-    check(
-      "features_archive_state_check",
-      sql.raw(
-        "(status = 'ACTIVE' AND archived_at IS NULL) OR (status = 'ARCHIVED' AND archived_at IS NOT NULL)",
-      ),
-    ),
+    check("features_archived_at_null_check", sql.raw("archived_at IS NULL")),
   ],
 );
 

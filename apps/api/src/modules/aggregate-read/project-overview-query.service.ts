@@ -87,14 +87,9 @@ export class ProjectOverviewQueryService {
         tx,
         [projectId],
       );
-      const activeModuleCount = await this.modules.count(tx, {
-        projectId,
-        status: "ACTIVE",
-      });
-      const activeFeatureCount = await this.features.count(tx, {
-        projectId,
-        status: "ACTIVE",
-      });
+      // ADR-044：模块层面已下线归档，模块计数不再需要状态过滤（模块只有 ACTIVE）。
+      const activeModuleCount = await this.modules.count(tx, { projectId });
+      const activeFeatureCount = await this.features.count(tx, { projectId });
       const openTaskCount = await this.tasks.count(tx, {
         projectIds: [projectId],
         workStatuses: ["TODO"],

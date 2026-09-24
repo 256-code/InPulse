@@ -28,7 +28,6 @@ import { ProjectCreateModule } from "./modules/projects/project-create.module.js
 import { ProjectsReadModule } from "./modules/projects/projects-read.module.js";
 import { ProjectMemberManagementModule } from "./modules/projects/project-member-management.module.js";
 import { ProjectManagementModule } from "./modules/projects/project-management.module.js";
-import { ProjectArchiveRequestModule } from "./modules/projects/project-archive-request.module.js";
 import { AggregateReadModule } from "./modules/aggregate-read/aggregate-read.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
 import { AdminUsersModule } from "./admin-users/admin-users.module.js";
@@ -45,7 +44,6 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ProjectsReadModule,
       ProjectMemberManagementModule,
       ProjectManagementModule,
-      ProjectArchiveRequestModule,
       ModulesManagementModule,
       FeaturesManagementModule,
       AdminUsersModule,

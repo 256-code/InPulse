@@ -3,7 +3,7 @@ import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import {
   pickCalmSelectOption,
-  pickCalmSelectOptionByIndex,
+  pickFirstCalmSelectOption,
 } from "../helpers/calm-select.js";
 async function add(page: Page, url: string, label: string) {
   const modal = page.getByRole("dialog", { name: "GitHub 链接", exact: true });
@@ -128,7 +128,7 @@ test("F22 draft links survive publication and revision without changing old vers
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建迭代记录" }).click();
     const draft = page.getByRole("dialog", { name: "新建迭代记录" });
-    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
+    await pickFirstCalmSelectOption(draft, "所属模块");
     await draft.getByLabel("迭代标题").fill("F22记录" + Date.now());
     await draft.getByLabel("改动原因").fill("原始问题");
     await draft.getByLabel("具体改动").fill("原始方案");

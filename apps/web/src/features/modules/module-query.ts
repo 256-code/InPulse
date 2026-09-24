@@ -9,25 +9,23 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
+/** ADR-044：模块层面已下线归档，模块命令只有新建与编辑。 */
 export type ModuleChange = {
-  action: "create" | "update" | "archive" | "restore";
+  action: "create" | "update";
   item?: ModuleItem;
   name: string;
   description: string;
-  reason: string;
 };
 export function moduleErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
-      if (error.code === "MODULE_ARCHIVE_TASKS_OPEN")
-        return `${error.message}。请先在任务弹窗底部完成或归档该模块的全部任务再重试。`;
       return `${error.message}。输入已保留，请检查冲突并加载最新版本后继续编辑。`;
     }
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 404) return "项目或模块不存在，或你已无权访问。";
     if (error.status === 403)
       return "你没有执行此操作的权限，或安全校验未通过。";
-    if (error.status === 422) return "请检查模块名称、描述或原因。";
+    if (error.status === 422) return "请检查模块名称或描述。";
   }
   return "模块服务暂时不可用，请重试。";
 }
@@ -49,16 +47,12 @@ export function useModules(projectId: number, client?: InpulseApiClient) {
         name: change.name.trim(),
         description: change.description,
       };
-      const body =
-        change.action === "archive" || change.action === "restore"
-          ? { reason: change.reason.trim() }
-          : edit;
       const signature = JSON.stringify([
         projectId,
         change.action,
         change.item?.id,
         change.item?.rowVersion,
-        body,
+        edit,
       ]);
       if (retryKey.current?.signature !== signature)
         retryKey.current = { signature, key: createIdempotencyKey("module") };
@@ -73,11 +67,7 @@ export function useModules(projectId: number, client?: InpulseApiClient) {
       if (change.action === "create")
         return api.createModule(projectId, edit, init);
       if (!change.item) throw new Error("Module selection missing");
-      if (change.action === "update")
-        return api.updateModule(projectId, change.item.id, edit, init);
-      return api[
-        change.action === "archive" ? "archiveModule" : "restoreModule"
-      ](projectId, change.item.id, { reason: change.reason.trim() }, init);
+      return api.updateModule(projectId, change.item.id, edit, init);
     },
     onSuccess: async () => {
       retryKey.current = null;

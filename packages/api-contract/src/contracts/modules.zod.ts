@@ -15,10 +15,6 @@ export const moduleEditRequestSchema = z
   })
   .strict()
   .meta({ id: "ModuleEditRequest" });
-export const moduleArchiveRequestSchema = z
-  .object({ reason: z.string().trim().min(1).max(2000) })
-  .strict()
-  .meta({ id: "ModuleArchiveRequest" });
 export const moduleMutationHeadersSchema = z
   .object({ "x-csrf-token": z.string().length(43) })
   .strict()
@@ -26,6 +22,10 @@ export const moduleMutationHeadersSchema = z
 export const moduleVersionHeadersSchema = moduleMutationHeadersSchema
   .extend({ "if-match": z.string().regex(/^"[1-9][0-9]{0,9}"$/) })
   .meta({ id: "ModuleVersionHeaders" });
+/**
+ * ADR-044：模块层面已下线归档，模块没有生命周期状态，因此 ModuleItem 不再有
+ * `status` / `archivedAt`；模块列表的「进行中 / 未开始」由 stats.completedTaskCount 推导。
+ */
 /**
  * 模块卡统计：activeFeatureCount 只计模块下 status = ACTIVE 的功能；
  * openTaskCount 与项目卡同口径（work_status = TODO，排除 INVALID 与历史来源分支），
@@ -52,12 +52,10 @@ export const moduleItemSchema = z
     name: z.string().min(1).max(200),
     description: z.string().max(20000),
     kind: z.enum(["NORMAL", "UNCLASSIFIED"]),
-    status: z.enum(["ACTIVE", "ARCHIVED"]),
     sortOrder: z.number().int().nonnegative(),
     rowVersion: id,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
-    archivedAt: z.iso.datetime().nullable(),
     stats: moduleStatsSchema,
   })
   .strict()
@@ -89,11 +87,6 @@ export const moduleSchemas = {
     summary: "普通或未分类模块名称描述",
     sensitiveFieldPaths: [],
   },
-  ModuleArchiveRequest: {
-    schema: moduleArchiveRequestSchema,
-    summary: "归档或恢复原因",
-    sensitiveFieldPaths: [],
-  },
   ModuleMutationHeaders: {
     schema: moduleMutationHeadersSchema,
     summary: "模块创建安全头",
@@ -111,7 +104,7 @@ export const moduleSchemas = {
   },
   ModuleListResponse: {
     schema: moduleListResponseSchema,
-    summary: "含归档模块的列表",
+    summary: "项目全部模块列表",
     sensitiveFieldPaths: [],
   },
   ModuleReplayContext: {

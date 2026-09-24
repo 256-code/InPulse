@@ -478,10 +478,10 @@ export function GlobalTaskCreateModal({
                     disabled: true,
                   },
                   { value: -1, label: "自定义 · 创建新模块" },
+                  // ADR-044：模块已无归档只读态，模块选项全部可选。
                   ...(modules.query.data?.items ?? []).map((module) => ({
                     value: module.id,
                     label: module.name,
-                    disabled: module.status !== "ACTIVE",
                   })),
                 ]}
               />
@@ -524,10 +524,7 @@ export function GlobalTaskCreateModal({
                     { value: -1, label: "自定义 · 创建新功能" },
                     ...(features.query.data?.items ?? []).map((feature) => ({
                       value: feature.id,
-                      label:
-                        feature.name +
-                        (feature.status === "ARCHIVED" ? "（已归档）" : ""),
-                      disabled: feature.status !== "ACTIVE",
+                      label: feature.name,
                     })),
                   ]}
                 />
@@ -655,7 +652,6 @@ export function GlobalTaskCreateModal({
                       <input
                         type="checkbox"
                         checked={impactFeatureIds.includes(feature.id)}
-                        disabled={feature.status !== "ACTIVE"}
                         onChange={(event) =>
                           setImpactFeatureIds((current) =>
                             event.target.checked
@@ -667,7 +663,6 @@ export function GlobalTaskCreateModal({
                         }
                       />
                       {feature.name}
-                      {feature.status === "ARCHIVED" ? "（已归档）" : ""}
                     </label>
                   ))
                 )}

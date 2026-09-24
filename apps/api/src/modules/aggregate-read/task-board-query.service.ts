@@ -45,7 +45,7 @@ import { AggregateReadError } from "./aggregate-read.errors.js";
  * 数据来源全部是公开 QueryPort：任务行与统计走 B 域 TaskQueryPort 的看板读扩展，
  * 模块 / 功能 / 负责人 / 记录数 / 历史来源分支分别走 A、B、C 域既有端口。
  * 泳道的模块功能数按模块逐个计数（V1 项目模块数有限，命中
- * features_module_status_idx），不新增批量端口。
+ * features_module_id_idx），不新增批量端口。
  */
 export interface TaskBoardQueryCommand {
   readonly actorUserId: number;
@@ -162,7 +162,6 @@ export class TaskBoardQueryService {
       );
       const projectFeatureCount = await this.features.count(tx, {
         projectId,
-        status: "ACTIVE",
       });
       const moduleFeatureCounts: { moduleId: number; count: number }[] = [];
       for (const moduleId of moduleIds) {
@@ -171,7 +170,6 @@ export class TaskBoardQueryService {
           count: await this.features.count(tx, {
             projectId,
             moduleId,
-            status: "ACTIVE",
           }),
         });
       }
