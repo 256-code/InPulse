@@ -50,6 +50,12 @@ const TaskBoardTableRow: React.FC<{
 }> = ({ card, leftoverSource, onOpen }) => {
   const due = dueListLabelOf(card);
   const priority = priorityMarkOf(card.priority);
+  // ADR-040：负责人是平权集合，列表行要列出全部人，用「、」连接，
+  // 超出列宽时由 .tb-owner-name 省略并以 title 兑底全名单。
+  const lead = card.assignees[0];
+  const assigneeNames = card.assignees
+    .map((assignee) => assignee.name)
+    .join("、");
   return (
     <button
       type="button"
@@ -71,10 +77,14 @@ const TaskBoardTableRow: React.FC<{
       </span>
       <span className="tb-row-sub">{card.featureName ?? "模块级任务"}</span>
       <span className="tb-row-owner">
-        <span className={"tb-ava " + avatarToneOf(card.assignee.userId)}>
-          {avatarTextOf(card.assignee.name)}
+        {lead === undefined ? null : (
+          <span className={"tb-ava " + avatarToneOf(lead.userId)}>
+            {avatarTextOf(lead.name)}
+          </span>
+        )}
+        <span className="tb-owner-name" title={"负责人：" + assigneeNames}>
+          {assigneeNames}
         </span>
-        {card.assignee.name}
       </span>
       <span className={"tb-prio tb-prio--" + priority.tone}>
         {priority.label}

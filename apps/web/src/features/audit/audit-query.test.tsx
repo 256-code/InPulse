@@ -87,8 +87,72 @@ describe("useAuditLogsInfiniteQuery", () => {
       await result.current.fetchNextPage();
     });
     expect(getAuditLogs).toHaveBeenLastCalledWith(
-      { cursor: "cursor-1", limit: AUDIT_PAGE_LIMIT },
+      { cursor: "cursor-1", limit: AUDIT_PAGE_LIMIT, readTrail: "false" },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("opens the read trail once per view token and marks the rest as continuation", async () => {
+    const getAuditLogs = vi.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    } satisfies AuditLogPage);
+    const client = { getAuditLogs } as unknown as InpulseApiClient;
+    const { wrapper } = createQueryWrapper();
+
+    const view = renderHook(
+      ({
+        filters,
+        newViewToken,
+      }: {
+        filters: typeof EMPTY_AUDIT_FILTERS;
+        newViewToken: number;
+      }) =>
+        useAuditLogsInfiniteQuery({
+          client,
+          chain: { kind: "system" },
+          filters,
+          newViewToken,
+        }),
+      {
+        wrapper,
+        initialProps: { filters: EMPTY_AUDIT_FILTERS, newViewToken: 0 },
+      },
+    );
+    await waitFor(() => expect(view.result.current.isSuccess).toBe(true));
+    // 进入审计页：开启一次新查看，请求不带 readTrail，服务端写留痕。
+    expect(getAuditLogs).toHaveBeenLastCalledWith(
+      { limit: AUDIT_PAGE_LIMIT },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    // 同一次查看内的筛选（令牌未变）：readTrail=false，服务端不写新留痕。
+    await act(async () => {
+      view.rerender({
+        filters: { ...EMPTY_AUDIT_FILTERS, action: "task.merge" },
+        newViewToken: 0,
+      });
+    });
+    await waitFor(() =>
+      expect(getAuditLogs).toHaveBeenLastCalledWith(
+        { action: "task.merge", limit: AUDIT_PAGE_LIMIT, readTrail: "false" },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+
+    // 切换审计对象：令牌递增开启新查看，请求重新不带 readTrail（ADR-042）。
+    await act(async () => {
+      view.rerender({
+        filters: EMPTY_AUDIT_FILTERS,
+        newViewToken: 1,
+      });
+    });
+    await waitFor(() =>
+      expect(getAuditLogs).toHaveBeenLastCalledWith(
+        { limit: AUDIT_PAGE_LIMIT },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
     );
   });
 
@@ -107,7 +171,7 @@ describe("useAuditLogsInfiniteQuery", () => {
           chain: { kind: "project", projectId: 7 },
           filters: {
             action: " project.update ",
-            actorId: "3",
+            actorIds: [7, 3],
             from: "2026-09-01T08:00",
             to: "2026-09-02T08:00",
           },
@@ -120,7 +184,7 @@ describe("useAuditLogsInfiniteQuery", () => {
       {
         projectId: 7,
         action: "project.update",
-        actorId: 3,
+        actorIds: [3, 7],
         from: new Date("2026-09-01T08:00").toISOString(),
         to: new Date("2026-09-02T08:00").toISOString(),
         limit: AUDIT_PAGE_LIMIT,
@@ -138,12 +202,6 @@ describe("audit query helpers", () => {
 
   it("validates filters before submit", () => {
     expect(
-      validateAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: "abc" }),
-    ).toBe("操作人 ID 必须是正整数。");
-    expect(validateAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: "0" })).toBe(
-      "操作人 ID 必须是正整数。",
-    );
-    expect(
       validateAuditFilters({
         ...EMPTY_AUDIT_FILTERS,
         from: "2026-09-02T08:00",
@@ -153,7 +211,7 @@ describe("audit query helpers", () => {
     expect(
       validateAuditFilters({
         action: " project.update ",
-        actorId: "3",
+        actorIds: [3],
         from: "2026-09-01T08:00",
         to: "2026-09-02T08:00",
       }),
@@ -162,13 +220,15 @@ describe("audit query helpers", () => {
 
   it("normalizes empty filters to the contract optional shape", () => {
     expect(
-      normalizeAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorId: " 3 " }),
+      normalizeAuditFilters({ ...EMPTY_AUDIT_FILTERS, actorIds: [9, 3, 9] }),
     ).toEqual({
       action: undefined,
-      actorId: 3,
+      actorIds: [3, 9],
       from: undefined,
       to: undefined,
     });
+    // 多选清空后回到「全体操作人」：不传该参数，而不是传空列表。
+    expect(normalizeAuditFilters(EMPTY_AUDIT_FILTERS).actorIds).toBeUndefined();
   });
 
   it("maps gate errors to safe copy", () => {

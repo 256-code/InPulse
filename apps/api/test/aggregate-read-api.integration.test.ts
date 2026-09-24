@@ -1562,7 +1562,7 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     const response = await getJson("/api/v1/me/tasks?" + scope, memberCookie);
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
-    // ADR-037：已逾期(0) → 今/明日截止(3) → 已完成 → 已取消。
+    // ADR-037：已逾期(1) → 今/明日截止(3) → 已完成 → 已取消。
     expect(page.items.map((item) => item.taskId)).toEqual([
       overdueTask,
       todayTask,

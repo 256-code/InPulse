@@ -34,6 +34,28 @@ function projectOwnerOf(key: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** 收起动画时长（毫秒）：与 design-system.css 里折叠区块 grid-template-rows 的
+ * 过渡时长一致——收起时等高度与淡出动画走完再卸载内容，展开时立即挂载。 */
+const COLLAPSE_MS = 240;
+
+/**
+ * 折叠区块的挂载保持：展开立即可见，收起延迟卸载。
+ * 既保住模块 / 功能列表的懒加载（未展开不请求），又让收起有完整动画，
+ * 不会出现「容器还在收缩、内容已经消失」的断层。
+ */
+function useRetainedMount(open: boolean): boolean {
+  const [retained, setRetained] = React.useState(open);
+  React.useEffect(() => {
+    if (open) {
+      setRetained(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setRetained(false), COLLAPSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+  return retained;
+}
+
 const PROJECT_PAGE_ROWS: readonly {
   readonly segment: string;
   readonly label: string;
@@ -181,6 +203,7 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
   client,
 }) => {
   const key = `project:${projectId}:module:${item.id}`;
+  const featuresRendered = useRetainedMount(expanded);
   const isSelected =
     selection?.kind === "module" && selection.moduleId === item.id;
   const inPath =
@@ -204,17 +227,23 @@ const ModuleBranch: React.FC<ModuleBranchProps> = ({
           <strong>{item.name}</strong>
         </span>
       </button>
-      {expanded ? (
-        <div className="tree-children">
-          <FeatureList
-            projectId={projectId}
-            moduleId={item.id}
-            selection={selection}
-            onFeatureClick={(next) => onFeatureClick(projectId, next)}
-            client={client}
-          />
+      <div
+        className="tree-children"
+        data-open={expanded ? "true" : "false"}
+        aria-hidden={expanded ? undefined : true}
+      >
+        <div className="tree-children-clip">
+          {featuresRendered ? (
+            <FeatureList
+              projectId={projectId}
+              moduleId={item.id}
+              selection={selection}
+              onFeatureClick={(next) => onFeatureClick(projectId, next)}
+              client={client}
+            />
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 };
@@ -312,6 +341,8 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
   onFeatureClick,
   client,
 }) => {
+  const branchRendered = useRetainedMount(expanded);
+  const modulesRendered = useRetainedMount(modulesExpanded);
   const isActiveProject = activeScope?.projectId === item.id;
   const isSelected =
     isActiveProject && activeScope?.selection.kind === "project";
@@ -335,36 +366,51 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
         {/* 项目编码是唯一短标识：同名/相近的项目行靠它区分。 */}
         <span className="tree-code">{item.code}</span>
       </button>
-      {expanded ? (
-        <div className="tree-children">
-          {PROJECT_PAGE_ROWS.map((row) => (
-            <ProjectPageRow
-              key={row.segment}
-              projectId={item.id}
-              segment={row.segment}
-              label={row.label}
-              icon={row.icon}
-              active={pageSegment === row.segment}
-              expanded={row.segment === "modules" && modulesExpanded}
-              onClick={onPageClick}
-            />
-          ))}
-          {/* 模块列表单独放进滚动区：展开某个项目时其它项目仍然完整露出，
-              滚动条只属于这个项目（高度上限见 design-system.css 的 .tree-modules）。 */}
-          {modulesExpanded ? (
-            <div className="tree-modules">
-              <ModuleList
-                projectId={item.id}
-                selection={isActiveProject ? activeScope.selection : null}
-                expandedKeys={expandedKeys}
-                onModuleClick={onModuleClick}
-                onFeatureClick={onFeatureClick}
-                client={client}
-              />
-            </div>
+      <div
+        className="tree-children"
+        data-open={expanded ? "true" : "false"}
+        aria-hidden={expanded ? undefined : true}
+      >
+        <div className="tree-children-clip">
+          {branchRendered ? (
+            <>
+              {PROJECT_PAGE_ROWS.map((row) => (
+                <ProjectPageRow
+                  key={row.segment}
+                  projectId={item.id}
+                  segment={row.segment}
+                  label={row.label}
+                  icon={row.icon}
+                  active={pageSegment === row.segment}
+                  expanded={row.segment === "modules" && modulesExpanded}
+                  onClick={onPageClick}
+                />
+              ))}
+              {/* 模块列表单独放进滚动区：展开某个项目时其它项目仍然完整露出，滚动条只
+              属于这个项目，且滚动条槽常驻，长短变化不再挤动行宽（限高与槽位见
+              design-system.css 的 .tree-modules-scroll）。 */}
+              <div
+                className="tree-modules"
+                data-open={modulesExpanded ? "true" : "false"}
+                aria-hidden={modulesExpanded ? undefined : true}
+              >
+                <div className="tree-modules-scroll">
+                  {modulesRendered ? (
+                    <ModuleList
+                      projectId={item.id}
+                      selection={isActiveProject ? activeScope.selection : null}
+                      expandedKeys={expandedKeys}
+                      onModuleClick={onModuleClick}
+                      onFeatureClick={onFeatureClick}
+                      client={client}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </>
           ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 };

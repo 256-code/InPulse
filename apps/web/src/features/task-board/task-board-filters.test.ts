@@ -26,7 +26,7 @@ function cardOf(overrides: Partial<TaskBoardCard> = {}): TaskBoardCard {
     dueAt: "2026-09-20T02:00:00.000Z",
     completedAt: null,
     dueState: "SCHEDULED",
-    assignee: { userId: 9, name: "张启明", avatarUrl: null },
+    assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
     publishedRecordCount: 0,
     ...overrides,
   };
@@ -195,24 +195,31 @@ describe("matchesTaskBoardCard", () => {
     ).toBe(false);
   });
 
-  it("优先级与负责人不匹配即排除", () => {
-    const card = cardOf();
+  it("优先级与负责人不匹配即排除，多负责人任一命中即保留", () => {
+    const card = cardOf({
+      assignees: [
+        { userId: 9, name: "张启明", avatarUrl: null },
+        { userId: 10, name: "林沐", avatarUrl: null },
+      ],
+    });
     expect(
       matchesTaskBoardCard(card, {
         ...DEFAULT_TASK_BOARD_FILTERS,
         priority: "HIGH",
       }),
     ).toBe(false);
+    for (const assigneeId of [9, 10]) {
+      expect(
+        matchesTaskBoardCard(card, {
+          ...DEFAULT_TASK_BOARD_FILTERS,
+          assigneeId,
+        }),
+      ).toBe(true);
+    }
     expect(
       matchesTaskBoardCard(card, {
         ...DEFAULT_TASK_BOARD_FILTERS,
-        assigneeId: 9,
-      }),
-    ).toBe(true);
-    expect(
-      matchesTaskBoardCard(card, {
-        ...DEFAULT_TASK_BOARD_FILTERS,
-        assigneeId: 10,
+        assigneeId: 11,
       }),
     ).toBe(false);
   });
@@ -222,9 +229,12 @@ describe("matchesTaskBoardCard", () => {
       code: "AGV-12",
       title: "Fix Board",
       featureName: "调度",
-      assignee: { userId: 9, name: "Ada", avatarUrl: null },
+      assignees: [
+        { userId: 9, name: "Ada", avatarUrl: null },
+        { userId: 10, name: "林沐", avatarUrl: null },
+      ],
     });
-    for (const term of ["agv-12", "fix board", "调度", "ada"]) {
+    for (const term of ["agv-12", "fix board", "调度", "ada", "林沐"]) {
       expect(
         matchesTaskBoardCard(card, {
           ...DEFAULT_TASK_BOARD_FILTERS,
@@ -275,16 +285,21 @@ describe("collectTaskBoardAssignees", () => {
   it("按姓名排序去重，且不受筛选影响", () => {
     const board: readonly TaskBoardModule[] = [
       laneOf(3, [
-        cardOf({ assignee: { userId: 9, name: "张启明", avatarUrl: null } }),
+        cardOf({
+          assignees: [{ userId: 9, name: "张启明", avatarUrl: null }],
+        }),
         cardOf({
           taskId: 2,
-          assignee: { userId: 9, name: "张启明", avatarUrl: null },
+          assignees: [
+            { userId: 9, name: "张启明", avatarUrl: null },
+            { userId: 4, name: "Ada", avatarUrl: null },
+          ],
         }),
       ]),
       laneOf(4, [
         cardOf({
           taskId: 3,
-          assignee: { userId: 4, name: "Ada", avatarUrl: null },
+          assignees: [{ userId: 4, name: "Ada", avatarUrl: null }],
         }),
       ]),
     ];

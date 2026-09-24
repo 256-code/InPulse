@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   ApiError,
@@ -19,21 +19,22 @@ export type AuditChain =
 
 export interface AuditFilters {
   readonly action: string;
-  readonly actorId: string;
+  /** 操作人筛选：空数组表示不过滤（全体操作人）。 */
+  readonly actorIds: readonly number[];
   readonly from: string;
   readonly to: string;
 }
 
 export const EMPTY_AUDIT_FILTERS: AuditFilters = {
   action: "",
-  actorId: "",
+  actorIds: [],
   from: "",
   to: "",
 };
 
 export interface NormalizedAuditFilters {
   readonly action: string | undefined;
-  readonly actorId: number | undefined;
+  readonly actorIds: readonly number[] | undefined;
   readonly from: string | undefined;
   readonly to: string | undefined;
 }
@@ -76,13 +77,6 @@ export function toQueryIsoString(value: string): string | undefined {
 
 /** 提交前校验；返回错误文案或 null。服务端仍会独立校验同一套规则。 */
 export function validateAuditFilters(filters: AuditFilters): string | null {
-  const actorId = filters.actorId.trim();
-  if (
-    actorId.length > 0 &&
-    (!/^[0-9]+$/.test(actorId) || Number(actorId) < 1)
-  ) {
-    return "操作人 ID 必须是正整数。";
-  }
   const from = filters.from.trim();
   const to = filters.to.trim();
   if (from.length > 0 && toQueryIsoString(from) === undefined) {
@@ -107,10 +101,13 @@ export function normalizeAuditFilters(
   filters: AuditFilters,
 ): NormalizedAuditFilters {
   const action = filters.action.trim();
-  const actorId = filters.actorId.trim();
+  // 排序去重后参与 queryKey 与请求参数，保证选择顺序不同不会重复取数。
+  const actorIds = [...new Set(filters.actorIds)].sort(
+    (left, right) => left - right,
+  );
   return {
     action: action.length > 0 ? action : undefined,
-    actorId: actorId.length > 0 ? Number(actorId) : undefined,
+    actorIds: actorIds.length > 0 ? actorIds : undefined,
     from: toQueryIsoString(filters.from),
     to: toQueryIsoString(filters.to),
   };
@@ -121,6 +118,12 @@ export interface AuditLogsQueryOptions {
   readonly chain: AuditChain;
   readonly filters: AuditFilters;
   readonly enabled?: boolean;
+  /**
+   * 新查看令牌（ADR-042）：令牌递增表示开启一次新查看，只有该次查看的首
+   * 个请求写读取留痕；同一次查看内的重复请求、重试、筛选与重置都声明为延
+   * 续（readTrail=false）。带签名游标的分页由服务端按同一次查看处理。
+   */
+  readonly newViewToken?: number;
 }
 
 export function useAuditLogsInfiniteQuery({
@@ -128,36 +131,50 @@ export function useAuditLogsInfiniteQuery({
   chain,
   filters,
   enabled = true,
+  newViewToken = 0,
 }: AuditLogsQueryOptions) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const normalized = useMemo(() => normalizeAuditFilters(filters), [filters]);
   const chainKey = auditChainKey(chain);
+  // 消费式令牌：同一次查看只允许首个请求开启留痕，重复挂载（开发期
+  // StrictMode 双挂载）与失败重试都不会再写第二条（ADR-042）。
+  const trailedToken = useRef<number | null>(null);
   return useInfiniteQuery({
     queryKey: [
       "audit-logs",
       chainKey,
       normalized.action ?? "",
-      normalized.actorId ?? null,
+      normalized.actorIds?.join(",") ?? "",
       normalized.from ?? "",
       normalized.to ?? "",
     ],
-    queryFn: ({ pageParam, signal }) =>
-      api.getAuditLogs(
+    queryFn: ({ pageParam, signal }) => {
+      const paging = typeof pageParam === "string";
+      const opensNewView = !paging && trailedToken.current !== newViewToken;
+      if (opensNewView) {
+        trailedToken.current = newViewToken;
+      }
+      return api.getAuditLogs(
         {
           ...(chain.kind === "project" ? { projectId: chain.projectId } : {}),
           ...(normalized.action !== undefined
             ? { action: normalized.action }
             : {}),
-          ...(normalized.actorId !== undefined
-            ? { actorId: normalized.actorId }
+          ...(normalized.actorIds !== undefined
+            ? { actorIds: normalized.actorIds }
             : {}),
           ...(normalized.from !== undefined ? { from: normalized.from } : {}),
           ...(normalized.to !== undefined ? { to: normalized.to } : {}),
-          ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
+          ...(paging ? { cursor: pageParam } : {}),
+          // 只有开启一次新查看（进入审计页、切换审计链）的首个请求写读取
+          // 留痕（ADR-042）：分页是同一次查看的延续，服务端也会按游标排除；
+          // 其余请求全部显式声明为延续。
+          ...(paging || !opensNewView ? { readTrail: "false" as const } : {}),
           limit: AUDIT_PAGE_LIMIT,
         },
         signal ? { signal } : undefined,
-      ),
+      );
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,

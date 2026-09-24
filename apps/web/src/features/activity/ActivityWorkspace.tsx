@@ -13,6 +13,7 @@ import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useProjects } from "@features/projects/project-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import { ActivitySnapshotModal } from "./ActivitySnapshotModal";
+import { activityTimeLabel, groupActivitiesByDay } from "./activity-day-groups";
 import {
   ACTIVITY_CHIPS,
   activityActionLabel,
@@ -48,22 +49,6 @@ export interface ActivityWorkspaceProps {
   readonly lockedProjectId?: number | undefined;
 }
 
-function formatActivityTime(value: string): { date: string; time: string } {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return { date: value, time: "" };
-  }
-  const date = [
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
-  const time = [
-    String(parsed.getHours()).padStart(2, "0"),
-    String(parsed.getMinutes()).padStart(2, "0"),
-  ].join(":");
-  return { date, time };
-}
-
 export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   client,
   lockedProjectId,
@@ -78,6 +63,17 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   );
   const [includeAdminOnly, setIncludeAdminOnly] = useState(false);
   const [snapshotItem, setSnapshotItem] = useState<ActivityItem | null>(null);
+  /** 动态按天折叠：日期键集合，默认全部展开。 */
+  const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleDay = (key: string) =>
+    setCollapsedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const projectsQuery = useProjects(client ? { client } : {});
   const directoryQuery = useUserDirectoryQuery(client ? { client } : {});
@@ -156,6 +152,11 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     });
   }, [items, query, chip, actorNameOf]);
 
+  const dayGroups = useMemo(
+    () => groupActivitiesByDay(filteredItems),
+    [filteredItems],
+  );
+
   const snapshotActorName = snapshotItem
     ? actorNameOf(snapshotItem.actorId)
     : "系统";
@@ -203,63 +204,97 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     content = (
       <>
         <div className="audit-list">
-          {filteredItems.map((item) => {
-            const time = formatActivityTime(item.occurredAt);
-            const actorName = actorNameOf(item.actorId);
+          {dayGroups.map((group) => {
+            const collapsed = collapsedDays.has(group.key);
             return (
-              <div
-                className="audit-row"
-                key={item.id}
-                data-testid={`activity-item-${item.id}`}
-              >
-                <div className="audit-time">
-                  {time.date}
-                  <small>{time.time}</small>
-                </div>
-                <div className="audit-line">
-                  <span />
-                </div>
-                <div className="audit-content">
-                  <div className="activity-avatar">{actorName.slice(0, 1)}</div>
-                  <div>
-                    <strong>
-                      {actorName}
-                      <span>{activityActionLabel(item.activityType)}</span>
-                    </strong>
-                    <p>{activitySubject(item.summary)}</p>
-                    <small>
-                      {(projectNames.get(item.projectId) ??
-                        `项目 #${item.projectId}`) +
-                        " · " +
-                        activityTargetLabel(item)}
-                    </small>
+              <section className="activity-day" key={group.key}>
+                <div className="activity-day-head">
+                  <span aria-hidden="true" className="activity-day-date">
+                    {group.shortLabel}
+                  </span>
+                  <div className="audit-line">
+                    <span />
                   </div>
-                </div>
-                <div className="audit-actions">
-                  {isAdmin ? (
-                    <button
-                      type="button"
-                      className="small-button"
-                      aria-label={`原始快照 ${item.id}`}
-                      onClick={() => setSnapshotItem(item)}
-                    >
-                      <InpulseIcon name="shield" size={13} />
-                      原始快照
-                    </button>
-                  ) : null}
                   <button
                     type="button"
-                    className="icon-button"
-                    aria-label="查看对象"
-                    title={activityTargetLabel(item)}
-                    onClick={() =>
-                      navigate(activityTargetPath(item, { isAdmin }))
-                    }
+                    className="activity-day-toggle"
+                    aria-expanded={!collapsed}
+                    title={collapsed ? "展开当天动态" : "收起当天动态"}
+                    onClick={() => toggleDay(group.key)}
                   >
-                    <InpulseIcon name="chevronRight" size={16} />
+                    <InpulseIcon
+                      name="chevron"
+                      size={14}
+                      {...(collapsed ? {} : { className: "expanded" })}
+                    />
+                    <strong>{group.label}</strong>
+                    <small>{group.items.length} 条动态</small>
                   </button>
                 </div>
-              </div>
+                {collapsed
+                  ? null
+                  : group.items.map((item) => {
+                      const actorName = actorNameOf(item.actorId);
+                      return (
+                        <div
+                          className="audit-row"
+                          key={item.id}
+                          data-testid={`activity-item-${item.id}`}
+                        >
+                          <div className="audit-time">
+                            {activityTimeLabel(item.occurredAt)}
+                          </div>
+                          <div className="audit-line">
+                            <span />
+                          </div>
+                          <div className="audit-content">
+                            <div className="activity-avatar">
+                              {actorName.slice(0, 1)}
+                            </div>
+                            <div>
+                              <strong>
+                                {actorName}
+                                <span>
+                                  {activityActionLabel(item.activityType)}
+                                </span>
+                              </strong>
+                              <p>{activitySubject(item.summary)}</p>
+                              <small>
+                                {(projectNames.get(item.projectId) ??
+                                  `项目 #${item.projectId}`) +
+                                  " · " +
+                                  activityTargetLabel(item)}
+                              </small>
+                            </div>
+                          </div>
+                          <div className="audit-actions">
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                className="small-button"
+                                aria-label={`原始快照 ${item.id}`}
+                                onClick={() => setSnapshotItem(item)}
+                              >
+                                <InpulseIcon name="shield" size={13} />
+                                原始快照
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label="查看对象"
+                              title={activityTargetLabel(item)}
+                              onClick={() =>
+                                navigate(activityTargetPath(item, { isAdmin }))
+                              }
+                            >
+                              <InpulseIcon name="chevronRight" size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+              </section>
             );
           })}
         </div>

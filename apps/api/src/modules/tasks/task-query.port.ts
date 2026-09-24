@@ -141,10 +141,11 @@ function mapTaskReadRow(row: TaskReadRowRaw): TaskReadModel {
 
 interface TaskBoardTaskRowRaw extends Omit<
   TaskBoardTaskRow,
-  "dueAt" | "completedAt"
+  "dueAt" | "completedAt" | "assigneeIds"
 > {
   readonly dueAt: string | null;
   readonly completedAt: string | null;
+  readonly assigneeIds: number[] | null;
 }
 
 interface TaskBoardStatsRowRaw extends TaskBoardStatsTotals {
@@ -156,6 +157,8 @@ function mapTaskBoardTaskRow(row: TaskBoardTaskRowRaw): TaskBoardTaskRow {
     ...row,
     dueAt: row.dueAt === null ? null : new Date(row.dueAt),
     completedAt: row.completedAt === null ? null : new Date(row.completedAt),
+    // array_agg 对无负责人的任务返回 NULL；集合为空由聚合读按数据不一致拒绝。
+    assigneeIds: row.assigneeIds ?? [],
   };
 }
 
@@ -185,7 +188,8 @@ export interface TaskBoardTaskRow {
   readonly scopeType: TaskScopeType;
   readonly code: string;
   readonly title: string;
-  readonly assigneeId: number;
+  /** 全部负责人，按 user_id 升序（ADR-040）；无负责人的任务在适配器边界归一为空数组。 */
+  readonly assigneeIds: readonly number[];
   readonly priority: TaskPriority;
   readonly workStatus: TaskWorkStatus;
   readonly dueAt: Date | null;
@@ -274,7 +278,7 @@ export abstract class TaskQueryPort {
    * 1. projectIds 必须来自服务端生成的 AuthorizedProjectScope；端口不校验成员关系。
    * 2. projectIds 为空时短路返回空页，不发出任何 SQL。
    * 3. 排序固定，且与任务中心、任务面板共用 task-list-order.ts 的同一排序键
-   *    （状态分组 → 紧急桶 → 优先级 → 截止时间 → 任务 ID，ADR-037）；
+   *    （状态分组 → 紧急桶 → 优先级 → 遗留问题 → 截止时间 → 任务 ID，ADR-037）；
    *    该排序不命中 tasks_project_status_idx / tasks_assignee_status_idx 的排序尾，
    *    当前不新增索引（见 ADR-037 §4）。
    * 4. excludedTaskIds 在分页前过滤，保证先过滤后分页。
@@ -514,7 +518,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
              t.scope_type AS "scopeType",
              t.code,
              t.title,
-             (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId",
+             (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeIds",
              t.priority,
              t.work_status AS "workStatus",
              t.due_at AS "dueAt",

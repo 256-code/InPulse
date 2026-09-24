@@ -55,6 +55,14 @@ html,
   font-variation-settings: normal;
   -webkit-tap-highlight-color: transparent;
 }
+/* 根滚动条常显（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
+   不再被系统滚动条挤窄 15px，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
+   Chromium 下 `100vw` 只到初始包含块（实测槽宽 15px 时 100vw=1143、遮罩同为 1143），
+   弹窗遮罩、命令面板与右侧任务抽屉都到不了窗口边缘，会在右缘留一条未变暗的亮带；
+   常显的滚动条就是视口滚动条，固定覆盖层几何与「页面上本来有滚动条」时一致。 */
+html {
+  overflow-y: scroll;
+}
 abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
   text-decoration: underline dotted;
@@ -353,6 +361,10 @@ button {
   padding: 0 11px;
   text-align: left;
   margin-bottom: 3px;
+  /* 底色与文字色走短过渡：hover / 选中不再像开关一样跳变。 */
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 .nav-item:hover {
   background: #1a3957;
@@ -393,7 +405,7 @@ button {
 }
 /* 罗列区间不再整块限高：所有项目行始终完整展示，展开某个项目也不会把其它项目
    挤出可视区（产品要求 2026-09-21，取代原先 264px 的整块限高）。滚动收进被展开
-   项目的模块列表，见下面的 `.tree-modules`。 */
+   项目的模块列表，见下面的 `.tree-modules-scroll`。 */
 .project-tree-scroll {
   overflow: visible;
 }
@@ -408,28 +420,78 @@ button {
   padding-top: 6px;
   border-top: 1px solid #1c3b5c;
 }
-.project-tree-scroll > .tree-project > .tree-children {
+/* 缩进、左边框与底色挂在裁剪层上：折叠区块自身不留 padding，收起态高度才是
+   真正的 0，罗列区不会因为「所有项目都收起」而多出可滚动的一点点高度。 */
+.project-tree-scroll > .tree-project > .tree-children > .tree-children-clip {
   margin: 2px 0 4px;
   padding: 2px 0 2px 6px;
   border-left: 2px solid #2a5a86;
   border-radius: 0 8px 8px 0;
   background: #102a44;
 }
+/* 收起态把内边距与外边距一起归零：高度完全交给 grid 行，折叠区块不占任何空间，
+   罗列区不会因为「所有项目都收起」多出 1px 级溢出（展开时这些留白与动画同帧生效）。 */
+.project-tree-scroll
+  > .tree-project
+  > .tree-children[data-open="false"]
+  > .tree-children-clip {
+  margin: 0;
+  padding: 0;
+}
 /* 滚动条只属于被展开的这个项目，且只包住它的模块列表：子页行（任务看板 / 模块与
    功能）留在滚动区之外，翻模块时不会被一起滚走；限高按产品复核由 260px 收到 200px
-   （2026-09-21）。 */
-.tree-modules {
-  display: flex;
-  flex-direction: column;
+   （2026-09-21）。滚动条槽常驻（scrollbar-gutter）并换成 6px 细条：模块多少都不再
+   挤动行宽，也不会出现带箭头的系统滚动条（2026-09-23）。 */
+.tree-modules-scroll {
   max-height: 200px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #2c4a66 transparent;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+/* 细滚动条：Chromium 走 ::-webkit-scrollbar（6px、圆角、无系统箭头），Firefox 走
+   标准属性；两者不要同时声明，否则 Chromium 会忽略自定义条。 */
+.tree-modules-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.tree-modules-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tree-modules-scroll::-webkit-scrollbar-thumb {
+  background: #3f6d94;
+  border-radius: 999px;
+}
+.tree-modules-scroll::-webkit-scrollbar-thumb:hover {
+  background: #5b90bb;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .tree-modules-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #3f6d94 transparent;
+  }
 }
 /* 模块分支不参与收缩：滚动区再矮也按内容高度排版，超出部分交给滚动条。 */
-.tree-modules > .tree-project {
+.tree-modules-scroll > .tree-project {
   flex: none;
+}
+/* Firefox 不支持 ::-webkit-scrollbar，只能走标准属性（同时声明会让 Chromium 忽略
+   自定义条）；把侧栏导航区也收成细条，常驻滚动条槽才不会按系统默认宽度长期占位。 */
+@supports not selector(::-webkit-scrollbar) {
+  .nav-group {
+    scrollbar-width: thin;
+    scrollbar-color: #2b4a68 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-children,
+  .tree-modules,
+  .tree-children > .tree-children-clip,
+  .tree-modules > .tree-modules-scroll,
+  .tree-row,
+  .nav-item {
+    transition: none;
+  }
 }
 .tree-row {
   width: 100%;
@@ -446,6 +508,10 @@ button {
   text-align: left;
   font-size: 12px;
   cursor: pointer;
+  /* 同 .nav-item：目录行的 hover / 选中用短过渡，展开与滚动因此更连贯。 */
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 .tree-row:hover {
   background: #1a3957;
@@ -467,9 +533,51 @@ button {
 .tree-icon {
   flex: 0 0 auto;
 }
-.tree-children {
+/* 折叠区块（项目子级 / 模块列表 / 模块下的功能列表）：grid-template-rows 的
+   0fr ↔ 1fr 过渡给出「按内容高度」的展开收起，不需要 JS 量高；clip 层负责裁剪与
+   延迟隐藏，收起动画走完（240ms，与组件里的 COLLAPSE_MS 一致）内容才不可见。 */
+.tree-children,
+.tree-modules {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.tree-children[data-open="true"],
+.tree-modules[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.tree-children > .tree-children-clip,
+.tree-modules > .tree-modules-scroll {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.24s;
+}
+.tree-children[data-open="true"] > .tree-children-clip,
+.tree-modules[data-open="true"] > .tree-modules-scroll {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+/* 裁剪层真的裁剪：行始终按最终位置排版，展开 / 收起只改外框高度，可见部分由外框
+   裁出。否则动画中的行会全尺寸画到下一个项目行上（视觉重影），还会把罗列区撑出
+   瞬时溢出。 */
+.tree-children > .tree-children-clip {
+  overflow: clip;
+}
+/* 裁剪余量只在展开态给：展开时行可以被键盘聚焦，6px 余量容得下 2px 聚焦环 + 3px
+   偏移，不被切边；收起 / 动画中不留余量，被裁出的内容也不会在罗列区之外留下
+   “可见余量”把 scrollHeight 撑大（收起动画实测会多 6px）。 */
+.tree-children[data-open="true"] > .tree-children-clip {
+  overflow-clip-margin: 6px;
+}
+/* 裁剪层里的行不参与收缩：高度压缩必须表现为裁剪，否则动画中行会被压扁。 */
+.tree-children > .tree-children-clip > * {
+  flex: none;
 }
 .project-node {
   padding-left: 8px;
@@ -1146,9 +1254,40 @@ button {
   background: white;
   box-shadow: 0 1px 3px #203c5515;
 }
+
+/* 分段控件切换滑块（2026-09-22）：选中底色与投影从 .selected 按钮迁到滑块上，由
+   CalmSegmented 实测选中按钮的矩形后写 transform / width，档位切换只做 0.15s ease
+   位移（参考 Uiverse radio-input 的滑块动画）。取值与原 .selected 完全一致，观感不变；
+   手写 .segmented（任务面板工具栏）不带 .segmented-slide，不受影响。 */
+.segmented-slide {
+  position: relative;
+}
+.segmented-slide button {
+  position: relative;
+  z-index: 1;
+}
+.segmented-slide button.selected {
+  background: transparent;
+  box-shadow: none;
+}
+.segmented-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 1px 3px #203c5515;
+  pointer-events: none;
+  transition:
+    transform 0.15s ease,
+    width 0.15s ease;
+}
+
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 轨道下限必须写 0：`1fr` 等价 `minmax(auto, 1fr)`，卡片里不可断行的长项目编号
+     会把轨道撑到 min-content，列宽不等并溢出网格。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -1157,6 +1296,10 @@ button {
   border: 1px solid var(--border);
   border-radius: 7px;
   box-shadow: 0 2px 5px #17355205;
+  /* 网格把同行卡片拉成等高，纵向 flex 让多出的空间由描述区吸收，
+     统计行与操作行才能在整排卡片间对齐。 */
+  display: flex;
+  flex-direction: column;
 }
 .card-top,
 .card-progress > div:first-child,
@@ -1168,6 +1311,8 @@ button {
 .project-card h2 {
   font-size: 15px;
   margin: 17px 0 8px;
+  /* 项目编号可能很长且不含空格，允许在任意位置断行，避免撑破卡片。 */
+  overflow-wrap: anywhere;
 }
 .project-card p {
   color: #7b8998;
@@ -1206,14 +1351,12 @@ button {
   gap: 10px;
   padding: 0 18px;
 }
-.module-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid #e7edf3;
-  border-radius: 6px;
-  padding: 14px;
-}
+/* 旧版模块卡自己的盒模型规则已删除（2026-09-24）：`.module-card` 现在总是与
+   `.calm-feature-card` 同时出现，边框/圆角/内边距早已由后者按 (0,1,0) 的同特异性
+   + 更晚的源码顺序接管；剩下的 `display` 同样被接走，而 `align-items: flex-start`
+   与 `gap: 10px` 在卡片改成纵向 flex 之后开始泄漏——前者让卡内各段不再撑满整宽
+   （底部信息行只剩内容宽度、按钮挤到中间），后者给每两段之间凭空加了 10px。
+   与 2026-09-20 那批旧规则同因，一并删除并在原位留档。 */
 /* 旧版模块卡的 `.module-card div/strong/span/small` 元素选择器已删除（2026-09-20）：
    现在的模块卡是 `.calm-feature-card.module-card`，卡里的 span 分别是 `.feature-symbol`
    图标容器、`.task-id` 编号和状态徽章。旧规则以 (0,1,1) 的特异性盖掉 `.feature-symbol`
@@ -1582,16 +1725,32 @@ td small {
   color: #a0aab5;
   font-size: 10px;
 }
+/* 时间范围字段：.audit-toolbar 的直接提示 span 靠 margin-left:auto 贴右，这里
+   显式回零，让「开始时间 / 结束时间」贴着各自的输入框，说明哪端是哪端。 */
+.audit-toolbar .audit-time-field span {
+  margin-left: 0;
+  color: #586d83;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.audit-time-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .audit-list {
   background: white;
   border: 1px solid var(--border);
   border-radius: 7px;
 }
 .audit-row {
+  /* 竖线得跨过行的上下内边距才连得上，内边距在这里暴露给 `.audit-line::before` 使用。 */
+  --audit-line-gap-top: 20px;
+  --audit-line-gap-bottom: 20px;
   display: grid;
   grid-template-columns: 75px 18px 1fr 35px;
   gap: 12px;
-  padding: 20px;
+  padding: var(--audit-line-gap-top) 20px var(--audit-line-gap-bottom);
   border-bottom: 1px solid #edf1f5;
   align-items: start;
 }
@@ -1607,9 +1766,20 @@ td small {
   font-size: 10px;
 }
 .audit-line {
+  position: relative;
   display: flex;
   justify-content: center;
   height: 100%;
+}
+/* 时间线竖线由伪元素绘制，并向上下各溢出「行内边距 + 1px」：`.audit-line` 本身只有内容区
+ * 高度，相邻行之间还夹着两段内边距和一条分隔线，直接画在本元素上会断成一截一截。
+ * 溢出 1px 是为了让相邻段首尾交叠，避免子像素边框处露出缝隙。 */
+.audit-line::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * (var(--audit-line-gap-top, 20px) + 1px));
+  bottom: calc(-1 * (var(--audit-line-gap-bottom, 20px) + 1px));
+  right: 0;
   border-right: 1px solid #dae4ec;
 }
 .audit-line span {
@@ -1630,6 +1800,7 @@ td small {
   color: #2e455c;
 }
 .audit-content strong span {
+  margin-left: 6px;
   font-weight: 400;
   color: #718398;
 }
@@ -2207,7 +2378,7 @@ td small {
   }
   .cards-grid,
   .module-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .overview-grid,
   .bottom-grid,
@@ -2245,7 +2416,7 @@ td small {
   }
   .cards-grid,
   .module-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .toolbar,
   .task-toolbar {
@@ -2279,8 +2450,10 @@ td small {
     display: none;
   }
   .audit-row {
+    --audit-line-gap-top: 15px;
+    --audit-line-gap-bottom: 15px;
     grid-template-columns: 48px 10px 1fr;
-    padding: 15px 12px;
+    padding: var(--audit-line-gap-top) 12px var(--audit-line-gap-bottom);
   }
   .audit-row > .icon-button {
     display: none;
@@ -2784,6 +2957,17 @@ a:focus-visible {
 .calm-task-card {
   position: relative;
   overflow: hidden;
+  /* 卡片本体是 <button>：浏览器给按钮内容套的匿名盒默认垂直居中，同一网格行里
+     内容行数少的卡片（例如没有「记录 N 条」那行）会被整体推到下方，标题与底部标签
+     逐行错位。改成纵向 flex 让内容从顶部排起，所有卡片逐行对齐。
+     flex item 之间不折叠外边距；本卡内部相邻两段的间距本来就只由单侧 margin 给出，
+     不受影响。 */
+  display: flex;
+  flex-direction: column;
+  /* 2026-09-23 产品要求「这个布局太紧凑了」：卡片内边距 22 → 26/24，标题、归属、
+     负责人、标签四段之间同步放宽，详见下面各行的日期注释。组卡与功能档案任务卡
+     共用本块，一并生效。 */
+  padding: 26px 24px;
 }
 .calm-task-card::before {
   content: "";
@@ -2793,6 +2977,14 @@ a:focus-visible {
   bottom: 0;
   width: 4px;
   background: var(--task-c, transparent);
+}
+/* 模块卡与功能卡同样被网格拉成等高，但内容是从顶部自然流动的块级排版：
+   描述行数少的卡片，底部信息行会浮在卡片中间，整排看起来参差不齐。
+   这里也改成纵向 flex，让底部信息行吃掉剩余空间（见下面 `.card-footer` 的
+   `margin-top: auto`），统计行与「编辑」动作才能贴在同一条水平线上。 */
+.calm-feature-card {
+  display: flex;
+  flex-direction: column;
 }
 .calm-task-card:hover,
 .calm-feature-card:hover {
@@ -2809,10 +3001,19 @@ a:focus-visible {
 .calm-task-card h3 {
   font-size: 16px;
   line-height: 1.6;
-  margin: 20px 0 8px;
+  /* 2026-09-23 放宽：标题与归属行由 8px → 12px。 */
+  margin: 20px 0 12px;
   font-weight: 600;
   color: #243d54;
-  min-height: 51px;
+  /* 标题固定占两行高（2026-09-24）：超过两行的长标题会把归属、负责人、标签逐行推低，
+     同一网格行里就只剩它自己不对齐；溢出部分按省略号截断，完整标题在点击后的详情里可见。
+     做法与描述行的 -webkit-line-clamp 一致。用固定高度而不是 min-height：一行标题是 51px、
+     两行标题是 51.2px，同一排里仍会差 1px。 */
+  height: 51px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 /* 已完成 / 已取消卡片：标题随状态柔和转青碧或转灰（已取消加删除线），与看板卡片同款。 */
 .calm-task-card.tone-prio-done h3 {
@@ -2825,16 +3026,18 @@ a:focus-visible {
 }
 /* 卡片顶部那一行（编号 + 徽章）取消后 <h3> 成了卡片首行（2026-09-22 定案）：
    原来的 20px 上边距会和外层 22px 内边距叠成 42px 的空档，收到 4px，
-   让标题回到常规内边距附近，卡片整体随之变矮。 */
+   让标题回到常规内边距附近，卡片整体随之变矮。
+   2026-09-23 放宽：随内边距一起收到 8px，标题不再贴顶。 */
 .calm-task-card > h3:first-child {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .calm-task-card > p {
   color: #687f93;
   font-size: 12px;
   margin: 0 0 23px;
 }
-/* 任务介绍固定两行：长短描述的卡片同高，底部信息行在整排卡片间对齐。 */
+/* 任务介绍固定两行：长短描述的卡片同高，底部信息行在整排卡片间对齐。
+   2026-09-23 放宽：与负责人行之间由 16px → 18px，与同批的归属行间距协调。 */
 .calm-task-card > p.task-card-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -2842,24 +3045,29 @@ a:focus-visible {
   overflow: hidden;
   line-height: 1.6;
   min-height: 38px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .calm-task-card > p.task-card-desc.is-placeholder {
   color: #a7b2c0;
 }
 /* 归属行下面紧接着负责人行（2026-09-22 定案）：原来 23px 的下边距会把两行
-   撑成双倍行距，收到 8px 后「归属 + 负责人」整体仍占原来 meta 区的高度。 */
+   撑成双倍行距，收到 8px 后「归属 + 负责人」整体仍占原来 meta 区的高度。
+   2026-09-23 放宽：8px → 14px，两行不再挨在一起。 */
 .calm-task-card > p.task-belonging {
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 /* 负责人单独一行贴在卡片分隔线上方并右对齐：横线以上右侧只放负责人，
-   横线以下的左下角给标签、右下角给截止时间。 */
+   横线以下的左下角给标签、右下角给截止时间。
+   2026-09-23 放宽：聚合组卡在这一行会并排「负责人」与「N 条分支」两个 span，
+   它们原先没有间距、直接贴在一起，这里补 12px。 */
 .calm-card-assignee {
   display: flex;
+  gap: 12px;
   justify-content: flex-end;
   color: #637b91;
   font-size: 12px;
-  margin: 0 0 15px;
+  /* 2026-09-23 放宽：与分隔线之间由 15px → 18px。 */
+  margin: 0 0 18px;
 }
 .calm-card-assignee > span {
   display: flex;
@@ -2868,7 +3076,8 @@ a:focus-visible {
 }
 .calm-card-bottom {
   border-top: 1px solid #edf1f5;
-  padding-top: 15px;
+  /* 2026-09-23 放宽：分隔线与底部标签行之间由 15px → 18px。 */
+  padding-top: 18px;
   color: #637b91;
   font-size: 12px;
 }
@@ -2940,12 +3149,31 @@ a:focus-visible {
   font-size: 18px;
   margin: 23px 0 10px;
 }
+/* 功能名固定占两行高（2026-09-24）：长短不一的名字会把状态徽章行、功能说明、
+   底部信息行逐行推低，同一网格行里只剩它自己不对齐；溢出按省略号截断，
+   完整名称在点击后的功能档案里可见。做法与任务卡标题一致。
+   用固定高度而不是 max-height：一行 27px、两行 54px，同一排仍会差整整一行。 */
+.calm-feature-card:not(.module-card) > h2 {
+  line-height: 1.5;
+  height: 54px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .calm-feature-card > p {
   font-size: 13px;
   line-height: 1.7;
   color: #647c92;
   min-height: 44px;
   margin-bottom: 25px;
+}
+/* 底部信息行贴底（2026-09-24）：卡片等高，这一行把「说明」与卡片底部之间的剩余空间
+   全部吃掉，整排卡片的统计行才能落在同一条水平线上。固定最小高度与模块卡里那颗
+   按钮等高，让两页的统计文字垂直位置一致。 */
+.calm-feature-card > .card-footer {
+  margin-top: auto;
+  min-height: 35px;
 }
 .feature-symbol,
 .record-symbol {
@@ -3022,8 +3250,10 @@ a:focus-visible {
   gap: 14px;
 }
 .calm-drawer .calm-task-card h3 {
-  min-height: 0;
+  height: auto;
   margin-top: 14px;
+  /* 抽屉里卡片单列排列，没有跨卡对齐要求，标题保持完整显示。 */
+  -webkit-line-clamp: none;
 }
 .calm-drawer .calm-task-card {
   padding: 19px;
@@ -3403,7 +3633,7 @@ a:focus-visible {
     gap: 14px;
   }
   .calm-task-card h3 {
-    min-height: 0;
+    height: auto;
   }
   .page-header .back-button {
     margin-bottom: 15px;
@@ -3555,14 +3785,12 @@ a:focus-visible {
   position: relative;
   min-width: 0;
 }
+/* 下内边距回到常规值（2026-09-24）：这 58px 原先是给卡片外挂的一行动作
+   （「编辑功能」绝对定位在卡底右下）预留的空档，于是卡片底下永远压着一条空白。
+   卡内底部信息行改为贴底后，卡外按钮与它同处一行，预留不再需要。 */
 .catalog-module-wrap > .calm-feature-card {
   width: 100%;
   height: 100%;
-  padding-bottom: 58px;
-}
-/* 模块卡不再在卡片外挂一行动作（查看功能/模块任务/归档），底部那 58px
-   预留留白回收到卡片常规内边距，卡片随之变矮。 */
-.catalog-module-wrap > .calm-feature-card.module-card {
   padding-bottom: 22px;
 }
 /* 模块卡内容更少（一行说明 + 一条统计），纵向节奏比功能卡再紧一档。 */
@@ -3573,10 +3801,14 @@ a:focus-visible {
   min-height: 20px;
   margin-bottom: 16px;
 }
+/* 卡外的「编辑功能 / 恢复功能」与卡内贴底的统计行对齐（2026-09-24）：
+   bottom 让按钮垂直中心落在统计文字的中心（底部信息行最小高度 35px，文字行再往上
+   让出 13px 分隔线间距 → 中心距卡片底边约 33px），right 让按钮右缘与卡内按钮一样
+   距卡片右边 22px（自身还有 5px 点击留白）。 */
 .catalog-edit-link {
   position: absolute;
-  bottom: 15px;
-  right: 22px;
+  bottom: 17px;
+  right: 17px;
   background: none;
   border: 0;
   color: #2874bf;
@@ -5682,12 +5914,42 @@ td.due-overdue {
   color: #4d6479;
   font-size: 11px;
   line-height: 1.75;
-  overflow-x: auto;
+  max-height: 46vh;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .snapshot-body .permission-hint {
   margin-top: 18px;
+}
+/* 该盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的默认头部
+   排版（同 `.project-picker-modal` / `.record-detail-modal`）：不补内边距时眉标会顶到
+   盒子左上角并被 18px 圆角裁掉，关闭按钮也贴住右边缘。 */
+.snapshot-modal > .drawer-header {
+  padding: 22px 26px 16px;
+  border-bottom: 1px solid #e8eef5;
+  flex-shrink: 0;
+}
+/* 原始审计快照按「基本信息 / 请求上下文 / 完整性校验 / 事件载荷」分组，
+   长哈希与载荷各自成块，避免一条字段列表从弹层顶部排到底部。 */
+.snapshot-group + .snapshot-group {
+  margin-top: 24px;
+}
+.snapshot-group-title {
+  margin: 0 0 13px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #8b9cb0;
+}
+.snapshot-group .calm-meta {
+  margin: 0;
+  padding-top: 0;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px 15px;
+}
+.snapshot-group .calm-meta code {
+  font-size: 11px;
 }
 
 .field-inline {
@@ -5829,10 +6091,15 @@ td.due-overdue {
     height: 100dvh;
     min-height: 0;
   }
+  /* 导航区常驻 6px 滚动条槽，并把等宽从右内边距里让出：内容超长时滚动条只占预留槽，
+     导航行与文字不再被挤窄 6px；未超长时右留白仍是 12px（6px padding + 6px 空槽），
+     与加槽前的版式一致，两种状态之间不再有任何位置变化。 */
   .nav-group {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    padding-right: 6px;
+    scrollbar-gutter: stable;
   }
   .nav-group::-webkit-scrollbar {
     width: 6px;
@@ -6503,7 +6770,9 @@ td.due-overdue {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 72px;
+  /* 2026-09-23 ADR-040 收口：卡片列出全部负责人（「、」连接），
+     72px 只够一个人名，放宽到 110px；空间仍不够时省略，完整名单在 title。 */
+  max-width: 110px;
 }
 .tb-ava {
   display: inline-grid;
@@ -6723,9 +6992,17 @@ td.due-overdue {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: #4c6178;
   font-size: 11px;
   white-space: nowrap;
+}
+/* 2026-09-23 ADR-040：负责人列列出全部负责人，超出 116px 列宽时省略，
+   完整名单在行内 title；min-width: 0 是 flex 子项能收缩出省略号的前提。 */
+.tb-owner-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tb-row-owner .tb-ava {
   width: 16px;

@@ -313,7 +313,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
             重试
           </Button>
         </CalmEmptyState>
-      ) : (query.data?.items.length ?? 0) === 0 ? (
+      ) : activeMembers.length === 0 ? (
         <CalmEmptyState
           icon="users"
           title="暂无项目成员"
@@ -383,16 +383,13 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     添加成员
                   </Button>
                 </div>
+                {/* 2026-09-23：只展示活跃成员，已移除成员不再出现在列表里；
+                    成员关系仍按 REMOVED 保留在库中，重新加入走「添加成员」。 */}
                 <div className="member-history-list">
-                  {[...(query.data?.items ?? [])].map((member) => (
+                  {activeMembers.map((member) => (
                     <article
                       key={member.membershipId}
-                      className={
-                        "calm-member-card" +
-                        (member.status === "REMOVED"
-                          ? " member-card-removed"
-                          : "")
-                      }
+                      className="calm-member-card"
                     >
                       <div className="calm-member-card-main">
                         <span className="person-avatar member-avatar">
@@ -408,31 +405,18 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                           <span>
                             加入时间：{formatMemberDate(member.joinedAt)}
                           </span>
-                          {member.removedAt ? (
-                            <span>
-                              移除时间：{formatMemberDate(member.removedAt)}
-                            </span>
-                          ) : null}
                         </div>
                       </div>
                       <div className="member-status">
-                        <CalmBadge
-                          tone={member.status === "ACTIVE" ? "green" : "gray"}
-                        >
-                          {member.status === "ACTIVE" ? "活跃成员" : "已移除"}
-                        </CalmBadge>
-                        {member.status === "ACTIVE" &&
-                        member.role !== "MEMBER" ? (
+                        <CalmBadge tone="green">活跃成员</CalmBadge>
+                        {member.role !== "MEMBER" ? (
                           <CalmBadge tone="blue">
                             {roleLabel[member.role]}
                           </CalmBadge>
                         ) : null}
-                        {member.status === "REMOVED" ? (
-                          <small>历史记录已保留</small>
-                        ) : null}
                       </div>
                       <div className="member-card-actions">
-                        {member.status === "ACTIVE" && isSystemAdmin ? (
+                        {isSystemAdmin ? (
                           <Button
                             className="secondary-button"
                             onClick={() => openRoleModal(member)}
@@ -440,8 +424,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                             设置角色
                           </Button>
                         ) : null}
-                        {member.status === "ACTIVE" &&
-                        member.role !== "LEADER" ? (
+                        {member.role !== "LEADER" ? (
                           <Button
                             className="danger-button"
                             onClick={() => openRemove(member)}
@@ -450,14 +433,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                           </Button>
                         ) : null}
                       </div>
-                      {member.status === "REMOVED" ? (
-                        <p className="member-removed-note">
-                          <InpulseIcon name="clock" size={14} />
-                          <span>
-                            已移除成员的历史任务、记录和审计均保留，可重新加入。
-                          </span>
-                        </p>
-                      ) : null}
                     </article>
                   ))}
                 </div>
@@ -518,7 +493,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               showIcon
               type="info"
               title="添加后该用户将成为项目活跃成员"
-              description="系统管理员可在成员历史中重新加入已移除用户；停用用户不会出现在目录中。"
+              description="已被移出的用户仍在候选目录中，重新选择即可再次加入；停用用户不会出现在目录中。"
             />
             {directory.isPending ? (
               <div className="calm-state modal-loading">

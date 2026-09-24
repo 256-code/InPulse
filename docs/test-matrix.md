@@ -219,8 +219,8 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 | F05-MEMBER-API-002 | HTTP + PostgreSQL | 添加与移除生命周期 | 添加 ACTIVE 成员同事务写审计、活动、通知与成员历史；重复活跃成员 409；无效/停用用户 422；移除可真实改派并保留未改派任务原负责人；移除创建者不改 `projects.created_by` | 本地通过（`project-member-management-api.integration.test.ts` 8/8；API 集成 34 文件 190/190） |
 | F05-MEMBER-API-003 | HTTP + PostgreSQL | 拒绝与边界 | 匿名/停用 401；非管理员、CSRF 失败 403；非成员/不存在 404；重复活跃或状态冲突 409；非法字段 422；非 JSON 请求 400；统一返回 `{ code, message, details, requestId }` | 本地通过（同集成 8/8；HTTP 单测覆盖 400 与脱敏） |
 | F05-MEMBER-TX-001 | PostgreSQL 集成 | 同事务与幂等 | 审计失败时成员写、通知、活动或任务改派整体回滚；同 Key、同摘要、同契约版本重放不重复写；项目归档后旧 Key 拒绝返回缓存 | 本地通过（集成 8/8 覆盖回滚与重放；归档后重放已由服务单测覆盖） |
-| F05-MEMBER-UI-001 | 前端单元 | 成员管理页面 | 管理员入口仅系统管理员可见；成员历史、添加、移除、未完成任务提示、改派、CSRF/幂等键与成功后缓存失效均经生成客户端调用 | 本地通过（`ProjectMembersPageView.test.tsx`、`project-member-query.test.tsx` 等，Web 33 文件 104 例） |
-| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 活跃成员访问 `/projects/:id/members` 直接展示管理视图（ADR-039；本行早期记录的 `RequireAdmin` 403 空态已在 ADR-033 后失效）；通过页面添加成员出现成功提示与「活跃成员」徽标；移除成员出现确认对话框与「该成员没有未完成任务。」，确认后保留历史记录卡并标记「已移除」「历史记录已保留」；不存在的项目返回前端映射的读取失败空态 | 本地通过（`apps/e2e/tests/project-members.spec.ts`；ADR-039 后断言已反转） |
+| F05-MEMBER-UI-001 | 前端单元 | 成员管理页面 | 管理员入口仅系统管理员可见；成员列表只渲染活跃成员（接口返回的 `REMOVED` 行不出现，也无「已移除」「历史记录已保留」文案）、添加、移除、未完成任务提示、改派、CSRF/幂等键与成功后缓存失效均经生成客户端调用 | 本地通过（2026-09-23 同步 `ProjectMembersPageView.test.tsx`；`project-member-query.test.tsx` 等，Web 33 文件 104 例） |
+| F05-MEMBER-E2E-001 | Playwright | 成员管理页面关键路径 | 活跃成员访问 `/projects/:id/members` 直接展示管理视图（ADR-039；本行早期记录的 `RequireAdmin` 403 空态已在 ADR-033 后失效）；通过页面添加成员出现成功提示与「活跃成员」徽标；移除成员出现确认对话框与「该成员没有未完成任务。」，确认后该成员卡片从列表消失且页面不再出现「已移除」标记；不存在的项目返回前端映射的读取失败空态 | 本地通过（`apps/e2e/tests/project-members.spec.ts`；2026-09-23 移除后断言已反转为卡片消失；未重跑） |
 | F05-READ-E2E-001 | Playwright | 项目页面回归 | 项目创建关键路径与全量 E2E 结果如实记录 | 本地通过（`pnpm test:e2e` 29/29，4.7m，含本 diff 新增的成员管理 2 例与既有 F-18 记录发布、搜索/动态/通知/任务用例） |
 
 2026-09-09 本地验证说明：`pnpm test:unit` 数据库 5 例、api-contract 67 例、Web 33 文件
@@ -228,6 +228,14 @@ GitHub Actions 已通过（F-04 后端 PR #53，run 34247563039）。
 临时 PostgreSQL 18.6 + PGroonga 4.0.8 曾因 `max_connections=100` 初始化不足，已改为
 `max_connections=200` 后完整通过；成员管理页面 Playwright E2E 已于 2026-09-10 由
 `apps/e2e/tests/project-members.spec.ts` 补齐（本地 2/2；该分支 rebase 到 `origin/main` `5020c0a` 后全量 29/29 通过）。
+
+2026-09-23：按用户要求，成员与设置列表只展示活跃成员，接口返回的 `REMOVED` 行不再渲染。
+后端契约、数据库与权限矩阵均未改动：`listProjectMembers` 仍返回完整成员历史，已移出用户
+在「添加成员」候选目录中，重新选择即可再次加入（活跃唯一索引只约束 `status = 'ACTIVE'`）。
+受影响断言已同步：`ProjectMembersPageView.test.tsx` 改为断言 `已移除成员` 与
+`历史记录已保留` 均不出现，`apps/e2e/tests/project-members.spec.ts` 改为断言移除后该成员
+卡片计数为 0；F05-MEMBER-UI-001 与 F05-MEMBER-E2E-001 描述同步。本轮为纯前端改动，
+按 2026-09-17 约定未运行测试与门禁命令，单测与 Playwright 均未重跑。
 
 ## ADR-033 项目内角色（组长与项目管理员，A，2026-09-16 本地落库）
 
@@ -824,15 +832,16 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 ## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
 
-`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。留痕按「查看」而不是「每次请求」计数（[ADR-042](adr/ADR-042.md)）：只有开启一次新查看的请求（进入审计页或切换审计对象）才写，同一次查看内的筛选、重置、重试与分页不写新留痕（带游标的分页由服务端排除，延续请求以 `readTrail=false` 声明）。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-11） |
 | F08-READ-API-002 | HTTP + PostgreSQL | 身份与管理员门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；只读路径不强制同步 CSRF，完整管理员 Session 即可读取（ADR-031 起不再要求 TOTP 重认证） | 同上 |
-| F08-READ-API-003 | HTTP + PostgreSQL | action 过滤与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
+| F08-READ-API-003 | HTTP + PostgreSQL | 筛选与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；`actorIds` 为英文逗号分隔的 1..100 个正整数（单值、多值均可，重复 ID 返回 422 `VALIDATION_FAILED`，无匹配返回空页且 `hasMore=false`）；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
-| F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人 ID 必须正整数、`from/to` 由 `datetime-local` 换算为带时区 ISO，`from >= to` 与非法 ID 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-11） |
+| F08-READ-API-005 | HTTP + PostgreSQL | 留痕按「查看」计数 | 带 `readTrail=false` 的筛选请求不写新留痕；非分页且未声明延续的请求恰写一条；带签名游标的分页即使显式传 `readTrail=true` 也不写；`readTrail` 取枚举外取值返回 422 | 本地通过（同上 8/8，2026-09-23） |
+| F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人为可搜索多选并按 `actorIds` 升序去重后以逗号提交、不选即全体且省略该参数、`from/to` 由带可见标签的 `datetime-local` 换算为带时区 ISO，`from >= to` 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-23 更新为多操作人与时间字段标签口径） |
 | F08-READ-WEB-002 | 前端单元（jsdom） | 错误映射 | 403 `ADMIN_REQUIRED` 展示管理员权限文案并保留重试入口；401/403/422/429 与未知失败映射为安全文案、不泄露服务端 `message`；行内「原始快照」展示 `eventPayload` JSON、前后哈希与请求元数据；`/audit` 路由 `requiresAdmin` 且侧栏入口仅管理员可见（`AppLayout.test.tsx`） | 同上 |
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 已通过（PR #106，run 34560879433）。
@@ -1171,11 +1180,19 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | F08-E2E-001 | 浏览器 E2E | 普通成员访问审计页 | 普通成员打开 `/audit` 命中 `admin-forbidden` 空态与「无权访问」「此区域仅限系统管理员访问。」，页面不展示任何审计内容 | 本地通过（`apps/e2e/tests/audit.spec.ts` 2/2，2026-09-12） |
-| F08-E2E-002 | 浏览器 E2E | 管理员读取原始审计 | 管理员进入 `/audit` 直接读取原始审计（ADR-031 起不再要求 TOTP 重认证）；动作码 `AUDIT_LOG_READ` 过滤命中「链 SYSTEM / 用户 #id / 用户操作」；行内「原始快照」弹窗展示 `eventPayload`（含 `returnedCount`）并以 Escape 关闭；切到 `PROJECT:<id>` 链命中 `project.create` 行与 `PROJECT #id` 归属；操作人 ID 非正整数在本地被拦截且不发请求 | 同上 |
+| F08-E2E-002 | 浏览器 E2E | 管理员读取原始审计 | 管理员进入 `/audit` 直接读取原始审计（ADR-031 起不再要求 TOTP 重认证）；动作码 `AUDIT_LOG_READ` 过滤命中「链 SYSTEM / 用户 #id / 用户操作」；行内「原始快照」弹窗展示 `eventPayload`（含 `returnedCount`）并以 Escape 关闭；切到 `PROJECT:<id>` 链命中 `project.create` 行与 `PROJECT #id` 归属；操作人下拉默认占位为「全体操作人（可搜索多选）」，展开后可搜索当前用户目录并选中成员，点「查询」后的请求同时带 `action` 与 `actorIds=<用户 ID>`，重置后回到全体占位；开始/结束时间各带可见标签 | 本地通过（同上 2/2，2026-09-23 更新为多选操作人与时间字段标签口径） |
 
 本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/e2e typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 通过；`pnpm --filter @inpulse/api build` 后全量 `pnpm test:e2e` 53/53（9.3 分钟，其中 `audit.spec.ts` 两例 8.1s）通过；`pnpm test:unit`（database 15、canonical-json 5、api-contract 16 文件 98 例、web 69 文件 340 例、ops 8 文件 52 例、api 68 文件 351 例）与 `pnpm test:web`（69 文件 340 例）通过；`pnpm check:deps`（656 文件）、`pnpm check:secrets`（961 文件）、`pnpm check:docs`（75 个 Markdown）通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
 
 未运行 / 已知偏差：① 本片 GitHub Actions 结果见 PR #133 检查记录；② 未运行 `pnpm test:integration`、`pnpm db:test` 与整体 `pnpm check`（本片无后端、契约、迁移与角色改动；整体 `check` 的 `deps:audit` 在本机 npm 镜像必然失败，其余步骤已逐条执行）；③ 新增 E2E 用例与 E2E 基建配置需非作者人工评审；④ 既有真库集成 500 偶发（`idempotency_records_retention_check` 时钟偏差族）本次全量 E2E 未复现、未修复。
+
+### 2026-09-23 审计筛选 UI 改造（操作人多选 + 时间字段标签）
+
+用户反馈「看不出来哪个代表开始时间与结束时间」，且操作人筛选要像新建项目的人员选择那样可搜索多选、不选即全体成员。本轮把契约筛选参数由单值 `actorId` 改为 `actorIds`（[`audit.zod.ts`](../packages/api-contract/src/contracts/audit.zod.ts)：`z.preprocess` 逗号拆分 + `z.array(z.coerce.number().int().positive()).min(1).max(100)` + 去重 `refine`；省略即全体），服务端 `audit-query.service.ts` 的查询指纹、`AUDIT_LOG_READ` 留痕载荷（`filters.actorIds`）与 SQL 过滤（`actor_id = ANY(${ids}::integer[])`）同步，前端 `AuditLogPageView.tsx` 改用 `CalmSelect appearance="member" multiple`（选项来自既有用户目录只读路由）并给两个 `datetime-local` 各加可见标签（开始时间 / 结束时间）。留痕「查看」粒度语义（[ADR-042](adr/ADR-042.md)）未变：筛选请求仍带 `readTrail=false`，不新增留痕。
+
+本地验证（2026-09-23）：契约 5 产物 `generate`/`drift` 与 `validate`（108 条路由）、`permissions:check`（108/108）、`lint`、`format:check`、8 个 workspace `typecheck` 通过；API 单测 66 文件 368 例、契约单测 16 文件 100 例、Web 单测 85 文件 582 例通过；真库 `apps/api/test/audit-logs.integration.test.ts` 8/8（新增「actorIds 多操作人过滤、去重约束与留痕载荷」）；`apps/e2e/tests/audit.spec.ts` 2/2 与 `tests/activity.spec.ts` 1/1（E2E 夹具已由 `global-teardown` 自动物理清理，SYSTEM 链头回退）。
+
+排障记录（值得保留）：E2E 首轮 1 passed / 1 failed，trace 中 `GET /api/v1/audit-logs?action=AUDIT_LOG_READ&actorIds=14&readTrail=false&limit=50` 返回 422 `VALIDATION_FAILED`、`details.issues` 为 `$: Unrecognized key: "actorIds"`。根因是本地只重新构建了 `apps/api`、未重建 `packages/api-contract` 的 `dist`，运行中的 API 经该包 `exports.default` 解析到旧 schema；`corepack pnpm --filter @inpulse/api-contract build` 后复跑 2/2 通过。源码直读路径的真实 PostgreSQL 集成测试当时已 8/8，故该 422 只出现在「先构建再运行」的 E2E 链路上。
 
 ## 登录入口与登录页视觉（C，2026-09-12 本地落库，[PR #134](https://github.com/256-code/InPulse/pull/134)）
 
@@ -2017,14 +2034,14 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 ## 任务列表统一排序与多列游标（ADR-037，2026-09-18 本地落库，待人工批准）
 
-用户确认：任务中心与任务面板共用同一排序键 —— 状态分组 未完成 → 已完成 → 已取消；未完成内部按紧急桶 已逾期 → 遗留问题来源 → 标记紧急 → 今/明日截止 → 其余（命中第一个即定桶，按 `Asia/Shanghai` 日历日）；随后优先级 紧急 → 高 → 普通 → 低、截止时间升序（无截止最后）、任务 ID 升序兜底。任务中心的游标随之由单列 `afterId` 扩展为多列 keyset。（2026-09-23 更新：优先级只剩 紧急 → 高 → 普通 三档；游标版本由 3 升到 4，见末节。）
+用户确认：任务中心与任务面板共用同一排序键 —— 状态分组 未完成 → 已完成 → 已取消；未完成内部按紧急桶 标记紧急 → 已逾期 → 今/明日截止 → 其余（命中第一个即定桶，按 `Asia/Shanghai` 日历日）；随后优先级 紧急 → 高 → 普通、遗留问题来源与截止时间升序（无截止最后）、任务 ID 升序兜底。任务中心的游标随之由单列 `afterId` 扩展为多列 keyset。（2026-09-23 更新：优先级只剩 紧急 → 高 → 普通 三档；遗留问题来源退出紧急桶、改为优先级之后的独立一级，只同优先级内提前；游标版本由 3 升到 4、再到 5，见末节。）
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| ADR037-ORDER-001 | 真实 PostgreSQL | 5 个紧急桶 × 3 个状态分组的排序 | `aggregate-read-ports.integration.test.ts`：每个状态分组各造 已逾期（今天 00:00 前）/ 遗留问题来源（`leftover_task_links` 链接）/ 标记紧急（URGENT，无截止）/ 今日截止（今天 00:00 后）/ 其余 + 2 条完全并列，共 21 条；`MyTaskQueryPort.list` 返回顺序严格等于「未完成桶 0→4、已完成 / 已取消 URGENT 优先且无截止最后」，`TaskQueryPort.list` 同序；链接查询反证来源桶由 `leftover_task_links` 决定。反事实验证把 `taskListOrderBy` 退回 `t.id DESC` 时本用例与 6 个既有顺序用例一起失败（`expected [ 10872, 10871, … ] to deeply equal [ 10866, 10867, … ]`），恢复后 22/22 通过 | 本地通过（`app_it`，2026-09-18） |
-| ADR037-CURSOR-001 | 真实 PostgreSQL | 多列 keyset 分页不漏不重 | `aggregate-read-ports.integration.test.ts`：逾期 + URGENT + 今日截止 + 5 条完全并列（无截止）共 8 条，按 `limit=2` 用 `next` 逐页走完，拼接顺序与不分页结果一致且无重复；反事实验证同上（退回 `t.id DESC` 时该用例失败） | 本地通过（2026-09-18） |
+| ADR037-ORDER-001 | 真实 PostgreSQL | 4 个紧急桶档位 + 遗留问题来源 × 3 个状态分组的排序 | `aggregate-read-ports.integration.test.ts`：每个状态分组各造 已逾期（今天 00:00 前）/ 遗留问题来源（`leftover_task_links` 链接，普通优先级）/ 标记紧急（URGENT，无截止）/ 今日截止（今天 00:00 后）/ 其余 + 2 条完全并列，共 21 条，并额外为未完成组补 2 条对照（「高优先级无遗留」与「同优先级无遗留」，共 23 条）；`MyTaskQueryPort.list` 返回顺序严格等于「未完成按 紧急 → 已逾期 → 今/明日截止 → 高优先级 → 本优先级内遗留问题来源 → 其余按 id、已完成 / 已取消 URGENT 优先且无截止最后」，其中「高优先级无遗留」先于「遗留问题来源」而后者又先于「同优先级无遗留」两条件共同定义「遗留问题只在同优先级内提前」；`TaskQueryPort.list` 同序；链接查询反证来源由 `leftover_task_links` 决定。反事实验证把 `taskListOrderBy` 退回 `t.id DESC` 时本用例与 6 个既有顺序用例一起失败（`expected [ 10872, 10871, … ] to deeply equal [ 10866, 10867, … ]`），恢复后 22/22 通过；2026-09-23 改为 23 条后单文件 23/23 | 本地通过（`app_it`，2026-09-18；2026-09-23 按新口径重排） |
+| ADR037-CURSOR-001 | 真实 PostgreSQL | 多列 keyset 分页不漏不重 | `aggregate-read-ports.integration.test.ts`：逾期 + URGENT + 今日截止 + 5 条完全并列（无截止）共 8 条，按 `limit=2` 用 `next` 逐页走完，拼接顺序与不分页结果一致且无重复（2026-09-23 口径下紧急桶序号改为 0→3，用例不变仍通过）；反事实验证同上（退回 `t.id DESC` 时该用例失败） | 本地通过（2026-09-18） |
 | ADR037-CURSOR-002 | API 单元 | 游标排序键载荷 | `aggregate-read-cursor.test.ts` 8 例（新增 2 例）：`MY_TASKS` 游标带 `k` 时 `decodeKey(..., requireSortKey: true)` 返回 `{ afterId, sortKey }`；其它命名空间仍返回 `sortKey: null`；缺少 `k` 的旧载荷按 `version` 拒绝（422 语义）；改写 `k` 后重放按 `signature` 拒绝（排序键确实在 HMAC 载荷内） | 本地通过 |
-| ADR037-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序与筛选 | `aggregate-read-api.integration.test.ts` 20 例：主列表、`scopeType=FEATURE&workStatus=TODO`、`hasPublishedRecord`、`projectId` 全量与 `limit=3` 游标遍历的期望顺序全部改为 ADR-037 口径（遗留问题来源任务 `tSource` 提到未完成首位）；统计卡片用例改为 已逾期 → 今日截止 → 已完成 → 已取消 | 本地通过（`app_it`，2026-09-18） |
+| ADR037-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序与筛选 | `aggregate-read-api.integration.test.ts` 20 例：主列表、`scopeType=FEATURE&workStatus=TODO`、`hasPublishedRecord`、`projectId` 全量与 `limit=3` 游标遍历的期望顺序全部改为 ADR-037 口径（遗留问题来源任务 `tSource` 排在同为普通优先级的任务之前，2026-09-23 起不再越过更高优先级）；统计卡片用例改为 已逾期 → 今日截止 → 已完成 → 已取消 | 本地通过（`app_it`，2026-09-18；2026-09-23 复核通过） |
 | ADR037-FIX-001 | 真实 PostgreSQL | 原生 `sql` 绑定 `Date` 的前置缺陷 | 现象：drizzle-orm 构造时把 `client.options.serializers` 的 timestamptz 编码器改写为恒等函数，而 postgres.js 连接、原生 `sql` 与 Drizzle 共用同一 options 对象，原生 `sql` 传 `Date` 在 Bind 阶段抛 `Received an instance of Date`；修复为 `createDrizzleDb(sql)` 构造后只还原 1184 编码器（JSON 不还原，避免二次编码）。证据：事务内 `SELECT COALESCE($1::timestamptz, ```infinity```::timestamptz)` 修复前抛错、修复后返回 `2026-09-18 03:00:00+00`；全量集成 50 文件 476 例通过 | 本地通过（2026-09-18） |
 
 本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（含本轮新增 2 例）；`pnpm --filter @inpulse/api test:unit aggregate-read-cursor` 8 例通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）通过。反事实验证在真实 PostgreSQL 上执行：把 `taskListOrderBy` 临时替换为 `t.id DESC` 后 7 例失败，恢复后 22/22 通过。
@@ -2637,7 +2654,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 > 2026-09-22 更新（产品口径「（它们）同样是一个优先级的，按照截止日期从近到远排序」，C 本地落库）：本节「排列顺序：任务在前、聚合组在后」已作废，改为与任务卡共用 `gridEntries` 一把尺子混排；组卡外观、同网格呈现、弹窗入口与分页语义不变。用例与实测见本文件末节「组卡与任务卡同一顺序」与 [任务卡片配色规范](task-card-colors.md)。
 
 - 呈现方式：聚合组不再有独立区块（`section.group-panel`、`.group-list`、`article.group-card`、分支行 `.branch-task` 与页脚「查看主任务」全部删除），改渲染为 `.calm-task-card.task-group-card.tone-group`，与任务卡片同一 `.calm-task-grid` 混排；列表视图下任务表格保持原样，聚合组仍以同款卡片追加在表格之后（`.task-group-grid`）。
-- 排列顺序：2026-09-21 定为「任务在前、聚合组在后」；2026-09-22 产品要求「（它们）同样是一个优先级的，按照截止日期从近到远排序」后改为混排——组卡与任务卡共用 `gridEntries` 一把尺子（状态分组 → 紧急桶 → 优先级 → 截止时间近到远，组卡的三项都从「未完成分支」派生）。两侧仍是各自签名游标分页（R-3 / R-7），前端只在已加载页内按同一把尺子合并，不伪造跨页完整顺序；同键保持稳定次序（任务在前、组保持 R-7 顺序）。
+- 排列顺序：2026-09-21 定为「任务在前、聚合组在后」；2026-09-22 产品要求「（它们）同样是一个优先级的，按照截止日期从近到远排序」后改为混排——组卡与任务卡共用 `gridEntries` 一把尺子（状态分组 → 紧急桶 → 优先级 → 遗留问题 → 截止时间近到远，组卡靠前三项与截止从「未完成分支」派生，遗留问题一项在组卡上无事实、恒为 1，见末节 2026-09-23 行）。两侧仍是各自签名游标分页（R-3 / R-7），前端只在已加载页内按同一把尺子合并，不伪造跨页完整顺序；同键保持稳定次序（任务在前、组保持 R-7 顺序）。
 - 卡片信息取舍：按冻结的 R-7 契约，`TaskGroupListItem` 只有 `{ groupId, projectId, projectName, code, name, status, mainTask, branches }`，分支不带 priority / dueAt / 模块名 / 记录数，因此组卡**不伪造**这些字段，只显示：编号（`TG-*`）、「聚合组」+「进行中 / 已关闭」徽章、组名、项目名、主分支负责人、`N 条分支`、`已完成 n/N`（分支数 > 0 时）与「查看详情 / 解除合并」（CLOSED 组为「查看聚合历史」）。
 - 卡片交互：整卡是 `<button>`（`data-testid="my-task-group-{groupId}"`），点击就地打开既有 `TaskGroupDetailModal`（不离开页面、不改地址栏）；分支明细、来源类型徽章、解除合并与主任务直达都只在弹窗里提供一份，不在卡片上复制。CLOSED 组按服务端口径返回空 `branches` 与 `null mainTask`，卡片退化为组名 + 状态 + 「—」。
 - 空态与错误态：`hasListContent = 任务卡片数 > 0 || 聚合组数 > 0`；两者都空才显示任务空态（原「还没有聚合组」独立空态删除——聚合组现在只是列表的一部分）。聚合组读取失败时任务卡片照常渲染，错误 Alert 移到列表下方就地提示；任务为空且聚合组仍在加载时先给加载态，避免空态一闪再被组卡顶掉。
@@ -2798,7 +2815,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 2026-09-22 三次定案「红档收敛成一支」（产品要求「`#CE342B` 紧急用这个颜色，然后逾期的不搞特殊了，原本的优先级是什么就呈现什么颜色，只是排序靠前，比紧急低一档」）：
   - 紧急由 `#e84138` 改为 `#ce342b`（描边 `#b12c25`、悬停 `#b92e27`，白字对比度 4.00:1 → 5.09:1），`priority-select-option.ts` 的 URGENT 圆点同步。
   - 已逾期 / 马上到期退出卡片配色：`TaskToneName` 的 `overdue` / `soon`、`.tone-prio-overdue` / `.tone-prio-soon` 两块实色、白字组里的两个选择器与 `due-tiers*.png` 样图全部删除；`taskToneOf` / `taskToneClassName` 从四个参数回到三个（`hasLeftoverSource` 升为第三个）。卡片一律按任务自己的优先级取色，「高」逾期仍是明黄、「普通」逾期仍是普通蓝（2026-09-23 二次定案后改为「高」蓝 `#337ee6`、「普通」白 `#ffffff`，见末节）；组卡同理（`K123-TG-1` 由逾期砖红回到派生优先级的普通蓝）。
-  - 逾期改为只保留两处体现：① 排序——服务端 `apps/api/src/modules/tasks/task-list-order.ts` 的紧急桶重排为「遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)」，`TASK_LIST_SORT_KEY_VERSION` 由 1 升到 2（旧游标按无效游标拒绝）；② 日期文案——卡片右下角「已逾期 9月16日」/「今天截止」跟随卡内统一取色，白底表面（任务中心表格、项目任务面板列表、详情弹窗徽章、看板日期）仍用文字色 `#b3261e` / `#c9472c` 加粗。
+  - 逾期改为只保留两处体现：① 排序——服务端 `apps/api/src/modules/tasks/task-list-order.ts` 的紧急桶重排为「遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)」，`TASK_LIST_SORT_KEY_VERSION` 由 1 升到 2（旧游标按无效游标拒绝）；② 日期文案——卡片右下角「已逾期 9月16日」/「今天截止」跟随卡内统一取色，白底表面（任务中心表格、项目任务面板列表、详情弹窗徽章、看板日期）仍用文字色 `#b3261e` / `#c9472c` 加粗。（2026-09-23 二次修订：遗留问题来源退出紧急桶、改为优先级之后的独立一级，紧急桶收窄为「标记紧急(0) → 已逾期(1) → 今/明日截止(2) → 其余(3)」，`TASK_LIST_SORT_KEY_VERSION` 再由 4 升到 5，见末节 2026-09-23 行。）
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -2837,7 +2854,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-BROWSER-022 | 浏览器实测 | 「遗留问题」整卡锈红与列表行同源 | 无头 Chromium 1440 宽（本地 dev 5173，真实数据只读）：`/tasks` 的 `A-5 残余：5 年峰值模型定稿与 1.2 倍条件人工复核`（`hasLeftoverSource`、普通、未逾期）得 `calm-task-card tone-prio-leftover`、背景 `rgb(138, 43, 6)`、描边 `rgb(119, 37, 5)`、文字 `rgb(255, 255, 255)`，卡内「普通」与「遗留问题」徽章均为 `rgba(255, 255, 255, 0.18)` 底 + 白字；同页相邻 `A-6` 仍 `rgb(255, 219, 77)`、`呈现出` 仍 `rgb(51, 126, 230)`、逾期组卡仍 `rgb(179, 38, 30)`；切「列表」视图后该行类名 `tone-prio-leftover`、底色 `rgb(251, 238, 233)`、标题 `rgb(138, 43, 6)` | 本地通过（2026-09-22） |
 | CARD-COLOR-BROWSER-023 | 浏览器实测 | 组卡不吃日期档：含已逾期分支的组卡按派生优先级取色 | 无头 Chromium 1440 宽（本地 dev 5173，真实数据只读）：`K123-TG-1`（2 条分支都未完成、最早截止已逾期）为 `calm-task-card task-group-card tone-prio-normal`、背景 `rgb(51, 126, 230)`、描边 `rgb(44, 108, 198)`、白字，状态徽章仍是「未开始」，右下角仍是「已逾期 9月16日」；上一版「组卡底走日期档、整卡转红」的实测已作废 | 本地通过（2026-09-22 重测） |
 | CARD-COLOR-BROWSER-024 | 浏览器实测 | 红档取中 + 逾期退出整卡色（2026-09-22 三次定案） | 无头 Chromium 1440 宽（本地 dev 5173，成员账号，真实数据只读）：`/tasks` 卡片顺序为「A-5 残余…」遗留问题（底 `rgb(138, 43, 6)` / 边 `rgb(119, 37, 5)`）→ `222` 紧急（底 `rgb(206, 52, 43)` / 边 `rgb(177, 44, 37)` / 白字）→ `A-6` 高（底 `rgb(255, 219, 77)` / 字 `rgb(63, 45, 0)`）→ `呈现出` 普通（底 `rgb(51, 126, 230)`）→ 组卡 `啊J`（`tone-prio-normal`、底 `rgb(51, 126, 230)`、右下角「已逾期 9月16日」）；逐档注入得 urgent `rgb(206, 52, 43)` / `rgb(177, 44, 37)`、normal `rgb(51, 126, 230)`、high `rgb(255, 219, 77)` + `rgb(63, 45, 0)`、low `rgb(255, 255, 255)`、done `rgb(205, 241, 211)` + `rgb(47, 64, 49)`、canceled `rgb(242, 245, 248)`、leftover `rgb(138, 43, 6)`；页面内 `.tone-prio-overdue` / `.tone-prio-soon` 节点数均为 0；列表视图 `tone-prio-leftover` 行底 `rgb(251, 238, 233)`（只走浅色变量，未受实色改动影响） | 本地通过（2026-09-22） |
-| CARD-COLOR-API-002 | 真实 PostgreSQL 集成 | 逾期降到紧急下一档的排序与游标 | `apps/api/test/aggregate-read-ports.integration.test.ts`（真实 PostgreSQL 18 + PGroonga，23 例通过）：紧急桶用例断言同状态分组内顺序为 `leftover → urgent → overdue → dueSoon → other → tieA → tieB`，已完成 / 已取消分组不参与紧急桶；keyset 分页用例按新序造数后跨页取回不漏不重；`apps/api/src/modules/tasks/task-list-order.ts` 的 `TASK_LIST_SORT_KEY_VERSION` 由 1 升到 2，版本不符的旧游标由 `parseTaskListSortKey` 返回 null 后按无效游标拒绝；`aggregate-read.service.test.ts` / `aggregate-read-cursor.test.ts` 的游标断言同步为 `2|0|4|2||501`（2026-09-22 末轮版本再升到 3、载荷 7 段，断言为 `3|0||4|2||501`，见 CARD-COLOR-API-003） | 本地通过（2026-09-22） |
+| CARD-COLOR-API-002 | 真实 PostgreSQL 集成 | 逾期降到紧急下一档的排序与游标 | `apps/api/test/aggregate-read-ports.integration.test.ts`（真实 PostgreSQL 18 + PGroonga，23 例通过）：紧急桶用例断言同状态分组内顺序为 `leftover → urgent → overdue → dueSoon → other → tieA → tieB`（2026-09-23 起改为 `urgent → overdue → dueSoon → highPriority → leftover → other → tieA → tieB → leftoverPeer`，见末节），已完成 / 已取消分组不参与紧急桶；keyset 分页用例按新序造数后跨页取回不漏不重；`apps/api/src/modules/tasks/task-list-order.ts` 的 `TASK_LIST_SORT_KEY_VERSION` 由 1 升到 2，版本不符的旧游标由 `parseTaskListSortKey` 返回 null 后按无效游标拒绝；`aggregate-read.service.test.ts` / `aggregate-read-cursor.test.ts` 的游标断言同步为 `2|0|4|2||501`（2026-09-22 末轮版本再升到 3、载荷 7 段，断言为 `3|0||4|2||501`，见 CARD-COLOR-API-003；2026-09-23 版本再升到 4、5，同两处断言改为 `5|0||3|2|1||501` / `5|0||1|2|1|2026-09-18T01:00:00.000Z|42`，见末节 2026-09-23 行） | 本地通过（2026-09-22） |
 
 | CARD-COLOR-WEB-001 | Web 单元 | 前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 560 例通过（含卡片纵向排版、聚合组状态三态、「遗留问题」整卡锈红与「逾期不再整卡换色」用例；2026-09-22 本轮改动后重跑为该值，此前一版为 558 例） | 本地通过（2026-09-22 重跑） |
 | CARD-COLOR-DOC-001 | 文档同步 | 六种程度配色可查阅 | 新增 `docs/task-card-colors.md`《任务卡片配色规范》：六种程度的卡片底色 / 描边 / 悬停 / 文字 / 对比度、卡内元素取色、看板卡片、列表行浅色对照、下拉圆点色、实现位置与变更历史；`README.md` 文档索引已登记；`pnpm check:docs` 通过（85 个 Markdown） | 本地通过 |
@@ -2973,11 +2990,11 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 产品反馈（原文）：「这个同样是一个优先级的，按照截止日期从近到远排序」（`/tasks` 卡片视图：普通优先级的聚合组卡 `啊J`（未完成分支中最早的截止 9月16日 已逾期）被固定追加在网格尾部，排在普通优先级、未设置截止的任务卡 `呈现出` 之后）。本批为纯前端排序改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
 
-口径：组卡与任务卡共用一份网格顺序 `gridEntries`，逐级比较「状态分组（未完成 0 / 已完成 1 / 已取消 2）→ 紧急桶（遗留问题来源 0 / 标记紧急 1 / 已逾期 2 / 今-明日截止 3 / 其余 4）→ 优先级档位 → 截止时间近到远（未设置截止排最后）」；前三级取自服务端 `apps/api/src/modules/tasks/task-list-order.ts` 的排序键，组卡的三项都从「未完成分支」派生（最高一档 / 最早一条截止），没有未完成分支的已完成组落在优先级末档。`visibleGroups` 只保留「未完成 / 已完成」归属筛选，排序只此一处，卡片视图与列表视图同一顺序；两侧仍各自签名游标分页，前端只在已加载页内合并，不伪造跨页完整顺序。
+口径：组卡与任务卡共用一份网格顺序 `gridEntries`，逐级比较「状态分组（未完成 0 / 已完成 1 / 已取消 2）→ 完成时间倒序 → 紧急桶（标记紧急 0 / 已逾期 1 / 今-明日截止 2 / 其余 3）→ 优先级档位 → 遗留问题来源（仅未完成参与；组卡没有这一事实、恒为 1）→ 截止时间近到远（未设置截止排最后）」；前五级取自服务端 `apps/api/src/modules/tasks/task-list-order.ts` 的排序键，组卡的前三级与截止都从「未完成分支」派生（最高一档 / 最早一条截止），没有未完成分支的已完成组落在优先级末档。`visibleGroups` 只保留「未完成 / 已完成」归属筛选，排序只此一处，卡片视图与列表视图同一顺序；两侧仍各自签名游标分页，前端只在已加载页内合并，不伪造跨页完整顺序。（2026-09-23 更新：紧急桶收窄为 0..3、遗留问题来源独立成级，游标版本由 4 升到 5，见末节。）
 
 | 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| CARD-COLOR-UNIT-011 | Web 单元 | 组卡与任务卡同一顺序 | `TaskCenterPageView.test.tsx`「组卡与任务卡同一顺序：同优先级按截止日期从近到远」：夹具为高优先级任务卡（10月15日）+ 普通优先级组卡（4 条分支都未完成、最早截止已逾期）+ 普通优先级任务卡（未设置截止），断言网格 `data-testid` 顺序为 组卡 → 高任务卡 → 普通任务卡（组卡的已逾期落紧急桶 2，排在未逾期的紧急桶 4 之前）；「同优先级内按截止日期从近到远，未设截止排最后」：三张普通优先级卡（+8 天 / +3 天 / 未设置截止，乱序传入）收敛为 +3 天 → +8 天 → 未设置截止 | 本地通过（2026-09-22） |
+| CARD-COLOR-UNIT-011 | Web 单元 | 组卡与任务卡同一顺序 | `TaskCenterPageView.test.tsx`「组卡与任务卡同一顺序：同优先级按截止日期从近到远」：夹具为高优先级任务卡（10月15日）+ 普通优先级组卡（4 条分支都未完成、最早截止已逾期）+ 普通优先级任务卡（未设置截止），断言网格 `data-testid` 顺序为 组卡 → 高任务卡 → 普通任务卡（组卡的已逾期落紧急桶 1，排在未逾期的紧急桶 3 之前；2026-09-23 紧急桶收窄后复核通过）；「同优先级内按截止日期从近到远，未设截止排最后」：三张普通优先级卡（+8 天 / +3 天 / 未设置截止，乱序传入）收敛为 +3 天 → +8 天 → 未设置截止 | 本地通过（2026-09-22） |
 | CARD-COLOR-BROWSER-025 | 浏览器实测 | 真实数据下的组卡落位 | 无头 Chromium 1440 宽（本地 dev 5173，真实数据只读）：`/tasks` 卡片顺序为 `A-5 残余`（普通 · 遗留问题，9月30日）→ `222`（紧急，未设置截止）→ `啊J` 组卡（普通 · 聚合组 · 未开始，已逾期 9月16日）→ `A-6`（高 · 模块级，10月15日）→ `呈现出`（普通，未设置截止）；切「列表」视图为同一顺序（组行 `my-task-group-174` 排在 `A-6` 行之前）。改动前 `啊J` 固定在第 5 位（网格与表格尾部） | 本地通过（2026-09-22） |
 
 本地实际执行（2026-09-22 组卡与任务卡同一顺序）：`pnpm --filter @inpulse/web test`（85 文件 559 例；本轮新增 2 例后为该值）、`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`（49 例）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm exec prettier --write`（2 个改动文件）、`pnpm exec eslint`、`pnpm format:check`、`pnpm check:docs` 通过；浏览器实测见 CARD-COLOR-BROWSER-025（无头 Chromium 1440 宽指向本地 dev 5173，只读浏览既有演示数据，未新增或修改业务数据）。
@@ -2995,7 +3012,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | CARD-COLOR-UNIT-012 | Web 单元 | 已完成区按完成时间从晚到早 | `TaskCenterPageView.test.tsx`「已完成按完成时间从晚到早排序，优先级不参与」：三条已完成任务（941 URGENT 9月1日 / 942 LOW 9月12日 / 943 NORMAL 9月6日）收敛为 942 → 943 → 941（2026-09-23 起 942 的优先级改判 HIGH，结论不变，见末节），证明已完成区不再按优先级排、改按完成时间倒序 | 本地通过（2026-09-22） |
-| CARD-COLOR-API-003 | 真实 PostgreSQL 集成 | 完成时间倒序排序键与游标版本 3 | `apps/api/test/aggregate-read-ports.integration.test.ts`：夹具创建顺序为 overdue → leftover → urgent → dueSoon → other → tieA → tieB（完成时间随事务 `now()` 递增，前置断言块断言 `stampRows` 严格递增且互不相等），已完成分组期望顺序为 done.tieB → tieA → other → dueSoon → urgent → leftover → overdue（= 创建顺序完全倒序），两个任务端口同序；`aggregate-read.service.test.ts` / `aggregate-read-cursor.test.ts` 的游标断言同步为 7 段 `3\|0\|\|4\|2\|\|501`（2026-09-23 起版本由 3 升到 4，断言改为 `4\|0\|\|4\|2\|\|501`，见末节）。注：夹具只能用真实事务时间戳，直接 UPDATE `completed_at` 会被 `task_status_history` 完成快照不变量触发器拒绝 | 本地通过（2026-09-22） |
+| CARD-COLOR-API-003 | 真实 PostgreSQL 集成 | 完成时间倒序排序键与游标版本 3 | `apps/api/test/aggregate-read-ports.integration.test.ts`：夹具创建顺序为 overdue → leftover → urgent → dueSoon → other → tieA → tieB（完成时间随事务 `now()` 递增，前置断言块断言 `stampRows` 严格递增且互不相等），已完成分组期望顺序为 done.tieB → tieA → other → dueSoon → urgent → leftover → overdue（= 创建顺序完全倒序），两个任务端口同序；`aggregate-read.service.test.ts` / `aggregate-read-cursor.test.ts` 的游标断言同步为 7 段 `3\|0\|\|4\|2\|\|501`（2026-09-23 起版本由 3 升到 4、再到 5：优先级序号收窄为 0/1/2、新增遗留问题字段，断言改为 8 段 `5\|0\|\|3\|2\|1\|\|501`，见末节）。注：夹具只能用真实事务时间戳，直接 UPDATE `completed_at` 会被 `task_status_history` 完成快照不变量触发器拒绝 | 本地通过（2026-09-22） |
 | CARD-COLOR-BROWSER-026 | 浏览器实测 | D 青碧落地取色与已完成顺序 | 无头 Chromium 1500 宽（本地 dev 5173，成员账号 xiaoshao，只读浏览既有演示数据）：`/tasks?status=done` 的 `.calm-task-card.tone-prio-done` 计算底色 `rgb(225, 242, 242)`（`#e1f2f2`）、描边 `rgb(188, 221, 223)`（`#bcdddf`）、标题 `rgb(29, 91, 98)`（`#1d5b62`），15 张已完成卡在页面上的先后顺序与数据库 `WHERE work_status = 'DONE' ORDER BY completed_at DESC` 逐条一致（F-01 09-12 07:39:03 → … → F-07 09-08 11:31:17）；`/projects/1/task-board` 的 `.tb-card.tone-prio-done` 同值，切「列表」视图后 `.tb-row--done` 底色 `rgb(225, 242, 242)`、`--tb-row-accent` `#1d5b62`（该行日期文案仍是看板自带的语义绿 `#58937a`）；页面内 `.tone-prio-overdue` / `.tone-prio-soon` 节点数仍为 0 | 本地通过（2026-09-22） |
 
 本地实际执行（2026-09-22 「已完成」改 D 青碧 + 完成时间倒序）：`pnpm --filter @inpulse/web test`（85 文件 560 例）、`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`（50 例）、`pnpm --filter @inpulse/api exec vitest run test/aggregate-read.service.test.ts test/aggregate-read-cursor.test.ts`（37 例）、真实 PostgreSQL 集成 `--config vitest.integration.config.ts test/aggregate-read-ports.integration.test.ts`（23 例）、真实 PostgreSQL 集成全量 `--config vitest.integration.config.ts`（48 文件 480 例通过，另有 2 例与本轮无关的失败：`project-member-management-api.integration.test.ts` 期望 422 得 500、`projects-read-api.integration.test.ts` 插入 `PROJECT_ADMIN` 违反 CHECK）、`pnpm --filter @inpulse/web exec tsc --noEmit`、`pnpm --filter @inpulse/api exec tsc -p tsconfig.test.json --noEmit`（仅剩 3 处与本轮无关的 `PROJECT_ADMIN` 错误）、`pnpm exec prettier --write`（12 个改动文件）、`pnpm format:check`、`pnpm exec eslint`（改动文件）通过；浏览器实测见 CARD-COLOR-BROWSER-026（无头 Chromium 1500 宽指向本地 dev 5173，只读浏览既有演示数据，未新增或修改业务数据）；dev 树 `apps/api/dist` 已重建并重启 :3000（`TASK_LIST_SORT_KEY_VERSION = 3` 已生效）；`docs/task-card-colors.md` 的《「已完成」》章节改写为青碧一套色值，配图 `cards-overview.png` / `board-overview.png` / `group-states.png` 按新色重出。未运行：整链 `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright；`apps/e2e/tests/task-groups.spec.ts` 的断言已按新口径同步但本轮未跑）、`pnpm deps:audit`、GitHub Actions；`apps/api` 的 3 处 `PROJECT_ADMIN` 类型错误与本轮无关，未修。
@@ -3019,12 +3036,20 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | ADR040-READPORT-002 | PostgreSQL | R-3 读端口输出负责人集合 | `MyTaskListRow` 增加 `assigneeIds`（`array_agg(user_id ORDER BY user_id)`，`NULL` 在边界归一为空数组），原 `min(user_id)` 继续供看板等标量调用方使用；单测断言条目 `assignees` 为两人引用且派生 `assignee` 等于首位 | 本地通过（api 单测 65 文件 365 例，其中 1 例为既有 `PROJECT_ADMIN` 失败） |
 | ADR040-WEB-002 | Web 单元 | 任务中心卡片与列表列出全部负责人 | `TaskCenterPageView` 用 `assigneeNamesOf()` 以「、」连接全部负责人（卡片 `calm-card-assignee` 与列表负责人列都带 `title`，集合为空时回落「—」）；`my-tasks-v1-query` 的本地过滤按全部负责人姓名匹配；新增「卡片列出全部负责人而不是只显示第一位」与「列表行的负责人列同样列出全部负责人」2 例 | 本地通过（web 85 文件 557 例） |
 | ADR040-BROWSER-002 | 浏览器实测 | 任务中心显示多负责人 | 本地开发实例（`127.0.0.1:5173` + API `127.0.0.1:3000`，登录邵晨宇）：`GET /api/v1/me/tasks?limit=100` 的 `INPULSE-T-64` 返回 `assignees` 两人（小潘、邵晨宇）且 `assignee` 为小潘；卡片视图显示「负责人：小潘、邵晨宇」，`?view=list` 列表视图负责人列为「小潘、邵晨宇」 | 本地通过 |
+| ADR040-CONTRACT-003 | 契约 | 任务看板（R-8）卡片返回全部负责人 | `taskBoardCardSchema` 的 `assignee: userRefSchema` 改为 `assignees`（`z.array(userRefSchema).min(1).max(TASK_BOARD_CARD_ASSIGNEES_MAX)`，上限常量 20，与请求侧 `assigneeIds` 对齐）；泳道 `assignees` 头像组与 `TASK_BOARD_LANE_AVATARS_MAX` 不变；R-8 是 GET 路由（幂等策略 `none`），契约版本无需递增；`contract:drift`（5 产物）、`contract:validate`（108 条）、`permissions:check`（108/108）通过 | 本地通过（2026-09-23） |
+| ADR040-READPORT-003 | PostgreSQL | 看板读端口输出负责人集合 | `TaskBoardTaskRow.assigneeIds` 取代标量 `assigneeId`，SQL 由 `min(ta.user_id)` 改为 `array_agg(ta.user_id ORDER BY ta.user_id)`，无负责人时 `NULL` 在适配器边界归一为 `[]`；服务层按集合逐人解析用户引用、泳道头像按 userId 去重后截断，仍缺用户时保持 `AGGREGATE_READ_INCONSISTENT` 500；真库 `task-board-ports.integration.test.ts` 新增「卡片负责人为全部负责人的升序集合，不再只取最小 user_id」（三人任务 + 单人任务对照） | 本地通过（真库 7 例、api 单测 `task-board-query.service.test.ts` 9 例） |
+| ADR040-WEB-003 | Web 单元 | 看板卡片、列表行与筛选覆盖全部负责人 | 卡片 `.tb-meta-name` 与列表 `.tb-owner-name` 以「、」连接全部姓名并带 `title`；负责人筛选由等值改为 `some()` 任一命中、搜索 haystack 覆盖全部姓名、负责人下拉按全部负责人去重收集；`.tb-meta-name` 由 72px 放宽到 110px，`.tb-owner-name` 补省略号与 `min-width: 0`；`src/features/task-board` 4 文件 38 例（含「多负责人任一命中即保留」与页面双负责人渲染断言） | 本地通过（2026-09-23） |
+| ADR040-BROWSER-003 | 浏览器实测 | 看板两视图与按负责人筛选 | 本地开发实例（`127.0.0.1:5173`，登录邵晨宇）：卡片 `.tb-meta-name` 文本「特哥、邵晨宇」、`title="负责人：特哥、邵晨宇"`、`clientWidth = scrollWidth = 63`（未溢出）；列表视图 `.tb-owner-name` 58 个节点中 2 个多负责人（「特哥、邵晨宇」「小潘、邵晨宇」），目标行内容 66px 落在 116px 列内且 `title` 为全名单；`?view=list&owner=7`（邵晨宇）余 4 条，含两条「第二位负责人是邵晨宇」的任务 | 本地通过（2026-09-23） |
 
 本地实际执行（2026-09-22）：`pnpm db:migrate`（应用 `0020`/`0021`）→ `db:migrations:check`（22 条）→ `db:seed:check`（28 张业务表）→ `contract:generate`（5 产物）→ `contract:drift` → `contract:validate`（108 条）→ `permissions:check`（108/108）；`apps/api` 单测 65 文件 364 例、`apps/web` 85 文件 555 例、`packages/api-contract` 16 文件 100 例、`apps/ops` 52 例、`database` 15 例；真实 PostgreSQL 集成 `apps/api` 50 文件 481 例；`pnpm lint`、`check:deps`（528 文件）、`check:frontend:boundaries`（282 模块）、`check:secrets`（1065 文件）、`check:docs`（86 个 Markdown）、`check:deploy:test`（5 refs）、各包生产构建均通过；改动文件 Prettier 检查通过。验证后已按 2026-09-17 指示清理测试夹具（删除夹具用户 3663、夹具项目 1923、业务行 67226、审计行 3009，保留 3 个真实项目；SYSTEM 审计链因中段删除留下一个可检测断点，清理脚本已提示）。
 
 任务中心「负责人」多值展示（2026-09-22 追加，`fix(tasks)`）：多负责人落库后用户反馈「任务卡片上的负责人怎么只显示一个人」，定位为 R-3 任务中心契约只带派生标量 `assignee`（`min(user_id)`），集合本身没有出接口，视图无法渲染第二名负责人。本批把集合贯通契约、读端口、服务与前端（新增 `ADR040-CONTRACT-002` / `ADR040-READPORT-002` / `ADR040-WEB-002` / `ADR040-BROWSER-002` 四行），标量 `assignee` 保留为派生字段以便看板、统计等按单值消费的调用方无需同批改造。本轮另修复一处会被误判为「代码没生效」的运行时陷阱：`@inpulse/api-contract` 的 `exports.default` 指向 `dist`，只改契约源码而不重建该包产物时，全局响应校验会按旧 Schema 剔除新增字段（表现为接口 200 但响应缺 `assignees`）；改契约后必须同时重建 `packages/api-contract` 的 dist 再重启 API。
 
-未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入。
+任务看板「负责人」多值展示（2026-09-23 追加，`fix(task-board)`）：接续上一条，看板（R-8）此前只画派生标量，多负责人任务在泳道卡片与列表行上只出现一个人。本批把看板读路径同样收敛为集合（新增 `ADR040-CONTRACT-003` / `ADR040-READPORT-003` / `ADR040-WEB-003` / `ADR040-BROWSER-003` 四行）：契约 `taskBoardCardSchema` 由 `assignee` 单值改为 `assignees` 集合，读端口 SQL 的 `min(ta.user_id)` 换成 `array_agg(... ORDER BY user_id)`，服务层按集合解析用户引用、泳道头像按 userId 去重截断，前端卡片 / 列表行 / 负责人下拉 / 本地筛选都改为消费集合（筛选语义为「任一负责人命中即保留」）。ADR040-READPORT-001 中「标量 `assigneeId` 由 `min(user_id)` 派生」自本批起只适用于聚合组、遗留项工作流等其余调用方，看板 SQL 内已无 `min(user_id)`；泳道头像组与看板统计口径未变。
+
+本地实际执行（2026-09-23 看板多负责人）：`contract:generate`（5 产物）与 `packages/api-contract` 的 `build`（运行中的 API 经 `exports.default` 读 dist，改契约后必须同步重建）→ `contract:drift`（5 产物一致）、`contract:validate`（108 条）、`permissions:check`（108/108）；`pnpm -r typecheck`（9 个 workspace 项目全绿）；全 workspace 单测 —— `apps/api` 66 文件 369 例、`apps/web` 85 文件 583 例、`packages/api-contract` 16 文件 100 例、`apps/ops` 8 文件 52 例、`database` 15 例、`canonical-json` 5 例；定向 —— `apps/web` 的 `src/features/task-board` 4 文件 38 例、`apps/api/test/task-board-query.service.test.ts` 9 例、真实 PostgreSQL `apps/api/test/task-board-ports.integration.test.ts` 7 例；`pnpm --filter @inpulse/web build` 与 `pnpm --filter @inpulse/api build` 通过，重启本地 API / Vite 后完成上表两处浏览器实测。
+
+未运行 / 已知偏差：① 两例既有失败与本决策无关——`project-member-management-api.integration.test.ts` 与 `projects-read-api.integration.test.ts` 的 `PROJECT_ADMIN` 用例仍违反 `project_members_role_check`（ADR-039 在 `projects.zod.ts` 的 `projectMemberRoleSchema` 等处的残留，本批未改动）；`apps/api` 单测同源 1 例与 3 个 `PROJECT_ADMIN` 类型错误同样为既有问题；② 未跑 `pnpm check` 整链、Playwright E2E（本批未扩展 E2E 用例）、`deps:audit`（需 registry 访问）与 GitHub Actions；③ `pnpm format:check` 仅因工作区既有未提交文件 `apps/web/src/features/tasks/task-origin.tsx` 报错（用户 WIP）；④ 破坏性契约变更（请求体 `assigneeId` → `assigneeIds`）按仓库规则需非作者人工评审后才能合入；⑤ 2026-09-23 看板多负责人收口同样是破坏性契约变更（看板卡片 `assignee` → `assignees`），未跑整链 `pnpm check`、`pnpm test:e2e`（`apps/e2e/tests/task-board.spec.ts` 未扩展也未运行）、`deps:audit` 与 GitHub Actions，同样需非作者人工评审。
 
 ## 任务中心页头 + 控制条一体化与「未完成 / 已完成」数量角标（方案 A，产品要求，2026-09-22 本地落库）
 
@@ -3114,7 +3139,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 数据库：新增 `database/migrations/0022_drop_low_priority.sql`，三步顺序不可颠倒 —— ① `UPDATE app.tasks SET priority = 'NORMAL', row_version = row_version + 1 WHERE priority = 'LOW'`（`tasks_row_version` 触发器要求行版本恰好递增一次，持有旧版本号的客户端编辑时按乐观锁拿到 409）；② `SET CONSTRAINTS ALL IMMEDIATE`，让此前延迟的约束检查先落地；③ `DROP`/`ADD` 把 `tasks_priority_check` 收紧为 `('NORMAL', 'HIGH', 'URGENT')`。若先收紧 CHECK，表内仍存在的 `LOW` 行会让 `ADD CONSTRAINT` 直接失败。历史迁移 `0000_initial.sql` 不改写，升级窗口由该新迁移承接。
 
-排序与游标：`apps/api/src/modules/tasks/task-list-order.ts` 的优先级 CASE 由 `0/1/2/3` 收窄为 `0/1/2`（未命中一律 2），`TASK_LIST_SORT_KEY_VERSION` 由 3 升到 4 —— 旧键第 5 段的 `3` 原意是「低」，在新口径下不对应任何任务的序号，继续接受会在 keyset 比较里静默跳页 / 漏项，因此按无效游标整版拒绝。任务看板读端口 `listForBoard` 的 `ELSE 3` 同步改为 `ELSE 2`。
+排序与游标：`apps/api/src/modules/tasks/task-list-order.ts` 的优先级 CASE 由 `0/1/2/3` 收窄为 `0/1/2`（未命中一律 2），`TASK_LIST_SORT_KEY_VERSION` 由 3 升到 4 —— 旧键第 5 段的 `3` 原意是「低」，在新口径下不对应任何任务的序号，继续接受会在 keyset 比较里静默跳页 / 漏项，因此按无效游标整版拒绝。任务看板读端口 `listForBoard` 的 `ELSE 3` 同步改为 `ELSE 2`。（同日稍后按产品口径「遗留问题只需要比同优先级的高就行了」再升到 5：紧急桶收窄、遗留问题来源独立成级，见末节 2026-09-23 行；本节表格里的版本与旧键清单已按最终值（5）更新。）
 
 前端兜底：`task-tone.ts` 与 `priority-select-option.ts` 对未知优先级（含历史 `LOW`）统一回落到「普通」的 `normal` / `#337ee6`，不再有低档的中性灰 `#a0adb9`；`design-system.css` 里 `.tone-prio-low` 的三处定义（列表行浅色变量块、行标题选择器、卡片实色块）整体删除。
 
@@ -3122,7 +3147,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | --- | --- | --- | --- | --- |
 | LOW-PRIORITY-DB-001 | 真实 PostgreSQL 迁移 | 存量归一 + CHECK 收紧 | `0022_drop_low_priority.sql` 执行后 `pnpm db:migrate` 报 `Applied 0022_drop_low_priority.sql`；`pnpm db:migrations:check` 23 条通过；真库按 `app.tasks.priority` 分组只剩 `HIGH 66 / NORMAL 7131 / URGENT 53`，`LOW` 由 7 条归零；`app.tasks` 的 `tasks_priority_check` 已不含 `LOW` | 本地通过（2026-09-23） |
 | LOW-PRIORITY-CONTRACT-001 | 契约生成 | 枚举收窄落进契约与生成客户端 | `TASK_PRIORITIES`、`TaskEditRequest.priority`、`ProjectMemberUnfinishedTaskItem.priority`、`TaskBoardCard.priority` 与任务中心读取 Schema 同步收窄为三档；`pnpm contract:generate` 重生成 `packages/api-contract/generated/openapi.json` 与 `apps/web/src/generated/api/*` 后，契约与生成物中 `LOW` 零残留；`pnpm contract:drift` 无漂移、`pnpm contract:validate` 108 条通过、`pnpm permissions:check` 108/108 通过 | 本地通过（2026-09-23） |
-| LOW-PRIORITY-API-002 | API 单测 | 游标版本 4 与旧键整版拒绝 | 新增 `apps/api/test/task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` 为 4，样本键往返为 `4\|0\|\|4\|2\|\|501`，旧版载荷（含原「低」序号 `3\|0\|\|4\|3\|\|501` 与版本 2）经 `parseTaskListSortKey` 一律返回 `null` | 本地通过（2026-09-23） |
+| LOW-PRIORITY-API-002 | API 单测 | 游标版本 5 与旧键整版拒绝 | 新增 `apps/api/test/task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` 为 5，样本键往返为 `5\|0\|\|3\|2\|1\|\|501`，旧版载荷（含版本 4 的 `4\|0\|\|3\|2\|\|501` 与 `4\|0\|\|1\|2\|2026-09-18T01:00:00.000Z\|42`、原「低」序号 `3\|0\|\|4\|3\|\|501` 与版本 2）经 `parseTaskListSortKey` 一律返回 `null`；新增用例断言遗留问题字段非数字（`5\|0\|\|3\|2\|x\|\|501`）同样拒绝 | 本地通过（2026-09-23） |
 | LOW-PRIORITY-API-003 | 真实 HTTP API 集成 | 请求里的 `LOW` 与排序改判 | `aggregate-read-api.integration.test.ts`：`GET /api/v1/me/tasks?priority=LOW` 与既有 `priority=CRITICAL` 同为非法枚举 422；`tasks-api.integration.test.ts` 的排序用例把「低优任务」改为「高优任务」，未完成组内期望顺序随之改判 紧急 → 高 → 普通 | 本地通过（2026-09-23） |
 | LOW-PRIORITY-WEB-001 | Web 单元 | 卡片配色与下拉圆点的三档化 | `task-tone.test.ts`：「三个优先级取卡片实色：紧急 / 高 / 普通」，以及「已下线的「低」与其它未知值都落到「普通」，不整页崩溃」——`taskToneOf("LOW", "TODO")` / `taskToneOf("SOMEDAY", "TODO")` / `taskToneOf("", "")` 都为 `normal`，`taskToneClassName("LOW", "TODO")` 不等于 `tone-prio-low`。`priority-select-option.test.ts`：「已下线的「低」与其它未知值都按「普通」的蓝色处理」——`priorityDotColor("LOW")` / `("SOMEDAY")` / `("")` 都为 `#337ee6` | 本地通过（2026-09-23） |
 | LOW-PRIORITY-WEB-002 | Web 单元 | 筛选与下拉里不再出现「低」 | 任务中心（`TaskCenterPageView.tsx` / `.test.tsx`、`my-tasks-types.ts`、`my-tasks-url.ts`、`my-tasks-mock.ts`、`my-tasks-v1-query.test.ts`）、任务看板（`task-board-filters.ts` / `.test.ts`、`task-board-format.ts` / `.test.ts`、`TaskBoardToolbar.tsx`）、新建与编辑任务（`GlobalTaskCreateModal.tsx`）、功能页任务面板（`TasksPanel.tsx`）与遗留项转任务（`ConvertLeftoverTask.tsx`）的优先级选项 / 标签 / 圆点 / URL 参数统一为三档；`pnpm --filter @inpulse/web test` 85 文件 576 例通过 | 本地通过（2026-09-23） |
@@ -3381,6 +3406,62 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 API 单测、真实 PostgreSQL 集成、契约 / 权限 / Secret / 依赖审计门禁、整链 `pnpm typecheck` / `pnpm build` / `pnpm check`、`pnpm test:e2e`（Playwright）与 GitHub Actions（本轮未触碰契约、数据库与后端）；② 项目任务面板列表（`TasksPanel`）与功能档案任务列表（`FeaturesPageView`）保持「只有标题可点」，用户本次只提任务中心的列表模式；若产品要求全站一致需另立一轮；③ 行级热区是鼠标增强，键盘与读屏仍走标题按钮（不新增 Tab 停靠点），因此整行不会被读成按钮；④ 拖选保护按「当前选区非空」判定，拖选后不重新拖选直接单击同一行仍会被挡下一次，属有意行为；⑤ 交互与排版属主观项，需非作者人工评审。
 
+## 分段控件切换滑块动画（用户指示，2026-09-23 本地落库）
+
+需求（原文）：「我现在想改未完成和已完成还有卡片列表滑块的切换动画……只需要参考动画就行，样式不要改」，随后追加「任务看板那边也记得改」；参考实现是 Uiverse 的 radio-input（轨道 `position: relative`、绝对定位滑块、`transform: translateX` 位移 + 0.15s ease）。本批为纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+实现：选中底色与投影从 `.segmented button.selected` 迁到滑块 `.segmented-thumb`，取值与原规则完全一致（`background: white`、`box-shadow: 0 1px 3px #203c5515`，按钮与滑块同为 4px 圆角），按钮只保留 `color` 变化；`useCalmSegmentedThumb` 以 `button[aria-pressed=true]` 反查选中按钮并按其 `getBoundingClientRect()` 相对轨道实测矩形，写滑块的 `transform` 与 `width`，CSS 只负责 `transform 0.15s ease, width 0.15s ease`；测量在 layout effect 中每次渲染后执行（值未变时回传同一对象，避免测量自转），`ResizeObserver` 观察轨道与各按钮以兜住窗口缩放、字体加载与弹窗由隐藏转显示；滑块只在首次测量完成后挂载，因此首帧不会从左侧滑入。任务看板工具栏（手写 `.segmented`）复用同一 hook 与滑块组件。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SEGMENT-SLIDE-BROWSER-001 | 浏览器实测 | 任务中心滑块与选中按钮完全重合 | 临时 E2E：`/tasks?status=open` 打开态滑块 box 与选中按钮一致（x=283、w=86.63、h=29），`transition` 为 `transform 0.15s, width 0.15s` | 本地通过（2026-09-23，用例已删） |
+| SEGMENT-SLIDE-BROWSER-002 | 浏览器实测 | 切换过程确有位移过渡 | 同上：点「已完成」后逐帧采样得到 283 → 293 → 358.54 → 371.63 的中间值（不是瞬移） | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-BROWSER-003 | 浏览器实测 | 任务看板视图切换同样生效 | 临时 E2E：`/projects/{id}/task-board` 滑块 box 与「看板」按钮一致（x=286、w=65、h=28），切「列表」采样 286 → 293.68 → 343.97 → 354 | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-WEB-001 | Web 单元 | 既有分段控件断言不受影响 | `pnpm --filter @inpulse/web test` 85 文件 578 例通过（含 `TaskCenterPageView.test.tsx` 58 例与 `src/features/task-board` 4 文件 38 例） | 本地通过（2026-09-23） |
+| SEGMENT-SLIDE-GATE-001 | 静态门禁 | 类型、风格与格式 | `pnpm exec eslint`（`Calm.tsx`、`TaskBoardToolbar.tsx`）通过；`pnpm exec prettier --check` 通过；`pnpm --filter @inpulse/web typecheck` 仅剩并行 audit 改动的 1 个错误 | 本地通过（typecheck 见偏差说明） |
+
+本地实际执行（2026-09-23 滑块动画）：`pnpm --filter @inpulse/web test`（85 文件 578 例；首次整套并发运行出现过 2 例超时，单独复跑与随后整套复跑均通过，属既有负载敏感间歇失败）、`pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx`（58 例）、`pnpm --filter @inpulse/web exec vitest run src/features/task-board`（4 文件 38 例）、`pnpm exec eslint`（2 个改动文件）、`pnpm exec prettier --write` 与 `--check`、`pnpm --filter @inpulse/web typecheck`、真实浏览器临时用例（任务中心与任务看板三处滑块，截图留档）。
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`、全量 `pnpm test:e2e`、`pnpm deps:audit` 与 GitHub Actions；② `pnpm --filter @inpulse/web typecheck` 仍有 1 个并行 audit 改动的错误（`AuditLogPageView.test.tsx(107,5) TS2783: getUserDirectory is specified more than once`），与本批无关；③ `apps/e2e/tests/task-board.spec.ts` 的 R-8 在本机 180s 超时：用 `git stash` 只还原本批 3 个文件后同一用例同样超时（均卡在新建任务弹窗选完「所属模块」后负责人未选中、弹窗不关闭），确认为既有失败，本批未修；④ 本机 E2E 的 API 与 Web 由 Playwright 自建构建（端口 3100 / 4173），不使用手动启动的实例。
+
+## 侧栏项目树：折叠动画与滚动条槽常驻（用户指示，2026-09-23 本地落库）
+
+用户指示（原文，附侧栏「当前项目」截图）：「我希望让你帮我设计这边导航栏下拉列表这一块，我希望让它丝滑一点，而且不会因为太长出现滚轮条以后布局会发生变化」。本批为前端展示层改动：只改 `apps/web/src/features/project-tree/ProjectTree.tsx`、`ProjectTree.test.tsx` 与 `apps/web/src/styles/design-system.css`，不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+做法：① 三处折叠区（项目子级 / 模块列表 / 模块下的功能列表）改成 `grid-template-rows` 的 0fr↔1fr 过渡（240ms）+ 180ms 淡入，内容在动画中被裁剪层裁出；② 收起时延迟 240ms 卸载内容、展开立即挂载（`useRetainedMount`），保住模块 / 功能列表的懒加载；③ 模块列表滚动条槽常驻（`scrollbar-gutter: stable`）并换 6px 细条；④ 裁剪层补 `overflow: clip`，`overflow-clip-margin: 6px` 只在展开态给；⑤ `prefers-reduced-motion: reduce` 关闭全部过渡。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-TREE-MOTION-BROWSER-001 | 浏览器实测 | 滚动条出现与否都不改变行宽 | `/projects/{id}/modules` 展开模块列表后量测：无滚动条（内容 34px）与有滚动条（内容 714px、容器 200px）两种状态下模块行 `width 186 / right 212 / left 26`、标签 `width 117 / right 201 / left 84` 完全一致；`scrollbar-gutter` 计算值为 `stable` | 本地通过（2026-09-23，临时用例已删） |
+| SIDEBAR-TREE-MOTION-BROWSER-002 | 浏览器实测 | 动画全程罗列区不出现内部溢出 | 真实速度下一次收起 + 一次展开共 56 帧逐帧采样（`requestAnimationFrame`）：`.project-tree-scroll` 的 `clientHeight === scrollHeight` 每帧成立；修复前展开中为 130/151、收起中为 34/40 | 本地通过（2026-09-23，用例已删） |
+| SIDEBAR-TREE-MOTION-BROWSER-003 | 浏览器实测 | 展开按内容高度裁出而不是重影 | 4 倍慢放逐帧截图：行按最终位置排版、可见部分由外框裁出（`任务看板` 行被裁在中途），下方「交付记录」不被树行覆盖；裁剪层 `overflow` 计算值为 `clip` | 本地通过（2026-09-23，截图留档） |
+| SIDEBAR-TREE-MOTION-BROWSER-004 | 浏览器实测 | 三处折叠区走同一套动画 | 项目子级、模块列表、模块下功能列表的 `.tree-children` / `.tree-modules` 计算值均为 `display: grid` + `grid-template-rows` 0.24s 过渡，`data-open` 在 `1fr` / `0fr` 之间翻转 | 本地通过（2026-09-23） |
+| SIDEBAR-TREE-MOTION-WEB-001 | Web 单元 | 收起过程对辅助技术隐藏、动画后才卸载 | `ProjectTree.test.tsx`：点击收起后 `data-open="false"`、`aria-hidden="true"`，240ms 后内容不可查询；既有滚动区 DOM 契约用例改用 `.project-tree-scroll > .tree-project > .tree-children .tree-modules-scroll` 后代选择器 | 本地通过（11 例，2026-09-23） |
+| SIDEBAR-TREE-MOTION-E2E-001 | Playwright | 罗列区不变成内滚动区（既有断言在新动画下仍成立） | `visual-migration.spec.ts` 第 88–90 行：`overflow-y` 为 `visible`、`scrollHeight === clientHeight`；修掉裁剪层之前该断言因展开瞬时溢出失败（151 vs 130），修复后通过 | 本地通过（2026-09-23；同批 `aggregate-views`、`modules`、`features`、`project-create` 共 7 例通过） |
+| SIDEBAR-TREE-MOTION-GATE-001 | 静态门禁 | 类型、风格与格式 | `pnpm --filter @inpulse/web typecheck`（0 错）、`pnpm --filter @inpulse/web test`（85 文件 583 例）、`pnpm exec prettier --check` 与 `pnpm exec eslint`（改动文件）通过 | 本地通过（2026-09-23） |
+
+本地实际执行（2026-09-23）：`pnpm --filter @inpulse/web test`（85 文件 583 例；同日整套并发运行出现过 1~2 例负载敏感间歇失败——`app-router.test.tsx` 的 lazy 页面 1s 内未就绪、`SimilarFeatures.test.tsx` 的 debounce，单文件复跑与随后整套复跑均通过）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec prettier --check`、`pnpm exec eslint`、`pnpm --filter @inpulse/e2e exec playwright test visual-migration aggregate-views modules features project-create`（7/7）、真实浏览器临时量测与截图（用例已删）。
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`、`pnpm test:integration`、`deps:audit` 与 GitHub Actions；② 全量 E2E 57 例中 8 例失败，均为既有失败（把本批 3 个文件 `git stash` 还原到 HEAD 后同样失败）：`record-drafts` 3/3（strict mode：草稿卡片 `aria-label="继续编辑草稿：…"` 与草稿详情弹层的「继续编辑」同页共存）、`module-tasks`、`record-feed`、`task-board`（180s 超时）、`task-completion` 2 例，本批未修、未弱化断言；③ 折叠动画期间行按最终位置排版并由外框裁出，折叠区自身不能再加会被裁掉的外溢装饰（如外投影）；④ 裁剪余量只在展开态给 6px，恰在收起动画中聚焦时聚焦环可能被裁边，属可接受取舍；⑤ 侧栏整体高度仍随项目数与展开内容增长（沿用 2026-09-21 取舍），本批只保证模块列表内滚且不挤动行宽。
+
+> 历史说明（2026-09-24 合并）：本条是并行开发线当时的本地口径，已被 [ADR-037](adr/ADR-037.md) §3 的 2026-09-24 修订取代——两条并行开发线合并后统一采用「遗留问题来源回到紧急桶、排在已逾期之后」的口径，游标版本定为 6、载荷 7 段；下表用例已在本地按新口径改写（见本文件末节「2026-09-24 遗留问题来源改排到已逾期之后」）。
+
+## 2026-09-23 遗留问题退出紧急桶（产品要求，C 本地落库）
+
+需求（原文）：「现在这个任务排序不是很好，遗留问题只需要比同优先级的高就行了」，附 `/tasks` 截图（`A-6 上线门禁` 高优先级卡被两张「遗留问题」普通优先级卡压住）。此前口径把「遗留问题来源」放在紧急桶最高档（`遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)`），来源任务因此在未完成分组里恒排最前、越过任何更高优先级。本批改为**遗留问题来源在优先级之后单独成一级**，只在同优先级内提前。
+
+做法：`apps/api/src/modules/tasks/task-list-order.ts` 的紧急桶收窄为「标记紧急(0) → 已逾期(1) → 今/明日截止(2) → 其余(3)」，其后插入第 5 级「遗留问题来源(0) → 其余(1)」（仅未完成参与，已完成 / 已取消恒 1）；`TASK_LIST_SORT_KEY_VERSION` 由 4 升到 5，游标载荷由 7 段变 8 段（`版本|状态分组|完成时间|紧急桶|优先级|遗留问题|截止|任务ID`），旧版本键由 `parseTaskListSortKey` 返回 null、按无效游标 422 拒绝。前端 `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 同步：`urgencyBucketOf` 去掉 `hasLeftoverSource` 参数与首行分支，新增 `leftoverRankOf` 并插进 `taskEntriesOf` 与组卡 `rank` 数组（组卡没有这一事实、恒 1），`gridEntries` 由五级变六级。不改契约、Route Registry、权限矩阵、数据库不变量与迁移，后端只有这一处排序表达式与游标载荷。
+
+| 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-ORDER-API-001 | API 单测 | 排序键 7 级与游标版本 5 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` 为 5、样本键往返为 `5\|0\|\|3\|2\|1\|\|501`、遗留问题字段非数字拒绝；`aggregate-read.service.test.ts` 与 `aggregate-read-cursor.test.ts` 的游标断言同步为 8 段 | 本地通过（2026-09-23；`corepack pnpm --filter @inpulse/api test:unit task-list-order aggregate-read`：3 文件 42 例） |
+| LEFTOVER-ORDER-DB-001 | 真实 PostgreSQL 集成 | 同优先级内提前、不越过更高优先级 | `aggregate-read-ports.integration.test.ts`：未完成组新增「高优先级无遗留」与「同优先级无遗留」两条对照夹具，期望顺序为 `标记紧急 → 已逾期 → 今/明日截止 → 高优先级（无遗留）→ 遗留问题来源（普通）→ 其余 → 并列 A → 并列 B → 同优先级无遗留`，已完成 / 已取消分组不受影响；keyset 分页用例在新序号下仍不漏不重 | 本地通过（2026-09-23；单文件 23/23，`corepack pnpm --filter @inpulse/api test:integration aggregate-read` 3 文件 54 例） |
+| LEFTOVER-ORDER-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序未回归 | `aggregate-read-api.integration.test.ts`：`tSource`（普通 + 遗留问题来源）仍排在同为普通优先级的其它任务之前，顺序断言与注释同步为新口径 | 本地通过（2026-09-23，含在同一条 `aggregate-read` 运行内） |
+| LEFTOVER-ORDER-WEB-001 | Web 单元 | 前端镜像排序与反向夹具 | `TaskCenterPageView.test.tsx` 新增用例「遗留问题只在同优先级内提前，不越过更高优先级」：夹具 951（高）/ 952（普通 + 遗留问题来源）/ 953（普通）乱序传入，网格 `data-testid` 顺序收敛为 951 → 952 → 953 | 本地通过（2026-09-23；`corepack pnpm --filter @inpulse/web test my-tasks`：5 文件 107 例） |
+
+本地实际执行（2026-09-23 排序口径）：三条定向命令如上；`docs/adr/ADR-037.md`（§1 排序键、§2 载荷与版本递增行、§3 2026-09-23 修订行、§6 测试要求）、`docs/adr/ADR-041.md`（修订关系）、`docs/task-card-colors.md`（列表行排序与变更历史）与本文件同步。
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`、`pnpm typecheck`、`pnpm build`、全量 `test:unit` / `test:web` / `test:integration`、`pnpm test:e2e`、`deps:audit` 与 GitHub Actions；② 未做浏览器人工复核（需重启 API 使新排序生效）；③ 版本 4 及更早的已签发游标在升级后一律按无效游标拒绝（422 `AGGREGATE_READ_INVALID_CURSOR`），分页需从头开始——这是刻意选择，避免旧序号在新口径下跳页或漏项；④ ADR-037 仍为 `Proposed`，口径变更待人工批准。
 ## 2026-09-23 模块层面下线归档（ADR-044，本地落库）
 
 用户指示（原文：「好接下来我们改模块的归档，直接去掉这个功能」）：模块层面整体下线归档，模块只有 `ACTIVE`；功能、任务、迭代记录与遗留项的归档 / 恢复完全不变。决策落 [ADR-044](adr/ADR-044.md)，与同日的 [ADR-043](adr/ADR-043.md) 项目三态同属一个尚未推送的批次。
@@ -3485,7 +3566,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | TASK-URGENCY-ORDER-PG-INT-001 | 真实 PostgreSQL | 5 桶重排后的完整顺序 | `aggregate-read-ports.integration.test.ts`「状态分组 / 完成时间 / 紧急桶的组合按口径排序，且两个任务端口同序」：未完成期望改为 `[todo.urgent, todo.overdue, todo.leftover, todo.dueSoon, todo.other, todo.tieA, todo.tieB]`，且 `MyTaskQueryPort.list` 与 `TaskQueryPort.list` 同序；已完成（完成时间倒序）与已取消（优先级 → 截止 → id）分组期望不变 | 本地通过（2026-09-24） |
 | TASK-URGENCY-ORDER-PG-INT-002 | 真实 PostgreSQL | keyset 分页跨页不漏不重 | 同文件「多列 keyset 分页跨页不漏不重」：造数顺序仍等于返回顺序（标记紧急 → 已逾期 → 今/明日截止 → 其余），逐页翻完得到同一序列 | 本地通过（2026-09-24） |
 | TASK-URGENCY-ORDER-API-INT-001 | HTTP + PostgreSQL | R-3 我的任务实际返回顺序 | `aggregate-read-api.integration.test.ts`「只返回本人负责的任务，排除历史来源分支并标注组角色」：夹具里只有 `tSource` 命中遗留问题来源桶（其余未完成任务同为「其余」桶），期望顺序不变，仍为 `[tSource, tMain, tDetached, tModule, tInvalid, tDone, tCanceled]` | 本地通过（2026-09-24） |
-| TASK-URGENCY-ORDER-UNIT-001 | API 单元 | 游标版本随口径升级 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` = 5，当前版本载荷往返为 `5|0||4|2||501`，版本 4 / 3 / 2 的游标全部返回 null（含专门构造的 `4|0||0|2||501`：旧 0 桶在新口径下会被读成「标记紧急」） | 本地通过（2026-09-24） |
+| TASK-URGENCY-ORDER-UNIT-001 | API 单元 | 游标版本随口径升级 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` = 6，当前版本载荷往返为 `6|0||4|2||501`，版本 5（8 段载荷）/ 4 / 3 / 2 的游标全部返回 null（含专门构造的 `4|0||0|2||501`：旧 0 桶在新口径下会被读成「标记紧急」） | 本地通过（2026-09-24） |
 | TASK-URGENCY-ORDER-WEB-UNIT-001 | Web 单元 | 组卡与任务卡同一把尺子 | `TaskCenterPageView.test.tsx`「组卡与任务卡同一顺序：同优先级按截止日期从近到远」：已逾期组卡落在紧急桶 1，仍排在紧急桶 4 的高优先级任务卡之前，顺序为 组卡 → 高任务卡 → 普通任务卡；「同优先级内按截止日期从近到远，未设截止排最后」不受影响 | 本地通过（2026-09-24） |
 | TASK-URGENCY-ORDER-GATE-001 | 静态门禁 | 类型、风格、契约与格式 | `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`contract:drift`、`contract:validate`（98 条）、`permissions:check`（98 条）、`check:docs`、`check:frontend:boundaries` 通过 | 本地通过（2026-09-24） |
 

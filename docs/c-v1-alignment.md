@@ -15,7 +15,7 @@
 
 ## 2. R-3 `listMyTasks` 与 F-32 任务中心
 
-冻结事实（裁决 §2、§3、Q-08 ~ Q-10）：`GET /api/v1/me/tasks`，参数只有 `cursor` / `limit` / `projectId` / `scopeType` / `workStatus` / `hasPublishedRecord`；负责人固定为当前用户；排序固定 状态分组（未完成 → 已完成 → 已取消）+ 紧急桶（标记紧急 → 已逾期 → 遗留问题来源 → 今/明日截止 → 其余；2026-09-24 口径，见 ADR-037 §3 修订）+ 优先级 + 截止时间 + 任务 ID（2026-09-18 由 [ADR-037](adr/ADR-037.md) 替代原 `id DESC`，待人工批准）；`limit` 默认 20、上限 100。
+冻结事实（裁决 §2、§3、Q-08 ~ Q-10）：`GET /api/v1/me/tasks`，参数只有 `cursor` / `limit` / `projectId` / `scopeType` / `workStatus` / `hasPublishedRecord`；负责人固定为当前用户；排序固定 状态分组（未完成 → 已完成 → 已取消）+ 紧急桶（标记紧急 → 已逾期 → 遗留问题来源 → 今/明日截止 → 其余；2026-09-24 口径，见 ADR-037 §3 修订）+ 优先级 + 截止时间 + 任务 ID（2026-09-18 由 [ADR-037](adr/ADR-037.md) 替代原 `id DESC`，待人工批准；2026-09-24 两条并行开发线合并后游标版本定为 6、载荷 7 段）；`limit` 默认 20、上限 100。
 
 可执行映射见 `apps/web/src/features/my-tasks/my-tasks-v1-query.ts`：
 

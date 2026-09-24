@@ -505,8 +505,85 @@
   margin-left: auto;
 }
 
+/* 审计页的读取留痕（`AUDIT_LOG_READ`）是打开本页时自动生成的自我噪音，列表默认隐藏；
+ * 这一行给出开关与已隐藏条数，直接复用设计系统的 `.check-line`，不新增控件样式。 */
+.audit-trail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.audit-trail-bar > span {
+  color: #8291a1;
+  font-size: 11px;
+}
+
 .audit-row:last-child {
   border-bottom: 0;
+}
+
+/* 项目动态按自然日折叠：组头沿用 `.audit-row` 的列宽，让左侧日期列与时间线竖线、
+ * 行内时刻严格对齐；组内行只显示时刻，完整日期与条数由组头承担。 */
+.activity-day-head {
+  /* 竖线跨过的上下内边距（与行不同）交给 `.audit-line::before` 补齐。 */
+  --audit-line-gap-top: 18px;
+  --audit-line-gap-bottom: 6px;
+  display: grid;
+  grid-template-columns: 70px 18px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: var(--audit-line-gap-top) 20px var(--audit-line-gap-bottom);
+}
+
+/* 每天之间画一条与行分隔线同色的分隔线；首日不画，由 `.audit-list` 上边框收口。 */
+.activity-day + .activity-day .activity-day-head {
+  border-top: 1px solid #edf1f5;
+}
+
+.activity-day-date {
+  text-align: right;
+  color: #7b93ab;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.activity-day-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #5b7892;
+  cursor: pointer;
+  text-align: left;
+}
+
+.activity-day-toggle svg {
+  color: #93a1b0;
+  transition: transform 0.15s ease;
+}
+
+.activity-day-toggle svg.expanded {
+  transform: rotate(90deg);
+}
+
+.activity-day-toggle strong {
+  color: #31475e;
+  font-size: 13px;
+}
+
+.activity-day-toggle small {
+  color: #93a1b0;
+  font-size: 11px;
+}
+
+.activity-day-toggle:hover strong {
+  color: #2472c3;
 }
 
 .audit-entity-badge {
@@ -698,6 +775,12 @@
 
   .audit-row > .audit-actions {
     display: none;
+  }
+
+  /* 窄屏下 `.audit-row` 的横向内边距收到 12px（列模板仍由后面的规则给成 70px/18px），
+   * 组头跟着收，否则时间线竖线会在组头与行之间错开一截。 */
+  .activity-day-head {
+    padding: var(--audit-line-gap-top) 12px var(--audit-line-gap-bottom);
   }
 }
 
@@ -1285,13 +1368,15 @@
 }
 
 /* ===================== F-05 项目与成员 ===================== */
-/* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。 */
+/* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。
+   描述区同时是卡片内唯一的弹性区，同行卡片的高度差全部由它吸收。 */
 .project-card > p.project-card-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   min-height: 44px;
+  flex: 1 1 auto;
 }
 
 .project-card > p.project-card-desc.is-placeholder {
@@ -1507,30 +1592,6 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-}
-
-.member-card-removed {
-  background: #fbfcfd;
-}
-
-.member-removed-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  flex: 1 0 100%;
-  margin: 0;
-  padding: 9px 10px;
-  border-radius: 7px;
-  background: #f6f9fc;
-  color: #71869a;
-  font-size: 11px;
-  line-height: 1.7;
-}
-
-.member-removed-note svg {
-  flex: 0 0 auto;
-  color: #8eabc3;
-  margin-top: 2px;
 }
 
 .member-history-note {

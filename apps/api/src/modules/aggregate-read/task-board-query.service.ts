@@ -142,7 +142,7 @@ export class TaskBoardQueryService {
         ),
       ];
       const assigneeIds = [
-        ...new Set(board.items.map((row) => row.assigneeId)),
+        ...new Set(board.items.flatMap((row) => row.assigneeIds)),
       ];
       const taskIds = board.items.map((row) => row.taskId);
 
@@ -226,11 +226,20 @@ export class TaskBoardQueryService {
         };
         const laneAssigneeIds: number[] = [];
         const cards: TaskBoardCard[] = rows.map((row) => {
-          const assignee = userById.get(row.assigneeId);
-          if (assignee === undefined) {
-            throw inconsistentError(
-              "任务负责人不存在 " + String(row.assigneeId),
-            );
+          // ADR-040：负责人是平权集合，卡片与泳道头像都要列全，不再只取第一位。
+          const cardAssignees: UserRef[] = [];
+          for (const userId of row.assigneeIds) {
+            const user = userById.get(userId);
+            if (user === undefined) {
+              throw inconsistentError("任务负责人不存在 " + String(userId));
+            }
+            cardAssignees.push(toUserRef(user));
+            if (!laneAssigneeIds.includes(userId)) {
+              laneAssigneeIds.push(userId);
+            }
+          }
+          if (cardAssignees.length === 0) {
+            throw inconsistentError("任务缺少负责人 " + String(row.taskId));
           }
           let featureName: string | null = null;
           if (row.featureId !== null) {
@@ -239,9 +248,6 @@ export class TaskBoardQueryService {
               throw inconsistentError("任务缺少功能 " + String(row.featureId));
             }
             featureName = resolved;
-          }
-          if (!laneAssigneeIds.includes(row.assigneeId)) {
-            laneAssigneeIds.push(row.assigneeId);
           }
           return {
             taskId: row.taskId,
@@ -257,7 +263,7 @@ export class TaskBoardQueryService {
             completedAt:
               row.completedAt === null ? null : row.completedAt.toISOString(),
             dueState: row.dueState,
-            assignee: toUserRef(assignee),
+            assignees: cardAssignees,
             publishedRecordCount:
               publishedRecordCountByTask.get(row.taskId) ?? 0,
           };

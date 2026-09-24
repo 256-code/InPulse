@@ -142,6 +142,8 @@ function earliestOpenDueAt(group: MyTaskGroupItem): string | null {
  * 已逾期 1 → 遗留问题来源 2 → 今/明日截止 3 → 其余 4。任务卡与组卡共用这一处判定：
  * 组卡的「来源」不适用，「紧急」取未完成分支最高一档，「截止」取未完成分支最早一条。
  * 2026-09-24 产品口径「把遗留问题排到已经逾期后面」：遗留问题来源由第 0 桶降到第 2 桶。
+ * （2026-09-24 两条并行开发线合并后统一采用本口径；另一条线曾把遗留问题来源挪出紧急桶、
+ * 改在优先级之后单独比较，已被本口径取代。）
  */
 function urgencyBucketOf(
   priority: MyTaskPriority | null,

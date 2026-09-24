@@ -1166,6 +1166,44 @@ describe("TaskCenterPageView", () => {
     ).toEqual(["my-task-933", "my-task-932", "my-task-931"]);
   });
 
+  it("遗留问题来源排在已逾期之后、其余未完成任务之前（含更高优先级）", async () => {
+    const now = new Date();
+    const overdueAt = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 2,
+      18,
+      0,
+      0,
+    ).toISOString();
+    const openItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
+      ...doneTask,
+      workStatus: "TODO",
+      completedAt: null,
+      dueAt: null,
+      ...over,
+    });
+    // 造数刻意打乱：遗留问题来源卡最后传入，且优先级低于 HIGH 任务。
+    // 2026-09-24 产品口径「把遗留问题排到已经逾期后面」：紧急桶为 标记紧急(0) → 已逾期(1) →
+    // 遗留问题来源(2) → 今/明日截止(3) → 其余(4)，因此 952 排在已逾期的 954 之后，但在
+    // 更高优先级的 951 与未设截止的 953 之前——优先级只在同一紧急桶内才参与比较。
+    renderView({
+      adapter: serverLikeAdapterWith([
+        openItem({ taskId: 951, code: "INP-951", priority: "HIGH" }),
+        openItem({ taskId: 953, code: "INP-953" }),
+        openItem({ taskId: 952, code: "INP-952", hasLeftoverSource: true }),
+        openItem({ taskId: 954, code: "INP-954", dueAt: overdueAt }),
+      ]),
+    });
+
+    await screen.findByTestId("my-task-951");
+    expect(
+      screen
+        .getAllByTestId(/^my-task-95[1234]$/)
+        .map((node) => node.getAttribute("data-testid")),
+    ).toEqual(["my-task-954", "my-task-952", "my-task-951", "my-task-953"]);
+  });
+
   it("已完成按完成时间从晚到早排序，优先级不参与", async () => {
     const completedItem = (over: Partial<MyTaskListItem>): MyTaskListItem => ({
       ...doneTask,
