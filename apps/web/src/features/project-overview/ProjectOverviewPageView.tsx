@@ -39,6 +39,8 @@ export interface ProjectOverviewPageViewProps {
   readonly onRetryProject: () => void;
   /** 省略时不渲染「查看模块」入口（模块列表页自身已位于该层级）。 */
   readonly onOpenModules?: (() => void) | undefined;
+  /** 项目名右侧的「编辑项目」入口；省略或项目未加载时不渲染。 */
+  readonly onEditProject?: (() => void) | undefined;
   /** 标题左侧的返回箭头（与功能/模块页同款圆钮）；省略时不渲染。 */
   readonly onBack?: (() => void) | undefined;
   readonly onOpenMembers: () => void;
@@ -49,11 +51,6 @@ export interface ProjectOverviewPageViewProps {
   readonly onOpenIssues: () => void;
   readonly adapter?: ProjectOverviewAdapter;
   readonly client?: InpulseApiClient | undefined;
-  /**
-   * 项目头部动作区（`.project-detail-actions`）里「成员与设置」与「新建任务」
-   * 之间的附加按钮；设计师稿 catalog.tsx L233 的「新增模块」即落在这里。
-   */
-  readonly extraActions?: React.ReactNode;
   /** 指标条与面板之后渲染的页面主体（模块列表页注入模块网格）。 */
   readonly children?: React.ReactNode;
 }
@@ -73,6 +70,7 @@ export const ProjectOverviewPageView: React.FC<
   projectError,
   onRetryProject,
   onOpenModules,
+  onEditProject,
   onBack,
   onOpenMembers,
   onOpenRecords,
@@ -80,7 +78,6 @@ export const ProjectOverviewPageView: React.FC<
   onOpenIssues,
   adapter,
   client,
-  extraActions,
   children,
 }) => {
   const navigate = useNavigate();
@@ -194,13 +191,26 @@ export const ProjectOverviewPageView: React.FC<
             <ProjectLogo code={project.code} />
           )}
           <div>
-            <h1>
-              {project === null
-                ? projectLoading
-                  ? "正在加载项目…"
-                  : "项目主页"
-                : project.name}
-            </h1>
+            <div className="project-title-line">
+              <h1>
+                {project === null
+                  ? projectLoading
+                    ? "正在加载项目…"
+                    : "项目主页"
+                  : project.name}
+              </h1>
+              {project === null || onEditProject === undefined ? null : (
+                <button
+                  type="button"
+                  className="title-icon-button"
+                  aria-label="编辑项目"
+                  title="编辑项目"
+                  onClick={onEditProject}
+                >
+                  <InpulseIcon name="pencil" size={15} />
+                </button>
+              )}
+            </div>
             <p>
               {project === null || project.description === ""
                 ? "这里汇总项目的模块、功能、任务与迭代记录，从模块开始进入项目。"
@@ -233,7 +243,6 @@ export const ProjectOverviewPageView: React.FC<
             <InpulseIcon name="users" size={15} />
             成员与设置
           </button>
-          {extraActions}
           <button
             type="button"
             className="primary-button"

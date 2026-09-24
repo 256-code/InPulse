@@ -5,6 +5,8 @@ import {
   createApiClient,
   type InpulseApiClient,
   type ModuleItem,
+  type ProjectDetailResponse,
+  type ProjectItem,
 } from "@generated/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +19,7 @@ import { isCardClick } from "@features/common/card-click";
 import {
   moduleLifecycleLabel,
   moduleLifecycleTone,
+  projectLifecycleLabel,
 } from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
@@ -29,7 +32,12 @@ import {
   ProjectWorkspaceModals,
   type ProjectWorkspaceModalKind,
 } from "@features/project-overview/ProjectWorkspaceModals";
-import { useProjectDetail } from "@features/projects/project-query";
+import { useAuth } from "@features/auth/auth-context";
+import { EditProjectModal } from "@features/projects/ProjectManagementModals";
+import {
+  canManageProjectResources,
+  useProjectDetail,
+} from "@features/projects/project-query";
 import { moduleErrorMessage, useModules } from "./module-query";
 import {
   ModuleEditorModal,
@@ -53,6 +61,9 @@ export function ModulesPageView({
   /** 「最近迭代」单行：就地打开该条记录的详情弹窗。 */
   const [recordTarget, setRecordTarget] =
     useState<ProjectOverviewIteration | null>(null);
+  /** 项目名旁的「编辑项目」弹窗，以及保存后的页头提示。 */
+  const [projectEditOpen, setProjectEditOpen] = useState(false);
+  const [projectNotice, setProjectNotice] = useState<string | null>(null);
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const queryClient = useQueryClient();
   const open = (action: ModuleEditorRequest["action"], item?: ModuleItem) => {
@@ -66,6 +77,28 @@ export function ModulesPageView({
     projectId,
   });
   const projectName = projectQuery.data?.project?.name ?? null;
+  const { user } = useAuth();
+  // ADR-039：项目内管理入口对全体活跃成员与系统管理员开放。
+  const canManageProject = canManageProjectResources(
+    user?.isAdmin === true,
+    projectQuery.data?.currentUserRole ?? null,
+  );
+  /**
+   * 编辑项目或切换状态成功后就地回写详情缓存：弹窗继续操作时拿到的是服务端
+   * 返回的新 rowVersion，不会拿旧版本撞 409；mutation 自身的失效随后从服务端校准。
+   */
+  const applyProjectUpdate = (updated: ProjectItem) => {
+    const detail = queryClient.getQueryData<ProjectDetailResponse>([
+      "projects",
+      "detail",
+      projectId,
+    ]);
+    if (detail === undefined) return;
+    queryClient.setQueryData(["projects", "detail", projectId], {
+      ...detail,
+      project: updated,
+    });
+  };
   const overviewAdapter = useMemo(
     () => createProjectOverviewServerAdapter(client),
     [client],
@@ -85,17 +118,13 @@ export function ModulesPageView({
           onOpenRecord={setRecordTarget}
           onOpenIssues={() => setWorkspaceModal("issues")}
           adapter={overviewAdapter}
-          extraActions={
-            // 设计师稿 catalog.tsx L233：`.project-detail-actions` 内的「新增模块」
-            //（secondary）与 L307 SectionTitle 行内的「新增模块」（primary）是设计
-            // 稿同时存在的两个入口，共用同一个模块编辑器。三处「新增模块」统一
-            // 走淡蓝 `soft-blue-button`，与页头主操作「新建任务」拉开层级。
-            <Button className="soft-blue-button" onClick={() => open("create")}>
-              <InpulseIcon name="plus" size={15} />
-              新增模块
-            </Button>
+          onEditProject={
+            canManageProject ? () => setProjectEditOpen(true) : undefined
           }
         >
+          {projectNotice && (
+            <Alert type="success" showIcon title={projectNotice} />
+          )}
           {success && <Alert type="success" showIcon title="模块操作成功" />}
           {query.isPending ? (
             <div className="calm-state">
@@ -135,6 +164,8 @@ export function ModulesPageView({
                 title="模块"
                 hint={`${(query.data?.items ?? []).length} 个模块 · 模块负责分类，功能负责沉淀`}
               >
+                {/* 模块区块标题行是页面唯一的常驻新增入口：设计稿在页头动作区
+                    还有一个同名按钮，按产品要求删掉重复入口。 */}
                 <Button
                   className="soft-blue-button"
                   onClick={() => open("create")}
@@ -242,6 +273,28 @@ export function ModulesPageView({
         onClose={() => setRequest(null)}
         onSaved={() => setSuccess(true)}
       />
+      {projectEditOpen && projectQuery.data?.project ? (
+        <EditProjectModal
+          open
+          project={projectQuery.data.project}
+          client={client}
+          canChangeStatus={canManageProject}
+          onClose={() => setProjectEditOpen(false)}
+          onUpdated={(updated) => {
+            applyProjectUpdate(updated);
+            setProjectEditOpen(false);
+            setProjectNotice(
+              `项目「${updated.name}」已更新，当前版本 v${updated.rowVersion}。`,
+            );
+          }}
+          onStatusChanged={(updated) => {
+            applyProjectUpdate(updated);
+            setProjectNotice(
+              `项目状态已改为${projectLifecycleLabel(updated.status)}。`,
+            );
+          }}
+        />
+      ) : null}
     </>
   );
 }

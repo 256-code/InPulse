@@ -2159,6 +2159,32 @@ td small {
   color: #74869a;
   font-size: 12px;
 }
+/* 项目名与「编辑项目」图标同排；图标用淡蓝底圆形纽，与左侧返回圆钮同一配色、
+   更小一号，不在标题行里与主操作抢色。 */
+.project-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #cfe2f7;
+  border-radius: 50%;
+  background: #e8f1fb;
+  color: #3273bb;
+  cursor: pointer;
+}
+.title-icon-button:hover {
+  border-color: #b7d2ef;
+  background: #dbe9fa;
+  color: #1d5fa8;
+}
 .project-detail-actions {
   display: flex;
   align-items: center;

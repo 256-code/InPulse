@@ -31,10 +31,8 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     const projectId = page.url().match(/projects\/(\d+)/)![1];
     await page.goto(`/projects/${projectId}/modules`);
     await expect(page.getByText("暂无模块", { exact: true })).toBeVisible();
-    await page
-      .locator(".project-detail-actions")
-      .getByRole("button", { name: "新增模块", exact: true })
-      .click();
+    // 页头动作区的「新增模块」已按产品要求删除，空态里是唯一的入口。
+    await page.getByRole("button", { name: "新增模块", exact: true }).click();
     const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill(`支付模块-${suffix}`);
     await moduleDialog.getByRole("button", { name: /保\s*存/ }).click();
