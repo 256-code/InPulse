@@ -85,7 +85,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
     const task = page.getByRole("dialog", { name: "新建任务" });
     await task.getByLabel("任务标题").fill("GitHub任务");
     await pickCalmSelectOption(task, "负责人", runtime.user.name);
-    await task.getByRole("button", { name: /保\s*存/ }).click();
+    await task.getByRole("button", { name: /创建任务/ }).click();
     await expect(task).toBeHidden();
     const detail = page.getByRole("dialog", { name: "任务详情" });
     await detail.getByRole("button", { name: "GitHub 链接" }).click();

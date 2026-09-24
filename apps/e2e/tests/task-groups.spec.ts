@@ -47,7 +47,7 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
       await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
-      await dialog.getByRole("button", { name: /保\s*存/ }).click();
+      await dialog.getByRole("button", { name: /创建任务/ }).click();
       await expect(dialog).toBeHidden();
       // 任务保存后应用会自动打开该任务的详情弹窗（带遮罩），先关闭再继续，
       // 否则后续点击会被遮罩挡住直到用例超时。
@@ -155,7 +155,7 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
       const dialog = page.getByRole("dialog", { name: "新建任务" });
       await dialog.getByLabel("任务标题").fill(title);
       await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
-      await dialog.getByRole("button", { name: /保\s*存/ }).click();
+      await dialog.getByRole("button", { name: /创建任务/ }).click();
       await expect(dialog).toBeHidden();
       await expect(detail).toBeVisible();
       await detail.getByRole("button", { name: "关闭" }).click();

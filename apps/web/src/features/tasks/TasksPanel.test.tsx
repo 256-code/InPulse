@@ -336,7 +336,7 @@ describe("F-14 task editing", () => {
       target: { value: "新任务" },
     });
     pickSelectOption("负责人", "项目成员");
-    const save = screen.getByRole("button", { name: /保\s*存/ });
+    const save = screen.getByRole("button", { name: /创建任务/ });
     fireEvent.click(save);
     await screen.findByText("任务服务暂时不可用，输入已保留，可重试。");
     fireEvent.click(save);
@@ -408,7 +408,7 @@ describe("F-14 task editing", () => {
     fireEvent.change(screen.getByLabelText("任务标题"), {
       target: { value: "新任务" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "请至少选择一名负责人",
     );

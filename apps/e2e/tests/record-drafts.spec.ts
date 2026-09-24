@@ -80,7 +80,7 @@ for (const moduleScope of [false, true])
       const title = `草稿任务-${suffix}`;
       await createTask.getByLabel("任务标题").fill(title);
       await pickCalmSelectOption(createTask, "负责人", runtime.user.name);
-      await createTask.getByRole("button", { name: /保\s*存/ }).click();
+      await createTask.getByRole("button", { name: /创建任务/ }).click();
       await expect(createTask).toBeHidden();
       const task = page.getByRole("dialog", { name: "任务详情" });
       await task.getByRole("button", { name: "完成任务", exact: true }).click();

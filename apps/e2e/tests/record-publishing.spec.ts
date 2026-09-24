@@ -109,7 +109,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     const taskForm = page.getByRole("dialog", { name: "新建任务" });
     await taskForm.getByLabel("任务标题").fill(`发布来源-${suffix}`);
     await pickCalmSelectOption(taskForm, "负责人", runtime.user.name);
-    await taskForm.getByRole("button", { name: /保\s*存/ }).click();
+    await taskForm.getByRole("button", { name: /创建任务/ }).click();
     await expect(taskForm).toBeHidden();
     const task = page.getByRole("dialog", { name: "任务详情" });
     await task.getByRole("button", { name: "完成任务", exact: true }).click();

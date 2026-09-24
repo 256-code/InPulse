@@ -159,6 +159,7 @@ function mount(
       readonly moduleId?: number;
       readonly featureId?: number;
     };
+    readonly lockedScope?: "FEATURE" | "MODULE";
   } = {},
 ) {
   return render(
@@ -173,6 +174,7 @@ function mount(
         onClose={test.onClose}
         onCreated={test.onCreated}
         {...(props.preset ? { preset: props.preset } : {})}
+        {...(props.lockedScope ? { lockedScope: props.lockedScope } : {})}
       />
     </QueryClientProvider>,
   );
@@ -351,7 +353,7 @@ describe("GlobalTaskCreateModal", () => {
     await user.type(await screen.findByLabelText("任务标题"), "模块级任务");
     await waitFor(() => expect(screen.getByLabelText("指派给")).toBeEnabled());
     await pickAssignee(user, "陈晓");
-    await user.click(await screen.findByLabelText("会话管理"));
+    await pickOption(user, "影响功能", "会话管理");
     await user.click(screen.getByRole("button", { name: "创建任务" }));
 
     await waitFor(() => expect(test.createModuleTask).toHaveBeenCalledTimes(1));
@@ -373,6 +375,29 @@ describe("GlobalTaskCreateModal", () => {
         },
       },
     );
+  });
+
+  it("locks the project and scope when the host page already fixed them", async () => {
+    const test = harness();
+    mount(test, {
+      preset: { projectId: 1, moduleId: 11 },
+      lockedScope: "MODULE",
+    });
+
+    // 页面已经固定归属：项目与模块都只回显名称，不再出现「所属项目」「所属模块」「任务范围」这三组选择器。
+    // 弹层内容挂在 portal 上（不在 RTL 容器内），因此从 document 读取回显行。
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll(".task-fixed-project")].map((row) =>
+          row.textContent?.trim(),
+        ),
+      ).toEqual(["InPulse 平台", "访问控制"]),
+    );
+    expect(screen.queryByLabelText("所属项目")).toBeNull();
+    expect(screen.queryByLabelText("所属模块")).toBeNull();
+    expect(screen.queryAllByText("任务范围")).toHaveLength(0);
+    expect(screen.queryByLabelText("所属功能")).toBeNull();
+    expect(await screen.findByLabelText("影响功能")).toBeEnabled();
   });
 
   it("reports the links that could not be attached without losing the task", async () => {

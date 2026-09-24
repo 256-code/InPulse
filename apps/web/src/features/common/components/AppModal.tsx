@@ -88,6 +88,47 @@ function mergeClass(...names: (string | undefined)[]): string {
  */
 const modalStack: symbol[] = [];
 
+/**
+ * 打开中的弹层数。滚动锁按它增减，避免多层弹层乱序关闭时提前解锁；
+ * 计数归零时才把下面三处保存值回写。
+ */
+let scrollLocks = 0;
+let bodyOverflowBeforeLock = "";
+let rootOverflowBeforeLock = "";
+let rootPaddingBeforeLock = "";
+
+/**
+ * 同时锁住 `body` 与仓库真正的根滚动器 `html`。design-system.css 给 `html` 设了
+ * `overflow-y: scroll`（常显滚动条，让版式不随内容长短跳动），只锁 `body` 挡不住它：
+ * 实测弹窗打开后背景仍能被滚轮滚走。隐藏根滚动条的同时把槽宽补成 `padding-right`，
+ * 实测 `.app-shell` / `main` / `.sidebar` 几何完全不变，而视口回到整个窗口宽后，
+ * 固定遮罩反而铺满右缘、不再留一条亮带。
+ */
+function lockScroll(): () => void {
+  const root = document.documentElement;
+  if (scrollLocks === 0) {
+    // 槽宽必须在隐藏滚动条之前量。
+    const gutter = window.innerWidth - root.clientWidth;
+    bodyOverflowBeforeLock = document.body.style.overflow;
+    rootOverflowBeforeLock = root.style.overflow;
+    rootPaddingBeforeLock = root.style.paddingRight;
+    document.body.style.overflow = "hidden";
+    root.style.overflow = "hidden";
+    if (gutter > 0) root.style.paddingRight = `${gutter}px`;
+  }
+  scrollLocks += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    scrollLocks -= 1;
+    if (scrollLocks > 0) return;
+    document.body.style.overflow = bodyOverflowBeforeLock;
+    root.style.overflow = rootOverflowBeforeLock;
+    root.style.paddingRight = rootPaddingBeforeLock;
+  };
+}
+
 function labelOf(
   label: string | undefined,
   eyebrow: ReactNode,
@@ -110,8 +151,9 @@ function labelOf(
  * `modalRender` 只多插一层 `.ant-modal-render`，由 `antd-adapter.css` 抹平。
  *
  * 同时复刻 `<dialog>.showModal()` 的两件事：① 打开时聚焦盒内第一个可聚焦元素，
- * 关闭后把焦点还给触发元素；② 只锁 `body` 的 `overflow`，不用 antd 的 `scrollLock`
+ * 关闭后把焦点还给触发元素；② 锁住页面滚动，不用 antd 的 `scrollLock`
  * ——它会给 body 补 `width: calc(100% - 15px)`，把背景布局挤窄 15px。
+ * 滚动锁的细节见 `lockScroll`。
  *
  * 垂直居中由 `.surface-modal` 的 `position: fixed; inset: 0; margin: auto` 承担，
  * 因此 `centered` 与 `top` 都不再有意义；`title` 只用于头部排版，不再下发给 antd。
@@ -163,11 +205,10 @@ export function AppModal({
     if (!active) return;
     const box = boxRef.current;
     const prior = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlock = lockScroll();
     box?.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       if (prior?.isConnected) prior.focus({ preventScroll: true });
     };
   }, [active]);

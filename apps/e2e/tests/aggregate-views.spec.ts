@@ -46,7 +46,7 @@ test("F-32 任务中心：真实任务进入列表，工作状态与优先级接
     const taskDialog = page.getByRole("dialog", { name: "新建任务" });
     await taskDialog.getByLabel("任务标题").fill(taskTitle);
     await pickCalmSelectOption(taskDialog, "负责人", runtime.user.name);
-    await taskDialog.getByRole("button", { name: /保\s*存/ }).click();
+    await taskDialog.getByRole("button", { name: /创建任务/ }).click();
     await expect(taskDialog).toBeHidden();
 
     await page.goto("/tasks");

@@ -176,11 +176,14 @@
 }
 
 /* `body` 开关渲染的正文容器：沿用原 antd 正文的内边距与滚动，
- * 供尚未迁到 `.catalog-form` / `.dialog-form` 结构的小弹层使用。 */
+ * 供尚未迁到 `.catalog-form` / `.dialog-form` 结构的小弹层使用。
+ * 上内边距由 24px 收到 20px（2026-09-24）：与头部下内边距合起来，标题到首个字段的
+ * 空档由 44px 收到 36px，与新建 / 编辑类弹层对齐（见本文件 `catalog-modal .dialog-form`
+ * 那一段）。窄屏（≤700px）由本文件后面的媒体查询单独给值。 */
 .surface-modal > .modal-body {
   flex: 1;
   min-height: 0;
-  padding: 24px 28px 16px;
+  padding: 20px 28px 16px;
   overflow-y: auto;
 }
 
@@ -1282,6 +1285,52 @@
   min-width: 0;
 }
 
+/* 新建 / 编辑类弹层的纵向节奏（2026-09-24 产品反馈「留白太多」）。契约层三处规则
+ * （design-system.css L4102 头部下 20px、L4131 正文上 24px、L4157 页脚上 18px）叠出的实测
+ * 空档是：标题墨迹→首个字段 40px（带提示条的弹层因 `.permission-hint` 自带 14px 上边距
+ * 变成 54px）、字段之间 20px、末个字段→页脚按钮 42px。仓库其余弹层的字段节奏都更紧
+ * （`.calm-form .task-form-fields` 16px、`.admin-user-form` 16px、`.completion-flow` 16px），
+ * 只有 catalog 系列停在 20px。
+ * 这里统一到同一档：正文外边距收掉（基础规则 `.dialog-form` 的 23px，design-system.css
+ * L2046）后，头部下 16 + 正文上 16 = 标题→首字段 32px，字段间距 16px，
+ * 正文下 16 + 页脚上 16 = 末字段→按钮 32px。
+ * 「完成任务」流程的 `.completion-flow > .dialog-form` 自带 `padding: 0` 与 `gap: 15px`
+ * （优先级更高），只吃上面的字段间距；窄屏（≤700px）由 design-system.css 的媒体查询给值。 */
+.catalog-modal > .drawer-header {
+  padding-bottom: 16px;
+}
+.catalog-modal .dialog-form {
+  margin-top: 0;
+  row-gap: 16px;
+}
+@media (min-width: 701px) {
+  .catalog-modal .dialog-form {
+    padding: 16px 28px;
+  }
+  .catalog-modal .calm-action-footer {
+    padding: 16px 28px 20px;
+  }
+}
+/* `.permission-hint` 自带 14px 上边距（design-system.css L5873），放进已经有间距的
+ * `.dialog-form` 会叠成 30–34px，比相邻字段宽出一截；容器已给间距时撤掉它。 */
+.dialog-form > .permission-hint {
+  margin-top: 0;
+}
+
+/* 锁定归属时「所属项目」只回显项目名：与输入框同尺寸的浅底只读行，表明不可选。 */
+.calm-form .task-fixed-project {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #dbe5ef;
+  border-radius: 6px;
+  background: #f6f8fb;
+  color: #405a72;
+  font-size: 12px;
+}
+
 .calm-form fieldset {
   min-width: 0;
 }
@@ -1342,6 +1391,16 @@
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+/* 影响功能分区的图例在一列字段里要与相邻字段标签同字号、同字重（`legend` 的 UA 样式是
+ * 13px/400 深色，实测比「任务说明」等标签大一号且更黑）；复选框行本身由 L267 段的
+ * `.calm-form .check-list` 规则排成紧凑行，`.task-impact-features` 不再另占地。 */
+.calm-form .task-impact-features > legend {
+  color: #526b83;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
 }
 
 .calm-footer {

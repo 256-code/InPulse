@@ -36,7 +36,7 @@ for (const moduleScope of [false, true])
       const title = `状态任务-${suffix}`;
       await create.getByLabel("任务标题").fill(title);
       await pickCalmSelectOption(create, "负责人", runtime.user.name);
-      await create.getByRole("button", { name: /保\s*存/ }).click();
+      await create.getByRole("button", { name: /创建任务/ }).click();
       await expect(create).toBeHidden();
       const detail = page.getByRole("dialog", { name: "任务详情" });
       await detail

@@ -54,7 +54,7 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await pickCalmSelectOption(form, "负责人", runtime.member.name);
     await pickCalmSelectOption(form, "优先级", "高");
     await form.getByLabel("截止时间").fill("2026-10-01T18:00");
-    await form.getByRole("button", { name: /保\s*存/ }).click();
+    await form.getByRole("button", { name: /创建任务/ }).click();
     await expect(form).toBeHidden();
     const drawer = page.getByRole("dialog", { name: "任务详情" });
     await expect(drawer.getByText("最初说明", { exact: true })).toBeVisible();

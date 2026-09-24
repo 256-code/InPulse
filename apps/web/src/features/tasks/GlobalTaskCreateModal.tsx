@@ -64,6 +64,11 @@ export interface GlobalTaskCreateModalProps {
         readonly featureId?: number;
       }
     | undefined;
+  /**
+   * 调用它的页面已经固定任务范围时传值：隐藏「任务范围」分段控件并锁定该范围，
+   * 其余字段与任务中心完全一致。
+   */
+  readonly lockedScope?: TaskScope | undefined;
   readonly onCreated?: (taskId: number) => void;
   readonly onCreatedLocation?: ((task: TaskLocation) => void) | undefined;
 }
@@ -77,6 +82,7 @@ export function GlobalTaskCreateModal({
   onClose,
   client,
   preset,
+  lockedScope,
   onCreated,
   onCreatedLocation,
 }: GlobalTaskCreateModalProps) {
@@ -85,7 +91,8 @@ export function GlobalTaskCreateModal({
   const retryKeys = useRef(new Map<string, string>());
 
   const [scope, setScope] = useState<TaskScope>(
-    preset?.featureId ? "FEATURE" : preset?.moduleId ? "MODULE" : "FEATURE",
+    lockedScope ??
+      (preset?.featureId ? "FEATURE" : preset?.moduleId ? "MODULE" : "FEATURE"),
   );
   const [projectId, setProjectId] = useState<number>(preset?.projectId ?? 0);
   const [moduleId, setModuleId] = useState<number>(preset?.moduleId ?? 0);
@@ -113,11 +120,13 @@ export function GlobalTaskCreateModal({
     if (!open) return;
     setCreatedLocation(null);
     setScope(
-      presetFeatureId ? "FEATURE" : presetModuleId ? "MODULE" : "FEATURE",
+      lockedScope ??
+        (presetFeatureId ? "FEATURE" : presetModuleId ? "MODULE" : "FEATURE"),
     );
     setProjectId(presetProjectId);
     setModuleId(presetModuleId);
-    setFeatureId(presetFeatureId);
+    // 模块级任务不指定所属功能：锁定为模块级时清掉可能预置的功能归属。
+    setFeatureId(lockedScope === "MODULE" ? 0 : presetFeatureId);
     setNewModule("");
     setNewFeature("");
     setTitle("");
@@ -130,7 +139,7 @@ export function GlobalTaskCreateModal({
     setInvalid(null);
     setFailedLinks([]);
     retryKeys.current.clear();
-  }, [open, presetProjectId, presetModuleId, presetFeatureId]);
+  }, [open, presetProjectId, presetModuleId, presetFeatureId, lockedScope]);
 
   const projects = useProjects({ client, enabled: open });
   const modules = useModules(open ? projectId : 0, client);
@@ -140,6 +149,14 @@ export function GlobalTaskCreateModal({
     undefined,
     client,
   );
+
+  // 锁定模块级的页面（模块任务列表）已由路由固定模块：与所属项目一样只回显名称，
+  // 不再让用户重选（2026-09-24 产品反馈）。
+  const lockedModule = lockedScope === "MODULE";
+  const lockedModuleName = lockedModule
+    ? ((modules.query.data?.items ?? []).find((item) => item.id === moduleId)
+        ?.name ?? null)
+    : null;
 
   const targetReady =
     projectId > 0 &&
@@ -359,6 +376,17 @@ export function GlobalTaskCreateModal({
     mutation.mutate();
   }
 
+  const projectName = projects.data?.items.find(
+    (project) => project.id === projectId,
+  )?.name;
+  /** 影响功能只有在模块确定后才能读选项；自定义新建模块同理不可选。 */
+  const impactPlaceholder =
+    moduleId === -1
+      ? "新建模块暂不支持影响功能"
+      : moduleId === 0
+        ? "请先选择模块"
+        : "可多选，可为空";
+
   const busy = mutation.isPending;
   const createError =
     mutation.isError && !(mutation.error instanceof ApiError)
@@ -372,9 +400,7 @@ export function GlobalTaskCreateModal({
       open={open}
       className="catalog-modal"
       size="lg"
-      eyebrow={
-        projects.data?.items.find((p) => p.id === projectId)?.name ?? "任务中心"
-      }
+      eyebrow={projectName ?? "任务中心"}
       title="新建任务"
       onCancel={close}
       mask={{ closable: !busy }}
@@ -400,6 +426,23 @@ export function GlobalTaskCreateModal({
             className="task-form-fields"
             disabled={busy || createdLocation !== null}
           >
+            {lockedScope ? (
+              // 页面已经固定归属：项目只回显名称，不再让用户重选（2026-09-24 产品反馈）。
+              <div className="calm-field">
+                <span className="field-label">所属项目</span>
+                <p className="task-fixed-project">
+                  {projectName ?? "正在加载项目…"}
+                </p>
+              </div>
+            ) : null}
+            {lockedModule ? (
+              <div className="calm-field">
+                <span className="field-label">所属模块</span>
+                <p className="task-fixed-project">
+                  {lockedModuleName ?? "正在加载模块…"}
+                </p>
+              </div>
+            ) : null}
             <div className="calm-field">
               <label htmlFor="global-task-title">任务标题</label>
               <input
@@ -410,82 +453,90 @@ export function GlobalTaskCreateModal({
               />
             </div>
 
-            <div className="calm-field">
-              <span
-                className="field-label"
-                title="功能级：推进一个具体功能；模块级：跨功能或模块整体工作。"
-              >
-                任务范围
-              </span>
-              <small>
-                功能级关联具体功能；模块级用于跨功能或模块整体工作。
-              </small>
-              <CalmSegmented
-                label="任务范围"
-                options={scopeOptions}
-                value={scope}
-                onChange={(next) => {
-                  setScope(next);
-                  setAssigneeIds([]);
-                  if (next === "MODULE") setFeatureId(0);
-                }}
-              />
-            </div>
+            {lockedScope ? null : (
+              <div className="calm-field">
+                <span
+                  className="field-label"
+                  title="功能级：推进一个具体功能；模块级：跨功能或模块整体工作。"
+                >
+                  任务范围
+                </span>
+                <small>
+                  功能级关联具体功能；模块级用于跨功能或模块整体工作。
+                </small>
+                <CalmSegmented
+                  label="任务范围"
+                  options={scopeOptions}
+                  value={scope}
+                  onChange={(next) => {
+                    setScope(next);
+                    setAssigneeIds([]);
+                    if (next === "MODULE") setFeatureId(0);
+                  }}
+                />
+              </div>
+            )}
 
-            <div className="calm-field">
-              <label htmlFor="global-task-project">所属项目</label>
-              <CalmSelect
-                id="global-task-project"
-                ariaLabel="所属项目"
-                value={projectId}
-                appearance="rich"
-                onChange={(next) => {
-                  setProjectId(Number(next));
-                  setModuleId(0);
-                  setFeatureId(0);
-                  setAssigneeIds([]);
-                  setImpactFeatureIds([]);
-                }}
-                options={[
-                  // 占位项只作提示，禁用以防用户主动选回「未选择」清掉归属（2026-09-22 产品反馈）。
-                  { value: 0, label: "请选择项目", disabled: true },
-                  ...(projects.data?.items ?? []).map(projectSelectOption),
-                ]}
-              />
-              {projects.isError && (
-                <p role="alert">项目列表加载失败，请稍后重试。</p>
-              )}
-            </div>
+            {/* 锁定归属时项目已由上面的只读行给出，这里不再渲染选择器。 */}
+            {lockedScope ? null : (
+              <div className="calm-field">
+                <label htmlFor="global-task-project">所属项目</label>
+                <CalmSelect
+                  id="global-task-project"
+                  ariaLabel="所属项目"
+                  value={projectId}
+                  appearance="rich"
+                  onChange={(next) => {
+                    setProjectId(Number(next));
+                    setModuleId(0);
+                    setFeatureId(0);
+                    setAssigneeIds([]);
+                    setImpactFeatureIds([]);
+                  }}
+                  options={[
+                    // 占位项只作提示，禁用以防用户主动选回「未选择」清掉归属（2026-09-22 产品反馈）。
+                    { value: 0, label: "请选择项目", disabled: true },
+                    ...(projects.data?.items ?? []).map(projectSelectOption),
+                  ]}
+                />
+                {projects.isError && (
+                  <p role="alert">项目列表加载失败，请稍后重试。</p>
+                )}
+              </div>
+            )}
 
-            <div className="calm-field">
-              <label htmlFor="global-task-module">所属模块</label>
-              <CalmSelect
-                id="global-task-module"
-                ariaLabel="所属模块"
-                value={moduleId}
-                disabled={projectId === 0}
-                appearance="menu"
-                onChange={(next) => {
-                  setModuleId(Number(next));
-                  setFeatureId(Number(next) === -1 ? -1 : 0);
-                  setAssigneeIds([]);
-                  setImpactFeatureIds([]);
-                }}
-                options={[
-                  {
-                    value: 0,
-                    label: projectId === 0 ? "请先选择项目" : "请选择模块",
-                    disabled: true,
-                  },
-                  { value: -1, label: "自定义 · 创建新模块" },
-                  // ADR-044：模块已无归档只读态，模块选项全部可选。
-                  ...(modules.query.data?.items ?? []).map((module) => ({
-                    value: module.id,
-                    label: module.name,
-                  })),
-                ]}
-              />
-            </div>
+            {/* 锁定模块级时模块已由上面的只读行给出，这里不再渲染选择器。 */}
+            {lockedModule ? null : (
+              <div className="calm-field">
+                <label htmlFor="global-task-module">所属模块</label>
+                <CalmSelect
+                  id="global-task-module"
+                  ariaLabel="所属模块"
+                  value={moduleId}
+                  disabled={projectId === 0}
+                  appearance="menu"
+                  onChange={(next) => {
+                    setModuleId(Number(next));
+                    setFeatureId(Number(next) === -1 ? -1 : 0);
+                    setAssigneeIds([]);
+                    setImpactFeatureIds([]);
+                  }}
+                  options={[
+                    {
+                      value: 0,
+                      label: projectId === 0 ? "请先选择项目" : "请选择模块",
+                      disabled: true,
+                    },
+                    { value: -1, label: "自定义 · 创建新模块" },
+                    // ADR-044：模块已无归档只读态，模块选项全部可选。
+                    ...(modules.query.data?.items ?? []).map((module) => ({
+                      value: module.id,
+                      label: module.name,
+                    })),
+                  ]}
+                />
+              </div>
+            )}
 
             {moduleId === -1 && (
               <div className="calm-field">
@@ -502,6 +553,48 @@ export function GlobalTaskCreateModal({
             {modules.query.isError && (
               <p role="alert">模块加载失败，请重试。</p>
             )}
+
+            {scope === "MODULE" && (
+              // 2026-09-24 产品反馈：影响功能紧跟在所属模块下面，并用下拉多选与其它归属选择器同一交互。
+              <div className="calm-field">
+                <label htmlFor="global-task-impact-features">影响功能</label>
+                <CalmSelect
+                  id="global-task-impact-features"
+                  ariaLabel="影响功能"
+                  value={impactFeatureIds}
+                  multiple
+                  maxTagCount={2}
+                  appearance="menu"
+                  placeholder={impactPlaceholder}
+                  disabled={moduleId <= 0}
+                  loading={moduleId > 0 && isFirstLoad(impactOptions)}
+                  onChange={(next) =>
+                    setImpactFeatureIds(
+                      [...new Set(next.map(Number))].sort((a, b) => a - b),
+                    )
+                  }
+                  options={(impactOptions.data?.items ?? []).map((feature) => ({
+                    value: feature.id,
+                    label: feature.name,
+                  }))}
+                />
+                {impactOptions.isError && (
+                  <Alert
+                    type="error"
+                    title={taskError(impactOptions.error)}
+                    action={
+                      <Button
+                        className="secondary-button"
+                        onClick={() => void impactOptions.refetch()}
+                      >
+                        重试影响功能
+                      </Button>
+                    }
+                  />
+                )}
+              </div>
+            )}
+
             {scope === "FEATURE" && (
               <div className="calm-field">
                 <label htmlFor="global-task-feature">所属功能</label>
@@ -629,45 +722,6 @@ export function GlobalTaskCreateModal({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
-
-            {scope === "MODULE" && (
-              <fieldset className="calm-field task-impact-features">
-                <legend>影响功能（可多选，可为空）</legend>
-                {impactOptions.isError ? (
-                  <Alert
-                    type="error"
-                    title={taskError(impactOptions.error)}
-                    action={
-                      <Button
-                        className="secondary-button"
-                        onClick={() => void impactOptions.refetch()}
-                      >
-                        重试影响功能
-                      </Button>
-                    }
-                  />
-                ) : (
-                  impactOptions.data?.items.map((feature) => (
-                    <label key={feature.id}>
-                      <input
-                        type="checkbox"
-                        checked={impactFeatureIds.includes(feature.id)}
-                        onChange={(event) =>
-                          setImpactFeatureIds((current) =>
-                            event.target.checked
-                              ? [...new Set([...current, feature.id])].sort(
-                                  (a, b) => a - b,
-                                )
-                              : current.filter((id) => id !== feature.id),
-                          )
-                        }
-                      />
-                      {feature.name}
-                    </label>
-                  ))
-                )}
-              </fieldset>
-            )}
 
             <div className="calm-field">
               <label htmlFor="global-task-links">GitHub 链接</label>

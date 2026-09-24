@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { pickCalmSelectOption } from "../helpers/calm-select.js";
+import {
+  pickCalmSelectOption,
+  pickCalmSelectOptions,
+} from "../helpers/calm-select.js";
 
 /**
  * 标题行内的标题、任务数徽章与右侧控件必须共用同一条垂直中线。
@@ -81,9 +84,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
     const title = `公共任务-${suffix}`;
     await create.getByLabel("任务标题").fill(title);
     await pickCalmSelectOption(create, "负责人", runtime.user.name);
-    await create.getByLabel(names[0]!, { exact: true }).check();
-    await create.getByLabel(names[1]!, { exact: true }).check();
-    await create.getByRole("button", { name: /保\s*存/ }).click();
+    await pickCalmSelectOptions(create, "影响功能", [names[0]!, names[1]!]);
+    await create.getByRole("button", { name: /创建任务/ }).click();
     await expect(create).toBeHidden();
     await expect(
       page.getByRole("dialog", { name: "任务详情" }).getByText(/影响功能：/),

@@ -320,7 +320,11 @@ export function TasksPanel({
     formState: { errors },
   } = useForm<TaskDraft>({ defaultValues: empty });
   const navigate = useNavigate();
-  const [customCreateOpen, setCustomCreateOpen] = useState(false);
+  /**
+   * 模块级面板的两个跨项目/功能新建入口：null 关闭；"page" 由页面固定为模块级
+   * （与任务中心同一个弹窗，只是不再让用户选范围）；"free" 允许自选归属与范围。
+   */
+  const [createMode, setCreateMode] = useState<"page" | "free" | null>(null);
   // 聚合组详情与任务中心共用同一弹窗实现；本面板只负责把当前选中组传给它。
   const groupAdapter = useMemo(() => createTaskGroupServerAdapter(api), [api]);
   const current = query.data?.items.find((item) => item.id === selectedId);
@@ -541,6 +545,14 @@ export function TasksPanel({
     void members.refetch();
     if (featureId === null) void features.refetch();
   };
+  /**
+   * 新建任务入口：模块级面板直接用任务中心那套弹窗并把范围固定在模块级；
+   * 功能级面板沿用本面板弹窗，归属由页面给定。
+   */
+  const startCreate = () => {
+    if (featureId === null) setCreateMode("page");
+    else open();
+  };
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
   const close = () => {
@@ -657,10 +669,11 @@ export function TasksPanel({
     >
       {mode === "detail" ? null : (
         <>
-          {featureId === null && customCreateOpen && (
+          {featureId === null && createMode !== null && (
             <GlobalTaskCreateModal
               open
-              onClose={() => setCustomCreateOpen(false)}
+              lockedScope={createMode === "page" ? "MODULE" : undefined}
+              onClose={() => setCreateMode(null)}
               client={client}
               preset={{ projectId, moduleId }}
               onCreatedLocation={(task) => navigate(taskDetailPath(task))}
@@ -680,12 +693,12 @@ export function TasksPanel({
               )}
             </div>
             <div className="feature-view-controls">
-              {/* 功能级面板的新建任务固定归属当前功能，不需要自定义归属；
-                  只有模块级面板才需要选择归属到某个功能还是留在模块下。 */}
+              {/* 模块级面板另有「自定义归属新建任务」：可跨模块/功能或新建模块、
+                  功能；常规「新建任务」不重复选择归属与范围。 */}
               {featureId === null && (
                 <Button
                   disabled={!writable}
-                  onClick={() => setCustomCreateOpen(true)}
+                  onClick={() => setCreateMode("free")}
                 >
                   自定义归属新建任务
                 </Button>
@@ -713,7 +726,7 @@ export function TasksPanel({
                 <Button
                   className="primary-button"
                   disabled={!writable}
-                  onClick={() => open()}
+                  onClick={startCreate}
                 >
                   <InpulseIcon name="plus" size={15} />
                   新建任务
@@ -759,7 +772,7 @@ export function TasksPanel({
               <Button
                 className="primary-button"
                 disabled={!writable}
-                onClick={() => open()}
+                onClick={startCreate}
               >
                 <InpulseIcon name="plus" size={15} />
                 新建任务
@@ -1549,67 +1562,6 @@ export function TasksPanel({
                 </Button>
               </div>
             )}
-            {featureId === null && (
-              <>
-                <div className="calm-field form-hint">
-                  <p>
-                    同一工作只保留一份任务；如果负责人、状态、验收、上线或回滚不同，建议拆分任务。
-                  </p>
-                </div>
-                {features.isPending ? (
-                  <p>正在加载影响功能…</p>
-                ) : features.isError ? (
-                  <Alert
-                    type="error"
-                    title={taskError(features.error)}
-                    action={
-                      <Button
-                        className="secondary-button"
-                        onClick={() => void features.refetch()}
-                      >
-                        重试影响功能
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <Controller
-                    name="impactFeatureIds"
-                    control={control}
-                    render={({ field }) => (
-                      <fieldset
-                        className="calm-field task-impact-features"
-                        disabled={mutation.isPending || reloading || !!merge}
-                      >
-                        <legend>影响功能（可多选，可为空）</legend>
-                        {features.data?.items.map((f) => (
-                          <label key={f.id}>
-                            <input
-                              type="checkbox"
-                              checked={(field.value ?? []).includes(f.id)}
-                              onChange={(event) =>
-                                field.onChange(
-                                  event.target.checked
-                                    ? [
-                                        ...new Set([
-                                          ...(field.value ?? []),
-                                          f.id,
-                                        ]),
-                                      ].sort((a, b) => a - b)
-                                    : (field.value ?? []).filter(
-                                        (id) => id !== f.id,
-                                      ),
-                                )
-                              }
-                            />
-                            {f.name}
-                          </label>
-                        ))}
-                      </fieldset>
-                    )}
-                  />
-                )}
-              </>
-            )}
             <fieldset
               className="task-form-fields"
               disabled={mutation.isPending || reloading || !!merge}
@@ -1629,50 +1581,9 @@ export function TasksPanel({
                 {errors.title && <p role="alert">{errors.title.message}</p>}
               </div>
               <div className="calm-field">
-                <label htmlFor="task-description">任务说明</label>
-                <Controller
-                  name="description"
-                  control={control}
-                  rules={{
-                    maxLength: {
-                      value: 50000,
-                      message: "说明最多 50000 字",
-                    },
-                  }}
-                  render={({ field }) => (
-                    <Input.TextArea {...field} id="task-description" rows={4} />
-                  )}
-                />
-                {errors.description && (
-                  <p role="alert">{errors.description.message}</p>
-                )}
-              </div>
-              <div className="calm-field">
-                <label htmlFor="task-priority">优先级</label>
-                <Controller
-                  name="priority"
-                  control={control}
-                  render={({ field }) => (
-                    <CalmSelect
-                      id="task-priority"
-                      ariaLabel="优先级"
-                      value={field.value}
-                      appearance="menu"
-                      onChange={(next) => field.onChange(next)}
-                      onBlur={field.onBlur}
-                      options={Object.entries(priorityLabels).map(
-                        ([value, label]) => ({
-                          value,
-                          label,
-                          dotColor: priorityDotColor(value),
-                        }),
-                      )}
-                    />
-                  )}
-                />
-              </div>
-              <div className="calm-field">
-                <label htmlFor="task-assignee">负责人</label>
+                {/* 可见标签与任务中心弹窗统一为「指派给」，无障碍名称仍是「负责人」：
+                    CalmSelect 交互辅助按 aria-label 定位这个下拉。 */}
+                <label htmlFor="task-assignee">指派给</label>
                 <Controller
                   name="assigneeIds"
                   control={control}
@@ -1713,38 +1624,141 @@ export function TasksPanel({
                   />
                 )}
               </div>
+              <div className="form-row">
+                <div className="calm-field">
+                  <label htmlFor="task-priority">优先级</label>
+                  <Controller
+                    name="priority"
+                    control={control}
+                    render={({ field }) => (
+                      <CalmSelect
+                        id="task-priority"
+                        ariaLabel="优先级"
+                        value={field.value}
+                        appearance="menu"
+                        onChange={(next) => field.onChange(next)}
+                        onBlur={field.onBlur}
+                        options={Object.entries(priorityLabels).map(
+                          ([value, label]) => ({
+                            value,
+                            label,
+                            dotColor: priorityDotColor(value),
+                          }),
+                        )}
+                      />
+                    )}
+                  />
+                </div>
+                <div className="calm-field">
+                  <label htmlFor="task-due">截止时间</label>
+                  <Controller
+                    name="dueAt"
+                    control={control}
+                    render={({ field }) => (
+                      <input
+                        id="task-due"
+                        type="datetime-local"
+                        value={
+                          field.value
+                            ? new Date(
+                                new Date(field.value).getTime() -
+                                  new Date(field.value).getTimezoneOffset() *
+                                    60000,
+                              )
+                                .toISOString()
+                                .slice(0, 16)
+                            : ""
+                        }
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                        onChange={(event) =>
+                          field.onChange(
+                            event.target.value
+                              ? new Date(event.target.value).toISOString()
+                              : null,
+                          )
+                        }
+                      />
+                    )}
+                  />
+                </div>
+              </div>
               <div className="calm-field">
-                <label htmlFor="task-due">截止时间</label>
+                <label htmlFor="task-description">任务说明</label>
                 <Controller
-                  name="dueAt"
+                  name="description"
                   control={control}
+                  rules={{
+                    maxLength: {
+                      value: 50000,
+                      message: "说明最多 50000 字",
+                    },
+                  }}
                   render={({ field }) => (
-                    <input
-                      id="task-due"
-                      type="datetime-local"
-                      value={
-                        field.value
-                          ? new Date(
-                              new Date(field.value).getTime() -
-                                new Date(field.value).getTimezoneOffset() *
-                                  60000,
-                            )
-                              .toISOString()
-                              .slice(0, 16)
-                          : ""
-                      }
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                      onChange={(event) =>
-                        field.onChange(
-                          event.target.value
-                            ? new Date(event.target.value).toISOString()
-                            : null,
-                        )
-                      }
-                    />
+                    <Input.TextArea {...field} id="task-description" rows={4} />
                   )}
                 />
+                {errors.description && (
+                  <p role="alert">{errors.description.message}</p>
+                )}
+              </div>
+              {featureId === null && (
+                <fieldset className="calm-field task-impact-features">
+                  <legend>影响功能（可多选，可为空）</legend>
+                  {features.isPending ? (
+                    <p>正在加载影响功能…</p>
+                  ) : features.isError ? (
+                    <Alert
+                      type="error"
+                      title={taskError(features.error)}
+                      action={
+                        <Button
+                          className="secondary-button"
+                          onClick={() => void features.refetch()}
+                        >
+                          重试影响功能
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <Controller
+                      name="impactFeatureIds"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="check-list">
+                          {features.data?.items.map((f) => (
+                            <label key={f.id}>
+                              <input
+                                type="checkbox"
+                                checked={(field.value ?? []).includes(f.id)}
+                                onChange={(event) =>
+                                  field.onChange(
+                                    event.target.checked
+                                      ? [
+                                          ...new Set([
+                                            ...(field.value ?? []),
+                                            f.id,
+                                          ]),
+                                        ].sort((a, b) => a - b)
+                                      : (field.value ?? []).filter(
+                                          (id) => id !== f.id,
+                                        ),
+                                  )
+                                }
+                              />
+                              {f.name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    />
+                  )}
+                </fieldset>
+              )}
+              <div className="calm-field form-hint">
+                <p>
+                  同一工作只保留一份任务；如果负责人、状态、验收、上线或回滚不同，建议拆分任务。
+                </p>
               </div>
             </fieldset>
           </div>
@@ -1788,7 +1802,8 @@ export function TasksPanel({
                 !writable || reloading || !!merge || conflict || !!reloadError
               }
             >
-              保存
+              {/* 与任务中心弹窗一致：新建说「创建任务」，编辑仍说「保存」。 */}
+              {selection?.item ? "保存" : "创建任务"}
             </Button>
           </div>
         </form>
