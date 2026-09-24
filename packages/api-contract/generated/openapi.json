@@ -5812,7 +5812,7 @@
     "/projects/{projectId}/members/{userId}/remove": {
       "post": {
         "operationId": "removeProjectMember",
-        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
         "responses": {
           "200": {
             "description": "成功",
@@ -5900,7 +5900,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.2.0",
+          "idempotencyContractVersion": "1.3.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -18465,10 +18465,15 @@
             "exclusiveMinimum": 0,
             "maximum": 2147483647
           },
-          "assigneeId": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 2147483647
+          "assigneeIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
           }
         },
         "required": [
@@ -18476,7 +18481,7 @@
           "moduleId",
           "featureId",
           "rowVersion",
-          "assigneeId"
+          "assigneeIds"
         ],
         "additionalProperties": false
       },

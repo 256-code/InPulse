@@ -247,14 +247,23 @@ export type ProjectMemberUnfinishedTasksResponse = z.infer<
   typeof projectMemberUnfinishedTasksResponseSchema
 >;
 
-/** 单项成员移除时的任务改派；rowVersion 用于防止覆盖并发任务编辑。 */
+/**
+ * 单项成员移除时的任务改派；rowVersion 用于防止覆盖并发任务编辑。
+ * 2026-09-24：改派目标由单人 `assigneeId` 改为集合 `assigneeIds`（至少一人、至多 20 人，
+ * 去重升序），与 ADR-040 的任务多负责人口径一致；承接人只在被移除成员是唯一负责人时
+ * 顶上，其余成员继续负责。
+ */
 export const projectMemberReassignmentItemSchema = z
   .object({
     taskId: projectPositiveId,
     moduleId: projectPositiveId,
     featureId: projectPositiveId.nullable(),
     rowVersion: projectPositiveId,
-    assigneeId: projectPositiveId,
+    assigneeIds: z
+      .array(projectPositiveId)
+      .min(1)
+      .max(20)
+      .overwrite((values) => [...new Set(values)].sort((a, b) => a - b)),
   })
   .strict()
   .meta({ id: "ProjectMemberReassignmentItem" });

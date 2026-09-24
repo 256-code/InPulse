@@ -202,7 +202,7 @@ describe("project member query", () => {
             moduleId: 12,
             featureId: 33,
             rowVersion: 4,
-            assigneeId: 3,
+            assigneeIds: [3],
           },
         ],
       });
@@ -218,7 +218,7 @@ describe("project member query", () => {
             moduleId: 12,
             featureId: 33,
             rowVersion: 4,
-            assigneeId: 3,
+            assigneeIds: [3],
           },
         ],
       },

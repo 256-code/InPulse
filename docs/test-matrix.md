@@ -283,8 +283,8 @@ API 集成 48 文件 444 例、database 单测 15/15 + 集成 26/26 通过。本
 | F03-API-001 | 单元 | HTTP 编排 | `listAdminUsers` 允许管理员、普通用户 403、匿名 401；create 的事务外 Argon2id 哈希、CSRF/幂等键/`If-Match` 传递、失败映射与幂等回放授权回调 | 本地通过（`admin-users-http.test.ts`，API 单测 55 文件 256 例） |
 | F03-API-002 | HTTP + PostgreSQL | 完整生命周期 | 管理员创建用户后同 Key 重放不重复；编辑、停用、启用、强退分别递增版本；停用/强退同事务递增 `auth_version` 并撤销 Session；停用后旧 Session 请求 401；五类审计事件齐全；审计失败时创建整体回滚 | 本地通过（`admin-users-api.integration.test.ts`；API 集成 31 文件 152 例，PostgreSQL 18.6 + PGroonga） |
 | F03-API-003 | 权限与边界 | 拒绝与保护 | 缺管理员身份 403、缺幂等键 400、非法字段 422、旧版本/状态冲突与自停用/最后一名可用管理员 409（`LAST_ACTIVE_ADMIN_REQUIRED`）；错误响应不泄露 SQL 或约束名；普通成员访问管理页 403 | 本地通过（HTTP 单元、真实 PostgreSQL 与权限矩阵） |
-| F03-UI-001 | 前端单元 | 管理页关键交互 | 列表展示、隐藏当前管理员停用/强退入口；新增/编辑携带 CSRF、幂等键和 `If-Match`；写失败后保留同一幂等键；错误文案统一映射 | 本地通过（`admin-user-query.test.tsx` 3 例、`AdminUsersPageView.test.tsx` 5 例；Web 30 文件 87 例） |
-| F03-E2E-001 | Playwright | 领域 E2E | 普通成员访问 `/settings` 显示 403；管理员完成新增（首次写携带 CSRF 与幂等键）→ 编辑 → 停用 → 启用 → 强制退出真实 UI 链路 | 本地 18/18 通过（新增 2 例，Playwright 全量含 F-13、MFA、搜索、项目创建等既有用例） |
+| F03-UI-001 | 前端单元 | 管理页关键交互 | 列表展示、当前登录账号置顶、隐藏当前管理员停用/强退入口；编辑携带 CSRF、幂等键和 `If-Match`；写失败后保留同一幂等键；错误文案统一映射 | 本地通过（`admin-user-query.test.tsx` 4 例、`AdminUsersPageView.test.tsx` 5 例）；2026-09-24 改口径后未执行 |
+| F03-E2E-001 | Playwright | 领域 E2E | 普通成员访问 `/settings` 显示 403；管理员完成编辑 → 停用 → 启用 → 强制退出真实 UI 链路（2026-09-24 起目标账号由夹具预置，管理页不再有新增入口） | 本地 18/18 通过（历史口径：含经 UI 新增）；2026-09-24 改口径后未执行 |
 
 2026-09-09 本地实际通过（已合并 `origin/main` `8386b29`）：`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、
 `pnpm test:unit`（database 5、api-contract 63、web 87、api 256）、`pnpm test:web`（30 文件 87 例）、`pnpm test:integration`（database 13、API 31 文件 152 例）、`pnpm build`、
@@ -2531,6 +2531,28 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 卡片尺寸：`calm-task-grid` / `calm-task-card` 换成 `draft-card-grid` / `draft-card`，三列网格、`min-height: 96px`、左侧琥珀竖条；卡片本身是 `button`，整卡可点。
 - 入口唯一：页头 CTA 文案由「记录一次迭代」改为「新建迭代记录」；`taskId > 0` 的「来源草稿」语境保留区块内「新建来源草稿」按钮。
 
+## 用户管理口径调整：移除「新增用户」入口、当前登录账号置顶（用户指示，2026-09-24 本地落库）
+
+用户指示（原文，附 `/settings` 成员列表截图）：「因为以后是用单点登录，新增用户功能去除掉，然后当前登录的账户要在最上面」。本批为前端展示层改动：只改 `apps/web/src/features/users/AdminUsersPageView.tsx`、`admin-user-query.ts`、`AdminUsersPageView.test.tsx`、`apps/web/src/styles/inpulse-design.css` 与 `apps/e2e/tests/admin-users.spec.ts`，不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端与生成客户端零改动。
+
+锁定口径：
+
+- 管理页不再提供新增入口：`CalmSectionTitle` 右侧按钮与空态按钮一并删除，空态文案改为「账号由统一身份认证在首次登录时自动创建，无需在此新增」；编辑器只剩编辑态（姓名 / 邮箱 / 管理员角色），`admin-user-query.ts` 的 `AdminUserChange` 删除 `create` 分支与 `createUser` 调用。
+- `POST /api/v1/admin/users`（`createUser`）与服务端实现保持原样：后端仍支持管理员创建本地账号，仅前端不再暴露入口，因此契约、OpenAPI、生成客户端与权限矩阵无需变更。
+- 当前登录账号置顶：成员数组按 `currentUserId` 把自身行移到首位，其余保持服务端返回顺序；`currentUserId` 缺失或不在列表时顺序不变。
+- E2E 目标账号改由夹具直接预置（`f03_` 前缀，登录名前缀由 `global-teardown` 的夹具清理统一物理删除；`password_hash` 为空，与 SSO JIT 开通一致），并断言页面上不存在「新增用户」按钮。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F03-UI-002 | Web 单元 | 当前登录账号置顶 | 服务端返回 `[member, admin]` 且 `currentUserId = admin.id` 时，`.member-list` 首个 `.member-row` 为当前账号、第二个为其余成员 | 未运行（2026-09-24 新增用例「pins the current account to the top of the list」；本批按 2026-09-17 前端免测口径未执行） |
+| F03-UI-003 | Web 单元 | 新增入口确实消失 | 管理页不再渲染「新增用户」按钮；编辑弹层只有姓名 / 邮箱 / 管理员角色三个字段，提交体不再包含 `loginName` / `password` | 未运行（同上；`AdminUsersPageView.test.tsx` 原「creates a user…」用例已随功能删除，不以 `skip` 保留） |
+| F03-E2E-002 | Playwright | 编辑 → 停用 → 启用 → 强制退出在新口径下仍成立 | 夹具预置的 `f03_` 账号可被编辑改名、停用、启用与强制退出；页面上 `getByRole('button', { name: '新增用户' })` 计数为 0 | 未运行（2026-09-24 改写 `admin-users.spec.ts`；本批未跑 Playwright） |
+| F03-BROWSER-001 | 浏览器实测 | 编辑弹层字段与排版 | 真实登录后打开「编辑用户」：无「头像地址」字段（`#admin-user-avatar` 不存在）；字段节奏为说明 12px → 标签 16px → 控件 6px → 下一字段 16px，底部按钮组距上方 16px；新增态字段顺序为登录名 / 姓名 / 邮箱 / 初始密码 / 管理员角色（本行记录移除头像字段时的实测，随后新增入口已整体删除） | 本地通过（2026-09-24，Playwright 探针 + 截图留档） |
+
+本地实际执行（2026-09-24）：`pnpm exec prettier --check`（改动文件）、编辑器 TypeScript 诊断、真实浏览器（本机 Vite + 真实 PostgreSQL，管理员账号）打开 `/settings` 的「编辑用户」弹层做 DOM 量测与截图。
+
+未运行 / 已知偏差：① 按 2026-09-17 前端免测口径未执行 `pnpm --filter @inpulse/web test`、`pnpm test:e2e`、`pnpm check`、`deps:audit` 与 GitHub Actions，新增与改写的用例均未实跑；② 后端 `createUser` 路由、契约与设计文档保持原样（功能设计 / 系统设计仍把「管理员新增本地账号」写成可用能力），是否补 ADR 或文档修订需项目负责人定案；③ 置顶只改展示顺序，不写入任何用户偏好；④ 改动需非作者人工评审。
+
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | RECORD-DRAFTS-CARD-001 | 浏览器实测 | 草稿箱默认平铺 | `/records?projectId=1`：`.draft-strip` 0 个、标题无折叠箭头、`.calm-section-title .badge` 0 个、区块内按钮 0 个 | 本地通过 |
@@ -3462,6 +3484,31 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 本地实际执行（2026-09-23 排序口径）：三条定向命令如上；`docs/adr/ADR-037.md`（§1 排序键、§2 载荷与版本递增行、§3 2026-09-23 修订行、§6 测试要求）、`docs/adr/ADR-041.md`（修订关系）、`docs/task-card-colors.md`（列表行排序与变更历史）与本文件同步。
 
 未运行 / 已知偏差：① 未跑整链 `pnpm check`、`pnpm typecheck`、`pnpm build`、全量 `test:unit` / `test:web` / `test:integration`、`pnpm test:e2e`、`deps:audit` 与 GitHub Actions；② 未做浏览器人工复核（需重启 API 使新排序生效）；③ 版本 4 及更早的已签发游标在升级后一律按无效游标拒绝（422 `AGGREGATE_READ_INVALID_CURSOR`），分页需从头开始——这是刻意选择，避免旧序号在新口径下跳页或漏项；④ ADR-037 仍为 `Proposed`，口径变更待人工批准。
+
+## 成员改派支持多位接手成员（用户指示，2026-09-24 本地落库，契约 1.3.0）
+
+用户反馈原文：「指派成员怎么只能指派一个」，随后澄清「我指的是移除前的改派」。本批把「移除项目成员」弹层里每条未完成任务的改派目标由单人 `assigneeId` 扩为集合 `assigneeIds`，沿用 [ADR-040](./adr/ADR-040.md) 的多负责人平权口径，并保持 ADR-033/ADR-034/ADR-035 的成员移除门槛不变。
+
+锁定口径：
+
+- 契约：`ProjectMemberReassignmentItem.assigneeIds` 为 1..20 个正整数，Schema 内 `overwrite` 去重升序；原 `assigneeId` 字段删除（破坏性请求字段变更，前端与生成客户端同一批更新）。
+- 幂等：`removeProjectMember` 的 `idempotencyContractVersion` 由 `1.2.0` 升到 `1.3.0`，持旧版本 Key 的重放一律 409；`assigneeIds` 参与请求摘要，集合不同即 409。
+- 改派语义：只摘掉被移除成员，任务上其他负责人原样保留；仅当被移除成员是该任务唯一负责人时，才由所选接手成员顶上（可多位）。`PROJECT_MEMBER_REASSIGNMENT_NOOP`（422）改判为「改派目标包含被移除成员本人」，不再因多人而拒绝。
+- 前端：改派列改用与创建任务同款的 `CalmSelect`（`appearance="member"`）多选，最多显示 2 个标签；某条任务未勾选改派时仍保留原负责人。
+- 不改数据库结构、不新增迁移、不改鉴权 / CSRF / 幂等要求与父级可写校验：本批只是同一路由的请求字段与改派结果集扩大。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| F05-MEMBER-API-003 | HTTP + PostgreSQL | 一条任务改派多位接手成员 | `assigneeIds: [B, A, A]`（乱序 + 重复）落库后 `app.task_assignees` 为 `[A, B]` 升序、被移除成员不再出现，`reassignedTaskIds` 升序且 `unfinishedTaskCount` 为 0 | 本地通过（2026-09-24；`project-member-management-api.integration.test.ts` 单文件 15/15，含新用例「accepts several replacement members for one task and keeps the other owners (ADR-040)」） |
+| F05-MEMBER-API-004 | HTTP + PostgreSQL | 共享任务只摘掉被移除成员 | 任务原负责人为「被移除成员 + 其他成员」时，改派 `[C]` 后落库只剩其他成员（接手人只在唯一负责人场景顶上） | 本地通过（2026-09-24，同上用例内第二条断言） |
+| F05-MEMBER-UI-002 | Web 单元 | 改派多选下拉提交集合 | 勾选「开发者 A」「开发者 B」后提交体为 `assigneeIds: [3, 5]`（升序），并携带 CSRF 与 `Idempotency-Key` 头 | 本地通过（2026-09-24；`ProjectMembersPageView.test.tsx` 7/7，含新用例「reassigns unfinished tasks to several members in one multi-select (2026-09-24)」） |
+| F05-MEMBER-UI-003 | 浏览器实测 | 改派多选交互 | 移除弹层中每个任务行的改派下拉可多选、标签最多显示 2 个、选中态与创建任务的负责人下拉一致 | 未运行（2026-09-24；重启本地服务后浏览器会话失效回到 `/login`，需重新登录后复验） |
+| F05-MEMBER-CONTRACT-001 | 契约 | 请求字段与版本升级 | `contract:generate` / `contract:drift` 的 5 个产物与 Registry 一致；`contract:validate` 108 条路由通过；权限矩阵 108/108 | 本地通过（2026-09-24） |
+
+本地实际执行（2026-09-24）：`pnpm --filter @inpulse/api-contract generate` 与 `drift`、`validate`、权限矩阵脚本、`pnpm -r typecheck`、`pnpm --filter @inpulse/web exec vitest run src/features/projects/ProjectMembersPageView.test.tsx`（7 例）与 `project-member-query.test.tsx`（5 例）、`pnpm --filter @inpulse/api test:unit`（66 文件 370 例）、`pnpm --filter @inpulse/api-contract test:unit`（16 文件 100 例）、真实 PostgreSQL 集成 `apps/api/test/project-member-management-api.integration.test.ts`（15 例）。
+
+未运行 / 已知偏差：① 整链 `pnpm check`、`pnpm test:e2e`、定向 Playwright E2E、全量真实 PostgreSQL 集成、`deps:audit` 与 GitHub Actions 未跑；② 浏览器端多选改派的点击复验未做（本地会话失效）；③ 契约版本升级后持 `1.2.0` 旧 Key 的重放一律 409，属刻意选择；④ 契约源、Route Registry、权限矩阵、OpenAPI、生成客户端与本文件同一批落库，未改 ADR 与三份设计文档；⑤ 需非作者人工评审。
+
 ## 2026-09-23 模块层面下线归档（ADR-044，本地落库）
 
 用户指示（原文：「好接下来我们改模块的归档，直接去掉这个功能」）：模块层面整体下线归档，模块只有 `ACTIVE`；功能、任务、迭代记录与遗留项的归档 / 恢复完全不变。决策落 [ADR-044](adr/ADR-044.md)，与同日的 [ADR-043](adr/ADR-043.md) 项目三态同属一个尚未推送的批次。

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
-  type AdminUserCreateRequest,
   type AdminUserItem,
   type AdminUserUpdateRequest,
   type InpulseApiClient,
@@ -11,10 +10,6 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 export type AdminUserChange =
-  | {
-      readonly action: "create";
-      readonly body: AdminUserCreateRequest;
-    }
   | {
       readonly action: "update";
       readonly user: AdminUserItem;
@@ -43,8 +38,7 @@ export function adminUserErrorMessage(error: unknown): string {
         return "不能停用、降级或移除最后一名可用管理员，请先指定其他管理员。";
       return "用户当前状态不允许此操作，请检查列表后重试。";
     }
-    if (error.status === 422)
-      return "请检查登录名、姓名、邮箱、头像或初始密码。";
+    if (error.status === 422) return "请检查姓名或邮箱。";
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
   }
   return "用户管理服务暂时不可用，请重试。";
@@ -97,7 +91,6 @@ export function useAdminUsers(client?: InpulseApiClient) {
       const init = {
         headers: mutationHeaders(change, csrf.csrfToken, retryKey.current.key),
       };
-      if (change.action === "create") return api.createUser(change.body, init);
       if (change.action === "update")
         return api.updateUser(change.user.id, change.body, init);
       if (change.action === "disable")

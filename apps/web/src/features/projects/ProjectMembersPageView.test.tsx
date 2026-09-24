@@ -42,6 +42,30 @@ const removed: ProjectMemberRecordItem = {
   removedAt: "2026-09-09T00:00:00.000Z",
 };
 
+const memberA: ProjectMemberRecordItem = {
+  membershipId: 12,
+  projectId: 7,
+  userId: 3,
+  name: "开发者 A",
+  avatarUrl: null,
+  status: "ACTIVE",
+  role: "MEMBER",
+  joinedAt: "2026-09-09T00:00:00.000Z",
+  removedAt: null,
+};
+
+const memberB: ProjectMemberRecordItem = {
+  membershipId: 13,
+  projectId: 7,
+  userId: 5,
+  name: "开发者 B",
+  avatarUrl: null,
+  status: "ACTIVE",
+  role: "MEMBER",
+  joinedAt: "2026-09-09T00:00:00.000Z",
+  removedAt: null,
+};
+
 const unfinishedTask: ProjectMemberUnfinishedTaskItem = {
   taskId: 99,
   projectId: 7,
@@ -273,6 +297,79 @@ describe("ProjectMembersPageView", () => {
       7,
       2,
       { reassignments: [] },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-token",
+          "Idempotency-Key": expect.stringContaining("project-member-remove-"),
+        }),
+      }),
+    );
+    await screen.findByText(/成员已移出项目/);
+  });
+
+  it("reassigns unfinished tasks to several members in one multi-select (2026-09-24)", async () => {
+    const client = baseClient();
+    client.listProjectMembers.mockResolvedValue({
+      items: [owner, removed, memberA, memberB],
+    });
+    client.listProjectMemberUnfinishedTasks.mockResolvedValue({
+      items: [unfinishedTask],
+    });
+    const removeProjectMember = vi.fn().mockResolvedValue({
+      member: {
+        ...owner,
+        status: "REMOVED",
+        removedAt: "2026-09-09T01:00:00.000Z",
+      },
+      reassignedTaskIds: [99],
+      unfinishedTaskCount: 0,
+    });
+    const api = {
+      ...client,
+      removeProjectMember,
+    } as unknown as InpulseApiClient;
+    mount(api);
+
+    // 三位活跃成员各自有「移除」入口，第一位即被移除的 开发者 C（user 2）。
+    const removeButtons = await screen.findAllByRole("button", {
+      name: /移\s*除/,
+    });
+    expect(removeButtons).toHaveLength(3);
+    fireEvent.click(removeButtons[0]!);
+    const dialog = await screen.findByRole("dialog", {
+      name: "移除项目成员",
+    });
+    await within(dialog).findByText("SHOP-T-99");
+    fireEvent.click(within(dialog).getByLabelText("改派任务 SHOP-T-99"));
+
+    // 改派下拉与新建任务的负责人选择一致：可搜索、可多选、弹层保持展开。
+    const trigger = within(dialog)
+      .getByLabelText("选择 SHOP-T-99 的改派成员")
+      .closest(".ant-select");
+    if (!trigger) {
+      throw new Error("reassignment select not found");
+    }
+    fireEvent.mouseDown(trigger);
+    fireEvent.click(await screen.findByTitle("开发者 A"));
+    fireEvent.click(await screen.findByTitle("开发者 B"));
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认移除" }));
+
+    await waitFor(() => expect(removeProjectMember).toHaveBeenCalledTimes(1));
+    expect(removeProjectMember).toHaveBeenCalledWith(
+      7,
+      2,
+      {
+        reassignments: [
+          {
+            taskId: 99,
+            moduleId: 12,
+            featureId: 33,
+            rowVersion: 4,
+            assigneeIds: [3, 5],
+          },
+        ],
+      },
       expect.objectContaining({
         headers: expect.objectContaining({
           "x-csrf-token": "csrf-token",

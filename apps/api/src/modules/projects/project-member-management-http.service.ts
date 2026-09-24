@@ -252,7 +252,7 @@ export class ProjectMemberManagementHttpService {
       moduleId: number;
       featureId: number | null;
       rowVersion: number;
-      assigneeId: number;
+      assigneeIds: number[];
     }[];
   } {
     const parsed =
