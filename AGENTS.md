@@ -328,11 +328,25 @@
 - `created_at` 相同时用 `id DESC` 兜底保证顺序稳定；演示数据里项目 1 的 8 个模块创建时间完全相同，因此它们现在按 ID 倒序显示。契约侧 `listProjects` / `listModules` / `listFeatures` 三条路由描述同步（顺手清掉 `listProjects` 描述里残留的「包含归档历史 / 已归档档位 / 待审归档申请摘要」过时文案）。
 - 验证（2026-09-24 本地）：`apps/api` 单测 66 文件 367 例、真实 PostgreSQL 集成 49 文件 451 例（含三处新排序断言：`projects-read-api` 的后建「未开始」项目排在旧「未开始」之前且档位计数为 `[1, 0, 0, 0]`、`modules-api` 的未分类模块列表 `[module.id, project.moduleId]`、`features-api` 的 `[active.id, newerNotStarted.id, notStarted.id]`）、`apps/web` 单测 85 文件 553 例、Playwright E2E 整包 56 例全绿（4.9 分钟）；`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`pnpm build`、`contract:drift`、`contract:validate`（98 条）、`permissions:check`（98 条）、`db:migrations:check`（26 条）、`check:docs`（92 个 Markdown）、`check:frontend:boundaries`（283 模块 / 1392 依赖）通过。`apps/web` 的 `src/app/router/app-router.test.tsx` 在全量批次下偶发 1 例失败，单独复跑 3/3 通过，与本次排序改动无关（既有偏差）。详见 `docs/test-matrix.md` 的 ADR-046 节。
 
-## 2026-09-24 任务紧急桶：遗留问题来源改排到已逾期之后
+## 2026-09-24 任务紧急桶：遗留问题来源改排到已逾期之后（该口径已于同日作废）
+
+> 本节描述的「遗留问题来源并回紧急桶第 2 档、游标版本 6、载荷 7 段」已由同日文末的 [排序口径复核](#2026-09-24-排序口径复核遗留问题来源只在同优先级内提前) 撤销，现行口径以该节与 [ADR-037](./docs/adr/ADR-037.md) §3 修订 B 为准。本节仅保留为变更历史。
 
 按用户 2026-09-24 指示（「这个排序稍微改一下，把遗留问题排到已经逾期后面」）重排未完成任务的紧急桶：**标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)**（此前遗留问题来源是第 0 桶）。
 
-- 服务端唯一排序键在 `apps/api/src/modules/tasks/task-list-order.ts` 的 `urgency` 表达式，任务中心、任务列表端口与任务面板共用；`TASK_LIST_SORT_KEY_VERSION` 由 4 升到 5，旧游标整版拒绝（旧 0 = 遗留问题来源，新 0 = 标记紧急）。
+- 服务端唯一排序键在 `apps/api/src/modules/tasks/task-list-order.ts` 的 `urgency` 表达式，任务中心、任务列表端口与任务面板共用；`TASK_LIST_SORT_KEY_VERSION` 由 5 升到 6，旧游标整版拒绝（旧 0 = 遗留问题来源，新 0 = 标记紧急）。
 - 前端 `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 的 `urgencyBucketOf` 必须与服务端同步重排：它让聚合组卡与任务卡共用同一把尺子（组卡「来源」不适用，「紧急」取未完成分支最高一档、「截止」取最早一条）。两处注释互相引用，改一处必须改另一处。
 - 只改顺序，不改颜色：`task-tone.ts` / `design-system.css` 的卡片取色、优先级徽章、「遗留问题」棕色徽章与截止日期文案全部不变；任务看板四桶口径（[ADR-037](./docs/adr/ADR-037.md) §3）同样不变。
 - ADR-037 §3 已补 2026-09-22 与 2026-09-24 两条修订（§1 / §3 表格里 2026-09-18 的原始桶序以这两条为准），并同步 `功能设计v1.1.md`、`docs/task-card-colors.md`、`docs/c-v1-alignment.md`、`docs/test-matrix.md`（TASK-URGENCY-ORDER-* 小节）与 `开发日志.md` 第二十一条。
+
+## 2026-09-24 排序口径复核：遗留问题来源只在同优先级内提前
+
+按用户 2026-09-24 指示（「为什么这里排序又被改动了，我要求遗留问题只会在同优先级里面高一点，以后不管是别人拉取还是，都要以这个为准」）复核并回退当日的紧急桶口径（[ADR-037](./docs/adr/ADR-037.md) §3 修订 B）。因此：
+
+- **现行口径（唯一权威）**：任务列表排序键 = 状态分组 → 完成时间倒序 → 紧急桶（标记紧急 0 → 已逾期 1 → 今/明日截止 2 → 其余 3）→ 优先级 → **遗留问题来源**（同优先级内 0/1）→ 截止时间 → 任务 ID。遗留问题来源**不是紧急桶的一档**，它在优先级之后单独成一档，因此只会在同优先级任务内提前，不越过更高优先级的任务。
+- 回退原因：当日两条并行开发线合并时采用了另一条线的口径（把遗留问题来源并回紧急桶第 2 档），于是「普通 + 遗留问题」的卡片压过了「高」优先级卡片；该口径已作废，见上文「任务紧急桶：遗留问题来源改排到已逾期之后」的作废注记。
+- 固化要求：任何分支合并、端到端拉取、端口扩展或前端镜像实现都必须保留这一级的位置；确需改动必须新增 ADR-037 修订行并同步本文件，不得静默沿用其它分支的旧口径。
+- 实现位置（三处必须同步，缺一即口径漂移）：`apps/api/src/modules/tasks/task-list-order.ts`（`urgency` / `leftover` 表达式、`taskListOrderBy`、`taskListKeysetPredicate`、`taskListSortKeyFor` 与游标编解码）、`apps/web/src/features/my-tasks/TaskCenterPageView.tsx`（`urgencyBucketOf` / `leftoverRankOf` 与六级排序键，聚合组卡与任务卡共用同一把尺子）、`apps/web/src/features/common/task-tone.ts`（只解释配色与桶序，不参与排序）。
+- 游标：`TASK_LIST_SORT_KEY_VERSION` 升到 7，载荷 8 段（版本|状态分组|完成时间|紧急桶|优先级|遗留问题来源|截止|任务ID）；v5、v6 旧键整版拒绝，前端按既有 422 重新取第一页。版本号单调递增，不回收已用过的号。
+- 只改顺序，不改颜色与看板：卡片取色、优先级徽章、「遗留问题」徽章与截止日期文案不变；任务看板 `listForBoard` 的四桶口径与其未完成桶「优先级 → 截止时间」排序不受影响（ADR-037 §3）。
+- 回归防线：`apps/api/test/task-list-order.test.ts`（游标版本与段数）、`apps/api/test/aggregate-read-ports.integration.test.ts`（真库顺序矩阵，含「高优先级无遗留 vs 普通优先级有遗留」对照）、`apps/api/test/aggregate-read-api.integration.test.ts`（HTTP 层顺序与分页不重不漏）、`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`（前端镜像顺序）。改动排序口径时必须同时跑这四处。

@@ -1420,9 +1420,9 @@ describe("任务列表统一排序（ADR-037）", () => {
   }
 
   /**
-   * 每个状态分组造齐 5 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到标记紧急之后一档，
-   * 2026-09-24 起遗留问题来源再降到已逾期之后一档）：
-   * 标记紧急 → 已逾期 → 遗留问题来源（leftover_task_links 链接）→ 今/明日截止 → 其余。
+   * 每个状态分组造齐 4 个紧急桶 + 2 条完全并列的行（2026-09-22 起逾期退到标记紧急之后一档）：
+   * 标记紧急 → 已逾期 → 今/明日截止 → 其余。遗留问题来源不在紧急桶里，它是优先级之后的
+   * 独立一级（2026-09-24 产品定案「遗留问题只会在同优先级里面高一点」）。
    * leftover_task_links 的 leftover_item_id 是主键且 task_id 唯一，因此每条遗留问题来源任务各配一个遗留项。
    */
   async function seedOrderingMatrix(
@@ -1473,21 +1473,37 @@ describe("任务列表统一排序（ADR-037）", () => {
     const bounds = await dayBounds();
     const matrix = await seedOrderingMatrix(scope, bounds);
     const { canceled, done, todo } = matrix;
+    /**
+     * 同优先级 / 跨优先级的对照夹具（ADR-037 §6；2026-09-24 定案「遗留问题只会在同优先级里面高一点」）：
+     * 高优先级无遗留问题与普通优先级无遗留问题都在最后创建，ID 比遗留问题来源任务大。
+     * 若有人把遗留问题来源重新并回紧急桶（v6 口径），普通优先级的 leftover 会压到高优先级的
+     * highPlain 之前，下面的期望顺序立即失败——这就是这条口径的回归网。
+     */
+    const highPlain = await newTask(scope, {
+      priority: "HIGH",
+      title: "高优先级无遗留",
+    });
+    const normalPlain = await newTask(scope, { title: "同优先级无遗留" });
 
     const mine = await uow.run((tx) =>
       myTasks.list(tx, { projectIds: [scope.projectId], limit: 100 }),
     );
     const ids = mine.items.map((item) => item.taskId);
     expect(ids).toEqual([
-      // 未完成：紧急桶 0 → 1 → 2 → 3 → 4（标记紧急 → 已逾期 → 遗留问题来源 →
-      // 今/明日截止 → 其余），桶内完全并列的两条按 id 升序。
+      // 未完成：紧急桶 0 → 1 → 2 → 3（标记紧急 → 已逾期 → 今/明日截止 → 其余），
+      // 同桶内先比较优先级，再比较「遗留问题来源」这一独立一级，最后才看截止与 ID：
+      // 高优先级无遗留的 highPlain 因此排在普通优先级 + 遗留问题来源的 leftover 之前
+      // （优先级更高的任务不会被遗留问题来源越过），而 leftover 又排在同为普通优先级、
+      // 无遗留问题的 other / tieA / tieB / normalPlain 之前（同优先级内提前）。
       todo.urgent,
       todo.overdue,
-      todo.leftover,
       todo.dueSoon,
+      highPlain,
+      todo.leftover,
       todo.other,
       todo.tieA,
       todo.tieB,
+      normalPlain,
       // 已完成按完成时间倒序（2026-09-22 产品口径「这个排序按照完成时间，越晚越排前面」）：
       // 优先级 / 截止 / 紧急桶都退出这一组。夹具按 已逾期 → 遗留问题来源 → 标记紧急 →
       // 今日截止 → 其余 → 并列甲 → 并列乙 的顺序创建，每条各起一个事务、completed_at 随
@@ -1500,7 +1516,8 @@ describe("任务列表统一排序（ADR-037）", () => {
       done.urgent,
       done.leftover,
       done.overdue,
-      // 已取消仍不参与紧急桶与完成时间：URGENT 优先，其后按截止时间升序、无截止最后。
+      // 已取消不参与紧急桶、完成时间与遗留问题来源（后两者对非未完成恒等）：
+      // URGENT 优先，其后按截止时间升序、无截止最后。
       canceled.urgent,
       canceled.overdue,
       canceled.dueSoon,
@@ -1539,7 +1556,7 @@ describe("任务列表统一排序（ADR-037）", () => {
     expect(stamps).toEqual([...stamps].sort((left, right) => left - right));
     expect(new Set(stamps).size).toBe(stamps.length);
 
-    // 遗留问题来源桶确实来自链接，而不是标题或优先级。
+    // 遗留问题来源标记确实来自链接，而不是标题或优先级。
     const linked = await client.sql<{ taskId: number }[]>`
       SELECT task_id AS "taskId" FROM app.leftover_task_links WHERE project_id = ${scope.projectId}
     `;
@@ -1558,14 +1575,26 @@ describe("任务列表统一排序（ADR-037）", () => {
     const scope = await newProject();
     const bounds = await dayBounds();
     // 造数据的顺序即期望的返回顺序：紧急桶现在是
-    // 标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)，
+    // 标记紧急(0) → 已逾期(1) → 今/明日截止(2) → 其余(3)，
     // 因此「标记紧急」要排在「已逾期」之前（2026-09-22 逾期退到标记紧急之后一档），
-    // 本用例不含遗留问题来源任务（2026-09-24 起它在已逾期之后一档）。
+    // 「今/明日截止」落在它们之后；未完成里的遗留问题来源是优先级之后的独立一级
+    // （2026-09-24 定案），这里放在「其余」之前、与其余任务同优先级，用于覆盖新增一级的
+    // keyset 比较；最后再补一条高优先级无遗留任务，防止遗留问题来源越级提前。
     const created = [
       await newTask(scope, { priority: "URGENT" }),
       await newTask(scope, { dueAt: bounds.overdue }),
       await newTask(scope, { dueAt: bounds.today }),
+      await newTask(scope, { priority: "HIGH" }),
     ];
+    // 遗留问题来源：与后面 5 条同为普通优先级、无截止，靠独立一级排到它们之前。
+    const keysetRecordId = await newPublishedRecord(scope);
+    const keysetLeftoverId = await newLeftover(scope, keysetRecordId, {
+      contents: ["分页夹具遗留问题"],
+    });
+    const leftover = await newTask(scope, { title: "遗留问题来源" });
+    await client.sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+      VALUES (${keysetLeftoverId}, ${leftover}, ${scope.projectId}, ${scope.userId})`;
+    created.push(leftover);
     for (let index = 0; index < 5; index += 1) {
       created.push(await newTask(scope));
     }

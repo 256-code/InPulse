@@ -63,15 +63,15 @@ function cursorMock(
   return {
     encode: vi.fn().mockReturnValue("cursor-next"),
     decode: vi.fn(options.decode ?? (() => null)),
-    // ADR-037 / ADR-041：任务中心走 decodeKey，载荷必须带排序键（版本 6 为 7 段：
-    // 版本|状态分组|完成时间|紧急桶|优先级|截止|任务ID）。测试用最小合法键。
+    // ADR-037 / ADR-041：任务中心走 decodeKey，载荷必须带排序键（版本 7 为 8 段：
+    // 版本|状态分组|完成时间|紧急桶|优先级|遗留问题来源|截止|任务ID）。测试用最小合法键。
     decodeKey: vi.fn(
       options.decodeKey ??
         (() => {
           const afterId = options.decode?.() ?? null;
           return afterId === null
             ? null
-            : { afterId, sortKey: `6|0||3|2||${afterId}` };
+            : { afterId, sortKey: `7|0||3|2|1||${afterId}` };
         }),
     ),
   };
@@ -1452,6 +1452,7 @@ describe("MyTasksQueryService.list", () => {
           completedAt: null,
           urgency: 3,
           priority: 2,
+          leftover: 1,
           dueAt: null,
           taskId: 501,
         },
@@ -1532,7 +1533,7 @@ describe("MyTasksQueryService.list", () => {
         null,
       ]),
       afterId: 501,
-      sortKey: "6|0||3|2||501",
+      sortKey: "7|0||3|2|1||501",
     });
   });
 

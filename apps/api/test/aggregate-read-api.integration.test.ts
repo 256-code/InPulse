@@ -1157,9 +1157,12 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
     expect(response.status).toBe(200);
     const page = myTaskPageSchema.parse(response.body);
     // ADR-037：未完成 → 已完成 → 已取消；未完成内部按
-    // 标记紧急 → 已逾期 → 遗留问题来源 → 今/明日截止 → 其余（2026-09-24 起
-    // 遗留问题来源降到已逾期之后一档），桶内按 ID 升序。本夹具只有 tSource 命中
-    // 「遗留问题来源」桶，其余未完成任务都落在「其余」桶，故期望顺序不变。
+    // 标记紧急 → 已逾期 → 今/明日截止 → 其余 分紧急桶，桶内先比优先级、再比「遗留问题来源」
+    // 独立一级（2026-09-24 定案：遗留问题只会在同优先级里面高一点），最后按 ID 升序。
+    // 本夹具没有截止时间与紧急优先级，只有 tSource 命中「遗留问题来源」，其余未完成任务
+    // 都落在「其余」同级，因此 tSource 只在同为普通优先级的 tMain 等同级任务里提前，
+    // 期望顺序仍是 tSource 在前、其余按 ID 升序。更高优先级不会被遗留问题越过的用例见
+    // 文件末尾的「GET /api/v1/me/tasks 排序口径：遗留问题来源只在同优先级内提前」。
     expect(page.items.map((item) => item.taskId)).toEqual([
       tSource,
       tMain,
@@ -1805,5 +1808,74 @@ describe("GET /api/v1/task-groups/memberships（R-5 任务记录标记批量读�
       422,
       "VALIDATION_FAILED",
     );
+  });
+});
+
+// 2026-09-24 产品定案（原文「遗留问题只会在同优先级里面高一点……以后不管是别人拉取
+// 还是，都要以这个为准」）：遗留问题来源是优先级之后的独立一级，只在同优先级内部提前，
+// 绝不越过更高优先级的任务。这条口径在 2026-09-24 的两条并行开发线合并时曾被改成
+// 「并回紧急桶、排在已逾期之后」（v6），本用例就是防止再次翻回去的 HTTP 级回归网。
+// 单独建项目夹具并显式带 projectId，避免影响同文件其它用例的期望集合。
+describe("GET /api/v1/me/tasks 排序口径：遗留问题来源只在同优先级内提前", () => {
+  test("高优先级任务不被普通优先级的遗留问题来源越过，同优先级内遗留问题来源排前", async () => {
+    const scope = await createProject(runtime!.sql, memberUser);
+    // 创建顺序刻意与期望顺序相反：先建同优先级的对照任务，再建遗留问题来源，
+    // 最后建更高优先级的任务。若遗留问题来源重新并回紧急桶，普通优先级的
+    // leftoverSource 会压住更高优先级的 plainHigh，下面的顺序断言立即失败。
+    const normalPlain = await newTask(scope, { title: "同优先级对照" });
+    const recordId = await newPublishedRecord(scope);
+    const leftoverId = await newLeftover(scope, recordId, {
+      content: "排序口径回归夹具",
+      createdAt: new Date().toISOString(),
+    });
+    const leftoverSource = await newTask(scope, { title: "遗留问题来源" });
+    await runtime!
+      .sql`INSERT INTO app.leftover_task_links (leftover_item_id, task_id, project_id, created_by)
+      VALUES (${leftoverId}, ${leftoverSource}, ${scope.projectId}, ${scope.userId})`;
+    const plainHigh = await newTask(scope, {
+      priority: "HIGH",
+      title: "高优先级对照",
+    });
+
+    const response = await getJson(
+      "/api/v1/me/tasks?projectId=" + String(scope.projectId),
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const page = myTaskPageSchema.parse(response.body);
+    expect(page.items.map((item) => item.taskId)).toEqual([
+      plainHigh,
+      leftoverSource,
+      normalPlain,
+    ]);
+    const leftoverSourceByTask = new Map(
+      page.items.map((item) => [item.taskId, item.hasLeftoverSource]),
+    );
+    expect(leftoverSourceByTask.get(leftoverSource)).toBe(true);
+    expect(leftoverSourceByTask.get(plainHigh)).toBe(false);
+    expect(leftoverSourceByTask.get(normalPlain)).toBe(false);
+
+    // 分页时同一把尺子：limit=1 逐页取，顺序与不分页一致，游标不重不漏。
+    const collected: number[] = [];
+    let cursor: string | null = null;
+    for (let index = 0; index < 5; index += 1) {
+      const suffix =
+        cursor === null ? "" : "&cursor=" + encodeURIComponent(cursor);
+      const pagedResponse = await getJson(
+        "/api/v1/me/tasks?projectId=" +
+          String(scope.projectId) +
+          "&limit=1" +
+          suffix,
+        memberCookie,
+      );
+      expect(pagedResponse.status).toBe(200);
+      const paged = myTaskPageSchema.parse(pagedResponse.body);
+      collected.push(...paged.items.map((item) => item.taskId));
+      cursor = paged.nextCursor;
+      if (cursor === null) {
+        break;
+      }
+    }
+    expect(collected).toEqual([plainHigh, leftoverSource, normalPlain]);
   });
 });

@@ -2034,14 +2034,14 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 ## 任务列表统一排序与多列游标（ADR-037，2026-09-18 本地落库，待人工批准）
 
-用户确认：任务中心与任务面板共用同一排序键 —— 状态分组 未完成 → 已完成 → 已取消；未完成内部按紧急桶 标记紧急 → 已逾期 → 今/明日截止 → 其余（命中第一个即定桶，按 `Asia/Shanghai` 日历日）；随后优先级 紧急 → 高 → 普通、遗留问题来源与截止时间升序（无截止最后）、任务 ID 升序兜底。任务中心的游标随之由单列 `afterId` 扩展为多列 keyset。（2026-09-23 更新：优先级只剩 紧急 → 高 → 普通 三档；遗留问题来源退出紧急桶、改为优先级之后的独立一级，只同优先级内提前；游标版本由 3 升到 4、再到 5，见末节。）
+用户确认：任务中心与任务面板共用同一排序键 —— 状态分组 未完成 → 已完成 → 已取消；未完成内部按紧急桶 标记紧急 → 已逾期 → 今/明日截止 → 其余（命中第一个即定桶，按 `Asia/Shanghai` 日历日）；随后优先级 紧急 → 高 → 普通、遗留问题来源（同优先级内提前的独立一级）、截止时间升序（无截止最后）、任务 ID 升序兜底。任务中心的游标随之由单列 `afterId` 扩展为多列 keyset。（2026-09-23 更新：优先级只剩 紧急 → 高 → 普通 三档；遗留问题来源退出紧急桶、改为优先级之后的独立一级，只同优先级内提前；游标版本由 3 升到 4、再到 5；2026-09-24 更新：同日「遗留问题来源并回紧急桶」的临时口径（版本 6、载荷 7 段）已作废，复核确认独立成级并由版本 6 升到 7、载荷回到 8 段，见末节。）
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| ADR037-ORDER-001 | 真实 PostgreSQL | 4 个紧急桶档位 + 遗留问题来源 × 3 个状态分组的排序 | `aggregate-read-ports.integration.test.ts`：每个状态分组各造 已逾期（今天 00:00 前）/ 遗留问题来源（`leftover_task_links` 链接，普通优先级）/ 标记紧急（URGENT，无截止）/ 今日截止（今天 00:00 后）/ 其余 + 2 条完全并列，共 21 条，并额外为未完成组补 2 条对照（「高优先级无遗留」与「同优先级无遗留」，共 23 条）；`MyTaskQueryPort.list` 返回顺序严格等于「未完成按 紧急 → 已逾期 → 今/明日截止 → 高优先级 → 本优先级内遗留问题来源 → 其余按 id、已完成 / 已取消 URGENT 优先且无截止最后」，其中「高优先级无遗留」先于「遗留问题来源」而后者又先于「同优先级无遗留」两条件共同定义「遗留问题只在同优先级内提前」；`TaskQueryPort.list` 同序；链接查询反证来源由 `leftover_task_links` 决定。反事实验证把 `taskListOrderBy` 退回 `t.id DESC` 时本用例与 6 个既有顺序用例一起失败（`expected [ 10872, 10871, … ] to deeply equal [ 10866, 10867, … ]`），恢复后 22/22 通过；2026-09-23 改为 23 条后单文件 23/23 | 本地通过（`app_it`，2026-09-18；2026-09-23 按新口径重排） |
-| ADR037-CURSOR-001 | 真实 PostgreSQL | 多列 keyset 分页不漏不重 | `aggregate-read-ports.integration.test.ts`：逾期 + URGENT + 今日截止 + 5 条完全并列（无截止）共 8 条，按 `limit=2` 用 `next` 逐页走完，拼接顺序与不分页结果一致且无重复（2026-09-23 口径下紧急桶序号改为 0→3，用例不变仍通过）；反事实验证同上（退回 `t.id DESC` 时该用例失败） | 本地通过（2026-09-18） |
+| ADR037-ORDER-001 | 真实 PostgreSQL | 4 个紧急桶档位 + 遗留问题来源 × 3 个状态分组的排序 | `aggregate-read-ports.integration.test.ts`：每个状态分组各造 已逾期（今天 00:00 前）/ 遗留问题来源（`leftover_task_links` 链接，普通优先级）/ 标记紧急（URGENT，无截止）/ 今日截止（今天 00:00 后）/ 其余 + 2 条完全并列，共 21 条，并额外为未完成组补 2 条对照（「高优先级无遗留」与「同优先级无遗留」，共 23 条）；`MyTaskQueryPort.list` 返回顺序严格等于「未完成按 标记紧急 → 已逾期 → 今/明日截止 → 高优先级 → 本优先级内遗留问题来源 → 其余按 id、已完成 / 已取消 URGENT 优先且无截止最后」，其中「高优先级无遗留」先于「遗留问题来源」而后者又先于「同优先级无遗留」两条件共同定义「遗留问题只在同优先级内提前」，也是 2026-09-24 复核撤销「并回紧急桶」口径的回归网（该口径下普通优先级的遗留问题来源会压到高优先级之前、本断言立即失败）；`TaskQueryPort.list` 同序；链接查询反证来源由 `leftover_task_links` 决定。反事实验证把 `taskListOrderBy` 退回 `t.id DESC` 时本用例与 6 个既有顺序用例一起失败（`expected [ 10872, 10871, … ] to deeply equal [ 10866, 10867, … ]`），恢复后 22/22 通过；2026-09-23 改为 23 条后单文件 23/23 | 本地通过（`app_it`，2026-09-18；2026-09-23 按新口径重排；2026-09-24 复核通过） |
+| ADR037-CURSOR-001 | 真实 PostgreSQL | 多列 keyset 分页不漏不重 | `aggregate-read-ports.integration.test.ts`：逾期 + URGENT + 今日截止 + 高优先级无遗留 + 遗留问题来源 + 5 条完全并列（无截止）共 10 条，按 `limit=2` 用 `next` 逐页走完，拼接顺序与不分页结果一致且无重复（紧急桶序号 0→3，遗留问题来源靠独立一级排在 5 条并列行之前；2026-09-24 复核新增遗留问题来源与高优先级对照两条）；反事实验证同上（退回 `t.id DESC` 时该用例失败） | 本地通过（2026-09-18；2026-09-24 复核通过） |
 | ADR037-CURSOR-002 | API 单元 | 游标排序键载荷 | `aggregate-read-cursor.test.ts` 8 例（新增 2 例）：`MY_TASKS` 游标带 `k` 时 `decodeKey(..., requireSortKey: true)` 返回 `{ afterId, sortKey }`；其它命名空间仍返回 `sortKey: null`；缺少 `k` 的旧载荷按 `version` 拒绝（422 语义）；改写 `k` 后重放按 `signature` 拒绝（排序键确实在 HMAC 载荷内） | 本地通过 |
-| ADR037-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序与筛选 | `aggregate-read-api.integration.test.ts` 20 例：主列表、`scopeType=FEATURE&workStatus=TODO`、`hasPublishedRecord`、`projectId` 全量与 `limit=3` 游标遍历的期望顺序全部改为 ADR-037 口径（遗留问题来源任务 `tSource` 排在同为普通优先级的任务之前，2026-09-23 起不再越过更高优先级）；统计卡片用例改为 已逾期 → 今日截止 → 已完成 → 已取消 | 本地通过（`app_it`，2026-09-18；2026-09-23 复核通过） |
+| ADR037-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序与筛选 | `aggregate-read-api.integration.test.ts` 21 例：主列表、`scopeType=FEATURE&workStatus=TODO`、`hasPublishedRecord`、`projectId` 全量与 `limit=3` 游标遍历的期望顺序全部为 ADR-037 口径（遗留问题来源任务 `tSource` 排在同为普通优先级的任务之前，不越过更高优先级）；统计卡片用例为 已逾期 → 今日截止 → 已完成 → 已取消；末节新增独立项目夹具的专属用例「遗留问题来源只在同优先级内提前」（同一首屏断言 `plainHigh → leftoverSource → normalPlain`，再用 `limit=1` 逐页复验同序不重不漏） | 本地通过（`app_it`，2026-09-18；2026-09-23、2026-09-24 复核通过） |
 | ADR037-FIX-001 | 真实 PostgreSQL | 原生 `sql` 绑定 `Date` 的前置缺陷 | 现象：drizzle-orm 构造时把 `client.options.serializers` 的 timestamptz 编码器改写为恒等函数，而 postgres.js 连接、原生 `sql` 与 Drizzle 共用同一 options 对象，原生 `sql` 传 `Date` 在 Bind 阶段抛 `Received an instance of Date`；修复为 `createDrizzleDb(sql)` 构造后只还原 1184 编码器（JSON 不还原，避免二次编码）。证据：事务内 `SELECT COALESCE($1::timestamptz, ```infinity```::timestamptz)` 修复前抛错、修复后返回 `2026-09-18 03:00:00+00`；全量集成 50 文件 476 例通过 | 本地通过（2026-09-18） |
 
 本地实际执行（2026-09-18，Windows + PowerShell + docker `inpulse-pg` 的独立集成库 `app_it`）：`pnpm --filter @inpulse/api test:integration` 50 文件 476 例通过（含本轮新增 2 例）；`pnpm --filter @inpulse/api test:unit aggregate-read-cursor` 8 例通过；`pnpm --filter @inpulse/api typecheck`（含测试 tsconfig）通过。反事实验证在真实 PostgreSQL 上执行：把 `taskListOrderBy` 临时替换为 `t.id DESC` 后 7 例失败，恢复后 22/22 通过。
@@ -3468,7 +3468,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑整链 `pnpm check`、`pnpm test:integration`、`deps:audit` 与 GitHub Actions；② 全量 E2E 57 例中 8 例失败，均为既有失败（把本批 3 个文件 `git stash` 还原到 HEAD 后同样失败）：`record-drafts` 3/3（strict mode：草稿卡片 `aria-label="继续编辑草稿：…"` 与草稿详情弹层的「继续编辑」同页共存）、`module-tasks`、`record-feed`、`task-board`（180s 超时）、`task-completion` 2 例，本批未修、未弱化断言；③ 折叠动画期间行按最终位置排版并由外框裁出，折叠区自身不能再加会被裁掉的外溢装饰（如外投影）；④ 裁剪余量只在展开态给 6px，恰在收起动画中聚焦时聚焦环可能被裁边，属可接受取舍；⑤ 侧栏整体高度仍随项目数与展开内容增长（沿用 2026-09-21 取舍），本批只保证模块列表内滚且不挤动行宽。
 
-> 历史说明（2026-09-24 合并）：本条是并行开发线当时的本地口径，已被 [ADR-037](adr/ADR-037.md) §3 的 2026-09-24 修订取代——两条并行开发线合并后统一采用「遗留问题来源回到紧急桶、排在已逾期之后」的口径，游标版本定为 6、载荷 7 段；下表用例已在本地按新口径改写（见本文件末节「2026-09-24 遗留问题来源改排到已逾期之后」）。
+> 历史说明（2026-09-24 复核后恢复为现行口径）：本条口径在 2026-09-24 两条并行开发线合并时曾被临时推翻（改用「遗留问题来源回到紧急桶、排在已逾期之后」、游标版本 6、载荷 7 段）；同日产品复核「遗留问题只会在同优先级里面高一点，以后都要以这个为准」后，本条的独立成级口径已恢复并作为唯一权威，版本由 6 再升到 7、载荷回到 8 段；下表用例已按恢复后的口径重写（见本文件末节「2026-09-24 排序口径复核」）。
 
 ## 2026-09-23 遗留问题退出紧急桶（产品要求，C 本地落库）
 
@@ -3478,12 +3478,12 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 | 编号 | 类型 | 覆盖点 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| LEFTOVER-ORDER-API-001 | API 单测 | 排序键 7 级与游标版本 5 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` 为 5、样本键往返为 `5\|0\|\|3\|2\|1\|\|501`、遗留问题字段非数字拒绝；`aggregate-read.service.test.ts` 与 `aggregate-read-cursor.test.ts` 的游标断言同步为 8 段 | 本地通过（2026-09-23；`corepack pnpm --filter @inpulse/api test:unit task-list-order aggregate-read`：3 文件 42 例） |
-| LEFTOVER-ORDER-DB-001 | 真实 PostgreSQL 集成 | 同优先级内提前、不越过更高优先级 | `aggregate-read-ports.integration.test.ts`：未完成组新增「高优先级无遗留」与「同优先级无遗留」两条对照夹具，期望顺序为 `标记紧急 → 已逾期 → 今/明日截止 → 高优先级（无遗留）→ 遗留问题来源（普通）→ 其余 → 并列 A → 并列 B → 同优先级无遗留`，已完成 / 已取消分组不受影响；keyset 分页用例在新序号下仍不漏不重 | 本地通过（2026-09-23；单文件 23/23，`corepack pnpm --filter @inpulse/api test:integration aggregate-read` 3 文件 54 例） |
-| LEFTOVER-ORDER-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序未回归 | `aggregate-read-api.integration.test.ts`：`tSource`（普通 + 遗留问题来源）仍排在同为普通优先级的其它任务之前，顺序断言与注释同步为新口径 | 本地通过（2026-09-23，含在同一条 `aggregate-read` 运行内） |
+| LEFTOVER-ORDER-API-001 | API 单测 | 六级排序键与游标版本 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` 为 7、样本键往返为 `7\|0\|\|3\|2\|1\|\|501`、遗留问题字段非数字拒绝、版本 3/4/5/6 一律整版拒绝；`aggregate-read.service.test.ts` 与 `aggregate-read-cursor.test.ts` 的游标断言同步为 8 段（2026-09-24 复核后版本由 5 升到 7） | 本地通过（2026-09-23；2026-09-24 复核后 `corepack pnpm --filter @inpulse/api test:unit task-list-order aggregate-read`：3 文件 42 例） |
+| LEFTOVER-ORDER-DB-001 | 真实 PostgreSQL 集成 | 同优先级内提前、不越过更高优先级 | `aggregate-read-ports.integration.test.ts`：未完成组新增「高优先级无遗留」与「同优先级无遗留」两条对照夹具，期望顺序为 `标记紧急 → 已逾期 → 今/明日截止 → 高优先级（无遗留）→ 遗留问题来源（普通）→ 其余 → 并列 A → 并列 B → 同优先级无遗留`，已完成 / 已取消分组不受影响；keyset 分页用例在恢复后的序号（同样大小下补了遗留问题来源与高优先级对照两条）下仍不漏不重 | 本地通过（2026-09-23；2026-09-24 复核后单文件 `aggregate-read` 3 文件 55 例） |
+| LEFTOVER-ORDER-HTTP-001 | 真实 PostgreSQL / HTTP | 任务中心 HTTP 顺序未回归 | `aggregate-read-api.integration.test.ts`：`tSource`（普通 + 遗留问题来源）仍排在同为普通优先级的其它任务之前，顺序断言与注释同步为新口径；末节专属用例用独立项目夹具断言 `plainHigh → leftoverSource → normalPlain` 并用 `limit=1` 逐页复验 | 本地通过（2026-09-23，含在同一条 `aggregate-read` 运行内；2026-09-24 复核通过） |
 | LEFTOVER-ORDER-WEB-001 | Web 单元 | 前端镜像排序与反向夹具 | `TaskCenterPageView.test.tsx` 新增用例「遗留问题只在同优先级内提前，不越过更高优先级」：夹具 951（高）/ 952（普通 + 遗留问题来源）/ 953（普通）乱序传入，网格 `data-testid` 顺序收敛为 951 → 952 → 953 | 本地通过（2026-09-23；`corepack pnpm --filter @inpulse/web test my-tasks`：5 文件 107 例） |
 
-本地实际执行（2026-09-23 排序口径）：三条定向命令如上；`docs/adr/ADR-037.md`（§1 排序键、§2 载荷与版本递增行、§3 2026-09-23 修订行、§6 测试要求）、`docs/adr/ADR-041.md`（修订关系）、`docs/task-card-colors.md`（列表行排序与变更历史）与本文件同步。
+本地实际执行（2026-09-23 排序口径；表中版本与载荷已按 2026-09-24 复核后的最终值（版本 7、8 段）更新）：三条定向命令如上；`docs/adr/ADR-037.md`（§1 排序键、§2 载荷与版本递增行、§3 2026-09-23 修订行、§6 测试要求）、`docs/adr/ADR-041.md`（修订关系）、`docs/task-card-colors.md`（列表行排序与变更历史）与本文件同步。
 
 未运行 / 已知偏差：① 未跑整链 `pnpm check`、`pnpm typecheck`、`pnpm build`、全量 `test:unit` / `test:web` / `test:integration`、`pnpm test:e2e`、`deps:audit` 与 GitHub Actions；② 未做浏览器人工复核（需重启 API 使新排序生效）；③ 版本 4 及更早的已签发游标在升级后一律按无效游标拒绝（422 `AGGREGATE_READ_INVALID_CURSOR`），分页需从头开始——这是刻意选择，避免旧序号在新口径下跳页或漏项；④ ADR-037 仍为 `Proposed`，口径变更待人工批准。
 
@@ -3597,7 +3597,9 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 GitHub Actions；② 未跑 `pnpm check` 整链（`deps:audit` 依赖本机 npm 镜像的 audit endpoint，历史结论是需改用公共 registry）；③ 模块与功能保留「进行中 / 未开始」档位是本轮的实现口径假设（用户只说「按创建时间从近到远」，未要求取消档位分组），如产品要求纯创建时间排序需另立 ADR；④ 既有偏差与本轮无关：`database/test/integration` 全链被 `helpers.ts` 向已删除列 `app.tasks.assignee_id` 插数据阻断，HEAD 即失败。
 
-## 2026-09-24 遗留问题来源改排到已逾期之后（产品要求，本地落库）
+## 2026-09-24 遗留问题来源改排到已逾期之后（产品要求，本地落库；该口径已于同日作废）
+
+> 本节描述的「遗留问题来源并回紧急桶第 2 档、游标版本 6、载荷 7 段」已由同日末节「2026-09-24 排序口径复核：遗留问题来源只在同优先级内提前」撤销；现行口径以该节与 [ADR-037](adr/ADR-037.md) §3 修订 B 为准。本节仅保留为变更历史，下表用例的版本与期望值已不再是当前事实。
 
 产品反馈（原文）：「这个排序稍微改一下，把遗留问题排到已经逾期后面」（附图为 `/tasks` 任务中心卡片视图）。现状：未完成任务的紧急桶是「遗留问题来源(0) → 标记紧急(1) → 已逾期(2) → 今/明日截止(3) → 其余(4)」，第 0 桶的遗留问题来源排在标记紧急与已逾期之前；同一屏里「普通 + 遗留问题」的白卡排在「紧急」红卡与「已逾期」黄卡之前。
 
@@ -3621,4 +3623,24 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 本地实际执行（2026-09-24）：`pnpm --filter @inpulse/api test:unit`（66 文件 367 例）、真实 PostgreSQL 集成 49 文件 451 例、`apps/web` 单测（85 文件 553 例）、Playwright E2E 整包 56 例，以及上表列出的门禁；无头 Chromium 用演示账号在 5173 真实登录后打开 `/tasks` 卡片视图，实测未完成卡片顺序为「222（紧急）→ 啊J（聚合组 · 已逾期 9月16日）→ A-5 残余…（遗留问题）→ A-6 上线门禁…（高 · 10月15日）→ 呈现出（普通 · 无截止）」——遗留问题卡由改编前的第 1 位落到已逾期卡之后，与本次口径一致。
 
-未运行 / 已知偏差：① 未跑 GitHub Actions；② 任务看板的四桶口径（逾期 → 未完成 → 已完成 → 已取消）按 [ADR-037](adr/ADR-037.md) §3 保持不变，本轮不涉及；③ 排序属主观项，需非作者人工评审。
+未运行 / 已知偏差：① 未跑 GitHub Actions；② 任务看板的四桶口径（逾期 → 未完成 → 已完成 → 已取消）按 [ADR-037](adr/ADR-037.md) §3 保持不变，本轮不涉及；③ 排序属主观项，需非作者人工评审；④ 本节口径已于同日被下文复核撤销，第四次卡序与断言均已失效。
+
+## 2026-09-24 排序口径复核：遗留问题来源只在同优先级内提前（现行口径）
+
+产品复核（原文）：「为什么这里排序又被改动了，我要求遗留问题只会在同优先级里面高一点，以后不管是别人拉取还是，都要以这个为准」，附 `/tasks` 截图：两张「普通 + 遗留问题」卡片排在「高」优先级卡片之前。根因是同日两条并行开发线合并（见 `开发日志.md` 2026-09-24 第一条）时采用了另一条线的 v6 口径：「遗留问题来源并回紧急桶第 2 档、排在已逾期之后」，因紧急桶先于优先级比较，普通优先级 + 遗留问题就压过了高优先级。
+
+现行口径（唯一权威）：排序键 = 状态分组 → 完成时间倒序 → 紧急桶（标记紧急 0 → 已逾期 1 → 今/明日截止 2 → 其余 3）→ 优先级 → **遗留问题来源（同优先级内 0/1）** → 截止时间 → 任务 ID。遗留问题来源不是紧急桶的一档，只会在同优先级任务内提前；`TASK_LIST_SORT_KEY_VERSION` 由 6 升到 7，载荷回到 8 段（`版本|状态分组|完成时间|紧急桶|优先级|遗留问题|截止|任务ID`），版本 5、6 的旧游标整版拒绝（旧 6 的载荷少一段且桶序不同，放行会跳页）。
+
+三处实现必须同步（缺一即口径漂移）：`apps/api/src/modules/tasks/task-list-order.ts`（`urgency` / `leftover` 表达式、`taskListOrderBy`、`taskListKeysetPredicate`、排序键编解码）、`apps/web/src/features/my-tasks/TaskCenterPageView.tsx`（`urgencyBucketOf` / `leftoverRankOf` 与六级 rank）、`apps/web/src/features/common/task-tone.ts`（只解释配色与桶序，不参与排序）。不改契约、Route Registry、权限矩阵、数据库不变量、迁移与索引；任务看板 `listForBoard` 的四桶与桶内排序不受影响。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| TASK-URGENCY-RESTORE-UNIT-001 | API 单元 | 版本 7 与 8 段载荷 | `task-list-order.test.ts`：`TASK_LIST_SORT_KEY_VERSION` = 7、当前版本样本往返为 `7\|0\|\|3\|2\|1\|\|501`、`leftover` 非数字拒绝、版本 6 / 5 / 4 / 3 / 2 全部整版拒绝；`aggregate-read.service.test.ts` 的 `decodeKey` 夹具同步为 `7\|0\|\|3\|2\|1\|\|{afterId}`（首位与首位段数都对不上时立即报 `expected "6\|…"`） | 本地通过（`corepack pnpm --filter @inpulse/api test:unit task-list-order aggregate-read`：3 文件 42 例） |
+| TASK-URGENCY-RESTORE-PG-INT-001 | 真实 PostgreSQL | 同优先级内提前、不越过更高优先级 | `aggregate-read-ports.integration.test.ts`：未完成期望 `[todo.urgent, todo.overdue, todo.dueSoon, highPlain, todo.leftover, todo.other, todo.tieA, todo.tieB, normalPlain]`，其中 `highPlain`（高优先级无遗留）先于 `todo.leftover`（普通 + 遗留问题来源）、后者又先于 `normalPlain`（普通无遗留）；已完成 / 已取消分组期望不变；keyset 分页用例新增遗留问题来源（自带记录 / 遗留项 / 链接）与高优先级对照，`unpaged === created` 且分页 `seen === created` 不重不漏 | 本地通过（`TEST_DATABASE_URL=…/app_it`，`corepack pnpm --filter @inpulse/api test:integration aggregate-read`：3 文件 55 例） |
+| TASK-URGENCY-RESTORE-HTTP-001 | HTTP + PostgreSQL | 任务中心首屏顺序与分页复验 | `aggregate-read-api.integration.test.ts` 新增专属 `describe`：自建独立项目夹具按 `normalPlain → 遗留问题来源（含记录 / 遗留项 / 链接）→ plainHigh` 种子，断言顺序为 `[plainHigh, leftoverSource, normalPlain]` 与三条 `hasLeftoverSource` 取值，再用 `limit=1` 逐页复验同序不重不漏 | 本地通过（含在同一条 `aggregate-read` 运行内，`aggregate-read-api` 21 例） |
+| TASK-URGENCY-RESTORE-WEB-UNIT-001 | Web 单元 | 前端镜像排序 | `TaskCenterPageView.test.tsx` 用例「遗留问题来源只在同优先级内提前，不越过更高优先级」：夹具 954（高）/ 951（普通 + 遗留问题来源）/ 952（普通）/ 953（普通）乱序传入，网格 `data-testid` 顺序收敛为 `954 → 951 → 952 → 953`（高优先级不带遗留问题也排在前面）；六级 rank（状态分组 → 完成时间 → 紧急桶 → 优先级 → 遗留问题来源 → 截止）与组卡遗留问题槽固定值 1 同步 | 本地通过（`corepack pnpm --filter @inpulse/web exec vitest run src/features/my-tasks`：5 文件 107 例） |
+| TASK-URGENCY-RESTORE-TYPE-001 | 静态门禁 | 类型 | `corepack pnpm --filter @inpulse/api typecheck`、`corepack pnpm --filter @inpulse/web typecheck` 无输出（通过） | 本地通过 |
+
+文档同步：`docs/adr/ADR-037.md`（§1、§2 版本链改为 `3→4→5→6（已作废）→7` 并加「版本号单调递增，不回收」、§3 拆为修订 A（作废）/ 修订 B（现行）、§3 的 2026-09-23 修订行改为「中间曾被 A 推翻、又由 B 恢复」）、`AGENTS.md`（作废注记 + 新定案小节「排序口径复核：遗留问题来源只在同优先级内提前」，含三处实现位置与四处回归防线）、`功能设计v1.1.md`（默认排序条目）、`docs/task-card-colors.md`（组卡尺子 / 列表行排序 / 事实来源 / 变更历史）、`docs/c-v1-alignment.md`（R-3 冻结事实）、`docs/a-contract-review-f25-f29-f32.md`（Q-10 台账与详表）、`docs/c-aggregate-read-contract-proposal.md`（Q-10 冻结结论）、`docs/adr/ADR-041.md`（修订关系与测试条目）、本文件。
+
+未运行 / 已知偏差：① 未跑全量 `test:unit` / `test:integration` / `test:web`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 未做浏览器人工复核（需先重新构建并重启本机 API）；③ 版本 5、6 已签发的游标升级后一律按无效游标拒绝（422），分页需从头开始；④ ADR-037 仍为 `Proposed`，本次复核是否即人工批准需确认。
