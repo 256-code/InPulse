@@ -2530,7 +2530,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 卡片尺寸：`calm-task-grid` / `calm-task-card` 换成 `draft-card-grid` / `draft-card`，三列网格、`min-height: 96px`、左侧琥珀竖条；卡片本身是 `button`，整卡可点。
 - 入口唯一：页头 CTA 文案由「记录一次迭代」改为「新建迭代记录」；`taskId > 0` 的「来源草稿」语境保留区块内「新建来源草稿」按钮。
 
-## 用户管理口径调整：移除「新增用户」入口、当前登录账号置顶（用户指示，2026-09-24 本地落库）
+## 用户管理口径调整：移除「新增用户」入口、当前账号与管理员置顶（用户指示，2026-09-24 本地落库）
 
 用户指示（原文，附 `/settings` 成员列表截图）：「因为以后是用单点登录，新增用户功能去除掉，然后当前登录的账户要在最上面」。本批为前端展示层改动：只改 `apps/web/src/features/users/AdminUsersPageView.tsx`、`admin-user-query.ts`、`AdminUsersPageView.test.tsx`、`apps/web/src/styles/inpulse-design.css` 与 `apps/e2e/tests/admin-users.spec.ts`，不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端与生成客户端零改动。
 
@@ -2538,19 +2538,21 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 - 管理页不再提供新增入口：`CalmSectionTitle` 右侧按钮与空态按钮一并删除，空态文案改为「账号由统一身份认证在首次登录时自动创建，无需在此新增」；编辑器只剩编辑态（姓名 / 邮箱 / 管理员角色），`admin-user-query.ts` 的 `AdminUserChange` 删除 `create` 分支与 `createUser` 调用。
 - `POST /api/v1/admin/users`（`createUser`）与服务端实现保持原样：后端仍支持管理员创建本地账号，仅前端不再暴露入口，因此契约、OpenAPI、生成客户端与权限矩阵无需变更。
-- 当前登录账号置顶：成员数组按 `currentUserId` 把自身行移到首位，其余保持服务端返回顺序；`currentUserId` 缺失或不在列表时顺序不变。
+- 列表排序固定为「当前登录账号 → 其他系统管理员 → 普通成员」，同组内保持服务端返回顺序；`currentUserId` 缺失时按「管理员 → 普通成员」排序。2026-09-24 追补：用户反馈「系统管理员排上面，但是依旧是自身账户在最上面」，原来只把自身提到首位、其余原样，现改为自身优先级高于其他管理员。
 - E2E 目标账号改由夹具直接预置（`f03_` 前缀，登录名前缀由 `global-teardown` 的夹具清理统一物理删除；`password_hash` 为空，与 SSO JIT 开通一致），并断言页面上不存在「新增用户」按钮。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| F03-UI-002 | Web 单元 | 当前登录账号置顶 | 服务端返回 `[member, admin]` 且 `currentUserId = admin.id` 时，`.member-list` 首个 `.member-row` 为当前账号、第二个为其余成员 | 未运行（2026-09-24 新增用例「pins the current account to the top of the list」；本批按 2026-09-17 前端免测口径未执行） |
+| F03-UI-002 | Web 单元 | 当前登录账号置顶 | 服务端返回 `[member, admin]` 且 `currentUserId = admin.id` 时，`.member-list` 首个 `.member-row` 为当前账号、第二个为其余成员 | 本地通过（2026-09-24，`vitest run src/features/users/AdminUsersPageView.test.tsx` 7/7） |
+| F03-UI-004 | Web 单元 | 自身 → 其他管理员 → 普通成员 | 服务端返回 `[member, otherAdmin, admin]`、`currentUserId = admin.id` 时，渲染顺序为 `Alice（当前账号）→ Carol → Bob` | 本地通过（2026-09-24，同上文件用例「orders self, then other admins, then members」） |
 | F03-UI-003 | Web 单元 | 新增入口确实消失 | 管理页不再渲染「新增用户」按钮；编辑弹层只有姓名 / 邮箱 / 管理员角色三个字段，提交体不再包含 `loginName` / `password` | 未运行（同上；`AdminUsersPageView.test.tsx` 原「creates a user…」用例已随功能删除，不以 `skip` 保留） |
 | F03-E2E-002 | Playwright | 编辑 → 停用 → 启用 → 强制退出在新口径下仍成立 | 夹具预置的 `f03_` 账号可被编辑改名、停用、启用与强制退出；页面上 `getByRole('button', { name: '新增用户' })` 计数为 0 | 未运行（2026-09-24 改写 `admin-users.spec.ts`；本批未跑 Playwright） |
 | F03-BROWSER-001 | 浏览器实测 | 编辑弹层字段与排版 | 真实登录后打开「编辑用户」：无「头像地址」字段（`#admin-user-avatar` 不存在）；字段节奏为说明 12px → 标签 16px → 控件 6px → 下一字段 16px，底部按钮组距上方 16px；新增态字段顺序为登录名 / 姓名 / 邮箱 / 初始密码 / 管理员角色（本行记录移除头像字段时的实测，随后新增入口已整体删除） | 本地通过（2026-09-24，Playwright 探针 + 截图留档） |
+| F03-BROWSER-002 | 浏览器实测 | 列表排序在真实数据下成立 | 真实登录后 `/settings` 的 `.member-row` 顺序为「邵晨宇（当前账号，系统管理员）→ 特哥（系统管理员）→ 吴孟杰 / 潘兴 / 林雨妍 / 小邵 / 小吴 / 小潘（项目成员）」 | 本地通过（2026-09-24，真实 PostgreSQL + 管理员会话） |
 
-本地实际执行（2026-09-24）：`pnpm exec prettier --check`（改动文件）、编辑器 TypeScript 诊断、真实浏览器（本机 Vite + 真实 PostgreSQL，管理员账号）打开 `/settings` 的「编辑用户」弹层做 DOM 量测与截图。
+本地实际执行（2026-09-24）：`pnpm exec prettier --check`（改动文件）、`vitest run src/features/users/AdminUsersPageView.test.tsx`（7 例通过）、编辑器 TypeScript 诊断、真实浏览器（本机 Vite + 真实 PostgreSQL，管理员账号）：① 打开 `/settings` 的「编辑用户」弹层做 DOM 量测与截图；② 读取 `.member-row` 顺序复核自身 → 其他管理员 → 普通成员。
 
-未运行 / 已知偏差：① 按 2026-09-17 前端免测口径未执行 `pnpm --filter @inpulse/web test`、`pnpm test:e2e`、`pnpm check`、`deps:audit` 与 GitHub Actions，新增与改写的用例均未实跑；② 后端 `createUser` 路由、契约与设计文档保持原样（功能设计 / 系统设计仍把「管理员新增本地账号」写成可用能力），是否补 ADR 或文档修订需项目负责人定案；③ 置顶只改展示顺序，不写入任何用户偏好；④ 改动需非作者人工评审。
+未运行 / 已知偏差：① 未执行 `pnpm test:e2e`、整链 `pnpm check`、`deps:audit` 与 GitHub Actions；新增的排序用例已单独实跑（7/7），但 F03-UI-003 的「新增入口消失」断言落在 `apps/e2e/tests/admin-users.spec.ts`，随 Playwright 未跑；② 后端 `createUser` 路由、契约与设计文档保持原样（功能设计 / 系统设计仍把「管理员新增本地账号」写成可用能力），是否补 ADR 或文档修订需项目负责人定案；③ 置顶只改展示顺序，不写入任何用户偏好；④ 改动需非作者人工评审。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |

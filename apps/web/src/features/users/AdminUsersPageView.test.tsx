@@ -99,6 +99,25 @@ describe("F-03 admin users page", () => {
     ).toBeTruthy();
   });
 
+  it("orders self, then other admins, then members", async () => {
+    const otherAdmin: AdminUserItem = {
+      ...admin,
+      id: 3,
+      loginName: "carol",
+      name: "Carol",
+      email: "carol@example.com",
+    };
+    const listAdminUsers = vi
+      .fn()
+      .mockResolvedValue({ items: [member, otherAdmin, admin] });
+    mount({ listAdminUsers } as unknown as InpulseApiClient, admin.id);
+    await screen.findByText("Alice");
+    const rendered = [...document.querySelectorAll(".member-row")].map(
+      (row) => row.querySelector("strong")?.textContent ?? "",
+    );
+    expect(rendered).toEqual(["Alice（当前账号）", "Carol", "Bob"]);
+  });
+
   it("edits a user and sends row version via If-Match", async () => {
     const listAdminUsers = vi
       .fn()

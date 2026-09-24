@@ -200,13 +200,14 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
     false;
 
-  // 当前登录账号置顶，方便管理员先确认自己的身份与权限；其余保持服务端顺序。
+  // 当前登录账号置顶（便于先确认自身身份与权限），其后是其他系统管理员，最后是普通成员；同组内保持服务端顺序。
   const members = useMemo(() => {
     const items = query.data?.items ?? [];
-    if (currentUserId === undefined) return items;
-    const self = items.find((item) => item.id === currentUserId);
-    if (!self || items[0]?.id === self.id) return items;
-    return [self, ...items.filter((item) => item.id !== self.id)];
+    const rank = (user: AdminUserItem) => {
+      if (currentUserId !== undefined && user.id === currentUserId) return 0;
+      return user.isAdmin ? 1 : 2;
+    };
+    return [...items].sort((left, right) => rank(left) - rank(right));
   }, [query.data, currentUserId]);
 
   return (
