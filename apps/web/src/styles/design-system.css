@@ -55,6 +55,14 @@ html,
   font-variation-settings: normal;
   -webkit-tap-highlight-color: transparent;
 }
+/* 根滚动条常显（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
+   不再被系统滚动条挤窄 15px，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
+   Chromium 下 `100vw` 只到初始包含块（实测槽宽 15px 时 100vw=1143、遮罩同为 1143），
+   弹窗遮罩、命令面板与右侧任务抽屉都到不了窗口边缘，会在右缘留一条未变暗的亮带；
+   常显的滚动条就是视口滚动条，固定覆盖层几何与「页面上本来有滚动条」时一致。 */
+html {
+  overflow-y: scroll;
+}
 abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
   text-decoration: underline dotted;
@@ -466,6 +474,14 @@ button {
 /* 模块分支不参与收缩：滚动区再矮也按内容高度排版，超出部分交给滚动条。 */
 .tree-modules-scroll > .tree-project {
   flex: none;
+}
+/* Firefox 不支持 ::-webkit-scrollbar，只能走标准属性（同时声明会让 Chromium 忽略
+   自定义条）；把侧栏导航区也收成细条，常驻滚动条槽才不会按系统默认宽度长期占位。 */
+@supports not selector(::-webkit-scrollbar) {
+  .nav-group {
+    scrollbar-width: thin;
+    scrollbar-color: #2b4a68 transparent;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .tree-children,
@@ -1335,14 +1351,12 @@ button {
   gap: 10px;
   padding: 0 18px;
 }
-.module-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid #e7edf3;
-  border-radius: 6px;
-  padding: 14px;
-}
+/* 旧版模块卡自己的盒模型规则已删除（2026-09-24）：`.module-card` 现在总是与
+   `.calm-feature-card` 同时出现，边框/圆角/内边距早已由后者按 (0,1,0) 的同特异性
+   + 更晚的源码顺序接管；剩下的 `display` 同样被接走，而 `align-items: flex-start`
+   与 `gap: 10px` 在卡片改成纵向 flex 之后开始泄漏——前者让卡内各段不再撑满整宽
+   （底部信息行只剩内容宽度、按钮挤到中间），后者给每两段之间凭空加了 10px。
+   与 2026-09-20 那批旧规则同因，一并删除并在原位留档。 */
 /* 旧版模块卡的 `.module-card div/strong/span/small` 元素选择器已删除（2026-09-20）：
    现在的模块卡是 `.calm-feature-card.module-card`，卡里的 span 分别是 `.feature-symbol`
    图标容器、`.task-id` 编号和状态徽章。旧规则以 (0,1,1) 的特异性盖掉 `.feature-symbol`
@@ -1730,10 +1744,13 @@ td small {
   border-radius: 7px;
 }
 .audit-row {
+  /* 竖线得跨过行的上下内边距才连得上，内边距在这里暴露给 `.audit-line::before` 使用。 */
+  --audit-line-gap-top: 20px;
+  --audit-line-gap-bottom: 20px;
   display: grid;
   grid-template-columns: 75px 18px 1fr 35px;
   gap: 12px;
-  padding: 20px;
+  padding: var(--audit-line-gap-top) 20px var(--audit-line-gap-bottom);
   border-bottom: 1px solid #edf1f5;
   align-items: start;
 }
@@ -1749,9 +1766,20 @@ td small {
   font-size: 10px;
 }
 .audit-line {
+  position: relative;
   display: flex;
   justify-content: center;
   height: 100%;
+}
+/* 时间线竖线由伪元素绘制，并向上下各溢出「行内边距 + 1px」：`.audit-line` 本身只有内容区
+ * 高度，相邻行之间还夹着两段内边距和一条分隔线，直接画在本元素上会断成一截一截。
+ * 溢出 1px 是为了让相邻段首尾交叠，避免子像素边框处露出缝隙。 */
+.audit-line::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * (var(--audit-line-gap-top, 20px) + 1px));
+  bottom: calc(-1 * (var(--audit-line-gap-bottom, 20px) + 1px));
+  right: 0;
   border-right: 1px solid #dae4ec;
 }
 .audit-line span {
@@ -2422,8 +2450,10 @@ td small {
     display: none;
   }
   .audit-row {
+    --audit-line-gap-top: 15px;
+    --audit-line-gap-bottom: 15px;
     grid-template-columns: 48px 10px 1fr;
-    padding: 15px 12px;
+    padding: var(--audit-line-gap-top) 12px var(--audit-line-gap-bottom);
   }
   .audit-row > .icon-button {
     display: none;
@@ -2927,6 +2957,13 @@ a:focus-visible {
 .calm-task-card {
   position: relative;
   overflow: hidden;
+  /* 卡片本体是 <button>：浏览器给按钮内容套的匿名盒默认垂直居中，同一网格行里
+     内容行数少的卡片（例如没有「记录 N 条」那行）会被整体推到下方，标题与底部标签
+     逐行错位。改成纵向 flex 让内容从顶部排起，所有卡片逐行对齐。
+     flex item 之间不折叠外边距；本卡内部相邻两段的间距本来就只由单侧 margin 给出，
+     不受影响。 */
+  display: flex;
+  flex-direction: column;
   /* 2026-09-23 产品要求「这个布局太紧凑了」：卡片内边距 22 → 26/24，标题、归属、
      负责人、标签四段之间同步放宽，详见下面各行的日期注释。组卡与功能档案任务卡
      共用本块，一并生效。 */
@@ -2940,6 +2977,14 @@ a:focus-visible {
   bottom: 0;
   width: 4px;
   background: var(--task-c, transparent);
+}
+/* 模块卡与功能卡同样被网格拉成等高，但内容是从顶部自然流动的块级排版：
+   描述行数少的卡片，底部信息行会浮在卡片中间，整排看起来参差不齐。
+   这里也改成纵向 flex，让底部信息行吃掉剩余空间（见下面 `.card-footer` 的
+   `margin-top: auto`），统计行与「编辑」动作才能贴在同一条水平线上。 */
+.calm-feature-card {
+  display: flex;
+  flex-direction: column;
 }
 .calm-task-card:hover,
 .calm-feature-card:hover {
@@ -2960,7 +3005,15 @@ a:focus-visible {
   margin: 20px 0 12px;
   font-weight: 600;
   color: #243d54;
-  min-height: 51px;
+  /* 标题固定占两行高（2026-09-24）：超过两行的长标题会把归属、负责人、标签逐行推低，
+     同一网格行里就只剩它自己不对齐；溢出部分按省略号截断，完整标题在点击后的详情里可见。
+     做法与描述行的 -webkit-line-clamp 一致。用固定高度而不是 min-height：一行标题是 51px、
+     两行标题是 51.2px，同一排里仍会差 1px。 */
+  height: 51px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 /* 已完成 / 已取消卡片：标题随状态柔和转青碧或转灰（已取消加删除线），与看板卡片同款。 */
 .calm-task-card.tone-prio-done h3 {
@@ -3096,12 +3149,31 @@ a:focus-visible {
   font-size: 18px;
   margin: 23px 0 10px;
 }
+/* 功能名固定占两行高（2026-09-24）：长短不一的名字会把状态徽章行、功能说明、
+   底部信息行逐行推低，同一网格行里只剩它自己不对齐；溢出按省略号截断，
+   完整名称在点击后的功能档案里可见。做法与任务卡标题一致。
+   用固定高度而不是 max-height：一行 27px、两行 54px，同一排仍会差整整一行。 */
+.calm-feature-card:not(.module-card) > h2 {
+  line-height: 1.5;
+  height: 54px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .calm-feature-card > p {
   font-size: 13px;
   line-height: 1.7;
   color: #647c92;
   min-height: 44px;
   margin-bottom: 25px;
+}
+/* 底部信息行贴底（2026-09-24）：卡片等高，这一行把「说明」与卡片底部之间的剩余空间
+   全部吃掉，整排卡片的统计行才能落在同一条水平线上。固定最小高度与模块卡里那颗
+   按钮等高，让两页的统计文字垂直位置一致。 */
+.calm-feature-card > .card-footer {
+  margin-top: auto;
+  min-height: 35px;
 }
 .feature-symbol,
 .record-symbol {
@@ -3178,8 +3250,10 @@ a:focus-visible {
   gap: 14px;
 }
 .calm-drawer .calm-task-card h3 {
-  min-height: 0;
+  height: auto;
   margin-top: 14px;
+  /* 抽屉里卡片单列排列，没有跨卡对齐要求，标题保持完整显示。 */
+  -webkit-line-clamp: none;
 }
 .calm-drawer .calm-task-card {
   padding: 19px;
@@ -3559,7 +3633,7 @@ a:focus-visible {
     gap: 14px;
   }
   .calm-task-card h3 {
-    min-height: 0;
+    height: auto;
   }
   .page-header .back-button {
     margin-bottom: 15px;
@@ -3711,14 +3785,12 @@ a:focus-visible {
   position: relative;
   min-width: 0;
 }
+/* 下内边距回到常规值（2026-09-24）：这 58px 原先是给卡片外挂的一行动作
+   （「编辑功能」绝对定位在卡底右下）预留的空档，于是卡片底下永远压着一条空白。
+   卡内底部信息行改为贴底后，卡外按钮与它同处一行，预留不再需要。 */
 .catalog-module-wrap > .calm-feature-card {
   width: 100%;
   height: 100%;
-  padding-bottom: 58px;
-}
-/* 模块卡不再在卡片外挂一行动作（查看功能/模块任务/归档），底部那 58px
-   预留留白回收到卡片常规内边距，卡片随之变矮。 */
-.catalog-module-wrap > .calm-feature-card.module-card {
   padding-bottom: 22px;
 }
 /* 模块卡内容更少（一行说明 + 一条统计），纵向节奏比功能卡再紧一档。 */
@@ -3729,10 +3801,14 @@ a:focus-visible {
   min-height: 20px;
   margin-bottom: 16px;
 }
+/* 卡外的「编辑功能 / 恢复功能」与卡内贴底的统计行对齐（2026-09-24）：
+   bottom 让按钮垂直中心落在统计文字的中心（底部信息行最小高度 35px，文字行再往上
+   让出 13px 分隔线间距 → 中心距卡片底边约 33px），right 让按钮右缘与卡内按钮一样
+   距卡片右边 22px（自身还有 5px 点击留白）。 */
 .catalog-edit-link {
   position: absolute;
-  bottom: 15px;
-  right: 22px;
+  bottom: 17px;
+  right: 17px;
   background: none;
   border: 0;
   color: #2874bf;
@@ -6015,10 +6091,15 @@ td.due-overdue {
     height: 100dvh;
     min-height: 0;
   }
+  /* 导航区常驻 6px 滚动条槽，并把等宽从右内边距里让出：内容超长时滚动条只占预留槽，
+     导航行与文字不再被挤窄 6px；未超长时右留白仍是 12px（6px padding + 6px 空槽），
+     与加槽前的版式一致，两种状态之间不再有任何位置变化。 */
   .nav-group {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    padding-right: 6px;
+    scrollbar-gutter: stable;
   }
   .nav-group::-webkit-scrollbar {
     width: 6px;
