@@ -186,9 +186,14 @@ export function useTasks(
         // task-group / task-group-records：聚合组详情的成员块正是这些字段（标题、
         // 负责人、状态、优先级、记录数），编辑后若不失效会一直显示旧值，
         // 只能靠手动刷新（2026-09-22 修）。
+        // modules / features / project-overview：新建任务改变待办计数，编辑影响
+        // 功能关联会改变统计归属口径（2026-09-24 修）。
         [
           "tasks",
           "task-board",
+          "modules",
+          "features",
+          "project-overview",
           "activity",
           "search",
           "notifications",

@@ -138,10 +138,15 @@ export function TaskStatusPanel({
       await Promise.all(
         // task-group / task-group-records：状态推进改变聚合组详情里的工作状态、
         // 已完成计数与记录可见性，同批失效才不用手动刷新（2026-09-22 修）。
+        // modules / features / project-overview：已完成任务数驱动功能与模块卡的
+        // 「进行中 / 未开始」档位，不失效会一直停留旧标签（2026-09-24 修）。
         [
           "tasks",
           "task-board",
           "task-history",
+          "modules",
+          "features",
+          "project-overview",
           "activity",
           "search",
           "notifications",

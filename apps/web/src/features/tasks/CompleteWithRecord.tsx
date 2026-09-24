@@ -159,10 +159,15 @@ export function CompleteWithRecord({
         await Promise.all(
           // task-group / task-group-records：完成并发布记录会同时改变聚合组详情
           // 的分支状态与「已发布记录」计数，以及组内记录列表（2026-09-22 修）。
+          // modules / features / project-overview：完成会改变功能与模块卡的
+          // 「进行中 / 未开始」档位和概览统计，不失效会停留旧标签（2026-09-24 修）。
           [
             "tasks",
             "task-board",
             "task-history",
+            "modules",
+            "features",
+            "project-overview",
             "record-drafts",
             "task-record-drafts",
             "published-records",
