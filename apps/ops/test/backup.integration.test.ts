@@ -395,7 +395,9 @@ describe("逻辑备份（真实 PostgreSQL + 真实 pg_dump + WORM 桩）", () =
       now: () => now,
     });
 
-    expect(summary.databaseName).toBe("app");
+    // 备份摘要里的库名必须与连库 URL 一致：CI 上是 `app`，本地按 AGENTS.md 第 8 节
+    // 的约定指向独立测试库 `app_ci`，这里不再写死库名。
+    expect(summary.databaseName).toBe(new URL(baseUrl).pathname.slice(1));
     expect(summary.databaseVersion).toMatch(/^18\./);
     expect(summary.migrationVersion).not.toBeNull();
     expect(summary.migrationVersion! >= "0007").toBe(true);

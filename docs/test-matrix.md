@@ -3573,6 +3573,14 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 GitHub Actions；② `database/test/integration` 仍因既有 `helpers.ts` 的 `assignee_id` 陈旧夹具在 HEAD 即失败，与本轮无关；③ 功能卡档位与配色属主观项，需非作者人工评审。
 
+PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支第一次真正跑 `CI / workspace`（此前只跑过 `Documentation / docs`）：第一处红灯是 `apps/web` 单测（见开发日志第二十四条），修完后第二处红灯落在 `Integration tests against real PostgreSQL` 步骤的 `database` 工作区，正是本条与 2026-09-24 三层排序统一条目里记过的两处既有偏差——它们不是本机特有，而是会在 CI 上必失：
+
+1. `database/test/integration/helpers.ts#createTask` 仍在向 `app.tasks` 写 `assignee_id`，而该列已由 [ADR-040](adr/ADR-040.md) 的 `0021_contract_task_assignees.sql` 删除（错误为 `42703 column "assignee_id" of relation "tasks" does not exist`），连带 `database.test.ts`、`external-links.test.ts` 共 4 例失败。修复：夹具改为在同一事务内写 `app.task_assignees(task_id, user_id, project_id)`，与 ADR-040 的「负责人集合是唯一真相」一致，断言强度不变。
+2. `database.test/integration/database.test.ts` 的「migrations are immutable and idempotent」硬编码 `alreadyApplied` 清单停在 `0024`，未同步本轮新增的 `0025_feature_archive_removal.sql`。修复：清单补齐 `0025`。
+3. 同一步骤里 `apps/ops/test/backup.integration.test.ts` 的 `expect(summary.databaseName).toBe("app")` 与本仓库 [AGENTS.md](../AGENTS.md) 第 8 节「本地集成测试必须指向独立测试库 `app_ci`」的新约定冲突（CI 上库名确实是 `app`，本地按约定是 `app_ci`）。修复：断言改为按 `TEST_DATABASE_URL` 推导库名（`new URL(baseUrl).pathname.slice(1)`），仍然是「备份摘要报告的就是实际连的库」，CI 上的期望值不变。
+
+本地验证（`TEST_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci`，库内 26 条迁移，另设 `INPULSE_BACKUP_PG_DUMP`/`INPULSE_BACKUP_PG_RESTORE` 指向 PostgreSQL 18 客户端）：`pnpm test:integration` 全绿 —— database 2 文件 26 例、ops 2 文件 7 例、api 49 文件 455 例（101.17 s）。CI 回填：本批连同第二十四条的单测等待预算修复推送 `9ddc14e`、`2da522d` 后，PR [#145](https://github.com/256-code/InPulse/pull/145) 的 `CI / workspace`（run `35962777061`，16 分钟）全绿，含 Playwright Browser E2E、五个生产镜像构建与 Trivy 扫描、`deps:audit`；本机未单独跑 `pnpm test:e2e`。
+
 ## 2026-09-24 三层列表排序统一（ADR-046，本地落库）
 
 用户指示：「项目排序首先大体按照状态，进行中，未开始，维护中，细化按照创建时间排序。模块和功能按照创建时间从近到远」。此前三层列表的次级排序键各不相同（项目 `id` 升序、模块 `sort_order` 后接 `id` 升序、功能 `id` 升序），其中 `app.modules.sort_order` 应用代码从不写入（`ModuleManagementRepository.create` 的 INSERT 不含该列，恒为默认 0），只有演示种子给项目 1 的 8 个模块写过 1~8，排序键形同虚设。决策落 [ADR-046](adr/ADR-046.md)，与 [ADR-043](adr/ADR-043.md) / [ADR-044](adr/ADR-044.md) / [ADR-045](adr/ADR-045.md) 同属本次尚未推送的批次。
