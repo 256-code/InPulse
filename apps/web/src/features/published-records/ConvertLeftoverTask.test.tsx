@@ -111,7 +111,11 @@ it("shows inherited history, retains input and reuses the key after uncertain fa
   const converted = mount({ convertLeftoverToTask: convert });
   await open();
   // ADR-045：功能不再有归档态，记录上的影响全部继承，弹层不再展示「历史归档影响」块。
-  expect(screen.getByText(/将继承的影响功能：支付/)).toBeVisible();
+  // 弹层内容在 rc-motion 的过渡帧里会短暂处于不可见态：整套件并发跑时曾抓到 `expect(element).toBeVisible()`
+  // 对同一个 <p> 偶发失败（元素已能匹配、只是还没可见），这里改成等待可见，断言目标不变。
+  await waitFor(() =>
+    expect(screen.getByText(/将继承的影响功能：支付/)).toBeVisible(),
+  );
   fireEvent.change(screen.getByLabelText("跟进任务标题"), {
     target: { value: "我的跟进标题" },
   });

@@ -112,6 +112,7 @@
 - 先运行最小相关测试，再运行类型检查和模块测试；交付前运行所有适用于本次变更的完整门禁。
 - 必须覆盖真实数据库约束、事务回滚、权限矩阵、幂等、乐观锁、并发竞态、请求/响应契约和关键 E2E 路径。
 - 不得使用 `skip`、降低断言或删除用例来掩盖失败；确需隔离不稳定测试时必须说明原因、影响和恢复计划，并获得人工同意。
+- 本地跑真实 PostgreSQL 集成测试与 Playwright E2E 必须指向独立测试库（推荐 `app_ci`），不得指向本地演示库 `app`：夹具会直接写进演示页面，而演示库里的历史夹具只能人工清理。一次性准备：`CREATE DATABASE app_ci OWNER cluster_bootstrap` → 在 `app_ci` 上执行 `database/bootstrap/000_roles.sql` 与 `database/bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate`；跑测试时把 `TEST_DATABASE_URL` / `E2E_DATABASE_URL` 指向 `app_ci`。演示库若已被污染，用 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app node apps/e2e/helpers/fixture-cleanup.ts` 清理（按夹具前缀删除并回退 SYSTEM 审计链头；`cleanupFixtures` 有事务级完整性断言）。
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
 
