@@ -2213,19 +2213,20 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries` 与 API 测试；② 13 个 E2E spec 的进入模块方式由链接改为点卡片（需要模块级任务页的用例再点「模块级任务」页签），`record-drafts` / `task-status` 的 `if/else` 同步补了大括号，需非作者人工评审；③ `/projects/:id/modules/:moduleId/tasks` 页头的「查看功能目录」按钮与同页「功能目录」页签目的地相同，属同类重复入口，本轮按用户指定范围保留；④ 项目卡的「查看模块 ›」是非交互 `span`，未动；⑤ `ProjectTree.test.tsx` 7 例存量失败未修，与本轮无关。
 
-## 「新增模块」淡蓝色按钮（C，2026-09-20 本地落库）
+## 「新增模块」淡蓝色按钮（C，2026-09-20 本地落库；2026-09-24 入口去重修订）
 
 用户定案：页头动作行里的「新增模块」给一个淡蓝色，不要再用白底描边。
 
 锁定口径：
 
+- **2026-09-24 修订（用户指示「新建模块多了一个，要删一个」）**：页头动作行的「新增模块」已删除，`ProjectOverviewPageView` 的 `extraActions` prop 随之移除（声明、解构、渲染三处）；该类名现只剩模块区块标题行与无模块空态两处，二者同页互斥、同时最多一个可见。
 - 新增 `.soft-blue-button`：淡蓝底 `#e6f2ff`、蓝字 `#2472c3`、淡蓝描边 `#cfe4fa`，hover 变 `#d7e9fd` / 描边 `#b6d4f4` / 字色 `#1d5fa8`。色值取自既有 `.badge-blue` 同族，不新增设计 token。
-- 页头动作行、模块区块标题行、无模块空态三处「新增模块」共用该类名，同一动作在同一页只有一种外观，并与实心 `--primary` 的「新建任务」拉开层级。
+- 页头动作行、模块区块标题行、无模块空态三处「新增模块」共用该类名（**页头那一处已于 2026-09-24 删除，见上**），同一动作在同一页只有一种外观，并与实心 `--primary` 的「新建任务」拉开层级。
 - `.soft-blue-button` 同时进入 `design-system.css` 中 `.primary-button/.secondary-button/.small-button` 的几何基线组，非 antd 场景（原生 `button`）也能直接使用。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| SOFT-BLUE-BUTTON-BROWSER-001 | 浏览器实测 | 计算样式与三处一致 | 真实 dev 页面 `/projects/2/modules`：两个可见「新增模块」按钮（页头动作行 y≈114、模块区块标题行 y≈566）类名均为 `soft-blue-button`，`backgroundColor: rgb(230, 242, 255)`、`color: rgb(36, 114, 195)`、`borderColor: rgb(207, 228, 250)`，尺寸 102×35 | 本地通过 |
+| SOFT-BLUE-BUTTON-BROWSER-001 | 浏览器实测 | 计算样式一致 | 2026-09-20 初测（当时页头动作行 y≈114、模块区块标题行 y≈566 两个可见按钮）：类名均为 `soft-blue-button`，`backgroundColor: rgb(230, 242, 255)`、`color: rgb(36, 114, 195)`、`borderColor: rgb(207, 228, 250)`，尺寸 102×35；2026-09-24 页头入口删除后复测真实 dev 页面 `/projects/118/modules/12755/features/6836`：页头动作区只剩「GitHub 链接 / 成员与设置 / 新建任务」，全页 `getByRole("button", { name: "新增模块", exact: true })` 计数为 1 | 本地通过 |
 | SOFT-BLUE-BUTTON-BROWSER-002 | 浏览器实测 | 空态同色 | 用 Playwright 路由拦截 `GET /api/v1/projects/2/modules` 返回 `{"items":[]}`（不写库）复现空态：页面出现「暂无模块」，空态按钮类名为 `soft-blue-button`、底色 `rgb(230, 242, 255)` | 本地通过 |
 | SOFT-BLUE-BUTTON-E2E-001 | E2E | 点「新增模块」的路径不回归 | `modules`、`tasks`、`task-groups`、`aggregate-views`、`project-archive` 5 个 spec 全部通过（按 role+name 定位，不依赖类名） | 本地通过 |
 
@@ -3652,3 +3653,23 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 文档同步：`docs/adr/ADR-037.md`（§1、§2 版本链改为 `3→4→5→6（已作废）→7` 并加「版本号单调递增，不回收」、§3 拆为修订 A（作废）/ 修订 B（现行）、§3 的 2026-09-23 修订行改为「中间曾被 A 推翻、又由 B 恢复」）、`AGENTS.md`（作废注记 + 新定案小节「排序口径复核：遗留问题来源只在同优先级内提前」，含三处实现位置与四处回归防线）、`功能设计v1.1.md`（默认排序条目）、`docs/task-card-colors.md`（组卡尺子 / 列表行排序 / 事实来源 / 变更历史）、`docs/c-v1-alignment.md`（R-3 冻结事实）、`docs/a-contract-review-f25-f29-f32.md`（Q-10 台账与详表）、`docs/c-aggregate-read-contract-proposal.md`（Q-10 冻结结论）、`docs/adr/ADR-041.md`（修订关系与测试条目）、本文件。
 
 未运行 / 已知偏差：① 未跑全量 `test:unit` / `test:integration` / `test:web`、`pnpm lint`、`pnpm format:check`、`pnpm check:docs`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions；② 未做浏览器人工复核（需先重新构建并重启本机 API）；③ 版本 5、6 已签发的游标升级后一律按无效游标拒绝（422），分页需从头开始；④ ADR-037 仍为 `Proposed`，本次复核是否即人工批准需确认。
+
+## 2026-09-24 项目主页编辑项目入口、页头入口去重与派生档位即时刷新（用户指示，本地提交）
+
+用户指示（原文）：①「我这边任务完成功能的状态第一时间不会变要刷新，需要更改」；②「在这个页面添加一个编辑项目的功能」（附项目主页截图 `/projects/118/modules/12755/features/6836`），随后追加「然后新建模块多了一个，要删一个」与「编辑的底色改成这样的」（附参考图）。
+
+本批全是前端接线与样式：后端、契约、Route Registry、权限矩阵、迁移与生成物**零改动**——`PATCH /api/v1/projects/{projectId}`（`updateProject`）与 `EditProjectModal`、`useUpdateProject`、`useChangeProjectStatus` 早已落库，只是此前只挂在 `/projects` 列表页，项目主页（`ModulesPageView`，页头是 `ProjectOverviewPageView`）没有入口。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| TASK-DERIVED-CACHE-BROWSER-001 | 浏览器实测 | 任务状态变更后派生档位与概览统计即时更新 | 真实 dev 页面推进任务状态后，网络面板自动出现模块 / 功能列表重取请求，功能卡与模块卡的「进行中 · 未开始」档位与项目概览统计同步变化，无需手动刷新；修复前同样的操作标签停留在旧值，必须 F5 | 本地通过（人工实测） |
+| TASK-DERIVED-CACHE-CODE-001 | 静态检查 | 失效键覆盖 | `task-query.ts`、`TaskStatusPanel.tsx`、`CompleteWithRecord.tsx`、`MergeIntoMainTaskModal.tsx`、`UnmergeTaskGroupButton.tsx` 五处 mutation 的失效列表均含 `modules` / `features` / `project-overview`；编辑器诊断无报错。**未跑单测** | 未验证（未运行自动化测试） |
+| PROJECT-EDIT-ENTRY-BROWSER-001 | 浏览器实测 | 项目主页编辑入口 | 项目主页标题行出现圆形铅笔按钮（`aria-label="编辑项目"`、`title="编辑项目"`），点击打开 `EditProjectModal`，可改名称 / 描述 / 状态；`project === null || onEditProject === undefined` 时不渲染 | 本地通过（人工实测） |
+| PROJECT-EDIT-ENTRY-BROWSER-002 | 浏览器实测 | 保存后即时生效与 `rowVersion` 回写 | 改名与描述保存后弹出绿色 Alert「项目「test」已更新，当前版本 v10。」，标题即时更新且无整页刷新；`PATCH /api/v1/projects/118` 200，随后自动重取 `GET /api/v1/projects/118`；连续第二次操作未撞 409（`applyProjectUpdate` 把新 `rowVersion` 合并回详情缓存），状态切换同理 | 本地通过（人工实测） |
+| PROJECT-HEAD-ACTIONS-BROWSER-001 | 浏览器实测 | 页头重复入口删除 | 页头动作区只剩「GitHub 链接 / 成员与设置 / 新建任务」；全页 `getByRole("button", { name: "新增模块", exact: true })` 计数为 1（模块区块标题行） | 本地通过（人工实测） |
+| PROJECT-EDIT-ENTRY-STYLE-BROWSER-001 | 浏览器实测 | 圆钮配色 | `.title-icon-button` 计算样式：28×28、`border-radius: 50%`、图标 15px、`background-color: rgb(232, 241, 251)`、`border-color: rgb(207, 226, 247)`、`color: rgb(50, 115, 187)`，与左侧返回圆钮 `.title-back-button` 同族但小一号 | 本地通过（人工实测） |
+| PROJECT-HEAD-ACTIONS-E2E-001 | E2E | 定位器随入口删除同步 | `apps/e2e/tests/record-feed.spec.ts`、`apps/e2e/tests/tasks.spec.ts` 的「新增模块」由 `.project-detail-actions` 作用域改为全页 `getByRole`（页面上只剩区块标题行与空态两处互斥入口） | 未运行（未复跑） |
+
+本地实际执行（2026-09-24）：仅编辑器诊断（`get_errors`）三个改动文件无报错与浏览器人工实测（见上表）。按项目负责人 2026-09-17 指示（只改前端、不涉及后端 / 契约 / 权限 / 数据库时不运行测试与门禁），本批**未运行** `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions。
+
+未运行 / 已知偏差：① 两处 E2E 定位器改动未复跑；② 缓存失效修复未跑单测——`apps/web/src/features/modules/ModulesPageView.test.tsx` 使用 `findByRole("button", { name: /编\s*辑/ })`，新按钮 `aria-label="编辑项目"` 有可能触发 strict mode 多匹配（未验证），下次跑 `pnpm test:web` 时需确认；③ 圆钮淡蓝底色的具体色值属主观项，需非作者人工评审；④ 验证中临时改动的演示数据（项目 118 的描述与状态）已全部复原，项目本身是用户真实数据，未删除，未落库任何测试夹具。
