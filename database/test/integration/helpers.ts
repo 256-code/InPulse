@@ -156,7 +156,6 @@ export async function createTask(
         scope_type,
         code,
         title,
-        assignee_id,
         creator_id
       )
       VALUES (
@@ -165,7 +164,6 @@ export async function createTask(
         'MODULE',
         ${`${fixture.code}-T-${ordinal}`},
         ${`Task ${ordinal}`},
-        ${fixture.userId},
         ${fixture.userId}
       )
       RETURNING id
@@ -173,6 +171,12 @@ export async function createTask(
     if (!task) {
       throw new Error("Task fixture insert returned no row");
     }
+    // ADR-040：负责人集合的唯一真相是 app.task_assignees，tasks.assignee_id 已在
+    // 0021_contract_task_assignees.sql 删除，因此负责人行与任务写在同一事务里。
+    await transaction`
+      INSERT INTO app.task_assignees (task_id, user_id, project_id)
+      VALUES (${task.id}, ${fixture.userId}, ${fixture.projectId})
+    `;
     await transaction`
       INSERT INTO app.task_status_history (
         task_id,

@@ -71,6 +71,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0022_drop_low_priority.sql",
       "0023_project_three_state.sql",
       "0024_module_archive_removal.sql",
+      "0025_feature_archive_removal.sql",
     ]);
   });
 
@@ -151,7 +152,6 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           scope_type,
           code,
           title,
-          assignee_id,
           creator_id
         )
         VALUES (
@@ -161,7 +161,6 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           'FEATURE',
           ${`${right.code}-T-1`},
           'Cross-project task',
-          ${userId},
           ${userId}
         )
       `,
@@ -592,7 +591,6 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           scope_type,
           code,
           title,
-          assignee_id,
           creator_id
         )
         VALUES (
@@ -602,7 +600,6 @@ describe("PostgreSQL schema, invariants, and roles", () => {
           'FEATURE',
           ${`${fixture.code}-T-1`},
           'Feature task',
-          ${fixture.userId},
           ${fixture.userId}
         )
         RETURNING id
