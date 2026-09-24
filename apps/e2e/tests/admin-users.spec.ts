@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { expect } from "@playwright/test";
+import postgres from "postgres";
 import { test } from "../helpers/admin-fixture.js";
 
 import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
-import { loadRuntime } from "../helpers/runtime.js";
+import { loadRuntime, requiredE2eDatabaseUrl } from "../helpers/runtime.js";
 
 test("普通成员不能访问用户管理页面", async ({ browser }) => {
   test.setTimeout(60_000);
@@ -25,10 +26,7 @@ test("普通成员不能访问用户管理页面", async ({ browser }) => {
   }
 });
 
-test("管理员完成用户新增、编辑、停用、启用与强制退出", async ({
-  browser,
-  admin,
-}) => {
+test("管理员完成用户编辑、停用、启用与强制退出", async ({ browser, admin }) => {
   test.setTimeout(120_000);
   const runtime = await loadRuntime();
   const context = await browser.newContext({
@@ -38,23 +36,22 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
   const suffix = `${Date.now().toString(36)}${randomUUID().slice(0, 6)}`;
   const loginName = `f03_${suffix}`;
   const name = `F-03 用户 ${suffix}`;
+  // 新增用户入口已按「将来只用单点登录」的口径从管理页移除，目标账号改由夹具
+  // 直接预置（与 SSO JIT 开通一致：password_hash 为空）；`f03_` 前缀由
+  // global-teardown 的夹具清理统一物理删除。
+  const sql = postgres(requiredE2eDatabaseUrl(), {
+    max: 1,
+    onnotice: () => undefined,
+  });
 
   try {
+    await sql`INSERT INTO app.users (login_name, name, password_hash, is_admin, status) VALUES (${loginName}, ${name}, NULL, false, 'ACTIVE')`;
     await loginAdminViaUi(page, runtime, admin);
     await page.goto("/settings");
     await expect(
       page.getByRole("heading", { name: "成员与设置" }),
     ).toBeVisible();
-
-    await page.getByRole("button", { name: "新增用户" }).click();
-    const createDialog = page.getByRole("dialog", { name: "新增用户" });
-    await createDialog.getByLabel("登录名").fill(loginName);
-    await createDialog.getByLabel("姓名").fill(name);
-    await createDialog.getByLabel("邮箱").fill(`${loginName}@example.com`);
-    await createDialog.getByLabel("初始密码").fill("f03-e2e-password-123");
-    await createDialog.getByRole("button", { name: /保\s*存/ }).click();
-
-    await expect(page.getByText("用户创建成功", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "新增用户" })).toHaveCount(0);
 
     const card = page.locator(".member-row").filter({ hasText: loginName });
     await expect(card.getByText(name, { exact: true })).toBeVisible();
@@ -87,6 +84,7 @@ test("管理员完成用户新增、编辑、停用、启用与强制退出", as
       page.getByText("已强制退出该用户", { exact: true }),
     ).toBeVisible();
   } finally {
+    await sql.end({ timeout: 5 });
     await context.close();
   }
 });

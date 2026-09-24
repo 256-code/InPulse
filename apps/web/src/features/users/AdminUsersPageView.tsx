@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Alert, Button, Input, Space, Switch } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
@@ -15,15 +15,7 @@ import {
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
 import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
-import {
-  adminUserErrorMessage,
-  useAdminUsers,
-  type AdminUserChange,
-} from "./admin-user-query";
-
-type EditorState =
-  | { readonly mode: "create" }
-  | { readonly mode: "update"; readonly user: AdminUserItem };
+import { adminUserErrorMessage, useAdminUsers } from "./admin-user-query";
 
 type LifecycleAction = "disable" | "enable" | "forceLogout";
 
@@ -31,11 +23,8 @@ type LifecycleAction = "disable" | "enable" | "forceLogout";
 type SettingsTab = "members" | "permissions" | "notifications";
 
 type EditorValues = {
-  readonly loginName: string;
   readonly name: string;
   readonly email: string;
-  readonly avatarUrl: string;
-  readonly password: string;
   readonly isAdmin: boolean;
 };
 
@@ -62,7 +51,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   onOpenProjects,
 }) => {
   const { query, mutation } = useAdminUsers(client);
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [editor, setEditor] = useState<AdminUserItem | null>(null);
   const [lifecycle, setLifecycle] = useState<{
     action: LifecycleAction;
     user: AdminUserItem;
@@ -79,46 +68,19 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     reset,
     formState: { errors },
   } = useForm<EditorValues>({
-    defaultValues: {
-      loginName: "",
-      name: "",
-      email: "",
-      avatarUrl: "",
-      password: "",
-      isAdmin: false,
-    },
+    defaultValues: { name: "", email: "", isAdmin: false },
   });
 
-  const openCreate = () => {
-    setEditor({ mode: "create" });
-    setLifecycle(null);
-    setSuccess(null);
-    setFormError(null);
-    setReloadError(null);
-    mutation.reset();
-    reset({
-      loginName: "",
-      name: "",
-      email: "",
-      avatarUrl: "",
-      password: "",
-      isAdmin: false,
-    });
-  };
-
   const openUpdate = (user: AdminUserItem) => {
-    setEditor({ mode: "update", user });
+    setEditor(user);
     setLifecycle(null);
     setSuccess(null);
     setFormError(null);
     setReloadError(null);
     mutation.reset();
     reset({
-      loginName: user.loginName,
       name: user.name,
       email: user.email ?? "",
-      avatarUrl: user.avatarUrl ?? "",
-      password: "",
       isAdmin: user.isAdmin,
     });
   };
@@ -151,49 +113,23 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     submitting.current = true;
     setFormError(null);
     try {
-      let change: AdminUserChange;
-      if (editor.mode === "create") {
-        const body: {
-          loginName: string;
-          name: string;
-          password: string;
-          isAdmin: boolean;
-          email?: string;
-          avatarUrl?: string;
-        } = {
-          loginName: values.loginName.trim(),
-          name: values.name.trim(),
-          password: values.password,
-          isAdmin: values.isAdmin,
-        };
-        if (values.email.trim()) body.email = values.email.trim();
-        if (values.avatarUrl.trim()) body.avatarUrl = values.avatarUrl.trim();
-        change = { action: "create", body };
-      } else {
-        const user = editor.user;
-        const body: {
-          name?: string;
-          email?: string | null;
-          avatarUrl?: string | null;
-          isAdmin?: boolean;
-        } = {};
-        const name = values.name.trim();
-        const email = values.email.trim();
-        const avatarUrl = values.avatarUrl.trim();
-        if (name !== user.name) body.name = name;
-        if (email !== (user.email ?? ""))
-          body.email = email.length === 0 ? null : email;
-        if (avatarUrl !== (user.avatarUrl ?? ""))
-          body.avatarUrl = avatarUrl.length === 0 ? null : avatarUrl;
-        if (values.isAdmin !== user.isAdmin) body.isAdmin = values.isAdmin;
-        if (Object.keys(body).length === 0) {
-          setFormError("没有需要保存的更改。");
-          return;
-        }
-        change = { action: "update", user, body };
+      const body: {
+        name?: string;
+        email?: string | null;
+        isAdmin?: boolean;
+      } = {};
+      const name = values.name.trim();
+      const email = values.email.trim();
+      if (name !== editor.name) body.name = name;
+      if (email !== (editor.email ?? ""))
+        body.email = email.length === 0 ? null : email;
+      if (values.isAdmin !== editor.isAdmin) body.isAdmin = values.isAdmin;
+      if (Object.keys(body).length === 0) {
+        setFormError("没有需要保存的更改。");
+        return;
       }
-      await mutation.mutateAsync(change);
-      setSuccess(editor.mode === "create" ? "用户创建成功" : "用户资料已更新");
+      await mutation.mutateAsync({ action: "update", user: editor, body });
+      setSuccess("用户资料已更新");
       setEditor(null);
       reset();
     } catch {
@@ -204,7 +140,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   });
 
   const reloadLatest = async () => {
-    if (!editor || editor.mode !== "update" || reloading) return;
+    if (!editor || reloading) return;
     setReloading(true);
     setReloadError(null);
     try {
@@ -213,22 +149,17 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
         setReloadError(adminUserErrorMessage(result.error));
         return;
       }
-      const latest = result.data?.items.find(
-        (item) => item.id === editor.user.id,
-      );
+      const latest = result.data?.items.find((item) => item.id === editor.id);
       if (!latest) {
         setReloadError("用户已不存在，请关闭编辑窗口。");
         return;
       }
       reset({
-        loginName: latest.loginName,
         name: latest.name,
         email: latest.email ?? "",
-        avatarUrl: latest.avatarUrl ?? "",
-        password: "",
         isAdmin: latest.isAdmin,
       });
-      setEditor({ mode: "update", user: latest });
+      setEditor(latest);
       mutation.reset();
       setFormError(null);
     } finally {
@@ -259,12 +190,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     }
   };
 
-  const editorTitle =
-    editor?.mode === "create"
-      ? "新增用户"
-      : editor?.mode === "update"
-        ? "编辑用户"
-        : "";
   const versionConflict =
     mutation.error instanceof ApiError &&
     mutation.error.code === "ADMIN_USER_VERSION_CONFLICT";
@@ -274,6 +199,15 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const selfIsAdmin =
     query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
     false;
+
+  // 当前登录账号置顶，方便管理员先确认自己的身份与权限；其余保持服务端顺序。
+  const members = useMemo(() => {
+    const items = query.data?.items ?? [];
+    if (currentUserId === undefined) return items;
+    const self = items.find((item) => item.id === currentUserId);
+    if (!self || items[0]?.id === self.id) return items;
+    return [self, ...items.filter((item) => item.id !== self.id)];
+  }, [query.data, currentUserId]);
 
   return (
     <>
@@ -331,16 +265,9 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             <CalmSectionTitle
               title="成员与角色"
               hint={
-                query.data
-                  ? `共 ${query.data.items.length} 位成员`
-                  : "正在加载成员列表"
+                query.data ? `共 ${members.length} 位成员` : "正在加载成员列表"
               }
-            >
-              <Button className="secondary-button" onClick={openCreate}>
-                <InpulseIcon name="users" size={15} />
-                新增用户
-              </Button>
-            </CalmSectionTitle>
+            />
 
             {success ? (
               <div className="permission-note note-success" role="status">
@@ -367,20 +294,15 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
                   重试
                 </Button>
               </CalmEmptyState>
-            ) : !query.data?.items.length ? (
+            ) : !members.length ? (
               <CalmEmptyState
                 icon="users"
                 title="暂无用户"
-                description="新增第一位用户后，即可按角色参与项目协作。"
-              >
-                <Button className="primary-button" onClick={openCreate}>
-                  <InpulseIcon name="plus" size={15} />
-                  新增用户
-                </Button>
-              </CalmEmptyState>
+                description="账号由统一身份认证在首次登录时自动创建，无需在此新增。"
+              />
             ) : (
               <div className="member-list">
-                {query.data.items.map((user) => (
+                {members.map((user) => (
                   <div className="member-row" key={user.id}>
                     <span className="person-avatar">
                       {user.name.trim().charAt(0) || "成"}
@@ -458,40 +380,19 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
       <Modal
         className="catalog-modal"
         open={editor !== null}
-        eyebrow="用户目录与本地账号"
-        title={editorTitle}
+        eyebrow={editor ? "账号 · " + editor.loginName : "用户目录与本地账号"}
+        title="编辑用户"
         body
         onCancel={closeEditor}
         mask={{ closable: !mutation.isPending }}
       >
-        <form onSubmit={(event) => void save(event)}>
-          {editor?.mode === "update" && (
-            <p>
-              登录名创建后不可修改；编辑资料、邮箱、头像与管理员角色都会写入审计。
-            </p>
-          )}
-          {editor?.mode === "create" && (
-            <>
-              <label htmlFor="admin-user-login-name">登录名</label>
-              <Controller
-                name="loginName"
-                control={control}
-                rules={{
-                  validate: (value) =>
-                    value.trim().length > 0 || "请填写登录名",
-                  maxLength: { value: 100, message: "登录名最多 100 字" },
-                }}
-                render={({ field }) => (
-                  <Input
-                    {...field}
-                    id="admin-user-login-name"
-                    disabled={mutation.isPending || reloading}
-                  />
-                )}
-              />
-              <p role="alert">{errors.loginName?.message}</p>
-            </>
-          )}
+        <form
+          className="admin-user-form"
+          onSubmit={(event) => void save(event)}
+        >
+          <p>
+            账号由统一身份认证创建，登录名不可修改；编辑资料、邮箱与管理员角色都会写入审计。
+          </p>
           <label htmlFor="admin-user-name">姓名</label>
           <Controller
             name="name"
@@ -524,45 +425,6 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             )}
           />
           <p role="alert">{errors.email?.message}</p>
-          <label htmlFor="admin-user-avatar">头像地址</label>
-          <Controller
-            name="avatarUrl"
-            control={control}
-            rules={{
-              maxLength: { value: 2048, message: "头像地址最多 2048 字" },
-            }}
-            render={({ field }) => (
-              <Input
-                {...field}
-                id="admin-user-avatar"
-                disabled={mutation.isPending || reloading}
-                placeholder="可选"
-              />
-            )}
-          />
-          <p role="alert">{errors.avatarUrl?.message}</p>
-          {editor?.mode === "create" && (
-            <>
-              <label htmlFor="admin-user-password">初始密码</label>
-              <Controller
-                name="password"
-                control={control}
-                rules={{
-                  validate: (value) => value.length > 0 || "请填写初始密码",
-                  maxLength: { value: 1024, message: "密码最多 1024 字" },
-                }}
-                render={({ field }) => (
-                  <Input.Password
-                    {...field}
-                    id="admin-user-password"
-                    disabled={mutation.isPending || reloading}
-                    autoComplete="new-password"
-                  />
-                )}
-              />
-              <p role="alert">{errors.password?.message}</p>
-            </>
-          )}
           <label>管理员角色</label>
           <Controller
             name="isAdmin"
@@ -575,14 +437,14 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
                 disabled={
                   mutation.isPending ||
                   reloading ||
-                  (editor?.mode === "update" && selfAdmin(editor.user))
+                  (editor !== null && selfAdmin(editor))
                 }
                 onChange={field.onChange}
               />
             )}
           />
           <p>
-            {editor?.mode === "update" && selfAdmin(editor.user)
+            {editor !== null && selfAdmin(editor)
               ? "不能取消自己当前的管理员角色。"
               : "开启后该账号可执行用户管理、模块归档等管理员操作。"}
           </p>

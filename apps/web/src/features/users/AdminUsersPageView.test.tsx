@@ -41,8 +41,6 @@ const member: AdminUserItem = {
   rowVersion: 1,
 };
 
-const ADMIN_USER_INITIAL_PASSWORD = "initial-password";
-
 function mount(client: InpulseApiClient, currentUserId = 1) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
@@ -87,57 +85,18 @@ describe("F-03 admin users page", () => {
     ).toBeInTheDocument();
   });
 
-  it("creates a user through the generated client with CSRF and idempotency headers", async () => {
-    const listAdminUsers = vi.fn().mockResolvedValue({ items: [admin] });
-    const issueCsrfToken = vi
+  it("pins the current account to the top of the list", async () => {
+    const listAdminUsers = vi
       .fn()
-      .mockResolvedValue({ csrfToken: "a".repeat(43) });
-    const createUser = vi.fn().mockResolvedValue({
-      ...member,
-      id: 2,
-      loginName: "bob",
-      name: "Bob",
-    });
-    const client = {
-      listAdminUsers,
-      issueCsrfToken,
-      createUser,
-    } as unknown as InpulseApiClient;
-    mount(client);
-
-    fireEvent.click(await screen.findByRole("button", { name: "新增用户" }));
-    fireEvent.change(screen.getByLabelText("登录名"), {
-      target: { value: "bob" },
-    });
-    fireEvent.change(screen.getByLabelText("姓名"), {
-      target: { value: "Bob" },
-    });
-    fireEvent.change(screen.getByLabelText("邮箱"), {
-      target: { value: "bob@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText("初始密码"), {
-      target: { value: "initial-password" },
-    });
-    fireEvent.click(screen.getByRole("switch", { name: "管理员角色" }));
-    fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
-
-    await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
-    expect(createUser).toHaveBeenCalledWith(
-      {
-        loginName: "bob",
-        name: "Bob",
-        email: "bob@example.com",
-        password: ADMIN_USER_INITIAL_PASSWORD,
-        isAdmin: true,
-      },
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          "x-csrf-token": "a".repeat(43),
-          "Idempotency-Key": expect.stringContaining("admin-user-"),
-        }),
-      }),
-    );
-    await screen.findByText("用户创建成功");
+      .mockResolvedValue({ items: [member, admin] });
+    mount({ listAdminUsers } as unknown as InpulseApiClient, admin.id);
+    await screen.findByText("Alice");
+    const selfCard = userCard("Alice");
+    const otherCard = userCard("Bob");
+    expect(
+      selfCard.compareDocumentPosition(otherCard) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("edits a user and sends row version via If-Match", async () => {
