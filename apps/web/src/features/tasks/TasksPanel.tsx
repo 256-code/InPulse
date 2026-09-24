@@ -1164,20 +1164,9 @@ export function TasksPanel({
                         <p>{current.description || "暂无任务说明"}</p>
                       </section>
                       <div className="task-modal-links">
-                        {current.scopeType === "MODULE" && (
-                          <a
-                            href={
-                              "/projects/" +
-                              projectId +
-                              "/modules/" +
-                              moduleId +
-                              "/tasks?taskId=" +
-                              current.id
-                            }
-                          >
-                            打开模块任务
-                          </a>
-                        )}
+                        {/* 2026-09-24 产品要求删除「打开模块任务」：任务中心详情头部
+                            的「在项目中打开」与功能页头部的「模块级任务」标签都指向同
+                            一地址（taskDetailPath），正文里重复。 */}
                         <a
                           href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
                         >

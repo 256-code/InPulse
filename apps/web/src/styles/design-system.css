@@ -55,13 +55,48 @@ html,
   font-variation-settings: normal;
   -webkit-tap-highlight-color: transparent;
 }
-/* 根滚动条常显（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
-   不再被系统滚动条挤窄 15px，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
+/* 根滚动条槽常驻（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
+   不再被滚动条槽挤窄，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
    Chromium 下 `100vw` 只到初始包含块（实测槽宽 15px 时 100vw=1143、遮罩同为 1143），
    弹窗遮罩、命令面板与右侧任务抽屉都到不了窗口边缘，会在右缘留一条未变暗的亮带；
-   常显的滚动条就是视口滚动条，固定覆盖层几何与「页面上本来有滚动条」时一致。 */
+   `overflow-y: scroll` 占的是视口滚动条的槽，固定覆盖层几何与「页面上本来有滚动条」时一致。
+   槽里的 thumb 自 2026-09-24 起默认透明，只有滚动中才显形，见下一条。 */
 html {
   overflow-y: scroll;
+}
+/* 滚动条按需显形（2026-09-24 产品要求「所有的滚轮条不用的时候是隐藏的」）：槽宽统一 8px
+   （不再被系统默认的 15px 挤窄），thumb 默认透明，只有正在滚动（或指针停在滚动条上）的容器
+   才用颜色浮现；[data-scrolling] 由 apps/web/src/app/auto-hide-scrollbars.ts 在 scroll 事件里
+   打上，停手 1 秒后摘掉 —— 纯 :hover 做不到这件事：指针停在窗口里就算悬停，常显的根滚动条会
+   一直亮着。深色侧栏内的 .nav-group / .tree-modules-scroll / .sidebar 另有更亮的配色覆盖。
+   Chromium 走 ::-webkit-scrollbar，Firefox 走标准属性，两者不要同时声明，否则 Chromium
+   会忽略自定义滚动条。 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+*[data-scrolling]::-webkit-scrollbar-thumb {
+  background: rgba(113, 128, 150, 0.55);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 128, 150, 0.8);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  *[data-scrolling] {
+    scrollbar-color: rgba(113, 128, 150, 0.55) transparent;
+  }
 }
 abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
@@ -458,9 +493,14 @@ button {
 .tree-modules-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+/* thumb 默认透明、滚动中才显形（2026-09-24）：侧栏是深色底，全局那个浅灰 thumb 在这里看不见，
+   所以这一族保留设计系统的蓝色。 */
 .tree-modules-scroll::-webkit-scrollbar-thumb {
-  background: #3f6d94;
+  background: transparent;
   border-radius: 999px;
+}
+.tree-modules-scroll[data-scrolling]::-webkit-scrollbar-thumb {
+  background: #3f6d94;
 }
 .tree-modules-scroll::-webkit-scrollbar-thumb:hover {
   background: #5b90bb;
@@ -468,6 +508,9 @@ button {
 @supports not selector(::-webkit-scrollbar) {
   .tree-modules-scroll {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .tree-modules-scroll[data-scrolling] {
     scrollbar-color: #3f6d94 transparent;
   }
 }
@@ -480,6 +523,9 @@ button {
 @supports not selector(::-webkit-scrollbar) {
   .nav-group {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .nav-group[data-scrolling] {
     scrollbar-color: #2b4a68 transparent;
   }
 }
@@ -5402,27 +5448,19 @@ td.due-overdue {
   margin-top: 14px;
 }
 
-/* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）。 */
-.issues-toolbar {
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-.issues-toolbar-field {
+/* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）；
+   2026-09-24 起与「回到迭代记录」并排放在页头动作区，不再独占一行工具栏。 */
+.issues-project-field {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted-foreground);
   font-size: 12px;
 }
-.issues-toolbar-field select {
-  min-width: 180px;
-  height: 35px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: white;
-  color: #586a7e;
-  font: inherit;
+
+/* 「问题不是任务」说明：同一日按产品要求从页面顶部移到底部，紧跟已闭环折叠区。 */
+.issues-callout {
+  margin: 24px 0 0;
 }
 
 .issue-list {
@@ -6130,9 +6168,13 @@ td.due-overdue {
   .nav-group::-webkit-scrollbar {
     width: 6px;
   }
+  /* 与项目树同一口径（2026-09-24）：深色底上的 thumb 默认透明，滚动中才显形。 */
   .nav-group::-webkit-scrollbar-thumb {
-    background: #2b4a68;
+    background: transparent;
     border-radius: 3px;
+  }
+  .nav-group[data-scrolling]::-webkit-scrollbar-thumb {
+    background: #2b4a68;
   }
 }
 .brand-joint {

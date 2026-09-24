@@ -103,16 +103,22 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       await moduleCard.click();
       // 单份引用：功能页只展示模块级任务的引用，状态流转仍按 taskWritable=false
       // 关闭。旧断言要求「编辑任务」禁用；72c0714 起归档/恢复入口对全部项目成员
-      // 开放，该按钮改为可点，回到真实归属页请用「打开模块任务」。
+      // 开放，该按钮改为可点。
       const referenced = page.getByRole("dialog", { name: "任务详情" });
       await expect(
         referenced.getByRole("button", { name: "完成任务" }),
       ).toBeDisabled();
+      // 2026-09-24 产品要求删除正文里的「打开模块任务」跳转：它与任务中心详情
+      // 头部的「在项目中打开」以及功能页头部的「模块级任务」标签是同一去向。
       await expect(
         referenced.getByRole("link", { name: "打开模块任务" }),
-      ).toBeVisible();
+      ).toHaveCount(0);
     }
-    await page.getByRole("link", { name: "打开模块任务" }).click();
+    await page.goto(`/projects/${runtime.projectId}/modules/${moduleId}/tasks`);
+    await page
+      .locator(".calm-task-card")
+      .filter({ has: page.getByText(title, { exact: true }) })
+      .click();
     await page.getByRole("button", { name: "编辑任务" }).click();
     const edit = page.getByRole("dialog", { name: "编辑任务" });
     await edit.getByLabel(names[0]!, { exact: true }).uncheck();

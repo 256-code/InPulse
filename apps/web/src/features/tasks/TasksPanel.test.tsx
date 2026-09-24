@@ -283,7 +283,7 @@ describe("F-14 task editing", () => {
       ).conflicts,
     ).toEqual([]);
   });
-  it("shows a MODULE reference only once and directs editing to its module", async () => {
+  it("shows a MODULE reference only once and without a module-task jump link", async () => {
     const module = {
       ...item,
       featureId: null,
@@ -298,9 +298,12 @@ describe("F-14 task editing", () => {
     expect(screen.getByText("原说明")).toBeVisible();
     expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
+    // 2026-09-24 产品要求删除正文里的「打开模块任务」跳转（任务中心详情头部
+    // 的「在项目中打开」与功能页头部的「模块级任务」标签已是同一去向）。
+    await screen.findByRole("button", { name: "编辑任务" });
     expect(
-      await screen.findByRole("link", { name: "打开模块任务" }),
-    ).toHaveAttribute("href", "/projects/2/modules/3/tasks?taskId=1");
+      screen.queryByRole("link", { name: "打开模块任务" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑任务" })).toBeDisabled();
   });
   it("merges untouched fields and requires choice for conflicting assignee/due date", () => {

@@ -332,9 +332,14 @@
     width: 6px;
   }
 
+  /* 与 .nav-group 同一口径（2026-09-24）：默认透明，滚动中才显形。 */
   .sidebar::-webkit-scrollbar-thumb {
-    background: #2b4a68;
+    background: transparent;
     border-radius: 3px;
+  }
+
+  .sidebar[data-scrolling]::-webkit-scrollbar-thumb {
+    background: #2b4a68;
   }
 }
 

@@ -171,8 +171,22 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
               迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
             </p>
           </div>
-          {onBackToRecords === undefined ? null : (
-            <div className="catalog-actions">
+          {/* 项目筛选与「回到迭代记录」并排放在页头动作区（2026-09-24 产品要求）。 */}
+          <div className="catalog-actions">
+            <label className="issues-project-field">
+              项目
+              <CalmSelect
+                ariaLabel="项目"
+                value={projectId > 0 ? String(projectId) : ""}
+                onChange={(next) => selectProject(String(next))}
+                appearance="rich"
+                options={[
+                  { value: "", label: "全部项目" },
+                  ...(projects.data?.items ?? []).map(projectSelectOption),
+                ]}
+              />
+            </label>
+            {onBackToRecords === undefined ? null : (
               <button
                 type="button"
                 className="secondary-button"
@@ -181,38 +195,10 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
                 <InpulseIcon name="gitBranch" size={15} />
                 回到迭代记录
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
-
-      {embedded ? null : (
-        <div className="toolbar task-toolbar issues-toolbar">
-          <label className="issues-toolbar-field">
-            项目
-            <CalmSelect
-              ariaLabel="项目"
-              value={projectId > 0 ? String(projectId) : ""}
-              onChange={(next) => selectProject(String(next))}
-              appearance="rich"
-              options={[
-                { value: "", label: "全部项目" },
-                ...(projects.data?.items ?? []).map(projectSelectOption),
-              ]}
-            />
-          </label>
-        </div>
-      )}
-
-      <div className="callout">
-        <InpulseIcon name="alert" size={18} />
-        <div>
-          <strong>问题不是任务</strong>
-          <p>
-            转为任务时系统会自动带入来源项目、模块、功能与遗留问题描述，并把来源记录标记为已闭环；原记录内容不会被修改。
-          </p>
-        </div>
-      </div>
 
       <CalmSectionTitle
         title="未闭环"
@@ -282,6 +268,17 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
           )}
         </details>
       ) : null}
+
+      {/* 「问题不是任务」说明：2026-09-24 按产品要求从页面顶部移到底部。 */}
+      <div className="callout issues-callout">
+        <InpulseIcon name="alert" size={18} />
+        <div>
+          <strong>问题不是任务</strong>
+          <p>
+            转为任务时系统会自动带入来源项目、模块、功能与遗留问题描述，并把来源记录标记为已闭环；原记录内容不会被修改。
+          </p>
+        </div>
+      </div>
 
       {convertTarget === null ? null : (
         <LeftoverTaskConvertModal
