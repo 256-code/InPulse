@@ -17,7 +17,6 @@ describe("F-13 feature contract", () => {
       { projectId: 1 },
       { moduleId: 1 },
       { createdBy: 1 },
-      { status: "ARCHIVED" },
     ])
       expect(
         featureEditRequestSchema.safeParse({ name: "支付", ...extra }).success,
@@ -37,15 +36,14 @@ describe("F-13 feature contract", () => {
       }).success,
     ).toBe(true);
   });
-  it("registers all seven operations with explicit write/replay/version policies", () => {
+  it("registers all five operations with explicit write/replay/version policies", () => {
+    // ADR-045：功能下线归档，archiveFeature / restoreFeature 已从 Registry 移除。
     const operations = [
       "listFeatures",
       "getFeature",
       "findSimilarFeatures",
       "createFeature",
       "updateFeature",
-      "archiveFeature",
-      "restoreFeature",
     ];
     for (const operation of operations) {
       const route = routeRegistry.find((r) => r.operationId === operation);

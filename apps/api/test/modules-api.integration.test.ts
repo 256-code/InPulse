@@ -33,8 +33,6 @@ import { IdempotencyRunner } from "../src/idempotency/runner.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
-import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
-import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import { ModuleManagementRepository } from "../src/modules/modules/module-management.repository.js";
@@ -90,10 +88,6 @@ beforeAll(async () => {
     audit,
     new PostgresActivityWritePort(),
     search,
-    new ProjectRoleGateService(
-      new PostgresProjectAccessQueryPort(client),
-      new PostgresProjectMembersQueryPort(),
-    ),
   );
   const http = new ModulesHttpService(
     auth,
@@ -143,19 +137,7 @@ async function fixture(): Promise<{ member: Actor; project: ProjectFixture }> {
   const member = await actor();
   return { member, project: await createProject(client.sql, member.userId) };
 }
-/** ADR-033：把夹具成员降级为普通成员（创建者默认回填 LEADER）。 */
-async function demoteToMember(
-  sql: DatabaseClient["sql"],
-  projectId: number,
-  userId: number,
-): Promise<void> {
-  await sql`
-    UPDATE app.project_members
-       SET role = 'MEMBER'
-     WHERE project_id = ${projectId}
-       AND user_id = ${userId}
-  `;
-}
+
 async function request(
   projectId: number,
   method: string,
@@ -215,9 +197,11 @@ describe("F-12 real HTTP + PostgreSQL", () => {
     const listing = await request(project.projectId, "GET", member);
     expect(listing.status).toBe(200);
     const items = moduleListResponseSchema.parse(await listing.json()).items;
-    expect(items.map((item) => item.id)).toEqual([project.moduleId, module.id]);
+    // ADR-046：两个模块都还没有完成任务（同属「未开始」档），同档位内按创建时间
+    // 从近到远，因此后建的 module 排在创建项目时自动生成的未分类模块之前。
+    expect(items.map((item) => item.id)).toEqual([module.id, project.moduleId]);
   });
-  it("orders module cards by lifecycle band and counts completed tasks", async () => {
+  it("orders module cards by derived lifecycle band and counts completed tasks", async () => {
     const { member, project } = await fixture();
     const started = moduleItemSchema.parse(
       await (
@@ -227,11 +211,6 @@ describe("F-12 real HTTP + PostgreSQL", () => {
     const notStarted = moduleItemSchema.parse(
       await (
         await request(project.projectId, "POST", member, { name: "未开始模块" })
-      ).json(),
-    );
-    const archived = moduleItemSchema.parse(
-      await (
-        await request(project.projectId, "POST", member, { name: "归档模块" })
       ).json(),
     );
     // 只有「已开始模块」下有已完成任务，其余模块都没有。
@@ -265,26 +244,19 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       SELECT id, project_id, NULL, 'DONE', now(), '已完成', ${member.userId}
         FROM created
     `;
-    await client.sql`
-      UPDATE app.modules
-         SET status = 'ARCHIVED',
-             archived_at = now(),
-             row_version = row_version + 1
-       WHERE id = ${archived.id}
-         AND project_id = ${project.projectId}
-    `;
-
     const listing = await request(project.projectId, "GET", member);
     expect(listing.status).toBe(200);
     const items = moduleListResponseSchema.parse(await listing.json()).items;
+    // ADR-044 / ADR-046：模块排序只剩派生档位 进行中（模块内已有完成任务）与
+    // 未开始 两档，同档位内按创建时间从近到远、创建时间相同时按 ID 降序；
+    // 这里 started 单独占「进行中」档，两个「未开始」模块里 notStarted 建得更晚。
     expect(items.map((item) => item.id)).toEqual([
       started.id,
-      project.moduleId,
       notStarted.id,
-      archived.id,
+      project.moduleId,
     ]);
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
-      1, 0, 0, 0,
+      1, 0, 0,
     ]);
   });
   it("maps normalized duplicate names and stale versions to safe 409; rejects identity injection", async () => {
@@ -357,241 +329,55 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       404,
     );
   });
-  it("allows any active member to archive, preserves archived reads, rejects archived edit, restores without changing kind", async () => {
+  it("serves no module archive or restore route and drops lifecycle fields from the module DTO (ADR-044)", async () => {
     const { member, project } = await fixture();
-    const admin = await actor(true);
-    // ADR-039：归档不再要求组长或系统管理员，降级为 MEMBER 的成员同样可归档。
-    await demoteToMember(client.sql, project.projectId, member.userId);
-    const memberModule = moduleItemSchema.parse(
-      await (
-        await request(project.projectId, "POST", member, { name: "成员归档" })
-      ).json(),
-    );
-    const memberArchived = await request(
+    // 归档/恢复路由已从 Route Registry、Controller 与生成客户端一并下线。
+    expect(
+      (
+        await request(
+          project.projectId,
+          "POST",
+          member,
+          { reason: "已下线" },
+          `/${project.moduleId}/archive`,
+          1,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(
+          project.projectId,
+          "POST",
+          member,
+          { reason: "已下线" },
+          `/${project.moduleId}/restore`,
+          1,
+        )
+      ).status,
+    ).toBe(404);
+
+    // 模块只有 ACTIVE 一种状态，契约 DTO 不再暴露 status / archivedAt。
+    const listed = await request(project.projectId, "GET", member);
+    expect(listed.status).toBe(200);
+    const items = moduleListResponseSchema.parse(await listed.json()).items;
+    const item = items.find((entry) => entry.id === project.moduleId);
+    expect(item?.kind).toBe("UNCLASSIFIED");
+    expect(item).not.toHaveProperty("status");
+    expect(item).not.toHaveProperty("archivedAt");
+    // 只剩创建与更新：改名仍可按版本正常完成。
+    const renamed = await request(
       project.projectId,
-      "POST",
+      "PATCH",
       member,
-      { reason: "成员归档" },
-      `/${memberModule.id}/archive`,
+      { name: "模块改版", description: "" },
+      `/${project.moduleId}`,
       1,
     );
-    expect(memberArchived.status).toBe(200);
-    expect(moduleItemSchema.parse(await memberArchived.json())).toMatchObject({
-      status: "ARCHIVED",
+    expect(renamed.status).toBe(200);
+    expect(moduleItemSchema.parse(await renamed.json())).toMatchObject({
+      name: "模块改版",
       rowVersion: 2,
-    });
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        admin,
-        { reason: " " },
-        `/${project.moduleId}/archive`,
-        1,
-      ),
-      422,
-    );
-    const archived = await request(
-      project.projectId,
-      "POST",
-      admin,
-      { reason: "暂时停用" },
-      `/${project.moduleId}/archive`,
-      1,
-    );
-    expect(archived.status).toBe(200);
-    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
-      status: "ARCHIVED",
-      rowVersion: 2,
-    });
-    expect((await request(project.projectId, "GET", member)).status).toBe(200);
-    await error(
-      await request(
-        project.projectId,
-        "PATCH",
-        member,
-        { name: "不可编辑" },
-        `/${project.moduleId}`,
-        2,
-      ),
-      409,
-      "MODULE_STATE_CONFLICT",
-    );
-    const restored = await request(
-      project.projectId,
-      "POST",
-      admin,
-      { reason: "重新启用" },
-      `/${project.moduleId}/restore`,
-      2,
-    );
-    expect(restored.status).toBe(200);
-    expect(moduleItemSchema.parse(await restored.json())).toMatchObject({
-      status: "ACTIVE",
-      kind: "UNCLASSIFIED",
-      archivedAt: null,
-      rowVersion: 3,
-    });
-    const archivedAgain = await request(
-      project.projectId,
-      "POST",
-      admin,
-      { reason: "无需重认证再次停用" },
-      `/${project.moduleId}/archive`,
-      3,
-    );
-    expect(archivedAgain.status).toBe(200);
-  });
-  it("lets a project leader archive and restore modules without any admin flag (ADR-033)", async () => {
-    const { member, project } = await fixture();
-    // 夹具创建者默认回填 LEADER；普通成员（非系统管理员）也可归档。
-    const archived = await request(
-      project.projectId,
-      "POST",
-      member,
-      { reason: "组长封存" },
-      `/${project.moduleId}/archive`,
-      1,
-    );
-    expect(archived.status).toBe(200);
-    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
-      status: "ARCHIVED",
-      rowVersion: 2,
-    });
-    const restored = await request(
-      project.projectId,
-      "POST",
-      member,
-      { reason: "组长恢复" },
-      `/${project.moduleId}/restore`,
-      2,
-    );
-    expect(restored.status).toBe(200);
-    expect(moduleItemSchema.parse(await restored.json())).toMatchObject({
-      status: "ACTIVE",
-      rowVersion: 3,
-    });
-  });
-  it("blocks module archiving while the module still has unarchived tasks (ADR-034)", async () => {
-    const { member, project } = await fixture();
-    const module = moduleItemSchema.parse(
-      await (
-        await request(project.projectId, "POST", member, {
-          name: "有任务的模块",
-        })
-      ).json(),
-    );
-    await client.sql`
-      WITH created AS (
-        INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, creator_id
-        )
-        VALUES (
-          ${project.projectId},
-          ${module.id},
-          'MODULE',
-          ${project.code + "-T-1"},
-          '未归档任务',
-          ${member.userId}
-        )
-        RETURNING id, project_id
-      ),
-      assignees AS (
-        INSERT INTO app.task_assignees (task_id, user_id, project_id)
-        SELECT id, ${member.userId}, project_id FROM created
-      )
-      INSERT INTO app.task_status_history (
-        task_id, project_id, from_work_status, to_work_status, changed_by
-      )
-      SELECT id, project_id, NULL, 'TODO', ${member.userId} FROM created
-    `;
-
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        member,
-        { reason: "任务未收尾" },
-        `/${module.id}/archive`,
-        module.rowVersion,
-      ),
-      409,
-      "MODULE_ARCHIVE_TASKS_OPEN",
-    );
-
-    await client.sql`
-      UPDATE app.tasks
-         SET lifecycle_status = 'ARCHIVED',
-             row_version = row_version + 1
-       WHERE project_id = ${project.projectId}
-         AND module_id = ${module.id}
-    `;
-
-    const archived = await request(
-      project.projectId,
-      "POST",
-      member,
-      { reason: "任务全部归档" },
-      `/${module.id}/archive`,
-      module.rowVersion,
-    );
-    expect(archived.status, await archived.clone().text()).toBe(200);
-    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
-      status: "ARCHIVED",
-      rowVersion: module.rowVersion + 1,
-    });
-  });
-  it("archives a module whose tasks are finished but not archived", async () => {
-    const { member, project } = await fixture();
-    const module = moduleItemSchema.parse(
-      await (
-        await request(project.projectId, "POST", member, {
-          name: "已完成任务的模块",
-        })
-      ).json(),
-    );
-    // ADR-034：任务完成（work_status = DONE）即视为已收尾，不再阻塞模块归档。
-    await client.sql`
-      WITH created AS (
-        INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, creator_id,
-          work_status, completed_at
-        )
-        VALUES (
-          ${project.projectId},
-          ${module.id},
-          'MODULE',
-          ${project.code + "-T-1"},
-          '已完成任务',
-          ${member.userId},
-          'DONE',
-          now()
-        )
-        RETURNING id, project_id, completed_at
-      ),
-      assignees AS (
-        INSERT INTO app.task_assignees (task_id, user_id, project_id)
-        SELECT id, ${member.userId}, project_id FROM created
-      )
-      INSERT INTO app.task_status_history (
-        task_id, project_id, from_work_status, to_work_status,
-        completed_at_snapshot, changed_by
-      )
-      SELECT id, project_id, NULL, 'DONE', completed_at, ${member.userId}
-        FROM created
-    `;
-
-    const archived = await request(
-      project.projectId,
-      "POST",
-      member,
-      { reason: "任务已完成" },
-      `/${module.id}/archive`,
-      module.rowVersion,
-    );
-    expect(archived.status, await archived.clone().text()).toBe(200);
-    expect(moduleItemSchema.parse(await archived.json())).toMatchObject({
-      status: "ARCHIVED",
     });
   });
 
@@ -647,69 +433,50 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       404,
     );
   });
-  it("revalidates identity on replay and rejects archived parent writes while retaining history", async () => {
+  it("replays an updateModule request by key without a second write and refuses removed membership", async () => {
     const { member, project } = await fixture();
     const admin = await actor(true);
     const key = randomUUID();
-    const suffix = `/${project.moduleId}/archive`;
-    expect(
-      (
-        await request(
-          project.projectId,
-          "POST",
-          admin,
-          { reason: "封存" },
-          suffix,
-          1,
-          key,
-        )
-      ).status,
-    ).toBe(200);
-    expect(
-      (
-        await request(
-          project.projectId,
-          "POST",
-          admin,
-          { reason: "封存" },
-          suffix,
-          1,
-          key,
-        )
-      ).status,
-    ).toBe(200);
-    expect(
-      (
-        await request(
-          project.projectId,
-          "POST",
-          admin,
-          { reason: "封存" },
-          suffix,
-          1,
-          key,
-        )
-      ).status,
-    ).toBe(200);
-    await client.sql`UPDATE app.projects SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.projectId}`;
-    expect((await request(project.projectId, "GET", member)).status).toBe(200);
-    await error(
-      await request(project.projectId, "POST", member, { name: "归档父级" }),
-      409,
-      "MODULE_PROJECT_ARCHIVED",
+    const suffix = `/${project.moduleId}`;
+    const body = { name: "重命名模块", description: "重放" };
+    const first = await request(
+      project.projectId,
+      "PATCH",
+      member,
+      body,
+      suffix,
+      1,
+      key,
     );
-    await error(
-      await request(
-        project.projectId,
-        "POST",
-        admin,
-        { reason: "恢复" },
-        `/${project.moduleId}/restore`,
-        2,
-      ),
-      409,
-      "MODULE_PROJECT_ARCHIVED",
+    expect(first.status).toBe(200);
+    const cached = await first.json();
+    // ADR-044：ModuleItem 去掉 status / archivedAt 后契约版本升到 1.4.0；
+    // 同 Key、同摘要、同契约版本重放返回原 2xx，且不再校验 row_version。
+    const replay = await request(
+      project.projectId,
+      "PATCH",
+      member,
+      body,
+      suffix,
+      1,
+      key,
     );
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(cached);
+    // 重放前重新鉴权：成员被移除后拒绝，且不泄露已存状态码或响应。
+    await removeMember(client.sql, project.projectId, member.userId);
+    await error(
+      await request(project.projectId, "PATCH", member, body, suffix, 1, key),
+      404,
+    );
+    // 重放没有产生第二次写入：名称与 row_version 都停在首次结果。
+    const listed = await request(project.projectId, "GET", admin);
+    expect(listed.status).toBe(200);
+    const items = moduleListResponseSchema.parse(await listed.json()).items;
+    expect(items.find((entry) => entry.id === project.moduleId)).toMatchObject({
+      name: "重命名模块",
+      rowVersion: 2,
+    });
   });
   it.each(["audit", "search"] as const)(
     "rolls back business, audit, projections and idempotency after %s failure",
@@ -776,10 +543,6 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       new PostgresAuditWritePort({ currentVersion: 1, keyFor: () => key }),
       new PostgresActivityWritePort(),
       new PostgresSearchProjectionWritePort(),
-      new ProjectRoleGateService(
-        new PostgresProjectAccessQueryPort(dedicatedClient),
-        new PostgresProjectMembersQueryPort(),
-      ),
     );
     let ready = 0;
     let release: (() => void) | undefined;
@@ -806,7 +569,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       );
       const results = await Promise.all(operations);
       expect(results).toHaveLength(100);
-      expect(results.every((item) => item.status === "ACTIVE")).toBe(true);
+      expect(results.every((item) => item.kind === "NORMAL")).toBe(true);
       expect(results.every((item) => item.rowVersion === 1)).toBe(true);
 
       const chainId = `PROJECT:${project.projectId}`;
@@ -871,7 +634,7 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       await dedicatedClient.close();
     }
   });
-  it("parent archive FOR UPDATE blocks a child write, which rechecks ACTIVE after acquiring its lock", async () => {
+  it("父级 FOR UPDATE 阻塞子级写入，释放后按当前状态提交", async () => {
     const { member, project } = await fixture();
     let release!: () => void;
     let acquired!: () => void;
@@ -885,7 +648,6 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       await tx.sql`SELECT id FROM app.projects WHERE id = ${project.projectId} FOR UPDATE`;
       acquired();
       await gate;
-      await tx.sql`UPDATE app.projects SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.projectId}`;
     });
     await ready;
     const child = request(project.projectId, "POST", member, {
@@ -904,9 +666,9 @@ describe("F-12 real HTTP + PostgreSQL", () => {
       release();
       await parent;
     }
-    await error(await child, 409, "MODULE_PROJECT_ARCHIVED");
+    expect((await child).status).toBe(200);
     expect(
       (await management.list(member.userId, project.projectId)).items,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 });

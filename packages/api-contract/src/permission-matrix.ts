@@ -105,40 +105,19 @@ export const permissionMatrix = [
       },
     }),
   ),
-  ...(
-    [
-      "listModules",
-      "createModule",
-      "updateModule",
-      "archiveModule",
-      "restoreModule",
-    ] as const
-  ).map((operationId): PermissionMatrixEntry => ({
-    operationId,
-    outcomes: {
-      匿名: { kind: "deny", status: 401 },
-      活跃成员:
-        operationId === "archiveModule" || operationId === "restoreModule"
-          ? {
-              kind: "conditional",
-              allowedWhen:
-                "ADR-039：本项目任意活跃成员（实时成员关系），项目 ACTIVE、原因/If-Match/CSRF 与幂等必填",
-              deniedWith: 403,
-            }
-          : { kind: "allow" },
-      其他项目成员: { kind: "deny", status: 404 },
-      已移除成员: { kind: "deny", status: 404 },
-      停用用户: { kind: "deny", status: 401 },
-      系统管理员:
-        operationId === "archiveModule" || operationId === "restoreModule"
-          ? {
-              kind: "conditional",
-              allowedWhen: "完整管理员 Session",
-              deniedWith: 403,
-            }
-          : { kind: "allow" },
-    },
-  })),
+  ...(["listModules", "createModule", "updateModule"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: { kind: "allow" },
+        其他项目成员: { kind: "deny", status: 404 },
+        已移除成员: { kind: "deny", status: 404 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: { kind: "allow" },
+      },
+    }),
+  ),
   ...(
     [
       "listFeatures",
@@ -182,33 +161,16 @@ export const permissionMatrix = [
       "findSimilarFeatures",
       "createFeature",
       "updateFeature",
-      "archiveFeature",
-      "restoreFeature",
     ] as const
   ).map((operationId): PermissionMatrixEntry => ({
     operationId,
     outcomes: {
       匿名: { kind: "deny", status: 401 },
-      活跃成员:
-        operationId === "archiveFeature" || operationId === "restoreFeature"
-          ? {
-              kind: "conditional",
-              allowedWhen:
-                "ADR-039：本项目任意活跃成员（实时成员关系），项目/模块 ACTIVE、原因/If-Match/CSRF 与幂等必填",
-              deniedWith: 403,
-            }
-          : { kind: "allow" },
+      活跃成员: { kind: "allow" },
       其他项目成员: { kind: "deny", status: 404 },
       已移除成员: { kind: "deny", status: 404 },
       停用用户: { kind: "deny", status: 401 },
-      系统管理员:
-        operationId === "archiveFeature" || operationId === "restoreFeature"
-          ? {
-              kind: "conditional",
-              allowedWhen: "完整管理员 Session",
-              deniedWith: 403,
-            }
-          : { kind: "allow" },
+      系统管理员: { kind: "allow" },
     },
   })),
   {
@@ -605,7 +567,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-039：本项目任意活跃成员（实时成员关系），未归档项目、CSRF、Idempotency-Key 与 If-Match 必填，未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
+          "ADR-039：本项目任意活跃成员（实时成员关系），CSRF、Idempotency-Key 与 If-Match 必填；进入维护中要求项目下任务全部收尾，仍有未完成且未归档的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -614,46 +576,11 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；未归档项目、CSRF、Idempotency-Key 与 If-Match 必填，两条硬约束同样返回 409",
+          "完整系统管理员 Session；CSRF、Idempotency-Key 与 If-Match 必填，维护中任务收尾门禁与两条硬约束同样返回 409",
         deniedWith: 403,
       },
     },
   },
-  {
-    operationId: "getProjectArchivePreview",
-    outcomes: {
-      匿名: { kind: "deny", status: 401 },
-      活跃成员: { kind: "deny", status: 403 },
-      其他项目成员: { kind: "deny", status: 404 },
-      已移除成员: { kind: "deny", status: 404 },
-      停用用户: { kind: "deny", status: 401 },
-      系统管理员: {
-        kind: "conditional",
-        allowedWhen: "完整系统管理员 Session；只读，不要求 CSRF 或幂等键",
-        deniedWith: 403,
-      },
-    },
-  },
-  ...(["archiveProject", "restoreProject"] as const).map(
-    (operationId): PermissionMatrixEntry => ({
-      operationId,
-      outcomes: {
-        匿名: { kind: "deny", status: 401 },
-        活跃成员: { kind: "deny", status: 403 },
-        其他项目成员: { kind: "deny", status: 404 },
-        已移除成员: { kind: "deny", status: 404 },
-        停用用户: { kind: "deny", status: 401 },
-        系统管理员: {
-          kind: "conditional",
-          allowedWhen:
-            operationId === "archiveProject"
-              ? "完整系统管理员 Session；项目 ACTIVE，原因、If-Match、CSRF 与幂等必填"
-              : "完整系统管理员 Session；项目 ARCHIVED，原因、If-Match、CSRF 与幂等必填",
-          deniedWith: 403,
-        },
-      },
-    }),
-  ),
   ...(
     [
       "listProjectMembers",
@@ -706,47 +633,6 @@ export const permissionMatrix = [
       },
     },
   },
-  {
-    operationId: "requestProjectArchive",
-    outcomes: {
-      匿名: { kind: "deny", status: 401 },
-      活跃成员: {
-        kind: "conditional",
-        allowedWhen:
-          "ADR-034/ADR-039：本项目任意活跃成员（实时成员关系），项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填",
-        deniedWith: 403,
-      },
-      其他项目成员: { kind: "deny", status: 404 },
-      已移除成员: { kind: "deny", status: 404 },
-      停用用户: { kind: "deny", status: 401 },
-      系统管理员: {
-        kind: "conditional",
-        allowedWhen:
-          "完整系统管理员 Session；项目 ACTIVE、项目下无未完成任务、CSRF 与幂等必填",
-        deniedWith: 403,
-      },
-    },
-  },
-  ...(["approveProjectArchive", "rejectProjectArchive"] as const).map(
-    (operationId): PermissionMatrixEntry => ({
-      operationId,
-      outcomes: {
-        匿名: { kind: "deny", status: 401 },
-        活跃成员: { kind: "deny", status: 403 },
-        其他项目成员: { kind: "deny", status: 404 },
-        已移除成员: { kind: "deny", status: 404 },
-        停用用户: { kind: "deny", status: 401 },
-        系统管理员: {
-          kind: "conditional",
-          allowedWhen:
-            operationId === "approveProjectArchive"
-              ? "完整系统管理员 Session；申请仍为 PENDING、项目 ACTIVE、If-Match、CSRF 与幂等必填；批准即在同一事务内归档项目"
-              : "完整系统管理员 Session；申请仍为 PENDING、CSRF 与幂等必填；只驳回申请，不改变项目状态",
-          deniedWith: 403,
-        },
-      },
-    }),
-  ),
   ...(
     [
       "archiveTask",

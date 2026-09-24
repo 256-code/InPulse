@@ -14,15 +14,14 @@ import type { Fragment, ISql } from "postgres";
  *      时间，越晚越排前面」，与任务看板 listForBoard 的「已完成按完成时间倒序」对齐；
  *      已完成任务之间因此先看完成时间，优先级 / 截止只做完成时间相同时的兜底。
  *   3. 紧急桶（仅未完成参与，命中第一个）：标记紧急(0) → 已逾期(1) →
- *      今/明日截止(2) → 其余(3)。已逾期排在标记紧急之后是 2026-09-22 产品口径
- *      「逾期的不搞特殊了……只是排序靠前，比紧急低一档」：逾期不再整卡换色，
- *      但仍在未完成的普通任务之前。
+ *      遗留问题来源(2) → 今/明日截止(3) → 其余(4)。已逾期排在标记紧急之后是
+ *      2026-09-22 产品口径「逾期的不搞特殊了……只是排序靠前，比紧急低一档」：
+ *      逾期不再整卡换色，但仍在未完成的普通任务之前；2026-09-24 产品口径
+ *      「把遗留问题排到已经逾期后面」再把遗留问题来源降到已逾期之后一档
+ *      （此前它是第 0 桶、排在标记紧急之前）。
  *   4. 优先级：紧急(0) → 高(1) → 普通(2)
- *   5. 遗留问题来源（仅未完成参与）：是(0) → 否(1)。2026-09-23 产品口径「遗留问题
- *      只需要比同优先级的高就行了」：从紧急桶最高档移到优先级之后，只在同优先级内
- *      提前，不再越过高优先级任务。
- *   6. 截止时间：due_at 升序，NULL 最后（用 'infinity' 归一，便于 keyset 比较）
- *   7. 任务 ID 升序：唯一兜底，保证刷新前后顺序稳定
+ *   5. 截止时间：due_at 升序，NULL 最后（用 'infinity' 归一，便于 keyset 比较）
+ *   6. 任务 ID 升序：唯一兜底，保证刷新前后顺序稳定
  *
  * 「今天 / 明天 / 已逾期」按 Asia/Shanghai 的日历日由服务端计算，与任务中心
  * dueToday 统计、任务看板 dueState 同一口径；前端不得按客户端时钟重算。
@@ -33,8 +32,6 @@ export interface TaskListSortKey {
   readonly completedAt: Date | null;
   readonly urgency: number;
   readonly priority: number;
-  /** 遗留问题来源；未完成恒为 0/1，已完成 / 已取消恒为 1（不参与比较）。 */
-  readonly leftover: number;
   readonly dueAt: Date | null;
   readonly taskId: number;
 }
@@ -45,18 +42,20 @@ export interface TaskListSortKey {
  * 载荷由 6 段变 7 段，旧游标继续使用会跳页 / 重项。
  * 2026-09-23 由 3 升到 4：删除「低」（LOW）档位后优先级序号由 0/1/2/3 收窄为 0/1/2，
  * 旧游标里遗留的 3（原「低」）在新口径下不再是任何任务的序号，继续使用会跳页 / 漏项。
- * 2026-09-23 由 4 升到 5：遗留问题来源从紧急桶最高档移到优先级之后的独立一级，
+ * 2026-09-23 由 4 升到 5（并行开发线）：遗留问题来源从紧急桶最高档移到优先级之后的独立一级，
  * 紧急桶序号由 0..4 收窄为 0..3、载荷由 7 段变 8 段，旧游标继续使用会跳页 / 漏项。
- * （更早两次：2 → 3 新增「完成时间倒序」一级；1 → 2 紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
+ * 2026-09-24 由 5 升到 6：两条并行开发线合并后统一采用「遗留问题来源回到紧急桶、排在已逾期之后」
+ * 的口径，紧急桶重排为「标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)」，
+ * 载荷回到 7 段；线上已签发的 v5（8 段）游标一律按无效游标拒绝。
+ * （更早三次：2 → 3 新增「完成时间倒序」一级；1 → 2 紧急桶重排，已逾期从 0 移到 2、遗留问题来源升到 0、标记紧急升到 1。）
  */
-export const TASK_LIST_SORT_KEY_VERSION = 5;
+export const TASK_LIST_SORT_KEY_VERSION = 6;
 
 interface TaskListSortExpressions {
   readonly statusGroup: PostgresFragment;
   readonly completedOrder: PostgresFragment;
   readonly urgency: PostgresFragment;
   readonly priority: PostgresFragment;
-  readonly leftover: PostgresFragment;
   readonly dueOrder: PostgresFragment;
 }
 
@@ -64,7 +63,7 @@ interface TaskListSortExpressions {
 type PostgresFragment = Fragment;
 
 /**
- * 排序键各列表达式。遗留问题来源的 EXISTS 命中 app.leftover_task_links 的 task_id
+ * 排序键各列表达式。紧急桶的 EXISTS 命中 app.leftover_task_links 的 task_id
  * 唯一索引，与前端 hasLeftoverSource 同源同口径（存在链接即视为遗留问题来源）。
  */
 export function taskListSortExpressions(sql: ISql): TaskListSortExpressions {
@@ -74,25 +73,16 @@ export function taskListSortExpressions(sql: ISql): TaskListSortExpressions {
              ELSE 2
            END`;
   const urgency = sql`CASE
-             WHEN t.work_status <> 'TODO' THEN 3
+             WHEN t.work_status <> 'TODO' THEN 4
              WHEN t.priority = 'URGENT' THEN 0
              WHEN t.due_at IS NOT NULL AND t.due_at < (
                date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
              ) THEN 1
+             WHEN EXISTS (SELECT 1 FROM app.leftover_task_links l WHERE l.task_id = t.id) THEN 2
              WHEN t.due_at IS NOT NULL AND t.due_at < (
                (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') + interval '2 days') AT TIME ZONE 'Asia/Shanghai'
-             ) THEN 2
-             ELSE 3
-           END`;
-  /**
-   * 遗留问题来源（2026-09-23 起独立成级，落在优先级之后）：EXISTS 命中
-   * app.leftover_task_links 的 task_id 唯一索引。非未完成分组恒 1，使这一级在
-   * 已完成 / 已取消分组内不参与比较（「已完成只看完成时间」的口径不变）。
-   */
-  const leftover = sql`CASE
-             WHEN t.work_status <> 'TODO' THEN 1
-             WHEN EXISTS (SELECT 1 FROM app.leftover_task_links l WHERE l.task_id = t.id) THEN 0
-             ELSE 1
+             ) THEN 3
+             ELSE 4
            END`;
   const priority = sql`CASE t.priority
              WHEN 'URGENT' THEN 0
@@ -106,13 +96,13 @@ export function taskListSortExpressions(sql: ISql): TaskListSortExpressions {
    */
   const completedOrder = sql`COALESCE(t.completed_at, '-infinity'::timestamptz)`;
   const dueOrder = sql`COALESCE(t.due_at, 'infinity'::timestamptz)`;
-  return { statusGroup, completedOrder, urgency, priority, leftover, dueOrder };
+  return { statusGroup, completedOrder, urgency, priority, dueOrder };
 }
 
 /** ORDER BY 片段（不含关键字本身）。 */
 export function taskListOrderBy(sql: ISql): PostgresFragment {
   const expressions = taskListSortExpressions(sql);
-  return sql`${expressions.statusGroup}, ${expressions.completedOrder} DESC, ${expressions.urgency}, ${expressions.priority}, ${expressions.leftover}, ${expressions.dueOrder}, t.id`;
+  return sql`${expressions.statusGroup}, ${expressions.completedOrder} DESC, ${expressions.urgency}, ${expressions.priority}, ${expressions.dueOrder}, t.id`;
 }
 
 /**
@@ -127,7 +117,7 @@ export function taskListKeysetPredicate(
   if (after === null) {
     return sql`TRUE`;
   }
-  const { statusGroup: g, urgency: u, priority: p, leftover: lo } = after;
+  const { statusGroup: g, urgency: u, priority: p } = after;
   const expressions = taskListSortExpressions(sql);
   const dueAtKey = sql`COALESCE(${after.dueAt}::timestamptz, 'infinity'::timestamptz)`;
   const completedAtKey = sql`COALESCE(${after.completedAt}::timestamptz, '-infinity'::timestamptz)`;
@@ -140,14 +130,10 @@ export function taskListKeysetPredicate(
         AND ${expressions.urgency} = ${u} AND ${expressions.priority} > ${p})
     OR (${expressions.statusGroup} = ${g} AND ${expressions.completedOrder} = ${completedAtKey}
         AND ${expressions.urgency} = ${u} AND ${expressions.priority} = ${p}
-        AND ${expressions.leftover} > ${lo})
+        AND ${expressions.dueOrder} > ${dueAtKey})
     OR (${expressions.statusGroup} = ${g} AND ${expressions.completedOrder} = ${completedAtKey}
         AND ${expressions.urgency} = ${u} AND ${expressions.priority} = ${p}
-        AND ${expressions.leftover} = ${lo} AND ${expressions.dueOrder} > ${dueAtKey})
-    OR (${expressions.statusGroup} = ${g} AND ${expressions.completedOrder} = ${completedAtKey}
-        AND ${expressions.urgency} = ${u} AND ${expressions.priority} = ${p}
-        AND ${expressions.leftover} = ${lo} AND ${expressions.dueOrder} = ${dueAtKey}
-        AND t.id > ${after.taskId})
+        AND ${expressions.dueOrder} = ${dueAtKey} AND t.id > ${after.taskId})
   )`;
 }
 
@@ -165,7 +151,6 @@ export async function taskListSortKeyFor(
                          t.completed_at AS "completedAt",
                          ${expressions.urgency} AS "urgency",
                          ${expressions.priority} AS "priority",
-                         ${expressions.leftover} AS "leftover",
                          t.due_at AS "dueAt"
                     FROM app.tasks t WHERE t.id = ${taskId}`;
   const row = rows[0];
@@ -178,13 +163,12 @@ export async function taskListSortKeyFor(
     completedAt: row.completedAt === null ? null : new Date(row.completedAt),
     urgency: Number(row.urgency),
     priority: Number(row.priority),
-    leftover: Number(row.leftover),
     dueAt: row.dueAt === null ? null : new Date(row.dueAt),
     taskId,
   };
 }
 
-/** 游标载荷文本：版本|状态分组|完成时间(ISO 或空)|紧急桶|优先级|遗留问题|截止(ISO 或空)|任务ID。 */
+/** 游标载荷文本：版本|状态分组|完成时间(ISO 或空)|紧急桶|优先级|截止(ISO 或空)|任务ID。 */
 export function encodeTaskListSortKey(key: TaskListSortKey): string {
   return [
     String(TASK_LIST_SORT_KEY_VERSION),
@@ -192,7 +176,6 @@ export function encodeTaskListSortKey(key: TaskListSortKey): string {
     key.completedAt === null ? "" : new Date(key.completedAt).toISOString(),
     String(key.urgency),
     String(key.priority),
-    String(key.leftover),
     key.dueAt === null ? "" : new Date(key.dueAt).toISOString(),
     String(key.taskId),
   ].join("|");
@@ -201,7 +184,7 @@ export function encodeTaskListSortKey(key: TaskListSortKey): string {
 /** 解析游标载荷；版本不符或字段非法时返回 null，由调用方按无效游标拒绝。 */
 export function parseTaskListSortKey(raw: string): TaskListSortKey | null {
   const parts = raw.split("|");
-  if (parts.length !== 8) {
+  if (parts.length !== 7) {
     return null;
   }
   const version = parts[0]!;
@@ -209,13 +192,12 @@ export function parseTaskListSortKey(raw: string): TaskListSortKey | null {
   const completedAt = parts[2]!;
   const urgency = parts[3]!;
   const priority = parts[4]!;
-  const leftover = parts[5]!;
-  const dueAt = parts[6]!;
-  const taskId = parts[7]!;
+  const dueAt = parts[5]!;
+  const taskId = parts[6]!;
   if (Number(version) !== TASK_LIST_SORT_KEY_VERSION) {
     return null;
   }
-  for (const value of [statusGroup, urgency, priority, leftover, taskId]) {
+  for (const value of [statusGroup, urgency, priority, taskId]) {
     if (!/^[0-9]+$/.test(value)) {
       return null;
     }
@@ -239,7 +221,6 @@ export function parseTaskListSortKey(raw: string): TaskListSortKey | null {
     completedAt: completedAtValue,
     urgency: Number(urgency),
     priority: Number(priority),
-    leftover: Number(leftover),
     dueAt: dueAtValue,
     taskId: taskIdValue,
   };

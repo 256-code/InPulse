@@ -490,13 +490,6 @@ export class ProjectMemberManagementService {
     if (check.kind === "not-found") {
       throw this.notFound();
     }
-    if (check.kind === "parent-not-active") {
-      throw new ProjectMemberManagementError(
-        409,
-        "PROJECT_MEMBER_PROJECT_ARCHIVED",
-        "项目已归档，不能变更项目成员",
-      );
-    }
     const project = await this.projects.findProject(tx, {
       projectId: input.projectId,
     });

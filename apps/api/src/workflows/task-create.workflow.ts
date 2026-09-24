@@ -45,8 +45,6 @@ export class TaskCreateWorkflow {
         "PROJECT_NOT_FOUND",
         "项目不存在或无法访问",
       );
-    if (access.kind === "parent-not-active")
-      throw new TaskManagementError(409, "PROJECT_ARCHIVED", "项目已归档");
     const moduleId =
       input.module.kind === "existing"
         ? input.module.id

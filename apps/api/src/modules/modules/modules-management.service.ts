@@ -10,14 +10,13 @@ import { PostgresUnitOfWork } from "../../database/unit-of-work.js";
 import { ActivityWritePort } from "../activity/index.js";
 import {
   PROJECT_ACCESS_QUERY_PORT,
-  ProjectRoleGateService,
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { SearchProjectionWritePort } from "../search/index.js";
 import { ModuleManagementRepository } from "./module-management.repository.js";
 
-export type ModuleOperation =
-  "createModule" | "updateModule" | "archiveModule" | "restoreModule";
+/** ADR-044：模块层面下线归档，模块命令只剩创建与更新。 */
+export type ModuleOperation = "createModule" | "updateModule";
 export class ModuleManagementError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422,
@@ -34,23 +33,15 @@ const missing = () =>
     "项目或模块不存在或无法访问",
   );
 export function assertModuleTransition(
-  operation: ModuleOperation,
-  current: Pick<ModuleItem, "rowVersion" | "status">,
+  current: Pick<ModuleItem, "rowVersion">,
   version: number,
 ): void {
+  // ADR-044：模块只有 ACTIVE 一种状态，模块命令的唯一冲突源是版本落后。
   if (current.rowVersion !== version)
     throw new ModuleManagementError(
       409,
       "MODULE_VERSION_CONFLICT",
       "模块版本已变化，请重新加载后编辑",
-    );
-  if (
-    current.status !== (operation === "restoreModule" ? "ARCHIVED" : "ACTIVE")
-  )
-    throw new ModuleManagementError(
-      409,
-      "MODULE_STATE_CONFLICT",
-      "模块状态不允许此操作",
     );
 }
 
@@ -66,8 +57,6 @@ export class ModulesManagementService {
     @Inject(ActivityWritePort) private readonly activity: ActivityWritePort,
     @Inject(SearchProjectionWritePort)
     private readonly search: SearchProjectionWritePort,
-    @Inject(ProjectRoleGateService)
-    private readonly roleGate: ProjectRoleGateService,
   ) {}
 
   async list(actorId: number, projectId: number) {
@@ -96,37 +85,15 @@ export class ModulesManagementService {
       !(await this.repository.find(tx, projectId, moduleId))
     )
       throw missing();
-    if (check.kind === "parent-not-active")
-      throw new ModuleManagementError(
-        409,
-        "MODULE_PROJECT_ARCHIVED",
-        "项目已归档，模块只读",
-      );
   }
 
   async replay(
     tx: TransactionContext,
     actorId: number,
     context: unknown,
-    options: { readonly requireManageRole?: boolean } = {},
   ): Promise<void> {
     const resource = moduleReplayContextSchema.parse(context);
     await this.authorize(tx, actorId, resource.projectId, resource.moduleId);
-    if (options.requireManageRole === true)
-      await this.requireManageRole(tx, actorId, resource.projectId);
-  }
-
-  /**
-   * ADR-033/ADR-039：模块归档/恢复的项目内管理门禁；系统管理员或本项目
-   * 任意活跃成员通过，非成员 404。
-   */
-  async requireManageRole(
-    tx: TransactionContext,
-    actorId: number,
-    projectId: number,
-  ): Promise<void> {
-    const role = await this.roleGate.manageRole(tx, actorId, projectId);
-    if (role === "NOT_MEMBER") throw missing();
   }
 
   async execute(
@@ -138,19 +105,10 @@ export class ModulesManagementService {
       moduleId?: number;
       version?: number;
       edit?: ModuleEditRequest;
-      reason?: string;
       requestId: string;
     },
   ): Promise<ModuleItem> {
     await this.authorize(tx, input.actorId, input.projectId, input.moduleId);
-    if (
-      input.operation === "archiveModule" ||
-      input.operation === "restoreModule"
-    )
-      await this.requireManageRole(tx, input.actorId, input.projectId);
-    // ADR-034：模块归档要求模块下所有任务已归档，功能无需归档。
-    if (input.operation === "archiveModule")
-      await this.assertAllTasksArchived(tx, input.projectId, input.moduleId!);
     const action = input.operation.replace("Module", "");
     let previous: ModuleItem | undefined;
     let result: ModuleItem;
@@ -170,11 +128,10 @@ export class ModulesManagementService {
         true,
       );
       if (!previous) throw missing();
-      assertModuleTransition(input.operation, previous, input.version!);
+      assertModuleTransition(previous, input.version!);
       const updated = await this.repository.update(tx, previous, {
         name: input.edit?.name ?? previous.name,
         description: input.edit?.description ?? previous.description,
-        status: input.operation === "archiveModule" ? "ARCHIVED" : "ACTIVE",
       });
       if (!updated)
         throw new ModuleManagementError(
@@ -194,7 +151,7 @@ export class ModulesManagementService {
       eventPayload: {
         before: previous ?? null,
         after: result,
-        reason: input.reason ?? null,
+        reason: null,
       },
       requestId: input.requestId,
     });
@@ -206,10 +163,10 @@ export class ModulesManagementService {
       sourceEntityId: result.id,
       activityType: `module.${action}`,
       actorId: input.actorId,
-      summary: `模块${{ create: "创建", update: "更新", archive: "归档", restore: "恢复" }[action] ?? action}：${result.name}`,
+      summary: `模块${{ create: "创建", update: "更新" }[action] ?? action}：${result.name}`,
       metadata: { moduleId: result.id },
       visibilityScope: "MEMBER",
-      sourceStatus: result.status,
+      sourceStatus: "ACTIVE",
       sourceRowVersion: result.rowVersion,
       occurredAt: new Date(result.updatedAt),
     });
@@ -221,33 +178,9 @@ export class ModulesManagementService {
       summary: result.description.slice(0, 5000),
       rawText: `${result.name}\n${result.description}`,
       visibilityScope: "MEMBER",
-      sourceStatus: result.status,
+      sourceStatus: "ACTIVE",
       sourceRowVersion: result.rowVersion,
     });
     return result;
-  }
-
-  /**
-   * ADR-034：模块归档要求模块下所有任务已归档；仍有未归档任务时返回 409，
-   * 由前端提示用户先处理任务。
-   */
-  private async assertAllTasksArchived(
-    tx: TransactionContext,
-    projectId: number,
-    moduleId: number,
-  ): Promise<void> {
-    const unarchived = await this.repository.countUnarchivedTasks(
-      tx,
-      projectId,
-      moduleId,
-    );
-    if (unarchived > 0)
-      throw new ModuleManagementError(
-        409,
-        "MODULE_ARCHIVE_TASKS_OPEN",
-        // ADR-034：任务「完成」即视为已收尾，提示里说明还剩多少 TODO 任务，
-        // 并指明可以做完成或归档两种动作。
-        `模块下仍有 ${unarchived} 个未完成、也未归档的任务，请先完成或归档该模块的全部任务再归档`,
-      );
   }
 }

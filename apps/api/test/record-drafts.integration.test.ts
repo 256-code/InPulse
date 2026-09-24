@@ -279,7 +279,7 @@ describe("F-17 independent drafts", () => {
     await failure(await http(path, "POST", actor, body, undefined, key), 404);
     await failure(await http(resource, "GET", actor), 404);
   });
-  it("waits for module archival then rejects draft creation atomically", async () => {
+  it("waits for the feature row lock then commits draft creation", async () => {
     const f = await fixture();
     let release!: () => void, acquired!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -288,8 +288,9 @@ describe("F-17 independent drafts", () => {
     const ready = new Promise<void>((resolve) => {
       acquired = resolve;
     });
+    // ADR-045：功能不再有归档只读态，持锁方只做一次改名。
     const archive = uow.run(async (tx) => {
-      await tx.sql`UPDATE app.modules SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.moduleId}`;
+      await tx.sql`UPDATE app.features SET name='持锁改名',row_version=row_version+1 WHERE id=${f.featureId}`;
       acquired();
       await gate;
     });
@@ -300,11 +301,10 @@ describe("F-17 independent drafts", () => {
         f.userId,
         f.projectId,
         f.moduleId,
-        { ...content, scopeType: "MODULE", impactFeatureIds: [] },
+        { ...content, scopeType: "FEATURE", featureId: f.featureId },
         randomUUID(),
       ),
     );
-    const outcome = expect(pending).rejects.toMatchObject({ status: 409 });
     try {
       await vi.waitFor(
         async () =>
@@ -319,10 +319,13 @@ describe("F-17 independent drafts", () => {
       release();
       await archive;
     }
-    await outcome;
+    await expect(pending).resolves.toMatchObject({
+      scopeType: "FEATURE",
+      featureId: f.featureId,
+    });
     expect(
       await client.sql`SELECT 1 FROM app.change_records WHERE project_id=${f.projectId}`,
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
   it("creates a real unnumbered draft, allows another member to edit, and emits no published data", async () => {
     const f = await fixture();
@@ -405,14 +408,15 @@ describe("F-17 independent drafts", () => {
         f.userId,
         f.projectId,
         f.moduleId,
-        { ...content, scopeType: "MODULE", impactFeatureIds: [] },
+        { ...content, scopeType: "FEATURE", featureId: f.featureId },
         randomUUID(),
       ),
     );
     await expect(
       service.read(other.userId, f.projectId, draft.id),
     ).rejects.toMatchObject({ status: 404 });
-    await client.sql`UPDATE app.modules SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.moduleId}`;
+    // ADR-045：功能不再有归档态，父级改名不影响草稿写入。
+    await client.sql`UPDATE app.features SET name='改名功能',row_version=row_version+1 WHERE id=${f.featureId}`;
     await expect(
       uow.run((tx) =>
         service.update(
@@ -425,7 +429,7 @@ describe("F-17 independent drafts", () => {
           randomUUID(),
         ),
       ),
-    ).rejects.toMatchObject({ status: 409 });
+    ).resolves.toMatchObject({ id: draft.id });
     expect(await service.read(f.userId, f.projectId, draft.id)).toMatchObject({
       id: draft.id,
     });
@@ -434,7 +438,7 @@ describe("F-17 independent drafts", () => {
       service.read(f.userId, f.projectId, draft.id),
     ).rejects.toMatchObject({ status: 404 });
   });
-  it("keeps independent MODULE impact snapshots and rejects foreign/new archived impacts", async () => {
+  it("keeps independent MODULE impact snapshots and rejects foreign impacts", async () => {
     const f = await fixture();
     const other = await fixture();
     await expect(
@@ -463,7 +467,7 @@ describe("F-17 independent drafts", () => {
         randomUUID(),
       ),
     );
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.featureId}`;
+    // ADR-045：功能不再有归档态，已有影响功能在编辑后原样保留，也可以再次引用。
     expect(
       await uow.run((tx) =>
         service.update(
@@ -488,7 +492,7 @@ describe("F-17 independent drafts", () => {
           randomUUID(),
         ),
       ),
-    ).rejects.toMatchObject({ status: 409 });
+    ).resolves.toMatchObject({ impactFeatureIds: [f.featureId] });
   });
   it("serializes concurrent edits and rolls back a failed audit with content and version", async () => {
     const f = await fixture();
@@ -822,7 +826,7 @@ describe("F-17 source drafts", () => {
       ).toEqual(history);
     },
   );
-  it("freezes MODULE impacts and handler despite later task changes and archived historical impacts", async () => {
+  it("freezes MODULE impacts and handler despite later task changes", async () => {
     const f = await taskFixture("MODULE");
     const draft = await uow.run((tx) =>
       workflow.execute(
@@ -842,7 +846,6 @@ describe("F-17 source drafts", () => {
       await tx.sql`DELETE FROM app.task_assignees WHERE task_id=${f.task.id}`;
       await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) SELECT ${f.task.id}, ${f.member}, project_id FROM app.tasks WHERE id=${f.task.id}`;
     });
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.featureId}`;
     const edited = await uow.run((tx) =>
       workflow.execute(
         tx,
@@ -875,7 +878,7 @@ describe("F-17 source drafts", () => {
       title: "已改名",
     });
   });
-  it("rejects foreign source identity and archived true parents, including replay", async () => {
+  it("rejects foreign source identity and revoked membership, including replay", async () => {
     const f = await taskFixture(),
       other = await taskFixture(),
       actor = await session(f.member),
@@ -909,12 +912,18 @@ describe("F-17 source drafts", () => {
       await http(f.url, "POST", { ...actor, csrf: "a".repeat(43) }, body, 1),
       401,
     );
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.featureId}`;
-    await failure(await http(f.url, "POST", actor, body, 1, key), 409);
-    await failure(
-      await http(f.url + "/" + saved.id, "PATCH", actor, content, 1),
-      409,
+    // ADR-045：功能不再有归档态，父级改名后草稿仍可写、同 Key 重放返回原响应。
+    await client.sql`UPDATE app.features SET name='改名功能',row_version=row_version+1 WHERE id=${f.featureId}`;
+    const replay = await http(f.url, "POST", actor, body, 1, key);
+    expect(replay.status, await replay.clone().text()).toBe(200);
+    const patched = await http(
+      f.url + "/" + saved.id,
+      "PATCH",
+      actor,
+      content,
+      1,
     );
+    expect(patched.status, await patched.clone().text()).toBe(200);
     expect((await workflow.read(f.member, f.path)).items).toHaveLength(1);
   });
   it("rolls back failed audit and accepts only one concurrent content edit", async () => {

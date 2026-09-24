@@ -135,9 +135,7 @@ export function matchesTaskBoardCard(
   }
   if (
     filters.assigneeId !== null &&
-    !card.assignees.some(
-      (assignee) => assignee.userId === filters.assigneeId,
-    )
+    !card.assignees.some((assignee) => assignee.userId === filters.assigneeId)
   ) {
     return false;
   }

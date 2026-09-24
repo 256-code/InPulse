@@ -139,39 +139,38 @@ function earliestOpenDueAt(group: MyTaskGroupItem): string | null {
 
 /**
  * 服务端 apps/api/src/modules/tasks/task-list-order.ts 的紧急桶：标记紧急 0 →
- * 已逾期 1 → 今/明日截止 2 → 其余 3。任务卡与组卡共用这一处判定：组卡的「紧急」
- * 取未完成分支最高一档，「截止」取未完成分支最早一条。遗留问题自 2026-09-23 起
- * 不再是紧急桶的一档，改在优先级之后单独比较（见 leftoverRankOf）。
+ * 已逾期 1 → 遗留问题来源 2 → 今/明日截止 3 → 其余 4。任务卡与组卡共用这一处判定：
+ * 组卡的「来源」不适用，「紧急」取未完成分支最高一档，「截止」取未完成分支最早一条。
+ * 2026-09-24 产品口径「把遗留问题排到已经逾期后面」：遗留问题来源由第 0 桶降到第 2 桶。
+ * （2026-09-24 两条并行开发线合并后统一采用本口径；另一条线曾把遗留问题来源挪出紧急桶、
+ * 改在优先级之后单独比较，已被本口径取代。）
  */
 function urgencyBucketOf(
   priority: MyTaskPriority | null,
   dueAt: string | null,
+  hasLeftoverSource: boolean,
 ): number {
   if (priority === "URGENT") return 0;
-  if (dueAt === null) return 3;
-  if (isBeforeTodayIso(dueAt)) return 1;
+  if (dueAt !== null && isBeforeTodayIso(dueAt)) return 1;
+  if (hasLeftoverSource) return 2;
+  if (dueAt === null) return 4;
   // 「今/明日截止」= 今天 0 点起、后天 0 点前，与日期文案的同日判定同一把尺子。
-  if (isWithinNextDaysIso(dueAt, 2)) return 2;
-  return 3;
+  if (isWithinNextDaysIso(dueAt, 2)) return 3;
+  return 4;
 }
 
 function taskUrgencyBucket(item: MyTaskListItem): number {
-  if (item.workStatus !== "TODO") return 3;
-  return urgencyBucketOf(item.priority, item.dueAt);
+  if (item.workStatus !== "TODO") return 4;
+  return urgencyBucketOf(item.priority, item.dueAt, item.hasLeftoverSource);
 }
 
 function taskGroupUrgencyBucket(group: MyTaskGroupItem): number {
-  if (isTaskGroupCompleted(group)) return 3;
-  return urgencyBucketOf(highestOpenPriority(group), earliestOpenDueAt(group));
-}
-
-/**
- * 服务端排序键第五级：遗留问题来源（2026-09-23 产品口径「遗留问题只需要比同优先级的
- * 高就行了」）。只在同优先级内提前，不再越过更高优先级的任务；已完成 / 已取消分组与
- * 聚合组恒为 1（服务端对非未完成同样归一为 1，这一级在那些分组内不参与比较）。
- */
-function leftoverRankOf(item: MyTaskListItem): number {
-  return item.workStatus === "TODO" && item.hasLeftoverSource ? 0 : 1;
+  if (isTaskGroupCompleted(group)) return 4;
+  return urgencyBucketOf(
+    highestOpenPriority(group),
+    earliestOpenDueAt(group),
+    false,
+  );
 }
 
 /** 服务端排序键第一级：未完成 0 → 已完成 1 → 已取消 2。 */
@@ -222,10 +221,9 @@ function compareGridRank(
 
 /**
  * 卡片视图与列表视图共用的一份顺序（2026-09-22 产品口径「（它们）同样是一个优先级的，
- * 按照截止日期从近到远排序」，同日追加「已完成按完成时间，越晚越排前面」；2026-09-23
- * 追加「遗留问题只需要比同优先级的高就行了」）：逐级比较「状态分组 → 完成时间倒序 →
- * 紧急桶 → 优先级 → 遗留问题 → 截止时间」，六级都取自服务端 task-list-order.ts 的
- * 排序键，组卡因此与任务卡混排，不再固定追加在网格 / 表格尾部。
+ * 按照截止日期从近到远排序」，同日追加「已完成按完成时间，越晚越排前面」）：逐级比较
+ * 「状态分组 → 完成时间倒序 → 紧急桶 → 优先级 → 截止时间」，五级都取自服务端
+ * task-list-order.ts 的排序键，组卡因此与任务卡混排，不再固定追加在网格 / 表格尾部。
  * 两侧仍是各自签名游标的分页结果，前端只在已加载页内按同一把尺子合并，不伪造跨页
  * 完整顺序；Array.prototype.sort 稳定，同键保持「任务在前、组保持 R-7 顺序」。
  */
@@ -982,7 +980,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         completedRankOf(item.workStatus, item.completedAt),
         taskUrgencyBucket(item),
         priorityRankOf(item.priority),
-        leftoverRankOf(item),
         dueRankOf(item.dueAt),
       ],
     }));
@@ -998,8 +995,6 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         0,
         taskGroupUrgencyBucket(group),
         taskGroupPriorityRank(group),
-        // 聚合组没有「遗留问题来源」这个事实，取 1，与无遗留问题的任务卡同档。
-        1,
         dueRankOf(earliestOpenDueAt(group)),
       ],
     })),
@@ -1357,8 +1352,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           {hasListContent ? (
             filters.display === "cards" ? (
               // 聚合组卡片与任务卡片同一网格混排，顺序由 gridEntries 统一决定
-              // （状态分组 → 紧急桶 → 优先级 → 遗留问题 → 截止时间近到远），
-              // 不再把组卡固定在尾部。
+              // （状态分组 → 紧急桶 → 优先级 → 截止时间近到远），不再把组卡固定在尾部。
               <div className="calm-task-grid">
                 {gridEntries.map((entry) =>
                   entry.kind === "task"

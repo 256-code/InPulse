@@ -15,8 +15,8 @@ import type { ProjectOverviewIteration } from "@features/project-overview/projec
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
 import {
-  resourceLifecycleLabel,
-  resourceLifecycleTone,
+  moduleLifecycleLabel,
+  moduleLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
@@ -29,10 +29,7 @@ import {
   ProjectWorkspaceModals,
   type ProjectWorkspaceModalKind,
 } from "@features/project-overview/ProjectWorkspaceModals";
-import {
-  canManageProjectResources,
-  useProjectDetail,
-} from "@features/projects/project-query";
+import { useProjectDetail } from "@features/projects/project-query";
 import { moduleErrorMessage, useModules } from "./module-query";
 import {
   ModuleEditorModal,
@@ -41,11 +38,9 @@ import {
 
 export function ModulesPageView({
   projectId,
-  isAdmin,
   client,
 }: {
   projectId: number;
-  isAdmin: boolean;
   client?: InpulseApiClient | undefined;
 }) {
   const { query } = useModules(projectId, client);
@@ -71,11 +66,6 @@ export function ModulesPageView({
     projectId,
   });
   const projectName = projectQuery.data?.project?.name ?? null;
-  // ADR-039：模块归档/恢复对系统管理员或本项目任意活跃成员开放。
-  const canArchive = canManageProjectResources(
-    isAdmin,
-    projectQuery.data?.currentUserRole ?? null,
-  );
   const overviewAdapter = useMemo(
     () => createProjectOverviewServerAdapter(client),
     [client],
@@ -157,10 +147,7 @@ export function ModulesPageView({
                 {query.data.items.map((item) => (
                   <article className="catalog-module-wrap" key={item.id}>
                     <div
-                      className={
-                        "calm-feature-card module-card" +
-                        (item.status === "ARCHIVED" ? " card-archived" : "")
-                      }
+                      className="calm-feature-card module-card"
                       onClick={(event) => {
                         if (!isCardClick(event)) return;
                         onOpenModule(item.id);
@@ -185,16 +172,12 @@ export function ModulesPageView({
                           <CalmBadge tone="violet">未分类</CalmBadge>
                         )}
                         <CalmBadge
-                          tone={resourceLifecycleTone(
-                            item.status,
+                          tone={moduleLifecycleTone(
                             item.stats.completedTaskCount,
                             "blue",
                           )}
                         >
-                          {resourceLifecycleLabel(
-                            item.status,
-                            item.stats.completedTaskCount,
-                          )}
+                          {moduleLifecycleLabel(item.stats.completedTaskCount)}
                         </CalmBadge>
                       </div>
                       <p>{item.description || "暂无模块说明"}</p>
@@ -205,22 +188,13 @@ export function ModulesPageView({
                         </span>
                         {/* 整卡点击已经进入模块页，卡内只留「编辑模块」一个动作：
                             查看功能由整卡点击承担，模块任务在模块页「模块级任务」
-                            页签，归档/恢复在编辑弹窗底部（ADR-034 同款收敛）。 */}
-                        {item.status === "ACTIVE" ? (
-                          <Button
-                            className="text-button"
-                            onClick={() => open("update", item)}
-                          >
-                            编辑模块
-                          </Button>
-                        ) : canArchive ? (
-                          <Button
-                            className="text-button"
-                            onClick={() => open("restore", item)}
-                          >
-                            恢复模块
-                          </Button>
-                        ) : null}
+                            页签。ADR-044：模块已无归档/恢复动作。 */}
+                        <Button
+                          className="text-button"
+                          onClick={() => open("update", item)}
+                        >
+                          编辑模块
+                        </Button>
                       </div>
                     </div>
                   </article>
@@ -267,8 +241,6 @@ export function ModulesPageView({
         request={request}
         onClose={() => setRequest(null)}
         onSaved={() => setSuccess(true)}
-        canArchive={canArchive}
-        onLifecycleRequest={(action, item) => open(action, item)}
       />
     </>
   );

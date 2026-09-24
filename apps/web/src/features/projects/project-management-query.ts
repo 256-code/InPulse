@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -9,29 +9,18 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
-export type ProjectManagementAction =
-  "update" | "status" | "archive" | "restore";
+export type ProjectManagementAction = "update" | "status";
 
 export function describeProjectManagementError(
   error: unknown,
   action: ProjectManagementAction,
 ): string {
-  const actionLabel =
-    action === "update"
-      ? "编辑"
-      : action === "status"
-        ? "状态变更"
-        : action === "archive"
-          ? "归档"
-          : "恢复";
+  const actionLabel = action === "update" ? "编辑" : "状态变更";
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "登录状态已失效，请重新登录后再操作项目。";
     }
     if (error.status === 403) {
-      if (error.code === "ADMIN_REQUIRED") {
-        return "只有系统管理员可以归档或恢复项目。";
-      }
       return "安全校验未通过，请刷新页面后重试。";
     }
     if (error.status === 404) return "项目不存在或你已无权访问。";
@@ -39,14 +28,11 @@ export function describeProjectManagementError(
       if (error.code === "PROJECT_VERSION_CONFLICT") {
         return "项目内容已被他人更新，请加载最新版本后重试。";
       }
-      if (error.code === "PROJECT_ARCHIVED") {
-        return "项目已归档，项目只读；需要先恢复后才能编辑。";
-      }
       if (error.code === "PROJECT_STATE_CONFLICT") {
-        if (action === "status") return "项目已处于所选状态，请刷新后重试。";
-        return action === "archive"
-          ? "项目已归档，不能重复归档。"
-          : "项目当前未归档，无法恢复。";
+        return "项目已处于所选状态，请刷新后重试。";
+      }
+      if (error.code === "PROJECT_MAINTENANCE_TASKS_OPEN") {
+        return "项目下仍有未完成、也未归档的任务，请先完成或归档全部任务再切换为维护中。";
       }
       if (error.code === "PROJECT_STATUS_NOT_STARTED_LOCKED") {
         return "项目里已经出现过已完成任务，不能再退回「未开始」。";
@@ -57,7 +43,7 @@ export function describeProjectManagementError(
       return "项目状态已变化，请刷新列表后重试。";
     }
     if (error.status === 422) {
-      return "请检查项目名称、描述或归档原因。";
+      return "请检查项目名称或描述。";
     }
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
   }
@@ -118,8 +104,9 @@ export function useUpdateProject(projectId: number, client?: InpulseApiClient) {
 }
 
 /**
- * ADR-035/ADR-039：本项目任意活跃成员或系统管理员手动切换项目生命周期状态。
- * 归档与恢复不走这里，仍由归档流程负责；「维护中」不通知，
+ * ADR-039/ADR-043：本项目任意活跃成员或系统管理员手动切换项目生命周期状态；
+ * 项目只有未开始 / 进行中 / 维护中三态，归档与恢复已随项目归档一并下线。
+ * 进入维护中要求项目下任务全部收尾（否则 409），「维护中」本身不通知，
  * 「未开始 → 进行中」会由服务端通知全体活跃成员。
  */
 export function useChangeProjectStatus(
@@ -145,226 +132,6 @@ export function useChangeProjectStatus(
         projectId,
         { status: input.status },
         { headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion) },
-      );
-    },
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-}
-
-export function useArchiveProject(
-  projectId: number,
-  client?: InpulseApiClient,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  const cache = useQueryClient();
-  const retryKey = useRetryKey();
-
-  return useMutation({
-    retry: false,
-    mutationFn: async (input: {
-      readonly reason: string;
-      readonly rowVersion: number;
-    }) => {
-      const key = retryKey(
-        JSON.stringify([projectId, input.rowVersion, input.reason]),
-        "project-archive",
-      );
-      const csrf = await api.issueCsrfToken();
-      return api.archiveProject(
-        projectId,
-        { reason: input.reason },
-        { headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion) },
-      );
-    },
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-}
-
-export function useRestoreProject(
-  projectId: number,
-  client?: InpulseApiClient,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  const cache = useQueryClient();
-  const retryKey = useRetryKey();
-
-  return useMutation({
-    retry: false,
-    mutationFn: async (input: {
-      readonly reason: string;
-      readonly rowVersion: number;
-    }) => {
-      const key = retryKey(
-        JSON.stringify([projectId, input.rowVersion, input.reason]),
-        "project-restore",
-      );
-      const csrf = await api.issueCsrfToken();
-      return api.restoreProject(
-        projectId,
-        { reason: input.reason },
-        { headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion) },
-      );
-    },
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-}
-
-export function useProjectArchivePreview(
-  projectId: number | null,
-  client?: InpulseApiClient,
-  enabled = true,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  return useQuery({
-    queryKey: ["project-archive-preview", projectId],
-    queryFn: ({ signal }) =>
-      api.getProjectArchivePreview(projectId as number, { signal }),
-    retry: false,
-    enabled:
-      enabled &&
-      projectId !== null &&
-      Number.isInteger(projectId) &&
-      projectId > 0,
-  });
-}
-
-export type ProjectArchiveRequestAction = "request" | "approve" | "reject";
-
-/** ADR-034：项目归档申请与审核的错误文案；码值来自 Route Registry。 */
-export function describeProjectArchiveRequestError(
-  error: unknown,
-  action: ProjectArchiveRequestAction,
-): string {
-  const fallback =
-    action === "request"
-      ? "归档申请提交失败，请稍后重试。"
-      : "归档申请审核失败，请稍后重试。";
-  if (error instanceof ApiError) {
-    if (error.status === 401) return "登录状态已失效，请重新登录后再操作。";
-    if (error.status === 403) {
-      if (error.code === "ADMIN_REQUIRED")
-        return "只有系统管理员可以审核项目归档申请。";
-      return "安全校验未通过，请刷新页面后重试。";
-    }
-    if (error.status === 404) return "项目或归档申请不存在，可能已被处理。";
-    if (error.status === 409) {
-      if (error.code === "PROJECT_ARCHIVE_TASKS_OPEN")
-        return "项目下仍有未完成、也未归档的任务，请先在任务弹窗底部完成或归档全部任务再申请。";
-      if (error.code === "PROJECT_ARCHIVE_REQUEST_EXISTS")
-        return "该项目已有待审核的归档申请，请等待系统管理员审核。";
-      if (error.code === "PROJECT_ARCHIVE_REQUEST_DECIDED")
-        return "该归档申请已被处理，请刷新列表查看最新状态。";
-      if (error.code === "PROJECT_VERSION_CONFLICT")
-        return "项目内容已被他人更新，请刷新列表后重试。";
-      return "项目状态已变化，请刷新列表后重试。";
-    }
-    if (error.status === 422) return "请检查归档原因或审核批注。";
-    if (error.status === 429) return "请求过于频繁，请稍后重试。";
-  }
-  return fallback;
-}
-
-/** 申请与审核都不要求 If-Match，只带 CSRF 与幂等键。 */
-function archiveRequestHeaders(csrfToken: string, idempotencyKey: string) {
-  return {
-    "x-csrf-token": csrfToken,
-    "Idempotency-Key": idempotencyKey,
-  };
-}
-
-/**
- * ADR-034/ADR-039：本项目任意活跃成员或系统管理员发起归档申请；申请不改变项目状态，
- * 只有系统管理员批准后才归档。
- */
-export function useRequestProjectArchive(
-  projectId: number,
-  client?: InpulseApiClient,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  const cache = useQueryClient();
-  const retryKey = useRetryKey();
-
-  return useMutation({
-    retry: false,
-    mutationFn: async (input: { readonly reason: string }) => {
-      const key = retryKey(
-        JSON.stringify([projectId, input.reason]),
-        "project-archive-request",
-      );
-      const csrf = await api.issueCsrfToken();
-      return api.requestProjectArchive(
-        projectId,
-        { reason: input.reason },
-        { headers: archiveRequestHeaders(csrf.csrfToken, key) },
-      );
-    },
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-}
-
-/** ADR-034：只有系统管理员能批准归档；批准按 If-Match 版本直接归档项目。 */
-export function useApproveProjectArchive(
-  projectId: number,
-  client?: InpulseApiClient,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  const cache = useQueryClient();
-  const retryKey = useRetryKey();
-
-  return useMutation({
-    retry: false,
-    mutationFn: async (input: {
-      readonly requestId: number;
-      readonly rowVersion: number;
-    }) => {
-      const key = retryKey(
-        JSON.stringify([projectId, input.requestId, input.rowVersion]),
-        "project-archive-approve",
-      );
-      const csrf = await api.issueCsrfToken();
-      return api.approveProjectArchive(projectId, input.requestId, {
-        headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion),
-      });
-    },
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-}
-
-/** ADR-034：系统管理员驳回申请；项目状态不变，批注可选。 */
-export function useRejectProjectArchive(
-  projectId: number,
-  client?: InpulseApiClient,
-) {
-  const api = useMemo(() => client ?? createApiClient(), [client]);
-  const cache = useQueryClient();
-  const retryKey = useRetryKey();
-
-  return useMutation({
-    retry: false,
-    mutationFn: async (input: {
-      readonly requestId: number;
-      readonly note: string;
-    }) => {
-      const key = retryKey(
-        JSON.stringify([projectId, input.requestId, input.note]),
-        "project-archive-reject",
-      );
-      const csrf = await api.issueCsrfToken();
-      return api.rejectProjectArchive(
-        projectId,
-        input.requestId,
-        { note: input.note },
-        { headers: archiveRequestHeaders(csrf.csrfToken, key) },
       );
     },
     onSuccess: () => {

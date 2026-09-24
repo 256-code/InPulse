@@ -64,12 +64,9 @@ export function RecordDetailModal({
 }: RecordDetailModalProps) {
   const { user } = useAuth();
   const open = record !== null;
-  // 只在弹层打开时查项目状态：ADR-035 下已归档项目只读；真正的写权限由服务端再校验。
+  // 只在弹层打开时查项目状态：ADR-043 下项目三态都可写；真正的写权限由服务端再校验。
   const project = useProjectDetail({ client: api, projectId, enabled: open });
-  const writable =
-    open &&
-    project.data !== undefined &&
-    project.data.project.status !== "ARCHIVED";
+  const writable = open && project.data !== undefined;
   const voidedForMember =
     record !== null && record.recordStatus === "VOID" && user?.isAdmin !== true;
   const links = record?.externalLinks ?? [];

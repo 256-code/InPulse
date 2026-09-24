@@ -7,13 +7,7 @@ import type {
   ProjectListItem,
 } from "@generated/api";
 import { CreateProjectModal } from "./CreateProjectModal";
-import {
-  ArchiveProjectModal,
-  EditProjectModal,
-  RequestProjectArchiveModal,
-  RestoreProjectModal,
-  ReviewProjectArchiveModal,
-} from "./ProjectManagementModals";
+import { EditProjectModal } from "./ProjectManagementModals";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -76,16 +70,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   const [editing, setEditing] = useState<ProjectItem | null>(null);
   const [editingRole, setEditingRole] =
     useState<ProjectListItem["currentUserRole"]>(null);
-  const [archiving, setArchiving] = useState<ProjectItem | null>(null);
-  const [restoring, setRestoring] = useState<ProjectItem | null>(null);
   const [managementSuccess, setManagementSuccess] = useState<string | null>(
     null,
   );
-  const [requesting, setRequesting] = useState<ProjectListItem | null>(null);
-  const [reviewing, setReviewing] = useState<{
-    readonly project: ProjectListItem;
-    readonly decision: "approve" | "reject";
-  } | null>(null);
 
   return (
     <>
@@ -214,10 +201,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             {[...projects].map((project) => (
               <article
                 key={project.id}
-                className={
-                  "project-card" +
-                  (project.status === "ARCHIVED" ? " card-archived" : "")
-                }
+                className="project-card"
                 onClick={(event) => {
                   if (!isCardClick(event)) return;
                   onOpenModules?.(project.id);
@@ -283,81 +267,6 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     >
                       编辑
                     </Button>
-                    {isAdmin ? (
-                      project.status !== "ARCHIVED" ? (
-                        <Button
-                          className="danger-button"
-                          data-testid={`archive-project-${project.id}`}
-                          onClick={() => setArchiving(project)}
-                        >
-                          归档
-                        </Button>
-                      ) : (
-                        <Button
-                          className="text-button"
-                          data-testid={`restore-project-${project.id}`}
-                          onClick={() => setRestoring(project)}
-                        >
-                          恢复
-                        </Button>
-                      )
-                    ) : null}
-                    {isAdmin && project.pendingArchiveRequest ? (
-                      <span
-                        className="card-pending-note"
-                        data-testid={"archive-request-info-" + project.id}
-                      >
-                        待审归档申请：
-                        {project.pendingArchiveRequest.requestedByName}
-                      </span>
-                    ) : null}
-                    {isAdmin &&
-                    project.status !== "ARCHIVED" &&
-                    project.pendingArchiveRequest ? (
-                      <>
-                        <Button
-                          className="danger-button"
-                          data-testid={"approve-archive-request-" + project.id}
-                          onClick={() =>
-                            setReviewing({ project, decision: "approve" })
-                          }
-                        >
-                          批准归档
-                        </Button>
-                        <Button
-                          className="text-button"
-                          data-testid={"reject-archive-request-" + project.id}
-                          onClick={() =>
-                            setReviewing({ project, decision: "reject" })
-                          }
-                        >
-                          驳回申请
-                        </Button>
-                      </>
-                    ) : null}
-                    {!isAdmin &&
-                    project.status !== "ARCHIVED" &&
-                    canManageProjectResources(
-                      isAdmin,
-                      project.currentUserRole,
-                    ) ? (
-                      project.pendingArchiveRequest ? (
-                        <span
-                          className="card-pending-note"
-                          data-testid={"archive-request-pending-" + project.id}
-                        >
-                          归档申请审核中
-                        </span>
-                      ) : (
-                        <Button
-                          className="text-button"
-                          data-testid={"request-archive-" + project.id}
-                          onClick={() => setRequesting(project)}
-                        >
-                          申请归档
-                        </Button>
-                      )
-                    ) : null}
                   </div>
                   {isAdmin && onOpenMembers ? (
                     <Button
@@ -417,67 +326,6 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             setEditing(updated);
             setManagementSuccess(
               `项目「${updated.name}」状态已改为${projectLifecycleLabel(updated.status)}，当前版本 ${updated.rowVersion}。`,
-            );
-          }}
-        />
-      ) : null}
-      {archiving ? (
-        <ArchiveProjectModal
-          open
-          project={archiving}
-          client={client}
-          onClose={() => setArchiving(null)}
-          onArchived={(updated) => {
-            setArchiving(null);
-            setManagementSuccess(
-              `项目「${updated.name}」已归档，历史仍可查看。`,
-            );
-          }}
-        />
-      ) : null}
-      {restoring ? (
-        <RestoreProjectModal
-          open
-          project={restoring}
-          client={client}
-          onClose={() => setRestoring(null)}
-          onRestored={(updated) => {
-            setRestoring(null);
-            setManagementSuccess(`项目「${updated.name}」已恢复为进行中状态。`);
-          }}
-        />
-      ) : null}
-      {requesting ? (
-        <RequestProjectArchiveModal
-          open
-          project={requesting}
-          client={client}
-          onClose={() => setRequesting(null)}
-          onRequested={(created) => {
-            setRequesting(null);
-            setManagementSuccess(
-              `已提交项目归档申请（申请编号 ${created.id}），等待系统管理员审核。`,
-            );
-          }}
-        />
-      ) : null}
-      {reviewing ? (
-        <ReviewProjectArchiveModal
-          open
-          project={reviewing.project}
-          decision={reviewing.decision}
-          client={client}
-          onClose={() => setReviewing(null)}
-          onApproved={(updated) => {
-            setReviewing(null);
-            setManagementSuccess(
-              `项目「${updated.name}」已归档，历史仍可查看。`,
-            );
-          }}
-          onRejected={() => {
-            setReviewing(null);
-            setManagementSuccess(
-              "已驳回该项目的归档申请，项目保持进行中状态。",
             );
           }}
         />

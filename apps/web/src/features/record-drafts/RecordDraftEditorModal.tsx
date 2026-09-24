@@ -336,15 +336,12 @@ export function RecordDraftEditorModal({
     setScopeType(defaultFeatureId ? "FEATURE" : "MODULE");
     setImpacts([]);
   }, [target, reset, mutation, defaultModuleId, defaultFeatureId]);
-  // ADR-035：项目四态下只有已归档只读；目标项目状态未知时不可写。
+  // ADR-043：项目只有未开始 / 进行中 / 维护中且都可写；目标项目状态未知时不可写。
   const formProjectStatus = projects.data?.items.find(
     (p) => p.id === formProjectId,
   )?.status;
   const canWrite =
-    writable &&
-    formProjectId > 0 &&
-    formProjectStatus !== undefined &&
-    formProjectStatus !== "ARCHIVED";
+    writable && formProjectId > 0 && formProjectStatus !== undefined;
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
   const reload = async () => {
@@ -353,7 +350,7 @@ export function RecordDraftEditorModal({
       mutation.error instanceof ApiError &&
       mutation.error.code === "RECORD_PARENT_ARCHIVED"
     ) {
-      setReloadError("所属范围已归档，草稿只读，输入已保留。");
+      setReloadError("来源任务已归档，草稿只读，输入已保留。");
       return;
     }
     setReloading(true);
@@ -575,10 +572,10 @@ export function RecordDraftEditorModal({
                     setFeatureId(0);
                     setImpacts([]);
                   }}
+                  // ADR-044：模块已无归档只读态，模块选项全部可选。
                   options={(modules.data?.items ?? []).map((m) => ({
                     value: m.id,
                     label: m.name,
-                    disabled: m.status !== "ACTIVE",
                   }))}
                 />
               </label>
@@ -609,7 +606,6 @@ export function RecordDraftEditorModal({
                     options={(features.data?.items ?? []).map((f) => ({
                       value: f.id,
                       label: f.name,
-                      disabled: f.status !== "ACTIVE",
                     }))}
                   />
                 </label>
@@ -628,7 +624,6 @@ export function RecordDraftEditorModal({
                     options={(features.data?.items ?? []).map((f) => ({
                       value: f.id,
                       label: f.name,
-                      disabled: f.status !== "ACTIVE",
                     }))}
                   />
                 </fieldset>

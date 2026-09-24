@@ -475,24 +475,22 @@ for (const feature of [true, false])
       details: { task: { taskId: result.taskId } },
     });
   });
-it("inherits active MODULE impacts, excludes archived history and permits all-archived empty inheritance", async () => {
+it("inherits every impacted feature because impacts can no longer be archived (ADR-045)", async () => {
   const f = await published(),
     [second] = await db.sql<
       { id: number }[]
-    >`INSERT INTO app.features(project_id,module_id,code,name,created_by,status,archived_at) VALUES(${f.projectId},${f.moduleId},${f.code + "-F-2"},'历史影响',${f.actor},'ARCHIVED',now()) RETURNING id`;
+    >`INSERT INTO app.features(project_id,module_id,code,name,created_by) VALUES(${f.projectId},${f.moduleId},${f.code + "-F-2"},'后加影响',${f.actor}) RETURNING id`;
   await db.sql`INSERT INTO app.change_record_feature_impacts(module_id,project_id,change_record_id,feature_id) VALUES(${f.moduleId},${f.projectId},${f.record.id},${second!.id})`;
   const preview = await uow.run((tx) =>
     leftover.preview(tx, f.actor, f.projectId, f.record.id),
   );
+  // 功能层下线归档后，记录上的全部影响都会原样继承，不再有 archived history 排除分支。
   expect(preview.inheritedImpacts.map((i) => i.id)).toEqual([
     f.impactFeatureId,
+    second!.id,
   ]);
-  expect(preview.excludedImpacts.map((i) => i.id)).toEqual([second!.id]);
   const result = await convert(f, await inputFor(f));
-  expect(result.impactFeatureIds).toEqual([f.impactFeatureId]);
-  const g = await published();
-  await db.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${g.impactFeatureId}`;
-  expect((await convert(g, await inputFor(g))).impactFeatureIds).toEqual([]);
+  expect(result.impactFeatureIds).toEqual([f.impactFeatureId, second!.id]);
   expect(
     (await uow.run((tx) =>
       new PublishedRecordRepository().find(tx, f.projectId, f.record.id),
@@ -528,27 +526,6 @@ it("rejects stale record/item versions, foreign item, non-member assignee and hi
       .status,
   ).toBe(422);
 });
-for (const field of ["project", "module", "feature"] as const)
-  it(`rejects archived real ${field} parent without conversion`, async () => {
-    const f = await published(true),
-      input = await inputFor(f);
-    const table =
-        field === "project"
-          ? "projects"
-          : field === "module"
-            ? "modules"
-            : "features",
-      id =
-        field === "project"
-          ? f.projectId
-          : field === "module"
-            ? f.moduleId
-            : f.featureId!;
-    await db.sql`UPDATE ${db.sql("app." + table)} SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${id}`;
-    const before = await snapshot(f);
-    await expect(convert(f, input)).rejects.toMatchObject({ status: 409 });
-    expect(await snapshot(f)).toEqual(before);
-  });
 for (const effect of [
   "audit",
   "activity",
@@ -789,54 +766,6 @@ it("requires an explicit leftover id once a record carries more than one active 
     ),
   ).toMatchObject({ leftoverItemId: ids[1], content: "新发现的遗留" });
 });
-async function waitBlocked() {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const [row] = await db.sql<
-      { n: number }[]
-    >`SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name='inpulse-f20-conversion' AND wait_event_type='Lock'`;
-    if (row!.n > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw Error("conversion did not wait for a real PostgreSQL lock");
-}
-for (const feature of [false, true])
-  it(`rejects an archive committed while ${feature ? "FEATURE parent" : "MODULE impact"} conversion waits, before taking the record lock`, async () => {
-    const f = await published(feature),
-      input = await inputFor(f),
-      actor = await session(f.actor);
-    let release!: () => void, ready!: () => void;
-    const gate = new Promise<void>((r) => (release = r)),
-      held = new Promise<void>((r) => (ready = r));
-    const archiver = uow.run(async (tx) => {
-      await tx.sql`SELECT id FROM app.features WHERE id=${f.impactFeatureId} FOR UPDATE`;
-      ready();
-      await gate;
-      await tx.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.impactFeatureId}`;
-    });
-    await held;
-    const pending = post(f, actor, input);
-    try {
-      await waitBlocked();
-      await uow.run(async (tx) => {
-        await tx.sql`SELECT id FROM app.change_records WHERE id=${f.record.id} FOR UPDATE NOWAIT`;
-      });
-    } finally {
-      release();
-    }
-    await archiver;
-    const response = await pending;
-    expect(response.status, await response.clone().text()).toBe(409);
-    expect(await response.json()).toMatchObject({
-      code: feature ? "LEFTOVER_PARENT_ARCHIVED" : "LEFTOVER_IMPACTS_CHANGED",
-    });
-    expect(
-      await db.sql`SELECT task_id FROM app.leftover_task_links WHERE project_id=${f.projectId}`,
-    ).toHaveLength(0);
-    if (!feature)
-      expect((await convert(f, await inputFor(f))).impactFeatureIds).toEqual(
-        [],
-      );
-  });
 it("checks current HTTP access for preview, task source, foreign records and duplicate target references", async () => {
   const f = await published(),
     input = await inputFor(f),

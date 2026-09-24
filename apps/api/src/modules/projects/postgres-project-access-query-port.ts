@@ -127,27 +127,31 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
     },
     isSystemAdmin: boolean,
   ): ProjectWriteCheckResult {
+    const status = asProjectLifecycleStatus(project.status);
+    if (status === undefined) {
+      // 出现三态之外的脏值时按不可写处理，fail-closed，不放行写入。
+      return { kind: "not-found" };
+    }
     const resource: ProjectForWriteResource = {
       projectId: project.id,
-      status: asProjectLifecycleStatus(project.status),
+      status,
       rowVersion: project.rowVersion,
       isSystemAdmin,
     };
-    return resource.status === "ARCHIVED"
-      ? { kind: "parent-not-active", resource }
-      : { kind: "allowed", resource };
+    return { kind: "allowed", resource };
   }
 }
 
 /**
- * 数据库 status 是 text 列，这里收敛成四态联合类型；出现未知值时按「已归档」处理，
- * 让写前检查保持 fail-closed，不因脏数据放行写入。
+ * 数据库 status 是 text 列，这里收敛成项目三态联合类型；出现未知值时返回
+ * `undefined`，由调用方按不可写处理，保持 fail-closed，不因脏数据放行写入。
  */
-function asProjectLifecycleStatus(value: string): ProjectLifecycleStatus {
+function asProjectLifecycleStatus(
+  value: string,
+): ProjectLifecycleStatus | undefined {
   return value === "NOT_STARTED" ||
     value === "ACTIVE" ||
-    value === "MAINTENANCE" ||
-    value === "ARCHIVED"
+    value === "MAINTENANCE"
     ? value
-    : "ARCHIVED";
+    : undefined;
 }

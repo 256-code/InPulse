@@ -852,39 +852,4 @@ it("rolls back a failed revision and rejects publication after an actual parent-
   expect(
     await db.sql`SELECT 1 FROM app.change_record_versions WHERE record_id=${v1.id}`,
   ).toHaveLength(1);
-  const g = await fixture();
-  let release!: () => void, acquired!: () => void;
-  const gate = new Promise<void>((r) => {
-      release = r;
-    }),
-    ready = new Promise<void>((r) => {
-      acquired = r;
-    });
-  const archive = uow.run(async (tx) => {
-    await tx.sql`UPDATE app.modules SET status='ARCHIVED',archived_at=clock_timestamp(),row_version=row_version+1 WHERE id=${g.moduleId}`;
-    acquired();
-    await gate;
-  });
-  await ready;
-  const pending = publish(g),
-    outcome = expect(pending).rejects.toMatchObject({
-      status: 409,
-      code: "RECORD_PARENT_ARCHIVED",
-    });
-  try {
-    await vi.waitFor(
-      async () =>
-        expect(
-          (
-            await db.sql`SELECT pid FROM pg_stat_activity WHERE application_name='inpulse-f18-publish' AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0`
-          ).length,
-        ).toBeGreaterThan(0),
-      { timeout: 4000, interval: 30 },
-    );
-  } finally {
-    release();
-    await archive;
-  }
-  await outcome;
-  await clean(g);
 });

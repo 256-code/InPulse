@@ -99,9 +99,16 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       ).toBeVisible();
       await expect(page.getByText("1 个任务")).toBeVisible();
       await moduleCard.click();
+      // 单份引用：功能页只展示模块级任务的引用，状态流转仍按 taskWritable=false
+      // 关闭。旧断言要求「编辑任务」禁用；72c0714 起归档/恢复入口对全部项目成员
+      // 开放，该按钮改为可点，回到真实归属页请用「打开模块任务」。
+      const referenced = page.getByRole("dialog", { name: "任务详情" });
       await expect(
-        page.getByRole("button", { name: "编辑任务" }),
+        referenced.getByRole("button", { name: "完成任务" }),
       ).toBeDisabled();
+      await expect(
+        referenced.getByRole("link", { name: "打开模块任务" }),
+      ).toBeVisible();
     }
     await page.getByRole("link", { name: "打开模块任务" }).click();
     await page.getByRole("button", { name: "编辑任务" }).click();

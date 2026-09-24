@@ -29,56 +29,6 @@
       "fingerprint": "b1905da65954165a5fa8be9fb052a021d34435c345f1c6392d35a1ee4d539712"
     }
   ],
-  "approveProjectArchive": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "317f0a6ce3d78c0bf858fe0226330285073bd9c1885ce4692e8be6bc5d00fcb7"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "755fa637a2eb5bcc6c3b12059f4b16650a8fa29ea9aaf685ba9ba2ac4550daee"
-    }
-  ],
-  "archiveFeature": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "7c6dc946f388359612fa98fe597e2c395af0a3efd9b7747efa55bba9e34062c1"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "c11f18115759cb4a8a5b2b2e5db956afd225a7426cdea63c529aadc4e2192cae"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "bf818cbcbdac516a44ac168f744e52b51e38c8eb1ca3ee01ce6f018c6c678846"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "5bdb09177f6788dfe6bdd8e12047e6493b8218d86f5265b416bd628a23d04bdf"
-    }
-  ],
-  "archiveModule": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "c0a4b256606f5bd1d5e6063481cde614ef99b23d3fe64aab561f654b7593eeeb"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "0c4c48038d311ee08d1e70467a10f99f835b3581c2a483b406b6411fd5bf3db4"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "c3d7bea397f63de02d6e932a079ec7ce290befe96d447c660554d369f21b1427"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "cbfc0fbc1a3294f69f16cb95645708dafa6257c4b0c2a09b7a19b8430058d032"
-    },
-    {
-      "version": "1.4.0",
-      "fingerprint": "29532a69887b56b5bee7e6af8dcd54d1a3a30e567ca5f64d6b331f8d756a8876"
-    }
-  ],
   "archiveModuleTask": [
     {
       "version": "1.0.0",
@@ -87,32 +37,6 @@
     {
       "version": "2.0.0",
       "fingerprint": "f81dfa224ded704d1703e6963a13f386237609a55aa24a69e624850b4136b28d"
-    }
-  ],
-  "archiveProject": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "4eb7e9b0f46438afef9bc50ed7a33bf04c482153439af71dd9e97a44b3c5d869"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "b35cd59b90d139fdc562e7c5631e999c9ba06effb47fa4686ad172680756d497"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "fbbdc5327a1b0d985d333e7097bb2babb71773440a63be56f1d9b5a48a786e6e"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "8adb9f496011a638d52114ed651ed882f1aae3aae3ec940166045e93fb9eab7e"
-    },
-    {
-      "version": "1.4.0",
-      "fingerprint": "dcf74da484c34f437067415050d0ae0fbded93088d874f3b6e7035a9e5f2259a"
-    },
-    {
-      "version": "1.5.0",
-      "fingerprint": "31e0ac592afb9eb5bdfca22a258712e64fbaefd895d12b28c5cce500b2676856"
     }
   ],
   "archiveTask": [
@@ -133,6 +57,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "28f13505f00da2ee08eb897d93abb11adddc848ccea0925b061246ba1a73c431"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "a5a0ed2feecac6f4cb544aa363b7bec04f5b2355b0768b6937655be2c0277697"
     }
   ],
   "completeTask": [
@@ -189,6 +117,14 @@
     {
       "version": "1.2.0",
       "fingerprint": "4cff5cb9650b3d85ce49b6e3fc4c101eb16e3367bf75f258693658225425f357"
+    },
+    {
+      "version": "1.3.0",
+      "fingerprint": "4379dd43e38459e19196d2dbf3737cdfef0a7a9248e3f0dcb8df4bf8219b33ae"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "0a4f7f37e1402718434da4fba6987ff5528b26c4887762861e40316764a67faa"
     }
   ],
   "createIndependentRecordDraft": [
@@ -221,6 +157,10 @@
     {
       "version": "1.3.0",
       "fingerprint": "613d2d6736bd50086150b81bd23b0251d9a25158b5d8d771163bcce435bab341"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "0075719aef4072550c9d149b6a3bbb813806dfd621162bb0e6e144c8318e431d"
     }
   ],
   "createModuleTask": [
@@ -341,12 +281,6 @@
       "fingerprint": "bfcc90d99b2e6c0158619d46792aa3c219861966b9495b48d4dffc91779a1a43"
     }
   ],
-  "rejectProjectArchive": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "e9cd0d1e914582793f8d498c0839c6ec8a8eae31428ee628077d5a6e2fed30ff"
-    }
-  ],
   "removeExternalLink": [
     {
       "version": "1.0.0",
@@ -375,12 +309,6 @@
       "fingerprint": "a0bf683107213f39e38e0a6f7df8977ac3889780c795808f15c7a598c74089d5"
     }
   ],
-  "requestProjectArchive": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "500128d643472c4e5cf4e24c1044599beaf69811f28d61fa720ce26d3da70e69"
-    }
-  ],
   "restoreChangeRecord": [
     {
       "version": "1.0.0",
@@ -391,46 +319,6 @@
       "fingerprint": "47fb6e4148cefa04903f6204e1829efa652c413b7a4273b9fbd456f47900264e"
     }
   ],
-  "restoreFeature": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "6a805b9fc94a28c4b964502666b4d819ee8684b2fc2f8ca48ad0f08696770ac9"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "06c94d593aa2335a8bfeb908102801d7adbc82722afc5473f2b2d83e9e9765f0"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "72e491c121d700fe0607c2fc09dfc0605b88e07f3de1044c8226240f8e658ea0"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "c8e6602c5ef60c4ee0bc6fcb13656aeca5668861e8914941faf6896e505758a7"
-    }
-  ],
-  "restoreModule": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "ea08dd8b3fc048149e5f7ce88990006839f0b5e92761f44341fa3a4c44c2ae71"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "12ea1cef319f1c8cdea21dc10b17406bdee0dc095ccb3a0b3fa0d19c9ae1946a"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "70363ff80d937c56568ef5d502bab230b9dad79cb66519b70bd3cc1a75861189"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "0f5c676940b722994b8b5fa582ce8913ce8733dd3836fa83895bb8cd806c2e24"
-    },
-    {
-      "version": "1.4.0",
-      "fingerprint": "e236c71896e790889a162f5f63bfab6e6f5fa876d692c63929cc437927851713"
-    }
-  ],
   "restoreModuleTask": [
     {
       "version": "1.0.0",
@@ -439,32 +327,6 @@
     {
       "version": "2.0.0",
       "fingerprint": "92ac72fdb96850a7905902632e69154d40e628889b3d9e1cdec7e00c580a7aa3"
-    }
-  ],
-  "restoreProject": [
-    {
-      "version": "1.0.0",
-      "fingerprint": "f53eb1e655c6934d4f2f0651901d5d36c6ffa197240f1678592b6311819bb96b"
-    },
-    {
-      "version": "1.1.0",
-      "fingerprint": "f1b38b54c2ddf3f59929c9abdb92fbd9007c4fb57bc0b4c3de88f5703765751a"
-    },
-    {
-      "version": "1.2.0",
-      "fingerprint": "045281bc5ca8b08e0eafc82bf245d4d9d5c1e304dbf5b0fe1c0d9863a187861a"
-    },
-    {
-      "version": "1.3.0",
-      "fingerprint": "94a14894d98f7a80a35757ddf615b1210d8e29f6507944438406944f6aadaa4f"
-    },
-    {
-      "version": "1.4.0",
-      "fingerprint": "fdb230bfaf147ea5e6f03e9b230ba408337906d8f90a45c9a6766be072296487"
-    },
-    {
-      "version": "1.5.0",
-      "fingerprint": "c73b2933d95493cbc3c2c4d13f15cf86259ddf937fccabb2c3cea8fccb2e564b"
     }
   ],
   "restoreTask": [
@@ -539,6 +401,14 @@
     {
       "version": "1.2.0",
       "fingerprint": "553bda002ac994a807dd6fc5258a63ec2260d77e3cc2326529af06e6c0020180"
+    },
+    {
+      "version": "1.3.0",
+      "fingerprint": "9d81b3e7dc530a921bee2b60259e7917f3130bc628bc89ade446a071957ef4b4"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "ebefa9015fe19d26f4b2320f41adc24e415b2e38420c9fd37ce14cc92492ecf6"
     }
   ],
   "updateIndependentRecordDraft": [
@@ -571,6 +441,10 @@
     {
       "version": "1.3.0",
       "fingerprint": "7a1b476dfe1679cac7f83e165e5b94f121846163404d3d7a8e89d4b4b0231ad8"
+    },
+    {
+      "version": "1.4.0",
+      "fingerprint": "192f3cb8deae106d1f6e6dabbfaadd678dc5cc3cfef1ed9d65fd2c112664fc7f"
     }
   ],
   "updateModuleTask": [
@@ -607,6 +481,10 @@
     {
       "version": "1.5.0",
       "fingerprint": "8eaeeb114a4b4cebec9e072424f8d7689fce06e2b9067a1e312fead5bef1eba8"
+    },
+    {
+      "version": "1.6.0",
+      "fingerprint": "de09f7523b61ee9b614c51785a821958ccf0bc29c964295a5f6cb2e3620f2f31"
     }
   ],
   "updateTask": [

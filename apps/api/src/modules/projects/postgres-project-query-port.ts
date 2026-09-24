@@ -29,11 +29,6 @@ interface ProjectListItemRow {
   readonly openTaskCount: number;
   readonly completedTaskCount: number;
   readonly currentUserRole: "MEMBER" | "LEADER" | null;
-  readonly pendingRequestId: number | null;
-  readonly pendingRequestedBy: number | null;
-  readonly pendingRequestedByName: string | null;
-  readonly pendingReason: string | null;
-  readonly pendingRequestedAt: Date | null;
 }
 
 interface ProjectRow {
@@ -56,7 +51,8 @@ interface ProjectRow {
 
 /**
  * 项目只读 PostgreSQL 适配器；不计入事务，在服务端授权范围之后执行。
- * ADR-035：状态读存储四态，粘性标记 first_task_completed_at 只下发给前端一个布尔位。
+ * ADR-043：项目状态已是三态、不再读取归档申请；粘性标记 first_task_completed_at
+ * 只下发给前端一个布尔位。
  */
 @Injectable()
 export class PostgresProjectQueryPort extends ProjectQueryPort {
@@ -92,23 +88,14 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
                   AND m.status = 'ACTIVE'
              ) AS "memberCount",
              ${projectStatColumns(this.client.sql, "p")},
-             m.role AS "currentUserRole",
-             r.id AS "pendingRequestId",
-             r.requested_by AS "pendingRequestedBy",
-             requester.name AS "pendingRequestedByName",
-             r.reason AS "pendingReason",
-             r.requested_at AS "pendingRequestedAt"
+             m.role AS "currentUserRole"
         FROM app.projects p
         LEFT JOIN app.project_members m
                ON m.project_id = p.id
               AND m.user_id = ${actorUserId ?? null}
               AND m.status = 'ACTIVE'
-        LEFT JOIN app.project_archive_requests r
-               ON r.project_id = p.id
-              AND r.status = 'PENDING'
-        LEFT JOIN app.users requester ON requester.id = r.requested_by
        WHERE p.id = ANY(${projectIds}::integer[])
-       ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.id ASC
+       ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.created_at DESC, p.id DESC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
   }
@@ -160,20 +147,6 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
     return {
       ...this.toItem(row),
       currentUserRole: row.currentUserRole,
-      pendingArchiveRequest:
-        row.pendingRequestId === null ||
-        row.pendingRequestedBy === null ||
-        row.pendingRequestedByName === null ||
-        row.pendingReason === null ||
-        row.pendingRequestedAt === null
-          ? null
-          : {
-              id: row.pendingRequestId,
-              requestedBy: row.pendingRequestedBy,
-              requestedByName: row.pendingRequestedByName,
-              reason: row.pendingReason,
-              requestedAt: new Date(row.pendingRequestedAt).toISOString(),
-            },
     };
   }
 

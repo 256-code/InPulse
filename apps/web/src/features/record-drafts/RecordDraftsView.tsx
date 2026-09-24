@@ -200,7 +200,7 @@ export function RecordDraftsView({
     enabled: projectId > 0 && recordId > 0,
     retry: false,
   });
-  // ADR-035：项目四态下只有已归档只读；列表里还没有该项目时按只读处理。
+  // ADR-043：项目只有未开始 / 进行中 / 维护中且都可写；列表里还没有该项目时按只读处理。
   const pageProjectStatus = projects.data?.items.find(
     (p) => p.id === projectId,
   )?.status;
@@ -209,14 +209,9 @@ export function RecordDraftsView({
   /** 来源任务已归档时草稿只读；目标项目状态由弹窗内部再叠加。 */
   const sourceWritable = !taskId || source?.lifecycleStatus === "ACTIVE";
   const writable =
-    projectId > 0 &&
-    pageProjectStatus !== undefined &&
-    pageProjectStatus !== "ARCHIVED" &&
-    sourceWritable;
+    projectId > 0 && pageProjectStatus !== undefined && sourceWritable;
   /** 全部项目视图下只要存在可写项目即可发起创建，具体项目在弹窗内选定。 */
-  const anyWritableProject = (projects.data?.items ?? []).some(
-    (p) => p.status === "ACTIVE",
-  );
+  const anyWritableProject = (projects.data?.items ?? []).length > 0;
   const canCreate =
     projectId > 0
       ? !!writable && (taskId === 0 || !!sourceQuery.data?.source)

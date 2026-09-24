@@ -65,7 +65,11 @@ export async function pickCalmSelectOption(
   await item.first().click();
 }
 
-/** 按下标点选（等价旧 selectOption({ index })：0 是「请选择…」占位项）。 */
+/**
+ * 按下标点选（等价旧 selectOption({ index })）。下标以真实渲染的选项为准：多数下拉会把
+ * 「请选择…」占位项一并渲染成禁用的第一项，而记录草稿编辑器的「所属模块」没有占位项，
+ * index 0 就是第一个真实模块。
+ */
 export async function pickCalmSelectOptionByIndex(
   scope: Page | Locator,
   label: string,
@@ -73,6 +77,18 @@ export async function pickCalmSelectOptionByIndex(
 ): Promise<void> {
   const listbox = await openListbox(scope, label);
   await listbox.locator(".ant-select-item-option").nth(index).click();
+}
+
+/**
+ * 选中下拉里的第一个选项，用于「选任意一个归属模块」这类不关心具体取值的步骤。
+ * 不要把这种语义写成固定下标：没有占位项的下拉里 index 1 直接不存在，而 Playwright 的
+ * actionTimeout 默认为 0（不超时），用例会一直卡到整体超时。
+ */
+export async function pickFirstCalmSelectOption(
+  scope: Page | Locator,
+  label: string,
+): Promise<void> {
+  await pickCalmSelectOptionByIndex(scope, label, 0);
 }
 
 /**

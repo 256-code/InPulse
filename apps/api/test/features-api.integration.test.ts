@@ -39,8 +39,6 @@ import { IdempotencyRunner } from "../src/idempotency/runner.js";
 import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
-import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
-import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import { FeatureManagementRepository } from "../src/modules/features/feature-management.repository.js";
@@ -104,7 +102,6 @@ beforeAll(async () => {
     activity,
     search,
     new PostgresUserReadPort(),
-    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
   );
   const http = new FeaturesHttpService(
     auth,
@@ -153,18 +150,6 @@ async function actor(admin = false): Promise<Actor> {
 async function fixture(): Promise<{ member: Actor; project: ProjectFixture }> {
   const member = await actor();
   return { member, project: await createProject(client.sql, member.userId) };
-}
-/** ADR-033/ADR-034：把夹具创建者降级为普通成员（创建者默认回填 LEADER）。 */
-async function demoteToMember(
-  projectId: number,
-  userId: number,
-): Promise<void> {
-  await client.sql`
-    UPDATE app.project_members
-       SET role = 'MEMBER'
-     WHERE project_id = ${projectId}
-       AND user_id = ${userId}
-  `;
 }
 async function request(
   project: Pick<ProjectFixture, "projectId" | "moduleId">,
@@ -363,13 +348,12 @@ describe("F-13 real HTTP and PostgreSQL", () => {
       );
   });
 
-  it("orders the feature list by lifecycle rank: 进行中、未开始、已归档", async () => {
+  it("orders the feature list by lifecycle rank then newest-first creation: 进行中、未开始", async () => {
     const { member, project } = await fixture();
     // 创建顺序刻意与目标顺序相反：若排序键没生效，断言会退化成「按 id 升序」。
     const notStarted = await create(project, member, "未开始功能");
+    // ADR-045：功能不再有归档态，排序档位只剩进行中与未开始。
     const active = await create(project, member, "进行中功能");
-    const archived = await create(project, member, "已归档功能");
-    await client.sql`UPDATE app.features SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${archived.id} AND project_id = ${project.projectId}`;
     // 功能下有一条已完成的有效任务，作用域内即「进行中」。
     // app.tasks 的状态历史不变量要求任务行与最后一条 task_status_history 对齐，
     // 同一语句里带上完工快照，夹具才能落库。
@@ -398,13 +382,16 @@ describe("F-13 real HTTP and PostgreSQL", () => {
         FROM created
     `;
 
+    // ADR-046：与 notStarted 同属「未开始」档但创建更晚，应排在它前面。
+    const newerNotStarted = await create(project, member, "更晚建的未开始功能");
+
     const items = featureListResponseSchema.parse(
       await (await request(project, "GET", member)).json(),
     ).items;
     expect(items.map((item) => item.id)).toEqual([
       active.id,
+      newerNotStarted.id,
       notStarted.id,
-      archived.id,
     ]);
   });
 
@@ -521,166 +508,6 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     ).toBe(200);
   });
 
-  it("allows any active member to archive, archives history, blocks downstream writes and restores only itself", async () => {
-    const { member, project } = await fixture();
-    const admin = await actor(true);
-    const item = await create(project, member);
-    const task = await uow.run(async (tx) => {
-      const [task] = await tx.sql<
-        { id: number }[]
-      >`INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, creator_id, lifecycle_status) VALUES (${project.projectId}, ${project.moduleId}, ${item.id}, 'FEATURE', ${`${project.code}-T-1`}, '已归档历史任务', ${member.userId}, 'ARCHIVED') RETURNING id`;
-      await tx.sql`INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES (${task!.id}, ${member.userId}, ${project.projectId})`;
-      await tx.sql`INSERT INTO app.task_status_history (task_id, project_id, from_work_status, to_work_status, changed_by) VALUES (${task!.id}, ${project.projectId}, NULL, 'TODO', ${member.userId})`;
-      return task!;
-    });
-    // ADR-039：归档不再要求组长或系统管理员，降级为 MEMBER 的成员同样可归档。
-    await demoteToMember(project.projectId, member.userId);
-    const memberItem = await create(project, member, "成员归档功能");
-    const memberArchived = await request(
-      project,
-      "POST",
-      member,
-      { reason: "成员归档" },
-      `/${memberItem.id}/archive`,
-      1,
-    );
-    expect(memberArchived.status).toBe(200);
-    expect(featureItemSchema.parse(await memberArchived.json())).toMatchObject({
-      status: "ARCHIVED",
-      rowVersion: 2,
-    });
-    await error(
-      await request(
-        project,
-        "POST",
-        admin,
-        { reason: " " },
-        `/${item.id}/archive`,
-        1,
-      ),
-      422,
-    );
-    const key = randomUUID();
-    const archive = () =>
-      request(
-        project,
-        "POST",
-        admin,
-        { reason: "保留历史" },
-        `/${item.id}/archive`,
-        1,
-        key,
-      );
-    expect((await archive()).status).toBe(200);
-    expect((await archive()).status).toBe(200);
-    const detail = featureItemSchema.parse(
-      await (
-        await request(project, "GET", member, undefined, `/${item.id}`)
-      ).json(),
-    );
-    expect(detail).toMatchObject({ status: "ARCHIVED", rowVersion: 2 });
-    expect(
-      await uow.run((tx) =>
-        new PostgresFeatureQueryPort().checkFeatureForWrite(tx, {
-          ...project,
-          featureId: item.id,
-        }),
-      ),
-    ).toMatchObject({ kind: "parent-not-active" });
-    await error(
-      await request(
-        project,
-        "PATCH",
-        member,
-        { name: "只读" },
-        `/${item.id}`,
-        2,
-      ),
-      409,
-    );
-    expect((await archive()).status).toBe(200);
-    const restored = await request(
-      project,
-      "POST",
-      admin,
-      { reason: "重新启用" },
-      `/${item.id}/restore`,
-      2,
-    );
-    expect(featureItemSchema.parse(await restored.json())).toMatchObject({
-      status: "ACTIVE",
-      rowVersion: 3,
-      archivedAt: null,
-    });
-    const [child] =
-      await client.sql`SELECT lifecycle_status, row_version FROM app.tasks WHERE id = ${task!.id}`;
-    expect(child).toEqual({ lifecycle_status: "ARCHIVED", row_version: 1 });
-  });
-
-  it("lets a project leader archive and restore features without any admin flag (ADR-034)", async () => {
-    const { member, project } = await fixture();
-    const item = await create(project, member);
-    // 夹具创建者默认回填 LEADER；非系统管理员的组长可归档/恢复功能。
-    const archived = await request(
-      project,
-      "POST",
-      member,
-      { reason: "组长封存功能" },
-      `/${item.id}/archive`,
-      1,
-    );
-    expect(archived.status, await archived.clone().text()).toBe(200);
-    expect(featureItemSchema.parse(await archived.json())).toMatchObject({
-      status: "ARCHIVED",
-      rowVersion: 2,
-    });
-    const restored = await request(
-      project,
-      "POST",
-      member,
-      { reason: "组长恢复功能" },
-      `/${item.id}/restore`,
-      2,
-    );
-    expect(restored.status, await restored.clone().text()).toBe(200);
-    expect(featureItemSchema.parse(await restored.json())).toMatchObject({
-      status: "ACTIVE",
-      rowVersion: 3,
-    });
-  });
-
-  it("rejects cross-project, removed member and non-member archive requests (ADR-034)", async () => {
-    const { member, project } = await fixture();
-    const outsider = await actor();
-    const item = await create(project, member);
-    await error(
-      await request(
-        project,
-        "POST",
-        outsider,
-        { reason: "越权归档" },
-        `/${item.id}/archive`,
-        1,
-      ),
-      404,
-      "FEATURE_NOT_FOUND",
-    );
-    // ADR-033：移除成员须同事务把角色复位为 MEMBER，否则违反
-    // project_members_removed_role_check。
-    await removeMember(client.sql, project.projectId, member.userId);
-    await error(
-      await request(
-        project,
-        "POST",
-        member,
-        { reason: "被移除后归档" },
-        `/${item.id}/archive`,
-        1,
-      ),
-      404,
-    );
-  });
-
   it("replays same semantic key and rejects changes, stale If-Match and revoked result access", async () => {
     const { member, project } = await fixture();
     const key = randomUUID();
@@ -735,12 +562,46 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     );
   });
 
-  it.each(["project", "module"] as const)(
-    "keeps %s archived history readable but blocks creation and restore",
-    async (parent) => {
-      const { member, project } = await fixture();
-      const admin = await actor(true);
-      const item = await create(project, member);
+  it("removes feature archive entirely: no archive routes, no status field and always writable (ADR-045)", async () => {
+    const { member, project } = await fixture();
+    const admin = await actor(true);
+    const item = await create(project, member);
+    // 功能下补一条已完成的有效任务，用于断言新增的 completedTaskCount。
+    await client.sql`
+      WITH created AS (
+        INSERT INTO app.tasks (
+          project_id, module_id, feature_id, scope_type, code, title,
+          work_status, completion_note, completed_at, creator_id
+        ) VALUES (
+          ${project.projectId}, ${project.moduleId}, ${item.id}, 'FEATURE',
+          ${project.code + "-T-1"}, '已完成任务', 'DONE', '已完成', now(),
+          ${member.userId}
+        )
+        RETURNING id, project_id, completed_at, completion_note
+      ),
+      assignees AS (
+        INSERT INTO app.task_assignees (task_id, user_id, project_id)
+        SELECT id, ${member.userId}, project_id FROM created
+      )
+      INSERT INTO app.task_status_history (
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
+      )
+      SELECT id, project_id, NULL, 'DONE', completed_at, completion_note,
+             ${member.userId}
+        FROM created
+    `;
+    const detail = featureItemSchema.parse(
+      await (
+        await request(project, "GET", member, undefined, `/${item.id}`)
+      ).json(),
+    );
+    // 响应里既没有 status 也没有 archivedAt：功能档案不再有归档态。
+    expect(detail).not.toHaveProperty("status");
+    expect(detail).not.toHaveProperty("archivedAt");
+    expect(detail.stats.completedTaskCount).toBe(1);
+    // 归档与恢复路由已随 Controller 与 Route Registry 一并删除。
+    for (const action of ["archive", "restore"] as const)
       expect(
         (
           await request(
@@ -748,37 +609,32 @@ describe("F-13 real HTTP and PostgreSQL", () => {
             "POST",
             admin,
             { reason: "归档" },
-            `/${item.id}/archive`,
+            `/${item.id}/${action}`,
             1,
           )
         ).status,
-      ).toBe(200);
-      if (parent === "project")
-        await client.sql`UPDATE app.projects SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.projectId}`;
-      else
-        await client.sql`UPDATE app.modules SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.moduleId}`;
-      expect(
-        (await request(project, "GET", member, undefined, `/${item.id}`))
-          .status,
-      ).toBe(200);
-      expect((await request(project, "GET", member)).status).toBe(200);
-      await error(
-        await request(project, "POST", member, { name: "只读父级" }),
-        409,
-      );
-      await error(
-        await request(
-          project,
-          "POST",
-          admin,
-          { reason: "恢复" },
-          `/${item.id}/restore`,
-          2,
-        ),
-        409,
-      );
-    },
-  );
+      ).toBe(404);
+    // 归属链上已无归档只读态：写检查恒为 allowed。
+    expect(
+      await uow.run((tx) =>
+        new PostgresFeatureQueryPort().checkFeatureForWrite(tx, {
+          ...project,
+          featureId: item.id,
+        }),
+      ),
+    ).toMatchObject({ kind: "allowed" });
+    // 父级模块改名后功能仍然可写，row_version 正常递增。
+    await client.sql`UPDATE app.modules SET name = '改名模块', row_version = row_version + 1 WHERE id = ${project.moduleId}`;
+    const edited = await request(
+      project,
+      "PATCH",
+      member,
+      { name: "父级仍可写" },
+      `/${item.id}`,
+      1,
+    );
+    expect(edited.status, await edited.clone().text()).toBe(200);
+  });
 
   it.each(["audit", "activity", "search"] as const)(
     "rolls back business, code, audit, projections and idempotency on %s failure",
@@ -838,51 +694,42 @@ describe("F-13 real HTTP and PostgreSQL", () => {
     },
   );
 
-  it.each(["project", "module"] as const)(
-    "waits on real %s archive lock then rejects stale write",
-    async (parentKind) => {
-      const { member, project } = await fixture();
-      let release!: () => void;
-      let acquired!: () => void;
-      const gate = new Promise<void>((r) => {
-        release = r;
-      });
-      const ready = new Promise<void>((r) => {
-        acquired = r;
-      });
-      const parent = uow.run(async (tx) => {
-        if (parentKind === "project")
-          await tx.sql`SELECT id FROM app.projects WHERE id = ${project.projectId} FOR UPDATE`;
-        else {
-          await tx.sql`SELECT id FROM app.projects WHERE id = ${project.projectId} FOR SHARE`;
-          await tx.sql`SELECT id FROM app.modules WHERE id = ${project.moduleId} FOR UPDATE`;
-        }
-        acquired();
-        await gate;
-        if (parentKind === "project")
-          await tx.sql`UPDATE app.projects SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.projectId}`;
-        else
-          await tx.sql`UPDATE app.modules SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${project.moduleId}`;
-      });
-      await ready;
-      const child = request(project, "POST", member, { name: "锁竞争" });
-      try {
-        await vi.waitFor(
-          async () => {
-            const rows =
-              await client.sql`SELECT pid FROM pg_stat_activity WHERE application_name = 'inpulse-f13-http' AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0`;
-            expect(rows.length).toBeGreaterThan(0);
-          },
-          { timeout: 4000, interval: 30 },
-        );
-      } finally {
-        release();
-        await parent;
-      }
-      await error(await child, 409);
-      expect(
-        await client.sql`SELECT id FROM app.features WHERE project_id = ${project.projectId}`,
-      ).toHaveLength(0);
-    },
-  );
+  it("waits on a real module row lock then commits the released child write", async () => {
+    const { member, project } = await fixture();
+    let release!: () => void;
+    let acquired!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const ready = new Promise<void>((r) => {
+      acquired = r;
+    });
+    const parent = uow.run(async (tx) => {
+      await tx.sql`SELECT id FROM app.projects WHERE id = ${project.projectId} FOR SHARE`;
+      await tx.sql`SELECT id FROM app.modules WHERE id = ${project.moduleId} FOR UPDATE`;
+      acquired();
+      await gate;
+      // ADR-044：模块命令只剩改名，父级写不再把子级置为只读。
+      await tx.sql`UPDATE app.modules SET name = '锁竞争改名', row_version = row_version + 1 WHERE id = ${project.moduleId}`;
+    });
+    await ready;
+    const child = request(project, "POST", member, { name: "锁竞争" });
+    try {
+      await vi.waitFor(
+        async () => {
+          const rows =
+            await client.sql`SELECT pid FROM pg_stat_activity WHERE application_name = 'inpulse-f13-http' AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0`;
+          expect(rows.length).toBeGreaterThan(0);
+        },
+        { timeout: 4000, interval: 30 },
+      );
+    } finally {
+      release();
+      await parent;
+    }
+    expect((await child).status, await (await child).clone().text()).toBe(200);
+    expect(
+      await client.sql`SELECT id FROM app.features WHERE project_id = ${project.projectId}`,
+    ).toHaveLength(1);
+  });
 });

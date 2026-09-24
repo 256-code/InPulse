@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Space, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
+import { featureLifecycleLabel } from "@features/common/resource-lifecycle";
 
 export function SimilarFeatures({
   projectId,
@@ -57,7 +58,7 @@ export function SimilarFeatures({
             rel="noopener noreferrer"
           >
             {item.code} {item.name}（
-            {item.status === "ACTIVE" ? "进行中" : "已归档"}）
+            {featureLifecycleLabel(item.stats.completedTaskCount)}）
           </Button>
         ))}
       </Space>

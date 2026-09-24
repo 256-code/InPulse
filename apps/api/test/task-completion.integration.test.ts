@@ -840,33 +840,8 @@ it("rechecks edited draft contents and task versions after real lock waits", asy
     await db.sql`SELECT work_status FROM app.tasks WHERE id=${g.task.id}`,
   ).toEqual([{ work_status: "TODO" }]);
 });
-it("rejects parent archival after a real lock wait and serializes independent publication against binding/completion", async () => {
-  const f = await fixture();
-  let release!: () => void, acquired!: () => void;
-  const gate = new Promise<void>((r) => {
-      release = r;
-    }),
-    ready = new Promise<void>((r) => {
-      acquired = r;
-    });
-  const archiving = uow.run(async (tx) => {
-    await tx.sql`UPDATE app.modules SET status='ARCHIVED',archived_at=clock_timestamp(),row_version=row_version+1 WHERE id=${f.moduleId}`;
-    acquired();
-    await gate;
-  });
-  await ready;
-  const outcome = expect(complete(f)).rejects.toMatchObject({
-    status: 409,
-    code: "TASK_PARENT_ARCHIVED",
-  });
-  try {
-    await waitBlocked();
-  } finally {
-    release();
-    await archiving;
-  }
-  await outcome;
-  await unchanged(f);
+it("serializes independent publication against binding/completion", async () => {
+  // ADR-045：功能层下线归档后不再有父级归档拒写，这里只覆盖两条并发写入的互斥。
   const g = await fixture(),
     saved = await draft(g);
   const outcomes = await Promise.allSettled([
@@ -894,7 +869,7 @@ it("rejects parent archival after a real lock wait and serializes independent pu
       : task?.workStatus === "DONE",
   ).toBe(true);
 });
-it("locks the union of current MODULE impacts and archived draft impacts before acquiring the task", async () => {
+it("locks the union of current MODULE impacts and draft impacts before acquiring the task", async () => {
   const f = await fixture();
   const [old] = await db.sql<
     { id: number }[]
@@ -914,8 +889,9 @@ it("locks the union of current MODULE impacts and archived draft impacts before 
     ready = new Promise<void>((r) => {
       acquired = r;
     });
+  // ADR-045：功能不再有归档态，持锁方只做一次改名，锁序与等待行为不变。
   const archiving = uow.run(async (tx) => {
-    await tx.sql`UPDATE app.features SET status='ARCHIVED',archived_at=clock_timestamp(),row_version=row_version+1 WHERE id=${old!.id}`;
+    await tx.sql`UPDATE app.features SET name='持锁改名',row_version=row_version+1 WHERE id=${old!.id}`;
     acquired();
     await gate;
   });

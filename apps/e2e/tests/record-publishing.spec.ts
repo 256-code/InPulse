@@ -4,7 +4,7 @@ import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import {
   pickCalmSelectOption,
-  pickCalmSelectOptionByIndex,
+  pickFirstCalmSelectOption,
 } from "../helpers/calm-select.js";
 test("F18 独立发布、修订、明确解决遗留与不可变历史对比", async ({
   browser,
@@ -17,7 +17,7 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建迭代记录" }).click();
     const draft = page.getByRole("dialog", { name: "新建迭代记录" });
-    await pickCalmSelectOptionByIndex(draft, "所属模块", 1);
+    await pickFirstCalmSelectOption(draft, "所属模块");
     await draft.getByLabel("迭代标题").fill(title);
     await draft.getByLabel("改动原因").fill("版本一问题");
     await draft.getByLabel("具体改动").fill("版本一方案");

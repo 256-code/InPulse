@@ -66,13 +66,6 @@ function Preview({
         将继承的影响功能：
         {value.inheritedImpacts.map((f) => f.name).join("、") || "无"}
       </p>
-      {value.excludedImpacts.length > 0 && (
-        <p>
-          历史归档影响不加入新任务：
-          {value.excludedImpacts.map((f) => f.name).join("、")}
-          。原记录历史保留。
-        </p>
-      )}
       {value.linkedTask && (
         <a href={taskDetailPath(value.linkedTask)}>查看已有跟进任务</a>
       )}

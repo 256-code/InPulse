@@ -127,9 +127,7 @@ export class ModulesHttpService {
       const input = parse(
         route.request.body.contentTypes[0]!.schemaRef,
         request.body,
-      ) as ModuleEditRequest & { reason: string };
-      const highRisk =
-        operation === "archiveModule" || operation === "restoreModule";
+      ) as ModuleEditRequest;
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (!current)
@@ -144,8 +142,8 @@ export class ModulesHttpService {
           path.projectId,
           path.moduleId,
         );
-        // ADR-033：归档/恢复不再要求系统管理员 Session，改由服务层在
-        // execute/replay 内校验项目内管理角色（系统管理员经 is_admin 旁路）。
+        // ADR-044：模块已无归档/恢复，模块命令对项目内活跃成员开放，
+        // 写前检查与角色门禁由服务层在同一事务内完成。
         return current.userId;
       };
       const result = await this.idempotency.run({
@@ -174,7 +172,7 @@ export class ModulesHttpService {
                     getHeader(request.headers, "if-match")!.slice(1, -1),
                   ),
                 }),
-            ...(highRisk ? { reason: input.reason } : { edit: input }),
+            edit: input,
             requestId,
           });
           return {
@@ -187,9 +185,7 @@ export class ModulesHttpService {
         },
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
-          await this.modules.replay(tx, actorId, record.replayAuthContext, {
-            requireManageRole: highRisk,
-          });
+          await this.modules.replay(tx, actorId, record.replayAuthContext);
         },
       });
       return {
@@ -221,7 +217,7 @@ export class ModulesHttpService {
       ) {
         status = 409;
         code = "MODULE_NAME_CONFLICT";
-        message = "该项目已有同名模块（包含归档模块）";
+        message = "该项目已有同名模块";
       }
       return {
         status,

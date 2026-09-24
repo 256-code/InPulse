@@ -63,15 +63,15 @@ function cursorMock(
   return {
     encode: vi.fn().mockReturnValue("cursor-next"),
     decode: vi.fn(options.decode ?? (() => null)),
-    // ADR-037 / ADR-041：任务中心走 decodeKey，载荷必须带排序键（版本 5 起为 8 段，
-    // 含完成时间与遗留问题来源；紧急桶自 2026-09-23 起收窄为 0..3）。测试用最小合法键。
+    // ADR-037 / ADR-041：任务中心走 decodeKey，载荷必须带排序键（版本 6 为 7 段：
+    // 版本|状态分组|完成时间|紧急桶|优先级|截止|任务ID）。测试用最小合法键。
     decodeKey: vi.fn(
       options.decodeKey ??
         (() => {
           const afterId = options.decode?.() ?? null;
           return afterId === null
             ? null
-            : { afterId, sortKey: `5|0||3|2|1||${afterId}` };
+            : { afterId, sortKey: `6|0||3|2||${afterId}` };
         }),
     ),
   };
@@ -1078,13 +1078,13 @@ describe("ProjectOverviewQueryService.getOverview", () => {
         createdAt: createdAt.toISOString(),
       },
     ]);
+    // ADR-044：模块已无归档态，投影计数只按 projectId。
     expect(setup.modulesCount).toHaveBeenCalledWith(expect.anything(), {
       projectId: 7,
-      status: "ACTIVE",
     });
+    // ADR-045：功能同样已无归档态，投影计数也只按 projectId / moduleId。
     expect(setup.featuresCount).toHaveBeenCalledWith(expect.anything(), {
       projectId: 7,
-      status: "ACTIVE",
     });
     expect(setup.tasksCount).toHaveBeenCalledWith(expect.anything(), {
       projectIds: [7],
@@ -1452,7 +1452,6 @@ describe("MyTasksQueryService.list", () => {
           completedAt: null,
           urgency: 3,
           priority: 2,
-          leftover: 1,
           dueAt: null,
           taskId: 501,
         },
@@ -1533,7 +1532,7 @@ describe("MyTasksQueryService.list", () => {
         null,
       ]),
       afterId: 501,
-      sortKey: "5|0||3|2|1||501",
+      sortKey: "6|0||3|2||501",
     });
   });
 

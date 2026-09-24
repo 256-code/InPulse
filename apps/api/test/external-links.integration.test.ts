@@ -963,52 +963,40 @@ describe("F22 typed external links", () => {
       ).toHaveLength(1);
     },
   );
-  it.each(["project", "module", "feature"])(
-    "waits for %s archive lock then rejects new association",
-    async (parent) => {
-      const f = await fixture(),
-        actor = await session(f.userId),
-        taskId = await taskFixture(f);
-      const table =
-          parent === "project"
-            ? "projects"
-            : parent === "module"
-              ? "modules"
-              : "features",
-        id =
-          parent === "project"
-            ? f.projectId
-            : parent === "module"
-              ? f.moduleId
-              : f.featureId;
-      let locked!: () => void, release!: () => void;
-      const ready = new Promise<void>((r) => (locked = r)),
-        gate = new Promise<void>((r) => (release = r));
-      const blocker = db.sql.begin(async (tx) => {
-        await tx`SELECT id FROM ${tx("app." + table)} WHERE id=${id} FOR UPDATE`;
-        locked();
-        await gate;
-        await tx`UPDATE ${tx("app." + table)} SET status='ARCHIVED',archived_at=now(),row_version=row_version+1,updated_at=now() WHERE id=${id}`;
-      });
-      await ready;
-      let completed = false;
-      const pending = linkRequest("TASK", taskId, actor).then((r) => {
-        completed = true;
-        return r;
-      });
-      try {
-        await new Promise((r) => setTimeout(r, 70));
-        expect(completed).toBe(false);
-      } finally {
-        release();
-        await blocker;
-      }
-      await failure(await pending, 409);
-      expect(
-        await db.sql`SELECT id FROM app.external_links WHERE project_id=${f.projectId}`,
-      ).toHaveLength(0);
-    },
-  );
+  it("waits for the feature row lock then commits the association", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      taskId = await taskFixture(f);
+    const id = f.featureId;
+    let locked!: () => void, release!: () => void;
+    const ready = new Promise<void>((r) => (locked = r)),
+      gate = new Promise<void>((r) => (release = r));
+    const blocker = db.sql.begin(async (tx) => {
+      await tx`SELECT id FROM app.features WHERE id=${id} FOR UPDATE`;
+      locked();
+      await gate;
+      // ADR-045：功能不再有归档只读态，持锁方只做一次普通改名。
+      await tx`UPDATE app.features SET name='持锁改名',row_version=row_version+1,updated_at=now() WHERE id=${id}`;
+    });
+    await ready;
+    let completed = false;
+    const pending = linkRequest("TASK", taskId, actor).then((r) => {
+      completed = true;
+      return r;
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 70));
+      expect(completed).toBe(false);
+    } finally {
+      release();
+      await blocker;
+    }
+    const response = await pending;
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(
+      await db.sql`SELECT id FROM app.external_links WHERE project_id=${f.projectId}`,
+    ).toHaveLength(1);
+  });
   it.each(["audit", "activity", "search"])(
     "removal rollback retains the association on %s failure",
     async (point) => {

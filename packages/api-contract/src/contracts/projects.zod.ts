@@ -39,23 +39,27 @@ export const projectStatsSchema = z
 export type ProjectStats = z.infer<typeof projectStatsSchema>;
 
 /**
- * 项目生命周期四态：与 app.projects 的 projects_status_check 一致。
+ * 项目生命周期三态：与 app.projects 的 projects_status_check 一致。
+ *
+ * 2026-09-23 定案：项目层面不再有「归档」这一说、也不再需要归档申请，只剩三态；
+ * 归档概念只保留在模块 / 功能 / 任务上，项目自身只表达进度。
  *
  * - `NOT_STARTED`（未开始）：项目下还没有任何已完成任务；
  * - `ACTIVE`（进行中）：项目已开工，含手动置为进行中与首次有任务完成后的自动升级；
- * - `MAINTENANCE`（维护中）：主体已完成、只做小修小补且不打算归档；纯标签，不限制任何操作；
- * - `ARCHIVED`（已归档）：只能由归档流程写入，项目及其下级只读。
+ * - `MAINTENANCE`（维护中）：项目主体已完成、只做小修小补。进入前要求项目下任务
+ *   全部收尾（不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'` 的任务），
+ *   否则 409 `PROJECT_MAINTENANCE_TASKS_OPEN`。
  *
  * 未开始与维护中之间禁止直接互改（409 `PROJECT_STATUS_LEVEL_SKIP`）；
  * 项目内出现过已完成任务后不可回退未开始（409 `PROJECT_STATUS_NOT_STARTED_LOCKED`）。
  */
 export const projectStatusSchema = z
-  .enum(["NOT_STARTED", "ACTIVE", "MAINTENANCE", "ARCHIVED"])
+  .enum(["NOT_STARTED", "ACTIVE", "MAINTENANCE"])
   .meta({ id: "ProjectStatus" });
 
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 
-/** 项目公开摘要；包含归档状态、当前活跃成员数与项目卡统计，不暴露成员名单或内部字段。 */
+/** 项目公开摘要；包含生命周期状态、当前活跃成员数与项目卡统计，不暴露成员名单或内部字段。 */
 export const projectItemSchema = z
   .object({
     id: projectPositiveId,
@@ -444,7 +448,8 @@ export const projectEditRequestSchema = z
 export type ProjectEditRequest = z.infer<typeof projectEditRequestSchema>;
 
 /**
- * 项目状态变更请求（F-06.3）。只接受前三个目标态：归档必须走归档申请与批准流程。
+ * 项目状态变更请求（F-06.3）。三态即全部目标态；进入维护中要求项目下任务全部收尾，
+ * 否则 409 `PROJECT_MAINTENANCE_TASKS_OPEN`。
  * 目标态等于当前态视为无变化并返回 409 `PROJECT_STATE_CONFLICT`。
  */
 export const projectStatusChangeRequestSchema = z
@@ -489,142 +494,22 @@ export const projectReplayContextSchema = z
 
 export type ProjectReplayContext = z.infer<typeof projectReplayContextSchema>;
 
-/** 项目归档/恢复原因；两类高风险操作都必须显式填写。 */
-export const projectArchiveRequestSchema = z
-  .object({
-    reason: z.string().trim().min(1).max(2000),
-  })
-  .strict()
-  .meta({ id: "ProjectArchiveRequest" });
-
-export type ProjectArchiveRequest = z.infer<typeof projectArchiveRequestSchema>;
-
-/** 归档前影响预览；只统计当前未完成的真实任务，用于归档提醒。 */
-export const projectArchivePreviewResponseSchema = z
-  .object({
-    projectId: projectPositiveId,
-    unfinishedTaskCount: z.number().int().nonnegative(),
-  })
-  .strict()
-  .meta({ id: "ProjectArchivePreviewResponse" });
-
-export type ProjectArchivePreviewResponse = z.infer<
-  typeof projectArchivePreviewResponseSchema
->;
 /**
- * 项目归档申请状态：PENDING 待审核、APPROVED 已批准（项目已归档）、
- * REJECTED 已驳回；CANCELED 保留给项目在审核前已被归档等情况的历史行。
- */
-export const projectArchiveRequestStatusSchema = z
-  .enum(["PENDING", "APPROVED", "REJECTED", "CANCELED"])
-  .meta({ id: "ProjectArchiveRequestStatus" });
-
-export type ProjectArchiveRequestStatus = z.infer<
-  typeof projectArchiveRequestStatusSchema
->;
-
-/** 项目卡上的待审归档申请摘要；只暴露发起人展示名与理由，不含内部列。 */
-export const pendingProjectArchiveRequestSchema = z
-  .object({
-    id: projectPositiveId,
-    requestedBy: projectPositiveId,
-    requestedByName: z.string().min(1).max(200),
-    reason: z.string().min(1).max(2000),
-    requestedAt: z.iso.datetime(),
-  })
-  .strict()
-  .meta({ id: "PendingProjectArchiveRequest" });
-
-export type PendingProjectArchiveRequest = z.infer<
-  typeof pendingProjectArchiveRequestSchema
->;
-
-/**
- * F-06.2 项目列表条目：在项目摘要之上补充当前用户在本项目的成员角色与待审
- * 归档申请。列表页据此决定是否显示「申请归档」入口，以及管理员审核入口。
+ * F-06.2 项目列表条目：在项目摘要之上补充当前用户在本项目的成员角色。
+ * 2026-09-23 起不再携带待审归档申请（项目归档与归档申请整体下线）。
  */
 export const projectListItemSchema = projectItemSchema
   .extend({
     currentUserRole: projectMemberRoleSchema.nullable(),
-    pendingArchiveRequest: pendingProjectArchiveRequestSchema.nullable(),
   })
   .meta({ id: "ProjectListItem" });
 
 export type ProjectListItem = z.infer<typeof projectListItemSchema>;
 
-/** 当前用户可见项目列表；系统管理员返回全部项目。 */
+/** 当前用户可见项目列表；系统管理员返回全部项目。归档概念下线后列表只按生命周期分档。 */
 export const projectListResponseSchema = z
   .object({ items: z.array(projectListItemSchema) })
   .strict()
   .meta({ id: "ProjectListResponse" });
 
 export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
-
-/** 项目归档申请路径；申请与审核都定位到具体项目的单条申请。 */
-export const projectArchiveRequestPathSchema = z
-  .object({
-    projectId: z.coerce.number().int().positive().max(2147483647),
-    requestId: z.coerce.number().int().positive().max(2147483647),
-  })
-  .strict()
-  .meta({ id: "ProjectArchiveRequestPath" });
-
-export type ProjectArchiveRequestPath = z.infer<
-  typeof projectArchiveRequestPathSchema
->;
-
-/** 项目归档申请理由；申请本身不改变项目状态，只有系统管理员批准才归档。 */
-export const projectArchiveRequestSubmissionSchema = z
-  .object({ reason: z.string().trim().min(1).max(2000) })
-  .strict()
-  .meta({ id: "ProjectArchiveRequestSubmission" });
-
-export type ProjectArchiveRequestSubmission = z.infer<
-  typeof projectArchiveRequestSubmissionSchema
->;
-
-/** 项目归档申请完整条目；申请人与审核人只暴露展示名，不暴露账号字段。 */
-export const projectArchiveRequestItemSchema = z
-  .object({
-    id: projectPositiveId,
-    projectId: projectPositiveId,
-    requestedBy: projectPositiveId,
-    requestedByName: z.string().min(1).max(200),
-    reason: z.string().min(1).max(2000),
-    status: projectArchiveRequestStatusSchema,
-    requestedAt: z.iso.datetime(),
-    decidedBy: projectPositiveId.nullable(),
-    decidedByName: z.string().min(1).max(200).nullable(),
-    decidedAt: z.iso.datetime().nullable(),
-    decisionNote: z.string().max(2000).nullable(),
-    rowVersion: projectPositiveId,
-  })
-  .strict()
-  .meta({ id: "ProjectArchiveRequestItem" });
-
-export type ProjectArchiveRequestItem = z.infer<
-  typeof projectArchiveRequestItemSchema
->;
-
-/** 驳回项目归档申请；批注可选，留空表示不附理由。 */
-export const projectArchiveRejectionRequestSchema = z
-  .object({ note: z.string().trim().max(2000).default("") })
-  .strict()
-  .meta({ id: "ProjectArchiveRejectionRequest" });
-
-export type ProjectArchiveRejectionRequest = z.infer<
-  typeof projectArchiveRejectionRequestSchema
->;
-
-/** 项目归档申请幂等重放的最小结果资源上下文。 */
-export const projectArchiveRequestReplayContextSchema = z
-  .object({
-    projectId: z.number().int().positive().max(2147483647),
-    requestId: z.number().int().positive().max(2147483647),
-  })
-  .strict()
-  .meta({ id: "ProjectArchiveRequestReplayContext" });
-
-export type ProjectArchiveRequestReplayContext = z.infer<
-  typeof projectArchiveRequestReplayContextSchema
->;

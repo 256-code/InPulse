@@ -79,35 +79,38 @@ async function fixture() {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 type Domain = "module" | "feature";
-function check(domain: Domain, tx: TransactionContext, input: Fixture) {
+async function check(domain: Domain, tx: TransactionContext, input: Fixture) {
   return domain === "module"
     ? modules.checkModuleForWrite(tx, input)
     : features.checkFeatureForWrite(tx, input);
 }
-function summary(
-  domain: Domain,
-  f: Fixture,
-  status = "ACTIVE",
-  rowVersion = 1,
-) {
+/** ADR-044/ADR-045：模块与功能都没有状态列，摘要只剩归属与 row_version。 */
+function summary(domain: Domain, f: Fixture, rowVersion = 1) {
   return {
     projectId: f.projectId,
     moduleId: f.moduleId,
     ...(domain === "feature" ? { featureId: f.featureId } : {}),
-    status,
     rowVersion,
   };
 }
-async function archive(tx: TransactionContext, domain: Domain, f: Fixture) {
+/**
+ * 对行做一次真实写入并递增 row_version：模块与功能都只做改名
+ * （ADR-044 起模块、ADR-045 起功能都没有可写的生命周期状态）。
+ */
+async function writeRow(tx: TransactionContext, domain: Domain, f: Fixture) {
   if (domain === "module") {
-    await tx.sql`UPDATE app.modules SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${f.moduleId}`;
+    await tx.sql`UPDATE app.modules SET name = 'Renamed fixture', row_version = row_version + 1 WHERE id = ${f.moduleId}`;
   } else {
-    await tx.sql`UPDATE app.features SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1 WHERE id = ${f.featureId}`;
+    await tx.sql`UPDATE app.features SET name = 'Renamed fixture', row_version = row_version + 1 WHERE id = ${f.featureId}`;
   }
+}
+/** 写入后各域的公共读取结果：两域都只有 allowed，不再有归档只读态。 */
+function afterWrite(domain: Domain, f: Fixture) {
+  return { kind: "allowed" as const, resource: summary(domain, f, 2) };
 }
 
 for (const domain of ["module", "feature"] as const) {
-  test(`${domain}: active, archived, absent and wrong ownership have exact public results`, async () => {
+  test(`${domain}: active, absent and wrong ownership have exact public results`, async () => {
     const f = await fixture();
     const otherProject = await createProject(client.sql, userId);
     await uow.run(async (tx) => {
@@ -132,11 +135,8 @@ for (const domain of ["module", "feature"] as const) {
           await check(domain, tx, { ...f, moduleId: f.otherModuleId }),
         ).toEqual({ kind: "not-found" });
       }
-      await archive(tx, domain, f);
-      expect(await check(domain, tx, f)).toEqual({
-        kind: "parent-not-active",
-        resource: summary(domain, f, "ARCHIVED", 2),
-      });
+      await writeRow(tx, domain, f);
+      expect(await check(domain, tx, f)).toEqual(afterWrite(domain, f));
       expect(await check(domain, tx, { ...f, projectId: -1 })).toEqual({
         kind: "not-found",
       });
@@ -144,7 +144,7 @@ for (const domain of ["module", "feature"] as const) {
   });
 
   for (const end of ["commit", "rollback"] as const) {
-    test(`${domain}: FOR SHARE blocks real archive UPDATE until ${end}`, async () => {
+    test(`${domain}: FOR SHARE blocks a real row UPDATE until ${end}`, async () => {
       const f = await fixture();
       const rollback = new Error("Release holder by rollback");
       let update: Promise<void> | undefined;
@@ -168,7 +168,7 @@ for (const domain of ["module", "feature"] as const) {
               >`SELECT pg_backend_pid() AS pid`;
               if (!session) throw new Error("Missing writer PID");
               announce(session.pid);
-              await archive(other, domain, f);
+              await writeRow(other, domain, f);
               updated = true;
             })
             .catch((error: unknown) => {
@@ -204,10 +204,9 @@ for (const domain of ["module", "feature"] as const) {
       expect(updateError).toBeUndefined();
       expect(updated).toBe(true);
       // Independent transaction after both connections finish proves release and persistence.
-      expect(await uow.run((tx) => check(domain, tx, f))).toEqual({
-        kind: "parent-not-active",
-        resource: summary(domain, f, "ARCHIVED", 2),
-      });
+      expect(await uow.run((tx) => check(domain, tx, f))).toEqual(
+        afterWrite(domain, f),
+      );
     });
   }
 }

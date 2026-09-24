@@ -86,10 +86,7 @@ export const taskBoardCardSchema = z
     dueAt: z.iso.datetime().nullable(),
     completedAt: z.iso.datetime().nullable(),
     dueState: z.enum(TASK_BOARD_DUE_STATES),
-    assignees: z
-      .array(userRefSchema)
-      .min(1)
-      .max(TASK_BOARD_CARD_ASSIGNEES_MAX),
+    assignees: z.array(userRefSchema).min(1).max(TASK_BOARD_CARD_ASSIGNEES_MAX),
     publishedRecordCount: z.number().int().nonnegative(),
   })
   .strict()

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   moduleEditRequestSchema,
   moduleVersionHeadersSchema,
-  moduleArchiveRequestSchema,
 } from "../src/contracts/modules.zod.js";
 
 describe("F-12 request boundaries", () => {
@@ -20,7 +19,7 @@ describe("F-12 request boundaries", () => {
       description: "",
     });
   });
-  it("requires a quoted positive If-Match and a nonempty archive reason", () => {
+  it("requires a quoted positive If-Match and rejects unknown fields", () => {
     for (const value of [undefined, "1", '"0"', '"-1"', "*"]) {
       expect(
         moduleVersionHeadersSchema.safeParse({
@@ -35,8 +34,10 @@ describe("F-12 request boundaries", () => {
         "x-csrf-token": "a".repeat(43),
       }).success,
     ).toBe(true);
-    expect(moduleArchiveRequestSchema.safeParse({ reason: " " }).success).toBe(
-      false,
-    );
+    // ADR-044：模块已下线归档，归档原因请求体连同 Schema 一起删除。
+    expect(
+      moduleEditRequestSchema.safeParse({ name: "模块", reason: "封存" })
+        .success,
+    ).toBe(false);
   });
 });

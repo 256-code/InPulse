@@ -87,17 +87,12 @@ export class RecordLifecycleService {
       throw new RecordDraftError(403, "ADMIN_REQUIRED", "仅管理员可以操作");
     const before = await this.identities.identity(tx, projectId, recordId);
     if (!before) throw missing();
+    // ADR-044/ADR-045：模块与功能都已无归档只读态，这里只保留归属校验与父级 FOR SHARE 取锁。
     const module = await this.modules.checkModuleForWrite(tx, {
       projectId,
       moduleId: before.moduleId,
     });
     if (module.kind === "not-found") throw missing();
-    if (project.kind !== "allowed" || module.kind !== "allowed")
-      throw new RecordDraftError(
-        409,
-        "RECORD_PARENT_ARCHIVED",
-        "项目或模块已归档，记录只读",
-      );
     if (before.featureId !== null) {
       const feature = await this.features.checkFeatureForWrite(tx, {
         projectId,
@@ -105,12 +100,6 @@ export class RecordLifecycleService {
         featureId: before.featureId,
       });
       if (feature.kind === "not-found") throw missing();
-      if (feature.kind !== "allowed")
-        throw new RecordDraftError(
-          409,
-          "RECORD_PARENT_ARCHIVED",
-          "所属功能已归档，记录只读",
-        );
     }
     const locked = await this.identities.identity(
       tx,

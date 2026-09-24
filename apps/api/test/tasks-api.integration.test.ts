@@ -615,12 +615,6 @@ describe("F-16 status history", () => {
       await request(project, "POST", member, complete, `/${task.id}/status`),
       422,
     );
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
-    await error(
-      await request(project, "POST", member, complete, `/${task.id}/status`, 1),
-      409,
-      "TASK_PARENT_ARCHIVED",
-    );
     expect(
       (
         await request(
@@ -650,8 +644,6 @@ describe("F-16 status history", () => {
           })
         ).json(),
       );
-      if (moduleScope)
-        await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
       const results = await Promise.all(
         [complete, { action: "CANCEL", reason: "重复" }].map((body) =>
           request(scope, "POST", member, body, `/${original.id}/status`, 1),
@@ -1034,10 +1026,9 @@ describe("F-15 module tasks", () => {
     expect(logs[0]!.event_payload.impactsAfter).toEqual([]);
     expect(logs[0]!.event_payload.removed).toEqual([project.featureId]);
   });
-  it("preserves/removes archived existing impacts but rejects adding or readding them", async () => {
+  it("keeps, removes and re-adds existing impacts now that features cannot be archived (ADR-045)", async () => {
     const { project, member } = await fixture();
     const item = await createModule(project, member, [project.featureId]);
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
     const patch = (ids: number[], version: number) =>
       request(
         moduleScope(project),
@@ -1049,18 +1040,8 @@ describe("F-15 module tasks", () => {
       );
     expect((await patch([project.featureId], 1)).status).toBe(200);
     expect((await patch([], 2)).status).toBe(200);
-    await error(
-      await patch([project.featureId], 3),
-      409,
-      "TASK_IMPACT_ARCHIVED",
-    );
-    await error(
-      await request(moduleScope(project), "POST", member, {
-        ...edit(member.userId),
-        impactFeatureIds: [project.featureId],
-      }),
-      409,
-    );
+    // ADR-045：影响功能不再有归档态，移除后可以重新加回。
+    expect((await patch([project.featureId], 3)).status).toBe(200);
   });
   it("rolls back relation removal on audit failure and rejects stale concurrent updates", async () => {
     const { project, member } = await fixture();
@@ -1111,7 +1092,7 @@ describe("F-15 module tasks", () => {
       ),
     ).toEqual(success);
   });
-  it("waits for feature archival before adding an influence then rejects it", async () => {
+  it("waits for the feature row lock before adding an influence then commits it", async () => {
     const { project, member } = await fixture();
     let release!: () => void;
     let acquired!: () => void;
@@ -1121,8 +1102,9 @@ describe("F-15 module tasks", () => {
     const ready = new Promise<void>((r) => {
       acquired = r;
     });
+    // ADR-045：功能不再有归档态，持锁方只做一次改名；影响功能写入必须等它解锁。
     const archive = uow.run(async (tx) => {
-      await tx.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+      await tx.sql`UPDATE app.features SET name='持锁改名',row_version=row_version+1 WHERE id=${project.featureId}`;
       acquired();
       await gate;
     });
@@ -1145,7 +1127,11 @@ describe("F-15 module tasks", () => {
       release();
       await archive;
     }
-    await error(await pending, 409, "TASK_IMPACT_ARCHIVED");
+    const response = await pending;
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(
+      moduleTaskItemSchema.parse(await response.json()).impactFeatureIds,
+    ).toEqual([project.featureId]);
   });
 });
 
@@ -1248,7 +1234,7 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     ]);
   });
 
-  it("keeps archived history readable, rejects edits and stale successful replay after parent archival", async () => {
+  it("keeps the task writable and replays the same key after an unrelated parent change (ADR-045)", async () => {
     const { project, member } = await fixture();
     const key = randomUUID();
     const body = edit(member.userId);
@@ -1262,27 +1248,38 @@ describe("F-14 real HTTP / PostgreSQL", () => {
       key,
     );
     const item = taskItemSchema.parse(await first.json());
-    await client.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${project.featureId}`;
+    // ADR-045：功能改名不产生只读态，任务仍可读、可编辑，同 Key 重放返回原响应。
+    await client.sql`UPDATE app.features SET name='改名功能',row_version=row_version+1 WHERE id=${project.featureId}`;
     expect(
       (await request(project, "GET", member, undefined, `/${item.id}`)).status,
     ).toBe(200);
-    await error(
-      await request(project, "PATCH", member, body, `/${item.id}`, 1),
-      409,
+    const patched = await request(
+      project,
+      "PATCH",
+      member,
+      body,
+      `/${item.id}`,
+      1,
     );
-    await error(
-      await request(project, "POST", member, body, "", undefined, key),
-      409,
+    expect(patched.status, await patched.clone().text()).toBe(200);
+    const replay = await request(
+      project,
+      "POST",
+      member,
+      body,
+      "",
+      undefined,
+      key,
     );
+    expect(replay.status, await replay.clone().text()).toBe(200);
+    expect(taskItemSchema.parse(await replay.json())).toMatchObject({
+      id: item.id,
+    });
   });
-  for (const target of [
-    "project",
-    "module",
-    "feature",
-    "member",
-    "user",
-  ] as const)
-    it(`waits for concurrent ${target} archival/removal then rechecks`, async () => {
+  // ADR-043/ADR-044/ADR-045：项目、模块与功能都已无归档态，
+  // 并发父级状态变更只覆盖成员停用与用户停用。
+  for (const target of ["member", "user"] as const)
+    it(`waits for concurrent ${target} removal then rechecks`, async () => {
       const { project, member } = await fixture();
       const assignee = await actor();
       await addMember(project.projectId, assignee.userId);
@@ -1295,12 +1292,6 @@ describe("F-14 real HTTP / PostgreSQL", () => {
         acquired = resolve;
       });
       const change = uow.run(async (tx) => {
-        if (target === "project")
-          await tx.sql`UPDATE app.projects SET status='ARCHIVED', archived_at=now(), row_version=row_version+1 WHERE id=${project.projectId}`;
-        if (target === "module")
-          await tx.sql`UPDATE app.modules SET status='ARCHIVED', archived_at=now(), row_version=row_version+1 WHERE id=${project.moduleId}`;
-        if (target === "feature")
-          await tx.sql`UPDATE app.features SET status='ARCHIVED', archived_at=now(), row_version=row_version+1 WHERE id=${project.featureId}`;
         if (target === "member")
           await tx.sql`UPDATE app.project_members SET status='REMOVED', removed_at=now() WHERE project_id=${project.projectId} AND user_id=${assignee.userId}`;
         if (target === "user")
@@ -1325,10 +1316,7 @@ describe("F-14 real HTTP / PostgreSQL", () => {
         release();
         await change;
       }
-      await error(
-        await pending,
-        target === "member" || target === "user" ? 422 : 409,
-      );
+      await error(await pending, 422);
       expect(
         await client.sql`SELECT 1 FROM app.tasks WHERE project_id=${project.projectId}`,
       ).toHaveLength(0);
@@ -1769,41 +1757,37 @@ describe("ADR-034 task archive and restore", () => {
     });
   });
 
-  it("archives a feature task after its parent feature was archived", async () => {
+  it("archives and restores a feature task whose parent feature stays active (ADR-045)", async () => {
     const { project, member } = await fixture();
     const task = await create(project, member);
-    // ADR-034：功能归档不要求其下任务已归档，之后任务仍必须能归档收尾；
-    // 否则「功能已归档 → 任务无法归档 → 模块永远无法归档」会形成死锁。
-    await client.sql`
-      UPDATE app.features
-         SET status = 'ARCHIVED', archived_at = now(), row_version = row_version + 1
-       WHERE id = ${project.featureId} AND project_id = ${project.projectId}
-    `;
     const archived = await request(
       project,
       "POST",
       member,
-      { reason: "功能归档后收尾" },
+      { reason: "阶段结束" },
       `/${task.id}/archive`,
       task.rowVersion,
     );
     expect(archived.status, await archived.clone().text()).toBe(200);
     const archivedItem = taskItemSchema.parse(await archived.json());
-    expect(archivedItem).toMatchObject({ lifecycleStatus: "ARCHIVED" });
+    expect(archivedItem).toMatchObject({
+      lifecycleStatus: "ARCHIVED",
+      rowVersion: task.rowVersion + 1,
+    });
 
-    // 恢复仍要求父级链活跃：功能已归档时先恢复功能，再恢复任务。
-    await error(
-      await request(
-        project,
-        "POST",
-        member,
-        { reason: "先恢复功能" },
-        `/${task.id}/restore`,
-        archivedItem.rowVersion,
-      ),
-      409,
-      "TASK_PARENT_ARCHIVED",
+    // ADR-045：功能层不再有归档态，任务归档后可以直接恢复。
+    const restored = await request(
+      project,
+      "POST",
+      member,
+      { reason: "提前恢复" },
+      `/${task.id}/restore`,
+      archivedItem.rowVersion,
     );
+    expect(restored.status, await restored.clone().text()).toBe(200);
+    expect(taskItemSchema.parse(await restored.json())).toMatchObject({
+      lifecycleStatus: "ACTIVE",
+    });
   });
 
   it("enforces member, project, version and lifecycle gates", async () => {

@@ -243,12 +243,7 @@ export class RecordDraftsService
     await this.appendAudit(tx, actorId, before, after, requestId);
     return after;
   }
-  async authorize(
-    tx: TransactionContext,
-    actorId: number,
-    scope: DraftScope,
-    existing = false,
-  ) {
+  async authorize(tx: TransactionContext, actorId: number, scope: DraftScope) {
     const project = await this.access.checkProjectForWrite(tx, {
       actorUserId: actorId,
       projectId: scope.projectId,
@@ -266,17 +261,9 @@ export class RecordDraftsService
       ))
     )
       throw missing();
+    // ADR-044/ADR-045：模块与功能都已无归档只读态，这里只保留归属校验与父级 FOR SHARE 取锁。
     const module = await this.modules.checkModuleForWrite(tx, scope);
     if (module.kind === "not-found") throw missing();
-    if (
-      project.kind === "parent-not-active" ||
-      module.kind === "parent-not-active"
-    )
-      throw new RecordDraftError(
-        409,
-        "RECORD_PARENT_ARCHIVED",
-        "项目或模块已归档，草稿只读",
-      );
     for (const featureId of [
       ...new Set(
         scope.featureId === null ? scope.impactFeatureIds : [scope.featureId],
@@ -288,15 +275,6 @@ export class RecordDraftsService
         featureId,
       });
       if (feature.kind === "not-found") throw missing();
-      if (
-        feature.kind === "parent-not-active" &&
-        (scope.featureId !== null || !existing)
-      )
-        throw new RecordDraftError(
-          409,
-          "RECORD_PARENT_ARCHIVED",
-          "所属功能已归档或影响功能不可新增，草稿只读",
-        );
     }
   }
   async resolveExisting(
@@ -312,7 +290,7 @@ export class RecordDraftsService
     if (project.kind === "not-found") throw missing();
     const before = await this.repository.find(tx, projectId, recordId);
     if (!before) throw missing();
-    await this.authorize(tx, actorId, before, true);
+    await this.authorize(tx, actorId, before);
     return before;
   }
   async create(
@@ -422,7 +400,7 @@ export class RecordDraftsService
     content: RecordDraftContent,
     requestId: string,
   ) {
-    await this.authorize(tx, actorId, source, true);
+    await this.authorize(tx, actorId, source);
     const after = await this.repository.create(
       tx,
       source,
@@ -462,7 +440,7 @@ export class RecordDraftsService
         "草稿版本或关联已变化，请加载最新内容后合并",
       );
     // Workflow prelocked this record version's parents/impact set before locking the task.
-    await this.authorize(tx, actorId, before, true);
+    await this.authorize(tx, actorId, before);
     const after = await this.repository.update(
       tx,
       before,

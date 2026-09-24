@@ -40,12 +40,6 @@ export class RecordPublicationAccess {
       projectId,
     });
     if (project.kind === "not-found") throw this.missing();
-    if (project.kind === "parent-not-active")
-      throw new RecordDraftError(
-        409,
-        "RECORD_PARENT_ARCHIVED",
-        "项目已归档，记录只读",
-      );
   }
   async prepare(
     tx: TransactionContext,
@@ -63,17 +57,9 @@ export class RecordPublicationAccess {
       await tx.sql`SAVEPOINT record_publication_locks`;
       const previous = await this.repository.identity(tx, projectId, recordId);
       if (!previous || previous.status === "VOID") throw this.missing();
+      // ADR-044/ADR-045：模块与功能都已无归档只读态，这里只保留归属校验与父级 FOR SHARE 取锁。
       const module = await this.modules.checkModuleForWrite(tx, previous);
       if (module.kind === "not-found") throw this.missing();
-      if (
-        project.kind === "parent-not-active" ||
-        module.kind === "parent-not-active"
-      )
-        throw new RecordDraftError(
-          409,
-          "RECORD_PARENT_ARCHIVED",
-          "项目或模块已归档，记录只读",
-        );
       let source: TaskReadModel | undefined;
       if (publish && previous.taskId !== null) {
         source = await this.tasks.find(tx, projectId, previous.taskId);
@@ -99,15 +85,6 @@ export class RecordPublicationAccess {
           featureId,
         });
         if (feature.kind === "not-found") throw this.missing();
-        if (
-          feature.kind === "parent-not-active" &&
-          featureId === previous.featureId
-        )
-          throw new RecordDraftError(
-            409,
-            "RECORD_PARENT_ARCHIVED",
-            "所属功能已归档，记录只读",
-          );
       }
       if (source) {
         const locked = await this.tasks.lock(tx, projectId, source.taskId);

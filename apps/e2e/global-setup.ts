@@ -233,6 +233,10 @@ async function seedFixture(databaseUrl: string): Promise<{
       return project.id;
     });
 
+    // 人工 PROJECT 投影行必须用真实项目行之外的 entity_id：真实行用 project_id 作
+    // entity_id，成员变更等合法写入会按唯一键 (project_id, entity_type, entity_id)
+    // 覆盖同一行，夹具共用该值时会被冲掉（搜索用例因此依赖执行顺序）。同时只能用
+    // 正数：响应契约校验拒绝非正 entityId，负值会让 /api/v1/search 直接 500。
     const searchQuery = `e2e${randomBytes(3).toString("hex")}`;
     const projectTitle = `E2E 可搜索项目 ${code}`;
     const projectSearchText = `${projectTitle} ${searchQuery}`;
@@ -252,7 +256,7 @@ async function seedFixture(databaseUrl: string): Promise<{
       VALUES (
         ${projectId},
         'PROJECT',
-        ${projectId},
+        2_100_000,
         ${projectTitle},
         'Playwright E2E fixture',
         ${projectSearchText},
@@ -302,7 +306,7 @@ async function seedFixture(databaseUrl: string): Promise<{
       VALUES (
         ${hiddenProjectId},
         'PROJECT',
-        ${hiddenProjectId},
+        2_100_001,
         ${hiddenProjectTitle},
         'Playwright hidden search fixture',
         ${hiddenProjectTitle},

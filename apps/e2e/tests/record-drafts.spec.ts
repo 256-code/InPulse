@@ -4,7 +4,7 @@ import { fillLeftovers } from "../helpers/record-leftovers.js";
 import { loadRuntime } from "../helpers/runtime.js";
 import {
   pickCalmSelectOption,
-  pickCalmSelectOptionByIndex,
+  pickFirstCalmSelectOption,
 } from "../helpers/calm-select.js";
 test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browser }) => {
   test.setTimeout(90000);
@@ -14,7 +14,8 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await page.goto(`/records?projectId=${runtime.projectId}`);
     await page.getByRole("button", { name: "新建迭代记录" }).click();
     const create = page.getByRole("dialog", { name: "新建迭代记录" });
-    await pickCalmSelectOptionByIndex(create, "所属模块", 1);
+    // 该弹窗的「所属模块」没有占位项，选第一项即第一个真实模块。
+    await pickFirstCalmSelectOption(create, "所属模块");
     const title = `独立草稿-${Date.now()}`;
     await create.getByLabel("迭代标题").fill(title);
     await create.getByLabel("改动原因").fill("重复提交造成状态冲突");
@@ -22,9 +23,13 @@ test("F-17 独立草稿保存、继续编辑和刷新持久化", async ({ browse
     await create.getByLabel("改动效果").fill("并发请求验证通过");
     await create.getByRole("button", { name: "保存草稿" }).click();
     await expect(create).toBeHidden();
-    const detail = page.getByRole("region", { name: "草稿详情" });
+    // 14808b1 起标题在弹层页头、草稿说明在弹层页脚，都在 region 之外。
+    const detail = page.getByRole("dialog", {
+      name: "草稿详情",
+      exact: true,
+    });
     await expect(detail.getByText("暂无已知遗留问题")).toBeVisible();
-    await page.getByRole("button", { name: "继续编辑" }).click();
+    await page.getByRole("button", { name: "继续编辑", exact: true }).click();
     const edit = page.getByRole("dialog", { name: "编辑草稿" });
     await fillLeftovers(edit, ["继续观察高峰流量"]);
     await edit.getByRole("button", { name: "保存草稿" }).click();
@@ -113,7 +118,7 @@ for (const moduleScope of [false, true])
         .locator(".draft-card")
         .filter({ hasText: title + "第二条" })
         .click();
-      await page.getByRole("button", { name: "继续编辑" }).click();
+      await page.getByRole("button", { name: "继续编辑", exact: true }).click();
       const edit = page.getByRole("dialog", { name: "编辑草稿" });
       await fillLeftovers(edit, ["来源草稿补充"]);
       await edit.getByRole("button", { name: "保存草稿" }).click();

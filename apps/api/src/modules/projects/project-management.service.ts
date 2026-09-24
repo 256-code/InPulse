@@ -1,7 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   projectReplayContextSchema,
-  type ProjectArchivePreviewResponse,
   type ProjectDetailResponse,
   type ProjectEditRequest,
   type ProjectItem,
@@ -15,7 +14,6 @@ import {
   PROJECT_ACCESS_QUERY_PORT,
   type ProjectAccessQueryPort,
 } from "./project-access.port.js";
-import { ProjectArchiveRequestPort } from "./project-archive-request.port.js";
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 import { ProjectRoleGateService } from "./project-role-gate.service.js";
 import { ProjectStartNotifier } from "./project-start.notifier.js";
@@ -25,18 +23,15 @@ import {
 } from "./projects-write.port.js";
 
 const PROJECT_UPDATE_ACTIVITY = "PROJECT_UPDATED";
-const PROJECT_ARCHIVED_ACTIVITY = "PROJECT_ARCHIVED";
-const PROJECT_RESTORED_ACTIVITY = "PROJECT_RESTORED";
 const PROJECT_STATUS_CHANGED_ACTIVITY = "PROJECT_STATUS_CHANGED";
 
-/** F-06.3 状态接口可写入的目标态：归档必须走归档流程，不在其中。 */
+/** F-06.3 状态接口可写入的目标态：项目三态，不存在归档。 */
 export type ProjectLifecycleTarget = "NOT_STARTED" | "ACTIVE" | "MAINTENANCE";
 
 const PROJECT_STATUS_LABELS: Readonly<Record<string, string>> = {
   NOT_STARTED: "未开始",
   ACTIVE: "进行中",
   MAINTENANCE: "维护中",
-  ARCHIVED: "已归档",
 };
 
 export class ProjectManagementError extends Error {
@@ -80,15 +75,13 @@ export class ProjectManagementService {
     private readonly search: SearchProjectionWritePort,
     @Inject(ProjectMembersQueryPort)
     private readonly members: ProjectMembersQueryPort,
-    @Inject(ProjectArchiveRequestPort)
-    private readonly archiveRequests: ProjectArchiveRequestPort,
     @Inject(ProjectRoleGateService)
     private readonly roles: ProjectRoleGateService,
     @Inject(ProjectStartNotifier)
     private readonly startNotifier: ProjectStartNotifier,
   ) {}
 
-  /** 写前授权：实时成员关系与用户状态由 Port 读取，归档项目拒绝写入。 */
+  /** 写前授权：实时成员关系与用户状态由 Port 读取；项目三态下没有只读态。 */
   async authorize(
     tx: TransactionContext,
     actorId: number,
@@ -99,12 +92,6 @@ export class ProjectManagementService {
       projectId,
     });
     if (check.kind === "not-found") throw missing();
-    if (check.kind === "parent-not-active")
-      throw new ProjectManagementError(
-        409,
-        "PROJECT_ARCHIVED",
-        "项目已归档，项目只读",
-      );
   }
 
   /** 幂等重放前的当前权限复核；任一门禁失败都不得返回已存成功结果。 */
@@ -112,33 +99,12 @@ export class ProjectManagementService {
     tx: TransactionContext,
     actorId: number,
     context: unknown,
-    options: { readonly allowArchived?: boolean } = {},
   ): Promise<void> {
     const resource = projectReplayContextSchema.safeParse(context);
     if (!resource.success) {
       throw new Error("invalid project replay context");
     }
-    if (options.allowArchived === true) {
-      await this.authorizeArchived(tx, actorId, resource.data.projectId);
-      return;
-    }
     await this.authorize(tx, actorId, resource.data.projectId);
-  }
-
-  /**
-   * 恢复专用授权：已归档项目允许继续；管理员身份与 CSRF
-   * 由 HTTP 层 `AdminHighRiskAuthService` 校验。
-   */
-  async authorizeArchived(
-    tx: TransactionContext,
-    actorId: number,
-    projectId: number,
-  ): Promise<void> {
-    const check = await this.access.checkProjectForWrite(tx, {
-      actorUserId: actorId,
-      projectId,
-    });
-    if (check.kind === "not-found") throw missing();
   }
 
   async updateProject(
@@ -228,39 +194,14 @@ export class ProjectManagementService {
     };
   }
 
-  async archiveProject(
-    tx: TransactionContext,
-    input: {
-      readonly actorId: number;
-      readonly projectId: number;
-      readonly version: number;
-      readonly reason: string;
-      readonly requestId: string;
-    },
-  ): Promise<ProjectDetailResponse> {
-    return this.changeStatus(tx, { ...input, target: "ARCHIVED" });
-  }
-
-  async restoreProject(
-    tx: TransactionContext,
-    input: {
-      readonly actorId: number;
-      readonly projectId: number;
-      readonly version: number;
-      readonly reason: string;
-      readonly requestId: string;
-    },
-  ): Promise<ProjectDetailResponse> {
-    return this.changeStatus(tx, { ...input, target: "ACTIVE" });
-  }
-
   /**
    * F-06.3 项目状态变更：本项目任意活跃成员或系统管理员把项目在未开始、
-   * 进行中、维护中之间手动切换。归档只能走归档流程，因此不是合法目标。
+   * 进行中、维护中之间手动切换；项目三态下不存在归档，也没有归档流程。
    *
-   * 两条硬约束在服务端拦截，前端置灰只是提示：
+   * 三条硬约束在服务端拦截，前端置灰只是提示：
    * - 未开始与维护中之间禁止直接互改，必须先经过进行中；
-   * - 项目内出现过已完成任务后不可回退未开始（粘性标记永不回落）。
+   * - 项目内出现过已完成任务后不可回退未开始（粘性标记永不回落）；
+   * - 进入维护中要求项目下任务全部收尾（未归档且未完成的任务数为 0）。
    *
    * 只有「未开始 → 进行中」通知全体活跃成员；维护中不通知，避免反复切换刷屏。
    * 状态、审计 `project.status.change`、活动与搜索投影在同一事务提交。
@@ -287,13 +228,6 @@ export class ProjectManagementService {
       true,
     );
     if (current === undefined) throw missing();
-    if (current.status === "ARCHIVED") {
-      throw new ProjectManagementError(
-        409,
-        "PROJECT_ARCHIVED",
-        "项目已归档，项目只读",
-      );
-    }
     if (current.rowVersion !== input.version) throw versionConflict();
     if (current.status === input.target) {
       throw new ProjectManagementError(
@@ -324,6 +258,18 @@ export class ProjectManagementService {
         "PROJECT_STATUS_LEVEL_SKIP",
         "未开始的项目不能直接切换为维护中，请先切换为进行中",
       );
+    }
+    if (input.target === "MAINTENANCE") {
+      const openTaskCount = await this.projects.countUnarchivedTasks(tx, {
+        projectId: input.projectId,
+      });
+      if (openTaskCount > 0) {
+        throw new ProjectManagementError(
+          409,
+          "PROJECT_MAINTENANCE_TASKS_OPEN",
+          `项目下仍有 ${openTaskCount} 个未完成、也未归档的任务，请先完成或归档全部任务再切换为维护中`,
+        );
+      }
     }
     const updated = await this.projects.updateProjectStatus(tx, {
       projectId: input.projectId,
@@ -386,134 +332,6 @@ export class ProjectManagementService {
         occurredAt,
       });
     }
-    return {
-      project: this.toItem(updated),
-      currentUserRole:
-        (await this.members.findActiveRole(tx, {
-          projectId: updated.projectId,
-          userId: input.actorId,
-        })) ?? null,
-    };
-  }
-
-  /** 归档前未完成任务提醒；只读，归档项目也可查看。 */
-  async archivePreview(
-    tx: TransactionContext,
-    actorId: number,
-    projectId: number,
-  ): Promise<ProjectArchivePreviewResponse> {
-    await this.authorizeArchived(tx, actorId, projectId);
-    return {
-      projectId,
-      unfinishedTaskCount: await this.projects.countUnfinishedTasks(tx, {
-        projectId,
-      }),
-    };
-  }
-
-  private async changeStatus(
-    tx: TransactionContext,
-    input: {
-      readonly actorId: number;
-      readonly projectId: number;
-      readonly version: number;
-      readonly reason: string;
-      readonly requestId: string;
-      readonly target: "ACTIVE" | "ARCHIVED";
-    },
-  ): Promise<ProjectDetailResponse> {
-    if (input.target === "ARCHIVED") {
-      await this.authorize(tx, input.actorId, input.projectId);
-    } else {
-      await this.authorizeArchived(tx, input.actorId, input.projectId);
-    }
-    const current = await this.projects.findProjectForChange(
-      tx,
-      { projectId: input.projectId },
-      true,
-    );
-    if (current === undefined) throw missing();
-    if (current.rowVersion !== input.version) throw versionConflict();
-    // ADR-035：归档允许从任一未归档状态进入（未开始、进行中、维护中都可以直接归档）；
-    // 恢复一律回到进行中，不保留归档前的状态。
-    const stateConflict =
-      input.target === "ARCHIVED"
-        ? current.status === "ARCHIVED"
-        : current.status !== "ARCHIVED";
-    if (stateConflict) {
-      throw new ProjectManagementError(
-        409,
-        "PROJECT_STATE_CONFLICT",
-        input.target === "ARCHIVED"
-          ? "项目已归档，不能重复归档"
-          : "项目未归档，不能恢复",
-      );
-    }
-    const updated = await this.projects.updateProjectStatus(tx, {
-      projectId: input.projectId,
-      expectedRowVersion: input.version,
-      status: input.target,
-    });
-    if (updated === undefined) throw versionConflict();
-    // ADR-034：直接归档项目时结束仍待审的归档申请，避免悬挂的待办。
-    const cancelledArchiveRequestIds =
-      input.target === "ARCHIVED"
-        ? await this.archiveRequests.cancelPendingRequests(tx, {
-            projectId: updated.projectId,
-            decidedBy: input.actorId,
-          })
-        : [];
-
-    const action = input.target === "ARCHIVED" ? "archive" : "restore";
-    const occurredAt = new Date();
-    const event = await this.audit.append(tx, {
-      projectId: updated.projectId,
-      actorType: "USER",
-      actorId: input.actorId,
-      action: `project.${action}`,
-      targetType: "PROJECT",
-      targetId: String(updated.projectId),
-      eventPayload: {
-        reason: input.reason,
-        before: { status: current.status, rowVersion: current.rowVersion },
-        after: { status: updated.status, rowVersion: updated.rowVersion },
-        cancelledArchiveRequestIds,
-      },
-      requestId: input.requestId,
-      occurredAt,
-    });
-    await this.activity.append(tx, {
-      projectId: updated.projectId,
-      sourceChainId: event.chainId,
-      sourceSequence: event.sequenceNo,
-      sourceEntityType: "PROJECT",
-      sourceEntityId: updated.projectId,
-      activityType:
-        input.target === "ARCHIVED"
-          ? PROJECT_ARCHIVED_ACTIVITY
-          : PROJECT_RESTORED_ACTIVITY,
-      actorId: input.actorId,
-      summary:
-        input.target === "ARCHIVED"
-          ? `归档了项目 ${updated.name}`
-          : `恢复了项目 ${updated.name}`,
-      metadata: { code: updated.code, reason: input.reason },
-      visibilityScope: "MEMBER",
-      sourceStatus: updated.status,
-      sourceRowVersion: updated.rowVersion,
-      occurredAt,
-    });
-    await this.search.upsert(tx, {
-      projectId: updated.projectId,
-      entityType: "PROJECT",
-      entityId: updated.projectId,
-      title: updated.name,
-      summary: updated.description.slice(0, 5000),
-      rawText: `${updated.code} ${updated.name} ${updated.description}`,
-      visibilityScope: "MEMBER",
-      sourceStatus: updated.status,
-      sourceRowVersion: updated.rowVersion,
-    });
     return {
       project: this.toItem(updated),
       currentUserRole:

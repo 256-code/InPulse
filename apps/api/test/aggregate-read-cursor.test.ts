@@ -169,7 +169,7 @@ describe("AggregateReadCursorService", () => {
 
   test("MY_TASKS 游标携带多列排序键并随签名绑定（ADR-037）", () => {
     const cursors = service();
-    const sortKey = "5|0||1|2|1|2026-09-18T01:00:00.000Z|42";
+    const sortKey = "6|0||1|2|2026-09-18T01:00:00.000Z|42";
     const token = cursors.encode({
       actorUserId: 7,
       namespace: "MY_TASKS",
@@ -226,7 +226,7 @@ describe("AggregateReadCursorService", () => {
       namespace: "MY_TASKS",
       filterKey: context.filterKey,
       afterId: 42,
-      sortKey: "5|0||1|2|1|2026-09-18T01:00:00.000Z|42",
+      sortKey: "6|0||1|2|2026-09-18T01:00:00.000Z|42",
       nowMs,
     });
     const [payloadRaw, signature] = token.split(".") as [string, string];
@@ -234,7 +234,7 @@ describe("AggregateReadCursorService", () => {
       Buffer.from(payloadRaw, "base64url").toString("utf8"),
     ) as Record<string, unknown>;
     const forged = Buffer.from(
-      JSON.stringify({ ...payload, k: "5|0||3|2|1||42" }),
+      JSON.stringify({ ...payload, k: "6|0||3|2||42" }),
       "utf8",
     ).toString("base64url");
     expectReason(

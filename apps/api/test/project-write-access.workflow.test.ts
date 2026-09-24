@@ -35,7 +35,6 @@ const project: ProjectForWriteResource = {
 const moduleResource: ModuleForWriteResource = {
   projectId: 1,
   moduleId: 2,
-  status: "ACTIVE",
   rowVersion: 1,
 };
 
@@ -43,7 +42,6 @@ const featureResource: FeatureForWriteResource = {
   projectId: 1,
   moduleId: 2,
   featureId: 3,
-  status: "ACTIVE",
   rowVersion: 1,
 };
 
@@ -143,23 +141,13 @@ describe("ProjectWriteAccessWorkflow", () => {
     expect(features.checkFeatureForWrite).not.toHaveBeenCalled();
   });
 
-  test("项目 not-found / parent-not-active 会阻断模块和功能检查", async () => {
-    const cases: ProjectWriteCheckResult[] = [
-      { kind: "not-found" },
-      {
-        kind: "parent-not-active",
-        resource: { ...project, status: "ARCHIVED" },
-      },
-    ];
+  test("项目 not-found 会阻断模块和功能检查", async () => {
+    const cases: ProjectWriteCheckResult[] = [{ kind: "not-found" }];
 
     for (const projectResult of cases) {
       const { calls, modules, features, workflow } = setup({
         project: projectResult,
       });
-      const expected =
-        projectResult.kind === "not-found"
-          ? { kind: "project-not-found" as const }
-          : { kind: "project-not-active" as const };
 
       await expect(
         workflow.checkFeatureForWrite(tx(), {
@@ -168,7 +156,7 @@ describe("ProjectWriteAccessWorkflow", () => {
           moduleId: 2,
           featureId: 3,
         }),
-      ).resolves.toEqual(expected);
+      ).resolves.toEqual({ kind: "project-not-found" });
 
       expect(calls).toEqual(["session", "project"]);
       expect(modules.checkModuleForWrite).not.toHaveBeenCalled();
@@ -176,34 +164,22 @@ describe("ProjectWriteAccessWorkflow", () => {
     }
   });
 
-  test("模块 not-found / parent-not-active 会阻断功能检查", async () => {
-    const cases: ModuleWriteCheckResult[] = [
-      { kind: "not-found" },
-      {
-        kind: "parent-not-active",
-        resource: { ...moduleResource, status: "ARCHIVED" },
-      },
-    ];
+  test("模块 not-found 会阻断功能检查（ADR-044：模块已无只读态）", async () => {
+    const { calls, features, workflow } = setup({
+      module: { kind: "not-found" },
+    });
 
-    for (const moduleResult of cases) {
-      const { calls, features, workflow } = setup({ module: moduleResult });
-      const expected =
-        moduleResult.kind === "not-found"
-          ? { kind: "module-not-found" as const }
-          : { kind: "module-not-active" as const };
+    await expect(
+      workflow.checkFeatureForWrite(tx(), {
+        cookieHeader: "__Host-session=token",
+        projectId: 1,
+        moduleId: 2,
+        featureId: 3,
+      }),
+    ).resolves.toEqual({ kind: "module-not-found" });
 
-      await expect(
-        workflow.checkFeatureForWrite(tx(), {
-          cookieHeader: "__Host-session=token",
-          projectId: 1,
-          moduleId: 2,
-          featureId: 3,
-        }),
-      ).resolves.toEqual(expected);
-
-      expect(calls).toEqual(["session", "project", "module"]);
-      expect(features.checkFeatureForWrite).not.toHaveBeenCalled();
-    }
+    expect(calls).toEqual(["session", "project", "module"]);
+    expect(features.checkFeatureForWrite).not.toHaveBeenCalled();
   });
 
   test("feature allowed 在模块检查后继续检查功能并返回完整摘要", async () => {
@@ -227,30 +203,17 @@ describe("ProjectWriteAccessWorkflow", () => {
     expect(calls).toEqual(["session", "project", "module", "feature"]);
   });
 
-  test("feature not-found / parent-not-active 保留父级语义并返回 feature 失败", async () => {
-    const cases: FeatureWriteCheckResult[] = [
-      { kind: "not-found" },
-      {
-        kind: "parent-not-active",
-        resource: { ...featureResource, status: "ARCHIVED" },
-      },
-    ];
+  // ADR-045：功能不再有归档只读态，父级失败只剩 not-found 一种。
+  test("feature not-found 保留父级语义并返回 feature 失败", async () => {
+    const { workflow } = setup({ feature: { kind: "not-found" } });
 
-    for (const featureResult of cases) {
-      const { workflow } = setup({ feature: featureResult });
-      const expected =
-        featureResult.kind === "not-found"
-          ? { kind: "feature-not-found" as const }
-          : { kind: "feature-not-active" as const };
-
-      await expect(
-        workflow.checkFeatureForWrite(tx(), {
-          cookieHeader: "__Host-session=token",
-          projectId: 1,
-          moduleId: 2,
-          featureId: 3,
-        }),
-      ).resolves.toEqual(expected);
-    }
+    await expect(
+      workflow.checkFeatureForWrite(tx(), {
+        cookieHeader: "__Host-session=token",
+        projectId: 1,
+        moduleId: 2,
+        featureId: 3,
+      }),
+    ).resolves.toEqual({ kind: "feature-not-found" });
   });
 });

@@ -7,7 +7,7 @@ import { TasksPanel } from "@features/tasks/TasksPanel";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmSectionTitle, CalmTabs } from "@features/common/components/Calm";
-import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
+import { moduleLifecycleLabel } from "@features/common/resource-lifecycle";
 
 /**
  * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
@@ -74,10 +74,7 @@ export default function ModuleTasksPage() {
       <details className="calm-disclosure module-information">
         <summary>
           模块资料 · {module.name} ·{" "}
-          {resourceLifecycleLabel(
-            module.status,
-            module.stats.completedTaskCount,
-          )}
+          {moduleLifecycleLabel(module.stats.completedTaskCount)}
         </summary>
         <h4>职责与范围</h4>
         <p>{module.description || "尚未补充，可通过编辑模块完善。"}</p>
@@ -103,7 +100,8 @@ export default function ModuleTasksPage() {
         projectId={projectId}
         moduleId={moduleId}
         featureId={null}
-        writable={module.status === "ACTIVE"}
+        /* ADR-044：模块层面已下线归档，模块级任务始终可写。 */
+        writable
         isAdmin={user?.isAdmin === true}
         onOpenTask={setTaskTarget}
       />

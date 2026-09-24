@@ -23,17 +23,18 @@ export interface ProjectForWriteResource {
 }
 
 /**
- * 与 B 侧 Module/Feature 的 `WriteCheckResult` 保持同一语义：
+ * 与 B 侧 Module/Feature 的 `WriteCheckResult` 同语义：
  * - `not-found`：项目不存在、当前用户停用，或普通用户没有 ACTIVE 成员关系。
- * - `parent-not-active`：已通过归属/成员校验，但项目已归档（status = ARCHIVED）。
- *   项目四态改造后只有「已归档」拦截写入：未开始 / 进行中 / 维护中都是活跃态，
- *   仍可新建模块、功能、任务与记录；「维护中」只是对外声明的纯标签。
+ * - `allowed`：已通过归属与成员校验，项目可写。
+ *
+ * ADR-043：项目生命周期收敛为三态（未开始 / 进行中 / 维护中），项目层不再有
+ * 归档入口与只读态，因此本 Port 不再返回 `parent-not-active`；模块自 ADR-044 起也
+ * 不再有归档态（只有 ACTIVE），只剩功能保留该 kind（`feature.status = ARCHIVED`）。未开始 / 进行中 / 维护中都是活跃态，仍可新建模块、功能、任务与记录。
  * Port 只返回类型化结果，不抛出 HTTP 异常；HTTP 映射由 Use Case/Workflow 负责。
  */
 export type ProjectWriteCheckResult =
   | { kind: "allowed"; resource: ProjectForWriteResource }
-  | { kind: "not-found" }
-  | { kind: "parent-not-active"; resource: ProjectForWriteResource };
+  | { kind: "not-found" };
 
 export interface ProjectAccessQueryPort {
   getAuthorizedSearchScope(

@@ -11,16 +11,15 @@ export class PostgresModuleQueryPort extends ModuleQueryPort {
     tx: TransactionContext,
     input: CheckModuleForWriteInput,
   ): Promise<ModuleWriteCheckResult> {
+    // ADR-044：模块只有 ACTIVE 一种状态，取锁成功即代表可写。
     const [resource] = await tx.sql<ModuleForWriteResource[]>`
       SELECT id AS "moduleId", project_id AS "projectId",
-        status, row_version AS "rowVersion"
+        row_version AS "rowVersion"
       FROM app.modules
       WHERE id = ${input.moduleId} AND project_id = ${input.projectId}
       FOR SHARE
     `;
     if (!resource) return { kind: "not-found" };
-    return resource.status === "ACTIVE"
-      ? { kind: "allowed", resource }
-      : { kind: "parent-not-active", resource };
+    return { kind: "allowed", resource };
   }
 }

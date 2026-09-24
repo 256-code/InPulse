@@ -6,17 +6,21 @@ export interface CheckModuleForWriteInput {
 }
 
 export interface ModuleForWriteResource extends CheckModuleForWriteInput {
-  readonly status: "ACTIVE" | "ARCHIVED";
   readonly rowVersion: number;
 }
 
+/**
+ * 与 Module/Feature 的其他 WriteCheckResult 同语义：
+ * - `not-found`：模块不存在或项目归属不匹配。
+ * - `allowed`：已通过归属校验，模块可写。
+ *
+ * ADR-044：模块层面下线归档，模块不再有只读态，因此本 Port 不再返回
+ * `parent-not-active`；功能仍保留该 kind（`feature.status = ARCHIVED`）。
+ * Port 只返回类型化结果，不抛出 HTTP 异常；HTTP 映射由 Use Case/Workflow 负责。
+ */
 export type ModuleWriteCheckResult =
   | { readonly kind: "allowed"; readonly resource: ModuleForWriteResource }
-  | { readonly kind: "not-found" }
-  | {
-      readonly kind: "parent-not-active";
-      readonly resource: ModuleForWriteResource;
-    };
+  | { readonly kind: "not-found" };
 
 /** Caller authorizes and locks parents first; this check holds FOR SHARE until tx ends. */
 export abstract class ModuleQueryPort {

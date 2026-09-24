@@ -1,6 +1,6 @@
 # FeatureQueryPort 事务内写前检查
 
-2026-09-09 F-13 增量：功能管理 HTTP 模块为独立 `FeaturesManagementModule`，与本文件原 `FeaturesModule` 写前检查公开模块分离。功能列表/详情、创建/编辑、管理员归档恢复、相似候选的接口及实际验证见 [F-13 本地交审说明](../../../../../docs/f13-local-handoff.md)。原写前检查接口不变，继续由 Tasks/ChangeRecords/Workflow 使用；归档后返回 `parent-not-active`，历史读取不调用此 Port。
+2026-09-09 F-13 增量：功能管理 HTTP 模块为独立 `FeaturesManagementModule`，与本文件原 `FeaturesModule` 写前检查公开模块分离。功能列表/详情、创建/编辑、相似候选的接口及实际验证见 [F-13 本地交审说明](../../../../../docs/f13-local-handoff.md)。原写前检查接口继续由 Tasks/ChangeRecords/Workflow 使用。2026-09-24 [ADR-045](../../../../../docs/adr/ADR-045.md) 起功能层面归档整体下线：`archiveFeature`、`restoreFeature`、`FeatureArchiveRequest` 与本 Port 的 `parent-not-active` 已删除，`app.features.status` 只有 `ACTIVE`；下文「归档 / 恢复 / 三种 kind / status 为 ACTIVE 或 ARCHIVED」的描述为当时事实。
 
 公开入口 `apps/api/src/modules/features/index.ts` 导出 `FeatureQueryPort`、
 `CheckFeatureForWriteInput`、`FeatureForWriteResource`、`FeatureWriteCheckResult` 和 `FeaturesModule`。
@@ -14,11 +14,10 @@ checkFeatureForWrite(
 ): Promise<FeatureWriteCheckResult>;
 ```
 
-三种 kind 与 [ModuleQueryPort](../modules/README.md) 一致：allowed、not-found、parent-not-active。
-allowed 与 parent-not-active 的 resource 仅含 featureId、moduleId、projectId、status 和 rowVersion；
-status 为 ACTIVE 或 ARCHIVED，其余为 Schema integer 对应的 number。
-不存在、项目或模块归属不匹配时只返回 not-found，归属正确但功能已归档时返回摘要。
-SQL 只读取 app.features，包含完整归属条件并取得 FOR SHARE，再检查状态；
+两种 kind 与 [ModuleQueryPort](../modules/README.md) 一致：allowed、not-found。
+allowed 的 resource 仅含 featureId、moduleId、projectId 与 rowVersion，均为 Schema integer 对应的 number。
+不存在、项目或模块归属不匹配时只返回 not-found（ADR-045 起功能无归档态，不存在「归属正确但已归档」的第三种结果）。
+SQL 只读取 app.features，包含完整归属条件并取得 FOR SHARE；
 不自行查询项目或模块，不认证、不写入、不自行开启事务。
 
 下面是 Workflow 接入示意，**不是本次实现的业务 Workflow**；需注入 A 的
@@ -57,7 +56,7 @@ await this.unitOfWork.run(async (tx) => {
 pnpm --filter @inpulse/api exec vitest run --config vitest.integration.config.ts test/write-query-ports.integration.test.ts
 ```
 
-6 个用例覆盖两域活跃/归档/缺失/归属不匹配，以及两域各自提交、回滚释放锁。
+6 个用例覆盖两域存在/缺失/归属不匹配，以及两域各自提交、回滚释放锁。
 锁测试用 app_runtime 的两个独立连接，以 pg_blocking_pids 确认真实 UPDATE 被持锁连接阻塞，
 事务结束后验证更新完成与版本递增。fixture 复用项目初始化 helper，满足创建者成员和未分类约束；
 使用唯一测试数据，不删除历史、不禁用触发器、不使用 Mock。仅在隔离测试库运行。

@@ -144,9 +144,7 @@ export class FeaturesHttpService {
       const input = parse(
         route.request.body.contentTypes[0]!.schemaRef,
         request.body,
-      ) as FeatureEditRequest & { reason: string };
-      const highRisk =
-        operation === "archiveFeature" || operation === "restoreFeature";
+      ) as FeatureEditRequest;
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (!current)
@@ -162,8 +160,6 @@ export class FeaturesHttpService {
           path.moduleId,
           path.featureId,
         );
-        // ADR-034：归档/恢复不再要求系统管理员 Session，改由服务层在
-        // execute/replay 内校验项目内管理角色（系统管理员经 is_admin 旁路）。
         return current.userId;
       };
       const result = await this.idempotency.run({
@@ -193,7 +189,7 @@ export class FeaturesHttpService {
                     getHeader(request.headers, "if-match")!.slice(1, -1),
                   ),
                 }),
-            ...(highRisk ? { reason: input.reason } : { edit: input }),
+            edit: input,
             requestId,
           });
           return {
@@ -210,9 +206,7 @@ export class FeaturesHttpService {
         },
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
-          await this.features.replay(tx, actorId, record.replayAuthContext, {
-            requireManageRole: highRisk,
-          });
+          await this.features.replay(tx, actorId, record.replayAuthContext);
         },
       });
       return {

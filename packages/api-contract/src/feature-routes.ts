@@ -24,12 +24,11 @@ const fields = [
   "createdBy",
   "createdByName",
   "tags[]",
-  "status",
   "rowVersion",
   "createdAt",
   "updatedAt",
-  "archivedAt",
   "stats.openTaskCount",
+  "stats.completedTaskCount",
   "stats.recordCount",
 ];
 export const featureRoutes: readonly RouteDefinition[] = [
@@ -37,7 +36,8 @@ export const featureRoutes: readonly RouteDefinition[] = [
     method: "GET",
     path: "/projects/{projectId}/modules/{moduleId}/features",
     operationId: "listFeatures",
-    summary: "读取可访问项目的全部功能，含归档历史，按 id 升序。",
+    summary:
+      "读取可访问项目的全部功能；先按派生档位（进行中、未开始）排序，同档位内按创建时间从近到远、创建时间相同时按功能 ID 降序（ADR-045：功能已无归档态，档位只剩两档）。",
     request: {
       path: "FeatureCollectionPath",
       query: "none",
@@ -63,7 +63,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
     method: "GET",
     path: "/projects/{projectId}/modules/{moduleId}/features/similar",
     operationId: "findSimilarFeatures",
-    summary: "当前项目最多十个关键词候选，含归档，不自动阻止创建或合并。",
+    summary: "当前项目最多十个关键词候选，不自动阻止创建或合并。",
     request: {
       path: "FeatureCollectionPath",
       query: "FeatureSimilarQuery",
@@ -89,7 +89,7 @@ export const featureRoutes: readonly RouteDefinition[] = [
     method: "GET",
     path: "/projects/{projectId}/modules/{moduleId}/features/{featureId}",
     operationId: "getFeature",
-    summary: "按完整项目和模块归属读取功能详情，含归档历史。",
+    summary: "按完整项目和模块归属读取功能详情。",
     request: {
       path: "FeatureResourcePath",
       query: "none",
@@ -111,89 +111,74 @@ export const featureRoutes: readonly RouteDefinition[] = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
-  ...(
-    [
-      "createFeature",
-      "updateFeature",
-      "archiveFeature",
-      "restoreFeature",
-    ] as const
-  ).map((operationId): RouteDefinition => {
-    const create = operationId === "createFeature";
-    const update = operationId === "updateFeature";
-    const highRisk = !create && !update;
-    const action = create
-      ? "create"
-      : update
-        ? "update"
-        : operationId === "archiveFeature"
-          ? "archive"
-          : "restore";
-    return {
-      method: update ? "PATCH" : "POST",
-      path: `/projects/{projectId}/modules/{moduleId}/features${create ? "" : `/{featureId}${highRisk ? `/${action}` : ""}`}`,
-      operationId,
-      summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；归档/恢复需系统管理员或本项目任意活跃成员（ADR-039）与原因。`,
-      request: {
-        path: create ? "FeatureCollectionPath" : "FeatureResourcePath",
-        query: "none",
-        headers: create ? "FeatureMutationHeaders" : "FeatureVersionHeaders",
-        body: {
-          contentTypes: [
-            {
-              contentType: "application/json",
-              schemaRef: highRisk
-                ? "FeatureArchiveRequest"
-                : "FeatureEditRequest",
-            },
-          ],
+  ...(["createFeature", "updateFeature"] as const).map(
+    (operationId): RouteDefinition => {
+      const create = operationId === "createFeature";
+      const action = create ? "create" : "update";
+      return {
+        method: create ? "POST" : "PATCH",
+        path: `/projects/{projectId}/modules/{moduleId}/features${create ? "" : "/{featureId}"}`,
+        operationId,
+        summary: `${action} 功能；项目可写，项目/模块/编号/创建者不可变；ADR-045 起功能不再有归档态。`,
+        request: {
+          path: create ? "FeatureCollectionPath" : "FeatureResourcePath",
+          query: "none",
+          headers: create ? "FeatureMutationHeaders" : "FeatureVersionHeaders",
+          body: {
+            contentTypes: [
+              {
+                contentType: "application/json",
+                schemaRef: "FeatureEditRequest",
+              },
+            ],
+          },
         },
-      },
-      responses: { "200": json("FeatureItem"), ...errors },
-      // ADR-034/ADR-039：功能归档/恢复与任务、模块归档对齐，下放给本项目全体活跃成员，
-      // 角色门禁在权限矩阵 conditional 条目与服务层校验，系统管理员经 is_admin 旁路。
-      authPolicy: "session",
-      csrfPolicy: "required",
-      idempotencyPolicy: "idempotencyRequired",
-      idempotencyExceptionAdr: "none",
-      // ADR-034：归档/恢复的重放门禁加入项目角色复核，旧 Key 409。
-      idempotencyContractVersion: highRisk ? "1.3.0" : "1.2.0",
-      idempotencyFingerprintVersion: "1.0.0",
-      behaviorHeaders: create ? [] : ["If-Match"],
-      idempotencyReplayPolicy: {
-        version: "1.0.0",
-        success: {
-          "200": {
-            body: {
-              responseSchemaRef: "FeatureItem",
-              safeBodyFieldPaths: fields,
+        responses: { "200": json("FeatureItem"), ...errors },
+        authPolicy: "session",
+        csrfPolicy: "required",
+        idempotencyPolicy: "idempotencyRequired",
+        idempotencyExceptionAdr: "none",
+        // ADR-045：功能下线归档后 FeatureItem 去掉 status / archivedAt，两条归档路由一并移除，
+        // 统计新增 stats.completedTaskCount，重放安全字段集合随响应 Schema 变化，
+        // 旧 Key 在新契约下 409。
+        idempotencyContractVersion: "1.4.0",
+        idempotencyFingerprintVersion: "1.0.0",
+        behaviorHeaders: create ? [] : ["If-Match"],
+        idempotencyReplayPolicy: {
+          version: "1.0.0",
+          success: {
+            "200": {
+              body: {
+                responseSchemaRef: "FeatureItem",
+                safeBodyFieldPaths: fields,
+              },
             },
           },
         },
-      },
-      replayAuthorizationPolicy: {
-        version: "1.0.0",
-        resources: {
-          contextSchemaRef: "FeatureReplayContext",
-          resultRefExtractor: "featureResultResource",
-          currentReadAuthorizer: "featureCurrentReadAuthorizer",
+        replayAuthorizationPolicy: {
+          version: "1.0.0",
+          resources: {
+            contextSchemaRef: "FeatureReplayContext",
+            resultRefExtractor: "featureResultResource",
+            currentReadAuthorizer: "featureCurrentReadAuthorizer",
+          },
         },
-      },
-      securityFlowPolicy: "none",
-      versionPolicy: {
-        apiVersion: "v1",
-        schemaVersion: "1.0.0",
-        ifMatch: create ? "none" : "required",
-      },
-      concurrencyPolicy: {
-        rowVersion: create ? "none" : "required",
-        lockOrder: create
-          ? ["project", "module"]
-          : ["project", "module", "feature"],
-        retry:
-          "none; parent FOR SHARE, feature FOR UPDATE, expected row_version",
-      },
-      auditAction: `feature.${action}`,
-    };
-  }),
+        securityFlowPolicy: "none",
+        versionPolicy: {
+          apiVersion: "v1",
+          schemaVersion: "1.0.0",
+          ifMatch: create ? "none" : "required",
+        },
+        concurrencyPolicy: {
+          rowVersion: create ? "none" : "required",
+          lockOrder: create
+            ? ["project", "module"]
+            : ["project", "module", "feature"],
+          retry:
+            "none; parent FOR SHARE, feature FOR UPDATE, expected row_version",
+        },
+        auditAction: `feature.${action}`,
+      };
+    },
+  ),
 ];

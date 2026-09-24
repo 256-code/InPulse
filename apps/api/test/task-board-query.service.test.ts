@@ -426,12 +426,12 @@ describe("TaskBoardQueryService.getBoard", () => {
       projectId: 7,
     });
 
+    // ADR-045：功能已无归档态，项目级与模块级计数都不再带 status 过滤。
     expect(setup.featuresCount).toHaveBeenNthCalledWith(
       1,
       {},
       {
         projectId: 7,
-        status: "ACTIVE",
       },
     );
     expect(setup.featuresCount).toHaveBeenNthCalledWith(
@@ -440,7 +440,6 @@ describe("TaskBoardQueryService.getBoard", () => {
       {
         projectId: 7,
         moduleId: 3,
-        status: "ACTIVE",
       },
     );
     expect(setup.featuresCount).toHaveBeenNthCalledWith(
@@ -449,7 +448,6 @@ describe("TaskBoardQueryService.getBoard", () => {
       {
         projectId: 7,
         moduleId: 4,
-        status: "ACTIVE",
       },
     );
     expect(result.stats.featureCount).toBe(2);

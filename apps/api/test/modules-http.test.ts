@@ -17,12 +17,10 @@ const item = {
   name: "模块",
   description: "",
   kind: "NORMAL",
-  status: "ACTIVE",
   sortOrder: 0,
   rowVersion: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
-  archivedAt: null,
   stats: { activeFeatureCount: 0, openTaskCount: 0, completedTaskCount: 0 },
 };
 function setup() {
@@ -101,14 +99,11 @@ describe("F-12 HTTP orchestration", () => {
     ).toBe(422);
     expect(s.execute).not.toHaveBeenCalled();
   });
-  it("revalidates manage role on replay and refuses cached response disclosure", async () => {
+  it("revalidates membership on replay and refuses cached response disclosure", async () => {
     const s = setup();
-    const result = await s.service.handle("archiveModule", {
-      ...s.request,
-      body: { reason: "封存" },
-    });
+    const result = await s.service.handle("updateModule", s.request);
     expect(result.status).toBe(200);
-    // ADR-039：归档门禁只排除非成员，回放时重新鉴权失败即 404。
+    // ADR-044：模块命令对项目内活跃成员开放，回放时重新鉴权失败即 404。
     s.replay.mockRejectedValueOnce({ code: "PROJECT_NOT_FOUND" });
     await expect(
       s.command().replayAuthorizer!(
@@ -116,12 +111,10 @@ describe("F-12 HTTP orchestration", () => {
         tx,
       ),
     ).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
-    expect(s.replay).toHaveBeenCalledWith(
-      tx,
-      7,
-      { projectId: 2, moduleId: 3 },
-      { requireManageRole: true },
-    );
+    expect(s.replay).toHaveBeenCalledWith(tx, 7, {
+      projectId: 2,
+      moduleId: 3,
+    });
   });
   it("normalizes name conflicts and never exposes database failures", async () => {
     const s = setup();

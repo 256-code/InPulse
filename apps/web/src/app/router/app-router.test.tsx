@@ -31,8 +31,14 @@ describe("AppRouter integration", () => {
     expect(
       screen.getByRole("img", { name: "Libiao Robotics | InPulse" }),
     ).toBeInTheDocument();
+    // 默认路由的页面是懒加载 chunk：单文件跑时约 200ms 就能渲染，但在 `pnpm -r test:unit`
+    // 并行起 85 个 jsdom worker 时曾超过 1s 默认窗口导致偶发红灯，这里只放宽等待窗口，断言不变。
     expect(
-      await screen.findByRole("heading", { name: "任务中心" }),
+      await screen.findByRole(
+        "heading",
+        { name: "任务中心" },
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
   });
 

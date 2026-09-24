@@ -112,6 +112,8 @@
 - 先运行最小相关测试，再运行类型检查和模块测试；交付前运行所有适用于本次变更的完整门禁。
 - 必须覆盖真实数据库约束、事务回滚、权限矩阵、幂等、乐观锁、并发竞态、请求/响应契约和关键 E2E 路径。
 - 不得使用 `skip`、降低断言或删除用例来掩盖失败；确需隔离不稳定测试时必须说明原因、影响和恢复计划，并获得人工同意。
+- `apps/web` 单测的等待预算是按 CI 实测定过的：`maxWorkers` 取「核数 - 1」与 8 的较小值（本机 20 核 = 8，CI 4 vCPU = 3；写死 8 会在 CI 上超额订阅，反而更慢、更容易超时）、`testTimeout` 20s、`@testing-library` 的 `asyncUtilTimeout` 4s（懒加载 chunk 冷启动与弹层过渡帧）。放宽等待预算不算弱化断言，但不得用来掩盖真实失败：同一个用例若继续红灯，必须回到实现或测试本身找原因。
+- 本地跑真实 PostgreSQL 集成测试与 Playwright E2E 必须指向独立测试库（推荐 `app_ci`），不得指向本地演示库 `app`：夹具会直接写进演示页面，而演示库里的历史夹具只能人工清理。一次性准备：`CREATE DATABASE app_ci OWNER cluster_bootstrap` → 在 `app_ci` 上执行 `database/bootstrap/000_roles.sql` 与 `database/bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate`；跑测试时把 `TEST_DATABASE_URL` / `E2E_DATABASE_URL` 指向 `app_ci`。演示库若已被污染，用 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app node apps/e2e/helpers/fixture-cleanup.ts` 清理（按夹具前缀删除并回退 SYSTEM 审计链头；`cleanupFixtures` 有事务级完整性断言）。
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
 
@@ -214,7 +216,7 @@
 - 阶段 0 F-26 搜索结果「遗留问题」独立分类已本地落库（A）：新增迁移 `0006_leftover_search_entity.sql` 把 `search_projection_entity_type_check` 扩展为 8 类；新增 `LeftoverSearchProjectionSync`，在记录发布/修订（`RecordPublicationEffects`）、作废/恢复（`RecordLifecycleService`）与遗留项转任务（`LeftoverTaskWorkflow`）的同一事务内按遗留项最新版本 `content_snapshot` 刷新 `LEFTOVER` 投影：`entityId` 为遗留项 ID、title 至多 500 字符、summary 标注处置状态（待处理/已解决/已转为任务）与来源记录、可见性跟随父记录（PUBLISHED=MEMBER、VOID=ADMIN_ONLY）、`sourceStatus` 为遗留项状态、`sourceRowVersion` 防旧写；搜索页面与命令面板新增「遗留问题」分组。本地验证：API 单测 66 文件 343 例、真实 PostgreSQL API 集成 47 文件 408 例、Web 58 文件 249 例、`pnpm db:test` 26 例、Playwright E2E 43/43，lint/format/typecheck/build/契约（94 条）/权限（94/94）/迁移（7 个）/Secret/文档/部署/依赖边界与公共 registry 审计全部通过；GitHub Actions 未执行。用户反馈的 A 缺口清单中 F-26 项关闭；F-08 的审计读取留痕与远端 WORM 归档仍待交付。
 
 - 阶段 1 ADR-033 项目内角色（组长与项目管理员）已本地落库（A+C，未提交）：按用户要求「创建项目的人是项目小组组长，可以进行成员添加、归档模块、删除模块（逻辑归档），或让其他成员成为该项目管理员，权限只存在于被赋予的项目中」交付完整纵切片——[ADR-033](./docs/adr/ADR-033.md)（[ADR-012](./docs/adr/ADR-012.md) 转 Superseded）、迁移 `0015_project_member_roles.sql`（`project_members.role` + 枚举 CHECK + `project_members_one_leader` 部分唯一索引 + `project_members_removed_role_check` + 创建者回填 LEADER）、契约新增 `setProjectMemberRole` 路由与 `ProjectMemberRecordItem/ProjectMemberItem.role`、`ProjectDetailResponse.currentUserRole`（98 条路由，受影响路由 `authPolicy` 由 `adminSession` 调整为 `session`、幂等契约版本按重放字段升级）、后端 `ProjectRoleGateService` 同事务实时角色门禁（成员管理与模块归档/恢复：系统管理员/本项目 LEADER/PROJECT_ADMIN 允许、普通成员 403、非成员 404；组长不可被移除 409；系统管理员转移组长时同事务自动降级原组长；`removeMember` 同事务重置 role）、前端成员页角色徽标与「设置角色」弹窗（组长仅 MEMBER/PROJECT_ADMIN，系统管理员含 LEADER）、成员页入口按 `currentUserRole` 分流、模块/功能页归档入口按角色放开（功能归档仍仅系统管理员）；功能设计/系统设计/技术设计、权限矩阵与 `docs/permissions.md`、测试矩阵同步。本地验证：契约 generate/drift/validate（98 条）、permissions:check（98/98）、lint、format:check、全 workspace typecheck、check:deps（173 文件）、check:frontend:boundaries（248 模块）、db:migrations:check（16 迁移）、check:secrets（1002 文件）、API 单测 64 文件 351 例、Web 单测 76 文件 425 例、web/api 生产构建、真实 PostgreSQL 18.6 + PGroonga 下 API 集成 48 文件 444 例（含 ADR-033 角色矩阵新用例）与 database 单测 15 + 集成 26 全部通过；Playwright E2E、GitHub Actions 与 `deps:audit` 未运行；`check:docs` 仅因仓库根目录历史遗留未跟踪 `.tmp-*.diff` 文件失败（非本批文件）。本批未提交、未推送，等待用户评审。附带环境修复（不入库）：本机系统缺失 VC++ 运行库导致 `@node-rs/argon2` 原生模块加载失败（Win32 126），已在 node_modules 平台包目录补齐 `vcruntime140*.dll`/`msvcp140.dll` 恢复本机测试能力。
-完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
+  完成一项后应在同一 PR 中更新本节并链接对应证据，避免保留已经解决的阻断描述。
 
 - 2026-09-10 F-21 已本地交审：管理员记录作废/恢复、双时间戳重认证（含锁后复核）、原因/If-Match/数据库幂等、管理员VOID读取/发现及同事务审计/Activity/Search；版本、最近作废快照、遗留项及转换链接保留，无通知或迁移。真库四文件63/63、契约42/42、Web7/7、86路由/权限与5生成物漂移通过；Edge F21 1/1及相邻F18 2/2分别通过，未执行本批CI。代码 9b5805805bbee6f0ff964fba75d5732701570943，范围与失败历史见 [F-21交审说明](docs/f21-local-handoff.md)。
 
@@ -293,3 +295,44 @@
 - 部署配方同步为 2 小时：`deploy/.env.deploy.example` 与 `deploy/.env.deploy.test` 写入 `SESSION_IDLE_MAX_AGE_SECONDS=7200`，`deploy/compose.yaml` 注释同步。
 - 路由、契约、权限矩阵与数据库迁移无改动；测试断言已同步（`session-ttl.policy.test.ts` 默认 7200 秒、`sso-login.integration.test.ts` 以 7200 秒签发并断言窗口），测试矩阵新增 2026-09-20 修订行。
 - 本文件上文历史条目中出现的 30 分钟空闲超时为当时事实，与本节冲突时以 ADR-038 与本节的现行规则为准。
+
+## 2026-09-23 ADR-043 / ADR-044 项目与模块归档下线说明
+
+按用户 2026-09-23 连续两条指示整体下线「项目层」与「模块层」的归档：[ADR-043](./docs/adr/ADR-043.md) 把项目状态收窄为未开始 / 进行中 / 维护中三态，[ADR-044](./docs/adr/ADR-044.md) 让模块只剩 `ACTIVE`。因此：
+
+- 项目不再有归档、恢复、归档申请与待审提示，六条项目归档路由与 `app.project_archive_requests` 的前后端实现全部删除；切换到维护中要求项目下不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status NOT IN ('DONE','CANCELED')` 的任务，否则 409 `PROJECT_MAINTENANCE_TASKS_OPEN`。项目三态下都可写。
+- 模块只有 `ACTIVE`：`archiveModule` / `restoreModule` 两条路由、`ModuleArchiveRequest`（原因）、`MODULE_ARCHIVE_TASKS_OPEN`、`FEATURE_MODULE_ARCHIVED`、`ModuleQueryPort.checkModuleForWrite` 的 `parent-not-active` 与 `ProjectWriteAccessFailure.module-not-active` 全部删除，`ModuleWriteCheckResult` 只有 `allowed | not-found`；`app.modules.status` 由 `modules_status_check` 锁定为 `ACTIVE`，`archived_at` 由 `modules_archived_at_null_check` 锁定为空。
+- 功能、任务、迭代记录与遗留项的归档、恢复与父级归档前置校验**不变**：功能级 `parent-not-active`（`feature.status = 'ARCHIVED'`）当时仍在（该部分已由 [ADR-045](./docs/adr/ADR-045.md) 下线，见下文 2026-09-24 小节）；`archiveModuleTask` / `restoreModuleTask` 是「模块级任务」的归档命令，与模块归档无关，继续有效。
+- 管理员高风险操作清单不再包含 `getProjectArchivePreview` / `archiveProject` / `restoreProject` / `archiveModule` / `restoreModule`（对应路由已不存在，调用返回 404）。
+- 模块卡「进行中 / 未开始」标签继续由该模块已完成任务数派生，列表仍按派生档位分组（进行中在前），组内按 `sort_order`、`id` 升序；功能列表当时仍保留「已归档」档位（该表述已由 [ADR-045](./docs/adr/ADR-045.md) 修订，见下文 2026-09-24 小节）。
+- 本文件上文 ADR-016 与 ADR-034 小节中把「项目归档申请—审核」「模块归档与恢复」写作现行规则的部分，以本节与 ADR-043 / ADR-044 为准。
+
+## 2026-09-24 ADR-045 功能归档下线说明
+
+按用户 2026-09-24 指示（承接功能卡上仍显示琥珀色「已归档」徽章的追问，答复「要继续」）把「功能层」归档一并下线（[ADR-045](./docs/adr/ADR-045.md)）。因此：
+
+- 功能只有 `ACTIVE`：`archiveFeature` / `restoreFeature` 两条路由、`FeatureArchiveRequest`（原因）、`FeatureQueryPort.checkFeatureForWrite` 的 `parent-not-active`、`ProjectWriteAccessFailure.feature-not-active` 与 `FEATURE_STATE_CONFLICT` 全部删除，`FeatureWriteCheckResult` 只有 `allowed | not-found`；`app.features.status` 由 `features_status_check` 锁定为 `ACTIVE`，`archived_at` 由 `features_archived_at_null_check` 锁定为空。
+- 功能下级的「父级已归档」分支整体删除：任务、聚合组、迭代记录、遗留项、外部链接、记录发布与聚合读不再有 `TASK_PARENT_ARCHIVED` / `TASK_IMPACT_ARCHIVED` / `TASK_MERGE_PARENT_ARCHIVED` / `LEFTOVER_PARENT_ARCHIVED` 与「排除归档影响功能」；功能创建 / 编辑 / 详情 / 列表 / 相似候选不再按状态过滤。任务自身的归档与恢复（`archiveTask` / `restoreTask` / `archiveModuleTask` / `restoreModuleTask`）不变。
+- 功能卡「进行中 / 未开始」标签改由该功能已完成任务数（`stats.completedTaskCount`）派生，与模块同一口径；`featureItemSchema` 去掉 `status` / `archivedAt`，`createFeature` / `updateFeature` 幂等契约版本统一升 1.4.0。
+- 管理员高风险操作清单不再包含 `archiveFeature` / `restoreFeature`（对应路由已不存在，调用返回 404）。
+- 本文件上文 ADR-034 小节中把「功能归档 / 恢复」写作现行规则的部分、以及本节上一段（2026-09-23）中「功能列表保留「已归档」档位」的表述，以本节与 ADR-045 为准。
+- 功能层下线归档的验证：`pnpm --filter @inpulse/e2e exec playwright test` 整包 56 例全绿（含 `features.spec.ts`「功能页不再有归档与恢复入口，功能始终可编辑（ADR-045）」）；同步运行树 `D:\InPulse` 后真机核对 `/projects/1/modules/3/features` 与 `/projects/2/modules/9/features` 无「已归档」文本、无归档 / 恢复动作按钮，页面内 `fetch` 实测 `POST .../features/{id}/archive` 与 `/restore` 均 404，`GET .../features` 的 item 无 `status` / `archivedAt`。E2E 侧同时修掉既有 spec 漂移与 `apps/e2e/global-setup.ts` 搜索夹具在 `search_projection_entity_unique` 上的唯一键冲突（夹具 `entity_id` 改为 `2_100_000` / `2_100_001`），并给 `playwright.config.ts` 补 `actionTimeout: 30_000` 以免定位器失配时静默等到用例超时；详见 `docs/test-matrix.md` 的 ADR-045 节。
+
+## 2026-09-24 ADR-046 三层列表排序口径
+
+按用户 2026-09-24 指示（「项目排序首先大体按照状态，进行中，未开始，维护中，细化按照创建时间排序。模块和功能按照创建时间从近到远」）统一三层列表的排序键（[ADR-046](./docs/adr/ADR-046.md)）：
+
+- 项目列表：档位（`ACTIVE` 进行中 → `NOT_STARTED` 未开始 → `MAINTENANCE` 维护中）→ `created_at DESC` → `id DESC`，见 `apps/api/src/modules/projects/postgres-project-query-port.ts` 的 `list`。
+- 模块列表与功能列表：派生档位（进行中 → 未开始）→ `created_at DESC` → `id DESC`，见 `apps/api/src/modules/modules/module-management.repository.ts` 与 `apps/api/src/modules/features/feature-management.repository.ts`。模块排序**不再使用** `sort_order`：该列应用内从不写入、恒为默认值 `0`，只有演示种子数据填了 1~8；列本身保留，不删列，也不为此新增迁移与索引（排序首键是相关子查询算出的 `CASE`，任何索引都满足不了）。
+- 档位口径不变：项目读存储状态，模块与功能由 `stats.completedTaskCount` 派生；卡片档位徽章的文案与配色不变。本文件与 ADR-044 中「模块列表组内按 `sort_order`、`id` 升序」的表述以本节与 ADR-046 为准。
+- `created_at` 相同时用 `id DESC` 兜底保证顺序稳定；演示数据里项目 1 的 8 个模块创建时间完全相同，因此它们现在按 ID 倒序显示。契约侧 `listProjects` / `listModules` / `listFeatures` 三条路由描述同步（顺手清掉 `listProjects` 描述里残留的「包含归档历史 / 已归档档位 / 待审归档申请摘要」过时文案）。
+- 验证（2026-09-24 本地）：`apps/api` 单测 66 文件 367 例、真实 PostgreSQL 集成 49 文件 451 例（含三处新排序断言：`projects-read-api` 的后建「未开始」项目排在旧「未开始」之前且档位计数为 `[1, 0, 0, 0]`、`modules-api` 的未分类模块列表 `[module.id, project.moduleId]`、`features-api` 的 `[active.id, newerNotStarted.id, notStarted.id]`）、`apps/web` 单测 85 文件 553 例、Playwright E2E 整包 56 例全绿（4.9 分钟）；`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`pnpm build`、`contract:drift`、`contract:validate`（98 条）、`permissions:check`（98 条）、`db:migrations:check`（26 条）、`check:docs`（92 个 Markdown）、`check:frontend:boundaries`（283 模块 / 1392 依赖）通过。`apps/web` 的 `src/app/router/app-router.test.tsx` 在全量批次下偶发 1 例失败，单独复跑 3/3 通过，与本次排序改动无关（既有偏差）。详见 `docs/test-matrix.md` 的 ADR-046 节。
+
+## 2026-09-24 任务紧急桶：遗留问题来源改排到已逾期之后
+
+按用户 2026-09-24 指示（「这个排序稍微改一下，把遗留问题排到已经逾期后面」）重排未完成任务的紧急桶：**标记紧急(0) → 已逾期(1) → 遗留问题来源(2) → 今/明日截止(3) → 其余(4)**（此前遗留问题来源是第 0 桶）。
+
+- 服务端唯一排序键在 `apps/api/src/modules/tasks/task-list-order.ts` 的 `urgency` 表达式，任务中心、任务列表端口与任务面板共用；`TASK_LIST_SORT_KEY_VERSION` 由 4 升到 5，旧游标整版拒绝（旧 0 = 遗留问题来源，新 0 = 标记紧急）。
+- 前端 `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 的 `urgencyBucketOf` 必须与服务端同步重排：它让聚合组卡与任务卡共用同一把尺子（组卡「来源」不适用，「紧急」取未完成分支最高一档、「截止」取最早一条）。两处注释互相引用，改一处必须改另一处。
+- 只改顺序，不改颜色：`task-tone.ts` / `design-system.css` 的卡片取色、优先级徽章、「遗留问题」棕色徽章与截止日期文案全部不变；任务看板四桶口径（[ADR-037](./docs/adr/ADR-037.md) §3）同样不变。
+- ADR-037 §3 已补 2026-09-22 与 2026-09-24 两条修订（§1 / §3 表格里 2026-09-18 的原始桶序以这两条为准），并同步 `功能设计v1.1.md`、`docs/task-card-colors.md`、`docs/c-v1-alignment.md`、`docs/test-matrix.md`（TASK-URGENCY-ORDER-* 小节）与 `开发日志.md` 第二十一条。

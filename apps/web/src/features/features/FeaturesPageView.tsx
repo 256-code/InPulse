@@ -13,7 +13,11 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
-import { resourceLifecycleLabel } from "@features/common/resource-lifecycle";
+import {
+  featureLifecycleLabel,
+  featureLifecycleTone,
+  moduleLifecycleLabel,
+} from "@features/common/resource-lifecycle";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -25,10 +29,7 @@ import {
   ModuleEditorModal,
   type ModuleEditorRequest,
 } from "@features/modules/ModuleEditorModal";
-import {
-  canManageProjectResources,
-  useProjectDetail,
-} from "@features/projects/project-query";
+import { useProjectDetail } from "@features/projects/project-query";
 import { useTasks } from "@features/tasks/task-query";
 import type { TaskLocation } from "@features/tasks/task-links";
 import {
@@ -50,7 +51,6 @@ type Values = {
   name: string;
   currentBehavior: string;
   acceptanceCriteria: string;
-  reason: string;
   tags: string;
 };
 const editableFields = [
@@ -108,7 +108,7 @@ export function FeaturesPageView({
     item?: FeatureItem;
   } | null>(null);
   const [success, setSuccess] = useState(false);
-  // 模块本体的编辑/归档/恢复与模块列表页共用同一个编辑器弹层。
+  // ADR-044：模块只有编辑，弹层与模块列表页共用。
   const [moduleRequest, setModuleRequest] =
     useState<ModuleEditorRequest | null>(null);
   const [moduleSuccess, setModuleSuccess] = useState(false);
@@ -133,7 +133,6 @@ export function FeaturesPageView({
       name: "",
       currentBehavior: "",
       acceptanceCriteria: "",
-      reason: "",
       tags: "",
     },
   });
@@ -145,7 +144,6 @@ export function FeaturesPageView({
       name: item?.name ?? "",
       currentBehavior: item?.currentBehavior ?? "",
       acceptanceCriteria: item?.acceptanceCriteria ?? "",
-      reason: "",
       tags: item?.tags.join("\n") ?? "",
     });
     mutation.reset();
@@ -203,12 +201,6 @@ export function FeaturesPageView({
           return;
         }
         if (selection.action === "update") {
-          if (item.status !== "ACTIVE") {
-            setReloadError(
-              "功能已归档，草稿已保留，请取消编辑并在恢复后重试。",
-            );
-            return;
-          }
           const values = { ...draft };
           const conflicts: EditableField[] = [];
           for (const field of editableFields) {
@@ -269,18 +261,9 @@ export function FeaturesPageView({
     setSelection(null);
     setMerge(null);
   };
-  const lifecycle =
-    selection?.action === "archive" || selection?.action === "restore";
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
-  const modalTitle =
-    selection?.action === "create"
-      ? "新增功能"
-      : selection?.action === "update"
-        ? "编辑功能"
-        : selection?.action === "archive"
-          ? "归档功能"
-          : "恢复功能";
+  const modalTitle = selection?.action === "create" ? "新增功能" : "编辑功能";
   const activeItem = featureId
     ? query.data?.items.find((item) => item.id === featureId)
     : undefined;
@@ -288,11 +271,6 @@ export function FeaturesPageView({
     (item) => item.id === moduleId,
   );
   const projectQuery = useProjectDetail({ client, projectId });
-  // ADR-034/ADR-039：模块与功能的归档/恢复对系统管理员或本项目任意活跃成员开放。
-  const canArchiveResources = canManageProjectResources(
-    isAdmin,
-    projectQuery.data?.currentUserRole ?? null,
-  );
   const projectName =
     projectQuery.data === undefined
       ? null
@@ -344,37 +322,11 @@ export function FeaturesPageView({
                 >
                   编辑模块
                 </Button>
-                {canArchiveResources && currentModule ? (
-                  <Button
-                    className="secondary-button"
-                    onClick={() =>
-                      setModuleRequest({
-                        action:
-                          currentModule.status === "ARCHIVED"
-                            ? "restore"
-                            : "archive",
-                        item: currentModule,
-                      })
-                    }
-                  >
-                    {currentModule.status === "ARCHIVED"
-                      ? "恢复模块"
-                      : "归档模块"}
-                  </Button>
-                ) : null}
+                {/* ADR-044：模块层面已下线归档，模块头部只留「编辑模块」。 */}
                 {query.isSuccess && !query.data?.items.length ? null : (
                   <Button
                     className="primary-button"
-                    disabled={
-                      !query.data ||
-                      query.isError ||
-                      currentModule?.status === "ARCHIVED"
-                    }
-                    title={
-                      currentModule?.status === "ARCHIVED"
-                        ? "模块归档后不能新建功能或模块级任务"
-                        : undefined
-                    }
+                    disabled={!query.data || query.isError}
                     onClick={() => open("create")}
                   >
                     <InpulseIcon name="plus" size={15} />
@@ -388,10 +340,7 @@ export function FeaturesPageView({
                 {currentModule?.code ?? "模块资料"} ·{" "}
                 {currentModule ? currentModule.name : "加载中"} ·{" "}
                 {currentModule
-                  ? resourceLifecycleLabel(
-                      currentModule.status,
-                      currentModule.stats.completedTaskCount,
-                    )
+                  ? moduleLifecycleLabel(currentModule.stats.completedTaskCount)
                   : "进行中"}
               </summary>
               <h4>模块说明</h4>
@@ -460,7 +409,6 @@ export function FeaturesPageView({
               >
                 <Button
                   className="primary-button"
-                  disabled={currentModule?.status === "ARCHIVED"}
                   onClick={() => open("create")}
                 >
                   <InpulseIcon name="plus" size={15} />
@@ -543,11 +491,14 @@ export function FeaturesPageView({
                             </td>
                             <td>
                               <CalmBadge
-                                tone={
-                                  item.status === "ACTIVE" ? "blue" : "amber"
-                                }
+                                tone={featureLifecycleTone(
+                                  item.stats.completedTaskCount,
+                                  "blue",
+                                )}
                               >
-                                {item.status === "ACTIVE" ? "进行中" : "已归档"}
+                                {featureLifecycleLabel(
+                                  item.stats.completedTaskCount,
+                                )}
                               </CalmBadge>
                             </td>
                             <td>
@@ -564,10 +515,7 @@ export function FeaturesPageView({
                     {visibleItems.map((item) => (
                       <article className="catalog-module-wrap" key={item.id}>
                         <div
-                          className={
-                            "calm-feature-card" +
-                            (item.status === "ARCHIVED" ? " card-archived" : "")
-                          }
+                          className="calm-feature-card"
                           onClick={(event) => {
                             if (!isCardClick(event)) return;
                             onOpenFeature(item.id);
@@ -590,9 +538,14 @@ export function FeaturesPageView({
                           <h2>{item.name}</h2>
                           <div className="task-card-badges">
                             <CalmBadge
-                              tone={item.status === "ACTIVE" ? "blue" : "amber"}
+                              tone={featureLifecycleTone(
+                                item.stats.completedTaskCount,
+                                "blue",
+                              )}
                             >
-                              {item.status === "ACTIVE" ? "进行中" : "已归档"}
+                              {featureLifecycleLabel(
+                                item.stats.completedTaskCount,
+                              )}
                             </CalmBadge>
                             {item.tags.slice(0, 3).map((tag) => (
                               <CalmBadge key={tag} tone="violet">
@@ -609,26 +562,12 @@ export function FeaturesPageView({
                           </div>
                         </div>
                         <span className="catalog-edit-link">
-                          {item.status === "ACTIVE" && (
-                            <Button
-                              className="text-button"
-                              onClick={() => open("update", item)}
-                            >
-                              编辑功能
-                            </Button>
-                          )}
-                          {/* ADR-034：归档入口只在「编辑功能」弹窗底部提供，
-                              卡片上仅保留已归档功能的恢复入口。 */}
-                          {canArchiveResources &&
-                            item.status === "ARCHIVED" && (
-                              <Button
-                                className="text-button"
-                                data-testid={"feature-lifecycle-" + item.id}
-                                onClick={() => open("restore", item)}
-                              >
-                                恢复功能
-                              </Button>
-                            )}
+                          <Button
+                            className="text-button"
+                            onClick={() => open("update", item)}
+                          >
+                            编辑功能
+                          </Button>
                         </span>
                       </article>
                     ))}
@@ -691,9 +630,12 @@ export function FeaturesPageView({
                 <div className="task-modal-badges">
                   {/* 功能编号不在页头展示，保留右侧「功能档案」里的编号。 */}
                   <CalmBadge
-                    tone={activeItem.status === "ACTIVE" ? "blue" : "amber"}
+                    tone={featureLifecycleTone(
+                      activeItem.stats.completedTaskCount,
+                      "blue",
+                    )}
                   >
-                    {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
+                    {featureLifecycleLabel(activeItem.stats.completedTaskCount)}
                   </CalmBadge>
                   {/* 标签与状态并列成小徽章，放在状态和更新时间之间。 */}
                   {activeItem.tags.map((tag) => (
@@ -713,23 +655,12 @@ export function FeaturesPageView({
                   targetId={activeItem.id}
                   client={client}
                 />
-                {activeItem.status === "ACTIVE" && (
-                  <Button
-                    className="secondary-button"
-                    onClick={() => open("update", activeItem)}
-                  >
-                    编辑功能
-                  </Button>
-                )}
-                {canArchiveResources && activeItem.status === "ARCHIVED" && (
-                  <Button
-                    className="secondary-button"
-                    data-testid={"feature-detail-lifecycle-" + activeItem.id}
-                    onClick={() => open("restore", activeItem)}
-                  >
-                    恢复功能
-                  </Button>
-                )}
+                <Button
+                  className="secondary-button"
+                  onClick={() => open("update", activeItem)}
+                >
+                  编辑功能
+                </Button>
               </div>
             </header>
             <div className="feature-modal-content">
@@ -742,7 +673,7 @@ export function FeaturesPageView({
                       projectId={projectId}
                       moduleId={moduleId}
                       featureId={activeItem.id}
-                      writable={activeItem.status === "ACTIVE"}
+                      writable
                       client={client}
                       isAdmin={isAdmin}
                       onOpenTask={setTaskTarget}
@@ -755,13 +686,6 @@ export function FeaturesPageView({
                       {activeItem.acceptanceCriteria || "尚未填写验收标准"}
                     </p>
                   </section>
-                  {/* 归档状态排在验收标准之后：它是附加说明，不再插在功能任务之前。 */}
-                  {activeItem.status === "ARCHIVED" && (
-                    <section>
-                      <h3>归档状态</h3>
-                      <p>归档历史仍可查看；恢复前不能在此功能新增下级内容。</p>
-                    </section>
-                  )}
                 </div>
                 <aside className="feature-facts">
                   <h3>功能档案</h3>
@@ -776,10 +700,6 @@ export function FeaturesPageView({
                     <dd>{activeItem.createdByName ?? "名称暂不可用"}</dd>
                     <dt>数据版本</dt>
                     <dd>v{activeItem.rowVersion}</dd>
-                    <dt>状态</dt>
-                    <dd>
-                      {activeItem.status === "ACTIVE" ? "进行中" : "已归档"}
-                    </dd>
                   </dl>
                 </aside>
               </div>
@@ -792,20 +712,6 @@ export function FeaturesPageView({
         className="catalog-modal"
         eyebrow={projectName}
         title={modalTitle}
-        tone={
-          selection?.action === "archive"
-            ? "danger"
-            : selection?.action === "restore"
-              ? "success"
-              : undefined
-        }
-        icon={
-          selection?.action === "archive"
-            ? "alert"
-            : selection?.action === "restore"
-              ? "rotateCcw"
-              : undefined
-        }
         onCancel={close}
         mask={{ closable: !mutation.isPending }}
       >
@@ -816,133 +722,106 @@ export function FeaturesPageView({
           <div className="dialog-form">
             <p className="permission-hint">
               <InpulseIcon name="shield" size={14} />
-              {selection?.action === "archive"
-                ? "归档后功能及下级内容不可写，历史将保留。"
-                : selection?.action === "restore"
-                  ? "恢复功能本身的可写状态，不改变下级资源各自的归档状态。"
-                  : "只维护长期档案；任务与迭代记录由对应能力独立管理。"}
+              只维护长期档案；任务与迭代记录由对应能力独立管理。
             </p>
-            {lifecycle ? (
+            <>
               <div className="calm-field">
-                <label htmlFor="feature-reason">操作原因</label>
+                <label htmlFor="feature-name">功能名称</label>
                 <Controller
-                  name="reason"
+                  name="name"
                   control={control}
                   rules={{
-                    validate: (v) => v.trim().length > 0 || "请填写操作原因",
-                    maxLength: { value: 2000, message: "原因最多 2000 字" },
+                    validate: (v) => v.trim().length > 0 || "请填写功能名称",
+                    maxLength: { value: 500, message: "名称最多 500 字" },
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      id="feature-name"
+                      disabled={mutation.isPending || reloading || !!merge}
+                    />
+                  )}
+                />
+                <p role="alert">{errors.name?.message}</p>
+                {selection?.action === "create" && (
+                  <SimilarFeatures
+                    projectId={projectId}
+                    moduleId={moduleId}
+                    name={watch("name")}
+                    client={client}
+                  />
+                )}
+              </div>
+              <div className="calm-field">
+                <label htmlFor="feature-currentBehavior">当前功能说明</label>
+                <Controller
+                  name="currentBehavior"
+                  control={control}
+                  rules={{
+                    maxLength: {
+                      value: 50000,
+                      message: "说明最多 50000 字",
+                    },
                   }}
                   render={({ field }) => (
                     <Input.TextArea
                       {...field}
-                      id="feature-reason"
+                      id="feature-currentBehavior"
+                      rows={5}
                       disabled={mutation.isPending || reloading || !!merge}
-                      rows={3}
                     />
                   )}
                 />
-                <p role="alert">{errors.reason?.message}</p>
+                <p role="alert">{errors.currentBehavior?.message}</p>
               </div>
-            ) : (
-              <>
-                <div className="calm-field">
-                  <label htmlFor="feature-name">功能名称</label>
-                  <Controller
-                    name="name"
-                    control={control}
-                    rules={{
-                      validate: (v) => v.trim().length > 0 || "请填写功能名称",
-                      maxLength: { value: 500, message: "名称最多 500 字" },
-                    }}
-                    render={({ field }) => (
-                      <Input
-                        {...field}
-                        id="feature-name"
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.name?.message}</p>
-                  {selection?.action === "create" && (
-                    <SimilarFeatures
-                      projectId={projectId}
-                      moduleId={moduleId}
-                      name={watch("name")}
-                      client={client}
+              <div className="calm-field">
+                <label htmlFor="feature-acceptanceCriteria">
+                  验收标准（选填）
+                </label>
+                <Controller
+                  name="acceptanceCriteria"
+                  control={control}
+                  rules={{
+                    maxLength: {
+                      value: 50000,
+                      message: "验收标准最多 50000 字",
+                    },
+                  }}
+                  render={({ field }) => (
+                    <Input.TextArea
+                      {...field}
+                      id="feature-acceptanceCriteria"
+                      rows={5}
+                      disabled={mutation.isPending || reloading || !!merge}
                     />
                   )}
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="feature-currentBehavior">当前功能说明</label>
-                  <Controller
-                    name="currentBehavior"
-                    control={control}
-                    rules={{
-                      maxLength: {
-                        value: 50000,
-                        message: "说明最多 50000 字",
-                      },
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="feature-currentBehavior"
-                        rows={5}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.currentBehavior?.message}</p>
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="feature-acceptanceCriteria">
-                    验收标准（选填）
-                  </label>
-                  <Controller
-                    name="acceptanceCriteria"
-                    control={control}
-                    rules={{
-                      maxLength: {
-                        value: 50000,
-                        message: "验收标准最多 50000 字",
-                      },
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="feature-acceptanceCriteria"
-                        rows={5}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.acceptanceCriteria?.message}</p>
-                </div>
-                <div className="calm-field">
-                  <label htmlFor="feature-tags">
-                    标签（每行一个，最多 50 个）
-                  </label>
-                  <Controller
-                    name="tags"
-                    control={control}
-                    rules={{
-                      validate: (value) =>
-                        value.split("\n").filter((tag) => tag.trim()).length <=
-                          50 || "标签最多 50 个",
-                    }}
-                    render={({ field }) => (
-                      <Input.TextArea
-                        {...field}
-                        id="feature-tags"
-                        rows={2}
-                        disabled={mutation.isPending || reloading || !!merge}
-                      />
-                    )}
-                  />
-                  <p role="alert">{errors.tags?.message}</p>
-                </div>
-              </>
-            )}
+                />
+                <p role="alert">{errors.acceptanceCriteria?.message}</p>
+              </div>
+              <div className="calm-field">
+                <label htmlFor="feature-tags">
+                  标签（每行一个，最多 50 个）
+                </label>
+                <Controller
+                  name="tags"
+                  control={control}
+                  rules={{
+                    validate: (value) =>
+                      value.split("\n").filter((tag) => tag.trim()).length <=
+                        50 || "标签最多 50 个",
+                  }}
+                  render={({ field }) => (
+                    <Input.TextArea
+                      {...field}
+                      id="feature-tags"
+                      rows={2}
+                      disabled={mutation.isPending || reloading || !!merge}
+                    />
+                  )}
+                />
+                <p role="alert">{errors.tags?.message}</p>
+              </div>
+            </>
             {mutation.isError && (
               <Alert type="error" title={featureErrorMessage(mutation.error)} />
             )}
@@ -1021,27 +900,6 @@ export function FeaturesPageView({
             )}
           </div>
           <div className="calm-action-footer">
-            {/* ADR-034/ADR-039：功能归档/恢复入口与模块弹窗一致放在编辑弹窗底部；
-                非本项目成员看不到，活跃成员可直接切到归档流程。 */}
-            {selection?.action === "update" &&
-            selection.item &&
-            canArchiveResources ? (
-              <Button
-                className="secondary-button footer-leading"
-                data-testid="feature-modal-lifecycle"
-                disabled={mutation.isPending || reloading || !!merge}
-                onClick={() =>
-                  open(
-                    selection.item!.status === "ARCHIVED"
-                      ? "restore"
-                      : "archive",
-                    selection.item!,
-                  )
-                }
-              >
-                {selection.item.status === "ARCHIVED" ? "恢复" : "归档"}
-              </Button>
-            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1055,7 +913,7 @@ export function FeaturesPageView({
               loading={mutation.isPending}
               disabled={reloading || conflict || !!reloadError || !!merge}
             >
-              {lifecycle ? "确认" : "保存"}
+              保存
             </Button>
           </div>
         </form>
@@ -1067,10 +925,6 @@ export function FeaturesPageView({
         request={moduleRequest}
         onClose={() => setModuleRequest(null)}
         onSaved={() => setModuleSuccess(true)}
-        canArchive={canArchiveResources}
-        onLifecycleRequest={(action, item) =>
-          setModuleRequest({ action, item })
-        }
       />
       <Suspense fallback={null}>
         {taskTarget === null ? null : (

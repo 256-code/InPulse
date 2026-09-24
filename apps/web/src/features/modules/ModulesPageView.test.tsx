@@ -25,15 +25,13 @@ const item: ModuleItem = {
   name: "未分类模块",
   description: "",
   kind: "UNCLASSIFIED",
-  status: "ACTIVE",
   sortOrder: 0,
   rowVersion: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
-  archivedAt: null,
   stats: { activeFeatureCount: 0, openTaskCount: 0, completedTaskCount: 1 },
 };
-function mount(client: InpulseApiClient, admin = false) {
+function mount(client: InpulseApiClient) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <AuthStateProvider>
@@ -43,7 +41,7 @@ function mount(client: InpulseApiClient, admin = false) {
           }
         >
           <MemoryRouter>
-            <ModulesPageView projectId={2} isAdmin={admin} client={client} />
+            <ModulesPageView projectId={2} client={client} />
           </MemoryRouter>
         </QueryClientProvider>
       </AuthStateProvider>
@@ -221,66 +219,10 @@ describe("F-12 forms", () => {
     fireEvent.click(await screen.findByRole("button", { name: /重\s*试/ }));
     await screen.findByText("暂无模块");
   });
-  it("requires an archive reason and sends the selected version as an admin", async () => {
+  it("模块卡与编辑弹窗都不再有归档 / 恢复入口（ADR-044）", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({ items: [item] }),
       issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
-      archiveModule: vi
-        .fn()
-        .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
-    } as unknown as InpulseApiClient;
-    mount(client, true);
-    // 卡内不再有归档入口：先打开「编辑模块」，归档按钮在弹窗底部（ADR-034 同款收敛）。
-    expect(
-      screen.queryByRole("button", { name: /归\s*档/ }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    const footer = dialog.querySelector(".calm-action-footer");
-    fireEvent.click(
-      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
-    );
-    const archiving = await screen.findByRole("dialog", { name: "归档模块" });
-    fireEvent.click(within(archiving).getByRole("button", { name: /确\s*认/ }));
-    await screen.findByText("请填写操作原因");
-    expect(client.archiveModule).not.toHaveBeenCalled();
-    fireEvent.change(within(archiving).getByLabelText("操作原因"), {
-      target: { value: "暂时封存" },
-    });
-    fireEvent.click(within(archiving).getByRole("button", { name: /确\s*认/ }));
-    await waitFor(() =>
-      expect(client.archiveModule).toHaveBeenCalledWith(
-        2,
-        3,
-        { reason: "暂时封存" },
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            "If-Match": '"1"',
-            "x-csrf-token": "a".repeat(43),
-          }),
-        }),
-      ),
-    );
-    await screen.findByText("模块操作成功");
-  });
-  it("offers restore instead of edit for archived modules", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({
-        items: [{ ...item, status: "ARCHIVED", rowVersion: 2 }],
-      }),
-    } as unknown as InpulseApiClient;
-    mount(client, true);
-    await screen.findByRole("button", { name: /恢\s*复/ });
-    expect(
-      screen.queryByRole("button", { name: /编\s*辑/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /归\s*档/ }),
-    ).not.toBeInTheDocument();
-  });
-  it("shows archive entries for a project leader without system admin flag (ADR-033)", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({ items: [item] }),
       getProject: vi.fn().mockResolvedValue({
         project: {
           id: 2,
@@ -300,17 +242,26 @@ describe("F-12 forms", () => {
             completedTaskCount: 1,
           },
         },
+        // 组长也没有归档入口：模块层面已下线归档，权限不再参与。
         currentUserRole: "LEADER",
       }),
     } as unknown as InpulseApiClient;
-    mount(client, false);
-    // 卡内只留「编辑模块」，组长的归档入口在编辑弹窗底部。
+    mount(client);
+    expect(
+      screen.queryByRole("button", { name: /归\s*档/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /恢\s*复/ }),
+    ).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
     const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    const footer = dialog.querySelector(".calm-action-footer");
     expect(
-      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
-    ).toBeInTheDocument();
+      within(dialog).queryByRole("button", { name: /归\s*档/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /恢\s*复/ }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("操作原因")).not.toBeInTheDocument();
   });
 });
 
@@ -332,13 +283,7 @@ describe("模块卡", () => {
               <Routes>
                 <Route
                   path="/projects/:projectId/modules"
-                  element={
-                    <ModulesPageView
-                      projectId={2}
-                      isAdmin={false}
-                      client={client}
-                    />
-                  }
+                  element={<ModulesPageView projectId={2} client={client} />}
                 />
                 <Route
                   path="/projects/:projectId/modules/:moduleId/features"
@@ -400,7 +345,7 @@ describe("模块卡", () => {
     const badge = await screen.findByText("未开始");
     expect(badge.className).toContain("badge-cyan");
   });
-  it("keeps 进行中 for completed work and 已归档 for archived modules", async () => {
+  it("按模块内是否已有完成任务分档：进行中 / 未开始（ADR-044 无归档档位）", async () => {
     const client = {
       listModules: vi.fn().mockResolvedValue({
         items: [
@@ -409,8 +354,7 @@ describe("模块卡", () => {
             ...withStats,
             id: 4,
             code: "INP-M-2",
-            name: "已归档模块",
-            status: "ARCHIVED",
+            name: "尚未开张的模块",
             stats: { ...withStats.stats, completedTaskCount: 0 },
           },
         ],
@@ -420,14 +364,15 @@ describe("模块卡", () => {
     expect((await screen.findByText("进行中")).className).toContain(
       "badge-blue",
     );
-    expect(screen.getByText("已归档").className).toContain("badge-amber");
+    expect(screen.getByText("未开始").className).toContain("badge-cyan");
   });
 });
 
-describe("ADR-033 模块弹层底部归档入口", () => {
-  const leaderClient = (extra: Record<string, unknown>) =>
+describe("模块弹层的归档入口（ADR-044 已下线）", () => {
+  const clientFor = (role: "LEADER" | "MEMBER" | null) =>
     ({
       listModules: vi.fn().mockResolvedValue({ items: [item] }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
       getProject: vi.fn().mockResolvedValue({
         project: {
           id: 2,
@@ -447,112 +392,26 @@ describe("ADR-033 模块弹层底部归档入口", () => {
             completedTaskCount: 1,
           },
         },
-        currentUserRole: "LEADER",
+        currentUserRole: role,
       }),
-      ...extra,
     }) as unknown as InpulseApiClient;
 
-  it("归档按钮出现在组长打开的模块弹窗最下面，并直接进入归档流程", async () => {
-    const client = leaderClient({
-      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
-      archiveModule: vi
-        .fn()
-        .mockResolvedValue({ ...item, status: "ARCHIVED", rowVersion: 2 }),
-    });
-    mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    const footer = dialog.querySelector(".calm-action-footer");
-    expect(footer).not.toBeNull();
-    expect(
-      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
-    ).toBeInTheDocument();
-    fireEvent.click(
-      within(footer as HTMLElement).getByRole("button", { name: "归档模块" }),
-    );
-    const archiving = await screen.findByRole("dialog", { name: "归档模块" });
-    fireEvent.change(within(archiving).getByLabelText("操作原因"), {
-      target: { value: "暂时封存" },
-    });
-    fireEvent.click(within(archiving).getByRole("button", { name: /确\s*认/ }));
-    await waitFor(() =>
-      expect(client.archiveModule).toHaveBeenCalledWith(
-        2,
-        3,
-        { reason: "暂时封存" },
-        expect.objectContaining({
-          headers: expect.objectContaining({ "If-Match": '"1"' }),
-        }),
-      ),
-    );
-  });
-
-  it("普通成员同样在弹窗底部看到归档入口（ADR-039）", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({ items: [item] }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 2,
-          code: "INP",
-          name: "项目",
-          description: "",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 9,
-          createdAt: "2026-09-09T00:00:00.000Z",
-          updatedAt: "2026-09-09T00:00:00.000Z",
-          memberCount: 2,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 0,
-            openTaskCount: 0,
-            completedTaskCount: 1,
-          },
-        },
-        currentUserRole: "MEMBER",
-      }),
-    } as unknown as InpulseApiClient;
-    mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    expect(
-      within(dialog).getByRole("button", { name: "归档模块" }),
-    ).toBeInTheDocument();
-  });
-
-  it("无项目内角色（非成员）打开的模块弹窗底部没有归档入口（ADR-039）", async () => {
-    const client = {
-      listModules: vi.fn().mockResolvedValue({ items: [item] }),
-      getProject: vi.fn().mockResolvedValue({
-        project: {
-          id: 2,
-          code: "INP",
-          name: "项目",
-          description: "",
-          status: "ACTIVE",
-          rowVersion: 1,
-          createdBy: 9,
-          createdAt: "2026-09-09T00:00:00.000Z",
-          updatedAt: "2026-09-09T00:00:00.000Z",
-          memberCount: 2,
-          stats: {
-            activeModuleCount: 1,
-            activeFeatureCount: 0,
-            openTaskCount: 0,
-            completedTaskCount: 1,
-          },
-        },
-        currentUserRole: null,
-      }),
-    } as unknown as InpulseApiClient;
-    mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
-    const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
-    expect(
-      within(dialog).queryByRole("button", { name: /归\s*档/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(dialog).queryByRole("button", { name: /恢\s*复/ }),
-    ).not.toBeInTheDocument();
-  });
+  it.each(["LEADER", "MEMBER", null] as const)(
+    "角色 %s 打开编辑弹窗都没有归档 / 恢复入口，也没有操作原因字段",
+    async (role) => {
+      const view = mount(clientFor(role));
+      fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+      const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
+      expect(
+        within(dialog).queryByRole("button", { name: /归\s*档/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: /恢\s*复/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByLabelText("操作原因"),
+      ).not.toBeInTheDocument();
+      view.unmount();
+    },
+  );
 });

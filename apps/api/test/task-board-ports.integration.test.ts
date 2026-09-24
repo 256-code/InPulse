@@ -391,7 +391,9 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
         "INSERT INTO app.task_assignees (task_id, user_id, project_id) VALUES ($1, $2, $3), ($1, $4, $3)",
         [multi, secondUserId, scope.projectId, thirdUserId],
       );
-      const single = await insertBoardTask(tx, scope, { title: "单负责人任务" });
+      const single = await insertBoardTask(tx, scope, {
+        title: "单负责人任务",
+      });
 
       const page = await taskQuery.listForBoard(transactionContext(tx), {
         projectId: scope.projectId,

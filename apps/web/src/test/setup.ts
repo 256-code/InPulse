@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { afterEach } from "vitest";
+
+// CI 的 4 vCPU runner 上，懒加载 chunk 冷启动与 Ant Design 过渡帧会让默认 1s 的异步查询超时
+//（`TasksPage.test.tsx` 的详情弹窗、`app-router.test.tsx` 的默认路由都踩过）。这里全局放宽
+// `findBy*`/`waitFor` 的默认预算；单处显式传 `timeout` 的用例仍以显式值为准。
+configure({ asyncUtilTimeout: 4_000 });
 
 // jsdom 环境补齐 ResizeObserver 与 matchMedia mock，确保 Ant Design 正常运行
 class MockResizeObserver {

@@ -120,14 +120,14 @@ export class ExternalLinkWorkflow {
       projectId: before.projectId,
     });
     if (project.kind === "not-found") throw missing();
-    let writable = project.kind === "allowed";
+    let writable = true;
     if (before.moduleId !== null) {
+      // ADR-044：模块已无归档只读态，这里只保留父级 FOR SHARE 取锁与归属校验。
       const module = await this.modules.checkModuleForWrite(tx, {
         projectId: before.projectId,
         moduleId: before.moduleId,
       });
       if (module.kind === "not-found") throw missing();
-      writable = writable && module.kind === "allowed";
     }
     if (before.featureId !== null && type !== "FEATURE") {
       const feature = await this.features.checkFeatureForWrite(tx, {
@@ -136,7 +136,6 @@ export class ExternalLinkWorkflow {
         featureId: before.featureId,
       });
       if (feature.kind === "not-found") throw missing();
-      writable = writable && feature.kind === "allowed";
     }
     // Parent waits can invalidate the pre-read. Lock and re-read every target,
     // including GET/replay, then retain that lock through result authorization.
@@ -158,8 +157,11 @@ export class ExternalLinkWorkflow {
       writable &&
       (type === "CHANGE_RECORD"
         ? ["DRAFT", "PUBLISHED"].includes(current.status)
-        : // ADR-035：项目是四态，只有已归档只读；功能与任务是 ACTIVE/ARCHIVED，恰好等价。
-          current.status !== "ARCHIVED");
+        : type === "FEATURE"
+          ? // ADR-045：功能不再有归档态，功能目标恒可写。
+            true
+          : // 任务仍是 ACTIVE/ARCHIVED 两态，只有已归档只读。
+            current.status !== "ARCHIVED");
     if (write && !writable)
       throw new ExternalLinkError(
         409,

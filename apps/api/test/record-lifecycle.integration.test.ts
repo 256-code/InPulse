@@ -512,13 +512,16 @@ describe("F21 ADR-024 lifecycle", () => {
       await failure(await change(f), 500);
       expect(await state(f)).toEqual(before);
     });
-  it("MODULE historical impacts may be archived; FEATURE ownership must remain active", async () => {
+  it("keeps MODULE historical impacts and FEATURE ownership writable now that features cannot be archived (ADR-045)", async () => {
     for (const feature of [false, true]) {
       const f = await lifecycleFixture(feature);
       expect((await change(f)).status).toBe(200);
-      await db.sql`UPDATE app.features SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.featureId}`;
+      // 功能不再有归档态：存量功能恒为 ACTIVE，父级不再产生只读拒写。
+      expect(
+        await db.sql`SELECT status FROM app.features WHERE id=${f.featureId}`,
+      ).toEqual([{ status: "ACTIVE" }]);
       const response = await change(f, true, f.record.rowVersion + 1);
-      expect(response.status).toBe(feature ? 409 : 200);
+      expect(response.status, await response.clone().text()).toBe(200);
     }
   });
 });
@@ -641,58 +644,9 @@ it("preserves converted links, exact history and source TODO without a restore g
     await db.sql`SELECT task_id FROM app.change_records WHERE id=${draft.id}`;
   expect(source!.task_id).toBe(task.id);
 });
-for (const parent of ["projects", "modules", "features"] as const)
-  it(
-    "waits behind " +
-      parent +
-      " archival then rejects restore without any effects",
-    async () => {
-      const f = await lifecycleFixture(true);
-      expect((await change(f)).status).toBe(200);
-      const before = await state(f);
-      let release!: () => void, locked!: () => void;
-      const lockReady = new Promise<void>((r) => (locked = r)),
-        hold = new Promise<void>((r) => (release = r));
-      const id =
-        parent === "projects"
-          ? f.projectId
-          : parent === "modules"
-            ? f.moduleId
-            : f.featureId;
-      const blocker = uow.run(async (tx) => {
-        await tx.sql`SELECT id FROM app.projects WHERE id=${f.projectId} FOR UPDATE`;
-        if (parent !== "projects")
-          await tx.sql`SELECT id FROM app.modules WHERE id=${f.moduleId} FOR UPDATE`;
-        if (parent === "features")
-          await tx.sql`SELECT id FROM app.features WHERE id=${f.featureId} FOR UPDATE`;
-        locked();
-        await hold;
-        await tx.sql.unsafe(
-          `UPDATE app.${parent} SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=$1`,
-          [id],
-        );
-      });
-      await lockReady;
-      let response: Promise<Response> | undefined;
-      try {
-        response = change(f, true, f.record.rowVersion + 1);
-        await vi.waitFor(
-          async () => {
-            const rows =
-              await db.sql`SELECT 1 FROM pg_stat_activity WHERE application_name='inpulse-f18-publish' AND wait_event_type='Lock'`;
-            expect(rows.length).toBeGreaterThan(0);
-          },
-          { timeout: 5000, interval: 20 },
-        );
-      } finally {
-        release();
-        await blocker;
-      }
-      expect((await response!).status).toBe(409);
-      expect(await state(f)).toEqual(before);
-    },
-  );
-it("holds parent locks until projections commit, serializing a following archive", async () => {
+// ADR-045：功能层下线归档后，父级已不存在「归档后再拒写」这条路径；
+// 父到子锁序由下面的「holds parent locks until projections commit」用例覆盖。
+it("holds parent locks until projections commit, serializing a following parent write", async () => {
   const f = await lifecycleFixture();
   expect((await change(f)).status).toBe(200);
   let release!: () => void, entered!: () => void;
@@ -706,11 +660,10 @@ it("holds parent locks until projections commit, serializing a following archive
   });
   const pending = change(f, true, f.record.rowVersion + 1);
   await ready;
-  let archived = false;
-  const archive = uow.run(async (tx) => {
+  let locked = false;
+  const parentWrite = uow.run(async (tx) => {
     await tx.sql`SELECT id FROM app.projects WHERE id=${f.projectId} FOR UPDATE`;
-    archived = true;
-    await tx.sql`UPDATE app.projects SET status='ARCHIVED',archived_at=now(),row_version=row_version+1 WHERE id=${f.projectId}`;
+    locked = true;
   });
   try {
     await vi.waitFor(
@@ -721,13 +674,13 @@ it("holds parent locks until projections commit, serializing a following archive
       },
       { timeout: 5000, interval: 20 },
     );
-    expect(archived).toBe(false);
+    expect(locked).toBe(false);
   } finally {
     release();
   }
   expect((await pending).status).toBe(200);
-  await archive;
-  expect(archived).toBe(true);
+  await parentWrite;
+  expect(locked).toBe(true);
 });
 
 it("rechecks administrator identity after waiting for the record lock", async () => {
