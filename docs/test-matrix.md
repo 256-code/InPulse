@@ -3702,3 +3702,24 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 | SCROLLBAR-AUTOHIDE-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示：只改前端、不涉及后端 / 契约 / 权限 / 数据库时不跑测试与门禁）；既有侧栏 / 项目树相关用例未复跑。唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档）→ 通过（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」） | 未运行（除文档检查） |
 
 未运行 / 已知偏差：① 既有 `apps/web` 单测里涉及侧栏与项目树的用例未复跑（未验证）；② 深色侧栏三处的 hover 口径不完全一致——`.tree-modules-scroll` 保留既有 `#5b90bb` hover，`.nav-group` / `.sidebar` 静止悬浮仍透明（继承既有规则，未新增）；③ 操作系统开启「自动隐藏滚动条」（overlay scrollbars）时 Chromium 不使用 `::-webkit-scrollbar`，本改动对其无影响（未验证）；④ 根滚动条的像素观感需人工在有头浏览器确认。本条只改前端样式与文档，后端、契约、权限矩阵、迁移与生成物零改动。
+
+## 2026-09-28 修复 `main` 单元测试红灯：`ModulesPageView.test.tsx` 宽泛查询撞上新「编辑项目」按钮（用户指示，本地提交）
+
+用户指示（原文）：「A（推荐）：把手上这个修复提交 → 推 `test` → 开 `test → main` 的 PR，先把主干治好（顺带把测试矩阵/开发日志补一条记录）。」
+
+现象：`origin/main` 自 2026-09-24 起为红。运行 [35975479381](https://github.com/256-code/InPulse/actions/runs/35975479381)（`CI / workspace`，commit `64b7a6f`）在第 9 步 `Unit tests` 失败，`apps/web test:unit` 汇总为 `1 failed | 84 passed (85)`，3 例失败全部落在 `apps/web/src/features/modules/ModulesPageView.test.tsx`；同一 commit 的 `dev/a` 运行同样失败。
+
+根因：该用例文件用宽泛可访问名 `findByRole("button", { name: /编\s*辑/ })` 定位模块卡上的「编辑模块」按钮；2026-09-24 的项目主页新增了带 `aria-label="编辑项目"` 的圆形铅笔按钮（即上一小节的 `PROJECT-EDIT-ENTRY-BROWSER-001`），两者渲染在同一页面，strict mode 遂报 `TestingLibraryElementError: Found multiple elements with the role "button" and name /编\s*辑/`（命中元素为 `aria-label="编辑项目"` 与文本 `编辑模块`）。这正是 2026-09-24 那条小节「未运行 / 已知偏差」第 ② 条当时记下的「未验证」风险点，本次确认并修复。
+
+未被更早发现的原因：`.github/workflows/ci.yml` 的 `on:` 只有 `pull_request` 与 `push` 到 `main` / `dev/*`，**推送 `test` 分支不触发 CI**，因此该缺陷是合入 `main` 后才第一次被验证到。
+
+修复：只收紧测试定位符，产品代码零改动。`findByRole` 按可访问名精确匹配——`编辑模块` 是按钮文本、`编辑项目` 是按钮 `aria-label`，二者互不冲突。该文件 5 处 `{ name: /编\s*辑/ }` 全部改为 `{ name: "编辑模块" }`（第 78、133、198、256、403 行）；同文件其余断言（归档 / 恢复入口不存在、操作原因字段不存在）原样保留。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| MODULES-EDIT-QUERY-FIX-WEB-UNIT-001 | Web 单元 | 收紧定位符后 F-12 与 ADR-044 用例全部通过 | `pnpm --filter @inpulse/web test:unit` → `Test Files 85 passed (85)`、`Tests 560 passed (560)`（36.99s），含原先失败的 `F-12 forms > 模块卡与编辑弹窗都不再有归档 / 恢复入口（ADR-044）` 与 `模块弹层的归档入口（ADR-044 已下线）> 角色 LEADER / MEMBER` 两例；单文件复跑 `vitest run src/features/modules/ModulesPageView.test.tsx` → 14/14 | 本地通过 |
+| MODULES-EDIT-QUERY-FIX-CI-001 | CI | `main` 主干恢复绿灯 | `test → main` PR 触发的 `CI / workspace` 全链 | 待回填（PR 已开，运行结论在 PR 创建后补记） |
+
+文档同步：`docs/test-matrix.md`（本条）与 `开发日志.md`（第三十一条记录）。后端、契约、Route Registry、权限矩阵、迁移、生成物与产品代码零改动。
+
+未运行 / 已知偏差：① 本批只改测试定位符，未跑 `pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:integration`、`pnpm build`、`pnpm test:e2e` 与 `pnpm check` 整链——`test` 分支推送不触发 CI，这些门禁由 `test → main` PR 的 `CI / workspace` 全链覆盖；② 其余 84 个 web 用例文件在 `main` 的失败运行里已经全绿，说明不存在第二处宽泛查询冲突（未逐个复核）；③ 本次不涉及运行时代码，UI 行为与产品代码零变化，未做浏览器人工复核；④ 推送 `test` 不跑 CI 属独立议题（需改技术设计 §12.4 章节），不在本 PR 范围。
