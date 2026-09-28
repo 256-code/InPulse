@@ -4130,3 +4130,22 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 收尾门禁（2026-09-28 本批全量复跑，全部通过）：`pnpm format:check`（首轮报出 6 个文件不符合 Prettier，其中 `ProjectDeletionActions.tsx`、`project-management-query.ts`、`schema-registry.ts`、`project-delete-api.integration.test.ts` 属上一条 ADR-051 / 动态中文化批次遗留，已 `prettier --write` 修复并复检全绿）、`pnpm lint`、`pnpm check:docs`（**99 个 Markdown** 链接与锚点有效）、`pnpm build`（api / web / ops / database / api-contract）、`pnpm check:frontend:boundaries`（**289 模块 / 1430 依赖**，无违规）、`pnpm check:deps`（**824 个源文件**）、`pnpm check:secrets`（**1090 个文件**）、`pnpm db:migrations:check`（**29 个迁移**）、`pnpm contract:drift`（5 产物与 Registry 一致）、`pnpm contract:validate`（**102 条路由**）、`pnpm permissions:check`（**102/102**）、`pnpm db:seed:check`（28 张业务表无漂移）、`pnpm check:deploy:test`（5 image refs）、`pnpm test:unit`（api **66 文件 370 例**、web **86 文件 582 例**、api-contract 16 文件 100 例、ops 8 文件 52 例、database 15 例、canonical-json 5 例）、`pnpm audit --registry=https://registry.npmjs.org --audit-level=high`（`No known vulnerabilities found`）、`pnpm test:e2e` 整包（独立测试库 `app_ci`，`E2E_API_PORT=3188` / `E2E_WEB_PORT=4188`）→ **59 passed（4.4m）**，跑后按仓库规则复核 `e2e_` / `f03_` 夹具账号与夹具项目残留均为 **0**。
 
 未运行 / 已知偏差：① 全量 `pnpm test:integration` 未重跑（本批只定向跑受影响的 4 个文件 30/30，其余集成文件未受本批改动影响）；② 镜像构建、Trivy 扫描与 **GitHub Actions** 未跑；③ 已删除项目的名称、创建过程、成员与任务/记录动态对**全部登录用户**可见是**有意**放宽（ADR-052 第 1 节），若将来改为「仅参加过该项目的人可见完整过程」必须新增 ADR 并同步权限矩阵与本节。
+
+## 2026-09-28 审计页与站内通知事件文案中文化（用户指示，本地落库）
+
+用户 2026-09-28 指示「先本地提交，然后一并中文化，并且审计日志那边也要一并中文化」，并澄清「这个中文化指的是什么，就是前端显示的是吧，然后审计日志只的是我发图里的」——即**只改前端展示文案**，审计日志指 `/audit` 页面（用户截图里的动作列仍显示原始码 `project.purge`）。范围因此收在展示层：不动契约、不动后端事件码、不改数据库存值、不改路由与权限，也没有新增依赖。
+
+锁定口径：
+
+- **审计页**：`apps/web/src/features/audit/audit-labels.ts` 的 `ACTION_LABELS` 补 `"project.purge": "彻底删除项目"`（第四十五条的中文化批次收了 `project.delete` / `project.restore` 却漏了彻底删除，用户截图看到的正是这条）；`auditActionWithCode()` 仍按「中文（原始码）」渲染原始快照弹窗的对照，这是有意的——快照的语义就是原始值。
+- **通知页**：`NotificationsPageView` 的 `notificationTypeLabels` 由 9 条扩到 19 条。服务端同时存在两套命名风格（项目与记录生命周期用 `UPPER_SNAKE`，任务与记录用 `dot.case`），两套都收录；未收录的取值按原样显示，便于在界面上直接发现新的后端事件，不静默兜底成「未知」。
+- **历史取值**：ADR-043 已下线的归档通知 3 条（`PROJECT_ARCHIVE_REQUESTED` / `APPROVED` / `REJECTED`）保留标签，只用于展示早期演示数据。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AUDIT-LABEL-I18N-001 | Web 单元 + 人工复验 | 审计页动作码中文化 | `AuditLogPageView.test.tsx` 新增用例：`project.purge` 渲染为「彻底删除项目」且页面不出现原始码；真实浏览器复核 `/audit` 抓取 **68 行 / 19 种动作**全部为中文（删除项目、恢复项目、创建项目、变更成员角色、变更项目状态、完成任务、重新打开任务、发布记录、合并任务、遗留问题转任务、添加 GitHub 关联等），无原始码残留 | 本地通过 |
+| NOTIFICATION-LABEL-I18N-001 | Web 单元 + 人工复验 | 站内通知类型中文化（两套命名） | `NotificationsPageView.test.tsx` 新增用例：`record.publish` / `task.complete` 渲染为「发布记录」/「任务完成」且不出现原始码；真实浏览器复核 `/notifications` 标签取值 **8 种全部中文**（加入项目、任务完成、重新打开任务、变更项目状态、任务指派、追加遗留问题、发布记录），无 `dot.case` 残留 | 本地通过 |
+
+本地实际执行（2026-09-28，全部通过）：`pnpm exec prettier --write`（改动 4 个文件，唯一失格项 `NotificationsPageView.test.tsx` 已修复）、`pnpm format:check`（`All matched files use Prettier code style!`）、`pnpm lint`、`pnpm typecheck`（8 个 workspace）、定向 `pnpm --filter @inpulse/web exec vitest run src/features/audit src/features/notifications` → **5 文件 25/25**、`pnpm --filter @inpulse/web test:unit` → **86 文件 584 例**、真实浏览器复核（审计页与通知页各一次抓取）。
+
+未运行 / 已知偏差：① 本批为纯前端文案、无行为变更，未跑 `pnpm test:e2e`（上一次整包 `59 passed` 在本批之前）、全量 `pnpm test:integration`、镜像构建、Trivy 扫描与 **GitHub Actions**；② 通知类型标签表是**展示用白名单**，服务端新增事件码时不会自动中文化（按原样显示以便发现），需要时补表；③ 审计页的动作筛选项由 `AUDIT_ACTION_OPTIONS` 从同一标签表生成，因此 `project.purge` 的筛选项随本次改动一并出现。

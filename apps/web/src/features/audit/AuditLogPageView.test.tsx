@@ -76,6 +76,16 @@ const seedFeatureItem: AuditLogItem = {
   eventPayload: { code: "INPULSE-F-11", name: "工程基建" },
 };
 
+// ADR-051：彻底删除项目，用于校验动作码已收进中文标签表。
+const purgeItem: AuditLogItem = {
+  ...systemItem,
+  sequenceNo: 16,
+  action: "project.purge",
+  targetType: "PROJECT",
+  targetId: "41",
+  eventPayload: { code: "T1", name: "旧版交付平台" },
+};
+
 const project = {
   id: 7,
   code: "AGV",
@@ -174,6 +184,15 @@ describe("F-08 audit page", () => {
     const featureLabel = "对象：功能 INPULSE-F-11「工程基建」";
     expect(await screen.findByText(taskLabel)).toBeInTheDocument();
     expect(screen.getByText(featureLabel)).toBeInTheDocument();
+  });
+
+  it("把 project.purge 显示为中文动作，不泄露原始码（ADR-051 中文化）", async () => {
+    const getAuditLogs = vi.fn().mockResolvedValue(page([purgeItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    expect(await screen.findByText("彻底删除项目")).toBeInTheDocument();
+    expect(screen.queryByText("project.purge")).not.toBeInTheDocument();
   });
 
   it("hides read-trail rows by default and reveals them on demand", async () => {

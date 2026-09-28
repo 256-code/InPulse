@@ -10,6 +10,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "project.delete": "删除项目",
   "project.archive": "归档项目",
   "project.restore": "恢复项目",
+  // ADR-051：彻底删除会连项目自己的审计链一起清掉，历史行只可能出现在别处引用。
+  "project.purge": "彻底删除项目",
   "project.archive.request": "提交归档申请",
   "project.archive.reject": "驳回归档申请",
   "project.member.add": "添加项目成员",

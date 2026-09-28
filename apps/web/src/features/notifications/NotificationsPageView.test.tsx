@@ -98,4 +98,54 @@ describe("NotificationsPageView", () => {
     );
     expect(readNotification).toHaveBeenCalledTimes(1);
   });
+
+  it("把 dot.case 通知类型也显示成中文标签", async () => {
+    const getNotifications = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "81",
+          projectId: 1,
+          notificationType: "record.publish",
+          title: "迭代记录已发布",
+          body: "INPULSE-R-12",
+          targetPath: "/projects/1/activity",
+          createdAt: "2026-09-20T00:00:00.000Z",
+          readAt: null,
+        },
+        {
+          id: "82",
+          projectId: 1,
+          notificationType: "task.complete",
+          title: "任务完成：单点登录",
+          body: "INPULSE-T-59",
+          targetPath: "/projects/1/activity",
+          createdAt: "2026-09-20T01:00:00.000Z",
+          readAt: null,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+    const client = {
+      getNotifications,
+      getNotificationUnreadCount: vi.fn().mockResolvedValue({ unreadCount: 2 }),
+    } as unknown as InpulseApiClient;
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <NotificationsPageView client={client} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("发布记录")).toBeInTheDocument();
+    expect(screen.getByText("任务完成")).toBeInTheDocument();
+    expect(screen.queryByText("record.publish")).not.toBeInTheDocument();
+    expect(screen.queryByText("task.complete")).not.toBeInTheDocument();
+  });
 });
