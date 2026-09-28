@@ -116,11 +116,7 @@ function filterOptionByLabel(input: string, option?: unknown): boolean {
   if (data === undefined) {
     return false;
   }
-  const haystack = (
-    data.label +
-    " " +
-    (data.description ?? "")
-  ).toLowerCase();
+  const haystack = (data.label + " " + (data.description ?? "")).toLowerCase();
   return haystack.includes(needle);
 }
 

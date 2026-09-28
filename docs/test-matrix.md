@@ -3910,3 +3910,20 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 本地实际执行（2026-09-28，全部通过）：修改前先复现 `tasks.spec.ts` 的同一失败；临时调试 spec 打印创建后快照（跑完已删除）；单文件 `task-status.spec.ts` 2 passed；全量 `playwright test` **56 passed (4.0m)**；`pnpm --filter @inpulse/web test:unit` → `Test Files 85 passed (85)` / `Tests 560 passed (560)`；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（全 workspace 含 `apps/e2e`）、`pnpm check:docs` 通过。
 
 未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链——本批未触碰后端、数据库与生成物，这些门禁由推送后 CI 覆盖；② `Browser E2E` 的 CI 结论未回填（`test` 分支推送不触发 CI）；③ 本批含产品代码改动（`TasksPanel.tsx` 创建后跳转语义），按 §8 需非作者人工评审，且不宜与第三十一条「只改测试定位符」合并成同一个评审单元；④ 「自定义归属新建任务」在同页创建模块级任务时仍只改写地址栏（不就地打开），这是 `a9a8db5` 之后、本批之前的既有行为，本批未改，也未新增 E2E 覆盖。
+## 2026-09-28 修复并行改造留下的单测定位失效与 prettier 未格式化（用户指示，本地落库）
+
+承接第三十八条记录的同一轮：把该轮提交 rebase 到 `origin/test` 时发现并行的前端改造（`b5ff697`／`8cbb21c`／`31767ee`）把 `test` 分支留在两处门禁红灯上（其开发日志自述「单测与 E2E 已按新交互改写但未复跑」）。两处都会让 PR #146 的 `Unit tests` 与 `format check` 失败，本批一并治掉。只改 1 处测试定位 + 3 处纯格式化，未改产品代码、未削弱断言。
+
+定位失效根因：`apps/web/src/features/task-groups/MergeIntoMainTaskModal.test.tsx` 的「keeps only same-project TASK candidates and excludes the source task」把作用域写成 `within(await screen.findByRole("listbox"))` 再在其中 `findByTitle`。临时用例打印真实 DOM 后确认：`role="listbox"` 挂在 `div.ant-select-dropdown-list-holder-inner` 上、候选 `div.ant-select-item-option[title=...]` 确在其内部，但空态（`notFoundContent`）与有候选时不是同一个节点——先抓到的空态节点在防抖 + 搜索返回后被替换、脱离文档，作用域内永远查不到选项；同一写法还让三条负向断言在空作用域里恒为真（空断言）。改为先 `await screen.findByTitle(...)` 等候选渲染，再用 `option.closest(".ant-select-dropdown")` 重新取作用域，负向断言恢复校验力。
+
+格式：`pnpm format:check` 报 `CalmSelect.tsx`（`filterOptionByLabel` 的 `haystack` 折行）、`LeftoverTaskSource.tsx`（`title` 三元折行）、`TasksPanel.test.tsx`（`findByLabelText` 断言折行）；`pnpm format` 只做折行归一，`git diff` 为 3 处换行、无语义改动。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| MERGE-CANDIDATE-SCOPE-WEB-UNIT-001 | Web 单元 | 候选下拉的作用域在候选渲染后重新获取，三条负向断言不再空跑 | 修复后 `vitest run src/features/task-groups/MergeIntoMainTaskModal.test.tsx` → `Tests 5 passed (5)`；全量 `pnpm --filter @inpulse/web test:unit` → `Test Files 85 passed (85)`、`Tests 561 passed (561)`（修复前 `1 failed \| 84 passed`、560/561）；并已在 `origin/test`（`31767ee`）单独复现原失败，证明与本轮自身改动无关 | 本地通过 |
+| PARALLEL-CHANGE-FORMAT-CHECK-001 | 格式门禁 | 并行改造留下的 3 个文件符合 prettier | `pnpm format` 后 `pnpm format:check` → `All matched files use Prettier code style!`；`git diff` 仅 3 处换行 | 本地通过 |
+| PARALLEL-CHANGE-E2E-RECHECK-001 | E2E（全量） | 并行改造自述未复跑的用例一并覆盖 | 格式化后的最终树 `pnpm --filter @inpulse/e2e exec playwright test` → **56 passed (4.0m)**（含 `task-groups.spec.ts`、`TasksPanel.test.tsx` 主任务断言所在路径） | 本地通过 |
+
+本地实际执行（2026-09-28）：`pnpm --filter @inpulse/web test:unit` 全绿、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（全 workspace）通过、全量 Playwright 56 passed (4.0m)。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链（本批未触碰后端、数据库与生成物，由推送后 CI 覆盖）；② 修复的是并行改造方尚未复跑的改动留下的红灯，若对方在别处继续改同一文件，需以最新 `origin/test` 为准重新 rebase；③ 本批含测试定位与格式化改动，`MergeIntoMainTaskModal.test.tsx` 按 §8 属测试代码，产品代码零改动。

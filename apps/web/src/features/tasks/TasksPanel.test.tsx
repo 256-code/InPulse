@@ -455,9 +455,7 @@ describe("F-23 merge entry", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "合并到主任务" }),
     );
-    expect(
-      await screen.findByLabelText(/^主任务$/),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^主任务$/)).toBeInTheDocument();
   });
 });
 describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {

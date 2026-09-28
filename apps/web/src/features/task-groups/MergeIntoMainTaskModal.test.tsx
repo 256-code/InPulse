@@ -144,10 +144,15 @@ describe("F-23 merge into main task", () => {
     fireEvent.change(screen.getByLabelText(searchLabel), {
       target: { value: "退款" },
     });
-    // 按选项 title 断言而不是全屏文本：弹层挂在 body 上，而「当前任务」卡片里
-    // 也有同一个标题，全屏查询会把卡片误判成候选。
-    const listbox = within(await screen.findByRole("listbox"));
-    expect(await listbox.findByTitle("重复回调任务 A")).toBeInTheDocument();
+    // 候选要等防抖 + 搜索返回后才渲染。按选项 title 断言而不是全屏文本：弹层挂在
+    // body 上，而「当前任务」卡片里也有同一个标题，全屏查询会把卡片误判成候选。
+    // 作用域必须在这之后重新取：空态（notFoundContent）与有候选时不是同一个 listbox
+    // 节点，先按 role 抓到的旧节点在候选回来后就脱离了文档，导致永远查不到选项。
+    const option = await screen.findByTitle("重复回调任务 A");
+    expect(option).toBeInTheDocument();
+    const listbox = within(
+      option.closest(".ant-select-dropdown") as HTMLElement,
+    );
     expect(listbox.queryByTitle("退款主任务")).toBeNull();
     expect(listbox.queryByTitle("其他项目任务")).toBeNull();
     expect(listbox.queryByTitle("退款功能")).toBeNull();

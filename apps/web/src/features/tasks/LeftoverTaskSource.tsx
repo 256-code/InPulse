@@ -48,7 +48,9 @@ export function LeftoverTaskSource({
         className="leftover-source-open"
         disabled={detail === undefined}
         title={
-          detail === undefined ? "来源记录加载中或当前不可读" : "打开来源记录详情"
+          detail === undefined
+            ? "来源记录加载中或当前不可读"
+            : "打开来源记录详情"
         }
         onClick={() => setOpen(true)}
       >
