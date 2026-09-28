@@ -347,6 +347,10 @@
     {
       "version": "2.0.0",
       "fingerprint": "b5adb281b13a7c030db13ecf8532b7878ee0ea528392a76013da36a63361d11c"
+    },
+    {
+      "version": "2.2.0",
+      "fingerprint": "2929fd0b9b72b6c3cef73e58bb0eda77208fdb3c6754587c015b3a40f62c65bf"
     }
   ],
   "transitionModuleTask": [

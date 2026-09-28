@@ -38,8 +38,13 @@ interface ReassignmentChoice {
 export interface ProjectMembersPageViewProps {
   readonly projectId: number;
   readonly client?: InpulseApiClient | undefined;
-  /** ADR-033：当前登录用户是否系统管理员（可转移/撤销组长）。 */
+  /** ADR-033/ADR-047：当前登录用户是否系统管理员（可任命/转移组长）。 */
   readonly isSystemAdmin?: boolean | undefined;
+  /**
+   * ADR-047：当前登录用户在本项目的角色。`LEADER` 只能把组长身份转交给
+   * 其他活跃成员，不能自设也不能撤销。
+   */
+  readonly viewerRole?: "MEMBER" | "LEADER" | null | undefined;
   /**
    * 嵌在项目主页弹窗内：项目已由外层固定，隐藏页内的项目切换器
    * （切换器依赖整页路由，弹窗内无法生效）。
@@ -59,6 +64,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   projectId,
   client,
   isSystemAdmin = false,
+  viewerRole = null,
   embedded = false,
 }) => {
   const { query, addMutation, removeMutation, roleMutation } =
@@ -145,8 +151,13 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     removeMutation.reset();
   };
 
-  // ADR-039：项目内角色任命只剩「任命/撤销组长」，且只能由系统管理员执行。
-  const assignableRoles = ["MEMBER", "LEADER"] as const;
+  // ADR-047：角色任命只针对现任组长之外的行——把其他成员设为组长即完成转移，
+  // 原组长自动降级；撤销组长不存在独立入口。调用者只剩系统管理员与本项目组长。
+  const canSetRoles = isSystemAdmin || viewerRole === "LEADER";
+  const leaderTransferOnly = !isSystemAdmin && viewerRole === "LEADER";
+  const assignableRoles = leaderTransferOnly
+    ? (["LEADER"] as const)
+    : (["MEMBER", "LEADER"] as const);
   const [roleTarget, setRoleTarget] = useState<ProjectMemberRecordItem | null>(
     null,
   );
@@ -156,7 +167,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
 
   const openRoleModal = (member: ProjectMemberRecordItem) => {
     setRoleTarget(member);
-    setSelectedRole(member.role === "LEADER" ? null : member.role);
+    setSelectedRole(
+      member.role === "LEADER" || leaderTransferOnly ? null : member.role,
+    );
     setActionError(null);
     setSuccess(null);
     roleMutation.reset();
@@ -179,7 +192,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         role: selectedRole,
       });
       setSuccess(
-        `已将 ${roleTarget.name} 的项目角色设置为${roleLabel[selectedRole]}。`,
+        leaderTransferOnly
+          ? `已将组长身份转交给 ${roleTarget.name}，你已成为普通成员。`
+          : `已将 ${roleTarget.name} 的项目角色设置为${roleLabel[selectedRole]}。`,
       );
       setRoleTarget(null);
       setSelectedRole(null);
@@ -421,12 +436,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                         ) : null}
                       </div>
                       <div className="member-card-actions">
-                        {isSystemAdmin ? (
+                        {canSetRoles && member.role !== "LEADER" ? (
                           <Button
                             className="secondary-button"
                             onClick={() => openRoleModal(member)}
                           >
-                            设置角色
+                            {leaderTransferOnly ? "转移组长" : "设置角色"}
                           </Button>
                         ) : null}
                         {member.role !== "LEADER" ? (
@@ -454,8 +469,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 <p className="permission-hint">
                   <InpulseIcon name="shield" size={15} />
                   <span>
-                    移除创建者只关闭成员关系，不会修改永久保留的创建人字段；
-                    已完成任务保留原负责人，已发布记录保留原作者，
+                    项目始终保留一名组长：组长不能被直接移除或撤销，需先把其他成员
+                    设为组长完成转移；移除创建者只关闭成员关系，不会修改永久保留的
+                    创建人字段；已完成任务保留原负责人，已发布记录保留原作者，
                     未完成任务需要提示是否改派。
                   </span>
                 </p>
@@ -703,10 +719,14 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               title={
                 "为 " +
                 (roleTarget?.name ?? "") +
-                " 设置项目内角色（仅在本项目生效）"
+                (leaderTransferOnly
+                  ? " 转交组长身份（仅在本项目生效）"
+                  : " 设置项目内角色（仅在本项目生效）")
               }
               description={
-                "可将成员设为组长或撤销组长；每个项目只能有一名组长，转移组长后原组长自动成为普通成员。"
+                leaderTransferOnly
+                  ? "转交后对方成为组长，你自动成为普通成员；每个项目只能有一名组长。"
+                  : "可将成员设为组长；把其他成员设为组长即完成转移，原组长自动成为普通成员。组长不能被直接撤销。"
               }
             />
             <div className="impact-fieldset member-candidate-list">
@@ -722,7 +742,9 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     />
                     {roleLabel[role]}
                     {role === "LEADER"
-                      ? "（每项目唯一，仅作身份标识，管理权限与成员相同）"
+                      ? leaderTransferOnly
+                        ? "（转交后你成为普通成员）"
+                        : "（每项目唯一，可把组长身份转交给其他成员）"
                       : "（普通项目成员）"}
                   </label>
                 ))}

@@ -54,6 +54,7 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
       projectId={id}
       client={client}
       isSystemAdmin={isSystemAdmin}
+      viewerRole={detail.data?.currentUserRole ?? null}
     />
   );
 };

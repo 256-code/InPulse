@@ -191,8 +191,8 @@ async function seedFixture(client: DatabaseClient): Promise<SeedFixture> {
       throw new Error("project fixture insert returned no row");
     }
     await tx`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${project.id}, ${user.id})
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${project.id}, ${user.id}, 'LEADER')
     `;
     await tx`
       INSERT INTO app.modules (project_id, name, kind, created_by)

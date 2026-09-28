@@ -161,13 +161,45 @@ export async function removeMember(
   userId: number,
 ): Promise<void> {
   // ADR-033：REMOVED 行不得保留非 MEMBER 角色（project_members_removed_role_check）。
-  await sql`
-    UPDATE app.project_members
-       SET status = 'REMOVED',
-           removed_at = now(),
-           role = 'MEMBER'
-     WHERE project_id = ${projectId}
-       AND user_id = ${userId}
-       AND status = 'ACTIVE'
-  `;
+  // ADR-047：有活跃成员就必须恰好一名组长，夹具移除组长前先转移给最早的活跃成员。
+  await sql.begin(async (transaction) => {
+    const [target] = await transaction<Array<{ id: number; role: string }>>`
+      SELECT id, role
+        FROM app.project_members
+       WHERE project_id = ${projectId}
+         AND user_id = ${userId}
+         AND status = 'ACTIVE'
+       FOR UPDATE
+    `;
+    if (!target) return;
+
+    if (target.role === "LEADER") {
+      const [successor] = await transaction<Array<{ id: number }>>`
+        SELECT id
+          FROM app.project_members
+         WHERE project_id = ${projectId}
+           AND status = 'ACTIVE'
+           AND id <> ${target.id}
+         ORDER BY joined_at, id
+         LIMIT 1
+         FOR UPDATE
+      `;
+      if (successor) {
+        await transaction`
+          UPDATE app.project_members SET role = 'MEMBER' WHERE id = ${target.id}
+        `;
+        await transaction`
+          UPDATE app.project_members SET role = 'LEADER' WHERE id = ${successor.id}
+        `;
+      }
+    }
+
+    await transaction`
+      UPDATE app.project_members
+         SET status = 'REMOVED',
+             removed_at = now(),
+             role = 'MEMBER'
+       WHERE id = ${target.id}
+    `;
+  });
 }

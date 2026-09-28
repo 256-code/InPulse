@@ -428,9 +428,10 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     tx: TransactionContext,
     input: AddProjectMemberInput,
   ): Promise<ProjectMemberRecord> {
+    const role = input.role ?? "MEMBER";
     const inserted = (await tx.sql`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${input.projectId}, ${input.userId})
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${input.projectId}, ${input.userId}, ${role})
       RETURNING id
     `) as unknown as readonly { id: number }[];
     if (inserted.length === 0) {

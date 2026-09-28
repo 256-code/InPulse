@@ -112,8 +112,8 @@ export async function createProject(
     }
 
     await transaction`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${project.id}, ${ownerId})
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${project.id}, ${ownerId}, 'LEADER')
     `;
     const [module] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.modules (

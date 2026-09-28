@@ -13,9 +13,9 @@ export function projectMemberErrorMessage(error: unknown): string {
     if (error.status === 401)
       return "登录状态已失效，请重新登录后再查看项目成员。";
     if (error.status === 403) {
-      // ADR-039：管理操作对全体活跃成员开放，只剩角色任命仍限系统管理员。
+      // ADR-047：角色任命只剩「系统管理员或本项目组长转移组长身份」。
       if (error.code === "PROJECT_MEMBER_ROLE_FORBIDDEN")
-        return "只有系统管理员可以任命或撤销项目组长。";
+        return "只有系统管理员或本项目组长可以设定组长，且组长只能把身份转交给其他成员。";
       return "安全校验未通过，请刷新页面后重试。";
     }
     if (error.status === 404) return "项目或成员不存在，或你已无权访问。";
@@ -25,9 +25,11 @@ export function projectMemberErrorMessage(error: unknown): string {
       if (error.code === "PROJECT_MEMBER_TASK_NOT_REASSIGNABLE")
         return "待改派任务已发生变化，请重新加载后重试。";
       if (error.code === "PROJECT_MEMBER_LEADER_PROTECTED")
-        return "项目组长不能被移除，请先由系统管理员转移或撤销组长角色。";
+        return "项目组长不能被直接移除，请先把其他成员设为组长（转移）。";
+      if (error.code === "PROJECT_MEMBER_LEADER_REQUIRED")
+        return "项目必须保留一名组长，请先把其他成员设为组长（转移）。";
       if (error.code === "PROJECT_MEMBER_LEADER_CONFLICT")
-        return "该项目已存在组长，请先转移或撤销现有组长。";
+        return "该项目已存在组长，请刷新成员列表后重试。";
       return "项目成员状态已变化，请刷新列表后重试。";
     }
     if (error.status === 422) return "请检查成员信息或任务改派参数。";

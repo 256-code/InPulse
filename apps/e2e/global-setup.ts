@@ -223,8 +223,8 @@ async function seedFixture(databaseUrl: string): Promise<{
       }
 
       await transaction`
-        INSERT INTO app.project_members (project_id, user_id)
-        VALUES (${project.id}, ${user.id})
+        INSERT INTO app.project_members (project_id, user_id, role)
+        VALUES (${project.id}, ${user.id}, 'LEADER')
       `;
       await transaction`
         INSERT INTO app.modules (project_id, name, kind, created_by)
@@ -279,8 +279,8 @@ async function seedFixture(databaseUrl: string): Promise<{
         throw new Error("E2E hidden project fixture insert returned no row");
       }
       await transaction`
-        INSERT INTO app.project_members (project_id, user_id)
-        VALUES (${hiddenProject.id}, ${member.id})
+        INSERT INTO app.project_members (project_id, user_id, role)
+        VALUES (${hiddenProject.id}, ${member.id}, 'LEADER')
       `;
       await transaction`
         INSERT INTO app.modules (project_id, name, kind, created_by)

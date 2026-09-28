@@ -3931,3 +3931,22 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/146) 的运行 [36371651925](https://github.com/256-code/InPulse/actions/runs/36371651925)（head `f32aaf0`）**全绿**：第 2 步 `Format check` 与第 9 步 `Unit tests` 由红转绿，`CI / workspace` 45 步与 `Documentation / docs` 全部 success。
 
 未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链（本批未触碰后端、数据库与生成物，由推送后 CI 覆盖）；② 修复的是并行改造方尚未复跑的改动留下的红灯，若对方在别处继续改同一文件，需以最新 `origin/test` 为准重新 rebase；③ 本批含测试定位与格式化改动，`MergeIntoMainTaskModal.test.tsx` 按 §8 属测试代码，产品代码零改动。
+
+## 2026-09-28 项目组长唯一性与转移（ADR-047，用户指示，本地落库）
+
+用户三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）把 ADR-033 只做了一半的组长不变量补齐：**只要项目还有活跃成员，就必须恰好一名 `ACTIVE` 组长**，组长只能**转移**、不能撤销、不能被直接移除。数据库最终防线是迁移 `0026_project_leader_invariant.sql` 的延迟约束触发器（提交期调用 `app.assert_project_leader`）；服务端 `setProjectMemberRole` 从「仅系统管理员可任命/撤销」改为「系统管理员或现任组长本人可转移」，撤销组长返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；`addProjectMember` 在项目无活跃组长时把首位加入者直接写成 `LEADER`。零活跃成员的项目在数据库层保持合法（夹具清理与历史数据的删除路径），「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，不另设错误码（详见 [ADR-047](adr/ADR-047.md)）。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| LEADER-INVARIANT-DB-001 | 数据库集成 | 有活跃成员的项目必须恰好一名组长（数据库最终防线） | `database/test/integration/database.test.ts`「project with active members keeps exactly one leader」：把唯一组长降级 → 提交期 `23514`；移除唯一组长只留普通成员 → `23514`；先降级再提升（转移）→ 合法；把全部成员标记 `REMOVED` → 合法（零活跃成员）；无组长项目直接加人 → `23514`；显式 `role='LEADER'` 加人 → 成功。`TEST_DATABASE_URL=…/app_it pnpm --filter @inpulse/database test:integration` → **2 文件 27 例通过** | 本地通过 |
+| LEADER-INVARIANT-PROBE-001 | 数据库手工探针 | 三条只能靠真实数据库区分的行为 | `psql`：降级唯一组长 → `check_violation`（exit 3）；物理 `DELETE` 组长 → `app.assert_project_bootstrap` 拒绝（exit 3）；`UPDATE … SET status='REMOVED', removed_at=now(), role='MEMBER'` 全表 → `UPDATE 4`（exit 0，零活跃成员合法） | 本地通过 |
+| LEADER-MIGRATION-SEED-001 | 迁移 / 种子 | 空库全量迁移 + 载入新种子后每项目恰好一名组长 | 新建库 `app_seed_verify`：bootstrap + 27 迁移 + `pnpm db:seed:demo` → 载入成功、每项目 `active=4 / leaders=1`、`app.audit_logs=198` | 本地通过 |
+| LEADER-MIGRATION-UPGRADE-001 | 迁移（升级路径） | 迁移到 0025 的库载入无 `role` 列的旧种子后再应用 0026 | `app_seed_old`：先迁移到 `0025`、载入旧种子 → 4 行全 `MEMBER`、0 个 `LEADER`；应用 `0026` → 创建者 `user_id=1` 回填为 `LEADER`、其余保持 `MEMBER`、`active_leaders=1` | 本地通过 |
+| LEADER-TRANSFER-SERVICE-001 | API 单测 | 门禁四态、撤销组长 409、无组长项目首位加入者 | `apps/api/test/project-member-management.service.test.ts` → **11/11**（含「首位加入者成为组长」用例与 `leaderMember` 夹具） | 本地通过 |
+| LEADER-TRANSFER-API-001 | API 集成（真实 PostgreSQL + HTTP） | 转移、403/409 分支、审计与项目动态 | `apps/api/test/project-member-management-api.integration.test.ts` → **16/16**：组长转移 200；转移后原组长自设 403；新组长撤销他人 403；普通成员 403；系统管理员直接撤销组长 409 `PROJECT_MEMBER_LEADER_REQUIRED`；零成员项目（先移除全部成员）首位加入者 `role='LEADER'`、第二位 `MEMBER`；审计 1 条 + 项目动态 1 条 | 本地通过 |
+| LEADER-FIXTURE-001 | 测试夹具 | 共享夹具移除组长时先转移身份（新不变量的连锁修复） | `apps/api/test/database.helpers.ts` 的 `removeMember` 改为在一个事务内：`FOR UPDATE` 读出目标 → 目标是 `LEADER` 且存在其他活跃成员时先降级为 `MEMBER`、把最早的活跃成员提升为 `LEADER` → 再标记 `REMOVED`；`external-links.integration.test.ts` 的「does not replay after member removal」改为复用该助手。修复前 API 集成 **11 例失败**（`project N has M active members but 0 active leader`，均来自直接 `UPDATE … status='REMOVED'` 移除创建者/组长），修复后 **49 文件 457 例通过** | 本地通过 |
+| LEADER-TRANSFER-WEB-UNIT-001 | Web 单元 | 组长只看到「转移组长」且不能自设；普通成员不能任命；移除能力不受影响 | `apps/web/src/features/projects/ProjectMembersPageView.test.tsx` → **8/8**（`viewerRole` 驱动 `leaderTransferOnly`，弹窗只列「组长」） | 本地通过 |
+| LEADER-TRANSFER-E2E-001 | Playwright（真实浏览器） | 组长本人经真实 UI 完成身份转交 | `apps/e2e/tests/project-members.spec.ts` → **3/3**（新用例：自己卡片显示「组长」且无移除/无转移入口 → 目标卡片「转移组长」→ 弹窗只有组长选项 → 保存 → 成功横幅 → 双方角色状态正确） | 本地通过 |
+| LEADER-CONTRACT-001 | 契约 / 权限 | 摘要与幂等契约版本、权限矩阵同步 | `contract:generate` 产出 5 个产物（`openapi.json`、路由指纹、`apps/web/src/generated/api/*`）；`contract:drift` 一致；`contract:validate` **98 条路由**；`permissions:check` **98/98**；`setProjectMemberRole.idempotencyContractVersion` = `2.2.0` | 本地通过 |
+
+未运行 / 已知偏差：① 并发竞态（「移除成员」与「转移组长」并发提交落到零组长）未加真实并发测试，当前由数据库以 `23514` 拒绝后提交者兜底且不映射为 409，与既有 `app.assert_project_bootstrap` 的处理方式一致；② GitHub Actions、`pnpm check` 整链、全量 `test:unit` / `test:integration` / `test:e2e` 未运行；③ 演示库 `app` 未应用 `0026`、未重载新种子；④ 为让 `app_it` 记录新校验和（迁移注释修正改变 checksum）重建了本机集成测试库并重新 bootstrap + 迁移。

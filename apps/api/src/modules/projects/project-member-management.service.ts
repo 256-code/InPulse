@@ -136,15 +136,27 @@ export class ProjectMemberManagementService {
       throw this.alreadyActive();
     }
 
+    // ADR-047：项目必须始终保留一名组长；无活跃组长的项目（历史或夹具清理
+    // 残留）重新加人时第一位成员直接成为组长，否则提交时延迟约束会拒绝。
+    const joiningRole = await this.resolveJoiningRole(tx, input.projectId);
+
     let member: ProjectMemberRecord;
     try {
       member = await this.projects.addMemberHistory(tx, {
         projectId: input.projectId,
         userId: input.userId,
+        role: joiningRole,
       });
     } catch (error) {
       if (isActiveUniqueViolation(error)) {
         throw this.alreadyActive();
+      }
+      if (isUniqueViolation(error, "project_members_one_leader")) {
+        throw new ProjectMemberManagementError(
+          409,
+          "PROJECT_MEMBER_LEADER_CONFLICT",
+          "该项目已存在组长，请刷新成员列表后重试",
+        );
       }
       throw error;
     }
@@ -162,6 +174,7 @@ export class ProjectMemberManagementService {
         userId: input.userId,
         membershipId: member.membershipId,
         joinedAt: member.joinedAt,
+        role: member.role,
       },
       requestId: input.requestId,
       occurredAt,
@@ -174,10 +187,14 @@ export class ProjectMemberManagementService {
       sourceEntityId: project.projectId,
       activityType: PROJECT_MEMBER_ADD_ACTIVITY,
       actorId: input.actorId,
-      summary: `将用户 ${member.name} 添加为项目成员`,
+      summary:
+        member.role === "LEADER"
+          ? `将用户 ${member.name} 添加为项目成员并任命为组长`
+          : `将用户 ${member.name} 添加为项目成员`,
       metadata: {
         userId: member.userId,
         membershipId: member.membershipId,
+        role: member.role,
       },
       visibilityScope: "MEMBER",
       sourceStatus: project.status,
@@ -235,7 +252,7 @@ export class ProjectMemberManagementService {
       throw new ProjectMemberManagementError(
         409,
         "PROJECT_MEMBER_LEADER_PROTECTED",
-        "项目组长不能被移除，请先由系统管理员转移或撤销组长角色",
+        "项目组长不能被移除，请先把其他成员设为组长（转移）后再移除，项目至少要保留一名成员",
       );
     }
 
@@ -319,8 +336,10 @@ export class ProjectMemberManagementService {
   }
 
   /**
-   * ADR-033/ADR-039：任命/撤销组长。只有系统管理员可调用（本项目组长与普通
-   * 成员 403），目标必须为 ACTIVE 成员，组长唯一性由部分唯一索引报 409。
+   * ADR-047：任命与转移组长。系统管理员可把任意活跃成员设为组长；本项目组长
+   * 只能把其他活跃成员设为组长以转交身份（不能自设、不能撤销）。普通成员
+   * 403，目标必须为 ACTIVE 成员；组长唯一性由部分唯一索引报 409，撤销组长
+   * 只能通过转移（新组长产生时旧组长自动降级）。
    */
   async setRole(
     tx: TransactionContext,
@@ -339,11 +358,22 @@ export class ProjectMemberManagementService {
       input.projectId,
     );
     if (setter === "NOT_MEMBER") throw this.notFound();
-    if (setter !== "SYSTEM_ADMIN") {
+    if (setter === "MEMBER") {
       throw new ProjectMemberManagementError(
         403,
         "PROJECT_MEMBER_ROLE_FORBIDDEN",
-        "只有系统管理员可以任命或撤销项目组长",
+        "只有系统管理员或本项目组长可以任命组长",
+      );
+    }
+    // ADR-047：组长只能把身份转交给其他活跃成员，不能自设也不能撤销。
+    if (
+      setter === "LEADER" &&
+      (input.role !== "LEADER" || input.userId === input.actorId)
+    ) {
+      throw new ProjectMemberManagementError(
+        403,
+        "PROJECT_MEMBER_ROLE_FORBIDDEN",
+        "项目组长只能把其他活跃成员设为组长来转移身份",
       );
     }
     const target = await this.projects.findLatestMember(
@@ -353,6 +383,15 @@ export class ProjectMemberManagementService {
     );
     if (target === undefined || target.status !== "ACTIVE") {
       throw this.notFound();
+    }
+    // ADR-047：项目必须始终保留一名组长，禁止直接降级现任组长；
+    // 撤销组长只能通过「先任命新组长」的转移路径（新组长产生时旧组长自动降级）。
+    if (input.role === "MEMBER" && target.role === "LEADER") {
+      throw new ProjectMemberManagementError(
+        409,
+        "PROJECT_MEMBER_LEADER_REQUIRED",
+        "项目必须保留一名组长，请先把其他成员设为组长（转移）",
+      );
     }
     let updated: ProjectMemberRecord | undefined;
     try {
@@ -366,7 +405,7 @@ export class ProjectMemberManagementService {
         throw new ProjectMemberManagementError(
           409,
           "PROJECT_MEMBER_LEADER_CONFLICT",
-          "该项目已存在组长，请先转移或撤销现有组长",
+          "该项目已存在组长，请先转移现有组长身份后重试",
         );
       }
       throw error;
@@ -477,6 +516,22 @@ export class ProjectMemberManagementService {
   ): Promise<void> {
     const role = await this.roleGate.manageRole(tx, actorId, projectId);
     if (role === "NOT_MEMBER") throw this.notFound();
+  }
+
+  /**
+   * ADR-047：项目无活跃组长时（只可能来自历史数据或夹具清理），
+   * 第一位加入的成员直接成为组长，保证「有成员就必须有组长」。
+   */
+  private async resolveJoiningRole(
+    tx: TransactionContext,
+    projectId: number,
+  ): Promise<"MEMBER" | "LEADER"> {
+    const members = await this.projects.listMembers(tx, { projectId });
+    return members.some(
+      (record) => record.status === "ACTIVE" && record.role === "LEADER",
+    )
+      ? "MEMBER"
+      : "LEADER";
   }
 
   private async requireWritableProject(

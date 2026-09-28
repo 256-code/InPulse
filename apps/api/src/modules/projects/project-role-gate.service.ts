@@ -9,7 +9,8 @@ import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 
 /**
  * ADR-039：项目内管理操作（成员增删、模块/功能/任务归档恢复、项目状态变更、
- * 归档申请）对全体活跃成员开放，`LEADER` 只是身份标识，不再单独授予管理权。
+ * 归档申请）对全体活跃成员开放，`LEADER` 只是身份标识，不再单独授予管理权；
+ * ADR-047 的唯一例外是组长可以转移组长身份（`roleSetterRole`）。
  */
 export type ProjectManageRole = "SYSTEM_ADMIN" | "MEMBER" | "LEADER";
 
@@ -46,17 +47,19 @@ export class ProjectRoleGateService {
   }
 
   /**
-   * ADR-039 角色任命门禁：与 `manageRole` 同源但口径更窄，只有系统管理员放行，
-   * 本项目组长与普通成员归入 `MEMBER`（403），非成员归入 `NOT_MEMBER`（404）。
-   * 单独成方法是为了防止以后有人拿 `manageRole` 放行成员自行改角色。
+   * ADR-047 角色任命门禁：与 `manageRole` 同源但口径更窄，只有系统管理员与
+   * 本项目组长放行（组长只能把其他活跃成员设为组长完成转移，目标与角色约束
+   * 由调用方校验），本项目普通成员归入 `MEMBER`（403），非成员归入
+   * `NOT_MEMBER`（404）。单独成方法是为了防止以后有人拿 `manageRole` 放行成员
+   * 自行改角色。
    */
   async roleSetterRole(
     tx: TransactionContext,
     actorUserId: number,
     projectId: number,
-  ): Promise<"SYSTEM_ADMIN" | "MEMBER" | "NOT_MEMBER"> {
+  ): Promise<"SYSTEM_ADMIN" | "LEADER" | "MEMBER" | "NOT_MEMBER"> {
     const role = await this.manageRole(tx, actorUserId, projectId);
-    if (role === "SYSTEM_ADMIN") return "SYSTEM_ADMIN";
+    if (role === "SYSTEM_ADMIN" || role === "LEADER") return role;
     if (role === "NOT_MEMBER") return "NOT_MEMBER";
     return "MEMBER";
   }

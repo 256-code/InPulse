@@ -87,6 +87,7 @@ function mount(
   client: InpulseApiClient,
   props: {
     readonly isSystemAdmin?: boolean | undefined;
+    readonly viewerRole?: "MEMBER" | "LEADER" | null | undefined;
   } = {},
 ) {
   return render(
@@ -389,7 +390,7 @@ describe("ProjectMembersPageView", () => {
       ...client,
       setProjectMemberRole,
     } as unknown as InpulseApiClient;
-    mount(api, { isSystemAdmin: true });
+    mount(api, { isSystemAdmin: true, viewerRole: "MEMBER" });
 
     await screen.findByText("开发者 C");
     fireEvent.click(screen.getByRole("button", { name: "设置角色" }));
@@ -428,7 +429,7 @@ describe("ProjectMembersPageView", () => {
     await screen.findByText("组长本人");
     expect(screen.getByText("组长")).toBeInTheDocument();
     const removeButtons = screen.getAllByRole("button", { name: /移\s*除/ });
-    // 组长卡片不提供移除入口，只有普通成员可以移除。
+    // 组长卡片既不能移除也不能改角色，只有普通成员两样都有。
     expect(removeButtons).toHaveLength(1);
     fireEvent.click(removeButtons[0]!);
     const dialog = await screen.findByRole("dialog", {
@@ -438,8 +439,8 @@ describe("ProjectMembersPageView", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /取\s*消/ }));
 
     const roleButtons = screen.getAllByRole("button", { name: "设置角色" });
-    expect(roleButtons).toHaveLength(2);
-    fireEvent.click(roleButtons[1]!);
+    expect(roleButtons).toHaveLength(1);
+    fireEvent.click(roleButtons[0]!);
     const roleDialog = await screen.findByRole("dialog", {
       name: "设置项目角色",
     });
@@ -448,12 +449,72 @@ describe("ProjectMembersPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets a non-admin member remove members but never appoint roles (ADR-039)", async () => {
+  it("lets the project leader transfer the role to another member only (ADR-047)", async () => {
     const client = baseClient();
-    mount(client as unknown as InpulseApiClient, { isSystemAdmin: false });
+    const leader: ProjectMemberRecordItem = {
+      ...owner,
+      membershipId: 12,
+      userId: 6,
+      name: "组长本人",
+      role: "LEADER",
+    };
+    client.listProjectMembers.mockResolvedValue({ items: [owner, leader] });
+    const setProjectMemberRole = vi.fn().mockResolvedValue({
+      member: { ...owner, role: "LEADER" },
+    });
+    const api = {
+      ...client,
+      setProjectMemberRole,
+    } as unknown as InpulseApiClient;
+    mount(api, { isSystemAdmin: false, viewerRole: "LEADER" });
+
+    await screen.findByText("组长本人");
+    // 组长自己的卡片没有动作按钮，其他成员卡片只有「转移组长」。
+    expect(screen.queryByRole("button", { name: "设置角色" })).toBeNull();
+    const transferButtons = screen.getAllByRole("button", {
+      name: "转移组长",
+    });
+    expect(transferButtons).toHaveLength(1);
+    fireEvent.click(transferButtons[0]!);
+
+    const dialog = await screen.findByRole("dialog", { name: "设置项目角色" });
+    expect(
+      within(dialog).getByRole("radio", { name: /^项目角色：组长/ }),
+    ).toBeInTheDocument();
+    // 组长不能撤销组长：转移弹窗里没有「成员」选项。
+    expect(
+      within(dialog).queryByRole("radio", { name: /^项目角色：成员/ }),
+    ).toBeNull();
+    fireEvent.click(within(dialog).getByRole("radio", { name: /组\s*长/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存角色" }));
+
+    await waitFor(() => expect(setProjectMemberRole).toHaveBeenCalledTimes(1));
+    expect(setProjectMemberRole).toHaveBeenCalledWith(
+      7,
+      2,
+      { role: "LEADER" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-token",
+          "Idempotency-Key": expect.stringContaining("project-member-role-"),
+        }),
+      }),
+    );
+    await screen.findByText(/已将组长身份转交给 开发者 C/);
+  });
+
+  it("lets a non-admin member remove members but never appoint roles (ADR-039/ADR-047)", async () => {
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient, {
+      isSystemAdmin: false,
+      viewerRole: "MEMBER",
+    });
     await screen.findByText("开发者 C");
     expect(
       screen.queryByRole("button", { name: "设置角色" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "转移组长" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /移\s*除/ })).toBeInTheDocument();
   });

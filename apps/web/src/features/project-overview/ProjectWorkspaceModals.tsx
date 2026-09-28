@@ -110,6 +110,7 @@ export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
                     projectId={projectId}
                     {...(client ? { client } : {})}
                     isSystemAdmin={isSystemAdmin}
+                    viewerRole={detail.data?.currentUserRole ?? null}
                     embedded
                   />
                 ) : (

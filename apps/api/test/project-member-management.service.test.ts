@@ -34,6 +34,13 @@ const removedMember = {
   status: "REMOVED" as const,
   removedAt: "2026-09-09T01:00:00.000Z",
 };
+const leaderMember = {
+  ...activeMember,
+  membershipId: 11,
+  userId: 6,
+  name: "组长",
+  role: "LEADER" as const,
+};
 const unfinishedTask = {
   taskId: 12,
   projectId: 7,
@@ -151,6 +158,8 @@ describe("ProjectMemberManagementService", () => {
 
   it("adds a new ACTIVE member with audit/activity/notification in one transaction", async () => {
     const s = setup();
+    // ADR-047：项目已有活跃组长，新成员以普通成员身份加入。
+    s.projects.listMembers.mockResolvedValue([leaderMember, activeMember]);
     s.projects.findLatestMember.mockResolvedValueOnce(removedMember);
     const result = await s.service.addMember(tx, {
       actorId: 1,
@@ -165,6 +174,7 @@ describe("ProjectMemberManagementService", () => {
     expect(s.projects.addMemberHistory).toHaveBeenCalledWith(tx, {
       projectId: 7,
       userId: 5,
+      role: "MEMBER",
     });
     expect(s.audit.append).toHaveBeenCalledWith(
       tx,
@@ -179,6 +189,36 @@ describe("ProjectMemberManagementService", () => {
       expect.objectContaining({
         recipientId: 5,
         notificationType: "PROJECT_JOINED",
+      }),
+    );
+  });
+
+  it("promotes the first joiner to leader when the project has no active leader (ADR-047)", async () => {
+    const s = setup();
+    // 默认夹具没有活跃组长（历史数据或夹具清理残留）——加入者直接成为组长。
+    s.projects.listMembers.mockResolvedValue([removedMember]);
+    s.projects.findLatestMember.mockResolvedValueOnce(removedMember);
+    s.projects.addMemberHistory.mockResolvedValue({
+      ...activeMember,
+      role: "LEADER",
+    });
+    const result = await s.service.addMember(tx, {
+      actorId: 1,
+      projectId: 7,
+      userId: 5,
+      requestId: "req-1b",
+    });
+    expect(result.responseStatus).toBe(200);
+    expect(s.projects.addMemberHistory).toHaveBeenCalledWith(tx, {
+      projectId: 7,
+      userId: 5,
+      role: "LEADER",
+    });
+    expect(s.activity.append).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        activityType: "PROJECT_MEMBER_ADDED",
+        metadata: expect.objectContaining({ role: "LEADER" }),
       }),
     );
   });
@@ -287,7 +327,7 @@ describe("ProjectMemberManagementService", () => {
     expect(s.tasks.reassign).not.toHaveBeenCalled();
   });
 
-  it("sets member roles with audit and activity, enforcing setter gates", async () => {
+  it("sets member roles with audit and activity, enforcing setter and transfer gates", async () => {
     const s = setup();
     s.projects.findLatestMember.mockResolvedValueOnce(activeMember);
     s.projects.setMemberRole.mockResolvedValueOnce({
@@ -336,19 +376,69 @@ describe("ProjectMemberManagementService", () => {
       code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
     });
 
-    // ADR-039：组长也不再有任命权（`roleSetterRole` 把 LEADER 归入 MEMBER）
-    s.roleGate.roleSetterRole.mockResolvedValueOnce("MEMBER");
+    // ADR-047：本项目组长可以转移身份——把其他成员设为组长放行。
+    s.projects.setMemberRole.mockResolvedValueOnce({
+      ...activeMember,
+      role: "LEADER" as const,
+    });
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
+    const transferred = await s.service.setRole(tx, {
+      actorId: 3,
+      projectId: 7,
+      userId: 5,
+      role: "LEADER",
+      requestId: "req-9",
+    });
+    expect(transferred.responseStatus).toBe(200);
+    expect(transferred.body).toMatchObject({
+      member: { userId: 5, role: "LEADER" },
+    });
+
+    // ADR-047：组长不能撤销组长，也不能把组长设给自己。
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
+    await expect(
+      s.service.setRole(tx, {
+        actorId: 3,
+        projectId: 7,
+        userId: 5,
+        role: "MEMBER",
+        requestId: "req-9a",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    });
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
+    await expect(
+      s.service.setRole(tx, {
+        actorId: 5,
+        projectId: 7,
+        userId: 5,
+        role: "LEADER",
+        requestId: "req-9b",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    });
+
+    // ADR-047：即使系统管理员也不能直接降级现任组长 -> 409
+    s.projects.findLatestMember.mockResolvedValueOnce({
+      ...activeMember,
+      role: "LEADER" as const,
+    });
+    s.roleGate.roleSetterRole.mockResolvedValueOnce("SYSTEM_ADMIN");
     await expect(
       s.service.setRole(tx, {
         actorId: 1,
         projectId: 7,
         userId: 5,
-        role: "LEADER",
-        requestId: "req-9",
+        role: "MEMBER",
+        requestId: "req-9c",
       }),
     ).rejects.toMatchObject({
-      status: 403,
-      code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
+      status: 409,
+      code: "PROJECT_MEMBER_LEADER_REQUIRED",
     });
 
     // 唯一组长约束冲突 -> 409

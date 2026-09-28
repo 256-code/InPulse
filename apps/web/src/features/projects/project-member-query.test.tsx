@@ -262,10 +262,10 @@ describe("project member query", () => {
       "安全校验未通过，请刷新页面后重试。",
     );
     expect(projectMemberErrorMessage(roleForbidden)).toBe(
-      "只有系统管理员可以任命或撤销项目组长。",
+      "只有系统管理员或本项目组长可以设定组长，且组长只能把身份转交给其他成员。",
     );
     expect(projectMemberErrorMessage(leaderProtected)).toBe(
-      "项目组长不能被移除，请先由系统管理员转移或撤销组长角色。",
+      "项目组长不能被直接移除，请先把其他成员设为组长（转移）。",
     );
     expect(projectMemberErrorMessage(notFound)).toBe(
       "项目或成员不存在，或你已无权访问。",
