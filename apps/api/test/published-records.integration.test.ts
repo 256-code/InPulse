@@ -298,8 +298,10 @@ async function sourceFixture(status: "TODO" | "DONE" | "CANCELED") {
   return { ...project, userId, task, draft, tasks };
 }
 describe("F18 publishing lock prerequisites", () => {
+  // ADR-047：来源任务的完成状态不再是发布门禁——未完成与已取消的来源都能就地发布，
+  // 取锁、锁内重读与归属校验保持不变。
   it.each(["TODO", "CANCELED"] as const)(
-    "rejects %s sources under locks without modifying tasks or drafts",
+    "opens %s sources under locks without modifying tasks or drafts",
     async (status) => {
       const f = await sourceFixture(status);
       await expect(
@@ -312,7 +314,10 @@ describe("F18 publishing lock prerequisites", () => {
             true,
           ),
         ),
-      ).rejects.toMatchObject({ status: 409, code: "RECORD_SOURCE_NOT_DONE" });
+      ).resolves.toMatchObject({
+        record: { id: f.draft.id, status: "DRAFT" },
+        source: { taskId: f.task.id, workStatus: status },
+      });
       expect(
         await client.sql`SELECT 1 FROM app.change_record_versions WHERE record_id=${f.draft.id}`,
       ).toHaveLength(0);
@@ -321,6 +326,15 @@ describe("F18 publishing lock prerequisites", () => {
           new RecordDraftRepository().find(tx, f.projectId, f.draft.id),
         ),
       ).toEqual(f.draft);
+      expect(
+        await uow.run((tx) =>
+          f.tasks.find(
+            tx,
+            { projectId: f.projectId, moduleId: f.moduleId, featureId: null },
+            f.task.id,
+          ),
+        ),
+      ).toEqual(f.task);
     },
   );
   it("does not use a later reopened task to forbid revising published history", async () => {
@@ -353,7 +367,7 @@ describe("F18 publishing lock prerequisites", () => {
       ),
     ).toMatchObject({ record: { status: "PUBLISHED" } });
   });
-  it("rechecks source state after waiting for a concurrent reopening transaction", async () => {
+  it("re-reads the source under the lock after a concurrent reopening transaction", async () => {
     const f = await sourceFixture("DONE");
     let release!: () => void, acquired!: () => void;
     const gate = new Promise<void>((r) => {
@@ -368,13 +382,22 @@ describe("F18 publishing lock prerequisites", () => {
       await gate;
     });
     await ready;
-    const pending = uow.run((tx) =>
-      publicationAccess().prepare(tx, f.userId, f.projectId, f.draft.id, true),
-    );
-    const outcome = expect(pending).rejects.toMatchObject({
-      status: 409,
-      code: "RECORD_SOURCE_NOT_DONE",
-    });
+    // ADR-047 之后这里断言的不再是「重开后拒绝发布」，而是必须等到任务锁、重读到最新
+    // 来源状态后才发布：完成状态不再是门禁，但来源归属与其版本仍是锁内真相。
+    const pending = uow
+      .run((tx) =>
+        publicationAccess().prepare(
+          tx,
+          f.userId,
+          f.projectId,
+          f.draft.id,
+          true,
+        ),
+      )
+      .then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
     try {
       await vi.waitFor(
         async () =>
@@ -389,6 +412,11 @@ describe("F18 publishing lock prerequisites", () => {
       release();
       await reopen;
     }
-    await outcome;
+    const outcome = await pending;
+    if (!outcome.ok) throw outcome.error;
+    expect(outcome.value).toMatchObject({
+      record: { id: f.draft.id, status: "DRAFT" },
+      source: { taskId: f.task.id, workStatus: "TODO" },
+    });
   });
 });

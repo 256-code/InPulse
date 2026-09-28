@@ -831,6 +831,57 @@ it("publishes a DONE source, uses its current assignee, and replays/revises hist
     await db.sql`SELECT work_status FROM app.tasks WHERE id=${task.id}`,
   ).toEqual([{ work_status: "TODO" }]);
 });
+it("publishes an unfinished source without touching its task state or history", async () => {
+  const f = await fixture([], true),
+    tasks = new TaskManagementRepository();
+  const task = await uow.run((tx) =>
+    tasks.create(
+      tx,
+      { ...f, featureId: f.featureId },
+      f.userId,
+      f.code + "-T-1",
+      {
+        title: "未完成来源",
+        description: "",
+        assigneeIds: [f.creator],
+        priority: "NORMAL",
+        dueAt: null,
+      },
+    ),
+  );
+  const draft = await uow.run((tx) =>
+    new RecordDraftRepository().create(
+      tx,
+      { ...f, featureId: f.featureId, impactFeatureIds: [] },
+      f.userId,
+      { ...content, remainingIssues: [] },
+      { taskId: task.id, handlerId: f.creator },
+    ),
+  );
+  const before = (await db.sql`SELECT * FROM app.tasks WHERE id=${task.id}`)[0];
+  const source = { ...f, draft },
+    actor = await session(f.userId),
+    key = randomUUID(),
+    response = await post(source, actor, true, {}, 1, 1, key);
+  expect(response.status, await response.clone().text()).toBe(200);
+  const v1 = schemaRegistry.PublishedRecord.schema.parse(await response.json());
+  expect(v1).toMatchObject({
+    taskId: task.id,
+    handlerId: f.creator,
+    authorId: f.userId,
+  });
+  // ADR-047：迭代记录只描述本次迭代，发布不改变来源任务的状态、完成信息与历史。
+  expect(
+    (await db.sql`SELECT * FROM app.tasks WHERE id=${task.id}`)[0],
+  ).toEqual(before);
+  expect(
+    await db.sql`SELECT 1 FROM app.task_status_history WHERE task_id=${task.id}`,
+  ).toHaveLength(1);
+  // 幂等重放仍返回同一条 v1：口径不因来源任务未完成而改变。
+  expect(await (await post(source, actor, true, {}, 1, 1, key)).json()).toEqual(
+    v1,
+  );
+});
 it("rolls back a failed revision and rejects publication after an actual parent-archive lock wait", async () => {
   const f = await fixture(),
     v1 = await publish(f);

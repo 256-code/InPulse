@@ -95,7 +95,7 @@ for (const moduleScope of [false, true])
       await complete.getByRole("link", { name: "选择或新建草稿" }).click();
       for (let i = 1; i <= 2; i++) {
         await page.getByRole("button", { name: "新建来源草稿" }).click();
-        const create = page.getByRole("dialog", { name: "新建来源草稿" });
+        const create = page.getByRole("dialog", { name: "新建任务迭代" });
         await expect(create.getByLabel("迭代标题")).toHaveValue(title);
         if (i === 2) await create.getByLabel("迭代标题").fill(title + "第二条");
         await create.getByLabel("改动原因").fill("来源问题" + i);

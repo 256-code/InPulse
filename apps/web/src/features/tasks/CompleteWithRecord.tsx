@@ -296,7 +296,6 @@ export function CompleteWithRecord({
             </label>
           ))}
           <label>
-            {labels.remainingIssues}
             <LeftoverEntriesField
               value={content.remainingIssues}
               onChange={(remainingIssues) =>

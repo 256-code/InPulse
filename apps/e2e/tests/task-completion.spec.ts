@@ -100,7 +100,7 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     const { task, url } = await createTask(page, runtime, false);
     await task.getByRole("link", { name: "迭代记录草稿" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
-    const draft = page.getByRole("dialog", { name: "新建来源草稿" });
+    const draft = page.getByRole("dialog", { name: "新建任务迭代" });
     // 草稿与正式版本共用字段上限，超限只能在发布阶段由搜索容量触发；API 请求体默认上限
     // 100KB，因此只能用单字节字符：33600×3 越过 100000 字符的搜索文本上限，请求体约 100KB。
     const filler = "a".repeat(33600);

@@ -325,7 +325,6 @@ export function EditPublishedRecord({
                 </label>
               ))}
             <label>
-              {labels.remainingIssues}
               <Controller
                 name="remainingIssues"
                 control={control}
