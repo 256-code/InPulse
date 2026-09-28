@@ -63,6 +63,11 @@ async function openListbox(
  *
  * `query`：服务端搜索的下拉专用，关键词会先写进触发器；候选由远端返回，
  * 所以调用方要保证关键词已能命中目标项（通常直接用选项标题本身）。
+ *
+ * 单选下拉选中后会自动收起，但同一个辅助也用于多选下拉（如任务弹窗的「指派给」）：
+ * 多选弹层选中后仍停留在原地，并向下覆盖「优先级」等后续字段，下一次点击会被弹层的
+ * 选项行判为「拦截 pointer events」而一直重试到超时。这里沿用多选版的同一口径：选中
+ * 后若弹层仍未收起，就把 mousedown 直接派发到作用域本身（必然在触发器之外）显式收起。
  */
 export async function pickCalmSelectOption(
   scope: Page | Locator,
@@ -76,6 +81,10 @@ export async function pickCalmSelectOption(
       ? listbox.getByTitle(option, { exact: true })
       : listbox.getByTitle(option);
   await item.first().click();
+  if (await listbox.isVisible()) {
+    await outsideOf(scope).dispatchEvent("mousedown");
+    await expect(listbox).toBeHidden();
+  }
 }
 
 /**

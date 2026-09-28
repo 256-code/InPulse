@@ -3884,3 +3884,29 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 文档同步：`docs/test-matrix.md`（本条）与 `开发日志.md`（第三十七条记录）。后端、契约、Route Registry、权限矩阵、迁移、生成物与产品代码零改动。
 
 未运行 / 已知偏差：① 本批只改测试定位符，未跑 `pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:integration`、`pnpm build`、`pnpm test:e2e` 与 `pnpm check` 整链——`test` 分支推送不触发 CI，这些门禁由 `test → main` PR 的 `CI / workspace` 全链覆盖；② 其余 84 个 web 用例文件在 `main` 的失败运行里已经全绿，说明不存在第二处宽泛查询冲突（未逐个复核）；③ 本次不涉及运行时代码，UI 行为与产品代码零变化，未做浏览器人工复核；④ 推送 `test` 不跑 CI 属独立议题（需改技术设计 §12.4 章节），不在本 PR 范围；⑤ **同一次 CI 运行里 `Browser E2E` 的 9 例失败是既有红灯**（与 `main` 的祖先 `d14ffc5` 完全同形，2026-09-16 之后 `main` 未再全绿），本 PR 未修，也不应由本 PR 修——否则会把「治单测」的单文件改动扩成跨产品代码的调查，需独立立项。
+## 2026-09-28 定位并修复 CI Browser E2E 的 9 例红灯（用户指示，本地落库）
+
+用户指示（原文）：「开始」——专项定位第三十一条记录里 CI 第 36 步 `Browser E2E` 的 9 例既有红灯。本批只改前端面板的「创建后跳转语义」与 E2E 下拉交互辅助，后端、契约、Route Registry、权限矩阵、迁移与生成物**零改动**。
+
+9 例红灯（`d14ffc5`、`1576df6`、`deea095` 三个提交上完全同形）：`issues.spec.ts:14`、`leftover-task.spec.ts:76(MODULE)`、`leftover-task.spec.ts:163`、`module-tasks.spec.ts:41`、`record-drafts.spec.ts:51(MODULE)`、`task-completion.spec.ts:50(MODULE)`、`task-completion.spec.ts:93`、`task-status.spec.ts:7(MODULE)`、`tasks.spec.ts:12`。
+
+根因一（覆盖 8 例，均为「模块级任务 → 新建任务 → 立刻点详情」）：`a9a8db5`（2026-09-24，已在 `main`）把模块级面板的「新建任务」改成复用任务中心的 `GlobalTaskCreateModal`（`lockedScope="MODULE"`），创建成功后只执行 `onCreatedLocation → navigate(...)`；而 `TasksPanel` 的 `selectedId` 只在**挂载时**读一次 `initialTaskId ?? Number(new URLSearchParams(window.location.search).get("taskId"))`，没有订阅 URL 变化的 `useEffect` / `useSearchParams`，已挂载的面板因此不会消费新出现的 `?taskId=`，任务详情弹窗根本没有被挂载（本地调试 spec 实测：创建后 `taskModalCount: 0`、`dialogs: []`、无失败请求；`page.reload()` 后 `taskModalCount: 1`）。`a9a8db5` 之前模块级「新建任务」走面板内弹窗的 `open()` 路径并在 `save()` 后 `openDetail(result.id)`，功能级面板至今仍走该路径——这是「只有 MODULE 变体失败、FEATURE 变体通过」的原因。
+
+根因二（1 例，`tasks.spec.ts:12` 的 FEATURE 路径）：任务弹窗的「指派给 / 负责人」是 `multiple` 多选，「优先级」是同一 `.form-row` 之下的单选。`apps/e2e/helpers/calm-select.ts` 的 `pickCalmSelectOption` 只负责点选、不做收起，而多选弹层选中后不会自动关闭，会向下覆盖「优先级」触发器，下一次点击被弹层选项行判为「拦截 pointer events」并重试到 30s 超时（本地复现的堆栈末行为 `span.calm-select-member-name ... intercepts pointer events`，失败截图可见「指派给」下拉仍展开）。产品交互本身符合 antd 多选惯例，属**辅助层**缺陷。
+
+根因三（修好根因一后才暴露，`task-status.spec.ts:7` 的 MODULE 变体）：修根因一时若沿用 `navigate(taskDetailPath(task))`，模块级创建就会把 `?taskId=` 写进地址栏；该用例在状态历史闭环后执行 `page.reload()` 再点「任务状态筛选 / 已完成」，而带 `?taskId=` 的刷新会重新弹出任务详情、遮住筛选行（拦截元素为 `.task-modal-grid`）。既有口径是「同页就地打开详情不写地址栏、刷新回到列表」（`a9a8db5` 之前的模块级与至今的功能级都如此）。
+
+修复：① `apps/web/src/features/tasks/TasksPanel.tsx` 的 `onCreatedLocation` —— 当 `createMode === "page"`（页面已把归属固定为模块级）且创建结果落在本面板范围内（`projectId` / `moduleId` 相同、`featureId === null`，与 `listModuleTasks` 的 `scope_type = 'MODULE' AND feature_id IS NULL` 口径一致）时，就地 `openDetail(task.taskId)` **且不写地址栏**；其余情况（「自定义归属新建任务」可能建到别的模块 / 功能）保持原样 `navigate(taskDetailPath(task))`。② `apps/e2e/helpers/calm-select.ts` 的 `pickCalmSelectOption` —— 选中后若该 listbox 仍可见，就沿用多选版 `pickCalmSelectOptions` 的口径把 `mousedown` 派发到作用域本身（必然在触发器之外）显式收起并断言 `toBeHidden()`；未改断言、未用 `force: true`。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| E2E-MODULE-CREATE-DETAIL-001 | 浏览器实测（E2E） | 模块级「新建任务」创建后就地打开任务详情 | 修复后未刷新即 `taskModalCount: 1`、`dialogs: ["任务详情"]`、`hasCompleteButton: true`、`alertTexts: []`；修复前同点快照为 `taskModalCount: 0` / `dialogs: []` | 本地通过 |
+| E2E-MODULE-CREATE-URL-001 | 浏览器实测（E2E） | 模块级创建后地址栏保留「刷新回到列表」口径 | 页面固定归属的模块级创建不再写入 `?taskId=`，`page.reload()` 后详情不再自动弹出（`task-status.spec.ts` MODULE 变体可继续点击「任务状态筛选」） | 本地通过 |
+| E2E-MODULE-TASK-DETAIL-PATH-001 | E2E（回归） | 深链 `?taskId=` 仍在挂载时打开详情 | `module-tasks.spec.ts:148` 的通知直达断言（`toHaveURL(/modules/\d+/tasks\?taskId=/)` + 「任务详情」可见）保持通过 | 本地通过 |
+| E2E-CALM-SELECT-MULTI-CLOSE-001 | E2E | 多选下拉点选一个选项后不遮挡后续字段 | `tasks.spec.ts:12` 的「指派给 → 优先级」序列不再出现 `span.calm-select-member-name` 拦截；`calm-select.ts:44` 的点击不再超时 | 本地通过 |
+| E2E-BROWSER-FULL-001 | E2E（全量） | 9 例红灯全部转绿且无新增失败 | `pnpm --filter @inpulse/e2e exec playwright test` → **56 passed (4.0m)**（9 例失败清单全部命中通过） | 本地通过 |
+| E2E-BROWSER-CI-001 | CI | 推送后由 CI 复跑 `Browser E2E` | 待回填（`test` 分支推送不触发 CI，需经 PR #146 或推送 `main` / `dev/*`） | 未运行 |
+
+本地实际执行（2026-09-28，全部通过）：修改前先复现 `tasks.spec.ts` 的同一失败；临时调试 spec 打印创建后快照（跑完已删除）；单文件 `task-status.spec.ts` 2 passed；全量 `playwright test` **56 passed (4.0m)**；`pnpm --filter @inpulse/web test:unit` → `Test Files 85 passed (85)` / `Tests 560 passed (560)`；`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（全 workspace 含 `apps/e2e`）、`pnpm check:docs` 通过。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链——本批未触碰后端、数据库与生成物，这些门禁由推送后 CI 覆盖；② `Browser E2E` 的 CI 结论未回填（`test` 分支推送不触发 CI）；③ 本批含产品代码改动（`TasksPanel.tsx` 创建后跳转语义），按 §8 需非作者人工评审，且不宜与第三十一条「只改测试定位符」合并成同一个评审单元；④ 「自定义归属新建任务」在同页创建模块级任务时仍只改写地址栏（不就地打开），这是 `a9a8db5` 之后、本批之前的既有行为，本批未改，也未新增 E2E 覆盖。

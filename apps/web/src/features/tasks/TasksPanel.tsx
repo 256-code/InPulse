@@ -676,7 +676,24 @@ export function TasksPanel({
               onClose={() => setCreateMode(null)}
               client={client}
               preset={{ projectId, moduleId }}
-              onCreatedLocation={(task) => navigate(taskDetailPath(task))}
+              onCreatedLocation={(task) => {
+                // 2026-09-28：模块级面板的「新建任务」改用任务中心同一弹窗后，创建
+                // 成功只会改写地址栏；已经挂载的面板不会再读 URL 的 ?taskId=，就地
+                // 打开详情的旧口径因此丢失。归属已由页面固定为模块级时，与功能级
+                // 面板一致：就地打开详情且不写地址栏——留下 ?taskId= 会让刷新后重新
+                // 弹出详情，与「刷新回到列表」的既有口径冲突。「自定义归属新建任务」
+                // 保持原样跳转：它本来就可能建到别的模块 / 功能，由目标页按深链打开。
+                if (
+                  createMode === "page" &&
+                  task.projectId === projectId &&
+                  task.moduleId === moduleId &&
+                  task.featureId === null
+                ) {
+                  openDetail(task.taskId);
+                  return;
+                }
+                navigate(taskDetailPath(task));
+              }}
             />
           )}
           <div className="calm-section-title">
