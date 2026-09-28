@@ -4061,4 +4061,6 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-DRAFT-SUBMIT-E2E-FULL-001 | E2E（全量） | 无新增失败 | 全量 `pnpm test:e2e` → **61 passed (4.2m)**（原 59 + 新增 2） | 本地通过 |
 | RECORD-DRAFT-SUBMIT-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**；另单独复读关键数字：lint 无输出、typecheck 全 workspace 通过、`contract:validate`（99 条路由）、`permissions:check`（99 条操作 / 99 条路由）、`check:deps`（718 个源文件）、`check:frontend:boundaries`（286 模块 1408 依赖）、`deps:audit`（No known vulnerabilities found）、`check:secrets`（1076 文件）、`db:migrations:check`（27 个迁移）、`check:docs`（95 个 Markdown） | 本地通过 |
 
+推送（2026-09-28）：提交 `f3a8016`（`feat(web,e2e,docs): 迭代记录弹窗键盘提交、未保存离开确认与任务详情发布落点`，9 文件 +407 / −10）已推送到 `origin/test`（`c97f1a1..f3a8016`），`git ls-remote origin refs/heads/test` 与本地 `HEAD` 一致；CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发。
+
 未运行 / 已知偏差：① 本轮只改前端产品代码与 E2E 用例，未改 Schema、Route Registry、权限矩阵、数据库与迁移，因此没有重跑集成测试与迁移门禁（`pnpm check` 已覆盖不依赖数据库的门禁）；② 未保存内容不做本地暂存（用户口径：没有保存就不更改）——按 Esc、点遮罩或点头部 ✕ 会先确认，确认放弃后输入即丢弃，服务端草稿仍是上次保存的内容；③ **GitHub Actions 未跑**（推送后由既有 PR [#146](https://github.com/256-code/InPulse/pull/146) 的 `pull_request` 事件触发）；④ 快捷键与提示属交互变化，需非作者人工评审。
