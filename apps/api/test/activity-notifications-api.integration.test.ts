@@ -282,6 +282,62 @@ describe("GET /api/v1/projects/{projectId}/activity and /notifications with real
     expect(page.items).toHaveLength(2);
   });
 
+  // ADR-050（2026-09-28 修订）：已删除项目退出授权范围，但整个项目链的
+  // MEMBER 可见动态对全部登录用户公开。
+  test("已删除项目对任意登录用户下发 MEMBER 可见的全部动态", async () => {
+    const ownerUser = await createUser(runtime!.sql);
+    const deleted = await createProject(runtime!.sql, ownerUser);
+    await seedActivity(
+      deleted,
+      ownerUser,
+      501,
+      "PROJECT_DELETED",
+      "删除了项目",
+      "MEMBER",
+      "DELETED",
+      1,
+      "2026-09-08T00:00:06.000Z",
+    );
+    await seedActivity(
+      deleted,
+      ownerUser,
+      502,
+      "TASK_COMPLETED",
+      "删除前完成的",
+      "MEMBER",
+      "DONE",
+      2,
+      "2026-09-08T00:00:07.000Z",
+    );
+    await runtime!.sql`
+      UPDATE app.projects
+         SET deleted_at = now(),
+             deleted_by = ${ownerUser},
+             updated_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${deleted.projectId}
+    `;
+
+    const response = await requestActivity(
+      baseUrl,
+      deleted.projectId,
+      memberCookie,
+    );
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as ActivityPageDto;
+    expect(activityPageSchema.safeParse(page).success).toBe(true);
+    expect(page.items.map((item) => item.activityType)).toEqual([
+      "TASK_COMPLETED",
+      "PROJECT_DELETED",
+    ]);
+    expect(page.items[1]!.summary).toBe("删除了项目");
+
+    // 非成员访问未删除项目仍是 404，不因本次放行而放宽。
+    expect(
+      (await requestActivity(baseUrl, other!.projectId, memberCookie)).status,
+    ).toBe(404);
+  });
+
   test("通知查询只返回当前用户，未读数和标记接口都只操作本人", async () => {
     const listResponse = await requestNotifications(baseUrl, memberCookie);
     expect(listResponse.status).toBe(200);

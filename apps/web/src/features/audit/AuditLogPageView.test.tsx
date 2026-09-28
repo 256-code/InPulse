@@ -101,17 +101,25 @@ function queryClient() {
   });
 }
 
-/** 渲染前统一补一个用户目录 mock，断言里就能看到人名而不是「用户 #N」。 */
+/**
+ * 渲染前统一补两个默认 mock：用户目录（断言里就能看到人名而不是「用户 #N」）与
+ * 删除记录台账（默认空页）；用例自带同名 mock 时以后者为准。
+ */
 function withUserDirectory(client: InpulseApiClient): InpulseApiClient {
-  return {
-    ...client,
+  const defaults = {
     getUserDirectory: vi.fn().mockResolvedValue({
       items: [
         { id: 1, name: "邵昱宇", avatarUrl: null, isAdmin: true },
         { id: 2, name: "Bob", avatarUrl: null, isAdmin: false },
       ],
     }),
-  } as unknown as InpulseApiClient;
+    listProjectDeletions: vi.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    }),
+  };
+  return { ...defaults, ...client } as unknown as InpulseApiClient;
 }
 
 function mount(client: InpulseApiClient) {
@@ -205,6 +213,59 @@ describe("F-08 audit page", () => {
     expect(
       screen.getByText("第 3 条 · 项目 AGV 智能搬运平台"),
     ).toBeInTheDocument();
+  });
+
+  it("已删除项目的审计链仍可选中，并把项目名还原出来（ADR-050）", async () => {
+    const deletedChainItem: AuditLogItem = {
+      ...projectItem,
+      chainId: "PROJECT:41",
+      projectId: 41,
+      sequenceNo: 9,
+      action: "project.delete",
+    };
+    const getAuditLogs = vi.fn().mockResolvedValue(page([deletedChainItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount(
+      withUserDirectory({
+        getAuditLogs,
+        listProjects,
+        listProjectDeletions: vi.fn().mockResolvedValue({
+          items: [
+            {
+              projectId: 41,
+              code: "OLD",
+              name: "旧版交付平台",
+              deletedAt: "2026-09-28T06:30:00.000000Z",
+              deletedBy: { id: 2, name: "Bob" },
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        }),
+      } as unknown as InpulseApiClient),
+    );
+
+    // 历史行直接命中已删除项目：没有台账就会退化成「项目 #41」。
+    expect(
+      await screen.findByText("第 9 条 · 项目 旧版交付平台"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("第 9 条 · 项目 #41")).not.toBeInTheDocument();
+
+    // 下拉里补回这条已删除项目的审计链，并标明是谁删的。
+    const trigger = screen.getByLabelText("审计链").closest(".ant-select");
+    if (!trigger) {
+      throw new Error("审计链 select trigger not found");
+    }
+    fireEvent.mouseDown(trigger);
+    expect(await screen.findByText("已删除 · Bob 删除")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("PROJECT:41 · 旧版交付平台"));
+
+    await waitFor(() =>
+      expect(getAuditLogs).toHaveBeenLastCalledWith(
+        { projectId: 41, limit: 50 },
+        expect.anything(),
+      ),
+    );
   });
 
   it("only applies filters after the query button is pressed", async () => {

@@ -5,9 +5,17 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
-import { CalmSelect } from "@features/common/components/CalmSelect";
+import {
+  CalmSelect,
+  type CalmSelectOption,
+} from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import {
+  PROJECT_DELETION_PAGE_LIMIT,
+  projectDeletionItems,
+  useProjectDeletionsQuery,
+} from "@features/projects/project-deletion-query";
 import { useProjects } from "@features/projects/project-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import {
@@ -140,6 +148,12 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
 
   const projectsQuery = useProjects(client ? { client } : {});
   const directoryQuery = useUserDirectoryQuery(client ? { client } : {});
+  // ADR-050：已删除项目不在 `useProjects` 里，但它的 `PROJECT:<id>` 审计链
+  // 仍然完整；删除台账只用于向管理员补回链选项，不改变审计读取权限。
+  const deletionsQuery = useProjectDeletionsQuery({
+    ...(client ? { client } : {}),
+    limit: PROJECT_DELETION_PAGE_LIMIT,
+  });
   const auditQuery = useAuditLogsInfiniteQuery({
     chain,
     filters,
@@ -156,6 +170,54 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
   );
+  const deletedProjects = useMemo(
+    () => projectDeletionItems(deletionsQuery.data),
+    [deletionsQuery.data],
+  );
+  const deletedProjectNames = useMemo(
+    () => new Map(deletedProjects.map((row) => [row.projectId, row.name])),
+    [deletedProjects],
+  );
+  /** 已删除项目名用于历史行与链标签，避免回退成「项目 #id」。 */
+  const projectNameOf = useCallback(
+    (projectId: number): string | null =>
+      projectNames.get(projectId) ?? deletedProjectNames.get(projectId) ?? null,
+    [projectNames, deletedProjectNames],
+  );
+
+  const projectChainOptions = useMemo(() => {
+    const activeIds = new Set(projects.map((project) => project.id));
+    const options: CalmSelectOption[] = [
+      { value: "system", label: "SYSTEM 链（系统级）", iconText: "SY" },
+      ...projects.map((project) => ({
+        ...projectSelectOption(project),
+        label: "PROJECT:" + project.id + " · " + project.name,
+      })),
+      ...deletedProjects
+        .filter((row) => !activeIds.has(row.projectId))
+        .map((row) => ({
+          value: String(row.projectId),
+          label: "PROJECT:" + row.projectId + " · " + row.name,
+          description: "已删除 · " + row.deletedBy.name + " 删除",
+          iconText: row.code.slice(0, 2).toUpperCase(),
+          badge: { text: "已删除", tone: "gray" as const },
+        })),
+    ];
+    // 超过一页删除记录时仍要能显示当前选中链，不让选项数组与取值失配。
+    if (
+      chain.kind === "project" &&
+      !options.some((option) => option.value === String(chain.projectId))
+    ) {
+      options.push({
+        value: String(chain.projectId),
+        label: "PROJECT:" + chain.projectId,
+        description: "已删除项目（仅保留审计链）",
+        iconText: "删",
+        badge: { text: "已删除", tone: "gray" as const },
+      });
+    }
+    return options;
+  }, [projects, deletedProjects, chain]);
   const directoryNames = useMemo(
     () =>
       new Map(
@@ -218,7 +280,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         const name =
           item.targetType === "USER"
             ? directoryNames.get(numeric)
-            : projectNames.get(numeric);
+            : (projectNameOf(numeric) ?? undefined);
         if (name !== undefined) {
           return typeLabel + " " + name;
         }
@@ -229,15 +291,15 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       }
       return typeLabel + " #" + item.targetId;
     },
-    [directoryNames, projectNames],
+    [directoryNames, projectNameOf],
   );
 
   const scopeLabelOf = useCallback(
     (item: AuditLogItem): string =>
       item.projectId === null
         ? "系统链"
-        : "项目 " + (projectNames.get(item.projectId) ?? "#" + item.projectId),
-    [projectNames],
+        : "项目 " + (projectNameOf(item.projectId) ?? "#" + item.projectId),
+    [projectNameOf],
   );
 
   const chainLabelOf = useCallback(
@@ -246,12 +308,10 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         return "SYSTEM 链";
       }
       const name =
-        item.projectId === null
-          ? null
-          : (projectNames.get(item.projectId) ?? null);
+        item.projectId === null ? null : projectNameOf(item.projectId);
       return "「" + (name ?? item.chainId) + "」项目链";
     },
-    [projectNames],
+    [projectNameOf],
   );
 
   const describeChain = useCallback(
@@ -259,9 +319,9 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       value.kind === "system"
         ? "SYSTEM 链"
         : "「" +
-          (projectNames.get(value.projectId) ?? "项目 #" + value.projectId) +
+          (projectNameOf(value.projectId) ?? "项目 #" + value.projectId) +
           "」项目链",
-    [projectNames],
+    [projectNameOf],
   );
 
   const updateDraft = (patch: Partial<AuditFilters>) => {
@@ -464,13 +524,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           value={chain.kind === "system" ? "system" : String(chain.projectId)}
           appearance="rich"
           onChange={(next) => handleChainChange(String(next))}
-          options={[
-            { value: "system", label: "SYSTEM 链（系统级）", iconText: "SY" },
-            ...projects.map((project) => ({
-              ...projectSelectOption(project),
-              label: "PROJECT:" + project.id + " · " + project.name,
-            })),
-          ]}
+          options={projectChainOptions}
         />
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
@@ -623,7 +677,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
                 <dd>
                   {snapshot.projectId === null
                     ? "系统级（无项目）"
-                    : (projectNames.get(snapshot.projectId) ??
+                    : (projectNameOf(snapshot.projectId) ??
                       "项目 #" + snapshot.projectId)}
                 </dd>
                 <dt>操作人</dt>

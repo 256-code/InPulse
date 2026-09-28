@@ -112,6 +112,31 @@ export interface ProjectStatRecord {
   readonly completedTaskCount: number;
 }
 
+/**
+ * ADR-051：已软删除项目在写路径上的最小视图。还原需要它判断目标确实处于
+ * 已删除状态，彻底删除需要它把项目编码与名称写进 SYSTEM 审计链。
+ */
+export interface DeletedProjectRecord {
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly deletedAt: string;
+  readonly deletedById: number;
+  readonly deletedByName: string;
+  readonly rowVersion: number;
+}
+
+/** 彻底删除实际物理删除的行数；只用于响应与审计，不参与幂等摘要。 */
+export interface ProjectPurgeCounts {
+  readonly modules: number;
+  readonly features: number;
+  readonly tasks: number;
+  readonly changeRecords: number;
+  readonly auditLogs: number;
+  readonly members: number;
+  readonly total: number;
+}
+
 /** 项目与成员写边界；只做持久化，不决定业务状态流转，调用方持有事务。 */
 export abstract class ProjectsWritePort {
   abstract createProject(
@@ -170,6 +195,48 @@ export abstract class ProjectsWritePort {
       readonly status: ProjectLifecycleStatus;
     },
   ): Promise<ProjectChangeRecord | undefined>;
+
+  /**
+   * ADR-049：条件软删除项目，标记 deleted_at/deleted_by 并递增 row_version。
+   * 业务历史、成员关系与审计链全部保留；版本不匹配或项目已被删除返回 false。
+   */
+  abstract softDeleteProject(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly actorId: number;
+      readonly deletedAt: Date;
+    },
+  ): Promise<boolean>;
+
+  /**
+   * ADR-051：锁定并读取已软删除的项目行；项目不存在或未删除返回 undefined。
+   * 行锁与后续的状态守卫共同防止并发重复还原/重复彻底删除。
+   */
+  abstract findDeletedProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<DeletedProjectRecord | undefined>;
+
+  /**
+   * ADR-051：清空 deleted_at/deleted_by 并递增 row_version；项目未处于删除态
+   * （已被并发还原或根本不存在）返回 undefined，由调用方映射 409。
+   */
+  abstract restoreProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectChangeRecord | undefined>;
+
+  /**
+   * ADR-051：调用 `app.purge_project` 物理删除项目及其全部下级数据与
+   * `PROJECT:<id>` 审计链，返回实际删除行数。数据库侧只接受已软删除的项目，
+   * 否则抛错；调用方必须先在同一事务内校验状态。
+   */
+  abstract purgeProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectPurgeCounts>;
 
   /**
    * 任务完成写路径的粘性置位：first_task_completed_at 取最早一次完成时间且永不回落；

@@ -12,7 +12,7 @@ import {
   useAuditLogsInfiniteQuery,
   type AuditFilters,
 } from "@features/audit/audit-query";
-import { activitySubject } from "./activity-labels";
+import { activityDescription } from "./activity-labels";
 
 /** 动态投影与审计链一一对应，时间窗只需覆盖同一事务内的相邻写入。 */
 const SNAPSHOT_WINDOW_MS = 1000;
@@ -137,7 +137,7 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
           <dt>对象类型</dt>
           <dd>{record.targetType}</dd>
           <dt>对象</dt>
-          <dd>{item === null ? "—" : activitySubject(item.summary)}</dd>
+          <dd>{item === null ? "—" : activityDescription(item)}</dd>
           <dt>对象 ID</dt>
           <dd>
             <code>{record.targetId ?? "—"}</code>

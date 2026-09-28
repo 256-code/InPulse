@@ -14,7 +14,7 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { isCardClick } from "@features/common/card-click";
-import { canManageProjectResources } from "./project-query";
+import { canDeleteProject, canManageProjectResources } from "./project-query";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
@@ -311,6 +311,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           project={editing}
           client={client}
           canChangeStatus={canManageProjectResources(isAdmin, editingRole)}
+          canDeleteProject={canDeleteProject(isAdmin, editingRole)}
           onClose={() => {
             setEditing(null);
             setEditingRole(null);
@@ -320,6 +321,14 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             setEditingRole(null);
             setManagementSuccess(
               `项目「${updated.name}」已更新，当前版本 ${updated.rowVersion}。`,
+            );
+          }}
+          onDeleted={() => {
+            const name = editing.name;
+            setEditing(null);
+            setEditingRole(null);
+            setManagementSuccess(
+              `项目「${name}」已删除，列表已刷新；历史数据保留在数据库中供审计追溯。`,
             );
           }}
           onStatusChanged={(updated) => {

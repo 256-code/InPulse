@@ -41,6 +41,13 @@ export interface ProjectAccessQueryPort {
     actorUserId: number,
   ): Promise<AuthorizedProjectScope>;
 
+  /**
+   * ADR-050：已删除项目对全部登录用户只剩「删除项目」这一条公开记录，
+   * 因此跨域读需要能单独回答「该项目是否已被软删除」，
+   * 不能靠授权范围反推（不在范围内既可能是无权，也可能是已删除）。
+   */
+  isDeletedProject(projectId: number): Promise<boolean>;
+
   checkProjectForWrite(
     tx: TransactionContext,
     input: { readonly actorUserId: number; readonly projectId: number },

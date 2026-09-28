@@ -231,6 +231,12 @@
       "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
     }
   ],
+  "deleteProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "02a47c08efeb32daedf1ac8b4d1a9657ba111f279482ab42afaa6e471710ed68"
+    }
+  ],
   "disableUser": [
     {
       "version": "1.0.0",
@@ -267,6 +273,12 @@
     {
       "version": "1.2.0",
       "fingerprint": "78cf54b424a158de97213baded65ef3e2a793de2dfbb4431c7940d126b538957"
+    }
+  ],
+  "purgeProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "68545bfc3e2da8723738b2c027c66168975edaf479a3afed559237b93de010a8"
     }
   ],
   "readAllNotifications": [
@@ -327,6 +339,12 @@
     {
       "version": "2.0.0",
       "fingerprint": "92ac72fdb96850a7905902632e69154d40e628889b3d9e1cdec7e00c580a7aa3"
+    }
+  ],
+  "restoreProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "c5e07c7c78bcf225ed880bcaf2e436c1735cfae4b5ee4da5ee2855e3f19a3ec0"
     }
   ],
   "restoreTask": [

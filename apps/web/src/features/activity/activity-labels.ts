@@ -39,11 +39,15 @@ const ENTITY_LABELS: Readonly<Record<string, string>> = {
 const ACTION_LABELS: Readonly<Record<string, string>> = {
   PROJECT_CREATED: "创建项目",
   PROJECT_UPDATED: "更新项目",
+  PROJECT_STATUS_CHANGED: "变更项目状态",
+  // ADR-050：删除项目在同一事务里写项目动态与审计；已删除项目的动态流只保留这一条。
+  PROJECT_DELETED: "删除项目",
   // ADR-043：项目归档已下线，以下四条只用于展示历史动态与历史通知。
   PROJECT_ARCHIVED: "归档项目",
   PROJECT_RESTORED: "恢复项目",
   PROJECT_MEMBER_ADDED: "添加成员",
   PROJECT_MEMBER_REMOVED: "移除成员",
+  PROJECT_MEMBER_ROLE_CHANGED: "变更成员角色",
   "module.create": "创建模块",
   "module.update": "更新模块",
   "module.archive": "归档模块",
@@ -68,6 +72,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "record.version.create": "修订记录",
   "record.draft.create": "创建草稿",
   "record.draft.update": "更新草稿",
+  "record.leftover.add": "追加遗留问题",
   "leftover.convert": "遗留问题转任务",
   PROJECT_ARCHIVE_REQUESTED: "申请归档项目",
   PROJECT_ARCHIVE_REJECTED: "驳回归档申请",
@@ -132,6 +137,29 @@ export function activitySubject(summary: string): string {
     return summary;
   }
   return summary.slice(index + 1).trim() || summary;
+}
+
+/** 服务端摘要内嵌的项目内角色枚举；取值与成员页 `roleLabel` 保持一致。 */
+const ROLE_LABELS: Readonly<Record<string, string>> = {
+  MEMBER: "成员",
+  LEADER: "组长",
+};
+
+/**
+ * 动态行的描述文本。成员类动态的服务端摘要把角色写成枚举
+ * （`将用户 X 的项目角色设置为 LEADER`），而动态投影是落库快照，
+ * 历史行不会再被改写，因此在这里按值替换成中文；其余类型仍只做
+ * 「动作：对象」的前缀剥离。
+ */
+export function activityDescription(item: ActivityItem): string {
+  const subject = activitySubject(item.summary);
+  if (!item.activityType.startsWith("PROJECT_MEMBER")) {
+    return subject;
+  }
+  return subject.replace(
+    /\b(MEMBER|LEADER)\b/g,
+    (token) => ROLE_LABELS[token] ?? token,
+  );
 }
 
 export interface ActivityTargetOptions {

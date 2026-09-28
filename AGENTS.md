@@ -363,3 +363,37 @@
 - **幂等契约版本**：`setProjectMemberRole` 的 `idempotencyContractVersion` 由 `2.1.0` 升到 `2.2.0`（授权语义变化），旧 Key 在新契约下 409；`addProjectMember`（`1.2.0`）与 `removeProjectMember`（`1.3.0`）的请求/响应 Schema 与重放策略未变，版本保持。
 - **夹具与种子**：`app.project_members` 的所有插入夹具必须显式给出 `role`（测试库、E2E `global-setup`、`apps/ops` 集成、`database/poc` 共 42 处已补齐）；移除成员必须走 `apps/api/test/database.helpers.ts` 的 `removeMember`（在事务内先把组长身份转移给其他活跃成员再标记 `REMOVED`），直接 `UPDATE … status='REMOVED'` 移除创建者/组长会在提交期被 `project_members_leader_complete` 拒绝；`database/seed/demo-data.sql` 的 `project_members` 已包含 `role` 列，修改种子列清单时必须同步 `scripts/export-demo-seed.mjs`。
 - 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-048 与本节的现行规则为准。
+
+## 2026-09-28 ADR-049 / ADR-050 项目删除与删除记录说明
+
+按用户 2026-09-28 的连续指示（「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」→「布局记得更改」→「然后删除项目也要在项目动态和审计日志里记载」→「项目动态要所有人能看到，审计日志管理员看到就行，要留有记录，记录谁删除了项目」）交付项目删除与删除记录可见性（[ADR-049](./docs/adr/ADR-049.md)、[ADR-050](./docs/adr/ADR-050.md)）。因此：
+
+- **删除是软删除，不物理删除任何历史**：迁移 `0027_project_soft_delete.sql` 给 `app.projects` 加 `deleted_at` / `deleted_by`（`ON DELETE restrict` FK 到 `app.users`）与 `projects_deleted_state_check`（两列同时为空或同时有值）；不级联、不回收项目编码（`projects_code_unique` 不变）、不加「已删除」状态位（项目状态仍是 [ADR-043](./docs/adr/ADR-043.md) 的三态）。物理删除在本仓库不可行——`app.projects` 被 12 张表以 `RESTRICT` 外键引用，审计链按 [ADR-008](./docs/adr/ADR-008.md) 只追加。
+- **权限**：只有系统管理员与本项目 ACTIVE 组长可删（在 [ADR-039](./docs/adr/ADR-039.md) 的权限下放上新增例外）；普通成员 403 `PROJECT_DELETE_FORBIDDEN`，非成员与已移除成员 404（不泄露存在性），组长用实时成员关系判定、转移或降级后立即失效。重放走专用 `projectDeleteReplayAuthorizer`（删除后项目必不在成员范围内，复用常规作者探测会把合法重放变成 404）。
+- **删除后项目退出全部可见范围**，但**删除这件事要对全部登录用户可见**（ADR-050 修订 ADR-049 第 3 节的绝对表述），且必须**作为项目动态流里的普通一行**呈现、不得另起独立区块（2026-09-28 用户追加要求）：新增只读路由 `GET /api/v1/project-deletions`（`listProjectDeletions`，`session` 策略、无 CSRF / 幂等键 / `If-Match`、不写审计、`no-store`），条目只有 `projectId` / `code` / `name` / `deletedAt` / `deletedBy{id,name}`，不暴露任何下级数据也不提供恢复入口；签名游标（`TimeCursorService` 命名空间 `PROJECT_DELETION`、绑定操作者、TTL 15 分钟），`limit` 1～50、默认 20。动态读取的例外必须靠 `ProjectAccessQueryPort.isDeletedProject` 判定（不能用授权范围反推），并收窄到只下发 `activityType = PROJECT_DELETED`（删除前的历史与 `ADMIN_ONLY` 行不得借该例外回放），删除行不带「查看对象」；审计读取 `getAuditLogs` 保持 `adminSession` 不变，前端补齐已删除项目的 `PROJECT:<id>` 审计链入口并把项目名按记录还原。
+- 删除的**写入侧从未缺失**：审计 `project.delete`（含项目编码与名称、操作者）与项目动态 `PROJECT_DELETED`（`visibilityScope: MEMBER`）早已在同一事务写入；缺口只在读取侧（项目级动态查询对被删除项目不可用、审计页只列活跃项目）。**刻意不发通知**——删除后项目深链必成死链，通知只能标记已读不能作废（[ADR-035](./docs/adr/ADR-035.md)）。
+- 路由总数由 99 增至 **100**（`deleteProject` 与 `listProjectDeletions`）；`packages/api-contract/test/permissions.test.ts` 的真实 Controller 扫描期望清单必须随新增路由同步，否则该用例会以「扫描到的绑定数与清单不一致」失败。
+- 前端口径：删除入口在「编辑项目」弹窗**页脚最左侧**（`danger-button footer-leading`），只在 `canDeleteProject(isAdmin, currentUserRole)` 为真时渲染，后果说明由二次确认承担；项目动态页把删除行与其它动态**混排在同一时间线**（已删除项目的 ID 与项目名由 `listProjectDeletions` 第一页补进取数范围与项目名映射，仅「全部项目」视图；锁定单项目时不请求也不出现删除行），渲染上共用日期分组 / 时间轴 / 头像 / 原始快照，且不给「查看对象」；原「项目删除记录」独立区块与 `activity-deletions-*` 样式已整体下线。
+- 本文件与三份基线设计文档中「项目只能创建 / 编辑 / 切换状态」的历史描述，以及 ADR-049 第 3 节「删除后对所有人不可见（含管理员）」的绝对表述，与本节冲突时以 ADR-049 / ADR-050 与本节的现行规则为准。
+
+## 2026-09-28 ADR-051 项目还原与彻底删除说明
+
+按用户 2026-09-28 指示（「给删除项目的动态的原始快照按钮边上加一个还原项目和彻底删除，还原项目就是把项目显示出来，彻底删除就是从硬性删除」）交付项目还原与彻底删除（[ADR-051](./docs/adr/ADR-051.md)），并附同批次的两项界面修订（删除行动作按钮横向对齐、动态文案中文化）。因此：
+
+- **两条新命令**：`POST /api/v1/projects/{projectId}/restore`（`restoreProject`，200 `ProjectDetailResponse`）与 `POST /api/v1/projects/{projectId}/purge`（`purgeProject`，200 `ProjectPurgeResponse`）；`session` + CSRF + 数据库级幂等（`idempotencyContractVersion: 1.0.0`）、`versionPolicy: none`、`behaviorHeaders: []`（不接受 `If-Match`）。Route Registry 由 100 条增至 **102 条**。
+- **权限分离**：还原与删除**同权**（系统管理员或本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；未删除项目一律 409 `PROJECT_NOT_DELETED`，非成员 / 不存在 404。重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」）。
+- **彻底删除的数据库边界**：迁移 `0028_project_purge.sql` 新增 `SECURITY DEFINER` 函数 `app.purge_project(INTEGER)`，**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed）；固定按叶子表到 `app.projects` 共 27 处删除并断言 `projects` 恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（[ADR-008](./docs/adr/ADR-008.md) 的唯一例外，范围写死在函数内）。
+- **还原不搬数据**：只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知，也不回收 / 复用编码。
+- **前端**：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**；动作区与「原始快照」共用基线（`.activity-actions` / `.activity-actions-main` / `.activity-actions-slot`），窄屏隐藏整个动作区；动态类型与角色值改为中文（`activity-labels.ts` 的 `PROJECT_STATUS_CHANGED` / `PROJECT_MEMBER_ROLE_CHANGED` / `record.leftover.add` / `ROLE_LABELS`），「原始快照」弹窗用中文描述、摘要区保留原始枚举。
+- 本文件与 ADR-049 第 8 节、ADR-050 非目标第 1 条中「不提供恢复入口 / 不提供彻底删除」的历史表述，与本节冲突时以 ADR-051 与本节的现行规则为准。
+
+## 2026-09-28 ADR-052 已删除项目的完整动态与删除操作唯一入口说明
+
+按用户 2026-09-28 指示（「有两个重复了，如果是被删除了的项目，就只有最晚的一个可以进行还原和彻底删除的操作，而且不要隐藏之前的创建和操作的动态过程，要有从创建到删除的完整过程，然后刷选的下拉框增加一个选项叫『已删除项目』」）修订 [ADR-050](./docs/adr/ADR-050.md) 第 5 节的服务端收窄（[ADR-052](./docs/adr/ADR-052.md)）。因此：
+
+- **已删除项目下发整个项目链的 `MEMBER` 可见动态**：`ActivityQueryService.resolveAccess` 返回来源 `"scope" | "deleted-project"`，后者**不再**追加 `activityTypes` 过滤；`visibilityScopes` 仍固定 `["MEMBER"]`——`ADMIN_ONLY` 不随该例外回放，`includeAdminOnly: true` 对已删除项目无效（管理员与普通成员一致），「不存在 / 从未有权访问 / 已移除成员」仍是 404。`ActivityProjectionReader.read` 的可选 `activityTypes` 参数与 SQL 过滤连同唯一调用方一并删除，不得再以「只放行 `PROJECT_DELETED`」为由重新加回。
+- **同一项目多次删除（删除 → 还原 → 再删除）只让最新一条可操作**：前端在已加载动态里取每个 `projectId` 时间序第一条 `PROJECT_DELETED`（`latestDeletionIdByProject`），只有该行渲染 `ProjectDeletionActions`；其余删除行保留为过程记录（时间 / 操作者 / 摘要 / 项目名 / 原始快照），不带任何动作。台账 `listProjectDeletions`（一项目一条当前状态）语义不变。
+- **已删除项目链的所有行都不提供跳转**：抑制「查看对象」的条件由删除行扩大为「该行项目在删除台账里」，历史行同样不留死链。
+- **项目筛选下拉新增「已删除项目」**：固定选项值 `"deleted"`，取数范围收窄为台账项目 ID 集合；台账为空时给「暂无已删除项目」空态且不发空请求；「全部项目」视图继续包含已删除项目的完整动态；台账读取时机为「全部项目或已删除项目」，锁定单项目视图仍不请求台账。
+- 契约、Route Registry、权限矩阵与数据库**零改动**（`activityType` 是自由字符串，筛选是纯前端行为）。
+- 放宽的理由与代价：项目一旦删除就不存在授权范围（ADR-049 / ADR-050），「删除前的过程」与「删除这件事」同属一条组织级事实，因此对**全部登录用户**可见；若将来改为「只有参加过该项目的人可见完整过程」，必须新增 ADR 并同步权限矩阵、`docs/test-matrix.md` 与本节。

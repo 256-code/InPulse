@@ -306,4 +306,131 @@ describe("EditProjectModal", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("有删除权限时展示删除入口，二次确认后带 CSRF、If-Match 与幂等键调用 deleteProject", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-9" });
+    const deleteProject = vi.fn().mockResolvedValue(undefined);
+    const client = {
+      issueCsrfToken,
+      deleteProject,
+    } as unknown as InpulseApiClient;
+    const onDeleted = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={project}
+        client={client}
+        canDeleteProject
+        onUpdated={vi.fn()}
+        onClose={onClose}
+        onDeleted={onDeleted}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    const entry = within(dialog).getByRole("button", { name: "删除项目" });
+    // ADR-049：删除入口位于弹窗页脚最左侧，与取消/保存修改分开。
+    expect(entry.closest(".calm-action-footer")).not.toBeNull();
+    expect(entry.classList.contains("footer-leading")).toBe(true);
+    // 编辑弹窗本身不直接删除，先打开二次确认。
+    await userEvent.click(entry);
+    expect(deleteProject).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    const confirm = await screen.findByRole("dialog", {
+      name: "确认删除项目",
+    });
+    expect(
+      within(confirm).getByText("确认删除项目「商城系统」？"),
+    ).toBeTruthy();
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "确认删除" }),
+    );
+
+    await waitFor(() => expect(deleteProject).toHaveBeenCalledTimes(1));
+    expect(deleteProject).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-csrf-token": "csrf-9",
+          "If-Match": '"3"',
+          "Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("无删除权限时不渲染删除入口", async () => {
+    const client = {
+      issueCsrfToken: vi.fn(),
+      deleteProject: vi.fn(),
+    } as unknown as InpulseApiClient;
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={project}
+        client={client}
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    expect(within(dialog).queryByTestId("delete-project-button")).toBeNull();
+    expect(
+      within(dialog).queryByRole("button", { name: "删除项目" }),
+    ).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "确认删除项目" })).toBeNull();
+  });
+
+  it("删除被拒绝时展示服务端文案、不触发 onDeleted 且确认弹窗保持打开", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-9" });
+    const deleteProject = vi.fn().mockRejectedValue(
+      new ApiError(403, {
+        code: "PROJECT_DELETE_FORBIDDEN",
+        message: "只有项目组长或系统管理员可以删除项目",
+        details: {},
+        requestId: "req-del",
+      }),
+    );
+    const client = {
+      issueCsrfToken,
+      deleteProject,
+    } as unknown as InpulseApiClient;
+    const onDeleted = vi.fn();
+    renderWithProviders(
+      <EditProjectModal
+        open
+        project={project}
+        client={client}
+        canDeleteProject
+        onUpdated={vi.fn()}
+        onClose={vi.fn()}
+        onDeleted={onDeleted}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "删除项目" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "确认删除项目",
+    });
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "确认删除" }),
+    );
+
+    await waitFor(() => expect(deleteProject).toHaveBeenCalledTimes(1));
+    expect(
+      await within(confirm).findByText(
+        "只有项目组长或系统管理员可以删除项目。",
+      ),
+    ).toBeTruthy();
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "确认删除项目" })).toBeTruthy();
+  });
 });

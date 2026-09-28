@@ -732,6 +732,30 @@ export type NotificationUnreadCountResponse = {
 
 export type ProjectCode = string;
 
+export type ProjectDeletionItem = {
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly deletedAt: string;
+  readonly deletedBy: {
+    readonly id: number;
+    readonly name: string;
+  };
+  readonly canRestore: boolean;
+  readonly canPurge: boolean;
+};
+
+export type ProjectDeletionPage = {
+  readonly items: readonly ProjectDeletionItem[];
+  readonly nextCursor: (string | null);
+  readonly hasMore: boolean;
+};
+
+export type ProjectDeletionQueryRequest = {
+  readonly cursor?: string;
+  readonly limit?: number;
+};
+
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
   readonly currentUserRole?: (("MEMBER" | "LEADER") | null);
@@ -880,6 +904,23 @@ export type ProjectOverviewStats = {
 
 export type ProjectPath = {
   readonly projectId: number;
+};
+
+export type ProjectPurgeResponse = {
+  readonly purged: {
+    readonly projectId: number;
+    readonly code: string;
+    readonly name: string;
+    readonly records: {
+      readonly modules: number;
+      readonly features: number;
+      readonly tasks: number;
+      readonly changeRecords: number;
+      readonly auditLogs: number;
+      readonly members: number;
+      readonly total: number;
+    };
+  };
 };
 
 export type ProjectReplayContext = {

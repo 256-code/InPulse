@@ -87,6 +87,17 @@ class FixtureScopedProjectAccessQueryPort implements ProjectAccessQueryPort {
     };
   }
 
+  async isDeletedProject(projectId: number): Promise<boolean> {
+    const projects = await this.#sql<Array<{ readonly matched: number }>>`
+      SELECT 1 AS matched
+        FROM app.projects
+       WHERE id = ${projectId}
+         AND deleted_at IS NOT NULL
+       LIMIT 1
+    `;
+    return projects.length > 0;
+  }
+
   async checkProjectForWrite(
     _tx: TransactionContext,
     _input: { readonly actorUserId: number; readonly projectId: number },

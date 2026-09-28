@@ -635,6 +635,78 @@ export const permissionMatrix = [
       },
     },
   },
+  {
+    operationId: "deleteProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-049：只有本项目组长（实时成员关系中的 ACTIVE LEADER）可以删除项目；本项目普通成员一律 403 PROJECT_DELETE_FORBIDDEN。CSRF、Idempotency-Key 与 If-Match 必填，版本不符 409 PROJECT_VERSION_CONFLICT。删除为软删除：项目退出全部可见范围，业务历史、成员关系与审计链保留，项目编码不复用",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整管理员 Session；CSRF、Idempotency-Key 与 If-Match 必填，删除语义与组长一致（软删除、编码不复用）。目标为已删除项目时 404，不得重复删除",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
+    operationId: "listProjectDeletions",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "restoreProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-051：只有系统管理员与本项目组长（实时成员关系中的 ACTIVE LEADER）可以还原已删除项目；本项目普通成员一律 403 PROJECT_RESTORE_FORBIDDEN。目标必须处于已删除状态，未删除 409 PROJECT_NOT_DELETED。CSRF 与 Idempotency-Key 必填",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整管理员 Session；CSRF 与 Idempotency-Key 必填，还原语义与组长一致（清空 deleted_at/deleted_by 并递增 row_version，审计 project.restore）。目标未被删除时 409 PROJECT_NOT_DELETED，不存在时 404",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
+    operationId: "purgeProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "deny",
+        status: 403,
+      },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-051：只有系统管理员可以彻底删除项目（包括项目组长在内的其他身份一律 403 PROJECT_PURGE_FORBIDDEN，因为删除台账对全体登录用户可读，存在性不再保密）；目标必须已软删除，未删除 409 PROJECT_NOT_DELETED，不存在 404；物理删除不可撤销，仅保留 SYSTEM 审计链上的一条 project.purge。CSRF 与 Idempotency-Key 必填",
+        deniedWith: 403,
+      },
+    },
+  },
   ...(
     [
       "archiveTask",

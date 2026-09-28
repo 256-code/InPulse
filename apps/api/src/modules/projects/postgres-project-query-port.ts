@@ -95,6 +95,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
               AND m.user_id = ${actorUserId ?? null}
               AND m.status = 'ACTIVE'
        WHERE p.id = ANY(${projectIds}::integer[])
+         AND p.deleted_at IS NULL
        ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.created_at DESC, p.id DESC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
@@ -138,6 +139,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
              ${projectStatColumns(this.client.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${projectId}
+         AND p.deleted_at IS NULL
     `) as unknown as readonly ProjectRow[];
     const row = rows[0];
     return row === undefined ? undefined : this.toItem(row);

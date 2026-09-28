@@ -7,6 +7,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "project.create": "创建项目",
   "project.update": "更新项目",
   "project.status.change": "变更项目状态",
+  "project.delete": "删除项目",
   "project.archive": "归档项目",
   "project.restore": "恢复项目",
   "project.archive.request": "提交归档申请",

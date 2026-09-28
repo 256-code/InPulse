@@ -35,6 +35,7 @@ import {
 import { useAuth } from "@features/auth/auth-context";
 import { EditProjectModal } from "@features/projects/ProjectManagementModals";
 import {
+  canDeleteProject,
   canManageProjectResources,
   useProjectDetail,
 } from "@features/projects/project-query";
@@ -80,6 +81,11 @@ export function ModulesPageView({
   const { user } = useAuth();
   // ADR-039：项目内管理入口对全体活跃成员与系统管理员开放。
   const canManageProject = canManageProjectResources(
+    user?.isAdmin === true,
+    projectQuery.data?.currentUserRole ?? null,
+  );
+  // ADR-049：删除项目只对系统管理员与本项目组长开放。
+  const canDeleteCurrentProject = canDeleteProject(
     user?.isAdmin === true,
     projectQuery.data?.currentUserRole ?? null,
   );
@@ -279,6 +285,7 @@ export function ModulesPageView({
           project={projectQuery.data.project}
           client={client}
           canChangeStatus={canManageProject}
+          canDeleteProject={canDeleteCurrentProject}
           onClose={() => setProjectEditOpen(false)}
           onUpdated={(updated) => {
             applyProjectUpdate(updated);
@@ -292,6 +299,12 @@ export function ModulesPageView({
             setProjectNotice(
               `项目状态已改为${projectLifecycleLabel(updated.status)}。`,
             );
+          }}
+          onDeleted={() => {
+            // 项目已从读取路径消失，详情查询会变 404，先回到项目列表。
+            setProjectEditOpen(false);
+            void queryClient.invalidateQueries({ queryKey: ["projects"] });
+            navigate("/projects");
           }}
         />
       ) : null}

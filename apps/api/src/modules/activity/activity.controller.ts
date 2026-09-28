@@ -34,6 +34,8 @@ interface ErrorResponseDto {
 /**
  * F-27 项目动态入口：先解析 Session，再让 ActivityQueryService 取得服务端
  * AuthorizedProjectScope；返回白名单时间线条目，不接受客户端授权范围。
+ * ADR-050：已删除项目不在授权范围内，但只放行「删除项目」一条公开记录，
+ * 因此越权访问仍是 404，已删除项目则返回收窄后的删除记录。
  */
 @Controller("projects")
 export class ActivityController {
