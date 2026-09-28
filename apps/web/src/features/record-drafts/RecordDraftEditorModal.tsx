@@ -143,6 +143,11 @@ export function RecordDraftEditorModal({
   const saving = useRef(false);
   /** 当前正在跑的动作：两个页脚按钮各自显示自己的 loading。 */
   const [pending, setPending] = useState<"save" | "publish" | null>(null);
+  /**
+   * 离开确认弹层：未保存的内容不会写库、也不做本地暂存，只请用户确认一次，
+   * 避免按 Esc / 点遮罩误触后静默丢掉刚输入的内容。
+   */
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   /** 删除确认弹层：草稿删除不可恢复，必须先确认再打接口。 */
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -154,7 +159,7 @@ export function RecordDraftEditorModal({
     handleSubmit,
     reset,
     getValues,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<RecordDraftContent>({ defaultValues: empty });
   const projects = useQuery({
     queryKey: ["projects"],
@@ -177,6 +182,9 @@ export function RecordDraftEditorModal({
   /** 保存后的后续步骤失败时切到这条草稿的编辑态：重试走更新，不会再建一条。 */
   const switchToSaved = async (saved: RecordDraftItem) => {
     setOverride({ kind: "item", item: saved });
+    // 草稿已经落库：把表单基线对齐到服务端保存的内容，
+    // 之后关闭弹窗不会因为「表单被改过」而误报有未保存内容。
+    reset(content(saved));
     await cache.invalidateQueries({
       queryKey: ["record-drafts", saved.projectId],
     });
@@ -455,6 +463,7 @@ export function RecordDraftEditorModal({
     setLinkInput("");
     setPendingLinks([]);
     setLinkError(null);
+    setConfirmDiscard(false);
     mutation.reset();
     if (target.kind === "item") {
       reset(content(target.item));
@@ -604,6 +613,24 @@ export function RecordDraftEditorModal({
     (!item &&
       !source &&
       (!formProjectId || !moduleId || (scopeType === "FEATURE" && !featureId)));
+  /**
+   * 未保存内容：表单被改过、还挂着待暂存的 GitHub 链接、冲突合并未选完，
+   * 或者链接框里刚输入还没按「添加链接」。离开时一律不写库。
+   */
+  const unsaved =
+    isDirty ||
+    pendingLinks.length > 0 ||
+    merge !== null ||
+    linkInput.trim() !== "";
+  /** Esc / 点遮罩 / 头部 ✕ 三条路径共用：有未保存内容就先确认一次。 */
+  const requestClose = () => {
+    if (saving.current || reloading || deleting || confirmDelete) return;
+    if (unsaved) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
   return (
     <Modal
       open={target !== null}
@@ -617,14 +644,21 @@ export function RecordDraftEditorModal({
       title={item ? "编辑草稿" : source ? "新建任务迭代" : "新建迭代记录"}
       className="catalog-modal"
       size="lg"
-      onCancel={() => {
-        if (!saving.current && !reloading) onClose();
-      }}
+      onCancel={requestClose}
       mask={{ closable: !mutation.isPending && !reloading }}
     >
       <form
         className="catalog-form calm-form"
         onSubmit={(event) => void save(event)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey))
+            return;
+          // Ctrl/Cmd + 回车只提交「保存草稿」：发布要把记录公开给项目成员，
+          // 必须是一次显式点击；从多行字段里保存则不该逼用户先退出输入框。
+          if (confirmDiscard || confirmDelete || submitBlocked) return;
+          event.preventDefault();
+          void save();
+        }}
       >
         <div className="dialog-form">
           {mutation.isError && (
@@ -925,7 +959,13 @@ export function RecordDraftEditorModal({
                       if (linkError !== null) setLinkError(null);
                     }}
                     onPressEnter={(event) => {
-                      // 回车只暂存链接，不提交整个表单。
+                      // 回车只暂存链接，不提交整个表单；只有框里没有待暂存内容时
+                      // 才把 Ctrl/Cmd + 回车让给表单级「保存草稿」，避免刚输入的链接被丢掉。
+                      if (
+                        (event.ctrlKey || event.metaKey) &&
+                        linkInput.trim() === ""
+                      )
+                        return;
                       event.preventDefault();
                       addPendingLink();
                     }}
@@ -1006,6 +1046,32 @@ export function RecordDraftEditorModal({
           </Button>
         </div>
       </form>
+      <Modal
+        className="catalog-modal"
+        eyebrow={item ? "草稿 · " + item.title : "迭代记录草稿"}
+        title="放弃未保存的内容"
+        tone="warning"
+        icon="alert"
+        open={confirmDiscard}
+        body
+        onCancel={() => setConfirmDiscard(false)}
+        footer={
+          <>
+            <Button onClick={() => setConfirmDiscard(false)}>继续编辑</Button>
+            <Button
+              type="primary"
+              onClick={() => {
+                setConfirmDiscard(false);
+                onClose();
+              }}
+            >
+              放弃修改
+            </Button>
+          </>
+        }
+      >
+        <p>这次输入不会保存，草稿仍是上次保存的内容。</p>
+      </Modal>
       <Modal
         className="catalog-modal"
         eyebrow={item ? "草稿 · " + item.title : "迭代记录草稿"}

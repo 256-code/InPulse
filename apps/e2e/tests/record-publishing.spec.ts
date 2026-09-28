@@ -198,6 +198,14 @@ test("F18 未完成任务的迭代记录可以直接发布且任务状态不变�
     await modal.getByLabel("改动效果").fill("任务状态保持不变");
     await modal.getByRole("button", { name: "发布迭代记录" }).click();
     await expect(modal).toBeHidden();
+    // 发布成功后不强制跳转：停在任务详情，但即刻给出一条直达正式记录的入口。
+    await expect(task.getByText(/迭代记录已发布：/)).toBeVisible();
+    await task.getByRole("button", { name: "查看正式记录" }).click();
+    const record = page.getByRole("dialog", { name: taskTitle });
+    await expect(record).toBeVisible();
+    await expect(record.getByText("发布与任务完成解耦").first()).toBeVisible();
+    await record.getByRole("button", { name: "关闭迭代记录详情" }).click();
+    await expect(record).toBeHidden();
     // 记录落进本任务列表并计入条数；任务自身没有完成，状态历史仍只有创建一条。
     await expect(
       task.locator(".task-record-list li").filter({ hasText: taskTitle }),

@@ -881,6 +881,126 @@ it("stages a GitHub link in the new-draft dialog and associates it after the dra
   expect(init.headers["x-csrf-token"]).toBe("a".repeat(43));
 });
 
+it("saves the draft with Ctrl/Cmd + Enter and keeps a typed GitHub link", async () => {
+  const create = vi.fn().mockResolvedValue({ ...item, id: 12 });
+  const publishChangeRecord = vi.fn();
+  const addExternalLink = vi.fn().mockResolvedValue({
+    projectId: 1,
+    targetType: "CHANGE_RECORD",
+    targetId: 12,
+    linkId: 3,
+    rowVersion: 2,
+  });
+  const api = client({
+    createIndependentRecordDraft: create,
+    publishChangeRecord,
+    addExternalLink,
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  // 提交条件不满足时（还没选范围）按钮不可用，同一个快捷键也不得绕过去。
+  fireEvent.keyDown(modal.getByLabelText("迭代标题"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  await pickInModal(modal, "所属模块", "支付模块");
+  for (const [label, value] of [
+    ["迭代标题", item.title],
+    ["改动原因", item.contextProblem],
+    ["具体改动", item.changeSolution],
+    ["改动效果", item.resultVerification],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  // 链接框里的回车仍然只暂存链接：Ctrl + Enter 也不会把刚输入的链接丢掉。
+  fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+    target: { value: "https://github.com/inpulse/inpulse/pull/123" },
+  });
+  fireEvent.keyDown(modal.getByLabelText("GitHub 链接地址"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  expect(modal.getByText("PR #123")).toBeInTheDocument();
+  // 链接已暂存、输入框清空后，快捷键才落成「保存草稿」，且绝不触发发布。
+  fireEvent.keyDown(modal.getByLabelText("GitHub 链接地址"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => expect(addExternalLink).toHaveBeenCalledOnce());
+  expect(publishChangeRecord).not.toHaveBeenCalled();
+});
+
+it("closes an untouched dialog without asking about unsaved input", async () => {
+  const create = vi.fn();
+  const canCreate = vi.fn();
+  const api = client({ createIndependentRecordDraft: create });
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  // 没改过任何字段：关闭不打扰，也不写库。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  expect(screen.queryByRole("dialog", { name: "放弃未保存的内容" })).toBeNull();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "新建迭代记录" })).toBeNull(),
+  );
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("asks before dropping unsaved input and never writes it on leave", async () => {
+  const create = vi.fn();
+  const canCreate = vi.fn();
+  const api = client({ createIndependentRecordDraft: create });
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  fireEvent.change(modal.getByLabelText("改动原因"), {
+    target: { value: "还没保存" },
+  });
+  // 未保存就关闭：先确认，输入原样留着。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  const discard = within(
+    await screen.findByRole("dialog", { name: "放弃未保存的内容" }),
+  );
+  fireEvent.click(discard.getByRole("button", { name: "继续编辑" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "放弃未保存的内容" }),
+    ).toBeNull(),
+  );
+  expect(modal.getByLabelText("改动原因")).toHaveValue("还没保存");
+  expect(create).not.toHaveBeenCalled();
+  // 放弃修改只是丢弃：草稿没有落库。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  fireEvent.click(
+    within(
+      await screen.findByRole("dialog", { name: "放弃未保存的内容" }),
+    ).getByRole("button", { name: "放弃修改" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "新建迭代记录" })).toBeNull(),
+  );
+  expect(create).not.toHaveBeenCalled();
+});
+
 it("reports the header action as unavailable when every visible project is archived", async () => {
   const canCreate = vi.fn();
   const archived = client({

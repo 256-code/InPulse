@@ -852,6 +852,84 @@ describe("C-3 任务详情弹窗标签页", () => {
     // 任务侧的新建任务迭代与记录页同一套 GitHub 链接区：可直接暂存仓库/PR 链接。
     expect(modal.getByLabelText("GitHub 链接地址")).toBeInTheDocument();
   });
+  it("lands the freshly published record inside the task detail", async () => {
+    const saved = {
+      id: 41,
+      projectId: 2,
+      moduleId: 3,
+      featureId: 4,
+      scopeType: "FEATURE",
+      taskId: 1,
+      impactFeatureIds: [],
+      handlerId: 5,
+      authorId: 5,
+      status: "DRAFT",
+      code: null,
+      currentVersion: 0,
+      publishedAt: null,
+      rowVersion: 2,
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-20T00:00:00.000Z",
+      title: item.title,
+      contextProblem: "a",
+      changeSolution: "b",
+      resultVerification: "c",
+      remainingIssues: [],
+    };
+    const published = {
+      ...saved,
+      status: "PUBLISHED",
+      code: "PR-CR-9",
+      currentVersion: 1,
+      publishedAt: "2026-09-20T01:00:00.000Z",
+      rowVersion: 3,
+      leftovers: [],
+    };
+    const createTaskRecordDraft = vi.fn().mockResolvedValue(saved);
+    const publishChangeRecord = vi.fn().mockResolvedValue(published);
+    mount(
+      client({
+        listProjects: vi.fn().mockResolvedValue({
+          items: [{ id: 2, name: "退款项目", status: "ACTIVE" }],
+        }),
+        createTaskRecordDraft,
+        publishChangeRecord,
+        getChangeRecord: vi.fn().mockResolvedValue(published),
+        listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [] }),
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    // 「记录一次迭代」只存在于迭代记录标签页。
+    fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "记录一次迭代" }),
+    );
+    const modal = within(
+      await screen.findByRole("dialog", { name: "新建任务迭代" }),
+    );
+    const publish = modal.getByRole("button", { name: "发布迭代记录" });
+    await waitFor(() => expect(publish).toBeEnabled());
+    for (const [label, value] of [
+      ["改动原因", "a"],
+      ["具体改动", "b"],
+      ["改动效果", "c"],
+    ])
+      fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+    fireEvent.click(publish);
+    await waitFor(() => expect(publishChangeRecord).toHaveBeenCalledOnce());
+    // 发布后不强制跳转：停在任务详情，但给出一条直达正式记录的入口。
+    const notice = await within(dialog).findByText(/迭代记录已发布/);
+    expect(notice.textContent).toContain("PR-CR-9");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "查看正式记录" }),
+    );
+    // 任务详情里的正式记录列表是另一条查询，刷新落地前也要能打开详情。
+    const record = await screen.findByRole("dialog", { name: item.title });
+    expect(within(record).getByText("PR-CR-9")).toBeInTheDocument();
+  });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {
       id: 11,

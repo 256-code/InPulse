@@ -2633,13 +2633,13 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | DRAFT-FOOTER-PUBLISH-UNIT-005 | Web 单元 | 发布失败不重复建草稿 | `publishChangeRecord` 以 422 失败后弹窗留在原地并切到该草稿的编辑态（按钮变「保存并发布」、标题输入仍是原值），再点一次走 `updateIndependentRecordDraft(1, 12, …)` 且 `createIndependentRecordDraft` 仍只调用一次 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-UNIT-004 | Web 单元 | 来源草稿页脚（2026-09-28 随 ADR-047 更新） | 打开来源草稿弹窗：主按钮为「发布迭代记录」且类名含 `primary-button`，「保存草稿」类名含 `soft-blue-button`，只读归属行 `.record-scope-facts` 可见 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-BROWSER-001 | 浏览器实测 | 位置与配色 | `/records?projectId=1` 打开「新建迭代记录」：页脚两键高 35px，「保存草稿」`rgb(230,242,255)` / `rgb(36,114,195)` 在 x=941，「新建迭代」`rgb(20,103,216)` / 白字在 x=1031（右端） | 本地通过 |
-| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案 | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「保存并发布」（蓝）。弹窗内原有的提示语（「保存草稿可继续编辑；…之后只能新增版本或作废…」）已按 2026-09-28 产品反馈整段删除，不再断言该文案 | 待复测（提示语删除后未重跑浏览器实测） |
+| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案（2026-09-28 回填） | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「发布迭代记录」（主按钮；原口径「保存并发布」已由 2026-09-28 的统一文案与 [ADR-047](adr/ADR-047.md) 作废，见文末「迭代记录发布与任务完成解耦」小节）；弹窗内原有的提示语（「保存草稿可继续编辑；…之后只能新增版本或作废…」）已按 2026-09-28 产品反馈整段删除，不再断言该文案。该路径现由 `record-drafts.spec.ts` 的「继续编辑 → 保存草稿」用例覆盖 | 本地通过（2026-09-28 全量 E2E `61 passed`） |
 | DRAFT-FOOTER-PUBLISH-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-GATE-001 | 静态门禁 | 类型、风格与依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`（279 模块 1359 依赖）通过 | 本地通过 |
 
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号只读量测，未点「新建迭代」本身，未新增或修改业务数据）。
 
-未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿当时没有发布入口，属产品口径问题；2026-09-28 已由 [ADR-047](adr/ADR-047.md) 定案改为有发布入口（见文末「迭代记录发布与任务完成解耦」小节）；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿当时没有发布入口，属产品口径问题；2026-09-28 已由 [ADR-047](adr/ADR-047.md) 定案改为有发布入口（见文末「迭代记录发布与任务完成解耦」小节）；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认——2026-09-28 已定案：三态统一为「发布迭代记录」（见文末「迭代记录发布与任务完成解耦」小节与 [ADR-047](adr/ADR-047.md)）；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
 
 ## 任务中心删除统计卡与「未完成 / 已完成」筛选（C，2026-09-21 本地落库）
 
@@ -4038,3 +4038,27 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-DRAFT-DELETE-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**：lint / format:check / typecheck / test:unit（canonical-json 1 文件 5 例、database 1 文件 15 例、api-contract 16 文件 100 例、api 66 文件 369 例、ops 8 文件 52 例、web 85 文件 566 例）/ db:migrations:check / db:seed:check / contract:drift / contract:validate（99 条路由）/ build / check:deploy:test / check:deps（718 源文件）/ check:frontend:boundaries（286 模块 1408 依赖）/ permissions:check（99 操作 / 99 路由）/ deps:audit（No known vulnerabilities found）/ check:secrets（1076 文件）/ check:docs（95 个 Markdown） | 本地通过 |
 
 未运行 / 已知偏差：① GitHub Actions 已跑通——推送 `test` 不触发 `push` 事件，但既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件会为新提交起 CI，见 `RECORD-DRAFT-DELETE-CI-001`；② 本批含服务端业务逻辑、数据库迁移（`SECURITY DEFINER` 函数与 `EXECUTE` 授权）与前端产品代码改动，按 §6 / §8 需人工评审；③ 迁移只在 `app_ci` 应用过，演示库 `app` 与本机生产形态未升级。
+
+## 2026-09-28 迭代记录弹窗 Ctrl/Cmd+Enter 与任务详情发布落点（用户指示，本地落库）
+
+用户在本批评审意见里指出：草稿编辑弹窗缺键盘提交；任务详情「记录一次迭代」发布成功后没有落点，用户还得自己去找正式记录；缺「未保存离开」保护。第三条先被否掉（「没保存就没保存吧不用保护」），随后用户改口「没做的做掉」，并定下实现口径：**没有保存就不更改**——离开时既不写库、也不做本地暂存，只保留一道确认，避免 Esc / 遮罩误触静默丢内容。
+
+- 快捷键：`RecordDraftEditorModal` 的 `<form>` 增加 `onKeyDown`，只在 `Enter` 且带 `Ctrl`/`Meta` 时提交，并且只提交「保存草稿」——发布会把记录公开给项目成员，必须是一次显式点击。`submitBlocked` 或删除确认层打开时不响应，键盘路径与按钮的禁用条件完全一致。
+- GitHub 链接框：该输入框的回车仍只暂存链接（既有行为）。只有框内没有待暂存内容（`linkInput.trim() === ""`）时才把 `Ctrl/Cmd+Enter` 冒泡给表单，避免用户刚输入的链接被「保存草稿」带走后丢掉。
+- 未保存离开：`RecordDraftEditorModal` 用 `formState.isDirty` + 待暂存的 GitHub 链接 + 没选完的冲突合并 + 链接框里刚输入还没提交的内容合成 `unsaved`；Esc / 点遮罩 / 头部 ✕ 三条路径统一走 `requestClose`，有未保存内容时先弹 `tone="warning"` 的「放弃未保存的内容」（继续编辑 / 放弃修改），两条分支都不发任何写请求。草稿已落库但后续步骤失败而留在原地时，`switchToSaved` 会把表单基线 `reset` 到服务端内容，避免之后关闭时误报未保存。
+- 任务详情落点：`TasksPanel` 新增 `publishedRecord`，草稿弹窗 `onSaved` 收到 `published` 时记下该记录并刷新本任务正式记录列表；任务详情头部下方渲染 `Alert type="success"`「迭代记录已发布：{编号}」+「查看正式记录」按钮，点击就地打开记录详情弹窗，不强制跳转。`openRecord` 在正式记录列表刷新落地前用发布响应兜底，所以按钮不会「点了没反应」；`openDetail` / `closeDetail` 都清空该状态。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-SUBMIT-WEB-UNIT-001 | Web 单元 | Ctrl + Enter 等于「保存草稿」 | `RecordDraftsView.test.tsx` 新增 `saves the draft with Ctrl/Cmd + Enter and keeps a typed GitHub link`：范围没选完时快捷键与按钮一样被拦住（`createIndependentRecordDraft` 未被调用）；选好范围后链接框内 `Ctrl+Enter` 只暂存链接（`PR #123` 出现、仍未提交）；清空后再按才落成保存草稿，`addExternalLink` 调用一次且 `publishChangeRecord` 从未调用 | 本地通过 |
+| TASK-RECORD-PUBLISH-LAND-WEB-UNIT-001 | Web 单元 | 任务详情发布后的落点 | `TasksPanel.test.tsx` 新增 `lands the freshly published record inside the task detail`：来源草稿发布后弹窗关闭、任务详情出现「迭代记录已发布：PR-CR-9」；点「查看正式记录」在正式记录列表仍为空（`listChangeRecords` 返回空）时也能就地打开记录详情弹窗并显示编号 | 本地通过 |
+| RECORD-DRAFT-SUBMIT-E2E-001 | 浏览器实测（E2E） | 真实浏览器键盘路径 | `record-drafts.spec.ts` 新增 `F-17 弹窗内的 Ctrl+Enter 直接保存草稿且不发布`：多行字段里 `press("Control+Enter")` 后弹窗关闭、草稿详情弹层出现且带正文 | 本地通过 |
+| TASK-RECORD-PUBLISH-LAND-E2E-001 | 浏览器实测（E2E） | 任务详情发布落点 | `record-publishing.spec.ts` 的 `F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）` 增补断言：发布后任务详情出现「迭代记录已发布：」提示，点「查看正式记录」打开记录详情弹层（正文可见），关闭后任务详情与后续断言不受影响 | 本地通过 |
+| RECORD-DRAFT-LEAVE-WEB-UNIT-001 | Web 单元 | 没改过就不打扰 | `RecordDraftsView.test.tsx` 新增 `closes an untouched dialog without asking about unsaved input`：打开未改动的弹窗点头部 ✕ 直接关闭、不出现确认层、`createIndependentRecordDraft` 未被调用 | 本地通过 |
+| RECORD-DRAFT-LEAVE-WEB-UNIT-002 | Web 单元 | 改了内容先确认 | 同文件 `asks before dropping unsaved input and never writes it on leave`：改「改动原因」后点 ✕ 出现「放弃未保存的内容」；点「继续编辑」保留输入且未写库；再点 ✕ 后点「放弃修改」才关闭，`createIndependentRecordDraft` 始终未被调用 | 本地通过 |
+| RECORD-DRAFT-LEAVE-E2E-001 | 浏览器实测（E2E） | Esc 误触路径 | `record-drafts.spec.ts` 新增 `F-17 未保存就离开先确认，放弃后不留痕迹`：填好标题与正文后按 `Escape` 出现确认层 →「继续编辑」后输入仍在 → 再按 `Escape` →「放弃修改」关闭，草稿箱里没有这条草稿 | 本地通过 |
+| RECORD-DRAFT-SUBMIT-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm test:unit` → apps/web **85 文件 570 例**通过（原 566 + 新增 4） | 本地通过 |
+| RECORD-DRAFT-SUBMIT-E2E-FULL-001 | E2E（全量） | 无新增失败 | 全量 `pnpm test:e2e` → **61 passed (4.2m)**（原 59 + 新增 2） | 本地通过 |
+| RECORD-DRAFT-SUBMIT-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**；另单独复读关键数字：lint 无输出、typecheck 全 workspace 通过、`contract:validate`（99 条路由）、`permissions:check`（99 条操作 / 99 条路由）、`check:deps`（718 个源文件）、`check:frontend:boundaries`（286 模块 1408 依赖）、`deps:audit`（No known vulnerabilities found）、`check:secrets`（1076 文件）、`db:migrations:check`（27 个迁移）、`check:docs`（95 个 Markdown） | 本地通过 |
+
+未运行 / 已知偏差：① 本轮只改前端产品代码与 E2E 用例，未改 Schema、Route Registry、权限矩阵、数据库与迁移，因此没有重跑集成测试与迁移门禁（`pnpm check` 已覆盖不依赖数据库的门禁）；② 未保存内容不做本地暂存（用户口径：没有保存就不更改）——按 Esc、点遮罩或点头部 ✕ 会先确认，确认放弃后输入即丢弃，服务端草稿仍是上次保存的内容；③ **GitHub Actions 未跑**（推送后由既有 PR [#146](https://github.com/256-code/InPulse/pull/146) 的 `pull_request` 事件触发）；④ 快捷键与提示属交互变化，需非作者人工评审。
