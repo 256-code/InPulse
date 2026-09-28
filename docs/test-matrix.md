@@ -3702,3 +3702,161 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 | SCROLLBAR-AUTOHIDE-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示：只改前端、不涉及后端 / 契约 / 权限 / 数据库时不跑测试与门禁）；既有侧栏 / 项目树相关用例未复跑。唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档）→ 通过（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」） | 未运行（除文档检查） |
 
 未运行 / 已知偏差：① 既有 `apps/web` 单测里涉及侧栏与项目树的用例未复跑（未验证）；② 深色侧栏三处的 hover 口径不完全一致——`.tree-modules-scroll` 保留既有 `#5b90bb` hover，`.nav-group` / `.sidebar` 静止悬浮仍透明（继承既有规则，未新增）；③ 操作系统开启「自动隐藏滚动条」（overlay scrollbars）时 Chromium 不使用 `::-webkit-scrollbar`，本改动对其无影响（未验证）；④ 根滚动条的像素观感需人工在有头浏览器确认。本条只改前端样式与文档，后端、契约、权限矩阵、迁移与生成物零改动。
+
+## 任务编辑弹窗「影响功能」改为多选下拉（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「这里影响功能也改成下拉框的那种样式」（附「编辑任务」弹窗截图，模块级任务，影响功能仍是一排原生复选框）。本批为纯前端交互替换：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动；`impactFeatureIds` 仍是去重升序 `number[]`。
+
+锁定口径：
+
+- 参照物是新建任务弹窗 `GlobalTaskCreateModal` 的同一字段（此前已改为 `CalmSelect` 多选下拉，占位「可多选，可为空」）；本轮把 `TasksPanel` 编辑任务弹窗的 `featureId === null` 分支改成同一交互：`<div className="calm-field">` + `<label htmlFor="task-impact-features">影响功能</label>` + `CalmSelect`（`multiple` + `maxTagCount={2}` + `appearance="menu"` + `placeholder="可多选，可为空"` + `ariaLabel="影响功能"`）。
+- 旧实现是 `<fieldset className="task-impact-features">` + `.check-list` 原生复选框，每个功能一项、`getByLabel(功能名)` 可勾选；改后无复选框，勾选走多选下拉（仓库 E2E 助手 `apps/e2e/helpers/calm-select.ts` 的 `pickCalmSelectOptions` 覆盖该交互）。
+- 字段契约不变：`Controller name="impactFeatureIds"`、加载与出错（「重试影响功能」）分支、`featureId === null` 条件均保留；`onChange` 去重升序（`[...new Set(next.map(Number))].sort((a, b) => a - b)`），与新建弹窗口径一致。
+- `apps/web/src/styles/inpulse-design.css` 删除 `.calm-form .task-impact-features > legend` 与其两行注释：改成 `label` 后该选择器不再匹配（源码中已无其它 `.task-impact-features` 引用）。
+- 历史表述修订：本文件 2026-09-21 两节（《草稿编辑器入口改名与影响功能改多选下拉》《CalmSelect 多选下拉的重复选中勾修复》）中「任务侧的同名影响功能勾选区（`TasksPanel`、`GlobalTaskCreateModal` 的 `.task-impact-features`）本批未改，仍是原生复选框」为当时事实；自本条起 `TasksPanel` 编辑任务弹窗亦已改为 `CalmSelect` 多选下拉（`GlobalTaskCreateModal` 更早已改），上述历史行不改写，以本条为准。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-EDIT-IMPACT-SELECT-BROWSER-001 | 浏览器实测（DOM） | 旧复选框消失、新下拉接管 | 真实 dev `/projects/1/modules/2/tasks`「编辑任务」弹窗：旧 `fieldset.task-impact-features` 计数 0、旧复选框计数 0、`CalmSelect` 触发器存在且标签文本「影响功能」，原值渲染为 chip「部署、备份与恢复」 | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SELECT-BROWSER-002 | 浏览器实测（交互） | 下拉选项、选中态与 chips 折叠 | 打开下拉后 7 个选项、「部署、备份与恢复」为 `aria-selected="true"`（其余 false）；追加「用户管理」「数据安全专项（数据库角色、CSP、SSRF、Secrets）」后 chips 为「用户管理」「数据安全专项（…）」「+ 1 ...」（`maxTagCount={2}` 生效） | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SELECT-BROWSER-003 | 浏览器实测（载荷） | 表单载荷形态不变、未落库 | 拦截到的 PATCH 载荷 `impactFeatureIds: [3,18,19]`（升序、全为 number），载荷键仍为 `title / description / priority / assigneeIds / dueAt / impactFeatureIds`；请求由脚本 `abort()` 后重新加载，chips 回落原值（未落库） | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SELECT-E2E-001 | Playwright | 既有 E2E 定位器已同步 | `apps/e2e/tests/module-tasks.spec.ts` 两处 `edit.getByLabel(功能名).uncheck()/check()` 改为 `pickCalmSelectOptions(edit, "影响功能", [功能名])` | 未运行（未复跑） |
+| TASK-EDIT-IMPACT-SELECT-UNIT-001 | Web 单元 | `TasksPanel.test.tsx` 的 `impactFeatureIds` 断言 | 该文件 3 处 `impactFeatureIds` 断言均为表单 payload / 默认值 / 差异比较（非 DOM 勾选交互），改造后预期不受影响 | 未运行（未复跑） |
+| TASK-EDIT-IMPACT-SELECT-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档） | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：编辑器诊断（`get_errors`）三个改动文件无本轮引入的报错；真实浏览器实测见上表前三行；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」）。
+
+未运行 / 已知偏差：① `TASK-EDIT-IMPACT-SELECT-E2E-001` 与 `TASK-EDIT-IMPACT-SELECT-UNIT-001` 均未复跑，属未验证改动；② 无障碍名变化：旧复选框的 accessible name 是功能名，新下拉触发器的 accessible name 是 `aria-label="影响功能"`，按功能名定位的旧脚本会失效——已 grep 确认仓库内无其它引用；③ 下拉的视觉细节沿用 `CalmSelect` 的 `menu` 形态既有样式，未新增规则，需人工复核；④ 未提交、未推送，前端与 E2E 改动需非作者人工评审。
+
+## 合并到主任务弹窗排版精简（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「这里字太多了，而且当前任务的描述不明显」（附「合并到主任务」弹窗截图，模块级任务 `INPULSE-T-57`）。本批为纯前端排版与文案精简：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动；合并命令的请求 / 响应形态不变。
+
+锁定口径：
+
+- 删除弹层眉标 `eyebrow={task.code + " · " + task.title}`：它与正文首段重复同一段「编号 + 标题」，是「字太多」的主要来源。删后 `role=dialog` 的无障碍名仍取 `title`（`AppModal` 的 `labelOf` 优先 title），E2E 的 `getByRole("dialog", { name: "合并到主任务" })` 不受影响。
+- 正文首段改为聚焦卡片 `.merge-source-task`：第一行「当前任务」标签（左侧）+ 任务编号（右侧，11px 灰），第二行加粗标题（14px/600 `#22384f`）。原散文句「合并后当前任务作为分支任务保留，不删除、不覆盖任何历史。」删除——该后果已由「合并后处理方式」的两个单选项逐项说明。
+- 字段标签由「主任务（搜索任务编号或标题，至少 2 个字符）」收成「主任务」；最小字符数移入空态提示「输入任务编号或标题（至少 2 个字符），仅搜索当前项目。」。该提示只在未达 2 字符时显示，正好覆盖用户只输一个字的情形。
+- 底部 `permission-hint` 由三句并作一句：「合并不删除或覆盖双方的迭代记录，也不改变任务归属与工作状态。」；跨项目限制改由搜索范围提示（「仅搜索当前项目」）与既有 404 文案承载。
+- 定位器同步（无障碍名从长句变成「主任务」）：`MergeIntoMainTaskModal.test.tsx` 的 `searchLabel` 改为 `/^主任务$/`；`TasksPanel.test.tsx` 同一断言同步；`apps/e2e/tests/task-groups.spec.ts` 两处改为 `getByLabel("主任务", { exact: true })`。「已选择主任务：」「合并说明（选填）」「合并后处理方式」等既有文案与断言保持不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MERGE-MODAL-LAYOUT-BROWSER-001 | 浏览器实测（DOM） | 眉标删除、弹层名不变 | 真实 dev `/projects/1/modules/2/tasks` → 任务卡片「A-6 上线门禁」→ 任务详情 → 合并到主任务：弹层内 `.detail-label` 计数 0；`role=dialog` 无障碍名仍为「合并到主任务」 | 本地通过（Playwright 脚本实测） |
+| MERGE-MODAL-LAYOUT-BROWSER-002 | 浏览器实测（DOM） | 当前任务卡片内容 | 卡片读出「当前任务」标签、编号 `INPULSE-T-57`、标题「A-6 上线门禁：全新主机恢复演练、告警投递与 TLS 签发」（`.merge-source-task-label` / `-code` / `-title`） | 本地通过（Playwright 脚本实测） |
+| MERGE-MODAL-LAYOUT-BROWSER-003 | 浏览器实测（文案） | 正文与提示语精简后的文本序列 | `.modal-body` 纯文本为「当前任务 \| INPULSE-T-57 \| A-6 上线门禁：… \| 主任务 \| 输入任务编号或标题（至少 2 个字符），仅搜索当前项目。 \| 合并后处理方式 \| 活动分支… \| 历史分支… \| 合并说明（选填） \| 合并不删除或覆盖双方的迭代记录，也不改变任务归属与工作状态。」；弹层内可见标签只剩 `主任务` / 两个分支选项 / `合并说明（选填）` | 本地通过（Playwright 脚本实测） |
+| MERGE-MODAL-LAYOUT-BROWSER-004 | 浏览器实测（交互回归） | 搜索与选择主任务仍可用 | 搜索框 accessible name 实测为「主任务」（新 E2E 定位器依据）；输入「任务」得到 1 个候选，点选后显示「已选择主任务：F-14 功能级任务 交付」；未点确认，以「取消」关闭弹窗（未落库） | 本地通过（Playwright 脚本实测） |
+| MERGE-MODAL-LAYOUT-E2E-001 | Playwright | 既有 E2E 定位器已同步 | `apps/e2e/tests/task-groups.spec.ts` 两处 `getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")` 改为 `getByLabel("主任务", { exact: true })` | 未运行（未复跑） |
+| MERGE-MODAL-LAYOUT-UNIT-001 | Web 单元 | 两个单测文件的定位器已同步 | `MergeIntoMainTaskModal.test.tsx` 的 `searchLabel = /^主任务$/`、`TasksPanel.test.tsx` 的 `findByLabelText(/^主任务$/)`；其余断言（`已选择主任务：`、`合并说明（选填）`、`请先搜索并选择主任务。`、409 重扫）未改 | 未运行（未复跑） |
+| MERGE-MODAL-LAYOUT-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档） | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：编辑器诊断（`get_errors`）五个改动文件无本轮引入的报错；真实浏览器实测见上表前四行；弹层局部截图确认卡片与整体排版；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」）。
+
+未运行 / 已知偏差：① `MERGE-MODAL-LAYOUT-E2E-001` 与 `MERGE-MODAL-LAYOUT-UNIT-001` 均未复跑，属未验证改动；② 眉标删除后弹层头部只剩标题，若希望保留编号上下文需另行指出（编号仍在正文卡片内）；③ 最小字符数提示没有 `aria-describedby` 关联，仅为可见文本；④ 文案精简后不再明写「跨项目任务不能直接合并」，同一事实仍以搜索范围提示与 404 文案保留；⑤ 未提交、未推送，前端与 E2E 改动需非作者人工评审。
+
+## 任务编辑弹窗「影响功能」下拉支持输入搜索（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「这里影响功能应该支持搜索」（附「编辑任务」弹窗截图：下拉已展开，7 个功能项平铺，只能滚动翻找）。本批为纯前端交互补齐：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动；`impactFeatureIds` 仍是去重升序 `number[]`。
+
+锁定口径：
+
+- 根因：`apps/web/src/features/common/components/CalmSelect.tsx` 的搜索开关是 `const withSearch = searchable ?? appearance === "member";`——只有 `appearance="member"` 默认开搜索。本处是第三十一条改成的 `appearance="menu"` 多选下拉且没传 `searchable`，所以 `showSearch` 为 false，输入不生效。
+- 修法：在该 `CalmSelect` 上补 `searchable`（一行），并把占位符由「可多选，可为空」改为「输入功能名称搜索，可多选，可为空」；不改 `CalmSelect` 组件、不改 CSS。选项过滤沿用组件内置的 `filterOption`：对 `label + " " + description` 做大小写不敏感的包含匹配（本处只传 `label`，即功能名）。
+- 同源关系：本条是第三十一条小节（《任务编辑弹窗「影响功能」改为多选下拉》）的直接延续，只补搜索能力，不改变该节的选中态、chips 折叠与载荷口径。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-EDIT-IMPACT-SEARCH-BROWSER-001 | 浏览器实测（DOM） | 搜索输入真实可用 | 真实 dev `/projects/1/modules/2/tasks`「编辑任务」弹窗：`#task-impact-features` 为真实 `<input>`（`tag=INPUT`、`readonly` 与 `disabled` 均无），`getByLabel("影响功能")` 在该弹窗内只命中这一个 input | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SEARCH-BROWSER-002 | 浏览器实测（过滤） | 输入中文子串能过滤选项 | 打开下拉 7 个选项；输入「用户」后过滤为 2 项（「用户管理」「用户登录与会话管理」）；输入不匹配串时空态「暂无数据」（证明过滤是实时的，未命中即不显示） | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SEARCH-BROWSER-003 | 浏览器实测（选择） | 过滤后仍能多选、选中态累积 | 输入「用户」→ 点选「用户管理」→ 触发器折叠为「用户管理 \| 部署、备份与恢复」；再输入「会话」→ 点选「用户登录与会话管理」→ 折叠为「用户登录与会话管理 \| 用户管理 \| + 1 ...」（`maxTagCount={2}` 生效），`ant-select-item-option-selected` 计数 3 | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SEARCH-BROWSER-004 | 浏览器实测（视觉） | 搜索中的下拉观感 | 下拉打开且已输入过滤串时截图复核（本次会话内截图，未落仓）：过滤后的 2 个选项与搜索框在同一弹层内，无布局错位（触发器内搜索框沿既有 `.calm-select.ant-select .ant-select-input` 归零规则，无新增 CSS） | 本地通过（Playwright 截图复核） |
+| TASK-EDIT-IMPACT-SEARCH-BROWSER-005 | 浏览器实测（未落库） | 清理未保存、无副作用 | 标题区 `mousedown` 收起下拉（`[role="listbox"]:visible` 计数回到 0）→ 点「取消」关闭编辑弹窗 → 关闭任务详情弹窗；最终 `div[role="dialog"]:visible` 计数 0、URL 仍为 `/projects/1/modules/2/tasks`，服务端数据未污染 | 本地通过（Playwright 脚本实测） |
+| TASK-EDIT-IMPACT-SEARCH-E2E-001 | Playwright | 既有 E2E 助手不受影响 | `apps/e2e/helpers/calm-select.ts` 的 `pickCalmSelectOptions` 按 `aria-controls` 定位 listbox、按 `title` 点选项，不输入文字，因此开搜索后仍可用；`apps/e2e/tests/module-tasks.spec.ts` 两处调用无需修改 | 未运行（未复跑） |
+| TASK-EDIT-IMPACT-SEARCH-UNIT-001 | Web 单元 | `TasksPanel.test.tsx` 的 `impactFeatureIds` 断言 | 三处 `impactFeatureIds` 断言是表单 payload / 默认值 / 差异比较（非 DOM 过滤交互），补 `searchable` 后预期不受影响 | 未运行（未复跑） |
+| TASK-EDIT-IMPACT-SEARCH-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；唯一实际跑的门禁是文档检查 `node scripts/check_docs.mjs`（因本轮改了文档） | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：真实浏览器实测见上表五行（`TASK-EDIT-IMPACT-SEARCH-BROWSER-001` ~ `-005`）；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」）。
+
+未运行 / 已知偏差：① `-E2E-001` 与 `-UNIT-001` 均未复跑，属未验证改动；② 搜索域是 `label + description`，本下拉只传功能名，因此**按功能编号搜索不生效**（该字段本就不显示功能编号）；③ 输入不匹配时显示空态「暂无数据」，不会自动清空已选值（多选语义不变）；④ 未提交、未推送，前端改动需非作者人工评审。
+
+## 合并到主任务弹窗「主任务」改为可搜索下拉（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「这里主任务也改成可搜索的下拉框」（附「合并到主任务」弹窗截图）。改前「主任务」是普通 `Input` + 下方候选 `<ul>`，与同弹窗内的「影响功能」「指派给」「优先级」不一致。本批为纯前端交互重做：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动；合并命令的请求 / 响应形态与 `rescan()` / `submit()` 逻辑不变。
+
+锁定口径：
+
+- 候选仍由服务端搜索提供（`GET /api/v1/search`，最小 2 字符、350ms 防抖），客户端只做「同项目 + `entityType === "TASK"` + 排除当前任务」过滤；下拉因此关闭本地 `filterOption`——按编号命中并非本地子串匹配。
+- `CalmSelect` 新增 `onSearch`（服务端搜索，传入即关闭本地过滤）与 `notFoundContent`（弹层空态）两个可选属性；原内联 `filterOption` 抽成模块级 `filterOptionByLabel`，逻辑逐字未改，未传 `onSearch` 的既有下拉（含「影响功能」多选）行为不变。
+- 选中项保留在 `options` 里（`candidateItems`）：远端结果换批后若选中项不在其中，`CalmSelect` 查不到 label，触发器会退化成裸 id。代价是无匹配时弹层仍非空（`notFoundContent` 不渲染），所以此时在下拉下方补同一句「当前项目内没有匹配的任务。」（模块级 `NO_MATCH_TEXT` 单一来源）。
+- 检索中判定为 `keyword.length >= 2 && (searchTerm.length < 2 || isFetching)`：防抖窗口内也显示「正在搜索任务…」，否则那 350ms 会先显示「没有匹配」。
+- 搜索失败提示与「重试搜索」按钮放在下拉下方（`Alert` 不能进弹层）；「已选择主任务：{title}」一行删除，改由触发器文本承载。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MERGE-MAIN-SEARCH-BROWSER-001 | 浏览器实测（DOM） | 默认空态在弹层内 | 真实 dev `/projects/1/modules/2/tasks` → 任务卡片「A-6 上线门禁」→ 任务详情 → 合并到主任务；未选、未输入时弹层文本为「输入任务编号或标题（至少 2 个字符），仅搜索当前项目。」（外置 `notFoundContent` 覆盖 antd 默认空态） | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-002 | 浏览器实测（检索） | 输入关键词走服务端检索 | 输入「服务」→ 弹层出现 3 条同项目 TASK 候选（A-1 / B-3 / B-3b）；再输入「部署」→ 候选换批为「F-10 部署、备份与恢复 交付」。弹层内容完全由远端结果驱动，无本地子串过滤 | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-003 | 浏览器实测（检索） | 完整任务编号可命中 | 同一端点实测 `GET /api/v1/search?q=INPULSE-T-57` 返回唯一 `TASK#9287`，即编号为 INPULSE-T-57 的任务，placeholder 的「例如：T-101」话术成立 | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-004 | 浏览器实测（选择） | 选中回填且搜索框清空 | 点第一个候选 → 触发器显示「A-1 operations/backup 服务本体」，搜索输入框文本被清空（antd 单选取值的既有行为） | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-005 | 浏览器实测（选择） | 重开保选、换批不退化 | 再次打开下拉：该候选带 `[selected]` 与勾选图标；输入新关键词后候选换批，触发器仍显示标题（未退化成裸 id） | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-006 | 浏览器实测（空态） | 无匹配时的提示 | 已选中后再输入「zzzz」→ 旧候选清空、弹层只剩当前已选项，下拉下方出现「当前项目内没有匹配的任务。」；输入「门禁」命中时该行消失（计数 0） | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-007 | 浏览器实测（时序） | 检索中不再误报无匹配 | 输入「部署」后按 45ms 连续采样弹层文本，序列为「（防抖期仍显示上一批结果）→ 正在搜索任务… → F-10 部署、备份与恢复 交付」；改动前出现的「当前项目内没有匹配的任务。」误报帧不再出现 | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-008 | 浏览器实测（回归） | 共享组件的本地过滤未回归 | 「编辑任务」弹窗「影响功能」输入「用户」→ 7 项过滤为 2 项（「用户管理」「用户登录与会话管理」），证明 `filterOptionByLabel` 抽取未破坏本地过滤路径 | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-BROWSER-009 | 浏览器实测（未落库） | 清理无副作用 | 合并弹窗「取消」→ 关闭任务详情 → `role=dialog` 计数 0、`#merge-main-search` 计数 0、`.merge-candidate-list` 计数 0、URL 仍为 `/projects/1/modules/2/tasks`；全程未点「确认合并」与「保存」，演示库未写入 | 本地通过（Playwright 脚本实测） |
+| MERGE-MAIN-SEARCH-UNIT-001 | Web 单元 | 单测已按下拉改写 | `MergeIntoMainTaskModal.test.tsx` 五个用例改为 `fireEvent.change` 驱动搜索、`within(listbox)` 定位候选、按 `.calm-select-trigger-label` 读选中文本，并覆盖「未达 2 字符不发请求」；409 重扫用例补断言选中被清空 | 未运行（未复跑） |
+| MERGE-MAIN-SEARCH-E2E-001 | Playwright | E2E 助手与调用点已同步 | `apps/e2e/helpers/calm-select.ts` 的 `openListbox` / `pickCalmSelectOption` 新增可选 `query`（先填关键词再重读 `aria-controls`）；`task-groups.spec.ts` 两处合并调用改为先搜标题再点候选，第一处补断言触发器文本包含主任务标题 | 未运行（未复跑） |
+| MERGE-MAIN-SEARCH-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；实际执行的只有编辑器诊断、上表浏览器实测与文档检查 `node scripts/check_docs.mjs` | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：编辑器诊断（`get_errors`）六个改动文件无本轮引入的报错；真实浏览器实测见上表九行（`MERGE-MAIN-SEARCH-BROWSER-001` ~ `-009`）；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**（「Checked Git whitespace state and 93 Markdown files: links and anchors are valid.」，退出码 0）。
+
+未运行 / 已知偏差：① `-UNIT-001` 与 `-E2E-001` 均未复跑，属未验证改动；② `CalmSelect` 是全站共享组件，本轮新增两个可选属性并移动了 `filterOption`，除「影响功能」实测回归外其它使用方（「指派给」「优先级」等）未逐一实测；③ 选中项保留在 `options` 是刻意设计，代价是无匹配时弹层不为空，需靠下拉下方提示补足语义；④ 搜索失败时提示不能进弹层，只能放在表单里；⑤ 未提交、未推送，前端与 E2E 改动需非作者人工评审。
+
+## 任务详情「查看遗留来源记录」改为就地打开记录详情弹窗（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「这里查看遗留来源记录只是跳转到迭代记录页面，我希望是跳出来对应的迭代记录弹窗」（附任务详情弹窗截图，圈住「查看遗留来源记录 INPULSE-CR-4 · 搜索容量实测报告」一行）。本批为纯前端交互改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动；沿用 F-20 的 `GET /api/v1/tasks/{taskId}/leftover-source` 与 F-18 的记录详情弹窗（B-3a）既有实现。
+
+锁定口径：
+
+- 入口由 `<a href="/records?view=published&projectId={p}&publishedId={recordId}">` 整页跳转改为 `<button type="button" class="leftover-source-open">`，就地渲染 `RecordDetailModal`（与任务详情「迭代记录」标签同一实现，正文 / 版本 / 遗留项 / GitHub 关联按 `recordId` 二次加载），不再离开当前任务。
+- 记录目标形状与 `TasksPanel.recordDetailTarget` 一致：`{recordId, code, title, recordStatus, publishedAt}`；不传 `contextLabel` / `externalLinks`（`ReadableRecord` 映射为该形状，与「迭代记录」标签同一份摘要）。
+- **不加 `nested`**：任务详情弹窗是 `size="xl"`、记录弹窗是 `lg`，两者宽度不同即可看出层级；`nested` 只解决同为 `lg`（如聚合组详情）时两个盒子等宽等高、完全重叠的问题。
+- `onChanged` 同时重读记录与来源（`record.refetch()` + `source.refetch()`）：来源不再 PUBLISHED 时接口返回 `source=null`，入口按契约自行消失；来源变为 VOID 时管理员看到 `record-detail-void` 摘要、成员看到 404 回退（`getChangeRecord` 返回非空 `ReadableRecord`，请求失败时 `record.data === undefined` 令入口 `disabled`）。
+- 加载中 / 不可读时按钮 `disabled` 且 `title` 提示「来源记录加载中或当前不可读」；入口样式仍是链接观感（蓝色 12px、无边框、无背景），点击后 Esc 只关记录弹窗、任务详情弹窗保留（嵌套弹层实测）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-SOURCE-MODAL-BROWSER-001 | 浏览器实测（DOM） | 入口是按钮且已就绪 | 真实 dev `/projects/1/modules/6/features/14?taskId=14`：`button.leftover-source-open` 文本为「查看遗留来源记录 INPULSE-CR-4 · 搜索容量实测报告」，`disabled=false` | 本地通过（Playwright 脚本实测） |
+| LEFTOVER-SOURCE-MODAL-BROWSER-002 | 浏览器实测（行为） | 就地弹窗、不跳页 | 点击后出现 `button[aria-label="关闭迭代记录详情"]`（记录弹窗打开），`page.url()` 与点击前逐字相同（无导航），任务详情弹窗仍在 | 本地通过（Playwright 脚本实测） |
+| LEFTOVER-SOURCE-MODAL-BROWSER-003 | 浏览器实测（内容） | 弹窗内是对应记录 | 弹窗内眉标 `INPULSE-CR-4`、标题「搜索容量实测报告」、区块 `正式记录详情`；遗留问题区「查看跟进任务」链接 `href=/projects/1/modules/6/features/14?taskId=14`（证明是同一来源记录） | 本地通过（Playwright 脚本实测） |
+| LEFTOVER-SOURCE-MODAL-BROWSER-004 | 浏览器实测（关闭） | 关闭回落到任务详情 | 点「关闭迭代记录详情」后记录弹窗消失、`.task-modal` 计数仍为 1、焦点回到入口按钮（`[active]`）；URL 未变 | 本地通过（Playwright 脚本实测） |
+| LEFTOVER-SOURCE-MODAL-BROWSER-005 | 浏览器实测（层叠） | Esc 只关最上层 | 重新打开记录弹窗后按 `Escape`：`关闭迭代记录详情` 计数 0、`.task-modal` 计数 1、URL 未变（不会连带关掉任务详情） | 本地通过（Playwright 脚本实测） |
+| LEFTOVER-SOURCE-MODAL-BROWSER-006 | 浏览器实测（视觉） | 入口保持链接观感 | 入口按钮 computed style：`color: rgb(36, 114, 195)`（#2472c3）、`font-size: 12px`、`background: transparent`、`border-width: 0px`、`padding: 0px`、`cursor: pointer`；元素截图与改前链接观感一致 | 本地通过（Playwright 截图复核） |
+| LEFTOVER-SOURCE-MODAL-E2E-001 | Playwright | `leftover-task.spec.ts` 已同步 | 断言改为 `getByRole("button", { name: "查看遗留来源记录" })` → 记录弹窗可见（`关闭迭代记录详情`）→ `expect(page.url()).toBe(taskUrl)`（就地打开、不跳页） | 未运行（未复跑） |
+| LEFTOVER-SOURCE-MODAL-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；实际执行的只有编辑器诊断、上表浏览器实测与文档检查 `node scripts/check_docs.mjs` | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：编辑器诊断（`get_errors`）两个改动文件无本轮引入的报错；真实浏览器实测见上表六行（`LEFTOVER-SOURCE-MODAL-BROWSER-001` ~ `-006`）；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**。
+
+未运行 / 已知偏差：① `-E2E-001` 未复跑，属未验证改动；② 来源记录当场变为 VOID 或权限被撤销的两条降级路径**未实测**（需构造数据），只按代码与契约核对（`source=null` 令入口消失、`record.data === undefined` 令入口禁用）；③ 记录弹窗内的修订 / 作废等写操作会经 `onChanged` 触发两个查询重读，本批未做写路径实测；④ 未提交、未推送，前端与 E2E 改动需非作者人工评审。
+
+## 记录详情弹窗事实区显示名称而非编号（用户指示，2026-09-28 本地落库）
+
+用户指示（原文）：「把这里编号改成对应的文字」（附记录详情弹窗「归属」「作者与时间」两行截图，原文为「项目 #1 / 模块 #6 / 功能 #14」与「用户 #7」）。本批为纯前端展示改动：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，后端零改动。
+
+锁定口径：
+
+- 记录接口（`getChangeRecord`）只回传 `projectId` / `moduleId` / `featureId` / `authorId`（浏览器实测响应无名称字段），名称必须由前端解析。`PublishedRecordDetail` 早有 `labels` 机制（记录列表卡片已回填名称），但 `RecordDetailModal`（任务详情「迭代记录」标签、任务详情「查看遗留来源记录」、模块页与聚合组详情）以及 `/records` 深链的 `standalone` 详情都不传 `labels`，此前一律回落裸 ID。
+- 无 `labels` 的语境就地解析：项目名取 `useProjectDetail`（查询键 `["projects","detail",projectId]`）、模块名取 `useModules`（`["modules",projectId]`）、功能名与影响功能名取 `useProjectFeatureNames`（`["features",projectId,moduleId]`，与功能档案页共享缓存）、作者名取 `useUserDirectoryQuery`（`["users","directory"]`）。
+- 有 `labels` 的语境（记录列表展开卡片）不发任何新请求：三个查询分别以 `enabled: false` 与 `projectId: 0` 短路（`useModules` 的门槛是 `projectId > 0`；`useProjectFeatureNames` 在模块清单为空时用空 `useQueries` 数组，不发请求）。
+- 解析未就绪或失败时回落裸 ID，事实区不空项、不抛错；「影响功能」由 `功能 #id` 改为解析后的功能名（跨模块解析，取不到的名字从列表剔除，不再显示编号），`impactFeatureIds` 为空时不渲染该行（口径不变）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-FACTS-NAMES-UNIT-001 | 前端单测 | 无列表语境解析名称 | mock `getProject` / `listModules` / `listFeatures` / `getUserDirectory` 后断言「支付项目 / 支付模块 / 支付功能」与「邵晨宇 · 创建 …」可见、`用户 #3` 不出现 | 本地通过（`PublishedRecordDetail.test.tsx` 1 文件 7 例） |
+| RECORD-FACTS-NAMES-BROWSER-001 | 浏览器实测（遗留来源弹窗） | 归属与作者显示名称 | 真实 dev `/projects/1/modules/6/features/14?taskId=14` → 「查看遗留来源记录」→ 事实区文本为「InPulse 研发交付平台 / 搜索与动态 / 全局搜索」与「邵晨宇 · 创建 2026/9/11 17:50:00 · 发布 2026/9/11 18:42:00」 | 本地通过（Playwright 脚本实测） |
+| RECORD-FACTS-NAMES-BROWSER-002 | 浏览器实测（深链 `standalone`） | 无卡片摘要语境同样显示名称 | 真实 dev `/records?projectId=1&publishedId=4`：事实区两行文本与 `-BROWSER-001` 逐字相同（`labels` 缺省时就地解析生效） | 本地通过（Playwright 脚本实测） |
+| RECORD-FACTS-NAMES-BROWSER-003 | 浏览器实测（列表展开） | 列表语境回填名称且不新增请求 | 真实 dev `/records?projectId=1` 展开第一条卡片：事实区显示项目 / 模块 / 完整功能名（含括号长名）；展开期间网络请求只有 `change-records/{id}` 与 `change-records/{id}/versions`，无 `modules` / `features` / `users/directory` / 项目详情请求 | 本地通过（Playwright 脚本实测） |
+| RECORD-FACTS-NAMES-BROWSER-004 | 浏览器实测（无残留） | 页面内不再出现编号文案 | 记录弹窗打开时，全页所有 `dl.record-facts` 的 `textContent` 均不含「项目 #」「模块 #」「功能 #」「用户 #」四种编号文案 | 本地通过（Playwright 脚本实测） |
+| RECORD-FACTS-NAMES-TEST-001 | 静态 / 自动化 | 未运行 | `pnpm test:web`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm test:e2e`、`pnpm check` 整链与 GitHub Actions **均未运行**（按项目负责人 2026-09-17 指示）；本批实际执行的是定向单测（1 文件 7 例）、编辑器诊断、上表浏览器实测与文档检查 | 见下方「本地实际执行」 |
+
+本地实际执行（2026-09-28）：`apps/web` 定向单测 `vitest run src/features/published-records/PublishedRecordDetail.test.tsx` → 1 file / 7 tests passed；编辑器诊断（`get_errors`）两个改动文件无本轮引入的报错；真实浏览器实测见上表四行；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**。
+
+未运行 / 已知偏差：① 活动页 `ActivityWorkspace.tsx` 仍有 3 处裸 ID 回落（`用户 #id` / `项目 #id`），属同类问题但不在本次诉求内，本批未改动；② E2E 未新增用例、未复跑（上一批 `leftover-task.spec.ts` 的改动同样仍未复跑）；③ 「解析失败回落裸 ID」分支未实测（需构造接口失败）；④ 未提交、未推送，前端改动需非作者人工评审。
