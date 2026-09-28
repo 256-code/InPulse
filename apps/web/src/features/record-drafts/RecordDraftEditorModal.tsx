@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input } from "antd";
+import { Alert, Button, Input, Tag } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import {
+  ExternalLinksPanel,
+  previewLabel,
+} from "@features/external-links/ExternalLinksPanel";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import {
@@ -117,6 +122,12 @@ export function RecordDraftEditorModal({
   const [merge, setMerge] = useState<Merge | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  /** 新建迭代时先暂存的 GitHub 链接：草稿落库成功后再逐条写入。 */
+  const [linkInput, setLinkInput] = useState("");
+  const [pendingLinks, setPendingLinks] = useState<string[]>([]);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const githubSection = useRef<HTMLElement | null>(null);
+  const stagedCount = useRef(0);
   /** 创建草稿的目标项目：草稿按项目创建，服务端不接受「全部项目」。 */
   const formProjectId = projectId > 0 ? projectId : createProjectId;
   const retry = useRef<{ signature: string; key: string } | null>(null);
@@ -150,6 +161,42 @@ export function RecordDraftEditorModal({
     enabled: formProjectId > 0 && moduleId > 0,
     retry: false,
   });
+  /** 保存后的后续步骤失败时切到这条草稿的编辑态：重试走更新，不会再建一条。 */
+  const switchToSaved = async (saved: RecordDraftItem) => {
+    setOverride({ kind: "item", item: saved });
+    await cache.invalidateQueries({
+      queryKey: ["record-drafts", saved.projectId],
+    });
+    await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
+    await cache.invalidateQueries({
+      queryKey: ["task-record-drafts", projectId],
+    });
+  };
+  /**
+   * 链接区在表单最末尾：刚暂存的行或校验错误会落在滚动折线下方，
+   * 这里在内容变化后把链接区底边滚进可视区，保证用户能看到反馈。
+   */
+  useEffect(() => {
+    const grew = pendingLinks.length > stagedCount.current;
+    stagedCount.current = pendingLinks.length;
+    if (!grew && linkError === null) return;
+    githubSection.current?.scrollIntoView?.({ block: "end" });
+  }, [pendingLinks, linkError]);
+  const addPendingLink = () => {
+    const url = linkInput.trim();
+    if (url === "") return;
+    if (previewLabel(url) === null) {
+      setLinkError("只接受 github.com 的 HTTPS 链接，请检查输入。");
+      return;
+    }
+    if (pendingLinks.includes(url)) {
+      setLinkError("这条链接已经在待添加列表里。");
+      return;
+    }
+    setPendingLinks([...pendingLinks, url]);
+    setLinkInput("");
+    setLinkError(null);
+  };
   const mutation = useMutation({
     retry: false,
     mutationFn: async (input: {
@@ -209,7 +256,7 @@ export function RecordDraftEditorModal({
               : {}),
         },
       };
-      const saved: RecordDraftItem =
+      let saved: RecordDraftItem =
         item && item.taskId !== null
           ? await api.updateTaskRecordDraft(
               projectId,
@@ -244,6 +291,44 @@ export function RecordDraftEditorModal({
                   >[2],
                   init,
                 );
+      // 新建时暂存的 GitHub 链接在草稿落库后写入；失败时草稿已在，切到编辑态重试。
+      // 关联链接会让记录的 rowVersion 前进，因此写完必须把本地版本刷新到最新，
+      // 否则紧随其后的发布会被 If-Match 版本冲突挡下。
+      if (pendingLinks.length > 0) {
+        let linkRowVersion = (
+          await api.listExternalLinks("CHANGE_RECORD", saved.id)
+        ).rowVersion;
+        for (const url of pendingLinks) {
+          const linkCsrf = await api.issueCsrfToken();
+          try {
+            const added = await api.addExternalLink(
+              "CHANGE_RECORD",
+              saved.id,
+              { url },
+              {
+                headers: {
+                  "x-csrf-token": linkCsrf.csrfToken,
+                  "If-Match": `"${linkRowVersion}"`,
+                  "Idempotency-Key": createIdempotencyKey("external-link"),
+                },
+              },
+            );
+            linkRowVersion = added.rowVersion;
+          } catch (error) {
+            // 重试时已经关联上的那条按成功处理，不再卡在 409。
+            if (
+              error instanceof ApiError &&
+              error.status === 409 &&
+              error.code === "EXTERNAL_LINK_ALREADY_ASSOCIATED"
+            )
+              continue;
+            await switchToSaved(saved);
+            throw error;
+          }
+        }
+        saved = { ...saved, rowVersion: linkRowVersion };
+        setPendingLinks([]);
+      }
       if (!input.publish) return { draft: saved, published: null };
       const publishSignature = saved.id + ":" + saved.rowVersion;
       if (publishRetry.current?.signature !== publishSignature)
@@ -268,16 +353,8 @@ export function RecordDraftEditorModal({
         publishRetry.current = null;
         return { draft: saved, published };
       } catch (error) {
-        // 发布失败时草稿已经落库：把弹窗切到这条草稿的编辑态并刷新列表，
-        // 重试「新建迭代」就是更新同一条，不会再建出重复草稿。
-        setOverride({ kind: "item", item: saved });
-        await cache.invalidateQueries({
-          queryKey: ["record-drafts", saved.projectId],
-        });
-        await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
-        await cache.invalidateQueries({
-          queryKey: ["task-record-drafts", projectId],
-        });
+        // 发布失败时草稿已经落库：切到编辑态，重试就是更新同一条，不会建重复草稿。
+        await switchToSaved(saved);
         throw error;
       }
     },
@@ -300,9 +377,12 @@ export function RecordDraftEditorModal({
       await cache.invalidateQueries({
         queryKey: ["task-record-drafts", projectId],
       });
-      // 刚发布的记录要立刻出现在时间线里，草稿箱则少一条。
-      if (published)
+      // 刚发布的记录要立刻出现在时间线里，草稿箱则少一条；任务卡片与任务详情的
+      //「迭代记录 N 条」来自 R-5 任务标记，也必须一起失效。
+      if (published) {
+        await cache.invalidateQueries({ queryKey: ["task-marks"] });
         await cache.invalidateQueries({ queryKey: ["record-feed"] });
+      }
     },
   });
   // 每次传入新 target 视为一次打开：同步表单与范围选择器，清空冲突与错误态。
@@ -316,6 +396,9 @@ export function RecordDraftEditorModal({
     setOverride(null);
     setMerge(null);
     setReloadError(null);
+    setLinkInput("");
+    setPendingLinks([]);
+    setLinkError(null);
     mutation.reset();
     if (target.kind === "item") {
       reset(content(target.item));
@@ -326,8 +409,12 @@ export function RecordDraftEditorModal({
       return;
     }
     if (target.kind === "source") {
+      // 来源快照同时驱动归属行的只读展示：模块与功能名称按它的 moduleId 走既有只读契约。
       reset({ ...empty, title: target.source.title });
-      setImpacts([]);
+      setModuleId(target.source.moduleId);
+      setFeatureId(target.source.featureId ?? 0);
+      setScopeType(target.source.scopeType);
+      setImpacts([...target.source.impactFeatureIds]);
       return;
     }
     reset(empty);
@@ -433,10 +520,26 @@ export function RecordDraftEditorModal({
   const save = handleSubmit((edit) => run(edit, false));
   const saveAndPublish = handleSubmit((edit) => run(edit, true));
   /**
-   * 页脚主按钮：无来源任务的草稿可以直接发布成正式 v1。带来源任务时必须由任务完成
-   * 流程（F-19）发布，服务端会因为任务不是 DONE 拒绝，所以这里不给这个入口。
+   * 页脚主按钮：ADR-047 起迭代记录只描述本次迭代，发布与任务完成解耦——来源任务未完成
+   * （含已取消）也能就地发布，且发布不改变任务状态，三种目标于是共用同一个发布入口。
    */
-  const canPublish = !source && (item ? item.taskId === null : true);
+  const publishLabel = item
+    ? "保存并发布"
+    : source
+      ? "发布迭代记录"
+      : "新建迭代";
+  /** 来源快照的只读归属行：名称走既有只读契约，数据未到时回退编号。 */
+  const nameOf = {
+    project: (id: number) =>
+      projects.data?.items.find((entry) => entry.id === id)?.name ??
+      `项目 #${id}`,
+    module: (id: number) =>
+      modules.data?.items.find((entry) => entry.id === id)?.name ??
+      `模块 #${id}`,
+    feature: (id: number) =>
+      features.data?.items.find((entry) => entry.id === id)?.name ??
+      `功能 #${id}`,
+  };
   /** 两个页脚动作共用同一套禁用条件：不可写、有冲突或范围没选全都不能提交。 */
   const submitBlocked =
     mutation.isPending ||
@@ -455,10 +558,10 @@ export function RecordDraftEditorModal({
         item
           ? "草稿 · " + item.title
           : source
-            ? "来源任务 · " + source.title
+            ? "任务 · " + source.title
             : "项目与功能 / 迭代记录"
       }
-      title={item ? "编辑草稿" : source ? "新建来源草稿" : "新建迭代记录"}
+      title={item ? "编辑草稿" : source ? "新建任务迭代" : "新建迭代记录"}
       className="catalog-modal"
       size="lg"
       onCancel={() => {
@@ -527,11 +630,48 @@ export function RecordDraftEditorModal({
             </section>
           )}
           {source && (
-            <p>
-              来源：{source.title} · 处理人{" "}
-              {source.assigneeName ?? "名称暂不可用"}
-              。归属和影响功能按保存时的来源快照记录。
-            </p>
+            <section
+              className="record-source-panel"
+              aria-label="来源任务与归属"
+            >
+              <p className="record-source-line">
+                来源任务 <strong>{source.title}</strong>
+                {" · "}
+                处理人 <strong>{source.assigneeName ?? "名称暂不可用"}</strong>
+              </p>
+              {/* 与迭代记录页同一套归属行，只是按保存时的来源快照预填并只读。 */}
+              <dl className="record-scope-facts">
+                <div className="record-scope-fact">
+                  <dt>所属项目</dt>
+                  <dd>{nameOf.project(formProjectId)}</dd>
+                </div>
+                <div className="record-scope-fact">
+                  <dt>所属模块</dt>
+                  <dd>{nameOf.module(moduleId)}</dd>
+                </div>
+                <div className="record-scope-fact">
+                  <dt>记录范围</dt>
+                  <dd>{source.scopeType === "FEATURE" ? "功能" : "模块"}</dd>
+                </div>
+                {source.scopeType === "FEATURE" ? (
+                  <div className="record-scope-fact">
+                    <dt>所属功能</dt>
+                    <dd>{nameOf.feature(featureId)}</dd>
+                  </div>
+                ) : (
+                  <div className="record-scope-fact">
+                    <dt>影响功能</dt>
+                    <dd>
+                      {source.impactFeatureIds.length === 0
+                        ? "未选择"
+                        : source.impactFeatureIds
+                            .map((id) => nameOf.feature(id))
+                            .join("、")}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </section>
           )}
           {independent && (
             <>
@@ -674,7 +814,6 @@ export function RecordDraftEditorModal({
               </label>
             ))}
           <label>
-            {labels.remainingIssues}
             <Controller
               name="remainingIssues"
               control={control}
@@ -697,33 +836,104 @@ export function RecordDraftEditorModal({
               </span>
             )}
           </label>
-          <p>
-            {canPublish
-              ? "保存草稿可继续编辑；" +
-                (item ? "「保存并发布」" : "「新建迭代」") +
-                "会立即生成正式编号与 v1，之后只能新增版本或作废。"
-              : "保存为草稿，可继续编辑；不会完成任务或发布记录。"}
-          </p>
+          <section
+            ref={githubSection}
+            aria-label="GitHub 链接"
+            className="record-github-links"
+          >
+            <div className="record-github-head">
+              <h4 className="record-github-title">GitHub 链接</h4>
+              <span className="record-github-hint">
+                {item
+                  ? "关联本次迭代的仓库、PR、Issue 或提交。"
+                  : "保存后自动关联到这条记录。"}
+              </span>
+            </div>
+            {item ? (
+              <ExternalLinksPanel
+                key={item.id}
+                variant="inline"
+                targetType="CHANGE_RECORD"
+                targetId={item.id}
+                client={api}
+              />
+            ) : (
+              <>
+                <div className="record-github-add">
+                  <Input
+                    id="record-github-link-input"
+                    aria-label="GitHub 链接地址"
+                    value={linkInput}
+                    maxLength={2048}
+                    disabled={!canWrite}
+                    placeholder="https://github.com/owner/repository/pull/123"
+                    onChange={(event) => {
+                      setLinkInput(event.target.value);
+                      if (linkError !== null) setLinkError(null);
+                    }}
+                    onPressEnter={(event) => {
+                      // 回车只暂存链接，不提交整个表单。
+                      event.preventDefault();
+                      addPendingLink();
+                    }}
+                  />
+                  <Button
+                    type="default"
+                    onClick={addPendingLink}
+                    disabled={!canWrite || linkInput.trim() === ""}
+                  >
+                    <InpulseIcon name="plus" size={14} />
+                    添加链接
+                  </Button>
+                </div>
+                {linkError !== null && (
+                  <span role="alert" className="record-github-error">
+                    {linkError}
+                  </span>
+                )}
+                {pendingLinks.length > 0 && (
+                  <ul className="record-github-pending">
+                    {pendingLinks.map((url) => (
+                      <li key={url}>
+                        <Tag>{previewLabel(url)}</Tag>
+                        <span className="record-github-url">{url}</span>
+                        <button
+                          type="button"
+                          className="text-button"
+                          aria-label={"移除 " + url}
+                          onClick={() =>
+                            setPendingLinks(
+                              pendingLinks.filter((entry) => entry !== url),
+                            )
+                          }
+                        >
+                          移除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </section>
         </div>
         <div className="calm-action-footer">
           <Button
             htmlType="submit"
-            className={canPublish ? "soft-blue-button" : "primary-button"}
+            className="soft-blue-button"
             loading={pending === "save"}
             disabled={submitBlocked}
           >
             保存草稿
           </Button>
-          {canPublish && (
-            <Button
-              className="primary-button"
-              loading={pending === "publish"}
-              disabled={submitBlocked}
-              onClick={() => void saveAndPublish()}
-            >
-              {item ? "保存并发布" : "新建迭代"}
-            </Button>
-          )}
+          <Button
+            className="primary-button"
+            loading={pending === "publish"}
+            disabled={submitBlocked}
+            onClick={() => void saveAndPublish()}
+          >
+            {publishLabel}
+          </Button>
         </div>
       </form>
     </Modal>

@@ -136,7 +136,7 @@ export class ProjectMemberManagementService {
       throw this.alreadyActive();
     }
 
-    // ADR-047：项目必须始终保留一名组长；无活跃组长的项目（历史或夹具清理
+    // ADR-048：项目必须始终保留一名组长；无活跃组长的项目（历史或夹具清理
     // 残留）重新加人时第一位成员直接成为组长，否则提交时延迟约束会拒绝。
     const joiningRole = await this.resolveJoiningRole(tx, input.projectId);
 
@@ -336,7 +336,7 @@ export class ProjectMemberManagementService {
   }
 
   /**
-   * ADR-047：任命与转移组长。系统管理员可把任意活跃成员设为组长；本项目组长
+   * ADR-048：任命与转移组长。系统管理员可把任意活跃成员设为组长；本项目组长
    * 只能把其他活跃成员设为组长以转交身份（不能自设、不能撤销）。普通成员
    * 403，目标必须为 ACTIVE 成员；组长唯一性由部分唯一索引报 409，撤销组长
    * 只能通过转移（新组长产生时旧组长自动降级）。
@@ -365,7 +365,7 @@ export class ProjectMemberManagementService {
         "只有系统管理员或本项目组长可以任命组长",
       );
     }
-    // ADR-047：组长只能把身份转交给其他活跃成员，不能自设也不能撤销。
+    // ADR-048：组长只能把身份转交给其他活跃成员，不能自设也不能撤销。
     if (
       setter === "LEADER" &&
       (input.role !== "LEADER" || input.userId === input.actorId)
@@ -384,7 +384,7 @@ export class ProjectMemberManagementService {
     if (target === undefined || target.status !== "ACTIVE") {
       throw this.notFound();
     }
-    // ADR-047：项目必须始终保留一名组长，禁止直接降级现任组长；
+    // ADR-048：项目必须始终保留一名组长，禁止直接降级现任组长；
     // 撤销组长只能通过「先任命新组长」的转移路径（新组长产生时旧组长自动降级）。
     if (input.role === "MEMBER" && target.role === "LEADER") {
       throw new ProjectMemberManagementError(
@@ -519,7 +519,7 @@ export class ProjectMemberManagementService {
   }
 
   /**
-   * ADR-047：项目无活跃组长时（只可能来自历史数据或夹具清理），
+   * ADR-048：项目无活跃组长时（只可能来自历史数据或夹具清理），
    * 第一位加入的成员直接成为组长，保证「有成员就必须有组长」。
    */
   private async resolveJoiningRole(

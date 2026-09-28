@@ -1264,7 +1264,7 @@ export function TasksPanel({
                           <InpulseIcon name="gitBranch" size={25} />
                           <strong>该任务还没有迭代记录</strong>
                           <p>
-                            完成任务时可以直接记录，也可以先在迭代记录草稿中保存内容。
+                            可以直接发布一条迭代记录，也可以先保存草稿稍后补充；发布记录不会改变任务状态。
                           </p>
                         </div>
                       ) : (
@@ -1473,8 +1473,11 @@ export function TasksPanel({
           projectId={projectId}
           writable={taskWritable}
           onClose={() => setDraftTarget(null)}
-          // 保存成功后弹窗内部会失效草稿查询，列表在下一次渲染时出现新草稿。
-          onSaved={() => setDraftTarget(null)}
+          // 草稿列表由弹窗内部失效；本任务正式记录列表是另一条只读查询，发布后需自行刷新。
+          onSaved={(_draft, published) => {
+            setDraftTarget(null);
+            if (published) void taskRecords.refetch();
+          }}
         />
       )}
       <Modal

@@ -832,7 +832,25 @@ describe("C-3 任务详情弹窗标签页", () => {
     });
     expect(draftEntry).toBeInTheDocument();
     fireEvent.click(draftEntry);
-    expect(await screen.findByText("新建来源草稿")).toBeInTheDocument();
+    const modal = within(
+      await screen.findByRole("dialog", { name: "新建任务迭代" }),
+    );
+    // ADR-047：任务侧的记录弹窗与迭代记录页同一套排版——归属按来源快照只读呈现，
+    // 页脚直接给发布入口，来源任务未完成也能发布。
+    expect(modal.getByLabelText("迭代标题")).toHaveValue("退款任务");
+    expect(
+      modal.getByText("所属功能").closest(".record-scope-facts"),
+    ).not.toBeNull();
+    // 页脚与迭代记录页同一顺序：淡蓝「保存草稿」在左、主按钮「发布迭代记录」在右。
+    // 是否可提交取决于项目状态是否已知，由 RecordDraftsView 的单测与浏览器用例覆盖。
+    expect(
+      modal.getByRole("button", { name: "发布迭代记录" }).className,
+    ).toContain("primary-button");
+    expect(modal.getByRole("button", { name: "保存草稿" }).className).toContain(
+      "soft-blue-button",
+    );
+    // 任务侧的新建任务迭代与记录页同一套 GitHub 链接区：可直接暂存仓库/PR 链接。
+    expect(modal.getByLabelText("GitHub 链接地址")).toBeInTheDocument();
   });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {

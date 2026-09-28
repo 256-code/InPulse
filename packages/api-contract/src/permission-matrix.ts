@@ -597,9 +597,9 @@ export const permissionMatrix = [
         allowedWhen:
           "ADR-039：本项目任意活跃成员（实时成员关系）" +
           (operationId === "removeProjectMember"
-            ? "；目标为本项目 LEADER 时 409，须先把其他成员设为组长完成转移（ADR-047）"
+            ? "；目标为本项目 LEADER 时 409，须先把其他成员设为组长完成转移（ADR-048）"
             : operationId === "addProjectMember"
-              ? "；新成员默认 role='MEMBER'，项目无活跃组长时首位加入者直接成为 LEADER（ADR-047）"
+              ? "；新成员默认 role='MEMBER'，项目无活跃组长时首位加入者直接成为 LEADER（ADR-048）"
               : ""),
         deniedWith: 403,
       },
@@ -609,7 +609,7 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权与角色；目标为本项目 LEADER 时 409（ADR-047：组长只能先转移再移除）",
+          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权与角色；目标为本项目 LEADER 时 409（ADR-048：组长只能先转移再移除）",
         deniedWith: 403,
       },
     },
@@ -621,7 +621,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-047：系统管理员或本项目组长可转移组长——本项目组长只能把其他活跃成员设为 LEADER（不能自设、不能撤销组长）；普通成员与已降级的前组长一律 403 PROJECT_MEMBER_ROLE_FORBIDDEN，非成员 404",
+          "ADR-048：系统管理员或本项目组长可转移组长——本项目组长只能把其他活跃成员设为 LEADER（不能自设、不能撤销组长）；普通成员与已降级的前组长一律 403 PROJECT_MEMBER_ROLE_FORBIDDEN，非成员 404",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -630,7 +630,7 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；把其他成员设为 LEADER 即完成转移（原组长自动降级），不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，ADR-047 项目必须始终保留一名组长）；目标必须 ACTIVE 成员，LEADER 唯一性冲突 409 PROJECT_MEMBER_LEADER_CONFLICT",
+          "完整系统管理员 Session；把其他成员设为 LEADER 即完成转移（原组长自动降级），不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，ADR-048 项目必须始终保留一名组长）；目标必须 ACTIVE 成员，LEADER 唯一性冲突 409 PROJECT_MEMBER_LEADER_CONFLICT",
         deniedWith: 403,
       },
     },

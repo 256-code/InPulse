@@ -15,6 +15,9 @@ it("renders every entry and appends an empty one on demand", () => {
       onChange={onChange}
     />,
   );
+  // 标题行由字段自己渲染，右侧就是「添加遗留问题」，底部不再重复上限提示。
+  expect(screen.getByText("遗留问题")).toBeInTheDocument();
+  expect(screen.queryByText("最多 50 条，每条最多 10000 字符。")).toBeNull();
   expect(screen.getByLabelText("遗留问题 1")).toHaveValue("第一条");
   expect(screen.getByLabelText("遗留问题 2")).toHaveValue("第二条");
   fireEvent.click(screen.getByRole("button", { name: "添加遗留问题" }));
@@ -61,11 +64,19 @@ it("keeps converted entries visible without a remove action", () => {
   expect(onChange).toHaveBeenCalledWith([{ id: 8, content: "已转任务" }]);
 });
 
-it("shows the empty state and stops adding at the entry limit", () => {
+it("starts from a single empty textarea and stops adding at the entry limit", () => {
+  const onChange = vi.fn();
   const { unmount } = wrap(
-    <LeftoverEntriesField value={[]} onChange={() => {}} />,
+    <LeftoverEntriesField value={[]} onChange={onChange} />,
   );
-  expect(screen.getByText("暂无遗留问题。")).toBeInTheDocument();
+  // 空态不再显示「暂无遗留问题。」，而是直接给一个可输入的空文本域，且没有可移除的条目。
+  expect(screen.queryByText("暂无遗留问题。")).toBeNull();
+  expect(screen.getByLabelText("遗留问题 1")).toHaveValue("");
+  expect(screen.queryByRole("button", { name: "移除" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("遗留问题 1"), {
+    target: { value: "第一条" },
+  });
+  expect(onChange).toHaveBeenCalledWith([{ content: "第一条" }]);
   unmount();
   wrap(
     <LeftoverEntriesField

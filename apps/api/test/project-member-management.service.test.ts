@@ -158,7 +158,7 @@ describe("ProjectMemberManagementService", () => {
 
   it("adds a new ACTIVE member with audit/activity/notification in one transaction", async () => {
     const s = setup();
-    // ADR-047：项目已有活跃组长，新成员以普通成员身份加入。
+    // ADR-048：项目已有活跃组长，新成员以普通成员身份加入。
     s.projects.listMembers.mockResolvedValue([leaderMember, activeMember]);
     s.projects.findLatestMember.mockResolvedValueOnce(removedMember);
     const result = await s.service.addMember(tx, {
@@ -193,7 +193,7 @@ describe("ProjectMemberManagementService", () => {
     );
   });
 
-  it("promotes the first joiner to leader when the project has no active leader (ADR-047)", async () => {
+  it("promotes the first joiner to leader when the project has no active leader (ADR-048)", async () => {
     const s = setup();
     // 默认夹具没有活跃组长（历史数据或夹具清理残留）——加入者直接成为组长。
     s.projects.listMembers.mockResolvedValue([removedMember]);
@@ -376,7 +376,7 @@ describe("ProjectMemberManagementService", () => {
       code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
     });
 
-    // ADR-047：本项目组长可以转移身份——把其他成员设为组长放行。
+    // ADR-048：本项目组长可以转移身份——把其他成员设为组长放行。
     s.projects.setMemberRole.mockResolvedValueOnce({
       ...activeMember,
       role: "LEADER" as const,
@@ -394,7 +394,7 @@ describe("ProjectMemberManagementService", () => {
       member: { userId: 5, role: "LEADER" },
     });
 
-    // ADR-047：组长不能撤销组长，也不能把组长设给自己。
+    // ADR-048：组长不能撤销组长，也不能把组长设给自己。
     s.roleGate.roleSetterRole.mockResolvedValueOnce("LEADER");
     await expect(
       s.service.setRole(tx, {
@@ -422,7 +422,7 @@ describe("ProjectMemberManagementService", () => {
       code: "PROJECT_MEMBER_ROLE_FORBIDDEN",
     });
 
-    // ADR-047：即使系统管理员也不能直接降级现任组长 -> 409
+    // ADR-048：即使系统管理员也不能直接降级现任组长 -> 409
     s.projects.findLatestMember.mockResolvedValueOnce({
       ...activeMember,
       role: "LEADER" as const,

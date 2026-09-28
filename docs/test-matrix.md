@@ -1982,7 +1982,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | F18-MULTI-API-INT-001 | 真实 PostgreSQL | 多条发布、快捷追加与稳定 id 复用 | `record-publication.integration.test.ts`：发布两条遗留问题后再追加一条形成 v4，按稳定 `id` 解除与复活，清空后重填保留 `CONVERTED` 身份与任务链接 | 本地通过 |
 | F18-MULTI-API-INT-002 | 真实 PostgreSQL | 冲突、容量与 HTTP 重放 | 同上：带 `id` 但不在当前版本快照 409 `RECORD_LEFTOVER_CONFLICT`；超长条目与搜索容量溢出 422 且不改写正文、不消耗记录编号；追加路径校验 CSRF、双版本头（`If-Match` + `X-Record-Version`）与数据库幂等重放，撤回权限后重放返回 404 | 本地通过 |
 | F18-MULTI-API-INT-003 | 真实 PostgreSQL | 转任务选择与条目状态 | `leftover-task.integration.test.ts`：多条活跃条目缺 `leftoverItemId` 409 `LEFTOVER_SELECTION_REQUIRED`（`details.leftoverItemIds`）、已解决条目 409 `LEFTOVER_NOT_ACTIVE`、带显式 id 转任务后仅该条变 `CONVERTED` 并保留正文 | 本地通过 |
-| F18-MULTI-WEB-UNIT-001 | Web 单元 | 多条条目字段 | `LeftoverEntriesField.test.tsx` 4 例：逐条渲染且「添加遗留问题」追加空条目、就地编辑并只移除被点击的一行、已转任务条目只展示「已转任务，保留关联」且没有移除入口、空态与 50 条上限 | 本地通过 |
+| F18-MULTI-WEB-UNIT-001 | Web 单元 | 多条条目字段 | `LeftoverEntriesField.test.tsx` 4 例：逐条渲染且「添加遗留问题」追加空条目、就地编辑并只移除被点击的一行、已转任务条目只展示「已转任务，保留关联」且没有移除入口、空态直接给一个可输入文本域且 50 条时禁用添加 | 本地通过（2026-09-28 空态口径改为直接可输入） |
 | F18-MULTI-WEB-UNIT-002 | Web 单元 | 草稿、「完成任务并记录」与修订三条路径 | `RecordDraftsView.test.tsx`、`CompleteWithRecord.test.tsx`、`EditPublishedRecord.test.tsx`：三条路径共用条目字段，已有条目被移除时才出现确认勾选且未勾选不能保存 | 本地通过 |
 | F18-MULTI-E2E-001 | Playwright | 多条录入、快捷追加与历史保留 | `record-publishing.spec.ts`：发布带多条遗留问题的记录后，详情页「追加遗留问题」不改正文形成 v4、新条目可见、版本差异仍保留原条目；`task-completion.spec.ts` 覆盖「完成任务并记录」的多条路径与容量 422 提示 | 本地通过（定向 4 文件 11 例） |
 
@@ -2621,7 +2621,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 语义：「新建迭代」= 保存草稿后立刻发布成正式 v1（`publishChangeRecord`），调用方式与草稿详情的 `PublishRecordButton` 同构（CSRF + `If-Match` 用创建响应的 `rowVersion` + 独立 `Idempotency-Key`）；「保存草稿」语义不变，仍是只写草稿。
 - 文案：新建时主按钮为「新建迭代」；编辑一条未发布的独立草稿时同一动作为「保存并发布」。
 - 位置与配色：页脚两键右对齐，「保存草稿」在左、用既有淡蓝 `.soft-blue-button`（`#e6f2ff` / `#2472c3`），主按钮在右、用 `.primary-button`（`#1466d8` / 白字），两键同为 35px 高。
-- 来源任务的草稿不给发布入口：带 `taskId` 的记录必须由任务完成流程（F-19）在同一事务里发布，服务端也会因为任务不是 DONE 而拒绝，因此 `canPublish = !source && (item ? item.taskId === null : true)`，这种情况页脚维持单个主按钮「保存草稿」。
+- 来源任务的草稿不给发布入口（2026-09-28 已由 [ADR-047](adr/ADR-047.md) 取代，见文末「迭代记录发布与任务完成解耦」小节）：带 `taskId` 的记录当时必须由任务完成流程（F-19）在同一事务里发布，服务端也会因为任务不是 DONE 而拒绝，因此 `canPublish = !source && (item ? item.taskId === null : true)`，这种情况页脚维持单个主按钮「保存草稿」。
 - 发布失败不丢内容、不重复建：先建草稿再发布，发布失败时把弹窗切到刚建出来的那条草稿的编辑态并刷新草稿列表，重试是更新同一条而不是又建一条；错误仍走既有 `mutation.error` 提示。
 - 成功后跳转：`onSaved(draft, published)` 增加第二个参数，`RecordDraftsView` 在 `published` 非空时用 `publishedId` 落 URL（正式记录详情），否则维持原来的 `recordId`（草稿详情）。
 
@@ -2631,15 +2631,15 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | DRAFT-FOOTER-PUBLISH-UNIT-002 | Web 单元 | 成功后落到正式记录 | 发布成功后编辑弹窗关闭，且不再打开「草稿详情」（URL 用 `publishedId` 而不是 `recordId`） | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-UNIT-003 | Web 单元 | 按钮层级 | 新建弹窗：「保存草稿」类名含 `soft-blue-button`、「新建迭代」类名含 `primary-button` | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-UNIT-005 | Web 单元 | 发布失败不重复建草稿 | `publishChangeRecord` 以 422 失败后弹窗留在原地并切到该草稿的编辑态（按钮变「保存并发布」、标题输入仍是原值），再点一次走 `updateIndependentRecordDraft(1, 12, …)` 且 `createIndependentRecordDraft` 仍只调用一次 | 本地通过 |
-| DRAFT-FOOTER-PUBLISH-UNIT-004 | Web 单元 | 来源草稿不给发布入口 | 打开「新建来源草稿」弹窗：无「新建迭代」按钮，「保存草稿」类名含 `primary-button` | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-UNIT-004 | Web 单元 | 来源草稿页脚（2026-09-28 随 ADR-047 更新） | 打开来源草稿弹窗：主按钮为「发布迭代记录」且类名含 `primary-button`，「保存草稿」类名含 `soft-blue-button`，只读归属行 `.record-scope-facts` 可见 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-BROWSER-001 | 浏览器实测 | 位置与配色 | `/records?projectId=1` 打开「新建迭代记录」：页脚两键高 35px，「保存草稿」`rgb(230,242,255)` / `rgb(36,114,195)` 在 x=941，「新建迭代」`rgb(20,103,216)` / 白字在 x=1031（右端） | 本地通过 |
-| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案 | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「保存并发布」（蓝），提示语同步为「保存草稿可继续编辑；「保存并发布」会立即生成正式编号与 v1，之后只能新增版本或作废。」 | 本地通过 |
+| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案 | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「保存并发布」（蓝）。弹窗内原有的提示语（「保存草稿可继续编辑；…之后只能新增版本或作废…」）已按 2026-09-28 产品反馈整段删除，不再断言该文案 | 待复测（提示语删除后未重跑浏览器实测） |
 | DRAFT-FOOTER-PUBLISH-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-GATE-001 | 静态门禁 | 类型、风格与依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`（279 模块 1359 依赖）通过 | 本地通过 |
 
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号只读量测，未点「新建迭代」本身，未新增或修改业务数据）。
 
-未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿为什么没有发布入口是产品口径问题，若要求补上需先确认 F-19 任务完成事务的边界；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿当时没有发布入口，属产品口径问题；2026-09-28 已由 [ADR-047](adr/ADR-047.md) 定案改为有发布入口（见文末「迭代记录发布与任务完成解耦」小节）；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
 
 ## 任务中心删除统计卡与「未完成 / 已完成」筛选（C，2026-09-21 本地落库）
 
@@ -3932,9 +3932,9 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链（本批未触碰后端、数据库与生成物，由推送后 CI 覆盖）；② 修复的是并行改造方尚未复跑的改动留下的红灯，若对方在别处继续改同一文件，需以最新 `origin/test` 为准重新 rebase；③ 本批含测试定位与格式化改动，`MergeIntoMainTaskModal.test.tsx` 按 §8 属测试代码，产品代码零改动。
 
-## 2026-09-28 项目组长唯一性与转移（ADR-047，用户指示，本地落库）
+## 2026-09-28 项目组长唯一性与转移（ADR-048，用户指示，本地落库）
 
-用户三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）把 ADR-033 只做了一半的组长不变量补齐：**只要项目还有活跃成员，就必须恰好一名 `ACTIVE` 组长**，组长只能**转移**、不能撤销、不能被直接移除。数据库最终防线是迁移 `0026_project_leader_invariant.sql` 的延迟约束触发器（提交期调用 `app.assert_project_leader`）；服务端 `setProjectMemberRole` 从「仅系统管理员可任命/撤销」改为「系统管理员或现任组长本人可转移」，撤销组长返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；`addProjectMember` 在项目无活跃组长时把首位加入者直接写成 `LEADER`。零活跃成员的项目在数据库层保持合法（夹具清理与历史数据的删除路径），「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，不另设错误码（详见 [ADR-047](adr/ADR-047.md)）。
+用户三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）把 ADR-033 只做了一半的组长不变量补齐：**只要项目还有活跃成员，就必须恰好一名 `ACTIVE` 组长**，组长只能**转移**、不能撤销、不能被直接移除。数据库最终防线是迁移 `0026_project_leader_invariant.sql` 的延迟约束触发器（提交期调用 `app.assert_project_leader`）；服务端 `setProjectMemberRole` 从「仅系统管理员可任命/撤销」改为「系统管理员或现任组长本人可转移」，撤销组长返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；`addProjectMember` 在项目无活跃组长时把首位加入者直接写成 `LEADER`。零活跃成员的项目在数据库层保持合法（夹具清理与历史数据的删除路径），「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，不另设错误码（详见 [ADR-048](adr/ADR-048.md)）。
 
 | 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
 | --- | --- | --- | --- | --- |
@@ -3950,3 +3950,80 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | LEADER-CONTRACT-001 | 契约 / 权限 | 摘要与幂等契约版本、权限矩阵同步 | `contract:generate` 产出 5 个产物（`openapi.json`、路由指纹、`apps/web/src/generated/api/*`）；`contract:drift` 一致；`contract:validate` **98 条路由**；`permissions:check` **98/98**；`setProjectMemberRole.idempotencyContractVersion` = `2.2.0` | 本地通过 |
 
 未运行 / 已知偏差：① 并发竞态（「移除成员」与「转移组长」并发提交落到零组长）未加真实并发测试，当前由数据库以 `23514` 拒绝后提交者兜底且不映射为 409，与既有 `app.assert_project_bootstrap` 的处理方式一致；② GitHub Actions、`pnpm check` 整链、全量 `test:unit` / `test:integration` / `test:e2e` 未运行；③ 演示库 `app` 未应用 `0026`、未重载新种子；④ 为让 `app_it` 记录新校验和（迁移注释修正改变 checksum）重建了本机集成测试库并重新 bootstrap + 迁移。
+
+## 迭代记录发布与任务完成解耦（ADR-047，用户指示，2026-09-28 本地落库）
+
+用户 2026-09-28 在任务详情「迭代记录」页定案：「迭代记录只是记录一下迭代情况，不需要和任务完成挂钩，没有迭代记录也可以点击完成任务」。落 [ADR-047](adr/ADR-047.md)：`POST /change-records/{recordId}/publish` 不再以来源任务 `DONE` 为门禁，`TODO`/`CANCELED` 来源草稿同样可发布且不改变任务状态；任务详情「迭代记录」页的「记录一次迭代」弹窗与 `/records` 新建弹窗共用同一实现（只读归属行 + 淡蓝「保存草稿」+ 主按钮「发布迭代记录」），默认跟踪当前任务。
+
+锁定口径：
+
+- 服务端只删掉「完成状态」这一个判定：`RECORD_SOURCE_NOT_DONE` 错误码整体下线；锁序（预读 `task_id` → 按「任务 → 记录」取锁）、锁内重查 `task_id`/`moduleId`/`featureId`/`impactFeatureIds`、`RECORD_SCOPE_CONFLICT`、`RECORD_ALREADY_PUBLISHED` 与发布通知收件人集合（作者 / 处理人 / 当前任务负责人 / 真实所属或影响功能创建者）全部保留。
+- 发布不写 `tasks.work_status`、完成信息与 `task_status_history`；F-19「完成任务并发布记录」组合事务保留，仍然只有 `ACTIVE`/`TODO` 任务可以完成，两者互不写对方状态；功能设计 §15.5 的「不得出现已发布记录关联未完成任务」只约束该组合事务内部。
+- 契约与权限无变更：没有新增或修改路由、Schema、OpenAPI 与生成客户端；只同步 `docs/permissions.md` 的 `publishChangeRecord` 行口径。
+- 前端：来源草稿弹窗新增只读归属行（`.record-scope-facts`：所属项目 / 所属模块 / 记录范围 / 所属功能或影响功能），页脚不再因来源而隐藏发布按钮；发布成功后同时失效 `["task-marks"]` 计数，任务状态不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-PUBLISH-DECOUPLE-API-001 | 真实 PostgreSQL 集成 | 未完成来源可发布且不改任务 | `published-records.integration.test.ts` 的 `TODO`/`CANCELED` 两例由「拒绝且不改动」改为「在锁内通过（`record.status` 仍为 `DRAFT`、`source.workStatus` 原样）且任务与草稿不变」，并发重开一例断言等锁重读后仍发布 | 本地通过 |
+| RECORD-PUBLISH-DECOUPLE-API-002 | 真实 HTTP 集成 | 发布不改任务行与状态历史 | `record-publication.integration.test.ts` 新增 `publishes an unfinished source without touching its task state or history`：发布 `TODO` 来源后 200、任务行快照前后相等、`task_status_history` 仍 1 条、同幂等 Key 重放返回同一 v1 | 本地通过 |
+| RECORD-PUBLISH-DECOUPLE-WEB-UNIT-001 | Web 单元 | 来源草稿就地发布 | `RecordDraftsView.test.tsx` 新增 `publishes a source draft in place while the source task stays unfinished`：来源 `workStatus: "TODO"` 时点击「发布迭代记录」→ `createIndependentRecordDraft` 与 `publishChangeRecord` 各一次、`If-Match` 为草稿 `"1"`、`updateIndependentRecordDraft` 未被调用 | 本地通过 |
+| RECORD-DRAFT-SCOPE-FACTS-WEB-UNIT-001 | Web 单元 | 来源草稿只读归属行与页脚 | `TasksPanel.test.tsx` 的「记录一次迭代」用例：弹窗标题为任务标题、`.record-scope-facts` 可见、「发布迭代记录」为 `primary-button`、「保存草稿」为 `soft-blue-button` | 本地通过 |
+| RECORD-PUBLISH-DECOUPLE-E2E-001 | 浏览器实测（E2E） | 未完成任务直接发布且状态不变 | `record-publishing.spec.ts` 新增 `F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）`：建任务（不完成）→ 发布 → 本任务列表该行含「已发布」、tab 名「迭代记录 1」、`.task-status-history > li` 仍 1 条、「完成任务」仍 enabled | 本地通过 |
+| RECORD-PUBLISH-DECOUPLE-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 562 例通过 | 本地通过 |
+| RECORD-PUBLISH-DECOUPLE-E2E-FULL-001 | E2E（全量） | 无新增失败 | `pnpm --filter @inpulse/e2e exec playwright test` → **57 passed (4.0m)**（原 56 + 新增 1） | 本地通过 |
+
+本地实际执行（2026-09-28，全部通过）：`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/web test`（85 文件 562 例）、`pnpm --filter @inpulse/api exec vitest run --config vitest.integration.config.ts test/published-records.integration.test.ts test/record-publication.integration.test.ts`（2 文件 22 例）、`pnpm --filter @inpulse/api... build`、全量 `pnpm --filter @inpulse/e2e exec playwright test`（57 passed (4.0m)）、`pnpm exec prettier --write`（本轮改动文件）。
+
+未运行 / 已知偏差：① 未跑 `pnpm test:integration` 全量、`pnpm build` 全量、五个生产镜像与 Trivy 扫描、`pnpm check` 整链；② **GitHub Actions 未跑**（推送后由 CI 执行）；③ 本批含服务端业务逻辑与前端产品代码改动，按仓库规则需非作者人工评审；④ 既有 `DRAFT-FOOTER-PUBLISH-BROWSER-002` 的提示语末句未重跑浏览器实测（见上表标注）。
+
+### 弹窗头部与归属条调整（2026-09-28 追加）
+
+产品截图反馈两点：① 弹窗头部两行「来源任务 · X / 新建来源草稿」措辞不对，主体是这次任务迭代；② 来源归属逐项各占一行、另有一段独立说明，占位过多，希望更紧凑。
+
+- 文案：`RecordDraftEditorModal` 的 `eyebrow` 来源分支由「来源任务 · {title}」改为「任务 · {title}」，`title` 来源分支由「新建来源草稿」改为「新建任务迭代」；独立草稿仍是「新建迭代记录」、编辑态仍是「编辑草稿」。`RecordDraftsView` 区块内的「新建来源草稿」**按钮**按既有口径不动，只改弹层标题。
+- 版式：来源分支改为一张浅灰卡片（`.record-source-panel`）——首行「来源任务 {标题} · 处理人 {姓名}」，次行用 `.record-scope-facts` 的 flex 行内联展示四项归属（窄屏自然折行）；删除原来单独的说明段落，归属行标签与值仍在同一 dt/dd 组内。2026-09-28 追加：首行右侧的「来源快照 · 只读」徽标按产品反馈删除，头部只留来源任务与处理人一行。
+- 断言同步：按 `dialog` 名称查找的 `TasksPanel.test.tsx`、`RecordDraftsView.test.tsx`、`record-drafts.spec.ts`、`task-completion.spec.ts`、`record-publishing.spec.ts` 全部改为「新建任务迭代」；按 `button` 名称查找的「新建来源草稿」入口断言不变，「所属项目 / 记录范围 / 所属功能」等文本断言不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-MODAL-TITLE-WEB-UNIT-001 | Web 单元 | 任务侧弹窗标题与归属行 | `TasksPanel.test.tsx` 与 `RecordDraftsView.test.tsx` 均以 `findByRole("dialog", { name: "新建任务迭代" })` 打开，并继续断言 `.record-scope-facts` 归属行与页脚按钮类名 | 本地通过 |
+| RECORD-DRAFT-SCOPE-PANEL-WEB-UNIT-001 | Web 单元 | 归属条改版后文本结构不回归 | `RecordDraftsView.test.tsx` 的 `getByText("支付模块").closest(".record-scope-facts")` 仍命中，`textContent` 仍含「所属项目支付项目」与「记录范围模块」 | 本地通过 |
+| RECORD-DRAFT-MODAL-TITLE-E2E-001 | E2E | 三个含来源草稿弹窗的 spec 全通过 | `pnpm --filter @inpulse/e2e exec playwright test tests/record-drafts.spec.ts tests/task-completion.spec.ts tests/record-publishing.spec.ts` → **9 passed (1.1m)** | 本地通过 |
+| RECORD-DRAFT-SCOPE-PANEL-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 562 例通过；`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过 |
+
+未运行 / 已知偏差：① 本轮只跑 `record-drafts`/`task-completion`/`record-publishing` 三个 E2E 文件（9 例），未重跑全量 57 例；② **GitHub Actions 未跑**；③ 版式为视觉改动，需非作者人工评审。
+
+### 遗留问题字段去掉空态文案（2026-09-28 追加）
+
+产品截图反馈：记录表单里遗留问题区「暂无遗留问题。」这类解释文字太多，希望直接就是一个输入框加一个添加按钮。
+
+- 口径：`LeftoverEntriesField` 在 `value` 为空时不再渲染「暂无遗留问题。」，改为直接渲染一个空文本域（`aria-label` 为「{label} 1」），首次输入即落成第一条真实条目；这个占位条目不显示「移除」（没有可移除的内容），有内容后才出现。字段仍可空：提交时 `remainingIssues` 仍是空数组，调用方的「每条遗留问题都不能为空」校验不变。
+- 影响面：草稿弹窗（`RecordDraftEditorModal`）、任务完成弹窗（`CompleteWithRecord`）、正式记录修订（`EditPublishedRecord`）三处共用同一组件，一起生效；只读展示的「暂无已知遗留问题」文案（草稿详情、记录详情）不动。
+- 样式：`leftover-entries.css` 删除不再使用的 `.leftover-entry-empty`。
+- 2026-09-28 追加：标题「遗留问题（选填，可添加多条）」与「添加遗留问题」按钮合并成一行（标题在左、按钮靠右，`.leftover-field-head` / `.leftover-field-label`），并删掉原底部动作行里的「最多 50 条，每条最多 10000 字符。」提示——上限仍由按钮在第 50 条时禁用兜底。字段标题改由 `LeftoverEntriesField` 自己渲染，三处调用方（草稿弹窗 / 任务完成弹窗 / 正式修订）随之删掉重复的标题文本。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-EMPTY-WEB-UNIT-001 | Web 单元 | 空态即输入框 | `LeftoverEntriesField.test.tsx` 的空态用例：无「暂无遗留问题。」文本、`遗留问题 1` 文本域值为空、没有「移除」按钮，输入后 `onChange([{ content: "第一条" }])`，50 条时「添加遗留问题」禁用 | 本地通过 |
+| LEFTOVER-EMPTY-WEB-UNIT-002 | Web 单元 | 修订页移除最后一条回到空态 | `EditPublishedRecord.test.tsx`：点「移除」与请求失败重试后，均由断言「暂无遗留问题。」改为断言 `遗留问题（选填，可添加多条） 1` 文本域值为空 | 本地通过 |
+| LEFTOVER-EMPTY-E2E-001 | E2E | 四面表单仍可通过 | `record-drafts` / `task-completion` / `record-publishing` / `leftover-task` 四个 spec → **12 passed (1.4m)** | 本地通过 |
+| LEFTOVER-HEAD-ADD-WEB-UNIT-001 | Web 单元 | 标题行右侧按钮与去提示 | `LeftoverEntriesField.test.tsx`：标题「遗留问题」由字段渲染、「添加遗留问题」按钮存在、`queryByText("最多 50 条，每条最多 10000 字符。")` 为 null | 本地通过 |
+| LEFTOVER-EMPTY-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 562 例通过 | 本地通过 |
+
+未运行 / 已知偏差：① 未重跑全量 57 例 E2E（只跑上述 12 例）；② **GitHub Actions 未跑**；③ 空态去掉文案属交互变化，需非作者人工评审。
+
+### 新建迭代弹窗内置 GitHub 链接（2026-09-28 追加）
+
+口径：新建 / 编辑迭代弹窗（`RecordDraftEditorModal`）表单末尾新增「GitHub 链接」区块。编辑已有草稿时内联复用 `ExternalLinksPanel`（`variant="inline"`、`targetType="CHANGE_RECORD"`）的列表与增删；新建（独立 / 来源）草稿还没有记录 ID，改为先暂存，草稿落库后再逐条 `addExternalLink` 关联，因此「保存草稿」与「新建迭代 / 保存并发布」两条页脚路径都会带上链接。只接受 `github.com` 的 HTTPS 链接（`previewLabel` 是唯一口径，非法输入与重复条目各自给出 `role="alert"` 文案）。关联链接会经 `RecordLinkCommandPort.advance` 推进 `app.change_records.row_version`，所以写入后必须把本地 `rowVersion` 刷新到最新，紧随其后的发布才不会被 `If-Match` 挡下。区块处于表单末尾，条目或错误出现时对区块执行 `scrollIntoView`，避免反馈落在弹窗滚动折线下方。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-GITHUB-LINK-WEB-UNIT-001 | Web 单元 | 暂存链接随草稿落库并关联 | `RecordDraftsView.test.tsx`「stages a GitHub link in the new-draft dialog and associates it after the draft is created」：`https://gitlab.com/...` 被拦下且 `addExternalLink` 未被调用，`https://github.com/inpulse/inpulse/pull/123` 暂存为 `PR #123`；保存草稿后 `addExternalLink("CHANGE_RECORD", 12, { url })` 带 `If-Match: "1"`、字符串幂等键与非空 CSRF | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-WEB-UNIT-002 | Web 单元 | 发布使用刷新后的记录版本 | 同文件「publishes with the record version advanced by the links staged in the dialog」：`listExternalLinks` 版本 1、`addExternalLink` 返回版本 2 时，`publishChangeRecord` 的 `If-Match` 必须是 `"2"`；临时回退该修复可复现失败（`expected '"1"' to be '"2"'`） | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-WEB-UNIT-003 | Web 单元 | 任务侧弹窗同样带链接区 | `TasksPanel.test.tsx` 的来源弹窗用例新增断言 `modal.getByLabelText("GitHub 链接地址")` 存在（不为空） | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-E2E-001 | E2E | 弹窗内暂存 → 发布 → 正式记录可见 | `external-links.spec.ts`「F22 新建迭代弹窗内直接暂存 GitHub 链接，发布后落到正式记录」：非法链接给出「只接受 github.com 的 HTTPS 链接，请检查输入。」；合法链接暂存后 `.record-github-pending li` 恰为 1 行；点「新建迭代」后弹窗关闭，正式记录详情「GitHub 关联」里出现 `PR #22311` | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-E2E-002 | E2E | 全量回归不绿不交付 | `pnpm --filter @inpulse/e2e exec playwright test`（跑前先 `pnpm --filter @inpulse/api... build` 重建 dist）→ **58 passed (4.0m)**；本批新增用例 2.1s 通过，`F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）` 3.2s 通过 | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 564 例通过 | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-GATE-001 | 静态门禁 | 类型与风格 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过 | 本地通过 |
+
+未运行 / 已知偏差：① 全量 E2E 已在推送 `12b22fc` 后补跑并通过（见 RECORD-DRAFT-GITHUB-LINK-E2E-002），定向回归只跑过 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑且不会有**——推送 `test` 不触发 CI（`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发）；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。

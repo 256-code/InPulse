@@ -401,7 +401,7 @@ export function ExternalLinksPanel({
     </>
   );
 }
-function previewLabel(raw: string): string | null {
+export function previewLabel(raw: string): string | null {
   try {
     const parsed = new URL(raw.trim());
     if (

@@ -351,9 +351,9 @@
 - 只改顺序，不改颜色与看板：卡片取色、优先级徽章、「遗留问题」徽章与截止日期文案不变；任务看板 `listForBoard` 的四桶口径与其未完成桶「优先级 → 截止时间」排序不受影响（ADR-037 §3）。
 - 回归防线：`apps/api/test/task-list-order.test.ts`（游标版本与段数）、`apps/api/test/aggregate-read-ports.integration.test.ts`（真库顺序矩阵，含「高优先级无遗留 vs 普通优先级有遗留」对照）、`apps/api/test/aggregate-read-api.integration.test.ts`（HTTP 层顺序与分页不重不漏）、`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`（前端镜像顺序）。改动排序口径时必须同时跑这四处。
 
-## 2026-09-28 ADR-047 项目组长唯一性与转移说明
+## 2026-09-28 ADR-048 项目组长唯一性与转移说明
 
-按用户 2026-09-28 的三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任方案「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）补齐组长不变量（[ADR-047](./docs/adr/ADR-047.md)）。因此：
+按用户 2026-09-28 的三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任方案「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）补齐组长不变量（[ADR-048](./docs/adr/ADR-048.md)）。因此：
 
 - **有活跃成员 ⇒ 恰好一名 ACTIVE 组长**：迁移 `0026_project_leader_invariant.sql` 回填存量无组长项目（优先仍在任的创建者，否则最早加入者），并新增可延迟约束触发器 `project_members_leader_complete`（提交期调用 `app.assert_project_leader`）。**必须可延迟**：转移是「先降级原组长、再提升新组长」两步，中途必然零组长，而 `project_members_one_leader` 是不可延迟的部分唯一索引。
 - **组长只能转移，不能撤销或移除**：`removeProjectMember` 对组长 409 `PROJECT_MEMBER_LEADER_PROTECTED`（含系统管理员）；`setProjectMemberRole` 把现任组长降级为 `MEMBER` 返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；「撤销组长」这条路径整体取消，没有「先撤销再指定」的替代流程。
@@ -362,4 +362,4 @@
 - **无组长项目的加入规则**：`addProjectMember` 在项目没有活跃组长时把首位加入者直接写成 `LEADER`（`resolveJoiningRole`），否则该写入会被数据库不变量在提交时拒绝。
 - **幂等契约版本**：`setProjectMemberRole` 的 `idempotencyContractVersion` 由 `2.1.0` 升到 `2.2.0`（授权语义变化），旧 Key 在新契约下 409；`addProjectMember`（`1.2.0`）与 `removeProjectMember`（`1.3.0`）的请求/响应 Schema 与重放策略未变，版本保持。
 - **夹具与种子**：`app.project_members` 的所有插入夹具必须显式给出 `role`（测试库、E2E `global-setup`、`apps/ops` 集成、`database/poc` 共 42 处已补齐）；移除成员必须走 `apps/api/test/database.helpers.ts` 的 `removeMember`（在事务内先把组长身份转移给其他活跃成员再标记 `REMOVED`），直接 `UPDATE … status='REMOVED'` 移除创建者/组长会在提交期被 `project_members_leader_complete` 拒绝；`database/seed/demo-data.sql` 的 `project_members` 已包含 `role` 列，修改种子列清单时必须同步 `scripts/export-demo-seed.mjs`。
-- 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-047 与本节的现行规则为准。
+- 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-048 与本节的现行规则为准。
