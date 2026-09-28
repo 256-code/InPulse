@@ -45,6 +45,13 @@ interface CalmSelectBaseProps {
   readonly loading?: boolean | undefined;
   /** 是否允许输入搜索；member 形态默认开启。 */
   readonly searchable?: boolean | undefined;
+  /**
+   * 服务端搜索：传入后由调用方按关键词取数（过滤发生在远端），组件关闭本地
+   * `filterOption`，选项即调用方当前提供的列表；需与 `searchable` 一起使用。
+   */
+  readonly onSearch?: ((value: string) => void) | undefined;
+  /** 弹层无匹配项时的内容；缺省用 antd 空态。 */
+  readonly notFoundContent?: React.ReactNode;
   readonly className?: string | undefined;
   readonly ariaLabel?: string | undefined;
   /** 触发器内部输入框的 id；与 <label htmlFor> 配合保持表单语义。 */
@@ -96,6 +103,27 @@ export function avatarColorOf(name: string): string {
 const iconTextOf = (option: CalmSelectOption) =>
   option.iconText ?? option.label.slice(0, 1);
 
+/**
+ * 本地过滤：label + description 的大小写不敏感包含匹配。服务端搜索模式下结果集由
+ * 远端决定（远端可能按编号等本地看不到的字段命中），此时组件改用 `filterOption={false}`。
+ */
+function filterOptionByLabel(input: string, option?: unknown): boolean {
+  const needle = input.trim().toLowerCase();
+  if (needle.length === 0) {
+    return true;
+  }
+  const data = option as unknown as CalmSelectOption | undefined;
+  if (data === undefined) {
+    return false;
+  }
+  const haystack = (
+    data.label +
+    " " +
+    (data.description ?? "")
+  ).toLowerCase();
+  return haystack.includes(needle);
+}
+
 const OptionAvatar: React.FC<{ readonly option: CalmSelectOption }> = ({
   option,
 }) =>
@@ -119,6 +147,8 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
     disabled,
     loading,
     searchable,
+    onSearch,
+    notFoundContent,
     className,
     ariaLabel,
     id,
@@ -344,19 +374,9 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
       disabled={disabled ?? false}
       loading={loading ?? false}
       showSearch={withSearch}
-      filterOption={(input, option) => {
-        const needle = input.trim().toLowerCase();
-        if (needle.length === 0) {
-          return true;
-        }
-        const data = option as unknown as CalmSelectOption;
-        const haystack = (
-          data.label +
-          " " +
-          (data.description ?? "")
-        ).toLowerCase();
-        return haystack.includes(needle);
-      }}
+      {...(onSearch === undefined ? {} : { onSearch })}
+      {...(notFoundContent === undefined ? {} : { notFoundContent })}
+      filterOption={onSearch === undefined ? filterOptionByLabel : false}
       // antd 多选模式自带选中图标，会和 optionRender 里按形态渲染的勾重复成一个选项两个勾；
       // 这里关掉自带的，选中态统一由 `.calm-select-check` 表达。
       menuItemSelectedIcon={null}

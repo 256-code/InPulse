@@ -8,6 +8,10 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * 仍是 `:visible`，全局查选项会命中旧弹层里的隐藏项而永久卡住。
  * 选项 title 即 CalmSelect 的 option label：字符串精确匹配，版本号这类含
  * 动态时间的用正则。
+ *
+ * 服务端搜索的下拉（如合并弹窗的「主任务」，远端要按编号/标题检索、最小长度 2）
+ * 需要先输入关键词再等候选返回：给 `pickCalmSelectOption` 传第 4 个参数 `query` 即可，
+ * 它在点开触发器后、读取 `aria-controls` 前先把关键词敲进去。
  */
 
 function pageOf(scope: Page | Locator): Page {
@@ -38,10 +42,13 @@ export function calmSelectTrigger(
 async function openListbox(
   scope: Page | Locator,
   label: string,
+  query?: string,
 ): Promise<Locator> {
   const page = pageOf(scope);
   const input = scope.getByLabel(label).first();
   await calmSelectTrigger(scope, label).click();
+  if (query !== undefined) await input.fill(query);
+  // 填入关键词后输入框被重渲染（rc-select 受控搜索值），必须重新取一次 aria-controls。
   const listId = await input.getAttribute("aria-controls");
   const listbox =
     listId === null || listId === ""
@@ -51,13 +58,19 @@ async function openListbox(
   return listbox;
 }
 
-/** 点开 CalmSelect 并选择目标选项（按选项 title 匹配）。 */
+/**
+ * 点开 CalmSelect 并选择目标选项（按选项 title 匹配）。
+ *
+ * `query`：服务端搜索的下拉专用，关键词会先写进触发器；候选由远端返回，
+ * 所以调用方要保证关键词已能命中目标项（通常直接用选项标题本身）。
+ */
 export async function pickCalmSelectOption(
   scope: Page | Locator,
   label: string,
   option: string | RegExp,
+  query?: string,
 ): Promise<void> {
-  const listbox = await openListbox(scope, label);
+  const listbox = await openListbox(scope, label, query);
   const item =
     typeof option === "string"
       ? listbox.getByTitle(option, { exact: true })

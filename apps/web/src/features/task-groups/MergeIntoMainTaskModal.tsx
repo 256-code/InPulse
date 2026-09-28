@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import { CalmSelect } from "@features/common/components/CalmSelect";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
@@ -31,6 +32,7 @@ export interface MergeIntoMainTaskModalProps {
 }
 
 const SEARCH_MIN_LENGTH = 2;
+const NO_MATCH_TEXT = "当前项目内没有匹配的任务。";
 
 export function MergeIntoMainTaskModal({
   open,
@@ -91,6 +93,37 @@ export function MergeIntoMainTaskModal({
         item.projectId === task.projectId &&
         item.entityId !== task.id,
     ) ?? [];
+
+  // 选中项必须留在 options 里：远端结果换一批后若它不在其中，
+  // CalmSelect 查不到 label，触发器会退化成裸 id。
+  const candidateItems =
+    mainTask !== null &&
+    !candidates.some((item) => item.entityId === mainTask.entityId)
+      ? [mainTask, ...candidates]
+      : candidates;
+
+  const searchFailed = searchQuery.isError;
+  // 关键词已达最小长度但防抖尚未落地（searchTerm 还是空）也按「检索中」处理：
+  // 否则这 350ms 会先显示「没有匹配」，像是搜过且确实无结果。
+  const searching =
+    keyword.trim().length >= SEARCH_MIN_LENGTH &&
+    (searchTerm.length < SEARCH_MIN_LENGTH || searchQuery.isFetching);
+  // 弹层空态：搜索不可用、检索中、未达最小长度、确实无匹配。
+  const notFoundText = searchFailed
+    ? "搜索暂时不可用，请稍后重试。"
+    : searching
+      ? "正在搜索任务…"
+      : keyword.trim().length < SEARCH_MIN_LENGTH
+        ? `输入任务编号或标题（至少 ${SEARCH_MIN_LENGTH} 个字符），仅搜索当前项目。`
+        : NO_MATCH_TEXT;
+  // 已选主任务会保留在 options 里（触发器要显示标题），所以远端无匹配时弹层非空、
+  // notFoundContent 不会渲染；此时在下方补同一句无匹配提示，免得像「命中」了。
+  const showNoMatchHint =
+    mainTask !== null &&
+    !searchFailed &&
+    !searching &&
+    keyword.trim().length >= SEARCH_MIN_LENGTH &&
+    candidates.length === 0;
 
   async function rescan() {
     setBusy(true);
@@ -177,12 +210,9 @@ export function MergeIntoMainTaskModal({
                   : "暂时无法合并，输入已保留，可重试。"
       : "暂时无法合并，输入已保留，可重试。";
 
-  const searchFailed = searchQuery.isError;
-
   return (
     <Modal
       className="catalog-modal"
-      eyebrow={task.code + " · " + task.title}
       title="合并到主任务"
       open={open}
       body
@@ -207,74 +237,64 @@ export function MergeIntoMainTaskModal({
         </>
       }
     >
-      <p>
-        当前任务：{task.code} {task.title}。合并后当前任务作为分支任务保留，
-        不删除、不覆盖任何历史。
-      </p>
-      <label htmlFor="merge-main-search">
-        主任务（搜索任务编号或标题，至少 {SEARCH_MIN_LENGTH} 个字符）
-      </label>
-      <Input
+      {/* 2026-09-28 产品反馈：正文太啰嗦、当前任务不醒目，改为聚焦卡片 + 短标签
+          （原先的散文句与弹层眉标重复了同一段「编号 + 标题」）。 */}
+      <div className="merge-source-task">
+        <div className="merge-source-task-head">
+          <span className="merge-source-task-label">当前任务</span>
+          <span className="merge-source-task-code">{task.code}</span>
+        </div>
+        <p className="merge-source-task-title">{task.title}</p>
+      </div>
+      <label htmlFor="merge-main-search">主任务</label>
+      {/* 2026-09-28 产品反馈：候选区从「输入框 + 结果列表」改成可搜索下拉；检索仍在
+          服务端（F-26 最小长度 2），所以关闭本地过滤，选项就是远端返回的候选。 */}
+      <CalmSelect
         id="merge-main-search"
-        value={keyword}
+        ariaLabel="主任务"
+        appearance="rich"
+        searchable
+        width="100%"
+        value={mainTask?.entityId ?? null}
         disabled={busy}
+        loading={searching}
+        notFoundContent={
+          <span className="merge-select-empty">{notFoundText}</span>
+        }
         placeholder="例如：T-101 或 修复重复退款"
-        onChange={(event) => {
-          setKeyword(event.target.value);
+        onSearch={(next) => {
+          setKeyword(next);
           setFormError(null);
         }}
+        onChange={(next) => {
+          setMainTask(
+            candidateItems.find(
+              (item) => String(item.entityId) === String(next),
+            ) ?? null,
+          );
+          setFormError(null);
+        }}
+        options={candidateItems.map((item) => ({
+          value: item.entityId,
+          label: item.title,
+          description: item.summary === "" ? "任务" : item.summary,
+        }))}
       />
-      {searchTerm.length >= SEARCH_MIN_LENGTH ? (
-        searchQuery.isPending ? (
-          <div className="merge-search-state">
-            <Spin size="small" />
-            <span>正在搜索任务</span>
-          </div>
-        ) : searchFailed ? (
-          <Alert
-            type="error"
-            title="搜索暂时不可用，请稍后重试。"
-            action={
-              <Button
-                disabled={busy}
-                onClick={() => void searchQuery.refetch()}
-              >
-                重试搜索
-              </Button>
-            }
-          />
-        ) : candidates.length === 0 ? (
-          <p className="merge-search-state">当前项目内没有匹配的任务。</p>
-        ) : (
-          <ul className="merge-candidate-list" aria-label="主任务候选">
-            {candidates.map((item) => (
-              <li key={item.entityId}>
-                <button
-                  type="button"
-                  aria-pressed={mainTask?.entityId === item.entityId}
-                  className={
-                    mainTask?.entityId === item.entityId ? "selected" : ""
-                  }
-                  disabled={busy}
-                  onClick={() => {
-                    setMainTask(item);
-                    setFormError(null);
-                  }}
-                >
-                  <strong>{item.title}</strong>
-                  <span>{item.summary === "" ? "任务" : item.summary}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )
-      ) : (
-        <p className="merge-search-state">
-          输入任务编号或标题，从当前项目中选择主任务。
+      {searchFailed ? (
+        <Alert
+          type="error"
+          title="搜索暂时不可用，请稍后重试。"
+          action={
+            <Button disabled={busy} onClick={() => void searchQuery.refetch()}>
+              重试搜索
+            </Button>
+          }
+        />
+      ) : null}
+      {showNoMatchHint ? (
+        <p className="merge-select-empty merge-select-empty-inline">
+          {NO_MATCH_TEXT}
         </p>
-      )}
-      {mainTask !== null ? (
-        <p className="merge-selected">已选择主任务：{mainTask.title}</p>
       ) : null}
       <fieldset className="merge-branch-choice">
         <legend>合并后处理方式</legend>
@@ -309,8 +329,7 @@ export function MergeIntoMainTaskModal({
         onChange={(event) => setNote(event.target.value)}
       />
       <p className="permission-hint">
-        两条任务的迭代记录不会被删除或覆盖；合并不改变任务的项目、模块、功能归属
-        与工作状态；跨项目任务不能直接合并。
+        合并不删除或覆盖双方的迭代记录，也不改变任务归属与工作状态。
       </p>
       {formError !== null ? <Alert type="warning" title={formError} /> : null}
       {(error !== null || needsRefresh) && (

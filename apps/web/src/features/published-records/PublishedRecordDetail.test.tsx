@@ -70,6 +70,28 @@ function mountDetail(
     </MemoryRouter>,
   );
 }
+/**
+ * 记录接口只回传 ID；没有列表语境时详情会补查项目、模块、功能名与用户目录。
+ * 这里给出最小可解析响应，让断言专注记录正文本身。
+ */
+function withNameSources(api: Record<string, unknown>) {
+  return {
+    getProject: vi.fn().mockResolvedValue({
+      project: { id: 1, name: "支付项目" },
+      currentUserRole: "LEADER",
+    }),
+    listModules: vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: 2, name: "支付模块" }] }),
+    listFeatures: vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: 2, name: "支付功能" }] }),
+    getUserDirectory: vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: 3, name: "邵晨宇" }] }),
+    ...api,
+  } as unknown as InpulseApiClient;
+}
 it("compares exact immutable version content and identifies unchanged fields", () => {
   const diff = compareRecordVersions(first, second);
   expect(diff.filter((x) => x.changed)).toEqual([
@@ -83,12 +105,12 @@ it("compares exact immutable version content and identifies unchanged fields", (
   ]);
 });
 it("loads real version data and permits selecting historical snapshots", async () => {
-  const api = {
+  const api = withNameSources({
     getChangeRecord: vi.fn().mockResolvedValue(item),
     listChangeRecordVersions: vi
       .fn()
       .mockResolvedValue({ items: [second, first] }),
-  } as unknown as InpulseApiClient;
+  });
   mountDetail(api);
   const diff = within(await screen.findByRole("generic", { name: "版本差异" }));
   expect(diff.getByText("初次验证")).toBeVisible();
@@ -115,12 +137,12 @@ it("loads real version data and permits selecting historical snapshots", async (
   );
 });
 it("renders the source task link and the four content sections", async () => {
-  const api = {
+  const api = withNameSources({
     getChangeRecord: vi
       .fn()
       .mockResolvedValue({ ...item, taskId: 8, featureId: 2 }),
     listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
-  } as unknown as InpulseApiClient;
+  });
   mountDetail(api);
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   const source = await within(region).findByRole("link", {
@@ -136,7 +158,7 @@ it("renders the source task link and the four content sections", async () => {
   expect(within(region).getByText("遗留问题")).toBeVisible();
 });
 it("explains a missing or unauthorized record without leaking existence", async () => {
-  const api = {
+  const api = withNameSources({
     getChangeRecord: vi.fn().mockRejectedValue(
       new ApiError(404, {
         code: "NOT_FOUND",
@@ -146,27 +168,40 @@ it("explains a missing or unauthorized record without leaking existence", async 
       }),
     ),
     listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [] }),
-  } as unknown as InpulseApiClient;
+  });
   mountDetail(api);
   expect(await screen.findByText("记录不存在或当前无法访问。")).toBeVisible();
 });
+it("resolves the ownership and author names when there is no list context", async () => {
+  const api = withNameSources({
+    getChangeRecord: vi.fn().mockResolvedValue({ ...item, featureId: 2 }),
+    listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
+  });
+  mountDetail(api);
+  const region = await screen.findByRole("region", { name: "正式记录详情" });
+  expect(
+    await within(region).findByText("支付项目 / 支付模块 / 支付功能"),
+  ).toBeVisible();
+  expect(within(region).getByText(/邵晨宇 · 创建/)).toBeVisible();
+  expect(within(region).queryByText(/用户 #3/)).toBeNull();
+});
 it("leaves the record identity to the card summary when not standalone", async () => {
-  const api = {
+  const api = withNameSources({
     getChangeRecord: vi.fn().mockResolvedValue(item),
     listChangeRecordVersions: vi
       .fn()
       .mockResolvedValue({ items: [second, first] }),
-  } as unknown as InpulseApiClient;
+  });
   mountDetail(api, { standalone: false });
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   expect(await within(region).findByText("归属")).toBeVisible();
   expect(within(region).queryByText("支付修订")).toBeNull();
 });
 it("hides the version comparison until a record has more than one version", async () => {
-  const api = {
+  const api = withNameSources({
     getChangeRecord: vi.fn().mockResolvedValue(item),
     listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
-  } as unknown as InpulseApiClient;
+  });
   mountDetail(api);
   const region = await screen.findByRole("region", { name: "正式记录详情" });
   expect(await within(region).findByText("归属")).toBeVisible();

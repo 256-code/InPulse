@@ -1692,8 +1692,9 @@ export function TasksPanel({
                 )}
               </div>
               {featureId === null && (
-                <fieldset className="calm-field task-impact-features">
-                  <legend>影响功能（可多选，可为空）</legend>
+                // 2026-09-28 产品反馈：与「指派给」「优先级」统一交互，原生复选框换成多选下拉，并支持按名称搜索。
+                <div className="calm-field">
+                  <label htmlFor="task-impact-features">影响功能</label>
                   {features.isPending ? (
                     <p>正在加载影响功能…</p>
                   ) : features.isError ? (
@@ -1714,35 +1715,31 @@ export function TasksPanel({
                       name="impactFeatureIds"
                       control={control}
                       render={({ field }) => (
-                        <div className="check-list">
-                          {features.data?.items.map((f) => (
-                            <label key={f.id}>
-                              <input
-                                type="checkbox"
-                                checked={(field.value ?? []).includes(f.id)}
-                                onChange={(event) =>
-                                  field.onChange(
-                                    event.target.checked
-                                      ? [
-                                          ...new Set([
-                                            ...(field.value ?? []),
-                                            f.id,
-                                          ]),
-                                        ].sort((a, b) => a - b)
-                                      : (field.value ?? []).filter(
-                                          (id) => id !== f.id,
-                                        ),
-                                  )
-                                }
-                              />
-                              {f.name}
-                            </label>
-                          ))}
-                        </div>
+                        <CalmSelect
+                          id="task-impact-features"
+                          ariaLabel="影响功能"
+                          value={field.value ?? []}
+                          multiple
+                          maxTagCount={2}
+                          appearance="menu"
+                          searchable
+                          placeholder="输入功能名称搜索，可多选，可为空"
+                          onChange={(next) =>
+                            field.onChange(
+                              [...new Set(next.map(Number))].sort(
+                                (a, b) => a - b,
+                              ),
+                            )
+                          }
+                          options={(features.data?.items ?? []).map((f) => ({
+                            value: f.id,
+                            label: f.name,
+                          }))}
+                        />
                       )}
                     />
                   )}
-                </fieldset>
+                </div>
               )}
               <div className="calm-field form-hint">
                 <p>

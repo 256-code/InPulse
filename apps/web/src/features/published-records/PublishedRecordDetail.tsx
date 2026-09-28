@@ -19,6 +19,10 @@ import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import { useModules } from "@features/modules/module-query";
+import { useProjectDetail } from "@features/projects/project-query";
+import { useProjectFeatureNames } from "@features/records/feature-name-map";
+import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -123,6 +127,23 @@ export function PublishedRecordDetail({
     enabled: projectId > 0 && recordId > 0 && !!detail.data,
     retry: false,
   });
+  /**
+   * 记录接口只回传归属与作者的 ID。列表语境把名称带进来（`labels`），弹窗、深链与
+   * 聚合组等没有列表的语境就地解析：项目详情、模块清单、功能名表与用户目录，
+   * 与记录页卡片共用同一批查询键，命中缓存时不额外发请求。
+   */
+  const needsLabels = labels === undefined;
+  const projectDetail = useProjectDetail({
+    client,
+    projectId,
+    enabled: needsLabels,
+  });
+  const modules = useModules(needsLabels ? projectId : 0, client);
+  const featureNames = useProjectFeatureNames(
+    needsLabels ? projectId : 0,
+    client,
+  );
+  const directory = useUserDirectoryQuery({ client, enabled: needsLabels });
   const history = versions.data?.items ?? [];
   const before =
     history.find((v) => v.versionNo === oldVersion) ??
@@ -154,6 +175,32 @@ export function PublishedRecordDetail({
   if (!detail.data)
     return <section className="record-expanded" aria-label="正式记录详情" />;
   const record = detail.data;
+  // 列举名称优先用列表回填的 labels；解析尚未就绪或失败时回落裸 ID，事实区不空项、不报错。
+  const projectName =
+    labels?.project ??
+    projectDetail.data?.project.name ??
+    `项目 #${record.projectId}`;
+  const moduleName =
+    labels?.module ??
+    modules.query.data?.items.find((item) => item.id === record.moduleId)
+      ?.name ??
+    `模块 #${record.moduleId}`;
+  const featureName =
+    record.featureId === null
+      ? null
+      : (labels?.feature ??
+        featureNames.get(record.featureId) ??
+        `功能 #${record.featureId}`);
+  const authorName =
+    labels?.author ??
+    (directory.data ?? []).find((item) => item.id === record.authorId)?.name ??
+    `用户 #${record.authorId}`;
+  const impactNames =
+    labels?.impactFeatures && labels.impactFeatures.length > 0
+      ? labels.impactFeatures
+      : record.impactFeatureIds
+          .map((id) => featureNames.get(id))
+          .filter((name): name is string => typeof name === "string");
   // 已解决的遗留项不在当前版本的列表里，只能通过相邻版本的条目数差判断是否移除过。
   const removedLeftovers = (() => {
     const current = history.find(
@@ -166,9 +213,6 @@ export function PublishedRecordDetail({
       ? 0
       : previous.leftovers.length - current.leftovers.length;
   })();
-  const impactNames =
-    labels?.impactFeatures ??
-    record.impactFeatureIds.map((id) => `功能 #${id}`);
   return (
     <section className="record-expanded" aria-label="正式记录详情">
       {standalone ? (
@@ -255,11 +299,9 @@ export function PublishedRecordDetail({
       <dl className="record-facts">
         <dt>归属</dt>
         <dd>
-          {labels?.project ?? `项目 #${record.projectId}`} /{" "}
-          {labels?.module ?? `模块 #${record.moduleId}`}
-          {record.featureId === null
-            ? ""
-            : ` / ${labels?.feature ?? `功能 #${record.featureId}`}`}
+          {[projectName, moduleName, featureName]
+            .filter((part) => part !== null)
+            .join(" / ")}
         </dd>
         {impactNames.length > 0 && (
           <>
@@ -269,7 +311,7 @@ export function PublishedRecordDetail({
         )}
         <dt>作者与时间</dt>
         <dd>
-          {labels?.author ?? `用户 #${record.authorId}`} · 创建{" "}
+          {authorName} · 创建{" "}
           {new Date(record.createdAt).toLocaleString("zh-CN")}
           {record.status === "PUBLISHED"
             ? ` · 发布 ${new Date(record.publishedAt).toLocaleString("zh-CN")}`

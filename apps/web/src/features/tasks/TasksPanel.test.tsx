@@ -456,7 +456,7 @@ describe("F-23 merge entry", () => {
       await screen.findByRole("button", { name: "合并到主任务" }),
     );
     expect(
-      await screen.findByLabelText(/主任务（搜索任务编号或标题/),
+      await screen.findByLabelText(/^主任务$/),
     ).toBeInTheDocument();
   });
 });

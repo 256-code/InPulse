@@ -127,7 +127,13 @@ for (const feature of [true, false])
         // Opening the editor closes the detail drawer; return through the real task URL.
         await page.goto(target!);
       }
-      await task.getByRole("link", { name: "查看遗留来源记录" }).click();
+      // 2026-09-28 产品反馈：入口由整页跳转到记录工作区改为就地打开记录详情弹窗。
+      const taskUrl = page.url();
+      await task.getByRole("button", { name: "查看遗留来源记录" }).click();
+      await expect(
+        page.getByRole("button", { name: "关闭迭代记录详情" }),
+      ).toBeVisible();
+      expect(page.url()).toBe(taskUrl);
       await expect(
         record.getByRole("link", { name: "查看跟进任务", exact: true }),
       ).toHaveAttribute("href", target!);

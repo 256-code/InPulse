@@ -1,6 +1,13 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -39,7 +46,25 @@ const featureCandidate: SearchItem = {
   summary: "功能",
 };
 
-const searchLabel = /主任务（搜索任务编号或标题/;
+const searchLabel = /^主任务$/;
+
+/** 打开「主任务」下拉：CalmSelect 的触发器是输入框的 `.ant-select` 祖先（jsdom 下无
+ *  真实指针，按仓库已有做法用 mouseDown 展开弹层）。
+ */
+function openMainTaskDropdown(): void {
+  const trigger = screen.getByLabelText(searchLabel).closest(".ant-select");
+  if (trigger === null) {
+    throw new Error("主任务下拉未找到");
+  }
+  fireEvent.mouseDown(trigger);
+}
+
+/** 触发器当前展示的选中项文本（`.calm-select-trigger-label` 只出现在触发器上）。 */
+function selectedMainTaskText(): string | null {
+  return (
+    document.querySelector(".calm-select-trigger-label")?.textContent ?? null
+  );
+}
 
 function createApi() {
   const getSearch = vi.fn().mockResolvedValue({
@@ -99,13 +124,13 @@ describe("F-23 merge into main task", () => {
   it("waits for two characters and the debounce before searching", async () => {
     const { api, getSearch } = createApi();
     mount({ api });
-    const user = userEvent.setup();
-    await user.type(screen.getByLabelText(searchLabel), "退");
+    const input = screen.getByLabelText(searchLabel);
+    fireEvent.change(input, { target: { value: "退" } });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
     expect(getSearch).not.toHaveBeenCalled();
-    await user.type(screen.getByLabelText(searchLabel), "款");
+    fireEvent.change(input, { target: { value: "退款" } });
     await waitFor(() => expect(getSearch).toHaveBeenCalledTimes(1), {
       timeout: 2000,
     });
@@ -115,12 +140,17 @@ describe("F-23 merge into main task", () => {
   it("keeps only same-project TASK candidates and excludes the source task", async () => {
     const { api, getSearch } = createApi();
     mount({ api });
-    const user = userEvent.setup();
-    await user.type(screen.getByLabelText(searchLabel), "退款");
-    expect(await screen.findByText("重复回调任务 A")).toBeInTheDocument();
-    expect(screen.queryByText("退款主任务")).toBeNull();
-    expect(screen.queryByText("其他项目任务")).toBeNull();
-    expect(screen.queryByText("退款功能")).toBeNull();
+    openMainTaskDropdown();
+    fireEvent.change(screen.getByLabelText(searchLabel), {
+      target: { value: "退款" },
+    });
+    // 按选项 title 断言而不是全屏文本：弹层挂在 body 上，而「当前任务」卡片里
+    // 也有同一个标题，全屏查询会把卡片误判成候选。
+    const listbox = within(await screen.findByRole("listbox"));
+    expect(await listbox.findByTitle("重复回调任务 A")).toBeInTheDocument();
+    expect(listbox.queryByTitle("退款主任务")).toBeNull();
+    expect(listbox.queryByTitle("其他项目任务")).toBeNull();
+    expect(listbox.queryByTitle("退款功能")).toBeNull();
     expect(getSearch).toHaveBeenCalledWith({ q: "退款", limit: 20 });
   });
 
@@ -128,13 +158,12 @@ describe("F-23 merge into main task", () => {
     const { api, mergeTaskGroup, issueCsrfToken } = createApi();
     const { onMerged } = mount({ api });
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText(searchLabel), "退款");
-    await user.click(
-      await screen.findByRole("button", { name: /重复回调任务 A/ }),
-    );
-    expect(
-      screen.getByText("已选择主任务：重复回调任务 A"),
-    ).toBeInTheDocument();
+    openMainTaskDropdown();
+    fireEvent.change(screen.getByLabelText(searchLabel), {
+      target: { value: "退款" },
+    });
+    fireEvent.click(await screen.findByTitle("重复回调任务 A"));
+    expect(selectedMainTaskText()).toBe("重复回调任务 A");
     await user.click(screen.getByRole("radio", { name: /历史分支/ }));
     await user.type(
       screen.getByLabelText("合并说明（选填）"),
@@ -184,16 +213,17 @@ describe("F-23 merge into main task", () => {
     );
     mount({ api });
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText(searchLabel), "退款");
-    await user.click(
-      await screen.findByRole("button", { name: /重复回调任务 A/ }),
-    );
+    openMainTaskDropdown();
+    fireEvent.change(screen.getByLabelText(searchLabel), {
+      target: { value: "退款" },
+    });
+    fireEvent.click(await screen.findByTitle("重复回调任务 A"));
     await user.click(screen.getByRole("button", { name: "确认合并" }));
     expect(
       await screen.findByText(/分支任务已属于其他聚合组/),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重新搜索" }));
     await waitFor(() => expect(getSearch).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByText(/已选择主任务/)).toBeNull());
+    await waitFor(() => expect(selectedMainTaskText()).toBeNull());
   });
 });

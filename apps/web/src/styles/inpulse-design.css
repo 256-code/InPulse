@@ -1214,13 +1214,26 @@
   padding: 0 30px 26px;
   overflow: auto;
 }
-.task-modal-bottom > a {
+.task-modal-bottom > a,
+.task-modal-bottom > .leftover-source-open {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
   color: #2472c3;
   font-size: 12px;
+}
+/* 「查看遗留来源记录」由整页链接改为就地打开记录弹窗的按钮，保留链接观感。 */
+.leftover-source-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.leftover-source-open:disabled {
+  color: #93a6b8;
+  cursor: default;
 }
 .task-status-section {
   margin-top: 6px;
@@ -1396,16 +1409,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-/* 影响功能分区的图例在一列字段里要与相邻字段标签同字号、同字重（`legend` 的 UA 样式是
- * 13px/400 深色，实测比「任务说明」等标签大一号且更黑）；复选框行本身由 L267 段的
- * `.calm-form .check-list` 规则排成紧凑行，`.task-impact-features` 不再另占地。 */
-.calm-form .task-impact-features > legend {
-  color: #526b83;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0;
 }
 
 .calm-footer {
@@ -2174,71 +2177,56 @@
 
 /* ===================== F-23/F-24/F-25 任务聚合组 ===================== */
 /* 合并到主任务弹窗：候选搜索、已选提示与分支类型选择。 */
-.merge-search-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0 0;
-  color: #6d8498;
-  font-size: 12px;
-}
-
-.merge-candidate-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  max-height: 216px;
-  overflow-y: auto;
-  border: 1px solid #e2eaf3;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.merge-candidate-list li + li {
-  border-top: 1px solid #edf1f5;
-}
-
-.merge-candidate-list button {
+/* 当前任务卡片（2026-09-28）：把原先夹在正文里的「当前任务：编号 + 标题」
+   抽成独立卡片，标题加粗、编号弱化，弹层眉标不再重复同一段文字。 */
+.merge-source-task {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  background: transparent;
-  color: #2a3b50;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  gap: 5px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #dfe8f2;
+  border-radius: 9px;
+  background: #f8fbfe;
 }
 
-.merge-candidate-list button:hover {
-  background: #f5faff;
+.merge-source-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.merge-candidate-list button.selected {
-  background: #eef6ff;
-  box-shadow: inset 2px 0 0 #4a8fd4;
+.merge-source-task-label {
+  color: #6d8498;
+  font-size: 11px;
 }
 
-.merge-candidate-list button strong {
-  color: #22384f;
-  font-size: 13px;
-}
-
-.merge-candidate-list button span {
+.merge-source-task-code {
   color: #8494a6;
   font-size: 11px;
 }
 
-.merge-selected {
-  margin: 10px 0 0;
-  padding: 8px 12px;
-  border: 1px solid #cfe3f6;
-  border-radius: 7px;
-  background: #f2f8ff;
-  color: #27567f;
+.merge-source-task-title {
+  margin: 0;
+  color: #22384f;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* 主任务下拉（CalmSelect 的 rich 形态）弹层空态：搜索提示 / 检索中 / 无匹配。
+ * 2026-09-28 候选区改成下拉后，原先的 `.merge-search-state` /
+ * `.merge-candidate-list` / `.merge-selected` 三块规则已无引用，同批删除。 */
+.merge-select-empty {
+  color: #6d8498;
   font-size: 12px;
+}
+
+/* 无匹配但触发器仍显示已选主任务时，同一条提示落在下拉下方。 */
+.merge-select-empty-inline {
+  display: block;
+  margin: 6px 0 0;
 }
 
 .merge-branch-choice {

@@ -121,7 +121,8 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       .click();
     await page.getByRole("button", { name: "编辑任务" }).click();
     const edit = page.getByRole("dialog", { name: "编辑任务" });
-    await edit.getByLabel(names[0]!, { exact: true }).uncheck();
+    // 影响功能已是多选下拉（2026-09-28）：再点一次同一项即取消选中。
+    await pickCalmSelectOptions(edit, "影响功能", [names[0]!]);
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await page.goto(featureUrls[0]!);
@@ -135,7 +136,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       .filter({ has: page.getByText(title, { exact: true }) })
       .click();
     await page.getByRole("button", { name: "编辑任务" }).click();
-    await edit.getByLabel(names[0]!, { exact: true }).check();
+    await pickCalmSelectOptions(edit, "影响功能", [names[0]!]);
     await edit.getByRole("button", { name: /保\s*存/ }).click();
     await expect(edit).toBeHidden();
     await page.reload();

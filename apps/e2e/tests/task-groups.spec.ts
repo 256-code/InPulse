@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 
 import { createAuthenticatedContext } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
-import { pickCalmSelectOption } from "../helpers/calm-select.js";
+import {
+  calmSelectTrigger,
+  pickCalmSelectOption,
+} from "../helpers/calm-select.js";
 
 /**
  * F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情与任务中心聚合组卡片的关键
@@ -64,15 +67,16 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
     await expect(detail).toBeVisible();
     await detail.getByRole("button", { name: "合并到主任务" }).click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
-    await mergeDialog
-      .getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")
-      .fill(mainTaskTitle);
-    await mergeDialog
-      .getByRole("button", { name: new RegExp(mainTaskTitle) })
-      .click();
-    await expect(
-      mergeDialog.getByText("已选择主任务：" + mainTaskTitle),
-    ).toBeVisible();
+    // 主任务候选由服务端搜索提供（最小 2 字符），先敲标题再点候选。
+    await pickCalmSelectOption(
+      mergeDialog,
+      "主任务",
+      mainTaskTitle,
+      mainTaskTitle,
+    );
+    await expect(calmSelectTrigger(mergeDialog, "主任务")).toContainText(
+      mainTaskTitle,
+    );
     await mergeDialog.getByRole("button", { name: "确认合并" }).click();
 
     // F-25：合并成功后在当前页面就地打开聚合组弹窗（地址不变），弹窗展示主任务
@@ -169,12 +173,12 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
     await expect(detail).toBeVisible();
     await detail.getByRole("button", { name: "合并到主任务" }).click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
-    await mergeDialog
-      .getByLabel("主任务（搜索任务编号或标题，至少 2 个字符）")
-      .fill(mainTaskTitle);
-    await mergeDialog
-      .getByRole("button", { name: new RegExp(mainTaskTitle) })
-      .click();
+    await pickCalmSelectOption(
+      mergeDialog,
+      "主任务",
+      mainTaskTitle,
+      mainTaskTitle,
+    );
     await mergeDialog.getByRole("button", { name: "确认合并" }).click();
     await expect(page.locator(".task-group-detail-modal")).toBeVisible();
     expect(new URL(page.url()).pathname).not.toContain("/task-groups/");
