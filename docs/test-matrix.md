@@ -4003,7 +4003,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-DRAFT-GITHUB-LINK-WEB-UNIT-002 | Web 单元 | 发布使用刷新后的记录版本 | 同文件「publishes with the record version advanced by the links staged in the dialog」：`listExternalLinks` 版本 1、`addExternalLink` 返回版本 2 时，`publishChangeRecord` 的 `If-Match` 必须是 `"2"`；临时回退该修复可复现失败（`expected '"1"' to be '"2"'`） | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-WEB-UNIT-003 | Web 单元 | 任务侧弹窗同样带链接区 | `TasksPanel.test.tsx` 的来源弹窗用例新增断言 `modal.getByLabelText("GitHub 链接地址")` 存在（不为空） | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-E2E-001 | E2E | 弹窗内暂存 → 发布 → 正式记录可见 | `external-links.spec.ts`「F22 新建迭代弹窗内直接暂存 GitHub 链接，发布后落到正式记录」：非法链接给出「只接受 github.com 的 HTTPS 链接，请检查输入。」；合法链接暂存后 `.record-github-pending li` 恰为 1 行；点「新建迭代」后弹窗关闭，正式记录详情「GitHub 关联」里出现 `PR #22311` | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-E2E-002 | E2E | 全量回归不绿不交付 | `pnpm --filter @inpulse/e2e exec playwright test`（跑前先 `pnpm --filter @inpulse/api... build` 重建 dist）→ **58 passed (4.0m)**；本批新增用例 2.1s 通过，`F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）` 3.2s 通过 | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 564 例通过 | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-GATE-001 | 静态门禁 | 类型与风格 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过 | 本地通过 |
 
-未运行 / 已知偏差：① 未重跑全量 E2E，只跑 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑**；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。
+未运行 / 已知偏差：① 全量 E2E 已在推送 `12b22fc` 后补跑并通过（见 RECORD-DRAFT-GITHUB-LINK-E2E-002），定向回归只跑过 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑且不会有**——推送 `test` 不触发 CI（`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发）；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。
