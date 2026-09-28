@@ -3860,3 +3860,27 @@ PR [#145](https://github.com/256-code/InPulse/pull/145) 的 CI 是 `test` 分支
 本地实际执行（2026-09-28）：`apps/web` 定向单测 `vitest run src/features/published-records/PublishedRecordDetail.test.tsx` → 1 file / 7 tests passed；编辑器诊断（`get_errors`）两个改动文件无本轮引入的报错；真实浏览器实测见上表四行；文档门禁 `node scripts/check_docs.mjs` 因本轮改了文档单独运行 → **通过**。
 
 未运行 / 已知偏差：① 活动页 `ActivityWorkspace.tsx` 仍有 3 处裸 ID 回落（`用户 #id` / `项目 #id`），属同类问题但不在本次诉求内，本批未改动；② E2E 未新增用例、未复跑（上一批 `leftover-task.spec.ts` 的改动同样仍未复跑）；③ 「解析失败回落裸 ID」分支未实测（需构造接口失败）；④ 未提交、未推送，前端改动需非作者人工评审。
+
+## 2026-09-28 修复 `main` 单元测试红灯：`ModulesPageView.test.tsx` 宽泛查询撞上新「编辑项目」按钮（用户指示，本地提交）
+
+用户指示（原文）：「A（推荐）：把手上这个修复提交 → 推 `test` → 开 `test → main` 的 PR，先把主干治好（顺带把测试矩阵/开发日志补一条记录）。」
+
+现象：`origin/main` 自 2026-09-24 起为红。运行 [35975479381](https://github.com/256-code/InPulse/actions/runs/35975479381)（`CI / workspace`，commit `64b7a6f`）在第 9 步 `Unit tests` 失败，`apps/web test:unit` 汇总为 `1 failed | 84 passed (85)`，3 例失败全部落在 `apps/web/src/features/modules/ModulesPageView.test.tsx`；同一 commit 的 `dev/a` 运行同样失败。
+
+根因：该用例文件用宽泛可访问名 `findByRole("button", { name: /编\s*辑/ })` 定位模块卡上的「编辑模块」按钮；2026-09-24 的项目主页新增了带 `aria-label="编辑项目"` 的圆形铅笔按钮（即上一小节的 `PROJECT-EDIT-ENTRY-BROWSER-001`），两者渲染在同一页面，strict mode 遂报 `TestingLibraryElementError: Found multiple elements with the role "button" and name /编\s*辑/`（命中元素为 `aria-label="编辑项目"` 与文本 `编辑模块`）。这正是 2026-09-24 那条小节「未运行 / 已知偏差」第 ② 条当时记下的「未验证」风险点，本次确认并修复。
+
+未被更早发现的原因：`.github/workflows/ci.yml` 的 `on:` 只有 `pull_request` 与 `push` 到 `main` / `dev/*`，**推送 `test` 分支不触发 CI**，因此该缺陷是合入 `main` 后才第一次被验证到。
+
+修复：只收紧测试定位符，产品代码零改动。`findByRole` 按可访问名精确匹配——`编辑模块` 是按钮文本、`编辑项目` 是按钮 `aria-label`，二者互不冲突。该文件 5 处 `{ name: /编\s*辑/ }` 全部改为 `{ name: "编辑模块" }`（第 78、133、198、256、403 行）；同文件其余断言（归档 / 恢复入口不存在、操作原因字段不存在）原样保留。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| MODULES-EDIT-QUERY-FIX-WEB-UNIT-001 | Web 单元 | 收紧定位符后 F-12 与 ADR-044 用例全部通过 | `pnpm --filter @inpulse/web test:unit` → `Test Files 85 passed (85)`、`Tests 560 passed (560)`（36.99s），含原先失败的 `F-12 forms > 模块卡与编辑弹窗都不再有归档 / 恢复入口（ADR-044）` 与 `模块弹层的归档入口（ADR-044 已下线）> 角色 LEADER / MEMBER` 两例；单文件复跑 `vitest run src/features/modules/ModulesPageView.test.tsx` → 14/14 | 本地通过 |
+| MODULES-EDIT-QUERY-FIX-CI-001 | CI | `main` 单元测试恢复绿灯 | PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`，commit `1576df6`）触发的运行 [36365472846](https://github.com/256-code/InPulse/actions/runs/36365472846)：原先失败的 `CI / workspace` 第 9 步 `Unit tests` 转为 **success**；同一次运行的 `Documentation` job 亦 **success** | 已通过（CI） |
+| MODULES-EDIT-QUERY-FIX-CI-002 | CI（既有红灯，与本批无关） | 同一次运行的 Browser E2E | 第 36 步 `Browser E2E` **failure**：`9 failed \| 47 passed (12.9m)`。失败 9 例为 `issues.spec.ts:14`、`leftover-task.spec.ts:76(MODULE)`、`leftover-task.spec.ts:163`、`module-tasks.spec.ts:41`、`record-drafts.spec.ts:51(MODULE)`、`task-completion.spec.ts:50(MODULE)`、`task-completion.spec.ts:93`、`task-status.spec.ts:7(MODULE)`、`tasks.spec.ts:12`；症状为 30s 级 `locator.click` / `locator.getAttribute` 超时（等不到「任务详情」弹窗里的「完成任务」按钮 / 「迭代记录草稿」链接）。**与本次改动无关**：`main` 的祖先提交 `d14ffc5`（2026-09-24 合入 PR #145）的运行 [35971299558](https://github.com/256-code/InPulse/actions/runs/35971299558) 是完全相同的 9 例与 `47 passed (12.9m)`；再往前 `72c0714a`（2026-09-20 合入 PR #144）已是 1 例 E2E 失败（`search.spec.ts:6`）。`main` 最近一次 Browser E2E 全绿是 2026-09-16（`489fe2a9`）。需独立立项定位 | 已知红灯（既有，本批未修） |
+
+CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/146) 的运行 [36365472846](https://github.com/256-code/InPulse/actions/runs/36365472846) 在前 36 步里把本次改动要治的那一步修好了——`Unit tests` **由红转绿**；`CI / workspace` 的第 1~35 步（lint、format check、typecheck、unit tests、迁移、PGroonga 探针镜像、空库迁移、集成测试、契约漂移、Route Registry、build、五个生产镜像与 Trivy 扫描）全部 success。但第 36 步 `Browser E2E` 仍红（9 failed / 47 passed / 12.9m），**与本批改动无关**（见上表 `MODULES-EDIT-QUERY-FIX-CI-002`，同形失败在 `main` 的祖先 `d14ffc5` 上已经存在），因此该运行在第 38~45 步（compose / ref 预检、依赖边界、前端边界、权限矩阵、依赖审计、Secret 扫描、文档检查）被跳过。即：S4 之后、E2E 之前的所有门禁已由 CI 覆盖；E2E 及其后的门禁属既有红灯的连带影响。
+
+文档同步：`docs/test-matrix.md`（本条）与 `开发日志.md`（第三十七条记录）。后端、契约、Route Registry、权限矩阵、迁移、生成物与产品代码零改动。
+
+未运行 / 已知偏差：① 本批只改测试定位符，未跑 `pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:integration`、`pnpm build`、`pnpm test:e2e` 与 `pnpm check` 整链——`test` 分支推送不触发 CI，这些门禁由 `test → main` PR 的 `CI / workspace` 全链覆盖；② 其余 84 个 web 用例文件在 `main` 的失败运行里已经全绿，说明不存在第二处宽泛查询冲突（未逐个复核）；③ 本次不涉及运行时代码，UI 行为与产品代码零变化，未做浏览器人工复核；④ 推送 `test` 不跑 CI 属独立议题（需改技术设计 §12.4 章节），不在本 PR 范围；⑤ **同一次 CI 运行里 `Browser E2E` 的 9 例失败是既有红灯**（与 `main` 的祖先 `d14ffc5` 完全同形，2026-09-16 之后 `main` 未再全绿），本 PR 未修，也不应由本 PR 修——否则会把「治单测」的单文件改动扩成跨产品代码的调查，需独立立项。

@@ -75,7 +75,7 @@ describe("F-12 forms", () => {
         .mockResolvedValue({ ...latest, name: "我的新名称", rowVersion: 3 }),
     } as unknown as InpulseApiClient;
     mount(client);
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑模块" }));
     fireEvent.change(screen.getByLabelText("模块名称"), {
       target: { value: "我的新名称" },
     });
@@ -130,7 +130,7 @@ describe("F-12 forms", () => {
           .mockResolvedValue({ ...latest, rowVersion: 3 }),
       } as unknown as InpulseApiClient;
       mount(client);
-      fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "编辑模块" }));
       fireEvent.change(screen.getByLabelText("模块说明"), {
         target: { value: "我的说明草稿" },
       });
@@ -195,7 +195,7 @@ describe("F-12 forms", () => {
     expect(
       screen.queryByRole("button", { name: /归\s*档/ }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /编\s*辑/ }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑模块" }));
     fireEvent.change(screen.getByLabelText("模块名称"), {
       target: { value: "保留的新名称" },
     });
@@ -253,7 +253,7 @@ describe("F-12 forms", () => {
     expect(
       screen.queryByRole("button", { name: /恢\s*复/ }),
     ).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑模块" }));
     const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
     expect(
       within(dialog).queryByRole("button", { name: /归\s*档/ }),
@@ -400,7 +400,7 @@ describe("模块弹层的归档入口（ADR-044 已下线）", () => {
     "角色 %s 打开编辑弹窗都没有归档 / 恢复入口，也没有操作原因字段",
     async (role) => {
       const view = mount(clientFor(role));
-      fireEvent.click(await screen.findByRole("button", { name: /编\s*辑/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "编辑模块" }));
       const dialog = await screen.findByRole("dialog", { name: "编辑模块" });
       expect(
         within(dialog).queryByRole("button", { name: /归\s*档/ }),
