@@ -231,6 +231,12 @@
       "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
     }
   ],
+  "deleteRecordDraft": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "be71ce677ff27bfae88ee6ff4022583a6baa90ef4f6a65c8166f4798d1a995b0"
+    }
+  ],
   "disableUser": [
     {
       "version": "1.0.0",

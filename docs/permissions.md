@@ -128,8 +128,9 @@ transitionTask/transitionModuleTask/getTaskStatusHistory/getModuleTaskStatusHist
 | updateIndependentRecordDraft | 同上 | 父级可写，If-Match 为记录版本；有来源任务则拒绝并要求 Workflow；历史 MODULE 归档影响可保留 |
 | createTaskRecordDraft | 同上 | 来源任务 ACTIVE、真实父级可写，If-Match 为任务版本；锁后派生标题/归属/负责人，允许同任务多草稿；CSRF、同源、数据库幂等 |
 | updateTaskRecordDraft | 同上 | 同上但 If-Match 为记录版本；任务/记录完整同项目关联匹配，内容更新保留来源与记录快照 |
+| deleteRecordDraft | 同上 | 只允许 `DRAFT`（[ADR-048](adr/ADR-048.md)）；独立与来源草稿共用；If-Match 为记录版本，不一致 409 `RECORD_VERSION_CONFLICT`；记录不存在、不是草稿、真实归属不匹配或父级不可写一律 404；CSRF、同源、数据库幂等；删除后同 Key 重放返回同一 200 结果 |
 
-所有写接口成功重放前重新验证当前认证、CSRF、成员权限、真实可写父级和返回的全部影响资源；来源路径额外重读任务/记录关联。拒绝不泄露已存响应。TODO/DONE/CANCELED 均可保存来源草稿，保存不改变状态。无权限放宽、数据库权限或迁移变更。列表分页（B-1）返回 C-006 envelope（items/nextCursor/hasMore），按服务端固定 `created_at DESC,id DESC` keyset 排序；前端只按 `nextCursor` 追加，不得重排，也不得把游标跨项目或跨接口复用。见 [F-17 交审说明](f17-local-handoff.md)。
+所有写接口成功重放前重新验证当前认证、CSRF、成员权限、真实可写父级和返回的全部影响资源；来源路径额外重读任务/记录关联。拒绝不泄露已存响应。TODO/DONE/CANCELED 均可保存来源草稿，保存不改变状态。无权限放宽、数据库权限或迁移变更。列表分页（B-1）返回 C-006 envelope（items/nextCursor/hasMore），按服务端固定 `created_at DESC,id DESC` keyset 排序；前端只按 `nextCursor` 追加，不得重排，也不得把游标跨项目或跨接口复用。见 [F-17 交审说明](f17-local-handoff.md)。 2026-09-28 追加：F-17 增加 `deleteRecordDraft`（草稿物理删除，[ADR-048](adr/ADR-048.md)），是本小节唯一放宽「无迁移/无数据库权限变更」的改动——迁移 `0026` 新增 `SECURITY DEFINER` 函数 `app.delete_change_record_draft` 并只授予 `app_runtime` `EXECUTE`，表级权限不放宽；删除只写审计 `record.draft.delete`，不写活动、通知与搜索投影。
 
 ## F-18 正式记录接口（2026-09-10）
 

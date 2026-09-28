@@ -142,6 +142,67 @@ export const recordDraftRoutes: readonly RouteDefinition[] = (
   };
 });
 
+/**
+ * 删除草稿：只允许 DRAFT；未发布过的草稿不属于业务历史，可连同子行物理删除。
+ * 独立草稿与来源草稿共用这条路径——删除不派生来源内容，不需要走来源流程，
+ * 来源任务本身与已发布历史都不受影响。
+ */
+export const recordDraftDeleteRoutes: readonly RouteDefinition[] = (
+  ["deleteRecordDraft"] as const
+).map((operationId): RouteDefinition => {
+  const base = recordDraftRoutes[3]!;
+  return {
+    ...base,
+    operationId,
+    method: "DELETE",
+    summary: "删除未发布的草稿；已发布记录、来源任务与审计历史都不受影响。",
+    request: {
+      path: "RecordDraftResourcePath",
+      query: "none",
+      headers: "RecordDraftVersionHeaders",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": json("RecordDraftDeleteResult"),
+      ...errors,
+    },
+    auditAction: "record.draft.delete",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "RecordDraftDeleteResult",
+            safeBodyFieldPaths: [
+              "projectId",
+              "recordId",
+              "moduleId",
+              "featureId",
+              "taskId",
+              "impactFeatureIds[]",
+            ],
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "RecordDraftDeleteResult",
+        resultRefExtractor: "recordDraftResultResource",
+        currentReadAuthorizer: "recordDraftCurrentReadAuthorizer",
+      },
+    },
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project", "module", "feature", "changeRecord"],
+      retry: "none; parents FOR SHARE then draft FOR UPDATE, recheck version",
+    },
+  };
+});
+
 export const taskRecordDraftRoutes: readonly RouteDefinition[] = (
   [
     "getTaskRecordDrafts",

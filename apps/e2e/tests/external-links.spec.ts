@@ -224,8 +224,10 @@ test("F22 新建迭代弹窗内直接暂存 GitHub 链接，发布后落到正�
     await draft.screenshot({
       path: "test-results/f22-dialog-staged-link-form.png",
     });
-    // 独立草稿的主按钮是「新建迭代」（保存并发布），来源草稿才叫「发布迭代记录」。
-    await draft.getByRole("button", { name: "新建迭代", exact: true }).click();
+    // 三态主按钮统一为「发布迭代记录」，独立新建同样会立即播给项目成员。
+    await draft
+      .getByRole("button", { name: "发布迭代记录", exact: true })
+      .click();
     await expect(draft).toBeHidden();
     // 发布后直接落到正式记录：链接随草稿一起写入，无需再手工关联一次。
     const detail = page.getByRole("region", { name: "正式记录详情" });

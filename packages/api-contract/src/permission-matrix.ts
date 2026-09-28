@@ -139,6 +139,7 @@ export const permissionMatrix = [
       "getRecordDraft",
       "createIndependentRecordDraft",
       "updateIndependentRecordDraft",
+      "deleteRecordDraft",
       "listTasks",
       "getTask",
       "listTaskAssignees",

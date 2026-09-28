@@ -196,6 +196,23 @@ export class RecordDraftRepository {
     >`SELECT ${this.columns(tx)} FROM app.change_records WHERE project_id=${projectId} AND task_id=${taskId} AND status='DRAFT' ORDER BY id DESC`;
     return rows.map(dto);
   }
+  /**
+   * 物理删除一条草稿及其子行，由 0026 的 app.delete_change_record_draft 完成：
+   * app_runtime 没有 change_records 的 DELETE 权限（已发布记录必须由数据库挡住
+   * 物理删除），删除能力收在 SECURITY DEFINER 函数里，只对草稿开放。
+   * 行不存在或版本不一致返回 false，由服务映射 409。
+   */
+  async deleteDraft(
+    tx: TransactionContext,
+    projectId: number,
+    recordId: number,
+    expectedRowVersion: number,
+  ): Promise<boolean> {
+    const rows = await tx.sql<
+      { deleted: boolean }[]
+    >`SELECT app.delete_change_record_draft(${projectId},${recordId},${expectedRowVersion}) AS deleted`;
+    return rows[0]?.deleted === true;
+  }
   async update(
     tx: TransactionContext,
     before: RecordDraftItem,

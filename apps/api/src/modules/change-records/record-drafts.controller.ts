@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Patch, Inject, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Inject,
+  Req,
+  Res,
+} from "@nestjs/common";
 import {
   Operation,
   ContractPath,
@@ -85,6 +94,31 @@ export class RecordDraftsController {
       params,
       query,
       body,
+    });
+    response.status(result.status);
+    response.setHeader("Cache-Control", "no-store");
+    if (result.status >= 400)
+      response.setHeader(
+        "X-Request-Id",
+        (result.body as { requestId: string }).requestId,
+      );
+    return result.body;
+  }
+
+  @Delete(":projectId/record-drafts/:recordId")
+  @Operation("deleteRecordDraft")
+  async deleteRecordDraft(
+    @Req() request: DraftHttpRequest,
+    @Res({ passthrough: true }) response: Response,
+    @ContractPath("deleteRecordDraft") params: unknown,
+    @ContractQuery("deleteRecordDraft") query: unknown,
+    @ContractHeaders("deleteRecordDraft") _headers: unknown,
+  ) {
+    const result = await this.service.handle("deleteRecordDraft", {
+      ...request,
+      headers: request.headers,
+      params,
+      query,
     });
     response.status(result.status);
     response.setHeader("Cache-Control", "no-store");

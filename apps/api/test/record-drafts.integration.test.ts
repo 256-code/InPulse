@@ -1059,3 +1059,162 @@ it("allows another source draft after an existing published record without modif
     await client.sql`SELECT * FROM app.change_record_versions WHERE record_id=${published.id}`,
   ).toHaveLength(1);
 });
+
+/** 删除草稿：审计留痕走 audit_reader，运行角色读不到审计表。 */
+async function auditEventFor(projectId: number, action: string) {
+  const db = createDatabaseClient(testUrls().auditReader, {
+    applicationName: "inpulse-f22-draft-delete",
+  });
+  try {
+    return await db.sql<
+      { action: string; targetId: string }[]
+    >`SELECT action,target_id AS "targetId" FROM app.audit_logs WHERE project_id=${projectId} AND action=${action} ORDER BY sequence_no`;
+  } finally {
+    await db.close();
+  }
+}
+
+describe("F-17 草稿删除", () => {
+  it("deletes an independent draft with its child rows, audits it, and still replays the same key afterwards", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId);
+    const created = await http(
+      `/projects/${f.projectId}/modules/${f.moduleId}/record-drafts`,
+      "POST",
+      actor,
+      { ...content, scopeType: "MODULE", impactFeatureIds: [f.featureId] },
+    );
+    expect(created.status, await created.clone().text()).toBe(200);
+    const saved = schemaRegistry.RecordDraftItem.schema.parse(
+      await created.json(),
+    );
+    const resource = `/projects/${f.projectId}/record-drafts/${saved.id}`;
+    // 子行确实存在，删除必须一起清掉，否则 restrict 外键会挡住。
+    expect(
+      await client.sql`SELECT 1 FROM app.change_record_feature_impacts WHERE change_record_id=${saved.id}`,
+    ).toHaveLength(1);
+    const key = randomUUID();
+    const deleted = await http(resource, "DELETE", actor, undefined, 1, key);
+    expect(deleted.status, await deleted.clone().text()).toBe(200);
+    const result = schemaRegistry.RecordDraftDeleteResult.schema.parse(
+      await deleted.json(),
+    );
+    expect(result).toEqual({
+      projectId: f.projectId,
+      recordId: saved.id,
+      moduleId: f.moduleId,
+      featureId: null,
+      taskId: null,
+      impactFeatureIds: [f.featureId],
+    });
+    expect(
+      await client.sql`SELECT 1 FROM app.change_records WHERE id=${saved.id}`,
+    ).toHaveLength(0);
+    expect(
+      await client.sql`SELECT 1 FROM app.change_record_feature_impacts WHERE change_record_id=${saved.id}`,
+    ).toHaveLength(0);
+    expect(await auditEventFor(f.projectId, "record.draft.delete")).toEqual([
+      { action: "record.draft.delete", targetId: String(saved.id) },
+    ]);
+    // 记录行已经不存在：同 Key 同摘要必须重放原 200，而不是 404。
+    const replay = await http(resource, "DELETE", actor, undefined, 1, key);
+    expect(replay.status, await replay.clone().text()).toBe(200);
+    expect(await replay.json()).toEqual(result);
+    // 列表与详情都不再暴露这条草稿；换新 Key 再来一次是 404。
+    const list = schemaRegistry.RecordDraftPage.schema.parse(
+      await (
+        await http(`/projects/${f.projectId}/record-drafts`, "GET", actor)
+      ).json(),
+    );
+    expect(list.items).toHaveLength(0);
+    await failure(await http(resource, "GET", actor), 404);
+    await failure(await http(resource, "DELETE", actor, undefined, 1), 404);
+  });
+
+  it("rejects unauthenticated, foreign, revoked and version-mismatched deletes, and never touches published history", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      path = `/projects/${f.projectId}/modules/${f.moduleId}/record-drafts`;
+    const first = await http(path, "POST", actor, {
+      ...content,
+      scopeType: "MODULE",
+      impactFeatureIds: [f.featureId],
+    });
+    const saved = schemaRegistry.RecordDraftItem.schema.parse(
+      await first.json(),
+    );
+    const resource = `/projects/${f.projectId}/record-drafts/${saved.id}`;
+    // 未登录：请求头形状合法但没有会话，鉴权必须 401。
+    await failure(
+      await http(
+        resource,
+        "DELETE",
+        { cookie: "__Host-session=" + "b".repeat(43), csrf: "a".repeat(43) },
+        undefined,
+        1,
+      ),
+      401,
+    );
+    const outsider = await session(await createUser(client.sql));
+    await failure(await http(resource, "DELETE", outsider, undefined, 1), 404);
+    await failure(await http(resource, "DELETE", actor, undefined, 9), 409);
+    expect(
+      await client.sql`SELECT 1 FROM app.change_records WHERE id=${saved.id}`,
+    ).toHaveLength(1);
+    // 已发布记录不是草稿：删除必须 404，正文与子行都保持原样。
+    // 版本不变式（assert_change_record_versions）要求发布行必须有 v1，同事务补上。
+    await uow.run(async (tx) => {
+      await tx.sql`INSERT INTO app.change_record_versions(record_id,project_id,version_no,title_snapshot,payload,created_by) SELECT id,project_id,1,title,current_payload,${f.userId} FROM app.change_records WHERE id=${saved.id}`;
+      await tx.sql`UPDATE app.change_records SET status='PUBLISHED',code=${f.code + "-CR-1"},current_version=1,published_at=now(),row_version=row_version+1 WHERE id=${saved.id}`;
+    });
+    const published =
+      await client.sql`SELECT * FROM app.change_records WHERE id=${saved.id}`;
+    await failure(await http(resource, "DELETE", actor, undefined, 2), 404);
+    expect(
+      await client.sql`SELECT * FROM app.change_records WHERE id=${saved.id}`,
+    ).toEqual(published);
+    expect(
+      await client.sql`SELECT 1 FROM app.change_record_feature_impacts WHERE change_record_id=${saved.id}`,
+    ).toHaveLength(1);
+    expect(
+      await auditEventFor(f.projectId, "record.draft.delete"),
+    ).toHaveLength(0);
+  });
+
+  it("deletes a task source draft through the same path without changing the task", async () => {
+    const f = await taskFixture(),
+      actor = await session(f.member);
+    const created = await http(
+      f.url,
+      "POST",
+      actor,
+      { ...content, title: null },
+      1,
+    );
+    expect(created.status, await created.clone().text()).toBe(200);
+    const saved = schemaRegistry.RecordDraftItem.schema.parse(
+      await created.json(),
+    );
+    expect(saved.taskId).toBe(f.task.id);
+    const before =
+      await client.sql`SELECT * FROM app.tasks WHERE id=${f.task.id}`;
+    const deleted = await http(
+      `/projects/${f.projectId}/record-drafts/${saved.id}`,
+      "DELETE",
+      actor,
+      undefined,
+      1,
+    );
+    expect(deleted.status, await deleted.clone().text()).toBe(200);
+    expect(
+      await client.sql`SELECT 1 FROM app.change_records WHERE id=${saved.id}`,
+    ).toHaveLength(0);
+    expect(
+      await client.sql`SELECT * FROM app.tasks WHERE id=${f.task.id}`,
+    ).toEqual(before);
+    const list = schemaRegistry.TaskRecordDraftsResponse.schema.parse(
+      await (await http(f.url, "GET", actor)).json(),
+    );
+    expect(list.items).toHaveLength(0);
+  });
+});

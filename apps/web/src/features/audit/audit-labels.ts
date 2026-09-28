@@ -31,6 +31,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "task.unmerge": "解除合并",
   "record.draft.create": "创建草稿",
   "record.draft.update": "更新草稿",
+  "record.draft.delete": "删除草稿",
   "record.publish": "发布记录",
   "record.version.create": "修订记录",
   "record.leftover.add": "追加遗留问题",

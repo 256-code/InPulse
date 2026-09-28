@@ -4011,3 +4011,29 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-DRAFT-GITHUB-LINK-CHECK-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**：lint / format:check / typecheck / test:unit / db:migrations:check / db:seed:check / contract:drift / contract:validate / build / check:deploy:test（5 个镜像 ref 有效）/ check:deps（725 源文件）/ check:frontend:boundaries（286 模块 1408 依赖）/ permissions:check（98 操作 98 路由）/ deps:audit（No known vulnerabilities found）/ check:secrets（1074 文件）/ check:docs（94 个 Markdown） | 本地通过 |
 
 未运行 / 已知偏差：① 推送 `12b22fc` 后已补跑全量 E2E（见 RECORD-DRAFT-GITHUB-LINK-E2E-002）、`pnpm test:integration`、`pnpm build` 整链与 `pnpm check` 整链，全部通过；定向回归只跑过 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑且不会有**——推送 `test` 不触发 CI（`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发），要 CI 结论需另开 `test → main` 的 PR；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。
+
+## 迭代记录草稿删除（ADR-048，用户指示，2026-09-28 本地落库）
+
+用户 2026-09-28 指示：「我希望在草稿箱里的迭代记录可以删除，就是点开编辑的时候有删除选项」。落 [ADR-048](adr/ADR-048.md)：新增 `deleteRecordDraft`（`DELETE /api/v1/projects/{projectId}/record-drafts/{recordId}`），只有 `status = 'DRAFT'` 可删，独立草稿与来源草稿共用；删除连同草稿自己的子行物理删除、只写审计 `record.draft.delete`，不写活动 / 通知 / 搜索投影；`app_runtime` 对 `app.change_records` 的表级权限不放宽，删除收进迁移 `0026` 的 `SECURITY DEFINER` 函数 `app.delete_change_record_draft`。
+
+锁定口径：
+
+- 门禁与编辑一致：匿名 / 停用 401；非成员、已移除成员、真实归属不符、记录不存在或不是 `DRAFT`、父级不可写一律 404；`If-Match` 映射记录 `row_version`，不一致 409 `RECORD_VERSION_CONFLICT`；CSRF + 同源 + 数据库级幂等，同 Key 重放返回同一 200 结果且不依赖已删除行存在。
+- 不与来源任务级联：来源任务的 `work_status`、完成信息、`task_status_history` 与行版本全部不变；已发布 / 已作废记录没有删除入口。
+- 数据库兜底：函数内非 `DRAFT` 抛 `check_violation`；草稿若存在遗留项行抛错而不静默连带删除；子行按 `change_record_external_links` → `change_record_feature_impacts` → `change_records` 顺序删除。
+- 前端：编辑器弹窗页脚左侧实底红色「删除草稿」按钮 + `tone="danger"` 二次确认；成功后失效草稿列表与全部项目草稿缓存、清掉 URL 的 `recordId`，详情弹层不残留已删除草稿。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-DELETE-INT-001 | 真实 PostgreSQL 集成 | 独立草稿删除与同 Key 重放 | `record-drafts.integration.test.ts` 新增 `deletes an independent draft with its child rows, audits it, and still replays the same key afterwards`：删除后 `change_record_external_links` / `change_record_feature_impacts` 清空、`app.audit_logs` 出现 `record.draft.delete`、同 Key 重放 200、列表与详情随即 404 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-002 | 真实 PostgreSQL 集成 | 401 / 404 / 409 与已发布拒绝 | 同文件 `rejects unauthenticated, foreign, revoked and version-mismatched deletes, and never touches published history`：未登录 401、外项目 404、版本不符 409、已发布记录删除 404 且正文与子行不变 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-003 | 真实 PostgreSQL 集成 | 来源草稿删除不动任务 | 同文件 `deletes a task source draft through the same path without changing the task`：任务行快照前后相等、来源草稿列表清空 | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-UNIT-001 | Web 单元 | 必须先确认再删除 | `RecordDraftsView.test.tsx`：点「删除草稿」只打开确认层、不调接口；点「确认删除」后 `deleteRecordDraft` 携带 `If-Match: "1"`、CSRF 与字符串幂等键，成功后弹窗关闭；触发按钮与确认按钮的 `className` 都含 `ant-btn-dangerous` 与 `ant-btn-primary`（实底红，与「作废记录」「解除合并」同一套） | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-UNIT-002 | Web 单元 | 新建草稿没有删除入口 | 同文件：未保存的新建草稿弹窗内没有「删除草稿」按钮 | 本地通过 |
+| RECORD-DRAFT-DELETE-E2E-001 | 浏览器实测（E2E） | 草稿删除全流程 | `record-drafts.spec.ts` `F-17 草稿箱里的迭代记录可以删除`：新建草稿 → 草稿详情 → 继续编辑 → 删除草稿 → 确认删除 → 编辑器与详情弹层关闭、草稿卡片消失 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-004 | 集成测试 | 迁移与真实 PostgreSQL 不回归 | `pnpm test:integration` → apps/api 49 文件 460 例、database 2 文件 26 例、apps/ops 2 文件 7 例（合计 53 文件 493 例），退出码 0；`database.test.ts` 的已应用迁移清单补入 `0026_record_draft_delete.sql` | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 566 例通过 | 本地通过 |
+| RECORD-DRAFT-DELETE-E2E-FULL-001 | E2E（全量） | 无新增失败 | 全量 `pnpm test:e2e` → **59 passed (4.1m)**（原 58 + 新增 1，新增用例 2.7s 通过） | 本地通过 |
+| RECORD-DRAFT-DELETE-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**：lint / format:check / typecheck / test:unit（canonical-json 1 文件 5 例、database 1 文件 15 例、api-contract 16 文件 100 例、api 66 文件 369 例、ops 8 文件 52 例、web 85 文件 566 例）/ db:migrations:check / db:seed:check / contract:drift / contract:validate（99 条路由）/ build / check:deploy:test / check:deps（718 源文件）/ check:frontend:boundaries（286 模块 1408 依赖）/ permissions:check（99 操作 / 99 路由）/ deps:audit（No known vulnerabilities found）/ check:secrets（1076 文件）/ check:docs（95 个 Markdown） | 本地通过 |
+
+未运行 / 已知偏差：① **GitHub Actions 未跑且不会有**——`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发，推送 `test` 不产生 CI 运行，要 CI 结论需另开 `test → main` 的 PR；② 本批含服务端业务逻辑、数据库迁移（`SECURITY DEFINER` 函数与 `EXECUTE` 授权）与前端产品代码改动，按 §6 / §8 需人工评审；③ 迁移只在 `app_ci` 应用过，演示库 `app` 与本机生产形态未升级。

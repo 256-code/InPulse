@@ -61,6 +61,7 @@
 | [ADR-045](ADR-045.md) | Accepted | 功能层面下线归档，功能只有 ACTIVE（替代 ADR-034 功能归档部分、修订 ADR-039 的项目内管理操作清单与 ADR-044 的功能档位表述） |
 | [ADR-046](ADR-046.md) | Accepted | 三层列表排序统一为「档位优先 + 创建时间从近到远」（修订 ADR-044 的模块列表排序表述） |
 | [ADR-047](ADR-047.md) | Accepted | 迭代记录发布与任务完成解耦（修订功能设计 F-18 / F-19 与技术设计 §6.3 的发布门禁） |
+| [ADR-048](ADR-048.md) | Accepted | 迭代记录草稿支持物理删除（`SECURITY DEFINER` 函数 + `record.draft.delete` 审计；明确 ADR-024 `DRAFT` 一档的删除语义） |
 
 ## 关联基线
 

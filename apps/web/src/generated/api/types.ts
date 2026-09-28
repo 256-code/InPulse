@@ -1001,6 +1001,15 @@ export type RecordDraftCreatePath = {
   readonly moduleId: number;
 };
 
+export type RecordDraftDeleteResult = {
+  readonly projectId: number;
+  readonly recordId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: (number | null);
+  readonly impactFeatureIds: readonly number[];
+};
+
 export type RecordDraftHeaders = {
   readonly "x-csrf-token": string;
 };

@@ -29,7 +29,10 @@ import {
   type Field,
 } from "./record-content";
 import { MY_RECORD_DRAFTS_QUERY_KEY } from "./record-drafts-query";
-import { recordDraftErrorMessage } from "./record-draft-errors";
+import {
+  recordDraftDeleteErrorMessage,
+  recordDraftErrorMessage,
+} from "./record-draft-errors";
 import "./record-drafts.css";
 
 /**
@@ -77,6 +80,7 @@ export function RecordDraftEditorModal({
   writable,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   api: InpulseApiClient;
   /** 非 null 即打开；每次传入新对象视为一次打开并初始化表单。 */
@@ -97,6 +101,10 @@ export function RecordDraftEditorModal({
     draft: RecordDraftItem,
     published?: PublishedRecord | null | undefined,
   ) => void;
+  /**
+   * 删除成功回调：调用方据此收起仍在展示这条草稿的详情弹层（弹窗已自行关闭）。
+   */
+  onDeleted?: (() => void) | undefined;
 }) {
   const cache = useQueryClient();
   // 409 后重新加载会拿到更新的来源或草稿版本：用内部覆盖保存最新目标，
@@ -135,6 +143,11 @@ export function RecordDraftEditorModal({
   const saving = useRef(false);
   /** 当前正在跑的动作：两个页脚按钮各自显示自己的 loading。 */
   const [pending, setPending] = useState<"save" | "publish" | null>(null);
+  /** 删除确认弹层：草稿删除不可恢复，必须先确认再打接口。 */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+  const deleteRetry = useRef<{ signature: string; key: string } | null>(null);
   const lastTarget = useRef<RecordDraftEditorTarget | null>(null);
   const {
     control,
@@ -197,11 +210,54 @@ export function RecordDraftEditorModal({
     setLinkInput("");
     setLinkError(null);
   };
+  /**
+   * 删除当前草稿：未发布过的草稿不属于业务历史，删掉后不能再恢复。
+   * 成功后清掉草稿相关缓存并关闭弹窗；失败保留弹窗与草稿，只提示原因。
+   */
+  const removeDraft = async () => {
+    if (!item || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const signature = JSON.stringify([item.id, item.rowVersion]);
+      if (deleteRetry.current?.signature !== signature)
+        deleteRetry.current = {
+          signature,
+          key: createIdempotencyKey("record-draft-delete"),
+        };
+      const csrf = await api.issueCsrfToken();
+      await api.deleteRecordDraft(item.projectId, item.id, {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "If-Match": `"${item.rowVersion}"`,
+          "Idempotency-Key": deleteRetry.current.key,
+        },
+      });
+      deleteRetry.current = null;
+      await cache.invalidateQueries({
+        queryKey: ["record-drafts", item.projectId],
+      });
+      await cache.invalidateQueries({ queryKey: MY_RECORD_DRAFTS_QUERY_KEY });
+      await cache.invalidateQueries({
+        queryKey: ["task-record-drafts", projectId],
+      });
+      cache.removeQueries({
+        queryKey: ["record-draft", item.projectId, item.id],
+      });
+      setConfirmDelete(false);
+      onDeleted?.();
+      onClose();
+    } catch (error) {
+      setDeleteError(error);
+    } finally {
+      setDeleting(false);
+    }
+  };
   const mutation = useMutation({
     retry: false,
     mutationFn: async (input: {
       readonly edit: RecordDraftContent;
-      /** 保存后立即发布成正式迭代记录（页脚「新建迭代」/「保存并发布」）。 */
+      /** 保存后立即发布成正式迭代记录（页脚主按钮「发布迭代记录」）。 */
       readonly publish: boolean;
     }) => {
       const edit = input.edit;
@@ -522,12 +578,9 @@ export function RecordDraftEditorModal({
   /**
    * 页脚主按钮：ADR-047 起迭代记录只描述本次迭代，发布与任务完成解耦——来源任务未完成
    * （含已取消）也能就地发布，且发布不改变任务状态，三种目标于是共用同一个发布入口。
+   * 三态共用「发布迭代记录」：独立新建时旧文案「新建迭代」看不出会播出去，容易被当成建草稿。
    */
-  const publishLabel = item
-    ? "保存并发布"
-    : source
-      ? "发布迭代记录"
-      : "新建迭代";
+  const publishLabel = "发布迭代记录";
   /** 来源快照的只读归属行：名称走既有只读契约，数据未到时回退编号。 */
   const nameOf = {
     project: (id: number) =>
@@ -916,8 +969,25 @@ export function RecordDraftEditorModal({
               </>
             )}
           </section>
+          <p className="record-publish-hint">
+            发布后项目成员可见；先「保存草稿」只自己能看到，检查好再发布。
+          </p>
         </div>
         <div className="calm-action-footer">
+          {item ? (
+            <Button
+              className="footer-leading"
+              danger
+              type="primary"
+              disabled={submitBlocked || deleting}
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmDelete(true);
+              }}
+            >
+              删除草稿
+            </Button>
+          ) : null}
           <Button
             htmlType="submit"
             className="soft-blue-button"
@@ -936,6 +1006,47 @@ export function RecordDraftEditorModal({
           </Button>
         </div>
       </form>
+      <Modal
+        className="catalog-modal"
+        eyebrow={item ? "草稿 · " + item.title : "迭代记录草稿"}
+        title="删除草稿"
+        tone="danger"
+        icon="alert"
+        open={confirmDelete}
+        body
+        closable={!deleting}
+        onCancel={() => {
+          if (!deleting) setConfirmDelete(false);
+        }}
+        mask={{ closable: !deleting }}
+        footer={
+          <>
+            <Button disabled={deleting} onClick={() => setConfirmDelete(false)}>
+              取消
+            </Button>
+            <Button
+              danger
+              type="primary"
+              loading={deleting}
+              onClick={() => void removeDraft()}
+            >
+              确认删除
+            </Button>
+          </>
+        }
+      >
+        <p>
+          删除后这条草稿、草稿里的遗留问题条目和 GitHub
+          链接关联都会移除，且不能恢复。
+        </p>
+        <p>已经发布的迭代记录不受影响，只能在记录详情里作废。</p>
+        {deleteError !== null && (
+          <Alert
+            type="error"
+            title={recordDraftDeleteErrorMessage(deleteError)}
+          />
+        )}
+      </Modal>
     </Modal>
   );
 }
