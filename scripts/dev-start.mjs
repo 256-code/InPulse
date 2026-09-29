@@ -24,6 +24,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { request } from "node:http";
@@ -38,6 +39,7 @@ const LOG_DIR = path.join(DATA_DIR, "dev");
 const KEYRING_DIR = path.join(DATA_DIR, "keyrings");
 const DB_CONTAINER = "inpulse-pg";
 const DB_PORT = 55432;
+const DB_ADMIN_USER = "cluster_bootstrap";
 const API_PORT = 3000;
 const WEB_PORT = 5173;
 const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
@@ -178,7 +180,7 @@ function relativeToRoot(target) {
   return path.relative(ROOT, target).split(path.sep).join("/");
 }
 
-async function ensureDatabase() {
+async function ensureDatabase(databaseUrl) {
   console.log("[1/4] 检查本地 PostgreSQL 容器 ...");
   const started = capture("docker", ["start", DB_CONTAINER]);
   if (started.status !== 0) {
@@ -190,6 +192,7 @@ async function ensureDatabase() {
   while (Date.now() < deadline) {
     if (capture("docker", ["exec", DB_CONTAINER, "pg_isready"]).status === 0) {
       console.log(`  就绪：127.0.0.1:${DB_PORT}（容器 ${DB_CONTAINER}）`);
+      assertMigrationsUpToDate(databaseUrl);
       return;
     }
     await delay(1000);
@@ -271,14 +274,88 @@ async function waitForPort(port, name, logFile, timeoutMs = 90_000) {
   );
 }
 
+function resolveRuntimeDatabaseUrl(fileValues) {
+  return (
+    fileValues["DATABASE_URL"] ??
+    `postgresql://app_runtime@127.0.0.1:${DB_PORT}/app`
+  );
+}
+
+/** 迁移版本校验 + ensureDatabase 用同一个 URL，避免两处各自拼装后不一致。 */
+function assertMigrationsUpToDate(databaseUrl) {
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    console.log("  迁移校验：跳过（DATABASE_URL 不是合法 URL）");
+    return;
+  }
+  const host = parsed.hostname;
+  if (
+    (host !== "127.0.0.1" && host !== "localhost") ||
+    parsed.port !== String(DB_PORT)
+  ) {
+    console.log(
+      `  迁移校验：跳过（DATABASE_URL 指向 ${parsed.host}，不是本地默认库）`,
+    );
+    return;
+  }
+  const database = parsed.pathname.replace(/^\//, "") || "app";
+  const expected = readdirSync(path.join(ROOT, "database", "migrations"))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  const result = capture("docker", [
+    "exec",
+    DB_CONTAINER,
+    "psql",
+    "-U",
+    DB_ADMIN_USER,
+    "-d",
+    database,
+    "-tAc",
+    "SELECT name FROM app.schema_migrations",
+  ]);
+  if (result.status !== 0) {
+    throw new Error(
+      `无法读取 ${database} 的 app.schema_migrations：请先按 database/README.md 初始化本地 PostgreSQL 18 + PGroonga 实例与角色。`,
+    );
+  }
+  const appliedNames = new Set(
+    result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
+  );
+  // 落后会让 API 的读路径直接 500（例如 ADR-049 起需要 app.projects.deleted_at），
+  // 且报错是「服务器无法完成…」这类兜底文案，很难反查到库版本，因此这里 fail fast。
+  const pending = expected.filter((name) => !appliedNames.has(name));
+  if (pending.length > 0) {
+    const preview = pending.slice(0, 3).join(" / ");
+    const more = pending.length > 3 ? " 等" : "";
+    throw new Error(
+      `本地库 ${database} 落后 ${String(pending.length)} 个迁移（缺 ${preview}${more}），当前代码会让项目级接口一律 500。\n` +
+        `    请先执行：$env:MIGRATION_DATABASE_URL='postgresql://${DB_ADMIN_USER}@127.0.0.1:${String(DB_PORT)}/${database}'; pnpm db:migrate\n` +
+        `    （随后重新运行 node scripts/dev-start.mjs）`,
+    );
+  }
+  const unknown = [...appliedNames].filter((name) => !expected.includes(name));
+  if (unknown.length > 0) {
+    console.log(
+      `  迁移校验：${database} 已是最新（${String(expected.length)} 个迁移），但库里有 ${String(unknown.length)} 个本地不存在的迁移记录：${unknown.slice(0, 3).join(" / ")}（当前代码可能落后于库）`,
+    );
+    return;
+  }
+  console.log(
+    `  迁移校验：${database} 已是最新（${String(expected.length)} 个迁移）`,
+  );
+}
+
 function buildApiEnvironment(fileValues, sso) {
   const env = {
     ...process.env,
     NODE_ENV: "test",
     PORT: String(API_PORT),
-    DATABASE_URL:
-      fileValues["DATABASE_URL"] ??
-      `postgresql://app_runtime@127.0.0.1:${DB_PORT}/app`,
+    DATABASE_URL: resolveRuntimeDatabaseUrl(fileValues),
     AUDIT_DATABASE_URL:
       fileValues["AUDIT_DATABASE_URL"] ??
       `postgresql://audit_reader@127.0.0.1:${DB_PORT}/app`,
@@ -396,7 +473,7 @@ async function main() {
     console.log(`已为本地开发生成 keyring：${createdKeyrings.join("、")}`);
   }
 
-  await ensureDatabase();
+  await ensureDatabase(resolveRuntimeDatabaseUrl(fileValues));
   buildApi(options.skipBuild);
 
   console.log("[3/4] 启动 API ...");
