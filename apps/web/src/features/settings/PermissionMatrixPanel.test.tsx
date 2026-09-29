@@ -34,26 +34,40 @@ describe("PermissionMatrixPanel", () => {
     expect(cell("查看所有项目", 3)).toHaveTextContent(
       "项目成员只能看已加入项目",
     );
-    expect(cell("归档/恢复项目", 1)).toHaveTextContent("√");
-    expect(cell("归档/恢复项目", 2)).toHaveTextContent("—");
-    expect(cell("归档/恢复项目", 3)).toHaveTextContent("高风险权限");
+    expect(cell("彻底删除项目", 1)).toHaveTextContent("√");
+    expect(cell("彻底删除项目", 2)).toHaveTextContent("—");
+    expect(cell("彻底删除项目", 3)).toHaveTextContent("仅系统管理员");
   });
 
-  it("keeps immutable and out-of-scope capabilities unavailable to everyone", () => {
+  it("omits removed and nobody-can-do capabilities and never shows a version tag", () => {
     render(<PermissionMatrixPanel />);
-    for (const row of ["修改项目编码", "配置 GitHub 应用或 Token"]) {
-      expect(cell(row, 1)).toHaveTextContent("—");
-      expect(cell(row, 2)).toHaveTextContent("—");
+    for (const row of [
+      "修改项目编码",
+      "配置 GitHub 应用或 Token",
+      "归档/恢复项目",
+      "归档/恢复模块",
+      "归档/恢复功能",
+    ]) {
+      expect(screen.queryByText(row)).not.toBeInTheDocument();
     }
-    expect(cell("配置 GitHub 应用或 Token", 3)).toHaveTextContent(
-      "V1.1 不接入 GitHub API，也不持有 Token",
-    );
+    expect(screen.queryAllByText(/V1\.1/)).toHaveLength(0);
   });
 
-  it("states the source of truth for authorization in the panel header", () => {
+  it("describes the panel without any version tag", () => {
     render(<PermissionMatrixPanel />);
     expect(
-      screen.getByText("V1.1 授权验收入口 · 与功能设计 §8.2 一致"),
+      screen.getByText("系统管理员与项目成员的权限对照"),
     ).toBeInTheDocument();
+  });
+
+  it("distinguishes member-wide, leader-only and admin-only capabilities", () => {
+    render(<PermissionMatrixPanel />);
+    expect(cell("变更项目状态", 2)).toHaveTextContent("√");
+    expect(cell("添加/移除项目成员", 2)).toHaveTextContent("√");
+    for (const row of ["组长转移", "删除/还原项目"]) {
+      expect(cell(row, 1)).toHaveTextContent("√");
+      expect(cell(row, 2)).toHaveTextContent("仅组长");
+    }
+    expect(cell("彻底删除项目", 2)).toHaveTextContent("—");
   });
 });
