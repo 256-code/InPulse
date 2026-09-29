@@ -185,8 +185,10 @@
   vertical-align: top;
 }
 
+/* 表头比表体的 12px 略大一档（2026-09-29 用户要求「这几个字稍微大一点」）。 */
 .summary-detail-table th {
   color: var(--muted-foreground);
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -200,4 +202,119 @@
 .summary-footer-count {
   color: var(--muted-foreground);
   font-size: 12px;
+}
+
+/* 明细行可展开（2026-09-29）：整个横向区域可点，首列箭头只做展开态的视觉提示；
+   展开区复用正式记录详情的只读形态，内边距清零交给外层单元格与 section 分隔线。 */
+/* 展开列钉成固定 28px 且零水平内边距：列宽不再是内容推导值，展开正文的
+   38px 左边距（28px 列宽 + 编号列 10px 内边距）才能稳定与「编号」文字对齐。 */
+.summary-detail-table thead th.summary-detail-toggle-head,
+.summary-detail-table tbody td.summary-detail-toggle {
+  padding: 9px 0;
+  text-align: center;
+}
+
+.summary-detail-row {
+  cursor: pointer;
+}
+
+.summary-detail-row:hover {
+  background: #fafcfe;
+}
+
+.summary-detail-toggle {
+  color: #93a1b0;
+}
+
+.summary-detail-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.summary-detail-toggle-button:hover,
+.summary-detail-toggle-button:focus-visible {
+  background: #eaf2fd;
+  color: #2671c9;
+}
+
+.summary-detail-toggle-button svg {
+  transition: transform 0.15s ease;
+}
+
+.summary-detail-toggle-button svg.expanded {
+  transform: rotate(90deg);
+}
+
+.summary-detail-expanded > td {
+  /* 左边距 = 展开列 28px + 编号列 10px 内边距，与「编号」文字同列。 */
+  padding: 0 10px 14px 38px;
+  background: #fbfdff;
+}
+
+.summary-detail-expanded .record-expanded {
+  padding: 0;
+}
+
+/* 展开区第一段自带的 border-top 会紧贴上方行线画成双线；上边距由单元格提供。 */
+.summary-detail-expanded .record-expanded > :first-child {
+  border-top: 0;
+  padding-top: 8px;
+}
+
+/* 明细表在 auto 布局下会被最长单元格的 min-content 顶宽（本项目实测 1318px >
+   弹窗正文 1124px），整表横向溢出会把展开区的遗留问题徽章挤出可视区。固定布局 +
+   显式列宽让表格始终贴合弹窗宽度，长内容在单元格内换行（日期、编号列留足不换行）。 */
+.summary-detail-table {
+  table-layout: fixed;
+}
+
+/* 六列都用百分比且合计 100%：固定布局下 px 列会按比例吸收剩余宽度（实测「展开列」
+   被撑到 46px），展开正文的 38px 左边距就再也对不上「编号」文字；百分比列没有剩余
+   可分配，列宽完全由弹窗宽度决定，28px 的展开列在任何宽度下都成立。 */
+.summary-detail-table th:nth-child(1) {
+  width: 2.5%;
+}
+
+.summary-detail-table th:nth-child(2) {
+  width: 11.5%;
+}
+
+.summary-detail-table th:nth-child(3) {
+  width: 20%;
+}
+
+.summary-detail-table th:nth-child(4) {
+  width: 40.5%;
+}
+
+.summary-detail-table th:nth-child(5) {
+  width: 12%;
+}
+
+.summary-detail-table th:nth-child(6) {
+  width: 13.5%;
+}
+
+/* 全局 `td { white-space: nowrap }`（design-system.css）会让长内容既换不了行、
+   又直接溢出单元格压到右侧列上（2026-09-29 用户反馈「排不下就用两行不要混在一起」）。
+   表体一律允许换行，只有编号 / 作者 / 发布日期这类短字段保留单行；展开行是独占
+   整行的 `colSpan={6}` 单元格（`nth-child(1)`），同样按可换行处理。 */
+.summary-detail-table td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.summary-detail-table td:nth-child(2),
+.summary-detail-table td:nth-child(5),
+.summary-detail-table td:nth-child(6) {
+  white-space: nowrap;
 }

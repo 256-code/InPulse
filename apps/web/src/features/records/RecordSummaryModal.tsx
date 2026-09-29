@@ -4,7 +4,9 @@ import type { InpulseApiClient, ProjectItem, UserRef } from "@generated/api";
 import { AppModal } from "@features/common/components/AppModal";
 import { CalmSegmented } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { projectSelectOption } from "@features/common/project-select-option";
+import { PublishedRecordDetail } from "@features/published-records/PublishedRecordDetail";
 import {
   buildSummaryDocument,
   summaryDocumentToText,
@@ -88,6 +90,8 @@ export function RecordSummaryModal({
   const [memberId, setMemberId] = useState(0);
   const [memberOptions, setMemberOptions] = useState<readonly UserRef[]>([]);
   const [detail, setDetail] = useState(false);
+  /** 明细里展开的那一条记录；null 表示全部收起（默认收起，点行或箭头展开）。 */
+  const [expandedRecordId, setExpandedRecordId] = useState<number | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done" | "failed">(
     "idle",
   );
@@ -96,8 +100,13 @@ export function RecordSummaryModal({
     if (open) {
       setProjectId(defaultProjectId);
       setMemberId(0);
+      setExpandedRecordId(null);
     }
   }, [open, defaultProjectId]);
+
+  const toggleRecord = (recordId: number) => {
+    setExpandedRecordId((current) => (current === recordId ? null : recordId));
+  };
 
   const range = preset === "custom" ? customRange : presetRange(preset);
   const summary = useRecordSummaryQuery({
@@ -319,6 +328,7 @@ export function RecordSummaryModal({
       <table className="summary-detail-table">
         <thead>
           <tr>
+            <th className="summary-detail-toggle-head" aria-label="展开详情" />
             <th>编号</th>
             <th>项目 / 模块 / 功能</th>
             <th>标题与效果</th>
@@ -327,21 +337,81 @@ export function RecordSummaryModal({
           </tr>
         </thead>
         <tbody>
-          {data.points.map((point) => (
-            <tr key={point.recordId}>
-              <td>{point.recordCode}</td>
-              <td>
-                {point.projectName} / {point.moduleName}
-                {point.featureName === null ? "" : ` / ${point.featureName}`}
-              </td>
-              <td>
-                <b>{point.title}</b>
-                <small>{point.detail}</small>
-              </td>
-              <td>{point.author.name}</td>
-              <td>{point.publishedAt.slice(0, 10)}</td>
-            </tr>
-          ))}
+          {data.points.map((point) => {
+            const expanded = expandedRecordId === point.recordId;
+            return (
+              <React.Fragment key={point.recordId}>
+                {/*
+                  整行可点：总结明细用于核对取数，展开即读记录正文的三段完整文本
+                  与遗留问题（正文比要点里的效果句长得多，要点被折叠并截断到 1000 字）。
+                */}
+                <tr
+                  className={
+                    expanded
+                      ? "summary-detail-row is-expanded"
+                      : "summary-detail-row"
+                  }
+                  onClick={() => {
+                    toggleRecord(point.recordId);
+                  }}
+                >
+                  <td className="summary-detail-toggle">
+                    <button
+                      type="button"
+                      className="summary-detail-toggle-button"
+                      aria-expanded={expanded}
+                      aria-label={
+                        expanded
+                          ? `收起 ${point.recordCode} 的详细内容`
+                          : `展开 ${point.recordCode} 的详细内容`
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleRecord(point.recordId);
+                      }}
+                    >
+                      <InpulseIcon
+                        name="chevron"
+                        size={14}
+                        {...(expanded ? { className: "expanded" } : {})}
+                      />
+                    </button>
+                  </td>
+                  <td>{point.recordCode}</td>
+                  <td>
+                    {point.projectName} / {point.moduleName}
+                    {point.featureName === null
+                      ? ""
+                      : ` / ${point.featureName}`}
+                  </td>
+                  <td>
+                    <b>{point.title}</b>
+                    <small>{point.detail}</small>
+                  </td>
+                  <td>{point.author.name}</td>
+                  <td>{point.publishedAt.slice(0, 10)}</td>
+                </tr>
+                {expanded ? (
+                  <tr className="summary-detail-expanded">
+                    <td colSpan={6}>
+                      {/*
+                        只读复用正式记录详情（B-3a）：同一查询键
+                        ["published-record", projectId, recordId]，详情已加载过时命中缓存，
+                        只读形态不发版本、GitHub 与任何写入请求。
+                      */}
+                      <PublishedRecordDetail
+                        projectId={point.projectId}
+                        recordId={point.recordId}
+                        client={client}
+                        writable={false}
+                        readOnly
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
