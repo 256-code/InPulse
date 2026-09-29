@@ -861,6 +861,51 @@ button {
   border: 1px solid var(--border);
   box-shadow: 0 6px 18px #16324d26;
 }
+/* 桌面端收起左侧导航（2026-09-29 产品要求「做个按钮可以把左边的导航栏收起来」）：
+   收起入口放在品牌行右侧，收起后整个侧栏隐藏、内容区拿到全部宽度，左上角保留一个与
+   窄屏同款的悬浮展开按钮；窄屏（≤700px）继续走抽屉加汉堡开关，两套规则各占一侧媒体
+   查询，互不干扰。 */
+.brand-joint > .joint-logo-frame {
+  /* 让出右侧收起按钮的宽度：标志是 object-fit: contain，等比缩小后仍完整可见。 */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sidebar-collapse-button {
+  flex: 0 0 auto;
+  color: #9bb0c7;
+}
+.sidebar-expand-button {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px #16324d26;
+}
+/* 两个开关各自只在一侧可见：收起按钮属于桌面侧栏（收起态它在 display:none 的侧栏里），
+   展开按钮只在桌面收起后渲染。 */
+.sidebar-collapse-button,
+.sidebar-expand-button {
+  display: none;
+}
+@media (min-width: 701px) {
+  .sidebar-collapse-button,
+  .sidebar-expand-button {
+    display: inline-grid;
+  }
+  .sidebar-collapse-button:hover {
+    background: #ffffff14;
+    color: #ffffff;
+  }
+  .nav-collapsed .sidebar {
+    display: none;
+  }
+  .nav-collapsed .page-content {
+    /* 默认 34px / 22px（≤1000px）左内边距会被 12 + 30px 的悬浮按钮压住标题行。 */
+    padding-left: 46px;
+  }
+}
 .page-content {
   max-width: 1450px;
   margin: 0 auto;

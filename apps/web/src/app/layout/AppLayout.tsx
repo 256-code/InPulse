@@ -158,6 +158,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // 桌面端把左侧导航整体收起（≤700px 走抽屉与汉堡开关，该状态不参与）。
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
@@ -299,7 +301,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   return (
     <>
-      <div className="app-shell">
+      <div className={"app-shell" + (navCollapsed ? " nav-collapsed" : "")}>
         {/* 顶栏已移除：窄屏导航开关改为左上角悬浮按钮（仅 ≤700px 显示）。 */}
         <button
           type="button"
@@ -310,7 +312,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         >
           <InpulseIcon name="menu" size={20} />
         </button>
-        <aside className={`sidebar${mobileNavOpen ? " sidebar-open" : ""}`}>
+        {navCollapsed ? (
+          // 桌面端收起后沿用窄屏开关的位置与外观，只负责把导航放回来（仅 >700px 显示）。
+          <button
+            type="button"
+            className="icon-button sidebar-expand-button"
+            aria-label="展开导航"
+            title="展开导航"
+            aria-controls="app-sidebar"
+            aria-expanded={false}
+            onClick={() => setNavCollapsed(false)}
+          >
+            <InpulseIcon name="menu" size={20} />
+          </button>
+        ) : null}
+        <aside
+          id="app-sidebar"
+          className={`sidebar${mobileNavOpen ? " sidebar-open" : ""}`}
+        >
           <div className="brand brand-joint">
             <div className="joint-logo-frame">
               <img
@@ -319,6 +338,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 className="joint-logo"
               />
             </div>
+            <button
+              type="button"
+              className="icon-button sidebar-collapse-button"
+              aria-label="收起导航"
+              title="收起导航"
+              aria-controls="app-sidebar"
+              aria-expanded
+              onClick={() => setNavCollapsed(true)}
+            >
+              <InpulseIcon name="chevronLeft" size={18} />
+            </button>
           </div>
           <nav className="nav-group" aria-label="工作区导航">
             <p>工作台</p>
