@@ -26,11 +26,13 @@ import { MyTasksQueryService } from "./my-tasks-query.service.js";
 import { ProjectOverviewController } from "./project-overview.controller.js";
 import { ProjectOverviewQueryService } from "./project-overview-query.service.js";
 import { RecordFeedController } from "./record-feed.controller.js";
+import { RecordSummaryController } from "./record-summary.controller.js";
 import {
   RecordFeedQueryService,
   RECORD_FEED_CURSOR,
   RECORD_FEED_CURSOR_NAMESPACE,
 } from "./record-feed-query.service.js";
+import { RecordSummaryQueryService } from "./record-summary-query.service.js";
 import { TaskGroupMembershipController } from "./task-group-membership.controller.js";
 import { TaskGroupMembershipQueryService } from "./task-group-membership-query.service.js";
 import { TaskBoardController } from "./task-board.controller.js";
@@ -85,6 +87,7 @@ import { TimeCursorService } from "../../cursors/time-cursor.js";
     TaskBoardQueryService,
     RecordFeedQueryService,
     MyRecordDraftsQueryService,
+    RecordSummaryQueryService,
   ],
   controllers: [
     // R-5 的静态段 /task-groups/memberships 必须先于 TaskGroupReadController 的
@@ -97,6 +100,7 @@ import { TimeCursorService } from "../../cursors/time-cursor.js";
     TaskBoardController,
     TaskCenterController,
     RecordFeedController,
+    RecordSummaryController,
     MyRecordDraftsController,
   ],
 })

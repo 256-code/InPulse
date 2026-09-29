@@ -1177,6 +1177,101 @@ export type RecordPublicationReplayContext = {
   readonly leftoverItemIds: readonly number[];
 };
 
+export type RecordSummaryGap = {
+  readonly taskId: number;
+  readonly taskCode: string;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly moduleId: number;
+  readonly moduleName: string;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly title: string;
+  readonly completedAt: string;
+  readonly assignee: UserRef;
+};
+
+export type RecordSummaryIssue = {
+  readonly leftoverItemId: number;
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly recordTitle: string;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly author: UserRef;
+  readonly content: string;
+  readonly status: ("ACTIVE" | "CONVERTED" | "RESOLVED");
+  readonly followupTaskId: (number | null);
+  readonly followupTaskCode: (string | null);
+  readonly publishedAt: string;
+};
+
+export type RecordSummaryPoint = {
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly moduleId: number;
+  readonly moduleName: string;
+  readonly featureId: (number | null);
+  readonly featureName: (string | null);
+  readonly title: string;
+  readonly detail: string;
+  readonly author: UserRef;
+  readonly publishedAt: string;
+  readonly taskId: (number | null);
+  readonly taskCode: (string | null);
+};
+
+export type RecordSummaryQueryRequest = {
+  readonly from: string;
+  readonly to: string;
+  readonly projectId?: number;
+  readonly memberId?: number;
+  readonly groupBy: ("PROJECT" | "MEMBER");
+};
+
+export type RecordSummaryRange = {
+  readonly from: string;
+  readonly to: string;
+};
+
+export type RecordSummaryResponse = {
+  readonly generatedAt: string;
+  readonly range: RecordSummaryRange;
+  readonly groupBy: ("PROJECT" | "MEMBER");
+  readonly scope: {
+    readonly projectIds: readonly number[];
+    readonly projectNames: readonly string[];
+    readonly member: (UserRef | null);
+  };
+  readonly totals: RecordSummaryTotals;
+  readonly sections: readonly RecordSummarySection[];
+  readonly points: readonly RecordSummaryPoint[];
+  readonly leftovers: readonly RecordSummaryIssue[];
+  readonly gaps: readonly RecordSummaryGap[];
+  readonly truncated: boolean;
+};
+
+export type RecordSummarySection = {
+  readonly key: string;
+  readonly projectId: (number | null);
+  readonly member: (UserRef | null);
+  readonly recordCount: number;
+  readonly completedTaskCount: number;
+};
+
+export type RecordSummaryTotals = {
+  readonly projectCount: number;
+  readonly moduleCount: number;
+  readonly featureCount: number;
+  readonly recordCount: number;
+  readonly completedTaskCount: number;
+  readonly missingRecordTaskCount: number;
+  readonly leftoverCount: number;
+  readonly closedLeftoverCount: number;
+};
+
 export type RemoveProjectMemberRequest = {
   readonly reassignments: readonly ProjectMemberReassignmentItem[];
 };

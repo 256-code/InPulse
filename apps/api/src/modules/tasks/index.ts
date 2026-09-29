@@ -26,6 +26,9 @@ export {
   type TaskListRow,
   type TaskPriority,
   type TaskReadModel,
+  type SummaryTaskPage,
+  type SummaryTaskReadInput,
+  type SummaryTaskRow,
   type TaskScopeType,
   type TaskWorkStatus,
 } from "./task-query.port.js";

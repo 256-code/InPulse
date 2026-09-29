@@ -21,6 +21,7 @@ import {
   publishedRecordErrorMessage,
 } from "@features/published-records/PublishedRecordDetail";
 import { PublishedRecordCard } from "./PublishedRecordCard";
+import { RecordSummaryModal } from "./RecordSummaryModal";
 import { useProjectFeatureNames } from "./feature-name-map";
 import {
   groupRecordsByDate,
@@ -66,6 +67,8 @@ export function RecordsWorkspace({
   const [term, setTerm] = useState("");
   const [source, setSource] = useState<RecordSourceFilter>("ALL");
   const [createToken, setCreateToken] = useState(0);
+  /** F-33 迭代总结弹窗；只在打开时取数，不影响列表与草稿的任何请求。 */
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   /** 时间线按天折叠：记录日期键集合，默认全部展开。 */
   const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
@@ -117,6 +120,23 @@ export function RecordsWorkspace({
   const reportCanCreate = useCallback((next: boolean) => {
     setCanCreate((prev) => (prev === next ? prev : next));
   }, []);
+  /**
+   * 记录状态筛选：非管理员只有「已发布」这一档，单选控件没有可选项，整块不渲染。
+   * 「已作废 / 全部」是管理员的回溯入口，仍然保留。
+   */
+  const statusOptions = useMemo<
+    ReadonlyArray<{ readonly value: RecordFeedStatus; readonly label: string }>
+  >(
+    () =>
+      user?.isAdmin
+        ? [
+            { value: "PUBLISHED", label: "已发布" },
+            { value: "VOID", label: "已作废" },
+            { value: "ALL", label: "全部" },
+          ]
+        : [{ value: "PUBLISHED", label: "已发布" }],
+    [user?.isAdmin],
+  );
   const filtered = term.length > 0 || source !== "ALL";
   const standaloneDetail =
     projectId > 0 &&
@@ -215,20 +235,26 @@ export function RecordsWorkspace({
             animated
           />
         </label>
-        <CalmSegmented
-          label="记录状态"
-          value={status}
-          options={
-            user?.isAdmin
-              ? [
-                  { value: "PUBLISHED", label: "已发布" },
-                  { value: "VOID", label: "已作废" },
-                  { value: "ALL", label: "全部" },
-                ]
-              : [{ value: "PUBLISHED", label: "已发布" }]
-          }
-          onChange={selectStatus}
-        />
+        {statusOptions.length > 1 ? (
+          <CalmSegmented
+            label="记录状态"
+            value={status}
+            options={statusOptions}
+            onChange={selectStatus}
+          />
+        ) : null}
+        {/* F-33：生成总结与筛选同一行、靠右顶格；包一层 div 避免命中
+            `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则。 */}
+        <div className="records-toolbar-summary">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSummaryOpen(true)}
+          >
+            <InpulseIcon name="fileText" size={15} />
+            生成总结
+          </button>
+        </div>
       </div>
       <div className="record-drafts-block">
         <RecordDraftsView
@@ -338,6 +364,13 @@ export function RecordsWorkspace({
           />
         </section>
       )}
+      <RecordSummaryModal
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        client={client}
+        defaultProjectId={projectId}
+        projects={projects.data?.items ?? []}
+      />
       {list.hasNextPage && (
         <div className="record-load-more">
           <Button

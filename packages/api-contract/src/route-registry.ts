@@ -3,6 +3,7 @@ import { aggregateReadRoutes } from "./aggregate-read-routes.js";
 import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
 import { recordFeedRoutes } from "./record-feed-routes.js";
+import { recordSummaryRoutes } from "./record-summary-routes.js";
 import {
   recordDraftDeleteRoutes,
   recordDraftRoutes,
@@ -50,6 +51,7 @@ export const routeRegistry = [
   ...taskGroupRoutes,
   ...aggregateReadRoutes,
   ...recordFeedRoutes,
+  ...recordSummaryRoutes,
   ...taskCompletionRoutes,
   ...leftoverTaskRoutes,
   ...moduleTaskRoutes,

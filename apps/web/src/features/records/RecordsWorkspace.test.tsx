@@ -280,12 +280,9 @@ describe("RecordsWorkspace", () => {
       client as unknown as InpulseApiClient,
       "/records?projectId=1",
     );
-    const group = screen.getByRole("group", { name: "记录状态" });
+    // 非管理员只剩「已发布」一档，单选控件没有可选项，整块不渲染。
     expect(
-      within(group).queryByRole("button", { name: "已作废" }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(group).queryByRole("button", { name: "全部" }),
+      screen.queryByRole("group", { name: "记录状态" }),
     ).not.toBeInTheDocument();
     view.unmount();
     const adminClient = baseClient();
