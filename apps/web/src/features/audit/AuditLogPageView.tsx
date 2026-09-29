@@ -525,6 +525,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           appearance="rich"
           onChange={(next) => handleChainChange(String(next))}
           options={projectChainOptions}
+          animated
         />
         <div className="task-search">
           <InpulseIcon name="search" size={16} />
@@ -565,6 +566,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             avatarUrl: entry.avatarUrl ?? null,
             description: entry.isAdmin ? "系统管理员" : "项目成员",
           }))}
+          animated
         />
         <label className="audit-time-field">
           <span>开始时间</span>

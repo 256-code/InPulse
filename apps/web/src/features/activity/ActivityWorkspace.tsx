@@ -515,6 +515,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
               { value: DELETED_PROJECTS, label: "已删除项目" },
               ...projects.map(projectSelectOption),
             ]}
+            animated
           />
         ) : null}
         {isAdmin ? (

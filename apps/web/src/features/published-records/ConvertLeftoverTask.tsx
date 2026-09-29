@@ -339,6 +339,7 @@ export function LeftoverTaskConvertModal({
               label: m.name,
               avatarUrl: m.avatarUrl ?? null,
             }))}
+            animated
           />
           {members.isError && (
             <Alert
@@ -378,6 +379,7 @@ export function LeftoverTaskConvertModal({
                 dotColor: priorityDotColor("URGENT"),
               },
             ]}
+            animated
           />
           <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
           <input

@@ -1176,6 +1176,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             无障碍定位仍由 CalmSelect 的 aria-label 提供。 */}
         <CalmSelect
           ariaLabel="项目"
+          animated
           value={filters.projectId === null ? "" : String(filters.projectId)}
           onChange={(next) => {
             const parsed = typeof next === "number" ? next : Number(next);
@@ -1191,6 +1192,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         />
         <CalmSelect
           ariaLabel="优先级"
+          animated
           value={filters.priority ?? ""}
           disabled={!enabled("filter:priority")}
           appearance="menu"
@@ -1212,6 +1214,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         />
         <CalmSelect
           ariaLabel="任务范围"
+          animated
           value={filters.level ?? ""}
           appearance="notion"
           onChange={(next) =>
@@ -1256,6 +1259,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             合并关系
             <CalmSelect
               ariaLabel="合并关系"
+              animated
               value={filters.relation ?? ""}
               disabled={!enabled("filter:relation")}
               appearance="menu"
@@ -1276,6 +1280,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             是否有迭代记录
             <CalmSelect
               ariaLabel="是否有迭代记录"
+              animated
               value={filters.hasRecord ?? ""}
               appearance="menu"
               onChange={(next) =>
@@ -1294,6 +1299,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             是否有 GitHub
             <CalmSelect
               ariaLabel="是否有 GitHub"
+              animated
               value={filters.hasGithub ?? ""}
               disabled={!enabled("filter:github")}
               appearance="menu"

@@ -184,6 +184,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
                   { value: "", label: "全部项目" },
                   ...(projects.data?.items ?? []).map(projectSelectOption),
                 ]}
+                animated
               />
             </label>
             {onBackToRecords === undefined ? null : (

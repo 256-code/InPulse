@@ -279,6 +279,7 @@ export function MergeIntoMainTaskModal({
           label: item.title,
           description: item.summary === "" ? "任务" : item.summary,
         }))}
+        animated
       />
       {searchFailed ? (
         <Alert

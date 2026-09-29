@@ -369,6 +369,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                   }))}
                   appearance="rich"
                   ariaLabel="选择项目"
+                  animated
                 />
               )}
             </CalmSectionTitle>
@@ -550,6 +551,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     avatarUrl: user.avatarUrl ?? null,
                     description: user.isAdmin ? "系统管理员" : "启用用户",
                   }))}
+                  animated
                 />
                 {selectedUserIds.length > 1 ? (
                   <p className="member-hint">
@@ -662,6 +664,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                               next.map(Number),
                             )
                           }
+                          animated
                         />
                       ) : (
                         <span className="member-task-keep">

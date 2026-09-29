@@ -498,6 +498,7 @@ export function GlobalTaskCreateModal({
                     { value: 0, label: "请选择项目", disabled: true },
                     ...(projects.data?.items ?? []).map(projectSelectOption),
                   ]}
+                  animated
                 />
                 {projects.isError && (
                   <p role="alert">项目列表加载失败，请稍后重试。</p>
@@ -534,6 +535,7 @@ export function GlobalTaskCreateModal({
                       label: module.name,
                     })),
                   ]}
+                  animated
                 />
               </div>
             )}
@@ -577,6 +579,7 @@ export function GlobalTaskCreateModal({
                     value: feature.id,
                     label: feature.name,
                   }))}
+                  animated
                 />
                 {impactOptions.isError && (
                   <Alert
@@ -620,6 +623,7 @@ export function GlobalTaskCreateModal({
                       label: feature.name,
                     })),
                   ]}
+                  animated
                 />
               </div>
             )}
@@ -657,6 +661,7 @@ export function GlobalTaskCreateModal({
                 }
                 disabled={!targetReady}
                 ariaLabel="负责人"
+                animated
               />
               {targetReady && isFirstLoad(assignees) && (
                 <p>正在加载项目成员…</p>
@@ -693,6 +698,7 @@ export function GlobalTaskCreateModal({
                       dotColor: priorityDotColor(value),
                     }),
                   )}
+                  animated
                 />
               </div>
               <div className="calm-field">

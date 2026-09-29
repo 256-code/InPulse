@@ -613,6 +613,7 @@ export function TasksPanel({
                   options={statusFilterOptions}
                   appearance="menu"
                   ariaLabel="任务状态筛选"
+                  animated
                 />
               )}
               <CalmSegmented
@@ -1510,6 +1511,7 @@ export function TasksPanel({
                       maxTagCount={2}
                       placeholder="请选择项目成员（可多选）"
                       ariaLabel="负责人"
+                      animated
                     />
                   )}
                 />
@@ -1553,6 +1555,7 @@ export function TasksPanel({
                             dotColor: priorityDotColor(value),
                           }),
                         )}
+                        animated
                       />
                     )}
                   />
@@ -1654,6 +1657,7 @@ export function TasksPanel({
                             value: f.id,
                             label: f.name,
                           }))}
+                          animated
                         />
                       )}
                     />

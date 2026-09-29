@@ -264,6 +264,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       avatarUrl: user.avatarUrl ?? null,
                       description: user.isAdmin ? "系统管理员" : "项目成员",
                     }))}
+                    animated
                   />
                 </div>
               ) : null}

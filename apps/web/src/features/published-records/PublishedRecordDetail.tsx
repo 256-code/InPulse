@@ -381,6 +381,7 @@ export function PublishedRecordDetail({
                         " · " +
                         new Date(v.createdAt).toLocaleString("zh-CN"),
                     }))}
+                    animated
                   />
                 </label>
                 <label>
@@ -399,6 +400,7 @@ export function PublishedRecordDetail({
                         " · " +
                         new Date(v.createdAt).toLocaleString("zh-CN"),
                     }))}
+                    animated
                   />
                 </label>
               </div>

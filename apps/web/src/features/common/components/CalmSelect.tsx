@@ -1,5 +1,5 @@
 import React from "react";
-import { Select } from "antd";
+import { ConfigProvider, Select, type ThemeConfig } from "antd";
 import { CalmBadge, type CalmBadgeTone } from "./Calm";
 import { InpulseIcon } from "./InpulseIcon";
 import "./calm-select.css";
@@ -58,6 +58,8 @@ interface CalmSelectBaseProps {
   readonly id?: string | undefined;
   /** 触发器宽度（数字按 px）；不设置时随内容自适应。 */
   readonly width?: number | string | undefined;
+  /** 弹层启用进入/离开动画。全局主题关闭了 antd motion，这里按需为弹层局部开启。 */
+  readonly animated?: boolean | undefined;
 }
 
 export interface CalmSelectProps extends CalmSelectBaseProps {
@@ -135,6 +137,13 @@ const OptionAvatar: React.FC<{ readonly option: CalmSelectOption }> = ({
     </span>
   );
 
+/** 全局主题关闭了 antd motion（外观零差异约束）；这里只让 CalmSelect 弹层恢复动效，
+ * 进入/离开关键帧由 calm-select.css 按 .calm-select-popup 接管。 */
+const motionEnabledTheme: ThemeConfig = {
+  inherit: true,
+  token: { motion: true },
+};
+
 export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
   const {
     options,
@@ -149,6 +158,7 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
     ariaLabel,
     id,
     width,
+    animated,
   } = props;
   const multiple = props.multiple === true;
   const withSearch = searchable ?? appearance === "member";
@@ -327,11 +337,16 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
         ? undefined
         : (selectedOption?.value ?? props.value);
 
-  return (
+  const selectNode = (
     <Select
       className={rootClass}
       classNames={{
-        popup: { root: "calm-select-popup calm-select-popup-" + appearance },
+        popup: {
+          root:
+            "calm-select-popup calm-select-popup-" +
+            appearance +
+            (animated === true ? " calm-select-popup-animated" : ""),
+        },
       }}
       {...(multiple ? { mode: "multiple" as const } : {})}
       {...(props.multiple === true
@@ -382,5 +397,11 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
       aria-label={ariaLabel}
       {...(id === undefined ? {} : { id })}
     />
+  );
+
+  return animated === true ? (
+    <ConfigProvider theme={motionEnabledTheme}>{selectNode}</ConfigProvider>
+  ) : (
+    selectNode
   );
 };

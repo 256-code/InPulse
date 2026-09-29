@@ -197,6 +197,7 @@ export function RecordsWorkspace({
                 { value: "", label: "全部项目" },
                 ...(projects.data?.items ?? []).map(projectSelectOption),
               ]}
+              animated
             />
           </label>
         )}
@@ -211,6 +212,7 @@ export function RecordsWorkspace({
               value: option.value,
               label: option.label,
             }))}
+            animated
           />
         </label>
         <CalmSegmented

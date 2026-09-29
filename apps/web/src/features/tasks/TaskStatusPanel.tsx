@@ -401,6 +401,7 @@ export function TaskStatusPanel({
                         value,
                         label: value,
                       }))}
+                      animated
                     />
                   </label>
                   <p className="permission-hint">

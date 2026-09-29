@@ -216,6 +216,7 @@ export function CompleteWithRecord({
             { value: "inline", label: "填写新记录" },
             { value: "draft", label: "选择已有草稿" },
           ]}
+          animated
         />
       </label>
       {!!error && (
@@ -345,6 +346,7 @@ export function CompleteWithRecord({
                       record.rowVersion,
                   })),
                 ]}
+                animated
               />
               {drafts.hasNextPage && (
                 <div className="record-load-more">

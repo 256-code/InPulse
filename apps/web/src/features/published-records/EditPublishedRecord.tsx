@@ -271,6 +271,7 @@ export function EditPublishedRecord({
                         { value: "mine", label: "保留我的输入" },
                         { value: "latest", label: "采用最新内容" },
                       ]}
+                      animated
                     />
                     <div className="record-field">
                       <span className="record-field-label">最新内容</span>

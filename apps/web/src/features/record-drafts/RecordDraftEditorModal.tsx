@@ -697,6 +697,7 @@ export function RecordDraftEditorModal({
                       { value: "mine", label: "保留我的输入" },
                       { value: "latest", label: "采用最新内容" },
                     ]}
+                    animated
                   />
                   <div className="record-field">
                     <span className="record-field-label">最新内容</span>
@@ -780,6 +781,7 @@ export function RecordDraftEditorModal({
                       ...projectSelectOption(p),
                       disabled: p.status !== "ACTIVE",
                     }))}
+                    animated
                   />
                 </label>
               )}
@@ -804,6 +806,7 @@ export function RecordDraftEditorModal({
                     value: m.id,
                     label: m.name,
                   }))}
+                  animated
                 />
               </label>
               <label>
@@ -817,6 +820,7 @@ export function RecordDraftEditorModal({
                     { value: "MODULE", label: "模块", emoji: "\u{1F9E9}" },
                     { value: "FEATURE", label: "功能", emoji: "\u{1F3AF}" },
                   ]}
+                  animated
                 />
               </label>
               {scopeType === "FEATURE" ? (
@@ -834,6 +838,7 @@ export function RecordDraftEditorModal({
                       value: f.id,
                       label: f.name,
                     }))}
+                    animated
                   />
                 </label>
               ) : (
@@ -852,6 +857,7 @@ export function RecordDraftEditorModal({
                       value: f.id,
                       label: f.name,
                     }))}
+                    animated
                   />
                 </fieldset>
               )}
