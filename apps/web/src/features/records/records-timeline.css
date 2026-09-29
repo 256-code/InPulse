@@ -28,6 +28,13 @@
   font: inherit;
 }
 
+/* F-33「生成总结」：与筛选控件同一行并靠右顶格。 */
+.records-toolbar-summary {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 .record-drafts-block {
   margin: 0 0 6px;
 }

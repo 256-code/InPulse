@@ -235,6 +235,46 @@ export interface TaskBoardStatsResult {
   readonly modules: readonly TaskBoardModuleStatsRow[];
 }
 
+/** F-33 迭代总结已完成任务入参；projectIds 必须来自服务端 AuthorizedProjectScope。 */
+export interface SummaryTaskReadInput {
+  readonly projectIds: readonly number[];
+  /** 完成自然日下界（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly fromDate: string;
+  /** 完成自然日上界（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly toDate: string;
+  readonly projectId?: number;
+  /** 收窄到单个负责人（task_assignees 之一）。 */
+  readonly assigneeId?: number;
+  readonly limit: number;
+}
+
+/**
+ * F-33 已完成任务行：work_status = DONE 且 completed_at 落在范围内；已失效
+ * （lifecycle_status = INVALID）的任务不进入总结。assigneeId 取多负责人中最小
+ * 的 user_id，与任务列表、看板同一口径。
+ */
+export interface SummaryTaskRow {
+  readonly taskId: number;
+  readonly code: string;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number | null;
+  readonly scopeType: TaskScopeType;
+  readonly title: string;
+  readonly completedAt: Date;
+  readonly assigneeId: number | null;
+}
+
+export interface SummaryTaskPage {
+  readonly items: readonly SummaryTaskRow[];
+  readonly total: number;
+  readonly hasMore: boolean;
+}
+
+interface SummaryTaskRowRaw extends Omit<SummaryTaskRow, "completedAt"> {
+  readonly completedAt: string;
+}
+
 /** Caller authorizes the project. lock requires project/module/sorted feature locks first. */
 export abstract class TaskQueryPort {
   /**
@@ -328,6 +368,16 @@ export abstract class TaskQueryPort {
     tx: TransactionContext,
     input: TaskBoardStatsInput,
   ): Promise<TaskBoardStatsResult>;
+
+  /**
+   * F-33 迭代总结已完成任务：work_status = DONE 且 completed_at 落在 [from, to) 内，
+   * 排除 lifecycle_status = INVALID；固定 completed_at DESC, id DESC。total 与筛选
+   * 同口径，不受 limit 截断。只读、不取锁；projectIds 为空时短路返回空页。
+   */
+  abstract summaryCompletedTasks(
+    tx: TransactionContext,
+    input: SummaryTaskReadInput,
+  ): Promise<SummaryTaskPage>;
 }
 
 function assertLimit(limit: number): void {
@@ -618,6 +668,61 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
         completedThisWeek: 0,
       },
       modules,
+    };
+  }
+
+  async summaryCompletedTasks(
+    tx: TransactionContext,
+    input: SummaryTaskReadInput,
+  ): Promise<SummaryTaskPage> {
+    assertLimit(input.limit);
+    if (input.projectIds.length === 0) {
+      return { items: [], total: 0, hasMore: false };
+    }
+    const projects = [...input.projectIds];
+    const projectId = input.projectId ?? null;
+    const assigneeId = input.assigneeId ?? null;
+    const rows = await tx.sql<SummaryTaskRowRaw[]>`
+      SELECT t.id AS "taskId",
+             t.code AS code,
+             t.project_id AS "projectId",
+             t.module_id AS "moduleId",
+             t.feature_id AS "featureId",
+             t.scope_type AS "scopeType",
+             t.title AS title,
+             t.completed_at AS "completedAt",
+             (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId"
+        FROM app.tasks t
+       WHERE t.project_id = ANY(${projects}::integer[])
+         AND t.work_status = 'DONE'
+         AND t.lifecycle_status <> 'INVALID'
+         AND t.completed_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND t.completed_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR t.project_id = ${projectId})
+         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
+       ORDER BY t.completed_at DESC, t.id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const [countRow] = await tx.sql<{ total: number }[]>`
+      SELECT COUNT(*)::integer AS total
+        FROM app.tasks t
+       WHERE t.project_id = ANY(${projects}::integer[])
+         AND t.work_status = 'DONE'
+         AND t.lifecycle_status <> 'INVALID'
+         AND t.completed_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND t.completed_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR t.project_id = ${projectId})
+         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
+    `;
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    return {
+      items: visible.map((row) => ({
+        ...row,
+        completedAt: new Date(row.completedAt),
+      })),
+      total: countRow?.total ?? 0,
+      hasMore,
     };
   }
 }

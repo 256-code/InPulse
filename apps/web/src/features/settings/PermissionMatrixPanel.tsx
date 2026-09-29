@@ -9,10 +9,7 @@ import { permissionMatrixRows } from "./settings-content";
  */
 export const PermissionMatrixPanel: React.FC = () => (
   <section className="panel settings-panel table-panel" aria-label="权限矩阵">
-    <CalmSectionTitle
-      title="权限矩阵"
-      hint="系统管理员与项目成员的权限对照"
-    />
+    <CalmSectionTitle title="权限矩阵" hint="系统管理员与项目成员的权限对照" />
 
     <div className="table-wrap">
       <table className="settings-table">
