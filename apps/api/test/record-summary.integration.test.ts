@@ -512,4 +512,49 @@ describe("RecordSummaryQueryService（真实端口）", () => {
     expect(summary.truncated).toBe(false);
     expect(summary.points.every((row) => row.detail.length > 0)).toBe(true);
   });
+
+  // 回归：授权范围内存在本期没有任何记录 / 任务的项目（如刚创建的项目）时，
+  // 它不会出现在结果集里，但 scope.projectNames 仍必须解析全部范围项目——
+  // 此前「按结果集取名」把它判成 `AGGREGATE_READ_INCONSISTENT` 并返回 500。
+  test("范围内没有记录 / 任务的项目不会让总结失败，名称覆盖全部授权项目", async () => {
+    const idleProject = await createProject(client!.sql, scope.userId);
+    const service = new RecordSummaryQueryService(
+      new PostgresProjectAccessQueryPort(client!),
+      new PostgresProjectQueryPort(client!),
+      new PostgresModuleReadPort(),
+      new PostgresFeatureReadPort(),
+      new PostgresChangeRecordReadPort(),
+      new PostgresTaskQueryPort(),
+      new PostgresUserReadPort(),
+      uow,
+    );
+
+    const summary = await service.get({
+      actorUserId: scope.userId,
+      fromDate: shanghaiDay(0),
+      toDate: shanghaiDay(2),
+      groupBy: "PROJECT",
+    });
+
+    expect(summary.scope.projectIds).toEqual(
+      expect.arrayContaining([scope.projectId, idleProject.projectId]),
+    );
+    expect(summary.scope.projectNames).toHaveLength(
+      summary.scope.projectIds.length,
+    );
+    const nameById = new Map([
+      [scope.projectId, `Project ${scope.code}`],
+      [idleProject.projectId, `Project ${idleProject.code}`],
+    ]);
+    summary.scope.projectIds.forEach((id, index) => {
+      const expectedName = nameById.get(id);
+      if (expectedName !== undefined) {
+        expect(summary.scope.projectNames[index]).toBe(expectedName);
+      }
+    });
+    // 本期没有记录 / 任务的项目不进分节，不产生空分节。
+    expect(
+      summary.sections.some((row) => row.projectId === idleProject.projectId),
+    ).toBe(false);
+  });
 });

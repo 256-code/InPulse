@@ -232,7 +232,10 @@ export class RecordSummaryQueryService {
       };
     });
 
-    const projects = await this.projects.list(data.pageProjectIds);
+    // 名字必须解析整个授权范围：本期没有任何记录 / 任务的项目（例如刚创建、
+    // 还没写记录的项目）不会出现在 pageProjectIds 里，但 scope.projectNames
+    // 与分组仍要给出名字，否则合法请求会被判成「聚合读数据不完整」。
+    const projects = await this.projects.list(projectIds);
     const projectNameById = new Map(
       projects.map((project) => [project.id, project.name]),
     );
