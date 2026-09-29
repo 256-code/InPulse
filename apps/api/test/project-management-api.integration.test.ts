@@ -708,7 +708,7 @@ describe("F-06.3 项目状态变更 API", () => {
     ).toBe("MAINTENANCE");
   });
 
-  it("已归档或已取消的任务不算未收尾，可进入维护中", async () => {
+  it("已完成或已取消的任务不算未收尾，可进入维护中", async () => {
     const value = await fixture();
     const path = statusPath(value.project.projectId);
     await request(
@@ -745,24 +745,28 @@ describe("F-06.3 项目状态变更 API", () => {
     await client.sql`
       WITH created AS (
         INSERT INTO app.tasks (
-          project_id, module_id, scope_type, code, title, lifecycle_status,
-          creator_id
+          project_id, module_id, scope_type, code, title, work_status,
+          completion_note, completed_at, creator_id
         )
         VALUES (
           ${value.project.projectId},
           ${value.project.moduleId},
           'MODULE',
           ${`${value.project.code}-T-2`},
-          '已归档任务',
-          'ARCHIVED',
+          '已完成任务',
+          'DONE',
+          '已完成',
+          now(),
           ${value.owner.userId}
         )
-        RETURNING id, project_id
+        RETURNING id, project_id, completed_at, completion_note
       )
       INSERT INTO app.task_status_history (
-        task_id, project_id, from_work_status, to_work_status, changed_by
+        task_id, project_id, from_work_status, to_work_status,
+        completed_at_snapshot, completion_note_snapshot, changed_by
       )
-      SELECT id, project_id, NULL, 'TODO', ${value.owner.userId}
+      SELECT id, project_id, NULL, 'DONE', completed_at, completion_note,
+             ${value.owner.userId}
         FROM created
     `;
 

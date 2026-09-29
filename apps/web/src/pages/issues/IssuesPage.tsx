@@ -1,7 +1,6 @@
 import React, { lazy, Suspense, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
-import { useAuth } from "@features/auth/auth-context";
 import { IssuesPageView } from "@features/issues/IssuesPageView";
 import type { TaskLocation } from "@features/tasks/task-links";
 
@@ -25,7 +24,6 @@ export interface IssuesPageProps {
 
 export const IssuesPage: React.FC<IssuesPageProps> = ({ client }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [detailTarget, setDetailTarget] = useState<TaskLocation | null>(null);
 
   const handleBackToRecords = useCallback(() => {
@@ -52,7 +50,6 @@ export const IssuesPage: React.FC<IssuesPageProps> = ({ client }) => {
           <TaskDetailOverlay
             target={detailTarget}
             client={client}
-            isAdmin={user?.isAdmin === true}
             onClose={handleCloseTask}
             onOpenTask={handleOpenTask}
           />

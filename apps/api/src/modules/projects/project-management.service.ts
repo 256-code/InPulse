@@ -281,7 +281,7 @@ export class ProjectManagementService {
    * 三条硬约束在服务端拦截，前端置灰只是提示：
    * - 未开始与维护中之间禁止直接互改，必须先经过进行中；
    * - 项目内出现过已完成任务后不可回退未开始（粘性标记永不回落）；
-   * - 进入维护中要求项目下任务全部收尾（未归档且未完成的任务数为 0）。
+   * - 进入维护中要求项目下任务全部收尾（未完成且未取消的任务数为 0）。
    *
    * 只有「未开始 → 进行中」通知全体活跃成员；维护中不通知，避免反复切换刷屏。
    * 状态、审计 `project.status.change`、活动与搜索投影在同一事务提交。
@@ -340,14 +340,14 @@ export class ProjectManagementService {
       );
     }
     if (input.target === "MAINTENANCE") {
-      const openTaskCount = await this.projects.countUnarchivedTasks(tx, {
+      const openTaskCount = await this.projects.countOpenTasks(tx, {
         projectId: input.projectId,
       });
       if (openTaskCount > 0) {
         throw new ProjectManagementError(
           409,
           "PROJECT_MAINTENANCE_TASKS_OPEN",
-          `项目下仍有 ${openTaskCount} 个未完成、也未归档的任务，请先完成或归档全部任务再切换为维护中`,
+          `项目下仍有 ${openTaskCount} 个未完成、也未取消的任务，请先完成或取消全部任务再切换为维护中`,
         );
       }
     }

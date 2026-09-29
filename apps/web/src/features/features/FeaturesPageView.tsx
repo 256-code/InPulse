@@ -81,13 +81,11 @@ export function FeaturesPageView({
   projectId,
   moduleId,
   featureId,
-  isAdmin,
   client,
 }: {
   projectId: number;
   moduleId: number;
   featureId?: number | undefined;
-  isAdmin: boolean;
   client?: InpulseApiClient | undefined;
 }) {
   const { query, mutation } = useFeatures(
@@ -675,7 +673,6 @@ export function FeaturesPageView({
                       featureId={activeItem.id}
                       writable
                       client={client}
-                      isAdmin={isAdmin}
                       onOpenTask={setTaskTarget}
                     />
                   </section>
@@ -931,7 +928,6 @@ export function FeaturesPageView({
           <TaskDetailOverlay
             target={taskTarget}
             client={client}
-            isAdmin={isAdmin}
             onClose={() => setTaskTarget(null)}
             onOpenTask={setTaskTarget}
           />

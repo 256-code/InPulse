@@ -253,8 +253,10 @@ export abstract class ProjectsWritePort {
   /**
    * 统计项目下尚未收尾的任务数（lifecycle_status 为 ACTIVE 且工作状态既非 DONE
    * 也非 CANCELED）；ADR-043：项目进入维护中要求结果为 0。
+   * 命名从 countUnarchivedTasks 改为 countOpenTasks（ADR-054）：任务归档已下线，
+   * 「未归档」不再是一个可表述的概念，SQL 口径不变。
    */
-  abstract countUnarchivedTasks(
+  abstract countOpenTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<number>;

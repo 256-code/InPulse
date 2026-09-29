@@ -49,7 +49,8 @@ export const taskItemSchema = taskEditRequestSchema
     assigneeId: id,
     creatorId: id,
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
-    lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    // ADR-054：任务层面下线归档，ARCHIVED 不可达；INVALID 保留「标记无效」语义。
+    lifecycleStatus: z.enum(["ACTIVE", "INVALID"]),
     rowVersion: id,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
@@ -159,23 +160,7 @@ export const taskStatusHistoryResponseSchema = z
   })
   .strict()
   .meta({ id: "TaskStatusHistoryResponse" });
-/**
- * 任务归档或恢复原因；两类生命周期操作都必须显式填写并进入不可变审计，
- * 模块归档与项目归档申请都要求下级任务已完成归档。
- */
-export const taskArchiveRequestSchema = z
-  .object({ reason: z.string().trim().min(1).max(2000) })
-  .strict()
-  .meta({ id: "TaskArchiveRequest" });
-
-export type TaskArchiveRequest = z.infer<typeof taskArchiveRequestSchema>;
-
 export const taskSchemas = {
-  TaskArchiveRequest: {
-    schema: taskArchiveRequestSchema,
-    summary: "任务归档或恢复原因",
-    sensitiveFieldPaths: [],
-  },
   TaskStatusRequest: {
     schema: taskStatusRequestSchema,
     summary: "任务状态命令；完成仅支持无功能变化",

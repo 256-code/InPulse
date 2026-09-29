@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Spin } from "antd";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
-import { useAuth } from "@features/auth/auth-context";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
 import { TaskDetailOverlay } from "@features/tasks/TaskDetailOverlay";
@@ -53,7 +52,6 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
   onOpenModules,
 }) => {
   const query = useTaskBoardQuery({ projectId, adapter });
-  const { user } = useAuth();
   const [detailTarget, setDetailTarget] = useState<TaskLocation | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   // 折叠状态由看板与列表两种视图共享，且只存在于本次浏览：
@@ -255,7 +253,6 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
         <TaskDetailOverlay
           target={detailTarget}
           client={client}
-          isAdmin={user?.isAdmin === true}
           onClose={() => setDetailTarget(null)}
         />
       )}

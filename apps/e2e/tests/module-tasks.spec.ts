@@ -102,8 +102,7 @@ test("F-15 单份模块任务影响两功能，引用计数与增删关系持久
       await expect(page.getByText("1 个任务")).toBeVisible();
       await moduleCard.click();
       // 单份引用：功能页只展示模块级任务的引用，状态流转仍按 taskWritable=false
-      // 关闭。旧断言要求「编辑任务」禁用；72c0714 起归档/恢复入口对全部项目成员
-      // 开放，该按钮改为可点。
+      // 关闭（ADR-054 已下线任务的归档 / 恢复入口）。
       const referenced = page.getByRole("dialog", { name: "任务详情" });
       await expect(
         referenced.getByRole("button", { name: "完成任务" }),

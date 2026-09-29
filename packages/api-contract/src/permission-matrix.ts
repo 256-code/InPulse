@@ -568,7 +568,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-039：本项目任意活跃成员（实时成员关系），CSRF、Idempotency-Key 与 If-Match 必填；进入维护中要求项目下任务全部收尾，仍有未完成且未归档的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
+          "ADR-039：本项目任意活跃成员（实时成员关系），CSRF、Idempotency-Key 与 If-Match 必填；进入维护中要求项目下任务全部收尾，仍有未完成且未取消的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -708,33 +708,6 @@ export const permissionMatrix = [
       },
     },
   },
-  ...(
-    [
-      "archiveTask",
-      "restoreTask",
-      "archiveModuleTask",
-      "restoreModuleTask",
-    ] as const
-  ).map((operationId): PermissionMatrixEntry => ({
-    operationId,
-    outcomes: {
-      匿名: { kind: "deny", status: 401 },
-      活跃成员: {
-        kind: "conditional",
-        allowedWhen:
-          "ADR-033/ADR-039：本项目任意活跃成员（实时成员关系），父级 ACTIVE、原因/If-Match/CSRF 与幂等必填",
-        deniedWith: 403,
-      },
-      其他项目成员: { kind: "deny", status: 404 },
-      已移除成员: { kind: "deny", status: 404 },
-      停用用户: { kind: "deny", status: 401 },
-      系统管理员: {
-        kind: "conditional",
-        allowedWhen: "完整管理员 Session；原因、If-Match、CSRF 与幂等必填",
-        deniedWith: 403,
-      },
-    },
-  })),
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

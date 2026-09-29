@@ -66,7 +66,7 @@ export interface MyTaskListItem {
   readonly featureName: string | null;
   readonly scopeType: MyTaskLevel;
   readonly workStatus: MyTaskWorkStatus;
-  readonly lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus: "ACTIVE" | "INVALID";
   readonly priority: MyTaskPriority;
   /** null 表示确实未设置截止；R-3 已提供该字段，不再有「不可知」态。 */
   readonly dueAt: string | null;

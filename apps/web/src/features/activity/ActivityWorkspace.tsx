@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ActivityItem, InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
@@ -201,6 +201,32 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   );
 
   /**
+   * 动态按项目分页取回后才在前端筛选，分类与关键词只作用于已加载的页：
+   * 选中的分类在首屏没有命中时，直接显示空态会把未加载的数据当成「没有」。
+   * 因此筛选激活且当前无匹配时自动继续翻页，直到找到匹配或数据穷尽；
+   * 期间界面给出「正在查找」状态，不再显示误导性空态。
+   */
+  const isFiltering = chip !== "全部" || query.trim().length > 0;
+  const awaitingFilteredMatch = isFiltering && filteredItems.length === 0;
+  useEffect(() => {
+    if (
+      !awaitingFilteredMatch ||
+      !activityQuery.hasNextPage ||
+      activityQuery.isFetchingNextPage ||
+      activityQuery.isError
+    ) {
+      return;
+    }
+    void activityQuery.fetchNextPage();
+  }, [
+    awaitingFilteredMatch,
+    activityQuery.hasNextPage,
+    activityQuery.isFetchingNextPage,
+    activityQuery.isError,
+    activityQuery.fetchNextPage,
+  ]);
+
+  /**
    * 同一项目可以被删除多次（删除 → 还原 → 再删除）。删除记录是历史过程，
    * 全部保留；但「还原项目」「彻底删除」只反映项目当前状态，因此只对每个
    * 项目最新的一条删除动态开放，其余删除行只展示记录本身。
@@ -269,6 +295,13 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         {describeActivityError(activityQuery.error)}
       </div>
     );
+  } else if (awaitingFilteredMatch && activityQuery.hasNextPage) {
+    content = (
+      <div className="activity-state">
+        <span className="activity-spinner" />
+        正在查找匹配的动态...
+      </div>
+    );
   } else if (filteredItems.length === 0) {
     content = (
       <CalmEmptyState
@@ -277,7 +310,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         description={
           items.length === 0
             ? "当前范围内还没有可展示的活动投影。"
-            : "调整筛选条件后重试。"
+            : "已加载该范围内的全部动态，没有符合条件的记录。"
         }
       />
     );
@@ -359,54 +392,52 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                               </small>
                             </div>
                           </div>
-                          <div className="audit-actions activity-actions">
-                            <div className="activity-actions-main">
-                              {isAdmin ? (
-                                <button
-                                  type="button"
-                                  className="small-button"
-                                  aria-label={`原始快照 ${item.id}`}
-                                  onClick={() => setSnapshotItem(item)}
-                                >
-                                  <InpulseIcon name="shield" size={13} />
-                                  原始快照
-                                </button>
-                              ) : null}
-                              {/* ADR-050：已删除项目的下级对象已不可访问，
-                                  项目链的每一行都不提供跳转；用与「查看对象」同宽
-                                  的占位槽补位，使「原始快照」在所有行落在同一列
-                                  （没有「原始快照」时不占位）。 */}
-                              {projectDeleted ? (
-                                <span
-                                  aria-hidden="true"
-                                  className="activity-actions-slot"
-                                />
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  aria-label="查看对象"
-                                  title={activityTargetLabel(item)}
-                                  onClick={() =>
-                                    navigate(
-                                      activityTargetPath(item, { isAdmin }),
-                                    )
-                                  }
-                                >
-                                  <InpulseIcon name="chevronRight" size={16} />
-                                </button>
-                              )}
-                            </div>
-                            {/* ADR-051：删除行用「还原项目」「彻底删除」代替跳转。
-                                两个入口只在服务端下发的 canRestore / canPurge 为真时
-                                渲染，并另起一行：并排会撑宽整个动作区，把「原始快照」
-                                挤出上面那一列。 */}
+                          <div className="audit-actions">
+                            {/* ADR-051：删除行的「还原项目」「彻底删除」与「原始快照」
+                                并排在同一行（快照列最右，两个动作排在其左侧），只在
+                                服务端下发的 canRestore / canPurge 为真时渲染。 */}
                             {deletionActions !== null ? (
                               <ProjectDeletionActions
                                 deletion={deletionActions}
                                 {...(client ? { client } : {})}
                               />
                             ) : null}
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                className="small-button"
+                                aria-label={`原始快照 ${item.id}`}
+                                onClick={() => setSnapshotItem(item)}
+                              >
+                                <InpulseIcon name="shield" size={13} />
+                                原始快照
+                              </button>
+                            ) : null}
+                            {/* ADR-050：已删除项目的下级对象已不可访问，项目链
+                                的每一行都不提供跳转；有「原始快照」的行用与
+                                「查看对象」等宽的占位，保持快照列跨行对齐。 */}
+                            {projectDeleted ? (
+                              isAdmin ? (
+                                <span
+                                  className="activity-actions-slot"
+                                  aria-hidden="true"
+                                />
+                              ) : null
+                            ) : (
+                              <button
+                                type="button"
+                                className="icon-button"
+                                aria-label="查看对象"
+                                title={activityTargetLabel(item)}
+                                onClick={() =>
+                                  navigate(
+                                    activityTargetPath(item, { isAdmin }),
+                                  )
+                                }
+                              >
+                                <InpulseIcon name="chevronRight" size={16} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

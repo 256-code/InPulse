@@ -160,7 +160,6 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
           <TaskDetailOverlay
             target={detailTarget}
             client={client}
-            isAdmin={isAdmin}
             onClose={handleCloseTask}
             onOpenTask={handleOpenTask}
           />

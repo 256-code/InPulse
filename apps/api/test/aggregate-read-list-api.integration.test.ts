@@ -160,7 +160,7 @@ interface TaskOptions {
   readonly assigneeIds?: number[];
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   readonly title?: string;
   readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt?: string | null;

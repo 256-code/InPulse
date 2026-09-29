@@ -192,9 +192,6 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
           >
             {taskPriorityLabel(member.priority)}
           </CalmBadge>
-          {member.lifecycleStatus === "ARCHIVED" ? (
-            <CalmBadge tone="gray">已归档</CalmBadge>
-          ) : null}
           {member.role === "SOURCE" && member.memberStatus === "ACTIVE" ? (
             <UnmergeTaskGroupButton
               groupId={groupId}

@@ -537,6 +537,8 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 
 > 2026-09-09 F-27/F-28 E2E 新增：`activity.spec.ts` 覆盖“创建项目 → 项目动态 → `project.create` 条目”专属路径；`notifications.spec.ts` 覆盖已读 ↔ 未读切换、全部已读与铃铛未读数联动；抽取 `createProjectViaUi` 复用项目创建。本分支已 rebase 到 `origin/main` `1c2b5bf`，本地 `pnpm build`、`pnpm test:e2e` 为 16/16（含搜索边界与 F-13 功能档案），`apps/e2e` typecheck、`pnpm format:check`、`pnpm check:docs` 与 `git diff --check` 通过；PR #67 首次 CI 已通过（workspace 9m58s，docs 通过）；rebase 到 1c2b5bf 后仅文档同步，未等待新 CI。
 
+> 2026-09-29 分类与关键词筛选改为「先找完再下结论」（用户报告误导性空态）：动态按项目分页取回后才在前端筛选，分类或关键词在已加载页没有命中时，界面此前直接显示「没有匹配的动态」，把未加载的数据当成结果。现在 `ActivityWorkspace`（`apps/web/src/features/activity/ActivityWorkspace.tsx`）在筛选激活（`chip !== "全部"` 或有搜索词）且当前无匹配时自动继续 `fetchNextPage` 直到命中或数据穷尽，期间显示「正在查找匹配的动态...」；空态只在数据穷尽后出现，文案改为「已加载该范围内的全部动态，没有符合条件的记录。」。真实浏览器复验（2026-09-29，演示库 `app`）：`/activity` 选「GitHub」自动翻 1 页命中 2026-09-20 的 `EXTERNAL_LINK_ADDED`（修复前需手动点「加载更多」才能看到，否则是假空态）；搜索一个不存在的关键词时自动翻页至穷尽（13 次 feed 请求）后显示真空态，无重复请求与死循环；请求失败（`isError`）时 effect 直接返回、停止自动翻页并沿用既有错误态（代码路径约定，未做错误注入实测）。按 2026-09-17「只改 `apps/web` 免测试与门禁」约定未运行单测与 E2E；既有 `ActivityWorkspace.deletions.test.tsx` 的空态断言夹具 `hasMore:false`，与新分支兼容。
+
 ## 维护规则
 
 - 新增 Route Registry 操作时，同一 PR 必须添加权限、幂等及错误契约用例。
@@ -1773,6 +1775,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 用户确认的口径：① 项目归档保留「双方同意」，但申请权与审批权分离——活跃成员（ADR-039 前为项目组长、项目管理员与系统管理员）可发起申请，只有总管理员（系统管理员）能批准真正归档；② 拦截口径只针对任务——项目归档的申请与批准、模块归档都要求作用域内任务均已收尾，功能不需要归档、也不参与任何一级的拦截。（该口径在 2026-09-16 第二轮按用户反馈修正：任务「完成」即算收尾，不再要求必须归档。）完整决策与边界见 [ADR-034](adr/ADR-034.md)。
 
+> 2026-09-29 修订：本小节的项目归档申请—审核部分已由 [ADR-043](adr/ADR-043.md) 整体下线（六条 `*ProjectArchive*` 路由、`app.project_archive_requests` 与「待审归档申请摘要」均已不存在）；任务归档与恢复部分已由 [ADR-054](adr/ADR-054.md) 下线。下表 `ADR034-API-INT-006` 为当时事实，现行口径见本文件「2026-09-29 任务层面下线归档」小节。
+
 - 迁移 `database/migrations/0016_project_archive_requests.sql`：新表 `app.project_archive_requests`（`status` 枚举 CHECK、`project_archive_requests_one_pending` 部分唯一索引、origin guard 触发器，`app_runtime` 授予 SELECT/INSERT/UPDATE）。该迁移尚未合并，初版用 `BIGINT` 主键导致 postgres.js 返回字符串并使响应 Schema 校验失败，改为 `integer` 后手动回退该迁移并重新 apply 验证通过。
 - 契约与权限：新增 `requestProjectArchive`/`approveProjectArchive`/`rejectProjectArchive` 与 `archiveTask`/`restoreTask`/`archiveModuleTask`/`restoreModuleTask` 共 7 条路由（Route Registry 98 → 105 条）；`projectListItemSchema` 增加 `currentUserRole`/`pendingArchiveRequest`；`docs/permissions.md` 同步新增条目，`archiveModule` 行补充 409 说明。
 - 后端：新增 `ProjectArchiveRequestService`/`Controller`/`Module` 与 PostgreSQL 仓储；`ProjectsWritePort.countUnarchivedTasks` 与 `ModuleManagementRepository.countUnarchivedTasks` 落实任务归档前置校验；`TasksManagementService` 新增 4 个生命周期命令并复用 `ProjectRoleGateService` 角色门禁。
@@ -1834,6 +1838,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 ## 任务归档入口与「已归档父级仍可归档任务」修复（C，2026-09-16 本地落库）
 
 用户反馈「模块下功能里任务都完成了但是模块不能归档」。排查确认根因是口径与入口的双重问题：任务「完成」（`work_status = DONE`）不等于「归档」（`lifecycle_status = ARCHIVED`），而功能一经归档，其下任务会被父级只读校验挡在归档之外，前端也没有任务归档入口，于是「归档功能 → 任务无法归档 → 模块下永远存在 ACTIVE 任务 → 模块无法归档」形成死锁。本轮按用户已确认的口径（模块/项目归档都要求下级任务已归档）修复死锁并补齐入口，未放宽归档前置校验。
+
+> 2026-09-29 修订（[ADR-054](adr/ADR-054.md)）：任务归档 / 恢复已整体下线，`archiveTask` / `restoreTask` / `archiveModuleTask` / `restoreModuleTask` 四条路由与前端 `task-modal-lifecycle` 入口已删除。下表 `ADR034-API-INT-011`、`ADR034-WEB-UNIT-004` / `005` / `007` 为当时事实，现行口径见本文件「2026-09-29 任务层面下线归档」小节。
 
 - 后端：`TasksManagementService.authorize` 增加 `allowArchivedParents` 选项，归档命令（`archiveTask`/`archiveModuleTask`）在模块或功能已归档时仍放行；恢复命令与「项目已归档」保持严格拒绝。`TasksHttpService` 幂等解析阶段的 `authorize` 使用同一口径。
 - 后端文案：`ModulesManagementService.assertAllTasksArchived` 的 409 `MODULE_ARCHIVE_TASKS_OPEN` 带未收尾任务数量；口径在同日第二轮修正为「完成即算收尾」，文案与前端 `module-query.ts`、`project-management-query.ts` 同步改为「完成或归档」。
@@ -2927,6 +2933,8 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 保留不变量：`project_members_one_leader` 部分唯一索引、`project_members_removed_role_check`（REMOVED 行 role=MEMBER）、移除/撤销 `LEADER` 时的 409 `PROJECT_MEMBER_LEADER_PROTECTED`、`PROJECT_MEMBER_LEADER_CONFLICT`、审计 `project.member.role.set` 与活动 `PROJECT_MEMBER_ROLE_CHANGED`。
 - 幂等契约版本：只有重放响应体携带 `role`/`currentUserRole` 的操作才升版（`setProjectMemberRole` 1.0.0→2.0.0；`addProjectMember`/`removeProjectMember` 1.1.0→1.2.0；`updateProject`/`archiveProject`/`restoreProject` 1.4.0→1.5.0；`changeProjectStatus` 1.0.0→1.1.0；`createProject` 2.2.0→2.3.0），模块/功能/任务归档恢复与 `requestProjectArchive` 不变。
 - 前端：`canManageProjectResources` 改为「系统管理员或本项目 `MEMBER`/`LEADER`」；成员页角色徽标只剩「组长」，「设置角色」仅系统管理员可见；「归档模块」「归档功能」入口对全体活跃成员可见。
+
+> 2026-09-29 修订（[ADR-054](adr/ADR-054.md)）：任务归档 / 恢复已整体下线，下表 `ADR039-API-INT-003` 中的任务归档部分与 `ADR039-WEB-UNIT-001` 中 `TasksPanel` 生命周期入口部分为当时事实；本小节的「归档 / 恢复对活跃成员可见」口径本身仍有效（模块归档已由 ADR-044 下线、功能归档已由 ADR-045 下线、任务归档已由 ADR-054 下线），现行口径见本文件「2026-09-29 任务层面下线归档」小节。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -4095,7 +4103,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 - 还原只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功，另一个 409）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知。
 - 幂等：两条路由 `idempotencyContractVersion: 1.0.0`、`versionPolicy: none`、`behaviorHeaders: []`（不接受 `If-Match`），`idempotencyReplayPolicy` 与 `replayAuthorizationPolicy` 逐条登记；重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」），失败不泄露已存状态码或响应体。
 - 前端：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**。
-- 界面修订之一（横向对齐）：删除行新增动作区后，行内「操作者 + 动作 + 摘要 + 项目名 + 原始快照 + 动作按钮」需要共用一套基线，落 `design-system.css` 的 `.activity-actions` / `.activity-actions-main` / `.activity-actions-slot` / `.deletion-actions` / `.deletion-buttons`，窄屏隐藏整个动作区；历史删除行用 `activity-actions-slot` 占位以保证时间线对齐。
+- 界面修订之一（横向对齐）：删除行新增动作区后，行内「操作者 + 动作 + 摘要 + 项目名 + 原始快照 + 动作按钮」共用 `.audit-actions` 基线（`design-system.css` 的 `.deletion-actions` / `.deletion-buttons` / `.deletion-error`），窄屏 ≤700px 由 `inpulse-design.css` 的 `.audit-row > .audit-actions { display: none }` 隐藏整个动作区；2026-09-29 按用户指示修订：「原始快照」「还原项目」「彻底删除」并排在同一行，且「原始快照」跨行同列——两个动作排在快照左侧，无「查看对象」的行（已删除项目链）用 `.activity-actions-slot`（30px，与图标按钮等宽）占位对齐；此前「另起一行」的 `.activity-actions` / `.activity-actions-main` 两行堆叠基线已删除。
 - 界面修订之二（中文化）：动态类型与角色值不再显示原始枚举，`features/activity/activity-labels.ts` 补齐 `PROJECT_STATUS_CHANGED: 变更项目状态`、`PROJECT_MEMBER_ROLE_CHANGED: 变更成员角色`、`record.leftover.add: 追加遗留问题` 以及 `ROLE_LABELS = { MEMBER: 成员, LEADER: 组长 }`；「原始快照」弹窗的对象字段用同一份中文描述，摘要区保留原始枚举（快照的语义就是原始值）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -4103,7 +4111,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | PROJECT-RESTORE-API-001 | API 集成（真实 PostgreSQL + HTTP） | 还原成功链、权限/状态矩阵与重放 | `project-delete-api.integration.test.ts` → **13/13**：还原 200 + `rowVersion` 递增 + 可见性恢复 + 台账退出 + 审计 `project.delete` → `project.restore` + 哈希头对齐 + 动态 `PROJECT_DELETED` → `PROJECT_RESTORED` + 搜索投影恢复；普通成员 403、非成员 / 已移除 / 不存在 404、未删除 409；同 Key 同摘要只写一条审计、换 Key 409、他人同 Key 409；缺 CSRF 422、缺幂等键 400、带请求体 422、匿名 401 且失败不改动项目行 | 本地通过 |
 | PROJECT-PURGE-API-001 | API 集成（真实 PostgreSQL + HTTP） | 彻底删除成功链、权限矩阵与重放复核 | `project-delete-api.integration.test.ts`：七项计数与逐表归零、SYSTEM 链唯一一条 `project.purge`（`projectId: null`、`deletedAt` 为合法 ISO）；未删除 409、组长 / 成员 / 非成员 403、不存在 404、删除后再次调用 404；同 Key 同一份统计、组长同 Key 403、SYSTEM 链仍只有一条 | 本地通过 |
 | PROJECT-DELETION-API-005 | API 集成（真实 PostgreSQL + HTTP） | 台账的动作可见性字段 | `project-deletion-records.integration.test.ts` → **7/7**：创建者 / 组长 `canRestore = true` 且 `canPurge = false`、系统管理员两者皆 `true`；条目字段清单为 7 个 | 本地通过 |
-| PROJECT-DELETION-LAYOUT-001 | Web 单元 + 人工复验 | 动作按钮与「原始快照」横向对齐 | `ActivityWorkspace.deletions.test.tsx` 覆盖动作区渲染与二次确认；真实浏览器复核删除行内基线一致、窄屏隐藏动作区、历史行用占位保持时间线对齐 | 本地通过 |
+| PROJECT-DELETION-LAYOUT-001 | Web 单元 + 人工复验 | 动作按钮与「原始快照」并排且快照列跨行对齐 | `ActivityWorkspace.deletions.test.tsx` 覆盖动作区渲染与二次确认；真实浏览器复核删除行内「还原项目」「彻底删除」「原始快照」并排在同一行、所有行「原始快照」右边缘同一 x（距行右缘 35px）、窄屏（≤700px）隐藏整个动作区（2026-09-29 修订：取消两行堆叠；恢复 `.activity-actions-slot` 对齐占位，删除行不再有「查看对象」分支） | 本地通过（2026-09-29 真实浏览器复验：三按钮同一 y；带「查看对象」行与已删除行、删除行的「原始快照」右边缘同为距行右缘 35px） |
 | ACTIVITY-LABEL-I18N-001 | Web 单元 + 人工复验 | 动态类型与角色值中文化 | 定向单测覆盖中文文案映射；真实浏览器复核动态行、摘要与「原始快照」弹窗不再出现枚举原文（摘要中的原始枚举按设计保留） | 本地通过 |
 
 本地实际执行（2026-09-28）：`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`pnpm contract:drift`（5 产物）、`pnpm contract:validate`（**102 条**）、`pnpm permissions:check`（**102/102**）、`pnpm db:migrations:check`（**29 个迁移**）、`pnpm test:unit`、定向真实 PostgreSQL 集成 `project-delete-api.integration.test.ts` 与 `project-deletion-records.integration.test.ts`、前端定向单测与真实浏览器复核；本文件在 ADR-052 批次复跑 `apps/web/src/features/activity` **3 文件 17/17** 与上述四个集成文件 **30/30**（含本节的 13 + 7 例），两批证据互相印证。
@@ -4206,3 +4214,29 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 推送（2026-09-28）：提交 `f3a8016`（`feat(web,e2e,docs): 迭代记录弹窗键盘提交、未保存离开确认与任务详情发布落点`，9 文件 +407 / −10）已推送到 `origin/test`（`c97f1a1..f3a8016`），`git ls-remote origin refs/heads/test` 与本地 `HEAD` 一致；CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发。
 
 未运行 / 已知偏差：① 本轮只改前端产品代码与 E2E 用例，未改 Schema、Route Registry、权限矩阵、数据库与迁移，因此没有重跑集成测试与迁移门禁（`pnpm check` 已覆盖不依赖数据库的门禁）；② 未保存内容不做本地暂存（用户口径：没有保存就不更改）——按 Esc、点遮罩或点头部 ✕ 会先确认，确认放弃后输入即丢弃，服务端草稿仍是上次保存的内容；③ GitHub Actions 已跑通——推送 `test` 不触发 `push` 事件，但既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件会为新提交起 CI，见 `RECORD-DRAFT-SUBMIT-CI-001`；④ 快捷键与提示属交互变化，需非作者人工评审。
+
+## 2026-09-29 任务层面下线归档（ADR-054，用户指示，本地落库）
+
+用户先追问任务编辑弹窗底部的「归档」按钮（「为什么编辑任务有个归档的功能，不是已经有完成任务和取消任务的功能了吗」），在拿到证据后给出结论「我感觉这个任务的归档没有用处」，随后要求「那就把这个功能去除掉」。证据：本地演示库 57 个任务中 `lifecycle_status = 'ARCHIVED'` 0 行，审计里只有 1 条 `task.archive` 测试痕迹、`task.unarchive` 0 条；归档既不收回权限也不改变任何统计口径（完成数、未完成数、项目/模块/功能档位都不看 `lifecycle_status`），只是把任务从看板拿掉并让表单只读，而它赖以存在的「模块/项目归档要求下级任务已收尾」前置校验已先被放宽（2026-09-16「完成即算收尾」）再被 [ADR-043](adr/ADR-043.md) / [ADR-044](adr/ADR-044.md) / [ADR-045](adr/ADR-045.md) 连根下线。据此端到端删除任务归档与恢复，决策见 [ADR-054](adr/ADR-054.md)。
+
+- 迁移 `database/migrations/0032_task_archive_removal.sql`：`SET LOCAL ROLE app_owner` 后临时关闭 `tasks_row_version` 触发器，把存量 `ARCHIVED` 行回填为 `ACTIVE`（不递增 `row_version`、不写审计），`SET CONSTRAINTS ALL IMMEDIATE` 结算延迟事件后恢复触发器，最后重建 `tasks_lifecycle_status_check` 为 `CHECK (lifecycle_status IN ('ACTIVE','INVALID'))`。不删列、不物理删除数据，历史迁移不改写。
+- 契约：`archiveTask` / `restoreTask` / `archiveModuleTask` / `restoreModuleTask` 四条路由与 `taskArchiveRequestSchema`（`TaskArchiveRequest`）整体删除，Route Registry 103 → 99 条（`openapi.json` 的 operationId 计数实测 103 → 99）；`taskItemSchema`（含 `ModuleTaskItem`）与 R-3 `MyTaskItem`、R-5 `TaskGroupMembershipItem`、记录草稿来源任务的 `lifecycleStatus` 统一收窄为 `["ACTIVE","INVALID"]`；`createTask` / `updateTask` / `createModuleTask` / `updateModuleTask` 幂等契约版本 `2.0.0 → 3.0.0`，`transitionTask` / `transitionModuleTask` `3.0.0 → 4.0.0`（响应 Schema 收窄属破坏性变更，旧 Key 在新契约下 409）。
+- 后端：`TasksManagementService.TaskOperation` 收窄为四个创建/编辑操作，`isTaskLifecycleOperation` / `changeTaskLifecycle` / `requireArchiveRole` 与 `execute` 入参的 `reason` 一并删除（只为归档注入的 `ProjectRoleGateService` 也从构造函数移除，注入参数 13 → 12）；`TaskManagementRepository.setLifecycle` 删除，`TasksHttpService` 不再传 `reason`，Controller 删除 4 个 `@Post` 绑定；`ProjectsWritePort.countUnarchivedTasks` 更名 `countOpenTasks`（SQL 与 `lifecycle_status = 'ACTIVE'` 条件不变，409 `PROJECT_MAINTENANCE_TASKS_OPEN` 不变），「先把任务归档再切维护中」的旁路随之下线——这是本次唯一有用户可见影响的口径变化。
+- 前端：任务编辑弹窗底部的 `task-modal-lifecycle` 按钮、归档/恢复确认弹窗（含「操作原因」必填）与 `lifecycleMutation` 整体删除，「编辑任务」回到只由 `writable` 控制；任务详情不再有「已归档」只读提示；聚合组详情成员卡去掉「已归档」徽章；`my-tasks-types` 同步收窄；只为归档入口存在的 `isAdmin` 管道从任务/问题/模块任务/功能四个页面与 `FeaturesPageView`、`ProjectWorkspaceModals`、`TaskBoardPageView`、`project-management-query` 清理。`TaskStatusPanel` / `CompleteWithRecord` / `RecordDraftsView` / `RecordDraftEditorModal` 的 `lifecycleStatus !== "ACTIVE"` 写入与只读门禁保留（现行语义收窄为「已标记无效」）。
+- 错误码与历史：`TASK_MERGE_PARENT_ARCHIVED`、`RECORD_PARENT_ARCHIVED` 与 `TASK_STATE_CONFLICT` 保留，措辞按「已无效」表述但不改码（合并/草稿侧的门禁语义未变）；`task.archive` / `task.unarchive` 的历史审计行、动态行与 `activity-labels.ts` / `audit-labels.ts` 的标签保留为只读展示，不清理历史数据。
+- 已退役条目：本节取代 ADR-034 小节的 `ADR034-API-INT-006`（任务归档与恢复）、`ADR034-API-INT-011`（功能已归档后归档其任务）、`ADR034-WEB-UNIT-004` / `005` / `007`（任务弹窗归档入口），以及 ADR-039 小节 `ADR039-API-INT-003` 中的任务归档部分与 `ADR039-WEB-UNIT-001` 中的 `TasksPanel` 生命周期入口部分；`ADR034-API-INT-012` / `013` 的「任务完成即算收尾」口径仍然有效（其模块归档分支已由 ADR-044 下线，项目归档分支已由 ADR-043 下线）。上述小节已就地补注记。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR054-DB-001 | PostgreSQL 迁移 | 回填 `ARCHIVED` 并收紧 CHECK | `pnpm db:migrations:check` → `Validated 31 SQL migration(s)`（含 `0032_task_archive_removal.sql sha256:ddbc57f909ddcb4b`）；`MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate` → `Applied 0032_task_archive_removal.sql` + `Migration complete: 1 applied, 30 already present.`；`pg_constraint` 实读 `tasks_lifecycle_status_check` = `CHECK ((lifecycle_status = ANY (ARRAY['ACTIVE'::text, 'INVALID'::text])))`；迁移后 `app_ci` 的 `app.tasks` 无 `ARCHIVED` 行（夹具已清理后为空表，等价断言；演示库的「57 个任务 / 0 个 `ARCHIVED`」是 ADR-054 的背景证据） | 本地通过（独立拒绝探针未复现，见文末） |
+| ADR054-CONTRACT-001 | 契约与生成物 | 四条路由与三处枚举下线 | `pnpm contract:generate`（5 产物）、`pnpm contract:drift`（5 产物与 Registry 一致）、`pnpm contract:validate`（**99 条路由**）、`pnpm permissions:check`（**99/99**）；`openapi.json` operationId 计数 103 → 99；`packages/api-contract/test/permissions.test.ts` 删 4 条路径条目、`tasks.test.ts` 删 2 个 operationId | 本地通过 |
+| ADR054-CONTRACT-002 | 契约 | 幂等契约版本随破坏性变更递增 | `task-completion.test.ts` 断言 `transitionTask` / `transitionModuleTask` 当前版本 `4.0.0`、历史指纹 `["1.0.0","2.0.0","3.0.0","4.0.0"]`（`route-contract-fingerprints.json` 实测各 4 版）；`createTask` / `updateTask` 历史 3 版（`1.0.0` / `2.0.0` / `3.0.0`） | 本地通过（api-contract 16 文件 100 例） |
+| ADR054-API-INT-001 | 真实 PostgreSQL + HTTP | 归档与恢复路由已下线 | `tasks-api.integration.test.ts` 的 `describe("ADR-054 task archive removal")`：功能级与模块级的 `POST .../tasks/{taskId}/archive`、`.../restore` 全部 404（未匹配路由的固定文案 JSON 404）；原 ADR-034 归档用例整体替换为该断言 | 本地通过 |
+| ADR054-API-INT-002 | 真实 PostgreSQL | 全量集成不回归 | `TEST_DATABASE_URL=…/app_ci pnpm --filter @inpulse/api test:integration` → **51 文件 481 例通过**（113.37s）；`pnpm --filter @inpulse/database test` → 单测 15 例 + 集成 2 文件 27 例通过。首轮曾报 1 例真实失败（`project-management-api.integration.test.ts` 用已不允许的 `ARCHIVED` 夹具插任务，被 `tasks_lifecycle_status_check` 拒绝），已把该夹具改为 `DONE` 任务并同步 `task_status_history` 完成快照，复跑全绿 | 本地通过 |
+| ADR054-API-UNIT-001 | API 单元测试 | 服务/仓储/HTTP 层收敛 | `pnpm test:unit` → apps/api 66 文件 370 例、apps/web 86 文件 587 例、apps/ops 8 文件 52 例通过；5 个集成测试文件的 `TasksManagementService` 构造参数同步去掉 `ProjectRoleGateService`（13 → 12），`project-management.service.test.ts` 与 `aggregate-read`、`task-board-ports`、`task-group-*` 用例同步 | 本地通过 |
+| ADR054-WEB-UNIT-001 | Web 单元 | 前端入口与类型收窄 | `TasksPanel.test.tsx` 的 `describe("ADR-034 任务归档入口")` 整块（3 例）删除，`FeaturesPageView.test.tsx` 随 `isAdmin` 管道清理同步；本轮另修 2 个未使用导入的 lint 错误（`TasksPanel`、`ModuleTasksPage`）；全量 `pnpm test:web` → **86 文件 587 例通过** | 本地通过 |
+| ADR054-E2E-001 | Playwright | 真实浏览器无归档入口、全量不回归 | 全量 `pnpm test:e2e`（`E2E_DATABASE_URL=…/app_ci`、`E2E_API_PORT=3188`、`E2E_WEB_PORT=4188`）→ **62 passed (5.2m)**；`module-tasks.spec.ts` 的注释随口径同步，其他用例未因归档下线出现失败 | 本地通过（夹具已清理：`e2e_` / `f03_` 账号 0、`app.projects` 0、`app.tasks` 0） |
+| ADR054-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm lint`、`pnpm format:check`（`All matched files use Prettier code style!`）无输出；`pnpm typecheck`（8 个 workspace）、`pnpm build`（web / api / ops 全部 Done）、`pnpm check:deps`（**724 个源文件 / 724 个模块节点，无循环依赖与越界导入**）、`pnpm check:frontend:boundaries`（**289 模块 / 1424 依赖**）、`pnpm check:secrets`（**1094 个文件**）、`pnpm check:docs`（**101 个 Markdown**）通过 | 本地通过 |
+| ADR054-CI-001 | GitHub Actions | 推送后 CI | 本轮未提交、未推送（用户未授权），GitHub Actions **未运行** | 未运行 |
+
+未运行 / 已知偏差：① GitHub Actions 未运行——本轮改动未提交、未推送；② 删除后直接 `UPDATE ... SET lifecycle_status='ARCHIVED'` 的「写入被拒」探针**未干净复现**：三次 `psql` 试插分别被 `tasks` 的 `NOT NULL`、`enforce_project_scoped_code()` 触发器拦下（缺 `scope_type` / `code` / 有效项目行），CHECK 收紧的结论由 `pg_constraint` 实读的约束定义与全量集成测试背书，没有独立的拒绝用例；③ 迁移只在 `app_ci` 应用过，演示库 `app` 与本机生产形态未升级；④ 本批含契约、数据库迁移与前后端产品代码，按 §6 / §8 须非作者人工评审（迁移方向、幂等契约版本升版范围、`countOpenTasks` 更名与保留错误码是重点）；⑤ `apps/web/src/features/activity/ActivityWorkspace.tsx` 与 `apps/web/src/styles/design-system.css` 携带用户既有的未提交改动，本轮未触碰。

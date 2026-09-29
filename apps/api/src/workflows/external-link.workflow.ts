@@ -160,8 +160,8 @@ export class ExternalLinkWorkflow {
         : type === "FEATURE"
           ? // ADR-045：功能不再有归档态，功能目标恒可写。
             true
-          : // 任务仍是 ACTIVE/ARCHIVED 两态，只有已归档只读。
-            current.status !== "ARCHIVED");
+          : // ADR-054：任务只剩 ACTIVE/INVALID 两态，只有无效任务只读。
+            current.status !== "INVALID");
     if (write && !writable)
       throw new ExternalLinkError(
         409,

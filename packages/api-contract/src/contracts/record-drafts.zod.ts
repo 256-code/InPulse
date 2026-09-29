@@ -177,7 +177,7 @@ export const recordDraftSchemas = {
             assigneeId: id,
             assigneeName: z.string().nullable().optional(),
             workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
-            lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+            lifecycleStatus: z.enum(["ACTIVE", "INVALID"]),
             rowVersion: id,
             impactFeatureIds: impactIds,
           })

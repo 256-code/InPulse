@@ -138,7 +138,6 @@ export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
           <TaskDetailOverlay
             target={taskTarget}
             {...(client ? { client } : {})}
-            isAdmin={isSystemAdmin}
             onClose={() => setTaskTarget(null)}
             onOpenTask={setTaskTarget}
           />

@@ -225,7 +225,7 @@ async function createTask(
   title: string,
   options: {
     readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-    readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED";
+    readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   } = {},
 ): Promise<number> {
   sequences += 1;

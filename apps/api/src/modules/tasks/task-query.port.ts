@@ -20,7 +20,8 @@ export interface TaskReadModel {
   assigneeId: number;
   priority: TaskPriority;
   workStatus: "TODO" | "DONE" | "CANCELED";
-  lifecycleStatus: "ACTIVE" | "ARCHIVED" | "INVALID";
+  // ADR-054：任务归档已下线，ARCHIVED 不可达；INVALID 仍是「标记无效」的历史取值。
+  lifecycleStatus: "ACTIVE" | "INVALID";
   /** 截止时间（null = 未设置）；由适配器在读取边界还原为 Date。 */
   dueAt: Date | null;
   rowVersion: number;
@@ -28,7 +29,7 @@ export interface TaskReadModel {
 }
 
 export type TaskWorkStatus = "TODO" | "DONE" | "CANCELED";
-export type TaskLifecycleStatus = "ACTIVE" | "ARCHIVED" | "INVALID";
+export type TaskLifecycleStatus = "ACTIVE" | "INVALID";
 export type TaskScopeType = "FEATURE" | "MODULE";
 
 /** excludedTaskIds 的条目上限：超限即拒绝，禁止把无界集合带进 SQL 参数。 */
@@ -299,8 +300,8 @@ export abstract class TaskQueryPort {
   ): Promise<number>;
 
   /**
-   * R-8 任务看板列表：一次读取项目内全部未归档任务（lifecycle_status = ACTIVE，
-   * 含已取消，不含已归档与无效），并在 LIMIT 之前应用 excludedTaskIds。
+   * R-8 任务看板列表：一次读取项目内全部活跃任务（lifecycle_status = ACTIVE，
+   * 含已取消，不含无效），并在 LIMIT 之前应用 excludedTaskIds。
    *
    * 约定：
    * 1. 调用方必须先完成项目授权（与 find / list 同一约定），端口不校验成员关系。

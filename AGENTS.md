@@ -384,7 +384,7 @@
 - **权限分离**：还原与删除**同权**（系统管理员或本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；未删除项目一律 409 `PROJECT_NOT_DELETED`，非成员 / 不存在 404。重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」）。
 - **彻底删除的数据库边界**：迁移 `0031_project_purge.sql` 新增 `SECURITY DEFINER` 函数 `app.purge_project(INTEGER)`，**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed）；固定按叶子表到 `app.projects` 共 27 处删除并断言 `projects` 恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（[ADR-008](./docs/adr/ADR-008.md) 的唯一例外，范围写死在函数内）。
 - **还原不搬数据**：只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知，也不回收 / 复用编码。
-- **前端**：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**；动作区与「原始快照」共用基线（`.activity-actions` / `.activity-actions-main` / `.activity-actions-slot`），窄屏隐藏整个动作区；动态类型与角色值改为中文（`activity-labels.ts` 的 `PROJECT_STATUS_CHANGED` / `PROJECT_MEMBER_ROLE_CHANGED` / `record.leftover.add` / `ROLE_LABELS`），「原始快照」弹窗用中文描述、摘要区保留原始枚举。
+- **前端**：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**；三个动作与「原始快照」并排在同一行（2026-09-29 用户指示修订：此前是「原始快照」一行、还原与彻底删除另起一行；`.activity-actions` / `.activity-actions-main` 两行堆叠基线删除，「还原项目」「彻底删除」移到「原始快照」左侧，`.activity-actions-slot` 保留为「原始快照」列的跨行对齐占位），窄屏由 `.audit-row > .audit-actions { display: none }`（≤700px）隐藏整个动作区；动态类型与角色值改为中文（`activity-labels.ts` 的 `PROJECT_STATUS_CHANGED` / `PROJECT_MEMBER_ROLE_CHANGED` / `record.leftover.add` / `ROLE_LABELS`），「原始快照」弹窗用中文描述、摘要区保留原始枚举。
 - 本文件与 ADR-049 第 8 节、ADR-050 非目标第 1 条中「不提供恢复入口 / 不提供彻底删除」的历史表述，与本节冲突时以 ADR-051 与本节的现行规则为准。
 
 ## 2026-09-28 ADR-052 已删除项目的完整动态与删除操作唯一入口说明
@@ -397,3 +397,15 @@
 - **项目筛选下拉新增「已删除项目」**：固定选项值 `"deleted"`，取数范围收窄为台账项目 ID 集合；台账为空时给「暂无已删除项目」空态且不发空请求；「全部项目」视图继续包含已删除项目的完整动态；台账读取时机为「全部项目或已删除项目」，锁定单项目视图仍不请求台账。
 - 契约、Route Registry、权限矩阵与数据库**零改动**（`activityType` 是自由字符串，筛选是纯前端行为）。
 - 放宽的理由与代价：项目一旦删除就不存在授权范围（ADR-049 / ADR-050），「删除前的过程」与「删除这件事」同属一条组织级事实，因此对**全部登录用户**可见；若将来改为「只有参加过该项目的人可见完整过程」，必须新增 ADR 并同步权限矩阵、`docs/test-matrix.md` 与本节。
+
+## 2026-09-29 ADR-054 任务归档下线说明
+
+按用户 2026-09-29 的三步反馈（「为什么编辑任务有个归档的功能，不是已经有完成任务和取消任务的功能了吗」→「我感觉这个任务的归档没有用处」→「那就把这个功能去除掉」）把「任务层」的归档一并下线（[ADR-054](./docs/adr/ADR-054.md)）。因此：
+
+- `archiveTask` / `restoreTask` / `archiveModuleTask` / `restoreModuleTask` 四条路由与 `TaskArchiveRequest`（原因）整体删除，Route Registry 103 → 99 条；删除后 `POST .../tasks/{taskId}/archive`、`/restore` 与模块级同形路径均返回 404。
+- 任务生命周期取值域收窄为 `ACTIVE | INVALID`：迁移 `0032_task_archive_removal.sql` 把存量 `ARCHIVED` 回填为 `ACTIVE`（不递增 `row_version`、不写审计），随后重建 `tasks_lifecycle_status_check`；**不删列、不物理删除任何历史**。`INVALID`（标记无效）语义与读写路径本次不动。
+- 契约：`taskItemSchema`（含 `ModuleTaskItem`）与 R-3 `MyTaskItem`、R-5 `TaskGroupMembershipItem`、记录草稿来源任务的 `lifecycleStatus` 统一收窄为 `["ACTIVE","INVALID"]`；`createTask` / `updateTask` / `createModuleTask` / `updateModuleTask` 幂等契约版本升 `3.0.0`，`transitionTask` / `transitionModuleTask` 升 `4.0.0`（响应 Schema 收窄属破坏性变更，旧 Key 在新契约下 409）。
+- 后端：`TasksManagementService` 的 `TaskOperation` 收窄为四个创建/编辑操作，`isTaskLifecycleOperation` / `changeTaskLifecycle` / `requireArchiveRole` 与 `reason` 入参删除，`TaskManagementRepository.setLifecycle` 删除；`ProjectsWritePort.countUnarchivedTasks` 更名 `countOpenTasks`（SQL 与 `lifecycle_status = 'ACTIVE'` 条件不变，409 `PROJECT_MAINTENANCE_TASKS_OPEN` 不变）——「先把任务归档再切维护中」的旁路随归档下线消失，这是本次唯一有用户可见影响的口径变化（[ADR-043](./docs/adr/ADR-043.md) 的「维护中」门禁本身不变）。
+- 前端：任务编辑弹窗底部的「归档 / 恢复」入口（`task-modal-lifecycle`）与确认弹窗整体删除，「编辑任务」回到只由 `writable` 控制；任务详情不再有「已归档」只读提示；聚合组详情成员卡去掉「已归档」徽章。
+- 保留项：`TASK_MERGE_PARENT_ARCHIVED` / `RECORD_PARENT_ARCHIVED` / `TASK_STATE_CONFLICT` 错误码与 `TaskStatusPanel` / `CompleteWithRecord` 的 `lifecycleStatus !== "ACTIVE"` 门禁保留，措辞按「已无效」表述；历史审计（`task.archive` / `task.unarchive`）、历史动态与对应中文标签保留为只读展示，不清理历史数据，历史迁移（`0000`–`0031`）不改写。
+- 本文件上文 ADR-034 小节中把「任务归档与恢复」「归档命令可越过已归档父级」写作现行规则的部分、ADR-039 小节中「任务弹窗归档入口按角色显示」的描述，以及 2026-09-23 节中「先把任务归档再切维护中」的旁路说明，均以本节与 ADR-054 为准；`功能设计v1.1.md`、`系统设计文档v1.0.2.md`、`技术设计v1.2.2.md`、[权限矩阵](./docs/permissions.md) 与[测试矩阵](./docs/test-matrix.md) 已同步。

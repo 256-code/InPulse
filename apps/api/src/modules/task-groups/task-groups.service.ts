@@ -62,7 +62,7 @@ const missing = () =>
     "TASK_MERGE_NOT_FOUND",
     "任务不存在或无法访问",
   );
-const parentArchived = (message: string) =>
+const parentInvalid = (message: string) =>
   new TaskGroupCommandError(409, "TASK_MERGE_PARENT_ARCHIVED", message);
 const alreadyMerged = (message: string) =>
   new TaskGroupCommandError(409, "TASK_ALREADY_MERGED", message);
@@ -284,7 +284,7 @@ export class TaskGroupsService {
       source.lifecycleStatus !== "ACTIVE" ||
       main.lifecycleStatus !== "ACTIVE"
     )
-      throw parentArchived("任务已归档或无效，不能合并");
+      throw parentInvalid("任务已无效，不能合并");
     const sourceActive = await this.groups.findActiveMember(
       tx,
       projectId,

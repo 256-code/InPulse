@@ -4,7 +4,6 @@ import { PostgresFeatureReadPort } from "../src/modules/features/postgres-featur
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
-import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { PostgresNotificationWritePort } from "../src/modules/notifications/postgres-notification-write-port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
@@ -121,10 +120,6 @@ beforeAll(async () => {
     new PostgresFeatureReadPort(),
     new PostgresProjectCodePort(),
     new PostgresProjectMembersQueryPort(),
-    new ProjectRoleGateService(
-      new PostgresProjectAccessQueryPort(client),
-      new PostgresProjectMembersQueryPort(),
-    ),
     uow,
     new TaskManagementRepository(),
     audit,
@@ -1678,125 +1673,11 @@ describe("F-14 real HTTP / PostgreSQL", () => {
     });
 });
 
-describe("ADR-034 task archive and restore", () => {
-  it("archives and restores a module task without touching status history", async () => {
+describe("ADR-054 task archive removal", () => {
+  it("serves no archive or restore route for module or feature tasks", async () => {
     const { project, member } = await fixture();
     const scope = { ...project, featureId: null };
-    const created = await request(scope, "POST", member, {
-      ...edit(member.userId),
-      impactFeatureIds: [project.featureId],
-    });
-    const task = moduleTaskItemSchema.parse(await created.json());
-
-    const archived = await request(
-      scope,
-      "POST",
-      member,
-      { reason: "阶段结束" },
-      `/${task.id}/archive`,
-      task.rowVersion,
-    );
-    expect(archived.status, await archived.clone().text()).toBe(200);
-    const archivedItem = moduleTaskItemSchema.parse(await archived.json());
-    expect(archivedItem).toMatchObject({
-      id: task.id,
-      lifecycleStatus: "ARCHIVED",
-      rowVersion: task.rowVersion + 1,
-    });
-
-    // 生命周期只切换 lifecycle_status，不追加工作状态历史。
-    expect(
-      await client.sql`SELECT 1 FROM app.task_status_history WHERE task_id=${task.id}`,
-    ).toHaveLength(1);
-
-    const audits = (await auditReader.sql`
-      SELECT action, event_payload AS "payload"
-        FROM app.audit_logs
-       WHERE project_id = ${project.projectId}
-         AND target_type = 'TASK'
-         AND target_id = ${String(task.id)}
-         AND action = 'task.archive'
-    `) as unknown as readonly {
-      action: string;
-      payload: { reason: string };
-    }[];
-    expect(audits).toHaveLength(1);
-    expect(audits[0]!.payload).toMatchObject({ reason: "阶段结束" });
-
-    expect(
-      await client.sql`
-        SELECT 1
-          FROM app.activity_projection
-         WHERE project_id = ${project.projectId}
-           AND source_entity_type = 'TASK'
-           AND source_entity_id = ${task.id}
-           AND activity_type = 'TASK_ARCHIVED'
-      `,
-    ).toHaveLength(1);
-    expect(
-      await client.sql`
-        SELECT source_row_version AS "sourceRowVersion"
-          FROM app.search_projection
-         WHERE entity_type = 'TASK'
-           AND entity_id = ${task.id}
-      `,
-    ).toMatchObject([{ sourceRowVersion: archivedItem.rowVersion }]);
-
-    const restored = await request(
-      scope,
-      "POST",
-      member,
-      { reason: "提前恢复" },
-      `/${task.id}/restore`,
-      archivedItem.rowVersion,
-    );
-    expect(restored.status, await restored.clone().text()).toBe(200);
-    expect(moduleTaskItemSchema.parse(await restored.json())).toMatchObject({
-      lifecycleStatus: "ACTIVE",
-      rowVersion: archivedItem.rowVersion + 1,
-    });
-  });
-
-  it("archives and restores a feature task whose parent feature stays active (ADR-045)", async () => {
-    const { project, member } = await fixture();
-    const task = await create(project, member);
-    const archived = await request(
-      project,
-      "POST",
-      member,
-      { reason: "阶段结束" },
-      `/${task.id}/archive`,
-      task.rowVersion,
-    );
-    expect(archived.status, await archived.clone().text()).toBe(200);
-    const archivedItem = taskItemSchema.parse(await archived.json());
-    expect(archivedItem).toMatchObject({
-      lifecycleStatus: "ARCHIVED",
-      rowVersion: task.rowVersion + 1,
-    });
-
-    // ADR-045：功能层不再有归档态，任务归档后可以直接恢复。
-    const restored = await request(
-      project,
-      "POST",
-      member,
-      { reason: "提前恢复" },
-      `/${task.id}/restore`,
-      archivedItem.rowVersion,
-    );
-    expect(restored.status, await restored.clone().text()).toBe(200);
-    expect(taskItemSchema.parse(await restored.json())).toMatchObject({
-      lifecycleStatus: "ACTIVE",
-    });
-  });
-
-  it("enforces member, project, version and lifecycle gates", async () => {
-    const { project, member } = await fixture();
-    const scope = { ...project, featureId: null };
-    const plain = await actor();
-    await addMember(project.projectId, plain.userId);
-    const outsider = await actor();
-    const task = moduleTaskItemSchema.parse(
+    const moduleTask = moduleTaskItemSchema.parse(
       await (
         await request(scope, "POST", member, {
           ...edit(member.userId),
@@ -1804,89 +1685,24 @@ describe("ADR-034 task archive and restore", () => {
         })
       ).json(),
     );
+    const featureTask = await create(project, member);
 
-    // ADR-039：归档任务不再要求组长或系统管理员，普通活跃成员同样可归档。
-    const plainTask = moduleTaskItemSchema.parse(
-      await (
-        await request(scope, "POST", plain, {
-          ...edit(plain.userId, "普通成员归档"),
-          impactFeatureIds: [project.featureId],
-        })
-      ).json(),
-    );
-    const plainArchived = await request(
-      scope,
-      "POST",
-      plain,
-      { reason: "普通成员" },
-      `/${plainTask.id}/archive`,
-      plainTask.rowVersion,
-    );
-    expect(plainArchived.status, await plainArchived.clone().text()).toBe(200);
-    expect(
-      moduleTaskItemSchema.parse(await plainArchived.json()),
-    ).toMatchObject({
-      lifecycleStatus: "ARCHIVED",
-      rowVersion: plainTask.rowVersion + 1,
-    });
-
-    await error(
-      await request(
-        scope,
-        "POST",
-        outsider,
-        { reason: "非成员" },
-        `/${task.id}/archive`,
-        task.rowVersion,
-      ),
-      404,
-    );
-    await error(
-      await request(
-        scope,
-        "POST",
-        member,
-        { reason: "过期版本" },
-        `/${task.id}/archive`,
-        task.rowVersion + 5,
-      ),
-      409,
-      "TASK_VERSION_CONFLICT",
-    );
-    await error(
-      await request(
-        scope,
-        "POST",
-        member,
-        { reason: "尚未归档" },
-        `/${task.id}/restore`,
-        task.rowVersion,
-      ),
-      409,
-      "TASK_STATE_CONFLICT",
-    );
-
-    const first = await request(
-      scope,
-      "POST",
-      member,
-      { reason: "首次归档" },
-      `/${task.id}/archive`,
-      task.rowVersion,
-    );
-    expect(first.status, await first.clone().text()).toBe(200);
-    const archivedItem = moduleTaskItemSchema.parse(await first.json());
-    await error(
-      await request(
-        scope,
-        "POST",
-        member,
-        { reason: "重复归档" },
-        `/${task.id}/archive`,
-        archivedItem.rowVersion,
-      ),
-      409,
-      "TASK_STATE_CONFLICT",
-    );
+    // ADR-054：任务归档已下线，归档/恢复路由从 Route Registry、Controller 与生成客户端一并移除。
+    for (const [label, target] of [
+      ["模块任务归档", [scope, moduleTask.id] as const],
+      ["功能任务归档", [project, featureTask.id] as const],
+    ] as const) {
+      for (const action of ["archive", "restore"] as const) {
+        const response = await request(
+          target[0],
+          "POST",
+          member,
+          { reason: "已下线" },
+          `/${target[1]}/${action}`,
+          1,
+        );
+        expect(response.status, `${label} ${action}`).toBe(404);
+      }
+    }
   });
 });

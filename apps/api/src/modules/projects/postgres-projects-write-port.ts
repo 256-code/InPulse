@@ -554,8 +554,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     };
   }
 
-  /** ADR-043：进入维护中要求项目下任务全部收尾，统计口径同模块归档。 */
-  async countUnarchivedTasks(
+  /** ADR-043：进入维护中要求项目下任务全部收尾；ADR-054 起归档链路已下线，口径只是「未完成且未取消」。 */
+  async countOpenTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<number> {

@@ -55,7 +55,7 @@ export function describeProjectManagementError(
           : "项目已不在删除状态，无需还原；请刷新页面。";
       }
       if (error.code === "PROJECT_MAINTENANCE_TASKS_OPEN") {
-        return "项目下仍有未完成、也未归档的任务，请先完成或归档全部任务再切换为维护中。";
+        return "项目下仍有未完成、也未取消的任务，请先完成或取消全部任务再切换为维护中。";
       }
       if (error.code === "PROJECT_STATUS_NOT_STARTED_LOCKED") {
         return "项目里已经出现过已完成任务，不能再退回「未开始」。";

@@ -577,7 +577,7 @@ export type ModuleTaskItem = {
   readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly lifecycleStatus: ("ACTIVE" | "INVALID");
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -636,7 +636,7 @@ export type MyTaskItem = {
   readonly featureName: (string | null);
   readonly scopeType: ("FEATURE" | "MODULE");
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly lifecycleStatus: ("ACTIVE" | "INVALID");
   readonly assignee: UserRef;
   readonly assignees: readonly UserRef[];
   readonly updatedAt: string;
@@ -1227,10 +1227,6 @@ export type SsoStartQueryRequest = {
   readonly returnTo?: string;
 };
 
-export type TaskArchiveRequest = {
-  readonly reason: string;
-};
-
 export type TaskAssigneesResponse = {
   readonly items: readonly ({
     readonly id: number;
@@ -1479,7 +1475,7 @@ export type TaskGroupMemberDetail = {
   readonly memberStatus: ("ACTIVE" | "DETACHED");
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
   readonly priority: ("NORMAL" | "HIGH" | "URGENT");
-  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly lifecycleStatus: ("ACTIVE" | "INVALID");
   readonly moduleId: number;
   readonly featureId: (number | null);
   readonly featureName: (string | null);
@@ -1635,7 +1631,7 @@ export type TaskItem = {
   readonly assigneeId: number;
   readonly creatorId: number;
   readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-  readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+  readonly lifecycleStatus: ("ACTIVE" | "INVALID");
   readonly rowVersion: number;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -1684,7 +1680,7 @@ export type TaskRecordDraftsResponse = {
     readonly assigneeId: number;
     readonly assigneeName?: (string | null);
     readonly workStatus: ("TODO" | "DONE" | "CANCELED");
-    readonly lifecycleStatus: ("ACTIVE" | "ARCHIVED" | "INVALID");
+    readonly lifecycleStatus: ("ACTIVE" | "INVALID");
     readonly rowVersion: number;
     readonly impactFeatureIds: readonly number[];
   };

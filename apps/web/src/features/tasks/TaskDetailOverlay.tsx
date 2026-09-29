@@ -16,7 +16,6 @@ import { TasksPanel } from "./TasksPanel";
 export interface TaskDetailOverlayProps {
   readonly target: TaskLocation;
   readonly client?: InpulseApiClient | undefined;
-  readonly isAdmin?: boolean | undefined;
   readonly onClose: () => void;
   /**
    * 详情内的聚合组弹窗点击成员任务标题时，交回宿主换一个任务重新就地打开。
@@ -28,7 +27,6 @@ export interface TaskDetailOverlayProps {
 export const TaskDetailOverlay: React.FC<TaskDetailOverlayProps> = ({
   target,
   client,
-  isAdmin,
   onClose,
   onOpenTask,
 }) => {
@@ -44,7 +42,6 @@ export const TaskDetailOverlay: React.FC<TaskDetailOverlayProps> = ({
       mode="detail"
       initialTaskId={target.taskId}
       writable
-      isAdmin={isAdmin}
       client={client}
       onDetailClose={onClose}
       onOpenTask={onOpenTask}

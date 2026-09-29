@@ -289,7 +289,6 @@ beforeAll(async () => {
     new PostgresFeatureReadPort(),
     new PostgresProjectCodePort(),
     new PostgresProjectMembersQueryPort(),
-    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
     uow,
     new TaskManagementRepository(),
     audit,

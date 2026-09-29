@@ -5960,28 +5960,15 @@ td.due-overdue {
   gap: 5px;
   justify-content: flex-end;
 }
-/* 动态行的动作区按列堆叠：第一行固定是「原始快照 + 查看对象（或等宽占位槽）」，
- * ADR-051 的「还原项目」「彻底删除」另起一行。两行都靠右，于是不论行内有没有尾部
- * 动作，宽度都一致，「原始快照」落在同一列；并排布局会撑宽整个动作区并把它挤走。 */
-.activity-actions {
-  flex-direction: column;
-  align-items: flex-end;
-}
-.activity-actions-main {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-/* 与 `.icon-button` 的 `min-width: 30px` 同宽，补上删除行缺失的「查看对象」位置。 */
+/* ADR-050：不提供「查看对象」的行用与 `.icon-button` 等宽的占位，保持「原始快照」
+ * 列在所有行同一基线。 */
 .activity-actions-slot {
   width: 30px;
   height: 1px;
 }
-/* 非管理员没有「原始快照」，此时占位槽是第一个子元素，不需要占位。 */
-.activity-actions-slot:first-child {
-  display: none;
-}
-/* ADR-051：删除行的「还原项目」「彻底删除」与失败提示。 */
+/* ADR-051：删除行的「还原项目」「彻底删除」与失败提示。2026-09-29 起这两个动作与
+ * 「原始快照」并排在同一行（`.audit-actions` 横排靠右，「原始快照」列由占位对齐），
+ * 此前 `.activity-actions` / `.activity-actions-main` 的两行堆叠基线随之删除。 */
 .deletion-actions {
   display: flex;
   flex-direction: column;

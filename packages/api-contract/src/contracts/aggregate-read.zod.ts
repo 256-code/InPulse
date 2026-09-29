@@ -95,7 +95,8 @@ export const taskGroupMemberDetailSchema = z
     memberStatus: z.enum(["ACTIVE", "DETACHED"]),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
     priority: z.enum(TASK_PRIORITIES),
-    lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    // ADR-054：任务层面下线归档，ARCHIVED 不可达。
+    lifecycleStatus: z.enum(["ACTIVE", "INVALID"]),
     moduleId: id,
     featureId: id.nullable(),
     featureName: z.string().min(1).max(500).nullable(),
@@ -383,7 +384,8 @@ export const myTaskItemSchema = z
     featureName: z.string().min(1).max(500).nullable(),
     scopeType: z.enum(["FEATURE", "MODULE"]),
     workStatus: z.enum(["TODO", "DONE", "CANCELED"]),
-    lifecycleStatus: z.enum(["ACTIVE", "ARCHIVED", "INVALID"]),
+    // ADR-054：任务层面下线归档，ARCHIVED 不可达。
+    lifecycleStatus: z.enum(["ACTIVE", "INVALID"]),
     /**
      * 派生展示字段：恒等于 assignees[0]，与 assignees 同源同口径（ADR-040）。
      * 集合本身是唯一真相，取值不一致时以 assignees 为准。

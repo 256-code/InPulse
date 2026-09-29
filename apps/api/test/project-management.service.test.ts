@@ -67,7 +67,7 @@ function setup(
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
   const updateProjectStatus = vi.fn().mockResolvedValue(statusUpdated);
-  const countUnarchivedTasks = vi.fn().mockResolvedValue(0);
+  const countOpenTasks = vi.fn().mockResolvedValue(0);
   const appendAudit = vi
     .fn()
     .mockResolvedValue({ chainId: "chain-1", sequenceNo: 4 });
@@ -82,7 +82,7 @@ function setup(
       findProjectForChange,
       updateProjectDetails,
       updateProjectStatus,
-      countUnarchivedTasks,
+      countOpenTasks,
     } as unknown as ProjectsWritePort,
     { checkProjectForWrite } as unknown as ProjectAccessQueryPort,
     { append: appendAudit } as unknown as AuditWritePort,
@@ -101,7 +101,7 @@ function setup(
     findProjectForChange,
     updateProjectDetails,
     updateProjectStatus,
-    countUnarchivedTasks,
+    countOpenTasks,
     appendAudit,
     appendActivity,
     upsertSearch,
@@ -235,7 +235,7 @@ describe("ProjectManagementService", () => {
       requestId: "req-status",
     });
 
-    expect(s.countUnarchivedTasks).toHaveBeenCalledWith(tx, { projectId: 7 });
+    expect(s.countOpenTasks).toHaveBeenCalledWith(tx, { projectId: 7 });
     expect(s.updateProjectStatus).toHaveBeenCalledWith(tx, {
       projectId: 7,
       expectedRowVersion: 1,
@@ -270,7 +270,7 @@ describe("ProjectManagementService", () => {
 
   it("维护中门禁：仍有未收尾任务时拒绝进入维护中且不写任何副作用", async () => {
     const s = setup();
-    s.countUnarchivedTasks.mockResolvedValueOnce(2);
+    s.countOpenTasks.mockResolvedValueOnce(2);
     await expect(
       s.service.changeProjectStatus(tx, {
         actorId: 9,
@@ -306,7 +306,7 @@ describe("ProjectManagementService", () => {
       status: 409,
       code: "PROJECT_STATUS_LEVEL_SKIP",
     });
-    expect(notStarted.countUnarchivedTasks).not.toHaveBeenCalled();
+    expect(notStarted.countOpenTasks).not.toHaveBeenCalled();
 
     const same = setup();
     await expect(

@@ -48,7 +48,7 @@ const withModules = (client: InpulseApiClient): InpulseApiClient =>
     client,
   ) as unknown as InpulseApiClient;
 
-function mount(client: InpulseApiClient, admin = false) {
+function mount(client: InpulseApiClient) {
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <AuthStateProvider>
@@ -61,7 +61,6 @@ function mount(client: InpulseApiClient, admin = false) {
             <FeaturesPageView
               projectId={2}
               moduleId={4}
-              isAdmin={admin}
               client={withModules(client)}
             />
           </MemoryRouter>
@@ -84,7 +83,6 @@ function mountDetail(client: InpulseApiClient, featureId: number) {
               projectId={2}
               moduleId={4}
               featureId={featureId}
-              isAdmin={false}
               client={withModules(client)}
             />
           </MemoryRouter>
@@ -336,12 +334,7 @@ describe("功能卡", () => {
     stats: { openTaskCount: 7, recordCount: 5, completedTaskCount: 7 },
   };
   const CardListRoute: React.FC = () => (
-    <FeaturesPageView
-      projectId={2}
-      moduleId={4}
-      isAdmin={false}
-      client={cardClient}
-    />
+    <FeaturesPageView projectId={2} moduleId={4} client={cardClient} />
   );
   const cardClient = withModules({
     listFeatures: vi.fn().mockResolvedValue({ items: [withStats] }),
@@ -412,7 +405,7 @@ describe("功能卡", () => {
       }),
       findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
     } as unknown as InpulseApiClient);
-    mount(api, true);
+    mount(api);
     await screen.findByRole("heading", { name: "退款功能" });
     // 功能层不再有归档：卡片上没有归档/恢复入口，也没有归档档位文案。
     expect(screen.queryByText("已归档")).toBeNull();
