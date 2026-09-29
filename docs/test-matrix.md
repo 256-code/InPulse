@@ -2633,13 +2633,13 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | DRAFT-FOOTER-PUBLISH-UNIT-005 | Web 单元 | 发布失败不重复建草稿 | `publishChangeRecord` 以 422 失败后弹窗留在原地并切到该草稿的编辑态（按钮变「保存并发布」、标题输入仍是原值），再点一次走 `updateIndependentRecordDraft(1, 12, …)` 且 `createIndependentRecordDraft` 仍只调用一次 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-UNIT-004 | Web 单元 | 来源草稿页脚（2026-09-28 随 ADR-047 更新） | 打开来源草稿弹窗：主按钮为「发布迭代记录」且类名含 `primary-button`，「保存草稿」类名含 `soft-blue-button`，只读归属行 `.record-scope-facts` 可见 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-BROWSER-001 | 浏览器实测 | 位置与配色 | `/records?projectId=1` 打开「新建迭代记录」：页脚两键高 35px，「保存草稿」`rgb(230,242,255)` / `rgb(36,114,195)` 在 x=941，「新建迭代」`rgb(20,103,216)` / 白字在 x=1031（右端） | 本地通过 |
-| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案 | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「保存并发布」（蓝）。弹窗内原有的提示语（「保存草稿可继续编辑；…之后只能新增版本或作废…」）已按 2026-09-28 产品反馈整段删除，不再断言该文案 | 待复测（提示语删除后未重跑浏览器实测） |
+| DRAFT-FOOTER-PUBLISH-BROWSER-002 | 浏览器实测 | 编辑态文案（2026-09-28 回填） | 草稿详情「继续编辑」：页脚为「保存草稿」（淡蓝）+「发布迭代记录」（主按钮；原口径「保存并发布」已由 2026-09-28 的统一文案与 [ADR-047](adr/ADR-047.md) 作废，见文末「迭代记录发布与任务完成解耦」小节）；弹窗内原有的提示语（「保存草稿可继续编辑；…之后只能新增版本或作废…」）已按 2026-09-28 产品反馈整段删除，不再断言该文案。该路径现由 `record-drafts.spec.ts` 的「继续编辑 → 保存草稿」用例覆盖 | 本地通过（2026-09-28 全量 E2E `61 passed`） |
 | DRAFT-FOOTER-PUBLISH-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：84 文件 539 例通过 | 本地通过 |
 | DRAFT-FOOTER-PUBLISH-GATE-001 | 静态门禁 | 类型、风格与依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`（279 模块 1359 依赖）通过 | 本地通过 |
 
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web test`（84 文件 539 例）、`pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（改动目录）、`pnpm check:frontend:boundaries`、`pnpm exec prettier --write` 通过；浏览器实测见上表（无头 Chromium 指向本地 dev 5173，管理员账号只读量测，未点「新建迭代」本身，未新增或修改业务数据）。
 
-未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿当时没有发布入口，属产品口径问题；2026-09-28 已由 [ADR-047](adr/ADR-047.md) 定案改为有发布入口（见文末「迭代记录发布与任务完成解耦」小节）；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
+未运行 / 已知偏差：① 未跑 `pnpm build`、`check:deps`、`permissions:check`、Playwright E2E 与真实 PostgreSQL 集成测试；② 刻意没有在浏览器里实点「新建迭代」——发布不可撤销（只能作废），为避免在演示库生成真实正式记录，发布链路现由单测与和 `PublishRecordButton` 同构的调用保证；③ 带来源任务的草稿当时没有发布入口，属产品口径问题；2026-09-28 已由 [ADR-047](adr/ADR-047.md) 定案改为有发布入口（见文末「迭代记录发布与任务完成解耦」小节）；④ 新建态叫「新建迭代」、编辑态叫「保存并发布」，是否统一文案待产品确认——2026-09-28 已定案：三态统一为「发布迭代记录」（见文末「迭代记录发布与任务完成解耦」小节与 [ADR-047](adr/ADR-047.md)）；⑤ 未改契约与 OpenAPI，`record-drafts.zod.ts` 摘要仍写「独立草稿」；⑥ 文案与视觉需非作者人工评审。
 
 ## 任务中心删除统计卡与「未完成 / 已完成」筛选（C，2026-09-21 本地落库）
 
@@ -3932,9 +3932,9 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 未运行 / 已知偏差：① 未跑 `pnpm test:integration`、`pnpm build`、五个生产镜像与 Trivy 扫描、`pnpm check` 整链（本批未触碰后端、数据库与生成物，由推送后 CI 覆盖）；② 修复的是并行改造方尚未复跑的改动留下的红灯，若对方在别处继续改同一文件，需以最新 `origin/test` 为准重新 rebase；③ 本批含测试定位与格式化改动，`MergeIntoMainTaskModal.test.tsx` 按 §8 属测试代码，产品代码零改动。
 
-## 2026-09-28 项目组长唯一性与转移（ADR-048，用户指示，本地落库）
+## 2026-09-28 项目组长唯一性与转移（ADR-053，用户指示，本地落库）
 
-用户三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）把 ADR-033 只做了一半的组长不变量补齐：**只要项目还有活跃成员，就必须恰好一名 `ACTIVE` 组长**，组长只能**转移**、不能撤销、不能被直接移除。数据库最终防线是迁移 `0026_project_leader_invariant.sql` 的延迟约束触发器（提交期调用 `app.assert_project_leader`）；服务端 `setProjectMemberRole` 从「仅系统管理员可任命/撤销」改为「系统管理员或现任组长本人可转移」，撤销组长返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；`addProjectMember` 在项目无活跃组长时把首位加入者直接写成 `LEADER`。零活跃成员的项目在数据库层保持合法（夹具清理与历史数据的删除路径），「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，不另设错误码（详见 [ADR-048](adr/ADR-048.md)）。
+用户三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）把 ADR-033 只做了一半的组长不变量补齐：**只要项目还有活跃成员，就必须恰好一名 `ACTIVE` 组长**，组长只能**转移**、不能撤销、不能被直接移除。数据库最终防线是迁移 `0029_project_leader_invariant.sql` 的延迟约束触发器（提交期调用 `app.assert_project_leader`）；服务端 `setProjectMemberRole` 从「仅系统管理员可任命/撤销」改为「系统管理员或现任组长本人可转移」，撤销组长返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；`addProjectMember` 在项目无活跃组长时把首位加入者直接写成 `LEADER`。零活跃成员的项目在数据库层保持合法（夹具清理与历史数据的删除路径），「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，不另设错误码（详见 [ADR-053](adr/ADR-053.md)）。
 
 | 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
 | --- | --- | --- | --- | --- |
@@ -4025,12 +4025,15 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-DRAFT-GITHUB-LINK-E2E-002 | E2E | 全量回归不绿不交付 | `pnpm --filter @inpulse/e2e exec playwright test`（跑前先 `pnpm --filter @inpulse/api... build` 重建 dist）→ **58 passed (4.0m)**；本批新增用例 2.1s 通过，`F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）` 3.2s 通过 | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 564 例通过 | 本地通过 |
 | RECORD-DRAFT-GITHUB-LINK-GATE-001 | 静态门禁 | 类型与风格 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过 | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-INT-001 | 集成测试 | 真实 PostgreSQL 不回归 | `pnpm test:integration`（`TEST_DATABASE_URL` 指向 `app_ci`，注入 `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE`）→ apps/api 49 文件 457 例、database 2 文件 26 例、apps/ops 2 文件 7 例（合计 53 文件 490 例），退出码 0 | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-BUILD-001 | 构建 | 整链构建 | `pnpm build` → 8 个 workspace 项目全部 Done（apps/web 产物 `✓ built in 328ms`） | 本地通过 |
+| RECORD-DRAFT-GITHUB-LINK-CHECK-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**：lint / format:check / typecheck / test:unit / db:migrations:check / db:seed:check / contract:drift / contract:validate / build / check:deploy:test（5 个镜像 ref 有效）/ check:deps（725 源文件）/ check:frontend:boundaries（286 模块 1408 依赖）/ permissions:check（98 操作 98 路由）/ deps:audit（No known vulnerabilities found）/ check:secrets（1074 文件）/ check:docs（94 个 Markdown） | 本地通过 |
 
-未运行 / 已知偏差：① 全量 E2E 已在推送 `12b22fc` 后补跑并通过（见 RECORD-DRAFT-GITHUB-LINK-E2E-002），定向回归只跑过 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑且不会有**——推送 `test` 不触发 CI（`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发）；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。
+未运行 / 已知偏差：① 推送 `12b22fc` 后已补跑全量 E2E（见 RECORD-DRAFT-GITHUB-LINK-E2E-002）、`pnpm test:integration`、`pnpm build` 整链与 `pnpm check` 整链，全部通过；定向回归只跑过 `external-links`（3 例）与 `record-drafts` + `record-publishing` + `task-completion` + `leftover-task`（合计 15 例）；② **GitHub Actions 未跑且不会有**——推送 `test` 不触发 CI（`.github/workflows/ci.yml` 的 `on:` 只在 PR 与 `main`/`dev/*` 推送时触发），要 CI 结论需另开 `test → main` 的 PR；③ 弹窗内新增交互与版式属视觉 / 交互改动，需非作者人工评审；④ 本条与第四十一条开发日志记录对应。
 
 ## 2026-09-28 项目删除：软删除与删除权限（ADR-049，用户指示，本地落库）
 
-用户 2026-09-28 指示「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」；同日追加「布局记得更改」，并在四个版式选项中选定「删除按钮移到弹窗页脚最左侧」。落 [ADR-049](adr/ADR-049.md)：`app.projects` 加 `deleted_at` / `deleted_by` 与状态一致 CHECK（迁移 `0027_project_soft_delete.sql`），删除是**软删除**——保留行与全部历史，只把项目移出全部可见范围（含管理员），项目编码保持占用、不提供回收站与恢复入口、刻意不发通知；只有系统管理员与本项目组长能删（在 [ADR-039](adr/ADR-039.md) 的权限下放上新增例外）。
+用户 2026-09-28 指示「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」；同日追加「布局记得更改」，并在四个版式选项中选定「删除按钮移到弹窗页脚最左侧」。落 [ADR-049](adr/ADR-049.md)：`app.projects` 加 `deleted_at` / `deleted_by` 与状态一致 CHECK（迁移 `0030_project_soft_delete.sql`），删除是**软删除**——保留行与全部历史，只把项目移出全部可见范围（含管理员），项目编码保持占用、不提供回收站与恢复入口、刻意不发通知；只有系统管理员与本项目组长能删（在 [ADR-039](adr/ADR-039.md) 的权限下放上新增例外）。
 
 锁定口径：
 
@@ -4042,7 +4045,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| PROJECT-DELETE-DB-001 | 数据库迁移（真实 PostgreSQL） | 两列 + 外键 + 状态一致 CHECK 落地，且迁移可重复校验 | `0027_project_soft_delete.sql` 在 `app_ci` 应用成功（迁移总数 28，`pnpm db:migrations:check` 通过）；`database.test.ts` 的不可变迁移清单已追加该文件 | 本地通过 |
+| PROJECT-DELETE-DB-001 | 数据库迁移（真实 PostgreSQL） | 两列 + 外键 + 状态一致 CHECK 落地，且迁移可重复校验 | `0030_project_soft_delete.sql` 在 `app_ci` 应用成功（迁移总数 28，`pnpm db:migrations:check` 通过）；`database.test.ts` 的不可变迁移清单已追加该文件 | 本地通过 |
 | PROJECT-DELETE-API-001 | API 集成（真实 PostgreSQL + HTTP） | 组长删除、可见性与副作用 | `apps/api/test/project-delete-api.integration.test.ts` → **5/5**：组长 204 且行上 `deleted_by` / `row_version` 正确、子表行数不变；删除后项目列表 / 详情 / 搜索范围 / 写校验 / 成员资料全部不可见；审计恰 1 条（`PROJECT:<id>` 链头哈希自洽）、动态 1 条、通知 0 条 | 本地通过 |
 | PROJECT-DELETE-API-002 | API 集成（真实 PostgreSQL + HTTP） | 幂等重放与重放期授权 | 同 Keys 重放 204 且审计仍 1 条；同键不同 `If-Match` → 409 `IDEMPOTENCY_REQUEST_MISMATCH`；换键 → 404；重放期角色变化（晋升继任者后原组长 403、移除后 404、继任者用同键 404） | 本地通过 |
 | PROJECT-DELETE-API-003 | API 集成（真实 PostgreSQL + HTTP） | 权限矩阵与参数校验分支 | 普通成员 403、非成员与已移除成员 404 且无副作用、系统管理员 204；缺 `If-Match` 422、缺 `Idempotency-Key` 400、带 body 422、缺 CSRF 422、匿名 401、陈旧版本 409 且无副作用 | 本地通过 |
@@ -4087,8 +4090,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 锁定口径：
 
-- 权限分离：还原与删除**同权**（系统管理员 / 本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；两者对未删除项目都是 409 `PROJECT_NOT_DELETED`，非成员与不存在仍 404；授权全部按实时成员关系在服务端判定（ADR-012 / ADR-039 / ADR-048）。
-- 彻底删除走 `SECURITY DEFINER` 窄口 `app.purge_project(INTEGER)`（迁移 `0028_project_purge.sql`），**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed，绕过软删除在数据库层也不成立）；删除顺序固定为叶子表到 `app.projects` 共 27 处，删 `projects` 断言恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（ADR-008 的唯一例外）。
+- 权限分离：还原与删除**同权**（系统管理员 / 本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；两者对未删除项目都是 409 `PROJECT_NOT_DELETED`，非成员与不存在仍 404；授权全部按实时成员关系在服务端判定（ADR-012 / ADR-039 / ADR-053）。
+- 彻底删除走 `SECURITY DEFINER` 窄口 `app.purge_project(INTEGER)`（迁移 `0031_project_purge.sql`），**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed，绕过软删除在数据库层也不成立）；删除顺序固定为叶子表到 `app.projects` 共 27 处，删 `projects` 断言恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（ADR-008 的唯一例外）。
 - 还原只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功，另一个 409）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知。
 - 幂等：两条路由 `idempotencyContractVersion: 1.0.0`、`versionPolicy: none`、`behaviorHeaders: []`（不接受 `If-Match`），`idempotencyReplayPolicy` 与 `replayAuthorizationPolicy` 逐条登记；重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」），失败不泄露已存状态码或响应体。
 - 前端：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**。
@@ -4149,3 +4152,57 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 本地实际执行（2026-09-28，全部通过）：`pnpm exec prettier --write`（改动 4 个文件，唯一失格项 `NotificationsPageView.test.tsx` 已修复）、`pnpm format:check`（`All matched files use Prettier code style!`）、`pnpm lint`、`pnpm typecheck`（8 个 workspace）、定向 `pnpm --filter @inpulse/web exec vitest run src/features/audit src/features/notifications` → **5 文件 25/25**、`pnpm --filter @inpulse/web test:unit` → **86 文件 584 例**、真实浏览器复核（审计页与通知页各一次抓取）。
 
 未运行 / 已知偏差：① 本批为纯前端文案、无行为变更，未跑 `pnpm test:e2e`（上一次整包 `59 passed` 在本批之前）、全量 `pnpm test:integration`、镜像构建、Trivy 扫描与 **GitHub Actions**；② 通知类型标签表是**展示用白名单**，服务端新增事件码时不会自动中文化（按原样显示以便发现），需要时补表；③ 审计页的动作筛选项由 `AUDIT_ACTION_OPTIONS` 从同一标签表生成，因此 `project.purge` 的筛选项随本次改动一并出现。
+
+## 迭代记录草稿删除（ADR-048，用户指示，2026-09-28 本地落库）
+
+用户 2026-09-28 指示：「我希望在草稿箱里的迭代记录可以删除，就是点开编辑的时候有删除选项」。落 [ADR-048](adr/ADR-048.md)：新增 `deleteRecordDraft`（`DELETE /api/v1/projects/{projectId}/record-drafts/{recordId}`），只有 `status = 'DRAFT'` 可删，独立草稿与来源草稿共用；删除连同草稿自己的子行物理删除、只写审计 `record.draft.delete`，不写活动 / 通知 / 搜索投影；`app_runtime` 对 `app.change_records` 的表级权限不放宽，删除收进迁移 `0026` 的 `SECURITY DEFINER` 函数 `app.delete_change_record_draft`。
+
+锁定口径：
+
+- 门禁与编辑一致：匿名 / 停用 401；非成员、已移除成员、真实归属不符、记录不存在或不是 `DRAFT`、父级不可写一律 404；`If-Match` 映射记录 `row_version`，不一致 409 `RECORD_VERSION_CONFLICT`；CSRF + 同源 + 数据库级幂等，同 Key 重放返回同一 200 结果且不依赖已删除行存在。
+- 不与来源任务级联：来源任务的 `work_status`、完成信息、`task_status_history` 与行版本全部不变；已发布 / 已作废记录没有删除入口。
+- 数据库兜底：函数内非 `DRAFT` 抛 `check_violation`；草稿若存在遗留项行抛错而不静默连带删除；子行按 `change_record_external_links` → `change_record_feature_impacts` → `change_records` 顺序删除。
+- 前端：编辑器弹窗页脚左侧实底红色「删除草稿」按钮 + `tone="danger"` 二次确认；成功后失效草稿列表与全部项目草稿缓存、清掉 URL 的 `recordId`，详情弹层不残留已删除草稿。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-DELETE-INT-001 | 真实 PostgreSQL 集成 | 独立草稿删除与同 Key 重放 | `record-drafts.integration.test.ts` 新增 `deletes an independent draft with its child rows, audits it, and still replays the same key afterwards`：删除后 `change_record_external_links` / `change_record_feature_impacts` 清空、`app.audit_logs` 出现 `record.draft.delete`、同 Key 重放 200、列表与详情随即 404 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-002 | 真实 PostgreSQL 集成 | 401 / 404 / 409 与已发布拒绝 | 同文件 `rejects unauthenticated, foreign, revoked and version-mismatched deletes, and never touches published history`：未登录 401、外项目 404、版本不符 409、已发布记录删除 404 且正文与子行不变 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-003 | 真实 PostgreSQL 集成 | 来源草稿删除不动任务 | 同文件 `deletes a task source draft through the same path without changing the task`：任务行快照前后相等、来源草稿列表清空 | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-UNIT-001 | Web 单元 | 必须先确认再删除 | `RecordDraftsView.test.tsx`：点「删除草稿」只打开确认层、不调接口；点「确认删除」后 `deleteRecordDraft` 携带 `If-Match: "1"`、CSRF 与字符串幂等键，成功后弹窗关闭；触发按钮与确认按钮的 `className` 都含 `ant-btn-dangerous` 与 `ant-btn-primary`（实底红，与「作废记录」「解除合并」同一套） | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-UNIT-002 | Web 单元 | 新建草稿没有删除入口 | 同文件：未保存的新建草稿弹窗内没有「删除草稿」按钮 | 本地通过 |
+| RECORD-DRAFT-DELETE-E2E-001 | 浏览器实测（E2E） | 草稿删除全流程 | `record-drafts.spec.ts` `F-17 草稿箱里的迭代记录可以删除`：新建草稿 → 草稿详情 → 继续编辑 → 删除草稿 → 确认删除 → 编辑器与详情弹层关闭、草稿卡片消失 | 本地通过 |
+| RECORD-DRAFT-DELETE-INT-004 | 集成测试 | 迁移与真实 PostgreSQL 不回归 | `pnpm test:integration` → apps/api 49 文件 460 例、database 2 文件 26 例、apps/ops 2 文件 7 例（合计 53 文件 493 例），退出码 0；`database.test.ts` 的已应用迁移清单补入 `0026_record_draft_delete.sql` | 本地通过 |
+| RECORD-DRAFT-DELETE-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm --filter @inpulse/web test`：85 文件 566 例通过 | 本地通过 |
+| RECORD-DRAFT-DELETE-E2E-FULL-001 | E2E（全量） | 无新增失败 | 全量 `pnpm test:e2e` → **59 passed (4.1m)**（原 58 + 新增 1，新增用例 2.7s 通过） | 本地通过 |
+| RECORD-DRAFT-DELETE-CI-001 | GitHub Actions | 推送后 CI 跑通 | PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件为提交 `1545b02` 触发 run `36393549369`：`CI / workspace` **success**（15m38s，含 Playwright Browser E2E、五个生产镜像构建与 Trivy 扫描、`deps:audit`）与 run `36393549335` `Documentation / docs` **success**；`9b1e245` 的 CI 按同 ref 取消策略被新推送取代 | 已通过 |
+| RECORD-DRAFT-DELETE-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**：lint / format:check / typecheck / test:unit（canonical-json 1 文件 5 例、database 1 文件 15 例、api-contract 16 文件 100 例、api 66 文件 369 例、ops 8 文件 52 例、web 85 文件 566 例）/ db:migrations:check / db:seed:check / contract:drift / contract:validate（99 条路由）/ build / check:deploy:test / check:deps（718 源文件）/ check:frontend:boundaries（286 模块 1408 依赖）/ permissions:check（99 操作 / 99 路由）/ deps:audit（No known vulnerabilities found）/ check:secrets（1076 文件）/ check:docs（95 个 Markdown） | 本地通过 |
+
+未运行 / 已知偏差：① GitHub Actions 已跑通——推送 `test` 不触发 `push` 事件，但既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件会为新提交起 CI，见 `RECORD-DRAFT-DELETE-CI-001`；② 本批含服务端业务逻辑、数据库迁移（`SECURITY DEFINER` 函数与 `EXECUTE` 授权）与前端产品代码改动，按 §6 / §8 需人工评审；③ 迁移只在 `app_ci` 应用过，演示库 `app` 与本机生产形态未升级。
+
+## 2026-09-28 迭代记录弹窗 Ctrl/Cmd+Enter 与任务详情发布落点（用户指示，本地落库）
+
+用户在本批评审意见里指出：草稿编辑弹窗缺键盘提交；任务详情「记录一次迭代」发布成功后没有落点，用户还得自己去找正式记录；缺「未保存离开」保护。第三条先被否掉（「没保存就没保存吧不用保护」），随后用户改口「没做的做掉」，并定下实现口径：**没有保存就不更改**——离开时既不写库、也不做本地暂存，只保留一道确认，避免 Esc / 遮罩误触静默丢内容。
+
+- 快捷键：`RecordDraftEditorModal` 的 `<form>` 增加 `onKeyDown`，只在 `Enter` 且带 `Ctrl`/`Meta` 时提交，并且只提交「保存草稿」——发布会把记录公开给项目成员，必须是一次显式点击。`submitBlocked` 或删除确认层打开时不响应，键盘路径与按钮的禁用条件完全一致。
+- GitHub 链接框：该输入框的回车仍只暂存链接（既有行为）。只有框内没有待暂存内容（`linkInput.trim() === ""`）时才把 `Ctrl/Cmd+Enter` 冒泡给表单，避免用户刚输入的链接被「保存草稿」带走后丢掉。
+- 未保存离开：`RecordDraftEditorModal` 用 `formState.isDirty` + 待暂存的 GitHub 链接 + 没选完的冲突合并 + 链接框里刚输入还没提交的内容合成 `unsaved`；Esc / 点遮罩 / 头部 ✕ 三条路径统一走 `requestClose`，有未保存内容时先弹 `tone="warning"` 的「放弃未保存的内容」（继续编辑 / 放弃修改），两条分支都不发任何写请求。草稿已落库但后续步骤失败而留在原地时，`switchToSaved` 会把表单基线 `reset` 到服务端内容，避免之后关闭时误报未保存。
+- 任务详情落点：`TasksPanel` 新增 `publishedRecord`，草稿弹窗 `onSaved` 收到 `published` 时记下该记录并刷新本任务正式记录列表；任务详情头部下方渲染 `Alert type="success"`「迭代记录已发布：{编号}」+「查看正式记录」按钮，点击就地打开记录详情弹窗，不强制跳转。`openRecord` 在正式记录列表刷新落地前用发布响应兜底，所以按钮不会「点了没反应」；`openDetail` / `closeDetail` 都清空该状态。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-DRAFT-SUBMIT-WEB-UNIT-001 | Web 单元 | Ctrl + Enter 等于「保存草稿」 | `RecordDraftsView.test.tsx` 新增 `saves the draft with Ctrl/Cmd + Enter and keeps a typed GitHub link`：范围没选完时快捷键与按钮一样被拦住（`createIndependentRecordDraft` 未被调用）；选好范围后链接框内 `Ctrl+Enter` 只暂存链接（`PR #123` 出现、仍未提交）；清空后再按才落成保存草稿，`addExternalLink` 调用一次且 `publishChangeRecord` 从未调用 | 本地通过 |
+| TASK-RECORD-PUBLISH-LAND-WEB-UNIT-001 | Web 单元 | 任务详情发布后的落点 | `TasksPanel.test.tsx` 新增 `lands the freshly published record inside the task detail`：来源草稿发布后弹窗关闭、任务详情出现「迭代记录已发布：PR-CR-9」；点「查看正式记录」在正式记录列表仍为空（`listChangeRecords` 返回空）时也能就地打开记录详情弹窗并显示编号 | 本地通过 |
+| RECORD-DRAFT-SUBMIT-E2E-001 | 浏览器实测（E2E） | 真实浏览器键盘路径 | `record-drafts.spec.ts` 新增 `F-17 弹窗内的 Ctrl+Enter 直接保存草稿且不发布`：多行字段里 `press("Control+Enter")` 后弹窗关闭、草稿详情弹层出现且带正文 | 本地通过 |
+| TASK-RECORD-PUBLISH-LAND-E2E-001 | 浏览器实测（E2E） | 任务详情发布落点 | `record-publishing.spec.ts` 的 `F18 未完成任务的迭代记录可以直接发布且任务状态不变（ADR-047）` 增补断言：发布后任务详情出现「迭代记录已发布：」提示，点「查看正式记录」打开记录详情弹层（正文可见），关闭后任务详情与后续断言不受影响 | 本地通过 |
+| RECORD-DRAFT-LEAVE-WEB-UNIT-001 | Web 单元 | 没改过就不打扰 | `RecordDraftsView.test.tsx` 新增 `closes an untouched dialog without asking about unsaved input`：打开未改动的弹窗点头部 ✕ 直接关闭、不出现确认层、`createIndependentRecordDraft` 未被调用 | 本地通过 |
+| RECORD-DRAFT-LEAVE-WEB-UNIT-002 | Web 单元 | 改了内容先确认 | 同文件 `asks before dropping unsaved input and never writes it on leave`：改「改动原因」后点 ✕ 出现「放弃未保存的内容」；点「继续编辑」保留输入且未写库；再点 ✕ 后点「放弃修改」才关闭，`createIndependentRecordDraft` 始终未被调用 | 本地通过 |
+| RECORD-DRAFT-LEAVE-E2E-001 | 浏览器实测（E2E） | Esc 误触路径 | `record-drafts.spec.ts` 新增 `F-17 未保存就离开先确认，放弃后不留痕迹`：填好标题与正文后按 `Escape` 出现确认层 →「继续编辑」后输入仍在 → 再按 `Escape` →「放弃修改」关闭，草稿箱里没有这条草稿 | 本地通过 |
+| RECORD-DRAFT-SUBMIT-WEB-001 | Web 单元 | 全量前端不回归 | `pnpm test:unit` → apps/web **85 文件 570 例**通过（原 566 + 新增 4） | 本地通过 |
+| RECORD-DRAFT-SUBMIT-E2E-FULL-001 | E2E（全量） | 无新增失败 | 全量 `pnpm test:e2e` → **61 passed (4.2m)**（原 59 + 新增 2） | 本地通过 |
+| RECORD-DRAFT-SUBMIT-CI-001 | GitHub Actions | 推送后 CI 跑通 | 提交 `ecc73cd` 触发 run [36401966668](https://github.com/256-code/InPulse/actions/runs/36401966668) `CI / workspace` **success**（12m43s）与 run [36401966530](https://github.com/256-code/InPulse/actions/runs/36401966530) `Documentation / docs` **success**；`f3a8016` 的运行按同 ref 取消策略被取代 | 已通过 |
+| RECORD-DRAFT-SUBMIT-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**；另单独复读关键数字：lint 无输出、typecheck 全 workspace 通过、`contract:validate`（99 条路由）、`permissions:check`（99 条操作 / 99 条路由）、`check:deps`（718 个源文件）、`check:frontend:boundaries`（286 模块 1408 依赖）、`deps:audit`（No known vulnerabilities found）、`check:secrets`（1076 文件）、`db:migrations:check`（27 个迁移）、`check:docs`（95 个 Markdown） | 本地通过 |
+
+推送（2026-09-28）：提交 `f3a8016`（`feat(web,e2e,docs): 迭代记录弹窗键盘提交、未保存离开确认与任务详情发布落点`，9 文件 +407 / −10）已推送到 `origin/test`（`c97f1a1..f3a8016`），`git ls-remote origin refs/heads/test` 与本地 `HEAD` 一致；CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发。
+
+未运行 / 已知偏差：① 本轮只改前端产品代码与 E2E 用例，未改 Schema、Route Registry、权限矩阵、数据库与迁移，因此没有重跑集成测试与迁移门禁（`pnpm check` 已覆盖不依赖数据库的门禁）；② 未保存内容不做本地暂存（用户口径：没有保存就不更改）——按 Esc、点遮罩或点头部 ✕ 会先确认，确认放弃后输入即丢弃，服务端草稿仍是上次保存的内容；③ GitHub Actions 已跑通——推送 `test` 不触发 `push` 事件，但既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件会为新提交起 CI，见 `RECORD-DRAFT-SUBMIT-CI-001`；④ 快捷键与提示属交互变化，需非作者人工评审。

@@ -10,6 +10,7 @@ import {
   recordDraftReplayContextSchema,
   type IndependentRecordDraftRequest,
   type RecordDraftContent,
+  type RecordDraftDeleteResult,
   type RecordDraftItem,
   type RecordDraftPage,
 } from "@inpulse/api-contract";
@@ -454,6 +455,62 @@ export class RecordDraftsService
       );
     await this.appendAudit(tx, actorId, before, after, requestId);
     return after;
+  }
+  /**
+   * 删除草稿：只处理 DRAFT，未发布过的草稿不属于业务历史。
+   * 先按父到子取 FOR SHARE 再锁草稿行；版本不匹配、已发布（find 过滤 DRAFT）
+   * 或遗留问题已转成任务都拒绝，成功与审计在同一事务内提交。
+   */
+  async remove(
+    tx: TransactionContext,
+    actorId: number,
+    projectId: number,
+    recordId: number,
+    version: number,
+    requestId: string,
+  ): Promise<RecordDraftDeleteResult> {
+    const pre = await this.repository.find(tx, projectId, recordId);
+    if (!pre) throw missing();
+    await this.authorize(tx, actorId, pre);
+    const before = await this.repository.find(tx, projectId, recordId, true);
+    if (!before) throw missing();
+    if (before.rowVersion !== version)
+      throw new RecordDraftError(
+        409,
+        "RECORD_VERSION_CONFLICT",
+        "草稿版本已变化，请加载最新内容后再删除",
+      );
+    if (
+      !(await this.repository.deleteDraft(
+        tx,
+        projectId,
+        recordId,
+        before.rowVersion,
+      ))
+    )
+      throw new RecordDraftError(
+        409,
+        "RECORD_VERSION_CONFLICT",
+        "草稿状态已变化，请刷新列表后重试",
+      );
+    await this.audit.append(tx, {
+      projectId,
+      actorType: "USER",
+      actorId,
+      action: "record.draft.delete",
+      targetType: "CHANGE_RECORD",
+      targetId: String(recordId),
+      eventPayload: { before, after: null },
+      requestId,
+    });
+    return {
+      projectId,
+      recordId,
+      moduleId: before.moduleId,
+      featureId: before.featureId,
+      taskId: before.taskId,
+      impactFeatureIds: before.impactFeatureIds,
+    };
   }
   private content(input: RecordDraftContent): RecordDraftContent {
     const {

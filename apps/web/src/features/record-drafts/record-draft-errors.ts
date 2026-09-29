@@ -16,3 +16,18 @@ export function recordDraftErrorMessage(error: unknown) {
   }
   return "草稿服务暂时不可用，输入已保留，可重试。";
 }
+
+/**
+ * 删除草稿的错误文案：删除失败时草稿与弹窗都保留；409 直接透出服务端原因
+ * （版本冲突或状态已变化，提示用户加载最新内容后重试）。
+ */
+export function recordDraftDeleteErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录。";
+    if (error.status === 403) return "权限或安全校验未通过，无法删除。";
+    if (error.status === 404) return "草稿不存在，或已经被删除。";
+    if (error.status === 409) return error.message;
+    if (error.status === 429) return "请求过于频繁，请稍后重试。";
+  }
+  return "草稿服务暂时不可用，可重试。";
+}

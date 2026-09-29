@@ -38,10 +38,10 @@ interface ReassignmentChoice {
 export interface ProjectMembersPageViewProps {
   readonly projectId: number;
   readonly client?: InpulseApiClient | undefined;
-  /** ADR-033/ADR-048：当前登录用户是否系统管理员（可任命/转移组长）。 */
+  /** ADR-033/ADR-053：当前登录用户是否系统管理员（可任命/转移组长）。 */
   readonly isSystemAdmin?: boolean | undefined;
   /**
-   * ADR-048：当前登录用户在本项目的角色。`LEADER` 只能把组长身份转交给
+   * ADR-053：当前登录用户在本项目的角色。`LEADER` 只能把组长身份转交给
    * 其他活跃成员，不能自设也不能撤销。
    */
   readonly viewerRole?: "MEMBER" | "LEADER" | null | undefined;
@@ -151,7 +151,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
     removeMutation.reset();
   };
 
-  // ADR-048：角色任命只针对现任组长之外的行——把其他成员设为组长即完成转移，
+  // ADR-053：角色任命只针对现任组长之外的行——把其他成员设为组长即完成转移，
   // 原组长自动降级；撤销组长不存在独立入口。调用者只剩系统管理员与本项目组长。
   const canSetRoles = isSystemAdmin || viewerRole === "LEADER";
   const leaderTransferOnly = !isSystemAdmin && viewerRole === "LEADER";

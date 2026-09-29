@@ -161,7 +161,7 @@ export async function removeMember(
   userId: number,
 ): Promise<void> {
   // ADR-033：REMOVED 行不得保留非 MEMBER 角色（project_members_removed_role_check）。
-  // ADR-048：有活跃成员就必须恰好一名组长，夹具移除组长前先转移给最早的活跃成员。
+  // ADR-053：有活跃成员就必须恰好一名组长，夹具移除组长前先转移给最早的活跃成员。
   await sql.begin(async (transaction) => {
     const [target] = await transaction<Array<{ id: number; role: string }>>`
       SELECT id, role

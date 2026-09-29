@@ -351,24 +351,24 @@
 - 只改顺序，不改颜色与看板：卡片取色、优先级徽章、「遗留问题」徽章与截止日期文案不变；任务看板 `listForBoard` 的四桶口径与其未完成桶「优先级 → 截止时间」排序不受影响（ADR-037 §3）。
 - 回归防线：`apps/api/test/task-list-order.test.ts`（游标版本与段数）、`apps/api/test/aggregate-read-ports.integration.test.ts`（真库顺序矩阵，含「高优先级无遗留 vs 普通优先级有遗留」对照）、`apps/api/test/aggregate-read-api.integration.test.ts`（HTTP 层顺序与分页不重不漏）、`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`（前端镜像顺序）。改动排序口径时必须同时跑这四处。
 
-## 2026-09-28 ADR-048 项目组长唯一性与转移说明
+## 2026-09-28 ADR-053 项目组长唯一性与转移说明
 
-按用户 2026-09-28 的三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任方案「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）补齐组长不变量（[ADR-048](./docs/adr/ADR-048.md)）。因此：
+按用户 2026-09-28 的三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任方案「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）补齐组长不变量（[ADR-053](./docs/adr/ADR-053.md)）。因此：
 
-- **有活跃成员 ⇒ 恰好一名 ACTIVE 组长**：迁移 `0026_project_leader_invariant.sql` 回填存量无组长项目（优先仍在任的创建者，否则最早加入者），并新增可延迟约束触发器 `project_members_leader_complete`（提交期调用 `app.assert_project_leader`）。**必须可延迟**：转移是「先降级原组长、再提升新组长」两步，中途必然零组长，而 `project_members_one_leader` 是不可延迟的部分唯一索引。
+- **有活跃成员 ⇒ 恰好一名 ACTIVE 组长**：迁移 `0029_project_leader_invariant.sql` 回填存量无组长项目（优先仍在任的创建者，否则最早加入者），并新增可延迟约束触发器 `project_members_leader_complete`（提交期调用 `app.assert_project_leader`）。**必须可延迟**：转移是「先降级原组长、再提升新组长」两步，中途必然零组长，而 `project_members_one_leader` 是不可延迟的部分唯一索引。
 - **组长只能转移，不能撤销或移除**：`removeProjectMember` 对组长 409 `PROJECT_MEMBER_LEADER_PROTECTED`（含系统管理员）；`setProjectMemberRole` 把现任组长降级为 `MEMBER` 返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；「撤销组长」这条路径整体取消，没有「先撤销再指定」的替代流程。
 - **组长本人可转交身份**（修订 [ADR-039](./docs/adr/ADR-039.md) 决策 4）：`roleSetterRole` 返回 `SYSTEM_ADMIN | LEADER | MEMBER | NOT_MEMBER`；组长仅当 `role = LEADER` 且目标不是自己时放行，自设与撤销组长的请求一律 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，普通成员 403、非成员 404。系统管理员保持完全能力。
 - **零活跃成员的项目在数据库层保持合法**：夹具清理与历史数据的删除路径需要把成员关系标记 `REMOVED`；「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，**不新增** `PROJECT_MEMBER_LAST_MEMBER_PROTECTED` 之类的错误码（方案 A 下不可达）。将来若重新引入自动继任，必须新增 ADR 并同时补该码与门禁测试。
 - **无组长项目的加入规则**：`addProjectMember` 在项目没有活跃组长时把首位加入者直接写成 `LEADER`（`resolveJoiningRole`），否则该写入会被数据库不变量在提交时拒绝。
 - **幂等契约版本**：`setProjectMemberRole` 的 `idempotencyContractVersion` 由 `2.1.0` 升到 `2.2.0`（授权语义变化），旧 Key 在新契约下 409；`addProjectMember`（`1.2.0`）与 `removeProjectMember`（`1.3.0`）的请求/响应 Schema 与重放策略未变，版本保持。
 - **夹具与种子**：`app.project_members` 的所有插入夹具必须显式给出 `role`（测试库、E2E `global-setup`、`apps/ops` 集成、`database/poc` 共 42 处已补齐）；移除成员必须走 `apps/api/test/database.helpers.ts` 的 `removeMember`（在事务内先把组长身份转移给其他活跃成员再标记 `REMOVED`），直接 `UPDATE … status='REMOVED'` 移除创建者/组长会在提交期被 `project_members_leader_complete` 拒绝；`database/seed/demo-data.sql` 的 `project_members` 已包含 `role` 列，修改种子列清单时必须同步 `scripts/export-demo-seed.mjs`。
-- 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-048 与本节的现行规则为准。
+- 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-053 与本节的现行规则为准。
 
 ## 2026-09-28 ADR-049 / ADR-050 项目删除与删除记录说明
 
 按用户 2026-09-28 的连续指示（「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」→「布局记得更改」→「然后删除项目也要在项目动态和审计日志里记载」→「项目动态要所有人能看到，审计日志管理员看到就行，要留有记录，记录谁删除了项目」）交付项目删除与删除记录可见性（[ADR-049](./docs/adr/ADR-049.md)、[ADR-050](./docs/adr/ADR-050.md)）。因此：
 
-- **删除是软删除，不物理删除任何历史**：迁移 `0027_project_soft_delete.sql` 给 `app.projects` 加 `deleted_at` / `deleted_by`（`ON DELETE restrict` FK 到 `app.users`）与 `projects_deleted_state_check`（两列同时为空或同时有值）；不级联、不回收项目编码（`projects_code_unique` 不变）、不加「已删除」状态位（项目状态仍是 [ADR-043](./docs/adr/ADR-043.md) 的三态）。物理删除在本仓库不可行——`app.projects` 被 12 张表以 `RESTRICT` 外键引用，审计链按 [ADR-008](./docs/adr/ADR-008.md) 只追加。
+- **删除是软删除，不物理删除任何历史**：迁移 `0030_project_soft_delete.sql` 给 `app.projects` 加 `deleted_at` / `deleted_by`（`ON DELETE restrict` FK 到 `app.users`）与 `projects_deleted_state_check`（两列同时为空或同时有值）；不级联、不回收项目编码（`projects_code_unique` 不变）、不加「已删除」状态位（项目状态仍是 [ADR-043](./docs/adr/ADR-043.md) 的三态）。物理删除在本仓库不可行——`app.projects` 被 12 张表以 `RESTRICT` 外键引用，审计链按 [ADR-008](./docs/adr/ADR-008.md) 只追加。
 - **权限**：只有系统管理员与本项目 ACTIVE 组长可删（在 [ADR-039](./docs/adr/ADR-039.md) 的权限下放上新增例外）；普通成员 403 `PROJECT_DELETE_FORBIDDEN`，非成员与已移除成员 404（不泄露存在性），组长用实时成员关系判定、转移或降级后立即失效。重放走专用 `projectDeleteReplayAuthorizer`（删除后项目必不在成员范围内，复用常规作者探测会把合法重放变成 404）。
 - **删除后项目退出全部可见范围**，但**删除这件事要对全部登录用户可见**（ADR-050 修订 ADR-049 第 3 节的绝对表述），且必须**作为项目动态流里的普通一行**呈现、不得另起独立区块（2026-09-28 用户追加要求）：新增只读路由 `GET /api/v1/project-deletions`（`listProjectDeletions`，`session` 策略、无 CSRF / 幂等键 / `If-Match`、不写审计、`no-store`），条目只有 `projectId` / `code` / `name` / `deletedAt` / `deletedBy{id,name}`，不暴露任何下级数据也不提供恢复入口；签名游标（`TimeCursorService` 命名空间 `PROJECT_DELETION`、绑定操作者、TTL 15 分钟），`limit` 1～50、默认 20。动态读取的例外必须靠 `ProjectAccessQueryPort.isDeletedProject` 判定（不能用授权范围反推），并收窄到只下发 `activityType = PROJECT_DELETED`（删除前的历史与 `ADMIN_ONLY` 行不得借该例外回放），删除行不带「查看对象」；审计读取 `getAuditLogs` 保持 `adminSession` 不变，前端补齐已删除项目的 `PROJECT:<id>` 审计链入口并把项目名按记录还原。
 - 删除的**写入侧从未缺失**：审计 `project.delete`（含项目编码与名称、操作者）与项目动态 `PROJECT_DELETED`（`visibilityScope: MEMBER`）早已在同一事务写入；缺口只在读取侧（项目级动态查询对被删除项目不可用、审计页只列活跃项目）。**刻意不发通知**——删除后项目深链必成死链，通知只能标记已读不能作废（[ADR-035](./docs/adr/ADR-035.md)）。
@@ -382,7 +382,7 @@
 
 - **两条新命令**：`POST /api/v1/projects/{projectId}/restore`（`restoreProject`，200 `ProjectDetailResponse`）与 `POST /api/v1/projects/{projectId}/purge`（`purgeProject`，200 `ProjectPurgeResponse`）；`session` + CSRF + 数据库级幂等（`idempotencyContractVersion: 1.0.0`）、`versionPolicy: none`、`behaviorHeaders: []`（不接受 `If-Match`）。Route Registry 由 100 条增至 **102 条**。
 - **权限分离**：还原与删除**同权**（系统管理员或本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；未删除项目一律 409 `PROJECT_NOT_DELETED`，非成员 / 不存在 404。重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」）。
-- **彻底删除的数据库边界**：迁移 `0028_project_purge.sql` 新增 `SECURITY DEFINER` 函数 `app.purge_project(INTEGER)`，**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed）；固定按叶子表到 `app.projects` 共 27 处删除并断言 `projects` 恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（[ADR-008](./docs/adr/ADR-008.md) 的唯一例外，范围写死在函数内）。
+- **彻底删除的数据库边界**：迁移 `0031_project_purge.sql` 新增 `SECURITY DEFINER` 函数 `app.purge_project(INTEGER)`，**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed）；固定按叶子表到 `app.projects` 共 27 处删除并断言 `projects` 恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（[ADR-008](./docs/adr/ADR-008.md) 的唯一例外，范围写死在函数内）。
 - **还原不搬数据**：只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知，也不回收 / 复用编码。
 - **前端**：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**；动作区与「原始快照」共用基线（`.activity-actions` / `.activity-actions-main` / `.activity-actions-slot`），窄屏隐藏整个动作区；动态类型与角色值改为中文（`activity-labels.ts` 的 `PROJECT_STATUS_CHANGED` / `PROJECT_MEMBER_ROLE_CHANGED` / `record.leftover.add` / `ROLE_LABELS`），「原始快照」弹窗用中文描述、摘要区保留原始枚举。
 - 本文件与 ADR-049 第 8 节、ADR-050 非目标第 1 条中「不提供恢复入口 / 不提供彻底删除」的历史表述，与本节冲突时以 ADR-051 与本节的现行规则为准。

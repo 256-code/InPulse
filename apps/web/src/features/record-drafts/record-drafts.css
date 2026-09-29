@@ -367,6 +367,14 @@
   background: #fbfdff;
 }
 
+/* 页脚上方一行提示：说明「发布后项目成员可见」和「保存草稿」的区别。 */
+.record-publish-hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8091a4;
+}
+
 .record-github-head {
   display: flex;
   flex-wrap: wrap;

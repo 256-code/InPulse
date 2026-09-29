@@ -4,6 +4,7 @@ import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
 import { recordFeedRoutes } from "./record-feed-routes.js";
 import {
+  recordDraftDeleteRoutes,
   recordDraftRoutes,
   taskRecordDraftRoutes,
 } from "./record-draft-routes.js";
@@ -40,6 +41,7 @@ export const routeRegistry = [
   ...featureRoutes,
   ...taskRoutes,
   ...recordDraftRoutes,
+  ...recordDraftDeleteRoutes,
   ...publishedRecordRoutes,
   ...recordLifecycleRoutes,
   ...recordPublicationRoutes,

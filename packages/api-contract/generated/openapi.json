@@ -6048,7 +6048,7 @@
     "/projects/{projectId}/members/{userId}/remove": {
       "post": {
         "operationId": "removeProjectMember",
-        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（ADR-048：需先把其他成员设为组长完成转移，再由新组长移除，项目至少要保留一名成员）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（ADR-053：需先把其他成员设为组长完成转移，再由新组长移除，项目至少要保留一名成员）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6235,7 +6235,7 @@
     "/projects/{projectId}/members/{userId}/role": {
       "post": {
         "operationId": "setProjectMemberRole",
-        "summary": "ADR-048 任命/转移组长：系统管理员可把任意活跃成员设为 MEMBER/LEADER（把其他成员设为 LEADER 即完成转移，原组长自动降级），本项目组长可把其他活跃成员设为组长以转交身份（不能自设、不能撤销）；不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，项目必须始终保留一名组长）；普通成员 403，目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+        "summary": "ADR-053 任命/转移组长：系统管理员可把任意活跃成员设为 MEMBER/LEADER（把其他成员设为 LEADER 即完成转移，原组长自动降级），本项目组长可把其他活跃成员设为组长以转交身份（不能自设、不能撤销）；不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，项目必须始终保留一名组长）；普通成员 403，目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
         "responses": {
           "200": {
             "description": "成功",
@@ -12489,6 +12489,197 @@
       }
     },
     "/projects/{projectId}/record-drafts/{recordId}": {
+      "delete": {
+        "operationId": "deleteRecordDraft",
+        "summary": "删除未发布的草稿；已发布记录、来源任务与审计历史都不受影响。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDraftDeleteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "限流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [
+            "If-Match"
+          ],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "RecordDraftDeleteResult",
+                  "safeBodyFieldPaths": [
+                    "projectId",
+                    "recordId",
+                    "moduleId",
+                    "featureId",
+                    "taskId",
+                    "impactFeatureIds[]"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "RecordDraftDeleteResult",
+              "resultRefExtractor": "recordDraftResultResource",
+              "currentReadAuthorizer": "recordDraftCurrentReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "required"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "required",
+            "lockOrder": [
+              "project",
+              "module",
+              "feature",
+              "changeRecord"
+            ],
+            "retry": "none; parents FOR SHARE then draft FOR UPDATE, recheck version"
+          },
+          "auditAction": "record.draft.delete"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ]
+      },
       "get": {
         "operationId": "getRecordDraft",
         "summary": "独立迭代记录草稿；三段必填、不编号、不发布、不改变任务状态。",
@@ -20253,6 +20444,68 @@
         "required": [
           "projectId",
           "moduleId"
+        ],
+        "additionalProperties": false
+      },
+      "RecordDraftDeleteResult": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "impactFeatureIds": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "recordId",
+          "moduleId",
+          "featureId",
+          "taskId",
+          "impactFeatureIds"
         ],
         "additionalProperties": false
       },

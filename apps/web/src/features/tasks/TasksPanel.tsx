@@ -25,6 +25,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
   type InpulseApiClient,
+  type PublishedRecord,
   type ReadableRecord,
   type TaskStatusRequest,
 } from "@generated/api";
@@ -307,6 +308,12 @@ export function TasksPanel({
   const [success, setSuccess] = useState(false);
   /** 当前打开的迭代记录详情（null 表示弹层关闭）。 */
   const [openRecordId, setOpenRecordId] = useState<number | null>(null);
+  /**
+   * 本任务里「记录一次迭代」刚发布成功的记录。正式记录列表是另一条只读查询，
+   * 刷新落地前先用发布响应渲染详情弹层，用户点「查看正式记录」不会点了没反应。
+   */
+  const [publishedRecord, setPublishedRecord] =
+    useState<PublishedRecord | null>(null);
   /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
   const [draftTarget, setDraftTarget] =
     useState<RecordDraftEditorTarget | null>(null);
@@ -367,7 +374,8 @@ export function TasksPanel({
   const openRecord =
     openRecordId === null
       ? null
-      : (taskPublished.find((record) => record.id === openRecordId) ?? null);
+      : (taskPublished.find((record) => record.id === openRecordId) ??
+        (publishedRecord?.id === openRecordId ? publishedRecord : null));
   const taskDraftItems = taskDrafts.data?.items ?? [];
   // 详情头部展示名称而非裸 ID：项目/模块名称为既有只读契约。
   const projectDetail = useProjectDetail({ client, projectId });
@@ -513,12 +521,14 @@ export function TasksPanel({
     setSelectedId(id);
     setTab("info");
     setStatusAction(null);
+    setPublishedRecord(null);
   };
   const closeDetail = () => {
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
     setOpenRecordId(null);
+    setPublishedRecord(null);
     onDetailClose?.();
   };
   /**
@@ -1092,6 +1102,20 @@ export function TasksPanel({
                   <InpulseIcon name="x" size={19} />
                 </button>
               </div>
+              {publishedRecord !== null && (
+                <Alert
+                  type="success"
+                  title={"迭代记录已发布：" + publishedRecord.code}
+                  action={
+                    <Button
+                      className="secondary-button"
+                      onClick={() => setOpenRecordId(publishedRecord.id)}
+                    >
+                      查看正式记录
+                    </Button>
+                  }
+                />
+              )}
               <div className="calm-task-actions">
                 <TaskDueBadge item={current} />
                 {current.workStatus === "TODO" && (
@@ -1476,7 +1500,10 @@ export function TasksPanel({
           // 草稿列表由弹窗内部失效；本任务正式记录列表是另一条只读查询，发布后需自行刷新。
           onSaved={(_draft, published) => {
             setDraftTarget(null);
-            if (published) void taskRecords.refetch();
+            if (!published) return;
+            // 发布成功就在原地给出落点：正式记录列表刷新期间也能直接打开详情。
+            setPublishedRecord(published);
+            void taskRecords.refetch();
           }}
         />
       )}

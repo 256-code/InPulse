@@ -449,7 +449,7 @@ describe("ProjectMembersPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets the project leader transfer the role to another member only (ADR-048)", async () => {
+  it("lets the project leader transfer the role to another member only (ADR-053)", async () => {
     const client = baseClient();
     const leader: ProjectMemberRecordItem = {
       ...owner,
@@ -503,7 +503,7 @@ describe("ProjectMembersPageView", () => {
     await screen.findByText(/已将组长身份转交给 开发者 C/);
   });
 
-  it("lets a non-admin member remove members but never appoint roles (ADR-039/ADR-048)", async () => {
+  it("lets a non-admin member remove members but never appoint roles (ADR-039/ADR-053)", async () => {
     const client = baseClient();
     mount(client as unknown as InpulseApiClient, {
       isSystemAdmin: false,

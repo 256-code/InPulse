@@ -159,7 +159,7 @@ async function addMember(projectId: number, userId: number): Promise<void> {
 }
 
 /**
- * ADR-048：组长只能转移——把目标成员设为组长，原组长自动降级为 MEMBER，
+ * ADR-053：组长只能转移——把目标成员设为组长，原组长自动降级为 MEMBER，
  * 之后才能移除原组长；直接撤销组长（role=MEMBER）返回 409。
  */
 async function transferLeaderRole(
@@ -538,7 +538,7 @@ describe("F-05 project member management API", () => {
     const assignee = await actor(false);
     await addMember(value.project.projectId, assignee.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-048：创建者默认是组长，移除前必须先把组长交给接手人。
+    // ADR-053：创建者默认是组长，移除前必须先把组长交给接手人。
     await transferLeaderRole(
       value.project.projectId,
       value.admin,
@@ -613,7 +613,7 @@ describe("F-05 project member management API", () => {
       value.owner.userId,
       first.userId,
     ]);
-    // ADR-048：把组长转交给接手人之一，原组长降级后才能被移除。
+    // ADR-053：把组长转交给接手人之一，原组长降级后才能被移除。
     await transferLeaderRole(
       value.project.projectId,
       value.admin,
@@ -665,7 +665,7 @@ describe("F-05 project member management API", () => {
     const successor = await actor(false);
     await addMember(value.project.projectId, successor.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-048：先把组长交给其他成员，原组长降级后才能被移除。
+    // ADR-053：先把组长交给其他成员，原组长降级后才能被移除。
     await transferLeaderRole(
       value.project.projectId,
       value.admin,
@@ -773,7 +773,7 @@ describe("F-05 project member management API", () => {
     const assignee = await actor(false);
     await addMember(value.project.projectId, assignee.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-048：先把组长交给接手人，原组长降级后才可移除。
+    // ADR-053：先把组长交给接手人，原组长降级后才可移除。
     await transferLeaderRole(
       value.project.projectId,
       value.admin,
@@ -838,7 +838,7 @@ describe("F-05 project member management API", () => {
     expect(normal?.role).toBe("MEMBER");
   });
 
-  it("makes the first joiner the leader of a project without any active member (ADR-048)", async () => {
+  it("makes the first joiner the leader of a project without any active member (ADR-053)", async () => {
     const value = await fixture();
     // 历史数据：项目没有任何活跃成员（数据库允许零成员，加入时由服务端补选组长）。
     await removeMember(client.sql, value.project.projectId, value.owner.userId);
@@ -930,13 +930,13 @@ describe("F-05 project member management API", () => {
     );
   });
 
-  it("lets the leader transfer the role but never revoke or self-appoint it (ADR-048)", async () => {
+  it("lets the leader transfer the role but never revoke or self-appoint it (ADR-053)", async () => {
     const value = await fixture();
     const member = await actor(false);
     await addMember(value.project.projectId, member.userId);
     const rolePath = `/projects/${value.project.projectId}/members/${member.userId}/role`;
 
-    // ADR-048：组长本人可以把身份转交给其他活跃成员。
+    // ADR-053：组长本人可以把身份转交给其他活跃成员。
     const transferred = await request(
       "POST",
       rolePath,
@@ -1018,7 +1018,7 @@ describe("F-05 project member management API", () => {
     expect(activityRows).toHaveLength(1);
   });
 
-  it("transfers the leader role as system admin, protects the leader row and keeps the role audit trail (ADR-039/ADR-048)", async () => {
+  it("transfers the leader role as system admin, protects the leader row and keeps the role audit trail (ADR-039/ADR-053)", async () => {
     const value = await fixture();
     const target = await actor(false);
     await addMember(value.project.projectId, target.userId);
@@ -1083,7 +1083,7 @@ describe("F-05 project member management API", () => {
       "PROJECT_MEMBER_LEADER_PROTECTED",
     );
 
-    // ADR-048：系统管理员也不能直接撤销组长，只能通过转移。
+    // ADR-053：系统管理员也不能直接撤销组长，只能通过转移。
     await expectError(
       await request(
         "POST",

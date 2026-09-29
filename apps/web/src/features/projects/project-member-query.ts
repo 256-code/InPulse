@@ -13,7 +13,7 @@ export function projectMemberErrorMessage(error: unknown): string {
     if (error.status === 401)
       return "登录状态已失效，请重新登录后再查看项目成员。";
     if (error.status === 403) {
-      // ADR-048：角色任命只剩「系统管理员或本项目组长转移组长身份」。
+      // ADR-053：角色任命只剩「系统管理员或本项目组长转移组长身份」。
       if (error.code === "PROJECT_MEMBER_ROLE_FORBIDDEN")
         return "只有系统管理员或本项目组长可以设定组长，且组长只能把身份转交给其他成员。";
       return "安全校验未通过，请刷新页面后重试。";

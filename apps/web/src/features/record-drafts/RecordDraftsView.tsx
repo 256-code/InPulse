@@ -502,6 +502,12 @@ export function RecordDraftsView({
         defaultFeatureId={Number(params.get("featureId")) || 0}
         writable={sourceWritable}
         onClose={() => setEditorTarget(null)}
+        // 删除草稿后详情弹层仍在按 URL 的 recordId 取值：一并清掉，避免展示已删草稿。
+        onDeleted={() => {
+          const next = new URLSearchParams(params);
+          next.delete("recordId");
+          setParams(next);
+        }}
         onSaved={(draft, published) => {
           setEditorTarget(null);
           // 「新建迭代」发布成功后直接落到正式记录，不再打开草稿详情。

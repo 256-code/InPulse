@@ -99,6 +99,21 @@ export const recordDraftCreatePathSchema = recordDraftProjectPathSchema
 export const recordDraftResourcePathSchema = recordDraftProjectPathSchema
   .extend({ recordId: pathId })
   .meta({ id: "RecordDraftResourcePath" });
+/**
+ * 删除草稿的最小结果：只带幂等重放要复验的可写范围，不回传正文。
+ * 草稿行已物理删除，重放授权改为复验项目可写与模块/功能仍存在。
+ */
+export const recordDraftDeleteResultSchema = z
+  .object({
+    projectId: id,
+    recordId: id,
+    moduleId: id,
+    featureId: id.nullable(),
+    taskId: id.nullable(),
+    impactFeatureIds: impactIds,
+  })
+  .strict()
+  .meta({ id: "RecordDraftDeleteResult" });
 export const recordDraftReplayContextSchema = z
   .object({
     projectId: id,
@@ -120,6 +135,9 @@ export const recordDraftVersionHeadersSchema = recordDraftHeadersSchema
 export type RecordDraftContent = z.infer<typeof recordDraftContentSchema>;
 export type RecordLeftoverEntry = z.infer<typeof recordLeftoverEntrySchema>;
 export type RecordDraftItem = z.infer<typeof recordDraftItemSchema>;
+export type RecordDraftDeleteResult = z.infer<
+  typeof recordDraftDeleteResultSchema
+>;
 export type IndependentRecordDraftRequest = z.infer<
   typeof independentRecordDraftSchema
 >;
@@ -214,6 +232,11 @@ export const recordDraftSchemas = {
   RecordDraftReplayContext: {
     schema: recordDraftReplayContextSchema,
     summary: "草稿结果资源授权",
+    sensitiveFieldPaths: [],
+  },
+  RecordDraftDeleteResult: {
+    schema: recordDraftDeleteResultSchema,
+    summary: "已删除草稿的最小结果引用（供幂等重放复验可写范围）",
     sensitiveFieldPaths: [],
   },
   RecordDraftHeaders: {
