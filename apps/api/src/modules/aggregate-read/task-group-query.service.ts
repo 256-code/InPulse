@@ -48,12 +48,15 @@ import {
   AggregateReadError,
   invalidCursorError,
 } from "./aggregate-read.errors.js";
+import { excludeMaintenanceProjects } from "./maintenance-project-filter.js";
 
 /**
  * R-1 任务聚合组视图与 R-4 聚合组记录列表的聚合读服务。
  *
  * 授权：只调用 A 的 ProjectAccessQueryPort 取得服务端 AuthorizedProjectScope；
  * 组不存在、项目不在授权范围（含非成员）统一 404，不返回 403（A 裁决 Q-01）。
+ * 展示：聚合组列表先剔除维护中项目（2026-09-30 产品口径，与 R-3 任务卡片一致）；
+ * 单组详情与记录列表不按项目状态过滤，只受授权范围约束。
  * 事务：一次请求一个只读事务，不创建命令 UnitOfWork、不取任何行锁、不写投影。
  * 归属：记录列表按 Q-02 形态 B 拆到 R-4 子资源分页，R-1 只返回组与成员。
  */
@@ -288,12 +291,16 @@ export class TaskGroupQueryService {
       command.actorUserId,
     );
     const limit = command.limit ?? AGGREGATE_READ_PAGE_LIMIT_DEFAULT;
-    const projectIds =
+    // 与 R-3 同一展示口径（2026-09-30）：维护中项目不再产出任务卡片，聚合组卡片
+    // 同样不返回；项目范围在此收窄后，游标位置与列表来自同一集合。
+    const projectIds = await excludeMaintenanceProjects(
+      this.projects,
       command.projectId === undefined
         ? scope.projectIds
         : scope.projectIds.filter(
             (projectId) => projectId === command.projectId,
-          );
+          ),
+    );
     const filterKey = JSON.stringify([command.projectId ?? null]);
     const afterGroupId = this.decodeCursor(
       command.cursor,

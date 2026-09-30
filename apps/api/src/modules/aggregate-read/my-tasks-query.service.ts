@@ -38,6 +38,7 @@ import {
   AggregateReadError,
   invalidCursorError,
 } from "./aggregate-read.errors.js";
+import { excludeMaintenanceProjects } from "./maintenance-project-filter.js";
 
 /**
  * R-3 我的任务聚合读（F-32）。
@@ -46,6 +47,8 @@ import {
  * ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，
  * 用于任务中心「我负责的 / 我创建的」分段。projectId 只用于缩小范围，最终仍按服务端
  * AuthorizedProjectScope 过滤，越权项目直接收敛为空页而不是 404（不泄露其他项目是否存在）。
+ * 维护中（MAINTENANCE）项目不产出任务卡片（2026-09-30 产品口径）：项目范围先剔除
+ * 维护中项目，未完成与已完成两档、统计与遗留问题入口共用同一基准集合。
  * 排序固定，由 task-list-order.ts 给出（状态分组 → 紧急桶 → 优先级 → 遗留问题
  * → 截止时间 → id，ADR-037 替代 Q-10 的单列 id DESC），游标签名绑定 actor 与七项
  * 筛选并携带完整排序键位置；旧格式游标按无效游标拒绝。
@@ -155,12 +158,16 @@ export class MyTasksQueryService {
         "请先选择项目",
       );
     const limit = command.limit ?? AGGREGATE_READ_PAGE_LIMIT_DEFAULT;
-    const projectIds =
+    // 维护中项目不再产出任务卡片（2026-09-30 产品口径）；统计与列表共用收窄后的
+    // 集合，避免出现「卡片消失但统计与角标仍计入」的不一致。
+    const projectIds = await excludeMaintenanceProjects(
+      this.projects,
       command.projectId === undefined
         ? scope.projectIds
         : scope.projectIds.filter(
             (projectId) => projectId === command.projectId,
-          );
+          ),
+    );
     const filterKey = JSON.stringify([
       ...(command.scope === undefined &&
       command.overdue === undefined &&
