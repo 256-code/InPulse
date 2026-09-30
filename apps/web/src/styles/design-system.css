@@ -3940,6 +3940,11 @@ a:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* 项目与功能页（2026-09-30）：标题行内加入搜索框后，窄屏下标题会被压缩换行，
+   这里让标题保持单行，空间不足时由右侧工具组（.catalog-actions）先换行。 */
+.catalog-heading {
+  white-space: nowrap;
+}
 .catalog-actions {
   display: flex;
   gap: 8px;
