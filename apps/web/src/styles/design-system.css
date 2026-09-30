@@ -6923,6 +6923,9 @@ td.due-overdue {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* 等高卡：标记行按 .badge 的实际高度（11px × 1.5 + 上下 4px 内边距 = 24.5px）预留，
+     只有 ✓ 勾（14px）的卡片不再比带徽章的矮 9px。 */
+  min-height: 25px;
 }
 /* 右上角标记组：遗留问题徽章与优先级 / 完成标记并排，不参与收缩。 */
 .tb-card-flags {
@@ -6942,6 +6945,9 @@ td.due-overdue {
   font-weight: 600;
   color: #2a4058;
   line-height: 1.35;
+  /* 等高卡：标题最多 2 行（line-clamp），这里把 2 行的位置恒带预留出来，
+     1 行标题的卡片不再矮一行。单位用 em（自身字号）而非 px，与行高同步。 */
+  min-height: 2.7em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
