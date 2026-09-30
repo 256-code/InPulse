@@ -45,6 +45,7 @@ import {
 } from "./contracts/aggregate-read.zod.js";
 import { recordDraftSchemas } from "./contracts/record-drafts.zod.js";
 import { recordFeedSchemas } from "./contracts/record-feed.zod.js";
+import { recordSummarySchemas } from "./contracts/record-summary.zod.js";
 import { publishedRecordSchemas } from "./contracts/published-records.zod.js";
 import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
@@ -80,6 +81,11 @@ import {
   activityPathSchema,
   activityQueryRequestSchema,
 } from "./contracts/activity.zod.js";
+import {
+  projectDeletionItemSchema,
+  projectDeletionPageSchema,
+  projectDeletionQueryRequestSchema,
+} from "./contracts/project-deletion.zod.js";
 import {
   notificationItemSchema,
   notificationPageSchema,
@@ -127,6 +133,7 @@ import {
   projectMutationHeadersSchema,
   projectVersionHeadersSchema,
   projectReplayContextSchema,
+  projectPurgeResponseSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -171,6 +178,7 @@ export const schemaRegistry = {
   ...recordDraftSchemas,
   ...publishedRecordSchemas,
   ...recordFeedSchemas,
+  ...recordSummarySchemas,
 
   ...taskGroupSchemas,
   UserRef: {
@@ -471,6 +479,28 @@ export const schemaRegistry = {
     summary: "项目动态分页结果",
     sensitiveFieldPaths: [],
   },
+  ProjectDeletionQueryRequest: {
+    schema: projectDeletionQueryRequestSchema,
+    summary:
+      "项目删除记录查询参数；cursor 为服务端签名的不透明字符串，limit 默认 20、最大 50",
+    sensitiveFieldPaths: [],
+  },
+  ProjectDeletionItem: {
+    schema: projectDeletionItemSchema,
+    summary:
+      "一条项目删除记录（ADR-050）：项目编号、名称、删除时间与删除人，以及当前会话可否还原 / 彻底删除（ADR-051）；不含已删除项目的正文",
+    sensitiveFieldPaths: [],
+  },
+  ProjectPurgeResponse: {
+    schema: projectPurgeResponseSchema,
+    summary: "项目彻底删除响应（ADR-051）：项目标识与本次物理删除的行数统计",
+    sensitiveFieldPaths: [],
+  },
+  ProjectDeletionPage: {
+    schema: projectDeletionPageSchema,
+    summary: "项目删除记录分页结果，按删除时间倒序",
+    sensitiveFieldPaths: [],
+  },
   NotificationPath: {
     schema: notificationPathSchema,
     summary: "站内通知路径参数",
@@ -513,12 +543,13 @@ export const schemaRegistry = {
   },
   ProjectStatus: {
     schema: projectStatusSchema,
-    summary: "项目生命周期四态：未开始 / 进行中 / 维护中 / 已归档",
+    summary:
+      "项目生命周期三态：未开始 / 进行中 / 维护中（ADR-043 起不再有归档态）",
     sensitiveFieldPaths: [],
   },
   ProjectItem: {
     schema: projectItemSchema,
-    summary: "项目公开摘要；包含四态状态、粘性完成标记与活跃成员数",
+    summary: "项目公开摘要；包含三态状态、粘性完成标记与活跃成员数",
     sensitiveFieldPaths: [],
   },
   ProjectListResponse: {

@@ -350,3 +350,179 @@
 - 游标：`TASK_LIST_SORT_KEY_VERSION` 升到 7，载荷 8 段（版本|状态分组|完成时间|紧急桶|优先级|遗留问题来源|截止|任务ID）；v5、v6 旧键整版拒绝，前端按既有 422 重新取第一页。版本号单调递增，不回收已用过的号。
 - 只改顺序，不改颜色与看板：卡片取色、优先级徽章、「遗留问题」徽章与截止日期文案不变；任务看板 `listForBoard` 的四桶口径与其未完成桶「优先级 → 截止时间」排序不受影响（ADR-037 §3）。
 - 回归防线：`apps/api/test/task-list-order.test.ts`（游标版本与段数）、`apps/api/test/aggregate-read-ports.integration.test.ts`（真库顺序矩阵，含「高优先级无遗留 vs 普通优先级有遗留」对照）、`apps/api/test/aggregate-read-api.integration.test.ts`（HTTP 层顺序与分页不重不漏）、`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`（前端镜像顺序）。改动排序口径时必须同时跑这四处。
+
+## 2026-09-28 ADR-053 项目组长唯一性与转移说明
+
+按用户 2026-09-28 的三条指示（「只剩最后一个成员时他就是组长，且不能被移除，除非有其他的成员进来，一个项目至少得有一个成员」→ 撤回自动继任方案「还是改成需要先转移才能进行移除」→「组长应该也有转移身份的权限」）补齐组长不变量（[ADR-053](./docs/adr/ADR-053.md)）。因此：
+
+- **有活跃成员 ⇒ 恰好一名 ACTIVE 组长**：迁移 `0029_project_leader_invariant.sql` 回填存量无组长项目（优先仍在任的创建者，否则最早加入者），并新增可延迟约束触发器 `project_members_leader_complete`（提交期调用 `app.assert_project_leader`）。**必须可延迟**：转移是「先降级原组长、再提升新组长」两步，中途必然零组长，而 `project_members_one_leader` 是不可延迟的部分唯一索引。
+- **组长只能转移，不能撤销或移除**：`removeProjectMember` 对组长 409 `PROJECT_MEMBER_LEADER_PROTECTED`（含系统管理员）；`setProjectMemberRole` 把现任组长降级为 `MEMBER` 返回 409 `PROJECT_MEMBER_LEADER_REQUIRED`；「撤销组长」这条路径整体取消，没有「先撤销再指定」的替代流程。
+- **组长本人可转交身份**（修订 [ADR-039](./docs/adr/ADR-039.md) 决策 4）：`roleSetterRole` 返回 `SYSTEM_ADMIN | LEADER | MEMBER | NOT_MEMBER`；组长仅当 `role = LEADER` 且目标不是自己时放行，自设与撤销组长的请求一律 403 `PROJECT_MEMBER_ROLE_FORBIDDEN`，普通成员 403、非成员 404。系统管理员保持完全能力。
+- **零活跃成员的项目在数据库层保持合法**：夹具清理与历史数据的删除路径需要把成员关系标记 `REMOVED`；「一个项目至少有一名成员」由「唯一成员必然是组长」+「组长不可移除」隐含，**不新增** `PROJECT_MEMBER_LAST_MEMBER_PROTECTED` 之类的错误码（方案 A 下不可达）。将来若重新引入自动继任，必须新增 ADR 并同时补该码与门禁测试。
+- **无组长项目的加入规则**：`addProjectMember` 在项目没有活跃组长时把首位加入者直接写成 `LEADER`（`resolveJoiningRole`），否则该写入会被数据库不变量在提交时拒绝。
+- **幂等契约版本**：`setProjectMemberRole` 的 `idempotencyContractVersion` 由 `2.1.0` 升到 `2.2.0`（授权语义变化），旧 Key 在新契约下 409；`addProjectMember`（`1.2.0`）与 `removeProjectMember`（`1.3.0`）的请求/响应 Schema 与重放策略未变，版本保持。
+- **夹具与种子**：`app.project_members` 的所有插入夹具必须显式给出 `role`（测试库、E2E `global-setup`、`apps/ops` 集成、`database/poc` 共 42 处已补齐）；移除成员必须走 `apps/api/test/database.helpers.ts` 的 `removeMember`（在事务内先把组长身份转移给其他活跃成员再标记 `REMOVED`），直接 `UPDATE … status='REMOVED'` 移除创建者/组长会在提交期被 `project_members_leader_complete` 拒绝；`database/seed/demo-data.sql` 的 `project_members` 已包含 `role` 列，修改种子列清单时必须同步 `scripts/export-demo-seed.mjs`。
+- 本文件上文历史条目（ADR-033/ADR-039 小节，以及 2026-09-24 前后的相关表述）中出现的「每个项目至多一名组长」「组长转移与撤销仅系统管理员可为」「创建后可由系统管理员按普通成员规则移除（组长须先转移或撤销）」为当时事实，与本节冲突时以 ADR-053 与本节的现行规则为准。
+
+## 2026-09-28 ADR-049 / ADR-050 项目删除与删除记录说明
+
+按用户 2026-09-28 的连续指示（「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」→「布局记得更改」→「然后删除项目也要在项目动态和审计日志里记载」→「项目动态要所有人能看到，审计日志管理员看到就行，要留有记录，记录谁删除了项目」）交付项目删除与删除记录可见性（[ADR-049](./docs/adr/ADR-049.md)、[ADR-050](./docs/adr/ADR-050.md)）。因此：
+
+- **删除是软删除，不物理删除任何历史**：迁移 `0030_project_soft_delete.sql` 给 `app.projects` 加 `deleted_at` / `deleted_by`（`ON DELETE restrict` FK 到 `app.users`）与 `projects_deleted_state_check`（两列同时为空或同时有值）；不级联、不回收项目编码（`projects_code_unique` 不变）、不加「已删除」状态位（项目状态仍是 [ADR-043](./docs/adr/ADR-043.md) 的三态）。物理删除在本仓库不可行——`app.projects` 被 12 张表以 `RESTRICT` 外键引用，审计链按 [ADR-008](./docs/adr/ADR-008.md) 只追加。
+- **权限**：只有系统管理员与本项目 ACTIVE 组长可删（在 [ADR-039](./docs/adr/ADR-039.md) 的权限下放上新增例外）；普通成员 403 `PROJECT_DELETE_FORBIDDEN`，非成员与已移除成员 404（不泄露存在性），组长用实时成员关系判定、转移或降级后立即失效。重放走专用 `projectDeleteReplayAuthorizer`（删除后项目必不在成员范围内，复用常规作者探测会把合法重放变成 404）。
+- **删除后项目退出全部可见范围**，但**删除这件事要对全部登录用户可见**（ADR-050 修订 ADR-049 第 3 节的绝对表述），且必须**作为项目动态流里的普通一行**呈现、不得另起独立区块（2026-09-28 用户追加要求）：新增只读路由 `GET /api/v1/project-deletions`（`listProjectDeletions`，`session` 策略、无 CSRF / 幂等键 / `If-Match`、不写审计、`no-store`），条目只有 `projectId` / `code` / `name` / `deletedAt` / `deletedBy{id,name}`，不暴露任何下级数据也不提供恢复入口；签名游标（`TimeCursorService` 命名空间 `PROJECT_DELETION`、绑定操作者、TTL 15 分钟），`limit` 1～50、默认 20。动态读取的例外必须靠 `ProjectAccessQueryPort.isDeletedProject` 判定（不能用授权范围反推），并收窄到只下发 `activityType = PROJECT_DELETED`（删除前的历史与 `ADMIN_ONLY` 行不得借该例外回放），删除行不带「查看对象」；审计读取 `getAuditLogs` 保持 `adminSession` 不变，前端补齐已删除项目的 `PROJECT:<id>` 审计链入口并把项目名按记录还原。
+- 删除的**写入侧从未缺失**：审计 `project.delete`（含项目编码与名称、操作者）与项目动态 `PROJECT_DELETED`（`visibilityScope: MEMBER`）早已在同一事务写入；缺口只在读取侧（项目级动态查询对被删除项目不可用、审计页只列活跃项目）。**刻意不发通知**——删除后项目深链必成死链，通知只能标记已读不能作废（[ADR-035](./docs/adr/ADR-035.md)）。
+- 路由总数由 99 增至 **100**（`deleteProject` 与 `listProjectDeletions`）；`packages/api-contract/test/permissions.test.ts` 的真实 Controller 扫描期望清单必须随新增路由同步，否则该用例会以「扫描到的绑定数与清单不一致」失败。
+- 前端口径：删除入口在「编辑项目」弹窗**页脚最左侧**（`danger-button footer-leading`），只在 `canDeleteProject(isAdmin, currentUserRole)` 为真时渲染，后果说明由二次确认承担；项目动态页把删除行与其它动态**混排在同一时间线**（已删除项目的 ID 与项目名由 `listProjectDeletions` 第一页补进取数范围与项目名映射，仅「全部项目」视图；锁定单项目时不请求也不出现删除行），渲染上共用日期分组 / 时间轴 / 头像 / 原始快照，且不给「查看对象」；原「项目删除记录」独立区块与 `activity-deletions-*` 样式已整体下线。
+- 本文件与三份基线设计文档中「项目只能创建 / 编辑 / 切换状态」的历史描述，以及 ADR-049 第 3 节「删除后对所有人不可见（含管理员）」的绝对表述，与本节冲突时以 ADR-049 / ADR-050 与本节的现行规则为准。
+
+## 2026-09-28 ADR-051 项目还原与彻底删除说明
+
+按用户 2026-09-28 指示（「给删除项目的动态的原始快照按钮边上加一个还原项目和彻底删除，还原项目就是把项目显示出来，彻底删除就是从硬性删除」）交付项目还原与彻底删除（[ADR-051](./docs/adr/ADR-051.md)），并附同批次的两项界面修订（删除行动作按钮横向对齐、动态文案中文化）。因此：
+
+- **两条新命令**：`POST /api/v1/projects/{projectId}/restore`（`restoreProject`，200 `ProjectDetailResponse`）与 `POST /api/v1/projects/{projectId}/purge`（`purgeProject`，200 `ProjectPurgeResponse`）；`session` + CSRF + 数据库级幂等（`idempotencyContractVersion: 1.0.0`）、`versionPolicy: none`、`behaviorHeaders: []`（不接受 `If-Match`）。Route Registry 由 100 条增至 **102 条**。
+- **权限分离**：还原与删除**同权**（系统管理员或本项目 ACTIVE 组长；普通成员与项目管理员 403 `PROJECT_RESTORE_FORBIDDEN`），彻底删除**只有系统管理员**（其余 403 `PROJECT_PURGE_FORBIDDEN`）；未删除项目一律 409 `PROJECT_NOT_DELETED`，非成员 / 不存在 404。重放前复核当前认证与角色，彻底删除走专用 `projectPurgeReplayAuthorizer`（只复核「当前仍是有效系统管理员」）。
+- **彻底删除的数据库边界**：迁移 `0031_project_purge.sql` 新增 `SECURITY DEFINER` 函数 `app.purge_project(INTEGER)`，**不**逐表授予运行时 `DELETE`；函数内 `deleted_at IS NULL` 即 `RAISE EXCEPTION`（fail closed）；固定按叶子表到 `app.projects` 共 27 处删除并断言 `projects` 恰 1 行；`modules_protect_unclassified` 的豁免只能由该函数用事务级 `set_config(..., true)` 打开并在返回前复位；项目自己的 `PROJECT:<id>` 审计链随项目删除，**SYSTEM 链不受影响**（[ADR-008](./docs/adr/ADR-008.md) 的唯一例外，范围写死在函数内）。
+- **还原不搬数据**：只清 `deleted_at` / `deleted_by` 并递增 `row_version`，条件带 `deleted_at IS NOT NULL`（并发还原只有一个成功）；编码、成员、模块、功能、任务、记录、审计链与通知原样保留，还原后立即恢复删除前的可见性，不重发通知，也不回收 / 复用编码。
+- **前端**：两个动作就在删除记录行的「原始快照」旁（`restore-project-<id>` / `purge-project-<id>`，「彻底删除」必须二次确认 `confirm-purge-project-<id>`），入口由服务端下发的 `canRestore` / `canPurge` 决定，只作渲染提示、**不作为授权依据**；三个动作与「原始快照」并排在同一行（2026-09-29 用户指示修订：此前是「原始快照」一行、还原与彻底删除另起一行；`.activity-actions` / `.activity-actions-main` 两行堆叠基线删除，「还原项目」「彻底删除」移到「原始快照」左侧，`.activity-actions-slot` 保留为「原始快照」列的跨行对齐占位），窄屏由 `.audit-row > .audit-actions { display: none }`（≤700px）隐藏整个动作区；动态类型与角色值改为中文（`activity-labels.ts` 的 `PROJECT_STATUS_CHANGED` / `PROJECT_MEMBER_ROLE_CHANGED` / `record.leftover.add` / `ROLE_LABELS`），「原始快照」弹窗用中文描述、摘要区保留原始枚举。
+- 本文件与 ADR-049 第 8 节、ADR-050 非目标第 1 条中「不提供恢复入口 / 不提供彻底删除」的历史表述，与本节冲突时以 ADR-051 与本节的现行规则为准。
+
+## 2026-09-28 ADR-052 已删除项目的完整动态与删除操作唯一入口说明
+
+按用户 2026-09-28 指示（「有两个重复了，如果是被删除了的项目，就只有最晚的一个可以进行还原和彻底删除的操作，而且不要隐藏之前的创建和操作的动态过程，要有从创建到删除的完整过程，然后刷选的下拉框增加一个选项叫『已删除项目』」）修订 [ADR-050](./docs/adr/ADR-050.md) 第 5 节的服务端收窄（[ADR-052](./docs/adr/ADR-052.md)）。因此：
+
+- **已删除项目下发整个项目链的 `MEMBER` 可见动态**：`ActivityQueryService.resolveAccess` 返回来源 `"scope" | "deleted-project"`，后者**不再**追加 `activityTypes` 过滤；`visibilityScopes` 仍固定 `["MEMBER"]`——`ADMIN_ONLY` 不随该例外回放，`includeAdminOnly: true` 对已删除项目无效（管理员与普通成员一致），「不存在 / 从未有权访问 / 已移除成员」仍是 404。`ActivityProjectionReader.read` 的可选 `activityTypes` 参数与 SQL 过滤连同唯一调用方一并删除，不得再以「只放行 `PROJECT_DELETED`」为由重新加回。
+- **同一项目多次删除（删除 → 还原 → 再删除）只让最新一条可操作**：前端在已加载动态里取每个 `projectId` 时间序第一条 `PROJECT_DELETED`（`latestDeletionIdByProject`），只有该行渲染 `ProjectDeletionActions`；其余删除行保留为过程记录（时间 / 操作者 / 摘要 / 项目名 / 原始快照），不带任何动作。台账 `listProjectDeletions`（一项目一条当前状态）语义不变。
+- **已删除项目链的所有行都不提供跳转**：抑制「查看对象」的条件由删除行扩大为「该行项目在删除台账里」，历史行同样不留死链。
+- **项目筛选下拉新增「已删除项目」**：固定选项值 `"deleted"`，取数范围收窄为台账项目 ID 集合；台账为空时给「暂无已删除项目」空态且不发空请求；「全部项目」视图继续包含已删除项目的完整动态；台账读取时机为「全部项目或已删除项目」，锁定单项目视图仍不请求台账。
+- 契约、Route Registry、权限矩阵与数据库**零改动**（`activityType` 是自由字符串，筛选是纯前端行为）。
+- 放宽的理由与代价：项目一旦删除就不存在授权范围（ADR-049 / ADR-050），「删除前的过程」与「删除这件事」同属一条组织级事实，因此对**全部登录用户**可见；若将来改为「只有参加过该项目的人可见完整过程」，必须新增 ADR 并同步权限矩阵、`docs/test-matrix.md` 与本节。
+
+## 2026-09-29 ADR-054 任务归档下线说明
+
+按用户 2026-09-29 的三步反馈（「为什么编辑任务有个归档的功能，不是已经有完成任务和取消任务的功能了吗」→「我感觉这个任务的归档没有用处」→「那就把这个功能去除掉」）把「任务层」的归档一并下线（[ADR-054](./docs/adr/ADR-054.md)）。因此：
+
+- `archiveTask` / `restoreTask` / `archiveModuleTask` / `restoreModuleTask` 四条路由与 `TaskArchiveRequest`（原因）整体删除，Route Registry 103 → 99 条；删除后 `POST .../tasks/{taskId}/archive`、`/restore` 与模块级同形路径均返回 404。
+- 任务生命周期取值域收窄为 `ACTIVE | INVALID`：迁移 `0032_task_archive_removal.sql` 把存量 `ARCHIVED` 回填为 `ACTIVE`（不递增 `row_version`、不写审计），随后重建 `tasks_lifecycle_status_check`；**不删列、不物理删除任何历史**。`INVALID`（标记无效）语义与读写路径本次不动。
+- 契约：`taskItemSchema`（含 `ModuleTaskItem`）与 R-3 `MyTaskItem`、R-5 `TaskGroupMembershipItem`、记录草稿来源任务的 `lifecycleStatus` 统一收窄为 `["ACTIVE","INVALID"]`；`createTask` / `updateTask` / `createModuleTask` / `updateModuleTask` 幂等契约版本升 `3.0.0`，`transitionTask` / `transitionModuleTask` 升 `4.0.0`（响应 Schema 收窄属破坏性变更，旧 Key 在新契约下 409）。
+- 后端：`TasksManagementService` 的 `TaskOperation` 收窄为四个创建/编辑操作，`isTaskLifecycleOperation` / `changeTaskLifecycle` / `requireArchiveRole` 与 `reason` 入参删除，`TaskManagementRepository.setLifecycle` 删除；`ProjectsWritePort.countUnarchivedTasks` 更名 `countOpenTasks`（SQL 与 `lifecycle_status = 'ACTIVE'` 条件不变，409 `PROJECT_MAINTENANCE_TASKS_OPEN` 不变）——「先把任务归档再切维护中」的旁路随归档下线消失，这是本次唯一有用户可见影响的口径变化（[ADR-043](./docs/adr/ADR-043.md) 的「维护中」门禁本身不变）。
+- 前端：任务编辑弹窗底部的「归档 / 恢复」入口（`task-modal-lifecycle`）与确认弹窗整体删除，「编辑任务」回到只由 `writable` 控制；任务详情不再有「已归档」只读提示；聚合组详情成员卡去掉「已归档」徽章。
+- 保留项：`TASK_MERGE_PARENT_ARCHIVED` / `RECORD_PARENT_ARCHIVED` / `TASK_STATE_CONFLICT` 错误码与 `TaskStatusPanel` / `CompleteWithRecord` 的 `lifecycleStatus !== "ACTIVE"` 门禁保留，措辞按「已无效」表述；历史审计（`task.archive` / `task.unarchive`）、历史动态与对应中文标签保留为只读展示，不清理历史数据，历史迁移（`0000`–`0031`）不改写。
+- 本文件上文 ADR-034 小节中把「任务归档与恢复」「归档命令可越过已归档父级」写作现行规则的部分、ADR-039 小节中「任务弹窗归档入口按角色显示」的描述，以及 2026-09-23 节中「先把任务归档再切维护中」的旁路说明，均以本节与 ADR-054 为准；`功能设计v1.1.md`、`系统设计文档v1.0.2.md`、`技术设计v1.2.2.md`、[权限矩阵](./docs/permissions.md) 与[测试矩阵](./docs/test-matrix.md) 已同步。
+
+## 2026-09-29 F-33 迭代总结（规则版）接入正式站点
+
+按用户 2026-09-29 指示（「可以，接入正式网站吧」）把 `/records` 的「年终总结」模拟页正式落库。用户明确不做模型接入（问过「有接入简单的ai吗」，答复「没有」并说明了接模型的代价），因此本轮是**规则版**：服务端只出事实（范围内 PUBLISHED 正式记录、未失效的已完成任务、遗留问题、以及「已完成但范围内没有任何记录」的缺口 + 计数），分节标题与正文措辞由前端按事实派生，与 R-7 聚合组「服务端只透传事实」同一口径；不新增依赖、不新增 ADR、不改数据库与迁移。
+
+- 新增只读路由 `getRecordSummary`（`GET /api/v1/change-records/summary`）：契约 `packages/api-contract/src/contracts/record-summary.zod.ts`、路由 `packages/api-contract/src/record-summary-routes.ts`，Schema Registry / Route Registry / 权限矩阵 / OpenAPI / 生成客户端同步；三个端口方法为 `ChangeRecordReadPort.summaryRecords`、`summaryLeftovers` 与 `TaskQueryPort.summaryCompletedTasks`，聚合读落在 `apps/api/src/modules/aggregate-read/record-summary-query.service.ts`。
+- 排障（2026-09-29，用户两次报「生成总结失败」）：三点均已修——① 本地 3000 端口跑的是未重建的旧 `dist`，总结路由 404，已 `node scripts/dev-start.mjs` 重建重启；② 端口 `assertLimit` 误用分页上限 `CHANGE_RECORD_READ_LIMIT_MAX`(100) 校验总结下发量（`RECORD_SUMMARY_ITEM_MAX` 2000 / `RECORD_SUMMARY_POINT_MAX` 300），真实链路必抛 `limit exceeds CHANGE_RECORD_READ_LIMIT_MAX (100)` 并 500，已新增 `assertSummaryLimit`（上限取契约常量）供 `summaryRecords` / `summaryLeftovers` 使用并补真实端口回归；③ 聚合读的项目名只按结果集（`pageProjectIds`）解析，授权范围内本期没有任何记录 / 任务的项目（如「LIINK市场管理系统-销售部门」）取名失败，`scope.projectNames` 抛 `AGGREGATE_READ_INCONSISTENT`「总结缺少项目 <id>」并 500（提交 `f5bf6f1`），已改为按整个授权范围 `projectIds` 取名并补真实 PostgreSQL 回归；三处均未改契约、分页口径与其它端口方法。单元层同时补覆盖：`apps/api/test/record-summary.service.test.ts` 的桩端口改为按传入 `projectIds` 过滤（此前无条件返回全部 `projectNames`，与真实端口不符、掩盖同类缺陷），并新增 2 例回归（该文件 8 → 10 例），修复前单元与真库回归均必红。
+- 口径：`from` / `to` 为 Asia/Shanghai 自然日（含首尾），SQL 内换算日界；跨度上限 400 个自然日，起止倒置 / 格式 / `groupBy` 非法统一 422；`projectId` / `memberId` 只收窄服务端 `AuthorizedProjectScope`，越权项目静默排除（空结果，不返回 403 / 404）；空授权范围短路且不发 SQL；只读、不取锁；`truncated` 为真时不做缺口判定；作废记录与草稿不进总结。
+- 前端：`/records` 筛选行最右端新增「生成总结」入口（原在页头，2026-09-29 移到筛选 toolbar 末位并靠右顶格），打开 `RecordSummaryModal`（时间 / 项目 / 按项目或按成员筛选 + 正文 / 明细切换 + 复制正文或明细 Markdown）；外部迭代记录界面不变。
+- 验证（2026-09-29 本地）：`pnpm check` **exit 0**（lint、format:check、typecheck、test:unit（api 67 文件 **380 例** / web 87 文件 **595 例** / api-contract 16 文件 100 例 / ops 8 文件 52 例 / database 1 文件 15 例 / canonical-json 1 文件 5 例）、db:migrations:check 31、contract:drift、contract:validate **100 条路由**、build、check:deploy:test、check:deps **739** 源文件、check:frontend:boundaries 294 模块 1442 依赖、permissions:check **100 / 100**、deps:audit（`--audit-level=high` 通过）、check:secrets 1105 文件、check:docs 101 个 Markdown）；`TEST_DATABASE_URL=app_ci` 的 apps/api `test:integration` **52 文件 489 例**全绿（含 `record-summary.integration.test.ts` 8 例：真实端口 limit 口径回归 + 零记录项目取名回归），database 集成 2 文件 27 例通过；全量 `pnpm test:e2e` **62 passed (5.0m)**。以上为 rebase 到 `0c01ac0` 后重跑的结果。
+- 本地环境与取数口径（2026-09-29 全面测试）：演示库 `app` 当时停在 `0025`（26 个迁移），而当前代码（ADR-049 起需要 `projects.deleted_at` 等）在未迁移的库上会让**全部项目级接口** 500；已按 README 用 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app pnpm db:migrate` 升到 `0032`（31 个迁移），迁移前留有 `pg_dump -Fc` 快照（`.data/backup/`，`.data` 被 gitignore），升级后单日窄区间与全年区间均实测正常。为避免同类问题再次以「服务器无法完成…」的兜底文案出现在全站，`scripts/dev-start.mjs` 第 1 步已增加迁移版本校验：比对 `database/migrations` 与本地库 `app.schema_migrations`，落后即 fail fast 并打印迁移命令，库中存在本地不存在的迁移记录时提示「当前代码可能落后于库」，`DATABASE_URL` 指向非本机默认库（host/port 不是 127.0.0.1:55432）时跳过并说明；用只到 `0017` 的 `app_e2e` 实测能拦住并给出命令。
+- 明细可展开（2026-09-29，用户指示「我希望实现在点击明细里的迭代记录时可以展开看到更详细的内容」）：`RecordSummaryModal` 明细表新增首列展开箭头（`summary-detail-toggle` / `summary-detail-toggle-button`，`aria-expanded` + 中文 `aria-label`），**整行横向区域可点**即展开 / 收起（按钮 `stopPropagation` 防双触发），默认全部收起、弹窗重开重置；展开后在下一行 `colSpan={6}` 复用 `PublishedRecordDetail` 的**只读形态**——该组件新增 `readOnly` 入参（不渲染编辑 / 作废 / 遗留项转任务与追加 / GitHub 关联面板 / 「已转任务」说明，且 `listChangeRecordVersions` 的 `enabled` 加 `&& !readOnly` 不再发版本请求；与 `writable` 的分工是「只置灰」对「直接不渲染」），与记录页卡片共用 `["published-record", projectId, recordId]` 缓存。明细表改 `table-layout: fixed` + 六列百分比（2.5 / 11.5 / 20 / 40.5 / 12 / 13.5）：实测 auto 布局整表 1318px > 弹窗正文 1124px，整表横向溢出会把展开区遗留问题的「未闭环」徽章挤出可视区；又必须用百分比列而非 px 列，否则固定布局下 px 列会吸走剩余宽度、28px 展开列被撑到 46px，展开正文的 38px 左边距就再也对不上「编号」列。**同时回答用户第二问**：当前总结**没有**参考记录正文详述——`RecordSummaryPoint.detail` 只取 `resultVerification`（退 `changeSolution`，再退 `title`）并截断到 `DETAIL_MAX = 1000` 字，`ChangeRecordReadPort.summaryRecords` 的 SQL 不取 `contextProblem`、遗留问题正文与影响功能列表，正文措辞由前端按事实派生、未接模型；明细展开看正文即补齐这一缺口的直接手段。新增 `apps/web/src/features/records/RecordSummaryModal.test.tsx` 2 例（点行内文字就地展开四段正文 + 遗留问题，且 `listChangeRecordVersions` 未被调用、不出现「GitHub 关联 / 修订内容 / 作废记录」；首列箭头 `aria-expanded` 同步并能再点收起卸载）。（同日用户复核后补两处排版修正：表头 `th` 字号 12px → 13px；表体 `td` 显式 `white-space: normal` 覆盖 `design-system.css` 的全局 `td { white-space: nowrap }`——该全局规则会让长内容既不能换行又溢出压到右列标题上，只对编号 / 作者 / 发布日期保留单行，长路径按两行渲染。）该批已按用户「很好，推送」授权提交 `bf9fa69` 并推送 `origin/test`（`d301c83..bf9fa69`），由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发 `CI / workspace` run [36543430865](https://github.com/256-code/InPulse/actions/runs/36543430865)（**success**，约 17m07s）与 `Documentation / docs` run [36543430874](https://github.com/256-code/InPulse/actions/runs/36543430874)（**success**，14s）。
+- 未运行 / 已知偏差：apps/ops 备份集成 2 例需要本机注入 PostgreSQL 18 的 `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE`（按 A-1 等价设置指向本机 PostgreSQL 18.6 的 `pg_dump.exe` / `pg_restore.exe` 时 2 文件 7 例全通过，未注入时这 2 例以 `pg_dump exited with code null` 失败）；registry 现有 1 条 moderate（`multer` GHSA-3pph-fpjx-jg34，修复 `>=2.4.0`，当前锁 `2.3.0`）——`deps:audit` 在 `--audit-level=high` 下不阻断，依赖升级按本文件第 4 节只能走独立 PR 由人工确认；本批已按用户「上传 test」授权提交并推送到 `origin/test`（提交前 rebase 到 `aa193dc`，推送区间 `aa193dc..9c4a02b`）；GitHub Actions 已跑通——`test → main` 的 PR [#146](https://github.com/256-code/InPulse/pull/146) 为提交 `9c4a02b` 起了 `CI / workspace`（run [36528124797](https://github.com/256-code/InPulse/actions/runs/36528124797)，**success**，17m06s）与 `Documentation / docs`（run [36528124971](https://github.com/256-code/InPulse/actions/runs/36528124971)，**success**）；未新增 Playwright 用例，总结弹窗的浏览器关键路径待补；新增只读接口与前端产品代码需非作者人工评审。详见 [开发日志](./开发日志.md) 第五十三条与 [测试矩阵](./docs/test-matrix.md) 的 F-33 小节。
+- 2026-09-29 本地开发新增局域网共享（`node scripts/dev-start.mjs --lan`，第五十七条记录见 [开发日志](./开发日志.md)）：Vite 以 HTTPS 监听 `0.0.0.0:5173`，自签证书由脚本调用 openssl 生成在 `.data/dev-certs`（SAN 覆盖 `localhost`、`127.0.0.1`、本机名与当前全部局域网 IPv4，地址变化时重建；openssl 依次取 `INPULSE_OPENSSL`、`PATH` 与 Git for Windows 自带版本），并使 API 经新增环境变量 `INPULSE_API_HOST` 只监听 `127.0.0.1:3000`（`apps/api/src/main.ts` 未设置时保持原行为），局域网流量统一经 Vite 同源代理进入。局域网必须走 HTTPS：会话与 CSRF Cookie 是 `__Host-` 加 `Secure`，浏览器拒绝在局域网明文 HTTP 保存；Vite 代理仅在启用 HTTPS 时追加 `xfwd: true`，把原始协议转发给 API 的同源校验。`--lan` 不改写 `SSO_REDIRECT_URI`（保持用户已登记的 Casdoor 地址），脚本在启用 SSO 时提示局域网设备走 SSO 需改配置并重新登记。联调修复 `apps/web/tools/vite-csp.ts` 的真实缺陷：Vite 8 的 `server.https` 走 `http2.createSecureServer`，Node 的 HTTP/2 兼容层在 `end()` 内部经 `this.write()` 写出 body，而 `rewriteHtmlBody` 的缓冲式 `write`/`end` 覆写会把整段 body 二次收集，HTTPS 下响应体为空（h1 不走该路径故此前未暴露）；修复为发送前恢复原型 `write`/`end` 并改用 `.call(response, …)`，新增回归用例并做鉴别性实验（去掉修复仅该用例红灯）。本地实测：`--lan` 启动后 `https://10.1.7.170:5173`（含主机名入口 `https://shaochenyu:5173`）HTTP 200，curl 与真实 Chromium 均完成 CSRF → 登录 → `/api/v1/me`（`__Host-session` 为 `secure=true`），HMR `wss://` 连接成功；`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`check:docs`、web 单测 87 文件 596 例（含新增回归用例）、api 单测 67 文件 378 例本地通过；`pnpm check` 整链、`test:integration` 与 GitHub Actions 未运行；本次未新增 Playwright 用例，改动仍需非作者人工评审。
+
+## 2026-09-29 任务「截止时间」点击方框即展开日历并按「年」键入（⚠️ 已被 2026-09-30 的「自绘日历弹层」取代，保留作排障记录）
+
+用户指示（原话）：「在新建任务的时候，选择截止时间，我希望在点击这个方框时就会展开日历，并且进入填写年份模式」。截止时间沿用原生 `datetime-local`——项目未引入 dayjs，antd `DatePicker` 需要新增生产依赖（按第 4 节只能走独立 PR），因此本轮不换控件，只补「点击即展开」与「年优先键入」两件事：
+
+- 新增 `apps/web/src/features/common/native-date-picker.ts`：`nativeDateTimePickerClick` 在点击输入框时调 `input.showPicker()`——Chromium 原本只在点右侧日历图标时展开日历，点输入框本身只落光标；`nativeDateTimePickerMouseDown` 只在**空值**时 `preventDefault()`，使点击落不到「日」段，再由 `focus()` 把光标交给第一段（zh-CN 显示顺序为 年/月/日，即年份），可以直接键入年份。已有值时保留原生行为，点哪一段编辑哪一段。
+- 接入三处同一字段：新建任务（`GlobalTaskCreateModal`，`#global-task-due`）、编辑任务（`TasksPanel`，`#task-due`）、遗留问题转跟进任务（`ConvertLeftoverTask`，`#leftover-task-due`）；值语义、`toISOString()` 换算与 E2E 的 `fill()` 用法均不变。
+- `showPicker()` 需要用户手势，不支持或已展开时会抛错（jsdom 下该方法不存在），一律静默忽略；单测 `apps/web/src/features/common/native-date-picker.test.tsx` 5 例覆盖「调用展开」「空值先聚焦」「有值不重设光标」「不支持 / 被拒绝不抛错」「只有空值阻止默认落光标」。
+- 验证边界（如实记录）：无头 Chromium 无法模拟原生日期框的逐段键入——对页面上新建的裸 `<input type="datetime-local">` 分别用 `keyboard.press` 逐键、`keyboard.insertText` 与 `ArrowUp` 实测，`value` 始终为 `""`，因此「光标落在年段」只有 `focus()` 行为与单测背书；真机探针只确认了「点击方框会调用 `showPicker()` 一次且无异常」。有头浏览器在本机启动失败（`browserType.launch: spawn UNKNOWN`），未能改为有头复核。
+
+## 2026-09-29 重新打开「新建项目」时清掉上一次的成功卡片
+
+用户指示（原话）：「还有如果没有保存新建项目那就一切清空，我发现再次点击会有上次残留」。先定位「残留」到底在哪：用一次性真机探针（Playwright，无头 Chromium，脚本用后删除、**只填不提交、未向数据库写入任何项目**）走「填写 → 取消 → 重新打开」，新建项目弹窗的名称 / 编码 / 描述回到空串、卡片简称回到 `—`、成员提示回到「已选择 0 位其他成员」；新建任务、新增模块、新增功能、新建迭代记录的表单本身也都会重置。**唯一能复现的「上次残留」是项目创建成功横幅**：创建成功后 `ProjectsPageView` 的 `createdProject` 卡片一直挂在项目页上，再次点「新建项目」时它仍在，显示的仍是上一个项目名。
+
+- `ProjectsPageView` 新增可选入参 `onStartCreate?: (() => void) | undefined`，两个「新建项目」入口（页头 `data-testid="create-project-button"` 与空列表空态里的同名按钮）的 `onClick` 里先调 `onStartCreate?.()` 再 `setCreateOpen(true)`；`ProjectsPage` 用 `handleStartCreate = () => setCreatedProject(null)` 接上——成功卡片的真值在页面层，清理只能由页面层做，视图层因此不新增本地 state。
+- `CreateProjectModal` 自己的重置逻辑（`useEffect([open])` 的 `reset(defaultValues)` + 清空成员选择）本来就对，没有改；服务端、契约与数据库本批未动。
+- 新增单测 `apps/web/src/pages/projects/ProjectsPage.test.tsx` 第 2 例「clears the previous success card when the create form is reopened」覆盖「创建成功 → 再点新建项目 → 横幅消失」；同文件 3 处 `getByRole("button", { name: "新建项目" })` 改为 `getByTestId("create-project-button")`——空列表下页头与空态各有一个同名按钮，`getByRole` 会命中多个而报错。
+- 测试环境限制（如实记录）：`AppModal` 靠 antd 过渡帧判定卸载，jsdom 里没有过渡帧，`open` 置 false 后节点仍留在 DOM（最小探针实测：`rerender(open=false)` 800ms 后仍有 `.ant-modal-wrap` 且无 `display:none`），所以在单测里断言「弹窗消失」会误报；真机里同一个「取消」是立即关闭的。该批单测因此直接断言用户看得见的结果（横幅消失），并在真机探针里补了「取消后 `visible=false`」这一条。
+- 已知同类项（未处理，待用户确认）：`ProjectsPageView.managementSuccess`（编辑 / 删除项目后的成功语）同样会一直挂着。门禁：`pnpm check` → exit 0（web 单测 89 文件 603 例、`check:frontend:boundaries` 297 模块 1460 依赖、`check:deps` 735 源文件、`check:secrets` 1108 文件、`check:docs` 101 个 Markdown）；`pnpm --filter @inpulse/web typecheck` 与 8 个改动文件的 `prettier --check` 均通过。本批**未提交、未推送**。
+
+## 2026-09-30 任务「截止时间」改为自绘日历弹层（原生弹层会压住输入框）
+
+用户指示（原话）：「这个排版不太对，日历不可以把截止日期填写框盖住的」。根因是上一节（2026-09-29）那条路的固有上限：截图里的遮挡物是 Chromium **原生的 `datetime-local` 面板**，位置由浏览器决定——字段在居中弹窗里靠近窗口右侧时（实测 `#task-due` 右边缘 1112px / 窗口 1440px），Chrome 判定右侧放不下，就把面板摆到输入框**左侧**，直接压住输入框与左侧相邻字段；`showPicker()` 与点右侧日历图标两条路径位置完全相同，CSS / `position` 都改不了。因此本轮把日历换成自绘弹层，原生输入框只保留键入职责。
+
+- 新增 `apps/web/src/features/common/components/CalmDateTimeInput.tsx` + `calm-date-picker.css`：`antd Popover`（触发器 `click`、默认 `placement=bottomLeft`、关箭头、`destroyOnHidden`）包住原生 `input`（`type=datetime-local`，只负责键入）与一枚 `pointer-events: none` 的装饰日历图标，并隐藏原生 `::-webkit-calendar-picker-indicator`。面板自绘「年 / 月 select + 周一开头网格 + 时 / 分 select + 清空 / 今天 / 完成」，值格式仍是本地 `YYYY-MM-DDTHH:mm`；日期断言一律用**本地时间**拼串，不走 `toISOString()`（它会按时区改掉日期）。不换 antd `DatePicker` 的原因与上一节相同：它需要 dayjs 生产依赖，按第 4 节只能走独立 PR。
+- 弹层位置交给 rc-trigger 计算：默认贴在字段**正下方**（实测功能页 `bottomLeft`、间距 4.66px），下方空间不足时翻到字段**上方**（实测任务中心弹窗 `topLeft`、间距 4.29px，因为弹窗把下方视口空间压到低于面板高度）。两条路径都**不覆盖字段**（几何量测的 x/y 重叠量均为负值）。
+- 两个必须知道的坑（已实测）：① antd `Popover` 的 `content` 不能是 `null`——Tooltip 会判定「无标题」并把打开状态压回 `false`，面板永远打不开；② `apps/web/src/styles/antd-adapter.css` 为原型里的账户 / 通知气泡把 `.ant-popover-container` 压成 1×1 透明盒、`.ant-popover-content` 绝对定位，日历继承后弹层变成 2×2 透明（`document.elementFromPoint` 能打到格子，但肉眼看不见）。已在 `calm-date-picker.css` 用 `div.ant-popover.calm-date-popover > div.ant-popover-container`（特异性 0,3,2）覆写回白色卡片 + `position: static`；因此组件**不再**通过 Popover 的内联 `styles` 下发外形（内联压不过该规则），全部走 CSS。
+- 三处接入（`#global-task-due`、`#task-due`、`#leftover-task-due`）的原 `id` 与 `aria-describedby` 全部保留，调用方换算语义不变（`next === "" ? null : new Date(next).toISOString()`）；`native-date-picker.ts` 与其单测已删除，第五十九条的 `TASK-DUE-PICKER-*` 用例随之作废。
+- 门禁与实测（本地）：`pnpm --filter @inpulse/web typecheck` exit 0；`pnpm --filter @inpulse/web exec vitest run` **89 文件 609 例全绿**（上批 603 例；删 5 例、增 11 例）；`pnpm check` **exit 0**（`check:deps` 735 源文件、`check:frontend:boundaries` 298 模块 1464 依赖、`check:secrets` 1109 文件、`check:docs` 101 个 Markdown、`permissions:check` 100 / 100）。真机复核（一次性 Playwright 无头 Chromium 脚本，用后删除）：两条页面路径的 `placement` / 间距 / 重叠见上，`containerSize` 260×316.5、`backgroundColor` `rgb(255,255,255)`、`contentPosition` `static`；选日期 → `2026-09-22T00:00`、再选时分 → `2026-09-22T09:30`，「完成」后面板卸载且值保留。未做的：键鼠可达性只覆盖点击路径（Tab 顺序 / Esc 关闭未做）、跨浏览器未复核、全量 E2E 未重跑。本批含前端产品代码，按 §8 需非作者人工评审；**未提交、未推送**。
+
+## 2026-09-30 ADR-055 项目保留期自动彻底删除说明
+
+按用户 2026-09-30 指示（「我希望删除的项目30天后会被彻底删除，如果还原过，那就按最后一次删除来计算时间」）为 [ADR-051](./docs/adr/ADR-051.md) 的彻底删除补一条自动触发路径（[ADR-055](./docs/adr/ADR-055.md)）。因此：
+
+- 保留期 30 天，从 `app.projects.deleted_at` 起算、由数据库时钟判断（`deleted_at <= now() - make_interval(days => $1::integer)`，避免多实例时钟偏差）；还原会清空 `deleted_at`、重新删除会写入新的删除时间，因此天然「按最后一次删除计时」，**不新增**任何状态列或计数器。
+- 触发在服务端进程内：`ProjectAutoPurgeService` + `ProjectAutoPurgeScheduler`（启动 1 分钟后首跑，成功后每小时一次，抛错 60 秒后重试，定时器 `unref()`），随 `ProjectManagementModule` 注册；`NODE_ENV=test` 不启动（避免挂住 vitest），`PROJECT_AUTO_PURGE_ENABLED=false` 可整体关闭，`PROJECT_AUTO_PURGE_RETENTION_DAYS`（默认 30）与 `PROJECT_AUTO_PURGE_BATCH_SIZE`（默认 20）为可选覆盖，非正整数配置 fail closed。
+- 执行语义：只读候选查询（`deleted_at ASC, id ASC` 取到期项目）→ 每个候选一个**独立事务**、`FOR UPDATE` 行锁内复核保留期 → `app.purge_project` → SYSTEM 链写一条 `project.purge`（`actorType: SYSTEM`、`actorId: null`、`trigger: AUTO_RETENTION`、`retentionDays`、`deletedAt` / `deletedBy` 快照与七项计数，与手工路径的 `actorRole: SYSTEM_ADMIN`、无 `trigger` 可区分）。复核未命中（已还原、已被并发彻底删除、删除时间被刷新）即跳过；单项目失败只回滚该项目并进 `failedProjectIds`，下一轮重试，不阻塞同批其它项目。
+- 零契约面：不新增路由、契约、权限矩阵条目与生成客户端产物（Route Registry 仍 99 条），不改数据库与迁移（复用 `0031_project_purge.sql` 的窄口与角色授权），不改 `deploy/compose.yaml`（新环境变量都有默认值，与 `SESSION_CLEANUP_*` 同处理）。不发通知、不加保留期倒计时 UI、不回收项目编码，被自动删除后无恢复路径。
+- 测试：`apps/api/test/project-auto-purge.service.test.ts` 5 例单测（候选为空时只读一次且不写审计、锁内复核未命中跳过、审计形状、单项目失败隔离、环境变量默认值与非法值 fail closed）与 `apps/api/test/project-auto-purge.integration.test.ts` 4 例真实 PostgreSQL（到期项目物理删除且项目行 / 模块 / 成员归零、`PROJECT` 审计链消失、SYSTEM 链恰好一条且 `records` 计数正确；删除 29 天不删；「删除 40 天前 → 还原 → 立刻重新删除」不删、「还原 → 再删除满 31 天」删除；活跃项目不进候选且复核谓词对活跃 / 刚删除 / 已到期三态正确）。
+- 边界与例外：保留期是「满 30 天即删」，调度为一小时粒度，因此实际删除会落在到期后 0～1 小时内，批大小还会影响同一轮覆盖范围；要改成删除前提醒、可配置保留期或恢复路径，必须新增 ADR 并同步权限矩阵、测试矩阵与本小节。
+
+## 2026-09-30 全站等待态改骨架屏 + 首屏 logo 补尺寸与重制位图（用户指示，本地落库）
+
+用户看过原型页「质感改造 · 第一批」后回「可以改吧」，本批按已确认范围只做 §2（骨架屏）与 §3（首屏 logo）；§1 favicon / 标题、§4 动效 token、§5 统一状态条按用户口径不做。开工前先盘存量：全仓等待态 50 处 / 26 文件（另扣「加载更多」按钮文案 6 处，保持原样），`Skeleton` 用量 0、`Spin` 只在路由级用过 1 次，`.calm-state` + `.calm-spinner` 与 antd `Spin` 两套写法并存。
+
+- 新增 `apps/web/src/features/common/components/CalmSkeleton.tsx` + `calm-skeleton.css`：五形态 `list` / `card` / `table` / `timeline` / `lines`，外加 `compact` 与 `tone="sidebar"`。容器尺寸刻意与它替换掉的 `.calm-state` 对齐（1px 边框 + 10px 圆角 + 白底 + `min-height:140px`，compact 82px），扫光动画在 `prefers-reduced-motion: reduce` 下关闭；`label` 渲染成 `.sr-only` 并由 `role="status"` 承载、骨架图形本身 `aria-hidden`，原等待态里的读屏文案不丢。
+- 全站 49 处替换**只落在各页原有的 `isPending` 分支里**：`isFetching`（已有数据 + 后台刷新）继续显示旧数据，不新增判断，避免每次切筛选都闪一次骨架。覆盖面含应用级 `RequireAuth` / `RequireAdmin` / 路由懒加载兜底（`app/auth/auth-guard.tsx`、`app/router/AppRouter.tsx`），深色侧栏项目树用 `tone="sidebar"`（半透明白占位块、去卡片、去白底）。
+- 「加载更多」按钮文案与名称回退文案（`xx ?? "加载中"`）保持原样，不在本批范围。
+- 三张 logo 补 `width` / `height`（`LoginPage.tsx` 的 `login-logo` 560×226 与 `casdoor-logo` 251×251、`AppLayout.tsx` 的 joint 480×174），并把 `inpulse-joint-logo.png` 从 2086×754 / 317,124 B 重采样到 480×174 / 22,417 B（面积平均 + 预乘 alpha；用 Node `zlib` 手写 PNG 解码 / 编码，未引入图像库，`pnpm-lock.yaml` 无改动）。
+- **改了一处既有单测的定位方式（未弱化断言）**：骨架屏也带 `role="status"`，`apps/web/src/features/task-board/TaskBoardPageView.test.tsx` 原来的 `findByRole("status")` 会先命中加载骨架，现改为按文案 `findByText(/任务超过 1000 条/)` 定位、再回查 `.tb-notice` 的 `role="status"`，断言强度不变。
+
+验证（本地实际执行）：`pnpm --filter @inpulse/web typecheck` → exit 0；`pnpm typecheck`（全 workspace 8 个项目）→ exit 0；`pnpm --filter @inpulse/web exec vitest run` → **89 文件 609 例全绿**；`pnpm exec eslint apps/web/src` → exit 0；`pnpm exec prettier --check apps/web/src` → 全部符合；`pnpm check` → **exit 0**（`check:deps` 736 源文件、`check:frontend:boundaries` 300 模块 1498 依赖、`check:secrets` 1111 文件、`check:docs` 101 个 Markdown、`deps:audit` 仅 1 条 moderate，低于 `--audit-level=high`）。另有一次性 Playwright 无头探针（脚本用后删除）：给 `/api/v1/**` 加 8s 延迟并排除认证 / 会话端点后，`/projects` 出 `card` 骨架 ×3 + 侧栏 `sidebar` 骨架 ×1，`/tasks`、`/issues`、`/records` 各出 `list` 骨架，`/projects/1/modules` 出 `card` + `list` 骨架；登录页 `login-logo` 实测 300×121.06、侧栏 `joint-logo` 实测 163×46（换图后长宽比与裁切不变形）。**未运行**：`pnpm test:e2e`、`pnpm test:integration`（无服务端 / 数据库改动）。推送后 GitHub Actions：**CI run 36660346081**（18m42s）与 **Documentation run 36660346070**（49s）均成功。
+
+遗留与偏差：① 骨架屏的 `role="status"` 让页面上多出一个 live region，§5「统一状态条 + 读屏可感知」按用户口径本轮不做，后续若要做需合并这两处播报；② `SimilarFeatures`、`TasksPanel`（两处）、`GlobalTaskCreateModal`、`SettingsPage` 原来只有一行 `<p>` 文案，换成 82px / 140px 骨架后弹窗与表单内高度会变化，属有意改动但需人工在真机确认不顶布局；③ 应用级守卫换成 4 行骨架是整页形态变化，需人工确认；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 已推送 `test`（`e481908`），CI 成功。
+
+## 2026-09-30 侧边导航收起 / 展开改为宽度过渡（隐藏动作不丝滑）
+
+用户指示（原话）：「侧边导航栏隐藏动作不丝滑」。根因：桌面端（≥701px）收起态是 `.nav-collapsed .sidebar { display: none; }`——`display` 不可动画，点「收起导航」后侧栏瞬间消失；`.sidebar` 本身也没有 `transition`，而仓库既有动效范式（`ProjectTree` 折叠）是 `0.24s cubic-bezier(0.33, 1, 0.68, 1)`。
+
+- `apps/web/src/styles/design-system.css`：新增 `--sidebar-width` 变量（`:root` 默认 236px，`@media (max-width: 1000px)` 覆盖为 200px，替换原先散落的 `.sidebar` 字面量）；`.brand` / `.nav-group` / `.sidebar-footer` 按整栏宽度固定排版，过渡中文字不折行；收起态为 `width: 0; opacity: 0; visibility: hidden`（`visibility` 延迟 0.24s 生效，动画结束才不可聚焦）；`.nav-collapsed .page-content` 的 `padding-left` 同节奏过渡；展开按钮 `sidebar-expand-in` 0.12s 延迟淡入；`@media (prefers-reduced-motion: reduce)` 关闭全部过渡 / 动画（必须写在媒体查询规则之后，媒体查询不提升特异性）。
+- **裁切只在过渡期间与收起态开启**：`.app-shell.nav-animating .sidebar, .nav-collapsed .sidebar { overflow: hidden }`——常态必须保留 `.popover` 向右越出侧栏覆盖内容区的能力（底部通知 / 账户弹层宽 344px，常态裁切会切掉弹层右半）。
+- `apps/web/src/app/layout/AppLayout.tsx`：新增 `navAnimating` 状态与 `handleToggleNav`（240ms 定时器 + 卸载清理；`NAV_COLLAPSE_MS` 与 CSS 过渡时长互相引用），收起 / 展开时给 `.app-shell` 加 `nav-animating` 类。
+- 真机实测（本地 dev 页面，逐帧采样）：收起 `236 → … → 0px`（约 234ms，opacity 同步），展开 `0 → … → 236px`（约 240ms）；收起稳定态 `overflow: hidden` / `visibility: hidden`，展开后恢复可见；账户弹层越出侧栏右缘 46px 未被裁切、`elementFromPoint` 探针命中弹层；`≤700px` 移动抽屉规则不受影响。
+- 按 2026-09-17 前端免测试指示未运行测试与门禁（仅改动文件 `prettier --check` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`906b9fe`），未推送。
+
+## 2026-09-30 侧栏改为 fixed 定位（弹窗背景中不再随页面滚走）
+
+用户报告（原话）：「背景里面的这个导航栏呈现有问题」（附弹窗截图）。根因：桌面端（≥701px）侧栏是 `position: sticky; top: 0; height: 100dvh`，antd 弹窗的滚动锁会给 `html` / `body` 写内联 `overflow: hidden`——此时没有滚动祖先，sticky 失去参照物、随文档一起滚走，弹窗背景里只剩半截深色栏。真机对照实验（Playwright）：解锁 overflow 后 `scrollTo(300 / 495)` 侧栏 `top` 恒 0，锁上后分别为 -300 / -495。
+
+- `apps/web/src/styles/design-system.css`：桌面 `.sidebar` 改 `position: fixed; top: 0; left: 0`（保留 `z-index: 40` 与 `height: 100dvh`）。
+- 文档流让位改由外壳承担：`.app-shell { padding-left: var(--sidebar-width); transition: padding-left 0.24s cubic-bezier(0.33, 1, 0.68, 1) }` 加 `.app-shell.nav-collapsed { padding-left: 46px }`。`nav-collapsed` 加在 `.app-shell` 自身而非祖先，因此必须用复合选择器（误写成后代选择器 `.nav-collapsed .app-shell` 时真机实测 padding 仍 236px）。
+- 本文件上一小节（「侧边导航收起 / 展开改为宽度过渡」）中「`.nav-collapsed .page-content` 的 `padding-left` 同节奏过渡」的表述由本节修订为 `.app-shell` 的左内边距过渡；其余（宽度变量、过渡时长、裁切策略、移动抽屉）均不变。
+- `prefers-reduced-motion: reduce` 的选择器列表同步加入 `.app-shell`，并移除原 `.nav-collapsed .page-content` 条目。
+- 真机实测：弹窗滚动锁下侧栏 `position: fixed`、`sidebar.y = 0`（含 `scrollY = 495`）；正文 `x = 236` 与改前一致；收起态 `width 0 / opacity 0 / visibility hidden` 加外壳左内边距 46px；账户弹层越出侧栏右缘 46px 未被裁切。
+- 缺陷为既有问题（`git log -S` 至少 2026-09-14 起存在），非收起 / 展开过渡批次引入；按 2026-09-17 前端免测试指示未运行测试与门禁（仅改动文件 `prettier --check` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`ce904a3`），未推送。
+
+## 2026-09-30 任务看板卡片等高
+
+用户指示（原话）：「把卡片的布局大小都统一一下」（附 `/projects/1/task-board` 看板截图）。真机量测（55 张卡片）：宽度本来就统一（253.6px），高度有 4 档（78 / 83 / 91 / 100）；逐行诊断定位到两处可变高度行——`.tb-card-top` 只有 ✓ 勾（14px）时 15px、带 `.badge`（24.5px）时 24.5px；`.tb-card-title` 1 行 16.9px、2 行 33.8px（`-webkit-line-clamp: 2`）。`.tb-card-meta` 恒 15.8px。
+
+- `apps/web/src/styles/design-system.css`：`.tb-card-top { min-height: 25px }`（按 `.badge` 实测高度 24.5px 预留）；`.tb-card-title { min-height: 2.7em }`（标题最多 2 行，恒定预留 2 行位置；用 em 跟随自身字号）。
+- 未选方案：`.tb-lane-cards` 加 `grid-auto-rows: 1fr` 会把卡片少的泳道卡片拉得极高；`.tb-lane-cards > li` 的拉伸只作用于行内、跨行不生效。
+- 真机实测：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张全部 100.5px 高 × 253.6px 宽**，7 个泳道逐张复核卡内三行（25 / 33.8 / 15.8）完全一致；`prettier --check` 通过。
+- 按 2026-09-17 前端免测试指示未运行测试与门禁；≤1100px 窄断点未单独实测（未验证）；列表视图 `.tb-row` 不受影响；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`89a1365`），未推送。
+
+## 2026-09-30 维护中项目不产出任务中心卡片（R-3 / R-7 读取收窄）
+
+用户指示（原话）：「项目进入维护中后，任务中心已完成未完成的任务卡片要求都不显示」。此前 R-3（我的任务）与 R-7（任务聚合组）读取链路只按 `AuthorizedProjectScope` 收窄，没有任何项目状态过滤：ADR-043 的 409 只在切换时校验任务已收尾，切维护中后项目仍可产生新任务，这些任务与聚合组卡照常出现在任务中心，并计入 `stats` 角标（演示库实测：维护中项目 `test`（project 118）的已完成任务仍出现在「已完成」列表，角标 17）。
+
+- 新增只读端口 `ProjectQueryPort.listStatuses(projectIds)`（`apps/api/src/modules/projects/project-query.port.ts` 的 `ProjectStatusRef` + PostgreSQL 适配器；只查 id 与 status、空输入短路、未知 ID 不返回）与公共助手 `apps/api/src/modules/aggregate-read/maintenance-project-filter.ts` 的 `excludeMaintenanceProjects`（剔除 `status = MAINTENANCE` 的项目 ID；读不到状态的 ID 原样保留，避免放大范围）。
+- R-3 `MyTasksQueryService.listMyTasks` 与 R-7 `TaskGroupQueryService.listTaskGroups` 在**分页、统计、遗留问题入口、聚合组列表之前**统一使用收窄后的 `projectIds`，避免「卡片消失但统计与角标仍计入」的不一致；授权范围内全部为维护中时复用既有空集合短路（不发 SQL，返回空页与零统计）。
+- 这是**展示口径**，不是权限收窄：维护中项目仍可写（ADR-043「三态都可写」不变），项目内任务 / 迭代记录 / 任务看板不受影响；R-1 单组详情与 R-4 组内记录刻意**不**过滤（已打开的深链在项目转维护中后仍可读）；未开始 / 进行中项目不在剔除范围内。契约只更新 `listMyTasks` / `listTaskGroups` 两条路由 summary 描述，路由数不变（100 条）。
+- 测试：单测 4 例（R-3 / R-7 各 2，含全维护中短路）+ 真实 PostgreSQL 集成 2 例（含「切回进行中后重新出现」与「R-1 详情仍可读」反证）；`docs/test-matrix.md` 新增「维护中项目不产出任务卡片」小节（`MAINT-FILTER-*` 6 条）。鉴别性验证：临时还原未过滤集合后集成用例转红，恢复后转绿。
+- 本地验证：`pnpm check` 至 `deps:audit` 之前全部通过（contract 100 条、权限 100/100、typecheck 8 workspace、api 单测 68 文件 389 例、web 89 文件 610 例、真实 PostgreSQL 集成 53 文件 495 例、lint / 格式 / 依赖边界 / Secret / 文档门禁）；`deps:audit` 因新公布的 `brace-expansion` high 公告中断（与本批无关，按 §4 走独立 PR）；浏览器实测演示库「已完成」角标 17 → 16 且维护中项目任务不再出现。本批为 R-3 / R-7 语义收窄，需非作者人工评审；已本地提交（`c0d362c`），未推送。
+
+## 2026-09-30 项目与功能页标题行内加入本地搜索框（用户指示，本地落库）
+
+用户指示（原话）：先「项目与功能页面帮我画出来的地方加一个搜索框」（附标注截图），随后限定「我只需要在项目与功能的页面里面添加，然后是和标题并行的，其他页面不要添加」。因此搜索框只落在项目与功能页（`/projects`），且与标题同行：
+
+- `ProjectsPageView.tsx`：新增 `search` state 与 `visibleProjects` 本地筛选（`toLocaleLowerCase().trim()` 后按 `name` / `code` / `(description ?? "")` 匹配，空关键词直通全部）；搜索框渲染在标题行 `.catalog-actions` 首位（`aria-label="搜索项目"`，占位「搜索项目名称、编码或描述」），仅在 `projects.length > 0` 时渲染；无匹配时显示「没有匹配的项目」空态与「清空搜索」按钮。不走全局搜索、不调 API，其余页面未添加搜索框。
+- `design-system.css`：新增 `.catalog-heading { white-space: nowrap }`——900px 窄屏实测新搜索框把标题挤成两行（41px 单行 → 81px 两行），加此规则后标题保持单行，空间不足时由右侧工具组（`.catalog-actions`）先换行。
+- 真机验证（本地 dev `/projects`，Playwright 探针 + 截图）：按名称（「3D」）/ 编码（「inspection」，大小写不敏感）/ 描述（「贯穿」）过滤、无匹配空态与「清空搜索」恢复、「层级说明」保留逐项通过；搜索框与 `h1` 垂直同心、header 高 56、网格 `y=115` 与改动前一致；宽度扫描 [1440, 1200, 1000, 900, 760] 标题保持单行（900 下 header 78、工具组换行为两行，第二行仅「新建项目」，可接受）。
+- 按 2026-09-17 前端免测试指示未运行任何测试与门禁（仅对改动文件执行 `prettier --check` 通过，本次文档提交另跑 `pnpm check:docs` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`a009533`），未推送。

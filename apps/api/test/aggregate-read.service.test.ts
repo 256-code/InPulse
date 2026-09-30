@@ -177,13 +177,17 @@ function taskRowFixture(
   };
 }
 
-function projectFixture(id: number, name: string): ProjectItem {
+function projectFixture(
+  id: number,
+  name: string,
+  status: ProjectItem["status"] = "ACTIVE",
+): ProjectItem {
   return {
     id,
     code: "P" + String(id),
     name,
     description: "项目描述",
-    status: "ACTIVE",
+    status,
     hasCompletedTask: true,
     rowVersion: 1,
     createdBy: 5,
@@ -242,9 +246,21 @@ function taskGroupSetup(
       options.page ?? { items: [], nextRecordId: null, hasMore: false },
     );
   const listChangeRecordLinks = vi.fn().mockResolvedValue([]);
-  const listProjects = vi
+  const projects = options.projects ?? [projectFixture(7, "商城系统")];
+  const listProjects = vi.fn().mockResolvedValue(projects);
+  // 状态过滤与项目名解析共用同一份夹具，忠实反映 PostgresProjectQueryPort。
+  const listStatuses = vi
     .fn()
-    .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
+    .mockImplementation((projectIds: readonly number[]) =>
+      Promise.resolve(
+        projects
+          .filter((project) => projectIds.includes(project.id))
+          .map((project) => ({
+            projectId: project.id,
+            status: project.status,
+          })),
+      ),
+    );
   const listUsers = vi
     .fn()
     .mockResolvedValue([{ userId: 5, name: "成员", avatarUrl: null }]);
@@ -254,7 +270,7 @@ function taskGroupSetup(
   const service = new TaskGroupQueryService(
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
     { findGroupById, listMembers } as unknown as TaskGroupReadPort,
-    { list: listProjects } as unknown as ProjectQueryPort,
+    { list: listProjects, listStatuses } as unknown as ProjectQueryPort,
     { listByIds } as unknown as TaskQueryPort,
     {
       countPublishedByTask,
@@ -282,6 +298,7 @@ function taskGroupSetup(
     listVisibleRecordsByTaskIds,
     listChangeRecordLinks,
     listProjects,
+    listStatuses,
   };
 }
 
@@ -330,9 +347,21 @@ function taskGroupListSetup(
     .mockResolvedValue(
       options.users ?? [{ userId: 5, name: "成员", avatarUrl: null }],
     );
-  const listProjects = vi
+  const projects = options.projects ?? [projectFixture(7, "商城系统")];
+  const listProjects = vi.fn().mockResolvedValue(projects);
+  // 状态过滤与项目名解析共用同一份夹具，忠实反映 PostgresProjectQueryPort。
+  const listStatuses = vi
     .fn()
-    .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
+    .mockImplementation((projectIds: readonly number[]) =>
+      Promise.resolve(
+        projects
+          .filter((project) => projectIds.includes(project.id))
+          .map((project) => ({
+            projectId: project.id,
+            status: project.status,
+          })),
+      ),
+    );
   const listModuleNames = vi
     .fn()
     .mockResolvedValue(
@@ -357,7 +386,7 @@ function taskGroupListSetup(
       listGroups,
       listActiveMembersForGroups,
     } as unknown as TaskGroupReadPort,
-    { list: listProjects } as unknown as ProjectQueryPort,
+    { list: listProjects, listStatuses } as unknown as ProjectQueryPort,
     { listByIds } as unknown as TaskQueryPort,
     { countPublishedByTask } as unknown as ChangeRecordReadPort,
     { listByIds: listUsers } as unknown as UserReadPort,
@@ -376,6 +405,7 @@ function taskGroupListSetup(
     listFeatureNames,
     countPublishedByTask,
     listProjects,
+    listStatuses,
     cursor,
   };
 }
@@ -646,6 +676,37 @@ describe("TaskGroupQueryService.listTaskGroupRecords", () => {
 });
 
 describe("TaskGroupQueryService.listTaskGroups", () => {
+  it("维护中项目不再产出聚合组卡片：聚合组查询收到剔除后的项目集合", async () => {
+    const setup = taskGroupListSetup({
+      scopeProjectIds: [7, 9, 11],
+      projects: [
+        projectFixture(7, "商城系统"),
+        projectFixture(9, "维护项目", "MAINTENANCE"),
+        projectFixture(11, "未开始项目", "NOT_STARTED"),
+      ],
+    });
+    await setup.service.listTaskGroups({ actorUserId: 5 });
+    expect(setup.listGroups).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [7, 11] }),
+    );
+    expect(setup.listStatuses).toHaveBeenCalledWith([7, 9, 11]);
+  });
+
+  it("授权范围内全部维护中时返回空列表，聚合组查询按空集合短路", async () => {
+    const setup = taskGroupListSetup({
+      scopeProjectIds: [9],
+      projects: [projectFixture(9, "维护项目", "MAINTENANCE")],
+    });
+    const page = await setup.service.listTaskGroups({ actorUserId: 5 });
+    expect(page).toMatchObject({ items: [], hasMore: false });
+    expect(setup.listGroups).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [] }),
+    );
+    expect(setup.listProjects).toHaveBeenCalledWith([]);
+  });
+
   it("组列表映射主任务与分支排序，并签发下一页游标", async () => {
     const setup = taskGroupListSetup({
       page: {
@@ -1174,9 +1235,21 @@ function myTasksSetup(
     .mockResolvedValue(
       options.page ?? { items: [], next: null, hasMore: false },
     );
-  const listProjects = vi
+  const projects = options.projects ?? [projectFixture(7, "商城系统")];
+  const listProjects = vi.fn().mockResolvedValue(projects);
+  // 状态过滤与项目名解析共用同一份夹具，忠实反映 PostgresProjectQueryPort。
+  const listStatuses = vi
     .fn()
-    .mockResolvedValue(options.projects ?? [projectFixture(7, "商城系统")]);
+    .mockImplementation((projectIds: readonly number[]) =>
+      Promise.resolve(
+        projects
+          .filter((project) => projectIds.includes(project.id))
+          .map((project) => ({
+            projectId: project.id,
+            status: project.status,
+          })),
+      ),
+    );
   const listModuleNames = vi
     .fn()
     .mockResolvedValue(
@@ -1236,7 +1309,7 @@ function myTasksSetup(
   );
   const service = new MyTasksQueryService(
     { getAuthorizedSearchScope } as unknown as ProjectAccessQueryPort,
-    { list: listProjects } as unknown as ProjectQueryPort,
+    { list: listProjects, listStatuses } as unknown as ProjectQueryPort,
     { list: listPage, stats, leftoverEntry } as unknown as MyTaskQueryPort,
     { listNames: listModuleNames } as unknown as ModuleReadPort,
     { listNames: listFeatureNames } as unknown as FeatureReadPort,
@@ -1265,10 +1338,55 @@ function myTasksSetup(
     countTaskLinks,
     stats,
     leftoverEntry,
+    listStatuses,
   };
 }
 
 describe("MyTasksQueryService.list", () => {
+  it("维护中项目不产出任务卡片：分页、统计与遗留入口共用剔除后的集合", async () => {
+    const setup = myTasksSetup({
+      scopeProjectIds: [7, 9, 11],
+      projects: [
+        projectFixture(7, "商城系统"),
+        projectFixture(9, "维护项目", "MAINTENANCE"),
+        projectFixture(11, "未开始项目", "NOT_STARTED"),
+      ],
+    });
+    await setup.service.list({ actorUserId: 5 });
+    expect(setup.listPage.mock.calls[0]![1]).toMatchObject({
+      projectIds: [7, 11],
+    });
+    expect(setup.stats).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [7, 11] }),
+    );
+    expect(setup.leftoverEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [7, 11] }),
+    );
+    expect(setup.listStatuses).toHaveBeenCalledWith([7, 9, 11]);
+  });
+
+  it("授权范围内全部维护中时返回空页，统计与遗留入口按空集合收敛", async () => {
+    const setup = myTasksSetup({
+      scopeProjectIds: [9],
+      projects: [projectFixture(9, "维护项目", "MAINTENANCE")],
+    });
+    const page = await setup.service.list({ actorUserId: 5, projectId: 9 });
+    expect(page).toMatchObject({ items: [], hasMore: false });
+    expect(setup.listPage.mock.calls[0]![1]).toMatchObject({
+      projectIds: [],
+    });
+    expect(setup.stats).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [] }),
+    );
+    expect(setup.leftoverEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectIds: [] }),
+    );
+  });
+
   it("项目范围去除个人过滤，仍在授权项目和逾期条件内分页", async () => {
     const setup = myTasksSetup({ scopeProjectIds: [7, 9] });
     await setup.service.list({

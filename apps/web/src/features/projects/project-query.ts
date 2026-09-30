@@ -76,6 +76,17 @@ export function canManageProjectResources(
   return role === "MEMBER" || role === "LEADER";
 }
 
+/**
+ * ADR-049：删除项目只对系统管理员与本项目组长开放，普通成员连入口都不显示；
+ * 服务端 `projectDeleterRole` 会以同一口径二次判定。
+ */
+export function canDeleteProject(
+  isSystemAdmin: boolean,
+  role: "MEMBER" | "LEADER" | null | undefined,
+): boolean {
+  return isSystemAdmin || role === "LEADER";
+}
+
 export function describeCreateProjectError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.status) {

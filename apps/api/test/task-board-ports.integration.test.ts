@@ -26,8 +26,8 @@ import type { TestUrls } from "./database.helpers.js";
 // 2. 列表顺序：逾期未完成 -> 其他未完成（先按优先级 紧急 -> 高 -> 普通 -> 低，
 //    再按截止升序，NULL 最后）-> 已完成（完成时间倒序）-> 已取消；已完成与
 //    已取消不参与优先级排序。
-// 3. ARCHIVED / INVALID 不进看板；CANCELED 保留在列表与统计中
-//    （功能设计 29.1 / 29.2 口径）。
+// 3. INVALID 不进看板（ADR-054：任务归档已下线，ARCHIVED 不可达）；
+//    CANCELED 保留在列表与统计中（功能设计 29.1 / 29.2 口径）。
 // 4. excludedTaskIds 在 LIMIT 之前过滤；超过 TASK_BOARD_TASKS_MAX 截断并置
 //    truncated。
 // 5. 统计与列表同一集合口径：项目级总计等于各模块分组之和，空项目为零值。
@@ -80,7 +80,7 @@ const DUE_EXPRESSION: Record<DueSpec, string> = {
 interface BoardTaskOptions {
   readonly due?: DueSpec;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly moduleId?: number;
   readonly title?: string;
@@ -504,13 +504,12 @@ describe("PostgresTaskQueryPort 看板读（R-8）", () => {
     expect(emptyStats.modules).toEqual([]);
   });
 
-  test("ARCHIVED / INVALID 不进看板，CANCELED 保留在列表与统计", async () => {
+  test("INVALID 不进看板，CANCELED 保留在列表与统计", async () => {
     const scope = await newProject();
     let active = 0;
     let canceled = 0;
     await commitFixture(async (tx) => {
       active = await insertBoardTask(tx, scope, { due: "future" });
-      await insertBoardTask(tx, scope, { lifecycleStatus: "ARCHIVED" });
       await insertBoardTask(tx, scope, { lifecycleStatus: "INVALID" });
       canceled = await insertBoardTask(tx, scope, { workStatus: "CANCELED" });
     });

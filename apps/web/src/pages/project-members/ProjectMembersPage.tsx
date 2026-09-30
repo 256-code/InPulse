@@ -1,7 +1,7 @@
 import { useAuth } from "@features/auth/auth-context";
 import { ActiveProjectMembers } from "@features/projects/ActiveProjectMembers";
 import React from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import { useParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import {
@@ -9,6 +9,7 @@ import {
   useProjectDetail,
 } from "@features/projects/project-query";
 import { ProjectMembersPageView } from "@features/projects/ProjectMembersPageView";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export interface ProjectMembersPageProps {
   readonly client?: InpulseApiClient | undefined;
@@ -31,10 +32,12 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
   const detail = useProjectDetail({ projectId: id, client });
   if (!isSystemAdmin && detail.isPending) {
     return (
-      <div className="calm-state">
-        <Spin size="small" />
-        <span>正在确认项目内角色</span>
-      </div>
+      <CalmSkeleton
+        variant="lines"
+        rows={2}
+        compact
+        label="正在确认项目内角色"
+      />
     );
   }
   const canManage =
@@ -54,6 +57,7 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
       projectId={id}
       client={client}
       isSystemAdmin={isSystemAdmin}
+      viewerRole={detail.data?.currentUserRole ?? null}
     />
   );
 };

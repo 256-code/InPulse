@@ -1480,6 +1480,124 @@
         ]
       }
     },
+    "/change-records/summary": {
+      "get": {
+        "operationId": "getRecordSummary",
+        "summary": "F-33 迭代总结取数：按 AuthorizedProjectScope 汇总 from / to（Asia/Shanghai 自然日，含首尾）范围内的 PUBLISHED 正式记录、已完成任务、遗留问题与「已完成但没有任何记录」的缺口，并按 PROJECT 或 MEMBER 分组给出分节与计数；projectId / memberId 只收窄范围，越权项目静默排除；不在服务端生成正文措辞。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordSummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": "PROJECT",
+              "type": "string",
+              "enum": [
+                "PROJECT",
+                "MEMBER"
+              ]
+            }
+          }
+        ]
+      }
+    },
     "/external-links/{targetType}/{targetId}": {
       "get": {
         "operationId": "listExternalLinks",
@@ -2368,7 +2486,7 @@
     "/me/tasks": {
       "get": {
         "operationId": "listMyTasks",
-        "summary": "F-32 我的任务：跨项目列出当前用户负责或创建的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系、PUBLISHED 记录数与遗留问题来源标记（hasLeftoverSource，裁决修订 D-2），并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；V1 支持 ownership / projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 七项筛选，其中 ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，不接受任何他人身份或授权范围参数。",
+        "summary": "F-32 我的任务：跨项目列出当前用户负责或创建的任务，返回优先级、截止与完成时间、创建者、外部链接数、聚合组关系、PUBLISHED 记录数与遗留问题来源标记（hasLeftoverSource，裁决修订 D-2），并附统计卡片与遗留问题入口；服务端按 AuthorizedProjectScope 过滤并固定 id DESC 游标分页；维护中（MAINTENANCE）项目不产出任务卡片（2026-09-30 口径）：项目范围先剔除维护中项目，未完成与已完成两档、统计卡片与遗留问题入口共用同一集合，未开始 / 进行中项目不受影响；V1 支持 ownership / projectId / scopeType / workStatus / hasPublishedRecord / priority / includeCanceled 七项筛选，其中 ownership 只区分 ASSIGNEE（负责，缺省）与 CREATOR（创建）两个当前用户自指维度，不接受任何他人身份或授权范围参数。",
         "responses": {
           "200": {
             "description": "成功",
@@ -2990,6 +3108,91 @@
         }
       }
     },
+    "/project-deletions": {
+      "get": {
+        "operationId": "listProjectDeletions",
+        "summary": "ADR-050 项目删除记录：全部登录用户可读的删除台账，只返回项目编号、项目名称、删除时间与删除人，按删除时间倒序、服务端签名游标分页。删除记录不构成已删除项目重新可见：列表、详情、搜索、项目动态、任务中心与全部项目级读写仍不返回已被删除的项目与业务数据。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDeletionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ]
+      }
+    },
     "/projects": {
       "get": {
         "operationId": "listProjects",
@@ -3178,6 +3381,157 @@
       }
     },
     "/projects/{projectId}": {
+      "delete": {
+        "operationId": "deleteProject",
+        "summary": "F-06.4 删除项目（ADR-049）：只有本项目组长与系统管理员可以删除，普通成员 403 PROJECT_DELETE_FORBIDDEN，非成员与不存在（含已删除）一律 404。删除是软删除——项目退出列表、详情、搜索、项目动态与全部项目级读写，业务历史（模块、功能、任务、迭代记录、外部链接）、成员关系与审计链全部保留，可按 SQL 恢复；项目编码继续被占用，不允许被新建项目复用。If-Match 版本不符 409 PROJECT_VERSION_CONFLICT，CSRF 与数据库幂等必填，审计 project.delete 与项目动态在同一事务提交。",
+        "responses": {
+          "204": {
+            "description": "成功且无响应体"
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [
+            "If-Match"
+          ],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "204": {
+                "noBody": true
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectReplayContext",
+              "resultRefExtractor": "projectId",
+              "currentReadAuthorizer": "projectDeleteReplayAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "required"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "required",
+            "lockOrder": [
+              "project"
+            ],
+            "retry": "none; project FOR UPDATE, expected row_version"
+          },
+          "auditAction": "project.delete"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ]
+      },
       "get": {
         "operationId": "getProject",
         "summary": "读取当前用户可访问的单项目摘要；系统管理员可访问全部项目；不存在与无权访问统一返回 404；包含归档历史。",
@@ -4001,8 +4355,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -5812,7 +6166,7 @@
     "/projects/{projectId}/members/{userId}/remove": {
       "post": {
         "operationId": "removeProjectMember",
-        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+        "summary": "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（ADR-053：需先把其他成员设为组长完成转移，再由新组长移除，项目至少要保留一名成员）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
         "responses": {
           "200": {
             "description": "成功",
@@ -5999,7 +6353,7 @@
     "/projects/{projectId}/members/{userId}/role": {
       "post": {
         "operationId": "setProjectMemberRole",
-        "summary": "ADR-039 任命/撤销组长：仅系统管理员可设 MEMBER/LEADER（转移或撤销组长），目标必须为 ACTIVE 成员；本项目组长与普通成员一律 403，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+        "summary": "ADR-053 任命/转移组长：系统管理员可把任意活跃成员设为 MEMBER/LEADER（把其他成员设为 LEADER 即完成转移，原组长自动降级），本项目组长可把其他活跃成员设为组长以转交身份（不能自设、不能撤销）；不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，项目必须始终保留一名组长）；普通成员 403，目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
         "responses": {
           "200": {
             "description": "成功",
@@ -6087,7 +6441,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "2.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -7692,7 +8046,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -8058,7 +8412,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -8192,476 +8546,6 @@
         }
       }
     },
-    "/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/archive": {
-      "post": {
-        "operationId": "archiveTask",
-        "summary": "归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskItem"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求格式或业务参数错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或当前用户不可访问",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "idempotencyRequired",
-          "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
-          "behaviorHeaders": [
-            "If-Match"
-          ],
-          "idempotencyReplayPolicy": {
-            "version": "1.0.0",
-            "success": {
-              "200": {
-                "body": {
-                  "responseSchemaRef": "TaskItem",
-                  "safeBodyFieldPaths": [
-                    "id",
-                    "projectId",
-                    "moduleId",
-                    "featureId",
-                    "scopeType",
-                    "code",
-                    "title",
-                    "description",
-                    "assigneeId",
-                    "assigneeIds[]",
-                    "creatorId",
-                    "priority",
-                    "workStatus",
-                    "lifecycleStatus",
-                    "dueAt",
-                    "rowVersion",
-                    "createdAt",
-                    "updatedAt"
-                  ]
-                }
-              }
-            }
-          },
-          "replayAuthorizationPolicy": {
-            "version": "1.0.0",
-            "resources": {
-              "contextSchemaRef": "TaskReplayContext",
-              "resultRefExtractor": "taskResultResource",
-              "currentReadAuthorizer": "taskCurrentReadAuthorizer"
-            }
-          },
-          "securityFlowPolicy": "none",
-          "versionPolicy": {
-            "apiVersion": "v1",
-            "schemaVersion": "1.0.0",
-            "ifMatch": "required"
-          },
-          "concurrencyPolicy": {
-            "rowVersion": "required",
-            "lockOrder": [
-              "project",
-              "module",
-              "feature",
-              "task"
-            ],
-            "retry": "none; parents FOR SHARE, task FOR UPDATE, then assignee user/membership FOR SHARE"
-          },
-          "auditAction": "task.archive"
-        },
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "moduleId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "featureId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          },
-          {
-            "name": "if-match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\"[1-9][0-9]{0,9}\"$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskArchiveRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/restore": {
-      "post": {
-        "operationId": "restoreTask",
-        "summary": "恢复已归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskItem"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求格式或业务参数错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或当前用户不可访问",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "idempotencyRequired",
-          "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
-          "behaviorHeaders": [
-            "If-Match"
-          ],
-          "idempotencyReplayPolicy": {
-            "version": "1.0.0",
-            "success": {
-              "200": {
-                "body": {
-                  "responseSchemaRef": "TaskItem",
-                  "safeBodyFieldPaths": [
-                    "id",
-                    "projectId",
-                    "moduleId",
-                    "featureId",
-                    "scopeType",
-                    "code",
-                    "title",
-                    "description",
-                    "assigneeId",
-                    "assigneeIds[]",
-                    "creatorId",
-                    "priority",
-                    "workStatus",
-                    "lifecycleStatus",
-                    "dueAt",
-                    "rowVersion",
-                    "createdAt",
-                    "updatedAt"
-                  ]
-                }
-              }
-            }
-          },
-          "replayAuthorizationPolicy": {
-            "version": "1.0.0",
-            "resources": {
-              "contextSchemaRef": "TaskReplayContext",
-              "resultRefExtractor": "taskResultResource",
-              "currentReadAuthorizer": "taskCurrentReadAuthorizer"
-            }
-          },
-          "securityFlowPolicy": "none",
-          "versionPolicy": {
-            "apiVersion": "v1",
-            "schemaVersion": "1.0.0",
-            "ifMatch": "required"
-          },
-          "concurrencyPolicy": {
-            "rowVersion": "required",
-            "lockOrder": [
-              "project",
-              "module",
-              "feature",
-              "task"
-            ],
-            "retry": "none; parents FOR SHARE, task FOR UPDATE, then assignee user/membership FOR SHARE"
-          },
-          "auditAction": "task.unarchive"
-        },
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "moduleId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "featureId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          },
-          {
-            "name": "if-match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\"[1-9][0-9]{0,9}\"$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskArchiveRequest"
-              }
-            }
-          }
-        }
-      }
-    },
     "/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/status": {
       "post": {
         "operationId": "transitionTask",
@@ -8763,7 +8647,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "3.0.0",
+          "idempotencyContractVersion": "4.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -9779,7 +9663,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -10126,7 +10010,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "3.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -10245,232 +10129,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ModuleTaskEditRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/archive": {
-      "post": {
-        "operationId": "archiveModuleTask",
-        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModuleTaskItem"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求格式或业务参数错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或当前用户不可访问",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "idempotencyRequired",
-          "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
-          "behaviorHeaders": [
-            "If-Match"
-          ],
-          "idempotencyReplayPolicy": {
-            "version": "1.0.0",
-            "success": {
-              "200": {
-                "body": {
-                  "responseSchemaRef": "ModuleTaskItem",
-                  "safeBodyFieldPaths": [
-                    "id",
-                    "projectId",
-                    "moduleId",
-                    "featureId",
-                    "scopeType",
-                    "code",
-                    "title",
-                    "description",
-                    "assigneeId",
-                    "assigneeIds[]",
-                    "creatorId",
-                    "priority",
-                    "workStatus",
-                    "lifecycleStatus",
-                    "dueAt",
-                    "rowVersion",
-                    "createdAt",
-                    "updatedAt",
-                    "impactFeatureIds[]"
-                  ]
-                }
-              }
-            }
-          },
-          "replayAuthorizationPolicy": {
-            "version": "1.0.0",
-            "resources": {
-              "contextSchemaRef": "ModuleTaskReplayContext",
-              "resultRefExtractor": "moduleTaskResultResource",
-              "currentReadAuthorizer": "moduleTaskCurrentReadAuthorizer"
-            }
-          },
-          "securityFlowPolicy": "none",
-          "versionPolicy": {
-            "apiVersion": "v1",
-            "schemaVersion": "1.0.0",
-            "ifMatch": "required"
-          },
-          "concurrencyPolicy": {
-            "rowVersion": "required",
-            "lockOrder": [
-              "project",
-              "module",
-              "feature",
-              "task"
-            ],
-            "retry": "up to 3 savepoint attempts; sorted union of current/target feature ids before task; re-read under task lock"
-          },
-          "auditAction": "task.archive"
-        },
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "moduleId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          },
-          {
-            "name": "if-match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\"[1-9][0-9]{0,9}\"$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskArchiveRequest"
               }
             }
           }
@@ -11100,236 +10758,10 @@
         }
       }
     },
-    "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/restore": {
-      "post": {
-        "operationId": "restoreModuleTask",
-        "summary": "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。",
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModuleTaskItem"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求格式或业务参数错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未登录或 Session 失效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "已登录但无全局权限",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或当前用户不可访问",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "版本冲突、重复操作或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "字段校验错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "限流",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "未预期错误，不向客户端泄露堆栈",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-inpulse-policy": {
-          "authPolicy": "session",
-          "csrfPolicy": "required",
-          "idempotencyPolicy": "idempotencyRequired",
-          "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
-          "idempotencyFingerprintVersion": "1.0.0",
-          "behaviorHeaders": [
-            "If-Match"
-          ],
-          "idempotencyReplayPolicy": {
-            "version": "1.0.0",
-            "success": {
-              "200": {
-                "body": {
-                  "responseSchemaRef": "ModuleTaskItem",
-                  "safeBodyFieldPaths": [
-                    "id",
-                    "projectId",
-                    "moduleId",
-                    "featureId",
-                    "scopeType",
-                    "code",
-                    "title",
-                    "description",
-                    "assigneeId",
-                    "assigneeIds[]",
-                    "creatorId",
-                    "priority",
-                    "workStatus",
-                    "lifecycleStatus",
-                    "dueAt",
-                    "rowVersion",
-                    "createdAt",
-                    "updatedAt",
-                    "impactFeatureIds[]"
-                  ]
-                }
-              }
-            }
-          },
-          "replayAuthorizationPolicy": {
-            "version": "1.0.0",
-            "resources": {
-              "contextSchemaRef": "ModuleTaskReplayContext",
-              "resultRefExtractor": "moduleTaskResultResource",
-              "currentReadAuthorizer": "moduleTaskCurrentReadAuthorizer"
-            }
-          },
-          "securityFlowPolicy": "none",
-          "versionPolicy": {
-            "apiVersion": "v1",
-            "schemaVersion": "1.0.0",
-            "ifMatch": "required"
-          },
-          "concurrencyPolicy": {
-            "rowVersion": "required",
-            "lockOrder": [
-              "project",
-              "module",
-              "feature",
-              "task"
-            ],
-            "retry": "up to 3 savepoint attempts; sorted union of current/target feature ids before task; re-read under task lock"
-          },
-          "auditAction": "task.unarchive"
-        },
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "moduleId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 2147483647
-            }
-          },
-          {
-            "name": "x-csrf-token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 43,
-              "maxLength": 43
-            }
-          },
-          {
-            "name": "if-match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\"[1-9][0-9]{0,9}\"$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskArchiveRequest"
-              }
-            }
-          }
-        }
-      }
-    },
     "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status": {
       "post": {
         "operationId": "transitionModuleTask",
-        "summary": "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。",
+        "summary": "模块真实归属下的任务状态和历史。",
         "responses": {
           "200": {
             "description": "成功",
@@ -11427,7 +10859,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "3.0.0",
+          "idempotencyContractVersion": "4.0.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [
             "If-Match"
@@ -11556,7 +10988,7 @@
     "/projects/{projectId}/modules/{moduleId}/tasks/{taskId}/status-history": {
       "get": {
         "operationId": "getModuleTaskStatusHistory",
-        "summary": "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。",
+        "summary": "模块真实归属下的任务状态和历史。",
         "responses": {
           "200": {
             "description": "成功",
@@ -11938,6 +11370,165 @@
         ]
       }
     },
+    "/projects/{projectId}/purge": {
+      "post": {
+        "operationId": "purgeProject",
+        "summary": "ADR-051 彻底删除项目：只有系统管理员可以调用（其余身份 403 PROJECT_PURGE_FORBIDDEN），且只接受已经软删除的项目（未删除 409 PROJECT_NOT_DELETED，项目不存在 404）。服务端在同一事务内按外键顺序物理删除该项目的全部业务行（模块、功能、任务、聚合组、迭代记录、遗留项、外部链接、通知、动态与搜索投影）与它自己的 PROJECT 审计链，并返回删除行数统计；SYSTEM 审计链新增一条 project.purge 作为不可变留痕（操作者、项目编码与名称、删除行数），这是本操作唯一保留的记录，不可撤销。CSRF 与数据库幂等必填。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPurgeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "ProjectPurgeResponse",
+                  "safeBodyFieldPaths": [
+                    "purged.projectId",
+                    "purged.code",
+                    "purged.name",
+                    "purged.records.modules",
+                    "purged.records.features",
+                    "purged.records.tasks",
+                    "purged.records.changeRecords",
+                    "purged.records.auditLogs",
+                    "purged.records.members",
+                    "purged.records.total"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectReplayContext",
+              "resultRefExtractor": "projectId",
+              "currentReadAuthorizer": "projectPurgeReplayAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": [
+              "project"
+            ],
+            "retry": "none; project FOR UPDATE then soft-delete guard"
+          },
+          "auditAction": "project.purge"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ]
+      }
+    },
     "/projects/{projectId}/record-drafts": {
       "get": {
         "operationId": "listRecordDrafts",
@@ -12094,6 +11685,197 @@
       }
     },
     "/projects/{projectId}/record-drafts/{recordId}": {
+      "delete": {
+        "operationId": "deleteRecordDraft",
+        "summary": "删除未发布的草稿；已发布记录、来源任务与审计历史都不受影响。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDraftDeleteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "限流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [
+            "If-Match"
+          ],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "RecordDraftDeleteResult",
+                  "safeBodyFieldPaths": [
+                    "projectId",
+                    "recordId",
+                    "moduleId",
+                    "featureId",
+                    "taskId",
+                    "impactFeatureIds[]"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "RecordDraftDeleteResult",
+              "resultRefExtractor": "recordDraftResultResource",
+              "currentReadAuthorizer": "recordDraftCurrentReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "required"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "required",
+            "lockOrder": [
+              "project",
+              "module",
+              "feature",
+              "changeRecord"
+            ],
+            "retry": "none; parents FOR SHARE then draft FOR UPDATE, recheck version"
+          },
+          "auditAction": "record.draft.delete"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ]
+      },
       "get": {
         "operationId": "getRecordDraft",
         "summary": "独立迭代记录草稿；三段必填、不编号、不发布、不改变任务状态。",
@@ -12450,10 +12232,175 @@
         }
       }
     },
+    "/projects/{projectId}/restore": {
+      "post": {
+        "operationId": "restoreProject",
+        "summary": "ADR-051 还原项目：撤销 ADR-049 的软删除，项目重新回到列表、详情、搜索、项目动态与全部项目级读写；只有系统管理员与本项目组长可以还原（普通成员 403 PROJECT_RESTORE_FORBIDDEN，非成员与不存在 404），未被删除的项目 409 PROJECT_NOT_DELETED。项目编码、成员关系、任务与审计链从未被删除，因此还原不恢复任何数据，只清空 deleted_at/deleted_by 并递增 row_version；CSRF 与数据库幂等必填，审计 project.restore、项目动态与搜索投影在同一事务提交。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "ProjectDetailResponse",
+                  "safeBodyFieldPaths": [
+                    "project.id",
+                    "project.code",
+                    "project.name",
+                    "project.description",
+                    "project.status",
+                    "project.hasCompletedTask",
+                    "project.rowVersion",
+                    "project.createdBy",
+                    "project.createdAt",
+                    "project.updatedAt",
+                    "project.memberCount",
+                    "project.stats.activeModuleCount",
+                    "project.stats.activeFeatureCount",
+                    "project.stats.openTaskCount",
+                    "project.stats.completedTaskCount",
+                    "currentUserRole"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectReplayContext",
+              "resultRefExtractor": "projectId",
+              "currentReadAuthorizer": "projectCurrentReadAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": [
+              "project"
+            ],
+            "retry": "none; project FOR UPDATE then deleted_at guard"
+          },
+          "auditAction": "project.restore"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ]
+      }
+    },
     "/projects/{projectId}/status": {
       "patch": {
         "operationId": "changeProjectStatus",
-        "summary": "F-06.3 项目状态变更：本项目任意活跃成员或系统管理员（ADR-039）把项目在未开始 / 进行中 / 维护中之间手动切换（2026-09-23 起三态即全部状态，项目不再有归档）；进入维护中要求项目下任务全部收尾，仍有未完成且未归档的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
+        "summary": "F-06.3 项目状态变更：本项目任意活跃成员或系统管理员（ADR-039）把项目在未开始 / 进行中 / 维护中之间手动切换（2026-09-23 起三态即全部状态，项目不再有归档）；进入维护中要求项目下任务全部收尾，仍有未完成且未取消的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，项目内出现过已完成任务后回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED；维护中不通知，未开始升级为进行中通知全体成员；审计、活动与搜索投影在同一事务提交。",
         "responses": {
           "200": {
             "description": "成功",
@@ -12996,7 +12943,7 @@
     "/task-groups": {
       "get": {
         "operationId": "listTaskGroups",
-        "summary": "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总当前用户作为活跃分支任务负责人的聚合组（与自己无关的组不返回，组关闭后成员全部解除因此不再返回）；分支主任务在前、来源任务按 joinedAt 升序，携带优先级、工作状态、模块/功能名称、截止时间与 PUBLISHED 迭代记录数；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举，组的派生展示值（组优先级、归属、截止、迭代合计）由客户端按事实计算。",
+        "summary": "R-7 任务聚合组列表（F-25）：跨项目按 AuthorizedProjectScope 汇总当前用户作为活跃分支任务负责人的聚合组（与自己无关的组不返回，组关闭后成员全部解除因此不再返回）；维护中（MAINTENANCE）项目不产出任务卡片（2026-09-30 口径）：项目范围先剔除维护中项目，与 R-3 任务卡片口径一致；分支主任务在前、来源任务按 joinedAt 升序，携带优先级、工作状态、模块/功能名称、截止时间与 PUBLISHED 迭代记录数；已解除成员不进入摘要；按 groupId DESC 游标分页，服务端返回原始状态枚举，组的派生展示值（组优先级、归属、截止、迭代合计）由客户端按事实计算。",
         "responses": {
           "200": {
             "description": "成功",
@@ -16707,6 +16654,10 @@
               }
             ]
           },
+          "description": {
+            "type": "string",
+            "maxLength": 50000
+          },
           "leftoverItemId": {
             "type": "integer",
             "exclusiveMinimum": 0,
@@ -17307,7 +17258,6 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "ARCHIVED",
               "INVALID"
             ]
           },
@@ -17622,7 +17572,6 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "ARCHIVED",
               "INVALID"
             ]
           },
@@ -18132,6 +18081,116 @@
       "ProjectCode": {
         "type": "string",
         "pattern": "^[A-Z][A-Z0-9_]{1,31}$"
+      },
+      "ProjectDeletionItem": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "deletedAt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "deletedBy": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "canRestore": {
+            "type": "boolean"
+          },
+          "canPurge": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "code",
+          "name",
+          "deletedAt",
+          "deletedBy",
+          "canRestore",
+          "canPurge"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDeletionPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectDeletionItem"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDeletionQueryRequest": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
       },
       "ProjectDetailResponse": {
         "type": "object",
@@ -18871,6 +18930,92 @@
         ],
         "additionalProperties": false
       },
+      "ProjectPurgeResponse": {
+        "type": "object",
+        "properties": {
+          "purged": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "records": {
+                "type": "object",
+                "properties": {
+                  "modules": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "features": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tasks": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "changeRecords": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "auditLogs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "members": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "modules",
+                  "features",
+                  "tasks",
+                  "changeRecords",
+                  "auditLogs",
+                  "members",
+                  "total"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "projectId",
+              "code",
+              "name",
+              "records"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "purged"
+        ],
+        "additionalProperties": false
+      },
       "ProjectReplayContext": {
         "type": "object",
         "properties": {
@@ -19497,6 +19642,68 @@
         "required": [
           "projectId",
           "moduleId"
+        ],
+        "additionalProperties": false
+      },
+      "RecordDraftDeleteResult": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "impactFeatureIds": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "recordId",
+          "moduleId",
+          "featureId",
+          "taskId",
+          "impactFeatureIds"
         ],
         "additionalProperties": false
       },
@@ -20158,6 +20365,576 @@
         ],
         "additionalProperties": false
       },
+      "RecordSummaryGap": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "taskCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "assignee": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        },
+        "required": [
+          "taskId",
+          "taskCode",
+          "projectId",
+          "projectName",
+          "moduleId",
+          "moduleName",
+          "featureId",
+          "featureName",
+          "title",
+          "completedAt",
+          "assignee"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryIssue": {
+        "type": "object",
+        "properties": {
+          "leftoverItemId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "recordTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CONVERTED",
+              "RESOLVED"
+            ]
+          },
+          "followupTaskId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "followupTaskCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "leftoverItemId",
+          "recordId",
+          "recordCode",
+          "recordTitle",
+          "projectId",
+          "projectName",
+          "author",
+          "content",
+          "status",
+          "followupTaskId",
+          "followupTaskCode",
+          "publishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryPoint": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "recordCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "recordId",
+          "recordCode",
+          "projectId",
+          "projectName",
+          "moduleId",
+          "moduleName",
+          "featureId",
+          "featureName",
+          "title",
+          "detail",
+          "author",
+          "publishedAt",
+          "taskId",
+          "taskCode"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryQueryRequest": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "memberId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "groupBy": {
+            "default": "PROJECT",
+            "type": "string",
+            "enum": [
+              "PROJECT",
+              "MEMBER"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "groupBy"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryRange": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "range": {
+            "$ref": "#/components/schemas/RecordSummaryRange"
+          },
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "PROJECT",
+              "MEMBER"
+            ]
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "projectIds": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                }
+              },
+              "projectNames": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "member": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/UserRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "projectIds",
+              "projectNames",
+              "member"
+            ],
+            "additionalProperties": false
+          },
+          "totals": {
+            "$ref": "#/components/schemas/RecordSummaryTotals"
+          },
+          "sections": {
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordSummarySection"
+            }
+          },
+          "points": {
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordSummaryPoint"
+            }
+          },
+          "leftovers": {
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordSummaryIssue"
+            }
+          },
+          "gaps": {
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordSummaryGap"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generatedAt",
+          "range",
+          "groupBy",
+          "scope",
+          "totals",
+          "sections",
+          "points",
+          "leftovers",
+          "gaps",
+          "truncated"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummarySection": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "member": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completedTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "key",
+          "projectId",
+          "member",
+          "recordCount",
+          "completedTaskCount"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryTotals": {
+        "type": "object",
+        "properties": {
+          "projectCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "moduleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "featureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completedTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "missingRecordTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "leftoverCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "closedLeftoverCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectCount",
+          "moduleCount",
+          "featureCount",
+          "recordCount",
+          "completedTaskCount",
+          "missingRecordTaskCount",
+          "leftoverCount",
+          "closedLeftoverCount"
+        ],
+        "additionalProperties": false
+      },
       "RemoveProjectMemberRequest": {
         "type": "object",
         "properties": {
@@ -20370,20 +21147,6 @@
             "maxLength": 2000
           }
         },
-        "additionalProperties": false
-      },
-      "TaskArchiveRequest": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        },
-        "required": [
-          "reason"
-        ],
         "additionalProperties": false
       },
       "TaskAssigneesResponse": {
@@ -21826,7 +22589,6 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "ARCHIVED",
               "INVALID"
             ]
           },
@@ -22760,7 +23522,6 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "ARCHIVED",
               "INVALID"
             ]
           },
@@ -23026,7 +23787,6 @@
                 "type": "string",
                 "enum": [
                   "ACTIVE",
-                  "ARCHIVED",
                   "INVALID"
                 ]
               },

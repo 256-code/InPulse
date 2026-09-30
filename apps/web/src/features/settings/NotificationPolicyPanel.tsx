@@ -41,7 +41,7 @@ export const NotificationPolicyPanel: React.FC = () => {
         <InpulseIcon name="bell" size={17} />
         <span>
           <strong>展示方式</strong>
-          顶部导航铃铛显示未读数量，点击通知直接跳转到对应任务、功能或迭代记录。
+          左侧导航底部的铃铛在收到未读通知时显示红点，悬停可看到未读条数；点击铃铛展开通知中心，点开单条通知会直达对应的任务、迭代记录或项目动态。
         </span>
       </div>
     </section>

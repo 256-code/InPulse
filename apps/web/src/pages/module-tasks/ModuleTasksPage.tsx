@@ -1,13 +1,13 @@
 import React, { lazy, Suspense, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useModules } from "@features/modules/module-query";
-import { useAuth } from "@features/auth/auth-context";
 import { TasksPanel } from "@features/tasks/TasksPanel";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmSectionTitle, CalmTabs } from "@features/common/components/Calm";
 import { moduleLifecycleLabel } from "@features/common/resource-lifecycle";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /**
  * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
@@ -24,7 +24,6 @@ export default function ModuleTasksPage() {
   const projectId = Number(params["projectId"]);
   const moduleId = Number(params["moduleId"]);
   const { query } = useModules(projectId);
-  const { user } = useAuth();
   /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
   const [taskTarget, setTaskTarget] = useState<TaskLocation | null>(null);
   if (
@@ -33,7 +32,8 @@ export default function ModuleTasksPage() {
     )
   )
     return <Alert type="error" title="模块地址无效" />;
-  if (query.isPending) return <Spin />;
+  if (query.isPending)
+    return <CalmSkeleton variant="list" rows={4} label="正在加载模块任务" />;
   if (query.isError)
     return (
       <Alert
@@ -102,14 +102,12 @@ export default function ModuleTasksPage() {
         featureId={null}
         /* ADR-044：模块层面已下线归档，模块级任务始终可写。 */
         writable
-        isAdmin={user?.isAdmin === true}
         onOpenTask={setTaskTarget}
       />
       <Suspense fallback={null}>
         {taskTarget === null ? null : (
           <TaskDetailOverlay
             target={taskTarget}
-            isAdmin={user?.isAdmin === true}
             onClose={() => setTaskTarget(null)}
             onOpenTask={setTaskTarget}
           />

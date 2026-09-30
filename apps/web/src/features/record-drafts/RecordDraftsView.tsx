@@ -14,7 +14,7 @@ import {
 } from "./RecordDraftEditorModal";
 import { recordDraftErrorMessage } from "./record-draft-errors";
 import "./record-drafts.css";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,6 +25,7 @@ import {
 import { useScopedSearchParams } from "@features/common/search-params-scope";
 import { CalmBadge, CalmSectionTitle } from "@features/common/components/Calm";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 /** 卡片时间用 9/21 11:35 这种短格式，1/3 宽的卡片才放得下。 */
 function formatDraftTime(value: string) {
   const date = new Date(value);
@@ -333,7 +334,7 @@ export function RecordDraftsView({
       {showDraftList && (
         <div id="record-draft-list">
           {listPending ? (
-            <Spin />
+            <CalmSkeleton variant="list" rows={3} label="正在加载草稿" />
           ) : listFailed ? (
             <Alert
               type="error"
@@ -429,7 +430,7 @@ export function RecordDraftsView({
       >
         {recordId > 0 &&
           (detail.isPending ? (
-            <Spin />
+            <CalmSkeleton variant="lines" rows={4} label="正在加载草稿详情" />
           ) : detail.isError ? (
             <Alert type="error" title={recordDraftErrorMessage(detail.error)} />
           ) : (
@@ -502,6 +503,12 @@ export function RecordDraftsView({
         defaultFeatureId={Number(params.get("featureId")) || 0}
         writable={sourceWritable}
         onClose={() => setEditorTarget(null)}
+        // 删除草稿后详情弹层仍在按 URL 的 recordId 取值：一并清掉，避免展示已删草稿。
+        onDeleted={() => {
+          const next = new URLSearchParams(params);
+          next.delete("recordId");
+          setParams(next);
+        }}
         onSaved={(draft, published) => {
           setEditorTarget(null);
           // 「新建迭代」发布成功后直接落到正式记录，不再打开草稿详情。

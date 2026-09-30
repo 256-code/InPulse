@@ -38,6 +38,15 @@ export const projects = appSchema.table(
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
     /** ADR-043：归档时代的只读历史列，项目侧恒为空（见 projects_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
+    /**
+     * ADR-049 软删除：非空表示项目已退出全部可见范围。业务历史、成员关系与审计链
+     * 全部保留，只从列表、详情、搜索、动态与项目级读写中排除。
+     */
+    deletedAt: timestamptz("deleted_at"),
+    /** 执行删除的用户；与 deleted_at 成对写入（见 projects_deleted_state_check）。 */
+    deletedBy: integer("deleted_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
   },
   (table) => [
     unique("projects_code_unique").on(table.code),
@@ -61,6 +70,10 @@ export const projects = appSchema.table(
     ),
     check("projects_row_version_check", sql.raw("row_version > 0")),
     check("projects_archived_at_null_check", sql.raw("archived_at IS NULL")),
+    check(
+      "projects_deleted_state_check",
+      sql.raw("(deleted_at IS NULL) = (deleted_by IS NULL)"),
+    ),
   ],
 );
 

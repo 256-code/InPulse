@@ -146,7 +146,6 @@ export class TasksHttpService {
         request.body,
       ) as TaskEditRequest & {
         impactFeatureIds?: number[];
-        reason?: string;
       };
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
@@ -194,7 +193,6 @@ export class TasksHttpService {
             ...(input.impactFeatureIds === undefined
               ? {}
               : { impactFeatureIds: input.impactFeatureIds }),
-            ...(input.reason === undefined ? {} : { reason: input.reason }),
             requestId,
           });
           return {

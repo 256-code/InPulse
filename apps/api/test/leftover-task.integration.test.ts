@@ -24,7 +24,6 @@ import { TasksManagementService } from "../src/modules/tasks/tasks-management.se
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
-import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -190,10 +189,6 @@ beforeAll(async () => {
         featureRead,
         new PostgresProjectCodePort(),
         new PostgresProjectMembersQueryPort(),
-        new ProjectRoleGateService(
-          access,
-          new PostgresProjectMembersQueryPort(),
-        ),
         uow,
         tasks,
         audit,
@@ -243,10 +238,6 @@ beforeAll(async () => {
               featureRead,
               new PostgresProjectCodePort(),
               new PostgresProjectMembersQueryPort(),
-              new ProjectRoleGateService(
-                access,
-                new PostgresProjectMembersQueryPort(),
-              ),
               uow,
               tasks,
               audit,
@@ -432,6 +423,8 @@ for (const feature of [true, false])
     });
     expect(task?.description).toContain("后续优化");
     expect(task?.description).toContain(f.record.code + " v1");
+    // 未填任务说明时，说明仍是服务端自动的来源块（口径 A 的退化情形）。
+    expect(task?.description?.startsWith("来源记录：")).toBe(true);
     const after = await snapshot(f);
     for (const table of [
       "change_record_versions",
@@ -525,6 +518,31 @@ it("rejects stale record/item versions, foreign item, non-member assignee and hi
     (await post(f, actor, { ...input, projectId: 99 } as LeftoverTaskRequest))
       .status,
   ).toBe(422);
+});
+it("prepends the authored task description ahead of the server source block (口径 A)", async () => {
+  const f = await published(),
+    input = await inputFor(f),
+    result = await convert(f, {
+      ...input,
+      description: "  按线上日志先补埋点  ",
+    });
+  const description = (await uow.run((tx) => tasks.find(tx, f, result.taskId)))!
+    .description;
+  expect(description.startsWith("按线上日志先补埋点")).toBe(true);
+  expect(description).toContain("来源记录：");
+  expect(description).toContain(f.record.code + " v1");
+  expect(description).toContain("后续优化");
+  expect(description).not.toContain("  按线上日志");
+});
+it("rejects an authored description that overflows the 50000 character column", async () => {
+  const f = await published(),
+    input = await inputFor(f);
+  await expect(
+    convert(f, { ...input, description: "x".repeat(50000) }),
+  ).rejects.toMatchObject({
+    status: 422,
+    code: "LEFTOVER_TASK_DESCRIPTION_TOO_LONG",
+  });
 });
 for (const effect of [
   "audit",

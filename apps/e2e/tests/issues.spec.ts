@@ -69,8 +69,8 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
       .click();
     const convert = page.getByRole("dialog", { name: "遗留问题转为新任务" });
     await expect(convert.getByText(leftover)).toBeVisible();
-    await convert.getByLabel("跟进任务标题").fill(followupTitle);
-    await pickCalmSelectOption(convert, "跟进任务负责人", runtime.user.name);
+    await convert.getByLabel("标题").fill(followupTitle);
+    await pickCalmSelectOption(convert, "负责人", runtime.user.name);
     await convert.getByRole("button", { name: "创建跟进任务" }).click();
     await expect(convert).toBeHidden();
 

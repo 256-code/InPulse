@@ -172,7 +172,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members/{userId}/remove",
     operationId: "removeProjectMember",
     summary:
-      "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（先由系统管理员转移/撤销）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
+      "移除项目成员；系统管理员或本项目任意活跃成员（ADR-039）可写，但组长成员行不得被移除（ADR-053：需先把其他成员设为组长完成转移，再由新组长移除，项目至少要保留一名成员）；可同时提交真实任务改派，每项可指定一位或多位接手成员，未改派任务保留原负责人但成员立即失去访问权与角色，同事务写审计与活动。",
     request: {
       path: "ProjectMemberPath",
       query: "none",
@@ -194,6 +194,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     // ADR-033/ADR-039：响应新增 role、LEADER 移除保护与重放角色复核，旧 Key 409。
     // 2026-09-22：role 枚举收窄（移除 PROJECT_ADMIN），重放安全字段变化，旧 Key 409。
     // 2026-09-24：请求体改派目标由 assigneeId 改为 assigneeIds，请求 Schema 与摘要变化，旧 Key 409。
+    // ADR-053：组长移除保护与重放复核语义不变，仅文案澄清「先转移」；契约版本不升。
     idempotencyContractVersion: "1.3.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
@@ -218,7 +219,7 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/members/{userId}/role",
     operationId: "setProjectMemberRole",
     summary:
-      "ADR-039 任命/撤销组长：仅系统管理员可设 MEMBER/LEADER（转移或撤销组长），目标必须为 ACTIVE 成员；本项目组长与普通成员一律 403，LEADER 唯一性由部分唯一索引保证，冲突 409。",
+      "ADR-053 任命/转移组长：系统管理员可把任意活跃成员设为 MEMBER/LEADER（把其他成员设为 LEADER 即完成转移，原组长自动降级），本项目组长可把其他活跃成员设为组长以转交身份（不能自设、不能撤销）；不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，项目必须始终保留一名组长）；普通成员 403，目标必须为 ACTIVE 成员，LEADER 唯一性由部分唯一索引保证，冲突 409。",
     request: {
       path: "ProjectMemberPath",
       query: "none",
@@ -238,7 +239,9 @@ export const projectMemberRoutes: readonly RouteDefinition[] = [
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
     // ADR-039：role 枚举收窄为 MEMBER/LEADER 且门禁改为仅系统管理员，旧 Key 409。
-    idempotencyContractVersion: "2.0.0",
+    // ADR-053：撤销组长（MEMBER）由允许改为 409 PROJECT_MEMBER_LEADER_REQUIRED，
+    // 且项目组长本人由 403 放行为可转交组长身份，旧 Key 409。
+    idempotencyContractVersion: "2.2.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: {

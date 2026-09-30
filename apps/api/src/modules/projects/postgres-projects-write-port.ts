@@ -4,6 +4,8 @@ import {
   ActiveUsersQueryPort,
   type AddProjectMemberInput,
   type CreateProjectRecordInput,
+  type DeletedProjectRecord,
+  type ExpiredProjectRecord,
   type ProjectChangeRecord,
   type ProjectCreatedRecord,
   type ProjectMemberAddedRecord,
@@ -11,6 +13,7 @@ import {
   type ProjectFirstTaskCompletionRecord,
   type ProjectMemberRecord,
   type ProjectLifecycleStatus,
+  type ProjectPurgeCounts,
   type ProjectRecord,
   ProjectsWritePort,
 } from "./projects-write.port.js";
@@ -69,6 +72,23 @@ interface ProjectChangeRow {
   readonly activeFeatureCount: number;
   readonly openTaskCount: number;
   readonly completedTaskCount: number;
+}
+
+interface DeletedProjectRow {
+  readonly rowVersion: number;
+  readonly deletedAt: Date;
+  readonly deletedById: number;
+  readonly deletedByName: string;
+}
+
+interface PurgeCountRow {
+  readonly modules: number;
+  readonly features: number;
+  readonly tasks: number;
+  readonly change_records: number;
+  readonly audit_logs: number;
+  readonly members: number;
+  readonly total: number;
 }
 
 /** 项目写适配器；只接收显式 TransactionContext，从不开启事务或使用全局客户端。 */
@@ -162,6 +182,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              row_version
         FROM app.projects
        WHERE id = ${input.projectId}
+         AND deleted_at IS NULL
        LIMIT 1
     `) as unknown as readonly ProjectSummaryRow[];
     const row = rows[0];
@@ -200,6 +221,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
              ${projectStatColumns(tx.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${input.projectId}
+         AND p.deleted_at IS NULL
        LIMIT 1
        ${lock ? tx.sql`FOR UPDATE` : tx.sql``}
     `) as unknown as readonly ProjectChangeRow[];
@@ -318,6 +340,214 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
    * undefined，避免每次任务完成都把项目版本推高一格、连带作废在途的项目编辑 If-Match。
    * 行锁在语句内的 before CTE 中获取，与项目写路径的 project 优先锁序一致。
    */
+  async softDeleteProject(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly expectedRowVersion: number;
+      readonly actorId: number;
+      readonly deletedAt: Date;
+    },
+  ): Promise<boolean> {
+    const rows = (await tx.sql`
+      UPDATE app.projects
+         SET deleted_at = ${input.deletedAt.toISOString()}::TIMESTAMPTZ,
+             deleted_by = ${input.actorId},
+             updated_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${input.projectId}
+         AND row_version = ${input.expectedRowVersion}
+         AND deleted_at IS NULL
+      RETURNING id
+    `) as unknown as readonly { readonly id: number }[];
+    return rows.length > 0;
+  }
+
+  /**
+   * ADR-051：行锁 + `deleted_at IS NOT NULL` 过滤，因此已删除项目的
+   * 成员关系读取与还原先后都在同一个锁上排队，不会双双看到已删除的行。
+   */
+  async findDeletedProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<DeletedProjectRecord | undefined> {
+    return this.readDeletedProjectForChange(tx, {
+      projectId: input.projectId,
+      retentionDays: null,
+    });
+  }
+
+  /**
+   * ADR-055：与 `findDeletedProjectForChange` 同一读取实现，额外要求
+   * `deleted_at` 已超过保留期；删除前的复核与行锁在同一条语句内完成，
+   * 并发还原或「还原后重新删除」都会让本方法返回 undefined。
+   */
+  async findExpiredDeletedProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number; readonly retentionDays: number },
+  ): Promise<DeletedProjectRecord | undefined> {
+    return this.readDeletedProjectForChange(tx, input);
+  }
+
+  /**
+   * ADR-055：候选列表（只读、不加锁）；保留期由 SQL 的 `now()` 计算，
+   * 与 `deleted_at` 的写入时钟无关，避免应用进程与数据库时钟偏移。
+   */
+  async listAutoPurgeCandidates(
+    tx: TransactionContext,
+    input: { readonly retentionDays: number; readonly limit: number },
+  ): Promise<readonly ExpiredProjectRecord[]> {
+    const rows = (await tx.sql`
+      SELECT p.id AS "projectId",
+             p.deleted_at AS "deletedAt"
+        FROM app.projects p
+       WHERE p.deleted_at IS NOT NULL
+         AND p.deleted_at <= now() - make_interval(days => ${input.retentionDays}::integer)
+       ORDER BY p.deleted_at ASC, p.id ASC
+       LIMIT ${input.limit}
+    `) as unknown as readonly {
+      readonly projectId: number;
+      readonly deletedAt: Date;
+    }[];
+    return rows.map((row) => ({
+      projectId: row.projectId,
+      // 连接层把 TIMESTAMPTZ 读成字符串，与仓库内其它端口一致地显式包装。
+      deletedAt: new Date(row.deletedAt).toISOString(),
+    }));
+  }
+
+  private async readDeletedProjectForChange(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      /** null 表示不断言保留期（还原路径）；整数为自动彻底删除的保留天数。 */
+      readonly retentionDays: number | null;
+    },
+  ): Promise<DeletedProjectRecord | undefined> {
+    const rows = (await tx.sql`
+      SELECT p.id,
+             p.code,
+             p.name,
+             p.deleted_at AS "deletedAt",
+             p.deleted_by AS "deletedById",
+             u.name AS "deletedByName",
+             p.row_version AS "rowVersion"
+        FROM app.projects p
+        JOIN app.users u ON u.id = p.deleted_by
+       WHERE p.id = ${input.projectId}
+         AND p.deleted_at IS NOT NULL
+         AND (
+               ${input.retentionDays}::integer IS NULL
+               OR p.deleted_at <= now() - make_interval(days => ${input.retentionDays}::integer)
+             )
+       LIMIT 1
+       FOR UPDATE OF p
+    `) as unknown as readonly (DeletedProjectRow & {
+      readonly id: number;
+      readonly code: string;
+      readonly name: string;
+    })[];
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : {
+          projectId: row.id,
+          code: row.code,
+          name: row.name,
+          // 连接层把 TIMESTAMPTZ 读成字符串，与仓库内其它端口一致地显式包装。
+          deletedAt: new Date(row.deletedAt).toISOString(),
+          deletedById: row.deletedById,
+          deletedByName: row.deletedByName,
+          rowVersion: row.rowVersion,
+        };
+  }
+
+  /**
+   * ADR-051：还原只清空软删除标记并递增 row_version；编码、成员关系、任务与审计链
+   * 在删除期间从未变动，因此不需要任何“恢复”写入。并发还原只有一个能命中
+   * `deleted_at IS NOT NULL`，另一个返回 undefined 由调用方映射 409。
+   */
+  async restoreProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectChangeRecord | undefined> {
+    const rows = (await tx.sql`
+      WITH updated AS (
+        UPDATE app.projects
+           SET deleted_at = NULL,
+               deleted_by = NULL,
+               updated_at = now(),
+               row_version = row_version + 1
+         WHERE id = ${input.projectId}
+           AND deleted_at IS NOT NULL
+         RETURNING id,
+                   code,
+                   name,
+                   description,
+                   status,
+                   first_task_completed_at,
+                   row_version,
+                   created_by,
+                   created_at,
+                   updated_at
+      )
+      SELECT u.id,
+             u.code,
+             u.name,
+             u.description,
+             u.status,
+             u.first_task_completed_at AS "firstTaskCompletedAt",
+             u.row_version AS "rowVersion",
+             u.created_by AS "createdBy",
+             u.created_at AS "createdAt",
+             u.updated_at AS "updatedAt",
+             (
+               SELECT COUNT(*)::integer
+                 FROM app.project_members m
+                WHERE m.project_id = u.id
+                  AND m.status = 'ACTIVE'
+             ) AS "memberCount",
+             ${projectStatColumns(tx.sql, "u")}
+        FROM updated u
+    `) as unknown as readonly ProjectChangeRow[];
+    const row = rows[0];
+    return row === undefined ? undefined : this.toChangeRecord(row);
+  }
+
+  /**
+   * ADR-051：`app_runtime` 对业务表没有 DELETE 权限，物理删除只能经
+   * `app.purge_project` 这个 SECURITY DEFINER 窄口完成；函数内部按外键顺序
+   * 删除全部下级数据与项目自己的审计链，并由数据库再次校验目标确已软删除。
+   */
+  async purgeProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectPurgeCounts> {
+    const rows = (await tx.sql`
+      SELECT modules,
+             features,
+             tasks,
+             change_records,
+             audit_logs,
+             members,
+             total
+        FROM app.purge_project(${input.projectId})
+    `) as unknown as readonly PurgeCountRow[];
+    const row = rows[0];
+    if (row === undefined) {
+      throw new Error("app.purge_project returned no counts");
+    }
+    return {
+      modules: row.modules,
+      features: row.features,
+      tasks: row.tasks,
+      changeRecords: row.change_records,
+      auditLogs: row.audit_logs,
+      members: row.members,
+      total: row.total,
+    };
+  }
+
   async recordFirstTaskCompletion(
     tx: TransactionContext,
     input: { readonly projectId: number; readonly completedAt: Date },
@@ -382,8 +612,8 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     };
   }
 
-  /** ADR-043：进入维护中要求项目下任务全部收尾，统计口径同模块归档。 */
-  async countUnarchivedTasks(
+  /** ADR-043：进入维护中要求项目下任务全部收尾；ADR-054 起归档链路已下线，口径只是「未完成且未取消」。 */
+  async countOpenTasks(
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<number> {
@@ -428,9 +658,10 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     tx: TransactionContext,
     input: AddProjectMemberInput,
   ): Promise<ProjectMemberRecord> {
+    const role = input.role ?? "MEMBER";
     const inserted = (await tx.sql`
-      INSERT INTO app.project_members (project_id, user_id)
-      VALUES (${input.projectId}, ${input.userId})
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${input.projectId}, ${input.userId}, ${role})
       RETURNING id
     `) as unknown as readonly { id: number }[];
     if (inserted.length === 0) {

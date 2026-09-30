@@ -52,8 +52,8 @@ async function initializeProject(tx: TransactionContext): Promise<number> {
   `;
   if (!project) throw new Error("Project fixture insert returned no row");
   await tx.sql`
-    INSERT INTO app.project_members (project_id, user_id)
-    VALUES (${project.id}, ${creatorId}), (${project.id}, ${memberId})
+    INSERT INTO app.project_members (project_id, user_id, role)
+    VALUES (${project.id}, ${creatorId}, 'LEADER'), (${project.id}, ${memberId}, 'MEMBER')
   `;
   return project.id;
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Space, Spin } from "antd";
+import { Alert, Button, Space } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
 import { featureLifecycleLabel } from "@features/common/resource-lifecycle";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export function SimilarFeatures({
   projectId,
@@ -32,7 +33,8 @@ export function SimilarFeatures({
   });
   if (!enabled)
     return <p>输入 2–200 字名称后提示当前项目的关键词候选；仍可继续创建。</p>;
-  if (query.isPending) return <Spin description="正在查询相似候选" />;
+  if (query.isPending)
+    return <CalmSkeleton variant="lines" rows={2} label="正在查询相似候选" />;
   if (query.isError)
     return (
       <Alert

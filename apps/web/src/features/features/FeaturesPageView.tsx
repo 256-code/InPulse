@@ -2,7 +2,7 @@ import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel"
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
 import React, { lazy, Suspense, useRef, useState } from "react";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
@@ -37,6 +37,7 @@ import {
   useFeatures,
   type FeatureChange,
 } from "./feature-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /**
  * 聚合组详情里的成员任务就地打开任务详情（与任务中心同一实现：状态推进、编辑、
@@ -81,13 +82,11 @@ export function FeaturesPageView({
   projectId,
   moduleId,
   featureId,
-  isAdmin,
   client,
 }: {
   projectId: number;
   moduleId: number;
   featureId?: number | undefined;
-  isAdmin: boolean;
   client?: InpulseApiClient | undefined;
 }) {
   const { query, mutation } = useFeatures(
@@ -384,10 +383,7 @@ export function FeaturesPageView({
               <Alert type="success" showIcon title="模块操作成功" />
             )}
             {query.isPending ? (
-              <div className="calm-state">
-                <Spin />
-                <span>正在加载功能</span>
-              </div>
+              <CalmSkeleton variant="list" rows={4} label="正在加载功能" />
             ) : query.isError ? (
               <Alert
                 type="error"
@@ -577,10 +573,7 @@ export function FeaturesPageView({
             )}
           </>
         ) : query.isPending ? (
-          <div className="calm-state">
-            <Spin />
-            <span>正在加载功能详情</span>
-          </div>
+          <CalmSkeleton variant="lines" rows={5} label="正在加载功能详情" />
         ) : query.isError ? (
           <Alert
             type="error"
@@ -675,7 +668,6 @@ export function FeaturesPageView({
                       featureId={activeItem.id}
                       writable
                       client={client}
-                      isAdmin={isAdmin}
                       onOpenTask={setTaskTarget}
                     />
                   </section>
@@ -931,7 +923,6 @@ export function FeaturesPageView({
           <TaskDetailOverlay
             target={taskTarget}
             client={client}
-            isAdmin={isAdmin}
             onClose={() => setTaskTarget(null)}
             onOpenTask={setTaskTarget}
           />

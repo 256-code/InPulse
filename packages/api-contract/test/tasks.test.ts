@@ -12,8 +12,6 @@ describe("F-14 task input", () => {
       "updateTask",
       "getTaskStatusHistory",
       "transitionTask",
-      "archiveTask",
-      "restoreTask",
     ]);
     for (const route of taskRoutes) {
       if (route.method === "GET") expect(route.idempotencyPolicy).toBe("none");

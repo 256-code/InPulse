@@ -72,6 +72,11 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0023_project_three_state.sql",
       "0024_module_archive_removal.sql",
       "0025_feature_archive_removal.sql",
+      "0026_record_draft_delete.sql",
+      "0029_project_leader_invariant.sql",
+      "0030_project_soft_delete.sql",
+      "0031_project_purge.sql",
+      "0032_task_archive_removal.sql",
     ]);
   });
 
@@ -95,7 +100,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
         VALUES (${invalidCode + "E"}, 'Empty project', ${userId}) RETURNING id
       `;
       if (!project) throw new Error("Project insert returned no row");
-      await tx`INSERT INTO app.project_members (project_id, user_id) VALUES (${project.id}, ${userId})`;
+      await tx`INSERT INTO app.project_members (project_id, user_id, role) VALUES (${project.id}, ${userId}, 'LEADER')`;
       return project.id;
     });
     const [emptyCounts] = await runtime<Array<{ modules: number }>>`
@@ -115,6 +120,91 @@ describe("PostgreSQL schema, invariants, and roles", () => {
             AND kind = 'UNCLASSIFIED') AS modules
     `;
     expect(counts).toEqual({ members: 1, modules: 1 });
+  });
+
+  test("project with active members keeps exactly one leader", async () => {
+    const userId = await createUser(runtime);
+    const fixture = await createProject(runtime, userId);
+    const secondUserId = await createUser(runtime);
+
+    // 新增成员默认是普通成员：创建者仍是唯一组长，提交不受影响。
+    await runtime.begin(async (transaction) => {
+      await transaction`
+        INSERT INTO app.project_members (project_id, user_id)
+        VALUES (${fixture.projectId}, ${secondUserId})
+      `;
+    });
+
+    // 把唯一组长降级为普通成员 → 延迟约束在提交时报 23514。
+    await expectPostgresError(
+      runtime.begin(async (transaction) => {
+        await transaction`
+          UPDATE app.project_members
+             SET role = 'MEMBER'
+           WHERE project_id = ${fixture.projectId}
+             AND user_id = ${userId}
+        `;
+      }),
+      "23514",
+    );
+
+    // 移除唯一组长、只留下普通成员同样违反不变量。
+    await expectPostgresError(
+      runtime.begin(async (transaction) => {
+        await transaction`
+          UPDATE app.project_members
+             SET status = 'REMOVED', removed_at = now(), role = 'MEMBER'
+           WHERE project_id = ${fixture.projectId}
+             AND user_id = ${userId}
+        `;
+      }),
+      "23514",
+    );
+
+    // 先转移组长再移除原组长是合法路径（与服务端 setRole 的降级→提升顺序一致）。
+    await runtime.begin(async (transaction) => {
+      await transaction`
+        UPDATE app.project_members SET role = 'MEMBER'
+         WHERE project_id = ${fixture.projectId} AND user_id = ${userId}
+      `;
+      await transaction`
+        UPDATE app.project_members SET role = 'LEADER'
+         WHERE project_id = ${fixture.projectId} AND user_id = ${secondUserId}
+      `;
+    });
+
+    // 零活跃成员的项目保持合法：不变量只约束「有成员时必须有且只有一名组长」。
+    await runtime.begin(async (transaction) => {
+      await transaction`
+        UPDATE app.project_members
+           SET status = 'REMOVED', removed_at = now(), role = 'MEMBER'
+         WHERE project_id = ${fixture.projectId}
+      `;
+    });
+    const [remaining] = await runtime<Array<{ active: number }>>`
+      SELECT count(*)::integer AS active
+        FROM app.project_members
+       WHERE project_id = ${fixture.projectId}
+         AND status = 'ACTIVE'
+    `;
+    expect(remaining).toEqual({ active: 0 });
+
+    // 全员已移除的项目重新加人时必须直接指定组长，否则提交违反不变量。
+    await expectPostgresError(
+      runtime.begin(async (transaction) => {
+        await transaction`
+          INSERT INTO app.project_members (project_id, user_id)
+          VALUES (${fixture.projectId}, ${secondUserId})
+        `;
+      }),
+      "23514",
+    );
+    await runtime.begin(async (transaction) => {
+      await transaction`
+        INSERT INTO app.project_members (project_id, user_id, role)
+        VALUES (${fixture.projectId}, ${secondUserId}, 'LEADER')
+      `;
+    });
   });
 
   test("composite foreign keys reject cross-project scope and links", async () => {

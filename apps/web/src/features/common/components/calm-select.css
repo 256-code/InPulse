@@ -314,3 +314,70 @@
   margin-left: auto;
   color: #37352f;
 }
+
+/* ===== 弹层动效：对齐设计参考（shadcn / Base UI 菜单）的「淡入 + 缩放 + 位移」 =====
+ * 仅对启用 animated 的 CalmSelect 生效（弹层根节点带 .calm-select-popup-animated）。
+ * 只在弹层「正在播放」的 active 状态接管 animation-*；prepare / start 等非播放状态
+ * 一律保留 antd 的 scale(1)——否则 rc-align 会在缩小的尺寸上完成首次测量与对齐，
+ * 表现为「按下的瞬间错位、播放结束后再跳正」。
+ * antd 6 的 Select 弹层固定使用 ant-slide-up-* 类名，上下方向由
+ * .ant-select-dropdown-placement-* 类区分（antd 自身也按 placement 切换关键帧）。
+ * 进入：自触发器一侧位移 8px、从 95% 放大到 100% 并淡入；离开：淡出并轻微收缩。
+ * 注意：opacity / transform 不能用 !important——它们由 CSS 动画驱动，
+ * !important 会压过关键帧；只对 animation-name 使用 !important。 */
+@keyframes calm-select-popup-in-from-top {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes calm-select-popup-in-from-bottom {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes calm-select-popup-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(0);
+  }
+}
+
+/* 播放中的进入动画：覆盖 antd 按 placement 注入的 antSlideUpIn / antSlideDownIn。
+ * antd 规则同为 4 层类名，这里用 !important 保证胜出。 */
+.ant-select-dropdown.calm-select-popup-animated.ant-slide-up-enter.ant-slide-up-enter-active,
+.ant-select-dropdown.calm-select-popup-animated.ant-slide-up-appear.ant-slide-up-appear-active {
+  transform-origin: center top;
+  animation-name: calm-select-popup-in-from-top !important;
+  animation-duration: 150ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+.ant-select-dropdown.calm-select-popup-animated[class*="placement-top"].ant-slide-up-enter.ant-slide-up-enter-active,
+.ant-select-dropdown.calm-select-popup-animated[class*="placement-top"].ant-slide-up-appear.ant-slide-up-appear-active {
+  transform-origin: center bottom;
+  animation-name: calm-select-popup-in-from-bottom !important;
+}
+
+/* 离开：淡出 + 轻微收缩（略快、更收敛）。 */
+.ant-select-dropdown.calm-select-popup-animated.ant-slide-up-leave {
+  animation-duration: 130ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-fill-mode: both;
+}
+.ant-select-dropdown.calm-select-popup-animated.ant-slide-up-leave.ant-slide-up-leave-active {
+  animation-name: calm-select-popup-out !important;
+}

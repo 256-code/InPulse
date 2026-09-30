@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+
+import { RECORD_SUMMARY_ITEM_MAX } from "@inpulse/api-contract";
 import type { TransactionContext } from "../../database/transaction-context.js";
 import type { TaskScopeType } from "../tasks/index.js";
 
@@ -151,6 +153,98 @@ interface TaskGroupRecordRowRaw extends Omit<
 > {
   readonly publishedAt: string;
 }
+/** F-33 迭代总结记录入参；projectIds 必须来自服务端 AuthorizedProjectScope，端口不校验授权。 */
+export interface RecordSummaryReadInput {
+  readonly projectIds: readonly number[];
+  /** 起始自然日（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly fromDate: string;
+  /** 结束自然日（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly toDate: string;
+  /** 收窄到单个项目；越权项目由授权范围收敛，端口不额外校验。 */
+  readonly projectId?: number;
+  /** 收窄到单个作者。 */
+  readonly authorId?: number;
+  readonly limit: number;
+}
+
+/**
+ * F-33 正文要点行：一条 PUBLISHED 记录。changeSolution / resultVerification 取自
+ * current_payload，两者都是记录正文的原文，服务端不做措辞改写。
+ */
+export interface RecordSummaryRecordRow {
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number | null;
+  readonly scopeType: TaskScopeType;
+  readonly title: string;
+  readonly changeSolution: string;
+  readonly resultVerification: string;
+  readonly authorId: number;
+  readonly publishedAt: Date;
+  readonly taskId: number | null;
+}
+
+export interface RecordSummaryRecordPage {
+  readonly items: readonly RecordSummaryRecordRow[];
+  /** 与筛选同口径的总数，不受 limit 截断影响。 */
+  readonly total: number;
+  readonly hasMore: boolean;
+}
+
+/** F-33 遗留问题入参；口径为来源记录的 published_at 落在 [from, to) 内。 */
+export interface RecordSummaryLeftoverReadInput {
+  readonly projectIds: readonly number[];
+  /** 起始自然日（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly fromDate: string;
+  /** 结束自然日（含），Asia/Shanghai 日历日，格式 YYYY-MM-DD。 */
+  readonly toDate: string;
+  readonly projectId?: number;
+  readonly authorId?: number;
+  readonly limit: number;
+}
+
+/**
+ * F-33 遗留问题行：内容取最新版本快照（与 R-6 同一口径）；status 为遗留项当前
+ * 处置状态，CONVERTED / RESOLVED 计入已闭环。
+ */
+export interface RecordSummaryLeftoverRow {
+  readonly leftoverItemId: number;
+  readonly recordId: number;
+  readonly recordCode: string;
+  readonly recordTitle: string;
+  readonly projectId: number;
+  readonly authorId: number;
+  readonly content: string;
+  readonly status: "ACTIVE" | "CONVERTED" | "RESOLVED";
+  readonly followupTaskId: number | null;
+  readonly publishedAt: Date;
+}
+
+export interface RecordSummaryLeftoverPage {
+  readonly items: readonly RecordSummaryLeftoverRow[];
+  /** 与筛选同口径的遗留项总数。 */
+  readonly total: number;
+  /** 其中已闭环（CONVERTED / RESOLVED）的数量。 */
+  readonly closedTotal: number;
+  readonly hasMore: boolean;
+}
+
+interface RecordSummaryRecordRowRaw extends Omit<
+  RecordSummaryRecordRow,
+  "publishedAt"
+> {
+  readonly publishedAt: string;
+}
+
+interface RecordSummaryLeftoverRowRaw extends Omit<
+  RecordSummaryLeftoverRow,
+  "publishedAt"
+> {
+  readonly publishedAt: string;
+}
+
 /**
  * 记录域（B）的项目维度只读聚合端口，服务 F-29 项目概览与 R-1 / R-3 的记录维度。
  *
@@ -242,6 +336,28 @@ export abstract class ChangeRecordReadPort {
     tx: TransactionContext,
     input: TaskGroupRecordReadInput,
   ): Promise<TaskGroupRecordPage>;
+
+  /**
+   * F-33 迭代总结记录：范围内（published_at 落在 [from, to)）status = PUBLISHED 的
+   * 记录，按现时可见性取数——不作废、不含草稿。固定 published_at DESC, id DESC，
+   * 便于正文按时间倒序阅读；total 与筛选同口径，不受 limit 截断。
+   * 只读、不取锁；projectIds 为空时短路返回空页，不发出 SQL。
+   */
+  abstract summaryRecords(
+    tx: TransactionContext,
+    input: RecordSummaryReadInput,
+  ): Promise<RecordSummaryRecordPage>;
+
+  /**
+   * F-33 迭代总结遗留问题：来源记录在范围内且仍可见（PUBLISHED / VOID）的遗留项，
+   * 内容取最新版本快照；closedTotal 为其中 CONVERTED / RESOLVED 的数量，用于总结
+   * 正文的「已闭环 X 条」口径。固定 leftoverItemId DESC；只读、不取锁。
+   * projectIds 为空时短路返回空页，不发出 SQL。
+   */
+  abstract summaryLeftovers(
+    tx: TransactionContext,
+    input: RecordSummaryLeftoverReadInput,
+  ): Promise<RecordSummaryLeftoverPage>;
 }
 
 function assertLimit(limit: number): void {
@@ -255,6 +371,26 @@ function assertLimit(limit: number): void {
     throw new ChangeRecordReadInputError(
       "invalid-limit",
       `limit exceeds CHANGE_RECORD_READ_LIMIT_MAX (${CHANGE_RECORD_READ_LIMIT_MAX})`,
+    );
+  }
+}
+
+/**
+ * F-33 总结取数专用 limit 校验：总结要一次取完范围内的事实（上限由契约
+ * `RECORD_SUMMARY_ITEM_MAX` 定义），不适用分页接口的
+ * `CHANGE_RECORD_READ_LIMIT_MAX`（100）口径。
+ */
+function assertSummaryLimit(limit: number): void {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new ChangeRecordReadInputError(
+      "invalid-limit",
+      "record summary limit must be a positive integer",
+    );
+  }
+  if (limit > RECORD_SUMMARY_ITEM_MAX) {
+    throw new ChangeRecordReadInputError(
+      "invalid-limit",
+      `limit exceeds RECORD_SUMMARY_ITEM_MAX (${RECORD_SUMMARY_ITEM_MAX})`,
     );
   }
 }
@@ -554,6 +690,136 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
       items,
       hasMore,
       nextRecordId: hasMore && last !== null ? last.recordId : null,
+    };
+  }
+
+  async summaryRecords(
+    tx: TransactionContext,
+    input: RecordSummaryReadInput,
+  ): Promise<RecordSummaryRecordPage> {
+    assertSummaryLimit(input.limit);
+    if (input.projectIds.length === 0) {
+      return { items: [], total: 0, hasMore: false };
+    }
+    const projects = [...input.projectIds];
+    const projectId = input.projectId ?? null;
+    const authorId = input.authorId ?? null;
+    const rows = await tx.sql<RecordSummaryRecordRowRaw[]>`
+      SELECT cr.id AS "recordId",
+             cr.code AS "recordCode",
+             cr.project_id AS "projectId",
+             cr.module_id AS "moduleId",
+             cr.feature_id AS "featureId",
+             cr.scope_type AS "scopeType",
+             cr.title AS title,
+             COALESCE(cr.current_payload->>'changeSolution', '') AS "changeSolution",
+             COALESCE(cr.current_payload->>'resultVerification', '') AS "resultVerification",
+             cr.author_id AS "authorId",
+             cr.published_at AS "publishedAt",
+             cr.task_id AS "taskId"
+        FROM app.change_records cr
+       WHERE cr.project_id = ANY(${projects}::integer[])
+         AND cr.status = 'PUBLISHED'
+         AND cr.published_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND cr.published_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR cr.project_id = ${projectId})
+         AND (${authorId}::integer IS NULL OR cr.author_id = ${authorId})
+       ORDER BY cr.published_at DESC, cr.id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const [countRow] = await tx.sql<{ total: number }[]>`
+      SELECT COUNT(*)::integer AS total
+        FROM app.change_records cr
+       WHERE cr.project_id = ANY(${projects}::integer[])
+         AND cr.status = 'PUBLISHED'
+         AND cr.published_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND cr.published_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR cr.project_id = ${projectId})
+         AND (${authorId}::integer IS NULL OR cr.author_id = ${authorId})
+    `;
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    return {
+      items: visible.map((row) => ({
+        ...row,
+        publishedAt: new Date(row.publishedAt),
+      })),
+      total: countRow?.total ?? 0,
+      hasMore,
+    };
+  }
+
+  async summaryLeftovers(
+    tx: TransactionContext,
+    input: RecordSummaryLeftoverReadInput,
+  ): Promise<RecordSummaryLeftoverPage> {
+    assertSummaryLimit(input.limit);
+    if (input.projectIds.length === 0) {
+      return { items: [], total: 0, closedTotal: 0, hasMore: false };
+    }
+    const projects = [...input.projectIds];
+    const projectId = input.projectId ?? null;
+    const authorId = input.authorId ?? null;
+    const rows = await tx.sql<RecordSummaryLeftoverRowRaw[]>`
+      SELECT li.id AS "leftoverItemId",
+             li.record_id AS "recordId",
+             cr.code AS "recordCode",
+             cr.title AS "recordTitle",
+             li.project_id AS "projectId",
+             cr.author_id AS "authorId",
+             vl.content_snapshot AS content,
+             li.status AS status,
+             ltl.task_id AS "followupTaskId",
+             cr.published_at AS "publishedAt"
+        FROM app.change_record_leftover_items li
+        JOIN app.change_records cr
+          ON cr.id = li.record_id
+         AND cr.project_id = li.project_id
+         AND cr.status IN ('PUBLISHED', 'VOID')
+        JOIN LATERAL (
+          SELECT v.content_snapshot
+            FROM app.change_record_version_leftovers v
+           WHERE v.leftover_item_id = li.id
+             AND v.record_id = li.record_id
+             AND v.project_id = li.project_id
+           ORDER BY v.version_no DESC
+           LIMIT 1
+        ) vl ON TRUE
+        LEFT JOIN app.leftover_task_links ltl
+          ON ltl.leftover_item_id = li.id
+         AND ltl.project_id = li.project_id
+       WHERE li.project_id = ANY(${projects}::integer[])
+         AND cr.published_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND cr.published_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR li.project_id = ${projectId})
+         AND (${authorId}::integer IS NULL OR cr.author_id = ${authorId})
+       ORDER BY li.id DESC
+       LIMIT ${input.limit + 1}
+    `;
+    const [countRow] = await tx.sql<{ total: number; closedTotal: number }[]>`
+      SELECT COUNT(*)::integer AS total,
+             COUNT(*) FILTER (WHERE li.status IN ('CONVERTED', 'RESOLVED'))::integer AS "closedTotal"
+        FROM app.change_record_leftover_items li
+        JOIN app.change_records cr
+          ON cr.id = li.record_id
+         AND cr.project_id = li.project_id
+         AND cr.status IN ('PUBLISHED', 'VOID')
+       WHERE li.project_id = ANY(${projects}::integer[])
+         AND cr.published_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+         AND cr.published_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+         AND (${projectId}::integer IS NULL OR li.project_id = ${projectId})
+         AND (${authorId}::integer IS NULL OR cr.author_id = ${authorId})
+    `;
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    return {
+      items: visible.map((row) => ({
+        ...row,
+        publishedAt: new Date(row.publishedAt),
+      })),
+      total: countRow?.total ?? 0,
+      closedTotal: countRow?.closedTotal ?? 0,
+      hasMore,
     };
   }
 }

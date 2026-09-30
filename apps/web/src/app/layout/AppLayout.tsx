@@ -149,6 +149,9 @@ export interface AppLayoutProps {
   readonly projectClient?: InpulseApiClient;
 }
 
+/** 侧栏收起 / 展开的宽度过渡时长，与 design-system.css 中 .sidebar 的 transition 一致。 */
+const NAV_COLLAPSE_MS = 240;
+
 export const AppLayout: React.FC<AppLayoutProps> = ({
   notificationClient,
   projectClient,
@@ -158,6 +161,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // 桌面端把左侧导航整体收起（≤700px 走抽屉与汉堡开关，该状态不参与）。
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  // 收起 / 展开过渡期间开启裁切：整栏宽度的内容在被宽度动画压缩时不能画到内容区上。
+  const [navAnimating, setNavAnimating] = useState(false);
+  const navAnimationTimerRef = useRef<number | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const accountRootRef = useRef<HTMLDivElement>(null);
   const { status, user, logout } = useAuth();
@@ -212,6 +220,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (navAnimationTimerRef.current !== null) {
+        window.clearTimeout(navAnimationTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!accountOpen) {
       return;
@@ -239,6 +256,19 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     if (path !== location.pathname) {
       navigate(path);
     }
+  };
+
+  // 收起与展开都先打开裁切类，过渡结束后再撤掉；收起态本身也保留裁切，无需等定时器。
+  const handleToggleNav = (collapsed: boolean) => {
+    setNavCollapsed(collapsed);
+    setNavAnimating(true);
+    if (navAnimationTimerRef.current !== null) {
+      window.clearTimeout(navAnimationTimerRef.current);
+    }
+    navAnimationTimerRef.current = window.setTimeout(() => {
+      navAnimationTimerRef.current = null;
+      setNavAnimating(false);
+    }, NAV_COLLAPSE_MS);
   };
 
   const handleOpenTarget = (targetPath: string) => {
@@ -299,7 +329,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   return (
     <>
-      <div className="app-shell">
+      <div
+        className={
+          "app-shell" +
+          (navCollapsed ? " nav-collapsed" : "") +
+          (navAnimating ? " nav-animating" : "")
+        }
+      >
         {/* 顶栏已移除：窄屏导航开关改为左上角悬浮按钮（仅 ≤700px 显示）。 */}
         <button
           type="button"
@@ -310,15 +346,45 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         >
           <InpulseIcon name="menu" size={20} />
         </button>
-        <aside className={`sidebar${mobileNavOpen ? " sidebar-open" : ""}`}>
+        {navCollapsed ? (
+          // 桌面端收起后沿用窄屏开关的位置与外观，只负责把导航放回来（仅 >700px 显示）。
+          <button
+            type="button"
+            className="icon-button sidebar-expand-button"
+            aria-label="展开导航"
+            title="展开导航"
+            aria-controls="app-sidebar"
+            aria-expanded={false}
+            onClick={() => handleToggleNav(false)}
+          >
+            <InpulseIcon name="menu" size={20} />
+          </button>
+        ) : null}
+        <aside
+          id="app-sidebar"
+          className={`sidebar${mobileNavOpen ? " sidebar-open" : ""}`}
+        >
           <div className="brand brand-joint">
             <div className="joint-logo-frame">
               <img
                 src="/inpulse-joint-logo.png"
                 alt="Libiao Robotics | InPulse"
+                width={480}
+                height={174}
                 className="joint-logo"
               />
             </div>
+            <button
+              type="button"
+              className="icon-button sidebar-collapse-button"
+              aria-label="收起导航"
+              title="收起导航"
+              aria-controls="app-sidebar"
+              aria-expanded
+              onClick={() => handleToggleNav(true)}
+            >
+              <InpulseIcon name="chevronLeft" size={18} />
+            </button>
           </div>
           <nav className="nav-group" aria-label="工作区导航">
             <p>工作台</p>

@@ -139,6 +139,7 @@ export const permissionMatrix = [
       "getRecordDraft",
       "createIndependentRecordDraft",
       "updateIndependentRecordDraft",
+      "deleteRecordDraft",
       "listTasks",
       "getTask",
       "listTaskAssignees",
@@ -440,6 +441,17 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "getRecordSummary",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
     operationId: "listMyRecordDrafts",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
@@ -567,7 +579,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-039：本项目任意活跃成员（实时成员关系），CSRF、Idempotency-Key 与 If-Match 必填；进入维护中要求项目下任务全部收尾，仍有未完成且未归档的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
+          "ADR-039：本项目任意活跃成员（实时成员关系），CSRF、Idempotency-Key 与 If-Match 必填；进入维护中要求项目下任务全部收尾，仍有未完成且未取消的任务时 409 PROJECT_MAINTENANCE_TASKS_OPEN；未开始与维护中互改 409 PROJECT_STATUS_LEVEL_SKIP，已有完成任务回退未开始 409 PROJECT_STATUS_NOT_STARTED_LOCKED",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -597,8 +609,10 @@ export const permissionMatrix = [
         allowedWhen:
           "ADR-039：本项目任意活跃成员（实时成员关系）" +
           (operationId === "removeProjectMember"
-            ? "；目标为本项目 LEADER 时 409，须先由系统管理员转移/撤销"
-            : ""),
+            ? "；目标为本项目 LEADER 时 409，须先把其他成员设为组长完成转移（ADR-053）"
+            : operationId === "addProjectMember"
+              ? "；新成员默认 role='MEMBER'，项目无活跃组长时首位加入者直接成为 LEADER（ADR-053）"
+              : ""),
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -607,7 +621,7 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权与角色；目标为本项目 LEADER 时 409",
+          "完整系统管理员 Session；移除前未完成任务可按需改派，不改派保留历史负责人但成员失去项目访问权与角色；目标为本项目 LEADER 时 409（ADR-053：组长只能先转移再移除）",
         deniedWith: 403,
       },
     },
@@ -619,7 +633,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-039：仅系统管理员可任命/撤销组长；本项目组长与普通成员一律 403 PROJECT_MEMBER_ROLE_FORBIDDEN，非成员 404",
+          "ADR-053：系统管理员或本项目组长可转移组长——本项目组长只能把其他活跃成员设为 LEADER（不能自设、不能撤销组长）；普通成员与已降级的前组长一律 403 PROJECT_MEMBER_ROLE_FORBIDDEN，非成员 404",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -628,26 +642,19 @@ export const permissionMatrix = [
       系统管理员: {
         kind: "conditional",
         allowedWhen:
-          "完整系统管理员 Session；可设 MEMBER/LEADER（含转移组长），目标必须 ACTIVE 成员，LEADER 唯一性冲突 409 PROJECT_MEMBER_LEADER_CONFLICT",
+          "完整系统管理员 Session；把其他成员设为 LEADER 即完成转移（原组长自动降级），不允许直接撤销组长（409 PROJECT_MEMBER_LEADER_REQUIRED，ADR-053 项目必须始终保留一名组长）；目标必须 ACTIVE 成员，LEADER 唯一性冲突 409 PROJECT_MEMBER_LEADER_CONFLICT",
         deniedWith: 403,
       },
     },
   },
-  ...(
-    [
-      "archiveTask",
-      "restoreTask",
-      "archiveModuleTask",
-      "restoreModuleTask",
-    ] as const
-  ).map((operationId): PermissionMatrixEntry => ({
-    operationId,
+  {
+    operationId: "deleteProject",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-033/ADR-039：本项目任意活跃成员（实时成员关系），父级 ACTIVE、原因/If-Match/CSRF 与幂等必填",
+          "ADR-049：只有本项目组长（实时成员关系中的 ACTIVE LEADER）可以删除项目；本项目普通成员一律 403 PROJECT_DELETE_FORBIDDEN。CSRF、Idempotency-Key 与 If-Match 必填，版本不符 409 PROJECT_VERSION_CONFLICT。删除为软删除：项目退出全部可见范围，业务历史、成员关系与审计链保留，项目编码不复用",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -655,11 +662,63 @@ export const permissionMatrix = [
       停用用户: { kind: "deny", status: 401 },
       系统管理员: {
         kind: "conditional",
-        allowedWhen: "完整管理员 Session；原因、If-Match、CSRF 与幂等必填",
+        allowedWhen:
+          "完整管理员 Session；CSRF、Idempotency-Key 与 If-Match 必填，删除语义与组长一致（软删除、编码不复用）。目标为已删除项目时 404，不得重复删除",
         deniedWith: 403,
       },
     },
-  })),
+  },
+  {
+    operationId: "listProjectDeletions",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "restoreProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-051：只有系统管理员与本项目组长（实时成员关系中的 ACTIVE LEADER）可以还原已删除项目；本项目普通成员一律 403 PROJECT_RESTORE_FORBIDDEN。目标必须处于已删除状态，未删除 409 PROJECT_NOT_DELETED。CSRF 与 Idempotency-Key 必填",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整管理员 Session；CSRF 与 Idempotency-Key 必填，还原语义与组长一致（清空 deleted_at/deleted_by 并递增 row_version，审计 project.restore）。目标未被删除时 409 PROJECT_NOT_DELETED，不存在时 404",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
+    operationId: "purgeProject",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "deny",
+        status: 403,
+      },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-051：只有系统管理员可以彻底删除项目（包括项目组长在内的其他身份一律 403 PROJECT_PURGE_FORBIDDEN，因为删除台账对全体登录用户可读，存在性不再保密）；目标必须已软删除，未删除 409 PROJECT_NOT_DELETED，不存在 404；物理删除不可撤销，仅保留 SYSTEM 审计链上的一条 project.purge。CSRF 与 Idempotency-Key 必填",
+        deniedWith: 403,
+      },
+    },
+  },
 ] satisfies readonly PermissionMatrixEntry[];
 
 export function outcomeAllows(outcome: MatrixOutcome): boolean {

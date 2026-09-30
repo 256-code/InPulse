@@ -6,7 +6,6 @@ import {
   Card,
   Empty,
   Space,
-  Spin,
   Tag,
   Typography,
 } from "antd";
@@ -18,19 +17,36 @@ import {
   useNotificationsInfiniteQuery,
   useNotificationUnreadCount,
 } from "./notification-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const { Title, Paragraph, Text } = Typography;
 
+/**
+ * 服务端存在两种命名风格：项目与记录生命周期用 UPPER_SNAKE，任务与记录用
+ * dot.case；两种都收录。未收录的取值按原样显示，便于在界面上直接发现新的
+ * 后端事件；UPPER_SNAKE 的历史项只用于展示存库的早期演示通知。
+ */
 const notificationTypeLabels: Readonly<Record<string, string>> = {
   PROJECT_CREATED: "项目创建",
   PROJECT_JOINED: "加入项目",
+  "project.status.change": "变更项目状态",
+  "task.assigned": "任务指派",
   TASK_ASSIGNED: "任务指派",
+  "task.complete": "任务完成",
   TASK_COMPLETED: "任务完成",
+  "task.reopen": "重新打开任务",
+  "task.merge": "合并任务",
+  "task.unmerge": "解除合并",
+  "record.publish": "发布记录",
+  "record.version.create": "修订记录",
+  "record.leftover.add": "追加遗留问题",
+  "leftover.convert": "遗留问题转任务",
+  CHANGE_RECORD_VOIDED: "记录作废",
+  CHANGE_RECORD_RESTORED: "记录恢复",
+  // ADR-043：项目归档已下线，以下三条只用于展示历史通知。
   PROJECT_ARCHIVE_REQUESTED: "归档申请",
   PROJECT_ARCHIVE_APPROVED: "归档通过",
   PROJECT_ARCHIVE_REJECTED: "归档驳回",
-  CHANGE_RECORD_VOIDED: "记录作废",
-  CHANGE_RECORD_RESTORED: "记录恢复",
 };
 
 function formatNotificationTime(value: string): string {
@@ -99,11 +115,7 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
 
   let content: React.ReactNode;
   if (listQuery.isPending) {
-    content = (
-      <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
-        <Spin size="large" description="正在加载通知..." />
-      </div>
-    );
+    content = <CalmSkeleton variant="list" rows={4} label="正在加载通知..." />;
   } else if (listQuery.isError) {
     content = (
       <Alert

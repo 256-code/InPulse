@@ -21,12 +21,27 @@ it("requires stable item, current record and item versions and explicit impact c
     { ...input, recordVersion: 0 },
     { ...input, expectedImpactFeatureIds: [4, 4] },
     { ...input, projectId: 10 },
-    { ...input, description: "覆盖原文" },
     { ...input, workStatus: "DONE" },
     { ...input, assigneeIds: [] },
     { ...input, assigneeIds: [0] },
   ])
     expect(leftoverTaskRequestSchema.safeParse(body).success).toBe(false);
+});
+it("accepts the optional task description (2026-09-30) and still bounds it by 50000", () => {
+  expect(leftoverTaskRequestSchema.safeParse(input).success).toBe(true);
+  expect(
+    leftoverTaskRequestSchema.safeParse({ ...input, description: "补充说明" })
+      .success,
+  ).toBe(true);
+  expect(
+    leftoverTaskRequestSchema.safeParse({ ...input, description: "" }).success,
+  ).toBe(true);
+  expect(
+    leftoverTaskRequestSchema.safeParse({
+      ...input,
+      description: "x".repeat(50001),
+    }).success,
+  ).toBe(false);
 });
 it("preview query either names one leftover item or omits it for multi-entry records", () => {
   expect(leftoverTaskPreviewQuerySchema.parse({ leftoverItemId: "7" })).toEqual(

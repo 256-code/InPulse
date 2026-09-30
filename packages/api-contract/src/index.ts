@@ -15,6 +15,7 @@ export * from "./controller-bindings.js";
 export * from "./permission-checks.js";
 export * from "./contracts/search.zod.js";
 export * from "./contracts/activity.zod.js";
+export * from "./contracts/project-deletion.zod.js";
 export * from "./contracts/notification.zod.js";
 export * from "./contracts/projects.zod.js";
 export * from "./contracts/users.zod.js";
@@ -28,6 +29,7 @@ export * from "./contracts/record-pagination.zod.js";
 export * from "./contracts/record-drafts.zod.js";
 export * from "./contracts/published-records.zod.js";
 export * from "./contracts/record-feed.zod.js";
+export * from "./contracts/record-summary.zod.js";
 
 export * from "./contracts/task-groups.zod.js";
 export * from "./contracts/task-completion.zod.js";

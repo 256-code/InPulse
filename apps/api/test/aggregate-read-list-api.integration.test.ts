@@ -160,7 +160,7 @@ interface TaskOptions {
   readonly assigneeIds?: number[];
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   readonly title?: string;
   readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt?: string | null;
@@ -349,6 +349,23 @@ async function seedTaskGroup(
     }
     return group.id;
   });
+}
+
+/**
+ * 直改项目状态：ADR-043 要求切维护中前不存在未完成任务，本文件要覆盖「维护中仍有
+ * 卡片来源」的展示口径，因此绕过 API 直接改库；row_version 必须 +1（0001 触发器）。
+ */
+async function setProjectStatus(
+  projectId: number,
+  status: "NOT_STARTED" | "ACTIVE" | "MAINTENANCE",
+): Promise<void> {
+  await runtime!.sql`
+    UPDATE app.projects
+       SET status = ${status},
+           updated_at = clock_timestamp(),
+           row_version = row_version + 1
+     WHERE id = ${projectId}
+  `;
 }
 
 async function getJson(
@@ -1251,6 +1268,75 @@ describe("GET /api/v1/task-groups（R-7 任务聚合组列表）", () => {
     ).toEqual([
       [tOtherMain, "MAIN"],
       [tOtherSource, "SOURCE"],
+    ]);
+  });
+
+  test("维护中项目不再产出聚合组卡片，R-1 详情仍可读（2026-09-30 口径）", async () => {
+    const maintenanceProject = await createProject(runtime!.sql, memberUser);
+    const maintenanceTask = await newTask(maintenanceProject, {
+      title: "维护中聚合组主任务",
+    });
+    const maintenanceSource = await newTask(maintenanceProject, {
+      title: "维护中聚合组来源任务",
+    });
+    const maintenanceGroup = await seedTaskGroup(
+      maintenanceProject,
+      1,
+      "维护中聚合组",
+      [
+        { taskId: maintenanceTask, role: "MAIN", joinedAt: isoAt(1) },
+        { taskId: maintenanceSource, role: "SOURCE", joinedAt: isoAt(2) },
+      ],
+    );
+    const scoped =
+      "/api/v1/task-groups?projectId=" + String(maintenanceProject.projectId);
+
+    const before = taskGroupListPageSchema.parse(
+      (await getJson(scoped, memberCookie)).body,
+    );
+    expect(before.items.map((group) => group.groupId)).toEqual([
+      maintenanceGroup,
+    ]);
+
+    await setProjectStatus(maintenanceProject.projectId, "MAINTENANCE");
+
+    const hidden = taskGroupListPageSchema.parse(
+      (await getJson(scoped, memberCookie)).body,
+    );
+    expect(hidden).toEqual({ items: [], nextCursor: null, hasMore: false });
+
+    const all = taskGroupListPageSchema.parse(
+      (await getJson("/api/v1/task-groups", memberCookie)).body,
+    );
+    expect(all.items.map((group) => group.groupId)).not.toContain(
+      maintenanceGroup,
+    );
+
+    // 只有列表被收窄：R-1 详情不按项目状态过滤，任务看板与功能档案入口不受影响。
+    const detail = taskGroupDetailResponseSchema.parse(
+      (
+        await getJson(
+          "/api/v1/task-groups/" + String(maintenanceGroup),
+          memberCookie,
+        )
+      ).body,
+    );
+    expect(detail.group).toMatchObject({
+      groupId: maintenanceGroup,
+      status: "ACTIVE",
+    });
+    expect(detail.members).toHaveLength(2);
+    expect(detail.members.map((member) => member.taskId)).toEqual(
+      expect.arrayContaining([maintenanceTask, maintenanceSource]),
+    );
+
+    await setProjectStatus(maintenanceProject.projectId, "ACTIVE");
+
+    const restored = taskGroupListPageSchema.parse(
+      (await getJson(scoped, memberCookie)).body,
+    );
+    expect(restored.items.map((group) => group.groupId)).toEqual([
+      maintenanceGroup,
     ]);
   });
 });

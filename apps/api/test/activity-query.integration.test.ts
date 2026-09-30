@@ -229,6 +229,95 @@ describe("ActivityQueryService (real PostgreSQL)", () => {
       "summary",
     ]);
   });
+
+  // ADR-050（2026-09-28 修订）：已删除项目退出全部授权范围，但整个项目链的
+  // MEMBER 可见动态（含创建到删除的完整过程）对全部登录用户公开；
+  // ADMIN_ONLY 行仍随项目一起退出可见范围。
+  test("已删除项目对任意登录用户下发 MEMBER 可见的全部动态，不含 ADMIN_ONLY", async () => {
+    const owner = await createUser(client!.sql);
+    const deletedProject = await createProject(client!.sql, owner);
+    await seedActivity(
+      deletedProject.projectId,
+      owner,
+      3001,
+      "TASK_COMPLETED",
+      "删除前的任务动态",
+      "DONE",
+      1,
+      "MEMBER",
+      "2026-09-08T00:00:05.000Z",
+    );
+    await seedActivity(
+      deletedProject.projectId,
+      owner,
+      3002,
+      "PROJECT_DELETED",
+      "删除了项目",
+      "DELETED",
+      2,
+      "MEMBER",
+      "2026-09-08T00:00:06.000Z",
+    );
+    await seedActivity(
+      deletedProject.projectId,
+      owner,
+      3003,
+      "CHANGE_RECORD_VOIDED",
+      "作废记录",
+      "VOID",
+      3,
+      "ADMIN_ONLY",
+      "2026-09-08T00:00:07.000Z",
+    );
+    await client!.sql`
+      UPDATE app.projects
+         SET deleted_at = now(),
+             deleted_by = ${adminId!},
+             updated_at = now(),
+             row_version = row_version + 1
+       WHERE id = ${deletedProject.projectId}
+    `;
+
+    // 非成员与仍在册的成员口径一致：删除前的 MEMBER 动态随项目公开。
+    for (const actorUserId of [otherId!, owner]) {
+      const page = await service!.query({
+        actorUserId,
+        projectId: deletedProject.projectId,
+        limit: 50,
+      });
+      expect(page.items.map((item) => item.activityType)).toEqual([
+        "PROJECT_DELETED",
+        "TASK_COMPLETED",
+      ]);
+      expect(page.items[0]).toMatchObject({
+        projectId: deletedProject.projectId,
+        activityType: "PROJECT_DELETED",
+        sourceEntityId: 3002,
+      });
+      expect(page.hasMore).toBe(false);
+    }
+
+    // includeAdminOnly 不扩大已删除项目的范围（ADMIN_ONLY 不回放）。
+    const adminPage = await service!.query({
+      actorUserId: adminId!,
+      projectId: deletedProject.projectId,
+      includeAdminOnly: true,
+      limit: 50,
+    });
+    expect(adminPage.items.map((item) => item.activityType)).toEqual([
+      "PROJECT_DELETED",
+      "TASK_COMPLETED",
+    ]);
+
+    // 未删除项目的行为不变：跨项目依旧无访问权。
+    await expect(
+      service!.query({
+        actorUserId: memberId!,
+        projectId: otherProject!.projectId,
+        limit: 50,
+      }),
+    ).rejects.toBeInstanceOf(ActivityAuthorizationError);
+  });
 });
 
 async function seedActivity(

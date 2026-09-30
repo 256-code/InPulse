@@ -173,6 +173,7 @@ export const TaskBoardToolbar: React.FC<TaskBoardToolbarProps> = ({
               dotColor: option.dotColor,
             })),
           ]}
+          animated
         />
         <CalmSelect
           className="tb-select"
@@ -195,6 +196,7 @@ export const TaskBoardToolbar: React.FC<TaskBoardToolbarProps> = ({
               avatarUrl: user.avatarUrl,
             })),
           ]}
+          animated
         />
         <input
           className="tb-search"

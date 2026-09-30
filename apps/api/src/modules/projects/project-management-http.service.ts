@@ -27,7 +27,22 @@ import {
 } from "./project-management.service.js";
 
 export type ProjectManagementOperation =
-  "updateProject" | "changeProjectStatus";
+  | "updateProject"
+  | "changeProjectStatus"
+  | "deleteProject"
+  | "restoreProject"
+  | "purgeProject";
+
+/**
+ * ADR-051：还原与彻底删除只接受已软删除的项目——首次执行取不到项目、重放时
+ * 结果资源又确实存在（还原）或已经不存在（彻底删除），所以这两条路由必须在
+ * 事务内分别走自己的角色门禁，不能沿用「先做当前可读性预检」的通用路径。
+ */
+const DELETED_PROJECT_OPERATIONS: readonly ProjectManagementOperation[] = [
+  "deleteProject",
+  "restoreProject",
+  "purgeProject",
+];
 
 export interface ProjectManagementHttpRequest {
   readonly headers: HttpHeaderBag;
@@ -95,49 +110,44 @@ export class ProjectManagementHttpService {
       if (route.request.headers === "none") {
         throw new Error("project write route requires header schema");
       }
-      const parsedHeaders =
-        schemaRegistry.ProjectVersionHeaders.schema.safeParse({
-          "x-csrf-token": getHeader(request.headers, "x-csrf-token"),
-          "if-match": getHeader(request.headers, "if-match"),
-        });
-      if (!parsedHeaders.success) {
-        throw new ProjectInputError(
-          Object.fromEntries(
-            parsedHeaders.error.issues.map((issue) => [
-              issue.path.join(".") || "headers",
-              issue.message,
-            ]),
-          ),
-        );
+      const version = this.parseWriteHeaders(route, request.headers);
+      const bodyBinding = route.request.body;
+      let payload: unknown;
+      if ("contentTypes" in bodyBinding) {
+        if (
+          getHeader(request.headers, "content-type")
+            ?.split(";")[0]
+            ?.trim()
+            .toLowerCase() !== "application/json"
+        ) {
+          throw new ProjectManagementError(
+            400,
+            "PROJECT_CONTENT_TYPE_INVALID",
+            "请求必须使用 application/json",
+          );
+        }
+        const parsedBody = schemaRegistry[
+          bodyBinding.contentTypes[0]!.schemaRef
+        ].schema.safeParse(request.body);
+        if (!parsedBody.success) {
+          throw new ProjectBodyValidationError(
+            parsedBody.error.issues
+              .map((issue) => issue.path.join(".") || "body")
+              .join(","),
+          );
+        }
+        payload = parsedBody.data;
+      } else if (Object.keys((request.body ?? {}) as object).length > 0) {
+        // 删除与 ADR-051 的还原 / 彻底删除都不接受请求体：noBody 路由的幂等摘要
+        // 不含正文，放行会让不同正文共享同一摘要。
+        throw new ProjectInputError({ body: "此接口不接受请求体" });
       }
-      if (
-        getHeader(request.headers, "content-type")
-          ?.split(";")[0]
-          ?.trim()
-          .toLowerCase() !== "application/json"
-      ) {
-        throw new ProjectManagementError(
-          400,
-          "PROJECT_CONTENT_TYPE_INVALID",
-          "请求必须使用 application/json",
-        );
-      }
-      if (!("contentTypes" in route.request.body)) {
-        throw new Error("project write route requires body schema");
-      }
-      const parsedBody = schemaRegistry[
-        route.request.body.contentTypes[0]!.schemaRef
-      ].schema.safeParse(request.body);
-      if (!parsedBody.success) {
-        throw new ProjectBodyValidationError(
-          parsedBody.error.issues
-            .map((issue) => issue.path.join(".") || "body")
-            .join(","),
-        );
-      }
-      const version = Number(parsedHeaders.data["if-match"].slice(1, -1));
 
-      // 编辑与状态变更只要求有效 Session，权限由服务内的成员角色门禁判定。
+      // 编辑、状态变更与删除都只要求有效 Session，写权限由服务内的角色门禁判定。
+      // 删除与 ADR-051 的还原 / 彻底删除例外：这三条命令的目标就是已删除或即将
+      // 删除的项目，执行路径的授权由各自的角色门禁给出（非成员 404、权限不足
+      // 403、不存在 404），重放路径分别由 `replayDelete`、当前可读性与
+      // `replayPurge` 复核；这里一旦做「当前可读性」预检，前两者就必然变成 404。
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (current === undefined) {
@@ -147,8 +157,14 @@ export class ProjectManagementHttpService {
             "登录或 CSRF 状态已失效",
           );
         }
-        // 只做当前可读性；写前置条件由服务在执行/重放时判定。
-        await this.projects.authorize(tx, current.userId, path.data.projectId);
+        if (!DELETED_PROJECT_OPERATIONS.includes(operation)) {
+          // 只做当前可读性；写前置条件由服务在执行/重放时判定。
+          await this.projects.authorize(
+            tx,
+            current.userId,
+            path.data.projectId,
+          );
+        }
         return current.userId;
       };
 
@@ -161,24 +177,66 @@ export class ProjectManagementHttpService {
           pathParams: { projectId: String(path.data.projectId) },
           query: {},
           headers: request.headers,
-          body: parsedBody.data,
+          body: payload,
         },
         execute: async (tx, actorId) => {
+          if (operation === "deleteProject") {
+            await this.projects.deleteProject(tx, {
+              actorId,
+              projectId: path.data.projectId,
+              version,
+              requestId,
+            });
+            return {
+              responseStatus: 204,
+              responseSchemaRef: null,
+              responseHasBody: false,
+              responseBody: null,
+              replayAuthContext: { projectId: path.data.projectId },
+            };
+          }
+          if (operation === "restoreProject") {
+            const restored = await this.projects.restoreProject(tx, {
+              actorId,
+              projectId: path.data.projectId,
+              requestId,
+            });
+            return {
+              responseStatus: 200,
+              responseSchemaRef: "ProjectDetailResponse",
+              responseHasBody: true,
+              responseBody: restored,
+              replayAuthContext: { projectId: path.data.projectId },
+            };
+          }
+          if (operation === "purgeProject") {
+            const purged = await this.projects.purgeProject(tx, {
+              actorId,
+              projectId: path.data.projectId,
+              requestId,
+            });
+            return {
+              responseStatus: 200,
+              responseSchemaRef: "ProjectPurgeResponse",
+              responseHasBody: true,
+              responseBody: purged,
+              replayAuthContext: { projectId: path.data.projectId },
+            };
+          }
           const body =
             operation === "updateProject"
               ? await this.projects.updateProject(tx, {
                   actorId,
                   projectId: path.data.projectId,
                   version,
-                  edit: parsedBody.data as ProjectEditRequest,
+                  edit: payload as ProjectEditRequest,
                   requestId,
                 })
               : await this.projects.changeProjectStatus(tx, {
                   actorId,
                   projectId: path.data.projectId,
                   version,
-                  target: (parsedBody.data as ProjectStatusChangeRequest)
-                    .status,
+                  target: (payload as ProjectStatusChangeRequest).status,
                   requestId,
                 });
           return {
@@ -191,9 +249,37 @@ export class ProjectManagementHttpService {
         },
         replayAuthorizer: async (record, tx) => {
           const actorId = await resolve(tx);
+          if (operation === "deleteProject") {
+            await this.projects.replayDelete(
+              tx,
+              actorId,
+              record.replayAuthContext,
+            );
+            return;
+          }
+          if (operation === "purgeProject") {
+            await this.projects.replayPurge(
+              tx,
+              actorId,
+              record.replayAuthContext,
+            );
+            return;
+          }
           await this.projects.replay(tx, actorId, record.replayAuthContext);
         },
       });
+      if (result.responseHasBody === false) {
+        // 删除只有 204：响应体为空，由 ContractResponseInterceptor 按 noBody 跳过校验。
+        return { status: result.responseStatus, body: undefined };
+      }
+      if (operation === "purgeProject") {
+        return {
+          status: result.responseStatus,
+          body: schemaRegistry.ProjectPurgeResponse.schema.parse(
+            result.responseBody,
+          ),
+        };
+      }
       return {
         status: result.responseStatus,
         body: schemaRegistry.ProjectDetailResponse.schema.parse(
@@ -203,6 +289,36 @@ export class ProjectManagementHttpService {
     } catch (error) {
       return this.mapError(error, requestId);
     }
+  }
+
+  /**
+   * 项目写路由的请求头校验：按路由声明的 Schema 选择校验器，先校验再取版本号。
+   * ADR-051 的还原与彻底删除不接收 If-Match（删除台账不暴露 row_version，并发
+   * 控制由项目行锁与「仍未删除」守卫承担），因此只声明 ProjectMutationHeaders；
+   * 这类路由的 version 返回 0 且不会被使用。
+   */
+  private parseWriteHeaders(
+    route: (typeof routeRegistry)[number],
+    headers: HttpHeaderBag,
+  ): number {
+    const csrfToken = getHeader(headers, "x-csrf-token");
+    if (route.request.headers === "ProjectVersionHeaders") {
+      const parsed = schemaRegistry.ProjectVersionHeaders.schema.safeParse({
+        "x-csrf-token": csrfToken,
+        "if-match": getHeader(headers, "if-match"),
+      });
+      if (!parsed.success) {
+        throw new ProjectInputError(headerFields(parsed.error.issues));
+      }
+      return Number(parsed.data["if-match"].slice(1, -1));
+    }
+    const parsed = schemaRegistry.ProjectMutationHeaders.schema.safeParse({
+      "x-csrf-token": csrfToken,
+    });
+    if (!parsed.success) {
+      throw new ProjectInputError(headerFields(parsed.error.issues));
+    }
+    return 0;
   }
 
   private mapError(
@@ -248,6 +364,18 @@ export class ProjectManagementHttpService {
       requestId,
     );
   }
+}
+
+/** 头校验失败按字段聚合成 422 details，与请求体校验保持同一形态。 */
+function headerFields(
+  issues: readonly {
+    readonly path: readonly PropertyKey[];
+    readonly message: string;
+  }[],
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    issues.map((issue) => [issue.path.join(".") || "headers", issue.message]),
+  );
 }
 
 function errorBody(

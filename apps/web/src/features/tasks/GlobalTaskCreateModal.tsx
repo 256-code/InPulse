@@ -12,12 +12,17 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CalmSegmented } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import {
+  CalmDateTimeInput,
+  toLocalDateTimeInput,
+} from "@features/common/components/CalmDateTimeInput";
 import { priorityDotColor } from "@features/common/priority-select-option";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { useProjects } from "@features/projects/project-query";
 import { useModules } from "@features/modules/module-query";
 import { useFeatures } from "@features/features/feature-query";
 import { isFirstLoad, taskError } from "./task-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 任务范围与后端路由一一对应：功能级走功能任务，模块级走模块任务。 */
 type TaskScope = "FEATURE" | "MODULE";
@@ -32,14 +37,6 @@ const scopeOptions: ReadonlyArray<{ value: TaskScope; label: string }> = [
   { value: "FEATURE", label: "功能级" },
   { value: "MODULE", label: "模块级" },
 ];
-
-function localDateTime(value: string | null): string {
-  if (!value) return "";
-  const at = new Date(value);
-  return new Date(at.getTime() - at.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-}
 
 function linksOf(text: string): string[] {
   return [
@@ -498,6 +495,7 @@ export function GlobalTaskCreateModal({
                     { value: 0, label: "请选择项目", disabled: true },
                     ...(projects.data?.items ?? []).map(projectSelectOption),
                   ]}
+                  animated
                 />
                 {projects.isError && (
                   <p role="alert">项目列表加载失败，请稍后重试。</p>
@@ -534,6 +532,7 @@ export function GlobalTaskCreateModal({
                       label: module.name,
                     })),
                   ]}
+                  animated
                 />
               </div>
             )}
@@ -577,6 +576,7 @@ export function GlobalTaskCreateModal({
                     value: feature.id,
                     label: feature.name,
                   }))}
+                  animated
                 />
                 {impactOptions.isError && (
                   <Alert
@@ -620,6 +620,7 @@ export function GlobalTaskCreateModal({
                       label: feature.name,
                     })),
                   ]}
+                  animated
                 />
               </div>
             )}
@@ -657,9 +658,15 @@ export function GlobalTaskCreateModal({
                 }
                 disabled={!targetReady}
                 ariaLabel="负责人"
+                animated
               />
               {targetReady && isFirstLoad(assignees) && (
-                <p>正在加载项目成员…</p>
+                <CalmSkeleton
+                  variant="list"
+                  rows={2}
+                  compact
+                  label="正在加载项目成员…"
+                />
               )}
               {assignees.isError && (
                 <Alert
@@ -693,20 +700,16 @@ export function GlobalTaskCreateModal({
                       dotColor: priorityDotColor(value),
                     }),
                   )}
+                  animated
                 />
               </div>
               <div className="calm-field">
                 <label htmlFor="global-task-due">截止时间</label>
-                <input
+                <CalmDateTimeInput
                   id="global-task-due"
-                  type="datetime-local"
-                  value={localDateTime(dueAt)}
-                  onChange={(event) =>
-                    setDueAt(
-                      event.target.value
-                        ? new Date(event.target.value).toISOString()
-                        : null,
-                    )
+                  value={toLocalDateTimeInput(dueAt)}
+                  onChange={(next) =>
+                    setDueAt(next === "" ? null : new Date(next).toISOString())
                   }
                 />
               </div>

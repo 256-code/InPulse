@@ -17,6 +17,8 @@
   --radius: 0.55rem;
   --sidebar: #10253e;
   --sidebar-foreground: #c9d7e7;
+  /* 侧栏展开宽度：收起动画（宽度过渡）与三段内容的固定排版宽度共用同一个值。 */
+  --sidebar-width: 236px;
   /* 以下两个字体变量与原 Tailwind @theme 的默认值一致，供下面的 preflight 使用。 */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
@@ -55,13 +57,48 @@ html,
   font-variation-settings: normal;
   -webkit-tap-highlight-color: transparent;
 }
-/* 根滚动条常显（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
-   不再被系统滚动条挤窄 15px，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
+/* 根滚动条槽常驻（2026-09-23）：内容长短切换（展开项目树、进长列表、短页回退）时，主内容区
+   不再被滚动条槽挤窄，整页版式不跳动。不用 `scrollbar-gutter: stable`：常驻槽在
    Chromium 下 `100vw` 只到初始包含块（实测槽宽 15px 时 100vw=1143、遮罩同为 1143），
    弹窗遮罩、命令面板与右侧任务抽屉都到不了窗口边缘，会在右缘留一条未变暗的亮带；
-   常显的滚动条就是视口滚动条，固定覆盖层几何与「页面上本来有滚动条」时一致。 */
+   `overflow-y: scroll` 占的是视口滚动条的槽，固定覆盖层几何与「页面上本来有滚动条」时一致。
+   槽里的 thumb 自 2026-09-24 起默认透明，只有滚动中才显形，见下一条。 */
 html {
   overflow-y: scroll;
+}
+/* 滚动条按需显形（2026-09-24 产品要求「所有的滚轮条不用的时候是隐藏的」）：槽宽统一 8px
+   （不再被系统默认的 15px 挤窄），thumb 默认透明，只有正在滚动（或指针停在滚动条上）的容器
+   才用颜色浮现；[data-scrolling] 由 apps/web/src/app/auto-hide-scrollbars.ts 在 scroll 事件里
+   打上，停手 1 秒后摘掉 —— 纯 :hover 做不到这件事：指针停在窗口里就算悬停，常显的根滚动条会
+   一直亮着。深色侧栏内的 .nav-group / .tree-modules-scroll / .sidebar 另有更亮的配色覆盖。
+   Chromium 走 ::-webkit-scrollbar，Firefox 走标准属性，两者不要同时声明，否则 Chromium
+   会忽略自定义滚动条。 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+*[data-scrolling]::-webkit-scrollbar-thumb {
+  background: rgba(113, 128, 150, 0.55);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 128, 150, 0.8);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  *[data-scrolling] {
+    scrollbar-color: rgba(113, 128, 150, 0.55) transparent;
+  }
 }
 abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
@@ -275,13 +312,23 @@ button {
   min-height: 100vh;
 }
 .sidebar {
-  width: 236px;
-  flex: 0 0 236px;
+  width: var(--sidebar-width);
+  flex: 0 0 auto;
   min-height: 100vh;
   background: var(--sidebar);
   color: var(--sidebar-foreground);
   display: flex;
   flex-direction: column;
+}
+/* 收起动画沿容器宽度过渡：三段内容各按整栏宽度排版，滑动过程中文字不随容器收缩折行，
+   溢出部分由过渡期间的裁切收掉（见 min-width:701px 的 .nav-collapsed 规则）。 */
+.sidebar > .brand,
+.sidebar > .nav-group {
+  width: var(--sidebar-width);
+}
+.sidebar > .sidebar-footer {
+  /* 底部工具条左右各有 18px 外边距，减掉后与其它两段右缘对齐。 */
+  width: calc(var(--sidebar-width) - 36px);
 }
 .brand {
   display: flex;
@@ -458,9 +505,14 @@ button {
 .tree-modules-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+/* thumb 默认透明、滚动中才显形（2026-09-24）：侧栏是深色底，全局那个浅灰 thumb 在这里看不见，
+   所以这一族保留设计系统的蓝色。 */
 .tree-modules-scroll::-webkit-scrollbar-thumb {
-  background: #3f6d94;
+  background: transparent;
   border-radius: 999px;
+}
+.tree-modules-scroll[data-scrolling]::-webkit-scrollbar-thumb {
+  background: #3f6d94;
 }
 .tree-modules-scroll::-webkit-scrollbar-thumb:hover {
   background: #5b90bb;
@@ -468,6 +520,9 @@ button {
 @supports not selector(::-webkit-scrollbar) {
   .tree-modules-scroll {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .tree-modules-scroll[data-scrolling] {
     scrollbar-color: #3f6d94 transparent;
   }
 }
@@ -480,6 +535,9 @@ button {
 @supports not selector(::-webkit-scrollbar) {
   .nav-group {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .nav-group[data-scrolling] {
     scrollbar-color: #2b4a68 transparent;
   }
 }
@@ -814,6 +872,99 @@ button {
   background: white;
   border: 1px solid var(--border);
   box-shadow: 0 6px 18px #16324d26;
+}
+/* 桌面端收起左侧导航（2026-09-29 产品要求「做个按钮可以把左边的导航栏收起来」）：
+   收起入口放在品牌行右侧，收起后整个侧栏隐藏、内容区拿到全部宽度，左上角保留一个与
+   窄屏同款的悬浮展开按钮；窄屏（≤700px）继续走抽屉加汉堡开关，两套规则各占一侧媒体
+   查询，互不干扰。 */
+.brand-joint > .joint-logo-frame {
+  /* 让出右侧收起按钮的宽度：标志是 object-fit: contain，等比缩小后仍完整可见。 */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sidebar-collapse-button {
+  flex: 0 0 auto;
+  color: #9bb0c7;
+}
+.sidebar-expand-button {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px #16324d26;
+  /* 等侧栏收起过半再淡入，两个动作不同时抢眼。 */
+  animation: sidebar-expand-in 0.2s ease 0.12s both;
+}
+@keyframes sidebar-expand-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+/* 两个开关各自只在一侧可见：收起按钮属于桌面侧栏（收起态随侧栏一并隐藏），
+   展开按钮只在桌面收起后渲染。 */
+.sidebar-collapse-button,
+.sidebar-expand-button {
+  display: none;
+}
+@media (min-width: 701px) {
+  .sidebar-collapse-button,
+  .sidebar-expand-button {
+    display: inline-grid;
+  }
+  .sidebar-collapse-button:hover {
+    background: #ffffff14;
+    color: #ffffff;
+  }
+  /* 收起 / 展开走宽度与淡出过渡（2026-09-30 反馈「隐藏动作不丝滑」）：收起后宽度归零、
+     动画结束才 visibility 隐藏；过渡期间与收起态才开启裁切，常态保留 .popover 向右越出
+     侧栏覆盖内容区的能力（底部通知 / 账户弹层宽 344px，裁切会直接切掉弹层右半）。 */
+  .sidebar {
+    transition:
+      width 0.24s cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 0.24s ease,
+      visibility 0s linear 0s;
+  }
+  .app-shell.nav-animating .sidebar,
+  .nav-collapsed .sidebar {
+    overflow: hidden;
+  }
+  .nav-collapsed .sidebar {
+    width: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      width 0.24s cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 0.24s ease,
+      visibility 0s linear 0.24s;
+  }
+  /* 侧栏是 fixed（见文件末 min-width:701px 块），文档流里的让位改由外壳左内边距承担：
+     展开时等于侧栏宽度，收起时缩到 46px，为 12 + 30px 的悬浮展开按钮让出标题行，
+     标题不再在动画结束后跳一下。 */
+  .app-shell {
+    padding-left: var(--sidebar-width);
+    transition: padding-left 0.24s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  /* nav-collapsed 加在 .app-shell 自身，不是祖先，因此用复合选择器。 */
+  .app-shell.nav-collapsed {
+    padding-left: 46px;
+  }
+}
+/* 上面的过渡 / 动画在减弱动态偏好下必须一并关掉：媒体查询不提升特异性，
+   因此这条覆盖写在它们之后。 */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .app-shell,
+  .sidebar-expand-button {
+    transition: none;
+    animation: none;
+  }
 }
 .page-content {
   max-width: 1450px;
@@ -2193,26 +2344,43 @@ td small {
 .project-repository-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
-.project-repository-link > a {
+/* 项目根仓库跳转按钮：与操作行按钮同高同圆角，但整体更轻（灰字 + 淡边框），
+   与旁边负责新增/解除的「GitHub 链接」按钮区分「只读入口 / 写入口」。 */
+.repo-jump-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: #2472c3;
+  gap: 7px;
+  height: 35px;
+  max-width: 340px;
+  padding: 0 13px;
+  border: 1px solid #e3e8ee;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #40546d;
   font-size: 13px;
-  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
 }
-.project-repository-url {
-  max-width: 260px;
+.repo-jump-button:hover {
+  border-color: #c3d6ea;
+  background: #f8fbfe;
+  color: #2472c3;
+}
+.repo-jump-button:focus-visible {
+  outline: 2px solid #a9cdf3;
+  outline-offset: 1px;
+}
+.repo-jump-button .repo-jump-path {
   overflow: hidden;
   color: #74869a;
   font-size: 12px;
-  font-weight: 400;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.repo-jump-button svg {
+  flex-shrink: 0;
 }
 .project-overview-strip {
   display: flex;
@@ -2395,9 +2563,8 @@ td small {
 }
 
 @media (max-width: 1000px) {
-  .sidebar {
-    width: 200px;
-    flex-basis: 200px;
+  :root {
+    --sidebar-width: 200px;
   }
   .page-content {
     padding: 27px 22px;
@@ -3790,6 +3957,11 @@ a:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* 项目与功能页（2026-09-30）：标题行内加入搜索框后，窄屏下标题会被压缩换行，
+   这里让标题保持单行，空间不足时由右侧工具组（.catalog-actions）先换行。 */
+.catalog-heading {
+  white-space: nowrap;
+}
 .catalog-actions {
   display: flex;
   gap: 8px;
@@ -5402,27 +5574,19 @@ td.due-overdue {
   margin-top: 14px;
 }
 
-/* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）。 */
-.issues-toolbar {
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-.issues-toolbar-field {
+/* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）；
+   2026-09-24 起与「回到迭代记录」并排放在页头动作区，不再独占一行工具栏。 */
+.issues-project-field {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted-foreground);
   font-size: 12px;
 }
-.issues-toolbar-field select {
-  min-width: 180px;
-  height: 35px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: white;
-  color: #586a7e;
-  font: inherit;
+
+/* 「问题不是任务」说明：同一日按产品要求从页面顶部移到底部，紧跟已闭环折叠区。 */
+.issues-callout {
+  margin: 24px 0 0;
 }
 
 .issue-list {
@@ -5922,6 +6086,38 @@ td.due-overdue {
   gap: 5px;
   justify-content: flex-end;
 }
+/* ADR-050：不提供「查看对象」的行用与 `.icon-button` 等宽的占位，保持「原始快照」
+ * 列在所有行同一基线。 */
+.activity-actions-slot {
+  width: 30px;
+  height: 1px;
+}
+/* ADR-051：删除行的「还原项目」「彻底删除」与失败提示。2026-09-29 起这两个动作与
+ * 「原始快照」并排在同一行（`.audit-actions` 横排靠右，「原始快照」列由占位对齐），
+ * 此前 `.activity-actions` / `.activity-actions-main` 的两行堆叠基线随之删除。 */
+.deletion-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.deletion-buttons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.deletion-actions .danger-button {
+  height: 29px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+.deletion-error {
+  max-width: 220px;
+  color: #c0453f;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: right;
+}
 .snapshot-body {
   padding: 22px 26px 26px;
   overflow: auto;
@@ -6109,9 +6305,12 @@ td.due-overdue {
 @media (min-width: 701px) {
   /* 滚动下沉到导航区：品牌与底部工具条固定，通知弹层才不会被侧栏裁剪。 */
   .sidebar {
-    position: sticky;
+    /* fixed 而非 sticky：antd 弹窗的滚动锁会给 html/body 写 overflow: hidden，
+       sticky 在该状态下失效、随页面滚走（弹窗背景里只剩半截深色栏），fixed 不受影响。 */
+    position: fixed;
     top: 0;
-    /* 与窄屏（.sidebar fixed z-index:40）同层级：sticky 默认 z-index:auto 会让整个侧栏
+    left: 0;
+    /* 与窄屏（.sidebar fixed z-index:40）同层级：默认 z-index:auto 会让整个侧栏
        停在根层叠上下文，底部通知弹层（.popover z-index:40）被后置的任务卡压住。 */
     z-index: 40;
     height: 100dvh;
@@ -6130,9 +6329,13 @@ td.due-overdue {
   .nav-group::-webkit-scrollbar {
     width: 6px;
   }
+  /* 与项目树同一口径（2026-09-24）：深色底上的 thumb 默认透明，滚动中才显形。 */
   .nav-group::-webkit-scrollbar-thumb {
-    background: #2b4a68;
+    background: transparent;
     border-radius: 3px;
+  }
+  .nav-group[data-scrolling]::-webkit-scrollbar-thumb {
+    background: #2b4a68;
   }
 }
 .brand-joint {
@@ -6742,6 +6945,9 @@ td.due-overdue {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* 等高卡：标记行按 .badge 的实际高度（11px × 1.5 + 上下 4px 内边距 = 24.5px）预留，
+     只有 ✓ 勾（14px）的卡片不再比带徽章的矮 9px。 */
+  min-height: 25px;
 }
 /* 右上角标记组：遗留问题徽章与优先级 / 完成标记并排，不参与收缩。 */
 .tb-card-flags {
@@ -6761,6 +6967,9 @@ td.due-overdue {
   font-weight: 600;
   color: #2a4058;
   line-height: 1.35;
+  /* 等高卡：标题最多 2 行（line-clamp），这里把 2 行的位置恒带预留出来，
+     1 行标题的卡片不再矮一行。单位用 em（自身字号）而非 px，与行高同步。 */
+  min-height: 2.7em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

@@ -283,7 +283,7 @@ describe("F-14 task editing", () => {
       ).conflicts,
     ).toEqual([]);
   });
-  it("shows a MODULE reference only once and directs editing to its module", async () => {
+  it("shows a MODULE reference only once and without a module-task jump link", async () => {
     const module = {
       ...item,
       featureId: null,
@@ -298,9 +298,12 @@ describe("F-14 task editing", () => {
     expect(screen.getByText("原说明")).toBeVisible();
     expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
+    // 2026-09-24 产品要求删除正文里的「打开模块任务」跳转（任务中心详情头部
+    // 的「在项目中打开」与功能页头部的「模块级任务」标签已是同一去向）。
+    await screen.findByRole("button", { name: "编辑任务" });
     expect(
-      await screen.findByRole("link", { name: "打开模块任务" }),
-    ).toHaveAttribute("href", "/projects/2/modules/3/tasks?taskId=1");
+      screen.queryByRole("link", { name: "打开模块任务" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑任务" })).toBeDisabled();
   });
   it("merges untouched fields and requires choice for conflicting assignee/due date", () => {
@@ -452,9 +455,7 @@ describe("F-23 merge entry", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "合并到主任务" }),
     );
-    expect(
-      await screen.findByLabelText(/主任务（搜索任务编号或标题/),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^主任务$/)).toBeInTheDocument();
   });
 });
 describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
@@ -831,7 +832,103 @@ describe("C-3 任务详情弹窗标签页", () => {
     });
     expect(draftEntry).toBeInTheDocument();
     fireEvent.click(draftEntry);
-    expect(await screen.findByText("新建来源草稿")).toBeInTheDocument();
+    const modal = within(
+      await screen.findByRole("dialog", { name: "新建任务迭代" }),
+    );
+    // ADR-047：任务侧的记录弹窗与迭代记录页同一套排版——归属按来源快照只读呈现，
+    // 页脚直接给发布入口，来源任务未完成也能发布。
+    expect(modal.getByLabelText("迭代标题")).toHaveValue("退款任务");
+    expect(
+      modal.getByText("所属功能").closest(".record-scope-facts"),
+    ).not.toBeNull();
+    // 页脚与迭代记录页同一顺序：淡蓝「保存草稿」在左、主按钮「发布迭代记录」在右。
+    // 是否可提交取决于项目状态是否已知，由 RecordDraftsView 的单测与浏览器用例覆盖。
+    expect(
+      modal.getByRole("button", { name: "发布迭代记录" }).className,
+    ).toContain("primary-button");
+    expect(modal.getByRole("button", { name: "保存草稿" }).className).toContain(
+      "soft-blue-button",
+    );
+    // 任务侧的新建任务迭代与记录页同一套 GitHub 链接区：可直接暂存仓库/PR 链接。
+    expect(modal.getByLabelText("GitHub 链接地址")).toBeInTheDocument();
+  });
+  it("lands the freshly published record inside the task detail", async () => {
+    const saved = {
+      id: 41,
+      projectId: 2,
+      moduleId: 3,
+      featureId: 4,
+      scopeType: "FEATURE",
+      taskId: 1,
+      impactFeatureIds: [],
+      handlerId: 5,
+      authorId: 5,
+      status: "DRAFT",
+      code: null,
+      currentVersion: 0,
+      publishedAt: null,
+      rowVersion: 2,
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-20T00:00:00.000Z",
+      title: item.title,
+      contextProblem: "a",
+      changeSolution: "b",
+      resultVerification: "c",
+      remainingIssues: [],
+    };
+    const published = {
+      ...saved,
+      status: "PUBLISHED",
+      code: "PR-CR-9",
+      currentVersion: 1,
+      publishedAt: "2026-09-20T01:00:00.000Z",
+      rowVersion: 3,
+      leftovers: [],
+    };
+    const createTaskRecordDraft = vi.fn().mockResolvedValue(saved);
+    const publishChangeRecord = vi.fn().mockResolvedValue(published);
+    mount(
+      client({
+        listProjects: vi.fn().mockResolvedValue({
+          items: [{ id: 2, name: "退款项目", status: "ACTIVE" }],
+        }),
+        createTaskRecordDraft,
+        publishChangeRecord,
+        getChangeRecord: vi.fn().mockResolvedValue(published),
+        listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [] }),
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    // 「记录一次迭代」只存在于迭代记录标签页。
+    fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "记录一次迭代" }),
+    );
+    const modal = within(
+      await screen.findByRole("dialog", { name: "新建任务迭代" }),
+    );
+    const publish = modal.getByRole("button", { name: "发布迭代记录" });
+    await waitFor(() => expect(publish).toBeEnabled());
+    for (const [label, value] of [
+      ["改动原因", "a"],
+      ["具体改动", "b"],
+      ["改动效果", "c"],
+    ])
+      fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+    fireEvent.click(publish);
+    await waitFor(() => expect(publishChangeRecord).toHaveBeenCalledOnce());
+    // 发布后不强制跳转：停在任务详情，但给出一条直达正式记录的入口。
+    const notice = await within(dialog).findByText(/迭代记录已发布/);
+    expect(notice.textContent).toContain("PR-CR-9");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "查看正式记录" }),
+    );
+    // 任务详情里的正式记录列表是另一条查询，刷新落地前也要能打开详情。
+    const record = await screen.findByRole("dialog", { name: item.title });
+    expect(within(record).getByText("PR-CR-9")).toBeInTheDocument();
   });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {
@@ -1027,89 +1124,5 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).queryByRole("button", { name: /查看主任务/ }),
     ).toBeNull();
-  });
-});
-
-describe("ADR-034 任务归档入口", () => {
-  it("archives the task from the edit dialog footer", async () => {
-    const archiveTask = vi.fn().mockResolvedValue({
-      ...item,
-      lifecycleStatus: "ARCHIVED",
-      rowVersion: 2,
-    });
-    mount(
-      client({
-        getProject: vi.fn().mockResolvedValue({
-          project: { id: 1, code: "INPULSE", name: "演示项目" },
-          currentUserRole: "LEADER",
-        }),
-        archiveTask,
-      }),
-    );
-    fireEvent.click(
-      await screen.findByRole("article", { name: /^查看任务详情/ }),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
-    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
-    fireEvent.click(await modal.findByTestId("task-modal-lifecycle"));
-    const lifecycleModal = within(
-      screen.getByRole("dialog", { name: "归档任务" }),
-    );
-    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
-    expect(await lifecycleModal.findByRole("alert")).toHaveTextContent(
-      "请填写操作原因",
-    );
-    fireEvent.change(lifecycleModal.getByLabelText("操作原因"), {
-      target: { value: "阶段结束" },
-    });
-    fireEvent.click(lifecycleModal.getByRole("button", { name: /确\s*认/ }));
-    await waitFor(() => expect(archiveTask).toHaveBeenCalledTimes(1));
-    expect(archiveTask.mock.calls[0]![4]).toMatchObject({ reason: "阶段结束" });
-    expect(archiveTask.mock.calls[0]![5].headers["If-Match"]).toBe('"1"');
-  });
-
-  it("keeps the archive entry reachable when the parent feature is archived", async () => {
-    const archiveTask = vi.fn().mockResolvedValue({
-      ...item,
-      lifecycleStatus: "ARCHIVED",
-      rowVersion: 2,
-    });
-    mount(
-      client({
-        getProject: vi.fn().mockResolvedValue({
-          project: { id: 1, code: "INPULSE", name: "演示项目" },
-          currentUserRole: "LEADER",
-        }),
-        archiveTask,
-      }),
-      false,
-    );
-    fireEvent.click(
-      await screen.findByRole("article", { name: /^查看任务详情/ }),
-    );
-    const edit = await screen.findByRole("button", { name: "编辑任务" });
-    expect(edit).not.toBeDisabled();
-    fireEvent.click(edit);
-    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
-    expect(
-      await modal.findByTestId("task-modal-lifecycle"),
-    ).toBeInTheDocument();
-  });
-
-  it("hides the lifecycle entry from viewers without a project role (ADR-039)", async () => {
-    mount(
-      client({
-        getProject: vi.fn().mockResolvedValue({
-          project: { id: 1, code: "INPULSE", name: "演示项目" },
-          currentUserRole: null,
-        }),
-      }),
-    );
-    fireEvent.click(
-      await screen.findByRole("article", { name: /^查看任务详情/ }),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
-    const modal = within(screen.getByRole("dialog", { name: "编辑任务" }));
-    expect(modal.queryByTestId("task-modal-lifecycle")).toBeNull();
   });
 });

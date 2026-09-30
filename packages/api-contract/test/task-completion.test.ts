@@ -20,8 +20,9 @@ it("versions both legacy status operations while preserving their original finge
     const route = routeRegistry.find(
       (route) => route.operationId === operation,
     )!;
-    // ADR-040 起响应 TaskItem 新增 assigneeIds：legacy status 路由再升一个主版本，历史指纹继续保留。
-    expect(route.idempotencyContractVersion).toBe("3.0.0");
+    // ADR-040 起响应 TaskItem 新增 assigneeIds：legacy status 路由再升一个主版本；
+    // ADR-054 起 TaskItem 去掉已归档生命周期取值，重放响应字段变化再升一个主版本。
+    expect(route.idempotencyContractVersion).toBe("4.0.0");
     expect(route.replayAuthorizationPolicy).toMatchObject({
       version: "2.0.0",
       resources: { contextSchemaRef: "TaskStatusCompatibilityReplayContext" },
@@ -30,6 +31,7 @@ it("versions both legacy status operations while preserving their original finge
       "1.0.0",
       "2.0.0",
       "3.0.0",
+      "4.0.0",
     ]);
   }
 });

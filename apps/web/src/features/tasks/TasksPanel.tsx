@@ -18,13 +18,18 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useMemo, useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Input, Spin } from "antd";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import {
+  CalmDateTimeInput,
+  toLocalDateTimeInput,
+} from "@features/common/components/CalmDateTimeInput";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
   type InpulseApiClient,
+  type PublishedRecord,
   type ReadableRecord,
   type TaskStatusRequest,
 } from "@generated/api";
@@ -52,13 +57,9 @@ import {
   type TaskViewItem,
   type TaskDraft,
 } from "./task-query";
-import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { isCardClick } from "@features/common/card-click";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
-import {
-  canManageProjectResources,
-  useProjectDetail,
-} from "@features/projects/project-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const labels: Record<TaskField, string> = {
   title: "任务标题",
@@ -242,7 +243,6 @@ export function TasksPanel({
   featureId,
   writable,
   client,
-  isAdmin = false,
   mode = "panel",
   initialTaskId,
   onDetailClose,
@@ -250,8 +250,6 @@ export function TasksPanel({
 }: TaskScope & {
   writable: boolean;
   client?: InpulseApiClient | undefined;
-  /** ADR-034：任务归档/恢复入口只对系统管理员或项目内管理角色开放。 */
-  isAdmin?: boolean | undefined;
   /**
    * `detail`：只渲染任务详情弹窗及其子弹窗，不渲染面板头部、任务列表与新建入口，
    * 供任务中心等跨项目页在当前页面就地打开完整任务详情（含写操作）；
@@ -295,18 +293,19 @@ export function TasksPanel({
   const [mergeInto, setMergeInto] = useState(false);
   /** 当前就地打开的聚合组详情（null 表示弹层关闭）；聚合组入口不再整页跳转。 */
   const [openGroupId, setOpenGroupId] = useState<number | null>(null);
-  // ADR-034：归档/恢复是编辑弹窗底部的独立确认流程，与编辑表单状态互不影响。
-  const [lifecycle, setLifecycle] = useState<{
-    action: "archive" | "restore";
-    item: TaskViewItem;
-  } | null>(null);
-  const [lifecycleReason, setLifecycleReason] = useState("");
-  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [success, setSuccess] = useState(false);
+  /** 聚合组弹层里解除合并后需要整批重读的 R-5 标记缓存。 */
+  const queryClient = useQueryClient();
   /** 当前打开的迭代记录详情（null 表示弹层关闭）。 */
   const [openRecordId, setOpenRecordId] = useState<number | null>(null);
+  /**
+   * 本任务里「记录一次迭代」刚发布成功的记录。正式记录列表是另一条只读查询，
+   * 刷新落地前先用发布响应渲染详情弹层，用户点「查看正式记录」不会点了没反应。
+   */
+  const [publishedRecord, setPublishedRecord] =
+    useState<PublishedRecord | null>(null);
   /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
   const [draftTarget, setDraftTarget] =
     useState<RecordDraftEditorTarget | null>(null);
@@ -367,10 +366,9 @@ export function TasksPanel({
   const openRecord =
     openRecordId === null
       ? null
-      : (taskPublished.find((record) => record.id === openRecordId) ?? null);
+      : (taskPublished.find((record) => record.id === openRecordId) ??
+        (publishedRecord?.id === openRecordId ? publishedRecord : null));
   const taskDraftItems = taskDrafts.data?.items ?? [];
-  // 详情头部展示名称而非裸 ID：项目/模块名称为既有只读契约。
-  const projectDetail = useProjectDetail({ client, projectId });
   // C-1/C-3：R-5 的 groupId 与 groupRole 同生共死；这里给「合并与分支」标签页
   // 与标签文案一份显式的关系视图模型（未入组为 null）。
   const currentRelation =
@@ -426,99 +424,22 @@ export function TasksPanel({
     members.data?.items.find((m) => m.id === id)?.name ??
     userDirectory.data?.find((u) => u.id === id)?.name ??
     "用户 #" + id;
-  // ADR-033/ADR-034：项目内管理角色或系统管理员才看到归档/恢复入口。
-  const canArchiveTasks = canManageProjectResources(
-    isAdmin,
-    projectDetail.data?.currentUserRole ?? null,
-  );
-  // ADR-045：父级不再有归档只读态，只读只可能来自任务自身或调用方传入的只读范围。
+  // ADR-054：任务层面已下线归档，只读只可能来自任务自身无效或调用方传入的只读范围。
   const editReadOnly =
     selection?.item !== undefined &&
     (!writable || selection.item.lifecycleStatus !== "ACTIVE");
-  const canOpenLifecycleDialog =
-    canArchiveTasks &&
-    current !== undefined &&
-    (current.lifecycleStatus === "ACTIVE" ||
-      current.lifecycleStatus === "ARCHIVED");
-  const lifecycleCache = useQueryClient();
-  const lifecycleMutation = useMutation({
-    retry: false,
-    mutationFn: async (input: {
-      item: TaskViewItem;
-      action: "archive" | "restore";
-      reason: string;
-    }) => {
-      const csrf = await api.issueCsrfToken();
-      const init = {
-        headers: {
-          "x-csrf-token": csrf.csrfToken,
-          "Idempotency-Key": createIdempotencyKey("task-lifecycle"),
-          "If-Match": '"' + input.item.rowVersion + '"',
-        },
-      };
-      const body = { reason: input.reason };
-      if (input.item.scopeType === "MODULE")
-        return input.action === "archive"
-          ? api.archiveModuleTask(
-              projectId,
-              moduleId,
-              input.item.id,
-              body,
-              init,
-            )
-          : api.restoreModuleTask(
-              projectId,
-              moduleId,
-              input.item.id,
-              body,
-              init,
-            );
-      return input.action === "archive"
-        ? api.archiveTask(
-            projectId,
-            moduleId,
-            input.item.featureId,
-            input.item.id,
-            body,
-            init,
-          )
-        : api.restoreTask(
-            projectId,
-            moduleId,
-            input.item.featureId,
-            input.item.id,
-            body,
-            init,
-          );
-    },
-    onSuccess: async () => {
-      await Promise.all(
-        [
-          "tasks",
-          "modules",
-          "activity",
-          "search",
-          "notifications",
-          "my-tasks",
-          "my-task-groups",
-          "task-marks",
-          // 归档/恢复会改变聚合组详情里的分支状态与归档徽标（2026-09-22 修）。
-          "task-group",
-          "task-group-records",
-        ].map((key) => lifecycleCache.invalidateQueries({ queryKey: [key] })),
-      );
-    },
-  });
   const openDetail = (id: number) => {
     setSelectedId(id);
     setTab("info");
     setStatusAction(null);
+    setPublishedRecord(null);
   };
   const closeDetail = () => {
     setSelectedId(null);
     setTab("info");
     setStatusAction(null);
     setOpenRecordId(null);
+    setPublishedRecord(null);
     onDetailClose?.();
   };
   /**
@@ -601,7 +522,7 @@ export function TasksPanel({
       if (stamp !== generation.current) return;
       if (stamp !== generation.current) return;
       if (latest.lifecycleStatus !== "ACTIVE") {
-        setReloadError("任务已归档，草稿已保留，当前不能保存。");
+        setReloadError("任务已无效，草稿已保留，当前不能保存。");
         return;
       }
       const result = mergeTask(taskEdit(base), draft, taskEdit(latest));
@@ -631,37 +552,6 @@ export function TasksPanel({
     mutation.reset();
     setReloadError(null);
   };
-  const openLifecycle = (action: "archive" | "restore", item: TaskViewItem) => {
-    lifecycleMutation.reset();
-    setLifecycleError(null);
-    setLifecycleReason("");
-    setLifecycle({ action, item });
-  };
-  const closeLifecycle = () => {
-    if (lifecycleMutation.isPending) return;
-    lifecycleMutation.reset();
-    setLifecycleError(null);
-    setLifecycleReason("");
-    setLifecycle(null);
-  };
-  const submitLifecycle = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!lifecycle || lifecycleMutation.isPending) return;
-    const reason = lifecycleReason.trim();
-    if (reason.length === 0) {
-      setLifecycleError("请填写操作原因。");
-      return;
-    }
-    setLifecycleError(null);
-    try {
-      await lifecycleMutation.mutateAsync({ ...lifecycle, reason });
-      setLifecycle(null);
-      setLifecycleReason("");
-      setSuccess(true);
-    } catch {
-      /* 失败时保留原因输入，便于按最新版本重试。 */
-    }
-  };
   return (
     <section
       aria-label={featureId === null ? "模块任务" : "功能任务"}
@@ -676,7 +566,24 @@ export function TasksPanel({
               onClose={() => setCreateMode(null)}
               client={client}
               preset={{ projectId, moduleId }}
-              onCreatedLocation={(task) => navigate(taskDetailPath(task))}
+              onCreatedLocation={(task) => {
+                // 2026-09-28：模块级面板的「新建任务」改用任务中心同一弹窗后，创建
+                // 成功只会改写地址栏；已经挂载的面板不会再读 URL 的 ?taskId=，就地
+                // 打开详情的旧口径因此丢失。归属已由页面固定为模块级时，与功能级
+                // 面板一致：就地打开详情且不写地址栏——留下 ?taskId= 会让刷新后重新
+                // 弹出详情，与「刷新回到列表」的既有口径冲突。「自定义归属新建任务」
+                // 保持原样跳转：它本来就可能建到别的模块 / 功能，由目标页按深链打开。
+                if (
+                  createMode === "page" &&
+                  task.projectId === projectId &&
+                  task.moduleId === moduleId &&
+                  task.featureId === null
+                ) {
+                  openDetail(task.taskId);
+                  return;
+                }
+                navigate(taskDetailPath(task));
+              }}
             />
           )}
           <div className="calm-section-title">
@@ -711,6 +618,7 @@ export function TasksPanel({
                   options={statusFilterOptions}
                   appearance="menu"
                   ariaLabel="任务状态筛选"
+                  animated
                 />
               )}
               <CalmSegmented
@@ -742,10 +650,7 @@ export function TasksPanel({
           )}
           {success && <Alert type="success" title="任务已保存" />}
           {query.isPending ? (
-            <div className="calm-state">
-              <Spin />
-              <span>正在加载任务</span>
-            </div>
+            <CalmSkeleton variant="list" rows={4} label="正在加载任务" />
           ) : query.isError ? (
             <Alert
               type="error"
@@ -987,10 +892,7 @@ export function TasksPanel({
           className="task-modal"
         >
           {query.isPending ? (
-            <div className="calm-state">
-              <Spin />
-              <span>正在加载任务详情</span>
-            </div>
+            <CalmSkeleton variant="lines" rows={5} label="正在加载任务详情" />
           ) : query.isError ? (
             <Alert
               type="error"
@@ -1075,6 +977,20 @@ export function TasksPanel({
                   <InpulseIcon name="x" size={19} />
                 </button>
               </div>
+              {publishedRecord !== null && (
+                <Alert
+                  type="success"
+                  title={"迭代记录已发布：" + publishedRecord.code}
+                  action={
+                    <Button
+                      className="secondary-button"
+                      onClick={() => setOpenRecordId(publishedRecord.id)}
+                    >
+                      查看正式记录
+                    </Button>
+                  }
+                />
+              )}
               <div className="calm-task-actions">
                 <TaskDueBadge item={current} />
                 {current.workStatus === "TODO" && (
@@ -1127,7 +1043,7 @@ export function TasksPanel({
                 )}
                 <Button
                   className="secondary-button"
-                  disabled={!taskWritable && !canOpenLifecycleDialog}
+                  disabled={!taskWritable}
                   onClick={() => open(current)}
                 >
                   <InpulseIcon name="pencil" size={14} />
@@ -1164,20 +1080,9 @@ export function TasksPanel({
                         <p>{current.description || "暂无任务说明"}</p>
                       </section>
                       <div className="task-modal-links">
-                        {current.scopeType === "MODULE" && (
-                          <a
-                            href={
-                              "/projects/" +
-                              projectId +
-                              "/modules/" +
-                              moduleId +
-                              "/tasks?taskId=" +
-                              current.id
-                            }
-                          >
-                            打开模块任务
-                          </a>
-                        )}
+                        {/* 2026-09-24 产品要求删除「打开模块任务」：任务中心详情头部
+                            的「在项目中打开」与功能页头部的「模块级任务」标签都指向同
+                            一地址（taskDetailPath），正文里重复。 */}
                         <a
                           href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
                         >
@@ -1233,10 +1138,11 @@ export function TasksPanel({
                         </Button>
                       </div>
                       {taskRecords.isPending || taskDrafts.isPending ? (
-                        <div className="calm-state">
-                          <Spin />
-                          <span>正在加载迭代记录</span>
-                        </div>
+                        <CalmSkeleton
+                          variant="list"
+                          rows={3}
+                          label="正在加载迭代记录"
+                        />
                       ) : taskRecords.isError || taskDrafts.isError ? (
                         <Alert
                           type="error"
@@ -1258,7 +1164,7 @@ export function TasksPanel({
                           <InpulseIcon name="gitBranch" size={25} />
                           <strong>该任务还没有迭代记录</strong>
                           <p>
-                            完成任务时可以直接记录，也可以先在迭代记录草稿中保存内容。
+                            可以直接发布一条迭代记录，也可以先保存草稿稍后补充；发布记录不会改变任务状态。
                           </p>
                         </div>
                       ) : (
@@ -1445,7 +1351,7 @@ export function TasksPanel({
         onOpenTask={onOpenTask}
         onChanged={() => {
           // 解除合并会改变任务在聚合组里的关系标记，整批重读 R-5 标记。
-          void lifecycleCache.invalidateQueries({ queryKey: ["task-marks"] });
+          void queryClient.invalidateQueries({ queryKey: ["task-marks"] });
         }}
       />
       {openRecord === null ? null : (
@@ -1467,8 +1373,14 @@ export function TasksPanel({
           projectId={projectId}
           writable={taskWritable}
           onClose={() => setDraftTarget(null)}
-          // 保存成功后弹窗内部会失效草稿查询，列表在下一次渲染时出现新草稿。
-          onSaved={() => setDraftTarget(null)}
+          // 草稿列表由弹窗内部失效；本任务正式记录列表是另一条只读查询，发布后需自行刷新。
+          onSaved={(_draft, published) => {
+            setDraftTarget(null);
+            if (!published) return;
+            // 发布成功就在原地给出落点：正式记录列表刷新期间也能直接打开详情。
+            setPublishedRecord(published);
+            void taskRecords.refetch();
+          }}
         />
       )}
       <Modal
@@ -1490,10 +1402,7 @@ export function TasksPanel({
         >
           <div className="dialog-form">
             {editReadOnly && (
-              <Alert
-                type="info"
-                title="任务已归档，表单只读；可用下方按钮恢复。"
-              />
+              <Alert type="info" title="任务已无效，表单只读。" />
             )}
             {mutation.isError && (
               <Alert type="error" title={taskError(mutation.error)} />
@@ -1602,13 +1511,21 @@ export function TasksPanel({
                       maxTagCount={2}
                       placeholder="请选择项目成员（可多选）"
                       ariaLabel="负责人"
+                      animated
                     />
                   )}
                 />
                 {errors.assigneeIds && (
                   <p role="alert">{errors.assigneeIds.message}</p>
                 )}
-                {isFirstLoad(members) && <p>正在加载项目成员…</p>}
+                {isFirstLoad(members) && (
+                  <CalmSkeleton
+                    variant="list"
+                    rows={2}
+                    compact
+                    label="正在加载项目成员…"
+                  />
+                )}
                 {members.isError && (
                   <Alert
                     type="error"
@@ -1645,6 +1562,7 @@ export function TasksPanel({
                             dotColor: priorityDotColor(value),
                           }),
                         )}
+                        animated
                       />
                     )}
                   />
@@ -1655,27 +1573,14 @@ export function TasksPanel({
                     name="dueAt"
                     control={control}
                     render={({ field }) => (
-                      <input
+                      <CalmDateTimeInput
                         id="task-due"
-                        type="datetime-local"
-                        value={
-                          field.value
-                            ? new Date(
-                                new Date(field.value).getTime() -
-                                  new Date(field.value).getTimezoneOffset() *
-                                    60000,
-                              )
-                                .toISOString()
-                                .slice(0, 16)
-                            : ""
-                        }
+                        value={toLocalDateTimeInput(field.value)}
                         onBlur={field.onBlur}
-                        ref={field.ref}
-                        onChange={(event) =>
+                        inputRef={field.ref}
+                        onChange={(next) =>
                           field.onChange(
-                            event.target.value
-                              ? new Date(event.target.value).toISOString()
-                              : null,
+                            next === "" ? null : new Date(next).toISOString(),
                           )
                         }
                       />
@@ -1703,10 +1608,16 @@ export function TasksPanel({
                 )}
               </div>
               {featureId === null && (
-                <fieldset className="calm-field task-impact-features">
-                  <legend>影响功能（可多选，可为空）</legend>
+                // 2026-09-28 产品反馈：与「指派给」「优先级」统一交互，原生复选框换成多选下拉，并支持按名称搜索。
+                <div className="calm-field">
+                  <label htmlFor="task-impact-features">影响功能</label>
                   {features.isPending ? (
-                    <p>正在加载影响功能…</p>
+                    <CalmSkeleton
+                      variant="lines"
+                      rows={2}
+                      compact
+                      label="正在加载影响功能…"
+                    />
                   ) : features.isError ? (
                     <Alert
                       type="error"
@@ -1725,35 +1636,32 @@ export function TasksPanel({
                       name="impactFeatureIds"
                       control={control}
                       render={({ field }) => (
-                        <div className="check-list">
-                          {features.data?.items.map((f) => (
-                            <label key={f.id}>
-                              <input
-                                type="checkbox"
-                                checked={(field.value ?? []).includes(f.id)}
-                                onChange={(event) =>
-                                  field.onChange(
-                                    event.target.checked
-                                      ? [
-                                          ...new Set([
-                                            ...(field.value ?? []),
-                                            f.id,
-                                          ]),
-                                        ].sort((a, b) => a - b)
-                                      : (field.value ?? []).filter(
-                                          (id) => id !== f.id,
-                                        ),
-                                  )
-                                }
-                              />
-                              {f.name}
-                            </label>
-                          ))}
-                        </div>
+                        <CalmSelect
+                          id="task-impact-features"
+                          ariaLabel="影响功能"
+                          value={field.value ?? []}
+                          multiple
+                          maxTagCount={2}
+                          appearance="menu"
+                          searchable
+                          placeholder="输入功能名称搜索，可多选，可为空"
+                          onChange={(next) =>
+                            field.onChange(
+                              [...new Set(next.map(Number))].sort(
+                                (a, b) => a - b,
+                              ),
+                            )
+                          }
+                          options={(features.data?.items ?? []).map((f) => ({
+                            value: f.id,
+                            label: f.name,
+                          }))}
+                          animated
+                        />
                       )}
                     />
                   )}
-                </fieldset>
+                </div>
               )}
               <div className="calm-field form-hint">
                 <p>
@@ -1763,30 +1671,6 @@ export function TasksPanel({
             </fieldset>
           </div>
           <div className="calm-action-footer">
-            {/* ADR-034：任务归档/恢复入口与模块、功能一致放在编辑弹窗底部；
-                普通成员看不到，系统管理员或项目内管理角色可直接切到归档流程。 */}
-            {selection?.item &&
-            canArchiveTasks &&
-            (selection.item.lifecycleStatus === "ACTIVE" ||
-              selection.item.lifecycleStatus === "ARCHIVED") ? (
-              <Button
-                className="secondary-button footer-leading"
-                data-testid="task-modal-lifecycle"
-                disabled={mutation.isPending || reloading || !!merge}
-                onClick={() =>
-                  openLifecycle(
-                    selection.item!.lifecycleStatus === "ARCHIVED"
-                      ? "restore"
-                      : "archive",
-                    selection.item!,
-                  )
-                }
-              >
-                {selection.item.lifecycleStatus === "ARCHIVED"
-                  ? "恢复"
-                  : "归档"}
-              </Button>
-            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -1804,68 +1688,6 @@ export function TasksPanel({
             >
               {/* 与任务中心弹窗一致：新建说「创建任务」，编辑仍说「保存」。 */}
               {selection?.item ? "保存" : "创建任务"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal
-        open={lifecycle !== null}
-        eyebrow={
-          lifecycle === null
-            ? "任务生命周期"
-            : lifecycle.item.code +
-              (lifecycle.action === "archive"
-                ? " · 归档只切换生命周期状态"
-                : " · 恢复后任务重新回到活跃列表")
-        }
-        title={lifecycle?.action === "restore" ? "恢复任务" : "归档任务"}
-        // 归档是不可逆感知的破坏性动作，恢复则是挽回：两者用不同语义色顶条区分。
-        tone={lifecycle?.action === "restore" ? "success" : "danger"}
-        icon={lifecycle?.action === "restore" ? "rotateCcw" : "alert"}
-        className="catalog-modal"
-        onCancel={closeLifecycle}
-        mask={{ closable: !lifecycleMutation.isPending }}
-      >
-        <form
-          className="catalog-form calm-form"
-          onSubmit={(event) => void submitLifecycle(event)}
-        >
-          <div className="dialog-form">
-            {lifecycleMutation.isError && (
-              <Alert type="error" title={taskError(lifecycleMutation.error)} />
-            )}
-            {lifecycleError && <Alert type="error" title={lifecycleError} />}
-            <div className="calm-field">
-              <label htmlFor="task-lifecycle-reason">操作原因</label>
-              <Input.TextArea
-                id="task-lifecycle-reason"
-                rows={3}
-                maxLength={2000}
-                value={lifecycleReason}
-                disabled={lifecycleMutation.isPending}
-                onChange={(event) => setLifecycleReason(event.target.value)}
-              />
-            </div>
-            <p className="calm-hint">
-              {lifecycle?.action === "restore"
-                ? "恢复只让任务重新可写；所属模块或功能已归档时，先恢复上一级再恢复任务。"
-                : "归档不改变工作状态、完成记录与状态历史；模块归档要求该模块下的全部任务都已归档。"}
-            </p>
-          </div>
-          <div className="calm-action-footer">
-            <Button
-              className="secondary-button"
-              onClick={closeLifecycle}
-              disabled={lifecycleMutation.isPending}
-            >
-              取消
-            </Button>
-            <Button
-              className="primary-button"
-              htmlType="submit"
-              loading={lifecycleMutation.isPending}
-            >
-              确认
             </Button>
           </div>
         </form>

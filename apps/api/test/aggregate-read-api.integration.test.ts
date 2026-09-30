@@ -130,7 +130,7 @@ interface TaskOptions {
   readonly actorUserId?: number;
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   readonly title?: string;
   readonly priority?: "NORMAL" | "HIGH" | "URGENT";
   readonly dueAt?: string | null;
@@ -173,6 +173,24 @@ async function newTask(
     }
     return current.id;
   });
+}
+
+/**
+ * 直改项目状态：ADR-043 要求切维护中前不存在未完成任务，本文件刻意保留任务数据
+ * 以覆盖「维护中仍有卡片来源」的展示口径，因此绕过 API 直接改库。
+ * row_version 必须 +1（0001 的 projects_row_version 触发器）。
+ */
+async function setProjectStatus(
+  projectId: number,
+  status: "NOT_STARTED" | "ACTIVE" | "MAINTENANCE",
+): Promise<void> {
+  await runtime!.sql`
+    UPDATE app.projects
+       SET status = ${status},
+           updated_at = clock_timestamp(),
+           row_version = row_version + 1
+     WHERE id = ${projectId}
+  `;
 }
 
 interface RecordOptions {
@@ -1634,6 +1652,55 @@ describe("GET /api/v1/me/tasks（R-3 我的任务）", () => {
       recordCode: recordRow!.code,
       summary: "长".repeat(200) + "…",
     });
+  });
+
+  test("维护中项目不再产出任务卡片，切回进行中后重新出现（2026-09-30 口径）", async () => {
+    const maintenanceProject = await createProject(runtime!.sql, memberUser);
+    const openTask = await newTask(maintenanceProject);
+    const doneTask = await newTask(maintenanceProject, {
+      workStatus: "DONE",
+    });
+    const scope = "projectId=" + String(maintenanceProject.projectId);
+    const taskIdsIn = (page: { items: readonly { taskId: number }[] }) =>
+      page.items.map((item) => item.taskId);
+
+    // 未开始 / 进行中项目仍产出卡片：只有维护中项目被剔除。
+    const before = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks?" + scope, memberCookie)).body,
+    );
+    expect(taskIdsIn(before)).toEqual([openTask, doneTask]);
+    expect(before.stats).toMatchObject({ myOpen: 1, completed: 1 });
+
+    await setProjectStatus(maintenanceProject.projectId, "MAINTENANCE");
+
+    const hidden = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks?" + scope, memberCookie)).body,
+    );
+    expect(hidden.items).toEqual([]);
+    expect(hidden.stats).toMatchObject({
+      todayTodo: 0,
+      myOpen: 0,
+      completed: 0,
+      created: 0,
+    });
+    expect(hidden.leftoverCount).toBe(0);
+
+    // 未带 projectId 的全局查询同样不再出现该项目：剔除发生在授权范围收窄之后、
+    // 分页与统计之前。
+    const all = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks", memberCookie)).body,
+    );
+    expect(
+      all.items.some((item) => item.projectId === maintenanceProject.projectId),
+    ).toBe(false);
+
+    await setProjectStatus(maintenanceProject.projectId, "ACTIVE");
+
+    const restored = myTaskPageSchema.parse(
+      (await getJson("/api/v1/me/tasks?" + scope, memberCookie)).body,
+    );
+    expect(taskIdsIn(restored)).toEqual([openTask, doneTask]);
+    expect(restored.stats).toMatchObject({ myOpen: 1, completed: 1 });
   });
 });
 

@@ -111,8 +111,8 @@ async function seedProjects(sql: Sql, suffix: string): Promise<ProjectIdMap> {
       }
 
       await transaction`
-        INSERT INTO app.project_members (project_id, user_id)
-        VALUES (${project.id}, ${user.id})
+        INSERT INTO app.project_members (project_id, user_id, role)
+        VALUES (${project.id}, ${user.id}, 'LEADER')
       `;
       await transaction`
         INSERT INTO app.modules (

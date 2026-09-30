@@ -13,7 +13,6 @@ import { TasksManagementService } from "../src/modules/tasks/tasks-management.se
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
 import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
-import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
@@ -187,10 +186,6 @@ beforeAll(async () => {
               featureRead,
               new PostgresProjectCodePort(),
               new PostgresProjectMembersQueryPort(),
-              new ProjectRoleGateService(
-                access,
-                new PostgresProjectMembersQueryPort(),
-              ),
               uow,
               tasks,
               audit,

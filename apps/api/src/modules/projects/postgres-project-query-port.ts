@@ -10,7 +10,10 @@ import {
   projectLifecycleRankExpression,
   projectStatColumns,
 } from "../../stats/card-stat-columns.js";
-import { ProjectQueryPort } from "./project-query.port.js";
+import {
+  ProjectQueryPort,
+  type ProjectStatusRef,
+} from "./project-query.port.js";
 
 interface ProjectListItemRow {
   readonly id: number;
@@ -95,9 +98,27 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
               AND m.user_id = ${actorUserId ?? null}
               AND m.status = 'ACTIVE'
        WHERE p.id = ANY(${projectIds}::integer[])
+         AND p.deleted_at IS NULL
        ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.created_at DESC, p.id DESC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
+  }
+
+  // 任务中心的维护中排除只读 id 与 status 两列（不取统计列、不 Join 成员）；
+  // 已删除项目不在这里判定：授权范围本身已排除软删项目（ADR-049）。
+  async listStatuses(
+    projectIds: readonly number[],
+  ): Promise<readonly ProjectStatusRef[]> {
+    if (projectIds.length === 0) {
+      return [];
+    }
+    const rows = (await this.client.sql`
+      SELECT p.id AS "projectId",
+             p.status
+        FROM app.projects p
+       WHERE p.id = ANY(${projectIds}::integer[])
+    `) as unknown as readonly ProjectStatusRef[];
+    return rows;
   }
 
   async findActiveMemberRole(
@@ -138,6 +159,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
              ${projectStatColumns(this.client.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${projectId}
+         AND p.deleted_at IS NULL
     `) as unknown as readonly ProjectRow[];
     const row = rows[0];
     return row === undefined ? undefined : this.toItem(row);

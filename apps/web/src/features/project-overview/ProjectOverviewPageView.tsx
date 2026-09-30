@@ -2,7 +2,7 @@ import { ProjectRepositoryLink } from "@features/external-links/ProjectRepositor
 import { useNavigate } from "react-router-dom";
 import { taskDetailPath } from "@features/tasks/task-links";
 import React, { useState } from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import {
   InpulseIcon,
@@ -25,6 +25,7 @@ import type {
   ProjectOverviewIteration,
   ProjectOverviewLeftover,
 } from "./project-overview-types";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 function formatPublishedAt(iso: string): string {
   const date = new Date(iso);
@@ -199,6 +200,11 @@ export const ProjectOverviewPageView: React.FC<
                     : "项目主页"
                   : project.name}
               </h1>
+              {project === null ? null : (
+                <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+                  {projectLifecycleLabel(project.status)}
+                </CalmBadge>
+              )}
               {project === null || onEditProject === undefined ? null : (
                 <button
                   type="button"
@@ -211,20 +217,13 @@ export const ProjectOverviewPageView: React.FC<
                 </button>
               )}
             </div>
-            <p>
-              {project === null || project.description === ""
-                ? "这里汇总项目的模块、功能、任务与迭代记录，从模块开始进入项目。"
-                : project.description}
-            </p>
+            {project === null || project.description === "" ? null : (
+              <p>{project.description}</p>
+            )}
           </div>
         </div>
         <div className="project-detail-actions">
           <ProjectRepositoryLink projectId={projectId} client={client} />
-          {project === null ? null : (
-            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
-              {projectLifecycleLabel(project.status)}
-            </CalmBadge>
-          )}
           {onOpenModules === undefined ? null : (
             <button
               type="button"
@@ -237,7 +236,7 @@ export const ProjectOverviewPageView: React.FC<
           )}
           <button
             type="button"
-            className="secondary-button"
+            className="soft-blue-button"
             onClick={onOpenMembers}
           >
             <InpulseIcon name="users" size={15} />
@@ -301,10 +300,7 @@ export const ProjectOverviewPageView: React.FC<
       </div>
 
       {overviewQuery.isPending ? (
-        <div className="calm-state">
-          <Spin size="large" />
-          <p>正在加载项目…</p>
-        </div>
+        <CalmSkeleton variant="card" rows={3} label="正在加载项目…" />
       ) : overviewQuery.isError ? (
         <Alert
           type="error"

@@ -34,7 +34,7 @@ import { AggregateReadError } from "./aggregate-read.errors.js";
  * R-8 任务看板聚合读（项目任务看板）。
  *
  * 口径（2026-09-18 定稿，与功能设计 29 节对齐）：
- * 1. 看板集合 = 项目内 lifecycle_status = ACTIVE 的任务（不含已归档与无效任务），
+ * 1. 看板集合 = 项目内 lifecycle_status = ACTIVE 的任务（不含无效任务），
  *    再排除任务组历史来源分支；已取消任务保留为历史标记。
  * 2. 完成率 = 已完成 /（已完成 + 未完成），已取消与历史来源分支不计入分母（29.2 节）。
  * 3. 逾期 / 今日到期 / 本周完成 / 卡片截止状态全部由 SQL 按 Asia/Shanghai 计算，

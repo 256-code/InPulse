@@ -101,8 +101,21 @@ async function pickSelectOption(label: string, optionTitle: string) {
 async function open() {
   fireEvent.click(screen.getByRole("button", { name: "转为新任务" }));
   await screen.findByText("待跟进原文");
-  await pickSelectOption("跟进任务负责人", "成员");
+  await pickSelectOption("负责人", "成员");
 }
+// 2026-09-30 版 1 对照稿：没有继承影响时只留「记录 · 版本 · 编号 · 原文」，
+// 不再多出一句「影响功能：无」。
+it("hides the impact segment when nothing is inherited", async () => {
+  mount({
+    previewLeftoverTask: vi
+      .fn()
+      .mockResolvedValue({ ...preview, inheritedImpacts: [] }),
+  });
+  await open();
+  await waitFor(() => expect(screen.getByText(/遗留问题 #8/)).toBeVisible());
+  expect(screen.queryByText(/影响功能/)).toBeNull();
+});
+
 it("shows inherited history, retains input and reuses the key after uncertain failure", async () => {
   const convert = vi
     .fn()
@@ -113,21 +126,20 @@ it("shows inherited history, retains input and reuses the key after uncertain fa
   // ADR-045：功能不再有归档态，记录上的影响全部继承，弹层不再展示「历史归档影响」块。
   // 弹层内容在 rc-motion 的过渡帧里会短暂处于不可见态：整套件并发跑时曾抓到 `expect(element).toBeVisible()`
   // 对同一个 <p> 偶发失败（元素已能匹配、只是还没可见），这里改成等待可见，断言目标不变。
-  await waitFor(() =>
-    expect(screen.getByText(/将继承的影响功能：支付/)).toBeVisible(),
-  );
-  fireEvent.change(screen.getByLabelText("跟进任务标题"), {
+  await waitFor(() => expect(screen.getByText(/影响功能：支付/)).toBeVisible());
+  fireEvent.change(screen.getByLabelText("标题"), {
     target: { value: "我的跟进标题" },
   });
-  fireEvent.change(screen.getByLabelText("跟进任务截止时间（选填）"), {
+  fireEvent.change(screen.getByLabelText("任务说明"), {
+    target: { value: "按线上日志补埋点" },
+  });
+  fireEvent.change(screen.getByLabelText("截止时间"), {
     target: { value: "2026-10-10T18:30" },
   });
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   await screen.findByText("暂时无法转换，输入已保留，请重试。");
-  expect(screen.getByLabelText("跟进任务标题")).toHaveValue("我的跟进标题");
-  expect(screen.getByLabelText("跟进任务截止时间（选填）")).toHaveValue(
-    "2026-10-10T18:30",
-  );
+  expect(screen.getByLabelText("标题")).toHaveValue("我的跟进标题");
+  expect(screen.getByLabelText("截止时间")).toHaveValue("2026-10-10T18:30");
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   // 转换成功后由父级列表按 CONVERTED 渲染「查看跟进任务」链接，这里只断言回调与弹窗关闭。
   await waitFor(() => expect(converted).toHaveBeenCalledTimes(1));
@@ -143,7 +155,7 @@ it("shows inherited history, retains input and reuses the key after uncertain fa
     assigneeIds: [3],
     dueAt: new Date(2026, 9, 10, 18, 30).toISOString(),
   });
-  expect(convert.mock.calls[0]![2]).not.toHaveProperty("description");
+  expect(convert.mock.calls[0]![2].description).toBe("按线上日志补埋点");
   expect(convert.mock.calls[0]![2]).not.toHaveProperty("projectId");
 });
 it("requires explicit confirmation after 409 impact/content change, retaining task input", async () => {
@@ -173,10 +185,10 @@ it("requires explicit confirmation after 409 impact/content change, retaining ta
       }),
   });
   await open();
-  fireEvent.change(screen.getByLabelText("跟进任务标题"), {
+  fireEvent.change(screen.getByLabelText("标题"), {
     target: { value: "保留标题" },
   });
-  fireEvent.change(screen.getByLabelText("跟进任务截止时间（选填）"), {
+  fireEvent.change(screen.getByLabelText("截止时间"), {
     target: { value: "2026-10-11T09:15" },
   });
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
@@ -194,10 +206,8 @@ it("requires explicit confirmation after 409 impact/content change, retaining ta
   expect(
     await screen.findByRole("button", { name: "创建跟进任务" }),
   ).toBeDisabled();
-  expect(screen.getByLabelText("跟进任务标题")).toHaveValue("保留标题");
-  expect(screen.getByLabelText("跟进任务截止时间（选填）")).toHaveValue(
-    "2026-10-11T09:15",
-  );
+  expect(screen.getByLabelText("标题")).toHaveValue("保留标题");
+  expect(screen.getByLabelText("截止时间")).toHaveValue("2026-10-11T09:15");
   fireEvent.click(screen.getByRole("button", { name: "确认使用最新预览" }));
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   await waitFor(() => expect(convert).toHaveBeenCalledTimes(2));
@@ -220,7 +230,7 @@ it("changes the key when the deadline changes and sends null when cleared", asyn
     .mockResolvedValue(result);
   const converted = mount({ convertLeftoverToTask: convert });
   await open();
-  const due = screen.getByLabelText("跟进任务截止时间（选填）");
+  const due = screen.getByLabelText("截止时间");
   fireEvent.change(due, { target: { value: "2026-10-10T18:30" } });
   fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
   await screen.findByText("暂时无法转换，输入已保留，请重试。");
@@ -236,11 +246,32 @@ it("changes the key when the deadline changes and sends null when cleared", asyn
     new Date(2026, 9, 12, 8, 45).toISOString(),
     null,
   ]);
+  expect(convert.mock.calls[0]![2]).not.toHaveProperty("description");
   expect(
     new Set(
       convert.mock.calls.map((call) => call[3].headers["Idempotency-Key"]),
     ).size,
   ).toBe(3);
+});
+it("surfaces the 422 description-too-long message and keeps the input", async () => {
+  const convert = vi.fn().mockRejectedValue(
+    new ApiError(422, {
+      code: "LEFTOVER_TASK_DESCRIPTION_TOO_LONG",
+      message: "过长",
+      details: {},
+      requestId: "test",
+    }),
+  );
+  mount({ convertLeftoverToTask: convert });
+  await open();
+  fireEvent.change(screen.getByLabelText("任务说明"), {
+    target: { value: "很长很长的说明" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "创建跟进任务" }));
+  await screen.findByText(
+    "任务说明加上来源记录与遗留原文后超过 50000 字，请缩短说明。",
+  );
+  expect(screen.getByLabelText("任务说明")).toHaveValue("很长很长的说明");
 });
 it("rejects malformed or overflowing local dates without throwing", () => {
   for (const value of [

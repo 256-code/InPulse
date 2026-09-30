@@ -133,11 +133,7 @@ export class TaskCompletionWorkflow {
       }
       if (!source) throw missing();
       if (source.lifecycleStatus !== "ACTIVE")
-        throw new TaskManagementError(
-          409,
-          "TASK_STATE_CONFLICT",
-          "任务已归档或无效",
-        );
+        throw new TaskManagementError(409, "TASK_STATE_CONFLICT", "任务已无效");
       if (
         currentBranch?.role === "SOURCE" &&
         currentBranch.sourceKind === "HISTORICAL"

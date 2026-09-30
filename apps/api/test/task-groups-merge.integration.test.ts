@@ -205,7 +205,7 @@ async function createTask(
   title: string,
   options: {
     readonly featureId?: number | null;
-    readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED";
+    readonly lifecycleStatus?: "ACTIVE" | "INVALID";
     readonly workStatus?: "TODO" | "DONE" | "CANCELED";
   } = {},
 ): Promise<number> {
@@ -550,18 +550,18 @@ describe("F-23 task group merge", () => {
       await merge(f.actor, mergeBody(f.sourceTaskId, f.mainTaskId)),
       404,
     );
-    const archived = await mergeFixture();
-    // ADR-045：功能不再有归档态，父级拒写改由任务自身的归档承接（错误码不变）。
-    await client.sql`UPDATE app.tasks SET lifecycle_status = ${"ARCHIVED"}, updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${archived.sourceTaskId}`;
+    const invalid = await mergeFixture();
+    // ADR-054：任务归档已下线，父级拒写改由任务自身的无效状态承接（错误码不变）。
+    await client.sql`UPDATE app.tasks SET lifecycle_status = ${"INVALID"}, updated_at = clock_timestamp(), row_version = row_version + 1 WHERE id = ${invalid.sourceTaskId}`;
     const blocked = await failure(
       await merge(
-        archived.actor,
-        mergeBody(archived.sourceTaskId, archived.mainTaskId),
+        invalid.actor,
+        mergeBody(invalid.sourceTaskId, invalid.mainTaskId),
       ),
       409,
     );
     expect(blocked.code).toBe("TASK_MERGE_PARENT_ARCHIVED");
-    expect((await countSideEffects(archived.project.projectId)).members).toBe(
+    expect((await countSideEffects(invalid.project.projectId)).members).toBe(
       "0",
     );
   });

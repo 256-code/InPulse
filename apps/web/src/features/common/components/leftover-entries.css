@@ -1,4 +1,19 @@
-/* 遗留问题多条编辑：逐条文本域 + 行尾移除/锁定标记，末行是添加按钮。 */
+/* 遗留问题多条编辑：标题行右侧是「添加遗留问题」，下面是逐条文本域 + 行尾移除/锁定标记。 */
+.leftover-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leftover-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.leftover-field-label {
+  color: #586d83;
+  font-size: 11px;
+}
 .leftover-entries {
   display: flex;
   flex-direction: column;
@@ -18,17 +33,4 @@
   font-size: 12px;
   line-height: 24px;
   white-space: nowrap;
-}
-.leftover-entry-empty {
-  color: #7b8fa2;
-  font-size: 12px;
-}
-.leftover-entry-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.leftover-entry-actions > span {
-  color: #7b8fa2;
-  font-size: 12px;
 }

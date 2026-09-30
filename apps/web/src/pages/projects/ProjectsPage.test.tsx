@@ -111,14 +111,20 @@ describe("ProjectsPage", () => {
     const projectName = await screen.findByText("商城系统");
     expect(projectName).toBeInTheDocument();
     expect(projectName.closest(".project-card")).toHaveTextContent("1 位成员");
-    expect(projectName.closest(".project-card")).toHaveTextContent("查看模块");
+    // 卡片整块可点击进入模块，不再渲染「查看模块」入口（已按用户要求移除）。
+    expect(projectName.closest(".project-card")).toHaveTextContent(
+      "商城项目描述",
+    );
+    expect(projectName.closest(".project-card")).not.toHaveTextContent(
+      "查看模块",
+    );
     expect(screen.getByText("层级说明")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }),
     ).toBeInTheDocument();
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "新建项目" }));
+    await user.click(screen.getByTestId("create-project-button"));
 
     const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     fireEvent.change(within(dialog).getByLabelText("项目名称"), {
@@ -136,6 +142,79 @@ describe("ProjectsPage", () => {
     expect(await screen.findByText("项目创建成功")).toBeInTheDocument();
     await user.click(screen.getByTestId("open-created-project-activity"));
     expect(await screen.findByText("Activity content")).toBeInTheDocument();
+  }, 15_000);
+
+  it("clears the previous success card when the create form is reopened", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false }],
+    });
+    const createProject = vi.fn().mockResolvedValue(createdProject);
+    const listProjects = vi.fn().mockResolvedValue({ items: [] });
+    const client = {
+      issueCsrfToken,
+      getUserDirectory,
+      createProject,
+      listProjects,
+    } as unknown as InpulseApiClient;
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <AuthStateProvider
+          value={{
+            status: "authenticated",
+            user: {
+              id: 1,
+              loginName: "developer",
+              name: "开发者 C",
+              email: null,
+              avatarUrl: null,
+              isAdmin: true,
+              status: "ACTIVE",
+            },
+          }}
+        >
+          <MemoryRouter initialEntries={["/projects"]}>
+            <Routes>
+              <Route
+                path="/projects"
+                element={<ProjectsPage client={client} />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthStateProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("create-project-button"));
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    fireEvent.change(within(dialog).getByLabelText("项目名称"), {
+      target: { value: "商城系统" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("项目编码"), {
+      target: { value: "shop" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
+
+    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("项目创建成功")).toBeInTheDocument();
+
+    // 再次打开「新建项目」：上一次的成功卡片不应继续留在页面上。
+    // 这里不显式点「取消」——AppModal 在 jsdom 里没有过渡帧，关闭后节点仍留在 DOM，
+    // 断言「弹窗消失」会误报；直接断言用户真正看到的东西：旧成功卡片被清掉。
+    await user.click(screen.getByTestId("create-project-button"));
+
+    await waitFor(() =>
+      expect(screen.queryByText("项目创建成功")).not.toBeInTheDocument(),
+    );
   }, 15_000);
 
   it("opens the admin member management page from a project card", async () => {

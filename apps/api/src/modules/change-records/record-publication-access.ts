@@ -120,12 +120,8 @@ export class RecordPublicationAccess {
           "RECORD_ALREADY_PUBLISHED",
           "记录已发布，请查看正式记录",
         );
-      if (publish && source?.workStatus !== "DONE" && source !== undefined)
-        throw new RecordDraftError(
-          409,
-          "RECORD_SOURCE_NOT_DONE",
-          "来源任务尚未完成，请使用发布并完成流程",
-        );
+      // ADR-047：迭代记录只描述本次迭代本身，发布不再以来源任务是否完成为门禁。
+      // 来源任务仍按「任务 -> 记录」取锁并校验归属，任务状态保持原样。
       if (!publish && current.status !== "PUBLISHED")
         throw new RecordDraftError(409, "RECORD_NOT_PUBLISHED", "记录尚未发布");
       await tx.sql`RELEASE SAVEPOINT record_publication_locks`;

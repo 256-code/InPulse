@@ -56,6 +56,7 @@ import { TasksManagementService } from "../src/modules/tasks/tasks-management.se
 import {
   createProject,
   createUser,
+  removeMember,
   testUrls,
   type ProjectFixture,
 } from "./database.helpers.js";
@@ -158,23 +159,25 @@ async function addMember(projectId: number, userId: number): Promise<void> {
 }
 
 /**
- * ADR-033 §6：组长不能被移除；需要移除创建者时，先由系统管理员
- * 通过 setProjectMemberRole 撤销组长角色。
+ * ADR-053：组长只能转移——把目标成员设为组长，原组长自动降级为 MEMBER，
+ * 之后才能移除原组长；直接撤销组长（role=MEMBER）返回 409。
  */
-async function revokeLeaderRole(
+async function transferLeaderRole(
   projectId: number,
   actorValue: Actor,
-  userId: number,
+  targetUserId: number,
 ): Promise<void> {
   const response = await request(
     "POST",
-    `/projects/${projectId}/members/${userId}/role`,
+    `/projects/${projectId}/members/${targetUserId}/role`,
     actorValue,
-    { role: "MEMBER" },
+    { role: "LEADER" },
     { key: randomUUID() },
   );
   if (response.status !== 200) {
-    throw new Error(`revokeLeaderRole failed with ${String(response.status)}`);
+    throw new Error(
+      `transferLeaderRole failed with ${String(response.status)}`,
+    );
   }
 }
 
@@ -286,7 +289,6 @@ beforeAll(async () => {
     new PostgresFeatureReadPort(),
     new PostgresProjectCodePort(),
     new PostgresProjectMembersQueryPort(),
-    new ProjectRoleGateService(access, new PostgresProjectMembersQueryPort()),
     uow,
     new TaskManagementRepository(),
     audit,
@@ -535,11 +537,11 @@ describe("F-05 project member management API", () => {
     const assignee = await actor(false);
     await addMember(value.project.projectId, assignee.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-033：创建者默认是组长，移除前需先撤销组长角色。
-    await revokeLeaderRole(
+    // ADR-053：创建者默认是组长，移除前必须先把组长交给接手人。
+    await transferLeaderRole(
       value.project.projectId,
       value.admin,
-      value.owner.userId,
+      assignee.userId,
     );
     const removePath = `/projects/${value.project.projectId}/members/${value.owner.userId}/remove`;
     const key = randomUUID();
@@ -610,11 +612,11 @@ describe("F-05 project member management API", () => {
       value.owner.userId,
       first.userId,
     ]);
-    // ADR-033：创建者默认是组长，移除前需先撤销组长角色。
-    await revokeLeaderRole(
+    // ADR-053：把组长转交给接手人之一，原组长降级后才能被移除。
+    await transferLeaderRole(
       value.project.projectId,
       value.admin,
-      value.owner.userId,
+      first.userId,
     );
 
     const response = await request(
@@ -659,12 +661,14 @@ describe("F-05 project member management API", () => {
 
   it("keeps un-reassigned tasks on the removed owner and reports unfinished count", async () => {
     const value = await fixture();
+    const successor = await actor(false);
+    await addMember(value.project.projectId, successor.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-033：创建者默认是组长，移除前需先撤销组长角色。
-    await revokeLeaderRole(
+    // ADR-053：先把组长交给其他成员，原组长降级后才能被移除。
+    await transferLeaderRole(
       value.project.projectId,
       value.admin,
-      value.owner.userId,
+      successor.userId,
     );
     const removePath = `/projects/${value.project.projectId}/members/${value.owner.userId}/remove`;
 
@@ -768,11 +772,11 @@ describe("F-05 project member management API", () => {
     const assignee = await actor(false);
     await addMember(value.project.projectId, assignee.userId);
     const task = await createFeatureTask(value, value.owner.userId);
-    // ADR-033：创建者默认是组长，移除前需先撤销组长角色。
-    await revokeLeaderRole(
+    // ADR-053：先把组长交给接手人，原组长降级后才可移除。
+    await transferLeaderRole(
       value.project.projectId,
       value.admin,
-      value.owner.userId,
+      assignee.userId,
     );
     const spy = vi
       .spyOn(audit, "append")
@@ -833,6 +837,41 @@ describe("F-05 project member management API", () => {
     expect(normal?.role).toBe("MEMBER");
   });
 
+  it("makes the first joiner the leader of a project without any active member (ADR-053)", async () => {
+    const value = await fixture();
+    // 历史数据：项目没有任何活跃成员（数据库允许零成员，加入时由服务端补选组长）。
+    await removeMember(client.sql, value.project.projectId, value.owner.userId);
+    const joiner = await actor(false);
+
+    const added = await request(
+      "POST",
+      `/projects/${value.project.projectId}/members`,
+      value.admin,
+      { userId: joiner.userId },
+      { key: randomUUID() },
+    );
+    expect(added.status).toBe(200);
+    const body = schemaRegistry.AddProjectMemberResponse.schema.parse(
+      await added.json(),
+    );
+    expect(body.member.role).toBe("LEADER");
+
+    // 第二位加入者是普通成员，不会顶掉已产生的组长。
+    const second = await actor(false);
+    const secondAdded = await request(
+      "POST",
+      `/projects/${value.project.projectId}/members`,
+      value.admin,
+      { userId: second.userId },
+      { key: randomUUID() },
+    );
+    expect(secondAdded.status).toBe(200);
+    const secondBody = schemaRegistry.AddProjectMemberResponse.schema.parse(
+      await secondAdded.json(),
+    );
+    expect(secondBody.member.role).toBe("MEMBER");
+  });
+
   it("lets any active member manage members without any system admin flag (ADR-039)", async () => {
     const value = await fixture();
     const remover = await actor(false);
@@ -890,17 +929,32 @@ describe("F-05 project member management API", () => {
     );
   });
 
-  it("forbids every non-admin, including the leader, from appointing roles (ADR-039)", async () => {
+  it("lets the leader transfer the role but never revoke or self-appoint it (ADR-053)", async () => {
     const value = await fixture();
     const member = await actor(false);
     await addMember(value.project.projectId, member.userId);
     const rolePath = `/projects/${value.project.projectId}/members/${member.userId}/role`;
 
-    // 组长不再拥有任命权。
+    // ADR-053：组长本人可以把身份转交给其他活跃成员。
+    const transferred = await request(
+      "POST",
+      rolePath,
+      value.owner,
+      { role: "LEADER" },
+      { key: randomUUID() },
+    );
+    expect(transferred.status).toBe(200);
+    const transferredBody =
+      schemaRegistry.SetProjectMemberRoleResponse.schema.parse(
+        await transferred.json(),
+      );
+    expect(transferredBody.member.role).toBe("LEADER");
+
+    // 转移后原组长降级：既不能再转移，也不能撤销现任组长或自设。
     await expectError(
       await request(
         "POST",
-        rolePath,
+        `/projects/${value.project.projectId}/members/${value.owner.userId}/role`,
         value.owner,
         { role: "LEADER" },
         { key: randomUUID() },
@@ -908,8 +962,17 @@ describe("F-05 project member management API", () => {
       403,
       "PROJECT_MEMBER_ROLE_FORBIDDEN",
     );
-
-    // 普通成员也不可以。
+    await expectError(
+      await request(
+        "POST",
+        rolePath,
+        member,
+        { role: "MEMBER" },
+        { key: randomUUID() },
+      ),
+      403,
+      "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    );
     await expectError(
       await request(
         "POST",
@@ -922,17 +985,39 @@ describe("F-05 project member management API", () => {
       "PROJECT_MEMBER_ROLE_FORBIDDEN",
     );
 
-    // 被拒绝的调用不留下审计与活动。
+    // 普通成员同样不可以。
+    const plain = await actor(false);
+    await addMember(value.project.projectId, plain.userId);
+    await expectError(
+      await request(
+        "POST",
+        `/projects/${value.project.projectId}/members/${plain.userId}/role`,
+        plain,
+        { role: "LEADER" },
+        { key: randomUUID() },
+      ),
+      403,
+      "PROJECT_MEMBER_ROLE_FORBIDDEN",
+    );
+
+    // 只有组长转移这一次成功落审计与活动，被拒绝的调用不留下痕迹。
     const auditRows = (await auditReader.sql`
       SELECT action AS "action"
         FROM app.audit_logs
        WHERE project_id = ${value.project.projectId}
          AND action = 'project.member.role.set'
     `) as unknown as readonly { action: string }[];
-    expect(auditRows).toHaveLength(0);
+    expect(auditRows).toHaveLength(1);
+    const activityRows = (await client.sql`
+      SELECT activity_type AS "activityType"
+        FROM app.activity_projection
+       WHERE project_id = ${value.project.projectId}
+         AND activity_type = 'PROJECT_MEMBER_ROLE_CHANGED'
+    `) as unknown as readonly { activityType: string }[];
+    expect(activityRows).toHaveLength(1);
   });
 
-  it("transfers the leader role as system admin, protects the leader row and keeps the role audit trail (ADR-039)", async () => {
+  it("transfers the leader role as system admin, protects the leader row and keeps the role audit trail (ADR-039/ADR-053)", async () => {
     const value = await fixture();
     const target = await actor(false);
     await addMember(value.project.projectId, target.userId);
@@ -995,6 +1080,19 @@ describe("F-05 project member management API", () => {
       ),
       409,
       "PROJECT_MEMBER_LEADER_PROTECTED",
+    );
+
+    // ADR-053：系统管理员也不能直接撤销组长，只能通过转移。
+    await expectError(
+      await request(
+        "POST",
+        rolePath,
+        value.admin,
+        { role: "MEMBER" },
+        { key: randomUUID() },
+      ),
+      409,
+      "PROJECT_MEMBER_LEADER_REQUIRED",
     );
 
     // ADR-039：角色枚举已收窄，PROJECT_ADMIN 不再是合法请求体。

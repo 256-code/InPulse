@@ -41,11 +41,11 @@ COPY app.projects (id, code, name, description, created_by, status, first_task_c
 -- Data for Name: project_members; Type: TABLE DATA; Schema: app
 --
 
-COPY app.project_members (id, project_id, user_id, status, joined_at, removed_at) FROM stdin;
-1	1	1	ACTIVE	2026-09-04 01:12:00+00	\N
-2	1	2	ACTIVE	2026-09-04 01:12:00+00	\N
-3	1	3	ACTIVE	2026-09-04 01:12:00+00	\N
-4	1	4	ACTIVE	2026-09-04 01:12:00+00	\N
+COPY app.project_members (id, project_id, user_id, status, joined_at, removed_at, role) FROM stdin;
+1	1	1	ACTIVE	2026-09-04 01:12:00+00	\N	LEADER
+2	1	2	ACTIVE	2026-09-04 01:12:00+00	\N	MEMBER
+3	1	3	ACTIVE	2026-09-04 01:12:00+00	\N	MEMBER
+4	1	4	ACTIVE	2026-09-04 01:12:00+00	\N	MEMBER
 \.
 
 --

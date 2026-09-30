@@ -169,7 +169,8 @@ export function EditPublishedRecord({
         queryKey: ["record-versions", item.projectId, item.id],
       });
       await cache.invalidateQueries({
-        queryKey: ["published-records", item.projectId],
+        // 正文修订会改变时间线卡片上的摘要与遗留项，正式记录清单必须一起失效。
+        queryKey: ["record-feed"],
       });
       // 修订会增删正文里的剩余问题，侧栏遗留项计数随即变化。
       await invalidateShellCounters(cache);
@@ -271,6 +272,7 @@ export function EditPublishedRecord({
                         { value: "mine", label: "保留我的输入" },
                         { value: "latest", label: "采用最新内容" },
                       ]}
+                      animated
                     />
                     <div className="record-field">
                       <span className="record-field-label">最新内容</span>
@@ -325,7 +327,6 @@ export function EditPublishedRecord({
                 </label>
               ))}
             <label>
-              {labels.remainingIssues}
               <Controller
                 name="remainingIssues"
                 control={control}

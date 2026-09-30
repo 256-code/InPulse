@@ -82,14 +82,14 @@ export class TaskRecordDraftWorkflow {
     if (project.kind === "not-found") throw missing();
     const task = await this.tasks.find(tx, path.projectId, path.taskId);
     if (!task || task.moduleId !== path.moduleId) throw missing();
-    // ADR-044：模块已无归档只读态，来源任务仍必须是可写的活跃任务。
+    // ADR-044：模块已无归档只读态；ADR-054：来源任务只有「无效」一种只读态。
     const module = await this.modules.checkModuleForWrite(tx, path);
     if (module.kind === "not-found") throw missing();
     if (task.lifecycleStatus !== "ACTIVE")
       throw new RecordDraftError(
         409,
         "RECORD_PARENT_ARCHIVED",
-        "来源任务或所属范围只读",
+        "来源任务已无效，所属范围只读",
       );
   }
   private async prepare(
@@ -141,7 +141,7 @@ export class TaskRecordDraftWorkflow {
         throw new RecordDraftError(
           409,
           "RECORD_PARENT_ARCHIVED",
-          "来源任务已归档或无效",
+          "来源任务已无效",
         );
       await tx.sql`RELEASE SAVEPOINT record_source_locks`;
       return { source, record };

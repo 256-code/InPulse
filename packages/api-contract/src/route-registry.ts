@@ -3,7 +3,9 @@ import { aggregateReadRoutes } from "./aggregate-read-routes.js";
 import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
 import { recordFeedRoutes } from "./record-feed-routes.js";
+import { recordSummaryRoutes } from "./record-summary-routes.js";
 import {
+  recordDraftDeleteRoutes,
   recordDraftRoutes,
   taskRecordDraftRoutes,
 } from "./record-draft-routes.js";
@@ -40,6 +42,7 @@ export const routeRegistry = [
   ...featureRoutes,
   ...taskRoutes,
   ...recordDraftRoutes,
+  ...recordDraftDeleteRoutes,
   ...publishedRecordRoutes,
   ...recordLifecycleRoutes,
   ...recordPublicationRoutes,
@@ -48,6 +51,7 @@ export const routeRegistry = [
   ...taskGroupRoutes,
   ...aggregateReadRoutes,
   ...recordFeedRoutes,
+  ...recordSummaryRoutes,
   ...taskCompletionRoutes,
   ...leftoverTaskRoutes,
   ...moduleTaskRoutes,

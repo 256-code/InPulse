@@ -96,7 +96,8 @@ const basicTaskRoutes: readonly RouteDefinition[] = [
         idempotencyPolicy: "idempotencyRequired",
         idempotencyExceptionAdr: "none",
         // ADR-040：请求体 assigneeId 改为 assigneeIds，响应新增 assigneeIds，属破坏性契约变更，主版本递增。
-        idempotencyContractVersion: "2.0.0",
+        // ADR-054：响应 lifecycleStatus 去掉不可达的 ARCHIVED，再次递增主版本。
+        idempotencyContractVersion: "3.0.0",
         idempotencyFingerprintVersion: "1.0.0",
         behaviorHeaders: create ? [] : ["If-Match"],
         idempotencyReplayPolicy: {
@@ -152,7 +153,8 @@ export const taskRoutes: readonly RouteDefinition[] = [
     method: "POST",
     operationId: "transitionTask",
     // ADR-040：响应 TaskItem 新增 assigneeIds，属破坏性契约变更，主版本递增。
-    idempotencyContractVersion: "3.0.0",
+    // ADR-054：响应 lifecycleStatus 去掉不可达的 ARCHIVED，再次递增主版本。
+    idempotencyContractVersion: "4.0.0",
     replayAuthorizationPolicy: {
       version: "2.0.0",
       resources: {
@@ -179,35 +181,6 @@ export const taskRoutes: readonly RouteDefinition[] = [
         "COMPLETE uses TaskCompletionWorkflow with branch recheck and bounded retry; other transitions retain existing state semantics",
     },
   },
-  ...(["archiveTask", "restoreTask"] as const).map(
-    (operationId): RouteDefinition => {
-      const archive = operationId === "archiveTask";
-      return {
-        ...basicTaskRoutes[4]!,
-        method: "POST",
-        operationId,
-        path:
-          collection + (archive ? "/{taskId}/archive" : "/{taskId}/restore"),
-        summary: archive
-          ? "归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，工作状态、完成快照与状态历史保持不可变；模块归档与项目归档申请都要求下级任务已归档。"
-          : "恢复已归档任务：系统管理员或本项目任意活跃成员（ADR-039）可执行；只切换生命周期状态，不改变工作状态、完成快照与状态历史。",
-        request: {
-          path: "TaskResourcePath",
-          query: "none",
-          headers: "TaskVersionHeaders",
-          body: {
-            contentTypes: [
-              {
-                contentType: "application/json",
-                schemaRef: "TaskArchiveRequest",
-              },
-            ],
-          },
-        },
-        auditAction: archive ? "task.archive" : "task.unarchive",
-      };
-    },
-  ),
 ];
 
 /** Same task commands and security policies, addressed through the true MODULE parent. */
@@ -215,18 +188,14 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
   (route) => {
     const write = route.method !== "GET";
     const create = route.operationId === "createTask";
-    const lifecycle =
-      route.operationId === "archiveTask" ||
-      route.operationId === "restoreTask";
     return {
       ...route,
       operationId: route.operationId.replace("Task", "ModuleTask"),
       path: route.path.replace("/features/{featureId}", ""),
-      summary: lifecycle
-        ? "模块真实归属下的任务归档或恢复；要求系统管理员或本项目任意活跃成员（ADR-039）。"
-        : route.operationId === "transitionTask" ||
-            route.operationId === "getTaskStatusHistory"
-          ? "模块真实归属下的任务状态和历史；既有影响功能归档不阻止状态流转。"
+      summary:
+        route.operationId === "transitionTask" ||
+        route.operationId === "getTaskStatusHistory"
+          ? "模块真实归属下的任务状态和历史。"
           : "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
       request: {
         ...route.request,
@@ -235,7 +204,7 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
             ? "ModuleTaskResourcePath"
             : "ModuleTaskCollectionPath",
         body:
-          write && !lifecycle && route.operationId !== "transitionTask"
+          write && route.operationId !== "transitionTask"
             ? {
                 contentTypes: [
                   {

@@ -63,7 +63,12 @@ it("requires explicit resolution and preserves the same key and input when retry
   mount(api);
   // Ant Design 会在两个汉字的按钮文字间插入空格。
   fireEvent.click(screen.getByRole("button", { name: /^移\s*除$/ }));
-  expect(await screen.findByText("暂无遗留问题。")).toBeInTheDocument();
+  // 移除最后一条后回到空态：直接给一个可输入的空文本域，不再显示空态文案。
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText(/遗留问题（选填，可添加多条） 1$/),
+    ).toHaveValue(""),
+  );
   expect(screen.getByRole("button", { name: "保存新版本" })).toBeDisabled();
   fireEvent.click(
     screen.getByRole("checkbox", {
@@ -72,7 +77,9 @@ it("requires explicit resolution and preserves the same key and input when retry
   );
   fireEvent.click(screen.getByRole("button", { name: "保存新版本" }));
   await screen.findByText("服务暂时不可用，输入已保留，可重试。");
-  expect(await screen.findByText("暂无遗留问题。")).toBeInTheDocument();
+  expect(screen.getByLabelText(/遗留问题（选填，可添加多条） 1$/)).toHaveValue(
+    "",
+  );
   fireEvent.click(screen.getByRole("button", { name: "保存新版本" }));
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
   expect(save.mock.calls[0]).toEqual(save.mock.calls[1]);

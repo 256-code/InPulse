@@ -9,6 +9,7 @@ import {
   type ProjectItem,
 } from "@generated/api";
 import {
+  canDeleteProject,
   describeCreateProjectError,
   useCreateProject,
   useProjects,
@@ -135,5 +136,16 @@ describe("project creation query", () => {
     const message = describeCreateProjectError(error);
     expect(message).toBe("项目编码已存在或创建请求发生冲突，请刷新后重试。");
     expect(message).not.toContain("internal-conflict-message");
+  });
+});
+
+describe("canDeleteProject", () => {
+  it("只对系统管理员与本项目组长放行（ADR-049）", () => {
+    expect(canDeleteProject(true, null)).toBe(true);
+    expect(canDeleteProject(true, "MEMBER")).toBe(true);
+    expect(canDeleteProject(false, "LEADER")).toBe(true);
+    expect(canDeleteProject(false, "MEMBER")).toBe(false);
+    expect(canDeleteProject(false, null)).toBe(false);
+    expect(canDeleteProject(false, undefined)).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ActivityItem, InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
@@ -10,15 +10,20 @@ import {
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import {
+  projectDeletionItems,
+  useProjectDeletionsQuery,
+} from "@features/projects/project-deletion-query";
 import { useProjects } from "@features/projects/project-query";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
 import { ActivitySnapshotModal } from "./ActivitySnapshotModal";
+import { ProjectDeletionActions } from "./ProjectDeletionActions";
 import { activityTimeLabel, groupActivitiesByDay } from "./activity-day-groups";
 import {
   ACTIVITY_CHIPS,
   activityActionLabel,
+  activityDescription,
   activityEntityLabel,
-  activitySubject,
   activityTargetLabel,
   activityTargetPath,
   matchesActivityChip,
@@ -29,8 +34,11 @@ import {
   mergeActivityPages,
   useActivityFeedQuery,
 } from "./activity-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const ALL_PROJECTS = "all";
+/** ADR-050 修订：已删除项目不在项目列表里，用独立选项聚焦它们的动态。 */
+const DELETED_PROJECTS = "deleted";
 
 /** 设计稿 `activity.tsx` 的「审计规则」列表，BR-012 要求必须留痕的操作。 */
 const AUDIT_RULES: readonly string[] = [
@@ -48,7 +56,6 @@ export interface ActivityWorkspaceProps {
   /** 项目详情页锁定单个项目；不传表示按「全部项目」聚合。 */
   readonly lockedProjectId?: number | undefined;
 }
-
 export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   client,
   lockedProjectId,
@@ -82,9 +89,37 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     () => projectsQuery.data?.items ?? [],
     [projectsQuery.data],
   );
+  const lockedScope = lockedProjectId !== undefined;
+
+  // ADR-050：已删除项目不在项目列表里，但它的项目动态（含删除前的完整过程）
+  // 对全部登录用户可见。读动态前先取一次删除台账，把已删除项目补进取数范围与项目名。
+  const showDeletedProjects =
+    !lockedScope &&
+    (projectFilter === ALL_PROJECTS || projectFilter === DELETED_PROJECTS);
+  const deletionsQuery = useProjectDeletionsQuery({
+    ...(client ? { client } : {}),
+    enabled: showDeletedProjects,
+  });
+  const deletedProjects = useMemo(
+    () => projectDeletionItems(deletionsQuery.data),
+    [deletionsQuery.data],
+  );
+
   const projectNames = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.name])),
-    [projects],
+    () =>
+      new Map([
+        ...projects.map((project) => [project.id, project.name] as const),
+        ...deletedProjects.map(
+          (project) => [project.projectId, project.name] as const,
+        ),
+      ]),
+    [projects, deletedProjects],
+  );
+  // ADR-051：删除行的两个入口要拿台账条目上的 canRestore / canPurge。
+  const deletionsById = useMemo(
+    () =>
+      new Map(deletedProjects.map((item) => [item.projectId, item] as const)),
+    [deletedProjects],
   );
   const actorNames = useMemo(
     () =>
@@ -98,20 +133,29 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     if (lockedProjectId !== undefined) {
       return [lockedProjectId];
     }
+    if (projectFilter === DELETED_PROJECTS) {
+      return deletedProjects.map((project) => project.projectId);
+    }
     if (projectFilter !== ALL_PROJECTS) {
       const picked = Number(projectFilter);
       return Number.isSafeInteger(picked) && picked > 0 ? [picked] : [];
     }
-    return projects.map((project) => project.id);
-  }, [lockedProjectId, projectFilter, projects]);
+    return [
+      ...projects.map((project) => project.id),
+      ...deletedProjects.map((project) => project.projectId),
+    ];
+  }, [lockedProjectId, projectFilter, projects, deletedProjects]);
 
   // 「全部项目」要先知道有哪些项目才能决定取数范围；锁定项目时可直接取数。
-  const lockedScope = lockedProjectId !== undefined;
   const activityQuery = useActivityFeedQuery({
     projectIds: scopeProjectIds,
     ...(client ? { client } : {}),
     includeAdminOnly,
-    enabled: lockedScope || !projectsQuery.isPending,
+    // 台账未落定前不发动态请求，避免先少一次再重取；
+    // 台账读取失败按「没有已删除项目」降级，不影响其余动态。
+    enabled:
+      (lockedScope || !projectsQuery.isPending) &&
+      (showDeletedProjects ? !deletionsQuery.isPending : true),
   });
 
   const actorNameOf = useCallback(
@@ -140,7 +184,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         return true;
       }
       return [
-        item.summary,
+        activityDescription(item),
         activityActionLabel(item.activityType),
         activityEntityLabel(item.sourceEntityType),
         actorNameOf(item.actorId),
@@ -157,6 +201,46 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     [filteredItems],
   );
 
+  /**
+   * 动态按项目分页取回后才在前端筛选，分类与关键词只作用于已加载的页：
+   * 选中的分类在首屏没有命中时，直接显示空态会把未加载的数据当成「没有」。
+   * 因此筛选激活且当前无匹配时自动继续翻页，直到找到匹配或数据穷尽；
+   * 期间界面给出「正在查找」状态，不再显示误导性空态。
+   */
+  const isFiltering = chip !== "全部" || query.trim().length > 0;
+  const awaitingFilteredMatch = isFiltering && filteredItems.length === 0;
+  useEffect(() => {
+    if (
+      !awaitingFilteredMatch ||
+      !activityQuery.hasNextPage ||
+      activityQuery.isFetchingNextPage ||
+      activityQuery.isError
+    ) {
+      return;
+    }
+    void activityQuery.fetchNextPage();
+  }, [
+    awaitingFilteredMatch,
+    activityQuery.hasNextPage,
+    activityQuery.isFetchingNextPage,
+    activityQuery.isError,
+    activityQuery.fetchNextPage,
+  ]);
+
+  /**
+   * 同一项目可以被删除多次（删除 → 还原 → 再删除）。删除记录是历史过程，
+   * 全部保留；但「还原项目」「彻底删除」只反映项目当前状态，因此只对每个
+   * 项目最新的一条删除动态开放，其余删除行只展示记录本身。
+   */
+  const latestDeletionIdByProject = useMemo(() => {
+    const latest = new Map<number, string>();
+    for (const item of items) {
+      if (item.activityType !== "PROJECT_DELETED") continue;
+      if (!latest.has(item.projectId)) latest.set(item.projectId, item.id);
+    }
+    return latest;
+  }, [items]);
+
   const snapshotActorName = snapshotItem
     ? actorNameOf(snapshotItem.actorId)
     : "系统";
@@ -167,7 +251,28 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         `项目 #${snapshotItem.projectId}`);
 
   let content: React.ReactNode;
-  if (!lockedScope && projectsQuery.isSuccess && projects.length === 0) {
+  if (showDeletedProjects && deletionsQuery.isPending) {
+    content = (
+      <CalmSkeleton variant="timeline" rows={4} label="正在加载项目动态..." />
+    );
+  } else if (
+    !lockedScope &&
+    projectFilter === DELETED_PROJECTS &&
+    deletedProjects.length === 0
+  ) {
+    content = (
+      <CalmEmptyState
+        icon="boxes"
+        title="暂无已删除项目"
+        description="项目被删除后，删除前的完整动态会保留在这里。"
+      />
+    );
+  } else if (
+    !lockedScope &&
+    projectsQuery.isSuccess &&
+    projects.length === 0 &&
+    deletedProjects.length === 0
+  ) {
     content = (
       <CalmEmptyState
         icon="boxes"
@@ -177,15 +282,19 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     );
   } else if (activityQuery.isPending) {
     content = (
-      <div className="activity-state">
-        <span className="activity-spinner" />
-        正在加载项目动态...
-      </div>
+      <CalmSkeleton variant="timeline" rows={4} label="正在加载项目动态..." />
     );
   } else if (activityQuery.isError) {
     content = (
       <div className="activity-state activity-state-error">
         {describeActivityError(activityQuery.error)}
+      </div>
+    );
+  } else if (awaitingFilteredMatch && activityQuery.hasNextPage) {
+    content = (
+      <div className="activity-state">
+        <span className="activity-spinner" />
+        正在查找匹配的动态...
       </div>
     );
   } else if (filteredItems.length === 0) {
@@ -196,7 +305,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         description={
           items.length === 0
             ? "当前范围内还没有可展示的活动投影。"
-            : "调整筛选条件后重试。"
+            : "已加载该范围内的全部动态，没有符合条件的记录。"
         }
       />
     );
@@ -235,6 +344,17 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                   ? null
                   : group.items.map((item) => {
                       const actorName = actorNameOf(item.actorId);
+                      const deletion =
+                        deletionsById.get(item.projectId) ?? null;
+                      const projectDeleted = deletion !== null;
+                      // 同项目有多条删除记录时只有最新一条能操作（见 latestDeletionIdByProject）。
+                      const deletionActions =
+                        item.activityType === "PROJECT_DELETED" &&
+                        projectDeleted &&
+                        latestDeletionIdByProject.get(item.projectId) ===
+                          item.id
+                          ? deletion
+                          : null;
                       return (
                         <div
                           className="audit-row"
@@ -258,7 +378,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                                   {activityActionLabel(item.activityType)}
                                 </span>
                               </strong>
-                              <p>{activitySubject(item.summary)}</p>
+                              <p>{activityDescription(item)}</p>
                               <small>
                                 {(projectNames.get(item.projectId) ??
                                   `项目 #${item.projectId}`) +
@@ -268,6 +388,15 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                             </div>
                           </div>
                           <div className="audit-actions">
+                            {/* ADR-051：删除行的「还原项目」「彻底删除」与「原始快照」
+                                并排在同一行（快照列最右，两个动作排在其左侧），只在
+                                服务端下发的 canRestore / canPurge 为真时渲染。 */}
+                            {deletionActions !== null ? (
+                              <ProjectDeletionActions
+                                deletion={deletionActions}
+                                {...(client ? { client } : {})}
+                              />
+                            ) : null}
                             {isAdmin ? (
                               <button
                                 type="button"
@@ -279,17 +408,31 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                                 原始快照
                               </button>
                             ) : null}
-                            <button
-                              type="button"
-                              className="icon-button"
-                              aria-label="查看对象"
-                              title={activityTargetLabel(item)}
-                              onClick={() =>
-                                navigate(activityTargetPath(item, { isAdmin }))
-                              }
-                            >
-                              <InpulseIcon name="chevronRight" size={16} />
-                            </button>
+                            {/* ADR-050：已删除项目的下级对象已不可访问，项目链
+                                的每一行都不提供跳转；有「原始快照」的行用与
+                                「查看对象」等宽的占位，保持快照列跨行对齐。 */}
+                            {projectDeleted ? (
+                              isAdmin ? (
+                                <span
+                                  className="activity-actions-slot"
+                                  aria-hidden="true"
+                                />
+                              ) : null
+                            ) : (
+                              <button
+                                type="button"
+                                className="icon-button"
+                                aria-label="查看对象"
+                                title={activityTargetLabel(item)}
+                                onClick={() =>
+                                  navigate(
+                                    activityTargetPath(item, { isAdmin }),
+                                  )
+                                }
+                              >
+                                <InpulseIcon name="chevronRight" size={16} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -364,8 +507,10 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
             onChange={(next) => setProjectFilter(String(next))}
             options={[
               { value: ALL_PROJECTS, label: "全部项目" },
+              { value: DELETED_PROJECTS, label: "已删除项目" },
               ...projects.map(projectSelectOption),
             ]}
+            animated
           />
         ) : null}
         {isAdmin ? (

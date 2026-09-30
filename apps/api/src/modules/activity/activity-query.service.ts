@@ -19,6 +19,9 @@ import type {
 export const ACTIVITY_PAGE_LIMIT_DEFAULT = 20;
 export const ACTIVITY_PAGE_LIMIT_MAX = 50;
 
+/** 读取来源，决定可见范围与是否允许 `includeAdminOnly`。 */
+type ActivityAccess = "scope" | "deleted-project";
+
 export interface ActivityQueryCommand {
   readonly actorUserId: number;
   readonly projectId: number;
@@ -86,7 +89,11 @@ export class ActivityQueryService {
     const scope = await this.#projectAccess.getAuthorizedSearchScope(
       command.actorUserId,
     );
-    this.assertScope(scope, command.actorUserId, command.projectId);
+    const access = await this.resolveAccess(
+      scope,
+      command.actorUserId,
+      command.projectId,
+    );
 
     const limit = parseLimit(command.limit);
     let after: TimeCursorValue | null;
@@ -107,7 +114,9 @@ export class ActivityQueryService {
     }
 
     const visibilityScopes: readonly ActivityVisibilityScope[] =
-      scope.isSystemAdmin && command.includeAdminOnly === true
+      access === "scope" &&
+      scope.isSystemAdmin &&
+      command.includeAdminOnly === true
         ? ["MEMBER", "ADMIN_ONLY"]
         : ["MEMBER"];
     const page = await this.#reader.read({
@@ -132,21 +141,31 @@ export class ActivityQueryService {
     };
   }
 
-  private assertScope(
+  /**
+   * 项目在授权范围内时返回 `scope`（按普通项目读）；不在范围内但已被删除时
+   * 返回 `deleted-project`（ADR-050 的公开删除记录例外，2026-09-28 扩展为
+   * 整个项目链的 MEMBER 可见动态，见 ADR-050 修订；ADMIN_ONLY 仍不回放）；
+   * 其余（不存在、无权访问、已移除成员）一律抛出，避免泄露资源存在性。
+   */
+  private async resolveAccess(
     scope: AuthorizedProjectScope,
     actorUserId: number,
     projectId: number,
-  ): void {
+  ): Promise<ActivityAccess> {
     if (scope.actorUserId !== actorUserId) {
       throw new ActivityAuthorizationError(
         "authorization scope actor does not match the request actor",
       );
     }
-    if (!scope.projectIds.includes(projectId)) {
-      throw new ActivityAuthorizationError(
-        "project is not available to the current actor",
-      );
+    if (scope.projectIds.includes(projectId)) {
+      return "scope";
     }
+    if (await this.#projectAccess.isDeletedProject(projectId)) {
+      return "deleted-project";
+    }
+    throw new ActivityAuthorizationError(
+      "project is not available to the current actor",
+    );
   }
 }
 

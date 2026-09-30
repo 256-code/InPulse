@@ -310,6 +310,143 @@
   transform: rotate(-90deg);
 }
 
+/* 来源任务弹窗的来源与归属条：一张浅灰卡片压到两行——首行是来源任务 / 处理人，
+   次行按来源快照内联展示归属与影响功能（窄屏自然折行），不再逐项各占一行。 */
+.record-source-panel {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  background: #f5f8fc;
+  border-radius: 12px;
+}
+
+.record-source-line {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #7a8da0;
+  overflow-wrap: anywhere;
+}
+
+.record-source-line strong {
+  color: #456078;
+  font-weight: 600;
+}
+
+.record-scope-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.record-scope-fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.record-scope-fact dt {
+  color: #8091a4;
+}
+
+.record-scope-fact dd {
+  margin: 0;
+  color: #456078;
+  overflow-wrap: anywhere;
+}
+
+/* 新建/编辑迭代弹窗里的 GitHub 链接区：与来源归属条同一张浅色卡片，
+   新建时先暂存链接（落库后再逐条关联），编辑时内联复用 ExternalLinksPanel。 */
+.record-github-links {
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #e6edf4;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+/* 页脚上方一行提示：说明「发布后项目成员可见」和「保存草稿」的区别。 */
+.record-publish-hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8091a4;
+}
+
+.record-github-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+}
+
+.record-github-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #33475c;
+}
+
+.record-github-hint {
+  font-size: 11px;
+  color: #8091a4;
+}
+
+.record-github-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.record-github-add input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.record-github-add .ant-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.record-github-error {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c0392b;
+}
+
+.record-github-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record-github-pending li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e6edf4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.record-github-url {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  color: #456078;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1100px) {
   .draft-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

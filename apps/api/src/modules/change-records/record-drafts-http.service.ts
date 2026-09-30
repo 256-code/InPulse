@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   routeRegistry,
   schemaRegistry,
+  recordDraftDeleteResultSchema,
   recordDraftItemSchema,
   type IndependentRecordDraftRequest,
   type RecordDraftContent,
@@ -29,7 +30,8 @@ export type DraftOperation =
   | "listRecordDrafts"
   | "getRecordDraft"
   | "createIndependentRecordDraft"
-  | "updateIndependentRecordDraft";
+  | "updateIndependentRecordDraft"
+  | "deleteRecordDraft";
 export interface DraftHttpRequest {
   headers: HttpHeaderBag;
   params: unknown;
@@ -56,6 +58,8 @@ export class RecordDraftsHttpService {
     request: DraftHttpRequest,
   ): Promise<{ status: number; body: unknown }> {
     const requestId = randomUUID();
+    // 删除是唯一带 noBody 的写操作：正文与 Content-Type 校验都要跳过。
+    const remove = operation === "deleteRecordDraft";
     try {
       const route = routeRegistry.find((r) => r.operationId === operation)!;
       const create = operation === "createIndependentRecordDraft";
@@ -136,6 +140,7 @@ export class RecordDraftsHttpService {
           : { "if-match": getHeader(request.headers, "if-match") }),
       });
       if (
+        !remove &&
         getHeader(request.headers, "content-type")
           ?.split(";")[0]
           ?.trim()
@@ -146,12 +151,22 @@ export class RecordDraftsHttpService {
           "DRAFT_CONTENT_TYPE_INVALID",
           "请使用 application/json",
         );
-      if (!("contentTypes" in route.request.body))
-        throw Error("Draft body missing");
-      const input = parse(
-        route.request.body.contentTypes[0]!.schemaRef,
-        request.body,
-      );
+      if (
+        remove &&
+        request.body !== undefined &&
+        request.body !== null &&
+        request.body !== ""
+      )
+        throw new DraftInputError({ body: "此接口不接受请求正文" });
+      let input: unknown = undefined;
+      if (!remove) {
+        if (!("contentTypes" in route.request.body))
+          throw Error("Draft body missing");
+        input = parse(
+          route.request.body.contentTypes[0]!.schemaRef,
+          request.body,
+        );
+      }
       const resolve = async (tx: TransactionContext) => {
         const actor = await this.mutation.verify(tx, request.headers);
         if (!actor)
@@ -169,7 +184,8 @@ export class RecordDraftsHttpService {
             impactFeatureIds:
               body.scopeType === "MODULE" ? body.impactFeatureIds : [],
           });
-        } else
+        } else if (!remove)
+          // 删除不做草稿预读：草稿已删的重放要能命中缓存结果，而不是 404。
           await this.drafts.resolveExisting(
             tx,
             actor.userId,
@@ -192,6 +208,23 @@ export class RecordDraftsHttpService {
           body: input,
         },
         execute: async (tx, actorId) => {
+          if (remove) {
+            const deleted = await this.drafts.remove(
+              tx,
+              actorId,
+              path.projectId,
+              path.recordId!,
+              Number(getHeader(request.headers, "if-match")!.slice(1, -1)),
+              requestId,
+            );
+            return {
+              responseStatus: 200,
+              responseSchemaRef: "RecordDraftDeleteResult",
+              responseHasBody: true,
+              responseBody: deleted,
+              replayAuthContext: deleted,
+            };
+          }
           const body = create
             ? await this.drafts.create(
                 tx,
@@ -226,21 +259,33 @@ export class RecordDraftsHttpService {
           };
         },
         replayAuthorizer: async (record, tx) => {
-          await this.drafts.replay(
-            tx,
-            await resolve(tx),
-            record.replayAuthContext,
-          );
+          const actorId = await resolve(tx);
+          // 删除后草稿行已不存在，重放只复验当前可写范围（项目、模块、功能）。
+          if (remove) {
+            const saved = recordDraftDeleteResultSchema.parse(
+              record.replayAuthContext,
+            );
+            await this.drafts.authorize(tx, actorId, {
+              projectId: saved.projectId,
+              moduleId: saved.moduleId,
+              featureId: saved.featureId,
+              impactFeatureIds: saved.impactFeatureIds,
+            });
+            return;
+          }
+          await this.drafts.replay(tx, actorId, record.replayAuthContext);
         },
       });
       return {
         status: result.responseStatus,
-        body: recordDraftItemSchema.parse(result.responseBody),
+        body: remove
+          ? recordDraftDeleteResultSchema.parse(result.responseBody)
+          : recordDraftItemSchema.parse(result.responseBody),
       };
     } catch (error) {
       let status = 500,
         code = "INTERNAL_ERROR",
-        message = "暂时无法保存草稿";
+        message = remove ? "暂时无法删除草稿" : "暂时无法保存草稿";
       let details: Record<string, string> = {};
       if (
         error instanceof RecordDraftError ||

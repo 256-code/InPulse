@@ -4,12 +4,16 @@
  * 授权的可执行真相源仍是 docs/permissions.md 与 packages/api-contract 的路由权限矩阵；
  * 本文件只承载说明表文案，不含任何鉴权判断，也不得被其他模块引用。
  * docs/permissions.md 的功能级条目发生变化时必须同步本文件。
+ * 全角色都不具备的能力不列入矩阵。
  */
+
+/** 项目成员列取值：true = 任意活跃成员；"leader" = 仅本项目现任组长；false = 无人。 */
+export type MemberPermissionMark = boolean | "leader";
 
 export interface PermissionMatrixRow {
   readonly feature: string;
   readonly admin: boolean;
-  readonly member: boolean;
+  readonly member: MemberPermissionMark;
   readonly note: string;
 }
 
@@ -40,21 +44,37 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     note: "项目成员需已加入项目",
   },
   {
-    feature: "修改项目编码",
-    admin: false,
-    member: false,
-    note: "编码创建后不可修改",
+    feature: "变更项目状态",
+    admin: true,
+    member: true,
+    note: "未开始 / 进行中 / 维护中；进入维护中要求任务全部收尾",
   },
   {
     feature: "添加/移除项目成员",
     admin: true,
-    member: false,
-    note: "高风险权限",
+    member: true,
+    note: "组长不可被移除，需先转交组长身份",
   },
-  { feature: "归档/恢复项目", admin: true, member: false, note: "高风险权限" },
+  {
+    feature: "组长转移",
+    admin: true,
+    member: "leader",
+    note: "组长只能把身份转交其他活跃成员，不能自设或撤销",
+  },
+  {
+    feature: "删除/还原项目",
+    admin: true,
+    member: "leader",
+    note: "软删除，成员、记录与审计完整保留",
+  },
+  {
+    feature: "彻底删除项目",
+    admin: true,
+    member: false,
+    note: "仅系统管理员；物理删除，不可恢复",
+  },
   { feature: "创建模块", admin: true, member: true, note: "—" },
   { feature: "编辑模块", admin: true, member: true, note: "—" },
-  { feature: "归档/恢复模块", admin: true, member: false, note: "高风险权限" },
   { feature: "创建功能", admin: true, member: true, note: "—" },
   { feature: "编辑功能", admin: true, member: true, note: "—" },
   {
@@ -63,7 +83,6 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     member: true,
     note: "保存操作日志",
   },
-  { feature: "归档/恢复功能", admin: true, member: false, note: "高风险权限" },
   { feature: "创建任务", admin: true, member: true, note: "—" },
   { feature: "编辑任务", admin: true, member: true, note: "普通项目成员均可" },
   {
@@ -106,12 +125,6 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     admin: true,
     member: true,
     note: "操作留痕",
-  },
-  {
-    feature: "配置 GitHub 应用或 Token",
-    admin: false,
-    member: false,
-    note: "V1.1 不接入 GitHub API，也不持有 Token",
   },
   { feature: "查看项目动态", admin: true, member: true, note: "—" },
   {

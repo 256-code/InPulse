@@ -154,6 +154,36 @@ describe("HTML security headers and body rewrite", () => {
     expect(response.removeHeader).toHaveBeenCalledWith("Transfer-Encoding");
   });
 
+  it("restores write/end so the http2 compat end() cannot swallow the body", () => {
+    const { response } = createResponseStub();
+    const forwarded: string[] = [];
+    response.write = ((chunk: string) => {
+      forwarded.push(chunk);
+      return true;
+    }) as never;
+    const restoredWrite = response.write;
+    // Node 的 HTTP/2 兼容层 end() 内部经 this.write() 写出 body；若覆写仍挂在
+    // 实例上，整段 body 会被再次收集而不是发送（HTTPS + Chromium 实测为空响应）。
+    response.end = ((body: string) => {
+      (response.write as (chunk: string) => boolean)(body);
+      return response;
+    }) as never;
+    const restoredEnd = response.end;
+
+    rewriteHtmlBody(response as never, "e".repeat(32));
+    expect(response.write).not.toBe(restoredWrite);
+    expect(response.end).not.toBe(restoredEnd);
+
+    response.write(`<meta nonce="${CSP_NONCE_PLACEHOLDER}">`);
+    response.end(`<script nonce="${CSP_NONCE_PLACEHOLDER}"></script>`);
+
+    expect(response.write).toBe(restoredWrite);
+    expect(response.end).toBe(restoredEnd);
+    expect(forwarded).toEqual([
+      `<meta nonce="${"e".repeat(32)}"><script nonce="${"e".repeat(32)}"></script>`,
+    ]);
+  });
+
   it("drops cache validators so a 304 can never re-serve a stale nonce body", () => {
     const { response, headers } = createResponseStub();
     headers.set("cache-control", "no-cache");

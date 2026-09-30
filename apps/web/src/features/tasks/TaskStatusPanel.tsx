@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +13,7 @@ import { CompleteWithRecord } from "./CompleteWithRecord";
 import { TaskOriginCrumb } from "./task-origin";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const labels = {
   COMPLETE: "完成任务",
@@ -247,7 +248,12 @@ export function TaskStatusPanel({
       )}
       <h3>状态历史</h3>
       {history.isPending ? (
-        <Spin />
+        <CalmSkeleton
+          variant="timeline"
+          rows={3}
+          compact
+          label="正在加载状态历史"
+        />
       ) : history.isError ? (
         <Alert
           type="error"
@@ -401,6 +407,7 @@ export function TaskStatusPanel({
                         value,
                         label: value,
                       }))}
+                      animated
                     />
                   </label>
                   <p className="permission-hint">

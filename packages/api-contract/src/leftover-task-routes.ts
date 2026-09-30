@@ -29,9 +29,10 @@ export const leftoverTaskRoutes: readonly RouteDefinition[] = [
     },
     responses: { ...write.responses, "200": json("LeftoverTaskResponse") },
     auditAction: "leftover.convert",
-    idempotencyContractVersion: "1.1.0",
-    // 该路由的请求/响应/重放策略未变，保持既有 fingerprint 版本。
-    idempotencyFingerprintVersion: "1.1.0",
+    // 2026-09-30：请求 Schema 增加可选 description（任务说明），请求侧语义变化，
+    // 幂等契约版本与请求 Schema 版本一起升到 1.2.0；摘要格式与重放策略未变。
+    idempotencyContractVersion: "1.2.0",
+    idempotencyFingerprintVersion: "1.2.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: {
       version: "1.0.0",

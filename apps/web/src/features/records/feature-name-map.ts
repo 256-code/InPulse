@@ -6,7 +6,8 @@ import { useModules } from "@features/modules/module-query";
 /**
  * 迭代记录的事实区需要展示功能名称而不是裸 ID。记录接口只返回 `impactFeatureIds`，
  * 因此这里按项目并行读取各模块的功能清单，复用 `["features", projectId, moduleId]`
- * 查询键，与功能档案页共享缓存。
+ * 查询键，与功能档案页共享缓存。记录页卡片与正式记录详情（无列表语境时就地解析名称）
+ * 共用本 Hook。
  */
 export function useProjectFeatureNames(
   projectId: number,

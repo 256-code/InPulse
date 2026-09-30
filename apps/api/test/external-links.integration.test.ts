@@ -85,7 +85,12 @@ import { PostgresIdempotencyStore } from "../src/idempotency/store.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
 import { ApiExceptionFilter } from "../src/http/api-exception.filter.js";
 import { ContractResponseInterceptor } from "../src/http/contract-response.interceptor.js";
-import { createProject, createUser, testUrls } from "./database.helpers.js";
+import {
+  createProject,
+  createUser,
+  removeMember,
+  testUrls,
+} from "./database.helpers.js";
 let db: DatabaseClient,
   auditDb: DatabaseClient,
   uow: PostgresUnitOfWork,
@@ -719,7 +724,7 @@ describe("F22 typed external links", () => {
         )
       ).status,
     ).toBe(200);
-    await db.sql`UPDATE app.project_members SET status='REMOVED',removed_at=now(),role='MEMBER' WHERE project_id=${f.projectId} AND user_id=${f.userId}`;
+    await removeMember(db.sql, f.projectId, f.userId);
     await failure(
       await linkRequest(
         "FEATURE",

@@ -7,7 +7,7 @@ import { AppendLeftoverForm } from "./AppendLeftoverForm";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { fieldText } from "@features/record-drafts/record-content";
 import React, { useMemo, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import {
   createApiClient,
@@ -19,6 +19,11 @@ import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import { useModules } from "@features/modules/module-query";
+import { useProjectDetail } from "@features/projects/project-query";
+import { useProjectFeatureNames } from "@features/records/feature-name-map";
+import { useUserDirectoryQuery } from "@features/users/user-directory-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -82,6 +87,7 @@ export function PublishedRecordDetail({
   onListChanged,
   standalone,
   labels,
+  readOnly = false,
 }: {
   readonly projectId: number;
   readonly recordId: number;
@@ -103,6 +109,13 @@ export function PublishedRecordDetail({
         readonly impactFeatures: readonly string[];
       }
     | undefined;
+  /**
+   * 只读语境（迭代总结明细等）：不渲染任何写入入口（编辑 / 作废 / 遗留项转任务与
+   * 追加）与 GitHub 关联面板，也不加载不可变版本与版本对比，只保留四段正文、
+   * 遗留问题与事实区。与 `writable` 的分工：`writable` 只把按钮置灰，`readOnly`
+   * 直接不渲染。
+   */
+  readonly readOnly?: boolean | undefined;
 }) {
   const { user } = useAuth();
   const api = useMemo(() => client ?? createApiClient(), [client]);
@@ -120,9 +133,26 @@ export function PublishedRecordDetail({
     queryKey: ["record-versions", projectId, recordId],
     queryFn: ({ signal }) =>
       api.listChangeRecordVersions(projectId, recordId, { signal }),
-    enabled: projectId > 0 && recordId > 0 && !!detail.data,
+    enabled: projectId > 0 && recordId > 0 && !!detail.data && !readOnly,
     retry: false,
   });
+  /**
+   * 记录接口只回传归属与作者的 ID。列表语境把名称带进来（`labels`），弹窗、深链与
+   * 聚合组等没有列表的语境就地解析：项目详情、模块清单、功能名表与用户目录，
+   * 与记录页卡片共用同一批查询键，命中缓存时不额外发请求。
+   */
+  const needsLabels = labels === undefined;
+  const projectDetail = useProjectDetail({
+    client,
+    projectId,
+    enabled: needsLabels,
+  });
+  const modules = useModules(needsLabels ? projectId : 0, client);
+  const featureNames = useProjectFeatureNames(
+    needsLabels ? projectId : 0,
+    client,
+  );
+  const directory = useUserDirectoryQuery({ client, enabled: needsLabels });
   const history = versions.data?.items ?? [];
   const before =
     history.find((v) => v.versionNo === oldVersion) ??
@@ -136,7 +166,7 @@ export function PublishedRecordDetail({
   if (detail.isPending)
     return (
       <section className="record-expanded" aria-label="正式记录详情">
-        <Spin />
+        <CalmSkeleton variant="lines" rows={5} label="正在加载记录详情" />
       </section>
     );
   if (detail.isError)
@@ -154,6 +184,32 @@ export function PublishedRecordDetail({
   if (!detail.data)
     return <section className="record-expanded" aria-label="正式记录详情" />;
   const record = detail.data;
+  // 列举名称优先用列表回填的 labels；解析尚未就绪或失败时回落裸 ID，事实区不空项、不报错。
+  const projectName =
+    labels?.project ??
+    projectDetail.data?.project.name ??
+    `项目 #${record.projectId}`;
+  const moduleName =
+    labels?.module ??
+    modules.query.data?.items.find((item) => item.id === record.moduleId)
+      ?.name ??
+    `模块 #${record.moduleId}`;
+  const featureName =
+    record.featureId === null
+      ? null
+      : (labels?.feature ??
+        featureNames.get(record.featureId) ??
+        `功能 #${record.featureId}`);
+  const authorName =
+    labels?.author ??
+    (directory.data ?? []).find((item) => item.id === record.authorId)?.name ??
+    `用户 #${record.authorId}`;
+  const impactNames =
+    labels?.impactFeatures && labels.impactFeatures.length > 0
+      ? labels.impactFeatures
+      : record.impactFeatureIds
+          .map((id) => featureNames.get(id))
+          .filter((name): name is string => typeof name === "string");
   // 已解决的遗留项不在当前版本的列表里，只能通过相邻版本的条目数差判断是否移除过。
   const removedLeftovers = (() => {
     const current = history.find(
@@ -166,9 +222,6 @@ export function PublishedRecordDetail({
       ? 0
       : previous.leftovers.length - current.leftovers.length;
   })();
-  const impactNames =
-    labels?.impactFeatures ??
-    record.impactFeatureIds.map((id) => `功能 #${id}`);
   return (
     <section className="record-expanded" aria-label="正式记录详情">
       {standalone ? (
@@ -208,7 +261,8 @@ export function PublishedRecordDetail({
                             查看跟进任务
                           </a>
                         )}
-                      {leftover.status === "ACTIVE" &&
+                      {!readOnly &&
+                        leftover.status === "ACTIVE" &&
                         record.status === "PUBLISHED" && (
                           <ConvertLeftoverTask
                             key={`convert-${record.id}-${leftover.id}`}
@@ -226,7 +280,7 @@ export function PublishedRecordDetail({
                   ))}
                 </ul>
               )}
-              {record.status === "PUBLISHED" && (
+              {record.status === "PUBLISHED" && !readOnly && (
                 <AppendLeftoverForm
                   item={record}
                   api={api}
@@ -246,20 +300,21 @@ export function PublishedRecordDetail({
             </section>
           ),
         )}
-      {record.leftovers.some((leftover) => leftover.status === "CONVERTED") && (
-        <p>已转任务的遗留问题保留原任务关联，修订文字不会创建第二个任务。</p>
-      )}
+      {!readOnly &&
+        record.leftovers.some(
+          (leftover) => leftover.status === "CONVERTED",
+        ) && (
+          <p>已转任务的遗留问题保留原任务关联，修订文字不会创建第二个任务。</p>
+        )}
       {removedLeftovers > 0 && (
         <p>已标记解决的遗留问题保留历史内容，不再计入未闭环。</p>
       )}
       <dl className="record-facts">
         <dt>归属</dt>
         <dd>
-          {labels?.project ?? `项目 #${record.projectId}`} /{" "}
-          {labels?.module ?? `模块 #${record.moduleId}`}
-          {record.featureId === null
-            ? ""
-            : ` / ${labels?.feature ?? `功能 #${record.featureId}`}`}
+          {[projectName, moduleName, featureName]
+            .filter((part) => part !== null)
+            .join(" / ")}
         </dd>
         {impactNames.length > 0 && (
           <>
@@ -269,7 +324,7 @@ export function PublishedRecordDetail({
         )}
         <dt>作者与时间</dt>
         <dd>
-          {labels?.author ?? `用户 #${record.authorId}`} · 创建{" "}
+          {authorName} · 创建{" "}
           {new Date(record.createdAt).toLocaleString("zh-CN")}
           {record.status === "PUBLISHED"
             ? ` · 发布 ${new Date(record.publishedAt).toLocaleString("zh-CN")}`
@@ -308,7 +363,12 @@ export function PublishedRecordDetail({
         <section aria-label="历史版本">
           <h4>历史版本与对比</h4>
           {versions.isPending ? (
-            <Spin />
+            <CalmSkeleton
+              variant="lines"
+              rows={3}
+              compact
+              label="正在加载历史版本"
+            />
           ) : versions.isError ? (
             <Alert
               type="error"
@@ -339,6 +399,7 @@ export function PublishedRecordDetail({
                         " · " +
                         new Date(v.createdAt).toLocaleString("zh-CN"),
                     }))}
+                    animated
                   />
                 </label>
                 <label>
@@ -357,6 +418,7 @@ export function PublishedRecordDetail({
                         " · " +
                         new Date(v.createdAt).toLocaleString("zh-CN"),
                     }))}
+                    animated
                   />
                 </label>
               </div>
@@ -387,32 +449,34 @@ export function PublishedRecordDetail({
           )}
         </section>
       )}
-      <div className="record-github">
-        {/* 链接列表可能很长，默认折叠，点击标题展开；折叠时不挂载面板、不发列表请求。 */}
-        <button
-          type="button"
-          className="record-github-toggle"
-          aria-expanded={githubOpen}
-          onClick={() => setGithubOpen((open) => !open)}
-        >
-          <InpulseIcon
-            name="chevron"
-            size={14}
-            {...(githubOpen ? { className: "expanded" } : {})}
-          />
-          <span>GitHub 关联</span>
-        </button>
-        {githubOpen && (
-          <ExternalLinksPanel
-            key={record.id}
-            targetType="CHANGE_RECORD"
-            targetId={record.id}
-            client={api}
-            variant="inline"
-          />
-        )}
-      </div>
-      {(record.status === "PUBLISHED" || user?.isAdmin) && (
+      {!readOnly && (
+        <div className="record-github">
+          {/* 链接列表可能很长，默认折叠，点击标题展开；折叠时不挂载面板、不发列表请求。 */}
+          <button
+            type="button"
+            className="record-github-toggle"
+            aria-expanded={githubOpen}
+            onClick={() => setGithubOpen((open) => !open)}
+          >
+            <InpulseIcon
+              name="chevron"
+              size={14}
+              {...(githubOpen ? { className: "expanded" } : {})}
+            />
+            <span>GitHub 关联</span>
+          </button>
+          {githubOpen && (
+            <ExternalLinksPanel
+              key={record.id}
+              targetType="CHANGE_RECORD"
+              targetId={record.id}
+              client={api}
+              variant="inline"
+            />
+          )}
+        </div>
+      )}
+      {!readOnly && (record.status === "PUBLISHED" || user?.isAdmin) && (
         <div className="record-actions">
           {record.status === "PUBLISHED" && (
             <EditPublishedRecord item={record} api={api} writable={writable} />

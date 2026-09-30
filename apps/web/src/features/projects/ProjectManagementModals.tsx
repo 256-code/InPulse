@@ -11,6 +11,7 @@ import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import {
   describeProjectManagementError,
   useChangeProjectStatus,
+  useDeleteProject,
   useUpdateProject,
 } from "./project-management-query";
 import {
@@ -38,6 +39,14 @@ export interface EditProjectModalProps {
   readonly canChangeStatus?: boolean | undefined;
   /** 状态保存成功且不关闭弹窗时通知调用方刷新列表与版本。 */
   readonly onStatusChanged?: ((updated: ProjectItem) => void) | undefined;
+  /**
+   * ADR-049：只有本项目组长（实时成员关系中的 ACTIVE LEADER）或系统管理员
+   * 可以删除项目。调用方按 `canDeleteProject` 判定后传入，默认 false 就不渲染
+   * 危险区；服务端 `projectDeleterRole` 会用同一口径二次判定。
+   */
+  readonly canDeleteProject?: boolean | undefined;
+  /** 删除成功（204）后通知调用方：列表页刷新即可，项目页需要离开该路由。 */
+  readonly onDeleted?: (() => void) | undefined;
 }
 
 /** F-06.1 前端编辑入口；编码不可修改，保存走 If-Match 乐观锁。 */
@@ -49,6 +58,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   onUpdated,
   canChangeStatus = false,
   onStatusChanged,
+  canDeleteProject = false,
+  onDeleted,
 }) => {
   const {
     control,
@@ -62,10 +73,12 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   });
   const mutation = useUpdateProject(project.id, client);
   const statusMutation = useChangeProjectStatus(project.id, client);
+  const deleteMutation = useDeleteProject(project.id, client);
   const formId = React.useId();
   const [statusDraft, setStatusDraft] = useState<ProjectLifecycleTarget | null>(
     null,
   );
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -73,6 +86,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
       mutation.reset();
       setStatusDraft(null);
       statusMutation.reset();
+      deleteMutation.reset();
+      setDeleteConfirmOpen(false);
     }
   }, [open, project.id, project.name, project.description]);
 
@@ -153,160 +168,244 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     }
   };
 
+  const submitDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync({ rowVersion: project.rowVersion });
+      setDeleteConfirmOpen(false);
+      onDeleted?.();
+    } catch {
+      // deleteMutation.error 负责展示，确认弹窗保持打开以便重试。
+    }
+  };
+
   return (
-    <Modal
-      className="catalog-modal"
-      eyebrow="项目活跃成员或系统管理员可编辑"
-      title="编辑项目"
-      destroyOnHidden
-      mask={{ closable: false }}
-      open={open}
-      onCancel={() => {
-        if (!mutation.isPending) onClose();
-      }}
-      footer={
-        <>
-          <Button disabled={mutation.isPending} onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            type="primary"
-            htmlType="submit"
-            form={formId}
-            loading={mutation.isPending}
-          >
-            保存修改
-          </Button>
-        </>
-      }
-    >
-      <form
-        id={formId}
-        className="catalog-form calm-form"
-        onSubmit={handleSubmit((values) => void submit(values))}
-        noValidate
-      >
-        <Form component={false} layout="vertical" requiredMark={false}>
-          <div className="dialog-form">
-            <Form.Item label="项目编码">
-              <Input value={project.code} disabled aria-label="项目编码" />
-            </Form.Item>
-            <Controller
-              name="name"
-              control={control}
-              render={({ field }) => (
-                <Form.Item
-                  label="项目名称"
-                  required
-                  validateStatus={errors.name ? "error" : ""}
-                  help={errors.name?.message ?? ""}
-                >
-                  <Input
-                    {...field}
-                    aria-label="项目名称"
-                    maxLength={PROJECT_NAME_MAX_LENGTH}
-                    disabled={mutation.isPending}
-                    onChange={(event) => {
-                      field.onChange(event.currentTarget.value);
-                      clearErrors("name");
-                    }}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              name="description"
-              control={control}
-              render={({ field }) => (
-                <Form.Item
-                  label="项目描述"
-                  validateStatus={errors.description ? "error" : ""}
-                  help={errors.description?.message ?? ""}
-                >
-                  <Input.TextArea
-                    {...field}
-                    aria-label="项目描述"
-                    rows={4}
-                    maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-                    disabled={mutation.isPending}
-                    onChange={(event) => {
-                      field.onChange(event.currentTarget.value);
-                      clearErrors("description");
-                    }}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-              编码创建后不可修改，仅用于溯源；保存成功后项目版本递增，
-              其他页面的编辑需要重新加载最新版本。
-            </Text>
-            {mutation.error ? (
-              <Alert
-                showIcon
-                type="error"
-                title={describeProjectManagementError(mutation.error, "update")}
-                style={{ marginTop: 16 }}
-              />
-            ) : null}
-          </div>
-          <div className="dialog-form project-status-section">
-            <Form.Item label="项目状态">
-              <div className="project-status-control">
-                {canEditStatus ? (
-                  <CalmSegmented
-                    label="项目状态"
-                    value={statusValue}
-                    options={statusOptions}
-                    onChange={(next) => {
-                      statusMutation.reset();
-                      setStatusDraft(next);
-                    }}
-                  />
-                ) : (
-                  <CalmBadge
-                    tone={projectLifecycleTone(project.status, "blue")}
-                  >
-                    {projectLifecycleLabel(project.status)}
-                  </CalmBadge>
-                )}
-                <Button
-                  htmlType="button"
-                  className="secondary-button"
-                  data-testid="save-project-status"
-                  disabled={!canEditStatus || !statusDirty}
-                  loading={statusMutation.isPending}
-                  onClick={() => void submitStatus()}
-                >
-                  保存状态
-                </Button>
-              </div>
-            </Form.Item>
-            <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-              {statusHint}
-            </Text>
-            {statusMutation.error ? (
-              <Alert
-                showIcon
-                type="error"
-                title={describeProjectManagementError(
-                  statusMutation.error,
-                  "status",
-                )}
-                style={{ marginTop: 16 }}
-              />
-            ) : null}
-            {statusMutation.isSuccess && !statusDirty ? (
-              <Text
-                data-testid="project-status-saved"
-                style={{ display: "block", marginTop: 8, fontSize: 12 }}
+    <>
+      <Modal
+        className="catalog-modal"
+        eyebrow="项目活跃成员或系统管理员可编辑"
+        title="编辑项目"
+        destroyOnHidden
+        mask={{ closable: false }}
+        open={open}
+        onCancel={() => {
+          if (!mutation.isPending) onClose();
+        }}
+        footer={
+          <>
+            {/* ADR-049：删除入口只对系统管理员与本项目组长渲染，放在页脚最左侧
+                与常规的取消/保存分开；后果说明由二次确认弹窗承担。 */}
+            {canDeleteProject ? (
+              <Button
+                className="danger-button footer-leading"
+                data-testid="delete-project-button"
+                disabled={mutation.isPending || statusMutation.isPending}
+                onClick={() => {
+                  deleteMutation.reset();
+                  setDeleteConfirmOpen(true);
+                }}
               >
-                状态已更新为「{projectLifecycleLabel(project.status)}」。
-              </Text>
+                删除项目
+              </Button>
             ) : null}
+            <Button disabled={mutation.isPending} onClick={onClose}>
+              取消
+            </Button>
+            <Button
+              type="primary"
+              htmlType="submit"
+              form={formId}
+              loading={mutation.isPending}
+            >
+              保存修改
+            </Button>
+          </>
+        }
+      >
+        <form
+          id={formId}
+          className="catalog-form calm-form"
+          onSubmit={handleSubmit((values) => void submit(values))}
+          noValidate
+        >
+          <Form component={false} layout="vertical" requiredMark={false}>
+            <div className="dialog-form">
+              <Form.Item label="项目编码">
+                <Input value={project.code} disabled aria-label="项目编码" />
+              </Form.Item>
+              <Controller
+                name="name"
+                control={control}
+                render={({ field }) => (
+                  <Form.Item
+                    label="项目名称"
+                    required
+                    validateStatus={errors.name ? "error" : ""}
+                    help={errors.name?.message ?? ""}
+                  >
+                    <Input
+                      {...field}
+                      aria-label="项目名称"
+                      maxLength={PROJECT_NAME_MAX_LENGTH}
+                      disabled={mutation.isPending}
+                      onChange={(event) => {
+                        field.onChange(event.currentTarget.value);
+                        clearErrors("name");
+                      }}
+                    />
+                  </Form.Item>
+                )}
+              />
+              <Controller
+                name="description"
+                control={control}
+                render={({ field }) => (
+                  <Form.Item
+                    label="项目描述"
+                    validateStatus={errors.description ? "error" : ""}
+                    help={errors.description?.message ?? ""}
+                  >
+                    <Input.TextArea
+                      {...field}
+                      aria-label="项目描述"
+                      rows={4}
+                      maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+                      disabled={mutation.isPending}
+                      onChange={(event) => {
+                        field.onChange(event.currentTarget.value);
+                        clearErrors("description");
+                      }}
+                    />
+                  </Form.Item>
+                )}
+              />
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                编码创建后不可修改，仅用于溯源；保存成功后项目版本递增，
+                其他页面的编辑需要重新加载最新版本。
+              </Text>
+              {mutation.error ? (
+                <Alert
+                  showIcon
+                  type="error"
+                  title={describeProjectManagementError(
+                    mutation.error,
+                    "update",
+                  )}
+                  style={{ marginTop: 16 }}
+                />
+              ) : null}
+            </div>
+            <div className="dialog-form project-status-section">
+              <Form.Item label="项目状态">
+                <div className="project-status-control">
+                  {canEditStatus ? (
+                    <CalmSegmented
+                      label="项目状态"
+                      value={statusValue}
+                      options={statusOptions}
+                      onChange={(next) => {
+                        statusMutation.reset();
+                        setStatusDraft(next);
+                      }}
+                    />
+                  ) : (
+                    <CalmBadge
+                      tone={projectLifecycleTone(project.status, "blue")}
+                    >
+                      {projectLifecycleLabel(project.status)}
+                    </CalmBadge>
+                  )}
+                  <Button
+                    htmlType="button"
+                    className="secondary-button"
+                    data-testid="save-project-status"
+                    disabled={!canEditStatus || !statusDirty}
+                    loading={statusMutation.isPending}
+                    onClick={() => void submitStatus()}
+                  >
+                    保存状态
+                  </Button>
+                </div>
+              </Form.Item>
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                {statusHint}
+              </Text>
+              {statusMutation.error ? (
+                <Alert
+                  showIcon
+                  type="error"
+                  title={describeProjectManagementError(
+                    statusMutation.error,
+                    "status",
+                  )}
+                  style={{ marginTop: 16 }}
+                />
+              ) : null}
+              {statusMutation.isSuccess && !statusDirty ? (
+                <Text
+                  data-testid="project-status-saved"
+                  style={{ display: "block", marginTop: 8, fontSize: 12 }}
+                >
+                  状态已更新为「{projectLifecycleLabel(project.status)}」。
+                </Text>
+              ) : null}
+            </div>
+          </Form>
+        </form>
+      </Modal>
+      {canDeleteProject ? (
+        <Modal
+          className="catalog-modal"
+          open={deleteConfirmOpen}
+          eyebrow={`${project.code} / 删除项目`}
+          title="确认删除项目"
+          tone="danger"
+          icon="alert"
+          onCancel={() => {
+            if (!deleteMutation.isPending) setDeleteConfirmOpen(false);
+          }}
+          mask={{ closable: !deleteMutation.isPending }}
+          footer={
+            <>
+              <Button
+                className="secondary-button"
+                disabled={deleteMutation.isPending}
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                className="primary-button danger-button"
+                data-testid="confirm-delete-project"
+                loading={deleteMutation.isPending}
+                onClick={() => void submitDelete()}
+              >
+                确认删除
+              </Button>
+            </>
+          }
+        >
+          <div className="catalog-form">
+            <div className="dialog-form">
+              <Alert
+                showIcon
+                type="warning"
+                title={`确认删除项目「${project.name}」？`}
+                description="删除后项目会从项目列表、搜索、项目动态与通知中消失，成员与任务历史保留在数据库中供审计追溯；系统管理员或项目组长可以在项目动态的删除记录里还原项目，彻底删除则由系统管理员执行。"
+              />
+              {deleteMutation.error ? (
+                <Alert
+                  showIcon
+                  type="error"
+                  title={describeProjectManagementError(
+                    deleteMutation.error,
+                    "delete",
+                  )}
+                />
+              ) : null}
+            </div>
           </div>
-        </Form>
-      </form>
-    </Modal>
+        </Modal>
+      ) : null}
+    </>
   );
 };

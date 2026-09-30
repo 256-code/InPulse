@@ -14,6 +14,7 @@ import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjects } from "@features/projects/project-query";
 import { treePath, type TreeScope, type TreeSelection } from "./tree-selection";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export interface ProjectTreeProps {
   readonly activeScope: TreeScope | null;
@@ -152,7 +153,15 @@ const FeatureList: React.FC<FeatureListProps> = ({
 }) => {
   const features = useFeatures(projectId, moduleId, undefined, client);
   if (features.query.isPending) {
-    return <p className="tree-hint">正在加载功能…</p>;
+    return (
+      <CalmSkeleton
+        variant="lines"
+        rows={3}
+        compact
+        tone="sidebar"
+        label="正在加载功能…"
+      />
+    );
   }
   if (features.query.isError) {
     return <p className="tree-hint">功能加载失败</p>;
@@ -280,7 +289,15 @@ const ModuleList: React.FC<ModuleListProps> = ({
 }) => {
   const modules = useModules(projectId, client);
   if (modules.query.isPending) {
-    return <p className="tree-hint">正在加载模块…</p>;
+    return (
+      <CalmSkeleton
+        variant="lines"
+        rows={3}
+        compact
+        tone="sidebar"
+        label="正在加载模块…"
+      />
+    );
   }
   if (modules.query.isError) {
     return <p className="tree-hint">模块加载失败</p>;
@@ -544,7 +561,13 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     <div className="project-tree">
       <div className="project-tree-scroll">
         {projects.isPending ? (
-          <p className="tree-hint">正在加载项目…</p>
+          <CalmSkeleton
+            variant="lines"
+            rows={3}
+            compact
+            tone="sidebar"
+            label="正在加载项目…"
+          />
         ) : projects.isError ? (
           <p className="tree-hint">项目加载失败</p>
         ) : items.length === 0 ? (

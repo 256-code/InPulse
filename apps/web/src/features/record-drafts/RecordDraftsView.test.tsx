@@ -61,6 +61,26 @@ function client(overrides: object = {}) {
     }),
     getRecordDraft: vi.fn().mockResolvedValue(item),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 1,
+      rowVersion: 1,
+      writable: true,
+      items: [],
+    }),
+    addExternalLink: vi.fn().mockResolvedValue({
+      projectId: 1,
+      targetType: "CHANGE_RECORD",
+      targetId: 7,
+      linkId: 1,
+      rowVersion: 2,
+    }),
+    removeExternalLink: vi.fn().mockResolvedValue({
+      projectId: 1,
+      targetType: "CHANGE_RECORD",
+      targetId: 7,
+      linkId: 1,
+      rowVersion: 2,
+    }),
     ...overrides,
   } as unknown as InpulseApiClient;
 }
@@ -345,15 +365,19 @@ it("lists all source drafts without implicit selection and explicitly creates an
   expect(create).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "新建来源草稿" }));
   const modal = within(
-    await screen.findByRole("dialog", { name: "新建来源草稿" }),
+    await screen.findByRole("dialog", { name: "新建任务迭代" }),
   );
   expect(modal.getByLabelText("迭代标题")).toHaveValue("来源标题");
   expect(modal.queryByLabelText("所属模块")).not.toBeInTheDocument();
-  // 带来源任务时发布由任务完成流程（F-19）负责：弹窗里没有发布入口，
-  //「保存草稿」仍是唯一的主按钮，不会退成淡蓝次级。
-  expect(modal.queryByRole("button", { name: "新建迭代" })).toBeNull();
+  // 归属与影响功能按来源快照只读展示（与迭代记录页同一套行），不是可编辑的选择器。
+  const scopeFacts = modal.getByText("支付模块").closest(".record-scope-facts");
+  expect(scopeFacts).not.toBeNull();
+  expect(scopeFacts!.textContent).toContain("所属项目支付项目");
+  expect(scopeFacts!.textContent).toContain("记录范围模块");
+  // ADR-047：来源草稿也能就地发布；「保存草稿」退成淡蓝次级，主按钮是「发布迭代记录」。
+  expect(modal.getByRole("button", { name: "发布迭代记录" })).toBeEnabled();
   expect(modal.getByRole("button", { name: "保存草稿" }).className).toContain(
-    "primary-button",
+    "soft-blue-button",
   );
   for (const label of ["改动原因", "具体改动", "改动效果"])
     fireEvent.change(modal.getByLabelText(label), {
@@ -374,6 +398,51 @@ it("lists all source drafts without implicit selection and explicitly creates an
     },
   ]);
   expect(create.mock.calls[0]![4].headers["If-Match"]).toBe('"4"');
+});
+it("publishes a source draft in place while the source task stays unfinished", async () => {
+  const create = vi.fn().mockResolvedValue({ ...item, id: 10, taskId: 8 });
+  const publishChangeRecord = vi.fn().mockResolvedValue({
+    ...item,
+    id: 10,
+    taskId: 8,
+    rowVersion: 2,
+    status: "PUBLISHED",
+    code: "PAY-CR-1",
+    currentVersion: 1,
+    publishedAt: "2026-09-28T01:00:00.000Z",
+  });
+  const updateTaskRecordDraft = vi.fn();
+  const api = client({
+    getTaskRecordDrafts: vi.fn().mockResolvedValue({ source, items: [] }),
+    createTaskRecordDraft: create,
+    updateTaskRecordDraft,
+    publishChangeRecord,
+  });
+  mount(api, "/records?projectId=1&moduleId=2&taskId=8");
+  // 来源上下文解析前按钮是可写禁用的：等它可用再点，避免点空。
+  const entry = await screen.findByRole("button", { name: "新建来源草稿" });
+  await waitFor(() => expect(entry).toBeEnabled());
+  fireEvent.click(entry);
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建任务迭代" }),
+  );
+  for (const [label, value] of [
+    ["改动原因", "说明"],
+    ["具体改动", "说明"],
+    ["改动效果", "说明"],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  // 来源任务在 fixture 里仍是 TODO：发布入口不因完成状态被禁用。
+  fireEvent.click(modal.getByRole("button", { name: "发布迭代记录" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => expect(publishChangeRecord).toHaveBeenCalledOnce());
+  // 发布用刚建出的草稿版本，而不是任务版本；也不写回任务。
+  expect(publishChangeRecord.mock.calls[0]!.slice(0, 3)).toEqual([1, 10, {}]);
+  expect(publishChangeRecord.mock.calls[0]![3].headers["If-Match"]).toBe('"1"');
+  expect(updateTaskRecordDraft).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "新建任务迭代" })).toBeNull(),
+  );
 });
 it("continues the selected source draft through the workflow without copying source fields", async () => {
   const draft = { ...item, taskId: 8 };
@@ -441,6 +510,63 @@ it("lists project drafts as flat cards and opens one straight away", async () =>
   await waitFor(() =>
     expect(screen.getByRole("dialog", { name: "草稿详情" })).toBeVisible(),
   );
+});
+it("deletes the draft from the editor modal only after the destructive confirmation", async () => {
+  const deleteRecordDraft = vi.fn().mockResolvedValue({
+    projectId: 1,
+    recordId: 7,
+    moduleId: 2,
+    featureId: null,
+    taskId: null,
+    impactFeatureIds: [],
+  });
+  mount(client({ deleteRecordDraft }));
+  fireEvent.click(await screen.findByRole("button", { name: /继续编辑/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "继续编辑" }));
+  const modal = within(await screen.findByRole("dialog", { name: "编辑草稿" }));
+  const deleteButton = modal.getByRole("button", { name: "删除草稿" });
+  // 破坏性动作走 antd 的实底危险按钮（与「作废记录」「解除合并」同一套 danger + primary）。
+  expect(deleteButton.className).toContain("ant-btn-dangerous");
+  expect(deleteButton.className).toContain("ant-btn-primary");
+  fireEvent.click(deleteButton);
+  const confirm = within(
+    await screen.findByRole("dialog", { name: "删除草稿" }),
+  );
+  // 删除不可恢复，确认弹层必须写清楚连带删掉的东西。
+  // 弹层刚出现时还带 antd 的 appear 动画类（opacity 0），等它稳定再断言可见。
+  await waitFor(() => expect(confirm.getByText(/不能恢复/)).toBeVisible());
+  expect(deleteRecordDraft).not.toHaveBeenCalled();
+  const confirmButton = confirm.getByRole("button", { name: "确认删除" });
+  expect(confirmButton.className).toContain("ant-btn-dangerous");
+  expect(confirmButton.className).toContain("ant-btn-primary");
+  fireEvent.click(confirmButton);
+  await waitFor(() => expect(deleteRecordDraft).toHaveBeenCalledOnce());
+  expect(deleteRecordDraft.mock.calls[0]!.slice(0, 2)).toEqual([1, 7]);
+  const init = deleteRecordDraft.mock.calls[0]![2];
+  expect(init.headers["If-Match"]).toBe(
+    String.fromCharCode(34) + "1" + String.fromCharCode(34),
+  );
+  expect(init.headers["x-csrf-token"]).toBe("a".repeat(43));
+  expect(typeof init.headers["Idempotency-Key"]).toBe("string");
+  // 删除成功后编辑弹窗与确认弹层一起关闭。
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "编辑草稿" })).toBeNull(),
+  );
+});
+it("offers no delete action while the draft has not been saved yet", async () => {
+  const canCreate = vi.fn();
+  const { rerender } = render(
+    mountView(client(), "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(
+    mountView(client(), "/records?projectId=1", undefined, 1, canCreate),
+  );
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  // 还没落库的草稿关掉弹窗就够了，没有可删的对象。
+  expect(modal.queryByRole("button", { name: "删除草稿" })).toBeNull();
 });
 it("lists my drafts across projects, labels the owning project and opens it", async () => {
   const getRecordDraft = vi
@@ -517,11 +643,11 @@ it("saves the draft and publishes it when the new-iteration action is used", asy
     await screen.findByRole("dialog", { name: "新建迭代记录" }),
   );
   await pickInModal(modal, "所属模块", "支付模块");
-  // 页脚两个动作：「保存草稿」退成淡蓝次级，右侧是主按钮「新建迭代」。
+  // 页脚两个动作：「保存草稿」退成淡蓝次级，右侧是主按钮「发布迭代记录」（三态统一文案）。
   expect(modal.getByRole("button", { name: "保存草稿" }).className).toContain(
     "soft-blue-button",
   );
-  const publish = modal.getByRole("button", { name: "新建迭代" });
+  const publish = modal.getByRole("button", { name: "发布迭代记录" });
   expect(publish.className).toContain("primary-button");
   for (const [label, value] of [
     ["迭代标题", item.title],
@@ -546,6 +672,55 @@ it("saves the draft and publishes it when the new-iteration action is used", asy
     expect(screen.queryByRole("dialog", { name: "新建迭代记录" })).toBeNull(),
   );
   expect(screen.queryByRole("dialog", { name: "草稿详情" })).toBeNull();
+});
+it("publishes with the record version advanced by the links staged in the dialog", async () => {
+  const create = vi.fn().mockResolvedValue({ ...item, id: 12, rowVersion: 1 });
+  const publishChangeRecord = vi.fn().mockResolvedValue({
+    ...item,
+    id: 12,
+    rowVersion: 3,
+    status: "PUBLISHED",
+    code: "PAY-CR-2",
+    currentVersion: 1,
+    publishedAt: "2026-09-28T01:00:00.000Z",
+  });
+  const addExternalLink = vi.fn().mockResolvedValue({
+    projectId: 1,
+    targetType: "CHANGE_RECORD",
+    targetId: 12,
+    linkId: 3,
+    rowVersion: 2,
+  });
+  const api = client({
+    createIndependentRecordDraft: create,
+    publishChangeRecord,
+    addExternalLink,
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  await pickInModal(modal, "所属模块", "支付模块");
+  for (const [label, value] of [
+    ["迭代标题", item.title],
+    ["改动原因", item.contextProblem],
+    ["具体改动", item.changeSolution],
+    ["改动效果", item.resultVerification],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+    target: { value: "https://github.com/inpulse/inpulse/issues/9" },
+  });
+  fireEvent.click(modal.getByRole("button", { name: "添加链接" }));
+  fireEvent.click(modal.getByRole("button", { name: "发布迭代记录" }));
+  await waitFor(() => expect(publishChangeRecord).toHaveBeenCalledOnce());
+  // 关联链接把记录版本从 1 推到 2：发布必须跟上最新版本，否则服务端 409。
+  expect(publishChangeRecord.mock.calls[0]![3].headers["If-Match"]).toBe('"2"');
 });
 it("keeps the created draft and edits it in place when publishing fails", async () => {
   const create = vi.fn().mockResolvedValue({ ...item, id: 12, rowVersion: 1 });
@@ -580,10 +755,10 @@ it("keeps the created draft and edits it in place when publishing fails", async 
     ["改动效果", item.resultVerification],
   ])
     fireEvent.change(modal.getByLabelText(label!), { target: { value } });
-  fireEvent.click(modal.getByRole("button", { name: "新建迭代" }));
+  fireEvent.click(modal.getByRole("button", { name: "发布迭代记录" }));
   await waitFor(() => expect(publishChangeRecord).toHaveBeenCalledOnce());
   // 草稿已经落库：弹窗留在原地并切到这条草稿的编辑态，输入不丢。
-  const retry = await modal.findByRole("button", { name: "保存并发布" });
+  const retry = await modal.findByRole("button", { name: "发布迭代记录" });
   expect(modal.getByLabelText("迭代标题")).toHaveValue(item.title);
   fireEvent.click(retry);
   await waitFor(() => expect(update).toHaveBeenCalledOnce());
@@ -637,6 +812,193 @@ it("creates an independent draft in the project chosen inside the dialog from th
   fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]!.slice(0, 2)).toEqual([2, 9]);
+});
+
+it("stages a GitHub link in the new-draft dialog and associates it after the draft is created", async () => {
+  const create = vi.fn().mockResolvedValue({ ...item, id: 12 });
+  const addExternalLink = vi.fn().mockResolvedValue({
+    projectId: 1,
+    targetType: "CHANGE_RECORD",
+    targetId: 12,
+    linkId: 3,
+    rowVersion: 2,
+  });
+  const api = client({
+    createIndependentRecordDraft: create,
+    addExternalLink,
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 1,
+      rowVersion: 1,
+      writable: true,
+      items: [],
+    }),
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  await pickInModal(modal, "所属模块", "支付模块");
+  // 非 github.com 的 HTTPS 链接不进待添加列表，只给可读错误。
+  fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+    target: { value: "https://gitlab.com/inpulse/inpulse/pull/123" },
+  });
+  fireEvent.click(modal.getByRole("button", { name: "添加链接" }));
+  expect(
+    modal.getByText("只接受 github.com 的 HTTPS 链接，请检查输入。"),
+  ).toBeInTheDocument();
+  expect(addExternalLink).not.toHaveBeenCalled();
+  // 合法链接先暂存并展示识别结果，草稿落库后才写入关联。
+  fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+    target: { value: "https://github.com/inpulse/inpulse/pull/123" },
+  });
+  fireEvent.click(modal.getByRole("button", { name: "添加链接" }));
+  expect(modal.getByText("PR #123")).toBeInTheDocument();
+  for (const [label, value] of [
+    ["迭代标题", item.title],
+    ["改动原因", item.contextProblem],
+    ["具体改动", item.changeSolution],
+    ["改动效果", item.resultVerification],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  fireEvent.click(modal.getByRole("button", { name: "保存草稿" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => expect(addExternalLink).toHaveBeenCalledOnce());
+  expect(addExternalLink.mock.calls[0]!.slice(0, 3)).toEqual([
+    "CHANGE_RECORD",
+    12,
+    { url: "https://github.com/inpulse/inpulse/pull/123" },
+  ]);
+  // 版本头用列表当前版本，幂等键是每次新生成的字符串。
+  const init = addExternalLink.mock.calls[0]![3];
+  expect(init.headers["If-Match"]).toBe('"1"');
+  expect(typeof init.headers["Idempotency-Key"]).toBe("string");
+  expect(init.headers["Idempotency-Key"].length).toBeGreaterThan(0);
+  expect(init.headers["x-csrf-token"]).toBe("a".repeat(43));
+});
+
+it("saves the draft with Ctrl/Cmd + Enter and keeps a typed GitHub link", async () => {
+  const create = vi.fn().mockResolvedValue({ ...item, id: 12 });
+  const publishChangeRecord = vi.fn();
+  const addExternalLink = vi.fn().mockResolvedValue({
+    projectId: 1,
+    targetType: "CHANGE_RECORD",
+    targetId: 12,
+    linkId: 3,
+    rowVersion: 2,
+  });
+  const api = client({
+    createIndependentRecordDraft: create,
+    publishChangeRecord,
+    addExternalLink,
+  });
+  const canCreate = vi.fn();
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  // 提交条件不满足时（还没选范围）按钮不可用，同一个快捷键也不得绕过去。
+  fireEvent.keyDown(modal.getByLabelText("迭代标题"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  await pickInModal(modal, "所属模块", "支付模块");
+  for (const [label, value] of [
+    ["迭代标题", item.title],
+    ["改动原因", item.contextProblem],
+    ["具体改动", item.changeSolution],
+    ["改动效果", item.resultVerification],
+  ])
+    fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+  // 链接框里的回车仍然只暂存链接：Ctrl + Enter 也不会把刚输入的链接丢掉。
+  fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+    target: { value: "https://github.com/inpulse/inpulse/pull/123" },
+  });
+  fireEvent.keyDown(modal.getByLabelText("GitHub 链接地址"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  expect(modal.getByText("PR #123")).toBeInTheDocument();
+  // 链接已暂存、输入框清空后，快捷键才落成「保存草稿」，且绝不触发发布。
+  fireEvent.keyDown(modal.getByLabelText("GitHub 链接地址"), {
+    key: "Enter",
+    ctrlKey: true,
+  });
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => expect(addExternalLink).toHaveBeenCalledOnce());
+  expect(publishChangeRecord).not.toHaveBeenCalled();
+});
+
+it("closes an untouched dialog without asking about unsaved input", async () => {
+  const create = vi.fn();
+  const canCreate = vi.fn();
+  const api = client({ createIndependentRecordDraft: create });
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  // 没改过任何字段：关闭不打扰，也不写库。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  expect(screen.queryByRole("dialog", { name: "放弃未保存的内容" })).toBeNull();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "新建迭代记录" })).toBeNull(),
+  );
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("asks before dropping unsaved input and never writes it on leave", async () => {
+  const create = vi.fn();
+  const canCreate = vi.fn();
+  const api = client({ createIndependentRecordDraft: create });
+  const { rerender } = render(
+    mountView(api, "/records?projectId=1", undefined, 0, canCreate),
+  );
+  await waitFor(() => expect(canCreate).toHaveBeenLastCalledWith(true));
+  rerender(mountView(api, "/records?projectId=1", undefined, 1, canCreate));
+  const modal = within(
+    await screen.findByRole("dialog", { name: "新建迭代记录" }),
+  );
+  fireEvent.change(modal.getByLabelText("改动原因"), {
+    target: { value: "还没保存" },
+  });
+  // 未保存就关闭：先确认，输入原样留着。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  const discard = within(
+    await screen.findByRole("dialog", { name: "放弃未保存的内容" }),
+  );
+  fireEvent.click(discard.getByRole("button", { name: "继续编辑" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "放弃未保存的内容" }),
+    ).toBeNull(),
+  );
+  expect(modal.getByLabelText("改动原因")).toHaveValue("还没保存");
+  expect(create).not.toHaveBeenCalled();
+  // 放弃修改只是丢弃：草稿没有落库。
+  fireEvent.click(modal.getByRole("button", { name: "关闭" }));
+  fireEvent.click(
+    within(
+      await screen.findByRole("dialog", { name: "放弃未保存的内容" }),
+    ).getByRole("button", { name: "放弃修改" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "新建迭代记录" })).toBeNull(),
+  );
+  expect(create).not.toHaveBeenCalled();
 });
 
 it("reports the header action as unavailable when every visible project is archived", async () => {

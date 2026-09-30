@@ -7,6 +7,8 @@ import {
 } from "../helpers/calm-select.js";
 async function add(page: Page, url: string, label: string) {
   const modal = page.getByRole("dialog", { name: "GitHub 链接", exact: true });
+  // 方案 A：写操作按需展开，先点「添加链接」再填地址。
+  await modal.getByRole("button", { name: "添加链接" }).click();
   await modal.getByLabel("GitHub URL").fill(url);
   await modal.getByRole("button", { name: "确认添加" }).click();
   await expect(
@@ -68,6 +70,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
       "https://GitHub.com:443/inpulse/core/releases/tag/v2.6.0?utm_source=test#notes",
       "Release v2.6.0",
     );
+    await modal.getByRole("button", { name: "添加链接" }).click();
     await modal
       .getByLabel("GitHub URL")
       .fill("https://github.com/inpulse/core/releases/tag/v2.6.0");
@@ -186,6 +189,59 @@ test("F22 draft links survive publication and revision without changing old vers
     ).toBeVisible();
     await page.goto("/search?q=22004");
     await expect(page.getByText(/F22记录/).first()).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("F22 新建迭代弹窗内直接暂存 GitHub 链接，发布后落到正式记录", async ({
+  browser,
+}) => {
+  test.setTimeout(120000);
+  const runtime = await loadRuntime(),
+    { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const suffix = Date.now();
+    await page.goto(`/records?projectId=${runtime.projectId}`);
+    await page.getByRole("button", { name: "新建迭代记录" }).click();
+    const draft = page.getByRole("dialog", { name: "新建迭代记录" });
+    await pickFirstCalmSelectOption(draft, "所属模块");
+    await draft.getByLabel("迭代标题").fill(`F22内联记录${suffix}`);
+    await draft.getByLabel("改动原因").fill("原始问题");
+    await draft.getByLabel("具体改动").fill("原始方案");
+    await draft.getByLabel("改动效果").fill("原始验证");
+    // 弹窗内直接暂存 GitHub 链接：非法链接被拦下，合法的进入待添加列表。
+    await draft
+      .getByLabel("GitHub 链接地址")
+      .fill("https://gitlab.com/inpulse/core/pull/22311");
+    await draft.getByRole("button", { name: "添加链接" }).click();
+    await expect(
+      draft.getByText("只接受 github.com 的 HTTPS 链接，请检查输入。"),
+    ).toBeVisible();
+    await draft
+      .getByLabel("GitHub 链接地址")
+      .fill("https://github.com/inpulse/core/pull/22311");
+    await draft.getByRole("button", { name: "添加链接" }).click();
+    await expect(draft.getByText("PR #22311")).toBeVisible();
+    await expect(draft.locator(".record-github-pending li")).toHaveCount(1);
+    await draft.screenshot({
+      path: "test-results/f22-dialog-staged-link-form.png",
+    });
+    // 三态主按钮统一为「发布迭代记录」，独立新建同样会立即播给项目成员。
+    await draft
+      .getByRole("button", { name: "发布迭代记录", exact: true })
+      .click();
+    await expect(draft).toBeHidden();
+    // 发布后直接落到正式记录：链接随草稿一起写入，无需再手工关联一次。
+    const detail = page.getByRole("region", { name: "正式记录详情" });
+    await detail.getByRole("button", { name: "GitHub 关联" }).click();
+    await expect(
+      detail.getByRole("link", { name: "PR #22311", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "test-results/f22-dialog-staged-link.png",
+      fullPage: true,
+    });
   } finally {
     await context.close();
   }

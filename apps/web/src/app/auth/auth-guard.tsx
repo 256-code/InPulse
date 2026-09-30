@@ -1,7 +1,8 @@
 import React from "react";
-import { Spin, Result, Button } from "antd";
+import { Result, Button } from "antd";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@features/auth/auth-context";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export interface RequireAuthProps {
   readonly children: React.ReactElement;
@@ -29,11 +30,8 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({
 
   if (status === "loading") {
     return (
-      <div
-        data-testid="auth-loading"
-        style={{ display: "flex", justifyContent: "center", padding: 48 }}
-      >
-        <Spin size="large" description="正在验证身份..." />
+      <div data-testid="auth-loading" style={{ padding: 48 }}>
+        <CalmSkeleton variant="lines" rows={4} label="正在验证身份..." />
       </div>
     );
   }
@@ -86,11 +84,8 @@ export const RequireAdmin: React.FC<RequireAdminProps> = ({
 
   if (status === "loading") {
     return (
-      <div
-        data-testid="admin-loading"
-        style={{ display: "flex", justifyContent: "center", padding: 48 }}
-      >
-        <Spin size="large" description="正在验证权限..." />
+      <div data-testid="admin-loading" style={{ padding: 48 }}>
+        <CalmSkeleton variant="lines" rows={4} label="正在验证权限..." />
       </div>
     );
   }

@@ -9,18 +9,36 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
-export type ProjectManagementAction = "update" | "status";
+export type ProjectManagementAction =
+  "update" | "status" | "delete" | "restore" | "purge";
+
+const ACTION_LABELS: Readonly<Record<ProjectManagementAction, string>> = {
+  update: "编辑",
+  status: "状态变更",
+  delete: "删除",
+  restore: "还原",
+  purge: "彻底删除",
+};
 
 export function describeProjectManagementError(
   error: unknown,
   action: ProjectManagementAction,
 ): string {
-  const actionLabel = action === "update" ? "编辑" : "状态变更";
+  const actionLabel = ACTION_LABELS[action];
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "登录状态已失效，请重新登录后再操作项目。";
     }
     if (error.status === 403) {
+      if (error.code === "PROJECT_DELETE_FORBIDDEN") {
+        return "只有项目组长或系统管理员可以删除项目。";
+      }
+      if (error.code === "PROJECT_RESTORE_FORBIDDEN") {
+        return "只有项目组长或系统管理员可以还原项目。";
+      }
+      if (error.code === "PROJECT_PURGE_FORBIDDEN") {
+        return "只有系统管理员可以彻底删除项目。";
+      }
       return "安全校验未通过，请刷新页面后重试。";
     }
     if (error.status === 404) return "项目不存在或你已无权访问。";
@@ -31,8 +49,13 @@ export function describeProjectManagementError(
       if (error.code === "PROJECT_STATE_CONFLICT") {
         return "项目已处于所选状态，请刷新后重试。";
       }
+      if (error.code === "PROJECT_NOT_DELETED") {
+        return action === "purge"
+          ? "项目已不在删除状态，不能彻底删除；请刷新页面。"
+          : "项目已不在删除状态，无需还原；请刷新页面。";
+      }
       if (error.code === "PROJECT_MAINTENANCE_TASKS_OPEN") {
-        return "项目下仍有未完成、也未归档的任务，请先完成或归档全部任务再切换为维护中。";
+        return "项目下仍有未完成、也未取消的任务，请先完成或取消全部任务再切换为维护中。";
       }
       if (error.code === "PROJECT_STATUS_NOT_STARTED_LOCKED") {
         return "项目里已经出现过已完成任务，不能再退回「未开始」。";
@@ -43,7 +66,7 @@ export function describeProjectManagementError(
       return "项目状态已变化，请刷新列表后重试。";
     }
     if (error.status === 422) {
-      return "请检查项目名称或描述。";
+      return `请检查项目${actionLabel}所需的项。`;
     }
     if (error.status === 429) return "请求过于频繁，请稍后重试。";
   }
@@ -75,6 +98,32 @@ function mutationHeaders(
     "Idempotency-Key": idempotencyKey,
     "If-Match": `"${rowVersion}"`,
   };
+}
+
+/** ADR-051：还原与彻底删除都是无 If-Match 的行锁命令（见两条路由的 versionPolicy）。 */
+function locklessMutationHeaders(
+  csrfToken: string,
+  idempotencyKey: string,
+): Readonly<Record<string, string>> {
+  return {
+    "x-csrf-token": csrfToken,
+    "Idempotency-Key": idempotencyKey,
+  };
+}
+
+/** 还原/彻底删除都会改变项目集合与动态台账，需要一并失效的公共缓存。 */
+function invalidateProjectCollections(
+  cache: ReturnType<typeof useQueryClient>,
+): void {
+  void cache.invalidateQueries({ queryKey: ["projects"] });
+  void cache.invalidateQueries({ queryKey: ["project-deletions"] });
+  void cache.invalidateQueries({ queryKey: ["project-overview"] });
+  void cache.invalidateQueries({ queryKey: ["my-tasks"] });
+  void cache.invalidateQueries({ queryKey: ["task-board"] });
+  void cache.invalidateQueries({ queryKey: ["activity"] });
+  void cache.invalidateQueries({ queryKey: ["notifications"] });
+  void cache.invalidateQueries({ queryKey: ["search"] });
+  void cache.invalidateQueries({ queryKey: ["audit-logs"] });
 }
 
 export function useUpdateProject(projectId: number, client?: InpulseApiClient) {
@@ -136,6 +185,94 @@ export function useChangeProjectStatus(
     },
     onSuccess: () => {
       void cache.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/**
+ * ADR-049：只有本项目组长或系统管理员可以删除项目（服务端 `projectDeleterRole`
+ * 二次判定，非成员与已删项目一律 404、普通成员 403）。
+ * 删除是软删除：项目退出列表、搜索与详情，模块与任务等历史保留；
+ * 成功返回 204 无正文，重复提交靠幂等键重放同一个 204。
+ */
+export function useDeleteProject(projectId: number, client?: InpulseApiClient) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: { readonly rowVersion: number }) => {
+      const key = retryKey(
+        JSON.stringify([projectId, input.rowVersion, "delete"]),
+        "project-delete",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.deleteProject(projectId, {
+        headers: mutationHeaders(csrf.csrfToken, key, input.rowVersion),
+      });
+    },
+    onSuccess: () => {
+      invalidateProjectCollections(cache);
+    },
+  });
+}
+
+/**
+ * ADR-051：撤销软删除，项目重新出现在列表、搜索与详情里；系统管理员与本项目
+ * ACTIVE 组长可用（服务端 `projectRestorerRole` 二次判定，普通成员 403、
+ * 非成员与已移除成员 404，未处于删除状态 409 `PROJECT_NOT_DELETED`）。
+ * 与删除不同，还原不要求 `If-Match`：目标状态唯一，并发由项目行锁保证。
+ */
+export function useRestoreProject(
+  projectId: number,
+  client?: InpulseApiClient,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async () => {
+      const key = retryKey(
+        JSON.stringify([projectId, "restore"]),
+        "project-restore",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.restoreProject(projectId, {
+        headers: locklessMutationHeaders(csrf.csrfToken, key),
+      });
+    },
+    onSuccess: () => {
+      invalidateProjectCollections(cache);
+    },
+  });
+}
+
+/**
+ * ADR-051：物理删除项目与其全部下级数据（含项目自己的审计链），不可撤销；
+ * 只有系统管理员可用，其余一律 403 `PROJECT_PURGE_FORBIDDEN`。
+ */
+export function usePurgeProject(projectId: number, client?: InpulseApiClient) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  const retryKey = useRetryKey();
+
+  return useMutation({
+    retry: false,
+    mutationFn: async () => {
+      const key = retryKey(
+        JSON.stringify([projectId, "purge"]),
+        "project-purge",
+      );
+      const csrf = await api.issueCsrfToken();
+      return api.purgeProject(projectId, {
+        headers: locklessMutationHeaders(csrf.csrfToken, key),
+      });
+    },
+    onSuccess: () => {
+      invalidateProjectCollections(cache);
     },
   });
 }

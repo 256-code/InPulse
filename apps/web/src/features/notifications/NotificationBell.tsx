@@ -7,6 +7,7 @@ import {
   useNotificationsInfiniteQuery,
   useNotificationUnreadCount,
 } from "./notification-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export interface NotificationBellProps {
   readonly client?: InpulseApiClient | undefined;
@@ -110,7 +111,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
 
   let content: React.ReactNode;
   if (listQuery.isPending) {
-    content = <div className="notification-state">正在加载通知...</div>;
+    content = (
+      <CalmSkeleton variant="list" rows={2} compact label="正在加载通知..." />
+    );
   } else if (listQuery.isError) {
     content = (
       <div className="notification-state notification-state-error">

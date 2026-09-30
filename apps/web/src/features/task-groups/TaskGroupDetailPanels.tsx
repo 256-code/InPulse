@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import type { InpulseApiClient, TaskGroupRecordItem } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
@@ -31,6 +31,7 @@ import {
   type TaskGroupAdapter,
   type TaskGroupMember,
 } from "./task-groups-types";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /**
  * F-25 聚合组正文面板：成员与分支、组内记录（按分支筛选、服务端过滤并以签名
@@ -192,9 +193,6 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
           >
             {taskPriorityLabel(member.priority)}
           </CalmBadge>
-          {member.lifecycleStatus === "ARCHIVED" ? (
-            <CalmBadge tone="gray">已归档</CalmBadge>
-          ) : null}
           {member.role === "SOURCE" && member.memberStatus === "ACTIVE" ? (
             <UnmergeTaskGroupButton
               groupId={groupId}
@@ -275,10 +273,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
       ) : null}
 
       {groupQuery.isPending ? (
-        <div className="calm-state">
-          <Spin size="large" />
-          <p>正在加载聚合组…</p>
-        </div>
+        <CalmSkeleton variant="lines" rows={4} label="正在加载聚合组…" />
       ) : groupQuery.isError ? (
         <Alert type="error" title={describeTaskGroupError(groupQuery.error)} />
       ) : (
@@ -345,10 +340,7 @@ export const TaskGroupDetailPanels: React.FC<TaskGroupDetailPanelsProps> = ({
                 />
               </div>
               {recordsQuery.isPending ? (
-                <div className="calm-state">
-                  <Spin />
-                  <span>正在加载记录</span>
-                </div>
+                <CalmSkeleton variant="list" rows={3} label="正在加载记录" />
               ) : recordsQuery.isError ? (
                 <Alert
                   type="error"

@@ -147,7 +147,7 @@ interface TaskOptions {
   readonly assigneeIds?: number[];
   readonly featureId?: number | null;
   readonly workStatus?: "TODO" | "DONE" | "CANCELED";
-  readonly lifecycleStatus?: "ACTIVE" | "ARCHIVED" | "INVALID";
+  readonly lifecycleStatus?: "ACTIVE" | "INVALID";
   readonly title?: string;
   /** 创建者（app.tasks.creator_id）；缺省用项目创建者，用于构造 creator ≠ assignee 的夹具。 */
   readonly actorUserId?: number;
@@ -582,18 +582,17 @@ describe("TaskQueryPort list and count", () => {
     expect(rows[1]?.dueAt).toBeNull();
   });
 
-  test("effectiveOnly drops invalid and canceled tasks but keeps archived ones", async () => {
+  test("effectiveOnly drops invalid and canceled tasks", async () => {
     const scope = await newProject();
     const featureId = await newFeature(scope, scope.moduleId, "影响功能");
     const active = await newTask(scope);
     const canceled = await newTask(scope, { workStatus: "CANCELED" });
     const invalid = await newTask(scope, { lifecycleStatus: "INVALID" });
-    const archived = await newTask(scope, { lifecycleStatus: "ARCHIVED" });
     const featureScoped = await newTask(scope, { featureId });
     const all = await uow.run((tx) =>
       taskQuery.list(tx, { projectIds: [scope.projectId], limit: 100 }),
     );
-    expect(all.items).toHaveLength(5);
+    expect(all.items).toHaveLength(4);
     const effective = await uow.run((tx) =>
       taskQuery.list(tx, {
         projectIds: [scope.projectId],
@@ -603,7 +602,7 @@ describe("TaskQueryPort list and count", () => {
     );
     const effectiveIds = effective.items.map((item) => item.taskId);
     expect(effectiveIds.sort((left, right) => left - right)).toEqual(
-      [active, archived, featureScoped].sort((left, right) => left - right),
+      [active, featureScoped].sort((left, right) => left - right),
     );
     expect(effectiveIds).not.toContain(canceled);
     expect(effectiveIds).not.toContain(invalid);
@@ -631,7 +630,7 @@ describe("TaskQueryPort list and count", () => {
           scopeTypes: ["MODULE"],
         }),
       ),
-    ).toBe(4);
+    ).toBe(3);
   });
 
   test("task pagination walks every row exactly once", async () => {

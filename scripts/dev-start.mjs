@@ -24,13 +24,16 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { request } from "node:http";
-import { createConnection } from "node:net";
+import { request as httpsRequest } from "node:https";
+import { createConnection, isIP } from "node:net";
+import { hostname, networkInterfaces } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { domainToASCII, fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_DIR = path.join(ROOT, ".data");
@@ -38,9 +41,12 @@ const LOG_DIR = path.join(DATA_DIR, "dev");
 const KEYRING_DIR = path.join(DATA_DIR, "keyrings");
 const DB_CONTAINER = "inpulse-pg";
 const DB_PORT = 55432;
+const DB_ADMIN_USER = "cluster_bootstrap";
 const API_PORT = 3000;
 const WEB_PORT = 5173;
-const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
+const WEB_HOST = "127.0.0.1";
+const WEB_ORIGIN = "http://" + WEB_HOST + ":" + WEB_PORT;
+const LAN_CERT_DIR = path.join(DATA_DIR, "dev-certs");
 const SSO_KEYS = [
   "SSO_ISSUER",
   "SSO_CLIENT_ID",
@@ -55,6 +61,7 @@ const USAGE = `InPulse 本地开发启动
 选项：
   --skip-build        跳过 API 构建（dist 已是最新时使用）
   --local-only        强制关闭统一身份认证，按本地口令登录启动
+  --lan               让同一局域网的设备以 HTTPS 访问（自签证书存放在 .data/dev-certs）
   --env-file <路径>   统一身份认证配置文件，默认 deploy/.env.dev.local
   -h, --help          显示本帮助`;
 
@@ -62,6 +69,7 @@ function parseArguments(argv) {
   const options = {
     skipBuild: false,
     localOnly: false,
+    lan: false,
     help: false,
     envFile: path.join(ROOT, "deploy", ".env.dev.local"),
   };
@@ -71,6 +79,8 @@ function parseArguments(argv) {
       options.skipBuild = true;
     } else if (argument === "--local-only") {
       options.localOnly = true;
+    } else if (argument === "--lan") {
+      options.lan = true;
     } else if (argument === "--env-file") {
       const value = argv[index + 1];
       if (value === undefined) {
@@ -174,11 +184,173 @@ function runPnpm(commandLine) {
   }
 }
 
+/** 本机可用于局域网访问的 IPv4 地址，私网网段优先，并带接口名便于识别虚拟网卡。 */
+function listLanAddresses() {
+  const entries = [];
+  for (const [name, addresses] of Object.entries(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === "IPv4" && !address.internal) {
+        entries.push({ name, address: address.address });
+      }
+    }
+  }
+  const priority = (entry) => {
+    const value = entry.address;
+    if (value.startsWith("192.168.")) {
+      return 0;
+    }
+    if (value.startsWith("10.")) {
+      return 1;
+    }
+    const match = /^172\.(\d{1,2})\./.exec(value);
+    const second = match === null ? 0 : Number.parseInt(match[1], 10);
+    return second >= 16 && second <= 31 ? 2 : 3;
+  };
+  return entries.sort((left, right) => priority(left) - priority(right));
+}
+
+function findOpenssl() {
+  const configured = process.env["INPULSE_OPENSSL"]?.trim();
+  if (configured !== undefined && configured.length > 0) {
+    if (!existsSync(configured)) {
+      throw new Error("INPULSE_OPENSSL 指向的文件不存在：" + configured);
+    }
+    return configured;
+  }
+  if (capture("openssl", ["version"]).status === 0) {
+    return "openssl";
+  }
+  const lookup = process.platform === "win32" ? "where" : "which";
+  const gitPath = capture(lookup, ["git"]).stdout.split(/\r?\n/)[0]?.trim();
+  if (gitPath !== undefined && gitPath.length > 0) {
+    const installRoot = path.resolve(path.dirname(gitPath), "..");
+    for (const candidate of [
+      path.join(installRoot, "usr", "bin", "openssl.exe"),
+      path.join(installRoot, "mingw64", "bin", "openssl.exe"),
+    ]) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** 生成 openssl req 配置：SAN 覆盖 localhost、loopback、主机名与局域网 IPv4。 */
+function buildOpensslConfig(names) {
+  const subjectAltName = names
+    .map((name) => (isIP(name) === 0 ? "DNS:" : "IP:") + name)
+    .join(",");
+  return [
+    "[req]",
+    "prompt = no",
+    "distinguished_name = dn",
+    "x509_extensions = ext",
+    "",
+    "[dn]",
+    "CN = InPulse LAN Dev",
+    "",
+    "[ext]",
+    "basicConstraints = CA:FALSE",
+    "keyUsage = digitalSignature,keyEncipherment",
+    "extendedKeyUsage = serverAuth",
+    "subjectAltName = " + subjectAltName,
+    "",
+  ].join("\n");
+}
+
+/**
+ * 局域网模式的自签证书：SAN 必须覆盖当前地址，地址变化（DHCP）时重新生成；
+ * 证书与私钥只落在被 .gitignore 忽略的 .data/dev-certs，不进入版本库。
+ */
+function ensureLanCertificate(entries) {
+  const openssl = findOpenssl();
+  if (openssl === undefined) {
+    throw new Error(
+      "未找到 openssl，无法生成局域网自签证书；可安装 Git for Windows（自带 openssl），或用 INPULSE_OPENSSL 指定可执行文件路径。",
+    );
+  }
+  const machineName = domainToASCII(hostname());
+  const names = Array.from(
+    new Set(
+      ["localhost", "127.0.0.1", machineName]
+        .concat(entries.map((entry) => entry.address))
+        .filter((name) => name.length > 0),
+    ),
+  ).sort();
+  mkdirSync(LAN_CERT_DIR, { recursive: true });
+  const keyFile = path.join(LAN_CERT_DIR, "lan-key.pem");
+  const certFile = path.join(LAN_CERT_DIR, "lan-cert.pem");
+  const configFile = path.join(LAN_CERT_DIR, "lan-openssl.cnf");
+  const metaFile = path.join(LAN_CERT_DIR, "lan-hosts.json");
+  let reusable = false;
+  if (existsSync(keyFile) && existsSync(certFile) && existsSync(metaFile)) {
+    try {
+      const meta = JSON.parse(readFileSync(metaFile, "utf8"));
+      reusable =
+        Array.isArray(meta.names) &&
+        meta.names.length === names.length &&
+        meta.names.every((value, index) => value === names[index]);
+    } catch {
+      reusable = false;
+    }
+    if (reusable) {
+      const check = capture(openssl, [
+        "x509",
+        "-in",
+        certFile,
+        "-noout",
+        "-checkend",
+        String(30 * 24 * 60 * 60),
+      ]);
+      reusable = check.status === 0;
+    }
+  }
+  if (!reusable) {
+    writeFileSync(configFile, buildOpensslConfig(names), "utf8");
+    const result = spawnSync(
+      openssl,
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-sha256",
+        "-days",
+        "825",
+        "-nodes",
+        "-keyout",
+        keyFile,
+        "-out",
+        certFile,
+        "-config",
+        configFile,
+      ],
+      { encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        "openssl 生成自签证书失败：" + (result.stderr ?? "").trim(),
+      );
+    }
+    writeFileSync(
+      metaFile,
+      JSON.stringify(
+        { names, generatedAt: new Date().toISOString() },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+  }
+  return { certFile, keyFile, names };
+}
+
 function relativeToRoot(target) {
   return path.relative(ROOT, target).split(path.sep).join("/");
 }
 
-async function ensureDatabase() {
+async function ensureDatabase(databaseUrl) {
   console.log("[1/4] 检查本地 PostgreSQL 容器 ...");
   const started = capture("docker", ["start", DB_CONTAINER]);
   if (started.status !== 0) {
@@ -190,6 +362,7 @@ async function ensureDatabase() {
   while (Date.now() < deadline) {
     if (capture("docker", ["exec", DB_CONTAINER, "pg_isready"]).status === 0) {
       console.log(`  就绪：127.0.0.1:${DB_PORT}（容器 ${DB_CONTAINER}）`);
+      assertMigrationsUpToDate(databaseUrl);
       return;
     }
     await delay(1000);
@@ -271,14 +444,88 @@ async function waitForPort(port, name, logFile, timeoutMs = 90_000) {
   );
 }
 
-function buildApiEnvironment(fileValues, sso) {
+function resolveRuntimeDatabaseUrl(fileValues) {
+  return (
+    fileValues["DATABASE_URL"] ??
+    `postgresql://app_runtime@127.0.0.1:${DB_PORT}/app`
+  );
+}
+
+/** 迁移版本校验 + ensureDatabase 用同一个 URL，避免两处各自拼装后不一致。 */
+function assertMigrationsUpToDate(databaseUrl) {
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    console.log("  迁移校验：跳过（DATABASE_URL 不是合法 URL）");
+    return;
+  }
+  const host = parsed.hostname;
+  if (
+    (host !== "127.0.0.1" && host !== "localhost") ||
+    parsed.port !== String(DB_PORT)
+  ) {
+    console.log(
+      `  迁移校验：跳过（DATABASE_URL 指向 ${parsed.host}，不是本地默认库）`,
+    );
+    return;
+  }
+  const database = parsed.pathname.replace(/^\//, "") || "app";
+  const expected = readdirSync(path.join(ROOT, "database", "migrations"))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  const result = capture("docker", [
+    "exec",
+    DB_CONTAINER,
+    "psql",
+    "-U",
+    DB_ADMIN_USER,
+    "-d",
+    database,
+    "-tAc",
+    "SELECT name FROM app.schema_migrations",
+  ]);
+  if (result.status !== 0) {
+    throw new Error(
+      `无法读取 ${database} 的 app.schema_migrations：请先按 database/README.md 初始化本地 PostgreSQL 18 + PGroonga 实例与角色。`,
+    );
+  }
+  const appliedNames = new Set(
+    result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
+  );
+  // 落后会让 API 的读路径直接 500（例如 ADR-049 起需要 app.projects.deleted_at），
+  // 且报错是「服务器无法完成…」这类兜底文案，很难反查到库版本，因此这里 fail fast。
+  const pending = expected.filter((name) => !appliedNames.has(name));
+  if (pending.length > 0) {
+    const preview = pending.slice(0, 3).join(" / ");
+    const more = pending.length > 3 ? " 等" : "";
+    throw new Error(
+      `本地库 ${database} 落后 ${String(pending.length)} 个迁移（缺 ${preview}${more}），当前代码会让项目级接口一律 500。\n` +
+        `    请先执行：$env:MIGRATION_DATABASE_URL='postgresql://${DB_ADMIN_USER}@127.0.0.1:${String(DB_PORT)}/${database}'; pnpm db:migrate\n` +
+        `    （随后重新运行 node scripts/dev-start.mjs）`,
+    );
+  }
+  const unknown = [...appliedNames].filter((name) => !expected.includes(name));
+  if (unknown.length > 0) {
+    console.log(
+      `  迁移校验：${database} 已是最新（${String(expected.length)} 个迁移），但库里有 ${String(unknown.length)} 个本地不存在的迁移记录：${unknown.slice(0, 3).join(" / ")}（当前代码可能落后于库）`,
+    );
+    return;
+  }
+  console.log(
+    `  迁移校验：${database} 已是最新（${String(expected.length)} 个迁移）`,
+  );
+}
+
+function buildApiEnvironment(fileValues, sso, runtime) {
   const env = {
     ...process.env,
     NODE_ENV: "test",
     PORT: String(API_PORT),
-    DATABASE_URL:
-      fileValues["DATABASE_URL"] ??
-      `postgresql://app_runtime@127.0.0.1:${DB_PORT}/app`,
+    DATABASE_URL: resolveRuntimeDatabaseUrl(fileValues),
     AUDIT_DATABASE_URL:
       fileValues["AUDIT_DATABASE_URL"] ??
       `postgresql://audit_reader@127.0.0.1:${DB_PORT}/app`,
@@ -295,6 +542,9 @@ function buildApiEnvironment(fileValues, sso) {
     AUDIT_HMAC_KEYRING_TEST_PATH: "1",
     AUDIT_HMAC_KEY_VERSION: "1",
   };
+  if (runtime.apiHost !== undefined) {
+    env["INPULSE_API_HOST"] = runtime.apiHost;
+  }
   // 清掉继承来的 SSO 变量，避免与本次解析结果混用。
   for (const key of [
     ...SSO_KEYS,
@@ -311,7 +561,8 @@ function buildApiEnvironment(fileValues, sso) {
   env["SSO_CLIENT_ID"] = sso.values["SSO_CLIENT_ID"];
   env["SSO_CLIENT_SECRET_FILE"] = sso.values["SSO_CLIENT_SECRET_FILE"];
   env["SSO_REDIRECT_URI"] =
-    sso.values["SSO_REDIRECT_URI"] || `${WEB_ORIGIN}/api/v1/auth/sso/callback`;
+    sso.values["SSO_REDIRECT_URI"] ||
+    runtime.webOrigin + "/api/v1/auth/sso/callback";
   // 本地 Secret 位于 /run/secrets 之外，按仓库规则只允许 NODE_ENV=test 加该开关读取（技术设计 §7）。
   env["SSO_CLIENT_SECRET_TEST_PATH"] = "1";
   return env;
@@ -333,7 +584,13 @@ function spawnBackground(command, args, options) {
 
 function requestOnce(url) {
   return new Promise((resolve, reject) => {
-    const req = request(url, { method: "GET" }, (res) => {
+    // 局域网模式探测的是本机自签证书入口，本机探测按设计跳过证书校验。
+    const secure = url.startsWith("https://");
+    const client = secure ? httpsRequest : request;
+    const options = secure
+      ? { method: "GET", rejectUnauthorized: false }
+      : { method: "GET" };
+    const req = client(url, options, (res) => {
       res.resume();
       resolve({
         status: res.statusCode ?? 0,
@@ -345,9 +602,9 @@ function requestOnce(url) {
   });
 }
 
-async function verifySso(issuer) {
+async function verifySso(issuer, webOrigin) {
   try {
-    const response = await requestOnce(`${WEB_ORIGIN}/api/v1/auth/sso/start`);
+    const response = await requestOnce(webOrigin + "/api/v1/auth/sso/start");
     if (
       response.status >= 300 &&
       response.status < 400 &&
@@ -362,19 +619,39 @@ async function verifySso(issuer) {
   }
 }
 
-function printSsoGuidance(reason) {
+function printSsoGuidance(reason, webOrigin) {
+  const callbackUrl = webOrigin + "/api/v1/auth/sso/callback";
   console.log("");
-  console.log(`提示：SSO 未启用（${reason}）。启用步骤：`);
+  console.log("提示：SSO 未启用（" + reason + "）。启用步骤：");
   console.log(
     "  1. 复制 deploy/.env.dev.example 为 deploy/.env.dev.local（该文件名被 .gitignore 忽略）；",
   );
   console.log(
     "  2. 填入 Casdoor 应用签发的 SSO_CLIENT_ID 与 Client Secret 文件的绝对路径；",
   );
-  console.log(
-    `  3. 在 Casdoor 应用中登记回调地址 ${WEB_ORIGIN}/api/v1/auth/sso/callback；`,
-  );
+  console.log("  3. 在 Casdoor 应用中登记回调地址 " + callbackUrl + "；");
   console.log("  4. 重新运行 node scripts/dev-start.mjs。");
+}
+
+function printLanGuidance(certificate) {
+  console.log("");
+  console.log("局域网访问说明（--lan）：");
+  console.log(
+    "  1. 其他设备首次访问会提示证书不受信任，点击「高级」->「继续前往」即可；",
+  );
+  console.log("     如需消除警告，可把自签证书导入访问设备的受信任根证书：");
+  console.log("     " + certificate.certFile);
+  console.log(
+    "  2. Windows 首次共享需以管理员身份放行 TCP " + WEB_PORT + " 入站：",
+  );
+  console.log(
+    '     netsh advfirewall firewall add rule name="InPulse Dev" ' +
+      "dir=in action=allow protocol=TCP localport=" +
+      WEB_PORT,
+  );
+  console.log(
+    "  3. 局域网地址随 DHCP 变化，以本次输出为准；重启脚本会自动重建证书。",
+  );
 }
 
 async function main() {
@@ -396,7 +673,31 @@ async function main() {
     console.log(`已为本地开发生成 keyring：${createdKeyrings.join("、")}`);
   }
 
-  await ensureDatabase();
+  const lanAddresses = options.lan ? listLanAddresses() : [];
+  const lanCertificate = options.lan
+    ? ensureLanCertificate(lanAddresses)
+    : undefined;
+  const webOrigin = options.lan
+    ? "https://" + WEB_HOST + ":" + WEB_PORT
+    : WEB_ORIGIN;
+  const runtime = {
+    webOrigin,
+    apiHost: options.lan ? WEB_HOST : undefined,
+  };
+  const ssoRedirectUri = sso.enabled
+    ? sso.values["SSO_REDIRECT_URI"] || webOrigin + "/api/v1/auth/sso/callback"
+    : undefined;
+  if (lanCertificate !== undefined) {
+    console.log(
+      "局域网证书就绪：" +
+        relativeToRoot(lanCertificate.certFile) +
+        "（SAN：" +
+        lanCertificate.names.join("、") +
+        "）",
+    );
+  }
+
+  await ensureDatabase(resolveRuntimeDatabaseUrl(fileValues));
   buildApi(options.skipBuild);
 
   console.log("[3/4] 启动 API ...");
@@ -410,7 +711,7 @@ async function main() {
     {
       name: "api",
       cwd: path.join(ROOT, "apps", "api"),
-      env: buildApiEnvironment(fileValues, sso),
+      env: buildApiEnvironment(fileValues, sso, runtime),
     },
   );
   await waitForPort(API_PORT, "API", path.join(LOG_DIR, "api.err.log"));
@@ -421,41 +722,81 @@ async function main() {
   if (stoppedWeb > 0) {
     console.log(`  已停止占用 ${WEB_PORT} 的旧进程（${stoppedWeb} 个）`);
   }
+  const webEnvironment = {
+    ...process.env,
+    INPULSE_WEB_CSP: "report-only",
+  };
+  if (lanCertificate !== undefined) {
+    webEnvironment["VITE_DEV_HTTPS_CERT"] = lanCertificate.certFile;
+    webEnvironment["VITE_DEV_HTTPS_KEY"] = lanCertificate.keyFile;
+  }
   const webPid = spawnBackground(
     process.execPath,
     [
       path.join(ROOT, "apps", "web", "node_modules", "vite", "bin", "vite.js"),
       "--host",
-      "127.0.0.1",
+      options.lan ? "0.0.0.0" : WEB_HOST,
       "--strictPort",
     ],
     {
       name: "web",
       cwd: path.join(ROOT, "apps", "web"),
-      env: { ...process.env, INPULSE_WEB_CSP: "report-only" },
+      env: webEnvironment,
     },
   );
   await waitForPort(WEB_PORT, "Vite", path.join(LOG_DIR, "web.err.log"));
-  console.log(`  就绪：${WEB_ORIGIN}（PID ${webPid}）`);
+  console.log(`  就绪：${webOrigin}（PID ${webPid}）`);
 
   const ssoSummary = sso.enabled
-    ? await verifySso(sso.values["SSO_ISSUER"])
+    ? await verifySso(sso.values["SSO_ISSUER"], webOrigin)
     : "本地口令登录（SSO 已关闭）";
 
   console.log("");
   console.log("启动完成");
-  console.log(`  前端:        ${WEB_ORIGIN}`);
+  console.log("  前端:        " + webOrigin);
+  if (options.lan) {
+    for (const entry of lanAddresses) {
+      console.log(
+        "  局域网:      https://" +
+          entry.address +
+          ":" +
+          WEB_PORT +
+          "（" +
+          entry.name +
+          "）",
+      );
+    }
+  }
   console.log(
-    `  健康检查:    http://127.0.0.1:${API_PORT}/api/v1/health/ready`,
+    "  健康检查:    http://127.0.0.1:" + API_PORT + "/api/v1/health/ready",
   );
-  console.log(`  数据库:      127.0.0.1:${DB_PORT}（容器 ${DB_CONTAINER}）`);
-  console.log(`  登录方式:    ${ssoSummary}`);
-  console.log(`  本地应急入口: ${WEB_ORIGIN}/login?local=1`);
-  console.log(`  日志:        ${relativeToRoot(LOG_DIR)}`);
-  console.log(`  进程:        API ${apiPid} / Web ${webPid}`);
+  console.log(
+    "  数据库:      127.0.0.1:" + DB_PORT + "（容器 " + DB_CONTAINER + "）",
+  );
+  console.log("  登录方式:    " + ssoSummary);
+  console.log("  本地应急入口: " + webOrigin + "/login?local=1");
+  console.log("  日志:        " + relativeToRoot(LOG_DIR));
+  console.log("  进程:        API " + apiPid + " / Web " + webPid);
 
+  if (options.lan && lanAddresses.length === 0) {
+    console.log(
+      "  提示:        未检测到局域网 IPv4 地址，其他设备暂时无法访问。",
+    );
+  }
+  if (options.lan && sso.enabled && ssoRedirectUri !== undefined) {
+    console.log("  SSO 回调:    " + ssoRedirectUri);
+    console.log(
+      "               局域网设备要用 SSO 需把 SSO_REDIRECT_URI 换成局域网地址并在 Casdoor 登记，",
+    );
+    console.log(
+      "               改动后本机同样改用该地址访问；未登记时局域网设备请用本地口令登录。",
+    );
+  }
+  if (options.lan) {
+    printLanGuidance(lanCertificate);
+  }
   if (!sso.enabled) {
-    printSsoGuidance(sso.reason);
+    printSsoGuidance(sso.reason, webOrigin);
   }
 }
 

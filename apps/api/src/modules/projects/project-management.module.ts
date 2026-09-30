@@ -10,6 +10,8 @@ import { SearchProjectionModule } from "../search/index.js";
 import { ProjectManagementController } from "./project-management.controller.js";
 import { ProjectManagementHttpService } from "./project-management-http.service.js";
 import { ProjectManagementService } from "./project-management.service.js";
+import { ProjectAutoPurgeScheduler } from "./project-auto-purge.scheduler.js";
+import { ProjectAutoPurgeService } from "./project-auto-purge.service.js";
 import { ProjectsModule } from "./projects.module.js";
 
 /** F-06 项目编辑、状态变更与归档支柱；写命令只创建一个 UnitOfWork。 */
@@ -24,7 +26,13 @@ import { ProjectsModule } from "./projects.module.js";
     NotificationProjectionModule,
     SearchProjectionModule,
   ],
-  providers: [ProjectManagementService, ProjectManagementHttpService],
+  providers: [
+    ProjectManagementService,
+    ProjectManagementHttpService,
+    // ADR-055：保留期到期后的自动彻底删除（后台调度，无 HTTP 入口）。
+    ProjectAutoPurgeService,
+    ProjectAutoPurgeScheduler,
+  ],
   controllers: [ProjectManagementController],
 })
 export class ProjectManagementModule {}

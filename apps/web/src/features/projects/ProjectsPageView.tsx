@@ -14,13 +14,14 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { isCardClick } from "@features/common/card-click";
-import { canManageProjectResources } from "./project-query";
+import { canDeleteProject, canManageProjectResources } from "./project-query";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
   projectLifecycleLabel,
   projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const hierarchyNotes = [
   { label: "项目", text: "顶层业务容器，承载范围与成员。" },
@@ -37,6 +38,11 @@ export interface ProjectsPageViewProps {
   readonly creatorUserId?: number | undefined;
   readonly isAdmin?: boolean | undefined;
   readonly createdProject?: CreateProjectResponse | null;
+  /**
+   * 打开「新建项目」表单前的清理钩子（2026-09-29 用户指示）：上一次创建成功的卡片
+   * 一直挂在页面上，重新点「新建项目」时它仍显示旧项目名，属于「上次残留」，先清掉。
+   */
+  readonly onStartCreate?: (() => void) | undefined;
   readonly onCreated?: (response: CreateProjectResponse) => void;
   readonly onBackToTasks?: (() => void) | undefined;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
@@ -55,6 +61,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   creatorUserId,
   isAdmin = false,
   createdProject,
+  onStartCreate,
   onCreated,
   onBackToTasks,
   onOpenActivity,
@@ -73,15 +80,39 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   const [managementSuccess, setManagementSuccess] = useState<string | null>(
     null,
   );
+  // 本地过滤（2026-09-30 用户指示）：只在「项目与功能」页搜索当前列表，不走全局搜索。
+  const [search, setSearch] = useState("");
+
+  const keyword = search.trim().toLocaleLowerCase();
+  const visibleProjects =
+    keyword === ""
+      ? projects
+      : projects.filter(
+          (project) =>
+            project.name.toLocaleLowerCase().includes(keyword) ||
+            project.code.toLocaleLowerCase().includes(keyword) ||
+            (project.description ?? "").toLocaleLowerCase().includes(keyword),
+        );
 
   return (
     <>
       <div className="page-header">
-        <div>
+        <div className="catalog-heading">
           <h1>项目与功能</h1>
           <p>项目负责承载范围，模块负责分类，功能负责沉淀。</p>
         </div>
         <div className="catalog-actions">
+          {projects.length > 0 ? (
+            <div className="task-search">
+              <InpulseIcon name="search" size={15} />
+              <input
+                aria-label="搜索项目"
+                placeholder="搜索项目名称、编码或描述"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+          ) : null}
           {onBackToTasks ? (
             <Button className="secondary-button" onClick={onBackToTasks}>
               <InpulseIcon name="clipboard" size={15} />
@@ -91,7 +122,10 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           <Button
             className="primary-button"
             data-testid="create-project-button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              onStartCreate?.();
+              setCreateOpen(true);
+            }}
           >
             <InpulseIcon name="plus" size={15} />
             新建项目
@@ -165,10 +199,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
       ) : null}
 
       {projectsLoading ? (
-        <div className="calm-state">
-          <span className="calm-spinner" />
-          <span>正在加载项目列表</span>
-        </div>
+        <CalmSkeleton variant="card" rows={3} label="正在加载项目列表" />
       ) : projectsError ? (
         <CalmEmptyState
           icon="alert"
@@ -189,7 +220,10 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         >
           <Button
             className="primary-button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              onStartCreate?.();
+              setCreateOpen(true);
+            }}
           >
             <InpulseIcon name="plus" size={15} />
             新建项目
@@ -197,89 +231,93 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         </CalmEmptyState>
       ) : (
         <>
-          <div className="cards-grid calm-projects">
-            {[...projects].map((project) => (
-              <article
-                key={project.id}
-                className="project-card"
-                onClick={(event) => {
-                  if (!isCardClick(event)) return;
-                  onOpenModules?.(project.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  if (event.target !== event.currentTarget) return;
-                  event.preventDefault();
-                  onOpenModules?.(project.id);
-                }}
-                tabIndex={0}
+          {visibleProjects.length === 0 ? (
+            <CalmEmptyState
+              icon="search"
+              title="没有匹配的项目"
+              description="调整关键词后重试，或清空搜索查看全部项目。"
+            >
+              <Button
+                className="secondary-button"
+                onClick={() => setSearch("")}
               >
-                <span className="card-top">
-                  <ProjectLogo code={project.code} />
-                  <CalmBadge
-                    tone={projectLifecycleTone(project.status, "blue")}
-                  >
-                    {projectLifecycleLabel(project.status)}
-                  </CalmBadge>
-                </span>
-                <h2>{project.name}</h2>
-                <p
-                  className={
-                    "project-card-desc" +
-                    (project.description ? "" : " is-placeholder")
-                  }
+                清空搜索
+              </Button>
+            </CalmEmptyState>
+          ) : (
+            <div className="cards-grid calm-projects">
+              {[...visibleProjects].map((project) => (
+                <article
+                  key={project.id}
+                  className="project-card"
+                  onClick={(event) => {
+                    if (!isCardClick(event)) return;
+                    onOpenModules?.(project.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    if (event.target !== event.currentTarget) return;
+                    event.preventDefault();
+                    onOpenModules?.(project.id);
+                  }}
+                  tabIndex={0}
                 >
-                  {project.description || "暂无项目描述"}
-                </p>
-                <span className="card-footer">
-                  <span>
-                    <InpulseIcon name="boxes" size={14} />
-                    {project.stats.activeModuleCount} 个模块
-                  </span>
-                  <span>
-                    <InpulseIcon name="code" size={14} />
-                    {project.stats.activeFeatureCount} 个功能
-                  </span>
-                  <span>
-                    <InpulseIcon name="clipboard" size={14} />
-                    {project.stats.openTaskCount} 项待办
-                  </span>
-                </span>
-                <span className="card-footer">
-                  <span>
-                    <InpulseIcon name="users" size={14} />
-                    {project.memberCount} 位成员
-                  </span>
-                  <span>
-                    查看模块
-                    <InpulseIcon name="chevronRight" size={14} />
-                  </span>
-                </span>
-                <div className="card-footer project-card-actions">
-                  <div className="project-card-actions-main">
-                    <Button
-                      className="text-button"
-                      data-testid={`edit-project-${project.id}`}
-                      onClick={() => {
-                        setEditingRole(project.currentUserRole);
-                        setEditing(project);
-                      }}
+                  <span className="card-top">
+                    <ProjectLogo code={project.code} />
+                    <CalmBadge
+                      tone={projectLifecycleTone(project.status, "blue")}
                     >
-                      编辑
-                    </Button>
+                      {projectLifecycleLabel(project.status)}
+                    </CalmBadge>
+                  </span>
+                  <h2>{project.name}</h2>
+                  <p className="project-card-desc">{project.description}</p>
+                  <span className="card-footer">
+                    <span>
+                      <InpulseIcon name="boxes" size={14} />
+                      {project.stats.activeModuleCount} 个模块
+                    </span>
+                    <span>
+                      <InpulseIcon name="code" size={14} />
+                      {project.stats.activeFeatureCount} 个功能
+                    </span>
+                    <span>
+                      <InpulseIcon name="clipboard" size={14} />
+                      {project.stats.openTaskCount} 项待办
+                    </span>
+                  </span>
+                  <span className="card-footer">
+                    <span>
+                      <InpulseIcon name="users" size={14} />
+                      {project.memberCount} 位成员
+                    </span>
+                  </span>
+                  <div className="card-footer project-card-actions">
+                    <div className="project-card-actions-main">
+                      <Button
+                        className="text-button"
+                        data-testid={`edit-project-${project.id}`}
+                        onClick={() => {
+                          setEditingRole(project.currentUserRole);
+                          setEditing(project);
+                        }}
+                      >
+                        编辑
+                      </Button>
+                    </div>
+                    {isAdmin && onOpenMembers ? (
+                      <Button
+                        className="text-button"
+                        onClick={() => onOpenMembers(project.id)}
+                      >
+                        管理成员
+                      </Button>
+                    ) : null}
                   </div>
-                  {isAdmin && onOpenMembers ? (
-                    <Button
-                      className="text-button"
-                      onClick={() => onOpenMembers(project.id)}
-                    >
-                      管理成员
-                    </Button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
+                </article>
+              ))}
+            </div>
+          )}
           <CalmSectionTitle
             title="层级说明"
             hint="项目 / 模块 / 功能 / 任务 / 迭代记录"
@@ -311,6 +349,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           project={editing}
           client={client}
           canChangeStatus={canManageProjectResources(isAdmin, editingRole)}
+          canDeleteProject={canDeleteProject(isAdmin, editingRole)}
           onClose={() => {
             setEditing(null);
             setEditingRole(null);
@@ -320,6 +359,14 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             setEditingRole(null);
             setManagementSuccess(
               `项目「${updated.name}」已更新，当前版本 ${updated.rowVersion}。`,
+            );
+          }}
+          onDeleted={() => {
+            const name = editing.name;
+            setEditing(null);
+            setEditingRole(null);
+            setManagementSuccess(
+              `项目「${name}」已删除，列表已刷新；历史数据保留在数据库中供审计追溯。`,
             );
           }}
           onStatusChanged={(updated) => {

@@ -7,6 +7,7 @@ import {
 } from "../helpers/auth-context.js";
 import { pickCalmSelectOptions } from "../helpers/calm-select.js";
 import { loadRuntime } from "../helpers/runtime.js";
+import { createProjectViaUi } from "../helpers/project-create.js";
 
 test("普通成员可查看并管理本项目成员，不能读取其他项目", async ({
   browser,
@@ -31,15 +32,25 @@ test("普通成员可查看并管理本项目成员，不能读取其他项目",
     await expect(
       members.getByRole("button", { name: "添加成员" }),
     ).toBeVisible();
-    // ADR-039：项目内管理权对全体活跃成员等同，视图不再按角色降级——普通成员
-    // （此处即项目创建者）同样看到完整管理入口。授权仍由服务端强制，同文件末尾
-    // 的隐藏项目 404 断言覆盖。
+    // ADR-053：项目创建者就是组长，组长不能被直接移除或撤销，需先把其他成员
+    // 设为组长完成转移；因此自己的卡片上没有「移除」入口，也没有角色按钮。
+    await expect(
+      members
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.user.name }),
+    ).toContainText("组长");
     await expect(
       members
         .locator(".calm-member-card")
         .filter({ hasText: runtime.user.name })
         .getByRole("button", { name: /移\s*除/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(
+      members
+        .locator(".calm-member-card")
+        .filter({ hasText: runtime.user.name })
+        .getByRole("button", { name: "转移组长" }),
+    ).toHaveCount(0);
 
     const forbidden = page.waitForResponse((response) =>
       response
@@ -138,6 +149,72 @@ test("管理员完成成员添加与移除，并校验不存在项目的读取�
     await expect(
       page.getByText("项目或成员不存在，或你已无权访问。", { exact: true }),
     ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("项目组长本人可把组长身份转交给其他成员（ADR-053）", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const created = await createProjectViaUi(page, runtime, "LEAD");
+    await page.getByTestId("open-created-project-activity").click();
+    await expect(page).toHaveURL(/\/projects\/\d+\/activity/);
+    const projectId = Number(
+      page.url().match(/\/projects\/(\d+)\/activity/)?.[1],
+    );
+    expect(Number.isSafeInteger(projectId)).toBe(true);
+
+    await page.goto(`/projects/${projectId}/members`);
+    await expect(
+      page.getByRole("heading", { name: created.name, level: 1 }),
+    ).toBeVisible();
+    const ownCard = page
+      .locator(".calm-member-card")
+      .filter({ hasText: runtime.user.name });
+    const targetCard = page
+      .locator(".calm-member-card")
+      .filter({ hasText: runtime.member.name });
+    await expect(ownCard).toContainText("组长");
+    await expect(ownCard.getByRole("button", { name: /移\s*除/ })).toHaveCount(
+      0,
+    );
+    // 组长不能给自己改角色，只能在其他成员卡片上看到「转移组长」。
+    await expect(ownCard.getByRole("button", { name: "转移组长" })).toHaveCount(
+      0,
+    );
+
+    await targetCard.getByRole("button", { name: "转移组长" }).click();
+    const dialog = page.getByRole("dialog", { name: "设置项目角色" });
+    // 组长没有撤销组长的入口：弹窗里只有「组长」一个选项。
+    await expect(
+      dialog.getByRole("radio", { name: "项目角色：组长" }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("radio", { name: "项目角色：成员" }),
+    ).toHaveCount(0);
+    await dialog.getByRole("radio", { name: "项目角色：组长" }).click();
+    await dialog.getByRole("button", { name: "保存角色" }).click();
+    await expect(
+      page.getByText(
+        `已将组长身份转交给 ${runtime.member.name}，你已成为普通成员。`,
+        { exact: true },
+      ),
+    ).toBeVisible();
+
+    // 转移生效：接手人成为组长且不可移除，原组长降级为普通成员。
+    await expect(targetCard).toContainText("组长");
+    await expect(
+      targetCard.getByRole("button", { name: /移\s*除/ }),
+    ).toHaveCount(0);
+    await expect(ownCard).not.toContainText("组长");
+    await expect(ownCard.getByRole("button", { name: "转移组长" })).toHaveCount(
+      0,
+    );
   } finally {
     await context.close();
   }
