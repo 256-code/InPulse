@@ -1,0 +1,219 @@
+/* CalmDateTimeInput：原生 `datetime-local` 只负责键入，日历交给自绘弹层。
+ *
+ * 浏览器自带日历弹层的位置由浏览器决定、样式与位置都改不了：实测字段较窄时它会把弹层摆到
+ * 输入框左侧，直接压住输入框本身和相邻字段（`showPicker()` 与点右侧日历图标两条路径位置
+ * 相同）。这里改用 antd Popover 承载自绘面板：永远贴在字段正下方，下方空间不足时翻到字段
+ * 上方，绝不覆盖字段。详见 AGENTS.md 2026-09-30 条目。 */
+
+/* 字段仍是一个原生输入框，外观沿用 .calm-form input / .dialog-form input 的既有规则，
+ * 只额外留出右侧图标位。 */
+.calm-date-field {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.calm-date-field input.calm-date-input {
+  padding-right: 30px;
+}
+
+/* 原生日历图标会打开浏览器自带弹层（位置不可控），隐藏它，换成不触发展开的装饰图标。 */
+.calm-date-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.calm-date-field-icon {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9aa7b4;
+  pointer-events: none;
+}
+
+/* ===== 弹层外壳 ===== */
+/* antd-adapter.css 为原型里的账户 / 通知气泡把 `.ant-popover-container` 压成 1×1 透明盒，
+ * 并把 `.ant-popover-content` 绝对定位；那两条规则写在 `div.ant-popover > ...` 上（0,2,2 /
+ * 0,2,3），会一并作用到这里的日历面板：容器透明、且 rc-trigger 会按 1×1 的引用盒算位置。
+ * 这里用同样的「元素 + 类」写法再加一个 `.calm-date-popover` 提升特异性，把容器还原成正常
+ * 尺寸的白色卡片、内容层回到常规流，让容器尺寸等于面板尺寸。 */
+div.ant-popover.calm-date-popover > div.ant-popover-container {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background: #ffffff;
+  background-clip: border-box;
+  box-shadow:
+    0 18px 44px -12px #09090b26,
+    0 3px 8px -2px #09090b0f;
+}
+
+div.ant-popover.calm-date-popover
+  > div.ant-popover-container
+  > div.ant-popover-content {
+  position: static;
+}
+
+/* ===== 自绘日历面板 ===== */
+.calm-date-panel {
+  width: 258px;
+  padding: 10px;
+  color: #18181b;
+  font-size: 13px;
+}
+
+.calm-date-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.calm-date-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #52525b;
+  cursor: pointer;
+}
+
+.calm-date-nav:hover {
+  background: #f4f4f5;
+}
+
+.calm-date-select {
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.calm-date-select:hover {
+  background: #f4f4f5;
+}
+
+.calm-date-head .calm-date-select {
+  flex: 1;
+  padding: 0 4px;
+}
+
+.calm-date-week,
+.calm-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.calm-date-week span {
+  padding: 4px 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  text-align: center;
+}
+
+.calm-date-cell {
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.calm-date-cell:hover {
+  background: #f4f4f5;
+}
+
+.calm-date-cell.is-outside {
+  color: #b9b9c0;
+}
+
+.calm-date-cell.is-today {
+  box-shadow: inset 0 0 0 1px #d4d4d8;
+}
+
+.calm-date-cell.is-selected {
+  background: #1467d8;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.calm-date-cell.is-selected:hover {
+  background: #1058bd;
+}
+
+.calm-date-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f1f3;
+}
+
+.calm-date-time-label {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.calm-date-time .calm-date-select {
+  flex: 0 0 62px;
+  background: #f4f4f5;
+  font-weight: 500;
+  text-align: center;
+}
+
+.calm-date-time-colon {
+  color: #a1a1aa;
+}
+
+.calm-date-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f1f3;
+}
+
+.calm-date-link {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1467d8;
+  font: inherit;
+  cursor: pointer;
+}
+
+.calm-date-link:hover {
+  background: #eef3fd;
+}
+
+.calm-date-done {
+  margin-left: auto;
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #18181b;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.calm-date-done:hover {
+  background: #2f2f36;
+}

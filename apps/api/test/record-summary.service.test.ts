@@ -117,12 +117,19 @@ function setup(
     projectIds: options.scopeProjectIds ?? [7],
     isSystemAdmin: false,
   });
-  const listProjects = vi.fn().mockResolvedValue(
-    (options.projectNames ?? ["商城系统"]).map((name, index) => ({
-      id: (options.scopeProjectIds ?? [7])[index] ?? 7,
-      name,
-    })),
+  // 按传入的 projectIds 过滤，忠实反映 PostgresProjectQueryPort：只请求「命中页数据
+  // 的项目」时不会带回授权范围内的其它项目，这正是窄区间 500 的触发条件。
+  const projectNameById = new Map(
+    (options.scopeProjectIds ?? [7]).map((id, index) => [
+      id,
+      (options.projectNames ?? ["商城系统"])[index] ?? `项目 ${String(id)}`,
+    ]),
   );
+  const listProjects = vi
+    .fn()
+    .mockImplementation(async (projectIds: readonly number[]) =>
+      projectIds.map((id) => ({ id, name: projectNameById.get(id) as string })),
+    );
   const listModuleNames = vi
     .fn()
     .mockResolvedValue(
@@ -366,6 +373,41 @@ describe("RecordSummaryQueryService.get", () => {
       followupTaskId: 30,
       followupTaskCode: "SHOP-T-30",
     });
+  });
+
+  it("授权范围内某项目在区间内没有数据时，项目名仍按整个授权范围回填", async () => {
+    // 回归：scope.projectNames 曾按「命中页数据的项目」取名，区间内既无记录也无已
+    // 完成任务 / 遗留问题的授权项目会被判成 AGGREGATE_READ_INCONSISTENT——单日 /
+    // 窄区间必现 500。
+    const setupResult = setup({
+      scopeProjectIds: [7, 8],
+      projectNames: ["商城系统", "风控项目"],
+    });
+    const result = await setupResult.service.get({ ...command });
+
+    expect(setupResult.listProjects).toHaveBeenCalledWith([7, 8]);
+    expect(result.scope).toEqual({
+      projectIds: [7, 8],
+      projectNames: ["商城系统", "风控项目"],
+      member: null,
+    });
+    // 项目 8 无数据：不进入分节，但整卡仍能取到名字而不是抛错。
+    expect(result.sections.map((section) => section.projectId)).toEqual([7]);
+  });
+
+  it("授权范围在区间内完全无数据时返回空结果，且项目名依旧完整", async () => {
+    const setupResult = setup({
+      scopeProjectIds: [7, 8],
+      projectNames: ["商城系统", "风控项目"],
+      records: { items: [], total: 0, hasMore: false },
+      tasks: { items: [], total: 0, hasMore: false },
+    });
+    const result = await setupResult.service.get({ ...command });
+
+    expect(result.scope.projectNames).toEqual(["商城系统", "风控项目"]);
+    expect(result.totals.recordCount).toBe(0);
+    expect(result.sections).toEqual([]);
+    expect(result.points).toEqual([]);
   });
 
   it("缺少项目或模块名称时按聚合读不一致失败，不返回残缺正文", async () => {

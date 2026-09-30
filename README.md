@@ -141,8 +141,10 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 ## 本地开发启动
 
 本地开发要求一个已初始化的 PostgreSQL 18 + PGroonga 实例（初始化见[数据库说明](./database/README.md)）。
-仓库提供一键启动脚本，按「检查数据库 -> 构建 API -> 启动 API -> 启动 Vite」的顺序拉起开发环境，
-并在启动后探测统一身份认证跳转；脚本只服务本地开发，不参与 CI 门禁。
+仓库提供一键启动脚本，按「检查数据库（含迁移版本校验）-> 构建 API -> 启动 API -> 启动 Vite」的顺序拉起开发环境，
+并在启动后探测统一身份认证跳转；脚本只服务本地开发，不参与 CI 门禁。第 1 步会把 `database/migrations` 与本地库
+`app.schema_migrations` 比对，落后时直接失败并打印 `MIGRATION_DATABASE_URL=... pnpm db:migrate` 命令
+（库落后会让项目级接口一律 500），`DATABASE_URL` 指向非本机默认库时跳过校验。
 
 ```powershell
 node scripts/dev-start.mjs                # 按配置启动，默认启用统一身份认证

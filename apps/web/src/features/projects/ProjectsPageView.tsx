@@ -37,6 +37,11 @@ export interface ProjectsPageViewProps {
   readonly creatorUserId?: number | undefined;
   readonly isAdmin?: boolean | undefined;
   readonly createdProject?: CreateProjectResponse | null;
+  /**
+   * 打开「新建项目」表单前的清理钩子（2026-09-29 用户指示）：上一次创建成功的卡片
+   * 一直挂在页面上，重新点「新建项目」时它仍显示旧项目名，属于「上次残留」，先清掉。
+   */
+  readonly onStartCreate?: (() => void) | undefined;
   readonly onCreated?: (response: CreateProjectResponse) => void;
   readonly onBackToTasks?: (() => void) | undefined;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
@@ -55,6 +60,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   creatorUserId,
   isAdmin = false,
   createdProject,
+  onStartCreate,
   onCreated,
   onBackToTasks,
   onOpenActivity,
@@ -91,7 +97,10 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           <Button
             className="primary-button"
             data-testid="create-project-button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              onStartCreate?.();
+              setCreateOpen(true);
+            }}
           >
             <InpulseIcon name="plus" size={15} />
             新建项目
@@ -189,7 +198,10 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         >
           <Button
             className="primary-button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              onStartCreate?.();
+              setCreateOpen(true);
+            }}
           >
             <InpulseIcon name="plus" size={15} />
             新建项目

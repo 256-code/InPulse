@@ -12,6 +12,10 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CalmSegmented } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import {
+  CalmDateTimeInput,
+  toLocalDateTimeInput,
+} from "@features/common/components/CalmDateTimeInput";
 import { priorityDotColor } from "@features/common/priority-select-option";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { useProjects } from "@features/projects/project-query";
@@ -32,14 +36,6 @@ const scopeOptions: ReadonlyArray<{ value: TaskScope; label: string }> = [
   { value: "FEATURE", label: "功能级" },
   { value: "MODULE", label: "模块级" },
 ];
-
-function localDateTime(value: string | null): string {
-  if (!value) return "";
-  const at = new Date(value);
-  return new Date(at.getTime() - at.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-}
 
 function linksOf(text: string): string[] {
   return [
@@ -703,16 +699,11 @@ export function GlobalTaskCreateModal({
               </div>
               <div className="calm-field">
                 <label htmlFor="global-task-due">截止时间</label>
-                <input
+                <CalmDateTimeInput
                   id="global-task-due"
-                  type="datetime-local"
-                  value={localDateTime(dueAt)}
-                  onChange={(event) =>
-                    setDueAt(
-                      event.target.value
-                        ? new Date(event.target.value).toISOString()
-                        : null,
-                    )
+                  value={toLocalDateTimeInput(dueAt)}
+                  onChange={(next) =>
+                    setDueAt(next === "" ? null : new Date(next).toISOString())
                   }
                 />
               </div>
