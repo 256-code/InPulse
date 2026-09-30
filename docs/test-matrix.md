@@ -4336,3 +4336,14 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 本地实际执行（2026-09-30）：定向 `apps/api` 单测（5/5）、`TEST_DATABASE_URL=…/app_ci` 的定向集成（4/4）、`apps/api` 全量单测（68 文件 383 例）与全量集成（53 文件 493 例）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`。夹具清理按 2026-09-17 规则执行：`E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` → 删除用户 783、项目 421、业务行 13853、审计行 721，复核 `app_ci` 夹具与项目残留均为 0（同时提示 SYSTEM 链存在一个夹具记录删除产生的断点，属该入口的既有已知行为）。
 
 未运行 / 已知偏差：① `pnpm test:e2e` 与 Playwright 用例未跑（本批无前端改动）；② `pnpm check` 整链、`deps:audit`、镜像构建与 **GitHub Actions** 未跑；③ 到期后的实际删除时间落在 0～1 小时窗口内（调度为小时粒度，首轮还受批大小限制），且本 ADR 不做「删除前提醒」；④ 新增后台服务与端口方法按本文件 §8 需非作者人工评审。
+
+## 侧边导航收起 / 展开改为宽度过渡（用户指示，2026-09-30 本地落库）
+
+用户口径（原话）：「侧边导航栏隐藏动作不丝滑」。根因：桌面端（≥701px）收起态是 `.nav-collapsed .sidebar { display: none; }`——`display` 不可动画，侧栏瞬间消失；`.sidebar` 也没有任何 `transition`。修法：`--sidebar-width` 变量化宽度（`:root` 默认 236px、`≤1000px` 覆盖为 200px）+ `width / opacity` 0.24s `cubic-bezier(0.33, 1, 0.68, 1)` 过渡，收起态 `width: 0; opacity: 0; visibility: hidden`（`visibility` 延迟 0.24s，动画结束才不可聚焦）；裁切只在过渡期间与收起态开启（常态要保留底部弹层向右越出侧栏覆盖内容区的能力）；`AppLayout` 用 `navAnimating` + 240ms 定时器驱动 `.nav-animating` 类；`prefers-reduced-motion` 关闭全部过渡 / 动画。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-COLLAPSE-BROWSER-001 | 浏览器实测 | 收起 / 展开平滑过渡 | 真机逐帧采样（本地 dev 页面 `127.0.0.1:5173`，Vite HMR）：收起 `236 → 190 → 151 → 117 → … → 0px`（约 234ms）、opacity 同步 1→0；展开 `0 → 46 → 85 → … → 236px`（约 240ms）；收 / 展稳定态 `width`（0 / 236）、`overflow`（hidden / visible）、`visibility`（hidden / visible）正确；`nav-animating` 在过渡结束（240ms）后撤除 | 本地通过 |
+| SIDEBAR-COLLAPSE-BROWSER-002 | 浏览器实测 | 弹层不被裁切（回归点） | 同页面：账户弹层左 18 / 右 282 越出侧栏右缘（236）46px；`document.elementFromPoint` 在越界处命中弹层本体；侧栏展开态 `overflow: visible`；`brand` 宽 236 / `sidebar-footer` 宽 200 与改动前一致；`≤700px` 移动抽屉规则不受影响（新规则都在 `min-width: 701px` 内） | 本地通过 |
+
+未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**（含定向 vitest、`pnpm test:web`、Playwright、`pnpm check`），仅对两个改动文件执行 `prettier --check`（通过）；是否补跑由项目负责人决定；② 未新增 Playwright 用例；③ 键盘可达性未单独复核（收起动画期间约 240ms 内容仍可聚焦，`visibility` 在动画结束才生效，与既有 `ProjectTree` 折叠同一处理）；④ 跨浏览器未复核；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`906b9fe`），未推送。

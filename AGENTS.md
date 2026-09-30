@@ -463,3 +463,13 @@
 - 零契约面：不新增路由、契约、权限矩阵条目与生成客户端产物（Route Registry 仍 99 条），不改数据库与迁移（复用 `0031_project_purge.sql` 的窄口与角色授权），不改 `deploy/compose.yaml`（新环境变量都有默认值，与 `SESSION_CLEANUP_*` 同处理）。不发通知、不加保留期倒计时 UI、不回收项目编码，被自动删除后无恢复路径。
 - 测试：`apps/api/test/project-auto-purge.service.test.ts` 5 例单测（候选为空时只读一次且不写审计、锁内复核未命中跳过、审计形状、单项目失败隔离、环境变量默认值与非法值 fail closed）与 `apps/api/test/project-auto-purge.integration.test.ts` 4 例真实 PostgreSQL（到期项目物理删除且项目行 / 模块 / 成员归零、`PROJECT` 审计链消失、SYSTEM 链恰好一条且 `records` 计数正确；删除 29 天不删；「删除 40 天前 → 还原 → 立刻重新删除」不删、「还原 → 再删除满 31 天」删除；活跃项目不进候选且复核谓词对活跃 / 刚删除 / 已到期三态正确）。
 - 边界与例外：保留期是「满 30 天即删」，调度为一小时粒度，因此实际删除会落在到期后 0～1 小时内，批大小还会影响同一轮覆盖范围；要改成删除前提醒、可配置保留期或恢复路径，必须新增 ADR 并同步权限矩阵、测试矩阵与本小节。
+
+## 2026-09-30 侧边导航收起 / 展开改为宽度过渡（隐藏动作不丝滑）
+
+用户指示（原话）：「侧边导航栏隐藏动作不丝滑」。根因：桌面端（≥701px）收起态是 `.nav-collapsed .sidebar { display: none; }`——`display` 不可动画，点「收起导航」后侧栏瞬间消失；`.sidebar` 本身也没有 `transition`，而仓库既有动效范式（`ProjectTree` 折叠）是 `0.24s cubic-bezier(0.33, 1, 0.68, 1)`。
+
+- `apps/web/src/styles/design-system.css`：新增 `--sidebar-width` 变量（`:root` 默认 236px，`@media (max-width: 1000px)` 覆盖为 200px，替换原先散落的 `.sidebar` 字面量）；`.brand` / `.nav-group` / `.sidebar-footer` 按整栏宽度固定排版，过渡中文字不折行；收起态为 `width: 0; opacity: 0; visibility: hidden`（`visibility` 延迟 0.24s 生效，动画结束才不可聚焦）；`.nav-collapsed .page-content` 的 `padding-left` 同节奏过渡；展开按钮 `sidebar-expand-in` 0.12s 延迟淡入；`@media (prefers-reduced-motion: reduce)` 关闭全部过渡 / 动画（必须写在媒体查询规则之后，媒体查询不提升特异性）。
+- **裁切只在过渡期间与收起态开启**：`.app-shell.nav-animating .sidebar, .nav-collapsed .sidebar { overflow: hidden }`——常态必须保留 `.popover` 向右越出侧栏覆盖内容区的能力（底部通知 / 账户弹层宽 344px，常态裁切会切掉弹层右半）。
+- `apps/web/src/app/layout/AppLayout.tsx`：新增 `navAnimating` 状态与 `handleToggleNav`（240ms 定时器 + 卸载清理；`NAV_COLLAPSE_MS` 与 CSS 过渡时长互相引用），收起 / 展开时给 `.app-shell` 加 `nav-animating` 类。
+- 真机实测（本地 dev 页面，逐帧采样）：收起 `236 → … → 0px`（约 234ms，opacity 同步），展开 `0 → … → 236px`（约 240ms）；收起稳定态 `overflow: hidden` / `visibility: hidden`，展开后恢复可见；账户弹层越出侧栏右缘 46px 未被裁切、`elementFromPoint` 探针命中弹层；`≤700px` 移动抽屉规则不受影响。
+- 按 2026-09-17 前端免测试指示未运行测试与门禁（仅改动文件 `prettier --check` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`906b9fe`），未推送。
