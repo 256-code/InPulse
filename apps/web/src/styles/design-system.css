@@ -17,6 +17,8 @@
   --radius: 0.55rem;
   --sidebar: #10253e;
   --sidebar-foreground: #c9d7e7;
+  /* 侧栏展开宽度：收起动画（宽度过渡）与三段内容的固定排版宽度共用同一个值。 */
+  --sidebar-width: 236px;
   /* 以下两个字体变量与原 Tailwind @theme 的默认值一致，供下面的 preflight 使用。 */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
@@ -310,13 +312,23 @@ button {
   min-height: 100vh;
 }
 .sidebar {
-  width: 236px;
-  flex: 0 0 236px;
+  width: var(--sidebar-width);
+  flex: 0 0 auto;
   min-height: 100vh;
   background: var(--sidebar);
   color: var(--sidebar-foreground);
   display: flex;
   flex-direction: column;
+}
+/* 收起动画沿容器宽度过渡：三段内容各按整栏宽度排版，滑动过程中文字不随容器收缩折行，
+   溢出部分由过渡期间的裁切收掉（见 min-width:701px 的 .nav-collapsed 规则）。 */
+.sidebar > .brand,
+.sidebar > .nav-group {
+  width: var(--sidebar-width);
+}
+.sidebar > .sidebar-footer {
+  /* 底部工具条左右各有 18px 外边距，减掉后与其它两段右缘对齐。 */
+  width: calc(var(--sidebar-width) - 36px);
 }
 .brand {
   display: flex;
@@ -882,8 +894,20 @@ button {
   background: white;
   border: 1px solid var(--border);
   box-shadow: 0 6px 18px #16324d26;
+  /* 等侧栏收起过半再淡入，两个动作不同时抢眼。 */
+  animation: sidebar-expand-in 0.2s ease 0.12s both;
 }
-/* 两个开关各自只在一侧可见：收起按钮属于桌面侧栏（收起态它在 display:none 的侧栏里），
+@keyframes sidebar-expand-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+/* 两个开关各自只在一侧可见：收起按钮属于桌面侧栏（收起态随侧栏一并隐藏），
    展开按钮只在桌面收起后渲染。 */
 .sidebar-collapse-button,
 .sidebar-expand-button {
@@ -898,12 +922,45 @@ button {
     background: #ffffff14;
     color: #ffffff;
   }
+  /* 收起 / 展开走宽度与淡出过渡（2026-09-30 反馈「隐藏动作不丝滑」）：收起后宽度归零、
+     动画结束才 visibility 隐藏；过渡期间与收起态才开启裁切，常态保留 .popover 向右越出
+     侧栏覆盖内容区的能力（底部通知 / 账户弹层宽 344px，裁切会直接切掉弹层右半）。 */
+  .sidebar {
+    transition:
+      width 0.24s cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 0.24s ease,
+      visibility 0s linear 0s;
+  }
+  .app-shell.nav-animating .sidebar,
   .nav-collapsed .sidebar {
-    display: none;
+    overflow: hidden;
+  }
+  .nav-collapsed .sidebar {
+    width: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      width 0.24s cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 0.24s ease,
+      visibility 0s linear 0.24s;
   }
   .nav-collapsed .page-content {
-    /* 默认 34px / 22px（≤1000px）左内边距会被 12 + 30px 的悬浮按钮压住标题行。 */
+    /* 默认 34px / 22px（≤1000px）左内边距会被 12 + 30px 的悬浮按钮压住标题行；
+       收起时与侧栏同节奏过渡，标题不再在动画结束后跳一下。 */
     padding-left: 46px;
+    transition: padding-left 0.24s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+}
+/* 上面两条 .sidebar 过渡 / 动画在减弱动态偏好下必须一并关掉：媒体查询不提升特异性，
+   因此这条覆盖写在它们之后。 */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-expand-button {
+    transition: none;
+    animation: none;
+  }
+  .nav-collapsed .page-content {
+    transition: none;
   }
 }
 .page-content {
@@ -2486,9 +2543,8 @@ td small {
 }
 
 @media (max-width: 1000px) {
-  .sidebar {
-    width: 200px;
-    flex-basis: 200px;
+  :root {
+    --sidebar-width: 200px;
   }
   .page-content {
     padding: 27px 22px;
