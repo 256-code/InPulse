@@ -59,9 +59,11 @@ export function PublishRecordButton({
       await cache.invalidateQueries({
         queryKey: ["task-record-drafts", item.projectId],
       });
-      await cache.invalidateQueries({
-        queryKey: ["published-records", item.projectId],
-      });
+      // 刚发布的记录要立刻出现在时间线里：与弹窗主按钮那条发布路径保持一致
+      //（RecordDraftEditorModal 发布会同时失效 record-feed 与 task-marks）；
+      // 任务卡片与任务详情的「迭代记录 N 条」来自 R-5 任务标记，也必须一起失效。
+      await cache.invalidateQueries({ queryKey: ["record-feed"] });
+      await cache.invalidateQueries({ queryKey: ["task-marks"] });
       // 发布会把正文里的剩余问题变成待处理遗留项，侧栏计数随即变化。
       await invalidateShellCounters(cache);
       setOpen(false);

@@ -131,7 +131,7 @@ export function ExternalLinksPanel({
         "tasks",
         "record-drafts",
         "record-draft",
-        "published-records",
+        "record-feed",
         "published-record",
         "task-record-drafts",
         "search",
