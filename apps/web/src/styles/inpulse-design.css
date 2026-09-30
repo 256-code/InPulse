@@ -1498,10 +1498,6 @@
   flex: 1 1 auto;
 }
 
-.project-card > p.project-card-desc.is-placeholder {
-  color: #a7b2c0;
-}
-
 /* 操作行：常规操作居左、管理成员固定靠右；按钮统一高度与内边距，
    不再一个描边大块、一个无边小字地混排。 */
 .project-card-actions {

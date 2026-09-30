@@ -200,6 +200,11 @@ export const ProjectOverviewPageView: React.FC<
                     : "项目主页"
                   : project.name}
               </h1>
+              {project === null ? null : (
+                <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
+                  {projectLifecycleLabel(project.status)}
+                </CalmBadge>
+              )}
               {project === null || onEditProject === undefined ? null : (
                 <button
                   type="button"
@@ -212,20 +217,13 @@ export const ProjectOverviewPageView: React.FC<
                 </button>
               )}
             </div>
-            <p>
-              {project === null || project.description === ""
-                ? "这里汇总项目的模块、功能、任务与迭代记录，从模块开始进入项目。"
-                : project.description}
-            </p>
+            {project === null || project.description === "" ? null : (
+              <p>{project.description}</p>
+            )}
           </div>
         </div>
         <div className="project-detail-actions">
           <ProjectRepositoryLink projectId={projectId} client={client} />
-          {project === null ? null : (
-            <CalmBadge tone={projectLifecycleTone(project.status, "blue")}>
-              {projectLifecycleLabel(project.status)}
-            </CalmBadge>
-          )}
           {onOpenModules === undefined ? null : (
             <button
               type="button"
@@ -238,7 +236,7 @@ export const ProjectOverviewPageView: React.FC<
           )}
           <button
             type="button"
-            className="secondary-button"
+            className="soft-blue-button"
             onClick={onOpenMembers}
           >
             <InpulseIcon name="users" size={15} />

@@ -16,6 +16,11 @@ function mount(api: InpulseApiClient) {
   );
   fireEvent.click(screen.getByRole("button", { name: "GitHub 链接" }));
 }
+
+/** 弹层形态的写操作按需展开：先点「添加链接」，输入框才出现。 */
+async function openAddForm() {
+  fireEvent.click(await screen.findByRole("button", { name: "添加链接" }));
+}
 it("retains same semantic key after uncertain failure", async () => {
   const add = vi
     .fn()
@@ -27,7 +32,7 @@ it("retains same semantic key after uncertain failure", async () => {
     addExternalLink: add,
   } as unknown as InpulseApiClient;
   mount(api);
-  await screen.findByLabelText("GitHub URL");
+  await openAddForm();
   fireEvent.change(screen.getByLabelText("GitHub URL"), {
     target: { value: "https://github.com/a/b/pull/7" },
   });
@@ -62,7 +67,7 @@ it("409 refresh failure and closing never enable stale submission", async () => 
     addExternalLink: add,
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
   } as unknown as InpulseApiClient);
-  await screen.findByLabelText("GitHub URL");
+  await openAddForm();
   fireEvent.change(screen.getByLabelText("GitHub URL"), {
     target: { value: "https://github.com/a/b" },
   });
@@ -149,7 +154,7 @@ it("explains an ordinary duplicate link without root repository wording", async 
       }),
     ),
   } as unknown as InpulseApiClient);
-  await screen.findByLabelText("GitHub URL");
+  await openAddForm();
   fireEvent.change(screen.getByLabelText("GitHub URL"), {
     target: { value: "https://github.com/a/b/pull/7" },
   });
@@ -160,7 +165,7 @@ it("explains an ordinary duplicate link without root repository wording", async 
   expect(screen.getByRole("button", { name: "确认添加" })).toBeDisabled();
 });
 
-it("renders the add form above the link list in the modal", async () => {
+it("keeps the add form collapsed until the add button is pressed", async () => {
   mount({
     listExternalLinks: vi.fn().mockResolvedValue({
       projectId: 1,
@@ -184,14 +189,81 @@ it("renders the add form above the link list in the modal", async () => {
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
     addExternalLink: vi.fn().mockResolvedValue({ rowVersion: 3 }),
   } as unknown as InpulseApiClient);
-  const addBox = await screen
-    .findByLabelText("GitHub URL")
-    .then((input) => input.closest(".external-links-add"));
+  // 方案 A：默认态只有链接列表与「添加链接」，输入框按需展开。
   const firstItem = await screen.findByRole("link", { name: /a\/b#7/ });
+  expect(screen.queryByLabelText("GitHub URL")).toBeNull();
+  await openAddForm();
+  const addBox = screen
+    .getByLabelText("GitHub URL")
+    .closest(".external-links-add");
   expect(addBox).not.toBeNull();
-  // 添加表单必须排在链接列表之前（DOM 顺序）。
+  // 展开后的表单排在链接列表之后（下半区追加式）。
   expect(
     addBox!.compareDocumentPosition(firstItem) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_PRECEDING,
   ).toBeTruthy();
+});
+
+it("pins the project root repository above the link list for project targets", async () => {
+  const api = {
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 3,
+      rowVersion: 5,
+      writable: true,
+      items: [
+        {
+          id: 1,
+          projectId: 3,
+          normalizedUrl: "https://github.com/a/root",
+          kind: "OTHER",
+          label: "a/root",
+          repository: "a/root",
+          externalNumber: null,
+          externalSha: null,
+          releaseTag: null,
+          isRootRepository: true,
+        },
+        {
+          id: 2,
+          projectId: 3,
+          normalizedUrl: "https://github.com/a/root/pull/7",
+          kind: "PULL_REQUEST",
+          label: "a/root#7",
+          repository: "a/root",
+          externalNumber: "7",
+          externalSha: null,
+          releaseTag: null,
+          isRootRepository: false,
+        },
+      ],
+    }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+  } as unknown as InpulseApiClient;
+  render(
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <QueryClientProvider client={new QueryClient()}>
+        <ExternalLinksPanel targetType="PROJECT" targetId={3} client={api} />
+      </QueryClientProvider>
+    </ConfigProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "GitHub 链接" }));
+  const rootCard = await screen.findByText("项目根仓库");
+  const card = rootCard.closest(".external-links-root");
+  expect(card).not.toBeNull();
+  // 上半区是根仓库卡片：短标识 + 完整地址 + 「打开」入口 + 「切换」。
+  expect(card!.textContent).toContain("a/root");
+  expect(card!.textContent).toContain("https://github.com/a/root");
+  expect(screen.getByRole("link", { name: /打开/ })).toHaveAttribute(
+    "href",
+    "https://github.com/a/root",
+  );
+  // 弹层有进场帧：可见性断言等动画落定，与文件内其他用例同一写法。
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "切换" })).toBeVisible(),
+  );
+  // 根仓库不再混进下半区列表，避免同一条链接出现两次。
+  const list = document.querySelector(".external-links-list");
+  expect(list).not.toBeNull();
+  expect(list!.querySelectorAll("li")).toHaveLength(1);
+  expect(list!.textContent).toContain("a/root#7");
 });
