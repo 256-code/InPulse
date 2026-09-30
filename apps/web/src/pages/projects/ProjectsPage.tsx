@@ -23,6 +23,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
     setCreatedProject(response);
   }, []);
 
+  /** 重新打开「新建项目」时先撤掉上一次的成功提示，避免旧项目名残留在页面上。 */
+  const handleStartCreate = useCallback(() => {
+    setCreatedProject(null);
+  }, []);
+
   const handleOpenActivity = useCallback(
     (projectId: number) => {
       navigate(`/projects/${projectId}/activity`);
@@ -44,6 +49,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
       isAdmin={user?.isAdmin === true}
       createdProject={createdProject}
       onCreated={handleCreated}
+      onStartCreate={handleStartCreate}
       onBackToTasks={() => navigate("/tasks")}
       onOpenActivity={handleOpenActivity}
       onOpenModules={(projectId) => navigate(`/projects/${projectId}/modules`)}

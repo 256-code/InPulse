@@ -4273,3 +4273,27 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-SUMMARY-CSS-001 | 浏览器实测 | 明细表排版（表头字号 / 长内容换行） | 用户复核后的两处修正：`.summary-detail-table th` 字号 12px → 13px；`.summary-detail-table td` 显式 `white-space: normal` 覆盖 `design-system.css` 的全局 `td { white-space: nowrap }`（该规则让长内容既不能换行、又溢出压住右列标题），仅 `nth-child(2/5/6)`（编号 / 作者 / 发布日期）保留单行。真机实测：`thead th` 均 13px；四行样例逐行 `scrollWidth === clientWidth`（改前 col3 288 > 225、col4 570 > 455）；INPULSE-CR-9 的「InPulse 研发交付平台 / 平台与访问 / 用户登录与会话管理」按两行渲染并与右侧加粗标题明显分离（截图 `.data/f33b-header.png`，`.data` 被 gitignore） | 本地通过 |
 | RECORD-SUMMARY-CI-002 | GitHub Actions | 明细展开批次推送后 CI 跑通 | 提交 `bf9fa69`（`d301c83..bf9fa69`）触发 run [36543430865](https://github.com/256-code/InPulse/actions/runs/36543430865) `CI / workspace` **success**（08:33:06Z → 08:50:13Z，约 17m07s）与 run [36543430874](https://github.com/256-code/InPulse/actions/runs/36543430874) `Documentation / docs` **success**（14s）；推送 `test` 不触发 `push` 事件，两次运行均由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件起；仅记录本批 CI 结论的后续 docs 提交会在同 ref 触发新运行 | 已通过 |
 未运行 / 已知偏差：① 本批**未新增 Playwright 用例**——`/records` 筛选行末位的「生成总结」按钮与弹窗目前只有 Web 派生层单测与真实 PostgreSQL 侧覆盖，浏览器关键路径与「筛选 / 复制正文」等交互待补（2026-09-29 追补的「明细行展开」同样只有 Web 单测 + 一次性真机脚本，未落成 E2E 用例；该批全量 E2E 为 61 passed / 1 failed，失败项是 `task-status.spec.ts` 的既有并发脆弱点，单跑通过，见 `RECORD-SUMMARY-E2E-002`）；② **GitHub Actions 已跑**——见 `RECORD-SUMMARY-CI-001`；推送 `test` 不触发 `push` 事件，CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发（2026-09-29 明细展开批次已推送 `bf9fa69`，CI 见 `RECORD-SUMMARY-CI-002`）；③ `pnpm audit`（不带层级）会因 registry 现有 1 条 **moderate**（`multer` GHSA-3pph-fpjx-jg34，影响 `>=2.2.0 <2.4.0`，修复 `>=2.4.0`，当前基线按 ADR 锁 `2.3.0`）返回非零，`deps:audit` 的 `--audit-level=high` 下不阻断；按 §4 依赖升级只能走独立 PR 由人工确认，本批未改依赖；④ apps/ops 备份集成测试需要真实 `pg_dump` / `pg_restore` 18.x；⑤ 新增只读接口、端口扩展与前端产品代码按 §6 / §8 需非作者人工评审；⑥ 总结正文目前是规则版：不接模型、不做语义归纳，措辞口径（三段式、正文插数据小表、导出 Word、人员多选）尚未拍板。
+
+## 新建任务「截止时间」点击方框即展开日历并按「年」键入（用户指示，2026-09-29 本地落库）
+
+用户口径（原话）：「在新建任务的时候，选择截止时间，我希望在点击这个方框时就会展开日历，并且进入填写年份模式」。不换控件（保持原生 `datetime-local`；antd `DatePicker` 需要新增 dayjs 生产依赖，按 §4 只能走独立 PR），只补「点击即展开日历」与「空值年优先键入」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-DUE-PICKER-UNIT-001 | Web 单元 | 展开、年优先与降级 | `apps/web/src/features/common/native-date-picker.test.tsx` 5 例：点击调用 `showPicker()` 1 次；空值点击先 `focus()` 输入框（第一段「年」）；已有值点击不重设光标（点哪段编辑哪段）；jsdom 无该方法与 `showPicker` 抛 `NotAllowedError` 时均不抛错；`mousedown` 只在空值 `preventDefault()`（`fireEvent.mouseDown` 返回 `false` / `true`） | 本地通过 |
+| TASK-DUE-PICKER-BROWSER-001 | 浏览器实测 | 点击方框触发展开 | 真机探针（临时脚本，用后删除，无头 Chromium）：`/tasks` → 新建任务 → 点击截止时间方框内容区 → `HTMLInputElement.prototype.showPicker` 桩记录 **1 次调用、`__pickerError` 为 null**；同时确认 `getByLabel("截止时间")` 在弹窗内唯一（count = 1），点击前值为 `""` | 本地通过 |
+| TASK-DUE-PICKER-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**（web 单测 **89 文件 602 例** = 上批 88 / 597 加 1 文件 5 例；`check:deps` **735** 源文件；`check:secrets` **1108** 文件；其余分项同上批；新增辅助模块与单测后重跑） | 本地通过 |
+
+未运行 / 已知偏差：① **「光标落在年段、可直接键入年份」没有浏览器内的自动化证据**——无头 Chromium 无法模拟原生日期框的逐段键入（对页面里新建的裸 `<input type="datetime-local">` 分别用 `keyboard.press` 逐键、`keyboard.insertText`、`ArrowUp` 实测，`value` 始终为 `""`），结论只能由 `focus()` 让空的原生日期框落在第一段（zh-CN 显示顺序 年/月/日）与单测背书；有头浏览器在本机启动失败（`browserType.launch: spawn UNKNOWN`），未能改为有头复核，请人工点一下确认；② 本批未新增 Playwright 用例；③ 输入框接入三处（新建任务 / 编辑任务 / 遗留转跟进任务），值语义与 E2E `fill()` 用法不变，但**未重跑全量 E2E**；④ 本批含前端产品代码，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。
+
+## 重新打开「新建项目」清掉上一次成功卡片（用户指示，2026-09-29 本地落库）
+
+用户口径（原话）：「还有如果没有保存新建项目那就一切清空，我发现再次点击会有上次残留」。定位结论：各创建 / 新增弹窗的表单本身都会在重新打开时重置（真机探针实测新建项目弹窗名称 / 编码 / 描述为空串、卡片简称 `—`、成员提示「已选择 0 位其他成员」），**唯一残留是项目创建成功横幅**——`ProjectsPageView` 的 `createdProject` 卡片在重新点「新建项目」时仍显示上一个项目名。修法：`ProjectsPageView` 新增 `onStartCreate` 清理钩子，两个「新建项目」入口在打开弹窗前调用；`ProjectsPage` 提供 `setCreatedProject(null)`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-CREATE-RESET-UNIT-001 | Web 单元 | 重新打开表单时清掉上一次成功卡片 | `apps/web/src/pages/projects/ProjectsPage.test.tsx`「clears the previous success card when the create form is reopened」：空项目列表 → 创建成功 → 断言「项目创建成功」可见 → 再点一次「新建项目」→ 断言横幅消失；同文件 3 处「新建项目」入口改用 `create-project-button` testid（空列表下页头与空态各有一个同名按钮，`getByRole` 会命中多个） | 本地通过 |
+| PROJECT-CREATE-RESET-BROWSER-001 | 浏览器实测 | 取消即关闭、重开无残留 | 真机探针（一次性脚本，用后删除，无头 Chromium，**只填不提交、未写库**）：`/projects` → 新建项目 → 填名称 / 编码 / 描述 → 点「取消」→ 弹窗 `visible=false`（同一步在 jsdom 单测里不成立，见偏差 ①）→ 再点「新建项目」→ `name=""`、`code=""`、`desc=""`、`shortname="—"`、成员提示「已选择 0 位其他成员」、`项目创建成功` 计数 0 | 本地通过 |
+| PROJECT-CREATE-RESET-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**（web 单测 **89 文件 603 例** = 上批 89 / 602 加 1 例；`check:frontend:boundaries` **297** 模块 1460 依赖；`check:deps` **735** 源文件；`check:secrets` **1108** 文件；`check:docs` 101 个 Markdown）；`pnpm --filter @inpulse/web typecheck` exit 0；8 个改动文件 `prettier --check` 通过 | 本地通过 |
+
+未运行 / 已知偏差：① 单测里不能断言「点取消后弹窗消失」——`AppModal` 靠 antd 过渡帧卸载，jsdom 没有过渡帧，`open` 置 false 后 `.ant-modal-wrap` 仍留在 DOM（最小探针实测），真机里同一动作立即关闭，因此单测改为断言横幅消失、真机补证关闭行为；② 本批**未新增 Playwright 用例**，也**未重跑全量 E2E**（改动只在创建弹窗打开时清横幅，现有 `project-create.ts` / `tasks.spec.ts` 都是「先点新建项目、再创建后断言横幅」，不受影响）；③ `ProjectsPageView.managementSuccess`（编辑 / 删除后的成功语）同样会一直挂着，本次未处理，待用户确认；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。
