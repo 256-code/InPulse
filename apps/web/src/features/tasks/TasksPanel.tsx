@@ -21,6 +21,10 @@ import { useTaskMarks, type TaskMark } from "./task-marks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input, Spin } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import {
+  CalmDateTimeInput,
+  toLocalDateTimeInput,
+} from "@features/common/components/CalmDateTimeInput";
 import { Controller, useForm } from "react-hook-form";
 import {
   ApiError,
@@ -1566,27 +1570,14 @@ export function TasksPanel({
                     name="dueAt"
                     control={control}
                     render={({ field }) => (
-                      <input
+                      <CalmDateTimeInput
                         id="task-due"
-                        type="datetime-local"
-                        value={
-                          field.value
-                            ? new Date(
-                                new Date(field.value).getTime() -
-                                  new Date(field.value).getTimezoneOffset() *
-                                    60000,
-                              )
-                                .toISOString()
-                                .slice(0, 16)
-                            : ""
-                        }
+                        value={toLocalDateTimeInput(field.value)}
                         onBlur={field.onBlur}
-                        ref={field.ref}
-                        onChange={(event) =>
+                        inputRef={field.ref}
+                        onChange={(next) =>
                           field.onChange(
-                            event.target.value
-                              ? new Date(event.target.value).toISOString()
-                              : null,
+                            next === "" ? null : new Date(next).toISOString(),
                           )
                         }
                       />

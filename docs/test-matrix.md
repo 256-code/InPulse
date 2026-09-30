@@ -4274,7 +4274,9 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-SUMMARY-CI-002 | GitHub Actions | 明细展开批次推送后 CI 跑通 | 提交 `bf9fa69`（`d301c83..bf9fa69`）触发 run [36543430865](https://github.com/256-code/InPulse/actions/runs/36543430865) `CI / workspace` **success**（08:33:06Z → 08:50:13Z，约 17m07s）与 run [36543430874](https://github.com/256-code/InPulse/actions/runs/36543430874) `Documentation / docs` **success**（14s）；推送 `test` 不触发 `push` 事件，两次运行均由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件起；仅记录本批 CI 结论的后续 docs 提交会在同 ref 触发新运行 | 已通过 |
 未运行 / 已知偏差：① 本批**未新增 Playwright 用例**——`/records` 筛选行末位的「生成总结」按钮与弹窗目前只有 Web 派生层单测与真实 PostgreSQL 侧覆盖，浏览器关键路径与「筛选 / 复制正文」等交互待补（2026-09-29 追补的「明细行展开」同样只有 Web 单测 + 一次性真机脚本，未落成 E2E 用例；该批全量 E2E 为 61 passed / 1 failed，失败项是 `task-status.spec.ts` 的既有并发脆弱点，单跑通过，见 `RECORD-SUMMARY-E2E-002`）；② **GitHub Actions 已跑**——见 `RECORD-SUMMARY-CI-001`；推送 `test` 不触发 `push` 事件，CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发（2026-09-29 明细展开批次已推送 `bf9fa69`，CI 见 `RECORD-SUMMARY-CI-002`）；③ `pnpm audit`（不带层级）会因 registry 现有 1 条 **moderate**（`multer` GHSA-3pph-fpjx-jg34，影响 `>=2.2.0 <2.4.0`，修复 `>=2.4.0`，当前基线按 ADR 锁 `2.3.0`）返回非零，`deps:audit` 的 `--audit-level=high` 下不阻断；按 §4 依赖升级只能走独立 PR 由人工确认，本批未改依赖；④ apps/ops 备份集成测试需要真实 `pg_dump` / `pg_restore` 18.x；⑤ 新增只读接口、端口扩展与前端产品代码按 §6 / §8 需非作者人工评审；⑥ 总结正文目前是规则版：不接模型、不做语义归纳，措辞口径（三段式、正文插数据小表、导出 Word、人员多选）尚未拍板。
 
-## 新建任务「截止时间」点击方框即展开日历并按「年」键入（用户指示，2026-09-29 本地落库）
+## 新建任务「截止时间」点击方框即展开日历并按「年」键入（用户指示，2026-09-29 本地落库）（⚠️ 已被 2026-09-30「自绘日历弹层」取代）
+
+> ⚠️ 本节记录的是第五十八条的实现与证据，**已废弃**：原生 `datetime-local` 弹层的位置由浏览器决定、改不了，字段靠近窗口右侧时会被摆到输入框左侧并压住字段（见下一节「自绘日历弹层」）。`native-date-picker.ts` 与其单测已删除，下面的 `TASK-DUE-PICKER-*` 三条用例随之作废，保留仅作排障记录。
 
 用户口径（原话）：「在新建任务的时候，选择截止时间，我希望在点击这个方框时就会展开日历，并且进入填写年份模式」。不换控件（保持原生 `datetime-local`；antd `DatePicker` 需要新增 dayjs 生产依赖，按 §4 只能走独立 PR），只补「点击即展开日历」与「空值年优先键入」。
 
@@ -4297,3 +4299,15 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | PROJECT-CREATE-RESET-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**（web 单测 **89 文件 603 例** = 上批 89 / 602 加 1 例；`check:frontend:boundaries` **297** 模块 1460 依赖；`check:deps` **735** 源文件；`check:secrets` **1108** 文件；`check:docs` 101 个 Markdown）；`pnpm --filter @inpulse/web typecheck` exit 0；8 个改动文件 `prettier --check` 通过 | 本地通过 |
 
 未运行 / 已知偏差：① 单测里不能断言「点取消后弹窗消失」——`AppModal` 靠 antd 过渡帧卸载，jsdom 没有过渡帧，`open` 置 false 后 `.ant-modal-wrap` 仍留在 DOM（最小探针实测），真机里同一动作立即关闭，因此单测改为断言横幅消失、真机补证关闭行为；② 本批**未新增 Playwright 用例**，也**未重跑全量 E2E**（改动只在创建弹窗打开时清横幅，现有 `project-create.ts` / `tasks.spec.ts` 都是「先点新建项目、再创建后断言横幅」，不受影响）；③ `ProjectsPageView.managementSuccess`（编辑 / 删除后的成功语）同样会一直挂着，本次未处理，待用户确认；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。
+
+## 任务「截止时间」改为自绘日历弹层（用户指示，2026-09-30 本地落库）
+
+用户口径（原话）：「这个排版不太对，日历不可以把截止日期填写框盖住的」。根因：截图里的遮挡物是 **Chromium 原生的 `datetime-local` 面板**，位置由浏览器决定——字段在居中弹窗里靠近窗口右侧时（实测 `#task-due` 右边缘 1112px / 窗口 1440px），Chrome 判定右侧放不下，就把面板摆到输入框**左侧**，压住输入框与左侧相邻字段；`showPicker()` 与点右侧日历图标两条路径位置完全相同，CSS 改不了。修法：把日历换成 `CalmDateTimeInput` 的自绘弹层（antd `Popover` 承载），原生输入框只保留键入职责；不换 antd `DatePicker` 是因为它需要 dayjs 生产依赖，按 §4 只能走独立 PR。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CALM-DATE-PICKER-UNIT-001 | Web 单元 | 面板交互与值换算 | `apps/web/src/features/common/components/CalmDateTimeInput.test.tsx` 11 例：点击展开；选日期回填；改时 / 分用当天补齐；翻月；清空；今天；`onBadInput` 接线；空值 `mouseDown` 阻止 / 有值不阻止；`disabled` 不展开；`parse` / `format` / `toLocalDateTimeInput` 换算 | 本地通过 |
+| CALM-DATE-PICKER-BROWSER-001 | 浏览器实测 | 弹层不覆盖字段 | 真机探针（一次性 Playwright 无头 Chromium 脚本，用后删除）：功能页 `#task-due` → `placement=bottomLeft`、面板 258×314.5、间距 4.66px；任务中心 `#global-task-due` → `placement=topLeft`（弹窗把下方视口空间压到低于面板高度）、间距 4.29px；两条路径的 x / y 重叠量均为负值（即不覆盖字段）；`containerSize` 260×316.5（改前是 1×1 透明盒）、`backgroundColor=rgb(255,255,255)`、`contentPosition=static`；选日期 → `2026-09-22T00:00`、再选时分 → `2026-09-22T09:30`，「完成」后面板卸载且值保留 | 本地通过 |
+| CALM-DATE-PICKER-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm --filter @inpulse/web typecheck` exit 0；`pnpm --filter @inpulse/web exec vitest run` **89 文件 609 例全绿**；`pnpm check` → **exit 0**（`check:deps` **735** 源文件、`check:frontend:boundaries` **298** 模块 1464 依赖、`check:secrets` **1109** 文件、`check:docs` 101 个 Markdown、`permissions:check` **100 / 100**） | 本地通过 |
+
+未运行 / 已知偏差：① 键盘路径（Tab 顺序、Esc 关闭）本轮未做，只覆盖点击路径；② 跨浏览器（Firefox / Safari）未复核——本轮已隐藏原生指示器，点击只会开自绘面板，但原生输入框的逐段键入外观在不同浏览器不同，请人工点一次；③ 本批未新增 Playwright 用例、**未重跑全量 E2E 与 `test:integration`**（`#task-due` / `#global-task-due` 的 `fill()` 用法不变，服务端 / 契约 / 迁移均未动）；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。

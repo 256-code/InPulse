@@ -17,6 +17,7 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { invalidateShellCounters } from "@shared/api/shell-counters";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import { CalmDateTimeInput } from "@features/common/components/CalmDateTimeInput";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { priorityDotColor } from "@features/common/priority-select-option";
 /** Match the task form's browser-local input and UTC API value, guarding invalid dates. */
@@ -382,19 +383,14 @@ export function LeftoverTaskConvertModal({
             animated
           />
           <label htmlFor="leftover-task-due">跟进任务截止时间（选填）</label>
-          <input
+          <CalmDateTimeInput
             id="leftover-task-due"
-            type="datetime-local"
             value={dueInput}
             disabled={busy}
-            aria-invalid={dueInvalid}
-            aria-describedby={
-              dueInvalid ? "leftover-task-due-error" : undefined
-            }
-            onChange={(event) => {
-              setDueInput(event.target.value);
-              setDueBadInput(event.target.validity.badInput);
-            }}
+            ariaInvalid={dueInvalid}
+            ariaDescribedBy={dueInvalid ? "leftover-task-due-error" : undefined}
+            onChange={setDueInput}
+            onBadInput={setDueBadInput}
           />
           {dueInvalid && (
             <p id="leftover-task-due-error" role="alert">
