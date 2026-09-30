@@ -473,3 +473,23 @@
 - `apps/web/src/app/layout/AppLayout.tsx`：新增 `navAnimating` 状态与 `handleToggleNav`（240ms 定时器 + 卸载清理；`NAV_COLLAPSE_MS` 与 CSS 过渡时长互相引用），收起 / 展开时给 `.app-shell` 加 `nav-animating` 类。
 - 真机实测（本地 dev 页面，逐帧采样）：收起 `236 → … → 0px`（约 234ms，opacity 同步），展开 `0 → … → 236px`（约 240ms）；收起稳定态 `overflow: hidden` / `visibility: hidden`，展开后恢复可见；账户弹层越出侧栏右缘 46px 未被裁切、`elementFromPoint` 探针命中弹层；`≤700px` 移动抽屉规则不受影响。
 - 按 2026-09-17 前端免测试指示未运行测试与门禁（仅改动文件 `prettier --check` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`906b9fe`），未推送。
+
+## 2026-09-30 侧栏改为 fixed 定位（弹窗背景中不再随页面滚走）
+
+用户报告（原话）：「背景里面的这个导航栏呈现有问题」（附弹窗截图）。根因：桌面端（≥701px）侧栏是 `position: sticky; top: 0; height: 100dvh`，antd 弹窗的滚动锁会给 `html` / `body` 写内联 `overflow: hidden`——此时没有滚动祖先，sticky 失去参照物、随文档一起滚走，弹窗背景里只剩半截深色栏。真机对照实验（Playwright）：解锁 overflow 后 `scrollTo(300 / 495)` 侧栏 `top` 恒 0，锁上后分别为 -300 / -495。
+
+- `apps/web/src/styles/design-system.css`：桌面 `.sidebar` 改 `position: fixed; top: 0; left: 0`（保留 `z-index: 40` 与 `height: 100dvh`）。
+- 文档流让位改由外壳承担：`.app-shell { padding-left: var(--sidebar-width); transition: padding-left 0.24s cubic-bezier(0.33, 1, 0.68, 1) }` 加 `.app-shell.nav-collapsed { padding-left: 46px }`。`nav-collapsed` 加在 `.app-shell` 自身而非祖先，因此必须用复合选择器（误写成后代选择器 `.nav-collapsed .app-shell` 时真机实测 padding 仍 236px）。
+- 本文件上一小节（「侧边导航收起 / 展开改为宽度过渡」）中「`.nav-collapsed .page-content` 的 `padding-left` 同节奏过渡」的表述由本节修订为 `.app-shell` 的左内边距过渡；其余（宽度变量、过渡时长、裁切策略、移动抽屉）均不变。
+- `prefers-reduced-motion: reduce` 的选择器列表同步加入 `.app-shell`，并移除原 `.nav-collapsed .page-content` 条目。
+- 真机实测：弹窗滚动锁下侧栏 `position: fixed`、`sidebar.y = 0`（含 `scrollY = 495`）；正文 `x = 236` 与改前一致；收起态 `width 0 / opacity 0 / visibility hidden` 加外壳左内边距 46px；账户弹层越出侧栏右缘 46px 未被裁切。
+- 缺陷为既有问题（`git log -S` 至少 2026-09-14 起存在），非收起 / 展开过渡批次引入；按 2026-09-17 前端免测试指示未运行测试与门禁（仅改动文件 `prettier --check` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`ce904a3`），未推送。
+
+## 2026-09-30 任务看板卡片等高
+
+用户指示（原话）：「把卡片的布局大小都统一一下」（附 `/projects/1/task-board` 看板截图）。真机量测（55 张卡片）：宽度本来就统一（253.6px），高度有 4 档（78 / 83 / 91 / 100）；逐行诊断定位到两处可变高度行——`.tb-card-top` 只有 ✓ 勾（14px）时 15px、带 `.badge`（24.5px）时 24.5px；`.tb-card-title` 1 行 16.9px、2 行 33.8px（`-webkit-line-clamp: 2`）。`.tb-card-meta` 恒 15.8px。
+
+- `apps/web/src/styles/design-system.css`：`.tb-card-top { min-height: 25px }`（按 `.badge` 实测高度 24.5px 预留）；`.tb-card-title { min-height: 2.7em }`（标题最多 2 行，恒定预留 2 行位置；用 em 跟随自身字号）。
+- 未选方案：`.tb-lane-cards` 加 `grid-auto-rows: 1fr` 会把卡片少的泳道卡片拉得极高；`.tb-lane-cards > li` 的拉伸只作用于行内、跨行不生效。
+- 真机实测：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张全部 100.5px 高 × 253.6px 宽**，7 个泳道逐张复核卡内三行（25 / 33.8 / 15.8）完全一致；`prettier --check` 通过。
+- 按 2026-09-17 前端免测试指示未运行测试与门禁；≤1100px 窄断点未单独实测（未验证）；列表视图 `.tb-row` 不受影响；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`89a1365`），未推送。

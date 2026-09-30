@@ -4347,3 +4347,23 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | SIDEBAR-COLLAPSE-BROWSER-002 | 浏览器实测 | 弹层不被裁切（回归点） | 同页面：账户弹层左 18 / 右 282 越出侧栏右缘（236）46px；`document.elementFromPoint` 在越界处命中弹层本体；侧栏展开态 `overflow: visible`；`brand` 宽 236 / `sidebar-footer` 宽 200 与改动前一致；`≤700px` 移动抽屉规则不受影响（新规则都在 `min-width: 701px` 内） | 本地通过 |
 
 未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**（含定向 vitest、`pnpm test:web`、Playwright、`pnpm check`），仅对两个改动文件执行 `prettier --check`（通过）；是否补跑由项目负责人决定；② 未新增 Playwright 用例；③ 键盘可达性未单独复核（收起动画期间约 240ms 内容仍可聚焦，`visibility` 在动画结束才生效，与既有 `ProjectTree` 折叠同一处理）；④ 跨浏览器未复核；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`906b9fe`），未推送。
+
+## 侧栏改为 fixed 定位（用户指示，2026-09-30 本地落库）
+
+用户报告（原话）：「背景里面的这个导航栏呈现有问题」——弹窗滚动锁（antd 给 `html` / `body` 写内联 `overflow: hidden`）下，桌面 `position: sticky` 侧栏失去滚动参照物、随页面滚走，弹窗背景只剩半截深色栏。修法：桌面 `.sidebar` 改 `position: fixed; top: 0; left: 0`，文档流让位改由 `.app-shell` 的左内边距承担（`.app-shell.nav-collapsed` 复合选择器覆盖收起态），并同步 `prefers-reduced-motion` 选择器列表。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-FIXED-BROWSER-001 | 浏览器实测 | 弹窗滚动锁下侧栏钉住、正文让位与收起态不回归 | 真机实测（本地 dev 页面 `127.0.0.1:5173`，Playwright 前后对照）：弹窗滚动锁下侧栏 `position: fixed`、`sidebar.y = 0`（含页面 `scrollY = 495` 时；改前同条件随页滚走、y 为负）；正文 `x = 236` 与改前一致；收起态 `width 0 / opacity 0 / visibility hidden` 加 `.app-shell` 左内边距 46px；解锁状态下 `scrollTo(300 / 495)` 侧栏 `top` 恒 0；账户弹层越出侧栏右缘 46px 未被裁切 | 本地通过 |
+
+未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**（含 `pnpm test:web`、Playwright 用例、`pnpm check`），仅对改动文件执行 `prettier --check`（通过）；② sticky 在弹窗滚动锁下失效为**既有**缺陷（`git log -S "position: sticky"` 显示至少 2026-09-14 起存在）；③ 未新增 Playwright 用例；④ 跨浏览器未复核；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`ce904a3`），未推送。
+
+## 任务看板卡片等高（用户指示，2026-09-30 本地落库）
+
+用户指示（原话）：「把卡片的布局大小都统一一下」。真机量测 55 张卡片：宽度本就一致（253.6px），高差来自两处可变高度行——`.tb-card-top`（只有 ✓ 勾 15px 对带 `.badge` 24.5px）与 `.tb-card-title`（1 行 16.9px 对 2 行 33.8px，`-webkit-line-clamp: 2`）。修法：`.tb-card-top { min-height: 25px }`、`.tb-card-title { min-height: 2.7em }`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-BOARD-CARD-HEIGHT-BROWSER-001 | 浏览器实测 | 看板所有卡片等高 | 真机量测（本地 dev 页面 `/projects/1/task-board`，Playwright 前后对照）：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张卡片全部 100.5px 高 × 253.6px 宽**；7 个泳道逐张复核卡内三行（`.tb-card-top` 25 / `.tb-card-title` 33.8 / `.tb-card-meta` 15.8）完全一致 | 本地通过 |
+
+未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**，仅对改动文件执行 `prettier --check`（通过）；② ≤1100px 窄断点未单独实测（`min-height` 与宽度无关，属未验证）；③ 列表视图 `.tb-row` 不受影响（不同类名）；④ 未新增 Playwright 用例；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`89a1365`），未推送。
