@@ -230,7 +230,7 @@ export function LeftoverTaskConvertModal({
       for (const key of [
         "leftover-items",
         "published-record",
-        "published-records",
+        "record-feed",
         "record-versions",
         "tasks",
         "task-history",

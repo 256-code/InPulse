@@ -55,11 +55,16 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     const publish = page.getByRole("dialog", { name: "发布迭代记录" });
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
+    // 回归（2026-09-30 修）：草稿详情页发布后正式记录必须立刻进入时间线。该路径此前失效的
+    // 是没有任何地方定义过的死键 ["published-records"]，列表不刷新，只能靠独立详情形态兜底；
+    // 记录进入列表后标题落在卡片摘要行（.record-expanded-head 的 <h3> 只在独立形态渲染）。
+    await expect(page.getByText("暂无已发布记录")).toBeHidden();
     await expect(
       page
-        .getByRole("region", { name: "正式记录详情" })
-        .getByRole("heading", { name: title }),
-    ).toBeVisible();
+        .locator(".record-card")
+        .filter({ hasText: title })
+        .locator("summary"),
+    ).toContainText(title);
 
     // 默认全部项目：不选项目即可看到刚发布的记录，并带回项目名称。
     await page.goto("/records");

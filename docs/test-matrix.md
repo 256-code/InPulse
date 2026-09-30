@@ -4380,3 +4380,22 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | TASK-BOARD-CARD-HEIGHT-BROWSER-001 | 浏览器实测 | 看板所有卡片等高 | 真机量测（本地 dev 页面 `/projects/1/task-board`，Playwright 前后对照）：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张卡片全部 100.5px 高 × 253.6px 宽**；7 个泳道逐张复核卡内三行（`.tb-card-top` 25 / `.tb-card-title` 33.8 / `.tb-card-meta` 15.8）完全一致 | 本地通过 |
 
 未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**，仅对改动文件执行 `prettier --check`（通过）；② ≤1100px 窄断点未单独实测（`min-height` 与宽度无关，属未验证）；③ 列表视图 `.tb-row` 不受影响（不同类名）；④ 未新增 Playwright 用例；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`89a1365`），未推送。
+## 迭代记录清单失效键修正（用户指示「请修改bug」，2026-09-30 本地落库）
+
+用户口径：承接同日全流程走查（项目 → 模块 → 功能 → 任务 → 完成 → 迭代记录 → 发布 → 总结）发现的唯一缺陷——从「草稿详情页」点「发布记录」并二次确认后，`/records` 左侧时间线不刷新，页面停在「暂无已发布记录」，只有下方独立详情能看到刚发布的记录；用户回「请修改bug」。
+
+根因（真机取证）：`PublishRecordButton`（草稿详情页 / 任务详情「发布记录」按钮）失效的是 `["published-records", item.projectId]`，而时间线真正的 queryKey 是 `["record-feed", projectId, status, source, term, limit]`（`published-records-query.ts:45`）。`["published-records"]` 在全仓库只出现在 6 处 `invalidateQueries`、**没有任何地方定义**，是一条死键；只有弹窗主按钮那条发布路径（`RecordDraftEditorModal.tsx:448`）失效了 `["record-feed"]`——正是用户先前指出的「同一个『发布』两条路径行为不一样」。取证过程：发布成功（HTTP 200）后前端**再没有发出任何 `change-records` 清单请求**，而同一时刻服务端 `GET /api/v1/change-records?status=PUBLISHED&projectId=N` 已返回该记录。
+
+处置：6 处死键统一改为 `["record-feed"]`（`PublishRecordButton`、`EditPublishedRecord`、`ConvertLeftoverTask`、`RecordLifecycleButton`、`ExternalLinksPanel`、`CompleteWithRecord`）；`PublishRecordButton` 另补 `["task-marks"]`（任务卡片 / 任务详情的「迭代记录 N 条」来自 R-5 任务标记），与弹窗主按钮路径对齐。未改服务端、契约、迁移、权限与三份设计文档。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-FEED-INVALIDATE-E2E-001 | 浏览器 E2E | 草稿详情页发布后记录立刻进入时间线 | `record-publishing.spec.ts` 首例新增「`暂无已发布记录` 不可见」+「`.record-card` 摘要行含记录标题」；`record-feed.spec.ts` 按同一口径改写原独立详情断言 | 本地通过 |
+| RECORD-FEED-INVALIDATE-E2E-002 | 浏览器 E2E | 受影响路径定向回归 | `record-publishing` 3/3；`record-lifecycle` / `external-links` / `leftover-task` / `task-completion` 与 `record-publishing` 首轮合跑 11 passed / 2 failed（2 例均为断言未同步的 `record-publishing`），同步后该文件 3/3 | 本地通过 |
+| RECORD-FEED-INVALIDATE-E2E-003 | 浏览器 E2E | 全量关键路径回归 | 全量 `pnpm test:e2e`（`E2E_DATABASE_URL=…/app_ci`）→ **62 passed / 0 failed（4.9 分钟）**；本批改动前同环境基线（`git stash` 复核）→ **62 passed / 0 failed（4.8 分钟）**，用例集合与结果一致 | 本地通过 |
+| RECORD-FEED-INVALIDATE-UNIT-001 | Web 单元 | 既有单测不被改写破坏 | `pnpm --filter @inpulse/web test:unit` → **89 文件 610 例全绿**；本批未新增单测（见「已知偏差」） | 本地通过 |
+| RECORD-FEED-INVALIDATE-GATE-001 | 静态门禁 | 类型、lint 与格式 | `pnpm typecheck`（8 个 workspace 项目）、`pnpm lint`、`pnpm format:check` 全部 exit 0 | 本地通过 |
+
+断言同步（3 处）：`record-publishing.spec.ts` 2 处、`record-feed.spec.ts` 1 处，把 `region「正式记录详情」` 内的标题断言改为 `details.record-card` 摘要行断言。原因是回归生效后的**行为变化**：`standaloneDetail` 的条件是 `projectId > 0 && publishedId > 0 && !list.isPending && !items.some(…)`（`RecordsWorkspace.tsx:142`），记录进入清单后只在 `standalone` 形态渲染的 `record-expanded-head`（含标题 h3）不再出现——与既有「记录标题移出详情区」一条对 `task-completion` 的处理口径完全一致。页面观感：发布后落在 `/records` 时间线，今天分组下该记录卡片自动展开，取代此前「时间线空态 + 下方独立详情」的组合。
+
+未运行 / 已知偏差：① 本批未新增单元测试，回归由上述 E2E 断言覆盖；② `record-feed.spec.ts` 的 `heading「我的草稿」` 断言在**单独运行该文件时**失败（发布后当前用户已无草稿，草稿箱按用户口径整块隐藏；全量套件里因前序用例留有未发布草稿而通过），已用 `git stash` 在本批改动前的原始代码上复现同一失败，判定为**既有的顺序依赖脆弱点、与本批无关**，未改动该断言；③ `pnpm check` 整链、`test:integration`、`deps:audit`、镜像构建与 **GitHub Actions** 未跑（本批无服务端 / 契约 / 迁移改动）；④ 本批含前端产品代码与 E2E 断言改动，按 §8 需非作者人工评审。

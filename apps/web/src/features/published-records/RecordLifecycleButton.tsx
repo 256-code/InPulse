@@ -74,7 +74,7 @@ export function RecordLifecycleButton({
       else await api.voidChangeRecord(item.projectId, item.id, body, init);
       await Promise.all(
         [
-          ["published-records"],
+          ["record-feed"],
           ["published-record", item.projectId, item.id],
           ["record-versions", item.projectId, item.id],
           ["search"],

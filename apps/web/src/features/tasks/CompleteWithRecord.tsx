@@ -171,7 +171,7 @@ export function CompleteWithRecord({
             "project-overview",
             "record-drafts",
             "task-record-drafts",
-            "published-records",
+            "record-feed",
             "activity",
             "search",
             "notifications",

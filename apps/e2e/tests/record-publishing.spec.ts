@@ -30,8 +30,18 @@ test("F18 独立发布、修订、明确解决遗留与不可变历史对比", a
     await publish.getByRole("button", { name: "确认发布" }).click();
     await expect(publish).toBeHidden();
     const detail = page.getByRole("region", { name: "正式记录详情" });
-    // 详情头部不再渲染「编号 · 版本」小字（0f34d7a），standalone 形态以标题为锚点。
-    await expect(detail.getByRole("heading", { name: title })).toBeVisible();
+    // 回归（2026-09-30 修）：草稿详情页发布后正式记录必须立刻进入时间线。该路径此前失效的
+    // 是没有任何地方定义过的死键 ["published-records"]，列表不刷新，页面停在
+    // 「暂无已发布记录」，只能靠 !items.some(publishedId) 的独立详情形态兜底。
+    await expect(page.getByText("暂无已发布记录")).toBeHidden();
+    // 记录进入列表后标题由卡片摘要行承载：.record-expanded-head 的 <h3> 只在独立详情形态
+    // 渲染（同 docs/test-matrix.md「记录标题移出详情区」那条对 task-completion 的处理）。
+    await expect(
+      page
+        .locator(".record-card")
+        .filter({ hasText: title })
+        .locator("summary"),
+    ).toContainText(title);
     await detail.getByRole("button", { name: "修订内容" }).click();
     const edit = page.getByRole("dialog", { name: "修订迭代记录" });
     await edit.getByLabel("具体改动").fill("版本二方案");
@@ -135,9 +145,13 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
       .getByRole("button", { name: "确认发布" })
       .click();
     const detail = page.getByRole("region", { name: "正式记录详情" });
+    // 发布后记录立刻进入时间线卡片（与首个 F18 用例同一回归口径，标题落在摘要行）。
     await expect(
-      detail.getByRole("heading", { name: "发布来源-" + suffix }),
-    ).toBeVisible();
+      page
+        .locator(".record-card")
+        .filter({ hasText: "发布来源-" + suffix })
+        .locator("summary"),
+    ).toContainText("发布来源-" + suffix);
     await detail.getByRole("link", { name: "查看来源任务" }).click();
     await expect(
       task.getByRole("button", { name: "重新打开", exact: true }),
