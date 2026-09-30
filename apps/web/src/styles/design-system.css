@@ -944,23 +944,26 @@ button {
       opacity 0.24s ease,
       visibility 0s linear 0.24s;
   }
-  .nav-collapsed .page-content {
-    /* 默认 34px / 22px（≤1000px）左内边距会被 12 + 30px 的悬浮按钮压住标题行；
-       收起时与侧栏同节奏过渡，标题不再在动画结束后跳一下。 */
-    padding-left: 46px;
+  /* 侧栏是 fixed（见文件末 min-width:701px 块），文档流里的让位改由外壳左内边距承担：
+     展开时等于侧栏宽度，收起时缩到 46px，为 12 + 30px 的悬浮展开按钮让出标题行，
+     标题不再在动画结束后跳一下。 */
+  .app-shell {
+    padding-left: var(--sidebar-width);
     transition: padding-left 0.24s cubic-bezier(0.33, 1, 0.68, 1);
   }
+  /* nav-collapsed 加在 .app-shell 自身，不是祖先，因此用复合选择器。 */
+  .app-shell.nav-collapsed {
+    padding-left: 46px;
+  }
 }
-/* 上面两条 .sidebar 过渡 / 动画在减弱动态偏好下必须一并关掉：媒体查询不提升特异性，
+/* 上面的过渡 / 动画在减弱动态偏好下必须一并关掉：媒体查询不提升特异性，
    因此这条覆盖写在它们之后。 */
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
+  .app-shell,
   .sidebar-expand-button {
     transition: none;
     animation: none;
-  }
-  .nav-collapsed .page-content {
-    transition: none;
   }
 }
 .page-content {
@@ -6280,9 +6283,12 @@ td.due-overdue {
 @media (min-width: 701px) {
   /* 滚动下沉到导航区：品牌与底部工具条固定，通知弹层才不会被侧栏裁剪。 */
   .sidebar {
-    position: sticky;
+    /* fixed 而非 sticky：antd 弹窗的滚动锁会给 html/body 写 overflow: hidden，
+       sticky 在该状态下失效、随页面滚走（弹窗背景里只剩半截深色栏），fixed 不受影响。 */
+    position: fixed;
     top: 0;
-    /* 与窄屏（.sidebar fixed z-index:40）同层级：sticky 默认 z-index:auto 会让整个侧栏
+    left: 0;
+    /* 与窄屏（.sidebar fixed z-index:40）同层级：默认 z-index:auto 会让整个侧栏
        停在根层叠上下文，底部通知弹层（.popover z-index:40）被后置的任务卡压住。 */
     z-index: 40;
     height: 100dvh;
