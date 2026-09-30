@@ -291,9 +291,15 @@
   opacity: 0.88;
 }
 
+/* 兜底详情放在筛选栏下方：记录不在当前页或筛选范围内时，用户不用滚到列表底部。 */
 .record-standalone-detail {
   max-width: 1000px;
-  margin-bottom: 20px;
+  margin: 12px 0 20px;
+}
+
+/* 深链滚动目标不贴到视口顶端，留出与页面内边距一致的呼吸空间。 */
+[data-record-anchor] {
+  scroll-margin-top: 16px;
 }
 
 .record-standalone-detail > .record-expanded {

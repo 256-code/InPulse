@@ -5880,6 +5880,11 @@ td.due-overdue {
   border-bottom: 1px solid #eef2f6;
   flex-shrink: 0;
 }
+.palette-enter-hint {
+  margin-left: 6px;
+  color: #6f8299;
+  font-weight: 500;
+}
 .palette-results {
   overflow-y: auto;
   padding: 8px 10px 14px;

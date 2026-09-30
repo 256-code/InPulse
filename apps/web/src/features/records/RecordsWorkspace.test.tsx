@@ -204,9 +204,9 @@ describe("RecordsWorkspace", () => {
     expect(client.getChangeRecord).toHaveBeenCalledWith(1, 7, signalInit);
   });
 
-  it("opens a record outside the loaded page as a standalone detail", async () => {
+  it("falls back to a standalone detail above the list when the feed cannot reach the record", async () => {
     const client = baseClient();
-    mount(
+    const { container } = mount(
       client as unknown as InpulseApiClient,
       "/records?projectId=1&publishedId=99",
     );
@@ -215,6 +215,73 @@ describe("RecordsWorkspace", () => {
       await screen.findByRole("region", { name: "正式记录详情" }),
     ).toBeVisible();
     expect(client.getChangeRecord).toHaveBeenCalledWith(1, 99, signalInit);
+    // 没有后续页时不应反复请求
+    expect(client.listRecordFeed).toHaveBeenCalledTimes(1);
+    // 兜底详情必须排在时间线上方：它曾放在列表之后，用户只能滚到最底部才看得到。
+    const standalone = container.querySelector(".record-standalone-detail");
+    const timeline = container.querySelector(".record-timeline");
+    expect(standalone).not.toBeNull();
+    expect(timeline).not.toBeNull();
+    expect(
+      standalone!.compareDocumentPosition(timeline!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps loading pages until the deep-linked record lands in the timeline", async () => {
+    const client = baseClient();
+    client.listRecordFeed
+      .mockResolvedValueOnce({
+        items: [feedItem(first)],
+        nextCursor: "cursor-1",
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [feedItem(second)],
+        nextCursor: null,
+        hasMore: false,
+      });
+    const { container } = mount(
+      client as unknown as InpulseApiClient,
+      "/records?projectId=1&publishedId=8",
+    );
+    expect(
+      await screen.findByText("风控修正", { selector: "summary strong" }),
+    ).toBeVisible();
+    // 未手动点「加载更多」也要续拉：目标记录在后续页里
+    expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+      {
+        projectId: 1,
+        status: "PUBLISHED",
+        source: "ALL",
+        limit: 20,
+        cursor: "cursor-1",
+      },
+      signalInit,
+    );
+    // 目标记录在时间线里原地展开，不再另起一块兜底详情。
+    expect(
+      await screen.findByRole("region", { name: "正式记录详情" }),
+    ).toBeVisible();
+    expect(container.querySelector(".record-standalone-detail")).toBeNull();
+  });
+
+  it("stops paging and falls back once the locate limit is reached", async () => {
+    const client = baseClient();
+    client.listRecordFeed.mockResolvedValue({
+      items: [feedItem(first)],
+      nextCursor: "cursor-next",
+      hasMore: true,
+    });
+    const { container } = mount(
+      client as unknown as InpulseApiClient,
+      "/records?projectId=1&publishedId=999",
+    );
+    await screen.findByText("支付修正", { selector: "summary strong" });
+    // 定位上限 5 页：找不到就停手，不能为了一个 ID 把整个记录库拉完。
+    await waitFor(() => expect(client.listRecordFeed).toHaveBeenCalledTimes(5));
+    expect(container.querySelector(".record-standalone-detail")).not.toBeNull();
+    expect(client.getChangeRecord).toHaveBeenCalledWith(1, 999, signalInit);
   });
 
   it("sends the source filter and the debounced keyword to the server", async () => {

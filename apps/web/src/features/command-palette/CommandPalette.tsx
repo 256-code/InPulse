@@ -11,6 +11,7 @@ import {
   SEARCH_MIN_LENGTH,
   useSearchInfiniteQuery,
 } from "@features/search/search-query";
+import { searchResultPath } from "@features/search/search-destination";
 
 interface QuickAction {
   readonly key: string;
@@ -55,6 +56,12 @@ const PALETTE_GROUP_ORDER = [
 
 const paletteGroupOrder: readonly string[] = PALETTE_GROUP_ORDER;
 
+/** 分组排序权重：显示顺序与 ↑↓ 的扁平顺序必须同源，否则高亮会跳到看不见的行。 */
+const paletteGroupRank = (group: string): number => {
+  const index = paletteGroupOrder.indexOf(group);
+  return index === -1 ? PALETTE_GROUP_ORDER.length : index;
+};
+
 const entityMeta: Readonly<
   Record<SearchItem["entityType"], { label: string; icon: InpulseIconName }>
 > = {
@@ -78,6 +85,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
+  // 用户是否显式选过某一行（↑↓ 或悬停）。没选过时面板不默认选中任何一行，
+  // Enter 走全局搜索结果页而不是盲开第一行（用户明确要求）。
+  const [cursorTouched, setCursorTouched] = useState(false);
   const normalizedQuery = query.trim();
   const canSearch = isValidSearchQuery(normalizedQuery);
   const search = useSearchInfiniteQuery({
@@ -140,18 +150,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       return [];
     }
     const items = search.data?.pages.flatMap((page) => [...page.items]) ?? [];
-    return items.map((item) => {
+    // 面板是启动器：没有独立页面的结果（外部链接、任务组）不列进来，
+    // 否则选中它们只能回到搜索页（就是这次要修的旧行为）；完整列表仍在搜索页。
+    return items.flatMap((item) => {
+      const path = searchResultPath(item);
+      if (path === null) {
+        return [];
+      }
       const meta = entityMeta[item.entityType];
-      return {
-        key: `${item.entityType}:${item.entityId}`,
-        group: meta.label,
-        icon: meta.icon,
-        title: item.title,
-        hint: `${meta.label} · ${item.summary || "可访问对象"}`,
-        run: () => onOpenSearch(normalizedQuery),
-      };
+      return [
+        {
+          key: `${item.entityType}:${item.entityId}`,
+          group: meta.label,
+          icon: meta.icon,
+          title: item.title,
+          hint: `${meta.label} · ${item.summary || "可访问对象"}`,
+          run: () => onNavigate(path),
+        },
+      ];
     });
-  }, [canSearch, normalizedQuery, onOpenSearch, search.data]);
+  }, [canSearch, onNavigate, search.data]);
 
   const searchQuickAction: SearchResult[] = canSearch
     ? [
@@ -166,22 +184,29 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       ]
     : [];
 
-  const results = useMemo(
-    () => [...quickActions, ...searchQuickAction, ...searchResults],
+  const flatResults = useMemo(
+    () =>
+      [...quickActions, ...searchQuickAction, ...searchResults].sort(
+        (a, b) => paletteGroupRank(a.group) - paletteGroupRank(b.group),
+      ),
     [quickActions, searchQuickAction, searchResults],
   );
-  const flatResults = results;
 
   useEffect(() => {
     if (open) {
       setQuery("");
       setCursor(0);
+      setCursorTouched(false);
     }
   }, [open]);
 
   useEffect(() => {
     setCursor(0);
   }, [normalizedQuery, searchResults.length]);
+
+  useEffect(() => {
+    setCursorTouched(false);
+  }, [normalizedQuery]);
 
   useEffect(() => {
     if (!open) {
@@ -202,37 +227,51 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   }
 
   const grouped = new Map<string, SearchResult[]>();
-  for (const result of results) {
+  for (const result of flatResults) {
     grouped.set(result.group, [...(grouped.get(result.group) ?? []), result]);
   }
+  const flatIndex = new Map(
+    flatResults.map((result, index) => [result.key, index]),
+  );
+
+  // 没选中任何一行时用 -1 表示「无选中」：高亮与 Enter 都以它为准。
+  const selectedIndex = canSearch && !cursorTouched ? -1 : cursor;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setCursor((current) => (current + 1) % Math.max(flatResults.length, 1));
+      if (flatResults.length === 0) {
+        return;
+      }
+      setCursor(cursorTouched ? (cursor + 1) % flatResults.length : 0);
+      setCursorTouched(true);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
+      if (flatResults.length === 0) {
+        return;
+      }
       setCursor(
-        (current) =>
-          (current - 1 + flatResults.length) % Math.max(flatResults.length, 1),
+        cursorTouched
+          ? (cursor - 1 + flatResults.length) % flatResults.length
+          : flatResults.length - 1,
       );
+      setCursorTouched(true);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const current = flatResults[cursor];
+      const current = flatResults[selectedIndex];
       if (current) {
         current.run();
+        onClose();
+      } else if (canSearch) {
+        onOpenSearch(normalizedQuery);
         onClose();
       }
     }
   };
 
-  const orderedGroups = [...grouped.entries()].sort(([a], [b]) => {
-    const rank = (name: string) => {
-      const index = paletteGroupOrder.indexOf(name);
-      return index === -1 ? PALETTE_GROUP_ORDER.length : index;
-    };
-    return rank(a) - rank(b);
-  });
+  const orderedGroups = [...grouped.entries()].sort(
+    ([a], [b]) => paletteGroupRank(a) - paletteGroupRank(b),
+  );
 
   const searchHint = !canSearch
     ? normalizedQuery.length === 0
@@ -243,6 +282,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       : search.isPending
         ? "正在通过服务端搜索当前可访问对象..."
         : `支持中文短词、完整英文缩写、完整代码标识符与完整编号；不保证英文或任意子串搜索。已找到 ${searchResults.length} 条可访问结果。`;
+  const enterHint =
+    canSearch && !cursorTouched
+      ? "按 Enter 进入全局搜索结果页，或用 ↑↓ 选择具体结果。"
+      : null;
 
   return (
     <div
@@ -269,7 +312,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           />
           <kbd>Esc</kbd>
         </div>
-        <p className="palette-hint">{searchHint}</p>
+        <p className="palette-hint">
+          {searchHint}
+          {enterHint ? (
+            <span className="palette-enter-hint">{enterHint}</span>
+          ) : null}
+        </p>
         <div className="palette-results">
           {flatResults.length > 0 ? (
             orderedGroups.map(([group, items]) => (
@@ -277,13 +325,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 <h4>{group}</h4>
                 <ul>
                   {items.map((result) => {
-                    const index = results.indexOf(result);
+                    const index = flatIndex.get(result.key) ?? 0;
                     return (
                       <li key={result.key}>
                         <button
                           type="button"
-                          className={index === cursor ? "cursor" : ""}
-                          onMouseEnter={() => setCursor(index)}
+                          className={index === selectedIndex ? "cursor" : ""}
+                          onMouseEnter={() => {
+                            setCursor(index);
+                            setCursorTouched(true);
+                          }}
                           onClick={() => {
                             result.run();
                             onClose();
@@ -294,7 +345,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                             <strong>{result.title}</strong>
                             <small>{result.hint}</small>
                           </span>
-                          {index === cursor ? (
+                          {index === selectedIndex ? (
                             <InpulseIcon name="cornerDown" size={14} />
                           ) : null}
                         </button>

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button } from "antd";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -36,6 +42,13 @@ import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 关键词下发前的防抖窗口（毫秒）：与相似功能提示保持同一节奏。 */
 const SEARCH_DEBOUNCE_MS = 350;
+
+/**
+ * 深链定位记录时最多自动加载的页数（含首页）。
+ * 记录可能排在「加载更多」之后的页里，只渲染已加载页会让用户看到列表顶部、
+ * 目标记录孤零零挂在最下面；自动续拉到上限后仍找不到才退回独立详情。
+ */
+const RECORD_DEEP_LINK_MAX_PAGES = 5;
 
 /**
  * B-3a：`/records` 单页工作区（设计师稿 views/records.tsx 的结构）。
@@ -104,6 +117,30 @@ export function RecordsWorkspace({
   });
   const items = list.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const groups = groupRecordsByDate(items);
+  /** 深链目标已经在已加载页里时由时间线卡片原地展开，不需要额外定位。 */
+  const recordInItems = items.some((item) => item.record.id === publishedId);
+  const pagesLoaded = list.data?.pages.length ?? 0;
+  /** 目标记录还没出现且可能还在后续页：自动续拉（有上限，不为一条记录拉完整库）。 */
+  const locatingRecord =
+    publishedId > 0 &&
+    projectId > 0 &&
+    !list.isPending &&
+    !list.isError &&
+    !recordInItems &&
+    list.hasNextPage &&
+    !list.isFetchNextPageError &&
+    pagesLoaded < RECORD_DEEP_LINK_MAX_PAGES;
+  useEffect(() => {
+    // 只由状态驱动续拉：isFetchingNextPage 同时挡住重复请求，
+    // pagesLoaded 保证每拿到一页都能继续推进（并发批次里仅在 in-flight 标志上自旋会卡死）。
+    if (!locatingRecord || list.isFetchingNextPage) return;
+    void list.fetchNextPage();
+  }, [
+    locatingRecord,
+    list.isFetchingNextPage,
+    list.fetchNextPage,
+    pagesLoaded,
+  ]);
   const projectStatus = useMemo(
     () =>
       new Map(
@@ -139,11 +176,13 @@ export function RecordsWorkspace({
     [user?.isAdmin],
   );
   const filtered = term.length > 0 || source !== "ALL";
+  /** 记录不在筛选范围内（例如已作废记录落在「已发布」筛选）或超出续拉上限时的兜底详情。 */
   const standaloneDetail =
     projectId > 0 &&
     publishedId > 0 &&
     !list.isPending &&
-    !items.some((item) => item.record.id === publishedId);
+    !recordInItems &&
+    !locatingRecord;
   const selectProject = (value: string) => {
     const next = new URLSearchParams(params);
     if (Number(value) > 0) next.set("projectId", value);
@@ -168,6 +207,21 @@ export function RecordsWorkspace({
     else return;
     setParams(nextParams, { replace: true });
   };
+  // 从搜索等入口深链打开记录时把它滚进视野：目标可能是列表下方独立详情，
+  // 也可能是列表里很靠后的一张卡，不滚动的话用户只看到列表顶部，
+  // 会以为「没跳到对应记录」。每个 publishedId 只滚一次，已在视野内不动页面。
+  const scrolledRecord = useRef(0);
+  useEffect(() => {
+    if (publishedId <= 0 || scrolledRecord.current === publishedId) return;
+    const anchor = document.querySelector(
+      `[data-record-anchor="${publishedId}"]`,
+    );
+    if (!anchor) return;
+    scrolledRecord.current = publishedId;
+    const rect = anchor.getBoundingClientRect();
+    if (rect.top >= 0 && rect.top < window.innerHeight) return;
+    anchor.scrollIntoView({ block: "start" });
+  }, [publishedId, standaloneDetail, items]);
   return (
     <div className="records-workspace">
       <div className={"page-header" + (embedded ? " embedded" : "")}>
@@ -275,6 +329,21 @@ export function RecordsWorkspace({
           }
         />
       )}
+      {standaloneDetail && (
+        <section
+          className="record-standalone-detail"
+          data-record-anchor={publishedId}
+        >
+          <PublishedRecordDetail
+            projectId={projectId}
+            recordId={publishedId}
+            client={client}
+            writable={canWrite(projectId)}
+            standalone
+            onListChanged={() => void list.refetch()}
+          />
+        </section>
+      )}
       {list.isPending ? (
         <CalmSkeleton variant="list" rows={3} label="正在加载记录" />
       ) : list.isError ? (
@@ -329,7 +398,11 @@ export function RecordsWorkspace({
                 {!collapsed && (
                   <div className="record-card-list">
                     {group.records.map((item) => (
-                      <div className="timeline-item" key={item.record.id}>
+                      <div
+                        className="timeline-item"
+                        data-record-anchor={item.record.id}
+                        key={item.record.id}
+                      >
                         <span aria-hidden="true" className="timeline-time">
                           {timelineTimeLabel(item.record.publishedAt)}
                         </span>
@@ -352,18 +425,6 @@ export function RecordsWorkspace({
             );
           })}
         </div>
-      )}
-      {standaloneDetail && (
-        <section className="record-standalone-detail">
-          <PublishedRecordDetail
-            projectId={projectId}
-            recordId={publishedId}
-            client={client}
-            writable={canWrite(projectId)}
-            standalone
-            onListChanged={() => void list.refetch()}
-          />
-        </section>
       )}
       <RecordSummaryModal
         open={summaryOpen}
