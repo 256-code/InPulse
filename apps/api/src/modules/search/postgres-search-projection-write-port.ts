@@ -40,6 +40,9 @@ export class PostgresSearchProjectionWritePort extends SearchProjectionWritePort
         project_id,
         entity_type,
         entity_id,
+        module_id,
+        feature_id,
+        record_id,
         title,
         summary,
         raw_text,
@@ -52,6 +55,9 @@ export class PostgresSearchProjectionWritePort extends SearchProjectionWritePort
         ${input.projectId},
         ${input.entityType},
         ${input.entityId},
+        ${input.moduleId},
+        ${input.featureId},
+        ${input.recordId},
         ${input.title},
         ${input.summary},
         ${input.rawText},
@@ -62,6 +68,9 @@ export class PostgresSearchProjectionWritePort extends SearchProjectionWritePort
       )
       ON CONFLICT (project_id, entity_type, entity_id)
       DO UPDATE SET
+        module_id = EXCLUDED.module_id,
+        feature_id = EXCLUDED.feature_id,
+        record_id = EXCLUDED.record_id,
         title = EXCLUDED.title,
         summary = EXCLUDED.summary,
         raw_text = EXCLUDED.raw_text,

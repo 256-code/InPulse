@@ -27,6 +27,9 @@ interface SearchProjectionRow {
   readonly visibility_scope: string;
   readonly source_status: string;
   readonly source_row_version: number;
+  readonly module_id: number | null;
+  readonly feature_id: number | null;
+  readonly record_id: number | null;
 }
 
 let client: DatabaseClient | undefined;
@@ -64,6 +67,9 @@ function writeInput(entityId: number): SearchProjectionWriteInput {
     projectId: fixture.projectId,
     entityType: "FEATURE",
     entityId,
+    moduleId: fixture.moduleId,
+    featureId: entityId,
+    recordId: null,
     title: "登录功能",
     summary: "统一认证入口",
     rawText: "登录功能。统一认证入口。InPulse-001",
@@ -82,7 +88,10 @@ async function projectionRow(entityId: number) {
       normalized_search_text,
       visibility_scope,
       source_status,
-      source_row_version
+      source_row_version,
+      module_id,
+      feature_id,
+      record_id
     FROM app.search_projection
     WHERE project_id = ${fixture.projectId}
       AND entity_type = 'FEATURE'
@@ -137,6 +146,9 @@ describe("PostgresSearchProjectionWritePort", () => {
       visibility_scope: "MEMBER",
       source_status: "ACTIVE",
       source_row_version: 1,
+      module_id: fixture.moduleId,
+      feature_id: entityId,
+      record_id: null,
     });
 
     await unitOfWork.run((tx) =>
@@ -148,6 +160,7 @@ describe("PostgresSearchProjectionWritePort", () => {
         visibilityScope: "ADMIN_ONLY",
         sourceStatus: "VOID",
         sourceRowVersion: 2,
+        featureId: null,
       }),
     );
 
@@ -160,7 +173,37 @@ describe("PostgresSearchProjectionWritePort", () => {
       visibility_scope: "ADMIN_ONLY",
       source_status: "VOID",
       source_row_version: 2,
+      // 父级 id 必须随冲突更新改写，不能在旧值上粘住
+      module_id: fixture.moduleId,
+      feature_id: null,
     });
+  });
+
+  test("rejects a parent id that belongs to another project", async () => {
+    const entityId = await createFeatureEntity();
+    const otherUserId = await createUser(client!.sql);
+    const otherProject = await createProject(client!.sql, otherUserId);
+
+    await expect(
+      unitOfWork.run((tx) =>
+        writer.upsert(tx, {
+          ...writeInput(entityId),
+          moduleId: otherProject.moduleId,
+        }),
+      ),
+    ).rejects.toThrow(/search_projection_(module|feature)_project_fk/);
+    expect(await projectionCount(entityId)).toBe(0);
+  });
+
+  test("rejects a feature projection without its parent module", async () => {
+    const entityId = await createFeatureEntity();
+
+    await expect(
+      unitOfWork.run((tx) =>
+        writer.upsert(tx, { ...writeInput(entityId), moduleId: null }),
+      ),
+    ).rejects.toThrow(/search_projection_navigation_shape_check/);
+    expect(await projectionCount(entityId)).toBe(0);
   });
 
   test("a later caller failure rolls back the projection write", async () => {

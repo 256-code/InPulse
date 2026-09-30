@@ -18,6 +18,8 @@ import {
   useSearchInfiniteQuery,
 } from "./search-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { searchResultPath } from "./search-destination";
+import "./search-results.css";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -40,12 +42,15 @@ const entityTypeMeta: Readonly<
 export interface SearchPageViewProps {
   readonly initialQuery?: string;
   readonly onSubmit?: (query: string) => void;
+  /** 打开单条结果自身的页面（路径由 searchResultPath 决定）；未接线时结果行只读。 */
+  readonly onOpenResult?: (path: string) => void;
   readonly client?: InpulseApiClient;
 }
 
 export const SearchPageView: React.FC<SearchPageViewProps> = ({
   initialQuery = "",
   onSubmit,
+  onOpenResult,
   client,
 }) => {
   const [draft, setDraft] = useState(initialQuery);
@@ -112,18 +117,9 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
     content = (
       <Space orientation="vertical" size={16} style={{ width: "100%" }}>
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {results.map((item, index) => (
-            <li
-              key={`${item.entityType}:${item.entityId}`}
-              data-testid="search-result-item"
-              style={{
-                padding: "12px 0",
-                borderBottom:
-                  index === results.length - 1
-                    ? "none"
-                    : "1px solid var(--border)",
-              }}
-            >
+          {results.map((item, index) => {
+            const path = searchResultPath(item);
+            const body = (
               <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                 <Space align="center" wrap>
                   <Tag color={entityTypeMeta[item.entityType].color}>
@@ -132,9 +128,41 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
                   <Text strong>{item.title}</Text>
                 </Space>
                 <Text type="secondary">{item.summary}</Text>
+                {path === null ? (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    该类型没有独立页面，可在所属对象的页面上查看
+                  </Text>
+                ) : null}
               </Space>
-            </li>
-          ))}
+            );
+            return (
+              <li
+                key={`${item.entityType}:${item.entityId}`}
+                data-testid="search-result-item"
+                style={{
+                  borderBottom:
+                    index === results.length - 1
+                      ? "none"
+                      : "1px solid var(--border)",
+                }}
+              >
+                {path !== null && onOpenResult ? (
+                  <a
+                    className="search-result-link"
+                    href={path}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onOpenResult(path);
+                    }}
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <div className="search-result-static">{body}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
         {hasNextPage ? (
           <Button

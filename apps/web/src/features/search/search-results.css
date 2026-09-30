@@ -1,0 +1,23 @@
+/* 全局搜索结果行：有落地页的整行可点（链接语义，支持新标签页打开与键盘激活）。 */
+.search-result-link {
+  display: block;
+  padding: 12px 10px;
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.search-result-link:hover {
+  background: var(--muted);
+}
+
+.search-result-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 没有可打开页面的结果（外部链接、任务组）保留为只读行，不提供虚假的点击反馈。 */
+.search-result-static {
+  display: block;
+  padding: 12px 10px;
+}

@@ -25,6 +25,9 @@ function createSearchItem(
     projectId: 1,
     entityType,
     entityId: id,
+    moduleId: null,
+    featureId: null,
+    recordId: null,
     title: `title-${id}`,
     summary: `summary-${id}`,
   };

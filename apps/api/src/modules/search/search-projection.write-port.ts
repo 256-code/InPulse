@@ -16,6 +16,11 @@ export interface SearchProjectionWriteInput {
   readonly projectId: number;
   readonly entityType: SearchProjectionEntityType;
   readonly entityId: number;
+  /** 打开结果自身页面所需的上级归属：TASK 必带、FEATURE 带 moduleId；其余为 null。 */
+  readonly moduleId: number | null;
+  readonly featureId: number | null;
+  /** 遗留问题所属的来源记录；只有 LEFTOVER 使用，其余类型为 null。 */
+  readonly recordId: number | null;
   readonly title: string;
   readonly summary: string;
   readonly rawText: string;
@@ -55,6 +60,15 @@ export function validateSearchProjectionWriteInput(
   }
   if (!SEARCH_PROJECTION_VISIBILITY_SCOPES.includes(input.visibilityScope)) {
     invalid("visibilityScope is not supported");
+  }
+  for (const [field, value] of [
+    ["moduleId", input.moduleId],
+    ["featureId", input.featureId],
+    ["recordId", input.recordId],
+  ] as const) {
+    if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
+      invalid(`${field} must be null or a positive integer`);
+    }
   }
   if (
     input.title.trim().length === 0 ||

@@ -1286,6 +1286,9 @@ export type SearchItem = {
   readonly projectId: number;
   readonly entityType: ("PROJECT" | "MODULE" | "FEATURE" | "TASK" | "CHANGE_RECORD" | "EXTERNAL_LINK" | "TASK_GROUP" | "LEFTOVER");
   readonly entityId: number;
+  readonly moduleId: (number | null);
+  readonly featureId: (number | null);
+  readonly recordId: (number | null);
   readonly title: string;
   readonly summary: string;
 };

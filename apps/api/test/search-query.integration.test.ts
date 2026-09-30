@@ -132,6 +132,7 @@ describe("SearchQueryService with real PostgreSQL", () => {
   let seedOffset: number;
   let adminOnlyEntityId: number;
   let hiddenEntityId: number;
+  let navFeatureEntityId: number;
   let service: SearchQueryService;
 
   beforeAll(async () => {
@@ -260,6 +261,56 @@ describe("SearchQueryService with real PostgreSQL", () => {
           1
         )
       `;
+
+      // 带真实父级的 FEATURE 投影：验证读链路把 moduleId / featureId 原样交给上层（导航契约）
+      const [navFeature] = await transaction<{ id: number }[]>`
+        INSERT INTO app.features (
+          project_id,
+          module_id,
+          code,
+          name,
+          created_by
+        )
+        VALUES (
+          ${p1.projectId},
+          ${p1.moduleId},
+          ${`${p1.code}-F-999`},
+          'Navigation probe feature',
+          ${p1.userId}
+        )
+        RETURNING id
+      `;
+      navFeatureEntityId = navFeature!.id;
+      await transaction`
+        INSERT INTO app.search_projection (
+          project_id,
+          entity_type,
+          entity_id,
+          module_id,
+          feature_id,
+          title,
+          summary,
+          raw_text,
+          normalized_search_text,
+          visibility_scope,
+          source_status,
+          source_row_version
+        )
+        VALUES (
+          ${p1.projectId},
+          'FEATURE',
+          ${navFeatureEntityId},
+          ${p1.moduleId},
+          ${navFeatureEntityId},
+          'zznavparentprobe 功能',
+          '导航父级探针',
+          'zznavparentprobe。导航父级探针',
+          'zznavparentprobe.导航父级探针',
+          'MEMBER',
+          'ACTIVE',
+          1
+        )
+      `;
     });
 
     const port = new FixtureScopedProjectAccessQueryPort(
@@ -313,6 +364,24 @@ describe("SearchQueryService with real PostgreSQL", () => {
     });
 
     expect(result.items).toEqual([]);
+  });
+
+  test("results keep the parent ids needed to open their own page", async () => {
+    const result = await service.search({
+      actorUserId: memberA,
+      query: "zznavparentprobe",
+      limit: 20,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      projectId: projectIds.get("p1"),
+      entityType: "FEATURE",
+      entityId: navFeatureEntityId,
+      moduleId: projectFixtures.get("p1")?.moduleId,
+      featureId: navFeatureEntityId,
+      recordId: null,
+    });
   });
 
   test("removed and disabled users fail closed", async () => {

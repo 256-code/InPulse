@@ -24,6 +24,9 @@ const candidate: SearchItem = {
   projectId: 2,
   entityType: "TASK",
   entityId: 102,
+  moduleId: null,
+  featureId: null,
+  recordId: null,
   title: "重复回调任务 A",
   summary: "任务",
 };
@@ -42,6 +45,9 @@ const featureCandidate: SearchItem = {
   projectId: 2,
   entityType: "FEATURE",
   entityId: 104,
+  moduleId: null,
+  featureId: null,
+  recordId: null,
   title: "退款功能",
   summary: "功能",
 };

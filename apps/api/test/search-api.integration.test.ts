@@ -33,6 +33,9 @@ interface SearchPageDto {
     readonly projectId: number;
     readonly entityType: string;
     readonly entityId: number;
+    readonly moduleId: number | null;
+    readonly featureId: number | null;
+    readonly recordId: number | null;
     readonly title: string;
     readonly summary: string;
   }[];
@@ -127,6 +130,9 @@ async function insertProjection(
     readonly summary: string;
     readonly title: string;
     readonly visibilityScope: string;
+    readonly moduleId?: number;
+    readonly featureId?: number;
+    readonly recordId?: number;
   },
 ): Promise<void> {
   await sql`
@@ -134,6 +140,9 @@ async function insertProjection(
       project_id,
       entity_type,
       entity_id,
+      module_id,
+      feature_id,
+      record_id,
       title,
       summary,
       raw_text,
@@ -146,6 +155,9 @@ async function insertProjection(
       ${input.projectId},
       ${input.entityType},
       ${input.entityId},
+      ${input.moduleId ?? null},
+      ${input.featureId ?? null},
+      ${input.recordId ?? null},
       ${input.title},
       ${input.summary},
       ${input.title},
@@ -447,7 +459,10 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
     expect(Object.keys(page.items[0]!).sort()).toEqual([
       "entityId",
       "entityType",
+      "featureId",
+      "moduleId",
       "projectId",
+      "recordId",
       "summary",
       "title",
     ]);

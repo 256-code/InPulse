@@ -77,6 +77,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0030_project_soft_delete.sql",
       "0031_project_purge.sql",
       "0032_task_archive_removal.sql",
+      "0033_search_navigation_parents.sql",
     ]);
   });
 

@@ -33,6 +33,10 @@ export function validatePublishedRecordSearch(
     projectId: record.projectId,
     entityType: "CHANGE_RECORD",
     entityId: record.id,
+    // 记录自身的 entityId 就是打开记录页所需的 id，上级归属不重复下发。
+    moduleId: null,
+    featureId: null,
+    recordId: null,
     title: record.title,
     summary: record.contextProblem.slice(0, 5000),
     rawText: [

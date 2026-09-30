@@ -15,6 +15,9 @@ const validItem = {
   entityId: 2,
   title: "实现搜索契约",
   summary: "契约纵切片",
+  moduleId: null,
+  featureId: null,
+  recordId: null,
 };
 
 describe("SearchQueryRequest 契约", () => {
@@ -73,6 +76,25 @@ describe("SearchItem/SearchPage 契约", () => {
       searchItemSchema.safeParse({ ...validItem, id: "projection-row" })
         .success,
     ).toBe(false);
+  });
+
+  test("SearchItem 的上级归属字段必填、可为 null", () => {
+    const withParents = {
+      ...validItem,
+      moduleId: 3,
+      featureId: 4,
+      recordId: 5,
+    };
+    expect(searchItemSchema.parse(withParents)).toEqual(withParents);
+
+    for (const key of ["moduleId", "featureId", "recordId"] as const) {
+      const missing: Record<string, unknown> = { ...validItem };
+      delete missing[key];
+      expect(searchItemSchema.safeParse(missing).success).toBe(false);
+      expect(
+        searchItemSchema.safeParse({ ...validItem, [key]: 0 }).success,
+      ).toBe(false);
+    }
   });
 
   test("SearchPage 空列表与末页语义有效", () => {

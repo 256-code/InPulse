@@ -340,6 +340,9 @@ export class LeftoverTaskWorkflow {
       projectId: p,
       entityType: "CHANGE_RECORD",
       entityId: r,
+      moduleId: null,
+      featureId: null,
+      recordId: null,
       title: record.title,
       summary: record.changeSolution.slice(0, 5000),
       rawText: [
