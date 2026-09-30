@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Empty, Form, Input, Spin, Typography } from "antd";
+import { Alert, Button, Empty, Form, Input, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
 import { AppModal as Modal } from "@features/common/components/AppModal";
@@ -20,6 +20,7 @@ import {
   type ProjectFormValues,
 } from "./project-form";
 import { describeCreateProjectError, useCreateProject } from "./project-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const { Text } = Typography;
 
@@ -270,7 +271,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               ) : null}
               {directory.isPending ? (
                 <div className="member-loading">
-                  <Spin size="small" description="正在加载成员..." />
+                  <CalmSkeleton
+                    variant="list"
+                    rows={2}
+                    compact
+                    label="正在加载成员..."
+                  />
                 </div>
               ) : directory.isError ? (
                 <Alert

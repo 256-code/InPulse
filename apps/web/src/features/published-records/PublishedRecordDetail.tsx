@@ -7,7 +7,7 @@ import { AppendLeftoverForm } from "./AppendLeftoverForm";
 import { taskDetailPath } from "@features/tasks/task-links";
 import { fieldText } from "@features/record-drafts/record-content";
 import React, { useMemo, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import {
   createApiClient,
@@ -23,6 +23,7 @@ import { useModules } from "@features/modules/module-query";
 import { useProjectDetail } from "@features/projects/project-query";
 import { useProjectFeatureNames } from "@features/records/feature-name-map";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 正式记录正文的四段字段与中文标签：详情卡展开区与版本差异共用。 */
 export const recordContentFields = [
@@ -165,7 +166,7 @@ export function PublishedRecordDetail({
   if (detail.isPending)
     return (
       <section className="record-expanded" aria-label="正式记录详情">
-        <Spin />
+        <CalmSkeleton variant="lines" rows={5} label="正在加载记录详情" />
       </section>
     );
   if (detail.isError)
@@ -362,7 +363,12 @@ export function PublishedRecordDetail({
         <section aria-label="历史版本">
           <h4>历史版本与对比</h4>
           {versions.isPending ? (
-            <Spin />
+            <CalmSkeleton
+              variant="lines"
+              rows={3}
+              compact
+              label="正在加载历史版本"
+            />
           ) : versions.isError ? (
             <Alert
               type="error"

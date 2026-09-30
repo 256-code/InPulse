@@ -17,6 +17,7 @@ import {
   projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import { projectMemberErrorMessage } from "./project-member-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const formatMemberDate = (value: string) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
@@ -84,10 +85,7 @@ export function ActiveProjectMembers({
       </div>
 
       {members.isPending ? (
-        <div className="calm-state">
-          <span className="calm-spinner" />
-          <span>正在加载项目成员</span>
-        </div>
+        <CalmSkeleton variant="list" rows={3} label="正在加载项目成员" />
       ) : members.isError ? (
         <CalmEmptyState
           icon="alert"

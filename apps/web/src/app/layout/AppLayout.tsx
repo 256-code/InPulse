@@ -335,6 +335,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <img
                 src="/inpulse-joint-logo.png"
                 alt="Libiao Robotics | InPulse"
+                width={480}
+                height={174}
                 className="joint-logo"
               />
             </div>

@@ -22,6 +22,7 @@ import { useProjects } from "@features/projects/project-query";
 import { useModules } from "@features/modules/module-query";
 import { useFeatures } from "@features/features/feature-query";
 import { isFirstLoad, taskError } from "./task-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 任务范围与后端路由一一对应：功能级走功能任务，模块级走模块任务。 */
 type TaskScope = "FEATURE" | "MODULE";
@@ -660,7 +661,12 @@ export function GlobalTaskCreateModal({
                 animated
               />
               {targetReady && isFirstLoad(assignees) && (
-                <p>正在加载项目成员…</p>
+                <CalmSkeleton
+                  variant="list"
+                  rows={2}
+                  compact
+                  label="正在加载项目成员…"
+                />
               )}
               {assignees.isError && (
                 <Alert

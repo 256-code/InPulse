@@ -2,7 +2,7 @@ import { ProjectRepositoryLink } from "@features/external-links/ProjectRepositor
 import { useNavigate } from "react-router-dom";
 import { taskDetailPath } from "@features/tasks/task-links";
 import React, { useState } from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import type { InpulseApiClient, ProjectItem } from "@generated/api";
 import {
   InpulseIcon,
@@ -25,6 +25,7 @@ import type {
   ProjectOverviewIteration,
   ProjectOverviewLeftover,
 } from "./project-overview-types";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 function formatPublishedAt(iso: string): string {
   const date = new Date(iso);
@@ -301,10 +302,7 @@ export const ProjectOverviewPageView: React.FC<
       </div>
 
       {overviewQuery.isPending ? (
-        <div className="calm-state">
-          <Spin size="large" />
-          <p>正在加载项目…</p>
-        </div>
+        <CalmSkeleton variant="card" rows={3} label="正在加载项目…" />
       ) : overviewQuery.isError ? (
         <Alert
           type="error"

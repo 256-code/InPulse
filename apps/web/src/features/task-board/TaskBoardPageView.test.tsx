@@ -328,9 +328,10 @@ describe("TaskBoardPageView", () => {
   it("截断时提示列表已按排序截断且统计仍为全量口径", async () => {
     renderView({ response: { ...response, truncated: true } });
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "任务超过 1000 条",
-    );
+    // 骨架屏也带 role="status"（首屏等待会被读屏播报），所以这里按文案定位，
+    // 再回查截断提示自身确实带 role="status"，断言强度不变。
+    const notice = await screen.findByText(/任务超过 1000 条/);
+    expect(notice.closest(".tb-notice")).toHaveAttribute("role", "status");
   });
 
   it("遗留问题来源任务在卡片上显示徽章", async () => {

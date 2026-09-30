@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
@@ -25,6 +25,7 @@ import type {
   TaskBoardCard,
   TaskBoardFilters,
 } from "./task-board-types";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /**
  * R-8 项目任务看板页面视图（GET /api/v1/projects/{projectId}/task-board）。
@@ -119,7 +120,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
   if (query.isPending) {
     return (
       <div className="tb-loading">
-        <Spin size="large" description="正在加载任务看板..." />
+        <CalmSkeleton variant="card" rows={4} label="正在加载任务看板..." />
       </div>
     );
   }

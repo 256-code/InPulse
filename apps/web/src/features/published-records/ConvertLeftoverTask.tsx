@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,6 +10,7 @@ import {
   type LeftoverTaskRequest,
   type LeftoverTaskResponse,
 } from "@generated/api";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 正式记录里的一条遗留问题：状态与跟进任务都按条目自身判定。 */
 export type RecordLeftover = PublishedRecord["leftovers"][number];
@@ -286,7 +287,14 @@ export function LeftoverTaskConvertModal({
       <div className="catalog-form">
         <div className="dialog-form">
           {error !== null && <Alert type="error" title={message(error)} />}
-          {busy && !preview && <Spin />}
+          {busy && !preview && (
+            <CalmSkeleton
+              variant="lines"
+              rows={3}
+              compact
+              label="正在转换遗留问题"
+            />
+          )}
           {preview && (
             <Preview value={preview} recordTitle={target.recordTitle} />
           )}

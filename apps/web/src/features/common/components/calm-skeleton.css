@@ -1,0 +1,269 @@
+/* CalmSkeleton：内容骨架屏。
+ * 容器尺寸刻意与它替换掉的 `.calm-state`（inpulse-design.css L948）保持一致——
+ * 1px 边框、10px 圆角、白底、min-height 140px（compact 82px，对应原 `.modal-loading`）——
+ * 这样等待态与真内容、以及未来可能的形态调整之间，页面高度都不会跳。 */
+
+.calm-skeleton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  min-height: 140px;
+  padding: 18px 20px;
+  border: 1px solid #e1e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.calm-skeleton.is-compact {
+  min-height: 82px;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.calm-skeleton-body {
+  display: block;
+}
+
+/* 单个占位块：底色 + 从左向右扫过的高光。 */
+.calm-sk {
+  display: block;
+  border-radius: 5px;
+  background-color: #eef2f7;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-position: -140% 0;
+  background-size: 60% 100%;
+  animation: calm-sk-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes calm-sk-sweep {
+  0% {
+    background-position: -140% 0;
+  }
+  100% {
+    background-position: 240% 0;
+  }
+}
+
+/* 三档文字占位，宽度在下面按行号错开，避免整块看起来像条形码。 */
+.calm-sk-title {
+  height: 10px;
+  width: 46%;
+}
+.calm-sk-text {
+  height: 8px;
+  width: 70%;
+  margin-top: 7px;
+}
+.calm-sk-text.short {
+  width: 42%;
+}
+
+.calm-sk-line {
+  height: 9px;
+  width: 100%;
+}
+.calm-sk-line + .calm-sk-line {
+  margin-top: 11px;
+}
+.calm-sk-line.short {
+  width: 64%;
+}
+
+/* ===== list ===== */
+.calm-sk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.calm-sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.calm-sk-row > .calm-sk-lines {
+  flex: 1;
+  min-width: 0;
+}
+.calm-sk-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+}
+.calm-sk-avatar.alt {
+  background-color: #eaf3ee;
+}
+.calm-sk-badge {
+  width: 54px;
+  height: 18px;
+  flex: 0 0 54px;
+  border-radius: 999px;
+}
+/* 第 2、4 行换一个宽度，视觉上更像真实数据的参差。 */
+.calm-sk-row:nth-child(even) .calm-sk-title {
+  width: 38%;
+}
+.calm-sk-row:nth-child(even) .calm-sk-text {
+  width: 58%;
+}
+.calm-sk-row:nth-child(3n) .calm-sk-badge {
+  flex-basis: 42px;
+  width: 42px;
+}
+
+/* ===== card ===== */
+.calm-sk-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+.calm-sk-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 15px;
+  border: 1px solid #eef2f7;
+  border-radius: 9px;
+  background: #fbfdff;
+}
+.calm-sk-card > .calm-sk-title {
+  width: 58%;
+}
+.calm-sk-card > .calm-sk-text {
+  width: 88%;
+}
+.calm-sk-card > .calm-sk-text.short {
+  width: 46%;
+}
+
+/* ===== table ===== */
+.calm-sk-table {
+  border: 1px solid #eef2f7;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.calm-sk-thead,
+.calm-sk-tr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+.calm-sk-thead {
+  background: #f7fafd;
+}
+.calm-sk-tr + .calm-sk-tr,
+.calm-sk-thead + .calm-sk-tr {
+  border-top: 1px solid #f1f5f9;
+}
+.calm-sk-td {
+  height: 9px;
+}
+.calm-sk-td.c1 {
+  flex: 0 0 76px;
+}
+.calm-sk-td.c2 {
+  flex: 1;
+}
+.calm-sk-td.c3 {
+  flex: 0 0 92px;
+}
+.calm-sk-td.c4 {
+  flex: 0 0 58px;
+}
+.calm-sk-tr:nth-child(even) .calm-sk-td.c2 {
+  flex-basis: 72%;
+}
+
+/* ===== timeline ===== */
+.calm-sk-tl {
+  display: flex;
+  flex-direction: column;
+}
+.calm-sk-tl-item {
+  display: flex;
+  gap: 12px;
+}
+.calm-sk-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 12px;
+}
+.calm-sk-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-top: 3px;
+  border-radius: 50%;
+}
+.calm-sk-rail-line {
+  flex: 1;
+  width: 2px;
+  margin-top: 5px;
+  background: #eef2f7;
+}
+.calm-sk-tl-item:last-child .calm-sk-rail-line {
+  display: none;
+}
+.calm-sk-tl-item > .calm-sk-lines {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 16px;
+}
+
+/* ===== lines ===== */
+.calm-sk-lines-block {
+  display: block;
+}
+
+/* 尊重系统的「减少动态效果」：骨架只留静态灰块，高光不再扫动。 */
+@media (prefers-reduced-motion: reduce) {
+  .calm-sk {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* 深色侧栏（项目树）里的用法：不要白色卡片，占位块改成半透明白。 */
+.calm-skeleton.is-sidebar {
+  min-height: 0;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+}
+.calm-skeleton.is-sidebar .calm-sk {
+  background-color: rgba(255, 255, 255, 0.12);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+.calm-skeleton.is-sidebar .calm-sk-badge {
+  width: 34px;
+  height: 12px;
+  flex-basis: 34px;
+}
+.calm-skeleton.is-sidebar .calm-sk-avatar {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  border-radius: 5px;
+}
+.calm-skeleton.is-sidebar .calm-sk-title {
+  height: 8px;
+  width: 56%;
+}
+.calm-skeleton.is-sidebar .calm-sk-text {
+  height: 7px;
+  margin-top: 6px;
+}

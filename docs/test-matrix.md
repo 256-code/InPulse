@@ -4312,6 +4312,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 未运行 / 已知偏差：① 键盘路径（Tab 顺序、Esc 关闭）本轮未做，只覆盖点击路径；② 跨浏览器（Firefox / Safari）未复核——本轮已隐藏原生指示器，点击只会开自绘面板，但原生输入框的逐段键入外观在不同浏览器不同，请人工点一次；③ 本批未新增 Playwright 用例、**未重跑全量 E2E 与 `test:integration`**（`#task-due` / `#global-task-due` 的 `fill()` 用法不变，服务端 / 契约 / 迁移均未动）；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。
 
+EAD
 ## 2026-09-30 项目保留期到期自动彻底删除（ADR-055，用户指示，本地落库）
 
 用户 2026-09-30 指示「我希望删除的项目30天后会被彻底删除，如果还原过，那就按最后一次删除来计算时间」，为 [ADR-051](adr/ADR-051.md) 的彻底删除补一条自动触发路径（[ADR-055](adr/ADR-055.md)）。本批是**零契约面**改动：不新增路由、不改契约与权限矩阵（Route Registry 仍 99 条）、不改数据库与迁移（复用 `0031_project_purge.sql` 的 `app.purge_project` 窄口与角色授权），只在服务端新增后台服务与调度器。
@@ -4336,3 +4337,16 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 本地实际执行（2026-09-30）：定向 `apps/api` 单测（5/5）、`TEST_DATABASE_URL=…/app_ci` 的定向集成（4/4）、`apps/api` 全量单测（68 文件 383 例）与全量集成（53 文件 493 例）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`。夹具清理按 2026-09-17 规则执行：`E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` → 删除用户 783、项目 421、业务行 13853、审计行 721，复核 `app_ci` 夹具与项目残留均为 0（同时提示 SYSTEM 链存在一个夹具记录删除产生的断点，属该入口的既有已知行为）。
 
 未运行 / 已知偏差：① `pnpm test:e2e` 与 Playwright 用例未跑（本批无前端改动）；② `pnpm check` 整链、`deps:audit`、镜像构建与 **GitHub Actions** 未跑；③ 到期后的实际删除时间落在 0～1 小时窗口内（调度为小时粒度，首轮还受批大小限制），且本 ADR 不做「删除前提醒」；④ 新增后台服务与端口方法按本文件 §8 需非作者人工评审。
+
+## 全站等待态改骨架屏 + 首屏 logo 补尺寸与重制位图（用户指示，2026-09-30 本地落库）
+
+用户看过原型页「质感改造 · 第一批」后回「可以改吧」，本批按已确认范围只做 §2（骨架屏）与 §3（首屏 logo）；§1 favicon / 标题、§4 动效 token、§5 统一状态条按用户口径不做。开工前先盘存量：全仓等待态 50 处 / 26 文件（另扣「加载更多」按钮文案 6 处，保持原样），`Skeleton` 用量 0、`Spin` 只在路由级用过 1 次。做法是新增 `CalmSkeleton` 并把各页**原有的 `isPending` 分支**换成骨架——`isFetching`（已有数据 + 后台刷新）继续显示旧数据，不新增判断。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CALM-SKELETON-UNIT-001 | Web 单元 | 既有用例不被骨架屏改写破坏 | `pnpm --filter @inpulse/web exec vitest run` → **89 文件 609 例全绿**；其中 `TaskBoardPageView.test.tsx` 的定位方式因骨架屏也带 `role="status"` 而由 `findByRole("status")` 改为 `findByText(/任务超过 1000 条/)` + 回查 `.tb-notice` 的 `role="status"`（断言强度不变）；`GlobalTaskCreateModal.test.tsx` 的「正在加载项目成员…」断言不变（骨架屏的 `label` 同样渲染成 `.sr-only` 文案，`findByText` 仍可命中） | 本地通过 |
+| CALM-SKELETON-BROWSER-001 | 浏览器实测 | 骨架屏真的出现在等待态的对应形态上 | 真机探针（一次性 Playwright 无头 Chromium 脚本，用后删除）：给 `/api/v1/**` 加 8s 延迟并排除认证 / 会话端点后，`/projects` 命中 `calm-sk-cards` ×1（1136×140）+ 侧栏 `is-sidebar` 的 `calm-sk-lines-block` ×1（200×61），`/tasks` 命中 `calm-sk-list`（1136×206），`/records` 命中 `calm-sk-list`（1136×160），`/projects/1/modules` 命中 `calm-sk-cards` + `calm-sk-list`，`/issues` 命中 `calm-sk-list` | 本地通过 |
+| CALM-SKELETON-BROWSER-002 | 浏览器实测 | 首屏 logo 定尺寸后不跳版、换图不变形 | 真机探针：登录页 `login-logo` 实测 300×121.06（560×226 的比例），侧栏 `joint-logo` 实测 163×46（`.joint-logo-frame` 的 `aspect-ratio: 6.15` 成立）；`inpulse-joint-logo.png` 由 2086×754 / 317,124 B 重采样为 480×174 / 22,417 B（面积平均 + 预乘 alpha；Node `zlib` 手写编解码，PNG 解码 → 重采样 → 编码 → 再解码比对逐字节一致） | 本地通过 |
+| CALM-SKELETON-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**（`check:deps` **736** 源文件、`check:frontend:boundaries` **300** 模块 1498 依赖、`check:secrets` **1111** 文件、`check:docs` 101 个 Markdown、`deps:audit` 仅 1 条 moderate 低于 `--audit-level=high`）；`pnpm typecheck`（全 workspace 8 个项目）exit 0；`pnpm exec eslint apps/web/src` exit 0；`pnpm exec prettier --check apps/web/src` 全部符合 | 本地通过 |
+
+未运行 / 已知偏差：① 骨架屏的 `role="status"` 让页面上多出一个 live region，§5「统一状态条 + 读屏可感知」按用户口径本轮不做，后续若要做需合并这两处播报；② `SimilarFeatures`、`TasksPanel`（两处）、`GlobalTaskCreateModal`、`SettingsPage` 原来只有一行 `<p>` 文案，换成 82px / 140px 骨架后弹窗与表单内高度会变化，属有意改动但需人工在真机确认不顶布局；③ 应用级守卫（`RequireAuth` / `RequireAdmin` / 路由懒加载兜底）也换成 4 行骨架，属整页形态变化，需人工确认；④ 本批**未新增 Playwright 用例**，也**未重跑全量 E2E 与 `test:integration`**（无服务端 / 契约 / 迁移改动），GitHub Actions 未跑（未推送）；⑤ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑥ 改动**已本地提交，未推送**。
