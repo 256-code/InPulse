@@ -6,7 +6,6 @@ import {
   Empty,
   Input,
   Space,
-  Spin,
   Tag,
   Typography,
 } from "antd";
@@ -18,6 +17,7 @@ import {
   SEARCH_MIN_LENGTH,
   useSearchInfiniteQuery,
 } from "./search-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -96,11 +96,7 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
       />
     );
   } else if (isPending) {
-    content = (
-      <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
-        <Spin size="large" description="正在搜索..." />
-      </div>
-    );
+    content = <CalmSkeleton variant="list" rows={4} label="正在搜索..." />;
   } else if (isError) {
     content = (
       <Alert showIcon type="error" message={describeSearchError(error)} />

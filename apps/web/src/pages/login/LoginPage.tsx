@@ -66,6 +66,8 @@ export const LoginPage: React.FC = () => {
           className="login-logo"
           src="/libiao-robotics-logo.png"
           alt="Libiao Robotics"
+          width={560}
+          height={226}
         />
         <h1 className="login-title">登录 InPulse</h1>
         {ssoDisabled ? (
@@ -103,6 +105,8 @@ export const LoginPage: React.FC = () => {
                 src="/casdoor-logo.png"
                 alt=""
                 aria-hidden="true"
+                width={251}
+                height={251}
               />
             </button>
           </div>

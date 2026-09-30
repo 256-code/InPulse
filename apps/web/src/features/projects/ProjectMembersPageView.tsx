@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import type {
   InpulseApiClient,
@@ -28,6 +28,7 @@ import {
   useProjectMembers,
 } from "./project-member-query";
 import { useProjects } from "./project-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 interface ReassignmentChoice {
   readonly enabled: boolean;
@@ -316,10 +317,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       ) : null}
 
       {query.isPending ? (
-        <div className="calm-state">
-          <span className="calm-spinner" />
-          <span>正在加载项目成员</span>
-        </div>
+        <CalmSkeleton variant="list" rows={4} label="正在加载项目成员" />
       ) : query.isError ? (
         <CalmEmptyState
           icon="alert"
@@ -518,10 +516,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               description="已被移出的用户仍在候选目录中，重新选择即可再次加入；停用用户不会出现在目录中。"
             />
             {directory.isPending ? (
-              <div className="calm-state modal-loading">
-                <Spin size="small" />
-                <span>正在加载用户目录</span>
-              </div>
+              <CalmSkeleton
+                variant="list"
+                rows={2}
+                compact
+                label="正在加载用户目录"
+              />
             ) : directory.isError ? (
               <Alert
                 type="error"
@@ -610,10 +610,12 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
               hint="勾选改派后须选择其他活跃成员，可同时指定多位；不勾选则任务保留原负责人。"
             />
             {unfinished.isPending ? (
-              <div className="calm-state modal-loading">
-                <Spin size="small" />
-                <span>正在检查未完成任务</span>
-              </div>
+              <CalmSkeleton
+                variant="list"
+                rows={2}
+                compact
+                label="正在检查未完成任务"
+              />
             ) : unfinished.isError ? (
               <Alert
                 type="error"

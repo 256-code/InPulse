@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Spin } from "antd";
+import { Alert } from "antd";
 import {
   createApiClient,
   type InpulseApiClient,
@@ -22,6 +22,7 @@ import { useProjects } from "@features/projects/project-query";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { issueOriginText, isLeftoverClosed } from "./issues-format";
 import { describeIssuesError, useLeftoverItemsQuery } from "./issues-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /**
  * F-20 遗留问题页（R-6）：未闭环与已闭环两个分桶各自按服务端签名游标分页，
@@ -206,10 +207,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
         hint={String(openItems.length) + " 条 · 按发布时间倒序"}
       />
       {openQuery.isPending ? (
-        <div className="calm-state">
-          <Spin size="large" />
-          <p>正在加载遗留问题…</p>
-        </div>
+        <CalmSkeleton variant="list" rows={4} label="正在加载遗留问题…" />
       ) : openQuery.isError ? (
         <Alert type="error" title={describeIssuesError(openQuery.error)} />
       ) : openItems.length === 0 ? (

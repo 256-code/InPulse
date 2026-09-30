@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AdminUsersPageView } from "@features/users/AdminUsersPageView";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export interface SettingsPageProps {
   readonly client?: InpulseApiClient | undefined;
@@ -38,7 +39,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
         body
       >
         {projects.isPending ? (
-          <p>正在加载项目</p>
+          <CalmSkeleton variant="list" rows={3} compact label="正在加载项目" />
         ) : projects.isError ? (
           <p role="alert">
             项目加载失败{" "}

@@ -1,6 +1,6 @@
 import "./external-links.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Checkbox, Input, Spin, Tag } from "antd";
+import { Alert, Button, Checkbox, Input, Tag } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import {
   type ExternalLinkTargetPath,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 type TargetType = ExternalLinkTargetPath["targetType"];
 /** 设计师稿 github-links 的徽章文案：先看 Release 标记，再看链接类型。 */
 export function externalLinkKindLabel(item: ExternalLinkItem): string {
@@ -250,7 +251,9 @@ export function ExternalLinksPanel({
   if (inline)
     return (
       <div className="github-block">
-        {!data && busy && <Spin />}
+        {!data && busy && (
+          <CalmSkeleton variant="lines" rows={2} compact label="正在加载关联" />
+        )}
         {error !== null && <Alert type="error" title={message} />}
         {!data && !busy && (
           <Button disabled={busy} onClick={() => void load()}>
@@ -332,7 +335,9 @@ export function ExternalLinksPanel({
         }
       >
         <p>保存代码证据，可关联多个链接。</p>
-        {busy && <Spin />}
+        {busy && (
+          <CalmSkeleton variant="lines" rows={2} compact label="正在加载关联" />
+        )}
         {error !== null && <Alert type="error" title={message} />}
         {(needsRefresh || (!data && !busy)) && (
           <Button disabled={busy} onClick={() => void load()}>

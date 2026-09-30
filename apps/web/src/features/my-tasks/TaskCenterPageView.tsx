@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import {
   createApiClient,
   type InpulseApiClient,
@@ -63,6 +63,7 @@ import {
   type MyTasksFilterSupport,
   type MyTaskWorkStatus,
 } from "./my-tasks-types";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const statusLabels: Record<MyTaskWorkStatus, string> = {
   TODO: "未完成",
@@ -1343,10 +1344,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
           description="选择项目后查看该项目内全员的任务。"
         />
       ) : taskQuery.isPending ? (
-        <div className="calm-state">
-          <Spin size="large" />
-          <p>正在加载任务列表…</p>
-        </div>
+        <CalmSkeleton variant="list" rows={4} label="正在加载任务列表…" />
       ) : taskQuery.isError ? (
         <Alert type="error" title={describeMyTasksError(taskQuery.error)} />
       ) : (
@@ -1379,10 +1377,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             )
           ) : groupsQuery.isPending ? (
             // 任务为空且聚合组仍在加载：先给加载态，避免空态一闪再被组卡片顶掉。
-            <div className="calm-state">
-              <Spin size="large" />
-              <p>正在加载任务列表…</p>
-            </div>
+            <CalmSkeleton variant="list" rows={4} label="正在加载任务列表…" />
           ) : (
             <CalmEmptyState
               icon="check"

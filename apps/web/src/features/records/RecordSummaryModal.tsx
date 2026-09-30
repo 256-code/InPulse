@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import type { InpulseApiClient, ProjectItem, UserRef } from "@generated/api";
 import { AppModal } from "@features/common/components/AppModal";
 import { CalmSegmented } from "@features/common/components/Calm";
@@ -17,6 +17,7 @@ import {
   type RecordSummaryGroupBy,
 } from "./record-summary-query";
 import "./record-summary.css";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 时间档位：自定义以外的三档都由本地日历推导起止自然日。 */
 type RangePreset = "year" | "quarter" | "month" | "custom";
@@ -286,9 +287,7 @@ export function RecordSummaryModal({
 
   const data = summary.data;
   const body = summary.isPending ? (
-    <div className="summary-loading">
-      <Spin />
-    </div>
+    <CalmSkeleton variant="lines" rows={6} label="正在生成总结" />
   ) : summary.isError ? (
     <Alert
       type="error"

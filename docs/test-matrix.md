@@ -4337,6 +4337,19 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 未运行 / 已知偏差：① `pnpm test:e2e` 与 Playwright 用例未跑（本批无前端改动）；② `pnpm check` 整链、`deps:audit`、镜像构建与 **GitHub Actions** 未跑；③ 到期后的实际删除时间落在 0～1 小时窗口内（调度为小时粒度，首轮还受批大小限制），且本 ADR 不做「删除前提醒」；④ 新增后台服务与端口方法按本文件 §8 需非作者人工评审。
 
+## 全站等待态改骨架屏 + 首屏 logo 补尺寸与重制位图（用户指示，2026-09-30 本地落库）
+
+用户看过原型页「质感改造 · 第一批」后回「可以改吧」，本批按已确认范围只做 §2（骨架屏）与 §3（首屏 logo）；§1 favicon / 标题、§4 动效 token、§5 统一状态条按用户口径不做。开工前先盘存量：全仓等待态 50 处 / 26 文件（另扣「加载更多」按钮文案 6 处，保持原样），`Skeleton` 用量 0、`Spin` 只在路由级用过 1 次。做法是新增 `CalmSkeleton` 并把各页**原有的 `isPending` 分支**换成骨架——`isFetching`（已有数据 + 后台刷新）继续显示旧数据，不新增判断。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CALM-SKELETON-UNIT-001 | Web 单元 | 既有用例不被骨架屏改写破坏 | `pnpm --filter @inpulse/web exec vitest run` → **89 文件 609 例全绿**；其中 `TaskBoardPageView.test.tsx` 的定位方式因骨架屏也带 `role="status"` 而由 `findByRole("status")` 改为 `findByText(/任务超过 1000 条/)` + 回查 `.tb-notice` 的 `role="status"`（断言强度不变）；`GlobalTaskCreateModal.test.tsx` 的「正在加载项目成员…」断言不变（骨架屏的 `label` 同样渲染成 `.sr-only` 文案，`findByText` 仍可命中） | 本地通过 |
+| CALM-SKELETON-BROWSER-001 | 浏览器实测 | 骨架屏真的出现在等待态的对应形态上 | 真机探针（一次性 Playwright 无头 Chromium 脚本，用后删除）：给 `/api/v1/**` 加 8s 延迟并排除认证 / 会话端点后，`/projects` 命中 `calm-sk-cards` ×1（1136×140）+ 侧栏 `is-sidebar` 的 `calm-sk-lines-block` ×1（200×61），`/tasks` 命中 `calm-sk-list`（1136×206），`/records` 命中 `calm-sk-list`（1136×160），`/projects/1/modules` 命中 `calm-sk-cards` + `calm-sk-list`，`/issues` 命中 `calm-sk-list` | 本地通过 |
+| CALM-SKELETON-BROWSER-002 | 浏览器实测 | 首屏 logo 定尺寸后不跳版、换图不变形 | 真机探针：登录页 `login-logo` 实测 300×121.06（560×226 的比例），侧栏 `joint-logo` 实测 163×46（`.joint-logo-frame` 的 `aspect-ratio: 6.15` 成立）；`inpulse-joint-logo.png` 由 2086×754 / 317,124 B 重采样为 480×174 / 22,417 B（面积平均 + 预乘 alpha；Node `zlib` 手写编解码，PNG 解码 → 重采样 → 编码 → 再解码比对逐字节一致） | 本地通过 |
+| CALM-SKELETON-GATE-001 | 静态门禁 | 全量非数据库门禁 | `pnpm check` → **exit 0**（`check:deps` **736** 源文件、`check:frontend:boundaries` **300** 模块 1498 依赖、`check:secrets` **1111** 文件、`check:docs` 101 个 Markdown、`deps:audit` 仅 1 条 moderate 低于 `--audit-level=high`）；`pnpm typecheck`（全 workspace 8 个项目）exit 0；`pnpm exec eslint apps/web/src` exit 0；`pnpm exec prettier --check apps/web/src` 全部符合 | 本地通过 |
+
+未运行 / 已知偏差：① 骨架屏的 `role="status"` 让页面上多出一个 live region，§5「统一状态条 + 读屏可感知」按用户口径本轮不做，后续若要做需合并这两处播报；② `SimilarFeatures`、`TasksPanel`（两处）、`GlobalTaskCreateModal`、`SettingsPage` 原来只有一行 `<p>` 文案，换成 82px / 140px 骨架后弹窗与表单内高度会变化，属有意改动但需人工在真机确认不顶布局；③ 应用级守卫（`RequireAuth` / `RequireAdmin` / 路由懒加载兜底）也换成 4 行骨架，属整页形态变化，需人工确认；④ 本批**未新增 Playwright 用例**，也**未重跑全量 E2E 与 `test:integration`**（无服务端 / 契约 / 迁移改动），GitHub Actions：推送后 **CI run 36660346081**（18m42s）与 **Documentation run 36660346070**（49s）均成功；⑤ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑥ 改动已推送 `test`（`e481908`），CI run `36660346081` 与 Documentation run `36660346070` 均成功。
+
 ## 侧边导航收起 / 展开改为宽度过渡（用户指示，2026-09-30 本地落库）
 
 用户口径（原话）：「侧边导航栏隐藏动作不丝滑」。根因：桌面端（≥701px）收起态是 `.nav-collapsed .sidebar { display: none; }`——`display` 不可动画，侧栏瞬间消失；`.sidebar` 也没有任何 `transition`。修法：`--sidebar-width` 变量化宽度（`:root` 默认 236px、`≤1000px` 覆盖为 200px）+ `width / opacity` 0.24s `cubic-bezier(0.33, 1, 0.68, 1)` 过渡，收起态 `width: 0; opacity: 0; visibility: hidden`（`visibility` 延迟 0.24s，动画结束才不可聚焦）；裁切只在过渡期间与收起态开启（常态要保留底部弹层向右越出侧栏覆盖内容区的能力）；`AppLayout` 用 `navAnimating` + 240ms 定时器驱动 `.nav-animating` 类；`prefers-reduced-motion` 关闭全部过渡 / 动画。

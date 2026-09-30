@@ -19,7 +19,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import {
   CalmDateTimeInput,
@@ -59,6 +59,7 @@ import {
 } from "./task-query";
 import { isCardClick } from "@features/common/card-click";
 import { useUserDirectoryQuery } from "@features/users/user-directory-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const labels: Record<TaskField, string> = {
   title: "任务标题",
@@ -649,10 +650,7 @@ export function TasksPanel({
           )}
           {success && <Alert type="success" title="任务已保存" />}
           {query.isPending ? (
-            <div className="calm-state">
-              <Spin />
-              <span>正在加载任务</span>
-            </div>
+            <CalmSkeleton variant="list" rows={4} label="正在加载任务" />
           ) : query.isError ? (
             <Alert
               type="error"
@@ -894,10 +892,7 @@ export function TasksPanel({
           className="task-modal"
         >
           {query.isPending ? (
-            <div className="calm-state">
-              <Spin />
-              <span>正在加载任务详情</span>
-            </div>
+            <CalmSkeleton variant="lines" rows={5} label="正在加载任务详情" />
           ) : query.isError ? (
             <Alert
               type="error"
@@ -1143,10 +1138,11 @@ export function TasksPanel({
                         </Button>
                       </div>
                       {taskRecords.isPending || taskDrafts.isPending ? (
-                        <div className="calm-state">
-                          <Spin />
-                          <span>正在加载迭代记录</span>
-                        </div>
+                        <CalmSkeleton
+                          variant="list"
+                          rows={3}
+                          label="正在加载迭代记录"
+                        />
                       ) : taskRecords.isError || taskDrafts.isError ? (
                         <Alert
                           type="error"
@@ -1522,7 +1518,14 @@ export function TasksPanel({
                 {errors.assigneeIds && (
                   <p role="alert">{errors.assigneeIds.message}</p>
                 )}
-                {isFirstLoad(members) && <p>正在加载项目成员…</p>}
+                {isFirstLoad(members) && (
+                  <CalmSkeleton
+                    variant="list"
+                    rows={2}
+                    compact
+                    label="正在加载项目成员…"
+                  />
+                )}
                 {members.isError && (
                   <Alert
                     type="error"
@@ -1609,7 +1612,12 @@ export function TasksPanel({
                 <div className="calm-field">
                   <label htmlFor="task-impact-features">影响功能</label>
                   {features.isPending ? (
-                    <p>正在加载影响功能…</p>
+                    <CalmSkeleton
+                      variant="lines"
+                      rows={2}
+                      compact
+                      label="正在加载影响功能…"
+                    />
                   ) : features.isError ? (
                     <Alert
                       type="error"

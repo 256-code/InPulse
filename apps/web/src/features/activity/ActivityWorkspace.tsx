@@ -34,6 +34,7 @@ import {
   mergeActivityPages,
   useActivityFeedQuery,
 } from "./activity-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const ALL_PROJECTS = "all";
 /** ADR-050 修订：已删除项目不在项目列表里，用独立选项聚焦它们的动态。 */
@@ -252,10 +253,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   let content: React.ReactNode;
   if (showDeletedProjects && deletionsQuery.isPending) {
     content = (
-      <div className="activity-state">
-        <span className="activity-spinner" />
-        正在加载项目动态...
-      </div>
+      <CalmSkeleton variant="timeline" rows={4} label="正在加载项目动态..." />
     );
   } else if (
     !lockedScope &&
@@ -284,10 +282,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     );
   } else if (activityQuery.isPending) {
     content = (
-      <div className="activity-state">
-        <span className="activity-spinner" />
-        正在加载项目动态...
-      </div>
+      <CalmSkeleton variant="timeline" rows={4} label="正在加载项目动态..." />
     );
   } else if (activityQuery.isError) {
     content = (

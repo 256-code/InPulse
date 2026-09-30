@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
 import {
@@ -32,6 +32,7 @@ import {
   type RecordSourceFilter,
 } from "./record-timeline";
 import "./records-timeline.css";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 关键词下发前的防抖窗口（毫秒）：与相似功能提示保持同一节奏。 */
 const SEARCH_DEBOUNCE_MS = 350;
@@ -275,7 +276,7 @@ export function RecordsWorkspace({
         />
       )}
       {list.isPending ? (
-        <Spin />
+        <CalmSkeleton variant="list" rows={3} label="正在加载记录" />
       ) : list.isError ? (
         <Alert
           type="error"

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Alert, Button, Input, Spin } from "antd";
+import { Alert, Button, Input } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecordDraftsQuery } from "@features/record-drafts/record-drafts-query";
 import {
@@ -21,6 +21,7 @@ import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { invalidateShellCounters } from "@shared/api/shell-counters";
 import type { TaskViewItem } from "./task-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 export function CompleteWithRecord({
   item,
   api,
@@ -310,7 +311,12 @@ export function CompleteWithRecord({
       ) : (
         <>
           {drafts.isPending ? (
-            <Spin />
+            <CalmSkeleton
+              variant="list"
+              rows={2}
+              compact
+              label="正在加载草稿"
+            />
           ) : drafts.isError ? (
             <Alert
               type="error"

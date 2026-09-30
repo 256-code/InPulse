@@ -21,6 +21,7 @@ import {
   projectLifecycleLabel,
   projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const hierarchyNotes = [
   { label: "项目", text: "顶层业务容器，承载范围与成员。" },
@@ -174,10 +175,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
       ) : null}
 
       {projectsLoading ? (
-        <div className="calm-state">
-          <span className="calm-spinner" />
-          <span>正在加载项目列表</span>
-        </div>
+        <CalmSkeleton variant="card" rows={3} label="正在加载项目列表" />
       ) : projectsError ? (
         <CalmEmptyState
           icon="alert"

@@ -6,7 +6,6 @@ import {
   Card,
   Empty,
   Space,
-  Spin,
   Tag,
   Typography,
 } from "antd";
@@ -18,6 +17,7 @@ import {
   useNotificationsInfiniteQuery,
   useNotificationUnreadCount,
 } from "./notification-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -115,11 +115,7 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
 
   let content: React.ReactNode;
   if (listQuery.isPending) {
-    content = (
-      <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
-        <Spin size="large" description="正在加载通知..." />
-      </div>
-    );
+    content = <CalmSkeleton variant="list" rows={4} label="正在加载通知..." />;
   } else if (listQuery.isError) {
     content = (
       <Alert

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Button, Spin } from "antd";
+import { Alert, Button } from "antd";
 import { useNavigate } from "react-router-dom";
 import {
   createApiClient,
@@ -44,6 +44,7 @@ import {
   ModuleEditorModal,
   type ModuleEditorRequest,
 } from "./ModuleEditorModal";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 export function ModulesPageView({
   projectId,
@@ -133,10 +134,7 @@ export function ModulesPageView({
           )}
           {success && <Alert type="success" showIcon title="模块操作成功" />}
           {query.isPending ? (
-            <div className="calm-state">
-              <Spin />
-              <span>正在加载模块</span>
-            </div>
+            <CalmSkeleton variant="list" rows={4} label="正在加载模块" />
           ) : query.isError ? (
             <Alert
               type="error"

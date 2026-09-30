@@ -16,6 +16,7 @@ import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
 import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
 import { adminUserErrorMessage, useAdminUsers } from "./admin-user-query";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 type LifecycleAction = "disable" | "enable" | "forceLogout";
 
@@ -278,10 +279,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             ) : null}
 
             {query.isPending ? (
-              <div className="calm-state">
-                <span className="calm-spinner" />
-                正在加载用户列表
-              </div>
+              <CalmSkeleton variant="list" rows={5} label="正在加载用户列表" />
             ) : query.isError ? (
               <CalmEmptyState
                 icon="alert"

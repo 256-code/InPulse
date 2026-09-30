@@ -6,12 +6,12 @@ import {
   useParams,
   type RouteObject,
 } from "react-router-dom";
-import { Spin } from "antd";
 import type { AppRouteModule } from "@shared/routing/route-descriptor";
 import { buildRouteObjects } from "@shared/routing/route-registry";
 import { AppLayout } from "../layout/AppLayout";
 import { RequireAuth, RequireAdmin } from "../auth/auth-guard";
 import { RouteErrorPage } from "../errors/RouteErrorPage";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 项目概览已与「模块与功能」合并：旧地址不再单独渲染页面，整体重定向到项目主页。 */
 const ProjectOverviewRedirect: React.FC = () => {
@@ -46,8 +46,8 @@ export function createInPulseRouter(
 ): ReturnType<typeof createBrowserRouter> {
   const childRoutes = buildRouteObjects(pageRoutes, {
     fallback: (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" description="正在加载页面..." />
+      <div style={{ padding: 48 }}>
+        <CalmSkeleton variant="lines" rows={4} label="正在加载页面..." />
       </div>
     ),
     authWrapper: (element, requiresAdmin) => {

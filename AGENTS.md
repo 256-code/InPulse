@@ -464,6 +464,20 @@
 - 测试：`apps/api/test/project-auto-purge.service.test.ts` 5 例单测（候选为空时只读一次且不写审计、锁内复核未命中跳过、审计形状、单项目失败隔离、环境变量默认值与非法值 fail closed）与 `apps/api/test/project-auto-purge.integration.test.ts` 4 例真实 PostgreSQL（到期项目物理删除且项目行 / 模块 / 成员归零、`PROJECT` 审计链消失、SYSTEM 链恰好一条且 `records` 计数正确；删除 29 天不删；「删除 40 天前 → 还原 → 立刻重新删除」不删、「还原 → 再删除满 31 天」删除；活跃项目不进候选且复核谓词对活跃 / 刚删除 / 已到期三态正确）。
 - 边界与例外：保留期是「满 30 天即删」，调度为一小时粒度，因此实际删除会落在到期后 0～1 小时内，批大小还会影响同一轮覆盖范围；要改成删除前提醒、可配置保留期或恢复路径，必须新增 ADR 并同步权限矩阵、测试矩阵与本小节。
 
+## 2026-09-30 全站等待态改骨架屏 + 首屏 logo 补尺寸与重制位图（用户指示，本地落库）
+
+用户看过原型页「质感改造 · 第一批」后回「可以改吧」，本批按已确认范围只做 §2（骨架屏）与 §3（首屏 logo）；§1 favicon / 标题、§4 动效 token、§5 统一状态条按用户口径不做。开工前先盘存量：全仓等待态 50 处 / 26 文件（另扣「加载更多」按钮文案 6 处，保持原样），`Skeleton` 用量 0、`Spin` 只在路由级用过 1 次，`.calm-state` + `.calm-spinner` 与 antd `Spin` 两套写法并存。
+
+- 新增 `apps/web/src/features/common/components/CalmSkeleton.tsx` + `calm-skeleton.css`：五形态 `list` / `card` / `table` / `timeline` / `lines`，外加 `compact` 与 `tone="sidebar"`。容器尺寸刻意与它替换掉的 `.calm-state` 对齐（1px 边框 + 10px 圆角 + 白底 + `min-height:140px`，compact 82px），扫光动画在 `prefers-reduced-motion: reduce` 下关闭；`label` 渲染成 `.sr-only` 并由 `role="status"` 承载、骨架图形本身 `aria-hidden`，原等待态里的读屏文案不丢。
+- 全站 49 处替换**只落在各页原有的 `isPending` 分支里**：`isFetching`（已有数据 + 后台刷新）继续显示旧数据，不新增判断，避免每次切筛选都闪一次骨架。覆盖面含应用级 `RequireAuth` / `RequireAdmin` / 路由懒加载兜底（`app/auth/auth-guard.tsx`、`app/router/AppRouter.tsx`），深色侧栏项目树用 `tone="sidebar"`（半透明白占位块、去卡片、去白底）。
+- 「加载更多」按钮文案与名称回退文案（`xx ?? "加载中"`）保持原样，不在本批范围。
+- 三张 logo 补 `width` / `height`（`LoginPage.tsx` 的 `login-logo` 560×226 与 `casdoor-logo` 251×251、`AppLayout.tsx` 的 joint 480×174），并把 `inpulse-joint-logo.png` 从 2086×754 / 317,124 B 重采样到 480×174 / 22,417 B（面积平均 + 预乘 alpha；用 Node `zlib` 手写 PNG 解码 / 编码，未引入图像库，`pnpm-lock.yaml` 无改动）。
+- **改了一处既有单测的定位方式（未弱化断言）**：骨架屏也带 `role="status"`，`apps/web/src/features/task-board/TaskBoardPageView.test.tsx` 原来的 `findByRole("status")` 会先命中加载骨架，现改为按文案 `findByText(/任务超过 1000 条/)` 定位、再回查 `.tb-notice` 的 `role="status"`，断言强度不变。
+
+验证（本地实际执行）：`pnpm --filter @inpulse/web typecheck` → exit 0；`pnpm typecheck`（全 workspace 8 个项目）→ exit 0；`pnpm --filter @inpulse/web exec vitest run` → **89 文件 609 例全绿**；`pnpm exec eslint apps/web/src` → exit 0；`pnpm exec prettier --check apps/web/src` → 全部符合；`pnpm check` → **exit 0**（`check:deps` 736 源文件、`check:frontend:boundaries` 300 模块 1498 依赖、`check:secrets` 1111 文件、`check:docs` 101 个 Markdown、`deps:audit` 仅 1 条 moderate，低于 `--audit-level=high`）。另有一次性 Playwright 无头探针（脚本用后删除）：给 `/api/v1/**` 加 8s 延迟并排除认证 / 会话端点后，`/projects` 出 `card` 骨架 ×3 + 侧栏 `sidebar` 骨架 ×1，`/tasks`、`/issues`、`/records` 各出 `list` 骨架，`/projects/1/modules` 出 `card` + `list` 骨架；登录页 `login-logo` 实测 300×121.06、侧栏 `joint-logo` 实测 163×46（换图后长宽比与裁切不变形）。**未运行**：`pnpm test:e2e`、`pnpm test:integration`（无服务端 / 数据库改动）。推送后 GitHub Actions：**CI run 36660346081**（18m42s）与 **Documentation run 36660346070**（49s）均成功。
+
+遗留与偏差：① 骨架屏的 `role="status"` 让页面上多出一个 live region，§5「统一状态条 + 读屏可感知」按用户口径本轮不做，后续若要做需合并这两处播报；② `SimilarFeatures`、`TasksPanel`（两处）、`GlobalTaskCreateModal`、`SettingsPage` 原来只有一行 `<p>` 文案，换成 82px / 140px 骨架后弹窗与表单内高度会变化，属有意改动但需人工在真机确认不顶布局；③ 应用级守卫换成 4 行骨架是整页形态变化，需人工确认；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 已推送 `test`（`e481908`），CI 成功。
+
 ## 2026-09-30 侧边导航收起 / 展开改为宽度过渡（隐藏动作不丝滑）
 
 用户指示（原话）：「侧边导航栏隐藏动作不丝滑」。根因：桌面端（≥701px）收起态是 `.nav-collapsed .sidebar { display: none; }`——`display` 不可动画，点「收起导航」后侧栏瞬间消失；`.sidebar` 本身也没有 `transition`，而仓库既有动效范式（`ProjectTree` 折叠）是 `0.24s cubic-bezier(0.33, 1, 0.68, 1)`。
