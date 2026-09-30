@@ -5,6 +5,7 @@ import {
   type AddProjectMemberInput,
   type CreateProjectRecordInput,
   type DeletedProjectRecord,
+  type ExpiredProjectRecord,
   type ProjectChangeRecord,
   type ProjectCreatedRecord,
   type ProjectMemberAddedRecord,
@@ -370,6 +371,59 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<DeletedProjectRecord | undefined> {
+    return this.readDeletedProjectForChange(tx, {
+      projectId: input.projectId,
+      retentionDays: null,
+    });
+  }
+
+  /**
+   * ADR-055：与 `findDeletedProjectForChange` 同一读取实现，额外要求
+   * `deleted_at` 已超过保留期；删除前的复核与行锁在同一条语句内完成，
+   * 并发还原或「还原后重新删除」都会让本方法返回 undefined。
+   */
+  async findExpiredDeletedProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number; readonly retentionDays: number },
+  ): Promise<DeletedProjectRecord | undefined> {
+    return this.readDeletedProjectForChange(tx, input);
+  }
+
+  /**
+   * ADR-055：候选列表（只读、不加锁）；保留期由 SQL 的 `now()` 计算，
+   * 与 `deleted_at` 的写入时钟无关，避免应用进程与数据库时钟偏移。
+   */
+  async listAutoPurgeCandidates(
+    tx: TransactionContext,
+    input: { readonly retentionDays: number; readonly limit: number },
+  ): Promise<readonly ExpiredProjectRecord[]> {
+    const rows = (await tx.sql`
+      SELECT p.id AS "projectId",
+             p.deleted_at AS "deletedAt"
+        FROM app.projects p
+       WHERE p.deleted_at IS NOT NULL
+         AND p.deleted_at <= now() - make_interval(days => ${input.retentionDays}::integer)
+       ORDER BY p.deleted_at ASC, p.id ASC
+       LIMIT ${input.limit}
+    `) as unknown as readonly {
+      readonly projectId: number;
+      readonly deletedAt: Date;
+    }[];
+    return rows.map((row) => ({
+      projectId: row.projectId,
+      // 连接层把 TIMESTAMPTZ 读成字符串，与仓库内其它端口一致地显式包装。
+      deletedAt: new Date(row.deletedAt).toISOString(),
+    }));
+  }
+
+  private async readDeletedProjectForChange(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      /** null 表示不断言保留期（还原路径）；整数为自动彻底删除的保留天数。 */
+      readonly retentionDays: number | null;
+    },
+  ): Promise<DeletedProjectRecord | undefined> {
     const rows = (await tx.sql`
       SELECT p.id,
              p.code,
@@ -382,6 +436,10 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
         JOIN app.users u ON u.id = p.deleted_by
        WHERE p.id = ${input.projectId}
          AND p.deleted_at IS NOT NULL
+         AND (
+               ${input.retentionDays}::integer IS NULL
+               OR p.deleted_at <= now() - make_interval(days => ${input.retentionDays}::integer)
+             )
        LIMIT 1
        FOR UPDATE OF p
     `) as unknown as readonly (DeletedProjectRow & {

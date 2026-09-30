@@ -4267,3 +4267,28 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | RECORD-SUMMARY-E2E-001 | 浏览器实测（E2E） | 全量 E2E 不回归 | 全量 `pnpm test:e2e` → **62 passed (5.1m)**（本批未新增 E2E 用例；数字为 rebase 到 `origin/test` 后重跑） | 本地通过 |
 
 未运行 / 已知偏差：① 本批**未新增 Playwright 用例**——`/records` 筛选行末位的「生成总结」按钮与弹窗目前只有 Web 派生层单测与真实 PostgreSQL 侧覆盖，浏览器关键路径与「筛选 / 复制正文」等交互待补；② **GitHub Actions 已跑**——见 `RECORD-SUMMARY-CI-001`；推送 `test` 不触发 `push` 事件，CI 由既有 PR [#146](https://github.com/256-code/InPulse/pull/146)（`test → main`）的 `pull_request` 事件触发；③ `pnpm audit`（不带层级）会因 registry 现有 1 条 **moderate**（`multer` GHSA-3pph-fpjx-jg34，影响 `>=2.2.0 <2.4.0`，修复 `>=2.4.0`，当前基线按 ADR 锁 `2.3.0`）返回非零，`deps:audit` 的 `--audit-level=high` 下不阻断；按 §4 依赖升级只能走独立 PR 由人工确认，本批未改依赖；④ apps/ops 备份集成测试需要真实 `pg_dump` / `pg_restore` 18.x；⑤ 新增只读接口、端口扩展与前端产品代码按 §6 / §8 需非作者人工评审；⑥ 总结正文目前是规则版：不接模型、不做语义归纳，措辞口径（三段式、正文插数据小表、导出 Word、人员多选）尚未拍板。
+
+## 2026-09-30 项目保留期到期自动彻底删除（ADR-055，用户指示，本地落库）
+
+用户 2026-09-30 指示「我希望删除的项目30天后会被彻底删除，如果还原过，那就按最后一次删除来计算时间」，为 [ADR-051](adr/ADR-051.md) 的彻底删除补一条自动触发路径（[ADR-055](adr/ADR-055.md)）。本批是**零契约面**改动：不新增路由、不改契约与权限矩阵（Route Registry 仍 99 条）、不改数据库与迁移（复用 `0031_project_purge.sql` 的 `app.purge_project` 窄口与角色授权），只在服务端新增后台服务与调度器。
+
+锁定口径：
+
+- 保留期 30 天，从 `app.projects.deleted_at` 起算，条件写成数据库侧比较 `deleted_at <= now() - make_interval(days => $1::integer)`（用数据库时钟，避免多实例 / 容器时钟偏差）；还原清空 `deleted_at`、重新删除写入新的删除时间，因此天然「按最后一次删除计时」，**不新增**状态列或计数器。
+- 触点在服务端进程内：`ProjectAutoPurgeService` + `ProjectAutoPurgeScheduler`（随 `ProjectManagementModule` 注册），启动 1 分钟后首跑，成功后每小时一次，抛错 60 秒后重试，定时器 `unref()`；`NODE_ENV=test` 不启动（避免挂住 vitest），`PROJECT_AUTO_PURGE_ENABLED=false` 整体关闭，`PROJECT_AUTO_PURGE_RETENTION_DAYS`（默认 30）与 `PROJECT_AUTO_PURGE_BATCH_SIZE`（默认 20）为可选覆盖，非正整数配置 fail closed。
+- 执行语义：只读候选查询（`deleted_at ASC, id ASC`，上限 = 批大小）→ 每个候选一个**独立事务**、`FOR UPDATE OF p` 行锁内按保留期复核 → `app.purge_project` → SYSTEM 链写 `project.purge`（`actorType: "SYSTEM"`、`actorId: null`、`actorRole: "SYSTEM"`、`trigger: "AUTO_RETENTION"`、`retentionDays`、`deletedAt` / `deletedBy` 快照与 `records` 七项计数）；复核未命中即跳过（已还原 / 已被并发彻底删除 / 删除时间被刷新），单项目失败只回滚该项目并进 `failedProjectIds`，下一轮重试。
+- 与手工路径可区分（ADR-051 行为不变）：手工路径 `actorRole: "SYSTEM_ADMIN"`、无 `trigger`；自动路径 `actorRole: "SYSTEM"` 且带 `trigger: "AUTO_RETENTION"` 与 `retentionDays`。
+- 不做：不发通知（ADR-035）、不加保留期倒计时 UI、不回收项目编码（ADR-051 第 4 节）、不做删除前提醒、不新增恢复路径、不做按项目可配置的保留期。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-AUTO-PURGE-UNIT-001 | API 单元 | 候选筛选、锁内复核、审计形状与失败隔离 | `apps/api/test/project-auto-purge.service.test.ts` **5/5**：无候选时只跑一次只读事务且不写审计；复核未命中（`findExpiredDeletedProjectForChange` 返回 `undefined`）时项目进 `skippedProjectIds` 且不调用 `purgeProject`；成功路径审计形状（`actorType: "SYSTEM"`、`actorId: null`、`action: "project.purge"`、`targetId` 为字符串化项目 ID、`trigger: "AUTO_RETENTION"`、`records` 透传计数）；单项目失败隔离（抛错项目进 `failedProjectIds`，同批后续项目照常删除）；环境变量默认值（30 / 20）与非法值 fail closed（`PROJECT_AUTO_PURGE_RETENTION_DAYS must be a positive integer`、`PROJECT_AUTO_PURGE_BATCH_SIZE must be a positive integer`） | 本地通过 |
+| PROJECT-AUTO-PURGE-INT-001 | 真实 PostgreSQL 集成 | 到期自动删除与审计留痕 | `apps/api/test/project-auto-purge.integration.test.ts`：删除满 31 天的项目被物理删除（项目行、模块、成员归零，`PROJECT` 审计链消失），SYSTEM 链恰好一条 `project.purge`（`trigger = AUTO_RETENTION`、`records` 计数正确、`deletedAt` 早于 `now() - 30 天`） | 本地通过 |
+| PROJECT-AUTO-PURGE-INT-002 | 真实 PostgreSQL 集成 | 未到期不删 | 同文件：删除 29 天的项目不进候选 / 不被删除，项目行仍在且不写任何审计 | 本地通过 |
+| PROJECT-AUTO-PURGE-INT-003 | 真实 PostgreSQL 集成 | 按最后一次删除计时 | 同文件：删除 40 天前 → 还原 → 立刻重新删除 → 不删；再还原 → 删除 31 天前 → 删（锁死用户口径「还原过就按最后一次删除计算」） | 本地通过 |
+| PROJECT-AUTO-PURGE-INT-004 | 真实 PostgreSQL 集成 | 候选与复核谓词三态 | 同文件：活跃项目不进候选；`findExpiredDeletedProjectForChange` 对活跃 / 刚删除 / 已到期分别返回 `undefined` / `undefined` / 记录；到期项目出现在候选列表 | 本地通过 |
+| PROJECT-AUTO-PURGE-GATE-001 | 静态门禁 | 类型、lint、格式与全量回归 | `pnpm typecheck`（8 个 workspace 项目）、`pnpm lint`、`pnpm format:check` 通过；`apps/api` 单测 **68 文件 383/383**（新增 5 例）、真实 PostgreSQL 集成 **53 文件 493/493**（新增 4 例，既有项目删除 / 还原 / 彻底删除用例不回归） | 本地通过 |
+
+本地实际执行（2026-09-30）：定向 `apps/api` 单测（5/5）、`TEST_DATABASE_URL=…/app_ci` 的定向集成（4/4）、`apps/api` 全量单测（68 文件 383 例）与全量集成（53 文件 493 例）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`。夹具清理按 2026-09-17 规则执行：`E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` → 删除用户 783、项目 421、业务行 13853、审计行 721，复核 `app_ci` 夹具与项目残留均为 0（同时提示 SYSTEM 链存在一个夹具记录删除产生的断点，属该入口的既有已知行为）。
+
+未运行 / 已知偏差：① `pnpm test:e2e` 与 Playwright 用例未跑（本批无前端改动）；② `pnpm check` 整链、`deps:audit`、镜像构建与 **GitHub Actions** 未跑；③ 到期后的实际删除时间落在 0～1 小时窗口内（调度为小时粒度，首轮还受批大小限制），且本 ADR 不做「删除前提醒」；④ 新增后台服务与端口方法按本文件 §8 需非作者人工评审。

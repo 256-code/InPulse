@@ -126,6 +126,15 @@ export interface DeletedProjectRecord {
   readonly rowVersion: number;
 }
 
+/**
+ * ADR-055：等待自动彻底删除的候选项目（已软删除且超过保留期）。
+ * 只用于候选列表与日志，删除前的复核走 `findExpiredDeletedProjectForChange`。
+ */
+export interface ExpiredProjectRecord {
+  readonly projectId: number;
+  readonly deletedAt: string;
+}
+
 /** 彻底删除实际物理删除的行数；只用于响应与审计，不参与幂等摘要。 */
 export interface ProjectPurgeCounts {
   readonly modules: number;
@@ -237,6 +246,28 @@ export abstract class ProjectsWritePort {
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<ProjectPurgeCounts>;
+
+  /**
+   * ADR-055：列出已软删除且超过保留期的项目（按删除时间从早到晚），不加行锁；
+   * 自动彻底删除对每个候选在独立事务内加锁并复核，复核失败即跳过。
+   * 保留期从 `deleted_at` 起算，还原会清空它、重新删除会写入新值，
+   * 因此天然按「最后一次删除」计时。
+   */
+  abstract listAutoPurgeCandidates(
+    tx: TransactionContext,
+    input: { readonly retentionDays: number; readonly limit: number },
+  ): Promise<readonly ExpiredProjectRecord[]>;
+
+  /**
+   * ADR-055：带保留期条件的已删除项目读取，语义与 `findDeletedProjectForChange`
+   * 一致（行锁 + 只认已软删除的项目），但额外要求删除时间已超过保留期。
+   * 项目已还原、已被并发彻底删除或删除时间被刷新时返回 undefined，
+   * 由调用方按「跳过」处理。
+   */
+  abstract findExpiredDeletedProjectForChange(
+    tx: TransactionContext,
+    input: { readonly projectId: number; readonly retentionDays: number },
+  ): Promise<DeletedProjectRecord | undefined>;
 
   /**
    * 任务完成写路径的粘性置位：first_task_completed_at 取最早一次完成时间且永不回落；
