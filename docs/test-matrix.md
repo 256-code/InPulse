@@ -4417,3 +4417,15 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 鉴别性验证：临时把 `my-tasks-query.service.ts` 的派生换成未过滤集合（`void excludeMaintenanceProjects;`）后 MAINT-FILTER-INT-001 转红（维护中项目的 TODO / DONE 两条任务重新出现），恢复实现后转绿；证明用例真的在验证过滤而不是巧合为空。
 
 未运行 / 已知偏差：① 口径为本次新增，A 冻结的 R-3 / R-7 读取语义被收窄（维护中项目不产出卡片），需非作者人工评审确认；② R-1 单组详情与 R-4 组内记录**不**过滤，已打开的聚合组深链在项目转维护中后仍可读，属有意保留；③ 未新增 Playwright 用例、未运行 `pnpm test:e2e` 与 GitHub Actions；④ 集成夹具写入独立测试库 `app_ci`（`TEST_DATABASE_URL`），演示库 `app` 未写入，本批未对 `app_ci` 执行清理脚本；⑤ `pnpm check` 的 `deps:audit` 步骤因 registry 新公布的两条 `brace-expansion` high 公告（GHSA-qhr7-859c-m2p7、GHSA-6j4f-fj2g-mc7p，经 `eslint > minimatch > brace-expansion`，33 条路径）以 exit 1 中断，与本批代码无关；按仓库 §4 依赖修复须走独立 PR 由人工确认，本批不夹带 `overrides` 变更；⑥ 本批未提交、未推送。
+
+## 项目与功能页标题行内搜索框（用户指示，2026-09-30 本地落库）
+
+用户指示（原话）：先「项目与功能页面帮我画出来的地方加一个搜索框」（附标注截图），随后限定「我只需要在项目与功能的页面里面添加，然后是和标题并行的，其他页面不要添加」。实现为纯前端本地筛选：`ProjectsPageView.tsx` 的 `search` state 按名称 / 编码 / 描述（`toLocaleLowerCase`）过滤当前列表，搜索框渲染在标题行 `.catalog-actions` 首位且仅在列表非空时出现，无匹配时显示「没有匹配的项目」空态与「清空搜索」；不走全局搜索、不调 API、不改契约 / 权限 / 迁移。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-SEARCH-BROWSER-001 | 浏览器实测 | 筛选行为、空态与清空 | 本地 dev `/projects` 真机：输入「3D」按名称、「inspection」按编码（大小写不敏感）、「贯穿」按描述过滤均只留匹配卡片；「zzz-nope」出现「没有匹配的项目」空态与「清空搜索」且「层级说明」保留；点击清空恢复全部；搜索框与 `h1` 垂直同心，header 高 56 与网格 `y=115` 与改动前一致 | 本地通过（2026-09-30） |
+| PROJECT-SEARCH-BROWSER-002 | 浏览器实测 | 900px 标题换行副作用的发现与修复 | 修复前：900px 下标题由 41px 单行被新搜索框挤成 81px 两行；补 `.catalog-heading { white-space: nowrap }` 后宽度扫描 [1440, 1200, 1000, 900, 760] 标题保持单行，1440 下 header 56 / 网格 y=115 与改动前一致，900 下 header 78（工具组换行）、网格 y=137 | 本地通过（2026-09-30） |
+| PROJECT-SEARCH-GATE-001 | 静态门禁 | 前端免测试指示 | 按 2026-09-17 前端免测试指示未运行任何测试与门禁（未跑 vitest / typecheck / build / `pnpm check`），仅对改动文件执行 `prettier --check`（通过），文档提交另跑 `pnpm check:docs` 通过；未新增 Playwright 用例 | 按指示未运行 |
+
+未运行 / 已知偏差：① 本批含前端产品代码，按 §8 需非作者人工评审；② 900px 窄屏下工具组换行为两行（第二行仅「新建项目」），为已知可接受形态；③ 搜索为纯本地过滤，只作用于当前已加载列表，不查后端；④ 已本地提交（`a009533`），未推送。
