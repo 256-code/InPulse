@@ -1,0 +1,120 @@
+/* 遗留问题转新任务弹窗（2026-09-30 版 1）：
+   去掉图标、小标题与底部说明，来源压成标题下一行灰字，
+   标题 / 负责人 / 优先级 + 截止时间 / 任务说明 四行「左标签右控件」。
+   选择器带上 .catalog-modal 提高优先级：design-system.css 里的
+   .catalog-modal .dialog-form 网格规则与本文件同优先级，仅靠来源顺序不可靠。 */
+.leftover-convert-modal.catalog-modal .dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-form {
+  padding: 12px 28px 18px;
+}
+/* 日期字段默认按内容宽渲染，在并排行里会比左侧下拉窄一截；这里让它铺满所在列。 */
+.leftover-convert-modal.catalog-modal
+  .leftover-convert-row--pair
+  .calm-date-field {
+  width: 100%;
+}
+.leftover-convert-modal.catalog-modal
+  .leftover-convert-row--pair
+  .calm-date-field
+  input.calm-date-input {
+  width: 100%;
+}
+
+.leftover-convert-modal.catalog-modal .leftover-convert-source {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #9aa5b3;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-source > p {
+  margin: 0;
+  max-height: 104px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+}
+.leftover-convert-modal.catalog-modal
+  .leftover-convert-source
+  .leftover-convert-quote {
+  color: #5b6b7d;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-sep {
+  margin: 0 6px;
+  color: #d5dce4;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-source > a {
+  display: inline-block;
+  margin-top: 6px;
+  color: #2472c3;
+  text-decoration: none;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-source > a:hover {
+  text-decoration: underline;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-latest {
+  margin: 0 0 18px;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-latest h3 {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  color: #2b3440;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-form > .ant-alert,
+.leftover-convert-modal.catalog-modal .leftover-convert-form > button {
+  margin-bottom: 14px;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-latest > button {
+  margin-top: 10px;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row > label {
+  display: block;
+  font-size: 12.5px;
+  color: #9aa5b3;
+  text-align: right;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row--pair {
+  grid-template-columns: 66px minmax(0, 1fr) 66px minmax(0, 1fr);
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row--top {
+  align-items: start;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row--top > label {
+  padding-top: 9px;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-row textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+.leftover-convert-modal.catalog-modal .leftover-convert-form > p[role="alert"] {
+  margin: -4px 0 12px 78px;
+  font-size: 12.5px;
+  color: #c0392b;
+}
+@media (max-width: 700px) {
+  .leftover-convert-modal.catalog-modal .leftover-convert-row,
+  .leftover-convert-modal.catalog-modal .leftover-convert-row--pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .leftover-convert-modal.catalog-modal .leftover-convert-row > label {
+    text-align: left;
+  }
+  .leftover-convert-modal.catalog-modal .leftover-convert-row--top > label {
+    padding-top: 0;
+  }
+  .leftover-convert-modal.catalog-modal
+    .leftover-convert-form
+    > p[role="alert"] {
+    margin-left: 0;
+  }
+}

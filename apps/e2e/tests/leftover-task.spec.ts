@@ -90,12 +90,10 @@ for (const feature of [true, false])
         dialog.getByRole("button", { name: "创建跟进任务" }),
       ).toBeDisabled();
       const title = `遗留跟进-${Date.now()}`;
-      await dialog.getByLabel("跟进任务标题").fill(title);
-      await pickCalmSelectOption(dialog, "跟进任务负责人", runtime.user.name);
-      if (feature)
-        await dialog
-          .getByLabel("跟进任务截止时间（选填）")
-          .fill("2026-10-10T18:30");
+      await dialog.getByLabel("标题").fill(title);
+      await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
+      await dialog.getByLabel("任务说明").fill("F20 用户补充说明");
+      if (feature) await dialog.getByLabel("截止时间").fill("2026-10-10T18:30");
       await dialog.getByRole("button", { name: "创建跟进任务" }).click();
       await expect(dialog).toBeHidden();
       const link = record.getByRole("link", {
@@ -111,6 +109,7 @@ for (const feature of [true, false])
       ).toBeEnabled();
       await expect(task.locator(".task-status-history > li")).toHaveCount(1);
       await expect(task.getByText(/来源记录：.*-CR-/)).toBeVisible();
+      await expect(task.getByText("F20 用户补充说明")).toBeVisible();
       if (feature) {
         await task
           .getByRole("button", { name: "编辑任务", exact: true })
@@ -178,8 +177,8 @@ test("F20 其他页面修订造成409，保留任务输入并明确确认最新�
     await record.getByRole("button", { name: "转为新任务" }).click();
     const dialog = page.getByRole("dialog", { name: "遗留问题转为新任务" });
     await expect(dialog.getByText("本次需要跟进的完整遗留原文")).toBeVisible();
-    await dialog.getByLabel("跟进任务标题").fill("冲突后保留的任务标题");
-    await pickCalmSelectOption(dialog, "跟进任务负责人", runtime.user.name);
+    await dialog.getByLabel("标题").fill("冲突后保留的任务标题");
+    await pickCalmSelectOption(dialog, "负责人", runtime.user.name);
     const other = await context.newPage();
     await other.goto(url);
     await other.getByRole("button", { name: "修订内容" }).click();
@@ -192,9 +191,7 @@ test("F20 其他页面修订造成409，保留任务输入并明确确认最新�
     await expect(
       dialog.getByRole("button", { name: "刷新转换预览" }),
     ).toBeVisible();
-    await expect(dialog.getByLabel("跟进任务标题")).toHaveValue(
-      "冲突后保留的任务标题",
-    );
+    await expect(dialog.getByLabel("标题")).toHaveValue("冲突后保留的任务标题");
     await dialog.getByRole("button", { name: "刷新转换预览" }).click();
     await expect(dialog.getByText("并发修订后的最新遗留")).toBeVisible();
     await expect(

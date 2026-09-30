@@ -4355,8 +4355,8 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
-          "idempotencyFingerprintVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
+          "idempotencyFingerprintVersion": "1.2.0",
           "behaviorHeaders": [
             "If-Match"
           ],
@@ -16653,6 +16653,10 @@
                 "type": "null"
               }
             ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 50000
           },
           "leftoverItemId": {
             "type": "integer",

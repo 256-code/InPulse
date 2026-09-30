@@ -11,6 +11,11 @@ const ids = z
 export const leftoverTaskRequestSchema = taskEditRequestSchema
   .omit({ description: true })
   .extend({
+    /**
+     * 2026-09-30 用户确认：转换时可补一段任务说明（选填，≤50000）。
+     * 来源记录、遗留项编号与遗留原文仍由服务端拼在说明之后，留痕口径不变。
+     */
+    description: z.string().max(50000).optional(),
     leftoverItemId: id,
     recordVersion: id,
     expectedRowVersion: id,

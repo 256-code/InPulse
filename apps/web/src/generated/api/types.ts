@@ -455,6 +455,7 @@ export type LeftoverTaskRequest = {
   readonly priority: ("NORMAL" | "HIGH" | "URGENT");
   readonly assigneeIds: readonly number[];
   readonly dueAt: (string | null);
+  readonly description?: string;
   readonly leftoverItemId: number;
   readonly recordVersion: number;
   readonly expectedRowVersion: number;

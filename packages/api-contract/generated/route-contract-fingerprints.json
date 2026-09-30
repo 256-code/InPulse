@@ -69,6 +69,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "facf598b9bea2f1a00527c44ed320123e394df202e763a892e2b38dbdac91e9c"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "e545a95ff92a7e793a07b279489279b176f63138582a5e94ae1af0f52dd4c1e2"
     }
   ],
   "createChangeRecordVersion": [
