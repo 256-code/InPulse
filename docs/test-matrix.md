@@ -4380,3 +4380,20 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | TASK-BOARD-CARD-HEIGHT-BROWSER-001 | 浏览器实测 | 看板所有卡片等高 | 真机量测（本地 dev 页面 `/projects/1/task-board`，Playwright 前后对照）：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张卡片全部 100.5px 高 × 253.6px 宽**；7 个泳道逐张复核卡内三行（`.tb-card-top` 25 / `.tb-card-title` 33.8 / `.tb-card-meta` 15.8）完全一致 | 本地通过 |
 
 未运行 / 已知偏差：① 按 2026-09-17 前端免测试指示，本批**未运行任何测试与门禁**，仅对改动文件执行 `prettier --check`（通过）；② ≤1100px 窄断点未单独实测（`min-height` 与宽度无关，属未验证）；③ 列表视图 `.tb-row` 不受影响（不同类名）；④ 未新增 Playwright 用例；⑤ 本批含前端产品代码，按 §8 需非作者人工评审；⑥ 已本地提交（`89a1365`），未推送。
+
+## 维护中项目不产出任务卡片（R-3 / R-7，2026-09-30 本地落库）
+
+用户指示（原话）：「项目进入维护中后，任务中心已完成未完成的任务卡片要求都不显示」。根因：R-3 `listMyTasks` 与 R-7 `listTaskGroups` 的读路径只按 `AuthorizedProjectScope` 收窄，没有任何项目状态过滤——切维护中的 409 只拦当时的未收尾任务，之后仍可产生开放任务，维护中项目的任务卡与聚合组卡照常出现在任务中心，统计徽章也把它们算进去。修法为服务端单点：`ProjectQueryPort` 新增只读 `listStatuses(projectIds)`（只回 id + status，由调用方按授权范围传参），`apps/api/src/modules/aggregate-read/maintenance-project-filter.ts` 的 `excludeMaintenanceProjects` 在**分页 / 统计 / 遗留问题入口 / 聚合组列表之前**剔除 MAINTENANCE 项目；授权范围内全部维护中时沿用既有空集合短路（不发 SQL，空页 + 零统计）。R-1 单组详情与 R-4 组内记录不过滤（深链仍可读）；未开始 / 进行中 / 软删项目不受影响；维护中项目本身仍可写（ADR-043「三态都可写」不变）。契约只更新 `listMyTasks` / `listTaskGroups` 两条路由 summary（路由数仍 100），未新增路由、迁移与字段。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MAINT-FILTER-UNIT-001 | API 单元 | R-3 剔除发生在分页 / 统计 / 遗留入口之前 | `aggregate-read.service.test.ts`「维护中项目不产出任务卡片：分页、统计与遗留入口共用剔除后的集合」（`listPage` 收到 projectIds `[7, 11]`，`stats` 与 `leftoverEntry` 同一集合）与「授权范围内全部维护中时返回空页，统计与遗留入口按空集合收敛」（`list({ actorUserId: 5, projectId: 9 })` → 全部 projectIds 为空） | 本地通过（该文件 34 例） |
+| MAINT-FILTER-UNIT-002 | API 单元 | R-7 聚合组同样剔除 | 同文件「维护中项目不再产出聚合组卡片：聚合组查询收到剔除后的项目集合」（`listGroups` projectIds `[7, 11]`）与「授权范围内全部维护中时返回空列表，聚合组查询按空集合短路」（`items` 空、`hasMore` false） | 本地通过（同上） |
+| MAINT-FILTER-INT-001 | PostgreSQL 集成 | R-3 真实 HTTP 端到端 | `aggregate-read-api.integration.test.ts`「维护中项目不再产出任务卡片，切回进行中后重新出现」：切成 MAINTENANCE 后 `items = []`、`stats` 四项全 0、`leftoverCount = 0`，全局范围同样不含该项目；切回 ACTIVE 后分页与统计逐项恢复 | 本地通过（该文件 22 例） |
+| MAINT-FILTER-INT-002 | PostgreSQL 集成 | R-7 端到端且 R-1 详情不受影响 | `aggregate-read-list-api.integration.test.ts`「维护中项目不再产出聚合组卡片，R-1 详情仍可读」：作用域与全局列表都不含维护中项目的组，`GET /api/v1/task-groups/{id}` 仍返回该组（2 名成员） | 本地通过（该文件 12 例） |
+| MAINT-FILTER-BROWSER-001 | 浏览器实测 | 任务中心真实页面 | 本地 dev 重启后 `/tasks`：已完成徽章 **17 → 16**；`GET /api/v1/me/tasks` 返回全部 19 条均属 `projectId 1`（进行中，InPulse 研发交付平台），维护中项目（project 118 `test`）的已完成任务不再出现；未完成仍 3 条 | 本地通过（2026-09-30） |
+| MAINT-FILTER-GATE-001 | 静态门禁 | 契约与全量非数据库门禁 | `pnpm contract:generate` → `contract:drift`（5 产物）/ `contract:validate`（100 条）/ `permissions:check`（100/100）；`pnpm typecheck`（8 workspace）；`pnpm test:unit`（api 68 文件 389 例、web 89 文件 610 例）；`pnpm --filter @inpulse/api test:integration`（53 文件 495 例，含本批 34 例相关）；`pnpm lint`、`pnpm format:check`、`check:deps`（746 文件）、`check:frontend:boundaries`（300 模块 / 1498 依赖）、`check:secrets`（1117 文件）、`check:docs`（102 个 Markdown）通过；`pnpm check` 至 `deps:audit` 之前的全部步骤通过，`deps:audit` 因新公布的 `brace-expansion` 公告中断（见偏差 ⑤） | 本地通过（2026-09-30） |
+
+鉴别性验证：临时把 `my-tasks-query.service.ts` 的派生换成未过滤集合（`void excludeMaintenanceProjects;`）后 MAINT-FILTER-INT-001 转红（维护中项目的 TODO / DONE 两条任务重新出现），恢复实现后转绿；证明用例真的在验证过滤而不是巧合为空。
+
+未运行 / 已知偏差：① 口径为本次新增，A 冻结的 R-3 / R-7 读取语义被收窄（维护中项目不产出卡片），需非作者人工评审确认；② R-1 单组详情与 R-4 组内记录**不**过滤，已打开的聚合组深链在项目转维护中后仍可读，属有意保留；③ 未新增 Playwright 用例、未运行 `pnpm test:e2e` 与 GitHub Actions；④ 集成夹具写入独立测试库 `app_ci`（`TEST_DATABASE_URL`），演示库 `app` 未写入，本批未对 `app_ci` 执行清理脚本；⑤ `pnpm check` 的 `deps:audit` 步骤因 registry 新公布的两条 `brace-expansion` high 公告（GHSA-qhr7-859c-m2p7、GHSA-6j4f-fj2g-mc7p，经 `eslint > minimatch > brace-expansion`，33 条路径）以 exit 1 中断，与本批代码无关；按仓库 §4 依赖修复须走独立 PR 由人工确认，本批不夹带 `overrides` 变更；⑥ 本批未提交、未推送。

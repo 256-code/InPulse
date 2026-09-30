@@ -507,3 +507,13 @@
 - 未选方案：`.tb-lane-cards` 加 `grid-auto-rows: 1fr` 会把卡片少的泳道卡片拉得极高；`.tb-lane-cards > li` 的拉伸只作用于行内、跨行不生效。
 - 真机实测：改前 `distinctHeights: [100, 78, 91, 83]` 改为后 **55 张全部 100.5px 高 × 253.6px 宽**，7 个泳道逐张复核卡内三行（25 / 33.8 / 15.8）完全一致；`prettier --check` 通过。
 - 按 2026-09-17 前端免测试指示未运行测试与门禁；≤1100px 窄断点未单独实测（未验证）；列表视图 `.tb-row` 不受影响；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`89a1365`），未推送。
+
+## 2026-09-30 维护中项目不产出任务中心卡片（R-3 / R-7 读取收窄）
+
+用户指示（原话）：「项目进入维护中后，任务中心已完成未完成的任务卡片要求都不显示」。此前 R-3（我的任务）与 R-7（任务聚合组）读取链路只按 `AuthorizedProjectScope` 收窄，没有任何项目状态过滤：ADR-043 的 409 只在切换时校验任务已收尾，切维护中后项目仍可产生新任务，这些任务与聚合组卡照常出现在任务中心，并计入 `stats` 角标（演示库实测：维护中项目 `test`（project 118）的已完成任务仍出现在「已完成」列表，角标 17）。
+
+- 新增只读端口 `ProjectQueryPort.listStatuses(projectIds)`（`apps/api/src/modules/projects/project-query.port.ts` 的 `ProjectStatusRef` + PostgreSQL 适配器；只查 id 与 status、空输入短路、未知 ID 不返回）与公共助手 `apps/api/src/modules/aggregate-read/maintenance-project-filter.ts` 的 `excludeMaintenanceProjects`（剔除 `status = MAINTENANCE` 的项目 ID；读不到状态的 ID 原样保留，避免放大范围）。
+- R-3 `MyTasksQueryService.listMyTasks` 与 R-7 `TaskGroupQueryService.listTaskGroups` 在**分页、统计、遗留问题入口、聚合组列表之前**统一使用收窄后的 `projectIds`，避免「卡片消失但统计与角标仍计入」的不一致；授权范围内全部为维护中时复用既有空集合短路（不发 SQL，返回空页与零统计）。
+- 这是**展示口径**，不是权限收窄：维护中项目仍可写（ADR-043「三态都可写」不变），项目内任务 / 迭代记录 / 任务看板不受影响；R-1 单组详情与 R-4 组内记录刻意**不**过滤（已打开的深链在项目转维护中后仍可读）；未开始 / 进行中项目不在剔除范围内。契约只更新 `listMyTasks` / `listTaskGroups` 两条路由 summary 描述，路由数不变（100 条）。
+- 测试：单测 4 例（R-3 / R-7 各 2，含全维护中短路）+ 真实 PostgreSQL 集成 2 例（含「切回进行中后重新出现」与「R-1 详情仍可读」反证）；`docs/test-matrix.md` 新增「维护中项目不产出任务卡片」小节（`MAINT-FILTER-*` 6 条）。鉴别性验证：临时还原未过滤集合后集成用例转红，恢复后转绿。
+- 本地验证：`pnpm check` 至 `deps:audit` 之前全部通过（contract 100 条、权限 100/100、typecheck 8 workspace、api 单测 68 文件 389 例、web 89 文件 610 例、真实 PostgreSQL 集成 53 文件 495 例、lint / 格式 / 依赖边界 / Secret / 文档门禁）；`deps:audit` 因新公布的 `brace-expansion` high 公告中断（与本批无关，按 §4 走独立 PR）；浏览器实测演示库「已完成」角标 17 → 16 且维护中项目任务不再出现。本批为 R-3 / R-7 语义收窄，需非作者人工评审；已本地提交（`c0d362c`），未推送。
