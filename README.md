@@ -148,7 +148,29 @@ Secret、角色和功能开发事务契约见[数据库说明](./database/README
 node scripts/dev-start.mjs                # 按配置启动，默认启用统一身份认证
 node scripts/dev-start.mjs --skip-build   # 跳过 API 构建（dist 已是最新时）
 node scripts/dev-start.mjs --local-only   # 强制关闭 SSO，按本地口令登录
+node scripts/dev-start.mjs --lan          # 让同一局域网的设备以 HTTPS 访问
 ```
+
+### 局域网共享（--lan）
+
+`--lan` 让同一局域网的其他设备直接访问本机开发环境：
+
+- 前端以 HTTPS 监听 `0.0.0.0:5173`，证书是脚本用 openssl 生成的自签证书，存放在 `.data/dev-certs/`，
+  SAN 覆盖 `localhost`、`127.0.0.1`、本机名与当前全部局域网 IPv4；地址变化（DHCP）时自动重建。
+  脚本优先使用 `PATH` 里的 `openssl`，否则回退 Git for Windows 自带的 openssl，也可以用
+  `INPULSE_OPENSSL` 指定可执行文件路径；
+- API 在该模式下只监听 `127.0.0.1:3000`（`INPULSE_API_HOST`），局域网流量统一经 Vite 同源代理进入，
+  3000 端口不直接暴露；数据库仍只监听 `127.0.0.1:55432`；
+- HTTPS 是硬性要求：会话与 CSRF Cookie 是 `__Host-` 前缀且必须 `Secure`，浏览器会拒绝在明文 HTTP
+  的局域网地址上保存它们，因此不能改成 http 访问；
+- 其他设备首次访问会提示证书不受信任，点击「高级」->「继续前往」即可；如需消除警告，可把
+  `.data/dev-certs/lan-cert.pem` 导入访问设备的受信任根证书；
+- Windows 首次共享需要以管理员身份放行入站端口，命令是
+  `netsh advfirewall firewall add rule name="InPulse Dev" dir=in action=allow protocol=TCP localport=5173`；
+- 局域网地址随 DHCP 变化，以脚本每次启动输出的 `https://<局域网地址>:5173` 为准；其他设备用本地
+  账号登录（演示账号与口令见[数据库说明的演示种子数据章节](./database/README.md#演示种子数据)）；
+  统一身份认证的回调地址由 `SSO_REDIRECT_URI` 固定，局域网设备如需走 SSO，要把它换成局域网地址
+  并在 Casdoor 应用登记（此时本机也要改用该地址访问；未登记时局域网设备用本地口令登录）。
 
 ### 本地启用统一身份认证
 

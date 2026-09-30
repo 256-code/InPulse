@@ -126,8 +126,8 @@ export function disableHtmlCaching(response: ServerResponse): void {
  */
 export function rewriteHtmlBody(response: ServerResponse, nonce: string): void {
   const chunks: Buffer[] = [];
-  const originalWrite = response.write.bind(response);
-  const originalEnd = response.end.bind(response);
+  const originalWrite = response.write;
+  const originalEnd = response.end;
 
   const collect = (chunk: unknown, encoding: unknown): boolean => {
     if (typeof chunk === "string") {
@@ -159,7 +159,8 @@ export function rewriteHtmlBody(response: ServerResponse, nonce: string): void {
       }
       return true;
     }
-    return (originalWrite as (...args: unknown[]) => boolean)(
+    return (originalWrite as (...args: unknown[]) => boolean).call(
+      response,
       chunk,
       encoding,
       callback,
@@ -181,7 +182,13 @@ export function rewriteHtmlBody(response: ServerResponse, nonce: string): void {
       response.removeHeader("Transfer-Encoding");
     }
     const done = typeof encoding === "function" ? encoding : callback;
-    return (originalEnd as (...args: unknown[]) => ServerResponse)(
+    // Node 的 HTTP/2 兼容层（Vite 的 server.https 走 http2.createSecureServer）
+    // 在 end() 内部会调用 this.write()；若我们的覆写仍挂在实例上，整段 body
+    // 会被再次收集而不是写出，HTTPS 下表现为空响应体。发送前恢复原型方法。
+    response.write = originalWrite as typeof response.write;
+    response.end = originalEnd as typeof response.end;
+    return (originalEnd as (...args: unknown[]) => ServerResponse).call(
+      response,
       body,
       "utf8",
       typeof done === "function" ? done : undefined,
