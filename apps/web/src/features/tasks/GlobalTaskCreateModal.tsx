@@ -458,9 +458,6 @@ export function GlobalTaskCreateModal({
                 >
                   任务范围
                 </span>
-                <small>
-                  功能级关联具体功能；模块级用于跨功能或模块整体工作。
-                </small>
                 <CalmSegmented
                   label="任务范围"
                   options={scopeOptions}

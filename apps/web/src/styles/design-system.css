@@ -4860,6 +4860,36 @@ a:focus-visible {
   gap: 8px;
   margin-top: 10px;
 }
+/* 加载态（2026-09-30「弹窗首帧不跳尺寸」）：任务详情是 xl 宽体的长内容，实测 844px
+   （= 视口上限），而骨架只有 140px，弹窗会先闪出一条窄条再撑满。加载时按视口上限
+   开盒、正文骨架撑满剩余高度，弹层开门即最终尺寸。 */
+.surface-modal.task-modal.is-loading {
+  min-height: min(844px, calc(100dvh - 56px));
+}
+.task-modal-loading-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 28px 16px;
+}
+.task-modal-loading-body > .calm-skeleton {
+  flex: 1;
+}
+.task-modal-sk-title {
+  display: block;
+  width: 320px;
+  height: 20px;
+  border-radius: 6px;
+}
+.task-modal-sk-chip {
+  width: 76px;
+  height: 20px;
+  border-radius: 999px;
+}
+.task-modal-sk-chip.short {
+  width: 58px;
+}
+
 .task-modal > .calm-task-actions {
   padding: 15px 30px 0;
   margin-top: 0;

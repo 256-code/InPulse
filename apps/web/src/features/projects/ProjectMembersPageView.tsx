@@ -345,10 +345,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       ) : (
         <section className="panel settings-panel">
           <div className="settings-panel-head">
-            <CalmSectionTitle
-              title="项目成员"
-              hint="本项目任意活跃成员都可以添加或移除成员"
-            >
+            <CalmSectionTitle title="项目成员">
               {embedded ? null : (
                 <CalmSelect
                   value={projectId}
@@ -468,10 +465,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 <p className="permission-hint">
                   <InpulseIcon name="shield" size={15} />
                   <span>
-                    项目始终保留一名组长：组长不能被直接移除或撤销，需先把其他成员
-                    设为组长完成转移；移除创建者只关闭成员关系，不会修改永久保留的
-                    创建人字段；已完成任务保留原负责人，已发布记录保留原作者，
-                    未完成任务需要提示是否改派。
+                    项目必须保留一名组长：组长不能被直接移除或撤销，请先把其他成员设为组长完成转移。
                   </span>
                 </p>
               </div>
@@ -483,7 +477,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       <Modal
         className="catalog-modal"
         open={addOpen}
-        eyebrow={project ? project.name + " / 成员管理" : "项目成员"}
         title="添加项目成员"
         onCancel={closeAdd}
         mask={{ closable: !addMutation.isPending }}
@@ -571,7 +564,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       <Modal
         className="catalog-modal"
         open={removing !== null}
-        eyebrow={project ? project.name + " / 成员管理" : "项目成员"}
         title="移除项目成员"
         tone="danger"
         icon="alert"
@@ -689,7 +681,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
       <Modal
         className="catalog-modal"
         open={roleTarget !== null}
-        eyebrow={project ? project.name + " / 成员管理" : "项目成员"}
         title="设置项目角色"
         onCancel={closeRoleModal}
         mask={{ closable: !roleMutation.isPending }}

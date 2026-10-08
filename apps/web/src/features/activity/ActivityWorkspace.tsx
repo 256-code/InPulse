@@ -271,9 +271,6 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     return latest;
   }, [items]);
 
-  const snapshotActorName = snapshotItem
-    ? actorNameOf(snapshotItem.actorId)
-    : "系统";
   const snapshotProjectName =
     snapshotItem === null
       ? ""
@@ -581,7 +578,6 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
 
       <ActivitySnapshotModal
         item={snapshotItem}
-        actorName={snapshotActorName}
         projectName={snapshotProjectName}
         {...(client ? { client } : {})}
         onClose={() => setSnapshotItem(null)}

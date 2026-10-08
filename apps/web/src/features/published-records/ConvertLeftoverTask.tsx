@@ -11,7 +11,6 @@ import {
   type LeftoverTaskRequest,
   type LeftoverTaskResponse,
 } from "@generated/api";
-import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 /** 正式记录里的一条遗留问题：状态与跟进任务都按条目自身判定。 */
 export type RecordLeftover = PublishedRecord["leftovers"][number];
@@ -302,12 +301,16 @@ export function LeftoverTaskConvertModal({
         <div className="leftover-convert-form">
           {error !== null && <Alert type="error" title={message(error)} />}
           {busy && !preview && (
-            <CalmSkeleton
-              variant="lines"
-              rows={3}
-              compact
-              label="正在转换遗留问题"
-            />
+            /* 占位按真来源行收成一条：compact 骨架是 82px，真来源行只有一行 21px，
+               数据到达时弹层会整体缩一截、闪一下。 */
+            <div className="leftover-convert-source">
+              <p aria-hidden="true">
+                <span className="calm-sk leftover-convert-source-sk" />
+              </p>
+              <span className="sr-only" role="status">
+                正在转换遗留问题
+              </span>
+            </div>
           )}
           {preview && (
             <SourceLine value={preview} recordTitle={target.recordTitle} />

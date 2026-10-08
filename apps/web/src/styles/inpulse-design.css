@@ -256,15 +256,10 @@
   border-color: var(--ring);
 }
 
-/* 成员提示行（`.impact-fieldset` 内的说明文字与加载占位）。 */
+/* 成员提示行（`.impact-fieldset` 内的说明文字）。 */
 .member-hint {
   display: block;
   font-size: 12px;
-}
-
-.member-loading {
-  display: flex;
-  justify-content: center;
 }
 
 /* 设计契约的 `.check-list` 是 `flex-wrap: wrap` 的紧凑内联列表（design-system.css L1779），

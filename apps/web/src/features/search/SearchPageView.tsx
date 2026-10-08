@@ -21,7 +21,7 @@ import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { searchResultPath } from "./search-destination";
 import "./search-results.css";
 
-const { Paragraph, Text, Title } = Typography;
+const { Text, Title } = Typography;
 
 const entityTypeMeta: Readonly<
   Record<
@@ -187,9 +187,6 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
           </Title>
           <Tag color="blue">F-26</Tag>
         </Space>
-        <Paragraph type="secondary" style={{ margin: 0 }}>
-          搜索当前可访问的项目、模块、功能、任务、变更记录、任务组与外部链接。
-        </Paragraph>
         <Input.Search
           aria-label="搜索关键词"
           allowClear

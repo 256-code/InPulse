@@ -889,10 +889,41 @@ export function TasksPanel({
           size="xl"
           label="任务详情"
           onCancel={closeDetail}
-          className="task-modal"
+          className={query.isPending ? "task-modal is-loading" : "task-modal"}
         >
           {query.isPending ? (
-            <CalmSkeleton variant="lines" rows={5} label="正在加载任务详情" />
+            /* 加载态先摆出真弹层的骨架（头部 + 撑满的正文），盒子按视口上限开，
+               避免先闪出一条 140px 窄条再撑到 844px（2026-09-30 首帧尺寸修复）。 */
+            <>
+              <div className="drawer-header task-modal-header">
+                <div>
+                  <span
+                    className="calm-sk task-modal-sk-title"
+                    aria-hidden="true"
+                  />
+                  <div className="task-modal-badges" aria-hidden="true">
+                    <span className="calm-sk task-modal-sk-chip" />
+                    <span className="calm-sk task-modal-sk-chip short" />
+                    <span className="calm-sk task-modal-sk-chip short" />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="关闭任务详情"
+                  onClick={closeDetail}
+                >
+                  <InpulseIcon name="x" size={19} />
+                </button>
+              </div>
+              <div className="task-modal-loading-body">
+                <CalmSkeleton
+                  variant="lines"
+                  rows={6}
+                  label="正在加载任务详情"
+                />
+              </div>
+            </>
           ) : query.isError ? (
             <Alert
               type="error"
@@ -1385,11 +1416,6 @@ export function TasksPanel({
       )}
       <Modal
         open={selection !== null}
-        eyebrow={
-          selection?.item
-            ? selection.item.code + " · 编辑后 rowVersion 递增并写入审计"
-            : "任务负责一次具体执行工作"
-        }
         title={selection?.item ? "编辑任务" : "新建任务"}
         size="lg"
         className="catalog-modal"
@@ -1422,7 +1448,6 @@ export function TasksPanel({
                 <div className="calm-section-title">
                   <div>
                     <h3>解决编辑冲突</h3>
-                    <small>选择保留哪一版，应用后再提交最新版本。</small>
                   </div>
                 </div>
                 {merge.conflicts.map((field) => (
@@ -1663,11 +1688,6 @@ export function TasksPanel({
                   )}
                 </div>
               )}
-              <div className="calm-field form-hint">
-                <p>
-                  同一工作只保留一份任务；如果负责人、状态、验收、上线或回滚不同，建议拆分任务。
-                </p>
-              </div>
             </fieldset>
           </div>
           <div className="calm-action-footer">

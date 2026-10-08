@@ -51,6 +51,7 @@ export function ExternalLinksPanel({
   const [open, setOpen] = useState(false),
     [data, setData] = useState<ExternalLinkList | null>(null),
     [busy, setBusy] = useState(false),
+    [opening, setOpening] = useState(false),
     [url, setUrl] = useState(""),
     [error, setError] = useState<unknown>(null),
     [needsRefresh, setNeedsRefresh] = useState(false),
@@ -73,6 +74,25 @@ export function ExternalLinksPanel({
         setData(null);
     } finally {
       setBusy(false);
+    }
+  }
+  /**
+   * 打开弹层前先把关联列表取回来（2026-09-30「弹窗首帧不跳尺寸」）：弹层里原本只有一条
+   * 82px 骨架，真内容是根仓库卡片 + 链接列表（实测 284px → 747px），先开后填会让盒子在
+   * 数据到达时长高一大截。改为在触发按钮上转圈、数据就绪再开；加载失败也要打开，
+   * 让错误与「加载最新关联」留在弹层里。
+   */
+  async function openPanel() {
+    if (data !== null || needsRefresh) {
+      setOpen(true);
+      return;
+    }
+    setOpening(true);
+    try {
+      await load();
+    } finally {
+      setOpening(false);
+      setOpen(true);
     }
   }
   async function save() {
@@ -356,16 +376,13 @@ export function ExternalLinksPanel({
         {...(triggerUnconfiguredHint === undefined
           ? {}
           : { title: triggerUnconfiguredHint })}
-        onClick={() => {
-          setOpen(true);
-          if (!data && !needsRefresh) void load();
-        }}
+        loading={opening}
+        onClick={() => void openPanel()}
       >
         GitHub 链接
       </Button>
       <Modal
         className="catalog-modal"
-        eyebrow="保存代码证据，可关联多个链接"
         title="GitHub 链接"
         open={open}
         body
@@ -381,7 +398,8 @@ export function ExternalLinksPanel({
         }
       >
         <div className="external-links-body">
-          {busy && (
+          {/* 刷新时保留旧列表：再插一条骨架会让弹层先长后缩，等于把「闪一下」换个地方。 */}
+          {busy && data === null && (
             <CalmSkeleton
               variant="lines"
               rows={2}

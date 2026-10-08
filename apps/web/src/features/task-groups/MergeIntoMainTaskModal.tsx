@@ -329,9 +329,6 @@ export function MergeIntoMainTaskModal({
         placeholder="例如：两个任务均处理退款重复回调问题。"
         onChange={(event) => setNote(event.target.value)}
       />
-      <p className="permission-hint">
-        合并不删除或覆盖双方的迭代记录，也不改变任务归属与工作状态。
-      </p>
       {formError !== null ? <Alert type="warning" title={formError} /> : null}
       {(error !== null || needsRefresh) && (
         <Alert

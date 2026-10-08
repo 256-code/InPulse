@@ -19,28 +19,9 @@ const SNAPSHOT_WINDOW_MS = 1000;
 
 export interface ActivitySnapshotModalProps {
   readonly item: ActivityItem | null;
-  readonly actorName: string;
   readonly projectName: string;
   readonly client?: InpulseApiClient | undefined;
   readonly onClose: () => void;
-}
-
-function formatSnapshotTime(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  const date = [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
-  const time = [
-    String(parsed.getHours()).padStart(2, "0"),
-    String(parsed.getMinutes()).padStart(2, "0"),
-    String(parsed.getSeconds()).padStart(2, "0"),
-  ].join(":");
-  return `${date} ${time}`;
 }
 
 function snapshotPayloadText(entry: AuditLogItem): string {
@@ -59,7 +40,6 @@ function snapshotPayloadText(entry: AuditLogItem): string {
  */
 export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
   item,
-  actorName,
   projectName,
   client,
   onClose,
@@ -185,11 +165,6 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
         open={item !== null}
         onCancel={onClose}
         size="md"
-        eyebrow={
-          item === null
-            ? undefined
-            : formatSnapshotTime(item.occurredAt) + " · " + actorName
-        }
         title="原始快照"
       >
         <div className="snapshot-body" data-testid="activity-snapshot">

@@ -268,9 +268,6 @@ export function RecordDraftsView({
         <div className="draft-source-head">
           <section aria-label="来源任务">
             <h2>{sourceQuery.data.source.title}</h2>
-            <p>
-              选择已有草稿继续编辑，或新建另一条草稿。保存草稿不会改变任务状态。
-            </p>
             <a
               href={`/projects/${projectId}/modules/${sourceModuleId}${sourceQuery.data.source.featureId === null ? "/tasks" : `/features/${sourceQuery.data.source.featureId}`}?taskId=${taskId}`}
             >
@@ -391,11 +388,26 @@ export function RecordDraftsView({
         </div>
       )}
       <Modal
-        className="draft-detail-modal"
+        className={
+          detail.isPending
+            ? "draft-detail-modal is-loading"
+            : "draft-detail-modal"
+        }
         open={recordId > 0 && editorTarget === null}
         label="草稿详情"
         eyebrow="草稿"
-        title={detail.data === undefined ? undefined : detail.data.title}
+        /* 加载态先用占位标题顶住头部高度，数据到达时头部不再长高一截；
+           失败态没有标题可显示，仍按原来的「无标题」处理。 */
+        title={
+          detail.data !== undefined ? (
+            detail.data.title
+          ) : detail.isPending ? (
+            <span
+              className="calm-sk draft-detail-sk-title"
+              aria-hidden="true"
+            />
+          ) : undefined
+        }
         body
         size="lg"
         onCancel={() => {

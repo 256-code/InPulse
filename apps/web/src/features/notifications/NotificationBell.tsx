@@ -178,7 +178,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
               全部已读
             </button>
           </div>
-          <p className="popover-hint">只通知需要采取行动或关注结果的人。</p>
           {content}
           <button
             type="button"
