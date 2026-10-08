@@ -45,10 +45,12 @@ export type ProjectStats = z.infer<typeof projectStatsSchema>;
  * 归档概念只保留在模块 / 功能 / 任务上，项目自身只表达进度。
  *
  * - `NOT_STARTED`（未开始）：项目下还没有任何已完成任务；
- * - `ACTIVE`（进行中）：项目已开工，含手动置为进行中与首次有任务完成后的自动升级；
+ * - `ACTIVE`（进行中）：项目已开工，含手动置为进行中、首次有任务完成后的自动升级
+ *   与维护中项目任务重新变为未收尾后的自动回退（ADR-056 / ADR-057）；
  * - `MAINTENANCE`（维护中）：项目主体已完成、只做小修小补。进入前要求项目下任务
  *   全部收尾（不存在 `lifecycle_status = 'ACTIVE'` 且 `work_status = 'TODO'` 的任务），
- *   否则 409 `PROJECT_MAINTENANCE_TASKS_OPEN`。
+ *   否则 409 `PROJECT_MAINTENANCE_TASKS_OPEN`；进入后只要有任务重新变为未收尾
+ *   （新建、重新打开或恢复），会在同一事务内回到进行中。
  *
  * 未开始与维护中之间禁止直接互改（409 `PROJECT_STATUS_LEVEL_SKIP`）；
  * 项目内出现过已完成任务后不可回退未开始（409 `PROJECT_STATUS_NOT_STARTED_LOCKED`）。

@@ -8,11 +8,12 @@ import {
   type ExpiredProjectRecord,
   type ProjectChangeRecord,
   type ProjectCreatedRecord,
+  type ProjectFirstTaskCompletionRecord,
+  type ProjectLifecycleStatus,
+  type ProjectMaintenanceReopenRecord,
   type ProjectMemberAddedRecord,
   type ProjectMemberIdentity,
-  type ProjectFirstTaskCompletionRecord,
   type ProjectMemberRecord,
-  type ProjectLifecycleStatus,
   type ProjectPurgeCounts,
   type ProjectRecord,
   ProjectsWritePort,
@@ -609,6 +610,50 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
       status: row.status,
       rowVersion: row.rowVersion,
       firstTaskCompletedAt: new Date(row.firstTaskCompletedAt).toISOString(),
+    };
+  }
+
+  /**
+   * ADR-056 / ADR-057：任务重新变为未收尾后维护中项目重新开工；
+   * 非维护中项目不命中行，不产生副作用。
+   */
+  async reopenMaintenanceProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectMaintenanceReopenRecord | undefined> {
+    // 单条条件 UPDATE：非维护中项目不命中任何行、不取行锁，
+    // 因此不会与创建路径中 checkProjectForWrite 持有的 FOR SHARE 形成锁升级等待。
+    const rows = (await tx.sql`
+      UPDATE app.projects p
+         SET status = 'ACTIVE',
+             row_version = p.row_version + 1,
+             updated_at = now()
+       WHERE p.id = ${input.projectId}
+         AND p.status = 'MAINTENANCE'
+         AND p.deleted_at IS NULL
+      RETURNING p.id,
+                p.code,
+                p.name,
+                p.description,
+                p.status,
+                p.row_version AS "rowVersion"
+    `) as unknown as readonly {
+      readonly id: number;
+      readonly code: string;
+      readonly name: string;
+      readonly description: string;
+      readonly status: "ACTIVE";
+      readonly rowVersion: number;
+    }[];
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return {
+      projectId: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      rowVersion: row.rowVersion,
     };
   }
 

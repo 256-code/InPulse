@@ -141,6 +141,8 @@ export function TaskStatusPanel({
         // 已完成计数与记录可见性，同批失效才不用手动刷新（2026-09-22 修）。
         // modules / features / project-overview：已完成任务数驱动功能与模块卡的
         // 「进行中 / 未开始」档位，不失效会一直停留旧标签（2026-09-24 修）。
+        // projects：重新打开或恢复任务会把维护中项目带回进行中（ADR-057），
+        // 项目卡片与项目详情不失效会一直停留「维护中」。
         [
           "tasks",
           "task-board",
@@ -148,6 +150,7 @@ export function TaskStatusPanel({
           "modules",
           "features",
           "project-overview",
+          "projects",
           "activity",
           "search",
           "notifications",

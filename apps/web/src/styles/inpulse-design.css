@@ -551,10 +551,11 @@
  * 列表页的标题与筛选工具条吸顶，列表与说明区在其下方滚动。容器自带不透明底色，否则行会从
  * 标题与筛选条后方透出。工具条原本的 margin-bottom 挪到容器的内边距上：容器最后一个子级的
  * 外边距会坍出容器底部，那一截没有底色，滚动时会在吸顶块与列表之间露出一条内容。
- * `is-embedded`（记录视图装进项目主页弹窗）自带弹层头与独立滚动区，不参与吸顶。
+ * 记录视图装进项目主页弹窗（`is-embedded`）时也吸顶：正文是弹层自己的滚动区，
+ * 底色改成弹层盒面的白色（见 records-timeline.css），顶部间距也改由吸顶块自己承担。
  * 只在桌面档生效：窄屏下标题与工具条折行后自身已占掉大半屏，继续吸顶会让列表几乎没有可视空间。 */
 @media (min-width: 701px) {
-  .sticky-page-band:not(.is-embedded) {
+  .sticky-page-band {
     position: sticky;
     top: 0;
     z-index: 5;
@@ -562,7 +563,7 @@
     background: var(--background);
   }
 
-  .sticky-page-band:not(.is-embedded) > .toolbar {
+  .sticky-page-band > .toolbar {
     margin-bottom: 0;
   }
 
@@ -1425,13 +1426,43 @@
   overflow-y: auto;
 }
 
-/* 记录视图 embedded 页头只保留 CTA：按钮靠右，不再占整行标题位。 */
-.project-workspace-modal .page-header.embedded {
-  justify-content: flex-end;
-  margin-bottom: 14px;
+/* 记录视图（正文里是 `.records-workspace`）的顶部间距挤进吸顶块：弹层正文的 padding-top
+   留在吸顶线以上，而吸顶块只能盖住自己盒子里的内容，滚动时卡片会从那 20px 的缝里划过。
+   两行必须成对存在：正文顶部留白改由吸顶块自己的 padding 承担。 */
+.project-workspace-modal
+  > .project-workspace-modal-body:has(> .records-workspace) {
+  padding-top: 0;
 }
 
+.project-workspace-modal .records-workspace.is-embedded .sticky-page-band {
+  padding-top: 20px;
+}
+
+/* 2026-10-08 起记录视图 embedded 不再渲染页头（新建入口已移入筛选行，标题由弹层头部
+   承担），此处原有的 `.page-header.embedded` 靠右规则一并删除。 */
+
 /* ===================== F-05 项目与成员 ===================== */
+/* 维护中项目主体已完成、只做小修小补，卡片整体淡化以拉开与进行中/未开始的
+   视觉层级。维护中项目仍可点击、可编辑（ADR-043 三态都可写），所以只降不透明度
+   并去掉阴影，悬停或聚焦时恢复满不透明度，避免被误读为不可用。 */
+.project-card.is-maintenance {
+  opacity: 0.7;
+  box-shadow: none;
+  transition: opacity 0.18s ease;
+}
+
+.project-card.is-maintenance:hover,
+.project-card.is-maintenance:focus-visible,
+.project-card.is-maintenance:focus-within {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-card.is-maintenance {
+    transition: none;
+  }
+}
+
 /* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。
    描述区同时是卡片内唯一的弹性区，同行卡片的高度差全部由它吸收。 */
 .project-card > p.project-card-desc {

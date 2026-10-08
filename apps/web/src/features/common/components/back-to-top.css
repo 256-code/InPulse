@@ -1,4 +1,5 @@
-/* 回到顶部按钮：固定在右下角，只在滚过阈值后浮现（阈值见 BackToTop.tsx）。
+/* 回到顶部按钮：整页页面固定在视口右下角，弹层内（`.is-inset`）锚在正文滚动区右下角，
+   都只在滚过阈值后浮现（阈值见 BackToTop.tsx）。
    隐藏态用 visibility 而非 display —— display 不可动画，浮现会闪；
    visibility 过渡会在消失时延迟到动画结束才生效，浮现时立即可见。 */
 .back-to-top {
@@ -34,6 +35,17 @@
   color: #2469b5;
   border-color: #b9d3ea;
   background: #f7fbff;
+}
+/* 弹层内（`inset`，记录视图装进项目主页弹窗）：正文是弹层自己的滚动区，`fixed` 会让按钮
+   贴着视口右下角飘到弹层外面，改成 sticky 锚在滚动区内容区的右下角。水平位置交给 auto
+   外边距（内容区右边缘）；下偏移 4px 与正文 24px 的下内边距相加＝离弹层底边 28px，
+   与页面级按钮的 28px 一致。 */
+.back-to-top.is-inset {
+  position: sticky;
+  right: auto;
+  bottom: 4px;
+  display: grid;
+  margin-left: auto;
 }
 @media (max-width: 700px) {
   .back-to-top {

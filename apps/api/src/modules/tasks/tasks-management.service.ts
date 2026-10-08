@@ -14,6 +14,7 @@ import {
   type ProjectAccessQueryPort,
   ProjectCodePort,
   ProjectMembersQueryPort,
+  ProjectsWritePort,
 } from "../projects/index.js";
 import { ModuleQueryPort, ModuleReadPort } from "../modules/index.js";
 import { FeatureQueryPort, FeatureReadPort } from "../features/index.js";
@@ -70,6 +71,7 @@ export class TasksManagementService {
     @Inject(NotificationWritePort)
     private readonly notifications: NotificationWritePort,
     @Inject(ModuleReadPort) private readonly moduleRead: ModuleReadPort,
+    @Inject(ProjectsWritePort) private readonly projects: ProjectsWritePort,
   ) {}
   async read(
     actorId: number,
@@ -386,8 +388,84 @@ export class TasksManagementService {
           createdAt: new Date(result.updatedAt),
         });
     }
+    if (!before)
+      await this.reopenMaintenanceProject(tx, input, result, "TASK_CREATED");
     return result;
   }
+
+  /**
+   * ADR-056 / ADR-057：任务重新变为未收尾（新建、重新打开或恢复）后，维护中项目
+   * 就不再是「主体已完成、只做小修小补」，同一事务内回到进行中，并写审计、活动与
+   * 搜索投影；未开始与进行中项目不变，因此重复调用不会反复推高项目版本。
+   * 通知沿用 ADR-035 口径：不通知成员。
+   */
+  private async reopenMaintenanceProject(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly actorId: number;
+      readonly requestId: string;
+    },
+    result: TaskRecord,
+    trigger: "TASK_CREATED" | "TASK_REOPENED" | "TASK_RESTORED",
+  ): Promise<void> {
+    const reopened = await this.projects.reopenMaintenanceProject(tx, {
+      projectId: input.projectId,
+    });
+    if (reopened === undefined) return;
+    const occurredAt = new Date(result.updatedAt);
+    const event = await this.audit.append(tx, {
+      projectId: reopened.projectId,
+      actorType: "USER",
+      actorId: input.actorId,
+      action: "project.status.change",
+      targetType: "PROJECT",
+      targetId: String(reopened.projectId),
+      eventPayload: {
+        automatic: true,
+        trigger,
+        taskId: result.id,
+        before: { status: "MAINTENANCE" },
+        after: { status: reopened.status },
+      },
+      requestId: input.requestId,
+      occurredAt,
+    });
+    await this.activity.append(tx, {
+      projectId: reopened.projectId,
+      sourceChainId: event.chainId,
+      sourceSequence: event.sequenceNo,
+      sourceEntityType: "PROJECT",
+      sourceEntityId: reopened.projectId,
+      activityType: "PROJECT_STATUS_CHANGED",
+      actorId: input.actorId,
+      summary: `项目重新开工：${reopened.name} 由维护中回到进行中`,
+      metadata: {
+        code: reopened.code,
+        trigger,
+        taskId: result.id,
+      },
+      visibilityScope: "MEMBER",
+      sourceStatus: reopened.status,
+      sourceRowVersion: reopened.rowVersion,
+      occurredAt,
+    });
+    await this.search.upsert(tx, {
+      projectId: reopened.projectId,
+      entityType: "PROJECT",
+      entityId: reopened.projectId,
+      moduleId: null,
+      featureId: null,
+      recordId: null,
+      title: reopened.name,
+      summary: reopened.description.slice(0, 5000),
+      rawText: `${reopened.code} ${reopened.name} ${reopened.description}`,
+      visibilityScope: "MEMBER",
+      sourceStatus: reopened.status,
+      sourceRowVersion: reopened.rowVersion,
+    });
+  }
+
   async transition(
     tx: TransactionContext,
     input: TaskScope & {
@@ -519,6 +597,15 @@ export class TasksManagementService {
           createdAt: new Date(result.updatedAt),
         });
     }
+    // ADR-057：任务重新变为未收尾（重新打开 / 恢复）时维护中项目同样回到进行中；
+    // 完成与取消不触发——它们不会让项目重新产生未收尾任务。
+    if (command.action === "REOPEN" || command.action === "RESTORE")
+      await this.reopenMaintenanceProject(
+        tx,
+        input,
+        result,
+        command.action === "REOPEN" ? "TASK_REOPENED" : "TASK_RESTORED",
+      );
     return result;
   }
 }

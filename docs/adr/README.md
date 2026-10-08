@@ -69,6 +69,8 @@
 | [ADR-053](ADR-053.md) | Accepted | 项目组长唯一性与转移：有活跃成员则恰好一名组长，组长只能转移不能撤销/移除，组长本人可转交身份（修订 ADR-033/ADR-039 的组长授权口径） |
 | [ADR-054](ADR-054.md) | Accepted | 任务层面下线归档，任务生命周期只剩 ACTIVE / INVALID（替代 ADR-034 任务归档部分、修订 ADR-043「维护中」门禁的实现口径） |
 | [ADR-055](ADR-055.md) | Accepted | 项目保留期到期自动彻底删除：软删除满 30 天（按最后一次删除计时）由服务端后台经 `app.purge_project` 物理删除并在 SYSTEM 链留 `project.purge`（`trigger = AUTO_RETENTION`）（扩展 ADR-051 的触发路径） |
+| [ADR-056](ADR-056.md) | Accepted | 维护中项目新建任务即回到进行中：任务创建与项目状态切换同事务，写审计（`trigger = TASK_CREATED`）、活动与搜索投影但不发通知，`first_task_completed_at` 不动（扩展 ADR-035 的自动升级路径、修订 ADR-043 第 7 节第 3 条的边界）；**触发面由 [ADR-057](ADR-057.md) 扩展为「任务重新变为未收尾」** |
+| [ADR-057](ADR-057.md) | Accepted | 任务重新变为未收尾即让维护中项目回到进行中：重新打开（`REOPEN`）与恢复（`RESTORE`）与新建任务同口径（`trigger = TASK_REOPENED` / `TASK_RESTORED`、端口更名 `reopenMaintenanceProject`、前端补 `projects` 缓存失效），`COMPLETE` / `CANCEL` 不触发（扩展 ADR-056 的触发面、修订其非目标第 2 条） |
 
 ## 关联基线
 

@@ -196,6 +196,7 @@ beforeAll(async () => {
         search,
         notifications,
         new PostgresModuleReadPort(),
+        new PostgresProjectsWritePort(),
       ),
     ),
     new PostgresLeftoverRecordCommandPort(
@@ -245,6 +246,7 @@ beforeAll(async () => {
               search,
               notifications,
               new PostgresModuleReadPort(),
+              new PostgresProjectsWritePort(),
             ),
           ),
         ),

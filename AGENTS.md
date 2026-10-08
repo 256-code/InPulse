@@ -587,3 +587,38 @@
 - 折叠动画：两视图共用 `.tb-fold` / `.tb-fold-clip`（`grid-template-rows` 过渡）与 `@keyframes tb-enter-in`（0.24s），条目按 `--tb-enter-i` 每档 16ms 错开（上限 12，序号由 `TaskBoardLanes` / `TaskBoardTable` 写在条目自身）；`prefers-reduced-motion: reduce` 关闭动画；列表视图分组头补 `:first-child` 顶边框去除。真机逐帧量测 4 轮（展开 / 收起为连续高度变化而非跳变、错开序号生效、reduced-motion 无动画）。
 - 行链接：`FeaturesPageView` 列表首行「打开功能」由 antd `<Button href>` 改为原生 `<a className="feature-list-open">`（复用任务中心 / 任务面板既有类与样式）；DOM、计算样式与截图三重复核，`prettier` / `eslint` / `typecheck` 全部 exit 0。
 - 已知缺口：五项均无 Playwright 用例进套件（只有一次性探针），是回归防线缺口；折叠动画未在 Firefox / Safari 复核；本批需非作者人工评审，未提交、未推送。
+
+## 2026-10-08 ADR-056 维护中项目新建任务回到进行中说明
+
+按用户 2026-10-08 指示（「我要求如果给一个维护中的项目创建了一个新的任务，那么那个项目要转换为进行中」）在 [ADR-035](./docs/adr/ADR-035.md) 的自动升级路径上补第二个触发点（[ADR-056](./docs/adr/ADR-056.md)），并修订 [ADR-043](./docs/adr/ADR-043.md) 第 7 节第 3 条「不改动 ADR-035 自动升级口径」的边界。因此：
+
+- 维护中项目新建任务即在同一事务内回到进行中：`ProjectsWritePort.reopenMaintenanceProject`（原名 `reopenMaintenanceProjectOnTaskCreate`，经 [ADR-057](./docs/adr/ADR-057.md) 收敛为中性名；`PostgresProjectsWritePort` 用单条条件 UPDATE，`WHERE p.status = 'MAINTENANCE' AND p.deleted_at IS NULL`，未命中不取行锁）由 `TasksManagementService.execute()` 的创建分支调用，覆盖 HTTP 直连、联合创建、项目成员任务与遗留问题转任务四条入口；编辑任务、状态流转（**该部分经 ADR-057 修订**）、合并与记录发布都不触发。
+- 同事务写审计 `project.status.change`（`automatic: true` / `trigger: "TASK_CREATED"` / `taskId` / `before` / `after`）、活动 `PROJECT_STATUS_CHANGED`（摘要「项目重新开工：{name} 由维护中回到进行中」）与搜索投影；不写通知（沿用 ADR-035「只有未开始 → 进行中通知全体成员」），不写 `first_task_completed_at`（该标记唯一来源仍是任务完成）。
+- 并发面：非维护中项目不命中任何行、不推高 `row_version`；同一事务内由创建路径已持有的项目 `FOR SHARE` 升级为写锁，不跨事务、不改变父到子的取锁顺序；状态切换与任务创建、审计、活动、搜索投影同事务提交或一同回滚。
+- 零数据库面与零契约面：无迁移、无新表 / 新列 / 新角色、无新路由，Route Registry 仍 101 条，`createTask` / `createModuleTask` 幂等契约版本保持 `3.0.0`（幂等重放返回原响应、不重复执行状态切换）；`docs/permissions.md` 无改动。
+- 前端与 `docs/test-matrix.md` 已同步：`docs/test-matrix.md` 新增 `ADR056-*` 共 7 条（含鉴别性验证），三份设计文档各补一节；`apps/api/test/task-create-maintenance-reopen.integration.test.ts` 5 例真实 PostgreSQL。
+- 已知偏差：并发创建只有一个事务能完成状态切换这一点由条件 UPDATE 与行锁语义保证，本批没有并发真库竞态用例；连带效果是维护中项目创建任务后回到进行中、按 2026-09-30 口径重新出现在任务中心；`pnpm test:e2e`、整链 `pnpm check` 与 GitHub Actions 未运行；本批未提交、未推送。
+
+## 2026-10-08 ADR-057 任务重新变为未收尾即回到进行中说明
+
+按用户 2026-10-08 反馈（「现在问题我重新打开任务，将任务变为进行中还是处于维护中」）把 [ADR-056](./docs/adr/ADR-056.md) 的触发面由「任务创建」扩为「任务重新变为未收尾」（[ADR-057](./docs/adr/ADR-057.md)），并修订 ADR-056 第 5 节非目标第 2 条。因此：
+
+- 触发条件改为：命令执行前项目为 `MAINTENANCE`，且命令执行后任务的 `work_status` 由收尾态变回未收尾态——恰好是 `REOPEN`（`DONE → TODO`）与 `RESTORE`（`CANCELED → TODO`）。`COMPLETE` / `CANCEL`（减少未收尾任务）、编辑任务、合并 / 解除合并与记录发布仍不触发。用户先前观察到「重新打开任务后项目仍是维护中」符合 ADR-056 当时的明文边界，不是缺陷，本次是需求扩展。
+- 实现位置：`TasksManagementService.transition()` 在通知块之后、返回之前复用私有 `reopenMaintenanceProject(tx, input, result, trigger)`，`trigger` 取 `TASK_REOPENED` / `TASK_RESTORED`；覆盖 `transitionTask` 与 `transitionModuleTask` 两条 HTTP 路由。端口方法更名为 `ProjectsWritePort.reopenMaintenanceProject`（SQL 与返回值不变）。
+- 副作用与 ADR-056 一致：同事务写审计 `project.status.change`（`automatic: true` / `trigger` 逐动作区分）、活动 `PROJECT_STATUS_CHANGED`（`metadata.trigger` 同值）与搜索投影 `PROJECT` upsert；不发项目级通知，不写 `first_task_completed_at`；任务级通知（如 `task.reopen`）照旧发送。
+- 零数据库面与零契约面：无迁移、无新路由，Route Registry 仍 101 条，`transitionTask` / `transitionModuleTask` 幂等契约版本不变（响应 `TaskItem` 未变，重放不重复执行状态切换）；`docs/permissions.md` 无改动。
+- 前端修复必须项：`apps/web/src/features/tasks/TaskStatusPanel.tsx` 的 `onSuccess` 失效键补 `"projects"`，否则项目卡片读的 `["projects"]` 不失效，会出现「任务已回到未完成、项目卡片仍显示维护中」的观感（与用户报障描述一致）。
+- 测试：`apps/api/test/task-create-maintenance-reopen.integration.test.ts` 由 5 例扩为 9 例（新增重新打开触发、恢复触发、进行中项目不触发、同事务回滚）；鉴别性验证为临时停用 `transition()` 中的触发后新增两例转红、其余 7 例保持绿；`docs/test-matrix.md` 新增 `ADR057-*` 共 6 条。
+- 未运行：全量 `pnpm test:e2e`（本批无路由与前端行为改动，仅缓存失效键）、整链 `pnpm check` 与 GitHub Actions（尚未提交推送）；本批未提交、未推送，按 §8 需非作者人工评审。
+
+## 2026-10-08 迭代记录弹窗吸顶、回到顶部 inset 与「新建迭代记录」并入筛选行说明
+
+用户 2026-10-08 两条指示（原话）：①「这里弹窗没改」（项目主页「查看全部」弹窗内的迭代记录与独立页 `/records` 不一致：不吸顶、无日期分组头钉住、无回到顶部）；②「把新建迭代记录放在和搜索那些同一行里」。只改前端（`apps/web`），无 API / 契约 / 权限 / 迁移改动。
+
+- 弹窗与独立页对齐：`RecordsWorkspace.tsx` 的 `useStickyBandOffset(pageRef, bandRef)` 去掉 `!embedded` 限制——弹窗正文是 `overflow-y: auto` 的独立滚动容器，吸顶与偏移量量测都在弹窗内生效（实测页 132px / 弹窗 87px）；`is-embedded` 的吸顶块与分组头底色用白色 `#ffffff` 覆写（弹窗是白色卡片表面）。
+- 弹窗正文顶部内边距改由吸顶块承担：`.project-workspace-modal > .project-workspace-modal-body:has(> .records-workspace) { padding-top: 0 }` 必须与 `.project-workspace-modal .records-workspace.is-embedded .sticky-page-band { padding-top: 20px }` 成对存在，否则卡片会从吸顶块与正文之间的缝隙滑过；`TasksPage` 共用 `project-workspace-modal`，用 `:has` 把改动面收窄到记录视图容器。已无消费方的 `.page-header.embedded` 规则删除。
+- 记录视图在弹窗内不渲染自己的页头（标题由弹窗承担）；独立页页头只保留标题与说明。「新建迭代记录」由独立页页头移入筛选工具条最右端，与「生成总结」同排（`.records-toolbar-actions`，原 `.records-toolbar-summary`，`margin-left: auto` + `gap: 10px`）。
+- `BackToTop` 在弹窗内渲染 `inset` 变体（`position: sticky; right: auto; bottom: 4px; margin-left: auto`）；`nearestScroller` 向上探测最近的 `overflow-y: auto|scroll` 祖先作为滚动、监听与回顶目标，找不到时回退 `window`。
+- 修订上文表述：本小节之前，「活动 / 记录 / 审计三页吸顶页头与日期分组头」小节中「仅 ≥701px 且 `:not(.is-embedded)` 生效」「`is-embedded`（记录视图装进项目主页弹窗）不吸顶、不量高度」与「项目主页记录弹窗内吸顶块与分组头均为 `static`、变量未设置、弹窗内滚动 320px 时吸顶块 132 → −188」，以及「前端交互批次」小节中「挂载三处…（记录视图装在项目主页弹窗时 `embedded` 不渲染）」均为当时事实，与本节冲突时以本节为准。
+- 验证：一次性 Playwright 结构探针（用后删除、未入库）——独立页 `/records`：页头恰 1 个、搜索与动作组同一行（top 117 / bottom 152）且动作组右缘 = 工具条右缘（1398）、按钮次序 [生成总结 / 新建迭代记录] 不换行、`--sticky-band-height: 132px`；弹窗模式（项目主页「查看全部」）：无页头、吸顶块 `sticky-page-band is-embedded`、顶部 112 / 高度 88 / 变量 87px、搜索与动作组同排（top 153 / 高 35）、两按钮 enabled。改动文件 `prettier --check` 与 `pnpm --filter @inpulse/web typecheck` 通过；按 2026-09-17 前端免测试指示未运行 vitest / Playwright 套件 / 整链门禁。
+- 未运行 / 已知偏差：弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）在页头移除后复跑探针未命中项目主页弹窗（「查看全部」未找到），**未取得量测**，列为未取证；本批无 Playwright 用例进套件；按 §8 需非作者人工评审；已本地提交、未推送。

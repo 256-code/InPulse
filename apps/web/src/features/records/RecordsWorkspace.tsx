@@ -226,9 +226,9 @@ export function RecordsWorkspace({
   }, [publishedId, standaloneDetail, items]);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const bandRef = useRef<HTMLDivElement | null>(null);
-  // 量出的吸顶块高度写进页面根的 CSS 变量，供 `.timeline-day-head` 的 top 使用；
-  // 弹窗（embedded）不吸顶，也就不量，变量缺席时分组头按兜底值处理。
-  useStickyBandOffset(pageRef, bandRef, !embedded);
+  // 量出的吸顶块高度写进页面根的 CSS 变量，供 `.timeline-day-head` 的 top 使用。
+  // 弹窗（embedded）里正文是弹层自己的滚动区，吸顶同样成立，也要量。
+  useStickyBandOffset(pageRef, bandRef);
   return (
     <div
       className={
@@ -238,39 +238,25 @@ export function RecordsWorkspace({
     >
       {/* 2026-10-08 用户要求：页面滚动只滚动红线以下的区域——标题与筛选条吸顶，
           草稿与时间线在其下方滚动（样式见 inpulse-design.css 的 .sticky-page-band）。
-          项目主页弹窗里的记录视图自带弹层头与独立滚动区，不参与吸顶。 */}
+          项目主页弹窗里是弹层内部滚动，吸顶与回到顶部按钮都锚在这个滚动区上。 */}
       <div
         className={
           embedded ? "sticky-page-band is-embedded" : "sticky-page-band"
         }
         ref={bandRef}
       >
-        <div className={"page-header" + (embedded ? " embedded" : "")}>
-          {embedded ? null : (
+        {/* 2026-10-08 产品要求：新建入口与搜索、筛选用同一行，页头只剩标题。
+            弹层（embedded）里标题由弹层头部承担，页头整块不再渲染。 */}
+        {embedded ? null : (
+          <div className="page-header">
             <div>
               <h1>迭代记录</h1>
               <p>
                 只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
               </p>
             </div>
-          )}
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!canCreate}
-            title={
-              canCreate
-                ? undefined
-                : projectId === 0
-                  ? "当前没有可写入的项目"
-                  : "请先选择项目"
-            }
-            onClick={() => setCreateToken((token) => token + 1)}
-          >
-            <InpulseIcon name="plus" size={16} />
-            新建迭代记录
-          </button>
-        </div>
+          </div>
+        )}
         <div className="toolbar task-toolbar records-toolbar">
           <div className="task-search">
             <InpulseIcon name="search" size={16} />
@@ -319,9 +305,10 @@ export function RecordsWorkspace({
               onChange={selectStatus}
             />
           ) : null}
-          {/* F-33：生成总结与筛选同一行、靠右顶格；包一层 div 避免命中
-            `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则。 */}
-          <div className="records-toolbar-summary">
+          {/* F-33：生成总结与筛选同一行并靠右顶格；包一层 div 避免命中
+            `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则。
+            2026-10-08 产品要求「新建迭代记录」也进这一行，主操作放最右端。 */}
+          <div className="records-toolbar-actions">
             <button
               type="button"
               className="secondary-button"
@@ -329,6 +316,22 @@ export function RecordsWorkspace({
             >
               <InpulseIcon name="fileText" size={15} />
               生成总结
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!canCreate}
+              title={
+                canCreate
+                  ? undefined
+                  : projectId === 0
+                    ? "当前没有可写入的项目"
+                    : "请先选择项目"
+              }
+              onClick={() => setCreateToken((token) => token + 1)}
+            >
+              <InpulseIcon name="plus" size={16} />
+              新建迭代记录
             </button>
           </div>
         </div>
@@ -469,8 +472,8 @@ export function RecordsWorkspace({
           </Button>
         </div>
       )}
-      {/* 装进项目概览弹窗时是弹层内部滚动，页面级按钮不适用（与吸顶同一取舍） */}
-      {embedded ? null : <BackToTop />}
+      {/* 弹层里正文是弹层自己的滚动区，按钮要锚在它上面（见 BackToTop 的 inset）。 */}
+      <BackToTop inset={embedded} />
     </div>
   );
 }
