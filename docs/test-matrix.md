@@ -4714,3 +4714,54 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | CLEANUP-DEAD-CSS-REBASE-001 | 浏览器实测 | rebase 到 `5149d2a` 后复验 | 18 条路由「全 DOM 几何 + 计算样式」15 条逐字段一致；3 条差异全部可解释（`module-tasks` 本批有意的四列 319px、`admin-settings` 由「归档」改「删除」后的文案宽度、`admin-audit` 懒加载行数） | 本地通过 |
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、`test:integration`、Playwright E2E、镜像构建与 GitHub Actions（尚未提交推送）。② 死样式清除已在本批做完整：先按「被删 `className` 反查」清 7 处，再用脚本化口径做全量清除（该类名在 `apps/web/src` 全部 `.css` 里有定义、在全部 `.tsx/.ts/.html` 里无独立词引用、且不以任何代码拼接前缀开头），两轮共删 264 个整块死规则 + 16 处选择器裁剪并清掉空 `@media` 包裹；样式表里已无「代码零引用的活规则」。③ `CommandPalette.tsx:181` 的 `hint` 仍待用户定案。④ 未新增依赖、`pnpm-lock.yaml` 未动；按 §8 本批含前端产品代码与文档，需非作者人工评审。
+
+## 2026-10-08 维护中项目新建任务回到进行中（ADR-056，用户指示，本地落库，尚未提交）
+
+用户 2026-10-08 指示「我要求如果给一个维护中的项目创建了一个新的任务，那么那个项目要转换为进行中」，为 [ADR-035](adr/ADR-035.md) 的自动升级路径补第二个触发点（[ADR-056](adr/ADR-056.md)），并修订 [ADR-043](adr/ADR-043.md) 第 7 节第 3 条的边界。本批**零数据库面**：无迁移、无新表 / 新列 / 新角色；契约只改 `projects.zod.ts` 的状态说明注释（产物无变化，Route Registry 仍 101 条、`createTask` / `createModuleTask` 幂等契约版本保持 `3.0.0`，重放不重复执行状态切换）。
+
+锁定口径：
+
+- 触发条件：命令执行前项目 `status = 'MAINTENANCE'` 且任务创建成功；功能级 `createTask` 与模块级 `createModuleTask` 共用 `TasksManagementService.execute()`，因此四条真实入口（HTTP 直连、`TaskCreateCommandPort` 联合创建、`ProjectMemberTaskCommandPort`、`PostgresFollowupTaskCommandPort` 遗留问题转任务）全部生效。编辑任务、状态流转、合并 / 解除合并与记录发布都不触发。
+- 实现位置：`ProjectsWritePort.reopenMaintenanceProject`（原名 `reopenMaintenanceProjectOnTaskCreate`，经 [ADR-057](adr/ADR-057.md) 更名；`PostgresProjectsWritePort` 用一条条件 UPDATE，`WHERE p.status = 'MAINTENANCE' AND p.deleted_at IS NULL`，未命中返回 `undefined`）+ `TasksManagementService.execute()` 创建分支（`before === undefined`）末尾调用私有 `reopenMaintenanceProject`。
+- 同事务副作用：审计 `project.status.change`（`automatic: true` / `trigger: "TASK_CREATED"` / `taskId` / `before` / `after`）、活动 `PROJECT_STATUS_CHANGED`（摘要「项目重新开工：{name} 由维护中回到进行中」）、搜索投影 `PROJECT` upsert（`sourceStatus` / `sourceRowVersion` 取切换后项目行）。**不写**通知（沿用 ADR-035「只有未开始 → 进行中通知全体成员」）、**不写** `first_task_completed_at`（粘性标记唯一来源仍是任务完成）。
+- 并发：条件 UPDATE 只命中维护中行，非维护中不取行锁、不推高 `row_version`（`projects_row_version` 触发器要求每次 UPDATE 恰好 +1）；同一事务内由创建路径已持有的 `FOR SHARE` 升级为写锁，不跨事务、不改变父到子的取锁顺序。
+- 不做：反向自动（项目状态不影响任务状态）、不发通知、不回溯存量「维护中 + 未收尾任务」数据、不放宽进入维护中的 0 未收尾任务门禁（409 `PROJECT_MAINTENANCE_TASKS_OPEN` 不变）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR056-INT-001 | 真实 PostgreSQL 集成 | 维护中项目新建功能级任务回到进行中 | `apps/api/test/task-create-maintenance-reopen.integration.test.ts`：创建后项目 `status = 'ACTIVE'`、`row_version` 递增、`first_task_completed_at` 仍为 `NULL`；审计恰一条且 `automatic: true` / `trigger: "TASK_CREATED"` / `taskId` / `before` / `after` 齐全；活动与搜索投影的 `sourceStatus` / `sourceRowVersion` 与切换后项目行一致；**无** `project.status.change` 通知 | 本地通过 |
+| ADR056-INT-002 | 真实 PostgreSQL 集成 | 重复创建不重复切换 | 同文件：同项目再建任务后项目版本不再变化、审计与活动均不新增（条件 UPDATE 未命中） | 本地通过 |
+| ADR056-INT-003 | 真实 PostgreSQL 集成 | 模块级任务同样触发 | 同文件：`createModuleTask` 后项目回到进行中并写审计与活动（`ProjectMemberTaskCommandPort` / 联合创建共用同一出口） | 本地通过 |
+| ADR056-INT-004 | 真实 PostgreSQL 集成 | 未开始与进行中项目不受影响 | 同文件：两个状态下创建任务后状态与 `row_version` 均不变，且不写审计、不写活动（未开始的升级仍只由首次任务完成触发） | 本地通过 |
+| ADR056-INT-005 | 真实 PostgreSQL 集成 | 编辑任务不触发、失败同事务回滚 | 同文件：`updateTask` 不把维护中项目拉回进行中；创建流程外层抛错后项目仍为 `MAINTENANCE`，无任务行、无审计、无活动、无搜索投影 | 本地通过 |
+| ADR056-DISCRIM-001 | 鉴别性验证 | 证明用例真的在测触发点 | 临时停用 `execute()` 中的 `reopenMaintenanceProject` 调用后 `ADR056-INT-001/003` 转红（`AssertionError: expected 'MAINTENANCE' to be 'ACTIVE'`），负例与回滚用例保持绿；恢复实现后 5 例全绿 | 本地通过 |
+| ADR056-GATE-001 | 静态门禁 | 类型、单测与全量回归 | `pnpm --filter @inpulse/api typecheck` exit 0；`apps/api` 单测 **70 文件 405 例**、真实 PostgreSQL 集成 **54 文件 516 例**全绿（含新增 5 例与 5 个既有装配文件同步补 `PostgresProjectsWritePort`） | 本地通过 |
+
+本地实际执行（2026-10-08，分支 `test`，未提交未推送）：① `pnpm --filter @inpulse/api typecheck` → exit 0；定向集成 `task-create-maintenance-reopen` → **5/5**；`apps/api` 单测 **70 文件 405 例**（38.33s）；`apps/api` 真实 PostgreSQL 集成 **54 文件 516 例**（114.02s）；鉴别性实验如 `ADR056-DISCRIM-001` 所述转红后恢复。② 门禁：`pnpm lint` exit 0、`pnpm format:check` exit 0（新测试文件经 `prettier --write` 修正）、`pnpm typecheck`（8 workspace）exit 0、`pnpm test:unit` exit 0（api 70 文件 405 例，其余 workspace 同批通过）、`pnpm test:web` **90 文件 630 例**、`pnpm build` exit 0、`contract:drift` exit 0、`contract:validate` **101 条**、`permissions:check` **101 / 101**、`check:deps`（746 源文件）exit 0、`check:frontend:boundaries`（309 模块 / 1520 依赖）exit 0、`check:secrets`（1132 文件）exit 0、`db:migrations:check`（32 迁移）exit 0、`check:deploy:test`（5 refs）exit 0、`db:seed:check`（28 表）exit 0、`check:docs`（103 个 Markdown）exit 0。③ 收尾：`app_ci` 夹具按 2026-09-17 指示用 `E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` 清理（删除用户 800、项目 442、业务行 14183、审计行 776；脚本报告 SYSTEM 链有一个既有断点，属 `app_ci` 历史写入，与非本批夹具无关）。
+
+未运行 / 已知偏差：① **未跑** `pnpm test:e2e`（本 ADR 无路由与前端行为改动）、整链 `pnpm check`（`deps:audit` 因既有 registry 公告阻断，与本批无关；其余子项已逐条单独执行，见上）与 GitHub Actions（尚未提交推送）。② 并发创建「只有一个事务能完成状态切换」由条件 UPDATE 与行锁语义保证，本批**没有**写并发的真库竞态用例，现有用例只覆盖串行重复创建（`ADR056-INT-002`）。③ 本 ADR 本身零前端逻辑改动：状态标签与任务中心卡片的重新出现都依赖服务端状态读取；同一工作区另有一批未提交的纯视觉改动（维护中项目卡片淡化 `is-maintenance`，无自动化用例），与本 ADR 分属两件事、合并在一轮提交前需一并评审。④ 本批含服务端产品代码与文档，按 §8 需非作者人工评审。
+
+## 2026-10-08 任务重新变为未收尾即回到进行中（ADR-057，用户指示，本地落库，尚未提交）
+
+用户 2026-10-08 实测反馈（原话）「现在问题我重新打开任务，将任务变为进行中还是处于维护中」：点「重新打开」任务后任务回到未完成，但项目仍显示「维护中」——该行为**符合 ADR-056 第 5 节非目标第 2 条**（只覆盖创建、排除状态流转），属设计边界而非缺陷；用户要求扩展触发面，因此新增 [ADR-057](adr/ADR-057.md) 把触发条件改为「任务重新变为未收尾」并修订 ADR-056 非目标第 2 条。本批仍为**零数据库面**：无迁移、无新表 / 新列 / 新角色，契约只改 `projects.zod.ts` 的状态说明注释（Route Registry 仍 101 条，`transitionTask` / `transitionModuleTask` 幂等契约版本不变——响应 `TaskItem` 未变，重放不重复执行状态切换）。
+
+锁定口径：
+
+- 触发条件：命令执行前项目 `status = 'MAINTENANCE'`，且命令执行后任务 `work_status` 由收尾态变为未收尾态——恰好是 `REOPEN`（`DONE → TODO`）与 `RESTORE`（`CANCELED → TODO`）。`COMPLETE` / `CANCEL`（减少未收尾任务）、编辑任务、合并 / 解除合并与记录发布不触发。
+- 实现位置：`TasksManagementService.transition()` 在通知块之后、`return result` 之前复用私有 `reopenMaintenanceProject(tx, input, result, trigger)`，`trigger` 取 `TASK_REOPENED` / `TASK_RESTORED`；覆盖 `transitionTask`（功能级）与 `transitionModuleTask`（模块级）两条 HTTP 路由。
+- 副作用：与 ADR-056 完全一致（审计 / 活动 / 搜索投影同事务，**无**项目级通知、**不写** `first_task_completed_at`），仅 `trigger` 取值区分动作；任务级通知（`task.reopen`）照旧发送。
+- 前端：`apps/web/src/features/tasks/TaskStatusPanel.tsx` 的 `onSuccess` 失效键补 `"projects"`（项目卡片读 `["projects"]`、项目详情读 `["projects", "detail", projectId]`），否则会出现「任务已回到未完成、项目卡片仍显示维护中」的缓存形态复现。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR057-INT-001 | 真实 PostgreSQL 集成 | 维护中项目重新打开任务回到进行中 | 同文件：前置 `COMPLETE` 未改变项目状态（`MAINTENANCE`、版本不变、无审计）；`REOPEN` 后项目 `status = 'ACTIVE'`、`row_version` 递增、`first_task_completed_at` 仍为 `NULL`；审计恰一条且 `trigger: "TASK_REOPENED"` / `taskId` / `before` / `after` 齐全；活动与搜索投影 `sourceRowVersion` 与切换后项目行一致；**无** `project.status.change` 通知 | 本地通过 |
+| ADR057-INT-002 | 真实 PostgreSQL 集成 | 维护中项目恢复已取消任务回到进行中 | 同文件：前置 `CANCEL` 未触发（无项目状态审计）；`RESTORE` 后项目回到进行中，审计 `trigger: "TASK_RESTORED"`，活动 `metadata.trigger` 同值，无项目级通知 | 本地通过 |
+| ADR057-INT-003 | 真实 PostgreSQL 集成 | 进行中项目重新打开不写状态副作用 | 同文件：项目状态与 `row_version` 不变，无审计、无活动（条件 UPDATE 未命中） | 本地通过 |
+| ADR057-INT-004 | 真实 PostgreSQL 集成 | 重新打开与状态切换同一事务 | 同文件：外层抛错后项目仍为 `MAINTENANCE`、任务仍为 `DONE` 且 `row_version` 不变，无审计与活动，无 `task.reopen` 通知 | 本地通过 |
+| ADR057-DISCRIM-001 | 鉴别性验证 | 证明新用例真的在测触发点 | 临时把 `transition()` 中的触发条件改为恒假后 `ADR057-INT-001/002` 转红（`expected 'MAINTENANCE' to be 'ACTIVE'`），其余 7 例保持绿；恢复实现后 9 例全绿 | 本地通过 |
+| ADR057-GATE-001 | 静态门禁 | 类型、定向与全量回归 | `pnpm --filter @inpulse/api typecheck` exit 0；定向集成 `task-create-maintenance-reopen` **9/9**（新增 4 例 + 原有 5 例）；全量集成 database **2 文件 27 例** / api **54 文件 520 例** / ops **2 文件 7 例** 全绿；全量门禁矩阵见本节末「本地实际执行」 | 本地通过 |
+| ADR057-E2E-001 | 真机复验 | 演示库端到端确认触发链路 | 演示库项目 118（`test`）任务 35211：UI「重新打开」后项目转「进行中」；审计 `project.status.change` 一条 `trigger: "TASK_REOPENED"` / `automatic: true` / `next` 版本 +1；活动 `PROJECT_STATUS_CHANGED` 摘要「项目重新开工：test 由维护中回到进行中」；搜索投影 `PROJECT` 行 `source_status = 'ACTIVE'` 与切换后行版本一致；**无**新增 `project.status.change` 通知 | 本地通过（2026-10-08） |
+
+本地实际执行（2026-10-08，分支 `test`，未提交未推送）：① `pnpm --filter @inpulse/api typecheck` → exit 0；定向集成 `task-create-maintenance-reopen` → **9/9**；鉴别性实验如 `ADR057-DISCRIM-001` 所述转红后恢复。② 全量集成（`TEST_DATABASE_URL=…/app_ci` + `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE`）`pnpm test:integration` → **exit 0**：database **2 文件 27 例**、apps/api **54 文件 520 例**、apps/ops **2 文件 7 例**。③ 门禁 `pnpm check`：`lint`、`format:check`（新测试文件经 `prettier --write` 修正）、`typecheck`（8 workspace）、`test:unit`（api 70 文件 405 例、web 90 文件 630 例、api-contract 16 文件 102 例、ops 8 文件 52 例、database 1 文件 15 例、canonical-json 1 文件 5 例）、`db:migrations:check`（32 迁移）、`db:seed:check`（28 表）、`contract:drift`、`contract:validate`（**101 条**）、`build`、`check:deploy:test`（5 refs）、`check:deps`、`check:frontend:boundaries`、`permissions:check`（**101 / 101**）逐条 exit 0；`deps:audit` 因既有 registry 公告（2 moderate / 3 high / 1 critical，含 `proxy-addr` GHSA-jqcg-44mw-7w3h）中断，与本批无关，按 §4 走独立依赖 PR；中断点之后的 `check:secrets`（1133 文件）与 `check:docs`（104 个 Markdown）已单独补跑，均 exit 0。④ 真机复验见 `ADR057-E2E-001`（UI → 项目列表 → 项目动态 → 审计 → 活动 → 搜索投影 → 通知表逐项核对）。⑤ `app_ci` 夹具已按 2026-09-17 指示用 `E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` 清理（删除用户 1638、项目 921、业务行 29118、审计行 1879；脚本报告 SYSTEM 链留下一个断点，属 `app_ci` 历史写入）。
+
+未运行 / 已知偏差：① **未跑** `pnpm test:e2e`（本 ADR 仅改前端缓存失效键，无路由与页面行为改动）与 GitHub Actions（尚未提交推送）。② 本机 `pg_dump.exe` / `pg_restore.exe` 缺少 MSVC 运行库（`0xC0000135`）无法启动，本次通过把已补齐在 `node_modules/.pnpm/@node-rs+argon2-win32-x64-msvc@2.2.0/…` 的 `vcruntime140*.dll` / `msvcp140.dll` 前置到 `PATH` 后恢复，ops 备份 2 例随之通过；同一轮还清掉了 `app_ci` 被重复执行 `000_roles.sql` 带回来的陈旧 `pg_trgm`（零依赖对象），使 `database.test.ts` 的扩展不变量断言恢复。两者都是本机环境问题，**与本批代码无关**，也未改动仓库内任何文件。③ 演示库项目 118 的验证任务（35211 已回到未完成，35118 / 35209 / 35212 仍为已完成）是本轮真机复验夹具，仓库无任务删除入口，清理需人工 SQL。④ 本批含服务端与前端产品代码、测试与文档，按 §8 需非作者人工评审。
