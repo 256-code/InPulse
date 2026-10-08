@@ -48,6 +48,12 @@ export interface ProjectAccessQueryPort {
    */
   isDeletedProject(projectId: number): Promise<boolean>;
 
+  /**
+   * ADR-052：聚合动态需要把全部已删除项目（MEMBER 可见链对全部登录用户
+   * 公开）并入实时授权范围，因此提供全量已删除项目 ID（升序）。
+   */
+  listDeletedProjectIds(): Promise<readonly number[]>;
+
   checkProjectForWrite(
     tx: TransactionContext,
     input: { readonly actorUserId: number; readonly projectId: number },

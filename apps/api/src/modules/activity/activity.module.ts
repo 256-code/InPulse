@@ -13,6 +13,7 @@ import {
   type ProjectAccessQueryPort,
 } from "../projects/index.js";
 import { ActivityController } from "./activity.controller.js";
+import { ActivityFeedController } from "./activity-feed.controller.js";
 import { PostgresActivityProjectionReader } from "./activity-projection.reader.js";
 import { ActivityQueryService } from "./activity-query.service.js";
 
@@ -45,6 +46,6 @@ import { ActivityQueryService } from "./activity-query.service.js";
       ],
     },
   ],
-  controllers: [ActivityController],
+  controllers: [ActivityController, ActivityFeedController],
 })
 export class ActivityModule {}

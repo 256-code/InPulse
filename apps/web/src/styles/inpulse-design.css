@@ -556,6 +556,45 @@
   margin-bottom: 18px;
 }
 
+/* 2026-10-08 用户要求「页面滚动只滚动红线以下的区域」：项目动态、迭代记录与审计日志三个
+ * 列表页的标题与筛选工具条吸顶，列表与说明区在其下方滚动。容器自带不透明底色，否则行会从
+ * 标题与筛选条后方透出。工具条原本的 margin-bottom 挪到容器的内边距上：容器最后一个子级的
+ * 外边距会坍出容器底部，那一截没有底色，滚动时会在吸顶块与列表之间露出一条内容。
+ * `is-embedded`（记录视图装进项目主页弹窗）自带弹层头与独立滚动区，不参与吸顶。
+ * 只在桌面档生效：窄屏下标题与工具条折行后自身已占掉大半屏，继续吸顶会让列表几乎没有可视空间。 */
+@media (min-width: 701px) {
+  .sticky-page-band:not(.is-embedded) {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-bottom: 18px;
+    background: var(--background);
+  }
+
+  .sticky-page-band:not(.is-embedded) > .toolbar {
+    margin-bottom: 0;
+  }
+
+  /* 2026-10-08 用户要求「日期先不被滚走，等当天的内容滚完了再收起来」：分组头吸顶在标题
+   * 与筛选条下方，父级 `.activity-day` 就是它的包裹盒——当天内容滚完时它被下一组顶走，
+   * 「收起来」由分组头自身的边界完成，不需要脚本。偏移由脚本量出的吸顶块高度给出（见
+   * features/common/use-sticky-band-offset 的 useStickyBandOffset），兜底值取常见桌面宽度
+   * 的实测高度。底色必须不透明，否则被压住的行会从分组头后面透出来。 */
+  .activity-day-head {
+    position: sticky;
+    top: var(--sticky-band-height, 182px);
+    z-index: 4;
+    background: #ffffff;
+  }
+
+  /* 首个分组头与列表卡片的圆角顶边齐平，方形底色会盖住那圈圆角，跟着卡片取同样的圆角。
+   * 只有首组需要：后续分组吸顶时卡片顶边早已滚出视口。 */
+  .activity-day:first-child > .activity-day-head {
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+  }
+}
+
 .activity-toolbar .task-search {
   width: 320px;
   max-width: 100%;
@@ -598,6 +637,13 @@
 }
 
 /* 每天之间画一条与行分隔线同色的分隔线；首日不画，由 `.audit-list` 上边框收口。 */
+/* 按日数量是服务端全量统计（不随加载更多增长）；超出统计窗口时给出提示。 */
+.activity-totals-hint {
+  margin: 0 0 10px;
+  color: #8291a1;
+  font-size: 12px;
+}
+
 .activity-day + .activity-day .activity-day-head {
   border-top: 1px solid #edf1f5;
 }

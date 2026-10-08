@@ -11,6 +11,134 @@
     }
   ],
   "paths": {
+    "/activity": {
+      "get": {
+        "operationId": "listActivity",
+        "summary": "跨项目聚合动态时间线：服务端把实时 AuthorizedProjectScope 与全部已删除项目（ADR-050 / ADR-052 对全部登录用户可见的公开链）合并后在全量结果集上按 occurred_at DESC, id DESC 做全局游标分页，加载更多只会追加更早的条目；projectIds 只用于收窄（越权或未知项目静默排除，不返回 403 / 404）；category 按 chip 分类过滤；dayTotals 给出每个 Asia/Shanghai 自然日的全量总数，不随分页增长。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "includeAdminOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "task",
+                "record",
+                "feature",
+                "module",
+                "project",
+                "member",
+                "github"
+              ]
+            }
+          }
+        ]
+      }
+    },
     "/admin/users": {
       "get": {
         "operationId": "listAdminUsers",
@@ -3942,7 +4070,7 @@
     "/projects/{projectId}/activity": {
       "get": {
         "operationId": "getProjectActivity",
-        "summary": "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY。",
+        "summary": "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY；category 按 chip 分类在 SQL 层过滤；dayTotals 给出范围内每个 Asia/Shanghai 自然日的全量总数。",
         "responses": {
           "200": {
             "description": "成功",
@@ -4047,6 +4175,24 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "task",
+                "record",
+                "feature",
+                "module",
+                "project",
+                "member",
+                "github"
+              ]
             }
           }
         ]
@@ -14367,6 +14513,68 @@
         ],
         "additionalProperties": false
       },
+      "ActivityDayTotal": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "day",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityFeedQueryRequest": {
+        "type": "object",
+        "properties": {
+          "projectIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "includeAdminOnly": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "all",
+              "task",
+              "record",
+              "feature",
+              "module",
+              "project",
+              "member",
+              "github"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "ActivityItem": {
         "type": "object",
         "properties": {
@@ -14462,12 +14670,24 @@
           },
           "hasMore": {
             "type": "boolean"
+          },
+          "dayTotals": {
+            "maxItems": 400,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityDayTotal"
+            }
+          },
+          "dayTotalsTruncated": {
+            "type": "boolean"
           }
         },
         "required": [
           "items",
           "nextCursor",
-          "hasMore"
+          "hasMore",
+          "dayTotals",
+          "dayTotalsTruncated"
         ],
         "additionalProperties": false
       },
@@ -14500,6 +14720,19 @@
           },
           "includeAdminOnly": {
             "type": "boolean"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "all",
+              "task",
+              "record",
+              "feature",
+              "module",
+              "project",
+              "member",
+              "github"
+            ]
           }
         },
         "additionalProperties": false

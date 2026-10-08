@@ -13,6 +13,19 @@ export type ActiveProjectMembersResponse = {
   readonly items: readonly ActiveProjectMemberItem[];
 };
 
+export type ActivityDayTotal = {
+  readonly day: string;
+  readonly count: number;
+};
+
+export type ActivityFeedQueryRequest = {
+  readonly projectIds?: readonly number[];
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly includeAdminOnly?: boolean;
+  readonly category?: ("all" | "task" | "record" | "feature" | "module" | "project" | "member" | "github");
+};
+
 export type ActivityItem = {
   readonly id: string;
   readonly projectId: number;
@@ -28,6 +41,8 @@ export type ActivityPage = {
   readonly items: readonly ActivityItem[];
   readonly nextCursor: (string | null);
   readonly hasMore: boolean;
+  readonly dayTotals: readonly ActivityDayTotal[];
+  readonly dayTotalsTruncated: boolean;
 };
 
 export type ActivityPath = {
@@ -38,6 +53,7 @@ export type ActivityQueryRequest = {
   readonly cursor?: string;
   readonly limit?: number;
   readonly includeAdminOnly?: boolean;
+  readonly category?: ("all" | "task" | "record" | "feature" | "module" | "project" | "member" | "github");
 };
 
 export type AddProjectMemberRequest = {

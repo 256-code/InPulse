@@ -10,6 +10,7 @@ import {
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { useStickyBandOffset } from "@features/common/use-sticky-band-offset";
 import {
   projectDeletionItems,
   useProjectDeletionsQuery,
@@ -20,18 +21,19 @@ import { ActivitySnapshotModal } from "./ActivitySnapshotModal";
 import { ProjectDeletionActions } from "./ProjectDeletionActions";
 import { activityTimeLabel, groupActivitiesByDay } from "./activity-day-groups";
 import {
+  ACTIVITY_CHIP_CATEGORY,
   ACTIVITY_CHIPS,
   activityActionLabel,
   activityDescription,
   activityEntityLabel,
   activityTargetLabel,
   activityTargetPath,
-  matchesActivityChip,
   type ActivityChip,
 } from "./activity-labels";
 import {
+  activityDayTotals,
   describeActivityError,
-  mergeActivityPages,
+  flattenActivityPages,
   useActivityFeedQuery,
 } from "./activity-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
@@ -68,7 +70,9 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   const [projectFilter, setProjectFilter] = useState<string>(
     lockedProjectId === undefined ? ALL_PROJECTS : String(lockedProjectId),
   );
-  const [includeAdminOnly, setIncludeAdminOnly] = useState(false);
+  // 2026-09-24：管理员操作默认勾选——取消勾选会重取第一页，默认打开才不会让
+  // 用户以为「勾上以后动态变少了」。
+  const [includeAdminOnly, setIncludeAdminOnly] = useState(true);
   const [snapshotItem, setSnapshotItem] = useState<ActivityItem | null>(null);
   /** 动态按天折叠：日期键集合，默认全部展开。 */
   const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
@@ -81,6 +85,10 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
       else next.add(key);
       return next;
     });
+
+  const pageRef = React.useRef<HTMLDivElement | null>(null);
+  const bandRef = React.useRef<HTMLDivElement | null>(null);
+  useStickyBandOffset(pageRef, bandRef);
 
   const projectsQuery = useProjects(client ? { client } : {});
   const directoryQuery = useUserDirectoryQuery(client ? { client } : {});
@@ -129,33 +137,53 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
     [directoryQuery.data],
   );
 
-  const scopeProjectIds = useMemo(() => {
+  /**
+   * 取数范围：
+   * - 锁定单项目 → 项目级路由（保留 404 语义）；
+   * - 「已删除项目」→ 删除台账里的项目 ID；
+   * - 选定单项目 → 只传它；
+   * - 「全部项目」→ 不传 projectIds，由服务端用「实时授权范围 + 全部已删除
+   *   项目」直接取数，界面不需要先知道有哪些项目，也就不必等项目的读请求。
+   */
+  const feedScope = useMemo((): {
+    readonly projectIds?: readonly number[];
+    readonly scopeKey: string;
+  } => {
     if (lockedProjectId !== undefined) {
-      return [lockedProjectId];
+      return { scopeKey: `project:${lockedProjectId}` };
     }
     if (projectFilter === DELETED_PROJECTS) {
-      return deletedProjects.map((project) => project.projectId);
+      return {
+        projectIds: deletedProjects.map((project) => project.projectId),
+        scopeKey: "deleted",
+      };
     }
     if (projectFilter !== ALL_PROJECTS) {
       const picked = Number(projectFilter);
-      return Number.isSafeInteger(picked) && picked > 0 ? [picked] : [];
+      if (!Number.isSafeInteger(picked) || picked <= 0) {
+        return { projectIds: [], scopeKey: "invalid" };
+      }
+      return { projectIds: [picked], scopeKey: `project:${picked}` };
     }
-    return [
-      ...projects.map((project) => project.id),
-      ...deletedProjects.map((project) => project.projectId),
-    ];
-  }, [lockedProjectId, projectFilter, projects, deletedProjects]);
+    return { scopeKey: "all" };
+  }, [lockedProjectId, projectFilter, deletedProjects]);
 
-  // 「全部项目」要先知道有哪些项目才能决定取数范围；锁定项目时可直接取数。
   const activityQuery = useActivityFeedQuery({
-    projectIds: scopeProjectIds,
+    ...(lockedProjectId === undefined ? {} : { lockedProjectId }),
+    ...(feedScope.projectIds === undefined
+      ? {}
+      : { projectIds: feedScope.projectIds }),
+    scopeKey: feedScope.scopeKey,
+    category: ACTIVITY_CHIP_CATEGORY[chip],
+    includeAdminOnly: isAdmin && includeAdminOnly,
     ...(client ? { client } : {}),
-    includeAdminOnly,
-    // 台账未落定前不发动态请求，避免先少一次再重取；
+    // 「已删除项目」要先知道有哪些已删除项目，台账未落定前不发请求；
     // 台账读取失败按「没有已删除项目」降级，不影响其余动态。
-    enabled:
-      (lockedScope || !projectsQuery.isPending) &&
-      (showDeletedProjects ? !deletionsQuery.isPending : true),
+    enabled: !(
+      !lockedScope &&
+      projectFilter === DELETED_PROJECTS &&
+      deletionsQuery.isPending
+    ),
   });
 
   const actorNameOf = useCallback(
@@ -170,20 +198,24 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
 
   const items = useMemo(
     () =>
-      activityQuery.data ? mergeActivityPages(activityQuery.data.pages) : [],
+      activityQuery.data ? flattenActivityPages(activityQuery.data.pages) : [],
     [activityQuery.data],
   );
 
+  // 日期旁的数量取服务端按日总数（当前过滤条件下的全量），不随加载更多增长。
+  const { totals: dayTotals, truncated: dayTotalsTruncated } = useMemo(
+    () => activityDayTotals(activityQuery.data?.pages ?? []),
+    [activityQuery.data],
+  );
+
+  const term = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return items.filter((item) => {
-      if (!matchesActivityChip(item, chip)) {
-        return false;
-      }
-      if (term.length === 0) {
-        return true;
-      }
-      return [
+    if (term.length === 0) {
+      return items;
+    }
+    // 分类过滤由服务端完成，这里只剩关键词匹配（只作用于已加载的页）。
+    return items.filter((item) =>
+      [
         activityDescription(item),
         activityActionLabel(item.activityType),
         activityEntityLabel(item.sourceEntityType),
@@ -192,9 +224,9 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
       ]
         .join(" ")
         .toLowerCase()
-        .includes(term);
-    });
-  }, [items, query, chip, actorNameOf]);
+        .includes(term),
+    );
+  }, [items, term, actorNameOf]);
 
   const dayGroups = useMemo(
     () => groupActivitiesByDay(filteredItems),
@@ -202,13 +234,11 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   );
 
   /**
-   * 动态按项目分页取回后才在前端筛选，分类与关键词只作用于已加载的页：
-   * 选中的分类在首屏没有命中时，直接显示空态会把未加载的数据当成「没有」。
-   * 因此筛选激活且当前无匹配时自动继续翻页，直到找到匹配或数据穷尽；
-   * 期间界面给出「正在查找」状态，不再显示误导性空态。
+   * 分类已交给服务端；关键词仍在前端匹配已加载的页，命中不到时继续翻页，
+   * 直到找到匹配或数据穷尽，期间不给误导性的空态。
    */
-  const isFiltering = chip !== "全部" || query.trim().length > 0;
-  const awaitingFilteredMatch = isFiltering && filteredItems.length === 0;
+  const isSearching = term.length > 0;
+  const awaitingFilteredMatch = isSearching && filteredItems.length === 0;
   useEffect(() => {
     if (
       !awaitingFilteredMatch ||
@@ -312,9 +342,16 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   } else {
     content = (
       <>
+        {dayTotalsTruncated ? (
+          <p className="activity-totals-hint">
+            按日数量只统计最近 400 个自然日内的动态。
+          </p>
+        ) : null}
         <div className="audit-list">
           {dayGroups.map((group) => {
             const collapsed = collapsedDays.has(group.key);
+            // 服务端按日总数；超出统计窗口的旧日期退回已加载条数。
+            const dayTotal = dayTotals.get(group.key) ?? group.items.length;
             return (
               <section className="activity-day" key={group.key}>
                 <div className="activity-day-head">
@@ -337,7 +374,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                       {...(collapsed ? {} : { className: "expanded" })}
                     />
                     <strong>{group.label}</strong>
-                    <small>{group.items.length} 条动态</small>
+                    <small>{dayTotal} 条动态</small>
                   </button>
                 </div>
                 {collapsed
@@ -456,75 +493,79 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   }
 
   return (
-    <div className="activity-page">
-      <div className="page-header activity-page-header">
-        <div>
-          <h1>项目动态</h1>
-          <p>
-            创建、指派、完成、合并、记录发布与版本修改全部留痕；审计日志不允许删除。
-          </p>
+    <div className="activity-page" ref={pageRef}>
+      {/* 2026-10-08 用户要求：页面滚动只滚动红线以下的区域——标题与筛选条吸顶，
+          列表与审计规则在其下方滚动（样式见 inpulse-design.css 的 .sticky-page-band）。 */}
+      <div className="sticky-page-band" ref={bandRef}>
+        <div className="page-header activity-page-header">
+          <div>
+            <h1>项目动态</h1>
+            <p>
+              创建、指派、完成、合并、记录发布与版本修改全部留痕；审计日志不允许删除。
+            </p>
+          </div>
+          <div className="catalog-actions activity-header-actions">
+            {lockedProjectId !== undefined ? (
+              <span className="activity-scope-badge">
+                项目 #{lockedProjectId}
+              </span>
+            ) : null}
+            <CalmBadge tone={isAdmin ? "blue" : "gray"}>
+              {isAdmin ? "管理员可查看原始快照" : "仅管理员可查看原始快照"}
+            </CalmBadge>
+          </div>
         </div>
-        <div className="catalog-actions activity-header-actions">
-          {lockedProjectId !== undefined ? (
-            <span className="activity-scope-badge">
-              项目 #{lockedProjectId}
-            </span>
-          ) : null}
-          <CalmBadge tone={isAdmin ? "blue" : "gray"}>
-            {isAdmin ? "管理员可查看原始快照" : "仅管理员可查看原始快照"}
-          </CalmBadge>
-        </div>
-      </div>
 
-      <div className="toolbar task-toolbar activity-toolbar">
-        <div className="task-search">
-          <InpulseIcon name="search" size={16} />
-          <input
-            value={query}
-            placeholder="搜索操作、对象或执行人"
-            aria-label="搜索动态"
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-        </div>
-        <div className="chip-row" role="group" aria-label="动态类型筛选">
-          {ACTIVITY_CHIPS.map((option) => (
-            <button
-              type="button"
-              key={option}
-              className={`chip${chip === option ? " chip-active" : ""}`}
-              aria-pressed={chip === option}
-              onClick={() => setChip(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        {lockedProjectId === undefined ? (
-          <CalmSelect
-            ariaLabel="项目"
-            value={projectFilter}
-            appearance="rich"
-            onChange={(next) => setProjectFilter(String(next))}
-            options={[
-              { value: ALL_PROJECTS, label: "全部项目" },
-              { value: DELETED_PROJECTS, label: "已删除项目" },
-              ...projects.map(projectSelectOption),
-            ]}
-            animated
-          />
-        ) : null}
-        {isAdmin ? (
-          <label className="check-line activity-admin-toggle">
+        <div className="toolbar task-toolbar activity-toolbar">
+          <div className="task-search">
+            <InpulseIcon name="search" size={16} />
             <input
-              type="checkbox"
-              checked={includeAdminOnly}
-              onChange={(event) =>
-                setIncludeAdminOnly(event.currentTarget.checked)
-              }
+              value={query}
+              placeholder="搜索操作、对象或执行人"
+              aria-label="搜索动态"
+              onChange={(event) => setQuery(event.currentTarget.value)}
             />
-            包含管理员操作
-          </label>
-        ) : null}
+          </div>
+          <div className="chip-row" role="group" aria-label="动态类型筛选">
+            {ACTIVITY_CHIPS.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`chip${chip === option ? " chip-active" : ""}`}
+                aria-pressed={chip === option}
+                onClick={() => setChip(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          {lockedProjectId === undefined ? (
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectFilter}
+              appearance="rich"
+              onChange={(next) => setProjectFilter(String(next))}
+              options={[
+                { value: ALL_PROJECTS, label: "全部项目" },
+                { value: DELETED_PROJECTS, label: "已删除项目" },
+                ...projects.map(projectSelectOption),
+              ]}
+              animated
+            />
+          ) : null}
+          {isAdmin ? (
+            <label className="check-line activity-admin-toggle">
+              <input
+                type="checkbox"
+                checked={includeAdminOnly}
+                onChange={(event) =>
+                  setIncludeAdminOnly(event.currentTarget.checked)
+                }
+              />
+              包含管理员操作
+            </label>
+          ) : null}
+        </div>
       </div>
 
       {content}

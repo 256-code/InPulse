@@ -567,7 +567,7 @@ export const routeRegistry = [
     path: "/projects/{projectId}/activity",
     operationId: "getProjectActivity",
     summary:
-      "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY。",
+      "读取当前用户可访问项目的脱敏动态时间线；SQL 前强制服务端 AuthorizedProjectScope，普通成员只返回 MEMBER，系统管理员可显式包含 ADMIN_ONLY；category 按 chip 分类在 SQL 层过滤；dayTotals 给出范围内每个 Asia/Shanghai 自然日的全量总数。",
     request: {
       path: "ActivityPath",
       query: "ActivityQueryRequest",
@@ -590,6 +590,62 @@ export const routeRegistry = [
         },
       },
       "404": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "422": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+      "500": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ErrorResponse" },
+          ],
+        },
+      },
+    },
+    authPolicy: "session",
+    csrfPolicy: "none",
+    idempotencyPolicy: "none",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "none",
+    idempotencyFingerprintVersion: "none",
+    behaviorHeaders: "none",
+    idempotencyReplayPolicy: "none",
+    replayAuthorizationPolicy: "none",
+    securityFlowPolicy: "none",
+    versionPolicy: "none",
+    concurrencyPolicy: "none",
+    auditAction: "none",
+  },
+  {
+    method: "GET",
+    path: "/activity",
+    operationId: "listActivity",
+    summary:
+      "跨项目聚合动态时间线：服务端把实时 AuthorizedProjectScope 与全部已删除项目（ADR-050 / ADR-052 对全部登录用户可见的公开链）合并后在全量结果集上按 occurred_at DESC, id DESC 做全局游标分页，加载更多只会追加更早的条目；projectIds 只用于收窄（越权或未知项目静默排除，不返回 403 / 404）；category 按 chip 分类过滤；dayTotals 给出每个 Asia/Shanghai 自然日的全量总数，不随分页增长。",
+    request: {
+      path: "none",
+      query: "ActivityFeedQueryRequest",
+      headers: "none",
+      body: { noBody: true },
+    },
+    responses: {
+      "200": {
+        body: {
+          contentTypes: [
+            { contentType: "application/json", schemaRef: "ActivityPage" },
+          ],
+        },
+      },
+      "401": {
         body: {
           contentTypes: [
             { contentType: "application/json", schemaRef: "ErrorResponse" },

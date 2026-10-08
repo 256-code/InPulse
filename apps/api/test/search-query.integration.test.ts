@@ -106,6 +106,17 @@ class FixtureScopedProjectAccessQueryPort implements ProjectAccessQueryPort {
       "FixtureScopedProjectAccessQueryPort does not support write checks",
     );
   }
+
+  // 与真实适配器同口径：已删除项目 ID 全集（ADR-050）。
+  async listDeletedProjectIds(): Promise<readonly number[]> {
+    const projects = await this.#sql<Array<{ readonly id: number }>>`
+      SELECT id
+        FROM app.projects
+       WHERE deleted_at IS NOT NULL
+       ORDER BY id ASC
+    `;
+    return projects.map((project) => project.id);
+  }
 }
 
 function expectedProjectId(

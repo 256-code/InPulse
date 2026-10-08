@@ -1,4 +1,5 @@
 import type { ActivityItem } from "@generated/api";
+import type { ActivityCategory } from "./activity-query";
 
 /**
  * 项目动态的分类筛选项，取值与设计师稿 `activity.tsx` 的 chip 行一致。
@@ -94,35 +95,23 @@ export function activityEntityLabel(sourceEntityType: string): string {
   return ENTITY_LABELS[sourceEntityType] ?? sourceEntityType;
 }
 
-function activityChipOf(item: ActivityItem): ActivityChip {
-  if (item.activityType.startsWith("EXTERNAL_LINK")) {
-    return "GitHub";
-  }
-  if (item.activityType.startsWith("PROJECT_MEMBER")) {
-    return "成员";
-  }
-  switch (item.sourceEntityType) {
-    case "TASK":
-    case "TASK_GROUP":
-      return "任务";
-    case "CHANGE_RECORD":
-    case "LEFTOVER_ITEM":
-      return "迭代记录";
-    case "FEATURE":
-      return "功能";
-    case "MODULE":
-      return "模块";
-    default:
-      return "项目";
-  }
-}
-
-export function matchesActivityChip(
-  item: ActivityItem,
-  chip: ActivityChip,
-): boolean {
-  return chip === "全部" || activityChipOf(item) === chip;
-}
+/**
+ * chip 到服务端分类的映射。分类过滤由服务端 SQL 完成
+ * （`ACTIVITY_CATEGORY_SQL`），这里的取值必须与契约 `ACTIVITY_CATEGORIES`
+ * 一一对应，否则界面会筛出空列表；改映射时必须同时改两处。
+ */
+export const ACTIVITY_CHIP_CATEGORY: Readonly<
+  Record<ActivityChip, ActivityCategory>
+> = {
+  全部: "all",
+  任务: "task",
+  迭代记录: "record",
+  功能: "feature",
+  模块: "module",
+  项目: "project",
+  成员: "member",
+  GitHub: "github",
+};
 
 const SUBJECT_PREFIX_MAX_LENGTH = 16;
 

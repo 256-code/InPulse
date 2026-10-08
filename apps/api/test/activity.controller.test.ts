@@ -40,6 +40,8 @@ class FakeActivityService {
     ],
     nextCursor: "opaque-cursor",
     hasMore: false,
+    dayTotals: [{ day: "2026-09-08", count: 3 }],
+    dayTotalsTruncated: false,
   };
   error: unknown;
   commands: ActivityQueryCommand[] = [];
@@ -102,6 +104,7 @@ describe("ActivityController", () => {
         cursor: "opaque",
         limit: 10,
         includeAdminOnly: true,
+        category: "task",
       },
     );
 
@@ -112,12 +115,15 @@ describe("ActivityController", () => {
         after: "opaque",
         limit: 10,
         includeAdminOnly: true,
+        category: "task",
       },
     ]);
     expect(result).toEqual({
       items: service.result.items,
       nextCursor: "opaque-cursor",
       hasMore: false,
+      dayTotals: [{ day: "2026-09-08", count: 3 }],
+      dayTotalsTruncated: false,
     });
     expect(response.status).not.toHaveBeenCalled();
   });

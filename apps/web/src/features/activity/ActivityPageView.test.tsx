@@ -41,6 +41,9 @@ const ACTIVITY: ActivityPage = {
   ],
   nextCursor: null,
   hasMore: false,
+  // 服务端全量统计：当天 4 条，但首页只加载了 1 条。
+  dayTotals: [{ day: "2026-09-08", count: 4 }],
+  dayTotalsTruncated: false,
 };
 
 function createClient(): InpulseApiClient {
@@ -98,7 +101,10 @@ describe("ActivityPageView", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("项目 #7")).toBeInTheDocument();
     expect(screen.getByText("管理员可查看原始快照")).toBeInTheDocument();
-    expect(screen.getByLabelText("包含管理员操作")).toBeInTheDocument();
+    // 2026-09-24：管理员操作默认勾选（取消勾选会重取第一页）。
+    expect(screen.getByLabelText("包含管理员操作")).toBeChecked();
+    // 日期旁的条数是服务端全量，不是已加载行数。
+    expect(screen.getByText("4 条动态")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "原始快照 1" }),
     ).toBeInTheDocument();

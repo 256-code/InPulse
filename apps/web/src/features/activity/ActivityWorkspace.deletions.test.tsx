@@ -84,13 +84,21 @@ const DELETION_ROWS: readonly ActivityItem[] = [
 
 function createClient(overrides: Partial<InpulseApiClient> = {}) {
   return {
-    getProjectActivity: vi
-      .fn()
-      .mockImplementation(async (projectId: number) => ({
-        items: DELETION_ROWS.filter((row) => row.projectId === projectId),
-        nextCursor: null,
-        hasMore: false,
-      })),
+    // 服务端一次查询就返回整个范围内的全局倒序流（含已删除项目的历史）。
+    listActivity: vi.fn().mockResolvedValue({
+      items: [...DELETION_ROWS],
+      nextCursor: null,
+      hasMore: false,
+      dayTotals: [],
+      dayTotalsTruncated: false,
+    }),
+    getProjectActivity: vi.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      dayTotals: [],
+      dayTotalsTruncated: false,
+    }),
     listProjects: vi.fn().mockResolvedValue({ items: [PROJECT] }),
     getUserDirectory: vi.fn().mockResolvedValue({
       items: [
@@ -163,12 +171,11 @@ describe("ADR-050 项目删除记录", () => {
     // 删除记录指向的项目已不存在，不提供「查看对象」死链。
     expect(screen.queryByLabelText("查看对象")).toBeNull();
 
-    // 已删除项目不在项目列表里，必须由删除台账补进取数范围，否则读不到该行。
-    const feed = client.getProjectActivity as unknown as ReturnType<
-      typeof vi.fn
-    >;
+    // 已删除项目不在项目列表里，靠服务端把「授权范围 + 已删除项目」一并下发，
+    // 否则读不到这两行。「全部项目」不再在前端枚举项目，因此只发一次请求。
+    const feed = client.listActivity as unknown as ReturnType<typeof vi.fn>;
+    expect(feed).toHaveBeenCalledTimes(1);
     expect(feed).toHaveBeenCalledWith(
-      41,
       { limit: 20 },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -216,6 +223,14 @@ describe("ADR-050 项目删除记录", () => {
         nextCursor: null,
         hasMore: false,
       }),
+      // 没有已删除项目时服务端范围里就没有它们的行，首页只剩普通动态。
+      listActivity: vi.fn().mockResolvedValue({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        dayTotals: [],
+        dayTotalsTruncated: false,
+      }),
     } as never);
     mount(client);
 
@@ -225,43 +240,37 @@ describe("ADR-050 项目删除记录", () => {
     expect(screen.queryByTestId("activity-item-9001")).toBeNull();
   });
 
-  it("删除记录读取失败时降级：不阻塞其他项目动态，也不给已删除项目发请求", async () => {
+  it("删除记录读取失败时降级：仍展示动态，不把台账失败扩散成页面错误", async () => {
     const client = createClient({
       listProjectDeletions: vi.fn().mockRejectedValue(new Error("boom")),
-      getProjectActivity: vi
-        .fn()
-        .mockImplementation(async (projectId: number) => ({
-          items:
-            projectId === 7
-              ? [
-                  {
-                    id: "9100",
-                    projectId: 7,
-                    sourceEntityType: "PROJECT",
-                    sourceEntityId: 7,
-                    activityType: "PROJECT_CREATED",
-                    actorId: 1,
-                    summary: "创建了项目 InPulse 研发交付平台",
-                    occurredAt: "2026-09-08T00:00:00.000000Z",
-                  },
-                ]
-              : [],
-          nextCursor: null,
-          hasMore: false,
-        })),
+      listActivity: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "9100",
+            projectId: 7,
+            sourceEntityType: "PROJECT",
+            sourceEntityId: 7,
+            activityType: "PROJECT_CREATED",
+            actorId: 1,
+            summary: "创建了项目 InPulse 研发交付平台",
+            occurredAt: "2026-09-08T00:00:00.000000Z",
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+        dayTotals: [],
+        dayTotalsTruncated: false,
+      }),
     } as never);
     mount(client);
 
     const row = await screen.findByTestId("activity-item-9100");
     expect(row).toHaveTextContent("创建项目");
-    expect(screen.queryByTestId("activity-item-9001")).toBeNull();
 
-    const feed = client.getProjectActivity as unknown as ReturnType<
-      typeof vi.fn
-    >;
+    // 台账失败只影响项目名回退与「已删除项目」筛选，不影响动态本身。
+    const feed = client.listActivity as unknown as ReturnType<typeof vi.fn>;
     expect(feed).toHaveBeenCalledTimes(1);
     expect(feed).toHaveBeenCalledWith(
-      7,
       { limit: 20 },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -394,13 +403,13 @@ describe("已删除项目的完整动态过程", () => {
   function mountWithHistory() {
     return mount(
       createClient({
-        getProjectActivity: vi
-          .fn()
-          .mockImplementation(async (projectId: number) => ({
-            items: projectId === 41 ? ROWS : [],
-            nextCursor: null,
-            hasMore: false,
-          })),
+        listActivity: vi.fn().mockResolvedValue({
+          items: [...ROWS],
+          nextCursor: null,
+          hasMore: false,
+          dayTotals: [{ day: "2026-09-28", count: 2 }],
+          dayTotalsTruncated: false,
+        }),
       } as never),
     );
   }

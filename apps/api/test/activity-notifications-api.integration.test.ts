@@ -51,6 +51,11 @@ interface ActivityPageDto {
   }[];
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
+  readonly dayTotals: readonly {
+    readonly day: string;
+    readonly count: number;
+  }[];
+  readonly dayTotalsTruncated: boolean;
 }
 
 interface NotificationPageDto {
@@ -72,6 +77,7 @@ let notificationPort: PostgresNotificationWritePort | undefined;
 let auditPort: PostgresAuditWritePort | undefined;
 let member: ProjectFixture | undefined;
 let other: ProjectFixture | undefined;
+let feedProject: ProjectFixture | undefined;
 let memberCookie: string;
 let adminCookie: string;
 let memberNotificationId: number;
@@ -100,6 +106,42 @@ beforeAll(async () => {
   member = await createProject(runtime.sql, memberUser);
   other = await createProject(runtime.sql, otherUser);
   await createProject(runtime.sql, adminUser);
+
+  // 聚合动态专用夹具：只属于 memberUser，其他套件不会往这里写数据。
+  feedProject = await createProject(runtime.sql, memberUser);
+  await seedActivity(
+    feedProject,
+    memberUser,
+    601,
+    "TASK_COMPLETED",
+    "聚合动态样本 601",
+    "MEMBER",
+    "DONE",
+    1,
+    "2026-09-08T00:00:08.000Z",
+  );
+  await seedActivity(
+    feedProject,
+    memberUser,
+    602,
+    "TASK_COMPLETED",
+    "聚合动态样本 602",
+    "MEMBER",
+    "DONE",
+    1,
+    "2026-09-08T00:00:09.000Z",
+  );
+  await seedActivity(
+    feedProject,
+    memberUser,
+    603,
+    "TASK_COMPLETED",
+    "聚合动态样本 603",
+    "MEMBER",
+    "DONE",
+    1,
+    "2026-09-08T00:00:10.000Z",
+  );
 
   await seedActivity(
     member,
@@ -338,6 +380,93 @@ describe("GET /api/v1/projects/{projectId}/activity and /notifications with real
     ).toBe(404);
   });
 
+  test("聚合动态：单项目收窄后全局游标只追加，日期数量始终是全量", async () => {
+    const anon = await requestFeed(baseUrl, undefined, {
+      projectIds: String(feedProject!.projectId),
+    });
+    expect(anon.status).toBe(401);
+    expect(((await anon.json()) as ErrorResponseDto).code).toBe(
+      "ACTIVITY_UNAUTHENTICATED",
+    );
+
+    const first = await requestFeed(baseUrl, memberCookie, {
+      projectIds: String(feedProject!.projectId),
+      limit: "2",
+    });
+    expect(first.status).toBe(200);
+    const firstPage = (await first.json()) as ActivityPageDto;
+    expect(activityPageSchema.safeParse(firstPage).success).toBe(true);
+    expect(firstPage.items.map((item) => item.sourceEntityId)).toEqual([
+      603, 602,
+    ]);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.nextCursor).not.toBeNull();
+    // 分页只有 2 条，但日期旁的计数是过滤条件下的全量 3 条。
+    expect(firstPage.dayTotals).toEqual([{ day: "2026-09-08", count: 3 }]);
+    expect(firstPage.dayTotalsTruncated).toBe(false);
+
+    const second = await requestFeed(baseUrl, memberCookie, {
+      projectIds: String(feedProject!.projectId),
+      limit: "2",
+      cursor: firstPage.nextCursor as string,
+    });
+    expect(second.status).toBe(200);
+    const secondPage = (await second.json()) as ActivityPageDto;
+    expect(secondPage.items.map((item) => item.sourceEntityId)).toEqual([601]);
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.nextCursor).toBeNull();
+    expect(secondPage.dayTotals).toEqual([{ day: "2026-09-08", count: 3 }]);
+  });
+
+  test("聚合动态：越权项目静默排除，非法参数统一 422，游标换过滤条件失效", async () => {
+    const foreign = await requestFeed(baseUrl, memberCookie, {
+      projectIds: String(other!.projectId),
+    });
+    expect(foreign.status).toBe(200);
+    expect(await foreign.json()).toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      dayTotals: [],
+      dayTotalsTruncated: false,
+    });
+
+    // Schema 层非法参数（含空串、重复、越界、未知分类）在进入控制器前就被拒，
+    // 统一走路由级校验错误；服务层的 invalid-cursor 见下。
+    for (const query of [
+      { projectIds: "abc" },
+      { projectIds: "" },
+      { projectIds: "1,1" },
+      { projectIds: "0" },
+      { category: "bogus" },
+      { limit: "0" },
+      { limit: "51" },
+    ]) {
+      const response = await requestFeed(baseUrl, memberCookie, query);
+      expect(response.status).toBe(422);
+      expect(((await response.json()) as ErrorResponseDto).code).toBe(
+        "VALIDATION_FAILED",
+      );
+    }
+
+    const anchor = await requestFeed(baseUrl, memberCookie, {
+      projectIds: String(feedProject!.projectId),
+      limit: "1",
+    });
+    const cursor = ((await anchor.json()) as ActivityPageDto).nextCursor;
+    expect(cursor).not.toBeNull();
+    const switched = await requestFeed(baseUrl, memberCookie, {
+      projectIds: String(feedProject!.projectId),
+      limit: "1",
+      category: "task",
+      cursor: cursor as string,
+    });
+    expect(switched.status).toBe(422);
+    expect(((await switched.json()) as ErrorResponseDto).code).toBe(
+      "ACTIVITY_VALIDATION_FAILED",
+    );
+  });
+
   test("通知查询只返回当前用户，未读数和标记接口都只操作本人", async () => {
     const listResponse = await requestNotifications(baseUrl, memberCookie);
     expect(listResponse.status).toBe(200);
@@ -553,6 +682,21 @@ async function requestActivity(
   query: Readonly<Record<string, string>> = {},
 ): Promise<Response> {
   const target = new URL(`${url}/api/v1/projects/${projectId}/activity`);
+  for (const [name, value] of Object.entries(query)) {
+    target.searchParams.set(name, value);
+  }
+  return fetch(
+    target,
+    cookie === undefined ? undefined : { headers: { cookie } },
+  );
+}
+
+async function requestFeed(
+  url: string,
+  cookie: string | undefined,
+  query: Readonly<Record<string, string>>,
+): Promise<Response> {
+  const target = new URL(`${url}/api/v1/activity`);
   for (const [name, value] of Object.entries(query)) {
     target.searchParams.set(name, value);
   }

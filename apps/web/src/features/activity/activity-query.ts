@@ -3,23 +3,41 @@ import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
+  type ActivityDayTotal,
   type ActivityItem,
   type InpulseApiClient,
 } from "@generated/api";
 
 export const ACTIVITY_PAGE_LIMIT = 20;
 
-/** 每个项目在上一轮里的游标；没有条目的项目表示已经读完。 */
-export type ActivityCursorMap = Readonly<Record<string, string>>;
+/** 与契约 ACTIVITY_CATEGORIES 一致；「全部」即不传 category。 */
+export type ActivityCategory =
+  | "all"
+  | "task"
+  | "record"
+  | "feature"
+  | "module"
+  | "project"
+  | "member"
+  | "github";
 
 export interface ActivityFeedPage {
   readonly items: readonly ActivityItem[];
-  readonly next: ActivityCursorMap | null;
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+  /** 按日总数：服务端按当前过滤条件下的全量统计，不随翻页增长。 */
+  readonly dayTotals: readonly ActivityDayTotal[];
+  readonly dayTotalsTruncated: boolean;
 }
 
 export interface ActivityFeedOptions {
-  /** 要聚合的项目；设计稿的「全部项目」即把当前账号可见的项目全部传入。 */
-  readonly projectIds: readonly number[];
+  /** 锁定单项目（项目详情页）：走项目级路由，保留 404 语义。 */
+  readonly lockedProjectId?: number | undefined;
+  /** 聚合视图显式收窄到这些项目；缺省表示「实时授权范围 + 全部已删除项目」。 */
+  readonly projectIds?: readonly number[] | undefined;
+  /** 缓存隔离键（项目选择 / 删除台账范围）。 */
+  readonly scopeKey: string;
+  readonly category?: ActivityCategory | undefined;
   readonly client?: InpulseApiClient | undefined;
   readonly includeAdminOnly?: boolean;
   readonly limit?: number;
@@ -41,81 +59,93 @@ export function describeActivityError(error: unknown): string {
   return "项目动态服务暂时不可用，请稍后重试。";
 }
 
-function occurTime(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function idOrder(id: string): number {
-  const parsed = Number(id);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-/** 多项目轮次合并成一条时间倒序流；同秒事件按 ID 倒序保证顺序稳定。 */
-export function mergeActivityPages(
+/**
+ * 服务端一次查询就按 `occurred_at DESC, id DESC` 返回全局倒序的单一流，
+ * 翻页游标指向最后一条，因此加载更多只会把更早的条目接在尾部，
+ * 不会再往已显示的日期中间插入新条目。
+ */
+export function flattenActivityPages(
   pages: readonly ActivityFeedPage[],
 ): readonly ActivityItem[] {
-  return pages
-    .flatMap((page) => [...page.items])
-    .sort((left, right) => {
-      const delta = occurTime(right.occurredAt) - occurTime(left.occurredAt);
-      return delta !== 0 ? delta : idOrder(right.id) - idOrder(left.id);
-    });
+  return pages.flatMap((page) => [...page.items]);
 }
 
-/**
- * 项目动态接口是「一个项目一条游标」的分页，设计稿则是一个能看全部项目的单页，
- * 因此这里按项目并发取数并按轮次合并：首轮覆盖所有项目，之后只对仍有下一页的
- * 项目继续取，「加载更多」等于整体再推进一轮。
- */
+/** 首页下发的按日总数（服务端已按当前过滤条件全量统计，翻页不会改变）。 */
+export function activityDayTotals(pages: readonly ActivityFeedPage[]): {
+  readonly totals: ReadonlyMap<string, number>;
+  readonly truncated: boolean;
+} {
+  const totals = new Map<string, number>();
+  for (const entry of pages[0]?.dayTotals ?? []) {
+    totals.set(entry.day, entry.count);
+  }
+  return { totals, truncated: pages[0]?.dayTotalsTruncated ?? false };
+}
+
 export function useActivityFeedQuery({
+  lockedProjectId,
   projectIds,
+  scopeKey,
+  category,
   client,
   includeAdminOnly = false,
   limit = ACTIVITY_PAGE_LIMIT,
   enabled = true,
 }: ActivityFeedOptions) {
   const apiClient = useMemo(() => client ?? createApiClient(), [client]);
-  const scope = projectIds.join(",");
+  const scopedIds = projectIds?.join(",") ?? "all";
+  const queryKey = [
+    "activity",
+    scopeKey,
+    scopedIds,
+    category ?? "all",
+    includeAdminOnly,
+    limit,
+  ] as const;
+  // 显式收窄到空集合（例如没有任何已删除项目）时没有可读范围，不发请求。
+  const hasScope =
+    lockedProjectId !== undefined ||
+    projectIds === undefined ||
+    projectIds.length > 0;
+
   return useInfiniteQuery<
     ActivityFeedPage,
     Error,
-    InfiniteData<ActivityFeedPage, ActivityCursorMap | undefined>,
-    readonly ["activity", string, boolean, number],
-    ActivityCursorMap | undefined
+    InfiniteData<ActivityFeedPage, string | undefined>,
+    readonly ["activity", string, string, string, boolean, number],
+    string | undefined
   >({
-    queryKey: ["activity", scope, includeAdminOnly, limit] as const,
+    queryKey,
     queryFn: async ({ pageParam, signal }) => {
-      const targetIds = pageParam
-        ? Object.keys(pageParam).map(Number)
-        : [...projectIds];
-      const pages = await Promise.all(
-        targetIds.map((projectId) => {
-          const cursor = pageParam?.[String(projectId)];
-          return apiClient.getProjectActivity(
-            projectId,
-            {
-              ...(cursor ? { cursor } : {}),
-              ...(includeAdminOnly ? { includeAdminOnly: true } : {}),
-              limit,
-            },
-            signal ? { signal } : undefined,
-          );
-        }),
-      );
-      const next: Record<string, string> = {};
-      pages.forEach((page, index) => {
-        if (page.hasMore && page.nextCursor) {
-          next[String(targetIds[index])] = page.nextCursor;
-        }
-      });
+      const shared = {
+        ...(pageParam === undefined ? {} : { cursor: pageParam }),
+        ...(category === undefined || category === "all" ? {} : { category }),
+        ...(includeAdminOnly ? { includeAdminOnly: true } : {}),
+        limit,
+      };
+      const init = signal ? { signal } : undefined;
+      const page =
+        lockedProjectId === undefined
+          ? await apiClient.listActivity(
+              {
+                ...(projectIds === undefined
+                  ? {}
+                  : { projectIds: [...projectIds] }),
+                ...shared,
+              },
+              init,
+            )
+          : await apiClient.getProjectActivity(lockedProjectId, shared, init);
       return {
-        items: pages.flatMap((page) => [...page.items]),
-        next: Object.keys(next).length > 0 ? next : null,
+        items: [...page.items],
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        dayTotals: [...page.dayTotals],
+        dayTotalsTruncated: page.dayTotalsTruncated,
       };
     },
-    initialPageParam: undefined,
-    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    enabled: enabled && projectIds.length > 0,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: enabled && hasScope,
   });
 }

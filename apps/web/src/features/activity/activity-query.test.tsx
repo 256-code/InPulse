@@ -13,7 +13,12 @@ import type {
   ActivityPage,
   InpulseApiClient,
 } from "@generated/api";
-import { mergeActivityPages, useActivityFeedQuery } from "./activity-query";
+import {
+  activityDayTotals,
+  flattenActivityPages,
+  useActivityFeedQuery,
+  type ActivityFeedPage,
+} from "./activity-query";
 
 function createQueryWrapper() {
   const queryClient = new QueryClient({
@@ -41,66 +46,90 @@ function activityItem(patch: Partial<ActivityItem>): ActivityItem {
   };
 }
 
-const PAGE_BY_REQUEST: Readonly<Record<string, ActivityPage>> = {
-  "7:": {
-    items: [activityItem({ id: "1", projectId: 7 })],
-    nextCursor: "cursor-7",
-    hasMore: true,
-  },
-  "9:": {
-    items: [
-      activityItem({
-        id: "2",
-        projectId: 9,
-        occurredAt: "2026-09-08T00:00:09.000Z",
-      }),
-    ],
+function activityPage(patch: Partial<ActivityPage>): ActivityPage {
+  return {
+    items: [],
     nextCursor: null,
     hasMore: false,
-  },
-  "7:cursor-7": {
-    items: [
-      activityItem({
-        id: "3",
-        projectId: 7,
-        occurredAt: "2026-09-07T00:00:00.000Z",
-      }),
-    ],
+    dayTotals: [],
+    dayTotalsTruncated: false,
+    ...patch,
+  };
+}
+
+function feedPage(
+  items: readonly ActivityItem[],
+  patch: Partial<ActivityFeedPage> = {},
+): ActivityFeedPage {
+  return {
+    items,
     nextCursor: null,
     hasMore: false,
-  },
-};
+    dayTotals: [],
+    dayTotalsTruncated: false,
+    ...patch,
+  };
+}
+
+/** 首屏 2 条 + 第二条游标；下一页是更早的两条条目。 */
+const FIRST_PAGE = activityPage({
+  items: [
+    activityItem({ id: "4", occurredAt: "2026-09-08T04:00:00.000Z" }),
+    activityItem({ id: "3", occurredAt: "2026-09-08T03:00:00.000Z" }),
+  ],
+  nextCursor: "cursor-1",
+  hasMore: true,
+  // 服务端全量：当天 3 条，但首屏只加载了 2 条。
+  dayTotals: [
+    { day: "2026-09-08", count: 3 },
+    { day: "2026-09-07", count: 1 },
+  ],
+});
+const SECOND_PAGE = activityPage({
+  items: [
+    activityItem({ id: "2", occurredAt: "2026-09-07T03:00:00.000Z" }),
+    activityItem({ id: "1", occurredAt: "2026-09-07T02:00:00.000Z" }),
+  ],
+});
 
 function createActivityClient() {
-  const getProjectActivity = vi.fn(
-    (projectId: number, params: { readonly cursor?: string }) => {
-      const page = PAGE_BY_REQUEST[`${projectId}:${params.cursor ?? ""}`];
-      if (!page) throw new Error(`unexpected request: ${projectId}`);
-      return Promise.resolve(page);
-    },
+  const listActivity = vi.fn(
+    (query: { readonly cursor?: string | undefined }) =>
+      Promise.resolve(query.cursor === "cursor-1" ? SECOND_PAGE : FIRST_PAGE),
   );
+  const getProjectActivity = vi.fn(() => Promise.resolve(FIRST_PAGE));
   return {
+    listActivity,
     getProjectActivity,
-    client: { getProjectActivity } as unknown as InpulseApiClient,
+    client: { listActivity, getProjectActivity } as unknown as InpulseApiClient,
   };
 }
 
 interface FeedProbeProps {
   readonly client: InpulseApiClient;
+  readonly projectIds?: readonly number[];
 }
 
-function FeedProbe({ client }: FeedProbeProps) {
+function FeedProbe({ client, projectIds }: FeedProbeProps) {
   const query = useActivityFeedQuery({
-    projectIds: [7, 9],
+    scopeKey: "test",
+    ...(projectIds === undefined ? {} : { projectIds }),
     client,
+    category: "task",
     includeAdminOnly: true,
   });
   return (
     <div>
       <span data-testid="page-count">{query.data?.pages.length ?? 0}</span>
       <span data-testid="has-next">{String(query.hasNextPage)}</span>
-      <span data-testid="item-count">
-        {mergeActivityPages(query.data?.pages ?? []).length}
+      <span data-testid="item-ids">
+        {flattenActivityPages(query.data?.pages ?? [])
+          .map((item) => item.id)
+          .join(",")}
+      </span>
+      <span data-testid="first-day-total">
+        {activityDayTotals(query.data?.pages ?? []).totals.get("2026-09-08") ??
+          "-"}
       </span>
       <button type="button" onClick={() => void query.fetchNextPage()}>
         加载更多
@@ -109,36 +138,45 @@ function FeedProbe({ client }: FeedProbeProps) {
   );
 }
 
-describe("mergeActivityPages", () => {
-  it("orders the merged stream by time desc and id desc", () => {
-    const merged = mergeActivityPages([
-      {
-        items: [
-          activityItem({ id: "3", occurredAt: "2026-09-08T00:00:05.000Z" }),
-          activityItem({ id: "1", occurredAt: "2026-09-08T00:00:01.000Z" }),
-        ],
-        next: null,
-      },
-      {
-        items: [
-          activityItem({ id: "4", occurredAt: "2026-09-08T00:00:05.000Z" }),
-          activityItem({
-            id: "2",
-            projectId: 9,
-            occurredAt: "2026-09-08T00:00:03.000Z",
-          }),
-        ],
-        next: null,
-      },
-    ]);
+describe("flattenActivityPages", () => {
+  it("服务端已是全局倒序，拼接只按分页顺序追加，不再重排日期", () => {
+    const pages = [
+      feedPage([activityItem({ id: "4" }), activityItem({ id: "3" })]),
+      feedPage([activityItem({ id: "2" }), activityItem({ id: "1" })]),
+    ];
 
-    expect(merged.map((item) => item.id)).toEqual(["4", "3", "2", "1"]);
+    expect(flattenActivityPages(pages).map((item) => item.id)).toEqual([
+      "4",
+      "3",
+      "2",
+      "1",
+    ]);
+  });
+});
+
+describe("activityDayTotals", () => {
+  it("只取首页下发的按日总数与截断标记", () => {
+    const first = feedPage([], {
+      dayTotals: [{ day: "2026-09-08", count: 5 }],
+      dayTotalsTruncated: true,
+    });
+    const totals = activityDayTotals([first, feedPage([])]);
+
+    expect(totals.totals.get("2026-09-08")).toBe(5);
+    expect(totals.truncated).toBe(true);
+  });
+
+  it("还没有数据时返回空统计且不截断", () => {
+    const totals = activityDayTotals([]);
+
+    expect(totals.totals.size).toBe(0);
+    expect(totals.truncated).toBe(false);
   });
 });
 
 describe("useActivityFeedQuery", () => {
-  it("aggregates every project and follows each project cursor", async () => {
-    const { getProjectActivity, client } = createActivityClient();
+  it("「全部项目」不枚举项目，单请求按游标只追加更早的条目", async () => {
+    const { listActivity, client } = createActivityClient();
     const { queryClient } = createQueryWrapper();
 
     render(
@@ -150,44 +188,92 @@ describe("useActivityFeedQuery", () => {
     await waitFor(() =>
       expect(screen.getByTestId("page-count").textContent).toBe("1"),
     );
-    expect(getProjectActivity).toHaveBeenCalledWith(
-      7,
-      { includeAdminOnly: true, limit: 20 },
+    // 缺省范围由服务端决定（授权范围 + 已删除项目），因此不传 projectIds。
+    expect(listActivity).toHaveBeenCalledWith(
+      { category: "task", includeAdminOnly: true, limit: 20 },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(getProjectActivity).toHaveBeenCalledWith(
-      9,
-      { includeAdminOnly: true, limit: 20 },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(screen.getByTestId("item-ids").textContent).toBe("4,3");
     expect(screen.getByTestId("has-next").textContent).toBe("true");
-    expect(screen.getByTestId("item-count").textContent).toBe("2");
+    expect(screen.getByTestId("first-day-total").textContent).toBe("3");
 
     fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
 
     await waitFor(() =>
       expect(screen.getByTestId("page-count").textContent).toBe("2"),
     );
-    // 只有 7 号项目还有下一页，9 号项目不再发请求。
-    expect(getProjectActivity).toHaveBeenLastCalledWith(
-      7,
-      { cursor: "cursor-7", includeAdminOnly: true, limit: 20 },
+    expect(listActivity).toHaveBeenLastCalledWith(
+      {
+        category: "task",
+        cursor: "cursor-1",
+        includeAdminOnly: true,
+        limit: 20,
+      },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(getProjectActivity).toHaveBeenCalledTimes(3);
+    // 第二页是更早的条目，追加在尾部，不会插到 4/3 之间。
+    expect(screen.getByTestId("item-ids").textContent).toBe("4,3,2,1");
+    // 按日数量是服务端下发的全量，不随翻页变化。
+    expect(screen.getByTestId("first-day-total").textContent).toBe("3");
     expect(screen.getByTestId("has-next").textContent).toBe("false");
-    expect(screen.getByTestId("item-count").textContent).toBe("3");
   });
 
-  it("does not request anything when the scope is empty", async () => {
-    const { getProjectActivity, client } = createActivityClient();
+  it("显式收窄范围时把项目 ID 交给服务端", async () => {
+    const { listActivity, client } = createActivityClient();
+    const { wrapper } = createQueryWrapper();
+
+    renderHook(
+      () =>
+        useActivityFeedQuery({
+          scopeKey: "narrow",
+          projectIds: [9, 7],
+          client,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(listActivity).toHaveBeenCalledWith(
+        { projectIds: [9, 7], limit: 20 },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+  });
+
+  it("空范围不发请求", async () => {
+    const { listActivity, client } = createActivityClient();
     const { wrapper } = createQueryWrapper();
     const { result } = renderHook(
-      () => useActivityFeedQuery({ projectIds: [], client }),
+      () => useActivityFeedQuery({ scopeKey: "empty", projectIds: [], client }),
       { wrapper },
     );
 
     await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
-    expect(getProjectActivity).not.toHaveBeenCalled();
+    expect(listActivity).not.toHaveBeenCalled();
+  });
+
+  it("锁定项目时仍走项目级路由", async () => {
+    const { getProjectActivity, listActivity, client } = createActivityClient();
+    const { wrapper } = createQueryWrapper();
+
+    renderHook(
+      () =>
+        useActivityFeedQuery({
+          scopeKey: "project:7",
+          lockedProjectId: 7,
+          includeAdminOnly: true,
+          client,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(getProjectActivity).toHaveBeenCalledWith(
+        7,
+        { includeAdminOnly: true, limit: 20 },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+    expect(listActivity).not.toHaveBeenCalled();
   });
 });

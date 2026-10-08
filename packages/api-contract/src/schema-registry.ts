@@ -76,6 +76,8 @@ import {
 import { errorResponseSchema } from "./contracts/error.zod.js";
 import { healthResponseSchema } from "./contracts/health.zod.js";
 import {
+  activityDayTotalSchema,
+  activityFeedQueryRequestSchema,
   activityItemSchema,
   activityPageSchema,
   activityPathSchema,
@@ -466,7 +468,13 @@ export const schemaRegistry = {
   ActivityQueryRequest: {
     schema: activityQueryRequestSchema,
     summary:
-      "项目动态查询参数；includeAdminOnly 仅系统管理员显式开启时扩大服务端范围",
+      "项目动态查询参数；includeAdminOnly 仅系统管理员显式开启时扩大服务端范围，category 按 chip 分类在 SQL 层过滤",
+    sensitiveFieldPaths: [],
+  },
+  ActivityFeedQueryRequest: {
+    schema: activityFeedQueryRequestSchema,
+    summary:
+      "聚合动态查询参数；projectIds 为逗号分隔的 1..100 个正整数（越权或未知项目静默排除），缺省为授权范围加全部已删除项目；cursor 为服务端签名的全局游标",
     sensitiveFieldPaths: [],
   },
   ActivityItem: {
@@ -474,9 +482,16 @@ export const schemaRegistry = {
     summary: "项目动态白名单条目，不包含原始审计快照",
     sensitiveFieldPaths: [],
   },
+  ActivityDayTotal: {
+    schema: activityDayTotalSchema,
+    summary:
+      "一个 Asia/Shanghai 自然日的动态总数；按全量口径统计，不随分页加载增长",
+    sensitiveFieldPaths: [],
+  },
   ActivityPage: {
     schema: activityPageSchema,
-    summary: "项目动态分页结果",
+    summary:
+      "项目动态分页结果；dayTotals 为按日全量总数，dayTotalsTruncated 为真时只覆盖最近的 400 个自然日",
     sensitiveFieldPaths: [],
   },
   ProjectDeletionQueryRequest: {

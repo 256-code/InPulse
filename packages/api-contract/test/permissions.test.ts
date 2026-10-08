@@ -201,6 +201,7 @@ export class HealthController {
       "GET /api/v1/health",
       "GET /api/v1/health/live",
       "GET /api/v1/health/ready",
+      "GET /api/v1/activity",
       "GET /api/v1/projects/{projectId}/activity",
       "GET /api/v1/leftover-items",
       "GET /api/v1/me/record-drafts",

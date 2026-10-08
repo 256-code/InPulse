@@ -4084,8 +4084,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | PROJECT-DELETION-API-001 | API 集成（真实 PostgreSQL + HTTP） | 可见性与字段白名单 | `project-deletion-records.integration.test.ts` → **6/6**：匿名 401 `PROJECT_SESSION_REQUIRED`；任意登录用户可读，条目键严格为 `["code","deletedAt","deletedBy","name","projectId"]`、`deletedBy` 键为 `["id","name"]` | 本地通过 |
 | PROJECT-DELETION-API-002 | API 集成（真实 PostgreSQL + HTTP） | 排序、翻页与游标边界 | 未删除项目不出现；走完全部页面后 `deletedAt` 非递增、新删除项目排在旧项目之前、末页 `nextCursor === null`、翻页不重不漏；同一游标换操作者 422；非法游标 422 `PROJECT_DELETION_VALIDATION_FAILED`、`limit=51` 422 `VALIDATION_FAILED`（错误响应 `X-Request-Id` 与 `body.requestId` 一致） | 本地通过 |
 | PROJECT-DELETION-API-003 | API 集成（真实 PostgreSQL + HTTP） | 删除后「谁删的」两处留痕 | `project-delete-api.integration.test.ts` 第 6 例（**6/6**）：组长删除 → 204；与该项目无成员关系的外部用户读记录能看到 `{code, deletedBy{id,name}}` 且 `deletedAt` 以 `Z` 结尾；审计尾行 `action = project.delete` 且 `actorId` 为执行删除的组长 | 本地通过 |
-| PROJECT-DELETION-API-004 | API 集成（真实 PostgreSQL + HTTP） | 已删除项目的删除记录可读（动态流放行） | `activity-query.integration.test.ts` **5/5**（服务层）与 `activity-notifications-api.integration.test.ts` **5/5**（HTTP 层）：同一已删除项目在删除前另有 `TASK_COMPLETED` 动态，删除后非特权视角只取到 1 行 `PROJECT_DELETED`（HTTP 响应通过 `activityPageSchema`）、`hasMore` 为 false；`includeAdminOnly: true` 的管理员视角也不放大；未删除项目的跨项目读取仍 `ActivityAuthorizationError` / 404 | 本地通过 |
-| PROJECT-DELETION-WEB-UNIT-001 | Web 单元 | 删除记录作为普通动态行混排 | `ActivityWorkspace.deletions.test.tsx` → **5/5**：删除行渲染操作者 / 「删除项目」/ 项目名 / 目标标签且可被搜索词命中，已删除项目确实进入 `getProjectActivity` 取数范围；页面不再有 `activity-project-deletions` 区块与「查看对象」按钮；锁定单项目时既不渲染也不调用 `listProjectDeletions`；无匹配时「没有匹配的动态」；无删除记录时照常渲染其他动态；记录读取失败时只对可见项目发请求（降级不阻塞） | 本地通过 |
+| PROJECT-DELETION-API-004 | API 集成（真实 PostgreSQL + HTTP） | 已删除项目的删除记录可读（动态流放行） | `activity-query.integration.test.ts` **5/5**（服务层）与 `activity-notifications-api.integration.test.ts` **5/5**（HTTP 层）：同一已删除项目在删除前另有 `TASK_COMPLETED` 动态，删除后非特权视角当时只取到 1 行 `PROJECT_DELETED`（HTTP 响应通过 `activityPageSchema`；**2026-09-28 同日 ADR-052 起改为下发该项目链完整 `MEMBER` 历史**，见下节；2026-10-08 起聚合视图走 `listActivity`，见末节）、`hasMore` 为 false；`includeAdminOnly: true` 的管理员视角也不放大；未删除项目的跨项目读取仍 `ActivityAuthorizationError` / 404 | 本地通过 |
+| PROJECT-DELETION-WEB-UNIT-001 | Web 单元 | 删除记录作为普通动态行混排 | `ActivityWorkspace.deletions.test.tsx` → **5/5**：删除行渲染操作者 / 「删除项目」/ 项目名 / 目标标签且可被搜索词命中，已删除项目确实进入聚合动态取数范围（2026-10-08 修订：聚合视图改走 `listActivity`，锁定单项目仍用 `getProjectActivity`，见末节「聚合动态单一游标分页」）；页面不再有 `activity-project-deletions` 区块与「查看对象」按钮；锁定单项目时既不渲染也不调用 `listProjectDeletions`；无匹配时「没有匹配的动态」；无删除记录时照常渲染其他动态；记录读取失败时只对可见项目发请求（降级不阻塞） | 本地通过 |
 | PROJECT-DELETION-WEB-UNIT-002 | Web 单元 | 审计页已删除项目链入口 | `AuditLogPageView.test.tsx` → **11/11**：历史行显示「第 N 条 · 项目 <名称>」而非「项目 #id」；审计链下拉含 `PROJECT:<id> · <名称>`（说明「已删除 · <删除人> 删除」）；选中后 `getAuditLogs` 以 `{ projectId, limit }` 查询 | 本地通过 |
 
 本地实际执行（2026-09-28，全部通过）：`pnpm test:unit`（canonical-json 1 文件 5 例、database 1 文件 15 例、api-contract 16 文件 **100** 例、web 86 文件 **575** 例、ops 8 文件 52 例、api 66 文件 **370** 例）；定向真实 PostgreSQL 集成 `activity-query.integration.test.ts` **5/5**、`activity-notifications-api.integration.test.ts` **5/5**、`project-deletion-records.integration.test.ts` **6/6** 与 `project-delete-api.integration.test.ts` **6/6**（`app_ci`）；`apps/web` 动态特性 3 文件 **10/10**；`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/api typecheck`、改动文件 ESLint 与 Prettier；`pnpm contract:drift`（5 产物）、`pnpm contract:validate`（**100 条**）、`pnpm permissions:check`（**100/100**）、`pnpm check:docs`（97 个 Markdown）、`pnpm check:deps`（923 文件）、`pnpm check:frontend:boundaries`（288 模块 / 1422 依赖）；真实浏览器人工复验 `127.0.0.1:5173/activity`（系统管理员）：删除行出现在日期分组时间线内（`邵晨宇 + 删除项目 + 删除了项目 T1 / t2 + <项目名> · 项目 #<id>`）、不带「查看对象」、页面无独立删除区块。
@@ -4510,3 +4510,50 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 - 空页脚内注入一条「记录 99 条」内容后页脚实测仍 31.5px（内容 16.5px < 占位 31.5px），说明占位不会把有记录的卡片撑高。
 
 未运行 / 已知偏差：① 按前端免测试指示未跑任何自动化测试与门禁（`get_errors` 之外零验证命令），两条 `TASK-CARD-EQUAL-HEIGHT-UNIT-*` 用例的通过状态来自改动前基线口径与断言一致性检查，未经本次执行背书；② 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；③ 量测当日该账号可见范围内没有聚合组卡（`groupCount: 0`），**组卡的等高未做真机量测**，只由 `TASKGROUP-AS-CARD-WEB-001` / `UNIT-002` 的 DOM 断言与同一条 `.calm-task-card .task-card-footer` 规则背书（未验证）；④ 探针登录绕过了浏览器内登录（本机 Chromium 从 `http://127.0.0.1` 不保存 `Secure` Cookie、且浏览器内登录在本机始终 401，而同一口令经 curl 同源登录 200 成功）：会话 Cookie 由 curl 取回后经 `setExtraHTTPHeaders` 注入，与待验证的卡片布局无关；该现象是否影响本机开发用浏览器登录未定论（用户日常浏览正常，未复现）。⑤ 登录在演示库留下 1 条 `app.user_sessions` 行（只读量测的正常痕迹，未做清理）。
+
+## 聚合动态单一游标分页 + 服务端按日全量计数（用户指示，2026-10-08 本地落库）
+
+用户指示（原话）：「那这样有问题，包含管理员操作是默认的，动态过多是可以等加载更多再呈现出来但是日期边上那个动态数量是要有全部的而不是每次加载更多才会增加，并且动态是根据时间排好呈现出来的，而不是加载更多以后又在之前的时间里面加了动态」。三件事分别是：**(a)** 「包含管理员操作」默认勾选；**(b)** 日期旁的条数是**服务端全量**，不随「加载更多」增长；**(c)** 时间线全局有序，「加载更多」只能向更早追加，不能在已渲染的时间段里回插。
+
+根因与口径：
+
+- **(c) 的根因是取数方式，不是排序代码**：旧实现按项目逐个分页（`ActivityCursorMap`，每个项目一条游标）再在客户端做全局归并排序，每个项目的「下一页」都可能晚于其它项目已渲染的条目，因此「加载更多」必然回插。本轮把它换成**一条 SQL 的跨项目键集分页**（`ORDER BY occurred_at DESC, id DESC`，游标 `(occurred_at, id)`），追加式由构造保证，客户端不再重排（`flattenActivityPages` 只做拼接）。
+- 新增只读路由 `GET /api/v1/activity`（`listActivity`，`authPolicy: "session"`，其余策略显式 `none`；200/401/422/500，**没有 404**），Route Registry 由 100 条增至 **101 条**；范围 = 实时 `AuthorizedProjectScope` ∪ **全部已删除项目**（`ProjectAccessQueryPort.listDeletedProjectIds()`，保留 ADR-050 / ADR-052 的已删除项目公开动态链）。`projectIds`（逗号分隔 1..100 正整数、去重、显式空值 422）**只收窄**，越权 / 未知 ID 静默排除，全部越权时返回空页且不发 SQL。
+- **(b) 的实现**：`dayTotals` 由服务端在**同一次请求**里按与列表完全相同的条件（同一 `projectIds` / `projectIds` 收窄结果、同一 `category`、同一 `includeAdminOnly`）单独统计全量，日界为 **Asia/Shanghai 自然日**（SQL 内 `occurred_at AT TIME ZONE 'Asia/Shanghai'`）；上限 `ACTIVITY_DAY_TOTALS_MAX = 400` 天，超出时 `dayTotalsTruncated = true` 且前端提示「按日数量只统计最近 400 个自然日内的动态」。`getProjectActivity` 同样新增 `dayTotals` / `dayTotalsTruncated`（并新增可选 `category`）。
+- `category` 过滤下推到 SQL（`ACTIVITY_CATEGORY_SQL`：all / task（`source_entity_type IN ('TASK','TASK_GROUP')`）/ record（`CHANGE_RECORD` / `LEFTOVER_ITEM`）/ feature / module / project（兜底取反）/ member / github（`activity_type LIKE 'EXTERNAL_LINK%'`）），前端筛选芯片映射为 `ActivityCategory`，不再只在客户端过滤。
+- **(a) 的实现**：`ActivityWorkspace` 的 `includeAdminOnly` 初值改为 `true`（2026-09-24 口径）。勾选框仍只对 `isAdmin` 渲染；非管理员的服务端授权范围本就不含 `ADMIN_ONLY`，因此不影响非管理员。
+- 游标绑定：`TimeCursorService` 命名空间 `ACTIVITY`，载荷含 `projectId: number | null` 与 `filterKey`；`activityFilterKey` = `v1|scope=<project:{id}|feed>|category=…|projects=<升序 csv|all>|admin=0|1`，即游标**绑定路由身份 + 筛选条件 + 操作者**，跨路由（`/activity` ↔ `/projects/{id}/activity`）或筛选变化后继续翻页一律 422 `invalid-cursor`，前端按既有 422 逻辑重取第一页。
+- 422 的错误码分工（本次联调确认）：**Schema 层**（Route Registry 请求校验，如 `projectIds: ""`、`projectIds: "0"`、非法 `category` / `limit`）→ `VALIDATION_FAILED`；**服务层**（`invalid-cursor` / `invalid-project-ids` / `invalid-category`）→ `ACTIVITY_VALIDATION_FAILED`（由 Controller 映射）。
+- 「全部项目」视图不再在客户端枚举项目逐个取数（原实现会按项目数发 N 个请求）；锁定单项目仍走 `getProjectActivity`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ACTIVITY-FEED-SERVICE-UNIT-001 | API 单测 | 单一游标服务：范围、收窄、短路 | `activity-query.service.test.ts`（新增，14 例）：空授权范围短路（不发 SQL、返回空页与空 `dayTotals`）；`ADMIN_ONLY` 只按授权项目开放；已删除项目 ID 并入范围；`projectIds` 与授权范围求交且全部越权时返回空页；`[]` / `[0]` / `[-1]` / 重复 / 101 个 → `invalid-project-ids`；非法 `category` / `limit` → 对应错误；`limit=999` 收敛到 `ACTIVITY_PAGE_LIMIT_MAX` | 本地通过 |
+| ACTIVITY-FEED-SERVICE-UNIT-002 | API 单测 | 游标绑定与操作者校验 | 同文件：`includeAdminOnly` 翻转后旧游标 → `invalid-cursor`；`projectIds` / `category` / 操作者变化或游标被篡改 → `invalid-cursor`；跨路由游标互不接受（`/activity` ↔ `/projects/{id}/activity`）；请求操作者与鉴权操作者不一致时抛 `ActivityAuthorizationError`；非管理员带 `includeAdminOnly` 不改变指纹 | 本地通过 |
+| ACTIVITY-FEED-SERVICE-UNIT-003 | API 单测 | 按日全量统计的截断口径 | 同文件：`readDayTotals` 请求上限固定 401（`ACTIVITY_DAY_TOTALS_MAX + 1`），返回 401 天时 `dayTotalsTruncated = true` 且只下发前 400 天；返回 400 天时为 `false`；单项目 `query()` 同样返回 `dayTotals` | 本地通过 |
+| ACTIVITY-FEED-DB-001 | 真实 PostgreSQL 集成 | 追加式分页与全局排序 | `activity-query.integration.test.ts`（12 例）：三页夹具 `[[203,104],[103,201],[102,101]]` 连续翻页，第二 / 三页只出现更早的 `(occurred_at, id)`，无重复无回插 | 本地通过 |
+| ACTIVITY-FEED-DB-002 | 真实 PostgreSQL 集成 | 日界 Asia/Shanghai 与管理员开关 | 同文件：`15:30Z` 与 `16:30Z` 两条相邻条目分别落在 `2026-09-07` / `2026-09-08`（证明日界按上海时区而非 UTC）；同一请求加 / 不加 `includeAdminOnly` 时 `dayTotals` 与非 `MEMBER` 可见性同步变化 | 本地通过 |
+| ACTIVITY-FEED-DB-003 | 真实 PostgreSQL 集成 | 分类过滤等价性 | 同文件：`category` 取值与 `source_entity_type` / `activity_type` 判定表逐项等价（task / record / feature / module / project / member / github / all） | 本地通过 |
+| ACTIVITY-FEED-DB-004 | 真实 PostgreSQL 集成 | 已删除项目链与收窄 | 同文件：非成员用户仍能看到已删除项目的公开动态链；`projectIds` 收窄后只返回指定项目；含未知 ID 时该 ID 被静默排除（不报错、不影响其余结果）；无效输入返回对应校验状态 | 本地通过 |
+| ACTIVITY-FEED-HTTP-001 | 真实 HTTP API 集成 | 路由契约与分页稳定性 | `activity-notifications-api.integration.test.ts`（7 例）：匿名 401；分页第二页只追加更早条目；**跨页 `dayTotals` 完全相同**（不随已加载条数增长）；越权项目 `projectIds` 返回空页；`{ projectIds: "" }`、`{ projectIds: "0" }` 与游标 / 分类不匹配均为 422（`VALIDATION_FAILED` / `ACTIVITY_VALIDATION_FAILED` 按层区分） | 本地通过 |
+| ACTIVITY-FEED-UNIT-CONTROLLER-001 | API 单测 | Controller 透传与响应形状 | `activity.controller.test.ts`：`listActivity` 结果含 `dayTotals`；`category` 原样传给服务层 | 本地通过 |
+| ACTIVITY-FEED-WEB-UNIT-001 | Web 单元 | 追加式合并与服务端计数 | `activity-query.test.tsx`（重写）：`flattenActivityPages` 只拼接不重排（`[4,3]` → `[4,3,2,1]`）；`activityDayTotals` 只读第一页；`useActivityFeedQuery` 聚合范围只发一次 `listActivity`（不带 `projectIds`）、显式 `projectIds: [9,7]` 原样透传、空授权范围不发请求、锁定项目走 `getProjectActivity`；第一页 `dayTotals` 在加载第二页后仍为 3 | 本地通过 |
+| ACTIVITY-FEED-WEB-UNIT-002 | Web 单元 | 默认勾选 + 服务端全量渲染 | `ActivityPageView.test.tsx`：「包含管理员操作」默认 `checked`；夹具只加载 1 条动态而 `dayTotals` 为 4 时页头仍显示「4 条动态」（证明计数来自服务端而不是已加载条数） | 本地通过 |
+| ACTIVITY-FEED-WEB-UNIT-003 | Web 单元 | 已删除项目行仍可用 | `ActivityWorkspace.deletions.test.tsx`：聚合视图断言由逐项目调用改为单次 `listActivity`；删除记录读取失败只降级删除行、不阻塞其余动态；无删除记录时照常渲染其他动态 | 本地通过 |
+| ACTIVITY-FEED-E2E-001 | 浏览器 E2E | 聚合页默认勾选 + 按日全量计数 | `activity.spec.ts` 新增「聚合动态默认包含管理员操作，按日条数取服务端全量」：管理员登录 → 建项目 → 打开 `/activity`，「包含管理员操作」为 `checked`，能看到 `${name}` 的创建条目，首个日期组的 `N 条动态` 计数 ≥ 该组已渲染条数且 > 0 | 本地通过（2/2，11.0s） |
+
+本地实际执行（2026-10-08）：
+
+- 契约链：`pnpm contract:generate`（5 个产物）、`pnpm contract:drift`（5 产物与 Registry 一致）、`pnpm contract:validate`（**101 条路由**）、`pnpm --filter @inpulse/api-contract test:unit` **16 文件 / 102 例**。
+- API：`pnpm --filter @inpulse/api typecheck` exit 0；`test:unit` **69 文件 / 403 例**；`TEST_DATABASE_URL=…/app_ci` 的 `test:integration` **53 文件 / 510 例**（115.24s）。
+- Web：`pnpm --filter @inpulse/web typecheck` exit 0；定向 3 文件 **21 例**；`pnpm test:web` **90 文件 / 629 例**。
+- 仓库门禁：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm db:migrations:check`（31）、`pnpm db:seed:check`（28 张表）、`pnpm build`（web 1987 模块）、`pnpm check:deploy:test`、`pnpm check:deps`（305 模块 / 1510 依赖）、`pnpm check:frontend:boundaries`、`pnpm permissions:check`（**101 / 101**）全部通过；`pnpm check` 整链唯一失败步骤是 `pnpm deps:audit`（见偏差①），其后的 `pnpm check:secrets`（1125 文件）与 `pnpm check:docs`（102 个 Markdown）已单独补跑，均 exit 0。
+- 浏览器 E2E：`E2E_DATABASE_URL=…/app_ci`（`E2E_API_PORT=3188` / `E2E_WEB_PORT=4188`）定向 `tests/activity.spec.ts` **2 passed（11.0s）**，`global-teardown` 同期清理夹具（用户 3 / 项目 4 / 业务行 65 / 审计行 2）；运行前先用 `node apps/e2e/helpers/fixture-cleanup.ts` 清理 `app_ci` 既有遗留（用户 2412 / 项目 1325 / 业务行 43379 / 审计行 2335）。
+
+未运行 / 已知偏差：
+
+- ① 整链 `pnpm check` 在 `pnpm deps:audit`（`pnpm audit --audit-level=high`）中断，报 **6 条** registry 公告：`proxy-addr`（critical，GHSA-jqcg-44mw-7w3h，`>=1.1.0 <2.0.8` 经 `@nestjs/platform-express>express>proxy-addr`）、`brace-expansion` 两条 high（GHSA-qhr7-859c-m2p7 / GHSA-6j4f-fj2g-mc7p，经 eslint / minimatch 链）、`source-map-js` high（GHSA-68fv-2mgg-jv7q，经 vite / vitest 链）等。这些都是**本批之前就存在的依赖公告**，与本次改动无关；按 AGENTS.md 第 4 节，依赖修复只能走独立 PR 并由人工确认，**未在本批夹带修改**，也未调低 `--audit-level` 或加白名单。
+- ② 本批**未跑**全量 `pnpm test:e2e`（只跑定向 `activity.spec.ts`）；其余 E2E 用例是否受新路由影响未验证（现有用例只使用 `[data-testid^="activity-item-"]` 与标题，判断上不受影响，属**未验证**）。
+- ③ 同日分组在后续页面的**下边界**可能继续延伸：键集分页保证「只追加更早的条目」，但同一天内若有更早条目排在下一页，该日期分组会在底部追加（不会回插到中间）。这是键集分页的固有形态，与用户要求的「不在之前的时间里面加动态」不冲突；如需彻底冻结某日，需改成按日整批取数（未做）。
+- ④ 按日计数是**服务端范围口径**，不随前端的本地关键词搜索框变化（搜索只过滤已加载条目）；`dayTotalsTruncated` 时窗口外日期回退为已加载条数。
+- ⑤ 本批含契约、服务端与前端产品代码，按 §8 需非作者人工评审。

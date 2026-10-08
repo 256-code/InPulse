@@ -474,6 +474,19 @@ export const permissionMatrix = [
     },
   },
   {
+    // 聚合动态对全部登录用户开放：授权范围外的项目静默排除，但已删除项目的
+    // 公开动态链（ADR-050 / ADR-052）对所有登录用户可见，因此不存在 403 / 404。
+    operationId: "listActivity",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
     operationId: "getNotifications",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

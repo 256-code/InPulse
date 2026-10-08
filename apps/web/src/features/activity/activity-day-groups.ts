@@ -1,16 +1,26 @@
 import type { ActivityItem } from "@generated/api";
 
-/** 动态日期键与列表分组共用本地时区，避免组头日期与行内时刻跨零点错位。 */
-export function activityDayKey(occurredAt: string) {
+/**
+ * Asia/Shanghai 无夏令时，固定 +8 小时就够了；这里与服务端的按日统计
+ * （`occurred_at AT TIME ZONE 'Asia/Shanghai'`）保持同一自然日口径，
+ * 否则日期旁的服务端计数会与归组结果错开一天。
+ */
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function shanghaiTime(occurredAt: string): Date | null {
   const parsed = new Date(occurredAt);
   if (Number.isNaN(parsed.getTime())) {
-    return occurredAt.slice(0, 10);
+    return null;
   }
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
+  return new Date(parsed.getTime() + SHANGHAI_OFFSET_MS);
+}
+
+/** 日期键用上海时间（如 `2026-09-24`），与 Date 的本地时区无关。 */
+export function activityDayKey(occurredAt: string) {
+  const shifted = shanghaiTime(occurredAt);
+  return shifted === null
+    ? occurredAt.slice(0, 10)
+    : shifted.toISOString().slice(0, 10);
 }
 
 function activityDayDate(key: string) {
@@ -36,15 +46,15 @@ export function activityDayShortLabel(key: string) {
     : key;
 }
 
-/** 分组内每条动态对应的时刻（如 14:59），日期由组头承担。 */
+/** 分组内每条动态对应的时刻（如 14:59，上海时间），日期由组头承担。 */
 export function activityTimeLabel(occurredAt: string) {
-  const date = new Date(occurredAt);
-  if (Number.isNaN(date.getTime())) {
+  const shifted = shanghaiTime(occurredAt);
+  if (shifted === null) {
     return "";
   }
   return [
-    String(date.getHours()).padStart(2, "0"),
-    String(date.getMinutes()).padStart(2, "0"),
+    String(shifted.getUTCHours()).padStart(2, "0"),
+    String(shifted.getUTCMinutes()).padStart(2, "0"),
   ].join(":");
 }
 

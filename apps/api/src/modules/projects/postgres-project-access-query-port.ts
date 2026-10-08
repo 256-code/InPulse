@@ -90,6 +90,16 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
     return projects[0] !== undefined;
   }
 
+  async listDeletedProjectIds(): Promise<readonly number[]> {
+    const projects = (await this.client.sql`
+      SELECT id
+        FROM app.projects
+       WHERE deleted_at IS NOT NULL
+       ORDER BY id ASC
+    `) as unknown as readonly { id: number }[];
+    return projects.map((project) => project.id);
+  }
+
   async checkProjectForWrite(
     tx: TransactionContext,
     input: { readonly actorUserId: number; readonly projectId: number },
