@@ -271,14 +271,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     </CalmBadge>
                   </span>
                   <h2>{project.name}</h2>
-                  <p
-                    className={
-                      "project-card-desc" +
-                      (project.description ? "" : " is-placeholder")
-                    }
-                  >
-                    {project.description || "暂无项目描述"}
-                  </p>
+                  <p className="project-card-desc">{project.description}</p>
                   <span className="card-footer">
                     <span>
                       <InpulseIcon name="boxes" size={14} />
@@ -297,10 +290,6 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     <span>
                       <InpulseIcon name="users" size={14} />
                       {project.memberCount} 位成员
-                    </span>
-                    <span>
-                      查看模块
-                      <InpulseIcon name="chevronRight" size={14} />
                     </span>
                   </span>
                   <div className="card-footer project-card-actions">

@@ -17,6 +17,32 @@
   padding-right: 30px;
 }
 
+/* 自定义占位（2026-09-30）：原生 `datetime-local` 空值时会画自己的「年/月/日 --:--」，
+ * 文案与语言都不可控，所以把输入框文字压成透明、在同位置盖一层调用方给的文案；
+ * 聚焦后还原原生文字，否则用户看不到可键入的段。只有传了 `placeholder` 的字段生效。 */
+.calm-date-field.calm-date-field--placeholder
+  input.calm-date-input::-webkit-datetime-edit {
+  color: transparent;
+}
+.calm-date-field.calm-date-field--placeholder:focus-within
+  input.calm-date-input::-webkit-datetime-edit {
+  color: inherit;
+}
+.calm-date-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: #adb7c4;
+  font-size: 13.5px;
+  line-height: 1;
+  pointer-events: none;
+}
+.calm-date-field.calm-date-field--placeholder:focus-within
+  .calm-date-placeholder {
+  display: none;
+}
+
 /* 原生日历图标会打开浏览器自带弹层（位置不可控），隐藏它，换成不触发展开的装饰图标。 */
 .calm-date-input::-webkit-calendar-picker-indicator {
   display: none;

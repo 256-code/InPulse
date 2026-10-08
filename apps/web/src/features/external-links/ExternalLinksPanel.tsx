@@ -14,6 +14,7 @@ import {
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { repositoryDisplayPath } from "./repository-path";
 type TargetType = ExternalLinkTargetPath["targetType"];
 /** 设计师稿 github-links 的徽章文案：先看 Release 标记，再看链接类型。 */
 export function externalLinkKindLabel(item: ExternalLinkItem): string {
@@ -33,6 +34,7 @@ export function ExternalLinksPanel({
   client,
   variant = "button",
   triggerClassName,
+  triggerUnconfiguredHint,
 }: {
   targetType: TargetType;
   targetId: number;
@@ -41,6 +43,8 @@ export function ExternalLinksPanel({
   variant?: "button" | "inline";
   /** `button` 形态下触发按钮的样式类，用于融入所在页面的动作区。 */
   triggerClassName?: string | undefined;
+  /** 传入后把触发按钮标记为「待配置」：虚线描边，并把该文案作为悬停提示。 */
+  triggerUnconfiguredHint?: string | undefined;
 }) {
   const api = useMemo(() => client ?? createApiClient(), [client]),
     cache = useQueryClient();
@@ -177,14 +181,27 @@ export function ExternalLinksPanel({
     if (inline) void load();
     // 目标或形态变化时重新加载，等价于弹层形态的「打开即加载」。
   }, [inline, targetType, targetId]);
-  /** 弹层与内联形态共用的新增表单字段；弹层形态按用户要求置于链接列表顶部。 */
+  /** 弹层形态把项目根仓库固定在上半区，并从下半区列表里排除，避免同一条链接出现两次。 */
+  const rootRepository =
+    targetType === "PROJECT"
+      ? (data?.items.find((item) => item.isRootRepository) ?? null)
+      : null;
+  const linkedItems =
+    data === null
+      ? []
+      : rootRepository === null
+        ? data.items
+        : data.items.filter((item) => item.id !== rootRepository.id);
+  const canWrite = data?.writable === true;
+  const addBlocked = busy || needsRefresh;
+  /** 弹层与内联形态共用的新增表单字段；弹层形态在点「添加链接」后才展开。 */
   const addFormFields = removeId ? null : (
     <>
-      <label htmlFor={`external-link-url-${targetType}-${targetId}`}>
+      <label htmlFor={"external-link-url-" + targetType + "-" + targetId}>
         GitHub URL
       </label>
       <Input
-        id={`external-link-url-${targetType}-${targetId}`}
+        id={"external-link-url-" + targetType + "-" + targetId}
         value={url}
         maxLength={2048}
         disabled={busy}
@@ -197,7 +214,12 @@ export function ExternalLinksPanel({
           disabled={busy}
           onChange={(e) => setIsRootRepository(e.target.checked)}
         >
-          设为项目根仓库（可填写已有链接以切换）
+          设为项目根仓库
+          {rootRepository
+            ? "（当前：" +
+              repositoryDisplayPath(rootRepository.normalizedUrl) +
+              "）"
+            : ""}
         </Checkbox>
       )}
       {url.trim() && (
@@ -207,13 +229,27 @@ export function ExternalLinksPanel({
             : "请输入有效的 GitHub HTTPS URL"}
         </p>
       )}
-      <Button
-        type="primary"
-        disabled={busy || needsRefresh || !url.trim()}
-        onClick={() => void save()}
-      >
-        确认添加
-      </Button>
+      <div className="external-links-add-actions">
+        {inline ? null : (
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setUrl("");
+              setIsRootRepository(false);
+              setAdding(false);
+            }}
+          >
+            取消
+          </Button>
+        )}
+        <Button
+          type="primary"
+          disabled={busy || needsRefresh || !url.trim()}
+          onClick={() => void save()}
+        >
+          确认添加
+        </Button>
+      </div>
     </>
   );
   const addForm = removeId ? (
@@ -248,6 +284,13 @@ export function ExternalLinksPanel({
         添加 GitHub 链接
       </button>
     );
+  /** 触发按钮的样式类：页面自带类 + 待配置标记。 */
+  const triggerButtonClass = [
+    triggerClassName,
+    triggerUnconfiguredHint === undefined ? undefined : "is-unconfigured",
+  ]
+    .filter(Boolean)
+    .join(" ");
   if (inline)
     return (
       <div className="github-block">
@@ -307,9 +350,12 @@ export function ExternalLinksPanel({
   return (
     <>
       <Button
-        {...(triggerClassName === undefined
+        {...(triggerButtonClass === ""
           ? {}
-          : { className: triggerClassName })}
+          : { className: triggerButtonClass })}
+        {...(triggerUnconfiguredHint === undefined
+          ? {}
+          : { title: triggerUnconfiguredHint })}
         onClick={() => {
           setOpen(true);
           if (!data && !needsRefresh) void load();
@@ -334,74 +380,174 @@ export function ExternalLinksPanel({
           </Button>
         }
       >
-        <p>保存代码证据，可关联多个链接。</p>
-        {busy && (
-          <CalmSkeleton variant="lines" rows={2} compact label="正在加载关联" />
-        )}
-        {error !== null && <Alert type="error" title={message} />}
-        {(needsRefresh || (!data && !busy)) && (
-          <Button disabled={busy} onClick={() => void load()}>
-            加载最新关联
-          </Button>
-        )}
-        {data && (
-          <>
-            {data.writable && addFormFields !== null && (
-              <div className="external-links-add">{addFormFields}</div>
-            )}
-            <p>
-              当前版本 {data.rowVersion}
-              {!data.writable ? " · 只读" : ""}
-            </p>
-            {data.items.length === 0 ? (
-              <p>暂无 GitHub 链接</p>
-            ) : (
-              <ul className="external-links-list">
-                {data.items.map((item) => (
-                  <li key={item.id}>
-                    <Tag>
-                      {item.isRootRepository
-                        ? "项目根仓库"
-                        : externalLinkKindLabel(item)}
-                    </Tag>{" "}
-                    <a
-                      href={item.normalizedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {item.label}
-                    </a>
-                    <p>{item.normalizedUrl}</p>
-                    {data.writable && (
-                      <Button
-                        disabled={busy || needsRefresh}
-                        onClick={() => setRemoveId(item.id)}
-                        aria-label={"解除 " + item.label}
-                      >
-                        解除关联
-                      </Button>
+        <div className="external-links-body">
+          {busy && (
+            <CalmSkeleton
+              variant="lines"
+              rows={2}
+              compact
+              label="正在加载关联"
+            />
+          )}
+          {error !== null && <Alert type="error" title={message} />}
+          {(needsRefresh || (!data && !busy)) && (
+            <div className="external-links-refresh">
+              <Button disabled={busy} onClick={() => void load()}>
+                加载最新关联
+              </Button>
+            </div>
+          )}
+          {data && (
+            <>
+              {canWrite ? null : (
+                <p className="muted">当前为只读关联，无法新增或解除链接。</p>
+              )}
+              {targetType === "PROJECT" && (
+                <div className="external-links-root">
+                  <div className="root-meta">
+                    <span className="root-key">项目根仓库</span>
+                    {rootRepository ? (
+                      <span className="root-value">
+                        {repositoryDisplayPath(rootRepository.normalizedUrl)}
+                        <span className="root-url">
+                          {rootRepository.normalizedUrl}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="root-value root-empty">尚未设置</span>
                     )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {data.writable && removeId !== null && (
-              <>
-                <p>确认解除此链接的当前关联？</p>
-                <Button disabled={busy} onClick={() => setRemoveId(null)}>
-                  取消解除
-                </Button>
-                <Button
-                  danger
-                  disabled={busy || needsRefresh}
-                  onClick={() => void save()}
-                >
-                  确认解除关联
-                </Button>
-              </>
-            )}
-          </>
-        )}
+                  </div>
+                  <div className="root-actions">
+                    {rootRepository && (
+                      <a
+                        className="root-open"
+                        href={rootRepository.normalizedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        打开
+                        <InpulseIcon name="externalLink" size={13} />
+                      </a>
+                    )}
+                    {canWrite && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={addBlocked}
+                        onClick={() => {
+                          setIsRootRepository(true);
+                          setAdding(true);
+                        }}
+                      >
+                        {rootRepository ? "切换" : "设置"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {data.items.length === 0 ? (
+                <div className="external-links-empty">
+                  <span className="empty-title">
+                    还没有关联任何 GitHub 链接
+                  </span>
+                  {targetType === "PROJECT" && (
+                    <span className="empty-hint">
+                      可以先设一个项目根仓库，再补充 PR / Commit / Release
+                    </span>
+                  )}
+                  {canWrite && (
+                    <Button
+                      type="primary"
+                      disabled={addBlocked}
+                      onClick={() => setAdding(true)}
+                    >
+                      <InpulseIcon name="plus" size={14} />
+                      添加链接
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="external-links-head">
+                    <span className="head-label">
+                      关联链接
+                      {linkedItems.length > 0
+                        ? " · " + linkedItems.length + " 条"
+                        : ""}
+                    </span>
+                    {canWrite && !adding && removeId === null && (
+                      <button
+                        type="button"
+                        className="external-links-add-trigger"
+                        disabled={addBlocked}
+                        onClick={() => setAdding(true)}
+                      >
+                        <InpulseIcon name="plus" size={14} />
+                        添加链接
+                      </button>
+                    )}
+                  </div>
+                  {linkedItems.length === 0 ? (
+                    <p className="muted">
+                      还没有其他关联链接，可点「添加链接」补充 PR / Commit /
+                      Release。
+                    </p>
+                  ) : (
+                    <ul className="external-links-list">
+                      {linkedItems.map((item) => (
+                        <li key={item.id}>
+                          <Tag>{externalLinkKindLabel(item)}</Tag>
+                          <a
+                            className="link-name"
+                            href={item.normalizedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {item.label}
+                            <InpulseIcon name="externalLink" size={12} />
+                          </a>
+                          <span className="link-repo">
+                            {item.repository ??
+                              repositoryDisplayPath(item.normalizedUrl)}
+                          </span>
+                          {canWrite && (
+                            <button
+                              type="button"
+                              className="text-button danger-text link-remove"
+                              disabled={addBlocked}
+                              aria-label={"解除 " + item.label}
+                              onClick={() => setRemoveId(item.id)}
+                            >
+                              解除
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {canWrite && adding && addFormFields !== null && (
+                <div className="external-links-add">{addFormFields}</div>
+              )}
+              {canWrite && removeId !== null && (
+                <div className="calm-action-footer">
+                  <p>确认解除此链接的当前关联？</p>
+                  <Button disabled={busy} onClick={() => setRemoveId(null)}>
+                    取消解除
+                  </Button>
+                  <Button
+                    danger
+                    disabled={addBlocked}
+                    onClick={() => void save()}
+                  >
+                    确认解除关联
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </Modal>
     </>
   );

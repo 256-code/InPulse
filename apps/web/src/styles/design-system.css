@@ -2344,26 +2344,43 @@ td small {
 .project-repository-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
-.project-repository-link > a {
+/* 项目根仓库跳转按钮：与操作行按钮同高同圆角，但整体更轻（灰字 + 淡边框），
+   与旁边负责新增/解除的「GitHub 链接」按钮区分「只读入口 / 写入口」。 */
+.repo-jump-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: #2472c3;
+  gap: 7px;
+  height: 35px;
+  max-width: 340px;
+  padding: 0 13px;
+  border: 1px solid #e3e8ee;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #40546d;
   font-size: 13px;
-  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
 }
-.project-repository-url {
-  max-width: 260px;
+.repo-jump-button:hover {
+  border-color: #c3d6ea;
+  background: #f8fbfe;
+  color: #2472c3;
+}
+.repo-jump-button:focus-visible {
+  outline: 2px solid #a9cdf3;
+  outline-offset: 1px;
+}
+.repo-jump-button .repo-jump-path {
   overflow: hidden;
   color: #74869a;
   font-size: 12px;
-  font-weight: 400;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.repo-jump-button svg {
+  flex-shrink: 0;
 }
 .project-overview-strip {
   display: flex;

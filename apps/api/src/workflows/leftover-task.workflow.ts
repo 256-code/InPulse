@@ -42,6 +42,33 @@ const missing = () =>
     "LEFTOVER_NOT_FOUND",
     "记录、遗留项或任务不存在或无法访问",
   );
+const taskDescriptionLimit = 50000;
+const taskDescriptionDivider = "—————————";
+/**
+ * 2026-09-30 产品口径 A：用户补的任务说明放在最前，来源记录、遗留项编号与遗留原文
+ * 继续由服务端拼在其后，转换前后的留痕口径不变。两者共用同一个说明字段，
+ * 合计超过 tasks_description_check 的 50000 上限时必须在写库前给出 422。
+ */
+function composeTaskDescription(
+  authored: string | undefined,
+  recordTitle: string,
+  recordCode: string,
+  recordVersion: number,
+  leftoverItemId: number,
+  content: string,
+): string {
+  const source = `来源记录：${recordTitle}（${recordCode} v${recordVersion}）\n遗留项 #${leftoverItemId}\n\n${content}`;
+  const note = authored?.trim();
+  if (!note) return source;
+  const composed = `${note}\n\n${taskDescriptionDivider}\n${source}`;
+  if (composed.length > taskDescriptionLimit)
+    throw new LeftoverTaskError(
+      422,
+      "LEFTOVER_TASK_DESCRIPTION_TOO_LONG",
+      "任务说明加上来源记录与遗留原文后超过 50000 字，请缩短说明",
+    );
+  return composed;
+}
 @Injectable()
 export class LeftoverTaskWorkflow {
   constructor(
@@ -296,7 +323,14 @@ export class LeftoverTaskWorkflow {
         assigneeIds: input.assigneeIds,
         priority: input.priority,
         dueAt: input.dueAt,
-        description: `来源记录：${record.title}（${record.code} v${record.currentVersion}）\n遗留项 #${item.id}\n\n${content}`,
+        description: composeTaskDescription(
+          input.description,
+          record.title,
+          record.code,
+          record.currentVersion,
+          item.id,
+          content,
+        ),
       },
       requestId,
     );

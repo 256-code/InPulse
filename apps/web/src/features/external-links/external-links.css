@@ -1,21 +1,199 @@
-.external-links-add {
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color, #e7edf1);
+/* GitHub 链接弹窗（方案 A）：上半区固定「项目根仓库」，下半区是关联链接列表，
+   新增表单默认收起，点「添加链接」后才展开。 */
+.external-links-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-.external-links-list {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 16px;
+.external-links-body .muted {
+  margin: 0;
 }
-.external-links-list li {
+.external-links-refresh {
+  display: flex;
+  justify-content: flex-start;
+}
+.external-links-root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d8e6f6;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.external-links-root .root-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color, #e7edf1);
+}
+.external-links-root .root-key {
+  color: #7b8998;
+  font-size: 11.5px;
+  letter-spacing: 0.3px;
+}
+.external-links-root .root-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  color: #31415a;
+  font-size: 13.5px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-.external-links-list p {
-  margin: 8px 0;
-  color: var(--text-secondary, #64748b);
+.external-links-root .root-value.root-empty {
+  color: #8a97a6;
+  font-weight: 500;
+}
+.external-links-root .root-url {
+  color: #74869a;
   font-size: 12px;
+  font-weight: 400;
+}
+.external-links-root .root-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+.external-links-root .root-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid #e3e8ee;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #40546d;
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.external-links-root .root-open:hover {
+  border-color: #c3d6ea;
+  background: #f8fbfe;
+  color: #2472c3;
+}
+.external-links-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.external-links-head .head-label {
+  color: #4e5969;
+  font-size: 12.5px;
+}
+.external-links-add-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid #cfe4fa;
+  border-radius: 6px;
+  background: #e6f2ff;
+  color: #2472c3;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.external-links-add-trigger:not(:disabled):hover {
+  border-color: #a9cdf3;
+  background: #d9eaff;
+}
+.external-links-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 0 14px;
+  text-align: center;
+}
+.external-links-empty .empty-title {
+  color: #5b6b7d;
+  font-size: 13.5px;
+}
+.external-links-empty .empty-hint {
+  color: #8a97a6;
+  font-size: 12px;
+}
+.external-links-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e6ebf1;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+.external-links-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* 链接多时列表在弹窗内滚动（局内滚动）：根仓库卡片、列表表头与底部按钮保持常驻可见。
+   滚动条槽常驻，滚动前后行宽不跳。 */
+.external-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: clamp(160px, calc(100dvh - 400px), 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.external-links-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #eef2f6;
+  border-radius: 9px;
+  background: #ffffff;
+}
+.external-links-list .link-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #31415a;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.external-links-list .link-repo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #8a97a6;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.external-links-list .link-remove {
+  flex-shrink: 0;
+}
+/* 内联形态的新增表单是两列 grid，按钮行要整行收尾，与弹层里的排版一致。 */
+.github-add .external-links-add-actions {
+  grid-column: 1 / -1;
+}
+
+/* 未配置项目根仓库时的入口按钮：把「待配置」状态做在按钮本身（虚线描边 + 弱化文字），
+   不再单独占一行状态文案；悬停由按钮 title 提示具体原因。 */
+.is-unconfigured.ant-btn {
+  border-style: dashed;
+  border-color: #c8d6e5;
+  color: #7b8998;
+  background: #ffffff;
+}
+.is-unconfigured.ant-btn:not(:disabled):hover {
+  border-color: #a9c3de !important;
+  color: #40546d !important;
+  background: #f7fafd !important;
 }

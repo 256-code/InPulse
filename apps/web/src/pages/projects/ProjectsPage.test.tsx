@@ -111,7 +111,13 @@ describe("ProjectsPage", () => {
     const projectName = await screen.findByText("商城系统");
     expect(projectName).toBeInTheDocument();
     expect(projectName.closest(".project-card")).toHaveTextContent("1 位成员");
-    expect(projectName.closest(".project-card")).toHaveTextContent("查看模块");
+    // 卡片整块可点击进入模块，不再渲染「查看模块」入口（已按用户要求移除）。
+    expect(projectName.closest(".project-card")).toHaveTextContent(
+      "商城项目描述",
+    );
+    expect(projectName.closest(".project-card")).not.toHaveTextContent(
+      "查看模块",
+    );
     expect(screen.getByText("层级说明")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }),

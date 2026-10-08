@@ -4429,3 +4429,50 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | PROJECT-SEARCH-GATE-001 | 静态门禁 | 前端免测试指示 | 按 2026-09-17 前端免测试指示未运行任何测试与门禁（未跑 vitest / typecheck / build / `pnpm check`），仅对改动文件执行 `prettier --check`（通过），文档提交另跑 `pnpm check:docs` 通过；未新增 Playwright 用例 | 按指示未运行 |
 
 未运行 / 已知偏差：① 本批含前端产品代码，按 §8 需非作者人工评审；② 900px 窄屏下工具组换行为两行（第二行仅「新建项目」），为已知可接受形态；③ 搜索为纯本地过滤，只作用于当前已加载列表，不查后端；④ 已本地提交（`a009533`），未推送。
+
+## GitHub 链接弹窗方案 A 与项目页微调（用户指示，2026-09-30 本地落库，提交前补记）
+
+用户看过 `5599` 对照页 `github-links-modal-options.html` 后选定「方案 A」（原话「方案a不错」），随后提出「这个到时候做成局内滚动」「可不可以做两个按钮一个跳转网站一个用来更改」等微调。本批由同日更早的工作副本完成、当时未写日志，本轮推送前按 `git diff` 补记事实。纯前端：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略。
+
+锁定口径：
+
+- 「GitHub 链接」弹窗改成「方案 A」分区式：上半区固定「项目根仓库」（短路径 + 完整地址 + 「打开」 + 「设置 / 切换」），下半区是链接列表；写操作按需展开（点「添加链接」才出现 URL 输入、根仓库勾选、识别预览与「确认添加」），根仓库条目不再混进列表。
+- 项目概览头部的根仓库入口拆成两个按钮：只读跳转（新标签页打开根仓库地址）与右侧管理入口（未配置时按钮带待配置提示）。
+- 项目卡片去掉「暂无项目描述」占位与卡片内「查看模块 ›」（整卡点击进入项目）；项目概览在没有描述时不再渲染占位段，状态标签移到标题右侧；「成员与设置」按钮改淡蓝 `soft-blue-button`。
+- 空态「添加链接」不再默认勾选「设为项目根仓库」（口径 A）：该按钮文案是「添加链接」，默认勾选会让首个 PR / Issue 链接被服务端按「根仓库必须是仓库根地址」拒绝并统一显示误导性的「链接无效」文案；根仓库仍由根仓库卡片的「设置」入口一步设定。用户提供的备选口径「B 保留默认勾选并改错误文案」未采纳。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| EXTERNAL-LINKS-PANEL-A-UNIT-001 | Web 单元 | 弹窗新结构与按需展开 | `ExternalLinksPanel.test.tsx`（+90 行）覆盖根仓库卡片、列表排除根仓库与写操作按需展开；`ProjectRepositoryLink.test.tsx`（+49 行）覆盖直达按钮与待配置提示 | 上一轮通过（本轮未复跑） |
+| EXTERNAL-LINKS-PANEL-A-E2E-001 | 浏览器 E2E | 断言同步 | `external-links.spec.ts` 的 `add()` 辅助与第二处追加「先点『添加链接』」步骤 | 本地通过（定向 3/3；全量 62 passed） |
+| EXTERNAL-LINKS-PANEL-A-GATE-001 | 静态门禁 | 类型、lint 与格式 | 上一轮记录的 `tsc --noEmit` / `eslint` / `prettier` 通过 | 上一轮通过（本轮未复跑） |
+
+未运行 / 已知偏差：① 本轮推送前先复现了上一轮全量 E2E 在 `external-links.spec.ts:35`（F22 项目多链接）的失败：弹窗空态点「添加链接」会把「设为项目根仓库」默认勾上，粘贴 Issue 链接被服务端按「根仓库必须是仓库根地址」拒绝，而前端 422 一律显示「链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。」；按口径 A 去掉该默认勾选后复跑 `pnpm --filter @inpulse/e2e exec playwright test tests/external-links.spec.ts`（`E2E_DATABASE_URL=…/app_e2e`）→ **3 passed**，并复跑 `pnpm --filter @inpulse/web exec vitest run` → 89 文件 617 例全绿。② 变基到远端 `a0a8a10` 后整跑全量 `pnpm --filter @inpulse/e2e test:e2e`（`E2E_DATABASE_URL=…/app_e2e`）→ **62 passed（5.0 分钟，0 失败）**；上一轮 61 passed / 1 failed 的唯一失败点已按上句修复。③ `pnpm check` 整链、`test:integration`（无服务端改动）、镜像构建与 GitHub Actions 未跑。④ 本批含前端产品代码，按 §8 需非作者人工评审。
+
+## 遗留问题转任务弹窗改版与可选任务说明（用户指示，2026-09-30 本地落库）
+
+用户指示（原话）：「用版本1，不过遗留问题转任务好像填写的信息有点少，加一个任务说明输入框吧，优先级和截止时间可以放在同一行」；看过口径 A/B 对照稿后确认：「更改吧，要口径a」。
+
+锁定口径：
+
+- 版 1 排版：转换弹窗改为「左标签（右对齐）+ 右控件」的行式表单，四行 = 标题 / 负责人 / 优先级 + 截止时间（同行）/ 任务说明；删除图标、眉标说明句、来源分区标题与底部整段说明，来源信息压成标题下一行灰字（「来自「记录 · vN」的遗留问题 #ID」+ 原文 + 「影响功能：…」）。
+- 口径 A：任务说明选填（最多 50000 字），用户填写的说明置于任务描述最前，服务端随后拼接「来源记录：标题（编号 vN）」「遗留项 #ID」与本次遗留原文，中间以分隔行隔开；未填说明时任务描述退化为原有来源块；拼接后超过 50000 字返回 422 `LEFTOVER_TASK_DESCRIPTION_TOO_LONG` 并整体回滚。
+- 契约：`leftoverTaskRequestSchema` 新增 `description: z.string().max(50000).optional()`；因为是请求 Schema 变化，`convertLeftoverToTask` 的 `idempotencyContractVersion` / `idempotencyFingerprintVersion` 由 `1.1.0` 升到 `1.2.0`（旧 Key 在新契约下按 409 处理）。未改 Route Registry 的策略字段、权限矩阵、迁移与鉴权。
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-CONVERT-FORM-CONTRACT-001 | 契约 | Schema、生成物与幂等版本 | `packages/api-contract` 单测 3/3（新增「2026-09-30 起接受可选任务说明并仍受 50000 字约束」，同时从原「必须拒绝 description」用例里删掉该断言）；`pnpm contract:generate` 重生成 `openapi.json` / `route-contract-fingerprints.json`（`convertLeftoverToTask` 新增 1.2.0 指纹，1.0.0/1.1.0 历史条目保留）/ `apps/web/src/generated/api/types.ts`；`pnpm contract:drift` → 「5 个产物与 Registry 一致」；`pnpm contract:validate` → 100 条路由全部通过 | 本地通过 |
+| LEFTOVER-CONVERT-FORM-API-001 | API 集成（真实 PostgreSQL 18.6，`app_ci`） | 口径 A 的拼接与超长拒绝 | `leftover-task.integration.test.ts` 新增 3 例：未填说明时 `description` 以「来源记录：」开头（退化情形）；填说明时以其去空白后的文本开头、同时含「来源记录：」与「-CR-… v1」与遗留原文（口径 A 且不残留用户输入的首尾空格）；`"x".repeat(50000)` → 422 `LEFTOVER_TASK_DESCRIPTION_TOO_LONG`。全量 `pnpm --filter @inpulse/api test:integration`（`TEST_DATABASE_URL=…/app_ci`）→ 53 文件 495 例全绿 | 本地通过 |
+| LEFTOVER-CONVERT-FORM-UNIT-001 | Web 单元 | 弹窗字段、载荷与错误文案 | `ConvertLeftoverTask.test.tsx` 5/5：定位器改为「标题」「负责人」「截止时间」（无障碍名去掉长句）；填「任务说明」后 payload 带 `description`，不改截止时间时 payload 不带 `description`；新增 422 超长用例（提示「任务说明加上来源记录与遗留原文后超过 50000 字，请缩短说明。」且保留输入） | 本地通过 |
+| LEFTOVER-CONVERT-FORM-E2E-001 | 浏览器 E2E | 转换路径与来源留痕 | `leftover-task.spec.ts` + `issues.spec.ts` 定向 4/4；真机 DOM 快照确认版 1 行式表单（`.leftover-convert-modal`，四行 = 标题 / 负责人 / 优先级 + 截止时间 / 任务说明），任务详情可读用户填写的「F20 用户补充说明」 | 本地通过 |
+| LEFTOVER-CONVERT-FORM-E2E-002 | 浏览器 E2E | 全量关键路径回归 | 全量 `pnpm --filter @inpulse/e2e test:e2e`（`E2E_DATABASE_URL=…/app_e2e`）→ 变基到远端 `a0a8a10` 后整跑 **62 passed（5.0 分钟，0 失败）**；上一轮 61 passed / 1 failed 的唯一失败是上一批 `external-links.spec.ts` 的 F22 用例（见偏差①），已按口径 A 修复后消解 | 全量通过 |
+| LEFTOVER-CONVERT-FORM-WEB-001 | Web 单元 | 前端全量回归 | `pnpm --filter @inpulse/web exec vitest run` → 89 文件 614 例全绿 | 本地通过 |
+| LEFTOVER-CONVERT-FORM-GATE-001 | 静态门禁 | 类型、lint 与格式 | `tsc --noEmit`（web 与 api 各一次）、`eslint`（改动集）、`prettier --check`（改动集；首轮 5 个文件红灯，用 prettier API 写回后全绿）全部 exit 0 | 本地通过 |
+  2026-09-30 视觉复核后的二次修订（真机取证）：用户拿真实弹窗与版 1 对照稿（`leftover-task-modal-v2.html`）并排比对后反馈「这两个差距很大啊」。用一次性 Playwright 脚本在 1280×900 视口打开同一个真实弹窗并量测，暴露四处差异：① `.leftover-convert-form` 没有任何内边距（实测 `bodyPadding: 0px`、正文左边界等于弹窗左边界），来源行与四行表单整块贴边；② 截止时间沿用原生 `datetime-local` 的浏览器占位「年/月/日 --:--」，与对照稿的「选填」不一致；③ 并排行里日期字段按内容宽渲染（163 对 196），比左侧优先级下拉窄一截；④ 没有任何继承影响时来源行仍多一句「影响功能：无」。处置：① 给 `.leftover-convert-form` 加 `padding: 12px 28px 18px`（与 catalog 头部 28px 对齐）；② `CalmDateTimeInput` 新增可选 `placeholder`，空值时把 `::-webkit-datetime-edit` 压透明并盖一层同色文案、聚焦还原、有值即撤，属 opt-in，其它表单不受影响；③ 并排行的 `.calm-date-field` 与 `input` 撑满所在列；④ `impacts` 为空时不再渲染分隔符与「影响功能：」。修订后同脚本量测：`bodyPadding: 12px 28px 18px`、`prioWidth = dateWidth = 168`，来源行只剩「来自「记录 · vN」的遗留问题 #ID · 原文」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-CONVERT-FORM-BROWSER-002 | 浏览器实测（DOM + 截图） | 真实弹窗与版 1 对照稿逐项对齐 | 1280×900 视口打开真实弹窗并截图：内容不再贴边（padding 12/28/18）、截止时间显示「选填」、并排行两字段同宽（168/168）、来源行不再多出「影响功能：无」；上列四处差异全部消解 | 本地通过 |
+| LEFTOVER-CONVERT-FORM-UNIT-002 | Web 单元 | 占位与来源行新行为 | `CalmDateTimeInput.test.tsx` 新增 2 例（传了占位且值为空才出现、有值时不出现；不传占位不插节点）；`ConvertLeftoverTask.test.tsx` 新增 1 例（`inheritedImpacts` 为空时不渲染「影响功能」）；前端全量 `pnpm --filter @inpulse/web exec vitest run` → **89 文件 617 例全绿** | 本地通过 |
+| LEFTOVER-CONVERT-FORM-E2E-003 | 浏览器 E2E | 修订后定向回归 | `leftover-task.spec.ts` + `issues.spec.ts` → 4/4；真机取材的一次性截图脚本写在 `apps/e2e/tests/` 下，验证后已删除，不在仓库内 | 本地通过 |
+
+未运行 / 已知偏差：① 上一轮全量 E2E 的 `external-links.spec.ts:35`（F22 项目多链接）失败已按口径 A 修复：`GitHub 链接` 弹窗空态点「添加链接」原来会把「设为项目根仓库」默认勾上，粘贴 Issue 链接被服务端按「根仓库必须是仓库根地址」拒绝，前端 422 文案统一显示为「链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。」；去掉该默认勾选后该 spec 定向 3/3 通过；变基到远端 `a0a8a10` 后整跑全量 `pnpm --filter @inpulse/e2e test:e2e` → **62 passed（5.0 分钟，0 失败）**（详见上方「GitHub 链接弹窗方案 A 与项目页微调」小节）。② 本地 `app_e2e` 库原先停在 `0017`（仓库已到 `0032`），首轮全量 E2E 因此大面积失败；补 `MIGRATION_DATABASE_URL=…/app_e2e pnpm db:migrate`（13 applied / 18 already present）后复跑正常，属环境状态而非本批代码缺陷。③ `pnpm check` 整链、镜像构建与 GitHub Actions 未跑。④ 本批含契约与服务端改动（幂等契约版本升级）与前端产品代码，按 §8 需非作者人工评审。

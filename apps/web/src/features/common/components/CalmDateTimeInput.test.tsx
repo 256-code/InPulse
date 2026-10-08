@@ -169,6 +169,50 @@ describe("CalmDateTimeInput：自绘日历弹层（2026-09-29 用户反馈「日
   });
 });
 
+describe("自定义占位（2026-09-30）", () => {
+  it("传了文案且值为空时盖一层占位，聚焦或有值时都不再显示", async () => {
+    const { unmount } = render(
+      <CalmDateTimeInput
+        id="due"
+        ariaLabel="截止时间"
+        placeholder="选填"
+        value=""
+        onChange={() => undefined}
+      />,
+    );
+    const field = () => document.querySelector(".calm-date-field");
+    const placeholder = () => document.querySelector(".calm-date-placeholder");
+    expect(field()?.className).toContain("calm-date-field--placeholder");
+    expect(placeholder()?.textContent).toBe("选填");
+    fireEvent.focus(screen.getByLabelText("截止时间"));
+    expect(field()?.className).toContain("calm-date-field--placeholder");
+    unmount();
+    render(
+      <CalmDateTimeInput
+        id="due"
+        ariaLabel="截止时间"
+        placeholder="选填"
+        value="2026-10-05T08:07"
+        onChange={() => undefined}
+      />,
+    );
+    expect(field()?.className).not.toContain("calm-date-field--placeholder");
+    expect(placeholder()).toBeNull();
+  });
+
+  it("没传文案的字段保持原生占位，不额外插节点", () => {
+    render(
+      <CalmDateTimeInput
+        id="due"
+        ariaLabel="截止时间"
+        value=""
+        onChange={() => undefined}
+      />,
+    );
+    expect(document.querySelector(".calm-date-placeholder")).toBeNull();
+  });
+});
+
 describe("本地时间串换算", () => {
   it("parse / format 往返，非法日期与非法格式返回 null", () => {
     expect(

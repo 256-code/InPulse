@@ -334,6 +334,8 @@ export interface CalmDateTimeInputProps {
   readonly ariaLabel?: string | undefined;
   readonly ariaInvalid?: boolean | undefined;
   readonly ariaDescribedBy?: string | undefined;
+  /** 空值时的占位文案：原生 `datetime-local` 的浏览器占位改不了，传了它就在字段上盖一层同色文字。 */
+  readonly placeholder?: string | undefined;
   readonly inputRef?: Ref<HTMLInputElement> | undefined;
 }
 
@@ -351,10 +353,14 @@ export function CalmDateTimeInput({
   ariaLabel,
   ariaInvalid,
   ariaDescribedBy,
+  placeholder,
   inputRef,
 }: CalmDateTimeInputProps) {
   const [open, setOpen] = useState(false);
   const expanded = open && disabled !== true;
+  // 占位只在「传了文案 + 值为空」时出现：原生 `datetime-local` 空值时会画自己的
+  // 「年/月/日 --:--」，改不了它的文案，只能把输入框文字压成透明再盖一层。
+  const showPlaceholder = placeholder !== undefined && value === "";
 
   return (
     <Popover
@@ -379,7 +385,13 @@ export function CalmDateTimeInput({
         />
       }
     >
-      <div className="calm-date-field">
+      <div
+        className={
+          showPlaceholder
+            ? "calm-date-field calm-date-field--placeholder"
+            : "calm-date-field"
+        }
+      >
         <input
           className="calm-date-input"
           type="datetime-local"
@@ -407,6 +419,9 @@ export function CalmDateTimeInput({
             ? {}
             : { "aria-describedby": ariaDescribedBy })}
         />
+        {showPlaceholder ? (
+          <span className="calm-date-placeholder">{placeholder}</span>
+        ) : null}
         <InpulseIcon
           name="calendar"
           size={15}

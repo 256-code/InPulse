@@ -7,6 +7,8 @@ import {
 } from "../helpers/calm-select.js";
 async function add(page: Page, url: string, label: string) {
   const modal = page.getByRole("dialog", { name: "GitHub 链接", exact: true });
+  // 方案 A：写操作按需展开，先点「添加链接」再填地址。
+  await modal.getByRole("button", { name: "添加链接" }).click();
   await modal.getByLabel("GitHub URL").fill(url);
   await modal.getByRole("button", { name: "确认添加" }).click();
   await expect(
@@ -68,6 +70,7 @@ test("F22 project, feature and task multi-links persist; duplicate and unsafe li
       "https://GitHub.com:443/inpulse/core/releases/tag/v2.6.0?utm_source=test#notes",
       "Release v2.6.0",
     );
+    await modal.getByRole("button", { name: "添加链接" }).click();
     await modal
       .getByLabel("GitHub URL")
       .fill("https://github.com/inpulse/core/releases/tag/v2.6.0");
