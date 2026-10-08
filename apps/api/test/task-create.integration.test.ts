@@ -20,6 +20,7 @@ import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres
 import { ProjectCreationLockPort } from "../src/modules/projects/project-creation-lock.port.js";
 import { PostgresProjectCodePort } from "../src/modules/projects/postgres-project-code-port.js";
 import { PostgresProjectMembersQueryPort } from "../src/modules/projects/postgres-project-members-query-port.js";
+import { PostgresProjectsWritePort } from "../src/modules/projects/postgres-projects-write-port.js";
 import { PostgresModuleQueryPort } from "../src/modules/modules/postgres-module-query-port.js";
 import { PostgresModuleReadPort } from "../src/modules/modules/postgres-module-read-port.js";
 import { ModuleManagementRepository } from "../src/modules/modules/module-management.repository.js";
@@ -106,6 +107,7 @@ beforeAll(() => {
     search,
     new PostgresNotificationWritePort(),
     moduleRead,
+    new PostgresProjectsWritePort(),
   );
   workflow = new TaskCreateWorkflow(
     new ProjectCreationLockPort(),

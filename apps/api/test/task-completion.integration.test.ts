@@ -193,6 +193,7 @@ beforeAll(async () => {
               search,
               notifications,
               new PostgresModuleReadPort(),
+              new PostgresProjectsWritePort(),
             ),
           ),
         ),

@@ -104,6 +104,20 @@ export interface ProjectFirstTaskCompletionRecord {
   readonly firstTaskCompletedAt: string;
 }
 
+/**
+ * 任务重新变为未收尾（创建、重新打开或恢复）把维护中项目重新打开为进行中的结果；
+ * 调用方据此判定是否需要写审计、活动与搜索投影。返回 undefined 表示本次操作不改变
+ * 项目状态（项目不是维护中、已被软删除或不存在），不产生任何副作用。
+ */
+export interface ProjectMaintenanceReopenRecord {
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string;
+  readonly status: "ACTIVE";
+  readonly rowVersion: number;
+}
+
 /** 项目卡统计；与 R-2 项目概览的 ProjectOverviewStats 同名同口径。 */
 export interface ProjectStatRecord {
   readonly activeModuleCount: number;
@@ -280,6 +294,18 @@ export abstract class ProjectsWritePort {
     tx: TransactionContext,
     input: { readonly projectId: number; readonly completedAt: Date },
   ): Promise<ProjectFirstTaskCompletionRecord | undefined>;
+
+  /**
+   * ADR-056 / ADR-057：任务重新变为未收尾（新建、重新打开或恢复）后维护中项目
+   * 重新开工——维护中的语义是「主体已完成、只做小修小补」，一旦有未收尾任务
+   * 进来就不再成立，同一事务内回到进行中。
+   * 只命中 status = 'MAINTENANCE' 且未软删除的行并递增 row_version；未开始、
+   * 进行中与已软删除项目不命中任何行，因此重复调用不会推高项目版本。
+   */
+  abstract reopenMaintenanceProject(
+    tx: TransactionContext,
+    input: { readonly projectId: number },
+  ): Promise<ProjectMaintenanceReopenRecord | undefined>;
 
   /**
    * 统计项目下尚未收尾的任务数（lifecycle_status 为 ACTIVE 且工作状态既非 DONE

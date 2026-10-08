@@ -296,6 +296,7 @@ beforeAll(async () => {
     search,
     notifications,
     new PostgresModuleReadPort(),
+    new PostgresProjectsWritePort(),
   );
   memberService = new ProjectMemberManagementService(
     new PostgresProjectsWritePort(),
