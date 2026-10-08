@@ -1276,6 +1276,16 @@
             }
           },
           {
+            "name": "iss",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
             "name": "error",
             "in": "query",
             "required": false,
@@ -21159,6 +21169,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 256
+          },
+          "iss": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
           },
           "error": {
             "type": "string",

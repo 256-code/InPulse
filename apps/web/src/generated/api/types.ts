@@ -1317,6 +1317,7 @@ export type SetProjectMemberRoleResponse = {
 export type SsoCallbackQueryRequest = {
   readonly code?: string;
   readonly state?: string;
+  readonly iss?: string;
   readonly error?: string;
   readonly error_description?: string;
 };

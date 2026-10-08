@@ -100,6 +100,7 @@ export class SsoController {
       const result = await this.gateway.complete({
         code: query.code,
         state: query.state,
+        iss: query.iss,
         error: query.error,
         cookieHeader: getHeader(request.headers, "cookie"),
         clientIp: resolveClientIp(request),

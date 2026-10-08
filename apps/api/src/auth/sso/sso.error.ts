@@ -1,6 +1,7 @@
 /** SSO 登录失败分类；作为 `sso_error` 回跳参数与审计 payload 使用。 */
 export type SsoLoginReason =
   | "idp-error"
+  | "issuer-mismatch"
   | "state-invalid"
   | "state-mismatch"
   | "state-expired"

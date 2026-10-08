@@ -137,6 +137,12 @@ export class SsoLoginService extends SsoGateway {
     if (input.error !== undefined) {
       throw new SsoLoginError("idp-error");
     }
+    if (
+      input.iss !== undefined &&
+      !issuerMatches(input.iss, this.config.issuer)
+    ) {
+      throw new SsoLoginError("issuer-mismatch");
+    }
     const state = input.state;
     if (state === undefined || !isValidOpaqueToken(state)) {
       throw new SsoLoginError("state-invalid");
@@ -375,6 +381,15 @@ function fitsLocalColumns(claims: SsoIdTokenClaims): boolean {
     claims.displayName.length <= NAME_MAX_LENGTH &&
     (claims.email === null || claims.email.length <= EMAIL_MAX_LENGTH)
   );
+}
+
+/**
+ * RFC 9207：回调 URL 的 iss 必须等于配置的 issuer，仅容忍首尾空白与尾部斜杠
+ * 差异；不一致说明授权响应可能来自其它签发者，按 mix-up 拒绝。
+ */
+function issuerMatches(reported: string, configured: string): boolean {
+  const normalize = (value: string): string => value.trim().replace(/\/+$/, "");
+  return normalize(reported) === normalize(configured);
 }
 
 function reasonOf(error: unknown): SsoLoginReason {

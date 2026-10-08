@@ -64,7 +64,10 @@ class StubGateway extends SsoGateway {
       : Promise.resolve(this.startResult);
   }
 
-  complete(_input: SsoCompleteInput): Promise<SsoCompleteResult> {
+  lastCompleteInput: SsoCompleteInput | undefined;
+
+  complete(input: SsoCompleteInput): Promise<SsoCompleteResult> {
+    this.lastCompleteInput = input;
     return this.fail
       ? Promise.reject(new Error("boom"))
       : Promise.resolve(this.completeResult);
@@ -150,31 +153,34 @@ describe("SsoController（ADR-032 302 语义）", () => {
     expect(headers(recorded)).toHaveLength(0);
   });
 
-  test("callback 成功时下发 Session 并清理 state Cookie", async () => {
-    const controller = new SsoController(
-      new StubGateway(
-        true,
-        { location: "/ignored", cookies: [] },
-        {
-          location: "/projects",
-          cookies: [
-            { name: "__Host-sso-state", value: null, maxAgeSeconds: 0 },
-            {
-              name: "__Host-session",
-              value: "session-value",
-              maxAgeSeconds: 604800,
-            },
-          ],
-        },
-      ),
+  test("callback 成功时下发 Session、清理 state Cookie 并透传 iss", async () => {
+    const gateway = new StubGateway(
+      true,
+      { location: "/ignored", cookies: [] },
+      {
+        location: "/projects",
+        cookies: [
+          { name: "__Host-sso-state", value: null, maxAgeSeconds: 0 },
+          {
+            name: "__Host-session",
+            value: "session-value",
+            maxAgeSeconds: 604800,
+          },
+        ],
+      },
     );
+    const controller = new SsoController(gateway);
     const { recorded, response } = createResponse();
 
     await controller.callback({ ...request }, response, {
       code: "code-1",
       state: "state-1",
+      iss: "https://authtest.libiaorobot.com",
     });
 
+    expect(gateway.lastCompleteInput?.iss).toBe(
+      "https://authtest.libiaorobot.com",
+    );
     expect(recorded.status).toBe(302);
     expect(recorded.headers["Location"]).toBe("/projects");
     expect(headers(recorded)).toEqual([

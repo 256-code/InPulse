@@ -19,6 +19,8 @@ export const SSO_GENERIC_ERROR_MESSAGE =
 const SSO_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   "idp-error":
     "统一身份认证返回了错误，请重新登录；若持续失败请联系系统管理员。",
+  "issuer-mismatch":
+    "统一身份认证响应与配置的签发者不一致，请联系系统管理员核查配置。",
   "state-invalid": "登录请求校验未通过，请重新登录。",
   "state-mismatch": "登录请求与当前浏览器不匹配，请重新登录。",
   "state-expired": "登录请求已超时，请重新登录。",

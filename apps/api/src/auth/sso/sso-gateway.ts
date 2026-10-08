@@ -13,6 +13,8 @@ export interface SsoStartResult {
 export interface SsoCompleteInput {
   readonly code: string | undefined;
   readonly state: string | undefined;
+  /** RFC 9207 授权响应中的签发者标识；缺失时按未提供处理。 */
+  readonly iss: string | undefined;
   readonly error: string | undefined;
   readonly cookieHeader: string | undefined;
   readonly clientIp: string;

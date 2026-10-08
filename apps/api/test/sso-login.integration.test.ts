@@ -215,6 +215,7 @@ function completeInput(
   return {
     code: "stub-code",
     state,
+    iss: ISSUER,
     error: undefined,
     cookieHeader: `${STATE_COOKIE_NAME}=${state}`,
     clientIp,
@@ -697,6 +698,50 @@ describe("SSO 登录纵切片（真实 PostgreSQL + 桩 IdP）", () => {
     expect(result.location).toBe("/login?sso_error=token-invalid");
     expect(await usersByLoginName(loginName)).toHaveLength(0);
     expect(await lastFailureReason()).toBe("token-invalid");
+  });
+
+  test("回调 iss 规范化后等于配置 issuer 时放行（RFC 9207）", async () => {
+    const loginName = uniqueLoginName("sso_iss_ok");
+    const { state } = await startLogin("/projects");
+    idp.setClaims({
+      nonce: deriveNonce(state),
+      subject: uniqueSubject(),
+      loginName,
+      displayName: "iss 尾斜杠",
+      email: uniqueEmail(),
+    });
+
+    const result = await service.complete(
+      completeInput(state, "203.0.113.31", { iss: `${ISSUER}/` }),
+    );
+
+    expect(result.location).toBe("/projects");
+    expect(
+      result.cookies.some((cookie) => cookie.name === SESSION_COOKIE_NAME),
+    ).toBe(true);
+    expect(await usersByLoginName(loginName)).toHaveLength(1);
+  });
+
+  test("回调 iss 与配置不一致时拒绝且不交换 token（mix-up 防护）", async () => {
+    const loginName = uniqueLoginName("sso_iss_bad");
+    const { state } = await startLogin("/projects");
+    idp.setClaims({
+      nonce: deriveNonce(state),
+      subject: uniqueSubject(),
+      loginName,
+      displayName: "iss 不符",
+      email: uniqueEmail(),
+    });
+
+    const result = await service.complete(
+      completeInput(state, "203.0.113.32", {
+        iss: "https://evil-idp.example.com",
+      }),
+    );
+
+    expect(result.location).toBe("/login?sso_error=issuer-mismatch");
+    expect(await usersByLoginName(loginName)).toHaveLength(0);
+    expect(await lastFailureReason()).toBe("issuer-mismatch");
   });
 
   test("IdP 返回 error 时不交换 token 并按 idp-error 回跳", async () => {

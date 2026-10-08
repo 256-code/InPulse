@@ -4,6 +4,8 @@ import { z } from "zod";
 export const SSO_RETURN_TO_MAX_LENGTH = 2000;
 export const SSO_STATE_MAX_LENGTH = 256;
 export const SSO_CODE_MAX_LENGTH = 2048;
+/** RFC 9207 授权服务器签发者标识（iss）长度上限。 */
+export const SSO_ISSUER_MAX_LENGTH = 500;
 
 /**
  * 单点登录发起查询参数（ADR-032）。`returnTo` 只是浏览器回跳提示，
@@ -20,13 +22,16 @@ export type SsoStartQueryRequest = z.infer<typeof ssoStartQueryRequestSchema>;
 
 /**
  * 单点登录回调查询参数（ADR-032）。字段与 OIDC Authorization Response 精确对应：
- * 成功时携带 code/state，失败时携带 error/error_description；全部字段都是外部输入，
- * 服务端必须逐项校验（state 与 Cookie 绑定并一次性消费），不得直接信任其内容。
+ * 成功时携带 code/state，失败时携带 error/error_description；Casdoor 已声明支持
+ * RFC 9207，会在授权响应回传 iss，服务端必须校验其规范化后等于配置 issuer
+ * （防 mix-up）；全部字段都是外部输入，服务端必须逐项校验（state 与 Cookie
+ * 绑定并一次性消费），不得直接信任其内容。
  */
 export const ssoCallbackQueryRequestSchema = z
   .object({
     code: z.string().min(1).max(SSO_CODE_MAX_LENGTH).optional(),
     state: z.string().min(1).max(SSO_STATE_MAX_LENGTH).optional(),
+    iss: z.string().min(1).max(SSO_ISSUER_MAX_LENGTH).optional(),
     error: z.string().min(1).max(200).optional(),
     error_description: z.string().min(1).max(1000).optional(),
   })

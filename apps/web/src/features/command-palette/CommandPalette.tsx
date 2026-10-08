@@ -273,9 +273,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     ([a], [b]) => paletteGroupRank(a) - paletteGroupRank(b),
   );
 
-  const searchHint = !canSearch
+  // 空查询不展示提示：占位符已说明可搜索对象，下方直接是快捷操作列表。
+  const searchHint: string | null = !canSearch
     ? normalizedQuery.length === 0
-      ? "输入关键词开始搜索，或直接选择一个快捷操作。"
+      ? null
       : `请输入 ${SEARCH_MIN_LENGTH}～${SEARCH_MAX_LENGTH} 个字符进行搜索。`
     : search.isError
       ? describeSearchError(search.error)
@@ -312,12 +313,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           />
           <kbd>Esc</kbd>
         </div>
-        <p className="palette-hint">
-          {searchHint}
-          {enterHint ? (
-            <span className="palette-enter-hint">{enterHint}</span>
-          ) : null}
-        </p>
+        {searchHint || enterHint ? (
+          <p className="palette-hint">
+            {searchHint}
+            {enterHint ? (
+              <span className="palette-enter-hint">{enterHint}</span>
+            ) : null}
+          </p>
+        ) : null}
         <div className="palette-results">
           {flatResults.length > 0 ? (
             orderedGroups.map(([group, items]) => (
