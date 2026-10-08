@@ -4251,7 +4251,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 - 事实集：范围内 PUBLISHED 记录（不含草稿与 VOID）、`lifecycle_status <> 'INVALID'` 且已完成的的任务、来源记录在范围内的遗留问题（内容取最新版本快照，`CONVERTED` / `RESOLVED` 计入 `closedLeftoverCount`），以及「已完成但范围内没有任何记录」的缺口（`F:project:feature` / `M:project:module`，模块级记录覆盖整个模块）；取数命中 `RECORD_SUMMARY_ITEM_MAX` 时置 `truncated` 且不做缺口判定。
 - 端口与聚合读：`ChangeRecordReadPort.summaryRecords` / `summaryLeftovers`、`TaskQueryPort.summaryCompletedTasks`（只读、不取锁），聚合读服务 `apps/api/src/modules/aggregate-read/record-summary-query.service.ts` 与只绑 `@Operation("getRecordSummary")` 的 Controller。
 - 排障修复（2026-09-29，用户两次报「生成总结失败」）：三个原因，均已修——① 线上 3000 端口跑的是旧 `dist`（未重建），`/api/v1/change-records/summary` 返回 404，用 `node scripts/dev-start.mjs` 重建重启后日志确认路由已挂载；② 端口 `assertLimit` 沿用分页口径上限 `CHANGE_RECORD_READ_LIMIT_MAX`(100) 去校验总结下发量（`RECORD_SUMMARY_ITEM_MAX` 2000 / `RECORD_SUMMARY_POINT_MAX` 300），真实链路必然抛 `limit exceeds CHANGE_RECORD_READ_LIMIT_MAX (100)` 并 500，新增 `assertSummaryLimit`（上限取契约 `RECORD_SUMMARY_ITEM_MAX`）供 `summaryRecords` / `summaryLeftovers` 使用，`assertLimit` 与其余方法不动；`RecordSummaryModal.tsx` 失败态底栏文案由「正在取数」改为「取数失败」；单元层同步补 2 例回归并把桩端口改成按 `projectIds` 过滤（见 `RECORD-SUMMARY-UNIT-001`）；③ `RecordSummaryQueryService.get()` 的项目名映射原先只按结果集（`pageProjectIds`）调用 `projects.list`，而 `scope.projectNames` 需覆盖整个授权范围——授权范围内本期没有任何记录 / 任务的项目（如「LIINK市场管理系统-销售部门」）解析不到名字即抛 `AGGREGATE_READ_INCONSISTENT`「总结缺少项目 <id>」并 500（提交 `f5bf6f1`），已改为 `this.projects.list(projectIds)` 并补真实 PostgreSQL 回归（`RECORD-SUMMARY-INT-005`）；未改契约、路由、权限矩阵与其它端口方法。
-- 前端：`apps/web/src/features/records/RecordSummaryModal.tsx`（筛选 / 正文 / 明细、复制正文与明细 Markdown）与 `record-summary-document.ts`（正文派生）、`record-summary-query.ts`、`record-summary.css`；入口是 `RecordsWorkspace.tsx` 筛选行最右端的「生成总结」（2026-09-29 调整：由页头移到筛选 toolbar 末位、`margin-left: auto` 靠右顶格，与「已发布 / 已作废 / 全部」同一行；包一层 `.records-toolbar-summary` 以避开 `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则）。
+- 前端：`apps/web/src/features/records/RecordSummaryModal.tsx`（筛选 / 正文 / 明细、复制正文与明细 Markdown）与 `record-summary-document.ts`（正文派生）、`record-summary-query.ts`、`record-summary.css`；入口是 `RecordsWorkspace.tsx` 筛选行最右端的「生成总结」（2026-09-29 调整：由页头移到筛选 toolbar 末位、`margin-left: auto` 靠右顶格，与「已发布 / 已作废 / 全部」同一行；2026-10-08 起容器更名为 `.records-toolbar-actions`、`gap: 10px`，并同时容纳「新建迭代记录」主按钮（2026-10-08 由页头移入，见《迭代记录弹窗吸顶、回到顶部 inset 与「新建迭代记录」并入筛选行》小节）；包一层 div 以避开 `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -4595,19 +4595,20 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 口径与实现：
 
-- 吸顶块：`.sticky-page-band`（`apps/web/src/styles/inpulse-design.css`），仅 ≥701px 且 `:not(.is-embedded)` 生效——`position: sticky; top: 0; z-index: 5; padding-bottom: 18px; background: var(--background)`。容器必须自带不透明底色（否则行从标题与筛选条后方透出）；工具条的 `margin-bottom` 挪到容器内边距（容器末子级外边距会坍出底部，那一截没有底色，滚动时在吸顶块与列表之间露内容）。
+- 吸顶块：`.sticky-page-band`（`apps/web/src/styles/inpulse-design.css`），仅 ≥701px 生效（2026-10-08 起弹窗嵌入模式同样吸顶，量测落在弹窗自己的滚动容器内）——`position: sticky; top: 0; z-index: 5; padding-bottom: 18px; background: var(--background)`。容器必须自带不透明底色（否则行从标题与筛选条后方透出）；工具条的 `margin-bottom` 挪到容器内边距（容器末子级外边距会坍出底部，那一截没有底色，滚动时在吸顶块与列表之间露内容）。
 - 分组头：`.activity-day-head`（动态 / 审计）与 `.records-workspace .timeline-day-head`（记录）为 `position: sticky; top: var(--sticky-band-height, 182px); z-index: 4`、不透明底色；「当天内容滚完自己收起来」由分组头所在包裹 `<section>`（`.activity-day` / `.timeline-block`）完成——被下一组顶走是纯 CSS，无滚动监听。
 - 偏移量：新增共享钩子 `apps/web/src/features/common/use-sticky-band-offset.ts` 的 `useStickyBandOffset(pageRef, bandRef, enabled)`——`useLayoutEffect` 量吸顶块高度后**向下取整**写入页面根 `--sticky-band-height`（取整让分组头顶边微压吸顶块，避免子像素细缝），`ResizeObserver` 跟随工具条折行；变量落点是吸顶块与分组头的共同祖先（两者是兄弟节点）；卸载时移除，兜底 `182px`。
 - 记录页特例：分组头只吸内容列——完整头比时间线左边界靠左 104px、会伸进左侧留白列、在项目主页弹窗里顶出弹层卡片；`[data-record-anchor]` 的 `scroll-margin-top: calc(var(--sticky-band-height, 0px) + 16px)`；吸顶时分组头容器 `padding-bottom: 10px` 接管工具条下方原 10px。
 - 审计页新增按自然日分组：`auditDayKey` 用浏览器本地时区（与 `from` / `to` 和行内时刻同一口径，**不复用**项目动态按 Asia/Shanghai 换算的 helper），复用 `.activity-day` / `.activity-day-head` 类（零新增审计 CSS）；行内保留 `MM-DD` 短日期，组头给完整日期与 `N 条`，首组头 7px 顶圆角贴合 `.audit-list` 卡片。
-- `is-embedded`（记录视图装进项目主页弹窗）不吸顶、不量高度：弹层自带头部与独立滚动区。
+- `is-embedded`（记录视图装进项目主页弹窗，2026-10-08 起）：与独立页同样吸顶与量高度——弹窗正文本身是 `overflow-y: auto` 的独立滚动容器，`useStickyBandOffset` 的量测在弹窗内生效（实测页 132px / 弹窗 87px）；吸顶块与分组头底色改用白色 `#ffffff` 覆写；弹窗正文顶部内边距改由吸顶块承担（`.project-workspace-modal-body` 的 `padding-top: 0` ↔ 吸顶块 `padding-top: 20px` 成对，否则卡片从缝隙滑过）；记录视图在弹窗内不渲染页头。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | STICKY-BAND-ACTIVITY-BROWSER-001 | 浏览器实测 | 活动页吸顶块与分组头 | 1118×875：`--sticky-band-height` 为 181px；吸顶块顶 0 / 底 182 且 `sticky`；首个分组头钉在 181（吸顶块下方） | 本地通过 |
 | STICKY-BAND-RECORDS-BROWSER-001 | 浏览器实测 | 记录页吸顶与内容列对齐 | 同视口：变量 179px；吸顶块 0→179；分组头钉在 179、左 374 / 宽 702（与内容列对齐）；组尾交接「前一组 −170、后一组钉住」；首组折叠后可见行 20→17 | 本地通过 |
 | STICKY-BAND-AUDIT-BROWSER-001 | 浏览器实测 | 审计页吸顶 + 本地日分组 | 同视口：变量 182px；吸顶块 0→183；3 个分组头 / 33 行、组头钉在 182；交接「前组 −323、后组钉在 182」；首组 7px 顶圆角；折叠 32→23；命中测试返回 `activity-day-head` | 本地通过 |
-| STICKY-BAND-EMBEDDED-BROWSER-001 | 浏览器实测 | 弹窗嵌入模式不吸顶 | 项目主页记录弹窗：吸顶块类为 `sticky-page-band is-embedded`、吸顶块与分组头均为 `static`、变量未设置（`(unset)`）；弹窗内滚动 320px 时吸顶块 132 → −188（随内容滚走，符合预期） | 本地通过 |
+| STICKY-BAND-EMBEDDED-BROWSER-001 | 浏览器实测 | 弹窗嵌入模式吸顶（结构，2026-10-08 修订） | 项目主页记录弹窗（页头移除后复测）：无页头；吸顶块类 `sticky-page-band is-embedded`、吸顶块顶部 112 / 高度 88、变量 `--sticky-band-height` 为 87px；搜索与动作组同排（top 153 / 高 35）；两按钮 enabled。此前「吸顶块与分组头均为 `static`、变量未设置、弹窗内滚动 320px 时吸顶块 132 → −188」的量测为当时行为，已作废 | 本地通过 |
+| STICKY-BAND-EMBEDDED-BROWSER-002 | 浏览器实测 | 弹窗内滚动矩阵复测 | 分组头钉住与回到顶部 `inset` 贴底：改动后复跑探针时页面已不在项目主页弹窗（「查看全部」未命中），**未取得量测**；第 2 次尝试后按两次停手规则停止 | 未取证 |
 | STICKY-BAND-NARROW-001 | 浏览器实测 | 窄屏不吸顶 | 吸顶只在 `@media (min-width: 701px)` 内生效（标题与工具条折行后自身已占大半屏）；**未单独量测**（由 CSS 条件静态确认） | 未取证 |
 
 本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 探针（量测后删除、不入库）、改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck`（exit 0）与 `get_errors`（无新增错误）。**未运行**：vitest / `pnpm test:web` / 全量 `pnpm test:e2e` / `pnpm check` / GitHub Actions。
@@ -4657,8 +4658,8 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 **① 回到顶部按钮**（指示：「现在需要给迭代记录项目动态审计日志滚动页面加一个回到最顶上的一个按钮」）
 
-- 新增 `apps/web/src/features/common/components/BackToTop.tsx` + `back-to-top.css`：固定在右下角，`SHOW_AFTER_PX = 400`（≈一屏三分之一）后才浮现；监听 `window` 滚动（主内容区不是内部滚动容器），回顶用 `window.scrollTo({ behavior: reduced ? "auto" : "smooth" })`；隐藏态用 `visibility: hidden` 兜住「不可点击、不可聚焦、读屏跳过」，不靠 `aria-hidden`；图标为 `InpulseIcon` 新增的 `arrowUp`。
-- 挂载三处：`ActivityWorkspace`、`AuditLogPageView`、`RecordsWorkspace`（记录视图装在项目主页弹窗时 `embedded` 不渲染）。
+- 新增 `apps/web/src/features/common/components/BackToTop.tsx` + `back-to-top.css`：固定在右下角，`SHOW_AFTER_PX = 400`（≈一屏三分之一）后才浮现；滚动、监听与回顶目标为 `nearestScroller` 向上找到的最近可滚动祖先（独立页即 `window`，记录页弹窗内为弹窗正文；2026-10-08 修订），回顶执行 `scrollTo({ behavior: reduced ? "auto" : "smooth" })`；隐藏态用 `visibility: hidden` 兜住「不可点击、不可聚焦、读屏跳过」，不靠 `aria-hidden`；图标为 `InpulseIcon` 新增的 `arrowUp`；2026-10-08 新增 `inset` 变体（`position: sticky; right: auto; bottom: 4px; display: grid; margin-left: auto`）贴在弹窗滚动容器底部右侧。
+- 挂载三处：`ActivityWorkspace`、`AuditLogPageView`、`RecordsWorkspace`（记录视图装在项目主页弹窗时同样渲染 `inset` 变体；2026-10-08 修订，修订前为「`embedded` 不渲染」）。
 - 真机验证（三页）：跨过阈值后按钮出现、点击回顶、隐藏态不可聚焦。
 
 **② 成员列表组长置顶**（指示：「这里组长要放在第一位」）
@@ -4682,7 +4683,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| WEB-UX-BACKTOTOP-BROWSER-001 | 浏览器实测 | 三页回到顶部 | `/records`、`/activity`、`/audit` 滚过 400px 后按钮出现、点击回顶、隐藏态不可聚焦；记录页弹窗内不渲染 | 本地通过 |
+| WEB-UX-BACKTOTOP-BROWSER-001 | 浏览器实测 | 三页回到顶部 | `/records`、`/activity`、`/audit` 滚过 400px 后按钮出现、点击回顶、隐藏态不可聚焦；记录页弹窗内于 2026-10-08 起渲染 `inset` 变体（修订前为不渲染） | 本地通过 |
 | WEB-UX-LEADER-FIRST-BROWSER-001 | 浏览器实测 | 组长置顶 | 成员页与项目概览活跃成员两处，组长均为第一位；排序不修改 React Query 缓存引用 | 本地通过 |
 | WEB-UX-BOARD-STICKY-BROWSER-001 | 浏览器实测 | 看板吸顶 | 标题/概览/工具条吸在 `top: 0`，泳道头与列表分组头钉在 `--sticky-band-height`（实测 **311px**）下方 | 本地通过 |
 | WEB-UX-BOARD-FOLD-BROWSER-001 | 浏览器实测 | 折叠动画 | 泳道与列表展开/收起为连续高度变化（非跳变）、条目按 `--tb-enter-i` 错开；`prefers-reduced-motion` 下无动画 | 本地通过 |
@@ -4765,3 +4766,26 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08，分支 `test`，未提交未推送）：① `pnpm --filter @inpulse/api typecheck` → exit 0；定向集成 `task-create-maintenance-reopen` → **9/9**；鉴别性实验如 `ADR057-DISCRIM-001` 所述转红后恢复。② 全量集成（`TEST_DATABASE_URL=…/app_ci` + `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE`）`pnpm test:integration` → **exit 0**：database **2 文件 27 例**、apps/api **54 文件 520 例**、apps/ops **2 文件 7 例**。③ 门禁 `pnpm check`：`lint`、`format:check`（新测试文件经 `prettier --write` 修正）、`typecheck`（8 workspace）、`test:unit`（api 70 文件 405 例、web 90 文件 630 例、api-contract 16 文件 102 例、ops 8 文件 52 例、database 1 文件 15 例、canonical-json 1 文件 5 例）、`db:migrations:check`（32 迁移）、`db:seed:check`（28 表）、`contract:drift`、`contract:validate`（**101 条**）、`build`、`check:deploy:test`（5 refs）、`check:deps`、`check:frontend:boundaries`、`permissions:check`（**101 / 101**）逐条 exit 0；`deps:audit` 因既有 registry 公告（2 moderate / 3 high / 1 critical，含 `proxy-addr` GHSA-jqcg-44mw-7w3h）中断，与本批无关，按 §4 走独立依赖 PR；中断点之后的 `check:secrets`（1133 文件）与 `check:docs`（104 个 Markdown）已单独补跑，均 exit 0。④ 真机复验见 `ADR057-E2E-001`（UI → 项目列表 → 项目动态 → 审计 → 活动 → 搜索投影 → 通知表逐项核对）。⑤ `app_ci` 夹具已按 2026-09-17 指示用 `E2E_DATABASE_URL=…/app_ci node apps/e2e/helpers/fixture-cleanup.ts` 清理（删除用户 1638、项目 921、业务行 29118、审计行 1879；脚本报告 SYSTEM 链留下一个断点，属 `app_ci` 历史写入）。
 
 未运行 / 已知偏差：① **未跑** `pnpm test:e2e`（本 ADR 仅改前端缓存失效键，无路由与页面行为改动）与 GitHub Actions（尚未提交推送）。② 本机 `pg_dump.exe` / `pg_restore.exe` 缺少 MSVC 运行库（`0xC0000135`）无法启动，本次通过把已补齐在 `node_modules/.pnpm/@node-rs+argon2-win32-x64-msvc@2.2.0/…` 的 `vcruntime140*.dll` / `msvcp140.dll` 前置到 `PATH` 后恢复，ops 备份 2 例随之通过；同一轮还清掉了 `app_ci` 被重复执行 `000_roles.sql` 带回来的陈旧 `pg_trgm`（零依赖对象），使 `database.test.ts` 的扩展不变量断言恢复。两者都是本机环境问题，**与本批代码无关**，也未改动仓库内任何文件。③ 演示库项目 118 的验证任务（35211 已回到未完成，35118 / 35209 / 35212 仍为已完成）是本轮真机复验夹具，仓库无任务删除入口，清理需人工 SQL。④ 本批含服务端与前端产品代码、测试与文档，按 §8 需非作者人工评审。
+
+## 迭代记录弹窗吸顶、回到顶部 `inset` 与「新建迭代记录」并入筛选行（用户指示，2026-10-08 本地落库）
+
+用户两条指示（原话）：①「这里弹窗没改」（项目主页「查看全部」弹窗内的迭代记录相对独立页 `/records` 少了吸顶效应、日期分组头钉住与回到顶部按钮）；②「把新建迭代记录放在和搜索那些同一行里」。只改前端（`apps/web`），无 API / 契约 / 权限 / 迁移改动；按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁，证据为一次性 Playwright 结构探针（用后删除、未入库）与改动文件静态检查。
+
+口径与实现：
+
+- 弹窗与独立页对齐：`apps/web/src/features/records/RecordsWorkspace.tsx` 的 `useStickyBandOffset(pageRef, bandRef)` 去掉 `!embedded` 限制——弹窗正文是 `overflow-y: auto` 的独立滚动容器，吸顶与偏移量量测都在弹窗内生效（实测页 132px / 弹窗 87px）；`records-timeline.css` 对 `is-embedded` 的吸顶块与分组头用 `#ffffff` 覆写底色（弹窗为白色卡片表面，`var(--background)` 会撞色）。
+- 弹窗正文顶部内边距改由吸顶块承担：`inpulse-design.css` 新增 `.project-workspace-modal > .project-workspace-modal-body:has(> .records-workspace) { padding-top: 0 }`，必须与 `.project-workspace-modal .records-workspace.is-embedded .sticky-page-band { padding-top: 20px }` 成对存在，否则吸顶块与正文之间会露出滚动内容；`TasksPage` 共用 `project-workspace-modal`，用 `:has` 把改动面收窄到记录视图容器。同时删除已无消费方的 `.page-header.embedded` 规则。
+- 记录视图在弹窗内不渲染自己的页头（标题由弹窗承担）；独立页页头只保留标题与说明。
+- 「新建迭代记录」由独立页页头移入筛选工具条最右端，与「生成总结」同排（`.records-toolbar-actions`，原 `.records-toolbar-summary`，`margin-left: auto` + `gap: 10px`；包一层 div 以避开 `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则）。
+- `BackToTop` 在弹窗内渲染 `inset` 变体（`.back-to-top.is-inset { position: sticky; right: auto; bottom: 4px; display: grid; margin-left: auto }`）；`nearestScroller` 向上探测最近的 `overflow-y: auto|scroll` 祖先作为滚动、监听与回顶目标，找不到时回退 `window`。
+- `RecordsWorkspace.test.tsx` 测试名「keeps the header action」改为「keeps the create action」（按钮已不在页头；断言未变）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORDS-TOOLBAR-CREATE-BROWSER-001 | 浏览器实测 | 独立页入口同行右对齐 | `/records`：页头恰 1 个；搜索框与动作组同一行（top 117 / bottom 152）、动作组右缘 = 工具条右缘（1398）；按钮次序 [「生成总结」`secondary-button`、「新建迭代记录」`primary-button`]、不换行；`--sticky-band-height: 132px` | 本地通过 |
+| RECORDS-MODAL-PARITY-BROWSER-001 | 浏览器实测 | 弹窗模式结构与量测 | 项目主页「查看全部」：无页头；吸顶块 `sticky-page-band is-embedded`、顶部 112 / 高度 88 / 变量 87px；搜索与动作组同排（top 153 / 高 35）；两按钮 enabled | 本地通过 |
+| RECORDS-MODAL-SCROLL-MATRIX-BROWSER-002 | 浏览器实测 | 弹窗内滚动矩阵复测 | 分组头钉住与回到顶部 `inset` 贴底：改动后复跑探针时页面已不在项目主页弹窗（「查看全部」未命中），**未取得量测**（见 `STICKY-BAND-EMBEDDED-BROWSER-002`） | 未取证 |
+
+本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 结构探针（量测后删除、不入库）、全部改动文件 `prettier --check` 与 `pnpm --filter @inpulse/web typecheck`（exit 0）、`pnpm check:docs`。**未运行**：vitest / `pnpm test:web` / `pnpm test:e2e` / `pnpm check` / GitHub Actions。
+
+未运行 / 已知偏差：① 弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）未取得量测——第 2 次尝试仍未命中项目主页弹窗，按两次停手规则停止，列为未取证；② 本批无 Playwright 用例进 E2E 套件，与吸顶批次同一回归防线缺口；③ 本批含前端产品代码与单测描述修订，按 §8 需非作者人工评审。

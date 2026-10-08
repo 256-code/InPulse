@@ -610,3 +610,15 @@
 - 前端修复必须项：`apps/web/src/features/tasks/TaskStatusPanel.tsx` 的 `onSuccess` 失效键补 `"projects"`，否则项目卡片读的 `["projects"]` 不失效，会出现「任务已回到未完成、项目卡片仍显示维护中」的观感（与用户报障描述一致）。
 - 测试：`apps/api/test/task-create-maintenance-reopen.integration.test.ts` 由 5 例扩为 9 例（新增重新打开触发、恢复触发、进行中项目不触发、同事务回滚）；鉴别性验证为临时停用 `transition()` 中的触发后新增两例转红、其余 7 例保持绿；`docs/test-matrix.md` 新增 `ADR057-*` 共 6 条。
 - 未运行：全量 `pnpm test:e2e`（本批无路由与前端行为改动，仅缓存失效键）、整链 `pnpm check` 与 GitHub Actions（尚未提交推送）；本批未提交、未推送，按 §8 需非作者人工评审。
+
+## 2026-10-08 迭代记录弹窗吸顶、回到顶部 inset 与「新建迭代记录」并入筛选行说明
+
+用户 2026-10-08 两条指示（原话）：①「这里弹窗没改」（项目主页「查看全部」弹窗内的迭代记录与独立页 `/records` 不一致：不吸顶、无日期分组头钉住、无回到顶部）；②「把新建迭代记录放在和搜索那些同一行里」。只改前端（`apps/web`），无 API / 契约 / 权限 / 迁移改动。
+
+- 弹窗与独立页对齐：`RecordsWorkspace.tsx` 的 `useStickyBandOffset(pageRef, bandRef)` 去掉 `!embedded` 限制——弹窗正文是 `overflow-y: auto` 的独立滚动容器，吸顶与偏移量量测都在弹窗内生效（实测页 132px / 弹窗 87px）；`is-embedded` 的吸顶块与分组头底色用白色 `#ffffff` 覆写（弹窗是白色卡片表面）。
+- 弹窗正文顶部内边距改由吸顶块承担：`.project-workspace-modal > .project-workspace-modal-body:has(> .records-workspace) { padding-top: 0 }` 必须与 `.project-workspace-modal .records-workspace.is-embedded .sticky-page-band { padding-top: 20px }` 成对存在，否则卡片会从吸顶块与正文之间的缝隙滑过；`TasksPage` 共用 `project-workspace-modal`，用 `:has` 把改动面收窄到记录视图容器。已无消费方的 `.page-header.embedded` 规则删除。
+- 记录视图在弹窗内不渲染自己的页头（标题由弹窗承担）；独立页页头只保留标题与说明。「新建迭代记录」由独立页页头移入筛选工具条最右端，与「生成总结」同排（`.records-toolbar-actions`，原 `.records-toolbar-summary`，`margin-left: auto` + `gap: 10px`）。
+- `BackToTop` 在弹窗内渲染 `inset` 变体（`position: sticky; right: auto; bottom: 4px; margin-left: auto`）；`nearestScroller` 向上探测最近的 `overflow-y: auto|scroll` 祖先作为滚动、监听与回顶目标，找不到时回退 `window`。
+- 修订上文表述：本小节之前，「活动 / 记录 / 审计三页吸顶页头与日期分组头」小节中「仅 ≥701px 且 `:not(.is-embedded)` 生效」「`is-embedded`（记录视图装进项目主页弹窗）不吸顶、不量高度」与「项目主页记录弹窗内吸顶块与分组头均为 `static`、变量未设置、弹窗内滚动 320px 时吸顶块 132 → −188」，以及「前端交互批次」小节中「挂载三处…（记录视图装在项目主页弹窗时 `embedded` 不渲染）」均为当时事实，与本节冲突时以本节为准。
+- 验证：一次性 Playwright 结构探针（用后删除、未入库）——独立页 `/records`：页头恰 1 个、搜索与动作组同一行（top 117 / bottom 152）且动作组右缘 = 工具条右缘（1398）、按钮次序 [生成总结 / 新建迭代记录] 不换行、`--sticky-band-height: 132px`；弹窗模式（项目主页「查看全部」）：无页头、吸顶块 `sticky-page-band is-embedded`、顶部 112 / 高度 88 / 变量 87px、搜索与动作组同排（top 153 / 高 35）、两按钮 enabled。改动文件 `prettier --check` 与 `pnpm --filter @inpulse/web typecheck` 通过；按 2026-09-17 前端免测试指示未运行 vitest / Playwright 套件 / 整链门禁。
+- 未运行 / 已知偏差：弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）在页头移除后复跑探针未命中项目主页弹窗（「查看全部」未找到），**未取得量测**，列为未取证；本批无 Playwright 用例进套件；按 §8 需非作者人工评审；已本地提交、未推送。

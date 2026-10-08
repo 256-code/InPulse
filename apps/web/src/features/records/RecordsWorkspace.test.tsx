@@ -155,7 +155,7 @@ function pickSelectOption(label: string, optionTitle: string) {
 
 describe("RecordsWorkspace", () => {
   it(
-    "loads the cross-project feed by default and keeps the header action" +
+    "loads the cross-project feed by default and keeps the create action" +
       " available for the dialog-side project choice",
     async () => {
       const client = baseClient();

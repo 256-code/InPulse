@@ -28,10 +28,12 @@
   font: inherit;
 }
 
-/* F-33「生成总结」：与筛选控件同一行并靠右顶格。 */
-.records-toolbar-summary {
+/* F-33「生成总结」与 2026-10-08 移入同一行的「新建迭代记录」：固定在筛选行右端，
+   主操作最靠右。 */
+.records-toolbar-actions {
   display: flex;
   align-items: center;
+  gap: 10px;
   margin-left: auto;
 }
 
@@ -134,9 +136,10 @@
  * 底色必须不透明，否则被压住的卡片与时刻会从分组头后面透出来；左边留白列里的短日期与
  * 时间线圆点不跟着吸顶：分组头要伸进那一列（比时间线左边界再靠左 104px），在项目主页
  * 弹窗里会顶出弹层卡片，所以这里只吸内容列。
- * 窄屏与弹窗（.is-embedded）都不吸顶：前者标题与工具条折行后已占掉大半屏，后者自带弹层头。 */
+ * 弹窗（.is-embedded）里也吸：弹层正文是独立滚动区，只是底色改成弹层盒面的白色。
+ * 窄屏不吸顶：标题与工具条折行后已占掉大半屏。 */
 @media (min-width: 701px) {
-  .records-workspace:not(.is-embedded) .timeline-day-head {
+  .records-workspace .timeline-day-head {
     position: sticky;
     top: var(--sticky-band-height, 182px);
     z-index: 4;
@@ -144,9 +147,15 @@
   }
 
   /* 工具条下方原本留 10px，吸顶块改用内边距接管这段间隔（同 .sticky-page-band 的理由）。 */
-  .records-workspace:not(.is-embedded) .sticky-page-band {
+  .records-workspace .sticky-page-band {
     padding-bottom: 10px;
   }
+}
+
+/* 弹层里正文底是弹层自己的白色盒面，吸顶块与分组头的底色跟着改白。 */
+.records-workspace.is-embedded .sticky-page-band,
+.records-workspace.is-embedded .timeline-day-head {
+  background: #ffffff;
 }
 
 .timeline-toggle svg {
