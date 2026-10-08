@@ -1432,6 +1432,27 @@
 }
 
 /* ===================== F-05 项目与成员 ===================== */
+/* 维护中项目主体已完成、只做小修小补，卡片整体淡化以拉开与进行中/未开始的
+   视觉层级。维护中项目仍可点击、可编辑（ADR-043 三态都可写），所以只降不透明度
+   并去掉阴影，悬停或聚焦时恢复满不透明度，避免被误读为不可用。 */
+.project-card.is-maintenance {
+  opacity: 0.7;
+  box-shadow: none;
+  transition: opacity 0.18s ease;
+}
+
+.project-card.is-maintenance:hover,
+.project-card.is-maintenance:focus-visible,
+.project-card.is-maintenance:focus-within {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-card.is-maintenance {
+    transition: none;
+  }
+}
+
 /* 描述区固定两行：长短描述的卡片同高，统计行与操作行在整排卡片间对齐。
    描述区同时是卡片内唯一的弹性区，同行卡片的高度差全部由它吸收。 */
 .project-card > p.project-card-desc {

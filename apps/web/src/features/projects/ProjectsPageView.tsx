@@ -249,7 +249,11 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
               {[...visibleProjects].map((project) => (
                 <article
                   key={project.id}
-                  className="project-card"
+                  className={
+                    project.status === "MAINTENANCE"
+                      ? "project-card is-maintenance"
+                      : "project-card"
+                  }
                   onClick={(event) => {
                     if (!isCardClick(event)) return;
                     onOpenModules?.(project.id);
