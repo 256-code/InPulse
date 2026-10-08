@@ -267,3 +267,12 @@
   height: 7px;
   margin-top: 6px;
 }
+
+/* 表单控件占位（2026-09-30「弹窗首帧不跳尺寸」）：
+   弹层里等的是「一个下拉」时不能再用整块 .calm-skeleton——compact 也有 82px 高，
+   而真控件只有 32px，数据到达后弹层会先大后小地闪一下。调用点把它放进真字段的
+   .calm-field + label 结构里当控件占位，弹层首帧尺寸就等于真内容尺寸。 */
+.calm-sk-control {
+  height: 32px;
+  border-radius: 6px;
+}

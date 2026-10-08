@@ -458,3 +458,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 加载态先把弹层撑到与真内容同高（2026-09-30「弹窗首帧不跳尺寸」）：草稿详情实测
+   712px，而骨架只有 249px，弹窗会先小后大地弹一次；这里加载时直接开到同一高度，
+   正文骨架撑满剩余空间，数据到达只是换内容、不换尺寸。 */
+.draft-detail-modal.is-loading {
+  min-height: min(712px, calc(100dvh - 56px));
+}
+.draft-detail-modal.is-loading > .modal-body {
+  display: flex;
+  flex-direction: column;
+}
+.draft-detail-modal.is-loading > .modal-body > .calm-skeleton {
+  flex: 1;
+}
+.draft-detail-sk-title {
+  display: block;
+  width: 260px;
+  height: 20px;
+  border-radius: 6px;
+}

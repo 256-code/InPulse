@@ -629,11 +629,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             审计链不可编辑、不可删除；修正历史只能通过新事件或版本恢复完成。
           </li>
           <li>
-            <strong>留痕</strong>
-            打开本页或切换审计对象会向 SYSTEM
-            链追加一条读取留痕（含筛选条件与返回条数，不含审计正文）；同一次查看内的筛选、重置与翻页不重复留痕，留痕失败则整体失败。
-          </li>
-          <li>
             <strong>范围</strong>
             不选择项目时读取 SYSTEM 链，选择项目时读取对应 PROJECT
             链，不跨链返回。

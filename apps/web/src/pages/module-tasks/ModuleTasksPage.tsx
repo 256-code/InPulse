@@ -76,8 +76,12 @@ export default function ModuleTasksPage() {
           模块资料 · {module.name} ·{" "}
           {moduleLifecycleLabel(module.stats.completedTaskCount)}
         </summary>
-        <h4>职责与范围</h4>
-        <p>{module.description || "尚未补充，可通过编辑模块完善。"}</p>
+        {module.description ? (
+          <>
+            <h4>职责与范围</h4>
+            <p>{module.description}</p>
+          </>
+        ) : null}
       </details>
       <CalmTabs
         className="calm-tabs module-work-tabs"

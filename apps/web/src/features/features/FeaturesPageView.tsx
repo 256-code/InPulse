@@ -342,10 +342,12 @@ export function FeaturesPageView({
                   ? moduleLifecycleLabel(currentModule.stats.completedTaskCount)
                   : "进行中"}
               </summary>
-              <h4>模块说明</h4>
-              <p>
-                {currentModule?.description || "尚未补充，可通过编辑模块完善。"}
-              </p>
+              {currentModule && currentModule.description ? (
+                <>
+                  <h4>模块说明</h4>
+                  <p>{currentModule.description}</p>
+                </>
+              ) : null}
               <small>
                 功能 {query.data?.items.length ?? 0} 个 · 模块级任务{" "}
                 {moduleTasks.query.data?.items.length ?? 0} 项
@@ -712,10 +714,6 @@ export function FeaturesPageView({
           onSubmit={(event) => void save(event)}
         >
           <div className="dialog-form">
-            <p className="permission-hint">
-              <InpulseIcon name="shield" size={14} />
-              只维护长期档案；任务与迭代记录由对应能力独立管理。
-            </p>
             <>
               <div className="calm-field">
                 <label htmlFor="feature-name">功能名称</label>
@@ -823,7 +821,6 @@ export function FeaturesPageView({
                 <div className="calm-section-title">
                   <div>
                     <h3>解决编辑冲突</h3>
-                    <small>选择保留哪一版，应用后再提交最新版本。</small>
                   </div>
                 </div>
                 {merge.conflicts.map((field) => (

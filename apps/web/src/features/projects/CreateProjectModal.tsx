@@ -20,7 +20,6 @@ import {
   type ProjectFormValues,
 } from "./project-form";
 import { describeCreateProjectError, useCreateProject } from "./project-query";
-import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const { Text } = Typography;
 
@@ -115,7 +114,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     <Modal
       className="catalog-modal"
       size="lg"
-      eyebrow="项目是顶层业务容器"
       title="新建项目"
       destroyOnHidden
       mask={{ closable: false }}
@@ -270,13 +268,17 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </div>
               ) : null}
               {directory.isPending ? (
-                <div className="member-loading">
-                  <CalmSkeleton
-                    variant="list"
-                    rows={2}
-                    compact
-                    label="正在加载成员..."
+                /* 占位沿用真字段的 .calm-field + label 结构，控件占位与 CalmSelect 同为 32px；
+                   原先的 compact 骨架是 100px，数据到达后掉到 54px，弹层会先大后小地闪一下。 */
+                <div className="calm-field">
+                  <label htmlFor="project-member-candidates">选择成员</label>
+                  <span
+                    className="calm-sk calm-sk-control"
+                    aria-hidden="true"
                   />
+                  <span className="sr-only" role="status">
+                    正在加载成员...
+                  </span>
                 </div>
               ) : directory.isError ? (
                 <Alert

@@ -442,6 +442,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | SEC-018 | API + PostgreSQL 集成 | 单点登录纵切片（桩 IdP） | start 只落库 state 的 HMAC 与 key version 并下发 `__Host-sso-state`；回调必须同时匹配 URL state 与 Cookie（缺失或不同即 `state-mismatch`）后一次性消费；JIT 开通写 `sso_subject`、`password_hash=NULL`、`is_admin=false`，二次登录按 subject 命中并同步展示名/邮箱；仅当登录名命中且邮箱一致才绑定，邮箱不一致或被占用为 `account-conflict`；停用账号 `account-disabled`；重放 `state-consumed`、过期 `state-expired`、未知 state `state-invalid`、nonce 不符 `token-invalid`、IdP 返回 error 为 `idp-error`；成功签发 `AUTHENTICATED` 会话（空闲 7200s、绝对 7 天、只存 Hash）并写 `auth.sso_account_provisioned`/`auth.sso_account_linked`/`auth.sso_login` 审计 | 已本地通过（`apps/api/test/sso-login.integration.test.ts` 13 例，真实 PostgreSQL + 桩 IdP，2026-09-15） |
 | SEC-019 | API 单元 | SSO 302 导航与回落目标 | 未启用时 `start` 302 到 `/login?local=1&sso=disabled` 并保留规范化后的站内 `from`，外部地址被丢弃；启用时 302 携带 `Location`、`no-store` 与 state Cookie（HttpOnly/Secure/SameSite=Lax/Path=/）；成功回调同时下发清理 state 与 `__Host-session`；内部异常统一 302 到 `/login?sso_error=internal` 且不泄露内部原因 | 已本地通过（`sso.controller.test.ts` 6 例、`sso-return-to.test.ts` 6 例、`session-ttl.policy.test.ts` 3 例，2026-09-15） |
 | SEC-020 | API + PostgreSQL 集成 | 无口令账号的本地登录 | SSO JIT 账号 `password_hash` 为 NULL 时，`PasswordService.verify` 对 `null`/`undefined`/非 Argon2id 编码一律走等时占位校验并返回 false（不抛错、不 500），`UserCredential.passwordHash` 允许为空，隐藏口令入口对这类账号必然 401 | 已本地通过（`sso-login.integration.test.ts` 内断言 + `apps/api/test/password.service.test.ts`，2026-09-15） |
+| SEC-021 | 契约 + API HTTP | SSO 回调查询契约（RFC 9207 `iss`） | 回调 query 接受 OIDC 授权响应携带的 `iss` 并透传到网关，`.strict()` 仍拒绝其它未知键；`iss` 缺省放行，回传值去掉尾斜杠后必须等于配置 `SSO_ISSUER`，否则按 `issuer-mismatch` 302 回 `/login?sso_error=issuer-mismatch`（不消费 state、不交换 token） | 已本地通过（`apps/api/test/sso-callback-http.test.ts` 2 例 HTTP 边界 + 反事实红灯；`sso-login.integration.test.ts` 新增 2 例，真实 PostgreSQL + 桩 IdP，2026-10-08） |
 | SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 已自动化（`session-cleanup.integration.test.ts` 2 例，2026-09-09；CI 已执行） |
 
 ## 搜索、部署与恢复
@@ -4476,3 +4477,33 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | LEFTOVER-CONVERT-FORM-E2E-003 | 浏览器 E2E | 修订后定向回归 | `leftover-task.spec.ts` + `issues.spec.ts` → 4/4；真机取材的一次性截图脚本写在 `apps/e2e/tests/` 下，验证后已删除，不在仓库内 | 本地通过 |
 
 未运行 / 已知偏差：① 上一轮全量 E2E 的 `external-links.spec.ts:35`（F22 项目多链接）失败已按口径 A 修复：`GitHub 链接` 弹窗空态点「添加链接」原来会把「设为项目根仓库」默认勾上，粘贴 Issue 链接被服务端按「根仓库必须是仓库根地址」拒绝，前端 422 文案统一显示为「链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。」；去掉该默认勾选后该 spec 定向 3/3 通过；变基到远端 `a0a8a10` 后整跑全量 `pnpm --filter @inpulse/e2e test:e2e` → **62 passed（5.0 分钟，0 失败）**（详见上方「GitHub 链接弹窗方案 A 与项目页微调」小节）。② 本地 `app_e2e` 库原先停在 `0017`（仓库已到 `0032`），首轮全量 E2E 因此大面积失败；补 `MIGRATION_DATABASE_URL=…/app_e2e pnpm db:migrate`（13 applied / 18 already present）后复跑正常，属环境状态而非本批代码缺陷。③ `pnpm check` 整链、镜像构建与 GitHub Actions 未跑。④ 本批含契约与服务端改动（幂等契约版本升级）与前端产品代码，按 §8 需非作者人工评审。
+
+## 弹窗首帧尺寸：等待态与真内容同尺寸（用户指示「弹窗是从大然后闪成小的」，2026-09-30 本地落库）
+
+用户反馈（原话）：「我发现在点开某些弹窗的时候会闪一下，就是弹窗是从大然后闪成小的，这个问题你解决一下，很影响使用体验」。纯前端：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权与幂等策略，也不改依赖。
+
+锁定口径：
+
+- 弹层打开时的首帧尺寸必须等于数据到达后的稳定尺寸：等待态不再用「一块固定 140px / 82px 的骨架」，而是与真内容同形同高。这一条同时收掉了上一条骨架屏记录里预告的风险——「原来只有一行文案的等待态换成 82px / 140px 骨架后弹窗与表单内高度会变化」。
+- 不引入动画：Chrome 的 `interpolate-size` 只覆盖 `auto` ↔ 长度 的插值，`auto` ↔ `auto`（子内容换高）没有可插值的计算值，实测合成元素仍是 `100 → 300` 的硬跳；弹层尺寸只能靠「占位与真内容对齐」，不能靠过渡掩盖。
+- 能复用真字段结构就复用（新建项目的成员字段、转任务的来源行），只能给高度的地方用实测高度常量（任务详情 844 = 视口上限、草稿详情 712）。
+- GitHub 链接弹窗改为「先把关联列表取回来再开弹层」（触发按钮转圈），刷新时保留旧列表，不再在旧内容上方插骨架。
+
+实测（一次性 Playwright 探针：无头 Chromium、1440×900 视口、逐帧记录 `.surface-modal` 的 `getBoundingClientRect`；脚本写在 `apps/e2e/probe-flicker.mjs`，验证后删除，不入库）：
+
+| 弹窗 | 入口 | 修复前首帧 → 稳定态 | 修复后 |
+| --- | --- | --- | --- |
+| 遗留问题转任务 | `/issues` → 转为任务 | `560×480 → 560×437` | `560×437`（单帧） |
+| 新建项目 | `/projects` → 新建项目 | `840×687 → 840×641` | `840×641`（单帧） |
+| 任务详情 | `/tasks?status=done` → 任务卡片 | `1180×140 → 1180×844` | `1180×844`（单帧） |
+| 迭代记录草稿详情 | `/records?projectId=1` → 草稿卡片 | `840×249 → 840×712` | `840×712`（单帧） |
+| GitHub 链接 | `/projects/1/modules` → GitHub 链接 | `560×284 → 560×747` | `560×747`（单帧） |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MODAL-FIRST-FRAME-BROWSER-001 | 浏览器实测（逐帧） | 5 个弹窗的首帧尺寸等于稳定态 | 上表「修复后」列全部只剩单帧，且尺寸与稳定态逐像素一致 | 本地通过 |
+| MODAL-FIRST-FRAME-BROWSER-002 | 浏览器实测（逐帧） | 对照组：不带骨架的弹窗本来就不跳 | 新建任务 `840×844`、生成总结 `1180×792` 修复前后都只有一帧 | 本地通过 |
+| MODAL-FIRST-FRAME-UNIT-001 | Web 单元 | 等待态改写不破坏既有用例 | 受影响集的定向跑（`ExternalLinksPanel` / `ConvertLeftoverTask` / `CreateProjectModal` / `TasksPanel` / `record-drafts`）→ 5 文件 70 例；前端全量 `pnpm --filter @inpulse/web test:unit` → **89 文件 617 例全绿** | 本地通过 |
+| MODAL-FIRST-FRAME-E2E-001 | 浏览器 E2E | 相关关键路径回归 | 定向 `external-links` + `issues` + `record-drafts` + `tasks` → **12 passed**；全量 `pnpm --filter @inpulse/e2e test:e2e`（`E2E_DATABASE_URL=…/app_e2e`）→ **62 passed（5.0 分钟，0 失败）**；最后一处占位标题修订后定向复跑 → **12 passed（1.5 分钟）** | 本地通过 |
+| MODAL-FIRST-FRAME-GATE-001 | 静态门禁 | 类型、lint 与格式 | `pnpm --filter @inpulse/web exec tsc -p tsconfig.json --noEmit`、`pnpm exec eslint`（改动集）、`pnpm exec prettier --check`（改动集）全部 exit 0 | 本地通过 |
+未运行 / 已知偏差：① 「同尺寸」靠「占位结构与真内容对齐」+ 少量实测高度常量实现：任务详情的正文网格是固定高（`height: min(560px, 62dvh)`，见 design-system.css），弹层高度基本恒定，常量安全；草稿详情没有固定高，条目特别长（逼近视口上限 844）或特别短时仍会有几十像素的尺寸变化（修复前是 463px），若要彻底消除需改成「测到真内容高度后再插值」。② GitHub 链接弹窗的交互由「立即打开 + 骨架」改为「先取回关联列表再打开」，慢网络下用户先看到触发按钮转圈（本地 API 实测约 1 帧、无感）；加载失败仍会打开弹层以保留错误与「加载最新关联」入口。③ **未跑**：`pnpm check` 整链、`test:integration`（无服务端改动）、镜像构建与 GitHub Actions（未推送）；前端全量单测 `pnpm --filter @inpulse/web test:unit` → 89 文件 617 例全绿。④ 本批含前端产品代码，按 §8 需非作者人工评审。

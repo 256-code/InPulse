@@ -118,3 +118,14 @@
     margin-left: 0;
   }
 }
+
+/* 加载态的「来源行」占位（2026-09-30）：与真来源行同高。
+   原先是 compact 骨架（82px），真来源行只有 12.5px/1.7 的一行 21px，
+   数据到达时弹层会整体缩一截、闪一下。 */
+.leftover-convert-modal.catalog-modal
+  .leftover-convert-source
+  .leftover-convert-source-sk {
+  height: 21px;
+  width: 62%;
+  border-radius: 6px;
+}

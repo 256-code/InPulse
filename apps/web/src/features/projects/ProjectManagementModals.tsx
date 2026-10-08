@@ -182,7 +182,6 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     <>
       <Modal
         className="catalog-modal"
-        eyebrow="项目活跃成员或系统管理员可编辑"
         title="编辑项目"
         destroyOnHidden
         mask={{ closable: false }}

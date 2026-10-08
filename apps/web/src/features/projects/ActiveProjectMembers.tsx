@@ -11,7 +11,6 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
-import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   projectLifecycleLabel,
   projectLifecycleTone,
@@ -170,13 +169,6 @@ export function ActiveProjectMembers({
                 刷新成员
               </Button>
             </div>
-            <p className="permission-hint">
-              <InpulseIcon name="shield" size={15} />
-              <span>
-                成员关系由本项目任意活跃成员维护；此页面仅供查看当前项目的活跃成员，
-                不提供添加、移除或任务改派能力。
-              </span>
-            </p>
           </div>
         </section>
       )}

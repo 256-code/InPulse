@@ -7,7 +7,6 @@ import {
   type InpulseApiClient,
   type ModuleItem,
 } from "@generated/api";
-import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   moduleErrorMessage,
   useModules,
@@ -223,10 +222,6 @@ export function ModuleEditorModal({
           onSubmit={(event) => void save(event)}
         >
           <div className="dialog-form">
-            <p className="permission-hint">
-              <InpulseIcon name="shield" size={14} />
-              名称与说明会保留完整的版本与审计历史。
-            </p>
             <div className="calm-field">
               <label htmlFor="module-name">模块名称</label>
               <Controller
@@ -274,7 +269,6 @@ export function ModuleEditorModal({
                 <div className="calm-section-title">
                   <div>
                     <h3>解决编辑冲突</h3>
-                    <small>选择保留哪一版，应用后再提交最新版本。</small>
                   </div>
                 </div>
                 {merge.conflicts.map((field) => (
