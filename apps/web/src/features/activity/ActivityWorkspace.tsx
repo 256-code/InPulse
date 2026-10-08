@@ -7,6 +7,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { BackToTop } from "@features/common/components/BackToTop";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -582,6 +583,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         {...(client ? { client } : {})}
         onClose={() => setSnapshotItem(null)}
       />
+      <BackToTop />
     </div>
   );
 };

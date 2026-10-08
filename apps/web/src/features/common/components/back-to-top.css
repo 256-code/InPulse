@@ -1,0 +1,49 @@
+/* 回到顶部按钮：固定在右下角，只在滚过阈值后浮现（阈值见 BackToTop.tsx）。
+   隐藏态用 visibility 而非 display —— display 不可动画，浮现会闪；
+   visibility 过渡会在消失时延迟到动画结束才生效，浮现时立即可见。 */
+.back-to-top {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  /* 高于内容与菜单开关（30）、低于侧栏（40）：任务抽屉 / 弹窗（antd 遮罩 1000）打开时自然被盖住 */
+  z-index: 35;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #728297;
+  cursor: pointer;
+  box-shadow: 0 8px 20px #16324d2b;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition:
+    opacity 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+    visibility 0.2s;
+}
+.back-to-top.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.back-to-top:hover {
+  color: #2469b5;
+  border-color: #b9d3ea;
+  background: #f7fbff;
+}
+@media (max-width: 700px) {
+  .back-to-top {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+/* 系统要求减少动效时直接跳转（滚动行为见 BackToTop.tsx），浮现也不做过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top {
+    transition: none;
+  }
+}

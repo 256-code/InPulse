@@ -27,6 +27,7 @@ import {
   useProjectMemberUnfinishedTasks,
   useProjectMembers,
 } from "./project-member-query";
+import { orderMembersLeaderFirst } from "./project-member-order";
 import { useProjects } from "./project-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
@@ -95,7 +96,10 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
   );
 
   const activeMembers = useMemo(
-    () => (query.data?.items ?? []).filter((item) => item.status === "ACTIVE"),
+    () =>
+      orderMembersLeaderFirst(
+        (query.data?.items ?? []).filter((item) => item.status === "ACTIVE"),
+      ),
     [query.data],
   );
   const activeUserIds = useMemo(

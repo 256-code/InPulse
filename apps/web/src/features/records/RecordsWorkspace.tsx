@@ -13,6 +13,7 @@ import {
   CalmEmptyState,
   CalmSegmented,
 } from "@features/common/components/Calm";
+import { BackToTop } from "@features/common/components/BackToTop";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { useAuth } from "@features/auth/auth-context";
@@ -468,6 +469,8 @@ export function RecordsWorkspace({
           </Button>
         </div>
       )}
+      {/* 装进项目概览弹窗时是弹层内部滚动，页面级按钮不适用（与吸顶同一取舍） */}
+      {embedded ? null : <BackToTop />}
     </div>
   );
 }

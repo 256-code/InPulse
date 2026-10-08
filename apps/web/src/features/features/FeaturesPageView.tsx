@@ -467,7 +467,9 @@ export function FeaturesPageView({
                         {visibleItems.map((item) => (
                           <tr key={item.id}>
                             <td>
-                              <Button
+                              {/* 用原生 a 而不是 antd Button：Button 的边框、行高与内边距按单行控件渲染，
+                                  会把标题下的说明文字切在框外。其余列表（任务面板、任务中心）同样是原生按钮。 */}
+                              <a
                                 className="feature-list-open"
                                 href={
                                   "/projects/" +
@@ -482,7 +484,7 @@ export function FeaturesPageView({
                                 <span>
                                   {item.currentBehavior || "暂无功能说明"}
                                 </span>
-                              </Button>
+                              </a>
                             </td>
                             <td>
                               <InpulseIcon name="code" size={14} /> {item.code}

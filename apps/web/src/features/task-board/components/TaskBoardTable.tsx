@@ -46,8 +46,9 @@ function rowClassNameOf(card: TaskBoardCard): string {
 const TaskBoardTableRow: React.FC<{
   readonly card: TaskBoardCard;
   readonly leftoverSource: boolean;
+  readonly index: number;
   readonly onOpen: (card: TaskBoardCard) => void;
-}> = ({ card, leftoverSource, onOpen }) => {
+}> = ({ card, leftoverSource, index, onOpen }) => {
   const due = dueListLabelOf(card);
   const priority = priorityMarkOf(card.priority);
   // ADR-040：负责人是平权集合，列表行要列出全部人，用「、」连接，
@@ -56,10 +57,13 @@ const TaskBoardTableRow: React.FC<{
   const assigneeNames = card.assignees
     .map((assignee) => assignee.name)
     .join("、");
+  // 进入动画的错开序号：上限 12，长分组里最后一行不必等太久（见 .tb-row）。
+  const enterIndex = Math.min(index, 12);
   return (
     <button
       type="button"
       className={rowClassNameOf(card)}
+      style={{ "--tb-enter-i": enterIndex } as React.CSSProperties}
       onClick={() => onOpen(card)}
       aria-label={"打开任务 " + card.code + " " + card.title}
     >
@@ -119,7 +123,7 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
         const progress = laneProgressOf(lane);
         const collapsed = collapsedIds.has(lane.moduleId);
         return (
-          <React.Fragment key={lane.moduleId}>
+          <section className="tb-lgroup-section" key={lane.moduleId}>
             <div
               className={
                 "tb-lgroup" + (collapsed ? " tb-lgroup--collapsed" : "")
@@ -159,17 +163,27 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
                 <span>{progress.percent}%</span>
               </div>
             </div>
-            {collapsed
-              ? null
-              : lane.tasks.map((card) => (
+            {/* 展开 / 收起动画：行列表常驻挂载，data-open 驱动 grid-template-rows 的
+                0fr ↔ 1fr 过渡（与泳道 .tb-lane-cards 同一套实现）；折叠收起后 clip 层
+                visibility: hidden，行不参与键盘焦点与读屏。 */}
+            <div
+              className="tb-fold"
+              data-open={collapsed ? "false" : "true"}
+              aria-hidden={collapsed ? true : undefined}
+            >
+              <div className="tb-fold-clip">
+                {lane.tasks.map((card, index) => (
                   <TaskBoardTableRow
                     key={card.taskId}
                     card={card}
                     leftoverSource={leftoverIds.has(card.taskId)}
+                    index={index}
                     onOpen={onOpenTask}
                   />
                 ))}
-          </React.Fragment>
+              </div>
+            </div>
+          </section>
         );
       })}
     </div>

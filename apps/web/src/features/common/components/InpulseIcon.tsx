@@ -22,6 +22,7 @@ export type InpulseIconName =
   | "plus"
   | "search"
   | "arrowLeft"
+  | "arrowUp"
   | "calendar"
   | "chevronRight"
   | "chevronLeft"
@@ -215,6 +216,12 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
     <>
       <path d="M19 12H5" />
       <path d="m12 19-7-7 7-7" />
+    </>
+  ),
+  arrowUp: (
+    <>
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
     </>
   ),
   calendar: (

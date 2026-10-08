@@ -5,6 +5,7 @@ import {
   CalmEmptyState,
   CalmSectionTitle,
 } from "@features/common/components/Calm";
+import { BackToTop } from "@features/common/components/BackToTop";
 import {
   CalmSelect,
   type CalmSelectOption,
@@ -849,6 +850,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           </div>
         ) : null}
       </Modal>
+      <BackToTop />
     </div>
   );
 };

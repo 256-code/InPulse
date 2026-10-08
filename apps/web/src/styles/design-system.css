@@ -6761,7 +6761,9 @@ td.due-overdue {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  /* 泳道头要吸顶（见下方 @media 的 .tb-lane-head）：overflow: hidden 会把泳道本身
+     变成吸顶元素的滚动容器、吸顶失效；clip 保留同样的圆角裁切但不建立滚动容器。 */
+  overflow: clip;
   box-shadow: 0 4px 14px rgb(23 43 68 / 3%);
 }
 .tb-lane-head {
@@ -6780,6 +6782,32 @@ td.due-overdue {
 /* 折叠时头部是泳道唯一可见部分，去掉底部分隔线避免「空盒子」观感。 */
 .tb-lane--collapsed .tb-lane-head {
   border-bottom: 0;
+}
+/* 卡片区（泳道）与行区（列表）的展开 / 收起：内容始终挂载，data-open 驱动
+   grid-template-rows 的 0fr ↔ 1fr 过渡（与项目树 .tree-children 同一范式、同一时长），
+   不需要 JS 量高；clip 层负责裁剪与延迟隐藏，收起动画走完（240ms）内容才不可见、不可聚焦。
+   两个视图共用这套实现，进入动画与错开序号见下方 tb-enter-in。 */
+.tb-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.tb-fold[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.tb-fold-clip {
+  min-height: 0;
+  overflow: clip;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.24s;
+}
+.tb-fold[data-open="true"] > .tb-fold-clip {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 .tb-lane-toggle {
   border: 0;
@@ -6947,6 +6975,42 @@ td.due-overdue {
 .tb-lane-cards > li {
   display: flex;
 }
+/* 内容进入：展开（或首次渲染）时自上方 6px 淡入，按顺序逐条错开 16ms。
+   折叠态把动画重置为 none，因此每次展开都会重播（animation-name 变化会重新触发）；
+   错开序号由组件写在条目自己的 --tb-enter-i 上（上限 12，见 TaskBoardLanes / TaskBoardTable）。 */
+@keyframes tb-enter-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tb-lane-cards > li,
+.tb-row {
+  animation: tb-enter-in 0.24s cubic-bezier(0.33, 1, 0.68, 1) both;
+  animation-delay: calc(var(--tb-enter-i, 0) * 16ms);
+}
+.tb-fold[data-open="false"] .tb-lane-cards > li,
+.tb-fold[data-open="false"] .tb-row {
+  animation: none;
+}
+/* 上面的过渡 / 动画在减弱动态偏好下一并关掉：媒体查询不提升特异性，
+   因此这条覆盖写在它们之后。行自身的 background 过渡由 .tb-row 声明，不在此处覆盖。 */
+@media (prefers-reduced-motion: reduce) {
+  .tb-fold,
+  .tb-fold-clip,
+  .tb-lane-cards > li {
+    transition: none;
+  }
+
+  .tb-lane-cards > li,
+  .tb-row {
+    animation: none;
+  }
+}
 
 /* ---- 任务卡 ---- */
 .tb-card {
@@ -7106,7 +7170,8 @@ td.due-overdue {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  /* 同泳道：hidden 会让分组头吸顶失效，clip 保留圆角裁切。 */
+  overflow: clip;
 }
 .tb-list-head {
   display: grid;
@@ -7138,7 +7203,9 @@ td.due-overdue {
 .tb-lgroup:hover {
   background: #f4f9fe;
 }
-.tb-list-wrap > .tb-lgroup:first-child {
+/* 首个分组的头部紧贴表头，去掉它在表头分隔线下的重复分隔线（分组行自 2026-10-08 起
+   包在 .tb-lgroup-section 里以限定吸顶范围，选择器随之改为穿透这层包裹盒）。 */
+.tb-lgroup-section:first-child > .tb-lgroup {
   border-top: 0;
 }
 .tb-lgroup strong {
@@ -7151,6 +7218,29 @@ td.due-overdue {
 }
 .tb-lgroup .tb-bar {
   width: 110px;
+}
+/* 2026-10-08 用户要求「画出来的部分滚动也做的和迭代记录一样，只不过时间变成了模块名」：
+   看板泳道头与列表分组头吸在标题、概览卡与工具条组成的吸顶块下方（.sticky-page-band，
+   由 TaskBoardPageView 挂上），本模块内容滚完时被下一组顶走——与迭代记录的按日分组头
+   同一套行为（inpulse-design.css 的 .activity-day-head / .timeline-day-head）。
+   吸顶范围由各自的包裹盒界定：泳道是 .tb-lane，列表是 .tb-lgroup-section（没有这层包裹，
+   同级的后一个分组头会直接盖在前一个上，而不是把它顶出去）。
+   偏移取脚本量出的吸顶块高度：工具条会折行，写死像素会让分组头浮在半空或被压在工具条下。
+   窄屏不吸顶，与迭代记录做法一致：内容区左上角有悬浮的导航开关，吸顶头会与它重叠。
+   z-index 不可省：.tb-card 与 .tb-row 都是 position: relative，不给层级时卡片会盖到吸顶头上。 */
+@media (min-width: 701px) {
+  .tb-lane-head,
+  .tb-lgroup {
+    position: sticky;
+    top: var(--sticky-band-height, 182px);
+    z-index: 2;
+  }
+
+  /* 工具条是吸顶块的最后一个子级，下外边距会留在吸顶块内部、把底色拖出一条空白，
+     与记录 / 活动页同处理：间距交给吸顶块自己的内边距（18px）。 */
+  .sticky-page-band > .tb-toolbar {
+    margin-bottom: 0;
+  }
 }
 .tb-row {
   position: relative;

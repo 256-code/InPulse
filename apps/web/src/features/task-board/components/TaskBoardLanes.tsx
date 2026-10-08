@@ -45,8 +45,9 @@ function cardClassNameOf(card: TaskBoardCard): string {
 const TaskBoardCardItem: React.FC<{
   readonly card: TaskBoardCard;
   readonly leftoverSource: boolean;
+  readonly index: number;
   readonly onOpen: (card: TaskBoardCard) => void;
-}> = ({ card, leftoverSource, onOpen }) => {
+}> = ({ card, leftoverSource, index, onOpen }) => {
   const mark = cardMarkOf(card);
   const due = dueLabelOf(card);
   // ADR-040：负责人是平权集合，卡片要列出全部人（与任务中心、功能档案同一口径），
@@ -55,8 +56,10 @@ const TaskBoardCardItem: React.FC<{
   const assigneeNames = card.assignees
     .map((assignee) => assignee.name)
     .join("、");
+  // 进入动画的错开序号：上限 12，长泳道里最后一张不必等太久（见 .tb-lane-cards > li）。
+  const enterIndex = Math.min(index, 12);
   return (
-    <li>
+    <li style={{ "--tb-enter-i": enterIndex } as React.CSSProperties}>
       <button
         type="button"
         className={cardClassNameOf(card)}
@@ -172,18 +175,28 @@ const TaskBoardLane: React.FC<{
           ))}
         </div>
       </header>
-      {collapsed ? null : (
-        <ul className="tb-lane-cards">
-          {lane.tasks.map((card) => (
-            <TaskBoardCardItem
-              key={card.taskId}
-              card={card}
-              leftoverSource={leftoverIds.has(card.taskId)}
-              onOpen={onOpenTask}
-            />
-          ))}
-        </ul>
-      )}
+      {/* 展开 / 收起动画：卡片列表常驻挂载，data-open 驱动 grid-template-rows 的
+          0fr ↔ 1fr 过渡（与项目树 .tree-children 同一范式）；折叠收起后 clip 层
+          visibility: hidden，卡片不参与键盘焦点与读屏。列表视图的行列表共用这套实现。 */}
+      <div
+        className="tb-fold"
+        data-open={collapsed ? "false" : "true"}
+        aria-hidden={collapsed ? true : undefined}
+      >
+        <div className="tb-fold-clip">
+          <ul className="tb-lane-cards">
+            {lane.tasks.map((card, index) => (
+              <TaskBoardCardItem
+                key={card.taskId}
+                card={card}
+                leftoverSource={leftoverIds.has(card.taskId)}
+                index={index}
+                onOpen={onOpenTask}
+              />
+            ))}
+          </ul>
+        </div>
+      </div>
     </article>
   );
 };

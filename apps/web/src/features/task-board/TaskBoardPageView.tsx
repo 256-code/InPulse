@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Alert } from "antd";
 import { createApiClient, type InpulseApiClient } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -26,6 +26,7 @@ import type {
   TaskBoardFilters,
 } from "./task-board-types";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { useStickyBandOffset } from "@features/common/use-sticky-band-offset";
 
 /**
  * R-8 项目任务看板页面视图（GET /api/v1/projects/{projectId}/task-board）。
@@ -71,6 +72,13 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
       return next;
     });
   };
+
+  // 2026-10-08 用户要求「这些要固定住」：标题、概览卡与工具条一起吸顶，模块分组头再吸在
+  // 吸顶块下方（偏移由 useStickyBandOffset 量出，消费方见 design-system.css 的
+  // .tb-lane-head / .tb-lgroup）。enabled 跟随查询成功：首屏骨架里没有吸顶块，挂载后才有得量。
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  useStickyBandOffset(pageRef, bandRef, query.isSuccess);
 
   const data = query.data;
   const allModules = data?.modules ?? [];
@@ -137,53 +145,55 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
   }
 
   return (
-    <>
-      <div className="tb-page-head">
-        <h1>
-          任务看板
-          <span>
-            {data.project.name} · 数据截至{" "}
-            {formatTaskBoardDateTime(data.generatedAt)} · 完成率 = 已完成
-            ÷（总任务 - 已取消）
-          </span>
-        </h1>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => setCreateOpen(true)}
-        >
-          <InpulseIcon name="plus" size={13} />
-          新建任务
-        </button>
-      </div>
-
-      {data.truncated ? (
-        <div className="tb-notice" role="status">
-          <InpulseIcon name="alert" size={15} />
-          任务超过 1000 条，列表按排序截断；顶部与泳道统计仍为项目全量口径。
+    <div ref={pageRef}>
+      <div className="sticky-page-band" ref={bandRef}>
+        <div className="tb-page-head">
+          <h1>
+            任务看板
+            <span>
+              {data.project.name} · 数据截至{" "}
+              {formatTaskBoardDateTime(data.generatedAt)} · 完成率 = 已完成
+              ÷（总任务 - 已取消）
+            </span>
+          </h1>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setCreateOpen(true)}
+          >
+            <InpulseIcon name="plus" size={13} />
+            新建任务
+          </button>
         </div>
-      ) : null}
 
-      <TaskBoardOverview
-        stats={data.stats}
-        visibleCount={visibleCount}
-        filtered={filtered}
-        onClearFilters={clearFilters}
-      />
+        {data.truncated ? (
+          <div className="tb-notice" role="status">
+            <InpulseIcon name="alert" size={15} />
+            任务超过 1000 条，列表按排序截断；顶部与泳道统计仍为项目全量口径。
+          </div>
+        ) : null}
 
-      <TaskBoardToolbar
-        filters={filters}
-        counts={{
-          all: data.stats.total,
-          open: data.stats.open,
-          done: data.stats.done,
-          canceled: data.stats.canceled,
-          overdue: data.stats.overdue,
-          today: data.stats.dueToday,
-        }}
-        assignees={assignees}
-        onChange={onFiltersChange}
-      />
+        <TaskBoardOverview
+          stats={data.stats}
+          visibleCount={visibleCount}
+          filtered={filtered}
+          onClearFilters={clearFilters}
+        />
+
+        <TaskBoardToolbar
+          filters={filters}
+          counts={{
+            all: data.stats.total,
+            open: data.stats.open,
+            done: data.stats.done,
+            canceled: data.stats.canceled,
+            overdue: data.stats.overdue,
+            today: data.stats.dueToday,
+          }}
+          assignees={assignees}
+          onChange={onFiltersChange}
+        />
+      </div>
 
       {visibleModules.length === 0 ? (
         <div className="tb-empty">
@@ -267,6 +277,6 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
           setDetailTarget(location);
         }}
       />
-    </>
+    </div>
   );
 };

@@ -16,6 +16,7 @@ import {
   projectLifecycleTone,
 } from "@features/common/resource-lifecycle";
 import { projectMemberErrorMessage } from "./project-member-query";
+import { orderMembersLeaderFirst } from "./project-member-order";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const formatMemberDate = (value: string) =>
@@ -56,7 +57,7 @@ export function ActiveProjectMembers({
       api.listActiveProjectMembers(projectId, { signal }),
     retry: false,
   });
-  const items = members.data?.items ?? [];
+  const items = orderMembersLeaderFirst(members.data?.items ?? []);
   const creatorName =
     projectDetail === null
       ? undefined
