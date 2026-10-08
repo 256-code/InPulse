@@ -481,9 +481,7 @@ export function FeaturesPageView({
                                 }
                               >
                                 <strong>{item.name}</strong>
-                                <span>
-                                  {item.currentBehavior || "暂无功能说明"}
-                                </span>
+                                <span>{item.currentBehavior}</span>
                               </a>
                             </td>
                             <td>
@@ -553,7 +551,7 @@ export function FeaturesPageView({
                               </CalmBadge>
                             ))}
                           </div>
-                          <p>{item.currentBehavior || "暂无功能说明"}</p>
+                          <p>{item.currentBehavior}</p>
                           <div className="card-footer">
                             <span>
                               {item.stats.openTaskCount} 项待办 ·{" "}

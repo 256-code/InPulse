@@ -4850,3 +4850,29 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：`pnpm exec prettier --check apps/web/src/styles/antd-adapter.css`；`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_e2e pnpm test:e2e`（**64 passed，5.2 分钟**）。上一批前端交互按 2026-09-17 前端免测试指示未跑测试，本批照常跑齐。
 
 未运行 / 已知偏差：① 空档时长受机器负载影响（实测波动 0–84ms），「方案2 无空档」是本次 6 组采样的结论，不是保证值；② 未在 Firefox / Safari 复核，其它合成器的分帧行为未验证；③ 淡入只作用于打开，关闭仍是瞬时消失（与改前一致）；④ 面板淡入依赖 `@starting-style`（Chrome 117+ / Safari 17.5+ / Firefox 129+）：不支持的浏览器退化为「面板瞬现 + 遮罩淡入」，即本条改动前的结果，不会出现卡在透明态；⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；工作提交 `881db9a`，合并 `origin/test` 后经合并提交 `a98abc5` 推送 `origin/test`（GitHub Actions 尚未执行）。
+
+## 界面残留清理第二批：内部编号、空态口径、重复图标与指标单位（用户指示「可以」，2026-10-08 本地落库）
+
+承接上一批「界面清理的残留验收与死样式清除」。本轮先按实测列了 7 条候选，用户回「可以」采纳其中 1–4；第 5（任务卡整卡铺色把优先级与状态压在同一维度）、6（项目页底部「层级说明」六宫格）与 7（命令面板 hint 口径）未采纳或仍待定案，见本节末。纯前端，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等改动，`pnpm-lock.yaml` 未动。
+
+口径与实现：
+
+- **内部功能编号从界面移除**：`/search` 标题旁的 `F-26`（`SearchPageView.tsx`）与 `/notifications` 标题旁的 `F-28`（`NotificationsPageView.tsx`）是开发期标识。逐页扫描 9 条路由（`/search`、`/notifications`、`/tasks`、`/records`、`/issues`、`/activity`、`/projects`、`/projects/3/modules`、`/settings`）的叶子节点文本，匹配「F- 加 1~3 位数字」这一形态的只有这两处。上一批 72 条注释审查对该形态 **0 命中**，属漏网；两处 Tag 删除后搜索页的标题容器由 `Space` 收敛为单独的 `Title`（原 `Space` 只剩一个子项，无布局作用）。
+- **空态留空与项目卡同口径**：`/projects` 的项目卡在你确认「直接空白」后已经不写占位（`ProjectsPageView.tsx` 直出 `project.description`），而模块卡仍写「暂无模块说明」（`ModulesPageView.tsx`）、功能档案的表格行与卡片仍写「暂无功能说明」（`FeaturesPageView.tsx` 两处）。本轮三处一并改为直出原字段，空描述即空段落（`<p>` / `<span>` 仍在 DOM，卡片与行的骨架不变）。
+- **任务中心删除重复的展示方式图标**：`.task-list-mark`（`TaskCenterPageView.tsx`）渲染的是一个 16px 的 `layoutGrid` / `list` 图标，读数是「列表当前是卡片还是表格」，与工具栏里常驻的「卡片 / 列表」分段控件完全重复，实测它单独飘在列表右上方，读起来像残留。删除后工具栏到列表的纵向节奏必须保持 30px：原为工具栏 `margin-bottom: 8px` + 图标行 16px + 图标行下间距 6px，现改为 `.task-center .task-toolbar { margin-bottom: 30px }`（同一节奏，见 `design-system.css` 两处注释）。该 30px 是 `aggregate-views.spec.ts` 断言的口径：标题可见墨迹到工具栏、工具栏到列表，两侧差值 ≤ 4px。
+- **概览指标卡单位统一**：`ProjectOverviewPageView.tsx` 的成员卡原为 `memberCount + " 人"`，另三张（未完成任务 / 迭代记录 / 遗留问题）是裸数字，同排四张卡只有一张带单位。改为 `String(project.memberCount)`，四张统一裸数字；项目不可用时的兜底 `—` 不变。
+- **同步更新的既有断言**：`apps/e2e/tests/aggregate-views.spec.ts` 两处——`.task-list-mark` 计数由 1 改 0（该图标已删）；F-29 用例原来用成员卡文本「含『 人』」当作「服务端真实值已到位」的证据，改为「解析出的整数 > 0」，并把 `members` 并入其余三张卡的纯数字形态循环。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| UI-CLEANUP2-SCAN-001 | 静态检索 | 内部编号与占位文案清零 | 9 条路由 DOM 扫描「F- 加数字」形态由 2 处降为 0 处；「暂无模块说明」「暂无功能说明」在 `apps/web/src` 删除后 0 命中 | 本地通过 |
+| UI-CLEANUP2-BROWSER-001 | 浏览器实测 | 任务中心 30px 节奏不变 | 1628×1000、小邵身份：`.task-list-mark` 计数 **0**；标题墨迹→工具栏 **29px**、工具栏→列表 **30px**（差 1px，落在 ≤4px 断言内） | 本地通过 |
+| UI-CLEANUP2-BROWSER-002 | 浏览器实测 | 空态留空 | `/projects/3/modules` 与 `/projects/3/modules/3843/features` 正文的「暂无…」计数均为 0，模块卡仍在（1 张） | 本地通过 |
+| UI-CLEANUP2-BROWSER-003 | 浏览器实测 | 指标卡裸数字 | `/projects/3/modules` 四张卡文本依次为「未完成任务 7」「迭代记录 1」「成员 4」「遗留问题 1」 | 本地通过 |
+| UI-CLEANUP2-UNIT-001 | Web 单元 | 既有用例不破 | `pnpm --filter @inpulse/web test` → **90 文件 630 例全绿** | 本地通过 |
+| UI-CLEANUP2-E2E-001 | 浏览器 E2E | 定向 + 全量回归 | 定向 `playwright test aggregate-views` **2/2**（15.2s）；全量 `pnpm test:e2e` → **64 passed（5.2 分钟）** | 本地通过 |
+| UI-CLEANUP2-GATE-001 | 静态门禁 | lint、类型、格式、文档 | `pnpm lint`、`pnpm --filter @inpulse/web run typecheck`、改动集 `prettier --write`（均返回 unchanged）、`pnpm check:docs` 全部 exit 0 | 本地通过 |
+
+本地实际执行（2026-10-08）：`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=…/app_e2e pnpm --filter @inpulse/e2e exec playwright test aggregate-views`（**2/2**，夹具清理：删除用户 2、项目 2、业务行 63、审计行 2）；同环境 `pnpm test:e2e`（**64 passed，5.2 分钟**，夹具清理：删除用户 8、项目 14、业务行 1150、审计行 166）；`pnpm exec prettier --write` 八个改动文件与 `aggregate-views.spec.ts`；`pnpm check:docs`。浏览器实测用无头 Chromium 1628×1000、`xiaoshao` 身份逐条量测（见上表）。首轮定向 E2E 曾因 F-29 的「含『 人』」断言转红，按上表口径改写断言后复跑通过——本轮唯一一次失败，未跳过或弱化任何用例。
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与集成测试（服务端未改）、镜像构建与 GitHub Actions（本次提交后由 CI 执行）。② 模块卡与功能卡在空描述下会留下一段空白（`<p>` / `<span>` 仍占位），与项目卡口径一致；若后续希望卡片在空描述时收紧高度，需连同项目卡一起重新定案，本轮未做。③ 任务中心删除图标后，30px 由工具栏下外边距单点承担；若工具栏在窄屏折行换高，该换算基准会随之变化（未在 ≤700px 量测）。④ 以下三项按你的指示未动，仍待定案：任务 / 组卡「整卡铺色」把优先级与状态压在同一维度（高优先级整卡琥珀 `rgb(253, 193, 6)`、已完成整卡青碧，卡内「高 / 聚合组 / 未开始」仅同色系 12% 明度差）；项目页底部「层级说明」六宫格常驻（`ProjectsPageView.tsx`，有单测断言其存在）；`CommandPalette.tsx` 命令面板 hint「在全局搜索页查看完整权限过滤结果」的口径。⑤ 本轮扫描另发现一处同批未处理的开发用文案：通知页 `NotificationsPageView.tsx` 的说明段落仍写「通知只展示当前登录用户的站内消息；已读与未读操作会携带 CSRF 与幂等 Key，不会影响其他用户」——把 CSRF 与幂等 Key 写进了面向用户的说明，且不在上一批 72 条注释审查清单内（该页当时只收录了通知铃铛的 `aria-label`），留待你定案。⑥ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审。

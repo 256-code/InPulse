@@ -215,7 +215,7 @@ export function ModulesPageView({
                           {moduleLifecycleLabel(item.stats.completedTaskCount)}
                         </CalmBadge>
                       </div>
-                      <p>{item.description || "暂无模块说明"}</p>
+                      <p>{item.description}</p>
                       <div className="card-footer">
                         <span>
                           {item.stats.activeFeatureCount} 个功能 ·{" "}

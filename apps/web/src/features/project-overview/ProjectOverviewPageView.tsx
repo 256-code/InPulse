@@ -125,7 +125,7 @@ export const ProjectOverviewPageView: React.FC<
     {
       key: "members",
       label: "成员",
-      value: project === null ? "—" : project.memberCount + " 人",
+      value: project === null ? "—" : String(project.memberCount),
       icon: "users",
       tone: "amber",
     },

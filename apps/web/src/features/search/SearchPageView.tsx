@@ -176,12 +176,9 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
   return (
     <Card style={{ borderRadius: 10 }}>
       <Space orientation="vertical" size={20} style={{ width: "100%" }}>
-        <Space align="center" wrap>
-          <Title level={3} style={{ margin: 0 }}>
-            全局搜索
-          </Title>
-          <Tag color="blue">F-26</Tag>
-        </Space>
+        <Title level={3} style={{ margin: 0 }}>
+          全局搜索
+        </Title>
         <Input.Search
           aria-label="搜索关键词"
           allowClear

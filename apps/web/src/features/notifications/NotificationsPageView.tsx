@@ -223,7 +223,6 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
           <Title level={3} style={{ margin: 0 }}>
             站内通知
           </Title>
-          <Tag color="blue">F-28</Tag>
           <Badge count={unreadCount} overflowCount={99} showZero={false} />
         </Space>
         <Paragraph type="secondary" style={{ margin: 0 }}>

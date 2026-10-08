@@ -130,7 +130,7 @@ describe("ProjectOverviewPageView", () => {
     expect(screen.getByText("进行中")).toBeInTheDocument();
     await screen.findByTestId("overview-metric-members");
     expect(
-      within(screen.getByTestId("overview-metric-members")).getByText("3 人"),
+      within(screen.getByTestId("overview-metric-members")).getByText("3"),
     ).toBeInTheDocument();
   });
 

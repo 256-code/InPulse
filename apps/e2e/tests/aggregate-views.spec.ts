@@ -216,7 +216,9 @@ test("F-32 任务中心：真实任务进入列表，工作状态与优先级接
     await expect(
       statusFilter.getByRole("button", { name: "已完成" }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator(".task-list-mark")).toHaveCount(1);
+    // 2026-10-08：区块内的展示方式图标（.task-list-mark）与工具栏「卡片 / 列表」
+    // 切换完全重复，已按用户指示删除；工作状态与展示方式都只由工具栏表达。
+    await expect(page.locator(".task-list-mark")).toHaveCount(0);
     await expect(page.getByText("没有匹配的未完成任务")).toHaveCount(0);
     await page
       .getByRole("group", { name: "展示方式" })
@@ -318,17 +320,18 @@ test("F-29 项目主页：服务端真实指标（含遗留问题总数）与入
 
     // 服务端指标异步加载：轮询等待真实值渲染完成，避免读到初始占位。
     // 成员数是 fixture 项目必然 > 0 的服务端真实值（创建者自动成为成员）。
+    // 2026-10-08：成员卡不再带单位后缀「 人」，四张卡统一为裸数字，因此改用
+    // 「解析出的整数 > 0」作为真实值证据（不再以「 人」后缀佐证）。
     const memberCount = page
       .getByTestId("overview-metric-members")
       .locator("strong");
-    await expect.poll(() => memberCount.textContent()).toContain(" 人");
     await expect
       .poll(async () =>
         Number.parseInt((await memberCount.textContent()) ?? "", 10),
       )
       .toBeGreaterThan(0);
-    // 其余指标以数字形态渲染（fixture 项目尚无已发布记录与遗留问题，值为 0）。
-    for (const key of ["tasks", "records", "leftovers"]) {
+    // 四张指标卡都以数字形态渲染（fixture 项目尚无已发布记录与遗留问题，值为 0）。
+    for (const key of ["tasks", "records", "members", "leftovers"]) {
       const metric = page
         .getByTestId("overview-metric-" + key)
         .locator("strong");

@@ -1360,14 +1360,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         <>
           {/*
             工作状态已由工具栏「未完成 / 已完成」筛选表达，这里不再重复标题与
-            「n 项 · 排序」两行文字，只留展示方式图标（列表当前是卡片还是表格）。
+            「n 项 · 排序」两行文字。2026-10-08：原来的展示方式图标（列表当前是
+            卡片还是表格）与工具栏「卡片 / 列表」切换完全重复，按用户指示删除；
+            工具栏到列表的 30px 由 .task-center .task-toolbar 的下外边距承担。
           */}
-          <div className="task-list-mark">
-            <InpulseIcon
-              name={filters.display === "cards" ? "layoutGrid" : "list"}
-              size={16}
-            />
-          </div>
           {hasListContent ? (
             filters.display === "cards" ? (
               // 聚合组卡片与任务卡片同一网格混排，顺序由 gridEntries 统一决定
