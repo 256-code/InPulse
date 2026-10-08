@@ -4557,3 +4557,28 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 - ③ 同日分组在后续页面的**下边界**可能继续延伸：键集分页保证「只追加更早的条目」，但同一天内若有更早条目排在下一页，该日期分组会在底部追加（不会回插到中间）。这是键集分页的固有形态，与用户要求的「不在之前的时间里面加动态」不冲突；如需彻底冻结某日，需改成按日整批取数（未做）。
 - ④ 按日计数是**服务端范围口径**，不随前端的本地关键词搜索框变化（搜索只过滤已加载条目）；`dayTotalsTruncated` 时窗口外日期回退为已加载条数。
 - ⑤ 本批含契约、服务端与前端产品代码，按 §8 需非作者人工评审。
+
+## 活动 / 记录 / 审计三页吸顶页头与日期分组头（用户指示，2026-10-08 本地落库）
+
+用户三条指示（原话）：①「我要求页面滚动只滚动红线一下的区域」（附 `/activity` 截图圈出标题与筛选条）；②「那在这个基础上先实现时间先不会被滚走，等里面的内容滚完了再收起来」；③「将迭代记录和审计日记也根据以上两次更改进行更改」。只改前端（`apps/web`），无 API / 契约 / 权限 / 迁移改动；按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁，证据为一次性 Playwright 探针（用后删除）与改动文件静态检查。
+
+口径与实现：
+
+- 吸顶块：`.sticky-page-band`（`apps/web/src/styles/inpulse-design.css`），仅 ≥701px 且 `:not(.is-embedded)` 生效——`position: sticky; top: 0; z-index: 5; padding-bottom: 18px; background: var(--background)`。容器必须自带不透明底色（否则行从标题与筛选条后方透出）；工具条的 `margin-bottom` 挪到容器内边距（容器末子级外边距会坍出底部，那一截没有底色，滚动时在吸顶块与列表之间露内容）。
+- 分组头：`.activity-day-head`（动态 / 审计）与 `.records-workspace .timeline-day-head`（记录）为 `position: sticky; top: var(--sticky-band-height, 182px); z-index: 4`、不透明底色；「当天内容滚完自己收起来」由分组头所在包裹 `<section>`（`.activity-day` / `.timeline-block`）完成——被下一组顶走是纯 CSS，无滚动监听。
+- 偏移量：新增共享钩子 `apps/web/src/features/common/use-sticky-band-offset.ts` 的 `useStickyBandOffset(pageRef, bandRef, enabled)`——`useLayoutEffect` 量吸顶块高度后**向下取整**写入页面根 `--sticky-band-height`（取整让分组头顶边微压吸顶块，避免子像素细缝），`ResizeObserver` 跟随工具条折行；变量落点是吸顶块与分组头的共同祖先（两者是兄弟节点）；卸载时移除，兜底 `182px`。
+- 记录页特例：分组头只吸内容列——完整头比时间线左边界靠左 104px、会伸进左侧留白列、在项目主页弹窗里顶出弹层卡片；`[data-record-anchor]` 的 `scroll-margin-top: calc(var(--sticky-band-height, 0px) + 16px)`；吸顶时分组头容器 `padding-bottom: 10px` 接管工具条下方原 10px。
+- 审计页新增按自然日分组：`auditDayKey` 用浏览器本地时区（与 `from` / `to` 和行内时刻同一口径，**不复用**项目动态按 Asia/Shanghai 换算的 helper），复用 `.activity-day` / `.activity-day-head` 类（零新增审计 CSS）；行内保留 `MM-DD` 短日期，组头给完整日期与 `N 条`，首组头 7px 顶圆角贴合 `.audit-list` 卡片。
+- `is-embedded`（记录视图装进项目主页弹窗）不吸顶、不量高度：弹层自带头部与独立滚动区。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| STICKY-BAND-ACTIVITY-BROWSER-001 | 浏览器实测 | 活动页吸顶块与分组头 | 1118×875：`--sticky-band-height` 为 181px；吸顶块顶 0 / 底 182 且 `sticky`；首个分组头钉在 181（吸顶块下方） | 本地通过 |
+| STICKY-BAND-RECORDS-BROWSER-001 | 浏览器实测 | 记录页吸顶与内容列对齐 | 同视口：变量 179px；吸顶块 0→179；分组头钉在 179、左 374 / 宽 702（与内容列对齐）；组尾交接「前一组 −170、后一组钉住」；首组折叠后可见行 20→17 | 本地通过 |
+| STICKY-BAND-AUDIT-BROWSER-001 | 浏览器实测 | 审计页吸顶 + 本地日分组 | 同视口：变量 182px；吸顶块 0→183；3 个分组头 / 33 行、组头钉在 182；交接「前组 −323、后组钉在 182」；首组 7px 顶圆角；折叠 32→23；命中测试返回 `activity-day-head` | 本地通过 |
+| STICKY-BAND-EMBEDDED-BROWSER-001 | 浏览器实测 | 弹窗嵌入模式不吸顶 | 项目主页记录弹窗：吸顶块类为 `sticky-page-band is-embedded`、吸顶块与分组头均为 `static`、变量未设置（`(unset)`）；弹窗内滚动 320px 时吸顶块 132 → −188（随内容滚走，符合预期） | 本地通过 |
+| STICKY-BAND-NARROW-001 | 浏览器实测 | 窄屏不吸顶 | 吸顶只在 `@media (min-width: 701px)` 内生效（标题与工具条折行后自身已占大半屏）；**未单独量测**（由 CSS 条件静态确认） | 未取证 |
+
+本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 探针（量测后删除、不入库）、改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck`（exit 0）与 `get_errors`（无新增错误）。**未运行**：vitest / `pnpm test:web` / 全量 `pnpm test:e2e` / `pnpm check` / GitHub Actions。
+
+未运行 / 已知偏差：① 未新增 Playwright 用例——吸顶、交接、折叠与嵌入模式目前只有一次性探针证据，未进 E2E 套件，**回归防线缺口**；② 窄屏（≤700px）未量测（由 CSS 条件静态确认不启用）；③ 跨浏览器未复核（`position: sticky` 为普遍支持，未在 Firefox / Safari 实测）；④ `--sticky-band-height` 兜底值 182px 与三页实测值（181 / 179 / 182）并存是有意设计——变量缺席时兜底、就绪后覆盖；⑤ 本批含前端产品代码，按 §8 需非作者人工评审。
