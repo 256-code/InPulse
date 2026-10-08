@@ -564,3 +564,26 @@
 - `is-embedded`（记录视图装进项目主页弹窗）不吸顶也不量高度：弹层自带头部与独立滚动区。
 - 真机实测（一次性 Playwright 探针，1118×875，用后删除）：`/activity` 变量 181px、吸顶块 0→182、分组头钉在 181；`/records` 变量 179px、吸顶块 0→179、分组头钉在 179（左 374 / 宽 702，与内容列对齐）、组尾交接（前一组 −170 / 后一组钉住）、首组折叠后可见行 20→17；`/audit` 变量 182px、吸顶块 0→183、3 个分组头 / 33 行、组头钉在 182、交接（前组 −323 / 后组钉在 182）、首组 7px 圆角、折叠 32→23 行、命中测试为 `activity-day-head`；项目主页弹窗内吸顶块类为 `sticky-page-band is-embedded`、吸顶块与分组头均为 `static`、变量未设置、内部滚动 320px 时吸顶块 132 → −188（随内容滚走，符合预期）。
 - 按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁（实际执行的是改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck`（exit 0）与一次性探针）；全量 `pnpm test:e2e` 未运行，GitHub Actions 未执行。本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（活动页与共享实现随 `630a01f`、记录与审计页为 `32e3c42`），未推送。
+
+## 2026-10-08 全局搜索查询下限放宽到 1 个字符（单字可搜，用户指示，本地落库）
+
+用户报告（原话）：「搜索栏只搜索一个字的时候无法搜索」。根因是同一语义的长度下限在四处各写一份：契约 `SEARCH_QUERY_MIN_LENGTH = 2`、服务端 `MIN_QUERY_LENGTH = 2`、前端 `SEARCH_MIN_LENGTH = 2`，以及 `MergeIntoMainTaskModal.tsx` 里复制的本地常量；前端 `isValidSearchQuery` 据此直接不发请求。只改前端（`apps/web`）之外还触及契约与 `apps/api` 校验，无迁移、无权限策略与依赖改动。
+
+- 三处同源常量统一改为 1：`packages/api-contract/src/contracts/search.zod.ts`（`SEARCH_QUERY_MAX_LENGTH = 200` 不变）、`apps/api/src/modules/search/search-text.ts`、`apps/web/src/features/search/search-query.ts`；`MergeIntoMainTaskModal.tsx` 删除本地副本改为从 `@features/search/search-query` 导入。
+- **连带放开**：`record-feed.zod.ts`（B-3b `listChangeRecords` 的 `q`）共用同一常量，记录清单全文过滤下限一并由 2 变 1——单一常量不能只改一处，否则两条路由同名字段出现不同下限。
+- 归一化后为空的纯空白查询继续 422（服务端 `too-short` 分支保留，现在仅 0 字触发）；前端删除 `queryIsValid` / `queryIsTooShort` 死分支与「请输入 2～200 个字符进行搜索。」提示，`SearchPageView` 与 `CommandPalette` 仅在超长时提示「搜索词最多 200 个字符」。
+- PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行）：`'的'` 123 命中、`'审'` 38、`'一'` 113、`'a'` 170，全部走 `Bitmap Index Scan on idx_search_projection_pgroonga`，`Execution Time: 0.467 ms`；ADR-025「不保证任意英文/代码子串」的口径不变。
+- 文档与契约同步：`技术设计v1.2.2.md` §9.3、`系统设计文档v1.0.2.md`、`功能设计v1.1.md` §24.1 与 Route Registry 的 `getSearch` summary 统一为「1～200 个字符（单字可搜）」；`pnpm contract:generate` 重生成 5 个产物（Route Registry 仍 101 条）。
+- 验证（2026-10-08 本地）：契约 `generate` / `drift` / `validate`（101 条）、`permissions:check`（101 / 101）、`lint`、`format:check`、`typecheck`（8 workspace）、`test:unit`（api-contract 16 文件 102 例、api 70 文件 405 例、web 90 文件 630 例、ops 8 文件 52 例）、`pnpm test:web`（90 / 630）、真实 PostgreSQL 集成 53 文件 511 例、`test:search:db` 2 文件 19 例、定向 E2E `tests/search.spec.ts` 6 passed（含新增中文单字用例）全部通过；整链 `pnpm check` 仅在 `deps:audit` 中断（本机 npm 镜像缺 audit endpoint），公共 registry 复核为既有公告 2 moderate / 3 high / 1 critical（`proxy-addr`、`brace-expansion` 等，与本批无关，按 §4 走独立依赖 PR），其后的 `check:secrets`（1130 文件）与 `check:docs`（102 个 Markdown）另行补跑 exit 0。**未运行**：全量 `pnpm test:e2e`、生产镜像构建与 Trivy、GitHub Actions。
+- 未改：`database/poc/search/normalize.ts`（独立 PoC 脚本，仍写 2）与 `docs/poc/nestjs-11-vs-12-v1-result.md` 的历史探针记录（`q=a → 422`）；本批需非作者人工评审，未提交、未推送。
+
+## 2026-10-08 前端交互批次：回到顶部 / 组长置顶 / 看板吸顶 / 折叠动画 / 功能列表行链接（用户逐条指示，本地落库）
+
+用户五条指示（原话）：①「现在需要给迭代记录项目动态审计日志滚动页面加一个回到最顶上的一个按钮」②「这里组长要放在第一位」③「画出来的部分滚动也做的和迭代记录一样，只不过时间变成了模块名，记得列表也要改」+「这些要固定住」④「我指的的看板里面模块展开任务卡车的动画」+「列表没改」⑤「这个预选定框没有框对」。只改前端（`apps/web`），无 API / 契约 / 权限 / 迁移改动；按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁，证据为逐项一次性 Playwright 探针（用后删除）与静态检查。
+
+- 回到顶部：新增 `apps/web/src/features/common/components/BackToTop.tsx` + `back-to-top.css`——右下角固定按钮，`SHOW_AFTER_PX = 400` 后才浮现；监听 `window` 滚动、回顶 `window.scrollTo({ behavior: reduced ? "auto" : "smooth" })`；隐藏态用 `visibility: hidden` 兜住「不可点击、不可聚焦、读屏跳过」；`InpulseIcon` 新增 `arrowUp`；挂载于 `ActivityWorkspace`、`AuditLogPageView`、`RecordsWorkspace`（`embedded` 弹窗模式不渲染）。
+- 组长置顶：新增 `apps/web/src/features/projects/project-member-order.ts` 的 `orderMembersLeaderFirst`（`LEADER` 排首、其余保持服务端顺序；先拷贝再排序，不就地改 React Query 缓存引用），`ProjectMembersPageView` 与 `ActiveProjectMembers` 两处消费。
+- 看板吸顶：`TaskBoardPageView` 的标题、概览卡与工具条整块加 `.sticky-page-band` + `useStickyBandOffset`，泳道头 `.tb-lane-head` 与列表分组头吸在其下（`top: var(--sticky-band-height, 182px)`）；该页实测变量为 **311px**（概览卡占位比活动 / 记录 / 审计页多）。
+- 折叠动画：两视图共用 `.tb-fold` / `.tb-fold-clip`（`grid-template-rows` 过渡）与 `@keyframes tb-enter-in`（0.24s），条目按 `--tb-enter-i` 每档 16ms 错开（上限 12，序号由 `TaskBoardLanes` / `TaskBoardTable` 写在条目自身）；`prefers-reduced-motion: reduce` 关闭动画；列表视图分组头补 `:first-child` 顶边框去除。真机逐帧量测 4 轮（展开 / 收起为连续高度变化而非跳变、错开序号生效、reduced-motion 无动画）。
+- 行链接：`FeaturesPageView` 列表首行「打开功能」由 antd `<Button href>` 改为原生 `<a className="feature-list-open">`（复用任务中心 / 任务面板既有类与样式）；DOM、计算样式与截图三重复核，`prettier` / `eslint` / `typecheck` 全部 exit 0。
+- 已知缺口：五项均无 Playwright 用例进套件（只有一次性探针），是回归防线缺口；折叠动画未在 Firefox / Safari 复核；本批需非作者人工评审，未提交、未推送。

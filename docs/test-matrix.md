@@ -4613,3 +4613,81 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 探针（量测后删除、不入库）、改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck`（exit 0）与 `get_errors`（无新增错误）。**未运行**：vitest / `pnpm test:web` / 全量 `pnpm test:e2e` / `pnpm check` / GitHub Actions。
 
 未运行 / 已知偏差：① 未新增 Playwright 用例——吸顶、交接、折叠与嵌入模式目前只有一次性探针证据，未进 E2E 套件，**回归防线缺口**；② 窄屏（≤700px）未量测（由 CSS 条件静态确认不启用）；③ 跨浏览器未复核（`position: sticky` 为普遍支持，未在 Firefox / Safari 实测）；④ `--sticky-band-height` 兜底值 182px 与三页实测值（181 / 179 / 182）并存是有意设计——变量缺席时兜底、就绪后覆盖；⑤ 本批含前端产品代码，按 §8 需非作者人工评审。
+
+## 全局搜索查询下限放宽到 1 个字符（单字可搜，用户指示，2026-10-08 本地落库）
+
+用户报告（原话）：「搜索栏只搜索一个字的时候无法搜索」——在全局搜索页或命令面板输入单个字（例如「的」）时不发请求，页面提示「请输入 2～200 个字符进行搜索。」。根因是同一语义的长度下限在四处各写一份：契约 `SEARCH_QUERY_MIN_LENGTH = 2`、服务端 `MIN_QUERY_LENGTH = 2`、前端 `SEARCH_MIN_LENGTH = 2`，以及合并到主任务弹层里复制的本地常量 `const SEARCH_MIN_LENGTH = 2`。
+
+口径与实现：
+
+- 下限统一放宽为 1，三处同源常量同时改：`packages/api-contract/src/contracts/search.zod.ts` 的 `SEARCH_QUERY_MIN_LENGTH = 1`（`SEARCH_QUERY_MAX_LENGTH = 200` 不变）、`apps/api/src/modules/search/search-text.ts` 的 `MIN_QUERY_LENGTH = 1`、`apps/web/src/features/search/search-query.ts` 的 `SEARCH_MIN_LENGTH = 1`；`MergeIntoMainTaskModal.tsx` 删除本地副本，改为从 `@features/search/search-query` 导入同一常量（防止再次漂移）。
+- **连带放开**：`packages/api-contract/src/contracts/record-feed.zod.ts`（B-3b 记录清单 `listChangeRecords` 的 `q`）共用 `SEARCH_QUERY_MIN_LENGTH`，因此迭代记录清单的全文过滤下限一并由 2 变为 1。单一常量不能只改一处——只放开全局搜索会让两条路由的同名字段出现不同下限。
+- 归一化后为空（纯空白）继续 422：服务端 `validateSearchQuery` 的 `too-short` 分支保留（现在只有 0 字触发），`record-feed-query.service.ts` 的注释同步为「归一化后为空」。
+- 前端删除 `queryIsValid` / `queryIsTooShort` 死分支与「请输入 2～200 个字符进行搜索。」提示：`SearchPageView` 只在超长时提示「搜索词最多 200 个字符」，`CommandPalette` 的 `searchHint` 同理只在超长时出现，合并弹层空态仅在 `SEARCH_MIN_LENGTH > 1` 时回显门槛文案。`isValidSearchQuery` 仍是前端「是否发请求」的唯一入口。
+- 文档与契约同步：`技术设计v1.2.2.md` §9.3、`系统设计文档v1.0.2.md`、`功能设计v1.1.md` §24.1 与 Route Registry 的 `getSearch` summary 统一为「1～200 个字符（单字可搜）」；`pnpm contract:generate` 重生成 5 个产物（OpenAPI 变更，客户端类型与指纹未变）。
+
+PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行，`EXPLAIN (ANALYZE, BUFFERS)` + 计数）：
+
+| 查询 | 命中行数 | 计划 | 执行时间 |
+| --- | --- | --- | --- |
+| `'的'` | 123 | `Bitmap Index Scan on idx_search_projection_pgroonga` | 0.467 ms |
+| `'审'` | 38 | 同上 | 同量级 |
+| `'一'` | 113 | 同上 | 同量级 |
+| `'a'` | 170 | 同上 | 同量级 |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SEARCH-MINLEN-CONTRACT-001 | 契约单测 | 全局搜索与记录清单的下限 | `search-contract.test.ts` 只拒绝空串（`{ q: "" }`）；`record-feed.test.ts` 单字 `{ q: "甲" }` 合法、空串被拒 | 本地通过 |
+| SEARCH-MINLEN-API-UNIT-001 | API 单测 | Controller 层空串 | `search.controller.test.ts` 用 `{ q: "" }` 触发 `ContractValidationPipe` 校验失败 | 本地通过 |
+| SEARCH-MINLEN-API-INT-001 | API 集成（真实 PostgreSQL + HTTP） | 单字查询 | `search-api.integration.test.ts`：单字（`SEED_QUERY_PREFIX.slice(0, 1)`）返回 `items.length > 0`，且仍不含 `adminOnlyEntityId` / `hiddenEntityId` / `otherProjectEntityId` / `adminProjectEntityId`；中文单字「待」能取到 `SearchPage` | 本地通过 |
+| SEARCH-MINLEN-API-INT-002 | API 集成 | 空白仍 422 | `search-query.integration.test.ts`：`"   "` 归一化后为空 → 422 | 本地通过 |
+| SEARCH-MINLEN-FEED-INT-001 | API 集成 | 记录清单的 422 分层 | `record-feed-api.integration.test.ts`：`q=` 201 字符 → 422 `VALIDATION_FAILED`（Schema 层）；`q=` 纯空白 → 422 `INVALID_RECORD_FEED_QUERY`（服务层） | 本地通过 |
+| SEARCH-MINLEN-WEB-001 | Web 单测 | 单字发请求 | `search-query.test.tsx`：单字「甲」调用 `getSearch` 一次，参数 `{ q: "甲", cursor: undefined, limit: 20 }`；纯空白不发请求 | 本地通过 |
+| SEARCH-MINLEN-WEB-002 | Web 单测 | 超长提示且不发请求 | `SearchPageView.test.tsx`：201 字符显示「搜索词最多 200 个字符」且 `getSearch` 未被调用 | 本地通过 |
+| SEARCH-MINLEN-WEB-003 | Web 单测 | 合并弹层门槛 | `MergeIntoMainTaskModal.test.tsx`：纯空白不发请求，单字「退」防抖后 `getSearch` 恰好一次 | 本地通过 |
+| SEARCH-MINLEN-E2E-001 | 浏览器 E2E | 中文单字真实可搜 | `apps/e2e/tests/search.spec.ts`：`/search?q=退` 命中中文夹具标题、页面不出现「至少 2 个字符」 | 本地通过（6 passed / 16.5s） |
+
+本地实际执行（2026-10-08）：`pnpm contract:generate` / `contract:drift`（5 产物一致）/ `contract:validate`（**101 条**）/ `permissions:check`（**101 / 101**）、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 workspace）、`pnpm test:unit`（api-contract **16 文件 102 例**、api **70 文件 405 例**、web **90 文件 630 例**、ops **8 文件 52 例**、database 15 例、canonical-json 5 例）、`TEST_DATABASE_URL=…/app_ci pnpm --filter @inpulse/api test:integration`（**53 文件 511 例**）、`pnpm --filter @inpulse/api test:search:db`（**2 文件 19 例**，覆盖被 integration 配置 exclude 的 `search-query.integration.test.ts`）、定向 E2E `apps/e2e/tests/search.spec.ts`（**6 passed**）。整链 `pnpm check` 除 `deps:audit` 外全程通过，`deps:audit` 因本机 npm 镜像缺 audit endpoint 中断，改用公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 复核（**2 moderate / 3 high / 1 critical**，均为既有 registry 公告 `proxy-addr`、`brace-expansion`、`source-map-js` 等，与本批无关，按 §4 只能走独立依赖 PR）。**未运行**：全量 `pnpm test:e2e`、生产镜像构建、GitHub Actions。
+
+未运行 / 已知偏差：① 单字搜索在 PGroonga 上由 `pgroonga_tokenize` 的 bigram 分词覆盖，实测走 PGroonga 索引；但更短的英文/代码子串仍不保证命中（ADR-025 口径不变）；② `database/poc/search/normalize.ts`（独立 PoC 脚本）仍写 `MIN_QUERY_LENGTH = 2`，属历史探针，未改；③ `docs/poc/nestjs-11-vs-12-v1-result.md` 中 `q=a → 422` 一行是 NestJS PoC 当时事实，保留不改；④ 本批跨契约与前后端产品代码，按 §8 需非作者人工评审；未提交、未推送。
+
+## 前端交互批次：回到顶部 / 组长置顶 / 看板吸顶 / 折叠动画 / 功能列表行链接（用户逐条指示，2026-10-08 本地落库）
+
+用户按顺序提了五件事，逐条实现并用一次性 Playwright 探针真机复核（探针脚本用后删除、未入库）。全部只改 `apps/web`，无 API / 契约 / 权限 / 迁移改动。
+
+**① 回到顶部按钮**（指示：「现在需要给迭代记录项目动态审计日志滚动页面加一个回到最顶上的一个按钮」）
+
+- 新增 `apps/web/src/features/common/components/BackToTop.tsx` + `back-to-top.css`：固定在右下角，`SHOW_AFTER_PX = 400`（≈一屏三分之一）后才浮现；监听 `window` 滚动（主内容区不是内部滚动容器），回顶用 `window.scrollTo({ behavior: reduced ? "auto" : "smooth" })`；隐藏态用 `visibility: hidden` 兜住「不可点击、不可聚焦、读屏跳过」，不靠 `aria-hidden`；图标为 `InpulseIcon` 新增的 `arrowUp`。
+- 挂载三处：`ActivityWorkspace`、`AuditLogPageView`、`RecordsWorkspace`（记录视图装在项目主页弹窗时 `embedded` 不渲染）。
+- 真机验证（三页）：跨过阈值后按钮出现、点击回顶、隐藏态不可聚焦。
+
+**② 成员列表组长置顶**（指示：「这里组长要放在第一位」）
+
+- 新增 `apps/web/src/features/projects/project-member-order.ts` 的 `orderMembersLeaderFirst`：`LEADER` 排首位、其余保持服务端顺序；入参是 React Query 缓存里的数组引用，实现内部先拷贝再排序（不就地改缓存）。
+- 两处消费：`ProjectMembersPageView`（成员页）与 `ActiveProjectMembers`（项目概览活跃成员）。真机验证两处组长都在第一位。
+
+**③ 任务看板吸顶**（指示：「画出来的部分滚动也做的和迭代记录一样，只不过时间变成了模块名，记得列表也要改」+「这些要固定住」）
+
+- `TaskBoardPageView` 的标题、概览卡与工具条整块加 `.sticky-page-band` + `useStickyBandOffset`；泳道头 `.tb-lane-head` 与列表分组头吸在其下方（`design-system.css`，`top: var(--sticky-band-height, 182px)`）。真机量测该页变量为 **311px**（比活动/记录/审计页高，概览卡占位更多）。
+
+**④ 看板泳道与列表分组的折叠动画**（指示：「我指的的看板里面模块展开任务卡车的动画」+「列表没改」）
+
+- 两个视图共用一套实现：`.tb-fold` / `.tb-fold-clip`（`grid-template-rows` 过渡）承载展开与收起，条目进入用 `@keyframes tb-enter-in`（0.24s）并按 `--tb-enter-i` 错开（每档 16ms，上限 12），组件把序号写在条目自身（`TaskBoardLanes` / `TaskBoardTable`）；`prefers-reduced-motion: reduce` 下关闭动画。
+- 列表视图的分组头补 `:first-child` 顶边框去除（`.tb-lgroup-section:first-child > .tb-lgroup`）。
+- 真机逐帧量测 4 轮（泳道展开/收起、列表展开/收起、错开序号、reduced-motion），折叠中途高度为连续变化而非跳变。
+
+**⑤ 功能档案列表首行「打开功能」改为原生链接**（指示：「这个预选定框没有框对」）
+
+- `FeaturesPageView` 列表首行原用 antd `<Button href>`，其内部 `<a>` 尺寸与单元格不一致，聚焦/悬停边框会切过内容；改为原生 `<a className="feature-list-open">`（复用任务中心/任务面板既有类与样式）。DOM、计算样式与截图三重复核；`prettier` / `eslint` / `typecheck` 全部 exit 0。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| WEB-UX-BACKTOTOP-BROWSER-001 | 浏览器实测 | 三页回到顶部 | `/records`、`/activity`、`/audit` 滚过 400px 后按钮出现、点击回顶、隐藏态不可聚焦；记录页弹窗内不渲染 | 本地通过 |
+| WEB-UX-LEADER-FIRST-BROWSER-001 | 浏览器实测 | 组长置顶 | 成员页与项目概览活跃成员两处，组长均为第一位；排序不修改 React Query 缓存引用 | 本地通过 |
+| WEB-UX-BOARD-STICKY-BROWSER-001 | 浏览器实测 | 看板吸顶 | 标题/概览/工具条吸在 `top: 0`，泳道头与列表分组头钉在 `--sticky-band-height`（实测 **311px**）下方 | 本地通过 |
+| WEB-UX-BOARD-FOLD-BROWSER-001 | 浏览器实测 | 折叠动画 | 泳道与列表展开/收起为连续高度变化（非跳变）、条目按 `--tb-enter-i` 错开；`prefers-reduced-motion` 下无动画 | 本地通过 |
+| WEB-UX-FEATURE-LINK-STATIC-001 | 静态复核 | 行链接 | `FeaturesPageView` 首行为原生 `<a class="feature-list-open">`；DOM / 计算样式 / 截图三重复核；prettier + eslint + typecheck exit 0 | 本地通过 |
+
+本地实际执行（2026-10-08）：按 2026-09-17 前端免测试指示**未运行** vitest / `pnpm test:web` / 全量 `pnpm test:e2e` / `pnpm check`；实际执行的是逐项一次性 Playwright 探针（用后删除）、改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck` 与 `get_errors`（无新增错误）。其中单字搜索批次的完整门禁见上一节（该批跨契约与后端）。**未运行**：GitHub Actions。
+
+未运行 / 已知偏差：① ①～⑤ 五项均无 Playwright 用例进套件，只有一次性探针证据，**回归防线缺口**；② 折叠动画未在 Firefox / Safari 复核；③ 看板吸顶的 311px 为量测当页数值，不同项目概览卡内容长度会略有差异（由 `ResizeObserver` 跟随）；④ 本批含前端产品代码，按 §8 需非作者人工评审；未提交、未推送。
