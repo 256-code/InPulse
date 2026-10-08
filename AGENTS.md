@@ -632,3 +632,13 @@
 - 取舍：以「预留最大行数」换全列表等高，单行内容卡片会多出一行空白——与看板 / 任务中心两次等高的既有取舍一致；只改样式，DOM、文案与按钮行为均未动。
 - 验证：一次性 Playwright 量测探针（同一共享页面，用后删除、不入库）——改动前 5 张卡片高 [90, 120, 90, 109, 90]；改动后全部 160px、每张标题独占一行（`strong.left` = 内容左缘）、标题盒 42px / 来源盒 39px（各 2 行预留）；截图肉眼复核两卡版式一致。`prettier --check` 通过；按 2026-09-17 前端免测试指示未运行 vitest / Playwright 套件 / 整链门禁。
 - 未运行 / 已知偏差：本批无用例进 vitest / E2E 套件；等高以预留行实现，单行内容卡片存在一行空白（有意取舍）；按 §8 需非作者人工评审；已本地提交、未推送。
+
+## 2026-10-08 项目列表同档位内改按「最近变更时间」排序说明
+
+用户指示（原话）：「把同状态的项目根据最近的变更排序，最新变更的放在前面，变更指的是生成任务，完成任务等变更」，即 [ADR-046](./docs/adr/ADR-046.md) 的 2026-10-08 修订（只加不改原文）。因此：
+
+- 项目列表第二排序键由 `created_at DESC` 改为**最近变更时间 DESC**，其后仍是 `created_at DESC`、`id DESC` 兜底；第一键（档位：进行中 → 未开始 → 维护中）以及模块 / 功能列表口径不变。
+- 「最近变更时间」= 该项目动态投影（`app.activity_projection`）里最新一条业务事件的发生时间（`MAX(occurred_at) WHERE project_id = p.id`）；没有动态的项目回落 `p.created_at`。不要换回 `projects.updated_at` / `row_version`——生成与完成任务不会改项目行，只有项目动态能反映「最近有变更」。
+- 实现位置：`apps/api/src/stats/card-stat-columns.ts` 的 `projectLastChangeExpression` + `apps/api/src/modules/projects/postgres-project-query-port.ts` 的 `list`；不新增索引（走既有 `activity_projection_project_cursor_idx`）与迁移。
+- 契约：`listProjects` 的 Route Registry summary 已同步，改描述后必须重跑 `pnpm contract:generate` 与 `pnpm contract:drift`；路由仍 101 条。
+- 回归防线：`apps/api/test/projects-read-api.integration.test.ts` 的「同状态项目按最近变更时间从近到远」（无动态回落 / 较新变更提前 / 更新变更反超 / 档位优先），改动排序键时必须跑该文件。

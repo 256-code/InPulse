@@ -4809,3 +4809,25 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 量测探针（在同一共享页面 `http://127.0.0.1:5173/issues` 改动前后各一次，量测后删除、不入库）、`pnpm exec prettier --check apps/web/src/styles/design-system.css`（exit 0）与截图肉眼复核；文档提交后另跑 `pnpm check:docs`。**未运行**：vitest / `pnpm test:web` / `pnpm test:e2e` / `pnpm check` / GitHub Actions。
 
 未运行 / 已知偏差：① 本批无用例进 vitest / E2E 套件（纯视觉等高，仓库既有同等批次同样以探针量测为证据），回归防线缺口与看板 / 任务中心批次一致；② 等高以「预留 2 行」实现，单行标题与单行来源的卡片存在一行空白，属有意取舍；③ 本批含前端产品代码，按 §8 需非作者人工评审。
+
+## 2026-10-08 项目列表同档位按「最近变更时间」排序（ADR-046 修订，本地落库）
+
+用户指示（原话）：「把同状态的项目根据最近的变更排序，最新变更的放在前面，变更指的是生成任务，完成任务等变更」。ADR-046 原来把同档位项目按 `created_at DESC` 排，本轮把第二键换成「最近变更时间 DESC」，档位（进行中 → 未开始 → 维护中）与模块 / 功能列表不变；决策落 [ADR-046](adr/ADR-046.md) 的 2026-10-08 修订节。
+
+锁定口径：
+
+- 最近变更时间 = `MAX(app.activity_projection.occurred_at) WHERE project_id = p.id`，即项目动态里最新一条业务事件的发生时间；没有动态的项目回落 `p.created_at`，同值时按 `created_at DESC, id DESC` 兜底。
+- 选它而不是 `projects.updated_at` / `row_version`：那两列只在项目行自身被改动时变化，生成与完成任务不触碰项目行；项目动态与业务写入同事务落库，覆盖生成 / 完成任务、状态流转、发布 / 作废记录、成员变化等。
+- 实现位置：`apps/api/src/stats/card-stat-columns.ts` 新增 `projectLastChangeExpression`，由 `apps/api/src/modules/projects/postgres-project-query-port.ts` 的 `list` 写入 `ORDER BY`；不新增索引（逐项目 MAX 走既有 `activity_projection_project_cursor_idx (project_id, occurred_at, id)` 反向扫描），不新增迁移。
+- 契约：`listProjects` 的 Route Registry summary 改为「档位优先 → 最近变更时间从近到远 → 创建时间、ID 降序兜底」，`pnpm contract:generate` 后 5 个产物一致（只有 `openapi.json` 描述变化，生成客户端未变）；路由仍 101 条。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| ADR046R-API-INT-001 | 真实 PostgreSQL | 无动态回落创建时间 | `projects-read-api.integration.test.ts` 新增用例第 1 步：两个同档位项目都无动态时顺序为 `[newer, older]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-002 | 真实 PostgreSQL | 较新变更提前 | 第 2 步：先建项目写入 `task.create` 动态（较晚时间）后顺序变为 `[older, newer]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-003 | 真实 PostgreSQL | 更新变更反超 | 第 3 步：后建项目写入更晚的 `task.complete` 动态后顺序反超为 `[newer, older]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-004 | 真实 PostgreSQL | 档位优先于变更时间 | 第 4 步：先建项目置为 `ACTIVE` 后即使最近变更更早仍排最前 `[older, newer]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-005 | 鉴别性验证 | 用例能测出新行为 | 临时把 `ORDER BY` 还原为 `created_at DESC` 后按 `-t "最近变更时间"` 复跑，该用例在第 2 步以 `expected [30, 29] to deeply equal [29, 30]` 转红；恢复后 7/7 转绿 | 本地完成（2026-10-08） |
+| ADR046R-CONTRACT-001 | 静态门禁 | 契约与权限矩阵 | `pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（101 条路由）、`pnpm permissions:check`（101 / 101）通过 | 本地通过（2026-10-08） |
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② 模块与功能列表本轮不改；③ 若产品要求「只按最近变更排序、不再分档位」，需另立 ADR 修订 ADR-043 / ADR-046 的档位口径；④ 历史用例 `ADR045-API-INT-001`（档位 + 创建时间）在夹具无动态的前提下仍成立，已改名为「无动态时同档位按创建时间从近到远」。
