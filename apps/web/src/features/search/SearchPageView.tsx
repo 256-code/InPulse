@@ -12,9 +12,7 @@ import {
 import type { InpulseApiClient, SearchItem } from "@generated/api";
 import {
   describeSearchError,
-  isValidSearchQuery,
   SEARCH_MAX_LENGTH,
-  SEARCH_MIN_LENGTH,
   useSearchInfiniteQuery,
 } from "./search-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
@@ -60,9 +58,6 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
   }, [initialQuery]);
 
   const normalizedQuery = initialQuery.trim();
-  const queryIsValid = isValidSearchQuery(normalizedQuery);
-  const queryIsTooShort =
-    normalizedQuery.length > 0 && normalizedQuery.length < SEARCH_MIN_LENGTH;
   const queryIsTooLong = normalizedQuery.length > SEARCH_MAX_LENGTH;
 
   const {
@@ -85,19 +80,19 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
   };
 
   let content: React.ReactNode;
-  if (queryIsTooShort || queryIsTooLong) {
+  if (queryIsTooLong) {
     content = (
       <Alert
         showIcon
         type="warning"
-        message={`搜索词需为 ${SEARCH_MIN_LENGTH}～${SEARCH_MAX_LENGTH} 个字符`}
+        message={`搜索词最多 ${SEARCH_MAX_LENGTH} 个字符`}
       />
     );
   } else if (normalizedQuery.length === 0) {
     content = (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="输入至少 2 个字符开始全局搜索"
+        description="输入关键词开始全局搜索"
       />
     );
   } else if (isPending) {
@@ -198,7 +193,7 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
           onSearch={handleSearch}
           style={{ maxWidth: 620 }}
         />
-        {queryIsValid ? (
+        {normalizedQuery.length > 0 && !queryIsTooLong ? (
           <Text type="secondary">共找到 {results.length} 条结果</Text>
         ) : null}
         {content}

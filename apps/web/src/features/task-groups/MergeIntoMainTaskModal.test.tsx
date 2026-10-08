@@ -127,20 +127,21 @@ function mount(options: { api?: InpulseApiClient } = {}) {
 }
 
 describe("F-23 merge into main task", () => {
-  it("waits for two characters and the debounce before searching", async () => {
+  it("waits for a non-empty query and the debounce before searching", async () => {
     const { api, getSearch } = createApi();
     mount({ api });
     const input = screen.getByLabelText(searchLabel);
-    fireEvent.change(input, { target: { value: "退" } });
+    fireEvent.change(input, { target: { value: "   " } });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
     expect(getSearch).not.toHaveBeenCalled();
-    fireEvent.change(input, { target: { value: "退款" } });
+    // 下限为 1（单字可搜，F-26）：键入单字、等过防抖就该发起一次搜索。
+    fireEvent.change(input, { target: { value: "退" } });
     await waitFor(() => expect(getSearch).toHaveBeenCalledTimes(1), {
       timeout: 2000,
     });
-    expect(getSearch).toHaveBeenCalledWith({ q: "退款", limit: 20 });
+    expect(getSearch).toHaveBeenCalledWith({ q: "退", limit: 20 });
   });
 
   it("keeps only same-project TASK candidates and excludes the source task", async () => {

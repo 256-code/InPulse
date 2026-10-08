@@ -92,7 +92,7 @@ describe("SearchController", () => {
 
   test("查询参数无效由 ContractValidationPipe 统一拒绝", () => {
     expect(() =>
-      new ContractValidationPipe("getSearch", "query").transform({ q: "a" }),
+      new ContractValidationPipe("getSearch", "query").transform({ q: "" }),
     ).toThrow(ContractValidationError);
   });
 

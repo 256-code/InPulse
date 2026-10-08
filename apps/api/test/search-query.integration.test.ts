@@ -524,7 +524,7 @@ describe("SearchQueryService with real PostgreSQL", () => {
     await expect(
       service.search({
         actorUserId: adminUserId,
-        query: "a",
+        query: "   ",
         limit: 20,
       }),
     ).rejects.toBeInstanceOf(SearchQueryValidationError);

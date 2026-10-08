@@ -173,18 +173,18 @@ describe("SearchPageView", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a validation hint without calling the API for a short query", async () => {
+  it("shows a validation hint without calling the API for an over-long query", async () => {
     const getSearch = vi.fn();
     const client = { getSearch } as unknown as InpulseApiClient;
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <SearchPageView initialQuery="a" client={client} />
+        <SearchPageView initialQuery={"a".repeat(201)} client={client} />
       </QueryClientProvider>,
     );
 
     expect(
-      await screen.findByText("搜索词需为 2～200 个字符"),
+      await screen.findByText("搜索词最多 200 个字符"),
     ).toBeInTheDocument();
     expect(getSearch).not.toHaveBeenCalled();
   });

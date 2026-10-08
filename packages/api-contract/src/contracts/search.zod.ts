@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-/** 技术设计 9.3：普通查询最短 2 个字符；本纵切片登记服务端最大原始长度。 */
-export const SEARCH_QUERY_MIN_LENGTH = 2;
+/** 技术设计 9.3：普通查询最短 1 个字符（单字可搜，含中文单字）；本纵切片登记服务端最大原始长度。 */
+export const SEARCH_QUERY_MIN_LENGTH = 1;
 export const SEARCH_QUERY_MAX_LENGTH = 200;
 export const SEARCH_PAGE_LIMIT_MAX = 50;
 export const SEARCH_CURSOR_MAX_LENGTH = 256;

@@ -43,9 +43,9 @@ describe("SearchQueryRequest 契约", () => {
     expect(parsed).toEqual({ q: "ai" });
   });
 
-  test("拒绝过短查询、越界 limit、无效游标和未登记字段", () => {
+  test("拒绝空查询、越界 limit、无效游标和未登记字段", () => {
     const invalidValues = [
-      { q: "a" },
+      { q: "" },
       { q: "ai", limit: 0 },
       { q: "ai", limit: SEARCH_PAGE_LIMIT_MAX + 1 },
       { q: "ai", cursor: "" },

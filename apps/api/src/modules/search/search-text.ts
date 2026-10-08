@@ -1,4 +1,5 @@
-export const MIN_QUERY_LENGTH = 2;
+// 契约下限为 1（单字可搜，含中文单字）；保留长度分支以便契约收紧时立即生效。
+export const MIN_QUERY_LENGTH = 1;
 
 // 与 packages/api-contract 的 SearchQueryRequest 保持一致；契约变更必须同步此处。
 export const MAX_QUERY_LENGTH = 200;

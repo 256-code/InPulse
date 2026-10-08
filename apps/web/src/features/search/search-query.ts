@@ -6,7 +6,7 @@ import {
   type InpulseApiClient,
 } from "@generated/api";
 
-export const SEARCH_MIN_LENGTH = 2;
+export const SEARCH_MIN_LENGTH = 1;
 export const SEARCH_MAX_LENGTH = 200;
 export const DEFAULT_SEARCH_LIMIT = 20;
 

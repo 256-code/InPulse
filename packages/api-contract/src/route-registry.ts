@@ -448,7 +448,7 @@ export const routeRegistry = [
     path: "/search",
     operationId: "getSearch",
     summary:
-      "按服务端 AuthorizedProjectScope 搜索当前用户可访问项目中的投影实体；普通输入使用 PGroonga 转义查询，禁止客户端传入授权范围；cursor 为服务端签名、校验并带过期时间的不透明字符串；includeVoid=true 仅供系统管理员显式开启 VOID 可见，普通调用不影响范围。",
+      "按服务端 AuthorizedProjectScope 搜索当前用户可访问项目中的投影实体；查询 1～200 个字符（单字可搜），普通输入使用 PGroonga 转义查询，禁止客户端传入授权范围；cursor 为服务端签名、校验并带过期时间的不透明字符串；includeVoid=true 仅供系统管理员显式开启 VOID 可见，普通调用不影响范围。",
     request: {
       path: "none",
       query: "SearchQueryRequest",

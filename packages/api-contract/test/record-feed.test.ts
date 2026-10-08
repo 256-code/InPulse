@@ -54,7 +54,9 @@ describe("B-3b 跨项目记录读契约", () => {
     expect(schema.safeParse({ source: "GROUP" }).success).toBe(false);
     expect(schema.safeParse({ limit: 101 }).success).toBe(false);
     expect(schema.safeParse({ limit: 0 }).success).toBe(false);
-    expect(schema.safeParse({ q: "甲" }).success).toBe(false);
+    // 下限放宽到 1（单字可搜）后，单字合法、只有空串与超长被拒。
+    expect(schema.safeParse({ q: "甲" }).success).toBe(true);
+    expect(schema.safeParse({ q: "" }).success).toBe(false);
     expect(schema.safeParse({ q: "甲".repeat(201) }).success).toBe(false);
     expect(schema.safeParse({ cursor: "a".repeat(513) }).success).toBe(false);
     for (const field of ["projectIds", "authorId", "includeVoid", "ownerId"])

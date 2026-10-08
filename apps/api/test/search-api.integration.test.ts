@@ -597,15 +597,15 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
     expect(seen.size).toBe(3);
   });
 
-  test("短查询与无效游标统一返回 422", async () => {
-    const shortBody = await expectError(
+  test("空查询与无效游标统一返回 422", async () => {
+    const emptyBody = await expectError(
       await requestSearch(baseUrl, {
         cookie: fixture.memberSessionCookie,
-        query: { q: "a" },
+        query: { q: "" },
       }),
       422,
     );
-    expect(shortBody.code).toBe("VALIDATION_FAILED");
+    expect(emptyBody.code).toBe("VALIDATION_FAILED");
 
     const cursorBody = await expectError(
       await requestSearch(baseUrl, {
@@ -616,6 +616,31 @@ describe("GET /api/v1/search with HTTP and real PostgreSQL", () => {
     );
     expect(cursorBody.code).toBe("VALIDATION_FAILED");
     expect(cursorBody.details).toHaveProperty("reason");
+  });
+
+  test("单字查询不再被长度下限拦截且仍按授权范围过滤", async () => {
+    const page = await expectSearchPage(
+      await requestSearch(baseUrl, {
+        cookie: fixture.memberSessionCookie,
+        query: { q: SEED_QUERY_PREFIX.slice(0, 1), limit: 50 },
+      }),
+    );
+    const entityIds = page.items.map((item) => item.entityId);
+
+    // 单字比唯一前缀命中面更宽，这里只断言接受查询且不泄露本轮 fixture 的不可见投影。
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(entityIds).not.toContain(fixture.adminOnlyEntityId);
+    expect(entityIds).not.toContain(fixture.hiddenEntityId);
+    expect(entityIds).not.toContain(fixture.otherProjectEntityId);
+    expect(entityIds).not.toContain(fixture.adminProjectEntityId);
+
+    // 中文单字同样不再被拦截（用户实际场景）。
+    await expectSearchPage(
+      await requestSearch(baseUrl, {
+        cookie: fixture.memberSessionCookie,
+        query: { q: "待" },
+      }),
+    );
   });
 
   test("停用用户与未知 Session Token 均返回 401", async () => {

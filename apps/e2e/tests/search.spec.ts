@@ -78,3 +78,17 @@ test("中文短词与特殊标识符可被 PGroonga 检索", async ({ browser })
 
   await context.close();
 });
+
+test("中文单字即可检索，不再提示至少 2 个字符", async ({ browser }) => {
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+
+  // 「退款回调重复处理」的首字，验证长度下限放宽到 1 后单字能出结果。
+  await page.goto(`/search?q=${encodeURIComponent("退")}`);
+  await expect(
+    page.getByText(runtime.chineseSearchTitle, { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/至少 2 个字符/)).toHaveCount(0);
+
+  await context.close();
+});

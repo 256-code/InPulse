@@ -9,10 +9,11 @@ import {
   type SearchItem,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { SEARCH_MIN_LENGTH } from "@features/search/search-query";
 
 /**
  * F-23 合并到主任务（前端弹窗）。主任务候选来自全局搜索的 TASK 结果
- * （F-26 契约：SEARCH_QUERY_MIN_LENGTH = 2），客户端只做同项目过滤与自身排除；
+ * （与全局搜索共用 F-26 的下限常量），客户端只做同项目过滤与自身排除；
  * 跨项目、已在组内、状态冲突等业务规则由服务端合并命令校验（409/422）。
  * 提交按 Route Registry 携带 CSRF 与 Idempotency-Key；成功后回传 groupId
  * 供调用方提供「查看聚合组」入口（合并响应 TaskGroupItem.id）。
@@ -31,7 +32,6 @@ export interface MergeIntoMainTaskModalProps {
   readonly onMerged: (groupId: number) => void;
 }
 
-const SEARCH_MIN_LENGTH = 2;
 const NO_MATCH_TEXT = "当前项目内没有匹配的任务。";
 
 export function MergeIntoMainTaskModal({
@@ -108,13 +108,16 @@ export function MergeIntoMainTaskModal({
   const searching =
     keyword.trim().length >= SEARCH_MIN_LENGTH &&
     (searchTerm.length < SEARCH_MIN_LENGTH || searchQuery.isFetching);
+  // 下限为 1 时不再回显「至少 1 个字符」，只有下限大于 1 才需要把门槛写进提示。
+  const minLengthHint =
+    SEARCH_MIN_LENGTH > 1 ? `（至少 ${SEARCH_MIN_LENGTH} 个字符）` : "";
   // 弹层空态：搜索不可用、检索中、未达最小长度、确实无匹配。
   const notFoundText = searchFailed
     ? "搜索暂时不可用，请稍后重试。"
     : searching
       ? "正在搜索任务…"
       : keyword.trim().length < SEARCH_MIN_LENGTH
-        ? `输入任务编号或标题（至少 ${SEARCH_MIN_LENGTH} 个字符），仅搜索当前项目。`
+        ? `输入任务编号或标题${minLengthHint}，仅搜索当前项目。`
         : NO_MATCH_TEXT;
   // 已选主任务会保留在 options 里（触发器要显示标题），所以远端无匹配时弹层非空、
   // notFoundContent 不会渲染；此时在下方补同一句无匹配提示，免得像「命中」了。

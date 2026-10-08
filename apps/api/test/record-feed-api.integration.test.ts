@@ -504,7 +504,7 @@ describe("GET /api/v1/change-records（B-3b 跨项目记录清单）", () => {
       "VALIDATION_FAILED",
     );
     await expectError(
-      "/api/v1/change-records?q=" + encodeURIComponent("a"),
+      "/api/v1/change-records?q=" + "x".repeat(201),
       memberCookie,
       422,
       "VALIDATION_FAILED",
@@ -650,7 +650,7 @@ describe("GET /api/v1/change-records（B-3b 跨项目记录清单）", () => {
     expect(empty.hasMore).toBe(false);
 
     await expectError(
-      "/api/v1/change-records?q=" + encodeURIComponent("a "),
+      "/api/v1/change-records?q=" + encodeURIComponent("   "),
       memberCookie,
       422,
       "INVALID_RECORD_FEED_QUERY",

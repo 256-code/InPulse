@@ -23,7 +23,7 @@ import {
  * 来源口径与设计师稿一致：MAIN = 未入聚合组的任务与聚合组主任务，
  * SOURCE = ACTIVE 聚合组的来源任务（已解除成员按普通任务处理），
  * MODULE = 无任务的模块级记录，FEATURE = 无任务的功能级记录。
- * q 复用 CHANGE_RECORD 全文投影；最短 2、最长 200 字，归一化后仍不足 2 字返回 422。
+ * q 复用 CHANGE_RECORD 全文投影；最短 1、最长 200 字（单字可搜），归一化后为空返回 422。
  * 排序固定 published_at DESC, id DESC（与单项目列表 listChangeRecords 一致）；
  * 游标为服务端 HMAC 签名，绑定 actor、命名空间与 projectId（null = 全部项目），
  * TTL 15 分钟；游标不得跨接口或跨项目复用。

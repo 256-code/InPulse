@@ -8,7 +8,6 @@ import {
   describeSearchError,
   isValidSearchQuery,
   SEARCH_MAX_LENGTH,
-  SEARCH_MIN_LENGTH,
   useSearchInfiniteQuery,
 } from "@features/search/search-query";
 import { searchResultPath } from "@features/search/search-destination";
@@ -274,10 +273,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   );
 
   // 空查询不展示提示：占位符已说明可搜索对象，下方直接是快捷操作列表。
+  // 下限为 1 后非空即合法，只有超长才需要提示。
   const searchHint: string | null = !canSearch
-    ? normalizedQuery.length === 0
-      ? null
-      : `请输入 ${SEARCH_MIN_LENGTH}～${SEARCH_MAX_LENGTH} 个字符进行搜索。`
+    ? normalizedQuery.length > SEARCH_MAX_LENGTH
+      ? `搜索词最多 ${SEARCH_MAX_LENGTH} 个字符。`
+      : null
     : search.isError
       ? describeSearchError(search.error)
       : search.isPending

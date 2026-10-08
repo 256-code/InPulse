@@ -77,15 +77,36 @@ describe("useSearchInfiniteQuery", () => {
     });
   });
 
-  it("does not issue a request for a query shorter than two characters", () => {
+  it("does not issue a request for an empty query", () => {
     const getSearch = vi.fn();
     const client = { getSearch } as unknown as InpulseApiClient;
     const { wrapper } = createQueryWrapper();
 
-    renderHook(() => useSearchInfiniteQuery({ query: "a", client }), {
+    renderHook(() => useSearchInfiniteQuery({ query: "   ", client }), {
       wrapper,
     });
 
     expect(getSearch).not.toHaveBeenCalled();
+  });
+
+  it("issues a request for a single-character query", async () => {
+    const getSearch = vi.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+    const client = { getSearch } as unknown as InpulseApiClient;
+    const { wrapper } = createQueryWrapper();
+
+    renderHook(() => useSearchInfiniteQuery({ query: "甲", client }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(getSearch).toHaveBeenCalledTimes(1));
+    expect(getSearch).toHaveBeenCalledWith({
+      q: "甲",
+      cursor: undefined,
+      limit: 20,
+    });
   });
 });

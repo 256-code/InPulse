@@ -245,7 +245,7 @@ export class RecordFeedQueryService {
     };
   }
 
-  /** 归一化并校验 q；nil 表示不启用全文过滤，非法（含归一化后不足 2 字）返回 422。 */
+  /** 归一化并校验 q；nil 表示不启用全文过滤，非法（含归一化后为空）返回 422。 */
   private resolveQuery(q: string | undefined): string | null {
     if (q === undefined) {
       return null;
