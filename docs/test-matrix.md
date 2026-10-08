@@ -4714,3 +4714,64 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | CLEANUP-DEAD-CSS-REBASE-001 | 浏览器实测 | rebase 到 `5149d2a` 后复验 | 18 条路由「全 DOM 几何 + 计算样式」15 条逐字段一致；3 条差异全部可解释（`module-tasks` 本批有意的四列 319px、`admin-settings` 由「归档」改「删除」后的文案宽度、`admin-audit` 懒加载行数） | 本地通过 |
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、`test:integration`、Playwright E2E、镜像构建与 GitHub Actions（尚未提交推送）。② 死样式清除已在本批做完整：先按「被删 `className` 反查」清 7 处，再用脚本化口径做全量清除（该类名在 `apps/web/src` 全部 `.css` 里有定义、在全部 `.tsx/.ts/.html` 里无独立词引用、且不以任何代码拼接前缀开头），两轮共删 264 个整块死规则 + 16 处选择器裁剪并清掉空 `@media` 包裹；样式表里已无「代码零引用的活规则」。③ `CommandPalette.tsx:181` 的 `hint` 仍待用户定案。④ 未新增依赖、`pnpm-lock.yaml` 未动；按 §8 本批含前端产品代码与文档，需非作者人工评审。
+
+## 弹窗打开「闪一下」：遮罩与面板分两帧上屏（用户指示「方案2实行」，2026-10-08 本地落库，尚未提交）
+
+用户先问「我很好奇为什么经常会出现点开弹窗会闪一下」，在看过三个方案的真实抓帧对照页后回「方案2实行」；只淡遮罩落地后复看反馈「好像变化有点开始慢后面突然出现」，于是追加「面板也一起淡入」（见下文「追加」小节）。纯前端：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权、幂等策略，也不改依赖。
+
+承接 2026-09-30 的「弹窗首帧尺寸」那条（用户同一句反馈「弹窗是从大然后闪成小的」，当时判为等待态与真内容不同高，已修）。本次重新定位，结论是同一个抱怨下还压着**另一个机制**：那条管的是「盒子自身尺寸跳」，本次是「遮罩先上屏、盒子晚一帧」。
+
+### 诊断（一次性 Playwright 探针 + CDP screencast，脚本写在 `.data/`，验证后不入库）
+
+- 盒子几何没问题：逐帧 `requestAnimationFrame` 采样，`.surface-modal` 出现的第一帧就是终态（新建任务 `840×844`、生成总结 `1180×792`），`transform` 全程 `none`（`apps/web/src/app/theme/theme.ts` 的 `motion: false` 生效），没有尺寸或位置跳变。
+- 跳的是「已绘制帧」：CDP `Page.startScreencast` 逐帧取画面中央采样点，`/records` 生成总结依次为 `255,255,255`（页面）→ `95,108,124`（整屏被压暗 + 模糊，**弹窗还没有**）→ `255,255,255`（弹窗白盒）。中间那一帧就是用户看到的「闪」。
+- 空档时长（1440×900、dev 站、每次打开 3 次采样）：生成总结 72/33/34ms，新建任务 27/29/28ms——会随机器负载在 0–84ms 之间波动，所以是「经常」而不是「每次」。
+- 排除项两条：① 关掉背景模糊（`blur(7px)` → `none`）空档从 ~27ms 压到 ~15ms、压不到 0；② 去掉 `.surface-modal` 的 `will-change: opacity`（取消合成层提升）仍是 29–32ms。blur 与合成层提升都只是把窗口撑大，不是根因。
+- 根因：遮罩与弹窗面板是两个独立元素、两个合成层。遮罩是纯色 + 模糊，栅格化快、先提交上屏；面板里有文字、输入框、阴影，这一层要晚一帧才栅格化完。rc-dialog 的结构也印证两者不同路——`.ant-modal-mask` 拿立刻为真的 `visible`（`@rc-component/dialog/es/Dialog/index.js:148`），面板拿 `visible && animatedVisible`（`:169`），而 `animatedVisible` 只在 `useEffect` 里置真（`:118-132`）。
+
+### 三个方案的真实抓帧对照（对照页 `.data/annotations/modal-flash-options.html`，未入库）
+
+| 方案 | 做法 | 空档实测（生成总结 3 次 / 新建任务 3 次） | 判定 |
+| --- | --- | --- | --- |
+| 现状 | — | 72/33/34 · 27/29/28 ms | 闪 |
+| 方案1 | 遮罩外观挪到 `.ant-modal-wrap` 做单层合成 | 31/36/32 · 26/29/28 ms；再叠加去掉 `will-change` 也只到 27–43ms | 无效 |
+| 方案2 | 遮罩 160ms 淡入 | 6 组采样均无空档 | 有效 |
+| 方案3 | 背景模糊降到 2px | 34/31/34 · 28/32/29 ms | 只缓解 |
+
+### 落库内容（方案2，用户选定）
+
+- `apps/web/src/styles/antd-adapter.css`：`.surface-modal-root .ant-modal-mask` 原来的 `animation: none` 换成 `animation: surface-mask-in 160ms linear both`，新增 `@keyframes surface-mask-in`（`opacity: 0 → 1`），并按仓库既有约定补 `@media (prefers-reduced-motion: reduce) { animation: none }` 兜底。
+- 只改外观层：弹窗面板的渲染结构、盒子几何与静止外观都不变。原 `animation: none` 存在的原因写在该处注释里（它本来是挡 antd 在 `motion: false` 下仍会挂上的 `ant-fade-*` 类——0s 动画 + `fill-mode: both` 会让遮罩停在一帧透明态）。
+- 复验：改后 6 组抓帧空档全部为 0，抓不到任何「只有遮罩」的帧；关闭后复开时遮罩计算值为 `opacity` 从 0 起、`animationName: surface-mask-in`、`0.16s` 渐到 1，说明遮罩元素每次打开都会重建、动画重新跑；该帧遮罩的 `class` 只有 `ant-modal-mask`、没有 `ant-fade-*`，未与 antd 动效类冲突。
+- 与全局 `motion: false` 的关系：本批是用户指定的、只作用于「打开」这一下的 160ms 渐显（遮罩 + 面板）；静止外观与 `prefers-reduced-motion` 下的行为都与改前一致，`apps/web/src/app/theme/theme.ts` 未改。
+
+### 追加：面板也一起淡入（用户复看反馈「好像变化有点开始慢后面突然出现」）
+
+只淡遮罩时，压在背景上的那一层是慢慢来的、弹窗面板仍一帧蹦出来，读起来就是「开始慢、后面突然出现」。根因是面板与遮罩的挂载方式不同：遮罩每次打开都重建元素，面板却常驻——关闭只是让 `.ant-modal-wrap` 变成 `display: none`（2026-10-08 探针实测：关闭后 `.surface-modal` 仍在 DOM、`display: flex`，先打上的 `dataset` 标记也还在），所以给面板加 `animation` 只在首次挂载时跑一次、复开就不动了。
+
+改法：给 `.surface-modal-wrap.ant-modal-wrap` 加 `transition: opacity 160ms linear`，再配 `@starting-style { .surface-modal-wrap.ant-modal-wrap { opacity: 0 } }`，给「`display` 由 `none` 变 `block`」那一帧一个起始值——这正是 `@starting-style` 的设计用途。两处同为 160ms linear，压暗与盒子一起渐显。
+
+实测（无头 Chromium、1440×900、`/tasks` 新建任务）：
+
+| 取样 | 结果 |
+| --- | --- |
+| 首次打开逐帧计算值 | `wrap` 与 `mask` 的 `opacity` 同步 0 → 0.10 → 0.21 → 0.42 → 0.63 → 0.73 → 0.94 → 1；全程盒子矩形恒为 `840×844@300,28` |
+| 关闭后复开 | 同样从 0 起同步渐到 1（`@starting-style` 对 `display: none → block` 生效） |
+| 已绘制帧（盒内 / 盒外采样） | `+77ms 238/226 → +104ms 221/211 → +136ms 216/181 → +166ms 218/150 → +200ms 233/118 → +228ms 255/93`，逐帧连续，没有「一帧跳满」 |
+| `prefers-reduced-motion: reduce` | `wrap` `opacity: 1`、`transition-duration: 0s`、`mask` `animation-name: none`、矩形仍 `840×844`——瞬时出现，不会卡在透明态 |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MODAL-MASK-FRAME-BROWSER-001 | 浏览器实测（逐帧绘制帧） | 空档消失 | 生成总结与新建任务各 3 次抓帧，空档全为 0，无「只有遮罩」的帧 | 本地通过 |
+| MODAL-MASK-FRAME-BROWSER-002 | 浏览器实测（关闭后复开） | 淡入每次都跑 | `animationName: surface-mask-in`、`0.16s`、`opacity` 0→1；遮罩 `class` 无 `ant-fade-*` | 本地通过 |
+| MODAL-MASK-FRAME-BROWSER-003 | 浏览器实测（对照组） | 排除干扰项 | 去 `blur` 后空档 ~15ms、去 `will-change` 仍 29–32ms、把外观挪到 wrap 仍 26–43ms | 本地通过 |
+| MODAL-MASK-FRAME-UNIT-001 | Web 单元 | 不破坏既有用例 | `pnpm --filter @inpulse/web test` → 90 文件 630 例全绿 | 本地通过 |
+| MODAL-MASK-FRAME-E2E-001 | 浏览器 E2E | 关键路径回归 | `E2E_DATABASE_URL=…/app_e2e pnpm test:e2e` → 64 passed（5.2 分钟，0 失败） | 本地通过 |
+| MODAL-MASK-FRAME-GATE-001 | 静态门禁 | 格式、lint、类型 | 改动集 `pnpm exec prettier --check`、`pnpm lint`、`pnpm --filter @inpulse/web run typecheck` 全部 exit 0 | 本地通过 |
+| MODAL-MASK-FRAME-BROWSER-004 | 浏览器实测（逐帧计算值） | 面板与遮罩同步渐显 | 首次与复开都是 `opacity` 0→1 同步上升；盒子矩形全程 `840×844@300,28` | 本地通过 |
+| MODAL-MASK-FRAME-BROWSER-005 | 浏览器实测（已绘制帧） | 不再「一帧蹦出」 | 盒内/盒外采样逐帧连续（238/226 → … → 255/93），无跳满帧 | 本地通过 |
+| MODAL-MASK-FRAME-BROWSER-006 | 浏览器实测（reduced-motion） | 偏好关动效时瞬时出现 | `transition-duration: 0s`、`animation-name: none`、`opacity: 1`、矩形 `840×844` | 本地通过 |
+
+本地实际执行（2026-10-08）：`pnpm exec prettier --check apps/web/src/styles/antd-adapter.css`；`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_e2e pnpm test:e2e`（**64 passed，5.2 分钟**）。上一批前端交互按 2026-09-17 前端免测试指示未跑测试，本批照常跑齐。
+
+未运行 / 已知偏差：① 空档时长受机器负载影响（实测波动 0–84ms），「方案2 无空档」是本次 6 组采样的结论，不是保证值；② 未在 Firefox / Safari 复核，其它合成器的分帧行为未验证；③ 淡入只作用于打开，关闭仍是瞬时消失（与改前一致）；④ 面板淡入依赖 `@starting-style`（Chrome 117+ / Safari 17.5+ / Firefox 129+）：不支持的浏览器退化为「面板瞬现 + 遮罩淡入」，即本条改动前的结果，不会出现卡在透明态；⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
