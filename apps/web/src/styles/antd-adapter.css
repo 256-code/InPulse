@@ -26,7 +26,22 @@
   /* 方案 M2：深蓝 65% + blur 7px，把背景压得更沉、焦点集中在弹层上。 */
   background: #0d2038a6;
   backdrop-filter: blur(7px);
-  animation: none;
+  /* 遮罩与弹窗面板是两个合成层：遮罩（纯色 + 模糊）栅格化快、先上屏，面板要晚一帧才
+   * 栅格化完，中间会露出「只有遮罩、还没有弹窗」的一帧，肉眼就是打开时闪一下（2026-10-08
+   * 实测空档 27–72ms，机器越慢越长）。给遮罩一段 160ms 淡入后，那一帧的遮罩还在近乎
+   * 透明的起步段，实测空档降到 0。
+   * 这里原来写 `animation: none`，是为了挡住 antd 在 `motion: false` 下仍会挂上的
+   * `ant-fade-*` 类（0s 动画 + `fill-mode: both` 会让遮罩停在一帧透明态）。 */
+  animation: surface-mask-in 160ms linear both;
+}
+
+@keyframes surface-mask-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 原型里 .surface-modal.task-side-modal::backdrop 关掉了模糊 */
@@ -38,6 +53,28 @@
  * 保留它才能让「点遮罩关闭」和 rc-dialog 的 mousedown 判定继续工作。 */
 .surface-modal-wrap.ant-modal-wrap {
   overflow: hidden;
+  /* 面板这一层也淡入：遮罩是独立元素、每次打开都重建，面板却常驻（关闭只是让 wrap 变
+   * `display: none`），所以面板只能用「起始样式 + 过渡」——`animation` 只在元素首次挂载
+   * 时跑一次，复开就不动了（2026-10-08 实测：关闭后 `.surface-modal` 仍在 DOM 里、元素
+   * 未被重建）。用户反馈「开始慢后面突然出现」正是因为只淡了遮罩：背景慢慢压暗、盒子仍
+   * 硬蹦出来。两处同为 160ms linear，压暗与盒子才是一起渐显。 */
+  transition: opacity 160ms linear;
+}
+
+@starting-style {
+  .surface-modal-wrap.ant-modal-wrap {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface-modal-root .ant-modal-mask {
+    animation: none;
+  }
+
+  .surface-modal-wrap.ant-modal-wrap {
+    transition: none;
+  }
 }
 
 /* antd 给 .ant-modal 挂了 pointer-events:none（让遮罩可点）与 resetComponent 的字体/
