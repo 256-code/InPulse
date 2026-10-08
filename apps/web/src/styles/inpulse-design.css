@@ -21,10 +21,6 @@
   box-shadow: 0 1px 2px #10253e0d;
 }
 
-.catalog-panel .ant-card-body {
-  padding: 22px 24px;
-}
-
 /* 弹层盒面、宽度档、头部与滚动结构由 features/common/components/AppModal.tsx 的
  * `modalRender` 承担：`.drawer-header`、正文容器与 `.calm-action-footer` 都是 `.surface-modal`
  * 的直接子级，样式全部来自 design-system.css。antd 原生 header/body/footer 已不再渲染，
@@ -786,70 +782,6 @@
   margin-top: 28px;
 }
 
-.activity-project-search {
-  width: 340px;
-}
-
-.activity-project-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 760px;
-}
-
-.activity-project-result {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid #e1e8f0;
-  border-radius: 9px;
-  background: #ffffff;
-  padding: 15px 17px;
-  color: #728297;
-  text-align: left;
-}
-
-.activity-project-result:hover {
-  border-color: #86afd7;
-  background: #f7fbfe;
-}
-
-.activity-project-result > span:nth-child(2) {
-  flex: 1;
-  min-width: 0;
-}
-
-.activity-project-result strong {
-  display: block;
-  color: #2f4a63;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activity-project-result small {
-  display: block;
-  margin-top: 4px;
-  color: #8b9aab;
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activity-project-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 8px;
-  background: #e9f4fc;
-  color: #3183ba;
-}
-
 @keyframes activity-spin {
   to {
     transform: rotate(360deg);
@@ -865,8 +797,7 @@
     align-items: stretch;
   }
 
-  .activity-toolbar .task-search,
-  .activity-project-search {
+  .activity-toolbar .task-search {
     width: 100%;
   }
 
@@ -1040,11 +971,6 @@
   gap: 16px;
 }
 
-.calm-feature-card.card-archived {
-  background: #fbfcfd;
-  opacity: 0.92;
-}
-
 .card-footer > span {
   display: inline-flex;
   align-items: center;
@@ -1065,12 +991,6 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.tag-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 /* 页面标题行：返回箭头紧贴标题，取代原先的文字面包屑行。 */
@@ -1119,15 +1039,6 @@
 .title-back-button:hover {
   color: #1d5fa8;
   background: #dbe9fa;
-}
-
-.modal-badges,
-.detail-badges {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 13px;
 }
 
 .feature-reading {
@@ -1452,13 +1363,6 @@
   border: 0;
 }
 
-.calm-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .merge-panel .calm-section-title {
   margin-bottom: 0;
 }
@@ -1651,36 +1555,8 @@
   flex-wrap: wrap;
 }
 
-.calm-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  border: 2px solid #d9e7f5;
-  border-top-color: #2c78bb;
-  border-radius: 50%;
-  animation: inpulse-spin 0.8s linear infinite;
-}
-
-@keyframes inpulse-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .member-success {
   margin: 0 0 18px;
-}
-
-.member-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px;
-  border: 1px solid #dfe7ef;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 2px 8px #17355208;
 }
 
 .member-history-list {
@@ -1750,26 +1626,6 @@
   justify-content: flex-end;
 }
 
-.member-history-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid #dcecf8;
-  border-radius: 8px;
-  background: #f1f8fe;
-  color: #5b7892;
-  font-size: 11px;
-  line-height: 1.8;
-}
-
-.member-history-note svg {
-  flex: 0 0 auto;
-  color: #3b88c6;
-  margin-top: 3px;
-}
-
 .member-candidate-list {
   max-height: 260px;
   overflow-y: auto;
@@ -1798,10 +1654,6 @@
   background: #b8413c !important;
   border-color: #b8413c !important;
   color: #ffffff !important;
-}
-
-.modal-loading {
-  min-height: 82px;
 }
 
 .member-task-list {

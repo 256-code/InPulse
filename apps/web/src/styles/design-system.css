@@ -337,15 +337,6 @@ button {
   padding: 22px 20px 19px;
   color: white;
 }
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: #1597b9;
-  color: white;
-}
 .brand strong {
   display: block;
   font-size: 15px;
@@ -373,12 +364,6 @@ button {
 }
 .workspace > svg {
   margin-left: auto;
-}
-.workspace-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #42d3c7;
 }
 .nav-group {
   padding: 0 12px;
@@ -745,11 +730,7 @@ button {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-.sidebar-footer .muted-icon {
-  margin-left: auto;
-}
-/* 底部工具条：身份区作为账户菜单锚点自适应收窄，搜索与通知图标常驻。
+} /* 底部工具条：身份区作为账户菜单锚点自适应收窄，搜索与通知图标常驻。
    选择器必须限定在 .footer-account-text 内：账户弹层也挂在这个底栏里，
    用过宽的 .sidebar-footer strong/small 会把弹层文字也一并改写。 */
 .sidebar-footer .footer-account-wrap {
@@ -812,28 +793,12 @@ button {
   right: auto;
   left: 0;
 }
-.user-avatar,
-.mini-avatar,
 .activity-avatar,
 .person-avatar {
   display: grid;
   place-items: center;
   border-radius: 50%;
   font-weight: 700;
-}
-.user-avatar {
-  width: 29px;
-  height: 29px;
-  background: #d9ecf8;
-  color: #27749b;
-  font-size: 10px;
-}
-.mini-avatar {
-  width: 29px;
-  height: 29px;
-  background: #dcecff;
-  color: #2362b2;
-  font-size: 10px;
 }
 .content-shell {
   min-width: 0;
@@ -1045,17 +1010,6 @@ button {
   gap: 4px;
   font-size: 12px;
 }
-.overview-grid {
-  display: grid;
-  grid-template-columns: 1.25fr 0.75fr;
-  gap: 18px;
-  margin-bottom: 18px;
-}
-.bottom-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 18px;
-}
 .panel {
   background: white;
   border: 1px solid var(--border);
@@ -1078,26 +1032,12 @@ button {
   color: #8a98a8;
   font-size: 11px;
 }
-.project-row,
-.attention-row,
-.iteration-row,
 .module-card,
 .project-card {
   border: 0;
   background: white;
   text-align: left;
 }
-.project-row {
-  width: 100%;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 20px;
-  border-top: 1px solid #edf1f5;
-}
-.project-row:hover,
-.attention-row:hover,
-.iteration-row:hover,
 .module-card:hover,
 .project-card:hover {
   background: #f8fbfe;
@@ -1125,196 +1065,11 @@ button {
   color: #aa7215;
   background: #fff0d0;
 }
-.project-meta {
-  flex: 1;
-  min-width: 0;
-}
-.project-meta strong,
-.project-meta span {
-  display: block;
-}
-.project-meta strong {
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-.project-meta span {
-  color: #8795a5;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.progress-line {
-  height: 5px;
-  background: #edf2f6;
-  border-radius: 6px;
-  overflow: hidden;
-  margin-top: 11px;
-}
-.progress-line i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #2c9cc2;
-}
-.project-progress {
-  text-align: right;
-}
-.project-progress strong,
-.project-progress small {
-  display: block;
-}
-.project-progress strong {
-  color: #2778bc;
-}
-.project-progress small {
-  color: #8c99a7;
-  font-size: 10px;
-  margin-top: 4px;
-}
-.row-arrow {
-  color: #a4b0bc;
-}
-.chart {
-  height: 175px;
-  display: flex;
-  padding: 15px 21px 0 18px;
-  gap: 10px;
-}
-.chart-y {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding-bottom: 22px;
-  color: #a2afbc;
-  font-size: 10px;
-}
-.chart-bars {
-  border-bottom: 1px solid #e5ebf0;
-  flex: 1;
-  display: flex;
-  justify-content: space-around;
-  gap: 10px;
-  align-items: stretch;
-  background: linear-gradient(
-    #fff 24%,
-    #f1f4f7 25%,
-    #fff 26%,
-    #fff 49%,
-    #f1f4f7 50%,
-    #fff 51%,
-    #fff 74%,
-    #f1f4f7 75%,
-    #fff 76%
-  );
-}
-.bar-group {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.bars {
-  height: 140px;
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-}
-.bars i,
-.bars b {
-  display: block;
-  width: 8px;
-  border-radius: 2px 2px 0 0;
-}
-.bars i {
-  background: #4a93d5;
-}
-.bars b {
-  background: #b4e2e6;
-}
-.bar-group small {
-  color: #8e9bac;
-  font-size: 10px;
-  padding-bottom: 8px;
-}
-.chart-legend {
-  padding: 0 20px 14px;
-  display: flex;
-  gap: 17px;
-  color: #8391a2;
-  font-size: 10px;
-}
-.chart-legend span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.chart-legend i {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-}
-.legend-done {
-  background: #4a93d5;
-}
-.legend-new {
-  background: #b4e2e6;
-}
-.attention-list,
-.activity-list {
-  padding: 0 20px 12px;
-}
-.attention-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #edf1f5;
-  padding: 12px 0;
-}
-.attention-row > div:nth-child(2) {
-  flex: 1;
-  min-width: 0;
-}
-.attention-row strong,
-.attention-row small {
-  display: block;
-}
-.attention-row strong {
-  font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-.attention-row small {
-  color: #96a1ae;
-  margin-top: 4px;
-  font-size: 10px;
-}
-.priority-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-.priority-dot.high {
-  background: #e06b6b;
-}
-.priority-dot.medium {
-  background: #e4aa45;
-}
 .due {
   color: #8d9baa;
   font-size: 10px;
   width: 48px;
   text-align: right;
-}
-.activity-row {
-  display: flex;
-  gap: 10px;
-  padding: 10px 0;
-  border-top: 1px solid #edf1f5;
 }
 .activity-avatar {
   flex: 0 0 27px;
@@ -1323,29 +1078,6 @@ button {
   background: #e5f1fb;
   color: #3f80bf;
   font-size: 11px;
-}
-.activity-row span,
-.activity-row b,
-.activity-row small {
-  display: block;
-}
-.activity-row span {
-  color: #78889a;
-  font-size: 11px;
-}
-.activity-row span strong {
-  display: inline;
-  color: #31475e;
-}
-.activity-row b {
-  font-weight: 500;
-  font-size: 11px;
-  margin-top: 4px;
-}
-.activity-row small {
-  color: #a0abb7;
-  font-size: 10px;
-  margin-top: 4px;
 }
 .badge {
   display: inline-flex;
@@ -1453,7 +1185,6 @@ button {
   flex-direction: column;
 }
 .card-top,
-.card-progress > div:first-child,
 .card-footer {
   display: flex;
   justify-content: space-between;
@@ -1471,17 +1202,6 @@ button {
   line-height: 1.6;
   min-height: 36px;
 }
-.card-progress {
-  margin: 20px 0 16px;
-}
-.card-progress span,
-.card-progress strong {
-  color: #78899b;
-  font-size: 10px;
-}
-.card-progress strong {
-  color: #2c78bb;
-}
 .card-footer {
   padding-top: 13px;
   border-top: 1px solid #edf1f5;
@@ -1492,17 +1212,7 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
-}
-.module-section {
-  padding-bottom: 16px;
-}
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 0 18px;
-}
-/* 旧版模块卡自己的盒模型规则已删除（2026-09-24）：`.module-card` 现在总是与
+} /* 旧版模块卡自己的盒模型规则已删除（2026-09-24）：`.module-card` 现在总是与
    `.calm-feature-card` 同时出现，边框/圆角/内边距早已由后者按 (0,1,0) 的同特异性
    + 更晚的源码顺序接管；剩下的 `display` 同样被接走，而 `align-items: flex-start`
    与 `gap: 10px` 在卡片改成纵向 flex 之后开始泄漏——前者让卡内各段不再撑满整宽
@@ -1648,16 +1358,6 @@ button {
 /* 任务中心项目筛选：与遗留问题 / 迭代记录页同口径（全部项目 / 单项目）。
    2026-09-20 起去掉与下拉内容重复的「项目」文字标签，只留下拉本身；
    .toolbar 默认 space-between，下拉仍需靠左，由 .task-toolbar 自行保证。 */
-.table-summary {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  color: #8794a2;
-  font-size: 11px;
-  border-bottom: 1px solid var(--border);
-}
 .table-wrap {
   overflow-x: auto;
 }
@@ -1701,11 +1401,6 @@ td small {
   font-size: 10px;
   margin-top: 5px;
 }
-.person {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
 .person-avatar {
   width: 24px;
   height: 24px;
@@ -1713,125 +1408,11 @@ td small {
   color: #3476b5;
   font-size: 10px;
 }
-.person.large {
-  justify-content: flex-start;
-}
-.person.large span {
-  color: #8998a8;
-  margin-left: 4px;
-  font-size: 11px;
-}
-.iteration-layout {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 18px;
-}
-.timeline-panel {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-}
-.iteration-row {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  width: 100%;
-  padding: 20px;
-  border-bottom: 1px solid #edf1f5;
-}
-.iteration-row:last-child {
-  border-bottom: 0;
-}
 .version {
   color: #2776bd;
   font-weight: 700;
   font-size: 12px;
   width: 35px;
-}
-.iteration-row > div:nth-child(2) {
-  flex: 1;
-}
-.iteration-row strong,
-.iteration-row span,
-.iteration-row small {
-  display: block;
-}
-.iteration-row strong {
-  color: #273b51;
-}
-.iteration-row span {
-  color: #778a9d;
-  font-size: 11px;
-  margin-top: 5px;
-}
-.iteration-row small {
-  color: #9ca8b4;
-  font-size: 10px;
-  margin-top: 8px;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.iteration-detail {
-  padding: 24px;
-}
-.iteration-detail h2 {
-  margin: 10px 0 6px;
-  font-size: 19px;
-}
-.detail-sub {
-  color: #8795a3;
-  margin: 0 0 25px;
-}
-.detail-block {
-  border-top: 1px solid #edf1f5;
-  padding: 16px 0;
-}
-.detail-block h3,
-.drawer-section h3 {
-  font-size: 11px;
-  margin: 0 0 8px;
-  color: #546b82;
-}
-.detail-block p {
-  line-height: 1.65;
-  margin: 0;
-  color: #6b7d90;
-  font-size: 12px;
-}
-.verification {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #41845e;
-  background: #f0faf3;
-  margin-top: 7px;
-  padding: 8px 10px;
-  font-size: 11px;
-  border-radius: 4px;
-}
-.evidence {
-  display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  padding: 13px;
-  background: #f6f9fc;
-  border-radius: 5px;
-  color: #4c79a8;
-}
-.evidence strong,
-.evidence a {
-  display: block;
-}
-.evidence strong {
-  color: #60778e;
-  font-size: 11px;
-}
-.evidence a,
-.github-link {
-  color: #3179bd;
-  margin-top: 5px;
-  font-size: 11px;
 }
 .callout {
   display: flex;
@@ -2075,14 +1656,6 @@ td small {
   display: flex;
   justify-content: flex-end;
 }
-.drawer {
-  width: 485px;
-  height: 100%;
-  background: white;
-  padding: 25px 27px;
-  overflow-y: auto;
-  box-shadow: -7px 0 25px #16324d1b;
-}
 .drawer-header {
   display: flex;
   justify-content: space-between;
@@ -2093,85 +1666,6 @@ td small {
   line-height: 1.4;
   margin: 7px 0 0;
 }
-.drawer-actions {
-  display: flex;
-  gap: 8px;
-  margin: 24px 0 15px;
-}
-.drawer-status {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #edf1f5;
-}
-.drawer-status > span {
-  margin-left: auto;
-  color: #8b98a6;
-  font-size: 11px;
-}
-.drawer-section {
-  border-bottom: 1px solid #edf1f5;
-  padding: 18px 0;
-}
-.drawer-section p {
-  line-height: 1.7;
-  color: #718196;
-  margin: 0;
-}
-.source-card {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #3d7ebc;
-  background: #f6f9fc;
-  padding: 12px;
-  border-radius: 5px;
-}
-.source-card div {
-  flex: 1;
-}
-.source-card strong,
-.source-card span {
-  display: block;
-}
-.source-card strong {
-  color: #344e67;
-  font-size: 11px;
-}
-.source-card span {
-  color: #8796a5;
-  font-size: 10px;
-  margin-top: 4px;
-}
-.github-link {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  text-decoration: none;
-}
-.mini-timeline {
-  display: grid;
-  grid-template-columns: 10px 1fr;
-  gap: 4px 8px;
-}
-.mini-timeline > span {
-  width: 7px;
-  height: 7px;
-  background: #5b9ccc;
-  border-radius: 50%;
-  margin-top: 4px;
-}
-.mini-timeline p {
-  margin: 0;
-  color: #74869a;
-  font-size: 11px;
-}
-.mini-timeline p small {
-  display: block;
-  color: #a0abb7;
-  margin-top: 3px;
-}
 .dialog {
   width: 530px;
   align-self: center;
@@ -2180,19 +1674,6 @@ td small {
   border-radius: 8px;
   padding: 23px;
   box-shadow: 0 15px 50px #13294233;
-}
-.dialog-head {
-  display: flex;
-  justify-content: space-between;
-}
-.dialog-head h2 {
-  margin: 0 0 6px;
-  font-size: 17px;
-}
-.dialog-head p {
-  color: #8190a0;
-  margin: 0;
-  font-size: 11px;
 }
 .dialog-form {
   display: flex;
@@ -2244,14 +1725,6 @@ td small {
   gap: 5px;
   align-items: center;
 }
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  border-top: 1px solid #edf1f5;
-  margin-top: 22px;
-  padding-top: 17px;
-}
 .toast {
   position: fixed;
   z-index: 50;
@@ -2266,9 +1739,6 @@ td small {
   align-items: center;
   gap: 8px;
   box-shadow: 0 8px 25px #16365333;
-}
-.muted-icon {
-  color: #a2afbc;
 }
 .project-detail-head {
   display: flex;
@@ -2447,48 +1917,7 @@ td small {
   font-size: 20px;
   letter-spacing: -0.3px;
 }
-.project-section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.project-section-head h2 {
-  margin: 8px 0 5px;
-  font-size: 19px;
-}
-.project-section-head p {
-  margin: 0;
-  color: #8090a1;
-  font-size: 12px;
-}
-.task-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.task-card {
-  min-height: 208px;
-  padding: 21px;
-  border: 1px solid #dce6ee;
-  border-radius: 9px;
-  background: white;
-  text-align: left;
-  box-shadow: 0 3px 10px #17355208;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-  cursor: pointer;
-}
-.task-card:hover {
-  transform: translateY(-2px);
-  border-color: #8ab9d8;
-  box-shadow: 0 8px 20px #17355212;
-}
-.task-card-top,
-.task-card-footer,
-.task-card-meta {
+.task-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2500,42 +1929,10 @@ td small {
   font-size: 10px;
   letter-spacing: 0.4px;
 }
-.task-card h3 {
-  color: #243b54;
-  font-size: 15px;
-  line-height: 1.5;
-  margin: 25px 0 7px;
-}
-.task-card > p {
-  color: #8090a1;
-  font-size: 11px;
-  margin: 0 0 22px;
-}
-.task-card-meta {
-  justify-content: flex-start;
-  color: #6e8194;
-  font-size: 11px;
-  padding-bottom: 17px;
-  border-bottom: 1px solid #edf1f5;
-}
-.task-card-meta > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
 .task-card-footer {
   padding-top: 15px;
   flex-wrap: wrap;
   row-gap: 6px;
-}
-.empty-project-tasks {
-  grid-column: 1 / -1;
-  padding: 40px;
-  text-align: center;
-  color: #7f91a3;
-  border: 1px dashed #cbd9e5;
-  border-radius: 8px;
-  background: #fbfdff;
 }
 @media (max-width: 700px) {
   .project-detail-title {
@@ -2551,15 +1948,6 @@ td small {
     flex: 1 1 120px;
     max-width: none;
   }
-  .project-section-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .task-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
 }
 
 @media (max-width: 1000px) {
@@ -2569,14 +1957,8 @@ td small {
   .page-content {
     padding: 27px 22px;
   }
-  .cards-grid,
-  .module-grid {
+  .cards-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .overview-grid,
-  .bottom-grid,
-  .iteration-layout {
-    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 700px) {
@@ -2607,8 +1989,7 @@ td small {
   .page-header h1 {
     font-size: 24px;
   }
-  .cards-grid,
-  .module-grid {
+  .cards-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .toolbar,
@@ -2624,10 +2005,6 @@ td small {
   }
   .table-panel {
     overflow: hidden;
-  }
-  .drawer {
-    width: 100%;
-    padding: 21px 18px;
   }
   .settings-layout {
     grid-template-columns: 1fr;
@@ -2669,13 +2046,6 @@ td small {
 }
 
 /* 原 Tailwind 提供的少量通用类，改由设计系统自带实现 */
-.bg-background {
-  background: var(--background);
-}
-.antialiased {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2690,16 +2060,8 @@ td small {
 
 /* Readability and task state refinements. */
 .panel-head p,
-.project-meta span,
-.project-progress small,
-.attention-row small,
-.activity-row small,
 td small,
-.due,
-.table-summary,
-.source-card span,
-.mini-timeline p small,
-.drawer-status > span {
+.due {
   color: #607286;
 }
 .badge {
@@ -2711,30 +2073,6 @@ td small,
 .badge-amber {
   color: #865b0d;
 }
-.drawer-status > .badge {
-  margin-left: 0;
-}
-.drawer-status > span:last-child {
-  margin-left: auto;
-}
-.task-title-button {
-  border: 0;
-  background: transparent;
-  color: #273b51;
-  padding: 0;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-}
-.task-title-button:hover {
-  color: #1467d8;
-  text-decoration: underline;
-}
-.empty-tasks {
-  padding: 40px 20px;
-  text-align: center;
-  color: #607286;
-}
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -2742,146 +2080,14 @@ a:focus-visible {
   outline: 2px solid #1467d8;
   outline-offset: 3px;
 }
-.github-link {
-  overflow-wrap: anywhere;
-}
-
 /* Personal task scopes and assignment. */
-.personal-scope {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: #59718a;
-  margin: -8px 0 22px;
-  font-size: 12px;
-}
-.personal-scope > span:last-child {
-  margin-left: auto;
-}
-.personal-work-grid {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 18px;
-  margin-bottom: 20px;
-}
-.personal-work-grid .attention-row {
-  padding: 18px 0;
-}
-.personal-status-list {
-  padding: 0 20px 20px;
-}
-.personal-status-list > div {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 0;
-}
-.personal-status-list .badge {
-  min-width: 56px;
-  justify-content: center;
-}
-.personal-status-list .progress-line {
-  flex: 1;
-  margin: 0;
-  height: 6px;
-}
 .view-description {
   color: #607286;
   font-size: 12px;
   margin: 0 0 22px;
 }
-.owner-select {
-  height: 36px;
-  padding: 0 10px;
-  width: 100%;
-  border: 1px solid #d6e1ec;
-  border-radius: 5px;
-  color: #304c67;
-  background: white;
-}
-.drawer-section .assignment-hint,
-.assignment-hint {
-  color: #607286;
-  font-size: 11px;
-  line-height: 1.6;
-  margin: 8px 0 0;
-}
-.task-relationships {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  color: #607286;
-  font-size: 11px;
-  margin-top: 14px;
-}
-.form-error {
-  color: #a6343f;
-  margin: 0;
-  font-size: 12px;
-}
-@media (max-width: 900px) {
-  .personal-work-grid {
-    grid-template-columns: 1fr;
-  }
-  .personal-scope > span:last-child {
-    margin-left: 0;
-    width: 100%;
-  }
-}
 
-/* Equal task participation. */
-.member-summary {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  color: #536d86;
-  font-size: 12px;
-}
-.member-summary svg {
-  flex-shrink: 0;
-}
-.member-picker {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-.member-picker legend {
-  font-size: 12px;
-  color: #536d86;
-  margin-bottom: 10px;
-}
-.member-picker > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.member-picker label,
-.dialog-form .member-picker label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #dce5ef;
-  border-radius: 6px;
-  padding: 10px 12px;
-  cursor: pointer;
-  color: #405c76;
-  background: #fff;
-}
-.member-picker label.is-selected {
-  border-color: #83b4e8;
-  background: #eff6ff;
-}
-.member-picker input {
-  width: 16px;
-  height: 16px;
-  accent-color: #1467d8;
-  margin: 0;
-}
-
-/* Member selection is staged until explicitly saved. */
+/* Equal task participation. */ /* Member selection is staged until explicitly saved. */
 .member-selection-top {
   display: flex;
   align-items: center;
@@ -2890,108 +2096,11 @@ a:focus-visible {
   font-size: 12px;
   color: #425d76;
 }
-.member-chips {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 10px;
-}
-.member-chips > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 9px;
-  background: #eef5fc;
-  border: 1px solid #dfebf7;
-  border-radius: 5px;
-  color: #355e83;
-  font-size: 12px;
-}
-.member-chips small {
-  color: #687d90;
-}
-.member-chips button {
-  border: 0;
-  background: transparent;
-  color: #486e90;
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-}
 .member-editor {
   background: #fbfdff;
   border: 1px solid #d7e3ef;
   border-radius: 8px;
   padding: 14px;
-}
-.member-editor .member-editor-hint {
-  font-size: 11px;
-  color: #647b91;
-  margin: 7px 0 12px;
-}
-.member-editor-filters {
-  display: flex;
-  gap: 8px;
-}
-.member-editor-filters input,
-.member-editor-filters select {
-  min-width: 0;
-  height: 35px;
-  padding: 0 8px;
-  background: white;
-  border: 1px solid #d6e1ec;
-  border-radius: 5px;
-  color: #405a72;
-  font-size: 12px;
-}
-.member-editor-filters input {
-  flex: 1;
-  width: 100%;
-}
-.member-editor-filters select {
-  max-width: 120px;
-}
-.member-editor .selected-only,
-.dialog-form .member-editor .selected-only {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 0;
-  font-size: 11px;
-  color: #597087;
-}
-.member-results {
-  max-height: 240px;
-  overflow-y: auto;
-  border: 1px solid #e1e8f0;
-  border-radius: 5px;
-  background: white;
-}
-.member-results label,
-.dialog-form .member-results label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-bottom: 1px solid #edf2f7;
-  cursor: pointer;
-  color: #304d67;
-  font-size: 12px;
-}
-.member-results label:last-child {
-  border-bottom: 0;
-}
-.member-results label.is-selected {
-  background: #eff6ff;
-}
-.member-results small {
-  display: block;
-  color: #687d90;
-  font-size: 10px;
-  margin-top: 3px;
 }
 .member-editor input[type="checkbox"] {
   width: 15px;
@@ -3000,57 +2109,9 @@ a:focus-visible {
   margin: 0;
   accent-color: #1467d8;
 }
-.member-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #657a90;
-  margin: 9px 0 12px;
-  gap: 8px;
-}
-.member-pagination > div {
-  display: flex;
-  gap: 8px;
-}
 .member-editor button:disabled {
   opacity: 0.45;
   cursor: default;
-}
-.member-selected {
-  border-top: 1px solid #dfe8f0;
-  padding-top: 10px;
-  font-size: 11px;
-  color: #526e88;
-}
-.member-selected .member-chips {
-  max-height: 105px;
-  overflow-y: auto;
-}
-.member-editor-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid #dfe8f0;
-  padding-top: 12px;
-  margin-top: 12px;
-}
-.member-editor-footer small {
-  color: #60778d;
-  font-size: 10px;
-}
-.member-editor-footer > div {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-.member-editor .member-editor-empty {
-  text-align: center;
-  padding: 24px 12px;
-  color: #687d90;
-  font-size: 12px;
 }
 .dialog {
   max-height: calc(100dvh - 40px);
@@ -3391,24 +2452,6 @@ a:focus-visible {
   font-size: 13px;
   line-height: 1.7;
 }
-.calm-drawer {
-  width: min(620px, 100%);
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-}
-.feature-drawer {
-  width: min(760px, 100%);
-}
-.calm-drawer .drawer-header {
-  flex-shrink: 0;
-  margin-bottom: 12px;
-}
-.calm-drawer .drawer-header h2 {
-  font-size: 23px;
-  line-height: 1.5;
-  margin-top: 10px;
-}
 .calm-subtitle {
   color: #6d8297;
   font-size: 13px;
@@ -3435,22 +2478,6 @@ a:focus-visible {
   border-color: #1467d8;
   font-weight: 600;
 }
-.calm-drawer-body {
-  padding-top: 25px;
-}
-.calm-drawer .calm-task-grid {
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-.calm-drawer .calm-task-card h3 {
-  height: auto;
-  margin-top: 14px;
-  /* 抽屉里卡片单列排列，没有跨卡对齐要求，标题保持完整显示。 */
-  -webkit-line-clamp: none;
-}
-.calm-drawer .calm-task-card {
-  padding: 19px;
-}
 .calm-task-actions {
   display: flex;
   align-items: center;
@@ -3473,8 +2500,7 @@ a:focus-visible {
   justify-content: flex-end;
   padding: 13px 4px 0;
 }
-.calm-description h3,
-.calm-member-section h3 {
+.calm-description h3 {
   font-size: 14px;
   color: #354f66;
   margin: 0 0 14px;
@@ -3484,11 +2510,6 @@ a:focus-visible {
   line-height: 1.9;
   color: #61788d;
   margin: 0;
-}
-.calm-member-section {
-  padding: 28px 0;
-  margin: 25px 0 0;
-  border-top: 1px solid #edf1f5;
 }
 .calm-disclosure {
   border-top: 1px solid #e6edf3;
@@ -3776,7 +2797,6 @@ a:focus-visible {
   margin-right: auto;
 }
 .view-description,
-.personal-scope,
 .task-toolbar > .secondary-button {
   display: none;
 }
@@ -3784,12 +2804,25 @@ a:focus-visible {
   opacity: 0.45;
   cursor: not-allowed;
 }
-/* 任务中心：窗口拉到最大时一行四张。内容区上限 1420px 与 236px 侧栏决定四列就是宽屏上限；
+/* 任务中心与项目内的模块 / 功能任务面板（.tasks-panel，两者共用 .calm-task-grid）：
+   2026-10-08 产品要求「从项目进入的任务汇总跟任务中心尺寸对标」，两处同一口径。
+   窗口拉到最大时一行四张。内容区上限 1420px 与 236px 侧栏决定四列就是宽屏上限；
    gap 同步由 20px 收到 16px，避免卡片收窄后文字被挤得过窄。 */
 @media (min-width: 1440px) {
-  .task-center .calm-task-grid {
+  .task-center .calm-task-grid,
+  .tasks-panel .calm-task-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
+  }
+}
+/* 功能档案页左侧还占 195px 功能档案栏，网格可用宽度本就封顶（1920 窗口下也只有约 1080px），
+   排四列会把卡片压到 258px、底部标签被挤成两行；因此这里固定三列，卡片约 337px，与任务中心
+   的 319px 同一尺寸档。规则只在 1101px 以上生效，窄屏继续沿用 .calm-task-grid 自己的
+   两列 / 单列降列规则。 */
+@media (min-width: 1101px) {
+  .feature-document .tasks-panel .calm-task-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
   }
 }
 @media (max-width: 1100px) {
@@ -3812,12 +2845,6 @@ a:focus-visible {
   }
   .calm-feature-toolbar > input {
     width: 100%;
-  }
-  .calm-drawer {
-    padding: 22px 18px;
-  }
-  .calm-drawer .drawer-header h2 {
-    font-size: 20px;
   }
   .calm-task-actions {
     flex-wrap: wrap;
@@ -3858,27 +2885,6 @@ a:focus-visible {
   filter: url(#joint-logo-dark);
   mix-blend-mode: screen;
 }
-
-.account-area {
-  position: relative;
-  display: block;
-}
-.account-trigger {
-  border: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 4px;
-  text-align: left;
-  color: #d5e0ec;
-  border-radius: 6px;
-}
-.account-trigger:hover,
-.account-trigger[aria-expanded="true"] {
-  background: #ffffff0d;
-}
 .account-identity {
   flex: 1;
   min-width: 0;
@@ -3887,12 +2893,6 @@ a:focus-visible {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.account-trigger .user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
 }
 .account-popover {
   position: absolute;
@@ -3905,11 +2905,6 @@ a:focus-visible {
   padding: 7px;
   box-shadow: 0 8px 30px #07182d33;
   z-index: 20;
-}
-.account-popover-heading {
-  padding: 7px 10px;
-  color: #8392a4;
-  font-size: 11px;
 }
 .account-popover button {
   width: 100%;
@@ -3931,7 +2926,6 @@ a:focus-visible {
   opacity: 0.5;
   cursor: wait;
 }
-.account-trigger:focus-visible,
 .account-popover button:focus-visible {
   outline: 2px solid #3793f3;
   outline-offset: 2px;
@@ -4012,10 +3006,6 @@ a:focus-visible {
   color: #2874bf;
   font-size: 12px;
   padding: 5px;
-}
-.catalog-feature-edit {
-  margin-top: 18px;
-  align-self: flex-start;
 }
 .module-information {
   margin-bottom: 24px;
@@ -4183,11 +3173,6 @@ a:focus-visible {
   margin: 0;
   line-height: 1.7;
 }
-.feature-modal > .calm-tabs {
-  padding: 0 30px;
-  margin: 0;
-  flex-shrink: 0;
-}
 .feature-modal-content {
   padding: 26px 30px 30px;
   overflow: auto;
@@ -4237,62 +3222,6 @@ a:focus-visible {
 .feature-facts > .primary-button {
   width: 100%;
   margin-top: 16px;
-}
-.feature-task-metric {
-  width: 100%;
-  padding: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid #dfe8f2;
-  background: white;
-  color: #2d6eae;
-  border-radius: 8px;
-  text-align: left;
-}
-.feature-task-metric strong {
-  font-size: 26px;
-}
-.feature-task-metric span {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 1;
-  font-size: 12px;
-}
-.inline-empty {
-  padding: 16px;
-  border: 1px dashed #d9e4ee;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #7c8da0;
-}
-.inline-empty button {
-  margin-top: 10px;
-}
-.latest-record {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 14px;
-  border: 1px solid #e2eaf3;
-  background: #f9fbfd;
-  border-radius: 8px;
-  color: #3f648a;
-  text-align: left;
-}
-.latest-record span {
-  flex: 1;
-}
-.latest-record small {
-  display: block;
-  margin-top: 5px;
-  color: #8a9aab;
-}
-.feature-modal .calm-task-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .catalog-modal {
   width: min(790px, calc(100vw - 64px));
@@ -4345,9 +3274,6 @@ a:focus-visible {
   grid-column: 2;
   grid-row: 1;
 }
-.catalog-modal .dialog-form > .form-error {
-  grid-column: 1/-1;
-}
 .catalog-modal .dialog-form textarea {
   min-height: 75px;
   resize: vertical;
@@ -4391,9 +3317,6 @@ a:focus-visible {
   .feature-modal-header h2 {
     font-size: 21px;
   }
-  .feature-modal > .calm-tabs {
-    padding: 0 20px;
-  }
   .feature-modal-content {
     padding: 20px;
   }
@@ -4406,12 +3329,6 @@ a:focus-visible {
   }
   .feature-facts dl {
     display: none;
-  }
-  .feature-task-metric {
-    margin-top: 12px;
-  }
-  .feature-modal .calm-task-grid {
-    grid-template-columns: 1fr;
   }
   .catalog-modal .dialog-form {
     padding: 20px;
@@ -4686,25 +3603,14 @@ a:focus-visible {
   grid-template-columns: minmax(0, 1fr) 195px;
   gap: 24px;
 }
-.feature-document .calm-task-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+/* 2026-10-08 产品要求：功能档案 / 模块任务里的任务面板原来被压成两列，卡片被拉到 600px 以上、
+   卡内大片留白。这里删除该覆盖，改回 .calm-task-grid 的通用列数，与任务中心同一口径
+   （宽屏四列的规则见本文件 1440px 媒体查询里的 .tasks-panel .calm-task-grid）。 */
 .feature-document .feature-reading section {
   min-height: 85px;
 }
 .module-work-tabs {
   margin-bottom: 24px;
-}
-.record-workbench {
-  padding: 26px;
-}
-.record-workbench h1 {
-  font-size: 23px;
-}
-.record-writing-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
-  gap: 24px;
 }
 .writing-context {
   background: #f5f8fc;
@@ -4724,42 +3630,7 @@ a:focus-visible {
 .writing-context p {
   line-height: 1.8;
 }
-.record-save-bar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 0;
-  margin-top: 22px;
-  background: white;
-  border-top: 1px solid #e4ebf3;
-}
-.record-save-bar span {
-  flex: 1;
-  color: #7c8fa3;
-  font-size: 11px;
-}
-.impact-options {
-  display: grid;
-  gap: 10px;
-  padding: 14px 0;
-}
-.impact-options label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-.impact-options input {
-  width: 16px;
-  min-height: 16px;
-  height: 16px;
-}
 @media (max-width: 1000px) {
-  .record-writing-grid {
-    grid-template-columns: 1fr;
-  }
   .writing-context {
     display: none;
   }
@@ -4767,12 +3638,6 @@ a:focus-visible {
 @media (max-width: 700px) {
   .feature-document .feature-overview-grid {
     grid-template-columns: 1fr;
-  }
-  .feature-document .calm-task-grid {
-    grid-template-columns: 1fr;
-  }
-  .record-save-bar span {
-    display: none;
   }
   .feature-document .feature-modal-header {
     padding: 20px;
@@ -4996,72 +3861,6 @@ a:focus-visible {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.feature-recent {
-  margin-top: 18px;
-}
-.feature-recent .calm-section-title {
-  margin-bottom: 11px;
-}
-.feature-recent ul {
-  list-style: none;
-  margin: 0 0 9px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.link-button {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: #2c6fb5;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  text-align: left;
-}
-.link-button:hover {
-  text-decoration: underline;
-}
-.inline-select {
-  height: 30px;
-  max-width: 100%;
-  border: 1px solid #dbe5ef;
-  border-radius: 5px;
-  background: white;
-  padding: 0 8px;
-  color: #4a627a;
-  font-size: 12px;
-}
-.inline-select:focus {
-  border-color: #69a8dc;
-  box-shadow: 0 0 0 2px #dceefd;
-  outline: none;
-}
-.assign-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  background: #f1f8fe;
-  border: 1px solid #d6e8f7;
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-.assign-panel strong {
-  font-size: 12px;
-  color: #2b5f8d;
-}
-.assign-panel select {
-  height: 32px;
-  border: 1px solid #cfe0ee;
-  border-radius: 5px;
-  padding: 0 8px;
-  background: white;
-  color: #405a72;
-}
 .more-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -5113,28 +3912,6 @@ a:focus-visible {
 button.danger-text {
   color: #c0453f;
 }
-.danger-zone {
-  margin: 20px;
-  padding: 16px 18px;
-  border: 1px solid #f0d3d3;
-  background: #fffafa;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  align-items: flex-start;
-}
-.danger-zone strong {
-  color: #a63b36;
-  font-size: 13px;
-}
-.danger-zone p {
-  margin: 0;
-  color: #9c6a67;
-  font-size: 12px;
-  line-height: 1.75;
-}
-
 /* 「逾期 / 马上到期」两档红文字色（2026-09-22 定案；同日三次定案后卡片不再铺红）：
    白底表面（表格单元格、看板列表行、详情弹窗徽章）只用文字色——逾期 #b3261e、
    马上到期 #c9472c；卡片按任务自己的优先级铺色，逾期只保留排序与文字提示，
@@ -5255,9 +4032,6 @@ td.due-overdue {
    本身仍被任务卡片的记录计数页脚使用，保留不动。 */
 /* 聚合组卡片的负责人（2026-09-21 产品要求）：分支可能由不同人负责，名单较长时
    省略显示，完整名单由 title 给出；负责人一侧允许收缩，分支数保持完整可见。 */
-.task-group-assignees {
-  min-width: 0;
-}
 .task-group-assignee-names {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5268,28 +4042,6 @@ td.due-overdue {
 /* 列表视图下聚合组仍以卡片形式追加在表格之后，与卡片视图保持同一外观。 */
 .task-group-grid {
   margin-top: 20px;
-}
-.branch-list {
-  list-style: none;
-  margin: 14px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.branch-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 13px;
-  background: white;
-  border: 1px solid #e6edf4;
-  border-radius: 8px;
-}
-.branch-list li > small {
-  color: #8b9aab;
-  font-size: 11px;
-  white-space: nowrap;
 }
 .merge-panel {
   display: flex;
@@ -5302,35 +4054,6 @@ td.due-overdue {
 .merge-panel .calm-empty .primary-button {
   margin-top: 14px;
 }
-.source-task-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 13px 15px;
-  border: 1px solid #dfe8f2;
-  background: #f8fbfe;
-  border-radius: 9px;
-  color: #3f648a;
-  text-align: left;
-}
-.source-task-link > span {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.source-task-link strong {
-  color: #2b4560;
-}
-.source-task-link small {
-  color: #8b9aab;
-}
-.source-task-link:hover {
-  border-color: #86afd7;
-  background: #f2f8fe;
-}
-
 .github-block {
   display: flex;
   flex-direction: column;
@@ -5381,9 +4104,6 @@ td.due-overdue {
 .github-list > li > .icon-button {
   margin-left: auto;
 }
-.github-list-block li {
-  background: white;
-}
 .github-add {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 148px;
@@ -5416,15 +4136,6 @@ td.due-overdue {
 .github-add select:focus {
   border-color: #69a8dc;
   box-shadow: 0 0 0 2px #dceefd;
-}
-.github-add .github-preview,
-.github-add .form-error {
-  grid-column: 1/-1;
-}
-.github-preview {
-  margin: 0;
-  color: #3d8a63;
-  font-size: 11px;
 }
 .github-add .calm-action-footer {
   grid-column: 1/-1;
@@ -5510,95 +4221,8 @@ td.due-overdue {
 .record-voided > summary {
   opacity: 0.88;
 }
-.void-note {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin: 18px 0 0;
-  padding: 12px 14px;
-  background: #fff6f5;
-  border: 1px solid #f2d7d4;
-  border-radius: 8px;
-  color: #a6483f;
-  font-size: 12px;
-  line-height: 1.75;
-}
-.void-note svg {
-  flex: 0 0 auto;
-  margin-top: 3px;
-}
-.version-list {
-  list-style: none;
-  margin: 13px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.version-list li {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 4px 12px;
-  padding: 11px 13px;
-  background: #f8fbfe;
-  border: 1px solid #e6edf4;
-  border-radius: 8px;
-}
-.version-list strong {
-  grid-row: span 2;
-  color: #2c6fb5;
-  font-size: 12px;
-}
-.version-list span {
-  color: #4d6479;
-  font-size: 12px;
-  line-height: 1.65;
-}
-.version-list small {
-  color: #8b9aab;
-  font-size: 11px;
-}
-.inline-confirm {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex: 1;
-  min-width: 280px;
-}
-.inline-confirm input {
-  flex: 1;
-  min-width: 0;
-  height: 33px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0 9px;
-  outline: none;
-}
-.inline-confirm input:focus {
-  border-color: #69a8dc;
-  box-shadow: 0 0 0 2px #dceefd;
-}
-.record-form-footer {
-  flex-shrink: 0;
-}
-
 .timeline-block {
   margin-bottom: 28px;
-}
-.timeline-date {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #5b7892;
-  margin-bottom: 13px;
-}
-.timeline-date strong {
-  font-size: 13px;
-  color: #31475e;
-}
-.timeline-date small {
-  color: #93a1b0;
-  font-size: 11px;
 }
 .history-block {
   margin-top: 24px;
@@ -5726,23 +4350,6 @@ td.due-overdue {
   margin: 0;
   flex: 0 0 auto;
 }
-.inline-picker {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #586d83;
-  font-size: 12px;
-  margin-bottom: 16px;
-}
-.inline-picker select {
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: white;
-  padding: 0 10px;
-  color: #4a627a;
-  min-width: 230px;
-}
 .chip-row {
   display: flex;
   gap: 7px;
@@ -5812,12 +4419,6 @@ td.due-overdue {
 .popover-head .text-button {
   flex-shrink: 0;
   white-space: nowrap;
-}
-.popover-hint {
-  margin: 0 16px 10px;
-  color: #8b9aab;
-  font-size: 11px;
-  line-height: 1.65;
 }
 .notification-popover ul {
   list-style: none;
@@ -6095,12 +4696,6 @@ td.due-overdue {
   overflow-wrap: anywhere;
   line-height: 1.65;
 }
-.creator-locked {
-  opacity: 0.7;
-}
-.creator-locked input {
-  cursor: not-allowed;
-}
 .permission-cell {
   text-align: center;
 }
@@ -6217,13 +4812,6 @@ td.due-overdue {
 .snapshot-group .calm-meta code {
   font-size: 11px;
 }
-
-.field-inline {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
 .field-label {
   color: #586d83;
   font-size: 11px;
@@ -6244,10 +4832,6 @@ td.due-overdue {
   font-size: 11px;
   padding: 0 6px;
 }
-.impact-fieldset .impact-options {
-  padding: 2px 0 0;
-}
-
 @media (max-width: 1000px) {
   .task-modal-grid {
     grid-template-columns: 1fr;
@@ -6337,8 +4921,7 @@ td.due-overdue {
   }
 }
 .catalog-modal .dialog-form > .form-row,
-.catalog-modal .dialog-form > fieldset,
-.catalog-modal .dialog-form > .field-inline {
+.catalog-modal .dialog-form > fieldset {
   grid-column: 1 / -1;
 }
 .check-list label {
@@ -7509,7 +6092,6 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card).tone-prio-urgent
   :is(
     .calm-card-bottom,
-    .task-card-meta,
     .tb-card-meta,
     .task-card-counts,
     .calm-due,
@@ -7560,7 +6142,6 @@ td.due-overdue {
 :is(.calm-task-card, .tb-card):is(.tone-prio-high, .tone-prio-done)
   :is(
     .calm-card-bottom,
-    .task-card-meta,
     .tb-card-meta,
     .task-card-counts,
     .calm-due,

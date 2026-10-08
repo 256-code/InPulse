@@ -1446,9 +1446,7 @@ export function TasksPanel({
             {merge && (
               <div className="merge-panel">
                 <div className="calm-section-title">
-                  <div>
-                    <h3>解决编辑冲突</h3>
-                  </div>
+                  <h3>解决编辑冲突</h3>
                 </div>
                 {merge.conflicts.map((field) => (
                   <div className="merge-choice" key={field}>
