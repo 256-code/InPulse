@@ -17,6 +17,7 @@ import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { useAuth } from "@features/auth/auth-context";
 import { useScopedSearchParams } from "@features/common/search-params-scope";
+import { useStickyBandOffset } from "@features/common/use-sticky-band-offset";
 import { RecordDraftsView } from "@features/record-drafts/RecordDraftsView";
 import {
   useRecordFeedQuery,
@@ -222,93 +223,113 @@ export function RecordsWorkspace({
     if (rect.top >= 0 && rect.top < window.innerHeight) return;
     anchor.scrollIntoView({ block: "start" });
   }, [publishedId, standaloneDetail, items]);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  // 量出的吸顶块高度写进页面根的 CSS 变量，供 `.timeline-day-head` 的 top 使用；
+  // 弹窗（embedded）不吸顶，也就不量，变量缺席时分组头按兜底值处理。
+  useStickyBandOffset(pageRef, bandRef, !embedded);
   return (
-    <div className="records-workspace">
-      <div className={"page-header" + (embedded ? " embedded" : "")}>
-        {embedded ? null : (
-          <div>
-            <h1>迭代记录</h1>
-            <p>
-              只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
-            </p>
-          </div>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!canCreate}
-          title={
-            canCreate
-              ? undefined
-              : projectId === 0
-                ? "当前没有可写入的项目"
-                : "请先选择项目"
-          }
-          onClick={() => setCreateToken((token) => token + 1)}
-        >
-          <InpulseIcon name="plus" size={16} />
-          新建迭代记录
-        </button>
-      </div>
-      <div className="toolbar task-toolbar records-toolbar">
-        <div className="task-search">
-          <InpulseIcon name="search" size={16} />
-          <input
-            value={query}
-            placeholder={RECORD_SEARCH_PLACEHOLDER}
-            aria-label="搜索迭代记录"
-            onChange={(event) => setQuery(event.target.value)}
-          />
+    <div
+      className={
+        embedded ? "records-workspace is-embedded" : "records-workspace"
+      }
+      ref={pageRef}
+    >
+      {/* 2026-10-08 用户要求：页面滚动只滚动红线以下的区域——标题与筛选条吸顶，
+          草稿与时间线在其下方滚动（样式见 inpulse-design.css 的 .sticky-page-band）。
+          项目主页弹窗里的记录视图自带弹层头与独立滚动区，不参与吸顶。 */}
+      <div
+        className={
+          embedded ? "sticky-page-band is-embedded" : "sticky-page-band"
+        }
+        ref={bandRef}
+      >
+        <div className={"page-header" + (embedded ? " embedded" : "")}>
+          {embedded ? null : (
+            <div>
+              <h1>迭代记录</h1>
+              <p>
+                只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
+              </p>
+            </div>
+          )}
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!canCreate}
+            title={
+              canCreate
+                ? undefined
+                : projectId === 0
+                  ? "当前没有可写入的项目"
+                  : "请先选择项目"
+            }
+            onClick={() => setCreateToken((token) => token + 1)}
+          >
+            <InpulseIcon name="plus" size={16} />
+            新建迭代记录
+          </button>
         </div>
-        {embedded ? null : (
+        <div className="toolbar task-toolbar records-toolbar">
+          <div className="task-search">
+            <InpulseIcon name="search" size={16} />
+            <input
+              value={query}
+              placeholder={RECORD_SEARCH_PLACEHOLDER}
+              aria-label="搜索迭代记录"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          {embedded ? null : (
+            <label className="records-toolbar-field">
+              项目
+              <CalmSelect
+                ariaLabel="项目"
+                value={projectId > 0 ? String(projectId) : ""}
+                onChange={(next) => selectProject(String(next))}
+                appearance="rich"
+                options={[
+                  { value: "", label: "全部项目" },
+                  ...(projects.data?.items ?? []).map(projectSelectOption),
+                ]}
+                animated
+              />
+            </label>
+          )}
           <label className="records-toolbar-field">
-            项目
+            归属
             <CalmSelect
-              ariaLabel="项目"
-              value={projectId > 0 ? String(projectId) : ""}
-              onChange={(next) => selectProject(String(next))}
-              appearance="rich"
-              options={[
-                { value: "", label: "全部项目" },
-                ...(projects.data?.items ?? []).map(projectSelectOption),
-              ]}
+              ariaLabel="归属"
+              value={source}
+              appearance="menu"
+              onChange={(next) => setSource(next as RecordSourceFilter)}
+              options={RECORD_SOURCE_FILTERS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
               animated
             />
           </label>
-        )}
-        <label className="records-toolbar-field">
-          归属
-          <CalmSelect
-            ariaLabel="归属"
-            value={source}
-            appearance="menu"
-            onChange={(next) => setSource(next as RecordSourceFilter)}
-            options={RECORD_SOURCE_FILTERS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
-            animated
-          />
-        </label>
-        {statusOptions.length > 1 ? (
-          <CalmSegmented
-            label="记录状态"
-            value={status}
-            options={statusOptions}
-            onChange={selectStatus}
-          />
-        ) : null}
-        {/* F-33：生成总结与筛选同一行、靠右顶格；包一层 div 避免命中
+          {statusOptions.length > 1 ? (
+            <CalmSegmented
+              label="记录状态"
+              value={status}
+              options={statusOptions}
+              onChange={selectStatus}
+            />
+          ) : null}
+          {/* F-33：生成总结与筛选同一行、靠右顶格；包一层 div 避免命中
             `.task-toolbar > .secondary-button { display: none }` 的全局隐藏规则。 */}
-        <div className="records-toolbar-summary">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setSummaryOpen(true)}
-          >
-            <InpulseIcon name="fileText" size={15} />
-            生成总结
-          </button>
+          <div className="records-toolbar-summary">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSummaryOpen(true)}
+            >
+              <InpulseIcon name="fileText" size={15} />
+              生成总结
+            </button>
+          </div>
         </div>
       </div>
       <div className="record-drafts-block">
@@ -381,20 +402,24 @@ export function RecordsWorkspace({
                 <span aria-hidden="true" className="timeline-day">
                   {timelineDayLabel(group.key)}
                 </span>
-                <button
-                  type="button"
-                  className="timeline-toggle"
-                  aria-expanded={!collapsed}
-                  onClick={() => toggleDay(group.key)}
-                >
-                  <InpulseIcon
-                    name="chevron"
-                    size={14}
-                    {...(collapsed ? {} : { className: "expanded" })}
-                  />
-                  <strong>{group.label}</strong>
-                  <small>{group.records.length} 条</small>
-                </button>
+                {/* 2026-10-08 用户要求「日期先不被滚走，等当天的内容滚完了再收起来」：
+                    折叠按钮包成一行分组头并吸顶（样式见 records-timeline.css）。 */}
+                <div className="timeline-day-head">
+                  <button
+                    type="button"
+                    className="timeline-toggle"
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleDay(group.key)}
+                  >
+                    <InpulseIcon
+                      name="chevron"
+                      size={14}
+                      {...(collapsed ? {} : { className: "expanded" })}
+                    />
+                    <strong>{group.label}</strong>
+                    <small>{group.records.length} 条</small>
+                  </button>
+                </div>
                 {!collapsed && (
                   <div className="record-card-list">
                     {group.records.map((item) => (

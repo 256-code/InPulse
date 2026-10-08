@@ -117,6 +117,38 @@
   text-align: left;
 }
 
+/* 分组头是折叠按钮的一行包裹盒：按钮下方原本的 13px 间隔改成包裹盒的内边距，
+   吸顶时这段间隔也跟着有不透明底色（外边距会坍出容器，那一截会露出滚过的卡片）。 */
+.timeline-day-head {
+  padding-bottom: 13px;
+}
+
+.timeline-day-head > .timeline-toggle {
+  margin-bottom: 0;
+}
+
+/* 2026-10-08 用户要求「日期先不被滚走，等当天的内容滚完了再收起来」：分组头吸顶在标题
+ * 与筛选条下方，父级 `.timeline-block` 就是它的包裹盒——当天内容滚完时它被下一组顶走，
+ * 「收起来」由分组头自身的边界完成，不需要脚本。偏移由脚本量出的吸顶块高度给出（见
+ * features/common/use-sticky-band-offset 的 useStickyBandOffset）。
+ * 底色必须不透明，否则被压住的卡片与时刻会从分组头后面透出来；左边留白列里的短日期与
+ * 时间线圆点不跟着吸顶：分组头要伸进那一列（比时间线左边界再靠左 104px），在项目主页
+ * 弹窗里会顶出弹层卡片，所以这里只吸内容列。
+ * 窄屏与弹窗（.is-embedded）都不吸顶：前者标题与工具条折行后已占掉大半屏，后者自带弹层头。 */
+@media (min-width: 701px) {
+  .records-workspace:not(.is-embedded) .timeline-day-head {
+    position: sticky;
+    top: var(--sticky-band-height, 182px);
+    z-index: 4;
+    background: var(--background);
+  }
+
+  /* 工具条下方原本留 10px，吸顶块改用内边距接管这段间隔（同 .sticky-page-band 的理由）。 */
+  .records-workspace:not(.is-embedded) .sticky-page-band {
+    padding-bottom: 10px;
+  }
+}
+
 .timeline-toggle svg {
   color: #93a1b0;
   transition: transform 0.15s ease;
@@ -297,9 +329,10 @@
   margin: 12px 0 20px;
 }
 
-/* 深链滚动目标不贴到视口顶端，留出与页面内边距一致的呼吸空间。 */
+/* 深链滚动目标不贴到视口顶端，留出与页面内边距一致的呼吸空间；
+   吸顶块占住顶部时还要让开它，否则目标记录会被压在标题与筛选条下面。 */
 [data-record-anchor] {
-  scroll-margin-top: 16px;
+  scroll-margin-top: calc(var(--sticky-band-height, 0px) + 16px);
 }
 
 .record-standalone-detail > .record-expanded {

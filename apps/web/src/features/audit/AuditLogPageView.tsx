@@ -11,6 +11,7 @@ import {
 } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { useStickyBandOffset } from "@features/common/use-sticky-band-offset";
 import {
   PROJECT_DELETION_PAGE_LIMIT,
   projectDeletionItems,
@@ -69,6 +70,61 @@ function formatAuditDateTime(value: string): string {
   ].join("-");
   const { time } = formatAuditTime(value);
   return date + " " + time;
+}
+
+/**
+ * 2026-10-08 用户要求「时间先不会被滚走，等里面的内容滚完了再收起来」：审计列表与项目动态
+ * 一样按自然日分组、组头吸顶。日期用浏览器本地时区——与上方 from / to 和行内时刻同一口径，
+ * 因此不复用项目动态那套按上海时间换算的 helper。
+ */
+function auditDayKey(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value.slice(0, 10);
+  }
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, "0"),
+    String(parsed.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function auditDayLabel(key: string): string {
+  const parsed = new Date(`${key}T00:00:00`);
+  return Number.isFinite(parsed.getTime())
+    ? parsed.toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : key;
+}
+
+/** 时间线竖线左侧的短日期（如 9/24），完整日期由组头承担。 */
+function auditDayShortLabel(key: string): string {
+  const parsed = new Date(`${key}T00:00:00`);
+  return Number.isFinite(parsed.getTime())
+    ? parsed.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+    : key;
+}
+
+/** 服务端已按 occurred_at DESC 分页；这里只把当前已加载页按自然日分组。 */
+function groupAuditItemsByDay(items: readonly AuditLogItem[]) {
+  const groups = new Map<string, AuditLogItem[]>();
+  for (const item of items) {
+    const key = auditDayKey(item.occurredAt);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return Array.from(groups.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, grouped]) => ({
+      key,
+      label: auditDayLabel(key),
+      shortLabel: auditDayShortLabel(key),
+      items: grouped,
+    }));
 }
 
 /**
@@ -236,6 +292,25 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     [items, readTrailSuppressed],
   );
   const hiddenReadTrailCount = items.length - visibleItems.length;
+  const dayGroups = useMemo(
+    () => groupAuditItemsByDay(visibleItems),
+    [visibleItems],
+  );
+  const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleDay = useCallback((key: string) => {
+    setCollapsedDays((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const pageRef = React.useRef<HTMLDivElement | null>(null);
+  const bandRef = React.useRef<HTMLDivElement | null>(null);
+  // 吸顶块高度量出来写进页面根的 CSS 变量，供 `.activity-day-head` 的 top 使用。
+  useStickyBandOffset(pageRef, bandRef);
 
   const actorNameOf = useCallback(
     (item: AuditLogItem): string => {
@@ -435,53 +510,91 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           </CalmEmptyState>
         ) : (
           <div className="audit-list">
-            {visibleItems.map((item) => {
-              const time = formatAuditTime(item.occurredAt);
-              const rowKey = item.chainId + "-" + item.sequenceNo;
+            {dayGroups.map((group) => {
+              const collapsed = collapsedDays.has(group.key);
               return (
-                <div
-                  className="audit-row"
-                  key={rowKey}
-                  data-testid={"audit-item-" + rowKey}
-                >
-                  <div className="audit-time">
-                    {time.date}
-                    <small>{time.time}</small>
-                  </div>
-                  <div className="audit-line">
-                    <span />
-                  </div>
-                  <div className="audit-content">
-                    <div className="activity-avatar">{actorAvatarOf(item)}</div>
-                    <div>
-                      <strong>
-                        {actorNameOf(item)}
-                        <span>{auditActionLabel(item.action)}</span>
-                      </strong>
-                      <p>对象：{targetLabelOf(item)}</p>
-                      <small>
-                        {"第 " +
-                          item.sequenceNo +
-                          " 条 · " +
-                          scopeLabelOf(item)}
-                      </small>
-                    </div>
-                  </div>
-                  <div className="audit-actions">
-                    <span className="audit-entity-badge">
-                      {item.actorType === "SYSTEM" ? "系统操作" : "用户操作"}
+                <section className="activity-day" key={group.key}>
+                  <div className="activity-day-head">
+                    <span aria-hidden="true" className="activity-day-date">
+                      {group.shortLabel}
                     </span>
+                    <div className="audit-line">
+                      <span />
+                    </div>
                     <button
                       type="button"
-                      className="secondary-button"
-                      aria-label={"查看原始快照 第 " + item.sequenceNo + " 条"}
-                      onClick={() => setSnapshot(item)}
+                      className="activity-day-toggle"
+                      aria-expanded={!collapsed}
+                      title={collapsed ? "展开当天记录" : "收起当天记录"}
+                      onClick={() => toggleDay(group.key)}
                     >
-                      <InpulseIcon name="shield" size={13} />
-                      原始快照
+                      <InpulseIcon
+                        name="chevron"
+                        size={14}
+                        {...(collapsed ? {} : { className: "expanded" })}
+                      />
+                      <strong>{group.label}</strong>
+                      <small>{group.items.length} 条</small>
                     </button>
                   </div>
-                </div>
+                  {collapsed
+                    ? null
+                    : group.items.map((item) => {
+                        const time = formatAuditTime(item.occurredAt);
+                        const rowKey = item.chainId + "-" + item.sequenceNo;
+                        return (
+                          <div
+                            className="audit-row"
+                            key={rowKey}
+                            data-testid={"audit-item-" + rowKey}
+                          >
+                            <div className="audit-time">
+                              {time.date}
+                              <small>{time.time}</small>
+                            </div>
+                            <div className="audit-line">
+                              <span />
+                            </div>
+                            <div className="audit-content">
+                              <div className="activity-avatar">
+                                {actorAvatarOf(item)}
+                              </div>
+                              <div>
+                                <strong>
+                                  {actorNameOf(item)}
+                                  <span>{auditActionLabel(item.action)}</span>
+                                </strong>
+                                <p>对象：{targetLabelOf(item)}</p>
+                                <small>
+                                  {"第 " +
+                                    item.sequenceNo +
+                                    " 条 · " +
+                                    scopeLabelOf(item)}
+                                </small>
+                              </div>
+                            </div>
+                            <div className="audit-actions">
+                              <span className="audit-entity-badge">
+                                {item.actorType === "SYSTEM"
+                                  ? "系统操作"
+                                  : "用户操作"}
+                              </span>
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                aria-label={
+                                  "查看原始快照 第 " + item.sequenceNo + " 条"
+                                }
+                                onClick={() => setSnapshot(item)}
+                              >
+                                <InpulseIcon name="shield" size={13} />
+                                原始快照
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                </section>
               );
             })}
           </div>
@@ -501,107 +614,113 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   }
 
   return (
-    <div className="activity-page">
-      <div className="page-header activity-page-header">
-        <div>
-          <h1>动态审计</h1>
-          <p>
-            原始审计链仅系统管理员可读；打开本页或切换审计对象会在 SYSTEM
-            链留下一条读取留痕，筛选与翻页不会重复留痕。
-          </p>
+    <div className="activity-page" ref={pageRef}>
+      {/* 2026-10-08 用户要求：页面滚动只滚动红线以下的区域——标题与筛选条吸顶，
+          列表与审计规则在其下方滚动（样式见 inpulse-design.css 的 .sticky-page-band）。 */}
+      <div className="sticky-page-band" ref={bandRef}>
+        <div className="page-header activity-page-header">
+          <div>
+            <h1>动态审计</h1>
+            <p>
+              原始审计链仅系统管理员可读；打开本页或切换审计对象会在 SYSTEM
+              链留下一条读取留痕，筛选与翻页不会重复留痕。
+            </p>
+          </div>
+          <div className="catalog-actions activity-header-actions">
+            <span className="activity-scope-badge">
+              当前链：{activeChainLabel}
+            </span>
+            <span className="activity-admin-badge">管理员可查看原始快照</span>
+          </div>
         </div>
-        <div className="catalog-actions activity-header-actions">
-          <span className="activity-scope-badge">
-            当前链：{activeChainLabel}
-          </span>
-          <span className="activity-admin-badge">管理员可查看原始快照</span>
-        </div>
-      </div>
 
-      <div className="toolbar activity-toolbar audit-toolbar">
-        <CalmSelect
-          ariaLabel="审计链"
-          value={chain.kind === "system" ? "system" : String(chain.projectId)}
-          appearance="rich"
-          onChange={(next) => handleChainChange(String(next))}
-          options={projectChainOptions}
-          animated
-        />
-        <div className="task-search">
-          <InpulseIcon name="search" size={16} />
-          <input
-            value={draftFilters.action}
-            placeholder="动作：选择或输入原始动作码"
-            aria-label="动作码"
-            list="audit-action-options"
-            onChange={(event) =>
-              updateDraft({ action: event.currentTarget.value })
-            }
+        <div className="toolbar activity-toolbar audit-toolbar">
+          <CalmSelect
+            ariaLabel="审计链"
+            value={chain.kind === "system" ? "system" : String(chain.projectId)}
+            appearance="rich"
+            onChange={(next) => handleChainChange(String(next))}
+            options={projectChainOptions}
+            animated
           />
-          <datalist id="audit-action-options">
-            {AUDIT_ACTION_OPTIONS.map((option) => (
-              <option
-                key={option.code}
-                value={option.code}
-                label={option.label}
-              />
-            ))}
-          </datalist>
+          <div className="task-search">
+            <InpulseIcon name="search" size={16} />
+            <input
+              value={draftFilters.action}
+              placeholder="动作：选择或输入原始动作码"
+              aria-label="动作码"
+              list="audit-action-options"
+              onChange={(event) =>
+                updateDraft({ action: event.currentTarget.value })
+              }
+            />
+            <datalist id="audit-action-options">
+              {AUDIT_ACTION_OPTIONS.map((option) => (
+                <option
+                  key={option.code}
+                  value={option.code}
+                  label={option.label}
+                />
+              ))}
+            </datalist>
+          </div>
+          <CalmSelect
+            ariaLabel="操作人"
+            appearance="member"
+            multiple
+            maxTagCount={1}
+            width={200}
+            value={draftFilters.actorIds}
+            onChange={(next) =>
+              updateDraft({ actorIds: next.map((value) => Number(value)) })
+            }
+            placeholder="全体操作人（可搜索多选）"
+            loading={directoryQuery.isPending}
+            options={(directoryQuery.data ?? []).map((entry) => ({
+              value: entry.id,
+              label: entry.name,
+              avatarUrl: entry.avatarUrl ?? null,
+              description: entry.isAdmin ? "系统管理员" : "项目成员",
+            }))}
+            animated
+          />
+          <label className="audit-time-field">
+            <span>开始时间</span>
+            <input
+              type="datetime-local"
+              value={draftFilters.from}
+              aria-label="开始时间"
+              onChange={(event) =>
+                updateDraft({ from: event.currentTarget.value })
+              }
+            />
+          </label>
+          <label className="audit-time-field">
+            <span>结束时间</span>
+            <input
+              type="datetime-local"
+              value={draftFilters.to}
+              aria-label="结束时间"
+              onChange={(event) =>
+                updateDraft({ to: event.currentTarget.value })
+              }
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={applyFilters}
+          >
+            查询
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={resetFilters}
+          >
+            重置
+          </button>
         </div>
-        <CalmSelect
-          ariaLabel="操作人"
-          appearance="member"
-          multiple
-          maxTagCount={1}
-          width={200}
-          value={draftFilters.actorIds}
-          onChange={(next) =>
-            updateDraft({ actorIds: next.map((value) => Number(value)) })
-          }
-          placeholder="全体操作人（可搜索多选）"
-          loading={directoryQuery.isPending}
-          options={(directoryQuery.data ?? []).map((entry) => ({
-            value: entry.id,
-            label: entry.name,
-            avatarUrl: entry.avatarUrl ?? null,
-            description: entry.isAdmin ? "系统管理员" : "项目成员",
-          }))}
-          animated
-        />
-        <label className="audit-time-field">
-          <span>开始时间</span>
-          <input
-            type="datetime-local"
-            value={draftFilters.from}
-            aria-label="开始时间"
-            onChange={(event) =>
-              updateDraft({ from: event.currentTarget.value })
-            }
-          />
-        </label>
-        <label className="audit-time-field">
-          <span>结束时间</span>
-          <input
-            type="datetime-local"
-            value={draftFilters.to}
-            aria-label="结束时间"
-            onChange={(event) => updateDraft({ to: event.currentTarget.value })}
-          />
-        </label>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={applyFilters}
-        >
-          查询
-        </button>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={resetFilters}
-        >
-          重置
-        </button>
       </div>
 
       <p className="permission-hint">
