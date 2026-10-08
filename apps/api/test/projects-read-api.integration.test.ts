@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Module, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import {
@@ -10,12 +10,15 @@ import { schemaRegistry } from "@inpulse/api-contract";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ApiExceptionFilter } from "../src/http/api-exception.filter.js";
 import { ContractResponseInterceptor } from "../src/http/contract-response.interceptor.js";
+import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.js";
 import { VersionedHmacKeyring } from "../src/auth/keyring.js";
 import { SessionAuthService } from "../src/auth/session-auth.service.js";
 import { SessionTokenService } from "../src/auth/session-token.service.js";
 import { generateOpaqueToken } from "../src/auth/token.js";
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
+import type { ActivityWriteInput } from "../src/modules/activity/activity.write-port.js";
+import { PostgresActivityWritePort } from "../src/modules/activity/postgres-activity-write-port.js";
 import { ActiveMembersController } from "../src/modules/projects/active-members.controller.js";
 import { ActiveMembersService } from "../src/modules/projects/active-members.service.js";
 import { PostgresProjectAccessQueryPort } from "../src/modules/projects/postgres-project-access-query-port.js";
@@ -36,7 +39,10 @@ let app: INestApplication | undefined;
 let base: string;
 let tokenService: SessionTokenService;
 let uow: PostgresUnitOfWork;
+let auditPort: PostgresAuditWritePort;
+let activityPort: PostgresActivityWritePort;
 const taskWrites = new TaskManagementRepository();
+const auditKey = Buffer.alloc(32, 0x5c);
 
 /** 项目统计夹具的期望值：与 R-2 getProjectOverview 同口径。 */
 const expectedStats = {
@@ -113,12 +119,63 @@ async function errorBody(
   expect(body.code).toBe(code);
 }
 
+/**
+ * 项目动态夹具：先写审计（活动投影的复合外键指向审计行），再写与业务写入同形状的
+ * 活动投影，用于验证项目列表的「最近变更时间」排序（ADR-046 2026-10-08 修订）。
+ */
+async function seedProjectActivity(
+  projectId: number,
+  actorId: number,
+  entityId: number,
+  activityType: "task.create" | "task.complete",
+  occurredAt: Date,
+): Promise<void> {
+  const summary = activityType === "task.create" ? "生成任务" : "完成任务";
+  await uow.run(async (tx) => {
+    const audit = await auditPort.append(tx, {
+      projectId,
+      actorType: "USER",
+      actorId,
+      action: activityType,
+      targetType: "TASK",
+      targetId: String(entityId),
+      eventPayload: { summary },
+      requestId: randomUUID(),
+      clientRequestId: null,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+      occurredAt,
+    });
+    const input: ActivityWriteInput = {
+      projectId,
+      sourceChainId: `PROJECT:${projectId}`,
+      sourceSequence: audit.sequenceNo,
+      sourceEntityType: "TASK",
+      sourceEntityId: entityId,
+      activityType,
+      actorId,
+      summary,
+      metadata: { summary },
+      visibilityScope: "MEMBER",
+      sourceStatus: "ACTIVE",
+      sourceRowVersion: 1,
+      occurredAt,
+    };
+    await activityPort.append(tx, input);
+  });
+}
+
 beforeAll(async () => {
   client = createDatabaseClient(testUrls().runtime, {
     applicationName: "inpulse-projects-read-api-test",
   });
   const uowLocal = new PostgresUnitOfWork(client);
   uow = uowLocal;
+  auditPort = new PostgresAuditWritePort({
+    currentVersion: 1,
+    keyFor: () => auditKey,
+  });
+  activityPort = new PostgresActivityWritePort();
   const keyring = VersionedHmacKeyring.fromEntries(
     [{ version: 1, key: randomBytes(32) }],
     1,
@@ -474,7 +531,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     ).toBe(2);
   });
 
-  test("列表先按生命周期档位排序：进行中、未开始、维护中，同档位内按创建时间从近到远", async () => {
+  test("列表先按生命周期档位排序：进行中、未开始、维护中，无动态时同档位按创建时间从近到远", async () => {
     const owner = await actor();
     const active = await createProject(client.sql, owner.userId);
     const notStarted = await createProject(client.sql, owner.userId);
@@ -539,6 +596,54 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
       1, 0, 0, 0,
     ]);
+  });
+
+  test("同状态项目按最近变更时间从近到远，档位优先级不受影响（ADR-046 2026-10-08 修订）", async () => {
+    const owner = await actor();
+    const older = await createProject(client.sql, owner.userId);
+    const newer = await createProject(client.sql, owner.userId);
+    const ids = async (): Promise<readonly number[]> =>
+      schemaRegistry.ProjectListResponse.schema
+        .parse(await (await list(owner.cookie)).json())
+        .items.map((item) => item.id);
+
+    // 1) 两个项目都还没有动态：回落创建时间，后建的排在前。
+    expect(await ids()).toEqual([newer.projectId, older.projectId]);
+
+    // 基准取数据库时钟，夹具时间戳一律晚于两个项目的 created_at。
+    const [clock] = (await client.sql`
+      SELECT now() AS "now"
+    `) as unknown as readonly { now: string | Date }[];
+    const base = new Date(clock!.now).getTime();
+
+    // 2) 先建的项目写入较新的动态（生成任务）：它压过后建但无更新的项目。
+    await seedProjectActivity(
+      older.projectId,
+      owner.userId,
+      910_001,
+      "task.create",
+      new Date(base + 1_000),
+    );
+    expect(await ids()).toEqual([older.projectId, newer.projectId]);
+
+    // 3) 后建的项目写入更晚的动态（完成任务）：顺序反超。
+    await seedProjectActivity(
+      newer.projectId,
+      owner.userId,
+      910_002,
+      "task.complete",
+      new Date(base + 2_000),
+    );
+    expect(await ids()).toEqual([newer.projectId, older.projectId]);
+
+    // 4) 档位优先：先建项目置为进行中后，即使最近变更时间更早仍排最前。
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'ACTIVE',
+             row_version = row_version + 1
+       WHERE id = ${older.projectId}
+    `;
+    expect(await ids()).toEqual([older.projectId, newer.projectId]);
   });
 });
 

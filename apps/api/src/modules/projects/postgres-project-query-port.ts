@@ -7,6 +7,7 @@ import type {
 import type { DatabaseClient } from "@inpulse/database/client";
 import { DATABASE_CLIENT } from "../../database/database.constants.js";
 import {
+  projectLastChangeExpression,
   projectLifecycleRankExpression,
   projectStatColumns,
 } from "../../stats/card-stat-columns.js";
@@ -99,7 +100,7 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
               AND m.status = 'ACTIVE'
        WHERE p.id = ANY(${projectIds}::integer[])
          AND p.deleted_at IS NULL
-       ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, p.created_at DESC, p.id DESC
+       ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, ${projectLastChangeExpression(this.client.sql, "p")} DESC, p.created_at DESC, p.id DESC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
   }

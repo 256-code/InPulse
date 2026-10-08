@@ -103,9 +103,9 @@ const completedTaskCountColumn = (
  * 前端 `apps/web/src/features/common/resource-lifecycle.ts` 的
  * `projectLifecycleKind` 按同一顺序渲染标签，两处必须一起修改。
  *
- * 档位相同（同一状态）的项目再按「创建时间从近到远」排，同创建时间时按 ID 降序兜底，
- * 保证刷新前后顺序稳定；追加键由调用方 `postgres-project-query-port.ts` 的 `list` 写在
- * `ORDER BY` 里，本函数只产出档位这一列。
+ * 档位相同（同一状态）的项目再按 `projectLastChangeExpression` 从近到远排，
+ * 时间相同时按创建时间、ID 降序兜底，保证刷新前后顺序稳定；追加键由调用方
+ * `postgres-project-query-port.ts` 的 `list` 写在 `ORDER BY` 里，本函数只产出档位这一列。
  */
 export function projectLifecycleRankExpression(sql: ISql, table: "p" | "u") {
   return sql`CASE ${sql(`${table}.status`)}
@@ -114,6 +114,26 @@ export function projectLifecycleRankExpression(sql: ISql, table: "p" | "u") {
              WHEN 'MAINTENANCE' THEN 2
              ELSE 3
            END`;
+}
+
+/**
+ * 项目「最近变更时间」（ADR-046 2026-10-08 修订）：该项目动态投影里最新一条业务
+ * 事件的发生时间，没有动态的项目回落创建时间。生成任务、完成任务、状态流转、
+ * 发布 / 作废记录、成员变化等业务写入都会在同一事务里写项目动态，因此它比
+ * `projects.updated_at` / `row_version`（只随项目自身行改动）更贴近「最近有变更」。
+ *
+ * 逐项目 MAX 走 `activity_projection_project_cursor_idx (project_id, occurred_at, id)`
+ * 的反向索引扫描，不需要新增索引；`WHERE` 仍由授权范围的项目集合驱动。
+ */
+export function projectLastChangeExpression(sql: ISql, table: "p" | "u") {
+  return sql`COALESCE(
+             (
+               SELECT MAX(a.occurred_at)
+                 FROM app.activity_projection a
+                WHERE a.project_id = ${sql(`${table}.id`)}
+             ),
+             ${sql(`${table}.created_at`)}
+           )`;
 }
 
 /**

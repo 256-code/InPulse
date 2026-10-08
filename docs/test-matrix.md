@@ -4790,6 +4790,26 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 未运行 / 已知偏差：① 弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）未取得量测——第 2 次尝试仍未命中项目主页弹窗，按两次停手规则停止，列为未取证；② 本批无 Playwright 用例进 E2E 套件，与吸顶批次同一回归防线缺口；③ 本批含前端产品代码与单测描述修订，按 §8 需非作者人工评审。
 
+## 遗留问题卡片布局统一（用户指示，2026-10-08 本地落库）
+
+用户指示（原话）：「遗留问题的布局也统一一下」（附 `/issues` 未闭环两张卡片截图：短标题与徽章、编号挤同一行、卡高 90px，长标题独占一行、卡高 120px）。只改前端样式（`apps/web/src/styles/design-system.css`），无 API / 契约 / 权限 / 迁移改动；按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁，证据为一次性 Playwright 量测探针（用后删除、未入库）与截图复核。
+
+口径与实现：
+
+- 根因：`.issue-head` 是 `flex-wrap: wrap`，`strong`（标题）只在放不下时才整块换行——短标题的卡片是「徽章 + 编号 + 标题」同行，长标题的卡片标题独占一行，同一列表出现两种版式；`.issue-origin`（来源行）会因项目 / 模块 / 功能名长短不一而换行，再叠一层高差。
+- `.issue-head strong`：`flex-basis: 100%` 让标题恒独占一行；`-webkit-line-clamp: 2` 封顶 2 行（`display: -webkit-box` + `overflow: hidden`），`min-height: 3.2em` 恒预留 2 行（1.6 行高 × 2，单位用 em 跟随自身字号）——与任务看板 `.tb-card-title`（2026-09-30）同一手法。
+- `.issue-origin`：同样封顶 2 行（`-webkit-line-clamp: 2`）并 `min-height: 3.5em` 恒预留 2 行（1.75 行高 × 2），消除来源行换行带来的高差。
+- 两者都以「预留最大行数」换取全列表等高，代价是单行内容卡片会多出一行空白——与看板 / 任务中心两次等高的取舍一致（用户已接受）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ISSUES-CARD-EQUAL-BROWSER-001 | 浏览器实测 | 改动前量测（基线） | `/issues` 5 张卡片高 **[90, 120, 90, 109, 90]**；标题同行判定：仅 44 字长标题的那张 `titleOnMetaLine: false`，其余同行；第 4 张来源行换成两行（origin h=39 而非 19） | 本地通过 |
+| ISSUES-CARD-EQUAL-BROWSER-002 | 浏览器实测 | 改动后量测 | 5 张卡片全部 **160px 等高**；每张 `titleOwnLine: true`（`strong.left` = 内容左缘 291、`strong.top` 在徽章下方）；标题盒 42px（2 行预留）、来源盒 39px（2 行预留）；动作按钮仍顶对齐（顶部偏移 18px = 卡片内边距） | 本地通过 |
+
+本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 量测探针（在同一共享页面 `http://127.0.0.1:5173/issues` 改动前后各一次，量测后删除、不入库）、`pnpm exec prettier --check apps/web/src/styles/design-system.css`（exit 0）与截图肉眼复核；文档提交后另跑 `pnpm check:docs`。**未运行**：vitest / `pnpm test:web` / `pnpm test:e2e` / `pnpm check` / GitHub Actions。
+
+未运行 / 已知偏差：① 本批无用例进 vitest / E2E 套件（纯视觉等高，仓库既有同等批次同样以探针量测为证据），回归防线缺口与看板 / 任务中心批次一致；② 等高以「预留 2 行」实现，单行标题与单行来源的卡片存在一行空白，属有意取舍；③ 本批含前端产品代码，按 §8 需非作者人工评审。
+
 ## 弹窗打开「闪一下」：遮罩与面板分两帧上屏（用户指示「方案2实行」，2026-10-08 本地落库，已提交并推送 `test`）
 
 用户先问「我很好奇为什么经常会出现点开弹窗会闪一下」，在看过三个方案的真实抓帧对照页后回「方案2实行」；只淡遮罩落地后复看反馈「好像变化有点开始慢后面突然出现」，于是追加「面板也一起淡入」（见下文「追加」小节）。纯前端：不改契约、Route Registry、权限矩阵、数据库不变量、迁移、鉴权、幂等策略，也不改依赖。
@@ -4850,6 +4870,28 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：`pnpm exec prettier --check apps/web/src/styles/antd-adapter.css`；`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_e2e pnpm test:e2e`（**64 passed，5.2 分钟**）。上一批前端交互按 2026-09-17 前端免测试指示未跑测试，本批照常跑齐。
 
 未运行 / 已知偏差：① 空档时长受机器负载影响（实测波动 0–84ms），「方案2 无空档」是本次 6 组采样的结论，不是保证值；② 未在 Firefox / Safari 复核，其它合成器的分帧行为未验证；③ 淡入只作用于打开，关闭仍是瞬时消失（与改前一致）；④ 面板淡入依赖 `@starting-style`（Chrome 117+ / Safari 17.5+ / Firefox 129+）：不支持的浏览器退化为「面板瞬现 + 遮罩淡入」，即本条改动前的结果，不会出现卡在透明态；⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；工作提交 `881db9a`，合并 `origin/test` 后经合并提交 `a98abc5` 推送 `origin/test`（GitHub Actions 尚未执行）。
+
+## 2026-10-08 项目列表同档位按「最近变更时间」排序（ADR-046 修订，本地落库）
+
+用户指示（原话）：「把同状态的项目根据最近的变更排序，最新变更的放在前面，变更指的是生成任务，完成任务等变更」。ADR-046 原来把同档位项目按 `created_at DESC` 排，本轮把第二键换成「最近变更时间 DESC」，档位（进行中 → 未开始 → 维护中）与模块 / 功能列表不变；决策落 [ADR-046](adr/ADR-046.md) 的 2026-10-08 修订节。
+
+锁定口径：
+
+- 最近变更时间 = `MAX(app.activity_projection.occurred_at) WHERE project_id = p.id`，即项目动态里最新一条业务事件的发生时间；没有动态的项目回落 `p.created_at`，同值时按 `created_at DESC, id DESC` 兜底。
+- 选它而不是 `projects.updated_at` / `row_version`：那两列只在项目行自身被改动时变化，生成与完成任务不触碰项目行；项目动态与业务写入同事务落库，覆盖生成 / 完成任务、状态流转、发布 / 作废记录、成员变化等。
+- 实现位置：`apps/api/src/stats/card-stat-columns.ts` 新增 `projectLastChangeExpression`，由 `apps/api/src/modules/projects/postgres-project-query-port.ts` 的 `list` 写入 `ORDER BY`；不新增索引（逐项目 MAX 走既有 `activity_projection_project_cursor_idx (project_id, occurred_at, id)` 反向扫描），不新增迁移。
+- 契约：`listProjects` 的 Route Registry summary 改为「档位优先 → 最近变更时间从近到远 → 创建时间、ID 降序兜底」，`pnpm contract:generate` 后 5 个产物一致（只有 `openapi.json` 描述变化，生成客户端未变）；路由仍 101 条。
+
+| 用例 ID | 类型 | 覆盖点 | 断言 / 证据 | 最近结果 |
+| --- | --- | --- | --- | --- |
+| ADR046R-API-INT-001 | 真实 PostgreSQL | 无动态回落创建时间 | `projects-read-api.integration.test.ts` 新增用例第 1 步：两个同档位项目都无动态时顺序为 `[newer, older]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-002 | 真实 PostgreSQL | 较新变更提前 | 第 2 步：先建项目写入 `task.create` 动态（较晚时间）后顺序变为 `[older, newer]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-003 | 真实 PostgreSQL | 更新变更反超 | 第 3 步：后建项目写入更晚的 `task.complete` 动态后顺序反超为 `[newer, older]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-004 | 真实 PostgreSQL | 档位优先于变更时间 | 第 4 步：先建项目置为 `ACTIVE` 后即使最近变更更早仍排最前 `[older, newer]` | 本地通过（2026-10-08） |
+| ADR046R-API-INT-005 | 鉴别性验证 | 用例能测出新行为 | 临时把 `ORDER BY` 还原为 `created_at DESC` 后按 `-t "最近变更时间"` 复跑，该用例在第 2 步以 `expected [30, 29] to deeply equal [29, 30]` 转红；恢复后 7/7 转绿 | 本地完成（2026-10-08） |
+| ADR046R-CONTRACT-001 | 静态门禁 | 契约与权限矩阵 | `pnpm contract:drift`（5 个产物）、`pnpm contract:validate`（101 条路由）、`pnpm permissions:check`（101 / 101）通过 | 本地通过（2026-10-08） |
+
+未运行 / 已知偏差：① 未跑 GitHub Actions；② 模块与功能列表本轮不改；③ 若产品要求「只按最近变更排序、不再分档位」，需另立 ADR 修订 ADR-043 / ADR-046 的档位口径；④ 历史用例 `ADR045-API-INT-001`（档位 + 创建时间）在夹具无动态的前提下仍成立，已改名为「无动态时同档位按创建时间从近到远」。
 
 ## 界面残留清理第二批：内部编号、空态口径、重复图标与指标单位（用户指示「可以」，2026-10-08 本地落库）
 

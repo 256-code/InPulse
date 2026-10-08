@@ -622,3 +622,23 @@
 - 修订上文表述：本小节之前，「活动 / 记录 / 审计三页吸顶页头与日期分组头」小节中「仅 ≥701px 且 `:not(.is-embedded)` 生效」「`is-embedded`（记录视图装进项目主页弹窗）不吸顶、不量高度」与「项目主页记录弹窗内吸顶块与分组头均为 `static`、变量未设置、弹窗内滚动 320px 时吸顶块 132 → −188」，以及「前端交互批次」小节中「挂载三处…（记录视图装在项目主页弹窗时 `embedded` 不渲染）」均为当时事实，与本节冲突时以本节为准。
 - 验证：一次性 Playwright 结构探针（用后删除、未入库）——独立页 `/records`：页头恰 1 个、搜索与动作组同一行（top 117 / bottom 152）且动作组右缘 = 工具条右缘（1398）、按钮次序 [生成总结 / 新建迭代记录] 不换行、`--sticky-band-height: 132px`；弹窗模式（项目主页「查看全部」）：无页头、吸顶块 `sticky-page-band is-embedded`、顶部 112 / 高度 88 / 变量 87px、搜索与动作组同排（top 153 / 高 35）、两按钮 enabled。改动文件 `prettier --check` 与 `pnpm --filter @inpulse/web typecheck` 通过；按 2026-09-17 前端免测试指示未运行 vitest / Playwright 套件 / 整链门禁。
 - 未运行 / 已知偏差：弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）在页头移除后复跑探针未命中项目主页弹窗（「查看全部」未找到），**未取得量测**，列为未取证；本批无 Playwright 用例进套件；按 §8 需非作者人工评审；已本地提交、未推送。
+
+## 2026-10-08 遗留问题卡片布局统一说明
+
+用户 2026-10-08 指示（原话）：「遗留问题的布局也统一一下」（附 `/issues` 未闭环两张卡片截图：短标题与徽章、编号挤同一行，长标题独占一行，两卡不等高）。只改前端样式（`apps/web/src/styles/design-system.css`），无 API / 契约 / 权限 / 迁移改动。
+
+- 根因：`.issue-head` 是 `flex-wrap: wrap`，标题（`strong`）只在放不下时才整块换行——短标题卡片是「徽章 + 编号 + 标题」同行，长标题卡片标题独占一行，同一列表两种版式；`.issue-origin` 还会因项目 / 模块 / 功能名长短不一而换行，再叠一层高差（实测 5 张卡片 90 / 120 / 90 / 109 / 90）。
+- 统一手法与任务看板 `.tb-card-title`（2026-09-30）一致：`.issue-head strong` 加 `flex-basis: 100%`（标题恒独占一行）、`-webkit-line-clamp: 2` 封顶 2 行、`min-height: 3.2em` 恒预留 2 行（1.6 行高 × 2）；`.issue-origin` 同样封顶 2 行并 `min-height: 3.5em` 恒预留 2 行（1.75 行高 × 2）。
+- 取舍：以「预留最大行数」换全列表等高，单行内容卡片会多出一行空白——与看板 / 任务中心两次等高的既有取舍一致；只改样式，DOM、文案与按钮行为均未动。
+- 验证：一次性 Playwright 量测探针（同一共享页面，用后删除、不入库）——改动前 5 张卡片高 [90, 120, 90, 109, 90]；改动后全部 160px、每张标题独占一行（`strong.left` = 内容左缘）、标题盒 42px / 来源盒 39px（各 2 行预留）；截图肉眼复核两卡版式一致。`prettier --check` 通过；按 2026-09-17 前端免测试指示未运行 vitest / Playwright 套件 / 整链门禁。
+- 未运行 / 已知偏差：本批无用例进 vitest / E2E 套件；等高以预留行实现，单行内容卡片存在一行空白（有意取舍）；按 §8 需非作者人工评审；已本地提交、未推送。
+
+## 2026-10-08 项目列表同档位内改按「最近变更时间」排序说明
+
+用户指示（原话）：「把同状态的项目根据最近的变更排序，最新变更的放在前面，变更指的是生成任务，完成任务等变更」，即 [ADR-046](./docs/adr/ADR-046.md) 的 2026-10-08 修订（只加不改原文）。因此：
+
+- 项目列表第二排序键由 `created_at DESC` 改为**最近变更时间 DESC**，其后仍是 `created_at DESC`、`id DESC` 兜底；第一键（档位：进行中 → 未开始 → 维护中）以及模块 / 功能列表口径不变。
+- 「最近变更时间」= 该项目动态投影（`app.activity_projection`）里最新一条业务事件的发生时间（`MAX(occurred_at) WHERE project_id = p.id`）；没有动态的项目回落 `p.created_at`。不要换回 `projects.updated_at` / `row_version`——生成与完成任务不会改项目行，只有项目动态能反映「最近有变更」。
+- 实现位置：`apps/api/src/stats/card-stat-columns.ts` 的 `projectLastChangeExpression` + `apps/api/src/modules/projects/postgres-project-query-port.ts` 的 `list`；不新增索引（走既有 `activity_projection_project_cursor_idx`）与迁移。
+- 契约：`listProjects` 的 Route Registry summary 已同步，改描述后必须重跑 `pnpm contract:generate` 与 `pnpm contract:drift`；路由仍 101 条。
+- 回归防线：`apps/api/test/projects-read-api.integration.test.ts` 的「同状态项目按最近变更时间从近到远」（无动态回落 / 较新变更提前 / 更新变更反超 / 档位优先），改动排序键时必须跑该文件。
