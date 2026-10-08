@@ -4789,3 +4789,23 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 结构探针（量测后删除、不入库）、全部改动文件 `prettier --check` 与 `pnpm --filter @inpulse/web typecheck`（exit 0）、`pnpm check:docs`。**未运行**：vitest / `pnpm test:web` / `pnpm test:e2e` / `pnpm check` / GitHub Actions。
 
 未运行 / 已知偏差：① 弹窗内滚动矩阵（分组头钉住、回到顶部 `inset` 贴底）未取得量测——第 2 次尝试仍未命中项目主页弹窗，按两次停手规则停止，列为未取证；② 本批无 Playwright 用例进 E2E 套件，与吸顶批次同一回归防线缺口；③ 本批含前端产品代码与单测描述修订，按 §8 需非作者人工评审。
+
+## 遗留问题卡片布局统一（用户指示，2026-10-08 本地落库）
+
+用户指示（原话）：「遗留问题的布局也统一一下」（附 `/issues` 未闭环两张卡片截图：短标题与徽章、编号挤同一行、卡高 90px，长标题独占一行、卡高 120px）。只改前端样式（`apps/web/src/styles/design-system.css`），无 API / 契约 / 权限 / 迁移改动；按 2026-09-17 前端免测试指示未运行自动化测试与整链门禁，证据为一次性 Playwright 量测探针（用后删除、未入库）与截图复核。
+
+口径与实现：
+
+- 根因：`.issue-head` 是 `flex-wrap: wrap`，`strong`（标题）只在放不下时才整块换行——短标题的卡片是「徽章 + 编号 + 标题」同行，长标题的卡片标题独占一行，同一列表出现两种版式；`.issue-origin`（来源行）会因项目 / 模块 / 功能名长短不一而换行，再叠一层高差。
+- `.issue-head strong`：`flex-basis: 100%` 让标题恒独占一行；`-webkit-line-clamp: 2` 封顶 2 行（`display: -webkit-box` + `overflow: hidden`），`min-height: 3.2em` 恒预留 2 行（1.6 行高 × 2，单位用 em 跟随自身字号）——与任务看板 `.tb-card-title`（2026-09-30）同一手法。
+- `.issue-origin`：同样封顶 2 行（`-webkit-line-clamp: 2`）并 `min-height: 3.5em` 恒预留 2 行（1.75 行高 × 2），消除来源行换行带来的高差。
+- 两者都以「预留最大行数」换取全列表等高，代价是单行内容卡片会多出一行空白——与看板 / 任务中心两次等高的取舍一致（用户已接受）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ISSUES-CARD-EQUAL-BROWSER-001 | 浏览器实测 | 改动前量测（基线） | `/issues` 5 张卡片高 **[90, 120, 90, 109, 90]**；标题同行判定：仅 44 字长标题的那张 `titleOnMetaLine: false`，其余同行；第 4 张来源行换成两行（origin h=39 而非 19） | 本地通过 |
+| ISSUES-CARD-EQUAL-BROWSER-002 | 浏览器实测 | 改动后量测 | 5 张卡片全部 **160px 等高**；每张 `titleOwnLine: true`（`strong.left` = 内容左缘 291、`strong.top` 在徽章下方）；标题盒 42px（2 行预留）、来源盒 39px（2 行预留）；动作按钮仍顶对齐（顶部偏移 18px = 卡片内边距） | 本地通过 |
+
+本地实际执行（2026-10-08）：按 2026-09-17 指示未运行任何自动化测试与整链门禁；实际执行一次性 Playwright 量测探针（在同一共享页面 `http://127.0.0.1:5173/issues` 改动前后各一次，量测后删除、不入库）、`pnpm exec prettier --check apps/web/src/styles/design-system.css`（exit 0）与截图肉眼复核；文档提交后另跑 `pnpm check:docs`。**未运行**：vitest / `pnpm test:web` / `pnpm test:e2e` / `pnpm check` / GitHub Actions。
+
+未运行 / 已知偏差：① 本批无用例进 vitest / E2E 套件（纯视觉等高，仓库既有同等批次同样以探针量测为证据），回归防线缺口与看板 / 任务中心批次一致；② 等高以「预留 2 行」实现，单行标题与单行来源的卡片存在一行空白，属有意取舍；③ 本批含前端产品代码，按 §8 需非作者人工评审。
