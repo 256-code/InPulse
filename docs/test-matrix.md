@@ -4691,3 +4691,26 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：按 2026-09-17 前端免测试指示**未运行** vitest / `pnpm test:web` / 全量 `pnpm test:e2e` / `pnpm check`；实际执行的是逐项一次性 Playwright 探针（用后删除）、改动文件 `prettier --check`、`pnpm --filter @inpulse/web typecheck` 与 `get_errors`（无新增错误）。其中单字搜索批次的完整门禁见上一节（该批跨契约与后端）。**未运行**：GitHub Actions。
 
 未运行 / 已知偏差：① ①～⑤ 五项均无 Playwright 用例进套件，只有一次性探针证据，**回归防线缺口**；② 折叠动画未在 Firefox / Safari 复核；③ 看板吸顶的 311px 为量测当页数值，不同项目概览卡内容长度会略有差异（由 `ResizeObserver` 跟随）；④ 本批含前端产品代码，按 §8 需非作者人工评审；未提交、未推送。
+## 界面清理的残留验收与死样式清除（用户指示「先整理一下内部，删掉的东西有没有删干净有没有影响使用」与「着手处理2」，2026-10-08 本地落库，尚未提交）
+
+承接第七十六条（按注释审查台 72 条决策清理界面说明）与后续的弹窗首帧、任务弹窗收敛改动。本轮只做「逐条验收 + 清残留 + 全量死样式清除」，不改契约、Route Registry、权限矩阵、数据库、迁移、鉴权、幂等与依赖。
+
+验收口径与结论：
+
+- 20 条 `drop` 决策的原文本在 `apps/web/src` 已全部查不到（脚本遍历 275 个 `.tsx/.ts` 逐条字符串检索）；唯一仍命中的 `search#0`（`change`）是命令面板候选项的 `hint`（`CommandPalette.tsx:181`），与搜索页顶部已删的重复描述段不是同一处，保留待用户定案。
+- 对近 60 次提交里被删除的 JSX `className` 逐条回查现有代码与样式表，找出因删除而失去引用的孤儿规则并删除：`.popover-hint`（通知弹层说明）、`.danger-zone` 三条（四层归档下线后遗留）、`.calm-spinner` 与 `@keyframes inpulse-spin`（等待态改骨架屏后遗留）、`.modal-loading`、`.calm-feature-card.card-archived`（功能归档下线后遗留）、`.summary-loading`。 随后再做一轮脚本化全量清除（口径见下），两轮合计删除 264 个整块死规则 + 16 处选择器裁剪。
+- 归档下线残留的用户可见文案：`AdminUsersPageView.tsx` 的权限提示与管理员开关说明原写「归档项目」「模块归档」，按 ADR-043/044/045/054 改为「彻底删除项目」「项目删除」。
+- 结构残留：`ModuleEditorModal.tsx`、`FeaturesPageView.tsx`、`TasksPanel.tsx` 三处「解决编辑冲突」面板删掉 `<small>` 后剩下的 `<div><h3></h3></div>` 空壳去掉内层 `<div>`（`.calm-section-title` 为 `display:flex` 单子项，视觉不变）。
+- 尺寸对标（工作区里此前未提交的实现，本批一并提交）：`.tasks-panel .calm-task-grid` 在 `≥1440px` 与任务中心同为四列 319px、`.feature-document .tasks-panel .calm-task-grid` 在 `≥1101px` 固定三列，功能档案页原来的两列覆盖随之下线；远端 `5149d2a` 不含这些规则（模块任务面板仍是三列 428px）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| CLEANUP-RESIDUE-SCAN-001 | 静态检索 | 20 条删除文案与孤儿选择器回查 | 删除文案 0 命中；被删选择器在 `rg` 全库只剩注释 | 本地通过 |
+| CLEANUP-RESIDUE-UNIT-001 | Web 单元 | 清理不破坏既有用例 | `pnpm --filter @inpulse/web test` → **90 文件 629 例全绿** | 本地通过 |
+| CLEANUP-RESIDUE-GATE-001 | 静态门禁 | 类型、lint、格式 | `pnpm lint`、`pnpm --filter @inpulse/web run typecheck`、改动集 `pnpm exec prettier --check` 全部 exit 0 | 本地通过 |
+| CLEANUP-RESIDUE-BROWSER-001 | 浏览器实测 | 受影响页面无空白 / 错位 | 小邵（项目成员）：任务中心通知弹层、迭代记录 `/records?projectId=1`、模块任务（4 列 319×294）、功能档案均正常；特哥（系统管理员）`/settings` 权限提示渲染为「彻底删除项目」；末次全流程运行期 0 个 4xx 响应 | 本地通过 |
+| CLEANUP-DEAD-CSS-001 | 静态检索 | 全量死样式清除口径与残留复查 | 删除后重跑候选脚本 → `certain` 7 / `ambiguous` 11，全部是「注释里提到的历史类名」或活类名子串；样式表 0 个空规则块 | 本地通过 |
+| CLEANUP-DEAD-CSS-VISUAL-001 | 浏览器实测 | 删除不改变渲染 | 18 条路由「全 DOM 几何 + 计算样式」在 HEAD 与改动版之间 17/18 逐字段一致（唯一差异为 `admin-audit` 懒加载行数）；19 张截图 14 张逐字节一致，5 张差异全部可归因于相对时间文字 | 本地通过 |
+| CLEANUP-DEAD-CSS-REBASE-001 | 浏览器实测 | rebase 到 `5149d2a` 后复验 | 18 条路由「全 DOM 几何 + 计算样式」15 条逐字段一致；3 条差异全部可解释（`module-tasks` 本批有意的四列 319px、`admin-settings` 由「归档」改「删除」后的文案宽度、`admin-audit` 懒加载行数） | 本地通过 |
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、`test:integration`、Playwright E2E、镜像构建与 GitHub Actions（尚未提交推送）。② 死样式清除已在本批做完整：先按「被删 `className` 反查」清 7 处，再用脚本化口径做全量清除（该类名在 `apps/web/src` 全部 `.css` 里有定义、在全部 `.tsx/.ts/.html` 里无独立词引用、且不以任何代码拼接前缀开头），两轮共删 264 个整块死规则 + 16 处选择器裁剪并清掉空 `@media` 包裹；样式表里已无「代码零引用的活规则」。③ `CommandPalette.tsx:181` 的 `hint` 仍待用户定案。④ 未新增依赖、`pnpm-lock.yaml` 未动；按 §8 本批含前端产品代码与文档，需非作者人工评审。

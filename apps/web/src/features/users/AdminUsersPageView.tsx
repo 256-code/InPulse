@@ -369,7 +369,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
               <InpulseIcon name="shield" size={16} />
               <span>
                 <strong>权限提示</strong>
-                系统管理员可以归档项目、作废与恢复记录、查看原始审计快照；高风险操作需要二次确认。项目成员在已加入项目内拥有全部普通研发操作权限。
+                系统管理员可以彻底删除项目、作废与恢复记录、查看原始审计快照；高风险操作需要二次确认。项目成员在已加入项目内拥有全部普通研发操作权限。
               </span>
             </div>
           </section>
@@ -445,7 +445,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           <p>
             {editor !== null && selfAdmin(editor)
               ? "不能取消自己当前的管理员角色。"
-              : "开启后该账号可执行用户管理、模块归档等管理员操作。"}
+              : "开启后该账号可执行用户管理与项目删除等管理员操作。"}
           </p>
           {formError && <Alert type="error" title={formError} />}
           {mutation.isError && (

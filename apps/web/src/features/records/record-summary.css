@@ -72,12 +72,6 @@
   padding: 18px 28px 8px;
 }
 
-.summary-loading {
-  display: flex;
-  justify-content: center;
-  padding: 48px 0;
-}
-
 /* 正文：与设计稿的文档卡一致——白底、细边、行宽受限，便于直接复制。 */
 .summary-doc {
   max-width: 820px;
