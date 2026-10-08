@@ -5194,6 +5194,15 @@ td.due-overdue {
   align-items: center;
   gap: 4px;
 }
+/* 任务卡片等高（2026-10-08 产品要求「已完成和未完成任务卡片的布局也要一样大」）：
+   任务中心的卡片原先只在有已发布记录时才渲染 `.task-card-footer`（「记录 n 条」），
+   同一张网格里没有记录的卡（多见于「未完成」档）就比有记录的卡矮一截。现在页脚恒渲染，
+   无记录时是空占位盒，min-height 取满内容时的自然高度 = padding-top 15px +
+   11px × 1.5 行高 = 31.5px，两种卡片逐像素同高。项目任务面板（TasksPanel）的页脚带
+   「更新」行、本就每卡必渲染，自然高度同为 31.5px，不受影响。 */
+.calm-task-card .task-card-footer {
+  min-height: 31.5px;
+}
 
 /* 任务聚合组卡片（2026-09-21 产品定案）：与任务卡片同网格混排，外框、色条、
    内边距全部复用 `.calm-task-card`。独立区块（.group-panel / .group-card /

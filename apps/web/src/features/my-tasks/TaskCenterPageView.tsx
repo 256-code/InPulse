@@ -607,16 +607,20 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             {due}
           </span>
         </div>
-        {item.publishedRecordCount > 0 ? (
-          <div className="task-card-footer">
+        {/* 页脚恒渲染、只让计数按有无记录出现（2026-10-08 产品要求「已完成和未完成
+            任务卡片的布局也要一样大」）：原先没有已发布记录时整块不渲染，未完成档的卡片
+            就比有记录的已完成卡片矮一截。空页脚由 CSS 的 min-height 占位（见
+            design-system.css 的 `.calm-task-card .task-card-footer`），两种卡片等高。 */}
+        <div className="task-card-footer">
+          {item.publishedRecordCount > 0 ? (
             <span className="task-card-counts">
               <span title={item.publishedRecordCount + " 条已发布迭代记录"}>
                 <InpulseIcon name="gitBranch" size={13} />
                 记录 {item.publishedRecordCount} 条
               </span>
             </span>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </button>
     );
   };
@@ -871,6 +875,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             {dueText}
           </span>
         </div>
+        {/* 组卡没有记录计数，但要与任务卡片逐像素同高（2026-10-08 产品要求「已完成和
+            未完成任务卡片的布局也要一样大」）——任务卡片的页脚现在恒渲染、空页脚由 CSS
+            的 min-height 占位，组卡缺这一块就会矮 31.5px。这里补一个空占位盒，占位高度
+            同样来自 `.calm-task-card .task-card-footer`（组卡也带 `calm-task-card` 类）。 */}
+        <div className="task-card-footer" />
       </button>
     );
   };

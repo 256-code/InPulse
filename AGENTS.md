@@ -526,3 +526,13 @@
 - `design-system.css`：新增 `.catalog-heading { white-space: nowrap }`——900px 窄屏实测新搜索框把标题挤成两行（41px 单行 → 81px 两行），加此规则后标题保持单行，空间不足时由右侧工具组（`.catalog-actions`）先换行。
 - 真机验证（本地 dev `/projects`，Playwright 探针 + 截图）：按名称（「3D」）/ 编码（「inspection」，大小写不敏感）/ 描述（「贯穿」）过滤、无匹配空态与「清空搜索」恢复、「层级说明」保留逐项通过；搜索框与 `h1` 垂直同心、header 高 56、网格 `y=115` 与改动前一致；宽度扫描 [1440, 1200, 1000, 900, 760] 标题保持单行（900 下 header 78、工具组换行为两行，第二行仅「新建项目」，可接受）。
 - 按 2026-09-17 前端免测试指示未运行任何测试与门禁（仅对改动文件执行 `prettier --check` 通过，本次文档提交另跑 `pnpm check:docs` 通过）；本批含前端产品代码，按 §8 需非作者人工评审；已本地提交（`a009533`），未推送。
+
+## 2026-10-08 任务中心两档卡片等高（用户指示，本地落库）
+
+用户指示（原话）：「已完成和未完成任务卡片的布局也要一样大」（附 `/tasks` 两档截图：未完成档多数卡片没有页脚、已完成档多数带「记录 n 条」页脚）。只改前端，无 API / 契约 / 权限 / 迁移改动，沿用 2026-09-30 任务看板等高的既有手法（补齐可变高度行，而不是给网格或卡片写死高度）。
+
+- 根因：`.task-card-footer` 原先只在 `item.publishedRecordCount > 0` 时渲染，于是同一张 `.calm-task-grid` 里无记录的卡片比有记录的矮一个页脚（31.5px）；「未完成」档无记录卡居多、「已完成」档几乎每张都有，并排看两档高度不齐。网格行高由行内最高卡决定（`stretch` 会拉齐同排），所以缺陷只在**整档页脚全为空**时才可见。
+- 改动：`TaskCenterPageView.tsx` 的任务卡页脚改为**恒渲染**（有记录仍是「记录 n 条」，无记录为空占位盒）；`renderGroupCard` 末尾补一个空 `.task-card-footer` 占位，继续与任务卡逐行同构（组卡同时带 `.calm-task-card` 类）；`design-system.css` 新增 `.calm-task-card .task-card-footer { min-height: 31.5px }`（31.5px = `padding-top: 15px` + 11px × 1.5 行高，即满内容时的自然高度）。项目任务面板（`TasksPanel`）页脚本来就每卡必渲染，未改。
+- 真机实测（一次性 Playwright 只读探针，1440×900，本地演示库、账号 `tege`，量测后删除、不入库）：未完成档 20 张全 `270px` / 页脚 `31.5px`，已完成档 19 张（15 张带计数 + 4 张空）同样 `270px` / `31.5px`，行内混合无高差；反事实注入 `min-height: 0 !important` 后未完成档塌回 `253.5px` / 页脚 `15px`，即改动前「未完成档比已完成档矮 16.5px」的缺陷形态；空页脚内注入「记录 99 条」后页脚仍 31.5px（占位不会把有记录的卡片撑高）。
+- 探针排障留档：本机 Chromium 从 `http://127.0.0.1:5173` **不保存** `Secure` Cookie（`http://localhost:5173` 保存），且浏览器内登录在本机始终 401（`INVALID_AUTH_CREDENTIALS`），而同一口令经 curl 走同源完整流程 200 成功——服务端与代理链路已证清白，量测改用 curl 取回 `__Host-session` 后经 `context.setExtraHTTPHeaders({ Cookie })` 注入（CDP 拒绝向 http 源注入 Secure Cookie）。E2E 配置用的是 `http://127.0.0.1:${E2E_WEB_PORT}`，CI（Linux Chromium）登录正常，该差异只影响本机一次性探针，未改动任何仓库代码；是否影响本机浏览器登录未定论（用户日常浏览未复现）。
+- 未运行：vitest / `pnpm test:web` / Playwright 套件 / `pnpm check`（按 2026-09-17 前端免测试指示）；组卡等高未做真机量测（量测当日该账号可见范围内 `groupCount: 0`，只由 DOM 断言与同一条 CSS 规则背书，未验证）；本批含前端产品代码与新增单测，按 §8 需非作者人工评审；测试矩阵 `docs/test-matrix.md` 末节「任务中心卡片等高」与 `docs/task-card-colors.md` 变更历史同日行已同步；已本地提交，未推送。

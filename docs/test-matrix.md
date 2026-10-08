@@ -1032,7 +1032,7 @@ securityFlow（MFA 注册、验证、恢复码、管理员重认证）CSRF 路�
 | --- | --- | --- | --- | --- |
 | C1-UNIT-001 | 单元 | 批量标记 Hook | `useTaskMarks` 去重升序、按 `TASK_MARK_IDS_MAX=100` 分块、空集合不发请求（`enabled: key.length > 0`）、读取失败降级为空 Map 且不重试；`toTaskMarkMap` 按 taskId 建索引 | 本地通过（`apps/web/src/features/tasks/task-marks.test.tsx` 5 例） |
 | C1-UNIT-002 | 单元 | 任务面板徽章、计数与入口 | 列表行与卡片按 `groupRole` 显示「主任务 / 来源任务」徽章、卡片页脚与详情显示「迭代记录 n 条」（0 条不渲染）、详情「查看主任务」仅 `SOURCE` 显示并导航 `/task-groups/{groupId}`、`MAIN` 自身隐藏入口；整页只发一次标记请求（`taskIds: [1, 2]`） | 本地通过（`apps/web/src/features/tasks/TasksPanel.test.tsx`，含 C-1 3 例） |
-| C1-UNIT-003 | 单元 | 任务中心真实计数 | 任务中心卡片改读 `item.publishedRecordCount`（原写死「记录 1 条」），>0 显示「记录 n 条」且 `title` 为「n 条已发布迭代记录」，0 不渲染 | 本地通过（`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`，期望「记录 3 条」） |
+| C1-UNIT-003 | 单元 | 任务中心真实计数 | 任务中心卡片改读 `item.publishedRecordCount`（原写死「记录 1 条」），>0 显示「记录 n 条」且 `title` 为「n 条已发布迭代记录」，0 时页脚仍渲染为空占位盒（2026-10-08 等高口径，0 不再整块不渲染，见末节「任务中心卡片等高」） | 本地通过（`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx`，期望「记录 3 条」；断言口径 2026-10-08 更新） |
 | C1-UNIT-004 | 单元 | 适配器与 mock 计数同形 | `MyTaskListItem.publishedRecordCount` 在类型、v1 查询映射、服务端适配器与 mock 数据集（10 条，3 条非零 3/2/1）同形状 | 本地通过（`my-tasks-v1-query.test.ts`、`my-tasks-server.test.ts`） |
 | C1-E2E-001 | Playwright | 聚合组任务详情关系标记 | `task-groups.spec.ts`：合并后在任务详情弹窗（`.task-detail-modal`）看到「主任务 / 来源任务」（以 `getByText(..., { exact: true })` 断言，避免与卡片 h3 标题子串冲突）与「迭代记录 n 条」 | 本地通过 |
 | C1-E2E-002 | Playwright | 遗留问题页与记录发布路径 | `issues.spec.ts` 由抽屉断言改为弹窗断言；`record-publishing.spec.ts` 末段断言详情「迭代记录 1 条」、筛选 DONE 后卡片计数与无关系徽章 | 本地通过 |
@@ -2709,7 +2709,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| TASKGROUP-AS-CARD-WEB-001 | Web 单元 | 组卡与任务卡同网格、同排版 | `TaskCenterPageView.test.tsx`「renders task groups as cards inside the task grid」：`my-task-group-501` 可见，卡内组名 / 项目名 / `.calm-card-bottom > .task-card-badges` 里的「聚合组」「进行中」/「4 条分支」可定位，完成计数「已完成 1/4」在 `.task-group-card-top` 且该行是卡片第一个子元素（`.task-group-card-open` 与 `.task-card-footer` 均为 null、卡上无「查看详情 / 解除合并」文案）；`card.closest(".calm-task-grid")` 非空、`document.querySelector(".group-panel")` 为 null；`.calm-card-top` 与 `.task-id` 均为 null、`TG-001` 不在卡片上（编号只在列表视图与弹窗）；`.calm-card-assignee` 的 `nextElementSibling` 是 `.calm-card-bottom` | 本地通过（2026-09-22 改口径后重跑） |
+| TASKGROUP-AS-CARD-WEB-001 | Web 单元 | 组卡与任务卡同网格、同排版 | `TaskCenterPageView.test.tsx`「renders task groups as cards inside the task grid」：`my-task-group-501` 可见，卡内组名 / 项目名 / `.calm-card-bottom > .task-card-badges` 里的「聚合组」「进行中」/「4 条分支」可定位，完成计数「已完成 1/4」在 `.task-group-card-top` 且该行是卡片第一个子元素（`.task-group-card-open` 为 null、卡上无「查看详情 / 解除合并」文案；`.task-card-footer` 自 2026-10-08 起恒渲染为空占位盒，断言改为「存在且为空」，见末节「任务中心卡片等高」）；`card.closest(".calm-task-grid")` 非空、`document.querySelector(".group-panel")` 为 null；`.calm-card-top` 与 `.task-id` 均为 null、`TG-001` 不在卡片上（编号只在列表视图与弹窗）；`.calm-card-assignee` 的 `nextElementSibling` 是 `.calm-card-bottom` | 本地通过（2026-09-22 改口径后重跑；断言口径 2026-10-08 更新） |
 | TASKGROUP-AS-CARD-WEB-002 | Web 单元 | 组卡就地打开弹窗 | 同文件「opens the task group detail dialog from the group card」：点击组卡后 `onOpenTask` 未被调用、出现名称含「聚合组」的 `dialog` | 本地通过（2026-09-21 同批补跑） |
 | TASKGROUP-AS-CARD-WEB-003 | Web 单元 | 空聚合组不占位 | 同文件「keeps task cards visible without a group empty state when there are no groups」：任务卡 `my-task-101` 可见，无 `my-task-group-501`，无「还没有聚合组」 | 本地通过（2026-09-21 同批补跑） |
 | TASKGROUP-AS-CARD-WEB-004 | Web 单元 | 聚合组失败不遮任务 | 同文件「keeps the task list visible with an error alert when groups fail」：任务卡可见且「任务列表暂时不可用，请稍后重试。」可定位 | 本地通过（2026-09-21 同批补跑） |
@@ -2877,7 +2877,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-BROWSER-007 | 浏览器实测 | 看板卡片的整卡红（2026-09-22 已作废） | 同 CARD-COLOR-BROWSER-006 一并作废：看板卡片不再有整卡红档，逾期分支卡只按优先级上色。作废前记录：`/projects/1/task-board` 的 `INPULSE-T-18` `.tb-card.tone-prio-overdue` 背景 `rgb(179, 38, 30)`，日期文案 `09-19 逾期` 随反白组变白 | 已作废 |
 | CARD-COLOR-BROWSER-008 | 浏览器实测 | 白底表面只改文字色 | `/tasks` 切「列表」视图：`td.due-overdue` 为 `#b3261e` 加粗且无底色；任务详情弹窗 `.calm-due.due-red`（已逾期 6天）为 `rgb(179, 38, 30)`、底透明 | 本地通过 |
 | CARD-COLOR-BROWSER-009 | 浏览器实测 | 已完成 / 已取消不参与红档 | `/projects/1/task-board`：48 张已完成卡全部保持 `rgb(238, 248, 243)` 底与 `rgb(47, 64, 49)` 文字，没有一张因日期变红 | 本地通过 |
-| CARD-COLOR-UNIT-005 | Web 单元 | 卡片纵向排版：标签在左下角、负责人在分隔线上方（任务卡与聚合组卡同构） | `TaskCenterPageView.test.tsx` / `TasksPanel.test.tsx` 的对应用例：卡片不含 `.calm-card-top` 与 `.task-id`、TODO 卡片不渲染「未完成」徽章、`.task-card-badges` 是 `.calm-card-bottom` 的首个子元素（内含优先级与其他标签）、`.calm-card-assignee` 紧接在 `.calm-card-bottom` 之前且带「负责人：」标题；任务中心无迭代记录时 `.task-card-footer` 整块不渲染，已完成卡片仍保留「已完成」徽章 | 本地通过 |
+| CARD-COLOR-UNIT-005 | Web 单元 | 卡片纵向排版：标签在左下角、负责人在分隔线上方（任务卡与聚合组卡同构） | `TaskCenterPageView.test.tsx` / `TasksPanel.test.tsx` 的对应用例：卡片不含 `.calm-card-top` 与 `.task-id`、TODO 卡片不渲染「未完成」徽章、`.task-card-badges` 是 `.calm-card-bottom` 的首个子元素（内含优先级与其他标签）、`.calm-card-assignee` 紧接在 `.calm-card-bottom` 之前且带「负责人：」标题；任务中心无迭代记录时 `.task-card-footer` 仍渲染为空占位盒（2026-10-08 等高口径取代原「整块不渲染」，见末节），已完成卡片仍保留「已完成」徽章 | 本地通过（断言口径 2026-10-08 更新） |
 | CARD-COLOR-BROWSER-010 | 浏览器实测 | 卡片纵向排版与顶部空档 | 无头 Chromium 1500 宽 `/tasks`：四张卡 `.calm-card-top` 与 `.task-id` 全为 null，标签组左缩进 24px（贴左）、负责人右缩进 24px（贴右）且位于分隔线上方 15px、截止时间在右下角；同页注入旧 `20px` 上边距复现改前态，测得标题上方空档 `44px → 28px`、卡片高度 `227px → 211px`；`/tasks?status=done` 与项目任务面板同款卡片一致 | 本地通过 |
 | CARD-COLOR-UNIT-006 | Web 单元 | 遗留问题徽章取色 | `TaskCenterPageView.test.tsx` 与 `TasksPanel.test.tsx` 的用例断言「遗留问题」徽章带 `badge-leftover` 类（不再与优先级标签同款）；`task-board-format.ts` 的 `LEFTOVER_SOURCE_BADGE.className` 为 `badge badge-leftover`，看板卡片与列表行共用 | 本地通过 |
 | CARD-COLOR-BROWSER-011 | 浏览器实测 | 遗留问题徽章在可承载卡片底色上的取值 | 无头 Chromium 1440 宽（本地 dev 5173，把遗留项卡片上的 tone 类逐档替换后读徽章计算值）：同一枚「遗留问题」徽章在 `tone-prio-urgent` / `normal` / `high` / `done` / `canceled` 五档卡片上恒为 `background rgb(138, 43, 6)` + `color rgb(255, 255, 255)`；卡片自身是 `tone-prio-leftover` 时，卡内所有 `.badge`（含「普通」「遗留问题」）统一转 `rgba(255, 255, 255, 0.18)` 底 + 白字。（2026-09-23 八次配色定案删除了 `tone-prio-leftover` 卡片档，后半句作废，五档取值由末节 LEFTOVER-PRIORITY-COLOR-BROWSER-002 重测。）取样集合由旧八档收敛为五档——已逾期 / 马上到期两档卡片随整卡红一并作废 | 本地通过（2026-09-22 重测） |
@@ -2890,7 +2890,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | CARD-COLOR-BROWSER-018 | 浏览器实测 | 卡片实色按「全色样板」定色口径重定（2026-09-22，紧急色同日再取中） | 无头 Chromium 1440 宽（本地 dev 5173，真实样式表，逐个注入 tone 类读计算值）：任务中心卡片 urgent 底 `rgb(206, 52, 43)` / 边 `rgb(177, 44, 37)`（`#ce342b` / `#b12c25`，2026-09-22 红档取中，旧 `#e84138` / `#c83830`）、normal 底 `rgb(51, 126, 230)` / 边 `rgb(44, 108, 198)`（`#337ee6` / `#2c6cc6`）、high 底 `rgb(255, 219, 77)` / 边 `rgb(214, 184, 65)` / 字 `rgb(63, 45, 0)`（2026-09-23 二次定案后为底 `rgb(51, 126, 230)` / 边 `rgb(44, 108, 198)` / 白字，见末节）、low 底 `rgb(255, 255, 255)`、done 底 `rgb(205, 241, 211)` / 边 `rgb(163, 217, 176)`、canceled 底 `rgb(242, 245, 248)`、leftover 底 `rgb(138, 43, 6)`；已逾期 `#b3261e` 与马上到期 `#d9541b` 两档随「逾期不搞特殊」整档删除，页面内 `.tone-prio-overdue` / `.tone-prio-soon` 节点数为 0；任务看板 `.tb-card` 同值，其中 `tone-prio-done` 当日仍为底 `rgb(238, 248, 243)` / 边 `rgb(212, 232, 221)`（2026-09-22 末轮统一为 `rgb(225, 242, 242)` / `rgb(188, 221, 223)`，见 CARD-COLOR-BROWSER-026）；列表行 / 表格行的浅色 `.tone-prio-*` 块未被污染 | 本地通过（2026-09-22 重测） |
 | CARD-COLOR-UNIT-007 | Web 单元 | 聚合组卡片按未完成分支的最高优先级取色 | `TaskCenterPageView.test.tsx` 的聚合组用例：仍有未完成分支的组卡与组行得 `tone-prio-urgent`（优先级徽章与整卡底色同源）、紧急分支完成后落到 `tone-prio-high`、分支全部收尾后转 `tone-prio-done` 且不再渲染优先级徽章；组卡无 `.calm-card-top` 与 `.task-id`、标签组在 `.calm-card-bottom > .task-card-badges`、负责人是底部行的前一个兄弟节点 | 本地通过（2026-09-22 改口径后重跑） |
 | CARD-COLOR-BROWSER-019 | 浏览器实测 | 聚合组卡片按派生优先级的实际取色 | 无头 Chromium 1440 宽（本地 dev 5173，真实样式表，把六支 tone 类逐档注入真实组卡后读计算值）：`tone-prio-urgent` 底 `rgb(206, 52, 43)` / 边 `rgb(177, 44, 37)` / 标题白字、`tone-prio-high` 底 `rgb(255, 219, 77)` / 边 `rgb(214, 184, 65)` / 标题 `rgb(63, 45, 0)`、`tone-prio-normal` 底 `rgb(51, 126, 230)` / 边 `rgb(44, 108, 198)` / 标题白字、`tone-prio-low` 底 `rgb(255, 255, 255)` / 边 `rgb(217, 224, 231)`、`tone-prio-done` 底 `rgb(205, 241, 211)` / 边 `rgb(163, 217, 176)` / 标题 `rgb(47, 64, 49)`、`tone-prio-canceled` 底 `rgb(242, 245, 248)` / 边 `rgb(213, 221, 228)`；真实数据 `K123-TG-1` 组卡为 `tone-prio-normal`；三支旧组状态类（`tone-group-open` / `tone-group-done` / `tone-group`）已随规则删除，注入后不再产生任何底色（2026-09-23 更新：`tone-prio-low` 已随「低」档位删除，现只剩五支 tone 类，本行为当日测量事实，见末节） | 本地通过（2026-09-22） |
-| CARD-COLOR-BROWSER-020 | 浏览器实测 | 聚合组卡片排版与任务卡逐行同构 | 无头 Chromium 1440 宽 `/tasks`（本地 dev 5173，真实数据只读，`K123-TG-1`）：`className=calm-task-card task-group-card tone-prio-normal`；子元素序列为 `H3 → P.task-belonging → DIV.calm-card-assignee → DIV.calm-card-bottom`，与相邻任务卡逐项相同；`.task-group-card-top`、`.calm-card-top`、`.task-id` 均为 null（右上角计数行已删除，编号只留在列表视图与弹窗）；`.calm-card-assignee` 的 `justify-content: flex-end` 且 `nextElementSibling` 是 `.calm-card-bottom`；标签组在 `.calm-card-bottom > .task-card-badges` 内、顺序为「普通 / 聚合组 / 未开始」（徽章 title 为「聚合组：包含 2 条分支（主分支与全部来源分支）」「0 / 2 条分支任务已完成」）；底部行右侧是时钟图标 + 截止文案（该组取未完成分支中最早的一条）；`.task-card-footer` 与 `.task-group-card-open` 均为 null；组卡与相邻任务卡实测高度同为 241px | 本地通过（2026-09-22） |
+| CARD-COLOR-BROWSER-020 | 浏览器实测 | 聚合组卡片排版与任务卡逐行同构 | 无头 Chromium 1440 宽 `/tasks`（本地 dev 5173，真实数据只读，`K123-TG-1`）：`className=calm-task-card task-group-card tone-prio-normal`；子元素序列为 `H3 → P.task-belonging → DIV.calm-card-assignee → DIV.calm-card-bottom`（2026-10-08 起末尾再补一个空的 `DIV.task-card-footer`），与相邻任务卡逐项相同；`.task-group-card-top`、`.calm-card-top`、`.task-id` 均为 null（右上角计数行已删除，编号只留在列表视图与弹窗）；`.calm-card-assignee` 的 `justify-content: flex-end` 且 `nextElementSibling` 是 `.calm-card-bottom`；标签组在 `.calm-card-bottom > .task-card-badges` 内、顺序为「普通 / 聚合组 / 未开始」（徽章 title 为「聚合组：包含 2 条分支（主分支与全部来源分支）」「0 / 2 条分支任务已完成」）；底部行右侧是时钟图标 + 截止文案（该组取未完成分支中最早的一条）；`.task-group-card-open` 为 null，`.task-card-footer` 当时为 null（2026-10-08 起恒渲染为空占位盒、成为子元素序列末尾的 `DIV.task-card-footer`，见末节）；组卡与相邻任务卡当时实测高度同为 241px（2026-10-08 复测同为 270px） | 本地通过（2026-09-22；2026-10-08 复测见末节） |
 | CARD-COLOR-API-001 | 真实 PostgreSQL 集成 + 浏览器 E2E | 聚合组三态依赖的 R-7 分支事实字段 | `apps/api/test/aggregate-read-ports.integration.test.ts` 新增用例：`TaskQueryPort.listByIds` 的 `dueAt` 必须是 `Date`（时间列在驱动层以文本返回，读取边界还原）、优先级透传、无截止为 `null`；`apps/e2e/tests/task-groups.spec.ts` 两例通过，任务中心组卡断言「未开始」+「聚合组」+「普通」徽章 + `tone-prio-normal` 类名 + `.task-group-card-top` 数量为 0（真实 PostgreSQL + 新 API dist + 生产构建） | 本地通过 |
 | CARD-COLOR-UNIT-008 | Web 单元 | 聚合组状态三态与「已完成」档归属 | `TaskCenterPageView.test.tsx`：无分支完成的组卡状态徽章为「未开始」（`badge-gray`、title「0 / 4 条分支任务已完成」、整卡仍是未完成分支最高一档的 `tone-prio-urgent`）、有分支完成为「进行中」（title「1 / 4 条分支任务已完成」）、全部分支收尾为「已完成」（`tone-prio-done`、title「3 / 4 条分支任务已完成」，已取消分支算收尾但不计入完成数）；同一条用例断言全部分支收尾的组在 `status=open` 档位下不再渲染组卡（未入组的任务卡照常出现），在 `status=done` 档位下可见 | 本地通过（2026-09-22） |
 | CARD-COLOR-BROWSER-021 | 浏览器实测 | 组卡跟随「未完成 / 已完成」档位 | 无头 Chromium 1440 宽（本地 dev 5173，真实数据只读）：默认 `/tasks` 的 `K123-TG-1`（2 条分支都未完成）出现在「未完成」档、状态徽章「未开始」；`/tasks?status=done` 下 `.task-group-card` 数量为 0（该组仍有未完成分支，不归「已完成」档） | 本地通过（2026-09-22） |
@@ -4476,3 +4476,37 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 | LEFTOVER-CONVERT-FORM-E2E-003 | 浏览器 E2E | 修订后定向回归 | `leftover-task.spec.ts` + `issues.spec.ts` → 4/4；真机取材的一次性截图脚本写在 `apps/e2e/tests/` 下，验证后已删除，不在仓库内 | 本地通过 |
 
 未运行 / 已知偏差：① 上一轮全量 E2E 的 `external-links.spec.ts:35`（F22 项目多链接）失败已按口径 A 修复：`GitHub 链接` 弹窗空态点「添加链接」原来会把「设为项目根仓库」默认勾上，粘贴 Issue 链接被服务端按「根仓库必须是仓库根地址」拒绝，前端 422 文案统一显示为「链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。」；去掉该默认勾选后该 spec 定向 3/3 通过；变基到远端 `a0a8a10` 后整跑全量 `pnpm --filter @inpulse/e2e test:e2e` → **62 passed（5.0 分钟，0 失败）**（详见上方「GitHub 链接弹窗方案 A 与项目页微调」小节）。② 本地 `app_e2e` 库原先停在 `0017`（仓库已到 `0032`），首轮全量 E2E 因此大面积失败；补 `MIGRATION_DATABASE_URL=…/app_e2e pnpm db:migrate`（13 applied / 18 already present）后复跑正常，属环境状态而非本批代码缺陷。③ `pnpm check` 整链、镜像构建与 GitHub Actions 未跑。④ 本批含契约与服务端改动（幂等契约版本升级）与前端产品代码，按 §8 需非作者人工评审。
+
+## 任务中心卡片等高：页脚恒渲染 + 组卡补空占位（用户指示，2026-10-08 本地落库）
+
+用户指示（原话）：「已完成和未完成任务卡片的布局也要一样大」（附 `/tasks` 两档截图：未完成档的卡多数没有页脚、已完成档的卡多数带「记录 n 条」页脚）。只改前端，无 API / 契约 / 权限 / 迁移改动。
+
+根因与口径：
+
+- `.task-card-footer` 原先只在 `item.publishedRecordCount > 0` 时渲染（`TaskCenterPageView` 的任务卡片），于是同一张 `.calm-task-grid` 里没有已发布记录的卡片比有记录的卡片矮一个页脚（31.5px）——「未完成」档里无记录的卡居多，「已完成」档里几乎每张都有，两档并排看高度不齐。
+- 页脚改为**恒渲染**：有记录时内容仍是「记录 n 条」（`title` 为「n 条已发布迭代记录」），没有记录时是空占位盒，高度由新增的 `.calm-task-card .task-card-footer { min-height: 31.5px }` 给。31.5px 来自满内容时的自然高度 = `padding-top: 15px` + 11px 字号 × 1.5 行高。
+- 聚合组卡片（`.task-group-card`，同时带 `.calm-task-card` 类）原本没有页脚元素，页脚恒渲染后会在同一网格里比相邻任务卡矮 31.5px，因此 `renderGroupCard` 末尾补了一个**空的** `.task-card-footer` 占位，继续与任务卡逐行同构（见上方《任务聚合组与任务卡同网格》小节）。
+- 项目任务面板（`TasksPanel`）的卡片页脚本就每卡必渲染（「更新 …」行 + 可选「记录 n 条」），自然高度同为 31.5px，未改。
+- 范围只限「页脚盒在不在」：卡片配色、徽章、排序、看板与列表视图、任务详情弹窗、契约与路由均未动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CARD-EQUAL-HEIGHT-UNIT-001 | Web 单元 | 任务中心无记录卡片的页脚 | `TaskCenterPageView.test.tsx`「标签落到左下角、负责人贴在分隔线上方右侧」用例：无记录卡片 `.task-card-footer` 不再为 `null`（存在且不含「记录 n 条」文字），有记录卡片仍显示「记录 3 条」——原断言「无记录时整块不渲染」随本次口径作废 | 本地通过（断言已改，见下方偏差①） |
+| TASK-CARD-EQUAL-HEIGHT-UNIT-002 | Web 单元 | 组卡空页脚占位 | 同文件「renders task groups as cards inside the task grid」：组卡 `.task-card-footer` 存在且为空（`toBeEmptyDOMElement()`），`.task-group-card-open` 仍为 `null`、卡上无「查看详情 / 解除合并」文案 | 本地通过（断言已改，见下方偏差①） |
+| TASK-CARD-EQUAL-HEIGHT-BROWSER-001 | 浏览器实测 | 两档卡片与组卡逐像素等高 | 1440×900 真实 Chromium 打开 `/tasks`：修复后两档卡片高度集合均为单值 `[270]`、页脚均为 `[31.5]`、行内混合（带「记录 n 条」与空页脚同排）无高度差（`mixedRowHeights: []`）；反事实对照在注入 `min-height: 0 !important` 后未完成档塌回 `[253.5]` / 页脚 `[15]`，即改动前「未完成档比已完成档矮 16.5px」的缺陷形态 | 本地通过（组卡未覆盖，见下方偏差③） |
+
+本地实际执行（2026-10-08）：按 2026-09-17「只改前端不再运行测试与门禁」的指示，**未运行** vitest / `pnpm test:web` / Playwright 套件 / `pnpm check`；实际执行的是 `get_errors`（改动三个文件无错误，CSS 仅既有 `line-clamp` / `vertical-align` 警告）与一次性 Playwright 只读探针（`apps/e2e/probe-task-center-size.mjs`，量测后删除、不入库）。
+
+探针实测（真实 Chromium 1440×900，本地演示库、账号 `tege`、`.calm-task-grid` 4 列 × 272px）：
+
+| 场景 | 卡片数 | 卡片高度集合 | 页脚高度集合 | 行内高差 |
+| --- | --- | --- | --- | --- |
+| 未完成档（页脚全空） | 20 | `[270]` | `[31.5]` | 无 |
+| 已完成档（15 张带「记录 n 条」+ 4 张空） | 19 | `[270]` | `[31.5]` | 无 |
+| 反事实：未完成档 + `min-height: 0 !important` | 20 | `[253.5]` | `[15]` | 无 |
+
+- 两档 270px 完全一致，且已在同一次量测里出现「带计数 / 空页脚同排」而无行高差。注意网格行高由该行最高的卡片决定（`stretch` 会把同排矮卡拉齐），所以只要行内有一张带「记录 n 条」的卡片，空页脚卡在视觉上也会被拉平——反事实因此必须落在**整档页脚全为空**的未完成档才测得出来。
+- 反事实直接复现缺陷形态：关掉新增占位后未完成档整档为 253.5px，与已完成档的 270px 相差 16.5px，正是用户截图里的现象；恢复规则后回到 270px。
+- 空页脚内注入一条「记录 99 条」内容后页脚实测仍 31.5px（内容 16.5px < 占位 31.5px），说明占位不会把有记录的卡片撑高。
+
+未运行 / 已知偏差：① 按前端免测试指示未跑任何自动化测试与门禁（`get_errors` 之外零验证命令），两条 `TASK-CARD-EQUAL-HEIGHT-UNIT-*` 用例的通过状态来自改动前基线口径与断言一致性检查，未经本次执行背书；② 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；③ 量测当日该账号可见范围内没有聚合组卡（`groupCount: 0`），**组卡的等高未做真机量测**，只由 `TASKGROUP-AS-CARD-WEB-001` / `UNIT-002` 的 DOM 断言与同一条 `.calm-task-card .task-card-footer` 规则背书（未验证）；④ 探针登录绕过了浏览器内登录（本机 Chromium 从 `http://127.0.0.1` 不保存 `Secure` Cookie、且浏览器内登录在本机始终 401，而同一口令经 curl 同源登录 200 成功）：会话 Cookie 由 curl 取回后经 `setExtraHTTPHeaders` 注入，与待验证的卡片布局无关；该现象是否影响本机开发用浏览器登录未定论（用户日常浏览正常，未复现）。⑤ 登录在演示库留下 1 条 `app.user_sessions` 行（只读量测的正常痕迹，未做清理）。

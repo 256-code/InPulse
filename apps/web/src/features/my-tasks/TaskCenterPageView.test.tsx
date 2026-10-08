@@ -356,8 +356,11 @@ describe("TaskCenterPageView", () => {
     expect(assignee.firstElementChild?.getAttribute("title")).toMatch(
       /^负责人：/,
     );
-    // 页脚已无内容（没有迭代记录）时整块不渲染，不留空行。
-    expect(card.querySelector(".task-card-footer")).toBeNull();
+    // 页脚恒渲染、只按有无记录决定是否放计数（2026-10-08 「已完成和未完成任务卡片的
+    // 布局也要一样大」）：无记录时是空占位盒（高度由 CSS 的 min-height 给），整卡与
+    // 有记录的卡片等高；不能再断言 `.task-card-footer` 整块不渲染。
+    expect(card.querySelector(".task-card-footer")).not.toBeNull();
+    expect(within(card).queryByText(/记录 \d+ 条/)).toBeNull();
   });
 
   it("遗留问题来源的任务按自己的优先级取色，徽章保留深锈红实底", async () => {
@@ -720,10 +723,15 @@ describe("TaskCenterPageView", () => {
     // 不再覆盖底色，组卡按未完成分支里的最高一档取色（T-101 为紧急），因此是紧急红；
     // 最早一条已逾期只体现在右下角日期文案（上一段已断言）。
     expect(card).toHaveClass("tone-prio-urgent");
-    // 「查看详情 / 解除合并」提示已删除：整卡本身就是弹窗入口，页脚整块不再渲染。
+    // 「查看详情 / 解除合并」提示已删除：整卡本身就是弹窗入口。
     expect(card.querySelector(".task-group-card-open")).toBeNull();
     expect(within(card).queryByText("查看详情 / 解除合并")).toBeNull();
-    expect(card.querySelector(".task-card-footer")).toBeNull();
+    // 2026-10-08 产品要求「已完成和未完成任务卡片的布局也要一样大」：任务卡片的页脚改为
+    // 恒渲染（空页脚由 CSS 的 min-height 占位），组卡也要补一个空页脚占位才能逐像素同高，
+    // 因此这里不再断言 `.task-card-footer` 为 null，改成断言「存在且是空的」。
+    const groupFooter = card.querySelector(".task-card-footer");
+    expect(groupFooter).not.toBeNull();
+    expect(groupFooter).toBeEmptyDOMElement();
     // 独立聚合组区块已删除：组卡与任务卡在同一网格里。
     expect(card.closest(".calm-task-grid")).not.toBeNull();
     expect(document.querySelector(".group-panel")).toBeNull();
