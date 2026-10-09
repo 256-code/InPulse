@@ -485,6 +485,33 @@ export function TasksPanel({
     setMerge(null);
     if (returnId !== null) openDetail(returnId);
   };
+  /**
+   * 2026-10-09 改版：任务级操作（取消任务 / 合并到主任务）从详情弹窗动作行搬到
+   * 「编辑任务」弹窗页脚。编辑弹窗打开时详情弹窗已经卸载（`open` 会清掉 selectedId），
+   * 所以点这两枚按钮要先回到详情弹窗，再触发各自原有的确认流程，不会出现弹窗套弹窗。
+   * 开放条件与详情动作行同一口径：只对未完成任务、且通过同一条写入门禁。
+   */
+  const editorTaskOpsEnabled =
+    selection?.item !== undefined &&
+    !editReadOnly &&
+    !(featureId !== null && selection.item.scopeType === "MODULE");
+  const handOffToDetail = (): boolean => {
+    if (saving.current || reloading) return false;
+    const id = selection?.item?.id ?? null;
+    generation.current++;
+    setSelection(null);
+    setMerge(null);
+    if (id === null) return false;
+    openDetail(id);
+    setOpenRecordId(null);
+    return true;
+  };
+  const cancelFromEditor = () => {
+    if (handOffToDetail()) openStatus("CANCEL");
+  };
+  const mergeFromEditor = () => {
+    if (handOffToDetail()) setMergeInto(true);
+  };
   const save = handleSubmit(async (edit) => {
     if (
       !selection ||
@@ -942,61 +969,43 @@ export function TasksPanel({
           ) : (
             <>
               <div className="drawer-header task-modal-header">
-                <div>
-                  <h2>{current.title}</h2>
-                  <div className="task-modal-badges">
-                    <span className="task-id">{current.code}</span>
-                    <CalmBadge tone={statusTone[current.workStatus]}>
-                      {statusLabels[current.workStatus]}
-                    </CalmBadge>
-                    <CalmBadge tone={priorityTone[current.priority]}>
-                      {priorityLabels[current.priority]}
-                    </CalmBadge>
-                    {currentBadge !== null && (
-                      <CalmBadge
-                        tone={currentBadge.tone}
-                        title={currentBadge.title}
-                      >
-                        {currentBadge.label}
+                <div className="task-modal-header-main">
+                  {/* 2026-10-09 任务详情弹窗改版（定稿方案 ②A）：头部只留标题 +
+                      状态/优先级徽章 + 编码 + 关闭按钮（实测 76px → 约 48px）；
+                      「GitHub 链接 / 在项目中打开」并进下方动作行，与
+                      「编辑任务 / 完成任务」同排，中间用一道竖线把跳转与操作分开。 */}
+                  <div className="task-modal-title">
+                    <h2>{current.title}</h2>
+                    <div className="task-modal-badges">
+                      <CalmBadge tone={statusTone[current.workStatus]}>
+                        {statusLabels[current.workStatus]}
                       </CalmBadge>
-                    )}
-                    {currentMark?.hasLeftoverSource === true && (
-                      <CalmBadge
-                        tone={LEFTOVER_SOURCE_BADGE.tone}
-                        title={LEFTOVER_SOURCE_BADGE.title}
-                      >
-                        {LEFTOVER_SOURCE_BADGE.label}
+                      <CalmBadge tone={priorityTone[current.priority]}>
+                        {priorityLabels[current.priority]}
                       </CalmBadge>
-                    )}
-                  </div>
-                  <div className="task-modal-header-links">
-                    <ExternalLinksPanel
-                      key={current.id}
-                      targetType="TASK"
-                      targetId={current.id}
-                      client={api}
-                    />
-                    {/* 任务中心等跨项目页打开详情时页面里看不到项目结构：
-                        这里给一条回项目侧任务位置的入口（功能档案或模块任务页，
-                        落地后由 ?taskId= 打开同一个任务的详情）。 */}
-                    {mode === "detail" && (
-                      <Button
-                        title="跳转到该项目中此任务所在的功能档案 / 模块任务页"
-                        onClick={() => {
-                          const location = {
-                            projectId: current.projectId,
-                            moduleId: current.moduleId,
-                            featureId: current.featureId,
-                            taskId: current.id,
-                          };
-                          closeDetail();
-                          navigate(taskDetailPath(location));
-                        }}
-                      >
-                        <InpulseIcon name="folder" size={14} />
-                        在项目中打开
-                      </Button>
-                    )}
+                      {currentBadge !== null && (
+                        <CalmBadge
+                          tone={currentBadge.tone}
+                          title={currentBadge.title}
+                        >
+                          {currentBadge.label}
+                        </CalmBadge>
+                      )}
+                      {currentMark?.hasLeftoverSource === true && (
+                        <CalmBadge
+                          tone={LEFTOVER_SOURCE_BADGE.tone}
+                          title={LEFTOVER_SOURCE_BADGE.title}
+                        >
+                          {LEFTOVER_SOURCE_BADGE.label}
+                        </CalmBadge>
+                      )}
+                    </div>
+                    <span
+                      className="task-id"
+                      title={"任务编码 " + current.code}
+                    >
+                      {current.code}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -1024,33 +1033,57 @@ export function TasksPanel({
               )}
               <div className="calm-task-actions">
                 <TaskDueBadge item={current} />
+                {/* 2026-10-09 改版（定稿方案 ②A）：GitHub 链接与「在项目中打开」从
+                    头部挪到本行，与「编辑任务 / 完成任务」同排；「取消任务 / 合并到
+                    主任务」搬到「编辑任务」弹窗页脚，动作行只留「编辑任务」+ 状态
+                    主操作；主按钮靠既有的 margin-left:auto 顶到最右。 */}
+                <ExternalLinksPanel
+                  key={current.id}
+                  targetType="TASK"
+                  targetId={current.id}
+                  client={api}
+                  triggerClassName="secondary-button"
+                />
+                {/* 任务中心等跨项目页打开详情时页面里看不到项目结构：
+                    这里给一条回项目侧任务位置的入口（功能档案或模块任务页，
+                    落地后由 ?taskId= 打开同一个任务的详情）。 */}
+                {mode === "detail" && (
+                  <Button
+                    className="secondary-button"
+                    title="跳转到该项目中此任务所在的功能档案 / 模块任务页"
+                    onClick={() => {
+                      const location = {
+                        projectId: current.projectId,
+                        moduleId: current.moduleId,
+                        featureId: current.featureId,
+                        taskId: current.id,
+                      };
+                      closeDetail();
+                      navigate(taskDetailPath(location));
+                    }}
+                  >
+                    <InpulseIcon name="folder" size={14} />
+                    在项目中打开
+                  </Button>
+                )}
+                <span className="ta-sep" aria-hidden="true" />
+                <Button
+                  className="secondary-button"
+                  disabled={!taskWritable}
+                  onClick={() => open(current)}
+                >
+                  <InpulseIcon name="pencil" size={14} />
+                  编辑任务
+                </Button>
                 {current.workStatus === "TODO" && (
-                  <>
-                    <Button
-                      className="primary-button"
-                      disabled={!taskWritable}
-                      onClick={() => openStatus("COMPLETE")}
-                    >
-                      <InpulseIcon name="check" size={15} />
-                      完成任务
-                    </Button>
-                    <Button
-                      className="secondary-button"
-                      disabled={!taskWritable}
-                      onClick={() => openStatus("CANCEL")}
-                    >
-                      <InpulseIcon name="x" size={15} />
-                      取消任务
-                    </Button>
-                    <Button
-                      className="secondary-button"
-                      disabled={!taskWritable}
-                      onClick={() => setMergeInto(true)}
-                    >
-                      <InpulseIcon name="gitMerge" size={15} />
-                      合并到主任务
-                    </Button>
-                  </>
+                  <Button
+                    className="primary-button"
+                    disabled={!taskWritable}
+                    onClick={() => openStatus("COMPLETE")}
+                  >
+                    <InpulseIcon name="check" size={15} />
+                    完成任务
+                  </Button>
                 )}
                 {current.workStatus === "DONE" && (
                   <Button
@@ -1072,14 +1105,6 @@ export function TasksPanel({
                     恢复任务
                   </Button>
                 )}
-                <Button
-                  className="secondary-button"
-                  disabled={!taskWritable}
-                  onClick={() => open(current)}
-                >
-                  <InpulseIcon name="pencil" size={14} />
-                  编辑任务
-                </Button>
               </div>
               <CalmTabs
                 label="任务内容"
@@ -1111,7 +1136,7 @@ export function TasksPanel({
                         <p>{current.description || "暂无任务说明"}</p>
                       </section>
                       <div className="task-modal-links">
-                        {/* 2026-09-24 产品要求删除「打开模块任务」：任务中心详情头部
+                        {/* 2026-09-24 产品要求删除「打开模块任务」：任务中心详情动作行
                             的「在项目中打开」与功能页头部的「模块级任务」标签都指向同
                             一地址（taskDetailPath），正文里重复。 */}
                         <a
@@ -1689,6 +1714,29 @@ export function TasksPanel({
             </fieldset>
           </div>
           <div className="calm-action-footer">
+            {/* 2026-10-09 改版：任务级操作从详情弹窗动作行搬到这里，沿用
+                「编辑项目 → 删除项目」的页脚最左位置（ADR-049 同一约定），
+                与表单自己的「取消 / 保存」分开。 */}
+            {selection?.item?.workStatus === "TODO" ? (
+              <div className="footer-leading task-op-actions">
+                <Button
+                  className="tint-danger-button"
+                  disabled={!editorTaskOpsEnabled}
+                  onClick={cancelFromEditor}
+                >
+                  <InpulseIcon name="alert" size={15} />
+                  取消任务
+                </Button>
+                <Button
+                  className="tint-violet-button"
+                  disabled={!editorTaskOpsEnabled}
+                  onClick={mergeFromEditor}
+                >
+                  <InpulseIcon name="gitMerge" size={15} />
+                  合并到主任务
+                </Button>
+              </div>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}

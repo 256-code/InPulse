@@ -305,7 +305,7 @@ describe("F-14 task editing", () => {
     expect(screen.getByText("原说明")).toBeVisible();
     expect(screen.getByText("1 个任务")).toBeVisible();
     fireEvent.click(screen.getByRole("article", { name: /^查看任务详情/ }));
-    // 2026-09-24 产品要求删除正文里的「打开模块任务」跳转（任务中心详情头部
+    // 2026-09-24 产品要求删除正文里的「打开模块任务」跳转（任务中心详情动作行
     // 的「在项目中打开」与功能页头部的「模块级任务」标签已是同一去向）。
     await screen.findByRole("button", { name: "编辑任务" });
     expect(
@@ -454,14 +454,16 @@ function mountWithGroupModal(api: InpulseApiClient, writable = true) {
   );
 }
 describe("F-23 merge entry", () => {
-  it("opens the merge modal from the task detail dialog", async () => {
+  it("opens the merge modal from the edit-task footer", async () => {
     mount(client());
     fireEvent.click(
       await screen.findByRole("article", { name: /^查看任务详情/ }),
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "合并到主任务" }),
-    );
+    // 2026-10-09 改版（定稿方案 D）：合并入口从详情动作行搬进「编辑任务」页脚。
+    // 点它先收起编辑弹窗、由详情弹窗接管，不出现弹窗套弹窗。
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const editor = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    fireEvent.click(editor.getByRole("button", { name: "合并到主任务" }));
     expect(await screen.findByLabelText(/^主任务$/)).toBeInTheDocument();
   });
 });

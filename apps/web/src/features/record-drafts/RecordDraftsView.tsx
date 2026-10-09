@@ -12,12 +12,16 @@ import {
   RecordDraftEditorModal,
   type RecordDraftEditorTarget,
 } from "./RecordDraftEditorModal";
-import { recordDraftErrorMessage } from "./record-draft-errors";
+import {
+  recordDraftErrorMessage,
+  recordDraftListErrorMessage,
+} from "./record-draft-errors";
 import "./record-drafts.css";
 import { Alert, Button } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ApiError,
   createApiClient,
   type InpulseApiClient,
   type RecordDraftItem,
@@ -151,10 +155,21 @@ export function RecordDraftsView({
         ? myDrafts.isError
         : projectDrafts.isError;
   /**
+   * 项目级草稿读取对非成员项目按资源语义返回 404（跨项目清单则静默排除）：重试不会变好，
+   * 页面级守卫也会给出说明，这里不再重复渲染红条与「重试草稿列表」。
+   */
+  const projectListUnreadable =
+    !taskId &&
+    !isAllProjects &&
+    listFailed &&
+    listError instanceof ApiError &&
+    (listError.status === 403 || listError.status === 404);
+  /**
    * 内容区只在有东西可展示时占位：有草稿卡片，或读取失败需要给出重试入口。
    * （首次加载中不占位，空结果也不占位。）
    */
-  const hasDraftContent = listFailed || draftCards.length > 0;
+  const hasDraftContent =
+    (listFailed && !projectListUnreadable) || draftCards.length > 0;
   /**
    * 草稿箱（我的草稿 / 项目草稿）整块渲染的条件：解析完仍是空的时候，标题、说明、
    * 折叠按钮与列表一律不渲染，页面上不留任何与草稿箱有关的字样。
@@ -258,7 +273,7 @@ export function RecordDraftsView({
       {projects.isError && (
         <Alert
           type="error"
-          title={recordDraftErrorMessage(projects.error)}
+          title={recordDraftListErrorMessage(projects.error)}
           action={
             <Button onClick={() => void projects.refetch()}>重试项目</Button>
           }
@@ -335,7 +350,7 @@ export function RecordDraftsView({
           ) : listFailed ? (
             <Alert
               type="error"
-              title={recordDraftErrorMessage(listError)}
+              title={recordDraftListErrorMessage(listError)}
               action={<Button onClick={reloadList}>重试草稿列表</Button>}
             />
           ) : (

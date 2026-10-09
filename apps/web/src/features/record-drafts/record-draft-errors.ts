@@ -18,6 +18,21 @@ export function recordDraftErrorMessage(error: unknown) {
 }
 
 /**
+ * 草稿列表读取失败的文案：与创建/编辑失败分开——列表读取不会丢任何未提交输入，
+ * 沿用「输入已保留」会让用户以为自己的编辑被暂存了。
+ */
+export function recordDraftListErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录。";
+    if (error.status === 403) return "权限或安全校验未通过，无法读取草稿列表。";
+    if (error.status === 404)
+      return "该项目不存在或你已无权访问，无法读取草稿。";
+    if (error.status === 429) return "请求过于频繁，请稍后重试。";
+  }
+  return "草稿服务暂时不可用，请重试。";
+}
+
+/**
  * 删除草稿的错误文案：删除失败时草稿与弹窗都保留；409 直接透出服务端原因
  * （版本冲突或状态已变化，提示用户加载最新内容后重试）。
  */

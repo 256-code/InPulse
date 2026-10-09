@@ -1163,4 +1163,19 @@ it("草稿读取失败时内容区仍然展开，保留错误与重试入口", a
   expect(
     await screen.findByRole("button", { name: "重试草稿列表" }),
   ).toBeVisible();
+  // 列表读取不涉及未提交输入，「输入已保留」在这里是误导。
+  expect(screen.getByText("草稿服务暂时不可用，请重试。")).toBeVisible();
+  expect(screen.queryByText(/输入已保留/)).not.toBeInTheDocument();
+});
+
+it("项目草稿读取 404 时整块不渲染，不留永远失败的重试入口", async () => {
+  const listRecordDrafts = vi
+    .fn()
+    .mockRejectedValue(new ApiError(404, { code: "NOT_FOUND" }));
+  mount(client({ listRecordDrafts }));
+  await act(async () => {});
+  expect(listRecordDrafts).toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "重试草稿列表" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "项目草稿" })).toBeNull();
+  expect(screen.queryByText(/无权访问/)).not.toBeInTheDocument();
 });

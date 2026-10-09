@@ -432,4 +432,40 @@ describe("RecordsWorkspace", () => {
       "草稿令牌 1 · 当前用户 3",
     );
   });
+
+  it("replaces the workspace with one notice when the linked project is out of scope", async () => {
+    const client = baseClient();
+    mount(
+      client as unknown as InpulseApiClient,
+      "/records?projectId=9&publishedId=8",
+    );
+    // 项目 9 不在可读项目里：不能再出现「草稿箱红条 + 记录红条 + 空态」三条并存。
+    expect(await screen.findByText("项目不存在或你已无权访问")).toBeVisible();
+    expect(screen.queryByText(/输入已保留/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试草稿列表" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试记录" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("drafts-block")).not.toBeInTheDocument();
+    // 读不到的项目不再追问那条记录，也不渲染空态。
+    expect(client.getChangeRecord).not.toHaveBeenCalled();
+    expect(screen.queryByText("暂无已发布记录")).not.toBeInTheDocument();
+  });
+
+  it("returns to the cross-project view from the out-of-scope notice", async () => {
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient, "/records?projectId=9");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "查看全部迭代记录" }),
+    );
+    await waitFor(() =>
+      expect(client.listRecordFeed).toHaveBeenLastCalledWith(
+        { status: "PUBLISHED", source: "ALL", limit: 20 },
+        signalInit,
+      ),
+    );
+    expect(screen.getByRole("button", { name: "新建迭代记录" })).toBeVisible();
+  });
 });

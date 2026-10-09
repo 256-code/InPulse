@@ -65,7 +65,12 @@ test("F-23/F-24/F-25 合并到主任务、聚合组详情与解除合并", async
       .filter({ hasText: sourceTaskTitle })
       .click();
     await expect(detail).toBeVisible();
-    await detail.getByRole("button", { name: "合并到主任务" }).click();
+    // 2026-10-09 改版（定稿方案 D）：合并入口从详情动作行搬进「编辑任务」页脚。
+    await detail.getByRole("button", { name: "编辑任务" }).click();
+    await page
+      .getByRole("dialog", { name: "编辑任务" })
+      .getByRole("button", { name: "合并到主任务" })
+      .click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
     // 主任务候选由服务端搜索提供（最小 2 字符），先敲标题再点候选。
     await pickCalmSelectOption(
@@ -171,7 +176,12 @@ test("F-25 任务中心聚合组卡片代表已合并任务，弹窗展示主分
       .filter({ hasText: sourceTaskTitle })
       .click();
     await expect(detail).toBeVisible();
-    await detail.getByRole("button", { name: "合并到主任务" }).click();
+    // 2026-10-09 改版（定稿方案 D）：合并入口从详情动作行搬进「编辑任务」页脚。
+    await detail.getByRole("button", { name: "编辑任务" }).click();
+    await page
+      .getByRole("dialog", { name: "编辑任务" })
+      .getByRole("button", { name: "合并到主任务" })
+      .click();
     const mergeDialog = page.getByRole("dialog", { name: "合并到主任务" });
     await pickCalmSelectOption(
       mergeDialog,

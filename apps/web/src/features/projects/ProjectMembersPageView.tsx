@@ -466,12 +466,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                     刷新成员
                   </Button>
                 </div>
-                <p className="permission-hint">
-                  <InpulseIcon name="shield" size={15} />
-                  <span>
-                    项目必须保留一名组长：组长不能被直接移除或撤销，请先把其他成员设为组长完成转移。
-                  </span>
-                </p>
               </div>
             </>
           ) : null}

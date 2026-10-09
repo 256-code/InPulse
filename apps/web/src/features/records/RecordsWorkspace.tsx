@@ -229,6 +229,42 @@ export function RecordsWorkspace({
   // 量出的吸顶块高度写进页面根的 CSS 变量，供 `.timeline-day-head` 的 top 使用。
   // 弹窗（embedded）里正文是弹层自己的滚动区，吸顶同样成立，也要量。
   useStickyBandOffset(pageRef, bandRef);
+
+  /**
+   * 链接里的 projectId 不在当前账号可读的项目列表里（旧链接、项目已删除、已被移出成员）：
+   * 跨项目记录清单会静默排掉非成员项目，项目级草稿读取却按资源语义返回 404，
+   * 照常渲染会同时出现「草稿箱红条 + 记录红条 + 空态」三条互相矛盾的内容。
+   * 这里整页只留一条说明，草稿箱整块不挂载，不再下发项目级请求。
+   */
+  const projectOutOfScope =
+    !embedded &&
+    projectId > 0 &&
+    projects.isSuccess &&
+    !(projects.data?.items ?? []).some((item) => item.id === projectId);
+  if (projectOutOfScope) {
+    return (
+      <div className="records-workspace" ref={pageRef}>
+        <div className="page-header">
+          <div>
+            <h1>迭代记录</h1>
+            <p>
+              只记录已经发生或已确认的变化。人员、时间、归属与版本全部自动生成。
+            </p>
+          </div>
+        </div>
+        <CalmEmptyState
+          icon="gitBranch"
+          title="项目不存在或你已无权访问"
+          description="链接里的项目可能已被删除，或你已不在成员名单中。"
+        >
+          <Button onClick={() => setParams(new URLSearchParams())}>
+            查看全部迭代记录
+          </Button>
+        </CalmEmptyState>
+      </div>
+    );
+  }
+
   return (
     <div
       className={

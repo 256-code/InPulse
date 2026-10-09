@@ -2801,6 +2801,14 @@ a:focus-visible {
 .calm-action-footer > .footer-leading {
   margin-right: auto;
 }
+/* 2026-10-09 任务详情改版：任务级操作（取消任务 / 合并到主任务）搬进编辑任务弹窗页脚，
+   与表单自己的「取消 / 保存」分居两端，这里只负责两枚按钮的同组间距。 */
+.calm-action-footer > .footer-leading.task-op-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .view-description,
 .task-toolbar > .secondary-button {
   display: none;
@@ -3142,6 +3150,8 @@ a:focus-visible {
 .surface-modal .soft-blue-button,
 .surface-modal .small-button,
 .surface-modal .danger-button,
+.surface-modal .tint-danger-button,
+.surface-modal .tint-violet-button,
 .surface-modal .icon-button {
   border-radius: 8px;
 }
@@ -3712,12 +3722,34 @@ a:focus-visible {
   gap: 7px;
   align-items: center;
 }
-.task-modal-header-links {
+/* 2026-10-09 任务详情弹窗改版（定稿方案 ②A）：头部只留「标题 + 状态/优先级徽章
+   + 编码」与关闭按钮（实测 76px → 约 48px）；「GitHub 链接 / 在项目中打开」并进
+   下方动作行，窄窗口由 .calm-task-actions 的 flex-wrap 换行，不做逐字折行。 */
+.task-modal-header-main {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  flex: 1 1 auto;
+}
+.task-modal-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 标题进了 flex 行，行距交给 gap，去掉块级上下外边距。 */
+.task-modal-title h2 {
+  margin: 0;
+}
+/* 编码从独立一格降级为标题行尾的小片：沿用任务卡编号的等宽灰字，补一层极浅底。 */
+.task-modal-title .task-id {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  font-size: 11px;
 }
 /* 加载态（2026-09-30「弹窗首帧不跳尺寸」）：任务详情是 xl 宽体的长内容，实测 844px
    （= 视口上限），而骨架只有 140px，弹窗会先闪出一条窄条再撑满。加载时按视口上限
@@ -3747,6 +3779,16 @@ a:focus-visible {
 }
 .task-modal-sk-chip.short {
   width: 58px;
+}
+
+/* 动作行里把「跳转类」（GitHub 链接 / 在项目中打开）与「操作类」（编辑任务 /
+   状态主操作）用一道竖线分开；分隔符自身不参与换行美化。 */
+.ta-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: #e1e8f0;
+  flex: 0 0 auto;
 }
 
 .task-modal > .calm-task-actions {
@@ -3901,6 +3943,41 @@ a:focus-visible {
 }
 .danger-button:hover {
   background: #a93a35;
+}
+/* 2026-10-09 任务详情改版定案（用户选定「淡底 + 图标」）：任务级操作是低频、可逆的
+   旁支动作，用淡底彩字与实底主按钮区分——「取消任务」淡红底 + 警示三角（不用叉，
+   避免与右上角关闭按钮混淆），「合并到主任务」淡紫底；实底仍只留给「保存 / 完成任务」。 */
+.tint-danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 35px;
+  padding: 0 14px;
+  border-radius: 5px;
+  border: 1px solid #f7d5d2;
+  background: #fdecea;
+  color: #bf4a45;
+  white-space: nowrap;
+}
+.tint-danger-button:hover {
+  background: #fbdfdb;
+}
+.tint-violet-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 35px;
+  padding: 0 14px;
+  border-radius: 5px;
+  border: 1px solid #ddd6f8;
+  background: #eeeaff;
+  color: #6b58c4;
+  white-space: nowrap;
+}
+.tint-violet-button:hover {
+  background: #e4dcff;
 }
 .text-button.danger-text,
 button.danger-text {
