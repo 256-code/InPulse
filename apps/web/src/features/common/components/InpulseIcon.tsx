@@ -34,6 +34,7 @@ export type InpulseIconName =
   | "list"
   | "lock"
   | "moreHorizontal"
+  | "panelLeft"
   | "pencil"
   | "rotateCcw"
   | "settings"
@@ -292,6 +293,12 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <circle cx="12" cy="12" r="1" />
       <circle cx="19" cy="12" r="1" />
       <circle cx="5" cy="12" r="1" />
+    </>
+  ),
+  panelLeft: (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
     </>
   ),
   pencil: (

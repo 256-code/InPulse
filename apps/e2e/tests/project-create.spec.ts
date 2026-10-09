@@ -16,7 +16,7 @@ test("登录用户创建项目并验证动态、搜索与站内通知", async ({
   const name = `F-04 Playwright 项目 ${code}`;
 
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "项目与功能" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
   await page.getByTestId("create-project-button").click();
 
   const dialog = page.getByRole("dialog");

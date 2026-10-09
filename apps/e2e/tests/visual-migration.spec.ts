@@ -14,7 +14,7 @@ test("captures the migrated command palette, notification popover and activity p
   mkdirSync(output, { recursive: true });
 
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "项目与功能" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
   await page.screenshot({ path: path.join(output, "01-projects.png") });
 
   const suffix = Date.now().toString(16).slice(-8).toUpperCase();

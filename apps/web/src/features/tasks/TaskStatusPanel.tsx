@@ -14,6 +14,7 @@ import { TaskOriginCrumb } from "./task-origin";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 
 const labels = {
   COMPLETE: "完成任务",
@@ -37,7 +38,10 @@ const reasons = [
   "其他",
 ] as const;
 const time = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", { hour12: false });
+  new Date(value).toLocaleString("zh-CN", {
+    hour12: false,
+    timeZone: BEIJING_TIME_ZONE,
+  });
 
 /**
  * C-3：任务状态操作弹窗（完成任务 / 重新打开 / 取消任务 / 恢复任务）与状态历史。

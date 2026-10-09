@@ -3,6 +3,7 @@ import { fieldText, fields, labels } from "./record-content.js";
 export { mergeRecordDraft } from "./record-content.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { formatBeijingShortDateTime } from "@features/common/beijing-time";
 import { PublishRecordButton } from "@features/published-records/PublishRecordButton";
 import {
   useMyRecordDraftsQuery,
@@ -30,17 +31,6 @@ import { useScopedSearchParams } from "@features/common/search-params-scope";
 import { CalmBadge, CalmSectionTitle } from "@features/common/components/Calm";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
-/** 卡片时间用 9/21 11:35 这种短格式，1/3 宽的卡片才放得下。 */
-function formatDraftTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return [
-    date.getMonth() + 1 + "/" + date.getDate(),
-    pad(date.getHours()) + ":" + pad(date.getMinutes()),
-  ].join(" ");
-}
-
 /**
  * 归一后的草稿卡片。名称回填只由服务端跨项目列表（全部项目视图）提供；项目内视图
  * 与来源任务视图沿用草稿自身携带的 moduleName / featureName。
@@ -171,14 +161,14 @@ export function RecordDraftsView({
   const hasDraftContent =
     (listFailed && !projectListUnreadable) || draftCards.length > 0;
   /**
-   * 草稿箱（我的草稿 / 项目草稿）整块渲染的条件：解析完仍是空的时候，标题、说明、
+   * 草稿箱（我的草稿 / 项目草稿）整块渲染的条件：解析完仍是空的时候，标题、
    * 折叠按钮与列表一律不渲染，页面上不留任何与草稿箱有关的字样。
    * 两个例外：读取失败必须给出重试入口；来源任务视图的标题行带着「新建来源草稿」，
    * 那是那一屏唯一不随草稿数量消失的创建入口，因此照旧保留标题行。
    */
   const showDraftBox = taskId > 0 || (!listPending && hasDraftContent);
   /**
-   * 有草稿时草稿箱默认展开，标题行右侧的小按钮可以把内容区折叠起来；切换项目或进出
+   * 有草稿时草稿箱默认展开，标题右侧紧贴的小按钮可以把内容区折叠起来；切换项目或进出
    * 来源任务语境时回到默认展开，换语境后先让人看见草稿，而不是继承上一个语境的收起态。
    */
   const [draftsCollapsed, setDraftsCollapsed] = useState(false);
@@ -298,34 +288,38 @@ export function RecordDraftsView({
           title={
             taskId > 0 ? "来源草稿" : isAllProjects ? "我的草稿" : "项目草稿"
           }
-          hint={
-            taskId > 0
-              ? "先把变化写清楚，保存后可与项目成员继续补充。"
-              : isAllProjects
-                ? "跨项目汇总你创建的草稿，打开即回到所属项目继续编辑。"
-                : "只显示你自己创建的草稿，保存后可与项目成员继续补充。"
+          titleSuffix={
+            /**
+             * 展开/收起只属于草稿箱（C 版，2026-10-09 定案）：箭头紧贴标题，
+             * 覆盖整组的透明按钮负责命中，因此点标题或箭头都能折叠，收起时箭头转 -90°。
+             */
+            taskId === 0 ? (
+              <>
+                <InpulseIcon
+                  name="chevronDown"
+                  size={14}
+                  className="draft-box-caret"
+                />
+                <button
+                  type="button"
+                  className="draft-box-hit"
+                  aria-expanded={!draftsCollapsed}
+                  {...(draftsCollapsed
+                    ? { title: "展开草稿箱", "aria-label": "展开草稿箱" }
+                    : {
+                        title: "收起草稿箱",
+                        "aria-label": "收起草稿箱",
+                        "aria-controls": "record-draft-list",
+                      })}
+                  onClick={() => setDraftsCollapsed((value) => !value)}
+                />
+              </>
+            ) : null
           }
         >
-          <div className="draft-box-actions">
-            {/* 折叠按钮只属于草稿箱：来源任务视图的标题行保持原样，不夺它的创建入口。 */}
-            {taskId === 0 ? (
-              <button
-                type="button"
-                className="draft-box-toggle"
-                aria-expanded={!draftsCollapsed}
-                {...(draftsCollapsed
-                  ? { title: "展开草稿箱", "aria-label": "展开草稿箱" }
-                  : {
-                      title: "收起草稿箱",
-                      "aria-label": "收起草稿箱",
-                      "aria-controls": "record-draft-list",
-                    })}
-                onClick={() => setDraftsCollapsed((value) => !value)}
-              >
-                <InpulseIcon name="chevronDown" size={14} />
-              </button>
-            ) : null}
-            {taskId > 0 ? (
+          {/* 来源任务视图的「新建来源草稿」仍留在标题行右侧。 */}
+          {taskId > 0 ? (
+            <div className="draft-box-actions">
               <Button
                 className="primary-button"
                 disabled={!writable}
@@ -339,8 +333,8 @@ export function RecordDraftsView({
               >
                 新建来源草稿
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </CalmSectionTitle>
       )}
       {showDraftList && (
@@ -386,7 +380,7 @@ export function RecordDraftsView({
                       {item.authorName ?? "名称暂不可用"}
                     </span>
                     <span className="draft-card-time">
-                      更新 {formatDraftTime(item.draft.updatedAt)}
+                      更新 {formatBeijingShortDateTime(item.draft.updatedAt)}
                     </span>
                   </span>
                 </button>

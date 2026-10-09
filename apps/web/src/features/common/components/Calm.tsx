@@ -31,6 +31,8 @@ export const CalmEmptyState: React.FC<{
 export const CalmSectionTitle: React.FC<{
   readonly title: string;
   readonly hint?: string;
+  /** 紧贴标题右侧的附加节点（如草稿箱的展开/收起小按钮）。 */
+  readonly titleSuffix?: React.ReactNode;
   readonly children?: React.ReactNode;
   /** 提供后标题行成为展开/收起切换按钮（箭头随状态旋转）。 */
   readonly collapsible?: {
@@ -38,7 +40,7 @@ export const CalmSectionTitle: React.FC<{
     readonly onToggle: () => void;
     readonly controls?: string;
   };
-}> = ({ title, hint, children, collapsible }) => (
+}> = ({ title, hint, titleSuffix, children, collapsible }) => (
   <div className="calm-section-title">
     {collapsible ? (
       <button
@@ -62,7 +64,10 @@ export const CalmSectionTitle: React.FC<{
       </button>
     ) : (
       <div>
-        <h3>{title}</h3>
+        <div className="calm-section-title-head">
+          <h3>{title}</h3>
+          {titleSuffix ?? null}
+        </div>
         {hint ? <small>{hint}</small> : null}
       </div>
     )}

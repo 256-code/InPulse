@@ -1,4 +1,10 @@
 import type { RecordFeedQueryRequest } from "@generated/api";
+import {
+  beijingDayKey,
+  formatBeijingClock,
+  formatDayKeyCn,
+  formatDayKeySlash,
+} from "@features/common/beijing-time";
 
 /**
  * B-3b：记录清单的展示分组与筛选选项。
@@ -22,39 +28,23 @@ export const RECORD_SOURCE_FILTERS: ReadonlyArray<{
 export const RECORD_SEARCH_PLACEHOLDER =
   "搜索编号、标题、原因、改动、验证、遗留问题或 GitHub 编号";
 
+/** 分组键按北京日历日；服务端下发 UTC ISO 串，不能直接切字符串。 */
 export function recordDateKey(publishedAt: string) {
-  return publishedAt.slice(0, 10);
+  return beijingDayKey(publishedAt);
 }
 
 function recordDateLabel(key: string) {
-  const date = new Date(`${key}T00:00:00`);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleDateString("zh-CN", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : key;
+  return formatDayKeyCn(key);
 }
 
 /** 时间线竖线左侧的短日期（如 9/16），完整日期仍由分组标题承载。 */
 export function timelineDayLabel(key: string) {
-  const date = new Date(`${key}T00:00:00`);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
-    : key;
+  return formatDayKeySlash(key);
 }
 
 /** 时间线竖线左侧、每条记录对应的发布时刻（如 14:59）。 */
 export function timelineTimeLabel(publishedAt: string) {
-  const date = new Date(publishedAt);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })
-    : "";
+  return formatBeijingClock(publishedAt);
 }
 
 interface DatedFeedItem {

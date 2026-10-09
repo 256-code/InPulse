@@ -303,36 +303,33 @@ export function RecordsWorkspace({
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
+          {/* 2026-10-09 用户指示：去掉筛选框前面的灰色「项目」「归属」文字，
+              可访问名仍由 CalmSelect 的 ariaLabel 提供，外层 label 与
+              .records-toolbar-field 一并删除。 */}
           {embedded ? null : (
-            <label className="records-toolbar-field">
-              项目
-              <CalmSelect
-                ariaLabel="项目"
-                value={projectId > 0 ? String(projectId) : ""}
-                onChange={(next) => selectProject(String(next))}
-                appearance="rich"
-                options={[
-                  { value: "", label: "全部项目" },
-                  ...(projects.data?.items ?? []).map(projectSelectOption),
-                ]}
-                animated
-              />
-            </label>
-          )}
-          <label className="records-toolbar-field">
-            归属
             <CalmSelect
-              ariaLabel="归属"
-              value={source}
-              appearance="menu"
-              onChange={(next) => setSource(next as RecordSourceFilter)}
-              options={RECORD_SOURCE_FILTERS.map((option) => ({
-                value: option.value,
-                label: option.label,
-              }))}
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
               animated
             />
-          </label>
+          )}
+          <CalmSelect
+            ariaLabel="归属"
+            value={source}
+            appearance="menu"
+            onChange={(next) => setSource(next as RecordSourceFilter)}
+            options={RECORD_SOURCE_FILTERS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            animated
+          />
           {statusOptions.length > 1 ? (
             <CalmSegmented
               label="记录状态"

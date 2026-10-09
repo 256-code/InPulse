@@ -489,6 +489,24 @@ it("功能详情：标签进标题行、验收标准排在功能任务之后", a
   ).toBeTruthy();
 });
 
+it("功能详情的更新时间按北京时间渲染", async () => {
+  const api = {
+    listFeatures: vi.fn().mockResolvedValue({
+      items: [{ ...item, updatedAt: "2026-10-09T06:23:45.000Z" }],
+    }),
+    getProject: vi.fn().mockResolvedValue({ project: { id: 2, name: "项目" } }),
+  } as unknown as InpulseApiClient;
+  mountDetail(api, item.id);
+
+  const badgeRow = await waitFor(() => {
+    const node = document.querySelector(".task-modal-badges");
+    expect(node).not.toBeNull();
+    return node as Element;
+  });
+  // 06:23Z 是北京时间 14:23；直接切 ISO 串会显示成 06:23。
+  expect(badgeRow.textContent).toContain("更新 2026-10-09 14:23");
+});
+
 it("功能概览显示验收标准，编辑时保留并提交", async () => {
   const updateFeature = vi.fn().mockResolvedValue({
     ...item,

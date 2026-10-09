@@ -5,6 +5,7 @@ import {
   createApiClient,
   type InpulseApiClient,
 } from "@generated/api";
+import { beijingWallClockToIso } from "@features/common/beijing-time";
 
 /**
  * F-08 原始审计读取（GET /api/v1/audit-logs）的服务端签名游标分页。
@@ -62,17 +63,17 @@ export function describeAuditError(error: unknown): string {
   return "原始审计服务暂时不可用，请稍后重试。";
 }
 
-/** datetime-local 值按浏览器本地时区解析为带时区的 ISO 串；无效返回 undefined。 */
+/**
+ * datetime-local 值按北京时间解析为带时区的 ISO 串；无效返回 undefined。
+ * 审计列表与快照都按北京时间展示，筛选输入必须同一口径，
+ * 否则在非 +8 环境下用户按界面输入的范围会与看到的时刻错位。
+ */
 export function toQueryIsoString(value: string): string | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
     return undefined;
   }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-  return parsed.toISOString();
+  return beijingWallClockToIso(trimmed) ?? undefined;
 }
 
 /** 提交前校验；返回错误文案或 null。服务端仍会独立校验同一套规则。 */

@@ -3,6 +3,7 @@ import { Alert } from "antd";
 import type { InpulseApiClient, TaskGroupRecordLink } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AppModal } from "@features/common/components/AppModal";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 import { useProjectDetail } from "@features/projects/project-query";
 import { TaskGroupRecordLinks } from "@features/task-groups/TaskGroupRecordLinks";
 import { PublishedRecordDetail } from "./PublishedRecordDetail";
@@ -106,6 +107,7 @@ export function RecordDetailModal({
             <dd>
               {new Date(record.publishedAt).toLocaleString("zh-CN", {
                 hour12: false,
+                timeZone: BEIJING_TIME_ZONE,
               })}
             </dd>
           </dl>

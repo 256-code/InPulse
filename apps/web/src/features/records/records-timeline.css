@@ -9,25 +9,6 @@
   margin: 18px 0 10px;
 }
 
-.records-toolbar-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
-.records-toolbar-field select {
-  min-width: 150px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  color: inherit;
-  font: inherit;
-}
-
 /* F-33「生成总结」与 2026-10-08 移入同一行的「新建迭代记录」：固定在筛选行右端，
    主操作最靠右。 */
 .records-toolbar-actions {
@@ -351,11 +332,6 @@
 }
 
 @media (max-width: 700px) {
-  .records-toolbar-field {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .record-timeline {
     padding-left: 28px;
   }

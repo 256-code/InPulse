@@ -35,6 +35,10 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
+  beijingTodayStart,
+  BEIJING_TIME_ZONE,
+} from "@features/common/beijing-time";
+import {
   CalmBadge,
   CalmEmptyState,
   CalmSegmented,
@@ -132,10 +136,20 @@ const LEFTOVER_SOURCE_BADGE = {
   tone: "leftover",
   title: "由遗留问题转换而来的跟进任务",
 } as const;
+/** 一律按北京时间渲染服务端时间串，避免在非 +8 环境显示成另一天。 */
 const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "未设置";
+  value
+    ? new Date(value).toLocaleString("zh-CN", {
+        hour12: false,
+        timeZone: BEIJING_TIME_ZONE,
+      })
+    : "未设置";
 const formatDay = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString("zh-CN") : "日期不可用";
+  value
+    ? new Date(value).toLocaleDateString("zh-CN", {
+        timeZone: BEIJING_TIME_ZONE,
+      })
+    : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
 /**
@@ -167,10 +181,8 @@ function dueInfo(
   if (value === null) return { label: "未设置截止", tone: "gray" };
   if (workStatus === "DONE") return { label: "已完成", tone: "gray" };
   if (workStatus === "CANCELED") return { label: "已取消", tone: "gray" };
-  const startOfDay = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const days = Math.round(
-    (startOfDay(new Date(value)) - startOfDay(new Date())) / 86_400_000,
+    (beijingTodayStart(new Date(value)) - beijingTodayStart()) / 86_400_000,
   );
   if (days < 0)
     return { label: "已逾期 " + Math.abs(days) + "天", tone: "red" };

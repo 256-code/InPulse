@@ -1,65 +1,50 @@
 /**
- * 任务中心时间口径：一律按本地日历日比较与展示，
+ * 任务中心时间口径：日历日一律按北京时间（Asia/Shanghai）比较与展示，
+ * 与全站时间展示、服务端「按上海时间按日统计」保持同一自然日口径，
  * 避免直接比较时间戳（同一天的 09:00 与 23:00 会被误判为不同日）。
  */
-
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
+import {
+  beijingDateTime,
+  formatBeijingMonthDayCn,
+  isBeijingBeforeToday,
+  isBeijingSameDay,
+  isBeijingSameMonth,
+  isBeijingToday,
+  isBeijingWithinNextDays,
+} from "@features/common/beijing-time";
 
 export function isTodayIso(iso: string): boolean {
-  return isSameDayIso(iso, 0);
+  return isBeijingToday(iso);
 }
 
 export function isSameDayIso(iso: string, offsetDays: number): boolean {
-  const now = new Date();
-  const target = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + offsetDays,
-  );
-  const value = new Date(iso);
-  return (
-    value.getFullYear() === target.getFullYear() &&
-    value.getMonth() === target.getMonth() &&
-    value.getDate() === target.getDate()
-  );
+  return isBeijingSameDay(iso, offsetDays);
 }
 
 export function isBeforeTodayIso(iso: string): boolean {
-  return new Date(iso).getTime() < startOfToday().getTime();
+  return isBeijingBeforeToday(iso);
 }
 
 /** 是否落在「今天起 days 个日历日内」的区间（含今天，不含第 days 天的 0 点）。 */
 export function isWithinNextDaysIso(iso: string, days: number): boolean {
-  const start = startOfToday();
-  const end = new Date(
-    start.getFullYear(),
-    start.getMonth(),
-    start.getDate() + days,
-  );
-  const value = new Date(iso).getTime();
-  return value >= start.getTime() && value < end.getTime();
+  return isBeijingWithinNextDays(iso, days);
 }
 
 export function isSameMonthIso(iso: string): boolean {
-  const now = new Date();
-  const value = new Date(iso);
-  return (
-    value.getFullYear() === now.getFullYear() &&
-    value.getMonth() === now.getMonth()
-  );
+  return isBeijingSameMonth(iso);
 }
 
 export function formatDayIso(iso: string): string {
-  const value = new Date(iso);
-  return value.getMonth() + 1 + "月" + value.getDate() + "日";
+  return formatBeijingMonthDayCn(iso);
 }
 
 export function formatDateTimeIso(iso: string): string {
-  const value = new Date(iso);
-  const hour = String(value.getHours()).padStart(2, "0");
-  const minute = String(value.getMinutes()).padStart(2, "0");
-  return formatDayIso(iso) + " " + hour + ":" + minute;
+  const at = beijingDateTime(iso);
+  if (at === null) {
+    return iso;
+  }
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    formatBeijingMonthDayCn(iso) + " " + pad(at.hour) + ":" + pad(at.minute)
+  );
 }

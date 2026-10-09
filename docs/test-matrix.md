@@ -5122,3 +5122,116 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | ACTIVITY-SCOPE-GATE-001 | 门禁 | 格式 / 静态检查 / 类型 / 构建 | `prettier --check`、`pnpm lint`、`pnpm typecheck`（8 个 workspace）、`pnpm build` 全过 | 本地通过（2026-10-09） |
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 锁定态与全局态共用下拉但语义不同（换页 vs 就地过滤）：从项目页选「全部项目 / 已删除项目」会离开项目路由、侧栏「当前项目」分组收起，这是路由结构决定的，未新增「留在项目页但看全部项目」的第四种状态。③ 全局态的项目筛选现在进 URL（`/activity?project=…`），刷新 / 分享都会保留该筛选；此前是纯本地 state。④ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审（Playwright 新增强需非作者评审）。
+
+## 项目列表页分档滑块与维护中排序（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「这个界面需要改，首先大标题改为项目列表，第二我希望这个项目也进行分层参考 p2 分类未完成和维护中，维护中状态下排序就按照进入维护的时间，越远越往后排，这个滑块放在和搜索同行左侧」（附现状页、任务中心分段控件、工具栏三张截图）。纯前端展示层改动，无契约 / Route Registry / 权限矩阵 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 大标题 `项目与功能` → `项目列表`：与侧栏导航项、面包屑早已使用的「项目列表」对齐（其余同名文案未动）。
+- 新增生命周期分档滑块（`CalmSegmented`，与任务中心「未完成 / 已完成」同形态、带数量角标），放在搜索框**左侧同一行**（`.catalog-actions` 首位）：`未完成` = 进行中 + 未开始，`维护中` = 仅维护中；两档计数按当前可见项目总量算、不随搜索词跳动，默认停在「未完成」。
+- 归并规则是新导出 `apps/web/src/features/common/resource-lifecycle.ts` 的 `ProjectTier` / `projectTier(status)`：只做展示层归并，不改服务端三态，也不改 `projectLifecycleRankExpression`。
+- 维护中一档按「进入维护的时间」从近到远排（越久以前进入维护的排越后）。**项目列表契约没有精确的「进入维护时间」字段**，当前用 `updatedAt` 近似（切到维护中会写 `projects.updated_at`，此后只有再次编辑项目本身才会把它推近；任务与成员变化不写这一列），并在客户端重排——服务端默认顺序里的「最近变更时间」含任务动态，在维护中一档会随任务动态漂移。未完成一档保持服务端顺序（进行中 → 未开始，档内最近变更在前）。
+- 空态分两种：关键词没匹配 → 原有「没有匹配的项目」+「清空搜索」；当前档本身为空 → 「没有未完成的项目」/「没有维护中的项目」。
+- 样式：`.catalog-actions .segmented button` 收到 29px 条目高（滑块整体 35px），与同行搜索框、按钮同一层。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-TIER-UNIT-001 | Web 单元 | 两档计数与默认档位 | `ProjectsPageView.test.tsx`：1 个未完成 + 2 个维护中 →「未完成」`aria-pressed=true`、角标 1；「维护中」`aria-pressed=false`、角标 2；维护中卡片不在未完成档里 | 本地通过（2026-10-09） |
+| PROJECT-TIER-UNIT-002 | Web 单元 | 维护中按进入维护时间从近到远 | 切到「维护中」→ 卡片标题顺序为 `["晚维护", "早维护"]`（`updatedAt` 2026-09-01 → 2026-01-01） | 本地通过（2026-10-09） |
+| PROJECT-TIER-UNIT-003 | Web 单元 | 关键词只在当前档内过滤 | 未完成档搜「早维护」→「没有匹配的项目」，两档角标仍为 1 / 2 | 本地通过（2026-10-09） |
+| PROJECT-TIER-UNIT-004 | Web 单元 | 三态标签用例改写 | 「项目状态标签直接映射三态」拆两段：未完成档断言 `badge-cyan` / `badge-blue` 且查不到维护中卡片；切档后断言 `badge-violet` | 本地通过（2026-10-09） |
+| PROJECT-TIER-UNIT-005 | Web 单元 | 全量前端单测 | `pnpm --filter @inpulse/web test` → **91 文件 649 例全绿**（原 646 例 + 新增 3 例） | 本地通过（2026-10-09） |
+| PROJECT-TIER-BROWSER-001 | 浏览器实测 | 真实 dev 两档 | `/projects` 头部为「项目列表」+「未完成 1 ｜ 维护中 1」+ 搜索框；未完成档只显示「验证」卡，切维护中显示「项目1」卡且滑块与徽标同步（截图 `.data/annotations/projects-list-tier-open.png` / `-maintenance.png`） | 本地通过（2026-10-09） |
+| PROJECT-TIER-E2E-001 | 浏览器 E2E | 标题断言同步 + 全量回归 | `playwright test tests/project-create.spec.ts` → 1 passed；`tests/auth.spec.ts tests/csp.spec.ts` → 9 passed；`pnpm test:e2e` → **68 passed（5.5m）**（5 处标题断言已改为「项目列表」） | 本地通过（2026-10-09） |
+| PROJECT-TIER-GATE-001 | 门禁 | 格式 / 静态检查 / 类型 / 构建 | `prettier --check`、`pnpm lint`、`pnpm typecheck`（8 个 workspace）、`pnpm build` 全过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑**整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:integration` / `test:unit`（未改服务端）、镜像构建与 Trivy、GitHub Actions。② 「进入维护的时间」是 `updatedAt` 近似值：项目进入维护后若又被改名 / 改描述，会按改名时间排序；精确化需在项目列表契约新增字段（`activity_projection` 已存 `PROJECT_STATUS_CHANGED` + `source_status`，可派生，但属契约变更，须同 PR 同步 Schema / OpenAPI / 客户端 / 集成测试）。③ 侧栏导航、面包屑、命令面板与记录草稿里的「项目与功能」文案未改（用户只要求改页面大标题）。④ 底部「层级说明」六宫格与副标题按原样保留。⑤ 分档是组件内 state，未进 URL（任务中心 `?status=` 与项目动态 `?project=` 是 URL 化的），刷新会回到「未完成」档。
+
+## 侧栏「收起导航」按钮改用面板图标（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「这个图标换成 p2 样式呗」（p1 = 现状里的左箭头折线，p2 = 圆角方块内一条左侧竖线的「面板」图标）。纯图形替换，无布局 / 契约 / 权限 / 迁移 / 依赖改动：
+
+- `InpulseIcon` 新增 `panelLeft`（类型联合 + 内容表：`<rect width="18" height="18" x="3" y="3" rx="2" />` + `<path d="M9 3v18" />`，即 lucide 的 `panel-left` 路径）。
+- `AppLayout.tsx` 侧栏品牌行右侧的「收起导航」按钮由 `chevronLeft` 换成 `panelLeft`（size 仍 18，`aria-label` / `title` / `aria-controls` / `aria-expanded` 不变）。
+- 未改：收起后用同款汉堡图标返回导航的悬浮「展开导航」按钮、收起 / 展开的过渡与 `nav-collapsed` 规则、其它页面里带返回语义的 `chevronLeft`（功能详情返回、任务面板返回等都不动）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| SIDEBAR-ICON-BROWSER-001 | 浏览器实测 | 收起按钮渲染面板图标且动作不变 | 真实 dev（Vite 5173）：`.sidebar-collapse-button` 内 svg 为「圆角方块 + 左侧竖线」；点击后侧栏正常收起并出现悬浮「展开导航」按钮，再点可恢复 | 本地通过（2026-10-09） |
+| SIDEBAR-ICON-GATE-001 | 门禁 | 类型 / 格式 | `pnpm --filter @inpulse/web typecheck`、`prettier --check`（两个改动文件）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未做自动化断言**——纯图形替换没有可稳定断言的语义（不断言 svg path 内容），因此只做浏览器实测；`AppLayout.test.tsx` 与 E2E 均未涉及「收起导航」按钮，本次也未新增（如需回归防线，应在 AppLayout 单测里按 `aria-label="收起导航"` 断言按钮存在与点击后的收起 / 展开行为，而不是断言图标形状）。② 未跑全量 `pnpm test:e2e` / 整链 `pnpm check`（本次只改一个图标常量与一处调用）、未跑 `test:unit` / `test:integration`（未改服务端）。
+
+## 筛选框前的灰色文字标签删除（遗留问题页 / 迭代记录页，用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：先在遗留问题页「把这个灰色的项目两个字删掉」，随后在迭代记录页「这里的项目和归属也删掉」（两处均附截图圈出筛选框左侧的灰色说明文字）。与任务中心 2026-09 已定的口径一致（「下拉自身已显示『全部项目 / 项目名』，重复的文字标签已按产品要求删除」），纯展示层改动，无契约 / 权限 / 迁移 / 依赖改动：
+
+- 遗留问题页 `IssuesPageView.tsx`：删除包住项目筛选的 `<label className="issues-project-field">项目 …</label>` 外壳与其中的灰色文字，`CalmSelect` 直接作为 `.catalog-actions` 的子元素；可访问名仍由 `ariaLabel="项目"` 提供（`getByLabelText("项目")` / Playwright `getByLabel("项目")` 的定位方式不变）。`design-system.css` 的 `.issues-project-field` 规则随之删除（仅此一处使用），间距由 `.catalog-actions` 的 `gap: 8px` 承担。
+- 迭代记录页 `RecordsWorkspace.tsx`：同样删除「项目」（仅非 embedded 时渲染的那个）与「归属」两处 `<label className="records-toolbar-field">` 外壳与灰色文字；`records-timeline.css` 的 `.records-toolbar-field`、`.records-toolbar-field select`（原生 select 早已不用）与 `@media (max-width: 700px)` 里的同名规则一并删除。
+- **未改**：下拉选项、默认值、URL 参数与筛选语义、`aria-label`（可访问名不变）；「生成总结」弹窗里的 `<span className="summary-filter-label">项目</span>`（与同排的「分组」下拉需要区分，本轮未动）；任务中心与项目动态页（前者早已无标签、后者本就没有）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| FILTER-LABEL-UNIT-001 | Web 单元 | 可访问名不随可见标签删除而丢失 | `pnpm --filter @inpulse/web test` → **91 文件 649 例全绿**；其中 `IssuesPageView.test.tsx` 与 `RecordsWorkspace.test.tsx` 仍用 `getByLabelText("项目")` / `getByLabelText("归属")` 打开下拉（aria-label 路径），全部通过 | 本地通过（2026-10-09） |
+| FILTER-LABEL-BROWSER-001 | 浏览器实测 | 两个页面的筛选行 | 真实 dev（Vite 5173）：遗留问题页筛选行只剩「全部项目 ▾」「回到迭代记录」；迭代记录页筛选行只剩搜索框 ·「全部项目」·「全部」· 生成总结 / 新建迭代记录，属性面板里 `combobox "项目"` / `combobox "归属"` 仍有可访问名 | 本地通过（2026-10-09） |
+| FILTER-LABEL-E2E-001 | 浏览器 E2E | 相关页面回归 | `playwright test tests/record-feed.spec.ts tests/issues.spec.ts tests/activity.spec.ts tests/aggregate-views.spec.ts` → **7 passed / 1 failed**；唯一失败是 `record-feed.spec.ts:73` 断言「全部项目视图下『我的草稿』标题可见」，**在未改动的 HEAD 上复跑同样失败**（`git stash` 后 1 failed 1 passed，报错同为 `getByRole('heading', { name: '我的草稿' })` not found），与本次改动无关：`RecordDraftsView` 的设计是空草稿箱整块不渲染（其单测 `RecordDraftsView.test.tsx` 明确断言这一点），该用例在「草稿已发布」的数据下不成立 | 本地通过（7/8；失败项为既有问题） |
+| FILTER-LABEL-GATE-001 | 门禁 | 类型 / 格式 | `pnpm --filter @inpulse/web typecheck`、`prettier --check`（4 个改动文件）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑**全量 `pnpm test:e2e`（本轮只跑了 4 个相关 spec）与整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 既有问题（非本批引入）：`record-feed.spec.ts` 第 73 行依赖「该用户仍存在草稿」，与 `RecordDraftsView` 的空草稿箱不渲染行为冲突，单独跑必失败、整包跑因同用户其它 spec 留下草稿而偶然通过，待人工决定是修用例还是改用例数据。③ 迭代记录页「归属」下拉失去标签后，与左侧「全部项目」两个下拉的语义区分只剩选项文案本身（用户明确要求删除标签），若后续觉得歧义，可给「归属」补一个 `title` 或恢复轻量标签。
+
+## 项目列表页删除「回到任务中心」按钮（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「这个回到任务中心按钮删掉」（附项目列表页头截图）。纯展示层删除，无契约 / 权限 / 迁移 / 依赖改动：
+
+- `ProjectsPageView.tsx`：删除页头动作区的「回到任务中心」分支（`onBackToTasks` 条件渲染块），并从 props 接口与解构里移除 `onBackToTasks`；调用方 `apps/web/src/pages/projects/ProjectsPage.tsx` 不再传该回调（`useNavigate` 仍被「管理模块 / 成员 / 项目动态 / 全局搜索」等回调使用）。页头动作区因此只剩生命周期滑块 + 搜索框 + 「新建项目」。
+- **未改动**：404 页自己的「回到任务中心」按钮（`NotFoundPage.tsx`，另一处独立入口，仍在）；侧栏「任务中心」导航项。
+- 该按钮是 2026-09-30 前后由项目页带出的快捷入口，删除后从项目列表回任务中心走侧栏导航，功能未丢失。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECTS-BACKBTN-BROWSER-001 | 浏览器实测 | 项目列表页头不再有该按钮 | 真实 dev（Vite 5173）`/projects`：页头只剩「未完成 1 ｜ 维护中 1」+ 搜索框 + 「新建项目」，无障碍树里无「回到任务中心」按钮 | 本地通过（2026-10-09） |
+| PROJECTS-BACKBTN-UNIT-001 | Web 单元 | 全量前端单测 | `pnpm --filter @inpulse/web test` → **91 文件 649 例全绿**（`ProjectsPageView.test.tsx` / `ProjectsPage.test.tsx` 未引用该按钮与 `onBackToTasks`，无需改写） | 本地通过（2026-10-09） |
+| PROJECTS-BACKBTN-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web typecheck`、`pnpm lint`、`prettier --check`（两个改动文件）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑** E2E——全仓 grep 确认没有任何 E2E 点击或断言项目页的「回到任务中心」（`回到任务中心` 仅出现在 404 页与其单测），因此该按钮删除不影响既有用例；也未跑全量 `pnpm test:e2e` 与整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）。② 项目页回到任务中心现在只能走侧栏「任务中心」，若产品要保留快捷入口可在别处（如面包屑）另行设计。
+
+## 草稿箱标题行删除说明文案 + 展开/收起箭头紧贴标题（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「p2删掉p3的展开收起标准放到我的草稿箱旁边，离得太远了」（p1 = 草稿箱标题行全景，p2 = 标题下方的灰色副标题说明，p3 = 标题行最右端的展开/收起方钮）。第一版把方钮挪到标题右侧后用户反馈「这个样式有点丑给我几个模拟的别的样式」，从 7 版模拟（本地页 `.data/annotations/draft-toggle-options.html`）中定案 **C 版**：箭头紧贴标题、整组「标题 + 箭头」可点、无按钮容器。
+
+- **说明文案整条删除**（`apps/web/src/features/record-drafts/RecordDraftsView.tsx`）：三档 `hint`（「来源草稿」/「我的草稿」/「项目草稿」各自的说明小字）全部不再传，标题行只剩标题与展开/收起箭头；`CalmSectionTitle` 的 `hint` prop 保留（其它页面仍在用）。
+- **展开/收起改为 C 版**：`apps/web/src/features/common/components/Calm.tsx` 的 `CalmSectionTitle` 新增 `titleSuffix?: React.ReactNode` 插槽，非 collapsible 分支的标题改包进 `.calm-section-title-head`（flex、gap 6px，`design-system.css` 同步）。草稿箱往插槽里放两件东西——`.draft-box-caret`（紧贴标题的 14px 箭头）与 `.draft-box-hit`（`position: absolute; inset: -2px -4px -2px -6px` 的透明按钮，负责命中与键盘焦点），因此点标题或点箭头都能折叠；悬停整组转蓝 `#2472c3`，收起时箭头 `-90°`（`.record-drafts-page` 作用域内用 `:has(.draft-box-hit[aria-expanded="false"])`）。
+- **可访问性与既有选择器不变**：标题仍是 `h3`（`getByRole("heading", { name: "我的草稿" })` 与 Playwright 的 `.calm-section-title h3` 断言继续成立），按钮保留 `aria-expanded`、收起时的 `aria-controls="record-draft-list"` 与 `title`/`aria-label`（「收起草稿箱 / 展开草稿箱」）；`.draft-box-toggle`（26px 白底描边方钮）整套 CSS 删除。
+- **标题行上下留档**：`.record-drafts-page .calm-section-title` 由设计系统默认的 `0 0 18px` 改为 `8px 0 20px`，标题距上方筛选行 10px → **18px**、距下方草稿卡片 18px → **20px**（用户 2026-10-09 反馈「请调整上下间距」；命中层上下外扩同时从 4px 收到 2px，键盘焦点环不再顶到相邻元素）。
+- **焦点环左右留白 + 左边缘对齐**：① 箭头 14px 图标盒内左右各约 3px 余量，命中层右侧再外扩 6px 会让环内右留白比左多 2.6px（dev 实测左 9.5px / 右 12.1px），用户 2026-10-09 反馈「这个几个字稍微往右有点感觉没对其」，右侧外扩由 6px 收到 4px（`inset: -2px -4px -2px -6px`）后两侧各约 9.5px；② 用户随后澄清「纵向这三个该对齐，我的草稿往右移动」——指上方搜索框、中间的焦点环、下方草稿卡片三者左边缘对齐，因此 `.record-drafts-page .calm-section-title-head` 加 `margin-left: 8.7px`（= 命中层左外扩 6px + 焦点环描边 2px + `outline-offset` 0.67px），整组右移后焦点环外沿落在 **270.03px**，与 `.draft-card` / 搜索框外壳的 left **270px** 对齐；代价是标题文字由 270px 变为 **278.7px**，未聚焦时比内容列右 8.7px。
+- **未改**：来源任务视图（`taskId > 0`）不渲染箭头，行尾仍是「新建来源草稿」；折叠状态不持久化（换项目 / 进出语境回到默认展开）；草稿箱整块渲染条件（空草稿箱仍不渲染标题与箭头）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DRAFT-TOGGLE-INLINE-WEB-001 | Web 单元 | 标题行不再有副标题说明 | `RecordDraftsView.test.tsx`「有草稿时默认展开，标题行的小按钮能把内容区折叠再展开」断言 `.calm-section-title` 内 `querySelector("small")` 为 `null`；「全部项目视图」用例同样断言「我的草稿」标题行无 `<small>` | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-WEB-002 | Web 单元 | 箭头紧贴标题、整组只有一枚按钮 | 同用例断言标题行内 `.draft-box-caret` 存在、`querySelectorAll("button")` 长度为 1，且该按钮的 `closest(".calm-section-title-head")` 等于标题行内的同名节点 | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-WEB-003 | Web 单元 | 折叠 / 展开仍工作 | 同用例断言 `aria-expanded` 与 `aria-controls`、折叠后 `#record-draft-list` 为 `null`、再点「展开草稿箱」卡片回来；空草稿箱整块不渲染、跟随项目筛选、来源任务视图保留创建入口等既有用例不变 | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-WEB-004 | Web 单元 | 全量前端回归 | `pnpm --filter @inpulse/web test` → **91 文件 649 例全绿**（含 `RecordDraftsView.test.tsx` 29 例） | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-BROWSER-001 | 浏览器实测 | 真实页面两种状态 | dev（Vite 5173）`/records`：标题行为「我的草稿 ⌄」（无方框、无副标题），点标题或箭头折叠后 `#record-draft-list` 节点数 **0**、再点恢复为 **1**，收起态箭头朝右；截图 `.data/annotations/draft-toggle-c-open.png` 与 `draft-toggle-c-closed.png` | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-BROWSER-002 | 浏览器实测 | 标题行上下间距 | dev（Vite 5173）`/records` 实测：筛选行底 → 标题顶 **18px**（改前 10px）、标题底 → 首张草稿卡顶 **20px**（改前 18px）；命中层 `inset` 计算值 `-2px -4px -2px -6px`（2026-10-09 右侧由 6px 收到 4px，焦点环内左右留白各约 9.5px），焦点环距筛选行 13px、距卡片 15px | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-BROWSER-003 | 浏览器实测 | 焦点环左边缘与内容列对齐 | dev（Vite 5173）`/records` 实测：`.calm-section-title-head` 的 `margin-left` 计算值 `8.7px`，标题 `h3` left 270 → **278.7**、命中层 left 264 → **272.7**，焦点环外沿 **270.03px** 与 `.draft-card` left **270px** 对齐；用户截图（裁剪自 5173，`我的草稿` 文字 38 / 卡片 38 / 环 24 device px）复核改前环左凸 14 device px | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-E2E-001 | 浏览器 E2E | 草稿链路与相邻回归 | `playwright test tests/record-drafts.spec.ts tests/module-tasks.spec.ts`（`E2E_DATABASE_URL=…/app_ci`）→ **7 passed (48.7s)** | 本地通过（2026-10-09） |
+| DRAFT-TOGGLE-INLINE-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 / 构建 / 文档 | `pnpm lint`、`pnpm typecheck`（8 个 workspace）、`pnpm build`、`prettier --check .`、`pnpm check:docs`（104 个 md）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑**整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、全量 `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② `record-feed.spec.ts:73` 的**既有失败**（断言全部项目视图下「我的草稿」标题可见，与空草稿箱整块不渲染的设计冲突）本轮未修，与本批改动无关。③ 命中层按钮覆盖标题文字区域，标题文字因此不可选中（仅草稿箱这一处如此）；收起态的箭头旋转用 `:has()` 选择器，若将来要支持更旧的浏览器需把箭头挪进按钮内部。④ 样式取自用户从 7 版模拟中的显式选择（C 版），属视觉主观项，仍需非作者人工评审。⑤ 焦点环左右留白按「箭头笔画自身余量」折算（左 9.5 / 右 12.1 → 两侧各约 9.5），左边缘对齐按「环外沿」而非「标题文字」定义，两者同属视觉主观项，仍需非作者人工评审；且**环外沿与文字不可能同时贴齐内容列**（环左内边距必须为正），本轮按用户指示取「环外沿对齐」、文字右移 8.7px，若改判需回到用户确认。改前 / 改后真实截图放大对比见本地页 `.data/annotations/draft-ring-align.html`（未入库）。
+
+## 全站时间展示统一按北京时间（用户报障，2026-10-09 本地落库）
+
+用户报障（原话）：「这个是我刚刚创建的但是时间对不上」（功能详情页头「更新 2026-10-09 06:23」，实际创建于北京时间同日 14:23）→ 追加「都统一成北京时间」。根因：服务端下发 UTC ISO 串，前端 `features/features/FeaturesPageView.tsx` 的 `formatStamp` 直接 `replace("T"," ").slice(0, 16)`，多处其它渲染点则按浏览器本地时区格式化。本批新增 `apps/web/src/features/common/beijing-time.ts` 作为唯一时间展示口径（`Asia/Shanghai`），并把全部展示点改到该模块。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| BEIJING-TIME-UNIT-001 | Web 单元 | 各档位文案按北京时间渲染 | `beijing-time.test.ts`：`2026-10-09T06:23:45.000Z` → `2026-10-09 14:23` / `14:23` / `10月9日` / `10/9` / `10/9 14:23`；期望值硬编码，测试机时区不是 +8 也不会假通过 | 本地通过（2026-10-09） |
+| BEIJING-TIME-UNIT-002 | Web 单元 | 跨日归组按北京日历日 | `beijingDayKey("2026-10-08T16:30:00.000Z")` → `2026-10-09`、`…T15:59…` → `2026-10-08`（直接切 UTC 串会归错组） | 本地通过（2026-10-09） |
+| BEIJING-TIME-UNIT-003 | Web 单元 | `datetime-local` 按北京时间解析 | `beijingWallClockToIso("2026-09-01T08:00")` → `2026-09-01T00:00:00.000Z`；`2026-02-30T08:00` / `2026-09-01` / 空串 → `null` | 本地通过（2026-10-09） |
+| BEIJING-TIME-UNIT-004 | Web 单元 | 功能详情页头更新时间（报障回归） | `FeaturesPageView.test.tsx` 新增用例：`updatedAt = 2026-10-09T06:23:45.000Z` 时 `.task-modal-badges` 文案含「更新 2026-10-09 14:23」 | 本地通过（2026-10-09） |
+| BEIJING-TIME-BROWSER-001 | 浏览器实测 | 报障页面复验 | dev（Vite 5173）`/projects/3/modules/3843/features/6491`：页头徽章行「未开始 · q · 更新 2026-10-09 14:23」，与项目动态页同一「创建功能」事件的 14:23 一致（改前显示 06:23） | 本地通过（2026-10-09） |
+| BEIJING-TIME-WEB-001 | Web 全量 | 时间口径改动的全量回归 | `pnpm --filter @inpulse/web test` → **92 文件 655 例全绿**（基线 91 文件 649 例） | 本地通过（2026-10-09） |
+| BEIJING-TIME-GATE-001 | 门禁 | 类型 / 格式 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec prettier --check`（本批 26 个文件）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑**全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② `audit/audit-query.test.tsx` 与 `audit/AuditLogPageView.test.tsx` 里两处「表单 08:00 → `new Date("2026-09-01T08:00").toISOString()`」的期望值已改写为显式 `2026-09-01T00:00:00.000Z`（原写法隐含「按本地时区解析」，在 UTC 机器上本就与实现不一致）。③ `CalmDateTimeInput` / `ConvertLeftoverTask` / `GlobalTaskCreateModal` 的 `datetime-local` 输入**有意保留**浏览器本地墙上时间（与输入框写回 `toISOString()` 的取值语义自洽）；若将来要求「非 +8 环境也按北京时间选择」，需要同时改选择器的显示与取值，属独立改动。④ 时区口径属产品语义决定（全站统一北京时间），本批按用户明确指示执行，仍需非作者人工评审。

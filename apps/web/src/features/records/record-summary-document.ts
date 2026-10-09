@@ -1,3 +1,4 @@
+import { beijingDayKey } from "@features/common/beijing-time";
 import type { RecordSummaryResponse } from "@generated/api";
 
 /**
@@ -44,7 +45,8 @@ const CN_DIGITS = ["一", "二", "三", "四", "五", "六", "七", "八", "九"
 const cnIndex = (index: number): string =>
   CN_DIGITS[index] ?? String(index + 1);
 
-const day = (iso: string): string => iso.slice(0, 10);
+/** 服务端下发 UTC ISO 串，日历日一律按北京时间取。 */
+const day = (iso: string): string => beijingDayKey(iso);
 
 const monthDay = (iso: string): string => {
   const date = day(iso);

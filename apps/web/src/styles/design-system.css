@@ -2365,6 +2365,12 @@ a:focus-visible {
   font-size: 14px;
   margin: 0;
 }
+/* 标题与其紧邻的附加节点（草稿箱展开/收起的箭头）排成一行，不被推到标题行最右端。 */
+.calm-section-title-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .calm-section-toggle {
   display: flex;
   align-items: center;
@@ -2964,7 +2970,8 @@ a:focus-visible {
   text-overflow: ellipsis;
 }
 
-/* 项目与功能页（2026-09-30）：标题行内加入搜索框后，窄屏下标题会被压缩换行，
+/* 项目列表页（原「项目与功能」，2026-09-30 起标题行内带搜索框）：标题行内加入
+   搜索框与生命周期滑块后，窄屏下标题会被压缩换行，
    这里让标题保持单行，空间不足时由右侧工具组（.catalog-actions）先换行。 */
 .catalog-heading {
   white-space: nowrap;
@@ -2973,6 +2980,17 @@ a:focus-visible {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+/* 项目列表页（2026-10-09 用户指示）：生命周期滑块与搜索框同行、位于搜索框左侧，
+   条目尺寸收到与同行搜索框 / 按钮同一层（35px = 轨道上下 3px 内边距 + 条目 29px），
+   与任务中心控制条内的同一控件取同一组数值。 */
+.catalog-actions .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 29px;
+  padding: 0 12px;
+  font-size: 12.5px;
 }
 .catalog-form {
   display: flex;
@@ -4310,15 +4328,9 @@ td.due-overdue {
 }
 
 /* 遗留问题页项目筛选：与迭代记录页同口径（全部项目 / 单项目）；
-   2026-09-24 起与「回到迭代记录」并排放在页头动作区，不再独占一行工具栏。 */
-.issues-project-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
+   2026-09-24 起与「回到迭代记录」并排放在页头动作区，不再独占一行工具栏；
+   2026-10-09 用户指示去掉筛选框前的灰色「项目」文字后，外层 label 与
+   .issues-project-field 一并删除，间距由 .catalog-actions 的 gap 承担。 */
 /* 「问题不是任务」说明：同一日按产品要求从页面顶部移到底部，紧跟已闭环折叠区。 */
 .issues-callout {
   margin: 24px 0 0;

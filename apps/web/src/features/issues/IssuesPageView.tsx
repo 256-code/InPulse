@@ -172,22 +172,21 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
               迭代记录中「遗留问题」一栏写下的内容会汇总到这里，确认影响范围后转为可执行任务。
             </p>
           </div>
-          {/* 项目筛选与「回到迭代记录」并排放在页头动作区（2026-09-24 产品要求）。 */}
+          {/* 项目筛选与「回到迭代记录」并排放在页头动作区（2026-09-24 产品要求）；
+              2026-10-09 用户指示：去掉筛选框前面的灰色「项目」文字，可访问名仍由
+              CalmSelect 的 ariaLabel 提供。 */}
           <div className="catalog-actions">
-            <label className="issues-project-field">
-              项目
-              <CalmSelect
-                ariaLabel="项目"
-                value={projectId > 0 ? String(projectId) : ""}
-                onChange={(next) => selectProject(String(next))}
-                appearance="rich"
-                options={[
-                  { value: "", label: "全部项目" },
-                  ...(projects.data?.items ?? []).map(projectSelectOption),
-                ]}
-                animated
-              />
-            </label>
+            <CalmSelect
+              ariaLabel="项目"
+              value={projectId > 0 ? String(projectId) : ""}
+              onChange={(next) => selectProject(String(next))}
+              appearance="rich"
+              options={[
+                { value: "", label: "全部项目" },
+                ...(projects.data?.items ?? []).map(projectSelectOption),
+              ]}
+              animated
+            />
             {onBackToRecords === undefined ? null : (
               <button
                 type="button"

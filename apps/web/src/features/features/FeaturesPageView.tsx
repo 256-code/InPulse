@@ -13,6 +13,7 @@ import {
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { isCardClick } from "@features/common/card-click";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import {
   featureLifecycleLabel,
   featureLifecycleTone,
@@ -77,7 +78,6 @@ type Merge = {
 };
 const fieldValue = (item: FeatureItem, field: EditableField): string =>
   field === "tags" ? item.tags.join("\n") : item[field];
-const formatStamp = (value: string) => value.replace("T", " ").slice(0, 16);
 export function FeaturesPageView({
   projectId,
   moduleId,
@@ -502,7 +502,7 @@ export function FeaturesPageView({
                             <td>
                               {item.tags.length ? item.tags.join("、") : "—"}
                             </td>
-                            <td>{formatStamp(item.updatedAt)}</td>
+                            <td>{formatBeijingMinute(item.updatedAt)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -639,7 +639,7 @@ export function FeaturesPageView({
                     </CalmBadge>
                   ))}
                   <CalmBadge tone="gray">
-                    更新 {formatStamp(activeItem.updatedAt)}
+                    更新 {formatBeijingMinute(activeItem.updatedAt)}
                   </CalmBadge>
                 </div>
               </div>
