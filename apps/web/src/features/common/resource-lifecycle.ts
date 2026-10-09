@@ -42,6 +42,22 @@ export const projectLifecycleTone = (
 };
 
 /**
+ * 项目列表的生命周期分档（2026-10-09 用户指示）：列表页的滑块只分两档，与
+ * 任务中心「未完成 / 已完成」同形态，但按项目自己的三态归并——
+ *
+ * - `open`：未完成，进行中（`ACTIVE`）与未开始（`NOT_STARTED`）都在这一档；
+ * - `maintenance`：维护中（`MAINTENANCE`）。
+ *
+ * 分档只是展示层的归并，不改写服务端的三态，也不改
+ * `apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression`
+ * （该排序键仍是 进行中 → 未开始 → 维护中 三档）。
+ */
+export type ProjectTier = "open" | "maintenance";
+
+export const projectTier = (status: ProjectStatus): ProjectTier =>
+  status === "MAINTENANCE" ? "maintenance" : "open";
+
+/**
  * 模块生命周期标签档位（ADR-044）：模块层面已下线归档，档位只由「模块下是否已有
  * 完成任务」推导，与后端排序键 `apps/api/src/stats/card-stat-columns.ts` 的
  * `lifecycleRankExpression` 在模块侧的输出一致（0 = 进行中、1 = 未开始），两处必须一起修改：

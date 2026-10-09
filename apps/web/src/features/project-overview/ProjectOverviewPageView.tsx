@@ -9,6 +9,7 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
+import { formatBeijingMonthDayCn } from "@features/common/beijing-time";
 import {
   projectLifecycleLabel,
   projectLifecycleTone,
@@ -27,9 +28,9 @@ import type {
 } from "./project-overview-types";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
+/** 迭代发布日期按北京时间渲染（服务端下发 UTC ISO 串）。 */
 function formatPublishedAt(iso: string): string {
-  const date = new Date(iso);
-  return date.getMonth() + 1 + "月" + date.getDate() + "日";
+  return formatBeijingMonthDayCn(iso);
 }
 
 export interface ProjectOverviewPageViewProps {

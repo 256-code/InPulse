@@ -598,6 +598,13 @@ it("lists my drafts across projects, labels the owning project and opens it", as
   expect(
     await screen.findByRole("heading", { name: "我的草稿" }),
   ).toBeVisible();
+  // 用户截图 p2 指向的正是这条「我的草稿」副标题，已整条删除。
+  expect(
+    screen
+      .getByRole("heading", { name: "我的草稿" })
+      .closest(".calm-section-title")
+      ?.querySelector("small"),
+  ).toBeNull();
   expect(listMyRecordDrafts).toHaveBeenCalledWith(
     { limit: 20 },
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -1020,11 +1027,8 @@ it("空草稿箱整块不渲染：没有草稿时不留任何与草稿箱有关�
   await act(async () => {
     pending.resolve({ items: [], nextCursor: null, hasMore: false });
   });
-  // 解析为空后整块消失：标题、说明、折叠按钮、内容区一个都不留。
+  // 解析为空后整块消失：标题、折叠按钮、内容区一个都不留。
   expect(screen.queryByRole("heading", { name: "项目草稿" })).toBeNull();
-  expect(
-    screen.queryByText("只显示你自己创建的草稿，保存后可与项目成员继续补充。"),
-  ).toBeNull();
   expect(screen.queryByRole("button", { name: "收起草稿箱" })).toBeNull();
   expect(document.querySelector("#record-draft-list")).toBeNull();
 });
@@ -1036,9 +1040,6 @@ it("全部项目视图的空草稿箱整块不渲染，连「我的草稿」标�
     pending.resolve({ items: [], nextCursor: null, hasMore: false });
   });
   expect(screen.queryByRole("heading", { name: "我的草稿" })).toBeNull();
-  expect(
-    screen.queryByText("跨项目汇总你创建的草稿，打开即回到所属项目继续编辑。"),
-  ).toBeNull();
   expect(screen.queryByRole("button", { name: "收起草稿箱" })).toBeNull();
   expect(document.querySelector("#record-draft-list")).toBeNull();
 });
@@ -1048,7 +1049,19 @@ it("有草稿时默认展开，标题行的小按钮能把内容区折叠再展�
   expect(
     await screen.findByRole("heading", { name: "项目草稿" }),
   ).toBeVisible();
+  const titleRow = screen
+    .getByRole("heading", { name: "项目草稿" })
+    .closest(".calm-section-title");
+  // 说明文案整条删除：标题行里不再有 <small> 副标题。
+  expect(titleRow?.querySelector("small")).toBeNull();
   const toggle = screen.getByRole("button", { name: "收起草稿箱" });
+  // 展开/收起按钮紧贴标题（同一个标题行内的小组），不再被推到标题行最右端。
+  expect(toggle.closest(".calm-section-title-head")).toBe(
+    titleRow?.querySelector(".calm-section-title-head"),
+  );
+  // C 版：箭头紧贴标题，标题行里只有这一枚透明命中按钮，点它或点标题都能折叠。
+  expect(titleRow?.querySelector(".draft-box-caret")).not.toBeNull();
+  expect(titleRow?.querySelectorAll("button")).toHaveLength(1);
   expect(toggle).toHaveAttribute("aria-expanded", "true");
   expect(toggle).toHaveAttribute("aria-controls", "record-draft-list");
   expect(

@@ -711,6 +711,69 @@
 - **非目标**：不提供任务还原与彻底删除入口；不重建已解除的链接关联、不恢复已作废的记录；不改 `CANCEL` 流转本身（历史数据与既有深链仍可用）；不动项目层删除与记录作废 / 恢复的既有口径。
 - 本文件上文 [ADR-054](./docs/adr/ADR-054.md) 小节中把「取消任务 / 重新打开」写作现行前端入口的部分，以本节与 ADR-058 为准。
 
+## 2026-10-09 项目列表页：大标题改名 + 生命周期分档滑块 + 维护中排序
+
+用户指示（原话）：「这个界面需要改，首先大标题改为项目列表，第二我希望这个项目也进行分层参考 p2 分类未完成和维护中，维护中状态下排序就按照进入维护的时间，越远越往后排，这个滑块放在和搜索同行左侧」。纯前端展示层改动，无契约 / Route Registry / 权限矩阵 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `/projects` 大标题由「项目与功能」改为「项目列表」：与侧栏导航项、面包屑早已使用的同名文案对齐（`AppLayout.tsx` 的导航项、命令面板、记录草稿里的「项目与功能」未动）。
+- 新增生命周期分档滑块 `CalmSegmented`（与任务中心「未完成 / 已完成」同形态、带数量角标），位于搜索框**左侧同一行**：`未完成` = `ACTIVE` + `NOT_STARTED`，`维护中` = `MAINTENANCE`；计数按当前可见项目总量算、不随关键词跳动；默认停在「未完成」。归并规则是新导出 `apps/web/src/features/common/resource-lifecycle.ts` 的 `ProjectTier` / `projectTier()`，**只做展示层归并**，不改服务端三态，也不改 `projectLifecycleRankExpression`（该排序键仍是三档）。
+- 维护中一档按「进入维护的时间」从近到远排。项目列表契约**没有**精确的「进入维护时间」字段，当前用 `updatedAt` 近似并在客户端重排（服务端 `list` 的「最近变更时间」含任务动态，在维护中一档会随任务动态漂移）；未完成一档保持服务端顺序（进行中 → 未开始，档内最近变更在前）。要精确化须在契约新增字段（`activity_projection` 已存 `PROJECT_STATUS_CHANGED` + `source_status`，可派生），属契约变更，须同 PR 同步 Schema / OpenAPI / 客户端 / 集成测试。
+- 空态分两种：关键词没匹配 → 原有「没有匹配的项目」+「清空搜索」；当前档本身为空 → 「没有未完成的项目」/「没有维护中的项目」。底部「层级说明」六宫格与副标题按原样保留。
+- 改动文件：`ProjectsPageView.tsx`、`resource-lifecycle.ts`、`design-system.css`（`.catalog-actions .segmented button` 收到 29px 条目高，滑块整体 35px 与同行控件对齐）、`ProjectsPageView.test.tsx`（新增 3 例 + 改写三态标签 1 例）、`apps/e2e` 的 `tests/auth|csp|project-create|visual-migration.spec.ts` 与 `helpers/project-create.ts`（标题断言改为「项目列表」）。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **91 文件 649 例全绿**、`pnpm typecheck`（8 个 workspace）、`pnpm lint`、`pnpm build`、`prettier --check` 通过；定向 E2E `tests/project-create.spec.ts` 1 passed、`tests/auth.spec.ts tests/csp.spec.ts` 9 passed；全量 `pnpm test:e2e` **68 passed（5.5m）**；真实浏览器复验两档（截图 `.data/annotations/projects-list-tier-open.png` / `-maintenance.png`）。**未运行**：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:integration` / `test:unit`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 侧栏「收起导航」按钮改用面板图标
+
+用户指示（原话）：「这个图标换成 p2 样式呗」（p1 = 原左箭头，p2 = 圆角方块内一条左侧竖线的「面板」图标）。纯图形替换：
+
+- `InpulseIcon` 新增 `panelLeft`（lucide `panel-left` 路径：`<rect width="18" height="18" x="3" y="3" rx="2" />` + `<path d="M9 3v18" />`）；`AppLayout.tsx` 的「收起导航」按钮由 `chevronLeft` 换成它，size 仍 18，`aria-label` / `title` / `aria-controls` / `aria-expanded` 不变。
+- 未改：收起后的悬浮「展开导航」按钮（仍是 `menu` 汉堡）、`nav-collapsed` 过渡规则、其它页面里带返回语义的 `chevronLeft`（功能详情返回、模块任务返回、日期输入左右翻页等都不动）。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web typecheck` 与 `prettier --check`（两个改动文件）通过；真实 dev 浏览器复验按钮渲染为「圆角方块 + 左侧竖线」且收起 / 展开动作不变。**未做自动化断言**（纯图形替换，不断言 svg path），也**未跑**全量 `pnpm test:e2e` / `pnpm check` / `test:unit` / `test:integration`、镜像构建与 GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 删除遗留问题页 / 迭代记录页筛选框前的灰色文字标签
+
+用户指示（原话）：遗留问题页「把这个灰色的项目两个字删掉」；迭代记录页「这里的项目和归属也删掉」。与任务中心 2026-09 已定的口径一致（下拉自身已显示「全部项目 / 项目名」，重复的文字标签删掉）：
+
+- `IssuesPageView.tsx`：删掉包住项目筛选的 `<label className="issues-project-field">项目 …</label>` 外壳，`CalmSelect` 直接挂在 `.catalog-actions` 下；`design-system.css` 的 `.issues-project-field` 规则随之删除（仅此一处使用）。
+- `RecordsWorkspace.tsx`：删掉「项目」（仅非 embedded 渲染的那个）与「归属」两处 `<label className="records-toolbar-field">` 外壳；`records-timeline.css` 的 `.records-toolbar-field`、`.records-toolbar-field select`（原生 select 已不用）与 `@media (max-width: 700px)` 中的同名规则一并删除。
+- **可访问名必须继续由 `CalmSelect` 的 `ariaLabel` 提供**：删标签后 `getByLabelText` / Playwright `getByLabel` 仍按 aria-label 命中（两页的单测与 E2E 都是用这种方式定位的，改动这两个页面时不要依赖可见文字标签）。
+- 未改：「生成总结」弹窗里的 `<span className="summary-filter-label">项目</span>`（需与同排「分组」下拉区分）、任务中心与项目动态页、任何筛选语义与 URL 参数。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **91 文件 649 例全绿**、`pnpm --filter @inpulse/web typecheck`、`prettier --check`（4 个文件）通过；定向 E2E `tests/record-feed|issues|activity|aggregate-views.spec.ts` → **7 passed / 1 failed**，唯一失败 `record-feed.spec.ts:73`（「全部项目视图下『我的草稿』标题可见」）**在未改动的 HEAD 上 `git stash` 复跑同样失败**，属既有问题（空草稿箱整块不渲染，见 `RecordDraftsView.test.tsx` 的对应单测），未在本批修。**未跑**全量 `pnpm test:e2e`、整链 `pnpm check`、`test:unit` / `test:integration`、镜像构建与 GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 项目列表页删除「回到任务中心」按钮
+
+用户指示（原话）：「这个回到任务中心按钮删掉」。纯展示层删除：
+
+- `ProjectsPageView.tsx` 删除页头动作区里 `onBackToTasks` 条件渲染的「回到任务中心」按钮，并把 `onBackToTasks` 从 props 接口与解构中移除；`apps/web/src/pages/projects/ProjectsPage.tsx` 同步不再传该回调（`useNavigate` 仍被其它回调使用）。页头动作区只剩生命周期滑块 + 搜索框 + 「新建项目」。
+- 不动 404 页自己的「回到任务中心」按钮（`NotFoundPage.tsx`）与侧栏「任务中心」导航项：项目页回任务中心改走侧栏。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **91 文件 649 例全绿**、`pnpm --filter @inpulse/web typecheck`、`pnpm lint`、`prettier --check` 通过；真实 dev 浏览器复验 `/projects` 页头已无该按钮。**未跑** E2E（全仓 grep 确认无用例引用项目页该按钮，404 页的同名按钮与其单测不受影响）、全量 `pnpm test:e2e`、整链 `pnpm check`、`test:unit` / `test:integration`、镜像构建与 GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 草稿箱标题行删除说明文案 + 展开/收起箭头紧贴标题
+
+用户指示（原话）：「p2删掉p3的展开收起标准放到我的草稿箱旁边，离得太远了」；第一版方钮落地后反馈「这个样式有点丑给我几个模拟的别的样式」，从 7 版模拟中定案 **C 版**（箭头紧贴标题、整组「标题 + 箭头」可点、无按钮容器）。纯前端展示与交互改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `RecordDraftsView.tsx`：三档 `hint` 副标题（「来源草稿 / 我的草稿 / 项目草稿」各自的说明小字）整条删除；展开/收起由 26px 白底描边方钮改为「`<InpulseIcon name="chevronDown" className="draft-box-caret" />` + 覆盖整组的透明按钮 `.draft-box-hit`」，放进 `CalmSectionTitle` 的新插槽。
+- `Calm.tsx`：`CalmSectionTitle` 新增 `titleSuffix?: React.ReactNode`，非 collapsible 分支的标题改包进 `.calm-section-title-head`（flex、gap 6px）；`hint` prop 保留（其它页面仍在用），`design-system.css` 同步该规则。
+- `record-drafts.css`：`.draft-box-toggle` 整套方钮规则删除，换成 `.draft-box-caret` / `.draft-box-hit`（`inset: -2px -4px -2px -6px`）；收起态箭头旋转用 `:has(.draft-box-hit[aria-expanded="false"])`（`.record-drafts-page` 作用域内），悬停整组转 `#2472c3`。
+- **标题行上下留档**：`.record-drafts-page .calm-section-title` 从设计系统默认的 `0 0 18px` 改为 `8px 0 20px`（标题距筛选行 10px → 18px、距草稿卡 18px → 20px），命中层上下外扩由 4px 收到 2px，键盘焦点环不再贴到相邻元素（用户当日追加「请调整上下间距」）。
+- **焦点环左右留白 + 左边缘对齐**（用户同日追加「这个几个字稍微往右有点感觉没对其」→ 再澄清「纵向这三个该对齐，我的草稿往右移动」）：① 命中层右侧外扩由 6px 收到 4px——箭头 14px 图标盒左右各约有 3px 余量，右边再留 6px 会让环内右留白比左多 2.6px（实测左 9.5px / 右 12.1px），收到 4px 后两侧各约 9.5px；② `.record-drafts-page .calm-section-title-head` 加 `margin-left: 8.7px`（= 命中层左外扩 6px + 焦点环描边 2px + `outline-offset` 0.67px），整组「我的草稿 ⌄」右移后焦点环外沿落在 **270.03px**，与上方搜索框、下方草稿卡片左边缘（270px）纵向对齐。代价：未获得键盘焦点时标题文字比内容列右 8.7px——「环外沿贴齐内容列」与「文字贴齐内容列」不可兼得（环的左内边距必须为正），本轮按用户指示取前者。
+- **可访问性与既有选择器不变**：标题仍是 `h3`（`getByRole("heading")` 与 `.calm-section-title h3` 断言继续有效），按钮保留 `aria-expanded`、收起时的 `aria-controls="record-draft-list"` 与 `title`/`aria-label`（「收起草稿箱 / 展开草稿箱」）；来源任务视图（`taskId > 0`）不渲染箭头，行尾仍是「新建来源草稿」。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **91 文件 649 例全绿**、`pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm build`、`prettier --check .`、`pnpm check:docs` 通过；定向 E2E `tests/record-drafts.spec.ts tests/module-tasks.spec.ts`（`E2E_DATABASE_URL=…/app_ci`）**7 passed (48.7s)**；真实 dev 浏览器复验标题行「我的草稿 ⌄」，点标题与点箭头都能折叠 / 展开（截图 `.data/annotations/draft-toggle-c-open.png`、`draft-toggle-c-closed.png`）。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 全站时间展示统一按北京时间（Asia/Shanghai）
+
+用户报障（原话）：「这个是我刚刚创建的但是时间对不上」——功能详情页头显示「更新 2026-10-09 06:23」，而该功能创建于北京时间同日 14:23（项目动态页同一事件显示 14:23），即把服务端下发的 UTC ISO 串当北京时间显示；随后用户追加「都统一成北京时间」。前端多处直接切 ISO 字符串或按浏览器本地时区渲染，在非 +8 环境（CI、海外同事）会显示成另一天/另一时刻。本批新增**唯一时间展示口径** `apps/web/src/features/common/beijing-time.ts`（`Intl` 固定 `timeZone: "Asia/Shanghai"`；北京无夏令时，日历日按固定 +8 换算），并把下列渲染点全部改到该模块：
+
+- `features/features/FeaturesPageView.tsx`：`formatStamp` 原为 `value.replace("T"," ").slice(0, 16)`（**报障根因**），改为 `formatBeijingMinute`；功能列表「最近更新」列与详情页头「更新 …」徽章同时修正。
+- `tasks/TasksPanel.tsx`：`formatDate` / `formatDay` 加 `timeZone`；`dueLabel` 的「已逾期 N 天 / 今天截止 / N 天后截止」日历日差改由 `beijingTodayStart` 计算。
+- `tasks/TaskStatusPanel.tsx`、`notifications/NotificationsPageView.tsx`、`notifications/NotificationBell.tsx`、`projects/ActiveProjectMembers.tsx`、`projects/ProjectMembersPageView.tsx`、`records/PublishedRecordCard.tsx`、`published-records/PublishedRecordDetail.tsx`、`published-records/RecordDetailModal.tsx`：`toLocale*` 补 `timeZone: BEIJING_TIME_ZONE`（形状不变）。`NotificationBell` 的「x 分钟/小时/天前」是按时间差推导，不随时区变化。
+- `record-drafts/RecordDraftsView.tsx`（`formatDraftTime`）、`issues/issues-format.ts`（`formatIssueDate`）、`project-overview/ProjectOverviewPageView.tsx`（`formatPublishedAt`）、`task-groups/task-groups-format.ts`（`formatDay` / `formatDateTime`）、`my-tasks/my-tasks-time.ts`（`formatDayIso` / `formatDateTimeIso` 与 `isTodayIso` 等「今天/本周/本月」判断）：改走 `beijing-time`，不再是本地时区。
+- **按北京日历日归组**（原先部分按 UTC 日、部分按 +8 日，口径不一致）：`records/record-timeline.ts` 的 `recordDateKey` 原为 `publishedAt.slice(0, 10)`（UTC 日，跨日会归错组），`activity/activity-day-groups.ts` 与 `audit/AuditLogPageView.tsx` 的日键与组头/行内文案统一走 `beijingDayKey` / `formatDayKeyCn` / `formatDayKeySlash`；`records/record-summary-document.ts` 与 `records/RecordSummaryModal.tsx` 的日期、以及 `presetRange` 的「本年/本季度/本月」改由 `beijingTodayParts` 推导。
+- **审计筛选按北京时间解析**：`audit/audit-query.ts` 的 `toQueryIsoString` 原用 `new Date(trimmed)`（浏览器本地时区），改为 `beijingWallClockToIso`（严格 `YYYY-MM-DDTHH:mm[:ss]` + 真实日历日校验）；否则在非 +8 环境里用户按界面看到的北京时间填范围会与列表错位。
+- **有意保留的例外**：`common/components/CalmDateTimeInput.tsx`、`published-records/ConvertLeftoverTask.tsx`、`tasks/GlobalTaskCreateModal.tsx` 里的 `datetime-local` 仍是浏览器本地墙上时间——它与输入框往返自洽（写回 `new Date(next).toISOString()` 用的是同一套本地语义），本轮不动，避免把「选择器显示」与「选择器取值」拆成两套口径。
+- 未改：`task-board/task-board-format.ts`（本来就是 `Asia/Shanghai`，本批以它为准）、`features/features` 的 `toLocaleLowerCase` 搜索、各处只用于排序 / 比较的时间戳运算。
+- 本地验证（2026-10-09）：新增 `apps/web/src/features/common/beijing-time.test.ts`（5 例，期望值全部硬编码，避免测试机时区不是 +8 时对本地时区实现假通过）与 `FeaturesPageView.test.tsx` 的更新时间回归用例；`pnpm --filter @inpulse/web test` **92 文件 655 例全绿**（基线 91 文件 649 例），`pnpm --filter @inpulse/web typecheck`、`pnpm exec prettier --check`（本批 26 个文件）通过；真实 dev（Vite 5173）`/projects/3/modules/3843/features/6491` 复验页头显示「更新 2026-10-09 14:23」，与项目动态页同一事件的 14:23 一致。`audit/audit-query.test.tsx` 与 `audit/AuditLogPageView.test.tsx` 里两处「表单 08:00 → `new Date(...).toISOString()`」的期望改为显式 `2026-09-01T00:00:00.000Z`。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
 ## 2026-10-09 ADR-059 模块与功能软删除说明
 
 按用户 2026-10-09 指示（原话「现在先本地保存，然后给模块和功能增加删除按钮，如果里面有功能或者任务，要提醒操作者是否删除，如果真的删除那就一起删」，随后限定入口形态「把删除按钮放入模块和功能各自的编辑页面里，像任务那种一样一样」）交付模块与功能删除（[ADR-059](./docs/adr/ADR-059.md)）。因此：

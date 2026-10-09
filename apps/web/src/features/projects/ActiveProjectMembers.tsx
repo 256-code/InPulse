@@ -18,9 +18,13 @@ import {
 import { projectMemberErrorMessage } from "./project-member-query";
 import { orderMembersLeaderFirst } from "./project-member-order";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 
 const formatMemberDate = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", { hour12: false });
+  new Date(value).toLocaleString("zh-CN", {
+    hour12: false,
+    timeZone: BEIJING_TIME_ZONE,
+  });
 
 /** 与管理视图 `ProjectMembersPageView` 一致的角色标签。 */
 const roleLabel: Record<"MEMBER" | "LEADER", string> = {

@@ -2,6 +2,7 @@ import React from "react";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import type { InpulseApiClient, RecordFeedItem } from "@generated/api";
 import { CalmBadge } from "@features/common/components/Calm";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 import { PublishedRecordDetail } from "@features/published-records/PublishedRecordDetail";
 
 type RecordStatus = RecordFeedItem["record"]["status"];
@@ -51,8 +52,10 @@ export function PublishedRecordCard({
           <strong>{record.title}</strong>
           <small>
             {record.code} · v{record.currentVersion} · 发布{" "}
-            {new Date(record.publishedAt).toLocaleString("zh-CN")} ·{" "}
-            {item.author.name}
+            {new Date(record.publishedAt).toLocaleString("zh-CN", {
+              timeZone: BEIJING_TIME_ZONE,
+            })}{" "}
+            · {item.author.name}
           </small>
           <small className="record-summary-path">
             归属 {item.projectName} / {item.moduleName}

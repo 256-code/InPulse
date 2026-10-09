@@ -270,44 +270,68 @@
   flex: none;
 }
 
-/* 草稿箱标题行右侧的动作区：折叠小按钮 + 来源任务视图的「新建来源草稿」。
-   折叠按钮是 26px 的幽灵方钮，箭头朝下有草稿展开中、朝右表示已收起。 */
+/* 草稿箱标题行右侧的动作区：来源任务视图的「新建来源草稿」。
+   展开/收起不在这里——它是标题右侧紧贴标题的箭头（C 版，2026-10-09 定案）：
+   .calm-section-title-head 里「标题 + 箭头」整组可点，悬停一起转蓝，收起时箭头转 -90°。 */
 .draft-box-actions {
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
 
-.draft-box-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--border, #e2e9f0);
-  border-radius: 8px;
-  background: var(--card, #fff);
-  color: #7a8b9c;
+.record-drafts-page .calm-section-title-head {
+  position: relative;
   cursor: pointer;
+  /* 焦点环的外沿要跟上方搜索框、下方草稿卡片的左边缘对齐（用户 2026-10-09：「纵向这三个该对齐，
+     我的草稿往右移动」）。环画在命中层外沿，命中层又比标题左外扩 6px、描边再占 2px + 0.67px 偏移，
+     所以整组右移这 8.7px，环外沿正好落回内容列；标题文字随之一起右移。 */
+  margin-left: 8.7px;
+}
+
+/* 标题行上下留档：上面是筛选行、下面是草稿卡片，原 10px/18px 会让焦点环贴边（2026-10-09）。 */
+.record-drafts-page .calm-section-title {
+  margin: 8px 0 20px;
+}
+
+.record-drafts-page .calm-section-title-head h3 {
+  transition: color 0.15s ease;
+}
+
+.draft-box-caret {
+  color: #9aabbb;
   transition:
     color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+    transform 0.15s ease;
 }
 
-.draft-box-toggle:hover {
-  border-color: #cbdcec;
-  background: #f4f8fd;
-  color: #2c5f92;
-}
-
-.draft-box-toggle > svg {
-  transition: transform 0.15s ease;
-}
-
-.draft-box-toggle[aria-expanded="false"] > svg {
+.calm-section-title-head:has(.draft-box-hit[aria-expanded="false"])
+  .draft-box-caret {
   transform: rotate(-90deg);
+}
+
+.calm-section-title-head:hover h3,
+.calm-section-title-head:hover .draft-box-caret {
+  color: #2472c3;
+}
+
+/* 覆盖整组「标题 + 箭头」的透明命中层：标题本身不挂事件，键盘焦点只落在这一枚按钮上。
+   上下只外扩 2px——焦点环画在这层外沿，外扩太多会让蓝框顶到搜索行与草稿卡片。
+   右侧只外扩 4px（原 6px）：箭头笔画在 14px 图标盒里左右各留约 3px 余量，右边再留 6px
+   会让环内右留白比左留白多 2.6px，看着像「字偏左、没对齐」；收到 4px 后两侧留白相等（2026-10-09）。 */
+.draft-box-hit {
+  position: absolute;
+  inset: -2px -4px -2px -6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.draft-box-hit:focus-visible {
+  outline: 2px solid #2472c3;
+  outline-offset: 1px;
 }
 
 /* 来源任务弹窗的来源与归属条：一张浅灰卡片压到两行——首行是来源任务 / 处理人，

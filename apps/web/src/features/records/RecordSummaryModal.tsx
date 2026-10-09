@@ -18,6 +18,10 @@ import {
 } from "./record-summary-query";
 import "./record-summary.css";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import {
+  beijingDayKey,
+  beijingTodayParts,
+} from "@features/common/beijing-time";
 
 /** 时间档位：自定义以外的三档都由本地日历推导起止自然日。 */
 type RangePreset = "year" | "quarter" | "month" | "custom";
@@ -34,28 +38,27 @@ const RANGE_PRESETS: readonly {
 
 const pad = (value: number): string => String(value).padStart(2, "0");
 
-const isoDay = (date: Date): string =>
-  `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+/** 某年某月（1-12）的最后一天，纯 UTC 计算，不受运行环境时区影响。 */
+const monthEnd = (year: number, month: number): string =>
+  `${String(year)}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`;
 
-/** 档位 → [起始日, 结束日]（含首尾，Asia/Shanghai 日历日）。 */
+/** 档位 → [起始日, 结束日]（含首尾，北京日历日）。 */
 export function presetRange(preset: RangePreset): {
   readonly from: string;
   readonly to: string;
 } {
-  const now = new Date();
-  const year = now.getFullYear();
+  const { year, month } = beijingTodayParts();
   if (preset === "quarter") {
-    const startMonth = Math.floor(now.getMonth() / 3) * 3;
+    const startMonth = Math.floor((month - 1) / 3) * 3 + 1;
     return {
-      from: `${String(year)}-${pad(startMonth + 1)}-01`,
-      to: isoDay(new Date(year, startMonth + 3, 0)),
+      from: `${String(year)}-${pad(startMonth)}-01`,
+      to: monthEnd(year, startMonth + 2),
     };
   }
   if (preset === "month") {
-    const month = now.getMonth();
     return {
-      from: `${String(year)}-${pad(month + 1)}-01`,
-      to: isoDay(new Date(year, month + 1, 0)),
+      from: `${String(year)}-${pad(month)}-01`,
+      to: monthEnd(year, month),
     };
   }
   return { from: `${String(year)}-01-01`, to: `${String(year)}-12-31` };
@@ -388,7 +391,7 @@ export function RecordSummaryModal({
                     <small>{point.detail}</small>
                   </td>
                   <td>{point.author.name}</td>
-                  <td>{point.publishedAt.slice(0, 10)}</td>
+                  <td>{beijingDayKey(point.publishedAt)}</td>
                 </tr>
                 {expanded ? (
                   <tr className="summary-detail-expanded">

@@ -27,7 +27,7 @@ export async function createProjectViaUi(
   const name = `${prefix} Playwright 项目 ${code}`;
 
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "项目与功能" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
   await page.getByTestId("create-project-button").click();
 
   const dialog = page.getByRole("dialog");

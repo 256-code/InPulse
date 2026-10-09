@@ -383,7 +383,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               aria-expanded
               onClick={() => handleToggleNav(true)}
             >
-              <InpulseIcon name="chevronLeft" size={18} />
+              {/* 收起导航用「面板」图标（2026-10-09 用户指示，替换原来的左箭头）。 */}
+              <InpulseIcon name="panelLeft" size={18} />
             </button>
           </div>
           <nav className="nav-group" aria-label="工作区导航">

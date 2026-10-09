@@ -13,6 +13,7 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   projectLifecycleLabel,
@@ -55,7 +56,10 @@ export interface ProjectMembersPageViewProps {
 }
 
 const formatMemberDate = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", { hour12: false });
+  new Date(value).toLocaleString("zh-CN", {
+    hour12: false,
+    timeZone: BEIJING_TIME_ZONE,
+  });
 
 const roleLabel: Record<"MEMBER" | "LEADER", string> = {
   MEMBER: "成员",

@@ -8,6 +8,7 @@ import {
   useNotificationUnreadCount,
 } from "./notification-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 
 export interface NotificationBellProps {
   readonly client?: InpulseApiClient | undefined;
@@ -48,6 +49,7 @@ function formatNotificationTime(value: string): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BEIJING_TIME_ZONE,
   });
 }
 

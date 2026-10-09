@@ -1,7 +1,13 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ActivityPage, InpulseApiClient } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
@@ -46,10 +52,24 @@ const ACTIVITY: ActivityPage = {
   dayTotalsTruncated: false,
 };
 
-function createClient(): InpulseApiClient {
+const SECOND_PROJECT = {
+  ...PROJECT,
+  id: 9,
+  code: "WMS",
+  name: "WMS 仓储调度平台",
+  memberCount: 2,
+};
+
+function createClient(
+  projects: readonly (typeof PROJECT)[] = [PROJECT],
+): InpulseApiClient {
   return {
     getProjectActivity: vi.fn().mockResolvedValue(ACTIVITY),
-    listProjects: vi.fn().mockResolvedValue({ items: [PROJECT] }),
+    listActivity: vi.fn().mockResolvedValue(ACTIVITY),
+    listProjectDeletions: vi
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null }),
+    listProjects: vi.fn().mockResolvedValue({ items: projects }),
     getUserDirectory: vi.fn().mockResolvedValue({
       items: [{ id: 1, name: "特哥", avatarUrl: null, isAdmin: true }],
     }),
@@ -79,6 +99,79 @@ function mount(client: InpulseApiClient, isAdmin: boolean) {
           }
         >
           <ActivityPageView projectId={7} client={client} />
+        </QueryClientProvider>
+      </AuthStateProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** 项目详情页按路由参数取数：这里把 pathname 打到页面上，用来断言下拉换页。 */
+const RoutedActivity: React.FC<{ readonly client: InpulseApiClient }> = ({
+  client,
+}) => {
+  const { projectId } = useParams<{ projectId: string }>();
+  const location = useLocation();
+  return (
+    <>
+      <span data-testid="path">{location.pathname + location.search}</span>
+      <ActivityPageView
+        {...(projectId === undefined ? {} : { projectId: Number(projectId) })}
+        client={client}
+      />
+    </>
+  );
+};
+
+/** CalmSelect 交互：打开下拉并点选可见弹层里的目标项（弹层项带 title 属性）。 */
+function pickSelectOption(label: string, optionTitle: string) {
+  const field = screen.getByLabelText(label);
+  const trigger = field.closest(".ant-select");
+  if (!trigger) {
+    throw new Error("select trigger not found for " + label);
+  }
+  fireEvent.mouseDown(trigger);
+  const matches = Array.from(
+    document.querySelectorAll(`[title="${optionTitle}"]`),
+  ).filter((node) => node.closest(".ant-select-dropdown-hidden") === null);
+  const option = matches[matches.length - 1];
+  if (!option) {
+    throw new Error("select option not found: " + optionTitle);
+  }
+  fireEvent.click(option);
+}
+
+function mountRouted(client: InpulseApiClient, path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <AuthStateProvider
+        value={{
+          status: "authenticated",
+          user: {
+            id: 1,
+            loginName: "tege",
+            name: "特哥",
+            email: null,
+            avatarUrl: null,
+            isAdmin: true,
+            status: "ACTIVE",
+          },
+        }}
+      >
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <Routes>
+            <Route
+              path="/projects/:projectId/activity"
+              element={<RoutedActivity client={client} />}
+            />
+            <Route
+              path="/activity"
+              element={<RoutedActivity client={client} />}
+            />
+          </Routes>
         </QueryClientProvider>
       </AuthStateProvider>
     </MemoryRouter>,
@@ -133,5 +226,46 @@ describe("ActivityPageView", () => {
     expect(screen.getByText("仅管理员可查看原始快照")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "原始快照 1" })).toBeNull();
     expect(screen.queryByLabelText("包含管理员操作")).toBeNull();
+  });
+  it("锁定项目时同一个下拉可以换成其他项目，也可以切到全部项目 / 已删除项目", async () => {
+    // 2026-10-09：项目详情页原先连下拉都不渲染，用户反馈没法换项目；
+    // 且下拉选项要与全局态完全一致（含「已删除项目」）。
+    mountRouted(
+      createClient([PROJECT, SECOND_PROJECT]),
+      "/projects/7/activity",
+    );
+
+    expect(await screen.findByTestId("activity-item-1")).toBeInTheDocument();
+    expect(screen.getByTestId("path")).toHaveTextContent(
+      "/projects/7/activity",
+    );
+    // 触发器显示当前项目名（rich 形态），不是裸 id。
+    expect(screen.getByText("InPulse 研发交付平台")).toBeInTheDocument();
+
+    pickSelectOption("项目", "WMS 仓储调度平台");
+    await waitFor(() =>
+      expect(screen.getByTestId("path")).toHaveTextContent(
+        "/projects/9/activity",
+      ),
+    );
+
+    pickSelectOption("项目", "已删除项目");
+    await waitFor(() =>
+      expect(screen.getByTestId("path")).toHaveTextContent(
+        "/activity?project=deleted",
+      ),
+    );
+
+    // 回到全局态后，下拉仍是同一份选项，且筛选写回 URL（可分享、刷新保留）。
+    pickSelectOption("项目", "全部项目");
+    await waitFor(() =>
+      expect(screen.getByTestId("path")).toHaveTextContent("/activity"),
+    );
+    pickSelectOption("项目", "WMS 仓储调度平台");
+    await waitFor(() =>
+      expect(screen.getByTestId("path")).toHaveTextContent(
+        "/activity?project=9",
+      ),
+    );
   });
 });

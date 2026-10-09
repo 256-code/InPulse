@@ -185,8 +185,9 @@ describe("useAuditLogsInfiniteQuery", () => {
         projectId: 7,
         action: "project.update",
         actorIds: [3, 7],
-        from: new Date("2026-09-01T08:00").toISOString(),
-        to: new Date("2026-09-02T08:00").toISOString(),
+        // 表单里填的 08:00 是北京时间，落到 UTC 是前一天 00:00。
+        from: "2026-09-01T00:00:00.000Z",
+        to: "2026-09-02T00:00:00.000Z",
         limit: AUDIT_PAGE_LIMIT,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

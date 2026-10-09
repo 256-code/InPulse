@@ -12,6 +12,7 @@ import {
   CalmBadge,
   CalmEmptyState,
   CalmSectionTitle,
+  CalmSegmented,
 } from "@features/common/components/Calm";
 import { isCardClick } from "@features/common/card-click";
 import { canDeleteProject, canManageProjectResources } from "./project-query";
@@ -20,6 +21,8 @@ import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
   projectLifecycleLabel,
   projectLifecycleTone,
+  projectTier,
+  type ProjectTier,
 } from "@features/common/resource-lifecycle";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
@@ -44,7 +47,6 @@ export interface ProjectsPageViewProps {
    */
   readonly onStartCreate?: (() => void) | undefined;
   readonly onCreated?: (response: CreateProjectResponse) => void;
-  readonly onBackToTasks?: (() => void) | undefined;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
   readonly onOpenModules?: ((projectId: number) => void) | undefined;
   readonly onOpenMembers?: ((projectId: number) => void) | undefined;
@@ -63,7 +65,6 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   createdProject,
   onStartCreate,
   onCreated,
-  onBackToTasks,
   onOpenActivity,
   onOpenModules,
   onOpenMembers,
@@ -80,14 +81,51 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   const [managementSuccess, setManagementSuccess] = useState<string | null>(
     null,
   );
-  // 本地过滤（2026-09-30 用户指示）：只在「项目与功能」页搜索当前列表，不走全局搜索。
+  // 本地过滤（2026-09-30 用户指示）：只在项目列表页搜索当前列表，不走全局搜索。
   const [search, setSearch] = useState("");
+  // 生命周期分档（2026-10-09 用户指示）：与任务中心「未完成 / 已完成」同形态的滑块，
+  // 按项目自己的三态归并成两档——未完成（进行中 + 未开始）与维护中。
+  const [tier, setTier] = useState<ProjectTier>("open");
+
+  // 两档计数在关键词之前算：滑块上的数字是当前可见项目的总量，不随搜索词跳动。
+  const maintenanceProjectCount = projects.filter(
+    (project) => projectTier(project.status) === "maintenance",
+  ).length;
+  const tierOptions: ReadonlyArray<{
+    readonly value: ProjectTier;
+    readonly label: string;
+    readonly count: number;
+  }> = [
+    {
+      value: "open",
+      label: "未完成",
+      count: projects.length - maintenanceProjectCount,
+    },
+    { value: "maintenance", label: "维护中", count: maintenanceProjectCount },
+  ];
+
+  // 维护中这一档按「进入维护的时间」从近到远排，越久以前进入维护的排越后
+  // （2026-10-09 用户指示）。项目列表契约里没有精确的「进入维护时间」字段，这里用
+  // `updatedAt` 近似：切到维护中会写 `projects.updated_at`，此后只有再次编辑项目本身
+  // （改名、改描述）才会把它推近，任务与成员的变化不写这一列。服务端 `list` 的默认
+  // 顺序是「档位 + 最近变更时间（含任务动态）」，维护中一档会随任务动态漂移，所以本档
+  // 在客户端重排；未完成一档保持服务端顺序（进行中 → 未开始，档内最近变更在前）。
+  const tierProjects =
+    tier === "maintenance"
+      ? projects
+          .filter((project) => projectTier(project.status) === "maintenance")
+          .sort(
+            (left, right) =>
+              Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+              right.id - left.id,
+          )
+      : projects.filter((project) => projectTier(project.status) === "open");
 
   const keyword = search.trim().toLocaleLowerCase();
   const visibleProjects =
     keyword === ""
-      ? projects
-      : projects.filter(
+      ? tierProjects
+      : tierProjects.filter(
           (project) =>
             project.name.toLocaleLowerCase().includes(keyword) ||
             project.code.toLocaleLowerCase().includes(keyword) ||
@@ -98,26 +136,29 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
     <>
       <div className="page-header">
         <div className="catalog-heading">
-          <h1>项目与功能</h1>
+          <h1>项目列表</h1>
           <p>项目负责承载范围，模块负责分类，功能负责沉淀。</p>
         </div>
         <div className="catalog-actions">
           {projects.length > 0 ? (
-            <div className="task-search">
-              <InpulseIcon name="search" size={15} />
-              <input
-                aria-label="搜索项目"
-                placeholder="搜索项目名称、编码或描述"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+            <>
+              {/* 生命周期滑块与搜索框同行，且在搜索框左侧（2026-10-09 用户指示）。 */}
+              <CalmSegmented
+                label="项目生命周期分档"
+                value={tier}
+                options={tierOptions}
+                onChange={(next) => setTier(next)}
               />
-            </div>
-          ) : null}
-          {onBackToTasks ? (
-            <Button className="secondary-button" onClick={onBackToTasks}>
-              <InpulseIcon name="clipboard" size={15} />
-              回到任务中心
-            </Button>
+              <div className="task-search">
+                <InpulseIcon name="search" size={15} />
+                <input
+                  aria-label="搜索项目"
+                  placeholder="搜索项目名称、编码或描述"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+            </>
           ) : null}
           <Button
             className="primary-button"
@@ -232,18 +273,34 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
       ) : (
         <>
           {visibleProjects.length === 0 ? (
-            <CalmEmptyState
-              icon="search"
-              title="没有匹配的项目"
-              description="调整关键词后重试，或清空搜索查看全部项目。"
-            >
-              <Button
-                className="secondary-button"
-                onClick={() => setSearch("")}
+            keyword === "" ? (
+              <CalmEmptyState
+                icon="boxes"
+                title={
+                  tier === "maintenance"
+                    ? "没有维护中的项目"
+                    : "没有未完成的项目"
+                }
+                description={
+                  tier === "maintenance"
+                    ? "项目主体完成并切到维护中后会归到这一档，按进入维护的时间从近到远排列。"
+                    : "当前项目都已切到维护中，可以切到「维护中」这一档查看。"
+                }
+              />
+            ) : (
+              <CalmEmptyState
+                icon="search"
+                title="没有匹配的项目"
+                description="调整关键词后重试，或清空搜索查看全部项目。"
               >
-                清空搜索
-              </Button>
-            </CalmEmptyState>
+                <Button
+                  className="secondary-button"
+                  onClick={() => setSearch("")}
+                >
+                  清空搜索
+                </Button>
+              </CalmEmptyState>
+            )
           ) : (
             <div className="cards-grid calm-projects">
               {[...visibleProjects].map((project) => (

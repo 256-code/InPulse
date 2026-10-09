@@ -54,7 +54,7 @@ test("登录后回到登录前的目标页面", async ({ page }) => {
     .click();
 
   await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByRole("heading", { name: "项目与功能" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
 });
 
 test("E2E 登录复用后的 Session 可以读取当前用户", async ({ request }) => {

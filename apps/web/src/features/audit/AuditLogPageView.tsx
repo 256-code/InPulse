@@ -14,6 +14,13 @@ import { projectSelectOption } from "@features/common/project-select-option";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { useStickyBandOffset } from "@features/common/use-sticky-band-offset";
 import {
+  beijingDateTime,
+  beijingDayKey,
+  formatBeijingSecond,
+  formatDayKeyCn,
+  formatDayKeySlash,
+} from "@features/common/beijing-time";
+import {
   PROJECT_DELETION_PAGE_LIMIT,
   projectDeletionItems,
   useProjectDeletionsQuery,
@@ -41,72 +48,41 @@ export interface AuditLogPageViewProps {
   readonly client?: InpulseApiClient | undefined;
 }
 
+const padAudit = (value: number): string => String(value).padStart(2, "0");
+
 function formatAuditTime(value: string): { date: string; time: string } {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  const at = beijingDateTime(value);
+  if (at === null) {
     return { date: value, time: "" };
   }
-  const date = [
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
-  const time = [
-    String(parsed.getHours()).padStart(2, "0"),
-    String(parsed.getMinutes()).padStart(2, "0"),
-    String(parsed.getSeconds()).padStart(2, "0"),
-  ].join(":");
-  return { date, time };
+  return {
+    date: padAudit(at.month) + "-" + padAudit(at.day),
+    time:
+      padAudit(at.hour) + ":" + padAudit(at.minute) + ":" + padAudit(at.second),
+  };
 }
 
-/** 快照里的完整本地时间（`2026-09-21 16:24:20`），原始 UTC 值由调用方放进 title。 */
+/** 快照里的完整北京时间（`2026-09-21 16:24:20`），原始 UTC 值由调用方放进 title。 */
 function formatAuditDateTime(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  const date = [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
-  const { time } = formatAuditTime(value);
-  return date + " " + time;
+  return formatBeijingSecond(value);
 }
 
 /**
  * 2026-10-08 用户要求「时间先不会被滚走，等里面的内容滚完了再收起来」：审计列表与项目动态
- * 一样按自然日分组、组头吸顶。日期用浏览器本地时区——与上方 from / to 和行内时刻同一口径，
- * 因此不复用项目动态那套按上海时间换算的 helper。
+ * 一样按自然日分组、组头吸顶。分组与行内时刻一律按北京时间（Asia/Shanghai），
+ * 与上方 from / to 的解析口径一致。
  */
 function auditDayKey(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value.slice(0, 10);
-  }
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, "0"),
-    String(parsed.getDate()).padStart(2, "0"),
-  ].join("-");
+  return beijingDayKey(value);
 }
 
 function auditDayLabel(key: string): string {
-  const parsed = new Date(`${key}T00:00:00`);
-  return Number.isFinite(parsed.getTime())
-    ? parsed.toLocaleDateString("zh-CN", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : key;
+  return formatDayKeyCn(key);
 }
 
 /** 时间线竖线左侧的短日期（如 9/24），完整日期由组头承担。 */
 function auditDayShortLabel(key: string): string {
-  const parsed = new Date(`${key}T00:00:00`);
-  return Number.isFinite(parsed.getTime())
-    ? parsed.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
-    : key;
+  return formatDayKeySlash(key);
 }
 
 /** 服务端已按 occurred_at DESC 分页；这里只把当前已加载页按自然日分组。 */

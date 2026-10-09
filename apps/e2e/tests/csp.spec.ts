@@ -102,7 +102,7 @@ test("强制 CSP 下登录、主题、弹层、懒加载与错误页均无违规
   // 登录表单 + 主题
   await loginViaUi(page, runtime);
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "项目与功能" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
 
   const primaryBackground = await page.evaluate(() => {
     const button = document.querySelector(

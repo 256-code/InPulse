@@ -309,7 +309,8 @@ describe("F-08 audit page", () => {
         expect.objectContaining({
           action: "project.update",
           actorIds: [1],
-          from: new Date("2026-09-01T08:00").toISOString(),
+          // 表单里填的 08:00 是北京时间，落到 UTC 是前一天 00:00。
+          from: "2026-09-01T00:00:00.000Z",
           // 筛选属于同一次查看，不写新留痕（ADR-042）。
           readTrail: "false",
         }),
