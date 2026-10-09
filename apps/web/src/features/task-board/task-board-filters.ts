@@ -13,7 +13,7 @@ import type {
  * 任务看板 URL 状态与本地筛选。
  *
  * 与 F-30（任务中心）同一约定：筛选状态由 URL 承载，页面不保留内部副本。
- * 参数：view=board|list、status=all|open|done|canceled、time=all|overdue|today、
+ * 参数：view=board|list、status=all|open|done、time=all|overdue|today、
  * priority=NORMAL|HIGH|URGENT、owner=<userId>、q=<关键词>。
  * 与默认值相同的项不写入 URL；非法值一律回退默认值。
  *
@@ -31,12 +31,7 @@ export const DEFAULT_TASK_BOARD_FILTERS: TaskBoardFilters = {
 };
 
 const viewValues: readonly TaskBoardView[] = ["board", "list"];
-const statusValues: readonly TaskBoardStatusFilter[] = [
-  "all",
-  "open",
-  "done",
-  "canceled",
-];
+const statusValues: readonly TaskBoardStatusFilter[] = ["all", "open", "done"];
 const timeValues: readonly TaskBoardTimeFilter[] = ["all", "overdue", "today"];
 const priorityValues: readonly TaskBoardPriority[] = [
   "NORMAL",
@@ -125,9 +120,6 @@ export function matchesTaskBoardCard(
 ): boolean {
   if (filters.status === "open" && card.workStatus !== "TODO") return false;
   if (filters.status === "done" && card.workStatus !== "DONE") return false;
-  if (filters.status === "canceled" && card.workStatus !== "CANCELED") {
-    return false;
-  }
   if (filters.time === "overdue" && card.dueState !== "OVERDUE") return false;
   if (filters.time === "today" && card.dueState !== "TODAY") return false;
   if (filters.priority !== null && card.priority !== filters.priority) {

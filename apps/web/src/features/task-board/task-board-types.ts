@@ -27,8 +27,11 @@ export type TaskBoardDueState = TaskBoardCard["dueState"];
 /** 视图切换：看板（模块泳道）/ 列表（分组表格）。 */
 export type TaskBoardView = "board" | "list";
 
-/** 状态筛选；与预览的 4 个 chip 一一对应。 */
-export type TaskBoardStatusFilter = "all" | "open" | "done" | "canceled";
+/**
+ * 状态筛选；对应工具栏的 3 个状态 chip。2026-10-09 按用户要求移除 `canceled`：
+ * ADR-058 之后取消任务入口已下线，该筛选恒无命中。
+ */
+export type TaskBoardStatusFilter = "all" | "open" | "done";
 
 /** 时间筛选；overdue / today 均由服务端 dueState 派生。 */
 export type TaskBoardTimeFilter = "all" | "overdue" | "today";

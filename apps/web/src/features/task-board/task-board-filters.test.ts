@@ -70,6 +70,10 @@ describe("readTaskBoardFilters", () => {
       ...DEFAULT_TASK_BOARD_FILTERS,
       query: "看板",
     });
+    // 2026-10-09：「已取消」筛选连同 chip 一并移除，旧链接的 status=canceled 按非法值回退。
+    expect(
+      readTaskBoardFilters(new URLSearchParams({ status: "canceled" })),
+    ).toEqual(DEFAULT_TASK_BOARD_FILTERS);
   });
 
   it("解析列表视图、逾期、优先级与负责人", () => {
@@ -115,7 +119,7 @@ describe("writeTaskBoardFilters", () => {
   it("读写往返一致", () => {
     const filters = {
       view: "list",
-      status: "canceled",
+      status: "done",
       time: "all",
       priority: "NORMAL",
       assigneeId: 3,
@@ -171,12 +175,6 @@ describe("matchesTaskBoardCard", () => {
         status: "done",
       }),
     ).toBe(true);
-    expect(
-      matchesTaskBoardCard(done, {
-        ...DEFAULT_TASK_BOARD_FILTERS,
-        status: "canceled",
-      }),
-    ).toBe(false);
   });
 
   it("逾期与今日到期只读 dueState，不在前端按本地时钟重算", () => {

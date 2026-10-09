@@ -80,10 +80,6 @@ export const TaskBoardOverview: React.FC<TaskBoardOverviewProps> = ({
         <div className="tb-split-bar" aria-hidden="true">
           <i className="sb-done" style={{ width: split.donePercent + "%" }} />
           <i className="sb-todo" style={{ width: split.todoPercent + "%" }} />
-          <i
-            className="sb-cancel"
-            style={{ width: split.canceledPercent + "%" }}
-          />
         </div>
         <div className="tb-legend">
           <span>
@@ -95,11 +91,6 @@ export const TaskBoardOverview: React.FC<TaskBoardOverviewProps> = ({
             <i className="tb-dot sb-todo" aria-hidden="true" />
             未完成
             <b>{stats.open}</b>
-          </span>
-          <span>
-            <i className="tb-dot sb-cancel" aria-hidden="true" />
-            已取消
-            <b>{stats.canceled}</b>
           </span>
           {filtered ? (
             <span className="tb-filter-info">

@@ -5101,3 +5101,57 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-09）：`pnpm exec prettier --check apps/web/src/features/projects/ProjectMembersPageView.tsx`；`pnpm lint`；`pnpm typecheck`（8 个 workspace 全过）。E2E 未重跑（本轮只删一处静态文案，最近一次全量 `pnpm test:e2e` 为 65 passed (5.2m)，`project-members.spec.ts` 不涉及该段落）。
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 成员行上的「转移组长」按钮与角色弹窗内的 `Alert`（`leaderTransferOnly` 两条文案）仍在，用户若希望这两处也一并收敛，需另起一轮。③ 本批含前端产品代码与文档，按 §8 需非作者人工评审。
+
+## ADR-058 取消任务改为「二次确认后删除任务」（用户指示，2026-10-09 本地落库）
+
+用户原话：「现在我需要更改取消任务，取消任务以后要变成先二次确认，确认后彻底删除这个任务，然后那些任务的github链接要取消关联，如果这个任务有迭代记录要作废，可以点击取消任务以后你刷新页面前还能点击恢复任务，但是刷新后就不行，而且就算取消任务，项目动态和审计日志里面也需要有保留取消任务的记录」。经四轮澄清收敛为「不要恢复入口 + 不做完整还原 + 记录自动作废 + 合并中自动解除后删除」。实施口径、物理删除不可行的技术依据（7 张表 `ON DELETE RESTRICT` + 审计链只追加）与全部决策见 [ADR-058](adr/ADR-058.md)。
+
+### 服务端（真实 PostgreSQL 18.6 + PGroonga，HTTP 全链路）
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-DELETE-API-001 | API 集成 | 删除在同一事务内软删除任务、解除链接关联、作废迭代记录，并保留审计与动态 | `app.tasks.deleted_at` / `deleted_by` 已写入且 `row_version` 恰好 +1；`task_external_links` 关联行消失而 `external_links` 链接本体仍在；`change_records.status = 'VOID'` 且版本行保留；`task.delete` 审计（`chain_id = PROJECT:<id>`）与 `TASK_DELETED` 动态各 1 条；响应 `voidedRecordCount` / `removedLinkCount` 与库内一致 | 本地通过 |
+| TASK-DELETE-API-002 | API 集成 | 未认证 / CSRF 不匹配 / 缺幂等键分别按既有写命令口径拒绝 | 匿名 401 `TASK_SESSION_REQUIRED`；CSRF 值不匹配 401 `TASK_SESSION_REQUIRED`（`AuthenticatedMutationService.verify` 对 Session 缺失与 CSRF 不匹配同归 401）；缺 `Idempotency-Key` 400 `IDEMPOTENCY_KEY_REQUIRED`；三种情况均不落任何副作用 | 本地通过 |
+| TASK-DELETE-API-003 | API 集成 | `If-Match` 版本过期返回 409 且不落副作用 | 409 `TASK_STATE_CONFLICT`；任务未软删除、链接未解除、记录未作废、无审计与动态 | 本地通过 |
+| TASK-DELETE-API-004 | API 集成 | 任务不存在 / 跨项目 / 非成员统一 404 | 三种情况均为 404 `TASK_NOT_FOUND`（不泄露资源存在性），错误体不含 SQL、约束名与堆栈 | 本地通过 |
+| TASK-DELETE-API-005 | API 集成 | 同一幂等键同摘要重放原 2xx，摘要不同返回 409 | 重放返回首次的 200 `TaskDeletionResponse`（任务已软删除也**不得**变成 404）；同键不同 body 摘要 409；审计与动态不重复写入 | 本地通过 |
+| TASK-DELETE-API-006 | API 集成 | 非管理员的活跃项目成员也能删除 | 普通成员身份删除成功 200；无需管理员身份（记录作废走 `voidByTaskDeletion`，绕过记录作废的系统管理员硬门禁） | 本地通过 |
+| TASK-DELETE-API-007 | API 集成 | 聚合组来源任务删除时自动解除、最后一个来源关闭聚合组 | `task_group_members` 关系转为 `DETACHED`（含解除时间与原因），`detachedGroupRole = "SOURCE"`；最后一个来源被解除时同事务把聚合组置 `CLOSED` 并解除 `MAIN` | 本地通过 |
+| TASK-DELETE-API-008 | API 集成 | 聚合组主任务必须先解除合并 | 409 `TASK_GROUP_MAIN_LOCKED`，提示「该任务是聚合组 {id} 的主任务，请先解除合并后再删除」；任务未软删除、组关系不变 | 本地通过 |
+| TASK-DELETE-API-009 | API 集成 | 删除后再次删除返回 404，且审计与动态不重复 | 第二次请求 404 `TASK_NOT_FOUND`（软删除过滤生效）；`task.delete` 审计与 `TASK_DELETED` 动态仍各 1 条 | 本地通过 |
+
+命令：`TEST_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm --filter @inpulse/api exec vitest run --config vitest.integration.config.ts task-deletion` → **1 文件 9 例全绿**（5.15s）。
+
+### 断言级鉴别性验证（反事实）
+
+临时从 `apps/api/src/modules/tasks/task-management.repository.ts` 的 `find` 中移除 `deleted_at IS NULL` 条件后重跑同一文件 → **2 failed / 9 tests**（TASK-DELETE-API-001 与 TASK-DELETE-API-009 转红）；恢复条件后 9/9 全绿。证明「软删除过滤」是本组断言的必要条件，而不是恰好通过。
+
+### 契约与前端
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-DELETE-CONTRACT-001 | 契约门禁 | 两条新路由与生成物一致 | `contract:generate` 后 `contract:drift` 5 产物无漂移；`contract:validate` **103 条**；`permissions:check` **103 / 103**；`db:migrations:check` 通过（0034 / 0035） | 本地通过 |
+| TASK-DELETE-WEB-001 | Web 单元 | 编辑任务弹窗无「取消任务」，改为二次确认后删除 | `vitest run src/features/tasks` → `TasksPanel.test.tsx` 的「ADR-058 删除任务」：编辑弹窗内无「取消任务」；点「删除任务」后出现 `role="dialog"` 名为「确认删除任务」的弹窗且文案含「不能恢复」；未确认前 `deleteTask` **未**调用；确认后调用参数为 `[projectId, moduleId, featureId, taskId]`、body `{ reason: null }`，并带 `x-csrf-token` / `Idempotency-Key` / `If-Match`（`TasksPanel.test.tsx` 27 例） | 本地通过 |
+| TASK-DELETE-WEB-002 | Web 单元 | 任务状态弹窗与设置页文案同步 | `vitest run src/features/tasks src/features/settings` → **6 文件 56 例全绿**；`TaskStatusPanel` 不再有「取消任务不会物理删除」的旧提示；设置页权限说明改为「删除任务 · 二次确认，记录作废且链接解除关联；不可恢复」 | 本地通过 |
+
+### 未运行 / 已知偏差
+
+① **未跑** Playwright（本轮无前端 E2E 用例；浏览器关键路径待补）；② `app_ci` 中本组集成测试写入的夹具已按 AGENTS.md 清理约定处理；③ 存量数据一致性由迁移 `0034` 末尾的校验块保证，未做大批量删除的索引与耗时压测；④ 软删除任务的物理清除只随其所属项目的彻底删除（ADR-051）或保留期自动清理（ADR-055）发生；⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审。
+
+## 任务看板移除「已取消」筛选与展示（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「任务看板那里的已取消已经没用了也可以去掉了」（附 `/projects/{id}/task-board` 截图，圈出工具栏的「已取消 0」chip）。ADR-058 之后新增取消任务入口已下线、演示库存量已取消任务也已删除，该筛选恒无命中，因此连同看板上的「已取消」展示一并移除。纯前端（`apps/web`），无契约 / 权限 / 数据库 / 后端改动。
+
+- **移除面**：工具栏状态 chip 由 4 枚减为 3 枚（`all` / `open` / `done`）；`TaskBoardToolbarCounts` 删除 `canceled`；概览区三段构成条删除 `sb-cancel` 段（现为 `sb-done` + `sb-todo`）与 `.tb-legend` 的「已取消 N」；页脚图例删除「已取消」色点；页脚卡片顺序说明删除「→ 已取消」。
+- **保留面（不得再删）**：`workStatus = CANCELED` 的任务卡片与列表行仍要正常渲染（灰徽章、灰底行、`tone-prio-canceled`、删除线），因此 `task-board-format.ts` 的 `splitOf` / `cardMarkOf` / `dueLabelOf`、`docs/task-card-colors` 的配色口径与 `TaskBoardPageView.test.tsx` 的 `CANCELED` 卡片夹具全部未动；服务端 `stats.canceled` 与 `stats.completionRate` 口径不变。
+- **页头完成率公式文案**由「已完成 ÷（总任务 - 已取消）」改为「已完成 ÷（已完成 + 未完成）」，与后端 `stats.completionRate` 的分母一致，且不再出现「已取消」字样。
+- **URL 兼容**：`TaskBoardStatusFilter` 收窄为 `all | open | done`；旧链接 `?status=canceled` 由 `readTaskBoardFilters` 既有的 `pick(statusValues, …) ?? DEFAULT_TASK_BOARD_FILTERS` 回退为「全部」，无额外迁移代码。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| R8-CANCEL-REMOVAL-UNIT-001 | Web 单元 | 旧链接回退与筛选取值域收窄 | `task-board-filters.test.ts`：`readTaskBoardFilters(new URLSearchParams({ status: "canceled" }))` 等于 `DEFAULT_TASK_BOARD_FILTERS`（随「已取消」筛选移除而新增的兼容断言）；「读写往返一致」的往返取值由 `canceled` 换成 `done`；`matchesTaskBoardCard` 的 `status: "canceled"` 断言块删除（该取值已不在类型里） | 新增断言，**本地未运行**（按 2026-09-17 纯前端免测试指示） |
+| R8-CANCEL-REMOVAL-STATIC-001 | 静态自查 | 类型收窄无断裂、无残留引用 | IDE 诊断 6 个改动文件全部无错误；`prettier --write` 6 文件全部 `unchanged`；全仓 `TaskBoardStatusFilter` 仅 6 处 / 3 文件且均在已改文件内；`apps/web/src` 内 `status=canceled` / `"canceled"` 为空 | 本地通过 |
+
+### 未运行 / 已知偏差
+
+① 按 AGENTS.md 的 2026-09-17 纯前端免测试指示，本轮未运行 vitest（含新增断言）、`pnpm test:web`、Playwright 与 `pnpm check`；② `apps/e2e/tests/task-board.spec.ts` 只断言「未完成 / 已完成 / 逾期」chip，`apps/e2e/tests` 内 grep「已取消」为空，E2E 侧无对应断言需改（未实跑）；③ 本轮无用例进 Playwright 套件；④ `.sb-cancel` / `.tb-dot-canceled` CSS 规则与 `splitOf` 的 `canceledPercent` 保留为无引用残留（`done` / `todo` 字段同样未被 DOM 消费，为保持改动面最小未清理）；⑤ 本批含前端产品代码与测试改动，按 §8 需非作者人工评审。
