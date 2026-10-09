@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ActivityItem, InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import {
@@ -68,9 +68,18 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
   const isAdmin = Boolean(user?.isAdmin);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<ActivityChip>("全部");
-  const [projectFilter, setProjectFilter] = useState<string>(
-    lockedProjectId === undefined ? ALL_PROJECTS : String(lockedProjectId),
-  );
+  /**
+   * 项目筛选进 URL（`/activity?project=…`）：全局态可分享、刷新后保留，也让项目
+   * 详情页选「已删除项目」时能把筛选带过去。锁定态的取值直接来自路由参数本身。
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlProject = searchParams.get("project");
+  const projectFilter =
+    lockedProjectId !== undefined
+      ? String(lockedProjectId)
+      : urlProject === null || urlProject === ""
+        ? ALL_PROJECTS
+        : urlProject;
   // 2026-09-24：管理员操作默认勾选——取消勾选会重取第一页，默认打开才不会让
   // 用户以为「勾上以后动态变少了」。
   const [includeAdminOnly, setIncludeAdminOnly] = useState(true);
@@ -86,6 +95,57 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
       else next.add(key);
       return next;
     });
+
+  /**
+   * 项目详情页（/projects/:id/activity）的取数范围由路由决定，下拉不是「就地过滤」
+   * 而是「换页」：选其他项目 → 该项目动态，选「全部项目」→ 全局动态。
+   */
+  const switchActivityScope = useCallback(
+    (next: string) => {
+      if (next === ALL_PROJECTS) {
+        navigate("/activity");
+        return;
+      }
+      // 「已删除项目」是全局聚合视图才有的口径（ADR-050），把筛选带过去即可。
+      if (next === DELETED_PROJECTS) {
+        navigate(`/activity?project=${DELETED_PROJECTS}`);
+        return;
+      }
+      const picked = Number(next);
+      if (
+        !Number.isSafeInteger(picked) ||
+        picked <= 0 ||
+        picked === lockedProjectId
+      ) {
+        return;
+      }
+      navigate(`/projects/${picked}/activity`);
+    },
+    [lockedProjectId, navigate],
+  );
+
+  /** 全局态：项目筛选写回 URL（replace，避免每次点选都压一条历史）。 */
+  const changeProjectFilter = useCallback(
+    (next: string) => {
+      if (lockedProjectId !== undefined) {
+        switchActivityScope(next);
+        return;
+      }
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === ALL_PROJECTS) {
+            params.delete("project");
+          } else {
+            params.set("project", next);
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [lockedProjectId, setSearchParams, switchActivityScope],
+  );
 
   const pageRef = React.useRef<HTMLDivElement | null>(null);
   const bandRef = React.useRef<HTMLDivElement | null>(null);
@@ -537,20 +597,21 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
               </button>
             ))}
           </div>
-          {lockedProjectId === undefined ? (
-            <CalmSelect
-              ariaLabel="项目"
-              value={projectFilter}
-              appearance="rich"
-              onChange={(next) => setProjectFilter(String(next))}
-              options={[
-                { value: ALL_PROJECTS, label: "全部项目" },
-                { value: DELETED_PROJECTS, label: "已删除项目" },
-                ...projects.map(projectSelectOption),
-              ]}
-              animated
-            />
-          ) : null}
+          {/* 2026-10-09：项目详情页原先锁死项目、连下拉都不渲染，用户反馈没法换成
+              其他项目。现在两种状态共用同一份选项（含「已删除项目」），只把「就地过滤」
+              换成「换页」：全局态写回 ?project=，锁定态跳转到目标项目 / 全局动态。 */}
+          <CalmSelect
+            ariaLabel="项目"
+            value={projectFilter}
+            appearance="rich"
+            onChange={(next) => changeProjectFilter(String(next))}
+            options={[
+              { value: ALL_PROJECTS, label: "全部项目" },
+              { value: DELETED_PROJECTS, label: "已删除项目" },
+              ...projects.map(projectSelectOption),
+            ]}
+            animated
+          />
           {isAdmin ? (
             <label className="check-line activity-admin-toggle">
               <input

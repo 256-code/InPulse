@@ -5,6 +5,10 @@ import {
   createAuthenticatedContext,
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
+import {
+  calmSelectTrigger,
+  pickCalmSelectOption,
+} from "../helpers/calm-select.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
@@ -76,6 +80,51 @@ test("聚合动态默认包含管理员操作，按日条数取服务端全量",
     expect(Number.isSafeInteger(total)).toBe(true);
     expect(total).toBeGreaterThan(0);
     expect(total).toBeGreaterThanOrEqual(loaded);
+  } finally {
+    await context.close();
+  }
+});
+
+test("项目动态锁定项目时，同一下拉可以换到其他项目或回到全部项目", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const first = await createProjectViaUi(page, runtime, "ACTS");
+    await page.getByTestId("open-created-project-activity").click();
+    await expect(page).toHaveURL(/\/projects\/\d+\/activity/);
+    const firstId = Number(
+      page.url().match(/\/projects\/(\d+)\/activity/)?.[1],
+    );
+    expect(Number.isSafeInteger(firstId)).toBe(true);
+    // 2026-10-09：项目详情页原先连项目下拉都不渲染，用户反馈没法换成其他项目。
+    await expect(calmSelectTrigger(page, "项目")).toContainText(first.name);
+
+    // 换项目的目标：再建一个项目，然后回到第一个项目的动态页做切换。
+    const second = await createProjectViaUi(page, runtime, "ACTS2");
+    await page.goto(`/projects/${firstId}/activity`);
+    await expect(calmSelectTrigger(page, "项目")).toContainText(first.name);
+
+    await pickCalmSelectOption(page, "项目", second.name);
+    await expect(page).toHaveURL(/\/projects\/\d+\/activity$/);
+    expect(page.url()).not.toContain(`/projects/${firstId}/`);
+    await expect(calmSelectTrigger(page, "项目")).toContainText(second.name);
+    await expect(
+      page
+        .locator('[data-testid^="activity-item-"]')
+        .filter({ hasText: `创建了项目 ${second.name}` }),
+    ).toHaveCount(1);
+
+    await pickCalmSelectOption(page, "项目", "全部项目");
+    await expect(page).toHaveURL(/\/activity$/);
+    await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
+
+    // 下拉选项与全局态一致：项目详情页同样能直接切到「已删除项目」。
+    await pickCalmSelectOption(page, "项目", "已删除项目");
+    await expect(page).toHaveURL(/\/activity\?project=deleted$/);
+    await expect(calmSelectTrigger(page, "项目")).toContainText("已删除项目");
   } finally {
     await context.close();
   }

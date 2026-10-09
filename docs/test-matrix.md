@@ -5101,3 +5101,24 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-09）：`pnpm exec prettier --check apps/web/src/features/projects/ProjectMembersPageView.tsx`；`pnpm lint`；`pnpm typecheck`（8 个 workspace 全过）。E2E 未重跑（本轮只删一处静态文案，最近一次全量 `pnpm test:e2e` 为 65 passed (5.2m)，`project-members.spec.ts` 不涉及该段落）。
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 成员行上的「转移组长」按钮与角色弹窗内的 `Alert`（`leaderTransferOnly` 两条文案）仍在，用户若希望这两处也一并收敛，需另起一轮。③ 本批含前端产品代码与文档，按 §8 需非作者人工评审。
+
+## 项目动态锁定项目时也能换项目（用户指示「项目动态即使在选中的项目情况下也要有可以转换成其他项目的选项框」，2026-10-09 本地落库）
+
+项目详情页（`/projects/:projectId/activity`）此前把项目锁死：头部只有 `项目 #id` 徽标，工具栏连项目下拉都不渲染（全局 `/activity` 才有）。用户反馈在左侧选中项目后无法在该页换成其他项目。
+
+- **两种状态共用一个下拉、同一份选项**（`apps/web/src/features/activity/ActivityWorkspace.tsx`）：锁定态不再走「不渲染」分支，而是渲染同一个 `CalmSelect appearance="rich"`，选项与全局态逐项一致（全部项目 / 已删除项目 / 各项目）；差别只在 `onChange`——全局态就地过滤，锁定态改成「换页」：选其他项目 → `navigate("/projects/{id}/activity")`，选「全部项目」→ `navigate("/activity")`，选「已删除项目」→ `navigate("/activity?project=deleted")`（用户复看要求「和这个保持一致」，第一版锁定态缺这一项）。
+- **项目筛选进 URL**：全局态原来是本地 state，现在读 `?project=`（`useSearchParams`）并在点选时用 `replace` 写回；锁定态的取值直接来自路由参数本身——`/projects/3/activity` → `/projects/5/activity` 是同一个组件实例在换参数，用 state 会滞留旧项目，取参数才是唯一真相。URL 化同时让「已删除项目」这类筛选能从项目页带过去，并能分享 / 刷新保留。
+- 锁定态保留头部的 `项目 #id` 徽标（审计页 `.activity-scope-badge` 同族，未动）。
+- 纯前端：`ActivityWorkspace.tsx` 与其单测、`apps/e2e/tests/activity.spec.ts`。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ACTIVITY-SCOPE-UNIT-001 | Web 单元 | 锁定态下拉换项目 / 全部项目 / 已删除项目 | `ActivityPageView.test.tsx` 新增用例：`/projects/7/activity` 下点名「WMS 仓储调度平台」→ `/projects/9/activity`；点「已删除项目」→ `/activity?project=deleted`；点「全部项目」→ `/activity`；再点项目 → `/activity?project=9`（全局态写回 URL）。`vitest run src/features/activity` → **3 文件 22 例全绿** | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-UNIT-002 | Web 单元 | 全量前端单测 | `pnpm --filter @inpulse/web test` → **91 文件 646 例全绿** | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-BROWSER-001 | 浏览器实测 | 项目动态页三个状态 | 真实 dev：`/projects/3/activity` 工具栏出现「验证」下拉，选项与全局态逐项一致（全部项目 / 已删除项目 / 验证 / 项目1）→ 选「项目1」→ URL `/projects/2/activity`、侧栏切到项目1、列表与徽标同步 → 选「全部项目」→ `/activity` → 选「已删除项目」→ `/activity?project=deleted` → 全局态再选「验证」→ `/activity?project=3` 且列表切到该项目 | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-E2E-001 | 浏览器 E2E | 锁定态换项目、回到全局、切已删除项目 | `playwright test tests/activity.spec.ts` → **3 passed (16.9s)**；新增用例建两个项目，A 的动态页用下拉切到 B（URL 变、列表出现 B 的 `创建了项目 …`），再切「全部项目」回到 `/activity`，最后切「已删除项目」→ `/activity?project=deleted` | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-E2E-002 | 浏览器 E2E | 同页相邻回归 | `playwright test tests/activity.spec.ts tests/audit.spec.ts tests/project-create.spec.ts` → **5 passed (21.6s)** | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-E2E-003 | 浏览器 E2E | 全量回归 | `pnpm test:e2e`（`E2E_DATABASE_URL=…/app_ci`）→ **68 passed (5.6m)** | 本地通过（2026-10-09） |
+| ACTIVITY-SCOPE-GATE-001 | 门禁 | 格式 / 静态检查 / 类型 / 构建 | `prettier --check`、`pnpm lint`、`pnpm typecheck`（8 个 workspace）、`pnpm build` 全过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 锁定态与全局态共用下拉但语义不同（换页 vs 就地过滤）：从项目页选「全部项目 / 已删除项目」会离开项目路由、侧栏「当前项目」分组收起，这是路由结构决定的，未新增「留在项目页但看全部项目」的第四种状态。③ 全局态的项目筛选现在进 URL（`/activity?project=…`），刷新 / 分享都会保留该筛选；此前是纯本地 state。④ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审（Playwright 新增强需非作者评审）。
