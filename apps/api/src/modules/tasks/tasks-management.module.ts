@@ -16,6 +16,10 @@ import {
   TaskCompletionCommandPort,
   PostgresTaskCompletionCommandPort,
 } from "./task-completion.port.js";
+import {
+  SqlTaskDeletionCommandPort,
+  TaskDeletionCommandPort,
+} from "./task-deletion.command-port.js";
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../../auth/auth.module.js";
 import { AuditModule } from "../../audit/audit.module.js";
@@ -61,6 +65,7 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
       useClass: PostgresTaskCompletionCommandPort,
     },
     { provide: TaskQueryPort, useClass: PostgresTaskQueryPort },
+    { provide: TaskDeletionCommandPort, useClass: SqlTaskDeletionCommandPort },
     TasksManagementService,
     TasksHttpService,
     ProjectMemberTaskCommandPort,
@@ -74,6 +79,7 @@ import { ProjectMemberTaskCommandPort } from "./project-member-task.command-port
     TaskQueryPort,
     TaskCompletionCommandPort,
     TaskStatusCommandPort,
+    TaskDeletionCommandPort,
   ],
   controllers: [TasksController],
 })

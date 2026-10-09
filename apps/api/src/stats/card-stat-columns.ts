@@ -58,7 +58,8 @@ const taskScopeWhere = (sql: ISql, scope: TaskScope, table: CardRowAlias) => {
  * 「有效任务」条件：排除已作废任务，以及仍挂在活跃聚合组下的历史来源分支。
  * `openTaskCount` 与 `completedTaskCount` 共用，保证两个指标同一口径。
  */
-const effectiveTaskWhere = (sql: ISql) => sql`t.lifecycle_status <> 'INVALID'
+const effectiveTaskWhere = (sql: ISql) => sql`t.deleted_at IS NULL
+              AND t.lifecycle_status <> 'INVALID'
               AND NOT EXISTS (
                 SELECT 1
                   FROM app.task_group_members gm

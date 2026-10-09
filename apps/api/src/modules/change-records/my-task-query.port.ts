@@ -306,8 +306,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
              t.completed_at AS "completedAt",
              t.creator_id AS "creatorId"
         FROM app.tasks t
-       WHERE t.project_id = ANY(${projectIds}::integer[])
-         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
+       WHERE t.project_id = ANY(${projectIds}::integer[])          AND t.deleted_at IS NULL         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
          AND (${creatorId}::integer IS NULL OR t.creator_id = ${creatorId})
          AND (${input.overdue ?? false}::boolean = false OR (t.work_status = 'TODO' AND t.lifecycle_status <> 'INVALID' AND t.due_at < now()))
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
@@ -391,8 +390,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
                        AND ltl.task_id = t.id
                   )) AS "leftover"
           FROM app.tasks t
-         WHERE t.project_id = ANY(${projectIds}::integer[])
-           AND (EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${viewerId}) OR t.creator_id = ${viewerId})
+         WHERE t.project_id = ANY(${projectIds}::integer[])            AND t.deleted_at IS NULL           AND (EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${viewerId}) OR t.creator_id = ${viewerId})
            AND t.lifecycle_status <> 'INVALID'
            AND t.work_status <> 'CANCELED'
            AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
@@ -427,8 +425,7 @@ export class PostgresMyTaskQueryPort extends MyTaskQueryPort {
       WITH base AS (
         SELECT t.id AS task_id, t.project_id
           FROM app.tasks t
-         WHERE t.project_id = ANY(${projectIds}::integer[])
-           AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${input.assigneeId})
+         WHERE t.project_id = ANY(${projectIds}::integer[])            AND t.deleted_at IS NULL           AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${input.assigneeId})
            AND t.lifecycle_status <> 'INVALID'
            AND t.work_status <> 'CANCELED'
            AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))

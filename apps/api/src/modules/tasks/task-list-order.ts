@@ -175,7 +175,7 @@ export async function taskListSortKeyFor(
                          ${expressions.priority} AS "priority",
                          ${expressions.leftover} AS "leftover",
                          t.due_at AS "dueAt"
-                    FROM app.tasks t WHERE t.id = ${taskId}`;
+                    FROM app.tasks t WHERE t.id = ${taskId} AND t.deleted_at IS NULL`;
   const row = rows[0];
   if (row === undefined) {
     return null;

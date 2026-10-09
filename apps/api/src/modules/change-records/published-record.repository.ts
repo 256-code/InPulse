@@ -153,6 +153,20 @@ export class PublishedRecordRepository {
           : null,
     };
   }
+  /**
+   * ADR-058：删除任务时取该任务全部已发布记录（只取作废所需的 id 与版本）。
+   * 只读、不取锁；授权由调用方在取得任务后完成。
+   */
+  async listPublishedByTaskId(
+    tx: TransactionContext,
+    projectId: number,
+    taskId: number,
+  ): Promise<{ id: number; rowVersion: number }[]> {
+    const rows = await tx.sql<
+      { id: number; rowVersion: number }[]
+    >`SELECT id,row_version AS "rowVersion" FROM app.change_records WHERE project_id=${projectId} AND task_id=${taskId} AND status='PUBLISHED' ORDER BY id`;
+    return Array.from(rows);
+  }
   async findVoided(
     tx: TransactionContext,
     projectId: number,

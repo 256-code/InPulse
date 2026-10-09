@@ -241,6 +241,10 @@ export type CurrentUserResponse = {
   readonly status: ("ACTIVE" | "DISABLED");
 };
 
+export type DeleteTaskRequest = {
+  readonly reason: (string | null);
+};
+
 export type ErrorResponse = {
   readonly code: string;
   readonly message: string;
@@ -1506,6 +1510,28 @@ export type TaskCreateResult = {
   readonly moduleId: number;
   readonly featureId: (number | null);
   readonly taskId: number;
+};
+
+export type TaskDeletionReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly taskId: number;
+};
+
+export type TaskDeletionResponse = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly code: string;
+  readonly title: string;
+  readonly workStatus: ("TODO" | "DONE" | "CANCELED");
+  readonly deletedAt: string;
+  readonly deletedBy: number;
+  readonly voidedRecordCount: number;
+  readonly removedLinkCount: number;
+  readonly detachedGroupRole: (("MAIN" | "SOURCE") | null);
 };
 
 export type TaskEditRequest = {

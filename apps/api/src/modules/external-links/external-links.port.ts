@@ -70,4 +70,16 @@ export class ExternalLinksCommandPort {
   ) {
     return this.repository.remove(tx, p, type, id, linkId);
   }
+  /**
+   * ADR-058：目标被删除时解除其全部链接关联，返回解除的关联条数。
+   * 只删关联行，`app.external_links` 链接本体与项目面板聚合结果保留。
+   */
+  detachTarget(
+    tx: TransactionContext,
+    p: number,
+    type: ExternalLinkTargetType,
+    id: number,
+  ) {
+    return this.repository.detachTarget(tx, p, type, id);
+  }
 }

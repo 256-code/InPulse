@@ -83,4 +83,13 @@ export class PostgresSearchProjectionWritePort extends SearchProjectionWritePort
             EXCLUDED.source_row_version
     `;
   }
+
+  async remove(
+    tx: TransactionContext,
+    projectId: number,
+    entityType: SearchProjectionWriteInput["entityType"],
+    entityId: number,
+  ): Promise<void> {
+    await tx.sql`DELETE FROM app.search_projection WHERE project_id=${projectId} AND entity_type=${entityType} AND entity_id=${entityId}`;
+  }
 }

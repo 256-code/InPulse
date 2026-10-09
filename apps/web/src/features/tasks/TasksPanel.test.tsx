@@ -467,6 +467,55 @@ describe("F-23 merge entry", () => {
     expect(await screen.findByLabelText(/^主任务$/)).toBeInTheDocument();
   });
 });
+describe("ADR-058 删除任务", () => {
+  it("requires a second confirmation before calling deleteTask with CSRF, idempotency key and If-Match", async () => {
+    const deleteTask = vi.fn().mockResolvedValue({
+      id: 1,
+      projectId: 2,
+      moduleId: 3,
+      featureId: 4,
+      code: "PR-T-1",
+      title: "退款任务",
+      workStatus: "TODO",
+      deletedAt: "2026-10-09T00:00:00.000Z",
+      deletedBy: 5,
+      voidedRecordCount: 0,
+      removedLinkCount: 1,
+      detachedGroupRole: null,
+    });
+    mount(client({ deleteTask }));
+    fireEvent.click(
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const editor = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    // 「取消任务」已由「删除任务」取代：取消只是软删除的一种结果，没有恢复入口。
+    expect(editor.queryByRole("button", { name: "取消任务" })).toBeNull();
+    const deleteButton = editor.getByRole("button", { name: "删除任务" });
+    expect(deleteButton).toBeEnabled();
+    fireEvent.click(deleteButton);
+    const confirm = await screen.findByRole("dialog", { name: "确认删除任务" });
+    expect(within(confirm).getByText(/不能恢复/)).toBeInTheDocument();
+    // 二次确认前不发请求。
+    expect(deleteTask).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByTestId("confirm-delete-task"));
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledTimes(1));
+    const [projectId, moduleId, featureId, taskId, body, init] = deleteTask.mock
+      .calls[0] as [
+      number,
+      number,
+      number,
+      number,
+      { reason: string | null },
+      { headers: Record<string, string> },
+    ];
+    expect([projectId, moduleId, featureId, taskId]).toEqual([2, 3, 4, 1]);
+    expect(body).toEqual({ reason: null });
+    expect(init.headers["x-csrf-token"]).toBe("a".repeat(43));
+    expect(init.headers["If-Match"]).toBe('"1"');
+    expect(init.headers["Idempotency-Key"]).toBeTruthy();
+  });
+});
 describe("C-1 任务聚合标记（R-5 页面级一次批量）", () => {
   const source: TaskItem = { ...item, id: 1, title: "来源任务甲" };
   const ungrouped: TaskItem = { ...item, id: 2, title: "未入组任务乙" };

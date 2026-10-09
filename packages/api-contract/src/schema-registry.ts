@@ -8,6 +8,7 @@ import {
 import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
+import { taskDeletionSchemas } from "./contracts/task-deletion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import {
   aggregateTaskRefSchema,
@@ -167,6 +168,7 @@ export interface SchemaRegistryEntry {
 export const schemaRegistry = {
   ...externalLinkSchemas,
   ...taskCompletionSchemas,
+  ...taskDeletionSchemas,
   ...leftoverTaskSchemas,
   ...moduleSchemas,
   ...taskCreateSchemas,

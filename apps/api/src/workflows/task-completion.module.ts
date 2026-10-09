@@ -1,7 +1,11 @@
 import { Module } from "@nestjs/common";
+import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { IdempotencyModule } from "../idempotency/idempotency.module.js";
+import { ActivityProjectionModule } from "../modules/activity/activity-projection.module.js";
+import { ExternalLinksModule } from "../modules/external-links/external-links.module.js";
+import { SearchProjectionModule } from "../modules/search/search-projection.module.js";
 import { ProjectsModule } from "../modules/projects/index.js";
 import { ModulesModule } from "../modules/modules/index.js";
 import { FeaturesModule } from "../modules/features/index.js";
@@ -16,11 +20,18 @@ import { TaskCompletionHttpService } from "./task-completion-http.service.js";
 import { TaskCompletionController } from "./task-completion.controller.js";
 import { TaskStatusCompatibilityController } from "./task-status-compatibility.controller.js";
 import { TaskStatusCompatibilityHttpService } from "./task-status-compatibility-http.service.js";
+import { TaskDeletionWorkflow } from "./task-deletion.workflow.js";
+import { TaskDeletionHttpService } from "./task-deletion-http.service.js";
+import { TaskDeletionController } from "./task-deletion.controller.js";
 @Module({
   imports: [
+    AuditModule,
     AuthModule,
     DatabaseModule,
     IdempotencyModule,
+    ActivityProjectionModule,
+    ExternalLinksModule,
+    SearchProjectionModule,
     ProjectsModule,
     ModulesModule,
     FeaturesModule,
@@ -33,7 +44,13 @@ import { TaskStatusCompatibilityHttpService } from "./task-status-compatibility-
     TaskCompletionWorkflow,
     TaskCompletionHttpService,
     TaskStatusCompatibilityHttpService,
+    TaskDeletionWorkflow,
+    TaskDeletionHttpService,
   ],
-  controllers: [TaskCompletionController, TaskStatusCompatibilityController],
+  controllers: [
+    TaskCompletionController,
+    TaskStatusCompatibilityController,
+    TaskDeletionController,
+  ],
 })
 export class TaskCompletionModule {}

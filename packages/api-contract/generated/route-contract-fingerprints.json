@@ -227,6 +227,12 @@
       "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
     }
   ],
+  "deleteModuleTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "6c33bd7958e90dd4da6d5215199e3c97f7249fee0e043593e20eb6b243c1a616"
+    }
+  ],
   "deleteProject": [
     {
       "version": "1.0.0",
@@ -237,6 +243,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "be71ce677ff27bfae88ee6ff4022583a6baa90ef4f6a65c8166f4798d1a995b0"
+    }
+  ],
+  "deleteTask": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "bd4d18286ad83b2cc0c5bc6133d2c559b7eb8d2e5e8707c0777533badefa26e3"
     }
   ],
   "disableUser": [

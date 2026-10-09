@@ -44,6 +44,14 @@ export abstract class SearchProjectionWritePort {
     tx: TransactionContext,
     input: SearchProjectionWriteInput,
   ): Promise<void>;
+
+  /** ADR-058：源实体被删除时移除投影条目，避免已删除对象继续出现在搜索与命令面板。 */
+  abstract remove(
+    tx: TransactionContext,
+    projectId: number,
+    entityType: SearchProjectionEntityType,
+    entityId: number,
+  ): Promise<void>;
 }
 
 export function validateSearchProjectionWriteInput(

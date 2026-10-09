@@ -80,8 +80,7 @@ export class ProjectMemberTaskCommandPort {
                 ORDER BY i.feature_id
              ) AS "impactFeatureIds"
         FROM app.tasks AS t
-       WHERE t.project_id = ${projectId}
-         AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${userId})
+       WHERE t.project_id = ${projectId}          AND t.deleted_at IS NULL         AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${userId})
          AND t.work_status = 'TODO'
          AND t.lifecycle_status = 'ACTIVE'
        ORDER BY t.id ASC

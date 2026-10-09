@@ -158,6 +158,8 @@ export const permissionMatrix = [
       "unmergeTaskGroup",
       "transitionTask",
       "transitionModuleTask",
+      "deleteTask",
+      "deleteModuleTask",
       "getFeature",
       "findSimilarFeatures",
       "createFeature",
