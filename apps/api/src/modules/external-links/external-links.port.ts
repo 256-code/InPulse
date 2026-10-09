@@ -16,8 +16,16 @@ export class ExternalLinksQueryPort {
   ) {
     return this.repository.list(tx, p, type, id);
   }
+  /** 项目面板的聚合读取：项目内全部链接 + 来源标注（写入模型不变）。 */
+  listProjectLibrary(tx: TransactionContext, projectId: number) {
+    return this.repository.listProjectLibrary(tx, projectId);
+  }
   exists(tx: TransactionContext, p: number, id: number) {
     return this.repository.exists(tx, p, id);
+  }
+  /** 项目根仓库的 `owner/repository`；供裸 commit SHA 补全为链接使用。 */
+  findRootRepository(tx: TransactionContext, projectId: number) {
+    return this.repository.findRootRepository(tx, projectId);
   }
   /** R-3：批量统计任务上的外部链接数（去重后的 link_id 计数）。 */
   countTaskLinks(

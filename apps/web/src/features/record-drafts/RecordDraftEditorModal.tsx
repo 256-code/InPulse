@@ -1,16 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Input, Tag } from "antd";
+import { Alert, Button, Input } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { LeftoverEntriesField } from "@features/common/components/LeftoverEntriesField";
-import { InpulseIcon } from "@features/common/components/InpulseIcon";
-import {
-  ExternalLinksPanel,
-  previewLabel,
-} from "@features/external-links/ExternalLinksPanel";
+import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
+import { TaskLinksPicker } from "@features/external-links/TaskLinksPicker";
+import type { TaskLinksSelection } from "@features/external-links/TaskLinksPicker";
+import { associateLinks } from "@features/external-links/associate-links";
 import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import {
@@ -130,12 +129,17 @@ export function RecordDraftEditorModal({
   const [merge, setMerge] = useState<Merge | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
-  /** 新建迭代时先暂存的 GitHub 链接：草稿落库成功后再逐条写入。 */
-  const [linkInput, setLinkInput] = useState("");
-  const [pendingLinks, setPendingLinks] = useState<string[]>([]);
-  const [linkError, setLinkError] = useState<string | null>(null);
-  const githubSection = useRef<HTMLElement | null>(null);
-  const stagedCount = useRef(0);
+  /** 新建迭代时要一起关联的 GitHub 链接（来源任务链接的勾选 ∪ 自己添加），由链接小节上报。 */
+  const [selectedLinks, setSelectedLinks] = useState<string[]>([]);
+  /** 其中自己添加的那几条：任务上原本没有，保存后还要存进项目链接库并关联来源任务。 */
+  const [addedLinks, setAddedLinks] = useState<string[]>([]);
+  const handleLinksChange = (selection: TaskLinksSelection) => {
+    setSelectedLinks(selection.urls);
+    setAddedLinks(selection.addedUrls);
+  };
+  const [linksPending, setLinksPending] = useState(false);
+  /** 每次打开换一个 key：重置链接小节的勾选与自己添加的内容。 */
+  const [linksSession, setLinksSession] = useState(0);
   /** 创建草稿的目标项目：草稿按项目创建，服务端不接受「全部项目」。 */
   const formProjectId = projectId > 0 ? projectId : createProjectId;
   const retry = useRef<{ signature: string; key: string } | null>(null);
@@ -192,31 +196,6 @@ export function RecordDraftEditorModal({
     await cache.invalidateQueries({
       queryKey: ["task-record-drafts", projectId],
     });
-  };
-  /**
-   * 链接区在表单最末尾：刚暂存的行或校验错误会落在滚动折线下方，
-   * 这里在内容变化后把链接区底边滚进可视区，保证用户能看到反馈。
-   */
-  useEffect(() => {
-    const grew = pendingLinks.length > stagedCount.current;
-    stagedCount.current = pendingLinks.length;
-    if (!grew && linkError === null) return;
-    githubSection.current?.scrollIntoView?.({ block: "end" });
-  }, [pendingLinks, linkError]);
-  const addPendingLink = () => {
-    const url = linkInput.trim();
-    if (url === "") return;
-    if (previewLabel(url) === null) {
-      setLinkError("只接受 github.com 的 HTTPS 链接，请检查输入。");
-      return;
-    }
-    if (pendingLinks.includes(url)) {
-      setLinkError("这条链接已经在待添加列表里。");
-      return;
-    }
-    setPendingLinks([...pendingLinks, url]);
-    setLinkInput("");
-    setLinkError(null);
   };
   /**
    * 删除当前草稿：未发布过的草稿不属于业务历史，删掉后不能再恢复。
@@ -355,14 +334,15 @@ export function RecordDraftEditorModal({
                   >[2],
                   init,
                 );
-      // 新建时暂存的 GitHub 链接在草稿落库后写入；失败时草稿已在，切到编辑态重试。
+      // 新建时选中的 GitHub 链接在草稿落库后写入；失败时草稿已在，切到编辑态重试。
       // 关联链接会让记录的 rowVersion 前进，因此写完必须把本地版本刷新到最新，
       // 否则紧随其后的发布会被 If-Match 版本冲突挡下。
-      if (pendingLinks.length > 0) {
+      let taskLinked = false;
+      if (selectedLinks.length > 0) {
         let linkRowVersion = (
           await api.listExternalLinks("CHANGE_RECORD", saved.id)
         ).rowVersion;
-        for (const url of pendingLinks) {
+        for (const url of selectedLinks) {
           const linkCsrf = await api.issueCsrfToken();
           try {
             const added = await api.addExternalLink(
@@ -391,9 +371,28 @@ export function RecordDraftEditorModal({
           }
         }
         saved = { ...saved, rowVersion: linkRowVersion };
-        setPendingLinks([]);
+        // 自己添加的链接任务上原本没有：除记录外还要写进项目链接库并关联到来源
+        // 任务（任务详情的「GitHub 链接」面板可见）。失败切到编辑态重试，重试时
+        // 已写好的记录侧会被服务端判为「已关联」而跳过，不会重复。
+        if (source && addedLinks.length > 0) {
+          const linkCsrf = await api.issueCsrfToken();
+          const firstFailure = (
+            await associateLinks(
+              api,
+              "TASK",
+              source.taskId,
+              addedLinks,
+              linkCsrf.csrfToken,
+            )
+          )[0];
+          if (firstFailure !== undefined) {
+            await switchToSaved(saved);
+            throw firstFailure.error;
+          }
+          taskLinked = true;
+        }
       }
-      if (!input.publish) return { draft: saved, published: null };
+      if (!input.publish) return { draft: saved, published: null, taskLinked };
       const publishSignature = saved.id + ":" + saved.rowVersion;
       if (publishRetry.current?.signature !== publishSignature)
         publishRetry.current = {
@@ -415,14 +414,14 @@ export function RecordDraftEditorModal({
           },
         );
         publishRetry.current = null;
-        return { draft: saved, published };
+        return { draft: saved, published, taskLinked };
       } catch (error) {
         // 发布失败时草稿已经落库：切到编辑态，重试就是更新同一条，不会建重复草稿。
         await switchToSaved(saved);
         throw error;
       }
     },
-    onSuccess: async ({ draft, published }) => {
+    onSuccess: async ({ draft, published, taskLinked }) => {
       retry.current = null;
       onSaved(draft, published);
       cache.setQueryData(["record-draft", formProjectId, draft.id], draft);
@@ -447,6 +446,11 @@ export function RecordDraftEditorModal({
         await cache.invalidateQueries({ queryKey: ["task-marks"] });
         await cache.invalidateQueries({ queryKey: ["record-feed"] });
       }
+      // 自己添加的链接关联到任务后，任务链接清单与任务版本都变了，两者都要失效。
+      if (taskLinked) {
+        await cache.invalidateQueries({ queryKey: ["task-external-links"] });
+        await cache.invalidateQueries({ queryKey: ["tasks"] });
+      }
     },
   });
   // 每次传入新 target 视为一次打开：同步表单与范围选择器，清空冲突与错误态。
@@ -460,9 +464,10 @@ export function RecordDraftEditorModal({
     setOverride(null);
     setMerge(null);
     setReloadError(null);
-    setLinkInput("");
-    setPendingLinks([]);
-    setLinkError(null);
+    setSelectedLinks([]);
+    setAddedLinks([]);
+    setLinksPending(false);
+    setLinksSession((value) => value + 1);
     setConfirmDiscard(false);
     mutation.reset();
     if (target.kind === "item") {
@@ -614,14 +619,10 @@ export function RecordDraftEditorModal({
       !source &&
       (!formProjectId || !moduleId || (scopeType === "FEATURE" && !featureId)));
   /**
-   * 未保存内容：表单被改过、还挂着待暂存的 GitHub 链接、冲突合并未选完，
-   * 或者链接框里刚输入还没按「添加链接」。离开时一律不写库。
+   * 未保存内容：表单被改过、链接小节里还有没落库的内容、冲突合并未选完，
+   * 这些一律算作「离开会丢」。
    */
-  const unsaved =
-    isDirty ||
-    pendingLinks.length > 0 ||
-    merge !== null ||
-    linkInput.trim() !== "";
+  const unsaved = isDirty || linksPending || merge !== null;
   /** Esc / 点遮罩 / 头部 ✕ 三条路径共用：有未保存内容就先确认一次。 */
   const requestClose = () => {
     if (saving.current || reloading || deleting || confirmDelete) return;
@@ -929,20 +930,14 @@ export function RecordDraftEditorModal({
               </span>
             )}
           </label>
-          <section
-            ref={githubSection}
-            aria-label="GitHub 链接"
-            className="record-github-links"
-          >
-            <div className="record-github-head">
-              <h4 className="record-github-title">GitHub 链接</h4>
-              <span className="record-github-hint">
-                {item
-                  ? "关联本次迭代的仓库、PR、Issue 或提交。"
-                  : "保存后自动关联到这条记录。"}
-              </span>
-            </div>
-            {item ? (
+          {item ? (
+            <section aria-label="GitHub 链接" className="record-github-links">
+              <div className="record-github-head">
+                <h4 className="record-github-title">GitHub 链接</h4>
+                <span className="record-github-hint">
+                  关联本次迭代的仓库、PR、Issue 或提交。
+                </span>
+              </div>
               <ExternalLinksPanel
                 key={item.id}
                 variant="inline"
@@ -950,71 +945,23 @@ export function RecordDraftEditorModal({
                 targetId={item.id}
                 client={api}
               />
-            ) : (
-              <>
-                <div className="record-github-add">
-                  <Input
-                    id="record-github-link-input"
-                    aria-label="GitHub 链接地址"
-                    value={linkInput}
-                    maxLength={2048}
-                    disabled={!canWrite}
-                    placeholder="https://github.com/owner/repository/pull/123"
-                    onChange={(event) => {
-                      setLinkInput(event.target.value);
-                      if (linkError !== null) setLinkError(null);
-                    }}
-                    onPressEnter={(event) => {
-                      // 回车只暂存链接，不提交整个表单；只有框里没有待暂存内容时
-                      // 才把 Ctrl/Cmd + 回车让给表单级「保存草稿」，避免刚输入的链接被丢掉。
-                      if (
-                        (event.ctrlKey || event.metaKey) &&
-                        linkInput.trim() === ""
-                      )
-                        return;
-                      event.preventDefault();
-                      addPendingLink();
-                    }}
-                  />
-                  <Button
-                    type="default"
-                    onClick={addPendingLink}
-                    disabled={!canWrite || linkInput.trim() === ""}
-                  >
-                    <InpulseIcon name="plus" size={14} />
-                    添加链接
-                  </Button>
-                </div>
-                {linkError !== null && (
-                  <span role="alert" className="record-github-error">
-                    {linkError}
-                  </span>
-                )}
-                {pendingLinks.length > 0 && (
-                  <ul className="record-github-pending">
-                    {pendingLinks.map((url) => (
-                      <li key={url}>
-                        <Tag>{previewLabel(url)}</Tag>
-                        <span className="record-github-url">{url}</span>
-                        <button
-                          type="button"
-                          className="text-button"
-                          aria-label={"移除 " + url}
-                          onClick={() =>
-                            setPendingLinks(
-                              pendingLinks.filter((entry) => entry !== url),
-                            )
-                          }
-                        >
-                          移除
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </section>
+            </section>
+          ) : (
+            <TaskLinksPicker
+              key={linksSession}
+              api={api}
+              taskId={source?.taskId ?? 0}
+              disabled={!canWrite}
+              inputId="record-github-link-input"
+              hint={
+                source
+                  ? "来源任务上的链接默认带上，展开后可以取消勾选；自己添加的新链接会一起关联到这条记录和来源任务。"
+                  : "保存后自动关联到这条记录。"
+              }
+              onSelectionChange={handleLinksChange}
+              onPendingChange={setLinksPending}
+            />
+          )}
           <p className="record-publish-hint">
             发布后项目成员可见；先「保存草稿」只自己能看到，检查好再发布。
           </p>

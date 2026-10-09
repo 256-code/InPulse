@@ -323,7 +323,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | CI-011 | CI | 权限矩阵一致性 | `pnpm permissions:check` 双向校验可执行权限矩阵与 `docs/permissions.md` 的身份集合、ADR-023 allowlist 精确相等、每条路由都有矩阵条目，并要求需认证路由同时登记允许与拒绝结果 | 已自动化 |
 | CI-012 | CI | 生产构建 | `pnpm build` 完成 api（`tsc`）与 web（`vite`）生产构建 | 已自动化 |
 | CI-013 | CI | 依赖边界 | `pnpm check:deps` 校验前端分层 `app -> pages -> features -> shared/generated`、`features` 不导入 `pages`、web 不导入 database、Controller 不直连数据库、模块只能经公开表面（`public/**`、模块 `index.ts`、`*.port.ts`）跨模块、无循环依赖、前端无裸 `fetch`/`axios`；并由 `pnpm check:frontend:boundaries`（dependency-cruiser）复核 `apps/web/src` 的分层规则 | 已自动化 |
-| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex` 与 `multer` 两处 high 已由 `overrides` 解决，见下方状态说明） |
+| CI-014 | CI | 依赖漏洞审计 | `pnpm deps:audit`（`pnpm audit --audit-level=high`）无 high 及以上漏洞 | 已自动化（`ansi-regex`、`multer` 与 2026-10-08 的 `proxy-addr` / `brace-expansion` / `source-map-js` 及 `multer` 新公告均已由 `overrides` 解决，见下方状态说明） |
 | CI-015 | CI | Secret 扫描 | `pnpm check:secrets` 对受版本控制与待提交文件零命中；`.env.example` 只允许非敏感变量名 | 已自动化 |
 | CI-016 | CI | 文档与链接 | `pnpm check:docs` 见 DOC-001 与 DOC-002 | 已自动化 |
 | CI-017 | E2E | Playwright 关键路径 | 登录、项目创建（含选择第二成员）到动态/搜索/创建者与成员通知关键路径通过；F-05 成员管理添加/移除与 403 边界通过；任务完成、合并/解除任务组、遗留项转任务、记录作废/恢复等路径已覆盖 | 本地全量 45/45 通过（2026-09-11，5.1 分钟）；CI Browser E2E（默认 Chromium）已在 main 最新运行 [34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)（`4141e1d`，2026-09-11）50 passed（6.3 分钟），此前 push 运行 [34578707754](https://github.com/256-code/InPulse/actions/runs/34578707754)（`bff1972`）为 45 passed（5.6 分钟）；覆盖 F-03 用户管理、F-05 成员管理、MFA、项目创建、F-12 模块、F-13 功能档案、F-14 功能级任务、F-15 模块级任务、F-16 任务完成与状态闭环、F-17 草稿、F-18 记录发布、F-20 遗留项转任务、F-21 作废/恢复、F-22 外部链接、任务组合并/解除、搜索边界及 F-27/F-28 状态联动；其余完整关键路径 Required |
@@ -350,6 +350,8 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 > C #57 将 override 收紧为精确版本 `2.3.0`（lockfile 同步更新）；
 > `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 验证无漏洞。
 > 该依赖为 NestJS 运行时传递依赖，已按第 4 节经独立 PR 与人工确认处理，不得调低阈值。
+>
+> **CI-014 补充（2026-10-08）**：main 推送运行 `CI / workspace`（[run 37750490613](https://github.com/256-code/InPulse/actions/runs/37750490613)，`408ade2`）在 `Dependency audit` 步骤以 6 条公告（1 critical | 3 high | 2 moderate）转红：`proxy-addr@2.0.7`（GHSA-jqcg-44mw-7w3h，critical，经 `@nestjs/core` / `@nestjs/platform-express` -> `express`）、`brace-expansion@5.0.9`（GHSA-qhr7-859c-m2p7、GHSA-6j4f-fj2g-mc7p、GHSA-q2hr-2g5m-vwhr，经 `eslint` -> `minimatch`）、`source-map-js@1.2.1`（GHSA-68fv-2mgg-jv7q，经 `vitest` -> `vite` -> `postcss` 等）、`multer@2.3.0`（GHSA-3pph-fpjx-jg34）。已在 `pnpm-workspace.yaml` 的 `overrides` 固定 `proxy-addr: "2.0.8"`、`brace-expansion: "5.0.12"`、`source-map-js: "1.2.2"`、`multer: "2.4.0"` 并同步 lockfile，`pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 恢复 `No known vulnerabilities found`；本地 `pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test:unit`、`pnpm build` 与 `pnpm test:integration`（database 27 / ops 7 / api 521 例）全绿；该变更按 `AGENTS.md` 第 4 节须经独立 PR 与人工确认。
 > CI-007 与 CI-008 曾在 `0000-0002` 上通过本机 PostgreSQL 18.6 实测；合并 `0003-0005`
 > 后二者要求已安装 PGroonga 的 PostgreSQL 18 实例，本机 PostgreSQL 18.6 不含 PGroonga，
 > `pnpm db:test:local` 现按预期以“必须提供 PGroonga 扩展”失败，因此改由 CI 用
@@ -4918,3 +4920,87 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=…/app_e2e pnpm --filter @inpulse/e2e exec playwright test aggregate-views`（**2/2**，夹具清理：删除用户 2、项目 2、业务行 63、审计行 2）；同环境 `pnpm test:e2e`（**64 passed，5.2 分钟**，夹具清理：删除用户 8、项目 14、业务行 1150、审计行 166）；`pnpm exec prettier --write` 八个改动文件与 `aggregate-views.spec.ts`；`pnpm check:docs`。浏览器实测用无头 Chromium 1628×1000、`xiaoshao` 身份逐条量测（见上表）。首轮定向 E2E 曾因 F-29 的「含『 人』」断言转红，按上表口径改写断言后复跑通过——本轮唯一一次失败，未跳过或弱化任何用例。
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与集成测试（服务端未改）、镜像构建与 GitHub Actions（本次提交后由 CI 执行）。② 模块卡与功能卡在空描述下会留下一段空白（`<p>` / `<span>` 仍占位），与项目卡口径一致；若后续希望卡片在空描述时收紧高度，需连同项目卡一起重新定案，本轮未做。③ 任务中心删除图标后，30px 由工具栏下外边距单点承担；若工具栏在窄屏折行换高，该换算基准会随之变化（未在 ≤700px 量测）。④ 以下三项按你的指示未动，仍待定案：任务 / 组卡「整卡铺色」把优先级与状态压在同一维度（高优先级整卡琥珀 `rgb(253, 193, 6)`、已完成整卡青碧，卡内「高 / 聚合组 / 未开始」仅同色系 12% 明度差）；项目页底部「层级说明」六宫格常驻（`ProjectsPageView.tsx`，有单测断言其存在）；`CommandPalette.tsx` 命令面板 hint「在全局搜索页查看完整权限过滤结果」的口径。⑤ 本轮扫描另发现一处同批未处理的开发用文案：通知页 `NotificationsPageView.tsx` 的说明段落仍写「通知只展示当前登录用户的站内消息；已读与未读操作会携带 CSRF 与幂等 Key，不会影响其他用户」——把 CSRF 与幂等 Key 写进了面向用户的说明，且不在上一批 72 条注释审查清单内（该页当时只收录了通知铃铛的 `aria-label`），留待你定案。⑥ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审。
+
+## 粘贴裸 commit SHA 自动补全为 commit 链接（用户指示，2026-10-08 本地落库）
+
+用户指示（原话）：「添加github链接能不能除了直接粘贴网址，还能在根仓库已经提交的情况下直接粘贴commits的SHA值来直接确定commit网址」。GitHub 链接表单原先只接受完整 URL，裸 SHA 会在 `new URL()` 处失败并按通用「链接无效」422 拒绝；本批让服务端识别裸 SHA 并用项目根仓库补全为 `https://github.com/<owner>/<repo>/commit/<sha>` 后再走原有校验与落库路径。
+
+锁定口径：
+
+- 识别只按形状：`^[0-9a-fA-F]{7,64}$`（与数据库 `external_sha` 的 CHECK 同一形状），前后空白先裁剪、统一小写；`abc123`（6 位）等不足 7 位不识别，会走原有 URL 校验并按 422 `EXTERNAL_LINK_INVALID_URL` 拒绝。
+- 补全位置在服务端 `ExternalLinkWorkflow`（`resolveSubmittedUrl`），**不在前端拼 URL**：`display_url` / `normalized_url` 都只存规范化结果，且服务端校验是唯一安全边界。
+- 补全前提是项目已设置根仓库（`is_root_repository`）；未设置或根仓库 `repository` 无法解析为 `owner/repo` 时返回 **422 `EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY`**（新增错误码，前端给「请先粘贴完整链接或设置项目根仓库」），不再落进误导性的「链接无效」文案。
+- 不改数据库、迁移、权限矩阵与鉴权：补全结果仍是 GitHub HTTPS 链接，仍按既有 `COMMIT` 形状（`external_sha` + `repository`）落库；幂等契约版本按「同一请求由必然 422 变为可成功写库」升级 `addExternalLink` `2.0.0 → 2.1.0`（`removeExternalLink` 保持 `2.0.0`），旧 Key 在新契约下 409。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| EXTERNAL-LINK-SHA-UNIT-001 | API 单元 | SHA 形状识别与 URL 拼接 | `apps/api/test/github-url.test.ts` 19/19（新增 3 例）：`parseCommitShaInput` 接受用户给的 `408ade2023dbdcaae8fe7bfed7bdf2d759d71695`、裁剪首尾空白并小写化 `"  0AB12CD34EF  "` → `"0ab12cd34ef"`、接受 7 位短 SHA；拒绝完整 URL / 6 位 / 65 位 / 尾部 `z` / 空串；`commitUrlForRepository("256-code/InPulse","408ade2")` → `https://github.com/256-code/InPulse/commit/408ade2`，`null` 根仓库、`"only-owner"`、`"a/b/c"`、含空格全部返回 null | 本地通过（2026-10-08） |
+| EXTERNAL-LINK-SHA-INT-001 | API 集成（真实 PostgreSQL，`app_ci`） | 端到端补全、拒绝与落库形状 | `apps/api/test/external-links.integration.test.ts` 37/37（新增 `粘贴裸 commit SHA 时用项目根仓库补全为 commit 链接`）：无根仓库时 SHA 请求 422 `EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY`、消息含「项目根仓库」且 `app.external_links` 仍为 0 行；设根仓库后大写 SHA 与 7 位短 SHA 均 200；`listLinks("TASK", …)` 返回两条 `kind=COMMIT`、`repository=256-code/InPulse`、`externalSha`/`normalizedUrl` 与输入 SHA 一致（按 `l.id` 升序）；DB 断言 `app.external_links` 三行（根仓库 `OTHER` + 两条 `COMMIT`、`normalized_url` 为补全结果）；`"not-a-commit"` 仍 422 `EXTERNAL_LINK_INVALID_URL` | 本地通过（2026-10-08） |
+| EXTERNAL-LINK-SHA-WEB-001 | Web 单元 | 预览识别与缺根仓库文案 | `ExternalLinksPanel.test.tsx` 8/8（新增 2 例）：输入 `408ADE…1695` 时预览显示「识别为：Commit 408ade2023db」并附「（将用项目根仓库补全为链接）」（断言用 `waitFor` 包裹以匹配同文件既有惯例，首轮因弹层过渡帧直查 `toBeVisible` 转红，非实现缺陷）；服务端 422 `EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY` 时显示「尚未设置项目根仓库，无法把 commit SHA 补全为链接；请先粘贴完整链接或设置项目根仓库。」而非通用「链接无效」 | 本地通过（2026-10-08） |
+| EXTERNAL-LINK-SHA-CONTRACT-001 | 契约 | 描述、幂等版本与生成物 | `packages/api-contract` 的 `url` 字段补 `.describe`、`addExternalLink` 路由 summary 改为「新增目标的GitHub关联（接受完整链接或项目根仓库下的commit SHA）并保留实体和审计」、幂等契约版本 `2.0.0 → 2.1.0`；`pnpm contract:generate` 重生成 5 个产物、`pnpm contract:drift` → 「5 个产物与 Registry 一致」、`pnpm contract:validate` → 101 条路由全部通过、`pnpm permissions:check` → 101 / 101 | 本地通过（2026-10-08） |
+| EXTERNAL-LINK-SHA-GATE-001 | 静态门禁 | 类型、lint 与格式 | `pnpm typecheck`（8 个 workspace exit 0；首轮 API 侧因新增断言 `(await res.json()).code` 命中 `TS2571 unknown`，改用 `schemaRegistry.ErrorResponse.schema.parse` 后通过）、`pnpm lint` exit 0、改动集 `prettier --check` 全绿（3 个文件先 `--write` 写回） | 本地通过（2026-10-08） |
+| EXTERNAL-LINK-SHA-E2E-001 | 浏览器 E2E | 既有链接路径回归 | `E2E_DATABASE_URL=…/app_ci` 下定向 `pnpm --filter @inpulse/e2e exec playwright test tests/external-links.spec.ts` → **3 passed（44.5s）**（多链接持久化与不安全链接 422 / 跨发布与修订保留旧版本 / 新建迭代弹窗内暂存并随发布落库），夹具清理按 teardown 执行 | 本地通过（2026-10-08） |
+
+未运行 / 已知偏差：① 未新增 SHA 用例进 E2E 套件（`external-links.spec.ts` 只做既有路径回归 3/3），全量 `pnpm test:e2e` 未跑；② 未跑 `pnpm check` 整链、镜像构建与 Trivy、GitHub Actions；③ 补全只认「项目根仓库」这一来源，不解析粘贴内容里的 issue/PR 数字与分支；④ 根仓库 `repository` 无法解析成 `owner/repo` 时与「未设置根仓库」共用同一 422 错误码（不另设细分码）；⑤ 幂等契约版本升级依据是「同一请求由必然 422 变为可成功写库」，若评审认为应只升 `idempotencyFingerprintVersion`（摘要格式未变）或维持 `2.0.0`，需按 §6 定案后同步生成物与本表；⑥ 本批含服务端与前端产品代码、契约与幂等版本变更，按 §8 需非作者人工评审；⑦ 未提交、未推送。
+
+## 完成任务时把任务已有 GitHub 链接贴到新迭代记录（2026-10-09）
+
+用户指示（原话）：「那就做成如果这个任务有迭代记录或多条，可以让用户自己选择哪些要直接贴上去或者选择自己添加」。实现是**前端选择 + 既有 `addExternalLink` 逐条关联**，没有服务端自动复制，也没有契约 / 路由 / 权限 / 迁移改动（Route Registry 仍 101 条）：
+
+- 「完成任务并生成迭代记录」表单新增 `aria-label="GitHub 链接"` 区块：只读列出**任务自身**的链接并默认全部勾选（`excludedLinks` 只记取消勾选的 id），同一区块内可「自己添加」链接（非 GitHub HTTPS 链接与重复项当场拦下）并逐条移除。
+- 发布后按合并去重结果逐条 `addExternalLink("CHANGE_RECORD", …)`：认证 Session 的 CSRF 一次签发多次使用，每条用上一条响应回填的 `rowVersion` 作 `If-Match`（**必须保持回填**，否则第二条起 409），`Idempotency-Key` 逐条新生成，409 `EXTERNAL_LINK_ALREADY_ASSOCIATED` 视为已关联。
+- 部分失败时提交按钮禁用，恢复区块列出未关联链接并提供「重试关联」/「先查看记录」；读取任务链接失败不阻塞完成流程。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-LINK-CARRYOVER-WEB-001 | Web 单元 | 勾选沿用与取消勾选不带走 | `apps/web/src/features/tasks/CompleteWithRecord.test.tsx` 5/5（新增例）：任务两条链接只勾一条提交后 `addExternalLink` 恰好一次、target 为 `("CHANGE_RECORD", 71)`、body 为勾选项 URL、headers 含 `x-csrf-token` / `If-Match` / `Idempotency-Key`，`onSuccess` 收到的记录 `rowVersion` 为记录侧读到的 4 → 写入后的 5 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-WEB-002 | Web 单元 | 自己添加的校验与移除 | 同文件：`https://example.com/x` → 「只接受 github.com 的 HTTPS 链接，请检查输入。」；重复输入已有 URL → 「这条链接已经在要关联的列表里。」；裸 commit SHA 可添加、输入框清空，点「移除」后条目消失 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-WEB-003 | Web 单元 | 部分失败的重试与禁止重复提交 | 同文件：`addExternalLink` 先 500 后成功时出现「记录 … 已发布，下列链接尚未关联」，`onSuccess` 未被调用且提交按钮 disabled（不能重复发布）；点「重试关联」后 `onSuccess` 一次、`addExternalLink` 第二次参数仍为失败项 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-GATE-001 | 静态门禁 | 类型、lint 与格式 | `pnpm --filter @inpulse/web typecheck` exit 0、`pnpm --filter @inpulse/e2e typecheck` exit 0、改动文件 `eslint` exit 0、`prettier --write` 写回；`apps/web` 全量单测 **90 文件 635 例全绿（38.7s）**；收口补跑整链 `corepack pnpm check` → **exit 0**（含 `check:deps` 746 源文件 / `check:frontend:boundaries` 309 模块 1522 依赖 / `permissions:check` 101 / 101 / `deps:audit` 无已知漏洞 / `check:secrets` 1133 文件 / `check:docs` 104 个 Markdown） | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-E2E-001 | 浏览器 E2E | 既有完成 / 链接路径回归 | `E2E_DATABASE_URL=…/app_ci` 下 `playwright test tests/external-links.spec.ts tests/task-completion.spec.ts` → **6 passed（46.8s）**：新「GitHub 链接」区块与记录弹窗里的同名输入框 / 按钮不构成 strict mode 冲突 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-E2E-002 | 浏览器 E2E | 勾选沿用落到正式记录 | `apps/e2e/tests/task-completion.spec.ts` 的 `F22 任务上的 GitHub 链接可勾选沿用到新发布的迭代记录`（4 passed / 33.2s）：任务详情挂 PR 链接 → 完成任务时该链接 `toBeChecked` → 同一区块内新增 Issue 链接 → 发布 → 记录详情展开「GitHub 关联」后 PR 与 Issue 两条链接都在 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-E2E-003 | 浏览器 E2E | 整包套件无跨用例回归 | `E2E_DATABASE_URL=…/app_ci` 下全量 `pnpm test:e2e` → **65 passed（5.3m）**，新增的 `F22 任务上的 GitHub 链接可勾选沿用到新发布的迭代记录`（`task-completion.spec.ts:165`）在整包内通过；夹具由 `global-teardown` 清理（删除用户 8、项目 14、业务行 1192、审计行 173；SYSTEM 链留下一个可检测断点，因夹具记录之后已有真实写入） | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① 范围只含**任务自身**的链接，不含该任务已有迭代记录上的链接（`RecordListQuery` 无 taskId 过滤，需先扩契约）；② 逐条关联会推进记录 `rowVersion`（已用响应回填），请求数随链接条数线性增长，未做批量接口；③ 关联失败可能来自搜索文本容量（422 `SEARCH_TEXT_CAPACITY_EXCEEDED`），当前并入失败清单走重试、没有专门文案；④ 未做服务端同事务复制；⑤ 未跑全量 `pnpm test:integration`、镜像构建与 Trivy、GitHub Actions（整链 `pnpm check` 与全量 `pnpm test:e2e` 已补跑，分别见 `TASK-LINK-CARRYOVER-GATE-001` 与 `TASK-LINK-CARRYOVER-E2E-003`）；⑥ 本批含前端产品代码与新增用例，按 §8 需非作者人工评审；⑦ 未提交、未推送。
+
+## 「记录一次迭代」入口同样可勾选沿用任务 GitHub 链接（2026-10-09）
+
+用户指示（原话）：「我指的是实现之前说的任务已有链接可选择添加上去」——把上一节的能力从「完成任务并生成迭代记录」扩展到任务详情的「记录一次迭代」（草稿弹窗）。实现方式是**两个弹窗共用同一个组件**，而不是复制两份：
+
+- 新增 `apps/web/src/features/external-links/TaskLinksPicker.tsx`：任务链接勾选（默认全选、只记取消勾选的 id）+ 就地添加（校验与去重文案同上一节）+ 待添加列表，向上层上报 `onSelectionChange(urls)` 与 `onPendingChange(pending)`；`taskId = 0`（独立草稿、无来源任务）时退化为「自己添加」。
+- `CompleteWithRecord.tsx` 的私有实现删除并改用它；`RecordDraftEditorModal.tsx` 在来源任务存在时渲染它、在编辑已保存记录时保留原来的 `ExternalLinksPanel variant="inline"` 链接卡片。每次打开换 `key` 重置勾选。
+- 样式去容器化：`.completion-links*` 由 `.catalog-modal .completion-flow X` 收窄为 `.catalog-modal X`（草稿弹窗根节点有 `catalog-modal`、没有 `completion-flow`），两个弹窗共用一套规则；草稿弹窗原先的 `.record-github-add/-error/-pending/-url` 规则删除，`record-github-links/-head/-title/-hint` 保留给已保存记录的链接卡片。
+- 逐条关联协议与上一节一致（CSRF 可复用、`If-Match` 用上一条响应回填、幂等键逐条新生成、409 视为已关联）；`linksPending` 与表单脏标记一起决定「保存草稿 / 发布迭代记录」是否可用。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-LINK-CARRYOVER-WEB-004 | Web 单元 | 草稿弹窗沿用任务链接并就地添加 | `apps/web/src/features/tasks/TasksPanel.test.tsx` 26/26（新增例）：任务详情 → 迭代记录 → 记录一次迭代 → 两条任务链接默认勾选，取消 Issue 一条后新增 commit 链接，保存草稿后 `addExternalLink` 恰好两次、URL 依次为勾选的 PR 与新增的 commit（首轮因未填「改动原因 / 具体改动 / 改动效果」而保存按钮 disabled，属用例缺步骤、非实现缺陷） | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-WEB-005 | Web 单元 | 整包无回归 | `pnpm --filter @inpulse/web exec vitest run` → **90 文件 636 例全绿（39.4s）**；`corepack pnpm exec eslint` 改动文件 exit 0（首轮 `TaskLinksPicker.tsx` 因写了一条仓库未配置的 `react-hooks/exhaustive-deps` 禁用注释而报「Definition for rule … was not found」，删注释后通过）、`prettier --check` 全绿、`--filter @inpulse/web typecheck` exit 0 | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-E2E-004 | 浏览器 E2E | 记录一次迭代沿用链接落到正式记录 | `apps/e2e/tests/task-completion.spec.ts` 的 `F22 记录一次迭代可勾选沿用任务上已有的 GitHub 链接`（该文件 5 passed / 39.9s）：任务详情挂 Issue 链接 → 迭代记录标签 → 记录一次迭代 → 该链接默认勾选 → 同一区块新增 PR 链接 → 发布迭代记录 → 「查看正式记录」→ 记录详情展开「GitHub 关联」后 Issue 与 PR 两条链接都在；`external-links.spec.ts` 里「新建迭代弹窗内暂存链接」的定位器由 `.record-github-pending li` 同步改为 `.completion-links-pending li` | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-GATE-002 | 静态门禁 | 整链 `pnpm check` | `corepack pnpm check` → **exit 0**：lint、format:check、typecheck（8 workspace）、test:unit（web 90 文件 636 例 / api 70 文件 408 例 / api-contract 16 文件 102 例 / ops 8 文件 52 例 / database 15 例 / canonical-json 5 例）、`db:migrations:check` 32 条迁移、`db:seed:check` 28 张业务表、`contract:drift` 5 产物、`contract:validate` 101 条、build、`check:deploy:test` 5 refs、`check:deps` 747 源文件、`check:frontend:boundaries` 310 模块 1528 依赖、`permissions:check` 101 / 101、`deps:audit` 无已知漏洞（公共 registry 两次 ECONNRESET 重试后成功）、`check:secrets` 1134 文件、`check:docs` 104 个 Markdown | 本地通过（2026-10-09） |
+| TASK-LINK-CARRYOVER-E2E-005 | 浏览器 E2E | 整包套件无跨用例回归（含新增草稿弹窗用例） | `E2E_DATABASE_URL=…/app_ci` 下全量 `pnpm test:e2e` → **66 passed（5.4m）**：新增的 `F22 记录一次迭代可勾选沿用任务上已有的 GitHub 链接`（`task-completion.spec.ts:222`）与上一节的 `F22 任务上的 GitHub 链接可勾选沿用到新发布的迭代记录`（`:165`）都在整包内通过；夹具由 `global-teardown` 清理（删除用户 8、项目 14、业务行 1228、审计行 179；SYSTEM 链留下一个可检测断点，因夹具记录之后已有真实写入） | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① 同上节第 ① 条（仍不含任务已有迭代记录上的链接）；② 未跑 `pnpm test:integration`、镜像构建与 Trivy、GitHub Actions（本批只动了前端与 E2E；整链 `pnpm check` 与全量 `pnpm test:e2e` 已补跑，见 `TASK-LINK-CARRYOVER-GATE-002` 与 `TASK-LINK-CARRYOVER-E2E-005`）；③ 草稿弹窗在已保存记录下仍走 `ExternalLinksPanel`，两种链接形态并存是有意保留；④ 本批含前端产品代码与新增用例，按 §8 需非作者人工评审；⑤ 未提交、未推送。
+
+## 项目面板聚合展示任务 / 功能 / 迭代记录上的 GitHub 链接（用户指示，2026-10-09 本地落库）
+
+起因是用户提问（原话）：「为什么我给任务关联的GitHub链接在项目那边不会添加」（截图：项目面板只列出根仓库 `256-code/LibiaoLink`，任务弹窗显示「关联链接 · 1 条 / Commit 408ade2023db」）。核对数据库与代码后确认这是 [ADR-022](adr/ADR-022.md) 类型化关联的设计行为——`project_external_links` 里该项目只有根仓库一行，任务上的链接写在 `task_external_links`——随后给出三个选项，用户选择「聚合展示：项目面板列出全部链接并标注来源」。本批因此是**只读聚合**，写入模型与解除入口都不变：
+
+- 契约：`externalLinkItemSchema` 新增可选 `sources: [{ targetType, targetId, title }]`（`externalLinkSourceSchema`），只有项目目标返回；`listExternalLinks` 路由 summary 同步。路由数不变（101 条），三条路由的幂等策略与版本不变。
+- 服务端：`ExternalLinksRepository.listProjectLibrary()` 用一条 `UNION ALL`（项目级 → 任务 → 功能 → 已发布记录，各有 `sourceRank`）取回聚合行，JS 侧按链接去重、`sources` 按来源类型稳定排序；标题分别取 `projects.name` / `tasks.title` / `features.name` / `change_records.title`（统一 `left(..., 500)` 截断）。`ExternalLinksQueryPort` 与 `ExternalLinkWorkflow.list()` 在 `targetType = PROJECT` 时改走它，其他目标仍走原 `list()`。
+- 草稿与已作废记录**不**进聚合：草稿属私域内容，作废记录在搜索与统计口径上已对成员隐藏（SQL 注释已写明取舍；管理员查看 VOID 来源需另行设计，当前不提供）。
+- 任务来源只聚合**有效任务**（2026-10-09 用户追加指示「取消任务以后项目那边链接要隐藏掉不显示」）：`lifecycle_status <> 'INVALID' AND work_status <> 'CANCELED'`，与仓库既有「有效任务」口径同一表达式（`task-query.port.ts` 的 `effectiveOnly`、`card-stat-columns.ts` 的 `effectiveTaskWhere`）；取消 / 无效只影响项目面板的聚合呈现，任务自身面板与 `task_external_links` 关联行保留，恢复为待办后重新出现。
+- 前端：`ExternalLinksPanel` 对聚合条目渲染一行来源标注（「本项目」「任务「…」」「功能「…」」「记录「…」」，单行省略、完整文案走 `title`），并新增 `canRemoveExternalLink()`——项目面板只对**仍有项目级关联**的条目提供「解除」，聚合条目只标注来源，列表尾部提示「来自任务 / 功能 / 迭代记录的链接请在各自入口解除关联。」。样式 `.external-links-list .link-source` 落在 `external-links.css`。
+- 跨项目隔离不变：SQL 全分支带 `project_id`，测试用第二个项目验证其链接不进入结果。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| EXTERNAL-LINK-AGG-API-001 | 真实 PostgreSQL 集成 | 四类来源聚合、去重与跨项目排除 | `apps/api/test/external-links.integration.test.ts`：项目根仓库 + 任务 commit 链接 + 功能 issue 链接 + 已发布记录的 PR 链接后，`listExternalLinks("PROJECT", …)` 恰好 4 条——根仓库来源为 `[PROJECT]`（title 为项目名）、COMMIT 项 `label: "Commit 408ade2023db"` 且来源为任务（title 取 `tasks.title`）、ISSUE 项来源为功能、PR 项来源为记录（title 取 `change_records.title`）；同项目的 `TASK` 目标列表 `sources` 为 `undefined`；把同一 URL 同时关联任务与功能后聚合为 5 条且该条 `sources` 依序为 TASK、FEATURE；另一个项目的链接不出现在结果里 | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-API-002 | 真实 PostgreSQL 集成 | 草稿与已作废记录排除 | 同文件：草稿关联链接后聚合为空；发布后 1 条且来源为 `CHANGE_RECORD`；管理员作废该记录后聚合再次为空，而 `change_record_external_links` 的关联行仍保留 1 行（只影响读侧聚合，不物理删关联） | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-API-003 | 真实 PostgreSQL 集成 | 已取消 / 无效任务不进项目聚合 | 同文件「项目面板聚合排除已取消与无效任务上的链接，恢复后重新出现」：两个任务各关联一条 PR 链接，其中一个按数据库状态置 `lifecycle_status='INVALID'`（带 `row_version` 递增，任务表触发器要求）→ 项目面板恰好只有未取消任务那条；把另一个经 `TaskManagementRepository.transition()` 取消后项目面板 0 条，而 `listExternalLinks("TASK", …)` 仍返回该链接、`task_external_links` 关联行保留 2 行；再恢复为 `TODO` 后重新出现在项目面板 | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-WEB-001 | Web 单元 | 来源标注与解除入口收敛 | `apps/web/src/features/external-links/ExternalLinksPanel.test.tsx` 9/9（新增例）：项目面板中带 `sources` 的条目显示「本项目」「任务「登录企业微信」」「记录「发布验证」」，`getAllByRole("button", { name: /^解除 / })` 恰好 1 个（只有项目级关联那条），不存在「解除 Commit 408ade2023db」，页尾提示可见 | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-VERIFY-001 | 鉴别性验证 | 两处反向验证 | 前端：把 `canRemoveExternalLink()` 对项目目标临时改成恒 `true` → 新用例转红（`expected [ … ] to have a length of 1 but got 2`），恢复后 9/9 绿；服务端：临时去掉 `listProjectLibrary` 的 `AND r.status = 'PUBLISHED'` → `EXTERNAL-LINK-AGG-API-002` 转红（`expected [ { id: 1032, projectId: 142, … } ] to have a length of +0 but got 1`），恢复后 39/39 绿 | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-VERIFY-002 | 鉴别性验证 | 取消 / 无效过滤反向验证 | 临时去掉 `listProjectLibrary` 任务分支的 `AND t.lifecycle_status <> 'INVALID' AND t.work_status <> 'CANCELED'` → 新用例转红（`expected [ { id: 1259, … }, { id: 1260, … } ] to match object [ … ]`，即 INVALID 任务仍在聚合里），恢复后 40/40 绿 | 本地通过（2026-10-09） |
+| EXTERNAL-LINK-AGG-GATE-001 | 静态门禁 | 类型、契约、权限、lint 与格式 | `corepack pnpm typecheck`（8 个 workspace exit 0；首轮 `external-links.repository.ts` 因就地写入 `readonly` 属性报 TS25xx，改为不可变重建对象后通过）、`contract:generate` 重生成 5 产物、`contract:drift`（5 产物一致）、`contract:validate`（101 条）、`permissions:check`（101 / 101）、`pnpm lint` exit 0、`pnpm format:check` 全绿（5 个文件先 `prettier --write` 写回）、`node scripts/check_docs.mjs` 通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① 未新增 Playwright 用例，全量 `pnpm test:e2e` 未跑（用户当日指示改为不跑全量）；② 未跑全量 `pnpm test:unit` / `test:web` / `test:integration`（只跑定向文件与全 workspace typecheck）与整链 `pnpm check`；③ 已作废记录与草稿被排除在聚合之外是本次取舍，若产品要求管理员能看到 VOID 来源，需要在 workflow 层按 `actor.isAdmin` 追加查询并同步契约说明；④ 聚合条目不提供「解除」，解除仍到任务 / 功能 / 记录各自的入口；⑤ 本批含契约、服务端与前端产品代码与新增用例，按 §8 需非作者人工评审；⑥ 未提交、未推送。

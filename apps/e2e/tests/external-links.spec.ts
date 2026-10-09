@@ -223,7 +223,7 @@ test("F22 新建迭代弹窗内直接暂存 GitHub 链接，发布后落到正�
       .fill("https://github.com/inpulse/core/pull/22311");
     await draft.getByRole("button", { name: "添加链接" }).click();
     await expect(draft.getByText("PR #22311")).toBeVisible();
-    await expect(draft.locator(".record-github-pending li")).toHaveCount(1);
+    await expect(draft.locator(".completion-links-pending li")).toHaveCount(1);
     await draft.screenshot({
       path: "test-results/f22-dialog-staged-link-form.png",
     });

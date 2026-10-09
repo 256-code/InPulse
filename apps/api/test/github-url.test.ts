@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   InvalidGitHubUrlError,
   normalizeGitHubUrl,
+  parseCommitShaInput,
+  commitUrlForRepository,
 } from "../src/modules/external-links/github-url.js";
 
 describe("normalizeGitHubUrl", () => {
@@ -107,5 +109,36 @@ describe("normalizeGitHubUrl", () => {
     expect(
       normalizeGitHubUrl("https://github.com/a/b/commit/abc"),
     ).toMatchObject({ kind: "OTHER", externalSha: null });
+  });
+});
+
+describe("commit SHA 输入补全", () => {
+  test("识别 7~64 位十六进制裸 SHA 并统一为小写", () => {
+    expect(
+      parseCommitShaInput("408ade2023dbdcaae8fe7bfed7bdf2d759d71695"),
+    ).toBe("408ade2023dbdcaae8fe7bfed7bdf2d759d71695");
+    expect(parseCommitShaInput("  0AB12CD34EF  ")).toBe("0ab12cd34ef");
+    expect(parseCommitShaInput("abc1234")).toBe("abc1234");
+  });
+
+  test("非 SHA 输入返回 null，继续交给既有 URL 规范化处理", () => {
+    for (const raw of [
+      "https://github.com/a/b/pull/7",
+      "abc123",
+      "a".repeat(65),
+      "408ade2023dbdcaae8fe7bfed7bdf2d759d7169z",
+      "",
+    ])
+      expect(parseCommitShaInput(raw)).toBeNull();
+  });
+
+  test("用根仓库 slug 拼接 commit 链接，slug 缺失或非法时返回 null", () => {
+    expect(commitUrlForRepository("256-code/InPulse", "408ade2")).toBe(
+      "https://github.com/256-code/InPulse/commit/408ade2",
+    );
+    expect(commitUrlForRepository(null, "408ade2")).toBeNull();
+    expect(commitUrlForRepository("only-owner", "408ade2")).toBeNull();
+    expect(commitUrlForRepository("a/b/c", "408ade2")).toBeNull();
+    expect(commitUrlForRepository("a b/c", "408ade2")).toBeNull();
   });
 });

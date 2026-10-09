@@ -181,6 +181,33 @@ function isCommitSha(value: string | undefined): boolean {
   return value !== undefined && /^[0-9a-fA-F]{7,64}$/.test(value);
 }
 
+/**
+ * 用户直接粘贴的裸 commit SHA（GitHub 接受 7~64 位十六进制）；
+ * 返回小写形式，不是 SHA 时返回 null。
+ */
+export function parseCommitShaInput(raw: string): string | null {
+  const value = raw.trim();
+  return /^[0-9a-fA-F]{7,64}$/.test(value) ? value.toLowerCase() : null;
+}
+
+/**
+ * 用项目根仓库的 `owner/repository` 把 commit SHA 补全为规范 commit 链接。
+ * 根仓库缺失或 slug 不符合 `external_links_repository_check` 时返回 null，
+ * 由调用方按 422 拒绝并给出可操作提示。
+ */
+export function commitUrlForRepository(
+  repository: string | null,
+  sha: string,
+): string | null {
+  if (
+    repository === null ||
+    repository.length > 201 ||
+    !/^[^/\s]+\/[^/\s]+$/.test(repository)
+  )
+    return null;
+  return `https://${GITHUB_HOST}/${repository}/commit/${sha}`;
+}
+
 function normalizeQuery(searchParams: URLSearchParams): string {
   const kept = [...searchParams.entries()]
     .filter(([key]) => ALLOWED_QUERY_PARAMETERS.has(key))

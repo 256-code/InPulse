@@ -15,15 +15,18 @@ export const externalLinkRoutes: readonly RouteDefinition[] = [
   return {
     ...(write ? recordDraftRoutes[3]! : publishedRecordRoutes[1]!),
     operationId,
-    idempotencyContractVersion: write ? "2.0.0" : "none",
+    // 新增路由接受裸 commit SHA，同一请求由必然 422 变为可成功写库，故升级契约版本让旧 Key 在新契约下 409。
+    idempotencyContractVersion: write ? (remove ? "2.0.0" : "2.1.0") : "none",
     // 该路由的请求/响应/重放策略与记录内容无关，保持既有 fingerprint 版本。
     idempotencyFingerprintVersion: write ? "1.1.0" : "none",
     method: write ? (remove ? "DELETE" : "POST") : "GET",
     path:
       "/external-links/{targetType}/{targetId}" + (remove ? "/{linkId}" : ""),
     summary: write
-      ? "管理目标的当前GitHub关联并保留实体和审计"
-      : "读取当前有权目标的GitHub关联",
+      ? remove
+        ? "管理目标的当前GitHub关联并保留实体和审计"
+        : "新增目标的GitHub关联（接受完整链接或项目根仓库下的commit SHA）并保留实体和审计"
+      : "读取当前有权目标的GitHub关联；项目目标聚合其有效任务、功能与已发布记录上的关联并标注来源（取消或无效任务不聚合）",
     request: {
       path: remove ? "ExternalLinkResourcePath" : "ExternalLinkTargetPath",
       query: "none",

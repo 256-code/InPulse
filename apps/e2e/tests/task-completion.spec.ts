@@ -162,3 +162,158 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     await context.close();
   }
 });
+test("F22 任务上的 GitHub 链接可勾选沿用到新发布的迭代记录", async ({
+  browser,
+}) => {
+  test.setTimeout(120000);
+  const runtime = await loadRuntime(),
+    { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const { task } = await createTask(page, runtime, false);
+    // 任务先挂一条 PR 链接，完成任务时把它连同新添加的 Issue 一起贴到新记录上。
+    await task.getByRole("button", { name: "GitHub 链接" }).click();
+    const links = page.getByRole("dialog", {
+      name: "GitHub 链接",
+      exact: true,
+    });
+    await links.getByRole("button", { name: "添加链接" }).click();
+    await links
+      .getByLabel("GitHub URL")
+      .fill("https://github.com/inpulse/core/pull/22003");
+    await links.getByRole("button", { name: "确认添加" }).click();
+    await expect(
+      links.getByRole("link", { name: "PR #22003", exact: true }),
+    ).toBeVisible();
+    await links.getByRole("button", { name: "关闭关联" }).click();
+    await task.getByRole("button", { name: "完成任务", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "完成任务", exact: true });
+    await form.getByRole("button", { name: /有，填写迭代记录/ }).click();
+    const section = form.getByRole("region", { name: "GitHub 链接" });
+    // 任务上已有的链接收在下拉框里且默认勾选：展开后直接沿用。
+    await section
+      .getByRole("button", { name: /已选 1 \/ 1 条任务链接/ })
+      .click();
+    await expect(
+      section.getByRole("checkbox", { name: /pull\/22003/ }),
+    ).toBeChecked();
+    await section
+      .getByLabel("GitHub 链接地址")
+      .fill("https://github.com/inpulse/core/issues/22004");
+    await section.getByRole("button", { name: "添加链接" }).click();
+    await expect(section.getByText("Issue #22004")).toBeVisible();
+    // 勾选行与「自己添加」的待关联行同形：反例是修复前的单行 93px（复选框被顶到文案上方）。
+    const checkedRow = await section
+      .locator(".completion-links-list li")
+      .first()
+      .boundingBox();
+    const pendingRow = await section
+      .locator(".completion-links-pending li")
+      .first()
+      .boundingBox();
+    expect(checkedRow?.height ?? 0).toBeLessThan(46);
+    expect(
+      Math.abs((checkedRow?.height ?? 0) - (pendingRow?.height ?? 0)),
+    ).toBeLessThan(4);
+    for (const label of ["改动原因", "具体改动", "改动效果"])
+      await form.getByLabel(label).fill("链接沿用流程");
+    await fillLeftovers(form, ["需要后续跟进"]);
+    await form
+      .getByRole("button", { name: "发布并完成任务", exact: true })
+      .click();
+    await expect(form).toBeHidden();
+    await task.getByRole("link", { name: "查看已发布记录" }).click();
+    const record = page.getByRole("region", { name: "正式记录详情" });
+    await expect(record).toBeVisible();
+    await record.getByRole("button", { name: "GitHub 关联" }).click();
+    await expect(
+      record.getByRole("link", { name: "PR #22003", exact: true }),
+    ).toBeVisible();
+    await expect(
+      record.getByRole("link", { name: "Issue #22004", exact: true }),
+    ).toBeVisible();
+    // 自己添加的 Issue 还应该存进项目链接库并关联到任务本身。
+    await record.getByRole("link", { name: "查看来源任务" }).click();
+    await task.getByRole("button", { name: "GitHub 链接" }).click();
+    const taskLinks = page.getByRole("dialog", {
+      name: "GitHub 链接",
+      exact: true,
+    });
+    await expect(
+      taskLinks.getByRole("link", { name: "Issue #22004", exact: true }),
+    ).toBeVisible();
+    await expect(
+      taskLinks.getByRole("link", { name: "PR #22003", exact: true }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+test("F22 记录一次迭代可勾选沿用任务上已有的 GitHub 链接", async ({
+  browser,
+}) => {
+  test.setTimeout(120000);
+  const runtime = await loadRuntime(),
+    { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    const { task } = await createTask(page, runtime, false);
+    // 任务先挂一条链接，再从「记录一次迭代」入口把链接带进新记录。
+    await task.getByRole("button", { name: "GitHub 链接" }).click();
+    const links = page.getByRole("dialog", {
+      name: "GitHub 链接",
+      exact: true,
+    });
+    await links.getByRole("button", { name: "添加链接" }).click();
+    await links
+      .getByLabel("GitHub URL")
+      .fill("https://github.com/inpulse/core/issues/22005");
+    await links.getByRole("button", { name: "确认添加" }).click();
+    await expect(
+      links.getByRole("link", { name: "Issue #22005", exact: true }),
+    ).toBeVisible();
+    await links.getByRole("button", { name: "关闭关联" }).click();
+    await task.getByRole("tab", { name: "迭代记录" }).click();
+    await task.getByRole("button", { name: "记录一次迭代" }).click();
+    const draft = page.getByRole("dialog", { name: "新建任务迭代" });
+    const section = draft.getByRole("region", { name: "GitHub 链接" });
+    // 与「完成任务」入口同一套小节：任务上已有的链接收在下拉框里且默认勾选，也可以再添加新的。
+    await section
+      .getByRole("button", { name: /已选 1 \/ 1 条任务链接/ })
+      .click();
+    await expect(
+      section.getByRole("checkbox", { name: /issues\/22005/ }),
+    ).toBeChecked();
+    await section
+      .getByLabel("GitHub 链接地址")
+      .fill("https://github.com/inpulse/core/pull/22006");
+    await section.getByRole("button", { name: "添加链接" }).click();
+    await expect(section.getByText("PR #22006")).toBeVisible();
+    for (const label of ["改动原因", "具体改动", "改动效果"])
+      await draft.getByLabel(label).fill("记录一次迭代沿用链接");
+    await draft
+      .getByRole("button", { name: "发布迭代记录", exact: true })
+      .click();
+    await expect(draft).toBeHidden();
+    await expect(task.getByText(/迭代记录已发布：/)).toBeVisible();
+    await task.getByRole("button", { name: "查看正式记录" }).click();
+    const record = page.getByRole("region", { name: "正式记录详情" });
+    await record.getByRole("button", { name: "GitHub 关联" }).click();
+    await expect(
+      record.getByRole("link", { name: "Issue #22005", exact: true }),
+    ).toBeVisible();
+    await expect(
+      record.getByRole("link", { name: "PR #22006", exact: true }),
+    ).toBeVisible();
+    // 草稿弹窗里自己添加的 PR 同样要进链接库并关联到来源任务。
+    await record.getByRole("link", { name: "查看来源任务" }).click();
+    await task.getByRole("button", { name: "GitHub 链接" }).click();
+    const taskLinks = page.getByRole("dialog", {
+      name: "GitHub 链接",
+      exact: true,
+    });
+    await expect(
+      taskLinks.getByRole("link", { name: "PR #22006", exact: true }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

@@ -4098,9 +4098,10 @@ td.due-overdue {
 .github-list > li > .icon-button {
   margin-left: auto;
 }
+/* 单列堆叠：表单只有「GitHub URL」一个字段，两列网格会把输入框挤到 148px 窄栏里。 */
 .github-add {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 148px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: end;
   padding: 14px;

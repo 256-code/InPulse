@@ -176,10 +176,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 项目面板的聚合来源标注：单行省略，完整文案由 title 悬停提供。 */
+.external-links-list .link-source {
+  flex: 0 1 auto;
+  max-width: 42%;
+  overflow: hidden;
+  color: #7b8998;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .external-links-list .link-remove {
   flex-shrink: 0;
 }
-/* 内联形态的新增表单是两列 grid，按钮行要整行收尾，与弹层里的排版一致。 */
+/* 内联形态的新增表单是单列 grid，按钮行整行右对齐收尾，与弹层里的排版一致。 */
 .github-add .external-links-add-actions {
   grid-column: 1 / -1;
 }

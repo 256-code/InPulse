@@ -534,6 +534,85 @@ describe("F22 typed external links", () => {
     ).toHaveLength(0);
   });
 
+  it("粘贴裸 commit SHA 时用项目根仓库补全为 commit 链接", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      sha = "408ade2023dbdcaae8fe7bfed7bdf2d759d71695";
+    const taskId = await taskFixture(f);
+    const withoutRoot = await linkRequest("TASK", taskId, actor, 1, sha);
+    expect(withoutRoot.status, await withoutRoot.clone().text()).toBe(422);
+    const missingRoot = schemaRegistry.ErrorResponse.schema.parse(
+      await withoutRoot.json(),
+    );
+    expect(missingRoot.code).toBe("EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY");
+    expect(missingRoot.message).toContain("项目根仓库");
+    expect(
+      await db.sql`SELECT id FROM app.external_links WHERE project_id=${f.projectId}`,
+    ).toHaveLength(0);
+    const root = await linkRequest(
+      "PROJECT",
+      f.projectId,
+      actor,
+      1,
+      "https://github.com/256-code/InPulse",
+      undefined,
+      randomUUID(),
+      true,
+    );
+    expect(root.status, await root.clone().text()).toBe(200);
+    const upper = await linkRequest(
+      "TASK",
+      taskId,
+      actor,
+      1,
+      sha.toUpperCase(),
+    );
+    expect(upper.status, await upper.clone().text()).toBe(200);
+    const short = await linkRequest("TASK", taskId, actor, 2, "408ade2");
+    expect(short.status, await short.clone().text()).toBe(200);
+    const links = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("TASK", taskId, actor)).json(),
+    );
+    expect(links.items).toMatchObject([
+      {
+        kind: "COMMIT",
+        repository: "256-code/InPulse",
+        externalSha: sha,
+        normalizedUrl: "https://github.com/256-code/InPulse/commit/" + sha,
+      },
+      {
+        kind: "COMMIT",
+        repository: "256-code/InPulse",
+        externalSha: "408ade2",
+        normalizedUrl: "https://github.com/256-code/InPulse/commit/408ade2",
+      },
+    ]);
+    const stored = await db.sql<
+      { normalized_url: string; kind: string; external_sha: string }[]
+    >`SELECT normalized_url,kind,external_sha FROM app.external_links WHERE project_id=${f.projectId} ORDER BY id`;
+    expect(stored).toMatchObject([
+      {
+        normalized_url: "https://github.com/256-code/InPulse",
+        kind: "OTHER",
+      },
+      {
+        normalized_url: "https://github.com/256-code/InPulse/commit/" + sha,
+        kind: "COMMIT",
+        external_sha: sha,
+      },
+      {
+        normalized_url: "https://github.com/256-code/InPulse/commit/408ade2",
+        kind: "COMMIT",
+        external_sha: "408ade2",
+      },
+    ]);
+    const notSha = await linkRequest("TASK", taskId, actor, 3, "not-a-commit");
+    expect(notSha.status, await notSha.clone().text()).toBe(422);
+    expect(
+      schemaRegistry.ErrorResponse.schema.parse(await notSha.json()).code,
+    ).toBe("EXTERNAL_LINK_INVALID_URL");
+  });
+
   it.each(["PROJECT", "FEATURE", "TASK", "CHANGE_RECORD"])(
     "%s lists/adds/removes and preserves link entity plus audit",
     async (type) => {
@@ -608,6 +687,238 @@ describe("F22 typed external links", () => {
       );
     },
   );
+  it("项目面板聚合任务、功能与已发布记录的关联并标注来源", async () => {
+    const f = await fixture(),
+      g = await fixture(),
+      actor = await session(f.userId),
+      other = await session(g.userId),
+      taskId = await taskFixture(f);
+    for (const response of [
+      await linkRequest(
+        "PROJECT",
+        f.projectId,
+        actor,
+        1,
+        "https://github.com/inpulse/core",
+        undefined,
+        randomUUID(),
+        true,
+      ),
+      await linkRequest(
+        "TASK",
+        taskId,
+        actor,
+        1,
+        "https://github.com/inpulse/core/commit/408ade2023dbdcaa8fe7bfed7bdf2d759d71695",
+      ),
+      await linkRequest(
+        "FEATURE",
+        f.featureId,
+        actor,
+        1,
+        "https://github.com/inpulse/core/issues/7",
+      ),
+    ])
+      expect(response.status, await response.clone().text()).toBe(200);
+    const published = await publish(f);
+    const record = await linkRequest(
+      "CHANGE_RECORD",
+      published.id,
+      actor,
+      published.rowVersion,
+      "https://github.com/inpulse/core/pull/245",
+    );
+    expect(record.status, await record.clone().text()).toBe(200);
+    // 另一个项目的关联不得进入本项目面板。
+    expect(
+      (
+        await linkRequest(
+          "PROJECT",
+          g.projectId,
+          other,
+          1,
+          "https://github.com/other/secret",
+          undefined,
+          randomUUID(),
+          true,
+        )
+      ).status,
+    ).toBe(200);
+    const links = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(links.items).toHaveLength(4);
+    const root = links.items.filter((item) => item.isRootRepository);
+    expect(root).toHaveLength(1);
+    expect(root[0]).toMatchObject({
+      label: "inpulse/core",
+      sources: [
+        {
+          targetType: "PROJECT",
+          targetId: f.projectId,
+          title: "Project " + f.code,
+        },
+      ],
+    });
+    expect(links.items.find((item) => item.kind === "COMMIT")).toMatchObject({
+      label: "Commit 408ade2023db",
+      sources: [{ targetType: "TASK", targetId: taskId, title: "链接任务" }],
+    });
+    expect(links.items.find((item) => item.kind === "ISSUE")).toMatchObject({
+      label: "Issue #7",
+      sources: [
+        { targetType: "FEATURE", targetId: f.featureId, title: "关联功能" },
+      ],
+    });
+    expect(
+      links.items.find((item) => item.kind === "PULL_REQUEST"),
+    ).toMatchObject({
+      label: "PR #245",
+      sources: [
+        {
+          targetType: "CHANGE_RECORD",
+          targetId: published.id,
+          title: content.title,
+        },
+      ],
+    });
+    // 只有项目视图是聚合读，其他目标不返回 sources。
+    const taskList = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("TASK", taskId, actor)).json(),
+    );
+    expect(taskList.items[0]?.sources).toBeUndefined();
+    // 同一链接被任务与功能共同关联时合并成一行并列出全部来源。
+    const shared = "https://github.com/inpulse/core/pull/900";
+    for (const [type, id, version] of [
+      ["TASK", taskId, 2],
+      ["FEATURE", f.featureId, 2],
+    ] as const)
+      expect((await linkRequest(type, id, actor, version, shared)).status).toBe(
+        200,
+      );
+    const merged = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(merged.items).toHaveLength(5);
+    expect(
+      merged.items.find((item) => item.normalizedUrl === shared)?.sources,
+    ).toMatchObject([
+      { targetType: "TASK", targetId: taskId },
+      { targetType: "FEATURE", targetId: f.featureId },
+    ]);
+  });
+  it("项目面板聚合只呈现已发布记录，草稿与已作废记录不出现", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      url = "https://github.com/inpulse/core/issues/11";
+    const draftLink = await linkRequest(
+      "CHANGE_RECORD",
+      f.draft.id,
+      actor,
+      1,
+      url,
+    );
+    expect(draftLink.status, await draftLink.clone().text()).toBe(200);
+    const beforePublish = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(beforePublish.items).toHaveLength(0);
+    // 关联写入了草稿行版本，发布用当前版本而不是固定 1。
+    const [draftRow] = await db.sql<
+      { row_version: number }[]
+    >`SELECT row_version FROM app.change_records WHERE id=${f.draft.id}`;
+    const published = await uow.run((tx) =>
+      service.publish(
+        tx,
+        f.userId,
+        f.projectId,
+        f.draft.id,
+        draftRow!.row_version,
+        randomUUID(),
+      ),
+    );
+    const afterPublish = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(afterPublish.items).toMatchObject([
+      {
+        normalizedUrl: url,
+        sources: [{ targetType: "CHANGE_RECORD", targetId: published.id }],
+      },
+    ]);
+    const adminId = await createUser(db.sql, { admin: true }),
+      admin = await session(adminId);
+    const voided = await change({ ...f, record: published, adminId, admin });
+    expect(voided.status, await voided.clone().text()).toBe(200);
+    const afterVoid = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(afterVoid.items).toHaveLength(0);
+    // 作废只影响聚合呈现，关联关系本身保留。
+    expect(
+      await db.sql`SELECT link_id FROM app.change_record_external_links WHERE project_id=${f.projectId}`,
+    ).toHaveLength(1);
+  });
+  it("项目面板聚合排除已取消与无效任务上的链接，恢复后重新出现", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      canceledTaskId = await taskFixture(f),
+      invalidTaskId = await taskFixture(f, 2),
+      canceledUrl = "https://github.com/inpulse/core/pull/901",
+      invalidUrl = "https://github.com/inpulse/core/pull/902";
+    for (const [taskId, url] of [
+      [canceledTaskId, canceledUrl],
+      [invalidTaskId, invalidUrl],
+    ] as const)
+      expect((await linkRequest("TASK", taskId, actor, 1, url)).status).toBe(
+        200,
+      );
+    // 无效任务已无业务写入路径（ADR-054 删除了标记无效命令），按数据库状态构造。
+    await db.sql`UPDATE app.tasks SET lifecycle_status='INVALID', row_version=row_version+1 WHERE id=${invalidTaskId}`;
+    const tasks = new TaskManagementRepository(),
+      scope = {
+        projectId: f.projectId,
+        moduleId: f.moduleId,
+        featureId: f.featureId,
+      },
+      transition = (to: "CANCELED" | "TODO") =>
+        uow.run(async (tx) => {
+          const current = await tasks.find(tx, scope, canceledTaskId);
+          await tasks.transition(tx, current!, f.userId, to, null, null);
+        });
+    // 已标记无效的任务不进聚合，未取消的任务仍在。
+    const before = schemaRegistry.ExternalLinkList.schema.parse(
+      await (await listLinks("PROJECT", f.projectId, actor)).json(),
+    );
+    expect(before.items).toMatchObject([
+      {
+        normalizedUrl: canceledUrl,
+        sources: [{ targetType: "TASK", targetId: canceledTaskId }],
+      },
+    ]);
+    await transition("CANCELED");
+    expect(
+      schemaRegistry.ExternalLinkList.schema.parse(
+        await (await listLinks("PROJECT", f.projectId, actor)).json(),
+      ).items,
+    ).toHaveLength(0);
+    // 取消只影响项目面板的聚合呈现：任务自身面板与关联行保留。
+    expect(
+      schemaRegistry.ExternalLinkList.schema.parse(
+        await (await listLinks("TASK", canceledTaskId, actor)).json(),
+      ).items,
+    ).toMatchObject([{ normalizedUrl: canceledUrl }]);
+    expect(
+      await db.sql`SELECT task_id FROM app.task_external_links WHERE project_id=${f.projectId}`,
+    ).toHaveLength(2);
+    // 恢复任务（CANCELED -> TODO）后重新出现在项目面板。
+    await transition("TODO");
+    expect(
+      schemaRegistry.ExternalLinkList.schema.parse(
+        await (await listLinks("PROJECT", f.projectId, actor)).json(),
+      ).items,
+    ).toMatchObject([{ normalizedUrl: canceledUrl }]);
+  });
   it("same key concurrent replay and new-key duplicate are distinguished", async () => {
     const f = await fixture(),
       actor = await session(f.userId),

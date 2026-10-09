@@ -102,6 +102,13 @@ function client(overrides: object = {}) {
       },
       items: [],
     }),
+    /** 「记录一次迭代」里的链接小节会读来源任务上的链接；默认没有，用例按需覆盖。 */
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 2,
+      rowVersion: 1,
+      writable: true,
+      items: [],
+    }),
     ...overrides,
   } as unknown as InpulseApiClient;
 }
@@ -929,6 +936,121 @@ describe("C-3 任务详情弹窗标签页", () => {
     // 任务详情里的正式记录列表是另一条查询，刷新落地前也要能打开详情。
     const record = await screen.findByRole("dialog", { name: item.title });
     expect(within(record).getByText("PR-CR-9")).toBeInTheDocument();
+  });
+  it("carries the task's checked GitHub links into the draft it creates", async () => {
+    const saved = {
+      id: 41,
+      projectId: 2,
+      moduleId: 3,
+      featureId: 4,
+      scopeType: "FEATURE",
+      taskId: 1,
+      impactFeatureIds: [],
+      handlerId: 5,
+      authorId: 5,
+      status: "DRAFT",
+      code: null,
+      currentVersion: 0,
+      publishedAt: null,
+      rowVersion: 2,
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-20T00:00:00.000Z",
+      title: item.title,
+      contextProblem: "a",
+      changeSolution: "b",
+      resultVerification: "c",
+      remainingIssues: [],
+    };
+    const createTaskRecordDraft = vi.fn().mockResolvedValue(saved);
+    const addExternalLink = vi.fn().mockResolvedValue({ rowVersion: 5 });
+    mount(
+      client({
+        listProjects: vi.fn().mockResolvedValue({
+          items: [{ id: 2, name: "退款项目", status: "ACTIVE" }],
+        }),
+        createTaskRecordDraft,
+        addExternalLink,
+        listExternalLinks: vi.fn().mockResolvedValue({
+          projectId: 2,
+          rowVersion: 1,
+          writable: true,
+          items: [
+            {
+              id: 11,
+              kind: "PULL_REQUEST",
+              displayUrl: "PR #22311",
+              normalizedUrl: "https://github.com/inpulse/core/pull/22311",
+            },
+            {
+              id: 12,
+              kind: "ISSUE",
+              displayUrl: "Issue #22312",
+              normalizedUrl: "https://github.com/inpulse/core/issues/22312",
+            },
+          ],
+        }),
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    fireEvent.click(within(dialog).getByRole("tab", { name: "迭代记录" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "记录一次迭代" }),
+    );
+    const modal = within(
+      await screen.findByRole("dialog", { name: "新建任务迭代" }),
+    );
+    // 任务上已有的链接收在下拉框里且默认全部勾选，取消勾选的那条不跟着走。
+    fireEvent.click(
+      await modal.findByRole("button", { name: /已选 2 \/ 2 条任务链接/ }),
+    );
+    const pull = await modal.findByRole("checkbox", { name: /pull\/22311/ });
+    expect(pull).toBeChecked();
+    const issue = modal.getByRole("checkbox", { name: /issues\/22312/ });
+    expect(issue).toBeChecked();
+    fireEvent.click(issue);
+    expect(issue).not.toBeChecked();
+    expect(
+      modal.getByRole("button", { name: /已选 1 \/ 2 条任务链接/ }),
+    ).toBeInTheDocument();
+    // 自己添加的链接与勾选项合并写入。
+    fireEvent.change(modal.getByLabelText("GitHub 链接地址"), {
+      target: { value: "https://github.com/inpulse/core/commit/22313" },
+    });
+    fireEvent.click(modal.getByRole("button", { name: "添加链接" }));
+    expect(
+      await modal.findByText("https://github.com/inpulse/core/commit/22313"),
+    ).toBeInTheDocument();
+    for (const [label, value] of [
+      ["改动原因", "a"],
+      ["具体改动", "b"],
+      ["改动效果", "c"],
+    ])
+      fireEvent.change(modal.getByLabelText(label!), { target: { value } });
+    const save = modal.getByRole("button", { name: "保存草稿" });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    await waitFor(() => expect(createTaskRecordDraft).toHaveBeenCalledOnce());
+    await waitFor(() => expect(addExternalLink).toHaveBeenCalledTimes(3));
+    // 记录侧写勾选沿用的两条；自己添加的那条另在任务上补一条（存进项目链接库）。
+    expect(
+      addExternalLink.mock.calls
+        .filter((call) => call[0] === "CHANGE_RECORD")
+        .map((call) => (call[2] as { url: string }).url),
+    ).toEqual([
+      "https://github.com/inpulse/core/pull/22311",
+      "https://github.com/inpulse/core/commit/22313",
+    ]);
+    const taskCalls = addExternalLink.mock.calls.filter(
+      (call) => call[0] === "TASK",
+    );
+    expect(taskCalls).toHaveLength(1);
+    expect(taskCalls[0]![1]).toBe(1);
+    expect(taskCalls[0]![2]).toEqual({
+      url: "https://github.com/inpulse/core/commit/22313",
+    });
   });
   it("lists the task's published records and drafts on the records tab", async () => {
     const record = {

@@ -259,6 +259,11 @@ export type ExternalLinkItem = {
   readonly externalNumber: (string | null);
   readonly externalSha: (string | null);
   readonly releaseTag: (string | null);
+  readonly sources?: readonly ({
+    readonly targetType: ("PROJECT" | "FEATURE" | "TASK" | "CHANGE_RECORD");
+    readonly targetId: number;
+    readonly title: string;
+  })[];
 };
 
 export type ExternalLinkList = {

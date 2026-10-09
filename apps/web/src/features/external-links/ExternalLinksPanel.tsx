@@ -16,6 +16,38 @@ import { createIdempotencyKey } from "@shared/api/idempotency-key";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { repositoryDisplayPath } from "./repository-path";
 type TargetType = ExternalLinkTargetPath["targetType"];
+type ExternalLinkSource = NonNullable<ExternalLinkItem["sources"]>[number];
+/** 来源标注文案：项目面板聚合任务 / 功能 / 记录上的链接时展示（2026-10-09）。 */
+export function externalLinkSourceLabel(source: ExternalLinkSource): string {
+  switch (source.targetType) {
+    case "PROJECT":
+      return "本项目";
+    case "TASK":
+      return "任务「" + source.title + "」";
+    case "FEATURE":
+      return "功能「" + source.title + "」";
+    case "CHANGE_RECORD":
+      return "记录「" + source.title + "」";
+  }
+}
+/** 全部来源合并为一行的标注文本；其他目标不返回来源时返回 null。 */
+export function externalLinkSourceText(item: ExternalLinkItem): string | null {
+  if (item.sources === undefined || item.sources.length === 0) return null;
+  return item.sources.map(externalLinkSourceLabel).join("、");
+}
+/**
+ * 聚合条目可能只来自任务 / 功能 / 记录：解除只在链接仍有项目级关联时提供，
+ * 来源处各自保留自己的解除入口（写入模型不变）。
+ */
+export function canRemoveExternalLink(
+  targetType: TargetType,
+  item: ExternalLinkItem,
+): boolean {
+  if (targetType !== "PROJECT") return true;
+  return (
+    item.sources?.some((source) => source.targetType === "PROJECT") ?? true
+  );
+}
 /** 设计师稿 github-links 的徽章文案：先看 Release 标记，再看链接类型。 */
 export function externalLinkKindLabel(item: ExternalLinkItem): string {
   return item.releaseTag
@@ -191,7 +223,9 @@ export function ExternalLinksPanel({
               : error.status === 422
                 ? error.code === "SEARCH_TEXT_CAPACITY_EXCEEDED"
                   ? "正文与链接总量超过搜索容量，请精简正文或解除不需要的链接。"
-                  : "链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。"
+                  : error.code === "EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY"
+                    ? "尚未设置项目根仓库，无法把 commit SHA 补全为链接；请先粘贴完整链接或设置项目根仓库。"
+                    : "链接无效：只接受 github.com 的 HTTPS 链接，请检查输入。"
                 : error.status === 429
                   ? "操作频繁，请稍后重试。"
                   : "暂时无法操作，输入已保留，可重试。"
@@ -226,7 +260,7 @@ export function ExternalLinksPanel({
         maxLength={2048}
         disabled={busy}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://github.com/owner/repository/pull/123"
+        placeholder="https://github.com/owner/repository/pull/123 或 commit SHA"
       />
       {targetType === "PROJECT" && (
         <Checkbox
@@ -245,8 +279,12 @@ export function ExternalLinksPanel({
       {url.trim() && (
         <p role="status">
           {previewLabel(url)
-            ? "识别为：" + previewLabel(url)
-            : "请输入有效的 GitHub HTTPS URL"}
+            ? "识别为：" +
+              previewLabel(url) +
+              (commitShaInput(url) === null
+                ? ""
+                : "（将用项目根仓库补全为链接）")
+            : "请输入有效的 GitHub HTTPS URL 或 commit SHA"}
         </p>
       )}
       <div className="external-links-add-actions">
@@ -512,36 +550,53 @@ export function ExternalLinksPanel({
                     </p>
                   ) : (
                     <ul className="external-links-list">
-                      {linkedItems.map((item) => (
-                        <li key={item.id}>
-                          <Tag>{externalLinkKindLabel(item)}</Tag>
-                          <a
-                            className="link-name"
-                            href={item.normalizedUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {item.label}
-                            <InpulseIcon name="externalLink" size={12} />
-                          </a>
-                          <span className="link-repo">
-                            {item.repository ??
-                              repositoryDisplayPath(item.normalizedUrl)}
-                          </span>
-                          {canWrite && (
-                            <button
-                              type="button"
-                              className="text-button danger-text link-remove"
-                              disabled={addBlocked}
-                              aria-label={"解除 " + item.label}
-                              onClick={() => setRemoveId(item.id)}
+                      {linkedItems.map((item) => {
+                        // 项目视图会把任务 / 功能 / 记录上的链接一并聚合进来，并标注来源。
+                        const sourceText = externalLinkSourceText(item);
+                        return (
+                          <li key={item.id}>
+                            <Tag>{externalLinkKindLabel(item)}</Tag>
+                            <a
+                              className="link-name"
+                              href={item.normalizedUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
                             >
-                              解除
-                            </button>
-                          )}
-                        </li>
-                      ))}
+                              {item.label}
+                              <InpulseIcon name="externalLink" size={12} />
+                            </a>
+                            <span className="link-repo">
+                              {item.repository ??
+                                repositoryDisplayPath(item.normalizedUrl)}
+                            </span>
+                            {sourceText !== null && (
+                              <span className="link-source" title={sourceText}>
+                                {sourceText}
+                              </span>
+                            )}
+                            {canWrite &&
+                              canRemoveExternalLink(targetType, item) && (
+                                <button
+                                  type="button"
+                                  className="text-button danger-text link-remove"
+                                  disabled={addBlocked}
+                                  aria-label={"解除 " + item.label}
+                                  onClick={() => setRemoveId(item.id)}
+                                >
+                                  解除
+                                </button>
+                              )}
+                          </li>
+                        );
+                      })}
                     </ul>
+                  )}
+                  {linkedItems.some(
+                    (item) => !canRemoveExternalLink("PROJECT", item),
+                  ) && (
+                    <p className="muted">
+                      来自任务 / 功能 / 迭代记录的链接请在各自入口解除关联。
+                    </p>
                   )}
                 </>
               )}
@@ -571,6 +626,8 @@ export function ExternalLinksPanel({
   );
 }
 export function previewLabel(raw: string): string | null {
+  const sha = commitShaInput(raw);
+  if (sha !== null) return "Commit " + sha.slice(0, 12);
   try {
     const parsed = new URL(raw.trim());
     if (
@@ -602,4 +659,12 @@ export function previewLabel(raw: string): string | null {
   } catch {
     return null;
   }
+}
+/**
+ * 裸 commit SHA（7~64 位十六进制）识别，返回小写形式；
+ * 与服务端 `parseCommitShaInput` 同一口径，补全由服务端用项目根仓库完成。
+ */
+export function commitShaInput(raw: string): string | null {
+  const value = raw.trim();
+  return /^[a-f0-9]{7,64}$/i.test(value) ? value.toLowerCase() : null;
 }

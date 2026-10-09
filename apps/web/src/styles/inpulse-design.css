@@ -160,6 +160,193 @@
   flex-direction: column;
   gap: 6px;
 }
+/* 「完成任务 / 生成迭代记录」与「记录一次迭代」里的 GitHub 链接选择区：任务上已有的
+ * 链接默认全选，也可以自己添加；落库成功后逐条关联到新记录。外形沿用草稿编辑器那张
+ * 浅色卡片，但类名独立——record-drafts.css 只随记录页的 chunk 加载，这里必须自带。
+ * 选择器不带 `.completion-flow`：同一个小组件（TaskLinksPicker）在两处弹窗都用。 */
+.catalog-modal .completion-links,
+.catalog-modal .completion-links-recovery {
+  padding: 14px 16px;
+  border: 1px solid #e6edf4;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+.catalog-modal .completion-links-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+}
+.catalog-modal .completion-links-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #33475c;
+}
+.catalog-modal .completion-links-hint {
+  font-size: 11px;
+  color: #8091a4;
+}
+.catalog-modal .completion-links-empty {
+  margin: 0;
+  font-size: 12px;
+  color: #8091a4;
+}
+/* 链接多时清单会把弹窗撑长，这里按「下拉框」收拢：触发器只给选中计数，
+ * 展开后才铺出可勾选清单；触发器外形对齐弹窗里的其它下拉控件。 */
+.catalog-modal .completion-links-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dbe5ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #33475c;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.catalog-modal .completion-links-toggle:hover {
+  border-color: #b9cde0;
+}
+.catalog-modal .completion-links-toggle svg {
+  flex: none;
+  color: #8091a4;
+  transition: transform 0.16s ease-out;
+}
+.catalog-modal .completion-links-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.catalog-modal .completion-links-list,
+.catalog-modal .completion-links-pending {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 展开后的清单按菜单面板呈现：边框、圆角与滚动都由面板承担，行间只用细分割线，
+ * 从而不再一条链接一张卡片。这里只留上内边距：Chromium 的 scrollable overflow 会把
+ * 滚动容器自身的下内边距算进去，`padding: 4px 0` 实测能让面板多滚 4px（滚动条一闪，
+ * 内容却不动），下沿留白改由末行的自身内边距承担。 */
+.catalog-modal .completion-links-list {
+  margin-top: 6px;
+  padding-top: 4px;
+  border: 1px solid #e6edf4;
+  border-radius: 8px;
+  background: #fff;
+  max-height: 214px;
+  overflow-y: auto;
+  animation: completion-links-in 0.16s ease-out;
+}
+@keyframes completion-links-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .catalog-modal .completion-links-list {
+    animation: none;
+  }
+  .catalog-modal .completion-links-toggle svg {
+    transition: none;
+  }
+}
+/* 勾选行与「自己添加」的待关联行同形，只是前者用 `Checkbox` 承担整行点击。 */
+.catalog-modal .completion-links-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.catalog-modal .completion-links-list li + li {
+  border-top: 1px solid #f0f5fa;
+}
+/* `.dialog-form label` 会把弹层里的每个 `label` 排成 `flex-direction: column`，
+ * 复选框因此被 `align-items: center` 顶到文案上方居中（实测单行 93px、方框在上、
+ * 标签在下）；这里显式回到行向，方框与标签同行。
+ * 「完成任务」弹窗还多一条 `.catalog-modal .completion-flow .dialog-form label`
+ * （0,3,1，给记录字段恢复两级纵向间距用），会压过 (0,3,0) 的同名规则——实测该弹窗
+ * 里复选框行 83px。这里带上 `.completion-links` 与元素名提到 (0,4,1) 才能两处都生效。 */
+.catalog-modal
+  .completion-links
+  .completion-links-list
+  label.ant-checkbox-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+/* antd 的标签层默认是块级，URL 的 flex 伸缩要它自己先成为弹性容器。 */
+.catalog-modal .completion-links-list .ant-checkbox-label {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.catalog-modal .completion-links-pending {
+  gap: 8px;
+  margin-top: 12px;
+}
+.catalog-modal .completion-links-pending li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e6edf4;
+  border-radius: 8px;
+  background: #fff;
+}
+/* 两处链接行都压成单行：超长地址走省略号，完整地址看 title。 */
+.catalog-modal .completion-links-url {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  color: #456078;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog-modal .completion-links-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.catalog-modal .completion-links-add input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.catalog-modal .completion-links-add .ant-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.catalog-modal .completion-links-error {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c0392b;
+}
+.catalog-modal .completion-links-recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
 
 /* 设计稿没有只读态（静态稿不可交互）；仓库需要表达「不可写 / 冲突 / 状态已变化」。 */
 .completion-choices > button:disabled {

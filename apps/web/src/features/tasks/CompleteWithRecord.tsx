@@ -2,6 +2,9 @@ import React, { useRef, useState } from "react";
 import { Alert, Button, Input } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecordDraftsQuery } from "@features/record-drafts/record-drafts-query";
+import { TaskLinksPicker } from "@features/external-links/TaskLinksPicker";
+import type { TaskLinksSelection } from "@features/external-links/TaskLinksPicker";
+import { associateLinks } from "@features/external-links/associate-links";
 import {
   ApiError,
   type InpulseApiClient,
@@ -49,12 +52,28 @@ export function CompleteWithRecord({
     }),
     [error, setError] = useState<unknown>(null),
     [busy, setBusyState] = useState(false);
+  // 任务上已有的链接由 TaskLinksPicker 默认全选；勾选结果与自己添加的链接一起上报到
+  // selectedLinks，发布成功后逐条关联到新记录。
+  const [selectedLinks, setSelectedLinks] = useState<string[]>([]);
+  // 其中「自己添加」的那几条：任务上原本没有，发布成功后除记录外还要存进项目链接库
+  // 并关联到来源任务，否则只有这条记录看得到它们（2026-10-09 用户指示）。
+  const [addedLinks, setAddedLinks] = useState<string[]>([]);
+  const [attachIssue, setAttachIssue] = useState<{
+    record: PublishedRecord;
+    urls: string[];
+    taskUrls: string[];
+  } | null>(null);
+  const handleLinksChange = (selection: TaskLinksSelection) => {
+    setSelectedLinks(selection.urls);
+    setAddedLinks(selection.addedUrls);
+  };
   const setBusy = (value: boolean) => {
     setBusyState(value);
     onBusyChange?.(value);
   };
   const retry = useRef<{ signature: string; key: string } | null>(null),
     saving = useRef(false);
+
   const drafts = useRecordDraftsQuery({
     client: api,
     projectId: item.projectId,
@@ -69,6 +88,11 @@ export function CompleteWithRecord({
       (record.taskId === null || record.taskId === item.id),
   );
   const conflict = error instanceof ApiError && error.status === 409;
+  // 没能贴上的链接按去重后的并集提示：同一条可能在记录与任务两侧都失败。
+  const pendingUrls =
+    attachIssue === null
+      ? []
+      : Array.from(new Set([...attachIssue.urls, ...attachIssue.taskUrls]));
   const textFields = fields.filter((field) => field !== "remainingIssues");
   const textReady = textFields.every((field) =>
     field === "title"
@@ -85,6 +109,8 @@ export function CompleteWithRecord({
     !writable ||
     busy ||
     conflict ||
+    // 记录已发布只是链接没贴上：此时只能重试关联或查看记录，不能再提交一次。
+    attachIssue !== null ||
     base.workStatus !== "TODO" ||
     base.lifecycleStatus !== "ACTIVE" ||
     (mode === "draft" ? !selected : !textReady || !leftoversReady);
@@ -107,6 +133,121 @@ export function CompleteWithRecord({
       } else setError(null);
     } catch (e) {
       setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** 记录发布后的收尾：写入缓存、失效相关列表并关闭弹窗。 */
+  async function finish(record: PublishedRecord) {
+    setAttachIssue(null);
+    cache.setQueryData(["published-record", base.projectId, record.id], record);
+    await Promise.all(
+      // task-group / task-group-records：完成并发布记录会同时改变聚合组详情
+      // 的分支状态与「已发布记录」计数，以及组内记录列表（2026-09-22 修）。
+      // modules / features / project-overview：完成会改变功能与模块卡的
+      // 「进行中 / 未开始」档位和概览统计，不失效会停留旧标签（2026-09-24 修）。
+      [
+        "tasks",
+        "task-board",
+        "task-history",
+        "modules",
+        "features",
+        "project-overview",
+        "record-drafts",
+        "task-record-drafts",
+        "record-feed",
+        "activity",
+        "search",
+        "notifications",
+        "my-tasks",
+        "my-task-groups",
+        "task-marks",
+        "task-group",
+        "task-group-records",
+        // 自己添加的链接发布后会关联到任务，任务链接面板要换掉旧清单（2026-10-09）。
+        "task-external-links",
+      ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
+    );
+    onSuccess(record);
+  }
+  /**
+   * 把选中的链接逐条关联到刚落库的记录上：链接是独立资源，服务端不搬运它们，
+   * 与草稿编辑器同一做法（先取记录当前版本，逐条 If-Match，409「已关联」视为成功）。
+   * 任一失败都不回滚已完成的任务与记录，而是返回失败清单交给重试入口；
+   * 其中自己添加的几条另由 attachAddedLinks 关联到来源任务。
+   */
+  async function attachLinks(
+    record: PublishedRecord,
+    urls: readonly string[],
+  ): Promise<{ failed: string[]; rowVersion: number }> {
+    let rowVersion: number, csrfToken: string;
+    try {
+      rowVersion = (await api.listExternalLinks("CHANGE_RECORD", record.id))
+        .rowVersion;
+      csrfToken = (await api.issueCsrfToken()).csrfToken;
+    } catch {
+      return { failed: [...urls], rowVersion: record.rowVersion };
+    }
+    const failed: string[] = [];
+    for (const url of urls) {
+      try {
+        const added = await api.addExternalLink(
+          "CHANGE_RECORD",
+          record.id,
+          { url },
+          {
+            headers: {
+              "x-csrf-token": csrfToken,
+              "If-Match": `"${rowVersion}"`,
+              "Idempotency-Key": createIdempotencyKey("external-link"),
+            },
+          },
+        );
+        rowVersion = added.rowVersion;
+      } catch (e) {
+        if (
+          e instanceof ApiError &&
+          e.status === 409 &&
+          e.code === "EXTERNAL_LINK_ALREADY_ASSOCIATED"
+        )
+          continue;
+        failed.push(url);
+      }
+    }
+    return { failed, rowVersion };
+  }
+  /**
+   * 自己添加的链接在发布成功后补进项目链接库，并跟着关联到来源任务（任务详情
+   * 的「GitHub 链接」面板里能看到）；失败只回清单，不回滚已发布的任务与记录。
+   */
+  async function attachAddedLinks(
+    taskId: number,
+    urls: readonly string[],
+  ): Promise<string[]> {
+    if (urls.length === 0) return [];
+    let csrfToken: string;
+    try {
+      csrfToken = (await api.issueCsrfToken()).csrfToken;
+    } catch {
+      return [...urls];
+    }
+    const failures = await associateLinks(api, "TASK", taskId, urls, csrfToken);
+    return failures.map((failure) => failure.url);
+  }
+  /** 记录已发布但链接没贴全时的重试：只重试失败的那几条（记录与任务各一份）。 */
+  async function retryAttach() {
+    if (attachIssue === null || busy) return;
+    setBusy(true);
+    try {
+      const { failed, rowVersion } = await attachLinks(
+        attachIssue.record,
+        attachIssue.urls,
+      );
+      const record = { ...attachIssue.record, rowVersion };
+      const taskFailed = await attachAddedLinks(base.id, attachIssue.taskUrls);
+      if (failed.length > 0 || taskFailed.length > 0)
+        setAttachIssue({ record, urls: failed, taskUrls: taskFailed });
+      else await finish(record);
     } finally {
       setBusy(false);
     }
@@ -153,36 +294,16 @@ export function CompleteWithRecord({
         },
       });
       if (result.record) {
-        cache.setQueryData(
-          ["published-record", base.projectId, result.record.id],
-          result.record,
-        );
-        await Promise.all(
-          // task-group / task-group-records：完成并发布记录会同时改变聚合组详情
-          // 的分支状态与「已发布记录」计数，以及组内记录列表（2026-09-22 修）。
-          // modules / features / project-overview：完成会改变功能与模块卡的
-          // 「进行中 / 未开始」档位和概览统计，不失效会停留旧标签（2026-09-24 修）。
-          [
-            "tasks",
-            "task-board",
-            "task-history",
-            "modules",
-            "features",
-            "project-overview",
-            "record-drafts",
-            "task-record-drafts",
-            "record-feed",
-            "activity",
-            "search",
-            "notifications",
-            "my-tasks",
-            "my-task-groups",
-            "task-marks",
-            "task-group",
-            "task-group-records",
-          ].map((key) => cache.invalidateQueries({ queryKey: [key] })),
-        );
-        onSuccess(result.record);
+        const urls = selectedLinks;
+        if (urls.length === 0) await finish(result.record);
+        else {
+          const { failed, rowVersion } = await attachLinks(result.record, urls);
+          const record = { ...result.record, rowVersion };
+          const taskFailed = await attachAddedLinks(base.id, addedLinks);
+          if (failed.length > 0 || taskFailed.length > 0)
+            setAttachIssue({ record, urls: failed, taskUrls: taskFailed });
+          else await finish(record);
+        }
       }
       // 完成任务会减少我的未完成数；带记录时正文里的剩余问题同时变成待处理遗留项。
       await invalidateShellCounters(cache);
@@ -384,6 +505,38 @@ export function CompleteWithRecord({
             </section>
           )}
         </>
+      )}
+      {attachIssue === null ? (
+        <TaskLinksPicker
+          api={api}
+          taskId={base.id}
+          disabled={busy}
+          inputId="completion-github-link-input"
+          hint="任务上已有的链接默认带上，展开后可以取消勾选；自己添加的链接发布后会存进项目链接库并关联到这条任务。"
+          onSelectionChange={handleLinksChange}
+        />
+      ) : (
+        <section
+          aria-label="链接关联未完成"
+          className="completion-links-recovery"
+        >
+          <Alert
+            type="warning"
+            title={`记录 ${attachIssue.record.code} 已发布，下列链接尚未关联：${pendingUrls.join("、")}。可以重试，或先查看记录稍后在记录详情页 / 任务链接面板补充。`}
+          />
+          <div className="completion-links-recovery-actions">
+            <Button disabled={busy} onClick={() => void retryAttach()}>
+              重试关联
+            </Button>
+            <Button
+              type="primary"
+              disabled={busy}
+              onClick={() => void finish(attachIssue.record)}
+            >
+              先查看记录
+            </Button>
+          </div>
+        </section>
       )}
       <p>遗留问题最多10000字符，完整正文超出发布容量时保留输入并提示调整。</p>
       <div className="completion-flow-submit-bar">

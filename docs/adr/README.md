@@ -35,7 +35,7 @@
 | [ADR-019](ADR-019.md) | Accepted | Route Registry、权限矩阵与写接口幂等默认值 |
 | [ADR-020](ADR-020.md) | Accepted | 加密逻辑备份与全新主机恢复验证 |
 | [ADR-021](ADR-021.md) | Accepted | 逐响应 nonce CSP |
-| [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型 |
+| [ADR-022](ADR-022.md) | Accepted | ExternalLinks 类型化关联模型；2026-10-08 修订：接受裸 commit SHA 并用项目根仓库补全为 commit 链接；2026-10-09 修订：项目视图读侧聚合任务 / 功能 / 已发布记录上的关联并标注来源；2026-10-09 修订二：聚合只含有效任务（已取消 / 已无效任务的链接不进项目面板） |
 | [ADR-023](ADR-023.md) | Accepted | 一次性认证安全流程的幂等例外（allowlist 经 ADR-031 收缩、ADR-032 调整为 `issueCsrfToken`、`login`、`logout`、`startSsoLogin`、`completeSsoLogin`） |
 | [ADR-024](ADR-024.md) | Accepted | 迭代记录作废与可审计恢复状态机 |
 | [ADR-025](ADR-025.md) | Accepted | V1 采用 PGroonga 实现中文与标识符搜索 |

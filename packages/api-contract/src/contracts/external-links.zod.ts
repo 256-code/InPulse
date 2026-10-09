@@ -13,6 +13,13 @@ export const externalLinkTargetPathSchema = z
   })
   .strict()
   .meta({ id: "ExternalLinkTargetPath" });
+export const externalLinkSourceSchema = z
+  .object({
+    targetType: externalLinkTargetTypeSchema,
+    targetId: id,
+    title: z.string().max(500),
+  })
+  .strict();
 export const externalLinkItemSchema = z
   .object({
     id,
@@ -25,6 +32,10 @@ export const externalLinkItemSchema = z
     externalNumber: z.string().nullable(),
     externalSha: z.string().nullable(),
     releaseTag: z.string().nullable(),
+    sources: z
+      .array(externalLinkSourceSchema)
+      .optional()
+      .describe("项目目标聚合出的全部关联来源；其他目标不返回"),
   })
   .strict()
   .meta({ id: "ExternalLinkItem" });
@@ -54,12 +65,19 @@ export const externalLinkSchemas = {
   ExternalLinkRequest: {
     schema: z
       .object({
-        url: z.string().trim().min(1).max(2048),
+        url: z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .describe(
+            "GitHub HTTPS 链接；或项目根仓库下的 commit SHA（7~64 位十六进制），由服务端补全为 commit 链接",
+          ),
         isRootRepository: z.boolean().optional(),
       })
       .strict()
       .meta({ id: "ExternalLinkRequest" }),
-    summary: "用户提交的GitHub链接",
+    summary: "用户提交的GitHub链接或commit SHA",
     sensitiveFieldPaths: [],
   },
   ExternalLinkItem: {

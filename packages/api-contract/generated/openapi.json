@@ -1739,7 +1739,7 @@
     "/external-links/{targetType}/{targetId}": {
       "get": {
         "operationId": "listExternalLinks",
-        "summary": "读取当前有权目标的GitHub关联",
+        "summary": "读取当前有权目标的GitHub关联；项目目标聚合其有效任务、功能与已发布记录上的关联并标注来源（取消或无效任务不聚合）",
         "responses": {
           "200": {
             "description": "成功",
@@ -1876,7 +1876,7 @@
       },
       "post": {
         "operationId": "addExternalLink",
-        "summary": "管理目标的当前GitHub关联并保留实体和审计",
+        "summary": "新增目标的GitHub关联（接受完整链接或项目根仓库下的commit SHA）并保留实体和审计",
         "responses": {
           "200": {
             "description": "成功",
@@ -1974,7 +1974,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "2.0.0",
+          "idempotencyContractVersion": "2.1.0",
           "idempotencyFingerprintVersion": "1.1.0",
           "behaviorHeaders": [
             "If-Match"
@@ -15801,6 +15801,39 @@
               "string",
               "null"
             ]
+          },
+          "sources": {
+            "description": "项目目标聚合出的全部关联来源；其他目标不返回",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "targetType": {
+                  "type": "string",
+                  "enum": [
+                    "PROJECT",
+                    "FEATURE",
+                    "TASK",
+                    "CHANGE_RECORD"
+                  ]
+                },
+                "targetId": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "targetType",
+                "targetId",
+                "title"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -15889,7 +15922,8 @@
           "url": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2048
+            "maxLength": 2048,
+            "description": "GitHub HTTPS 链接；或项目根仓库下的 commit SHA（7~64 位十六进制），由服务端补全为 commit 链接"
           },
           "isRootRepository": {
             "type": "boolean"

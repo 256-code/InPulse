@@ -45,6 +45,49 @@ it("retains same semantic key after uncertain failure", async () => {
   );
   expect(add.mock.calls[0]![3].headers["If-Match"]).toBe('"2"');
 });
+it("recognizes a bare commit SHA and previews the root-repository expansion", async () => {
+  mount({
+    listExternalLinks: vi.fn().mockResolvedValue(empty),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+    addExternalLink: vi.fn().mockResolvedValue({ rowVersion: 3 }),
+  } as unknown as InpulseApiClient);
+  await openAddForm();
+  fireEvent.change(screen.getByLabelText("GitHub URL"), {
+    target: { value: "408ADE2023DBDCAAE8FE7BFED7BDF2D759D71695" },
+  });
+  await waitFor(() =>
+    expect(screen.getByText(/识别为：Commit 408ade2023db/)).toBeVisible(),
+  );
+  expect(screen.getByText(/将用项目根仓库补全为链接/)).toBeVisible();
+});
+
+it("explains the missing root repository when the server rejects a commit SHA", async () => {
+  mount({
+    listExternalLinks: vi.fn().mockResolvedValue(empty),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+    addExternalLink: vi.fn().mockRejectedValue(
+      new ApiError(422, {
+        code: "EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY",
+        message: "no root",
+        details: {},
+        requestId: "r",
+      }),
+    ),
+  } as unknown as InpulseApiClient);
+  await openAddForm();
+  fireEvent.change(screen.getByLabelText("GitHub URL"), {
+    target: { value: "408ade2023dbdcaae8fe7bfed7bdf2d759d71695" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "确认添加" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        "尚未设置项目根仓库，无法把 commit SHA 补全为链接；请先粘贴完整链接或设置项目根仓库。",
+      ),
+    ).toBeVisible(),
+  );
+});
+
 it("409 refresh failure and closing never enable stale submission", async () => {
   const add = vi
     .fn()
@@ -266,4 +309,67 @@ it("pins the project root repository above the link list for project targets", a
   expect(list).not.toBeNull();
   expect(list!.querySelectorAll("li")).toHaveLength(1);
   expect(list!.textContent).toContain("a/root#7");
+});
+
+it("marks aggregated project links with their sources and hides remove on foreign sources", async () => {
+  const api = {
+    listExternalLinks: vi.fn().mockResolvedValue({
+      projectId: 3,
+      rowVersion: 5,
+      writable: true,
+      items: [
+        {
+          id: 2,
+          projectId: 3,
+          normalizedUrl: "https://github.com/a/root/pull/7",
+          kind: "PULL_REQUEST",
+          label: "a/root#7",
+          repository: "a/root",
+          externalNumber: "7",
+          externalSha: null,
+          releaseTag: null,
+          sources: [{ targetType: "PROJECT", targetId: 3, title: "测试项目" }],
+        },
+        {
+          id: 4,
+          projectId: 3,
+          normalizedUrl:
+            "https://github.com/a/root/commit/408ade2023dbdcaae8fe7bfed7bdf2d759d71695",
+          kind: "COMMIT",
+          label: "Commit 408ade2023db",
+          repository: "a/root",
+          externalNumber: null,
+          externalSha: "408ade2023dbdcaae8fe7bfed7bdf2d759d71695",
+          releaseTag: null,
+          sources: [
+            { targetType: "TASK", targetId: 21, title: "登录企业微信" },
+            { targetType: "CHANGE_RECORD", targetId: 33, title: "发布验证" },
+          ],
+        },
+      ],
+    }),
+    issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "x" }),
+  } as unknown as InpulseApiClient;
+  render(
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <QueryClientProvider client={new QueryClient()}>
+        <ExternalLinksPanel targetType="PROJECT" targetId={3} client={api} />
+      </QueryClientProvider>
+    </ConfigProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "GitHub 链接" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText("任务「登录企业微信」、记录「发布验证」"),
+    ).toBeVisible(),
+  );
+  expect(screen.getByText("本项目")).toBeVisible();
+  // 解除只在仍有项目级关联时出现；任务 / 功能 / 记录来源须回到各自入口。
+  expect(screen.getAllByRole("button", { name: /^解除 / })).toHaveLength(1);
+  expect(
+    screen.queryByRole("button", { name: "解除 Commit 408ade2023db" }),
+  ).toBeNull();
+  expect(
+    screen.getByText("来自任务 / 功能 / 迭代记录的链接请在各自入口解除关联。"),
+  ).toBeVisible();
 });

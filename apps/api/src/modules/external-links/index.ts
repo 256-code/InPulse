@@ -1,4 +1,9 @@
-export { InvalidGitHubUrlError, normalizeGitHubUrl } from "./github-url.js";
+export {
+  InvalidGitHubUrlError,
+  normalizeGitHubUrl,
+  parseCommitShaInput,
+  commitUrlForRepository,
+} from "./github-url.js";
 export {
   ExternalLinksQueryPort,
   ExternalLinksCommandPort,

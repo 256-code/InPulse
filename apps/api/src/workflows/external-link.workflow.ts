@@ -33,6 +33,8 @@ import { FeatureQueryPort } from "../modules/features/index.js";
 import {
   ExternalLinksQueryPort,
   ExternalLinksCommandPort,
+  commitUrlForRepository,
+  parseCommitShaInput,
 } from "../modules/external-links/index.js";
 import { AuditWritePort } from "../audit/index.js";
 import { ActivityWritePort } from "../modules/activity/index.js";
@@ -192,7 +194,11 @@ export class ExternalLinkWorkflow {
       projectId: target.projectId,
       rowVersion: target.rowVersion,
       writable,
-      items: await this.links.list(tx, target.projectId, type, id),
+      // 项目视图是聚合读：项目级关联 + 有效任务 / 功能 / 已发布记录上的关联，并标注来源。
+      items:
+        type === "PROJECT"
+          ? await this.links.listProjectLibrary(tx, target.projectId)
+          : await this.links.list(tx, target.projectId, type, id),
     };
   }
   async replay(
@@ -212,6 +218,30 @@ export class ExternalLinkWorkflow {
     )
       throw missing();
   }
+  /**
+   * 允许直接粘贴裸 commit SHA：用项目根仓库补全为 commit 链接（2026-10-09 用户指示）。
+   * 非 SHA 输入原样返回，继续走既有的 GitHub URL 规范化与校验；
+   * 是 SHA 但项目没有可用根仓库时按 422 拒绝，不落库任何内容。
+   */
+  private async resolveSubmittedUrl(
+    tx: TransactionContext,
+    projectId: number,
+    raw: string,
+  ): Promise<string> {
+    const sha = parseCommitShaInput(raw);
+    if (sha === null) return raw;
+    const url = commitUrlForRepository(
+      await this.links.findRootRepository(tx, projectId),
+      sha,
+    );
+    if (url === null)
+      throw new ExternalLinkError(
+        422,
+        "EXTERNAL_LINK_SHA_REQUIRES_ROOT_REPOSITORY",
+        "尚未设置项目根仓库，无法把 commit SHA 补全为链接",
+      );
+    return url;
+  }
   async mutate(
     tx: TransactionContext,
     actor: number,
@@ -229,6 +259,9 @@ export class ExternalLinkWorkflow {
     if ((await reauthorize()) !== actor)
       throw new ExternalLinkError(401, "SESSION_REQUIRED", "登录状态已失效");
     const adding = "url" in input;
+    const submittedUrl = adding
+      ? await this.resolveSubmittedUrl(tx, target.projectId, input.url)
+      : null;
     const previousRoot =
       type === "PROJECT"
         ? ((await this.links.list(tx, target.projectId, type, id)).find(
@@ -242,7 +275,7 @@ export class ExternalLinkWorkflow {
           type,
           id,
           actor,
-          input.url,
+          submittedUrl!,
           input.isRootRepository,
         )
       : await this.linkCommands.remove(
