@@ -44,7 +44,7 @@ const projectItem: AuditLogItem = {
   targetId: "7",
 };
 
-const readTrailItem: AuditLogItem = {
+const historicalReadTrailItem: AuditLogItem = {
   ...systemItem,
   sequenceNo: 13,
   action: "AUDIT_LOG_READ",
@@ -160,17 +160,72 @@ function pickSelectOption(label: string, optionTitle: string) {
 }
 
 describe("F-08 audit page", () => {
-  it("reads the SYSTEM chain by default and renders raw audit rows", async () => {
+  it("默认读取「全部记录（所有链）」并渲染原始审计行（ADR-061）", async () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
     expect(await screen.findByText("创建用户")).toBeInTheDocument();
-    expect(getAuditLogs.mock.calls[0]?.[0]).toEqual({ limit: 50 });
+    expect(getAuditLogs.mock.calls[0]?.[0]).toEqual({
+      chain: "all",
+      limit: 50,
+    });
+    expect(screen.getByText("当前链：全部记录（所有链）")).toBeInTheDocument();
     expect(screen.getByText("邵昱宇")).toBeInTheDocument();
     expect(screen.getByText("对象：用户 Bob")).toBeInTheDocument();
     expect(screen.getByText("第 12 条 · 系统链")).toBeInTheDocument();
     expect(screen.queryByText("加载更多")).not.toBeInTheDocument();
+  });
+
+  it("可切回单链读取：SYSTEM 链不再携带 chain 参数", async () => {
+    const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    await screen.findByText("创建用户");
+    pickSelectOption("审计链", "SYSTEM 链（系统级）");
+
+    // 缺省语义与改动前一致：不传 projectId / chain 即读 SYSTEM 链。
+    await waitFor(() =>
+      expect(getAuditLogs).toHaveBeenLastCalledWith(
+        { limit: 50 },
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByText("当前链：SYSTEM 链")).toBeInTheDocument();
+  });
+
+  it("动作候选不再列出已下线动作码，历史行仍按中文文案渲染（ADR-061）", async () => {
+    const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    await screen.findByText("创建用户");
+    const codes = Array.from(
+      document.querySelectorAll<HTMLOptionElement>(
+        "#audit-action-options option",
+      ),
+    ).map((option) => option.value);
+    // 十个已下线动作码 + 仅测试写入的 SYSTEM_TEST 都不再是筛选候选。
+    for (const retired of [
+      "project.archive",
+      "project.archive.request",
+      "project.archive.reject",
+      "module.archive",
+      "module.restore",
+      "feature.archive",
+      "feature.restore",
+      "task.archive",
+      "task.unarchive",
+      "AUDIT_LOG_READ",
+      "SYSTEM_TEST",
+    ]) {
+      expect(codes).not.toContain(retired);
+    }
+    // 仍在产生记录的动作码必须保留。
+    expect(codes).toContain("project.create");
+    expect(codes).toContain("task.create");
+    expect(codes).toContain("project.purge");
   });
 
   it("labels entity targets with the code and name carried by the payload", async () => {
@@ -195,22 +250,23 @@ describe("F-08 audit page", () => {
     expect(screen.queryByText("project.purge")).not.toBeInTheDocument();
   });
 
-  it("hides read-trail rows by default and reveals them on demand", async () => {
+  it("renders historical AUDIT_LOG_READ rows as ordinary rows（ADR-060）", async () => {
     const getAuditLogs = vi
       .fn()
-      .mockResolvedValue(page([readTrailItem, systemItem]));
+      .mockResolvedValue(page([historicalReadTrailItem, systemItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
 
-    expect(await screen.findByText("创建用户")).toBeInTheDocument();
-    expect(screen.queryByText("读取审计日志")).not.toBeInTheDocument();
-    expect(screen.getByText("本页已隐藏 1 条读取留痕")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("隐藏读取留痕"));
+    // 读取留痕已下线：历史行照常渲染，页面上不再有隐藏开关与隐藏计数。
     expect(await screen.findByText("读取审计日志")).toBeInTheDocument();
-    expect(
-      screen.queryByText("本页已隐藏 1 条读取留痕"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("创建用户")).toBeInTheDocument();
+    expect(screen.queryByLabelText("隐藏读取留痕")).not.toBeInTheDocument();
+    expect(screen.queryByText(/本页已隐藏/)).not.toBeInTheDocument();
+    expect(screen.queryByText("显示读取留痕")).not.toBeInTheDocument();
+    expect(getAuditLogs.mock.calls[0]?.[0]).toEqual({
+      chain: "all",
+      limit: 50,
+    });
   });
 
   it("switches to a project chain and sends the project scope", async () => {
@@ -221,7 +277,7 @@ describe("F-08 audit page", () => {
     await screen.findByText("更新项目");
     pickSelectOption("审计链", "PROJECT:" + project.id + " · " + project.name);
 
-    // 切换审计对象开启一次新查看：不带 readTrail，服务端写读取留痕（ADR-042）。
+    // 切换审计对象只影响查询参数，不再产生任何留痕语义（ADR-060）。
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
         { projectId: 7, limit: 50 },
@@ -311,8 +367,6 @@ describe("F-08 audit page", () => {
           actorIds: [1],
           // 表单里填的 08:00 是北京时间，落到 UTC 是前一天 00:00。
           from: "2026-09-01T00:00:00.000Z",
-          // 筛选属于同一次查看，不写新留痕（ADR-042）。
-          readTrail: "false",
         }),
         expect.anything(),
       ),
@@ -356,9 +410,7 @@ describe("F-08 audit page", () => {
     expect(screen.getByText("vitest-agent")).toBeInTheDocument();
     expect(screen.getByText("b".repeat(64))).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "审计日志不允许删除；原始快照仅系统管理员可见，读取本身已留痕。",
-      ),
+      screen.getByText("审计日志不允许删除；原始快照仅系统管理员可见。"),
     ).toBeInTheDocument();
   });
 
@@ -378,8 +430,7 @@ describe("F-08 audit page", () => {
     await user.click(await screen.findByRole("button", { name: "加载更多" }));
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
-        // 分页是同一次查看的延续，不带新留痕（ADR-042）。
-        { cursor: "cursor-1", limit: 50, readTrail: "false" },
+        { chain: "all", cursor: "cursor-1", limit: 50 },
         expect.anything(),
       ),
     );

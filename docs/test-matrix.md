@@ -844,18 +844,18 @@ F-23 合并到主任务 / F-24 解除合并 / F-25 聚合组详情页的前端�
 
 排障记录：本地 `app` 库缺 `0006_leftover_search_entity.sql`（PR #104 引入）导致所有带遗留内容的记录发布返回 500 `INTERNAL_ERROR`（`search_projection_entity_type_check` 不含 `LEFTOVER`）；以 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app` 执行 `pnpm db:migrate` 应用 0006 后，原先稳定失败的 9 例复跑 10/10 通过。该问题是本地环境迁移滞后，与 C-2 改动无关（CI 一次性建库执行全部迁移）。未运行：GitHub Actions（本地时点；PR #119 的 CI 后续已通过，run 34579633422）、`pnpm test:integration` 与 `pnpm test:search:db`（无后端与搜索改动；后者另要求 `max_connections >= 150`，按既定决定未纳入 CI）、`pnpm db:test` / `pnpm test`（同上）。新增 / 更新的 E2E 断言需非作者人工评审。
 
-## F-08 原始审计读取留痕（A，2026-09-11 本地落库）
+## F-08 原始审计读取留痕（A，2026-09-11 本地落库；2026-10-09 按 [ADR-060](adr/ADR-060.md) 修订）
 
-`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取必须留痕。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。同一请求内先用业务连接向 SYSTEM 链追加 `AUDIT_LOG_READ` 留痕（含 filters/returnedCount/hasMore 与请求元数据，不含审计正文），留痕写失败则不返回读取结果。留痕按「查看」而不是「每次请求」计数（[ADR-042](adr/ADR-042.md)）：只有开启一次新查看的请求（进入审计页或切换审计对象）才写，同一次查看内的筛选、重置、重试与分页不写新留痕（带游标的分页由服务端排除，延续请求以 `readTrail=false` 声明）。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
+`GET /api/v1/audit-logs`（`getAuditLogs`）交付 F-08 步骤 4：原始审计读取（2026-10-09 起读取不写留痕，[ADR-060](adr/ADR-060.md)）。要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证；GET 只读路径不强制同步 CSRF、不使用幂等键）；不传 `projectId` 读 SYSTEM 链、传则读 `PROJECT:<id>` 链。查询经独立只读 `audit_reader` 连接（`AUDIT_DB_USER` 默认 `audit_reader`、`AUDIT_DATABASE_URL(_FILE)`，与业务连接分离，惰性建池、配置缺失或越界在首次读取 fail closed）。读取**不写审计**（2026-10-09 起，[ADR-060](adr/ADR-060.md) 替代 [ADR-042](adr/ADR-042.md)）：读取、筛选、重置、重试、分页与切换审计对象都不产生 `AUDIT_LOG_READ`，`AuditQueryService` 不再持有 `AuditWritePort`；契约的 `readTrail` 参数已删除，继续携带旧参数的请求返回 422 `VALIDATION_FAILED`（Schema 保持 `.strict()`）。历史 `AUDIT_LOG_READ` 行保留在数据库中并按普通行读取，前端不再提供「隐藏读取留痕」开关。`cursor` 为服务端 HMAC 签名、绑定操作者与查询指纹（含链、过滤器与 limit）、TTL 15 分钟；`limit` 默认 50、最大 100；`from`/`to` 为半开区间 `[from, to)` 且必须带时区。远端 WORM 归档与每日加密明细导出（F-08 步骤 6）已由 A2 交付，见本节末尾的「F-08 审计远端归档」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链并留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后在 SYSTEM 链恰有一条 `AUDIT_LOG_READ`，`targetId=SYSTEM`，payload 含 `returnedCount`/`hasMore` 与 filters，不含审计正文 | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 7/7，2026-09-11） |
+| F08-READ-API-001 | HTTP + PostgreSQL | 管理员读取 SYSTEM 链不写留痕 | 管理员返回 `AuditLogPage`（SYSTEM 链、64 位十六进制 `prevHash`/`recordHash`、ISO 时间）；同一请求后 SYSTEM 链 `AUDIT_LOG_READ` 行数不变（ADR-060） | 本地通过（`apps/api/test/audit-logs.integration.test.ts` 8/8，2026-10-09） |
 | F08-READ-API-002 | HTTP + PostgreSQL | 身份与管理员门禁 | 匿名 401 `ADMIN_SESSION_REQUIRED`；普通成员 403 `ADMIN_REQUIRED` 且响应体不含任何审计内容；只读路径不强制同步 CSRF，完整管理员 Session 即可读取（ADR-031 起不再要求 TOTP 重认证） | 同上 |
 | F08-READ-API-003 | HTTP + PostgreSQL | 筛选与签名游标分页 | `action` 精确过滤 + `limit` 分页不重叠、无遗漏；`actorIds` 为英文逗号分隔的 1..100 个正整数（单值、多值均可，重复 ID 返回 422 `VALIDATION_FAILED`，无匹配返回空页且 `hasMore=false`）；游标跨查询（不同 action 或不同链）返回 422 `VALIDATION_FAILED`；非法游标、`from > to`、`limit=0` 均 422 | 同上 |
 | F08-READ-API-004 | HTTP + PostgreSQL | 项目链隔离 | `projectId` 查询返回 `PROJECT:<id>` 链数据且不跨链（SYSTEM 链条目不出现在结果） | 同上 |
-| F08-READ-API-005 | HTTP + PostgreSQL | 留痕按「查看」计数 | 带 `readTrail=false` 的筛选请求不写新留痕；非分页且未声明延续的请求恰写一条；带签名游标的分页即使显式传 `readTrail=true` 也不写；`readTrail` 取枚举外取值返回 422 | 本地通过（同上 8/8，2026-09-23） |
-| F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人为可搜索多选并按 `actorIds` 升序去重后以逗号提交、不选即全体且省略该参数、`from/to` 由带可见标签的 `datetime-local` 换算为带时区 ISO，`from >= to` 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染 | 本地通过（`audit-query.test.tsx` 6 例、`AuditLogPageView.test.tsx` 8 例，2026-09-23 更新为多操作人与时间字段标签口径） |
+| F08-READ-API-005 | HTTP + PostgreSQL | 读取不写审计与旧参数被拒（ADR-060） | 首读、筛选、重置、分页（带签名游标）与切换链前后 SYSTEM 链 `AUDIT_LOG_READ` 行数均不变；query 携带已删除的 `readTrail` 参数返回 422 `VALIDATION_FAILED`（Schema `.strict()` 未放宽） | 本地通过（同上 8/8，2026-10-09） |
+| F08-READ-WEB-001 | 前端单元（jsdom） | `/audit` 链选择、筛选与签名游标分页 | 默认读取 SYSTEM 链并渲染原始行（操作人、动作、对象、链序号与项目归属）；切换到项目链带 `projectId`；筛选只有点击「查询」才提交（动作码 trim、操作人为可搜索多选并按 `actorIds` 升序去重后以逗号提交、不选即全体且省略该参数、`from/to` 由带可见标签的 `datetime-local` 换算为带时区 ISO，`from >= to` 本地拦截且不发请求）；`hasMore` 时「加载更多」用上一页 `nextCursor` 续读并合并渲染；续读请求只带 `{ cursor, limit }`（永不携带 `readTrail`，ADR-060）；历史 `AUDIT_LOG_READ` 行按普通行渲染，页面不出现「隐藏读取留痕」开关、「本页已隐藏 N 条读取留痕」提示与「显示读取留痕」按钮 | 本地通过（`audit-query.test.tsx` / `AuditLogPageView.test.tsx` 2 文件 19 例，2026-10-09 按 ADR-060 更新） |
 | F08-READ-WEB-002 | 前端单元（jsdom） | 错误映射 | 403 `ADMIN_REQUIRED` 展示管理员权限文案并保留重试入口；401/403/422/429 与未知失败映射为安全文案、不泄露服务端 `message`；行内「原始快照」展示 `eventPayload` JSON、前后哈希与请求元数据；`/audit` 路由 `requiresAdmin` 且侧栏入口仅管理员可见（`AppLayout.test.tsx`） | 同上 |
 
 本地实际执行（2026-09-11）：API `test:unit` 66 文件 343 例、API `test:integration` 48 文件 415 例；`pnpm lint`、`format:check`、`typecheck`（6 项目）、`contract:drift`（5 生成物一致）、`contract:validate`（95 条路由）、`permissions:check`（95/95）、`check:deps`、`check:frontend:boundaries`、`check:secrets`、`check:deploy:test`、`db:migrations:check` 与公共 registry 高等级审计（无已知漏洞）均通过；GitHub Actions 已通过（PR #106，run 34560879433）。
@@ -1206,7 +1206,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | F08-E2E-001 | 浏览器 E2E | 普通成员访问审计页 | 普通成员打开 `/audit` 命中 `admin-forbidden` 空态与「无权访问」「此区域仅限系统管理员访问。」，页面不展示任何审计内容 | 本地通过（`apps/e2e/tests/audit.spec.ts` 2/2，2026-09-12） |
-| F08-E2E-002 | 浏览器 E2E | 管理员读取原始审计 | 管理员进入 `/audit` 直接读取原始审计（ADR-031 起不再要求 TOTP 重认证）；动作码 `AUDIT_LOG_READ` 过滤命中「链 SYSTEM / 用户 #id / 用户操作」；行内「原始快照」弹窗展示 `eventPayload`（含 `returnedCount`）并以 Escape 关闭；切到 `PROJECT:<id>` 链命中 `project.create` 行与 `PROJECT #id` 归属；操作人下拉默认占位为「全体操作人（可搜索多选）」，展开后可搜索当前用户目录并选中成员，点「查询」后的请求同时带 `action` 与 `actorIds=<用户 ID>`，重置后回到全体占位；开始/结束时间各带可见标签 | 本地通过（同上 2/2，2026-09-23 更新为多选操作人与时间字段标签口径） |
+| F08-E2E-002 | 浏览器 E2E | 管理员读取原始审计（ADR-060 新锚点） | 管理员进入 `/audit` 直接读取原始审计（ADR-031 起不再要求 TOTP 重认证）；页头说明含「读取不会在审计链留下记录」，页面无「隐藏读取留痕」开关、「已隐藏 N 条」提示与「显示读取留痕」按钮；锚点改用测试自建项目的 `PROJECT:<id>` 链（原 SYSTEM 链锚点依赖留痕写入，ADR-060 后不再存在），命中 `project.create` 行与 `PROJECT #id` 归属；操作人下拉默认占位为「全体操作人（可搜索多选）」，选中成员后点「查询」的请求同时带 `action` 与 `actorIds=<用户 ID>`，重置后回到全体占位；行内「原始快照」弹窗展示 `eventPayload` 并以 Escape 关闭；开始/结束时间各带可见标签 | 本地通过（同上 2/2，2026-10-09 按 ADR-060 更换锚点并删除隐藏入口断言） |
 
 本地实际执行（2026-09-12，PostgreSQL 18.6 + PGroonga，`E2E_API_PORT=3111` / `E2E_WEB_PORT=4181`）：`pnpm --filter @inpulse/e2e typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 通过；`pnpm --filter @inpulse/api build` 后全量 `pnpm test:e2e` 53/53（9.3 分钟，其中 `audit.spec.ts` 两例 8.1s）通过；`pnpm test:unit`（database 15、canonical-json 5、api-contract 16 文件 98 例、web 69 文件 340 例、ops 8 文件 52 例、api 68 文件 351 例）与 `pnpm test:web`（69 文件 340 例）通过；`pnpm check:deps`（656 文件）、`pnpm check:secrets`（961 文件）、`pnpm check:docs`（75 个 Markdown）通过；公共 registry `pnpm audit --registry=https://registry.npmjs.org --audit-level=high` 返回无已知漏洞。
 
@@ -1214,7 +1214,7 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 
 ### 2026-09-23 审计筛选 UI 改造（操作人多选 + 时间字段标签）
 
-用户反馈「看不出来哪个代表开始时间与结束时间」，且操作人筛选要像新建项目的人员选择那样可搜索多选、不选即全体成员。本轮把契约筛选参数由单值 `actorId` 改为 `actorIds`（[`audit.zod.ts`](../packages/api-contract/src/contracts/audit.zod.ts)：`z.preprocess` 逗号拆分 + `z.array(z.coerce.number().int().positive()).min(1).max(100)` + 去重 `refine`；省略即全体），服务端 `audit-query.service.ts` 的查询指纹、`AUDIT_LOG_READ` 留痕载荷（`filters.actorIds`）与 SQL 过滤（`actor_id = ANY(${ids}::integer[])`）同步，前端 `AuditLogPageView.tsx` 改用 `CalmSelect appearance="member" multiple`（选项来自既有用户目录只读路由）并给两个 `datetime-local` 各加可见标签（开始时间 / 结束时间）。留痕「查看」粒度语义（[ADR-042](adr/ADR-042.md)）未变：筛选请求仍带 `readTrail=false`，不新增留痕。
+用户反馈「看不出来哪个代表开始时间与结束时间」，且操作人筛选要像新建项目的人员选择那样可搜索多选、不选即全体成员。本轮把契约筛选参数由单值 `actorId` 改为 `actorIds`（[`audit.zod.ts`](../packages/api-contract/src/contracts/audit.zod.ts)：`z.preprocess` 逗号拆分 + `z.array(z.coerce.number().int().positive()).min(1).max(100)` + 去重 `refine`；省略即全体），服务端 `audit-query.service.ts` 的查询指纹、`AUDIT_LOG_READ` 留痕载荷（`filters.actorIds`，该留痕与整个机制已由 [ADR-060](adr/ADR-060.md) 于 2026-10-09 删除）与 SQL 过滤（`actor_id = ANY(${ids}::integer[])`）同步，前端 `AuditLogPageView.tsx` 改用 `CalmSelect appearance="member" multiple`（选项来自既有用户目录只读路由）并给两个 `datetime-local` 各加可见标签（开始时间 / 结束时间）。留痕「查看」粒度语义（[ADR-042](adr/ADR-042.md)）当时未变：筛选请求带 `readTrail=false`、不新增留痕（该参数与留痕机制已由 [ADR-060](adr/ADR-060.md) 于 2026-10-09 整体删除）。
 
 本地验证（2026-09-23）：契约 5 产物 `generate`/`drift` 与 `validate`（108 条路由）、`permissions:check`（108/108）、`lint`、`format:check`、8 个 workspace `typecheck` 通过；API 单测 66 文件 368 例、契约单测 16 文件 100 例、Web 单测 85 文件 582 例通过；真库 `apps/api/test/audit-logs.integration.test.ts` 8/8（新增「actorIds 多操作人过滤、去重约束与留痕载荷」）；`apps/e2e/tests/audit.spec.ts` 2/2 与 `tests/activity.spec.ts` 1/1（E2E 夹具已由 `global-teardown` 自动物理清理，SYSTEM 链头回退）。
 
@@ -4084,7 +4084,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 - 记录字段只有 `projectId` / `code` / `name` / `deletedAt` / `deletedBy{id,name}`：不返回描述、状态、成员、模块、任务、统计，也不提供恢复入口；删除人取自 `projects.deleted_by` JOIN `app.users` 实时取名，不落冗余快照。该路由同时是动态页渲染删除行的项目 ID 与项目名来源。
 - 排序固定 `deleted_at DESC, id DESC`，签名游标（`TimeCursorService` 命名空间 `PROJECT_DELETION`，TTL 15 分钟，绑定操作者），`limit` 1～50、默认 20；非法游标与换人使用统一 422 `PROJECT_DELETION_VALIDATION_FAILED`，`limit` 越界由契约校验返回 422 `VALIDATION_FAILED`。
-- 只读路由：无 CSRF、无幂等键、无 `If-Match`、不写审计（读取留痕仍只属于 `getAuditLogs`，ADR-042），响应 `Cache-Control: no-store`；错误分支统一 `{ code, message, details, requestId }` 且 `X-Request-Id` 与 `body.requestId` 一致。
+- 只读路由：无 CSRF、无幂等键、无 `If-Match`、不写审计（[ADR-060](adr/ADR-060.md) 起审计读取一律不写审计），响应 `Cache-Control: no-store`；错误分支统一 `{ code, message, details, requestId }` 且 `X-Request-Id` 与 `body.requestId` 一致。
 - 动态流放行（本次修订）：`ActivityQueryService` 先取 `AuthorizedProjectScope`，项目在范围内时按普通项目读；不在范围内但 `ProjectAccessQueryPort.isDeletedProject(projectId)` 为真时放行并**收窄到只剩 `PROJECT_DELETED` 投影行**（`ActivityProjectionReader.read` 新增可选 `activityTypes`）。删除前的历史与 `ADMIN_ONLY` 行不得借该例外回放，`includeAdminOnly` 不适用于该例外；「不存在」「无权访问」「已移除成员」仍是 404。
 - 前端：删除行与其它动态共用日期分组、时间轴、头像与行尾「原始快照」，且**不**提供「查看对象」跳转（避免落到已删除项目的死链）；已删除项目不在项目列表里，取数范围与项目名映射由 `listProjectDeletions` 第一页补齐，仅在「全部项目」视图生效（锁定单项目时不请求、不出现删除行）；原「项目删除记录」独立区块与 `activity-deletions-*` 样式整体下线。审计页把已删除项目的 `PROJECT:<id>` 链列为选项（`已删除` 徽章 + 「<删除人> 删除」说明），历史行与快照的项目名按记录还原，不再退化为「项目 #id」。
 
@@ -5053,7 +5053,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 - **动作行 6 个按钮收到 2 个**：只留「编辑任务」与状态主操作（`TODO` = 完成任务 / `DONE` = 重新打开 / `CANCELED` = 恢复任务）；主按钮仍靠既有的 `.primary-button { margin-left: auto }` 顶到最右，不新增分隔样式。
 - **任务级操作搬进「编辑任务」页脚最左**：「取消任务」/「合并到主任务」只在 `workStatus === "TODO"` 时渲染，沿用「编辑项目 → 删除项目」的页脚最左位置（ADR-049 同一约定）。样式为新增的 `.tint-danger-button`（`#fdecea` 底 / `#f7d5d2` 边 / `#bf4a45` 字 + `alert` 图标，不用 `✕`，避免与右上角关闭按钮雷同）与 `.tint-violet-button`（`#eeeaff` 底 / `#ddd6f8` 边 / `#6b58c4` 字 + `gitMerge`）；实底主色仍只留给「保存 / 完成任务」。开放条件与详情动作行同口径（`writable` 且任务 `ACTIVE`；功能页里的模块级任务不可写），沿用编辑表单既有的 `editReadOnly` 门禁，不新增权限判断。
 - **不出现弹窗套弹窗**：编辑弹窗打开时详情弹窗已卸载（`open()` 清掉 `selectedId`），两枚按钮先 `handOffToDetail()` 收起表单并重新打开详情弹窗，再触发各自原有的确认流程（`openStatus("CANCEL")` / `setMergeInto(true)`）；`saving` / `reloading` 期间不接管，避免把没保存的输入丢掉。
-- **同步更新的既有用例**：`apps/web/src/features/tasks/TasksPanel.test.tsx` 的 F-23 改为「详情 → 编辑任务 → 合并到主任务」；`apps/e2e/tests/task-groups.spec.ts` 两处合并入口同改；`apps/e2e/tests/task-status.spec.ts` F-16 闭环里的「取消任务」一步改走编辑页脚；`apps/e2e/tests/leftover-task.spec.ts` 原有 `/取\s*消/` 会同时命中新增的「取消任务」，收紧为 `/^取\s*消$/`。
+- **同步更新的既有用例**：`apps/web/src/features/tasks/TasksPanel.test.tsx` 的 F-23 改为「详情 → 编辑任务 → 合并到主任务」；`apps/e2e/tests/task-groups.spec.ts` 两处合并入口同改；`apps/e2e/tests/task-status.spec.ts` F-16 闭环里的「取消任务」一步改走编辑页脚（该步已由 [ADR-058](adr/ADR-058.md) 的「删除任务」取代，见下方 ADR-058 小节）；`apps/e2e/tests/leftover-task.spec.ts` 原有 `/取\s*消/` 会同时命中新增的「取消任务」，收紧为 `/^取\s*消$/`。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -5139,11 +5139,11 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | --- | --- | --- | --- | --- |
 | TASK-DELETE-CONTRACT-001 | 契约门禁 | 两条新路由与生成物一致 | `contract:generate` 后 `contract:drift` 5 产物无漂移；`contract:validate` **103 条**；`permissions:check` **103 / 103**；`db:migrations:check` 通过（0034 / 0035） | 本地通过 |
 | TASK-DELETE-WEB-001 | Web 单元 | 编辑任务弹窗无「取消任务」，改为二次确认后删除 | `vitest run src/features/tasks` → `TasksPanel.test.tsx` 的「ADR-058 删除任务」：编辑弹窗内无「取消任务」；点「删除任务」后出现 `role="dialog"` 名为「确认删除任务」的弹窗且文案含「不能恢复」；未确认前 `deleteTask` **未**调用；确认后调用参数为 `[projectId, moduleId, featureId, taskId]`、body `{ reason: null }`，并带 `x-csrf-token` / `Idempotency-Key` / `If-Match`（`TasksPanel.test.tsx` 27 例） | 本地通过 |
-| TASK-DELETE-WEB-002 | Web 单元 | 任务状态弹窗与设置页文案同步 | `vitest run src/features/tasks src/features/settings` → **6 文件 56 例全绿**；`TaskStatusPanel` 不再有「取消任务不会物理删除」的旧提示；设置页权限说明改为「删除任务 · 二次确认，记录作废且链接解除关联；不可恢复」 | 本地通过 |
+| TASK-DELETE-WEB-003 | Playwright E2E | 「删除任务」浏览器关键路径 | `tests/task-status.spec.ts` 的 F-16 FEATURE / MODULE 两例末尾：详情 →「编辑任务」→ 页脚「删除任务」→ `role="dialog"` 名为「确认删除任务」→「确认删除」（`data-testid=confirm-delete-task`）→ 弹窗关闭、任务卡片从列表消失、`/search?q=<标题>` 显示「未找到匹配结果」且 `search-result-item` 计数为 0；同用例状态历史断言由 6 条改为 4 条（创建 / 完成 / 重新打开 / 再完成，删除不写状态历史） | 本地通过（2026-10-09，2 passed 29.6s） |
 
 ### 未运行 / 已知偏差
 
-① **未跑** Playwright（本轮无前端 E2E 用例；浏览器关键路径待补）；② `app_ci` 中本组集成测试写入的夹具已按 AGENTS.md 清理约定处理；③ 存量数据一致性由迁移 `0034` 末尾的校验块保证，未做大批量删除的索引与耗时压测；④ 软删除任务的物理清除只随其所属项目的彻底删除（ADR-051）或保留期自动清理（ADR-055）发生；⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审。
+① Playwright 已补（2026-10-09）：`apps/e2e/tests/task-status.spec.ts` F-16 FEATURE / MODULE 两例此前仍在找已下线的「取消任务」按钮（ADR-058 改名后必然超时，最近一次全量 E2E 66 passed / 2 failed 即此），现改为「重新打开 → 二次完成 → 删除任务」；命令 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/task-status.spec.ts` → **2 passed（29.6s）**，teardown 自动清理夹具 2 用户 / 2 项目 / 123 业务行 / 14 审计行；其余删除相关路径（聚合组主任务 409、记录作废与链接解除的界面提示）仍只有集成与单元层覆盖；② `app_ci` 中本组集成测试写入的夹具已按 AGENTS.md 清理约定处理；③ 存量数据一致性由迁移 `0034` 末尾的校验块保证，未做大批量删除的索引与耗时压测；④ 软删除任务的物理清除只随其所属项目的彻底删除（ADR-051）或保留期自动清理（ADR-055）发生；⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审。
 
 ## 任务看板移除「已取消」筛选与展示（用户指示，2026-10-09 本地落库）
 
@@ -5381,3 +5381,84 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ### 未运行 / 已知偏差
 
 ① 未跑整链 `pnpm check`、全量 `pnpm test:unit` / `pnpm test:web` / `pnpm test:integration`、Playwright / `pnpm test:e2e`（用户已指示「不用跑了」）、生产镜像构建与 GitHub Actions；② `database/test/integration/database.test.ts` 的不可变迁移清单此前缺 `0034` / `0035`（ADR-058 遗漏，本批已修），意味着 ADR-058 的集成套件此前从未完整跑绿——本批已补并复跑；③ 模块级联会为每个被删功能单独写一条 `feature.delete` 审计（`cascadeFromModuleId` 区分来源），审计条数大于用户可见动作数是有意为之；④ 存活记录的 `impactFeatureIds` 现在静默丢弃指向已删除功能的引用；⑤ 未分类模块的删除禁止是 **策略新增**（既有规则只禁物理删除），已在 ADR-059 §2.2 明确并同步 `docs/permissions.md`；⑥ 本批含契约、数据库迁移、服务端与前端产品代码，按 §8 需非作者人工评审。
+
+## 2026-10-09 审计读取不写留痕（ADR-060，用户指示，本地落库，尚未提交）
+
+用户指示（原话）：「审计日志不需要记录读取留痕，把记录读取留痕去除掉，既然没用读取留痕了那也没必要隐藏」。三层要求一次交付：服务端停止写 `AUDIT_LOG_READ`；契约删除 `readTrail` 参数；前端删除「隐藏读取留痕」机制，历史留痕行保留并按普通行渲染。见 [ADR-060](adr/ADR-060.md)（替代 [ADR-042](adr/ADR-042.md)）。
+
+### 锁定口径
+
+- **读取不写审计**：`AuditQueryService` 删除 `AuditWritePort` / `PostgresUnitOfWork` 依赖与整段留痕写入（含 `AUDIT_LOG_READ_ACTION` 常量、`AuditReadTrailContext` 类型与 `query()` 的留痕入参），`AuditLogController` 删除客户端 IP / UA 提取辅助；读取、筛选、重置、重试、分页与切换审计对象都不再产生任何审计行。`AuditLogReadModule` 的 `imports` 去掉 `AuditModule`（该模块此前仅为留痕写入而挂载）。
+- **契约删除 `readTrail`**：`auditLogQueryRequestSchema` 去掉该字段并保持 `.strict()`，继续携带旧参数的请求返回 422 `VALIDATION_FAILED`（旧客户端不会静默降级成普通读取）；Route Registry 的 `getAuditLogs.auditAction` 由 `AUDIT_LOG_READ` 改为 `none`，summary 注明「读取不写审计（ADR-060）」。路由总数不变（105 条）。
+- **前端删除隐藏机制**：`AuditLogPageView` 删除 `READ_TRAIL_ACTION` 常量、`hideReadTrail` state 与 `readTrailSuppressed` / `visibleItems` / `hiddenReadTrailCount` 派生值，以及「隐藏读取留痕」勾选框、「本页已隐藏 N 条读取留痕」提示、空态「本页记录均为读取留痕」+「显示读取留痕」按钮；`inpulse-design.css` 删除 `.audit-trail-bar` 两条规则；页头说明改为「读取不会在审计链留下记录」；`ActivitySnapshotModal` 与审计页快照页脚去掉「读取本身已留痕」。
+- **历史数据与标签保留**：数据库中的历史 `AUDIT_LOG_READ` 行不删除、不迁移（`audit_logs.action` 是 `TEXT NOT NULL` 无 CHECK），按普通行渲染、可读可筛；`audit-labels.ts` 的 `AUDIT_LOG_READ: "读取审计日志"` 标签与筛选下拉项保留，仅用于渲染历史行。
+- **零数据库面**：无迁移、无新表 / 列 / 角色；`database/seed/demo-data.sql` 未动；读取取证改由部署层访问日志与远端 WORM 归档（F-08 步骤 6，**仍未交付**）承担，归档交付前读取行为不再有应用层审计记录。
+
+### 用例
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR060-INT-001 | API 集成（真实 PostgreSQL + HTTP） | 读取不写审计 | `apps/api/test/audit-logs.integration.test.ts`（8/8）：首读、筛选、分页与切换链前后 `countReadTrailRows()` 相等 | 本地通过 |
+| ADR060-INT-002 | API 集成 | 旧参数被拒 | 同文件：query 携带 `readTrail` → 422 `VALIDATION_FAILED`（`.strict()` 未放宽） | 本地通过 |
+| ADR060-WEB-001 | Web 单元（jsdom） | 历史行按普通行渲染 | `AuditLogPageView.test.tsx`：历史 `AUDIT_LOG_READ` 行出现在列表，且页面无「隐藏读取留痕」开关、「已隐藏 N 条」提示与「显示读取留痕」按钮 | 本地通过 |
+| ADR060-WEB-002 | Web 单元 | 请求不再带读留痕参数 | `audit-query.test.tsx`：续读请求只带 `{ cursor, limit }`，永不携带 `readTrail` | 本地通过 |
+| ADR060-E2E-001 | 浏览器 E2E | `/audit` 读取链路新锚点 | `apps/e2e/tests/audit.spec.ts`（2/2）：页头含「读取不会在审计链留下记录」且无隐藏入口；锚点改用测试自建项目的 `PROJECT:<id>` 链（`project.create`），动作码 + 操作人过滤与快照弹窗覆盖不变 | 本地通过 |
+
+### 本地实际执行（2026-10-09，分支 `test`，未提交未推送）
+
+① `apps/api` 真库集成 `audit-logs.integration.test.ts` **8/8**（9.13s，`TEST_DATABASE_URL=…/app_ci`）。
+② `apps/web` 审计单测 `audit-query.test.tsx` / `AuditLogPageView.test.tsx` **2 文件 19 例**全绿。
+③ 定向 E2E `tests/audit.spec.ts` **2 passed（11.1s）**；夹具由 `global-teardown` 清理（3 用户 / 3 项目 / 57 业务行 / 1 审计行）。
+④ 契约 5 产物已 `contract:generate` 重生成，`@inpulse/api-contract` 与 `@inpulse/api` 均已 build；`contract:drift`（5 产物）与 `contract:validate`（105 条）、`permissions:check`（105 / 105）通过。
+⑤ `lint`、`format:check`（修正本批 2 个文件的格式后）、`typecheck`（8 个 workspace）通过。
+⑥ 文档门禁 `pnpm check:docs`（**107 个 Markdown**，链接与锚点有效）exit 0。
+
+### 未运行 / 已知偏差
+
+① **未运行**：整链 `pnpm check`（本机 npm 镜像缺 audit endpoint，`deps:audit` 必然中断）、全量 `pnpm test:e2e` 与全量 `test:unit` / `test:web` / `test:integration`、生产镜像构建与 Trivy、GitHub Actions（尚未提交推送）。
+② E2E 页头断言由 `toBeVisible`（针对说明段落）改为容器文本 `toContainText`：设计系统全局规则 `.page-header > div > p { display: none }`（`design-system.css`）让该段落本来就不可见，改为对容器取文本仍要求完整文案存在，**未弱化断言强度**。
+③ 历史 `AUDIT_LOG_READ` 行继续留在 SYSTEM 链中（审计链只追加），不影响计数与搜索口径；本批未提供清理入口。
+④ 本批含契约、服务端与前端产品代码，按 §8 需非作者人工评审。
+
+## 2026-10-09 原始审计读取「全部记录（所有链）」与死码候选清理（ADR-061，用户指示，本地落库，尚未提交）
+
+用户指示（原话）：「将不会产生的去除掉，然后动态审计加一个有全部记录的，以后默认就是这个」。澄清（用户二选一）后确定为**跨链读取**：审计链下拉新增「全部记录（所有链）」并设为默认。见 [ADR-061](adr/ADR-061.md)（扩展 [ADR-060](adr/ADR-060.md) 的读取范围）。
+
+### 锁定口径
+
+- **读取范围三选一**：不传 `projectId` 与 `chain` 读 `SYSTEM` 链（缺省语义不变）；`projectId=<id>` 读 `PROJECT:<id>` 链；新增 `chain=all` 读**全部链**并按 `occurred_at DESC, chain_id DESC, sequence_no DESC` 键集分页。`chain` 与 `projectId` **互斥**（同传 422 `VALIDATION_FAILED` + `details.reason = "invalid-chain"`），`chain` 只接受 `"all"`（其余取值 Schema 层 422）。
+- **跨链不能用单序号定位**：各链 `sequence_no` 互相独立，因此跨链分页的三段式键集谓词为 `occurred_at < $t OR (occurred_at = $t AND chain_id < $c) OR (occurred_at = $t AND chain_id = $c AND sequence_no < $seq)`；单链读取仍是 `sequence_no DESC` + `sequence_no < $seq`。
+- **签名游标加成对链坐标**：`AuditCursorPayload` 新增可选 `c`（`chain_id`，长度 1..100）与 `t`（`occurred_at`，UTC ISO 正则 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$`），二者**必须成对**（只出现其一 → `malformed`，`encode` 侧同样成对校验）；游标签名域仍 `inpulse.audit-cursor.v1:`（新增可选字段，不改变既有字段语义）。`decode` 返回类型由 `number` 改为 `AuditCursorPosition | null`，无游标返回 `null`（不再是哨兵值 `0`）。把单链游标拿到 `chain=all` 下继续翻页 → 422 `invalid-cursor`（不猜测、不回退首页）。
+- **迁移 `0037_audit_logs_cross_chain_idx.sql`**：`CREATE INDEX audit_logs_occurred_at_chain_seq_idx ON app.audit_logs (occurred_at DESC, chain_id DESC, sequence_no DESC);`，列序与排序键逐列一致；只加索引，不改表结构、不改既有索引、不改历史迁移。
+- **前端默认跨链**：`AuditChain` 扩展为 `{ kind: "all" } | { kind: "system" } | { kind: "project"; projectId }`，初始状态 `{ kind: "all" }`；链下拉首项「全部记录（所有链）」、次项「SYSTEM 链（系统级）」；页头「当前链」徽章与查询指纹同步三态；页面「审计规则 · 范围」文案改为跨链说明。
+- **动作码候选过滤（不删标签）**：新增 `RETIRED_ACTION_CODES`（11 个死码：`project.archive` / `project.archive.request` / `project.archive.reject` / `module.archive` / `module.restore` / `feature.archive` / `feature.restore` / `task.archive` / `task.unarchive` / `AUDIT_LOG_READ` / `SYSTEM_TEST`），`AUDIT_ACTION_OPTIONS` 由 `ACTION_LABELS` 过滤后按中文标签排序；`ACTION_LABELS`（53 条）与 `ACTION_PREFIX_LABELS`（`AUDIT_SEED_*` → 「演示种子数据」）**原样保留**，历史行与快照仍按中文渲染。`project.restore` **不是**死码（[ADR-051](adr/ADR-051.md) 项目还原仍活）。
+- **权限面不变**：`getAuditLogs` 仍 `adminSession`，CSRF / 幂等 / 版本 / 并发全 `none`；跨链读取等价于「管理员一次读他本就有权读的全部链」，不新增授权与角色；路由总数不变（105 条），无新增 / 删除路由。
+
+### 用例
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR061-INT-001 | API 集成（真实 PostgreSQL + HTTP） | 跨链并列时间排序稳定且分页不重不漏 | `apps/api/test/audit-logs.integration.test.ts`（10/10）：4 行同 `occurred_at` 夹具（`chain=all`，`limit=2` 翻两页）——首页 `chainId` 序为 `["SYSTEM","SYSTEM","PROJECT:<id>","PROJECT:<id>"]`、同链序号递减；两页拼接结果等于首页顺序、`Set` 去重后长度不变；末页 `hasMore false` + `nextCursor null` | 本地通过 |
+| ADR061-INT-002 | API 集成 | 读取模式互斥与游标不跨模式复用 | 同文件：`{chain:"all", projectId}` → 422 且 `details.reason === "invalid-chain"`；`{chain:"system"}` → 422（Schema 层）；单链游标在 `chain=all` 下 → 422 | 本地通过 |
+| ADR061-INT-003 | API 集成 | 缺省与 `projectId` 语义不变 | 同文件：不带 `chain` 仍只读 SYSTEM 链（新夹具的 4 行不出现）；`projectId` 仍只读项目链、不跨链 | 本地通过 |
+| ADR061-WEB-001 | Web 单元（jsdom） | 默认跨链与切回单链 | `AuditLogPageView.test.tsx`（21 例）：首屏请求 `{ chain: "all", limit: 50 }` 且页头「当前链：全部记录（所有链）」；切到 SYSTEM 链后请求不再携带 `chain` | 本地通过 |
+| ADR061-WEB-002 | Web 单元 | 动作候选过滤死码、历史行仍渲染 | 同文件：`#audit-action-options` 无 11 个死码，`project.create` / `task.create` / `project.purge` 仍在；历史 `AUDIT_LOG_READ` 行仍按「读取审计日志」渲染 | 本地通过 |
+| ADR061-E2E-001 | 浏览器 E2E | 真实浏览器默认跨链 | `apps/e2e/tests/audit.spec.ts`（2/2）：进入 `/audit` 即发出 `chain=all` 请求且「当前链」为「全部记录（所有链）」；切到项目链后请求带 `projectId` 且**不含** `chain=all`；筛选、快照与「读取不留痕」断言不变 | 本地通过 |
+| ADR061-DB-001 | 数据库集成 | 迁移不可变清单与索引 | `database/test/integration/database.test.ts`：`alreadyApplied` 清单含 `0037_audit_logs_cross_chain_idx.sql`（36 条迁移）；`pnpm db:migrations:check` 通过 | 本地通过 |
+| ADR061-DB-002 | 数据库计划证据 | 跨链首页走新索引、单链不受影响 | 演示库 `app`（1,324 行）`EXPLAIN (ANALYZE, BUFFERS)`：跨链 `Limit (actual time=0.055..0.102 rows=51.00)` → `Index Only Scan using audit_logs_occurred_at_chain_seq_idx on audit_logs (actual time=0.054..0.098 rows=51.00)`，`Heap Fetches: 51`，`Execution Time: 0.135 ms`，**无 Sort 节点**；单链 `Index Only Scan Backward using audit_logs_pk on audit_logs`（`Index Cond: (chain_id = 'SYSTEM'::text)`），`Execution Time: 0.101 ms` | 本地通过 |
+
+### 本地实际执行（2026-10-09，分支 `test`，未提交未推送）
+
+① API 真库集成 `apps/api/test/audit-logs.integration.test.ts` **10/10**（8.63s，`TEST_DATABASE_URL=…/app_ci`）；首跑 1 例失败（既有「`projectId` 查询返回 PROJECT 链数据且不跨链」被新增的 2 行项目链夹具撑到 3 行），修复方式是该查询显式加 `action: "PROJECT_CREATED"` 过滤——**未放宽断言强度**，复跑全绿。
+② Web 审计单测 `audit-query.test.tsx` / `AuditLogPageView.test.tsx` **2 文件 21 例**全绿（ADR-060 时为 19 例，本批新增 2 例、改写 1 例）。
+③ 迁移：`MIGRATION_DATABASE_URL=…/app_ci` 与 `…/app` 均 `Applied 0037_audit_logs_cross_chain_idx.sql`（`1 applied, 35 already present`）。
+④ EXPLAIN 证据见 ADR061-DB-002（演示库 `app` 1,324 行）。
+⑤ 契约 5 产物已 `contract:generate` 重生成（`apps/web/src/generated/api/types.ts` 含 `export readonly chain?: "all";`）；`apps/api` 与 `apps/web` 已重建（E2E 的 API 跑 `node dist/main.js`，首跑 422 即因陈旧 `dist` 不含 `chain` 参数，重建后通过）。
+⑥ 定向 E2E `tests/audit.spec.ts` **2 passed（11.5s）**；夹具由 `global-teardown` 清理（3 用户 / 3 项目 / 57 业务行 / 1 审计行）。
+
+### 未运行 / 已知偏差
+
+① **未运行**：整链 `pnpm check`（本机 npm 镜像缺 audit endpoint，`deps:audit` 必然中断）、全量 `pnpm test:e2e` 与全量 `test:unit` / `test:web` / `test:integration`、生产镜像构建与 Trivy、GitHub Actions（尚未提交推送）——收尾门禁结果见 [开发日志](../开发日志.md)。
+② 跨链读取**不做**「按链筛选」参数化：`chain` 当前只接受 `"all"`，要新增按链子集读取须另立 ADR。
+③ 默认跨链只存在于**前端初始状态**：服务端缺省仍是 SYSTEM 链（既有调用方与集成测试语义不变）。
+④ 本批含契约、服务端、迁移与前端产品代码，按 §8 需非作者人工评审；迁移 `0037` 属重点评审项。

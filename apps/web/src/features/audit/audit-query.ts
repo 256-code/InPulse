@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   ApiError,
@@ -9,12 +9,15 @@ import { beijingWallClockToIso } from "@features/common/beijing-time";
 
 /**
  * F-08 原始审计读取（GET /api/v1/audit-logs）的服务端签名游标分页。
- * limit 使用契约默认值 50（最大 100）；列表顺序由服务端按链序号保证，
- * 前端不重排、不跨链合并，也不解析或修改不透明游标。
+ * limit 使用契约默认值 50（最大 100）；读取范围三选一：全部链（chain=all，
+ * ADR-061 的「全部记录」，服务端按 occurred_at 倒序跨链分页）、SYSTEM 链或
+ * 单个 PROJECT 链（按链序号倒序）。顺序由服务端保证，前端不重排、不跨链
+ * 合并，也不解析或修改不透明游标。
  */
 export const AUDIT_PAGE_LIMIT = 50;
 
 export type AuditChain =
+  | { readonly kind: "all" }
   | { readonly kind: "system" }
   | { readonly kind: "project"; readonly projectId: number };
 
@@ -41,6 +44,9 @@ export interface NormalizedAuditFilters {
 }
 
 export function auditChainKey(chain: AuditChain): string {
+  if (chain.kind === "all") {
+    return "ALL";
+  }
   return chain.kind === "system" ? "SYSTEM" : "PROJECT:" + chain.projectId;
 }
 
@@ -119,12 +125,6 @@ export interface AuditLogsQueryOptions {
   readonly chain: AuditChain;
   readonly filters: AuditFilters;
   readonly enabled?: boolean;
-  /**
-   * 新查看令牌（ADR-042）：令牌递增表示开启一次新查看，只有该次查看的首
-   * 个请求写读取留痕；同一次查看内的重复请求、重试、筛选与重置都声明为延
-   * 续（readTrail=false）。带签名游标的分页由服务端按同一次查看处理。
-   */
-  readonly newViewToken?: number;
 }
 
 export function useAuditLogsInfiniteQuery({
@@ -132,14 +132,10 @@ export function useAuditLogsInfiniteQuery({
   chain,
   filters,
   enabled = true,
-  newViewToken = 0,
 }: AuditLogsQueryOptions) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const normalized = useMemo(() => normalizeAuditFilters(filters), [filters]);
   const chainKey = auditChainKey(chain);
-  // 消费式令牌：同一次查看只允许首个请求开启留痕，重复挂载（开发期
-  // StrictMode 双挂载）与失败重试都不会再写第二条（ADR-042）。
-  const trailedToken = useRef<number | null>(null);
   return useInfiniteQuery({
     queryKey: [
       "audit-logs",
@@ -151,12 +147,9 @@ export function useAuditLogsInfiniteQuery({
     ],
     queryFn: ({ pageParam, signal }) => {
       const paging = typeof pageParam === "string";
-      const opensNewView = !paging && trailedToken.current !== newViewToken;
-      if (opensNewView) {
-        trailedToken.current = newViewToken;
-      }
       return api.getAuditLogs(
         {
+          ...(chain.kind === "all" ? { chain: "all" as const } : {}),
           ...(chain.kind === "project" ? { projectId: chain.projectId } : {}),
           ...(normalized.action !== undefined
             ? { action: normalized.action }
@@ -167,10 +160,6 @@ export function useAuditLogsInfiniteQuery({
           ...(normalized.from !== undefined ? { from: normalized.from } : {}),
           ...(normalized.to !== undefined ? { to: normalized.to } : {}),
           ...(paging ? { cursor: pageParam } : {}),
-          // 只有开启一次新查看（进入审计页、切换审计链）的首个请求写读取
-          // 留痕（ADR-042）：分页是同一次查看的延续，服务端也会按游标排除；
-          // 其余请求全部显式声明为延续。
-          ...(paging || !opensNewView ? { readTrail: "false" as const } : {}),
           limit: AUDIT_PAGE_LIMIT,
         },
         signal ? { signal } : undefined,

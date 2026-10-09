@@ -5,7 +5,10 @@ import {
   loginAdminViaUi,
 } from "../helpers/auth-context.js";
 import { test } from "../helpers/admin-fixture.js";
-import { calmSelectTrigger } from "../helpers/calm-select.js";
+import {
+  calmSelectTrigger,
+  pickCalmSelectOption,
+} from "../helpers/calm-select.js";
 import { createProjectViaUi } from "../helpers/project-create.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
@@ -25,15 +28,15 @@ test("普通成员不能访问审计页", async ({ browser }) => {
   }
 });
 
-test("管理员读取原始审计、按动作过滤、查看快照并切换项目链", async ({
+test("管理员读取项目审计链、按动作与操作人过滤、查看快照，且读取不留痕", async ({
   browser,
   admin,
 }) => {
   test.setTimeout(240_000);
   const runtime = await loadRuntime();
 
-  // 先由普通成员创建一个全新项目：其 PROJECT 链必定包含 project.create。
-  // 不用管理员创建是为了避开管理员可见全部项目时的大列表渲染（本地长跑库）。
+  // 先由普通成员创建一个全新项目：其 PROJECT 链必定包含 project.create，
+  // 作为过滤与快照断言的确定性锚点（读取已不写审计，不能再拿 AUDIT_LOG_READ 当锚点）。
   const creator = await createAuthenticatedContext(browser, runtime);
   const project = await createProjectViaUi(creator.page, runtime, "E2EAUDIT");
   await creator.context.close();
@@ -44,70 +47,42 @@ test("管理员读取原始审计、按动作过滤、查看快照并切换项�
     await loginAdminViaUi(page, runtime, admin);
 
     // ADR-031 之后高风险只读只要求完整管理员 Session，直接进入即可读取。
-    await page.goto("/audit");
-    await expect(page.getByRole("heading", { name: "动态审计" })).toBeVisible();
-
-    // 首次读取返回（有行、空态，或首屏全是自身读取留痕）：成功后 SYSTEM 链必然已追加 AUDIT_LOG_READ。
-    const list = page.locator(".audit-list");
-    const empty = page.getByText("没有匹配的审计记录", { exact: true });
-    const readsOnly = page.getByText("本页记录均为读取留痕", { exact: true });
-    await expect(list.or(empty).or(readsOnly).first()).toBeVisible();
-
-    // 操作人多选：默认不选即全体操作人，选中后按 actor_id 过滤。
-    await expect(
-      page.getByText("全体操作人（可搜索多选）", { exact: true }),
-    ).toBeVisible();
-    await calmSelectTrigger(page, "操作人").click();
-    const actorOption = page
-      .locator(".ant-select-dropdown:visible .ant-select-item-option")
-      .filter({ hasText: admin.account.name });
-    await expect(actorOption).toHaveCount(1, { timeout: 30_000 });
-    await actorOption.click();
-    await page.keyboard.press("Escape");
-
-    // 按动作码过滤：上一次成功读取留下的 AUDIT_LOG_READ 必然命中。
-    await page.getByLabel("动作码").fill("AUDIT_LOG_READ");
-    // 选中的操作人必须真的进入请求：动作码与 actorIds 同时出现。
-    const filteredRequest = page.waitForRequest(
+    // ADR-061 起默认链是「全部记录（所有链）」，首次加载即跨链读取。
+    const firstLoad = page.waitForRequest(
       (request) =>
         request.url().includes("/api/v1/audit-logs?") &&
-        request.url().includes("action=AUDIT_LOG_READ") &&
-        request.url().includes(`actorIds=${admin.userId}`),
+        request.url().includes("chain=all"),
       { timeout: 30_000 },
     );
-    await page.getByRole("button", { name: "查询" }).click();
-    await filteredRequest;
-    const readRow = page
-      .locator(".audit-row")
-      .filter({ hasText: "读取审计日志" })
-      .first();
-    await expect(readRow).toBeVisible();
-    await expect(readRow).toContainText("系统链");
-    await expect(readRow).toContainText(admin.account.name);
-    await expect(readRow.getByText("用户操作", { exact: true })).toBeVisible();
-
-    // 行内原始快照：链、动作与事件载荷（returnedCount）可见。
-    await readRow.getByRole("button", { name: /查看原始快照/ }).click();
-    const snapshot = page.getByRole("dialog", { name: "原始审计快照" });
-    await expect(snapshot).toBeVisible();
-    await expect(page.getByTestId("audit-snapshot")).toContainText(
-      "AUDIT_LOG_READ",
+    await page.goto("/audit");
+    await firstLoad;
+    await expect(page.getByRole("heading", { name: "动态审计" })).toBeVisible();
+    await expect(page.locator(".activity-scope-badge")).toContainText(
+      "全部记录（所有链）",
     );
-    await expect(page.getByTestId("audit-snapshot")).toContainText("SYSTEM");
-    await expect(page.getByTestId("audit-snapshot-payload")).toContainText(
-      "returnedCount",
-    );
-    await page.keyboard.press("Escape");
-    await expect(snapshot).toBeHidden();
 
-    await page.getByRole("button", { name: "重置" }).click();
-    await expect(page.getByLabel("动作码")).toHaveValue("");
-    // 重置回到「全体操作人」：操作人多选清空。
+    // 默认跨链首屏（有行或空态）。
+    const list = page.locator(".audit-list");
+    const empty = page.getByText("没有匹配的审计记录", { exact: true });
+    await expect(list.or(empty).first()).toBeVisible();
+
+    // 读取不写审计（ADR-060）：页头说明已更新为不写审计，页面上不再有隐藏读取留痕
+    // 的开关与提示。页头说明段落受设计系统 `.page-header > div > p { display: none }`
+    // 隐藏，因此这里断言文本而不是可见性。
+    await expect(page.locator(".activity-page-header")).toContainText(
+      "读取不会在审计链留下记录",
+    );
+    await expect(page.getByLabel("隐藏读取留痕")).toHaveCount(0);
+    await expect(page.getByText("显示读取留痕", { exact: true })).toHaveCount(
+      0,
+    );
+
+    // 操作人不选即全体。
     await expect(
       page.getByText("全体操作人（可搜索多选）", { exact: true }),
     ).toBeVisible();
 
-    // 切换项目链：project.create 只出现在对应 PROJECT 链。
+    // 切到新建项目的 PROJECT 链：project.create 必定命中。
     // CalmSelect 的选项 title 形如「PROJECT:<id> · <项目名>」，编号从 title 里取。
     await calmSelectTrigger(page, "审计链").click();
     const projectOption = page
@@ -119,16 +94,66 @@ test("管理员读取原始审计、按动作过滤、查看快照并切换项�
     if (projectId === null) {
       throw new Error("项目链选项缺少编号");
     }
+    // 切回单链读取：请求带 projectId 且不再携带 chain=all（两者互斥）。
+    const projectChainRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes("/api/v1/audit-logs?") &&
+        request.url().includes(`projectId=${projectId}`) &&
+        !request.url().includes("chain=all"),
+      { timeout: 30_000 },
+    );
     await projectOption.click();
+    await projectChainRequest;
     await expect(page.locator(".activity-scope-badge")).toContainText(
       project.name,
     );
+
+    // 按动作码过滤并选中创建者作为操作人：动作码与 actorIds 必须同时进入请求。
+    await page.getByLabel("动作码").fill("project.create");
+    await pickCalmSelectOption(page, "操作人", runtime.user.name);
+    const filteredRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes("/api/v1/audit-logs?") &&
+        request.url().includes(`projectId=${projectId}`) &&
+        request.url().includes("action=project.create") &&
+        request.url().includes(`actorIds=${runtime.userId}`),
+      { timeout: 30_000 },
+    );
+    await page.getByRole("button", { name: "查询" }).click();
+    await filteredRequest;
+
     const createRow = page
       .locator(".audit-row")
       .filter({ hasText: "创建项目" })
       .first();
     await expect(createRow).toBeVisible();
     await expect(createRow).toContainText(project.name);
+    await expect(createRow).toContainText(runtime.user.name);
+    await expect(
+      createRow.getByText("用户操作", { exact: true }),
+    ).toBeVisible();
+
+    // 行内原始快照：项目链、动作与事件载荷（项目编码）可见。
+    await createRow.getByRole("button", { name: /查看原始快照/ }).click();
+    const snapshot = page.getByRole("dialog", { name: "原始审计快照" });
+    await expect(snapshot).toBeVisible();
+    await expect(page.getByTestId("audit-snapshot")).toContainText(
+      "project.create",
+    );
+    await expect(page.getByTestId("audit-snapshot")).toContainText("项目链");
+    await expect(page.getByTestId("audit-snapshot-payload")).toContainText(
+      project.code,
+    );
+    await page.keyboard.press("Escape");
+    await expect(snapshot).toBeHidden();
+
+    await page.getByRole("button", { name: "重置" }).click();
+    await expect(page.getByLabel("动作码")).toHaveValue("");
+    // 重置回到「全体操作人」：操作人多选清空。
+    await expect(
+      page.getByText("全体操作人（可搜索多选）", { exact: true }),
+    ).toBeVisible();
+
     await page.screenshot({
       path: "test-results/f08-audit-e2e.png",
       fullPage: true,

@@ -18,6 +18,5 @@ export {
 export {
   AuditQueryService,
   AuditQueryValidationError,
-  AUDIT_LOG_READ_ACTION,
   auditChainIdForProject,
 } from "./audit-query.service.js";

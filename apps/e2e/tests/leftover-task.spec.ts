@@ -121,7 +121,7 @@ for (const feature of [true, false])
         await expect(editTask.getByLabel("截止时间")).toHaveValue(
           "2026-10-10T18:30",
         );
-        // 2026-10-09 改版：编辑任务弹窗页脚新增「取消任务 / 合并到主任务」，
+        // 2026-10-09 改版：编辑任务弹窗页脚新增任务级操作（现为 ADR-058 的「删除任务 / 合并到主任务」），
         // 原来的 /取\s*消/ 会同时命中这两枚按钮，这里收紧成整名匹配表单的「取 消」。
         await editTask.getByRole("button", { name: /^取\s*消$/ }).click();
         await expect(editTask).toBeHidden();

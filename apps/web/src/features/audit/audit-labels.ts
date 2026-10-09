@@ -114,8 +114,29 @@ export interface AuditActionOption {
   readonly label: string;
 }
 
-/** 动作筛选候选：按中文名排序，填入的仍是服务端要求的原始码。 */
+/**
+ * 已下线的动作码：功能移除后不会再产生新记录（ADR-043 项目归档、ADR-044
+ * 模块归档、ADR-045 功能归档、ADR-054 任务归档、ADR-060 读取留痕；
+ * SYSTEM_TEST 仅由测试写入）。ACTION_LABELS 仍保留它们的中文文案供历史行
+ * 渲染，但筛选候选不再列出——选中一个永远为空的动作只会误导。
+ */
+const RETIRED_ACTION_CODES: ReadonlySet<string> = new Set([
+  "project.archive",
+  "project.archive.request",
+  "project.archive.reject",
+  "module.archive",
+  "module.restore",
+  "feature.archive",
+  "feature.restore",
+  "task.archive",
+  "task.unarchive",
+  "AUDIT_LOG_READ",
+  "SYSTEM_TEST",
+]);
+
+/** 动作筛选候选：去掉已下线动作码，按中文名排序，填入的仍是原始码。 */
 export const AUDIT_ACTION_OPTIONS: readonly AuditActionOption[] =
   Object.entries(ACTION_LABELS)
+    .filter(([code]) => !RETIRED_ACTION_CODES.has(code))
     .map(([code, label]) => ({ code, label }))
     .sort((left, right) => left.label.localeCompare(right.label, "zh-Hans-CN"));

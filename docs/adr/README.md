@@ -55,7 +55,7 @@
 | [ADR-039](ADR-039.md) | Accepted | 移除项目管理员角色，项目内管理权限下放给全体活跃成员（修订 ADR-033/034/035） |
 | [ADR-040](ADR-040.md) | Accepted | 任务支持平权多负责人（关联表取代单一负责人列） |
 | [ADR-041](ADR-041.md) | Accepted | 删除任务优先级的「低」（LOW）档位（修订 ADR-037 的排序键与游标版本） |
-| [ADR-042](ADR-042.md) | Accepted | 原始审计读取留痕按「查看」计数（进入与切换对象各一条） |
+| [ADR-042](ADR-042.md) | Superseded | 原始审计读取留痕按「查看」计数（进入与切换对象各一条），由 [ADR-060](ADR-060.md) 替代 |
 | [ADR-043](ADR-043.md) | Accepted | 项目层面下线归档，生命周期收窄为未开始 / 进行中 / 维护中三态（替代 ADR-034 项目归档部分、修订 ADR-035） |
 | [ADR-044](ADR-044.md) | Accepted | 模块层面下线归档，模块只有 ACTIVE（替代 ADR-034 模块归档部分、修订 ADR-033/ADR-039 的模块归档授权口径；功能档位表述经 ADR-045 修订，模块列表排序键经 ADR-046 修订） |
 | [ADR-045](ADR-045.md) | Accepted | 功能层面下线归档，功能只有 ACTIVE（替代 ADR-034 功能归档部分、修订 ADR-039 的项目内管理操作清单与 ADR-044 的功能档位表述） |
@@ -73,6 +73,8 @@
 | [ADR-057](ADR-057.md) | Accepted | 任务重新变为未收尾即让维护中项目回到进行中：重新打开（`REOPEN`）与恢复（`RESTORE`）与新建任务同口径（`trigger = TASK_REOPENED` / `TASK_RESTORED`、端口更名 `reopenMaintenanceProject`、前端补 `projects` 缓存失效），`COMPLETE` / `CANCEL` 不触发（扩展 ADR-056 的触发面、修订其非目标第 2 条） |
 | [ADR-058](ADR-058.md) | Accepted | 取消任务改为「二次确认后删除任务」：任务层软删除（`deleted_at` / `deleted_by`，保留编号、状态历史、迭代记录与审计）、同事务解除 GitHub 链接关联、作废该任务的迭代记录、聚合组 SOURCE 自动解除 / MAIN 拒绝（409 `TASK_GROUP_MAIN_LOCKED`）、写 `task.delete` 审计与 `TASK_DELETED` 动态并移除搜索投影；不提供恢复入口（修订 ADR-054 的「取消」语义、扩展 ADR-049 的软删除范式；补 `0035` 的 `search_projection` DELETE 授权缺陷） |
 | [ADR-059](ADR-059.md) | Accepted | 模块与功能增加删除：两者均为软删除（`deleted_at` / `deleted_by`，迁移 `0036`），删除模块级联软删除其全部功能与全部任务（任务按 ADR-058 语义处理）、删除功能只级联其自身任务，模块 / 功能自身的已发布记录一并作废、影响关系行保留；未分类模块不可删除（409 `MODULE_UNCLASSIFIED_PROTECTED`）；权限为系统管理员或本项目组长（ADR-039 的第五处例外）；读路径补 `deleted_at IS NULL`（修订 ADR-039 管理操作清单、扩展 ADR-049 / ADR-058 的软删除范式） |
+| [ADR-060](ADR-060.md) | Accepted | 审计读取不写留痕：`GET /api/v1/audit-logs` 不再写 `AUDIT_LOG_READ`（`AuditQueryService` 删除留痕写入路径、Route Registry `auditAction` 改为 `none`），契约删除 `readTrail` 参数（仍携带者 422）；历史留痕行保留在链中并按普通审计行可读，前端「隐藏读取留痕」机制整体删除；读取取证由远端 WORM 归档与部署层日志承担；无迁移、路由仍 105 条（替代 ADR-042） |
+| [ADR-061](ADR-061.md) | Accepted | 原始审计读取新增「全部记录（所有链）」并设为默认：契约加可选 `chain=all`（与 `projectId` 互斥，同传 422 `invalid-chain`，缺省仍读 SYSTEM 链），跨链按 `occurred_at DESC, chain_id DESC, sequence_no DESC` 键集分页、签名游标加成对链坐标（`c` / `t`，缺坐标 422 `invalid-cursor`），迁移 `0037` 新增 `audit_logs_occurred_at_chain_seq_idx`；审计页动作码候选过滤 11 个已下线动作码（标签表保留供历史行渲染）；权限仍 `adminSession`、路由仍 105 条（扩展 ADR-060 的读取范围） |
 
 ## 关联基线
 

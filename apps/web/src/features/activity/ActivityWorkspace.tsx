@@ -37,6 +37,7 @@ import {
   flattenActivityPages,
   useActivityFeedQuery,
 } from "./activity-query";
+import { activityEntityIcon, activityVisualKind } from "./activity-visuals";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 const ALL_PROJECTS = "all";
@@ -453,11 +454,24 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                       return (
                         <div
                           className="audit-row"
+                          data-kind={activityVisualKind(item.activityType)}
+                          data-entity={item.sourceEntityType}
                           key={item.id}
                           data-testid={`activity-item-${item.id}`}
                         >
                           <div className="audit-time">
-                            {activityTimeLabel(item.occurredAt)}
+                            <span className="activity-time-text">
+                              {activityTimeLabel(item.occurredAt)}
+                            </span>
+                            <span
+                              className="activity-kind-badge"
+                              aria-hidden="true"
+                            >
+                              <InpulseIcon
+                                name={activityEntityIcon(item.sourceEntityType)}
+                                size={14}
+                              />
+                            </span>
                           </div>
                           <div className="audit-line">
                             <span />
@@ -469,7 +483,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
                             <div>
                               <strong>
                                 {actorName}
-                                <span>
+                                <span className="activity-action">
                                   {activityActionLabel(item.activityType)}
                                 </span>
                               </strong>

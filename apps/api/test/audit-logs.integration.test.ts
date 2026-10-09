@@ -29,6 +29,9 @@ import {
 const SESSION_COOKIE_NAME = "__Host-session";
 const AUDIT_PATH = "/api/v1/audit-logs";
 const HMAC_KEY_VERSION = 1;
+// ADR-061 跨链夹具：两条链各两行共用同一 occurred_at，覆盖并列表排序与复合键集分页。
+const TIE_OCCURRED_AT = new Date("2026-01-01T00:00:00.000Z");
+const TIE_OCCURRED_AT_ISO = "2026-01-01T00:00:00.000000Z";
 
 interface AuditLogPageDto {
   readonly items: readonly {
@@ -169,6 +172,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
   let urls: TestUrls;
   let seedAction: string;
   let actorFilterAction: string;
+  let crossChainAction: string;
 
   beforeAll(async () => {
     urls = testUrls();
@@ -178,6 +182,7 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
 
     seedAction = `AUDIT_SEED_${randomBytes(4).toString("hex").toUpperCase()}`;
     actorFilterAction = `AUDIT_ACTOR_${randomBytes(4).toString("hex").toUpperCase()}`;
+    crossChainAction = `AUDIT_CROSS_${randomBytes(4).toString("hex").toUpperCase()}`;
 
     const adminUserId = await createUser(runtime, { admin: true });
     const memberUserId = await createUser(runtime);
@@ -233,6 +238,28 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
           targetId: String(actorId),
           eventPayload: { note: requestId },
           requestId,
+        }),
+      );
+    }
+    // ADR-061 跨链读取：两条链各两行、occurred_at 完全相同，用来验证复合键集
+    // 游标 (occurred_at, chain_id, sequence_no) 的并列分支与跨页不重不漏。
+    for (const [requestId, projectId] of [
+      ["audit-cross-system-1", null],
+      ["audit-cross-system-2", null],
+      ["audit-cross-project-1", project.projectId],
+      ["audit-cross-project-2", project.projectId],
+    ] as const) {
+      await uow.run((tx) =>
+        port.append(tx, {
+          projectId,
+          actorType: "SYSTEM",
+          actorId: null,
+          action: crossChainAction,
+          targetType: "PROJECT",
+          targetId: String(project.projectId),
+          eventPayload: { tie: true },
+          requestId,
+          occurredAt: TIE_OCCURRED_AT,
         }),
       );
     }
@@ -315,6 +342,17 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     }
   });
 
+  /** ADR-060：读取不再写审计，历史上已有的 AUDIT_LOG_READ 行数必须保持不变。 */
+  async function countReadTrailRows(): Promise<number> {
+    const rows = (await reader!`
+      SELECT count(*)::int AS "count"
+        FROM app.audit_logs
+       WHERE chain_id = 'SYSTEM'
+         AND action = 'AUDIT_LOG_READ'
+    `) as unknown as readonly { readonly count: number }[];
+    return rows[0]?.count ?? -1;
+  }
+
   test("匿名请求返回 401 与统一错误信封", async () => {
     const body = await expectError(await requestAuditLogs(baseUrl), 401);
     expect(body.code).toBe("ADMIN_SESSION_REQUIRED");
@@ -331,7 +369,8 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(JSON.stringify(body)).not.toContain(seedAction);
   });
 
-  test("管理员完整认证 Session 无需额外重认证即可读取 SYSTEM 链并写入 AUDIT_LOG_READ 留痕（ADR-031）", async () => {
+  test("管理员完整认证 Session 无需额外重认证即可读取 SYSTEM 链，且读取不写审计（ADR-060）", async () => {
+    const before = await countReadTrailRows();
     const page = await expectAuditPage(
       await requestAuditLogs(baseUrl, { cookie: fixture.adminCookie }),
     );
@@ -341,65 +380,33 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(first.recordHash).toMatch(/^[0-9a-f]{64}$/);
     expect(first.prevHash).toMatch(/^[0-9a-f]{64}$/);
     expect(first.occurredAt).toMatch(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/);
-
-    const trail = (await reader!`
-      SELECT actor_id AS "actorId",
-             target_id AS "targetId",
-             event_payload AS "eventPayload"
-        FROM app.audit_logs
-       WHERE chain_id = 'SYSTEM'
-         AND action = 'AUDIT_LOG_READ'
-       ORDER BY sequence_no DESC
-       LIMIT 1
-    `) as unknown as readonly {
-      readonly actorId: number;
-      readonly targetId: string;
-      readonly eventPayload: Readonly<Record<string, unknown>>;
-    }[];
-    expect(trail[0]?.actorId).toBe(fixture.adminUserId);
-    expect(trail[0]?.targetId).toBe("SYSTEM");
-    expect(trail[0]?.eventPayload["returnedCount"]).toBe(page.items.length);
-    expect(trail[0]?.eventPayload["hasMore"]).toBe(page.hasMore);
-    const filters = trail[0]?.eventPayload["filters"] as
-      Record<string, unknown> | undefined;
-    expect(filters?.["action"]).toBeNull();
-    expect(filters?.["actorIds"]).toBeNull();
+    expect(await countReadTrailRows()).toBe(before);
   });
 
-  test("readTrail=false 与带游标的分页属于同一次查看，不写新留痕（ADR-042）", async () => {
-    const countTrails = async (): Promise<number> => {
-      const rows = (await reader!`
-        SELECT count(*)::int AS "count"
-          FROM app.audit_logs
-         WHERE chain_id = 'SYSTEM'
-           AND action = 'AUDIT_LOG_READ'
-      `) as unknown as readonly { readonly count: number }[];
-      return rows[0]?.count ?? -1;
-    };
+  test("初始读取、筛选与游标分页都不写审计（ADR-060）", async () => {
+    const before = await countReadTrailRows();
 
-    const before = await countTrails();
+    await expectAuditPage(
+      await requestAuditLogs(baseUrl, { cookie: fixture.adminCookie }),
+    );
+    expect(await countReadTrailRows()).toBe(before);
 
-    // 筛选：客户端声明为同一次查看的延续，不写新留痕。
     await expectAuditPage(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
-        query: { action: seedAction, readTrail: "false" },
+        query: { action: seedAction },
       }),
     );
-    expect(await countTrails()).toBe(before);
+    expect(await countReadTrailRows()).toBe(before);
 
-    // 非分页且未声明延续：开启一次新查看，恰写一条留痕。
     const first = await expectAuditPage(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
         query: { action: seedAction, limit: 1 },
       }),
     );
-    const afterNewView = await countTrails();
-    expect(afterNewView).toBe(before + 1);
     expect(first.nextCursor).not.toBeNull();
 
-    // 分页由服务端按同一次查看排除，即使显式要求 readTrail=true 也不写。
     await expectAuditPage(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
@@ -407,11 +414,10 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
           action: seedAction,
           limit: 1,
           cursor: first.nextCursor as string,
-          readTrail: "true",
         },
       }),
     );
-    expect(await countTrails()).toBe(afterNewView);
+    expect(await countReadTrailRows()).toBe(before);
   });
 
   test("action 过滤与签名游标分页不重叠", async () => {
@@ -457,14 +463,13 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(mismatched.code).toBe("VALIDATION_FAILED");
   });
 
-  test("actorIds 多操作人过滤、去重约束与留痕载荷", async () => {
+  test("actorIds 多操作人过滤与去重约束", async () => {
     const single = await expectAuditPage(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
         query: {
           action: actorFilterAction,
           actorIds: String(fixture.adminUserId),
-          readTrail: "false",
         },
       }),
     );
@@ -477,7 +482,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
         query: {
           action: actorFilterAction,
           actorIds: `${fixture.memberUserId},${fixture.adminUserId}`,
-          readTrail: "false",
         },
       }),
     );
@@ -492,7 +496,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
         query: {
           action: actorFilterAction,
           actorIds: "999999",
-          readTrail: "false",
         },
       }),
     );
@@ -509,33 +512,6 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
       422,
     );
     expect(duplicated.code).toBe("VALIDATION_FAILED");
-
-    // 开启新查看时，留痕载荷按请求原样记录多选操作人（ADR-042）。
-    await expectAuditPage(
-      await requestAuditLogs(baseUrl, {
-        cookie: fixture.adminCookie,
-        query: {
-          action: actorFilterAction,
-          actorIds: `${fixture.memberUserId},${fixture.adminUserId}`,
-        },
-      }),
-    );
-    const trails = (await reader!`
-      SELECT event_payload AS "eventPayload"
-        FROM app.audit_logs
-       WHERE chain_id = 'SYSTEM'
-         AND action = 'AUDIT_LOG_READ'
-       ORDER BY sequence_no DESC
-       LIMIT 1
-    `) as unknown as readonly {
-      readonly eventPayload: Readonly<Record<string, unknown>>;
-    }[];
-    const trailFilters = trails[0]?.eventPayload["filters"] as
-      Record<string, unknown> | undefined;
-    expect(trailFilters?.["actorIds"]).toEqual([
-      fixture.memberUserId,
-      fixture.adminUserId,
-    ]);
   });
 
   test("非法游标、时间范围与 limit 返回 422", async () => {
@@ -570,22 +546,25 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     );
     expect(badLimit.code).toBe("VALIDATION_FAILED");
 
-    // readTrail 只接受 "true"/"false"，不接受其他写法（避免 "false" 被误判为真值）。
-    const badTrail = await expectError(
+    // readTrail 已随读取留痕一并移除（ADR-060）：未知查询参数按 strict 契约拒绝。
+    const removedParam = await expectError(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
-        query: { readTrail: "yes" },
+        query: { readTrail: "false" },
       }),
       422,
     );
-    expect(badTrail.code).toBe("VALIDATION_FAILED");
+    expect(removedParam.code).toBe("VALIDATION_FAILED");
   });
 
   test("projectId 查询返回 PROJECT 链数据且不跨链", async () => {
     const page = await expectAuditPage(
       await requestAuditLogs(baseUrl, {
         cookie: fixture.adminCookie,
-        query: { projectId: fixture.project.projectId },
+        query: {
+          projectId: fixture.project.projectId,
+          action: "PROJECT_CREATED",
+        },
       }),
     );
     expect(page.items).toHaveLength(1);
@@ -593,5 +572,128 @@ describe("GET /api/v1/audit-logs with HTTP and real PostgreSQL", () => {
     expect(page.items[0]?.action).toBe("PROJECT_CREATED");
     expect(page.items[0]?.targetId).toBe(String(fixture.project.projectId));
     expect(page.hasMore).toBe(false);
+  });
+
+  test("chain=all 跨链读取：并列时间排序稳定且分页不重不漏（ADR-061）", async () => {
+    const all = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { chain: "all", action: crossChainAction },
+      }),
+    );
+    expect(all.items).toHaveLength(4);
+    expect(
+      all.items.every((item) => item.occurredAt === TIE_OCCURRED_AT_ISO),
+    ).toBe(true);
+    // 同一 occurred_at 内先按 chain_id 倒序（SYSTEM > PROJECT:<id>），再按链序号倒序。
+    expect(all.items.map((item) => item.chainId)).toEqual([
+      "SYSTEM",
+      "SYSTEM",
+      `PROJECT:${fixture.project.projectId}`,
+      `PROJECT:${fixture.project.projectId}`,
+    ]);
+    expect(all.items[0]!.sequenceNo).toBeGreaterThan(all.items[1]!.sequenceNo);
+    expect(all.items[2]!.sequenceNo).toBeGreaterThan(all.items[3]!.sequenceNo);
+
+    const keys = all.items.map((item) => `${item.chainId}#${item.sequenceNo}`);
+    const paged: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    while (pages < 10) {
+      pages += 1;
+      const query: Record<string, string | number> = {
+        chain: "all",
+        action: crossChainAction,
+        limit: 2,
+      };
+      if (cursor !== null) {
+        query["cursor"] = cursor;
+      }
+      const page = await expectAuditPage(
+        await requestAuditLogs(baseUrl, { cookie: fixture.adminCookie, query }),
+      );
+      paged.push(
+        ...page.items.map((item) => `${item.chainId}#${item.sequenceNo}`),
+      );
+      if (!page.hasMore) {
+        expect(page.nextCursor).toBeNull();
+        break;
+      }
+      const next = page.nextCursor;
+      expect(next).not.toBeNull();
+      cursor = next;
+    }
+    expect(pages).toBe(2);
+    expect(paged).toEqual(keys);
+    expect(new Set(paged).size).toBe(paged.length);
+
+    // 缺省（不带 chain）与 projectId 各自仍只读单链，不被跨链开关影响。
+    const systemOnly = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { action: crossChainAction },
+      }),
+    );
+    expect(systemOnly.items.map((item) => item.chainId)).toEqual([
+      "SYSTEM",
+      "SYSTEM",
+    ]);
+    const projectOnly = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          projectId: fixture.project.projectId,
+          action: crossChainAction,
+        },
+      }),
+    );
+    expect(projectOnly.items).toHaveLength(2);
+    expect(
+      projectOnly.items.every(
+        (item) => item.chainId === `PROJECT:${fixture.project.projectId}`,
+      ),
+    ).toBe(true);
+  });
+
+  test("chain 参数校验：与 projectId 互斥、未知取值拒绝、游标不跨读取模式复用（ADR-061）", async () => {
+    const conflicting = await expectError(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { chain: "all", projectId: fixture.project.projectId },
+      }),
+      422,
+    );
+    expect(conflicting.code).toBe("VALIDATION_FAILED");
+    expect(conflicting.details).toHaveProperty("reason", "invalid-chain");
+
+    const unknownValue = await expectError(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { chain: "system" },
+      }),
+      422,
+    );
+    expect(unknownValue.code).toBe("VALIDATION_FAILED");
+
+    const systemPage = await expectAuditPage(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: { action: crossChainAction, limit: 1 },
+      }),
+    );
+    expect(systemPage.nextCursor).not.toBeNull();
+    const reused = await expectError(
+      await requestAuditLogs(baseUrl, {
+        cookie: fixture.adminCookie,
+        query: {
+          chain: "all",
+          action: crossChainAction,
+          limit: 1,
+          cursor: systemPage.nextCursor as string,
+        },
+      }),
+      422,
+    );
+    expect(reused.code).toBe("VALIDATION_FAILED");
   });
 });

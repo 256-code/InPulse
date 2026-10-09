@@ -157,13 +157,13 @@ export type AuditLogPage = {
 
 export type AuditLogQueryRequest = {
   readonly projectId?: number;
+  readonly chain?: "all";
   readonly action?: string;
   readonly actorIds?: readonly number[];
   readonly from?: string;
   readonly to?: string;
   readonly cursor?: string;
   readonly limit?: number;
-  readonly readTrail?: ("true" | "false");
 };
 
 export type ChangeRecordVersion = {

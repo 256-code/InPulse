@@ -763,7 +763,7 @@
     position: sticky;
     top: var(--sticky-band-height, 182px);
     z-index: 4;
-    background: #ffffff;
+    background: #eef2f7;
   }
 
   /* 首个分组头与列表卡片的圆角顶边齐平，方形底色会盖住那圈圆角，跟着卡片取同样的圆角。
@@ -783,23 +783,79 @@
   margin-left: auto;
 }
 
-/* 审计页的读取留痕（`AUDIT_LOG_READ`）是打开本页时自动生成的自我噪音，列表默认隐藏；
- * 这一行给出开关与已隐藏条数，直接复用设计系统的 `.check-line`，不新增控件样式。 */
-.audit-trail-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.audit-trail-bar > span {
-  color: #8291a1;
-  font-size: 11px;
-}
-
 .audit-row:last-child {
   border-bottom: 0;
+}
+
+/* 2026-10-09 用户反馈「做点分界线」：动态页行分隔线比设计稿默认（#edf1f5）深一档，
+ * 与分组头底色一起形成「组头 -> 行 -> 行」的层次；只作用于动态页，审计日志页保持设计稿原样。 */
+.activity-page .audit-row {
+  border-bottom-color: #e6edf4;
+}
+
+/* ===== 项目动态行视觉编码（2026-10-09 用户选定，原型方案 B）=====
+ * 颜色回答「发生了什么」：按行上的 data-kind 给时间下方的对象图标徽章和动作词上色；
+ * 图标形状回答「这是谁的事」：由 features/activity/activity-visuals.ts 按 sourceEntityType 选图标。
+ * 图标固定放在左侧时间正下方（时间列改为纵向 flex、右对齐）；头像被图标替代，不再渲染。 */
+.activity-page .audit-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* 只隐藏动态页自己行里的头像；审计日志页同样使用 `.activity-avatar`，不受影响。 */
+.activity-page .audit-content > .activity-avatar {
+  display: none;
+}
+
+/* 2026-10-09 用户反馈「圆点颜色没改」「圆点中心没在线上」：时间轴圆点跟随行类别着色
+ * （边框=类别色、内底=类别浅底；分组头不带 data-kind，回落到设计稿的蓝色圆点）；
+ * 位置由设计稿的「居中 + margin-right:-5px」改为右对齐 + -4px：竖线画在列右缘内侧 0.5px，
+ * 右对齐后圆心恒等于「列宽 - 0.5px」，与列宽无关（桌面 18px 与窄屏 10px 都落在线上）。 */
+.activity-page .audit-line {
+  justify-content: flex-end;
+}
+
+.activity-page .audit-line span {
+  border-color: var(--activity-kind-fg, #5a9ed1);
+  background: var(--activity-kind-bg, #ffffff);
+  margin-right: -4px;
+}
+
+.activity-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: var(--activity-kind-fg, #64788d);
+  background: var(--activity-kind-bg, #eef2f6);
+}
+
+.audit-row[data-kind="create"] {
+  --activity-kind-fg: #34815d;
+  --activity-kind-bg: #e7f6ed;
+}
+.audit-row[data-kind="update"] {
+  --activity-kind-fg: #2472c3;
+  --activity-kind-bg: #e6f2ff;
+}
+.audit-row[data-kind="delete"] {
+  --activity-kind-fg: #a6343f;
+  --activity-kind-bg: #ffebeb;
+}
+.audit-row[data-kind="status"] {
+  --activity-kind-fg: #ae741b;
+  --activity-kind-bg: #fff3dc;
+}
+
+/* 动作词跟随行类别着色加粗；选择器比设计系统里的 `.audit-content strong span` 更具体，
+ * 只命中动态页新加的 .activity-action。 */
+.audit-content strong span.activity-action {
+  color: var(--activity-kind-fg, #718398);
+  font-weight: 600;
 }
 
 /* 项目动态按自然日折叠：组头沿用 `.audit-row` 的列宽，让左侧日期列与时间线竖线、
@@ -813,6 +869,10 @@
   gap: 12px;
   align-items: center;
   padding: var(--audit-line-gap-top) 20px var(--audit-line-gap-bottom);
+  /* 2026-10-09 用户反馈「一整行换个色」：分组头整行换与设计系统 --muted 同色的浅灰蓝底，
+   * 底部压一条分界线，与下方白色行动态拉开层次；吸顶态见上方媒体查询。 */
+  background: #eef2f7;
+  border-bottom: 1px solid #dbe6f0;
 }
 
 /* 每天之间画一条与行分隔线同色的分隔线；首日不画，由 `.audit-list` 上边框收口。 */
@@ -824,12 +884,12 @@
 }
 
 .activity-day + .activity-day .activity-day-head {
-  border-top: 1px solid #edf1f5;
+  border-top: 1px solid #dbe6f0;
 }
 
 .activity-day-date {
   text-align: right;
-  color: #7b93ab;
+  color: #5b7892;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   line-height: 18px;

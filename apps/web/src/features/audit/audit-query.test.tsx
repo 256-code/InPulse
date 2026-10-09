@@ -87,12 +87,12 @@ describe("useAuditLogsInfiniteQuery", () => {
       await result.current.fetchNextPage();
     });
     expect(getAuditLogs).toHaveBeenLastCalledWith(
-      { cursor: "cursor-1", limit: AUDIT_PAGE_LIMIT, readTrail: "false" },
+      { cursor: "cursor-1", limit: AUDIT_PAGE_LIMIT },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
-  it("opens the read trail once per view token and marks the rest as continuation", async () => {
+  it("refetches with the new filters and never sends read-trail parameters", async () => {
     const getAuditLogs = vi.fn().mockResolvedValue({
       items: [],
       nextCursor: null,
@@ -102,57 +102,50 @@ describe("useAuditLogsInfiniteQuery", () => {
     const { wrapper } = createQueryWrapper();
 
     const view = renderHook(
-      ({
-        filters,
-        newViewToken,
-      }: {
-        filters: typeof EMPTY_AUDIT_FILTERS;
-        newViewToken: number;
-      }) =>
+      ({ filters }: { filters: typeof EMPTY_AUDIT_FILTERS }) =>
         useAuditLogsInfiniteQuery({
           client,
           chain: { kind: "system" },
           filters,
-          newViewToken,
         }),
-      {
-        wrapper,
-        initialProps: { filters: EMPTY_AUDIT_FILTERS, newViewToken: 0 },
-      },
+      { wrapper, initialProps: { filters: EMPTY_AUDIT_FILTERS } },
     );
     await waitFor(() => expect(view.result.current.isSuccess).toBe(true));
-    // 进入审计页：开启一次新查看，请求不带 readTrail，服务端写留痕。
+    // 读取不写审计（ADR-060）：请求没有任何留痕意图参数。
     expect(getAuditLogs).toHaveBeenLastCalledWith(
       { limit: AUDIT_PAGE_LIMIT },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
-    // 同一次查看内的筛选（令牌未变）：readTrail=false，服务端不写新留痕。
     await act(async () => {
       view.rerender({
         filters: { ...EMPTY_AUDIT_FILTERS, action: "task.merge" },
-        newViewToken: 0,
       });
     });
     await waitFor(() =>
       expect(getAuditLogs).toHaveBeenLastCalledWith(
-        { action: "task.merge", limit: AUDIT_PAGE_LIMIT, readTrail: "false" },
+        { action: "task.merge", limit: AUDIT_PAGE_LIMIT },
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );
 
-    // 切换审计对象：令牌递增开启新查看，请求重新不带 readTrail（ADR-042）。
-    await act(async () => {
-      view.rerender({
-        filters: EMPTY_AUDIT_FILTERS,
-        newViewToken: 1,
-      });
-    });
+    // 审计链变化同样只影响查询参数：换链后仍不带任何留痕参数。
+    view.unmount();
+    const projectView = renderHook(
+      () =>
+        useAuditLogsInfiniteQuery({
+          client,
+          chain: { kind: "project", projectId: 3 },
+          filters: EMPTY_AUDIT_FILTERS,
+        }),
+      { wrapper },
+    );
     await waitFor(() =>
-      expect(getAuditLogs).toHaveBeenLastCalledWith(
-        { limit: AUDIT_PAGE_LIMIT },
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      ),
+      expect(projectView.result.current.isSuccess).toBe(true),
+    );
+    expect(getAuditLogs).toHaveBeenLastCalledWith(
+      { projectId: 3, limit: AUDIT_PAGE_LIMIT },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 

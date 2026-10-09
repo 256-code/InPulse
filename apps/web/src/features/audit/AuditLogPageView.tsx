@@ -104,12 +104,6 @@ function groupAuditItemsByDay(items: readonly AuditLogItem[]) {
     }));
 }
 
-/**
- * 「读取审计日志」是打开本页时自动生成的自我留痕：列表默认隐藏它们，
- * 但按该动作码精确筛选时视为显式查看意图，不再隐藏。
- */
-const READ_TRAIL_ACTION = "AUDIT_LOG_READ";
-
 function readText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -168,16 +162,13 @@ function snapshotPayloadText(item: AuditLogItem): string {
 export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   client,
 }) => {
-  const [chain, setChain] = useState<AuditChain>({ kind: "system" });
+  // 默认读取「全部记录（所有链）」（ADR-061）；可切回 SYSTEM 或单个项目链。
+  const [chain, setChain] = useState<AuditChain>({ kind: "all" });
   const [draftFilters, setDraftFilters] =
     useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
-  // 读取留痕按「查看」计数（ADR-042）：进入页面与切换审计链开启一次新查看，
-  // 同一次查看内的重复请求、筛选、重置与重试不重复写 AUDIT_LOG_READ。
-  const [newViewToken, setNewViewToken] = useState(0);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AuditLogItem | null>(null);
-  const [hideReadTrail, setHideReadTrail] = useState(true);
 
   const projectsQuery = useProjects(client ? { client } : {});
   const directoryQuery = useUserDirectoryQuery(client ? { client } : {});
@@ -190,7 +181,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   const auditQuery = useAuditLogsInfiniteQuery({
     chain,
     filters,
-    newViewToken,
     ...(client ? { client } : {}),
   });
 
@@ -221,6 +211,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   const projectChainOptions = useMemo(() => {
     const activeIds = new Set(projects.map((project) => project.id));
     const options: CalmSelectOption[] = [
+      { value: "all", label: "全部记录（所有链）", iconText: "全" },
       { value: "system", label: "SYSTEM 链（系统级）", iconText: "SY" },
       ...projects.map((project) => ({
         ...projectSelectOption(project),
@@ -259,20 +250,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
     [directoryQuery.data],
   );
 
-  const readTrailSuppressed =
-    hideReadTrail && filters.action.trim() !== READ_TRAIL_ACTION;
-  const visibleItems = useMemo(
-    () =>
-      readTrailSuppressed
-        ? items.filter((item) => item.action !== READ_TRAIL_ACTION)
-        : items,
-    [items, readTrailSuppressed],
-  );
-  const hiddenReadTrailCount = items.length - visibleItems.length;
-  const dayGroups = useMemo(
-    () => groupAuditItemsByDay(visibleItems),
-    [visibleItems],
-  );
+  const dayGroups = useMemo(() => groupAuditItemsByDay(items), [items]);
   const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -368,11 +346,13 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
 
   const describeChain = useCallback(
     (value: AuditChain): string =>
-      value.kind === "system"
-        ? "SYSTEM 链"
-        : "「" +
-          (projectNameOf(value.projectId) ?? "项目 #" + value.projectId) +
-          "」项目链",
+      value.kind === "all"
+        ? "全部记录（所有链）"
+        : value.kind === "system"
+          ? "SYSTEM 链"
+          : "「" +
+            (projectNameOf(value.projectId) ?? "项目 #" + value.projectId) +
+            "」项目链",
     [projectNameOf],
   );
 
@@ -387,7 +367,6 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       return;
     }
     setFilterError(null);
-    // 筛选是同一次查看内的操作，不写新留痕（ADR-042）。
     setFilters(draftFilters);
   };
 
@@ -398,15 +377,16 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   };
 
   const handleChainChange = (value: string) => {
+    if (value === "all") {
+      setChain({ kind: "all" });
+      return;
+    }
     if (value === "system") {
-      // 切换审计对象开启一次新查看：重新写读取留痕（ADR-042）。
-      setNewViewToken((token) => token + 1);
       setChain({ kind: "system" });
       return;
     }
     const parsed = Number(value);
     if (Number.isSafeInteger(parsed) && parsed > 0) {
-      setNewViewToken((token) => token + 1);
       setChain({ kind: "project", projectId: parsed });
     }
   };
@@ -456,126 +436,95 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   } else {
     content = (
       <>
-        <div className="audit-trail-bar">
-          <label className="check-line">
-            <input
-              type="checkbox"
-              checked={hideReadTrail}
-              onChange={(event) =>
-                setHideReadTrail(event.currentTarget.checked)
-              }
-            />
-            隐藏读取留痕
-          </label>
-          {hiddenReadTrailCount > 0 ? (
-            <span>本页已隐藏 {hiddenReadTrailCount} 条读取留痕</span>
-          ) : null}
-        </div>
-        {visibleItems.length === 0 ? (
-          <CalmEmptyState
-            icon="shield"
-            title="本页记录均为读取留痕"
-            description="读取留痕是打开本页时自动生成的记录；取消隐藏即可查看。"
-          >
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setHideReadTrail(false)}
-            >
-              显示读取留痕
-            </button>
-          </CalmEmptyState>
-        ) : (
-          <div className="audit-list">
-            {dayGroups.map((group) => {
-              const collapsed = collapsedDays.has(group.key);
-              return (
-                <section className="activity-day" key={group.key}>
-                  <div className="activity-day-head">
-                    <span aria-hidden="true" className="activity-day-date">
-                      {group.shortLabel}
-                    </span>
-                    <div className="audit-line">
-                      <span />
-                    </div>
-                    <button
-                      type="button"
-                      className="activity-day-toggle"
-                      aria-expanded={!collapsed}
-                      title={collapsed ? "展开当天记录" : "收起当天记录"}
-                      onClick={() => toggleDay(group.key)}
-                    >
-                      <InpulseIcon
-                        name="chevron"
-                        size={14}
-                        {...(collapsed ? {} : { className: "expanded" })}
-                      />
-                      <strong>{group.label}</strong>
-                      <small>{group.items.length} 条</small>
-                    </button>
+        <div className="audit-list">
+          {dayGroups.map((group) => {
+            const collapsed = collapsedDays.has(group.key);
+            return (
+              <section className="activity-day" key={group.key}>
+                <div className="activity-day-head">
+                  <span aria-hidden="true" className="activity-day-date">
+                    {group.shortLabel}
+                  </span>
+                  <div className="audit-line">
+                    <span />
                   </div>
-                  {collapsed
-                    ? null
-                    : group.items.map((item) => {
-                        const time = formatAuditTime(item.occurredAt);
-                        const rowKey = item.chainId + "-" + item.sequenceNo;
-                        return (
-                          <div
-                            className="audit-row"
-                            key={rowKey}
-                            data-testid={"audit-item-" + rowKey}
-                          >
-                            <div className="audit-time">
-                              {time.date}
-                              <small>{time.time}</small>
+                  <button
+                    type="button"
+                    className="activity-day-toggle"
+                    aria-expanded={!collapsed}
+                    title={collapsed ? "展开当天记录" : "收起当天记录"}
+                    onClick={() => toggleDay(group.key)}
+                  >
+                    <InpulseIcon
+                      name="chevron"
+                      size={14}
+                      {...(collapsed ? {} : { className: "expanded" })}
+                    />
+                    <strong>{group.label}</strong>
+                    <small>{group.items.length} 条</small>
+                  </button>
+                </div>
+                {collapsed
+                  ? null
+                  : group.items.map((item) => {
+                      const time = formatAuditTime(item.occurredAt);
+                      const rowKey = item.chainId + "-" + item.sequenceNo;
+                      return (
+                        <div
+                          className="audit-row"
+                          key={rowKey}
+                          data-testid={"audit-item-" + rowKey}
+                        >
+                          <div className="audit-time">
+                            {time.date}
+                            <small>{time.time}</small>
+                          </div>
+                          <div className="audit-line">
+                            <span />
+                          </div>
+                          <div className="audit-content">
+                            <div className="activity-avatar">
+                              {actorAvatarOf(item)}
                             </div>
-                            <div className="audit-line">
-                              <span />
-                            </div>
-                            <div className="audit-content">
-                              <div className="activity-avatar">
-                                {actorAvatarOf(item)}
-                              </div>
-                              <div>
-                                <strong>
-                                  {actorNameOf(item)}
-                                  <span>{auditActionLabel(item.action)}</span>
-                                </strong>
-                                <p>对象：{targetLabelOf(item)}</p>
-                                <small>
-                                  {"第 " +
-                                    item.sequenceNo +
-                                    " 条 · " +
-                                    scopeLabelOf(item)}
-                                </small>
-                              </div>
-                            </div>
-                            <div className="audit-actions">
-                              <span className="audit-entity-badge">
-                                {item.actorType === "SYSTEM"
-                                  ? "系统操作"
-                                  : "用户操作"}
-                              </span>
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                aria-label={
-                                  "查看原始快照 第 " + item.sequenceNo + " 条"
-                                }
-                                onClick={() => setSnapshot(item)}
-                              >
-                                <InpulseIcon name="shield" size={13} />
-                                原始快照
-                              </button>
+                            <div>
+                              <strong>
+                                {actorNameOf(item)}
+                                <span>{auditActionLabel(item.action)}</span>
+                              </strong>
+                              <p>对象：{targetLabelOf(item)}</p>
+                              <small>
+                                {"第 " +
+                                  item.sequenceNo +
+                                  " 条 · " +
+                                  scopeLabelOf(item)}
+                              </small>
                             </div>
                           </div>
-                        );
-                      })}
-                </section>
-              );
-            })}
-          </div>
-        )}
+                          <div className="audit-actions">
+                            <span className="audit-entity-badge">
+                              {item.actorType === "SYSTEM"
+                                ? "系统操作"
+                                : "用户操作"}
+                            </span>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              aria-label={
+                                "查看原始快照 第 " + item.sequenceNo + " 条"
+                              }
+                              onClick={() => setSnapshot(item)}
+                            >
+                              <InpulseIcon name="shield" size={13} />
+                              原始快照
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+              </section>
+            );
+          })}
+        </div>
         {auditQuery.hasNextPage ? (
           <button
             type="button"
@@ -599,8 +548,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           <div>
             <h1>动态审计</h1>
             <p>
-              原始审计链仅系统管理员可读；打开本页或切换审计对象会在 SYSTEM
-              链留下一条读取留痕，筛选与翻页不会重复留痕。
+              原始审计链仅系统管理员可读；读取不会在审计链留下记录，可按动作、
+              操作人与时间范围筛选。
             </p>
           </div>
           <div className="catalog-actions activity-header-actions">
@@ -614,7 +563,13 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
         <div className="toolbar activity-toolbar audit-toolbar">
           <CalmSelect
             ariaLabel="审计链"
-            value={chain.kind === "system" ? "system" : String(chain.projectId)}
+            value={
+              chain.kind === "all"
+                ? "all"
+                : chain.kind === "system"
+                  ? "system"
+                  : String(chain.projectId)
+            }
             appearance="rich"
             onChange={(next) => handleChainChange(String(next))}
             options={projectChainOptions}
@@ -726,8 +681,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
           </li>
           <li>
             <strong>范围</strong>
-            不选择项目时读取 SYSTEM 链，选择项目时读取对应 PROJECT
-            链，不跨链返回。
+            默认读取「全部记录（所有链）」并按发生时间倒序跨链分页；选择 SYSTEM
+            链或某个项目链后只读该链，按链内序号倒序返回。
           </li>
         </ul>
       </section>
@@ -821,7 +776,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             </section>
             <p className="permission-hint">
               <InpulseIcon name="shield" size={14} />
-              审计日志不允许删除；原始快照仅系统管理员可见，读取本身已留痕。
+              审计日志不允许删除；原始快照仅系统管理员可见。
             </p>
           </div>
         ) : null}

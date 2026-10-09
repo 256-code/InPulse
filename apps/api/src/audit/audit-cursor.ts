@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
+import { AUDIT_CHAIN_ID_MAX_LENGTH } from "@inpulse/api-contract";
 
 import { SESSION_HMAC_KEYRING } from "../auth/auth.constants.js";
 import { VersionedHmacKeyring } from "../auth/keyring.js";
@@ -14,12 +15,28 @@ export const AUDIT_CURSOR_TTL_MS = 15 * 60 * 1_000;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 const BASE64URL_HASH_LENGTH = 43;
 
+/** `occurred_at` 由查询侧 to_char 产出：UTC ISO、必带 1..6 位小数秒与 Z。 */
+const UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+
 interface AuditCursorPayload {
   readonly v: number;
   readonly u: number;
   readonly q: string;
   readonly a: string;
   readonly e: number;
+  /** 跨链游标（ADR-061）才有：上一页最后一条的 chain_id。 */
+  readonly c?: string;
+  /** 跨链游标（ADR-061）才有：上一页最后一条的 occurred_at（UTC ISO）。 */
+  readonly t?: string;
+}
+
+/** 游标位置：单链游标只有 sequenceNo，跨链游标另带对齐用的链坐标。 */
+export interface AuditCursorPosition {
+  readonly sequenceNo: number;
+  /** 跨链游标：上一页最后一条的 `chain_id`。 */
+  readonly chainId?: string;
+  /** 跨链游标：上一页最后一条的 `occurred_at`（UTC ISO，微秒精度）。 */
+  readonly occurredAt?: string;
 }
 
 export interface AuditCursorEncodeInput {
@@ -27,6 +44,10 @@ export interface AuditCursorEncodeInput {
   /** 查询条件指纹（链 ID 与全部过滤条件的规范化文本），不得包含返回正文。 */
   readonly queryFingerprint: string;
   readonly afterSequenceNo: number;
+  /** 跨链分页才有：与 afterOccurredAt 成对提供。 */
+  readonly afterChainId?: string;
+  /** 跨链分页才有：与 afterChainId 成对提供。 */
+  readonly afterOccurredAt?: string;
   readonly nowMs?: number;
 }
 
@@ -105,6 +126,21 @@ function parsePayload(raw: string): AuditCursorPayload {
   if (!positiveInteger(payload.e ?? 0)) {
     fail("malformed", "audit cursor expiry is invalid");
   }
+  if ((payload.c === undefined) !== (payload.t === undefined)) {
+    fail("malformed", "audit cursor chain coordinates must be paired");
+  }
+  if (payload.c !== undefined) {
+    if (
+      typeof payload.c !== "string" ||
+      payload.c.length === 0 ||
+      payload.c.length > AUDIT_CHAIN_ID_MAX_LENGTH
+    ) {
+      fail("malformed", "audit cursor chain id is invalid");
+    }
+    if (typeof payload.t !== "string" || !UTC_ISO_PATTERN.test(payload.t)) {
+      fail("malformed", "audit cursor occurred at is invalid");
+    }
+  }
 
   return {
     v: payload.v!,
@@ -112,13 +148,18 @@ function parsePayload(raw: string): AuditCursorPayload {
     q: payload.q,
     a: payload.a,
     e: payload.e!,
+    ...(payload.c !== undefined && payload.t !== undefined
+      ? { c: payload.c, t: payload.t }
+      : {}),
   };
 }
 
 /**
  * 原始审计游标：base64url(payload).base64url(HMAC-SHA256)。Token 绑定
- * keyring 版本、操作者、查询条件指纹（链 ID 与过滤条件）和 afterSequenceNo，
- * 并带绝对过期时间；校验失败统一由 AuditQueryService 映射为 422。
+ * keyring 版本、操作者、查询条件指纹（链 ID 与过滤条件）和位置坐标，并带
+ * 绝对过期时间；单链分页只带 afterSequenceNo，跨链分页（ADR-061）另带
+ * 上一页最后一条的 chainId 与 occurredAt。校验失败统一由 AuditQueryService
+ * 映射为 422。
  */
 @Injectable()
 export class AuditCursorService {
@@ -135,6 +176,14 @@ export class AuditCursorService {
         "audit cursor afterSequenceNo must be a positive integer",
       );
     }
+    if (
+      (input.afterChainId === undefined) !==
+      (input.afterOccurredAt === undefined)
+    ) {
+      throw new Error(
+        "audit cursor chain coordinates must be provided together",
+      );
+    }
 
     const payload: AuditCursorPayload = {
       v: this.keyring.currentVersion,
@@ -142,6 +191,10 @@ export class AuditCursorService {
       q: fingerprintHash(input.queryFingerprint),
       a: String(input.afterSequenceNo),
       e: expiresAt,
+      ...(input.afterChainId !== undefined &&
+      input.afterOccurredAt !== undefined
+        ? { c: input.afterChainId, t: input.afterOccurredAt }
+        : {}),
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
       "base64url",
@@ -154,9 +207,9 @@ export class AuditCursorService {
   decode(
     cursor: string | undefined,
     context: AuditCursorDecodeContext,
-  ): number {
+  ): AuditCursorPosition | null {
     if (cursor === undefined) {
-      return 0;
+      return null;
     }
 
     const separator = cursor.indexOf(".");
@@ -208,6 +261,11 @@ export class AuditCursorService {
     if (!Number.isSafeInteger(afterSequenceNo) || afterSequenceNo <= 0) {
       fail("malformed", "audit cursor after sequence is out of range");
     }
-    return afterSequenceNo;
+    return {
+      sequenceNo: afterSequenceNo,
+      ...(payload.c !== undefined && payload.t !== undefined
+        ? { chainId: payload.c, occurredAt: payload.t }
+        : {}),
+    };
   }
 }

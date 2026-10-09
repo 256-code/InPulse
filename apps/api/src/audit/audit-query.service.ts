@@ -7,14 +7,13 @@ import {
 } from "@inpulse/api-contract";
 
 import { AuditReaderDatabase } from "../database/audit-reader.client.js";
-import { PostgresUnitOfWork } from "../database/unit-of-work.js";
-import { AuditCursorError, AuditCursorService } from "./audit-cursor.js";
-import { AuditWritePort } from "./audit.port.js";
+import {
+  AuditCursorError,
+  AuditCursorService,
+  type AuditCursorPosition,
+} from "./audit-cursor.js";
 
-/** 原始审计读取动作码（技术设计 7 / ADR-042）：每次新查看返回前写入 SYSTEM 链。 */
-export const AUDIT_LOG_READ_ACTION = "AUDIT_LOG_READ";
-
-/** 查询参数或游标非法 → 422；其他读取/留痕失败由调用方映射为 500。 */
+/** 查询参数或游标非法 → 422；其他读取失败由调用方映射为 500。 */
 export class AuditQueryValidationError extends Error {
   constructor(
     readonly reason: string,
@@ -28,13 +27,6 @@ export class AuditQueryValidationError extends Error {
 export interface AuditQueryInput {
   readonly actorUserId: number;
   readonly query: AuditLogQueryRequest;
-}
-
-export interface AuditReadTrailContext {
-  readonly requestId: string;
-  readonly clientRequestId?: string | null;
-  readonly ipAddress?: string | null;
-  readonly userAgent?: string | null;
 }
 
 export interface AuditQueryResult {
@@ -84,11 +76,8 @@ function buildQueryFingerprint(
 
 /**
  * F-08 步骤 4：原始审计读取。查询使用独立 `audit_reader` 只读连接，
- * 不占用业务事务；结果只在内存中暂存，开启一次新查看时（进入审计页、
- * 切换审计链；ADR-042 起按查看而不是每次请求计数）必须由 `app_runtime`
- * 在单独事务内通过受限追加函数向 SYSTEM 链写入 `AUDIT_LOG_READ`
- * （链、过滤条件、返回条数与操作者，不含返回正文）；留痕失败时丢弃
- * 结果并整体失败，绝不把未留痕的审计返回给调用方。
+ * 不占用业务事务、不写任何审计（读取留痕已由 ADR-060 移除）；
+ * 结果直接返回，游标由服务端签名并绑定操作者与查询指纹。
  */
 @Injectable()
 export class AuditQueryService {
@@ -97,15 +86,9 @@ export class AuditQueryService {
     private readonly reader: AuditReaderDatabase,
     @Inject(AuditCursorService)
     private readonly cursor: AuditCursorService,
-    @Inject(AuditWritePort) private readonly audit: AuditWritePort,
-    @Inject(PostgresUnitOfWork)
-    private readonly unitOfWork: PostgresUnitOfWork,
   ) {}
 
-  async query(
-    input: AuditQueryInput,
-    trail: AuditReadTrailContext,
-  ): Promise<AuditQueryResult> {
+  async query(input: AuditQueryInput): Promise<AuditQueryResult> {
     const { actorUserId, query } = input;
     if (
       query.from !== undefined &&
@@ -114,13 +97,22 @@ export class AuditQueryService {
     ) {
       throw new AuditQueryValidationError("invalid-range", "from 必须早于 to");
     }
-    const chainId = auditChainIdForProject(query.projectId);
+    if (query.chain === "all" && query.projectId !== undefined) {
+      throw new AuditQueryValidationError(
+        "invalid-chain",
+        "chain=all 与 projectId 不能同时使用",
+      );
+    }
+    // chain=all（ADR-061）读全部链；否则按 projectId 选单链（缺省 SYSTEM）。
+    const allChains = query.chain === "all";
+    const chainId = allChains ? null : auditChainIdForProject(query.projectId);
     const limit = query.limit ?? AUDIT_LOG_PAGE_LIMIT_DEFAULT;
-    const queryFingerprint = buildQueryFingerprint(chainId, query);
+    // 跨链用固定标识入指纹，保证游标不能跨读取模式或跨链复用。
+    const queryFingerprint = buildQueryFingerprint(chainId ?? "ALL", query);
 
-    let afterSequenceNo: number;
+    let position: AuditCursorPosition | null;
     try {
-      afterSequenceNo = this.cursor.decode(query.cursor, {
+      position = this.cursor.decode(query.cursor, {
         actorUserId,
         queryFingerprint,
       });
@@ -131,7 +123,7 @@ export class AuditQueryService {
       throw error;
     }
 
-    const rows = await this.readPage(chainId, query, afterSequenceNo, limit);
+    const rows = await this.readPage(chainId, query, position, limit);
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const items: AuditLogItem[] = pageRows.map((row) => ({
@@ -161,53 +153,31 @@ export class AuditQueryService {
             actorUserId,
             queryFingerprint,
             afterSequenceNo: Number(last.sequence_no),
+            ...(allChains
+              ? {
+                  afterChainId: last.chain_id,
+                  afterOccurredAt: last.occurred_at,
+                }
+              : {}),
           })
         : null;
-
-    // 留痕按「查看」而不是「每次请求」计数（ADR-042）：带签名游标的分页是
-    // 同一次查看的延续，服务端直接排除；筛选、重置与重试由客户端传
-    // readTrail=false 声明为延续。只有开启一次新查看的请求才写留痕。
-    const opensNewView =
-      query.cursor === undefined && query.readTrail !== "false";
-    if (opensNewView) {
-      await this.unitOfWork.run(async (tx) => {
-        await this.audit.append(tx, {
-          projectId: null,
-          actorType: "USER",
-          actorId: actorUserId,
-          action: AUDIT_LOG_READ_ACTION,
-          targetType: "AUDIT_CHAIN",
-          targetId: chainId,
-          eventPayload: {
-            chainId,
-            filters: {
-              action: query.action ?? null,
-              actorIds: query.actorIds ?? null,
-              from: query.from ?? null,
-              to: query.to ?? null,
-            },
-            returnedCount: items.length,
-            hasMore,
-          },
-          requestId: trail.requestId,
-          clientRequestId: trail.clientRequestId ?? null,
-          ipAddress: trail.ipAddress ?? null,
-          userAgent: trail.userAgent ?? null,
-        });
-      });
-    }
 
     return { items, nextCursor, hasMore };
   }
 
+  /**
+   * 单链按链序号倒序分页；`chainId === null`（chain=all，ADR-061）改为跨链
+   * 按 (occurred_at, chain_id, sequence_no) 倒序并做复合键集分页——各链的
+   * sequence_no 互相独立，单序号无法跨链定位。两种模式共用过滤条件与列清单。
+   */
   private async readPage(
-    chainId: string,
+    chainId: string | null,
     query: AuditLogQueryRequest,
-    afterSequenceNo: number,
+    position: AuditCursorPosition | null,
     limit: number,
   ): Promise<AuditLogRow[]> {
     const sql = await this.reader.readSql();
-    let where = sql`chain_id = ${chainId}`;
+    let where = chainId === null ? sql`TRUE` : sql`chain_id = ${chainId}`;
     if (query.action !== undefined) {
       where = sql`${where} AND action = ${query.action}`;
     }
@@ -220,9 +190,33 @@ export class AuditQueryService {
     if (query.to !== undefined) {
       where = sql`${where} AND occurred_at < ${query.to}::TIMESTAMPTZ`;
     }
-    if (afterSequenceNo > 0) {
-      where = sql`${where} AND sequence_no < ${afterSequenceNo}`;
+
+    let orderBy = sql`sequence_no DESC`;
+    if (chainId === null) {
+      orderBy = sql`occurred_at DESC, chain_id DESC, sequence_no DESC`;
+      if (position !== null) {
+        if (
+          position.chainId === undefined ||
+          position.occurredAt === undefined
+        ) {
+          throw new AuditQueryValidationError(
+            "invalid-cursor",
+            "跨链分页游标缺少链坐标",
+          );
+        }
+        where = sql`${where} AND (
+          occurred_at < ${position.occurredAt}::TIMESTAMPTZ
+          OR (occurred_at = ${position.occurredAt}::TIMESTAMPTZ
+              AND chain_id < ${position.chainId})
+          OR (occurred_at = ${position.occurredAt}::TIMESTAMPTZ
+              AND chain_id = ${position.chainId}
+              AND sequence_no < ${position.sequenceNo})
+        )`;
+      }
+    } else if (position !== null) {
+      where = sql`${where} AND sequence_no < ${position.sequenceNo}`;
     }
+
     return (await sql`
       SELECT chain_id,
              sequence_no,
@@ -245,7 +239,7 @@ export class AuditQueryService {
              canonical_version
         FROM app.audit_logs
        WHERE ${where}
-       ORDER BY sequence_no DESC
+       ORDER BY ${orderBy}
        LIMIT ${limit + 1}
     `) as unknown as AuditLogRow[];
   }

@@ -133,7 +133,7 @@ export const ActivitySnapshotModal: React.FC<ActivitySnapshotModalProps> = ({
         </pre>
         <p className="permission-hint">
           <InpulseIcon name="shield" size={14} />
-          审计日志不允许删除；原始快照仅系统管理员可见，读取本身已留痕。
+          审计日志不允许删除；原始快照仅系统管理员可见。
         </p>
       </>
     );
