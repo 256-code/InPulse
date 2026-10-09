@@ -5155,3 +5155,43 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ### 未运行 / 已知偏差
 
 ① 按 AGENTS.md 的 2026-09-17 纯前端免测试指示，本轮未运行 vitest（含新增断言）、`pnpm test:web`、Playwright 与 `pnpm check`；② `apps/e2e/tests/task-board.spec.ts` 只断言「未完成 / 已完成 / 逾期」chip，`apps/e2e/tests` 内 grep「已取消」为空，E2E 侧无对应断言需改（未实跑）；③ 本轮无用例进 Playwright 套件；④ `.sb-cancel` / `.tb-dot-canceled` CSS 规则与 `splitOf` 的 `canceledPercent` 保留为无引用残留（`done` / `todo` 字段同样未被 DOM 消费，为保持改动面最小未清理）；⑤ 本批含前端产品代码与测试改动，按 §8 需非作者人工评审。
+
+## 删除任务确认弹窗卡死修复与动态、审计中文标签（用户指示，2026-10-09 本地落库）
+
+用户报告（原话）：「现在删除任务后虽然会被删除但是这个弹窗确认删除会一直转，而且无法关闭，然后项目动态和审计日志里面要改成中文说明」。纯前端（`apps/web`），无契约 / 权限 / 数据库 / 后端改动；两条删除路由、迁移与权限矩阵均未动。
+
+### 根因（两变体实测对照，非推断）
+
+`TaskDeletionConfirm` 原先渲染在「编辑任务」弹窗的 children 内。rc-dialog 会 memo 化这份 children，因此删除成功后传给它的 `open={false}` / `pending={false}` **永远到不了组件**：它保持在最后一次渲染的打开态（`display: block`）、按钮保持 `loading`，同时 body 滚动锁不撤。编辑弹窗自身（Dialog 层）正常关闭，所以现象是「任务已删除、列表已刷新，但确认弹窗一直转圈且关不掉」。
+
+鉴别实验（同一页面、同一条删除流程，唯一变量是确认弹窗的挂载位置）：
+
+| 变体 | 编辑弹窗 | 确认弹窗 | body |
+| --- | --- | --- | --- |
+| 嵌套在编辑弹窗 children 内（旧结构） | 247ms 关闭 | **`display:block` + 转圈常驻 >10s** | `hidden`（滚动锁死） |
+| 与编辑弹窗平级（新结构） | — | **242ms 关闭** | `visible` |
+
+同一实验排除了另外两个候选因素：页面为 `reload` 后的干净模块（非 HMR 陈旧），且两变体的 `onCancel` 守卫均已移除（守卫不是卡死原因；`isPending` 在删除成功后必为 false）。
+
+### 修复面
+
+- `<TaskDeletionConfirm>` 由编辑弹窗子树**移出**为同级兄弟节点（附注释锁定该约束，防止回归时被移回）。
+- `onCancel` 去掉 `if (!deletion.isPending)` 守卫；取消按钮去掉 `disabled={pending}`；`mask={{ closable: !pending }}` 改为 `mask={{ closable: true }}` —— 删除一旦发起即不可撤销，确认弹窗必须随时可关。
+- `deletion.onSuccess` 改为非阻塞：`void Promise.all([...20 条失效链路])` + `void invalidateShellCounters(...)`。query-core 在 `onSuccess` resolve 之后才 dispatch success，`await` 会让 `isPending` 一直为 true，把确认弹窗的取消按钮、遮罩与 ✕ 一起上锁（本批一并修掉的第二个真实缺陷）。
+- `openDetail` / `handOffToDetail` 补 `setDeleteOpen(false)`，避免切换任务时残留删除确认态。
+
+### 中文标签
+
+`activity-labels.ts` 补 `TASK_DELETED: "删除任务"`，`audit-labels.ts` 补 `"task.delete": "删除任务"`。两张映射表都是白名单式查找，缺项会把原始枚举码直接渲染给用户（`TASK_DELETED` / `task.delete`），因此新增审计动作与活动类型必须同时补两处。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-DELETE-WEB-003 | Web 单元 | 改动文件的定向单测 | `vitest run src/features/tasks/TasksPanel.test.tsx` → **27/27 通过**（含 ADR-058 删除任务用例）；`pnpm --filter @inpulse/web typecheck` exit 0 | 本地通过 |
+| TASK-DELETE-MODAL-001 | 浏览器实测（两变体对照） | 确认弹窗关闭时延与滚动锁恢复 | 平级结构：确认弹窗 242ms 关闭、`body` 恢复 `visible`、无残留可见 `.ant-modal-wrap`；嵌套结构（反事实）：关闭超时 >10s 且 `body: hidden` | 本地通过（一次性 Playwright 探针，**未进 E2E 套件**） |
+| TASK-DELETE-MODAL-002 | 浏览器实测 | 删除后列表与侧栏计数刷新 | 功能下任务数 5 → 4；侧栏任务中心未完成角标 4 → 3 | 本地通过（同上探针） |
+| TASK-DELETE-LABEL-001 | 浏览器实测 | 项目动态按中文渲染删除条目 | `/activity` 页面 6 处「删除任务」条目（形如「邵晨宇 删除任务」），页面文本中不含 `TASK_DELETED` / `task.delete` / `TASK_RESTORED` / `record.void` 原始码 | 本地通过（同上探针） |
+| TASK-DELETE-LABEL-002 | 浏览器实测 | 审计日志按中文渲染删除条目 | 审计页切到 `PROJECT:123` 链后 6 处「删除任务」，不含 `task.delete` / `task.cancel` / `task.merge` 原始码 | 本地通过（同上探针） |
+
+### 未运行 / 已知偏差
+
+① 未跑整链 `pnpm check`、`pnpm test:web` 全量与 Playwright 套件（本轮只跑了定向 `TasksPanel.test.tsx` 与一次性探针，探针脚本用后已删除）；② `apps/web/src/features/tasks/task-query.ts` 的 `useTasks` 的 `mutation.onSuccess` 里仍有同形的 `await Promise.all`（11 条失效链路），会让该处 `isPending` 多持续一次失效耗时——**本批有意未改**（不在本次报告的问题范围内），如需一并收口须另行指示；③ 探针在演示库创建并删除的 4 个任务为一次性夹具（软删除，`deleted_at` 保留、UI 与各读路径已过滤），未物理清除；④ 本批含前端产品代码，按 §8 需非作者人工评审。

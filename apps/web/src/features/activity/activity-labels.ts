@@ -67,6 +67,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "task.unarchive": "恢复任务",
   TASK_ARCHIVED: "归档任务",
   TASK_RESTORED: "恢复任务",
+  // ADR-058：删除任务动态（与审计 `task.delete` 同一动作）。
+  TASK_DELETED: "删除任务",
   "task.merge": "合并任务",
   "task.unmerge": "解除合并",
   "record.publish": "发布记录",

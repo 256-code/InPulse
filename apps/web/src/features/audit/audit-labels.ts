@@ -32,6 +32,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "task.unarchive": "恢复任务",
   "task.merge": "合并任务",
   "task.unmerge": "解除合并",
+  // ADR-058：删除任务（软删除，无恢复入口）。
+  "task.delete": "删除任务",
   "record.draft.create": "创建草稿",
   "record.draft.update": "更新草稿",
   "record.draft.delete": "删除草稿",

@@ -252,14 +252,10 @@ function TaskDeletionConfirm({
       tone="danger"
       icon="alert"
       onCancel={onCancel}
-      mask={{ closable: !pending }}
+      mask={{ closable: true }}
       footer={
         <>
-          <Button
-            className="secondary-button"
-            disabled={pending}
-            onClick={onCancel}
-          >
+          <Button className="secondary-button" onClick={onCancel}>
             取消
           </Button>
           <Button
@@ -545,6 +541,8 @@ export function TasksPanel({
     setTab("info");
     setStatusAction(null);
     setOpenRecordId(null);
+    // 详情回退 / 合并交接只清 selection、不清删除确认态，避免打开任务时误弹确认框。
+    setDeleteOpen(false);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
     reset(item ? taskEdit(item) : empty);
@@ -609,10 +607,13 @@ export function TasksPanel({
           );
     },
     retry: false,
-    onSuccess: async () => {
+    onSuccess: () => {
       setDeleteOpen(false);
       setSelection(null);
-      await Promise.all(
+      // 刷新必须非阻塞：query-core 在 `onSuccess` resolve 之后才 dispatch success，
+      // 也就是这 20 条失效链路跑完 `isPending` 才转 false；而确认弹窗的取消按钮、
+      // 遮罩与 ✕ 都按它上锁——await 在这里会让弹窗一直转圈并且关不掉。
+      void Promise.all(
         [
           ["tasks"],
           ["task-board"],
@@ -638,7 +639,7 @@ export function TasksPanel({
         ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       );
       // 删除会改变侧栏计数（任务中心未完成 / 遗留问题），与作废记录同一处理。
-      await invalidateShellCounters(queryClient);
+      void invalidateShellCounters(queryClient);
     },
   });
   /**
@@ -659,6 +660,7 @@ export function TasksPanel({
     generation.current++;
     setSelection(null);
     setMerge(null);
+    setDeleteOpen(false);
     if (id === null) return false;
     openDetail(id);
     setOpenRecordId(null);
@@ -1909,22 +1911,22 @@ export function TasksPanel({
             </Button>
           </div>
         </form>
-        {/* ADR-058：删除确认弹窗挂在编辑弹窗内，与页脚「删除任务」入口同一层；
-            编辑弹窗打开时详情弹窗已卸载，所以这里不会出现第三层遮罩。 */}
-        <TaskDeletionConfirm
-          item={selection?.item}
-          open={deleteOpen}
-          pending={deletion.isPending}
-          error={deletion.error}
-          onCancel={() => {
-            if (!deletion.isPending) setDeleteOpen(false);
-          }}
-          onConfirm={() => {
-            const item = selection?.item;
-            if (item) deletion.mutate(item);
-          }}
-        />
       </Modal>
+      {/* ADR-058：删除确认弹窗必须渲染在编辑弹窗**之外**（与编辑弹窗平级）。
+          曾把它挂在编辑弹窗子树内，而 rc-dialog 会 memo 化编辑弹窗的 children，
+          `open=false` / `pending=false` 的 prop 更新永远传不进去：删除成功后确认弹窗
+          会卡在打开态一直转圈、遮罩不撤、body 滚动锁死（已用两个变体实测对照确认）。 */}
+      <TaskDeletionConfirm
+        item={selection?.item}
+        open={deleteOpen}
+        pending={deletion.isPending}
+        error={deletion.error}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          const item = selection?.item;
+          if (item) deletion.mutate(item);
+        }}
+      />
     </section>
   );
 }
