@@ -10,6 +10,8 @@ import {
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
 import { ProjectLogo } from "@features/common/components/ProjectLogo";
+import { projectTier } from "@features/common/resource-lifecycle";
+import { useProjectTier } from "@features/common/project-tier-context";
 import { useFeatures } from "@features/features/feature-query";
 import { useModules } from "@features/modules/module-query";
 import { useProjects } from "@features/projects/project-query";
@@ -439,12 +441,15 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
   client,
 }) => {
   const projects = useProjects({ client });
+  const { tier } = useProjectTier();
   const [extraExpanded, setExtraExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  // 当前项目：手风琴规则的唯一依据（见下方 expandedKeys 与切换副作用）。
+  const activeProjectId = activeScope?.projectId ?? null;
   const chainKeys = useMemo(() => {
     const keys = new Set<string>();
     if (activeScope === null) {
@@ -462,20 +467,29 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     }
     return keys;
   }, [activeScope, activePageSegment]);
+  // 手风琴（2026-10-09 用户指示）：树里任何时刻至多铺开一个项目，且只有「当前项目」
+  // 能铺开——展开态由路由推导，不靠点击累积。项目列表页没有当前项目，整棵树因此默认
+  // 收起；进入项目默认打开、点开另一个项目自动收起前一个，都由 activeProjectId 统一
+  // 驱动，从目录树、项目卡片或面包屑进来结果一致。
   const expandedKeys = useMemo(() => {
     const keys = new Set<string>();
+    if (activeProjectId === null) {
+      return keys;
+    }
+    const ownedByCurrentProject = (key: string) =>
+      projectOwnerOf(key) === activeProjectId;
     for (const key of chainKeys) {
-      if (!collapsed.has(key)) {
+      if (ownedByCurrentProject(key) && !collapsed.has(key)) {
         keys.add(key);
       }
     }
     for (const key of extraExpanded) {
-      if (!collapsed.has(key)) {
+      if (ownedByCurrentProject(key) && !collapsed.has(key)) {
         keys.add(key);
       }
     }
     return keys;
-  }, [chainKeys, collapsed, extraExpanded]);
+  }, [activeProjectId, chainKeys, collapsed, extraExpanded]);
   // 链路只负责自动展开、不负责收回：展开过的节点写入 extraExpanded 保留，
   // 用面包屑回到项目概况等上层页面时子级不自动收起，只有点击节点才开合。
   useEffect(() => {
@@ -492,26 +506,23 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     });
   }, [chainKeys, collapsed]);
 
-  // 手风琴语义：当前项目之外的展开态一律收起。挂在当前项目上而不是点击事件上，
-  // 从目录树、项目卡片或面包屑进入都能得到"同一时刻只铺开一个项目"的结果。
-  const activeProjectId = activeScope?.projectId ?? null;
+  // 切换（含进入 / 离开）项目时只保留当前项目的展开痕迹，并清掉收起标记：
+  // 上一个项目的残留键不会带到新项目，重新进入某个项目也总是「默认打开」，
+  // 而不是继承上一次在树上把它收起的状态。
   useEffect(() => {
-    if (activeProjectId === null) {
-      return;
-    }
     setExtraExpanded((prev) => {
-      const next = new Set<string>();
-      let changed = false;
-      for (const key of prev) {
-        const owner = projectOwnerOf(key);
-        if (owner !== null && owner !== activeProjectId) {
-          changed = true;
-          continue;
-        }
-        next.add(key);
+      if (activeProjectId === null) {
+        return prev.size === 0 ? prev : new Set<string>();
       }
-      return changed ? next : prev;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (projectOwnerOf(key) === activeProjectId) {
+          next.add(key);
+        }
+      }
+      return next.size === prev.size ? prev : next;
     });
+    setCollapsed((prev) => (prev.size === 0 ? prev : new Set<string>()));
   }, [activeProjectId]);
 
   const toggle = (key: string) => {
@@ -556,7 +567,22 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     onNavigate(treePath(projectId, next));
   };
 
-  const items = projects.data?.items ?? [];
+  const allProjects = projects.data?.items ?? [];
+  // 侧栏与项目列表页共享同一分档（`ProjectTierProvider`，2026-10-09 用户指示）：
+  // 未完成档只列进行中 / 未开始，维护中档只列维护中项目。
+  // 当前所在项目始终保留：分档是浏览过滤器，不该把正在看的项目从树上摘掉，
+  // 否则从「维护中」档点进项目后侧栏立刻找不到它。
+  const items = allProjects.filter(
+    (item) => projectTier(item.status) === tier || item.id === activeProjectId,
+  );
+  // 空态要分清「一个项目都没有」和「这一档没有项目」，后者是筛选结果
+  // 而不是系统里真的没有项目。
+  const emptyHint =
+    allProjects.length === 0
+      ? "暂无项目"
+      : tier === "maintenance"
+        ? "暂无维护中的项目"
+        : "暂无未完成的项目";
   return (
     <div className="project-tree">
       <div className="project-tree-scroll">
@@ -571,7 +597,7 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
         ) : projects.isError ? (
           <p className="tree-hint">项目加载失败</p>
         ) : items.length === 0 ? (
-          <p className="tree-hint">暂无项目</p>
+          <p className="tree-hint">{emptyHint}</p>
         ) : (
           items.map((item) => (
             <ProjectBranch

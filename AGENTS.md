@@ -758,3 +758,26 @@
 - **有意保留的例外**：`common/components/CalmDateTimeInput.tsx`、`published-records/ConvertLeftoverTask.tsx`、`tasks/GlobalTaskCreateModal.tsx` 里的 `datetime-local` 仍是浏览器本地墙上时间——它与输入框往返自洽（写回 `new Date(next).toISOString()` 用的是同一套本地语义），本轮不动，避免把「选择器显示」与「选择器取值」拆成两套口径。
 - 未改：`task-board/task-board-format.ts`（本来就是 `Asia/Shanghai`，本批以它为准）、`features/features` 的 `toLocaleLowerCase` 搜索、各处只用于排序 / 比较的时间戳运算。
 - 本地验证（2026-10-09）：新增 `apps/web/src/features/common/beijing-time.test.ts`（5 例，期望值全部硬编码，避免测试机时区不是 +8 时对本地时区实现假通过）与 `FeaturesPageView.test.tsx` 的更新时间回归用例；`pnpm --filter @inpulse/web test` **92 文件 655 例全绿**（基线 91 文件 649 例），`pnpm --filter @inpulse/web typecheck`、`pnpm exec prettier --check`（本批 26 个文件）通过；真实 dev（Vite 5173）`/projects/3/modules/3843/features/6491` 复验页头显示「更新 2026-10-09 14:23」，与项目动态页同一事件的 14:23 一致。`audit/audit-query.test.tsx` 与 `audit/AuditLogPageView.test.tsx` 里两处「表单 08:00 → `new Date(...).toISOString()`」的期望改为显式 `2026-09-01T00:00:00.000Z`。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 项目列表生命周期分档与侧栏项目树联动
+
+用户指示（原话）：「这边项目导航栏要改一下，点进项目列表后默认显示未完成的项目，左侧导航栏也只显示未进入维护中状态的项目，切换到维护中状态后左侧导航栏显示维护中的项目」（附侧栏截图：「项目」分组下列「验证 K123」「项目1 K1235」）。当天上一批刚给项目列表页加了「未完成 / 维护中」滑块，但档位只存在页面 `useState` 里，侧栏项目树始终罗列全部项目；从维护中档点进维护中项目后侧栏会立刻退回未完成档，正在看的项目反而从树上消失。纯前端展示与导航改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 新增 `apps/web/src/features/common/project-tier-context.tsx`（`ProjectTierProvider` + `useProjectTier`，默认档 `"open"` 未完成）；`apps/web/src/app/router/AppRouter.tsx` 的根路由元素改为 `<ProjectTierProvider><AppLayout /></ProjectTierProvider>`（根路由元素不随子路由切换重挂，档位因此跨页面存活）。
+- `apps/web/src/features/projects/ProjectsPageView.tsx`：删掉页面内的 `useState<ProjectTier>("open")`，改读共享档位（`const { tier, selectTier } = useProjectTier()`，滑块 `onChange={selectTier}`）；滑块位置、两档计数、默认档、维护中档按 `updatedAt` 的客户端重排均不变。
+- `apps/web/src/features/project-tree/ProjectTree.tsx`：项目行按 `projectTier(item.status) === tier || item.id === activeProjectId` 过滤——未完成档只列进行中 / 未开始，维护中档只列维护中项目；**当前所在项目始终保留**（分档是浏览过滤器，不该把正在看的项目从树上摘掉）。空态文案按档位区分：库里没有项目仍是「暂无项目」，这一档没有项目显示「暂无未完成的项目」/「暂无维护中的项目」。
+- `apps/web/src/app/layout/AppLayout.tsx`：读同一档位，侧栏「项目」分组标题在维护中档显示「维护中项目」（项目上下文内仍是「当前项目」）。
+- **降级**：没有 Provider 时 `useProjectTier` 回落到组件内 `useState("open")`，`AppLayout.test.tsx` 直接挂载 `AppLayout`、侧栏或列表页单独渲染时行为与改动前一致。
+- **未改动**：项目卡与卡片页脚、列表搜索、排序口径、服务端 `apps/api/src/stats/card-stat-columns.ts` 的三档排序键、其它页面的项目选择器（仍是全量项目）、项目树只在 `/projects` 与项目路由内渲染这一既有行为。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **93 文件 660 例全绿**（基线 91 文件 649 例），新增 `apps/web/src/features/projects/project-tier-sync.test.tsx`（列表页滑块 ↔ 侧栏项目树同步）与 `ProjectTree.test.tsx`《ProjectTree 分档过滤》4 例；`typecheck`、`eslint`、`prettier`、`check:boundaries`（316 模块 / 1578 依赖无违规）通过。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 侧栏项目树改为严格手风琴（只展开当前项目）
+
+用户指示（原话）：「侧边栏还是默认收起，进入项目后默认打开，点开另一个项目后默收起前一个，侧边项目展开至多一个」。纯前端导航行为改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/project-tree/ProjectTree.tsx`：展开态改为**由路由推导**——`expandedKeys` 只放行 `projectOwnerOf(key) === activeProjectId` 的键，`activeProjectId` 为 `null`（项目列表页）时整棵树收起；为便于 `expandedKeys` 引用，`activeProjectId` 的声明提前到 `chainKeys` 之前。
+- 进入 / 离开 / 切换项目的副作用：只保留当前项目的展开键（其它项目的残留键删除），并把 `collapsed` 清空——重新进入某个项目总是「默认打开」，而不是继承上一次在树上把它收起的状态。
+- 行为结果：项目列表页整棵树收起（不再保留刚离开项目的展开态）；点进项目后当前项目默认铺开（停在 `/projects/:id/modules` 时链路还会展开「模块与功能」）；点开另一个项目时前一个立即收起，任何时刻至多一个项目铺开。
+- **未改动**：`chainKeys` 的链路语义（当前项目 + 模块与功能 + 模块）、`extraExpanded` / `collapsed` 对子级（子页行、模块行）的开合与保留、`useRetainedMount` 的收起延迟卸载与 CSS 过渡、项目行「点自己开合且始终导航」的行为。
+- 测试同步（展开态改由路由推导后，旧用例「点击项目行但不导航也展开」的前置不再成立）：`ProjectTree.test.tsx` 新增 `RoutedTree` / `mountRouted` 壳让 `activeScope` 跟随路径变化（与真实路由一致），用例 1–5 改挂该壳并去掉冗余的「模块与功能」点击；新增《collapses every project branch back on the project list page》；`ProjectTree.accordion.test.tsx` 补「列表页进来整棵树收起」断言。
+- 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **93 文件 661 例全绿**；`typecheck`（8 workspace）、`lint`、`build`、`prettier --check .`、`check:boundaries` 通过；真实 dev（Vite 5173）实测三态——`/projects` 侧栏「验证 K123」收起 → 点进项目「当前项目 · 验证」铺开（任务看板 / 模块与功能 / 校验）→ 回 `/projects` 再次收起；维护中档（项目1）表现一致。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、服务端 `test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。

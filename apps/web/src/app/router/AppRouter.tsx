@@ -12,6 +12,7 @@ import { AppLayout } from "../layout/AppLayout";
 import { RequireAuth, RequireAdmin } from "../auth/auth-guard";
 import { RouteErrorPage } from "../errors/RouteErrorPage";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { ProjectTierProvider } from "@features/common/project-tier-context";
 
 /** 项目概览已与「模块与功能」合并：旧地址不再单独渲染页面，整体重定向到项目主页。 */
 const ProjectOverviewRedirect: React.FC = () => {
@@ -60,7 +61,12 @@ export function createInPulseRouter(
 
   const rootRoute: RouteObject = {
     path: "/",
-    element: <AppLayout />,
+    // 项目列表的「未完成 / 维护中」分档由 Provider 持有：侧栏项目树与列表页共用一份状态。
+    element: (
+      <ProjectTierProvider>
+        <AppLayout />
+      </ProjectTierProvider>
+    ),
     // 兜底错误页：路由级异常与默认 404 都不再落到 React Router 的开发者页面。
     errorElement: <RouteErrorPage />,
     children: [
