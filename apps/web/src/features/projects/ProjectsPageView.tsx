@@ -112,7 +112,8 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   // `updatedAt` 近似：切到维护中会写 `projects.updated_at`，此后只有再次编辑项目本身
   // （改名、改描述）才会把它推近，任务与成员的变化不写这一列。服务端 `list` 的默认
   // 顺序是「档位 + 最近变更时间（含任务动态）」，维护中一档会随任务动态漂移，所以本档
-  // 在客户端重排；未完成一档保持服务端顺序（进行中 → 未开始，档内最近变更在前）。
+  // 在客户端重排；未完成一档保持服务端顺序——自 ADR-060 起该档不再分「进行中 / 未开始」，
+  // 档内一律按最近变更时间从近到远，项目一有更新就排到最前。
   const tierProjects =
     tier === "maintenance"
       ? projects

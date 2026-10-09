@@ -73,6 +73,7 @@
 | [ADR-057](ADR-057.md) | Accepted | 任务重新变为未收尾即让维护中项目回到进行中：重新打开（`REOPEN`）与恢复（`RESTORE`）与新建任务同口径（`trigger = TASK_REOPENED` / `TASK_RESTORED`、端口更名 `reopenMaintenanceProject`、前端补 `projects` 缓存失效），`COMPLETE` / `CANCEL` 不触发（扩展 ADR-056 的触发面、修订其非目标第 2 条） |
 | [ADR-058](ADR-058.md) | Accepted | 取消任务改为「二次确认后删除任务」：任务层软删除（`deleted_at` / `deleted_by`，保留编号、状态历史、迭代记录与审计）、同事务解除 GitHub 链接关联、作废该任务的迭代记录、聚合组 SOURCE 自动解除 / MAIN 拒绝（409 `TASK_GROUP_MAIN_LOCKED`）、写 `task.delete` 审计与 `TASK_DELETED` 动态并移除搜索投影；不提供恢复入口（修订 ADR-054 的「取消」语义、扩展 ADR-049 的软删除范式；补 `0035` 的 `search_projection` DELETE 授权缺陷） |
 | [ADR-059](ADR-059.md) | Accepted | 模块与功能增加删除：两者均为软删除（`deleted_at` / `deleted_by`，迁移 `0036`），删除模块级联软删除其全部功能与全部任务（任务按 ADR-058 语义处理）、删除功能只级联其自身任务，模块 / 功能自身的已发布记录一并作废、影响关系行保留；未分类模块不可删除（409 `MODULE_UNCLASSIFIED_PROTECTED`）；权限为系统管理员或本项目组长（ADR-039 的第五处例外）；读路径补 `deleted_at IS NULL`（修订 ADR-039 管理操作清单、扩展 ADR-049 / ADR-058 的软删除范式） |
+| [ADR-060](ADR-060.md) | Accepted | 项目列表「未完成」档内统一按最近变更时间排序：第一排序键档位由三档收窄为两档（未完成 = 进行中与未开始同属一档、维护中），未完成档内「一有更新就排最前」（修订 ADR-046 决策 1 的项目列表行与 2026-10-08 修订的档位口径；模块与功能两层不变） |
 
 ## 关联基线
 

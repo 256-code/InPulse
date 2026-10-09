@@ -99,21 +99,25 @@ const completedTaskCountColumn = (
          ) AS "completedTaskCount"`;
 
 /**
- * 项目生命周期排序键（ADR-043）：直接读存储状态，三态各有固定档位——
- * 0 = 进行中、1 = 未开始、2 = 维护中；`ELSE 3` 只兜底未知脏值，排在最后。
- * 前端 `apps/web/src/features/common/resource-lifecycle.ts` 的
- * `projectLifecycleKind` 按同一顺序渲染标签，两处必须一起修改。
+ * 项目列表排序键（ADR-060，修订 ADR-046 决策 1 的项目行）：只分「未完成 / 维护中」两档——
+ * 0 = 未完成（进行中 `ACTIVE` 与未开始 `NOT_STARTED` 同属一档）、1 = 维护中；`ELSE 2` 只兜底
+ * 未知脏值，排在最后。
  *
- * 档位相同（同一状态）的项目再按 `projectLastChangeExpression` 从近到远排，
- * 时间相同时按创建时间、ID 降序兜底，保证刷新前后顺序稳定；追加键由调用方
+ * 2026-10-09 用户指示：「在项目未完成状态下，每次当项目中有更新，则将项目排序排到最前面」。
+ * 因此未完成档内不再先按进行中 → 未开始分档，统一由 `projectLastChangeExpression` 从近到远排
+ * （最近有业务变更的项目排最前），时间相同时按创建时间、ID 降序兜底；追加键由调用方
  * `postgres-project-query-port.ts` 的 `list` 写在 `ORDER BY` 里，本函数只产出档位这一列。
+ *
+ * 前端 `apps/web/src/features/common/resource-lifecycle.ts` 的 `projectTier` 按同一归并
+ * 渲染「未完成 / 维护中」两档；项目标签本身仍按三态渲染（进行中 / 未开始 / 维护中），标签与
+ * 分档都要跟着本函数修改。
  */
-export function projectLifecycleRankExpression(sql: ISql, table: "p" | "u") {
+export function projectTierRankExpression(sql: ISql, table: "p" | "u") {
   return sql`CASE ${sql(`${table}.status`)}
              WHEN 'ACTIVE' THEN 0
-             WHEN 'NOT_STARTED' THEN 1
-             WHEN 'MAINTENANCE' THEN 2
-             ELSE 3
+             WHEN 'NOT_STARTED' THEN 0
+             WHEN 'MAINTENANCE' THEN 1
+             ELSE 2
            END`;
 }
 

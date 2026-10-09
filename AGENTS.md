@@ -810,3 +810,15 @@
 - **未改动**：`chainKeys` 的链路语义（当前项目 + 模块与功能 + 模块）、`extraExpanded` / `collapsed` 对子级（子页行、模块行）的开合与保留、`useRetainedMount` 的收起延迟卸载与 CSS 过渡、项目行「点自己开合且始终导航」的行为。
 - 测试同步（展开态改由路由推导后，旧用例「点击项目行但不导航也展开」的前置不再成立）：`ProjectTree.test.tsx` 新增 `RoutedTree` / `mountRouted` 壳让 `activeScope` 跟随路径变化（与真实路由一致），用例 1–5 改挂该壳并去掉冗余的「模块与功能」点击；新增《collapses every project branch back on the project list page》；`ProjectTree.accordion.test.tsx` 补「列表页进来整棵树收起」断言。
 - 本地验证（2026-10-09）：`pnpm --filter @inpulse/web test` **93 文件 661 例全绿**；`typecheck`（8 workspace）、`lint`、`build`、`prettier --check .`、`check:boundaries` 通过；真实 dev（Vite 5173）实测三态——`/projects` 侧栏「验证 K123」收起 → 点进项目「当前项目 · 验证」铺开（任务看板 / 模块与功能 / 校验）→ 回 `/projects` 再次收起；维护中档（项目1）表现一致。**未运行**：全量 `pnpm test:e2e`、整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、服务端 `test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-09 项目列表未完成档内统一按最近变更时间排序（ADR-060）
+
+用户指示（原话）：「我希望在项目未完成状态下，每次当项目中有更新，则将项目排序排到最前面」。原排序第一键是「生命周期档位（进行中 → 未开始 → 维护中）」，于是「未开始」项目永远排在「进行中」项目之后——未开始项目无论怎么更新都挤不到前面。本批把第一键收窄为两档（未完成 = 进行中 + 未开始；维护中），未完成档内统一按最近变更时间从近到远。改 SQL 排序与注释、契约描述与生成物、集成测试断言，无契约结构 / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动（[ADR-060](./docs/adr/ADR-060.md)）：
+
+- 服务端：`apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression` 更名为 `projectTierRankExpression`，CASE 由 `ACTIVE → 0 / NOT_STARTED → 1 / MAINTENANCE → 2 / ELSE 3` 改为 `ACTIVE → 0 / NOT_STARTED → 0 / MAINTENANCE → 1 / ELSE 2`；`apps/api/src/modules/projects/postgres-project-query-port.ts` 的 import 与 `ORDER BY` 同步更名（其余排序键「最近变更时间 → 创建时间 → ID」不变）。这是 [ADR-046](./docs/adr/ADR-046.md) 决策 1 项目行的修订：**只动项目列表**，模块与功能两层仍是「进行中 → 未开始 → 创建时间从近到远」。
+- 未完成档内「一有更新就排最前」：`ACTIVE` 与 `NOT_STARTED` 在同一档内竞争第二键「最近变更时间」（该项目动态里最新一条业务事件的发生时间，`projectLastChangeExpression`），没有动态的项目回落 `created_at`。`MAINTENANCE` 仍整档垫底。
+- 标签不变：项目仍是 `ACTIVE` / `NOT_STARTED` / `MAINTENANCE` 三态，前端 `resource-lifecycle.ts` 的 `projectLifecycleLabel` 仍按三态渲染；只有排序档位与展示层归并的 `projectTier` 收窄为两档（`apps/web/src/features/common/resource-lifecycle.ts`、`apps/web/src/features/projects/ProjectsPageView.tsx` 仅改注释）。
+- 契约与生成物：`packages/api-contract/src/route-registry.ts` 的 `listProjects` summary 同步；`pnpm contract:generate` 重生成 5 产物，仅 `openapi.json` 变更 1 行，`contract:drift` 通过，`contract:validate` 105 条通过。
+- 不新增索引与迁移（沿用 ADR-046 决策 3 的结论）：第一键仍是相关子查询算出的 `CASE`，索引无法满足；`MAX(occurred_at)` 走既有 `activity_projection_project_cursor_idx`。
+- 回归防线：`apps/api/test/projects-read-api.integration.test.ts` 两个列表顺序用例（真实 HTTP + 真实 PostgreSQL）；改动该口径时必须跑 `pnpm --filter @inpulse/api test:integration`。本地实测 56 文件 545 例全绿；真实 dev 实测未完成档内 `OPS_DASH`（未开始）排在 `AGV_SCHED`（进行中）之前，向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位。
+- 本地验证（2026-10-09）：`pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm format:check` 通过。**未运行**：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:web`、全量 `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。

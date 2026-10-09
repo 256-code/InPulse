@@ -5421,3 +5421,23 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | TREE-ACCORDION-GATE-001 | 门禁 | 类型 / 静态检查 / 依赖边界 / 格式 | `pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm build`、`pnpm format:check`、`pnpm --filter @inpulse/web check:boundaries` 全部通过 | 本地通过（2026-10-09） |
 
 未运行 / 已知偏差：① **未跑** 全量 `pnpm test:e2e` 与整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 项目列表页上「点项目行」在真实路由里会立刻导航进该项目（路径 `/projects/:id/modules`），因此列表页不提供「只展开不跳转」的入口；若产品希望列表页也能就地展开浏览，需要改成不导航的手风琴入口。③ 展开态仍不写 URL、不落库，刷新页面后回到「当前项目默认打开」的推导结果。
+
+## 项目列表未完成档内统一按最近变更时间排序（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「我希望在项目未完成状态下，每次当项目中有更新，则将项目排序排到最前面」。原排序「档位（进行中 → 未开始 → 维护中）→ 最近变更时间 DESC」把「未开始」项目永远压在「进行中」项目之后，未开始项目的更新挤不到前面。本批把第一排序键由三档收窄为两档（未完成 = 进行中 + 未开始；维护中），未完成档内统一按最近变更时间从近到远（详见 [ADR-060](adr/ADR-060.md)）。改 SQL 排序与注释、契约描述与生成物、集成测试断言，无契约结构 / 权限 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 服务端：`apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression` 更名为 `projectTierRankExpression`，CASE 由 `ACTIVE → 0 / NOT_STARTED → 1 / MAINTENANCE → 2 / ELSE 3` 改为 `ACTIVE → 0 / NOT_STARTED → 0 / MAINTENANCE → 1 / ELSE 2`；`apps/api/src/modules/projects/postgres-project-query-port.ts` 的 import 与 `ORDER BY` 同步更名（其余排序键不变）。
+- 契约与生成物：`packages/api-contract/src/route-registry.ts` 的 `listProjects` summary 同步；`pnpm contract:generate` 重生成 5 产物，仅 `packages/api-contract/generated/openapi.json` 变更 1 行。
+- 前端：`apps/web/src/features/common/resource-lifecycle.ts` 与 `apps/web/src/features/projects/ProjectsPageView.tsx` 仅改注释。
+- 未改动：项目标签三态渲染与配色、模块 / 功能两层排序、维护中档的客户端重排、`ORDER BY` 的追加键。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-TIER-ORDER-INT-001 | API 集成 | 无动态时未完成档内按创建时间从近到远（ADR-060） | `projects-read-api.integration.test.ts`《列表先按「未完成 / 维护中」两档排序…》：`[newerNotStarted, notStarted, active, maintenance]`、`completedTaskCount` `[0, 0, 1, 0]`（`active` 最早建且有 1 条已完成任务，仍排在两个后建项目之后） | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-INT-002 | API 集成 | 档内按最近变更时间、不再分进行中与未开始；档位仍优先于时间 | 同文件《项目按最近变更时间从近到远…》第 4 步把更早变更项目置 `ACTIVE` 后顺序不变 `[newer, older]`；第 5 步把它置 `MAINTENANCE` 后落回未完成档之后 `[older, newer]` | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-API-001 | API 集成全量 | 排序改动的服务端全量回归 | `pnpm --filter @inpulse/api test:integration`（TEST_DATABASE_URL 指向 app_ci）→ **56 文件 545 例全绿** | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-CONTRACT-001 | 契约 | 描述与生成物同步 | `pnpm contract:generate` → 5 产物；`pnpm contract:drift` 通过；`pnpm contract:validate` 105 条通过 | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm format:check` 通过 | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-BROWSER-001 | 浏览器实测 | 未完成档内动态位次 | dev（Vite 5173 + API 3000 经代理）：`GET /api/v1/projects` 返回 `OPS_DASH`（未开始）在 `AGV_SCHED`（进行中）之前；向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位；`/projects` 页面按同一次序渲染 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:unit` / `pnpm test:web`（未改其它模块）、Playwright / `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 浏览器实测写入了演示库 `app`：向项目 3（`K123 验证`）创建了一个任务「排序验证任务 A」（连带一条 `task.create` 动态，因此该项目停留在未完成档首位，属预期行为）。③ 本批含服务端产品代码、契约与文档，按 §8 需非作者人工评审。
