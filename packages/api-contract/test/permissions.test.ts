@@ -278,6 +278,8 @@ export class HealthController {
       "POST /api/v1/projects/{projectId}/change-records/{recordId}/leftover-task",
       "GET /api/v1/projects/{projectId}/change-records/{recordId}/leftover-task-preview",
       "GET /api/v1/tasks/{taskId}/leftover-source",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/delete",
+      "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete",
       "POST /api/v1/tasks/{taskId}/complete",
       "POST /api/v1/projects/{projectId}/tasks",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/tasks/{taskId}/delete",

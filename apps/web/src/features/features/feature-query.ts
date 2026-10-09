@@ -8,6 +8,7 @@ import {
   type FeatureItem,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 
 export type FeatureChange = {
   action: "create" | "update";
@@ -89,9 +90,12 @@ export function useFeatures(
       if (!change.item) throw new Error("Feature selection missing");
       return api.updateFeature(projectId, moduleId, change.item.id, edit, init);
     },
-    onSuccess: async () => {
+    // 失效刷新必须非阻塞（沿用 ADR-058 实测结论）：query-core 在 `onSuccess` resolve
+    // 之后才 dispatch success，也就是全部失效链路跑完 `isPending` 才转 false，而弹窗的
+    // 取消按钮、遮罩与 ✕ 都按它上锁——`await` 在这里会让弹窗转圈并卡住不关。
+    onSuccess: () => {
       retryKey.current = null;
-      await Promise.all([
+      void Promise.all([
         cache.invalidateQueries({ queryKey: ["features", projectId] }),
         cache.invalidateQueries({ queryKey: ["feature-similar", projectId] }),
         cache.invalidateQueries({ queryKey: ["activity", projectId] }),
@@ -100,4 +104,76 @@ export function useFeatures(
     },
   });
   return { query, mutation };
+}
+
+/** ADR-059：删除功能只认功能 ID 与当前行版本（`If-Match`）。 */
+export type FeatureDeletionTarget = {
+  readonly id: number;
+  readonly rowVersion: number;
+};
+
+/**
+ * ADR-059：删除功能。服务端在同一事务内软删除功能、其下全部任务，并级联解除
+ * 这些任务的 GitHub 链接关联、作废其已发布记录、写审计与项目动态；
+ * 模块级影响任务（`scope_type = MODULE`）不被删除，影响关系行作为历史保留。
+ * 删除没有恢复入口，功能彻底消失只随所属项目的彻底删除发生。
+ *
+ * 失效清单比编辑宽：级联删除了任务，因此任务、看板、聚合组、任务中心、遗留问题、
+ * 项目概览与侧栏计数都要重取。失效刷新一律非阻塞（理由同上）。
+ */
+export function useDeleteFeature(
+  projectId: number,
+  moduleId: number,
+  client?: InpulseApiClient | undefined,
+) {
+  const api = useMemo(() => client ?? createApiClient(), [client]);
+  const cache = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: async (target: FeatureDeletionTarget) => {
+      const csrf = await api.issueCsrfToken();
+      return api.deleteFeature(
+        projectId,
+        moduleId,
+        target.id,
+        { reason: null },
+        {
+          headers: {
+            "x-csrf-token": csrf.csrfToken,
+            "Idempotency-Key": createIdempotencyKey("feature-delete"),
+            "If-Match": `"${target.rowVersion}"`,
+          },
+        },
+      );
+    },
+    onSuccess: () => {
+      void Promise.all(
+        [
+          ["features", projectId],
+          ["feature-similar", projectId],
+          ["modules", projectId],
+          ["tasks"],
+          ["task-board"],
+          ["task-group"],
+          ["task-group-records"],
+          ["task-marks"],
+          ["my-tasks"],
+          ["my-task-groups"],
+          ["leftover-items"],
+          ["project-overview", projectId],
+          ["projects"],
+          ["activity", projectId],
+          ["activity-center"],
+          ["search"],
+          ["notifications"],
+          ["record-feed"],
+          // 被作废的记录可能已在记录页 / 项目主页弹窗里被打开过，按当前项目前缀
+          // 一起失效（记录 ID 在删除前未知，取不到逐条 key）。
+          ["published-record", projectId],
+          ["record-versions", projectId],
+        ].map((queryKey) => cache.invalidateQueries({ queryKey })),
+      );
+      void invalidateShellCounters(cache);
+    },
+  });
 }

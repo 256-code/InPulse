@@ -6,6 +6,10 @@ import {
   RecordLifecycleTaskRecordVoidPort,
   TaskRecordVoidPort,
 } from "./task-record-void.port.js";
+import {
+  RecordLifecycleScopeVoidPort,
+  RecordScopeVoidPort,
+} from "./record-scope-void.port.js";
 import { RecordLifecycleController } from "./record-lifecycle.controller.js";
 import { RecordLifecycleRepository } from "./record-lifecycle.repository.js";
 import { RecordLifecycleHttpService } from "./record-lifecycle-http.service.js";
@@ -78,6 +82,7 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     RecordFeedReadPort,
     LeftoverSearchProjectionSync,
     TaskRecordVoidPort,
+    RecordScopeVoidPort,
   ],
   providers: [
     RecordLinkQueryPort,
@@ -85,6 +90,10 @@ import { PublishedRecordsController } from "./published-records.controller.js";
     {
       provide: TaskRecordVoidPort,
       useClass: RecordLifecycleTaskRecordVoidPort,
+    },
+    {
+      provide: RecordScopeVoidPort,
+      useClass: RecordLifecycleScopeVoidPort,
     },
     RecordLifecycleService,
     RecordLifecycleHttpService,

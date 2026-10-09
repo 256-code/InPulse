@@ -39,6 +39,15 @@ export const modules = appSchema.table(
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
     /** ADR-044：归档时代的只读历史列，模块侧恒为空（见 modules_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
+    /**
+     * ADR-059 软删除：非空表示模块已退出全部可见范围。功能、任务、迭代记录与
+     * 审计链全部保留，只从列表、详情、统计、搜索与读写路径中排除。
+     */
+    deletedAt: timestamptz("deleted_at"),
+    /** 执行删除的用户；与 deleted_at 成对写入（见 modules_deleted_state_check）。 */
+    deletedBy: integer("deleted_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
   },
   (table) => [
     unique("modules_project_code_unique").on(table.projectId, table.code),
@@ -76,6 +85,10 @@ export const modules = appSchema.table(
     check("modules_sort_order_check", sql.raw("sort_order >= 0")),
     check("modules_row_version_check", sql.raw("row_version > 0")),
     check("modules_archived_at_null_check", sql.raw("archived_at IS NULL")),
+    check(
+      "modules_deleted_state_check",
+      sql.raw("(deleted_at IS NULL) = (deleted_by IS NULL)"),
+    ),
   ],
 );
 
@@ -100,6 +113,15 @@ export const features = appSchema.table(
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
     /** ADR-045：归档时代的只读历史列，功能侧恒为空（见 features_archived_at_null_check）。 */
     archivedAt: timestamptz("archived_at"),
+    /**
+     * ADR-059 软删除：非空表示功能已退出全部可见范围。任务、迭代记录与审计链
+     * 全部保留，只从列表、详情、统计、搜索与读写路径中排除。
+     */
+    deletedAt: timestamptz("deleted_at"),
+    /** 执行删除的用户；与 deleted_at 成对写入（见 features_deleted_state_check）。 */
+    deletedBy: integer("deleted_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
   },
   (table) => [
     unique("features_project_code_unique").on(table.projectId, table.code),
@@ -144,6 +166,10 @@ export const features = appSchema.table(
     check("features_status_check", sql.raw("status = 'ACTIVE'")),
     check("features_row_version_check", sql.raw("row_version > 0")),
     check("features_archived_at_null_check", sql.raw("archived_at IS NULL")),
+    check(
+      "features_deleted_state_check",
+      sql.raw("(deleted_at IS NULL) = (deleted_by IS NULL)"),
+    ),
   ],
 );
 

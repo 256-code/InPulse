@@ -149,7 +149,7 @@ export class ExternalLinksRepository {
         FROM app.external_links l
         JOIN app.feature_external_links a ON a.project_id=l.project_id AND a.link_id=l.id
         JOIN app.features f ON f.id=a.feature_id
-       WHERE a.project_id=${projectId}
+       WHERE a.project_id=${projectId} AND f.deleted_at IS NULL
       UNION ALL
       SELECT l.id,
              l.project_id,

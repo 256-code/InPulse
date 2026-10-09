@@ -28,6 +28,20 @@ const fields = [
   "stats.openTaskCount",
   "stats.completedTaskCount",
 ];
+/** ADR-059：删除模块重放可安全回述的影响面计数。 */
+const moduleDeletionFields = [
+  "id",
+  "projectId",
+  "code",
+  "name",
+  "kind",
+  "deletedAt",
+  "deletedBy",
+  "deletedFeatureCount",
+  "deletedTaskCount",
+  "voidedRecordCount",
+  "removedLinkCount",
+];
 export const moduleRoutes: readonly RouteDefinition[] = [
   {
     method: "GET",
@@ -123,4 +137,66 @@ export const moduleRoutes: readonly RouteDefinition[] = [
       };
     },
   ),
+  {
+    // ADR-059：删除模块为新增命令。模块软删除后退出全部读写范围，
+    // 级联软删除其功能与任务（任务按 ADR-058 单任务语义），历史与审计保留。
+    method: "POST",
+    path: "/projects/{projectId}/modules/{moduleId}/delete",
+    operationId: "deleteModule",
+    summary:
+      "删除模块：同一事务级联删除其功能与任务、作废相关迭代记录并保留审计与动态（ADR-059）。",
+    request: {
+      path: "ModuleResourcePath",
+      query: "none",
+      headers: "ModuleVersionHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "DeleteModuleRequest",
+          },
+        ],
+      },
+    },
+    responses: { "200": json("ModuleDeletionResponse"), ...errors },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: ["If-Match"],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "ModuleDeletionResponse",
+            safeBodyFieldPaths: moduleDeletionFields,
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "ModuleDeletionReplayContext",
+        resultRefExtractor: "moduleDeletionResources",
+        currentReadAuthorizer: "moduleDeleteReplayAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: {
+      apiVersion: "v1",
+      schemaVersion: "1.0.0",
+      ifMatch: "required",
+    },
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project", "module", "feature", "task", "taskGroup"],
+      retry:
+        "parents FOR SHARE, module FOR UPDATE; cascaded tasks FOR UPDATE in ascending id order and change records voided in ascending id order inside the same transaction",
+    },
+    auditAction: "module.delete",
+  },
 ];

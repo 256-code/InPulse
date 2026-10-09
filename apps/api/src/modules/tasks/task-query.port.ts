@@ -434,14 +434,14 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const [row] = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND deleted_at IS NULL`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND deleted_at IS NULL`;
     return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async find(tx: TransactionContext, projectId: number, taskId: number) {
     const [row] = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} AND deleted_at IS NULL`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} AND deleted_at IS NULL`;
     return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async lock(tx: TransactionContext, projectId: number, taskId: number) {
@@ -464,7 +464,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const rows = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) AND deleted_at IS NULL ORDER BY id ASC`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) AND deleted_at IS NULL ORDER BY id ASC`;
     return rows.map(mapTaskReadRow);
   }
 

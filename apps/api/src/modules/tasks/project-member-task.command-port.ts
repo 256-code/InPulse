@@ -76,6 +76,8 @@ export class ProjectMemberTaskCommandPort {
              ARRAY(
                SELECT i.feature_id
                  FROM app.task_feature_impacts AS i
+                 JOIN app.features AS x
+                   ON x.id = i.feature_id AND x.deleted_at IS NULL
                 WHERE i.task_id = t.id
                 ORDER BY i.feature_id
              ) AS "impactFeatureIds"

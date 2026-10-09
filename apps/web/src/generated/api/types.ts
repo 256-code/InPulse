@@ -241,6 +241,14 @@ export type CurrentUserResponse = {
   readonly status: ("ACTIVE" | "DISABLED");
 };
 
+export type DeleteFeatureRequest = {
+  readonly reason: (string | null);
+};
+
+export type DeleteModuleRequest = {
+  readonly reason: (string | null);
+};
+
 export type DeleteTaskRequest = {
   readonly reason: (string | null);
 };
@@ -311,6 +319,25 @@ export type ExternalLinkTargetPath = {
 export type FeatureCollectionPath = {
   readonly projectId: number;
   readonly moduleId: number;
+};
+
+export type FeatureDeletionReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly featureId: number;
+};
+
+export type FeatureDeletionResponse = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly deletedAt: string;
+  readonly deletedBy: number;
+  readonly deletedTaskCount: number;
+  readonly voidedRecordCount: number;
+  readonly removedLinkCount: number;
 };
 
 export type FeatureEditRequest = {
@@ -525,6 +552,25 @@ export type LoginResponse = {
 
 export type LogoutHeaders = {
   readonly "x-csrf-token"?: string;
+};
+
+export type ModuleDeletionReplayContext = {
+  readonly projectId: number;
+  readonly moduleId: number;
+};
+
+export type ModuleDeletionResponse = {
+  readonly id: number;
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly kind: ("NORMAL" | "UNCLASSIFIED");
+  readonly deletedAt: string;
+  readonly deletedBy: number;
+  readonly deletedFeatureCount: number;
+  readonly deletedTaskCount: number;
+  readonly voidedRecordCount: number;
+  readonly removedLinkCount: number;
 };
 
 export type ModuleEditRequest = {

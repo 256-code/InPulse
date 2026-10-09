@@ -179,6 +179,45 @@ export class RecordLifecycleService {
       input.projectId,
       input.taskId,
     );
+    return this.voidRecords(tx, targets, input);
+  }
+
+  /**
+   * ADR-059：删除模块或功能时作废该范围内的全部已发布记录。口径与
+   * `voidByTaskDeletion` 相同——聚合命令本身即承担作废后果，不再要求系统管理员；
+   * 只有 `PUBLISHED` 参与，草稿与已作废记录不受影响。`featureId` 为 null 表示整
+   * 模块（含模块级记录与本模块各功能下的记录）。
+   */
+  async voidByScopeDeletion(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly moduleId: number;
+      readonly featureId: number | null;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly reason: string;
+    },
+  ): Promise<{ recordId: number; title: string }[]> {
+    const targets = await this.records.listPublishedByScope(
+      tx,
+      input.projectId,
+      { moduleId: input.moduleId, featureId: input.featureId },
+    );
+    return this.voidRecords(tx, targets, input);
+  }
+
+  /** 作废一批已发布记录：逐条条件更新，副作用链与 `transition` 完全共用。 */
+  private async voidRecords(
+    tx: TransactionContext,
+    targets: readonly { id: number; rowVersion: number }[],
+    input: {
+      readonly projectId: number;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly reason: string;
+    },
+  ): Promise<{ recordId: number; title: string }[]> {
     const voided: { recordId: number; title: string }[] = [];
     for (const target of targets) {
       if (

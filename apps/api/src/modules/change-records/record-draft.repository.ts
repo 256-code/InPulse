@@ -101,7 +101,7 @@ export class RecordDraftRepository {
     scope_type AS "scopeType",task_id AS "taskId",title,handler_id AS "handlerId",author_id AS "authorId",status,code,
     current_version AS "currentVersion",published_at AS "publishedAt",current_payload AS "currentPayload",
     row_version AS "rowVersion",created_at AS "createdAt",updated_at AS "updatedAt",
-    ARRAY(SELECT i.feature_id FROM app.change_record_feature_impacts i WHERE i.change_record_id=app.change_records.id ORDER BY i.feature_id) AS "impactFeatureIds"`;
+    ARRAY(SELECT i.feature_id FROM app.change_record_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.change_record_id=app.change_records.id ORDER BY i.feature_id) AS "impactFeatureIds"`;
   }
   async find(
     tx: TransactionContext,

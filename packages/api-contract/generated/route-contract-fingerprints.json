@@ -227,6 +227,18 @@
       "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
     }
   ],
+  "deleteFeature": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "fc056ee46babc8afaa0707fa58919975d65022bb6f50a0e576b6ddac18c1110a"
+    }
+  ],
+  "deleteModule": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "c62f03514d07d42113b0c9908df55f40d6dfa7ee41ab65d4e2b081e96723dca5"
+    }
+  ],
   "deleteModuleTask": [
     {
       "version": "1.0.0",

@@ -4,6 +4,8 @@ import { TasksPanel } from "../tasks/TasksPanel";
 import React, { lazy, Suspense, useRef, useState } from "react";
 import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
+import { CatalogItemDeletionConfirm } from "@features/common/components/CatalogItemDeletionConfirm";
+import { useAuth } from "@features/auth/auth-context";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import {
@@ -29,11 +31,15 @@ import {
   ModuleEditorModal,
   type ModuleEditorRequest,
 } from "@features/modules/ModuleEditorModal";
-import { useProjectDetail } from "@features/projects/project-query";
+import {
+  useProjectDetail,
+  canDeleteCatalogItem,
+} from "@features/projects/project-query";
 import { useTasks } from "@features/tasks/task-query";
 import type { TaskLocation } from "@features/tasks/task-links";
 import {
   featureErrorMessage,
+  useDeleteFeature,
   useFeatures,
   type FeatureChange,
 } from "./feature-query";
@@ -95,6 +101,9 @@ export function FeaturesPageView({
     featureId,
     client,
   );
+  // ADR-059：删除功能只对系统管理员与本项目组长开放，服务端二次判定。
+  const deletion = useDeleteFeature(projectId, moduleId, client);
+  const { user } = useAuth();
   const moduleQuery = useModules(projectId, client);
   const moduleTasks = useTasks(
     { projectId, moduleId, featureId: null },
@@ -114,6 +123,8 @@ export function FeaturesPageView({
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [merge, setMerge] = useState<Merge | null>(null);
+  /** ADR-059：删除功能的二次确认弹层开关。 */
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [display, setDisplay] = useState<"cards" | "list">("cards");
   const [search, setSearch] = useState("");
   /** 聚合组弹窗里点击成员任务标题后要就地打开的任务（null 表示弹层关闭）。 */
@@ -138,6 +149,7 @@ export function FeaturesPageView({
   const open = (action: FeatureChange["action"], item?: FeatureItem) => {
     editGeneration.current += 1;
     setMerge(null);
+    setDeleteOpen(false);
     setSelection({ action, ...(item ? { item } : {}) });
     reset({
       name: item?.name ?? "",
@@ -259,17 +271,75 @@ export function FeaturesPageView({
     editGeneration.current += 1;
     setSelection(null);
     setMerge(null);
+    setDeleteOpen(false);
   };
   const conflict =
     mutation.error instanceof ApiError && mutation.error.status === 409;
   const modalTitle = selection?.action === "create" ? "新增功能" : "编辑功能";
+  const projectQuery = useProjectDetail({ client, projectId });
+  /**
+   * ADR-059：删除入口的显示条件——编辑态且为系统管理员或本项目组长。功能没有
+   * 「未分类」概念（那是模块的），所以不需要额外的类型判定。
+   */
+  const deleteTarget =
+    selection?.action === "update" &&
+    selection.item !== undefined &&
+    canDeleteCatalogItem(
+      user?.isAdmin === true,
+      projectQuery.data?.currentUserRole ?? null,
+    )
+      ? selection.item
+      : undefined;
+  /**
+   * ADR-059：删除影响面文案。计数取列表已有的 `stats`（与功能卡同一份有效任务
+   * 口径），不为此新增预览接口；删除范围比这两个计数宽（已取消的历史任务也随
+   * 功能消失），所以文案里点明「全部任务」。
+   */
+  const deletionImpact = (item: FeatureItem): string => {
+    const open = item.stats.openTaskCount;
+    const done = item.stats.completedTaskCount;
+    if (open === 0 && done === 0)
+      return "该功能下没有未完成或已完成的任务：确认删除只影响功能自身。";
+    return (
+      "该功能下有 " +
+      open +
+      " 项未完成任务与 " +
+      done +
+      " 项已完成任务：确认删除会连同它们一起删除（无论未完成、已完成还是已取消）；被删任务的 GitHub 链接会解除关联，它们已发布的迭代记录会被作废（作废快照与历史版本保留）。"
+    );
+  };
+  const openDeletion = () => {
+    if (deleteTarget === undefined || mutation.isPending || reloading || merge)
+      return;
+    deletion.reset();
+    setDeleteOpen(true);
+  };
+  /**
+   * ADR-059：删除功能。服务端在同一事务内级联删除其名下任务；成功后关闭编辑与
+   * 确认两个弹层，停在功能档案的当前功能时还要退回功能列表（它已经不存在了）。
+   */
+  const confirmDeletion = () => {
+    if (deleteTarget === undefined || deletion.isPending) return;
+    deletion.mutate(
+      { id: deleteTarget.id, rowVersion: deleteTarget.rowVersion },
+      {
+        onSuccess: () => {
+          setDeleteOpen(false);
+          setSelection(null);
+          if (featureId)
+            navigate(
+              "/projects/" + projectId + "/modules/" + moduleId + "/features",
+            );
+        },
+      },
+    );
+  };
   const activeItem = featureId
     ? query.data?.items.find((item) => item.id === featureId)
     : undefined;
   const currentModule = moduleQuery.query.data?.items.find(
     (item) => item.id === moduleId,
   );
-  const projectQuery = useProjectDetail({ client, projectId });
   const projectName =
     projectQuery.data === undefined
       ? null
@@ -887,6 +957,24 @@ export function FeaturesPageView({
             )}
           </div>
           <div className="calm-action-footer">
+            {deleteTarget ? (
+              // ADR-059：与「删除任务」「删除模块」同一形态，页脚最左侧的危险动作。
+              <div className="footer-leading">
+                <Button
+                  className="tint-danger-button"
+                  disabled={
+                    mutation.isPending ||
+                    reloading ||
+                    !!merge ||
+                    deletion.isPending
+                  }
+                  onClick={openDeletion}
+                >
+                  <InpulseIcon name="alert" size={15} />
+                  删除功能
+                </Button>
+              </div>
+            ) : null}
             <Button
               className="secondary-button"
               onClick={close}
@@ -905,6 +993,22 @@ export function FeaturesPageView({
           </div>
         </form>
       </Modal>
+      {/* 删除确认必须在功能编辑弹窗**之外**：rc-dialog 会 memo 化编辑弹窗的
+          children，挂在子树内的确认弹层拿不到 open / pending 更新。 */}
+      <CatalogItemDeletionConfirm
+        noun="功能"
+        open={deleteOpen}
+        name={deleteTarget?.name}
+        code={deleteTarget?.code}
+        impact={deleteTarget ? deletionImpact(deleteTarget) : ""}
+        pending={deletion.isPending}
+        error={deletion.error}
+        testId="confirm-delete-feature"
+        onCancel={() => {
+          if (!deletion.isPending) setDeleteOpen(false);
+        }}
+        onConfirm={confirmDeletion}
+      />
       <ModuleEditorModal
         projectId={projectId}
         client={client}
@@ -912,6 +1016,9 @@ export function FeaturesPageView({
         request={moduleRequest}
         onClose={() => setModuleRequest(null)}
         onSaved={() => setModuleSuccess(true)}
+        // ADR-059：在功能档案里删掉当前模块后，本页的模块与功能都不存在了，
+        // 回到模块列表（服务端已级联删除其下功能）。
+        onDeleted={() => navigate("/projects/" + projectId + "/modules")}
       />
       <Suspense fallback={null}>
         {taskTarget === null ? null : (

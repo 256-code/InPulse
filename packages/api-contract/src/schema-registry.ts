@@ -52,6 +52,8 @@ import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
 import { moduleSchemas } from "./contracts/modules.zod.js";
+import { moduleDeletionSchemas } from "./contracts/module-deletion.zod.js";
+import { featureDeletionSchemas } from "./contracts/feature-deletion.zod.js";
 import {
   taskBoardCardSchema,
   taskBoardModuleSchema,
@@ -171,6 +173,7 @@ export const schemaRegistry = {
   ...taskDeletionSchemas,
   ...leftoverTaskSchemas,
   ...moduleSchemas,
+  ...moduleDeletionSchemas,
   ...taskCreateSchemas,
   TaskCenterQuery: {
     schema: taskCenterQuerySchema,
@@ -178,6 +181,7 @@ export const schemaRegistry = {
     sensitiveFieldPaths: [],
   },
   ...featureSchemas,
+  ...featureDeletionSchemas,
   ...taskSchemas,
   ...recordDraftSchemas,
   ...publishedRecordSchemas,

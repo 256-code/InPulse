@@ -15,7 +15,7 @@ export class PostgresModuleReadPort extends ModuleReadPort {
   ): Promise<ModuleReadResource | undefined> {
     const [row] = await tx.sql<
       ModuleReadResource[]
-    >`SELECT id AS "moduleId", project_id AS "projectId", name FROM app.modules WHERE id = ${moduleId} AND project_id = ${projectId}`;
+    >`SELECT id AS "moduleId", project_id AS "projectId", name FROM app.modules WHERE id = ${moduleId} AND project_id = ${projectId} AND deleted_at IS NULL`;
     return row;
   }
 
@@ -33,6 +33,7 @@ export class PostgresModuleReadPort extends ModuleReadPort {
         FROM app.modules
        WHERE project_id = ANY(${projectIds}::integer[])
          AND id = ANY(${moduleIds}::integer[])
+         AND deleted_at IS NULL
        ORDER BY id ASC
     `) as unknown as readonly ModuleNameItem[];
   }
@@ -45,6 +46,7 @@ export class PostgresModuleReadPort extends ModuleReadPort {
       SELECT COUNT(*)::integer AS total
         FROM app.modules
        WHERE project_id = ${input.projectId}
+         AND deleted_at IS NULL
     `;
     return row?.total ?? 0;
   }

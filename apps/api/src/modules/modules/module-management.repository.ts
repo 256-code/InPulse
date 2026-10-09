@@ -28,12 +28,27 @@ const dto = (row: Row): ModuleItem => {
   });
 };
 
+/** ADR-059：删除模块命令读取的原始行，含行版本，不解析为 `ModuleItem`。 */
+export interface ModuleDeletionRow {
+  readonly id: number;
+  readonly projectId: number;
+  readonly code: string;
+  readonly name: string;
+  readonly kind: ModuleItem["kind"];
+  readonly rowVersion: number;
+}
+
+/** ADR-059：软删除成功后返回的行快照，供响应与审计使用。 */
+export interface ModuleSoftDeletedRow extends ModuleDeletionRow {
+  readonly deletedAt: Date;
+}
+
 @Injectable()
 export class ModuleManagementRepository {
   async list(tx: TransactionContext, projectId: number): Promise<ModuleItem[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} ORDER BY ${lifecycleRankExpression(tx.sql, "module", "m")}, m.created_at DESC, m.id DESC`;
+    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} AND m.deleted_at IS NULL ORDER BY ${lifecycleRankExpression(tx.sql, "module", "m")}, m.created_at DESC, m.id DESC`;
     return rows.map(dto);
   }
 
@@ -45,7 +60,7 @@ export class ModuleManagementRepository {
   ): Promise<ModuleItem | undefined> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} AND m.id = ${moduleId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT m.id, m.code, m.project_id AS "projectId", m.name, m.description, m.kind, m.sort_order AS "sortOrder", m.row_version AS "rowVersion", m.created_at AS "createdAt", m.updated_at AS "updatedAt", ${moduleStatColumns(tx.sql, "m")} FROM app.modules m WHERE m.project_id = ${projectId} AND m.id = ${moduleId} AND m.deleted_at IS NULL ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return rows[0] === undefined ? undefined : dto(rows[0]);
   }
 
@@ -73,5 +88,37 @@ export class ModuleManagementRepository {
     return rows.length
       ? this.find(tx, current.projectId, current.id)
       : undefined;
+  }
+
+  /**
+   * ADR-059：删除命令的原始行读取，`lock` 时对模块行取排他锁，阻止与子级写命令
+   * 的写前 `FOR SHARE` 检查并行；已软删除的模块视为不存在。
+   */
+  async findForDeletion(
+    tx: TransactionContext,
+    projectId: number,
+    moduleId: number,
+    lock = false,
+  ): Promise<ModuleDeletionRow | undefined> {
+    const rows = await tx.sql<
+      ModuleDeletionRow[]
+    >`SELECT id, project_id AS "projectId", code, name, kind, row_version AS "rowVersion" FROM app.modules WHERE project_id = ${projectId} AND id = ${moduleId} AND deleted_at IS NULL ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    return rows[0];
+  }
+
+  /**
+   * ADR-059：模块软删除。`modules_row_version` 触发器要求任何 UPDATE 把行版本恰好
+   * 加一，因此这里与其它写命令一致地`row_version + 1`；条件带 `deleted_at IS NULL`
+   * 与预期行版本，并发重复删除只有一个命中。
+   */
+  async softDelete(
+    tx: TransactionContext,
+    current: ModuleDeletionRow,
+    actorId: number,
+  ): Promise<ModuleSoftDeletedRow | undefined> {
+    const rows = await tx.sql<
+      ModuleSoftDeletedRow[]
+    >`UPDATE app.modules SET deleted_at = clock_timestamp(), deleted_by = ${actorId}, row_version = row_version + 1, updated_at = GREATEST(clock_timestamp(), updated_at) WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} AND deleted_at IS NULL RETURNING id, project_id AS "projectId", code, name, kind, row_version AS "rowVersion", deleted_at AS "deletedAt"`;
+    return rows[0];
   }
 }

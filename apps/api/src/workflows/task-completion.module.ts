@@ -9,6 +9,8 @@ import { SearchProjectionModule } from "../modules/search/search-projection.modu
 import { ProjectsModule } from "../modules/projects/index.js";
 import { ModulesModule } from "../modules/modules/index.js";
 import { FeaturesModule } from "../modules/features/index.js";
+import { ModulesManagementModule } from "../modules/modules/modules-management.module.js";
+import { FeaturesManagementModule } from "../modules/features/features-management.module.js";
 import { TasksManagementModule } from "../modules/tasks/index.js";
 import { TaskGroupsModule } from "../modules/task-groups/index.js";
 import {
@@ -23,6 +25,9 @@ import { TaskStatusCompatibilityHttpService } from "./task-status-compatibility-
 import { TaskDeletionWorkflow } from "./task-deletion.workflow.js";
 import { TaskDeletionHttpService } from "./task-deletion-http.service.js";
 import { TaskDeletionController } from "./task-deletion.controller.js";
+import { ScopeDeletionWorkflow } from "./scope-deletion.workflow.js";
+import { ScopeDeletionHttpService } from "./scope-deletion-http.service.js";
+import { ScopeDeletionController } from "./scope-deletion.controller.js";
 @Module({
   imports: [
     AuditModule,
@@ -35,6 +40,8 @@ import { TaskDeletionController } from "./task-deletion.controller.js";
     ProjectsModule,
     ModulesModule,
     FeaturesModule,
+    ModulesManagementModule,
+    FeaturesManagementModule,
     TasksManagementModule,
     TaskGroupsModule,
     RecordDraftsModule,
@@ -46,11 +53,14 @@ import { TaskDeletionController } from "./task-deletion.controller.js";
     TaskStatusCompatibilityHttpService,
     TaskDeletionWorkflow,
     TaskDeletionHttpService,
+    ScopeDeletionWorkflow,
+    ScopeDeletionHttpService,
   ],
   controllers: [
     TaskCompletionController,
     TaskStatusCompatibilityController,
     TaskDeletionController,
+    ScopeDeletionController,
   ],
 })
 export class TaskCompletionModule {}

@@ -176,12 +176,14 @@ export function projectStatColumns(sql: ISql, table: "p" | "u") {
              FROM app.modules mm
             WHERE mm.project_id = ${projectId}
               AND mm.status = 'ACTIVE'
+              AND mm.deleted_at IS NULL
          ) AS "activeModuleCount",
          (
            SELECT COUNT(*)::integer
              FROM app.features ff
             WHERE ff.project_id = ${projectId}
               AND ff.status = 'ACTIVE'
+              AND ff.deleted_at IS NULL
          ) AS "activeFeatureCount",
          ${openTaskCountColumn(sql, "project", table)},
          ${completedTaskCountColumn(sql, "project", table)}`;
@@ -196,6 +198,7 @@ export function moduleStatColumns(sql: ISql, table: "m") {
              FROM app.features ff
             WHERE ff.module_id = ${moduleId}
               AND ff.status = 'ACTIVE'
+              AND ff.deleted_at IS NULL
          ) AS "activeFeatureCount",
          ${openTaskCountColumn(sql, "module", table)},
          ${completedTaskCountColumn(sql, "module", table)}`;

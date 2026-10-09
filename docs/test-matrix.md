@@ -739,6 +739,13 @@ URL/搜索模块单元17/17，契约三文件39/39；89路由/89权限/5生成�
 
 初次冻结前误删仍在使用的fixture import，导致本轮最初beforeAll ReferenceError；已恢复后完成上述最终验证。原71/71在误删前执行，不能当作旧冻结SHA测试可运行的证据；更正与全部红测见[F22交审增量](f22-local-handoff.md)。
 
+### F-22 动态摘要与草稿口径（2026-10-09）
+
+| 验收点 | 自动化与实际结果 |
+| --- | --- |
+| 摘要写明关联的链接与目标任务 | `apps/api/test/external-link-activity.test.ts` 6 例：PR / Commit / Issue / Release / 仓库标签、四类目标的中文标签与编号、无编号草稿、超长标题按 1000 字符截断；真实 PostgreSQL 用例断言任务上 PR 的添加与解除摘要为 `添加 GitHub 关联：PR #245（任务 <项目码>-T-1「链接任务」）` / 同名解除格式 |
+| 草稿链接事件不产生活动（ADR-048） | `apps/api/test/external-links.integration.test.ts`「动态摘要写明关联的链接与目标任务，草稿链接不产生活动」：DRAFT 记录添加链接返回 200，`activity_projection` 中该项目的 CHANGE_RECORD 动态为 0，审计保留 1 条 EXTERNAL_LINK_ADDED，草稿自身列表仍有该关联；本文件真库共 41 例通过 |
+
 ## F-32 任务中心 / F-29 项目概览前端骨架（C，2026-09-10 本地骨架，PR #92）
 
 按 [C 域聚合读契约与端口提案](c-port-extension-proposal.md) §7.5：F-25/F-29/F-32 路由尚未由 A 冻结，不登记 Route Registry、不新增契约草案；两张页面先用注入式 mock adapter 隔离数据源，项目名/状态/成员数走 A 已有项目端口。F-32 页面 `/tasks`（改为登录保护）承载统计卡片、视图标签、高级筛选面板与任务明细表；F-29 页面 `/projects/:projectId/overview` 承载项目详情头部、6 项指标条、最近迭代与待处理遗留问题面板。2026-09-10 按设计师最新稿做截图对比迁移：项目概览头部改为纵向结构（返回、标题块、操作行）且操作行左对齐下移，指标条改 4 列网格（第 2 行 2 格后留灰底空位）；任务卡片顶部徽章改为「模块级 / 主任务或来源任务 / 工作状态」，页脚左侧为优先级全称徽章、右侧仅在有已发布记录时显示记录数，并移除未冻结路由的禁用「任务详情」占位。
@@ -5195,3 +5202,48 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ### 未运行 / 已知偏差
 
 ① 未跑整链 `pnpm check`、`pnpm test:web` 全量与 Playwright 套件（本轮只跑了定向 `TasksPanel.test.tsx` 与一次性探针，探针脚本用后已删除）；② `apps/web/src/features/tasks/task-query.ts` 的 `useTasks` 的 `mutation.onSuccess` 里仍有同形的 `await Promise.all`（11 条失效链路），会让该处 `isPending` 多持续一次失效耗时——**本批有意未改**（不在本次报告的问题范围内），如需一并收口须另行指示；③ 探针在演示库创建并删除的 4 个任务为一次性夹具（软删除，`deleted_at` 保留、UI 与各读路径已过滤），未物理清除；④ 本批含前端产品代码，按 §8 需非作者人工评审。
+
+## ADR-059 模块与功能软删除（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「给模块和功能增加删除按钮，如果里面有功能或者任务，要提醒操作者是否删除，如果真的删除那就一起删」，随后限定「把删除按钮放入模块和功能各自的编辑页面里，像任务那种一样一样」。见 [ADR-059](adr/ADR-059.md)。
+
+### 实现要点
+
+- 两条新路由：`deleteModule`（`POST /api/v1/projects/{projectId}/modules/{moduleId}/delete`，审计 `module.delete`）与 `deleteFeature`（`POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete`，审计 `feature.delete`）；`session` + CSRF + 同源 + 数据库级幂等（`idempotencyContractVersion: "1.0.0"`）+ `If-Match`，锁序 `project -> module -> feature -> task -> taskGroup`。Route Registry 由 103 条增至 **105 条**，权限矩阵 105 / 105。
+- **软删除**：迁移 `0036_module_feature_soft_delete.sql` 给 `app.modules` / `app.features` 加 `deleted_at` / `deleted_by`（FK `ON DELETE restrict` 到 `app.users`）与 `*_deleted_state_check`（两列同时为空或同时有值）；不新增表级 `DELETE` 授权，也不物理删除任何业务历史；无还原入口，物理清除只随项目彻底删除（ADR-051 / ADR-055）发生。
+- **权限**：只有系统管理员与本项目 ACTIVE 组长（LEADER）可删（ADR-039 的第五处例外，`ProjectRoleGateService.scopeDeleterRole`）；普通成员与项目管理员 403，非成员与不存在统一 404 `MODULE_NOT_FOUND` / `FEATURE_NOT_FOUND`。
+- **未分类模块不可删除**：`kind !== 'NORMAL'` 一律 409 `MODULE_UNCLASSIFIED_PROTECTED`，前端同样不渲染删除入口（`kind === "NORMAL"` 门禁）。既有的 `modules_protect_unclassified`（BEFORE DELETE）继续禁止物理删除，本条在其上追加禁止软删除。
+- **级联**：任务逐条复用 `TaskDeletionWorkflow.deleteWithinTransaction`（ADR-058 的全部副作用链）；功能与模块自身再补软删除、`detachTarget` 解绑外部链接、`RecordScopeVoidPort.voidScopeRecords` 作废范围内 PUBLISHED 记录、审计、动态（`MODULE_DELETED` / `FEATURE_DELETED` + `updateEntityVisibility(sourceStatus: "DELETED")`）与 `search.remove`。
+- **主任务门禁**：`TaskDeletionCommandPort.listActiveMainTaskIds` 在逐条删除**之前**判定，仍有活跃聚合组主任务时整体 409 `TASK_GROUP_MAIN_LOCKED`（附任务 ID 清单），事务整体回滚；避免「删到一半才发现主任务」。
+- **读侧收窄**：21 个文件补 `deleted_at IS NULL`（列表、详情、统计列表达式、写前检查、`impactFeatureIds` 子查询、外部链接聚合、记录侧 `recentRecords` LEFT JOIN 等）。
+- **前端**：删除入口放在「编辑模块」/「编辑功能」弹窗页脚最左侧（`footer-leading` + `tint-danger-button`），确认弹窗 `CatalogItemDeletionConfirm` 是编辑弹窗的**同级兄弟节点**（rc-dialog children memo 化约束，ADR-058 已踩坑）；影响面文案**复用既有 `stats`**（模块用 `activeFeatureCount` / `openTaskCount` / `completedTaskCount`，功能用 `openTaskCount` / `completedTaskCount`），**未新增预览接口**；409 原文透传服务端理由。
+- `activity-labels.ts` 补 `MODULE_DELETED: "删除模块"` / `FEATURE_DELETED: "删除功能"`，`audit-labels.ts` 补 `"module.delete"` / `"feature.delete"`。
+
+### 用例
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR059-MIG-001 | 数据库 | 迁移 `0036` 列与 CHECK | `pnpm db:migrations:check` → `Validated 35 SQL migration(s).` exit 0；`app` 与 `app_ci` 均升到 `0036` | 本地通过 |
+| ADR059-CONTRACT-001 | 契约 | 路由登记与生成物无漂移 | `contract:validate` 105 条全部通过；`contract:drift` 5 个产物一致 | 本地通过 |
+| ADR059-PERM-001 | 权限矩阵 | 两条新路由登记 | `permissions:check` 「权限矩阵（105 条操作 / 105 条路由）: 全部检查通过。」 | 本地通过 |
+| ADR059-INT-001 | 集成（真实 PostgreSQL） | 删除模块级联功能与任务 | `scope-deletion.integration.test.ts` 10 / 10 | 本地通过 |
+| ADR059-INT-002 | 集成 | 未分类模块 409 `MODULE_UNCLASSIFIED_PROTECTED` 且不落软删除 | 同上文件 | 本地通过 |
+| ADR059-INT-003 | 集成 | 权限矩阵（组长 / 普通成员 / 非成员 / 系统管理员） | 同上文件 | 本地通过 |
+| ADR059-INT-004 | 集成 | `If-Match` 不符 409 且 `row_version` 不变 | 同上文件 | 本地通过 |
+| ADR059-INT-005 | 集成 | 删除功能只影响该功能（不波及同模块其它功能） | 同上文件 | 本地通过 |
+| ADR059-INT-006 | 集成 | 幂等重放 + 重放前实时角色复核 | 同上文件 | 本地通过 |
+| ADR059-INT-007 | 集成 | 并发删除 → 200 / 404（只有一个成功） | 同上文件 | 本地通过 |
+| ADR059-INT-008 | 集成 | 已软删除再删 404；项目级不可写 404 | 同上文件 | 本地通过 |
+| ADR059-INT-009 | 集成 | 活跃聚合组主任务 409 且事务整体回滚 | 同上文件 | 本地通过 |
+| ADR059-INT-010 | 集成 | 已删除功能不再参与模块级联计数 | 同上文件 | 本地通过 |
+| ADR059-INT-011 | 集成（回归） | ADR-058 任务删除套件未被级联抽取破坏 | `task-deletion.integration.test.ts` 9 / 9 | 本地通过 |
+| ADR059-UNIT-001 | API 单元 | HTTP 服务的 CSRF / 校验 / 版本 / 幂等分支 | `scope-deletion-http.service.test.ts` 13 / 13 | 本地通过 |
+| ADR059-UNIT-002 | API 单元 | 级联编排的锁序、计数汇总与失败回滚 | `scope-deletion.workflow.test.ts` 8 / 8 | 本地通过 |
+| ADR059-WEB-001 | Web 单元 | 确认弹窗分类文案与影响面渲染 | `CatalogItemDeletionConfirm.test.tsx` 10 / 10 | 本地通过 |
+| ADR059-WEB-002 | Web 单元 | 模块编辑弹窗删除入口的角色门禁 | `ModuleEditorModal.test.tsx` 6 / 6（含「普通成员看不到删除入口」） | 本地通过 |
+| ADR059-WEB-003 | Web 单元 | 功能删除入口、影响面文案、`If-Match` 与详情页删除后退回列表 | `FeaturesPageView.test.tsx` 16 / 16（新增 3 例） | 本地通过 |
+| ADR059-WEB-004 | 类型检查 | 全 workspace 类型 | `pnpm typecheck` exit 0；`pnpm --filter @inpulse/web exec tsc --noEmit` exit 0 | 本地通过 |
+
+### 未运行 / 已知偏差
+
+① 未跑整链 `pnpm check`、全量 `pnpm test:unit` / `pnpm test:web` / `pnpm test:integration`、Playwright / `pnpm test:e2e`（用户已指示「不用跑了」）、生产镜像构建与 GitHub Actions；② `database/test/integration/database.test.ts` 的不可变迁移清单此前缺 `0034` / `0035`（ADR-058 遗漏，本批已修），意味着 ADR-058 的集成套件此前从未完整跑绿——本批已补并复跑；③ 模块级联会为每个被删功能单独写一条 `feature.delete` 审计（`cascadeFromModuleId` 区分来源），审计条数大于用户可见动作数是有意为之；④ 存活记录的 `impactFeatureIds` 现在静默丢弃指向已删除功能的引用；⑤ 未分类模块的删除禁止是 **策略新增**（既有规则只禁物理删除），已在 ADR-059 §2.2 明确并同步 `docs/permissions.md`；⑥ 本批含契约、数据库迁移、服务端与前端产品代码，按 §8 需非作者人工评审。

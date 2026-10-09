@@ -31,6 +31,19 @@ const fields = [
   "stats.completedTaskCount",
   "stats.recordCount",
 ];
+/** ADR-059：删除功能重放可安全回述的影响面计数。 */
+const featureDeletionFields = [
+  "id",
+  "projectId",
+  "moduleId",
+  "code",
+  "name",
+  "deletedAt",
+  "deletedBy",
+  "deletedTaskCount",
+  "voidedRecordCount",
+  "removedLinkCount",
+];
 export const featureRoutes: readonly RouteDefinition[] = [
   {
     method: "GET",
@@ -181,4 +194,66 @@ export const featureRoutes: readonly RouteDefinition[] = [
       };
     },
   ),
+  {
+    // ADR-059：删除功能为新增命令。功能软删除后退出全部读写范围，
+    // 级联删除其自身任务（任务按 ADR-058 单任务语义），历史与审计保留。
+    method: "POST",
+    path: "/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete",
+    operationId: "deleteFeature",
+    summary:
+      "删除功能：同一事务删除其任务、作废相关迭代记录并保留审计与动态；受影响本功能的模块级任务保留（ADR-059）。",
+    request: {
+      path: "FeatureResourcePath",
+      query: "none",
+      headers: "FeatureVersionHeaders",
+      body: {
+        contentTypes: [
+          {
+            contentType: "application/json",
+            schemaRef: "DeleteFeatureRequest",
+          },
+        ],
+      },
+    },
+    responses: { "200": json("FeatureDeletionResponse"), ...errors },
+    authPolicy: "session",
+    csrfPolicy: "required",
+    idempotencyPolicy: "idempotencyRequired",
+    idempotencyExceptionAdr: "none",
+    idempotencyContractVersion: "1.0.0",
+    idempotencyFingerprintVersion: "1.0.0",
+    behaviorHeaders: ["If-Match"],
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "FeatureDeletionResponse",
+            safeBodyFieldPaths: featureDeletionFields,
+          },
+        },
+      },
+    },
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "FeatureDeletionReplayContext",
+        resultRefExtractor: "featureDeletionResources",
+        currentReadAuthorizer: "featureDeleteReplayAuthorizer",
+      },
+    },
+    securityFlowPolicy: "none",
+    versionPolicy: {
+      apiVersion: "v1",
+      schemaVersion: "1.0.0",
+      ifMatch: "required",
+    },
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project", "module", "feature", "task", "taskGroup"],
+      retry:
+        "parents FOR SHARE, feature FOR UPDATE; cascaded own tasks FOR UPDATE in ascending id order and change records voided in ascending id order inside the same transaction",
+    },
+    auditAction: "feature.delete",
+  },
 ];
