@@ -27,18 +27,11 @@ import type { TransactionContext } from "../src/database/transaction-context.js"
 
 class FakeProjectAccess implements ProjectAccessQueryPort {
   scope: AuthorizedProjectScope;
-  deletedProjectIds: readonly number[] = [];
-  readonly deletedCalls: number[] = [];
   /** 配置后模拟端口返回了别人的范围，用于覆盖操作者一致性校验。 */
   readonly scopeActorUserId?: number | undefined;
 
-  constructor(
-    scope: AuthorizedProjectScope,
-    deletedProjectIds: readonly number[],
-    scopeActorUserId?: number,
-  ) {
+  constructor(scope: AuthorizedProjectScope, scopeActorUserId?: number) {
     this.scope = scope;
-    this.deletedProjectIds = deletedProjectIds;
     this.scopeActorUserId = scopeActorUserId;
   }
 
@@ -50,15 +43,6 @@ class FakeProjectAccess implements ProjectAccessQueryPort {
       ...this.scope,
       actorUserId: this.scopeActorUserId ?? actorUserId,
     });
-  }
-
-  isDeletedProject(projectId: number): Promise<boolean> {
-    return Promise.resolve(this.deletedProjectIds.includes(projectId));
-  }
-
-  listDeletedProjectIds(): Promise<readonly number[]> {
-    this.deletedCalls.push(this.scope.actorUserId);
-    return Promise.resolve(this.deletedProjectIds);
   }
 
   checkProjectForWrite(
@@ -99,7 +83,6 @@ function createCursorService(): TimeCursorService {
 function createService(
   options: {
     readonly projectIds?: readonly number[];
-    readonly deletedProjectIds?: readonly number[];
     readonly isSystemAdmin?: boolean;
     readonly actorUserId?: number;
     readonly scopeActorUserId?: number;
@@ -116,7 +99,6 @@ function createService(
       projectIds: options.projectIds ?? [1, 2],
       isSystemAdmin: options.isSystemAdmin ?? false,
     },
-    options.deletedProjectIds ?? [],
     options.scopeActorUserId,
   );
   const service = new ActivityQueryService(
@@ -152,7 +134,7 @@ function withNextPage(
 }
 
 describe("ActivityQueryService 聚合动态（单元）", () => {
-  test("聚合动态在实时范围与已删除项目都为空时短路，不发起读取", async () => {
+  test("聚合动态在实时授权范围为空时短路，不发起读取", async () => {
     const { service, reader } = createService({ projectIds: [] });
     const page = await service.listFeed({ actorUserId: 7, limit: 20 });
 
@@ -169,8 +151,7 @@ describe("ActivityQueryService 聚合动态（单元）", () => {
 
   test("聚合动态把 ADMIN_ONLY 限制在本人活跃项目内", async () => {
     const { service, reader } = createService({
-      projectIds: [1],
-      deletedProjectIds: [2],
+      projectIds: [1, 2],
       isSystemAdmin: true,
     });
     await service.listFeed({
@@ -179,43 +160,34 @@ describe("ActivityQueryService 聚合动态（单元）", () => {
       limit: 20,
     });
 
-    // 已删除项目并入读取范围，但不进 ADMIN_ONLY 可见集合。
+    // 读取范围就是实时授权范围，ADMIN_ONLY 只对系统管理员开放。
     expect(reader.reads[0]!.projectIds).toEqual([1, 2]);
-    expect(reader.reads[0]!.adminOnlyProjectIds).toEqual([1]);
+    expect(reader.reads[0]!.adminOnlyProjectIds).toEqual([1, 2]);
     expect(reader.dayTotalReads[0]!.projectIds).toEqual([1, 2]);
-    expect(reader.dayTotalReads[0]!.adminOnlyProjectIds).toEqual([1]);
+    expect(reader.dayTotalReads[0]!.adminOnlyProjectIds).toEqual([1, 2]);
   });
 
-  test("聚合动态的公开范围包含全部已删除项目", async () => {
-    const { service, reader } = createService({
-      projectIds: [5],
-      deletedProjectIds: [11, 13],
-    });
+  test("非管理员聚合动态不开放任何 ADMIN_ONLY 项目", async () => {
+    const { service, reader } = createService({ projectIds: [5, 6] });
     await service.listFeed({ actorUserId: 7, limit: 20 });
 
-    expect(reader.reads[0]!.projectIds).toEqual([5, 11, 13]);
+    expect(reader.reads[0]!.projectIds).toEqual([5, 6]);
     expect(reader.reads[0]!.adminOnlyProjectIds).toEqual([]);
   });
 
   test("projectIds 只收窄且静默排除越权与未知项目", async () => {
-    const { service, reader } = createService({
-      projectIds: [1],
-      deletedProjectIds: [2],
-    });
+    const { service, reader } = createService({ projectIds: [1] });
     await service.listFeed({
       actorUserId: 7,
       projectIds: [3, 2, 1],
       limit: 20,
     });
 
-    expect(reader.reads[0]!.projectIds).toEqual([1, 2]);
+    expect(reader.reads[0]!.projectIds).toEqual([1]);
   });
 
   test("projectIds 全部越权时返回空页并不发起读取", async () => {
-    const { service, reader } = createService({
-      projectIds: [1],
-      deletedProjectIds: [],
-    });
+    const { service, reader } = createService({ projectIds: [1] });
     const page = await service.listFeed({
       actorUserId: 7,
       projectIds: [9, 10],

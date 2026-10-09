@@ -34,9 +34,8 @@ describe("PermissionMatrixPanel", () => {
     expect(cell("查看所有项目", 3)).toHaveTextContent(
       "项目成员只能看已加入项目",
     );
-    expect(cell("彻底删除项目", 1)).toHaveTextContent("√");
-    expect(cell("彻底删除项目", 2)).toHaveTextContent("—");
-    expect(cell("彻底删除项目", 3)).toHaveTextContent("仅系统管理员");
+    expect(cell("用户账号管理", 1)).toHaveTextContent("√");
+    expect(cell("用户账号管理", 2)).toHaveTextContent("—");
   });
 
   it("omits removed and nobody-can-do capabilities and never shows a version tag", () => {
@@ -47,6 +46,8 @@ describe("PermissionMatrixPanel", () => {
       "归档/恢复项目",
       "归档/恢复模块",
       "归档/恢复功能",
+      "彻底删除项目",
+      "删除/还原项目",
     ]) {
       expect(screen.queryByText(row)).not.toBeInTheDocument();
     }
@@ -64,10 +65,9 @@ describe("PermissionMatrixPanel", () => {
     render(<PermissionMatrixPanel />);
     expect(cell("变更项目状态", 2)).toHaveTextContent("√");
     expect(cell("添加/移除项目成员", 2)).toHaveTextContent("√");
-    for (const row of ["组长转移", "删除/还原项目"]) {
+    for (const row of ["组长转移", "删除项目"]) {
       expect(cell(row, 1)).toHaveTextContent("√");
       expect(cell(row, 2)).toHaveTextContent("仅组长");
     }
-    expect(cell("彻底删除项目", 2)).toHaveTextContent("—");
   });
 });

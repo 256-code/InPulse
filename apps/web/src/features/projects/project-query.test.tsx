@@ -140,7 +140,7 @@ describe("project creation query", () => {
 });
 
 describe("canDeleteProject", () => {
-  it("只对系统管理员与本项目组长放行（ADR-049）", () => {
+  it("只对系统管理员与本项目组长放行（ADR-062）", () => {
     expect(canDeleteProject(true, null)).toBe(true);
     expect(canDeleteProject(true, "MEMBER")).toBe(true);
     expect(canDeleteProject(false, "LEADER")).toBe(true);

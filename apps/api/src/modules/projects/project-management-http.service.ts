@@ -27,22 +27,7 @@ import {
 } from "./project-management.service.js";
 
 export type ProjectManagementOperation =
-  | "updateProject"
-  | "changeProjectStatus"
-  | "deleteProject"
-  | "restoreProject"
-  | "purgeProject";
-
-/**
- * ADR-051：还原与彻底删除只接受已软删除的项目——首次执行取不到项目、重放时
- * 结果资源又确实存在（还原）或已经不存在（彻底删除），所以这两条路由必须在
- * 事务内分别走自己的角色门禁，不能沿用「先做当前可读性预检」的通用路径。
- */
-const DELETED_PROJECT_OPERATIONS: readonly ProjectManagementOperation[] = [
-  "deleteProject",
-  "restoreProject",
-  "purgeProject",
-];
+  "updateProject" | "changeProjectStatus" | "deleteProject";
 
 export interface ProjectManagementHttpRequest {
   readonly headers: HttpHeaderBag;
@@ -138,16 +123,14 @@ export class ProjectManagementHttpService {
         }
         payload = parsedBody.data;
       } else if (Object.keys((request.body ?? {}) as object).length > 0) {
-        // 删除与 ADR-051 的还原 / 彻底删除都不接受请求体：noBody 路由的幂等摘要
-        // 不含正文，放行会让不同正文共享同一摘要。
+        // 删除不接受请求体：noBody 路由的幂等摘要不含正文，放行会让不同正文共享同一摘要。
         throw new ProjectInputError({ body: "此接口不接受请求体" });
       }
 
       // 编辑、状态变更与删除都只要求有效 Session，写权限由服务内的角色门禁判定。
-      // 删除与 ADR-051 的还原 / 彻底删除例外：这三条命令的目标就是已删除或即将
-      // 删除的项目，执行路径的授权由各自的角色门禁给出（非成员 404、权限不足
-      // 403、不存在 404），重放路径分别由 `replayDelete`、当前可读性与
-      // `replayPurge` 复核；这里一旦做「当前可读性」预检，前两者就必然变成 404。
+      // 删除是例外：它的目标项目在成功执行后已不存在，重放不能再按项目可读性
+      // 复核（ADR-062 的 `actorOnly` 策略只复核当前认证），首次执行的授权则由
+      // `deleteProject` 的角色门禁给出（非成员 404、权限不足 403、不存在 404）。
       const resolve = async (tx: TransactionContext): Promise<number> => {
         const current = await this.mutation.verify(tx, request.headers);
         if (current === undefined) {
@@ -157,7 +140,7 @@ export class ProjectManagementHttpService {
             "登录或 CSRF 状态已失效",
           );
         }
-        if (!DELETED_PROJECT_OPERATIONS.includes(operation)) {
+        if (operation !== "deleteProject") {
           // 只做当前可读性；写前置条件由服务在执行/重放时判定。
           await this.projects.authorize(
             tx,
@@ -195,34 +178,6 @@ export class ProjectManagementHttpService {
               replayAuthContext: { projectId: path.data.projectId },
             };
           }
-          if (operation === "restoreProject") {
-            const restored = await this.projects.restoreProject(tx, {
-              actorId,
-              projectId: path.data.projectId,
-              requestId,
-            });
-            return {
-              responseStatus: 200,
-              responseSchemaRef: "ProjectDetailResponse",
-              responseHasBody: true,
-              responseBody: restored,
-              replayAuthContext: { projectId: path.data.projectId },
-            };
-          }
-          if (operation === "purgeProject") {
-            const purged = await this.projects.purgeProject(tx, {
-              actorId,
-              projectId: path.data.projectId,
-              requestId,
-            });
-            return {
-              responseStatus: 200,
-              responseSchemaRef: "ProjectPurgeResponse",
-              responseHasBody: true,
-              responseBody: purged,
-              replayAuthContext: { projectId: path.data.projectId },
-            };
-          }
           const body =
             operation === "updateProject"
               ? await this.projects.updateProject(tx, {
@@ -248,37 +203,16 @@ export class ProjectManagementHttpService {
           };
         },
         replayAuthorizer: async (record, tx) => {
+          // ADR-062：删除的同 Key 重放不按项目可读性复核（项目行已随首次执行删除），
+          // `resolve` 内的当前认证复核就是该路由声明的全部门禁；已存 204 直接返回。
           const actorId = await resolve(tx);
-          if (operation === "deleteProject") {
-            await this.projects.replayDelete(
-              tx,
-              actorId,
-              record.replayAuthContext,
-            );
-            return;
-          }
-          if (operation === "purgeProject") {
-            await this.projects.replayPurge(
-              tx,
-              actorId,
-              record.replayAuthContext,
-            );
-            return;
-          }
+          if (operation === "deleteProject") return;
           await this.projects.replay(tx, actorId, record.replayAuthContext);
         },
       });
       if (result.responseHasBody === false) {
         // 删除只有 204：响应体为空，由 ContractResponseInterceptor 按 noBody 跳过校验。
         return { status: result.responseStatus, body: undefined };
-      }
-      if (operation === "purgeProject") {
-        return {
-          status: result.responseStatus,
-          body: schemaRegistry.ProjectPurgeResponse.schema.parse(
-            result.responseBody,
-          ),
-        };
       }
       return {
         status: result.responseStatus,
@@ -292,33 +226,25 @@ export class ProjectManagementHttpService {
   }
 
   /**
-   * 项目写路由的请求头校验：按路由声明的 Schema 选择校验器，先校验再取版本号。
-   * ADR-051 的还原与彻底删除不接收 If-Match（删除台账不暴露 row_version，并发
-   * 控制由项目行锁与「仍未删除」守卫承担），因此只声明 ProjectMutationHeaders；
-   * 这类路由的 version 返回 0 且不会被使用。
+   * 项目写路由的请求头校验：三条命令（编辑、状态变更、删除）都要求 `If-Match`
+   * 与服务端版本一致，因此这里只校验 `ProjectVersionHeaders` 并返回版本号。
    */
   private parseWriteHeaders(
     route: (typeof routeRegistry)[number],
     headers: HttpHeaderBag,
   ): number {
-    const csrfToken = getHeader(headers, "x-csrf-token");
-    if (route.request.headers === "ProjectVersionHeaders") {
-      const parsed = schemaRegistry.ProjectVersionHeaders.schema.safeParse({
-        "x-csrf-token": csrfToken,
-        "if-match": getHeader(headers, "if-match"),
-      });
-      if (!parsed.success) {
-        throw new ProjectInputError(headerFields(parsed.error.issues));
-      }
-      return Number(parsed.data["if-match"].slice(1, -1));
+    if (route.request.headers !== "ProjectVersionHeaders") {
+      throw new Error("project write route requires ProjectVersionHeaders");
     }
-    const parsed = schemaRegistry.ProjectMutationHeaders.schema.safeParse({
+    const csrfToken = getHeader(headers, "x-csrf-token");
+    const parsed = schemaRegistry.ProjectVersionHeaders.schema.safeParse({
       "x-csrf-token": csrfToken,
+      "if-match": getHeader(headers, "if-match"),
     });
     if (!parsed.success) {
       throw new ProjectInputError(headerFields(parsed.error.issues));
     }
-    return 0;
+    return Number(parsed.data["if-match"].slice(1, -1));
   }
 
   private mapError(

@@ -33,9 +33,9 @@ export interface ActivityFeedPage {
 export interface ActivityFeedOptions {
   /** 锁定单项目（项目详情页）：走项目级路由，保留 404 语义。 */
   readonly lockedProjectId?: number | undefined;
-  /** 聚合视图显式收窄到这些项目；缺省表示「实时授权范围 + 全部已删除项目」。 */
+  /** 聚合视图显式收窄到这些项目；缺省表示服务端实时 `AuthorizedProjectScope`。 */
   readonly projectIds?: readonly number[] | undefined;
-  /** 缓存隔离键（项目选择 / 删除台账范围）。 */
+  /** 缓存隔离键（项目选择）。 */
   readonly scopeKey: string;
   readonly category?: ActivityCategory | undefined;
   readonly client?: InpulseApiClient | undefined;
@@ -102,7 +102,7 @@ export function useActivityFeedQuery({
     includeAdminOnly,
     limit,
   ] as const;
-  // 显式收窄到空集合（例如没有任何已删除项目）时没有可读范围，不发请求。
+  // 显式收窄到空集合时没有任何可读范围，不发请求。
   const hasScope =
     lockedProjectId !== undefined ||
     projectIds === undefined ||

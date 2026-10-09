@@ -1881,7 +1881,7 @@ export function TasksPanel({
           </div>
           <div className="calm-action-footer">
             {/* 2026-10-09 改版：任务级操作从详情弹窗动作行搬到这里，沿用
-                「编辑项目 → 删除项目」的页脚最左位置（ADR-049 同一约定），
+                「编辑项目 → 删除项目」的页脚最左位置（ADR-062 同一约定），
                 与表单自己的「取消 / 保存」分开。 */}
             {selection?.item?.workStatus === "TODO" ? (
               <div className="footer-leading task-op-actions">

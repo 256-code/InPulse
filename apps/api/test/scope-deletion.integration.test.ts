@@ -1221,7 +1221,7 @@ describe("ADR-059 删除模块与功能", () => {
     expect(taskRow?.deletedAt).not.toBeNull();
   });
 
-  it("已软删除的模块再次删除返回 404，项目级不可写时也返回 404", async () => {
+  it("已软删除的模块再次删除返回 404，项目被物理删除后同样 404", async () => {
     const project = await fixture(),
       module = await createNormalModule(
         project,
@@ -1259,8 +1259,9 @@ describe("ADR-059 删除模块与功能", () => {
       "第二模块",
     );
     await deleteFeature(project.actor, project, module.id, feature.id, 1);
-    // 项目软删除也要走 `app.require_next_row_version()`，row_version 必须恰好 +1。
-    await client.sql`UPDATE app.projects SET deleted_at = now(), deleted_by = ${project.userId}, row_version = row_version + 1 WHERE id = ${project.projectId}`;
+    // ADR-062：项目删除是物理删除，模块随项目一起消失；此后模块删除按
+    // 「非成员」处理，仍是 404 而不泄露模块是否曾经存在。
+    await client.sql`SELECT * FROM app.purge_project(${project.projectId})`;
     expect(
       (
         await failure(

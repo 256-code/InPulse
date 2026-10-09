@@ -85,7 +85,7 @@ export function ModulesPageView({
     user?.isAdmin === true,
     projectQuery.data?.currentUserRole ?? null,
   );
-  // ADR-049：删除项目只对系统管理员与本项目组长开放。
+  // ADR-062：删除项目只对系统管理员与本项目组长开放。
   const canDeleteCurrentProject = canDeleteProject(
     user?.isAdmin === true,
     projectQuery.data?.currentUserRole ?? null,

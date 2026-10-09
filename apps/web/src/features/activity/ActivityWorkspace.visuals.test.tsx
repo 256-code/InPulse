@@ -94,11 +94,6 @@ function createClient(): InpulseApiClient {
     getUserDirectory: vi.fn().mockResolvedValue({
       items: [{ id: 812, name: "邵晨宇", avatarUrl: null, isAdmin: true }],
     }),
-    listProjectDeletions: vi.fn().mockResolvedValue({
-      items: [],
-      nextCursor: null,
-      hasMore: false,
-    }),
   } as unknown as InpulseApiClient;
 }
 

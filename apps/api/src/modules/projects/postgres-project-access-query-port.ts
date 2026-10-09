@@ -17,10 +17,9 @@ import type { ProjectLifecycleStatus } from "./projects-write.port.js";
  *
  * 每次查询都实时读取用户启用状态、全局管理员标记和活跃成员关系，
  * 不缓存成员关系，也绝不接受客户端提交的项目范围。
- * ADR-049：已删除（`deleted_at` 非空）的项目不进授权范围、也不放行写入，
- * 因此删除后所有项目级读写统一表现为 404。
- * ADR-050：唯一的例外是删除记录本身——`isDeletedProject` 让读侧能把
- * 「无权访问」与「项目已被删除」区分开。
+ * ADR-062：项目删除是物理删除，删除后项目行及其全部下级数据不复存在，
+ * 因此授权范围、写入前置条件与 README 级的可见性都只需按行是否存在判定，
+ * 不再需要任何 `deleted_at` 过滤。
  */
 @Injectable()
 export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
@@ -50,7 +49,6 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
       const projects = (await this.client.sql`
         SELECT id
           FROM app.projects
-         WHERE deleted_at IS NULL
          ORDER BY id ASC
       `) as unknown as readonly { id: number }[];
       return {
@@ -66,7 +64,6 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
         JOIN app.projects p ON p.id = m.project_id
        WHERE m.user_id = ${actorUserId}
          AND m.status = 'ACTIVE'
-         AND p.deleted_at IS NULL
        ORDER BY project_id ASC
     `) as unknown as readonly { projectId: number }[];
     return {
@@ -74,30 +71,6 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
       projectIds: memberships.map((membership) => membership.projectId),
       isSystemAdmin: false,
     };
-  }
-
-  async isDeletedProject(projectId: number): Promise<boolean> {
-    if (!Number.isSafeInteger(projectId) || projectId <= 0) {
-      return false;
-    }
-    const projects = (await this.client.sql`
-      SELECT 1 AS "matched"
-        FROM app.projects
-       WHERE id = ${projectId}
-         AND deleted_at IS NOT NULL
-       LIMIT 1
-    `) as unknown as readonly { matched: number }[];
-    return projects[0] !== undefined;
-  }
-
-  async listDeletedProjectIds(): Promise<readonly number[]> {
-    const projects = (await this.client.sql`
-      SELECT id
-        FROM app.projects
-       WHERE deleted_at IS NOT NULL
-       ORDER BY id ASC
-    `) as unknown as readonly { id: number }[];
-    return projects.map((project) => project.id);
   }
 
   async checkProjectForWrite(
@@ -120,7 +93,6 @@ export class PostgresProjectAccessQueryPort implements ProjectAccessQueryPort {
              row_version AS "rowVersion"
         FROM app.projects
        WHERE id = ${input.projectId}
-         AND deleted_at IS NULL
        FOR SHARE
     `) as unknown as readonly {
       id: number;

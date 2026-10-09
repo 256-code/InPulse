@@ -99,14 +99,13 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
               AND m.user_id = ${actorUserId ?? null}
               AND m.status = 'ACTIVE'
        WHERE p.id = ANY(${projectIds}::integer[])
-         AND p.deleted_at IS NULL
        ORDER BY ${projectLifecycleRankExpression(this.client.sql, "p")}, ${projectLastChangeExpression(this.client.sql, "p")} DESC, p.created_at DESC, p.id DESC
     `) as unknown as readonly ProjectListItemRow[];
     return rows.map((row) => this.toListItem(row));
   }
 
   // 任务中心的维护中排除只读 id 与 status 两列（不取统计列、不 Join 成员）；
-  // 已删除项目不在这里判定：授权范围本身已排除软删项目（ADR-049）。
+  // 项目删除是物理删除（ADR-062），行不存在即可直接判为不可读。
   async listStatuses(
     projectIds: readonly number[],
   ): Promise<readonly ProjectStatusRef[]> {
@@ -160,7 +159,6 @@ export class PostgresProjectQueryPort extends ProjectQueryPort {
              ${projectStatColumns(this.client.sql, "p")}
         FROM app.projects p
        WHERE p.id = ${projectId}
-         AND p.deleted_at IS NULL
     `) as unknown as readonly ProjectRow[];
     const row = rows[0];
     return row === undefined ? undefined : this.toItem(row);

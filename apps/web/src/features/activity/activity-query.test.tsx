@@ -188,7 +188,7 @@ describe("useActivityFeedQuery", () => {
     await waitFor(() =>
       expect(screen.getByTestId("page-count").textContent).toBe("1"),
     );
-    // 缺省范围由服务端决定（授权范围 + 已删除项目），因此不传 projectIds。
+    // 缺省范围由服务端决定（当前授权范围），因此不传 projectIds。
     expect(listActivity).toHaveBeenCalledWith(
       { category: "task", includeAdminOnly: true, limit: 20 },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

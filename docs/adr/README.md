@@ -62,19 +62,20 @@
 | [ADR-046](ADR-046.md) | Accepted | 三层列表排序统一为「档位优先 + 创建时间从近到远」（修订 ADR-044 的模块列表排序表述）；2026-10-08 修订：项目列表同档位内改为按「最近变更时间」从近到远 |
 | [ADR-047](ADR-047.md) | Accepted | 迭代记录发布与任务完成解耦（修订功能设计 F-18 / F-19 与技术设计 §6.3 的发布门禁） |
 | [ADR-048](ADR-048.md) | Accepted | 迭代记录草稿支持物理删除（`SECURITY DEFINER` 函数 + `record.draft.delete` 审计；明确 ADR-024 `DRAFT` 一档的删除语义） |
-| [ADR-049](ADR-049.md) | Accepted | 项目删除为软删除（保留全部历史、退出可见范 围），只有系统管理员与本项目组长可删除（在 ADR-039 的权限下放上新增例外）；**第 3 节的可见性绝对表述由 [ADR-050](ADR-050.md) 修订，第 8 节「不提供彻底删除与恢复」由 [ADR-051](ADR-051.md) 修订** |
-| [ADR-050](ADR-050.md) | Accepted | 项目删除记录对全部登录用户可见：作为动态流 内的普通一行（服务端只放行 `PROJECT_DELETED` 行）并在审计页补齐已删除项目的审计 链入口，记录删除人（修订 ADR-049 第 3 节的可见性表述；非目标第 1 条由 [ADR-051](ADR-051.md) 修订，**第 5 节的服务端 收窄由 [ADR-052](ADR-052.md) 修订**） |
-| [ADR-051](ADR-051.md) | Accepted | 项目还原与彻底删除：删除记录行同时提供「还 原项目」（系统管理员或本项目组长，清空软删除标记）与「彻底删除」（仅系统管理员，经 `app.purge_project` 窄口物理删除全部下级数据与该项目审计链，只留 SYSTEM 链一 条 `project.purge`）（修订 ADR-049 第 8 节与 ADR-050 非目标第 1 条） |
-| [ADR-052](ADR-052.md) | Accepted | 已删除项目的完整动态过程与删除操作唯一入口：已删除项目下发整个项目链的 `MEMBER` 可见动态（不含 `ADMIN_ONLY`），同一项目多次删除只让最新一条保留还原与彻底删除，项目筛选下拉新增「已删除项目」（修订 ADR-050 第 5 节的服务端收窄） |
+| [ADR-049](ADR-049.md) | Accepted | 项目删除为软删除（保留全部历史、退出可见范 围），只有系统管理员与本项目组长可删除（在 ADR-039 的权限下放上新增例外）；**第 3 节的可见性绝对表述由 [ADR-050](ADR-050.md) 修订，第 8 节「不提供彻底删除与恢复」由 [ADR-051](ADR-051.md) 修订** ；**本 ADR 整体由 [ADR-062](ADR-062.md) 替代（项目删除改为不可逆物理删除）** |
+| [ADR-050](ADR-050.md) | Accepted | 项目删除记录对全部登录用户可见：作为动态流 内的普通一行（服务端只放行 `PROJECT_DELETED` 行）并在审计页补齐已删除项目的审计 链入口，记录删除人（修订 ADR-049 第 3 节的可见性表述；非目标第 1 条由 [ADR-051](ADR-051.md) 修订，**第 5 节的服务端 收窄由 [ADR-052](ADR-052.md) 修订**）；**本 ADR 整体由 [ADR-062](ADR-062.md) 替代** |
+| [ADR-051](ADR-051.md) | Accepted | 项目还原与彻底删除：删除记录行同时提供「还 原项目」（系统管理员或本项目组长，清空软删除标记）与「彻底删除」（仅系统管理员，经 `app.purge_project` 窄口物理删除全部下级数据与该项目审计链，只留 SYSTEM 链一 条 `project.purge`）（修订 ADR-049 第 8 节与 ADR-050 非目标第 1 条）；**本 ADR 整体由 [ADR-062](ADR-062.md) 替代（`app.purge_project` 窄口与 SYSTEM 链留痕保留，删除改为一步到位）** |
+| [ADR-052](ADR-052.md) | Accepted | 已删除项目的完整动态过程与删除操作唯一入口：已删除项目下发整个项目链的 `MEMBER` 可见动态（不含 `ADMIN_ONLY`），同一项目多次删除只让最新一条保留还原与彻底删除，项目筛选下拉新增「已删除项目」（修订 ADR-050 第 5 节的服务端收窄）；**本 ADR 整体由 [ADR-062](ADR-062.md) 替代（不再有「已删除项目」档位与完整动态回放）** |
 | [ADR-053](ADR-053.md) | Accepted | 项目组长唯一性与转移：有活跃成员则恰好一名组长，组长只能转移不能撤销/移除，组长本人可转交身份（修订 ADR-033/ADR-039 的组长授权口径） |
 | [ADR-054](ADR-054.md) | Accepted | 任务层面下线归档，任务生命周期只剩 ACTIVE / INVALID（替代 ADR-034 任务归档部分、修订 ADR-043「维护中」门禁的实现口径） |
-| [ADR-055](ADR-055.md) | Accepted | 项目保留期到期自动彻底删除：软删除满 30 天（按最后一次删除计时）由服务端后台经 `app.purge_project` 物理删除并在 SYSTEM 链留 `project.purge`（`trigger = AUTO_RETENTION`）（扩展 ADR-051 的触发路径） |
+| [ADR-055](ADR-055.md) | Accepted | 项目保留期到期自动彻底删除：软删除满 30 天（按最后一次删除计时）由服务端后台经 `app.purge_project` 物理删除并在 SYSTEM 链留 `project.purge`（`trigger = AUTO_RETENTION`）（扩展 ADR-051 的触发路径）；**本 ADR 整体由 [ADR-062](ADR-062.md) 替代（保留期与后台自动删除一并取消）** |
 | [ADR-056](ADR-056.md) | Accepted | 维护中项目新建任务即回到进行中：任务创建与项目状态切换同事务，写审计（`trigger = TASK_CREATED`）、活动与搜索投影但不发通知，`first_task_completed_at` 不动（扩展 ADR-035 的自动升级路径、修订 ADR-043 第 7 节第 3 条的边界）；**触发面由 [ADR-057](ADR-057.md) 扩展为「任务重新变为未收尾」** |
 | [ADR-057](ADR-057.md) | Accepted | 任务重新变为未收尾即让维护中项目回到进行中：重新打开（`REOPEN`）与恢复（`RESTORE`）与新建任务同口径（`trigger = TASK_REOPENED` / `TASK_RESTORED`、端口更名 `reopenMaintenanceProject`、前端补 `projects` 缓存失效），`COMPLETE` / `CANCEL` 不触发（扩展 ADR-056 的触发面、修订其非目标第 2 条） |
 | [ADR-058](ADR-058.md) | Accepted | 取消任务改为「二次确认后删除任务」：任务层软删除（`deleted_at` / `deleted_by`，保留编号、状态历史、迭代记录与审计）、同事务解除 GitHub 链接关联、作废该任务的迭代记录、聚合组 SOURCE 自动解除 / MAIN 拒绝（409 `TASK_GROUP_MAIN_LOCKED`）、写 `task.delete` 审计与 `TASK_DELETED` 动态并移除搜索投影；不提供恢复入口（修订 ADR-054 的「取消」语义、扩展 ADR-049 的软删除范式；补 `0035` 的 `search_projection` DELETE 授权缺陷） |
 | [ADR-059](ADR-059.md) | Accepted | 模块与功能增加删除：两者均为软删除（`deleted_at` / `deleted_by`，迁移 `0036`），删除模块级联软删除其全部功能与全部任务（任务按 ADR-058 语义处理）、删除功能只级联其自身任务，模块 / 功能自身的已发布记录一并作废、影响关系行保留；未分类模块不可删除（409 `MODULE_UNCLASSIFIED_PROTECTED`）；权限为系统管理员或本项目组长（ADR-039 的第五处例外）；读路径补 `deleted_at IS NULL`（修订 ADR-039 管理操作清单、扩展 ADR-049 / ADR-058 的软删除范式） |
 | [ADR-060](ADR-060.md) | Accepted | 审计读取不写留痕：`GET /api/v1/audit-logs` 不再写 `AUDIT_LOG_READ`（`AuditQueryService` 删除留痕写入路径、Route Registry `auditAction` 改为 `none`），契约删除 `readTrail` 参数（仍携带者 422）；历史留痕行保留在链中并按普通审计行可读，前端「隐藏读取留痕」机制整体删除；读取取证由远端 WORM 归档与部署层日志承担；无迁移、路由仍 105 条（替代 ADR-042） |
 | [ADR-061](ADR-061.md) | Accepted | 原始审计读取新增「全部记录（所有链）」并设为默认：契约加可选 `chain=all`（与 `projectId` 互斥，同传 422 `invalid-chain`，缺省仍读 SYSTEM 链），跨链按 `occurred_at DESC, chain_id DESC, sequence_no DESC` 键集分页、签名游标加成对链坐标（`c` / `t`，缺坐标 422 `invalid-cursor`），迁移 `0037` 新增 `audit_logs_occurred_at_chain_seq_idx`；审计页动作码候选过滤 11 个已下线动作码（标签表保留供历史行渲染）；权限仍 `adminSession`、路由仍 105 条（扩展 ADR-060 的读取范围） |
+| [ADR-062](ADR-062.md) | Accepted | 项目删除改为不可逆物理删除（替代 ADR-049 / ADR-050 / ADR-051 / ADR-052 / ADR-055）：`DELETE /api/v1/projects/{projectId}` 经 `app.purge_project` 窄口在同一事务内清空项目全部下级数据与该项目审计链，只在 SYSTEM 链留一条 `project.delete`（仅管理员可见、不写动态与通知）；项目编码随之释放可复用；幂等契约版本升 `2.0.0` 且重放授权降为 `actorOnly`；删除路由 `restoreProject` / `purgeProject` / `listProjectDeletions` 与 ADR-055 保留期自动彻底删除一并下线，路由 105 → 102，迁移 `0038`（任务与模块 / 功能软删除不受影响） |
 
 ## 关联基线
 

@@ -87,17 +87,6 @@ class FixtureScopedProjectAccessQueryPort implements ProjectAccessQueryPort {
     };
   }
 
-  async isDeletedProject(projectId: number): Promise<boolean> {
-    const projects = await this.#sql<Array<{ readonly matched: number }>>`
-      SELECT 1 AS matched
-        FROM app.projects
-       WHERE id = ${projectId}
-         AND deleted_at IS NOT NULL
-       LIMIT 1
-    `;
-    return projects.length > 0;
-  }
-
   async checkProjectForWrite(
     _tx: TransactionContext,
     _input: { readonly actorUserId: number; readonly projectId: number },
@@ -105,17 +94,6 @@ class FixtureScopedProjectAccessQueryPort implements ProjectAccessQueryPort {
     throw new Error(
       "FixtureScopedProjectAccessQueryPort does not support write checks",
     );
-  }
-
-  // 与真实适配器同口径：已删除项目 ID 全集（ADR-050）。
-  async listDeletedProjectIds(): Promise<readonly number[]> {
-    const projects = await this.#sql<Array<{ readonly id: number }>>`
-      SELECT id
-        FROM app.projects
-       WHERE deleted_at IS NOT NULL
-       ORDER BY id ASC
-    `;
-    return projects.map((project) => project.id);
   }
 }
 

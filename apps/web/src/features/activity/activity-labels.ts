@@ -41,7 +41,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   PROJECT_CREATED: "创建项目",
   PROJECT_UPDATED: "更新项目",
   PROJECT_STATUS_CHANGED: "变更项目状态",
-  // ADR-050：删除项目在同一事务里写项目动态与审计；已删除项目的动态流只保留这一条。
+  // ADR-062：删除项目改为物理删除、同一事务只写系统审计链，不再写项目动态；
+  // 该文案只用于渲染历史动态与历史通知。
   PROJECT_DELETED: "删除项目",
   // ADR-043：项目归档已下线，以下四条只用于展示历史动态与历史通知。
   PROJECT_ARCHIVED: "归档项目",

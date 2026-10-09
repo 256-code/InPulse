@@ -21,7 +21,6 @@ import { PostgresAuditWritePort } from "../src/audit/postgres-audit-write-port.j
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { ApiExceptionFilter } from "../src/http/api-exception.filter.js";
 import { ContractResponseInterceptor } from "../src/http/contract-response.interceptor.js";
-import { TimeCursorService } from "../src/cursors/time-cursor.js";
 import { IdempotencyHttpService } from "../src/idempotency/http-service.js";
 import { IdempotencyRunner } from "../src/idempotency/runner.js";
 import { resolveRegisteredRoute } from "../src/idempotency/route.js";
@@ -36,10 +35,6 @@ import { ProjectManagementHttpService } from "../src/modules/projects/project-ma
 import { ProjectManagementService } from "../src/modules/projects/project-management.service.js";
 import { ProjectRoleGateService } from "../src/modules/projects/project-role-gate.service.js";
 import { ProjectStartNotifier } from "../src/modules/projects/project-start.notifier.js";
-import {
-  PROJECT_DELETION_CURSOR_NAMESPACE,
-  ProjectDeletionsQueryService,
-} from "../src/modules/projects/project-deletions.query.service.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import {
   createProject,
@@ -49,12 +44,21 @@ import {
   type ProjectFixture,
 } from "./database.helpers.js";
 
+/**
+ * ADR-062：项目删除是**物理删除**——一个事务内清空项目与全部下级数据，并连同
+ * `PROJECT:<id>` 审计链一起删除；唯一保留的记录是 SYSTEM 链上的一条
+ * `project.delete`（操作者、编码、名称、状态与各表行数），仅系统管理员可在审计
+ * 日志中查看。因此本项目删除后不做通知（深链必成死链），项目编码随行释放。
+ *
+ * ADR-051 的还原（`restoreProject`）与彻底删除（`purgeProject`）两条命令、删除
+ * 台账（`listProjectDeletions`）与 ADR-055 的保留期自动清理都已整体下线，本文件
+ * 不再覆盖它们；任务（ADR-058）与模块/功能（ADR-059）的软删除不受影响。
+ */
 let client: DatabaseClient;
 let auditReader: DatabaseClient;
 let unitOfWork: PostgresUnitOfWork;
 let access: PostgresProjectAccessQueryPort;
 let members: PostgresProjectMembersQueryPort;
-let deletions: ProjectDeletionsQueryService;
 let app: INestApplication | undefined;
 let base: string;
 
@@ -222,28 +226,17 @@ async function visibility(
   });
 }
 
-async function projectRow(projectId: number): Promise<{
-  readonly deletedAt: string | null;
-  readonly deletedBy: number | null;
-  readonly rowVersion: number;
-}> {
+/** 项目行是否还在；物理删除后必须为 false。 */
+async function projectExists(projectId: number): Promise<boolean> {
   const rows = (await client.sql`
-    SELECT deleted_at AS "deletedAt",
-           deleted_by AS "deletedBy",
-           row_version AS "rowVersion"
-      FROM app.projects
-     WHERE id = ${projectId}
-  `) as unknown as readonly {
-    deletedAt: string | null;
-    deletedBy: number | null;
-    rowVersion: number;
-  }[];
-  return rows[0]!;
+    SELECT count(*) AS "count" FROM app.projects WHERE id = ${projectId}
+  `) as unknown as readonly { count: string }[];
+  return rows[0]!.count !== "0";
 }
 
 /**
- * ADR-051：给项目造功能、任务、任务组关系与迭代记录草稿，彻底删除的外键顺序
- * 与行数统计才有真实数据可删。夹具直接写表、不走命令，因此不产生通知。
+ * 给项目造功能、任务、任务组关系与迭代记录草稿：物理删除的外键顺序与行数统计
+ * 才有真实数据可删。夹具直接写表、不走命令，因此不产生通知与动态。
  *
  * 任务必须在**同一事务内**补状态历史：`tasks` 上有延迟约束触发器，提交时没有
  * 历史行就会报 `task N must have status history`。
@@ -255,17 +248,17 @@ async function seedPurgeableRecords(
   await client.sql.begin(async (transaction) => {
     const [feature] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.features (project_id, module_id, code, name, created_by)
-      VALUES (${project.projectId}, ${project.moduleId}, ${`${project.code}-F-1`}, ${"彻底删除用功能"}, ${actorId})
+      VALUES (${project.projectId}, ${project.moduleId}, ${`${project.code}-F-1`}, ${"删除级联用功能"}, ${actorId})
       RETURNING id
     `;
     const [main] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, creator_id)
-      VALUES (${project.projectId}, ${project.moduleId}, ${feature!.id}, 'FEATURE', ${`${project.code}-T-1`}, ${"彻底删除用主任务"}, ${actorId})
+      VALUES (${project.projectId}, ${project.moduleId}, ${feature!.id}, 'FEATURE', ${`${project.code}-T-1`}, ${"删除级联用主任务"}, ${actorId})
       RETURNING id
     `;
     const [source] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.tasks (project_id, module_id, feature_id, scope_type, code, title, creator_id)
-      VALUES (${project.projectId}, ${project.moduleId}, ${feature!.id}, 'FEATURE', ${`${project.code}-T-2`}, ${"彻底删除用来源任务"}, ${actorId})
+      VALUES (${project.projectId}, ${project.moduleId}, ${feature!.id}, 'FEATURE', ${`${project.code}-T-2`}, ${"删除级联用来源任务"}, ${actorId})
       RETURNING id
     `;
     await transaction`
@@ -275,7 +268,7 @@ async function seedPurgeableRecords(
     `;
     const [group] = await transaction<Array<{ id: number }>>`
       INSERT INTO app.task_groups (project_id, code, name, created_by)
-      VALUES (${project.projectId}, ${`${project.code}-TG-1`}, ${"彻底删除用任务组"}, ${actorId})
+      VALUES (${project.projectId}, ${`${project.code}-TG-1`}, ${"删除级联用任务组"}, ${actorId})
       RETURNING id
     `;
     await transaction`
@@ -296,12 +289,35 @@ async function seedPurgeableRecords(
     `;
     await transaction`
       INSERT INTO app.change_records (project_id, module_id, scope_type, title, handler_id, author_id)
-      VALUES (${project.projectId}, ${project.moduleId}, 'MODULE', ${"彻底删除用迭代记录"}, ${actorId}, ${actorId})
+      VALUES (${project.projectId}, ${project.moduleId}, 'MODULE', ${"删除级联用迭代记录"}, ${actorId}, ${actorId})
     `;
   });
 }
 
-/** `app.purge_project` 逐表删除的全部位置，用于验证「彻底删除后全表无残留」。 */
+/** 走夹具之外的路径重建项目行，用于验证编码已随物理删除释放。 */
+async function insertProjectWithCode(
+  code: string,
+  ownerUserId: number,
+): Promise<number> {
+  return client.sql.begin(async (transaction) => {
+    const [project] = await transaction<Array<{ id: number }>>`
+      INSERT INTO app.projects (code, name, created_by)
+      VALUES (${code}, ${`Project ${code}`}, ${ownerUserId})
+      RETURNING id
+    `;
+    await transaction`
+      INSERT INTO app.project_members (project_id, user_id, role)
+      VALUES (${project!.id}, ${ownerUserId}, 'LEADER')
+    `;
+    await transaction`
+      INSERT INTO app.modules (project_id, name, kind, created_by)
+      VALUES (${project!.id}, '未分类', 'UNCLASSIFIED', ${ownerUserId})
+    `;
+    return project!.id;
+  });
+}
+
+/** `app.purge_project` 逐表删除的全部位置，用于验证「删除后全表无残留」。 */
 const PROJECT_SCOPED_TABLES = [
   "modules",
   "features",
@@ -371,8 +387,18 @@ async function projectRowCounts(
   return { ...business, ...audit };
 }
 
-/** PROJECT 链的哈希头仍与链上最后一条记录对齐（删除 / 还原都不得拆链）。 */
-async function chainHeadMatches(projectId: number): Promise<boolean> {
+/** `PROJECT:<id>` 审计链表头是否还在；项目物理删除后必须消失。 */
+async function projectChainHeadExists(projectId: number): Promise<boolean> {
+  const rows = (await auditReader.sql`
+    SELECT count(*) AS "count"
+      FROM app.audit_chain_heads
+     WHERE chain_id = ${`PROJECT:${String(projectId)}`}
+  `) as unknown as readonly { count: string }[];
+  return rows[0]!.count !== "0";
+}
+
+/** SYSTEM 链表头仍与链上最后一条记录对齐（项目链的删除不得影响系统链）。 */
+async function systemChainHealthy(): Promise<boolean> {
   const rows = (await auditReader.sql`
     SELECT h.last_hash = last_row.record_hash AS "hashMatches",
            h.last_sequence = last_row.sequence_no AS "sequenceMatches"
@@ -380,11 +406,11 @@ async function chainHeadMatches(projectId: number): Promise<boolean> {
       JOIN LATERAL (
         SELECT sequence_no, record_hash
           FROM app.audit_logs
-         WHERE project_id = ${projectId}
+         WHERE chain_id = 'SYSTEM'
          ORDER BY sequence_no DESC
          LIMIT 1
       ) AS last_row ON true
-     WHERE h.chain_id = ${`PROJECT:${String(projectId)}`}
+     WHERE h.chain_id = 'SYSTEM'
   `) as unknown as readonly {
     hashMatches: boolean;
     sequenceMatches: boolean;
@@ -395,21 +421,14 @@ async function chainHeadMatches(projectId: number): Promise<boolean> {
 beforeAll(async () => {
   const urls = testUrls();
   client = createDatabaseClient(urls.runtime, {
-    applicationName: "inpulse-adr049-project-delete",
+    applicationName: "inpulse-adr062-project-delete",
   });
   auditReader = createDatabaseClient(urls.auditReader, {
-    applicationName: "inpulse-adr049-project-delete-audit",
+    applicationName: "inpulse-adr062-project-delete-audit",
   });
   unitOfWork = new PostgresUnitOfWork(client);
   access = new PostgresProjectAccessQueryPort(client);
   members = new PostgresProjectMembersQueryPort();
-  deletions = new ProjectDeletionsQueryService(
-    client.sql,
-    new TimeCursorService(
-      VersionedHmacKeyring.fromEntries([{ version: 1, key }], 1),
-      PROJECT_DELETION_CURSOR_NAMESPACE,
-    ),
-  );
 
   const csrf = new PostgresSessionCsrfTokenRepository();
   const auth = new SessionAuthService(
@@ -456,215 +475,125 @@ afterAll(async () => {
   await auditReader?.close();
 });
 
-describe("ADR-049 project delete API", () => {
-  it("组长删除项目：204 无正文、项目退出全部读取路径、业务历史保留", async () => {
+describe("ADR-062 project delete API", () => {
+  it("组长删除项目：204 无正文、下级数据与项目审计链逐表清空、SYSTEM 链留一条 project.delete", async () => {
     const value = await fixture();
-    const path = `/projects/${value.project.projectId}`;
-    const deleteKey = randomUUID();
+    const projectId = value.project.projectId;
+    const path = `/projects/${projectId}`;
+    await seedPurgeableRecords(value.project, value.owner.userId);
 
-    const before = await visibility(
-      value.project.projectId,
-      value.owner.userId,
+    const before = await projectRowCounts(projectId);
+    const expectedTotal = Object.values(before).reduce(
+      (sum, count) => sum + count,
+      0,
     );
+    // 审计快照记录的是删除前的真实状态，按夹具实际值断言而不是写死常量。
+    const [statusRow] = (await client.sql`
+      SELECT status FROM app.projects WHERE id = ${projectId}
+    `) as unknown as readonly { readonly status: string }[];
+    expect(expectedTotal).toBeGreaterThan(0);
+    // 夹具确实在这些表里留了行，否则「全表归零」无意义；审计表为空是因为夹具
+    // 直接写表、不走命令。
     expect(before).toMatchObject({
-      inSearchScope: true,
-      writable: "allowed",
-      memberProfiles: 1,
+      modules: 1,
+      features: 1,
+      tasks: 2,
+      task_status_history: 2,
+      task_groups: 1,
+      task_group_members: 2,
+      change_records: 1,
+      project_members: 1,
+      audit_logs: 0,
+      notifications: 0,
+      activity_projection: 0,
     });
 
-    const deleted = await request("DELETE", path, value.owner, {
-      key: deleteKey,
-    });
+    const deleted = await request("DELETE", path, value.owner);
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     expect(deleted.headers.get("content-type")).toBeNull();
 
-    expect(await projectRow(value.project.projectId)).toMatchObject({
-      deletedBy: value.owner.userId,
-      rowVersion: 2,
-    });
+    // 项目行与它自己的审计链都没了，全部下级数据逐表归零。
+    expect(await projectExists(projectId)).toBe(false);
+    expect(await projectChainHeadExists(projectId)).toBe(false);
+    expect(await projectRowCounts(projectId)).toEqual(
+      Object.fromEntries(ALL_SCOPED_TABLES.map((table) => [table, 0])),
+    );
 
-    // 删除后组长自己也读不到、写不进，成员列表同理（undefined = 项目不可访问）。
-    expect(
-      await visibility(value.project.projectId, value.owner.userId),
-    ).toMatchObject({
+    // 删除后项目退出全部读取路径：组长自己也读不到、写不进、成员列表读不到。
+    expect(await visibility(projectId, value.owner.userId)).toMatchObject({
       inSearchScope: false,
       writable: "not-found",
       memberProfiles: -1,
     });
 
-    // 项目本身消失，但模块、成员关系与审计链都还在。
-    const retained = (await client.sql`
-      SELECT (SELECT count(*) FROM app.modules
-               WHERE project_id = ${value.project.projectId}) AS "modules",
-             (SELECT count(*) FROM app.project_members
-               WHERE project_id = ${value.project.projectId}
-                 AND status = 'ACTIVE') AS "members"
-    `) as unknown as readonly { modules: string; members: string }[];
-    expect(retained[0]).toMatchObject({ modules: "1", members: "1" });
-
-    const deleteAudits = (await auditReader.sql`
-      SELECT count(*) AS "count"
+    // 唯一保留的记录：SYSTEM 链上的 project.delete。
+    const systemLogs = (await auditReader.sql`
+      SELECT project_id AS "projectId",
+             actor_type AS "actorType",
+             actor_id AS "actorId",
+             target_type AS "targetType",
+             target_id AS "targetId",
+             event_payload AS "eventPayload"
         FROM app.audit_logs
-       WHERE project_id = ${value.project.projectId}
+       WHERE chain_id = 'SYSTEM'
          AND action = 'project.delete'
-    `) as unknown as readonly { count: string }[];
-    expect(deleteAudits[0]!.count).toBe("1");
-
-    // 夹具直接插入项目、不走命令，因此这里只有删除事件；关键是删除没有拆链：
-    // PROJECT 链头仍与该项目最后一条审计记录对得上。
-    const audits = (await auditReader.sql`
-      SELECT action AS "action"
-        FROM app.audit_logs
-       WHERE project_id = ${value.project.projectId}
-       ORDER BY sequence_no ASC
-    `) as unknown as readonly { action: string }[];
-    expect(audits.map((row) => row.action)).toEqual(["project.delete"]);
-
-    const heads = (await auditReader.sql`
-      SELECT h.last_sequence AS "lastSequence",
-             h.last_hash = last_row.record_hash AS "hashMatches",
-             h.last_sequence = last_row.sequence_no AS "sequenceMatches"
-        FROM app.audit_chain_heads h
-        JOIN LATERAL (
-          SELECT sequence_no, record_hash
-            FROM app.audit_logs
-           WHERE project_id = ${value.project.projectId}
-           ORDER BY sequence_no DESC
-           LIMIT 1
-        ) AS last_row ON true
-       WHERE h.chain_id = ${`PROJECT:${String(value.project.projectId)}`}
+         AND target_id = ${String(projectId)}
     `) as unknown as readonly {
-      hashMatches: boolean;
-      lastSequence: string;
-      sequenceMatches: boolean;
+      projectId: number | null;
+      actorType: string;
+      actorId: number | null;
+      targetType: string;
+      targetId: string;
+      eventPayload: {
+        readonly code: string;
+        readonly name: string;
+        readonly status: string;
+        readonly rowVersion: number;
+        readonly actorRole: string;
+        readonly records: Readonly<Record<string, number>>;
+      };
     }[];
-    expect(heads).toHaveLength(1);
-    expect(heads[0]).toMatchObject({
-      hashMatches: true,
-      sequenceMatches: true,
-    });
-
-    const activity = (await client.sql`
-      SELECT activity_type AS "activityType",
-             summary AS "summary"
-        FROM app.activity_projection
-       WHERE project_id = ${value.project.projectId}
-         AND activity_type = 'PROJECT_DELETED'
-    `) as unknown as readonly { activityType: string; summary: string }[];
-    expect(activity).toHaveLength(1);
-    expect(activity[0]!.summary).toContain("删除了项目");
-
-    // 通知不写：深链指向已不可见的项目。
-    const notifications = (await client.sql`
-      SELECT count(*) AS "count"
-        FROM app.notifications
-       WHERE project_id = ${value.project.projectId}
-    `) as unknown as readonly { count: string }[];
-    expect(notifications[0]!.count).toBe("0");
-  });
-
-  it("删除台账与审计都记下删除人：任何登录用户可读、管理员可查审计", async () => {
-    const value = await fixture();
-    const member = await actor(false);
-    const outsider = await actor(false);
-    await join(value.project.projectId, member.userId);
-
-    expect(
-      (
-        await request(
-          "DELETE",
-          `/projects/${value.project.projectId}`,
-          value.owner,
-        )
-      ).status,
-    ).toBe(204);
-
-    // 删除人姓名由服务端从 app.users 联表取出，页面直接可用。
-    const [ownerRow] = (await client.sql`
-      SELECT name FROM app.users WHERE id = ${value.owner.userId}
-    `) as unknown as readonly { name: string }[];
-    const ledgers = await deletions.query({
-      actorUserId: outsider.userId,
-    });
-    const entry = ledgers.items.find(
-      (item) => item.projectId === value.project.projectId,
-    );
-    expect(entry).toBeDefined();
-    expect(entry).toMatchObject({
-      code: value.project.code,
-      deletedBy: { id: value.owner.userId, name: ownerRow!.name },
-    });
-    expect(entry!.deletedAt).toMatch(/Z$/);
-
-    // 同一份事实在管理员可见的审计链里也留了痕：动作与操作者一致。
-    const audits = (await auditReader.sql`
-      SELECT action AS "action", actor_id AS "actorId"
-        FROM app.audit_logs
-       WHERE project_id = ${value.project.projectId}
-       ORDER BY sequence_no DESC
-       LIMIT 1
-    `) as unknown as readonly { action: string; actorId: number | null }[];
-    expect(audits[0]).toEqual({
-      action: "project.delete",
+    expect(systemLogs).toHaveLength(1);
+    expect(systemLogs[0]).toMatchObject({
+      projectId: null,
+      actorType: "USER",
       actorId: value.owner.userId,
+      targetType: "PROJECT",
+      targetId: String(projectId),
+      eventPayload: {
+        code: value.project.code,
+        name: `Project ${value.project.code}`,
+        status: statusRow?.status,
+        rowVersion: 1,
+        actorRole: "LEADER",
+        records: {
+          modules: before.modules,
+          features: before.features,
+          tasks: before.tasks,
+          changeRecords: before.change_records,
+          auditLogs: 0,
+          members: before.project_members,
+          total: expectedTotal,
+        },
+      },
     });
+
+    // 删除自己的项目链不得影响 SYSTEM 链的完整性。
+    expect(await systemChainHealthy()).toBe(true);
   });
 
-  it("同 Key 同 If-Match 重放 204；换 If-Match 或换 Key 都不重放", async () => {
+  it("普通成员 403、非成员与已移除成员 404、系统管理员放行；失败路径零副作用", async () => {
     const value = await fixture();
-    const path = `/projects/${value.project.projectId}`;
-    const deleteKey = randomUUID();
-
-    expect(
-      (await request("DELETE", path, value.owner, { key: deleteKey })).status,
-    ).toBe(204);
-
-    const replay = await request("DELETE", path, value.owner, {
-      key: deleteKey,
-    });
-    expect(replay.status).toBe(204);
-    expect(await replay.text()).toBe("");
-
-    const row = await projectRow(value.project.projectId);
-    expect(row.rowVersion).toBe(2);
-
-    const repeatAudits = (await auditReader.sql`
-      SELECT count(*) AS "count"
-        FROM app.audit_logs
-       WHERE project_id = ${value.project.projectId}
-         AND action = 'project.delete'
-    `) as unknown as readonly { count: string }[];
-    expect(repeatAudits[0]!.count).toBe("1");
-
-    // 同一把 Key、不同请求内容（If-Match 变了）→ 摘要不一致。
-    await expectError(
-      await request("DELETE", path, value.owner, {
-        key: deleteKey,
-        ifMatch: '"2"',
-      }),
-      409,
-      "IDEMPOTENCY_REQUEST_MISMATCH",
-    );
-
-    // 换一把新 Key 重删：项目已不可写，按不存在处理。
-    await expectError(
-      await request("DELETE", path, value.owner),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-  });
-
-  it("普通成员 403、非成员与已移除成员 404、系统管理员放行", async () => {
-    const value = await fixture();
-    const path = `/projects/${value.project.projectId}`;
+    const projectId = value.project.projectId;
+    const path = `/projects/${projectId}`;
     const member = await actor(false);
     const outsider = await actor(false);
     const removed = await actor(false);
     const admin = await actor(true);
-    await join(value.project.projectId, member.userId);
-    await join(value.project.projectId, removed.userId);
-    await removeMember(client.sql, value.project.projectId, removed.userId);
+    await join(projectId, member.userId);
+    await join(projectId, removed.userId);
+    await removeMember(client.sql, projectId, removed.userId);
 
     await expectError(
       await request("DELETE", path, member),
@@ -682,75 +611,122 @@ describe("ADR-049 project delete API", () => {
       "PROJECT_NOT_FOUND",
     );
 
-    // 失败路径不得留下副作用：项目仍然可读可写。
-    expect(await projectRow(value.project.projectId)).toMatchObject({
-      deletedAt: null,
-      deletedBy: null,
-      rowVersion: 1,
+    // 失败路径不得留下副作用：项目与全部下级数据仍在，版本号未变。
+    expect(await projectExists(projectId)).toBe(true);
+    expect(await visibility(projectId, value.owner.userId)).toMatchObject({
+      inSearchScope: true,
+      writable: "allowed",
+      memberProfiles: 2,
     });
-    expect(
-      await visibility(value.project.projectId, value.owner.userId),
-    ).toMatchObject({ inSearchScope: true, writable: "allowed" });
+    const counts = await projectRowCounts(projectId);
+    // 失败路径零副作用：成员行仍是组长 + 成员 + 已移除成员三条。
+    expect(counts).toMatchObject({ modules: 1, project_members: 3 });
+    expect(await projectChainHeadExists(projectId)).toBe(false);
 
-    const deleted = await request("DELETE", path, admin);
-    expect(deleted.status).toBe(204);
-    expect(await projectRow(value.project.projectId)).toMatchObject({
-      deletedBy: admin.userId,
-      rowVersion: 2,
-    });
+    // 系统管理员即使不是成员也可以删除。
+    expect((await request("DELETE", path, admin)).status).toBe(204);
+    expect(await projectExists(projectId)).toBe(false);
   });
 
-  it("组长被转移或移除后不得重放；他人无法用同一把 Key 顶替", async () => {
+  it("同 Key 同摘要重放已存的 204；摘要不一致 409；换 Key 按不存在处理", async () => {
     const value = await fixture();
-    const successor = await actor(false);
-    const path = `/projects/${value.project.projectId}`;
+    const projectId = value.project.projectId;
+    const path = `/projects/${projectId}`;
     const deleteKey = randomUUID();
 
     expect(
       (await request("DELETE", path, value.owner, { key: deleteKey })).status,
     ).toBe(204);
 
-    // 组长身份转给新成员，原组长降为普通成员。
-    await join(value.project.projectId, successor.userId, "LEADER");
+    // 项目行已不存在，重放只复核当前认证（ADR-062 的 actorOnly 策略），
+    // 因此这里直接返回已存的 204，而不是把合法重放变成 404。
+    const replay = await request("DELETE", path, value.owner, {
+      key: deleteKey,
+    });
+    expect(replay.status).toBe(204);
+    expect(await replay.text()).toBe("");
 
-    // 重放前重验原操作权限：原组长已降为普通成员，不得重放已存的 204。
+    const repeatLogs = (await auditReader.sql`
+      SELECT count(*) AS "count"
+        FROM app.audit_logs
+       WHERE chain_id = 'SYSTEM'
+         AND action = 'project.delete'
+         AND target_id = ${String(projectId)}
+    `) as unknown as readonly { count: string }[];
+    expect(repeatLogs[0]!.count).toBe("1");
+
+    // 同一把 Key、不同请求内容（If-Match 变了）→ 摘要不一致。
     await expectError(
-      await request("DELETE", path, value.owner, { key: deleteKey }),
-      403,
-      "PROJECT_DELETE_FORBIDDEN",
+      await request("DELETE", path, value.owner, {
+        key: deleteKey,
+        ifMatch: '"2"',
+      }),
+      409,
+      "IDEMPOTENCY_REQUEST_MISMATCH",
     );
 
-    // 连成员关系也没了：按不存在处理，不泄露「此项目刚被删除」。
-    await removeMember(client.sql, value.project.projectId, value.owner.userId);
+    // 换一把新 Key 重删：项目已不存在，按不存在处理。
     await expectError(
-      await request("DELETE", path, value.owner, { key: deleteKey }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-
-    // 幂等记录按操作者隔离，新组长用同一把 Key 也只是重新执行并撞上不可写。
-    await expectError(
-      await request("DELETE", path, successor, { key: deleteKey }),
+      await request("DELETE", path, value.owner),
       404,
       "PROJECT_NOT_FOUND",
     );
   });
 
-  it("陈旧版本 409、缺 If-Match 422、缺幂等键 400、带请求体 422", async () => {
+  it("重放只复核当前认证：项目已删除仍重放 204，但认证失效后不得重放", async () => {
     const value = await fixture();
-    const path = `/projects/${value.project.projectId}`;
+    const projectId = value.project.projectId;
+    const path = `/projects/${projectId}`;
+    const deleteKey = randomUUID();
+
+    expect(
+      (await request("DELETE", path, value.owner, { key: deleteKey })).status,
+    ).toBe(204);
+    expect(await projectExists(projectId)).toBe(false);
+
+    // 常规重放会按项目可读性复核并必然 404；删除走的是 actorOnly，只复核认证。
+    const replay = await request("DELETE", path, value.owner, {
+      key: deleteKey,
+    });
+    expect(replay.status).toBe(204);
+    expect(await replay.text()).toBe("");
+
+    // 认证失效后不得再重放：幂等记录不能变成绕过停用的后门。
+    await client.sql`
+      UPDATE app.users
+         SET auth_version = auth_version + 1,
+             row_version = row_version + 1
+       WHERE id = ${value.owner.userId}
+    `;
+    await expectError(
+      await request("DELETE", path, value.owner, { key: deleteKey }),
+      401,
+      "PROJECT_SESSION_REQUIRED",
+    );
+
+    // 未登录同样不重放。
+    await expectError(
+      await request("DELETE", path, undefined, { csrf: "a".repeat(43) }),
+      401,
+      "PROJECT_SESSION_REQUIRED",
+    );
+  });
+
+  it("陈旧版本 409、缺 If-Match 422、缺幂等键 400、带请求体 422、缺 CSRF 422、未登录 401", async () => {
+    const value = await fixture();
+    const projectId = value.project.projectId;
+    const path = `/projects/${projectId}`;
 
     await client.sql`
       UPDATE app.projects
          SET row_version = row_version + 1
-       WHERE id = ${value.project.projectId}
+       WHERE id = ${projectId}
     `;
     await expectError(
       await request("DELETE", path, value.owner, { ifMatch: '"1"' }),
       409,
       "PROJECT_VERSION_CONFLICT",
     );
-
     await expectError(
       await request("DELETE", path, value.owner, { omitIfMatch: true }),
       422,
@@ -780,505 +756,29 @@ describe("ADR-049 project delete API", () => {
       "PROJECT_SESSION_REQUIRED",
     );
 
-    // 以上失败都不改动项目行；用当前版本号删除成功。
-    expect(await projectRow(value.project.projectId)).toMatchObject({
-      deletedAt: null,
-      rowVersion: 2,
-    });
+    // 以上失败都不删除任何数据；用当前版本号删除成功。
+    expect(await projectExists(projectId)).toBe(true);
     expect(
       (await request("DELETE", path, value.owner, { ifMatch: '"2"' })).status,
     ).toBe(204);
-  });
-});
-
-describe("ADR-051 项目还原 API", () => {
-  it("组长还原：清空软删除、项目回到全部读路径、审计与动态同事务留痕", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-    expect(await visibility(projectId, value.owner.userId)).toMatchObject({
-      inSearchScope: false,
-      writable: "not-found",
-    });
-
-    const restored = await request("POST", `${path}/restore`, value.owner, {
-      omitIfMatch: true,
-    });
-    expect(restored.status).toBe(200);
-    const body = schemaRegistry.ProjectDetailResponse.schema.parse(
-      await restored.json(),
-    );
-    expect(body.project).toMatchObject({
-      id: projectId,
-      code: value.project.code,
-      rowVersion: 3,
-    });
-    expect(body.currentUserRole).toBe("LEADER");
-
-    // 还原不恢复数据，只清空软删除标记并递增版本。
-    expect(await projectRow(projectId)).toMatchObject({
-      deletedAt: null,
-      deletedBy: null,
-      rowVersion: 3,
-    });
-    expect(await visibility(projectId, value.owner.userId)).toMatchObject({
-      inSearchScope: true,
-      writable: "allowed",
-      memberProfiles: 1,
-    });
-
-    // 删除台账不再列出该项目。
-    const ledgers = await deletions.query({ actorUserId: value.owner.userId });
-    expect(ledgers.items.some((item) => item.projectId === projectId)).toBe(
-      false,
-    );
-
-    // 审计链追加 project.restore，链头仍与最后一条记录对齐。
-    const audits = (await auditReader.sql`
-      SELECT action AS "action", actor_id AS "actorId"
-        FROM app.audit_logs
-       WHERE project_id = ${projectId}
-       ORDER BY sequence_no ASC
-    `) as unknown as readonly { action: string; actorId: number | null }[];
-    expect(audits.map((row) => row.action)).toEqual([
-      "project.delete",
-      "project.restore",
-    ]);
-    expect(audits[1]!.actorId).toBe(value.owner.userId);
-    expect(await chainHeadMatches(projectId)).toBe(true);
-
-    // 项目动态按链序追加 PROJECT_RESTORED，搜索投影按新版本重建。
-    const activity = (await client.sql`
-      SELECT activity_type AS "activityType", summary AS "summary"
-        FROM app.activity_projection
-       WHERE project_id = ${projectId}
-       ORDER BY source_sequence ASC
-    `) as unknown as readonly { activityType: string; summary: string }[];
-    expect(activity.map((row) => row.activityType)).toEqual([
-      "PROJECT_DELETED",
-      "PROJECT_RESTORED",
-    ]);
-    expect(activity[1]!.summary).toContain("还原了项目");
-
-    const projection = (await client.sql`
-      SELECT title AS "title",
-             visibility_scope AS "visibilityScope",
-             source_row_version AS "sourceRowVersion"
-        FROM app.search_projection
-       WHERE project_id = ${projectId}
-         AND entity_type = 'PROJECT'
-         AND entity_id = ${projectId}
-    `) as unknown as readonly {
-      title: string;
-      visibilityScope: string;
-      sourceRowVersion: number;
-    }[];
-    expect(projection).toHaveLength(1);
-    expect(projection[0]).toMatchObject({
-      title: `Project ${value.project.code}`,
-      visibilityScope: "MEMBER",
-      sourceRowVersion: 3,
-    });
-
-    // 还原不发通知：项目回来看得到，不需要再点一次提醒。
-    const notifications = (await client.sql`
-      SELECT count(*) AS "count"
-        FROM app.notifications
-       WHERE project_id = ${projectId}
-    `) as unknown as readonly { count: string }[];
-    expect(notifications[0]!.count).toBe("0");
+    expect(await projectExists(projectId)).toBe(false);
   });
 
-  it("还原权限：普通成员 403、非成员与已移除成员 404、未删除 409、系统管理员放行", async () => {
+  it("项目编码随物理删除释放，可被后续新项目复用", async () => {
     const value = await fixture();
     const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-    const member = await actor(false);
-    const outsider = await actor(false);
-    const removed = await actor(false);
-    const admin = await actor(true);
-    await join(projectId, member.userId);
-    await join(projectId, removed.userId);
-    await removeMember(client.sql, projectId, removed.userId);
-
-    // 未删除的项目不能还原：组长与系统管理员都得到 409。
-    await expectError(
-      await request("POST", `${path}/restore`, value.owner, {
-        omitIfMatch: true,
-      }),
-      409,
-      "PROJECT_NOT_DELETED",
-    );
-    await expectError(
-      await request("POST", `${path}/restore`, admin, { omitIfMatch: true }),
-      409,
-      "PROJECT_NOT_DELETED",
-    );
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-
-    await expectError(
-      await request("POST", `${path}/restore`, member, { omitIfMatch: true }),
-      403,
-      "PROJECT_RESTORE_FORBIDDEN",
-    );
-    await expectError(
-      await request("POST", `${path}/restore`, outsider, { omitIfMatch: true }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-    await expectError(
-      await request("POST", `${path}/restore`, removed, { omitIfMatch: true }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-    // 不存在的项目与无权访问同样 404，不泄露存在性。
-    await expectError(
-      await request("POST", "/projects/2147483647/restore", admin, {
-        omitIfMatch: true,
-      }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-
-    // 以上失败都不改动项目行，项目仍是「已删除」。
-    expect((await projectRow(projectId)).deletedAt).not.toBeNull();
-
-    // 系统管理员即使不是成员也可以还原。
-    expect(
-      (await request("POST", `${path}/restore`, admin, { omitIfMatch: true }))
-        .status,
-    ).toBe(200);
-    expect(await projectRow(projectId)).toMatchObject({
-      deletedAt: null,
-      rowVersion: 3,
-    });
-  });
-
-  it("重放只按操作者与摘要命中：同 Key 不重复写审计，换 Key 得到 409", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-    const admin = await actor(true);
-    const restoreKey = randomUUID();
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-
-    const first = await request("POST", `${path}/restore`, value.owner, {
-      key: restoreKey,
-      omitIfMatch: true,
-    });
-    expect(first.status).toBe(200);
-    const firstBody = await first.json();
-
-    // 同 Key、同摘要、同契约版本重放原 200，不再写第二条审计、不再动版本。
-    const replay = await request("POST", `${path}/restore`, value.owner, {
-      key: restoreKey,
-      omitIfMatch: true,
-    });
-    expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual(firstBody);
-    expect(await projectRow(projectId)).toMatchObject({ rowVersion: 3 });
-
-    const restores = (await auditReader.sql`
-      SELECT count(*) AS "count"
-        FROM app.audit_logs
-       WHERE project_id = ${projectId}
-         AND action = 'project.restore'
-    `) as unknown as readonly { count: string }[];
-    expect(restores[0]!.count).toBe("1");
-
-    // 换一把新 Key：项目已还原，守卫把它拦成 409。
-    await expectError(
-      await request("POST", `${path}/restore`, value.owner, {
-        omitIfMatch: true,
-      }),
-      409,
-      "PROJECT_NOT_DELETED",
-    );
-
-    // 幂等记录按操作者隔离：系统管理员拿着同一把 Key 只是重新执行，同样 409。
-    await expectError(
-      await request("POST", `${path}/restore`, admin, {
-        key: restoreKey,
-        omitIfMatch: true,
-      }),
-      409,
-      "PROJECT_NOT_DELETED",
-    );
-  });
-
-  it("缺 CSRF 422、缺幂等键 400、带请求体 422、未登录 401", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}/restore`;
+    const code = value.project.code;
 
     expect(
       (await request("DELETE", `/projects/${projectId}`, value.owner)).status,
     ).toBe(204);
 
-    await expectError(
-      await request("POST", path, value.owner, {
-        omitCsrf: true,
-        omitIfMatch: true,
-      }),
-      422,
-      "PROJECT_VALIDATION_FAILED",
-    );
-    await expectError(
-      await request("POST", path, value.owner, {
-        omitIdempotency: true,
-        omitIfMatch: true,
-      }),
-      400,
-      "IDEMPOTENCY_KEY_REQUIRED",
-    );
-    await expectError(
-      await request("POST", path, value.owner, {
-        body: { reason: "误删" },
-        contentType: "application/json",
-        omitIfMatch: true,
-      }),
-      422,
-      "PROJECT_VALIDATION_FAILED",
-    );
-    await expectError(
-      await request("POST", path, undefined, {
-        csrf: "a".repeat(43),
-        omitIfMatch: true,
-      }),
-      401,
-      "PROJECT_SESSION_REQUIRED",
-    );
-
-    // 失败的还原不改动项目行。
-    expect((await projectRow(projectId)).deletedAt).not.toBeNull();
-  });
-});
-
-describe("ADR-051 项目彻底删除 API", () => {
-  it("系统管理员彻底删除：逐表物理删除、SYSTEM 链留一条 project.purge", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-    const admin = await actor(true);
-    await seedPurgeableRecords(value.project, value.owner.userId);
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-
-    // 删除前的行数即 total 的期望值：它必须覆盖全部 27 处删除位置。
-    const before = await projectRowCounts(projectId);
-    const expectedTotal = Object.values(before).reduce(
-      (sum, count) => sum + count,
-      0,
-    );
-    expect(expectedTotal).toBeGreaterThan(0);
-    // 夹具确实在这些表里留了行，否则「全表归零」无意义。
-    expect(before).toMatchObject({
-      modules: 1,
-      features: 1,
-      tasks: 2,
-      task_groups: 1,
-      task_group_members: 2,
-      change_records: 1,
-      project_members: 1,
-      audit_logs: 1,
-    });
-
-    const purged = await request("POST", `${path}/purge`, admin, {
-      omitIfMatch: true,
-    });
-    expect(purged.status).toBe(200);
-    const body = schemaRegistry.ProjectPurgeResponse.schema.parse(
-      await purged.json(),
-    );
-    expect(body.purged).toMatchObject({
-      projectId,
-      code: value.project.code,
-      name: `Project ${value.project.code}`,
-      records: {
-        modules: before.modules,
-        features: before.features,
-        tasks: before.tasks,
-        changeRecords: before.change_records,
-        auditLogs: before.audit_logs,
-        members: before.project_members,
-        total: expectedTotal,
-      },
-    });
-
-    // 项目行与它自己的审计链都没了，全部下级数据逐表归零。
-    const rows = (await client.sql`
-      SELECT count(*) AS "count" FROM app.projects WHERE id = ${projectId}
-    `) as unknown as readonly { count: string }[];
-    expect(rows[0]!.count).toBe("0");
-    expect(await projectRowCounts(projectId)).toEqual(
-      Object.fromEntries(ALL_SCOPED_TABLES.map((table) => [table, 0])),
-    );
-
-    // 项目动态里的删除行随之消失，删除台账也不再列出。
-    const ledgers = await deletions.query({ actorUserId: admin.userId });
-    expect(ledgers.items.some((item) => item.projectId === projectId)).toBe(
-      false,
-    );
-
-    // 唯一保留的记录：SYSTEM 链上的 project.purge（项目链已不存在，只能记在这里）。
-    const systemLogs = (await auditReader.sql`
-      SELECT project_id AS "projectId",
-             actor_id AS "actorId",
-             target_id AS "targetId",
-             event_payload AS "eventPayload"
-        FROM app.audit_logs
-       WHERE chain_id = 'SYSTEM'
-         AND action = 'project.purge'
-         AND target_id = ${String(projectId)}
-    `) as unknown as readonly {
-      projectId: number | null;
-      actorId: number | null;
-      targetId: string;
-      eventPayload: {
-        readonly code: string;
-        readonly name: string;
-        readonly deletedAt: string;
-        readonly deletedBy: { readonly id: number; readonly name: string };
-        readonly actorRole: string;
-        // 审计正文与响应体共用同一份统计对象，因此两边键名一致。
-        readonly records: Readonly<Record<string, number>>;
-      };
-    }[];
-    expect(systemLogs).toHaveLength(1);
-    expect(systemLogs[0]).toMatchObject({
-      projectId: null,
-      actorId: admin.userId,
-      targetId: String(projectId),
-      eventPayload: {
-        code: value.project.code,
-        name: `Project ${value.project.code}`,
-        deletedBy: { id: value.owner.userId },
-        actorRole: "SYSTEM_ADMIN",
-        records: {
-          modules: body.purged.records.modules,
-          features: body.purged.records.features,
-          tasks: body.purged.records.tasks,
-          changeRecords: body.purged.records.changeRecords,
-          auditLogs: body.purged.records.auditLogs,
-          members: body.purged.records.members,
-          total: body.purged.records.total,
-        },
-      },
-    });
-    // 审计正文里的删除时刻是 ISO 字符串，与项目行被软删除的时刻同源。
-    const purgedAt = systemLogs[0]!.eventPayload.deletedAt;
-    expect(Number.isNaN(Date.parse(purgedAt))).toBe(false);
-  });
-
-  it("权限与状态：只有系统管理员，未删除 409、不存在、已删除但非成员同样 403", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-    const member = await actor(false);
-    const outsider = await actor(false);
-    const admin = await actor(true);
-    await join(projectId, member.userId);
-
-    // 未删除的项目不能彻底删除：先过权限门禁的只有系统管理员，得到 409。
-    await expectError(
-      await request("POST", `${path}/purge`, admin, { omitIfMatch: true }),
-      409,
-      "PROJECT_NOT_DELETED",
-    );
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-
-    // 反向校验：权限门禁在状态门禁之前，非管理员即使项目已删除也是 403。
-    await expectError(
-      await request("POST", `${path}/purge`, value.owner, {
-        omitIfMatch: true,
-      }),
-      403,
-      "PROJECT_PURGE_FORBIDDEN",
-    );
-    await expectError(
-      await request("POST", `${path}/purge`, member, { omitIfMatch: true }),
-      403,
-      "PROJECT_PURGE_FORBIDDEN",
-    );
-    await expectError(
-      await request("POST", `${path}/purge`, outsider, { omitIfMatch: true }),
-      403,
-      "PROJECT_PURGE_FORBIDDEN",
-    );
-    await expectError(
-      await request("POST", "/projects/2147483647/purge", admin, {
-        omitIfMatch: true,
-      }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-
-    // 失败路径不得留下副作用：项目仍在，只是仍是已删除状态。
-    expect((await projectRow(projectId)).deletedAt).not.toBeNull();
-
-    expect(
-      (await request("POST", `${path}/purge`, admin, { omitIfMatch: true }))
-        .status,
-    ).toBe(200);
-    expect(await projectRowCounts(projectId)).toEqual(
-      Object.fromEntries(ALL_SCOPED_TABLES.map((table) => [table, 0])),
-    );
-
-    // 彻底删除后同一把 Key 之外的重复调用按不存在处理，不泄露「已被彻底删除」。
-    await expectError(
-      await request("POST", `${path}/purge`, admin, { omitIfMatch: true }),
-      404,
-      "PROJECT_NOT_FOUND",
-    );
-  });
-
-  it("重放按管理员身份复核：同 Key 返回同一份统计，普通成员无法借用", async () => {
-    const value = await fixture();
-    const projectId = value.project.projectId;
-    const path = `/projects/${projectId}`;
-    const admin = await actor(true);
-    const purgeKey = randomUUID();
-    await seedPurgeableRecords(value.project, value.owner.userId);
-
-    expect((await request("DELETE", path, value.owner)).status).toBe(204);
-
-    const first = await request("POST", `${path}/purge`, admin, {
-      key: purgeKey,
-      omitIfMatch: true,
-    });
-    expect(first.status).toBe(200);
-    const firstBody = await first.json();
-
-    // 项目行已不存在，重放只复核「当前 Session 仍是有效系统管理员」。
-    const replay = await request("POST", `${path}/purge`, admin, {
-      key: purgeKey,
-      omitIfMatch: true,
-    });
-    expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual(firstBody);
-
-    // 幂等记录按操作者隔离：组长拿同一把 Key 只是重新执行，被权限门禁拦下。
-    await expectError(
-      await request("POST", `${path}/purge`, value.owner, {
-        key: purgeKey,
-        omitIfMatch: true,
-      }),
-      403,
-      "PROJECT_PURGE_FORBIDDEN",
-    );
-
-    const purgeLogs = (await auditReader.sql`
-      SELECT count(*) AS "count"
-        FROM app.audit_logs
-       WHERE chain_id = 'SYSTEM'
-         AND action = 'project.purge'
-         AND target_id = ${String(projectId)}
-    `) as unknown as readonly { count: string }[];
-    expect(purgeLogs[0]!.count).toBe("1");
+    // 唯一约束里没有残留墓碑行：同一编码可以重新登记。
+    const reusedId = await insertProjectWithCode(code, value.owner.userId);
+    expect(reusedId).not.toBe(projectId);
+    const [reused] = (await client.sql`
+      SELECT code AS "code" FROM app.projects WHERE id = ${reusedId}
+    `) as unknown as readonly { code: string }[];
+    expect(reused!.code).toBe(code);
   });
 });

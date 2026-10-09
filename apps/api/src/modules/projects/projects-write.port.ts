@@ -107,7 +107,7 @@ export interface ProjectFirstTaskCompletionRecord {
 /**
  * 任务重新变为未收尾（创建、重新打开或恢复）把维护中项目重新打开为进行中的结果；
  * 调用方据此判定是否需要写审计、活动与搜索投影。返回 undefined 表示本次操作不改变
- * 项目状态（项目不是维护中、已被软删除或不存在），不产生任何副作用。
+ * 项目状态（项目不是维护中或不存在），不产生任何副作用。
  */
 export interface ProjectMaintenanceReopenRecord {
   readonly projectId: number;
@@ -126,30 +126,7 @@ export interface ProjectStatRecord {
   readonly completedTaskCount: number;
 }
 
-/**
- * ADR-051：已软删除项目在写路径上的最小视图。还原需要它判断目标确实处于
- * 已删除状态，彻底删除需要它把项目编码与名称写进 SYSTEM 审计链。
- */
-export interface DeletedProjectRecord {
-  readonly projectId: number;
-  readonly code: string;
-  readonly name: string;
-  readonly deletedAt: string;
-  readonly deletedById: number;
-  readonly deletedByName: string;
-  readonly rowVersion: number;
-}
-
-/**
- * ADR-055：等待自动彻底删除的候选项目（已软删除且超过保留期）。
- * 只用于候选列表与日志，删除前的复核走 `findExpiredDeletedProjectForChange`。
- */
-export interface ExpiredProjectRecord {
-  readonly projectId: number;
-  readonly deletedAt: string;
-}
-
-/** 彻底删除实际物理删除的行数；只用于响应与审计，不参与幂等摘要。 */
+/** 物理删除实际删除的行数；只用于审计留痕，不参与幂等摘要。 */
 export interface ProjectPurgeCounts {
   readonly modules: number;
   readonly features: number;
@@ -220,68 +197,14 @@ export abstract class ProjectsWritePort {
   ): Promise<ProjectChangeRecord | undefined>;
 
   /**
-   * ADR-049：条件软删除项目，标记 deleted_at/deleted_by 并递增 row_version。
-   * 业务历史、成员关系与审计链全部保留；版本不匹配或项目已被删除返回 false。
-   */
-  abstract softDeleteProject(
-    tx: TransactionContext,
-    input: {
-      readonly projectId: number;
-      readonly expectedRowVersion: number;
-      readonly actorId: number;
-      readonly deletedAt: Date;
-    },
-  ): Promise<boolean>;
-
-  /**
-   * ADR-051：锁定并读取已软删除的项目行；项目不存在或未删除返回 undefined。
-   * 行锁与后续的状态守卫共同防止并发重复还原/重复彻底删除。
-   */
-  abstract findDeletedProjectForChange(
-    tx: TransactionContext,
-    input: { readonly projectId: number },
-  ): Promise<DeletedProjectRecord | undefined>;
-
-  /**
-   * ADR-051：清空 deleted_at/deleted_by 并递增 row_version；项目未处于删除态
-   * （已被并发还原或根本不存在）返回 undefined，由调用方映射 409。
-   */
-  abstract restoreProject(
-    tx: TransactionContext,
-    input: { readonly projectId: number },
-  ): Promise<ProjectChangeRecord | undefined>;
-
-  /**
-   * ADR-051：调用 `app.purge_project` 物理删除项目及其全部下级数据与
-   * `PROJECT:<id>` 审计链，返回实际删除行数。数据库侧只接受已软删除的项目，
-   * 否则抛错；调用方必须先在同一事务内校验状态。
+   * ADR-062：调用 `app.purge_project` 物理删除项目及其全部下级数据与
+   * `PROJECT:<id>` 审计链，返回实际删除行数。项目行不存在或已被并发删除时
+   * 数据库抛错；调用方必须先在同一事务内锁定并校验项目行。
    */
   abstract purgeProject(
     tx: TransactionContext,
     input: { readonly projectId: number },
   ): Promise<ProjectPurgeCounts>;
-
-  /**
-   * ADR-055：列出已软删除且超过保留期的项目（按删除时间从早到晚），不加行锁；
-   * 自动彻底删除对每个候选在独立事务内加锁并复核，复核失败即跳过。
-   * 保留期从 `deleted_at` 起算，还原会清空它、重新删除会写入新值，
-   * 因此天然按「最后一次删除」计时。
-   */
-  abstract listAutoPurgeCandidates(
-    tx: TransactionContext,
-    input: { readonly retentionDays: number; readonly limit: number },
-  ): Promise<readonly ExpiredProjectRecord[]>;
-
-  /**
-   * ADR-055：带保留期条件的已删除项目读取，语义与 `findDeletedProjectForChange`
-   * 一致（行锁 + 只认已软删除的项目），但额外要求删除时间已超过保留期。
-   * 项目已还原、已被并发彻底删除或删除时间被刷新时返回 undefined，
-   * 由调用方按「跳过」处理。
-   */
-  abstract findExpiredDeletedProjectForChange(
-    tx: TransactionContext,
-    input: { readonly projectId: number; readonly retentionDays: number },
-  ): Promise<DeletedProjectRecord | undefined>;
 
   /**
    * 任务完成写路径的粘性置位：first_task_completed_at 取最早一次完成时间且永不回落；
@@ -299,8 +222,8 @@ export abstract class ProjectsWritePort {
    * ADR-056 / ADR-057：任务重新变为未收尾（新建、重新打开或恢复）后维护中项目
    * 重新开工——维护中的语义是「主体已完成、只做小修小补」，一旦有未收尾任务
    * 进来就不再成立，同一事务内回到进行中。
-   * 只命中 status = 'MAINTENANCE' 且未软删除的行并递增 row_version；未开始、
-   * 进行中与已软删除项目不命中任何行，因此重复调用不会推高项目版本。
+   * 只命中 status = 'MAINTENANCE' 的行并递增 row_version；未开始与进行中项目
+   * 不命中任何行，因此重复调用不会推高项目版本。
    */
   abstract reopenMaintenanceProject(
     tx: TransactionContext,

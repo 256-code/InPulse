@@ -121,10 +121,12 @@ test("项目动态锁定项目时，同一下拉可以换到其他项目或回�
     await expect(page).toHaveURL(/\/activity$/);
     await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
 
-    // 下拉选项与全局态一致：项目详情页同样能直接切到「已删除项目」。
-    await pickCalmSelectOption(page, "项目", "已删除项目");
-    await expect(page).toHaveURL(/\/activity\?project=deleted$/);
-    await expect(calmSelectTrigger(page, "项目")).toContainText("已删除项目");
+    // ADR-062：项目删除改为物理删除，动态筛选里不再有「已删除项目」档位。
+    await calmSelectTrigger(page, "项目").click();
+    await expect(page.getByRole("option", { name: "已删除项目" })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press("Escape");
   } finally {
     await context.close();
   }

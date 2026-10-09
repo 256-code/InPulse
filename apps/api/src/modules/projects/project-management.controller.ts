@@ -3,7 +3,6 @@ import {
   Delete,
   Inject,
   Patch,
-  Post,
   Req,
   Res,
   UseGuards,
@@ -24,6 +23,7 @@ interface ProjectControllerResponse {
 /**
  * F-06 项目编辑与状态变更 HTTP 入口；只绑定 operationId 与契约装饰器，
  * 业务规则在服务与 Workflow 内，编码创建后不可修改。
+ * ADR-062 起项目删除是物理删除（`DELETE :projectId`，仅系统管理员与项目组长）。
  */
 @Controller("projects")
 export class ProjectManagementController {
@@ -60,28 +60,6 @@ export class ProjectManagementController {
     @Res({ passthrough: true }) response: ProjectControllerResponse,
   ) {
     return this.respond("deleteProject", request, response);
-  }
-
-  /** ADR-051：撤销软删除；系统管理员与本项目组长可用。 */
-  @Post(":projectId/restore")
-  @UseGuards(StrictSameOriginGuard)
-  @Operation("restoreProject")
-  async restore(
-    @Req() request: ProjectManagementHttpRequest,
-    @Res({ passthrough: true }) response: ProjectControllerResponse,
-  ) {
-    return this.respond("restoreProject", request, response);
-  }
-
-  /** ADR-051：物理删除全部下级数据与项目自己的审计链；仅系统管理员可用。 */
-  @Post(":projectId/purge")
-  @UseGuards(StrictSameOriginGuard)
-  @Operation("purgeProject")
-  async purge(
-    @Req() request: ProjectManagementHttpRequest,
-    @Res({ passthrough: true }) response: ProjectControllerResponse,
-  ) {
-    return this.respond("purgeProject", request, response);
   }
 
   private async respond(

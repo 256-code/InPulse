@@ -28,8 +28,8 @@ export interface ProjectForWriteResource {
  * - `allowed`：已通过归属与成员校验，项目可写。
  *
  * ADR-043：项目生命周期收敛为三态（未开始 / 进行中 / 维护中），项目层不再有
- * 归档入口与只读态，因此本 Port 不再返回 `parent-not-active`；模块自 ADR-044 起也
- * 不再有归档态（只有 ACTIVE），只剩功能保留该 kind（`feature.status = ARCHIVED`）。未开始 / 进行中 / 维护中都是活跃态，仍可新建模块、功能、任务与记录。
+ * 归档入口与只读态，因此本 Port 不再返回 `parent-not-active`。未开始 / 进行中 /
+ * 维护中都是活跃态，仍可新建模块、功能、任务与记录。
  * Port 只返回类型化结果，不抛出 HTTP 异常；HTTP 映射由 Use Case/Workflow 负责。
  */
 export type ProjectWriteCheckResult =
@@ -40,19 +40,6 @@ export interface ProjectAccessQueryPort {
   getAuthorizedSearchScope(
     actorUserId: number,
   ): Promise<AuthorizedProjectScope>;
-
-  /**
-   * ADR-050：已删除项目对全部登录用户只剩「删除项目」这一条公开记录，
-   * 因此跨域读需要能单独回答「该项目是否已被软删除」，
-   * 不能靠授权范围反推（不在范围内既可能是无权，也可能是已删除）。
-   */
-  isDeletedProject(projectId: number): Promise<boolean>;
-
-  /**
-   * ADR-052：聚合动态需要把全部已删除项目（MEMBER 可见链对全部登录用户
-   * 公开）并入实时授权范围，因此提供全量已删除项目 ID（升序）。
-   */
-  listDeletedProjectIds(): Promise<readonly number[]>;
 
   checkProjectForWrite(
     tx: TransactionContext,

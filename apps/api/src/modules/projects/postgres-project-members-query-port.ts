@@ -24,7 +24,7 @@ export class PostgresProjectMembersQueryPort extends ProjectMembersQueryPort {
     input: { actorUserId: number; projectId: number },
   ): Promise<ActiveProjectMemberProfile[] | undefined> {
     const [authorized] =
-      await tx.sql`SELECT 1 FROM app.projects p JOIN app.users actor ON actor.id = ${input.actorUserId} AND actor.status = 'ACTIVE' AND actor.disabled_at IS NULL WHERE p.id = ${input.projectId} AND p.deleted_at IS NULL AND (actor.is_admin OR EXISTS (SELECT 1 FROM app.project_members m WHERE m.project_id = p.id AND m.user_id = actor.id AND m.status = 'ACTIVE'))`;
+      await tx.sql`SELECT 1 FROM app.projects p JOIN app.users actor ON actor.id = ${input.actorUserId} AND actor.status = 'ACTIVE' AND actor.disabled_at IS NULL WHERE p.id = ${input.projectId} AND (actor.is_admin OR EXISTS (SELECT 1 FROM app.project_members m WHERE m.project_id = p.id AND m.user_id = actor.id AND m.status = 'ACTIVE'))`;
     if (!authorized) return undefined;
     const rows = await tx.sql<
       {

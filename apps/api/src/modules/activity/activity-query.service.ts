@@ -26,9 +26,6 @@ export const ACTIVITY_PAGE_LIMIT_MAX = 50;
 
 const ACTIVITY_CATEGORY_SET: ReadonlySet<string> = new Set(ACTIVITY_CATEGORIES);
 
-/** 读取来源，决定可见范围与是否允许 `includeAdminOnly`。 */
-type ActivityAccess = "scope" | "deleted-project";
-
 export interface ActivityQueryCommand {
   readonly actorUserId: number;
   readonly projectId: number;
@@ -39,9 +36,9 @@ export interface ActivityQueryCommand {
 }
 
 /**
- * 聚合动态命令：`projectIds` 缺省表示「全部项目」——实时授权范围加全部已删除
- * 项目（ADR-050 / ADR-052 对全部登录用户可见的公开动态链）；显式给出时只用于
- * 收窄，越权或未知项目静默排除，不返回 403 / 404。
+ * 聚合动态命令：`projectIds` 缺省表示「全部项目」——实时授权范围；显式给出时
+ * 只用于收窄，越权或未知项目静默排除，不返回 403 / 404。
+ * ADR-062 起项目删除是物理删除，不再有对全部登录用户公开的已删除项目动态链。
  */
 export interface ActivityFeedCommand {
   readonly actorUserId: number;
@@ -195,18 +192,12 @@ export class ActivityQueryService {
     const scope = await this.#projectAccess.getAuthorizedSearchScope(
       command.actorUserId,
     );
-    const access = await this.resolveAccess(
-      scope,
-      command.actorUserId,
-      command.projectId,
-    );
+    this.assertProjectAccess(scope, command.actorUserId, command.projectId);
 
     const limit = parseLimit(command.limit);
     const category = parseCategory(command.category);
     const includeAdminOnly =
-      access === "scope" &&
-      scope.isSystemAdmin &&
-      command.includeAdminOnly === true;
+      scope.isSystemAdmin && command.includeAdminOnly === true;
     const filterKey = activityFilterKey({
       scope: `project:${String(command.projectId)}`,
       category,
@@ -272,11 +263,7 @@ export class ActivityQueryService {
       filterKey,
     });
 
-    const deletedProjectIds = await this.#projectAccess.listDeletedProjectIds();
-    const allowed = new Set<number>([
-      ...scope.projectIds,
-      ...deletedProjectIds,
-    ]);
+    const allowed = new Set<number>(scope.projectIds);
     const projectIds =
       requested === null
         ? [...allowed]
@@ -377,30 +364,25 @@ export class ActivityQueryService {
   }
 
   /**
-   * 项目在授权范围内时返回 `scope`（按普通项目读）；不在范围内但已被删除时
-   * 返回 `deleted-project`（ADR-050 的公开删除记录例外，2026-09-28 扩展为
-   * 整个项目链的 MEMBER 可见动态，见 ADR-050 修订；ADMIN_ONLY 仍不回放）；
-   * 其余（不存在、无权访问、已移除成员）一律抛出，避免泄露资源存在性。
+   * 项目必须在实时授权范围内。ADR-062 起项目删除是物理删除，已删除项目不再
+   * 存在任何可供放行的公开记录，因此「不存在 / 无权访问 / 已移除成员」一律
+   * 抛出，由 HTTP 层统一映射为 404，避免泄露资源存在性。
    */
-  private async resolveAccess(
+  private assertProjectAccess(
     scope: AuthorizedProjectScope,
     actorUserId: number,
     projectId: number,
-  ): Promise<ActivityAccess> {
+  ): void {
     if (scope.actorUserId !== actorUserId) {
       throw new ActivityAuthorizationError(
         "authorization scope actor does not match the request actor",
       );
     }
-    if (scope.projectIds.includes(projectId)) {
-      return "scope";
+    if (!scope.projectIds.includes(projectId)) {
+      throw new ActivityAuthorizationError(
+        "project is not available to the current actor",
+      );
     }
-    if (await this.#projectAccess.isDeletedProject(projectId)) {
-      return "deleted-project";
-    }
-    throw new ActivityAuthorizationError(
-      "project is not available to the current actor",
-    );
   }
 }
 

@@ -330,7 +330,7 @@ describe("EditProjectModal", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "编辑项目" });
     const entry = within(dialog).getByRole("button", { name: "删除项目" });
-    // ADR-049：删除入口位于弹窗页脚最左侧，与取消/保存修改分开。
+    // ADR-062：删除入口位于弹窗页脚最左侧，与取消/保存修改分开。
     expect(entry.closest(".calm-action-footer")).not.toBeNull();
     expect(entry.classList.contains("footer-leading")).toBe(true);
     // 编辑弹窗本身不直接删除，先打开二次确认。

@@ -4825,38 +4825,6 @@ td.due-overdue {
   gap: 5px;
   justify-content: flex-end;
 }
-/* ADR-050：不提供「查看对象」的行用与 `.icon-button` 等宽的占位，保持「原始快照」
- * 列在所有行同一基线。 */
-.activity-actions-slot {
-  width: 30px;
-  height: 1px;
-}
-/* ADR-051：删除行的「还原项目」「彻底删除」与失败提示。2026-09-29 起这两个动作与
- * 「原始快照」并排在同一行（`.audit-actions` 横排靠右，「原始快照」列由占位对齐），
- * 此前 `.activity-actions` / `.activity-actions-main` 的两行堆叠基线随之删除。 */
-.deletion-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-.deletion-buttons {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.deletion-actions .danger-button {
-  height: 29px;
-  padding: 0 8px;
-  font-size: 10px;
-}
-.deletion-error {
-  max-width: 220px;
-  color: #c0453f;
-  font-size: 10px;
-  line-height: 1.5;
-  text-align: right;
-}
 .snapshot-body {
   padding: 22px 26px 26px;
   overflow: auto;

@@ -427,7 +427,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             setEditing(null);
             setEditingRole(null);
             setManagementSuccess(
-              `项目「${name}」已删除，列表已刷新；历史数据保留在数据库中供审计追溯。`,
+              `项目「${name}」已彻底删除，其下级数据与项目审计链已一并清除；系统审计链保留一条「删除项目」记录供管理员追溯。`,
             );
           }}
           onStatusChanged={(updated) => {

@@ -57,8 +57,8 @@ const replayAuthorization = {
 } as const;
 
 /**
- * ADR-049：删除是软删除——项目退出全部可见范围，业务历史、成员关系与审计链保留。
- * 响应无正文，因此重放策略只有 noBody 分支；载荷本身不携带任何项目字段。
+ * ADR-062：删除是物理删除——项目行与它的全部下级数据、项目自己的审计链一并消失。
+ * 响应仍然无正文，因此重放策略只有 noBody 分支；载荷本身不携带任何项目字段。
  */
 const deleteReplayPolicy = {
   version: "1.0.0",
@@ -66,58 +66,15 @@ const deleteReplayPolicy = {
 } as const;
 
 /**
- * 删除的幂等重放授权：项目在成功删除后已不可读，但「谁有权删」的依据（成员关系）
- * 仍然保留在库内，因此重放复核沿用同一角色门禁的记录的成员关系，
- * 让网络重试得到与首次相同的 204，而不是 404。
+ * 项目删除的幂等重放授权（ADR-062 的 `actorOnly` 例外）：物理删除之后项目行、
+ * 成员关系与项目自己的 PROJECT 审计链全部消失，任何资源级复核都不再成立——
+ * 复核项目可读性会把合法重放变成 404，复核「保留的成员关系」也已无数据可依。
+ * 因此重放只复核当前认证（Session 有效、用户未被停用，由 HTTP 层在重放前完成），
+ * 同 Key、同摘要与同契约版本直接重放已存的 204。
  */
 const deleteReplayAuthorization = {
-  version: "1.0.0",
-  resources: {
-    contextSchemaRef: "ProjectReplayContext" as const,
-    resultRefExtractor: "projectId",
-    currentReadAuthorizer: "projectDeleteReplayAuthorizer",
-  },
-} as const;
-
-/**
- * ADR-051：彻底删除是软删除的第二步，响应携带物理删除的行数统计，
- * 重放逐字段列出可安全持久化的叶子字段。
- */
-const purgeReplayPolicy = {
-  version: "1.0.0",
-  success: {
-    "200": {
-      body: {
-        responseSchemaRef: "ProjectPurgeResponse" as const,
-        safeBodyFieldPaths: [
-          "purged.projectId",
-          "purged.code",
-          "purged.name",
-          "purged.records.modules",
-          "purged.records.features",
-          "purged.records.tasks",
-          "purged.records.changeRecords",
-          "purged.records.auditLogs",
-          "purged.records.members",
-          "purged.records.total",
-        ],
-      },
-    },
-  },
-} as const;
-
-/**
- * 彻底删除的重放授权（`projectPurgeReplayAuthorizer`）：项目行连同它的审计链
- * 已被物理删除，结果的当前可读性必然不成立，因此重放只复核「当前 Session 仍是
- * 有效的系统管理员」——与首次执行的门禁同源，只是不再需要项目行。
- */
-const purgeReplayAuthorization = {
-  version: "1.0.0",
-  resources: {
-    contextSchemaRef: "ProjectReplayContext" as const,
-    resultRefExtractor: "projectId",
-    currentReadAuthorizer: "projectPurgeReplayAuthorizer",
-  },
+  version: "2.0.0",
+  actorOnly: true,
 } as const;
 
 export const projectRoutes: readonly RouteDefinition[] = [
@@ -214,7 +171,7 @@ export const projectRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}",
     operationId: "deleteProject",
     summary:
-      "F-06.4 删除项目（ADR-049）：只有本项目组长与系统管理员可以删除，普通成员 403 PROJECT_DELETE_FORBIDDEN，非成员与不存在（含已删除）一律 404。删除是软删除——项目退出列表、详情、搜索、项目动态与全部项目级读写，业务历史（模块、功能、任务、迭代记录、外部链接）、成员关系与审计链全部保留，可按 SQL 恢复；项目编码继续被占用，不允许被新建项目复用。If-Match 版本不符 409 PROJECT_VERSION_CONFLICT，CSRF 与数据库幂等必填，审计 project.delete 与项目动态在同一事务提交。",
+      "F-06.4 删除项目（ADR-062，替代 ADR-049/ADR-051 的软删除与彻底删除两步）：只有本项目组长与系统管理员可以删除，普通成员 403 PROJECT_DELETE_FORBIDDEN，非成员与不存在一律 404。删除是物理删除——项目行、模块、功能、任务、聚合组、迭代记录、遗留项、外部链接、成员关系、通知、动态、搜索投影与项目自己的 PROJECT 审计链在同一事务内一并清空，不可撤销且没有还原入口；项目编码随之释放，可以被新建项目复用。SYSTEM 审计链新增一条 project.delete（操作者、项目编码与名称、删除行数），这是本操作唯一保留的记录，只对系统管理员可见。If-Match 版本不符 409 PROJECT_VERSION_CONFLICT，CSRF 与数据库幂等必填，同 Key 重放直接返回已存的 204。",
     request: {
       path: "ProjectPath",
       query: "none",
@@ -226,7 +183,9 @@ export const projectRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
+    // ADR-062：删除语义由软删除改为不可逆的物理删除，且重放授权由资源级降为
+    // actorOnly，旧 Key 在新契约下 409。
+    idempotencyContractVersion: "2.0.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: ["If-Match"],
     idempotencyReplayPolicy: deleteReplayPolicy,
@@ -243,101 +202,5 @@ export const projectRoutes: readonly RouteDefinition[] = [
       retry: "none; project FOR UPDATE, expected row_version",
     },
     auditAction: "project.delete",
-  },
-  {
-    method: "POST",
-    path: "/projects/{projectId}/restore",
-    operationId: "restoreProject",
-    summary:
-      "ADR-051 还原项目：撤销 ADR-049 的软删除，项目重新回到列表、详情、搜索、项目动态与全部项目级读写；只有系统管理员与本项目组长可以还原（普通成员 403 PROJECT_RESTORE_FORBIDDEN，非成员与不存在 404），未被删除的项目 409 PROJECT_NOT_DELETED。项目编码、成员关系、任务与审计链从未被删除，因此还原不恢复任何数据，只清空 deleted_at/deleted_by 并递增 row_version；CSRF 与数据库幂等必填，审计 project.restore、项目动态与搜索投影在同一事务提交。",
-    request: {
-      path: "ProjectPath",
-      query: "none",
-      headers: "ProjectMutationHeaders",
-      body: { noBody: true },
-    },
-    responses: { "200": json("ProjectDetailResponse"), ...errors },
-    authPolicy: "session",
-    csrfPolicy: "required",
-    idempotencyPolicy: "idempotencyRequired",
-    idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
-    idempotencyFingerprintVersion: "1.0.0",
-    behaviorHeaders: [],
-    idempotencyReplayPolicy: replayPolicy,
-    replayAuthorizationPolicy: replayAuthorization,
-    securityFlowPolicy: "none",
-    // 还原的并发控制由行锁与「仍未删除」守卫实现，不依赖 If-Match：删除台账
-    // 不暴露 row_version，而两个并发的还原中必有一个被守卫拦下并得到 409。
-    versionPolicy: "none",
-    concurrencyPolicy: {
-      rowVersion: "none",
-      lockOrder: ["project"],
-      retry: "none; project FOR UPDATE then deleted_at guard",
-    },
-    auditAction: "project.restore",
-  },
-  {
-    method: "POST",
-    path: "/projects/{projectId}/purge",
-    operationId: "purgeProject",
-    summary:
-      "ADR-051 彻底删除项目：只有系统管理员可以调用（其余身份 403 PROJECT_PURGE_FORBIDDEN），且只接受已经软删除的项目（未删除 409 PROJECT_NOT_DELETED，项目不存在 404）。服务端在同一事务内按外键顺序物理删除该项目的全部业务行（模块、功能、任务、聚合组、迭代记录、遗留项、外部链接、通知、动态与搜索投影）与它自己的 PROJECT 审计链，并返回删除行数统计；SYSTEM 审计链新增一条 project.purge 作为不可变留痕（操作者、项目编码与名称、删除行数），这是本操作唯一保留的记录，不可撤销。CSRF 与数据库幂等必填。",
-    request: {
-      path: "ProjectPath",
-      query: "none",
-      headers: "ProjectMutationHeaders",
-      body: { noBody: true },
-    },
-    responses: { "200": json("ProjectPurgeResponse"), ...errors },
-    authPolicy: "session",
-    csrfPolicy: "required",
-    idempotencyPolicy: "idempotencyRequired",
-    idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "1.0.0",
-    idempotencyFingerprintVersion: "1.0.0",
-    behaviorHeaders: [],
-    idempotencyReplayPolicy: purgeReplayPolicy,
-    replayAuthorizationPolicy: purgeReplayAuthorization,
-    securityFlowPolicy: "none",
-    versionPolicy: "none",
-    concurrencyPolicy: {
-      rowVersion: "none",
-      lockOrder: ["project"],
-      retry: "none; project FOR UPDATE then soft-delete guard",
-    },
-    auditAction: "project.purge",
-  },
-  {
-    method: "GET",
-    path: "/project-deletions",
-    operationId: "listProjectDeletions",
-    summary:
-      "ADR-050 项目删除记录：全部登录用户可读的删除台账，只返回项目编号、项目名称、删除时间与删除人，按删除时间倒序、服务端签名游标分页。删除记录不构成已删除项目重新可见：列表、详情、搜索、项目动态、任务中心与全部项目级读写仍不返回已被删除的项目与业务数据。",
-    request: {
-      path: "none",
-      query: "ProjectDeletionQueryRequest",
-      headers: "none",
-      body: { noBody: true },
-    },
-    responses: {
-      "200": json("ProjectDeletionPage"),
-      "401": json("ErrorResponse"),
-      "422": json("ErrorResponse"),
-      "500": json("ErrorResponse"),
-    },
-    authPolicy: "session",
-    csrfPolicy: "none",
-    idempotencyPolicy: "none",
-    idempotencyExceptionAdr: "none",
-    idempotencyContractVersion: "none",
-    idempotencyFingerprintVersion: "none",
-    behaviorHeaders: "none",
-    idempotencyReplayPolicy: "none",
-    replayAuthorizationPolicy: "none",
-    securityFlowPolicy: "none",
-    versionPolicy: "none",
-    concurrencyPolicy: "none",
-    auditAction: "none",
   },
 ];

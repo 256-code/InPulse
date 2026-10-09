@@ -497,37 +497,6 @@ export const projectReplayContextSchema = z
 export type ProjectReplayContext = z.infer<typeof projectReplayContextSchema>;
 
 /**
- * ADR-051 项目彻底删除响应：项目标识与本次实际物理删除的行数。
- * 行数按删除的业务表归类，`total` 是这些类别的合计；计数只用于提示与留痕，
- * 不构成幂等摘要的一部分。
- */
-export const projectPurgeResponseSchema = z
-  .object({
-    purged: z
-      .object({
-        projectId: z.number().int().positive().max(2147483647),
-        code: z.string().min(1).max(64),
-        name: z.string().min(1).max(200),
-        records: z
-          .object({
-            modules: z.number().int().nonnegative(),
-            features: z.number().int().nonnegative(),
-            tasks: z.number().int().nonnegative(),
-            changeRecords: z.number().int().nonnegative(),
-            auditLogs: z.number().int().nonnegative(),
-            members: z.number().int().nonnegative(),
-            total: z.number().int().nonnegative(),
-          })
-          .strict(),
-      })
-      .strict(),
-  })
-  .strict()
-  .meta({ id: "ProjectPurgeResponse" });
-
-export type ProjectPurgeResponse = z.infer<typeof projectPurgeResponseSchema>;
-
-/**
  * F-06.2 项目列表条目：在项目摘要之上补充当前用户在本项目的成员角色。
  * 2026-09-23 起不再携带待审归档申请（项目归档与归档申请整体下线）。
  */

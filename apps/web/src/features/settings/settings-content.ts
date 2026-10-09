@@ -62,16 +62,10 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     note: "组长只能把身份转交其他活跃成员，不能自设或撤销",
   },
   {
-    feature: "删除/还原项目",
+    feature: "删除项目",
     admin: true,
     member: "leader",
-    note: "软删除，成员、记录与审计完整保留",
-  },
-  {
-    feature: "彻底删除项目",
-    admin: true,
-    member: false,
-    note: "仅系统管理员；物理删除，不可恢复",
+    note: "物理删除且不可撤销，仅系统审计链保留一条记录",
   },
   { feature: "创建模块", admin: true, member: true, note: "—" },
   { feature: "编辑模块", admin: true, member: true, note: "—" },

@@ -76,7 +76,7 @@ const seedFeatureItem: AuditLogItem = {
   eventPayload: { code: "INPULSE-F-11", name: "工程基建" },
 };
 
-// ADR-051：彻底删除项目，用于校验动作码已收进中文标签表。
+// ADR-062：保留期自动清理已下线，该动作只剩历史行，用于校验中文标签表仍然生效。
 const purgeItem: AuditLogItem = {
   ...systemItem,
   sequenceNo: 16,
@@ -112,8 +112,8 @@ function queryClient() {
 }
 
 /**
- * 渲染前统一补两个默认 mock：用户目录（断言里就能看到人名而不是「用户 #N」）与
- * 删除记录台账（默认空页）；用例自带同名 mock 时以后者为准。
+ * 渲染前统一补用户目录 mock（断言里就能看到人名而不是「用户 #N」），
+ * 用例自带同名 mock 时以后者为准。
  */
 function withUserDirectory(client: InpulseApiClient): InpulseApiClient {
   const defaults = {
@@ -122,11 +122,6 @@ function withUserDirectory(client: InpulseApiClient): InpulseApiClient {
         { id: 1, name: "邵昱宇", avatarUrl: null, isAdmin: true },
         { id: 2, name: "Bob", avatarUrl: null, isAdmin: false },
       ],
-    }),
-    listProjectDeletions: vi.fn().mockResolvedValue({
-      items: [],
-      nextCursor: null,
-      hasMore: false,
     }),
   };
   return { ...defaults, ...client } as unknown as InpulseApiClient;
@@ -206,11 +201,13 @@ describe("F-08 audit page", () => {
         "#audit-action-options option",
       ),
     ).map((option) => option.value);
-    // 十个已下线动作码 + 仅测试写入的 SYSTEM_TEST 都不再是筛选候选。
+    // 已下线动作码 + 仅测试写入的 SYSTEM_TEST 都不再是筛选候选。
     for (const retired of [
       "project.archive",
       "project.archive.request",
       "project.archive.reject",
+      "project.restore",
+      "project.purge",
       "module.archive",
       "module.restore",
       "feature.archive",
@@ -225,7 +222,7 @@ describe("F-08 audit page", () => {
     // 仍在产生记录的动作码必须保留。
     expect(codes).toContain("project.create");
     expect(codes).toContain("task.create");
-    expect(codes).toContain("project.purge");
+    expect(codes).toContain("project.delete");
   });
 
   it("labels entity targets with the code and name carried by the payload", async () => {
@@ -241,7 +238,7 @@ describe("F-08 audit page", () => {
     expect(screen.getByText(featureLabel)).toBeInTheDocument();
   });
 
-  it("把 project.purge 显示为中文动作，不泄露原始码（ADR-051 中文化）", async () => {
+  it("把 project.purge 历史行显示为中文动作，不泄露原始码", async () => {
     const getAuditLogs = vi.fn().mockResolvedValue(page([purgeItem]));
     const listProjects = vi.fn().mockResolvedValue({ items: [project] });
     mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
@@ -288,59 +285,6 @@ describe("F-08 audit page", () => {
     expect(
       screen.getByText("第 3 条 · 项目 AGV 智能搬运平台"),
     ).toBeInTheDocument();
-  });
-
-  it("已删除项目的审计链仍可选中，并把项目名还原出来（ADR-050）", async () => {
-    const deletedChainItem: AuditLogItem = {
-      ...projectItem,
-      chainId: "PROJECT:41",
-      projectId: 41,
-      sequenceNo: 9,
-      action: "project.delete",
-    };
-    const getAuditLogs = vi.fn().mockResolvedValue(page([deletedChainItem]));
-    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
-    mount(
-      withUserDirectory({
-        getAuditLogs,
-        listProjects,
-        listProjectDeletions: vi.fn().mockResolvedValue({
-          items: [
-            {
-              projectId: 41,
-              code: "OLD",
-              name: "旧版交付平台",
-              deletedAt: "2026-09-28T06:30:00.000000Z",
-              deletedBy: { id: 2, name: "Bob" },
-            },
-          ],
-          nextCursor: null,
-          hasMore: false,
-        }),
-      } as unknown as InpulseApiClient),
-    );
-
-    // 历史行直接命中已删除项目：没有台账就会退化成「项目 #41」。
-    expect(
-      await screen.findByText("第 9 条 · 项目 旧版交付平台"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("第 9 条 · 项目 #41")).not.toBeInTheDocument();
-
-    // 下拉里补回这条已删除项目的审计链，并标明是谁删的。
-    const trigger = screen.getByLabelText("审计链").closest(".ant-select");
-    if (!trigger) {
-      throw new Error("审计链 select trigger not found");
-    }
-    fireEvent.mouseDown(trigger);
-    expect(await screen.findByText("已删除 · Bob 删除")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("PROJECT:41 · 旧版交付平台"));
-
-    await waitFor(() =>
-      expect(getAuditLogs).toHaveBeenLastCalledWith(
-        { projectId: 41, limit: 50 },
-        expect.anything(),
-      ),
-    );
   });
 
   it("only applies filters after the query button is pressed", async () => {

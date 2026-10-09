@@ -40,7 +40,7 @@ export interface EditProjectModalProps {
   /** 状态保存成功且不关闭弹窗时通知调用方刷新列表与版本。 */
   readonly onStatusChanged?: ((updated: ProjectItem) => void) | undefined;
   /**
-   * ADR-049：只有本项目组长（实时成员关系中的 ACTIVE LEADER）或系统管理员
+   * ADR-062：只有本项目组长（实时成员关系中的 ACTIVE LEADER）或系统管理员
    * 可以删除项目。调用方按 `canDeleteProject` 判定后传入，默认 false 就不渲染
    * 危险区；服务端 `projectDeleterRole` 会用同一口径二次判定。
    */
@@ -191,8 +191,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         }}
         footer={
           <>
-            {/* ADR-049：删除入口只对系统管理员与本项目组长渲染，放在页脚最左侧
-                与常规的取消/保存分开；后果说明由二次确认弹窗承担。 */}
+            {/* ADR-062：删除入口只对系统管理员与本项目组长渲染，放在页脚最左侧
+                与常规的取消/保存分开；后果说明与级联范围由二次确认弹窗承担。 */}
             {canDeleteProject ? (
               <Button
                 className="danger-button footer-leading"
@@ -389,7 +389,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
                 showIcon
                 type="warning"
                 title={`确认删除项目「${project.name}」？`}
-                description="删除后项目会从项目列表、搜索、项目动态与通知中消失，成员与任务历史保留在数据库中供审计追溯；系统管理员或项目组长可以在项目动态的删除记录里还原项目，彻底删除则由系统管理员执行。"
+                description="删除不可撤销，会一并物理删除该项目下的全部模块、功能、任务、迭代记录、GitHub 链接、通知、项目动态与项目的审计链，项目编码将可以被重新使用。删除后仅在系统审计链留下一条「删除项目」记录，系统管理员可在审计日志中查看。"
               />
               {deleteMutation.error ? (
                 <Alert

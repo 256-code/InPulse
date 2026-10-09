@@ -4051,6 +4051,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 ## 2026-09-28 项目删除：软删除与删除权限（ADR-049，用户指示，本地落库）
 
+> **已退役（2026-10-09，[ADR-062](adr/ADR-062.md)）**：项目删除已改为**物理删除**——本节描述的软删除（`deleted_at` / `deleted_by`）、只读记录路由 `GET /api/v1/project-deletions`、`projectDeleteReplayAuthorizer`、还原 / 彻底删除 / 保留期自动删除全部下线，本节的 `PROJECT-DELETE-*` 各条目只作变更历史；替代覆盖见本文末「2026-10-09 项目改为物理删除（ADR-062）」。
+
 用户 2026-09-28 指示「在编辑项目里面增加一个删除项目的功能，只有组长和系统管理员有删除的权限」；同日追加「布局记得更改」，并在四个版式选项中选定「删除按钮移到弹窗页脚最左侧」。落 [ADR-049](adr/ADR-049.md)：`app.projects` 加 `deleted_at` / `deleted_by` 与状态一致 CHECK（迁移 `0030_project_soft_delete.sql`），删除是**软删除**——保留行与全部历史，只把项目移出全部可见范围（含管理员），项目编码保持占用、不提供回收站与恢复入口、刻意不发通知；只有系统管理员与本项目组长能删（在 [ADR-039](adr/ADR-039.md) 的权限下放上新增例外）。
 
 锁定口径：
@@ -4078,6 +4080,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 ## 2026-09-28 项目删除记录：并入项目动态流与审计链入口（ADR-050，用户指示，本地落库）
 
+> **已退役（2026-10-09，[ADR-062](adr/ADR-062.md)）**：项目改为物理删除后不再有「已删除项目」，`listProjectDeletions` 路由、`project-deletion.zod.ts` 与 `project-deletion-records.integration.test.ts` 已删除；`PROJECT-DELETION-CONTRACT-001`、`PROJECT-DELETION-API-001` ～ `API-004`、`PROJECT-DELETION-WEB-UNIT-001` / `002` 退役，删除的动作留痕改由 SYSTEM 审计链一条 `project.delete` 承担（仅系统管理员可见）。
+
 用户 2026-09-28 指示「然后删除项目也要在项目动态和审计日志里记载」，并明确可见性口径「项目动态要所有人能看到，审计日志管理员看到就行，要留有记录，记录谁删除了项目」；同日追加「我要求记录要和其他动态放一块，而不是单独出来的」，据此把删除记录从独立区块改为**动态流内的普通一行**（ADR-050 同日修订）。核查结论：删除的**写入侧没有缺口**——审计 `project.delete` 与项目动态 `PROJECT_DELETED` 已在 ADR-049 的删除事务里写入；缺口在**读取侧**：项目级动态查询对被删除项目不可用（`AuthorizedProjectScope` 已排除），审计页的审计链下拉只列活跃项目。落 [ADR-050](adr/ADR-050.md)：新增只读记录路由 `GET /api/v1/project-deletions`（`listProjectDeletions`，`session` 策略、全部登录用户可读），审计读取保持 `adminSession` 不变、但前端补齐已删除项目的审计链入口。
 
 锁定口径：
@@ -4104,6 +4108,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 ## 2026-09-28 项目还原与彻底删除（ADR-051，用户指示，本地落库）
 
+> **已退役（2026-10-09，[ADR-062](adr/ADR-062.md)）**：`restoreProject` 与 `purgeProject` 两条路由已删除，`app.purge_project` 改为由 `DELETE /api/v1/projects/{projectId}` 直接调用（迁移 `0038` 重建）；`PROJECT-RESTORE-API-001`、`PROJECT-PURGE-API-001`、`PROJECT-DELETION-API-005`、`PROJECT-DELETION-LAYOUT-001` 退役。
+
 用户 2026-09-28 指示「给删除项目的动态的原始快照按钮边上加一个还原项目和彻底删除，还原项目就是把项目显示出来，彻底删除就是从硬性删除」，据此否掉 ADR-049 第 8 节与 ADR-050 非目标第 1 条的「不提供恢复 / 撤销」取舍，落 [ADR-051](adr/ADR-051.md)：新增 `POST /api/v1/projects/{projectId}/restore`（`restoreProject`）与 `POST /api/v1/projects/{projectId}/purge`（`purgeProject`），Route Registry 由 100 条增至 **102 条**。同一批次还包含两项界面修订（删除记录行的动作按钮横向对齐、动态类型与角色值中文化），一并记录在本节。
 
 锁定口径：
@@ -4129,6 +4135,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 未运行 / 已知偏差：① **`pnpm test:e2e` 未跑**（还原与彻底删除没有 Playwright 用例，界面路径由前端单测 + 人工浏览器复验覆盖）；② 彻底删除的**真实主机演练**未做，只在测试库由集成测试覆盖；③ `pnpm deps:audit`、镜像构建、Trivy 扫描与 **GitHub Actions** 未跑；④ 彻底删除不回收项目编码，重新创建同名项目会拿到新编码（ADR-051 第 4 节）。
 
 ## 2026-09-28 已删除项目的完整动态与删除操作唯一入口（ADR-052，用户指示，本地落库）
+
+> **已退役（2026-10-09，[ADR-062](adr/ADR-062.md)）**：物理删除后项目不再以「已删除」状态存在，活动读取不再有已删除项目例外，项目筛选的「已删除项目」选项与 `ProjectDeletionActions` 已删除；`ACTIVITY-DELETED-HISTORY-API-001`、`ACTIVITY-DELETION-ACTION-UNIQUE-WEB-UNIT-001`、`ACTIVITY-DELETED-HISTORY-WEB-UNIT-002`、`ACTIVITY-DELETED-FILTER-WEB-UNIT-003` 退役（`ActivityWorkspace.deletions.test.tsx` 已删除）。
 
 用户 2026-09-28 反馈「有两个重复了，如果是被删除了的项目，就只有最晚的一个可以进行还原和彻底删除的操作，而且不要隐藏之前的创建和操作的动态过程，要有从创建到删除的完整过程，然后刷选的下拉框增加一个选项叫『已删除项目』」，落 [ADR-052](adr/ADR-052.md)：**修订 [ADR-050](adr/ADR-050.md) 第 5 节的服务端收窄**（不再只放行 `PROJECT_DELETED` 一行），并把动作可见性与筛选入口收进前端。三处都只在读取层，写入侧与 ADR-051 的动作实现无缺口；契约、Route Registry、权限矩阵与数据库**零改动**。
 
@@ -4323,6 +4331,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 未运行 / 已知偏差：① 键盘路径（Tab 顺序、Esc 关闭）本轮未做，只覆盖点击路径；② 跨浏览器（Firefox / Safari）未复核——本轮已隐藏原生指示器，点击只会开自绘面板，但原生输入框的逐段键入外观在不同浏览器不同，请人工点一次；③ 本批未新增 Playwright 用例、**未重跑全量 E2E 与 `test:integration`**（`#task-due` / `#global-task-due` 的 `fill()` 用法不变，服务端 / 契约 / 迁移均未动）；④ 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；⑤ 改动**未提交、未推送**。
 
 ## 2026-09-30 项目保留期到期自动彻底删除（ADR-055，用户指示，本地落库）
+
+> **已退役（2026-10-09，[ADR-062](adr/ADR-062.md)）**：保留期自动删除整体下线（项目已是物理删除，不存在待清理的软删除行），`ProjectAutoPurgeService` / `ProjectAutoPurgeScheduler` 与其单测、集成测试已删除；`PROJECT-AUTO-PURGE-*` 各条目退役。
 
 用户 2026-09-30 指示「我希望删除的项目30天后会被彻底删除，如果还原过，那就按最后一次删除来计算时间」，为 [ADR-051](adr/ADR-051.md) 的彻底删除补一条自动触发路径（[ADR-055](adr/ADR-055.md)）。本批是**零契约面**改动：不新增路由、不改契约与权限矩阵（Route Registry 仍 99 条）、不改数据库与迁移（复用 `0031_project_purge.sql` 的 `app.purge_project` 窄口与角色授权），只在服务端新增后台服务与调度器。
 
@@ -4558,7 +4568,7 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 根因与口径：
 
 - **(c) 的根因是取数方式，不是排序代码**：旧实现按项目逐个分页（`ActivityCursorMap`，每个项目一条游标）再在客户端做全局归并排序，每个项目的「下一页」都可能晚于其它项目已渲染的条目，因此「加载更多」必然回插。本轮把它换成**一条 SQL 的跨项目键集分页**（`ORDER BY occurred_at DESC, id DESC`，游标 `(occurred_at, id)`），追加式由构造保证，客户端不再重排（`flattenActivityPages` 只做拼接）。
-- 新增只读路由 `GET /api/v1/activity`（`listActivity`，`authPolicy: "session"`，其余策略显式 `none`；200/401/422/500，**没有 404**），Route Registry 由 100 条增至 **101 条**；范围 = 实时 `AuthorizedProjectScope` ∪ **全部已删除项目**（`ProjectAccessQueryPort.listDeletedProjectIds()`，保留 ADR-050 / ADR-052 的已删除项目公开动态链）。`projectIds`（逗号分隔 1..100 正整数、去重、显式空值 422）**只收窄**，越权 / 未知 ID 静默排除，全部越权时返回空页且不发 SQL。
+- 新增只读路由 `GET /api/v1/activity`（`listActivity`，`authPolicy: "session"`，其余策略显式 `none`；200/401/422/500，**没有 404**），Route Registry 由 100 条增至 **101 条**；范围 = 实时 `AuthorizedProjectScope` ∪ **全部已删除项目**（`ProjectAccessQueryPort.listDeletedProjectIds()`，保留 ADR-050 / ADR-052 的已删除项目公开动态链）。`projectIds`（逗号分隔 1..100 正整数、去重、显式空值 422）**只收窄**，越权 / 未知 ID 静默排除，全部越权时返回空页且不发 SQL。**（2026-10-09 修订，[ADR-062](adr/ADR-062.md)）**：项目改为物理删除后「已删除项目」不再存在，`ProjectAccessQueryPort.listDeletedProjectIds()` 与「∪ 全部已删除项目」的并入范围连同 `isDeletedProject` 一并删除，`listActivity` 的范围只剩实时 `AuthorizedProjectScope`；本节 `ACTIVITY-FEED-DB-004` 的「已删除项目链」分支与 `ACTIVITY-FEED-WEB-UNIT-003` 依赖的 `ActivityWorkspace.deletions.test.tsx` 同步退役。
 - **(b) 的实现**：`dayTotals` 由服务端在**同一次请求**里按与列表完全相同的条件（同一 `projectIds` / `projectIds` 收窄结果、同一 `category`、同一 `includeAdminOnly`）单独统计全量，日界为 **Asia/Shanghai 自然日**（SQL 内 `occurred_at AT TIME ZONE 'Asia/Shanghai'`）；上限 `ACTIVITY_DAY_TOTALS_MAX = 400` 天，超出时 `dayTotalsTruncated = true` 且前端提示「按日数量只统计最近 400 个自然日内的动态」。`getProjectActivity` 同样新增 `dayTotals` / `dayTotalsTruncated`（并新增可选 `category`）。
 - `category` 过滤下推到 SQL（`ACTIVITY_CATEGORY_SQL`：all / task（`source_entity_type IN ('TASK','TASK_GROUP')`）/ record（`CHANGE_RECORD` / `LEFTOVER_ITEM`）/ feature / module / project（兜底取反）/ member / github（`activity_type LIKE 'EXTERNAL_LINK%'`）），前端筛选芯片映射为 `ActivityCategory`，不再只在客户端过滤。
 - **(a) 的实现**：`ActivityWorkspace` 的 `includeAdminOnly` 初值改为 `true`（2026-09-24 口径）。勾选框仍只对 `isAdmin` 渲染；非管理员的服务端授权范围本就不含 `ADMIN_ONLY`，因此不影响非管理员。
@@ -5143,7 +5153,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 ### 未运行 / 已知偏差
 
-① Playwright 已补（2026-10-09）：`apps/e2e/tests/task-status.spec.ts` F-16 FEATURE / MODULE 两例此前仍在找已下线的「取消任务」按钮（ADR-058 改名后必然超时，最近一次全量 E2E 66 passed / 2 failed 即此），现改为「重新打开 → 二次完成 → 删除任务」；命令 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/task-status.spec.ts` → **2 passed（29.6s）**，teardown 自动清理夹具 2 用户 / 2 项目 / 123 业务行 / 14 审计行；其余删除相关路径（聚合组主任务 409、记录作废与链接解除的界面提示）仍只有集成与单元层覆盖；② `app_ci` 中本组集成测试写入的夹具已按 AGENTS.md 清理约定处理；③ 存量数据一致性由迁移 `0034` 末尾的校验块保证，未做大批量删除的索引与耗时压测；④ 软删除任务的物理清除只随其所属项目的彻底删除（ADR-051）或保留期自动清理（ADR-055）发生；⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审。
+① Playwright 已补（2026-10-09）：`apps/e2e/tests/task-status.spec.ts` F-16 FEATURE / MODULE 两例此前仍在找已下线的「取消任务」按钮（ADR-058 改名后必然超时，最近一次全量 E2E 66 passed / 2 failed 即此），现改为「重新打开 → 二次完成 → 删除任务」；命令 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/task-status.spec.ts` → **2 passed（29.6s）**，teardown 自动清理夹具 2 用户 / 2 项目 / 123 业务行 / 14 审计行；其余删除相关路径（聚合组主任务 409、记录作废与链接解除的界面提示）仍只有集成与单元层覆盖；② `app_ci` 中本组集成测试写入的夹具已按 AGENTS.md 清理约定处理；③ 存量数据一致性由迁移 `0034` 末尾的校验块保证，未做大批量删除的索引与耗时压测；④ 软删除任务的物理清除只随其所属项目被物理删除（[ADR-062](adr/ADR-062.md)，2026-10-09 起）发生（原写作「所属项目的彻底删除（ADR-051）或保留期自动清理（ADR-055）」，两条路径已随 ADR-062 下线）；⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审。
 
 ## 任务看板移除「已取消」筛选与展示（用户指示，2026-10-09 本地落库）
 
@@ -5164,6 +5174,8 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ① 按 AGENTS.md 的 2026-09-17 纯前端免测试指示，本轮未运行 vitest（含新增断言）、`pnpm test:web`、Playwright 与 `pnpm check`；② `apps/e2e/tests/task-board.spec.ts` 只断言「未完成 / 已完成 / 逾期」chip，`apps/e2e/tests` 内 grep「已取消」为空，E2E 侧无对应断言需改（未实跑）；③ 本轮无用例进 Playwright 套件；④ `.sb-cancel` / `.tb-dot-canceled` CSS 规则与 `splitOf` 的 `canceledPercent` 保留为无引用残留（`done` / `todo` 字段同样未被 DOM 消费，为保持改动面最小未清理）；⑤ 本批含前端产品代码与测试改动，按 §8 需非作者人工评审。
 
 ## 项目动态锁定项目时也能换项目（用户指示「项目动态即使在选中的项目情况下也要有可以转换成其他项目的选项框」，2026-10-09 本地落库）
+
+> **2026-10-09 修订（[ADR-062](adr/ADR-062.md)）**：项目改为物理删除后项目下拉不再有「已删除项目」选项，本节 `ACTIVITY-SCOPE-UNIT-001` / `ACTIVITY-SCOPE-BROWSER-001` / `ACTIVITY-SCOPE-E2E-001` 中「选『已删除项目』→ `/activity?project=deleted`」的分支已随该选项移除（`apps/web/src` 全量 grep「已删除项目」为空），其余口径（锁定态换项目、回到全局、URL 化）不变。
 
 项目详情页（`/projects/:projectId/activity`）此前把项目锁死：头部只有 `项目 #id` 徽标，工具栏连项目下拉都不渲染（全局 `/activity` 才有）。用户反馈在左侧选中项目后无法在该页换成其他项目。
 
@@ -5344,7 +5356,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ### 实现要点
 
 - 两条新路由：`deleteModule`（`POST /api/v1/projects/{projectId}/modules/{moduleId}/delete`，审计 `module.delete`）与 `deleteFeature`（`POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete`，审计 `feature.delete`）；`session` + CSRF + 同源 + 数据库级幂等（`idempotencyContractVersion: "1.0.0"`）+ `If-Match`，锁序 `project -> module -> feature -> task -> taskGroup`。Route Registry 由 103 条增至 **105 条**，权限矩阵 105 / 105。
-- **软删除**：迁移 `0036_module_feature_soft_delete.sql` 给 `app.modules` / `app.features` 加 `deleted_at` / `deleted_by`（FK `ON DELETE restrict` 到 `app.users`）与 `*_deleted_state_check`（两列同时为空或同时有值）；不新增表级 `DELETE` 授权，也不物理删除任何业务历史；无还原入口，物理清除只随项目彻底删除（ADR-051 / ADR-055）发生。
+- **软删除**：迁移 `0036_module_feature_soft_delete.sql` 给 `app.modules` / `app.features` 加 `deleted_at` / `deleted_by`（FK `ON DELETE restrict` 到 `app.users`）与 `*_deleted_state_check`（两列同时为空或同时有值）；不新增表级 `DELETE` 授权，也不物理删除任何业务历史；无还原入口，物理清除只随所属项目被物理删除（[ADR-062](adr/ADR-062.md)，2026-10-09 起）发生。
 - **权限**：只有系统管理员与本项目 ACTIVE 组长（LEADER）可删（ADR-039 的第五处例外，`ProjectRoleGateService.scopeDeleterRole`）；普通成员与项目管理员 403，非成员与不存在统一 404 `MODULE_NOT_FOUND` / `FEATURE_NOT_FOUND`。
 - **未分类模块不可删除**：`kind !== 'NORMAL'` 一律 409 `MODULE_UNCLASSIFIED_PROTECTED`，前端同样不渲染删除入口（`kind === "NORMAL"` 门禁）。既有的 `modules_protect_unclassified`（BEFORE DELETE）继续禁止物理删除，本条在其上追加禁止软删除。
 - **级联**：任务逐条复用 `TaskDeletionWorkflow.deleteWithinTransaction`（ADR-058 的全部副作用链）；功能与模块自身再补软删除、`detachTarget` 解绑外部链接、`RecordScopeVoidPort.voidScopeRecords` 作废范围内 PUBLISHED 记录、审计、动态（`MODULE_DELETED` / `FEATURE_DELETED` + `updateEntityVisibility(sourceStatus: "DELETED")`）与 `search.remove`。
@@ -5431,7 +5443,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 - **签名游标加成对链坐标**：`AuditCursorPayload` 新增可选 `c`（`chain_id`，长度 1..100）与 `t`（`occurred_at`，UTC ISO 正则 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$`），二者**必须成对**（只出现其一 → `malformed`，`encode` 侧同样成对校验）；游标签名域仍 `inpulse.audit-cursor.v1:`（新增可选字段，不改变既有字段语义）。`decode` 返回类型由 `number` 改为 `AuditCursorPosition | null`，无游标返回 `null`（不再是哨兵值 `0`）。把单链游标拿到 `chain=all` 下继续翻页 → 422 `invalid-cursor`（不猜测、不回退首页）。
 - **迁移 `0037_audit_logs_cross_chain_idx.sql`**：`CREATE INDEX audit_logs_occurred_at_chain_seq_idx ON app.audit_logs (occurred_at DESC, chain_id DESC, sequence_no DESC);`，列序与排序键逐列一致；只加索引，不改表结构、不改既有索引、不改历史迁移。
 - **前端默认跨链**：`AuditChain` 扩展为 `{ kind: "all" } | { kind: "system" } | { kind: "project"; projectId }`，初始状态 `{ kind: "all" }`；链下拉首项「全部记录（所有链）」、次项「SYSTEM 链（系统级）」；页头「当前链」徽章与查询指纹同步三态；页面「审计规则 · 范围」文案改为跨链说明。
-- **动作码候选过滤（不删标签）**：新增 `RETIRED_ACTION_CODES`（11 个死码：`project.archive` / `project.archive.request` / `project.archive.reject` / `module.archive` / `module.restore` / `feature.archive` / `feature.restore` / `task.archive` / `task.unarchive` / `AUDIT_LOG_READ` / `SYSTEM_TEST`），`AUDIT_ACTION_OPTIONS` 由 `ACTION_LABELS` 过滤后按中文标签排序；`ACTION_LABELS`（53 条）与 `ACTION_PREFIX_LABELS`（`AUDIT_SEED_*` → 「演示种子数据」）**原样保留**，历史行与快照仍按中文渲染。`project.restore` **不是**死码（[ADR-051](adr/ADR-051.md) 项目还原仍活）。
+- **动作码候选过滤（不删标签）**：新增 `RETIRED_ACTION_CODES`（11 个死码：`project.archive` / `project.archive.request` / `project.archive.reject` / `module.archive` / `module.restore` / `feature.archive` / `feature.restore` / `task.archive` / `task.unarchive` / `AUDIT_LOG_READ` / `SYSTEM_TEST`），`AUDIT_ACTION_OPTIONS` 由 `ACTION_LABELS` 过滤后按中文标签排序；`ACTION_LABELS`（53 条）与 `ACTION_PREFIX_LABELS`（`AUDIT_SEED_*` → 「演示种子数据」）**原样保留**，历史行与快照仍按中文渲染。`project.restore` 当时**不是**死码（[ADR-051](adr/ADR-051.md) 项目还原当时仍活）——**2026-10-09 起已连同 `project.purge` 进入 `RETIRED_ACTION_CODES`**（共 **13 个**死码，[ADR-062](adr/ADR-062.md)），筛选项与实际行为一致，历史行仍按中文渲染。
 - **权限面不变**：`getAuditLogs` 仍 `adminSession`，CSRF / 幂等 / 版本 / 并发全 `none`；跨链读取等价于「管理员一次读他本就有权读的全部链」，不新增授权与角色；路由总数不变（105 条），无新增 / 删除路由。
 
 ### 用例
@@ -5442,7 +5454,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | ADR061-INT-002 | API 集成 | 读取模式互斥与游标不跨模式复用 | 同文件：`{chain:"all", projectId}` → 422 且 `details.reason === "invalid-chain"`；`{chain:"system"}` → 422（Schema 层）；单链游标在 `chain=all` 下 → 422 | 本地通过 |
 | ADR061-INT-003 | API 集成 | 缺省与 `projectId` 语义不变 | 同文件：不带 `chain` 仍只读 SYSTEM 链（新夹具的 4 行不出现）；`projectId` 仍只读项目链、不跨链 | 本地通过 |
 | ADR061-WEB-001 | Web 单元（jsdom） | 默认跨链与切回单链 | `AuditLogPageView.test.tsx`（21 例）：首屏请求 `{ chain: "all", limit: 50 }` 且页头「当前链：全部记录（所有链）」；切到 SYSTEM 链后请求不再携带 `chain` | 本地通过 |
-| ADR061-WEB-002 | Web 单元 | 动作候选过滤死码、历史行仍渲染 | 同文件：`#audit-action-options` 无 11 个死码，`project.create` / `task.create` / `project.purge` 仍在；历史 `AUDIT_LOG_READ` 行仍按「读取审计日志」渲染 | 本地通过 |
+| ADR061-WEB-002 | Web 单元 | 动作候选过滤死码、历史行仍渲染 | 同文件：`#audit-action-options` 无死码，`project.create` / `task.create` 仍在；历史 `AUDIT_LOG_READ` 行仍按「读取审计日志」渲染（**2026-10-09 修订**：死码由 11 个增至 **13 个**，`project.restore` / `project.purge` 加入，`project.purge` 不再出现在候选里但历史行仍渲染为「彻底删除项目」，见 [ADR-062](adr/ADR-062.md)） | 本地通过 |
 | ADR061-E2E-001 | 浏览器 E2E | 真实浏览器默认跨链 | `apps/e2e/tests/audit.spec.ts`（2/2）：进入 `/audit` 即发出 `chain=all` 请求且「当前链」为「全部记录（所有链）」；切到项目链后请求带 `projectId` 且**不含** `chain=all`；筛选、快照与「读取不留痕」断言不变 | 本地通过 |
 | ADR061-DB-001 | 数据库集成 | 迁移不可变清单与索引 | `database/test/integration/database.test.ts`：`alreadyApplied` 清单含 `0037_audit_logs_cross_chain_idx.sql`（36 条迁移）；`pnpm db:migrations:check` 通过 | 本地通过 |
 | ADR061-DB-002 | 数据库计划证据 | 跨链首页走新索引、单链不受影响 | 演示库 `app`（1,324 行）`EXPLAIN (ANALYZE, BUFFERS)`：跨链 `Limit (actual time=0.055..0.102 rows=51.00)` → `Index Only Scan using audit_logs_occurred_at_chain_seq_idx on audit_logs (actual time=0.054..0.098 rows=51.00)`，`Heap Fetches: 51`，`Execution Time: 0.135 ms`，**无 Sort 节点**；单链 `Index Only Scan Backward using audit_logs_pk on audit_logs`（`Index Cond: (chain_id = 'SYSTEM'::text)`），`Execution Time: 0.101 ms` | 本地通过 |
@@ -5462,3 +5474,49 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ② 跨链读取**不做**「按链筛选」参数化：`chain` 当前只接受 `"all"`，要新增按链子集读取须另立 ADR。
 ③ 默认跨链只存在于**前端初始状态**：服务端缺省仍是 SYSTEM 链（既有调用方与集成测试语义不变）。
 ④ 本批含契约、服务端、迁移与前端产品代码，按 §8 需非作者人工评审；迁移 `0037` 属重点评审项。
+
+## 2026-10-09 项目改为物理删除（ADR-062，用户指示，本地落库）
+
+用户指示（原话）：「现在项目是软删除，我想把他改成硬删除，把一切与之相关的都要更改，你先分析然后找我确认」；分析后逐项确认：「D1② D2① D3② D4提醒操作员，如果还是要删就也一起删除干净 D5管理员看的是「删除项目」 D6按表中来 然后还有之前那个软删除30天彻底删除也用不到了」。落 [ADR-062](adr/ADR-062.md)（`Accepted`，2026-10-09），**取代 [ADR-049](adr/ADR-049.md) / [ADR-050](adr/ADR-050.md) / [ADR-051](adr/ADR-051.md) / [ADR-052](adr/ADR-052.md) / [ADR-055](adr/ADR-055.md)**。
+
+- **删除语义**：`DELETE /api/v1/projects/{projectId}` 直接物理删除项目与其全部下级数据（27 处删除、叶子表到 `app.projects`），由 `ProjectManagementService.deleteProject` 在同一事务内调用 `app.purge_project(INTEGER)`；不再有软删除列（迁移 `0038_project_delete_contract_soft_delete_removal.sql` 删除 `deleted_at` / `deleted_by`、对应 CHECK / FK 并重建 `app.purge_project`），也不再有「还原」与「保留期自动删除」。
+- **动作留痕（D2① / D5）**：SYSTEM 审计链留**唯一一条** `project.delete`（`projectId: null`，payload 含 `code` / `name` / `status` / `rowVersion` / `actorRole` 与七项计数），只能由系统管理员在 `/audit` 查看；**不写**项目动态、通知与搜索投影，项目 `PROJECT:<id>` 审计链随项目删除。
+- **权限不变**：系统管理员或本项目 ACTIVE 组长可删（`ProjectRoleGateService.projectDeleterRole`）；普通成员 403 `PROJECT_DELETE_FORBIDDEN`；非成员、已移除成员与不存在统一 404 `PROJECT_NOT_FOUND`（不泄露存在性）。
+- **重放的授权口径（D1②）**：项目行已消失，重放只复核当前认证（`replayAuthorizationPolicy` `{ version: "2.0.0", actorOnly: true }`），**不读取项目行**——把资源可读性检查放进 `actorId` 回调会让合法重放变成 404（[ADR-058](adr/ADR-058.md) 同类教训）；HTTP 层 `mutation.verify` 仍复核 `auth_version` / `row_version`，认证失效后重放 401。
+- **编码释放（D3②）**：行被删除后 `projects_code_unique` 不再被占用，编码可被后续新项目复用；迁移 `0038` 把历史上被软删除的存量行（`deleted_at IS NOT NULL`）**恢复为活跃行**（`deleted_at = NULL` + `row_version + 1`）后再收窄约束，不做物理删除。
+- **前端（D4）**：「编辑项目」页脚最左侧的「删除项目」保留，二次确认弹窗升级为**级联后果警告**（`DELETE_WARNING` 逐项列出模块 / 功能 / 任务 / 迭代记录 / GitHub 链接 / 通知 / 项目动态 / 项目审计链，并说明编码可复用与 SYSTEM 链留痕），确认按钮 `confirm-delete-project` 才提交；成功语说明下级数据与项目审计链已清除、系统链留痕供管理员追溯；`ProjectDeletionActions.tsx`、`project-deletion-query.ts`、活动页「已删除项目」筛选选项与 `ActivityWorkspace.deletions.test.tsx` 整体删除。
+- **连带下线**：`listProjectDeletions` / `restoreProject` / `purgeProject` 三条路由删除，Route Registry 105 → **102 条**；`ProjectAutoPurgeService` / `ProjectAutoPurgeScheduler` 与其单测、集成测试删除（ADR-055 整体退役），服务端不再有定时清理任务。
+- **任务 / 模块 / 功能软删除不受影响**：`app.tasks`（ADR-058）与 `app.modules` / `app.features`（ADR-059）的 `deleted_at` 保留，其「物理清除只随所属项目被物理删除发生」的表述改为指向 ADR-062；`RETIRED_ACTION_CODES` 由 11 个增至 **13 个**（新增 `project.restore` / `project.purge`），`ACTION_LABELS` 仍保留全部历史文案供历史行渲染。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ADR062-CONTRACT-001 | 契约 / 权限 | 路由、重放策略与生成物同步 | `deleteProject` 改为物理删除语义（幂等契约版本 `2.0.0`，重放策略 `actorOnly`）；`restoreProject` / `purgeProject` / `listProjectDeletions` 三条路由与 `contracts/project-deletion.zod.ts` 删除；`contract:generate` 同步 5 个产物、`contract:drift` 一致、`contract:validate` **102 条路由**、`permissions:check` **102 / 102**、`packages/api-contract/test/permissions.test.ts` 的真实 Controller 扫描清单同步 | 本地通过（2026-10-09） |
+| ADR062-API-001 | API 集成（真实 PostgreSQL + HTTP） | 组长删除：级联清空与唯一留痕 | `project-delete-api.integration.test.ts` 第 1 例：204 无正文；25 张项目域表按 `project_id` 逐表归零、`audit_logs` / `audit_chain_heads` 的 `PROJECT:<id>` 链消失、项目行删除；SYSTEM 链恰好一条 `project.delete`（`projectId: null`，payload 计数与删除前一致） | 本地通过 |
+| ADR062-API-002 | API 集成（真实 PostgreSQL + HTTP） | 权限矩阵与失败路径零副作用 | 同文件第 2 例：普通成员 403 `PROJECT_DELETE_FORBIDDEN`；非成员与已移除成员 404 `PROJECT_NOT_FOUND`；系统管理员即使不是成员也放行 204；失败后项目仍在、版本号未变、成员行仍 3 条、无 `PROJECT` 链头 | 本地通过 |
+| ADR062-API-003 | API 集成（真实 PostgreSQL + HTTP） | 幂等重放与摘要绑定 | 同文件第 3 例：同 Key 同摘要重放已存 204；同 Key 但 `If-Match` 不同导致摘要不一致 409；换 Key 因项目已不存在按 404 处理 | 本地通过 |
+| ADR062-API-004 | API 集成（真实 PostgreSQL + HTTP） | 重放只复核当前认证 | 同文件第 4 例：项目已删除，同 Key 重放仍 204；`auth_version` 递增（同步 `row_version`）后重放 401，不得再返回已存的 204 | 本地通过 |
+| ADR062-API-005 | API 集成（真实 PostgreSQL + HTTP） | 版本门禁与参数校验分支 | 同文件第 5 例：陈旧 `If-Match` 409、缺 `If-Match` 422、缺幂等键 400、带请求体 422、缺 CSRF 422、未登录 401，失败路径零副作用 | 本地通过 |
+| ADR062-API-006 | API 集成（真实 PostgreSQL + HTTP） | 编码释放与复用 | 同文件第 6 例：删除后同一编码可再次创建并落库（`projects_code_unique` 不再被历史行占用） | 本地通过 |
+| ADR062-E2E-001 | 浏览器 E2E | 组长删除全流程与管理员审计可见 | `apps/e2e/tests/project-delete.spec.ts`：例 1 普通成员看不到 `delete-project-button`；例 2 组长删除 → 二次确认含 `DELETE_WARNING` → `confirm-delete-project` → 成功语 → 刷新后卡片消失 → 系统管理员在 `/audit` 以动作码 `project.delete` 命中该行（含项目编码、操作者、「系统链」），原始快照弹窗含 `actorRole` 等 payload | 本地通过（定向 2/2，14.3s） |
+| ADR062-ACTIVITY-E2E-001 | 浏览器 E2E | 项目筛选不再有「已删除项目」 | `apps/e2e/tests/activity.spec.ts` 断言项目下拉不含「已删除项目」选项（`apps/web/src` 全量 grep 该文案为空） | 本地通过（随全量 E2E） |
+| ADR062-GATE-001 | 门禁 | 迁移 / 静态检查 / 构建 | `pnpm db:migrations:check`（37 条，含 `0038`）、`database/test/integration/database.test.ts` 的 `alreadyApplied` 清单同步、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 个 workspace）、`pnpm build` 通过 | 本地通过（2026-10-09） |
+
+### 本地实际执行（2026-10-09，分支 `test`，未提交未推送）
+
+① 契约：`contract:generate` / `contract:drift`（5 产物）/ `contract:validate`（**102 条**）、`permissions:check`（**102 / 102**）。
+② API 真库集成（`TEST_DATABASE_URL=…/app_ci`）：**54 文件 528 例**全绿（111.35s），其中 `project-delete-api.integration.test.ts` **6/6**；同批修正 5 个既有集成 / 单测文件里依赖「已删除项目」并入范围的断言（`activity-query.integration.test.ts`、`activity-notifications-api.integration.test.ts`、`activity-query.service.test.ts`、`search-query.integration.test.ts`、`scope-deletion.integration.test.ts`）。
+③ API 单测：**72 文件 430 例**全绿（40.09s）。
+④ Web 定向单测：**22 文件 158 例**全绿（受影响文件）；`apps/web` typecheck exit 0。
+⑤ `pnpm build`：8 个 workspace 全绿（E2E 的 API 跑 `node dist/main.js`，必须先构建）。
+⑥ 浏览器 E2E（`E2E_DATABASE_URL=…/app_ci`）：定向 `tests/project-delete.spec.ts` **2 passed（14.3s）**；全量 **69 passed / 1 failed（6.1m）**，唯一失败为既有波动用例 `external-links.spec.ts` 的「F22 新建迭代弹窗内直接暂存 GitHub 链接」，单跑 **3/3** 通过（根因未定位，另行记录）；`global-teardown` 的 SYSTEM 链断点提示为夹具清理的预期噪声。
+⑦ 迁移：`MIGRATION_DATABASE_URL=…/app_ci` 与 `…/app` 均 `Applied 0038_project_delete_contract_soft_delete_removal.sql`；文件名的 `_contract_` 段是 `database/src/migrations.ts` 对破坏性 DDL 的显式放行标记，必须保留。
+⑧ 文档同步：`docs/adr/ADR-062.md`、`docs/adr/README.md` 索引、被取代的 ADR-049 / 050 / 051 / 052 / 055 顶部注记、`docs/adr/ADR-056.md` ～ `ADR-059.md` 的相关引用、`docs/permissions.md`、本节，以及 `AGENTS.md`、三份设计文档与 [开发日志](../开发日志.md)。
+⑨ 收尾整链门禁（2026-10-09 同日补跑）：`pnpm check` 除 `deps:audit` 外各步全绿——`lint`、`format:check`、`typecheck`（8 workspace）、`test:unit`（api-contract 16 文件 102 例、canonical-json 5 例、database 15 例、apps/web 全量）、`db:migrations:check`（**37 条**，含 `0038`）、`db:seed:check`（28 张业务表）、`contract:drift`（5 产物）、`contract:validate`（**102 条**）、`build`（8 workspace，web 1994 模块）、`check:deploy:test`（5 个镜像 ref）、`check:deps`（**766** 源文件）、`check:frontend:boundaries`（**317** 模块 / 1579 依赖）、`permissions:check`（**102 / 102**）；`deps:audit` 首次因公共 registry `ECONNRESET` 中断（**非漏洞**），改为 `pnpm audit --audit-level=high --registry=https://registry.npmjs.org` 复核返回 **`No known vulnerabilities found`**；其后被跳过的 `check:secrets`（**1176** 文件）与 `check:docs`（**109** 个 Markdown）单独补跑通过；另补跑全量 `pnpm test:web` → **95 文件 673 例全绿**（基线 92 文件 655 例）。首跑 `pnpm check` 曾在 `packages/api-contract/test/permissions.test.ts` 失败（真实 Controller 扫描期望清单仍含 3 条已下线路由，104 vs 102），已同步为 102 行并复跑 **16 文件 102 例全绿**。`check:deploy:test` 需要 Docker CLI 在 PATH 中（本机为 `C:\Users\20618\AppData\Local\Programs\DockerDesktop\resources\bin`，`docker version` 返回 `client=29.7.2 server=29.7.2`）。
+
+### 未运行 / 已知偏差
+
+① 整链 `pnpm check` 已跑通（见「本地实际执行」⑨）：除 `deps:audit` 因公共 registry `ECONNRESET` 中断（**非漏洞**，改用公共 registry 复核为 `No known vulnerabilities found`）外各步全绿；**未运行**：生产镜像构建与 Trivy、GitHub Actions（尚未提交推送）。
+② 全量 E2E 的唯一失败为既有波动用例（同文件单跑 3/3），**未定位根因**，按 AGENTS.md §8 如实记录，未跳过或弱化断言。
+③ 迁移 `0038` 的存量恢复（软删除行转活跃行）只在演示库 `app` 与 `app_ci` 上验证，未做大批量行的耗时压测。
+④ 物理删除**不可回滚**——这是本次决策的核心取舍（D3② 释放编码、D2① 仅管理员可见留痕、无还原入口）。
+⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审；迁移 `0038` 与重放授权口径为重点评审项。

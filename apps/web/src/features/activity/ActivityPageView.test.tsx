@@ -66,9 +66,6 @@ function createClient(
   return {
     getProjectActivity: vi.fn().mockResolvedValue(ACTIVITY),
     listActivity: vi.fn().mockResolvedValue(ACTIVITY),
-    listProjectDeletions: vi
-      .fn()
-      .mockResolvedValue({ items: [], nextCursor: null }),
     listProjects: vi.fn().mockResolvedValue({ items: projects }),
     getUserDirectory: vi.fn().mockResolvedValue({
       items: [{ id: 1, name: "特哥", avatarUrl: null, isAdmin: true }],
@@ -227,9 +224,8 @@ describe("ActivityPageView", () => {
     expect(screen.queryByRole("button", { name: "原始快照 1" })).toBeNull();
     expect(screen.queryByLabelText("包含管理员操作")).toBeNull();
   });
-  it("锁定项目时同一个下拉可以换成其他项目，也可以切到全部项目 / 已删除项目", async () => {
-    // 2026-10-09：项目详情页原先连下拉都不渲染，用户反馈没法换项目；
-    // 且下拉选项要与全局态完全一致（含「已删除项目」）。
+  it("锁定项目时同一个下拉可以换成其他项目，也可以切到全部项目", async () => {
+    // 2026-10-09：项目详情页原先连下拉都不渲染，用户反馈没法换项目。
     mountRouted(
       createClient([PROJECT, SECOND_PROJECT]),
       "/projects/7/activity",
@@ -246,13 +242,6 @@ describe("ActivityPageView", () => {
     await waitFor(() =>
       expect(screen.getByTestId("path")).toHaveTextContent(
         "/projects/9/activity",
-      ),
-    );
-
-    pickSelectOption("项目", "已删除项目");
-    await waitFor(() =>
-      expect(screen.getByTestId("path")).toHaveTextContent(
-        "/activity?project=deleted",
       ),
     );
 

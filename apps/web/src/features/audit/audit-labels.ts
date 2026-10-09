@@ -10,7 +10,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "project.delete": "删除项目",
   "project.archive": "归档项目",
   "project.restore": "恢复项目",
-  // ADR-051：彻底删除会连项目自己的审计链一起清掉，历史行只可能出现在别处引用。
+  // ADR-062：删除项目改为物理删除并取消保留期自动清理，只剩历史行。
   "project.purge": "彻底删除项目",
   "project.archive.request": "提交归档申请",
   "project.archive.reject": "驳回归档申请",
@@ -116,14 +116,16 @@ export interface AuditActionOption {
 
 /**
  * 已下线的动作码：功能移除后不会再产生新记录（ADR-043 项目归档、ADR-044
- * 模块归档、ADR-045 功能归档、ADR-054 任务归档、ADR-060 读取留痕；
- * SYSTEM_TEST 仅由测试写入）。ACTION_LABELS 仍保留它们的中文文案供历史行
+ * 模块归档、ADR-045 功能归档、ADR-054 任务归档、ADR-060 读取留痕、
+ * ADR-062 项目还原与保留期彻底删除；SYSTEM_TEST 仅由测试写入）。ACTION_LABELS 仍保留它们的中文文案供历史行
  * 渲染，但筛选候选不再列出——选中一个永远为空的动作只会误导。
  */
 const RETIRED_ACTION_CODES: ReadonlySet<string> = new Set([
   "project.archive",
   "project.archive.request",
   "project.archive.reject",
+  "project.restore",
+  "project.purge",
   "module.archive",
   "module.restore",
   "feature.archive",

@@ -87,11 +87,6 @@ import {
   activityQueryRequestSchema,
 } from "./contracts/activity.zod.js";
 import {
-  projectDeletionItemSchema,
-  projectDeletionPageSchema,
-  projectDeletionQueryRequestSchema,
-} from "./contracts/project-deletion.zod.js";
-import {
   notificationItemSchema,
   notificationPageSchema,
   notificationPathSchema,
@@ -138,7 +133,6 @@ import {
   projectMutationHeadersSchema,
   projectVersionHeadersSchema,
   projectReplayContextSchema,
-  projectPurgeResponseSchema,
 } from "./contracts/projects.zod.js";
 import {
   adminUserCreateRequestSchema,
@@ -498,28 +492,6 @@ export const schemaRegistry = {
     schema: activityPageSchema,
     summary:
       "项目动态分页结果；dayTotals 为按日全量总数，dayTotalsTruncated 为真时只覆盖最近的 400 个自然日",
-    sensitiveFieldPaths: [],
-  },
-  ProjectDeletionQueryRequest: {
-    schema: projectDeletionQueryRequestSchema,
-    summary:
-      "项目删除记录查询参数；cursor 为服务端签名的不透明字符串，limit 默认 20、最大 50",
-    sensitiveFieldPaths: [],
-  },
-  ProjectDeletionItem: {
-    schema: projectDeletionItemSchema,
-    summary:
-      "一条项目删除记录（ADR-050）：项目编号、名称、删除时间与删除人，以及当前会话可否还原 / 彻底删除（ADR-051）；不含已删除项目的正文",
-    sensitiveFieldPaths: [],
-  },
-  ProjectPurgeResponse: {
-    schema: projectPurgeResponseSchema,
-    summary: "项目彻底删除响应（ADR-051）：项目标识与本次物理删除的行数统计",
-    sensitiveFieldPaths: [],
-  },
-  ProjectDeletionPage: {
-    schema: projectDeletionPageSchema,
-    summary: "项目删除记录分页结果，按删除时间倒序",
     sensitiveFieldPaths: [],
   },
   NotificationPath: {

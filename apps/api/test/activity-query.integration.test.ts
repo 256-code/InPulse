@@ -234,94 +234,9 @@ describe("ActivityQueryService (real PostgreSQL)", () => {
     ]);
   });
 
-  // ADR-050（2026-09-28 修订）：已删除项目退出全部授权范围，但整个项目链的
-  // MEMBER 可见动态（含创建到删除的完整过程）对全部登录用户公开；
-  // ADMIN_ONLY 行仍随项目一起退出可见范围。
-  test("已删除项目对任意登录用户下发 MEMBER 可见的全部动态，不含 ADMIN_ONLY", async () => {
-    const owner = await createUser(client!.sql);
-    const deletedProject = await createProject(client!.sql, owner);
-    await seedActivity(
-      deletedProject.projectId,
-      owner,
-      3001,
-      "TASK_COMPLETED",
-      "删除前的任务动态",
-      "DONE",
-      1,
-      "MEMBER",
-      "2026-09-08T00:00:05.000Z",
-    );
-    await seedActivity(
-      deletedProject.projectId,
-      owner,
-      3002,
-      "PROJECT_DELETED",
-      "删除了项目",
-      "DELETED",
-      2,
-      "MEMBER",
-      "2026-09-08T00:00:06.000Z",
-    );
-    await seedActivity(
-      deletedProject.projectId,
-      owner,
-      3003,
-      "CHANGE_RECORD_VOIDED",
-      "作废记录",
-      "VOID",
-      3,
-      "ADMIN_ONLY",
-      "2026-09-08T00:00:07.000Z",
-    );
-    await client!.sql`
-      UPDATE app.projects
-         SET deleted_at = now(),
-             deleted_by = ${adminId!},
-             updated_at = now(),
-             row_version = row_version + 1
-       WHERE id = ${deletedProject.projectId}
-    `;
-
-    // 非成员与仍在册的成员口径一致：删除前的 MEMBER 动态随项目公开。
-    for (const actorUserId of [otherId!, owner]) {
-      const page = await service!.query({
-        actorUserId,
-        projectId: deletedProject.projectId,
-        limit: 50,
-      });
-      expect(page.items.map((item) => item.activityType)).toEqual([
-        "PROJECT_DELETED",
-        "TASK_COMPLETED",
-      ]);
-      expect(page.items[0]).toMatchObject({
-        projectId: deletedProject.projectId,
-        activityType: "PROJECT_DELETED",
-        sourceEntityId: 3002,
-      });
-      expect(page.hasMore).toBe(false);
-    }
-
-    // includeAdminOnly 不扩大已删除项目的范围（ADMIN_ONLY 不回放）。
-    const adminPage = await service!.query({
-      actorUserId: adminId!,
-      projectId: deletedProject.projectId,
-      includeAdminOnly: true,
-      limit: 50,
-    });
-    expect(adminPage.items.map((item) => item.activityType)).toEqual([
-      "PROJECT_DELETED",
-      "TASK_COMPLETED",
-    ]);
-
-    // 未删除项目的行为不变：跨项目依旧无访问权。
-    await expect(
-      service!.query({
-        actorUserId: memberId!,
-        projectId: otherProject!.projectId,
-        limit: 50,
-      }),
-    ).rejects.toBeInstanceOf(ActivityAuthorizationError);
-  });
+  // ADR-062：项目删除改为物理删除后，「已删除项目对全部登录用户公开动态」的
+  // 例外（ADR-050 / ADR-052）随之失效——项目与其动态行一起消失，读取一律按
+  // 实时成员关系判定，这里不再有可构造的已删除项目夹具。
 });
 
 /**
@@ -336,7 +251,6 @@ describe("ActivityQueryService 聚合动态 (real PostgreSQL)", () => {
   let projectA: ProjectFixture;
   let projectB: ProjectFixture;
   let projectC: ProjectFixture;
-  let deletedProject: ProjectFixture;
 
   beforeAll(async () => {
     feedUserId = await createUser(client!.sql);
@@ -345,16 +259,6 @@ describe("ActivityQueryService 聚合动态 (real PostgreSQL)", () => {
     projectA = await createProject(client!.sql, feedUserId);
     projectB = await createProject(client!.sql, feedUserId);
     projectC = await createProject(client!.sql, feedOtherId);
-    const deletedOwner = await createUser(client!.sql);
-    deletedProject = await createProject(client!.sql, deletedOwner);
-    await client!.sql`
-      UPDATE app.projects
-         SET deleted_at = now(),
-             deleted_by = ${feedAdminId},
-             updated_at = now(),
-             row_version = row_version + 1
-       WHERE id = ${deletedProject.projectId}
-    `;
 
     // A 项目：跨桶实体类型 + 跨上海自然日的两条（相隔 1 小时）。
     await seedActivity(
@@ -454,43 +358,6 @@ describe("ActivityQueryService 聚合动态 (real PostgreSQL)", () => {
       "MEMBER",
       "2026-09-08T05:00:00.000Z",
       "TASK",
-    );
-    // D 项目已删除：整条 MEMBER 链对全部登录用户公开。
-    await seedActivity(
-      deletedProject.projectId,
-      deletedOwner,
-      401,
-      "TASK_COMPLETED",
-      "D 删除前完成",
-      "DONE",
-      1,
-      "MEMBER",
-      "2026-09-08T06:00:00.000Z",
-      "TASK",
-    );
-    await seedActivity(
-      deletedProject.projectId,
-      deletedOwner,
-      402,
-      "PROJECT_DELETED",
-      "D 删除项目",
-      "DELETED",
-      2,
-      "MEMBER",
-      "2026-09-08T06:30:00.000Z",
-      "PROJECT",
-    );
-    await seedActivity(
-      deletedProject.projectId,
-      deletedOwner,
-      403,
-      "CHANGE_RECORD_VOIDED",
-      "D 管理员作废",
-      "VOID",
-      3,
-      "ADMIN_ONLY",
-      "2026-09-08T07:00:00.000Z",
-      "CHANGE_RECORD",
     );
   });
 
@@ -609,24 +476,31 @@ describe("ActivityQueryService 聚合动态 (real PostgreSQL)", () => {
     ]);
   });
 
-  test("范围 = 实时授权范围 ∪ 全部已删除项目，删除链不回放 ADMIN_ONLY", async () => {
-    const nonMember = await service!.listFeed({
+  test("范围 = 实时授权范围；admin 显式开启也只读有权项目", async () => {
+    // ADR-062：物理删除后没有「已删除项目」这一额外来源，范围就是实时成员项目。
+    const others = await service!.listFeed({
       actorUserId: feedOtherId,
-      projectIds: [deletedProject.projectId],
+      projectIds: [projectA.projectId],
       limit: 50,
     });
-    expect(nonMember.items.map((item) => item.sourceEntityId)).toEqual([
-      402, 401,
-    ]);
-    expect(nonMember.hasMore).toBe(false);
+    expect(others.items).toEqual([]);
+    expect(others.hasMore).toBe(false);
 
+    // 系统管理员的授权范围是全部项目，但 projectIds 只收窄：这里只返回 A 项目
+    // 的四条 MEMBER 动态，B 项目那条 ADMIN_ONLY 不会因为开启开关被带进来。
     const admin = await service!.listFeed({
       actorUserId: feedAdminId,
-      projectIds: [deletedProject.projectId],
+      projectIds: [projectA.projectId],
       includeAdminOnly: true,
       limit: 50,
     });
-    expect(admin.items.map((item) => item.sourceEntityId)).toEqual([402, 401]);
+    expect(admin.items.map((item) => item.sourceEntityId)).toEqual([
+      104, 103, 102, 101,
+    ]);
+    expect(
+      admin.items.every((item) => item.projectId === projectA.projectId),
+    ).toBe(true);
+    expect(admin.items.some((item) => item.sourceEntityId === 202)).toBe(false);
   });
 
   test("projectIds 只收窄，越权与未知项目静默排除", async () => {
