@@ -100,3 +100,32 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     await context.close();
   }
 });
+
+test("B-3b 深链指向不可读项目时整页只留一条说明，不再叠两条红条", async ({
+  browser,
+}) => {
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+  try {
+    // 隐藏项目的成员是 runtime.member；runtime.user 读不到它。
+    // 修复前：listRecordFeed 静默排除非成员项目（空态），项目级草稿读取却返回 404，
+    // 于是「草稿箱红条 + 记录红条 + 空态」三条互相矛盾的内容同时挂在页面上。
+    await page.goto(
+      `/records?projectId=${runtime.hiddenProjectId}&publishedId=1`,
+    );
+    await expect(page.getByText("项目不存在或你已无权访问")).toBeVisible();
+    await expect(page.locator(".ant-alert-error")).toHaveCount(0);
+    await expect(page.getByText("暂无已发布记录")).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "重试草稿列表" }),
+    ).toHaveCount(0);
+    // 出口回到跨项目视图，页头 CTA 与草稿箱一并恢复。
+    await page.getByRole("button", { name: "查看全部迭代记录" }).click();
+    await expect(calmSelectTrigger(page, "项目")).toContainText("全部项目");
+    await expect(
+      page.getByRole("button", { name: "新建迭代记录" }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

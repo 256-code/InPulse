@@ -4918,3 +4918,100 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 本地实际执行（2026-10-08）：`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；`pnpm --filter @inpulse/web test`（**90 文件 630 例**）；`E2E_DATABASE_URL=…/app_e2e pnpm --filter @inpulse/e2e exec playwright test aggregate-views`（**2/2**，夹具清理：删除用户 2、项目 2、业务行 63、审计行 2）；同环境 `pnpm test:e2e`（**64 passed，5.2 分钟**，夹具清理：删除用户 8、项目 14、业务行 1150、审计行 166）；`pnpm exec prettier --write` 八个改动文件与 `aggregate-views.spec.ts`；`pnpm check:docs`。浏览器实测用无头 Chromium 1628×1000、`xiaoshao` 身份逐条量测（见上表）。首轮定向 E2E 曾因 F-29 的「含『 人』」断言转红，按上表口径改写断言后复跑通过——本轮唯一一次失败，未跳过或弱化任何用例。
 
 未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与集成测试（服务端未改）、镜像构建与 GitHub Actions（本次提交后由 CI 执行）。② 模块卡与功能卡在空描述下会留下一段空白（`<p>` / `<span>` 仍占位），与项目卡口径一致；若后续希望卡片在空描述时收紧高度，需连同项目卡一起重新定案，本轮未做。③ 任务中心删除图标后，30px 由工具栏下外边距单点承担；若工具栏在窄屏折行换高，该换算基准会随之变化（未在 ≤700px 量测）。④ 以下三项按你的指示未动，仍待定案：任务 / 组卡「整卡铺色」把优先级与状态压在同一维度（高优先级整卡琥珀 `rgb(253, 193, 6)`、已完成整卡青碧，卡内「高 / 聚合组 / 未开始」仅同色系 12% 明度差）；项目页底部「层级说明」六宫格常驻（`ProjectsPageView.tsx`，有单测断言其存在）；`CommandPalette.tsx` 命令面板 hint「在全局搜索页查看完整权限过滤结果」的口径。⑤ 本轮扫描另发现一处同批未处理的开发用文案：通知页 `NotificationsPageView.tsx` 的说明段落仍写「通知只展示当前登录用户的站内消息；已读与未读操作会携带 CSRF 与幂等 Key，不会影响其他用户」——把 CSRF 与幂等 Key 写进了面向用户的说明，且不在上一批 72 条注释审查清单内（该页当时只收录了通知铃铛的 `aria-label`），留待你定案。⑥ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审。
+
+## 2026-10-09 迭代记录深链指向不可读项目时不再叠「两条红条 + 空态」（本地落库）
+
+用户以「林雨妍」（SSO JIT 开通、非项目 1 成员）打开 `/records?view=published&projectId=1&publishedId=8`，同一屏挂着三条互相矛盾的内容：项目草稿箱红条「草稿或所属范围不存在，或你已无权访问。输入已保留。」+「重试草稿列表」、记录红条「记录不存在或当前无法访问。」+「重试记录」，下面还有空态「暂无已发布记录 / 草稿发布后会出现在这里。」；项目下拉也只显示裸 ID `1`。
+
+根因是两类聚合读的既定授权口径不同，前端却把它们当作同一件事渲染：
+
+- 跨项目记录清单 `listRecordFeed` 与「我的草稿」同族：非成员项目**静默排除**，返回 200 空结果（契约注释见 `packages/api-contract/src/record-summary-routes.ts`）。
+- 项目级草稿读取 `listRecordDrafts`（`record-drafts.service.ts` 的 `read()` 先查 `AuthorizedSearchScope`）与记录详情 `getChangeRecord` 按资源语义返回 **404**。
+- `RecordDraftsView` 的**列表读取**错误沿用了创建 / 编辑错误的文案函数，于是对一次纯粹的「读不到」也说「输入已保留」。
+- 页面把 `listProjects` 之外的项目仍当作可渲染视图，项目下拉因此回落到裸 ID。
+
+改动（前端三处，未动接口、契约与数据库）：
+
+- `RecordsWorkspace.tsx`：新增 `projectOutOfScope`——`projectId` 不在 `listProjects` 返回的可读项目里且非 embedded 时，整页只渲染一条说明「项目不存在或你已无权访问 / 链接里的项目可能已被删除，或你已不在成员名单中。」+「查看全部迭代记录」（清空搜索参数回到跨项目视图）；筛选条、草稿箱、记录列表与空态都不再渲染，也不再追问那条记录。
+- `RecordDraftsView.tsx`：项目级草稿读取返回 403 / 404 时草稿箱整块不渲染（重试不会变好，也不再重复红条与「重试草稿列表」）；列表读取失败的文案改用新函数。
+- `record-draft-errors.ts`：新增 `recordDraftListErrorMessage`（401 / 403 / 404 / 429 + 兜底），全部不含「输入已保留」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| REC-SCOPE-UNIT-001 | Web 单元 | 不可读项目整页只留一条说明 | `RecordsWorkspace.test.tsx` 新增用例：`/records?projectId=9&publishedId=8` 出现「项目不存在或你已无权访问」，「重试草稿列表」「重试记录」「暂无已发布记录」与草稿块均不渲染，`getChangeRecord` 未被调用 | 本地通过（2026-10-09） |
+| REC-SCOPE-UNIT-002 | Web 单元 | 出口回到跨项目视图 | 同文件第二条用例：点「查看全部迭代记录」后 `listRecordFeed` 最后一次调用不带 `projectId`（`{ status: "PUBLISHED", source: "ALL", limit: 20 }`），页头「新建迭代记录」可见 | 本地通过（2026-10-09） |
+| REC-SCOPE-UNIT-003 | Web 单元 | 草稿箱 404 整块不渲染 | `RecordDraftsView.test.tsx` 新增用例：`listRecordDrafts` 抛 404 后无「重试草稿列表」、无「项目草稿」标题、无权限文案 | 本地通过（2026-10-09） |
+| REC-SCOPE-UNIT-004 | Web 单元 | 列表读取文案不再谎称输入已保留 | 既有「草稿读取失败时内容区仍然展开」用例追加两条断言：文案为「草稿服务暂时不可用，请重试。」且不含「输入已保留」 | 本地通过（2026-10-09） |
+| REC-SCOPE-BROWSER-001 | 浏览器实测 | 无红条且无首帧闪烁 | 无头 Chromium 1628×1000、`xiaoshao` 身份打开 `/records?projectId=999&publishedId=8`：导航后 320ms 抓帧与 2.4s 终帧的 `.ant-alert-error` 计数均为 **0**；正文只剩「迭代记录 / 项目不存在或你已无权访问 / 链接里的项目可能已被删除，或你已不在成员名单中。 / 查看全部迭代记录」 | 本地通过（2026-10-09） |
+| REC-SCOPE-BROWSER-002 | 浏览器实测 | 同账号可读项目不受影响 | 同身份打开 `/records?projectId=1`：筛选条、草稿箱（2 张草稿卡）与按日时间线照常渲染 | 本地通过（2026-10-09） |
+| REC-SCOPE-E2E-001 | 浏览器 E2E | 关键路径回归 | `apps/e2e/tests/record-feed.spec.ts` 新增用例：以 `runtime.hiddenProjectId`（成员是 `runtime.member`）打开深链，断言一条说明、`.ant-alert-error` 计数 0、无「重试草稿列表」、无「暂无已发布记录」，点出口后项目下拉回到「全部项目」且 CTA 可见 | 本地通过（2026-10-09） |
+
+本地实际执行（2026-10-09）：`pnpm --filter @inpulse/web test`（**90 文件 633 例**，较上一批 630 例多出本轮 3 例）；`pnpm lint`；`pnpm --filter @inpulse/web run typecheck`；改动集 `prettier --check`（5 个文件一次改写后全部合规）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_e2e pnpm --filter @inpulse/e2e exec playwright test tests/record-drafts.spec.ts tests/record-feed.spec.ts`（**8 passed，41.7s**）；同环境 `pnpm test:e2e`（**65 passed，5.2 分钟**，夹具清理：删除用户 8、项目 14、业务行 1152、审计行 166）；浏览器实测见上表。本轮无需改契约，未跑 `contract:*`。
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions（本次提交后由 CI 执行）。② 服务端两类聚合读的口径不一致是既定设计（`record-summary-routes.ts` 注释明确记录该族静默排除），本轮只在前端收敛表现，未改接口；若要把「读不到的项目」统一成 404 或统一成空结果，需另立 ADR。③ 顺带发现一处与本次改动无关的既有用例脆弱性：`record-feed.spec.ts` 首条用例的「我的草稿」断言依赖同一次 E2E 运行里其它 spec（如 `record-drafts.spec.ts`）为同一账号留下的草稿——单文件运行 `playwright test tests/record-feed.spec.ts` 时该账号此时没有草稿，断言转红；全部项目视图的渲染条件本轮未改，故未修，仅记录。④ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审。
+
+## 任务详情弹窗改版：头部收成一行、任务级操作搬进编辑任务页脚（用户「直接用这个版本」，2026-10-09 本地落库）
+
+承接「任务界面 P2 标签要跟在任务名称后面、P3 编码还有没有必要留、六个按钮怎么排更简洁」的追问。模拟页 `.data/annotations/task-modal-layout.html` 的⑤定稿段给出三种头部排版与三种按钮落点，用户在该段回「取消按钮先留着，直接用这个版本」：采纳方案 D（把「取消任务 / 合并到主任务」搬进「编辑任务」）、页脚取变体 2（与表单「取消 / 保存」同排、分居两端）、按钮样式取「淡底 + 图标」那版。纯前端，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等改动，`pnpm-lock.yaml` 未动。
+
+口径与实现：
+
+- **头部由 3 行收到 1 行**（`apps/web/src/features/tasks/TasksPanel.tsx` 详情弹窗头部 + `apps/web/src/styles/design-system.css`）：状态 / 优先级徽章与任务名同行；`.task-id` 编码从独立一格降级为标题行尾的小片（11px 等宽、`#f1f5f9` 底、`title="任务编码 …"`），不再单独占一行；「GitHub 链接 / 在项目中打开」从第三行挪到标题行右侧、与关闭按钮同行。新增 `.task-modal-header-main`（左块 + 按钮组的可换行 flex 行）与 `.task-modal-title`（标题 + 徽章 + 编码）两个类；窗口变窄时按钮组整组换行，不做逐字折行。实测头部高度 166px → 约 76px。
+- **动作行 6 个按钮收到 2 个**：只留「编辑任务」与状态主操作（`TODO` = 完成任务 / `DONE` = 重新打开 / `CANCELED` = 恢复任务）；主按钮仍靠既有的 `.primary-button { margin-left: auto }` 顶到最右，不新增分隔样式。
+- **任务级操作搬进「编辑任务」页脚最左**：「取消任务」/「合并到主任务」只在 `workStatus === "TODO"` 时渲染，沿用「编辑项目 → 删除项目」的页脚最左位置（ADR-049 同一约定）。样式为新增的 `.tint-danger-button`（`#fdecea` 底 / `#f7d5d2` 边 / `#bf4a45` 字 + `alert` 图标，不用 `✕`，避免与右上角关闭按钮雷同）与 `.tint-violet-button`（`#eeeaff` 底 / `#ddd6f8` 边 / `#6b58c4` 字 + `gitMerge`）；实底主色仍只留给「保存 / 完成任务」。开放条件与详情动作行同口径（`writable` 且任务 `ACTIVE`；功能页里的模块级任务不可写），沿用编辑表单既有的 `editReadOnly` 门禁，不新增权限判断。
+- **不出现弹窗套弹窗**：编辑弹窗打开时详情弹窗已卸载（`open()` 清掉 `selectedId`），两枚按钮先 `handOffToDetail()` 收起表单并重新打开详情弹窗，再触发各自原有的确认流程（`openStatus("CANCEL")` / `setMergeInto(true)`）；`saving` / `reloading` 期间不接管，避免把没保存的输入丢掉。
+- **同步更新的既有用例**：`apps/web/src/features/tasks/TasksPanel.test.tsx` 的 F-23 改为「详情 → 编辑任务 → 合并到主任务」；`apps/e2e/tests/task-groups.spec.ts` 两处合并入口同改；`apps/e2e/tests/task-status.spec.ts` F-16 闭环里的「取消任务」一步改走编辑页脚；`apps/e2e/tests/leftover-task.spec.ts` 原有 `/取\s*消/` 会同时命中新增的「取消任务」，收紧为 `/^取\s*消$/`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-MODAL-UNIT-001 | Web 单元 | 合并入口改走编辑页脚 | `TasksPanel.test.tsx`：详情 →「编辑任务」→ 页脚「合并到主任务」后「主任务」候选出现；文件 25 例全绿 | 本地通过（2026-10-09） |
+| TASK-MODAL-BROWSER-001 | 浏览器实测 | 头部一行、动作行两个按钮 | 真实 dev `/tasks` → 任务「111」详情：头部为 `111 [未完成] [紧急] K123-T-7` 与右侧「GitHub 链接 / 在项目中打开 / ✕」同一行；动作行为「未设置截止 · 编辑任务 ⋯ 完成任务」 | 本地通过（2026-10-09） |
+| TASK-MODAL-BROWSER-002 | 浏览器实测 | 页脚四按钮与两枚入口流程 | 同任务点「编辑任务」：页脚最左为淡红「取消任务」(alert 图标) + 淡紫「合并到主任务」(gitMerge)，右侧仍是「取消 / 保存」；点「合并到主任务」→ 重开详情后弹出合并弹窗；点「取消任务」→ 弹出取消任务状态弹窗 | 本地通过（2026-10-09） |
+| TASK-MODAL-E2E-001 | 浏览器 E2E | 定向回归 | `playwright test tests/task-status.spec.ts tests/task-groups.spec.ts` → **4 passed (41.1s)** | 本地通过（2026-10-09） |
+| TASK-MODAL-E2E-002 | 浏览器 E2E | 取消语义不串按钮 | `playwright test tests/leftover-task.spec.ts` → **3 passed (30.3s)** | 本地通过（2026-10-09） |
+| TASK-MODAL-E2E-003 | 浏览器 E2E | 全量回归 | `pnpm test:e2e` → **65 passed (5.2m)** | 本地通过（2026-10-09） |
+
+本地实际执行（2026-10-09）：`pnpm --filter @inpulse/web test`（**90 文件 633 例全绿**）；`pnpm --filter @inpulse/web exec vitest run src/features/tasks/TasksPanel.test.tsx`（**25 例**）；`pnpm typecheck`（8 个 workspace 全过）；`pnpm exec eslint` 与 `prettier --check` 覆盖改动集（`TasksPanel.tsx`、`TasksPanel.test.tsx`、`design-system.css`、`task-groups.spec.ts`、`task-status.spec.ts`、`leftover-task.spec.ts`）；E2E 见上表（`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci`）。本轮无需改契约，未跑 `contract:*`。
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 本地测试库 `app_ci` 此前停留在 `0032`，缺 `0033_search_navigation_parents.sql`（搜索投影新增 `module_id` / `feature_id` / `record_id`），会让任务与功能写入一律 500、E2E 在「新建任务」一步全红；本轮按 §8 的既有流程补跑 `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate`（应用 1 个既有迁移，未改迁移文件）后恢复。③ 头部两个链接按钮本轮按⑤定稿挪到标题行右侧（与关闭按钮同行）；若后续希望它们回到标题下方独立一行、或收进「更多」菜单，需另起一轮评估。④ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审（Playwright 新增强需非作者评审）。
+
+## 任务详情弹窗改版 ②A：头部只留标题、四个按钮并进一条动作栏（用户「用a吧挺好」，2026-10-09 本地落库）
+
+上一节把「GitHub 链接 / 在项目中打开」放在头部标题行右侧；用户看过真实页面后，按模拟页 `.data/annotations/task-info-layout.html#btn-a` 的 ②A 定稿（**取代上一节第 ③ 条的头部按钮组口径**，头部收成一行、编码小片与页脚任务级操作不变）。
+
+口径与实现：
+
+- **头部只剩「标题 + 状态/优先级徽章 + 编码」与关闭按钮**：删掉 `.task-modal-header-links`（该规则随之退场），`ExternalLinksPanel` 与「在项目中打开」整块挪到下方动作行；实测头部 76px → 约 48px。
+- **动作行一条排开、中间一道竖线分组**：`未设置截止 ｜ GitHub 链接 · 在项目中打开 ｜(竖线)｜ 编辑任务 ⋯ 完成任务`；触发按钮传入既有 `triggerClassName="secondary-button"` 融入同排，「在项目中打开」同样用 `secondary-button`；新增 `.ta-sep`（1px × 20px、`#e1e8f0`、`margin: 0 3px`）作为分组竖线；主按钮仍靠 `.primary-button { margin-left: auto }` 顶到最右。
+- **「在项目中打开」仍只在 `mode === "detail"`（任务中心等跨项目页）渲染**；`.calm-task-actions` 在 `@media (max-width: 1000px)` 已有 `flex-wrap: wrap`，窄窗口整行换行，不做逐字折行。
+- 纯前端：`apps/web/src/features/tasks/TasksPanel.tsx`、`apps/web/src/styles/design-system.css`；注释口径同步（`apps/web/src/features/tasks/TasksPanel.test.tsx` 与 `apps/e2e/tests/module-tasks.spec.ts` 把「详情头部」改「详情动作行」）。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 幂等改动，`pnpm-lock.yaml` 未动。
+- 预览页 `.data/annotations/task-info-layout.html` 补上 `.ta-sep` 定义（原先只有空 `<span>`，竖线实际没画出来），使已选定的 ②A 预览与真实实现一致；模拟页与截图不入库。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-MODAL-UNIT-002 | Web 单元 | 动作行搬动后详情弹窗与链接面板仍可打开 | `vitest run src/features/tasks/TasksPanel.test.tsx src/features/external-links/ExternalLinksPanel.test.tsx` → **2 文件 31 例全绿** | 本地通过（2026-10-09） |
+| TASK-MODAL-UNIT-003 | Web 单元 | 全量前端单测 | `pnpm --filter @inpulse/web test` → **90 文件 633 例全绿** | 本地通过（2026-10-09） |
+| TASK-MODAL-BROWSER-003 | 浏览器实测 | 头部一行 + 四按钮同排 | 真实 dev `/tasks` → 任务「111」详情：头部 `111 [未完成] [紧急] K123-T-7 ⋯ ✕` 单行；动作行「未设置截止 ｜ GitHub 链接 · 在项目中打开 ｜ 编辑任务 ⋯ 完成任务（主按钮靠右）」 | 本地通过（2026-10-09） |
+| TASK-MODAL-E2E-004 | 浏览器 E2E | 链接入口与状态流转定向回归 | `playwright test tests/external-links.spec.ts tests/module-tasks.spec.ts tests/task-status.spec.ts tests/task-groups.spec.ts tests/leftover-task.spec.ts` → **11 passed (1.7m)** | 本地通过（2026-10-09） |
+| TASK-MODAL-E2E-005 | 浏览器 E2E | 全量回归 | `pnpm test:e2e` → **65 passed (5.2m)** | 本地通过（2026-10-09） |
+
+本地实际执行（2026-10-09）：`pnpm --filter @inpulse/web test`（**90 文件 633 例全绿**）；`pnpm typecheck`（8 个 workspace 全过）；`pnpm lint`；`prettier --check` 覆盖改动集（`TasksPanel.tsx`、`TasksPanel.test.tsx`、`design-system.css`）；`pnpm build`；E2E 见上表（`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci`，跑前确认 `app_ci` 迁移已到 32 个）。本轮无需改契约，未跑 `contract:*`。
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 内容区固定高 `height: min(560px, 62dvh)` 会让「任务信息」内容少时空半屏；本轮的 ③D（任务信息分组、状态历史搬进网格）与高度改 `min-height` 两条仍待用户拍板，未落码。③ 本批含前端产品代码、E2E 用例与文档，按 §8 需非作者人工评审（Playwright 新增强需非作者评审）。
+
+## 成员页去掉「项目必须保留一名组长」整段提示（annotation-review 决策「这里去掉p2」，2026-10-09 本地落库）
+
+注释审查台（`.data/annotations/`，不入库）把 `apps/web/src/features/projects/ProjectMembersPageView.tsx` 卡片底部那段提示标为待处理；用户逐条过审时对第 2 条给出「这里去掉p2」。本轮删除 `调整成员` 卡片末尾的 `<p className="permission-hint">`（原「项目必须保留一名组长：组长不能被直接移除或撤销，请先把其他成员设为组长完成转移。」），卡片重新以 `.calm-action-footer` 的「刷新成员」收尾；第 1 条「创建人 林雨妍（仅溯源，不授予额外权限）」按用户未表态保持原样。
+
+- 规则仍由服务端与 `.permission-hint` 的既有其他位置表达：组长不可移除/不可撤销由 API 返回 409（`PROJECT_MEMBER_LEADER_REQUIRED` / `PROJECT_MEMBER_ROLE_FORBIDDEN`），角色弹窗内的 `<Alert>`（`leaderTransferOnly` 两条文案）说明转移口径，成员行上也有「转移组长」入口；本轮只删页面底部的常驻说明段，不动任何规则与提示语来源。
+- `.permission-hint` 类仍被 6 个页面/弹层使用，样式保留，未新增死样式。
+- 纯前端单文件改动：`apps/web/src/features/projects/ProjectMembersPageView.tsx`。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-MEMBERS-HINT-UNIT-001 | Web 单元 | 删除说明段后成员页仍渲染与管理 | `vitest run src/features/projects/ProjectMembersPageView.test.tsx src/features/projects/project-member-query.test.tsx` → **2 文件 14 例全绿** | 本地通过（2026-10-09） |
+| PROJECT-MEMBERS-HINT-BROWSER-001 | 浏览器实测 | 卡片底部不再有组长说明 | 真实 dev `/projects/3/members`：`项目成员` 卡片以「刷新成员」收尾，原「项目必须保留一名组长…」整段消失，其余字段与成员行不变 | 本地通过（2026-10-09） |
+
+本地实际执行（2026-10-09）：`pnpm exec prettier --check apps/web/src/features/projects/ProjectMembersPageView.tsx`；`pnpm lint`；`pnpm typecheck`（8 个 workspace 全过）。E2E 未重跑（本轮只删一处静态文案，最近一次全量 `pnpm test:e2e` 为 65 passed (5.2m)，`project-members.spec.ts` 不涉及该段落）。
+
+未运行 / 已知偏差：① **未跑** `pnpm check` 整链、API 单测与真实 PostgreSQL 集成测试（未改服务端）、镜像构建与 GitHub Actions。② 成员行上的「转移组长」按钮与角色弹窗内的 `Alert`（`leaderTransferOnly` 两条文案）仍在，用户若希望这两处也一并收敛，需另起一轮。③ 本批含前端产品代码与文档，按 §8 需非作者人工评审。

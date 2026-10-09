@@ -64,9 +64,19 @@ for (const moduleScope of [false, true])
         ["取消任务", "暂不需要"],
         ["恢复任务", "需求恢复"],
       ]) {
-        await detail
-          .getByRole("button", { name: action!, exact: true })
-          .click();
+        if (action === "取消任务") {
+          // 2026-10-09 改版（定稿方案 D）：取消任务入口从详情动作行搬进「编辑任务」
+          // 页脚，点它仍回到详情弹窗、由状态弹窗接管确认流程。
+          await detail.getByRole("button", { name: "编辑任务" }).click();
+          await page
+            .getByRole("dialog", { name: "编辑任务" })
+            .getByRole("button", { name: "取消任务", exact: true })
+            .click();
+        } else {
+          await detail
+            .getByRole("button", { name: action!, exact: true })
+            .click();
+        }
         const modal = page.getByRole("dialog", { name: action!, exact: true });
         await modal.getByLabel("操作原因（选填）").fill(reason!);
         await modal.getByRole("button", { name: `确认${action}` }).click();
