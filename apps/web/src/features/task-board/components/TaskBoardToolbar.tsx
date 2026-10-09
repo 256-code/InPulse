@@ -27,7 +27,6 @@ export interface TaskBoardToolbarCounts {
   readonly all: number;
   readonly open: number;
   readonly done: number;
-  readonly canceled: number;
   readonly overdue: number;
   readonly today: number;
 }
@@ -42,7 +41,6 @@ const statusChips: readonly StatusChipSpec[] = [
   { key: "all", label: "全部", countKey: "all" },
   { key: "open", label: "未完成", countKey: "open" },
   { key: "done", label: "已完成", countKey: "done" },
-  { key: "canceled", label: "已取消", countKey: "canceled" },
 ];
 
 const timeChips: readonly {

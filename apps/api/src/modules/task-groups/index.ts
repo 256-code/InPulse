@@ -17,3 +17,8 @@ export {
   TaskGroupMembershipReadPort,
   type TaskGroupRoleItem,
 } from "./task-group-membership-read.port.js";
+export {
+  SqlTaskGroupDeletionPort,
+  TaskGroupDeletionPort,
+  type TaskGroupDeletionOutcome,
+} from "./task-group-deletion.port.js";

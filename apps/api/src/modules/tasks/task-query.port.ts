@@ -434,18 +434,18 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const [row] = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId}`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND deleted_at IS NULL`;
     return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async find(tx: TransactionContext, projectId: number, taskId: number) {
     const [row] = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId}`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} AND deleted_at IS NULL`;
     return row === undefined ? undefined : mapTaskReadRow(row);
   }
   async lock(tx: TransactionContext, projectId: number, taskId: number) {
-    await tx.sql`SELECT id FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} FOR UPDATE`;
+    await tx.sql`SELECT id FROM app.tasks WHERE id=${taskId} AND project_id=${projectId} AND deleted_at IS NULL FOR UPDATE`;
     // Separate READ COMMITTED statement sees relationships committed while waiting for the row.
     return this.find(tx, projectId, taskId);
   }
@@ -464,7 +464,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const rows = await tx.sql<
       TaskReadRowRaw[]
     >`SELECT id AS "taskId",project_id AS "projectId",module_id AS "moduleId",feature_id AS "featureId",scope_type AS "scopeType",code,title,creator_id AS "creatorId",(SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId",priority,work_status AS "workStatus",lifecycle_status AS "lifecycleStatus",due_at AS "dueAt",row_version AS "rowVersion",
-      ARRAY(SELECT feature_id FROM app.task_feature_impacts WHERE task_id=app.tasks.id ORDER BY feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) ORDER BY id ASC`;
+      ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ANY(${projects}::integer[]) AND id = ANY(${tasks}::integer[]) AND deleted_at IS NULL ORDER BY id ASC`;
     return rows.map(mapTaskReadRow);
   }
 
@@ -502,8 +502,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
              t.created_at AS "createdAt",
              t.updated_at AS "updatedAt"
         FROM app.tasks t
-       WHERE t.project_id = ANY(${projectIds}::integer[])
-         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
+       WHERE t.project_id = ANY(${projectIds}::integer[])          AND t.deleted_at IS NULL         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${effectiveOnly}::boolean = false OR (t.lifecycle_status <> 'INVALID' AND t.work_status <> 'CANCELED'))
@@ -544,8 +543,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const [row] = await tx.sql<{ total: number }[]>`
       SELECT COUNT(*)::integer AS total
         FROM app.tasks t
-       WHERE t.project_id = ANY(${projectIds}::integer[])
-         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
+       WHERE t.project_id = ANY(${projectIds}::integer[])          AND t.deleted_at IS NULL         AND (${assigneeId}::integer IS NULL OR EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${assigneeId}))
          AND (${workStatuses}::text[] IS NULL OR t.work_status = ANY(${workStatuses}::text[]))
          AND (${scopeTypes}::text[] IS NULL OR t.scope_type = ANY(${scopeTypes}::text[]))
          AND (${effectiveOnly}::boolean = false OR (t.lifecycle_status <> 'INVALID' AND t.work_status <> 'CANCELED'))
@@ -581,8 +579,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
                ELSE 'SCHEDULED'
              END AS "dueState"
         FROM app.tasks t
-       WHERE t.project_id = ${input.projectId}
-         AND t.lifecycle_status = 'ACTIVE'
+       WHERE t.project_id = ${input.projectId}          AND t.deleted_at IS NULL         AND t.lifecycle_status = 'ACTIVE'
          AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
        ORDER BY CASE
                   WHEN t.work_status = 'DONE' THEN 2
@@ -634,8 +631,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
                  AND t.completed_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai'
              )::integer AS "completedThisWeek"
         FROM app.tasks t
-       WHERE t.project_id = ${input.projectId}
-         AND t.lifecycle_status = 'ACTIVE'
+       WHERE t.project_id = ${input.projectId}          AND t.deleted_at IS NULL         AND t.lifecycle_status = 'ACTIVE'
          AND (${excludedTaskIds}::integer[] IS NULL OR t.id <> ALL(${excludedTaskIds}::integer[]))
        GROUP BY GROUPING SETS ((), (t.module_id))
     `;
@@ -693,8 +689,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
              t.completed_at AS "completedAt",
              (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id = t.id) AS "assigneeId"
         FROM app.tasks t
-       WHERE t.project_id = ANY(${projects}::integer[])
-         AND t.work_status = 'DONE'
+       WHERE t.project_id = ANY(${projects}::integer[])          AND t.deleted_at IS NULL         AND t.work_status = 'DONE'
          AND t.lifecycle_status <> 'INVALID'
          AND t.completed_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
          AND t.completed_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'
@@ -706,8 +701,7 @@ export class PostgresTaskQueryPort extends TaskQueryPort {
     const [countRow] = await tx.sql<{ total: number }[]>`
       SELECT COUNT(*)::integer AS total
         FROM app.tasks t
-       WHERE t.project_id = ANY(${projects}::integer[])
-         AND t.work_status = 'DONE'
+       WHERE t.project_id = ANY(${projects}::integer[])          AND t.deleted_at IS NULL         AND t.work_status = 'DONE'
          AND t.lifecycle_status <> 'INVALID'
          AND t.completed_at >= (${input.fromDate}::date::timestamp AT TIME ZONE 'Asia/Shanghai')
          AND t.completed_at < (${input.toDate}::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai'

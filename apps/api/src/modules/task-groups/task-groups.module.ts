@@ -23,6 +23,10 @@ import {
   PostgresTaskGroupReadPort,
   TaskGroupReadPort,
 } from "./task-group-read.port.js";
+import {
+  SqlTaskGroupDeletionPort,
+  TaskGroupDeletionPort,
+} from "./task-group-deletion.port.js";
 import { TaskGroupsService } from "./task-groups.service.js";
 import { TaskGroupsHttpService } from "./task-groups-http.service.js";
 import { TaskGroupUnmergeHttpService } from "./task-group-unmerge-http.service.js";
@@ -51,12 +55,14 @@ import { TaskGroupsController } from "./task-groups.controller.js";
       useClass: PostgresTaskGroupMembershipReadPort,
     },
     { provide: TaskGroupReadPort, useClass: PostgresTaskGroupReadPort },
+    { provide: TaskGroupDeletionPort, useClass: SqlTaskGroupDeletionPort },
     TaskGroupUnmergeHttpService,
   ],
   exports: [
     TaskBranchQueryPort,
     TaskGroupMembershipReadPort,
     TaskGroupReadPort,
+    TaskGroupDeletionPort,
   ],
   controllers: [TaskGroupsController],
 })

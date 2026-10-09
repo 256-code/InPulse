@@ -18,8 +18,10 @@ import { LeftoverTaskSource } from "./LeftoverTaskSource";
 import React, { useMemo, useRef, useState } from "react";
 import { TaskStatusPanel } from "./TaskStatusPanel";
 import { useTaskMarks, type TaskMark } from "./task-marks";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input } from "antd";
+import { createIdempotencyKey } from "@shared/api/idempotency-key";
+import { invalidateShellCounters } from "@shared/api/shell-counters";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import {
   CalmDateTimeInput,
@@ -215,6 +217,87 @@ function TaskDueBadge({ item }: { readonly item: TaskViewItem }) {
   );
 }
 
+/**
+ * ADR-058：删除任务专用错误文案。`taskError` 是编辑场景的通用映射（「输入已保留，
+ * 请加载最新版本后继续编辑」），删除弹窗没有输入也没有重载按钮，因此 409 直接
+ * 透出服务端原因（如聚合组主任务 `TASK_GROUP_MAIN_LOCKED`），不追加编辑话术。
+ */
+function deletionError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录。";
+    if (error.status === 403) return "权限或安全校验未通过，请重新登录后重试。";
+    if (error.status === 404) return "任务不存在，或你已无权访问。";
+    if (error.status === 409 || error.status === 422)
+      return `${error.message}。`;
+    if (error.status === 429) return "请求过于频繁，请稍后重试。";
+  }
+  return "任务服务暂时不可用，请稍后重试。";
+}
+
+/**
+ * ADR-058：删除任务二次确认。删除即软删除——任务从项目、任务中心、看板、
+ * 搜索与动态的可见范围消失且没有恢复入口；服务端同一事务解除外部链接关联、
+ * 作废该任务的已发布记录（作废快照与版本保留）、解除聚合组，并写审计与项目
+ * 动态留痕，因此确认文案要把这三件事说清。
+ */
+function TaskDeletionConfirm({
+  item,
+  open,
+  pending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  item: TaskViewItem | undefined;
+  open: boolean;
+  pending: boolean;
+  error: unknown;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      className="catalog-modal"
+      open={open && item !== undefined}
+      eyebrow={item ? `${item.code} / 删除任务` : "删除任务"}
+      title="确认删除任务"
+      tone="danger"
+      icon="alert"
+      onCancel={onCancel}
+      mask={{ closable: true }}
+      footer={
+        <>
+          <Button className="secondary-button" onClick={onCancel}>
+            取消
+          </Button>
+          <Button
+            className="primary-button danger-button"
+            data-testid="confirm-delete-task"
+            loading={pending}
+            onClick={onConfirm}
+          >
+            确认删除
+          </Button>
+        </>
+      }
+    >
+      <div className="catalog-form">
+        <div className="dialog-form">
+          <Alert
+            showIcon
+            type="warning"
+            title={`确认删除任务「${item?.title ?? ""}」？`}
+            description="删除后该任务会从项目、任务中心、看板、搜索与动态中消失，且不能恢复。已关联的 GitHub 链接会解除关联，该任务已发布的迭代记录会被作废（作废快照与历史版本保留）；删除动作会记入审计日志与项目动态。"
+          />
+          {error ? (
+            <Alert showIcon type="error" title={deletionError(error)} />
+          ) : null}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function MergeIntoTargetModal({
   task,
   api,
@@ -297,6 +380,8 @@ export function TasksPanel({
   const [statusAction, setStatusAction] = useState<
     TaskStatusRequest["action"] | null
   >(null);
+  /** ADR-058：删除任务的二次确认。删除即软删除，没有恢复入口。 */
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusToken, setStatusToken] = useState(0);
   const [selection, setSelection] = useState<{ item?: TaskViewItem } | null>(
     null,
@@ -452,6 +537,7 @@ export function TasksPanel({
     setStatusAction(null);
     setOpenRecordId(null);
     setPublishedRecord(null);
+    setDeleteOpen(false);
     onDetailClose?.();
   };
   /**
@@ -467,6 +553,8 @@ export function TasksPanel({
     setTab("info");
     setStatusAction(null);
     setOpenRecordId(null);
+    // 详情回退 / 合并交接只清 selection、不清删除确认态，避免打开任务时误弹确认框。
+    setDeleteOpen(false);
     generation.current++;
     setSelection(item ? { item: { ...item } } : {});
     reset(item ? taskEdit(item) : empty);
@@ -495,13 +583,84 @@ export function TasksPanel({
     const returnId = mode === "detail" ? (selection?.item?.id ?? null) : null;
     setSelection(null);
     setMerge(null);
+    setDeleteOpen(false);
     if (returnId !== null) openDetail(returnId);
   };
+  /**
+   * ADR-058：删除任务。服务端在同一事务内软删除任务行（`deleted_at`）、解除
+   * 外部链接关联、作废该任务的已发布记录、解除聚合组并写审计与项目动态；
+   * 前端只负责二次确认与失效缓存，不提供恢复入口。
+   */
+  const deletion = useMutation({
+    mutationFn: async (item: TaskViewItem) => {
+      const csrf = await api.issueCsrfToken();
+      const init = {
+        headers: {
+          "x-csrf-token": csrf.csrfToken,
+          "Idempotency-Key": createIdempotencyKey("task-delete"),
+          "If-Match": `"${item.rowVersion}"`,
+        },
+      };
+      return item.featureId === null
+        ? api.deleteModuleTask(
+            projectId,
+            moduleId,
+            item.id,
+            { reason: null },
+            init,
+          )
+        : api.deleteTask(
+            projectId,
+            moduleId,
+            item.featureId,
+            item.id,
+            { reason: null },
+            init,
+          );
+    },
+    retry: false,
+    onSuccess: () => {
+      setDeleteOpen(false);
+      setSelection(null);
+      // 刷新必须非阻塞：query-core 在 `onSuccess` resolve 之后才 dispatch success，
+      // 也就是这 20 条失效链路跑完 `isPending` 才转 false；而确认弹窗的取消按钮、
+      // 遮罩与 ✕ 都按它上锁——await 在这里会让弹窗一直转圈并且关不掉。
+      void Promise.all(
+        [
+          ["tasks"],
+          ["task-board"],
+          ["task-group"],
+          ["task-group-records"],
+          ["task-marks"],
+          ["my-tasks"],
+          ["my-task-groups"],
+          ["modules"],
+          ["features"],
+          ["project-overview"],
+          ["projects"],
+          ["activity"],
+          ["activity-center"],
+          ["search"],
+          ["notifications"],
+          ["record-feed"],
+          ["task-external-links"],
+          // 被作废的记录可能已在记录页 / 项目主页弹窗里被打开过，按当前项目前缀
+          // 一起失效（记录 ID 在删除前未知，取不到逐条 key）。
+          ["published-record", projectId],
+          ["record-versions", projectId],
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+      // 删除会改变侧栏计数（任务中心未完成 / 遗留问题），与作废记录同一处理。
+      void invalidateShellCounters(queryClient);
+    },
+  });
   /**
    * 2026-10-09 改版：任务级操作（取消任务 / 合并到主任务）从详情弹窗动作行搬到
    * 「编辑任务」弹窗页脚。编辑弹窗打开时详情弹窗已经卸载（`open` 会清掉 selectedId），
    * 所以点这两枚按钮要先回到详情弹窗，再触发各自原有的确认流程，不会出现弹窗套弹窗。
    * 开放条件与详情动作行同一口径：只对未完成任务、且通过同一条写入门禁。
+   * ADR-058：页脚第一枚已由「取消任务」改为「删除任务」（二次确认后删除），
+   * 条件由 `deletion.isPending` 承担。
    */
   const editorTaskOpsEnabled =
     selection?.item !== undefined &&
@@ -513,13 +672,16 @@ export function TasksPanel({
     generation.current++;
     setSelection(null);
     setMerge(null);
+    setDeleteOpen(false);
     if (id === null) return false;
     openDetail(id);
     setOpenRecordId(null);
     return true;
   };
   const cancelFromEditor = () => {
-    if (handOffToDetail()) openStatus("CANCEL");
+    if (saving.current || reloading || deletion.isPending) return;
+    deletion.reset();
+    setDeleteOpen(true);
   };
   const mergeFromEditor = () => {
     if (handOffToDetail()) setMergeInto(true);
@@ -1107,16 +1269,8 @@ export function TasksPanel({
                     重新打开
                   </Button>
                 )}
-                {current.workStatus === "CANCELED" && (
-                  <Button
-                    className="primary-button"
-                    disabled={!taskWritable}
-                    onClick={() => openStatus("RESTORE")}
-                  >
-                    <InpulseIcon name="rotateCcw" size={15} />
-                    恢复任务
-                  </Button>
-                )}
+                {/* ADR-058：取消任务改为「删除任务」（编辑弹窗页脚），取消即删除、
+                    不提供恢复入口，因此这里不再渲染「恢复任务」。 */}
               </div>
               <CalmTabs
                 label="任务内容"
@@ -1733,11 +1887,11 @@ export function TasksPanel({
               <div className="footer-leading task-op-actions">
                 <Button
                   className="tint-danger-button"
-                  disabled={!editorTaskOpsEnabled}
+                  disabled={!editorTaskOpsEnabled || deletion.isPending}
                   onClick={cancelFromEditor}
                 >
                   <InpulseIcon name="alert" size={15} />
-                  取消任务
+                  删除任务
                 </Button>
                 <Button
                   className="tint-violet-button"
@@ -1770,6 +1924,21 @@ export function TasksPanel({
           </div>
         </form>
       </Modal>
+      {/* ADR-058：删除确认弹窗必须渲染在编辑弹窗**之外**（与编辑弹窗平级）。
+          曾把它挂在编辑弹窗子树内，而 rc-dialog 会 memo 化编辑弹窗的 children，
+          `open=false` / `pending=false` 的 prop 更新永远传不进去：删除成功后确认弹窗
+          会卡在打开态一直转圈、遮罩不撤、body 滚动锁死（已用两个变体实测对照确认）。 */}
+      <TaskDeletionConfirm
+        item={selection?.item}
+        open={deleteOpen}
+        pending={deletion.isPending}
+        error={deletion.error}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          const item = selection?.item;
+          if (item) deletion.mutate(item);
+        }}
+      />
     </section>
   );
 }

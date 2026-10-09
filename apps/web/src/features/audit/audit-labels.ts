@@ -19,10 +19,13 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "project.member.role.set": "调整成员角色",
   "module.create": "创建模块",
   "module.update": "更新模块",
+  // ADR-059：删除模块与删除功能（软删除，无还原入口）。
+  "module.delete": "删除模块",
   "module.archive": "归档模块",
   "module.restore": "恢复模块",
   "feature.create": "创建功能",
   "feature.update": "更新功能",
+  "feature.delete": "删除功能",
   "feature.archive": "归档功能",
   "feature.restore": "恢复功能",
   "task.create": "创建任务",
@@ -32,6 +35,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "task.unarchive": "恢复任务",
   "task.merge": "合并任务",
   "task.unmerge": "解除合并",
+  // ADR-058：删除任务（软删除，无恢复入口）。
+  "task.delete": "删除任务",
   "record.draft.create": "创建草稿",
   "record.draft.update": "更新草稿",
   "record.draft.delete": "删除草稿",

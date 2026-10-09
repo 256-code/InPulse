@@ -459,6 +459,7 @@ export class PostgresChangeRecordReadPort extends ChangeRecordReadPort {
           ON f.id = cr.feature_id
          AND f.module_id = cr.module_id
          AND f.project_id = cr.project_id
+         AND f.deleted_at IS NULL
        WHERE cr.project_id = ${input.projectId}
          AND cr.status = 'PUBLISHED'
          AND (${moduleId}::integer IS NULL OR cr.module_id = ${moduleId})

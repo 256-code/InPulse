@@ -38,6 +38,7 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | listModules | 当前活跃项目成员、系统管理员 | 匿名/无效 Session 401，其他项目/已移除成员 404；ADR-044 起模块已无归档态，返回该项目全部模块 |
 | createModule | 当前活跃项目成员、系统管理员 | 同上；父项目三态下均可写（ADR-043，项目已无归档态），Session/CSRF 与幂等必需，只能创建 NORMAL |
 | updateModule | 当前活跃项目成员、系统管理员 | 同上；真实模块归属与父项目可写（ADR-043），If-Match；允许编辑未分类名称/描述 |
+| deleteModule | **仅系统管理员或本项目 ACTIVE 组长（LEADER）**（[ADR-059](adr/ADR-059.md)，ADR-039 下放的第五处例外） | 匿名/停用 401；非成员、已移除成员与不存在统一 404 `MODULE_NOT_FOUND`（不泄露存在性）；普通成员与项目管理员 403 `MODULE_DELETE_FORBIDDEN`；**未分类模块一律 409 `MODULE_UNCLASSIFIED_PROTECTED`**（[ADR-059](adr/ADR-059.md) §2.2 在既有「不能物理删除」之上追加禁止软删除）；`If-Match`（模块 `row_version`）不符 409 `MODULE_VERSION_CONFLICT`；模块下仍有活跃聚合组主任务 409 `TASK_GROUP_MAIN_LOCKED`（给出任务 ID 清单）；要求同源 / CSRF、数据库幂等；`reason` 可空 1～10000 字符，空白回落「模块已被删除」；**软删除**（`deleted_at` / `deleted_by` + `row_version` +1），级联软删除模块内全部功能与任务，不物理删除任何业务历史；重放由 `moduleDeleteReplayAuthorizer` 复核当前认证与实时 `scopeDeleterRole`，模块已软删除不使合法重放变成 404 |
 
 全部写接口重放前重查当前 Session/CSRF、原操作权限和结果模块可读权限。项目、模块与功能自 ADR-043 / ADR-044 / ADR-045 起都不再有归档只读态，不存在「父级已归档」的写入或重放拒绝；这些状态门禁不作用于普通 GET。
 
@@ -55,7 +56,8 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 | 彻底删除项目（`purgeProject` · `POST /api/v1/projects/{projectId}/purge`） | 401 | 403 | 403 | 403 | 401 | 允许 | [ADR-051](adr/ADR-051.md)：**只有系统管理员**可调用（含项目组长在内的其余身份一律 403 `PROJECT_PURGE_FORBIDDEN`，项目内授权不参与判定），项目不存在或已被彻底删除 404 `PROJECT_NOT_FOUND`，未删除 409 `PROJECT_NOT_DELETED`。物理删除在单一事务内经 `app.purge_project(integer)`（`SECURITY DEFINER` 窄口，运行时角色没有逐表 `DELETE` 权限）按外键序清空该项目的 27 处数据（模块、功能、任务、任务组、迭代记录、遗留项、全部关联表、通知、动态与搜索投影、`code_sequences`、`project_members`、外部链接，以及项目自己的 `audit_logs` / `audit_chain_heads`）后再删 `projects` 行（非 1 行即整体失败）；函数内 `fail closed` 要求 `deleted_at IS NOT NULL`；未分类模块的禁删触发器仅在同一事务的 `app.purge_project_id` 豁免下放行。SYSTEM 审计链不受影响，只新增一条 `project.purge`（操作者、项目编码与名称、逐项删除行数，`projectId` 为空——项目已不存在）作为**唯一保留的留痕**；响应 200 返回 `records` 七项计数。请求无正文，CSRF 与 `Idempotency-Key` 必填、`versionPolicy = none`；重放走专用门禁 `projectPurgeReplayAuthorizer`（只复核当前 Session 仍是有效系统管理员，按操作者隔离幂等记录），他人同 Key 或换 Key 一律拒绝。**自动路径（[ADR-055](adr/ADR-055.md)）**：同一条 `app.purge_project` 窄口另有一条后台触发——软删除满 30 天（按最后一次删除计时：还原清空 `deleted_at`，重新删除重写它）由服务端调度器以 SYSTEM 身份物理删除，SYSTEM 链写 `project.purge`（行 `actorType: "SYSTEM"`、载荷 `actorRole: "SYSTEM"`、`trigger: "AUTO_RETENTION"`、`retentionDays` 与 `deletedBy` 快照）；它没有 HTTP 入口，因此不新增路由、权限矩阵条目或幂等契约，也不放宽上面的授权口径 |
 | 读取项目及下级资源 | 401 | 允许 | 404 | 404 | 401 | 允许 | 资源型接口隐藏存在性；归档数据仍可读；VOID 记录按下一行 |
 | 读取 VOID 迭代记录详情 | 401 | 404 | 404 | 404 | 401 | 允许 | `status` 是可见性真相；恢复为 PUBLISHED 后活跃成员重新可读 |
-| 新建或编辑模块、功能、任务、记录、链接 | 401 | 允许 | 404 | 404 | 401 | 允许 | 父级模块 / 功能可写（ADR-043，项目无归档态）；写接口默认幂等；未分类模块允许编辑名称、描述，kind 不变，不能物理删除（2026-09-09 人工确认；F-12 已本地实现，真库验收待运行） |
+| 新建或编辑模块、功能、任务、记录、链接 | 401 | 允许 | 404 | 404 | 401 | 允许 | 父级模块 / 功能可写（ADR-043，项目无归档态）；写接口默认幂等；未分类模块允许编辑名称、描述，kind 不变，不能物理删除（2026-09-09 人工确认；F-12 已本地实现，真库验收待运行）；[ADR-059](adr/ADR-059.md) 在此基础上追加：未分类模块也不能**软删除**（`deleteModule` 一律 409 `MODULE_UNCLASSIFIED_PROTECTED`，前端同样不渲染删除入口） |
+| 删除模块（`deleteModule` · `POST /api/v1/projects/{projectId}/modules/{moduleId}/delete`）与删除功能（`deleteFeature` · `POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete`） | 401 | **仅本项目 ACTIVE 组长**（普通成员与项目管理员 403） | 404 | 404 | 401 | 允许 | [ADR-059](adr/ADR-059.md)：在本项目内**只**对系统管理员与组长开放（ADR-039 第五处例外），服务端按实时成员关系判定、不缓存进 Session；两者都是**软删除**（`deleted_at` / `deleted_by` + `row_version` +1），不提供还原入口，也不物理删除任何业务历史；级联删除所含功能与任务（任务逐条复用 ADR-058 的全部副作用链：解除 GitHub 链接关联、作废其已发布记录、处理聚合组、审计、动态、搜索投影），功能与模块自身再补软删除、外部链接解除、范围内记录作废与投影移除；存在活跃聚合组主任务时整体 409 `TASK_GROUP_MAIN_LOCKED` 且事务整体回滚；`If-Match` 与 `Idempotency-Key` 必填；同事务写审计 `module.delete` / `feature.delete`（模块级联会为每个被删功能单独写一条 `feature.delete`）与动态 `MODULE_DELETED` / `FEATURE_DELETED`（`MEMBER` 可见）；**不发通知** |
 | 任务完成、重新打开、取消、恢复、合并、解除，遗留转任务 | 401 | 允许 | 404 | 404 | 401 | 允许 | 状态机、If-Match 与幂等约束 |
 | 搜索（`getSearch` · `GET /api/v1/search`） | 401 | 仅本人活跃项目 | 不返回本项目（可搜索其他活跃成员项目） | 不返回本项目（可搜索其他活跃成员项目） | 401 | 按服务端 Scope | SQL 前强制 AuthorizedProjectScope；`q` 最短 2、最长 200，`limit` 1～50、默认 20，`q`/`limit`/`cursor` 字段校验失败统一返回 422；`cursor` 为服务端 HMAC 签名、校验并带过期时间的不透明字符串，绑定当前用户与规范化查询，TTL 15 分钟，A 已于 2026-09-08 正式确认；VOID 默认不返回，仅系统管理员显式传 `includeVoid=true` 时可见，普通成员传该参数也不会扩大范围；`app_runtime` 只允许 `app` schema USAGE、业务事务内对 `search_projection` 执行 `SELECT/INSERT/UPDATE`、查询 `search_projection` 及执行 `pgroonga_query_escape`/`&@~` 所需函数，不允许 `DELETE`、DDL 或管理函数；`LEFTOVER`（遗留问题）投影由父记录发布/修订/作废/恢复与遗留项转任务在同一事务维护，其可见性与状态跟随父记录与遗留项，不单独放宽授权 |
 | 查看项目动态（`getProjectActivity` · `GET /api/v1/projects/{projectId}/activity`） | 401 | 允许 | 404 | 404 | 401 | 允许（默认 MEMBER；显式 `includeAdminOnly=true` 时可见 ADMIN_ONLY） | SQL 前强制服务端 `AuthorizedProjectScope`，不接受客户端传入授权范围；`projectId`、`limit`、`cursor`、`category` 校验失败统一 422；`cursor` 为服务端 HMAC 签名、绑定当前用户、项目与分类筛选、带过期时间的不透明字符串；普通成员传 `includeAdminOnly=true` 不扩大范围；`category`（`all`/`task`/`record`/`feature`/`module`/`project`/`member`/`github`）在 SQL 层按 `activityType` / `sourceEntityType` 过滤；`dayTotals` 按 Asia/Shanghai 自然日给出范围内全量总数（与当前 `includeAdminOnly`、`category` 同口径），不随分页增长；响应只暴露脱敏白名单字段；[ADR-050](adr/ADR-050.md) 例外（[ADR-052](adr/ADR-052.md) 修订范围）：项目已被软删除时，**任意**登录用户可读该链并下发**全部 MEMBER 可见动态**（从创建到删除的完整过程）；ADMIN_ONLY 行不因该例外可见，`includeAdminOnly` 不适用；「不存在」「无权访问」「已移除成员」仍是 404 |
@@ -99,6 +101,9 @@ F-14 功能级任务补充：`listTasks`、`getTask`、`listTaskAssignees`、`cr
 | findSimilarFeatures | 活跃项目成员、系统管理员 | 同上；SQL 在 LIMIT 前限制当前项目 FEATURE + MEMBER 投影；提示不阻止同名创建 |
 | createFeature | 活跃项目成员、系统管理员 | 项目与模块存在且归属正确（ADR-043 起项目、ADR-044 起模块都无归档态）；Session、CSRF、同源和幂等 Key；只接受 name/currentBehavior/tags |
 | updateFeature | 活跃项目成员、系统管理员 | 同上且功能存在（ADR-045 起功能只有 ACTIVE），If-Match；说明前后审计，不生成迭代记录 |
+| deleteFeature | **仅系统管理员或本项目 ACTIVE 组长（LEADER）**（[ADR-059](adr/ADR-059.md)，ADR-039 下放的第五处例外） | 匿名/停用 401；非成员、已移除成员与不存在统一 404 `FEATURE_NOT_FOUND`（不泄露存在性）；普通成员与项目管理员 403 `FEATURE_DELETE_FORBIDDEN`；`If-Match`（功能 `row_version`）不符 409 `FEATURE_VERSION_CONFLICT`；功能下仍有活跃聚合组主任务 409 `TASK_GROUP_MAIN_LOCKED`；要求同源 / CSRF、数据库幂等；`reason` 可空 1～10000 字符，空白回落「功能已被删除」；**软删除**（`deleted_at` / `deleted_by` + `row_version` +1），级联软删除该功能下全部任务与该功能范围内的迭代记录（模块级记录不属该功能范围），不物理删除任何业务历史；重放由 `featureDeleteReplayAuthorizer` 复核当前认证与实时 `scopeDeleterRole`，功能已软删除不使合法重放变成 404 |
+
+功能删除与模块删除由 [ADR-059](adr/ADR-059.md) 新增；两者不新增数据库表级 `DELETE` 权限，也不改任何既有授权口径。
 
 两条写接口重放前重查 Session/CSRF、当前项目授权与完整结果归属；项目、模块或功能归属不存在时拒绝重放（ADR-043 起项目、ADR-044 起模块、ADR-045 起功能都无归档态，不再有存留的归档路由身份复核）。重复状态操作可重放原成功结果，不重复执行状态迁移。所有拒绝返回统一错误体，不泄露已存响应。真实测试入口见 [F-13 交审说明](f13-local-handoff.md)。
 
@@ -209,6 +214,8 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 
 读取与重放在真实父级锁后取目标FOR SHARE并重读，锁保持至本次关联读取/重放授权完成；预读状态不参与最终可见性判定。等待父锁期间PUBLISHED转VOID后，普通GET与添加/解除重放均404，管理员只读。Route Registry与实写审计统一EXTERNAL_LINK_ADDED/EXTERNAL_LINK_REMOVED；真实锁竞态和验证更正见[F22交审说明](f22-local-handoff.md)。
 
+2026-10-09 修订：链接事件的动态摘要写明链接标签与目标身份快照（仍不写 URL/正文），并按 ADR-048 跳过未发布草稿——DRAFT 记录上的添加/解除只留审计，不进入项目动态；权限主体、锁序、幂等与重放门禁不变，不新增迁移。
+
 
 ## ADR-030 项目与任务新增入口
 
@@ -226,3 +233,14 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | addChangeRecordLeftover | 活跃项目成员、系统管理员 | 匿名/停用 401；非成员/撤权/跨项目/记录不存在 404；记录非 PUBLISHED 或真实父级不可写 409；`If-Match`（记录 row_version）与 `X-Record-Version`（current_version）锁内校验，不匹配 409；`content` 1～10000 字符、空白拒绝 422；同源/CSRF、数据库幂等 |
 
 一条迭代记录可挂多条遗留问题（每条 1～10000 字符、单记录最多 50 条），草稿与正式版本使用同一上限。追加接口只新增一条 ACTIVE 条目，服务端仍生成一次记录版本（进入版本历史，并按修订规则通知原作者与来源任务当前负责人）；既有条目 ID、状态与任务关联不变。移除 ACTIVE 条目必须明确确认已解决（RESOLVED），CONVERTED 条目保留关联且不重复建任务。重放重新验证当前认证、CSRF、实时权限、可写父级与 `leftovers[].id` 全部结果资源。无新增数据库角色或权限。
+
+## ADR-058 删除任务接口（2026-10-09）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `deleteTask` | 401 | 允许 | 404 | 404 | 401 | 允许 | 父级可写（项目 / 模块 / 功能）、任务可读且未删除、`If-Match`（任务 `row_version`）锁内校验；同源 / CSRF、数据库幂等；`reason` 可空 1～10000 字符 |
+| `deleteModuleTask` | 401 | 允许 | 404 | 404 | 401 | 允许 | 同上，模块级任务无功能段 |
+
+删除是**软删除**：任务退出全部读路径（列表、任务中心、看板、详情、成员任务、项目统计与完成率），但编号、状态历史、迭代记录与审计原样保留。同一事务内解除该任务的 GitHub 链接关联（`app.external_links` 链接本体保留）、作废该任务的全部迭代记录、按聚合组身份处理关系（`SOURCE` 自动标记 `DETACHED`、最后一个来源关闭聚合组；`MAIN` 拒绝并返回 409 `TASK_GROUP_MAIN_LOCKED`），并写 `task.delete` 审计与 `TASK_DELETED` 动态、移除搜索投影。版本冲突 409 `TASK_STATE_CONFLICT`；删除后再次删除返回 404。
+
+重放**不要求任务仍可读**（任务行已软删除）：只复核当前认证有效、缓存的 `projectId` / `moduleId` / `featureId` / `taskId` 与请求一致、以及原操作的写入门禁（项目可写 + 模块 / 功能归属）。普通项目成员即可删除，不需要管理员身份；不作废恢复、不重建链接关联、不提供还原入口。

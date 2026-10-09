@@ -153,7 +153,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
             <span>
               {data.project.name} · 数据截至{" "}
               {formatTaskBoardDateTime(data.generatedAt)} · 完成率 = 已完成
-              ÷（总任务 - 已取消）
+              ÷（已完成 + 未完成）
             </span>
           </h1>
           <button
@@ -186,7 +186,6 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
             all: data.stats.total,
             open: data.stats.open,
             done: data.stats.done,
-            canceled: data.stats.canceled,
             overdue: data.stats.overdue,
             today: data.stats.dueToday,
           }}
@@ -249,14 +248,9 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
             <i className="tb-foot-dot tb-dot-done" aria-hidden="true" />
             已完成
           </span>
-          <span>
-            <i className="tb-foot-dot tb-dot-canceled" aria-hidden="true" />
-            已取消
-          </span>
         </div>
         <span>
-          卡片顺序：逾期 → 未完成按优先级与截止 → 已完成 → 已取消 ·
-          点击卡片查看任务详情
+          卡片顺序：逾期 → 未完成按优先级与截止 → 已完成 · 点击卡片查看任务详情
         </span>
       </div>
 

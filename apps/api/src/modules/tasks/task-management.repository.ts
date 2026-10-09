@@ -35,6 +35,18 @@ export interface TaskScope {
   featureId: number | null;
 }
 
+/** ADR-058：软删除成功后返回的任务快照，供响应与审计使用。 */
+export interface TaskDeletionRow {
+  id: number;
+  projectId: number;
+  moduleId: number;
+  featureId: number | null;
+  code: string;
+  title: string;
+  workStatus: "TODO" | "DONE" | "CANCELED";
+  deletedAt: Date;
+}
+
 @Injectable()
 export class TaskManagementRepository {
   async history(tx: TransactionContext, scope: TaskScope, taskId: number) {
@@ -84,8 +96,7 @@ export class TaskManagementRepository {
           completed_at=CASE WHEN ${to}='DONE' THEN (SELECT at FROM stamp) ELSE NULL END,
           updated_at=(SELECT at FROM stamp), row_version=row_version+1
         WHERE id=${current.id} AND project_id=${current.projectId} AND row_version=${current.rowVersion}
-          AND work_status=${current.workStatus} AND lifecycle_status='ACTIVE'
-        RETURNING *
+          AND work_status=${current.workStatus} AND lifecycle_status='ACTIVE'           AND deleted_at IS NULL        RETURNING *
       )
       INSERT INTO app.task_status_history(task_id,project_id,from_work_status,to_work_status,
         completed_at_snapshot,completion_note_snapshot,reason,changed_by,changed_at)
@@ -127,7 +138,7 @@ export class TaskManagementRepository {
   async list(tx: TransactionContext, scope: TaskScope): Promise<TaskRecord[]> {
     const rows = await tx.sql<
       Row[]
-    >`SELECT t.id, t.project_id AS "projectId", t.module_id AS "moduleId", t.feature_id AS "featureId", t.scope_type AS "scopeType", t.code, t.title, t.description, a.ids AS "assigneeIds", a.ids[1] AS "assigneeId", t.creator_id AS "creatorId", t.priority, t.work_status AS "workStatus", t.lifecycle_status AS "lifecycleStatus", t.due_at AS "dueAt", t.row_version AS "rowVersion", t.created_at AS "createdAt", t.updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=t.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks t LEFT JOIN LATERAL (SELECT array_agg(ta.user_id ORDER BY ta.user_id) AS ids FROM app.task_assignees ta WHERE ta.task_id=t.id) AS a ON true WHERE t.project_id = ${scope.projectId} AND t.module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`t.scope_type = 'MODULE' AND t.feature_id IS NULL` : tx.sql`((t.feature_id = ${scope.featureId} AND t.scope_type = 'FEATURE') OR (t.scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = t.id AND i.feature_id = ${scope.featureId})))`} ORDER BY ${taskListOrderBy(tx.sql)}`;
+    >`SELECT t.id, t.project_id AS "projectId", t.module_id AS "moduleId", t.feature_id AS "featureId", t.scope_type AS "scopeType", t.code, t.title, t.description, a.ids AS "assigneeIds", a.ids[1] AS "assigneeId", t.creator_id AS "creatorId", t.priority, t.work_status AS "workStatus", t.lifecycle_status AS "lifecycleStatus", t.due_at AS "dueAt", t.row_version AS "rowVersion", t.created_at AS "createdAt", t.updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=t.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks t LEFT JOIN LATERAL (SELECT array_agg(ta.user_id ORDER BY ta.user_id) AS ids FROM app.task_assignees ta WHERE ta.task_id=t.id) AS a ON true WHERE t.deleted_at IS NULL AND t.project_id = ${scope.projectId} AND t.module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`t.scope_type = 'MODULE' AND t.feature_id IS NULL` : tx.sql`((t.feature_id = ${scope.featureId} AND t.scope_type = 'FEATURE') OR (t.scope_type = 'MODULE' AND EXISTS (SELECT 1 FROM app.task_feature_impacts i WHERE i.task_id = t.id AND i.feature_id = ${scope.featureId})))`} ORDER BY ${taskListOrderBy(tx.sql)}`;
     return rows.map(dto);
   }
   async find(
@@ -138,8 +149,39 @@ export class TaskManagementRepository {
   ): Promise<TaskRecord | undefined> {
     const [row] = await tx.sql<
       Row[]
-    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeIds", (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`} AND id = ${taskId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    >`SELECT id, project_id AS "projectId", module_id AS "moduleId", feature_id AS "featureId", scope_type AS "scopeType", code, title, description, (SELECT array_agg(ta.user_id ORDER BY ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeIds", (SELECT min(ta.user_id) FROM app.task_assignees ta WHERE ta.task_id=app.tasks.id) AS "assigneeId", creator_id AS "creatorId", priority, work_status AS "workStatus", lifecycle_status AS "lifecycleStatus", due_at AS "dueAt", row_version AS "rowVersion", created_at AS "createdAt", updated_at AS "updatedAt", ARRAY(SELECT i.feature_id FROM app.task_feature_impacts i JOIN app.features x ON x.id = i.feature_id AND x.deleted_at IS NULL WHERE i.task_id=app.tasks.id ORDER BY i.feature_id) AS "impactFeatureIds" FROM app.tasks WHERE deleted_at IS NULL AND project_id = ${scope.projectId} AND module_id = ${scope.moduleId} AND ${scope.featureId === null ? tx.sql`scope_type = 'MODULE' AND feature_id IS NULL` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`} AND id = ${taskId} ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
     return row ? dto(row) : undefined;
+  }
+  /**
+   * ADR-059：级联删除模块（`featureId = null`）或功能时，按 ID 升序取该范围内
+   * 全部未删除任务。`lock` 为真时一次性 `FOR UPDATE`（先排序再取锁，使同一
+   * 事务内与跨事务的等待方向都是 ID 升序，避免交叉等待）。
+   */
+  async listForDeletionScope(
+    tx: TransactionContext,
+    projectId: number,
+    scope: { moduleId: number; featureId: number | null },
+    lock = false,
+  ): Promise<{ id: number; rowVersion: number }[]> {
+    const rows = await tx.sql<
+      { id: number; rowVersion: number }[]
+    >`SELECT id, row_version AS "rowVersion" FROM app.tasks WHERE project_id = ${projectId} AND module_id = ${scope.moduleId} AND deleted_at IS NULL AND ${scope.featureId === null ? tx.sql`true` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`} ORDER BY id ${lock ? tx.sql`FOR UPDATE` : tx.sql``}`;
+    return Array.from(rows);
+  }
+  /**
+   * ADR-059：一次取回范围内全部活跃聚合组主任务，用于级联开始前的确定性门禁。
+   * 必须与逐条删除解耦：逐条处理时先删的来源会把所在组关掉、主任务随即变成
+   * 非 MAIN，同一个模块的删除结果会随任务 ID 顺序而变。
+   */
+  async listActiveMainTaskIds(
+    tx: TransactionContext,
+    projectId: number,
+    scope: { moduleId: number; featureId: number | null },
+  ): Promise<number[]> {
+    const rows = await tx.sql<
+      { id: number }[]
+    >`SELECT m.task_id AS id FROM app.task_group_members m JOIN app.task_groups g ON g.id = m.group_id AND g.project_id = m.project_id WHERE m.project_id = ${projectId} AND m.status = 'ACTIVE' AND m.role = 'MAIN' AND g.status = 'ACTIVE' AND m.task_id IN (SELECT id FROM app.tasks WHERE project_id = ${projectId} AND module_id = ${scope.moduleId} AND deleted_at IS NULL AND ${scope.featureId === null ? tx.sql`true` : tx.sql`scope_type = 'FEATURE' AND feature_id = ${scope.featureId}`}) ORDER BY m.task_id`;
+    return Array.from(rows, (row) => row.id);
   }
   async create(
     tx: TransactionContext,
@@ -161,7 +203,7 @@ export class TaskManagementRepository {
     edit: TaskEditRequest,
   ): Promise<TaskRecord | undefined> {
     const rows =
-      await tx.sql`UPDATE app.tasks SET title = ${edit.title}, description = ${edit.description}, priority = ${edit.priority}, due_at = ${edit.dueAt}, row_version = row_version + 1, updated_at = now() WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} RETURNING id`;
+      await tx.sql`UPDATE app.tasks SET title = ${edit.title}, description = ${edit.description}, priority = ${edit.priority}, due_at = ${edit.dueAt}, row_version = row_version + 1, updated_at = now() WHERE id = ${current.id} AND project_id = ${current.projectId} AND row_version = ${current.rowVersion} AND deleted_at IS NULL RETURNING id`;
     if (rows.length === 0) return undefined;
     await this.replaceAssignees(
       tx,
@@ -171,6 +213,28 @@ export class TaskManagementRepository {
       current.assigneeIds,
     );
     return this.find(tx, current, current.id);
+  }
+  /**
+   * ADR-058：任务软删除。只命中未删除且版本一致的任务，并让 row_version 恰好 +1
+   * （tasks_row_version 触发器要求）；未命中返回 undefined，由调用方映射 409。
+   * ADR-059：入参收窄为任务引用（id + projectId），级联删除不必先读整行。
+   */
+  async softDelete(
+    tx: TransactionContext,
+    current: Pick<TaskRecord, "id" | "projectId">,
+    expectedRowVersion: number,
+    actorId: number,
+  ): Promise<TaskDeletionRow | undefined> {
+    const rows = await tx.sql<TaskDeletionRow[]>`
+      UPDATE app.tasks SET deleted_at = clock_timestamp(), deleted_by = ${actorId},
+        row_version = row_version + 1, updated_at = GREATEST(clock_timestamp(), updated_at)
+      WHERE id = ${current.id} AND project_id = ${current.projectId}
+        AND row_version = ${expectedRowVersion} AND deleted_at IS NULL
+      RETURNING id, project_id AS "projectId", module_id AS "moduleId",
+        feature_id AS "featureId", code, title, work_status AS "workStatus",
+        deleted_at AS "deletedAt"
+    `;
+    return rows[0];
   }
   /**
    * 负责人集合的唯一写入路径：先删后插（app_runtime 不持有 UPDATE）。

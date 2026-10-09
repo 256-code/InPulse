@@ -17,6 +17,7 @@ export class PostgresFeatureQueryPort extends FeatureQueryPort {
       FROM app.features
       WHERE id = ${input.featureId} AND project_id = ${input.projectId}
         AND module_id = ${input.moduleId}
+        AND deleted_at IS NULL
       FOR SHARE
     `;
     if (!resource) return { kind: "not-found" };

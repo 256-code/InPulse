@@ -1,6 +1,7 @@
 import React from "react";
 import { ConfigProvider } from "antd";
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -13,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   type InpulseApiClient,
+  type CurrentUserResponse,
   type FeatureItem,
 } from "@generated/api";
 import { FeaturesPageView } from "./FeaturesPageView";
@@ -537,4 +539,159 @@ it("功能概览显示验收标准，编辑时保留并提交", async () => {
       expect.anything(),
     ),
   );
+});
+
+describe("ADR-059 功能删除入口", () => {
+  const member = (isAdmin: boolean): CurrentUserResponse => ({
+    id: 7,
+    loginName: isAdmin ? "tege" : "shaochenyu",
+    name: isAdmin ? "管理员" : "邵晨宇",
+    email: null,
+    avatarUrl: null,
+    isAdmin,
+    status: "ACTIVE",
+  });
+  const detailItem: FeatureItem = {
+    ...item,
+    stats: { openTaskCount: 7, recordCount: 5, completedTaskCount: 7 },
+  };
+  const project = { id: 2, name: "项目" };
+  /** 弹窗内部（编辑 / 删除入口）需要实时角色，因此这里显式给出认证态。 */
+  const mountWith = (
+    client: InpulseApiClient,
+    options: { readonly isAdmin: boolean; readonly featureId?: number },
+  ) =>
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider
+          value={{ status: "authenticated", user: member(options.isAdmin) }}
+        >
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter
+              initialEntries={[
+                options.featureId === undefined
+                  ? "/projects/2/modules/4/features"
+                  : "/projects/2/modules/4/features/" + options.featureId,
+              ]}
+            >
+              <Routes>
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features"
+                  element={
+                    <FeaturesPageView
+                      projectId={2}
+                      moduleId={4}
+                      client={withModules(client)}
+                    />
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features/:featureId"
+                  element={
+                    <FeaturesPageView
+                      projectId={2}
+                      moduleId={4}
+                      featureId={options.featureId}
+                      client={withModules(client)}
+                    />
+                  }
+                />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+  const projectClient = (overrides: Record<string, unknown>) =>
+    ({
+      listFeatures: vi.fn().mockResolvedValue({ items: [detailItem] }),
+      getProject: vi
+        .fn()
+        .mockResolvedValue({ project, currentUserRole: "LEADER" }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+      ...overrides,
+    }) as unknown as InpulseApiClient;
+
+  it("组长在编辑弹窗里按影响面确认后带 If-Match 删除功能", async () => {
+    const deleteFeature = vi.fn().mockResolvedValue({ id: item.id });
+    const api = projectClient({ deleteFeature });
+    mountWith(api, { isAdmin: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    const entry = await screen.findByRole("button", { name: "删除功能" });
+    expect(entry.className).toContain("danger-button");
+    fireEvent.click(entry);
+
+    expect(await screen.findByText("确认删除功能")).toBeTruthy();
+    expect(
+      screen.getByText(/该功能下有 7 项未完成任务与 7 项已完成任务/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("confirm-delete-feature"));
+
+    await waitFor(() =>
+      expect(deleteFeature).toHaveBeenCalledWith(
+        2,
+        4,
+        3,
+        { reason: null },
+        {
+          headers: {
+            "x-csrf-token": "a".repeat(43),
+            "Idempotency-Key": expect.stringMatching(/^feature-delete-/),
+            "If-Match": '"1"',
+          },
+        },
+      ),
+    );
+  });
+
+  it("普通成员看不到删除入口，系统管理员可以删除", async () => {
+    mountWith(
+      projectClient({
+        getProject: vi
+          .fn()
+          .mockResolvedValue({ project, currentUserRole: "MEMBER" }),
+      }),
+      { isAdmin: false },
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    // 弹窗照常打开，只是没有删除入口。
+    expect(await screen.findByRole("button", { name: /保\s*存/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "删除功能" })).toBeNull();
+
+    cleanup();
+    const adminApi = projectClient({
+      getProject: vi.fn().mockResolvedValue({ project, currentUserRole: null }),
+    });
+    mountWith(adminApi, { isAdmin: true });
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    expect(
+      await screen.findByRole("button", { name: "删除功能" }),
+    ).toBeTruthy();
+  });
+
+  it("在功能详情里删除当前功能后退回功能列表", async () => {
+    const deleteFeature = vi.fn().mockResolvedValue({ id: item.id });
+    mountWith(projectClient({ deleteFeature }), {
+      isAdmin: false,
+      featureId: 3,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑功能" }));
+    fireEvent.click(await screen.findByRole("button", { name: "删除功能" }));
+    fireEvent.click(await screen.findByTestId("confirm-delete-feature"));
+
+    // 当前功能已经不存在，宿主页面必须退到功能列表：详情页头独有的返回按钮消失。
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "返回功能列表" })).toBeNull(),
+    );
+    expect(
+      await screen.findByRole("button", { name: "编辑功能" }),
+    ).toBeInTheDocument();
+  });
 });

@@ -6,6 +6,13 @@ export interface LinkTarget {
   featureId: number | null;
   status: string;
   rowVersion: number;
+  /**
+   * 正式编号（草稿记录为 null）。与 title 一起只用于同事务写动态摘要快照，
+   * 不参与授权、锁序或业务判定。
+   */
+  code: string | null;
+  /** 目标的人类可读标题（项目 / 功能取名称）；同样只用于动态摘要。 */
+  title: string;
 }
 export type LinkTargetLock = "share" | "update";
 /** Shared/read and update locks remain held until the caller transaction ends. */

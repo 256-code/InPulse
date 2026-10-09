@@ -919,6 +919,63 @@ describe("F22 typed external links", () => {
       ).items,
     ).toMatchObject([{ normalizedUrl: canceledUrl }]);
   });
+  it("动态摘要写明关联的链接与目标任务，草稿链接不产生活动", async () => {
+    const f = await fixture(),
+      actor = await session(f.userId),
+      taskId = await taskFixture(f);
+    const added = await linkRequest("TASK", taskId, actor);
+    expect(added.status, await added.clone().text()).toBe(200);
+    const add = schemaRegistry.ExternalLinkResult.schema.parse(
+      await added.json(),
+    );
+    const readLinkActivity = () =>
+      db.sql<{ activity_type: string; summary: string }[]>`
+        SELECT activity_type, summary FROM app.activity_projection
+         WHERE project_id=${f.projectId} AND activity_type LIKE 'EXTERNAL_LINK%'
+         ORDER BY id`;
+    expect(await readLinkActivity()).toEqual([
+      {
+        activity_type: "EXTERNAL_LINK_ADDED",
+        summary: `添加 GitHub 关联：PR #245（任务 ${f.code}-T-1「链接任务」）`,
+      },
+    ]);
+    // 添加关联已把任务行版本推进到 2，解除必须带当前版本。
+    const removed = await linkRequest(
+      "TASK",
+      taskId,
+      actor,
+      2,
+      undefined,
+      add.linkId,
+    );
+    expect(removed.status, await removed.clone().text()).toBe(200);
+    expect((await readLinkActivity()).map((row) => row.summary)).toEqual([
+      `添加 GitHub 关联：PR #245（任务 ${f.code}-T-1「链接任务」）`,
+      `解除 GitHub 关联：PR #245（任务 ${f.code}-T-1「链接任务」）`,
+    ]);
+    // ADR-048：未发布草稿不产生活动；草稿上的链接只留审计与自身读取。
+    const draftLink = await linkRequest(
+      "CHANGE_RECORD",
+      f.draft.id,
+      actor,
+      1,
+      "https://github.com/inpulse/core/issues/11",
+    );
+    expect(draftLink.status, await draftLink.clone().text()).toBe(200);
+    expect(
+      await db.sql`SELECT id FROM app.activity_projection WHERE project_id=${f.projectId} AND source_entity_type='CHANGE_RECORD'`,
+    ).toHaveLength(0);
+    expect(
+      schemaRegistry.ExternalLinkList.schema.parse(
+        await (await listLinks("CHANGE_RECORD", f.draft.id, actor)).json(),
+      ).items,
+    ).toHaveLength(1);
+    expect(
+      await auditDb.sql<
+        { action: string }[]
+      >`SELECT action FROM app.audit_logs WHERE project_id=${f.projectId} AND target_type='CHANGE_RECORD' AND target_id=${String(f.draft.id)} AND action LIKE 'EXTERNAL_LINK%'`,
+    ).toEqual([{ action: "EXTERNAL_LINK_ADDED" }]);
+  });
   it("same key concurrent replay and new-key duplicate are distinguished", async () => {
     const f = await fixture(),
       actor = await session(f.userId),

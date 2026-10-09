@@ -8,12 +8,13 @@ import {
 import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 
 /**
- * ADR-039：项目内管理操作（成员增删、模块/功能/任务归档恢复、项目状态变更、
- * 归档申请）对全体活跃成员开放，`LEADER` 只是身份标识，不再单独授予管理权；
- * 例外只有四处：ADR-053 组长可以转移组长身份（`roleSetterRole`），
+ * ADR-039：项目内管理操作（成员增删、项目状态变更）对全体活跃成员开放，
+ * `LEADER` 只是身份标识，不再单独授予管理权；
+ * 例外只有五处：ADR-053 组长可以转移组长身份（`roleSetterRole`），
  * ADR-049 只有组长与系统管理员可以删除项目（`projectDeleterRole`），
  * ADR-051 同口径的还原（`projectRestorerRole`）与只有系统管理员的彻底删除
- * （`projectPurgerRole`）。
+ * （`projectPurgerRole`），ADR-059 只有组长与系统管理员可以删除模块与功能
+ * （`scopeDeleterRole`）。
  */
 export type ProjectManageRole = "SYSTEM_ADMIN" | "MEMBER" | "LEADER";
 
@@ -152,5 +153,39 @@ export class ProjectRoleGateService {
     actorUserId: number,
   ): Promise<"SYSTEM_ADMIN" | "FORBIDDEN"> {
     return this.projectPurgerRole(actorUserId);
+  }
+
+  /**
+   * ADR-059 模块与功能删除门禁：只有系统管理员与本项目组长放行，本项目普通成员
+   * 归入 `MEMBER`（403 `MODULE_DELETE_FORBIDDEN` / `FEATURE_DELETE_FORBIDDEN`），
+   * 非成员（含已移除）归入 `NOT_MEMBER`（404，不泄露存在性）。这里单独成方法而
+   * 不复用 `projectDeleterRole`：删除模块/功能会级联删除其功能、任务与迭代记录，
+   * 与删除整个项目是两档不同的授权面，任何一侧调整都不应静默影响另一侧。
+   */
+  async scopeDeleterRole(
+    tx: TransactionContext,
+    actorUserId: number,
+    projectId: number,
+  ): Promise<"SYSTEM_ADMIN" | "LEADER" | "MEMBER" | "NOT_MEMBER"> {
+    const role = await this.manageRole(tx, actorUserId, projectId);
+    if (role === "SYSTEM_ADMIN" || role === "LEADER") return role;
+    if (role === "NOT_MEMBER") return "NOT_MEMBER";
+    return "MEMBER";
+  }
+
+  /**
+   * ADR-059 删除重放门禁（`moduleDeleteReplayAuthorizer` / `featureDeleteReplayAuthorizer`）：
+   * 模块与功能行已软删除、退出可读范围，首次执行用的资源复核必然 404，因此重放
+   * 只复核「如果模块还在，这个人当初还能不能删」——仍读实时成员关系，组长被转移
+   * 或移除、降级为普通成员后重放一律拒绝，系统管理员保持放行；项目本身已删除时
+   * 授权范围必然不含它，同样拒绝。当前认证（Session 有效、用户未被停用）由 HTTP
+   * 层在调用前完成。
+   */
+  async scopeDeleterReplayRole(
+    tx: TransactionContext,
+    actorUserId: number,
+    projectId: number,
+  ): Promise<"SYSTEM_ADMIN" | "LEADER" | "MEMBER" | "NOT_MEMBER"> {
+    return this.scopeDeleterRole(tx, actorUserId, projectId);
   }
 }

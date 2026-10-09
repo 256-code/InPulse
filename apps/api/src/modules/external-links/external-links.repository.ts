@@ -131,8 +131,7 @@ export class ExternalLinksRepository {
         FROM app.external_links l
         JOIN app.task_external_links a ON a.project_id=l.project_id AND a.link_id=l.id
         JOIN app.tasks t ON t.id=a.task_id
-       WHERE a.project_id=${projectId}
-         AND t.lifecycle_status <> 'INVALID'
+       WHERE a.project_id=${projectId}          AND t.deleted_at IS NULL         AND t.lifecycle_status <> 'INVALID'
          AND t.work_status <> 'CANCELED'
       UNION ALL
       SELECT l.id,
@@ -150,7 +149,7 @@ export class ExternalLinksRepository {
         FROM app.external_links l
         JOIN app.feature_external_links a ON a.project_id=l.project_id AND a.link_id=l.id
         JOIN app.features f ON f.id=a.feature_id
-       WHERE a.project_id=${projectId}
+       WHERE a.project_id=${projectId} AND f.deleted_at IS NULL
       UNION ALL
       SELECT l.id,
              l.project_id,
@@ -265,6 +264,21 @@ export class ExternalLinksRepository {
       changed: true,
       associatedBefore: true,
     };
+  }
+  /**
+   * ADR-058：目标被删除时解除其全部链接关联，返回解除的关联条数。
+   * 只删关联行，`app.external_links` 链接本体保留，供项目面板聚合与其它目标继续使用。
+   */
+  async detachTarget(
+    tx: TransactionContext,
+    p: number,
+    type: ExternalLinkTargetType,
+    id: number,
+  ): Promise<number> {
+    const a = linkAssociation[type];
+    const rows =
+      await tx.sql`DELETE FROM ${tx.sql("app." + a.table)} WHERE project_id=${p} AND ${tx.sql(a.column)}=${id} RETURNING link_id`;
+    return rows.length;
   }
   async exists(tx: TransactionContext, p: number, linkId: number) {
     const rows =

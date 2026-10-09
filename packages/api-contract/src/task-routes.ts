@@ -139,6 +139,20 @@ const basicTaskRoutes: readonly RouteDefinition[] = [
   ),
 ];
 
+const deletionFields = [
+  "id",
+  "projectId",
+  "moduleId",
+  "featureId",
+  "code",
+  "title",
+  "workStatus",
+  "deletedAt",
+  "deletedBy",
+  "voidedRecordCount",
+  "removedLinkCount",
+  "detachedGroupRole",
+];
 export const taskRoutes: readonly RouteDefinition[] = [
   ...basicTaskRoutes,
   {
@@ -181,6 +195,51 @@ export const taskRoutes: readonly RouteDefinition[] = [
         "COMPLETE uses TaskCompletionWorkflow with branch recheck and bounded retry; other transitions retain existing state semantics",
     },
   },
+  {
+    ...basicTaskRoutes[4]!,
+    method: "POST",
+    operationId: "deleteTask",
+    // ADR-058：删除任务为新增命令，任务从可见范围消失但历史与审计保留。
+    idempotencyContractVersion: "1.0.0",
+    replayAuthorizationPolicy: {
+      version: "1.0.0",
+      resources: {
+        contextSchemaRef: "TaskDeletionReplayContext",
+        resultRefExtractor: "taskDeletionResources",
+        currentReadAuthorizer: "taskDeletionCurrentReadAuthorizer",
+      },
+    },
+    path: collection + "/{taskId}/delete",
+    summary:
+      "删除任务：同一事务解除外部链接关联、作废已发布记录、解除聚合组并保留审计与动态。",
+    request: {
+      ...basicTaskRoutes[4]!.request,
+      body: {
+        contentTypes: [
+          { contentType: "application/json", schemaRef: "DeleteTaskRequest" },
+        ],
+      },
+    },
+    responses: { "200": json("TaskDeletionResponse"), ...errors },
+    idempotencyReplayPolicy: {
+      version: "1.0.0",
+      success: {
+        "200": {
+          body: {
+            responseSchemaRef: "TaskDeletionResponse",
+            safeBodyFieldPaths: deletionFields,
+          },
+        },
+      },
+    },
+    auditAction: "task.delete",
+    concurrencyPolicy: {
+      rowVersion: "required",
+      lockOrder: ["project", "module", "feature", "task", "taskGroup"],
+      retry:
+        "parents FOR SHARE then task FOR UPDATE; taskGroup relations are locked and re-read inside the same transaction",
+    },
+  },
 ];
 
 /** Same task commands and security policies, addressed through the true MODULE parent. */
@@ -196,7 +255,9 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
         route.operationId === "transitionTask" ||
         route.operationId === "getTaskStatusHistory"
           ? "模块真实归属下的任务状态和历史。"
-          : "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
+          : route.operationId === "deleteTask"
+            ? "删除模块级任务：同一事务解除外部链接、作废已发布记录与解除聚合组。"
+            : "模块级任务或成员读取；影响关系为同模块当前集合，增删与完整审计快照原子提交。",
       request: {
         ...route.request,
         path:
@@ -204,7 +265,9 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
             ? "ModuleTaskResourcePath"
             : "ModuleTaskCollectionPath",
         body:
-          write && route.operationId !== "transitionTask"
+          write &&
+          route.operationId !== "transitionTask" &&
+          route.operationId !== "deleteTask"
             ? {
                 contentTypes: [
                   {
@@ -220,28 +283,44 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
         "200": json(
           route.operationId === "getTaskStatusHistory"
             ? "TaskStatusHistoryResponse"
-            : route.operationId === "listTaskAssignees"
-              ? "TaskAssigneesResponse"
-              : route.operationId === "listTasks"
-                ? "ModuleTaskListResponse"
-                : "ModuleTaskItem",
+            : route.operationId === "deleteTask"
+              ? "TaskDeletionResponse"
+              : route.operationId === "listTaskAssignees"
+                ? "TaskAssigneesResponse"
+                : route.operationId === "listTasks"
+                  ? "ModuleTaskListResponse"
+                  : "ModuleTaskItem",
         ),
       },
-      idempotencyReplayPolicy: write
-        ? {
-            version: "1.0.0",
-            success: {
-              "200": {
-                body: {
-                  responseSchemaRef: "ModuleTaskItem",
-                  safeBodyFieldPaths: [...fields, "impactFeatureIds[]"],
+      idempotencyReplayPolicy:
+        route.operationId === "deleteTask"
+          ? {
+              version: "1.0.0",
+              success: {
+                "200": {
+                  body: {
+                    responseSchemaRef: "TaskDeletionResponse",
+                    safeBodyFieldPaths: deletionFields,
+                  },
                 },
               },
-            },
-          }
-        : "none",
+            }
+          : write
+            ? {
+                version: "1.0.0",
+                success: {
+                  "200": {
+                    body: {
+                      responseSchemaRef: "ModuleTaskItem",
+                      safeBodyFieldPaths: [...fields, "impactFeatureIds[]"],
+                    },
+                  },
+                },
+              }
+            : "none",
       replayAuthorizationPolicy:
-        route.operationId === "transitionTask"
+        route.operationId === "transitionTask" ||
+        route.operationId === "deleteTask"
           ? route.replayAuthorizationPolicy
           : write
             ? {
@@ -254,7 +333,8 @@ export const moduleTaskRoutes: readonly RouteDefinition[] = taskRoutes.map(
               }
             : "none",
       concurrencyPolicy:
-        route.operationId === "transitionTask"
+        route.operationId === "transitionTask" ||
+        route.operationId === "deleteTask"
           ? route.concurrencyPolicy
           : write
             ? {

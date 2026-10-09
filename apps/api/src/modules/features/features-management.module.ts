@@ -1,4 +1,8 @@
 import { FeatureCreateCommandPort } from "./create.command-port.js";
+import {
+  FeatureDeletionCommandPort,
+  SqlFeatureDeletionCommandPort,
+} from "./feature-deletion.command-port.js";
 import { ModulesModule } from "../modules/index.js";
 import { FeatureCandidatesQueryPort } from "../search/index.js";
 import { Module } from "@nestjs/common";
@@ -25,9 +29,13 @@ import { FeatureManagementRepository } from "./feature-management.repository.js"
     ActivityProjectionModule,
     SearchProjectionModule,
   ],
-  exports: [FeatureCreateCommandPort],
+  exports: [FeatureCreateCommandPort, FeatureDeletionCommandPort],
   providers: [
     FeatureCreateCommandPort,
+    {
+      provide: FeatureDeletionCommandPort,
+      useClass: SqlFeatureDeletionCommandPort,
+    },
     FeatureCandidatesQueryPort,
     FeatureManagementRepository,
     FeaturesManagementService,

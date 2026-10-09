@@ -8,6 +8,7 @@ import {
 import { externalLinkSchemas } from "./contracts/external-links.zod.js";
 import { leftoverTaskSchemas } from "./contracts/leftover-task.zod.js";
 import { taskCompletionSchemas } from "./contracts/task-completion.zod.js";
+import { taskDeletionSchemas } from "./contracts/task-deletion.zod.js";
 import { taskGroupSchemas } from "./contracts/task-groups.zod.js";
 import {
   aggregateTaskRefSchema,
@@ -51,6 +52,8 @@ import { featureSchemas } from "./contracts/features.zod.js";
 import { taskSchemas } from "./contracts/tasks.zod.js";
 import type { z } from "zod";
 import { moduleSchemas } from "./contracts/modules.zod.js";
+import { moduleDeletionSchemas } from "./contracts/module-deletion.zod.js";
+import { featureDeletionSchemas } from "./contracts/feature-deletion.zod.js";
 import {
   taskBoardCardSchema,
   taskBoardModuleSchema,
@@ -167,8 +170,10 @@ export interface SchemaRegistryEntry {
 export const schemaRegistry = {
   ...externalLinkSchemas,
   ...taskCompletionSchemas,
+  ...taskDeletionSchemas,
   ...leftoverTaskSchemas,
   ...moduleSchemas,
+  ...moduleDeletionSchemas,
   ...taskCreateSchemas,
   TaskCenterQuery: {
     schema: taskCenterQuerySchema,
@@ -176,6 +181,7 @@ export const schemaRegistry = {
     sensitiveFieldPaths: [],
   },
   ...featureSchemas,
+  ...featureDeletionSchemas,
   ...taskSchemas,
   ...recordDraftSchemas,
   ...publishedRecordSchemas,

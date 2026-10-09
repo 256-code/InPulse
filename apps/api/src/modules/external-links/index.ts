@@ -11,3 +11,7 @@ export {
 export { ExternalLinksModule } from "./external-links.module.js";
 export type { ChangeRecordLinkRow } from "./external-links.repository.js";
 export type { TaskExternalLinkCountRow } from "./external-links.repository.js";
+export {
+  externalLinkActivityApplies,
+  externalLinkActivitySummary,
+} from "./external-link-activity.js";

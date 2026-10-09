@@ -98,10 +98,10 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     note: "记录操作人",
   },
   {
-    feature: "取消/恢复任务",
+    feature: "删除任务",
     admin: true,
     member: true,
-    note: "取消原因建议填写",
+    note: "二次确认，记录作废且链接解除关联；不可恢复",
   },
   { feature: "合并任务", admin: true, member: true, note: "有迭代记录也允许" },
   { feature: "解除合并", admin: true, member: true, note: "必须二次确认" },

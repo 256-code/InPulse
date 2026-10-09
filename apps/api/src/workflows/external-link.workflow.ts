@@ -34,6 +34,8 @@ import {
   ExternalLinksQueryPort,
   ExternalLinksCommandPort,
   commitUrlForRepository,
+  externalLinkActivityApplies,
+  externalLinkActivitySummary,
   parseCommitShaInput,
 } from "../modules/external-links/index.js";
 import { AuditWritePort } from "../audit/index.js";
@@ -318,22 +320,30 @@ export class ExternalLinkWorkflow {
       },
       requestId,
     });
-    // Activity contains no URL or content; F21 changes visibility for this source identity.
-    await this.activity.append(tx, {
-      projectId: target.projectId,
-      sourceChainId: event.chainId,
-      sourceSequence: event.sequenceNo,
-      sourceEntityType: type,
-      sourceEntityId: id,
-      activityType: adding ? "EXTERNAL_LINK_ADDED" : "EXTERNAL_LINK_REMOVED",
-      actorId: actor,
-      summary: adding ? "添加 GitHub 关联" : "解除 GitHub 关联",
-      metadata: { linkId: result.linkId },
-      visibilityScope: "MEMBER",
-      sourceStatus: target.status,
-      sourceRowVersion: rowVersion,
-      occurredAt: new Date(),
-    });
+    // 活动只写链接标签与目标身份快照（不写 URL 与正文）；F21 按同一来源身份迁移可见性。
+    // ADR-048：未发布草稿不产生活动，链接事件同样跳过，避免草稿标题进入项目动态。
+    if (externalLinkActivityApplies(type, target.status)) {
+      await this.activity.append(tx, {
+        projectId: target.projectId,
+        sourceChainId: event.chainId,
+        sourceSequence: event.sequenceNo,
+        sourceEntityType: type,
+        sourceEntityId: id,
+        activityType: adding ? "EXTERNAL_LINK_ADDED" : "EXTERNAL_LINK_REMOVED",
+        actorId: actor,
+        summary: externalLinkActivitySummary({
+          adding,
+          url: result.url,
+          targetType: type,
+          target,
+        }),
+        metadata: { linkId: result.linkId },
+        visibilityScope: "MEMBER",
+        sourceStatus: target.status,
+        sourceRowVersion: rowVersion,
+        occurredAt: new Date(),
+      });
+    }
     await this.search.refresh(tx, target.projectId, type, id, rowVersion);
     return {
       projectId: target.projectId,

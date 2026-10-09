@@ -100,3 +100,11 @@ pnpm --filter @inpulse/api exec vitest run --config vitest.integration.config.ts
 | 局部格式 | 锁定Prettier API format后check，仅9个增量TypeScript源码，全部通过；git diff --check通过 |
 
 最后一次真库成功后未再编辑代码或测试；随后仅提交、文档和交接。前端/浏览器和其他真库文件本轮未重复，原批结果保留为历史证据，等待父协调按最终候选独立复验。已再次SHOW data_directory核对为本任务.data/f22/pg并fast正常停止，数据保留，55427/3127/4197无监听。重启参数与上节完全相同，本任务不再占用数据库，交父独占复验。
+
+## 动态摘要与草稿口径修订（2026-10-09 +08:00）
+
+用户反馈动态里的「添加 GitHub 关联 / 解除 GitHub 关联」太模糊，读不出关联的是哪个对象。链接事件的动态摘要改为写明链接标签与目标身份快照：`添加 GitHub 关联：PR #245（任务 LIINK-T-90「登录企业微信」）`；解除沿用同一格式。仍不写 URL 与正文；目标编号与标题由四域 LinkTarget QueryPort 在同一事务内读取，摘要按 ActivityWritePort 的 1000 字符上限（新导出常量 ACTIVITY_SUMMARY_MAX_LENGTH）截断超长标题。
+
+同一批按 ADR-048 收紧草稿口径：此前对 DRAFT 记录的链接操作会写一条全员可见的通用动态；现在未发布草稿上的添加/解除只留不可变审计，不再进入项目动态，也不会把草稿标题带进动态流。项目 / 功能 / 任务与 PUBLISHED 记录照常写动态，F21 按同一来源身份迁移可见性不变；权限、锁序、幂等与重放门禁均未改动，不新增迁移。
+
+验证（2026-10-09 本地，app_ci）：单测 `apps/api/test/external-link-activity.test.ts` 6/6；真实 PostgreSQL `apps/api/test/external-links.integration.test.ts` 41/41，含新增用例「动态摘要写明关联的链接与目标任务，草稿链接不产生活动」（任务添加/解除的摘要文本、DRAFT 记录 activity 为 0 且审计保留、草稿自身仍可读取关联）；API 单测 73 文件 435 例、`apps/api` 两个 tsconfig 的 typecheck、变更文件 ESLint 与 Prettier、`check:docs`（106 个 Markdown）与 `permissions:check`（105 路由）通过。未运行：全仓 `pnpm lint`（被本工作区其它任务的未跟踪临时文件 `apps/api/test/__tmp-appmodule-di.integration.test.ts` 阻断，与本改动无关）、`apps/web` 单测与浏览器 E2E（无前端改动）、数据库与部署类门禁。

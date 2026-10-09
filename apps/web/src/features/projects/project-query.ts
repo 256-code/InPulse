@@ -87,6 +87,20 @@ export function canDeleteProject(
   return isSystemAdmin || role === "LEADER";
 }
 
+/**
+ * ADR-059：删除模块与功能同样只对系统管理员与本项目组长开放，普通成员连入口都不
+ * 显示；服务端 `scopeDeleterRole` 以同一口径二次判定。
+ *
+ * 判定式与 `canDeleteProject` 当前相同，但不合并成同一个函数：两者是两条独立裁决
+ * （ADR-049 与 ADR-059），以后调整删除项目口径时不能顺带放大模块与功能的删除权。
+ */
+export function canDeleteCatalogItem(
+  isSystemAdmin: boolean,
+  role: "MEMBER" | "LEADER" | null | undefined,
+): boolean {
+  return isSystemAdmin || role === "LEADER";
+}
+
 export function describeCreateProjectError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.status) {

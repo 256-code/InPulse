@@ -15,7 +15,7 @@ export class FeatureLinkQueryPort implements LinkTargetQueryPort {
   ): Promise<LinkTarget | undefined> {
     const [row] = await tx.sql<
       LinkTarget[]
-    >`SELECT id,project_id AS "projectId",module_id AS "moduleId",id AS "featureId",status AS status,row_version AS "rowVersion" FROM app.features WHERE id=${id} ${lock === "update" ? tx.sql`FOR UPDATE` : lock === "share" ? tx.sql`FOR SHARE` : tx.sql``}`;
+    >`SELECT id,project_id AS "projectId",module_id AS "moduleId",id AS "featureId",status AS status,row_version AS "rowVersion",code,name AS "title" FROM app.features WHERE id=${id} AND deleted_at IS NULL ${lock === "update" ? tx.sql`FOR UPDATE` : lock === "share" ? tx.sql`FOR SHARE` : tx.sql``}`;
     return row;
   }
 }

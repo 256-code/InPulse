@@ -665,8 +665,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
     const rows = (await tx.sql`
       SELECT COUNT(*)::integer AS "count"
         FROM app.tasks
-       WHERE project_id = ${input.projectId}
-         AND lifecycle_status = 'ACTIVE'
+       WHERE project_id = ${input.projectId}          AND deleted_at IS NULL         AND lifecycle_status = 'ACTIVE'
          AND work_status NOT IN ('DONE', 'CANCELED')
     `) as unknown as readonly { count: number }[];
     return rows[0]?.count ?? 0;

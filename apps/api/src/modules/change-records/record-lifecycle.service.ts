@@ -16,6 +16,14 @@ import { RecordLifecycleRepository } from "./record-lifecycle.repository.js";
 import { RecordDraftError } from "./record-drafts.service.js";
 import { validatePublishedRecordSearch } from "./record-publication-effects.js";
 import { LeftoverSearchProjectionSync } from "./leftover-search-projection.js";
+/** 作废后的记录快照：副作用链需要状态、版本与正文，因此复用作废读路径的返回类型。 */
+type VoidedRecordSnapshot = NonNullable<
+  Awaited<ReturnType<PublishedRecordRepository["findVoided"]>>
+>;
+/** 副作用链同时服务作废与恢复，恢复读的是已发布视图，因此两个快照都可接受。 */
+type LifecycleRecordSnapshot =
+  | VoidedRecordSnapshot
+  | NonNullable<Awaited<ReturnType<PublishedRecordRepository["find"]>>>;
 const missing = () =>
   new RecordDraftError(404, "CHANGE_RECORD_NOT_FOUND", "记录不存在或无法访问");
 const conflict = () =>
@@ -132,25 +140,157 @@ export class RecordLifecycleService {
       ? await this.records.find(tx, projectId, recordId)
       : await this.records.findVoided(tx, projectId, recordId);
     if (!after) throw conflict();
+    await this.applyLifecycleEffects(tx, {
+      projectId,
+      recordId,
+      actorId,
+      requestId,
+      restore,
+      reason: parsed.data.reason,
+      lockedStatus: locked.status,
+      lockedRowVersion: locked.rowVersion,
+      after,
+    });
+    return schemaRegistry.RecordLifecycleResult.schema.parse({
+      id: after.id,
+      projectId: after.projectId,
+      status: after.status,
+      rowVersion: after.rowVersion,
+    });
+  }
+
+  /**
+   * ADR-058：删除任务时作废该任务的全部已发布记录，与操作者是否系统管理员无关。
+   * 调用方已持有任务行锁，因此只复核记录版本仍与读取时一致；副作用链与
+   * `transition` 完全共用，审计记录操作者与被作废记录。
+   */
+  async voidByTaskDeletion(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly taskId: number;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly reason: string;
+    },
+  ): Promise<{ recordId: number; title: string }[]> {
+    const targets = await this.records.listPublishedByTaskId(
+      tx,
+      input.projectId,
+      input.taskId,
+    );
+    return this.voidRecords(tx, targets, input);
+  }
+
+  /**
+   * ADR-059：删除模块或功能时作废该范围内的全部已发布记录。口径与
+   * `voidByTaskDeletion` 相同——聚合命令本身即承担作废后果，不再要求系统管理员；
+   * 只有 `PUBLISHED` 参与，草稿与已作废记录不受影响。`featureId` 为 null 表示整
+   * 模块（含模块级记录与本模块各功能下的记录）。
+   */
+  async voidByScopeDeletion(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly moduleId: number;
+      readonly featureId: number | null;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly reason: string;
+    },
+  ): Promise<{ recordId: number; title: string }[]> {
+    const targets = await this.records.listPublishedByScope(
+      tx,
+      input.projectId,
+      { moduleId: input.moduleId, featureId: input.featureId },
+    );
+    return this.voidRecords(tx, targets, input);
+  }
+
+  /** 作废一批已发布记录：逐条条件更新，副作用链与 `transition` 完全共用。 */
+  private async voidRecords(
+    tx: TransactionContext,
+    targets: readonly { id: number; rowVersion: number }[],
+    input: {
+      readonly projectId: number;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly reason: string;
+    },
+  ): Promise<{ recordId: number; title: string }[]> {
+    const voided: { recordId: number; title: string }[] = [];
+    for (const target of targets) {
+      if (
+        !(await this.repository.transition(
+          tx,
+          input.projectId,
+          target.id,
+          target.rowVersion,
+          false,
+          input.reason,
+        ))
+      )
+        throw conflict();
+      const after = await this.records.findVoided(
+        tx,
+        input.projectId,
+        target.id,
+      );
+      if (!after) throw conflict();
+      await this.applyLifecycleEffects(tx, {
+        projectId: input.projectId,
+        recordId: target.id,
+        actorId: input.actorId,
+        requestId: input.requestId,
+        restore: false,
+        reason: input.reason,
+        lockedStatus: "PUBLISHED",
+        lockedRowVersion: target.rowVersion,
+        after,
+      });
+      voided.push({ recordId: target.id, title: after.title });
+    }
+    return voided;
+  }
+
+  /** 作废/恢复共用的副作用链：审计、动态可见性与条目、搜索投影、遗留项投影。 */
+  private async applyLifecycleEffects(
+    tx: TransactionContext,
+    input: {
+      readonly projectId: number;
+      readonly recordId: number;
+      readonly actorId: number;
+      readonly requestId: string;
+      readonly restore: boolean;
+      readonly reason: string;
+      readonly lockedStatus: string;
+      readonly lockedRowVersion: number;
+      readonly after: LifecycleRecordSnapshot;
+    },
+  ): Promise<void> {
+    const { after, restore } = input;
     const action = restore ? "CHANGE_RECORD_RESTORED" : "CHANGE_RECORD_VOIDED";
     const event = await this.audit.append(tx, {
-      projectId,
+      projectId: input.projectId,
       actorType: "USER",
-      actorId,
+      actorId: input.actorId,
       action,
       targetType: "CHANGE_RECORD",
-      targetId: String(recordId),
+      targetId: String(input.recordId),
       eventPayload: {
-        before: { status: locked.status, rowVersion: locked.rowVersion },
+        before: {
+          status: input.lockedStatus,
+          rowVersion: input.lockedRowVersion,
+        },
         after: { status: after.status, rowVersion: after.rowVersion },
-        reason: parsed.data.reason,
+        reason: input.reason,
       },
-      requestId,
+      requestId: input.requestId,
     });
     const visibility = {
-      projectId,
+      projectId: input.projectId,
       sourceEntityType: "CHANGE_RECORD" as const,
-      sourceEntityId: recordId,
+      sourceEntityId: input.recordId,
       visibilityScope: restore ? ("MEMBER" as const) : ("ADMIN_ONLY" as const),
       sourceStatus: after.status,
       sourceRowVersion: after.rowVersion,
@@ -161,10 +301,10 @@ export class RecordLifecycleService {
       sourceChainId: event.chainId,
       sourceSequence: event.sequenceNo,
       activityType: action,
-      actorId,
+      actorId: input.actorId,
       summary: `${restore ? "恢复" : "作废"}迭代记录：${after.title}`,
       metadata: {
-        recordId,
+        recordId: input.recordId,
         moduleId: after.moduleId,
         featureId: after.featureId,
         version: after.currentVersion,
@@ -177,11 +317,5 @@ export class RecordLifecycleService {
       sourceStatus: after.status,
     });
     await this.leftovers.syncRecord(tx, after);
-    return schemaRegistry.RecordLifecycleResult.schema.parse({
-      id: after.id,
-      projectId: after.projectId,
-      status: after.status,
-      rowVersion: after.rowVersion,
-    });
   }
 }

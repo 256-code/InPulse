@@ -76,12 +76,13 @@ export class ProjectMemberTaskCommandPort {
              ARRAY(
                SELECT i.feature_id
                  FROM app.task_feature_impacts AS i
+                 JOIN app.features AS x
+                   ON x.id = i.feature_id AND x.deleted_at IS NULL
                 WHERE i.task_id = t.id
                 ORDER BY i.feature_id
              ) AS "impactFeatureIds"
         FROM app.tasks AS t
-       WHERE t.project_id = ${projectId}
-         AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${userId})
+       WHERE t.project_id = ${projectId}          AND t.deleted_at IS NULL         AND EXISTS (SELECT 1 FROM app.task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ${userId})
          AND t.work_status = 'TODO'
          AND t.lifecycle_status = 'ACTIVE'
        ORDER BY t.id ASC

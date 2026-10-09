@@ -12,6 +12,9 @@ export const ACTIVITY_ENTITY_TYPES = [
   "LEFTOVER_ITEM",
 ] as const;
 
+/** `activity_projection.summary` 的字符上限；动态摘要构造器必须按同一上限截断。 */
+export const ACTIVITY_SUMMARY_MAX_LENGTH = 1000;
+
 export type ActivityVisibilityScope =
   (typeof ACTIVITY_VISIBILITY_SCOPES)[number];
 export type ActivitySourceEntityType = (typeof ACTIVITY_ENTITY_TYPES)[number];
@@ -91,7 +94,10 @@ export function validateActivityWriteInput(input: ActivityWriteInput): void {
   if (input.actorId !== null && !positiveInteger(input.actorId)) {
     invalid("actorId must be null or a positive integer");
   }
-  if (input.summary.trim().length === 0 || input.summary.length > 1000) {
+  if (
+    input.summary.trim().length === 0 ||
+    input.summary.length > ACTIVITY_SUMMARY_MAX_LENGTH
+  ) {
     invalid("summary must contain 1 to 1000 characters");
   }
   if (
