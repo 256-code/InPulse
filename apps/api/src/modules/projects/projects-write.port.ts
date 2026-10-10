@@ -264,10 +264,31 @@ export abstract class ProjectsWritePort {
   ): Promise<ProjectMemberRecord | undefined>;
 }
 
+/** 文档成员/负责人令牌解析结果；token 为文档中的原始令牌，按规范化登录名或姓名匹配。 */
+export type ActiveUserTokenResolution =
+  | {
+      readonly token: string;
+      readonly kind: "resolved";
+      readonly userId: number;
+      readonly name: string;
+    }
+  | { readonly token: string; readonly kind: "not-found" }
+  | { readonly token: string; readonly kind: "ambiguous" };
+
 /** 初始成员 ACTIVE 校验；返回合法集合，调用方负责与请求成员比对并决定是否回滚。 */
 export abstract class ActiveUsersQueryPort {
   abstract findActiveUserIds(
     tx: TransactionContext,
     userIds: readonly number[],
   ): Promise<readonly number[]>;
+
+  /**
+   * ADR-064：解析固定模板文档中的负责人/初始成员令牌。匹配顺序固定为
+   * 规范化登录名（全局唯一）优先、规范化姓名其次；姓名命中多个用户视为歧义。
+   * 只解析 ACTIVE 且未停用用户；调用方传入已 trim + 小写化的令牌。
+   */
+  abstract resolveActiveUsersByTokens(
+    tx: TransactionContext,
+    normalizedTokens: readonly string[],
+  ): Promise<readonly ActiveUserTokenResolution[]>;
 }

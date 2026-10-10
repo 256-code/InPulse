@@ -4,6 +4,7 @@ import {
   type FeatureCountInput,
   type FeatureNameItem,
   type FeatureNameLookupInput,
+  type FeatureNameMatchItem,
   type FeatureReadResource,
 } from "./feature-read.port.js";
 
@@ -37,6 +38,17 @@ export class PostgresFeatureReadPort extends FeatureReadPort {
          AND deleted_at IS NULL
        ORDER BY id ASC
     `) as unknown as readonly FeatureNameItem[];
+  }
+
+  async matchByName(
+    tx: TransactionContext,
+    projectId: number,
+    moduleId: number,
+    normalizedName: string,
+  ): Promise<readonly FeatureNameMatchItem[]> {
+    return (await tx.sql<
+      FeatureNameMatchItem[]
+    >`SELECT id AS "featureId", project_id AS "projectId", module_id AS "moduleId", name, code, current_behavior AS "currentBehavior", acceptance_criteria AS "acceptanceCriteria", tags, (deleted_at IS NOT NULL) AS deleted FROM app.features WHERE project_id = ${projectId} AND module_id = ${moduleId} AND lower(btrim(name)) = ${normalizedName} ORDER BY id ASC`) as unknown as readonly FeatureNameMatchItem[];
   }
 
   async count(

@@ -20,6 +20,7 @@ import {
 } from "./route-registry.js";
 import { schemaRegistry, type SchemaName } from "./schema-registry.js";
 import { securityFlowOperationIds } from "./security-flow.js";
+import { pureValidationOperationIds } from "./pure-validation.js";
 
 export interface Finding {
   readonly rule: string;
@@ -219,16 +220,31 @@ export function validateRouteRegistry(
     }
 
     const isUnsafe = unsafeHttpMethods.includes(route.method);
+    const isPureValidation = (
+      pureValidationOperationIds as readonly string[]
+    ).includes(route.operationId);
     if (isUnsafe) {
-      if (route.idempotencyPolicy === "none") {
+      if (route.idempotencyPolicy === "none" && !isPureValidation) {
         add(
           route,
           "idempotency-default",
           `ADR-019：${route.method} 必须登记 idempotencyRequired 或 securityFlow`,
         );
       }
-      if (route.csrfPolicy !== "required") {
+      if (route.csrfPolicy !== "required" && !isPureValidation) {
         add(route, "csrf", `${route.method} 必须登记 csrfPolicy: required`);
+      }
+      if (
+        isPureValidation &&
+        (route.method !== "POST" ||
+          route.idempotencyPolicy !== "none" ||
+          route.csrfPolicy !== "none")
+      ) {
+        add(
+          route,
+          "pure-validation",
+          "AGENTS.md 第 6 节：纯校验 allowlist 路由必须同时为 POST、idempotencyPolicy none 与 csrfPolicy none",
+        );
       }
     } else if (
       route.idempotencyPolicy !== "none" &&

@@ -6,9 +6,11 @@ import {
   type InpulseApiClient,
   type ModuleItem,
   type ProjectDetailResponse,
+  type ProjectDocumentImportResult,
   type ProjectItem,
 } from "@generated/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { DocumentImportModal } from "@features/document-import/DocumentImportModal";
 import {
   RecordDetailModal,
   type RecordDetailTarget,
@@ -71,6 +73,8 @@ export function ModulesPageView({
   /** 项目名旁的「编辑项目」弹窗，以及保存后的页头提示。 */
   const [projectEditOpen, setProjectEditOpen] = useState(false);
   const [projectNotice, setProjectNotice] = useState<string | null>(null);
+  /** 从文档导入模块/功能/任务（ADR-064）：预览确认后单事务写入。 */
+  const [importOpen, setImportOpen] = useState(false);
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const queryClient = useQueryClient();
   const open = (action: ModuleEditorRequest["action"], item?: ModuleItem) => {
@@ -151,6 +155,7 @@ export function ModulesPageView({
         taskCount,
         featureTargetName: featureTarget?.name ?? null,
         onCreateModule: () => open("create"),
+        onImportDocument: () => setImportOpen(true),
         onAddFeature: () => {
           if (featureTarget === undefined) return;
           navigate(
@@ -229,13 +234,23 @@ export function ModulesPageView({
               >
                 {/* 模块区块标题行是页面唯一的常驻新增入口：设计稿在页头动作区
                     还有一个同名按钮，按产品要求删掉重复入口。 */}
-                <Button
-                  className="soft-blue-button"
-                  onClick={() => open("create")}
-                >
-                  <InpulseIcon name="plus" size={15} />
-                  新增模块
-                </Button>
+                <div className="calm-section-actions">
+                  <Button
+                    className="secondary-button"
+                    data-testid="import-project-document-button"
+                    onClick={() => setImportOpen(true)}
+                  >
+                    <InpulseIcon name="fileText" size={15} />
+                    从文档导入
+                  </Button>
+                  <Button
+                    className="soft-blue-button"
+                    onClick={() => open("create")}
+                  >
+                    <InpulseIcon name="plus" size={15} />
+                    新增模块
+                  </Button>
+                </div>
               </CalmSectionTitle>
               <div className="calm-feature-grid">
                 {query.data.items.map((item) => (
@@ -335,6 +350,30 @@ export function ModulesPageView({
         request={request}
         onClose={() => setRequest(null)}
         onSaved={() => setSuccess(true)}
+      />
+      <DocumentImportModal
+        open={importOpen}
+        mode="PROJECT"
+        projectId={projectId}
+        client={client}
+        onClose={() => setImportOpen(false)}
+        onImported={(result: ProjectDocumentImportResult) => {
+          setImportOpen(false);
+          setProjectNotice(
+            "文档导入完成：新建 " +
+              result.counts.modules +
+              " 个模块、" +
+              result.counts.features +
+              " 个功能、" +
+              result.counts.tasks +
+              " 个任务，复用 " +
+              result.counts.reusedModules +
+              " 个模块、" +
+              result.counts.reusedFeatures +
+              " 个功能。",
+          );
+          void query.refetch();
+        }}
       />
       {projectEditOpen && projectQuery.data?.project ? (
         <EditProjectModal

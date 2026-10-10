@@ -1,4 +1,5 @@
 import { taskCreateRoutes } from "./task-create-routes.js";
+import { documentImportRoutes } from "./document-import-routes.js";
 import { aggregateReadRoutes } from "./aggregate-read-routes.js";
 import { externalLinkRoutes } from "./external-link-routes.js";
 import { leftoverTaskRoutes } from "./leftover-task-routes.js";
@@ -55,6 +56,7 @@ export const routeRegistry = [
   ...taskCompletionRoutes,
   ...leftoverTaskRoutes,
   ...moduleTaskRoutes,
+  ...documentImportRoutes,
   {
     method: "GET",
     path: "/health",

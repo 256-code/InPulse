@@ -41,6 +41,7 @@ export type InpulseIconName =
   | "shield"
   | "sliders"
   | "user"
+  | "upload"
   | "users"
   | "x"
   | "zap";
@@ -84,6 +85,13 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
       <path d="M12 8 7.26 5.15" />
       <path d="m12 8 4.74-2.85" />
       <path d="M12 13.5V8" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m17 8-5-5-5 5" />
+      <path d="M12 3v12" />
     </>
   ),
   check: <path d="M20 6 9 17l-5-5" />,

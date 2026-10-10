@@ -1,6 +1,10 @@
 import React, { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
+import type {
+  CreateProjectResponse,
+  InpulseApiClient,
+  ProjectDocumentImportResult,
+} from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import {
   describeProjectListError,
@@ -22,6 +26,14 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
   const handleCreated = useCallback((response: CreateProjectResponse) => {
     setCreatedProject(response);
   }, []);
+
+  /** 整项目导入成功后直接进入新项目模块页，导入的模块/功能/任务立即可见。 */
+  const handleImportedProject = useCallback(
+    (result: ProjectDocumentImportResult) => {
+      navigate("/projects/" + result.projectId + "/modules");
+    },
+    [navigate],
+  );
 
   /** 重新打开「新建项目」时先撤掉上一次的成功提示，避免旧项目名残留在页面上。 */
   const handleStartCreate = useCallback(() => {
@@ -62,6 +74,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
       isAdmin={user?.isAdmin === true}
       createdProject={createdProject}
       onCreated={handleCreated}
+      onImportedProject={handleImportedProject}
       onStartCreate={handleStartCreate}
       onOpenActivity={handleOpenActivity}
       onAddModule={handleAddModule}

@@ -285,6 +285,18 @@
       "fingerprint": "b829a35bc59f1d42318222e611b664c0ec5ebb6efe5a014d91c18fdfc611e2bb"
     }
   ],
+  "importProject": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "9849c5b4f22eaa2ef02246f6f6c53a87d3a61f9f22871558b6a0e079791690af"
+    }
+  ],
+  "importProjectDocument": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "193ceb042571ffa44aa823eb98ed55d55421502d258748db52b8bd6721308a31"
+    }
+  ],
   "mergeTaskGroup": [
     {
       "version": "1.0.0",

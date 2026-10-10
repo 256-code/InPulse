@@ -2,6 +2,7 @@ import type { TransactionContext } from "../../database/transaction-context.js";
 import { projectStatColumns } from "../../stats/card-stat-columns.js";
 import {
   ActiveUsersQueryPort,
+  type ActiveUserTokenResolution,
   type AddProjectMemberInput,
   type CreateProjectRecordInput,
   type ProjectChangeRecord,
@@ -630,6 +631,70 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
 
 /** 初始成员 ACTIVE 校验；只读取，不决定业务流转。 */
 export class PostgresActiveUsersQueryPort extends ActiveUsersQueryPort {
+  async resolveActiveUsersByTokens(
+    tx: TransactionContext,
+    normalizedTokens: readonly string[],
+  ): Promise<readonly ActiveUserTokenResolution[]> {
+    const unique = [...new Set(normalizedTokens)];
+    if (unique.length === 0) {
+      return [];
+    }
+    const batchSize = 500;
+    const rows: {
+      userId: number;
+      loginKey: string;
+      nameKey: string;
+      name: string;
+    }[] = [];
+    for (let offset = 0; offset < unique.length; offset += batchSize) {
+      const slice = unique.slice(offset, offset + batchSize);
+      const batch = (await tx.sql<
+        { userId: number; loginKey: string; nameKey: string; name: string }[]
+      >`SELECT id AS "userId", lower(btrim(login_name)) AS "loginKey", lower(btrim(name)) AS "nameKey", name FROM app.users WHERE status = 'ACTIVE' AND disabled_at IS NULL AND (lower(btrim(login_name)) = ANY(${slice}::text[]) OR lower(btrim(name)) = ANY(${slice}::text[]))`) as unknown as readonly {
+        userId: number;
+        loginKey: string;
+        nameKey: string;
+        name: string;
+      }[];
+      rows.push(...batch);
+    }
+    const byLogin = new Map<string, { userId: number; name: string }>();
+    const byName = new Map<string, { userId: number; name: string }[]>();
+    for (const row of rows) {
+      byLogin.set(row.loginKey, { userId: row.userId, name: row.name });
+      const list = byName.get(row.nameKey);
+      if (list === undefined) {
+        byName.set(row.nameKey, [{ userId: row.userId, name: row.name }]);
+      } else {
+        list.push({ userId: row.userId, name: row.name });
+      }
+    }
+    return unique.map((token): ActiveUserTokenResolution => {
+      const login = byLogin.get(token);
+      if (login !== undefined) {
+        return {
+          token,
+          kind: "resolved",
+          userId: login.userId,
+          name: login.name,
+        };
+      }
+      const named = byName.get(token) ?? [];
+      if (named.length === 0) {
+        return { token, kind: "not-found" };
+      }
+      if (named.length > 1) {
+        return { token, kind: "ambiguous" };
+      }
+      return {
+        token,
+        kind: "resolved",
+        userId: named[0]!.userId,
+        name: named[0]!.name,
+      };
+    });
+  }
+
   async findActiveUserIds(
     tx: TransactionContext,
     userIds: readonly number[],

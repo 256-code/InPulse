@@ -511,3 +511,63 @@ describe("新项目搭建引导（2026-10-10）", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("ADR-064 文档导入入口", () => {
+  const projectDetail = {
+    project: {
+      id: 2,
+      code: "PAY",
+      name: "结算系统",
+      description: "",
+      status: "ACTIVE" as const,
+      hasCompletedTask: false,
+      rowVersion: 1,
+      createdBy: 1,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+      memberCount: 3,
+      stats: {
+        activeModuleCount: 1,
+        activeFeatureCount: 0,
+        openTaskCount: 0,
+        completedTaskCount: 0,
+      },
+    },
+    currentUserRole: "MEMBER" as const,
+  };
+
+  it("模块区块标题行提供从文档导入入口", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [item] }),
+      getProject: vi.fn().mockResolvedValue(projectDetail),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    fireEvent.click(
+      await screen.findByTestId("import-project-document-button"),
+    );
+    expect(screen.getByLabelText("导入文档内容")).toBeTruthy();
+  });
+
+  it("空项目在搭建引导里也提供从文档导入入口", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [] }),
+      getProject: vi.fn().mockResolvedValue({
+        ...projectDetail,
+        project: {
+          ...projectDetail.project,
+          stats: {
+            activeModuleCount: 0,
+            activeFeatureCount: 0,
+            openTaskCount: 0,
+            completedTaskCount: 0,
+          },
+        },
+      }),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    fireEvent.click(
+      await screen.findByTestId("import-project-document-from-guide-button"),
+    );
+    expect(screen.getByLabelText("导入文档内容")).toBeTruthy();
+  });
+});

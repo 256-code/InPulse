@@ -5,6 +5,7 @@ export * from "./contracts/modules.zod.js";
 export * from "./route-registry.js";
 export * from "./permission-matrix.js";
 export * from "./security-flow.js";
+export * from "./pure-validation.js";
 export * from "./json-schema.js";
 export * from "./ts-types.js";
 export * from "./openapi.js";
@@ -38,3 +39,4 @@ export * from "./contracts/task-board.zod.js";
 export * from "./contracts/leftover-task.zod.js";
 
 export * from "./contracts/task-create.zod.js";
+export * from "./contracts/document-import.zod.js";

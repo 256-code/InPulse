@@ -3,6 +3,7 @@ import { Button } from "antd";
 import type {
   CreateProjectResponse,
   InpulseApiClient,
+  ProjectDocumentImportResult,
   ProjectItem,
   ProjectListItem,
 } from "@generated/api";
@@ -14,6 +15,7 @@ import {
   CalmSectionTitle,
   CalmSegmented,
 } from "@features/common/components/Calm";
+import { DocumentImportModal } from "@features/document-import/DocumentImportModal";
 import { isCardClick } from "@features/common/card-click";
 import { canDeleteProject, canManageProjectResources } from "./project-query";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
@@ -48,6 +50,9 @@ export interface ProjectsPageViewProps {
    */
   readonly onStartCreate?: (() => void) | undefined;
   readonly onCreated?: (response: CreateProjectResponse) => void;
+  /** 整项目导入成功（ADR-064）：结果含项目 ID 与计数，去向由调用方决定。 */
+  readonly onImportedProject?:
+    ((result: ProjectDocumentImportResult) => void) | undefined;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
   readonly onOpenModules?: ((projectId: number) => void) | undefined;
   /** 「添加模块」：打开模块列表并自动弹开新增模块表单；省略时退化为 onOpenModules。 */
@@ -68,6 +73,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   createdProject,
   onStartCreate,
   onCreated,
+  onImportedProject,
   onOpenActivity,
   onOpenModules,
   onAddModule,
@@ -79,6 +85,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   onRetryProjects,
 }) => {
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectItem | null>(null);
   const [editingRole, setEditingRole] =
     useState<ProjectListItem["currentUserRole"]>(null);
@@ -177,6 +184,18 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
           >
             <InpulseIcon name="plus" size={15} />
             新建项目
+          </Button>
+          {/* 从文档导入整项目（ADR-064）：文档含项目段时单事务创建项目与各下级。 */}
+          <Button
+            className="secondary-button"
+            data-testid="import-project-document-button"
+            onClick={() => {
+              onStartCreate?.();
+              setImportOpen(true);
+            }}
+          >
+            <InpulseIcon name="fileText" size={15} />
+            从文档导入整项目
           </Button>
         </div>
       </div>
@@ -414,6 +433,16 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
         onClose={() => setCreateOpen(false)}
         onCreated={(response) => {
           onCreated?.(response);
+        }}
+      />
+      <DocumentImportModal
+        open={importOpen}
+        mode="NEW_PROJECT"
+        client={client}
+        onClose={() => setImportOpen(false)}
+        onImported={(result) => {
+          setImportOpen(false);
+          onImportedProject?.(result);
         }}
       />
       {editing ? (
