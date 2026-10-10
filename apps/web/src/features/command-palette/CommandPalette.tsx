@@ -311,7 +311,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />
-          <kbd>Esc</kbd>
+          <button
+            type="button"
+            className="palette-esc"
+            aria-label="关闭搜索"
+            onClick={onClose}
+          >
+            <kbd>Esc</kbd>
+          </button>
         </div>
         {searchHint || enterHint ? (
           <p className="palette-hint">

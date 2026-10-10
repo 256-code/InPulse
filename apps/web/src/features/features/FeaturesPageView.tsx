@@ -1,13 +1,13 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { SimilarFeatures } from "./SimilarFeatures";
 import { TasksPanel } from "../tasks/TasksPanel";
-import React, { lazy, Suspense, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Alert, Button, Input } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { CatalogItemDeletionConfirm } from "@features/common/components/CatalogItemDeletionConfirm";
 import { useAuth } from "@features/auth/auth-context";
 import { Controller, useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ApiError,
   type InpulseApiClient,
@@ -111,6 +111,7 @@ export function FeaturesPageView({
     { impactOptions: false },
   );
   const navigate = useNavigate();
+  const location = useLocation();
   const [selection, setSelection] = useState<{
     action: FeatureChange["action"];
     item?: FeatureItem;
@@ -161,6 +162,18 @@ export function FeaturesPageView({
     setReloadError(null);
     setSuccess(false);
   };
+  /**
+   * 搭建引导的「添加功能」入口带着一次性信号进来：落地后自动打开新建功能
+   * 弹窗，并立刻从历史状态里清掉信号，刷新或返回不会重复弹出。
+   */
+  const arrivalState = location.state as { createFeature?: boolean } | null;
+  const openCreateOnArrive = useRef(arrivalState?.createFeature === true);
+  useEffect(() => {
+    if (!openCreateOnArrive.current) return;
+    openCreateOnArrive.current = false;
+    open("create");
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, navigate]);
   const onOpenFeature = (nextFeatureId: number) =>
     navigate(
       "/projects/" +

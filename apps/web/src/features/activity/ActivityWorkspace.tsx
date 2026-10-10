@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { ActivityItem, InpulseApiClient } from "@generated/api";
+import type {
+  ActivityItem,
+  AuditLogItem,
+  InpulseApiClient,
+} from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import {
   CalmBadge,
@@ -203,6 +207,20 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
         return "系统";
       }
       return actorNames.get(actorId) ?? `用户 #${actorId}`;
+    },
+    [actorNames],
+  );
+
+  /** 原始快照弹窗按审计记录解析操作人；措辞与审计页「原始审计快照」一致。 */
+  const auditActorNameOf = useCallback(
+    (record: AuditLogItem): string => {
+      if (record.actorType === "SYSTEM") {
+        return "系统";
+      }
+      if (record.actorId === null) {
+        return "未知用户";
+      }
+      return actorNames.get(record.actorId) ?? `用户 #${record.actorId}`;
     },
     [actorNames],
   );
@@ -534,6 +552,7 @@ export const ActivityWorkspace: React.FC<ActivityWorkspaceProps> = ({
       <ActivitySnapshotModal
         item={snapshotItem}
         projectName={snapshotProjectName}
+        actorNameOf={auditActorNameOf}
         {...(client ? { client } : {})}
         onClose={() => setSnapshotItem(null)}
       />

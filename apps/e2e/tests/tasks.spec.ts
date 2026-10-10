@@ -30,8 +30,9 @@ test("F-14 项目成员创建/指派任务，双页面合并，通知直达和�
     await page.getByTestId("open-created-project-activity").click();
     const projectId = page.url().match(/projects\/(\d+)/)![1];
     await page.goto(`/projects/${projectId}/modules`);
-    await expect(page.getByText("暂无模块", { exact: true })).toBeVisible();
-    // 页头动作区的「新增模块」已按产品要求删除，空态里是唯一的入口。
+    // 空项目的模块页显示「模块 → 功能 → 任务」搭建引导，第一步即新增模块
+    // 入口（2026-10-10 起取代「暂无模块」空态）。
+    await expect(page.getByTestId("project-setup-guide")).toBeVisible();
     await page.getByRole("button", { name: "新增模块", exact: true }).click();
     const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill(`支付模块-${suffix}`);

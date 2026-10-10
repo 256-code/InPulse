@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { CreateProjectResponse, InpulseApiClient } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 import { ProjectsPage } from "./ProjectsPage";
@@ -35,6 +35,13 @@ const createdProject: CreateProjectResponse = {
     },
   ],
 };
+
+function ModulesLandingProbe() {
+  const location = useLocation();
+  return (
+    <div data-testid="modules-landing">{JSON.stringify(location.state)}</div>
+  );
+}
 
 describe("ProjectsPage", () => {
   it("creates a project and navigates to its activity page", async () => {
@@ -282,4 +289,76 @@ describe("ProjectsPage", () => {
     await user.click(screen.getByRole("button", { name: /管\s*理\s*成\s*员/ }));
     expect(await screen.findByText("Member content")).toBeInTheDocument();
   });
+
+  it("创建成功后「添加模块」带着一次性信号进入模块页", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [{ id: 1, name: "开发者 C", avatarUrl: null, isAdmin: false }],
+    });
+    const createProject = vi.fn().mockResolvedValue(createdProject);
+    const listProjects = vi.fn().mockResolvedValue({ items: [] });
+    const client = {
+      issueCsrfToken,
+      getUserDirectory,
+      createProject,
+      listProjects,
+    } as unknown as InpulseApiClient;
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <AuthStateProvider
+          value={{
+            status: "authenticated",
+            user: {
+              id: 1,
+              loginName: "developer",
+              name: "开发者 C",
+              email: null,
+              avatarUrl: null,
+              isAdmin: true,
+              status: "ACTIVE",
+            },
+          }}
+        >
+          <MemoryRouter initialEntries={["/projects"]}>
+            <Routes>
+              <Route
+                path="/projects"
+                element={<ProjectsPage client={client} />}
+              />
+              <Route
+                path="/projects/:projectId/modules"
+                element={<ModulesLandingProbe />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthStateProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("create-project-button"));
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    fireEvent.change(within(dialog).getByLabelText("项目名称"), {
+      target: { value: "商城系统" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("项目编码"), {
+      target: { value: "shop" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
+
+    await screen.findByText("项目创建成功");
+    await user.click(screen.getByTestId("add-module-after-create"));
+    const probe = await screen.findByTestId("modules-landing");
+    expect(JSON.parse(probe.textContent ?? "null")).toEqual({
+      createModule: true,
+    });
+  }, 15_000);
 });

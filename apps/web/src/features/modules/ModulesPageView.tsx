@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button } from "antd";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   createApiClient,
   type InpulseApiClient,
@@ -29,6 +29,10 @@ import {
 import { ProjectOverviewPageView } from "@features/project-overview/ProjectOverviewPageView";
 import { createProjectOverviewServerAdapter } from "@features/project-overview/project-overview-server";
 import {
+  isProjectSetupComplete,
+  type ProjectSetupGuideInput,
+} from "@features/project-overview/ProjectSetupGuide";
+import {
   ProjectWorkspaceModals,
   type ProjectWorkspaceModalKind,
 } from "@features/project-overview/ProjectWorkspaceModals";
@@ -55,6 +59,7 @@ export function ModulesPageView({
 }) {
   const { query } = useModules(projectId, client);
   const navigate = useNavigate();
+  const location = useLocation();
   const [request, setRequest] = useState<ModuleEditorRequest | null>(null);
   const [success, setSuccess] = useState(false);
   /** 成员与设置 / 迭代记录 / 遗留问题：就地弹窗，不再整页跳转。 */
@@ -72,6 +77,18 @@ export function ModulesPageView({
     setSuccess(false);
     setRequest({ action, ...(item ? { item } : {}) });
   };
+  /**
+   * 「添加模块」入口带来的定位信号（history state）：只消费一次，落地即打开
+   * 新增模块弹窗，随后把信号从历史状态里清掉，刷新或后退不会重复弹出。
+   */
+  const arrivalState = location.state as { createModule?: boolean } | null;
+  const openCreateOnArrive = useRef(arrivalState?.createModule === true);
+  useEffect(() => {
+    if (!openCreateOnArrive.current) return;
+    openCreateOnArrive.current = false;
+    open("create");
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, navigate]);
   const onOpenModule = (moduleId: number) =>
     navigate("/projects/" + projectId + "/modules/" + moduleId + "/features");
   const projectQuery = useProjectDetail({
@@ -110,6 +127,43 @@ export function ModulesPageView({
     () => createProjectOverviewServerAdapter(client),
     [client],
   );
+  const modules = query.data?.items ?? [];
+  const featureCount = modules.reduce(
+    (total, item) => total + item.stats.activeFeatureCount,
+    0,
+  );
+  const taskCount = modules.reduce(
+    (total, item) =>
+      total + item.stats.openTaskCount + item.stats.completedTaskCount,
+    0,
+  );
+  // 搭建引导只在列表读取成功后出现：加载中不闪烁，读取失败让位给错误态。
+  const showSetupGuide =
+    query.isSuccess &&
+    !isProjectSetupComplete(modules.length, featureCount, taskCount);
+  // 第二步（添加功能）指向第一个模块：一个功能都没有时，列表首个即最近
+  // 创建的模块（模块列表按「创建时间从近到远」排）。
+  const featureTarget = featureCount === 0 ? modules[0] : undefined;
+  const setupGuide: ProjectSetupGuideInput | undefined = showSetupGuide
+    ? {
+        moduleCount: modules.length,
+        featureCount,
+        taskCount,
+        featureTargetName: featureTarget?.name ?? null,
+        onCreateModule: () => open("create"),
+        onAddFeature: () => {
+          if (featureTarget === undefined) return;
+          navigate(
+            "/projects/" +
+              projectId +
+              "/modules/" +
+              featureTarget.id +
+              "/features",
+            { state: { createFeature: true } },
+          );
+        },
+      }
+    : undefined;
   return (
     <>
       <div className="module-workspace-page">
@@ -125,6 +179,7 @@ export function ModulesPageView({
           onOpenRecord={setRecordTarget}
           onOpenIssues={() => setWorkspaceModal("issues")}
           adapter={overviewAdapter}
+          setupGuide={setupGuide}
           onEditProject={
             canManageProject ? () => setProjectEditOpen(true) : undefined
           }
@@ -149,19 +204,23 @@ export function ModulesPageView({
               }
             />
           ) : !query.data?.items.length ? (
-            <CalmEmptyState
-              icon="boxes"
-              title="暂无模块"
-              description="创建一个业务模块，也可以在新建任务时同时创建模块。"
-            >
-              <Button
-                className="soft-blue-button"
-                onClick={() => open("create")}
+            // 空项目的搭建引导已经在指标条下方给出「新增模块」直达入口，
+            // 引导在场时不再叠加同义的模块空态。
+            showSetupGuide ? null : (
+              <CalmEmptyState
+                icon="boxes"
+                title="暂无模块"
+                description="创建一个业务模块，也可以在新建任务时同时创建模块。"
               >
-                <InpulseIcon name="plus" size={15} />
-                新增模块
-              </Button>
-            </CalmEmptyState>
+                <Button
+                  className="soft-blue-button"
+                  onClick={() => open("create")}
+                >
+                  <InpulseIcon name="plus" size={15} />
+                  新增模块
+                </Button>
+              </CalmEmptyState>
+            )
           ) : (
             <>
               <CalmSectionTitle

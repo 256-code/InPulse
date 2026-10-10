@@ -8,7 +8,11 @@ import { RecordDraftsModule } from "./modules/change-records/record-drafts.modul
 import { PublishedRecordsModule } from "./modules/change-records/published-records.module.js";
 import { FeaturesManagementModule } from "./modules/features/features-management.module.js";
 import { TasksManagementModule } from "./modules/tasks/tasks-management.module.js";
-import { Module } from "@nestjs/common";
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from "@nestjs/common";
 import { ModulesManagementModule } from "./modules/modules/modules-management.module.js";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { ApiExceptionFilter } from "./http/api-exception.filter.js";
@@ -16,6 +20,7 @@ import { ContractResponseInterceptor } from "./http/contract-response.intercepto
 import { AuthModule } from "./auth/auth.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { AuditLogReadModule } from "./audit/audit-log-read.module.js";
+import { RequestAuditContextMiddleware } from "./audit/request-audit-context.middleware.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { IdempotencyModule } from "./idempotency/idempotency.module.js";
@@ -82,4 +87,12 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * 所有路由（含健康探针与未匹配路径）都建立请求级审计上下文；
+   * 集成测试同样实例化 AppModule，因此不能只依赖 `main.ts` 注册中间件。
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestAuditContextMiddleware).forRoutes("*");
+  }
+}

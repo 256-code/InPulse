@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { loginViaUi } from "../helpers/auth-context.js";
 import { loadRuntime } from "../helpers/runtime.js";
 
 test("API 使用测试数据库成功启动并通过健康探针", async ({ request }) => {
@@ -55,6 +56,33 @@ test("登录后回到登录前的目标页面", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
+});
+
+test("退出登录回落到干净的登录页，换账号登录不再落回上一账号的页面", async ({
+  page,
+}) => {
+  const runtime = await loadRuntime();
+
+  await loginViaUi(page, runtime);
+  await page.goto("/projects");
+  await expect(page.getByRole("heading", { name: "项目列表" })).toBeVisible();
+
+  await page.getByRole("button", { name: "账户菜单" }).click();
+  await page.getByRole("button", { name: /退出登录/ }).click();
+
+  // 主动退出必须回到不带 from 的干净登录页：from 只由匿名直达受保护页面的
+  // 跳转（RequireAuth）产生，退出登录不能把当前页写进登录地址。
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByLabel("登录名").fill(runtime.member.loginName);
+  await page.getByLabel("密码").fill(runtime.member.password);
+  await page
+    .locator("form")
+    .getByRole("button", { name: /登\s*录/ })
+    .click();
+
+  // 换账号登录后回到默认入口（任务中心），而不是上一账号停留的项目列表。
+  await expect(page).toHaveURL(/\/tasks$/);
 });
 
 test("E2E 登录复用后的 Session 可以读取当前用户", async ({ request }) => {

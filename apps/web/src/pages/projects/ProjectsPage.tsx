@@ -35,6 +35,19 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
     [navigate],
   );
 
+  /**
+   * 「添加模块」：创建成功横幅的下一步。带一次性信号进入项目工作区，
+   * 模块页落地后自动打开新增模块弹窗（搭建引导同时展示三步清单）。
+   */
+  const handleAddModule = useCallback(
+    (projectId: number) => {
+      navigate("/projects/" + projectId + "/modules", {
+        state: { createModule: true },
+      });
+    },
+    [navigate],
+  );
+
   const handleSearch = useCallback(
     (query: string) => {
       navigate(`/search?q=${encodeURIComponent(query)}`);
@@ -51,6 +64,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ client }) => {
       onCreated={handleCreated}
       onStartCreate={handleStartCreate}
       onOpenActivity={handleOpenActivity}
+      onAddModule={handleAddModule}
       onOpenModules={(projectId) => navigate(`/projects/${projectId}/modules`)}
       onOpenMembers={(projectId) => navigate(`/projects/${projectId}/members`)}
       onSearch={handleSearch}

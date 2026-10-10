@@ -50,6 +50,8 @@ export interface ProjectsPageViewProps {
   readonly onCreated?: (response: CreateProjectResponse) => void;
   readonly onOpenActivity?: ((projectId: number) => void) | undefined;
   readonly onOpenModules?: ((projectId: number) => void) | undefined;
+  /** 「添加模块」：打开模块列表并自动弹开新增模块表单；省略时退化为 onOpenModules。 */
+  readonly onAddModule?: ((projectId: number) => void) | undefined;
   readonly onOpenMembers?: ((projectId: number) => void) | undefined;
   readonly onSearch?: ((query: string) => void) | undefined;
   readonly projects?: readonly ProjectListItem[] | undefined;
@@ -68,6 +70,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   onCreated,
   onOpenActivity,
   onOpenModules,
+  onAddModule,
   onOpenMembers,
   onSearch,
   projects = [],
@@ -197,11 +200,16 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             </span>
           </div>
           <div className="creation-success-actions">
+            {/* 创建后的下一步就是「添加模块」：带一次性信号进入项目工作区，
+                落地即打开新增模块弹窗；没有该回调时退化为普通打开模块列表。 */}
             <Button
-              className="text-button"
-              onClick={() => onOpenModules?.(createdProject.project.id)}
+              className="primary-button"
+              data-testid="add-module-after-create"
+              onClick={() =>
+                (onAddModule ?? onOpenModules)?.(createdProject.project.id)
+              }
             >
-              管理模块
+              添加模块
             </Button>
             {isAdmin && onOpenMembers ? (
               <Button

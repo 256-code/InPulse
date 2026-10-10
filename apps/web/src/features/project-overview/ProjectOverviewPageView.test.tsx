@@ -1,7 +1,7 @@
 import { MemoryRouter } from "react-router-dom";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ProjectItem } from "@generated/api";
@@ -10,6 +10,7 @@ import type {
   ProjectOverviewAdapter,
   ProjectOverviewResult,
 } from "./project-overview-types";
+import type { ProjectSetupGuideInput } from "./ProjectSetupGuide";
 
 const project: ProjectItem = {
   id: 1,
@@ -79,6 +80,7 @@ interface RenderOverrides {
   readonly adapter?: ProjectOverviewAdapter;
   readonly project?: ProjectItem | null;
   readonly projectError?: string;
+  readonly setupGuide?: ProjectSetupGuideInput;
 }
 
 const renderView = (overrides: RenderOverrides = {}) => {
@@ -115,6 +117,9 @@ const renderView = (overrides: RenderOverrides = {}) => {
           {...(overrides.projectError === undefined
             ? {}
             : { projectError: overrides.projectError })}
+          {...(overrides.setupGuide === undefined
+            ? {}
+            : { setupGuide: overrides.setupGuide })}
         />
       </QueryClientProvider>
     </MemoryRouter>,
@@ -275,5 +280,31 @@ describe("ProjectOverviewPageView", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(handlers.onRetryProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("渲染搭建引导并把第一步动作接到回调上", () => {
+    const onCreateModule = vi.fn();
+    const onAddFeature = vi.fn();
+    renderView({
+      setupGuide: {
+        moduleCount: 0,
+        featureCount: 0,
+        taskCount: 0,
+        featureTargetName: null,
+        onCreateModule,
+        onAddFeature,
+      },
+    });
+    const guide = screen.getByTestId("project-setup-guide");
+    expect(within(guide).getByText("开始搭建这个项目")).toBeInTheDocument();
+    fireEvent.click(within(guide).getByRole("button", { name: "新增模块" }));
+    expect(onCreateModule).toHaveBeenCalledTimes(1);
+    expect(onAddFeature).not.toHaveBeenCalled();
+  });
+
+  it("没有搭建引导输入时不渲染引导", async () => {
+    renderView();
+    await screen.findByTestId("overview-metric-members");
+    expect(screen.queryByTestId("project-setup-guide")).toBeNull();
   });
 });

@@ -3,7 +3,11 @@ import { ConfigProvider } from "antd";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import type { InpulseApiClient, ProjectListItem } from "@generated/api";
+import type {
+  CreateProjectResponse,
+  InpulseApiClient,
+  ProjectListItem,
+} from "@generated/api";
 import { ProjectsPageView } from "./ProjectsPageView";
 
 const project: ProjectListItem = {
@@ -194,5 +198,42 @@ describe("项目归档入口下线（ADR-043）", () => {
     expect(screen.queryByTestId("request-archive-2")).toBeNull();
     expect(screen.queryByTestId("approve-archive-request-2")).toBeNull();
     expect(screen.queryByTestId("reject-archive-request-2")).toBeNull();
+  });
+});
+
+const createdProject: CreateProjectResponse = {
+  project: {
+    id: 2,
+    code: "INPULSE",
+    name: "InPulse 研发交付平台",
+    description: "研发交付平台",
+    status: "NOT_STARTED",
+    rowVersion: 1,
+    createdBy: 1,
+    createdAt: "2026-09-09T00:00:00.000Z",
+    updatedAt: "2026-09-09T00:00:00.000Z",
+  },
+  members: [
+    {
+      userId: 1,
+      status: "ACTIVE",
+      role: "LEADER",
+      joinedAt: "2026-09-09T00:00:00.000Z",
+    },
+  ],
+};
+
+describe("创建成功后的下一步（2026-10-10）", () => {
+  it("「添加模块」优先走一次性到达信号入口", () => {
+    const onAddModule = vi.fn();
+    mount({ createdProject, onAddModule });
+    fireEvent.click(screen.getByTestId("add-module-after-create"));
+    expect(onAddModule).toHaveBeenCalledWith(2);
+  });
+
+  it("没有专用入口时「添加模块」退化为打开模块列表", () => {
+    const { onOpenModules } = mount({ createdProject });
+    fireEvent.click(screen.getByTestId("add-module-after-create"));
+    expect(onOpenModules).toHaveBeenCalledWith(2);
   });
 });
