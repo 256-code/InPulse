@@ -2325,6 +2325,16 @@ a:focus-visible {
 .calm-task-card > p.task-belonging {
   margin-bottom: 14px;
 }
+/* 归属行加项目标识、项目名加大加粗（2026-10-10 产品要求「来源项目太模糊」）：
+   图标取项目编码前两位（与项目列表页 / 遗留问题来源行同一个 ProjectLogo，18px
+   小于行盒高度、不撑高卡片）；项目名比同行的模块 / 功能大一档并随 <strong> 加粗，
+   颜色不写死——紧急白字组与金黄深字组等卡片色调规则作用在 <p> 上，由它继承。 */
+.task-belonging > .project-logo {
+  margin-right: 6px;
+}
+.task-belonging > .belonging-project {
+  font-size: 13px;
+}
 /* 负责人单独一行贴在卡片分隔线上方并右对齐：横线以上右侧只放负责人，
    横线以下的左下角给标签、右下角给截止时间。
    2026-09-23 放宽：聚合组卡在这一行会并排「负责人」与「N 条分支」两个 span，

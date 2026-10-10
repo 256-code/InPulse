@@ -5721,3 +5721,23 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | RECORD-SOURCE-TASK-INPLACE-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（5 个 TSX）退出码 0；`pnpm exec prettier --check`（published-records、issues、E2E 用例）通过 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（本轮推送后不触发：工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码，按 §8 需非作者人工评审。③ 任务弹窗叠在记录弹窗之上时，底层记录弹窗会被弹层实现标 `aria-hidden`，因此 E2E 在任务弹窗关闭后才重新按角色断言记录弹窗；视觉上底层弹窗始终在位。④ 只影响「查看来源任务」这一个入口：记录弹窗里其它导航（修订内容、作废、遗留项转任务）语义未变。
+
+## 任务卡片归属行加项目标识、项目名加大加粗（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「接下来改任务卡片，这个任务的来源项目太模糊了我想加入项目图标，项目名称稍微加大加粗」。改动前任务中心卡片的归属行是纯文本「项目名 · 模块 · 功能」12px 灰字，跨项目视图里项目名与模块 / 功能同色同号，扫视时分不出哪一段是来源项目。纯前端改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/my-tasks/TaskCenterPageView.tsx`：新增 `projectCodes` 映射（`projects` 端口 → `projectId: name` 旁边的 `projectId: code`），任务卡片（`renderCard`）与聚合组卡片（`renderGroupCard`）的 `<p className="task-belonging">` 行首渲染 `<ProjectLogo className="tiny" />`，项目名包进 `<strong className="belonging-project">`，其后仍是「 · 模块 · 功能」。R-3 的任务项只带 `projectId` / `projectName`、不带项目编码，因此编码一律从页面已注入的项目列表取；项目不在列表里时只渲染项目名、不显示图标。
+- `apps/web/src/styles/design-system.css`：`.task-belonging > .project-logo { margin-right: 6px }`、`.task-belonging > .belonging-project { font-size: 13px }`（原 12px，`<strong>` 自带加粗）。颜色刻意不写死——卡片色调规则（紧急白字组、金黄深字组、白卡深字）作用在 `<p>` 上，由 `<strong>` 继承，因此五档卡片各自保持原有文字色。
+- 影响面：`/tasks` 卡片视图的任务卡与聚合组卡；`/tasks` 列表视图（表格）与项目任务面板卡片（`TasksPanel`）的归属列 / 任务介绍行未改。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CARD-PROJECT-LOGO-UNIT-001 | Web 单元 | 卡片归属行带标识与加粗项目名 | `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks` → 含新用例《marks the source project with an icon and a bolder name on the card》：`.project-logo` 文本 `IN`、`title=INP`、带 `tiny` 类，`strong.belonging-project` 文本 `注入项目名`，整行 `.textContent` = `IN注入项目名 · 访问控制 · MFA 登录` | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-UNIT-002 | Web 单元 | 项目不在端口里时降级 | 同文件《falls back to the plain project name when the project is not in the port》：项目列表去掉该项目后 `.project-logo` 为 null，`strong.belonging-project` 回落任务自带的 `projectName` | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-UNIT-003 | Web 单元 | 聚合组卡片同口径 | 既有《renders task groups as cards inside the task grid》追加 `.task-belonging .project-logo` 文本断言 | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 682 例全绿** | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-E2E-001 | 浏览器 E2E | 卡片仍是任务详情入口、文字断言不依赖拆分 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/tasks.spec.ts` → **1 passed (19.5s)**（夹具清理：删除用户 2、项目 3、业务行 93、审计行 8） | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-BROWSER-001 | 浏览器实测 | 观感与色调继承 | dev（Vite 5173）`/tasks` 实测金黄卡：`<p class="task-belonging"><span class="project-logo blue tiny" title="AGV_SCHED">AG</span><strong class="belonging-project">AGV 智能调度平台 2.0</strong> · 数据采集与监控 · 遥测数据采集</p>`；`span` 计算值 `inline-grid` / 18×18，`strong` 13px / 700 / 继承卡片色调（`rgba(63, 45, 0, 0.8)`）；归属行高 19.9px、单行不折行 | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-LOGO-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（改动 TSX）退出码 0；`pnpm exec prettier --check`（my-tasks + design-system.css）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发（工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 18px 标识与 13px 项目名把归属行行高从 18px 抬到 19.9px，卡片整体高约 +2px；同一行的卡片由网格 `align-items: stretch` 拉平，跨档对齐不受影响。④ `/tasks` 列表视图的「项目」列与项目任务面板的归属行沿用原样，未同步加图标与字重——若产品要求全站一致，需要再确认（列表视图是窄列，加图标会挤压标题）。

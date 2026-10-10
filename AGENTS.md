@@ -886,3 +886,12 @@
 - 未接就地宿主的入口保持深链语义：`/records` 卡片展开与 `?publishedId=` 深链、功能档案任务详情里的记录弹窗（`TasksPanel`）、聚合组详情（`TaskGroupDetailPanels`）。
 - 回归防线：`apps/web/src/features/published-records/PublishedRecordDetail.test.tsx` 的《opens the source task in place when the host passes onOpenTask》+ 既有深链用例，`apps/web/src/features/issues/IssuesPageView.test.tsx` 的弹窗桩断言，`apps/e2e/tests/issues.spec.ts` 的「查看来源任务 → 任务弹窗且 URL 仍 /issues → 关闭回到记录弹窗」；E2E `record-publishing.spec.ts` 反向锁定 /records 仍是 link。
 - 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **96 文件 680 例全绿**；定向 `published-records + issues + tasks` 10 文件 81 例；`tsc --noEmit`、改动的 `eslint`、`prettier --check` 通过；真实 PostgreSQL E2E（`app_ci`）`tests/issues.spec.ts` **1 passed (14.9s)**、`tests/record-publishing.spec.ts` **3 passed (25.8s)**。「未运行」：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 本轮推送后不会触发（工作流只在 `main` 与 `dev/*` 上跑）。
+## 2026-10-10 任务卡片归属行加项目标识
+
+用户指示（原话）：「接下来改任务卡片，这个任务的来源项目太模糊了我想加入项目图标，项目名称稍微加大加粗」。纯前端（React / CSS）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/my-tasks/TaskCenterPageView.tsx` 新增 `projectCodes` 映射，任务卡片与聚合组卡片的 `.task-belonging` 行首渲染 `<ProjectLogo className="tiny" />`（项目编码前两位，与项目列表页、遗留问题来源行同一个组件），项目名包进 `<strong className="belonging-project">`；R-3 任务项不带项目编码，编码一律取自页面注入的 `projects` 端口，项目不在列表里时只渲染项目名、不造图标。
+- `apps/web/src/styles/design-system.css` 新增 `.task-belonging > .project-logo { margin-right: 6px }` 与 `.task-belonging > .belonging-project { font-size: 13px }`（原 12px，`<strong>` 自带加粗）；颜色不写死，由卡片色调规则作用在 `<p>` 上、`<strong>` 继承，五档卡片保持原文字色。
+- 未改：`/tasks` 列表视图的项目列、项目任务面板（`TasksPanel`）的归属行 / 任务介绍行。
+- 回归防线：`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 的《marks the source project with an icon and a bolder name on the card》与《falls back to the plain project name when the project is not in the port》（`renderView` 新增 `projects` 覆盖项），聚合组用例追加标识断言。
+- 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **96 文件 682 例全绿**（定向 my-tasks 5 文件 109 例）；`tsc --noEmit`、改动 `eslint`、`prettier --check` 通过；真实 PostgreSQL E2E（`app_ci`）`tests/tasks.spec.ts` **1 passed (19.5s)**；dev（Vite 5173）实测金黄卡归属行 = `span.project-logo.blue.tiny`（18×18、`title=AGV_SCHED`）+ `strong.belonging-project`（13px / 700 / 继承 `rgba(63, 45, 0, 0.8)`），行高 19.9px 单行不折。「未运行」：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。

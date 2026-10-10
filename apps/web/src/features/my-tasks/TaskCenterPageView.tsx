@@ -6,6 +6,7 @@ import {
   type ProjectItem,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -438,6 +439,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const projectNames = new Map<number, string>(
     projects.map((project) => [project.id, project.name]),
   );
+  /**
+   * 项目标识（2026-10-10 产品要求「来源项目太模糊」）：卡片归属行行首加项目图标，
+   * 取项目编码前两位渲染（与项目列表页、遗留问题来源行同一个 ProjectLogo）。
+   * R-3 的任务项只带 projectId / projectName、不带项目编码，这里复用页面已注入的
+   * 项目列表做映射；项目不在可见列表里时降级为只渲染项目名，不显示图标。
+   */
+  const projectCodes = new Map<number, string>(
+    projects.map((project) => [project.id, project.code]),
+  );
   const projectNameOf = (item: MyTaskListItem): string =>
     projectNames.get(item.projectId) ?? item.projectName;
   const matchedItems = items.filter((item) =>
@@ -550,6 +560,10 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
   const renderCard = (item: MyTaskListItem) => {
     const due = dueLabel(item);
     const assigneeNames = assigneeNamesOf(item);
+    const projectCode = projectCodes.get(item.projectId);
+    const belongingScope =
+      item.moduleName +
+      (item.featureName === null ? "" : " · " + item.featureName);
     return (
       <button
         type="button"
@@ -563,11 +577,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
         {/* 2026-09-22 二次定案：编号与「未完成」都不占徽章位；标签从右上角下移到分隔线
             以下的左下角，负责人移到分隔线上方的右侧。 */}
         <h3>{item.title}</h3>
+        {/* 归属行（2026-10-10 产品要求）：行首项目图标 + 加大加粗的项目名，
+            其后才是「模块 · 功能」，整体仍是一行省略。 */}
         <p className="task-belonging">
-          {projectNameOf(item) +
-            " · " +
-            item.moduleName +
-            (item.featureName === null ? "" : " · " + item.featureName)}
+          {projectCode === undefined ? null : (
+            <ProjectLogo code={projectCode} className="tiny" />
+          )}
+          <strong className="belonging-project">{projectNameOf(item)}</strong>
+          {" · " + belongingScope}
         </p>
         <div className="calm-card-assignee">
           <span title={"负责人：" + assigneeNames}>
@@ -796,6 +813,7 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       dueTitle,
       dueTone,
     } = describeTaskGroup(group);
+    const groupProjectCode = projectCodes.get(group.projectId);
     return (
       <button
         type="button"
@@ -816,8 +834,14 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             编号一并删除，编号只留在列表视图与弹窗里；没有分支的 CLOSED 组同样只渲染这一套
             结构，截止占位为「—」。 */}
         <h3>{group.name}</h3>
+        {/* 归属行与任务卡片同口径（2026-10-10）：项目图标 + 加大加粗的项目名。 */}
         <p className="task-belonging">
-          {projectNames.get(group.projectId) ?? group.projectName}
+          {groupProjectCode === undefined ? null : (
+            <ProjectLogo code={groupProjectCode} className="tiny" />
+          )}
+          <strong className="belonging-project">
+            {projectNames.get(group.projectId) ?? group.projectName}
+          </strong>
         </p>
         <div className="calm-card-assignee">
           <span title={assigneeTitle}>
