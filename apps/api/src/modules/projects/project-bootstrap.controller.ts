@@ -34,6 +34,7 @@ import {
   ProjectBootstrapConflictError,
   ProjectBootstrapValidationError,
   ProjectBootstrapWorkflow,
+  ProjectCodeConflictError,
 } from "./project-bootstrap.workflow.js";
 
 interface ProjectBootstrapControllerRequest {
@@ -151,7 +152,10 @@ export class ProjectBootstrapController {
         requestId,
       };
     }
-    if (error instanceof ProjectBootstrapConflictError) {
+    if (
+      error instanceof ProjectBootstrapConflictError ||
+      error instanceof ProjectCodeConflictError
+    ) {
       response.status(error.status);
       return {
         code: error.code,
