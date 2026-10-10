@@ -5579,3 +5579,105 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | PROJECT-TIER-ORDER-BROWSER-001 | 浏览器实测 | 未完成档内动态位次 | dev（Vite 5173 + API 3000 经代理）：`GET /api/v1/projects` 返回 `OPS_DASH`（未开始）在 `AGV_SCHED`（进行中）之前；向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位；`/projects` 页面按同一次序渲染 | 本地通过（2026-10-09） |
 
 未运行 / 已知偏差：① 未跑整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:unit` / `pnpm test:web`（未改其它模块）、Playwright / `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 浏览器实测写入了演示库 `app`：向项目 3（`K123 验证`）创建了一个任务「排序验证任务 A」（连带一条 `task.create` 动态，因此该项目停留在未完成档首位，属预期行为）。③ 本批含服务端产品代码、契约与文档，按 §8 需非作者人工评审。
+
+## 新项目搭建引导：模块 → 功能 → 任务（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：先问「现在这个项目管理系统重建项目模块功能任务还是有点繁琐，怎么改进，先说明不要改代码」，看过第一档方案后指示「先做第一档的引导」。纯前端（`apps/web`）引导 + E2E 断言 / 注释同步，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 新增 `apps/web/src/features/project-overview/ProjectSetupGuide.tsx`：三步清单（建立模块 / 添加功能 / 创建任务）+ `isProjectSetupComplete`；当前步主按钮（`primary-button`）、已完成步显示计数、无模块时后两步「先完成第 1 步」、三步齐备整块隐藏；引导不新增 API 请求，计数复用模块列表既有 stats（`activeFeatureCount` 求和；`openTaskCount + completedTaskCount` 求和）。
+- `apps/web/src/features/modules/ModulesPageView.tsx`：列表读取成功后未齐备才注入引导（`ProjectOverviewPageView` 指标条下方渲染）；空项目不再叠加「暂无模块」空态；「添加功能」带 `state: { createFeature: true }` 跳到 `modules[0]` 的功能页（模块列表按创建时间从近到远，首个即最近创建）。
+- `apps/web/src/features/features/FeaturesPageView.tsx` 消费 `state.createFeature` 自动打开「新增功能」弹窗；模块页消费 `state.createModule`（`useRef` 只消费一次，`navigate(..., { replace: true, state: null })` 清信号，刷新 / 后退不重复弹出）。
+- `apps/web/src/features/projects/ProjectsPageView.tsx` + `apps/web/src/pages/projects/ProjectsPage.tsx`：创建成功横幅「管理模块」改「添加模块」（`primary-button`、`data-testid="add-module-after-create"`），缺 `onAddModule` 时退化为 `onOpenModules`。
+- `apps/web/src/styles/design-system.css`：新增 `.project-setup-guide` 系列样式（含 700px 媒体查询）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-SETUP-GUIDE-UNIT-001 | Web 单元 | 三步清单步态与回调 | `ProjectSetupGuide.test.tsx` 5 例：空项目第一步 current、后两步 blocked 且「先完成第 1 步」×2；有模块时第二步 current、`featureTargetName` 文案「为「支付」建第一个功能档案。」、按钮回调各自触发；模块 + 功能齐备后第三步 current；三步齐备整块隐藏；`isProjectSetupComplete` 四组断言 | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-UNIT-002 | Web 单元 | 项目主页渲染引导 | `ProjectOverviewPageView.test.tsx` +2：传入 `setupGuide` 时渲染并接上「新增模块」回调（`onAddFeature` 不被误触）；不传时不渲染 | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-UNIT-003 | Web 单元 | 模块页引导判定与到达信号 | `ModulesPageView.test.tsx` +4：空项目显示引导且「暂无模块」为 null、无 `createModule` 信号不自动开弹窗；只有模块时指向「未分类模块」且「添加功能」带 `{ createFeature: true }` 进入功能路由；三步齐备不渲染引导；`{ createModule: true }` 落地自动打开「新增模块」弹窗。既有「shows retry on list failure」改断言引导 | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-UNIT-004 | Web 单元 | 功能页到达信号 | `FeaturesPageView.test.tsx` +2：带 `{ createFeature: true }` 进入自动打开「新增功能」弹窗（功能名称空值）；无信号停留「暂无功能」不自动打开 | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-UNIT-005 | Web 单元 | 创建成功横幅下一步 | `ProjectsPageView.test.tsx` +2：「添加模块」优先调用 `onAddModule`；缺省退化为 `onOpenModules`。`ProjectsPage.test.tsx` +1：全流程创建后点「添加模块」经路由探针断言 state 为 `{ createModule: true }` | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-WEB-001 | Web 全量 | 引导改动的全量前端回归 | `pnpm --filter @inpulse/web test` → **97 文件 695 例全绿**（基线 96 文件 679 例） | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-GATE-001 | 门禁 | 类型 / 静态检查 / 依赖边界 / 构建 | `pnpm typecheck`（7 个 workspace）、`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/web check:boundaries`（321 模块 / 1608 依赖无违规）通过 | 本地通过（2026-10-10） |
+| PROJECT-SETUP-GUIDE-E2E-001 | 浏览器 E2E | 全量浏览器回归与空项目入口断言 | `E2E_DATABASE_URL` 指向 `app_ci` 的 `pnpm test:e2e` → **70 例全绿（7.0 分钟）**；`apps/e2e/tests/tasks.spec.ts` 空项目断言已改为 `project-setup-guide` 可见；`record-feed.spec.ts` 注释同步 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 发现既有问题（与本批无关、未修）：`apps/e2e/tests/record-feed.spec.ts` 约第 73 行「我的草稿」断言依赖 `record-drafts.spec.ts` 先跑留下未发布草稿，单独运行该文件会失败；全量顺序（CI 形态）70 例通过。③ 引导判定任务步用「未完成任务 + 已完成任务」计数；若产品要求只算待办，需调整口径。④ 本批为纯前端交互与文案，建议非作者人工评审中文文案与视觉。
+
+## 业务链路审计自动采集客户端请求元数据（用户指示，2026-10-10 本地落库，尚未提交）
+
+用户报告（原话）：「这里三个怎么是空的」（附 `/audit` 原始审计快照弹窗的「请求上下文」组：客户端请求 ID / IP 地址 / User-Agent 三行均为 `—`）。查证后定性为**写入侧从未采集**：`app.audit_logs` 的 `client_request_id` / `ip_address` / `user_agent` 三列与 SQL 函数 `app.audit_append_locked` 自 `0000_initial.sql` 起就已存在，读取侧（`getAuditLogs` → 快照弹窗）也早已渲染，但唯一写入端口 `PostgresAuditWritePort.append` 与全部调用方都不传这三个字段，也没有任何全局采集点。用户选择方案 B（补齐服务端采集），本批落地**请求级上下文自动填充**：不改契约（三字段早已在 `auditLogSchema` 中，上限 `clientRequestId` 64 / `ipAddress` 64 / `userAgent` 1000）、不改数据库、不改任何调用方签名。
+
+### 锁定口径
+
+- **采集走 AsyncLocalStorage 请求上下文**：新增 `apps/api/src/audit/request-audit-context.ts`（`RequestAuditMeta` + `runWithRequestAuditMeta` / `currentRequestAuditMeta` / `requestAuditMetaFrom` / `applyRequestAuditMeta`）与 `request-audit-context.middleware.ts`；`apps/api/src/app.module.ts` 实现 `NestModule.configure`，`consumer.apply(RequestAuditContextMiddleware).forRoutes("*")`（Nest 11 + Express 5 下 `"*"` 实测可用）。
+- **兜底发生在唯一入口**：`PostgresAuditWritePort.append` 首行 `applyRequestAuditMeta(input)`，其后全链路（链头锁、密钥轮换分支、`appendLocked`）统一使用兜底结果；显式传入的值**优先于**上下文，显式值本身也过同一套 normalize。`AuditWritePort` 在 `apps/api` 内只有 `PostgresAuditWritePort` 一个实现（grep 证实），因此业务链路、管理员域与 Workflow 的审计写入全部自动获得该行为（**推断**：由唯一实现 + 全局中间件保证，未逐接口实测）。
+- **入站 `X-Request-Id` 只落 `client_request_id`，绝不替换内部 `request_id`**：内部 ID 仍由服务端生成，保持「服务端追踪 ID」与「调用方追踪 ID」两层语义；白名单 `^[A-Za-z0-9._:-]{1,64}$`（trim 后匹配），不合法 → null 且**不影响业务响应**。
+- **IP 必须过 `node:net` 的 `isIP()`**：`ip_address` 是 `INET` 列，`"unknown"` 之类字面量入库会直接抛错，因此非法值一律归 null；`::ffff:127.0.0.1` 剥前缀归一为 `127.0.0.1`；来源优先级 `request.ip` → `socket.remoteAddress`。
+- **UA 截断 512**：契约上限 1000，服务端取 512 更保守；空串 / 纯空白归 null。
+- **非 HTTP 路径行为不变**：CLI、定时任务或测试直接调用 append 时上下文为空 → 三列仍为 null（不报错、不臆造）。
+
+### 用例
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AUDIT-CTX-UNIT-001 | API 单元 | 入站请求 ID 白名单 | `apps/api/test/request-audit-context.test.ts`（6 例）：合法值 trim 后通过、含空格拒、64 字符通过、65 字符拒 | 本地通过（2026-10-10） |
+| AUDIT-CTX-UNIT-002 | API 单元 | IP / UA 归一 | 同文件：`::ffff:127.0.0.1` 剥前缀、`unknown` 归 null、600 字符 UA 恰好截为 512 | 本地通过（2026-10-10） |
+| AUDIT-CTX-UNIT-003 | API 单元 | 上下文提取与兜底优先级 | 同文件：`requestAuditMetaFrom` 在 `request.ip` 缺失时回落 `socket.remoteAddress`；`applyRequestAuditMeta` 无上下文 → 三列 null、有上下文 → 兜底、显式值优先、显式 null 保持 null、显式非法 IP 归 null；`AsyncLocalStorage` 不跨请求泄漏 | 本地通过（2026-10-10） |
+| AUDIT-CTX-INT-001 | API 集成（真实 PostgreSQL + HTTP） | 三列精确落库且内部 ID 不被替换 | `apps/api/test/audit-request-context.integration.test.ts` 第 1 例：带 `X-Request-Id: audit-ctx-1.trace:alpha` 与自定义 UA 的 `createModule` 请求 → `module.create` 审计行 `client_request_id` / `host(ip_address)` / `user_agent` 三者与请求头精确一致，`request_id` 仍是服务端生成的 UUID 且 ≠ 客户端 ID | 本地通过（2026-10-10，4/4，8.78s） |
+| AUDIT-CTX-INT-002 | API 集成 | 缺请求头时只落 IP / UA | 同文件第 2 例：不传 `X-Request-Id` → `client_request_id` 为 null，IP 与 UA 照常有值 | 本地通过（2026-10-10） |
+| AUDIT-CTX-INT-003 | API 集成 | 非法请求 ID 不影响业务 | 同文件第 3 例：`X-Request-Id` 含空格或 65 字符 → HTTP 仍 200、`client_request_id` 为 null | 本地通过（2026-10-10） |
+| AUDIT-CTX-INT-004 | API 集成 | UA 截断落库 | 同文件第 4 例：600 字符 UA → 落库长度恰为 512 | 本地通过（2026-10-10） |
+| AUDIT-CTX-REG-001 | API 全量回归 | 写入端口改动的全量集成回归 | `pnpm --filter @inpulse/api test:integration`（`TEST_DATABASE_URL=…/app_ci`）→ **55 文件 532 例全绿**（基线 54 文件 528 例） | 本地通过（2026-10-10，121.49s） |
+| AUDIT-CTX-REG-002 | API 全量回归 | 单测与静态门禁 | `/test:unit` **73 文件 436 例全绿**（基线 72 文件 430 例）；`prettier --check`（6 文件）、`eslint`（6 文件）、`pnpm -r typecheck`（8 workspace）、`pnpm -r build` 全绿 | 本地通过（2026-10-10） |
+| AUDIT-CTX-BROWSER-001 | 浏览器实测 | 真实 UI 路径（无 `X-Request-Id`） | dev（API 3000 + Vite 5173）：真实 UI 创建项目（`Project P 审计验证`，projectId 127）→ `/audit` 首行 `project.create` 快照显示 IP `127.0.0.1/32` 与真实浏览器 UA，客户端请求 ID 为 `—`（浏览器默认不发该头，属设计行为） | 本地通过（2026-10-10） |
+| AUDIT-CTX-BROWSER-002 | 浏览器实测 | 带 `X-Request-Id` 的写操作三列全有值 | 同一次会话页面内 `POST /api/v1/projects/127/modules`（携带 `x-csrf-token`、`Idempotency-Key`、`X-Request-Id: audit-ctx-ui.trace:beta`）→ HTTP 200 建模块 `PROJECTP-M-1`；`module.create` 快照三列分别为 `bf3184c0-d953-4cea-a305-88a2238d67ef`（内部 UUID，未被入站头替换）/ `audit-ctx-ui.trace:beta` / `127.0.0.1/32` + 完整 UA；完整性校验前后哈希连续：前一条 `eb32bcd4…` → 本条 `bfc63f54…` | 本地通过（2026-10-10） |
+| AUDIT-CTX-BROWSER-003 | 浏览器实测 | 非项目链（SYSTEM 链）同样生效 | 删除项目 127 后 SYSTEM 链 `project.delete` 行 `ip_address = 127.0.0.1`（该请求未带 `X-Request-Id`，`client_request_id` 为 null） | 本地通过（2026-10-10） |
+
+### 本地实际执行（2026-10-10，未提交未推送）
+
+① 新增集成测试 `apps/api/test/audit-request-context.integration.test.ts` **4/4**（8.78s，真实 PostgreSQL + 动态 `AppModule` + `listen(0)`，读审计经 `audit_reader` 专门连接）——覆盖上表 INT-001..004。
+② API 单测 **73 文件 436 例**、全量真库集成 **55 文件 532 例**（121.49s）全绿。
+③ 静态与构建：`prettier`（6 文件）、`eslint`（6 文件）、`pnpm -r typecheck`（8 workspace）、`pnpm -r build` 全绿。
+④ dev 重启后浏览器实证见 BROWSER-001..003；弹窗内容逐项回读（基本信息 / 请求上下文 / 完整性校验 / 事件载荷 JSON 均含 `ipAddress` / `userAgent` / `clientRequestId` 字段）。
+⑤ 测试数据已清理：`Project P 审计验证`（projectId 127）按 [ADR-062](adr/ADR-062.md) 业务路径物理删除（核验 `projects` / `PROJECT:127` 审计链归零），SYSTEM 链保留唯一一条 `project.delete` 作为删除留痕；演示库无 `user_` 前缀用户与 `Project P` 前缀项目残留。集成测试库 `app_ci` 的夹具按 `scripts/purge-test-data.mjs` 的 fail-closed 设计保留（该库专用于隔离夹具，不影响演示数据）。
+
+### 未运行 / 已知偏差
+
+① **未运行**：全量 `pnpm test:e2e`、`pnpm test:web`（未改前端）、整链 `pnpm check`（本机 npm 镜像缺 audit endpoint，`deps:audit` 必然中断）、生产镜像构建与 Trivy、GitHub Actions（尚未提交推送）。
+② 管理员域逐接口未实测：其自动获益来自「唯一写入实现 + 全局中间件」的结构保证（**推断**，见「锁定口径」第 2 条）。
+③ `client_request_id` 只在调用方主动发送 `X-Request-Id` 时有值——浏览器与生成客户端默认不发，因此真实 UI 路径该列多为空，这是设计行为而非缺陷；若产品要求前端统一带上该头，须在生成客户端层做，属另一次变更。
+④ 本批含服务端产品代码与新增测试，按 §8 需非作者人工评审。
+
+## 生产反向代理信任链与网关注入修复（用户指示，2026-10-10 本地落库，尚未提交）
+
+用户在方案 B（客户端请求元数据采集）后追问「以后是要部署到服务器的，那现在能修复吗」，对修复给出合意。本批修复两个**只在生产拓扑下出现**的真实缺口（本地 dev / CI 走 loopback，均复现不到）：
+
+- **审计 IP 与登录 / SSO IP 限流失真**：`apps/api/src/main.ts` 读 `TRUSTED_PROXY_CIDRS`（`apps/api/src/trusted-proxy.ts`，未配置默认 `["loopback"]`），而 `deploy/compose.yaml` 的 api 在 internal `backend` 网络上被 web(Nginx) 代理访问，源地址是容器内网地址、不是 loopback → Express 5 `trust proxy` 不采信 `X-Forwarded-For`，`request.ip` 会记录为**网关容器地址**。三组对照实验（真实 Express 5.2.1）实证：loopback 默认 + 非 loopback 源 → `req.ip=::ffff:10.1.7.170`（XFF `203.0.113.9` 被忽略）；loopback 默认 + loopback 源（本地 dev）→ `req.ip=203.0.113.9`；信任 `10.1.0.0/16` + 非 loopback 源（修复方案）→ `req.ip=203.0.113.9`。同一误差还会让 `login.controller.ts` / `sso.controller.ts` 的 `resolveClientIp` → **按 IP 维度的登录与 SSO 限流在生产塌成全部用户共享同一个桶**。
+- **`client_request_id` 恒空**：浏览器不会自动发送 `X-Request-Id`，入口 Nginx 也未注入 → 生产审计「客户端请求 ID」永远为 `—`。
+
+### 锁定口径
+
+- **信任链用静态子网 + 字面量 CIDR，不用通配**：`deploy/compose.yaml` 的 `backend` 网络新增 `ipam.config: [subnet: 172.30.0.0/24]`，api 服务新增 `TRUSTED_PROXY_CIDRS: "172.30.0.0/24"`。`trusted-proxy.ts` 只接受 `loopback` 字面量 / 合法 IP / CIDR，容器名或 `!` 通配会被拒并使 API 启动失败（fail closed），因此必须给 backend 固定子网。
+- **`X-Request-Id` 由入口 Nginx 保证存在**：`deploy/docker/nginx.conf` 顶层新增 `map $http_x_request_id $inpulse_audit_request_id { default $request_id; "~^[A-Za-z0-9._:-]{1,64}$" $http_x_request_id; }`，`location /api/v1/` 新增 `proxy_set_header X-Request-Id $inpulse_audit_request_id;`。语义为「客户端自带合法值则透传（开发环境可溯源），否则回退 `$request_id`（16 随机字节 / 32 hex）」，并非无条件覆盖；nginx map 正则与 `apps/api/src/audit/request-audit-context.ts` 的 `CLIENT_REQUEST_ID_PATTERN` 逐字一致，由静态检查保真。
+- **幂等安全**：AGENTS §6 规定追踪头（含 `X-Request-Id`）不进入幂等摘要，注入不改变任何幂等键语义；`X-Forwarded-*` 信任链不影响 CSRF 同源校验（该处按 Origin / Host 判定）。
+- **不动 `check-web-image-csp.sh`**：CI 的 7 组断言只覆盖 CSP 与安全头，无法验证头转发，本批以静态断言 + 容器探针补足（见下）。
+
+### 用例
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TRUSTED-PROXY-STATIC-001 | 静态校验 | 子网与信任链绑定 | `scripts/check_deploy_refs.mjs`：api 存在时 backend `ipam.config` 恰好一个非空 subnet；api env 必须有非空 `TRUSTED_PROXY_CIDRS`、不得含 `loopback` / `0.0.0.0/0` / `::/0`、必须 `includes(backendSubnets[0])` | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-STATIC-002 | 静态校验 | 网关注入与正则保真 | 同脚本：`deploy/docker/nginx.conf` 必须含 `map $http_x_request_id $inpulse_audit_request_id`、`default $request_id;`、`proxy_set_header X-Request-Id $inpulse_audit_request_id;`；并读 `request-audit-context.ts` 提取 `CLIENT_REQUEST_ID_PATTERN` 文本断言在 nginx 配置中原样出现 | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-STATIC-003 | 鉴别性验证 | 漂移必然转红 | ① 把 CIDR 改为 `172.31.0.0/24` 并删除注入行 → `ERROR: api: TRUSTED_PROXY_CIDRS must include the backend subnet 172.30.0.0/24`（exit 1）；② 仅删除 nginx 注入行 → `ERROR: deploy/docker/nginx.conf: /api/v1 proxy must set X-Request-Id from $inpulse_audit_request_id`（exit 1）；两次恢复后 `pnpm check:deploy:test` 均 exit 0 | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-NGINX-001 | 容器探针（真实 Nginx） | 无 `X-Request-Id` 时回退 | 自签证书 + 改动后的 `nginx.conf` + busybox 上游回显：无头请求 → 上游收到 `X-Request-Id: 80019fdf4218bbf05b5f258d51c02fd5`（32 hex，`$request_id`） | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-NGINX-002 | 容器探针 | 合法客户端值透传 | `probe-client-abc.123` → 上游原样收到同值 | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-NGINX-003 | 容器探针 | 非法值（含空格）回退 | `bad id!` → 上游收到 32 hex 回退值 | 本地通过（2026-10-10） |
+| TRUSTED-PROXY-NGINX-004 | 容器探针 | 非法值（65 字符）回退 | 65 个 `a` → 上游收到 32 hex 回退值 | 本地通过（2026-10-10） |
+
+### 未运行 / 已知偏差
+
+① **未在真实生产栈实测**：证据止于配置级静态校验（`pnpm check:deploy:test` exit 0）、三组 Express 对照实验与真实 Nginx 容器探针（上游为回显容器，非真实 API）；本批未构建 / 未运行改动后的 web 与 api 生产镜像联动，也未在真实主机执行 compose 部署。
+② **CI 盲区（必须知道）**：dev / Playwright E2E 全走 loopback，`request.ip` 恒为 `127.0.0.1`，覆盖不到非 loopback 代理路径；本批的修复无法由现有自动化测试回归（漂移只会被静态检查拦住），改动 `backend` 子网或 `TRUSTED_PROXY_CIDRS` 时必须重新跑 `pnpm check:deploy:test`。
+③ **若将来在最外层再加一层 LB / CDN**，其地址段必须追加进 `TRUSTED_PROXY_CIDRS`（逗号分隔多值），否则 IP 采集与 IP 限流又会退化；本批只覆盖 Nginx 直连 API 的现有拓扑。
+④ 容器探针中上游同时收到 `X-Forwarded-For: 172.18.0.1`——正好实证「不修信任链时 API 只能看到网关内网地址」的缺陷形态。
+⑤ 本批含部署配置与静态检查的产品代码，按 §8 需非作者人工评审；部署到真实主机上线前，`TRUSTED_PROXY_CIDRS` 与实际网段一致性需在首次部署时人工核对一次。

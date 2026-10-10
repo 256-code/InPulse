@@ -865,3 +865,24 @@
 - 不新增索引与迁移（沿用 ADR-046 决策 3 的结论）：第一键仍是相关子查询算出的 `CASE`，索引无法满足；`MAX(occurred_at)` 走既有 `activity_projection_project_cursor_idx`。
 - 回归防线：`apps/api/test/projects-read-api.integration.test.ts` 两个列表顺序用例（真实 HTTP + 真实 PostgreSQL）；改动该口径时必须跑 `pnpm --filter @inpulse/api test:integration`。本地实测 56 文件 545 例全绿；真实 dev 实测未完成档内 `OPS_DASH`（未开始）排在 `AGV_SCHED`（进行中）之前，向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位。
 - 本地验证（2026-10-09）：`pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm format:check` 通过。**未运行**：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:web`、全量 `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+
+## 2026-10-10 新项目搭建引导（模块 → 功能 → 任务）
+
+用户指示（原话）：先问「现在这个项目管理系统重建项目模块功能任务还是有点繁琐，怎么改进，先说明不要改代码」，看过第一档方案后指示「先做第一档的引导」。纯前端（`apps/web`）引导 + E2E 断言 / 注释同步，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 新增 `apps/web/src/features/project-overview/ProjectSetupGuide.tsx`（三步清单 + `isProjectSetupComplete`）：建立模块 / 添加功能 / 创建任务三步各带直达动作，当前步主按钮（`primary-button`）、已完成步显示计数、无模块时后两步显示「先完成第 1 步」，三步齐备整块隐藏；引导不新增 API 请求，计数复用模块列表既有 stats（`activeFeatureCount` 求和、`openTaskCount + completedTaskCount` 求和）。
+- `apps/web/src/features/modules/ModulesPageView.tsx`：列表读取成功且未齐备时把引导传给 `ProjectOverviewPageView`（指标条下方渲染）；空项目不再叠加「暂无模块」空态；「添加功能」带 `state: { createFeature: true }` 跳到第一个模块的功能页（模块列表按创建时间从近到远，首个即最近创建）。「添加模块」到达信号（`state.createModule`，由 `apps/web/src/pages/projects/ProjectsPage.tsx` 下发）用 `useRef` 只消费一次并 `navigate(..., { replace: true, state: null })` 清除，刷新 / 后退不重复弹出。
+- `apps/web/src/features/features/FeaturesPageView.tsx` 消费 `state.createFeature` 落地自动打开「新增功能」弹窗；`apps/web/src/features/project-overview/ProjectOverviewPageView.tsx` 新增可选 `setupGuide`，任务步复用既有 `GlobalTaskCreateModal`；`apps/web/src/features/projects/ProjectsPageView.tsx` 创建成功横幅「管理模块」改「添加模块」（`data-testid="add-module-after-create"`），缺 `onAddModule` 时退化为 `onOpenModules`；`apps/web/src/styles/design-system.css` 新增 `.project-setup-guide` 系列样式（含 700px 媒体查询）。
+- 测试：`apps/web` 新增 16 例（`ProjectSetupGuide.test.tsx` 5 例；`ProjectOverviewPageView.test.tsx` +2；`ModulesPageView.test.tsx` +4，既有重试用例改为断言引导；`FeaturesPageView.test.tsx` +2；`ProjectsPageView.test.tsx` +2；`ProjectsPage.test.tsx` +1）→ `pnpm --filter @inpulse/web test` **97 文件 695 例全绿**（基线 96 文件 679 例）；`apps/e2e/tests/tasks.spec.ts` 空项目断言改为 `project-setup-guide` 可见，`apps/e2e/tests/record-feed.spec.ts` 注释同步。
+- 本地验证（2026-10-10）：`pnpm typecheck`（7 个 workspace）、`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm --filter @inpulse/web check:boundaries`（321 模块 / 1608 依赖无违规）、`pnpm --filter @inpulse/e2e typecheck` 通过；`E2E_DATABASE_URL` 指向 `app_ci` 的全量 `pnpm test:e2e` **70 例全绿（7.0 分钟）**。**未运行**：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+- 已知既有问题（与本批无关、未修）：`apps/e2e/tests/record-feed.spec.ts` 约第 73 行的「我的草稿」标题断言依赖 `record-drafts.spec.ts` 先跑并留下未发布草稿，单独运行该文件会失败；全量顺序（CI 形态）通过。
+
+## 2026-10-10 生产反向代理信任链与网关注入修复（用户指示，本地落库）
+
+用户在方案 B（客户端请求元数据采集）后追问「以后是要部署到服务器的，那现在能修复吗」，对修复给出合意。修复两个只在生产拓扑下出现的缺口，改动三文件（`deploy/compose.yaml`、`deploy/docker/nginx.conf`、`scripts/check_deploy_refs.mjs`），无契约 / 路由 / 权限 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- **审计 IP 与登录/SSO IP 限流失真**：`TRUSTED_PROXY_CIDRS` 未配置时默认只信 loopback，而 api 经 internal `backend` 网络被 web(Nginx) 访问 → Express 5 `trust proxy` 不采信 `X-Forwarded-For`，`request.ip` 记成网关容器地址，`resolveClientIp` 的 IP 维度限流在生产塌成全部用户共享一个桶。修复：`backend` 网络固定静态子网 `172.30.0.0/24`（Docker 动态分配无法稳定配置信任链），api 服务新增 `TRUSTED_PROXY_CIDRS: "172.30.0.0/24"`；`trusted-proxy.ts` 只接受 `loopback` 字面量 / IP / CIDR，容器名或通配会被拒并使 API 启动失败。
+- **`client_request_id` 恒空**：`deploy/docker/nginx.conf` 顶层新增 `map $http_x_request_id $inpulse_audit_request_id`（合法客户端值透传，否则 `default $request_id`），`location /api/v1/` 新增 `proxy_set_header X-Request-Id $inpulse_audit_request_id;`；map 正则与 `apps/api/src/audit/request-audit-context.ts` 的 `CLIENT_REQUEST_ID_PATTERN` 逐字一致。
+- **静态门禁**：`scripts/check_deploy_refs.mjs` 新增 8 条断言（backend 子网恰好一个非空、`TRUSTED_PROXY_CIDRS` 非空且不含 `loopback` / `0.0.0.0/0` / `::/0`、必须包含 backend 子网、nginx.conf 必须含 map 与注入行、正则与 API 源码逐字一致）。改动 `backend` 子网或 `TRUSTED_PROXY_CIDRS` 时必须重跑 `pnpm check:deploy:test`。
+- 验证（2026-10-10 本地）：`pnpm check:deploy:test` exit 0；两条鉴别性验证各转红一次（改 `172.31.0.0/24` 且删注入行 → `TRUSTED_PROXY_CIDRS must include the backend subnet`；仅删注入行 → `/api/v1 proxy must set X-Request-Id`）后恢复；真实 Nginx 容器探针四项断言全过（无头回退 32 hex、合法值原样透传、含空格非法值回退、65 字符非法值回退），探针已清理；Express trust proxy 三组对照实验实证缺陷与修复。
+- **H5 标注**：① 未在真实生产栈实测，证据止于配置级静态校验 + 对照实验 + 容器探针（上游为回显容器，非真实 API）；② 若将来在最外层再加一层 LB / CDN，其地址段必须追加进 `TRUSTED_PROXY_CIDRS`，否则 IP 采集与 IP 限流又会退化；③ 本批只覆盖 Nginx 直连 API 的现有拓扑，dev / E2E 走 loopback 覆盖不到该路径（CI 盲区）。按 §8 需非作者人工评审；未提交、未推送。
