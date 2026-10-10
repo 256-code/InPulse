@@ -22,7 +22,7 @@ test("B-3b 全部项目跨项目清单、名称回填与全局我的草稿", asy
     expect(projectId).not.toBeNull();
 
     await page.goto(`/projects/${projectId}/modules`);
-    // 页头动作区的「新增模块」已按产品要求删除，页面只剩区块标题行/空态一处入口。
+    // 页头动作区的「新增模块」已按产品要求删除，空项目由搭建引导第一步给出入口。
     await page.getByRole("button", { name: "新增模块", exact: true }).click();
     const moduleDialog = page.getByRole("dialog", { name: "新增模块" });
     await moduleDialog.getByLabel("模块名称").fill("记录测试模块");

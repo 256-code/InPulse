@@ -695,3 +695,52 @@ describe("ADR-059 功能删除入口", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("新项目搭建引导到达信号（2026-10-10）", () => {
+  it("带 createFeature 信号进入功能页时自动打开「新增功能」弹窗", async () => {
+    const client = {
+      listFeatures: vi.fn().mockResolvedValue({ items: [] }),
+      findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as InpulseApiClient;
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter
+              initialEntries={[
+                {
+                  pathname: "/projects/2/modules/4/features",
+                  state: { createFeature: true },
+                },
+              ]}
+            >
+              <FeaturesPageView
+                projectId={2}
+                moduleId={4}
+                client={withModules(client)}
+              />
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "新增功能" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("功能名称")).toHaveValue("");
+  });
+
+  it("没有到达信号时不会自动打开新建弹窗", async () => {
+    const client = {
+      listFeatures: vi.fn().mockResolvedValue({ items: [] }),
+      findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as InpulseApiClient;
+    mount(client);
+    await screen.findByText("暂无功能");
+    expect(screen.queryByRole("dialog", { name: "新增功能" })).toBeNull();
+  });
+});

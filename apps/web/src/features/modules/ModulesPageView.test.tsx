@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
@@ -217,7 +217,8 @@ describe("F-12 forms", () => {
     } as unknown as InpulseApiClient;
     mount(client);
     fireEvent.click(await screen.findByRole("button", { name: /重\s*试/ }));
-    await screen.findByText("暂无模块");
+    // 重试成功后是空项目：页面走搭建引导，不再叠加「暂无模块」空态。
+    await screen.findByTestId("project-setup-guide");
   });
   it("模块卡与编辑弹窗都不再有归档 / 恢复入口（ADR-044）", async () => {
     const client = {
@@ -414,4 +415,99 @@ describe("模块弹层的归档入口（ADR-044 已下线）", () => {
       view.unmount();
     },
   );
+});
+
+describe("新项目搭建引导（2026-10-10）", () => {
+  function FeatureRouteProbe() {
+    const location = useLocation();
+    return (
+      <div data-testid="feature-route-probe">
+        {JSON.stringify(location.state)}
+      </div>
+    );
+  }
+  const mountGuided = (
+    client: InpulseApiClient,
+    state: { createModule?: boolean } | null = null,
+  ) =>
+    render(
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <AuthStateProvider>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            <MemoryRouter
+              initialEntries={[{ pathname: "/projects/2/modules", state }]}
+            >
+              <Routes>
+                <Route
+                  path="/projects/:projectId/modules"
+                  element={<ModulesPageView projectId={2} client={client} />}
+                />
+                <Route
+                  path="/projects/:projectId/modules/:moduleId/features"
+                  element={<FeatureRouteProbe />}
+                />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </AuthStateProvider>
+      </ConfigProvider>,
+    );
+
+  it("空项目显示三步引导，不再叠加「暂无模块」空态", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as InpulseApiClient;
+    mountGuided(client);
+    expect(
+      await screen.findByTestId("project-setup-guide"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("暂无模块")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "新增模块" })).toBeNull();
+  });
+
+  it("只有模块时引导指向最近的模块，添加功能带一次性信号进入功能页", async () => {
+    const emptyModule: ModuleItem = {
+      ...item,
+      stats: { activeFeatureCount: 0, openTaskCount: 0, completedTaskCount: 0 },
+    };
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [emptyModule] }),
+    } as unknown as InpulseApiClient;
+    mountGuided(client);
+    expect(
+      await screen.findByText("为「未分类模块」建第一个功能档案。"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "添加功能" }));
+    const probe = await screen.findByTestId("feature-route-probe");
+    expect(JSON.parse(probe.textContent ?? "null")).toEqual({
+      createFeature: true,
+    });
+  });
+
+  it("三步齐备后不再出现引导", async () => {
+    const completeModule: ModuleItem = {
+      ...item,
+      stats: { activeFeatureCount: 3, openTaskCount: 2, completedTaskCount: 1 },
+    };
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [completeModule] }),
+    } as unknown as InpulseApiClient;
+    mountGuided(client);
+    await screen.findByRole("heading", { name: "未分类模块" });
+    expect(screen.queryByTestId("project-setup-guide")).toBeNull();
+  });
+
+  it("「添加模块」到达信号落地即打开新增模块弹窗", async () => {
+    const client = {
+      listModules: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as InpulseApiClient;
+    mountGuided(client, { createModule: true });
+    expect(
+      await screen.findByRole("dialog", { name: "新增模块" }),
+    ).toBeInTheDocument();
+  });
 });

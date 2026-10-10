@@ -27,6 +27,10 @@ import type {
   ProjectOverviewLeftover,
 } from "./project-overview-types";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import {
+  ProjectSetupGuide,
+  type ProjectSetupGuideInput,
+} from "./ProjectSetupGuide";
 
 /** 迭代发布日期按北京时间渲染（服务端下发 UTC ISO 串）。 */
 function formatPublishedAt(iso: string): string {
@@ -53,6 +57,8 @@ export interface ProjectOverviewPageViewProps {
   readonly onOpenIssues: () => void;
   readonly adapter?: ProjectOverviewAdapter;
   readonly client?: InpulseApiClient | undefined;
+  /** 新项目搭建引导的进度与入口；未提供（或三步已齐备）时不渲染。 */
+  readonly setupGuide?: ProjectSetupGuideInput | undefined;
   /** 指标条与面板之后渲染的页面主体（模块列表页注入模块网格）。 */
   readonly children?: React.ReactNode;
 }
@@ -80,6 +86,7 @@ export const ProjectOverviewPageView: React.FC<
   onOpenIssues,
   adapter,
   client,
+  setupGuide,
   children,
 }) => {
   const navigate = useNavigate();
@@ -299,6 +306,13 @@ export const ProjectOverviewPageView: React.FC<
           </div>
         ))}
       </div>
+
+      {setupGuide === undefined ? null : (
+        <ProjectSetupGuide
+          {...setupGuide}
+          onCreateTask={() => setCreateTaskOpen(true)}
+        />
+      )}
 
       {overviewQuery.isPending ? (
         <CalmSkeleton variant="card" rows={3} label="正在加载项目…" />
