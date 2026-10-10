@@ -521,29 +521,29 @@ describe("TaskCenterPageView", () => {
     expect(card).toHaveTextContent("注入项目名");
   });
 
-  it("marks the source project with an icon and a bolder name on the card", async () => {
+  it("fills the card with a project watermark and a bolder name on the belonging line", async () => {
     renderView();
-    // 2026-10-10 产品要求「这个任务的来源项目太模糊了」：归属行行首加项目图标
-    // （取项目编码前两位，与项目列表页同一个 ProjectLogo），项目名加大加粗，
-    // 其后才是「模块 · 功能」。
+    // 2026-10-10 产品定案：项目标识从归属行搬到卡片右下角，摊成一枚浅色字母水印
+    // （取项目编码前两位，与项目列表页同一个 ProjectLogo）；归属行只留加大加粗的项目名。
     const card = await screen.findByTestId("my-task-101");
+    const watermark = card.querySelector(":scope > .project-logo.watermark");
+    expect(watermark?.textContent).toBe("IN");
+    expect(watermark?.getAttribute("title")).toBe("INP");
     const belonging = card.querySelector(".task-belonging") as HTMLElement;
     expect(belonging).not.toBeNull();
-    const logo = belonging.querySelector(".project-logo");
-    expect(logo?.textContent).toBe("IN");
-    expect(logo?.getAttribute("title")).toBe("INP");
-    expect(logo?.classList.contains("tiny")).toBe(true);
+    expect(belonging.querySelector(".project-logo")).toBeNull();
     expect(
       belonging.querySelector("strong.belonging-project")?.textContent,
     ).toBe("注入项目名");
-    expect(belonging.textContent).toBe("IN注入项目名 · 访问控制 · MFA 登录");
+    expect(belonging.textContent).toBe("注入项目名 · 访问控制 · MFA 登录");
   });
 
   it("falls back to the plain project name when the project is not in the port", async () => {
     // 契约不给任务项项目编码，页面靠注入的项目列表映射；项目不在列表里时只渲染项目名，
-    // 不能凭空造图标（图标文字取编码前两位）。
+    // 不能凭空造水印（水印字母取编码前两位）。
     renderView({ projects: projects.filter((project) => project.id !== 1) });
     const card = await screen.findByTestId("my-task-101");
+    expect(card.querySelector(":scope > .project-logo")).toBeNull();
     const belonging = card.querySelector(".task-belonging") as HTMLElement;
     expect(belonging.querySelector(".project-logo")).toBeNull();
     expect(
@@ -705,10 +705,11 @@ describe("TaskCenterPageView", () => {
       within(card).getByText("任务合并后来源分支历史保留"),
     ).toBeInTheDocument();
     expect(within(card).getByText("注入项目名")).toBeInTheDocument();
-    // 2026-10-10：归属行与任务卡片同口径，行首也带项目图标。
+    // 2026-10-10：组卡与任务卡片同口径，右下角也有一枚项目水印。
     expect(
-      card.querySelector(".task-belonging .project-logo")?.textContent,
+      card.querySelector(":scope > .project-logo.watermark")?.textContent,
     ).toBe("IN");
+    expect(card.querySelector(".task-belonging .project-logo")).toBeNull();
     // 标签组（优先级 + 聚合组 + 状态）落到分隔线以下的左下角，与任务卡同款。
     const badges = card.querySelector(
       ".calm-card-bottom > .task-card-badges",
@@ -736,7 +737,11 @@ describe("TaskCenterPageView", () => {
     // 计数不再单占右上角一行，改由状态徽章表达（任意分支完成 → 进行中），明细计数只留在
     // 徽章的 title 里；卡片首行回到标题，与任务卡片逐行同构。
     expect(card.querySelector(".task-group-card-top")).toBeNull();
-    expect(card.firstElementChild?.tagName).toBe("H3");
+    // 2026-10-10：卡片首个子元素变成右下角的项目水印（流外绝对定位），标题仍是首个内容行。
+    expect(card.firstElementChild?.classList.contains("project-logo")).toBe(
+      true,
+    );
+    expect(card.querySelector(":scope > h3")).not.toBeNull();
     const stateBadge = within(badges).getByText("进行中");
     expect(stateBadge).toHaveAttribute("title", "1 / 4 条分支任务已完成");
     // 右下角让给与任务卡片同款的截止（未完成分支中最早的一条：T-101 已逾期）。

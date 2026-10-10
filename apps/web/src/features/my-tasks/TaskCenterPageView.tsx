@@ -440,10 +440,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
     projects.map((project) => [project.id, project.name]),
   );
   /**
-   * 项目标识（2026-10-10 产品要求「来源项目太模糊」）：卡片归属行行首加项目图标，
-   * 取项目编码前两位渲染（与项目列表页、遗留问题来源行同一个 ProjectLogo）。
+   * 项目水印（2026-10-10 产品定案）：项目标识取编码前两位（与项目列表页、遗留问题
+   * 来源行同一个 ProjectLogo），放大成卡片右下角的一枚浅色字母水印，只当背景肌理，
+   * 不再占归属行的位置。本水印只在任务中心生效，项目详情里的任务面板不加。
    * R-3 的任务项只带 projectId / projectName、不带项目编码，这里复用页面已注入的
-   * 项目列表做映射；项目不在可见列表里时降级为只渲染项目名，不显示图标。
+   * 项目列表做映射；项目不在可见列表里时整枚水印不渲染，也不凭空造字母。
    */
   const projectCodes = new Map<number, string>(
     projects.map((project) => [project.id, project.code]),
@@ -576,13 +577,15 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
       >
         {/* 2026-09-22 二次定案：编号与「未完成」都不占徽章位；标签从右上角下移到分隔线
             以下的左下角，负责人移到分隔线上方的右侧。 */}
+        {/* 项目水印（2026-10-10 产品定案）：项目标识放大成卡片右下角的一枚浅色水印。
+            绝对定位、在流外，不撑高卡片；配色与压层级见 design-system.css。 */}
+        {projectCode === undefined ? null : (
+          <ProjectLogo code={projectCode} className="watermark" />
+        )}
         <h3>{item.title}</h3>
-        {/* 归属行（2026-10-10 产品要求）：行首项目图标 + 加大加粗的项目名，
-            其后才是「模块 · 功能」，整体仍是一行省略。 */}
+        {/* 归属行（2026-10-10 产品要求）：加大加粗的项目名 + 「模块 · 功能」，一行省略；
+            项目标识已上移到卡片右下角的水印，不再在这行占位。 */}
         <p className="task-belonging">
-          {projectCode === undefined ? null : (
-            <ProjectLogo code={projectCode} className="tiny" />
-          )}
           <strong className="belonging-project">{projectNameOf(item)}</strong>
           {" · " + belongingScope}
         </p>
@@ -833,12 +836,13 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             让给任务卡同款的截止（取未完成分支中最早的一条）。顶部「编号 + 徽章」行与卡片上的
             编号一并删除，编号只留在列表视图与弹窗里；没有分支的 CLOSED 组同样只渲染这一套
             结构，截止占位为「—」。 */}
+        {/* 项目水印与任务卡片同口径（2026-10-10 产品定案）：右下角一枚浅色字母水印。 */}
+        {groupProjectCode === undefined ? null : (
+          <ProjectLogo code={groupProjectCode} className="watermark" />
+        )}
         <h3>{group.name}</h3>
-        {/* 归属行与任务卡片同口径（2026-10-10）：项目图标 + 加大加粗的项目名。 */}
+        {/* 归属行与任务卡片同口径（2026-10-10）：只留加大加粗的项目名。 */}
         <p className="task-belonging">
-          {groupProjectCode === undefined ? null : (
-            <ProjectLogo code={groupProjectCode} className="tiny" />
-          )}
           <strong className="belonging-project">
             {projectNames.get(group.projectId) ?? group.projectName}
           </strong>
