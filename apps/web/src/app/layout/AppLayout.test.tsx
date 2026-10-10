@@ -3,13 +3,25 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import {
   AuthStateProvider,
   type AuthContextValue,
+  type AuthStatus,
 } from "@features/auth/auth-context";
+import { RequireAuth } from "../auth/auth-guard";
 import { AppLayout } from "./AppLayout";
+
+function CurrentLocationProbe() {
+  const location = useLocation();
+  return (
+    <span data-testid="location">
+      {location.pathname}
+      {location.search}
+    </span>
+  );
+}
 
 describe("AppLayout", () => {
   const notificationClient = {
@@ -517,6 +529,98 @@ describe("AppLayout", () => {
         expect(logout).toHaveBeenCalledTimes(1);
       });
       expect(await screen.findByText("登录页占位")).toBeInTheDocument();
+    });
+
+    it("退出登录先卸载受保护页面，登录地址不带 from，换号后回到默认入口", async () => {
+      const user = userEvent.setup();
+      let resolveLogout: () => void = () => {};
+      const logout = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveLogout = resolve;
+          }),
+      );
+
+      const Harness: React.FC = () => {
+        const [status, setStatus] = React.useState<AuthStatus>("authenticated");
+        const value = React.useMemo<AuthContextValue>(
+          () => ({
+            status,
+            user: {
+              id: 1,
+              loginName: "developer",
+              name: "开发者 C",
+              email: null,
+              avatarUrl: null,
+              isAdmin: false,
+              status: "ACTIVE",
+            },
+            errorMessage: null,
+            login: async () => ({ kind: "cancelled" }),
+            logout: async () => {
+              await logout();
+              setStatus("anonymous");
+            },
+            refresh: async () => {},
+          }),
+          [status],
+        );
+        return (
+          <AuthStateProvider value={value}>
+            <MemoryRouter initialEntries={["/projects/7"]}>
+              <CurrentLocationProbe />
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <AppLayout notificationClient={notificationClient} />
+                  }
+                >
+                  <Route
+                    path="projects/7"
+                    element={
+                      <RequireAuth>
+                        <div>受保护页面内容</div>
+                      </RequireAuth>
+                    }
+                  />
+                  <Route path="login" element={<div>登录页占位</div>} />
+                </Route>
+              </Routes>
+            </MemoryRouter>
+          </AuthStateProvider>
+        );
+      };
+
+      render(
+        <QueryClientProvider
+          client={
+            new QueryClient({
+              defaultOptions: { queries: { retry: false } },
+            })
+          }
+        >
+          <Harness />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText("受保护页面内容")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "账户菜单" }));
+      await user.click(screen.getByRole("button", { name: /退出登录/ }));
+
+      // 退出请求挂起期间：受保护子树必须整体卸载，RequireAuth 不能在
+      // 认证态收敛为匿名的瞬间把当前地址写进 /login?from=...
+      await waitFor(() => {
+        expect(screen.queryByText("受保护页面内容")).toBeNull();
+      });
+      expect(screen.getByTestId("logout-pending")).toBeInTheDocument();
+
+      resolveLogout();
+
+      expect(await screen.findByText("登录页占位")).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/login");
+      expect(screen.getByTestId("location")).not.toHaveTextContent("from=");
     });
 
     it("未登录时点击前往登录回到登录页", async () => {

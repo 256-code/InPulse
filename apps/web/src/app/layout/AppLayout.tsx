@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { CommandPalette } from "@features/command-palette/CommandPalette";
+import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import {
   InpulseIcon,
   type InpulseIconName,
@@ -233,6 +234,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     [],
   );
 
+  // 退出登录状态只在路由真正落到 /login 后解除：退出跳转是低优先级过渡，
+  // 若提前解除，匿名渲染会重建受保护页面并触发 /login?from=... 的回跳。
+  useEffect(() => {
+    if (isLoggingOut && location.pathname === "/login") {
+      setIsLoggingOut(false);
+    }
+  }, [isLoggingOut, location.pathname]);
+
   useEffect(() => {
     if (!accountOpen) {
       return;
@@ -291,17 +300,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       return;
     }
     setIsLoggingOut(true);
-    try {
-      const loggedOut = await logout()
-        .then(() => true)
-        .catch(() => false);
-      if (loggedOut) {
-        // 退出后回到登录页，由用户选择本地口令或统一身份认证（ADR-036）。
-        navigate("/login");
-      }
-    } finally {
+    const loggedOut = await logout()
+      .then(() => true)
+      .catch(() => false);
+    if (!loggedOut) {
       setIsLoggingOut(false);
+      return;
     }
+    // 退出后回到干净的 /login（不带 from），由用户选择本地口令或统一身份认证
+    // （ADR-036）。退出态必须保持到路由真正落到 /login（见 isLoggingOut 的
+    // effect）：认证态一旦收敛为匿名，受保护页面若仍在渲染，RequireAuth 会
+    // 先把当前地址写成 /login?from=...，换账号登录就会落回上一个账号的页面。
+    navigate("/login");
   };
 
   const renderNavigationItem = (item: NavigationItem) => {
@@ -499,7 +509,21 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
         <main className="content-shell">
           <div className="page-content">
-            <Outlet />
+            {isLoggingOut ? (
+              // 退出登录期间先整体卸载受保护子树：logout() 会把认证态收敛为匿
+              // 名，若页面此时仍在渲染，RequireAuth 会在跳转前先把当前地址写成
+              // /login?from=...，导致换另一个账号登录后又落回上一个账号的页面。
+              // 退出完成后由 handleAccountAction 统一落到干净的 /login。
+              <div data-testid="logout-pending" style={{ padding: 48 }}>
+                <CalmSkeleton
+                  variant="lines"
+                  rows={4}
+                  label="正在退出登录..."
+                />
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </div>
         </main>
       </div>
