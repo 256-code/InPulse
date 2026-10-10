@@ -2226,6 +2226,9 @@ a:focus-visible {
 .calm-task-card {
   position: relative;
   overflow: hidden;
+  /* 自成层叠上下文（2026-10-10 项目水印）：水印用 z-index: -1 压在文字之下，必须让负层级
+     留在卡片内部，否则会掉到卡片背景之下、整枚看不见。 */
+  isolation: isolate;
   /* 卡片本体是 <button>：浏览器给按钮内容套的匿名盒默认垂直居中，同一网格行里
      内容行数少的卡片（例如没有「记录 N 条」那行）会被整体推到下方，标题与底部标签
      逐行错位。改成纵向 flex 让内容从顶部排起，所有卡片逐行对齐。
@@ -2297,7 +2300,10 @@ a:focus-visible {
    原来的 20px 上边距会和外层 22px 内边距叠成 42px 的空档，收到 4px，
    让标题回到常规内边距附近，卡片整体随之变矮。
    2026-09-23 放宽：随内边距一起收到 8px，标题不再贴顶。 */
-.calm-task-card > h3:first-child {
+.calm-task-card > h3:first-child,
+/* 带项目水印的卡片：水印是流外的绝对定位元素，但仍是 h3 的前一个兄弟，h3 不再命中
+   :first-child，这里补一条，让两种卡片的标题上边距一致。 */
+.calm-task-card > .project-logo.watermark + h3 {
   margin-top: 8px;
 }
 .calm-task-card > p {
@@ -2325,13 +2331,50 @@ a:focus-visible {
 .calm-task-card > p.task-belonging {
   margin-bottom: 14px;
 }
-/* 归属行加项目标识、项目名加大加粗（2026-10-10 产品要求「来源项目太模糊」）：
-   图标取项目编码前两位（与项目列表页 / 遗留问题来源行同一个 ProjectLogo，18px
-   小于行盒高度、不撑高卡片）；项目名比同行的模块 / 功能大一档并随 <strong> 加粗，
-   颜色不写死——紧急白字组与金黄深字组等卡片色调规则作用在 <p> 上，由它继承。 */
-.task-belonging > .project-logo {
-  margin-right: 6px;
+/* 项目水印（2026-10-10 产品定案）：项目标识从归属行搬到卡片右下角，摊成一枚很大的浅色
+   字母，只当背景肌理，不参与信息层级、不撑高卡片（绝对定位，脱离文档流）。
+   字母取项目编码前两位；right / bottom 取负值让字母出血，被卡片自身的 overflow: hidden
+   与 12px 圆角裁掉一角，读起来像盖在卡底的章，而不是贴上去的色块。
+   水印只做底纹、不承担文字对比度；真正的项目名仍在归属行（13px 加粗）。
+   放在 <h3> 之前、z-index: -1：卡片已用 isolation: isolate 自成层叠上下文，
+   负层级会压在卡片底色之上、所有文字之下。
+   只作用在任务中心的卡片上——项目详情里的任务面板不渲染这枚水印（2026-10-10 产品口径）。 */
+.calm-task-card > .project-logo.watermark {
+  position: absolute;
+  z-index: -1;
+  right: -16px;
+  bottom: -34px;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: 0;
+  background: none;
+  font-size: 148px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.07em;
+  pointer-events: none;
+  user-select: none;
 }
+/* 五档水印色（2026-10-10 产品逐档选定）：高 / 紧急是深底卡，水印取「底色加白的浅黄、
+   浅红」；普通 / 已完成 / 已取消是浅底卡，加白等于消失，改取「比底色更浅一档的同色」。 */
+.calm-task-card.tone-prio-high > .project-logo.watermark {
+  color: #fedd76;
+}
+.calm-task-card.tone-prio-urgent > .project-logo.watermark {
+  color: #de7670;
+}
+.calm-task-card.tone-prio-normal > .project-logo.watermark {
+  color: #dbe8f8;
+}
+.calm-task-card.tone-prio-done > .project-logo.watermark {
+  color: #cbe7e7;
+}
+.calm-task-card.tone-prio-canceled > .project-logo.watermark {
+  color: #dfe5ec;
+}
+/* 归属行的项目名（2026-10-10）：比同行的模块 / 功能大一档并随 <strong> 加粗，颜色不写死——
+   紧急白字组与金黄深字组等卡片色调规则作用在 <p> 上，由它继承。 */
 .task-belonging > .belonging-project {
   font-size: 13px;
 }

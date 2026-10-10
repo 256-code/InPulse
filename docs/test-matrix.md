@@ -5722,7 +5722,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（本轮推送后不触发：工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码，按 §8 需非作者人工评审。③ 任务弹窗叠在记录弹窗之上时，底层记录弹窗会被弹层实现标 `aria-hidden`，因此 E2E 在任务弹窗关闭后才重新按角色断言记录弹窗；视觉上底层弹窗始终在位。④ 只影响「查看来源任务」这一个入口：记录弹窗里其它导航（修订内容、作废、遗留项转任务）语义未变。
 
-## 任务卡片归属行加项目标识、项目名加大加粗（用户指示，2026-10-10 本地落库）
+## 任务卡片归属行加项目标识、项目名加大加粗（用户指示，2026-10-10 本地落库；**已被下一小节「改成卡片水印」替换，保留供追溯**）
 
 用户指示（原话）：「接下来改任务卡片，这个任务的来源项目太模糊了我想加入项目图标，项目名称稍微加大加粗」。改动前任务中心卡片的归属行是纯文本「项目名 · 模块 · 功能」12px 灰字，跨项目视图里项目名与模块 / 功能同色同号，扫视时分不出哪一段是来源项目。纯前端改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
 
@@ -5741,3 +5741,23 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | TASK-CARD-PROJECT-LOGO-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（改动 TSX）退出码 0；`pnpm exec prettier --check`（my-tasks + design-system.css）通过 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发（工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 18px 标识与 13px 项目名把归属行行高从 18px 抬到 19.9px，卡片整体高约 +2px；同一行的卡片由网格 `align-items: stretch` 拉平，跨档对齐不受影响。④ `/tasks` 列表视图的「项目」列与项目任务面板的归属行沿用原样，未同步加图标与字重——若产品要求全站一致，需要再确认（列表视图是窄列，加图标会挤压标题）。
+
+## 任务卡片项目标识改成卡片水印（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「如果将项目的字母像水印一样成为背景的一部分呢，比如黄色卡片背景增加水印用浅黄色」→「请运用到网站上」；同日追加范围约束「这个水印只在任务中心实行，项目里面不用添加」。上一小节《任务卡片归属行加项目标识、项目名加大加粗》的「归属行行首 18px 小贴纸」口径**已被本批替换**：项目标识搬到卡片右下角、摊成一枚 148px 的浅色字母水印（项目编码前两位），归属行只留「加粗项目名 · 模块 · 功能」。纯前端（React / CSS）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动。
+
+- `apps/web/src/features/my-tasks/TaskCenterPageView.tsx`：任务卡片（`renderCard`）与聚合组卡片（`renderGroupCard`）把 `<ProjectLogo className="watermark" />` 插在 `<h3>` 之前（`projectCode` / `groupProjectCode` 缺席时不渲染），归属行删掉行内的 `<ProjectLogo className="tiny" />`，只留 `<strong className="belonging-project">` + 「 · 模块 · 功能」。编码一律取自页面注入的 `projects` 端口（R-3 任务项不带编码），项目不在列表里时整枚水印不渲染、不凭空造字母。
+- `apps/web/src/styles/design-system.css`：删除 `.task-belonging > .project-logo { margin-right: 6px }`；`.calm-task-card` 补 `isolation: isolate`；新增 `.calm-task-card > .project-logo.watermark`（`position:absolute; z-index:-1; right:-16px; bottom:-34px; width/height:auto; display:block; border-radius:0; background:none; font-size:148px; font-weight:900; line-height:1; letter-spacing:-.07em; pointer-events:none; user-select:none`）与五档配色（高 `#fedd76` / 紧急 `#de7670` / 普通 `#dbe8f8` / 已完成 `#cbe7e7` / 已取消 `#dfe5ec`），并把标题上边距规则由 `h3:first-child` 扩到 `.project-logo.watermark + h3`。
+- 影响面：`/tasks` 卡片视图的任务卡与聚合组卡；**项目详情里的任务面板（`TasksPanel`）不加**（产品同日明确），`/tasks` 列表视图（表格）沿用原样。`TasksPanel` 本来也不渲染 `.task-belonging`，因此不受影响。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CARD-PROJECT-WATERMARK-UNIT-001 | Web 单元 | 水印填项目编码、归属行只剩加粗名 | `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks` → 《fills the card with a project watermark and a bolder name on the belonging line》：`:scope > .project-logo.watermark` 文本 `IN`、`title=INP`，归属行内无 `.project-logo`，`belonging.textContent` = `注入项目名 · 访问控制 · MFA 登录` | 本地通过（2026-10-10，my-tasks 5 文件 109 例） |
+| TASK-CARD-PROJECT-WATERMARK-UNIT-002 | Web 单元 | 项目不在端口里时不造水印 | 同文件《falls back to the plain project name when the project is not in the port》：`card.querySelector(":scope > .project-logo")` 与归属行内的 `.project-logo` 都为 null，归属行回落任务自带的 `projectName` | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-WATERMARK-UNIT-003 | Web 单元 | 聚合组卡片同口径 | 既有《renders task groups as cards inside the task grid》：`:scope > .project-logo.watermark` 文本 `IN`、归属行内无 `.project-logo`；首个子元素是水印且仍存在 `:scope > h3`（原 `firstElementChild.tagName === "H3"` 断言按新结构改写） | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-WATERMARK-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 682 例全绿** | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-WATERMARK-E2E-001 | 浏览器 E2E | 卡片仍是任务详情入口、文字断言不依赖拆分 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/tasks.spec.ts` → **1 passed (23.6s)**（夹具清理：删除用户 2、项目 3、业务行 93、审计行 8） | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-WATERMARK-BROWSER-001 | 浏览器实测 | 观感与五档配色 | dev（Vite 5173）`/tasks` 实测未完成档 12 张卡全部渲染：`tone-prio-high` 水印 `FI` / `rgb(254, 221, 118)`；`/tasks?status=done` 5 张 `tone-prio-done` 卡为 `rgb(203, 231, 231)`；水印计算值 `148px` / `z-index: -1` / `right: -16px` / `bottom: -34px` / `border-radius: 0` / 透明背景，卡片 `isolation: isolate`、标题 `margin-top: 8px` | 本地通过（2026-10-10） |
+| TASK-CARD-PROJECT-WATERMARK-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（改动 TSX）退出码 0；`pnpm exec prettier --check`（my-tasks + design-system.css）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发（工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 水印插到 `<h3>` 之前后 `h3` 不再是 `:first-child`，其 `margin-top` 由新增的 `.project-logo.watermark + h3 { margin-top: 8px }` 接管；无水印（项目不在端口里）时回落 `h3:first-child`，两档卡片等高。④ 右下角水印与截止文案重叠（黄卡「10月20日」压在水印上），字仍可读，是这套几何的固有代价。⑤ 上一小节（`TASK-CARD-PROJECT-LOGO-*`）的「18px 小贴纸」实现与断言已随本批被替换，保留仅供追溯。
