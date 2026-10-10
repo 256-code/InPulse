@@ -6,23 +6,36 @@ export function formatIssueDate(value: string): string {
   return formatBeijingDate(value);
 }
 
-/** 来源行：来自「记录标题」 · 项目 / 模块 / 功能 · 作者 · 日期。 */
-export function issueOriginText(item: LeftoverListItem): string {
+/** 来源行拆分结果：项目名与其余部分分开渲染，便于在行首放项目标识。 */
+export interface IssueOriginParts {
+  readonly projectName: string;
+  readonly detail: string;
+}
+
+/**
+ * 来源行：`项目名 · 记录「记录标题」 · 模块 / 功能 · 作者 · 日期`。
+ *
+ * 2026-10-10 用户指示：项目名从行中间提到行首单独成段，行首接项目标识，
+ * 同一项目的卡片靠标识成组；项目名与记录之间改用 ` · `，
+ * 模块 / 功能继续用 ` / ` 表示父子层级。
+ */
+export function issueOriginParts(item: LeftoverListItem): IssueOriginParts {
   const scope = [
-    item.projectName,
     item.moduleName,
     ...(item.featureName === null ? [] : [item.featureName]),
   ].join(" / ");
-  return (
-    "来自「" +
-    item.recordTitle +
-    "」 · " +
-    scope +
-    " · " +
-    item.author.name +
-    " · " +
-    formatIssueDate(item.publishedAt)
-  );
+  return {
+    projectName: item.projectName,
+    detail:
+      "记录「" +
+      item.recordTitle +
+      "」 · " +
+      scope +
+      " · " +
+      item.author.name +
+      " · " +
+      formatIssueDate(item.publishedAt),
+  };
 }
 
 /** 已闭环 = 已转为跟进任务（CONVERTED）或已标记解决（RESOLVED）。 */

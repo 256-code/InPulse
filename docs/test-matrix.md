@@ -4529,6 +4529,8 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 
 ## 任务中心卡片等高：页脚恒渲染 + 组卡补空占位（用户指示，2026-10-08 本地落库）
 
+> **2026-10-10 已取代**：本节的 `min-height: 31.5px` 页脚占位已撤销，见下方《任务中心卡片底部留白》。本节保留为历史记录：其中的等高数字（两档均为 `[270]`）不再成立。
+
 用户指示（原话）：「已完成和未完成任务卡片的布局也要一样大」（附 `/tasks` 两档截图：未完成档的卡多数没有页脚、已完成档的卡多数带「记录 n 条」页脚）。只改前端，无 API / 契约 / 权限 / 迁移改动。
 
 根因与口径：
@@ -4560,6 +4562,24 @@ CI 回填（2026-09-28）：PR [#146](https://github.com/256-code/InPulse/pull/1
 - 空页脚内注入一条「记录 99 条」内容后页脚实测仍 31.5px（内容 16.5px < 占位 31.5px），说明占位不会把有记录的卡片撑高。
 
 未运行 / 已知偏差：① 按前端免测试指示未跑任何自动化测试与门禁（`get_errors` 之外零验证命令），两条 `TASK-CARD-EQUAL-HEIGHT-UNIT-*` 用例的通过状态来自改动前基线口径与断言一致性检查，未经本次执行背书；② 本批含前端产品代码与新增单测，按 §8 需非作者人工评审；③ 量测当日该账号可见范围内没有聚合组卡（`groupCount: 0`），**组卡的等高未做真机量测**，只由 `TASKGROUP-AS-CARD-WEB-001` / `UNIT-002` 的 DOM 断言与同一条 `.calm-task-card .task-card-footer` 规则背书（未验证）；④ 探针登录绕过了浏览器内登录（本机 Chromium 从 `http://127.0.0.1` 不保存 `Secure` Cookie、且浏览器内登录在本机始终 401，而同一口令经 curl 同源登录 200 成功）：会话 Cookie 由 curl 取回后经 `setExtraHTTPHeaders` 注入，与待验证的卡片布局无关；该现象是否影响本机开发用浏览器登录未定论（用户日常浏览正常，未复现）。⑤ 登录在演示库留下 1 条 `app.user_sessions` 行（只读量测的正常痕迹，未做清理）。
+
+## 任务中心卡片底部留白：空页脚不占位（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「为什么这些任务卡片底部空白部分这么多，卡片高度可以稍微降低一点」（附 `/tasks` 未完成档截图，16 张卡片下方各有一段空白）。只改一行 CSS，无 API / 契约 / 权限 / 迁移 / 组件改动。
+
+根因：`.task-card-footer` 自 2026-10-08 起恒渲染，无已发布记录时是空盒；任务中心「未完成」档的卡片 `publishedRecordCount` 全为 0，页脚整档为空，于是 `.calm-task-card .task-card-footer { min-height: 31.5px }` 加上 `.task-card-footer` 自身的 `padding-top: 15px`，在分隔线以下留下一段看不到内容的空白（实测页脚盒 32px + 卡片 `padding-bottom` 26px = 58px）。
+
+口径：改为 `.calm-task-card .task-card-footer:empty { display: none }`，撤销 2026-10-08 的 `min-height: 31.5px` 占位。空页脚仍在 DOM 里（`TaskCenterPageView.test.tsx` 的两条断言不变），只是不渲染、不占高度。
+
+**取舍（与 2026-10-08 口径冲突，已按用户最新指示取后者）**：2026-10-08 的诉求是「已完成和未完成两档卡片一样大」，其手段（页脚占位）正是本次要消掉的空白；撤销后未完成档 238px、已完成档（页脚有内容）270px，两档相差 32px。同一网格行内仍由网格默认的 `align-items: stretch` 拉平，**行内**无高差。如需「两档仍等高且不留空」，需改为把「记录 n 条」并进 `.calm-card-bottom` 标签行、彻底去掉页脚，待产品定案。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TASK-CARD-FOOTER-GAP-UNIT-001 | Web 单元 | 空页脚不再占位不破坏既有断言 | `pnpm --filter @inpulse/web exec vitest run src/features/my-tasks/TaskCenterPageView.test.tsx src/features/tasks/TasksPanel.test.tsx` → 2 文件 89 例全绿（含「无记录卡片 `.task-card-footer` 存在且为空」「组卡空页脚」两条） | 本地通过 |
+| TASK-CARD-FOOTER-GAP-UNIT-002 | Web 单元 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过 |
+| TASK-CARD-FOOTER-GAP-BROWSER-001 | 浏览器实测 | 卡片高度与档内一致性 | 本地 Chromium（1340 宽、3 列）打开 `/tasks`：未完成档 15 张卡片高度集合 `[270] → [238]`（单值）、页脚 `[32] → [0]`；已完成档 6 张仍 `[270]`、页脚 `[32, 0]`（行内被 `stretch` 拉平）。项目任务面板（`/projects/8/modules/12579/features/6504`）不受影响：页脚仍含「更新 …」/「记录 1 条」、高 32px，两卡仍 346px | 本地通过 |
+
+未运行 / 已知偏差：① 未跑 `pnpm check` 整链、`test:integration`（无服务端改动）、Playwright E2E、镜像构建与 GitHub Actions（未推送）；② 本批含前端产品代码，按 §8 需非作者人工评审；③ 浏览器量测用的是页面内 `getBoundingClientRect` 探针（Playwright `evaluate`），非 `apps/e2e` 套件；④ 量测发生在真实 `/tasks` 页（本地演示库、账号 `linyuyan`），窗口宽 1340px 时网格为 3 列、1920px 下为 4 列，列数不影响卡片高度结论。
 
 ## 聚合动态单一游标分页 + 服务端按日全量计数（用户指示，2026-10-08 本地落库）
 
@@ -5579,3 +5599,103 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | PROJECT-TIER-ORDER-BROWSER-001 | 浏览器实测 | 未完成档内动态位次 | dev（Vite 5173 + API 3000 经代理）：`GET /api/v1/projects` 返回 `OPS_DASH`（未开始）在 `AGV_SCHED`（进行中）之前；向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位；`/projects` 页面按同一次序渲染 | 本地通过（2026-10-09） |
 
 未运行 / 已知偏差：① 未跑整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:unit` / `pnpm test:web`（未改其它模块）、Playwright / `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 浏览器实测写入了演示库 `app`：向项目 3（`K123 验证`）创建了一个任务「排序验证任务 A」（连带一条 `task.create` 动态，因此该项目停留在未完成档首位，属预期行为）。③ 本批含服务端产品代码、契约与文档，按 §8 需非作者人工评审。
+
+## 遗留问题来源行加项目标识、项目名前移（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「感觉还是不太好，要不底部的来源加上项目的图标？」。第一轮「来源任务」按钮文案的四个方案（A 改「查看来源任务」/ B 显示任务名 / C 任务名并入来源行 / D 删按钮）未定案，本轮只按用户选定的**变体 2「项目标识 + 项目名提到最前」**改来源行本身，「来源任务」按钮按现状保留。纯前端展示改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 口径：来源行由 `来自「记录标题」 · 项目 / 模块 / 功能 · 作者 · 日期` 改为 `[项目标识] 项目名 · 记录「记录标题」 · 模块 / 功能 · 作者 · 日期`。项目名从行中间提到行首单独成段、行首接项目标识；项目名与记录之间改用 ` · `，模块 / 功能继续用 ` / ` 表示父子层级。
+- 标识：行首为 `ProjectLogo`（项目编码前两位 + 由编码派生的固定色系），复用 `apps/web/src/features/common/components/ProjectLogo.tsx`，与项目列表页同一个组件。
+- 数据来源：`LeftoverListItem` 契约只有 `projectName`、**没有 `projectCode`**（`packages/api-contract/src/contracts/aggregate-read.zod.ts` 的 `leftoverListItemSchema`），本页筛选器已用 `useProjects()` 取过项目列表，前端直接用 `projectId → code` 映射，**零契约改动、零后端改动、不新增请求**；项目不在可见列表时降级为只渲染项目名、不渲染标识。
+- 改动文件：`apps/web/src/features/issues/issues-format.ts`（删 `issueOriginText`，新增 `IssueOriginParts` 类型与 `issueOriginParts(item)` → `{ projectName, detail }`，`formatIssueDate` / `isLeftoverClosed` 不变）；`apps/web/src/features/issues/IssuesPageView.tsx`（导入 `ProjectLogo` 与 `issueOriginParts`；新增 `projectCodeById` 的 `useMemo`；`renderRow` 的来源行 JSX 改为标识 + 项目名 + ` · ` + 其余）；`apps/web/src/styles/design-system.css`（新增 `.project-logo.tiny`——基准 `.project-logo` 是 `grid`，放进段落会独占一行，必须切成 `inline-grid`；新增 `.issue-origin .project-logo { margin-right: 6px }` 与 `.issue-origin .origin-project` 的字色 / 字重）；`issues-format.test.ts` 与 `IssuesPageView.test.tsx` 同步断言。
+- 未改动：「来源任务」按钮（文案 / 图标 / 行为）、转换弹窗 `ConvertLeftoverTask.tsx` 的旧文案「来自「记录 · vN」的遗留问题 #ID」、闭环状态、列表分档与筛选、`LeftoverListItem` 契约与 OpenAPI / 生成客户端。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ISSUE-ORIGIN-LOGO-UNIT-001 | Web 单元 | 来源行拆分口径 | `issues-format.test.ts`：`issueOriginParts(base)` → `{ projectName: "AGV 智能搬运平台", detail: "记录「充电策略支持参数配置」 · 任务调度 · 陈晓 · 2026-08-18" }`；`featureName` 存在时 `detail` 含 `任务调度 / 充电任务编排` | 本地通过（2026-10-10） |
+| ISSUE-ORIGIN-LOGO-UNIT-002 | Web 单元 | 行首标识 + 项目名前移 | `IssuesPageView.test.tsx`：`.issue-origin` 文本为 `AGV 智能搬运平台 · 记录「充电策略支持参数配置」 · 任务调度 / 充电任务编排 · 陈晓 · 2026-08-18`，且 `.project-logo` 文本为 `AG`（夹具 `listProjects` 返回 `code: "AGV"`） | 本地通过（2026-10-10） |
+| ISSUE-ORIGIN-LOGO-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过（2026-10-10） |
+| ISSUE-ORIGIN-LOGO-GATE-001 | 门禁 | 类型 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 无输出；`pnpm exec prettier --check`（本批 5 个文件）通过 | 本地通过（2026-10-10） |
+| ISSUE-ORIGIN-LOGO-BROWSER-001 | 浏览器实测 | 卡片高度不被行内标识撑高 | dev（Vite 5173）`/issues` 6 张卡片：来源行 `originH = 39px`、卡片 `cardH = 160px`（均与改动前一致）、标识 `18px`、与来源行顶部差 2px（垂直居中）；实际渲染如 `[BI] 计费对账与出账平台 · 记录「用量采集口径统一与去重」 · 计量采集 / 用量明细采集与聚合 · 特哥 · 2026-10-09`、`[AG] AGV 智能调度平台 2.0 · …` | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、Playwright E2E、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码与新增 / 改动的单测，按 §8 需非作者人工评审。③ `ProjectLogo` 的 `projectLogoTone` 只有 cyan / blue / amber 三色（`apps/web/src/features/common/components/ProjectLogo.tsx`），项目数超过 3 时必然撞色，真正区分靠两个字母与项目名。④ 「来源任务」按钮文案的第一轮四个方案用户尚未定案，本批按用户指示未动按钮。
+
+## 遗留问题页删除「未闭环」分档标题（用户指示，2026-10-10 本地落库）
+
+用户先问「这个待闭环标签就非得在表头占一行吗」，看过徽章位置三版模拟后决定**卡片徽章保持原状**（2026-09-24 起的「待闭环 / 已闭环」徽章不动），转而问分档标题能否删除，最后指示「条数不重要直接删除即可」。结论：删掉「未闭环」这一整条分档标题（含副行的条数与排序说明），卡片徽章继续承担状态。纯前端展示改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 删除 `apps/web/src/features/issues/IssuesPageView.tsx` 里未闭环列表前的 `<CalmSectionTitle title="未闭环" hint={String(openItems.length) + " 条 · 按发布时间倒序"} />`，并移除因此不再使用的 `CalmSectionTitle` 导入（`CalmBadge` / `CalmEmptyState` 仍在使用）。未闭环列表现在直接挂在 `.issues-page` 下。
+- 删除的理由：这一档的卡片本来就都带「待闭环」徽章，标题里的「未闭环」是重复信息；副行的「5 条 · 按发布时间倒序」经用户确认「不重要」，因此不搬到页头、直接丢弃。
+- **已闭环那档的标题仍保留**：它是折叠区的 `<details>` 开关（`▶ 已闭环 N 条 · 已生成跟进任务`），删掉就无法展开 / 收起；它的条数是「有多少条被折叠隐藏」的说明，与已删除的未闭环计数不同源，本次未动。
+- 未改动：卡片徽章（仍是「待闭环 / 已闭环」）、空态文案（`没有待闭环的遗留问题`）、`加载更多`、来源行项目标识、行内两个按钮、分桶与分页口径。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ISSUES-NO-OPEN-TITLE-UNIT-001 | Web 单元 | 删除标题不破坏遗留问题页组件行为 | `pnpm --filter @inpulse/web exec vitest run src/features/issues` → 2 文件 11 例全绿（含 `IssuesPageView.test.tsx` 的分桶、徽章、来源任务与转为任务入口断言） | 本地通过（2026-10-10） |
+| ISSUES-NO-OPEN-TITLE-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过（2026-10-10） |
+| ISSUES-NO-OPEN-TITLE-E2E-001 | 浏览器 E2E | 关键路径断言同步 | `apps/e2e/tests/issues.spec.ts` 原第 51 行 `getByText(/按发布时间倒序/)` 改为「该文案计数为 0」+「`.issues-page > .issue-list` 可见」，其余步骤（发布带遗留问题的记录 → 未闭环展示 → 来源任务跳转 → 页内转为任务 → 条目进入已闭环折叠区）不变 | 本地通过（2026-10-10） |
+| ISSUES-NO-OPEN-TITLE-GATE-001 | 门禁 | 类型 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 无输出；本批文件 `prettier --check` 通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码与 E2E 断言调整，按 §8 需非作者人工评审；断言由「文案可见」改为「文案计数为 0 + 列表直接挂页面下」，强度相当（前者验证标题存在，后者验证标题确实消失且列表结构未坏），不是为通过而放水。③ 删除标题后未闭环列表上方没有任何局部标识，若以后同一页面出现「未闭环 + 已闭环混排」的形态，需要重新引入分档标题或每卡状态标识。
+
+## 遗留问题行「来源任务」入口改为「来源迭代」记录弹窗（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「这个按钮我要更改，首先功能改成跳转来源迭代，字直接写来源迭代，跳转的时候链接这个来源迭代的弹窗」。行内原「来源任务 BILLING-T-1」按钮改为**文案「来源迭代」+ 点击就地打开该行来源记录的详情弹窗**，不再跳来源任务详情；来源任务仍可从记录详情里的「查看来源任务」进入（`PublishedRecordDetail` 自带）。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/issues/IssuesPageView.tsx`：删掉依赖 `sourceTask` 的按钮（`来源任务 {code}`）与 `const sourceTask`，改为固定渲染的「来源迭代」按钮（图标 `fileText`），点击 `setSourceRecord({ projectId, recordId })`；新增 `sourceRecord` 状态与 `useQuery(["leftover-source-record", projectId, recordId])`，按需调用生成客户端的 `getChangeRecord`，页面末尾渲染 `RecordDetailModal`（`onClose` 清空选中，`onChanged` 重读记录）。
+- **为什么点开时要二次读记录**：`LeftoverListItem` 契约只有 `recordId / recordCode / recordTitle / publishedAt`，**不含记录状态**（PUBLISHED / VOID），而记录弹窗的「作废记录对成员只给摘要」回退依赖状态。因此按 `recordId` 取 `ReadableRecord` 后再弹；取回前、或取回结果与当前选中行不匹配（连点两行）时不渲染弹层，避免弹出上一行的旧数据。这也避免了改契约。
+- `apps/web/src/features/published-records/RecordDetailModal.tsx`：把「可读记录摘要 → 弹窗目标」的映射提为导出的 `recordDetailTarget(record)`；`apps/web/src/features/tasks/LeftoverTaskSource.tsx` 删掉自己的局部 `targetOf` 并改用该函数（两处同一实现，不再各写一份）。
+- 行为变化：按钮**不再依赖 `sourceTask`**，因此独立记录（`sourceTask === null`）的遗留项现在也有入口；未闭环与已闭环两档都有。契约里的 `sourceTask` 字段与数据未动，只是本页不再用它做入口。
+- 未改动：卡片徽章、来源行（项目标识 + 项目名）、「转为任务」与「查看跟进任务 T-xxx」（后者仍走 `onOpenTask`）、分桶与分页、契约 / OpenAPI / 生成客户端 / 服务端。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ISSUES-SOURCE-RECORD-UNIT-001 | Web 单元 | 点击「来源迭代」就地弹来源记录，且不再跳来源任务 | `pnpm --filter @inpulse/web exec vitest run src/features/issues` → 2 文件 11 例全绿；其中《opens the source record modal and the follow-up task》断言弹层内容为 `来源记录 7 · 充电策略支持参数配置`、`onOpenTask` 未被调用（来源按钮不再跳任务），点「查看跟进任务 T-140」仍按 `onOpenTask({ projectId: 1, moduleId: 2, featureId: null, taskId: 140 })` 回调 | 本地通过（2026-10-10） |
+| ISSUES-SOURCE-RECORD-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过（2026-10-10） |
+| ISSUES-SOURCE-RECORD-E2E-001 | 浏览器 E2E | 真实库关键路径（含新入口） | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test issues.spec.ts` → **1 passed (14.1s)**：发布带遗留问题的记录 → 未闭环行点「来源迭代」→ 记录详情弹窗可见且含该条遗留内容 → 关闭 → 页内「转为任务」→ 条目进入已闭环折叠区；夹具清理：删除用户 2、项目 2、业务行 87、审计行 7 | 本地通过（2026-10-10） |
+| ISSUES-SOURCE-RECORD-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit -p tsconfig.json` 无输出；`pnpm exec eslint`（本批 5 个文件）退出码 0；`pnpm exec prettier --check`（同 5 个文件）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:drift` / `contract:validate`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码、E2E 断言与一处内部重构（`recordDetailTarget`），按 §8 需非作者人工评审。③ 「来源迭代」按钮对每个可见行都渲染，因此每行多一次点击入口，但只有点击后才发 `getChangeRecord` 请求（未点击不产生额外流量）。④ 已作废来源记录对成员按 `ReadableRecord` 只给摘要，弹窗回退由 `RecordDetailModal` 既有实现承担，本批未新增断言（该回退已有记录页用例覆盖）。
+
+## 记录详情「追加遗留问题」收成「遗留问题」标题行右侧的纯图标加号（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：先「这个改一下，首先这个追加遗留问题可不可以简洁一点放在遗留问题这行右侧」，随后追加「不是我想简化追加遗留问题，就改为一个加号按钮即可」。原文案入口是遗留问题列表下方整行宽的虚线添加框（`.leftover-append-trigger`，`border: 1px dashed`），本批最终落成标题行右侧的**纯图标加号按钮**（复用全站 `.icon-button`，文案收进 `aria-label` / `title`）。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/published-records/PublishedRecordDetail.tsx`：遗留问题 section 的 `<h4>` 包进新的 `.leftover-section-head`，`AppendLeftoverForm` 渲染进该标题行；遗留问题列表与行内「转为新任务」按钮位置、顺序不变。
+- `apps/web/src/features/published-records/AppendLeftoverForm.tsx`：返回结构由单个 `<div className="leftover-append">` 改为 Fragment；收起态由 `.leftover-append-trigger`（虚线框 + 「＋ 追加遗留问题」文字）改为 `<button class="icon-button" aria-label="追加遗留问题" title="追加遗留问题">` + `InpulseIcon name="plus" size={16}`。展开面板仍是原来的 `.leftover-append-panel`（标题栏、字数脚注、取消 / 保存为新版本），由标题行的 `flex-wrap` 整行换行到标题下方，宽度与列表一致。提交逻辑（CSRF、`If-Match`、`X-Record-Version`、幂等键、409 冲突保留输入）一字未改。
+- `apps/web/src/styles/design-system.css`：删掉 `.leftover-append` 与 `.leftover-append-trigger` / `:hover` / `:disabled` 四条规则，新增 `.leftover-section-head`（`display:flex` + `flex-wrap` + `align-items:center` + 行间距）与 `.leftover-section-head h4`（`flex: 1`，并清掉 `.record-expanded h4` 的 8px 下边距、改由标题行统一给），`.leftover-append-panel` 增加 `flex: 1 0 100%` 让它整行换行。加号按钮复用既有 `.icon-button`（30×30、`border-radius: 5px`）作命中区与布局，再按用户追加要求「这个加号按钮加一点底色吧」在 `.leftover-section-head` 内叠加浅蓝底：底色 `#e6f2ff`、边框 `1px solid #cfe4fa`、图标 `#2472c3`（即页头 `.soft-blue-button` 那套「浅蓝底 + 蓝字」，与 2026-09-xx「成员设置按钮改成浅蓝色」同一口径）；悬停转 `#d7e9fd` / 边框 `#b7d2ef` / 图标 `#1d5fa8`，禁用转 `#f4f7fa` 灰底。只覆盖这一处，不改全站 `.icon-button` 默认的灰底无底色观感。
+- 可访问性：按钮没有可见文字，因此 `aria-label="追加遗留问题"` 是唯一可读名称，`title` 提供鼠标悬停的原生提示；两者都不带则会出现「无名称按钮」，本批不允许删。
+- 未改动：入口可见性条件（仍只在 `record.status === "PUBLISHED" && !readOnly` 时渲染）、`writable` 禁用态、`onAdded` 的详情 / 版本重读与列表回调；面板内文案「追加遗留问题」「取消追加遗留问题」「追加遗留问题内容」「保存为新版本」全部保留。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LEFTOVER-APPEND-HEAD-UNIT-001 | Web 单元 | 详情四段与遗留问题区结构不变 | `pnpm --filter @inpulse/web exec vitest run src/features/published-records` → **4 文件 20 例全绿**（含《renders the source task link and the four content sections》仍能按 `region` 找到「遗留问题」标题） | 本地通过（2026-10-10） |
+| LEFTOVER-APPEND-HEAD-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过（2026-10-10） |
+| LEFTOVER-APPEND-HEAD-E2E-001 | 浏览器 E2E | 图标按钮仍能被既有选择器点到并生成新版本 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test record-publishing.spec.ts` → **3 passed**：按钮无可见文字但 `aria-label` 仍是「追加遗留问题」，因此 `getByRole("button", { name: "追加遗留问题" })` 与 `getByLabel("追加遗留问题内容")` 都不需要改；夹具清理：删除用户 2、项目 2、业务行 144、审计行 15 | 本地通过（2026-10-10） |
+| LEFTOVER-APPEND-HEAD-BROWSER-001 | 浏览器实测 | 收起态与展开态版式 | dev（Vite 5173）`/issues` → 点「来源迭代」打开记录弹窗：标题行右端是 16px 加号图标按钮（无文字，悬停出「追加遗留问题」提示），与「遗留问题」标题同行居中；计算样式实测 `background rgb(230, 242, 255)` / `border rgb(207, 228, 250)` / `color rgb(36, 114, 195)` / 30×30；点开后填写面板整行换行到标题下方、宽度与遗留问题列表一致 | 本地通过（2026-10-10） |
+| LEFTOVER-APPEND-HEAD-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（2 个 TSX）退出码 0；`pnpm exec prettier --check`（3 个文件）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:drift` / `contract:validate`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 纯图标按钮没有可见文字，可读性完全靠 `aria-label` + `title`：视觉上需要悬停才知道它是「追加遗留问题」，这是用户明确要的「只留一个加号」的直接代价；若后续觉得不好懂，最小改动是给标题行加一个常显的「遗留问题」副标签，而不是把文字塞回按钮。④ 加号按钮沿用全站 `.icon-button` 的 30×30 命中区，比 16px 图标本身大，符合可点击面积要求；底色是本批为它单独叠的浅蓝（见上），因此这一处与其它页面的灰色 `.icon-button` 观感不同，是有意为之。⑤ 面板展开时不再保留原位的加号按钮（面板自带标题「追加遗留问题」与 × 关闭），因此同一时刻只有一个「追加遗留问题」控件。
+
+## 记录详情事实区上移、来源任务与修订内容并排（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「这个界面的排版布局要不这样，p2 放到最上面去 p3 放到和修订内容按钮一行，修订内容按钮改到最右侧，注意是查看迭代弹窗一起更改，不是仅仅从遗留问题进入的弹窗更改」（p2 = 截图里的「归属 / 作者与时间」事实块，p3 = 截图里的「查看来源任务」按钮）。生效范围是唯一的详情实现 `PublishedRecordDetail`：迭代记录卡展开、`/records?publishedId=…` 深链、遗留问题页「来源迭代」弹窗与迭代总结明细的只读复用都是它，因此一次改到位。无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/published-records/PublishedRecordDetail.tsx`：① `<dl className="record-facts">` 整体从「正文四段 + 提示语之后」搬到 standalone 标题行之下、正文四段之上，进弹窗先看到归属与作者时间；② 原来的独立「查看来源任务」链接搬进底部 `.record-actions`，与「修订内容」/「作废记录」同一行；③ 动作行渲染条件由「`!readOnly` 且（已发布或管理员）」放宽为「有来源任务 **或** 满足原条件」，因此只读语境（迭代总结明细）仍保留来源任务这一条只读导航，与改动前一致。
+- `apps/web/src/styles/design-system.css`：`.record-actions` 加 `justify-content: flex-end`（没有来源任务时动作按钮贴右），新增 `.record-actions > .record-source-link { margin-right: auto }`（有来源任务时它贴左、动作按钮贴右），删掉旧 `.record-source-link { margin: 14px 0 }`（那个外距是它为独占一行时留的）。
+- 未改动：事实区字段与顺序（归属 / 影响功能 / 作者与时间 / 作废可见范围）、正文四段与遗留问题区（含上一条加号按钮）、作废提示、历史版本与对比、GitHub 关联折叠、修订 / 作废按钮自身逻辑与权限判断；导航链接的 href 一字未改。
+- **折叠态的「GitHub 关联」标题行补一次居中**：用户反馈「这个字能不能上下居中，下面这根线往上一点」。折叠时下面没有面板，但标题行仍留着为面板准备的 `margin-bottom: 12px`，于是它到上分隔线 16px、到下分隔线 46px（12 + 动作行 `margin-top: 18px` + 动作行 `padding-top: 16px`），视觉上贴着上面。修法是给折叠态加 `collapsed` 类（`PublishedRecordDetail` 按 `githubOpen` 拼类名），CSS 里 `.record-github-toggle.collapsed { margin-bottom: 0 }`；展开态保持原样。实测折叠后上 16.7px / 下 20.8px，不再偏向一侧。
+- **连带修掉的样式冲突**：`inpulse-design.css` 里原有一条 `.record-detail-modal .record-expanded > :first-child { border-top: 0; padding-top: 0 }`（当初目的是去掉第一个正文段的双分隔线），事实区上移后第一个子元素变成 `dl.record-facts`，这条规则把它的**上内边距一起清成 0**，浅蓝底就顶死在「归属」文字上沿（用户截图反馈「这个背景怎么这样」）。修法是把选择器收窄到 `> section:first-child`，并新增 `.record-detail-modal .record-expanded > .record-facts:first-child { margin-top: 0 }`（上间距交给 `.modal-body` 的 20px）。`record-summary.css` 的同名规则（`padding-top: 8px`）做同样收窄，只读明细展开里的事实块也不再被改掉上内边距。
+- 结构变化会影响 DOM 顺序，因此本批回看了一遍相关断言：`PublishedRecordDetail.test.tsx` 用 `within(region).findByRole("link", { name: "查看来源任务" })` 与 `getByText("归属")` 等按角色 / 文本查询，E2E 用 `getByRole("link" | "button", { name })`，都不依赖位置，无需改。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-LAYOUT-FACTS-TOP-UNIT-001 | Web 单元 | 事实区、来源链接与四段正文仍可被查询 | `pnpm --filter @inpulse/web exec vitest run src/features/published-records` → **4 文件 20 例全绿**（含按 `region` 找「归属」「查看来源任务」的用例） | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 679 例全绿** | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-E2E-001 | 浏览器 E2E | 两个入口的详情都跑通 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test record-publishing.spec.ts issues.spec.ts` → **4 passed (43.3s)**：`record-publishing` 走 /records 卡展开里的「修订内容」，`issues` 走遗留问题页「来源迭代」弹窗；夹具清理：删除用户 2、项目 2、业务行 183、审计行 21 | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-BROWSER-001 | 浏览器实测 | 视觉顺序与两端对齐 | dev（Vite 5173）`/issues` → 「来源迭代」弹窗：标题下方第一块就是浅蓝事实区（归属 / 作者与时间），其后才是改动原因、具体改动、改动效果、遗留问题；底部同一行左端「查看来源任务」、右端「修订内容」，中间留白；同页 /records 卡展开的可访问性树顺序一致（事实区 → 四段 → GitHub → 来源任务 + 修订内容） | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-BROWSER-002 | 浏览器实测 | 事实块内边距未被 `:first-child` 规则吃掉 | 修掉上面那条选择器冲突后，弹窗内 `.record-facts` 计算样式实测 `padding: 16px 18px`、`margin: 0px`、`background: rgb(247, 250, 253)`、高度 84.79（浅蓝底上下留白对称，块顶距头部 20px，与 `.modal-body` 内容区顶对齐） | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-BROWSER-003 | 浏览器实测 | 折叠态「GitHub 关联」上下居中 | 弹窗内实测标题行 `class="record-github-toggle collapsed"`、`margin-bottom: 0px`；到上分隔线 16.7px、到下分隔线 20.8px（改动前为 16px / 46px），下面那根线随之整体上移 12px | 本地通过（2026-10-10） |
+| RECORD-LAYOUT-FACTS-TOP-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（PublishedRecordDetail.tsx）退出码 0；`pnpm exec prettier --check`（TSX + CSS）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 只读语境（迭代总结明细）现在也会渲染 `.record-actions` 这一行——里面只有「查看来源任务」一条只读导航，没有放开任何写入入口；这是为了满足「来源任务与修订内容同一行」而不牺牲深链入口，若后续要求只读上下文完全不出现动作行，需要单独确认。④ 事实区上移后它成为弹窗正文的第一个元素，与下方「改动原因」之间靠 `.record-expanded section` 的 `border-top` 分隔；各页面（弹窗 / 卡展开 / 深链）看到的是同一版式，没有按入口分叉。

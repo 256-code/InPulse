@@ -22,6 +22,35 @@ import {
 import type { TaskLocation } from "@features/tasks/task-links";
 import { IssuesPageView } from "./IssuesPageView";
 
+vi.mock(
+  "@features/published-records/RecordDetailModal",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@features/published-records/RecordDetailModal")
+      >();
+    return {
+      ...actual,
+      // 弹窗正文（版本、遗留项、GitHub 关联）不在本文件覆盖范围：只桩掉组件本身，
+      // 保留 recordDetailTarget 映射，用来验证点击后确实带上了那条来源记录。
+      RecordDetailModal: (props: {
+        readonly record: {
+          readonly recordId: number;
+          readonly title: string;
+        } | null;
+      }) =>
+        props.record === null ? null : (
+          <div data-testid="record-detail-modal">
+            {"来源记录 " +
+              String(props.record.recordId) +
+              " · " +
+              props.record.title}
+          </div>
+        ),
+    };
+  },
+);
+
 vi.mock("@features/published-records/ConvertLeftoverTask", () => ({
   LeftoverTaskConvertModal: (props: {
     readonly target: { readonly recordId: number };
@@ -133,10 +162,23 @@ const createClient = (options: ClientOptions = {}) => {
       { id: 2, code: "WMS", name: "WMS 仓储调度平台", status: "ACTIVE" },
     ],
   });
+  /** 「来源迭代」弹窗按 recordId 二次读取记录（列表项契约不含记录状态）。 */
+  const getChangeRecord = vi.fn().mockResolvedValue({
+    id: 7,
+    code: "CR-201",
+    title: "充电策略支持参数配置",
+    status: "PUBLISHED",
+    publishedAt: "2026-08-18T03:00:00.000Z",
+  });
   return {
-    client: { listLeftoverItems, listProjects } as unknown as InpulseApiClient,
+    client: {
+      listLeftoverItems,
+      listProjects,
+      getChangeRecord,
+    } as unknown as InpulseApiClient,
     listLeftoverItems,
     listProjects,
+    getChangeRecord,
   };
 };
 
@@ -187,31 +229,33 @@ describe("IssuesPageView", () => {
     expect(
       within(row).getByText("高峰期多车同时等待充电的调度策略仍需优化。"),
     ).toBeInTheDocument();
+    // 2026-10-10：来源行改为「[项目标识] 项目名 · 记录「…」 · 模块 / 功能 · 作者 · 日期」，
+    // 标识取项目编码前两位（listProjects 返回 code "AGV" → "AG"）。
+    const origin = row.querySelector(".issue-origin");
+    expect(origin).toHaveTextContent(
+      "AGV 智能搬运平台 · 记录「充电策略支持参数配置」 · 任务调度 / 充电任务编排 · 陈晓 · 2026-08-18",
+    );
+    expect(origin?.querySelector(".project-logo")?.textContent).toBe("AG");
     expect(
-      within(row).getByText(
-        "来自「充电策略支持参数配置」 · AGV 智能搬运平台 / 任务调度 / 充电任务编排 · 陈晓 · 2026-08-18",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(row).getByRole("button", { name: /来源任务 T-105/ }),
+      within(row).getByRole("button", { name: "来源迭代" }),
     ).toBeInTheDocument();
     expect(
       within(row).getByRole("button", { name: /转为任务/ }),
     ).toBeInTheDocument();
   });
-  it("opens the source and follow-up tasks through onOpenTask", async () => {
+  it("opens the source record modal and the follow-up task", async () => {
     const { onOpenTask } = renderView();
     const user = userEvent.setup();
+    // 2026-10-10 用户指示：「来源任务 <编号>」按钮改为「来源迭代」，点击就地打开来源记录
+    // 详情弹窗（不再跳来源任务），因此这里断言弹窗带上的是该行的记录而不是任务。
     const sourceRow = await screen.findByTestId("leftover-item-8");
     await user.click(
-      within(sourceRow).getByRole("button", { name: /来源任务 T-105/ }),
+      within(sourceRow).getByRole("button", { name: "来源迭代" }),
     );
-    expect(onOpenTask).toHaveBeenLastCalledWith({
-      projectId: 1,
-      moduleId: 2,
-      featureId: 3,
-      taskId: 105,
-    });
+    expect(await screen.findByTestId("record-detail-modal")).toHaveTextContent(
+      "来源记录 7 · 充电策略支持参数配置",
+    );
+    expect(onOpenTask).not.toHaveBeenCalled();
 
     const followupRow = await screen.findByTestId("leftover-item-9");
     await user.click(

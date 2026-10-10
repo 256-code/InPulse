@@ -230,12 +230,60 @@ export function PublishedRecordDetail({
           <h3>{record.title}</h3>
         </div>
       ) : null}
+      {/* 事实区（归属 / 影响功能 / 作者与时间）提到正文之上（2026-10-10 定案），
+          进弹窗先看到「这条记录属于谁、谁在什么时候写的」。 */}
+      <dl className="record-facts">
+        <dt>归属</dt>
+        <dd>
+          {[projectName, moduleName, featureName]
+            .filter((part) => part !== null)
+            .join(" / ")}
+        </dd>
+        {impactNames.length > 0 && (
+          <>
+            <dt>影响功能</dt>
+            <dd>{impactNames.join("、")}</dd>
+          </>
+        )}
+        <dt>作者与时间</dt>
+        <dd>
+          {authorName} · 创建{" "}
+          {new Date(record.createdAt).toLocaleString("zh-CN", {
+            timeZone: BEIJING_TIME_ZONE,
+          })}
+          {record.status === "PUBLISHED"
+            ? ` · 发布 ${new Date(record.publishedAt).toLocaleString("zh-CN", {
+                timeZone: BEIJING_TIME_ZONE,
+              })}`
+            : ""}
+        </dd>
+        {record.status === "VOID" && (
+          <>
+            <dt>可见范围</dt>
+            <dd>已作废，仅管理员可读取</dd>
+          </>
+        )}
+      </dl>
       {recordContentFields
         .filter(([field]) => field !== "title")
         .map(([field, label]) =>
           field === "remainingIssues" ? (
             <section key={field} aria-label="遗留问题列表">
-              <h4>{label}</h4>
+              <div className="leftover-section-head">
+                <h4>{label}</h4>
+                {record.status === "PUBLISHED" && !readOnly && (
+                  <AppendLeftoverForm
+                    item={record}
+                    api={api}
+                    writable={writable}
+                    onAdded={() => {
+                      void detail.refetch();
+                      void versions.refetch();
+                      onListChanged?.();
+                    }}
+                  />
+                )}
+              </div>
               {record.leftovers.length === 0 ? (
                 <RecordMarkdown content="暂无已知遗留问题" />
               ) : (
@@ -281,18 +329,6 @@ export function PublishedRecordDetail({
                   ))}
                 </ul>
               )}
-              {record.status === "PUBLISHED" && !readOnly && (
-                <AppendLeftoverForm
-                  item={record}
-                  api={api}
-                  writable={writable}
-                  onAdded={() => {
-                    void detail.refetch();
-                    void versions.refetch();
-                    onListChanged?.();
-                  }}
-                />
-              )}
             </section>
           ) : (
             <section key={field}>
@@ -309,47 +345,6 @@ export function PublishedRecordDetail({
         )}
       {removedLeftovers > 0 && (
         <p>已标记解决的遗留问题保留历史内容，不再计入未闭环。</p>
-      )}
-      <dl className="record-facts">
-        <dt>归属</dt>
-        <dd>
-          {[projectName, moduleName, featureName]
-            .filter((part) => part !== null)
-            .join(" / ")}
-        </dd>
-        {impactNames.length > 0 && (
-          <>
-            <dt>影响功能</dt>
-            <dd>{impactNames.join("、")}</dd>
-          </>
-        )}
-        <dt>作者与时间</dt>
-        <dd>
-          {authorName} · 创建{" "}
-          {new Date(record.createdAt).toLocaleString("zh-CN", {
-            timeZone: BEIJING_TIME_ZONE,
-          })}
-          {record.status === "PUBLISHED"
-            ? ` · 发布 ${new Date(record.publishedAt).toLocaleString("zh-CN", {
-                timeZone: BEIJING_TIME_ZONE,
-              })}`
-            : ""}
-        </dd>
-        {record.status === "VOID" && (
-          <>
-            <dt>可见范围</dt>
-            <dd>已作废，仅管理员可读取</dd>
-          </>
-        )}
-      </dl>
-      {record.taskId !== null && (
-        <a
-          className="secondary-button record-source-link"
-          href={`/projects/${projectId}/modules/${record.moduleId}${record.featureId === null ? "/tasks" : `/features/${record.featureId}`}?taskId=${record.taskId}`}
-        >
-          <InpulseIcon name="cornerDown" size={14} />
-          查看来源任务
-        </a>
       )}
       {record.status === "VOID" && (
         <Alert
@@ -465,7 +460,7 @@ export function PublishedRecordDetail({
           {/* 链接列表可能很长，默认折叠，点击标题展开；折叠时不挂载面板、不发列表请求。 */}
           <button
             type="button"
-            className="record-github-toggle"
+            className={`record-github-toggle${githubOpen ? "" : " collapsed"}`}
             aria-expanded={githubOpen}
             onClick={() => setGithubOpen((open) => !open)}
           >
@@ -487,12 +482,25 @@ export function PublishedRecordDetail({
           )}
         </div>
       )}
-      {!readOnly && (record.status === "PUBLISHED" || user?.isAdmin) && (
+      {/* 底部动作行（2026-10-10 定案）：来源任务入口靠左，修订 / 作废靠右；
+          没有来源任务时动作按钮同样贴右。只读语境仍保留来源任务这一条只读导航。 */}
+      {(record.taskId !== null ||
+        (!readOnly &&
+          (record.status === "PUBLISHED" || user?.isAdmin === true))) && (
         <div className="record-actions">
-          {record.status === "PUBLISHED" && (
+          {record.taskId !== null && (
+            <a
+              className="secondary-button record-source-link"
+              href={`/projects/${projectId}/modules/${record.moduleId}${record.featureId === null ? "/tasks" : `/features/${record.featureId}`}?taskId=${record.taskId}`}
+            >
+              <InpulseIcon name="cornerDown" size={14} />
+              查看来源任务
+            </a>
+          )}
+          {!readOnly && record.status === "PUBLISHED" && (
             <EditPublishedRecord item={record} api={api} writable={writable} />
           )}
-          {user?.isAdmin && (
+          {!readOnly && user?.isAdmin === true && (
             <RecordLifecycleButton
               item={record}
               api={api}

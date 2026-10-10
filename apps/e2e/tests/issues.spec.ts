@@ -6,7 +6,7 @@ import { pickCalmSelectOption } from "../helpers/calm-select.js";
 
 /**
  * F-20 遗留问题页（R-6）关键路径 E2E：发布带「遗留问题」的迭代记录后，
- * 未闭环桶展示来源记录、来源任务与转为任务入口；页内完成转换后按应用统一
+ * 未闭环桶展示来源记录、来源迭代弹窗入口与转为任务入口；页内完成转换后按应用统一
  * 模式自动打开新建的跟进任务详情，回到遗留问题页可见该条移入已闭环折叠区
  * 并保留跟进任务入口，原记录内容不被改写。
  */
@@ -48,7 +48,10 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
 
     await page.goto("/issues");
     await expect(page.getByTestId("issues-page")).toBeVisible();
-    await expect(page.getByText(/按发布时间倒序/)).toBeVisible();
+    // 2026-10-10 用户指示：未闭环分档标题（含条数与排序说明）整条删除，
+    // 列表直接挂在页面下，不再有标题行。
+    await expect(page.getByText(/按发布时间倒序/)).toHaveCount(0);
+    await expect(page.locator(".issues-page > .issue-list")).toBeVisible();
     const row = page
       .getByTestId(/^leftover-item-/)
       .filter({ hasText: leftover });
@@ -56,10 +59,15 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(row.getByText("待闭环")).toBeVisible();
     await expect(row).toContainText(taskTitle);
 
-    await row.getByRole("button", { name: /^来源任务/ }).click();
-    const detail = page.getByRole("dialog", { name: "任务详情" });
-    await expect(detail).toBeVisible();
-    await expect(detail.getByText(taskTitle)).toBeVisible();
+    // 2026-10-10 用户指示：原「来源任务 <编号>」按钮改为「来源迭代」，点击就地打开这条
+    // 来源记录的详情弹窗（与任务详情「查看来源记录」同一实现），不再跳转任务详情；
+    // 来源任务仍可从记录详情里的「查看来源任务」进入。
+    await row.getByRole("button", { name: "来源迭代", exact: true }).click();
+    const record = page.getByRole("dialog", { name: taskTitle });
+    await expect(record).toBeVisible();
+    await expect(record.getByText(leftover).first()).toBeVisible();
+    await record.getByRole("button", { name: "关闭迭代记录详情" }).click();
+    await expect(record).toBeHidden();
 
     await page.goto("/issues");
     await page
@@ -75,6 +83,7 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     await expect(convert).toBeHidden();
 
     // 转换成功后与新建任务一致，自动打开新建的跟进任务详情。
+    const detail = page.getByRole("dialog", { name: "任务详情" });
     await expect(detail).toBeVisible();
     await expect(detail.getByText(followupTitle)).toBeVisible();
 

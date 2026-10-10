@@ -258,8 +258,10 @@
   padding: 0;
 }
 
-/* 展开区第一段自带的 border-top 会紧贴上方行线画成双线；上边距由单元格提供。 */
-.summary-detail-expanded .record-expanded > :first-child {
+/* 展开区第一段自带的 border-top 会紧贴上方行线画成双线；上边距由单元格提供。
+   同样收窄到 `section`：事实区上移后第一个子元素可能是 `dl.record-facts`，
+   它的上内边距不能被这条规则改掉。 */
+.summary-detail-expanded .record-expanded > section:first-child {
   border-top: 0;
   padding-top: 8px;
 }

@@ -1,20 +1,10 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { InpulseApiClient, ReadableRecord } from "@generated/api";
+import type { InpulseApiClient } from "@generated/api";
 import {
   RecordDetailModal,
-  type RecordDetailTarget,
+  recordDetailTarget,
 } from "@features/published-records/RecordDetailModal";
-/** 与任务详情「迭代记录」标签同一份摘要形状：正文由记录弹窗按 recordId 二次加载。 */
-function targetOf(record: ReadableRecord): RecordDetailTarget {
-  return {
-    recordId: record.id,
-    code: record.code,
-    title: record.title,
-    recordStatus: record.status,
-    publishedAt: record.publishedAt,
-  };
-}
 export function LeftoverTaskSource({
   api,
   taskId,
@@ -60,7 +50,7 @@ export function LeftoverTaskSource({
       {open && detail !== undefined ? (
         <RecordDetailModal
           projectId={src.projectId}
-          record={targetOf(detail)}
+          record={recordDetailTarget(detail)}
           api={api}
           onClose={() => setOpen(false)}
           onChanged={() => {

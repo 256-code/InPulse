@@ -875,10 +875,11 @@ export const TaskCenterPageView: React.FC<TaskCenterPageViewProps> = ({
             {dueText}
           </span>
         </div>
-        {/* 组卡没有记录计数，但要与任务卡片逐像素同高（2026-10-08 产品要求「已完成和
-            未完成任务卡片的布局也要一样大」）——任务卡片的页脚现在恒渲染、空页脚由 CSS
-            的 min-height 占位，组卡缺这一块就会矮 31.5px。这里补一个空占位盒，占位高度
-            同样来自 `.calm-task-card .task-card-footer`（组卡也带 `calm-task-card` 类）。 */}
+        {/* 组卡没有记录计数，页脚盒仍与任务卡片保持同构（2026-10-08 产品要求「已完成和
+            未完成任务卡片的布局也要一样大」）。任务卡片的空页脚自 2026-10-10 起由
+            `.calm-task-card .task-card-footer:empty { display: none }` 隐藏、不再占高度，
+            组卡这个空盒同理不占高度，保留它只为与任务卡片逐行同构（断言见
+            TaskCenterPageView.test.tsx）。 */}
         <div className="task-card-footer" />
       </button>
     );

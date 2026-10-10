@@ -1,6 +1,10 @@
 import React from "react";
 import { Alert } from "antd";
-import type { InpulseApiClient, TaskGroupRecordLink } from "@generated/api";
+import type {
+  InpulseApiClient,
+  ReadableRecord,
+  TaskGroupRecordLink,
+} from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AppModal } from "@features/common/components/AppModal";
 import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
@@ -27,6 +31,20 @@ export interface RecordDetailTarget {
   readonly contextLabel?: string | null;
   /** 作废回退里唯一可读的链接快照；调用方没有链接数据时给空数组。 */
   readonly externalLinks?: readonly TaskGroupRecordLink[];
+}
+
+/**
+ * 可读记录摘要 → 弹窗目标：调用方通常只有摘要（记录列表 / 聚合组 / 遗留问题行），
+ * 正文、版本与遗留项一律由弹窗按 recordId 二次加载，弹层打开前不需要额外请求。
+ */
+export function recordDetailTarget(record: ReadableRecord): RecordDetailTarget {
+  return {
+    recordId: record.id,
+    code: record.code,
+    title: record.title,
+    recordStatus: record.status,
+    publishedAt: record.publishedAt,
+  };
 }
 
 /** 弹层小标题：编号 + 语境标签，作废记录补状态。 */

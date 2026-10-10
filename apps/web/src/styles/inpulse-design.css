@@ -2671,10 +2671,19 @@
 }
 
 /* 展开区第一段自带的 `border-top` 会在头部下再画一条线：头部已有分隔线，
-   上边距由 `.modal-body` 提供，这里只让第一段接上节奏。 */
-.record-detail-modal .record-expanded > :first-child {
+   上边距由 `.modal-body` 提供，这里只让第一段接上节奏。
+   2026-10-10：选择器收窄到 `section`——事实区上移到正文之上后，第一个子元素
+   变成 `dl.record-facts`（自带浅蓝底与 16px 内边距），再套 `:first-child`
+   会把它的上内边距一起清掉，浅蓝底就会顶死在文字上沿。 */
+.record-detail-modal .record-expanded > section:first-child {
   border-top: 0;
   padding-top: 0;
+}
+
+/* 事实块成为弹窗正文第一个元素后，上间距交给 `.modal-body` 的 20px 内边距，
+   不再叠它自己的 18px 外距（内边距保留，浅蓝底上下留白对称）。 */
+.record-detail-modal .record-expanded > .record-facts:first-child {
+  margin-top: 0;
 }
 
 /* 聚合组详情弹窗本身就是 `lg`（840px），记录详情再按 `lg` 打开会与它等宽等高、

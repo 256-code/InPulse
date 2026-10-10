@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Alert } from "antd";
 import {
   createApiClient,
@@ -6,21 +7,22 @@ import {
   type LeftoverListItem,
 } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { ProjectLogo } from "@features/common/components/ProjectLogo";
 import { useScopedSearchParams } from "@features/common/search-params-scope";
-import {
-  CalmBadge,
-  CalmEmptyState,
-  CalmSectionTitle,
-} from "@features/common/components/Calm";
+import { CalmBadge, CalmEmptyState } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
 import { projectSelectOption } from "@features/common/project-select-option";
 import {
   LeftoverTaskConvertModal,
   type LeftoverConvertTarget,
 } from "@features/published-records/ConvertLeftoverTask";
+import {
+  RecordDetailModal,
+  recordDetailTarget,
+} from "@features/published-records/RecordDetailModal";
 import { useProjects } from "@features/projects/project-query";
 import type { TaskLocation } from "@features/tasks/task-links";
-import { issueOriginText, isLeftoverClosed } from "./issues-format";
+import { isLeftoverClosed, issueOriginParts } from "./issues-format";
 import { describeIssuesError, useLeftoverItemsQuery } from "./issues-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
@@ -66,6 +68,49 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
     bucket: "CLOSED",
     projectId,
   });
+  /**
+   * 「来源迭代」入口：点击就地打开这条来源记录的详情弹窗（与任务详情的「查看来源记录」
+   * 同一实现），不再跳到来源任务；来源任务仍可从记录详情里的「查看来源任务」进入。
+   * 列表项契约只给记录编号 / 标题 / 发布时间，不含记录状态（PUBLISHED / VOID），而弹窗的
+   * 作废回退依赖状态，因此点开时按 recordId 二次读取记录；读取完成前不渲染弹层，避免先弹
+   * 出上一个记录的旧数据。
+   */
+  const [sourceRecord, setSourceRecord] = useState<{
+    readonly projectId: number;
+    readonly recordId: number;
+  } | null>(null);
+  const sourceRecordProjectId = sourceRecord?.projectId ?? 0;
+  const sourceRecordId = sourceRecord?.recordId ?? 0;
+  const sourceRecordQuery = useQuery({
+    queryKey: ["leftover-source-record", sourceRecordProjectId, sourceRecordId],
+    queryFn: ({ signal }) =>
+      api.getChangeRecord(sourceRecordProjectId, sourceRecordId, { signal }),
+    enabled: sourceRecord !== null,
+    retry: false,
+  });
+  const sourceRecordData = sourceRecordQuery.data;
+  const sourceRecordTarget =
+    sourceRecord === null ||
+    sourceRecordData === undefined ||
+    sourceRecordData.id !== sourceRecord.recordId
+      ? null
+      : recordDetailTarget(sourceRecordData);
+  /**
+   * 来源行行首的项目标识取项目编码前两位，色系由编码派生（与项目列表页同一个
+   * ProjectLogo）。本页已用 useProjects 取过项目列表给筛选器，这里直接复用同一份
+   * 数据做 projectId → code 映射，不再多发请求；契约上 LeftoverListItem 不带项目
+   * 编码，若项目不在可见列表中则降级为只渲染项目名。
+   */
+  const projectCodeById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const project of projects.data?.items ?? []) {
+      if (typeof project.code === "string" && project.code.length > 0) {
+        map.set(project.id, project.code);
+      }
+    }
+    return map;
+  }, [projects.data]);
+
   const openItems =
     openQuery.data?.pages.flatMap((page) => [...page.items]) ?? [];
   const closedItems =
@@ -80,8 +125,9 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
 
   const renderRow = (item: LeftoverListItem) => {
     const closed = isLeftoverClosed(item);
-    const sourceTask = item.sourceTask;
     const followupTask = item.followupTask;
+    const origin = issueOriginParts(item);
+    const projectCode = projectCodeById.get(item.projectId);
     return (
       <article
         className="issue-row"
@@ -96,26 +142,31 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
             <span className="task-id">{item.recordCode}</span>
             <strong>{item.content}</strong>
           </div>
-          <p className="issue-origin">{issueOriginText(item)}</p>
+          {/* 来源行：项目标识 + 项目名 + 记录 / 位置 / 作者 / 日期（2026-10-10 用户指示）。 */}
+          <p className="issue-origin">
+            {projectCode === undefined ? null : (
+              <ProjectLogo code={projectCode} className="tiny" />
+            )}
+            <strong className="origin-project">{origin.projectName}</strong>
+            {" · " + origin.detail}
+          </p>
         </div>
         <div className="issue-actions">
-          {sourceTask === null ? null : (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() =>
-                onOpenTask?.({
-                  projectId: sourceTask.projectId,
-                  moduleId: sourceTask.moduleId,
-                  featureId: sourceTask.featureId,
-                  taskId: sourceTask.taskId,
-                })
-              }
-            >
-              <InpulseIcon name="gitBranch" size={14} />
-              来源任务 {sourceTask.code}
-            </button>
-          )}
+          {/* 来源迭代（2026-10-10 用户指示）：原「来源任务 <编号>」按钮改为「来源迭代」，
+              点击就地打开这条来源记录的详情弹窗，不再跳来源任务。 */}
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() =>
+              setSourceRecord({
+                projectId: item.projectId,
+                recordId: item.recordId,
+              })
+            }
+          >
+            <InpulseIcon name="fileText" size={14} />
+            来源迭代
+          </button>
           {followupTask === null ? (
             closed ? null : (
               <button
@@ -201,10 +252,9 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
         </div>
       )}
 
-      <CalmSectionTitle
-        title="未闭环"
-        hint={String(openItems.length) + " 条 · 按发布时间倒序"}
-      />
+      {/* 未闭环分档标题（含条数与排序说明）2026-10-10 按用户指示整条删除：这一
+          档的卡片本来就都带「待闭环」徽章，标题属于重复信息，条数与排序说明用户
+          确认不重要。已闭环那档的标题是折叠区开关，仍然保留。 */}
       {openQuery.isPending ? (
         <CalmSkeleton variant="list" rows={4} label="正在加载遗留问题…" />
       ) : openQuery.isError ? (
@@ -277,6 +327,16 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
           </p>
         </div>
       </div>
+
+      {sourceRecordTarget === null ? null : (
+        <RecordDetailModal
+          projectId={sourceRecordProjectId}
+          record={sourceRecordTarget}
+          api={api}
+          onClose={() => setSourceRecord(null)}
+          onChanged={() => void sourceRecordQuery.refetch()}
+        />
+      )}
 
       {convertTarget === null ? null : (
         <LeftoverTaskConvertModal
