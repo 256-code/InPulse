@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ApiError } from "@generated/api";
 import { PROJECT_OVERVIEW_MOCK_ADAPTER } from "./project-overview-mock";
 import type { ProjectOverviewAdapter } from "./project-overview-types";
@@ -30,5 +30,7 @@ export function useProjectOverviewQuery({
     queryKey: ["project-overview", adapter.source, projectId],
     queryFn: () => adapter.fetchProjectOverview({ projectId }),
     retry: false,
+    // 换项目只换 queryKey（2026-10-10）：指标条与最近迭代保留上一份，原地换数据。
+    placeholderData: keepPreviousData,
   });
 }

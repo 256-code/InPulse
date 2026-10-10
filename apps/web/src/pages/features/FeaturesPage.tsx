@@ -17,7 +17,6 @@ export default function FeaturesPage() {
     return <Alert type="error" title="功能地址无效" />;
   return (
     <FeaturesPageView
-      key={Object.values(params).join("/")}
       projectId={projectId}
       moduleId={moduleId}
       featureId={featureId}

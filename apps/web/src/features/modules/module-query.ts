@@ -1,5 +1,10 @@
 import { useMemo, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -40,6 +45,10 @@ export function useModules(projectId: number, client?: InpulseApiClient) {
     queryFn: ({ signal }) => api.listModules(projectId, { signal }),
     retry: false,
     enabled: Number.isInteger(projectId) && projectId > 0,
+    // 换项目只换 queryKey（2026-10-10 用户指示：项目间切换不要再闪）：保留上一份列表
+    // 原地换数据，内容区不会先塌成骨架再撑回。侧栏项目树按项目各持一个实例、
+    // projectId 不变，命不中这条占位。
+    placeholderData: keepPreviousData,
   });
   const mutation = useMutation({
     retry: false,

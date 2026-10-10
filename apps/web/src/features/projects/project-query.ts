@@ -1,10 +1,16 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
   type CreateProjectRequest,
   type InpulseApiClient,
+  type ProjectDetailResponse,
 } from "@generated/api";
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
@@ -64,6 +70,12 @@ export function useProjectDetail({
     enabled: enabled && projectId !== null,
     retry: false,
     staleTime: 60_000,
+    // 换项目保留上一份详情（2026-10-10）：项目页头与面包屑不先塌成骨架；非项目路由
+    // （projectId 为 null、查询禁用）不给占位，避免上一个项目的名字残留。显式写上
+    // 泛型是因为本仓库开了 exactOptionalPropertyTypes，三元里的 undefined 不能当缺省。
+    ...(enabled && projectId !== null
+      ? { placeholderData: keepPreviousData<ProjectDetailResponse> }
+      : {}),
   });
 }
 

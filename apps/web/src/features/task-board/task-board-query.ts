@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ApiError } from "@generated/api";
 
 import type { TaskBoardAdapter } from "./task-board-types";
@@ -29,5 +29,7 @@ export function useTaskBoardQuery({
     queryKey: ["task-board", adapter.source, projectId],
     queryFn: () => adapter.fetchTaskBoard({ projectId }),
     retry: false,
+    // 换项目只换 queryKey（2026-10-10）：看板保留上一份数据，不先塌成骨架再撑回。
+    placeholderData: keepPreviousData,
   });
 }

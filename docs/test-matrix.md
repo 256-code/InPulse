@@ -5934,3 +5934,25 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | TRANSITION-BUFFERED-REVEAL-E2E-001 | 浏览器 E2E | 全量回归 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test` → **70 passed / 1 failed (6.0m)**；唯一失败为 `tests/project-delete.spec.ts:59`，在 `git stash` 掉本批改动后的干净 HEAD 上同样失败（详见下） | 本地通过（本批相关用例） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59`（ADR-062 项目物理删除）本地失败：确认弹窗内出现 `项目删除暂时失败，请稍后重试。`，删除事务未成功。把本批改动 `git stash` 后在干净 HEAD（`0214487`）上复跑同样失败，判定与本批无关；最可能的诱因是本地 `app_ci` 的 SYSTEM 审计哈希链在此前夹具清理后留有断点（同次清理日志已提示「SYSTEM 链留下一个断点」），删除事务的审计追加因此失败。该失败未在本次处置范围内，未修改任何相关代码。③ 淡入时长（骨架 140ms 延迟 + 160ms 淡入、路由 180ms、浮层 160 / 140ms）是本批取值，产品若觉得快慢不合适可直接调这三个数字。④ 中间态 339ms 那条路径只在「不悬停直接点击 / 键盘直达 / 程序化跳转」时出现，本批未消除，仅靠预取覆盖鼠标自然悬停的常见路径。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+
+### 项目间切换不再闪：同路由换参数改为原地换数据（2026-10-10）
+
+用户反馈（原话）：「项目与项目之间的切换好像还是会闪」。根因：页面组件按路由参数生成 `key`，同一条路由换项目时整棵页面 DOM 卸载重挂，`.page-content > *` 的 180ms 淡入整块重放，中间夹 1–2 帧全透明（骨架自身 140ms 延迟，同帧不可见）。改法：去掉页面组件上按参数生成的 `key`，并把项目级查询改成 `placeholderData: keepPreviousData`，让「换项目」＝原地换数据。涉及 `pages/modules`、`pages/task-board`、`pages/project-members`、`pages/features`、`pages/module-tasks`（`TasksPanel`）与 `useModules` / `useProjectDetail` / `useProjectOverviewQuery` / `useFeatures` / `useTaskBoardQuery` / `useProjectMembers`；`ModuleTasksPage` 另把「换项目时查不到新模块」从报错改成等待态。
+
+改前 / 改后实测（dev Vite 5173、Chromium 1628×1000、`requestAnimationFrame` 逐帧记 `.page-content` 首子节点 opacity / 骨架存在性 / 文本指纹）：
+
+| 场景 | 改前 | 改后 |
+| --- | --- | --- |
+| `/projects/4/modules → /projects/8/modules` | `t=3 op=1` → `t=85 op=0`（骨架同帧但因 140ms 延迟不可见）→ 180ms 淡入 → `t=270 op=1` | 全程 `op=1`、无骨架帧、`t=116` 单帧换文本 |
+| `/projects/4/modules/12574/features → /…/12573/features` | 整页重建 + 淡入重放（同上一格） | 全程 `op=1`、无骨架帧、`t=62` 单帧换文本 |
+| 跨页跳转（如「模块与功能」→「任务看板」：路由元素类型变化） | 整页 180ms 淡入 | 不变（保留原设计） |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ROUTE-PARAM-SWITCH-KEEP-DATA-BROWSER-001 | 浏览器实测（逐帧） | 项目间切换不再闪 | `/projects/4/modules → /projects/8/modules` 全程 `op=1`、无空白帧、无骨架帧（改前 `op` 掉到 0） | 本地通过（2026-10-10） |
+| ROUTE-PARAM-SWITCH-KEEP-DATA-BROWSER-002 | 浏览器实测（逐帧） | 模块间切换不再闪 | `/…/12574/features → /…/12573/features` 全程 `op=1`、无骨架帧 | 本地通过（2026-10-10） |
+| ROUTE-PARAM-SWITCH-KEEP-DATA-UNIT-001 | Web 单元 | 不破坏既有用例 | `pnpm --filter @inpulse/web test` → **97 文件 699 例全绿** | 本地通过（2026-10-10） |
+| ROUTE-PARAM-SWITCH-KEEP-DATA-GATE-001 | 静态门禁 | 类型 / 边界 / 格式 | 全 workspace `pnpm typecheck` 通过（8 个带脚本的工程）；`tsc --noEmit` 无输出；`check:boundaries` 0 违规（322 modules / 1620 dependencies）；改动文件 `eslint` 与 `prettier --check` 通过 | 本地通过（2026-10-10） |
+| ROUTE-PARAM-SWITCH-KEEP-DATA-E2E-001 | 浏览器 E2E | 全量回归 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test` → **70 passed / 1 failed (5.9m)**；唯一失败为既有 `tests/project-delete.spec.ts:59`（本地 `app_ci` SYSTEM 审计链断点） | 本地通过（本批相关用例） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `build`（web 的生产构建已随 E2E 的 `vite build` 跑过）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59` 本地失败：确认弹窗停留，弹窗内红条为「项目删除暂时失败，请稍后重试。」；上一批已用 `git stash` 在干净 HEAD（`0214487`）复现同样失败，本次夹具清理日志再次提示「SYSTEM 链留下一个断点」，判定与本批无关，未修改删除链路与服务端。③ 占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要求的缓冲）；接口变慢时窗口等比变长，本批未做「悬停预取项目数据」。④ 页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数不再重置；弹窗状态不受影响。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。

@@ -43,7 +43,14 @@ export default function ModuleTasksPage() {
       />
     );
   const module = query.data?.items.find((item) => item.id === moduleId);
-  if (!module) return <Alert type="error" title="模块不存在或无法访问" />;
+  // 换项目时 useModules 会先保留上一份模块列表（见 module-query 的 keepPreviousData），
+  // 这一刻新模块还查不到；仍在取数就先给等待态，不能当成「模块不存在」报错。
+  if (!module)
+    return query.isFetching ? (
+      <CalmSkeleton variant="list" rows={4} label="正在加载模块任务" />
+    ) : (
+      <Alert type="error" title="模块不存在或无法访问" />
+    );
   const featuresHref =
     "/projects/" + projectId + "/modules/" + moduleId + "/features";
   return (
@@ -100,7 +107,6 @@ export default function ModuleTasksPage() {
         hint="一份任务，可影响当前模块的多个功能"
       />
       <TasksPanel
-        key={`${projectId}:${moduleId}`}
         projectId={projectId}
         moduleId={moduleId}
         featureId={null}

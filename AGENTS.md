@@ -938,3 +938,16 @@
 - 未消除：不悬停直接点击、键盘直达或程序化跳转仍会走 339ms 的通用骨架路径。
 - 回归防线：本批以抓帧实测为主（`docs/test-matrix.md` 的 `TRANSITION-BUFFERED-REVEAL-*`），未新增单测——改动全是 CSS 动效与预取时序，jsdom 无法验收。
 - 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **97 文件 699 例全绿**；`tsc --noEmit` 无输出、`check:boundaries` 0 违规、改动文件 `eslint` / `prettier --check` 通过；Playwright 全量 **70 passed / 1 failed (6.0m)**，唯一失败 `tests/project-delete.spec.ts:59` 在 `git stash` 掉本批改动后的干净 HEAD 上同样失败（本地 `app_ci` 的 SYSTEM 审计链有断点导致删除事务失败），与本批无关。
+
+## 2026-10-10 项目间切换不再闪：同路由换参数改为原地换数据
+
+用户反馈（原话）：「项目与项目之间的切换好像还是会闪」（浏览器停在 `/projects/8/modules`）。承接同一天《切换过渡：所有跳转与弹窗统一「缓冲后呈现」》：`.page-content > *` 已有 180ms 淡入，但页面组件自带「按路由参数生成」的 `key`，同一条路由换参数时整棵页面 DOM 会卸载重挂，淡入跟着整块重放，中间还夹 1–2 帧全透明（骨架自身带 140ms 延迟，同帧不可见）。纯前端（React / React Query）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 去掉页面组件上按路由参数生成的 `key`：`pages/modules`、`pages/task-board`、`pages/project-members`、`pages/features`，以及 `pages/module-tasks` 里 `TasksPanel` 的 `key`。换项目不再重建页面 DOM。
+- 项目级查询改用 `placeholderData: keepPreviousData`（`useModules`、`useProjectDetail`、`useProjectOverviewQuery`、`useFeatures`、`useTaskBoardQuery`、`useProjectMembers`）：新数据到位前保留上一份，切换＝原地换数据，不再先空一帧、也不先塌成骨架再撑回。`useProjectDetail` 只在 `projectId !== null` 时给占位（条件展开 + 显式泛型：本仓库开了 `exactOptionalPropertyTypes`，三元素里的 `undefined` 不能当缺省），避免非项目路由的面包屑残留上一个项目的名字。侧栏项目树的 `ModuleList` 每个项目各持一个 `useModules` 实例、`projectId` 不变，命不中这条占位。
+- `ModuleTasksPage`：换项目时旧模块列表里查不到新模块，只要仍在取数就按等待态处理，不再误判「模块不存在」。
+- 保留原设计：跨页跳转（路由元素类型变化 → DOM 确实重建）仍是整页 180ms 淡入；骨架 140ms 延迟不变。
+- 实测（dev Vite 5173、Chromium、逐帧记 `.page-content` 首子节点 opacity）：`/projects/4/modules → /projects/8/modules` 改前 `op=1 → 0`（空白 1–2 帧）`→ 0.15 → … → 1`；改后全程 `op=1`、无骨架帧、单帧换文本。功能目录模块间切换（`/…/12574/features → /…/12573/features`）同样全程 `op=1`。
+- 权衡：占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要的「缓冲」，接口变慢则等比变长）；页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数时不再重置；弹窗状态不受影响（弹层打开时侧栏被遮罩挡住）。
+- 回归防线：本批仍以抓帧实测为主（`docs/test-matrix.md` 的 `ROUTE-PARAM-SWITCH-KEEP-DATA-*`），未新增单测——改动是挂载时机与缓存占位时序，jsdom 无法验收；既有 97 文件 699 例保持全绿。
+- 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **97 文件 699 例全绿**；全 workspace `pnpm typecheck` 通过（8 个带脚本的工程，含 web 与 api）、`pnpm lint`、`pnpm check:docs`（110 个 Markdown 文件）通过；`tsc --noEmit` 无输出、`check:boundaries` 0 违规、改动文件 `eslint` / `prettier --check` 通过；Playwright 全量 **70 passed / 1 failed (5.9m)**，唯一失败仍是 `tests/project-delete.spec.ts:59`（本地 `app_ci` 的 SYSTEM 审计链断点，上一批已用 `git stash` 在干净 HEAD 上复现同样失败），与本批无关。

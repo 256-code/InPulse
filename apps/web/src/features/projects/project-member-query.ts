@@ -1,5 +1,10 @@
 import { useMemo, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -76,6 +81,8 @@ export function useProjectMembers(
     queryFn: ({ signal }) => api.listProjectMembers(projectId, { signal }),
     retry: false,
     enabled: Number.isInteger(projectId) && projectId > 0,
+    // 与其它项目级页面同一口径（2026-10-10）：换项目保留上一份成员列表。
+    placeholderData: keepPreviousData,
   });
 
   const addMutation = useMutation({
