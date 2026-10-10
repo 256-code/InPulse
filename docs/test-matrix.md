@@ -5681,3 +5681,31 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ③ **若将来在最外层再加一层 LB / CDN**，其地址段必须追加进 `TRUSTED_PROXY_CIDRS`（逗号分隔多值），否则 IP 采集与 IP 限流又会退化；本批只覆盖 Nginx 直连 API 的现有拓扑。
 ④ 容器探针中上游同时收到 `X-Forwarded-For: 172.18.0.1`——正好实证「不修信任链时 API 只能看到网关内网地址」的缺陷形态。
 ⑤ 本批含部署配置与静态检查的产品代码，按 §8 需非作者人工评审；部署到真实主机上线前，`TRUSTED_PROXY_CIDRS` 与实际网段一致性需在首次部署时人工核对一次。
+
+## 退出登录换号落点修复（2026-10-10，本地落库）
+
+**问题**：在受 `RequireAuth` 保护的页面上点「退出登录」时，`logout()` 先把认证态收敛为匿名；认证态更新先于退出跳转（低优先级过渡）提交，当前页面的 `RequireAuth` 在跳转落地前渲染 `<Navigate to="/login?from=<当前页>">`，最终地址变成带 `from` 的登录页。随后换成另一个账号登录，会被 `LoginPage` 送回上一个账号停留的页面（在 `/projects/1/modules` 退出后 6/6 复现；`/settings` 等 `RequireAdmin` 页面因 403 空态不触发跳转而未暴露）。
+
+**修复**（`apps/web/src/app/layout/AppLayout.tsx`）：
+
+- 退出请求发起后立即卸载内容区 `<Outlet />`（`isLoggingOut` 期间渲染 `CalmSkeleton`，`data-testid="logout-pending"`），受保护子树不再有机会在匿名态渲染 `RequireAuth`；
+- 退出态保持到路由真正落到 `/login`（新增 effect 收敛），退出成功统一 `navigate("/login")` 落干净登录页；退出失败立即解除退出态并保持原有错误分支；
+- 匿名直达受保护页面的 `from` 回跳（LOGIN-UI-001/003）语义不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| LOGIN-UI-006 | 单元（jsdom） | 退出登录期间卸载受保护页面 | `apps/web/src/app/layout/AppLayout.test.tsx`：退出请求挂起时不渲染受保护页面内容、显示 `logout-pending`；退出完成后地址为 `/login` 且不含 `from=` | 本地通过（2026-10-10；定向 14/14，先以未修复实现确认新用例转红） |
+| LOGIN-UI-007 | 浏览器 E2E | 退出登录 → 换账号落点 | `apps/e2e/tests/auth.spec.ts`：成员在 `/projects` 退出后 URL 精确为 `/login`（无 `from`），换第二账号登录后落 `/tasks`，而不是上一账号停留的 `/projects` | 本地通过（2026-10-10；定向 8/8，全量 E2E 71/71） |
+
+### 本地实际执行（2026-10-10）
+
+① 定向单测 `pnpm --filter @inpulse/web exec vitest run src/app/layout/AppLayout.test.tsx` → 14/14。
+② dev（API 3000 + Vite 5173）真实浏览器复验 3 轮（含 logout 接口延迟 1.5s）：退出后均为 `/login`（无 `from`），换第二账号登录均落 `/tasks`；匿名直达 `/projects` 仍带 `from` 并在登录后回 `/projects`（无回归）。
+③ `pnpm test:web` → 97 文件 696 例全绿；`pnpm lint`、`pnpm typecheck`（8 workspace）全绿；`pnpm exec prettier --check`（3 个改动文件）通过。
+④ `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/auth.spec.ts` → 8/8；全量 `pnpm test:e2e` → **71 passed（6.0m）**（夹具 teardown 自动清理）。
+
+### 未运行 / 已知偏差
+
+① 未跑 `pnpm test:unit` / `pnpm test:integration`（未改服务端与契约）、整链 `pnpm check`（本机 npm 镜像缺 audit endpoint）、生产镜像构建与 Trivy、GitHub Actions（未提交、未推送）。
+② 会话过期 / 401 收敛后的 `/login?from=...` 回跳（FE-012）保持现状：属既有设计（重新登录后回到原页面），本轮只修「主动退出」路径；若要一并改为落默认入口，需另行定案并同步 FE-012。
+③ 本批含前端产品代码与新增用例，按 §8 需非作者人工评审（Playwright 新增强需非作者评审）。
