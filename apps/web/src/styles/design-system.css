@@ -4726,6 +4726,23 @@ td.due-overdue {
   border-radius: 4px;
   padding: 3px 6px;
 }
+/* 「Esc」既是按键提示也是关闭按钮：按钮只提供点击面，外形仍由内部 kbd 承担 */
+.palette-esc {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  cursor: pointer;
+}
+.palette-esc:hover kbd {
+  color: #4a5c72;
+  border-color: #c3cfdb;
+}
+.palette-esc:focus-visible {
+  outline: 2px solid #2472c3;
+  outline-offset: 2px;
+  border-radius: 5px;
+}
 .palette-hint {
   margin: 0;
   padding: 11px 18px;
