@@ -4,7 +4,7 @@ import { RecordLifecycleButton } from "./RecordLifecycleButton";
 import { ConvertLeftoverTask } from "./ConvertLeftoverTask";
 import { EditPublishedRecord } from "./EditPublishedRecord";
 import { AppendLeftoverForm } from "./AppendLeftoverForm";
-import { taskDetailPath } from "@features/tasks/task-links";
+import { taskDetailPath, type TaskLocation } from "@features/tasks/task-links";
 import { fieldText } from "@features/record-drafts/record-content";
 import React, { useMemo, useState } from "react";
 import { Alert, Button } from "antd";
@@ -89,6 +89,7 @@ export function PublishedRecordDetail({
   standalone,
   labels,
   readOnly = false,
+  onOpenTask,
 }: {
   readonly projectId: number;
   readonly recordId: number;
@@ -117,6 +118,12 @@ export function PublishedRecordDetail({
    * 直接不渲染。
    */
   readonly readOnly?: boolean | undefined;
+  /**
+   * 就地打开来源任务（遗留问题页等已挂任务详情宿主时传入）：传了就渲染成按钮，
+   * 点击交回宿主在当前页面打开任务弹窗、关掉后回到本条记录弹窗，不改变地址栏；
+   * 缺省仍是深链到功能档案的 ?taskId=，由目标页自己打开任务详情。
+   */
+  readonly onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }) {
   const { user } = useAuth();
   const api = useMemo(() => client ?? createApiClient(), [client]);
@@ -223,6 +230,16 @@ export function PublishedRecordDetail({
       ? 0
       : previous.leftovers.length - current.leftovers.length;
   })();
+  // 来源任务位置（模块级任务回模块任务页、功能级任务回功能页）；taskId 为空时整个入口不渲染。
+  const sourceTask: TaskLocation | null =
+    record.taskId === null
+      ? null
+      : {
+          projectId,
+          moduleId: record.moduleId,
+          featureId: record.featureId,
+          taskId: record.taskId,
+        };
   return (
     <section className="record-expanded" aria-label="正式记录详情">
       {standalone ? (
@@ -488,14 +505,23 @@ export function PublishedRecordDetail({
         (!readOnly &&
           (record.status === "PUBLISHED" || user?.isAdmin === true))) && (
         <div className="record-actions">
-          {record.taskId !== null && (
+          {sourceTask === null ? null : onOpenTask === undefined ? (
             <a
               className="secondary-button record-source-link"
-              href={`/projects/${projectId}/modules/${record.moduleId}${record.featureId === null ? "/tasks" : `/features/${record.featureId}`}?taskId=${record.taskId}`}
+              href={taskDetailPath(sourceTask)}
             >
               <InpulseIcon name="cornerDown" size={14} />
               查看来源任务
             </a>
+          ) : (
+            <button
+              type="button"
+              className="secondary-button record-source-link"
+              onClick={() => onOpenTask(sourceTask)}
+            >
+              <InpulseIcon name="cornerDown" size={14} />
+              查看来源任务
+            </button>
           )}
           {!readOnly && record.status === "PUBLISHED" && (
             <EditPublishedRecord item={record} api={api} writable={writable} />

@@ -335,6 +335,7 @@ export const IssuesPageView: React.FC<IssuesPageViewProps> = ({
           api={api}
           onClose={() => setSourceRecord(null)}
           onChanged={() => void sourceRecordQuery.refetch()}
+          onOpenTask={onOpenTask}
         />
       )}
 

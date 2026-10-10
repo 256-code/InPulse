@@ -66,6 +66,20 @@ test("F-20 遗留问题页未闭环展示与页内转为任务闭环", async ({ 
     const record = page.getByRole("dialog", { name: taskTitle });
     await expect(record).toBeVisible();
     await expect(record.getByText(leftover).first()).toBeVisible();
+
+    // 2026-10-10 用户指示：记录详情里的「查看来源任务」只在当前页面就地打开任务弹窗
+    // （与任务中心同一宿主），不跳转到项目 / 模块 / 功能页；关掉任务弹窗后回到本条
+    // 记录弹窗，地址栏始终停在 /issues。
+    await record.getByRole("button", { name: "查看来源任务" }).click();
+    const sourceTask = page.getByRole("dialog", { name: "任务详情" });
+    await expect(sourceTask).toBeVisible();
+    await expect(sourceTask.getByText(taskTitle)).toBeVisible();
+    await expect(page).toHaveURL(/\/issues$/);
+    await sourceTask.getByRole("button", { name: "关闭任务详情" }).click();
+    await expect(sourceTask).toBeHidden();
+    await expect(record).toBeVisible();
+    await expect(page).toHaveURL(/\/issues$/);
+
     await record.getByRole("button", { name: "关闭迭代记录详情" }).click();
     await expect(record).toBeHidden();
 

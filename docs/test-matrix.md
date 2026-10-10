@@ -5699,3 +5699,25 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | RECORD-LAYOUT-FACTS-TOP-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（PublishedRecordDetail.tsx）退出码 0；`pnpm exec prettier --check`（TSX + CSS）通过 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 只读语境（迭代总结明细）现在也会渲染 `.record-actions` 这一行——里面只有「查看来源任务」一条只读导航，没有放开任何写入入口；这是为了满足「来源任务与修订内容同一行」而不牺牲深链入口，若后续要求只读上下文完全不出现动作行，需要单独确认。④ 事实区上移后它成为弹窗正文的第一个元素，与下方「改动原因」之间靠 `.record-expanded section` 的 `border-top` 分隔；各页面（弹窗 / 卡展开 / 深链）看到的是同一版式，没有按入口分叉。
+
+## 记录详情「查看来源任务」改为就地打开任务弹窗（用户指示，2026-10-10 本地落库）
+
+用户指示（原话）：「这个界面中查看来源问题时，我希望仅仅是任务弹窗，而不是跳转到项目里打开任务，也就是说，点进任务后，点叉叉，回到的是当前图片界面」。改动前「查看来源任务」是无条件渲染的 `<a href="/projects/…?taskId=…">` 深链，点一次就整页跳进功能档案 / 模块任务页；遗留问题页虽然已经挂了就地任务详情宿主（`TaskDetailOverlay`，新增跟进任务与来源任务都用它），但记录弹窗内的这个入口没接上。纯前端改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `apps/web/src/features/published-records/PublishedRecordDetail.tsx`：新增可选 `onOpenTask?: (location: TaskLocation) => void`；来源任务位置由内联拼接路径提成 `const sourceTask: TaskLocation | null`（`taskId` 为空时整个入口与改动前一样不渲染）；渲染时 `onOpenTask === undefined` 仍是原来的 `<a className="secondary-button record-source-link" href={taskDetailPath(sourceTask)}>`，传了就渲染同文案同图标的 `<button>`、点击调 `onOpenTask(sourceTask)`。
+- `apps/web/src/features/published-records/RecordDetailModal.tsx`：新增同名可选 prop 并透传给 `PublishedRecordDetail`（作废回退分支不涉及）。
+- `apps/web/src/features/issues/IssuesPageView.tsx`：把页面本就接收的 `onOpenTask` 一并交给「来源迭代」弹窗，于是 `IssuesPage`、`TasksPage` 内嵌与项目主页弹窗三条遗留问题入口都就地打开任务弹窗。
+- 未传 `onOpenTask` 的入口保持原语义不变：`/records` 卡片展开与 `?publishedId=` 深链、功能档案任务详情里的记录弹窗（`TasksPanel`）、聚合组详情（`TaskGroupDetailPanels`）仍走深链，因为这些宿主没有就地任务详情宿主。
+- 层级与返回：任务弹窗由宿主渲染在记录弹窗之外，关闭后记录弹窗仍在（用户要的「点叉叉回到当前界面」）；地址栏全程停在 `/issues`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SOURCE-TASK-INPLACE-UNIT-001 | Web 单元 | 传了 `onOpenTask` 时不再渲染深链 | `pnpm --filter @inpulse/web exec vitest run src/features/published-records` → 含新用例《opens the source task in place when the host passes onOpenTask》：`queryByRole("link", { name: "查看来源任务" })` 为 null，点按钮回传 `{ projectId: 1, moduleId: 2, featureId: 2, taskId: 8 }` | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-UNIT-002 | Web 单元 | 缺省仍是深链 | 同文件既有用例《renders the source task link and the four content sections》仍按 `<a href="/projects/1/modules/2/features/2?taskId=8">` 断言，未改 | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-UNIT-003 | Web 单元 | 页面把回调交给弹窗 | `apps/web/src/features/issues/IssuesPageView.test.tsx` 的弹窗桩透出 `onOpenTask`，点击后断言 `onOpenTask` 收到该记录来源任务的位置 | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-WEB-001 | Web 全量 | 前端全量回归 | `pnpm --filter @inpulse/web test` → **96 文件 680 例全绿** | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-E2E-001 | 浏览器 E2E | 就地打开、关闭回到记录弹窗、地址栏不变 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test tests/issues.spec.ts` → **1 passed (14.9s)**：`/issues` →「来源迭代」→ 记录弹窗 →「查看来源任务」→ 任务详情弹窗可见且 `page.toHaveURL(/\/issues$/)` →「关闭任务详情」→ 记录弹窗重新可见、URL 仍为 `/issues`；夹具清理：删除用户 2、项目 2、业务行 87、审计行 7 | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-E2E-002 | 浏览器 E2E | 未接就地宿主的入口仍走深链 | `apps/e2e/tests/record-publishing.spec.ts` → **3 passed (25.8s)**：/records 卡展开里的「查看来源任务」仍是 `getByRole("link", { name: "查看来源任务" })`；夹具清理：删除用户 2、项目 2、业务行 144、审计行 15 | 本地通过（2026-10-10） |
+| RECORD-SOURCE-TASK-INPLACE-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（5 个 TSX）退出码 0；`pnpm exec prettier --check`（published-records、issues、E2E 用例）通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace 的 `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（本批未动契约）、镜像构建与 Trivy、GitHub Actions（本轮推送后不触发：工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码，按 §8 需非作者人工评审。③ 任务弹窗叠在记录弹窗之上时，底层记录弹窗会被弹层实现标 `aria-hidden`，因此 E2E 在任务弹窗关闭后才重新按角色断言记录弹窗；视觉上底层弹窗始终在位。④ 只影响「查看来源任务」这一个入口：记录弹窗里其它导航（修订内容、作废、遗留项转任务）语义未变。

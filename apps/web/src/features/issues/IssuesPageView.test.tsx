@@ -38,6 +38,7 @@ vi.mock(
           readonly recordId: number;
           readonly title: string;
         } | null;
+        readonly onOpenTask?: (task: TaskLocation) => void;
       }) =>
         props.record === null ? null : (
           <div data-testid="record-detail-modal">
@@ -45,6 +46,20 @@ vi.mock(
               String(props.record.recordId) +
               " · " +
               props.record.title}
+            {/* 页面把就地打开任务的回调交给了记录弹窗（2026-10-10：不再跳项目页）。 */}
+            <button
+              type="button"
+              onClick={() =>
+                props.onOpenTask?.({
+                  projectId: 1,
+                  moduleId: 2,
+                  featureId: 3,
+                  taskId: 105,
+                })
+              }
+            >
+              就地打开来源任务
+            </button>
           </div>
         ),
     };
@@ -256,6 +271,15 @@ describe("IssuesPageView", () => {
       "来源记录 7 · 充电策略支持参数配置",
     );
     expect(onOpenTask).not.toHaveBeenCalled();
+
+    // 记录详情弹窗拿到宿主的就地打开回调：点里面的来源任务入口交回页面开弹窗。
+    await user.click(screen.getByRole("button", { name: "就地打开来源任务" }));
+    expect(onOpenTask).toHaveBeenLastCalledWith({
+      projectId: 1,
+      moduleId: 2,
+      featureId: 3,
+      taskId: 105,
+    });
 
     const followupRow = await screen.findByTestId("leftover-item-9");
     await user.click(

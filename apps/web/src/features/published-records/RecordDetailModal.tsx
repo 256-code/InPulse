@@ -9,6 +9,7 @@ import { useAuth } from "@features/auth/auth-context";
 import { AppModal } from "@features/common/components/AppModal";
 import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 import { useProjectDetail } from "@features/projects/project-query";
+import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskGroupRecordLinks } from "@features/task-groups/TaskGroupRecordLinks";
 import { PublishedRecordDetail } from "./PublishedRecordDetail";
 
@@ -71,6 +72,12 @@ export interface RecordDetailModalProps {
    * 弹窗的边框与阴影（两个盒子仍各自居中，不做位移）。
    */
   readonly nested?: boolean;
+  /**
+   * 就地打开来源任务：传入后记录详情里的「查看来源任务」渲染成按钮、交回宿主在
+   * 当前页面打开任务弹窗（遗留问题页等），关掉后回到本记录弹窗；缺省仍是深链到
+   * 功能档案的 ?taskId=。
+   */
+  readonly onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }
 
 export function RecordDetailModal({
@@ -80,6 +87,7 @@ export function RecordDetailModal({
   onClose,
   onChanged,
   nested = false,
+  onOpenTask,
 }: RecordDetailModalProps) {
   const { user } = useAuth();
   const open = record !== null;
@@ -144,6 +152,7 @@ export function RecordDetailModal({
           client={api}
           writable={writable}
           onListChanged={onChanged}
+          onOpenTask={onOpenTask}
         />
       )}
     </AppModal>
