@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RecordSummaryResponse } from "@generated/api";
 import {
+  buildSummaryDetailMarkdown,
   buildSummaryDocument,
   summaryDocumentToText,
 } from "./record-summary-document";
@@ -218,5 +219,53 @@ describe("buildSummaryDocument", () => {
     expect(text).toContain("## 一、商城系统 · 4 条记录 / 5 个已完成任务");
     expect(text).toContain("- **下单链路拆分**：下单耗时从 900ms 降到 240ms");
     expect(text).toContain("## 三、遗留问题与风险");
+  });
+});
+
+describe("buildSummaryDetailMarkdown", () => {
+  it("明细 Markdown 与明细表同列，逐条列出记录而不是复述正文", () => {
+    const text = buildSummaryDetailMarkdown(response());
+    expect(text).toContain("2026 年度总结 · 明细");
+    expect(text).toContain(
+      "商城系统 · 会员中心 ／ 2026-01-01 - 2026-12-31 ／ 全体成员",
+    );
+    expect(text).toContain("共 5 条迭代记录。");
+    expect(text).toContain(
+      "| 编号 | 项目 / 模块 / 功能 | 标题与效果 | 作者 | 发布日期 |",
+    );
+    expect(text).toContain(
+      "| SHOP-CR-100 | 商城系统 / 订单模块 / 下单 | **下单链路拆分**：下单耗时从 900ms 降到 240ms | 王浩 | 2026-09-20 |",
+    );
+    expect(text).toContain(
+      "| SHOP-CR-101 | 会员中心 / 积分模块 | **积分对账口径对齐**：对账差异归零 | 刘一诺 | 2026-09-22 |",
+    );
+    // 与「复制正文」刻意不同：不含小节标题与整体概览段落。
+    expect(text).not.toContain("## 整体概览");
+    expect(text).not.toContain("一、商城系统");
+  });
+
+  it("明细 Markdown 转义竖线与换行，表格不会被单元内容截断", () => {
+    const base = response();
+    const first = base.points[0]!;
+    const text = buildSummaryDetailMarkdown({
+      ...base,
+      points: [{ ...first, title: "含|竖线", detail: "第一行\n第二行" }],
+    });
+    expect(text).toContain(
+      "| SHOP-CR-100 | 商城系统 / 订单模块 / 下单 | **含\\|竖线**：第一行 第二行 | 王浩 | 2026-09-20 |",
+    );
+    expect(
+      text.split("\n").filter((line) => line.includes("含\\|竖线")),
+    ).toHaveLength(1);
+  });
+
+  it("明细为空或截断时给出明确说明", () => {
+    const base = response();
+    const empty = buildSummaryDetailMarkdown({ ...base, points: [] });
+    expect(empty).toContain(
+      "| — | — | 本范围内没有已发布的迭代记录。 | — | — |",
+    );
+    const truncated = buildSummaryDetailMarkdown({ ...base, truncated: true });
+    expect(truncated).toContain("本次取数超过单次上限");
   });
 });

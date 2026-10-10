@@ -147,17 +147,86 @@ export function buildSummaryDocument(
     });
   }
 
-  const memberLabel =
-    data.scope.member === null ? "全体成员" : data.scope.member.name;
   return {
     title: documentTitle(data.range.from, data.range.to),
-    scopeLine: `${data.scope.projectNames.join(" · ") || "全部项目"} ／ ${data.range.from} - ${data.range.to} ／ ${memberLabel}`,
+    scopeLine: scopeLineOf(data),
     note:
       data.groupBy === "MEMBER"
         ? "按成员归纳：记录按作者、任务按负责人归属；一个人同时是记录作者与任务负责人时分别计数。"
         : "按项目归纳：只统计范围内已发布的迭代记录与已完成任务，作废记录与草稿不计入。",
     blocks,
   };
+}
+
+/** 范围行：项目 · 时间 · 成员，正文与明细复制共用同一口径。 */
+function scopeLineOf(data: RecordSummaryResponse): string {
+  const memberLabel =
+    data.scope.member === null ? "全体成员" : data.scope.member.name;
+  return (
+    (data.scope.projectNames.join(" · ") || "全部项目") +
+    " ／ " +
+    data.range.from +
+    " - " +
+    data.range.to +
+    " ／ " +
+    memberLabel
+  );
+}
+
+/** Markdown 表格单元格：竖线与换行会截断行、破坏列对齐，统一转义。 */
+function cell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+/**
+ * 「复制明细 Markdown」的文档：与弹窗明细表同列、逐条列出记录取数结果。
+ * 与「复制正文」的总结稿刻意不同——明细用于核对取数，不写归纳措辞。
+ */
+export function buildSummaryDetailMarkdown(
+  data: RecordSummaryResponse,
+): string {
+  const lines: string[] = [
+    documentTitle(data.range.from, data.range.to) + " · 明细",
+    "",
+    scopeLineOf(data),
+    "",
+    "共 " + String(data.totals.recordCount) + " 条迭代记录。",
+    "",
+    "| 编号 | 项目 / 模块 / 功能 | 标题与效果 | 作者 | 发布日期 |",
+    "| --- | --- | --- | --- | --- |",
+  ];
+  if (data.points.length === 0) {
+    lines.push("| — | — | 本范围内没有已发布的迭代记录。 | — | — |");
+  }
+  for (const point of data.points) {
+    const scope =
+      point.projectName +
+      " / " +
+      point.moduleName +
+      (point.featureName === null ? "" : " / " + point.featureName);
+    lines.push(
+      "| " +
+        cell(point.recordCode) +
+        " | " +
+        cell(scope) +
+        " | **" +
+        cell(point.title) +
+        "**：" +
+        cell(point.detail) +
+        " | " +
+        cell(point.author.name) +
+        " | " +
+        day(point.publishedAt) +
+        " |",
+    );
+  }
+  if (data.truncated) {
+    lines.push(
+      "",
+      "本次取数超过单次上限，明细只包含已取到的部分，请缩小时间范围后再生成。",
+    );
+  }
+  return lines.join("\n");
 }
 
 /** 与「复制正文」一致的纯文本形式（Markdown 小节标题 + 列表）。 */
