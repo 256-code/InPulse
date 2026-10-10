@@ -18,11 +18,32 @@ import { useProjects } from "@features/projects/project-query";
 import { treePath, type TreeScope, type TreeSelection } from "./tree-selection";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
+/**
+ * 导航预取：鼠标悬停 / 按下 / 键盘聚焦时提前把这行的目标页面 chunk 拉进模块缓存。
+ * 回调由 app 层注入（AppLayout 传 `preloadRoutePath`）——features 不能反向依赖
+ * app/router，所以在这里用局部 context 把它透给同一文件里的各行，不再层层传 prop。
+ */
+const noopPreload = () => undefined;
+
+const RoutePreloadContext =
+  React.createContext<(path: string) => void>(noopPreload);
+
+function usePreloadHandlers(path: string) {
+  const preload = React.useContext(RoutePreloadContext);
+  return {
+    onPointerEnter: () => preload(path),
+    onPointerDown: () => preload(path),
+    onFocus: () => preload(path),
+  } as const;
+}
+
 export interface ProjectTreeProps {
   readonly activeScope: TreeScope | null;
   /** 当前项目页分段（overview/modules/task-board/members/activity），非项目页为 null。 */
   readonly activePageSegment?: string | null;
   readonly onNavigate: (path: string) => void;
+  /** 导航意图预取回调（app 层注入）：悬停/按下/聚焦时预热目标页面 chunk。 */
+  readonly onPreloadPath?: ((path: string) => void) | undefined;
   readonly client?: InpulseApiClient | undefined;
 }
 
@@ -95,6 +116,7 @@ const ProjectPageRow: React.FC<ProjectPageRowProps> = ({
     }`}
     aria-expanded={segment === "modules" ? expanded : undefined}
     aria-current={active ? "true" : undefined}
+    {...usePreloadHandlers(`/projects/${projectId}/${segment}`)}
     onClick={() => onClick(segment, projectId)}
   >
     <InpulseIcon name={icon} size={16} className="tree-icon" />
@@ -106,6 +128,7 @@ const ProjectPageRow: React.FC<ProjectPageRowProps> = ({
 
 interface FeatureRowProps {
   readonly moduleId: number;
+  readonly projectId: number;
   readonly item: FeatureItem;
   readonly selection: TreeSelection | null;
   readonly onFeatureClick: (selection: TreeSelection) => void;
@@ -120,6 +143,7 @@ interface FeatureListProps {
 }
 const FeatureRow: React.FC<FeatureRowProps> = ({
   moduleId,
+  projectId,
   item,
   selection,
   onFeatureClick,
@@ -134,6 +158,9 @@ const FeatureRow: React.FC<FeatureRowProps> = ({
       className={`tree-row feature-node${isSelected ? " selected" : ""}`}
       aria-current={isSelected ? "true" : undefined}
       title={item.name}
+      {...usePreloadHandlers(
+        `/projects/${projectId}/modules/${moduleId}/features/${item.id}`,
+      )}
       onClick={() =>
         onFeatureClick({ kind: "feature", moduleId, featureId: item.id })
       }
@@ -177,6 +204,7 @@ const FeatureList: React.FC<FeatureListProps> = ({
       {items.map((item) => (
         <FeatureRow
           key={item.id}
+          projectId={projectId}
           item={item}
           moduleId={moduleId}
           selection={selection}
@@ -376,6 +404,7 @@ const ProjectBranch: React.FC<ProjectBranchProps> = ({
         aria-expanded={expanded}
         aria-current={isSelected ? "true" : undefined}
         title={item.name}
+        {...usePreloadHandlers(`/projects/${item.id}/modules`)}
         onClick={() => onProjectClick(item.id)}
       >
         <ProjectLogo code={item.code} className="tree-logo" />
@@ -438,6 +467,7 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
   activeScope,
   activePageSegment = null,
   onNavigate,
+  onPreloadPath,
   client,
 }) => {
   const projects = useProjects({ client });
@@ -585,40 +615,42 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
         : "暂无未完成的项目";
   return (
     <div className="project-tree">
-      <div className="project-tree-scroll">
-        {projects.isPending ? (
-          <CalmSkeleton
-            variant="lines"
-            rows={3}
-            compact
-            tone="sidebar"
-            label="正在加载项目…"
-          />
-        ) : projects.isError ? (
-          <p className="tree-hint">项目加载失败</p>
-        ) : items.length === 0 ? (
-          <p className="tree-hint">{emptyHint}</p>
-        ) : (
-          items.map((item) => (
-            <ProjectBranch
-              key={item.id}
-              item={item}
-              expanded={expandedKeys.has(`project:${item.id}`)}
-              modulesExpanded={expandedKeys.has(
-                `project:${item.id}:pages:modules`,
-              )}
-              activeScope={activeScope}
-              activePageSegment={activePageSegment}
-              expandedKeys={expandedKeys}
-              onProjectClick={handleProjectClick}
-              onPageClick={handlePageClick}
-              onModuleClick={handleModuleClick}
-              onFeatureClick={handleFeatureClick}
-              client={client}
+      <RoutePreloadContext.Provider value={onPreloadPath ?? noopPreload}>
+        <div className="project-tree-scroll">
+          {projects.isPending ? (
+            <CalmSkeleton
+              variant="lines"
+              rows={3}
+              compact
+              tone="sidebar"
+              label="正在加载项目…"
             />
-          ))
-        )}
-      </div>
+          ) : projects.isError ? (
+            <p className="tree-hint">项目加载失败</p>
+          ) : items.length === 0 ? (
+            <p className="tree-hint">{emptyHint}</p>
+          ) : (
+            items.map((item) => (
+              <ProjectBranch
+                key={item.id}
+                item={item}
+                expanded={expandedKeys.has(`project:${item.id}`)}
+                modulesExpanded={expandedKeys.has(
+                  `project:${item.id}:pages:modules`,
+                )}
+                activeScope={activeScope}
+                activePageSegment={activePageSegment}
+                expandedKeys={expandedKeys}
+                onProjectClick={handleProjectClick}
+                onPageClick={handlePageClick}
+                onModuleClick={handleModuleClick}
+                onFeatureClick={handleFeatureClick}
+                client={client}
+              />
+            ))
+          )}
+        </div>
+      </RoutePreloadContext.Provider>
     </div>
   );
 };

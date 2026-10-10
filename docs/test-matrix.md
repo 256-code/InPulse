@@ -5891,3 +5891,46 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | TASK-CARD-PROJECT-WATERMARK-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm --filter @inpulse/web exec tsc --noEmit` 无输出；`pnpm exec eslint`（改动 TSX）退出码 0；`pnpm exec prettier --check`（my-tasks + design-system.css）通过 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `pnpm typecheck` / `pnpm build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发（工作流只在 `main` 与 `dev/*` 上跑）。② 本批含前端产品代码与样式，按 §8 需非作者人工评审。③ 水印插到 `<h3>` 之前后 `h3` 不再是 `:first-child`，其 `margin-top` 由新增的 `.project-logo.watermark + h3 { margin-top: 8px }` 接管；无水印（项目不在端口里）时回落 `h3:first-child`，两档卡片等高。④ 右下角水印与截止文案重叠（黄卡「10月20日」压在水印上），字仍可读，是这套几何的固有代价。⑤ 上一小节（`TASK-CARD-PROJECT-LOGO-*`）的「18px 小贴纸」实现与断言已随本批被替换，保留仅供追溯。
+
+## 切换过渡：所有跳转与弹窗统一「缓冲后呈现」（2026-10-10 用户指示「所有跳转，弹窗我都要实现这个效果」）
+
+用户指示（原话）：「好接下来我们优化所有切换效果，我发现经常会闪，我希望像之前改点开任务弹窗那样，可以增加一个缓冲，准备好了再呈现，所有跳转，弹窗我都要实现这个效果」。承接 2026-10-08《弹窗打开「闪一下」：遮罩与面板分两帧上屏》那一批（antd 弹窗遮罩 + 面板 160ms 同步淡入），本轮把同一口径铺到「页面跳转」与「自绘浮层」，并顺手消灭跳转中间态。纯前端（React / CSS）、测试与文档改动；不改契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等，未新增依赖、`pnpm-lock.yaml` 未动。
+
+改前实测（dev Vite 5173、Chromium 1628×1000，CDP 逐帧抓取 + MutationObserver 记录 `.page-content` 结构变化）：
+
+| 场景 | 中间态 | 时长 |
+| --- | --- | --- |
+| 项目列表 → 任务中心（数据 44ms 就绪） | 列表区 4 行骨架 | 骨架可见 1–3 帧（约 44ms），随后硬替换成真卡片 |
+| 遗留问题 → 审计日志（冷 chunk） | 路由级通用骨架「正在加载页面…」 | +79ms → +418ms（339ms） |
+| 全局搜索（Ctrl / Cmd + K） | 无过渡：遮罩与面板同帧硬蹦 | 0ms |
+| 通知中心 | 无过渡：整块同帧硬蹦 | 0ms |
+
+四条改动：
+
+- `apps/web/src/features/common/components/calm-skeleton.css`：`.calm-skeleton` 加 `animation: calm-skeleton-in 160ms linear 140ms both`。延迟窗口内数据若已就绪，骨架从头到尾没露过面；延迟期间容器照旧占位，页面高度与改前逐像素一致。`prefers-reduced-motion` 下关闭动画。
+- `apps/web/src/styles/design-system.css`：`.page-content > *` 180ms 淡入——只动 `opacity`、不加 `transform`，否则页内 fixed 元素（「回到顶部」等）会在动画期间改以该节点为包含块而跳位；`.overlay` / `.palette` 160ms 淡入（与 antd 弹窗同口径）；`.popover` 140ms 淡入 + 4px 上浮。三者同样受 `prefers-reduced-motion` 约束，静止外观与改前一致。
+- `apps/web/src/app/router/route-preload.ts`（新增）：构建期把 `pages` 下每个 `route.ts` 与同目录的页面组件配对，把 URL path 编译成正则（支持 `:featureId?` 这类可选段、跳过 not-found 的 `*`），导出 `preloadRoutePath` 与 `routePreloadHandlers`；预取失败只吞异常，不影响导航本身。
+- `apps/web/src/app/layout/AppLayout.tsx` + `apps/web/src/features/project-tree/ProjectTree.tsx`：侧栏导航项与项目树行在 `onPointerEnter` / `onPointerDown` / `onFocus` 时预取目标页 chunk。ProjectTree 用文件内局部 context 接 app 层注入的 `onPreloadPath`——features 不得反向依赖 app，`pnpm --filter @inpulse/web check:boundaries` 保持 0 违规（322 modules / 1620 dependencies）。
+
+改后实测：
+
+| 场景 | 结果 |
+| --- | --- |
+| 项目列表 → 任务中心 | 抓帧序列里不再出现骨架帧（骨架 DOM 仍在，140ms 内数据就绪 → 从未上屏）；新页整页 180ms 淡入，无第二次硬替换 |
+| 遗留问题 → 审计日志（悬停 250ms 后点） | 中间态 0ms，直接是目标页 |
+| 遗留问题 → 审计日志（无悬停：键盘直达 / 程序化跳转） | 通用骨架 339ms（保持原状，未回归也未被本批消除） |
+| 项目树 → 任务看板（悬停 250ms） | 无路由级骨架、页面 `pageerror` 为 0；页面自身「正在加载任务看板…」同样被 140ms 缓冲挡住 |
+| 全局搜索 | 抓帧由「1 帧硬蹦」变为 12 帧连续淡入（遮罩与面板同步） |
+| 通知中心 | 抓帧由「1 帧硬蹦」变为 11 帧连续淡入 + 上浮 |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-001 | 浏览器实测（逐帧） | 跳转不再闪骨架 | 「项目列表 → 任务中心」抓帧序列无骨架帧（改前 1–3 帧） | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-002 | 浏览器实测（逐帧） | 冷 chunk 中间态被预取消除 | 「遗留问题 → 审计日志」悬停 250ms 后点击：中间态 0ms（改前 339ms） | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-003 | 浏览器实测（逐帧） | 全局搜索与通知中心淡入 | 抓帧分别 12 / 11 帧连续淡入（改前各 1 帧硬蹦） | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-004 | 浏览器实测 | 项目树注入接通且无异常 | 「项目树 → 任务看板」无路由级骨架、`pageerror` 0 | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-UNIT-001 | Web 单元 | 不破坏既有用例 | `pnpm --filter @inpulse/web test` → **97 文件 699 例全绿** | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-GATE-001 | 静态门禁 | 类型 / 边界 / 格式 | `tsc --noEmit` 无输出；`check:boundaries` 0 违规；改动文件 `eslint` 与 `prettier --check` 通过 | 本地通过（2026-10-10） |
+| TRANSITION-BUFFERED-REVEAL-E2E-001 | 浏览器 E2E | 全量回归 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test` → **70 passed / 1 failed (6.0m)**；唯一失败为 `tests/project-delete.spec.ts:59`，在 `git stash` 掉本批改动后的干净 HEAD 上同样失败（详见下） | 本地通过（本批相关用例） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59`（ADR-062 项目物理删除）本地失败：确认弹窗内出现 `项目删除暂时失败，请稍后重试。`，删除事务未成功。把本批改动 `git stash` 后在干净 HEAD（`0214487`）上复跑同样失败，判定与本批无关；最可能的诱因是本地 `app_ci` 的 SYSTEM 审计哈希链在此前夹具清理后留有断点（同次清理日志已提示「SYSTEM 链留下一个断点」），删除事务的审计追加因此失败。该失败未在本次处置范围内，未修改任何相关代码。③ 淡入时长（骨架 140ms 延迟 + 160ms 淡入、路由 180ms、浮层 160 / 140ms）是本批取值，产品若觉得快慢不合适可直接调这三个数字。④ 中间态 339ms 那条路径只在「不悬停直接点击 / 键盘直达 / 程序化跳转」时出现，本批未消除，仅靠预取覆盖鼠标自然悬停的常见路径。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。

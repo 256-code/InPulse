@@ -6565,3 +6565,67 @@ td.due-overdue {
       「已逾期 9月16日」/「今天截止」原本跟随卡内统一文字色（2026-09-23 十一次定案
       起也按紧迫度染色，见上面「逾期 / 马上到期」那块的卡片规则，紧急卡除外）。
    已完成与已取消不参与红档，走各自的浅底深字；「遗留问题」另有自己的锈红实色（见上）。 */
+
+/* ===================== 切换过渡：跳转与浮层统一「缓冲后呈现」（2026-10-10 用户指示） =====================
+   用户要求：像弹窗那样（antd-adapter.css 里遮罩 surface-mask-in + @starting-style 面板淡入），
+   所有跳转与弹窗都加一层缓冲，准备好了再呈现。这里补齐此前仍是硬切换的三处：
+   1. 路由内容：.page-content 的直接子节点在切换路由时整棵重建，改前是硬切（旧页瞬没、新页瞬出）。
+      只淡入透明度、不加位移——加 transform 会让页内 fixed 元素（「回到顶部」等）在动画期间改以
+      该节点为包含块而跳位，透明度不产生包含块，安全。
+   2. 全局搜索浮层（.overlay 遮罩 + .palette 面板）：自绘浮层，改前遮罩与面板同一帧硬蹦出来；
+      现在与 antd 弹窗同口径——遮罩 160ms linear 淡入，面板同步淡入。
+   3. 侧栏浮层（.popover：账户菜单、通知中心）：改前硬蹦，现在 140ms 淡入 + 4px 上浮。
+   三处都只作用于「出现」这一下，静止外观与改前完全一致；prefers-reduced-motion 下全部瞬时出现。 */
+@keyframes route-content-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-content > * {
+  animation: route-content-in 180ms ease-out both;
+}
+
+@keyframes surface-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.overlay {
+  animation: surface-fade-in 160ms linear both;
+}
+
+.palette {
+  animation: surface-fade-in 160ms linear both;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.popover {
+  animation: popover-in 140ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-content > *,
+  .overlay,
+  .palette,
+  .popover {
+    animation: none;
+  }
+}

@@ -926,3 +926,15 @@
 - 未改：`/tasks` 列表视图的项目列、项目详情里的任务面板（`TasksPanel`，产品明确不加）。
 - 回归防线：`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 的《fills the card with a project watermark and a bolder name on the belonging line》《falls back to the plain project name when the project is not in the port》，聚合组用例断言水印与 `:scope > h3`。
 - 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **96 文件 682 例全绿**（定向 my-tasks 5 文件 109 例）；`tsc --noEmit`、改动 `eslint`、`prettier --check` 通过；真实 PostgreSQL E2E（`app_ci`）`tests/tasks.spec.ts` **1 passed (23.6s)**；dev（Vite 5173）实测未完成档 12 张卡水印 `rgb(254, 221, 118)`（高）、`/tasks?status=done` 5 张 `rgb(203, 231, 231)`（已完成），卡片 `isolation: isolate`、标题 `margin-top: 8px`。「未运行」：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。
+
+## 2026-10-10 切换过渡：所有跳转与弹窗统一「缓冲后呈现」
+
+用户指示（原话）：「好接下来我们优化所有切换效果，我发现经常会闪，我希望像之前改点开任务弹窗那样，可以增加一个缓冲，准备好了再呈现，所有跳转，弹窗我都要实现这个效果」。承接 2026-10-08《弹窗打开「闪一下」》（antd 弹窗遮罩 + 面板 160ms 同步淡入），把同一口径铺到页面跳转与自绘浮层。纯前端（React / CSS）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `calm-skeleton.css`：`.calm-skeleton` 加 140ms 延迟 + 160ms 淡入（`animation: calm-skeleton-in 160ms linear 140ms both`）。实测「项目列表 → 任务中心」数据 44ms 就绪，改前骨架可见 1–3 帧（约 44ms）、随后硬替换；加延迟后骨架从未上屏，延迟期间容器照旧占位、页面高度不变。
+- `design-system.css`：`.page-content > *` 180ms 淡入（**只动 opacity**，不加 transform——否则页内 fixed 元素会在动画期间改以该节点为包含块而跳位）；`.overlay` / `.palette` 160ms 淡入；`.popover` 140ms 淡入 + 4px 上浮。三者都受 `prefers-reduced-motion` 约束，静止外观与改前一致。
+- `app/router/route-preload.ts`（新增）：构建期把 `pages` 下每个 route.ts 与同目录页面组件配对、URL path 编译成正则（支持 `:id?` 可选段、跳过 not-found 的 `*`），导出 `preloadRoutePath` / `routePreloadHandlers`。冷 chunk 下「遗留问题 → 审计日志」改前中间态 339ms（通用骨架「正在加载页面…」），悬停预取后降到 0ms。
+- `app/layout/AppLayout.tsx` + `features/project-tree/ProjectTree.tsx`：侧栏导航与项目树行的 `onPointerEnter` / `onPointerDown` / `onFocus` 预取目标页 chunk；ProjectTree 用文件内局部 context 接 app 层注入的 `onPreloadPath`，因为 features 不得反向依赖 app（`check:boundaries` 保持 0 违规）。
+- 未消除：不悬停直接点击、键盘直达或程序化跳转仍会走 339ms 的通用骨架路径。
+- 回归防线：本批以抓帧实测为主（`docs/test-matrix.md` 的 `TRANSITION-BUFFERED-REVEAL-*`），未新增单测——改动全是 CSS 动效与预取时序，jsdom 无法验收。
+- 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **97 文件 699 例全绿**；`tsc --noEmit` 无输出、`check:boundaries` 0 违规、改动文件 `eslint` / `prettier --check` 通过；Playwright 全量 **70 passed / 1 failed (6.0m)**，唯一失败 `tests/project-delete.spec.ts:59` 在 `git stash` 掉本批改动后的干净 HEAD 上同样失败（本地 `app_ci` 的 SYSTEM 审计链有断点导致删除事务失败），与本批无关。

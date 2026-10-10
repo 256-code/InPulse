@@ -11,6 +11,10 @@ import {
 import { useProjectTier } from "@features/common/project-tier-context";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
+import {
+  preloadRoutePath,
+  routePreloadHandlers,
+} from "../router/route-preload";
 import { treeScopeOf } from "@features/project-tree/tree-selection";
 import { useShellCounters } from "./shell-data";
 
@@ -322,6 +326,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           type="button"
           className={"nav-item" + (selectedKey === item.key ? " active" : "")}
           aria-current={selectedKey === item.key ? "page" : undefined}
+          {...routePreloadHandlers(item.path)}
           onClick={() => handleNavigation(item.path)}
         >
           {item.icon ? <InpulseIcon name={item.icon} size={17} /> : null}
@@ -421,6 +426,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                     activeScope={treeScope}
                     activePageSegment={projectPage?.segment ?? null}
                     onNavigate={handleNavigation}
+                    onPreloadPath={preloadRoutePath}
                     {...(projectClient ? { client: projectClient } : {})}
                   />
                 </div>
