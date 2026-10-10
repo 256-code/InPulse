@@ -13,6 +13,9 @@ import { invalidateShellCounters } from "@shared/api/shell-counters";
 /**
  * 详情页快捷追加遗留问题：不再改写整段正文，服务端仍会形成一次记录版本，
  * 因此同样携带 CSRF、If-Match、X-Record-Version 与幂等键。
+ * 2026-10-10 定案：收起态不再是列表下方整行宽的虚线框，而是「遗留问题」标题行
+ * 右侧的纯图标加号按钮（全站 .icon-button，文案进 aria-label/title）；展开面板由
+ * 标题行整行换行承接（见 .leftover-section-head）。
  */
 export function AppendLeftoverForm({
   item,
@@ -81,7 +84,7 @@ export function AppendLeftoverForm({
     setError(null);
   }
   return (
-    <div className="leftover-append">
+    <>
       {open ? (
         <div className="leftover-append-panel">
           <div className="leftover-append-head">
@@ -146,14 +149,15 @@ export function AppendLeftoverForm({
       ) : (
         <button
           type="button"
-          className="leftover-append-trigger"
+          className="icon-button"
+          aria-label="追加遗留问题"
+          title="追加遗留问题"
           disabled={!writable}
           onClick={() => setOpen(true)}
         >
-          <InpulseIcon name="plus" size={14} />
-          追加遗留问题
+          <InpulseIcon name="plus" size={16} />
         </button>
       )}
-    </div>
+    </>
   );
 }

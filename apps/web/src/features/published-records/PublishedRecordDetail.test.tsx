@@ -12,6 +12,7 @@ import {
   PublishedRecordDetail,
   compareRecordVersions,
 } from "./PublishedRecordDetail";
+import type { TaskLocation } from "@features/tasks/task-links";
 vi.mock("@features/auth/auth-context", () => ({
   useAuth: () => ({ user: { id: 3, isAdmin: false } }),
 }));
@@ -54,7 +55,13 @@ const item = {
 };
 function mountDetail(
   api: InpulseApiClient,
-  { standalone = true }: { standalone?: boolean } = {},
+  {
+    standalone = true,
+    onOpenTask,
+  }: {
+    standalone?: boolean;
+    onOpenTask?: (location: TaskLocation) => void;
+  } = {},
 ) {
   return render(
     <MemoryRouter initialEntries={["/records?projectId=1&publishedId=7"]}>
@@ -65,6 +72,7 @@ function mountDetail(
           client={api}
           writable
           standalone={standalone}
+          onOpenTask={onOpenTask}
         />
       </QueryClientProvider>
     </MemoryRouter>,
@@ -156,6 +164,31 @@ it("renders the source task link and the four content sections", async () => {
   expect(within(region).getByText("具体改动")).toBeVisible();
   expect(within(region).getByText("改动效果")).toBeVisible();
   expect(within(region).getByText("遗留问题")).toBeVisible();
+});
+it("opens the source task in place when the host passes onOpenTask", async () => {
+  const api = withNameSources({
+    getChangeRecord: vi
+      .fn()
+      .mockResolvedValue({ ...item, taskId: 8, featureId: 2 }),
+    listChangeRecordVersions: vi.fn().mockResolvedValue({ items: [second] }),
+  });
+  const onOpenTask = vi.fn();
+  mountDetail(api, { onOpenTask });
+  const region = await screen.findByRole("region", { name: "正式记录详情" });
+  // 2026-10-10 用户指示：宿主能就地打开任务弹窗时，「查看来源任务」不再渲染成
+  // 深链 <a href>，而是走回调的按钮（地址栏不变、关掉任务弹窗回到本条记录弹窗）。
+  expect(
+    within(region).queryByRole("link", { name: "查看来源任务" }),
+  ).toBeNull();
+  fireEvent.click(
+    await within(region).findByRole("button", { name: "查看来源任务" }),
+  );
+  expect(onOpenTask).toHaveBeenCalledWith({
+    projectId: 1,
+    moduleId: 2,
+    featureId: 2,
+    taskId: 8,
+  });
 });
 it("explains a missing or unauthorized record without leaking existence", async () => {
   const api = withNameSources({

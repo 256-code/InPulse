@@ -3,7 +3,7 @@ import type { LeftoverListItem } from "@generated/api";
 import {
   formatIssueDate,
   isLeftoverClosed,
-  issueOriginText,
+  issueOriginParts,
 } from "./issues-format";
 
 const base: LeftoverListItem = {
@@ -26,16 +26,19 @@ const base: LeftoverListItem = {
 };
 
 describe("issues-format", () => {
-  it("formats the origin without the feature segment when absent", () => {
-    expect(issueOriginText(base)).toBe(
-      "来自「充电策略支持参数配置」 · AGV 智能搬运平台 / 任务调度 · 陈晓 · 2026-08-18",
-    );
+  it("splits the origin into project name and detail without the feature segment", () => {
+    // 2026-10-10：项目名从行中间提到行首单独成段（行首接项目标识），
+    // 项目名与记录之间改用「 · 」，模块 / 功能继续用「 / 」表示父子层级。
+    expect(issueOriginParts(base)).toEqual({
+      projectName: "AGV 智能搬运平台",
+      detail: "记录「充电策略支持参数配置」 · 任务调度 · 陈晓 · 2026-08-18",
+    });
     expect(
-      issueOriginText({
+      issueOriginParts({
         ...base,
         featureName: "充电任务编排",
-      }),
-    ).toContain("AGV 智能搬运平台 / 任务调度 / 充电任务编排");
+      }).detail,
+    ).toContain("任务调度 / 充电任务编排");
   });
 
   it("keeps the raw value when the date cannot be parsed", () => {

@@ -64,6 +64,8 @@ const projects: readonly ProjectItem[] = [
 
 interface ViewOverrides {
   readonly advancedOpen?: boolean;
+  /** 覆盖注入的项目列表：用于「项目不在可见列表里」的降级断言。 */
+  readonly projects?: readonly ProjectItem[];
   readonly adapter?: MyTasksAdapter;
   readonly filters?: Partial<MyTaskFilters>;
   readonly client?: InpulseApiClient;
@@ -91,7 +93,7 @@ const renderView = (overrides: ViewOverrides = {}) => {
         filters={{ ...DEFAULT_MY_TASK_FILTERS, ...overrides.filters }}
         onFiltersChange={onFiltersChange}
         viewerId={1}
-        projects={projects}
+        projects={overrides.projects ?? projects}
         advancedOpen={overrides.advancedOpen === true}
         onToggleAdvanced={onToggleAdvanced}
         onOpenIssues={onOpenIssues}
@@ -519,6 +521,36 @@ describe("TaskCenterPageView", () => {
     expect(card).toHaveTextContent("注入项目名");
   });
 
+  it("marks the source project with an icon and a bolder name on the card", async () => {
+    renderView();
+    // 2026-10-10 产品要求「这个任务的来源项目太模糊了」：归属行行首加项目图标
+    // （取项目编码前两位，与项目列表页同一个 ProjectLogo），项目名加大加粗，
+    // 其后才是「模块 · 功能」。
+    const card = await screen.findByTestId("my-task-101");
+    const belonging = card.querySelector(".task-belonging") as HTMLElement;
+    expect(belonging).not.toBeNull();
+    const logo = belonging.querySelector(".project-logo");
+    expect(logo?.textContent).toBe("IN");
+    expect(logo?.getAttribute("title")).toBe("INP");
+    expect(logo?.classList.contains("tiny")).toBe(true);
+    expect(
+      belonging.querySelector("strong.belonging-project")?.textContent,
+    ).toBe("注入项目名");
+    expect(belonging.textContent).toBe("IN注入项目名 · 访问控制 · MFA 登录");
+  });
+
+  it("falls back to the plain project name when the project is not in the port", async () => {
+    // 契约不给任务项项目编码，页面靠注入的项目列表映射；项目不在列表里时只渲染项目名，
+    // 不能凭空造图标（图标文字取编码前两位）。
+    renderView({ projects: projects.filter((project) => project.id !== 1) });
+    const card = await screen.findByTestId("my-task-101");
+    const belonging = card.querySelector(".task-belonging") as HTMLElement;
+    expect(belonging.querySelector(".project-logo")).toBeNull();
+    expect(
+      belonging.querySelector("strong.belonging-project")?.textContent,
+    ).toBe("InPulse 平台");
+  });
+
   it("reports the project filter through onFiltersChange", async () => {
     const { onFiltersChange } = renderView();
 
@@ -673,6 +705,10 @@ describe("TaskCenterPageView", () => {
       within(card).getByText("任务合并后来源分支历史保留"),
     ).toBeInTheDocument();
     expect(within(card).getByText("注入项目名")).toBeInTheDocument();
+    // 2026-10-10：归属行与任务卡片同口径，行首也带项目图标。
+    expect(
+      card.querySelector(".task-belonging .project-logo")?.textContent,
+    ).toBe("IN");
     // 标签组（优先级 + 聚合组 + 状态）落到分隔线以下的左下角，与任务卡同款。
     const badges = card.querySelector(
       ".calm-card-bottom > .task-card-badges",

@@ -1065,6 +1065,16 @@ button {
   color: #aa7215;
   background: #fff0d0;
 }
+/* 行内小号标识（遗留问题来源行等）：基准 .project-logo 是 grid，直接放进段落会独占
+   一行，这里必须切成 inline-grid；18px 仍小于来源行的两行预留高度，不会改变卡片高度。 */
+.project-logo.tiny {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+  border-radius: 4px;
+  display: inline-grid;
+  vertical-align: middle;
+}
 .due {
   color: #8d9baa;
   font-size: 10px;
@@ -2414,6 +2424,16 @@ a:focus-visible {
 .calm-task-card > p.task-belonging {
   margin-bottom: 14px;
 }
+/* 归属行加项目标识、项目名加大加粗（2026-10-10 产品要求「来源项目太模糊」）：
+   图标取项目编码前两位（与项目列表页 / 遗留问题来源行同一个 ProjectLogo，18px
+   小于行盒高度、不撑高卡片）；项目名比同行的模块 / 功能大一档并随 <strong> 加粗，
+   颜色不写死——紧急白字组与金黄深字组等卡片色调规则作用在 <p> 上，由它继承。 */
+.task-belonging > .project-logo {
+  margin-right: 6px;
+}
+.task-belonging > .belonging-project {
+  font-size: 13px;
+}
 /* 负责人单独一行贴在卡片分隔线上方并右对齐：横线以上右侧只放负责人，
    横线以下的左下角给标签、右下角给截止时间。
    2026-09-23 放宽：聚合组卡在这一行会并排「负责人」与「N 条分支」两个 span，
@@ -2778,31 +2798,39 @@ a:focus-visible {
   background: white;
   color: #405a72;
 }
-/* 遗留问题快捷追加：收起态是与列表同宽的虚线添加行，展开态为带标题栏、字数与动作脚注的内联面板。 */
-.leftover-append {
-  margin-top: 10px;
-}
-.leftover-append-trigger {
-  display: inline-flex;
+/* 遗留问题标题行：标题在左，「追加遗留问题」收成右侧的纯图标加号按钮（2026-10-10 定案，
+   原来是列表下方整行宽的虚线添加框；按钮复用全站 .icon-button，文案在 aria-label/title）；
+   展开的填写面板整行换行到标题下方，仍与列表同宽。 */
+.leftover-section-head {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px dashed #c9d7e2;
-  border-radius: 10px;
-  background: #fbfdfe;
-  color: #37566f;
-  font-size: 13px;
-  cursor: pointer;
+  gap: 8px 12px;
+  margin: 0 0 8px;
 }
-.leftover-append-trigger:hover:not(:disabled) {
-  border-color: #9db8cc;
-  background: #f3f8fb;
+.leftover-section-head h4 {
+  flex: 1;
+  margin: 0;
 }
-.leftover-append-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+/* 加号按钮给一点底色（2026-10-10 追加）：沿用页头「浅蓝底 + 蓝字」的 soft-blue 配色，
+   与标题行的白底拉开层次；只覆盖遗留问题标题行里的这一个按钮，不动全站 .icon-button。 */
+.leftover-section-head .icon-button {
+  border: 1px solid #cfe4fa;
+  background: #e6f2ff;
+  color: #2472c3;
+}
+.leftover-section-head .icon-button:hover:not(:disabled) {
+  border-color: #b7d2ef;
+  background: #d7e9fd;
+  color: #1d5fa8;
+}
+.leftover-section-head .icon-button:disabled {
+  border-color: #e3ebf2;
+  background: #f4f7fa;
+  color: #a9b8c6;
 }
 .leftover-append-panel {
+  flex: 1 0 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -4189,14 +4217,15 @@ td.due-overdue {
   align-items: center;
   gap: 4px;
 }
-/* 任务卡片等高（2026-10-08 产品要求「已完成和未完成任务卡片的布局也要一样大」）：
-   任务中心的卡片原先只在有已发布记录时才渲染 `.task-card-footer`（「记录 n 条」），
-   同一张网格里没有记录的卡（多见于「未完成」档）就比有记录的卡矮一截。现在页脚恒渲染，
-   无记录时是空占位盒，min-height 取满内容时的自然高度 = padding-top 15px +
-   11px × 1.5 行高 = 31.5px，两种卡片逐像素同高。项目任务面板（TasksPanel）的页脚带
-   「更新」行、本就每卡必渲染，自然高度同为 31.5px，不受影响。 */
-.calm-task-card .task-card-footer {
-  min-height: 31.5px;
+/* 卡片底部留白（2026-10-10 产品反馈「卡片底部空白部分太多，高度降一点」）：
+   原先用 `.task-card-footer { min-height: 31.5px }` 给无记录的卡片占位，但任务中心的
+   卡片在没有已发布记录时页脚是纯空盒（「记录 n 条」不渲染），这 31.5px 连同
+   padding-top 15px 就成了分隔线以下一段看不到内容的空白。同一网格行的高度本来就由
+   网格默认的 align-items: stretch 拉平，不需要占位盒手动等高，因此空页脚不再占位，
+   未完成档的每张卡片矮 32px。项目任务面板（TasksPanel）的页脚带「更新」行、非空，
+   不受影响。2026-10-08 的等高诉求仍成立：一行里最高的卡片决定行高，其余卡片被拉伸对齐。 */
+.calm-task-card .task-card-footer:empty {
+  display: none;
 }
 
 /* 任务聚合组卡片（2026-09-21 产品定案）：与任务卡片同网格混排，外框、色条、
@@ -4384,6 +4413,12 @@ td.due-overdue {
   font-weight: 600;
   color: #314b65;
 }
+/* 折叠时下面没有面板：去掉标题行自带的 12px 下边距，让「GitHub 关联」在上分隔线
+   （上 16px）与动作行分隔线（下 18px）之间上下居中，下面那根线也随之上移
+   （2026-10-10，用户反馈「这个字能不能上下居中，下面这根线往上一点」）。 */
+.record-github-toggle.collapsed {
+  margin-bottom: 0;
+}
 .record-github-toggle svg {
   color: #7b8fa2;
   transition: transform 0.15s ease;
@@ -4391,17 +4426,20 @@ td.due-overdue {
 .record-github-toggle svg.expanded {
   transform: rotate(90deg);
 }
+/* 底部动作行（2026-10-10 定案）：来源任务入口与修订 / 作废合并成一行，
+   来源链接贴左、动作按钮贴右；没有来源任务时动作按钮同样贴右。 */
 .record-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 9px;
   align-items: center;
+  justify-content: flex-end;
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #edf1f5;
 }
-.record-source-link {
-  margin: 14px 0;
+.record-actions > .record-source-link {
+  margin-right: auto;
 }
 .record-voided {
   background: #fffdfb;
@@ -4473,6 +4511,15 @@ td.due-overdue {
   -webkit-box-orient: vertical;
   overflow: hidden;
   min-height: 3.2em;
+}
+/* 来源行行首：项目标识 + 项目名（2026-10-10 用户指示）。标识与项目名之间用 margin
+   留距，不写空白文本节点，避免行首间距受 JSX 空白折叠影响。 */
+.issue-origin .project-logo {
+  margin-right: 6px;
+}
+.issue-origin .origin-project {
+  color: #5d7189;
+  font-weight: 600;
 }
 .issue-origin {
   margin: 9px 0 0;

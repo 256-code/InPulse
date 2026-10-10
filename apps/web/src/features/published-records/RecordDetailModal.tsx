@@ -1,10 +1,15 @@
 import React from "react";
 import { Alert } from "antd";
-import type { InpulseApiClient, TaskGroupRecordLink } from "@generated/api";
+import type {
+  InpulseApiClient,
+  ReadableRecord,
+  TaskGroupRecordLink,
+} from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AppModal } from "@features/common/components/AppModal";
 import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 import { useProjectDetail } from "@features/projects/project-query";
+import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskGroupRecordLinks } from "@features/task-groups/TaskGroupRecordLinks";
 import { PublishedRecordDetail } from "./PublishedRecordDetail";
 
@@ -27,6 +32,20 @@ export interface RecordDetailTarget {
   readonly contextLabel?: string | null;
   /** 作废回退里唯一可读的链接快照；调用方没有链接数据时给空数组。 */
   readonly externalLinks?: readonly TaskGroupRecordLink[];
+}
+
+/**
+ * 可读记录摘要 → 弹窗目标：调用方通常只有摘要（记录列表 / 聚合组 / 遗留问题行），
+ * 正文、版本与遗留项一律由弹窗按 recordId 二次加载，弹层打开前不需要额外请求。
+ */
+export function recordDetailTarget(record: ReadableRecord): RecordDetailTarget {
+  return {
+    recordId: record.id,
+    code: record.code,
+    title: record.title,
+    recordStatus: record.status,
+    publishedAt: record.publishedAt,
+  };
 }
 
 /** 弹层小标题：编号 + 语境标签，作废记录补状态。 */
@@ -53,6 +72,12 @@ export interface RecordDetailModalProps {
    * 弹窗的边框与阴影（两个盒子仍各自居中，不做位移）。
    */
   readonly nested?: boolean;
+  /**
+   * 就地打开来源任务：传入后记录详情里的「查看来源任务」渲染成按钮、交回宿主在
+   * 当前页面打开任务弹窗（遗留问题页等），关掉后回到本记录弹窗；缺省仍是深链到
+   * 功能档案的 ?taskId=。
+   */
+  readonly onOpenTask?: ((location: TaskLocation) => void) | undefined;
 }
 
 export function RecordDetailModal({
@@ -62,6 +87,7 @@ export function RecordDetailModal({
   onClose,
   onChanged,
   nested = false,
+  onOpenTask,
 }: RecordDetailModalProps) {
   const { user } = useAuth();
   const open = record !== null;
@@ -126,6 +152,7 @@ export function RecordDetailModal({
           client={api}
           writable={writable}
           onListChanged={onChanged}
+          onOpenTask={onOpenTask}
         />
       )}
     </AppModal>
