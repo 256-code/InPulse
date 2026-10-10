@@ -927,3 +927,36 @@
 - 未改：`/tasks` 列表视图的项目列、项目详情里的任务面板（`TasksPanel`，产品明确不加）。
 - 回归防线：`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 的《fills the card with a project watermark and a bolder name on the belonging line》《falls back to the plain project name when the project is not in the port》，聚合组用例断言水印与 `:scope > h3`。
 - 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **96 文件 682 例全绿**（定向 my-tasks 5 文件 109 例）；`tsc --noEmit`、改动 `eslint`、`prettier --check` 通过；真实 PostgreSQL E2E（`app_ci`）`tests/tasks.spec.ts` **1 passed (23.6s)**；dev（Vite 5173）实测未完成档 12 张卡水印 `rgb(254, 221, 118)`（高）、`/tasks?status=done` 5 张 `rgb(203, 231, 231)`（已完成），卡片 `isolation: isolate`、标题 `margin-top: 8px`。「未运行」：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。
+
+## 2026-10-10 文档导入（ADR-064）
+
+用户要求「通过导入固定的文档来直接将项目的模块功能任务那些建立好」，并逐项确认：接受固定 Markdown 模板、要能导入整个项目、负责人自动加入成员、项目编码强制必填、防同一文档重复建、可导入多个模块和功能、没填写的内容不影响创建时按默认值跳过（跳过字段、不跳过对象）。按 [ADR-064](./docs/adr/ADR-064.md) 落库 F-32（契约 + 迁移 + API + 前端 + 测试，均为常规路径，无旁路写法）：
+
+- **模板（版本 1）**：`# 项目：` / `## 模块：` / `### 功能：` / `#### 任务：` 四级标题 + `- 字段：值`（全角 / 半角冒号均可）；未知标题 / 字段、层级错配、空文档、任务缺负责人等 422 且任何 ERROR 整笔不落库；超长字段截断并回显问题；限额：原文 200000 字符、模块 100、功能 500、任务 500、实体总量 1000、初始成员 300、单任务负责人 20、单功能标签 50。
+- **双模式 4 条路由（总数 102 → 106）**：模式 A `POST /api/v1/projects/{projectId}/document-imports[/preview]`（沿用「项目可写」：活跃成员或系统管理员；负责人必须是目标项目当前活跃成员，否则 422 `ASSIGNEE_NOT_MEMBER`，导入不隐式改成员关系）；模式 B `POST /api/v1/project-imports[/preview]`（任何登录用户；单事务创建项目与全部下级；负责人与初始成员自动加入、去重、排除创建者，发起者按 ADR-033 自动成为 LEADER；项目编码强制必填 `^[A-Z][A-Z0-9_]{1,31}$`）。执行带 `expectedDigest`（预览后改文档再执行 409 `DOCUMENT_IMPORT_STALE`）、CSRF 与一次性 `Idempotency-Key`；预览只读（`csrfPolicy: none` / `idempotencyPolicy: none`）；执行路由为常规数据库级幂等 `idempotencyContractVersion 1.0.0`，不进入 ADR-023 `securityFlow` 清单。
+- **防重复**：摘要为规范化文档文本（去 BOM、CRLF→LF）的 SHA-256；A 在项目内查重、B 全局查重；重复执行 409 `DOCUMENT_IMPORT_DUPLICATE`（唯一约束兜底并发）；批次行含操作人 / 时间 / 各层创建与复用计数，不保存原文与解析正文。
+- **复用与默认值**：模块 / 功能按规范化名称在项目 / 所属模块内精确复用、不覆盖任何字段（差异只发 WARNING `MODULE_REUSE_DIFFERS` / `FEATURE_REUSE_DIFFERS`）；任务一律新建；未填字段按默认值（优先级 `NORMAL`、截止 `null`、描述 `""`、标签 `[]`、验收标准 `null`、影响功能 `[]`）。
+- **数据库**：迁移 `0039_document_import_runs.sql` 新增 `app.document_import_runs`（`UNIQUE (project_id, document_digest)`、摘要 / 模板版本 / 计数 CHECK、`app_runtime` 仅 `SELECT/INSERT`、显式补 `app_backup` 只读授权）并重写 `app.purge_project` 先清批次行（清理项 27 → 28 处），项目物理删除后同一文档可重新导入。
+- **前端**：项目列表「从文档导入整项目」（成功跳转模块页）、模块页「从文档导入」与空项目搭建引导头部入口；双阶段弹窗（粘贴模板 / 下载模板 → 预览计划与问题清单 → 确认导入）；全部经生成客户端，执行前签发 CSRF 与一次性幂等键，错误按契约错误码映射固定中文提示。
+- **收尾修复（本轮）**：`apps/e2e/helpers/fixture-cleanup.ts` 补 `app.document_import_runs` 夹具删除与历史孤儿兜底删除，并在收尾断言加入 `remaining_import_runs` / `orphan_import_runs` 必须为 0；此前 `session_replication_role = replica` 路径漏删批次行，`apps/ops` 逻辑备份恢复演练的 `pg_restore` 重建 `document_import_runs_project_fk` / `document_import_runs_actor_fk` 报错；`app_ci` 既有孤儿行已清理，`pnpm test:integration` 全量重跑通过。另修 `DocumentImportModal.test.tsx` 一处 8 字符 `token` 字面量触发 `check:secrets` 的问题（值改短，不放宽门禁）。
+- **本地验证（2026-10-10）**：`pnpm check` 整链全绿（lint、format、typecheck 8 workspace、test:unit、db:migrations:check 38 个、db:seed:check、contract:drift、contract:validate 106 条、build、check:deploy:test、check:deps 786 源文件、check:frontend:boundaries、permissions:check 106、deps:audit、check:secrets 1192 文件、check:docs 111 文件）；真实 PostgreSQL（`app_ci`）`pnpm test:integration` 全量重跑：database 27 例 + ops 7 例 + api 56 文件 538 例全绿（含文档导入 5 例；`project-delete-api` 回归在列）；前端 98 文件 714 例（含 `DocumentImportModal.test.tsx` 6 例）；Playwright 本轮重跑 `tests/document-import.spec.ts` **2 passed（9.4s）**，上一轮 E2E 全量 73 passed / 6.0m。
+- **未运行 / 已知偏差**：GitHub Actions 未执行（`test` 分支不触发，工作流只在 `main` 与 `dev/*`）；E2E 全量本轮未重跑（只重跑文档导入 2 例）；生产镜像构建与 Trivy 未跑；`.md` 文件上传、模板版本迁移工具与多文档批量导入属 ADR-064 非目标。本批含 API / 契约 / 迁移 / 前端产品代码与新增用例，按 §8 需非作者人工评审。工作树含全部改动；已本地提交（`28531ba`），未推送。
+
+## 2026-10-10 文档导入模板自带格式说明（ADR-065）
+
+用户指示（原话）：「模板那边要说明清楚格式，以为可能以后有人会用其他 ai 来把项目填写进入这个模板，怕 ai 乱写导致匹配不上」。按 [ADR-065](./docs/adr/ADR-065.md) 修订 ADR-064 的行处理口径（模板版本仍为 1，路由仍 106 条，无契约 / 权限 / 数据库 / 迁移改动）：
+
+- `apps/api/src/modules/document-import/document-template.parser.ts`：解析循环忽略 trim 后以 `>` 开头（说明行）或以三个反引号 / `~~~` 开头（代码围栏）的行——不计入文档内容、不产生问题、不参与字段解析；只有说明行 / 围栏行的文档仍按 `EMPTY_DOCUMENT`；`LINE_UNRECOGNIZED` 文案同步更新。
+- `apps/web/src/features/document-import/DocumentImportModal.tsx`：`DOCUMENT_IMPORT_TEMPLATE` 顶部新增 20+ 行 `>` 说明（三类行规则、逐字段名清单、必填与格式、两种导入范围差异、「不要自创、不要改名」），其后保留原示例结构；粘贴区上方新增「格式速查」区块（`document-import-format-guide`）。
+- `apps/web/src/styles/design-system.css`：新增 `.import-format-guide` 样式（左竖线 + 淡底 + 行内 code）。
+- 回归防线：`apps/api/test/document-import-parser.test.ts` 新增 3 例（忽略行、空文档、直接读取前端 `DOCUMENT_IMPORT_TEMPLATE` 喂解析器的一致性用例——模板或解析器任一先行修改都会让该用例变红）；`DocumentImportModal.test.tsx` 新增 1 例。
+- 本地验证（2026-10-10）：解析器 21 例、API 单测 74 文件 458 例、前端 98 文件 715 例、`pnpm lint` / `pnpm typecheck` / `pnpm format:check` 通过；真实 dev 浏览器实测三项（模板全文预览、真实用户名预览、代码围栏包裹预览）全部成功，未点「确认导入」。「未运行」：GitHub Actions（`test` 分支不触发）；集成测试与 Browser E2E 本轮未重跑（契约与服务端行为未变）。
+
+## 2026-10-10 文档导入支持选择文件（ADR-066）
+
+用户指示（原话）：「那除了粘贴能不能做个直接上传文件导入的」。按 [ADR-066](./docs/adr/ADR-066.md) 修订 ADR-064 非目标第 1 条——支持浏览器本地读取 `.md` / `.markdown` / `.txt` 文件内容填入导入文本；不引入 multipart 上传、服务端文件接收与附件存储（路由仍 106 条，无契约 / 权限 / 数据库改动）：
+
+- `apps/web/src/features/document-import/DocumentImportModal.tsx`：INPUT 阶段新增「选择文件」按钮与隐藏 `<input type="file">`；`File.text()` 读取（剔除 BOM）后填入文本框并显示「已读取文件：…」；本地校验扩展名白名单、1 MiB 字节上限与 20 万字符上限，全部不发请求；空内容提示改为「请粘贴内容或选择文件后再预览。」
+- `apps/web/src/features/common/components/InpulseIcon.tsx`：新增 `upload` 图标；`design-system.css` 新增 `.import-file-hint` 样式。
+- 回归防线：`DocumentImportModal.test.tsx` 新增 3 例（.md 读取与 BOM 剥离并预览、.pdf 拒绝、超 1 MiB 拒绝）。
+- 本地验证（2026-10-10）：前端 98 文件 718 例、`pnpm lint` / `pnpm typecheck` / `pnpm format:check` 通过；真实 dev 浏览器实测选择 `.md` 文件 → 预览成功、选择 `.pdf` 被本地拒绝。「未运行」：GitHub Actions（`test` 分支不触发）；集成测试与 Browser E2E 本轮未重跑（无服务端与契约改动）。
