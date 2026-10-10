@@ -115,6 +115,10 @@ export function canDeleteCatalogItem(
 
 export function describeCreateProjectError(error: unknown): string {
   if (error instanceof ApiError) {
+    // 编码冲突是唯一可自助修复的 409，先说清是哪一项冲突（服务端 PROJECT_CODE_CONFLICT）。
+    if (error.code === "PROJECT_CODE_CONFLICT") {
+      return "项目编码已被占用，请更换项目编码后重试。";
+    }
     switch (error.status) {
       case 401:
         return "登录状态已失效，请重新登录后再创建项目。";

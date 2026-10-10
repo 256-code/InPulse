@@ -13,6 +13,7 @@ import { NotificationWritePort } from "../notifications/index.js";
 import {
   ActiveUsersQueryPort,
   ProjectsWritePort,
+  type ProjectCreatedRecord,
 } from "./projects-write.port.js";
 import { resolveProjectCode } from "./project-code.js";
 
@@ -37,6 +38,31 @@ export class ProjectBootstrapConflictError extends Error {
     super(message);
     this.name = "ProjectBootstrapConflictError";
   }
+}
+
+/**
+ * 项目编码冲突：`app.projects` 的 `projects_code_unique` 是全局唯一约束，插入重复
+ * 编码时 PostgreSQL 抛 23505。映射成独立错误码，前端才能说明「是编码被占用」。
+ */
+export class ProjectCodeConflictError extends Error {
+  readonly code = "PROJECT_CODE_CONFLICT" as const;
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProjectCodeConflictError";
+  }
+}
+
+function uniqueViolation(error: unknown, constraint: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505" &&
+    "constraint_name" in error &&
+    error.constraint_name === constraint
+  );
 }
 
 export interface ProjectBootstrapDeps {
@@ -82,12 +108,23 @@ export class ProjectBootstrapWorkflow {
         "项目编码无法从名称派生或请求编码无效",
       );
     }
-    const project = await this.projects.createProject(tx, {
-      code,
-      name: request.name,
-      description: request.description,
-      createdBy: actorId,
-    });
+
+    let project: ProjectCreatedRecord;
+    try {
+      project = await this.projects.createProject(tx, {
+        code,
+        name: request.name,
+        description: request.description,
+        createdBy: actorId,
+      });
+    } catch (error) {
+      if (uniqueViolation(error, "projects_code_unique")) {
+        throw new ProjectCodeConflictError(
+          "项目编码已被占用，请更换项目编码后重试",
+        );
+      }
+      throw error;
+    }
 
     const allMemberIds = Array.from(
       new Set([actorId, ...request.memberIds]),

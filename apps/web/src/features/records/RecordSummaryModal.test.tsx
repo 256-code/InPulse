@@ -174,6 +174,53 @@ async function openDetail() {
   );
 }
 
+/** jsdom 不提供 Clipboard API；复制行为由弹窗底栏按钮触发，这里只捕获写入内容。 */
+function mockClipboard(): ReturnType<typeof vi.fn> {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
+}
+
+describe("RecordSummaryModal 复制", () => {
+  it("明细模式复制与明细表同列的 Markdown，而不是同一份总结正文", async () => {
+    const writeText = mockClipboard();
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient);
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "复制明细 Markdown" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = String(writeText.mock.calls[0]?.[0] ?? "");
+    expect(copied).toContain(
+      "| 编号 | 项目 / 模块 / 功能 | 标题与效果 | 作者 | 发布日期 |",
+    );
+    expect(copied).toContain(
+      "| SHOP-CR-1 | 支付项目 / 支付模块 | **支付修正**：要点句 | 管理员 | 2026-09-21 |",
+    );
+    expect(copied).not.toContain("## 整体概览");
+  });
+
+  it("正文模式仍复制总结正文", async () => {
+    const writeText = mockClipboard();
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient);
+
+    const copyButton = await screen.findByRole("button", { name: "复制正文" });
+    await waitFor(() => expect(copyButton).toBeEnabled());
+    fireEvent.click(copyButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = String(writeText.mock.calls[0]?.[0] ?? "");
+    expect(copied).toContain("2026 年度总结");
+    expect(copied).toContain("## 整体概览");
+    expect(copied).not.toContain("| 编号 |");
+  });
+});
+
 describe("RecordSummaryModal 明细展开", () => {
   it("点行内任意位置就地展开记录正文与遗留问题，且不出现任何写入入口", async () => {
     const client = baseClient();

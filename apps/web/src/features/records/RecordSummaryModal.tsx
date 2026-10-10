@@ -8,6 +8,7 @@ import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { projectSelectOption } from "@features/common/project-select-option";
 import { PublishedRecordDetail } from "@features/published-records/PublishedRecordDetail";
 import {
+  buildSummaryDetailMarkdown,
   buildSummaryDocument,
   summaryDocumentToText,
   type SummaryBlock,
@@ -144,15 +145,20 @@ export function RecordSummaryModal({
   }, [summary.data]);
 
   const copy = useCallback(async () => {
-    if (document === null) return;
+    const data = summary.data;
+    if (document === null || data === undefined) return;
+    // 明细模式复制的是与明细表同列的记录清单，而不是同一份总结正文。
+    const text = detail
+      ? buildSummaryDetailMarkdown(data)
+      : summaryDocumentToText(document);
     try {
-      await navigator.clipboard.writeText(summaryDocumentToText(document));
+      await navigator.clipboard.writeText(text);
       setCopyState("done");
     } catch {
       setCopyState("failed");
     }
     window.setTimeout(() => setCopyState("idle"), 2000);
-  }, [document]);
+  }, [detail, document, summary.data]);
 
   const filters = (
     <div className="summary-filters">

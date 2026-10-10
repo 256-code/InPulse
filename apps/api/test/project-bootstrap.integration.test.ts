@@ -17,6 +17,7 @@ import {
 import {
   ProjectBootstrapValidationError,
   ProjectBootstrapWorkflow,
+  ProjectCodeConflictError,
 } from "../src/modules/projects/project-bootstrap.workflow.js";
 import { PostgresSearchProjectionWritePort } from "../src/modules/search/postgres-search-projection-write-port.js";
 import { createUser, testUrls } from "./database.helpers.js";
@@ -234,5 +235,43 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
          WHERE name = ${name}
     `) as unknown as readonly { id: number }[];
     expect(leftover).toHaveLength(0);
+  });
+
+  test("重复项目编码：映射为 409 PROJECT_CODE_CONFLICT 且不写入第二行", async () => {
+    const creatorId = await createUser(client!.sql);
+    const code = `DUP_${randomUUID()
+      .replace(/[^0-9a-f]/g, "")
+      .slice(0, 8)
+      .toUpperCase()}`;
+    await uow!.run((tx) =>
+      workflow!.execute(tx, creatorId, {
+        code,
+        name: `首个项目 ${randomUUID()}`,
+        description: "",
+        memberIds: [],
+      }),
+    );
+
+    const failure = await uow!
+      .run((tx) =>
+        workflow!.execute(tx, creatorId, {
+          code,
+          name: `重复编码 ${randomUUID()}`,
+          description: "",
+          memberIds: [],
+        }),
+      )
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProjectCodeConflictError);
+    expect(failure).toMatchObject({
+      status: 409,
+      code: "PROJECT_CODE_CONFLICT",
+    });
+
+    const rows = (await client!.sql`
+        SELECT id FROM app.projects WHERE code = ${code}
+    `) as unknown as readonly { id: number }[];
+    expect(rows).toHaveLength(1);
   });
 });

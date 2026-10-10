@@ -7,6 +7,7 @@ import type {
   IdempotencyHttpResult,
 } from "../src/idempotency/http-service.js";
 import { ProjectBootstrapController } from "../src/modules/projects/project-bootstrap.controller.js";
+import { ProjectCodeConflictError } from "../src/modules/projects/project-bootstrap.workflow.js";
 
 const actor: AuthenticatedSessionActor = {
   sessionId: 1,
@@ -72,11 +73,19 @@ class FakeWorkflow {
   }
 }
 
+class ProjectCodeConflictWorkflow {
+  async execute(): Promise<never> {
+    throw new ProjectCodeConflictError(
+      "项目编码已被占用，请更换项目编码后重试",
+    );
+  }
+}
+
 function responseFixture() {
   return { status: vi.fn(() => undefined) };
 }
 
-function createController(): {
+function createController(workflow: unknown = new FakeWorkflow()): {
   readonly controller: ProjectBootstrapController;
   readonly idempotency: FakeIdempotency;
 } {
@@ -85,7 +94,7 @@ function createController(): {
     controller: new ProjectBootstrapController(
       new FakeMutationAuth() as never,
       idempotency as never,
-      new FakeWorkflow() as never,
+      workflow as never,
     ),
     idempotency,
   };
@@ -135,5 +144,48 @@ describe("ProjectBootstrapController", () => {
     expect(idempotency.calls).toHaveLength(1);
     expect(idempotency.calls[0]?.operationId).toBe("createProject");
     expect(idempotency.calls[0]?.request.body).toEqual(request.body);
+  });
+
+  test("编码重复映射为 409 PROJECT_CODE_CONFLICT 而不是 500", async () => {
+    const { controller } = createController(new ProjectCodeConflictWorkflow());
+    const response = responseFixture();
+    const request = {
+      headers: {
+        accept: "*/*",
+        cookie: "__Host-session=token",
+        host: "127.0.0.1:4173",
+        origin: "http://127.0.0.1:4173",
+        referer: "http://127.0.0.1:4173/projects",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Playwright",
+        "x-csrf-token": "a".repeat(43),
+      },
+      body: {
+        name: "test",
+        code: "TEST",
+        description: "",
+        memberIds: [],
+      },
+    };
+
+    const result = await controller.create(
+      request as never,
+      response as never,
+      {
+        name: request.body.name,
+        code: request.body.code,
+        description: request.body.description,
+        memberIds: request.body.memberIds,
+      },
+      { "x-csrf-token": "a".repeat(43) },
+    );
+
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(result).toMatchObject({
+      code: "PROJECT_CODE_CONFLICT",
+      message: "项目编码已被占用，请更换项目编码后重试",
+    });
   });
 });

@@ -137,6 +137,18 @@ describe("project creation query", () => {
     expect(message).toBe("项目编码已存在或创建请求发生冲突，请刷新后重试。");
     expect(message).not.toContain("internal-conflict-message");
   });
+
+  it("points at the project code when the server reports PROJECT_CODE_CONFLICT", () => {
+    const error = new ApiError(409, {
+      code: "PROJECT_CODE_CONFLICT",
+      message: "internal-code-conflict-message",
+      details: {},
+      requestId: "request-2",
+    });
+    const message = describeCreateProjectError(error);
+    expect(message).toBe("项目编码已被占用，请更换项目编码后重试。");
+    expect(message).not.toContain("internal-code-conflict-message");
+  });
 });
 
 describe("canDeleteProject", () => {
