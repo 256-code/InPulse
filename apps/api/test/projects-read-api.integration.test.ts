@@ -531,7 +531,7 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     ).toBe(2);
   });
 
-  test("列表先按生命周期档位排序：进行中、未开始、维护中，无动态时同档位按创建时间从近到远", async () => {
+  test("列表先按「未完成 / 维护中」两档排序，未完成档内无动态时按创建时间从近到远（ADR-063）", async () => {
     const owner = await actor();
     const active = await createProject(client.sql, owner.userId);
     const notStarted = await createProject(client.sql, owner.userId);
@@ -588,17 +588,17 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
       await (await list(owner.cookie)).json(),
     ).items;
     expect(items.map((item) => item.id)).toEqual([
-      active.projectId,
       newerNotStarted.projectId,
       notStarted.projectId,
+      active.projectId,
       maintenance.projectId,
     ]);
     expect(items.map((item) => item.stats.completedTaskCount)).toEqual([
-      1, 0, 0, 0,
+      0, 0, 1, 0,
     ]);
   });
 
-  test("同状态项目按最近变更时间从近到远，档位优先级不受影响（ADR-046 2026-10-08 修订）", async () => {
+  test("项目按最近变更时间从近到远；未完成档内不分进行中 / 未开始，维护中仍排最后（ADR-063）", async () => {
     const owner = await actor();
     const older = await createProject(client.sql, owner.userId);
     const newer = await createProject(client.sql, owner.userId);
@@ -636,12 +636,22 @@ describe("F-05.1 real HTTP + PostgreSQL", () => {
     );
     expect(await ids()).toEqual([newer.projectId, older.projectId]);
 
-    // 4) 档位优先：先建项目置为进行中后，即使最近变更时间更早仍排最前。
+    // 4) ADR-063：未完成档内不再区分进行中 / 未开始——把更早变更的项目置为进行中，
+    //    顺序不变（仍按最近变更时间）。
     await client.sql`
       UPDATE app.projects
          SET status = 'ACTIVE',
              row_version = row_version + 1
        WHERE id = ${older.projectId}
+    `;
+    expect(await ids()).toEqual([newer.projectId, older.projectId]);
+
+    // 5) 档位仍然优先：把最近变更的项目置为维护中，它落到未完成档之后。
+    await client.sql`
+      UPDATE app.projects
+         SET status = 'MAINTENANCE',
+             row_version = row_version + 1
+       WHERE id = ${newer.projectId}
     `;
     expect(await ids()).toEqual([older.projectId, newer.projectId]);
   });

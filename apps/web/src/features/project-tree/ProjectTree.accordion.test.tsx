@@ -71,6 +71,10 @@ describe("ProjectTree 手风琴", () => {
     const agv = await screen.findByRole("button", { name: /AGV 智能搬运平台/ });
     const wms = screen.getByRole("button", { name: /WMS 仓储管理/ });
 
+    // 项目列表页（没有当前项目）默认整棵树收起。
+    expect(agv).toHaveAttribute("aria-expanded", "false");
+    expect(wms).toHaveAttribute("aria-expanded", "false");
+
     fireEvent.click(agv);
     expect(agv).toHaveAttribute("aria-expanded", "true");
     expect(wms).toHaveAttribute("aria-expanded", "false");

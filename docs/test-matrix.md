@@ -5520,3 +5520,62 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 ③ 迁移 `0038` 的存量恢复（软删除行转活跃行）只在演示库 `app` 与 `app_ci` 上验证，未做大批量行的耗时压测。
 ④ 物理删除**不可回滚**——这是本次决策的核心取舍（D3② 释放编码、D2① 仅管理员可见留痕、无还原入口）。
 ⑤ 本批含迁移、契约、服务端与前端产品代码，按 §8 需非作者人工评审；迁移 `0038` 与重放授权口径为重点评审项。
+## 项目列表生命周期分档与侧栏项目树联动（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「这边项目导航栏要改一下，点进项目列表后默认显示未完成的项目，左侧导航栏也只显示未进入维护中状态的项目，切换到维护中状态后左侧导航栏显示维护中的项目」（附侧栏截图：「项目」分组下列「验证 K123」「项目1 K1235」）。项目列表页当天已定的「未完成 / 维护中」两档滑块改为**共享状态**，侧栏项目树读同一档位。纯前端展示与导航改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 新增 `apps/web/src/features/common/project-tier-context.tsx`（`ProjectTierProvider` + `useProjectTier`，默认档 `"open"` 未完成）；`apps/web/src/app/router/AppRouter.tsx` 的根路由元素包成 `<ProjectTierProvider><AppLayout /></ProjectTierProvider>`——档位原先只活在 `ProjectsPageView` 的 `useState` 里，页面随路由卸载后档位就没了。
+- `apps/web/src/features/projects/ProjectsPageView.tsx` 改读共享档位（滑块位置、两档计数、默认档、维护中档的客户端重排均不变）；`apps/web/src/features/project-tree/ProjectTree.tsx` 按 `projectTier(item.status)` 过滤项目行，**当前所在项目始终保留**；空态按档位说明（`暂无未完成的项目` / `暂无维护中的项目` / 库里没项目时仍是 `暂无项目`）；`apps/web/src/app/layout/AppLayout.tsx` 的分组标题在维护中档显示「维护中项目」（项目内仍是「当前项目」）。
+- **降级**：没有 Provider 时 `useProjectTier` 回落到组件内 `useState("open")`，`AppLayout.test.tsx` 直接挂载 `AppLayout`、侧栏或列表页单独渲染时行为与改动前一致。
+- **未改动**：项目卡与卡片页脚、列表搜索、排序、服务端 `apps/api/src/stats/card-stat-columns.ts` 的三档排序键、其它页面的项目选择器（仍是全量项目）、项目树只在 `/projects` 与项目路由内渲染这一既有行为。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-TIER-SYNC-UNIT-001 | Web 单元 | 列表页滑块与侧栏项目树同步（本批核心） | `project-tier-sync.test.tsx`：同一 Provider 下，默认（未完成档）侧栏只见「进行中平台」、不见「老平台维护」；点滑块「维护中」后侧栏改列「老平台维护」且「进行中平台」从树上消失 | 本地通过（2026-10-09） |
+| PROJECT-TIER-TREE-UNIT-002 | Web 单元 | 两档各自的可见集合 | `ProjectTree.test.tsx`《ProjectTree 分档过滤》：`open` 档列出 `AGV 智能搬运平台`、不列 `老平台维护`；`maintenance` 档列出 `老平台维护`、不列 `AGV 智能搬运平台` | 本地通过（2026-10-09） |
+| PROJECT-TIER-TREE-UNIT-003 | Web 单元 | 当前所在项目不被分档摘掉 | `maintenance` 档 + `activeScope.projectId = 2`（AGV 属未完成档）时，`老平台维护` 与 `AGV 智能搬运平台` 同时在树上 | 本地通过（2026-10-09） |
+| PROJECT-TIER-TREE-UNIT-004 | Web 单元 | 空态按档位说明，不再一律「暂无项目」 | 只有一个未完成项目时 `maintenance` 档显示「暂无维护中的项目」；接口返回空数组时显示「暂无项目」 | 本地通过（2026-10-09） |
+| PROJECT-TIER-WEB-001 | Web 全量 | 分档改动的全量前端回归 | `pnpm --filter @inpulse/web test` → **93 文件 660 例全绿**（基线 91 文件 649 例） | 本地通过（2026-10-09） |
+| PROJECT-TIER-GATE-001 | 门禁 | 类型 / 静态检查 / 依赖边界 | `pnpm --filter @inpulse/web typecheck`、`pnpm exec eslint`（本批 7 个文件）、`pnpm --filter @inpulse/web check:boundaries`（316 模块 / 1578 依赖无违规）通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑** 全量 `pnpm test:e2e` 与整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 档位是**会话内跨页面持久**的状态（不写 URL、不落库）：切到维护中档后进项目页，侧栏仍列维护中项目；这是为了「从维护中档点进项目后侧栏不把正在看的项目摘掉」。若产品要求「每次进项目列表都回到未完成档」，需改成随路由重置档位。③「当前项目始终保留」是本批按可用性补的例外：用户原话是「只显示未进入维护中状态的项目」，严格照字面执行会在从维护中档点进项目后把该项目从树上摘掉，需要用户确认是否接受这一例外。④ 侧栏在 `/tasks`、`/records` 等非项目路由本就不渲染项目树，因此档位对这几页无影响。
+
+## 侧栏项目树严格手风琴：只展开当前项目（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「侧边栏还是默认收起，进入项目后默认打开，点开另一个项目后默收起前一个，侧边项目展开至多一个」。同一天侧栏项目树刚接上分档共享状态，但展开态仍靠点击累积（离开项目回列表页时上一个项目仍铺开），本批把展开态改成**由路由推导**。纯前端导航行为改动，无契约 / 权限 / 迁移 / 依赖改动：
+
+- `apps/web/src/features/project-tree/ProjectTree.tsx`：`expandedKeys` 只放行 `projectOwnerOf(key) === activeProjectId` 的键；`activeProjectId` 为 `null`（项目列表页）时整棵树收起。进入 / 切换项目的副作用只保留当前项目的展开键，并清空 `collapsed`（进入项目默认打开，不继承上次的收起状态）。
+- 行为结果：项目列表页默认整棵树收起；进入项目默认铺开该项目；点开另一个项目时前一个立即收起，任何时刻至多一个项目铺开。
+- **未改动**：链路自动展开（当前项目 + 「模块与功能」子页行 + 选中模块）、子级开合的保留语义、收起延迟卸载与 CSS 过渡、项目行「点自己开合且始终导航」。
+- 测试同步：`ProjectTree.test.tsx` 新增 `RoutedTree` / `mountRouted`（`activeScope` 跟随路径变化，与真实路由一致），用例 1–5 改挂该壳并去掉冗余的「模块与功能」点击。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TREE-ACCORDION-UNIT-001 | Web 单元 | 项目列表页整棵树收起（含刚离开项目后回列表页） | `ProjectTree.test.tsx`《collapses every project branch back on the project list page》：`activeScope = 项目 2` 时该行 `aria-expanded=true` 且模块已加载；切到 `activeScope = null` 后同一行 `aria-expanded=false`，`模块与功能` 与 `调度模块` 均查不到 | 本地通过（2026-10-09） |
+| TREE-ACCORDION-UNIT-002 | Web 单元 | 进入项目默认打开、点开另一个项目收起前一个 | `ProjectTree.accordion.test.tsx`：列表页进来两行均 `aria-expanded=false`；点 AGV 后 AGV 展开、WMS 收起且「模块与功能」只有一份；点 WMS 后 WMS 展开、AGV 收起、AGV 的模块列表消失 | 本地通过（2026-10-09） |
+| TREE-ACCORDION-UNIT-003 | Web 单元 | 交互与既有语义不变 | `ProjectTree.test.tsx` 其余用例（折叠动画的 `data-open`/`aria-hidden`、再次点击项目行收起、其它项目行仍在、链路自动展开与返回保留）全部通过 | 本地通过（2026-10-09） |
+| TREE-ACCORDION-WEB-001 | Web 全量 | 导航行为改动的前端全量回归 | `pnpm --filter @inpulse/web test` → **93 文件 661 例全绿** | 本地通过（2026-10-09） |
+| TREE-ACCORDION-BROWSER-001 | 浏览器实测 | 三态真实复验 | dev（Vite 5173）：`/projects` 侧栏「验证 K123」收起、无子页行 → 点进项目后「当前项目 · 验证」铺开（任务看板 / 模块与功能 / 校验）→ 回 `/projects` 再次收起；切到维护中档后「项目1 K1235」同样「列表页收起 / 进项目铺开」 | 本地通过（2026-10-09） |
+| TREE-ACCORDION-GATE-001 | 门禁 | 类型 / 静态检查 / 依赖边界 / 格式 | `pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm build`、`pnpm format:check`、`pnpm --filter @inpulse/web check:boundaries` 全部通过 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① **未跑** 全量 `pnpm test:e2e` 与整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 项目列表页上「点项目行」在真实路由里会立刻导航进该项目（路径 `/projects/:id/modules`），因此列表页不提供「只展开不跳转」的入口；若产品希望列表页也能就地展开浏览，需要改成不导航的手风琴入口。③ 展开态仍不写 URL、不落库，刷新页面后回到「当前项目默认打开」的推导结果。
+
+## 项目列表未完成档内统一按最近变更时间排序（用户指示，2026-10-09 本地落库）
+
+用户指示（原话）：「我希望在项目未完成状态下，每次当项目中有更新，则将项目排序排到最前面」。原排序「档位（进行中 → 未开始 → 维护中）→ 最近变更时间 DESC」把「未开始」项目永远压在「进行中」项目之后，未开始项目的更新挤不到前面。本批把第一排序键由三档收窄为两档（未完成 = 进行中 + 未开始；维护中），未完成档内统一按最近变更时间从近到远（详见 [ADR-063](adr/ADR-063.md)）。改 SQL 排序与注释、契约描述与生成物、集成测试断言，无契约结构 / 权限 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 服务端：`apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression` 更名为 `projectTierRankExpression`，CASE 由 `ACTIVE → 0 / NOT_STARTED → 1 / MAINTENANCE → 2 / ELSE 3` 改为 `ACTIVE → 0 / NOT_STARTED → 0 / MAINTENANCE → 1 / ELSE 2`；`apps/api/src/modules/projects/postgres-project-query-port.ts` 的 import 与 `ORDER BY` 同步更名（其余排序键不变）。
+- 契约与生成物：`packages/api-contract/src/route-registry.ts` 的 `listProjects` summary 同步；`pnpm contract:generate` 重生成 5 产物，仅 `packages/api-contract/generated/openapi.json` 变更 1 行。
+- 前端：`apps/web/src/features/common/resource-lifecycle.ts` 与 `apps/web/src/features/projects/ProjectsPageView.tsx` 仅改注释。
+- 未改动：项目标签三态渲染与配色、模块 / 功能两层排序、维护中档的客户端重排、`ORDER BY` 的追加键。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-TIER-ORDER-INT-001 | API 集成 | 无动态时未完成档内按创建时间从近到远（ADR-063） | `projects-read-api.integration.test.ts`《列表先按「未完成 / 维护中」两档排序…》：`[newerNotStarted, notStarted, active, maintenance]`、`completedTaskCount` `[0, 0, 1, 0]`（`active` 最早建且有 1 条已完成任务，仍排在两个后建项目之后） | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-INT-002 | API 集成 | 档内按最近变更时间、不再分进行中与未开始；档位仍优先于时间 | 同文件《项目按最近变更时间从近到远…》第 4 步把更早变更项目置 `ACTIVE` 后顺序不变 `[newer, older]`；第 5 步把它置 `MAINTENANCE` 后落回未完成档之后 `[older, newer]` | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-API-001 | API 集成全量 | 排序改动的服务端全量回归 | `pnpm --filter @inpulse/api test:integration`（TEST_DATABASE_URL 指向 app_ci）→ **56 文件 545 例全绿** | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-CONTRACT-001 | 契约 | 描述与生成物同步 | `pnpm contract:generate` → 5 产物；`pnpm contract:drift` 通过；`pnpm contract:validate` 105 条通过 | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-GATE-001 | 门禁 | 类型 / 静态检查 / 格式 | `pnpm typecheck`（8 workspace）、`pnpm lint`、`pnpm format:check` 通过 | 本地通过（2026-10-09） |
+| PROJECT-TIER-ORDER-BROWSER-001 | 浏览器实测 | 未完成档内动态位次 | dev（Vite 5173 + API 3000 经代理）：`GET /api/v1/projects` 返回 `OPS_DASH`（未开始）在 `AGV_SCHED`（进行中）之前；向 `K123`（进行中）写入一个任务后它从第 3 位跃到第 1 位；`/projects` 页面按同一次序渲染 | 本地通过（2026-10-09） |
+
+未运行 / 已知偏差：① 未跑整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、`pnpm test:unit` / `pnpm test:web`（未改其它模块）、Playwright / `pnpm test:e2e`、镜像构建与 Trivy、GitHub Actions（未提交、未推送）。② 浏览器实测写入了演示库 `app`：向项目 3（`K123 验证`）创建了一个任务「排序验证任务 A」（连带一条 `task.create` 动态，因此该项目停留在未完成档首位，属预期行为）。③ 本批含服务端产品代码、契约与文档，按 §8 需非作者人工评审。

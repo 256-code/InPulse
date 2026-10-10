@@ -76,6 +76,7 @@
 | [ADR-060](ADR-060.md) | Accepted | 审计读取不写留痕：`GET /api/v1/audit-logs` 不再写 `AUDIT_LOG_READ`（`AuditQueryService` 删除留痕写入路径、Route Registry `auditAction` 改为 `none`），契约删除 `readTrail` 参数（仍携带者 422）；历史留痕行保留在链中并按普通审计行可读，前端「隐藏读取留痕」机制整体删除；读取取证由远端 WORM 归档与部署层日志承担；无迁移、路由仍 105 条（替代 ADR-042） |
 | [ADR-061](ADR-061.md) | Accepted | 原始审计读取新增「全部记录（所有链）」并设为默认：契约加可选 `chain=all`（与 `projectId` 互斥，同传 422 `invalid-chain`，缺省仍读 SYSTEM 链），跨链按 `occurred_at DESC, chain_id DESC, sequence_no DESC` 键集分页、签名游标加成对链坐标（`c` / `t`，缺坐标 422 `invalid-cursor`），迁移 `0037` 新增 `audit_logs_occurred_at_chain_seq_idx`；审计页动作码候选过滤 11 个已下线动作码（标签表保留供历史行渲染）；权限仍 `adminSession`、路由仍 105 条（扩展 ADR-060 的读取范围） |
 | [ADR-062](ADR-062.md) | Accepted | 项目删除改为不可逆物理删除（替代 ADR-049 / ADR-050 / ADR-051 / ADR-052 / ADR-055）：`DELETE /api/v1/projects/{projectId}` 经 `app.purge_project` 窄口在同一事务内清空项目全部下级数据与该项目审计链，只在 SYSTEM 链留一条 `project.delete`（仅管理员可见、不写动态与通知）；项目编码随之释放可复用；幂等契约版本升 `2.0.0` 且重放授权降为 `actorOnly`；删除路由 `restoreProject` / `purgeProject` / `listProjectDeletions` 与 ADR-055 保留期自动彻底删除一并下线，路由 105 → 102，迁移 `0038`（任务与模块 / 功能软删除不受影响） |
+| [ADR-063](ADR-063.md) | Accepted | 项目列表「未完成」档内统一按最近变更时间排序：第一排序键档位由三档收窄为两档（未完成 = 进行中与未开始同属一档、维护中），未完成档内「一有更新就排最前」（修订 ADR-046 决策 1 的项目列表行与 2026-10-08 修订的档位口径；模块与功能两层不变） |
 
 ## 关联基线
 

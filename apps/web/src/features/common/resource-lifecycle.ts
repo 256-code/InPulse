@@ -3,9 +3,9 @@ import type { ProjectStatus } from "@generated/api";
 import type { CalmBadgeTone } from "./components/Calm";
 
 /**
- * 项目生命周期标签档位（ADR-043）：直接映射服务端存储的三态，判定与排序键
- * `apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression` 一致
- * （进行中 → 未开始 → 维护中），两处必须一起修改。
+ * 项目生命周期标签档位（ADR-043）：直接映射服务端存储的三态，供标签渲染使用。
+ * 服务端排序键自 ADR-063 起只分「未完成 / 维护中」两档（`apps/api/src/stats/card-stat-columns.ts` 的
+ * `projectTierRankExpression`），标签仍按三态渲染，两处必须一起修改。
  * 项目层面已下线归档，不再有「已归档」档位。
  *
  * - `ACTIVE`：进行中，项目已开工；
@@ -48,9 +48,9 @@ export const projectLifecycleTone = (
  * - `open`：未完成，进行中（`ACTIVE`）与未开始（`NOT_STARTED`）都在这一档；
  * - `maintenance`：维护中（`MAINTENANCE`）。
  *
- * 分档只是展示层的归并，不改写服务端的三态，也不改
- * `apps/api/src/stats/card-stat-columns.ts` 的 `projectLifecycleRankExpression`
- * （该排序键仍是 进行中 → 未开始 → 维护中 三档）。
+ * 分档是展示层的归并，不改写服务端的三态；服务端排序键
+ * `apps/api/src/stats/card-stat-columns.ts` 的 `projectTierRankExpression` 自 ADR-063 起按同一
+ * 归并分两档，未完成档内统一按最近变更时间从近到远，两处必须一起修改。
  */
 export type ProjectTier = "open" | "maintenance";
 

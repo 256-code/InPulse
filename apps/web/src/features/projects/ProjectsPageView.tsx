@@ -25,6 +25,7 @@ import {
   type ProjectTier,
 } from "@features/common/resource-lifecycle";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { useProjectTier } from "@features/common/project-tier-context";
 
 const hierarchyNotes = [
   { label: "项目", text: "顶层业务容器，承载范围与成员。" },
@@ -85,7 +86,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   const [search, setSearch] = useState("");
   // 生命周期分档（2026-10-09 用户指示）：与任务中心「未完成 / 已完成」同形态的滑块，
   // 按项目自己的三态归并成两档——未完成（进行中 + 未开始）与维护中。
-  const [tier, setTier] = useState<ProjectTier>("open");
+  // 档位由 AppLayout 的 ProjectTierProvider 持有，侧栏项目树读同一份状态，
+  // 因此这里只负责渲染与切换，不再自己 useState。
+  const { tier, selectTier } = useProjectTier();
 
   // 两档计数在关键词之前算：滑块上的数字是当前可见项目的总量，不随搜索词跳动。
   const maintenanceProjectCount = projects.filter(
@@ -109,7 +112,8 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   // `updatedAt` 近似：切到维护中会写 `projects.updated_at`，此后只有再次编辑项目本身
   // （改名、改描述）才会把它推近，任务与成员的变化不写这一列。服务端 `list` 的默认
   // 顺序是「档位 + 最近变更时间（含任务动态）」，维护中一档会随任务动态漂移，所以本档
-  // 在客户端重排；未完成一档保持服务端顺序（进行中 → 未开始，档内最近变更在前）。
+  // 在客户端重排；未完成一档保持服务端顺序——自 ADR-063 起该档不再分「进行中 / 未开始」，
+  // 档内一律按最近变更时间从近到远，项目一有更新就排到最前。
   const tierProjects =
     tier === "maintenance"
       ? projects
@@ -147,7 +151,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                 label="项目生命周期分档"
                 value={tier}
                 options={tierOptions}
-                onChange={(next) => setTier(next)}
+                onChange={selectTier}
               />
               <div className="task-search">
                 <InpulseIcon name="search" size={15} />

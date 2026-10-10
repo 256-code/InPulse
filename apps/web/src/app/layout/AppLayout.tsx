@@ -7,6 +7,7 @@ import {
   InpulseIcon,
   type InpulseIconName,
 } from "@features/common/components/InpulseIcon";
+import { useProjectTier } from "@features/common/project-tier-context";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import { treeScopeOf } from "@features/project-tree/tree-selection";
@@ -175,6 +176,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     [location.pathname],
   );
   const treeScope = useMemo(() => treeScopeOf(catalogScope), [catalogScope]);
+  // 侧栏项目树与项目列表页的滑块共享同一分档（ProjectTierProvider）：
+  // 分组标题随档位说明当前列的是哪一档项目。
+  const { tier } = useProjectTier();
   const displayName = user?.name.trim() || "访客";
   const avatarText = user?.name.trim().charAt(0) || "访";
   const roleLabel = user?.isAdmin ? "系统管理员" : user ? "成员" : "未登录";
@@ -396,7 +400,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 {/* 项目列表页也展开项目树：点「项目列表」即可直接进具体项目，
                     不必先进某个项目再切换。 */}
                 <p className="nav-section">
-                  {projectScopeId === null ? "项目" : "当前项目"}
+                  {projectScopeId !== null
+                    ? "当前项目"
+                    : tier === "maintenance"
+                      ? "维护中项目"
+                      : "项目"}
                 </p>
                 <div className="nav-tree-panel">
                   <ProjectTree
