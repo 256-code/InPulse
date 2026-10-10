@@ -10,6 +10,7 @@ import {
   AuditWritePort,
 } from "./audit.port.js";
 import type { AuditKeyProvider } from "./audit-keyring.js";
+import { applyRequestAuditMeta } from "./request-audit-context.js";
 
 interface AuditLockRow {
   readonly locked_last_sequence: string;
@@ -34,39 +35,41 @@ export class PostgresAuditWritePort extends AuditWritePort {
     tx: TransactionContext,
     input: AuditWriteInput,
   ): Promise<AuditAppendResult> {
-    const chainId = auditChainId(input.projectId);
-    let lock = await this.lockHead(tx, chainId, input.projectId);
+    // 调用方显式提供的三字段优先，缺省取请求级审计上下文；两处都没有则留空。
+    const effective = applyRequestAuditMeta(input);
+    const chainId = auditChainId(effective.projectId);
+    let lock = await this.lockHead(tx, chainId, effective.projectId);
     const currentVersion = this.keyProvider.currentVersion;
 
     if (
-      input.nextKeyVersion === undefined &&
+      effective.nextKeyVersion === undefined &&
       currentVersion > lock.keyVersion
     ) {
       const rotation = await this.appendLocked(tx, chainId, lock, {
-        projectId: input.projectId,
+        projectId: effective.projectId,
         actorType: "SYSTEM",
         actorId: null,
         action: "AUDIT_KEY_ROTATED",
         targetType: "SYSTEM",
         targetId: null,
         eventPayload: { newKeyVersion: currentVersion },
-        requestId: input.requestId,
-        clientRequestId: input.clientRequestId ?? null,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-        occurredAt: input.occurredAt ?? new Date(),
+        requestId: effective.requestId,
+        clientRequestId: effective.clientRequestId ?? null,
+        ipAddress: effective.ipAddress ?? null,
+        userAgent: effective.userAgent ?? null,
+        occurredAt: effective.occurredAt ?? new Date(),
         nextKeyVersion: currentVersion,
       });
       lock = {
         chainId,
-        projectId: input.projectId,
+        projectId: effective.projectId,
         lastSequence: rotation.sequenceNo,
         lastHash: rotation.recordHash,
         keyVersion: currentVersion,
       };
     }
 
-    return this.appendLocked(tx, chainId, lock, input);
+    return this.appendLocked(tx, chainId, lock, effective);
   }
 
   private async appendLocked(

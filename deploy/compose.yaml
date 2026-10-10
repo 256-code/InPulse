@@ -36,6 +36,11 @@
 #      deploy/compose.init.yaml 负责（静态校验见 scripts/check_deploy_refs.mjs，
 #      完整步骤见 docs/runbooks/disaster-recovery.md）；本文件不为生产准备
 #      登录密码；生产不得暴露 PostgreSQL/API 到公网。
+#   7. api 只接入 internal 的 backend 网络，唯一入站来源是 web(Nginx)，因此该
+#      网络固定静态子网，api 的 TRUSTED_PROXY_CIDRS 与之绑定（Express trust
+#      proxy）。二者缺一或漂移都会让 req.ip 退化为 Nginx 容器地址——审计
+#      ip_address 与登录/SSO 的 IP 限流全部失真，且本地 loopback 环境不可复现。
+#      一致性由 scripts/check_deploy_refs.mjs 静态校验。
 
 x-logging: &default-logging
   driver: json-file
@@ -134,6 +139,12 @@ services:
       SSO_REDIRECT_URI: "${SSO_REDIRECT_URI}"
       # 本地会话空闲有效期（秒），ADR-038 起默认 7200；口令与 SSO 两条签发路径共用。
       SESSION_IDLE_MAX_AGE_SECONDS: "${SESSION_IDLE_MAX_AGE_SECONDS}"
+      # 反向代理信任链：api 只接入 internal 的 backend 网络，唯一入站来源是
+      # web(Nginx)。必须与 backend 的静态子网一致，否则 Express 只信任回环地址，
+      # req.ip 会退化为 Nginx 容器地址（审计 ip_address、登录/SSO 的 IP 限流
+      # 全部失真）；非法值会使 API 启动失败（apps/api/src/trusted-proxy.ts
+      # fail closed）。与本文件 networks.backend 的 ipam 子网保持一致。
+      TRUSTED_PROXY_CIDRS: "172.30.0.0/24"
     depends_on:
       db:
         condition: service_healthy
@@ -332,7 +343,13 @@ services:
 
 networks:
   backend:
+    # 静态子网：api 的 TRUSTED_PROXY_CIDRS 需要可枚举的信任目标，Docker 动态
+    # 分配时无法稳定配置信任链。若与本机既有网络冲突，compose up 会显式报
+    # "Pool overlaps"；改本值时必须同步 api 的 TRUSTED_PROXY_CIDRS。
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
   edge:
 
 volumes:

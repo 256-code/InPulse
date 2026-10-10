@@ -584,6 +584,19 @@ function checkStructure(rendered) {
     if (!db.healthcheck) problems.push("db: healthcheck is required");
   }
 
+  // 反向代理信任链（compose.yaml 说明 7 与 nginx.conf 顶部承诺）：backend 必须
+  // 有且只有一个静态 ipam 子网，api 的 TRUSTED_PROXY_CIDRS 必须包含它。缺一都
+  // 会让生产 req.ip 退化为 Nginx 容器地址（审计 ip_address、登录/SSO 的 IP 限流
+  // 全部失真），而本地 loopback 环境不可复现该缺口。
+  const backendSubnets = (rendered.networks?.backend?.ipam?.config ?? [])
+    .map((entry) => entry?.subnet)
+    .filter((subnet) => typeof subnet === "string" && subnet.length > 0);
+  if (services.api && backendSubnets.length !== 1) {
+    problems.push(
+      "backend network: must declare exactly one static ipam subnet (the api trust proxy target)",
+    );
+  }
+
   const api = services.api;
   if (api) {
     if (!api.healthcheck) problems.push("api: healthcheck is required");
@@ -598,6 +611,33 @@ function checkStructure(rendered) {
     if (!env.RUNTIME_DB_PASSWORD_FILE) {
       problems.push(
         "api: environment must set RUNTIME_DB_PASSWORD_FILE (code reads it)",
+      );
+    }
+    const trustedProxies = String(env.TRUSTED_PROXY_CIDRS ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (trustedProxies.length === 0) {
+      problems.push(
+        "api: environment must set TRUSTED_PROXY_CIDRS to the backend subnet (Express trust proxy)",
+      );
+    }
+    if (
+      trustedProxies.some(
+        (entry) =>
+          entry === "loopback" || entry === "0.0.0.0/0" || entry === "::/0",
+      )
+    ) {
+      problems.push(
+        "api: TRUSTED_PROXY_CIDRS must not trust loopback or all addresses in production",
+      );
+    }
+    if (
+      backendSubnets.length === 1 &&
+      !trustedProxies.includes(backendSubnets[0])
+    ) {
+      problems.push(
+        `api: TRUSTED_PROXY_CIDRS must include the backend subnet ${backendSubnets[0]}`,
       );
     }
   }
@@ -759,6 +799,46 @@ async function checkDockerfiles() {
   ) {
     problems.push(
       'deploy/docker/nginx.conf: must rewrite the CSP nonce placeholder via sub_filter "__INPULSE_CSP_NONCE__" "$request_id"',
+    );
+  }
+  // 审计「客户端请求 ID」（ADR-008 请求元数据）：/api/v1 代理必须注入
+  // X-Request-Id，且缺省回退为 $request_id——浏览器不会自动发送该头，缺了它
+  // 审计行的 client_request_id 恒为空。map 内正则必须与 API 白名单同一模式，
+  // 两处漂移会让审计字段静默丢失。
+  if (
+    !/map\s+\$http_x_request_id\s+\$inpulse_audit_request_id\b/.test(nginxConf)
+  ) {
+    problems.push(
+      "deploy/docker/nginx.conf: must define the $http_x_request_id -> $inpulse_audit_request_id map",
+    );
+  }
+  if (!/default\s+\$request_id;/.test(nginxConf)) {
+    problems.push(
+      "deploy/docker/nginx.conf: X-Request-Id map must fall back to $request_id",
+    );
+  }
+  if (
+    !/proxy_set_header\s+X-Request-Id\s+\$inpulse_audit_request_id;/.test(
+      nginxConf,
+    )
+  ) {
+    problems.push(
+      "deploy/docker/nginx.conf: /api/v1 proxy must set X-Request-Id from $inpulse_audit_request_id",
+    );
+  }
+  const requestAuditContext = await readFile(
+    "apps/api/src/audit/request-audit-context.ts",
+    "utf8",
+  ).catch(() => "");
+  const apiRequestIdPattern =
+    /CLIENT_REQUEST_ID_PATTERN\s*=\s*\/(.+?)\/;/.exec(requestAuditContext)?.[1];
+  if (!apiRequestIdPattern) {
+    problems.push(
+      "apps/api/src/audit/request-audit-context.ts: CLIENT_REQUEST_ID_PATTERN not found (needed to keep the Nginx map in sync)",
+    );
+  } else if (!nginxConf.includes(apiRequestIdPattern)) {
+    problems.push(
+      `deploy/docker/nginx.conf: X-Request-Id map regex must match the API whitelist ${apiRequestIdPattern}`,
     );
   }
   if (
