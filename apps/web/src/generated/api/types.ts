@@ -253,6 +253,99 @@ export type DeleteTaskRequest = {
   readonly reason: (string | null);
 };
 
+export type DocumentImportDuplicate = {
+  readonly projectId: number;
+  readonly importedAt: string;
+  readonly actorName: string;
+};
+
+export type DocumentImportFeaturePlan = {
+  readonly line: number;
+  readonly moduleName: string;
+  readonly name: string;
+  readonly action: ("CREATE" | "REUSE");
+  readonly featureId: (number | null);
+};
+
+export type DocumentImportIssue = {
+  readonly severity: ("ERROR" | "WARNING");
+  readonly line: number;
+  readonly code: string;
+  readonly message: string;
+};
+
+export type DocumentImportMemberRef = {
+  readonly token: string;
+  readonly userId: number;
+  readonly name: string;
+};
+
+export type DocumentImportModulePlan = {
+  readonly line: number;
+  readonly name: string;
+  readonly action: ("CREATE" | "REUSE");
+  readonly moduleId: (number | null);
+};
+
+export type DocumentImportProjectPlan = {
+  readonly name: string;
+  readonly code: string;
+  readonly description: string;
+  readonly codeAvailable: boolean;
+  readonly members: readonly DocumentImportMemberRef[];
+};
+
+export type DocumentImportResultCounts = {
+  readonly modules: number;
+  readonly features: number;
+  readonly tasks: number;
+  readonly reusedModules: number;
+  readonly reusedFeatures: number;
+  readonly addedMembers: number;
+};
+
+export type DocumentImportResultFeature = {
+  readonly id: number;
+  readonly code: string;
+  readonly moduleId: number;
+};
+
+export type DocumentImportResultModule = {
+  readonly id: number;
+  readonly code: string;
+};
+
+export type DocumentImportResultTask = {
+  readonly id: number;
+  readonly code: string;
+  readonly moduleId: number;
+  readonly featureId: (number | null);
+  readonly scopeType: ("FEATURE" | "MODULE");
+};
+
+export type DocumentImportSummary = {
+  readonly moduleCount: number;
+  readonly featureCount: number;
+  readonly taskCount: number;
+  readonly moduleCreateCount: number;
+  readonly moduleReuseCount: number;
+  readonly featureCreateCount: number;
+  readonly featureReuseCount: number;
+  readonly taskCreateCount: number;
+  readonly memberAddCount: number;
+};
+
+export type DocumentImportTaskPlan = {
+  readonly line: number;
+  readonly scope: ("FEATURE" | "MODULE");
+  readonly moduleName: string;
+  readonly featureName: (string | null);
+  readonly title: string;
+  readonly assignees: readonly DocumentImportMemberRef[];
+  readonly priority: ("NORMAL" | "HIGH" | "URGENT");
+  readonly dueAt: (string | null);
+};
+
 export type ErrorResponse = {
   readonly code: string;
   readonly message: string;
@@ -807,6 +900,45 @@ export type ProjectCode = string;
 export type ProjectDetailResponse = {
   readonly project: ProjectItem;
   readonly currentUserRole?: (("MEMBER" | "LEADER") | null);
+};
+
+export type ProjectDocumentImportPreviewRequest = {
+  readonly document: string;
+};
+
+export type ProjectDocumentImportPreviewResponse = {
+  readonly digest: string;
+  readonly templateVersion: "1";
+  readonly project: (DocumentImportProjectPlan | null);
+  readonly summary: DocumentImportSummary;
+  readonly modules: readonly DocumentImportModulePlan[];
+  readonly features: readonly DocumentImportFeaturePlan[];
+  readonly tasks: readonly DocumentImportTaskPlan[];
+  readonly issues: readonly DocumentImportIssue[];
+  readonly canApply: boolean;
+  readonly duplicate: (DocumentImportDuplicate | null);
+};
+
+export type ProjectDocumentImportReplayContext = {
+  readonly projectId: number;
+  readonly moduleIds: readonly number[];
+  readonly featureIds: readonly number[];
+  readonly taskIds: readonly number[];
+};
+
+export type ProjectDocumentImportRequest = {
+  readonly document: string;
+  readonly expectedDigest: string;
+};
+
+export type ProjectDocumentImportResult = {
+  readonly projectId: number;
+  readonly projectCode: string;
+  readonly digest: string;
+  readonly counts: DocumentImportResultCounts;
+  readonly modules: readonly DocumentImportResultModule[];
+  readonly features: readonly DocumentImportResultFeature[];
+  readonly tasks: readonly DocumentImportResultTask[];
 };
 
 export type ProjectEditRequest = {

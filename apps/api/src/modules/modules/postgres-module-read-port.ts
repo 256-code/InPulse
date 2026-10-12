@@ -4,6 +4,7 @@ import {
   type ModuleCountInput,
   type ModuleNameItem,
   type ModuleNameLookupInput,
+  type ModuleNameMatchItem,
   type ModuleReadResource,
 } from "./module-read.port.js";
 
@@ -36,6 +37,16 @@ export class PostgresModuleReadPort extends ModuleReadPort {
          AND deleted_at IS NULL
        ORDER BY id ASC
     `) as unknown as readonly ModuleNameItem[];
+  }
+
+  async matchByName(
+    tx: TransactionContext,
+    projectId: number,
+    normalizedName: string,
+  ): Promise<readonly ModuleNameMatchItem[]> {
+    return (await tx.sql<
+      ModuleNameMatchItem[]
+    >`SELECT id AS "moduleId", project_id AS "projectId", name, code, description, (deleted_at IS NOT NULL) AS deleted FROM app.modules WHERE project_id = ${projectId} AND lower(btrim(name)) = ${normalizedName} ORDER BY id ASC`) as unknown as readonly ModuleNameMatchItem[];
   }
 
   async count(

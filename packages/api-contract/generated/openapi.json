@@ -3245,6 +3245,260 @@
         }
       }
     },
+    "/project-imports": {
+      "post": {
+        "operationId": "importProject",
+        "summary": "单事务创建整个项目：项目、初始成员（含任务负责人自动加入）、模块、功能与任务，写审计、活动、通知与搜索投影；项目编码全局唯一，同摘要文档禁止重复导入。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "限流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "ProjectDocumentImportResult",
+                  "safeBodyFieldPaths": [
+                    "projectId",
+                    "projectCode",
+                    "digest",
+                    "counts.modules",
+                    "counts.features",
+                    "counts.tasks",
+                    "counts.reusedModules",
+                    "counts.reusedFeatures",
+                    "counts.addedMembers",
+                    "modules[].id",
+                    "modules[].code",
+                    "features[].id",
+                    "features[].code",
+                    "features[].moduleId",
+                    "tasks[].id",
+                    "tasks[].code",
+                    "tasks[].moduleId",
+                    "tasks[].featureId",
+                    "tasks[].scopeType"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectDocumentImportReplayContext",
+              "resultRefExtractor": "documentImportResultResources",
+              "currentReadAuthorizer": "documentImportReplayAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": [
+              "project",
+              "module",
+              "feature",
+              "task"
+            ],
+            "retry": "none; single transaction; project row FOR UPDATE reserved before any sequence or effect write"
+          },
+          "auditAction": "project.documentImport"
+        },
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDocumentImportRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/project-imports/preview": {
+      "post": {
+        "operationId": "previewProjectImport",
+        "summary": "解析整项目导入文档（含项目段）：校验项目编码、成员与全部下级计划；不写任何持久化状态。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentImportPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDocumentImportPreviewRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects": {
       "get": {
         "operationId": "listProjects",
@@ -5938,6 +6192,302 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RecordLifecycleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/document-imports": {
+      "post": {
+        "operationId": "importProjectDocument",
+        "summary": "在单个事务内按文档创建/复用模块与功能并创建任务，写审计、活动、通知与搜索投影；同摘要文档禁止重复导入，整笔幂等。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "限流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "ProjectDocumentImportResult",
+                  "safeBodyFieldPaths": [
+                    "projectId",
+                    "projectCode",
+                    "digest",
+                    "counts.modules",
+                    "counts.features",
+                    "counts.tasks",
+                    "counts.reusedModules",
+                    "counts.reusedFeatures",
+                    "counts.addedMembers",
+                    "modules[].id",
+                    "modules[].code",
+                    "features[].id",
+                    "features[].code",
+                    "features[].moduleId",
+                    "tasks[].id",
+                    "tasks[].code",
+                    "tasks[].moduleId",
+                    "tasks[].featureId",
+                    "tasks[].scopeType"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "ProjectDocumentImportReplayContext",
+              "resultRefExtractor": "documentImportResultResources",
+              "currentReadAuthorizer": "documentImportReplayAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": [
+              "project",
+              "module",
+              "feature",
+              "task"
+            ],
+            "retry": "none; single transaction; project row FOR UPDATE reserved before any sequence or effect write"
+          },
+          "auditAction": "project.documentImport"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDocumentImportRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/document-imports/preview": {
+      "post": {
+        "operationId": "previewProjectDocumentImport",
+        "summary": "解析固定模板文档并返回模块/功能/任务计划、行级问题与重复导入提示；不写任何持久化状态，执行时整笔重放校验。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocumentImportPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或当前用户不可访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDocumentImportPreviewRequest"
               }
             }
           }
@@ -16215,6 +16765,494 @@
         ],
         "additionalProperties": false
       },
+      "DocumentImportDuplicate": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "actorName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "projectId",
+          "importedAt",
+          "actorName"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportFeaturePlan": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "REUSE"
+            ]
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "line",
+          "moduleName",
+          "name",
+          "action",
+          "featureId"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportIssue": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "ERROR",
+              "WARNING"
+            ]
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "severity",
+          "line",
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportMemberRef": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "userId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "token",
+          "userId",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportModulePlan": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "REUSE"
+            ]
+          },
+          "moduleId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "line",
+          "name",
+          "action",
+          "moduleId"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportProjectPlan": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "codeAvailable": {
+            "type": "boolean"
+          },
+          "members": {
+            "maxItems": 300,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportMemberRef"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "description",
+          "codeAvailable",
+          "members"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportResultCounts": {
+        "type": "object",
+        "properties": {
+          "modules": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "features": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tasks": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "reusedModules": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "reusedFeatures": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "addedMembers": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "modules",
+          "features",
+          "tasks",
+          "reusedModules",
+          "reusedFeatures",
+          "addedMembers"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportResultFeature": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "moduleId"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportResultModule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportResultTask": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          },
+          "moduleId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "featureId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "FEATURE",
+              "MODULE"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "moduleId",
+          "featureId",
+          "scopeType"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportSummary": {
+        "type": "object",
+        "properties": {
+          "moduleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "featureCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500
+          },
+          "taskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500
+          },
+          "moduleCreateCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "moduleReuseCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "featureCreateCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "featureReuseCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "taskCreateCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "memberAddCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "moduleCount",
+          "featureCount",
+          "taskCount",
+          "moduleCreateCount",
+          "moduleReuseCount",
+          "featureCreateCount",
+          "featureReuseCount",
+          "taskCreateCount",
+          "memberAddCount"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportTaskPlan": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "FEATURE",
+              "MODULE"
+            ]
+          },
+          "moduleName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "featureName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "assignees": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportMemberRef"
+            }
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "line",
+          "scope",
+          "moduleName",
+          "featureName",
+          "title",
+          "assignees",
+          "priority",
+          "dueAt"
+        ],
+        "additionalProperties": false
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -19077,6 +20115,221 @@
         },
         "required": [
           "project"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDocumentImportPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000,
+            "description": "固定模板文档原文（UTF-8）"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDocumentImportPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "文档规范化文本（去 BOM、CRLF→LF）的 SHA-256 十六进制摘要"
+          },
+          "templateVersion": {
+            "type": "string",
+            "const": "1"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentImportProjectPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DocumentImportSummary"
+          },
+          "modules": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportModulePlan"
+            }
+          },
+          "features": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportFeaturePlan"
+            }
+          },
+          "tasks": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportTaskPlan"
+            }
+          },
+          "issues": {
+            "maxItems": 5000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportIssue"
+            }
+          },
+          "canApply": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentImportDuplicate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "digest",
+          "templateVersion",
+          "project",
+          "summary",
+          "modules",
+          "features",
+          "tasks",
+          "issues",
+          "canApply",
+          "duplicate"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDocumentImportReplayContext": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "moduleIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "featureIds": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "taskIds": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "moduleIds",
+          "featureIds",
+          "taskIds"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDocumentImportRequest": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000,
+            "description": "固定模板文档原文（UTF-8）"
+          },
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "文档规范化文本（去 BOM、CRLF→LF）的 SHA-256 十六进制摘要"
+          }
+        },
+        "required": [
+          "document",
+          "expectedDigest"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectDocumentImportResult": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "projectCode": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "文档规范化文本（去 BOM、CRLF→LF）的 SHA-256 十六进制摘要"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/DocumentImportResultCounts"
+          },
+          "modules": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportResultModule"
+            }
+          },
+          "features": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportResultFeature"
+            }
+          },
+          "tasks": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportResultTask"
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "projectCode",
+          "digest",
+          "counts",
+          "modules",
+          "features",
+          "tasks"
         ],
         "additionalProperties": false
       },

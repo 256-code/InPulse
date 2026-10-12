@@ -237,3 +237,11 @@ describe("创建成功后的下一步（2026-10-10）", () => {
     expect(onOpenModules).toHaveBeenCalledWith(2);
   });
 });
+
+describe("ADR-064 整项目文档导入入口", () => {
+  it("项目列表页提供「从文档导入整项目」按钮并打开导入弹窗", () => {
+    mount({});
+    fireEvent.click(screen.getByTestId("import-project-document-button"));
+    expect(screen.getByLabelText("导入文档内容")).toBeInTheDocument();
+  });
+});

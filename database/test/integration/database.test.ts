@@ -83,6 +83,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0036_module_feature_soft_delete.sql",
       "0037_audit_logs_cross_chain_idx.sql",
       "0038_project_delete_contract_soft_delete_removal.sql",
+      "0039_document_import_runs.sql",
     ]);
   });
 
@@ -1052,6 +1053,16 @@ describe("PostgreSQL schema, invariants, and roles", () => {
     ).resolves.toHaveLength(1);
     await expectPostgresError(
       backup.unsafe("DELETE FROM app.sso_login_attempts"),
+      "42501",
+    );
+    // ADR-064 / 迁移 0039：文档导入批次表同样必须有表级 SELECT，
+    // 这是 pg_dump 加 ACCESS SHARE 锁与一致性快照的前置条件；
+    // app_backup 对该表没有任何写权限。
+    await expect(
+      backup.unsafe("SELECT count(*) FROM app.document_import_runs"),
+    ).resolves.toHaveLength(1);
+    await expectPostgresError(
+      backup.unsafe("DELETE FROM app.document_import_runs"),
       "42501",
     );
     await expect(

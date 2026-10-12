@@ -141,6 +141,23 @@ export async function cleanupFixtures(
         return affected;
       };
 
+      // ADR-064 文档导入批次表：夹具用户/项目产生的导入记录必须一并物理删除，
+      // replica 模式跳过外键检查，漏删会留下孤儿行并让逻辑备份恢复演练失败；
+      // 历史遗留的孤儿行（project/actor 已不存在）也在这里兜底修复。
+      await remove(
+        `DELETE FROM app.document_import_runs
+          WHERE project_id IN (SELECT id FROM _cleanup_projects)
+             OR actor_id IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
+        `DELETE FROM app.document_import_runs r
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app.projects p WHERE p.id = r.project_id
+          )
+             OR NOT EXISTS (
+               SELECT 1 FROM app.users u WHERE u.id = r.actor_id
+             )`,
+      );
       await remove(
         `DELETE FROM app.notifications
           WHERE project_id IN (SELECT id FROM _cleanup_projects)
@@ -362,6 +379,17 @@ export async function cleanupFixtures(
 
       const checkRows = await transaction.unsafe(
         `SELECT
+           (SELECT count(*)::int FROM app.document_import_runs r
+             WHERE r.project_id IN (SELECT id FROM _cleanup_projects)
+                OR r.actor_id IN (SELECT id FROM _cleanup_users))
+             AS remaining_import_runs,
+           (SELECT count(*)::int FROM app.document_import_runs r
+             WHERE NOT EXISTS (
+               SELECT 1 FROM app.projects p WHERE p.id = r.project_id
+             )
+                OR NOT EXISTS (
+                  SELECT 1 FROM app.users u WHERE u.id = r.actor_id
+                )) AS orphan_import_runs,
            (SELECT count(*)::int FROM app.users
              WHERE ${FIXTURE_LOGIN_FILTER}) AS remaining_users,
            (SELECT count(*)::int FROM app.projects
@@ -395,6 +423,8 @@ export async function cleanupFixtures(
         ...[
           "remaining_users",
           "remaining_projects",
+          "remaining_import_runs",
+          "orphan_import_runs",
           "dangling_audit_actors",
         ].filter((key) => Number(checks[key] ?? 0) !== 0),
         // 项目不变量只要求清理未让计数变差：本地库可能存在规范化之前建立的历史项目。

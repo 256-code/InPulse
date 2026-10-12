@@ -77,6 +77,9 @@
 | [ADR-061](ADR-061.md) | Accepted | 原始审计读取新增「全部记录（所有链）」并设为默认：契约加可选 `chain=all`（与 `projectId` 互斥，同传 422 `invalid-chain`，缺省仍读 SYSTEM 链），跨链按 `occurred_at DESC, chain_id DESC, sequence_no DESC` 键集分页、签名游标加成对链坐标（`c` / `t`，缺坐标 422 `invalid-cursor`），迁移 `0037` 新增 `audit_logs_occurred_at_chain_seq_idx`；审计页动作码候选过滤 11 个已下线动作码（标签表保留供历史行渲染）；权限仍 `adminSession`、路由仍 105 条（扩展 ADR-060 的读取范围） |
 | [ADR-062](ADR-062.md) | Accepted | 项目删除改为不可逆物理删除（替代 ADR-049 / ADR-050 / ADR-051 / ADR-052 / ADR-055）：`DELETE /api/v1/projects/{projectId}` 经 `app.purge_project` 窄口在同一事务内清空项目全部下级数据与该项目审计链，只在 SYSTEM 链留一条 `project.delete`（仅管理员可见、不写动态与通知）；项目编码随之释放可复用；幂等契约版本升 `2.0.0` 且重放授权降为 `actorOnly`；删除路由 `restoreProject` / `purgeProject` / `listProjectDeletions` 与 ADR-055 保留期自动彻底删除一并下线，路由 105 → 102，迁移 `0038`（任务与模块 / 功能软删除不受影响） |
 | [ADR-063](ADR-063.md) | Accepted | 项目列表「未完成」档内统一按最近变更时间排序：第一排序键档位由三档收窄为两档（未完成 = 进行中与未开始同属一档、维护中），未完成档内「一有更新就排最前」（修订 ADR-046 决策 1 的项目列表行与 2026-10-08 修订的档位口径；模块与功能两层不变） |
+| [ADR-064](ADR-064.md) | Accepted | 固定模板 Markdown 文档导入（新增 F-32）：两种模式——项目内导入（`POST /api/v1/projects/{projectId}/document-imports`，项目可写门禁）与整项目导入（`POST /api/v1/project-imports`，任何已登录用户，单事务创建项目与全部下级）；固定模板语法（标题 + `- 字段：值`），项目编码整项目导入强制必填；负责人 / 初始成员按登录名或姓名解析，整项目导入自动加入（项目内导入要求已是活跃成员）；同名模块 / 功能精确复用不覆盖，任务一律新建；`digest`（规范化文本 SHA-256）+ 迁移 `0039` `app.document_import_runs` 拒重复导入（409），摘要过期 409、行级问题 422；预览只读、执行数据库级幂等；路由 102 → 106 |
+| [ADR-065](ADR-065.md) | Accepted | 文档导入模板自带格式说明与解析器忽略行 / 围栏行（修订 ADR-064 2.1 的行处理口径）：模板顶部以 `>` 引用行写入字段名清单、必填与两种模式约束并保留示例结构；解析器忽略以 `>` 开头的说明行与三个反引号 / `~~~` 代码围栏行（只有说明行 / 围栏行的文档仍按空文档处理），其余未知行仍 422 `LINE_UNRECOGNIZED`；弹窗新增「格式速查」区块，`DOCUMENT_IMPORT_TEMPLATE` 与解析器一致性测试锁定不漂移；路由 106 条、权限、数据库与模板版本号不变 |
+| [ADR-066](ADR-066.md) | Accepted | 文档导入支持选择文件（修订 ADR-064 非目标第 1 条）：弹窗新增「选择文件」，浏览器本地读取 .md / .markdown / .txt 内容（剔除 BOM）填入导入文本并提示，仍走既有「预览 → 确认导入」；本地校验扩展名白名单、1 MiB 字节与 20 万字符上限，全部不发请求；不引入 multipart、服务端文件接收与附件存储，路由 / 契约 / 权限 / 数据库与模板版本号不变 |
 
 ## 关联基线
 

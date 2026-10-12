@@ -681,6 +681,37 @@ export const permissionMatrix = [
       },
     },
   },
+  ...(["previewProjectDocumentImport", "importProjectDocument"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: {
+          kind: "conditional",
+          allowedWhen:
+            "ADR-064：目标项目当前活跃成员（或系统管理员）；预览只读不写库，执行另需 CSRF、同源与 Idempotency-Key，同一摘要文档禁止重复导入",
+          deniedWith: 404,
+        },
+        其他项目成员: { kind: "deny", status: 404 },
+        已移除成员: { kind: "deny", status: 404 },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: { kind: "allow" },
+      },
+    }),
+  ),
+  ...(["previewProjectImport", "importProject"] as const).map(
+    (operationId): PermissionMatrixEntry => ({
+      operationId,
+      outcomes: {
+        匿名: { kind: "deny", status: 401 },
+        活跃成员: { kind: "allow" },
+        其他项目成员: { kind: "allow" },
+        已移除成员: { kind: "allow" },
+        停用用户: { kind: "deny", status: 401 },
+        系统管理员: { kind: "allow" },
+      },
+    }),
+  ),
   {
     operationId: "deleteProject",
     outcomes: {

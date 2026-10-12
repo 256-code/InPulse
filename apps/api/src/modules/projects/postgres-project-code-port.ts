@@ -44,6 +44,23 @@ export class PostgresProjectCodePort extends ProjectCodePort {
     if (!sequence) throw new Error("Code allocation failed");
     return `${project.code}-F-${sequence.number}`;
   }
+  async findProjectCode(
+    tx: TransactionContext,
+    projectId: number,
+  ): Promise<string | undefined> {
+    const [row] = await tx.sql<
+      { code: string }[]
+    >`SELECT code FROM app.projects WHERE id = ${projectId}`;
+    return row?.code;
+  }
+
+  async isCodeAvailable(tx: TransactionContext, code: string) {
+    const [row] = await tx.sql<
+      { exists: boolean }[]
+    >`SELECT EXISTS (SELECT 1 FROM app.projects WHERE code = ${code}) AS exists`;
+    return row !== undefined && !row.exists;
+  }
+
   async allocateTaskGroupCode(
     tx: TransactionContext,
     projectId: number,

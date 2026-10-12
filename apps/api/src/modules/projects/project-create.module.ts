@@ -25,6 +25,7 @@ import { ProjectsModule } from "./projects.module.js";
     NotificationProjectionModule,
   ],
   providers: [ProjectBootstrapWorkflow],
+  exports: [ProjectBootstrapWorkflow],
   controllers: [ProjectBootstrapController],
 })
 export class ProjectCreateModule {}

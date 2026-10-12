@@ -27,6 +27,19 @@ export interface FeatureCountInput {
   readonly moduleId?: number;
 }
 
+export interface FeatureNameMatchItem {
+  readonly featureId: number;
+  readonly projectId: number;
+  readonly moduleId: number;
+  readonly name: string;
+  readonly code: string;
+  readonly currentBehavior: string;
+  readonly acceptanceCriteria: string;
+  readonly tags: readonly string[];
+  /** 已软删除（deleted_at 非空）的同名功能；V1 跳过复用并新建。 */
+  readonly deleted: boolean;
+}
+
 /** Caller authorizes project access. */
 export abstract class FeatureReadPort {
   abstract find(
@@ -50,6 +63,17 @@ export abstract class FeatureReadPort {
    * 项目授权。SQL 同时带 project_id 与 module_id，防止跨项目串联，并完整命中
    * features_module_id_idx（ADR-045 去掉常量列 status 后的三列索引）。
    */
+  /**
+   * 按规范化名称（lower(btrim(name))）查找模块内同名功能，包含已软删除行。
+   * 只读、不取锁，不校验项目授权。
+   */
+  abstract matchByName(
+    tx: TransactionContext,
+    projectId: number,
+    moduleId: number,
+    normalizedName: string,
+  ): Promise<readonly FeatureNameMatchItem[]>;
+
   abstract count(
     tx: TransactionContext,
     input: FeatureCountInput,

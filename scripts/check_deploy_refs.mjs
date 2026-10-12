@@ -830,8 +830,9 @@ async function checkDockerfiles() {
     "apps/api/src/audit/request-audit-context.ts",
     "utf8",
   ).catch(() => "");
-  const apiRequestIdPattern =
-    /CLIENT_REQUEST_ID_PATTERN\s*=\s*\/(.+?)\/;/.exec(requestAuditContext)?.[1];
+  const apiRequestIdPattern = /CLIENT_REQUEST_ID_PATTERN\s*=\s*\/(.+?)\/;/.exec(
+    requestAuditContext,
+  )?.[1];
   if (!apiRequestIdPattern) {
     problems.push(
       "apps/api/src/audit/request-audit-context.ts: CLIENT_REQUEST_ID_PATTERN not found (needed to keep the Nginx map in sync)",

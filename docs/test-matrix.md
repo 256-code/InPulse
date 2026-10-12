@@ -6006,3 +6006,39 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | AUDIT-SNAPSHOT-GATE-001 | 静态门禁 + E2E | 不破坏既有链路 | `pnpm --filter @inpulse/web test` → **97 文件 707 例全绿**；全 workspace `pnpm typecheck`、`pnpm lint` 通过；`playwright test tests/audit.spec.ts` → **2 passed (10.8s)** | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① **未跑** 全量 Playwright（只跑了 `tests/audit.spec.ts`）、整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration` / `contract:*`（未改服务端与契约）；GitHub Actions 不在 `test` 分支触发。② 复制依赖 `navigator.clipboard`，只在安全上下文（https 或 localhost）可用，失败时按钮不置位且没有降级提示。③ 复制按钮默认半透明常显，触屏无 hover 时以半透明兜底，未单独写 `@media (hover: none)`。④ 只改了快照弹窗，任务详情、记录详情等其它弹窗的字段排版未动。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+## 文档导入（ADR-064，用户指示，2026-10-10 本地落库）
+
+用户要求「通过导入固定的文档来直接将项目的模块功能任务那些建立好」，并与开发代理共同确认口径：固定 Markdown 模板、可选整项目导入、负责人自动加入成员、项目编码强制必填、防同一文档重复导入、支持多模块与多功能、缺省字段按默认值跳过（跳过字段不跳过对象）。按 [ADR-064](adr/ADR-064.md) 落库：新增 F-32 能力，4 条路由（预览 2 条只读接口 `csrfPolicy: none` / `idempotencyPolicy: none`；执行 2 条 `POST /api/v1/projects/{projectId}/document-imports` 与 `POST /api/v1/project-imports` 为数据库级幂等写命令，路由总数 102 → 106）；迁移 `0039_document_import_runs.sql` 新增批次表（同一项目同一摘要唯一，`app_runtime` 仅 `SELECT/INSERT`，显式补 `app_backup` 只读授权），并重写 `app.purge_project` 在删除项目前清空批次行（清理项 27 → 28 处）。
+
+2026-10-10 收尾修复：E2E / 集成夹具清理器 `apps/e2e/helpers/fixture-cleanup.ts` 未把 `app.document_import_runs` 纳入删除清单，`session_replication_role = replica` 删除夹具用户 / 项目时留下孤儿批次行，导致 `apps/ops` 逻辑备份恢复演练的 `pg_restore` 在重建 `document_import_runs_project_fk` / `document_import_runs_actor_fk` 时报错。已补「夹具范围删除」与「历史孤儿兜底删除」，收尾断言新增 `remaining_import_runs` / `orphan_import_runs` 必须为 0；`app_ci` 既有孤儿行已物理清理，`pnpm test:integration` 全量重跑通过。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-PARSER-UNIT-001 | API 单元 | 模板解析（模板版本 1） | `pnpm --filter @inpulse/api test:unit` → `document-import-parser.test.ts` **18 例通过**：四级标题语法与全角 / 半角冒号、层级与关键字不匹配、未知 / 重复字段、空文档、任务缺负责人、超长截断、规模上限、模式 A / B 项目段约束（422 错误码） | 本地通过（2026-10-10） |
+| DOC-IMPORT-API-INTEGRATION-001 | 真实 PostgreSQL API 集成 | 双模式执行 / 预览 / 查重 / 复用 / 零残留 | `document-import.integration.test.ts` **5 例通过**：整项目导入单事务建全量并重复导入 409；预览只读、摘要过期 409 `DOCUMENT_IMPORT_STALE`；编码占用 409 `PROJECT_CODE_CONFLICT`、格式 422、未登录 401；项目内同名模块 / 功能精确复用不覆盖；非成员负责人 422 `ASSIGNEE_NOT_MEMBER` 且零残留 | 本地通过（2026-10-10，全量 `pnpm test:integration` 重跑） |
+| DOC-IMPORT-DATABASE-001 | 真实 PostgreSQL 数据库集成 | 迁移与授权 | `database.test.ts`：迁移清单含 `0039_document_import_runs.sql`；`app_backup` 对 `app.document_import_runs` 有表级 SELECT、DELETE 报 42501；`project-delete-api.integration.test.ts` 回归通过（`purge_project` 重写后删除计数不变） | 本地通过（2026-10-10） |
+| DOC-IMPORT-WEB-UNIT-001 | Web 单元 | 双阶段弹窗与页面入口 | `DocumentImportModal.test.tsx` **6 例**（粘贴 / 预览 / 错误码映射 / 重复提示 / 摘要过期）；`ProjectsPageView.test.tsx` 与 `ModulesPageView.test.tsx` 新增 3 例入口断言 | 本地通过（2026-10-10） |
+| DOC-IMPORT-WEB-FULL-001 | Web 全量 | 前端回归 | `pnpm --filter @inpulse/web test` → **98 文件 714 例全绿** | 本地通过（2026-10-10） |
+| DOC-IMPORT-E2E-001 | 浏览器 E2E | 整项目导入关键路径与重复拦截 / 项目内多模块导入 | `apps/e2e/tests/document-import.spec.ts` **2 例通过**（真实 PostgreSQL + 生产构建 + `vite preview`）：整项目导入 → 模块 / 功能落库与重复导入 409 提示；项目内导入多个模块与功能 | 本地通过（2026-10-10，E2E 全量 73 passed） |
+| DOC-IMPORT-CONTRACT-001 | 契约 | 路由 / Schema / 权限矩阵同步 | `pnpm contract:validate`（106 条路由）、`contract:drift` 无漂移；`packages/api-contract/test/permissions.test.ts` 路由扫描期望同步（契约单测 102 例全绿）；`pnpm permissions:check` 106 条通过 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FIXTURE-CLEANUP-001 | E2E 辅助 | 清理器不再漏删导入批次 | 清理器新增 `document_import_runs` 夹具删除与孤儿兜底，收尾断言要求 `remaining_import_runs` / `orphan_import_runs` 为 0；`app_ci` 孤儿行清理后 `pnpm --filter @inpulse/ops test:integration` **7 例通过** | 本地通过（2026-10-10） |
+| DOC-IMPORT-GATE-001 | 门禁 | 类型 / lint / 格式 / 文档 / 迁移 / 部署预检 | `pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check`、`pnpm check:docs`、`pnpm db:migrations:check`（38 个）、`test:unit`（api 74 文件 455 例）本地通过 | 本地通过（2026-10-10） |
+
+2026-10-10 修订（[ADR-065](adr/ADR-065.md)：模板自带格式说明、解析器忽略说明行与围栏行）：模板顶部新增以 `>` 开头的填写说明（三类行规则、逐字段名清单、必填与两种模式差异），解析器忽略 `>` 说明行与三个反引号 / `~~~` 代码围栏行（只有说明行 / 围栏行的文档仍按 `EMPTY_DOCUMENT`），弹窗新增「格式速查」区块；新增一致性单测直接读取前端 `DOCUMENT_IMPORT_TEMPLATE` 喂解析器，锁定模板与解析器不漂移；路由、权限、数据库与模板版本号不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-FORMAT-PARSER-UNIT-001 | API 单元 | 说明行与围栏行被忽略、模板一致性 | `document-import-parser.test.ts` **21 例通过**（新增 3 例）：`>` 说明行与围栏行被忽略且不生效；只含说明行 / 围栏行的文档按空文档处理；直接读取 `DOCUMENT_IMPORT_TEMPLATE` 喂解析器零问题，且项目 / 模块 / 功能 / 任务结构断言通过 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FORMAT-WEB-UNIT-001 | Web 单元 | 格式速查区块与模板规则 | `DocumentImportModal.test.tsx` **7 例**：新增断言 `document-import-format-guide` 存在、含「格式速查」与关键规则（字段行形态、必填、说明行忽略）；模板文本含「不要自创、不要改名」约束 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FORMAT-BROWSER-001 | 浏览器实测（真实 dev + PostgreSQL） | 新版模板与围栏文本可直接预览 | 新版模板全文（含 20+ 行 `>` 说明）预览：结构全部识别，仅示例用户名不存在按数据问题报行级错误（带行号与建议）；替换真实用户后预览：模块 1 / 功能 1 / 任务 2、编码可用、自动加入成员 1 位；代码围栏包裹整段模板预览同样成功；未点击「确认导入」 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FORMAT-GATE-001 | 门禁 | 本轮全量回归 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过；API 单测 74 文件 458 例；前端全量 98 文件 715 例 | 本地通过（2026-10-10） |
+
+2026-10-10 补充（[ADR-066](adr/ADR-066.md)：选择文件导入）：弹窗 INPUT 阶段新增「选择文件」（浏览器本地读取 .md / .markdown / .txt，1 MiB 字节与 20 万字符双重本地校验，剔除 BOM），读取后填入文本框并显示回执，仍走「预览 → 确认导入」；不新增路由 / 契约 / multipart / 附件存储。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-FILE-WEB-UNIT-001 | Web 单元 | 文件读取与本地拒绝路径 | `DocumentImportModal.test.tsx` **10 例**（新增 3 例）：选择 .md 读取内容填入文本框（BOM 剥离）并可预览；非文本扩展名被拒绝且不发请求；超过 1 MiB 被拒绝且不发请求 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FILE-BROWSER-001 | 浏览器实测（真实 dev + PostgreSQL） | 真实文件选择 → 预览 | 「选择文件」读取模板 .md：内容填入、显示「已读取文件」提示、预览成功（模块 1 / 功能 1 / 任务 2、编码可用）；选择 .pdf 本地拒绝、不发请求 | 本地通过（2026-10-10） |
+| DOC-IMPORT-FILE-GATE-001 | 门禁 | 本轮回归 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过；前端全量 98 文件 718 例 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① GitHub Actions 未在本批执行（工作流只在 `main` 与 `dev/*` 触发，当前 `test` 分支不触发）；② 依赖审计本轮 `pnpm deps:audit` 直接通过（No known vulnerabilities found），公共 registry 复核同样无已知漏洞；③ `.md` 文件上传、模板版本迁移工具与多文档批量导入属于 ADR-064 非目标，未实现；④ 本批含 API / 契约 / 迁移 / 前端产品代码与新增用例，按 §8 需非作者人工评审；⑤ 夹具清理器对历史孤儿批次行的删除是测试库专用修复（生产删除路径 `app.purge_project` 已自带清空），不改变生产语义。

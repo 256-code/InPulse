@@ -22,6 +22,11 @@ export interface ProjectSetupGuideInput {
   readonly featureTargetName: string | null;
   readonly onCreateModule: () => void;
   readonly onAddFeature: () => void;
+  /**
+   * 「从文档导入」（ADR-064）：空项目没有模块区块入口时，引导头部提供导入
+   * 入口；已有模块时由模块区块标题行的按钮承担，调用方传 undefined。
+   */
+  readonly onImportDocument?: (() => void) | undefined;
 }
 
 export interface ProjectSetupGuideProps extends ProjectSetupGuideInput {
@@ -69,6 +74,7 @@ export const ProjectSetupGuide: React.FC<ProjectSetupGuideProps> = ({
   onCreateModule,
   onAddFeature,
   onCreateTask,
+  onImportDocument,
 }) => {
   if (isProjectSetupComplete(moduleCount, featureCount, taskCount)) {
     return null;
@@ -115,11 +121,23 @@ export const ProjectSetupGuide: React.FC<ProjectSetupGuideProps> = ({
       data-testid="project-setup-guide"
     >
       <div className="project-setup-guide-head">
-        <h2>开始搭建这个项目</h2>
-        <p>
-          按「模块 → 功能 →
-          任务」的顺序建立第一条业务链路，三步齐备后引导自动隐藏。
-        </p>
+        <div>
+          <h2>开始搭建这个项目</h2>
+          <p>
+            按「模块 → 功能 →
+            任务」的顺序建立第一条业务链路，三步齐备后引导自动隐藏。
+          </p>
+        </div>
+        {onImportDocument !== undefined && moduleCount === 0 ? (
+          <Button
+            className="secondary-button"
+            data-testid="import-project-document-from-guide-button"
+            onClick={onImportDocument}
+          >
+            <InpulseIcon name="fileText" size={15} />
+            从文档导入
+          </Button>
+        ) : null}
       </div>
       <ol className="project-setup-steps">
         {steps.map((step, index) => {
