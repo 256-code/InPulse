@@ -5998,3 +5998,22 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | DOC-IMPORT-FILE-GATE-001 | 门禁 | 本轮回归 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过；前端全量 98 文件 718 例 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① GitHub Actions 未在本批执行（工作流只在 `main` 与 `dev/*` 触发，当前 `test` 分支不触发）；② 依赖审计本轮 `pnpm deps:audit` 直接通过（No known vulnerabilities found），公共 registry 复核同样无已知漏洞；③ `.md` 文件上传、模板版本迁移工具与多文档批量导入属于 ADR-064 非目标，未实现；④ 本批含 API / 契约 / 迁移 / 前端产品代码与新增用例，按 §8 需非作者人工评审；⑤ 夹具清理器对历史孤儿批次行的删除是测试库专用修复（生产删除路径 `app.purge_project` 已自带清空），不改变生产语义。
+
+2026-10-12 修订（弹窗矮窗口布局修复）：用户反馈「页面没全屏的时候布局有问题」——非全屏窗口下「从文档导入整项目」弹窗底部「取消 / 预览」被裁掉。`apps/web/src/styles/design-system.css` 为「正文直接挂在 `.surface-modal` 下」的弹窗（当前仅导入弹窗）补 `min-height: 0` + `overflow-y: auto` 滚动链，并为 `.catalog-modal .dialog-form` 固定 `grid-auto-rows: max-content`（文本框不再被压扁）；只动呈现层，无契约 / 权限 / 数据库 / 迁移 / 依赖改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-LAYOUT-E2E-001 | 浏览器 E2E | 矮窗口下弹窗页脚不被裁切、正文可滚动 | `apps/e2e/tests/document-import.spec.ts`「F-32 文档导入弹窗在矮窗口下页脚不被裁切、正文可滚动（布局回归）」：`1280×620` 视口下「预览」按钮 `toBeVisible` + `toBeInViewport` + 底边 ≤620；`.dialog-form` `scrollHeight > clientHeight`；文本框高度 >200（防「压扁内容掩盖滚动」）；`scrollIntoViewIfNeeded` 后「选择文件」进入视口。修复前同用例失败（按钮完整裁出、比例 0） | 本地通过（2026-10-12，`document-import.spec.ts` 3 例全绿） |
+| DOC-IMPORT-LAYOUT-GATE-001 | 门禁 | 布局修复回归 | `modules.spec.ts` + `features.spec.ts` + `project-create.spec.ts` 4 例交叉验证其它 `.catalog-modal` 不受 `grid-auto-rows` 影响；`pnpm test:web` 98 文件 718 例；`pnpm lint` / `pnpm typecheck`（8 workspace）/ `pnpm format:check` 通过 | 本地通过（2026-10-12） |
+
+未运行 / 已知偏差：① 本批只动 `apps/web` 样式与 E2E，`test:unit` / `test:integration` / 契约门禁未重跑（未改服务端与契约）；② Playwright 全量未重跑（清单 74 例 / 29 文件），仅跑文档导入 3 例与模块 / 功能 / 建项目 4 例；③ GitHub Actions 不触发（`test` 分支）；④ 新增 E2E 用例按 §8 需非作者人工评审；⑤ 未提交、未推送。
+
+2026-10-12 修订（功能标签改为胶囊输入）：用户指示「新建功能的标签能不能改成这样形式的」，其后「颜色不要黑色改成这样的颜色」——新版控件为淡紫胶囊（与功能卡 `badge-violet` 同色）+ 虚线「＋ 新标签」行内输入（回车 / 失焦提交、Esc 取消、去重、50 上限就地拒绝），表单值仍为换行分隔字符串，契约与合并逻辑不变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| FEATURE-TAGS-WEB-UNIT-001 | Web 单元 | 胶囊控件交互与页面数组提交 | `FeatureTagsInput.test.tsx` **5 例**：回车提交与重复去重、失焦提交与 Esc 取消、× 移除、50 上限拒绝并保留草稿、禁用态不可操作；`FeaturesPageView.test.tsx` 新增 1 例：弹窗内回车添加「支付 / 退款」后以 `["支付", "退款"]` 数组提交 | 本地通过（2026-10-12，全量 99 文件 724 例） |
+| FEATURE-TAGS-E2E-001 | 浏览器 E2E | 胶囊添加、保存与编辑预填 | `features.spec.ts`：点「新标签」→ 输入两次回车 → 胶囊断言 → 保存 → 编辑弹窗预填两枚胶囊 | 本地通过（2026-10-12，features.spec.ts 2 例全绿） |
+| FEATURE-TAGS-GATE-001 | 门禁 | 本批回归 | `pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check` 通过；`pnpm test:web` 99 文件 724 例全绿（基线 98 / 718） | 本地通过（2026-10-12） |
+
+未运行 / 已知偏差：① `test:unit` / `test:integration` / 契约门禁未重跑（未改服务端与契约）；② Playwright 全量未重跑（清单 74 例 / 29 文件），只跑 `features.spec.ts` 2 例；③ GitHub Actions 不触发（`test` 分支）；④ 新增控件与用例按 §8 需非作者人工评审；⑤ 去重与 50 上限拒绝只做在控件层（改造前逐行文本框同样允许重复行），服务端契约不变；⑥ 未提交、未推送。

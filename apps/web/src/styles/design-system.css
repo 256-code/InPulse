@@ -3364,6 +3364,14 @@ a:focus-visible {
   background: #f8fafc;
   flex-shrink: 0;
 }
+/* 正文直接挂在弹层下的（如从文档导入整项目）：视口高度不足时正文收缩并内部滚动、
+   页脚固定可见。否则 flex 子项 min-height:auto 会把内容撑出盒子，底部的
+   「取消 / 预览」被 overflow:hidden 裁掉（2026-10-12 修复）。
+   走 .catalog-form 包裹的弹层有各自的滚动链，不受这条影响。 */
+.surface-modal > .dialog-form {
+  min-height: 0;
+  overflow-y: auto;
+}
 /* 破坏性确认的主按钮跟随 tone 转红：顶条、图标片、按钮同源，
    其余 tone 保持全局主色，避免把可逆操作也画成危险动作。 */
 .surface-modal.tone-danger .calm-action-footer .primary-button {
@@ -3515,6 +3523,12 @@ a:focus-visible {
   gap: 20px;
   align-content: start;
 }
+/* 行轨道固定 max-content：容器高度被视口压小时，auto 轨道会按可用空间收缩
+   （textarea 从 14 行被压到 min-height 附近、正文不再滚动）。max-content 让内容
+   保持自然高度，溢出交给 `.surface-modal > .dialog-form` 的滚动处理（2026-10-12）。 */
+.catalog-modal .dialog-form {
+  grid-auto-rows: max-content;
+}
 .catalog-modal .dialog-form > label {
   min-width: 0;
   grid-column: 1/-1;
@@ -3537,6 +3551,94 @@ a:focus-visible {
   border-top: 1px solid #e8eef5;
   flex-shrink: 0;
   background: #fafcfe;
+}
+
+/* 功能标签（2026-10-12 产品指定形态）：淡紫胶囊（与功能卡标签徽章 badge-violet 同色）+ 虚线「＋ 新标签」按钮，
+   填写中的行内输入与胶囊同高。表单值仍是换行分隔字符串，只有控件形态变化。 */
+.feature-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.feature-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.feature-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px 5px 13px;
+  border-radius: 999px;
+  background: #eeeaff;
+  color: #6b58c4;
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.feature-tag-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #8b7ace;
+  cursor: pointer;
+}
+.feature-tag-remove:hover {
+  background: #ded7ff;
+  color: #4a3a9e;
+}
+.feature-tag-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.calm-form .feature-tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px dashed #c2c0bc;
+  border-radius: 999px;
+  background: transparent;
+  color: #78716c;
+  font-size: 12.5px;
+  line-height: 1;
+}
+.calm-form .feature-tag-add:hover {
+  border-color: #a8a29e;
+  color: #57534e;
+  background: #fafaf9;
+}
+.calm-form .feature-tag-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.calm-form .feature-tag-entry {
+  width: 150px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #d6d3d1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #405a72;
+  font-size: 12.5px;
+  outline: none;
+}
+.calm-form .feature-tag-entry::placeholder {
+  color: #a8a29e;
+}
+.feature-tag-limit {
+  margin: 0;
+  color: #b45b55;
+  font-size: 11px;
 }
 .surface-modal button:focus-visible {
   outline: 2px solid #2d84e6;

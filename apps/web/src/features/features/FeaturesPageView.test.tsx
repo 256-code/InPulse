@@ -138,6 +138,34 @@ describe("F-13 forms", () => {
       createFeature.mock.calls[1]![3].headers["Idempotency-Key"],
     );
   });
+  it("新增功能的标签用胶囊输入，回车添加后按数组提交", async () => {
+    const createFeature = vi.fn().mockResolvedValue({ ...item, name: "退款" });
+    const client = {
+      listFeatures: vi.fn().mockResolvedValue({ items: [] }),
+      findSimilarFeatures: vi.fn().mockResolvedValue({ items: [] }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+      createFeature,
+    } as unknown as InpulseApiClient;
+    mount(client);
+    await screen.findByText("暂无功能");
+    fireEvent.click(screen.getByRole("button", { name: "新增功能" }));
+    fireEvent.change(screen.getByLabelText("功能名称"), {
+      target: { value: "退款" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新标签" }));
+    const entry = screen.getByLabelText<HTMLInputElement>("标签（最多 50 个）");
+    fireEvent.change(entry, { target: { value: "支付" } });
+    fireEvent.keyDown(entry, { key: "Enter" });
+    fireEvent.change(entry, { target: { value: "退款" } });
+    fireEvent.keyDown(entry, { key: "Enter" });
+    expect(screen.getByText("支付")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
+    await waitFor(() => expect(createFeature).toHaveBeenCalledTimes(1));
+    expect(createFeature.mock.calls[0]![2]).toMatchObject({
+      tags: ["支付", "退款"],
+    });
+  });
+
   it("merges a name draft with a concurrently changed currentBehavior before using the latest version", async () => {
     const original = { ...item, currentBehavior: "编辑前说明" };
     const latest = {
