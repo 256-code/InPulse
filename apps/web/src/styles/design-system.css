@@ -1472,18 +1472,36 @@ td small {
   color: #a0aab5;
   font-size: 10px;
 }
-/* 时间范围字段：.audit-toolbar 的直接提示 span 靠 margin-left:auto 贴右，这里
-   显式回零，让「开始时间 / 结束时间」贴着各自的输入框，说明哪端是哪端。 */
-.audit-toolbar .audit-time-field span {
+/* 时间范围字段（2026-10-10 方案 B）：两个独立输入框，各自带前置「开始 / 结束」
+   小标签与一条分隔线；边框盒子由 label 承担，原生 input 退成无边框内容。
+   .audit-toolbar 的直接提示 span 靠 margin-left:auto 贴右，这里显式回零，
+   让标签贴着输入框，说明哪端是哪端。 */
+.audit-toolbar .audit-time-field .audit-time-label {
   margin-left: 0;
-  color: #586d83;
+  flex: none;
+  color: #8b9aab;
   font-size: 11px;
   white-space: nowrap;
 }
 .audit-time-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  height: 35px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+.audit-time-field:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(45, 132, 230, 0.13);
+}
+.audit-time-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: #e8eef5;
 }
 .audit-list {
   background: white;
@@ -2143,6 +2161,9 @@ td small {
     display: none;
   }
   .audit-toolbar span {
+    display: none;
+  }
+  .audit-time-field .audit-time-divider {
     display: none;
   }
   .dialog {
@@ -5032,7 +5053,7 @@ td.due-overdue {
   justify-content: flex-end;
 }
 .snapshot-body {
-  padding: 22px 26px 26px;
+  padding: 14px 26px 18px;
   overflow: auto;
 }
 .snapshot-body h3 {
@@ -5042,20 +5063,21 @@ td.due-overdue {
 }
 .snapshot-body pre {
   margin: 0;
-  padding: 14px;
-  background: #f6f9fc;
-  border: 1px solid #e6edf4;
-  border-radius: 8px;
-  color: #4d6479;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #44596e;
+  font-family: var(--font-mono);
   font-size: 11px;
-  line-height: 1.75;
+  line-height: 1.7;
   max-height: 46vh;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .snapshot-body .permission-hint {
-  margin-top: 18px;
+  margin-top: 16px;
 }
 /* 该盒没有 `catalog-modal` 类，不吃 `.catalog-modal > .drawer-header` 的默认头部
    排版（同 `.project-picker-modal` / `.record-detail-modal`）：不补内边距时眉标会顶到
@@ -5065,26 +5087,99 @@ td.due-overdue {
   border-bottom: 1px solid #e8eef5;
   flex-shrink: 0;
 }
-/* 原始审计快照按「基本信息 / 请求上下文 / 完整性校验 / 事件载荷」分组，
-   长哈希与载荷各自成块，避免一条字段列表从弹层顶部排到底部。 */
-.snapshot-group + .snapshot-group {
-  margin-top: 24px;
+/* 原始审计快照按「基本信息 / 请求上下文 / 完整性校验 / 事件载荷」分组。
+   2026-10-10 优化：每组改成浅色卡片（分组标题在卡内、字段行紧贴标题）并把行距压紧；
+   请求 ID、链上哈希与事件载荷各自带一键复制，载荷块换成等宽字体加一条
+   「JSON + 复制」工具条，避免一条字段列表从弹层顶部排到底部、长值只能手选。 */
+.snapshot-group {
+  padding: 16px 14px;
+  border: 1px solid #eef3f8;
+  border-radius: 10px;
+  background: #fbfcfe;
 }
-.snapshot-group-title {
-  margin: 0 0 13px;
+.snapshot-group + .snapshot-group {
+  margin-top: 9px;
+}
+/* 注意：卡片标题必须带 .snapshot-body 前缀。原先只写 .snapshot-group-title 时，
+   特异性低于上方的 .snapshot-body h3（0,1,1），标题实际吃着 22px 上边距与 12px 字号，
+   卡片顶部因此空出一大截。 */
+.snapshot-body .snapshot-group-title {
+  margin: 0 0 7px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #8b9cb0;
+  color: #7d8ea1;
 }
 .snapshot-group .calm-meta {
   margin: 0;
   padding-top: 0;
-  grid-template-columns: 104px minmax(0, 1fr);
-  gap: 12px 15px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 6px 14px;
 }
 .snapshot-group .calm-meta code {
+  font-family: var(--font-mono);
   font-size: 11px;
+}
+/* 可复制字段：值占满剩余宽度，按钮贴右；默认低对比，悬停整组或键盘聚焦才提亮，
+   避免一列按钮抢走视线。 */
+.snapshot-copyable {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.snapshot-copyable > code {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.snapshot-copy-button {
+  flex: none;
+  border: 1px solid #e6edf4;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 7px;
+  color: #8b9cb0;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 19px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+.snapshot-group:hover .snapshot-copy-button,
+.snapshot-copy-button:focus-visible {
+  opacity: 1;
+}
+.snapshot-copy-button:hover {
+  color: var(--primary);
+  border-color: #cfe0f4;
+}
+/* 载荷块：工具条在顶部，正文滚动区独立，长 JSON 不把卡片撑高。 */
+.snapshot-payload {
+  border: 1px solid #e6edf4;
+  border-radius: 8px;
+  background: #f6f9fc;
+  overflow: hidden;
+}
+.snapshot-payload-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid #e6edf4;
+  background: #ffffff;
+}
+.snapshot-payload-kind {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: #8b9cb0;
+}
+.snapshot-payload-bar .snapshot-copy-button {
+  opacity: 1;
 }
 .field-label {
   color: #586d83;

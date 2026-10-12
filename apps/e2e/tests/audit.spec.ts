@@ -77,9 +77,9 @@ test("管理员读取项目审计链、按动作与操作人过滤、查看快�
       0,
     );
 
-    // 操作人不选即全体。
+    // 操作人不选即全体（2026-10-10 起占位文案改为「全员（可勾选多人）」）。
     await expect(
-      page.getByText("全体操作人（可搜索多选）", { exact: true }),
+      page.getByText("全员（可勾选多人）", { exact: true }),
     ).toBeVisible();
 
     // 切到新建项目的 PROJECT 链：project.create 必定命中。
@@ -149,9 +149,9 @@ test("管理员读取项目审计链、按动作与操作人过滤、查看快�
 
     await page.getByRole("button", { name: "重置" }).click();
     await expect(page.getByLabel("动作码")).toHaveValue("");
-    // 重置回到「全体操作人」：操作人多选清空。
+    // 重置回到「全员」：操作人多选清空。
     await expect(
-      page.getByText("全体操作人（可搜索多选）", { exact: true }),
+      page.getByText("全员（可勾选多人）", { exact: true }),
     ).toBeVisible();
 
     await page.screenshot({

@@ -2324,13 +2324,13 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | MODULE-ICON-CENTER-001 | 浏览器实测 | 影响面预演 | 运行时用 CSSOM 删除这 5 条规则：`.feature-symbol` 由 `display:block`（svg 偏移 0,0）变为 `flex`（11,11）；徽章 `10px / rgb(132,147,163)` → `11px / rgb(134,91,13)`；`.task-id` `rgb(132,147,163)` → `rgb(120,144,166)` | 本地通过 |
-| MODULE-ICON-CENTER-002 | 浏览器实测 | 落库后模块卡图标居中 | `/projects/2/modules` 两张模块卡：图标容器 `display:flex`、svg 相对方块偏移 `11,11`（方块 43×43），卡高 237px | 本地通过 |
+| MODULE-ICON-CENTER-002 | 浏览器实测 | 落库后模块卡图标居中 | `/projects/2/modules` 两张模块卡：图标容器 `display:flex`、svg 相对方块偏移 `11,11`（方块 43×43），卡高 199px | 本地通过 |
 | MODULE-ICON-CENTER-003 | 浏览器实测 | 与功能卡一致 | `/projects/2/modules/9/features` 同类容器同为 `display:flex`、偏移 `11,11`；徽章与编号色两页逐项一致 | 本地通过 |
 | MODULE-ICON-CENTER-WEB-001 | Web 单元 | 模块页渲染不回归 | `pnpm --filter @inpulse/web exec vitest run src/features/modules`：1 文件 16 例通过 | 本地通过 |
 
 本地实际执行（2026-09-20）：`pnpm format:check` 通过；web 单测 `src/features/modules` 16 例通过；浏览器实测见上表（无头 Chromium，本地 dev `5173`）。
 
-未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、`pnpm lint`、`tsc`、Playwright E2E 与 API 测试（本次只删 CSS 规则、未动 TSX 与文案）；② 模块卡标题仍是蓝色 `#317abd`（同一旧规则块里保留的 `.module-card { color: #317abd }` 继承到 `h2`），功能卡标题为深色 `#132238`，是否统一已给对照图待产品确认；③ 模块卡高度由 232px 变为 237px，来自徽章恢复 11px 字号；④ 样式改动需非作者人工评审。
+未运行 / 已知偏差：① 未跑 `pnpm build`、`pnpm check:docs`、`check:frontend:boundaries`、`pnpm lint`、`tsc`、Playwright E2E 与 API 测试（本次只删 CSS 规则、未动 TSX 与文案）；② 模块卡标题仍是蓝色 `#317abd`（同一旧规则块里保留的 `.module-card { color: #317abd }` 继承到 `h2`），功能卡标题为深色 `#132238`，是否统一已给对照图待产品确认；③ 模块卡高度由 232px 变为 199px，来自徽章恢复 11px 字号；④ 样式改动需非作者人工评审。
 
 ## 模块卡与功能卡标题统一为深色（C，2026-09-20 本地落库）
 
@@ -5961,3 +5961,48 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | ROUTE-PARAM-SWITCH-KEEP-DATA-E2E-001 | 浏览器 E2E | 全量回归 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test` → **70 passed / 1 failed (5.9m)**；唯一失败为既有 `tests/project-delete.spec.ts:59`（本地 `app_ci` SYSTEM 审计链断点） | 本地通过（本批相关用例） |
 
 未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `build`（web 的生产构建已随 E2E 的 `vite build` 跑过）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59` 本地失败：确认弹窗停留，弹窗内红条为「项目删除暂时失败，请稍后重试。」；上一批已用 `git stash` 在干净 HEAD（`0214487`）复现同样失败，本次夹具清理日志再次提示「SYSTEM 链留下一个断点」，判定与本批无关，未修改删除链路与服务端。③ 占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要求的缓冲）；接口变慢时窗口等比变长，本批未做「悬停预取项目数据」。④ 页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数不再重置；弹窗状态不受影响。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+
+### 审计日志时间范围筛选改版：方案 B + 操作人文案简化（2026-10-10）
+
+用户提议「审计日志这个起始时间和结束时间制作的 UI 美化」。先在 `.data/annotations/audit-time-range-options.html`（工作树外、不进仓库）用站点现有设计变量做了三版对照预览：A 一体式时间区间、B 精修双字段、C 胶囊 + 快捷区间弹层；用户选定「方案 B」，并要求把操作人占位文案简化，最终选定「全员（可勾选多人）」。改动落在 `apps/web/src/features/audit/AuditLogPageView.tsx`、`apps/web/src/styles/design-system.css`、`apps/web/src/styles/inpulse-design.css` 与 `apps/e2e/tests/audit.spec.ts`：时间字段可视标签缩成「开始 / 结束」并各带一条 1px 分隔线，`aria-label` 保留「开始时间 / 结束时间」；字段边框由 `.audit-time-field` 承担、输入退成盒内无边框内容；原生黑色日历图标换成主题浅灰 SVG；`placeholder` 与底部说明的「可搜索多选」改成「可勾选多人」。
+
+改前 / 改后（dev Vite 5173 + API 3000，登录 `tege`，Chromium）：
+
+| 场景 | 改前 | 改后 |
+| --- | --- | --- |
+| 时间字段外观（1440×900） | 孤立灰字标签 + 原生黑图标输入框，单字段约 199px | 盒内「开始 / 结束」标签 + 分隔线 + 浅灰日历图标，单字段 196px |
+| 时间字段外观（640×900） | 标签隐藏，输入框独立 | 标签与分隔线按设计隐藏，只剩盒内输入 |
+| 填入 2026/10/08 00:00 → 2026/10/10 23:59 | 不裁切 | 不裁切（138px 宽内完整显示） |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AUDIT-TIME-RANGE-UNIT-001 | Web 单元 | 可视标签与占位文案 | `AuditLogPageView.test.tsx`「labels the time fields concisely and shortens the actor hint」：出现可视「开始 / 结束」，`getByLabelText("开始时间")` / `("结束时间")` 仍可定位，占位为「全员（可勾选多人）」且页面上无「可搜索多选」 | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-UNIT-002 | Web 单元 | 不破坏既有筛选用例 | `pnpm --filter @inpulse/web test` → **97 文件 706 例全绿** | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-E2E-001 | 浏览器 E2E | 审计页关键路径 | `E2E_DATABASE_URL=…/app_ci E2E_API_PORT=3188 E2E_WEB_PORT=4188 pnpm --filter @inpulse/e2e exec playwright test tests/audit.spec.ts` → **2 passed (10.7s)**（含两处占位文案断言更新） | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-BROWSER-001 | 浏览器实测 | 桌面档字段尺寸与完整显示 | 1440×900：单字段实测 196px（等效旧样式覆盖后测得改前约 199px），「查询」按钮坐标改前改后一致（x=270 / y=162）即换行未变，填入 2026/10/08 00:00 与 2026/10/10 23:59 均不裁切 | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-BROWSER-002 | 浏览器实测 | 窄屏档退化 | 640×900：标签与分隔线隐藏，时间输入仍可完整显示与操作 | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-BROWSER-003 | 浏览器实测 | 操作人选择框宽度 | 1440×900：宽度 200 → 176；空态占位 `scrollWidth 131 / clientWidth 131` 不裁切，选中两人后框高 32px（单行不换行）；<164px 会裁占位、<172px 会换行（实测下限） | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-BROWSER-004 | 浏览器实测 | 聚焦提示只有一层 | 聚焦开始时间：输入 `outline-style: none`，`.audit-time-field` 取到 `border-color rgb(45, 132, 230)` 与 `box-shadow rgba(45, 132, 230, 0.13) 0 0 0 3px`，不再出现输入自带的内层蓝框 | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-BROWSER-005 | 浏览器实测 | 动作码输入聚焦不再套内框 | 聚焦动作码：输入 `outline-style: none`，`.audit-toolbar .task-search` 取到 `border-color rgb(45, 132, 230)` 与 `box-shadow rgba(45, 132, 230, 0.13) 0 0 0 3px`；改前全站 `input:focus-visible`（2px 实线 + offset 3px）会在灰框内多画一圈蓝框 | 本地通过（2026-10-10） |
+| AUDIT-TIME-RANGE-GATE-001 | 静态门禁 | 类型 / 边界 / 格式 | 全 workspace `pnpm typecheck` 通过；`pnpm lint` 通过；`check:boundaries` 0 违规（322 modules / 1620 dependencies）；改动文件 `prettier --check` 通过 | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 全量 Playwright（只跑了 `tests/audit.spec.ts`）、整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration` / `contract:*`（未改服务端与契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `::-webkit-calendar-picker-indicator` 只有 Chromium 系（Chrome / Edge）支持，Firefox 与 Safari 仍是各自的默认日历图标。③ 时间输入宽度写死 138px；浏览器语言不是 zh-CN 时原生占位串长度不同，极端语言下可能裁切（本批只在 zh-CN 实测）。④ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+
+### 原始审计快照弹窗优化：分组卡片化与长值一键复制（2026-10-10）
+
+用户反馈「优化一下这个界面」（审计日志「原始审计快照」弹窗）。改动落在 `apps/web/src/features/audit/AuditLogPageView.tsx` 与 `apps/web/src/styles/design-system.css`：四个分组改成浅色卡片并把行距压紧（组间距 24px → 9px、字段行距 12px → 6px、标签列 104px → 92px、正文内边距 `14px 26px 18px`、卡片内边距 `16px 14px`，并把被 `.snapshot-body h3` 盖过的标题规则改成 `.snapshot-body .snapshot-group-title`）；请求 ID、客户端请求 ID、两条哈希与事件载荷各加一键复制（复制按钮默认 `opacity .5`，悬停整组或键盘聚焦才提亮）；事件载荷换成等宽字体并加「JSON + 复制」工具条。
+
+| 场景 | 改前 | 改后 |
+| --- | --- | --- |
+| 分组外观 | 四个分组各排一条长字段列表，行距松、分区弱 | 每组一张浅色卡片，标题在卡内，字段紧贴标题 |
+| 长值 | 请求 ID 与两条 64 位哈希只能手选 | 各带「复制 / 已复制」按钮，点击写剪贴板 |
+| 事件载荷 | 裸 `pre`，无类型标注与复制入口 | 等宽正文 + 顶部「JSON + 复制」工具条 |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AUDIT-SNAPSHOT-UNIT-001 | Web 单元 | 复制哈希与载荷 | `AuditLogPageView.test.tsx`「copies the record hash and the raw payload from the snapshot modal」：弹窗内 5 个「复制」按钮；点本条哈希那行后 `writeText` 收到 64 位哈希且按钮变「已复制」；点载荷工具条后收到含 `"loginName": "bob"` 的 JSON | 本地通过（2026-10-10） |
+| AUDIT-SNAPSHOT-BROWSER-001 | 浏览器实测 | 真实剪贴板往返 | 1440×980、授予 clipboard 权限：点本条哈希后读回 64 字符、点载荷后读回 434 字符，两处按钮均显示「已复制」；弹窗 840×924 | 本地通过（2026-10-10） |
+| AUDIT-SNAPSHOT-BROWSER-002 | 浏览器实测 | 分组卡片上下留白收紧 | 1440×980、deviceScaleFactor 2：`.snapshot-group` 标题计算样式 `margin-bottom 7px / font-size 11px`（收前被 `.snapshot-body h3` 顶成 22px 上边距），单卡高度 258px（改前 273px），标题到首个字段行 7px，弹窗仍 840×924 | 本地通过（2026-10-10） |
+| AUDIT-SNAPSHOT-GATE-001 | 静态门禁 + E2E | 不破坏既有链路 | `pnpm --filter @inpulse/web test` → **97 文件 707 例全绿**；全 workspace `pnpm typecheck`、`pnpm lint` 通过；`playwright test tests/audit.spec.ts` → **2 passed (10.8s)** | 本地通过（2026-10-10） |
+
+未运行 / 已知偏差：① **未跑** 全量 Playwright（只跑了 `tests/audit.spec.ts`）、整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration` / `contract:*`（未改服务端与契约）；GitHub Actions 不在 `test` 分支触发。② 复制依赖 `navigator.clipboard`，只在安全上下文（https 或 localhost）可用，失败时按钮不置位且没有降级提示。③ 复制按钮默认半透明常显，触屏无 hover 时以半透明兜底，未单独写 `@media (hover: none)`。④ 只改了快照弹窗，任务详情、记录详情等其它弹窗的字段排版未动。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。

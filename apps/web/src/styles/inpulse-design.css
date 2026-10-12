@@ -779,6 +779,18 @@
   max-width: 100%;
 }
 
+/* 2026-10-10：动作码输入聚焦时，全站的 input:focus-visible 会在 .task-search 自己的
+ * 边框里再套一圈蓝色轮廓（外圈灰框 + 内圈蓝框），看起来像画歪了。审计筛选条统一成
+ * 「整盒描边」：去掉输入自带的轮廓，聚焦提示由 .task-search 承担，与同排时间字段一致。 */
+.audit-toolbar .task-search input:focus-visible {
+  outline: none;
+}
+
+.audit-toolbar .task-search:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(45, 132, 230, 0.13);
+}
+
 .activity-admin-toggle {
   margin-left: auto;
 }
@@ -952,14 +964,44 @@
   color: #586a7e;
 }
 
-.audit-toolbar input[type="number"],
-.audit-toolbar input[type="datetime-local"] {
+.audit-toolbar input[type="number"] {
   height: 35px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: #ffffff;
   padding: 0 10px;
   color: #586a7e;
+}
+
+/* 2026-10-10 方案 B：时间字段的边框与圆角挪到 .audit-time-field 盒子上，
+   输入自身不再画框；宽度收窄，避免两个字段把筛选条挤到换行。 */
+.audit-toolbar .audit-time-field input[type="datetime-local"] {
+  height: 33px;
+  width: 138px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 2px;
+  color: #33465c;
+  font-family: inherit;
+  font-size: 12px;
+  /* 输入自己不再画框，聚焦提示统一由 .audit-time-field:focus-within 的整盒描边承担；
+     否则 Chromium 会在盒内再套一圈 UA 轮廓，出现「外圈 + 内框」的双层蓝框。 */
+  outline: none;
+}
+
+/* Chromium 原生黑色日历图标与整套浅色筛选条不搭，换成主题浅灰图标。 */
+.audit-toolbar
+  .audit-time-field
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: 2px;
+  opacity: 0.9;
+  cursor: pointer;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237d8b9c' stroke-width='1.7' stroke-linecap='round'><rect x='3' y='5' width='18' height='16' rx='2.6'/><path d='M3 10h18M8 3.2v3.6M16 3.2v3.6'/></svg>")
+    center/contain no-repeat;
 }
 
 /* 审计页（F-08）是仓库扩展，设计师稿没有对应页面。设计系统的 `.audit-toolbar`
