@@ -1,5 +1,10 @@
 import { useMemo, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
@@ -51,6 +56,8 @@ export function useFeatures(
       projectId > 0 &&
       Number.isInteger(moduleId) &&
       moduleId > 0,
+    // 换模块 / 换功能只换 queryKey（2026-10-10）：保留上一份目录原地换数据。
+    placeholderData: keepPreviousData,
   });
   const mutation = useMutation({
     retry: false,

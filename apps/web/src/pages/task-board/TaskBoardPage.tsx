@@ -62,7 +62,6 @@ export default function TaskBoardPage({ client, adapter }: TaskBoardPageProps) {
   }
   return (
     <TaskBoardContainer
-      key={id}
       projectId={id}
       {...(client === undefined ? {} : { client })}
       {...(adapter === undefined ? {} : { adapter })}

@@ -53,7 +53,6 @@ export const ProjectMembersPage: React.FC<ProjectMembersPageProps> = ({
     );
   return (
     <ProjectMembersPageView
-      key={id}
       projectId={id}
       client={client}
       isSystemAdmin={isSystemAdmin}

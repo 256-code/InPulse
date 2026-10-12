@@ -276,3 +276,28 @@
   height: 32px;
   border-radius: 6px;
 }
+
+/* 骨架屏「缓冲后呈现」（2026-10-10 用户指示：所有跳转都要像弹窗那样先缓冲、准备好了再呈现）：
+   骨架与真内容是两棵节点，数据在几十毫秒内就绪时，中间那 1–4 帧骨架会一闪而过——实测
+   「项目列表 → 任务中心」本地只要 37ms 数据就到位，肉眼就是一次闪烁。这里给骨架加 140ms
+   起始延迟：数据在这个窗口内回来，骨架从头到尾没露过面（不闪）；真超过窗口才淡入（确实慢，
+   该给等待态）。延迟期间容器照旧占位，页面高度与不设延迟时逐像素一致，不引入布局跳动。
+   与全局 160ms 淡入（antd-adapter.css 的弹窗）同一节奏。 */
+.calm-skeleton {
+  animation: calm-skeleton-in 160ms linear 140ms both;
+}
+
+@keyframes calm-skeleton-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calm-skeleton {
+    animation: none;
+  }
+}

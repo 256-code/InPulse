@@ -928,6 +928,31 @@
 - 回归防线：`apps/web/src/features/my-tasks/TaskCenterPageView.test.tsx` 的《fills the card with a project watermark and a bolder name on the belonging line》《falls back to the plain project name when the project is not in the port》，聚合组用例断言水印与 `:scope > h3`。
 - 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **96 文件 682 例全绿**（定向 my-tasks 5 文件 109 例）；`tsc --noEmit`、改动 `eslint`、`prettier --check` 通过；真实 PostgreSQL E2E（`app_ci`）`tests/tasks.spec.ts` **1 passed (23.6s)**；dev（Vite 5173）实测未完成档 12 张卡水印 `rgb(254, 221, 118)`（高）、`/tasks?status=done` 5 张 `rgb(203, 231, 231)`（已完成），卡片 `isolation: isolate`、标题 `margin-top: 8px`。「未运行」：整链 `pnpm check`（本地 npm 镜像无 audit endpoint）、全 workspace `typecheck` / `build`、`test:unit` / `test:integration`（未改服务端）、其余 Playwright 用例、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。
 
+## 2026-10-10 切换过渡：所有跳转与弹窗统一「缓冲后呈现」
+
+用户指示（原话）：「好接下来我们优化所有切换效果，我发现经常会闪，我希望像之前改点开任务弹窗那样，可以增加一个缓冲，准备好了再呈现，所有跳转，弹窗我都要实现这个效果」。承接 2026-10-08《弹窗打开「闪一下」》（antd 弹窗遮罩 + 面板 160ms 同步淡入），把同一口径铺到页面跳转与自绘浮层。纯前端（React / CSS）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- `calm-skeleton.css`：`.calm-skeleton` 加 140ms 延迟 + 160ms 淡入（`animation: calm-skeleton-in 160ms linear 140ms both`）。实测「项目列表 → 任务中心」数据 44ms 就绪，改前骨架可见 1–3 帧（约 44ms）、随后硬替换；加延迟后骨架从未上屏，延迟期间容器照旧占位、页面高度不变。
+- `design-system.css`：`.page-content > *` 180ms 淡入（**只动 opacity**，不加 transform——否则页内 fixed 元素会在动画期间改以该节点为包含块而跳位）；`.overlay` / `.palette` 160ms 淡入；`.popover` 140ms 淡入 + 4px 上浮。三者都受 `prefers-reduced-motion` 约束，静止外观与改前一致。
+- `app/router/route-preload.ts`（新增）：构建期把 `pages` 下每个 route.ts 与同目录页面组件配对、URL path 编译成正则（支持 `:id?` 可选段、跳过 not-found 的 `*`），导出 `preloadRoutePath` / `routePreloadHandlers`。冷 chunk 下「遗留问题 → 审计日志」改前中间态 339ms（通用骨架「正在加载页面…」），悬停预取后降到 0ms。
+- `app/layout/AppLayout.tsx` + `features/project-tree/ProjectTree.tsx`：侧栏导航与项目树行的 `onPointerEnter` / `onPointerDown` / `onFocus` 预取目标页 chunk；ProjectTree 用文件内局部 context 接 app 层注入的 `onPreloadPath`，因为 features 不得反向依赖 app（`check:boundaries` 保持 0 违规）。
+- 未消除：不悬停直接点击、键盘直达或程序化跳转仍会走 339ms 的通用骨架路径。
+- 回归防线：本批以抓帧实测为主（`docs/test-matrix.md` 的 `TRANSITION-BUFFERED-REVEAL-*`），未新增单测——改动全是 CSS 动效与预取时序，jsdom 无法验收。
+- 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **97 文件 699 例全绿**；`tsc --noEmit` 无输出、`check:boundaries` 0 违规、改动文件 `eslint` / `prettier --check` 通过；Playwright 全量 **70 passed / 1 failed (6.0m)**，唯一失败 `tests/project-delete.spec.ts:59` 在 `git stash` 掉本批改动后的干净 HEAD 上同样失败（本地 `app_ci` 的 SYSTEM 审计链有断点导致删除事务失败），与本批无关。
+
+## 2026-10-10 项目间切换不再闪：同路由换参数改为原地换数据
+
+用户反馈（原话）：「项目与项目之间的切换好像还是会闪」（浏览器停在 `/projects/8/modules`）。承接同一天《切换过渡：所有跳转与弹窗统一「缓冲后呈现」》：`.page-content > *` 已有 180ms 淡入，但页面组件自带「按路由参数生成」的 `key`，同一条路由换参数时整棵页面 DOM 会卸载重挂，淡入跟着整块重放，中间还夹 1–2 帧全透明（骨架自身带 140ms 延迟，同帧不可见）。纯前端（React / React Query）、测试与文档改动，无契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等 / 依赖改动：
+
+- 去掉页面组件上按路由参数生成的 `key`：`pages/modules`、`pages/task-board`、`pages/project-members`、`pages/features`，以及 `pages/module-tasks` 里 `TasksPanel` 的 `key`。换项目不再重建页面 DOM。
+- 项目级查询改用 `placeholderData: keepPreviousData`（`useModules`、`useProjectDetail`、`useProjectOverviewQuery`、`useFeatures`、`useTaskBoardQuery`、`useProjectMembers`）：新数据到位前保留上一份，切换＝原地换数据，不再先空一帧、也不先塌成骨架再撑回。`useProjectDetail` 只在 `projectId !== null` 时给占位（条件展开 + 显式泛型：本仓库开了 `exactOptionalPropertyTypes`，三元素里的 `undefined` 不能当缺省），避免非项目路由的面包屑残留上一个项目的名字。侧栏项目树的 `ModuleList` 每个项目各持一个 `useModules` 实例、`projectId` 不变，命不中这条占位。
+- `ModuleTasksPage`：换项目时旧模块列表里查不到新模块，只要仍在取数就按等待态处理，不再误判「模块不存在」。
+- 保留原设计：跨页跳转（路由元素类型变化 → DOM 确实重建）仍是整页 180ms 淡入；骨架 140ms 延迟不变。
+- 实测（dev Vite 5173、Chromium、逐帧记 `.page-content` 首子节点 opacity）：`/projects/4/modules → /projects/8/modules` 改前 `op=1 → 0`（空白 1–2 帧）`→ 0.15 → … → 1`；改后全程 `op=1`、无骨架帧、单帧换文本。功能目录模块间切换（`/…/12574/features → /…/12573/features`）同样全程 `op=1`。
+- 权衡：占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要的「缓冲」，接口变慢则等比变长）；页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数时不再重置；弹窗状态不受影响（弹层打开时侧栏被遮罩挡住）。
+- 回归防线：本批仍以抓帧实测为主（`docs/test-matrix.md` 的 `ROUTE-PARAM-SWITCH-KEEP-DATA-*`），未新增单测——改动是挂载时机与缓存占位时序，jsdom 无法验收；既有 97 文件 699 例保持全绿。
+- 本地验证（2026-10-10）：`pnpm --filter @inpulse/web test` **97 文件 699 例全绿**；全 workspace `pnpm typecheck` 通过（8 个带脚本的工程，含 web 与 api）、`pnpm lint`、`pnpm check:docs`（110 个 Markdown 文件）通过；`tsc --noEmit` 无输出、`check:boundaries` 0 违规、改动文件 `eslint` / `prettier --check` 通过；Playwright 全量 **70 passed / 1 failed (5.9m)**，唯一失败仍是 `tests/project-delete.spec.ts:59`（本地 `app_ci` 的 SYSTEM 审计链断点，上一批已用 `git stash` 在干净 HEAD 上复现同样失败），与本批无关。
+
 ## 2026-10-10 文档导入（ADR-064）
 
 用户要求「通过导入固定的文档来直接将项目的模块功能任务那些建立好」，并逐项确认：接受固定 Markdown 模板、要能导入整个项目、负责人自动加入成员、项目编码强制必填、防同一文档重复建、可导入多个模块和功能、没填写的内容不影响创建时按默认值跳过（跳过字段、不跳过对象）。按 [ADR-064](./docs/adr/ADR-064.md) 落库 F-32（契约 + 迁移 + API + 前端 + 测试，均为常规路径，无旁路写法）：
