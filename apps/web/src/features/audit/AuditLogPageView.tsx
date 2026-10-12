@@ -164,6 +164,24 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AuditLogItem | null>(null);
+  /**
+   * 2026-10-10：快照里有三类长文本（请求 ID、链上哈希、事件载荷）以前只能手选，
+   * 这里给它们加一键复制；复制成功后按钮自己显示「已复制」1.6 秒再复位。
+   */
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copySnapshotField = useCallback(async (field: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+    } catch {
+      setCopiedField(null);
+    }
+    window.setTimeout(
+      () => setCopiedField((current) => (current === field ? null : current)),
+      1600,
+    );
+  }, []);
 
   const projectsQuery = useProjects(client ? { client } : {});
   const directoryQuery = useUserDirectoryQuery(client ? { client } : {});
@@ -558,12 +576,12 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             appearance="member"
             multiple
             maxTagCount={1}
-            width={200}
+            width={176}
             value={draftFilters.actorIds}
             onChange={(next) =>
               updateDraft({ actorIds: next.map((value) => Number(value)) })
             }
-            placeholder="全体操作人（可搜索多选）"
+            placeholder="全员（可勾选多人）"
             loading={directoryQuery.isPending}
             options={(directoryQuery.data ?? []).map((entry) => ({
               value: entry.id,
@@ -574,7 +592,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             animated
           />
           <label className="audit-time-field">
-            <span>开始时间</span>
+            <span className="audit-time-label">开始</span>
+            <i className="audit-time-divider" aria-hidden="true" />
             <input
               type="datetime-local"
               value={draftFilters.from}
@@ -585,7 +604,8 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
             />
           </label>
           <label className="audit-time-field">
-            <span>结束时间</span>
+            <span className="audit-time-label">结束</span>
+            <i className="audit-time-divider" aria-hidden="true" />
             <input
               type="datetime-local"
               value={draftFilters.to}
@@ -615,7 +635,7 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
       <p className="permission-hint">
         <InpulseIcon name="shield" size={14} />
         每页 {AUDIT_PAGE_LIMIT} 条（契约默认值）；
-        操作人不选即全体，可搜索多选； from / to 为半开区间 [from,
+        操作人不选即全体，可勾选多人； from / to 为半开区间 [from,
         to)，按浏览器本地时区换算为带时区时间；
         游标由服务端签名，不能跨查询复用。
       </p>
@@ -697,11 +717,38 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
               <h3 className="snapshot-group-title">请求上下文</h3>
               <dl className="calm-meta">
                 <dt>请求 ID</dt>
-                <dd>
+                <dd className="snapshot-copyable">
                   <code>{snapshot.requestId}</code>
+                  <button
+                    type="button"
+                    className="snapshot-copy-button"
+                    onClick={() =>
+                      void copySnapshotField("requestId", snapshot.requestId)
+                    }
+                  >
+                    {copiedField === "requestId" ? "已复制" : "复制"}
+                  </button>
                 </dd>
                 <dt>客户端请求 ID</dt>
-                <dd>{snapshot.clientRequestId ?? "—"}</dd>
+                {snapshot.clientRequestId === null ? (
+                  <dd>—</dd>
+                ) : (
+                  <dd className="snapshot-copyable">
+                    <code>{snapshot.clientRequestId}</code>
+                    <button
+                      type="button"
+                      className="snapshot-copy-button"
+                      onClick={() =>
+                        void copySnapshotField(
+                          "clientRequestId",
+                          snapshot.clientRequestId ?? "",
+                        )
+                      }
+                    >
+                      {copiedField === "clientRequestId" ? "已复制" : "复制"}
+                    </button>
+                  </dd>
+                )}
                 <dt>IP 地址</dt>
                 <dd>{snapshot.ipAddress ?? "—"}</dd>
                 <dt>User-Agent</dt>
@@ -716,20 +763,55 @@ export const AuditLogPageView: React.FC<AuditLogPageViewProps> = ({
                 <dt>规范化版本</dt>
                 <dd>{snapshot.canonicalVersion}</dd>
                 <dt>前一条哈希</dt>
-                <dd>
+                <dd className="snapshot-copyable">
                   <code>{snapshot.prevHash}</code>
+                  <button
+                    type="button"
+                    className="snapshot-copy-button"
+                    onClick={() =>
+                      void copySnapshotField("prevHash", snapshot.prevHash)
+                    }
+                  >
+                    {copiedField === "prevHash" ? "已复制" : "复制"}
+                  </button>
                 </dd>
                 <dt>本条哈希</dt>
-                <dd>
+                <dd className="snapshot-copyable">
                   <code>{snapshot.recordHash}</code>
+                  <button
+                    type="button"
+                    className="snapshot-copy-button"
+                    onClick={() =>
+                      void copySnapshotField("recordHash", snapshot.recordHash)
+                    }
+                  >
+                    {copiedField === "recordHash" ? "已复制" : "复制"}
+                  </button>
                 </dd>
               </dl>
             </section>
             <section className="snapshot-group">
               <h3 className="snapshot-group-title">事件载荷</h3>
-              <pre data-testid="audit-snapshot-payload">
-                {snapshotPayloadText(snapshot)}
-              </pre>
+              <div className="snapshot-payload">
+                <div className="snapshot-payload-bar">
+                  <span className="snapshot-payload-kind">JSON</span>
+                  <button
+                    type="button"
+                    className="snapshot-copy-button"
+                    onClick={() =>
+                      void copySnapshotField(
+                        "payload",
+                        snapshotPayloadText(snapshot),
+                      )
+                    }
+                  >
+                    {copiedField === "payload" ? "已复制" : "复制"}
+                  </button>
+                </div>
+                <pre data-testid="audit-snapshot-payload">
+                  {snapshotPayloadText(snapshot)}
+                </pre>
+              </div>
             </section>
             <p className="permission-hint">
               <InpulseIcon name="shield" size={14} />

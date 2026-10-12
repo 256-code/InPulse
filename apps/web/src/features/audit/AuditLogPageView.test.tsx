@@ -1,6 +1,12 @@
 import React from "react";
 import { ConfigProvider } from "antd";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -336,6 +342,24 @@ describe("F-08 audit page", () => {
     expect(getAuditLogs).toHaveBeenCalledTimes(1);
   });
 
+  it("labels the time fields concisely and shortens the actor hint", async () => {
+    const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+    await screen.findByText("创建用户");
+
+    // 2026-10-10 方案 B：可视标签简化为「开始 / 结束」，无障碍名保留完整语义，
+    // 现有用例仍按 getByLabelText("开始时间") 定位。
+    expect(screen.getByText("开始")).toBeInTheDocument();
+    expect(screen.getByText("结束")).toBeInTheDocument();
+    expect(screen.getByLabelText("开始时间")).toBeInTheDocument();
+    expect(screen.getByLabelText("结束时间")).toBeInTheDocument();
+
+    // 操作人占位文案改短为「全员（可勾选多人）」，页面上不再出现「可搜索多选」。
+    expect(screen.getByText("全员（可勾选多人）")).toBeInTheDocument();
+    expect(screen.queryByText(/可搜索多选/)).not.toBeInTheDocument();
+  });
+
   it("opens the raw snapshot modal with payload, hashes and request metadata", async () => {
     const user = userEvent.setup();
     const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
@@ -356,6 +380,49 @@ describe("F-08 audit page", () => {
     expect(
       screen.getByText("审计日志不允许删除；原始快照仅系统管理员可见。"),
     ).toBeInTheDocument();
+  });
+
+  it("copies the record hash and the raw payload from the snapshot modal", async () => {
+    const user = userEvent.setup();
+    // jsdom 不提供 Clipboard API：这里只捕获写入内容与按钮反馈。
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const getAuditLogs = vi.fn().mockResolvedValue(page([systemItem]));
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    await user.click(
+      await screen.findByRole("button", { name: "查看原始快照 第 12 条" }),
+    );
+    await screen.findByText("原始审计快照");
+
+    // 2026-10-10 起：请求 ID、客户端请求 ID、两条哈希与事件载荷各带一键复制。
+    expect(screen.getAllByRole("button", { name: "复制" })).toHaveLength(5);
+
+    const hashRow = screen.getByText("b".repeat(64)).closest("dd");
+    expect(hashRow).not.toBeNull();
+    await user.click(
+      within(hashRow as HTMLElement).getByRole("button", { name: "复制" }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]?.[0]).toBe("b".repeat(64));
+    expect(
+      within(hashRow as HTMLElement).getByRole("button", { name: "已复制" }),
+    ).toBeInTheDocument();
+
+    const payloadBlock = screen
+      .getByTestId("audit-snapshot-payload")
+      .closest(".snapshot-payload") as HTMLElement;
+    await user.click(
+      within(payloadBlock).getByRole("button", { name: "复制" }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(String(writeText.mock.calls[1]?.[0] ?? "")).toContain(
+      '"loginName": "bob"',
+    );
   });
 
   it("follows the signed cursor through load more", async () => {
