@@ -10,6 +10,7 @@ import {
 } from "@features/common/components/InpulseIcon";
 import { useProjectTier } from "@features/common/project-tier-context";
 import { NotificationBell } from "@features/notifications/NotificationBell";
+import { WecomBindingModal } from "@features/settings/WecomBindingModal";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import {
   preloadRoutePath,
@@ -166,6 +167,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [wecomOpen, setWecomOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // 桌面端把左侧导航整体收起（≤700px 走抽屉与汉堡开关，该状态不参与）。
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -481,6 +483,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   ) : null}
                   <button
                     type="button"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setWecomOpen(true);
+                    }}
+                  >
+                    <InpulseIcon name="bell" size={15} />
+                    绑定企业微信
+                  </button>
+                  <button
+                    type="button"
                     disabled={isLoggingOut}
                     onClick={() => void handleAccountAction()}
                   >
@@ -533,6 +545,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </div>
         </main>
       </div>
+      <WecomBindingModal
+        open={wecomOpen}
+        onClose={() => setWecomOpen(false)}
+        {...(notificationClient ? { client: notificationClient } : {})}
+      />
       <CommandPalette
         open={paletteOpen}
         isAdmin={user?.isAdmin === true}

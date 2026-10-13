@@ -2131,3 +2131,22 @@ export type VoidedRecord = {
   readonly voidedAt: string;
   readonly voidReason: string;
 };
+
+export type WecomBindingCode = {
+  readonly code: string;
+  readonly expiresAt: string;
+};
+
+export type WecomBindingMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type WecomBindingReplayContext = {
+  readonly actorUserId: number;
+};
+
+export type WecomBindingStatus = {
+  readonly state: ("UNBOUND" | "PENDING" | "BOUND");
+  readonly boundAt: (string | null);
+  readonly codeExpiresAt: (string | null);
+};

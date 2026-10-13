@@ -1,5 +1,6 @@
 import { taskCenterQuerySchema } from "./contracts/aggregate-read.zod.js";
 import { taskCreateSchemas } from "./contracts/task-create.zod.js";
+import { wecomBindingSchemas } from "./contracts/wecom-binding.zod.js";
 import { adminAiAssistSchemas } from "./contracts/admin-ai-assist.zod.js";
 import { documentImportSchemas } from "./contracts/document-import.zod.js";
 import {
@@ -172,6 +173,7 @@ export const schemaRegistry = {
   ...moduleDeletionSchemas,
   ...taskCreateSchemas,
   ...documentImportSchemas,
+  ...wecomBindingSchemas,
   ...adminAiAssistSchemas,
   TaskCenterQuery: {
     schema: taskCenterQuerySchema,

@@ -1,3 +1,4 @@
+import { wecomBindingRoutes } from "./wecom-binding-routes.js";
 import { aiAssistSettingsRoutes } from "./ai-assist-settings-routes.js";
 import { taskCreateRoutes } from "./task-create-routes.js";
 import { documentImportRoutes } from "./document-import-routes.js";
@@ -37,6 +38,7 @@ export * from "./route-definition.js";
 export const routeRegistry = [
   ...externalLinkRoutes,
   ...adminUserRoutes,
+  ...wecomBindingRoutes,
   ...aiAssistSettingsRoutes,
   ...projectMemberRoutes,
   ...projectRoutes,

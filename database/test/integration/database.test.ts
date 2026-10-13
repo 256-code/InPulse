@@ -84,6 +84,8 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0037_audit_logs_cross_chain_idx.sql",
       "0038_project_delete_contract_soft_delete_removal.sql",
       "0039_document_import_runs.sql",
+      "0040_ai_assist_settings.sql",
+      "0041_wecom_binding.sql",
     ]);
   });
 

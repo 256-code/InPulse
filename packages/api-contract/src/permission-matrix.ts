@@ -755,6 +755,42 @@ export const permissionMatrix = [
       },
     }),
   ),
+  // ADR-069：企业微信机器人绑定面向任何已登录用户（与项目无关）；
+  // 签发绑定码走 ADR-023 securityFlow（签发一次性安全材料），
+  // 解绑为 actorOnly 幂等撤销，全部不接触项目数据。
+  {
+    operationId: "getWecomBinding",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "createWecomBindingCode",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "deleteWecomBinding",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
   // ADR-067：AI 辅助转换面向任何已登录用户（与整项目导入一致的可见性），
   // 不接触项目数据；未启用或上游故障统一 503，不泄露配置细节。
   {

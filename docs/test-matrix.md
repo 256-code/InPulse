@@ -6138,3 +6138,21 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | DOC-IMPORT-AI-GATE-001 | 门禁 | 整链回归 | `pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 workspace）、`pnpm build`、`db:migrations:check`（38 个）、`db:seed:check`、`check:deps`、`check:frontend:boundaries`、`check:deploy:test`、`check:secrets`、`check:docs` 通过 | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未在本批执行（`test` 分支不触发工作流）；② E2E 的 AI 上游为本机回环 stub，未连真实中转站；③ `mammoth` 与 `pdfjs-dist` 为新增生产依赖，按仓库规则仍须独立依赖 PR 人工确认（本批已锁定精确版本、懒加载、PDF Worker 与 CSP 实测）；④ `pnpm deps:audit` 在本机 npm 镜像缺 audit endpoint，改用公共 registry 执行（结果见开发日志）。
+
+## 企业微信机器人绑定（ADR-069，阶段一）
+
+用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| WECOM-BIND-API-001 | 真实 PostgreSQL 集成（真实 HTTP） | 三态与签发 | 匿名 GET 401；新用户 UNBOUND；POST codes 201、码匹配 `^[0-9A-HJKMNP-TV-Z]{4}(-...){3}$`、库内只存 SHA-256（明文不可查）、GET 转 PENDING | 本地通过（2026-10-13） |
+| WECOM-BIND-API-002 | 真实 PostgreSQL 集成 | 重新签发与一次性消费 | 重新签发返回新码（旧码兑换 WBC01）；兑换成功 GET 转 BOUND、`boundAt` 非空、绑定行 ACTIVE；同码重复兑换 WBC02 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-003 | 真实 PostgreSQL 集成 | 唯一性与换绑 | 同一企微账号绑定第二个用户 WBC06（原绑定与新码都不受影响）；同一用户换绑新企微账号更新原行、`row_version` +1、不新增行 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-004 | 真实 PostgreSQL 集成 | 解绑与幂等重放 | DELETE 204 且 GET 回 UNBOUND、绑定转 REVOKED；同 Key 重放 204；同 Key 缺 CSRF 头 422、格式合法但未知 Token 401；缺 Idempotency-Key 400 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-005 | 真实 PostgreSQL 集成 | 兑换边界 | 解绑作废的码再兑换 WBC02；停用用户 WBC04 且不产生绑定；过期码 WBC05；非 32 字节 Hash WBC03 | 本地通过（2026-10-13） |
+| WECOM-BIND-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 对两表 DELETE 42501；`app_backup` 只读（UPDATE / DELETE 42501）；runtime 不能 `SET ROLE app_owner`；迁移内 `DO $$` 部署断言随 0041 通过 | 本地通过（2026-10-13） |
+| WECOM-BIND-UI-001 | Web 单测 | 弹窗三态与生成 | UNBOUND 引导；点「生成绑定码」只签发 CSRF（携带 `x-csrf-token`、无幂等 Key）、展示一次性明文码；生成后失效重取第二次 GET 为 BOUND 时自动「已绑定」；PENDING 无明文时提示有效期并引导重新生成；读取失败错误提示且生成按钮禁用 | 本地通过（2026-10-13） |
+| WECOM-BIND-UI-002 | Web 单测 | 解绑与复制 | 已绑定显示绑定时间；Popconfirm 确认后调用 DELETE（携带 `x-csrf-token` 与 `wecom-unbind-` 前缀幂等 Key），成功后回到未绑定视图；「复制绑定码」写入剪贴板并提示 | 本地通过（2026-10-13） |
+| WECOM-BIND-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 113 条、`contract:drift`（6 产物）、`permissions:check` 113 / 113、`db:migrations:check` 40 个、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 阶段二投递（长连接桥接按绑定关系推送、失败重试与可观测性）未实现、未测试；③ 未做浏览器 E2E（绑定需真实企微侧发送绑定码，E2E 只覆盖到 Web 单测；如需 E2E 需引入企微长连接 stub）。

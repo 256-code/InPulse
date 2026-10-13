@@ -39,5 +39,6 @@ export * from "./contracts/task-board.zod.js";
 export * from "./contracts/leftover-task.zod.js";
 
 export * from "./contracts/task-create.zod.js";
+export * from "./contracts/wecom-binding.zod.js";
 export * from "./contracts/admin-ai-assist.zod.js";
 export * from "./contracts/document-import.zod.js";

@@ -267,6 +267,12 @@
       "fingerprint": "bd4d18286ad83b2cc0c5bc6133d2c559b7eb8d2e5e8707c0777533badefa26e3"
     }
   ],
+  "deleteWecomBinding": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "0b8a0dad01a9e09143d8b0ce3c3b548daa1edaeb67844d4b78bd118041d7b19f"
+    }
+  ],
   "disableUser": [
     {
       "version": "1.0.0",

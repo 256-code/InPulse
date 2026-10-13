@@ -6883,3 +6883,154 @@ td.due-overdue {
     animation: none;
   }
 }
+
+/* ADR-069 企微机器人绑定弹层（账户菜单 → 绑定企业微信）。 */
+/* 该盒不吃 .catalog-modal 的默认头部排版：不补内边距，眉标会顶到盒子上沿
+   被圆角裁切、正文贴着标题。这里按弹层既有口径（record-detail-modal 同款）
+   补上头部内边距与分隔线，正文统一交给 .modal-body。 */
+.wecom-binding-modal > .drawer-header {
+  padding: 22px 28px 16px;
+  border-bottom: 1px solid #eef2f7;
+  flex-shrink: 0;
+}
+
+.wecom-binding-note {
+  display: flex;
+  gap: 9px;
+  padding: 12px 13px;
+  border-radius: 8px;
+  background: #f1f8fe;
+  color: #5b7892;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.wecom-binding-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #3b88c6;
+}
+
+.wecom-binding-note strong {
+  display: block;
+  color: #2e6794;
+}
+
+.wecom-binding-note.is-ready {
+  background: #eef8f3;
+  color: #4f7a66;
+}
+
+.wecom-binding-note.is-ready svg {
+  color: #34815d;
+}
+
+.wecom-binding-note.is-ready strong {
+  color: #2a6b4c;
+}
+
+.wecom-binding-note.is-alert {
+  background: #fdf2f1;
+  color: #8f3f3f;
+}
+
+.wecom-binding-note.is-alert svg {
+  color: #c0453f;
+}
+
+.wecom-binding-note.is-alert strong {
+  color: #8f3f3f;
+}
+
+.wecom-binding-steps {
+  counter-reset: wecom-binding-step;
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #60768b;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.wecom-binding-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.wecom-binding-steps li::before {
+  counter-increment: wecom-binding-step;
+  content: counter(wecom-binding-step);
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #e8f1fa;
+  color: #3f79b4;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wecom-binding-placeholder {
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px dashed #cfdcea;
+  border-radius: 10px;
+  background: #fbfdff;
+  color: #8fa5b8;
+  font-size: 12px;
+  text-align: center;
+}
+
+.wecom-binding-code {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid #dfe7ef;
+  border-radius: 12px;
+  background: #f7fafd;
+}
+
+.wecom-binding-code code {
+  display: block;
+  color: #314b65;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  user-select: all;
+}
+
+.wecom-binding-code-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.wecom-binding-code-foot small {
+  color: #7b8fa2;
+  font-size: 11.5px;
+}
+
+.wecom-binding-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5b7892;
+  font-size: 11.5px;
+}
+
+.wecom-binding-meta {
+  margin: 12px 0 0;
+  color: #7b8fa2;
+  font-size: 11.5px;
+}
+
+.wecom-binding-alert {
+  margin-top: 12px;
+}
