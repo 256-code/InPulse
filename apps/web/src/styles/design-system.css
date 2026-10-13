@@ -7034,3 +7034,49 @@ td.due-overdue {
 .wecom-binding-alert {
   margin-top: 12px;
 }
+
+/* ADR-070 企业微信机器人设置面板（2026-10-13 布局调整）：正文统一内缩（与标题带
+ * 20px 对齐），字段单列堆叠（标签在上、控件全宽、提示紧随），替代两列等宽网格
+ * 造成的标签 / 控件远距与行间拥挤。 */
+.wecom-robot-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 20px 5px;
+}
+
+.wecom-robot-body .permission-note {
+  margin: 0;
+}
+
+.wecom-robot-form {
+  display: grid;
+  gap: 16px;
+}
+
+.wecom-robot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wecom-robot-field > label {
+  color: #526b83;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wecom-robot-field .form-hint {
+  margin: 0;
+}
+
+.wecom-robot-field > small[role="alert"] {
+  color: #b45b55;
+  font-size: 11px;
+}
+
+.wecom-robot-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

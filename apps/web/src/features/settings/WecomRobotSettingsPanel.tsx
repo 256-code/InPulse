@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Button, Input, Space } from "antd";
+import { Button, Input } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { InpulseApiClient } from "@generated/api";
 import { CalmBadge, CalmSectionTitle } from "@features/common/components/Calm";
@@ -68,19 +68,25 @@ export const WecomRobotSettingsPanel: React.FC<
     }
   });
 
+  const title = (
+    <CalmSectionTitle
+      title="企业微信机器人"
+      hint="任务指派等站内通知通过它推送到成员的企业微信"
+    />
+  );
+
   if (query.isPending) {
     return (
       <section className="panel settings-panel" aria-label="企业微信机器人">
-        <CalmSectionTitle
-          title="企业微信机器人"
-          hint="任务指派等站内通知通过它推送到成员的企业微信"
-        />
-        <CalmSkeleton
-          variant="list"
-          rows={4}
-          compact
-          label="正在加载企业微信机器人配置"
-        />
+        {title}
+        <div className="wecom-robot-body">
+          <CalmSkeleton
+            variant="list"
+            rows={4}
+            compact
+            label="正在加载企业微信机器人配置"
+          />
+        </div>
       </section>
     );
   }
@@ -88,22 +94,21 @@ export const WecomRobotSettingsPanel: React.FC<
   if (query.isError || config === undefined) {
     return (
       <section className="panel settings-panel" aria-label="企业微信机器人">
-        <CalmSectionTitle
-          title="企业微信机器人"
-          hint="任务指派等站内通知通过它推送到成员的企业微信"
-        />
-        <div className="permission-note" role="alert">
-          <InpulseIcon name="alert" size={17} />
-          <span>
-            <strong>无法读取配置</strong>
-            {wecomRobotErrorMessage(query.error)}
-          </span>
+        {title}
+        <div className="wecom-robot-body">
+          <div className="permission-note" role="alert">
+            <InpulseIcon name="alert" size={17} />
+            <span>
+              <strong>无法读取配置</strong>
+              {wecomRobotErrorMessage(query.error)}
+            </span>
+          </div>
+          <div className="wecom-robot-actions">
+            <Button size="small" onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          </div>
         </div>
-        <Space>
-          <Button size="small" onClick={() => void query.refetch()}>
-            重试
-          </Button>
-        </Space>
       </section>
     );
   }
@@ -116,108 +121,109 @@ export const WecomRobotSettingsPanel: React.FC<
 
   return (
     <section className="panel settings-panel" aria-label="企业微信机器人">
-      <CalmSectionTitle
-        title="企业微信机器人"
-        hint="任务指派等站内通知通过它推送到成员的企业微信"
-      />
+      {title}
+      <div className="wecom-robot-body">
+        <div className="permission-note">
+          <InpulseIcon name="settings" size={17} />
+          <span>
+            <strong>当前状态</strong>
+            <CalmBadge tone={statusTone}>
+              {wecomRobotDisabledReasonText(config.disabledReason)}
+            </CalmBadge>
+            {config.configured
+              ? "；botId：" +
+                (config.botId ?? "") +
+                "；Secret 已配置（尾号 ****" +
+                (config.secretHint ?? "") +
+                "）" +
+                (config.updatedAt !== null
+                  ? "；最近保存 " +
+                    (config.updatedByName ?? "") +
+                    " " +
+                    new Date(config.updatedAt).toLocaleString("zh-CN")
+                  : "")
+              : "；成员可在「账户菜单 → 绑定企业微信」生成绑定码，发送给机器人后完成绑定"}
+          </span>
+        </div>
 
-      <div className="permission-note">
-        <InpulseIcon name="settings" size={17} />
-        <span>
-          <strong>当前状态</strong>
-          <CalmBadge tone={statusTone}>
-            {wecomRobotDisabledReasonText(config.disabledReason)}
-          </CalmBadge>
-          {config.configured
-            ? "；botId：" +
-              (config.botId ?? "") +
-              "；Secret 已配置（尾号 ****" +
-              (config.secretHint ?? "") +
-              "）" +
-              (config.updatedAt !== null
-                ? "；最近保存 " +
-                  (config.updatedByName ?? "") +
-                  " " +
-                  new Date(config.updatedAt).toLocaleString("zh-CN")
-                : "")
-            : "；成员可在「账户菜单 → 绑定企业微信」生成绑定码，发送给机器人后完成绑定"}
-        </span>
+        {success ? (
+          <div className="permission-note note-success" role="status">
+            <InpulseIcon name="check" size={16} />
+            <span>{success}</span>
+          </div>
+        ) : null}
+        {save.isError ? (
+          <div className="permission-note" role="alert">
+            <InpulseIcon name="alert" size={16} />
+            <span>{wecomRobotErrorMessage(save.error)}</span>
+          </div>
+        ) : null}
+
+        <form
+          className="wecom-robot-form"
+          onSubmit={(event) => void submit(event)}
+        >
+          <div className="wecom-robot-field">
+            <label htmlFor="wecom-robot-bot-id">机器人 botId</label>
+            <Controller
+              name="botId"
+              control={control}
+              rules={{ required: "请填写机器人 botId" }}
+              render={({ field }) => (
+                <Input
+                  id="wecom-robot-bot-id"
+                  {...field}
+                  placeholder="例如 aibxxxxxxxxxxxxxxxxxxxxxxxxx"
+                />
+              )}
+            />
+            {errors.botId ? (
+              <small role="alert">{errors.botId.message}</small>
+            ) : (
+              <small className="form-hint">
+                在企业微信管理后台的机器人详情页复制；更换机器人时填写新机器人的值。
+              </small>
+            )}
+          </div>
+          <div className="wecom-robot-field">
+            <label htmlFor="wecom-robot-secret">机器人 Secret</label>
+            <Controller
+              name="secret"
+              control={control}
+              rules={{
+                validate: (value) =>
+                  value.trim().length <= 256 || "Secret 不能超过 256 个字符",
+              }}
+              render={({ field }) => (
+                <Input.Password
+                  id="wecom-robot-secret"
+                  {...field}
+                  autoComplete="new-password"
+                  placeholder={
+                    config.configured
+                      ? "留空表示保持已保存的 Secret 不变"
+                      : "首次配置必填"
+                  }
+                />
+              )}
+            />
+            {errors.secret ? (
+              <small role="alert">{errors.secret.message}</small>
+            ) : (
+              <small className="form-hint">
+                Secret
+                只会在保存时提交一次，服务端加密存储、永不回显；更换机器人时连同新
+                Secret 一起填写。
+              </small>
+            )}
+          </div>
+          <div className="wecom-robot-actions">
+            <Button type="primary" htmlType="submit" loading={save.isPending}>
+              保存配置
+            </Button>
+          </div>
+        </form>
       </div>
-
-      {success ? (
-        <div className="permission-note note-success" role="status">
-          <InpulseIcon name="check" size={16} />
-          <span>{success}</span>
-        </div>
-      ) : null}
-      {save.isError ? (
-        <div className="permission-note" role="alert">
-          <InpulseIcon name="alert" size={16} />
-          <span>{wecomRobotErrorMessage(save.error)}</span>
-        </div>
-      ) : null}
-
-      <form onSubmit={(event) => void submit(event)}>
-        <div className="form-row">
-          <label htmlFor="wecom-robot-bot-id">机器人 botId</label>
-          <Controller
-            name="botId"
-            control={control}
-            rules={{ required: "请填写机器人 botId" }}
-            render={({ field }) => (
-              <Input
-                id="wecom-robot-bot-id"
-                {...field}
-                placeholder="例如 aibxxxxxxxxxxxxxxxxxxxxxxxxx"
-              />
-            )}
-          />
-        </div>
-        {errors.botId ? (
-          <small role="alert">{errors.botId.message}</small>
-        ) : (
-          <small className="form-hint">
-            在企业微信管理后台的机器人详情页复制；更换机器人时填写新机器人的值。
-          </small>
-        )}
-        <div className="form-row">
-          <label htmlFor="wecom-robot-secret">机器人 Secret</label>
-          <Controller
-            name="secret"
-            control={control}
-            rules={{
-              validate: (value) =>
-                value.trim().length <= 256 || "Secret 不能超过 256 个字符",
-            }}
-            render={({ field }) => (
-              <Input.Password
-                id="wecom-robot-secret"
-                {...field}
-                autoComplete="new-password"
-                placeholder={
-                  config.configured
-                    ? "留空表示保持已保存的 Secret 不变"
-                    : "首次配置必填"
-                }
-              />
-            )}
-          />
-        </div>
-        {errors.secret ? (
-          <small role="alert">{errors.secret.message}</small>
-        ) : (
-          <small className="form-hint">
-            Secret
-            只会在保存时提交一次，服务端加密存储、永不回显；更换机器人时连同新
-            Secret 一起填写。
-          </small>
-        )}
-        <Space>
-          <Button type="primary" htmlType="submit" loading={save.isPending}>
-            保存配置
-          </Button>
-        </Space>
-      </form>
     </section>
   );
 };
