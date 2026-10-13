@@ -114,9 +114,19 @@ function wormStub() {
   return { fetchImpl, puts, objects };
 }
 
-/** 与 compose ops 镜像一致：生产镜像内置 PostgreSQL 18 客户端（路径可由环境变量指定）。 */
+/** 与 compose ops 镜像一致：生产镜像内置 PostgreSQL 18 客户端（路径可由环境变量指定）。
+    本地按 CONTRIBUTING 的 `POSTGRES_BIN`（已安装 PGroonga 的 PostgreSQL 18 bin 目录）兜底，
+    这样 `db:test:local` 用的同一个开关也覆盖备份集成测试；两者都没有时回落 PATH 上的 pg_dump。 */
 function pgDumpPath(): string {
-  return process.env["INPULSE_BACKUP_PG_DUMP"]?.trim() || "pg_dump";
+  const explicit = process.env["INPULSE_BACKUP_PG_DUMP"]?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const bin = process.env["POSTGRES_BIN"]?.trim();
+  if (bin) {
+    return join(bin, process.platform === "win32" ? "pg_dump.exe" : "pg_dump");
+  }
+  return "pg_dump";
 }
 
 function pgRestorePath(): string {
