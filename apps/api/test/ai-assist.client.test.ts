@@ -137,11 +137,17 @@ describe("DocumentImportAiAssistClient", () => {
   test("401 → auth，429 → rate-limited，400 + context 提示 → context-limit", async () => {
     const auth = stubFetch(() => jsonResponse({ error: "bad key" }, 401));
     await expect(
-      new DocumentImportAiAssistClient(auth.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(auth.fetchImpl).generateDraft(config, {
+        mode: "IN_PROJECT",
+        text: "x",
+      }),
     ).rejects.toMatchObject({ reason: "auth" });
     const limited = stubFetch(() => jsonResponse({ error: "slow" }, 429));
     await expect(
-      new DocumentImportAiAssistClient(limited.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(limited.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "rate-limited" });
     const contextLimit = stubFetch(() =>
       jsonResponse(
@@ -154,11 +160,17 @@ describe("DocumentImportAiAssistClient", () => {
       ),
     );
     await expect(
-      new DocumentImportAiAssistClient(contextLimit.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(contextLimit.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "context-limit" });
     const upstreamError = stubFetch(() => jsonResponse({}, 500));
     await expect(
-      new DocumentImportAiAssistClient(upstreamError.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(upstreamError.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
   });
 
@@ -169,34 +181,52 @@ describe("DocumentImportAiAssistClient", () => {
       throw abort;
     });
     await expect(
-      new DocumentImportAiAssistClient(timeout.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(timeout.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "timeout" });
     const network = stubFetch(() => {
       throw new TypeError("fetch failed");
     });
     await expect(
-      new DocumentImportAiAssistClient(network.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(network.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "network" });
   });
 
   test("非 JSON / 缺少 choices / 空 content / 超长 content → invalid-response", async () => {
     const notJson = stubFetch(() => new Response("not json", { status: 200 }));
     await expect(
-      new DocumentImportAiAssistClient(notJson.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(notJson.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const emptyChoices = stubFetch(() => jsonResponse({ choices: [] }));
     await expect(
-      new DocumentImportAiAssistClient(emptyChoices.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(emptyChoices.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const blank = stubFetch(() => jsonResponse(completion("   ")));
     await expect(
-      new DocumentImportAiAssistClient(blank.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(blank.fetchImpl).generateDraft(config, {
+        mode: "IN_PROJECT",
+        text: "x",
+      }),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const tooLong = stubFetch(() =>
       jsonResponse(completion("x".repeat(200_001))),
     );
     await expect(
-      new DocumentImportAiAssistClient(tooLong.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(tooLong.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
   });
 
@@ -205,7 +235,9 @@ describe("DocumentImportAiAssistClient", () => {
       jsonResponse(completion("p", "stop", "probe-model")),
     );
     const client = new DocumentImportAiAssistClient(fetchImpl);
-    await expect(client.probe(config)).resolves.toEqual({ model: "probe-model" });
+    await expect(client.probe(config)).resolves.toEqual({
+      model: "probe-model",
+    });
     expect(calls).toHaveLength(1);
     const body = JSON.parse(String(calls[0]!.init.body)) as {
       max_tokens: number;

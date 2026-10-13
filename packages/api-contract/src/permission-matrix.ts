@@ -384,6 +384,33 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "getWecomRobotConfig",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "updateWecomRobotConfig",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；CSRF 与 Idempotency-Key 必填；机器人密钥经 AES-256-GCM 加密落库、明文永不入库；写审计 admin.wecomRobot.update（不含密钥）",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
     operationId: "getSearch",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

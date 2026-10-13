@@ -26,7 +26,7 @@
 | `logout` | 204 | 204 | 204 | 204 | 有效 Session 时要求其 CSRF 并条件撤销；Session 无效、已撤销或首次响应丢失后的重试仅在同源 Origin/Referer 与 Fetch Metadata 通过时清 Cookie 并返回 204，不执行状态写 |
 | `startSsoLogin` | 允许（302 到授权端点） | 允许（302） | 允许（302） | 允许（按匿名；302） | 每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash，同时下发短期 `__Host-sso-state` Cookie 绑定发起浏览器；`returnTo` 必须是站内相对路径，非法值回落默认路径；SSO 未配置时 302 回 `/login?local=1&sso=disabled`；302 只用于认证导航，本接口不签发本地会话（[ADR-032](adr/ADR-032.md)） |
 | `completeSsoLogin` | 允许（302 回应用页；成功即签发本地会话） | 允许（302，按重新登录处理） | 允许（302） | 拒绝（302 回登录页携带错误码，不恢复身份） | 必须同时匹配 URL 的 state 与 `__Host-sso-state` Cookie，并在同一事务内一次性消费；缺失、过期、重放或并发消费失败、token 交换失败、id_token 验签或 iss/aud/exp/nonce 校验失败、账号同名但邮箱不一致、账号已停用一律 302 回登录页并审计；成功时签发与口令登录同构的本地会话与 CSRF；Casdoor 的 `isAdmin` 等其余 claims 不得用于 InPulse 权限判定（[ADR-032](adr/ADR-032.md)） |
-| `createWecomBindingCode` | 401 | 允许 | 允许 | 401（按无效 Session） | 判定同左列 | 允许 | 要求有效认证 Session、同源与当前 CSRF；每次调用覆盖签发新码并立即作废旧码，明文码只返回一次、服务端只存 SHA-256 Hash，10 分钟有效、一次性消费；同码重复兑换一律拒绝（[ADR-069](adr/ADR-069.md)） |
+| `createWecomBindingCode` | 401 | 允许 | 允许 | 401（按无效 Session） | 要求有效认证 Session、同源与当前 CSRF；每次调用覆盖签发新码并立即作废旧码，明文码只返回一次、服务端只存 SHA-256 Hash，10 分钟有效、一次性消费；同码重复兑换一律拒绝（[ADR-069](adr/ADR-069.md)） |
 
 用户修改、管理员用户管理及其他不签发或消费一次性安全材料的写操作不在本表，仍按普通业务命令使用 `idempotencyRequired`；管理员高风险操作只要求当前有效的完整管理员 Session（[ADR-031](adr/ADR-031.md)）。
 
@@ -271,3 +271,12 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | `deleteWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 解除绑定（数据库级幂等，actorOnly 重放授权）：作废待用码并撤销 ACTIVE 绑定（REVOKED，不物理删除）；重复执行自然幂等 |
 
 三条路由都只操作当前登录用户自己的资源，与项目成员关系无关。绑定码兑换发生在长连接桥接侧调用 `app.redeem_wecom_binding_code`（按 Hash 行锁 + 条件消费 + 部分唯一索引兜底，错误码 WBC01～WBC06）；桥接侧不接触明文码存储，绑定成功前不产生任何机器人的通知投递。
+
+## ADR-070 企业微信机器人配置接口（2026-10-13）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `getWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读机器人配置与可用状态（`configured` / `ready` / `disabledReason` / botId / 密钥尾号）；响应 `no-store`、永不回显密钥；主密钥缺失 / 密文不可解按 `ENCRYPTION_KEY_UNAVAILABLE` / `CONFIG_INVALID` fail closed |
+| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret（secret 缺省或 null 保持原值，首次必填；AES-256-GCM 加密落库、明文不落库）；CSRF + 数据库级幂等；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
+
+两条路由都只服务完整管理员 Session（ADR-031 起不要求 TOTP 重认证），只访问单行配置 `app.wecom_robot_config`；写审计 `admin.wecomRobot.update`（不含密钥材料）。凭据进入数据库是本 ADR 对 ADR-069 §2.4 的修订；桥接侧读取解密后的凭据为下一批改造。

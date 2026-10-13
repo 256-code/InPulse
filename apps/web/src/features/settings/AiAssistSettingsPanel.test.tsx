@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { AiAssistSettings, InpulseApiClient } from "@generated/api";
 import { AiAssistSettingsPanel } from "./AiAssistSettingsPanel";
 
+const NEW_API_KEY = "new-secret-key-123";
+
 const readySettings: AiAssistSettings = {
   enabled: true,
   source: "DATABASE",
@@ -129,14 +131,14 @@ describe("AiAssistSettingsPanel（ADR-068）", () => {
     const { updateAiAssistSettings } = mount();
     await screen.findByText("当前状态");
     fireEvent.change(screen.getByLabelText("API 密钥"), {
-      target: { value: "new-secret-key-123" },
+      target: { value: NEW_API_KEY },
     });
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await waitFor(() =>
       expect(updateAiAssistSettings).toHaveBeenCalledTimes(1),
     );
     expect(updateAiAssistSettings.mock.calls[0]![0]).toMatchObject({
-      apiKey: "new-secret-key-123",
+      apiKey: NEW_API_KEY,
     });
     await waitFor(() =>
       expect(screen.getByLabelText("API 密钥")).toHaveValue(""),

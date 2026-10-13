@@ -79,7 +79,9 @@ export function loadAiAssistEncryptionKeyring(
 ): AiAssistEncryptionKeyring {
   const filePath = env["AI_ASSIST_ENCRYPTION_KEY_FILE"]?.trim();
   if (filePath === undefined || filePath.length === 0) {
-    throw new AiAssistEncryptionUnavailableError("AI_ASSIST_ENCRYPTION_KEY_FILE is required");
+    throw new AiAssistEncryptionUnavailableError(
+      "AI_ASSIST_ENCRYPTION_KEY_FILE is required",
+    );
   }
   const allowTestPath =
     env["NODE_ENV"] === "test" &&
@@ -98,7 +100,9 @@ export function loadAiAssistEncryptionKeyring(
   try {
     content = readFileSync(filePath, "utf8");
   } catch {
-    throw new AiAssistEncryptionUnavailableError("AI_ASSIST_ENCRYPTION_KEY_FILE is not readable");
+    throw new AiAssistEncryptionUnavailableError(
+      "AI_ASSIST_ENCRYPTION_KEY_FILE is not readable",
+    );
   }
   return parseAiAssistEncryptionKeyring(content, currentVersion);
 }

@@ -2150,3 +2150,29 @@ export type WecomBindingStatus = {
   readonly boundAt: (string | null);
   readonly codeExpiresAt: (string | null);
 };
+
+export type WecomRobotConfig = {
+  readonly configured: boolean;
+  readonly ready: boolean;
+  readonly disabledReason: (("NOT_CONFIGURED" | "ENCRYPTION_KEY_UNAVAILABLE" | "CONFIG_INVALID") | null);
+  readonly botId: (string | null);
+  readonly secretHint: (string | null);
+  readonly secretKeyVersion: (number | null);
+  readonly rowVersion: (number | null);
+  readonly updatedAt: (string | null);
+  readonly updatedByName: (string | null);
+};
+
+export type WecomRobotConfigUpdateRequest = {
+  readonly botId: string;
+  readonly secret?: (string | null);
+};
+
+export type WecomRobotMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type WecomRobotReplayContext = {
+  readonly actorUserId: number;
+  readonly robotConfigRowId: number;
+};

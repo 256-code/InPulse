@@ -6156,3 +6156,20 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-BIND-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 113 条、`contract:drift`（6 产物）、`permissions:check` 113 / 113、`db:migrations:check` 40 个、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 阶段二投递（长连接桥接按绑定关系推送、失败重试与可观测性）未实现、未测试；③ 未做浏览器 E2E（绑定需真实企微侧发送绑定码，E2E 只覆盖到 Web 单测；如需 E2E 需引入企微长连接 stub）。
+
+## 企业微信机器人配置（ADR-070）
+
+用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| WECOM-ROBOT-API-001 | 真实 PostgreSQL 集成（真实 HTTP） | 鉴权与未配置 | 匿名 GET 401；普通成员 GET / PUT 403 且不写行；管理员 GET 未配置返回 NOT_CONFIGURED、`Cache-Control: no-store` | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-002 | 真实 PostgreSQL 集成 | 保存与加密 | 缺 Idempotency-Key 400、缺 CSRF 401、首次缺 Secret 422（details 指向 secret）；保存成功响应只回尾 4 位、库内为密文且可用主密钥解回明文、`row_version` = 1 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-003 | 真实 PostgreSQL 集成 | 幂等与换机器人 | 同 Key 同请求重放返回原响应且不改行；同 Key 换 body 409；仅换 botId 保留原 Secret、`row_version` 递增、写 `admin.wecomRobot.update` 审计（含 before / after 摘要与 secretChanged、不含密钥） | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-004 | 真实 PostgreSQL 集成 | 主密钥 fail closed | 主密钥不可用：GET 分类 `ENCRYPTION_KEY_UNAVAILABLE`；带新 Secret 的 PUT 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` 且不落明文 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 无 DELETE（42501）；`app_backup` 只读；迁移内 `DO $$` 部署断言随 0042 通过；database 集成「已应用迁移清单」含 0042 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-UNIT-001 | API 单测 | keyring 解析与加解密 | 多版本解析（注释 / 空行 / 空白）、fail closed（非法版本 / 非法行 / 短键 / 重复版本 / 空 / 缺当前版本）、AES-256-GCM 往返（nonce‖tag‖body）、篡改与换版本解密被拒、过短密文、`/run/secrets` 路径防线、尾 4 位提示 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-UI-001 | Web 单测 | 面板三态与提交 | 未配置提示 + 首次缺 Secret 本地拦截；首次保存先签发 CSRF 再携带一次性幂等 Key；已配置回填 botId 与尾号、留空提交 secret=null；主密钥不可用文案；读取失败错误 + 重试按钮 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 115 条、`contract:drift`（6 产物）、`permissions:check` 115 / 115、契约单测 102 例、`db:migrations:check` 41 个；`lint` / `typecheck` / `format:check` / `check:docs` 见开发日志 | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 桥接侧读取数据库凭据与配置变化重连、阶段二投递未实现、未测试；③ 未做机器人配置页浏览器 E2E。

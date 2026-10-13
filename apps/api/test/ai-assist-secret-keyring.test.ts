@@ -52,7 +52,11 @@ describe("encryptAiAssistSecret / decryptAiAssistSecret", () => {
     expect(encrypted.keyVersion).toBe(1);
     expect(encrypted.ciphertext.length).toBeGreaterThan(12 + 16);
     expect(
-      decryptAiAssistSecret(encrypted.ciphertext, encrypted.keyVersion, keyring),
+      decryptAiAssistSecret(
+        encrypted.ciphertext,
+        encrypted.keyVersion,
+        keyring,
+      ),
     ).toBe("value-for-encryption");
   });
 
@@ -78,12 +82,12 @@ describe("encryptAiAssistSecret / decryptAiAssistSecret", () => {
       2,
     );
     const encrypted = encryptAiAssistSecret("value-for-encryption", keyring);
-    expect(() => decryptAiAssistSecret(encrypted.ciphertext, 1, keyring)).toThrow(
-      AiAssistDecryptError,
-    );
-    expect(() => decryptAiAssistSecret(encrypted.ciphertext, 9, keyring)).toThrow(
-      AiAssistEncryptionUnavailableError,
-    );
+    expect(() =>
+      decryptAiAssistSecret(encrypted.ciphertext, 1, keyring),
+    ).toThrow(AiAssistDecryptError);
+    expect(() =>
+      decryptAiAssistSecret(encrypted.ciphertext, 9, keyring),
+    ).toThrow(AiAssistEncryptionUnavailableError);
   });
 
   test("过短密文 → AiAssistDecryptError", () => {

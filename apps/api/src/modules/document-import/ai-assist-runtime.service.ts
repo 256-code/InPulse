@@ -107,11 +107,19 @@ export class AiAssistRuntimeService {
       row.model.length === 0 ||
       row.model.length > 200
     ) {
-      return { kind: "DISABLED", reason: "CONFIG_INVALID", detail: "stored config out of range" };
+      return {
+        kind: "DISABLED",
+        reason: "CONFIG_INVALID",
+        detail: "stored config out of range",
+      };
     }
     let endpoint: string;
     try {
-      endpoint = validateAiAssistEndpoint(row.endpoint, env, "AI_ASSIST_ENDPOINT");
+      endpoint = validateAiAssistEndpoint(
+        row.endpoint,
+        env,
+        "AI_ASSIST_ENDPOINT",
+      );
     } catch (error) {
       return {
         kind: "DISABLED",
@@ -129,8 +137,14 @@ export class AiAssistRuntimeService {
       );
     } catch (error) {
       if (error instanceof AiAssistDecryptError) {
-        this.logger.warn("AI 辅助转换密钥解密失败（fail closed）：ciphertext 认证不通过");
-        return { kind: "DISABLED", reason: "CONFIG_INVALID", detail: "api key unreadable" };
+        this.logger.warn(
+          "AI 辅助转换密钥解密失败（fail closed）：ciphertext 认证不通过",
+        );
+        return {
+          kind: "DISABLED",
+          reason: "CONFIG_INVALID",
+          detail: "api key unreadable",
+        };
       }
       if (error instanceof AiAssistEncryptionUnavailableError) {
         this.logger.warn(

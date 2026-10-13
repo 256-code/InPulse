@@ -577,6 +577,12 @@
       "fingerprint": "2009dfbfe32276348c93d22cf698ffc83445a8b939d977db14746a9a8e9ee545"
     }
   ],
+  "updateWecomRobotConfig": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "b7fa3ffc504e606d5e230965043779182896719ff30153f61bb1c19a74a93e5a"
+    }
+  ],
   "voidChangeRecord": [
     {
       "version": "1.0.0",

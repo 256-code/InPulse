@@ -182,15 +182,15 @@ function mount(options: MountOptions = {}) {
           }
         >
           <MemoryRouter>
-          <DocumentImportModal
-            open
-            mode={options.mode ?? "PROJECT"}
-            projectId={2}
-            client={client}
-            onClose={onClose}
-            onImported={onImported}
-          />
-          <LocationProbe />
+            <DocumentImportModal
+              open
+              mode={options.mode ?? "PROJECT"}
+              projectId={2}
+              client={client}
+              onClose={onClose}
+              onImported={onImported}
+            />
+            <LocationProbe />
           </MemoryRouter>
         </QueryClientProvider>
       </AuthStateProvider>

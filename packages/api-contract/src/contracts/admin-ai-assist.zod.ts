@@ -22,7 +22,9 @@ export const aiAssistSettingsDisabledReasonSchema = z.enum([
 
 export const aiAssistSettingsItemSchema = z
   .object({
-    enabled: z.boolean().describe("配置记录的启用开关（最终是否可用还要看 ready）"),
+    enabled: z
+      .boolean()
+      .describe("配置记录的启用开关（最终是否可用还要看 ready）"),
     source: aiAssistSettingsSourceSchema.describe(
       "DATABASE 为管理员在线配置；ENVIRONMENT 为无数据库行时的遗留环境变量模式；NONE 为未配置",
     ),
@@ -33,7 +35,12 @@ export const aiAssistSettingsItemSchema = z
     timeoutMs: z.number().int().min(1000).max(600000),
     maxTokens: z.number().int().min(1).max(200000),
     keyConfigured: z.boolean(),
-    keyHint: z.string().min(1).max(16).nullable().describe("密钥尾 4 位提示；不回显密钥本身"),
+    keyHint: z
+      .string()
+      .min(1)
+      .max(16)
+      .nullable()
+      .describe("密钥尾 4 位提示；不回显密钥本身"),
     rowVersion: z.number().int().min(1).max(2147483647).nullable(),
     updatedAt: z.iso.datetime().nullable(),
   })
@@ -88,7 +95,9 @@ export const aiAssistSettingsReplayContextSchema = z
   .strict()
   .meta({ id: "AiAssistSettingsReplayContext" });
 
-export type AiAssistSettingsSource = z.infer<typeof aiAssistSettingsSourceSchema>;
+export type AiAssistSettingsSource = z.infer<
+  typeof aiAssistSettingsSourceSchema
+>;
 export type AiAssistSettingsDisabledReason = z.infer<
   typeof aiAssistSettingsDisabledReasonSchema
 >;
@@ -132,4 +141,7 @@ export const adminAiAssistSchemas = {
     summary: "AI 辅助转换配置幂等重放的最小结果资源上下文",
     sensitiveFieldPaths: [],
   },
-} satisfies Record<string, { schema: z.ZodType; summary: string; sensitiveFieldPaths: readonly string[] }>;
+} satisfies Record<
+  string,
+  { schema: z.ZodType; summary: string; sensitiveFieldPaths: readonly string[] }
+>;
